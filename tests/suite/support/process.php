@@ -509,7 +509,12 @@ function normalizeDiagnosticPaths(string $text, string $projectRoot): string
         return $text;
     }
 
-    $prefix = $root . DIRECTORY_SEPARATOR;
-
-    return \str_replace($prefix, '', $text);
+    // The root reaches the text with whatever separators built the path. A Windows checkout is the
+    // awkward one: `__DIR__` is `D:\a\moggi\moggi` while the case paths below it are joined with
+    // `/`, so the text carries `D:\a\moggi\moggi/tests/…` and no single prefix covers every case.
+    return \str_replace(
+        [$root . DIRECTORY_SEPARATOR, $root . '/', \str_replace('\\', '/', $root) . '/'],
+        '',
+        $text,
+    );
 }

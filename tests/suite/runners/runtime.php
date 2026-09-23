@@ -474,7 +474,9 @@ function runReplScriptTest(string $scriptPath, string $expectedPath, string $bac
     if ($expected === false) {
         return ['passed' => false, 'message' => "{$name}: cannot read expected"];
     }
-    if ($actual !== $expected) {
+    // Compared as text, not as bytes: a checkout that converted the golden to CRLF must not read as
+    // a mismatch in the REPL's output.
+    if (normalize($actual) !== normalize($expected)) {
         return [
             'passed' => false,
             'message' => "{$name}: stdout mismatch\n--- expected ---\n{$expected}\n--- actual ---\n{$actual}\n--- stderr ---\n"
