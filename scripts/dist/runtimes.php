@@ -348,6 +348,32 @@ function copyTree(string $from, string $to, ?callable $keep = null): void
     }
 }
 
+/**
+ * Move a runtime out of the macOS bundle layout.
+ *
+ * A JDK archive for macOS nests the runtime — `jdk-21.0.12.1+1/Contents/Home/bin/java` — so the
+ * one-component strip every asset uses leaves it at `Contents/Home`, where nothing looks for it.
+ * The JDK and GraalVM assets are both built like that, and only on macOS. Nothing happens when the
+ * runtime's own binary is already at the root, so a flat archive is untouched.
+ */
+function flattenDarwinBundleHome(string $dir, string $binary): void
+{
+    $home = $dir . '/Contents/Home';
+    if (\is_file($dir . '/' . $binary) || !\is_file($home . '/' . $binary)) {
+        return;
+    }
+
+    foreach (\scandir($home) ?: [] as $name) {
+        if ($name === '.' || $name === '..') {
+            continue;
+        }
+        if (!\rename($home . '/' . $name, $dir . '/' . $name)) {
+            throw new \RuntimeException("cannot move {$home}/{$name} into {$dir}");
+        }
+    }
+    removeTree($dir . '/Contents');
+}
+
 function runtimeVersionOutput(string $runtime, string $root, string $target, array $config): string
 {
     $asset = runtimeAsset($runtime, $target, $config);
@@ -478,6 +504,7 @@ function prepareRuntime(string $runtime, string $target, array $config, bool $fo
         $reported = buildPhpFromSource($runtime, $target, $config, $fetched['archive'], $dir, $entry);
     } else {
         extractArchive($fetched['archive'], (string) $entry['format'], $dir, (int) $entry['stripComponents']);
+        flattenDarwinBundleHome($dir, (string) $entry['binary']);
         $reported = assertRuntimeVersion($runtime, runtimeVersionOutput($runtime, $dir, $target, $config), $config, $target);
     }
 

@@ -70,7 +70,13 @@ $hostConf = $work . '/host-conf.d';
 $emptyConf = $work . '/empty-conf.d';
 \mkdir($emptyConf, 0777, true);
 
-$build = runCompiledProcess([$compiler, '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror', '-o', $launcher, $root . '/launcher/moggi.c'], 120);
+// The compiler here is a GNU-style driver (`clang`/`cc`/`gcc`, MinGW on Windows), where
+// `CommandLineToArgvW` needs shell32 named: the source's `#pragma comment` only covers MSVC.
+$build = runCompiledProcess([
+    $compiler, '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror',
+    ...($isWindows ? ['-lshell32'] : []),
+    '-o', $launcher, $root . '/launcher/moggi.c',
+], 120);
 if ($build['exitCode'] !== 0) {
     \fwrite(STDERR, "launcher test: the launcher does not build\n" . $build['stdout'] . $build['stderr']);
     removeDirectory($work);

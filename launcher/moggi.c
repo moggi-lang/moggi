@@ -47,6 +47,11 @@
 #include <windows.h>
 #include <shellapi.h>
 #include <wchar.h>
+
+#if defined(_MSC_VER) || defined(__clang__)
+/* `CommandLineToArgvW` lives in shell32, which the C runtime does not link by default. */
+#pragma comment(lib, "shell32.lib")
+#endif
 #define MOGGI_PATH_SEP ';'
 #define MOGGI_DIR_SEP '\\'
 

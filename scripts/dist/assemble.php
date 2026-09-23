@@ -260,7 +260,9 @@ function buildLauncher(string $repo, string $out, string $target): void
     }
     unset($target);
 
-    runOrFail([$clang, '-std=c11', '-O2', '-Wall', '-Wextra', '-o', $out, LAUNCHER_SOURCE]);
+    /* Windows: clang there targets the MSVC toolchain, and `CommandLineToArgvW` is in shell32. */
+    $windows = \PHP_OS_FAMILY === 'Windows' ? ['shell32.lib'] : [];
+    runOrFail([$clang, '-std=c11', '-O2', '-Wall', '-Wextra', '-o', $out, LAUNCHER_SOURCE, ...$windows]);
     @\chmod($out, 0755);
 }
 
