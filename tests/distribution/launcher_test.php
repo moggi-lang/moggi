@@ -55,6 +55,9 @@ if ($compiler === null) {
 }
 
 $work = createTempDir('moggi-launcher');
+// Canonical before anything is derived from it: the launcher reports the paths it resolves, and
+// macOS reaches its temporary directory through a symlink.
+$work = \realpath($work) ?: $work;
 $launcher = $work . '/moggi' . $exe;
 
 $hostConf = $work . '/host-conf.d';
