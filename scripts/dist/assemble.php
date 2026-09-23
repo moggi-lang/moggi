@@ -609,6 +609,7 @@ function assembleMain(array $argv): int
 
     $report = [];
     $failures = [];
+    $archives = 0;
     \fwrite(STDOUT, "\nassembling\n");
     foreach ($plan as $entry) {
         $variant = $entry['variant'];
@@ -649,6 +650,7 @@ function assembleMain(array $argv): int
         if ($options['archives'] && $checked !== 'FAILED') {
             $archive = $out . '/' . archiveName($variant, $version, $target);
             createArchive($stage, $archive, \str_starts_with($target, 'windows-') ? 'zip' : 'tar.gz');
+            ++$archives;
         }
 
         $report[] = \sprintf(
@@ -666,6 +668,14 @@ function assembleMain(array $argv): int
 
     if ($failures !== []) {
         \fwrite(STDERR, "\n" . \implode("\n", $failures) . "\n");
+
+        return 1;
+    }
+
+    // Asked for archives and got none: a caller that uploads them would otherwise report an empty
+    // artifact instead of the reason there is nothing to upload.
+    if ($options['archives'] && $archives === 0) {
+        \fwrite(STDERR, "\nerror: no archive was produced for {$target} under {$out}\n");
 
         return 1;
     }

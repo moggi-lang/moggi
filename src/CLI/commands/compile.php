@@ -15,6 +15,7 @@ use function Moggi\CLI\printUsage;
 use function Moggi\CLI\resolveCompileInputs;
 use function Moggi\CLI\resolveLibraryDirs;
 use function Moggi\Compiler\compileFile;
+use function Moggi\Compiler\executableName;
 use function Moggi\Compiler\findExecutable;
 use function Moggi\Compiler\findToolchainExecutable;
 
@@ -355,10 +356,12 @@ function runCompile(
 /** Relative paths (inside the staging root) of each backend's packaged artifact, primary first. */
 function artifactPrimaryRel(string $backend): array
 {
+    $native = executableName('moggi-app');
+
     return match ($backend) {
         'php' => ['moggi-app.phar'],
-        'jvm' => ['moggi-app.jar', 'moggi-app'],
-        'dotnet' => ['moggi-app.dll', 'moggi-app', 'moggi-app.runtimeconfig.json', 'moggi-app.deps.json'],
+        'jvm' => ['moggi-app.jar', $native],
+        'dotnet' => ['moggi-app.dll', $native, 'moggi-app.runtimeconfig.json', 'moggi-app.deps.json'],
     };
 }
 
@@ -368,8 +371,7 @@ function artifactLabel(string $rel): string
         'moggi-app.phar' => 'phar',
         'moggi-app.jar' => 'jar',
         'moggi-app.dll' => 'dll',
-        'moggi-app' => 'native',
-        default => $rel,
+        default => $rel === executableName('moggi-app') ? 'native' : $rel,
     };
 }
 
@@ -456,7 +458,7 @@ function movePackagedArtifacts(string $staging, string $destBase, string $backen
 
     if ($native && ($backend === 'jvm' || $backend === 'dotnet')) {
         $binBase = preg_replace('/\.(jar|dll|phar|exe)$/', '', $destBase) ?? $destBase;
-        $move('moggi-app', $binBase);
+        $move(executableName('moggi-app'), executableName($binBase));
     }
 
     return $moved;
@@ -763,7 +765,7 @@ function executeBuiltApp(
 ): int {
     if ($backend === 'jvm') {
         if ($native) {
-            $binary = $outputRoot . DIRECTORY_SEPARATOR . 'moggi-app';
+            $binary = $outputRoot . DIRECTORY_SEPARATOR . executableName('moggi-app');
             if (!\is_file($binary)) {
                 \fwrite(STDERR, "error: missing {$binary}\n");
 
@@ -798,7 +800,7 @@ function executeBuiltApp(
 
     if ($backend === 'dotnet') {
         if ($native) {
-            $binary = $outputRoot . DIRECTORY_SEPARATOR . 'moggi-app';
+            $binary = $outputRoot . DIRECTORY_SEPARATOR . executableName('moggi-app');
             if (!\is_file($binary)) {
                 \fwrite(STDERR, "error: missing {$binary}\n");
 

@@ -807,6 +807,8 @@ function buildPhpFromSource(string $runtime, string $target, array $config, stri
     }
     $tree = $source . '/' . $roots[0];
 
+    assertChildCwd($tree);
+
     $jobs = (string) max(1, cpuCount());
     $make = findExecutable('make') ?? 'make';
     runOrFail([$tree . '/configure', '--prefix=' . $work . '/install', ...(array) $spec['configureFlags']], $tree);
@@ -862,8 +864,9 @@ function runWithLibraryPath(array $command, string $libDir): string
  */
 function runOrFail(array $command, ?string $cwd = null, bool $echo = false, ?int $timeoutSeconds = null): void
 {
-    $label = \implode(' ', $command);
+    $label = \implode(' ', $command) . ($cwd === null ? '' : '  [cwd ' . $cwd . ']');
     \fwrite(STDOUT, '  ' . $label . "\n");
+    assertProgramRunnable((string) $command[0], $cwd);
     $started = \microtime(true);
     [$code, $stdout, $stderr] = runProcess($command, $cwd, null, $echo, $timeoutSeconds);
     if ($code !== 0) {
@@ -872,6 +875,45 @@ function runOrFail(array $command, ?string $cwd = null, bool $echo = false, ?int
         );
     }
     \fwrite(STDOUT, \sprintf('    ok (%.1fs)%s', \microtime(true) - $started, "\n"));
+}
+
+/**
+ * Report why a command cannot start, rather than let it exit with -1 and no output.
+ *
+ * A program is resolved against *this* process's directory (and PATH for a bare name), so a relative
+ * program that only exists in the child's working directory fails to start with nothing to show.
+ */
+function assertProgramRunnable(string $program, ?string $cwd): void
+{
+    $resolved = \strpbrk($program, '/\\') === false ? findExecutable($program) : $program;
+    $where = $cwd === null ? '' : " (cwd {$cwd})";
+    if ($resolved === null) {
+        throw new \RuntimeException("cannot start {$program}: not found on PATH{$where}");
+    }
+    if (!\is_file($resolved)) {
+        throw new \RuntimeException("cannot start {$program}: no such file {$resolved}{$where}");
+    }
+    if (\PHP_OS_FAMILY !== 'Windows' && !\is_executable($resolved)) {
+        throw new \RuntimeException("cannot start {$program}: {$resolved} is not executable");
+    }
+}
+
+/**
+ * Confirm a child process really starts in `$cwd`.
+ *
+ * `configure` and `make` depend on the working directory handed to the child, so a platform that
+ * ignores it would fail much later, inside the build, and look like a broken source tree.
+ */
+function assertChildCwd(string $cwd): void
+{
+    [$code, $stdout] = runProcess([\PHP_BINARY, '-r', 'echo getcwd();'], $cwd);
+    $expected = \rtrim(\str_replace('\\', '/', (string) \realpath($cwd)), '/');
+    $actual = \rtrim(\str_replace('\\', '/', (string) \realpath(\trim($stdout))), '/');
+    if ($code !== 0 || $actual !== $expected) {
+        throw new \RuntimeException(
+            "a child process does not start in {$cwd} (got " . \trim($stdout) . ', exit ' . $code . ')',
+        );
+    }
 }
 
 function cpuCount(): int

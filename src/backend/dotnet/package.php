@@ -2,6 +2,7 @@
 
 namespace Moggi\Backend\DotNet;
 
+use function Moggi\Compiler\executableName;
 use function Moggi\Compiler\findExecutable;
 use function Moggi\Compiler\findToolchainExecutable;
 use function Moggi\Compiler\runProcess;
@@ -749,7 +750,8 @@ function buildDotNetNativeExecutable(
         '-v', 'q',
     ];
     $result = runProcess($cmd, $outputRoot, dotnetCliEnv());
-    $built = $pubDir . DIRECTORY_SEPARATOR . $binaryName;
+    $binary = executableName($binaryName);
+    $built = $pubDir . DIRECTORY_SEPARATOR . $binary;
     if ($result['exitCode'] !== 0 || !\is_file($built)) {
         \fwrite(
             STDERR,
@@ -759,7 +761,7 @@ function buildDotNetNativeExecutable(
 
         return false;
     }
-    \rename($built, $outputRoot . DIRECTORY_SEPARATOR . $binaryName);
+    \rename($built, $outputRoot . DIRECTORY_SEPARATOR . $binary);
 
     return true;
 }

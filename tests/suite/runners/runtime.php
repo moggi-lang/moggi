@@ -327,7 +327,7 @@ function runNativeExampleSmoke(string $exampleDir, string $backend, string $proj
             ];
         }
 
-        $binary = $outDir . '/moggi-app';
+        $binary = $outDir . '/' . \Moggi\Compiler\executableName('moggi-app');
         if (!\is_file($binary)) {
             return ['passed' => false, 'message' => "{$name}: missing {$binary}"];
         }

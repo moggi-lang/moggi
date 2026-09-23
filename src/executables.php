@@ -3,6 +3,18 @@
 namespace Moggi\Compiler;
 
 /**
+ * The file name an executable has on this host: `.exe` is part of it on Windows.
+ *
+ * `native-image` and `.NET` Native AOT both write that suffix themselves, so a
+ * caller that names the binary it expects has to ask here rather than append
+ * nothing and look for a file that was never created.
+ */
+function executableName(string $name): string
+{
+    return \PHP_OS_FAMILY === 'Windows' ? $name . '.exe' : $name;
+}
+
+/**
  * Find an executable the way a shell would, without invoking one.
  *
  * Host toolchains are discovered by probing directories directly. Asking a

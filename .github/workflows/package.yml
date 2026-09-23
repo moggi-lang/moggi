@@ -60,7 +60,7 @@ jobs:
         run: php scripts/dist/pin.php --check --target ${{ matrix.target }}
 
       - name: Build the distributions
-        run: php scripts/dist/assemble.php --target ${{ matrix.target }} --glibc-floor --archives --out "${{ github.workspace }}/dist-out"
+        run: php scripts/dist/assemble.php --target ${{ matrix.target }} --glibc-floor --archives --out dist-out
 
       - name: Upload the archives
         uses: actions/upload-artifact@v4.6.2
@@ -145,7 +145,7 @@ jobs:
         run: php scripts/dist/pin.php --check --target ${{ matrix.target }}
 
       - name: Build the distributions
-        run: php scripts/dist/assemble.php --target ${{ matrix.target }} --archives --out "${{ github.workspace }}/dist-out"
+        run: php scripts/dist/assemble.php --target ${{ matrix.target }} --archives --out dist-out
 
       - name: Upload the archives
         uses: actions/upload-artifact@v4.6.2

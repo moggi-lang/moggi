@@ -49,3 +49,25 @@ function distributionPhpOnlyPath(): string
 {
     return \dirname(\PHP_BINARY);
 }
+
+/**
+ * The host environment with `$overrides` applied.
+ *
+ * Windows spells a variable's name case-insensitively and calls this one `Path`, so an override keyed
+ * `PATH` would sit beside the host's own entry and leave the child free to read either one.
+ *
+ * @param array<string, string> $overrides
+ * @return array<string, string>
+ */
+function distributionEnvironment(array $overrides): array
+{
+    $names = \array_map('strtoupper', \array_keys($overrides));
+    $environment = [];
+    foreach (\getenv() ?: [] as $name => $value) {
+        if (!\in_array(\strtoupper((string) $name), $names, true)) {
+            $environment[$name] = $value;
+        }
+    }
+
+    return $overrides + $environment;
+}
