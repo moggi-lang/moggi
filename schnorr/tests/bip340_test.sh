@@ -6,10 +6,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCHNORR="${SCRIPT_DIR}/../schnorr"
-BECH32_ENC="${SCRIPT_DIR}/bech32_enc"
+BECH32_ENC="${SCRIPT_DIR}/../build/bech32_enc"
 
-# Build helper
-gcc -std=c99 -O2 -I"${SCRIPT_DIR}/../libbech32-1.1p1" -o "$BECH32_ENC" "${SCRIPT_DIR}/bech32_enc.c" "${SCRIPT_DIR}/../libbech32-1.1p1/libbech32.c"
+make -C "${SCRIPT_DIR}/.." test-helper
 
 # Official test vectors, vendored from
 # https://raw.githubusercontent.com/bitcoin/bips/master/bip-0340/test-vectors.csv

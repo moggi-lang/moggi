@@ -9,7 +9,9 @@ CFLAGS = -Wall -Wextra -pedantic -std=c99 -O2 -Wno-unknown-attributes
 
 SECP_DIR = libsecp256k1-0.8.0
 BECH32_DIR = libbech32-1.1p1
+TESTS_DIR = tests
 BUILD_DIR = build
+BECH32_ENC = $(BUILD_DIR)/bech32_enc
 
 # --- schnorr app ---
 # Feature macros (e.g. _GNU_SOURCE) are defined at the top of schnorr.c itself.
@@ -56,9 +58,11 @@ ifneq (,$(findstring apple,$(shell $(CC) -dumpmachine 2>/dev/null)))
   COMPAT_OBJS = $(BUILD_DIR)/compat.o
 endif
 
-.PHONY: all clean check-deps
+.PHONY: all clean check-deps test-helper
 
 all: check-deps schnorr
+
+test-helper: $(BECH32_ENC)
 
 check-deps:
 	@test -f $(SECP_DIR)/src/secp256k1.c || { echo "schnorr: $(SECP_DIR) is missing — clone it at the pinned tag (see README.md, Dependencies)" >&2; exit 1; }
@@ -75,6 +79,9 @@ $(BUILD_DIR)/libbech32.o: $(BECH32_DIR)/libbech32.c | $(BUILD_DIR)
 
 $(BUILD_DIR)/compat.o: compat.c compat.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -MMD -MP -c -o $@ $<
+
+$(BECH32_ENC): $(TESTS_DIR)/bech32_enc.c $(BUILD_DIR)/libbech32.o $(COMPAT_OBJS) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(LDFLAGS) $(APP_INCLUDES) -o $@ $^ $(LDLIBS)
 
 $(BUILD_DIR)/%.o: $(SECP_DIR)/src/%.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(SECP_WARN) $(SECP_DEFINES) $(SECP_INCLUDES) -MMD -MP -c -o $@ $<

@@ -97,6 +97,14 @@ function runProcess(
     bool $echo = false,
     ?int $timeoutSeconds = null,
 ): array {
+    // There is no non-blocking pipe on Windows: `stream_set_blocking` only
+    // reaches sockets there, so reading a pipe waits for it to close and the
+    // child blocks on whichever stream nobody is draining — a hang with no
+    // output. Files carry both streams instead, which cannot fill up.
+    if (\PHP_OS_FAMILY === 'Windows') {
+        return runProcessThroughFiles($command, $cwd, $env, $echo, $timeoutSeconds);
+    }
+
     $descriptors = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
     // A toolchain that is not installed is an expected answer here, not a
     // warning: the caller sees it in the return value.
@@ -166,4 +174,99 @@ function runProcess(
     }
 
     return ['exitCode' => $exitCode, 'stdout' => $stdout, 'stderr' => $stderr];
+}
+
+/**
+ * The Windows half of `runProcess`: the child writes both streams to files that
+ * are read back while it runs, so nothing blocks on a pipe buffer.
+ *
+ * @param list<string> $command
+ * @param ?array<string, string> $env
+ * @return array{exitCode: int, stdout: string, stderr: string}
+ */
+function runProcessThroughFiles(
+    array $command,
+    ?string $cwd,
+    ?array $env,
+    bool $echo,
+    ?int $timeoutSeconds,
+): array {
+    $base = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . 'moggi-proc-' . \getmypid() . '-' . \bin2hex(\random_bytes(6));
+    $stdoutPath = $base . '.out';
+    $stderrPath = $base . '.err';
+    $nullDevice = \PHP_OS_FAMILY === 'Windows' ? 'NUL' : '/dev/null';
+    $descriptors = [
+        0 => ['file', $nullDevice, 'r'],
+        1 => ['file', $stdoutPath, 'w'],
+        2 => ['file', $stderrPath, 'w'],
+    ];
+
+    $pipes = [];
+    $process = @\proc_open($command, $descriptors, $pipes, $cwd, $env);
+    if (!\is_resource($process)) {
+        return ['exitCode' => -1, 'stdout' => '', 'stderr' => 'cannot start ' . \implode(' ', $command)];
+    }
+
+    $shownOut = 0;
+    $shownErr = 0;
+    $deadline = $timeoutSeconds === null ? null : \microtime(true) + $timeoutSeconds;
+    $exitCode = -1;
+    $timedOut = false;
+    while (true) {
+        if ($echo) {
+            $shownOut = echoFileTail($stdoutPath, $shownOut, STDOUT);
+            $shownErr = echoFileTail($stderrPath, $shownErr, STDERR);
+        }
+        $status = \proc_get_status($process);
+        if (!$status['running']) {
+            $exitCode = $status['exitcode'];
+            break;
+        }
+        if ($deadline !== null && \microtime(true) > $deadline) {
+            $timedOut = true;
+            \proc_terminate($process);
+            \usleep(100_000);
+            break;
+        }
+        \usleep(2000);
+    }
+
+    if ($echo) {
+        echoFileTail($stdoutPath, $shownOut, STDOUT);
+        echoFileTail($stderrPath, $shownErr, STDERR);
+    }
+    $stdout = (string) @\file_get_contents($stdoutPath);
+    $stderr = (string) @\file_get_contents($stderrPath);
+    @\unlink($stdoutPath);
+    @\unlink($stderrPath);
+    \proc_close($process);
+
+    if ($timedOut) {
+        $stderr .= \sprintf("timed out after %d seconds: %s\n", $timeoutSeconds, \implode(' ', $command));
+        $exitCode = -1;
+    }
+
+    return ['exitCode' => $exitCode, 'stdout' => $stdout, 'stderr' => $stderr];
+}
+
+/** Print what the child appended to $path past $offset, and return the new offset. */
+function echoFileTail(string $path, int $offset, $target): int
+{
+    \clearstatcache(true, $path);
+    $size = @\filesize($path);
+    if ($size === false || $size <= $offset) {
+        return $offset;
+    }
+    $handle = @\fopen($path, 'rb');
+    if ($handle === false) {
+        return $offset;
+    }
+    \fseek($handle, $offset);
+    $chunk = (string) \stream_get_contents($handle);
+    \fclose($handle);
+    if ($chunk !== '') {
+        \fwrite($target, $chunk);
+    }
+
+    return $offset + \strlen($chunk);
 }
