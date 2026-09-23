@@ -10,6 +10,7 @@ use Moggi\Syntax\Parser\ParseError;
 use function Moggi\Backend\compileBackend;
 use function Moggi\Errors\appendDidYouMean;
 use function Moggi\Paths\canonicalPath;
+use function Moggi\Paths\canonicalSeparators;
 use function Moggi\Syntax\Ast\moduleName;
 use function Moggi\Syntax\Lexer\lex;
 use function Moggi\Syntax\Parser\importedFixityForImports;
@@ -721,7 +722,8 @@ function projectSourceClosure(array $inputFiles, array $libDirs): array
                 continue;
             }
             throw new TypeError(
-                "duplicate module `{$moduleName}` in project ({$byModule[$moduleName]} and {$real})",
+                "duplicate module `{$moduleName}` in project ("
+                . canonicalSeparators($byModule[$moduleName]) . ' and ' . canonicalSeparators($real) . ')',
                 $real,
                 (string) ($header['__source'] ?? ''),
                 ...moduleHeaderPoint($header),

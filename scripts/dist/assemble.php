@@ -5,8 +5,10 @@ namespace Moggi\Dist;
 require_once __DIR__ . '/runtimes.php';
 require_once __DIR__ . '/build-phar.php';
 require_once __DIR__ . '/schnorr.php';
+require_once __DIR__ . '/../../src/paths.php';
 
 use function Moggi\Compiler\findExecutable;
+use function Moggi\Paths\isAbsolutePath;
 
 /**
  * Assemble the Moggi distributions.
@@ -49,6 +51,25 @@ function assembleUsage(): int
     \fwrite(STDOUT, 'variants: ' . \implode(' ', \array_keys(loadRuntimeConfig()['variants'])) . "\n");
 
     return 0;
+}
+
+/**
+ * The output directory as an absolute path.
+ *
+ * Everything derived from it — the staged installation, the release archives, the example a smoke test
+ * runs — is handed to a process that starts in a different directory (the smoke work dir, an archive's
+ * parent), and those resolve relative arguments against their own cwd. A relative `--out` therefore
+ * names a path none of them can find.
+ */
+function absoluteOutDir(string $dir): string
+{
+    if ($dir === '' || isAbsolutePath($dir)) {
+        return $dir;
+    }
+
+    $cwd = \getcwd();
+
+    return $cwd === false ? $dir : \rtrim($cwd, '/\\') . \DIRECTORY_SEPARATOR . $dir;
 }
 
 /** @return array{target: ?string, out: string, variants: list<string>, archives: bool, forceRuntimes: bool, glibcFloor: bool} */
@@ -101,7 +122,7 @@ function parseAssembleArgv(array $argv): array
 
     return [
         'target' => $options['target'],
-        'out' => \rtrim((string) $options['out'], '/\\'),
+        'out' => absoluteOutDir(\rtrim((string) $options['out'], '/\\')),
         'variants' => $options['variants'],
         'archives' => $options['archives'],
         'forceRuntimes' => $options['forceRuntimes'],

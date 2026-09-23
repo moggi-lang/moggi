@@ -8,6 +8,7 @@ use Moggi\Semantics\Types\TypeError;
 
 use function Moggi\Backend\compileBackend;
 use function Moggi\Paths\canonicalPath;
+use function Moggi\Paths\canonicalSeparators;
 use function Moggi\Paths\moduleNameToPath;
 use function Moggi\Semantics\Effects\checkAndNormalize;
 use function Moggi\Syntax\Ast\moduleName;
@@ -64,7 +65,8 @@ function prepareProject(array $paths, string $rootDir, ?string $onlyTypecheckMod
             }
             $span = $header['headerSpan'] ?? null;
             throw new TypeError(
-                "duplicate module `{$moduleName}` in project ({$pending[$moduleName]['path']} and {$path})",
+                "duplicate module `{$moduleName}` in project ("
+                . canonicalSeparators($pending[$moduleName]['path']) . ' and ' . canonicalSeparators($path) . ')',
                 $path,
                 $source,
                 (int) ($span['line'] ?? 1),

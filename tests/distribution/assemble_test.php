@@ -45,11 +45,13 @@ if ($compiler === null) {
 }
 
 try {
+    // `--out` relative to a cwd that is not the staged tree, which is what CI passes.
+    $relativeOut = \basename($work) . '/out';
     $built = runCompiledProcess(
-        [\PHP_BINARY, $root . '/scripts/dist/assemble.php', '--variants', 'moggi-minimal', '--archives', '--out', $out],
+        [\PHP_BINARY, $root . '/scripts/dist/assemble.php', '--variants', 'moggi-minimal', '--archives', '--out', $relativeOut],
         600,
         ['MOGGI_DIST_CC' => $compiler] + \getenv(),
-        $root,
+        \dirname($work),
     );
     if ($built['exitCode'] !== 0) {
         \fwrite(STDERR, "assembling failed:\n" . $built['stdout'] . $built['stderr']);

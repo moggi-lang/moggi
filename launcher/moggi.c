@@ -274,6 +274,9 @@ static char *find_on_path(const char *name)
  * Put the bundled runtime directories in front of PATH, in the order given, so
  * the compiler's child processes (`javac`, `java`, `native-image`, `dotnet`,
  * `php`) resolve to the bundled copies before any system ones.
+ *
+ * The list is built by offset: writing the separator after an appended directory
+ * is what terminates it otherwise, and the next append then runs past the write.
  */
 static void prepend_paths(char **directories, int count)
 {
@@ -288,13 +291,14 @@ static void prepend_paths(char **directories, int count)
     if (final == NULL) {
         fail("out of memory");
     }
-    final[0] = '\0';
+    size_t offset = 0;
     for (int i = 0; i < count; ++i) {
-        size_t length = strlen(final);
-        strcat(final, directories[i]);
-        final[length + strlen(directories[i])] = MOGGI_PATH_SEP;
+        size_t length = strlen(directories[i]);
+        memcpy(final + offset, directories[i], length);
+        offset += length;
+        final[offset++] = MOGGI_PATH_SEP;
     }
-    strcat(final, current != NULL ? current : "");
+    strcpy(final + offset, current != NULL ? current : "");
 
 #if defined(_WIN32)
     SetEnvironmentVariableA("PATH", final);

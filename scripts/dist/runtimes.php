@@ -779,7 +779,13 @@ function writeBundledPhpIni(string $dir, array $compiledIn, array $enable): void
     \file_put_contents($dir . '/php.ini', \implode("\n", $lines));
 }
 
-/** Build the official php.net source release with the pinned configuration. */
+/**
+ * Build the official php.net source release with the pinned configuration.
+ *
+ * `configure` and `make` run with the source tree as their working directory rather than through a
+ * `chdir` here: changing this process's directory would re-base every relative path the caller still
+ * holds, and `MOGGI_DIST_CACHE` is a path a user can give relative.
+ */
 function buildPhpFromSource(string $runtime, string $target, array $config, string $archive, string $dir, array $entry): string
 {
     $spec = $config['runtimes'][$runtime];
@@ -799,14 +805,8 @@ function buildPhpFromSource(string $runtime, string $target, array $config, stri
     $tree = $source . '/' . $roots[0];
 
     $jobs = (string) max(1, cpuCount());
-    $cwd = \getcwd();
-    try {
-        \chdir($tree);
-        runOrFail(['./configure', '--prefix=' . $work . '/install', ...(array) $spec['configureFlags']]);
-        runOrFail(['make', '-j' . $jobs]);
-    } finally {
-        \chdir($cwd);
-    }
+    runOrFail(['./configure', '--prefix=' . $work . '/install', ...(array) $spec['configureFlags']], $tree);
+    runOrFail(['make', '-j' . $jobs], $tree);
 
     if (\is_file($tree . '/LICENSE')) {
         \copy($tree . '/LICENSE', $dir . '/LICENSE');

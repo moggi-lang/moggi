@@ -89,6 +89,11 @@ $assert(str_starts_with($uri, 'file://'), 'pathToUri scheme');
 $assert(!str_contains($uri, '%2F'), 'pathToUri must not encode slashes');
 $assert(str_ends_with(uriToPath($uri), '/Foo.mog') || str_ends_with(uriToPath($uri), '\\Foo.mog'), 'uriToPath round-trip basename');
 
+$assert(uriToPath('file:///C%3A/opt/Foo.mog') === 'C:/opt/Foo.mog', 'uriToPath drops the URI slash before an encoded drive');
+$assert(uriToPath('file:///C:/opt/Foo.mog') === 'C:/opt/Foo.mog', 'uriToPath drops the URI slash before a bare drive');
+$assert(uriToPath('file:///C:') === 'C:', 'uriToPath keeps a bare drive alone');
+$assert(uriToPath('file:///opt/Foo.mog') === '/opt/Foo.mog', 'uriToPath keeps a POSIX root');
+
 $assert(applyFullContentChanges('old', [['text' => 'new']]) === 'new', 'full sync replace');
 $assert(applyFullContentChanges('old', [['range' => [], 'text' => 'patched'], ['text' => 'final']]) === 'final', 'last change wins');
 $assert(applyFullContentChanges('old', []) === 'old', 'empty changes keep previous');

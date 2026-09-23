@@ -753,7 +753,8 @@ function buildDotNetNativeExecutable(
     if ($result['exitCode'] !== 0 || !\is_file($built)) {
         \fwrite(
             STDERR,
-            "error: Native AOT publish failed\n" . \trim($result['stdout'] . "\n" . $result['stderr']) . "\n",
+            "error: Native AOT publish failed (exit {$result['exitCode']})\n"
+            . \trim($result['stdout'] . "\n" . $result['stderr']) . "\n",
         );
 
         return false;

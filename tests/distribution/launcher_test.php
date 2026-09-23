@@ -181,7 +181,11 @@ try {
     // A bundled runtime wins over the host's, wherever the command is run from.
     $full = $install('full', ['php', 'jvm', 'graalvm', 'dotnet']);
     $result = $run($full, ['version'], ['MOGGI_TEST_MARKER' => 'kept'] + \getenv(), $work . '/from-here');
-    $assert($result['exitCode'] === 0, 'a bundled PHP must run the compiler');
+    $assert(
+        $result['exitCode'] === 0,
+        'a bundled PHP must run the compiler (exit ' . $result['exitCode'] . '): '
+        . $result['stdout'] . $result['stderr'],
+    );
     $seen = $probe($result);
     $assert($seen['args'] === ['version'], 'the launcher must forward the command');
     if ($isWindows) {
