@@ -30,3 +30,6 @@ opaque
 bound
 statement
 done
+case-bind 1
+case-bind none
+case-bind 4

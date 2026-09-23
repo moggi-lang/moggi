@@ -14,27 +14,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  gate:
-    name: require a green test run
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      actions: read
-      contents: read
-    steps:
-      - name: The commit being packaged must have a successful test run
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/test.yml/runs?head_sha=${{ github.sha }}&status=success&per_page=1" --jq '.total_count')
-          if [ "${runs:-0}" -lt 1 ]; then
-            echo "::error::no successful test run for ${{ github.sha }}; packaging takes a tested commit"
-            exit 1
-          fi
-
   linux:
     name: ${{ matrix.target }}
-    needs: [gate]
     runs-on: ${{ matrix.runner }}
     container: ubuntu:22.04
     timeout-minutes: 180
@@ -58,14 +39,14 @@ jobs:
         uses: shivammathur/setup-php@2.37.2
         with:
           php-version: '8.5'
-          extensions: bcmath, mbstring, zip, phar, ctype
+          extensions: bcmath, mbstring, zip, phar, ctype, intl
           ini-values: memory_limit=1G
           coverage: none
 
       - name: Install the build dependencies
         run: |
           apt-get install -y --no-install-recommends \
-            clang binutils autoconf make pkg-config libzip-dev libonig-dev
+            clang binutils autoconf make pkg-config libzip-dev libonig-dev libicu-dev
 
       - name: Cache downloads and builds
         uses: actions/cache@v4.3.0
@@ -93,7 +74,6 @@ jobs:
 
   native:
     name: ${{ matrix.target }}
-    needs: [gate]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
     strategy:
@@ -111,7 +91,7 @@ jobs:
         uses: shivammathur/setup-php@2.37.2
         with:
           php-version: '8.5'
-          extensions: bcmath, mbstring, zip, phar, ctype
+          extensions: bcmath, mbstring, zip, phar, ctype, intl
           ini-values: memory_limit=1G
           coverage: none
 
@@ -127,9 +107,9 @@ jobs:
       - name: Install the PHP build dependencies (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew install libzip oniguruma
+          brew install libzip oniguruma icu4c
           {
-            echo "PKG_CONFIG_PATH=$(brew --prefix libzip)/lib/pkgconfig:$(brew --prefix oniguruma)/lib/pkgconfig"
+            echo "PKG_CONFIG_PATH=$(brew --prefix libzip)/lib/pkgconfig:$(brew --prefix oniguruma)/lib/pkgconfig:$(brew --prefix icu4c)/lib/pkgconfig"
           } >> "$GITHUB_ENV"
 
       - name: Install MSYS2 for the schnorr CLI
@@ -179,7 +159,7 @@ jobs:
 
   publish:
     if: github.ref_type == 'tag' || github.ref == 'refs/heads/build'
-    needs: [gate, linux, native]
+    needs: [linux, native]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:

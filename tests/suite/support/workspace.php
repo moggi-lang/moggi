@@ -29,16 +29,16 @@ function removeDirectory(string $path): void
 
     foreach ($iterator as $item) {
         if ($item->isLink() || $item->isFile()) {
-            unlink($item->getPathname());
+            @unlink($item->getPathname());
             continue;
         }
 
         if ($item->isDir()) {
-            rmdir($item->getPathname());
+            @rmdir($item->getPathname());
         }
     }
 
-    rmdir($path);
+    @rmdir($path);
 }
 
 /** A unique temporary directory; throws `TestFailure` when none can be created. */

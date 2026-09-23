@@ -232,12 +232,19 @@ unset($env['JAVA_HOME'], $env['DOTNET_ROOT'], $env['GRAALVM_HOME'], $env['JDK_HO
     );
 
     $build = (string) ($info['compiler'] ?? $version);
-    $archive = $out . '/' . $target . '/moggi-minimal-' . $build . '-' . $target . '.tar.gz';
+    // The archive's format follows the target, not the host running the test: a
+    // Windows distribution is a zip (see scripts/dist/assemble.php).
+    $windowsTarget = \str_starts_with($target, 'windows-');
+    $archive = $out . '/' . $target . '/moggi-minimal-' . $build . '-' . $target
+        . ($windowsTarget ? '.zip' : '.tar.gz');
     $assert(\is_file($archive), 'the archive must be named after the build: ' . \basename($archive));
 
     $clean = $work . '/clean';
     \mkdir($clean, 0777, true);
-    $extract = runCompiledProcess(['tar', '-x', '-z', '-f', $archive, '-C', $clean], 300);
+    $extractArgs = $windowsTarget
+        ? ['tar', '-x', '-f', $archive, '-C', $clean]
+        : ['tar', '-x', '-z', '-f', $archive, '-C', $clean];
+    $extract = runCompiledProcess($extractArgs, 300);
     $assert($extract['exitCode'] === 0, 'the archive must extract: ' . $extract['stderr']);
     $assert(\is_file($clean . '/moggi-minimal/bin/moggi' . $exe), 'the archive must unpack to one directory');
     $assert(!\file_exists($clean . '/moggi-minimal/src'), 'the extracted archive must not carry sources');

@@ -432,6 +432,7 @@ function parseDo(ParserState $state): Ast\AstNode
     // following top-level decl.
     skipDocComments($state);
     $state->doBlockCol = peek($state)->col;
+    $lastStmtStart = peek($state);
     $stmts = [parseDoStmt($state)];
 
     while (true) {
@@ -447,11 +448,30 @@ function parseDo(ParserState $state): Ast\AstNode
             break;
         }
 
+        // Layout: a statement left of this block's column belongs to an enclosing one, which is
+        // what lets a `do` sit on the right of a `<-` without swallowing the binding's siblings.
+        if (peek($state)->col < $state->doBlockCol) {
+            break;
+        }
+
+        $lastStmtStart = peek($state);
         $stmts[] = parseDoStmt($state);
     }
 
     $state->inDoBlock = $prevInDo;
     $state->doBlockCol = $prevDoCol;
+
+    // A block yields the value of its last statement, so that statement has to be an expression.
+    $last = $stmts[count($stmts) - 1];
+    if ($last instanceof Ast\DoBind || $last instanceof Ast\DoLet) {
+        throw parseError(
+            $state,
+            'the last statement in a `do` block must be an expression',
+            $lastStmtStart,
+            'parse/do-last-stmt',
+        );
+    }
+
     $expr = new Ast\DoExpr($stmts);
 
     return spannedRange($expr, $start, $expr);
@@ -489,18 +509,30 @@ function parseDoStmt(ParserState $state): Ast\AstNode
     if (startsPattern($state) && isAt($state, TokenKind::Op, 1, '<-')) {
         $pattern = parsePattern($state);
         advance($state);
-        $state->doExprStartLine = peek($state)->line;
-        $expr = parseExprWithWhere($state);
-        $state->doExprStartLine = null;
+        $expr = withDoExprStartLine($state, static fn (): Ast\AstNode => parseExprWithWhere($state));
 
         return new Ast\DoBind($pattern, $expr);
     }
 
-    $state->doExprStartLine = peek($state)->line;
-    $expr = parseExprWithWhere($state);
-    $state->doExprStartLine = null;
+    $expr = withDoExprStartLine($state, static fn (): Ast\AstNode => parseExprWithWhere($state));
 
     return new Ast\DoExprStmt($expr);
+}
+
+/**
+ * Parse one do statement with the line it starts on in place, then put the enclosing statement's
+ * line back: a nested `do` sets its own, and without restoring it the enclosing expression would
+ * take the next statement as an argument.
+ */
+function withDoExprStartLine(ParserState $state, callable $body): mixed
+{
+    $prev = $state->doExprStartLine;
+    $state->doExprStartLine = peek($state)->line;
+    try {
+        return $body();
+    } finally {
+        $state->doExprStartLine = $prev;
+    }
 }
 
 /**
@@ -556,12 +588,7 @@ function parseDoBindings(ParserState $state): array
  */
 function parseDoLetItem(ParserState $state): array
 {
-    $state->doExprStartLine = peek($state)->line;
-    try {
-        return parseLetItem($state);
-    } finally {
-        $state->doExprStartLine = null;
-    }
+    return withDoExprStartLine($state, static fn (): array => parseLetItem($state));
 }
 
 /**

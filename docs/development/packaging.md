@@ -78,7 +78,8 @@ issue closes itself on the next run that passes.
 
 **PHP is built from the official source release** (php.net publishes Windows binaries only) with a
 deliberately minimal configure — `--disable-all` plus `phar`, `bcmath`, `mbstring`, `zip`,
-`ctype`, which is exactly what the compiler uses. Everything else — .NET SDK, JDK, GraalVM — is
+`ctype` and `intl` (the `Char` cons builds a character with `IntlChar::chr`), which is exactly what
+the compiler and its generated code use. Everything else — .NET SDK, JDK, GraalVM — is
 downloaded. Downloads and builds are cached under `.dist-cache/`, keyed by the lock hash: a cache
 hit makes a packaging job minutes long, and a miss makes it slower, never wrong.
 

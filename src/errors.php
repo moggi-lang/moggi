@@ -26,6 +26,7 @@ function diagnosticRegistry(): array
         'parse' => 'the token stream is not a well-formed program',
         'parse/late-import' => 'an import appears after a declaration',
         'parse/clause-arity' => 'equations of one function disagree on their parameter count',
+        'parse/do-last-stmt' => 'a do block does not end with an expression',
         'parse/pragma' => 'a pragma is malformed or names an unknown extension',
         'parse/backend' => 'a module names backend implementations outside a BACKEND pragma',
         'type' => 'an expression does not typecheck',

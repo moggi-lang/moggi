@@ -44,7 +44,10 @@ $shim = file_get_contents($deps . '/_runtime.php');
 $assert(\is_string($shim), 'the deps tree must provide _runtime.php');
 $assert(!str_contains($shim, 'function '), 'the deps runtime must just forward to the shared runtime');
 $assert(
-    str_contains($shim, $root . '/src/backend/php/runtime.php'),
+    str_contains(
+        \Moggi\Paths\canonicalSeparators($shim),
+        \Moggi\Paths\canonicalSeparators($root) . '/src/backend/php/runtime.php',
+    ),
     'the deps runtime must forward to the compiler runtime by absolute path',
 );
 $assert(!is_file($deps . '/moggi-app.phar'), 'the REPL deps tree must not be packaged');
