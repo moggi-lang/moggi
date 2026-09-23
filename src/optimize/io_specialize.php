@@ -68,6 +68,12 @@ function foldIoActionBoxesInItems(array $items): array
 }
 
 /**
+ * The body of a box, standing in for the `io_run` that executed it.
+ *
+ * Only a box that binds its result as its last statement can stand in: its value is then that
+ * binding. One whose arms `Ret` keeps a box and a run — inlining it would move that `Ret` into the
+ * enclosing function and leave the run's dest unbound.
+ *
  * @param array<int, IR\IoAssignAction> $assignByTemp
  * @return ?list<IR\Stmt>
  */
@@ -79,22 +85,22 @@ function inlineIoRun(IR\IoRun $stmt, array $assignByTemp): ?array
     }
 
     $assign = $assignByTemp[$action->id] ?? null;
-    if ($assign === null) {
+    if ($assign === null || !$assign->result instanceof IR\Temp) {
         return null;
     }
 
-    $inlined = $assign->body->items;
-    if ($stmt->dest !== null && $assign->result instanceof IR\Temp) {
-        $last = array_pop($inlined);
-        if ($last instanceof IR\Assign && $last->dest === $assign->result->id) {
-            $inlined[] = new IR\Assign($stmt->dest, $last->value);
-        } elseif ($last !== null) {
-            $inlined[] = $last;
-            $inlined[] = new IR\Assign($stmt->dest, $assign->result);
-        }
+    $body = $assign->body->items;
+    $last = $body === [] ? null : $body[count($body) - 1];
+    if (!$last instanceof IR\Assign || $last->dest !== $assign->result->id) {
+        return null;
     }
 
-    return $inlined;
+    \array_pop($body);
+    if ($stmt->dest !== null) {
+        $body[] = new IR\Assign($stmt->dest, $last->value);
+    }
+
+    return $body;
 }
 
 /** @return list<int> */

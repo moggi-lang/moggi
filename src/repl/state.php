@@ -6,6 +6,8 @@ use Moggi\Modules\PreparedProject;
 use Moggi\Pipeline\PipelineArtifacts;
 use Moggi\Syntax\Ast\Program;
 
+use function Moggi\Paths\moduleNameToPath;
+
 /** Mutable interactive session state for the Moggi REPL. */
 final class State
 {
@@ -62,6 +64,6 @@ final class State
 
     public function interactivePath(): string
     {
-        return $this->sessionDir . '/' . str_replace('.', '/', $this->moduleName) . '.mog';
+        return $this->sessionDir . DIRECTORY_SEPARATOR . moduleNameToPath($this->moduleName) . '.mog';
     }
 }

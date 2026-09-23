@@ -1,9 +1,21 @@
 import Data.Foldable
 import Data.Maybe
+import System.Environment (lookupEnv)
 import System.Filesystem (createDirectory, removeTree, writeTextFile)
 import System.Filesystem.Path
 import System.IO
 import System.IO.Error
+
+scratchPath :: String -> IO String
+scratchPath name = do
+  tmp <- lookupEnv "TMPDIR"
+  win <- lookupEnv "TEMP"
+  let dir = case tmp of
+        Just d -> d
+        Nothing -> case win of
+          Just d -> d
+          Nothing -> "/tmp"
+  pure (dir <> "/" <> name)
 
 -- ---- Exec-IO-BatchActions ----
 
@@ -43,7 +55,7 @@ runIODeferredAction = do
 
 runIOGetContents :: IO ()
 runIOGetContents = do
-  let p = "/tmp/moggi-exec-io-get-contents.txt"
+  p <- scratchPath "moggi-exec-io-get-contents.txt"
   hw <- openFile p WriteMode
   hPutStr hw "alpha\nbeta"
   hClose hw
@@ -66,9 +78,10 @@ readFirst h = do
 
 runIOHgetlineEof :: IO ()
 runIOHgetlineEof = do
-  hw <- openFile ("/tmp/moggi-exec-io-hgetline-eof.txt") WriteMode
+  p <- scratchPath "moggi-exec-io-hgetline-eof.txt"
+  hw <- openFile p WriteMode
   hClose hw
-  hr <- openFile ("/tmp/moggi-exec-io-hgetline-eof.txt") ReadMode
+  hr <- openFile p ReadMode
   readFirst hr
   hClose hr
 
@@ -84,15 +97,6 @@ runIONeverBuilt = do
 -- A failed open reports an IOErrorType read from the path, and every backend
 -- agrees on which one.
 
-missingPath :: FilePath
-missingPath = "/tmp/moggi-open-error-missing.txt"
-
-directoryPath :: FilePath
-directoryPath = "/tmp/moggi-open-error-dir"
-
-filePath :: FilePath
-filePath = "/tmp/moggi-open-error-file.txt"
-
 openType :: FilePath -> IO String
 openType p = do
   r <- tryIOError (openFile p ReadMode)
@@ -104,6 +108,9 @@ openType p = do
 
 runIOOpenError :: IO ()
 runIOOpenError = do
+  missingPath <- scratchPath "moggi-open-error-missing.txt"
+  directoryPath <- scratchPath "moggi-open-error-dir"
+  filePath <- scratchPath "moggi-open-error-file.txt"
   removeTree missingPath
   removeTree directoryPath
   createDirectory False directoryPath
@@ -175,6 +182,30 @@ runIOTypeAscription = do
   runAnnotated
   putStrLn "done"
 
+-- ---- Exec-IO-Case-Bind ----
+
+-- A `case` on the right of `<-`: the arms are actions, so the binding takes what the arm the
+-- pattern chose *ran to*, and the rest of the `do` still runs after the match.
+pickMessage :: Maybe Int -> IO String
+pickMessage m = case m of
+  Just n -> pure (show n)
+  Nothing -> pure "none"
+
+nestedCase :: IO ()
+nestedCase = do
+  x <- case Just 1 of
+    Just n -> pure (show n)
+    Nothing -> pure "none"
+  putStrLn ("case-bind " <> x)
+  y <- pickMessage Nothing
+  putStrLn ("case-bind " <> y)
+  z <- do
+    guard <- pure (Just 3)
+    case guard of
+      Just n -> pure (show (n + 1))
+      Nothing -> pure "none"
+  putStrLn ("case-bind " <> z)
+
 -- ---- combined entry point ----
 main :: IO ()
 main = do
@@ -189,3 +220,4 @@ main = do
   runIOStress
   runIOTwice
   runIOTypeAscription
+  nestedCase

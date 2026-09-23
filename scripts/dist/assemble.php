@@ -5,8 +5,10 @@ namespace Moggi\Dist;
 require_once __DIR__ . '/runtimes.php';
 require_once __DIR__ . '/build-phar.php';
 require_once __DIR__ . '/schnorr.php';
+require_once __DIR__ . '/../../src/paths.php';
 
 use function Moggi\Compiler\findExecutable;
+use function Moggi\Paths\isAbsolutePath;
 
 /**
  * Assemble the Moggi distributions.
@@ -49,6 +51,17 @@ function assembleUsage(): int
     \fwrite(STDOUT, 'variants: ' . \implode(' ', \array_keys(loadRuntimeConfig()['variants'])) . "\n");
 
     return 0;
+}
+
+function absoluteOutDir(string $dir): string
+{
+    if ($dir === '' || isAbsolutePath($dir)) {
+        return $dir;
+    }
+
+    $cwd = \getcwd();
+
+    return $cwd === false ? $dir : \rtrim($cwd, '/\\') . \DIRECTORY_SEPARATOR . $dir;
 }
 
 /** @return array{target: ?string, out: string, variants: list<string>, archives: bool, forceRuntimes: bool, glibcFloor: bool} */
@@ -101,7 +114,7 @@ function parseAssembleArgv(array $argv): array
 
     return [
         'target' => $options['target'],
-        'out' => \rtrim((string) $options['out'], '/\\'),
+        'out' => absoluteOutDir(\rtrim((string) $options['out'], '/\\')),
         'variants' => $options['variants'],
         'archives' => $options['archives'],
         'forceRuntimes' => $options['forceRuntimes'],
@@ -184,11 +197,6 @@ function variantPlan(array $config, string $target, array $requested): array
     return $plan;
 }
 
-/**
- * The part of every distribution that does not depend on the variant: the
- * compiler archive, the launcher, the standard library sources, user-facing docs,
- * examples and the licence.
- */
 function stageBaseInstallation(string $repo, string $base, string $target): void
 {
     removeTree($base);
@@ -230,11 +238,6 @@ function schnorrFileName(string $target): string
     return \str_starts_with($target, 'windows-') ? 'schnorr.exe' : 'schnorr';
 }
 
-/**
- * The schnorr CLI beside the launcher: self-contained, nothing to find at run
- * time. It has no user yet — it ships so that the installation carries the
- * toolbox it was built with, and so the next release can rely on it.
- */
 function stageSchnorr(string $repo, string $binDir, string $target): void
 {
     $name = schnorrFileName($target);
@@ -244,8 +247,6 @@ function stageSchnorr(string $repo, string $binDir, string $target): void
     @\chmod($binDir . '/' . $name, 0755);
 }
 
-/** Compile the native launcher. Only `MOGGI_DIST_CC` overrides Clang: `CC` is
- *  set by Nix and CI and must not silently change what a release is built with. */
 function buildLauncher(string $repo, string $out, string $target): void
 {
     $wanted = \getenv('MOGGI_DIST_CC');
@@ -259,7 +260,9 @@ function buildLauncher(string $repo, string $out, string $target): void
     }
     unset($target);
 
-    runOrFail([$clang, '-std=c11', '-O2', '-Wall', '-Wextra', '-o', $out, LAUNCHER_SOURCE]);
+    /* Windows: `CommandLineToArgvW` is in shell32, which no C runtime links by default. */
+    $windows = \PHP_OS_FAMILY === 'Windows' ? ['-lshell32'] : [];
+    runOrFail([$clang, '-std=c11', '-O2', '-Wall', '-Wextra', '-o', $out, LAUNCHER_SOURCE, ...$windows]);
     @\chmod($out, 0755);
 }
 
@@ -284,14 +287,7 @@ function assertBundledLicenses(string $stage, array $runtimes, array $config, st
     }
 }
 
-/**
- * The licence index for everything in the installation that belongs to someone
- * else: the bundled runtimes, which keep their own files under
- * `runtime/<name>/`, and the libraries statically linked into `bin/schnorr`,
- * whose full texts are repeated here because their sources are not shipped.
- *
- * @param list<string> $runtimes
- */
+/** @param list<string> $runtimes */
 function thirdPartyNotices(array $runtimes, string $target, array $config, string $repo): string
 {
     $lines = ['# Third-party notices', ''];
@@ -350,12 +346,7 @@ function thirdPartyNotices(array $runtimes, string $target, array $config, strin
     return \implode("\n", $lines);
 }
 
-/**
- * The archive's front page, written for the variant it sits in — deliberately not
- * the repository's README, which documents the compiler's development.
- *
- * @param list<string> $runtimes
- */
+/** @param list<string> $runtimes */
 function distributionReadme(string $variant, string $target, array $runtimes, string $version): string
 {
     $bundled = $runtimes === []
@@ -421,10 +412,6 @@ function distributionReadme(string $variant, string $target, array $runtimes, st
 }
 
 /**
- * Prove an assembled distribution works, from a directory that is not the
- * installation. `version` exercises the launcher, the archive and the bundled PHP;
- * compiling and running an example exercises the compiler and backend end to end.
- *
  * @param list<string> $runtimes
  * @return list<string> what was checked, for the report
  */
@@ -588,7 +575,11 @@ function assembleMain(array $argv): int
 
     $report = [];
     $failures = [];
+    $archives = 0;
     \fwrite(STDOUT, "\nassembling\n");
+    if ($options['archives']) {
+        \fwrite(STDOUT, 'archives go to: ' . $out . "\n");
+    }
     foreach ($plan as $entry) {
         $variant = $entry['variant'];
         $stage = $out . '/' . $variant;
@@ -628,6 +619,7 @@ function assembleMain(array $argv): int
         if ($options['archives'] && $checked !== 'FAILED') {
             $archive = $out . '/' . archiveName($variant, $version, $target);
             createArchive($stage, $archive, \str_starts_with($target, 'windows-') ? 'zip' : 'tar.gz');
+            ++$archives;
         }
 
         $report[] = \sprintf(
@@ -645,6 +637,12 @@ function assembleMain(array $argv): int
 
     if ($failures !== []) {
         \fwrite(STDERR, "\n" . \implode("\n", $failures) . "\n");
+
+        return 1;
+    }
+
+    if ($options['archives'] && $archives === 0) {
+        \fwrite(STDERR, "\nerror: no archive was produced for {$target} under {$out}\n");
 
         return 1;
     }

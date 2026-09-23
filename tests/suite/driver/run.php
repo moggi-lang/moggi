@@ -94,7 +94,7 @@ function runBackendCases(array $cases, string $backend, bool $multiBackend = fal
         $durationMs = (\microtime(true) - $started) * 1000.0;
         unset($GLOBALS['moggi_running_case']);
 
-        releasePreparedProjects();
+        releaseCaseMemos();
 
         $passed = (bool) ($outcome['passed'] ?? false);
         $message = (string) ($outcome['message'] ?? '');
@@ -140,6 +140,10 @@ function runBackendCases(array $cases, string $backend, bool $multiBackend = fal
     }
 
     $flush();
+
+    // The checked-module memo is keyed by the backend it was compiled for, and a run moves on to the
+    // next backend for good: keeping this one warm would hold a second copy of the stdlib closure.
+    \Moggi\Modules\ProjectCache::clearCheckedModules();
 
     return ['set' => $set, 'stopped' => $stopped, 'plain' => $plain];
 }

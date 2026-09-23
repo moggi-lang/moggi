@@ -6,9 +6,17 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -pedantic -std=c99 -O2
 
+# bech32.h marks its declarations with GCC's __access__; clang warns on every use of
+# them, GCC has the attribute itself and does not know this flag.
+ifneq (,$(findstring clang,$(shell $(CC) --version 2>/dev/null | head -1)))
+  CFLAGS += -Wno-unknown-attributes
+endif
+
 SECP_DIR = libsecp256k1-0.8.0
 BECH32_DIR = libbech32-1.1p1
+TESTS_DIR = tests
 BUILD_DIR = build
+BECH32_ENC = $(BUILD_DIR)/bech32_enc
 
 # --- schnorr app ---
 # Feature macros (e.g. _GNU_SOURCE) are defined at the top of schnorr.c itself.
@@ -44,20 +52,38 @@ SECP_OBJS = $(BUILD_DIR)/secp256k1.o \
 # the Windows compiler is simply `gcc`.
 LDLIBS =
 LDFLAGS =
-ifneq (,$(findstring mingw,$(shell $(CC) -dumpmachine 2>/dev/null)))
+PLATFORM = $(shell $(CC) -dumpmachine 2>/dev/null)
+ifneq (,$(findstring mingw,$(PLATFORM)))
   LDLIBS += -lbcrypt
   LDFLAGS += -static
 endif
 
-.PHONY: all clean check-deps
+# compat.h covers what these platforms lack in C: memrchr (libSystem and the Windows
+# CRT), the weak-alias attribute (Mach-O and PE/COFF cannot express it) and the
+# size_t-typed overflow builtins (Windows is LLP64, where size_t is wider than
+# unsigned long).
+ifneq (,$(findstring apple,$(PLATFORM)))
+  COMPAT = 1
+endif
+ifneq (,$(findstring mingw,$(PLATFORM)))
+  COMPAT = 1
+endif
+ifdef COMPAT
+  BECH32_CFLAGS += -include $(CURDIR)/compat.h
+  COMPAT_OBJS = $(BUILD_DIR)/compat.o
+endif
+
+.PHONY: all clean check-deps test-helper
 
 all: check-deps schnorr
+
+test-helper: $(BECH32_ENC)
 
 check-deps:
 	@test -f $(SECP_DIR)/src/secp256k1.c || { echo "schnorr: $(SECP_DIR) is missing — clone it at the pinned tag (see README.md, Dependencies)" >&2; exit 1; }
 	@test -f $(BECH32_DIR)/libbech32.c || { echo "schnorr: $(BECH32_DIR) is missing — clone it at the pinned tag (see README.md, Dependencies)" >&2; exit 1; }
 
-schnorr: $(BUILD_DIR)/schnorr.o $(BUILD_DIR)/libbech32.o $(SECP_LIB)
+schnorr: $(BUILD_DIR)/schnorr.o $(BUILD_DIR)/libbech32.o $(SECP_LIB) $(COMPAT_OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 $(BUILD_DIR)/schnorr.o: schnorr.c | $(BUILD_DIR)
@@ -65,6 +91,12 @@ $(BUILD_DIR)/schnorr.o: schnorr.c | $(BUILD_DIR)
 
 $(BUILD_DIR)/libbech32.o: $(BECH32_DIR)/libbech32.c | $(BUILD_DIR)
 	$(CC) $(BECH32_CFLAGS) -I$(BECH32_DIR) -MMD -MP -c -o $@ $<
+
+$(BUILD_DIR)/compat.o: compat.c compat.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -MMD -MP -c -o $@ $<
+
+$(BECH32_ENC): $(TESTS_DIR)/bech32_enc.c $(BUILD_DIR)/libbech32.o $(COMPAT_OBJS) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(LDFLAGS) $(APP_INCLUDES) -o $@ $^ $(LDLIBS)
 
 $(BUILD_DIR)/%.o: $(SECP_DIR)/src/%.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(SECP_WARN) $(SECP_DEFINES) $(SECP_INCLUDES) -MMD -MP -c -o $@ $<

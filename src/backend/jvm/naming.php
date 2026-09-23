@@ -12,7 +12,10 @@ function moduleInternalName(string $moduleName): string
     return 'moggi/' . \str_replace('.', '/', $moduleName);
 }
 
-/** Relative path of a module's primary artifact (internal name + `.class`). */
+/**
+ * Relative path of a module's primary artifact (internal name + `.class`). The internal name
+ * already spells the package with `/`, which is also the jar entry's rule, so it is kept as is.
+ */
 function artifactPath(string $moduleName): string
 {
     return moduleInternalName($moduleName) . '.class';

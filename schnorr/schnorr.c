@@ -1,6 +1,8 @@
 #if defined(__linux__) || defined(__FreeBSD__) || defined(__NetBSD__)
 #  if defined(__linux__)
 #    define _GNU_SOURCE
+#  elif defined(__NetBSD__)
+#    define _NETBSD_SOURCE
 #  else
 #    define _DEFAULT_SOURCE
 #    define _POSIX_C_SOURCE 200809L
@@ -20,8 +22,11 @@
 #include <unistd.h>
 #include <sys/random.h>
 #endif
-#if defined(__APPLE__) || defined(__OpenBSD__)
+#if defined(__APPLE__) || defined(__OpenBSD__) || defined(__NetBSD__)
 #include <unistd.h>
+#endif
+#if defined(__APPLE__)
+#include <sys/random.h>
 #endif
 #if defined(_WIN32)
 #  ifndef WIN32_LEAN_AND_MEAN

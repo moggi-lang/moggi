@@ -1,9 +1,0 @@
-public class moggi.Interactive {
-  public static java.lang.Object foo();
-    Code:
-         0: lconst_1
-         1: invokestatic  #17                 // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
-         4: areturn
-         5: aconst_null
-         6: areturn
-}

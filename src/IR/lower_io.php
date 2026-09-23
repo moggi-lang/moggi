@@ -173,6 +173,12 @@ function ioActionExprReturnsUnit(Ast\AstNode $expr): bool
     return $type !== null && isIoUnitType($type);
 }
 
+/**
+ * Lower an IO-typed expression to the value it produced once it ran.
+ *
+ * When the callee is unknown the lowering cannot tell whether it came back with an action to run or
+ * with its already executed result — which is what `IoRun` accepts.
+ */
 function lowerIoReturnOrAction(Ast\AstNode $expr, LowerCtx $ctx, bool $asStatement = false): ?Operand
 {
     if ($expr instanceof Ast\IoPure) {
@@ -215,11 +221,27 @@ function lowerIoReturnOrAction(Ast\AstNode $expr, LowerCtx $ctx, bool $asStateme
         }
     }
 
+    // A match's arms leave through `Ret`, so a match is only an action in tail position: anywhere
+    // its value is needed it is boxed and run, exactly as the statement path below does. Building
+    // that box calls this function, so inside one the match is the body itself.
+    if ($expr instanceof Ast\IoCase) {
+        if ($ctx->inActionBox) {
+            return lowerIoCase($expr, $ctx) ? new Unit() : null;
+        }
+
+        $boxed = lowerIoActionToBox($expr, $ctx);
+        $dest = $asStatement ? null : freshTemp($ctx);
+        $ctx->items[] = new IoRun($boxed, $dest, ioStmtSrcLoc($expr, $ctx));
+        $ctx->hasIoRun = true;
+
+        return $dest === null ? new Unit() : new Temp($dest);
+    }
+
     $dest = ($asStatement || ioActionExprReturnsUnit($expr)) ? null : freshTemp($ctx);
     if (!lowerIoAction($expr, $ctx, $dest)) {
-        // Higher-order applies (e.g. `k x` where `k` is a parameter) are not
-        // known IO callees. Lower as an ordinary expression; when building an
-        // action box the result may itself be a nested `__io` box.
+        // Higher-order applies (e.g. `k x` where `k` is a parameter) are not known IO callees:
+        // lower as an ordinary expression, whose value is either the action the callee returned
+        // or, when it ran the effect itself, its result.
         $inner = $expr instanceof Ast\IoAction ? $expr->expr : $expr;
         try {
             $value = lowerExpr($inner, $ctx);
@@ -228,30 +250,13 @@ function lowerIoReturnOrAction(Ast\AstNode $expr, LowerCtx $ctx, bool $asStateme
                 return null;
             }
 
-            $boxed = lowerIoActionToBox($expr, $ctx);
-            if ($dest !== null) {
-                $ctx->items[] = new Assign($dest, $boxed);
-
-                return new Temp($dest);
-            }
-
-            $ctx->items[] = new IoRun($boxed, null, ioStmtSrcLoc($expr, $ctx));
-            $ctx->hasIoRun = true;
-
-            return new Unit();
+            $value = lowerIoActionToBox($expr, $ctx);
         }
 
-        if ($dest !== null) {
-            $ctx->items[] = new Assign($dest, $value);
+        $ctx->items[] = new IoRun($value, $dest, ioStmtSrcLoc($expr, $ctx));
+        $ctx->hasIoRun = true;
 
-            return new Temp($dest);
-        }
-
-        if ($asStatement) {
-            return new Unit();
-        }
-
-        return $value;
+        return $dest === null ? new Unit() : new Temp($dest);
     }
 
     return $dest === null ? new Unit() : new Temp($dest);

@@ -30,6 +30,9 @@ $assert = static function (bool $condition, string $message) use (&$checks): voi
 
 $version = \trim((string) \file_get_contents($root . '/VERSION'));
 $work = createTempDir('moggi-distribution');
+// Canonical before anything is derived from it: the distribution reports the paths it resolves,
+// and macOS reaches its temporary directory through a symlink.
+$work = \realpath($work) ?: $work;
 $out = $work . '/out';
 $exe = \PHP_OS_FAMILY === 'Windows' ? '.exe' : '';
 
@@ -42,11 +45,13 @@ if ($compiler === null) {
 }
 
 try {
+    // `--out` relative to a cwd that is not the staged tree, which is what CI passes.
+    $relativeOut = \basename($work) . '/out';
     $built = runCompiledProcess(
-        [\PHP_BINARY, $root . '/scripts/dist/assemble.php', '--variants', 'moggi-minimal', '--archives', '--out', $out],
+        [\PHP_BINARY, $root . '/scripts/dist/assemble.php', '--variants', 'moggi-minimal', '--archives', '--out', $relativeOut],
         600,
         ['MOGGI_DIST_CC' => $compiler] + \getenv(),
-        $root,
+        \dirname($work),
     );
     if ($built['exitCode'] !== 0) {
         \fwrite(STDERR, "assembling failed:\n" . $built['stdout'] . $built['stderr']);
@@ -155,8 +160,10 @@ try {
 
     // A backend that is neither bundled nor on the host has to be reported, not
     // skipped and not fatal: the answer is `not found`, never an empty field.
-    $env = ['PATH' => distributionPhpOnlyPath()] + \getenv();
-    unset($env['JAVA_HOME'], $env['DOTNET_ROOT'], $env['GRAALVM_HOME'], $env['JDK_HOME']);
+$noRuntimes = $work . '/no-runtimes';
+\mkdir($noRuntimes, 0777, true);
+$env = ['PATH' => $noRuntimes] + \getenv();
+unset($env['JAVA_HOME'], $env['DOTNET_ROOT'], $env['GRAALVM_HOME'], $env['JDK_HOME']);
     $bare = runCompiledProcess([$php, $stage . '/bin/moggi.phar', 'version'], 120, $env, $work);
     $assert($bare['exitCode'] === 0, 'a missing backend toolchain must not fail `version`: ' . $bare['stderr']);
     foreach (['php', 'java', 'dotnet', 'native-image'] as $tool) {
@@ -227,12 +234,19 @@ try {
     );
 
     $build = (string) ($info['compiler'] ?? $version);
-    $archive = $out . '/' . $target . '/moggi-minimal-' . $build . '-' . $target . '.tar.gz';
+    // The archive's format follows the target, not the host running the test: a
+    // Windows distribution is a zip (see scripts/dist/assemble.php).
+    $windowsTarget = \str_starts_with($target, 'windows-');
+    $archive = $out . '/' . $target . '/moggi-minimal-' . $build . '-' . $target
+        . ($windowsTarget ? '.zip' : '.tar.gz');
     $assert(\is_file($archive), 'the archive must be named after the build: ' . \basename($archive));
 
     $clean = $work . '/clean';
     \mkdir($clean, 0777, true);
-    $extract = runCompiledProcess(['tar', '-x', '-z', '-f', $archive, '-C', $clean], 300);
+    $extractArgs = $windowsTarget
+        ? ['tar', '-x', '-f', $archive, '-C', $clean]
+        : ['tar', '-x', '-z', '-f', $archive, '-C', $clean];
+    $extract = runCompiledProcess($extractArgs, 300);
     $assert($extract['exitCode'] === 0, 'the archive must extract: ' . $extract['stderr']);
     $assert(\is_file($clean . '/moggi-minimal/bin/moggi' . $exe), 'the archive must unpack to one directory');
     $assert(!\file_exists($clean . '/moggi-minimal/src'), 'the extracted archive must not carry sources');

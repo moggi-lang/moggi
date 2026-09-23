@@ -8,6 +8,7 @@ while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
 
 require $root . '/src/compiler.php';
 
+use Moggi\Compiler;
 use Moggi\Docs;
 
 $failures = 0;
@@ -60,7 +61,7 @@ file_put_contents($jsPath, Docs\emitMoogleSearchJs());
 file_put_contents($rowsPath, json_encode($rows, JSON_UNESCAPED_UNICODE));
 file_put_contents($queriesPath, json_encode($queries, JSON_UNESCAPED_UNICODE));
 
-$node = trim((string) shell_exec('command -v node'));
+$node = Compiler\findExecutable('node') ?? '';
 if ($node === '') {
     fwrite(STDERR, "FAIL moogle parity: node is required\n");
     array_map(static fn ($f) => @unlink($f), glob($tmpDir . '/*') ?: []);

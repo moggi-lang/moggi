@@ -43,9 +43,12 @@ $deps = \Moggi\Repl\EvalRunner\ensurePhpDeps($state);
 $shim = file_get_contents($deps . '/_runtime.php');
 $assert(\is_string($shim), 'the deps tree must provide _runtime.php');
 $assert(!str_contains($shim, 'function '), 'the deps runtime must just forward to the shared runtime');
+$runtime = \Moggi\Backend\backendById('php')->runtimeFiles();
+$assert($runtime !== [], 'the PHP backend must have a runtime to share');
+$assert(\Moggi\Paths\isAbsolutePath($runtime[0]), 'the shared runtime path must be absolute');
 $assert(
-    str_contains($shim, $root . '/src/backend/php/runtime.php'),
-    'the deps runtime must forward to the compiler runtime by absolute path',
+    \str_contains($shim, 'require_once ' . \var_export($runtime[0], true) . ';'),
+    'the deps runtime must forward to the compiler runtime by absolute path: ' . $shim,
 );
 $assert(!is_file($deps . '/moggi-app.phar'), 'the REPL deps tree must not be packaged');
 

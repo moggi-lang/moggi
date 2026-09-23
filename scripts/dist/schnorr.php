@@ -105,7 +105,11 @@ function buildSchnorr(string $repo, bool $windows = false): string
     $dir = $repo . '/' . SCHNORR_DIR;
     // Run make from the directory rather than with `-C`: under MSYS2 the recipe
     // shell is POSIX but the path Windows PHP would hand over is not.
-    runOrFail([$make, 'CC=' . schnorrCompiler($windows), '-j' . cpuCount()], $dir);
+    //
+    // Serial on Windows: MSYS2's make hands its jobserver to recipes that
+    // cannot use it, and the build is a handful of files.
+    $jobs = $windows ? [] : ['-j' . cpuCount()];
+    runOrFail([$make, 'CC=' . schnorrCompiler($windows), ...$jobs], $dir, true, 600);
 
     foreach (['schnorr', 'schnorr.exe'] as $name) {
         if (\is_file($dir . '/' . $name)) {

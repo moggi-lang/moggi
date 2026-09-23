@@ -3,6 +3,7 @@
 namespace Moggi\Backend\DotNet\Naming;
 
 use function Moggi\Backend\DotNet\Dependencies\dotNetTypeAssembly;
+use function Moggi\Paths\moduleNameToPath;
 
 /**
  * Moggi module name → CLR type name (e.g. Data.String → Moggi.Data.String).
@@ -17,10 +18,16 @@ function moduleTypeName(string $moduleName): string
     return 'Moggi.' . $moduleName;
 }
 
+/** Relative path for a given CLR type's `.il` artifact (`Moggi.Data.String` → `Moggi\Data\String.il`). */
+function typeArtifactPath(string $typeName): string
+{
+    return moduleNameToPath($typeName) . '.il';
+}
+
 /** Relative path for a module's primary `.il` artifact (e.g. `Moggi/Data/String.il`). */
 function artifactPath(string $moduleName): string
 {
-    return str_replace('.', '/', moduleTypeName($moduleName)) . '.il';
+    return typeArtifactPath(moduleTypeName($moduleName));
 }
 
 /**

@@ -1,0 +1,4 @@
+tests/syntax/parser/bad-parse/Do-Last-Stmt.mog:2:3: parse error: the last statement in a `do` block must be an expression
+
+  2 |   x <- pure 1
+    |   ^

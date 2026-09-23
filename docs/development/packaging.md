@@ -78,7 +78,8 @@ issue closes itself on the next run that passes.
 
 **PHP is built from the official source release** (php.net publishes Windows binaries only) with a
 deliberately minimal configure — `--disable-all` plus `phar`, `bcmath`, `mbstring`, `zip`,
-`ctype`, which is exactly what the compiler uses. Everything else — .NET SDK, JDK, GraalVM — is
+`ctype` and `intl` (the `Char` cons builds a character with `IntlChar::chr`), which is exactly what
+the compiler and its generated code use. Everything else — .NET SDK, JDK, GraalVM — is
 downloaded. Downloads and builds are cached under `.dist-cache/`, keyed by the lock hash: a cache
 hit makes a packaging job minutes long, and a miss makes it slower, never wrong.
 
@@ -237,11 +238,13 @@ php scripts/dist/pin.php --check --target linux-x86_64
 ```
 
 `assemble.php` stages the installation, derives the variants, runs each variant's smoke test and
-optionally writes the archives; `--help` lists the options. The smoke test runs `version`, compiles
-and runs an example on every backend the variant bundles, builds an application PHAR, and generates
-a key with `bin/schnorr`. Building PHP from source needs
-`libzip` and `oniguruma` (`PKG_CONFIG_PATH` pointing at their `lib/pkgconfig`); the dev shell sets
-that up. The distribution tests are a normal part of the suite:
+optionally writes the archives; `--help` lists the options. A path you pass means what it means to the
+shell you started the script in: `--out` is anchored to that working directory immediately, and nothing
+under `scripts/dist` changes the working directory of the process, so a relative `MOGGI_DIST_CACHE` or
+`--source` is read from there too. The smoke test runs `version`, compiles and runs an example on every
+backend the variant bundles, builds an application PHAR, and generates a key with `bin/schnorr`.
+Building PHP from source needs `libzip` and `oniguruma` (`PKG_CONFIG_PATH` pointing at their
+`lib/pkgconfig`); the dev shell sets that up. The distribution tests are a normal part of the suite:
 
 ```bash
 php test.php distribution

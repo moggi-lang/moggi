@@ -2,8 +2,10 @@
 
 namespace Moggi\Backend\DotNet;
 
+use function Moggi\Compiler\executableName;
 use function Moggi\Compiler\findExecutable;
 use function Moggi\Compiler\findToolchainExecutable;
+use function Moggi\Compiler\runProcess;
 use function Moggi\Debug\sourceMapFrames;
 
 require_once __DIR__ . '/../../executables.php';
@@ -28,30 +30,21 @@ function resolveDotnetExecutable(): ?string
         ?? findExecutable('dotnet');
 }
 
-/** @return array<string, string> */
+/**
+ * The environment `dotnet` gets: this process's, plus the CLI's own quiet flags.
+ *
+ * Read through `getenv()` rather than `$_ENV`/`$_SERVER`: those hold what `variables_order` chose to
+ * import, which is not the environment a build tool inherits — and a Native AOT link needs the
+ * linker's `INCLUDE`/`LIB`/`PATH` as much as it needs the SDK.
+ *
+ * @return array<string, string>
+ */
 function dotnetCliEnv(): array
 {
     $env = [];
-    foreach ($_ENV as $k => $v) {
-        if (\is_string($k) && \is_string($v)) {
-            $env[$k] = $v;
-        }
-    }
-    foreach ($_SERVER as $k => $v) {
-        if (\is_string($k) && \is_string($v) && !isset($env[$k])) {
-            $env[$k] = $v;
-        }
-    }
-    if (!isset($env['PATH'])) {
-        $path = \getenv('PATH');
-        if (\is_string($path)) {
-            $env['PATH'] = $path;
-        }
-    }
-    if (!isset($env['HOME'])) {
-        $home = \getenv('HOME');
-        if (\is_string($home)) {
-            $env['HOME'] = $home;
+    foreach (\getenv() as $name => $value) {
+        if (\is_string($value)) {
+            $env[$name] = $value;
         }
     }
     $env['DOTNET_NOLOGO'] = '1';
@@ -126,7 +119,7 @@ function resolveIlasmExecutable(?string $dotnet = null): ?string
     $cached = true;
 
     $onPath = findExecutable('ilasm');
-    if ($onPath !== null) {
+    if ($onPath !== null && !isLegacyFrameworkIlasm($onPath)) {
         return $resolved = $onPath;
     }
 
@@ -153,13 +146,27 @@ function resolveIlasmExecutable(?string $dotnet = null): ?string
     return $resolved = null;
 }
 
+/**
+ * True for the .NET Framework's own `ilasm.exe`, which is not the assembler this backend targets:
+ * it reads the source in the system code page, so every non-ASCII string literal assembled with it
+ * comes out as mojibake. The CoreCLR flavour — the one Microsoft's own Sdk.IL drives, and the one
+ * the NuGet runtime package carries — reads the source as UTF-8, which is what the IL is written as.
+ * A Windows install carries it on `PATH` at `%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\ilasm.exe`.
+ */
+function isLegacyFrameworkIlasm(string $path): bool
+{
+    return \PHP_OS_FAMILY === 'Windows'
+        && \stripos($path, 'Microsoft.NET' . DIRECTORY_SEPARATOR . 'Framework') !== false;
+}
+
 function findIlasmInNuGetCaches(): ?string
 {
     $rid = nugetIlasmRuntimeId();
     $package = "runtime.{$rid}.microsoft.netcore.ilasm";
+    $binary = executableName('ilasm');
     $rel = $package . DIRECTORY_SEPARATOR . '6.0.0' . DIRECTORY_SEPARATOR
         . 'runtimes' . DIRECTORY_SEPARATOR . $rid . DIRECTORY_SEPARATOR
-        . 'native' . DIRECTORY_SEPARATOR . 'ilasm';
+        . 'native' . DIRECTORY_SEPARATOR . $binary;
 
     foreach (nugetPackageRoots() as $root) {
         $candidate = $root . DIRECTORY_SEPARATOR . $rel;
@@ -179,7 +186,7 @@ function findIlasmInNuGetCaches(): ?string
             }
             $candidate = $pkgDir . DIRECTORY_SEPARATOR . $ver . DIRECTORY_SEPARATOR
                 . 'runtimes' . DIRECTORY_SEPARATOR . $rid . DIRECTORY_SEPARATOR
-                . 'native' . DIRECTORY_SEPARATOR . 'ilasm';
+                . 'native' . DIRECTORY_SEPARATOR . $binary;
             if (\is_file($candidate) && \is_executable($candidate)) {
                 return $candidate;
             }
@@ -377,6 +384,12 @@ XML;
 
 /**
  * Assemble with CoreCLR ilasm directly (mirrors Sdk.IL's Exec of ilasm).
+ *
+ * The sources go to ilasm as one file, not one argument each. They are fragments of a single
+ * compilation unit — only the header carries `.module`/`.assembly` — and a program that pulls in
+ * the standard library reaches several hundred of them, which no Windows command line can name:
+ * `CreateProcess` stops at 32,767 characters. An ilasm error therefore names the bundle, not the
+ * fragment; the fragments stay on disk beside it for a `dotnet build` of the tree.
  */
 function assembleDotNetWithIlasm(
     string $ilasm,
@@ -394,29 +407,22 @@ function assembleDotNetWithIlasm(
     // apphost via the SDK. `dotnet app.dll` runs either shape.
     // No `-OPTIMIZE`: it rewrites long branches to short, which would invalidate
     // the compile-time IL offsets baked into Moggi.Frames.
-    $args = [
+    $bundlePath = bundleIlSources($outputRoot, $ilFiles);
+    $result = runProcess([
         $ilasm,
         '-NOLOGO',
         '-QUIET',
         '-DLL',
         '-OUTPUT=' . $dllPath,
-        ...$ilFiles,
-    ];
-    $desc = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
-    $proc = \proc_open($args, $desc, $pipes, $outputRoot);
-    if (!\is_resource($proc)) {
-        throw new \RuntimeException('failed to start ilasm');
-    }
-    \fclose($pipes[0]);
-    $stdout = (string) \stream_get_contents($pipes[1]);
-    $stderr = (string) \stream_get_contents($pipes[2]);
-    \fclose($pipes[1]);
-    \fclose($pipes[2]);
-    $code = \proc_close($proc);
-    if ($code !== 0 || !\is_file($dllPath)) {
+        $bundlePath,
+    ], $outputRoot);
+    @\unlink($bundlePath);
+    if ($result['exitCode'] !== 0 || !\is_file($dllPath)) {
         throw new \RuntimeException(
             'ilasm failed'
-            . ($stdout !== '' || $stderr !== '' ? "\n" . \trim($stdout . "\n" . $stderr) : ''),
+            . ($result['stdout'] !== '' || $result['stderr'] !== ''
+                ? "\n" . \trim($result['stdout'] . "\n" . $result['stderr'])
+                : ''),
         );
     }
 
@@ -498,6 +504,28 @@ function dotNetOutputReferencedAssemblies(string $outputRoot): array
 }
 
 /** @return list<string> absolute paths; `_header.il` first */
+/**
+ * Every ILASM source in `$outputRoot`, in assembly order, as one file. Returns its path.
+ *
+ * @param list<string> $ilFiles
+ */
+function bundleIlSources(string $outputRoot, array $ilFiles): string
+{
+    $bundle = '';
+    foreach ($ilFiles as $file) {
+        $chunk = (string) \file_get_contents($file);
+        $bundle .= $chunk;
+        if ($chunk === '' || !\str_ends_with($chunk, "\n")) {
+            $bundle .= "\n";
+        }
+    }
+
+    $path = $outputRoot . DIRECTORY_SEPARATOR . '_bundle.il';
+    \file_put_contents($path, $bundle);
+
+    return $path;
+}
+
 function collectIlSources(string $outputRoot): array
 {
     $header = null;
@@ -717,20 +745,10 @@ function mirrorIlTree(string $from, string $to): void
 function runDotnetCli(string $dotnet, array $args, string $cwd, array $env): void
 {
     $cmd = \array_merge([$dotnet], $args);
-    $desc = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
-    $proc = \proc_open($cmd, $desc, $pipes, $cwd, $env);
-    if (!\is_resource($proc)) {
-        throw new \RuntimeException('failed to start: ' . \implode(' ', $cmd));
-    }
-    \fclose($pipes[0]);
-    $stdout = (string) \stream_get_contents($pipes[1]);
-    $stderr = (string) \stream_get_contents($pipes[2]);
-    \fclose($pipes[1]);
-    \fclose($pipes[2]);
-    $code = \proc_close($proc);
-    if ($code !== 0) {
+    $result = runProcess($cmd, $cwd, $env);
+    if ($result['exitCode'] !== 0) {
         throw new \RuntimeException(
-            \implode(' ', $cmd) . " failed\n" . \trim($stdout . "\n" . $stderr),
+            \implode(' ', $cmd) . " failed\n" . \trim($result['stdout'] . "\n" . $result['stderr']),
         );
     }
 }
@@ -765,24 +783,84 @@ function buildDotNetNativeExecutable(
         '--nologo',
         '-v', 'q',
     ];
-    $desc = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
-    $proc = \proc_open($cmd, $desc, $pipes, $outputRoot, dotnetCliEnv());
-    if (!\is_resource($proc)) {
-        return false;
-    }
-    \fclose($pipes[0]);
-    $stdout = (string) \stream_get_contents($pipes[1]);
-    $stderr = (string) \stream_get_contents($pipes[2]);
-    \fclose($pipes[1]);
-    \fclose($pipes[2]);
-    $code = \proc_close($proc);
-    $built = $pubDir . DIRECTORY_SEPARATOR . $binaryName;
-    if ($code !== 0 || !\is_file($built)) {
-        \fwrite(STDERR, "error: Native AOT publish failed\n" . \trim($stdout . "\n" . $stderr) . "\n");
+    $result = runProcess($cmd, $outputRoot, dotnetCliEnv());
+    $binary = executableName($binaryName);
+    $built = $result['exitCode'] === 0 ? nativeAotArtifact($pubDir, $binary) : null;
+    if ($built === null) {
+        \fwrite(
+            STDERR,
+            "error: Native AOT publish failed (exit {$result['exitCode']})\n"
+            . nativeAotDryReport($pubDir, $binary)
+            . \trim($result['stdout'] . "\n" . $result['stderr']) . "\n",
+        );
 
         return false;
     }
-    \rename($built, $outputRoot . DIRECTORY_SEPARATOR . $binaryName);
+    if ($built !== $pubDir . DIRECTORY_SEPARATOR . $binary) {
+        \fwrite(STDOUT, "native: the publish wrote {$built}\n");
+    }
+    \rename($built, $outputRoot . DIRECTORY_SEPARATOR . $binary);
 
     return true;
+}
+
+/**
+ * The executable a publish left, when it is there and under the name we asked for.
+ *
+ * `-p:AssemblyName` is a request, not a guarantee — and a publish that reports success while writing
+ * nothing under that name has been seen. The requested name wins; failing that the only file in the
+ * publish directory that could be a program is taken, which a caller cannot be misled by: the
+ * artifact is executed, and an executable that is not this program does not print this program's
+ * output.
+ */
+function nativeAotArtifact(string $pubDir, string $binary): ?string
+{
+    $wanted = $pubDir . DIRECTORY_SEPARATOR . $binary;
+    if (\is_file($wanted)) {
+        return $wanted;
+    }
+
+    $candidates = [];
+    foreach (\scandir($pubDir) ?: [] as $entry) {
+        if ($entry === '.' || $entry === '..') {
+            continue;
+        }
+        $path = $pubDir . DIRECTORY_SEPARATOR . $entry;
+        if (\is_file($path) && isNativeAotProgram($entry)) {
+            $candidates[] = $path;
+        }
+    }
+
+    return \count($candidates) === 1 ? $candidates[0] : null;
+}
+
+/** Is this publish output a program rather than a library, a symbol file or a manifest? */
+function isNativeAotProgram(string $name): bool
+{
+    $library = ['.dll', '.pdb', '.json', '.lib', '.exp', '.obj', '.ilk', '.dbg', '.so', '.a', '.o'];
+    foreach ($library as $suffix) {
+        if (\str_ends_with(\strtolower($name), $suffix)) {
+            return false;
+        }
+    }
+
+    return \PHP_OS_FAMILY === 'Windows' ? \str_ends_with(\strtolower($name), '.exe') : !\str_contains($name, '.');
+}
+
+/** What a publish directory holds, so a failure names the reason there is nothing to run. */
+function nativeAotDryReport(string $pubDir, string $binary): string
+{
+    if (!\is_dir($pubDir)) {
+        return "  the publish wrote no {$pubDir}\n";
+    }
+
+    $entries = [];
+    foreach (\scandir($pubDir) ?: [] as $entry) {
+        if ($entry !== '.' && $entry !== '..') {
+            $entries[] = $entry;
+        }
+    }
+    \sort($entries);
+
+    return '  no ' . $binary . ' in ' . $pubDir . ': ' . ($entries === [] ? '(empty)' : \implode(', ', $entries)) . "\n";
 }

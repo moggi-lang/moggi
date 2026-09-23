@@ -370,7 +370,7 @@ function lexPragma(
             && $source[$i + 1] === '-'
             && $source[$i + 2] === '}'
         ) {
-            $body = trim(substr($source, $bodyStart, $i - $bodyStart));
+            $body = trim(str_replace("\r\n", "\n", substr($source, $bodyStart, $i - $bodyStart)));
             $i += 3;
             $col += 3;
 
@@ -424,6 +424,9 @@ function lexDocCommentLine(
             $lineText = $lineEnd === false
                 ? substr($source, $nextStart)
                 : substr($source, $nextStart, $lineEnd - $nextStart);
+            // A CRLF source keeps its `\r` in the line: dropping it here makes the
+            // continuation test below and the text it captures identical to LF's.
+            $lineText = rtrim($lineText, "\r");
 
             $pattern = $kind === TokenKind::DocTrailing
                 ? '/^[ \t]*-- \^[ \t]*(.*)$/'
@@ -488,7 +491,7 @@ function lexDocCommentBlock(
         throw lexError('unterminated documentation block', $source, $filename, $startLine, $startCol);
     }
 
-    return new Token(TokenKind::DocBlock, trim($text), $startLine, $startCol);
+    return new Token(TokenKind::DocBlock, trim(str_replace("\r\n", "\n", $text)), $startLine, $startCol);
 }
 
 /**

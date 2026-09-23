@@ -5,6 +5,7 @@ namespace Moggi\Dist;
 require_once __DIR__ . '/../../src/executables.php';
 
 use function Moggi\Compiler\findExecutable;
+use function Moggi\Compiler\runProcess as runCompilerProcess;
 
 /**
  * Third-party runtime acquisition for the distributions.
@@ -103,14 +104,7 @@ function expandAssetTemplate(string $template, string $runtime, string $target, 
     ) ?? $template;
 }
 
-/**
- * The asset for one runtime on one target, or null when upstream has no build.
- * Assets may be keyed by target, by platform (when the placeholder set differs),
- * or by the generic `asset`/`assetZip` templates; an entry without a `url` is a
- * selector, not an asset.
- *
- * @return array{format: string, url: string, stripComponents: int, build?: bool, binary: string, lockKey: string}|null
- */
+/** @return array{format: string, url: string, stripComponents: int, build?: bool, binary: string, lockKey: string}|null */
 function runtimeAsset(string $runtime, string $target, array $config): ?array
 {
     $targetCoords = $config['targets'][$target] ?? throw new \RuntimeException("unknown target {$target}");
@@ -207,20 +201,16 @@ function sha256File(string $path): string
     return \strtolower($hash);
 }
 
-/** Run a command and return [exitCode, stdout, stderr]. */
-function runProcess(array $command, ?string $cwd = null, ?array $env = null): array
-{
-    $descriptors = [1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
-    $process = \proc_open($command, $descriptors, $pipes, $cwd, $env);
-    if (!\is_resource($process)) {
-        throw new \RuntimeException('cannot start: ' . \implode(' ', $command));
-    }
-    $stdout = (string) \stream_get_contents($pipes[1]);
-    $stderr = (string) \stream_get_contents($pipes[2]);
-    \fclose($pipes[1]);
-    \fclose($pipes[2]);
+function runProcess(
+    array $command,
+    ?string $cwd = null,
+    ?array $env = null,
+    bool $echo = false,
+    ?int $timeoutSeconds = null,
+): array {
+    $result = runCompilerProcess($command, $cwd, $env, $echo, $timeoutSeconds);
 
-    return [\proc_close($process), $stdout, $stderr];
+    return [$result['exitCode'], $result['stdout'], $result['stderr']];
 }
 
 function extractArchive(string $archive, string $format, string $destination, int $stripComponents): void
@@ -321,17 +311,7 @@ function removeTree(string $path): void
     @\rmdir($path);
 }
 
-/**
- * Copy a tree, preserving permissions and symlinks.
- *
- * A runtime tree is copied verbatim: JDKs and GraalVM are full of links and
- * executables, and a copied runtime that lost one of either is broken in ways
- * only the compiler's child processes would notice. `$keep` decides what is
- * shipped at all — it sees each entry's path relative to `$from` and its name,
- * and `null` copies everything.
- *
- * @param ?callable(string, string): bool $keep
- */
+/** @param ?callable(string, string): bool $keep */
 function copyTree(string $from, string $to, ?callable $keep = null): void
 {
     if (!\is_dir($to) && !\mkdir($to, 0777, true) && !\is_dir($to)) {
@@ -369,10 +349,31 @@ function copyTree(string $from, string $to, ?callable $keep = null): void
 }
 
 /**
- * Read the version a runtime reports about itself, and assert it is the version
- * the configuration pins. Executing the binary also proves it belongs to the
- * target architecture: a binary for another one cannot run at all.
+ * Move a runtime out of the macOS bundle layout.
+ *
+ * A JDK archive for macOS nests the runtime — `jdk-21.0.12.1+1/Contents/Home/bin/java` — so the
+ * one-component strip every asset uses leaves it at `Contents/Home`, where nothing looks for it.
+ * The JDK and GraalVM assets are both built like that, and only on macOS. Nothing happens when the
+ * runtime's own binary is already at the root, so a flat archive is untouched.
  */
+function flattenDarwinBundleHome(string $dir, string $binary): void
+{
+    $home = $dir . '/Contents/Home';
+    if (\is_file($dir . '/' . $binary) || !\is_file($home . '/' . $binary)) {
+        return;
+    }
+
+    foreach (\scandir($home) ?: [] as $name) {
+        if ($name === '.' || $name === '..') {
+            continue;
+        }
+        if (!\rename($home . '/' . $name, $dir . '/' . $name)) {
+            throw new \RuntimeException("cannot move {$home}/{$name} into {$dir}");
+        }
+    }
+    removeTree($dir . '/Contents');
+}
+
 function runtimeVersionOutput(string $runtime, string $root, string $target, array $config): string
 {
     $asset = runtimeAsset($runtime, $target, $config);
@@ -405,17 +406,6 @@ function runtimeProcess(array $command): string
     return \trim($stdout . "\n" . $stderr);
 }
 
-/**
- * Runtime acquisition: from a pinned, verified upstream asset to a runtime
- * directory ready to be copied into a distribution.
- *
- * Everything is cached under `.dist-cache/` and keyed by the lock entry, so
- * preparing the runtimes for a target happens once and every variant is
- * assembled from the same result — one download and one build per target, at
- * most.
- */
-
-/** Root of the local distribution cache (downloads, builds, prepared runtimes). */
 function distCacheRoot(): string
 {
     $override = \getenv('MOGGI_DIST_CACHE');
@@ -432,12 +422,6 @@ function preparedRuntimeDir(string $runtime, string $target): string
     return distCacheRoot() . '/runtimes/' . $target . '/' . $runtime;
 }
 
-/**
- * Is the cached runtime still the one the lock describes? A rebuilt or
- * re-pinned upstream asset invalidates it, so a build never mixes revisions.
- * The marker records where the usable binary ended up, which a source build
- * moves from upstream's `sapi/cli/php` to `bin/php`.
- */
 function runtimeIsPrepared(string $runtime, string $target, array $config): bool
 {
     $dir = preparedRuntimeDir($runtime, $target);
@@ -455,12 +439,6 @@ function runtimeIsPrepared(string $runtime, string $target, array $config): bool
         && \is_file($dir . '/' . ($recorded['binary'] ?? ''));
 }
 
-/**
- * Download the pinned asset into the cache and verify it before it is used.
- *
- * The hash is the only thing standing between "upstream published this" and
- * "some server handed us this", so a mismatch is fatal, never a warning.
- */
 function fetchRuntimeAsset(string $runtime, string $target, array $config): array
 {
     $lock = loadRuntimeLock();
@@ -499,14 +477,6 @@ function fetchRuntimeAsset(string $runtime, string $target, array $config): arra
     return ['entry' => $entry, 'archive' => $archive];
 }
 
-/**
- * Prepare one runtime for one target, and return the directory to copy from.
- *
- * PHP has no upstream binary for Linux or macOS, so the official php.net source
- * release is built with a pinned minimal configuration (this is the only
- * official upstream PHP for those platforms). Every other runtime is an
- * upstream binary archive that is simply unpacked.
- */
 function prepareRuntime(string $runtime, string $target, array $config, bool $force = false): string
 {
     $dir = preparedRuntimeDir($runtime, $target);
@@ -534,6 +504,7 @@ function prepareRuntime(string $runtime, string $target, array $config, bool $fo
         $reported = buildPhpFromSource($runtime, $target, $config, $fetched['archive'], $dir, $entry);
     } else {
         extractArchive($fetched['archive'], (string) $entry['format'], $dir, (int) $entry['stripComponents']);
+        flattenDarwinBundleHome($dir, (string) $entry['binary']);
         $reported = assertRuntimeVersion($runtime, runtimeVersionOutput($runtime, $dir, $target, $config), $config, $target);
     }
 
@@ -566,13 +537,6 @@ function glibcFloor(array $config): string
     return (string) ($config['linuxGlibcFloor'] ?? '2.35');
 }
 
-/**
- * The newest `GLIBC_<major>.<minor>` a binary requires, or null if unreadable.
- *
- * Read from the binary's own dynamic symbol table: a build quietly linked
- * against a newer libc is exactly what must not ship, and no amount of care
- * about "where we build" replaces checking the artifact.
- */
 function requiredGlibc(string $binary): ?string
 {
     $objdump = \Moggi\Compiler\findExecutable('objdump');
@@ -599,12 +563,6 @@ function requiredGlibc(string $binary): ?string
     return $newest;
 }
 
-/**
- * Refuse a Linux artifact that needs a newer libc than the floor.
- *
- * Only meaningful inside the pinned build root — a build on a newer machine is
- * expected to miss it — so the assembler only calls this when asked to.
- */
 function assertGlibcFloor(string $binary, string $floor, string $label): void
 {
     $required = requiredGlibc($binary);
@@ -619,14 +577,6 @@ function assertGlibcFloor(string $binary, string $floor, string $label): void
     }
 }
 
-/**
- * Make sure a prepared runtime carries its own licence.
- *
- * Bundling somebody else's runtime means shipping the terms it comes under. The
- * upstream archives bring their licence files along, but the PHP source build and
- * php.net's Windows zip do not, so those are fetched from the upstream licence URL
- * and placed next to the runtime.
- */
 function stageRuntimeLicense(string $runtime, string $dir, array $config): void
 {
     $license = $config['runtimes'][$runtime]['license'] ?? null;
@@ -663,17 +613,6 @@ function requiredPhpExtensions(array $config): array
     return (array) $config['runtimes']['php']['extensions'];
 }
 
-/**
- * Make a PHP runtime usable, and prove that it is.
- *
- * An extension may be compiled into the PHP binary or shipped as a DLL that an
- * ini has to name — and which is which differs between php.net's Windows build
- * and a source build, and has changed between PHP releases (`bcmath` and `ctype`
- * are compiled in on Windows 8.5, `mbstring` and `zip` are not). Guessing is how
- * a distribution ends up broken on one platform, so this asks the runtime what it
- * has (`php -n -m`), enables exactly the DLLs it actually ships, then loads the
- * result the way the launcher will and asserts every required extension is there.
- */
 function assertPhpExtensions(string $binary, string $dir, string $target, array $config): void
 {
     $required = requiredPhpExtensions($config);
@@ -681,7 +620,7 @@ function assertPhpExtensions(string $binary, string $dir, string $target, array 
 
     $enable = [];
     foreach ($required as $extension) {
-        if (\in_array($extension, $compiledIn, true)) {
+        if (phpHasModule($compiledIn, $extension)) {
             continue;
         }
         $dll = $dir . '/ext/php_' . $extension . '.dll';
@@ -693,13 +632,28 @@ function assertPhpExtensions(string $binary, string $dir, string $target, array 
     writeBundledPhpIni($dir, $compiledIn, $enable);
 
     $loaded = phpModuleList($binary, $dir, ['-c', $dir . '/php.ini', '-d', 'extension_dir=' . $dir . '/ext']);
-    $missing = \array_values(\array_diff($required, $loaded));
+    $missing = \array_values(\array_filter(
+        $required,
+        static fn (string $extension): bool => !phpHasModule($loaded, $extension),
+    ));
     if ($missing !== []) {
         throw new \RuntimeException(
             'the PHP runtime for ' . $target . ' has no ' . \implode(', ', $missing)
             . ' (compiled in: ' . \implode(' ', $compiledIn) . ')',
         );
     }
+}
+
+/** @param list<string> $modules */
+function phpHasModule(array $modules, string $extension): bool
+{
+    foreach ($modules as $module) {
+        if (\strcasecmp($module, $extension) === 0) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 /** Modules a PHP binary reports, run without touching the host's configuration. */
@@ -711,18 +665,20 @@ function phpModuleList(string $binary, string $dir, array $options): array
         $output = runWithLibraryPath([$binary, ...$options, '-m'], $dir . '/lib');
     }
 
-    return \array_values(\array_filter(\array_map('trim', \explode("\n", $output))));
+    $modules = [];
+    foreach (\explode("\n", $output) as $line) {
+        $line = \trim($line);
+        // `-m` prints `[PHP Modules]` / `[Zend Modules]` group headers among the names.
+        if ($line === '' || ($line[0] === '[' && \str_ends_with($line, ']'))) {
+            continue;
+        }
+        $modules[] = $line;
+    }
+
+    return $modules;
 }
 
 /**
- * The `php.ini` a bundled PHP reads.
- *
- * The launcher points `PHPRC` at this directory, so this file is the only ini in
- * effect and the host's configuration stays out of the way. On Windows it is
- * load-bearing (PHP loads a DLL only when an ini names it, so `$enable` is the
- * list of DLLs this build really shipped); elsewhere the same extensions are
- * compiled in and the file records the configuration.
- *
  * @param list<string> $compiledIn
  * @param list<string> $enable
  */
@@ -743,7 +699,6 @@ function writeBundledPhpIni(string $dir, array $compiledIn, array $enable): void
     \file_put_contents($dir . '/php.ini', \implode("\n", $lines));
 }
 
-/** Build the official php.net source release with the pinned configuration. */
 function buildPhpFromSource(string $runtime, string $target, array $config, string $archive, string $dir, array $entry): string
 {
     $spec = $config['runtimes'][$runtime];
@@ -762,15 +717,12 @@ function buildPhpFromSource(string $runtime, string $target, array $config, stri
     }
     $tree = $source . '/' . $roots[0];
 
+    assertChildCwd($tree);
+
     $jobs = (string) max(1, cpuCount());
-    $cwd = \getcwd();
-    try {
-        \chdir($tree);
-        runOrFail(['./configure', '--prefix=' . $work . '/install', ...(array) $spec['configureFlags']]);
-        runOrFail(['make', '-j' . $jobs]);
-    } finally {
-        \chdir($cwd);
-    }
+    $make = findExecutable('make') ?? 'make';
+    runOrFail([$tree . '/configure', '--prefix=' . $work . '/install', ...(array) $spec['configureFlags']], $tree);
+    runOrFail([$make, '-j' . $jobs], $tree);
 
     if (\is_file($tree . '/LICENSE')) {
         \copy($tree . '/LICENSE', $dir . '/LICENSE');
@@ -815,19 +767,46 @@ function runWithLibraryPath(array $command, string $libDir): string
     return \trim($stdout . "\n" . $stderr);
 }
 
-/** Run a command, echoing it, and abort the build when it fails. */
-function runOrFail(array $command, ?string $cwd = null): void
+function runOrFail(array $command, ?string $cwd = null, bool $echo = false, ?int $timeoutSeconds = null): void
 {
-    $label = \implode(' ', $command);
+    $label = \implode(' ', $command) . ($cwd === null ? '' : '  [cwd ' . $cwd . ']');
     \fwrite(STDOUT, '  ' . $label . "\n");
+    assertProgramRunnable((string) $command[0], $cwd);
     $started = \microtime(true);
-    [$code, $stdout, $stderr] = runProcess($command, $cwd);
+    [$code, $stdout, $stderr] = runProcess($command, $cwd, null, $echo, $timeoutSeconds);
     if ($code !== 0) {
         throw new \RuntimeException(
             "{$label} failed ({$code})\n" . \substr($stdout . "\n" . $stderr, -4000),
         );
     }
     \fwrite(STDOUT, \sprintf('    ok (%.1fs)%s', \microtime(true) - $started, "\n"));
+}
+
+function assertProgramRunnable(string $program, ?string $cwd): void
+{
+    $resolved = \strpbrk($program, '/\\') === false ? findExecutable($program) : $program;
+    $where = $cwd === null ? '' : " (cwd {$cwd})";
+    if ($resolved === null) {
+        throw new \RuntimeException("cannot start {$program}: not found on PATH{$where}");
+    }
+    if (!\is_file($resolved)) {
+        throw new \RuntimeException("cannot start {$program}: no such file {$resolved}{$where}");
+    }
+    if (\PHP_OS_FAMILY !== 'Windows' && !\is_executable($resolved)) {
+        throw new \RuntimeException("cannot start {$program}: {$resolved} is not executable");
+    }
+}
+
+function assertChildCwd(string $cwd): void
+{
+    [$code, $stdout] = runProcess([\PHP_BINARY, '-r', 'echo getcwd();'], $cwd);
+    $expected = \rtrim(\str_replace('\\', '/', (string) \realpath($cwd)), '/');
+    $actual = \rtrim(\str_replace('\\', '/', (string) \realpath(\trim($stdout))), '/');
+    if ($code !== 0 || $actual !== $expected) {
+        throw new \RuntimeException(
+            "a child process does not start in {$cwd} (got " . \trim($stdout) . ', exit ' . $code . ')',
+        );
+    }
 }
 
 function cpuCount(): int
@@ -855,37 +834,38 @@ function stripBinary(string $binary): void
     runProcess([$strip, $binary]);
 }
 
-/**
- * Copy the shared libraries a built runtime needs but a host cannot be assumed
- * to have, next to it, so the bundled runtime is self-contained.
- *
- * A source-built PHP links against libzip and oniguruma, which are not part of
- * any base system. System libraries (the C library, libm, the loader, libSystem
- * on macOS) are deliberately not copied: they belong to the host, and shipping
- * a second copy of them is how a distribution breaks in interesting ways. The
- * launcher puts this directory on the runtime's library search path.
- */
 function copyNonBaselineLibraries(string $binary, string $libDir): void
 {
     if (\PHP_OS_FAMILY === 'Windows') {
         return;
     }
 
-    $baseline = '/^(libc|libm|libdl|librt|libpthread|libgcc_s|libstdc\+\+|libutil|libresolv|libnsl|ld-linux|linux-vdso|libSystem|libc\+\+|libobjc)/';
-    $paths = \PHP_OS_FAMILY === 'Darwin'
-        ? darwinLinkedLibraries($binary)
-        : linuxLinkedLibraries($binary);
+    $baseline = '/^(libc|libm|libdl|librt|libpthread|libgcc_s|libstdc\+\+|libutil|libresolv|libnsl|ld-linux|linux-vdso|libSystem|libc\+\+|libobjc)([.-]|$)/';
+    $darwin = \PHP_OS_FAMILY === 'Darwin';
+
+    /** @var list<array{string, string}> $queue referenced path, directory it is relative to */
+    $queue = [];
+    foreach ($darwin ? darwinLinkedLibraries($binary) : linuxLinkedLibraries($binary) as $path) {
+        $queue[] = [$path, \dirname($binary)];
+    }
 
     /** @var array<string, string> $copied library name (as referenced) => source path */
     $copied = [];
-    foreach ($paths as $path) {
+    while ($queue !== []) {
+        [$path, $referrer] = \array_shift($queue);
         $name = \basename($path);
-        if (\preg_match($baseline, $name) === 1) {
+        if (\preg_match($baseline, $name) === 1 || isset($copied[$name])) {
             continue;
         }
+        [$resolved, $relative] = resolveLibraryReference($path, $referrer);
+        $path = $resolved;
         if (!\is_file($path)) {
-            if (\PHP_OS_FAMILY === 'Darwin') {
-                throw new \RuntimeException("cannot make the bundled PHP portable: the unresolved dependency {$path}");
+            /* A reference the loader resolves somewhere we cannot see (a host library by rpath) is
+             * left alone; an absolute one that is not there is a copy that would not load. */
+            if ($darwin && !$relative) {
+                throw new \RuntimeException(
+                    "cannot make the bundled PHP portable: {$name} is needed by {$referrer} and is not a file",
+                );
             }
             continue;
         }
@@ -900,6 +880,9 @@ function copyNonBaselineLibraries(string $binary, string $libDir): void
             @\copy($real, $libDir . '/' . \basename($real));
         }
         $copied[$name] = $path;
+        foreach ($darwin ? darwinLinkedLibraries($path) : linuxLinkedLibraries($path) as $dependency) {
+            $queue[] = [$dependency, \dirname($path)];
+        }
     }
 
     if ($copied === []) {
@@ -913,18 +896,7 @@ function copyNonBaselineLibraries(string $binary, string $libDir): void
     }
 }
 
-/**
- * Make the copied libraries resolvable on macOS.
- *
- * A dylib is referenced by its `install_name`, which a build of libzip or
- * oniguruma sets to an absolute path under the build prefix — and unlike Linux,
- * `DYLD_FALLBACK_LIBRARY_PATH` does not override that, so a copy beside the
- * binary would be ignored and the runtime would only work on a machine that has
- * the build prefix. Every reference is therefore rewritten to a path relative to
- * the file that makes it, which needs no rpath and no environment variable.
- *
- * @param array<string, string> $copied library name => source path
- */
+/** @param array<string, string> $copied library name => source path */
 function relinkDarwinLibraries(string $binary, string $libDir, array $copied): void
 {
     $tool = findExecutable('install_name_tool');
@@ -948,6 +920,26 @@ function relinkDarwinLibraries(string $binary, string $libDir, array $copied): v
     foreach ($copied as $name => $source) {
         runProcess([$tool, '-change', $source, '@loader_path/../lib/' . $name, $binary]);
     }
+}
+
+/**
+ * Resolve a library reference to the file it means.
+ *
+ * macOS references a dylib by its `install_name`, which may be relative: `@loader_path` is the
+ * directory of the file that makes the reference (not of the binary being fixed up), and Homebrew's
+ * ICU uses it for the data library every ICU dylib needs. The second value says the reference was
+ * relative, since one that an `rpath` resolves somewhere we cannot see is left alone rather than
+ * reported as missing.
+ *
+ * @return array{string, bool} resolved path, whether the reference was relative
+ */
+function resolveLibraryReference(string $reference, string $referrer): array
+{
+    if (\str_starts_with($reference, '@loader_path/') || \str_starts_with($reference, '@rpath/')) {
+        return [$referrer . '/' . \basename($reference), true];
+    }
+
+    return [$reference, false];
 }
 
 /** @return list<string> */

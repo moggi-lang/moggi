@@ -2926,6 +2926,7 @@ function emitForeignMaybeStringWrap(EmitEnv $env): void
         true,
     );
     $env->c->label($done);
+    $env->c->noteFrame($env->frameLocals(), ['moggi/rt/Con']);
 }
 
 /** @param list<string> $kinds */
@@ -3160,6 +3161,10 @@ function emitMatchCommon(EmitEnv $env, IR\Operand $scrutinee, array $arms, ?int 
     $env->c->athrow();
     $env->matchJoinLabel = $prevJoin;
     if (!$needsEndLabel) {
+        // No arm needed the join, so nothing jumps over the `athrow` above -- but the code the
+        // caller emits next still begins a basic block, and the verifier wants a frame at it.
+        $env->c->noteFrame($env->frameLocals());
+
         return;
     }
     $env->c->label($end);

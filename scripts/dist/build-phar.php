@@ -2,6 +2,10 @@
 
 namespace Moggi\Dist;
 
+use function Moggi\Compiler\runProcess;
+
+require_once __DIR__ . '/../../src/executables.php';
+
 /**
  * Build `bin/moggi.phar` — the compiler as one self-contained PHP archive.
  *
@@ -39,12 +43,6 @@ const PHAR_INCLUDES = ['src'];
 /** A basename that starts with this is a working note, and is never archived. */
 const PHAR_EXCLUDES_PREFIX = '_';
 
-/**
- * The version the archive reports: the tag it was built from, or the version
- * file marked as an unreleased build of the commit that produced it
- * (`0.0.1-dev.20260922+f60fb9f`, plus `.dirty` for a modified tree). Without
- * git the version file is used verbatim, which is what a source tarball is.
- */
 function compilerBuildVersion(string $sourceRoot): string
 {
     $base = \trim((string) @\file_get_contents($sourceRoot . '/VERSION'));
@@ -74,17 +72,9 @@ function compilerBuildVersion(string $sourceRoot): string
 /** One `git` command in `$repo`, or null when git is absent or it fails. */
 function gitOutput(string $repo, array $args): ?string
 {
-    $pipes = [];
-    $process = @\proc_open(['git', '-C', $repo, ...$args], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
-    if (!\is_resource($process)) {
-        return null;
-    }
-    $output = (string) \stream_get_contents($pipes[1]);
-    \stream_get_contents($pipes[2]);
-    \fclose($pipes[1]);
-    \fclose($pipes[2]);
+    $result = runProcess(['git', '-C', $repo, ...$args]);
 
-    return \proc_close($process) === 0 ? \trim($output) : null;
+    return $result['exitCode'] === 0 ? \trim($result['stdout']) : null;
 }
 
 /**
@@ -133,7 +123,6 @@ function buildCompilerPhar(string $sourceRoot, string $outPath): void
         throw new \RuntimeException("cannot create {$outDir}");
     }
 
-    // Deterministic: the same tree produces the same archive bytes.
     $tmp = $outPath . '.building';
     if (\is_file($tmp)) {
         \unlink($tmp);

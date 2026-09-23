@@ -31,6 +31,7 @@ echo json_encode([
     'loader' => (getenv('LD_LIBRARY_PATH') ?: '') . (getenv('DYLD_FALLBACK_LIBRARY_PATH') ?: ''),
     'phpRc' => getenv('PHPRC') ?: '',
     'extDir' => (string) ini_get('extension_dir'),
+    'scanDir' => getenv('PHP_INI_SCAN_DIR') ?: '',
     'dotnetRoot' => getenv('DOTNET_ROOT') ?: '',
 ], JSON_UNESCAPED_SLASHES);
 exit((int) (getenv('MOGGI_TEST_EXIT') ?: 0));
@@ -46,6 +47,9 @@ $assert = static function (bool $condition, string $message) use (&$checks): voi
 
 $isWindows = \PHP_OS_FAMILY === 'Windows';
 $exe = $isWindows ? '.exe' : '';
+// A bundled PHP lives in `runtime/php/bin` on POSIX and in `runtime/php` on Windows, where the
+// interpreter sits beside the DLLs it loads.
+$phpDir = $isWindows ? '/runtime/php' : '/runtime/php/bin';
 
 $compiler = distributionCompiler();
 if ($compiler === null) {
@@ -54,9 +58,25 @@ if ($compiler === null) {
 }
 
 $work = createTempDir('moggi-launcher');
+// Canonical before anything is derived from it: the launcher reports the paths it resolves, and
+// macOS reaches its temporary directory through a symlink.
+$work = \realpath($work) ?: $work;
 $launcher = $work . '/moggi' . $exe;
 
-$build = runCompiledProcess([$compiler, '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror', '-o', $launcher, $root . '/launcher/moggi.c'], 120);
+$hostConf = $work . '/host-conf.d';
+\mkdir($hostConf, 0777, true);
+\file_put_contents($hostConf . '/10-absent.ini', "extension=moggi_absent_extension.so\n");
+
+$emptyConf = $work . '/empty-conf.d';
+\mkdir($emptyConf, 0777, true);
+
+// The compiler here is a GNU-style driver (`clang`/`cc`/`gcc`, MinGW on Windows), where
+// `CommandLineToArgvW` needs shell32 named: the source's `#pragma comment` only covers MSVC.
+$build = runCompiledProcess([
+    $compiler, '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror',
+    ...($isWindows ? ['-lshell32'] : []),
+    '-o', $launcher, $root . '/launcher/moggi.c',
+], 120);
 if ($build['exitCode'] !== 0) {
     \fwrite(STDERR, "launcher test: the launcher does not build\n" . $build['stdout'] . $build['stderr']);
     removeDirectory($work);
@@ -134,8 +154,11 @@ $install = static function (string $name, array $runtimes) use ($work, $launcher
  * the suite may run on a machine with a JDK installed, and "a missing runtime is
  * an error" must mean the same thing everywhere.
  */
-$run = static function (string $installDir, array $args, ?array $env = null, ?string $cwd = null) use ($exe, $work): array {
+$run = static function (string $installDir, array $args, ?array $env = null, ?string $cwd = null) use ($exe, $work, $hostConf): array {
     $env ??= \getenv();
+    if (\is_file($installDir . '/runtime/php/php.ini') && !\array_key_exists('PHP_INI_SCAN_DIR', $env)) {
+        $env['PHP_INI_SCAN_DIR'] = $hostConf;
+    }
     $cwd ??= $work . '/elsewhere';
     if (!\is_dir($cwd)) {
         \mkdir($cwd, 0777, true);
@@ -166,8 +189,12 @@ $norm = static fn (string $path): string => \str_replace('\\', '/', $path);
 try {
     // A bundled runtime wins over the host's, wherever the command is run from.
     $full = $install('full', ['php', 'jvm', 'graalvm', 'dotnet']);
-    $result = $run($full, ['version'], ['MOGGI_TEST_MARKER' => 'kept'] + \getenv(), $work . '/from-here');
-    $assert($result['exitCode'] === 0, 'a bundled PHP must run the compiler');
+    $result = $run($full, ['version'], distributionEnvironment(['MOGGI_TEST_MARKER' => 'kept']), $work . '/from-here');
+    $assert(
+        $result['exitCode'] === 0,
+        'a bundled PHP must run the compiler (exit ' . $result['exitCode'] . '): '
+        . $result['stdout'] . $result['stderr'],
+    );
     $seen = $probe($result);
     $assert($seen['args'] === ['version'], 'the launcher must forward the command');
     if ($isWindows) {
@@ -192,6 +219,10 @@ try {
         \str_starts_with(\rtrim($norm($seen['extDir']), '/'), $norm($full . '/runtime/php/ext')),
         'a bundled extension directory must be handed to PHP as an absolute path: ' . $seen['extDir'],
     );
+    $assert(
+        $seen['scanDir'] === '',
+        'a bundled PHP must not scan the ini directory of the host: ' . $seen['scanDir'],
+    );
 
     // Bundled directories come first, JDK before GraalVM so the JDK's own
     // `java`/`javac` win and GraalVM only supplies `native-image`.
@@ -199,34 +230,44 @@ try {
         $full . '/runtime/jvm/bin',
         $full . '/runtime/graalvm/bin',
         $full . '/runtime/dotnet',
-        $full . '/runtime/php/bin',
+        $full . $phpDir,
     ]);
     $entries = \array_map($norm, \explode(\PATH_SEPARATOR, (string) $seen['path']));
-    $assert(\array_slice($entries, 0, 4) === $expectedOrder, 'bundled runtimes must precede the host, JDK before GraalVM');
+    $assert(
+        \array_slice($entries, 0, 4) === $expectedOrder,
+        'bundled runtimes must precede the host, JDK before GraalVM'
+            . "\n  expected: " . \implode(' | ', $expectedOrder)
+            . "\n  actual:   " . \implode(' | ', \array_slice($entries, 0, 4)),
+    );
 
     // Nothing bundled: the host's PHP is used. A PATH holding PHP and nothing
     // else is what makes the backend cases below mean what they say.
     $plain = $install('plain', []);
     $phpOnlyPath = distributionPhpOnlyPath();
-    $seen = $probe($run($plain, ['version'], ['PATH' => $phpOnlyPath] + \getenv()));
+    $seen = $probe($run(
+        $plain,
+        ['version'],
+        distributionEnvironment(['PATH' => $phpOnlyPath, 'PHP_INI_SCAN_DIR' => $emptyConf]),
+    ));
     $assert($seen['bundledPhp'] === '', 'with no bundled PHP the host one must run');
     $assert($seen['phpRc'] === '', 'a host PHP must keep its own ini');
+    $assert($seen['scanDir'] === $emptyConf, 'a host PHP must keep its own scan directory');
     $assert($seen['dotnetRoot'] === (string) (\getenv('DOTNET_ROOT') ?: ''), 'the host environment must not be rewritten');
 
     // No PHP anywhere: a clear error, not a confusing failure inside the compiler.
     $empty = $work . '/empty-path';
     \mkdir($empty, 0777, true);
-    $missing = $run($plain, ['version'], ['PATH' => $empty] + \getenv());
+    $missing = $run($plain, ['version'], distributionEnvironment(['PATH' => $empty]));
     $assert($missing['exitCode'] === 127, 'a missing PHP runtime must exit 127, got ' . $missing['exitCode']);
     $assert(\str_contains($missing['stderr'], 'no PHP runtime'), 'the error must say what is missing: ' . $missing['stderr']);
     $assert(
-        \str_contains($norm($missing['stderr']), 'runtime/php/bin/php'),
+        \str_contains($norm($missing['stderr']), $norm($plain . $phpDir . '/php' . $exe)),
         'the error must name the bundled PHP it looked for: ' . $missing['stderr'],
     );
 
     // Arguments, including the awkward ones, and the exit status.
     $awkward = ['run', 'a b', '', '--', '--weird=1', 'é', '"quoted"', "it's", '-back-end'];
-    $result = $run($full, $awkward, ['MOGGI_TEST_EXIT' => '42'] + \getenv());
+    $result = $run($full, $awkward, distributionEnvironment(['MOGGI_TEST_EXIT' => '42']));
     $seen = $probe($result);
     $assert($seen['args'] === $awkward, 'arguments must be forwarded byte for byte: ' . \json_encode($seen['args']));
     $assert($result['exitCode'] === 42, 'the exit status must be preserved, got ' . $result['exitCode']);
@@ -241,10 +282,14 @@ try {
     $assert($result['exitCode'] === 127, 'a launcher without its archive must exit 127');
     $assert(\str_contains($result['stderr'], 'compiler archive'), 'the error must name the archive: ' . $result['stderr']);
 
-    // A backend is required only when it is asked for, and only when it is not
-    // on `PATH` either.
-    $phpOnly = $install('php-only', ['php']);
-    $withoutBackends = ['PATH' => $phpOnlyPath] + \getenv();
+// A backend is required only when it is asked for, and only when it is not
+// on `PATH` either. `PATH` is an empty directory, not PHP's own: this
+// installation carries PHP, and `dirname(PHP_BINARY)` is `/usr/bin` on a CI
+// image, which holds the very runtimes these cases say are missing.
+$phpOnly = $install('php-only', ['php']);
+$noRuntimes = $work . '/no-runtimes';
+\mkdir($noRuntimes, 0777, true);
+$withoutBackends = distributionEnvironment(['PATH' => $noRuntimes]);
     foreach (['--backend jvm', '--backend dotnet', '--backend=dotnet'] as $request) {
         $args = \array_merge(['compile', 'Main.mog'], \explode(' ', $request));
         $result = $run($phpOnly, $args, $withoutBackends);

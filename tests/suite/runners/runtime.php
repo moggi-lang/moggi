@@ -327,7 +327,7 @@ function runNativeExampleSmoke(string $exampleDir, string $backend, string $proj
             ];
         }
 
-        $binary = $outDir . '/moggi-app';
+        $binary = $outDir . '/' . \Moggi\Compiler\executableName('moggi-app');
         if (!\is_file($binary)) {
             return ['passed' => false, 'message' => "{$name}: missing {$binary}"];
         }
@@ -474,7 +474,9 @@ function runReplScriptTest(string $scriptPath, string $expectedPath, string $bac
     if ($expected === false) {
         return ['passed' => false, 'message' => "{$name}: cannot read expected"];
     }
-    if ($actual !== $expected) {
+    // Compared as text, not as bytes: a checkout that converted the golden to CRLF must not read as
+    // a mismatch in the REPL's output.
+    if (normalize($actual) !== normalize($expected)) {
         return [
             'passed' => false,
             'message' => "{$name}: stdout mismatch\n--- expected ---\n{$expected}\n--- actual ---\n{$actual}\n--- stderr ---\n"
@@ -597,12 +599,9 @@ function writeLibPhpOutputs(string $projectRoot): string
 /** Point a compiled fixture at the published stdlib build instead of the source tree's `lib/`. */
 function rewriteLibRequires(string $php, string $libPhpDir, string $compiledFile): string
 {
-    $libDir = rtrim(\str_replace('\\', '/', $libPhpDir), '/');
-    $rewrite = static function (array $matches) use ($libDir, $compiledFile): string {
-        $relative = \Moggi\Modules\relativeFilePath($compiledFile, $libDir . '/' . $matches[1]);
-
-        return "require_once __DIR__ . '/{$relative}'";
-    };
+    $libDir = rtrim(\Moggi\Paths\canonicalSeparators($libPhpDir), '/');
+    $rewrite = static fn (array $matches): string => 'require_once '
+        . \Moggi\Paths\requirePathExpression($compiledFile, $libDir . '/' . $matches[1]);
 
     $php = preg_replace_callback("#require_once __DIR__ \. '/(?:\.\./)+lib/([^']+)'#", $rewrite, $php) ?? $php;
 

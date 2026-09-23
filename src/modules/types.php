@@ -54,6 +54,14 @@ final class ProjectCache
     /** @var array<string, CheckedModule> */
     private static array $checkedModules = [];
 
+    /**
+     * The keys in `$checkedModules` that hold a source outside the stdlib — one project's own module,
+     * rather than part of the closure every project in the process shares.
+     *
+     * @var array<string, true>
+     */
+    private static array $projectModules = [];
+
     public static function preparedProject(string $key): ?PreparedProject
     {
         return self::$preparedProjects[$key] ?? null;
@@ -69,9 +77,31 @@ final class ProjectCache
         return self::$checkedModules[$key] ?? null;
     }
 
-    public static function rememberCheckedModule(string $key, CheckedModule $module): void
+    /** `$projectModule` marks an entry a caller may release again — see `releaseProjectCheckedModules`. */
+    public static function rememberCheckedModule(string $key, CheckedModule $module, bool $projectModule = false): void
     {
         self::$checkedModules[$key] = $module;
+        if ($projectModule) {
+            self::$projectModules[$key] = true;
+        }
+    }
+
+    /**
+     * Drop the checked modules marked as a project's own sources, keeping the stdlib closure.
+     *
+     * A project's modules are compiled once and their keys rarely recur, while the stdlib is shared by
+     * every project in the process — so a caller that compiles project after project releases these
+     * between them and keeps the part that pays for itself. Only the test suite calls this: a worker
+     * runs hundreds of unrelated fixtures, where the CLI compiles one project and exits and the LSP
+     * revisits the same files.
+     */
+    public static function releaseProjectCheckedModules(): void
+    {
+        foreach (self::$projectModules as $key => $_) {
+            unset(self::$checkedModules[$key]);
+        }
+
+        self::$projectModules = [];
     }
 
     /**
@@ -86,5 +116,6 @@ final class ProjectCache
     public static function clearCheckedModules(): void
     {
         self::$checkedModules = [];
+        self::$projectModules = [];
     }
 }

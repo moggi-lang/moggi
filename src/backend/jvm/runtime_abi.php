@@ -922,6 +922,15 @@ function addRtFrameAppenders(ClassBuilder $b): void
             $c->aload(6);
             $c->invokevirtual($cp->methodRef('java/lang/StackTraceElement', 'getMethodName', '()Ljava/lang/String;'), 0, true);
             rtAppendTop($c, $cp);
+            // Only a Moggi frame gets a location: a host frame's line number
+            // belongs to that library's build, not to this one.
+            $c->aload(6);
+            $c->invokevirtual($cp->methodRef('java/lang/StackTraceElement', 'getFileName', '()Ljava/lang/String;'), 0, true);
+            $c->ldc($cp->string_('.mog'));
+            $c->invokevirtual($cp->methodRef('java/lang/String', 'endsWith', '(Ljava/lang/String;)Z'), 1, true);
+            $c->ifeq('no_location');
+
+            $c->aload(0);
             rtAppendString($c, $cp, ' (');
             $c->aload(6);
             $c->invokevirtual($cp->methodRef('java/lang/StackTraceElement', 'getFileName', '()Ljava/lang/String;'), 0, true);
@@ -930,7 +939,14 @@ function addRtFrameAppenders(ClassBuilder $b): void
             $c->aload(6);
             $c->invokevirtual($cp->methodRef('java/lang/StackTraceElement', 'getLineNumber', '()I'), 0, true);
             rtAppendInt($c, $cp);
-            rtAppendString($c, $cp, ")\n");
+            rtAppendChar($c, $cp, 41); // ')'
+            $c->pop_();
+
+            $c->label('no_location');
+            $c->noteFrame($hostLocals, ['java/lang/StringBuilder']);
+            $c->aload(0);
+            rtAppendChar($c, $cp, 10); // '\n'
+            $c->pop_();
             $c->pop_();
             $c->iinc(4, 1);
 

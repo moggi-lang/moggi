@@ -2,6 +2,9 @@
 
 namespace Moggi\Docs;
 
+use function Moggi\Paths\canonicalPath;
+use function Moggi\Paths\canonicalSeparators;
+
 /**
  * Resolve a static file under $docRoot for $requestPath.
  *
@@ -16,10 +19,16 @@ function resolveStaticDocPath(string $docRoot, string $requestPath): ?string
     if (!str_contains(basename($staticPath), '.')) {
         return null;
     }
-    $file = $docRoot . $staticPath;
+    // The file is resolved below, which follows symlinks, so the root has to be resolved the
+    // same way before the two can be compared: macOS reaches its temporary directory through
+    // `/var`, a symlink to `/private/var`.
+    $root = canonicalPath($docRoot);
+    $file = $root . $staticPath;
     $resolved = realpath($file);
-    if ($resolved !== false && \is_file($resolved) && pathIsUnderDocRoot($resolved, $docRoot)) {
-        return $resolved;
+    if ($resolved !== false && \is_file($resolved) && pathIsUnderDocRoot($resolved, $root)) {
+        // The caller's spelling of the root, not the resolved one: everything it does with the
+        // answer compares against the root it passed in.
+        return rtrim(canonicalSeparators($docRoot), '/') . $staticPath;
     }
 
     return '';
@@ -146,8 +155,8 @@ function renderSearchPage(DocIndex $index, string $query, array $hits, ?string $
 
 function pathIsUnderDocRoot(string $path, string $root): bool
 {
-    $path = rtrim(str_replace('\\', '/', $path), '/');
-    $root = rtrim(str_replace('\\', '/', $root), '/');
+    $path = rtrim(canonicalSeparators($path), '/');
+    $root = rtrim(canonicalSeparators($root), '/');
 
     return $path === $root || str_starts_with($path, $root . '/');
 }

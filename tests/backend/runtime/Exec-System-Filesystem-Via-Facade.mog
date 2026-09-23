@@ -1,9 +1,22 @@
+import System.Environment (lookupEnv)
 import System.Filesystem hiding (readFile, writeFile, appendFile)
 import System.Filesystem.Path
 import System.IO
 
 main :: IO ()
 main = do
-  _ <- writeTextFile ("/tmp/moggi-fs-facade-test.txt") "facade-ok"
-  content <- readTextFile ("/tmp/moggi-fs-facade-test.txt")
+  path <- scratchPath "moggi-fs-facade-test.txt"
+  _ <- writeTextFile path "facade-ok"
+  content <- readTextFile path
   putStrLn content
+
+scratchPath :: String -> IO String
+scratchPath name = do
+  tmp <- lookupEnv "TMPDIR"
+  win <- lookupEnv "TEMP"
+  let dir = case tmp of
+        Just d -> d
+        Nothing -> case win of
+          Just d -> d
+          Nothing -> "/tmp"
+  pure (dir <> "/" <> name)

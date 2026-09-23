@@ -25,6 +25,11 @@
  *   clang -std=c11 -O2 -Wall -Wextra -o bin/moggi launcher/moggi.c
  */
 
+#if defined(_WIN32)
+/* The UCRT marks strcpy/strcat/getenv deprecated, and the launcher builds with -Werror. */
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+
 #if !defined(_WIN32)
 #define _POSIX_C_SOURCE 200809L
 #if defined(__APPLE__)
@@ -38,8 +43,15 @@
 
 #if defined(_WIN32)
 
+/* `shellapi.h` for `CommandLineToArgvW`, `wchar.h` for `wcslen`. */
 #include <windows.h>
-#include <process.h>
+#include <shellapi.h>
+#include <wchar.h>
+
+#if defined(_MSC_VER) || defined(__clang__)
+/* `CommandLineToArgvW` lives in shell32, which the C runtime does not link by default. */
+#pragma comment(lib, "shell32.lib")
+#endif
 #define MOGGI_PATH_SEP ';'
 #define MOGGI_DIR_SEP '\\'
 
@@ -205,6 +217,66 @@ static char *executable_directory(void)
 }
 
 /*
+ * PATH as this process sees it, and how to put a new value in its place.
+ *
+ * Windows matches an environment name without regard to case but keeps the
+ * spelling it was given: writing `PATH` while the inherited entry is `Path`
+ * leaves the host's value in the block, where a reader that matches
+ * case-insensitively can still find it first — and then the prepended
+ * directories would not win after all. Reading goes through the same API for the
+ * same reason, the other spelling is removed so the two cannot disagree, and the
+ * value comes back on the heap so every caller frees it the same way.
+ */
+#if defined(_WIN32)
+static char *current_path(void)
+{
+    DWORD size = GetEnvironmentVariableA("PATH", NULL, 0);
+    if (size == 0) {
+        return NULL;
+    }
+    char *value = (char *)malloc(size);
+    if (value == NULL) {
+        fail("out of memory");
+    }
+    if (GetEnvironmentVariableA("PATH", value, size) == 0) {
+        free(value);
+
+        return NULL;
+    }
+
+    return value;
+}
+
+static void set_path(const char *value)
+{
+    static const char *const names[] = {"PATH", "Path"};
+    for (int i = 0; i < 2; ++i) {
+        SetEnvironmentVariableA(names[i], value);
+    }
+}
+#else
+static char *current_path(void)
+{
+    const char *value = getenv("PATH");
+    if (value == NULL) {
+        return NULL;
+    }
+    char *copy = (char *)malloc(strlen(value) + 1);
+    if (copy == NULL) {
+        fail("out of memory");
+    }
+    strcpy(copy, value);
+
+    return copy;
+}
+
+static void set_path(const char *value)
+{
+    setenv("PATH", value, 1);
+}
+#endif
+
+/*
  * Search PATH for an executable, without a shell and without `which`. PATH is
  * read as it currently stands, so a bundled directory this process has already
  * prepended is searched first. On Windows a bare name is not a file name — a
@@ -213,8 +285,10 @@ static char *executable_directory(void)
  */
 static char *find_on_path(const char *name)
 {
-    const char *path = getenv("PATH");
+    char *path = current_path();
     if (path == NULL || *path == '\0') {
+        free(path);
+
         return NULL;
     }
 
@@ -225,13 +299,7 @@ static char *find_on_path(const char *name)
         {""};
 #endif
 
-    char *copy = (char *)malloc(strlen(path) + 1);
-    if (copy == NULL) {
-        fail("out of memory");
-    }
-    strcpy(copy, path);
-
-    char *cursor = copy;
+    char *cursor = path;
     char *candidate = NULL;
     while (cursor != NULL && *cursor != '\0') {
         char *separator = strchr(cursor, MOGGI_PATH_SEP);
@@ -260,7 +328,7 @@ static char *find_on_path(const char *name)
         }
         cursor = separator == NULL ? NULL : separator + 1;
     }
-    free(copy);
+    free(path);
 
     return candidate;
 }
@@ -269,10 +337,13 @@ static char *find_on_path(const char *name)
  * Put the bundled runtime directories in front of PATH, in the order given, so
  * the compiler's child processes (`javac`, `java`, `native-image`, `dotnet`,
  * `php`) resolve to the bundled copies before any system ones.
+ *
+ * The list is built by offset: writing the separator after an appended directory
+ * is what terminates it otherwise, and the next append then runs past the write.
  */
 static void prepend_paths(char **directories, int count)
 {
-    const char *current = getenv("PATH");
+    char *current = current_path();
     size_t needed = 1;
     for (int i = 0; i < count; ++i) {
         needed += strlen(directories[i]) + 1;
@@ -283,21 +354,19 @@ static void prepend_paths(char **directories, int count)
     if (final == NULL) {
         fail("out of memory");
     }
-    final[0] = '\0';
+    size_t offset = 0;
     for (int i = 0; i < count; ++i) {
-        size_t length = strlen(final);
-        strcat(final, directories[i]);
-        final[length + strlen(directories[i])] = MOGGI_PATH_SEP;
+        size_t length = strlen(directories[i]);
+        memcpy(final + offset, directories[i], length);
+        offset += length;
+        final[offset++] = MOGGI_PATH_SEP;
     }
-    strcat(final, current != NULL ? current : "");
+    strcpy(final + offset, current != NULL ? current : "");
 
-#if defined(_WIN32)
-    SetEnvironmentVariableA("PATH", final);
-#else
-    setenv("PATH", final, 1);
-#endif
+    set_path(final);
 
     free(final);
+    free(current);
 }
 
 static void set_environment(const char *name, const char *value)
@@ -385,6 +454,128 @@ static Needs scan_needs(int argc, char **argv)
     return needs;
 }
 
+#if defined(_WIN32)
+/*
+ * Windows has no argument vector: a child gets one string and a quoting convention, which the
+ * runtime splits back into `argv`. `_spawnv` cannot express every argument — it joins them with
+ * spaces — so `a b` arrived as two arguments, `"quoted"` lost its quotes and an empty argument
+ * disappeared. The command line is built here instead, by the same rules the runtime parses by.
+ */
+static wchar_t *quote_argument(wchar_t *out, const wchar_t *argument)
+{
+    size_t backslashes = 0;
+    *out++ = L'"';
+    for (const wchar_t *p = argument; *p != L'\0'; ++p) {
+        if (*p == L'\\') {
+            ++backslashes;
+            continue;
+        }
+        if (*p == L'"') {
+            for (size_t i = 0; i < backslashes * 2 + 1; ++i) {
+                *out++ = L'\\';
+            }
+            *out++ = L'"';
+        } else {
+            for (size_t i = 0; i < backslashes; ++i) {
+                *out++ = L'\\';
+            }
+            *out++ = *p;
+        }
+        backslashes = 0;
+    }
+    /* A backslash run before the closing quote would otherwise escape it. */
+    for (size_t i = 0; i < backslashes * 2; ++i) {
+        *out++ = L'\\';
+    }
+    *out++ = L'"';
+
+    return out;
+}
+
+/** Room for one always-quoted argument: it can double, plus two quotes and a separator. */
+static size_t quoted_length(const wchar_t *argument)
+{
+    return wcslen(argument) * 2 + 4;
+}
+
+/** The wide form of a path this process resolved through the narrow API. */
+static wchar_t *wide_path(const char *path)
+{
+    int needed = MultiByteToWideChar(CP_ACP, 0, path, -1, NULL, 0);
+    if (needed <= 0) {
+        fail_path("cannot convert a path for the child process: ", path);
+    }
+    wchar_t *wide = (wchar_t *)malloc((size_t)needed * sizeof(wchar_t));
+    if (wide == NULL) {
+        fail("out of memory");
+    }
+    MultiByteToWideChar(CP_ACP, 0, path, -1, wide, needed);
+
+    return wide;
+}
+
+/**
+ * Run PHP on the compiler archive with the arguments this process was given.
+ *
+ * The wide arguments come from the command line itself, so nothing is round-tripped through a code
+ * page on the way to the child; the exit status is waited for and returned, which is what makes the
+ * launcher transparent to whatever runs it.
+ */
+static int spawn_php(const char *program, const char *extension_option, const char *phar, wchar_t **arguments, int argument_count)
+{
+    wchar_t *program_wide = wide_path(program);
+    wchar_t *phar_wide = wide_path(phar);
+    wchar_t *option_wide = extension_option == NULL ? NULL : wide_path(extension_option);
+
+    size_t capacity = quoted_length(program_wide) + quoted_length(phar_wide) + 1;
+    if (option_wide != NULL) {
+        capacity += quoted_length(L"-d") + quoted_length(option_wide);
+    }
+    for (int i = 1; i < argument_count; ++i) {
+        capacity += quoted_length(arguments[i]);
+    }
+
+    wchar_t *line = (wchar_t *)malloc(capacity * sizeof(wchar_t));
+    if (line == NULL) {
+        fail("out of memory");
+    }
+    wchar_t *cursor = quote_argument(line, program_wide);
+    if (option_wide != NULL) {
+        *cursor++ = L' ';
+        cursor = quote_argument(cursor, L"-d");
+        *cursor++ = L' ';
+        cursor = quote_argument(cursor, option_wide);
+    }
+    *cursor++ = L' ';
+    cursor = quote_argument(cursor, phar_wide);
+    for (int i = 1; i < argument_count; ++i) {
+        *cursor++ = L' ';
+        cursor = quote_argument(cursor, arguments[i]);
+    }
+    *cursor = L'\0';
+
+    STARTUPINFOW startup;
+    memset(&startup, 0, sizeof(startup));
+    startup.cb = sizeof(startup);
+    PROCESS_INFORMATION info;
+    if (!CreateProcessW(program_wide, line, NULL, NULL, TRUE, 0, NULL, NULL, &startup, &info)) {
+        fail_path("cannot start PHP: ", program);
+    }
+    WaitForSingleObject(info.hProcess, INFINITE);
+    DWORD status = 0;
+    GetExitCodeProcess(info.hProcess, &status);
+    CloseHandle(info.hProcess);
+    CloseHandle(info.hThread);
+
+    free(line);
+    free(option_wide);
+    free(phar_wide);
+    free(program_wide);
+
+    return (int)status;
+}
+#endif
+
 int main(int argc, char **argv)
 {
     char *bin_dir = executable_directory();
@@ -465,6 +656,7 @@ int main(int argc, char **argv)
         char *php_ini = path_join(php_home, "php.ini");
         if (file_exists(php_ini)) {
             set_environment("PHPRC", php_home);
+            set_environment("PHP_INI_SCAN_DIR", "");
         }
         char *php_lib = path_join(php_home, "lib");
         add_library_path(php_lib);
@@ -530,6 +722,17 @@ int main(int argc, char **argv)
     }
     free(extension_dir);
 
+#if defined(_WIN32)
+    int wide_count = 0;
+    wchar_t **wide = CommandLineToArgvW(GetCommandLineW(), &wide_count);
+    if (wide == NULL) {
+        fail("cannot read this process's own command line");
+    }
+    int status = spawn_php(php, extra > 0 ? extension_option : NULL, phar, wide, wide_count);
+    LocalFree(wide);
+
+    return status;
+#else
     char **child_argv = (char **)calloc((size_t)argc + 2 + (size_t)extra, sizeof(char *));
     if (child_argv == NULL) {
         fail("out of memory");
@@ -545,14 +748,6 @@ int main(int argc, char **argv)
     }
     child_argv[argc + 1 + extra] = NULL;
 
-#if defined(_WIN32)
-    intptr_t status = _spawnv(_P_WAIT, php, (const char *const *)child_argv);
-    if (status == -1) {
-        fail_path("cannot start PHP: ", php);
-    }
-
-    return (int)status;
-#else
     execv(php, child_argv);
     fail_path("cannot start PHP: ", php);
 

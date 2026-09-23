@@ -25,17 +25,22 @@ function pathToUri(string $path): string
 
 /**
  * Convert a `file://` (or any) URI to a filesystem path.
+ *
+ * A file URI has an empty authority and an absolute path, so `file:///C:/x` arrives as `/C:/x`:
+ * on Windows the leading `/` is part of the URI and not of the path, and leaving it there is what
+ * makes `is_file`, `realpath` and every workspace comparison fail. A non-file URI (e.g. `untitled:`)
+ * is returned as it is, for the caller to decide about.
  */
 function uriToPath(string $uri): string
 {
     $uri = trim($uri);
     if (!str_starts_with($uri, 'file://')) {
-        // Not a file URI (e.g. untitled:); return as-is so callers can decide.
         return $uri;
     }
-    $path = substr($uri, strlen('file://'));
-    // Windows file:///C:/... sometimes arrives as /C:/...
-    $path = rawurldecode($path);
+    $path = rawurldecode(substr($uri, strlen('file://')));
+    if (preg_match('#^/[A-Za-z]:([\\/]|$)#', $path) === 1) {
+        $path = substr($path, 1);
+    }
 
     return $path;
 }

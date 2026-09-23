@@ -4,6 +4,7 @@ use Moggi\Backend;
 
 use function Moggi\Compiler\compileFileCapturingErrorsBoth;
 use function Moggi\Modules\bundledStdlibLibPath;
+use function Moggi\Paths\canonicalSeparators;
 use function Moggi\Modules\compileProjectBoth;
 use function Moggi\Modules\projectSourceClosure;
 
@@ -246,6 +247,20 @@ function projectModuleFiles(string $input): array
     return $files;
 }
 
+/**
+ * A project's outputs, re-keyed so a lookup does not depend on the host's separator: the compiler
+ * keys an artifact by the path it was handed, which is native on Windows.
+ */
+function projectArtifacts(array $outputs): array
+{
+    $normalized = [];
+    foreach ($outputs as $path => $source) {
+        $normalized[canonicalSeparators($path)] = $source;
+    }
+
+    return $normalized;
+}
+
 /** One project compile feeds every module's `emit` and `opt-ir` golden; the typed tree is per module. */
 function compareProjectSnapshots(TestCase $case, string $backend): void
 {
@@ -264,10 +279,15 @@ function compareProjectSnapshots(TestCase $case, string $backend): void
         if ($case->goldenBeside($base, 'emit', $backend) !== null || $case->goldenBeside($base, 'opt-ir', $backend) !== null) {
             if ($emitted === null) {
                 [$files, $root] = projectClosure($case->input);
-                $emitted = compileProjectBoth($files, $root);
+                $built = compileProjectBoth($files, $root);
+                $emitted = [
+                    'opt-ir' => projectArtifacts($built['opt-ir']),
+                    'emit' => projectArtifacts($built['emit']),
+                ];
+                $root = canonicalSeparators($root);
             }
         }
-        $key = \ltrim(\substr($base, \strlen($root)), '/');
+        $key = \ltrim(\substr(canonicalSeparators($base), \strlen($root)), '/');
         if ($case->goldenBeside($base, 'opt-ir', $backend) !== null) {
             $artifact = $emitted['opt-ir'][$key . '.opt-ir'] ?? null;
             if (!\is_string($artifact)) {

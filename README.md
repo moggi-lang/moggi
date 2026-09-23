@@ -2,10 +2,12 @@
 
 # Moggi
 
-A general-purpose, **purely functional, strictly evaluated** programming language
+[![.github/workflows/test.yml](https://github.com/moggi-lang/moggi/actions/workflows/test.yml/badge.svg)](https://github.com/moggi-lang/moggi/actions/workflows/test.yml)
+
+A **statically typed, purely functional, strictly evaluated** programming language
 that compiles to **PHP**, **JVM** and **.NET**. One `.mog` source — algebraic
 data types, pattern matching, type classes, explicit-effect IO — becomes a
-`.phar`, a `.jar` or a `.dll`.
+`.phar`, a `.jar` or a `.dll` or native executable.
 
 ```moggi
 data Shape = Circle Double | Rect Double Double

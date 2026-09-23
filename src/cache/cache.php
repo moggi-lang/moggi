@@ -362,6 +362,17 @@ function modulePath(string $relPath, string $kind): string
     return cacheGenerationDir() . '/' . $backend . '/' . mirrorPath($relPath) . '.' . $kind . '.mogc';
 }
 
+/**
+ * An artifact key as a file name: a Windows name may not have the `:` the stdlib index key carries,
+ * so an escaped key keeps a hash of its own spelling and cannot collide with an unescaped twin.
+ */
+function artifactFileName(string $key): string
+{
+    $safe = \preg_replace('/[^A-Za-z0-9._-]/', '_', $key) ?? $key;
+
+    return $safe === $key ? $key : $safe . '-' . \substr(hash('sha256', $key), 0, 12);
+}
+
 /** Whole-project artifact cache (e.g. `moggi compile` outputs). */
 function artifactGet(string $key): mixed
 {
@@ -371,7 +382,7 @@ function artifactGet(string $key): mixed
 
     ensureCache();
 
-    $path = cacheGenerationDir() . '/.artifacts/' . $key . '.blob';
+    $path = cacheGenerationDir() . '/.artifacts/' . artifactFileName($key) . '.blob';
     if (!\is_file($path)) {
         return null;
     }
@@ -395,7 +406,7 @@ function artifactPut(string $key, mixed $payload): void
     ensureCache();
 
     $raw = serialize(['payload' => $payload]);
-    atomicWrite(cacheGenerationDir() . '/.artifacts/' . $key . '.blob', $raw);
+    atomicWrite(cacheGenerationDir() . '/.artifacts/' . artifactFileName($key) . '.blob', $raw);
 }
 
 function removeTree(string $dir): int
