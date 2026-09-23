@@ -31,7 +31,7 @@ jobs:
           coverage: none
 
       - name: Cache downloaded assets
-        uses: actions/cache@v4.3.0
+        uses: actions/cache@v6.1.0
         with:
           path: .dist-cache/downloads
           key: runtime-check-${{ hashFiles('dist/runtimes.lock.json') }}
