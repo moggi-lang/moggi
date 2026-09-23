@@ -465,6 +465,7 @@ int main(int argc, char **argv)
         char *php_ini = path_join(php_home, "php.ini");
         if (file_exists(php_ini)) {
             set_environment("PHPRC", php_home);
+            set_environment("PHP_INI_SCAN_DIR", "");
         }
         char *php_lib = path_join(php_home, "lib");
         add_library_path(php_lib);

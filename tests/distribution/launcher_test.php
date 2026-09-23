@@ -31,6 +31,7 @@ echo json_encode([
     'loader' => (getenv('LD_LIBRARY_PATH') ?: '') . (getenv('DYLD_FALLBACK_LIBRARY_PATH') ?: ''),
     'phpRc' => getenv('PHPRC') ?: '',
     'extDir' => (string) ini_get('extension_dir'),
+    'scanDir' => getenv('PHP_INI_SCAN_DIR') ?: '',
     'dotnetRoot' => getenv('DOTNET_ROOT') ?: '',
 ], JSON_UNESCAPED_SLASHES);
 exit((int) (getenv('MOGGI_TEST_EXIT') ?: 0));
@@ -55,6 +56,13 @@ if ($compiler === null) {
 
 $work = createTempDir('moggi-launcher');
 $launcher = $work . '/moggi' . $exe;
+
+$hostConf = $work . '/host-conf.d';
+\mkdir($hostConf, 0777, true);
+\file_put_contents($hostConf . '/10-absent.ini', "extension=moggi_absent_extension.so\n");
+
+$emptyConf = $work . '/empty-conf.d';
+\mkdir($emptyConf, 0777, true);
 
 $build = runCompiledProcess([$compiler, '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror', '-o', $launcher, $root . '/launcher/moggi.c'], 120);
 if ($build['exitCode'] !== 0) {
@@ -134,8 +142,11 @@ $install = static function (string $name, array $runtimes) use ($work, $launcher
  * the suite may run on a machine with a JDK installed, and "a missing runtime is
  * an error" must mean the same thing everywhere.
  */
-$run = static function (string $installDir, array $args, ?array $env = null, ?string $cwd = null) use ($exe, $work): array {
+$run = static function (string $installDir, array $args, ?array $env = null, ?string $cwd = null) use ($exe, $work, $hostConf): array {
     $env ??= \getenv();
+    if (\is_file($installDir . '/runtime/php/php.ini') && !\array_key_exists('PHP_INI_SCAN_DIR', $env)) {
+        $env['PHP_INI_SCAN_DIR'] = $hostConf;
+    }
     $cwd ??= $work . '/elsewhere';
     if (!\is_dir($cwd)) {
         \mkdir($cwd, 0777, true);
@@ -192,6 +203,10 @@ try {
         \str_starts_with(\rtrim($norm($seen['extDir']), '/'), $norm($full . '/runtime/php/ext')),
         'a bundled extension directory must be handed to PHP as an absolute path: ' . $seen['extDir'],
     );
+    $assert(
+        $seen['scanDir'] === '',
+        'a bundled PHP must not scan the ini directory of the host: ' . $seen['scanDir'],
+    );
 
     // Bundled directories come first, JDK before GraalVM so the JDK's own
     // `java`/`javac` win and GraalVM only supplies `native-image`.
@@ -208,9 +223,10 @@ try {
     // else is what makes the backend cases below mean what they say.
     $plain = $install('plain', []);
     $phpOnlyPath = distributionPhpOnlyPath();
-    $seen = $probe($run($plain, ['version'], ['PATH' => $phpOnlyPath] + \getenv()));
+    $seen = $probe($run($plain, ['version'], ['PATH' => $phpOnlyPath, 'PHP_INI_SCAN_DIR' => $emptyConf] + \getenv()));
     $assert($seen['bundledPhp'] === '', 'with no bundled PHP the host one must run');
     $assert($seen['phpRc'] === '', 'a host PHP must keep its own ini');
+    $assert($seen['scanDir'] === $emptyConf, 'a host PHP must keep its own scan directory');
     $assert($seen['dotnetRoot'] === (string) (\getenv('DOTNET_ROOT') ?: ''), 'the host environment must not be rewritten');
 
     // No PHP anywhere: a clear error, not a confusing failure inside the compiler.

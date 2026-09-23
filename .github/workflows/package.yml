@@ -32,10 +32,10 @@ jobs:
           apt-get install -y --no-install-recommends \
             git ca-certificates curl unzip zstd sudo
 
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@v4.4.0
 
       - name: Set up PHP for the build scripts
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        uses: shivammathur/setup-php@2.37.2
         with:
           php-version: '8.5'
           extensions: bcmath, mbstring, zip, phar, ctype
@@ -48,7 +48,7 @@ jobs:
             clang binutils autoconf make pkg-config libzip-dev libonig-dev
 
       - name: Cache downloads and builds
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@v4.3.0
         with:
           path: |
             .dist-cache/downloads
@@ -67,7 +67,7 @@ jobs:
             --out dist-out
 
       - name: Upload the archives
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@v4.6.2
         with:
           name: ${{ matrix.target }}
           if-no-files-found: error
@@ -89,10 +89,10 @@ jobs:
           - {target: windows-x86_64, runner: windows-2022}
 
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@v4.4.0
 
       - name: Set up PHP for the build scripts
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        uses: shivammathur/setup-php@2.37.2
         with:
           php-version: '8.5'
           extensions: bcmath, mbstring, zip, phar, ctype
@@ -118,11 +118,12 @@ jobs:
 
       - name: Install MSYS2 (MinGW) for the schnorr CLI
         if: runner.os == 'Windows'
-        uses: msys2/setup-msys2@f84a36b4009b96413f91c01441130855db9392e5 # v2.9.0
+        uses: msys2/setup-msys2@v2.9.0
         with:
           msystem: UCRT64
           update: false
           install: mingw-w64-ucrt-x86_64-gcc make
+          path-type: inherit
 
       - name: Build the schnorr CLI (Windows)
         if: runner.os == 'Windows'
@@ -137,7 +138,7 @@ jobs:
           "MOGGI_DIST_SCHNORR=$env:GITHUB_WORKSPACE\$schnorr" >> $env:GITHUB_ENV
 
       - name: Cache downloads and builds
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@v4.3.0
         with:
           path: |
             .dist-cache/downloads
@@ -155,7 +156,7 @@ jobs:
             --out dist-out
 
       - name: Upload the archives
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@v4.6.2
         with:
           name: ${{ matrix.target }}
           if-no-files-found: error
@@ -175,7 +176,7 @@ jobs:
       attestations: write
 
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@v4.4.0
 
       - name: The tag and VERSION must agree
         run: |
@@ -186,7 +187,7 @@ jobs:
           fi
           echo "releasing ${version}"
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@v4.3.0
         with:
           path: dist-out
           merge-multiple: true
@@ -199,7 +200,7 @@ jobs:
           cat SHA256SUMS
 
       - name: Attest the provenance of the archives
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        uses: actions/attest-build-provenance@v2.4.0
         with:
           subject-path: |
             dist-out/*.tar.gz
