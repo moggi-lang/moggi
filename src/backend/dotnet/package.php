@@ -30,30 +30,21 @@ function resolveDotnetExecutable(): ?string
         ?? findExecutable('dotnet');
 }
 
-/** @return array<string, string> */
+/**
+ * The environment `dotnet` gets: this process's, plus the CLI's own quiet flags.
+ *
+ * Read through `getenv()` rather than `$_ENV`/`$_SERVER`: those hold what `variables_order` chose to
+ * import, which is not the environment a build tool inherits — and a Native AOT link needs the
+ * linker's `INCLUDE`/`LIB`/`PATH` as much as it needs the SDK.
+ *
+ * @return array<string, string>
+ */
 function dotnetCliEnv(): array
 {
     $env = [];
-    foreach ($_ENV as $k => $v) {
-        if (\is_string($k) && \is_string($v)) {
-            $env[$k] = $v;
-        }
-    }
-    foreach ($_SERVER as $k => $v) {
-        if (\is_string($k) && \is_string($v) && !isset($env[$k])) {
-            $env[$k] = $v;
-        }
-    }
-    if (!isset($env['PATH'])) {
-        $path = \getenv('PATH');
-        if (\is_string($path)) {
-            $env['PATH'] = $path;
-        }
-    }
-    if (!isset($env['HOME'])) {
-        $home = \getenv('HOME');
-        if (\is_string($home)) {
-            $env['HOME'] = $home;
+    foreach (\getenv() as $name => $value) {
+        if (\is_string($value)) {
+            $env[$name] = $value;
         }
     }
     $env['DOTNET_NOLOGO'] = '1';

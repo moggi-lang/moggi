@@ -611,6 +611,9 @@ function assembleMain(array $argv): int
     $failures = [];
     $archives = 0;
     \fwrite(STDOUT, "\nassembling\n");
+    if ($options['archives']) {
+        \fwrite(STDOUT, 'archives go to: ' . $out . "\n");
+    }
     foreach ($plan as $entry) {
         $variant = $entry['variant'];
         $stage = $out . '/' . $variant;

@@ -99,5 +99,11 @@ jobs:
           $schnorr = if (Test-Path schnorr/schnorr.exe) { 'schnorr\schnorr.exe' } else { 'schnorr\schnorr' }
           "MOGGI_DIST_SCHNORR=$env:GITHUB_WORKSPACE\$schnorr" >> $env:GITHUB_ENV
 
+      - name: Set up the MSVC toolchain (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1.13.0
+        with:
+          arch: x64
+
       - name: Run the suite
         run: php test.php --backend all --native
