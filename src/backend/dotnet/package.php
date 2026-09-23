@@ -119,7 +119,7 @@ function resolveIlasmExecutable(?string $dotnet = null): ?string
     $cached = true;
 
     $onPath = findExecutable('ilasm');
-    if ($onPath !== null) {
+    if ($onPath !== null && !isLegacyFrameworkIlasm($onPath)) {
         return $resolved = $onPath;
     }
 
@@ -146,13 +146,27 @@ function resolveIlasmExecutable(?string $dotnet = null): ?string
     return $resolved = null;
 }
 
+/**
+ * True for the .NET Framework's own `ilasm.exe`, which is not the assembler this backend targets:
+ * it reads the source in the system code page, so every non-ASCII string literal assembled with it
+ * comes out as mojibake. The CoreCLR flavour — the one Microsoft's own Sdk.IL drives, and the one
+ * the NuGet runtime package carries — reads the source as UTF-8, which is what the IL is written as.
+ * A Windows install carries it on `PATH` at `%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\ilasm.exe`.
+ */
+function isLegacyFrameworkIlasm(string $path): bool
+{
+    return \PHP_OS_FAMILY === 'Windows'
+        && \stripos($path, 'Microsoft.NET' . DIRECTORY_SEPARATOR . 'Framework') !== false;
+}
+
 function findIlasmInNuGetCaches(): ?string
 {
     $rid = nugetIlasmRuntimeId();
     $package = "runtime.{$rid}.microsoft.netcore.ilasm";
+    $binary = executableName('ilasm');
     $rel = $package . DIRECTORY_SEPARATOR . '6.0.0' . DIRECTORY_SEPARATOR
         . 'runtimes' . DIRECTORY_SEPARATOR . $rid . DIRECTORY_SEPARATOR
-        . 'native' . DIRECTORY_SEPARATOR . 'ilasm';
+        . 'native' . DIRECTORY_SEPARATOR . $binary;
 
     foreach (nugetPackageRoots() as $root) {
         $candidate = $root . DIRECTORY_SEPARATOR . $rel;
@@ -172,7 +186,7 @@ function findIlasmInNuGetCaches(): ?string
             }
             $candidate = $pkgDir . DIRECTORY_SEPARATOR . $ver . DIRECTORY_SEPARATOR
                 . 'runtimes' . DIRECTORY_SEPARATOR . $rid . DIRECTORY_SEPARATOR
-                . 'native' . DIRECTORY_SEPARATOR . 'ilasm';
+                . 'native' . DIRECTORY_SEPARATOR . $binary;
             if (\is_file($candidate) && \is_executable($candidate)) {
                 return $candidate;
             }
@@ -370,6 +384,12 @@ XML;
 
 /**
  * Assemble with CoreCLR ilasm directly (mirrors Sdk.IL's Exec of ilasm).
+ *
+ * The sources go to ilasm as one file, not one argument each. They are fragments of a single
+ * compilation unit — only the header carries `.module`/`.assembly` — and a program that pulls in
+ * the standard library reaches several hundred of them, which no Windows command line can name:
+ * `CreateProcess` stops at 32,767 characters. An ilasm error therefore names the bundle, not the
+ * fragment; the fragments stay on disk beside it for a `dotnet build` of the tree.
  */
 function assembleDotNetWithIlasm(
     string $ilasm,
@@ -387,15 +407,16 @@ function assembleDotNetWithIlasm(
     // apphost via the SDK. `dotnet app.dll` runs either shape.
     // No `-OPTIMIZE`: it rewrites long branches to short, which would invalidate
     // the compile-time IL offsets baked into Moggi.Frames.
-    $args = [
+    $bundlePath = bundleIlSources($outputRoot, $ilFiles);
+    $result = runProcess([
         $ilasm,
         '-NOLOGO',
         '-QUIET',
         '-DLL',
         '-OUTPUT=' . $dllPath,
-        ...$ilFiles,
-    ];
-    $result = runProcess($args, $outputRoot);
+        $bundlePath,
+    ], $outputRoot);
+    @\unlink($bundlePath);
     if ($result['exitCode'] !== 0 || !\is_file($dllPath)) {
         throw new \RuntimeException(
             'ilasm failed'
@@ -483,6 +504,28 @@ function dotNetOutputReferencedAssemblies(string $outputRoot): array
 }
 
 /** @return list<string> absolute paths; `_header.il` first */
+/**
+ * Every ILASM source in `$outputRoot`, in assembly order, as one file. Returns its path.
+ *
+ * @param list<string> $ilFiles
+ */
+function bundleIlSources(string $outputRoot, array $ilFiles): string
+{
+    $bundle = '';
+    foreach ($ilFiles as $file) {
+        $chunk = (string) \file_get_contents($file);
+        $bundle .= $chunk;
+        if ($chunk === '' || !\str_ends_with($chunk, "\n")) {
+            $bundle .= "\n";
+        }
+    }
+
+    $path = $outputRoot . DIRECTORY_SEPARATOR . '_bundle.il';
+    \file_put_contents($path, $bundle);
+
+    return $path;
+}
+
 function collectIlSources(string $outputRoot): array
 {
     $header = null;

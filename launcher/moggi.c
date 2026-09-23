@@ -43,8 +43,10 @@
 
 #if defined(_WIN32)
 
+/* `shellapi.h` for `CommandLineToArgvW`, `wchar.h` for `wcslen`. */
 #include <windows.h>
-#include <process.h>
+#include <shellapi.h>
+#include <wchar.h>
 #define MOGGI_PATH_SEP ';'
 #define MOGGI_DIR_SEP '\\'
 
@@ -447,6 +449,128 @@ static Needs scan_needs(int argc, char **argv)
     return needs;
 }
 
+#if defined(_WIN32)
+/*
+ * Windows has no argument vector: a child gets one string and a quoting convention, which the
+ * runtime splits back into `argv`. `_spawnv` cannot express every argument — it joins them with
+ * spaces — so `a b` arrived as two arguments, `"quoted"` lost its quotes and an empty argument
+ * disappeared. The command line is built here instead, by the same rules the runtime parses by.
+ */
+static wchar_t *quote_argument(wchar_t *out, const wchar_t *argument)
+{
+    size_t backslashes = 0;
+    *out++ = L'"';
+    for (const wchar_t *p = argument; *p != L'\0'; ++p) {
+        if (*p == L'\\') {
+            ++backslashes;
+            continue;
+        }
+        if (*p == L'"') {
+            for (size_t i = 0; i < backslashes * 2 + 1; ++i) {
+                *out++ = L'\\';
+            }
+            *out++ = L'"';
+        } else {
+            for (size_t i = 0; i < backslashes; ++i) {
+                *out++ = L'\\';
+            }
+            *out++ = *p;
+        }
+        backslashes = 0;
+    }
+    /* A backslash run before the closing quote would otherwise escape it. */
+    for (size_t i = 0; i < backslashes * 2; ++i) {
+        *out++ = L'\\';
+    }
+    *out++ = L'"';
+
+    return out;
+}
+
+/** Room for one always-quoted argument: it can double, plus two quotes and a separator. */
+static size_t quoted_length(const wchar_t *argument)
+{
+    return wcslen(argument) * 2 + 4;
+}
+
+/** The wide form of a path this process resolved through the narrow API. */
+static wchar_t *wide_path(const char *path)
+{
+    int needed = MultiByteToWideChar(CP_ACP, 0, path, -1, NULL, 0);
+    if (needed <= 0) {
+        fail_path("cannot convert a path for the child process: ", path);
+    }
+    wchar_t *wide = (wchar_t *)malloc((size_t)needed * sizeof(wchar_t));
+    if (wide == NULL) {
+        fail("out of memory");
+    }
+    MultiByteToWideChar(CP_ACP, 0, path, -1, wide, needed);
+
+    return wide;
+}
+
+/**
+ * Run PHP on the compiler archive with the arguments this process was given.
+ *
+ * The wide arguments come from the command line itself, so nothing is round-tripped through a code
+ * page on the way to the child; the exit status is waited for and returned, which is what makes the
+ * launcher transparent to whatever runs it.
+ */
+static int spawn_php(const char *program, const char *extension_option, const char *phar, wchar_t **arguments, int argument_count)
+{
+    wchar_t *program_wide = wide_path(program);
+    wchar_t *phar_wide = wide_path(phar);
+    wchar_t *option_wide = extension_option == NULL ? NULL : wide_path(extension_option);
+
+    size_t capacity = quoted_length(program_wide) + quoted_length(phar_wide) + 1;
+    if (option_wide != NULL) {
+        capacity += quoted_length(L"-d") + quoted_length(option_wide);
+    }
+    for (int i = 1; i < argument_count; ++i) {
+        capacity += quoted_length(arguments[i]);
+    }
+
+    wchar_t *line = (wchar_t *)malloc(capacity * sizeof(wchar_t));
+    if (line == NULL) {
+        fail("out of memory");
+    }
+    wchar_t *cursor = quote_argument(line, program_wide);
+    if (option_wide != NULL) {
+        *cursor++ = L' ';
+        cursor = quote_argument(cursor, L"-d");
+        *cursor++ = L' ';
+        cursor = quote_argument(cursor, option_wide);
+    }
+    *cursor++ = L' ';
+    cursor = quote_argument(cursor, phar_wide);
+    for (int i = 1; i < argument_count; ++i) {
+        *cursor++ = L' ';
+        cursor = quote_argument(cursor, arguments[i]);
+    }
+    *cursor = L'\0';
+
+    STARTUPINFOW startup;
+    memset(&startup, 0, sizeof(startup));
+    startup.cb = sizeof(startup);
+    PROCESS_INFORMATION info;
+    if (!CreateProcessW(program_wide, line, NULL, NULL, TRUE, 0, NULL, NULL, &startup, &info)) {
+        fail_path("cannot start PHP: ", program);
+    }
+    WaitForSingleObject(info.hProcess, INFINITE);
+    DWORD status = 0;
+    GetExitCodeProcess(info.hProcess, &status);
+    CloseHandle(info.hProcess);
+    CloseHandle(info.hThread);
+
+    free(line);
+    free(option_wide);
+    free(phar_wide);
+    free(program_wide);
+
+    return (int)status;
+}
+#endif
+
 int main(int argc, char **argv)
 {
     char *bin_dir = executable_directory();
@@ -593,6 +717,17 @@ int main(int argc, char **argv)
     }
     free(extension_dir);
 
+#if defined(_WIN32)
+    int wide_count = 0;
+    wchar_t **wide = CommandLineToArgvW(GetCommandLineW(), &wide_count);
+    if (wide == NULL) {
+        fail("cannot read this process's own command line");
+    }
+    int status = spawn_php(php, extra > 0 ? extension_option : NULL, phar, wide, wide_count);
+    LocalFree(wide);
+
+    return status;
+#else
     char **child_argv = (char **)calloc((size_t)argc + 2 + (size_t)extra, sizeof(char *));
     if (child_argv == NULL) {
         fail("out of memory");
@@ -608,14 +743,6 @@ int main(int argc, char **argv)
     }
     child_argv[argc + 1 + extra] = NULL;
 
-#if defined(_WIN32)
-    intptr_t status = _spawnv(_P_WAIT, php, (const char *const *)child_argv);
-    if (status == -1) {
-        fail_path("cannot start PHP: ", php);
-    }
-
-    return (int)status;
-#else
     execv(php, child_argv);
     fail_path("cannot start PHP: ", php);
 

@@ -957,21 +957,40 @@ function copyNonBaselineLibraries(string $binary, string $libDir): void
         return;
     }
 
-    $baseline = '/^(libc|libm|libdl|librt|libpthread|libgcc_s|libstdc\+\+|libutil|libresolv|libnsl|ld-linux|linux-vdso|libSystem|libc\+\+|libobjc)/';
-    $paths = \PHP_OS_FAMILY === 'Darwin'
-        ? darwinLinkedLibraries($binary)
-        : linuxLinkedLibraries($binary);
+    $baseline = '/^(libc|libm|libdl|librt|libpthread|libgcc_s|libstdc\+\+|libutil|libresolv|libnsl|ld-linux|linux-vdso|libSystem|libc\+\+|libobjc)([.-]|$)/';
+    $darwin = \PHP_OS_FAMILY === 'Darwin';
+
+    /*
+     * The whole dependency closure, not the binary's direct dependencies: a library brought in for
+     * one of those can need another (Homebrew's `libicuuc` loads `libicudata`), and a copy that is
+     * missing its own dependency only fails when the runtime is executed.
+     *
+     * Each entry carries the directory to resolve a relative reference in, because `@loader_path`
+     * means the directory of the file that makes the reference.
+     */
+    /** @var list<array{string, string}> $queue referenced path, directory it is relative to */
+    $queue = [];
+    foreach ($darwin ? darwinLinkedLibraries($binary) : linuxLinkedLibraries($binary) as $path) {
+        $queue[] = [$path, \dirname($binary)];
+    }
 
     /** @var array<string, string> $copied library name (as referenced) => source path */
     $copied = [];
-    foreach ($paths as $path) {
+    while ($queue !== []) {
+        [$path, $referrer] = \array_shift($queue);
         $name = \basename($path);
-        if (\preg_match($baseline, $name) === 1) {
+        if (\preg_match($baseline, $name) === 1 || isset($copied[$name])) {
             continue;
         }
+        [$resolved, $relative] = resolveLibraryReference($path, $referrer);
+        $path = $resolved;
         if (!\is_file($path)) {
-            if (\PHP_OS_FAMILY === 'Darwin') {
-                throw new \RuntimeException("cannot make the bundled PHP portable: the unresolved dependency {$path}");
+            /* A reference the loader resolves somewhere we cannot see (a host library by rpath) is
+             * left alone; an absolute one that is not there is a copy that would not load. */
+            if ($darwin && !$relative) {
+                throw new \RuntimeException(
+                    "cannot make the bundled PHP portable: {$name} is needed by {$referrer} and is not a file",
+                );
             }
             continue;
         }
@@ -986,6 +1005,9 @@ function copyNonBaselineLibraries(string $binary, string $libDir): void
             @\copy($real, $libDir . '/' . \basename($real));
         }
         $copied[$name] = $path;
+        foreach ($darwin ? darwinLinkedLibraries($path) : linuxLinkedLibraries($path) as $dependency) {
+            $queue[] = [$dependency, \dirname($path)];
+        }
     }
 
     if ($copied === []) {
@@ -1034,6 +1056,26 @@ function relinkDarwinLibraries(string $binary, string $libDir, array $copied): v
     foreach ($copied as $name => $source) {
         runProcess([$tool, '-change', $source, '@loader_path/../lib/' . $name, $binary]);
     }
+}
+
+/**
+ * Resolve a library reference to the file it means.
+ *
+ * macOS references a dylib by its `install_name`, which may be relative: `@loader_path` is the
+ * directory of the file that makes the reference (not of the binary being fixed up), and Homebrew's
+ * ICU uses it for the data library every ICU dylib needs. The second value says the reference was
+ * relative, since one that an `rpath` resolves somewhere we cannot see is left alone rather than
+ * reported as missing.
+ *
+ * @return array{string, bool} resolved path, whether the reference was relative
+ */
+function resolveLibraryReference(string $reference, string $referrer): array
+{
+    if (\str_starts_with($reference, '@loader_path/') || \str_starts_with($reference, '@rpath/')) {
+        return [$referrer . '/' . \basename($reference), true];
+    }
+
+    return [$reference, false];
 }
 
 /** @return list<string> */
