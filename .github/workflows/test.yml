@@ -24,8 +24,9 @@ jobs:
         include:
           - {name: linux-x86_64,   os: ubuntu-24.04}
           - {name: linux-aarch64,  os: ubuntu-24.04-arm}
+          - {name: macos-x86_64,   os: macos-15-intel}
           - {name: macos-aarch64,  os: macos-latest}
-          - {name: windows-x86_64, os: windows-2022}
+          - {name: windows-x86_64, os: windows-2022, msystem: UCRT64, msysPackages: 'mingw-w64-ucrt-x86_64-gcc make'}
 
     steps:
       - uses: actions/checkout@v7.0.1
@@ -53,20 +54,22 @@ jobs:
         run: |
           php --version
           java -version
-          native-image --version
           dotnet --version
+
+      - name: Show native-image
+        run: native-image --version
 
       - name: Install a C toolchain (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y clang
 
-      - name: Install MSYS2 (MinGW) for the schnorr CLI
+      - name: Install MSYS2 for the schnorr CLI
         if: runner.os == 'Windows'
         uses: msys2/setup-msys2@v2.32.0
         with:
-          msystem: UCRT64
+          msystem: ${{ matrix.msystem }}
           update: false
-          install: mingw-w64-ucrt-x86_64-gcc make
+          install: ${{ matrix.msysPackages }}
           path-type: inherit
 
       - name: Build the schnorr CLI

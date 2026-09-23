@@ -81,15 +81,22 @@ function findToolchainExecutable(string $rootEnv, string $name, string $subdir =
  * it never closes the stream being waited on. That buffer is ~4 KB on Windows
  * and 64 KB elsewhere, and an ordinary program printing to stderr reaches it.
  *
- * `$echo` passes the child's output through as it arrives.
+ * The loop ends when the process exits, not when its pipes reach EOF: build
+ * tools leave descendants holding them open, which reads exactly like a hang.
+ * `$timeoutSeconds` kills a process that outlives it and says so in `stderr`.
  *
  * @param list<string> $command
  * @param ?array<string, string> $env
  * @return array{exitCode: int, stdout: string, stderr: string} `exitCode` is -1
  *   when the command could not be started.
  */
-function runProcess(array $command, ?string $cwd = null, ?array $env = null, bool $echo = false): array
-{
+function runProcess(
+    array $command,
+    ?string $cwd = null,
+    ?array $env = null,
+    bool $echo = false,
+    ?int $timeoutSeconds = null,
+): array {
     $descriptors = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
     // A toolchain that is not installed is an expected answer here, not a
     // warning: the caller sees it in the return value.
@@ -103,7 +110,7 @@ function runProcess(array $command, ?string $cwd = null, ?array $env = null, boo
 
     $stdout = '';
     $stderr = '';
-    while (true) {
+    $drain = static function () use ($pipes, $echo, &$stdout, &$stderr): void {
         $out = (string) \stream_get_contents($pipes[1]);
         if ($out !== '') {
             $stdout .= $out;
@@ -118,13 +125,45 @@ function runProcess(array $command, ?string $cwd = null, ?array $env = null, boo
                 \fwrite(STDERR, $err);
             }
         }
-        if (\feof($pipes[1]) && \feof($pipes[2])) {
+    };
+
+    $deadline = $timeoutSeconds === null ? null : \microtime(true) + $timeoutSeconds;
+    $exitCode = -1;
+    $timedOut = false;
+    while (true) {
+        $drain();
+        $status = \proc_get_status($process);
+        if (!$status['running']) {
+            $exitCode = $status['exitcode'];
+            break;
+        }
+        if ($deadline !== null && \microtime(true) > $deadline) {
+            $timedOut = true;
+            \proc_terminate($process);
+            \usleep(100_000);
             break;
         }
         \usleep(2000);
     }
+
+    // Drains what the command buffered; a closed pipe ends this at once.
+    $grace = \microtime(true) + 0.2;
+    while (!\feof($pipes[1]) || !\feof($pipes[2])) {
+        $drain();
+        if (\microtime(true) >= $grace) {
+            break;
+        }
+        \usleep(2000);
+    }
+
     \fclose($pipes[1]);
     \fclose($pipes[2]);
+    \proc_close($process);
 
-    return ['exitCode' => \proc_close($process), 'stdout' => $stdout, 'stderr' => $stderr];
+    if ($timedOut) {
+        $stderr .= \sprintf("timed out after %d seconds: %s\n", $timeoutSeconds, \implode(' ', $command));
+        $exitCode = -1;
+    }
+
+    return ['exitCode' => $exitCode, 'stdout' => $stdout, 'stderr' => $stderr];
 }

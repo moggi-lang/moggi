@@ -214,9 +214,14 @@ function sha256File(string $path): string
  * `$echo` passes the child's own output through as it arrives, so a build that
  * stops producing output shows which command it stopped at.
  */
-function runProcess(array $command, ?string $cwd = null, ?array $env = null, bool $echo = false): array
-{
-    $result = runCompilerProcess($command, $cwd, $env, $echo);
+function runProcess(
+    array $command,
+    ?string $cwd = null,
+    ?array $env = null,
+    bool $echo = false,
+    ?int $timeoutSeconds = null,
+): array {
+    $result = runCompilerProcess($command, $cwd, $env, $echo, $timeoutSeconds);
 
     return [$result['exitCode'], $result['stdout'], $result['stderr']];
 }
@@ -818,12 +823,12 @@ function runWithLibraryPath(array $command, string $libDir): string
  *
  * `$echo` prints what the command prints, as it prints it.
  */
-function runOrFail(array $command, ?string $cwd = null, bool $echo = false): void
+function runOrFail(array $command, ?string $cwd = null, bool $echo = false, ?int $timeoutSeconds = null): void
 {
     $label = \implode(' ', $command);
     \fwrite(STDOUT, '  ' . $label . "\n");
     $started = \microtime(true);
-    [$code, $stdout, $stderr] = runProcess($command, $cwd, null, $echo);
+    [$code, $stdout, $stderr] = runProcess($command, $cwd, null, $echo, $timeoutSeconds);
     if ($code !== 0) {
         throw new \RuntimeException(
             "{$label} failed ({$code})\n" . \substr($stdout . "\n" . $stderr, -4000),

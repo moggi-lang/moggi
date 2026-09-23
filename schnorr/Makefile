@@ -50,6 +50,12 @@ ifneq (,$(findstring mingw,$(shell $(CC) -dumpmachine 2>/dev/null)))
   LDFLAGS += -static
 endif
 
+# macOS: libSystem has no memrchr, and Mach-O has no weak symbol aliases.
+ifneq (,$(findstring apple,$(shell $(CC) -dumpmachine 2>/dev/null)))
+  BECH32_CFLAGS += -include $(CURDIR)/compat.h
+  COMPAT_OBJS = $(BUILD_DIR)/compat.o
+endif
+
 .PHONY: all clean check-deps
 
 all: check-deps schnorr
@@ -58,7 +64,7 @@ check-deps:
 	@test -f $(SECP_DIR)/src/secp256k1.c || { echo "schnorr: $(SECP_DIR) is missing — clone it at the pinned tag (see README.md, Dependencies)" >&2; exit 1; }
 	@test -f $(BECH32_DIR)/libbech32.c || { echo "schnorr: $(BECH32_DIR) is missing — clone it at the pinned tag (see README.md, Dependencies)" >&2; exit 1; }
 
-schnorr: $(BUILD_DIR)/schnorr.o $(BUILD_DIR)/libbech32.o $(SECP_LIB)
+schnorr: $(BUILD_DIR)/schnorr.o $(BUILD_DIR)/libbech32.o $(SECP_LIB) $(COMPAT_OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 $(BUILD_DIR)/schnorr.o: schnorr.c | $(BUILD_DIR)
@@ -66,6 +72,9 @@ $(BUILD_DIR)/schnorr.o: schnorr.c | $(BUILD_DIR)
 
 $(BUILD_DIR)/libbech32.o: $(BECH32_DIR)/libbech32.c | $(BUILD_DIR)
 	$(CC) $(BECH32_CFLAGS) -I$(BECH32_DIR) -MMD -MP -c -o $@ $<
+
+$(BUILD_DIR)/compat.o: compat.c compat.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -MMD -MP -c -o $@ $<
 
 $(BUILD_DIR)/%.o: $(SECP_DIR)/src/%.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(SECP_WARN) $(SECP_DEFINES) $(SECP_INCLUDES) -MMD -MP -c -o $@ $<
