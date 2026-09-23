@@ -284,6 +284,14 @@ jobs:
       - name: Every published archive must match its checksum
         run: cd release && sha256sum -c SHA256SUMS
 
+      - name: Set up the PHP that the minimal distribution runs on
+        uses: shivammathur/setup-php@2.37.2
+        with:
+          php-version: '8.5'
+          extensions: bcmath, mbstring, zip, phar, ctype, intl
+          ini-values: memory_limit=1G
+          coverage: none
+
       - name: A published installation must run
         run: |
           cd release
