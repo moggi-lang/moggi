@@ -53,14 +53,6 @@ function assembleUsage(): int
     return 0;
 }
 
-/**
- * The output directory as an absolute path.
- *
- * Everything derived from it — the staged installation, the release archives, the example a smoke test
- * runs — is handed to a process that starts in a different directory (the smoke work dir, an archive's
- * parent), and those resolve relative arguments against their own cwd. A relative `--out` therefore
- * names a path none of them can find.
- */
 function absoluteOutDir(string $dir): string
 {
     if ($dir === '' || isAbsolutePath($dir)) {
@@ -205,11 +197,6 @@ function variantPlan(array $config, string $target, array $requested): array
     return $plan;
 }
 
-/**
- * The part of every distribution that does not depend on the variant: the
- * compiler archive, the launcher, the standard library sources, user-facing docs,
- * examples and the licence.
- */
 function stageBaseInstallation(string $repo, string $base, string $target): void
 {
     removeTree($base);
@@ -251,11 +238,6 @@ function schnorrFileName(string $target): string
     return \str_starts_with($target, 'windows-') ? 'schnorr.exe' : 'schnorr';
 }
 
-/**
- * The schnorr CLI beside the launcher: self-contained, nothing to find at run
- * time. It has no user yet — it ships so that the installation carries the
- * toolbox it was built with, and so the next release can rely on it.
- */
 function stageSchnorr(string $repo, string $binDir, string $target): void
 {
     $name = schnorrFileName($target);
@@ -265,8 +247,6 @@ function stageSchnorr(string $repo, string $binDir, string $target): void
     @\chmod($binDir . '/' . $name, 0755);
 }
 
-/** Compile the native launcher. Only `MOGGI_DIST_CC` overrides Clang: `CC` is
- *  set by Nix and CI and must not silently change what a release is built with. */
 function buildLauncher(string $repo, string $out, string $target): void
 {
     $wanted = \getenv('MOGGI_DIST_CC');
@@ -305,14 +285,7 @@ function assertBundledLicenses(string $stage, array $runtimes, array $config, st
     }
 }
 
-/**
- * The licence index for everything in the installation that belongs to someone
- * else: the bundled runtimes, which keep their own files under
- * `runtime/<name>/`, and the libraries statically linked into `bin/schnorr`,
- * whose full texts are repeated here because their sources are not shipped.
- *
- * @param list<string> $runtimes
- */
+/** @param list<string> $runtimes */
 function thirdPartyNotices(array $runtimes, string $target, array $config, string $repo): string
 {
     $lines = ['# Third-party notices', ''];
@@ -371,12 +344,7 @@ function thirdPartyNotices(array $runtimes, string $target, array $config, strin
     return \implode("\n", $lines);
 }
 
-/**
- * The archive's front page, written for the variant it sits in — deliberately not
- * the repository's README, which documents the compiler's development.
- *
- * @param list<string> $runtimes
- */
+/** @param list<string> $runtimes */
 function distributionReadme(string $variant, string $target, array $runtimes, string $version): string
 {
     $bundled = $runtimes === []
@@ -442,10 +410,6 @@ function distributionReadme(string $variant, string $target, array $runtimes, st
 }
 
 /**
- * Prove an assembled distribution works, from a directory that is not the
- * installation. `version` exercises the launcher, the archive and the bundled PHP;
- * compiling and running an example exercises the compiler and backend end to end.
- *
  * @param list<string> $runtimes
  * @return list<string> what was checked, for the report
  */
@@ -675,8 +639,6 @@ function assembleMain(array $argv): int
         return 1;
     }
 
-    // Asked for archives and got none: a caller that uploads them would otherwise report an empty
-    // artifact instead of the reason there is nothing to upload.
     if ($options['archives'] && $archives === 0) {
         \fwrite(STDERR, "\nerror: no archive was produced for {$target} under {$out}\n");
 

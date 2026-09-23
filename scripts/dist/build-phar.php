@@ -43,12 +43,6 @@ const PHAR_INCLUDES = ['src'];
 /** A basename that starts with this is a working note, and is never archived. */
 const PHAR_EXCLUDES_PREFIX = '_';
 
-/**
- * The version the archive reports: the tag it was built from, or the version
- * file marked as an unreleased build of the commit that produced it
- * (`0.0.1-dev.20260922+f60fb9f`, plus `.dirty` for a modified tree). Without
- * git the version file is used verbatim, which is what a source tarball is.
- */
 function compilerBuildVersion(string $sourceRoot): string
 {
     $base = \trim((string) @\file_get_contents($sourceRoot . '/VERSION'));
@@ -129,7 +123,6 @@ function buildCompilerPhar(string $sourceRoot, string $outPath): void
         throw new \RuntimeException("cannot create {$outDir}");
     }
 
-    // Deterministic: the same tree produces the same archive bytes.
     $tmp = $outPath . '.building';
     if (\is_file($tmp)) {
         \unlink($tmp);

@@ -75,13 +75,6 @@ function assertUpstreamHost(string $runtime, string $url): void
     }
 }
 
-/**
- * The architecture/OS token the asset for a target must carry in its filename.
- *
- * This is what catches the failure mode that matters most: a URL that resolves
- * and extracts, but belongs to another architecture. An upstream source release
- * is architecture-independent, so it names none and is exempt.
- */
 function expectedAssetToken(string $runtime, string $target, array $config): ?string
 {
     $coords = $config['targets'][$target];
@@ -113,10 +106,6 @@ function assertAssetMatchesTarget(string $runtime, string $url, string $target, 
     }
 }
 
-/**
- * Fetch the first byte of an asset: proves the pinned URL still resolves to a
- * real file, without downloading it.
- */
 function assertAssetReachable(string $url): int
 {
     $discard = \fopen('php://temp', 'wb');
@@ -143,11 +132,6 @@ function assertAssetReachable(string $url): int
     return $size;
 }
 
-/**
- * Upstream's own checksum for an asset, when it publishes one: a `.sha256`
- * sidecar, .NET's release metadata (SHA-512 per RID), php.net's release metadata
- * (source archives only), or Adoptium's asset API. Null when there is none.
- */
 function upstreamSha256(string $runtime, string $url, array $asset, string $target, array $config): ?array
 {
     if (isset($asset['sha256Url'])) {
@@ -229,11 +213,6 @@ function upstreamSha256(string $runtime, string $url, array $asset, string $targ
     return null;
 }
 
-/**
- * The hash to pin: upstream's own when it publishes one, otherwise a download
- * of the asset (the release is still real and archived, but with no published
- * digest, the only way to pin it is to hash what upstream served now).
- */
 function resolveChecksum(string $runtime, string $url, array $asset, string $target, array $config): array
 {
     $published = upstreamSha256($runtime, $url, $asset, $target, $config);
