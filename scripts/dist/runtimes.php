@@ -684,7 +684,7 @@ function assertPhpExtensions(string $binary, string $dir, string $target, array 
 
     $enable = [];
     foreach ($required as $extension) {
-        if (\in_array($extension, $compiledIn, true)) {
+        if (phpHasModule($compiledIn, $extension)) {
             continue;
         }
         $dll = $dir . '/ext/php_' . $extension . '.dll';
@@ -696,13 +696,36 @@ function assertPhpExtensions(string $binary, string $dir, string $target, array 
     writeBundledPhpIni($dir, $compiledIn, $enable);
 
     $loaded = phpModuleList($binary, $dir, ['-c', $dir . '/php.ini', '-d', 'extension_dir=' . $dir . '/ext']);
-    $missing = \array_values(\array_diff($required, $loaded));
+    $missing = \array_values(\array_filter(
+        $required,
+        static fn (string $extension): bool => !phpHasModule($loaded, $extension),
+    ));
     if ($missing !== []) {
         throw new \RuntimeException(
             'the PHP runtime for ' . $target . ' has no ' . \implode(', ', $missing)
             . ' (compiled in: ' . \implode(' ', $compiledIn) . ')',
         );
     }
+}
+
+/**
+ * Does a `php -m` list carry this extension?
+ *
+ * PHP spells module names its own way — `Phar` but `zip`, `Bcmath` on Windows — while the pinned
+ * configuration names every extension the way the workflow's `extensions:` input does, in lower
+ * case. Comparing them byte for byte reports a bundled extension as missing.
+ *
+ * @param list<string> $modules
+ */
+function phpHasModule(array $modules, string $extension): bool
+{
+    foreach ($modules as $module) {
+        if (\strcasecmp($module, $extension) === 0) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 /** Modules a PHP binary reports, run without touching the host's configuration. */
@@ -714,7 +737,17 @@ function phpModuleList(string $binary, string $dir, array $options): array
         $output = runWithLibraryPath([$binary, ...$options, '-m'], $dir . '/lib');
     }
 
-    return \array_values(\array_filter(\array_map('trim', \explode("\n", $output))));
+    $modules = [];
+    foreach (\explode("\n", $output) as $line) {
+        $line = \trim($line);
+        // `-m` prints `[PHP Modules]` / `[Zend Modules]` group headers among the names.
+        if ($line === '' || ($line[0] === '[' && \str_ends_with($line, ']'))) {
+            continue;
+        }
+        $modules[] = $line;
+    }
+
+    return $modules;
 }
 
 /**

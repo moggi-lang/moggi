@@ -14,8 +14,27 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  gate:
+    name: require a green test run
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: The commit being packaged must have a successful test run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/test.yml/runs?head_sha=${{ github.sha }}&status=success&per_page=1" --jq '.total_count')
+          if [ "${runs:-0}" -lt 1 ]; then
+            echo "::error::no successful test run for ${{ github.sha }}; packaging takes a tested commit"
+            exit 1
+          fi
+
   linux:
     name: ${{ matrix.target }}
+    needs: [gate]
     runs-on: ${{ matrix.runner }}
     container: ubuntu:22.04
     timeout-minutes: 180
@@ -60,12 +79,7 @@ jobs:
         run: php scripts/dist/pin.php --check --target ${{ matrix.target }}
 
       - name: Build the distributions
-        run: |
-          php scripts/dist/assemble.php \
-            --target ${{ matrix.target }} \
-            --glibc-floor \
-            --archives \
-            --out dist-out
+        run: php scripts/dist/assemble.php --target ${{ matrix.target }} --glibc-floor --archives --out dist-out
 
       - name: Upload the archives
         uses: actions/upload-artifact@v4.6.2
@@ -79,6 +93,7 @@ jobs:
 
   native:
     name: ${{ matrix.target }}
+    needs: [gate]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
     strategy:
@@ -150,11 +165,7 @@ jobs:
         run: php scripts/dist/pin.php --check --target ${{ matrix.target }}
 
       - name: Build the distributions
-        run: |
-          php scripts/dist/assemble.php \
-            --target ${{ matrix.target }} \
-            --archives \
-            --out dist-out
+        run: php scripts/dist/assemble.php --target ${{ matrix.target }} --archives --out dist-out
 
       - name: Upload the archives
         uses: actions/upload-artifact@v4.6.2
@@ -168,7 +179,7 @@ jobs:
 
   publish:
     if: github.ref_type == 'tag' || github.ref == 'refs/heads/build'
-    needs: [linux, native]
+    needs: [gate, linux, native]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
