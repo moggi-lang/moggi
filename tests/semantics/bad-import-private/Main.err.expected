@@ -1,0 +1,4 @@
+tests/semantics/bad-import-private/Main.mog:3:8: type error: module `Internal` does not export `peek`
+
+  3 | import Internal (peek)
+    |        ^^^^^^^^

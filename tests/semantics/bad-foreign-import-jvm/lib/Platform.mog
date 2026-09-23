@@ -1,0 +1,9 @@
+module Platform
+  ( hostToString
+  ) where
+
+-- Foreign *functions* bind to one backend's host, so a module that declares one can only be
+-- compiled for that backend. The library expresses "one API, several hosts" with
+-- `backend <name> <module>` plus a module per host (see lib/System/IO.mog), never by
+-- declaring every host in one module.
+foreign jvm function hostToString "java.lang.Long:toString" :: Int -> String

@@ -1,0 +1,3 @@
+-- Nat is a kind, not a type.
+bad :: Nat -> String
+bad _ = "no"

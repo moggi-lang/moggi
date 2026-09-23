@@ -1,0 +1,13 @@
+program
+  function idLocal :: Int -> Int
+    pat_var x
+    let
+      binding
+        pat_var f
+        type_asc Int -> Int
+          lambda
+            pat_var y
+            variable y
+      apply
+        variable f
+        variable x

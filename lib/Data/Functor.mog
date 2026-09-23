@@ -1,0 +1,42 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.Functor
+  ( Functor(..)
+  , ($>)
+  , (<$>)
+  , (<$)
+  , (<&>)
+  , unzip
+  , void
+  ) where
+
+infixl 4 <$>, <$, $>
+infixl 1 <&>
+
+class Functor f where
+  map :: (a -> b) -> (f a) -> (f b)
+
+(<$>) :: Functor f => (a -> b) -> f a -> f b
+(<$>) f x = map f x
+
+(<$) :: Functor f => a -> f b -> f a
+(<$) x fb = map (\ignored -> x) fb
+
+($>) :: Functor f => f a -> b -> f b
+($>) fa x = x <$ fa
+
+(<&>) :: Functor f => f a -> (a -> b) -> f b
+(<&>) fa f = map f fa
+
+unzip :: Functor f => f (a, b) -> (f a, f b)
+unzip x = (map unzipFirst x, map unzipSecond x)
+
+unzipFirst :: (a, b) -> a
+unzipFirst pair = case pair of
+  (a, _) -> a
+
+unzipSecond :: (a, b) -> b
+unzipSecond pair = case pair of
+  (_, b) -> b
+
+void :: Functor f => f a -> f ()
+void x = () <$ x

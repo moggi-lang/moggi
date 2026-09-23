@@ -1,0 +1,5 @@
+ascii-ok
+trunc-0100-ok
+trunc-20ac-ok
+zext-ok
+[72,105]

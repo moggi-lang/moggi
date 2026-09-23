@@ -1,0 +1,4 @@
+tests/syntax/parser/bad-parse/Newtype-Multi.mog:1:21: parse error: a newtype must have exactly one constructor
+
+  1 | newtype Bad = A Int | B Int
+    |                     ^

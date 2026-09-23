@@ -1,0 +1,5 @@
+module
+  function peel(xs)
+      ret intrinsic listTail#(xs)
+  function twice(xs)
+      ret intrinsic listTail#(intrinsic listTail#(xs))

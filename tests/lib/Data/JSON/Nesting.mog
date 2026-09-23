@@ -1,0 +1,34 @@
+import System.IO
+import Data.ByteString.Char8 qualified as C
+import Data.String
+import Data.Bool
+import Data.Eq
+import Data.Int
+import Data.Either
+import Data.JSON
+import Moggi.Generics
+data Address = Address { street :: String, city :: String }
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+data Person = Person { name :: String, age :: Int, address :: Address, tags :: [String] }
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+rt :: Person -> IO String
+rt p = do
+  mr <- eitherDecode (encode p)
+  pure (case mr of
+    Left err -> "ERR:" <> err
+    Right p2 -> case p2 == p of
+      True -> "ok"
+      False -> "bad")
+
+ada :: Person
+ada = Person "Ada" 36 (Address "Main St" "London") ("genius" : "pioneer" : [])
+
+main :: IO ()
+main = do
+  C.putStrLn (encode ada)
+  r <- rt ada
+  putStrLn r

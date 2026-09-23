@@ -1,0 +1,2 @@
+-- `\x` demands exactly two hex digits.
+s = "ok \xZZ bad"

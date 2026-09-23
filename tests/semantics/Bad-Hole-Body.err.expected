@@ -1,0 +1,4 @@
+tests/semantics/Bad-Hole-Body.mog:2:5: type error: Found hole with type: `Int`
+
+  2 | f = _
+    |     ^

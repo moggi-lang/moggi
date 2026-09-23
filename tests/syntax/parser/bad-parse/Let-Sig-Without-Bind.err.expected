@@ -1,0 +1,4 @@
+tests/syntax/parser/bad-parse/Let-Sig-Without-Bind.mog:2:7: parse error: type signature for `g` lacks an accompanying binding
+
+  2 |   let g :: Int -> Int
+    |       ^^

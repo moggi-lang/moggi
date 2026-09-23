@@ -1,0 +1,1 @@
+data Bad a = a + [a]

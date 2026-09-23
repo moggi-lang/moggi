@@ -1,0 +1,11 @@
+module StructureDataCtor where
+
+data Shape = Circle Int | Rect Int Int
+
+area :: Shape -> Int
+area s = case s of
+  Circle r -> r * r
+  Rect w h -> w * h
+
+square :: Int -> Shape
+square n = Rect n n

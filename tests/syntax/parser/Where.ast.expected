@@ -1,0 +1,10 @@
+program
+  function addOne :: Int -> Int
+    pat_var x
+    where
+      infix +
+        variable x
+        variable y
+      binding
+        pat_var y
+        integer 1

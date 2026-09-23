@@ -1,0 +1,88 @@
+<?php declare(strict_types=1);
+
+namespace Tc\Maybe;
+
+const __MOGGI_MAP = [[25 => ['Tc.Maybe.fmapMaybe', 'tests/backend/codegen/Tc-Maybe.mog', 11, 18], 40 => ['Tc.Maybe.justDemo', 'tests/backend/codegen/Tc-Maybe.mog', 20, 12], 44 => ['Tc.Maybe.apDemo', 'tests/backend/codegen/Tc-Maybe.mog', 23, 10], 48 => ['Tc.Maybe.bindDemo', 'tests/backend/codegen/Tc-Maybe.mog', 26, 12], 52 => ['Tc.Maybe.nothingShort', 'tests/backend/codegen/Tc-Maybe.mog', 29, 16], 56 => ['Tc.Maybe.fromMaybeDemo', 'tests/backend/codegen/Tc-Maybe.mog', 32, 17], 60 => ['Tc.Maybe.catMaybesDemo', 'tests/backend/codegen/Tc-Maybe.mog', 35, 17], 71 => ['Tc.Maybe.mapMaybeDemo', 'tests/backend/codegen/Tc-Maybe.mog', 43, 16], 83 => ['Tc.Maybe.λ2', 'tests/backend/codegen/Tc-Maybe.mog', 26, 38], 87 => ['Tc.Maybe.λ3', 'tests/backend/codegen/Tc-Maybe.mog', 29, 41]], ['Tc\\Maybe\\fmapMaybe' => ['Tc.Maybe.fmapMaybe', 'tests/backend/codegen/Tc-Maybe.mog', 11, 18], 'Tc\\Maybe\\apMaybe' => ['Tc.Maybe.apMaybe', 'tests/backend/codegen/Tc-Maybe.mog', 13, 1], 'Tc\\Maybe\\bindMaybe' => ['Tc.Maybe.bindMaybe', 'tests/backend/codegen/Tc-Maybe.mog', 16, 1], 'Tc\\Maybe\\justDemo' => ['Tc.Maybe.justDemo', 'tests/backend/codegen/Tc-Maybe.mog', 20, 12], 'Tc\\Maybe\\apDemo' => ['Tc.Maybe.apDemo', 'tests/backend/codegen/Tc-Maybe.mog', 23, 10], 'Tc\\Maybe\\bindDemo' => ['Tc.Maybe.bindDemo', 'tests/backend/codegen/Tc-Maybe.mog', 26, 12], 'Tc\\Maybe\\nothingShort' => ['Tc.Maybe.nothingShort', 'tests/backend/codegen/Tc-Maybe.mog', 29, 16], 'Tc\\Maybe\\fromMaybeDemo' => ['Tc.Maybe.fromMaybeDemo', 'tests/backend/codegen/Tc-Maybe.mog', 32, 17], 'Tc\\Maybe\\catMaybesDemo' => ['Tc.Maybe.catMaybesDemo', 'tests/backend/codegen/Tc-Maybe.mog', 35, 17], 'Tc\\Maybe\\dropTwo' => ['Tc.Maybe.dropTwo', 'tests/backend/codegen/Tc-Maybe.mog', 38, 13], 'Tc\\Maybe\\mapMaybeDemo' => ['Tc.Maybe.mapMaybeDemo', 'tests/backend/codegen/Tc-Maybe.mog', 43, 16], 'Tc\\Maybe\\__lambda_0' => ['Tc.Maybe.λ0', 'tests/backend/codegen/Tc-Maybe.mog', 20, 29], 'Tc\\Maybe\\__lambda_1' => ['Tc.Maybe.λ1', 'tests/backend/codegen/Tc-Maybe.mog', 23, 31], 'Tc\\Maybe\\__lambda_2' => ['Tc.Maybe.λ2', 'tests/backend/codegen/Tc-Maybe.mog', 26, 38], 'Tc\\Maybe\\__lambda_3' => ['Tc.Maybe.λ3', 'tests/backend/codegen/Tc-Maybe.mog', 29, 41]]];
+
+require_once __DIR__ . '/../../../lib/Control/Applicative.php';
+require_once __DIR__ . '/../../../lib/Control/Monad.php';
+require_once __DIR__ . '/../../../lib/Data/Maybe.php';
+
+use function Control\Applicative\__ev_Applicative_Maybe;
+use function Control\Monad\__ev_Monad_Maybe;
+use function Data\Maybe\__ev_Functor_Maybe;
+use function Data\Maybe\catMaybes;
+use function Data\Maybe\fromMaybe;
+use function Data\Maybe\mapMaybe;
+
+function moggi_u64_add(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao + $bo; $c = ($lo >> 32) & 0xffffffff; $hi = ($ah + $bh + $c) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }
+function moggi_u64_sub(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao - $bo; $bw = $lo < 0 ? 1 : 0; $hi = ($ah - $bh - $bw) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }
+function moggi_u64_mul(int $a, int $b): int { $a0 = $a & 0xffff; $a1 = ($a >> 16) & 0xffff; $a2 = ($a >> 32) & 0xffff; $a3 = ($a >> 48) & 0xffff; $b0 = $b & 0xffff; $b1 = ($b >> 16) & 0xffff; $b2 = ($b >> 32) & 0xffff; $b3 = ($b >> 48) & 0xffff; $low = $a0 * $b0; $cy = ($low >> 16) & 0xffff; $m1 = $a0 * $b1 + $a1 * $b0 + $cy; $cy = ($m1 >> 16) & 0xffffffff; $m2 = $a0 * $b2 + $a1 * $b1 + $a2 * $b0 + $cy; $cy = ($m2 >> 16) & 0xffffffff; $hi = $a0 * $b3 + $a1 * $b2 + $a2 * $b1 + $a3 * $b0 + $cy; return (($hi & 0xffff) << 48) | (($m2 & 0xffff) << 32) | (($m1 & 0xffff) << 16) | ($low & 0xffff); }
+function moggi_i64_add(int $a, int $b): int { $r = $a + $b; return \is_int($r) ? $r : moggi_u64_add($a, $b); }
+function moggi_i64_mul(int $a, int $b): int { $r = $a * $b; return \is_int($r) ? $r : moggi_u64_mul($a, $b); }
+
+function fmapMaybe($__ev_Functor, $f, $mx) {
+    $__t0 = ($__ev_Functor["map"])($f, $mx);
+    return $__t0;
+}
+
+function apMaybe($__ev_Functor, $__ev_Applicative_1, $mf, $mx) {
+    $__t1 = ($__ev_Applicative_1["<*>"])($mf, $mx);
+    return $__t1;
+}
+
+function bindMaybe($__ev_Functor, $__ev_Applicative_1, $__ev_Monad_2, $mx, $f) {
+    $__t2 = ($__ev_Monad_2[">>="])($mx, $f);
+    return $__t2;
+}
+
+function justDemo() {
+    return fmapMaybe(__ev_Functor_Maybe(), fn($x) => (\is_int($__m64 = $x + 1) ? $__m64 : moggi_u64_add($x, 1)), ["Just", 41]);
+}
+
+function apDemo() {
+    return apMaybe(__ev_Functor_Maybe(), __ev_Applicative_Maybe(), ["Just", fn($x) => (\is_int($__m64 = $x * 2) ? $__m64 : moggi_u64_mul($x, 2))], ["Just", 21]);
+}
+
+function bindDemo() {
+    return bindMaybe(__ev_Functor_Maybe(), __ev_Applicative_Maybe(), __ev_Monad_Maybe(), ["Just", 2], fn($x) => ["Just", (\is_int($__m64 = $x + 1) ? $__m64 : moggi_u64_add($x, 1))]);
+}
+
+function nothingShort() {
+    return bindMaybe(__ev_Functor_Maybe(), __ev_Applicative_Maybe(), __ev_Monad_Maybe(), ["Nothing"], fn($x) => ["Just", $x]);
+}
+
+function fromMaybeDemo() {
+    return fromMaybe(0, ["Nothing"]);
+}
+
+function catMaybesDemo() {
+    return catMaybes([["Nothing"], ["Just", 1], ["Nothing"], ["Just", 2]]);
+}
+
+function dropTwo($x) {
+    return match (($x === 2)) {
+        true => ["Nothing"],
+        false => ["Just", $x],
+    };
+}
+
+function mapMaybeDemo() {
+    return mapMaybe(dropTwo(...), [1, 2, 3]);
+}
+
+function __lambda_0($x) {
+    return (\is_int($__m64 = $x + 1) ? $__m64 : moggi_u64_add($x, 1));
+}
+
+function __lambda_1($x) {
+    return (\is_int($__m64 = $x * 2) ? $__m64 : moggi_u64_mul($x, 2));
+}
+
+function __lambda_2($x) {
+    return ["Just", (\is_int($__m64 = $x + 1) ? $__m64 : moggi_u64_add($x, 1))];
+}
+
+function __lambda_3($x) {
+    return ["Just", $x];
+}

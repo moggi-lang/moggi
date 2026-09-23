@@ -1,0 +1,4 @@
+tests/syntax/lexer/Bad-Unexpected-Char.mog:3:5: lex error: unexpected character "€"
+
+  3 | x = €
+    |     ^

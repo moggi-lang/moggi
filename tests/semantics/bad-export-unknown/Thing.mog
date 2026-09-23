@@ -1,0 +1,6 @@
+module Thing
+  ( widht
+  ) where
+
+width :: Int
+width = 1

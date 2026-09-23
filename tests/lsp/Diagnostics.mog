@@ -1,0 +1,15 @@
+-- Broken code for LSP diagnostics testing.
+-- Note: the typechecker is fail-fast — only the first type error is reported.
+-- Holes, parse errors, and other diagnostic codes are exercised by dedicated
+-- inline sources in the unit tests.
+
+module Diagnostics where
+
+foo = 1
+
+-- The single expected diagnostic: could not unify `Int` with `String`.
+wrongReturn :: Int
+wrongReturn = "hello"
+
+-- Valid helpers (not checked once the error above fires, but still parsed).
+okAdd x y = x + y

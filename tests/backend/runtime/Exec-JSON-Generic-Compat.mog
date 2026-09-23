@@ -1,0 +1,225 @@
+import System.IO
+import Data.ByteString.Char8 qualified as C
+import Data.ByteString (ByteString)
+import Data.String
+import Data.JSON
+import Data.Either
+import Data.Maybe
+import Data.Int
+import Data.Eq
+import Moggi.Generics
+
+runDecode :: FromJSON a => (Either String a -> String) -> ByteString -> IO ()
+runDecode showFn bs = do
+  mr <- eitherDecode bs
+  putStrLn (showFn mr)
+
+-- Generic JSON compatibility edges not covered elsewhere.
+-- Each assertion targets a distinct semantic class (not mechanical coverage).
+
+-- Aeson WriteProduct: nested field ToJSON Arrays stay nested (not spliced).
+data PairI = PairI Int Int
+  deriving (Generic, Eq)
+
+instance ToJSON PairI where
+  toJSON = genericToJSON defaultOptions
+  toEncoding = genericToEncoding defaultOptions
+instance FromJSON PairI where
+  parseJSON = genericParseJSON defaultOptions
+  parseEncoding = genericParseEncoding defaultOptions
+
+data Nest = Nest PairI Int
+  deriving (Generic, Eq)
+
+instance ToJSON Nest where
+  toJSON = genericToJSON defaultOptions
+  toEncoding = genericToEncoding defaultOptions
+instance FromJSON Nest where
+  parseJSON = genericParseJSON defaultOptions
+  parseEncoding = genericParseEncoding defaultOptions
+
+-- Newtype Generic encode unwraps to the payload (Aeson SerializationFormatSpec).
+newtype Age = Age Int
+  deriving (Generic, Eq)
+
+instance ToJSON Age where
+  toJSON = genericToJSON defaultOptions
+  toEncoding = genericToEncoding defaultOptions
+instance FromJSON Age where
+  parseJSON = genericParseJSON defaultOptions
+  parseEncoding = genericParseEncoding defaultOptions
+
+-- Unary record must stay an object (unwrapUnaryRecords is out of scope).
+data BoxR = BoxR { val :: Int }
+  deriving (Generic, Eq)
+
+instance ToJSON BoxR where
+  toJSON = genericToJSON defaultOptions
+  toEncoding = genericToEncoding defaultOptions
+instance FromJSON BoxR where
+  parseJSON = genericParseJSON defaultOptions
+  parseEncoding = genericParseEncoding defaultOptions
+
+-- Positional sum contents + missing tag/contents (Aeson ErrorMessages / SomeType).
+data Ev = Mark Int Int | Flag
+  deriving (Generic, Eq)
+
+instance ToJSON Ev where
+  toJSON = genericToJSON defaultOptions
+  toEncoding = genericToEncoding defaultOptions
+instance FromJSON Ev where
+  parseJSON = genericParseJSON defaultOptions
+  parseEncoding = genericParseEncoding defaultOptions
+
+-- Nullary single-ctor → [] (Aeson U1).
+data Unit = Unit
+  deriving (Generic, Eq)
+
+instance ToJSON Unit where
+  toJSON = genericToJSON defaultOptions
+  toEncoding = genericToEncoding defaultOptions
+instance FromJSON Unit where
+  parseJSON = genericParseJSON defaultOptions
+  parseEncoding = genericParseEncoding defaultOptions
+
+-- fieldLabelModifier encode→decode roundtrip.
+stripUnderscore :: String -> String
+stripUnderscore s = case unpack s of
+  '_' : rest -> pack rest
+  _ -> s
+
+data Item = Item { _name :: String, _note :: Maybe String }
+  deriving (Generic, Eq)
+
+optsRename :: Options
+optsRename = fieldLabelModifier stripUnderscore defaultOptions
+
+instance ToJSON Item where
+  toJSON = genericToJSON optsRename
+  toEncoding = genericToEncoding optsRename
+instance FromJSON Item where
+  parseJSON = genericParseJSON optsRename
+  parseEncoding = genericParseEncoding optsRename
+
+-- All-nullary sum + defaultOptions (allNullaryToStringTag True): string tags.
+-- Mixed sums still use tagged objects (Datatype.isAllNullary gates the Options bit).
+data Color = Red | Green | Blue
+  deriving (Generic, Eq)
+
+instance ToJSON Color where
+  toJSON = genericToJSON defaultOptions
+  toEncoding = genericToEncoding defaultOptions
+instance FromJSON Color where
+  parseJSON = genericParseJSON defaultOptions
+  parseEncoding = genericParseEncoding defaultOptions
+
+main :: IO ()
+main = do
+  C.putStrLn (encode (Nest (PairI 1 2) 3))
+  runDecode showNest ((encode (Nest (PairI 1 2) 3)))
+
+  C.putStrLn (encode (Age 36))
+  runDecode showAge ((encode (Age 36)))
+
+  C.putStrLn (encode (BoxR 3))
+  runDecode showBoxR ((encode (BoxR 3)))
+  runDecode showBoxRBare ((C.pack "3"))
+
+  runDecode showMark ((encode (Mark 1 2)))
+  runDecode showFlag ((encode Flag))
+  runDecode showMissTag ((C.pack "{}"))
+  runDecode showMissContents ((C.pack "{\"tag\":\"Mark\"}"))
+  runDecode showBadContents ((C.pack "{\"tag\":\"Mark\",\"contents\":true}"))
+  runDecode showNoTagField ((C.pack "{\"contents\":[1,2]}"))
+
+  C.putStrLn (encode Unit)
+  runDecode showUnit ((C.pack "[]"))
+  runDecode showUnitBad ((C.pack "{}"))
+
+  runDecode showItemRt ((encode (Item "x" (Just "hi"))))
+
+  C.putStrLn (encode Green)
+  runDecode showColorStr ((C.pack "\"Green\""))
+  runDecode showColorObj ((C.pack "{\"tag\":\"Green\"}"))
+
+  runDecode showIntFloat ((C.pack "1.5"))
+
+showNest :: Either String Nest -> String
+showNest e = case e of
+  Right (Nest (PairI 1 2) 3) -> "ok-nest"
+  _ -> "bad-nest"
+
+showAge :: Either String Age -> String
+showAge e = case e of
+  Right (Age 36) -> "ok-newtype"
+  _ -> "bad-newtype"
+
+showBoxR :: Either String BoxR -> String
+showBoxR e = case e of
+  Right (BoxR 3) -> "ok-unary-rec"
+  _ -> "bad-unary-rec"
+
+showBoxRBare :: Either String BoxR -> String
+showBoxRBare e = case e of
+  Left _ -> "ok-unary-rec-reject-bare"
+  Right _ -> "bad-unary-rec-reject-bare"
+
+showMark :: Either String Ev -> String
+showMark e = case e of
+  Right (Mark 1 2) -> "ok-mark"
+  _ -> "bad-mark"
+
+showFlag :: Either String Ev -> String
+showFlag e = case e of
+  Right Flag -> "ok-flag"
+  _ -> "bad-flag"
+
+showMissTag :: Either String Ev -> String
+showMissTag e = case e of
+  Left _ -> "ok-missing-tag"
+  Right _ -> "bad-missing-tag"
+
+showMissContents :: Either String Ev -> String
+showMissContents e = case e of
+  Left _ -> "ok-missing-contents"
+  Right _ -> "bad-missing-contents"
+
+showBadContents :: Either String Ev -> String
+showBadContents e = case e of
+  Left _ -> "ok-bad-contents"
+  Right _ -> "bad-bad-contents"
+
+showNoTagField :: Either String Ev -> String
+showNoTagField e = case e of
+  Left _ -> "ok-missing-tag"
+  Right _ -> "bad-missing-tag-contents-only"
+
+showUnit :: Either String Unit -> String
+showUnit e = case e of
+  Right Unit -> "ok-unit"
+  _ -> "bad-unit"
+
+showUnitBad :: Either String Unit -> String
+showUnitBad e = case e of
+  Left _ -> "ok-unit-reject-obj"
+  Right _ -> "bad-unit-reject-obj"
+
+showItemRt :: Either String Item -> String
+showItemRt e = case e of
+  Right (Item "x" (Just "hi")) -> "ok-item-rt"
+  _ -> "bad-item-rt"
+
+showColorStr :: Either String Color -> String
+showColorStr e = case e of
+  Right Green -> "ok-color-string"
+  _ -> "bad-color-string"
+
+showColorObj :: Either String Color -> String
+showColorObj e = case e of
+  Left _ -> "ok-color-object-reject"
+  Right _ -> "bad-color-object-reject"
+
+showIntFloat :: Either String Int -> String
+showIntFloat e = case e of
+  Left _ -> "ok-int-reject-float"
+  Right _ -> "bad-int-reject-float"

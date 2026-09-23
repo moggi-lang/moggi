@@ -1,0 +1,459 @@
+program
+  newtype Age
+    constructor Age
+      field  :: Int
+    deriving (Eq, Ord, Show, newtype Num)
+  function __ev_Eq_Age_eq :: Age -> Age -> Bool
+    pat_var __l
+    pat_var __r
+    case
+      variable __l
+      alt
+        pat_con Age
+          pat_var __a0
+        case
+          variable __r
+          alt
+            pat_con Age
+              pat_var __b0
+            apply
+              apply
+                evidence_method Eq.== evidence= nullary=0
+                  instance Int
+                variable __a0
+              variable __b0
+          alt
+            pat_wild _
+            constructor_ref False
+  function __ev_Eq_Age_ne :: Age -> Age -> Bool
+    pat_var __l
+    pat_var __r
+    case
+      case
+        variable __l
+        alt
+          pat_con Age
+            pat_var __a0
+          case
+            variable __r
+            alt
+              pat_con Age
+                pat_var __b0
+              apply
+                apply
+                  evidence_method Eq.== evidence= nullary=0
+                    instance Int
+                  variable __a0
+                variable __b0
+            alt
+              pat_wild _
+              constructor_ref False
+      alt
+        pat_con True
+        constructor_ref False
+      alt
+        pat_con False
+        constructor_ref True
+  function compare :: Age -> Age -> Ordering
+    pat_var __l
+    pat_var __r
+    case
+      variable __l
+      alt
+        pat_con Age
+          pat_var __a0
+        case
+          variable __r
+          alt
+            pat_con Age
+              pat_var __b0
+            case
+              apply
+                apply
+                  evidence_method Ord.compare evidence= nullary=0
+                    instance Int
+                  variable __a0
+                variable __b0
+              alt
+                pat_con EQ
+                constructor_ref EQ
+              alt
+                pat_con LT
+                constructor_ref LT
+              alt
+                pat_con GT
+                constructor_ref GT
+  function < :: Age -> Age -> Bool
+    pat_var x
+    pat_var y
+    case
+      apply
+        apply
+          evidence_method Ord.compare evidence= nullary=0
+            instance Age
+          variable x
+        variable y
+      alt
+        pat_con LT
+        constructor_ref True
+      alt
+        pat_wild _
+        constructor_ref False
+  function <= :: Age -> Age -> Bool
+    pat_var x
+    pat_var y
+    case
+      apply
+        apply
+          evidence_method Ord.compare evidence= nullary=0
+            instance Age
+          variable x
+        variable y
+      alt
+        pat_con GT
+        constructor_ref False
+      alt
+        pat_wild _
+        constructor_ref True
+  function > :: Age -> Age -> Bool
+    pat_var x
+    pat_var y
+    case
+      apply
+        apply
+          evidence_method Ord.compare evidence= nullary=0
+            instance Age
+          variable x
+        variable y
+      alt
+        pat_con GT
+        constructor_ref True
+      alt
+        pat_wild _
+        constructor_ref False
+  function >= :: Age -> Age -> Bool
+    pat_var x
+    pat_var y
+    case
+      apply
+        apply
+          evidence_method Ord.compare evidence= nullary=0
+            instance Age
+          variable x
+        variable y
+      alt
+        pat_con LT
+        constructor_ref False
+      alt
+        pat_wild _
+        constructor_ref True
+  function max :: Age -> Age -> Age
+    pat_var x
+    pat_var y
+    case
+      apply
+        apply
+          evidence_method Ord.<= evidence= nullary=0
+            instance Age
+          variable x
+        variable y
+      alt
+        pat_con True
+        variable y
+      alt
+        pat_con False
+        variable x
+  function min :: Age -> Age -> Age
+    pat_var x
+    pat_var y
+    case
+      apply
+        apply
+          evidence_method Ord.<= evidence= nullary=0
+            instance Age
+          variable x
+        variable y
+      alt
+        pat_con True
+        variable x
+      alt
+        pat_con False
+        variable y
+  function __ev_Show_Age_showsPrec :: Int -> Age -> String -> String
+    pat_var __d
+    pat_var __x
+    pat_var __s
+    case
+      variable __x
+      alt
+        pat_con Age
+          pat_var __f0
+        apply
+          apply
+            apply
+              variable showParen
+              apply
+                apply
+                  evidence_method Ord.> evidence= nullary=0
+                    instance Int
+                  variable __d
+                integer 10
+            lambda
+              pat_var __r
+              intrinsic stringAppend#
+                string "Age "
+                apply
+                  apply
+                    apply
+                      evidence_method Show.showsPrec evidence= nullary=0
+                        instance Int
+                      integer 11
+                    variable __f0
+                  variable __r
+          variable __s
+  function __ev_Show_Age_show :: Age -> String
+    pat_var x
+    apply
+      apply
+        apply
+          variable shows
+          evidence_ref Show Age
+        variable x
+      string ""
+  function __ev_Show_Age_showList :: [Age] -> String -> String
+    pat_var ls
+    pat_var s
+    apply
+      apply
+        apply
+          variable showListWith
+          apply
+            variable shows
+            evidence_ref Show Age
+        variable ls
+      variable s
+  function + :: __Dict_Num -> Age -> Age -> Age
+    pat_var __ev_Num
+    pat_con Age
+      pat_var __n0
+    pat_con Age
+      pat_var __n1
+    apply
+      constructor_ref Age
+      apply
+        apply
+          evidence_method Num.+ evidence= nullary=0
+            instance Int
+          variable __n0
+        variable __n1
+  function - :: __Dict_Num -> Age -> Age -> Age
+    pat_var __ev_Num
+    pat_con Age
+      pat_var __n0
+    pat_con Age
+      pat_var __n1
+    apply
+      constructor_ref Age
+      apply
+        apply
+          evidence_method Num.- evidence= nullary=0
+            instance Int
+          variable __n0
+        variable __n1
+  function * :: __Dict_Num -> Age -> Age -> Age
+    pat_var __ev_Num
+    pat_con Age
+      pat_var __n0
+    pat_con Age
+      pat_var __n1
+    apply
+      constructor_ref Age
+      apply
+        apply
+          evidence_method Num.* evidence= nullary=0
+            instance Int
+          variable __n0
+        variable __n1
+  function negate :: __Dict_Num -> Age -> Age
+    pat_var __ev_Num
+    pat_con Age
+      pat_var __n0
+    apply
+      constructor_ref Age
+      apply
+        evidence_method Num.negate evidence= nullary=0
+          instance Int
+        variable __n0
+  function abs :: __Dict_Num -> Age -> Age
+    pat_var __ev_Num
+    pat_con Age
+      pat_var __n0
+    apply
+      constructor_ref Age
+      apply
+        evidence_method Num.abs evidence= nullary=0
+          instance Int
+        variable __n0
+  function signum :: __Dict_Num -> Age -> Age
+    pat_var __ev_Num
+    pat_con Age
+      pat_var __n0
+    apply
+      constructor_ref Age
+      apply
+        evidence_method Num.signum evidence= nullary=0
+          instance Int
+        variable __n0
+  function fromInteger :: __Dict_Num -> Integer -> Age
+    pat_var __ev_Num
+    pat_var __n0
+    apply
+      constructor_ref Age
+      apply
+        evidence_method Num.fromInteger evidence= nullary=0
+          instance Int
+        variable __n0
+  data NotAge
+    constructor NotAge
+      field  :: Int
+    deriving (Eq, Show)
+  function __ev_Eq_NotAge_eq :: NotAge -> NotAge -> Bool
+    pat_var __l
+    pat_var __r
+    case
+      variable __l
+      alt
+        pat_con NotAge
+          pat_var __a0
+        case
+          variable __r
+          alt
+            pat_con NotAge
+              pat_var __b0
+            apply
+              apply
+                evidence_method Eq.== evidence= nullary=0
+                  instance Int
+                variable __a0
+              variable __b0
+          alt
+            pat_wild _
+            constructor_ref False
+  function __ev_Eq_NotAge_ne :: NotAge -> NotAge -> Bool
+    pat_var __l
+    pat_var __r
+    case
+      case
+        variable __l
+        alt
+          pat_con NotAge
+            pat_var __a0
+          case
+            variable __r
+            alt
+              pat_con NotAge
+                pat_var __b0
+              apply
+                apply
+                  evidence_method Eq.== evidence= nullary=0
+                    instance Int
+                  variable __a0
+                variable __b0
+            alt
+              pat_wild _
+              constructor_ref False
+      alt
+        pat_con True
+        constructor_ref False
+      alt
+        pat_con False
+        constructor_ref True
+  function __ev_Show_NotAge_showsPrec :: Int -> NotAge -> String -> String
+    pat_var __d
+    pat_var __x
+    pat_var __s
+    case
+      variable __x
+      alt
+        pat_con NotAge
+          pat_var __f0
+        apply
+          apply
+            apply
+              variable showParen
+              apply
+                apply
+                  evidence_method Ord.> evidence= nullary=0
+                    instance Int
+                  variable __d
+                integer 10
+            lambda
+              pat_var __r
+              intrinsic stringAppend#
+                string "NotAge "
+                apply
+                  apply
+                    apply
+                      evidence_method Show.showsPrec evidence= nullary=0
+                        instance Int
+                      integer 11
+                    variable __f0
+                  variable __r
+          variable __s
+  function __ev_Show_NotAge_show :: NotAge -> String
+    pat_var x
+    apply
+      apply
+        apply
+          variable shows
+          evidence_ref Show NotAge
+        variable x
+      string ""
+  function __ev_Show_NotAge_showList :: [NotAge] -> String -> String
+    pat_var ls
+    pat_var s
+    apply
+      apply
+        apply
+          variable showListWith
+          apply
+            variable shows
+            evidence_ref Show NotAge
+        variable ls
+      variable s
+  newtype Id a
+    constructor Id
+      field  :: a
+    deriving (Functor)
+  function map :: t443 -> t444 -> Id t443 -> Id t444
+    pat_var __f
+    pat_var __x
+    case
+      variable __x
+      alt
+        pat_con Id
+          pat_var __v0
+        apply
+          constructor_ref Id
+          apply
+            variable __f
+            variable __v0
+  function addAge :: Age -> Age -> Age
+    pat_var x
+    pat_var y
+    infix +
+      variable x
+      variable y
+  function mapId :: Id Int
+    apply
+      apply
+        evidence_method Functor.map evidence= nullary=0
+          instance Id
+        lambda
+          pat_var x
+          infix +
+            variable x
+            integer 1
+      apply
+        constructor_ref Id
+        integer 1

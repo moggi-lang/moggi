@@ -1,0 +1,91 @@
+import System.IO
+import Data.ByteString.Char8 qualified as C
+import Data.ByteString (ByteString)
+import Data.String
+import Data.JSON
+import Data.Int
+import Data.Eq
+import Moggi.Generics
+
+runDecode :: FromJSON a => (Either String a -> String) -> ByteString -> IO ()
+runDecode showFn bs = do
+  mr <- eitherDecode bs
+  putStrLn (showFn mr)
+
+data Box = Box Int deriving (Generic, Eq)
+
+-- All-nullary sum (string tags with defaultOptions).
+data Color = Red | Green | Blue deriving (Generic, Eq)
+
+-- Mixed sum: record + nullary (avoids duplicate MetaSel Nothing evidence).
+data Shape
+  = Circle { radius :: Int }
+  | Rect { width :: Int, height :: Int }
+  | Point
+  deriving (Generic, Eq)
+
+instance ToJSON Box where
+  toJSON x = genericToJSON defaultOptions x
+  toEncoding x = genericToEncoding defaultOptions x
+instance FromJSON Box where
+  parseJSON v = genericParseJSON defaultOptions v
+  parseEncoding enc = genericParseEncoding defaultOptions enc
+
+instance ToJSON Color where
+  toJSON x = genericToJSON defaultOptions x
+  toEncoding x = genericToEncoding defaultOptions x
+instance FromJSON Color where
+  parseJSON v = genericParseJSON defaultOptions v
+  parseEncoding enc = genericParseEncoding defaultOptions enc
+
+instance ToJSON Shape where
+  toJSON x = genericToJSON defaultOptions x
+  toEncoding x = genericToEncoding defaultOptions x
+instance FromJSON Shape where
+  parseJSON v = genericParseJSON defaultOptions v
+  parseEncoding enc = genericParseEncoding defaultOptions enc
+
+main :: IO ()
+main = do
+  C.putStrLn (encode (Box 3))
+  runDecode showBox ((encode (Box 3)))
+  C.putStrLn (encode Red)
+  C.putStrLn (encode Green)
+  C.putStrLn (encode Blue)
+  runDecode showColor ((encode Green))
+  C.putStrLn (encode (Circle 5))
+  C.putStrLn (encode (Rect 2 4))
+  C.putStrLn (encode Point)
+  runDecode showShape ((encode (Rect 2 4)))
+  runDecode showShape ((encode Point))
+  runDecode showBad ((C.pack "{\"tag\":\"Nope\"}"))
+
+showBox :: Either String Box -> String
+showBox e = case e of
+  Right b -> eqBox b
+  Left ignored -> "bad-box"
+
+eqBox :: Box -> String
+eqBox b = case b == (Box 3) of
+  True -> "ok-box"
+  False -> "bad-box"
+
+showColor :: Either String Color -> String
+showColor e = case e of
+  Right c -> eqColor c
+  Left ignored -> "bad-color"
+
+eqColor :: Color -> String
+eqColor c = case c == Green of
+  True -> "ok-color"
+  False -> "bad-color"
+
+showShape :: Either String Shape -> String
+showShape e = case e of
+  Right ignored -> "ok-shape"
+  Left ignored -> "bad-shape"
+
+showBad :: Either String Shape -> String
+showBad e = case e of
+  Left ignored -> "ok-bad-tag"
+  Right ignored -> "bad-tag"

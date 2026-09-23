@@ -1,0 +1,4 @@
+tests/syntax/parser/bad-parse/case/Pattern.mog:3:3: parse error: incomplete pattern `Just`; expected `->` and body before alternative `Nothing ->`
+
+  3 |   Just
+    |   ^^^^

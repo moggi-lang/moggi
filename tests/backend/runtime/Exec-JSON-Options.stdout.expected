@@ -1,0 +1,10 @@
+{"name":"x","note":"hi"}
+{"name":"x","note":null}
+ok-item
+{"label":"a"}
+{"label":"a","extra":1}
+ok-opt
+"Green"
+ok-color
+{"tag":"T_Circle","radius":5}
+ok-shape-tag

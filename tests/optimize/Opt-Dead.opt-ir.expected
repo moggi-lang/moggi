@@ -1,0 +1,3 @@
+module
+  function dead(x)
+      ret intrinsic intAdd#(x, 1)

@@ -1,0 +1,24 @@
+<?php declare(strict_types=1);
+
+namespace Tc\IO\HoSpecialize;
+
+const __MOGGI_MAP = [[12 => ['Tc.IO.HoSpecialize.runTwice', 'tests/backend/runtime/Tc-IO-HoSpecialize.mog', 7, 3], 13 => ['Tc.IO.HoSpecialize.runTwice', 'tests/backend/runtime/Tc-IO-HoSpecialize.mog', 8, 3], 19 => ['Tc.IO.HoSpecialize.main', 'tests/backend/runtime/Tc-IO-HoSpecialize.mog', 11, 18], 22 => ['Tc.IO.HoSpecialize.main', 'tests/backend/runtime/Tc-IO-HoSpecialize.mog', 11, 8]], ['Tc\\IO\\HoSpecialize\\runTwice' => ['Tc.IO.HoSpecialize.runTwice', 'tests/backend/runtime/Tc-IO-HoSpecialize.mog', 6, 16], 'Tc\\IO\\HoSpecialize\\main' => ['Tc.IO.HoSpecialize.main', 'tests/backend/runtime/Tc-IO-HoSpecialize.mog', 11, 8]]];
+
+require_once __DIR__ . '/../../../lib/System/IO/PHP.php';
+
+use function System\IO\PHP\putStrLn;
+
+function runTwice($act) {
+    (\is_array($act) && ($act[0] ?? null) === '__io' ? ($act[1])() : $act);
+    (\is_array($act) && ($act[0] ?? null) === '__io' ? ($act[1])() : $act);
+    return null;
+}
+
+function main() {
+    $__t0 = ['__io', static function(): mixed {
+        putStrLn("x");
+        return null;
+    }];
+    runTwice($__t0);
+    return null;
+}

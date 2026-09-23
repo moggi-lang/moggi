@@ -1,0 +1,12 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module System.Exit.JVM
+  ( exitWithCode
+  ) where
+
+import Data.Int
+import Moggi.Internal.Prim
+
+foreign jvm function rawExit "java.lang.System:exit" :: Int32 -> IO ()
+
+exitWithCode :: Int -> IO a
+exitWithCode code = rawExit (int32FromInt# code)

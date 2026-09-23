@@ -1,0 +1,16 @@
+-- Phase 4: class-associated type family reduction via normalizeType.
+
+class Family a where
+  type F a
+  get :: a -> F a
+
+instance Family Bool where
+  type F Bool = Int
+  get b = 0
+
+-- F Bool reduces to Int (forward, non-injective).
+asInt :: F Bool -> Int
+asInt x = x
+
+fromInt :: Int -> F Bool
+fromInt x = x

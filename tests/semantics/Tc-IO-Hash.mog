@@ -1,0 +1,12 @@
+module Tc.IO.Hash
+
+import Moggi.Internal.IO
+import System.IO.Base (IO)
+
+-- IO# is the primitive (Moggi.Internal.IO); IO is the public type synonym (System.IO).
+-- Both are accepted in signatures; internal types normalize to IO.
+idHash :: IO# a -> IO# a
+idHash x = x
+
+idSynonym :: IO a -> IO a
+idSynonym x = x

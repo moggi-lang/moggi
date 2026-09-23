@@ -1,0 +1,4 @@
+moggi: ErrorCall: boom
+  at Moggi.Err.error (lib/Moggi/Err.mog:7:13)
+  at Main.fail (tests/backend/runtime/Exec-IO-Error.mog:2:8)
+  at Main.main (tests/backend/runtime/Exec-IO-Error.mog:5:8)

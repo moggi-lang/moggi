@@ -1,0 +1,38 @@
+import Data.Functor
+import Data.Foldable
+import Data.Traversable
+import Data.Eq
+import Control.Applicative
+
+data Box a = Box a deriving (Functor, Foldable, Traversable, Eq)
+
+data Pair a b = Pair a b deriving (Functor, Foldable, Traversable)
+
+data Tree a = Leaf a | Node (Tree a) (Tree a)
+  deriving (Functor, Foldable, Traversable)
+
+data Phantom a b = Phantom a deriving (Functor, Foldable, Traversable)
+
+data Multi a = Multi a a Int deriving (Functor, Foldable, Traversable)
+
+mapped :: Box Int
+mapped = map (\x -> x + 1) (Box 1)
+
+folded :: Int
+folded = foldr (\x y -> x + y) 0 (Box 3)
+
+-- Traversable via Identity-like: use Maybe as Applicative
+trav :: Maybe (Box Int)
+trav = traverse Just (Box 1)
+
+pairMap :: Pair Bool Int
+pairMap = map (\x -> x + 1) (Pair True 2)
+
+treeMap :: Tree Int
+treeMap = map (\x -> x + 1) (Node (Leaf 1) (Leaf 2))
+
+phantomMap :: Phantom Int Bool
+phantomMap = map (\ignored -> True) (Phantom 9)
+
+multiMap :: Multi Int
+multiMap = map (\x -> x + 1) (Multi 1 2 3)

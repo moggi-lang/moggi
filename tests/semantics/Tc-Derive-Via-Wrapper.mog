@@ -1,0 +1,9 @@
+import Data.Eq
+
+-- The via type is a distinct newtype over the same representation, so every
+-- argument must be re-wrapped as `MySum` before dispatching `Eq (MySum)`.
+newtype MySum = MySum Int
+  deriving (Eq)
+
+newtype MyInt = MyInt Int
+  deriving via (MySum) Eq

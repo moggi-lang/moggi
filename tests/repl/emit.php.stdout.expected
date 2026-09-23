@@ -1,0 +1,6 @@
+function __repl_inspect() {
+    return foo();
+}
+function Per($v0, $v1, $v2) {
+    return ['Per', $v0, $v1, $v2];
+}

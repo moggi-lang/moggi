@@ -1,0 +1,7 @@
+tests/semantics/foreign/bad/Backend.mog:3:33: type error: foreign import backend `unknownBackend` does not match compile backend `jvm`
+
+Did you mean this?
+    jvm
+
+  3 | foreign unknownBackend function strlen "strlen" :: String -> Int
+    |                                 ^^^^^^

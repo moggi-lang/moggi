@@ -1,0 +1,27 @@
+add2 :: Int -> Int -> Int
+add2 a b = a + b
+
+add3 :: Int -> Int -> Int -> Int
+add3 a b c = a + b + c
+
+apply2 :: (Int -> Int -> Int) -> Int -> Int -> Int
+apply2 f x y = f x y
+
+apply3 :: (Int -> Int -> Int -> Int) -> Int -> Int -> Int -> Int
+apply3 f x y z = f x y z
+
+direct2 :: Int
+direct2 = add2 4 5
+
+direct3 :: Int
+direct3 = add3 4 5 6
+
+loop2 :: Int -> Int -> Int
+loop2 n acc = case n of
+  0 -> acc
+  _ -> loop2 (n - 1) (acc + apply2 add2 1 n)
+
+loop3 :: Int -> Int -> Int
+loop3 n acc = case n of
+  0 -> acc
+  _ -> loop3 (n - 1) (acc + apply3 add3 1 2 n)

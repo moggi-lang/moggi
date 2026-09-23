@@ -1,0 +1,13 @@
+module
+  newtype Age
+    constructor Age 
+  data Box
+    constructor Box 
+  function unwrapAge(_p0)
+      ret _p0
+  function unwrapBox(_p0)
+      ret call __field0(_p0)
+  function wrapAge(n)
+      ret n
+  function wrapBox(n)
+      ret call Box(n)

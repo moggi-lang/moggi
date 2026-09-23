@@ -1,0 +1,12 @@
+-- Decimal integers and floats only: a fraction needs a digit on both sides of
+-- the dot, so `1.` is an integer followed by the operator `.`.
+zero = 0
+leading = 007
+big = 1234567890
+frac = 1.5
+trailing = 12.75
+-- An exponent needs at least one digit after the optional sign.
+exponent = 1e21
+exponentSigned = 1.5e-3
+exponentUpper = 2E3
+notExponent = 1e

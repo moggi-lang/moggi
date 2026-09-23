@@ -1,0 +1,17 @@
+import Data.Functor
+import Data.Foldable
+import Data.Maybe
+import Data.Eq
+import Text.Show
+
+-- Nested last-slot applications must compose as `map (map f)` and
+-- `foldr (\x acc -> foldr f acc x)`. Checked here; exercised at runtime in
+-- tests/lib/Data/Foldable.mog, whose output is byte-identical to base's.
+data Nest a = Nest (Maybe (Maybe a))
+  deriving (Eq, Show, Functor, Foldable)
+
+mapped :: Nest Int
+mapped = map (\x -> x + 1) (Nest (Just (Just 1)))
+
+folded :: Int
+folded = foldr (\x y -> x + y) 0 (Nest (Just (Just 4)))

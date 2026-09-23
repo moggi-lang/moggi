@@ -1,0 +1,29 @@
+nan==nan: False
+nan/=nan: True
+0.0==-0.0: True
+cmp nan 1: True
+cmp nan nan: True
+cmp -0.0 0.0: True
+nan<1: False
+nan>1: True
+nan<=nan: False
+inf==1/0: True
+inf+1==inf: True
+inf-inf is nan: True
+recip 0 == inf: True
+signum -0.0 neg: True
+signum 0.0 pos: True
+8.0
+0.1
+1.0e10
+100.0
+1.0e-4
+1.23456789e8
+1.0e-10
+0.0
+Infinity
+NaN
+-0.0
+0.30000000000000004
+3.141592653589793
+-1.0e10

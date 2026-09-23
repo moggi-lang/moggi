@@ -1,0 +1,4 @@
+tests/semantics/bad-derive-via-private/Main.mog:6:17: type error: unknown type constructor `RepB`
+
+  6 | useIt = WrapA 1 === WrapA 1
+    |                 ^^^^

@@ -1,0 +1,4 @@
+tests/semantics/Bad-Derive-Duplicate-Clause.mog:3:35: type error: duplicate class `Generic` in deriving clause
+
+  3 | data Foo = Foo deriving (Generic, Generic)
+    |                                   ^^^^^^^

@@ -1,0 +1,33 @@
+-- Data.Proxy: the instance set for a phantom-value type. Every instance
+-- ignores its argument, so what is worth pinning is that they exist at all
+-- (`Proxy` is the tag used to pick a type by value) and that the derived
+-- `Bounded`/`Read` behave while the hand-written `Eq`/`Ord`/`Show` hold no data.
+
+import Control.Applicative
+import Control.Monad
+import Data.Proxy
+import Text.Read
+
+main :: IO ()
+main = do
+  putStrLn (show (Proxy :: Proxy Int))
+  putStrLn (show (compare (Proxy :: Proxy Int) Proxy))
+  putStrLn (show ((Proxy :: Proxy Int) == Proxy))
+  putStrLn (show ((Proxy :: Proxy Int) /= Proxy))
+  putStrLn (show (minBound :: Proxy Int))
+  putStrLn (show (maxBound :: Proxy String))
+  putStrLn (show (fromEnum (Proxy :: Proxy Int)))
+  putStrLn (show (toEnum 0 :: Proxy Int))
+  putStrLn (show (enumFromTo (Proxy :: Proxy Int) Proxy))
+  putStrLn (show (map (+1) (Proxy :: Proxy Int)))
+  putStrLn (show (pure 3 :: Proxy Int))
+  putStrLn (show ((Proxy :: Proxy (Int -> Int)) <*> Proxy))
+  putStrLn (show (empty :: Proxy Int))
+  putStrLn (show ((Proxy :: Proxy Int) <|> Proxy))
+  putStrLn (show ((Proxy :: Proxy Int) >>= (\x -> Proxy)))
+  putStrLn (show (mzero :: Proxy Int))
+  putStrLn (show (mplus (Proxy :: Proxy Int) Proxy))
+  putStrLn (show ((Proxy :: Proxy Int) <> Proxy))
+  putStrLn (show (mempty :: Proxy Int))
+  putStrLn (show (read "Proxy" :: Proxy Int))
+  putStrLn (show (asProxyTypeOf (7 :: Int) (Proxy :: Proxy Int)))

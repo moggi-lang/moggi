@@ -1,0 +1,43 @@
+-- Data.Foldable: the derived instances, including fields whose parameter sits
+-- deeper than one constructor. A `Maybe (Maybe a)` field folds as
+-- `foldr (\x acc -> foldr f acc x) z v` -- the accumulator comes first in
+-- `foldr`'s callback, so the inner fold has to be flipped -- and `[[a]]` /
+-- `Maybe [a]` compose the same way one level further down.
+import Data.Foldable
+
+data Nest a = Nest (Maybe (Maybe a)) deriving (Show, Functor, Foldable, Traversable)
+
+data Deep a = Deep [[a]] deriving (Show, Foldable)
+
+data Wrap a = Wrap (Maybe [a]) deriving (Show, Foldable)
+
+-- Fold through the class rather than the instance, so the derived instance's
+-- dictionary is what the call goes through.
+total :: Foldable t => t Int -> Int
+total = foldr (+) 0
+
+main :: IO ()
+main = do
+  putStrLn (show (foldr (+) 0 (Nest (Just (Just 3)))))
+  putStrLn (show (foldr (-) 0 (Nest (Just (Just 3)))))
+  putStrLn (show (foldl (-) 0 (Nest (Just (Just 3)))))
+  putStrLn (show (foldMap (\x -> [x]) (Nest (Just (Just 3)))))
+  putStrLn (show (toList (Nest (Just (Just 3)))))
+  putStrLn (show (toList (Nest (Just Nothing) :: Nest Int)))
+  putStrLn (show (length (Nest (Just (Just 3)))))
+  putStrLn (show (sum (Nest (Just (Just 3)))))
+  putStrLn (show (product (Nest (Just (Just 4)))))
+  putStrLn (show (null (Nest (Nothing :: Maybe (Maybe Int)))))
+  putStrLn (show (elem 3 (Nest (Just (Just 3)))))
+  putStrLn (show (maximum (Nest (Just (Just 3)))))
+  putStrLn (show (minimum (Nest (Just (Just 3)))))
+  putStrLn (show (foldr (+) 0 (Deep [[1, 2], [3]])))
+  putStrLn (show (foldl (-) 0 (Deep [[1, 2], [3]])))
+  putStrLn (show (toList (Deep [[1, 2], [3]])))
+  putStrLn (show (foldr (-) 1 (Wrap (Just [1, 2, 3]))))
+  putStrLn (show (toList (Wrap (Just [1, 2, 3]))))
+  putStrLn (show (total (Nest (Just (Just 3)))))
+  putStrLn (show (total (Deep [[1, 2], [3]])))
+  putStrLn (show (total (Wrap (Just [1, 2]))))
+  putStrLn (show (total [1, 2, 3]))
+  putStrLn (show (total (Just 5)))

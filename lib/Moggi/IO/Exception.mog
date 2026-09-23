@@ -1,0 +1,237 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | IO-related exception types and functions.
+--
+-- `IOException` is the type behind `IOError`: it records a more specific error
+-- type, a descriptive string, and the handle, location, errno and file name a
+-- failing action knows about. `HostException` is a Moggi addition for a native
+-- backend failure the runtime cannot classify (one program may run on PHP, the
+-- JVM and the CLR).
+module Moggi.IO.Exception
+  ( IOException(..)
+  , ioe_handle
+  , ioe_type
+  , ioe_location
+  , ioe_description
+  , ioe_errno
+  , ioe_filename
+  , IOError
+  , IOErrorType(..)
+  , HostException(..)
+  , ioException
+  , ioError
+  , userError
+  ) where
+
+import Data.Bool
+import Data.Eq
+import Data.Maybe
+import Data.Ord
+import Data.Semigroup
+import Text.Show
+import Data.String
+import Moggi.Exception.Type
+import Moggi.Internal.IO
+import Moggi.Internal.Prim
+import System.IO.Base (IO)
+import System.IO.Types (Handle)
+
+-- | An abstract type that contains a value for each variant of 'IOError'.
+data IOErrorType
+  -- The portable set:
+  = AlreadyExists
+  | NoSuchThing
+  | ResourceBusy
+  | ResourceExhausted
+  | EOF
+  | IllegalOperation
+  | PermissionDenied
+  | UserError
+  -- Additional variants:
+  | UnsatisfiedConstraints
+  | SystemError
+  | ProtocolError
+  | OtherError
+  | InvalidArgument
+  | InappropriateType
+  | HardwareFault
+  | UnsupportedOperation
+  | TimeExpired
+  | ResourceVanished
+  | Interrupted
+
+-- | Exceptions that occur in the @IO@ monad.
+-- An @IOException@ records a more specific error type, a descriptive string and
+-- maybe the handle that was used when the error was flagged.
+--
+-- * @ioe_handle@ — the handle used by the action flagging the error.
+-- * @ioe_type@ — what it was.
+-- * @ioe_location@ — location.
+-- * @ioe_description@ — error type specific information.
+-- * @ioe_errno@ — the errno leading to this error, if any.
+-- * @ioe_filename@ — the file name the error is related to.
+data IOException = IOError
+  { ioe_handle :: Maybe Handle
+  , ioe_type :: IOErrorType
+  , ioe_location :: String
+  , ioe_description :: String
+  , ioe_errno :: Maybe Int
+  , ioe_filename :: Maybe String
+  }
+
+-- | The type for exceptions in the 'IO' monad.
+-- Any I\/O operation may raise an 'IOError' instead of returning a result.
+-- For a more general type of exception, including also those that arise in pure
+-- code, see 'Control.Exception.Exception'.
+--
+-- This is an opaque type: 'System.IO.Error' exports it without its
+-- constructors, and the errors it hands out are inspected through
+-- 'System.IO.Error.ioeGetErrorType' and the 'System.IO.Error.isFooError'
+-- predicates.
+type IOError = IOException
+
+-- Field selectors. The declaration above names the fields, and these are what
+-- makes them readable as functions, exactly as a record declaration does.
+ioe_handle :: IOException -> Maybe Handle
+ioe_handle e = case e of
+  IOError h _ _ _ _ _ -> h
+
+ioe_type :: IOException -> IOErrorType
+ioe_type e = case e of
+  IOError _ t _ _ _ _ -> t
+
+ioe_location :: IOException -> String
+ioe_location e = case e of
+  IOError _ _ loc _ _ _ -> loc
+
+ioe_description :: IOException -> String
+ioe_description e = case e of
+  IOError _ _ _ desc _ _ -> desc
+
+ioe_errno :: IOException -> Maybe Int
+ioe_errno e = case e of
+  IOError _ _ _ _ errno _ -> errno
+
+ioe_filename :: IOException -> Maybe String
+ioe_filename e = case e of
+  IOError _ _ _ _ _ file -> file
+
+-- | Unknown native/backend failure. Fields: backend id, native type name, message.
+-- The original native exception is preserved as the host cause where supported.
+data HostException = HostException String String String
+
+ioErrorTypeTag :: IOErrorType -> Int
+ioErrorTypeTag t = case t of
+  AlreadyExists -> 0
+  NoSuchThing -> 1
+  ResourceBusy -> 2
+  ResourceExhausted -> 3
+  EOF -> 4
+  IllegalOperation -> 5
+  PermissionDenied -> 6
+  UserError -> 7
+  UnsatisfiedConstraints -> 8
+  SystemError -> 9
+  ProtocolError -> 10
+  OtherError -> 11
+  InvalidArgument -> 12
+  InappropriateType -> 13
+  HardwareFault -> 14
+  UnsupportedOperation -> 15
+  TimeExpired -> 16
+  ResourceVanished -> 17
+  Interrupted -> 18
+
+ioErrorTypeString :: IOErrorType -> String
+ioErrorTypeString t = case t of
+  AlreadyExists -> "already exists"
+  NoSuchThing -> "does not exist"
+  ResourceBusy -> "resource busy"
+  ResourceExhausted -> "resource exhausted"
+  EOF -> "end of file"
+  IllegalOperation -> "illegal operation"
+  PermissionDenied -> "permission denied"
+  UserError -> "user error"
+  UnsatisfiedConstraints -> "unsatisfied constraints"
+  SystemError -> "system error"
+  ProtocolError -> "protocol error"
+  OtherError -> "failed"
+  InvalidArgument -> "invalid argument"
+  InappropriateType -> "inappropriate type"
+  HardwareFault -> "hardware fault"
+  UnsupportedOperation -> "unsupported operation"
+  TimeExpired -> "timeout"
+  ResourceVanished -> "resource vanished"
+  Interrupted -> "interrupted"
+
+instance Eq IOErrorType where
+  (==) a b = intEq# (ioErrorTypeTag a) (ioErrorTypeTag b)
+  (/=) a b = intNe# (ioErrorTypeTag a) (ioErrorTypeTag b)
+
+instance Show IOErrorType where
+  show = ioErrorTypeString
+
+-- | The `show` layout of an IO error: the file name (or handle), then the
+-- location, then the kind of error, then the description in parentheses.
+ioErrorShow :: IOException -> String
+ioErrorShow e = case ioe_filename e of
+  Just name -> name <> ": " <> ioErrorShowBody e
+  Nothing -> case ioe_handle e of
+    Just h -> show h <> ": " <> ioErrorShowBody e
+    Nothing -> ioErrorShowBody e
+
+ioErrorShowBody :: IOException -> String
+ioErrorShowBody e = case ioe_location e of
+  "" -> ioErrorShowTypeAndDescription e
+  loc -> loc <> ": " <> ioErrorShowTypeAndDescription e
+
+ioErrorShowTypeAndDescription :: IOException -> String
+ioErrorShowTypeAndDescription e = case ioe_description e of
+  "" -> ioErrorTypeString (ioe_type e)
+  desc -> ioErrorTypeString (ioe_type e) <> " (" <> desc <> ")"
+
+instance Show IOException where
+  show = ioErrorShow
+
+instance Eq IOException where
+  (==) a b = ioErrorEq a b
+  (/=) a b = boolNot# (ioErrorEq a b)
+
+-- The comparison lives in its own function so the field comparisons resolve to
+-- the ordinary `Eq` methods rather than back to the instance being defined.
+ioErrorEq :: IOException -> IOException -> Bool
+ioErrorEq a b =
+  ioe_type a == ioe_type b
+    && ioe_description a == ioe_description b
+    && ioe_handle a == ioe_handle b
+    && ioe_location a == ioe_location b
+    && ioe_errno a == ioe_errno b
+    && ioe_filename a == ioe_filename b
+
+instance Exception IOException where
+  toException e = exceptionWrap# "IOException" (displayException e) e
+  fromException se = exceptionUnwrap# "IOException" se
+
+instance Show HostException where
+  show (HostException be nativeTy msg) =
+    be <> "/" <> nativeTy <> ": " <> msg
+
+instance Exception HostException where
+  toException e = exceptionWrap# "HostException" (displayException e) e
+  fromException se = exceptionUnwrap# "HostException" se
+  displayException (HostException _be _nativeTy msg) = msg
+
+ioException :: IOException -> IO a
+ioException e = throwIO e
+
+-- | Raise an 'IOError' in the 'IO' monad.
+ioError :: IOError -> IO a
+ioError e = ioException e
+
+-- | Construct an 'IOError' value with a string describing the error.
+-- 'Control.Monad.Fail.fail' is the other common source of one.
+userError :: String -> IOError
+userError msg = IOError Nothing UserError "" msg Nothing Nothing
+
+-- Local throwIO to avoid importing Control.Exception (cycle).
+throwIO :: Exception e => e -> IO a
+throwIO e = exceptionThrowIo# (toException e)

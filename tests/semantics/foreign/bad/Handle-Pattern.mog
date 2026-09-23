@@ -1,0 +1,10 @@
+module Bad.Handle.Pattern where
+
+import System.IO.Types (Handle)
+
+handleHole :: Handle
+handleHole = handleHole
+
+main :: IO ()
+main = case handleHole of
+  MkHandle _ -> pure ()

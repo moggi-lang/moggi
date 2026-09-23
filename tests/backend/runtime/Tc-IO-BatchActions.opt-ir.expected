@@ -1,0 +1,23 @@
+module
+  function sequenceLocal(_p0)
+      io_match _p0
+        arm []
+            t0 = call __tuple0()
+            ret t0
+        arm a : rest
+            io_run intrinsic listHead#(_p0)
+            io_call sequenceLocal(intrinsic listTail#(_p0))
+            ret ()
+  function main()
+      io_call putStrLn("custom-sequence")
+      t1 = io_assign_action
+          io_call putStrLn("a")
+        result ()
+      t2 = io_assign_action
+          io_call putStrLn("b")
+        result ()
+      io_call sequenceLocal([t1, t2])
+      io_call putStrLn("traverse_")
+      t3 = io_call traverse_(@__ev_Foldable_List, @__ev_Functor_IO, @__ev_Applicative_IO, @putStrLn, ["c", "d"])
+      io_run t3
+      ret ()

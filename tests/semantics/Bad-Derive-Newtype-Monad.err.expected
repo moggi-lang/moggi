@@ -1,0 +1,4 @@
+tests/semantics/Bad-Derive-Newtype-Monad.mog:5:49: type error: cannot derive newtype `Monad`: class is higher-kinded (only Functor, Foldable, and Traversable are supported for `* -> *`)
+
+  5 | newtype Box a = Box (Maybe a) deriving newtype (Monad)
+    |                                                 ^^^^^

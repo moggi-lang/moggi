@@ -1,0 +1,85 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Moggi.Internal.Real
+  ( Integral(..)
+  , Fractional(..)
+  , fromIntegral
+  , even
+  , odd
+  , (^)
+  , (^^)
+  , gcd
+  , lcm
+  ) where
+
+import Moggi.Internal.Num
+import Data.Ord
+import Data.Enum
+import Data.Tuple
+import Data.Bool
+import Data.Function
+import Moggi.Err
+
+infixr 8 ^, ^^
+infixl 7 `quot`, `rem`, `div`, `mod`
+infixl 7 /
+
+-- Integer is bootstrap-available; instances live in the module that defines the
+-- type (`Moggi.Internal.Integer`, `Data.Int`).
+
+class Num a => Fractional a where
+  (/) :: a -> a -> a
+  recip :: a -> a
+
+class (Num a, Ord a, Enum a) => Integral a where
+  quot, rem, div, mod :: a -> a -> a
+  quotRem, divMod :: a -> a -> (a, a)
+  toInteger :: a -> Integer
+
+fromIntegral :: (Integral a, Num b) => a -> b
+fromIntegral x = fromInteger (toInteger x)
+
+even :: Integral a => a -> Bool
+even n = n `rem` 2 == 0
+
+odd :: Integral a => a -> Bool
+odd = not . even
+
+-- | Raise a number to a non-negative integral power.
+(^) :: (Num a, Integral b) => a -> b -> a
+x0 ^ y0 = case y0 < 0 of
+  True -> errorWithoutStackTrace "Negative exponent"
+  False -> powAcc x0 y0 1
+
+-- Exponentiation by squaring, left to right: @x ^ y * z@. Each step halves the
+-- exponent, so the recursion is as deep as the exponent is wide, not as large
+-- as it is. The accumulator is what makes it tail-recursive.
+powAcc :: (Num a, Integral b) => a -> b -> a -> a
+powAcc x y z = case y == 0 of
+  True -> z
+  False -> case even y of
+    True -> powAcc (x * x) (y `quot` 2) z
+    False -> powAcc (x * x) (y `quot` 2) (z * x)
+
+-- | Raise a number to an integral power.
+(^^) :: (Fractional a, Integral b) => a -> b -> a
+x ^^ n = case n >= 0 of
+  True -> x ^ n
+  False -> recip (x ^ negate n)
+
+-- @'gcd' 4 2 = 2@, @'gcd' (-4) 6 = 2@, @'gcd' 0 4@ = @4@, @'gcd' 0 0@ = @0@ —
+-- the common divisor that is \"greatest\" in the divisibility preordering.
+--
+-- Note: since for signed fixed-width integer types @'abs' 'minBound' < 0@, the
+-- result may be negative if one of the arguments is @'minBound'@ (and
+-- necessarily is if the other is @0@ or @'minBound'@) for such types.
+gcd :: Integral a => a -> a -> a
+gcd x y = gcd' (abs x) (abs y)
+  where
+    gcd' a 0 = a
+    gcd' a b = gcd' b (a `rem` b)
+
+-- | @'lcm' x y@ is the smallest positive integer that both @x@ and @y@ divide.
+lcm :: Integral a => a -> a -> a
+lcm _ 0 = 0
+lcm 0 _ = 0
+lcm x y = abs ((x `quot` gcd x y) * y)

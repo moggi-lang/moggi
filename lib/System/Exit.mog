@@ -1,0 +1,37 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+{-# BACKEND
+  php = System.Exit.PHP
+  jvm = System.Exit.JVM
+  dotnet = System.Exit.DotNet
+#-}
+module System.Exit
+  ( ExitCode(ExitSuccess, ExitFailure)
+  , exitWith
+  , exitSuccess
+  , exitFailure
+  , die
+  ) where
+
+import Control.Monad
+import Data.Int
+import Data.String
+import Moggi.Err
+import System.IO
+
+data ExitCode = ExitSuccess | ExitFailure Int
+
+exitWithCode :: Int -> IO a
+
+exitWith :: ExitCode -> IO a
+exitWith code = case code of
+  ExitSuccess -> exitWithCode 0
+  ExitFailure n -> exitWithCode n
+
+exitSuccess :: IO a
+exitSuccess = exitWith ExitSuccess
+
+exitFailure :: IO a
+exitFailure = exitWith (ExitFailure 1)
+
+die :: String -> IO a
+die msg = putStrLn msg >> exitFailure

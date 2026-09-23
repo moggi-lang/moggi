@@ -1,0 +1,12 @@
+module
+  function pick(flag, m)
+      t10 = match m
+        arm Nothing
+            t10 = []
+        arm Just x
+            t10 = [x]
+      match_return flag
+        arm True
+            ret t10
+        arm False
+            ret []

@@ -1,0 +1,22 @@
+{- file header
+   with nested {- inner -} block text
+-}
+add x y = x + y  -- line comment
+
+sub x y = x {- inline -} - y
+
+id x = x  -- --- and --> are not comments
+
+infix 4 `f`
+f :: Int -> Int -> Int
+x `f` y = x
+
+list x = x
+echo x = x
+match x = x
+function x = x
+
+list_ x = x + 1
+fn_list x = x + 2
+
+useKeywords = list 1 + echo 2 + match 3 + function 4 + list_ 5 + fn_list 6

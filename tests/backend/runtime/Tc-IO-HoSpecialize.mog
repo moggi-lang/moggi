@@ -1,0 +1,11 @@
+module Tc.IO.HoSpecialize
+
+import System.IO
+
+runTwice :: IO () -> IO ()
+runTwice act = do
+  act
+  act
+
+main :: IO ()
+main = runTwice (putStrLn "x")

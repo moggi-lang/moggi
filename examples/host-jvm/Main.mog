@@ -1,0 +1,21 @@
+-- Calling the JVM from Moggi: a static method, an instance method, a static
+-- field, and the host-width rule (Java's int is not Moggi's 64-bit Int).
+--
+-- Build:  moggi compile examples/host-jvm -o /tmp/host-jvm.jar --backend jvm
+-- Run:    java -jar /tmp/host-jvm.jar
+
+module Main
+
+import Data.Int
+
+foreign jvm function shout "java.lang.String.toUpperCase" :: String -> String
+foreign jvm function parseInt "java.lang.Integer:parseInt" :: String -> Int32
+foreign jvm function maxOf "java.lang.Math:max" :: Int -> Int -> Int
+foreign jvm const maxLong "java.lang.Long:MAX_VALUE" :: Int
+
+main :: IO ()
+main = do
+  putStrLn (shout "hi")
+  putStrLn ("parsed: " <> show (fromIntegral (parseInt "43")))
+  putStrLn ("max: " <> show (maxOf 3 9))
+  putStrLn ("max int: " <> show maxLong)

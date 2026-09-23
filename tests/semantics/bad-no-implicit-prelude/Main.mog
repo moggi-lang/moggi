@@ -1,0 +1,5 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Main where
+
+-- map comes from Prelude / Data.Functor; without Prelude this must fail
+useMap xs = map (\x -> x) xs

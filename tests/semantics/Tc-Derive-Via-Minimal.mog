@@ -1,0 +1,11 @@
+import Data.Eq
+
+-- Via deriving works for a user-defined class with no stdlib instance.
+class MyEq a where
+  (===) :: a -> a -> Bool
+
+instance MyEq Int where
+  (===) x y = x == y
+
+newtype MyInt = MyInt Int
+  deriving via (Int) MyEq

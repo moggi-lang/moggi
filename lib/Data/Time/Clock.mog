@@ -1,0 +1,100 @@
+{-# BACKEND
+  php = Data.Time.Clock.PHP
+  jvm = Data.Time.Clock.JVM
+  dotnet = Data.Time.Clock.DotNet
+#-}
+module Data.Time.Clock
+  ( Day(..)
+  , DiffTime(..)
+  , UTCTime(..)
+  , dayNumber
+  , diffTimeSeconds
+  , utctDay
+  , utctDayTime
+  , utcTime
+  , utcTimeFromUnix
+  , getCurrentTime
+  , getMonotonicNanos
+  ) where
+
+import Data.Eq
+import Data.Ord
+import Text.Show
+import Data.Bool
+import Data.Int
+import Moggi.Internal.Real
+import Data.String
+import Control.Applicative
+import Control.Monad
+import System.IO (IO)
+import Moggi.Internal.Prim
+
+data Day = MkDay Int
+
+data DiffTime = MkDiffTime Int
+
+data UTCTime = MkUTCTime { day :: Day, dayTime :: DiffTime }
+
+dayNumber (MkDay n) = n
+
+diffTimeSeconds (MkDiffTime n) = n
+
+utctDay (MkUTCTime { day = d, dayTime = ignored }) = d
+
+utctDayTime (MkUTCTime { day = ignoredDay, dayTime = t }) = t
+
+utcTime d t = MkUTCTime { day = d, dayTime = t }
+
+secondsPerDay :: Int
+secondsPerDay = 86400
+
+utcTimeFromUnix :: Int -> UTCTime
+utcTimeFromUnix secs =
+  let dayNum = div secs secondsPerDay
+      daySecs = mod secs secondsPerDay
+  in MkUTCTime { day = MkDay dayNum, dayTime = MkDiffTime daySecs }
+
+currentTimeSeconds :: IO Int
+
+-- | Monotonic clock in nanoseconds (arbitrary epoch). Prefer diffs over
+-- absolute values; suitable for microbenchmarks.
+getMonotonicNanos :: IO Int
+
+getCurrentTime :: IO UTCTime
+getCurrentTime = do
+  secs <- currentTimeSeconds
+  pure (utcTimeFromUnix secs)
+
+equalInts a b =
+  case intCompare# a b of
+    EQ -> True
+    _ -> False
+
+utcEq a b =
+  equalInts (dayNumber (utctDay a)) (dayNumber (utctDay b))
+  && equalInts (diffTimeSeconds (utctDayTime a)) (diffTimeSeconds (utctDayTime b))
+
+compareIfEqual ord fallback =
+  case ord of
+    EQ -> fallback
+    LT -> LT
+    GT -> GT
+
+instance Eq UTCTime where
+  (==) a b = utcEq a b
+  (/=) a b = not (utcEq a b)
+
+instance Ord UTCTime where
+  compare a b =
+    compareIfEqual
+      (intCompare# (dayNumber (utctDay a)) (dayNumber (utctDay b)))
+      (intCompare# (diffTimeSeconds (utctDayTime a)) (diffTimeSeconds (utctDayTime b)))
+
+-- A named helper keeps the class method `show` reachable from inside
+-- `instance Show UTCTime`, where an unqualified `show` is the one being defined.
+showAs :: Show a => a -> String
+showAs x = show x
+
+instance Show UTCTime where
+  show t =
+    showAs (dayNumber (utctDay t)) <> " " <> showAs (diffTimeSeconds (utctDayTime t))

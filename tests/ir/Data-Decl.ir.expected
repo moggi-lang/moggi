@@ -1,0 +1,9 @@
+module
+  data Option a
+    constructor None
+    constructor Some 
+  function none()
+      ret @None
+  function some(x)
+      t0 = call Some(x)
+      ret t0

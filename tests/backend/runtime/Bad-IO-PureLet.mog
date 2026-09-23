@@ -1,0 +1,9 @@
+module Bad.IO.PureLet
+
+import System.IO
+
+f :: Int -> Int
+f n = let x = putStrLn "no" in n
+
+main :: IO ()
+main = putStrLn "ok"

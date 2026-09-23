@@ -1,0 +1,9 @@
+{
+  "assemblies": {
+    "System.Runtime": {
+      "types": {
+        "System.DateTimeOffset": { "valueType": true }
+      }
+    }
+  }
+}

@@ -1,0 +1,5 @@
+data FixedBytes (n :: Nat) = FixedBytes
+
+-- Distinct Nat literals must not unify.
+coerce :: FixedBytes 1024 -> FixedBytes 2048
+coerce x = x

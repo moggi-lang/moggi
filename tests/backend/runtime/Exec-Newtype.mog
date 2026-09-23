@@ -1,0 +1,26 @@
+import Data.Bool
+import Data.Int
+import Text.Show
+import System.IO
+
+newtype Age = Age Int
+
+newtype Wrap a = MkWrap a
+
+newtype Named = Named { unNamed :: Int }
+
+incAge :: Age -> Age
+incAge (Age n) = Age (n + 1)
+
+unbox :: Wrap Int -> Int
+unbox (MkWrap x) = x
+
+viaCase :: Age -> Int
+viaCase a = case a of
+  Age n -> n + 1
+
+main :: IO ()
+main = do
+  putStrLn (show (viaCase (incAge (Age 40)) == 42))
+  putStrLn (show (unbox (MkWrap 7) == 7))
+  putStrLn (show ((Named 9).unNamed == 9))

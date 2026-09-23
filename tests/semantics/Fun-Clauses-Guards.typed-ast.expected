@@ -1,0 +1,32 @@
+program
+  function describe :: [Int] -> String
+    pat_var _p0
+    case
+      variable _p0
+      alt
+        pat_nil
+        string "empty"
+      alt
+        pat_cons
+          pat_var x
+          pat_nil
+        guards
+          guarded
+            guard
+              infix ==
+                variable x
+                integer 0
+            string "one zero"
+          guarded
+            guard
+              variable otherwise
+            string "one element"
+      alt
+        pat_cons
+          pat_wild _
+          pat_wild _
+        guards
+          guarded
+            guard
+              variable otherwise
+            string "many elements"

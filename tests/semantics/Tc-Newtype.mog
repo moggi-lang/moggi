@@ -1,0 +1,14 @@
+import Data.Int
+
+newtype Age = Age Int
+
+newtype Wrap a = MkWrap a
+
+incAge :: Age -> Age
+incAge (Age n) = Age (n + 1)
+
+unwrap :: Wrap Int -> Int
+unwrap (MkWrap x) = x
+
+wrap :: Int -> Wrap Int
+wrap x = MkWrap x

@@ -1,0 +1,5 @@
+-- Fail: PHPValue reification is php-only, so no native signature may mention it.
+-- A local ADT of that name reaches the name-based rule.
+data PHPValue = PhpNull
+
+foreign dotnet function badValue "System.String.ToUpper" :: String -> PHPValue

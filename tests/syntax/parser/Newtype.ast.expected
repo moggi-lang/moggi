@@ -1,0 +1,10 @@
+program
+  newtype Age
+    constructor Age
+      field  :: Int
+  newtype Identity a
+    constructor MkIdentity
+      field  :: a
+  newtype Named
+    constructor Named
+      field unNamed :: Int

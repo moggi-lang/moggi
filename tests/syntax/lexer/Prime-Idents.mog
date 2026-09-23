@@ -1,0 +1,7 @@
+-- A prime is an identifier continuation character: the lexeme keeps one, two
+-- or three trailing primes as part of a single name, and does not split them
+-- into a name plus a character literal.
+go = 1
+go' = 2
+go'' = 3
+go''' = 4

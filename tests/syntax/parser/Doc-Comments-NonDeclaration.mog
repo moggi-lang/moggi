@@ -1,0 +1,63 @@
+module Parser.Doc.Comments.NonDeclaration
+
+-- Haddock doc comments are only *attachments* to a declaration (module header,
+-- export/import list, top-level item, class/instance method). Anywhere else
+-- they are ordinary comments and must not end the construct they sit in —
+-- otherwise a documented body fails with
+-- `expected expression, found documentation comment` /
+-- `... found export section heading`.
+
+beforeBody :: Int
+beforeBody =
+  -- | not a declaration
+  1
+
+beforeBlockComment :: Int
+beforeBlockComment =
+  {-| a block doc comment in body position -}
+  7
+
+beforeListElement :: [Int]
+beforeListElement =
+  [ -- * not an export section
+    1
+  , 2
+  ]
+
+beforeArgument :: Int -> Int -> Int
+beforeArgument a _ = a
+
+applied :: Int
+applied = beforeArgument
+  -- ^ not a trailing declaration doc
+  1
+  2
+
+beforeWhereSignature :: Int
+beforeWhereSignature = helper
+  where
+    -- | not attached anywhere
+    helper :: Int
+    helper = 3
+
+beforeLetSignature :: Int
+beforeLetSignature =
+  let
+    -- * not a section
+    local :: Int
+    local = 4
+  in local
+
+beforeCaseAlternative :: Int -> Int
+beforeCaseAlternative n = case n of
+  -- | first alternative
+  0 -> 10
+  -- * second alternative
+  _ ->
+    -- | not a body declaration
+    20
+
+beforeDoStatement :: IO ()
+beforeDoStatement = do
+  -- | not attached anywhere
+  pure ()

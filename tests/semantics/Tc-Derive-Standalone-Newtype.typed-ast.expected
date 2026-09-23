@@ -1,0 +1,72 @@
+program
+  newtype Age
+    constructor Age
+      field  :: Int
+  function == :: Age -> Age -> Bool
+    pat_con Age
+      pat_var __n0
+    pat_con Age
+      pat_var __n1
+    apply
+      apply
+        evidence_method Eq.== evidence= nullary=0
+          instance Int
+        variable __n0
+      variable __n1
+  function /= :: Age -> Age -> Bool
+    pat_con Age
+      pat_var __n0
+    pat_con Age
+      pat_var __n1
+    apply
+      apply
+        evidence_method Eq./= evidence= nullary=0
+          instance Int
+        variable __n0
+      variable __n1
+  function showsPrec :: Int -> Age -> String -> String
+    pat_var __n0
+    pat_con Age
+      pat_var __n1
+    pat_var __n2
+    apply
+      apply
+        apply
+          evidence_method Show.showsPrec evidence= nullary=0
+            instance Int
+          variable __n0
+        variable __n1
+      variable __n2
+  function show :: Age -> String
+    pat_con Age
+      pat_var __n0
+    apply
+      evidence_method Show.show evidence= nullary=0
+        instance Int
+      variable __n0
+  function showList :: [Age] -> String -> String
+    pat_var ls
+    pat_var s
+    apply
+      apply
+        apply
+          variable showListWith
+          apply
+            variable shows
+            evidence_ref Show Age
+        variable ls
+      variable s
+  function main :: String
+    apply
+      evidence_method Show.show evidence= nullary=0
+        instance Bool
+      apply
+        apply
+          evidence_method Eq.== evidence= nullary=0
+            instance Age
+          apply
+            constructor_ref Age
+            integer 10
+        apply
+          constructor_ref Age
+          integer 20

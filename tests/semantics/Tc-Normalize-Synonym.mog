@@ -1,0 +1,20 @@
+-- Phase 3: normalizeType — parametric synonym + expand-under-app.
+
+data K1 i c = K1 c
+data R = R
+
+-- Nullary synonym; application expands under the synonym (Rec0 Int → K1 R Int)
+type Rec0 = K1 R
+
+-- Parametric identity synonym
+type Id a = a
+
+useRec0 :: Rec0 Int -> Int
+useRec0 (K1 x) = x
+
+useId :: Id Bool -> Bool
+useId x = x
+
+-- Synonym on both sides of an arrow (normalize both)
+idToId :: Id Int -> Id Int
+idToId x = x

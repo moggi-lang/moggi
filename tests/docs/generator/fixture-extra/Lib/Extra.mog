@@ -1,0 +1,9 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Lib.Extra
+  ( val
+  ) where
+
+import Data.Int
+
+val :: Int
+val = 1

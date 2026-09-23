@@ -1,0 +1,4 @@
+tests/syntax/parser/bad-parse/case/Expr.mog:3:15: parse error: incomplete expression in case alternative
+
+  3 |   Just a -> a +
+    |               ^

@@ -1,0 +1,4 @@
+tests/semantics/foreign/bad/List-Argument-DotNet.mog:2:25: type error: `[a]` cannot be an argument of a dotnet foreign call — only php's array is the same value as a Moggi list; call it element by element or declare the host's own type
+
+  2 | foreign dotnet function join "System.String:Join" :: String -> [String] -> String
+    |                         ^^^^

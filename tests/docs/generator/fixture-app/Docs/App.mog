@@ -1,0 +1,8 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Docs.App where
+
+import Lib.Extra
+import Data.Int
+
+main :: Int
+main = val

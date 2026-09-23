@@ -1,0 +1,4 @@
+tests/syntax/parser/bad-parse/Data.mog:1:5: parse error: expected constructor, found end of file
+
+  1 | data
+    |     ^

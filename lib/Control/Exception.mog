@@ -1,0 +1,34 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Throwing, catching and bracketing exceptions.
+--
+-- Synchronous only: there is no async-exception machinery here (no mask, no
+-- ExceptionContext, no implicit call stacks).
+module Control.Exception
+  ( SomeException
+  , Exception(..)
+  , ArithException(..)
+  , IOException(..)
+  , HostException(..)
+  , ErrorCall(..)
+  , throw
+  , throwIO
+  , rethrowIO
+  , ioError
+  , catch
+  , handle
+  , try
+  , catchJust
+  , handleJust
+  , tryJust
+  , mapException
+  , bracket
+  , bracket_
+  , bracketOnError
+  , finally
+  , onException
+  ) where
+
+import Control.Exception.Base
+import Moggi.Exception
+import Moggi.Exception.Type
+import Moggi.IO.Exception

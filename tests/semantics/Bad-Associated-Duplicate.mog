@@ -1,0 +1,10 @@
+-- Phase 4: duplicate associated equations in one instance.
+
+class Family a where
+  type F a
+  get :: a -> F a
+
+instance Family Bool where
+  type F Bool = Int
+  type F Bool = Bool
+  get b = 0

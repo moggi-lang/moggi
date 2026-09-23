@@ -1,0 +1,9 @@
+module
+  data User
+    constructor User id
+  function getId(u)
+      ret call __field0(u)
+  function emptyUsers()
+      ret []
+  function doubleId(x)
+      ret intrinsic intMul#(x, 2)

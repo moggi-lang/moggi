@@ -1,0 +1,48 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.ByteString.DotNet
+  ( bsLength
+  , bsTake
+  , bsDrop
+  , bsIndex
+  , bsPackInts
+  , bsUnpackInts
+  ) where
+
+import Data.Char
+import Data.Int
+import Data.List hiding (singleton, take, drop, length, isPrefixOf, isSuffixOf)
+import Data.Ord
+import Data.String hiding (singleton)
+import Moggi.Err
+import Moggi.Internal.Prim
+
+-- Represent bytes as Latin-1 code units in the String/Bytes# coercion layer.
+bsLength :: ByteString -> Int
+bsLength b = length (bytesToString# b)
+
+bsTake :: Int -> ByteString -> ByteString
+bsTake n b = bytesFromString# (take n (bytesToString# b))
+
+bsDrop :: Int -> ByteString -> ByteString
+bsDrop n b = bytesFromString# (drop n (bytesToString# b))
+
+bsIndex :: ByteString -> Int -> Int
+bsIndex b n = ord (indexChar (unpack (bytesToString# b)) n)
+
+indexChar [] _ = error "Data.ByteString.index: index too large"
+indexChar (c : cs) n = case intCompare# n 0 of
+  EQ -> c
+  LT -> error "Data.ByteString.index: negative index"
+  GT -> indexChar cs (intSub# n 1)
+
+bsPackInts :: [Int] -> ByteString
+bsPackInts xs = bytesFromString# (pack (mapChr xs))
+
+mapChr [] = []
+mapChr (x : xs) = chr x : mapChr xs
+
+bsUnpackInts :: ByteString -> [Int]
+bsUnpackInts b = mapOrd (unpack (bytesToString# b))
+
+mapOrd [] = []
+mapOrd (c : cs) = ord c : mapOrd cs

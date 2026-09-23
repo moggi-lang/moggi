@@ -1,0 +1,7 @@
+import Data.Eq
+
+-- Explicit stock strategy keyword.
+data Color = Red | Blue deriving stock (Eq)
+
+same :: Bool
+same = Red == Red

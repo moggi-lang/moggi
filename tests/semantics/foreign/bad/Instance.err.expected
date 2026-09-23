@@ -1,0 +1,4 @@
+tests/semantics/foreign/bad/Instance.mog:3:22: type error: instance foreign import requires handle as first argument
+
+  3 | foreign php function prepare "PDO.prepare" :: String -> IO String
+    |                      ^^^^^^^

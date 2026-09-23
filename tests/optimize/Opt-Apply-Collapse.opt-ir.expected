@@ -1,0 +1,11 @@
+module
+  function add4(a, b, c, d)
+      ret a intAdd# b intAdd# c intAdd# d intAdd# 1
+  function chain(n)
+      ret call add4(1, 2, 3, n)
+  function exact()
+      ret call add4(10, 20, 30, 40)
+  function over(n)
+      ret call_value @add4(1, 2, 3, 4, n)
+  function unknown(f, n)
+      ret call_value f(n)

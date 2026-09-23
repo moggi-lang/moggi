@@ -1,0 +1,3 @@
+module Bad.Foreign.Pure.IO.Arg where
+
+foreign php function bad "strlen" :: IO String -> String

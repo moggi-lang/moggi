@@ -1,0 +1,12 @@
+-- A declared foreign *type* must be usable in signatures: `File` is declared locally, produced
+-- by the constructor across the FFI boundary and consumed by `getName`, so the emitted interop
+-- carries the type both ways instead of degrading it to Object/String.
+foreign jvm type File "java.io.File"
+
+foreign jvm function newFile "java.io.File:__con" :: String -> File
+foreign jvm function fileName "java.io.File.getName" :: File -> String
+
+main :: IO ()
+main = do
+  let f = newFile "host-foreign-type"
+  putStrLn (fileName f)

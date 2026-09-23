@@ -1,0 +1,36 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module System.Environment.JVM
+  ( getArgs
+  , getEnv
+  , lookupEnv
+  , getProgName
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Bool
+import Data.Maybe
+import Data.String
+import Moggi.Err
+import System.IO.Base (IO)
+import Moggi.Internal.Prim
+
+-- Argv is entry-point ABI (set by main); getenv is ordinary JDK FFI.
+foreign jvm function rawGetenv "java.lang.System:getenv" :: String -> IO (Maybe String)
+
+getArgs :: IO [String]
+getArgs = platformArgv#
+
+lookupEnv :: String -> IO (Maybe String)
+lookupEnv k = rawGetenv k
+
+getEnvFromMaybe :: Maybe String -> IO String
+getEnvFromMaybe m = case m of
+  Just v -> pure v
+  Nothing -> error "getEnv: missing environment variable"
+
+getEnv :: String -> IO String
+getEnv k = lookupEnv k >>= getEnvFromMaybe
+
+getProgName :: IO String
+getProgName = pure "moggi"

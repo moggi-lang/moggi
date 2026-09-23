@@ -1,0 +1,4 @@
+tests/semantics/Bad-Ambiguous-Class-Method.mog:9:13: type error: ambiguous class method `dup`
+
+   9 | ambiguous = dup
+     |             ^^^

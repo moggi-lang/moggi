@@ -1,0 +1,5 @@
+import Data.Functor
+import Data.Either
+
+-- Type parameter in a non-last argument position (not stock-Functor).
+data Bad a = Bad (Either a Int) deriving (Functor)

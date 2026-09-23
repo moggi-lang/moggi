@@ -1,0 +1,90 @@
+program
+  newtype MySum
+    constructor MySum
+      field  :: Int
+    deriving (Eq)
+  function __ev_Eq_MySum_eq :: MySum -> MySum -> Bool
+    pat_var __l
+    pat_var __r
+    case
+      variable __l
+      alt
+        pat_con MySum
+          pat_var __a0
+        case
+          variable __r
+          alt
+            pat_con MySum
+              pat_var __b0
+            apply
+              apply
+                evidence_method Eq.== evidence= nullary=0
+                  instance Int
+                variable __a0
+              variable __b0
+          alt
+            pat_wild _
+            constructor_ref False
+  function __ev_Eq_MySum_ne :: MySum -> MySum -> Bool
+    pat_var __l
+    pat_var __r
+    case
+      case
+        variable __l
+        alt
+          pat_con MySum
+            pat_var __a0
+          case
+            variable __r
+            alt
+              pat_con MySum
+                pat_var __b0
+              apply
+                apply
+                  evidence_method Eq.== evidence= nullary=0
+                    instance Int
+                  variable __a0
+                variable __b0
+            alt
+              pat_wild _
+              constructor_ref False
+      alt
+        pat_con True
+        constructor_ref False
+      alt
+        pat_con False
+        constructor_ref True
+  newtype MyInt
+    constructor MyInt
+      field  :: Int
+    deriving (via (MySum) Eq)
+  function __ev_Eq_MyInt_eq :: __Dict_Eq -> MyInt -> MyInt -> Bool
+    pat_var __ev_Eq
+    pat_con MyInt
+      pat_var __v0
+    pat_con MyInt
+      pat_var __v1
+    apply
+      apply
+        evidence_method Eq.== evidence=__ev_Eq nullary=0
+        apply
+          constructor_ref MySum
+          variable __v0
+      apply
+        constructor_ref MySum
+        variable __v1
+  function __ev_Eq_MyInt_ne :: __Dict_Eq -> MyInt -> MyInt -> Bool
+    pat_var __ev_Eq
+    pat_con MyInt
+      pat_var __v0
+    pat_con MyInt
+      pat_var __v1
+    apply
+      apply
+        evidence_method Eq./= evidence=__ev_Eq nullary=0
+        apply
+          constructor_ref MySum
+          variable __v0
+      apply
+        constructor_ref MySum
+        variable __v1

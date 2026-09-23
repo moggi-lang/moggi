@@ -1,0 +1,4 @@
+tests/backend/runtime/Bad-IO-DataField.mog:5:22: type error: IO values are forbidden outside an IO-returning function
+
+  5 | data Wrapper = Wrap (IO ())
+    |                      ^^

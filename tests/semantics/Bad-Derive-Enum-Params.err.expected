@@ -1,0 +1,4 @@
+tests/semantics/Bad-Derive-Enum-Params.mog:4:30: type error: cannot derive Enum: type has parameters (Enum requires a nullary type)
+
+  4 | data Tag a = A | B deriving (Enum)
+    |                              ^^^^

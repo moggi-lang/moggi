@@ -1,0 +1,5 @@
+module Platform.DotNet
+  ( hostToString
+  ) where
+
+foreign dotnet function hostToString "System.Convert:ToString" :: Int -> String

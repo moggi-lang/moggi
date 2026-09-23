@@ -1,0 +1,4 @@
+module Test.Foreign.Export where
+
+foreign jvm type Path "java.nio.file.Path"
+foreign jvm function getPath "java.nio.file.Paths:get" :: String -> IO Path

@@ -1,0 +1,8 @@
+module Bad.Handle.Construct where
+
+import System.IO.Types (Handle, MkHandle, Resource, MkResource)
+
+main :: IO ()
+main = do
+  let h = MkHandle MkResource
+  pure ()

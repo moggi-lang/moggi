@@ -1,0 +1,8 @@
+import Moggi.Generics
+
+data Foo = Foo Int deriving (Generic)
+
+instance Generic Foo where
+  type Rep Foo = Rec0 Int
+  from (Foo x) = K1 x
+  to (K1 x) = Foo x

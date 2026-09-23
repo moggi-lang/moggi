@@ -1,0 +1,16 @@
+{
+  "libsecp256k1-0.8.0": {
+    "repo": "https://github.com/bitcoin-core/secp256k1.git",
+    "tag": "v0.8.0",
+    "commit": "6e2c8bc4ecdc6e71dbe7a368f360d8d453ce435d",
+    "version": "0.8.0",
+    "license": { "name": "MIT", "file": "COPYING" }
+  },
+  "libbech32-1.1p1": {
+    "repo": "https://github.com/whitslack/libbech32.git",
+    "tag": "v1.1p1",
+    "commit": "3c43d811f0edbe897dac0d6b249eb5eb89cd625f",
+    "version": "1.1p1",
+    "license": { "name": "WTFPL v2", "file": "LICENSE" }
+  }
+}

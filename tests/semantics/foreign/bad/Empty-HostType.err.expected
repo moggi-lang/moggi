@@ -1,0 +1,4 @@
+tests/semantics/foreign/bad/Empty-HostType.mog:3:18: type error: foreign type host type must be a non-empty string
+
+  3 | foreign jvm type Path ""
+    |                  ^^^^

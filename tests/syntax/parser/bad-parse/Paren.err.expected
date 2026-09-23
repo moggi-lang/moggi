@@ -1,0 +1,4 @@
+tests/syntax/parser/bad-parse/Paren.mog:1:13: parse error: expected ')', found end of file
+
+  1 | f x = (x + 1
+    |             ^

@@ -1,0 +1,35 @@
+module Parser.DotProjectionVsCompose
+
+import Data.List qualified as L
+
+-- Data.Function declares this; repeated here so the single-file parser stage
+-- sees the real fixity instead of the default (infixl 9).
+infixr 9 .
+
+inc n = n + 1
+double n = n * 2
+
+-- Spaced dot: the `infixr 9 .` composition operator from Data.Function.
+composed = double . inc
+chained = double . inc . double
+
+-- Tight dot (no whitespace either side): record projection.
+projected = rec.field
+
+-- Projection binds tighter than application: the field belongs to the argument.
+argProjected = show rec.field
+chained = rec.field.inner
+applied = rec.field other
+
+-- Tight dot after a constructor stays a projection; semantics resolves it to a
+-- qualified reference when the receiver names a qualified import.
+qualifiedRef = L.filter
+qualifiedArg = L.filter xs
+
+-- Postfix `{ … }` is a record update. It is part of the same atom, so it binds
+-- tighter than application (`show rec { field = 1 }` updates `rec`), it chains,
+-- and it takes any expression as its receiver.
+updated = rec { field = 1 }
+appliedUpdate = show rec { field = 1 }
+chainedUpdate = rec { a = 1 } { b = 2 }
+parenUpdate = (make 3) { field = 4 }

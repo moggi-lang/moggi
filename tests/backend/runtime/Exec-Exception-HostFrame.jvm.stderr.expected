@@ -1,0 +1,6 @@
+moggi: HostException: / by zero
+  at Main.boom (tests/backend/runtime/Exec-Exception-HostFrame.mog:10:8)
+  at Main.main (tests/backend/runtime/Exec-Exception-HostFrame.mog:13:8)
+caused by: java.lang.ArithmeticException: / by zero
+  #0 moggi.Main.boom (Exec-Exception-HostFrame.mog:10)
+  #1 moggi.Main.main (Exec-Exception-HostFrame.mog:13)

@@ -1,0 +1,71 @@
+import Data.Bool
+import Data.Bounded
+import Data.Eq
+import Moggi.Internal.Num
+import Data.Ord
+import Text.Show
+import Data.Word
+import Moggi.Internal.Prim
+import System.IO
+
+-- ---- Exec-Word-BitReverse ----
+
+runWordBitReverse :: IO ()
+runWordBitReverse = do
+  let w8 = word8FromInt# 15
+  let w16 = word16FromInt# 1
+  let w32 = word32FromInt# 1
+  let w64 = word64FromInt# 1
+  putStrLn (show (word8ToInt# (bitReverse8 w8)))
+  putStrLn (show (word16ToInt# (bitReverse16 w16)))
+  putStrLn (show (word32ToInt# (bitReverse32 w32)))
+  putStrLn (word64Show# (bitReverse64 w64))
+
+-- ---- Exec-Word-ByteSwap ----
+
+runWordByteSwap :: IO ()
+runWordByteSwap = do
+  let w16 = word16FromInt# 4660
+  let w32 = word32FromInt# 305419896
+  -- Full 64-bit endian reverse: 0x0102030405060708 → 0x0807060504030201
+  let w64 = word64FromInt# 72623859790382856
+  putStrLn (show (word16ToInt# (byteSwap16 w16)))
+  putStrLn (show (word32ToInt# (byteSwap32 w32)))
+  putStrLn (word64Show# (byteSwap64 w64))
+
+-- ---- Exec-Word-Fixed-Wrap ----
+
+-- Fixed-width unsigned wrap, including Word32 mul that overflows PHP Int to float
+-- if implemented via host `*`.
+runWordFixedWrap :: IO ()
+runWordFixedWrap = do
+  let w8max = maxBound :: Word8
+  let w16max = maxBound :: Word16
+  let w32max = maxBound :: Word32
+  putStrLn (show ((w8max + word8FromInt# 1) == word8FromInt# 0))
+  putStrLn (show ((w16max + word16FromInt# 1) == word16FromInt# 0))
+  putStrLn (show ((w32max + word32FromInt# 1) == word32FromInt# 0))
+  putStrLn (show ((w8max * w8max) == word8FromInt# 1))
+  putStrLn (show ((w16max * w16max) == word16FromInt# 1))
+  putStrLn (show ((w32max * w32max) == word32FromInt# 1))
+  putStrLn (show (word32ToInt# (w32max * w32max)))
+
+-- ---- Exec-Word-Machine ----
+
+runWordMachine :: IO ()
+runWordMachine = do
+  let a = wordFromInt# (7)
+  let b = wordFromInt# (7)
+  let c = wordFromInt# (9)
+  putStrLn (show (a == b))
+  putStrLn (show (a == c))
+  putStrLn (show (compare a c))
+  putStrLn (show (wordToInt# a))
+
+-- ---- combined entry point ----
+main :: IO ()
+main = do
+  runWordBitReverse
+  runWordByteSwap
+  runWordFixedWrap
+  runWordMachine

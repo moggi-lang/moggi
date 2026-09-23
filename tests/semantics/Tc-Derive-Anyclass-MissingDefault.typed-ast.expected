@@ -1,0 +1,28 @@
+program
+  class Half a
+    method half :: a -> Int = default
+    method required :: a -> Int
+  data Foo
+    constructor Foo
+    deriving (anyclass Half)
+  function required :: Foo -> Int
+    pat_var __eta0
+    apply
+      apply
+        variable error
+        string "no default implementation for class method `required` in an anyclass instance for `Half`"
+      variable __eta0
+  function half :: Foo -> Int
+    pat_wild _
+    integer 1
+  function main :: IO ()
+    io_action
+      apply
+        variable putStrLn
+        apply
+          evidence_method Show.show evidence= nullary=0
+            instance Int
+          apply
+            evidence_method Half.half evidence= nullary=0
+              instance Foo
+            constructor_ref Foo

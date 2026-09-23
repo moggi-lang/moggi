@@ -1,0 +1,11 @@
+import Data.Bounded
+import Data.Ord
+import Data.Eq
+
+data Pair a b = Pair a b deriving (Eq, Ord, Bounded)
+
+lo :: Pair Int Int
+lo = minBound
+
+hi :: Pair Int Int
+hi = maxBound

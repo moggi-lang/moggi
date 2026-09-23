@@ -1,0 +1,9 @@
+import Data.Eq
+import Data.Ord
+import Text.Show
+
+newtype MyInt = MyInt Int
+  deriving via (Int) Eq
+
+main :: String
+main = show (MyInt 42 == MyInt 42)

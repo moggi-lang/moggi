@@ -1,0 +1,7 @@
+module Bad.IO.Do.Without.System
+
+import Prelude ()
+
+main :: IO ()
+main = do
+  putStrLn "hello"

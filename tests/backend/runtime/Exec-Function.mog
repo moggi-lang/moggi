@@ -1,0 +1,50 @@
+import Data.Function
+import Data.Int
+import Text.Show
+import System.IO
+
+addOne :: Int -> Int
+addOne x = x + 1
+
+double :: Int -> Int
+double x = x * 2
+
+addI :: Int -> Int -> Int
+addI a b = a + b
+
+absOf :: Int -> Int
+absOf x = case compare x 0 of
+  LT -> 0 - x
+  EQ -> x
+  GT -> x
+
+idDemo :: Int
+idDemo = id 42
+
+constDemo :: Int
+constDemo = const 7 99
+
+flipDemo :: Int
+flipDemo = flip addI 3 10
+
+dollarDemo :: Int
+dollarDemo = addOne $ double 5
+
+composeDemo :: Int
+composeDemo = (.) addOne double 5
+
+ampDemo :: Int
+ampDemo = 10 & addOne & double
+
+onDemo :: Int
+onDemo = on addI absOf 3 (0 - 4)
+
+main :: IO ()
+main = do
+  putStrLn (show idDemo)
+  putStrLn (show constDemo)
+  putStrLn (show flipDemo)
+  putStrLn (show dollarDemo)
+  putStrLn (show composeDemo)
+  putStrLn (show ampDemo)
+  putStrLn (show onDemo)

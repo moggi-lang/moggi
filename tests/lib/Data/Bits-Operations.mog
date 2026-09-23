@@ -1,0 +1,288 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+import Control.Monad
+import Data.Bits
+import Data.Bool
+import Data.Int
+import Moggi.Internal.Real
+import Data.Maybe
+import Data.Monoid
+import Moggi.Internal.Num
+import Data.Ord
+import Text.Show
+import Data.Word
+import Moggi.Internal.Prim
+import Numeric.Natural
+import System.IO
+
+-- Bitwise operations at every supported width. The interesting cases are the
+-- boundary shift and rotate counts (0, width - 1, width, width + 1, very
+-- large), the signed and unsigned complements, the popCount/zero-count
+-- identities, and the `Integer` fake two's-complement rule for negative values.
+-- Every backend must print the same lines.
+
+w :: Int -> Word
+w = fromIntegral
+
+w8 :: Int -> Word8
+w8 = fromIntegral
+
+w16 :: Int -> Word16
+w16 = fromIntegral
+
+w32 :: Int -> Word32
+w32 = fromIntegral
+
+w64 :: Int -> Word64
+w64 = fromIntegral
+
+i :: Int -> Int
+i = fromIntegral
+
+i8 :: Int -> Int8
+i8 = fromIntegral
+
+i16 :: Int -> Int16
+i16 = fromIntegral
+
+i32 :: Int -> Int32
+i32 = fromIntegral
+
+i64 :: Int64
+i64 = fromIntegral 7
+
+z :: Int -> Integer
+z = fromIntegral
+
+nat :: Int -> Natural
+nat = fromIntegral
+
+main :: IO ()
+main = do
+  -- Word8: masks, complements, shifts, rotates, counts.
+  putStrLn (show (w8 171 .&. w8 18))
+  putStrLn (show (w8 171 .|. w8 18))
+  putStrLn (show (w8 171 .^. w8 18))
+  putStrLn (show (complement (w8 171)))
+  putStrLn (show (oneBits :: Word8))
+  putStrLn (show (zeroBits :: Word8))
+  putStrLn (show (shiftL (w8 1) 7))
+  putStrLn (show (shiftL (w8 1) 8))
+  putStrLn (show (shiftR (w8 128) 7))
+  putStrLn (show (shiftR (w8 128) 8))
+  putStrLn (show (shift (w8 1) 3))
+  putStrLn (show (shift (w8 128) (negate 7)))
+  putStrLn (show (rotate (w8 129) 1))
+  putStrLn (show (rotate (w8 129) (negate 1)))
+  putStrLn (show (rotate (w8 1) 8))
+  putStrLn (show (rotateL (w8 129) 1))
+  putStrLn (show (rotateR (w8 129) 1))
+  putStrLn (show (popCount (w8 171)))
+  putStrLn (show (popCount (w8 0)))
+  putStrLn (show (countLeadingZeros (w8 1)))
+  putStrLn (show (countTrailingZeros (w8 128)))
+  putStrLn (show (countLeadingZeros (w8 0)))
+  putStrLn (show (countTrailingZeros (w8 0)))
+  putStrLn (show (finiteBitSize (w8 0)))
+  putStrLn (show (bitSizeMaybe (w8 0)))
+  putStrLn (show (bitSize (w8 0)))
+  putStrLn (show (isSigned (w8 0)))
+  putStrLn (show (testBit (w8 171) 0))
+  putStrLn (show (testBit (w8 171) 2))
+  putStrLn (show (setBit (w8 0) 3))
+  putStrLn (show (clearBit (w8 255) 3))
+  putStrLn (show (complementBit (w8 0) 3))
+  putStrLn (show (bit 7 :: Word8))
+  putStrLn (show (bit 8 :: Word8))
+  putStrLn (show (w8 128 .>>. 7))
+  putStrLn (show (w8 1 .<<. 7))
+  putStrLn (show (w8 128 !>>. 7))
+  putStrLn (show (w8 1 !<<. 7))
+
+  -- Word16 / Word32 / Word64 boundaries.
+  putStrLn (show (oneBits :: Word16))
+  putStrLn (show (shiftL (w16 1) 15))
+  putStrLn (show (shiftL (w16 1) 16))
+  putStrLn (show (rotate (w16 1) (negate 1)))
+  putStrLn (unsignedParts (w16 32769))
+
+  putStrLn (show (oneBits :: Word32))
+  putStrLn (show (shiftR (oneBits :: Word32) 31))
+  putStrLn (show (rotate (w32 2147483649) 1))
+
+  putStrLn (show (oneBits :: Word64))
+  putStrLn (show (shiftR (oneBits :: Word64) 63))
+  putStrLn (show (shiftL (w64 1) 64))
+  putStrLn (show (popCount (oneBits :: Word64)))
+  putStrLn (show (countLeadingZeros (oneBits :: Word64)))
+  putStrLn (show (countTrailingZeros (w64 0)))
+  putStrLn (show (testBit (oneBits :: Word64) 63))
+  putStrLn (show (bit 63 :: Word64))
+  putStrLn (show (rotate (w64 1) 63))
+  putStrLn (show (w64 255 .&. w64 15))
+
+  -- Word (host width).
+  putStrLn (show (popCount (oneBits :: Word)))
+  putStrLn (show (countTrailingZeros (w 0)))
+  putStrLn (show (w 255 .&. w 15))
+  putStrLn (show (shiftL (w 1) 63))
+  putStrLn (show (shiftL (w 1) 64))
+  putStrLn (show (isSigned (w 0)))
+  putStrLn (show (bitSizeMaybe (w 0)))
+  putStrLn (show (oneBits :: Word))
+  putStrLn (show (oneBits > w 0))
+  putStrLn (show (w 1 > oneBits))
+  putStrLn (show (signum (oneBits :: Word)))
+
+  -- Int8: sign extension in every direction.
+  putStrLn (show (complement (i8 0)))
+  putStrLn (show (complement (i8 127)))
+  putStrLn (show (oneBits :: Int8))
+  putStrLn (show (shiftL (i8 1) 7))
+  putStrLn (show (shiftL (i8 1) 8))
+  putStrLn (show (shiftR (i8 (negate 128)) 7))
+  putStrLn (show (shiftR (i8 (negate 1)) 100))
+  putStrLn (show (popCount (i8 (negate 1))))
+  putStrLn (show (countLeadingZeros (i8 (negate 1))))
+  putStrLn (show (countTrailingZeros (i8 (negate 1))))
+  putStrLn (show (countLeadingZeros (i8 0)))
+  putStrLn (show (countTrailingZeros (i8 0)))
+  putStrLn (show (rotate (i8 (negate 128)) 1))
+  putStrLn (show (rotate (i8 (negate 1)) 1))
+  putStrLn (show (testBit (i8 (negate 1)) 7))
+  putStrLn (show (testBit (i8 (negate 1)) 8))
+  putStrLn (show (i8 (negate 1) .&. i8 15))
+  putStrLn (show (i8 (negate 1) .|. i8 0))
+  putStrLn (show (i8 5 .^. i8 5))
+
+  -- Int16 / Int32 / Int64.
+  putStrLn (show (complement (i16 0)))
+  putStrLn (show (shiftR (i16 (negate 1)) 15))
+  putStrLn (show (rotate (i16 (negate 32768)) 1))
+  putStrLn (show (complement (i32 0)))
+  putStrLn (show (shiftR (i32 (negate 1)) 31))
+  putStrLn (show (rotate (i32 (negate 2147483648)) 1))
+  putStrLn (show (i64 `xor` i64))
+  putStrLn (show (popCount (complement i64)))
+
+  -- Int (host width).
+  putStrLn (show (complement (i 0)))
+  putStrLn (show (complement (i (negate 1))))
+  putStrLn (show (oneBits :: Int))
+  putStrLn (show (shiftL (i 1) 63))
+  putStrLn (show (shiftR (i (negate 1)) 63))
+  putStrLn (show (shiftR (i (negate 1)) 64))
+  putStrLn (show (popCount (i 0)))
+  putStrLn (show (popCount (i (negate 1))))
+  putStrLn (show (countLeadingZeros (i 0)))
+  putStrLn (show (countTrailingZeros (i 0)))
+  putStrLn (show (rotate (i 1) 1))
+  putStrLn (show (rotate (i 1) (negate 1)))
+  putStrLn (show (bitSizeMaybe (i 0)))
+  putStrLn (show (bitSize (i 0)))
+  putStrLn (show (isSigned (i 0)))
+
+  -- Bool: a one-bit bit field.
+  putStrLn (show (bitSize True))
+  putStrLn (show (True .&. False))
+  putStrLn (show (True .|. False))
+  putStrLn (show (xor True False))
+  putStrLn (show (complement True))
+  putStrLn (show (shift True 0))
+  putStrLn (show (shift True 1))
+  putStrLn (show (rotate True 5))
+  putStrLn (show (bit 0 :: Bool))
+  putStrLn (show (bit 1 :: Bool))
+  putStrLn (show (testBit True 0))
+  putStrLn (show (testBit True 1))
+  putStrLn (show (popCount True))
+  putStrLn (show (finiteBitSize False))
+  putStrLn (show (countLeadingZeros False))
+  putStrLn (show (countTrailingZeros True))
+
+  -- Integer: fake two's complement for negative values.
+  putStrLn (show (z 171 .&. z 18))
+  putStrLn (show (z 171 .|. z 18))
+  putStrLn (show (z 171 .^. z 18))
+  putStrLn (show (complement (z 5)))
+  putStrLn (show (complement (negate (z 6))))
+  putStrLn (show (testBit (negate (z 5)) 0))
+  putStrLn (show (testBit (negate (z 5)) 1))
+  putStrLn (show (testBit (negate (z 5)) 2))
+  putStrLn (show (testBit (negate (z 5)) 100))
+  putStrLn (show (testBit (z 5) 100))
+  putStrLn (show (popCount (z 171)))
+  putStrLn (show (popCount (negate (z 171))))
+  putStrLn (show (shiftL (z 1) 70))
+  putStrLn (show (shiftR (negate (z 4)) 1))
+  putStrLn (show (shiftR (negate (z 1)) 200))
+  putStrLn (show (shiftR (complement (z 0)) 5))
+  putStrLn (show (bit 70 :: Integer))
+  putStrLn (show (rotate (z 5) 3))
+  putStrLn (show (rotate (negate (z 5)) 1))
+  putStrLn (show (shiftL (z 1) 0))
+  putStrLn (show (bitSizeMaybe (z 0)))
+  putStrLn (show (isSigned (z 0)))
+  putStrLn (show (negate (z 5) .&. z 15))
+
+  -- Natural: the same bit pattern rules without negative values.
+  putStrLn (show (nat 171 .&. nat 18))
+  putStrLn (show (nat 171 .|. nat 18))
+  putStrLn (show (complementBit (nat 0) 3))
+  putStrLn (show (popCount (nat 171)))
+  putStrLn (show (shiftL (nat 1) 70))
+  putStrLn (show (shiftR (nat 171) 4))
+  putStrLn (show (testBit (nat 171) 0))
+  putStrLn (show (bitSizeMaybe (nat 0)))
+  putStrLn (show (isSigned (nat 0)))
+
+  -- toIntegralSized.
+  putStrLn (show (toIntegralSized (100 :: Int) :: Maybe Word8))
+  putStrLn (show (toIntegralSized (200 :: Int) :: Maybe Word8))
+  putStrLn (show (toIntegralSized (w8 200) :: Maybe Int8))
+  putStrLn (show (toIntegralSized (w8 100) :: Maybe Int8))
+  putStrLn (show (toIntegralSized (negate 1 :: Int) :: Maybe Word8))
+  putStrLn (show (toIntegralSized (w8 255) :: Maybe Int16))
+  putStrLn (show (toIntegralSized (300 :: Int) :: Maybe Word8))
+  putStrLn (show (toIntegralSized (5 :: Int) :: Maybe Integer))
+  putStrLn (show (toIntegralSized (negate 5 :: Int) :: Maybe Integer))
+  putStrLn (show (toIntegralSized (5 :: Int) :: Maybe Natural))
+  putStrLn (show (toIntegralSized (negate 5 :: Int) :: Maybe Natural))
+  putStrLn (show (toIntegralSized (1000 :: Int) :: Maybe Int8))
+  putStrLn (show (toIntegralSized (negate 129 :: Int) :: Maybe Int8))
+  putStrLn (show (toIntegralSized (negate 128 :: Int) :: Maybe Int8))
+  putStrLn (show (toIntegralSized (127 :: Int) :: Maybe Int8))
+  putStrLn (show (toIntegralSized (128 :: Int) :: Maybe Int8))
+  putStrLn (show (toIntegralSized (300 :: Int) :: Maybe Int16))
+  putStrLn (show (toIntegralSized (70000 :: Int) :: Maybe Int16))
+  putStrLn (show (toIntegralSized (z 5) :: Maybe Int))
+  putStrLn (show (toIntegralSized (z 5) :: Maybe Word8))
+  putStrLn (show (toIntegralSized (w8 200) :: Maybe Word16))
+
+  -- The unbounded types report no width, and `bitSize` on them fails; the
+  -- failure is pinned by Exec-Bits-BitSize.mog.
+  putStrLn (show (bitSizeMaybe (z 0)))
+  putStrLn (show (bitSizeMaybe (nat 0)))
+
+  -- Monoids under bitwise operations.
+  putStrLn (show (getAnd (And (w8 171) <> And (w8 18))))
+  putStrLn (show (getIor (Ior (w8 171) <> Ior (w8 18))))
+  putStrLn (show (getXor (Xor (w8 171) <> Xor (w8 18))))
+  putStrLn (show (getIff (Iff (w8 171) <> Iff (w8 18))))
+  putStrLn (show (getAnd (mempty :: And Word8)))
+  putStrLn (show (getIor (mempty :: Ior Word8)))
+  putStrLn (show (getXor (mempty :: Xor Word8)))
+  putStrLn (show (getIff (mempty :: Iff Word8)))
+  putStrLn (show (And (w8 3)))
+  putStrLn (show (Iff (w8 3)))
+  putStrLn (show (getAnd (And (w8 171) .&. And (w8 18))))
+  putStrLn (show (popCount (And (w8 171))))
+  putStrLn (show (getAnd (And (i8 15) <> And (i8 3))))
+  putStrLn (show (getIff (Iff (i8 0) <> Iff (i8 0))))
+
+-- Leading zeros, the highest bit, and the width of a 16-bit value, as one
+-- composite line so the readers of a golden file can see the parts.
+unsignedParts :: Word16 -> String
+unsignedParts x =
+  stringAppend#
+    (show (countLeadingZeros x))
+    (stringAppend# "," (stringAppend# (show (countTrailingZeros x)) (stringAppend# "," (show (popCount x)))))

@@ -1,0 +1,4 @@
+tests/semantics/Bad-Duplicate-Constructor.mog:2:12: type error: duplicate data constructor `Same`
+
+  2 | data Two = Same
+    |            ^^^^

@@ -1,0 +1,4 @@
+tests/semantics/bad-unknown-language/Main.mog:1:1: parse error: unknown LANGUAGE extension `NotARealExtension`
+
+  1 | {-# LANGUAGE NotARealExtension #-}
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^

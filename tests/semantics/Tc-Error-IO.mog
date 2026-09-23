@@ -1,0 +1,8 @@
+import Moggi.Internal.Prim
+import System.IO.Base (IO)
+
+fail :: IO String
+fail = error# "boom"
+
+abort :: IO ()
+abort = error# "in do"

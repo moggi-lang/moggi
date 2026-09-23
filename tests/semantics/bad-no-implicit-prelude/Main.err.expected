@@ -1,0 +1,4 @@
+tests/semantics/bad-no-implicit-prelude/Main.mog:5:13: type error: undefined variable `map`
+
+  5 | useMap xs = map (\x -> x) xs
+    |             ^^^

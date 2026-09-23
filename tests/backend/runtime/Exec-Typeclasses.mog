@@ -1,0 +1,136 @@
+-- ---- Class methods through an instance ----
+
+bindList :: Monad m => m Int -> (Int -> m Int) -> m Int
+bindList m f = m >>= f
+
+listDemo :: [Int]
+listDemo = bindList [1, 2] (\x -> [x, x * 10])
+
+listPure :: [Int]
+listPure = bindList [42] (\x -> [x])
+
+listLet :: Monad m => m Int -> m Int
+listLet m = do
+  x <- m
+  let y = x + 1
+  pure y
+
+listLetDemo :: [Int]
+listLetDemo = listLet [41]
+
+inc :: Int -> Int
+inc x = x + 1
+
+double :: Int -> Int
+double x = x * 2
+
+applPure :: Applicative f => a -> f a
+applPure x = pure x
+
+applAp :: Applicative f => f (a -> b) -> f a -> f b
+applAp fs xs = fs <*> xs
+
+pureDemo :: [Int]
+pureDemo = applPure 42
+
+apDemo :: [Int]
+apDemo = applAp [inc, double] [10, 20]
+
+-- ---- `==`/`/=` dispatch through a hand-written instance ----
+
+-- A hand-written instance decides equality. `W`'s `==` compares its payload by
+-- `<`, so a representation comparison answers `False` where the instance says
+-- `True`; every use site has to reach the instance, in a body that mentions `W`
+-- and at a call site in another function.
+data W = W Int
+
+instance Eq W where
+  (==) (W a) (W b) = a < b
+  (/=) (W a) (W b) = a >= b
+
+data Wrap = Wrap W
+
+-- An instance body using another instance's method at its own field.
+instance Eq Wrap where
+  (==) (Wrap a) (Wrap b) = a /= b
+
+data Color = Red | Green deriving (Eq)
+
+atCallSite :: W -> W -> Bool
+atCallSite x y = x == y
+
+-- ---- A mutual default with a MINIMAL pragma ----
+
+-- A class with mutually defaulted methods and a MINIMAL pragma: an instance that
+-- writes any one alternative gets the rest from the class, and the pragma's
+-- parentheses and `|`/`,` groupings are what decide which alternatives count.
+
+class Counter t where
+  {-# MINIMAL (count | countUp), label #-}
+  count :: t -> Int
+  count x = countUp x
+  countUp :: t -> Int
+  countUp x = count x
+  label :: t -> String
+
+data Ticks = Ticks
+data Toes = Toes
+
+-- Implements the first alternative and the mandatory one.
+instance Counter Ticks where
+  countUp _ = 3
+  label _ = "ticks"
+
+-- Implements the second alternative instead.
+instance Counter Toes where
+  count _ = 7
+  label _ = "toes"
+
+-- ---- Consecutive equations of one instance method ----
+
+-- Equations of one method are clauses of one binding, exactly as at top level:
+-- the instance writes the patterns and the dispatcher picks the clause.
+
+class Describe a where
+  describe :: a -> String
+
+instance Describe Bool where
+  describe True = "yes"
+  describe False = "no"
+
+instance Describe Int where
+  describe 0 = "zero"
+  describe _ = "many"
+
+data Coin = Heads | Tails
+
+instance Describe Coin where
+  describe Heads = "heads"
+  describe Tails = "tails"
+
+main :: IO ()
+main = do
+  putStrLn (show (listDemo == [1, 10, 2, 20]))
+  putStrLn (show (listPure == [42]))
+  putStrLn (show (listLetDemo == [42]))
+  putStrLn (show (pureDemo == [42]))
+  putStrLn (show (apDemo == [11, 21, 20, 40]))
+  putStrLn (show (W 1 == W 3))
+  putStrLn (show (W 3 == W 1))
+  putStrLn (show (W 1 /= W 3))
+  putStrLn (show (atCallSite (W 1) (W 3)))
+  putStrLn (show (Wrap (W 1) == Wrap (W 3)))
+  putStrLn (show (Red == Green))
+  putStrLn (show (Red == Red))
+  putStrLn (show (count Ticks))
+  putStrLn (show (countUp Ticks))
+  putStrLn (label Ticks)
+  putStrLn (show (count Toes))
+  putStrLn (show (countUp Toes))
+  putStrLn (label Toes)
+  putStrLn (describe True)
+  putStrLn (describe False)
+  putStrLn (describe (0 :: Int))
+  putStrLn (describe (7 :: Int))
+  putStrLn (describe Heads)
+  putStrLn (describe Tails)

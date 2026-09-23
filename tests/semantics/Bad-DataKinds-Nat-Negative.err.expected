@@ -1,0 +1,4 @@
+tests/semantics/Bad-DataKinds-Nat-Negative.mog:4:19: type error: numeric type literal must be a natural number (Nat), got -1
+
+  4 | bad :: FixedBytes -1 -> String
+    |                   ^^

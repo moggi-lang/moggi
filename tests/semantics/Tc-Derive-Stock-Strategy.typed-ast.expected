@@ -1,0 +1,69 @@
+program
+  data Color
+    constructor Red
+    constructor Blue
+    deriving (stock Eq)
+  function == :: Color -> Color -> Bool
+    pat_var __l
+    pat_var __r
+    case
+      variable __l
+      alt
+        pat_con Red
+        case
+          variable __r
+          alt
+            pat_con Red
+            constructor_ref True
+          alt
+            pat_wild _
+            constructor_ref False
+      alt
+        pat_con Blue
+        case
+          variable __r
+          alt
+            pat_con Blue
+            constructor_ref True
+          alt
+            pat_wild _
+            constructor_ref False
+  function /= :: Color -> Color -> Bool
+    pat_var __l
+    pat_var __r
+    case
+      case
+        variable __l
+        alt
+          pat_con Red
+          case
+            variable __r
+            alt
+              pat_con Red
+              constructor_ref True
+            alt
+              pat_wild _
+              constructor_ref False
+        alt
+          pat_con Blue
+          case
+            variable __r
+            alt
+              pat_con Blue
+              constructor_ref True
+            alt
+              pat_wild _
+              constructor_ref False
+      alt
+        pat_con True
+        constructor_ref False
+      alt
+        pat_con False
+        constructor_ref True
+  function same :: Bool
+    apply
+      apply
+        evidence_method Eq.== evidence= nullary=0
+          instance Color
+        constructor_ref Red
+      constructor_ref Red

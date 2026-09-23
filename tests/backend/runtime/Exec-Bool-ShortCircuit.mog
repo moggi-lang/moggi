@@ -1,0 +1,23 @@
+-- `&&` and `||` decide on their left operand: the right one runs only when it
+-- can still change the result, so a failing operand is never reached. The guard
+-- case is the same conjunction the reference's `isDirPath` is written as.
+boom :: String -> Bool
+boom _ = error "right operand evaluated"
+
+positive :: [Int] -> Bool
+positive xs
+  | not (null xs) && head xs > 0 = True
+  | otherwise = False
+
+main :: IO ()
+main = do
+  putStrLn (show (False && boom "and"))
+  putStrLn (show (True || boom "or"))
+  putStrLn (show (True && False))
+  putStrLn (show (False || True))
+  putStrLn (show ((False && boom "chain") || True))
+  putStrLn (show (False && True || True))
+  putStrLn (show (True && False || False))
+  putStrLn (show (positive []))
+  putStrLn (show (positive [7]))
+  putStrLn (show (positive [-1]))

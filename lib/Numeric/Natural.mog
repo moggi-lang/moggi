@@ -1,0 +1,130 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | The arbitrary-precision @Natural@ number type: the non-negative integers.
+--
+-- A @Natural@ is a bignum that cannot be negative. It is a type of its own
+-- with the same primitive representation as 'Integer', and the conversion into
+-- it rejects a negative argument, so a negative @Natural@ cannot be built at
+-- all rather than merely not being expected.
+--
+-- An operation whose mathematical result could be negative fails with an
+-- arithmetic underflow instead: subtraction, @pred@, and @negate@ of anything
+-- but zero.
+module Numeric.Natural
+  ( Natural
+  , minusNaturalMaybe
+  ) where
+
+import Data.Bits
+import Data.Bool
+import Data.Enum
+import Data.Eq
+import Moggi.Internal.Integer
+import Moggi.Internal.Real
+import Data.Maybe
+import Moggi.Internal.Num
+import Data.Ord
+import Text.Show
+import Moggi.Err
+import Moggi.Exception
+import Moggi.Internal.Prim
+
+-- | Arbitrary-precision natural number.
+type Natural = Natural#
+
+-- | Subtract two naturals, yielding 'Nothing' when the result would be
+-- negative.
+minusNaturalMaybe :: Natural -> Natural -> Maybe Natural
+minusNaturalMaybe x y = case integerCompare (naturalToInteger# x) (naturalToInteger# y) of
+  LT -> Nothing
+  _ -> Just (integerToNatural# (integerSub (naturalToInteger# x) (naturalToInteger# y)))
+
+instance Eq Natural where
+  (==) a b = integerEq (naturalToInteger# a) (naturalToInteger# b)
+  (/=) a b = not (integerEq (naturalToInteger# a) (naturalToInteger# b))
+
+instance Ord Natural where
+  compare a b = integerCompare (naturalToInteger# a) (naturalToInteger# b)
+
+instance Show Natural where
+  show n = integerShow (naturalToInteger# n)
+
+-- No negative value fits the type, so @(-)@, @negate@ and @fromInteger@
+-- underflow instead of wrapping.
+instance Num Natural where
+  (+) a b = integerToNatural# (integerAdd (naturalToInteger# a) (naturalToInteger# b))
+  (-) a b = case integerCompare (naturalToInteger# a) (naturalToInteger# b) of
+    LT -> error "arithmetic underflow"
+    _ -> integerToNatural# (integerSub (naturalToInteger# a) (naturalToInteger# b))
+  (*) a b = integerToNatural# (integerMul (naturalToInteger# a) (naturalToInteger# b))
+  negate a = case integerEq (naturalToInteger# a) (integerFromInt 0) of
+    True -> a
+    False -> error "arithmetic underflow"
+  abs a = a
+  signum a = integerToNatural# (integerSignum (naturalToInteger# a))
+  fromInteger = integerToNatural#
+
+instance Enum Natural where
+  succ n = integerToNatural# (integerAdd (naturalToInteger# n) (integerFromInt 1))
+  pred n = case integerEq (naturalToInteger# n) (integerFromInt 0) of
+    True -> error "arithmetic underflow"
+    False -> integerToNatural# (integerSub (naturalToInteger# n) (integerFromInt 1))
+  toEnum i = case intCompare# i 0 of
+    LT -> error "arithmetic underflow"
+    _ -> integerToNatural# (integerFromInt i)
+  fromEnum n = integerToInt (naturalToInteger# n)
+
+-- Every operand is non-negative, so the quotient and the floor division agree.
+-- See Data.Int: a zero divisor raises `DivideByZero` on every backend.
+naturalZeroDivisor :: Natural -> Bool
+naturalZeroDivisor b = integerEq (naturalToInteger# b) (integerFromInt 0)
+
+instance Integral Natural where
+  quot a b = case naturalZeroDivisor b of
+    True -> throw DivideByZero
+    False -> integerToNatural# (integerQuot (naturalToInteger# a) (naturalToInteger# b))
+  rem a b = integerToNatural# (integerRem (naturalToInteger# a) (naturalToInteger# b))
+  quotRem a b = (quot a b, rem a b)
+  div a b = case naturalZeroDivisor b of
+    True -> throw DivideByZero
+    False -> integerToNatural# (integerQuot (naturalToInteger# a) (naturalToInteger# b))
+  mod a b = integerToNatural# (integerRem (naturalToInteger# a) (naturalToInteger# b))
+  divMod a b = (div a b, mod a b)
+  toInteger n = naturalToInteger# n
+
+-- The bit operations are the 'Integer' ones on a non-negative value, which
+-- stays non-negative, so the conversion back is total.
+instance Bits Natural where
+  (.&.) a b = integerToNatural# (integerAndBits (naturalToInteger# a) (naturalToInteger# b))
+  (.|.) a b = integerToNatural# (integerOrBits (naturalToInteger# a) (naturalToInteger# b))
+  xor a b = integerToNatural# (integerXorBits (naturalToInteger# a) (naturalToInteger# b))
+  complement _ = error "Bits.complement: Natural complement undefined"
+  shift a i = case intCompare# i 0 of
+    LT -> shiftR a (intNegate# i)
+    GT -> shiftL a i
+    EQ -> a
+  shiftL a i = case intCompare# i 0 of
+    LT -> throw Overflow
+    _ -> integerToNatural# (integerShiftLBits (naturalToInteger# a) i)
+  shiftR a i = case intCompare# i 0 of
+    LT -> error "Bits.shiftR: negative shift amount"
+    _ -> integerToNatural# (integerShiftRBits (naturalToInteger# a) i)
+  unsafeShiftL a i = shiftL a i
+  unsafeShiftR a i = shiftR a i
+  -- A Natural is unbounded, so it never wraps around.
+  rotate a i = shift a i
+  rotateL a i = rotate a i
+  rotateR a i = rotate a (intNegate# i)
+  bit i = integerToNatural# (integerBitBits i)
+  testBit a i = integerTestBitBits (naturalToInteger# a) i
+  zeroBits = integerToNatural# integerBitZeroI
+  -- 'complement' is undefined for a 'Natural', so the three operations that
+  -- would otherwise reach it through a class default are defined here instead:
+  -- each one is the same bit operation on the two's-complement 'Integer' view,
+  -- and stays non-negative for a non-negative argument.
+  setBit a i = integerToNatural# (integerOrBits (naturalToInteger# a) (integerBitBits i))
+  clearBit a i = integerToNatural# (integerAndBits (naturalToInteger# a) (integerComplementBits (integerBitBits i)))
+  complementBit a i = integerToNatural# (integerXorBits (naturalToInteger# a) (integerBitBits i))
+  popCount a = integerPopCountNonNeg (naturalToInteger# a)
+  bitSizeMaybe _ = Nothing
+  bitSize _ = error "Data.Bits.bitSize(Natural)"
+  isSigned _ = False

@@ -1,0 +1,4 @@
+tests/syntax/lexer/Bad-CharLit-Multi.mog:3:8: lex error: character literal must contain exactly one Unicode scalar value
+
+  3 | main = '\u{65}\u{301}'
+    |        ^^^^^^^^^^^^^^^^

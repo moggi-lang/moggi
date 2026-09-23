@@ -1,0 +1,117 @@
+name: test
+
+# The whole suite, on every backend, including the native builds, on the three
+# platforms Moggi runs on.
+#
+# The toolchains this job uses are the ones the *test suite* drives, so they come
+# from the standard setup actions (they are the runners' job to provide). The
+# runtimes that get *shipped* are a different question, and they are downloaded
+# and verified from upstream by the `package` workflow instead.
+#
+# `--native` is exercised here as well as in packaging: a distribution that
+# compiles but cannot build a native image is not finished.
+#
+# Every action is pinned to a commit, not a tag: a tag can be moved, and a job
+# running an attacker's commit is a job running their code.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux x86_64 and ARM64, macOS (ARM64) and Windows x86_64. The
+          # architecture-specific jobs are the ones that catch a code generator
+          # or a runtime that only works on one machine shape.
+          - {name: linux-x86_64,   os: ubuntu-24.04}
+          - {name: linux-aarch64,  os: ubuntu-24.04-arm}
+          - {name: macos-aarch64,  os: macos-latest}
+          - {name: windows-x86_64, os: windows-2022}
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.5'
+          extensions: bcmath, mbstring, zip, phar, ctype
+          ini-values: memory_limit=1G
+          coverage: none
+
+      # GraalVM is a JDK 21 as well as a native-image host, which is exactly the
+      # pair the jvm backend and `--native` need.
+      - name: Set up GraalVM (JDK 21 + native-image)
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          distribution: graalvm
+          java-version: '21'
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Show the toolchains
+        run: |
+          php --version
+          java -version
+          native-image --version
+          dotnet --version
+
+      # A native build needs a C toolchain in addition to the runtime: clang on
+      # Linux, the Xcode command line tools on macOS, and the MSVC toolchain that
+      # the Windows image already carries.
+      - name: Install a C toolchain (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y clang
+
+      # `schnorr` ships in every distribution and its Makefile needs a POSIX
+      # shell, so on Windows it is built under MSYS2 and the result is handed to
+      # the assembler rather than rebuilt by it.
+      - name: Install MSYS2 (MinGW) for the schnorr CLI
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@f84a36b4009b96413f91c01441130855db9392e5 # v2.9.0
+        with:
+          msystem: UCRT64
+          update: false
+          install: mingw-w64-ucrt-x86_64-gcc make
+
+      - name: Build the schnorr CLI
+        shell: ${{ runner.os == 'Windows' && 'msys2 {0}' || 'bash' }}
+        run: php scripts/dist/schnorr.php
+
+      - name: Run the schnorr BIP-340 vectors
+        shell: ${{ runner.os == 'Windows' && 'msys2 {0}' || 'bash' }}
+        run: ./schnorr/tests/bip340_test.sh
+
+      - name: Point the assembler at the schnorr binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $schnorr = if (Test-Path schnorr/schnorr.exe) { 'schnorr\schnorr.exe' } else { 'schnorr\schnorr' }
+          "MOGGI_DIST_SCHNORR=$env:GITHUB_WORKSPACE\$schnorr" >> $env:GITHUB_ENV
+
+      - name: Run the suite
+        run: php test.php --backend all --native
+
+  # The VS Code extension is not tested here: it lives in its own repository
+  # (moggi-lang/moggi-vscode-plugin) and runs its own workflow, which checks it
+  # out next to this compiler for the language-server end-to-end test. The
+  # server's own protocol suite stays here, in `tests/lsp/`, and runs above.

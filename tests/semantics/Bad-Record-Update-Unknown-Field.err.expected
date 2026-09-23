@@ -1,0 +1,4 @@
+tests/semantics/Bad-Record-Update-Unknown-Field.mog:5:17: type error: record type `Person` has no field `nickname`
+
+  5 | renamed = alice { nickname = "Bob" }
+    |                 ^

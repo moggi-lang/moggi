@@ -1,0 +1,8 @@
+module Bad.Resource.Construct where
+
+import System.IO.Types (Resource, MkResource)
+
+main :: IO ()
+main = do
+  let r = MkResource
+  pure ()

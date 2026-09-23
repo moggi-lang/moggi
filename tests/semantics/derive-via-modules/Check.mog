@@ -1,0 +1,11 @@
+module DeriveVia.Check where
+
+import DeriveVia.Provider
+
+-- Uses a via-derived instance whose via type is exported from another module.
+checkExported :: Bool
+checkExported = WrapA 1 === WrapA 1
+
+-- The same-module private case dispatches inside the provider.
+checkPrivateSameModule :: Bool
+checkPrivateSameModule = checkLocal (LocalA 1) (LocalA 1)

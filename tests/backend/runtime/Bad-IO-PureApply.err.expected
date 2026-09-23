@@ -1,0 +1,4 @@
+tests/backend/runtime/Bad-IO-PureApply.mog:8:11: type error: could not unify `ByteString` with `IO ByteString`
+
+   8 |   let n = length (readFile ("f.txt"))
+     |           ^^^^^^^^^^^^^^^^^^^^^^^

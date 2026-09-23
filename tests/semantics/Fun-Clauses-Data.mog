@@ -1,0 +1,29 @@
+data Person = Person { name :: String, age :: Int }
+
+greet :: Person -> String
+greet (Person name age) = name
+
+data Shape
+  = Circle { r :: Int }
+  | Rectangle { w :: Int, h :: Int }
+
+area :: Shape -> Int
+area (Circle r)      = r * r
+area (Rectangle w h) = w * h
+
+data User = User { name :: String, age :: Int }
+
+greetUser :: User -> String
+greetUser (User name age) = name
+
+greetUserByField :: User -> String
+greetUserByField User { name = n, age = a } = n
+
+data Expr
+  = Lit { n :: Int }
+  | Add { l :: Expr, r :: Expr }
+
+eval :: Expr -> Int
+eval (Lit n)         = n
+eval (Add (Lit 0) e) = eval e
+eval (Add l r)       = eval l + eval r

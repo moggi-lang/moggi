@@ -1,0 +1,17 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module System.Exit.PHP
+  ( exitWithCode
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import System.IO.Base (IO)
+import Moggi.Err
+import Data.Int
+
+foreign php function rawExit "exit" :: Int -> IO ()
+
+exitWithCode :: Int -> IO a
+exitWithCode code = do
+  _ <- rawExit code
+  pure (error "exit")

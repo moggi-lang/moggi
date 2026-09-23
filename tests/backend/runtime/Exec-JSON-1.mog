@@ -1,0 +1,55 @@
+import Data.ByteString (ByteString)
+import Data.ByteString.Char8 qualified as C
+import Data.Either
+import Data.Eq
+import Data.Int
+import Moggi.Internal.Integer
+import Data.JSON
+import Data.String
+import Data.String qualified as S
+import Moggi.Generics
+import System.IO
+
+-- ---- Exec-JSON-Bigint-Interleave ----
+
+runDecode :: FromJSON a => (Either String a -> String) -> ByteString -> IO ()
+runDecode showFn bs = do
+  mr <- eitherDecode bs
+  putStrLn (showFn mr)
+
+-- Keep a decoded oversized Integer Value, run an unrelated decode, then
+-- re-encode: native json_encode must not drop exact digits.
+bsToStr b = S.pack (C.unpack b)
+
+runJSONBigintInterleave :: IO ()
+runJSONBigintInterleave = do
+  runDecode showEncode (C.pack "9223372036854775808")
+  runDecode showDecode (C.pack "1")
+  runDecode showEncode (C.pack "9223372036854775808")
+
+showEncode :: Either String Integer -> String
+showEncode e = case e of
+  Right n -> bsToStr (encode n)
+  _ -> "bad-encode"
+
+showDecode :: Either String Int -> String
+showDecode e = case e of
+  Right 1 -> "ok-decode"
+  _ -> "bad-decode"
+
+-- ---- Exec-JSON-Generic-Encode-Shape ----
+-- Structural encode shape for a concrete Generic Person.
+-- Optimized toEncoding must be Hand-shaped (no Rep / fieldKeys residual).
+
+data Person = Person { name :: String, age :: Int }
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+runJSONGenericEncodeShape :: IO ()
+runJSONGenericEncodeShape = C.putStrLn (encode (Person "ada" 36))
+
+-- ---- combined entry point ----
+main :: IO ()
+main = do
+  runJSONBigintInterleave
+  runJSONGenericEncodeShape

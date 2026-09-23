@@ -1,0 +1,14 @@
+program
+  function greet :: String -> String
+    pat_var _p0
+    case
+      variable _p0
+      alt
+        pat_lit "Alice"
+        string "Hello Alice!"
+      alt
+        pat_lit "Bob"
+        string "Hi Bob!"
+      alt
+        pat_wild _
+        string "Hello stranger!"

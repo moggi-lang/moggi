@@ -1,0 +1,4 @@
+moggi: ErrorCall: Data.Bits.bitSize(Integer)
+  at Moggi.Err.error (lib/Moggi/Err.mog:7:13)
+  at Data.Bits.__ev_Bits_Integer_bitSize (lib/Data/Bits.mog:300:15)
+  at Main.main (tests/backend/runtime/Exec-Bits-BitSize.mog:13:8)

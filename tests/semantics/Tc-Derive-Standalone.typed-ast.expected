@@ -1,0 +1,121 @@
+program
+  data Foo a
+    constructor Foo
+      field  :: a
+  function == :: __Dict_Eq -> Foo t0 -> Foo t0 -> Bool
+    pat_var __ev_Eq
+    pat_var __l
+    pat_var __r
+    case
+      variable __l
+      alt
+        pat_con Foo
+          pat_var __a0
+        case
+          variable __r
+          alt
+            pat_con Foo
+              pat_var __b0
+            apply
+              apply
+                evidence_method Eq.== evidence=__ev_Eq nullary=0
+                variable __a0
+              variable __b0
+          alt
+            pat_wild _
+            constructor_ref False
+  function /= :: __Dict_Eq -> Foo t0 -> Foo t0 -> Bool
+    pat_var __ev_Eq
+    pat_var __l
+    pat_var __r
+    case
+      case
+        variable __l
+        alt
+          pat_con Foo
+            pat_var __a0
+          case
+            variable __r
+            alt
+              pat_con Foo
+                pat_var __b0
+              apply
+                apply
+                  evidence_method Eq.== evidence=__ev_Eq nullary=0
+                  variable __a0
+                variable __b0
+            alt
+              pat_wild _
+              constructor_ref False
+      alt
+        pat_con True
+        constructor_ref False
+      alt
+        pat_con False
+        constructor_ref True
+  function showsPrec :: __Dict_Show -> Int -> Foo t21 -> String -> String
+    pat_var __ev_Show
+    pat_var __d
+    pat_var __x
+    pat_var __s
+    case
+      variable __x
+      alt
+        pat_con Foo
+          pat_var __f0
+        apply
+          apply
+            apply
+              variable showParen
+              apply
+                apply
+                  evidence_method Ord.> evidence= nullary=0
+                    instance Int
+                  variable __d
+                integer 10
+            lambda
+              pat_var __r
+              intrinsic stringAppend#
+                string "Foo "
+                apply
+                  apply
+                    apply
+                      evidence_method Show.showsPrec evidence=__ev_Show nullary=0
+                      integer 11
+                    variable __f0
+                  variable __r
+          variable __s
+  function show :: __Dict_Show -> Foo t21 -> String
+    pat_var __ev_Show
+    pat_var x
+    apply
+      apply
+        apply
+          variable shows
+          evidence_ref Show Foo a
+        variable x
+      string ""
+  function showList :: __Dict_Show -> [Foo t21] -> String -> String
+    pat_var __ev_Show
+    pat_var ls
+    pat_var s
+    apply
+      apply
+        apply
+          variable showListWith
+          apply
+            variable shows
+            evidence_ref Show Foo a
+        variable ls
+      variable s
+  function main :: String
+    apply
+      evidence_method Show.show evidence= nullary=0
+        instance Bool
+      infix ==
+        apply
+          constructor_ref Foo
+          integer 42
+        apply
+          constructor_ref Foo
+          integer 42

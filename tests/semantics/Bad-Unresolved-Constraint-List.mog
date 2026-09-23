@@ -1,0 +1,11 @@
+import Text.Show
+
+-- Same as the tuple case, for list literals.
+
+class Tag a where
+  tag :: a -> String
+
+data Box = Box Int
+
+bad :: [String]
+bad = [tag (Box 1)]

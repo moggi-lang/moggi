@@ -1,0 +1,260 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+{-# BACKEND
+  php = Data.ByteString.PHP
+  jvm = Data.ByteString.JVM
+  dotnet = Data.ByteString.DotNet
+#-}
+module Data.ByteString
+  ( ByteString
+  , empty
+  , singleton
+  , pack
+  , unpack
+  , null
+  , length
+  , cons
+  , snoc
+  , append
+  , head
+  , tail
+  , last
+  , init
+  , uncons
+  , unsnoc
+  , take
+  , drop
+  , splitAt
+  , reverse
+  , map
+  , concat
+  , any
+  , all
+  , elem
+  , notElem
+  , filter
+  , find
+  , index
+  , isPrefixOf
+  , isSuffixOf
+  , replicate
+  ) where
+
+import Data.Bool
+import Data.Eq
+import Data.List hiding (
+  map, reverse, concat, any, all, elem, notElem, filter, find,
+  take, drop, splitAt, replicate, head, tail, last, init, null, length,
+  singleton, isPrefixOf, isSuffixOf
+  )
+import Data.Maybe
+import Data.Monoid
+import Data.Ord
+import Data.Semigroup
+import Text.Show
+import Data.Word
+import Moggi.Err
+import Moggi.Internal.Prim
+
+type ByteString = Bytes#
+
+-- Backend byte length / slice (not Unicode scalars).
+bsLength :: ByteString -> Int
+bsTake :: Int -> ByteString -> ByteString
+bsDrop :: Int -> ByteString -> ByteString
+bsIndex :: ByteString -> Int -> Int
+bsPackInts :: [Int] -> ByteString
+bsUnpackInts :: ByteString -> [Int]
+
+empty :: ByteString
+empty = bsPackInts []
+
+singleton :: Word8 -> ByteString
+singleton w = pack [w]
+
+pack :: [Word8] -> ByteString
+pack ws = bsPackInts (listMap fromWord8 ws)
+
+unpack :: ByteString -> [Word8]
+unpack b = listMap toWord8 (bsUnpackInts b)
+
+listMap f xs = case xs of
+  [] -> []
+  x : rest -> f x : listMap f rest
+
+fromWord8 w = word8ToInt# w
+
+toWord8 n = word8FromInt# n
+
+null :: ByteString -> Bool
+null b = intEq# (length b) 0
+
+length :: ByteString -> Int
+length b = bsLength b
+
+cons :: Word8 -> ByteString -> ByteString
+cons w b = pack (w : unpack b)
+
+snoc :: ByteString -> Word8 -> ByteString
+snoc b w = pack (snocList (unpack b) w)
+
+snocList :: [Word8] -> Word8 -> [Word8]
+snocList [] w = [w]
+snocList (x : xs) w = x : snocList xs w
+
+append :: ByteString -> ByteString -> ByteString
+append a b = bytesAppend# a b
+
+head :: ByteString -> Word8
+head b = case uncons b of
+  Just (w, ignored) -> w
+  Nothing -> error "Data.ByteString.head: empty"
+
+tail :: ByteString -> ByteString
+tail b = case uncons b of
+  Just (ignored, rest) -> rest
+  Nothing -> error "Data.ByteString.tail: empty"
+
+last :: ByteString -> Word8
+last b = case unsnoc b of
+  Just (ignored, w) -> w
+  Nothing -> error "Data.ByteString.last: empty"
+
+init :: ByteString -> ByteString
+init b = case unsnoc b of
+  Just (rest, ignored) -> rest
+  Nothing -> error "Data.ByteString.init: empty"
+
+uncons :: ByteString -> Maybe (Word8, ByteString)
+uncons b = case unpack b of
+  [] -> Nothing
+  w : rest -> Just (w, pack rest)
+
+unsnoc :: ByteString -> Maybe (ByteString, Word8)
+unsnoc b = case unpack b of
+  [] -> Nothing
+  xs -> unsnocGo xs
+
+unsnocGo [] = Nothing
+unsnocGo (x : xs) = case xs of
+  [] -> Just (empty, x)
+  _ -> case unsnocGo xs of
+    Just (rest, w) -> Just (cons x rest, w)
+    Nothing -> Nothing
+
+take :: Int -> ByteString -> ByteString
+take n b = bsTake n b
+
+drop :: Int -> ByteString -> ByteString
+drop n b = bsDrop n b
+
+splitAt :: Int -> ByteString -> (ByteString, ByteString)
+splitAt n b = (take n b, drop n b)
+
+reverse :: ByteString -> ByteString
+reverse b = pack (reverseList (unpack b))
+
+reverseList [] = []
+reverseList (x : xs) = snocList (reverseList xs) x
+
+map :: (Word8 -> Word8) -> ByteString -> ByteString
+map f b = pack (listMap f (unpack b))
+
+concat :: [ByteString] -> ByteString
+concat xs = case xs of
+  [] -> empty
+  x : rest -> append x (concat rest)
+
+any :: (Word8 -> Bool) -> ByteString -> Bool
+any p b = anyList p (unpack b)
+
+anyList _ [] = False
+anyList p (x : xs) = case p x of
+  True -> True
+  False -> anyList p xs
+
+all :: (Word8 -> Bool) -> ByteString -> Bool
+all p b = allList p (unpack b)
+
+allList _ [] = True
+allList p (x : xs) = case p x of
+  False -> False
+  True -> allList p xs
+
+elem :: Word8 -> ByteString -> Bool
+elem w b = any (\x -> word8Eq# x w) b
+
+notElem :: Word8 -> ByteString -> Bool
+notElem w b = case elem w b of
+  True -> False
+  False -> True
+
+filter :: (Word8 -> Bool) -> ByteString -> ByteString
+filter p b = pack (filterList p (unpack b))
+
+filterList _ [] = []
+filterList p (x : xs) = case p x of
+  True -> x : filterList p xs
+  False -> filterList p xs
+
+find :: (Word8 -> Bool) -> ByteString -> Maybe Word8
+find p b = findList p (unpack b)
+
+findList _ [] = Nothing
+findList p (x : xs) = case p x of
+  True -> Just x
+  False -> findList p xs
+
+index :: ByteString -> Int -> Word8
+index b n = toWord8 (bsIndex b n)
+
+isPrefixOf :: ByteString -> ByteString -> Bool
+isPrefixOf pre b = isPrefixList (unpack pre) (unpack b)
+
+isPrefixList :: [Word8] -> [Word8] -> Bool
+isPrefixList [] _ = True
+isPrefixList _ [] = False
+isPrefixList (x : xs) (y : ys) = case word8Eq# x y of
+  True -> isPrefixList xs ys
+  False -> False
+
+isSuffixOf :: ByteString -> ByteString -> Bool
+isSuffixOf suf b = isPrefixOf (reverse suf) (reverse b)
+
+replicate :: Int -> Word8 -> ByteString
+replicate n w = pack (replicateList n w)
+
+replicateList n w = case orderingIsGt# (intCompare# n 0) of
+  True -> w : replicateList (intSub# n 1) w
+  False -> []
+
+showWord8ListRest :: [Word8] -> String
+showWord8ListRest xs = case xs of
+  [] -> "]"
+  x : rest ->
+    (stringAppend# ","
+      (stringAppend# (show x) (showWord8ListRest rest)))
+
+showWord8List :: [Word8] -> String
+showWord8List xs = case xs of
+  [] -> "[]"
+  x : rest ->
+    (stringAppend# "["
+      (stringAppend# (show x) (showWord8ListRest rest)))
+
+-- Eq/Ord/Show/Semigroup/Monoid stay: class modules importing ByteString cycle
+-- (ByteString → backend String → Monoid/Semigroup, and Show/Eq/Ord via List/Int).
+instance Eq ByteString where
+  (==) a b = bytesEq# a b
+  (/=) a b = bytesNe# a b
+
+instance Ord ByteString where
+  compare a b = bytesCompare# a b
+
+instance Semigroup ByteString where
+  (<>) a b = bytesAppend# a b
+
+instance Monoid ByteString where
+  mempty = empty
+
+instance Show ByteString where
+  show b = showWord8List (unpack b)

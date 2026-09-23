@@ -1,0 +1,7 @@
+data Color = Red | Blue | Yellow
+
+data OnlyColor (c :: Color) = OnlyColor
+
+-- Distinct promoted types must not unify.
+coerceBlue :: OnlyColor 'Red -> OnlyColor 'Blue
+coerceBlue x = x

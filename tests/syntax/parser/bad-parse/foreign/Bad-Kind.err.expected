@@ -1,0 +1,4 @@
+tests/syntax/parser/bad-parse/foreign/Bad-Kind.mog:3:13: parse error: I do not recognize the foreign declaration kind `variable`; expected `type`, `function`, or `const`
+
+  3 | foreign php variable bad "strlen" :: String -> Int
+    |             ^^^^^^^^

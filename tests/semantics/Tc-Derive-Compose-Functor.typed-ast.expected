@@ -1,0 +1,36 @@
+program
+  data Compose f a
+    constructor Compose
+      field  :: f a
+    deriving (Functor)
+  function map :: __Dict_Functor -> t111 -> t112 -> Compose t107 t111 -> Compose t107 t112
+    pat_var __ev_Functor
+    pat_var __f
+    pat_var __x
+    case
+      variable __x
+      alt
+        pat_con Compose
+          pat_var __v0
+        apply
+          constructor_ref Compose
+          apply
+            apply
+              evidence_method Functor.map evidence=__ev_Functor nullary=0
+              variable __f
+            variable __v0
+  function mapped :: Compose Maybe Int
+    apply
+      apply
+        evidence_method Functor.map evidence= nullary=0
+          instance Compose f
+        lambda
+          pat_var x
+          infix +
+            variable x
+            integer 1
+      apply
+        constructor_ref Compose
+        apply
+          constructor_ref Just
+          integer 1

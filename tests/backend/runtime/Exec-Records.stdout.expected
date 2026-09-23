@@ -1,0 +1,20 @@
+Person {name = "Alice", age = 30, address = Address {city = "Berlin", zip = "10115"}}
+Company {name = "Moggi", city = "Berlin"}
+Alice
+Moggi
+Berlin
+Berlin
+30
+hello Alice
+10115
+30
+Berlin
+Person {name = "Alice", age = 30, address = Address {city = "Munich", zip = "10115"}}
+Age {unAge = 7}
+7
+Person {name = "Bob", age = 30, address = Address {city = "Berlin", zip = "10115"}}
+Person {name = "Alice", age = 31, address = Address {city = "Berlin", zip = "10115"}}
+Person {name = "Baby", age = 0, address = Address {city = "Berlin", zip = "10115"}}
+8
+"Alice"
+"Hamburg"

@@ -1,0 +1,7 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Clash.A
+  ( foo
+  ) where
+
+foo :: Int
+foo = 1

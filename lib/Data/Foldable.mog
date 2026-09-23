@@ -1,0 +1,202 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.Foldable
+  ( Foldable(..)
+  , notElem
+  , find
+  , any
+  , all
+  , and
+  , or
+  , maximumBy
+  , minimumBy
+  , concat
+  , concatMap
+  , traverse_
+  , for_
+  , sequenceA_
+  , mapM_
+  , forM_
+  , sequence_
+  , asum
+  , foldrM
+  , foldlM
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Bool
+import Data.Eq
+import Moggi.Err
+import Data.Functor
+import Data.Maybe
+import Data.Monoid
+import Moggi.Internal.Num
+import Data.Ord
+import Data.Semigroup
+import Moggi.Internal.Prim
+
+class Foldable t where
+  {-# MINIMAL foldMap | foldr #-}
+
+  -- | Combine the elements of a structure using a monoid.
+  fold :: Monoid m => t m -> m
+  fold t = foldMap (\x -> x) t
+
+  -- | Map each element of the structure into a monoid, and combine the results
+  -- with '(<>)'.
+  foldMap :: Monoid m => (a -> m) -> t a -> m
+  foldMap f t = foldr (\x acc -> f x <> acc) mempty t
+
+  -- | Right-associative fold of a structure.
+  foldr :: (a -> b -> b) -> b -> t a -> b
+  foldr f z t = appEndo (foldMap (\x -> Endo (f x)) t) z
+
+  -- | Left-associative fold of a structure.
+  foldl :: (b -> a -> b) -> b -> t a -> b
+  foldl f z t = appEndo (getDual (foldMap (\x -> Dual (Endo (\acc -> f acc x))) t)) z
+
+  -- | The elements of a structure as a list.
+  toList :: t a -> [a]
+  toList t = foldr (\x xs -> x : xs) [] t
+
+  -- | Whether the structure is empty.
+  null :: t a -> Bool
+  null t = foldr (\ignoredX ignoredAcc -> False) True t
+
+  -- | Size of the structure, counted from the left.
+  length :: t a -> Int
+  length t = foldl (\n ignored -> n + 1) 0 t
+
+  -- | Does the element occur in the structure?
+  elem :: Eq a => a -> t a -> Bool
+  elem x t = any (\y -> x == y) t
+
+  -- | The largest element of a non-empty structure.
+  maximum :: Ord a => t a -> a
+  maximum t = case toList t of
+    [] -> error "Foldable.maximum: empty structure"
+    x : xs -> let
+        go acc ys = case ys of
+          [] -> acc
+          y : rest -> go (max acc y) rest
+      in go x xs
+
+  -- | The least element of a non-empty structure.
+  minimum :: Ord a => t a -> a
+  minimum t = case toList t of
+    [] -> error "Foldable.minimum: empty structure"
+    x : xs -> let
+        go acc ys = case ys of
+          [] -> acc
+          y : rest -> go (min acc y) rest
+      in go x xs
+
+  -- | The sum of the numbers of a structure.
+  sum :: Num a => t a -> a
+  sum t = foldl (\a b -> a + b) 0 t
+
+  -- | The product of the numbers of a structure.
+  product :: Num a => t a -> a
+  product t = foldl (\a b -> a * b) 1 t
+
+  -- | A variant of 'foldr' with no base case; only for non-empty structures.
+  foldr1 :: (a -> a -> a) -> t a -> a
+  foldr1 f t = let
+      go ys = case ys of
+        [] -> error "Foldable.foldr1: empty structure"
+        [x] -> x
+        x : zs -> f x (go zs)
+    in go (toList t)
+
+  -- | A variant of 'foldl' with no base case; only for non-empty structures.
+  foldl1 :: (a -> a -> a) -> t a -> a
+  foldl1 f t = case toList t of
+    [] -> error "Foldable.foldl1: empty structure"
+    x : xs -> let
+        go acc ys = case ys of
+          [] -> acc
+          y : rest -> go (f acc y) rest
+      in go x xs
+
+notElem :: (Foldable t, Eq a) => a -> t a -> Bool
+notElem x t = not (elem x t)
+
+-- | The 'find' function takes a predicate and a structure and returns
+-- the leftmost element of the structure matching the predicate, or
+-- 'Nothing' if there is no such element.
+find :: Foldable t => (a -> Bool) -> t a -> Maybe a
+find p t = foldr (\x acc -> case p x of
+  True -> Just x
+  False -> acc) Nothing t
+
+any :: Foldable t => (a -> Bool) -> t a -> Bool
+any p t = foldr (\x acc -> p x || acc) False t
+
+all :: Foldable t => (a -> Bool) -> t a -> Bool
+all p t = foldr (\x acc -> p x && acc) True t
+
+and :: Foldable t => t Bool -> Bool
+and t = foldr (\x acc -> x && acc) True t
+
+or :: Foldable t => t Bool -> Bool
+or t = foldr (\x acc -> x || acc) False t
+
+maximumBy :: Foldable t => (a -> a -> Ordering) -> t a -> a
+maximumBy cmp t = case toList t of
+  [] -> error "Foldable.maximumBy: empty structure"
+  x : xs -> let
+      go acc ys = case ys of
+        [] -> acc
+        y : rest -> go (case cmp acc y of
+          GT -> acc
+          _ -> y) rest
+    in go x xs
+
+minimumBy :: Foldable t => (a -> a -> Ordering) -> t a -> a
+minimumBy cmp t = case toList t of
+  [] -> error "Foldable.minimumBy: empty structure"
+  x : xs -> let
+      go acc ys = case ys of
+        [] -> acc
+        y : rest -> go (case cmp acc y of
+          GT -> y
+          _ -> acc) rest
+    in go x xs
+
+concat :: Foldable t => t [a] -> [a]
+concat t = foldr (\x ys -> listAppend# x ys) [] t
+
+concatMap :: Foldable t => (a -> [b]) -> t a -> [b]
+concatMap f t = foldr (\x ys -> listAppend# (f x) ys) [] t
+
+traverse_ :: (Foldable t, Applicative f) => (a -> f b) -> t a -> f ()
+traverse_ f t = foldl (\acc x -> (\ignored b -> b) <$> acc <*> f x) (pure ()) t
+
+for_ :: (Foldable t, Applicative f) => t a -> (a -> f b) -> f ()
+for_ xs f = traverse_ f xs
+
+sequenceA_ :: (Foldable t, Applicative f) => t (f a) -> f ()
+sequenceA_ xs = traverse_ (\x -> x) xs
+
+mapM_ :: (Foldable t, Applicative f) => (a -> f b) -> t a -> f ()
+mapM_ f t = traverse_ f t
+
+forM_ :: (Foldable t, Applicative f) => t a -> (a -> f b) -> f ()
+forM_ xs f = mapM_ f xs
+
+sequence_ :: (Foldable t, Applicative f) => t (f a) -> f ()
+sequence_ xs = sequenceA_ xs
+
+asum :: (Foldable t, Alternative f) => t (f a) -> f a
+asum t = foldr (\x acc -> x <|> acc) empty t
+
+foldrM :: (Foldable t, Monad m) => (a -> b -> m b) -> b -> t a -> m b
+foldrM f z t = (foldr (\x k -> (\z0 -> f x z0 >>= k)) pure t) z
+
+foldlM :: (Foldable t, Monad m) => (b -> a -> m b) -> b -> t a -> m b
+foldlM f z t = (foldl (\k x -> (\z0 -> k z0 >>= (\z1 -> f z1 x))) pure t) z
+
+instance Foldable Maybe where
+  foldr f z mx = case mx of
+    Nothing -> z
+    Just x -> f x z

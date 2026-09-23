@@ -1,0 +1,7 @@
+module Ir.DataDecl where
+
+-- A data declaration lowers to one constructor function per alternative.
+data Option a = None | Some a
+
+none = None
+some x = Some x

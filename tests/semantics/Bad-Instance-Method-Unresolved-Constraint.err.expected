@@ -1,0 +1,4 @@
+tests/semantics/Bad-Instance-Method-Unresolved-Constraint.mog:9:10: type error: unresolved type class constraint: `Eq Box`
+
+   9 | instance Check Box where
+     |          ^^^^^

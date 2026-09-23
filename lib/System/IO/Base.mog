@@ -1,0 +1,34 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | The `IO` type and its instances, and the `FilePath` spelling of `String`.
+--
+-- Users import {@link System.IO}; this module exists so dependents that must not
+-- pull in file/console APIs (e.g. Control.Exception.Base, or every module that
+-- only mentions a path) still get the IO monad and `FilePath` without the
+-- filesystem modules.
+module System.IO.Base
+  ( IO
+  , FilePath
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Functor
+import Data.String (String)
+import Moggi.Internal.IO
+
+type IO = IO#
+
+-- | File and directory names are values of type `String`, whose precise
+-- meaning is operating system dependent. Files can be opened, yielding a
+-- handle which can then be used to operate on the contents of that file.
+type FilePath = String
+
+instance Functor IO where
+  map f m = ioBind# m (\x -> ioPure# (f x))
+
+instance Applicative IO where
+  pure x = ioPure# x
+  (<*>) mf mx = ioBind# mf (\f -> ioBind# mx (\x -> ioPure# (f x)))
+
+instance Monad IO where
+  (>>=) m k = ioBind# m k

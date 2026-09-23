@@ -1,0 +1,11 @@
+-- A line comment runs to end of line.
+-- A run of dashes is still a comment (`-----`), but `-->` is the arrow operator.
+
+{- Block comments nest:
+   {- inner -}
+   still inside -}
+before = 1 --> 2
+after = 3
+
+----- five dashes are a comment, not an operator
+end = 4

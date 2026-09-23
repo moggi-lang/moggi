@@ -1,0 +1,7 @@
+data Color = Red | Blue
+data OnlyColor (c :: Color) = OnlyColor
+data PairColor (a :: Color) (b :: Color) = PairColor
+
+-- Nested app of wrong kind: OnlyColor 'Red :: Type, but PairColor expects Color
+bad :: PairColor (OnlyColor 'Red) 'Blue -> Int
+bad _ = 0

@@ -1,0 +1,11 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Moggi.Internal.Read
+  ( Read(read)
+  ) where
+
+-- Minimal Read matching Moggi's thin Show (single method). Stock deriving
+-- supports nullary enumerations; generalized newtype deriving reuses the
+-- underlying Read instance.
+
+class Read a where
+  read :: String -> a

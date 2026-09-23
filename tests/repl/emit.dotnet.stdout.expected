@@ -1,0 +1,40 @@
+.class public abstract auto ansi sealed beforefieldinit Moggi.Interactive
+       extends [System.Runtime]System.Object
+{
+.method public hidebysig static object '__repl_inspect'() cil managed
+{
+  .maxstack 64
+  .line 5, 5 : 19, 19 'Interactive.mog'
+  call object Moggi.Interactive::'foo'()
+  ret
+  ldnull
+  ret
+}
+
+}
+.class public abstract auto ansi sealed beforefieldinit Moggi.Interactive
+       extends [System.Runtime]System.Object
+{
+.method public hidebysig static object 'Per'(object, object, object) cil managed
+{
+  .maxstack 64
+  ldstr "Per"
+  ldc.i4.3
+  newarr object
+  dup
+  ldc.i4.0
+  ldarg.0
+  stelem.ref
+  dup
+  ldc.i4.1
+  ldarg.1
+  stelem.ref
+  dup
+  ldc.i4.2
+  ldarg.2
+  stelem.ref
+  call class Moggi.Rt.Con Moggi.Rt.RT::Con(string, object[])
+  ret
+}
+
+}

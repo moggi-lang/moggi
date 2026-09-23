@@ -1,0 +1,3 @@
+import Moggi.Generics
+
+data Foo = Foo deriving (Generic, Generic)

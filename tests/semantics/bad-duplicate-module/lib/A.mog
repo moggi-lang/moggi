@@ -1,0 +1,3 @@
+module Dup.A
+
+foo x = x

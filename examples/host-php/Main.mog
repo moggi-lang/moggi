@@ -1,0 +1,28 @@
+-- Calling PHP from Moggi: a global function, a class, a constant, and a
+-- deliberately open `mixed` result reified through Platform.PHP.
+--
+-- Build:  moggi compile examples/host-php -o /tmp/host-php.phar
+-- Run:    php /tmp/host-php.phar
+
+module Main
+
+import Platform.PHP
+
+foreign php type DateTime "DateTime"
+
+foreign php function strLength "strlen" :: String -> Int
+foreign php function makeDate "DateTime::createFromFormat" :: String -> String -> DateTime
+foreign php function formatDate "DateTime.format" :: DateTime -> String -> String
+foreign php const atomFormat "DateTime::ATOM" :: String
+foreign php function jsonDecode "json_decode" :: String -> PHPValue
+
+main :: IO ()
+main = do
+  putStrLn ("length: " <> show (strLength "hello"))
+  putStrLn ("parsed: " <> formatDate (makeDate "Y-m-d" "2026-09-21") "d/m/Y")
+  putStrLn ("atom format: " <> atomFormat)
+  case jsonDecode "{\"ok\": true}" of
+    PhpObject entries -> case lookupStringPHPValue "ok" entries of
+      Just (PhpBool ok) -> putStrLn ("ok: " <> show ok)
+      _ -> putStrLn "ok: absent"
+    _ -> putStrLn "not an object"

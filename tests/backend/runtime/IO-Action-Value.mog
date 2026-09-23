@@ -1,0 +1,26 @@
+-- `pure <action>` builds an action *value*: the action runs where the value is
+-- run, never where it is written. Running it early breaks the order of effects
+-- around it, so this pins the order on every backend.
+import Text.Show
+import System.IO
+
+boxed :: IO (IO ())
+boxed = pure (putStrLn "x")
+
+holding :: IO () -> IO (IO ())
+holding act = pure act
+
+lvl2 :: IO (IO Int)
+lvl2 = pure (pure 42)
+
+main :: IO ()
+main = do
+  a <- boxed
+  a
+  a
+  b <- holding (putStrLn "v")
+  putStrLn "before"
+  b
+  c <- lvl2
+  n <- c
+  putStrLn (show n)

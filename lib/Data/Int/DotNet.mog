@@ -1,0 +1,25 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.Int.DotNet
+  ( showInt
+  , intQuot
+  , intMinBound
+  , intMaxBound
+  ) where
+
+import Moggi.Internal.Prim
+
+foreign dotnet function rawShowInt "System.Convert:ToString" :: Int -> String
+
+-- `Int` is the signed 64-bit machine integer, `System.Int64`'s range.
+-- minBound is built from maxBound - 1 so the literal never has to be the
+-- un-representable `-9223372036854775808`.
+intMinBound :: Int
+intMinBound = intSub# (intNegate# 9223372036854775807) 1
+
+intMaxBound :: Int
+intMaxBound = 9223372036854775807
+
+showInt n = rawShowInt n
+
+-- Toward-zero quot; floor `div` is derived in Data.Int.
+intQuot a b = intDiv# a b

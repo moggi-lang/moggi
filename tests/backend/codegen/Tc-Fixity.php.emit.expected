@@ -1,0 +1,21 @@
+<?php declare(strict_types=1);
+
+namespace Tc\Fixity;
+
+const __MOGGI_MAP = [[], ['Tc\\Fixity\\eqAdd' => ['Tc.Fixity.eqAdd', 'tests/backend/codegen/Tc-Fixity.mog', 9, 9], 'Tc\\Fixity\\addEq' => ['Tc.Fixity.addEq', 'tests/backend/codegen/Tc-Fixity.mog', 12, 9], 'Tc\\Fixity\\cons' => ['Tc.Fixity.cons', 'tests/backend/codegen/Tc-Fixity.mog', 15, 8], 'Tc\\Fixity\\append' => ['Tc.Fixity.append', 'tests/backend/codegen/Tc-Fixity.mog', 18, 10]]];
+
+function eqAdd() {
+    return (1 === 5);
+}
+
+function addEq() {
+    return (3 === 3);
+}
+
+function cons() {
+    return [1, 2, 3];
+}
+
+function append() {
+    return [1, 2, 3, 4];
+}

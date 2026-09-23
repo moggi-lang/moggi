@@ -1,0 +1,3 @@
+module
+  function appendKnown()
+      ret [1, 2]

@@ -1,0 +1,242 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+{-# BACKEND
+  php = Moggi.Internal.Integer.PHP
+  jvm = Moggi.Internal.Integer.JVM
+  dotnet = Moggi.Internal.Integer.DotNet
+#-}
+module Moggi.Internal.Integer
+  ( Integer(..)
+  -- The operations the class instances are built from, so that other modules
+  -- defining an instance for a type over `Integer` can use them too: inside an
+  -- instance body a class method name resolves to that instance, not to
+  -- `Integer`'s.
+  , integerAdd
+  , integerSub
+  , integerMul
+  , integerSignum
+  , integerQuot
+  , integerRem
+  , integerCompare
+  , integerEq
+  , integerFromInt
+  , integerToInt
+  , integerShow
+  -- The bit operations on the two's-complement view, for the same reason: a
+  -- module defining a `Bits` instance for a type over `Integer` builds it from
+  -- these (a class method name inside an instance body resolves to that
+  -- instance, not to `Integer`'s).
+  , integerAndBits
+  , integerOrBits
+  , integerXorBits
+  , integerComplementBits
+  , integerShiftLBits
+  , integerShiftRBits
+  , integerBitBits
+  , integerTestBitBits
+  , integerPopCountBits
+  , integerPopCountNonNeg
+  , integerBitZeroI
+  ) where
+
+import Data.Bool
+import Data.Enum
+import Data.Eq
+import Data.Ord
+import Data.Tuple
+import Moggi.Internal.Num
+import Moggi.Internal.Real
+import Moggi.Internal.Show
+import Moggi.Exception
+import Moggi.Internal.Prim
+
+-- Arbitrary-precision integer.
+type Integer = Integer#
+
+integerAdd :: Integer -> Integer -> Integer
+integerSub :: Integer -> Integer -> Integer
+integerMul :: Integer -> Integer -> Integer
+integerNegate :: Integer -> Integer
+integerAbs :: Integer -> Integer
+integerSignum :: Integer -> Integer
+integerQuot :: Integer -> Integer -> Integer
+integerRem :: Integer -> Integer -> Integer
+integerCompare :: Integer -> Integer -> Ordering
+integerEq :: Integer -> Integer -> Bool
+integerShow :: Integer -> String
+integerFromInt :: Int -> Integer
+integerToInt :: Integer -> Int
+
+instance Eq Integer where
+  (==) a b = integerEq a b
+  (/=) a b = case integerEq a b of
+    True -> False
+    False -> True
+
+instance Ord Integer where
+  compare a b = integerCompare a b
+
+instance Num Integer where
+  (+) = integerAdd
+  (-) = integerSub
+  (*) = integerMul
+  negate = integerNegate
+  abs = integerAbs
+  signum = integerSignum
+  fromInteger n = n
+
+instance Enum Integer where
+  succ n = integerAdd n (integerFromInt 1)
+  pred n = integerSub n (integerFromInt 1)
+  toEnum n = integerFromInt n
+  fromEnum n = integerToInt n
+
+instance Integral Integer where
+  quot a b = case integerEq b (integerFromInt 0) of
+    True -> throw DivideByZero
+    False -> integerQuot a b
+  rem = integerRem
+  quotRem a b = (quot a b, rem a b)
+  divMod a b =
+    let qr = quotRem a b
+        q = fst qr
+        r = snd qr
+    in case integerNeedFloorAdjust r b of
+      True -> (pred q, integerAdd r b)
+      False -> (q, r)
+  div a b = fst (divMod a b)
+  mod a b = snd (divMod a b)
+  toInteger n = n
+
+integerNeedFloorAdjust :: Integer -> Integer -> Bool
+integerNeedFloorAdjust r b = case integerEq r (integerFromInt 0) of
+  True -> False
+  False -> case integerCompare (integerSignum r) (integerNegate (integerSignum b)) of
+    EQ -> True
+    _ -> False
+
+instance Show Integer where
+  show n = integerShow n
+
+-- ---------------------------------------------------------------------------
+-- Bit operations: fake two's complement over a sign-magnitude representation
+-- ---------------------------------------------------------------------------
+
+integerBitsNegativeShiftError :: a
+integerBitsNegativeShiftError = error "Data.Bits: negative shift amount"
+
+integerBitZeroI :: Integer
+integerBitZeroI = integerFromInt 0
+
+integerBitOneI :: Integer
+integerBitOneI = integerFromInt 1
+
+integerBitMinusOneI :: Integer
+integerBitMinusOneI = integerFromInt (intNegate# 1)
+
+-- The limb size is chosen so that a limb and the limb base both fit in the
+-- host Int; 2^62 is the largest power of two that does.
+integerBitLimbWidth :: Int
+integerBitLimbWidth = 62
+
+integerBitLimbBase :: Integer
+integerBitLimbBase = integerFromInt (intShiftL# 1 62)
+
+-- True once a value has become its own sign extension: only -1 and 0 have all
+-- their remaining digits equal to their sign.
+integerBitSettled :: Integer -> Bool
+integerBitSettled x = case x == integerBitZeroI of
+  True -> True
+  False -> x == integerBitMinusOneI
+
+-- Two's-complement AND, one limb at a time. Both operands are decomposed as
+-- @x = q * 2^62 + r@ with @r@ in [0, 2^62) (floor division, so this is the
+-- digit of the two's-complement representation); the recursion ends once both
+-- quotients are -1 or 0, and the digits beyond that are the AND of the signs.
+integerAndBits :: Integer -> Integer -> Integer
+integerAndBits x y = integerAndGo x y integerBitZeroI integerBitOneI
+
+integerAndGo :: Integer -> Integer -> Integer -> Integer -> Integer
+integerAndGo x y acc place = case integerBitSettled x of
+  True -> case integerBitSettled y of
+    True -> acc + place * integerAndTail x y
+    False -> integerAndStep x y acc place
+  False -> integerAndStep x y acc place
+
+integerAndTail :: Integer -> Integer -> Integer
+integerAndTail x y = case x == integerBitMinusOneI of
+  True -> case y == integerBitMinusOneI of
+    True -> integerBitMinusOneI
+    False -> integerBitZeroI
+  False -> integerBitZeroI
+
+integerAndStep :: Integer -> Integer -> Integer -> Integer -> Integer
+integerAndStep x y acc place =
+  integerAndGo
+    (div x integerBitLimbBase)
+    (div y integerBitLimbBase)
+    (acc + place * integerFromInt (intAnd# (integerToInt (mod x integerBitLimbBase)) (integerToInt (mod y integerBitLimbBase))))
+    (place * integerBitLimbBase)
+
+-- De Morgan: @x .|. y == complement (complement x .&. complement y)@.
+integerOrBits :: Integer -> Integer -> Integer
+integerOrBits x y = integerComplementBits (integerAndBits (integerComplementBits x) (integerComplementBits y))
+
+-- @x `xor` y == (x .|. y) .&. complement (x .&. y)@.
+integerXorBits :: Integer -> Integer -> Integer
+integerXorBits x y = integerAndBits (integerOrBits x y) (integerComplementBits (integerAndBits x y))
+
+-- @complement x == -x - 1@.
+integerComplementBits :: Integer -> Integer
+integerComplementBits x = negate x - integerBitOneI
+
+integerBitPow2 :: Int -> Integer
+integerBitPow2 i = case intCompare# i 0 of
+  GT -> case intEq# (intAnd# i 1) 0 of
+    True -> integerBitSquare (integerBitPow2 (intShiftRA# i 1))
+    False -> integerFromInt 2 * integerBitPow2 (intSub# i 1)
+  _ -> integerBitOneI
+
+integerBitSquare :: Integer -> Integer
+integerBitSquare x = x * x
+
+integerShiftLBits :: Integer -> Int -> Integer
+integerShiftLBits x i = x * integerBitPow2 i
+
+-- An arithmetic right shift is floor division by the shift amount, which is
+-- exactly two's complement for negative values. Whole limbs are dropped at a
+-- time so that a large count on a small value stays cheap (0 or -1 settle).
+integerShiftRBits :: Integer -> Int -> Integer
+integerShiftRBits x i = case intCompare# i integerBitLimbWidth of
+  LT -> div x (integerBitPow2 i)
+  _ -> integerShiftRBits (div x integerBitLimbBase) (intSub# i integerBitLimbWidth)
+
+integerBitBits :: Int -> Integer
+integerBitBits i = case intCompare# i 0 of
+  LT -> integerBitsNegativeShiftError
+  _ -> integerBitPow2 i
+
+integerTestBitBits :: Integer -> Int -> Bool
+integerTestBitBits x i = case compare x integerBitZeroI of
+  LT -> case integerTestBitNonNeg (integerComplementBits x) i of
+    True -> False
+    False -> True
+  _ -> integerTestBitNonNeg x i
+
+integerTestBitNonNeg :: Integer -> Int -> Bool
+integerTestBitNonNeg x i = case x == integerBitZeroI of
+  True -> False
+  False -> case intCompare# i 0 of
+    GT -> integerTestBitNonNeg (div x (integerFromInt 2)) (intSub# i 1)
+    _ -> mod x (integerFromInt 2) == integerBitOneI
+
+-- For a negative argument this is the negated population count of the
+-- absolute value.
+integerPopCountBits :: Integer -> Int
+integerPopCountBits x = case compare x integerBitZeroI of
+  LT -> intNegate# (integerPopCountNonNeg (negate x))
+  _ -> integerPopCountNonNeg x
+
+integerPopCountNonNeg :: Integer -> Int
+integerPopCountNonNeg x = case x == integerBitZeroI of
+  True -> 0
+  False -> intAdd# (intPopCnt# (integerToInt (mod x integerBitLimbBase))) (integerPopCountNonNeg (div x integerBitLimbBase))

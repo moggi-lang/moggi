@@ -1,0 +1,4 @@
+tests/semantics/Bad-Recursive-Instance-Context.mog:12:10: type error: missing superclass instance: `Loop Box`
+
+  12 | instance Use Box where
+     |          ^^^

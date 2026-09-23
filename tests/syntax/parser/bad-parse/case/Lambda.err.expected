@@ -1,0 +1,4 @@
+tests/syntax/parser/bad-parse/case/Lambda.mog:3:16: parse error: incomplete expression in case alternative
+
+  3 |   Just n -> \y ->
+    |                ^^

@@ -1,0 +1,4 @@
+data Maybe a = Just a | Nothing
+f mx = case mx of
+  Just a -> a +
+  Nothing -> 0

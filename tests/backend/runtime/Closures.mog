@@ -1,0 +1,20 @@
+import Data.Int
+import Text.Show
+import System.IO
+
+-- Backend drift risk: closure capture, partial application and function values.
+add :: Int -> Int -> Int
+add a b = a + b
+
+adder :: Int -> Int -> Int
+adder n = \x -> x + n
+
+applyTwice :: (Int -> Int) -> Int -> Int
+applyTwice f x = f (f x)
+
+main :: IO ()
+main = do
+  putStrLn (show (add 1 2))
+  putStrLn (show (adder 10 5))
+  putStrLn (show (applyTwice (adder 3) 0))
+  putStrLn (show (map (\x -> x + 1) [1, 2, 3]))

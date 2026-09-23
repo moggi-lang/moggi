@@ -1,0 +1,220 @@
+import System.IO
+import Data.ByteString.Char8 qualified as C
+import Data.ByteString (ByteString)
+import Data.String
+import Data.JSON
+import Data.Either
+import Data.Maybe
+import Data.Int
+import Data.Eq
+import Moggi.Generics
+
+runDecode :: FromJSON a => (Either String a -> String) -> ByteString -> IO ()
+runDecode showFn bs = do
+  mr <- eitherDecode bs
+  putStrLn (showFn mr)
+
+-- Combinatorial Generic/JSON shapes that unit tests of isolated features miss.
+-- Stresses GProductValues (no Array splice), GTagged×omit, newtype list unwrap,
+-- Options composition, and non-string tag rejection.
+
+-- List leaf inside positional product (empty + non-empty).
+data WithList = WithList [Int] Int
+  deriving (Generic, Eq)
+
+instance ToJSON WithList where
+  toJSON = genericToJSON defaultOptions
+  toEncoding = genericToEncoding defaultOptions
+instance FromJSON WithList where
+  parseJSON = genericParseJSON defaultOptions
+  parseEncoding = genericParseEncoding defaultOptions
+
+-- Record as leaf of positional product.
+data Person = Person { name :: String, age :: Int }
+  deriving (Generic, Eq)
+
+instance ToJSON Person where
+  toJSON = genericToJSON defaultOptions
+  toEncoding = genericToEncoding defaultOptions
+instance FromJSON Person where
+  parseJSON = genericParseJSON defaultOptions
+  parseEncoding = genericParseEncoding defaultOptions
+
+data WrapP = WrapP Person Int
+  deriving (Generic, Eq)
+
+instance ToJSON WrapP where
+  toJSON = genericToJSON defaultOptions
+  toEncoding = genericToEncoding defaultOptions
+instance FromJSON WrapP where
+  parseJSON = genericParseJSON defaultOptions
+  parseEncoding = genericParseEncoding defaultOptions
+
+-- Positional product as record field.
+data PairI = PairI Int Int
+  deriving (Generic, Eq)
+
+instance ToJSON PairI where
+  toJSON = genericToJSON defaultOptions
+  toEncoding = genericToEncoding defaultOptions
+instance FromJSON PairI where
+  parseJSON = genericParseJSON defaultOptions
+  parseEncoding = genericParseEncoding defaultOptions
+
+data RecNest = RecNest { pair :: PairI, n :: Int }
+  deriving (Generic, Eq)
+
+instance ToJSON RecNest where
+  toJSON = genericToJSON defaultOptions
+  toEncoding = genericToEncoding defaultOptions
+instance FromJSON RecNest where
+  parseJSON = genericParseJSON defaultOptions
+  parseEncoding = genericParseEncoding defaultOptions
+
+-- Sum of records + omitNothingFields (fields beside tag).
+data Shape
+  = Circle { radius :: Int, label :: Maybe String }
+  | Point
+  deriving (Generic, Eq)
+
+optsOmit :: Options
+optsOmit = omitNothingFields True defaultOptions
+
+instance ToJSON Shape where
+  toJSON = genericToJSON optsOmit
+  toEncoding = genericToEncoding optsOmit
+instance FromJSON Shape where
+  parseJSON = genericParseJSON optsOmit
+  parseEncoding = genericParseEncoding optsOmit
+
+-- Newtype wrapping a list (unwrap to bare Array).
+newtype Ids = Ids [Int]
+  deriving (Generic, Eq)
+
+instance ToJSON Ids where
+  toJSON = genericToJSON defaultOptions
+  toEncoding = genericToEncoding defaultOptions
+instance FromJSON Ids where
+  parseJSON = genericParseJSON defaultOptions
+  parseEncoding = genericParseEncoding defaultOptions
+
+-- Non-string tag must fail.
+data Ev = Mark Int | Flag
+  deriving (Generic, Eq)
+
+instance ToJSON Ev where
+  toJSON = genericToJSON defaultOptions
+  toEncoding = genericToEncoding defaultOptions
+instance FromJSON Ev where
+  parseJSON = genericParseJSON defaultOptions
+  parseEncoding = genericParseEncoding defaultOptions
+
+-- constructorTagModifier × allNullaryToStringTag True.
+tagPrefix :: String -> String
+tagPrefix s = "T_" <> s
+
+data Color = Red | Green | Blue
+  deriving (Generic, Eq)
+
+optsModNullary :: Options
+optsModNullary =
+  allNullaryToStringTag True (constructorTagModifier tagPrefix defaultOptions)
+
+instance ToJSON Color where
+  toJSON = genericToJSON optsModNullary
+  toEncoding = genericToEncoding optsModNullary
+instance FromJSON Color where
+  parseJSON = genericParseJSON optsModNullary
+  parseEncoding = genericParseEncoding optsModNullary
+
+main :: IO ()
+main = do
+  C.putStrLn (encode (WithList [1, 2] 3))
+  runDecode showWithList ((encode (WithList [1, 2] 3)))
+  C.putStrLn (encode (WithList [] 0))
+  runDecode showWithListEmpty ((encode (WithList [] 0)))
+
+  runDecode showWrapP ((encode (WrapP (Person "a" 1) 9)))
+  runDecode showRecNest ((encode (RecNest (PairI 1 2) 3)))
+
+  C.putStrLn (encode (Circle 5 Nothing))
+  C.putStrLn (encode (Circle 5 (Just "x")))
+  runDecode showCircleOmit ((encode (Circle 5 Nothing)))
+  runDecode showPoint ((encode Point))
+
+  C.putStrLn (encode (Ids [7, 8]))
+  runDecode showIds ((encode (Ids [7, 8])))
+
+  runDecode showTagNum ((C.pack "{\"tag\":1,\"contents\":2}"))
+  runDecode showTagNull ((C.pack "{\"tag\":null}"))
+
+  C.putStrLn (encode Green)
+  runDecode showColorMod ((encode Green))
+  runDecode showColorModStr ((C.pack "\"T_Green\""))
+  runDecode showColorBare ((C.pack "\"Green\""))
+  runDecode showColorUnmod ((C.pack "{\"tag\":\"Green\"}"))
+
+showWithList :: Either String WithList -> String
+showWithList e = case e of
+  Right (WithList [1, 2] 3) -> "ok-withlist"
+  _ -> "bad-withlist"
+
+showWithListEmpty :: Either String WithList -> String
+showWithListEmpty e = case e of
+  Right (WithList [] 0) -> "ok-withlist-empty"
+  _ -> "bad-withlist-empty"
+
+showWrapP :: Either String WrapP -> String
+showWrapP e = case e of
+  Right (WrapP (Person "a" 1) 9) -> "ok-wrapp"
+  _ -> "bad-wrapp"
+
+showRecNest :: Either String RecNest -> String
+showRecNest e = case e of
+  Right (RecNest (PairI 1 2) 3) -> "ok-recnest"
+  _ -> "bad-recnest"
+
+showCircleOmit :: Either String Shape -> String
+showCircleOmit e = case e of
+  Right (Circle 5 Nothing) -> "ok-circle-omit"
+  _ -> "bad-circle-omit"
+
+showPoint :: Either String Shape -> String
+showPoint e = case e of
+  Right Point -> "ok-point"
+  _ -> "bad-point"
+
+showIds :: Either String Ids -> String
+showIds e = case e of
+  Right (Ids [7, 8]) -> "ok-ids"
+  _ -> "bad-ids"
+
+showTagNum :: Either String Ev -> String
+showTagNum e = case e of
+  Left _ -> "ok-tag-num"
+  Right _ -> "bad-tag-num"
+
+showTagNull :: Either String Ev -> String
+showTagNull e = case e of
+  Left _ -> "ok-tag-null"
+  Right _ -> "bad-tag-null"
+
+showColorMod :: Either String Color -> String
+showColorMod e = case e of
+  Right Green -> "ok-mod-nullary"
+  _ -> "bad-mod-nullary"
+
+showColorModStr :: Either String Color -> String
+showColorModStr e = case e of
+  Right Green -> "ok-mod-decode"
+  _ -> "bad-mod-decode"
+
+showColorBare :: Either String Color -> String
+showColorBare e = case e of
+  Left _ -> "ok-mod-reject-bare"
+  Right _ -> "bad-mod-reject-bare"
+
+showColorUnmod :: Either String Color -> String
+showColorUnmod e = case e of
+  Left _ -> "ok-mod-reject-unmod-tag"
+  Right _ -> "bad-mod-reject-unmod-tag"

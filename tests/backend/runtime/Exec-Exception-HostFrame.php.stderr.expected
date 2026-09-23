@@ -1,0 +1,5 @@
+moggi: HostException: Division by zero
+  at Main.boom (tests/backend/runtime/Exec-Exception-HostFrame.mog:10:8)
+  at Main.main (tests/backend/runtime/Exec-Exception-HostFrame.mog:13:8)
+caused by: DivisionByZeroError: Division by zero
+  #0 intdiv (tests/backend/runtime/Exec-Exception-HostFrame.php:15)

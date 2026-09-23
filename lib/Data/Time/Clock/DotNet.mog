@@ -1,0 +1,30 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.Time.Clock.DotNet
+  ( currentTimeSeconds
+  , getMonotonicNanos
+  , DateTimeOffset
+  , dtoToUnixTimeSeconds
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import System.IO.Base (IO)
+import Moggi.Internal.Prim
+
+foreign dotnet type DateTimeOffset "System.DateTimeOffset"
+
+foreign dotnet function dtoUtcNow "System.DateTimeOffset:get_UtcNow" :: IO DateTimeOffset
+foreign dotnet function dtoToUnixTimeSeconds "System.DateTimeOffset.ToUnixTimeSeconds" :: DateTimeOffset -> Int
+-- TickCount64 is a static Int64 property (no value-type boxing issues).
+foreign dotnet function envTickCount64 "System.Environment:get_TickCount64" :: IO Int
+
+currentTimeSeconds :: IO Int
+currentTimeSeconds = do
+  now <- dtoUtcNow
+  pure (dtoToUnixTimeSeconds now)
+
+-- Millisecond monotonic clock scaled to nanoseconds (bench diffs only).
+getMonotonicNanos :: IO Int
+getMonotonicNanos = do
+  ms <- envTickCount64
+  pure (ms * 1000000)

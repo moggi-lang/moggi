@@ -1,0 +1,9 @@
+module Ir.Guards where
+
+-- Guarded equations lower to a chain of branches, falling through to the next
+-- clause when no guard holds.
+clamp :: Int -> Int
+clamp x
+  | x < 0 = 0
+  | x > 10 = 10
+  | not False = x

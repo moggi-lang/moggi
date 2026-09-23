@@ -1,0 +1,104 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+{-# BACKEND
+  php = Data.String.PHP
+  jvm = Data.String.JVM
+  dotnet = Data.String.DotNet
+#-}
+module Data.String
+  ( String
+  , singleton
+  , unpack
+  , pack
+  , length
+  , take
+  , drop
+  , isPrefixOf
+  , isSuffixOf
+  , lines
+  , words
+  , unlines
+  , unwords
+  ) where
+
+import Data.Bool
+import Data.Char
+import Data.Eq
+import Data.Monoid
+import Data.Ord
+import Data.Semigroup
+import Text.Show
+import Moggi.Internal.Prim
+
+-- String is an opaque backend-native representation of a sequence of Char
+-- (Unicode scalar values). The sequence model is semantic only: String does
+-- not expose list operations or guarantee scalar indexing complexity.
+-- Equality is scalar-sequence identity (no implicit normalization).
+type String = String#
+
+singleton :: Char -> String
+
+unpack :: String -> [Char]
+
+pack :: [Char] -> String
+
+-- Public length/take/drop count Unicode scalar values, not bytes.
+length :: String -> Int
+
+take :: Int -> String -> String
+
+drop :: Int -> String -> String
+
+isPrefixOf :: String -> String -> Bool
+
+isSuffixOf :: String -> String -> Bool
+
+lines :: String -> [String]
+
+words :: String -> [String]
+
+unlines :: [String] -> String
+
+unwords :: [String] -> String
+
+-- | Show a string the way it is written in a source literal: the double quote
+-- that delimits it is escaped, every other character through 'showLitChar'.
+--
+-- A decimal escape followed by a digit, or the @SO@ escape followed by @H@,
+-- would re-read as one longer escape, so those get a @\&@ separator. The
+-- separator goes against the character that follows in the source: the rendered
+-- tail is a 'String', which has no first-character access to test it from.
+showLitString :: [Char] -> ShowS
+showLitString cs = \s -> case cs of
+  [] -> s
+  c : rest -> case ord c of
+    34 -> showString "\\\"" (showLitString rest s)
+    _ -> case needsEscapeGuard (ord c) rest of
+      True -> showLitChar c (showString "\\&" (showLitString rest s))
+      False -> showLitChar c (showLitString rest s)
+
+-- | Whether the escape of the character with code point @n@ would swallow the
+-- character that follows it: a decimal escape is followed by a digit, and the
+-- @SO@ escape by @H@.
+needsEscapeGuard :: Int -> [Char] -> Bool
+needsEscapeGuard n rest = case rest of
+  [] -> False
+  d : _ -> case ord d of
+    m -> case n > 127 of
+      True -> m >= 48 && m <= 57
+      False -> n == 14 && m == 72
+
+instance Eq String where
+  (==) a b = stringEq# a b
+  (/=) a b = stringNe# a b
+
+instance Ord String where
+  compare a b = stringCompare# a b
+
+instance Semigroup String where
+  (<>) a b = stringAppend# a b
+
+instance Monoid String where
+  mempty = ""
+
+instance Show String where
+  show s = showString "\"" (showLitString (unpack s) (showString "\"" ""))

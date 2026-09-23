@@ -1,0 +1,3 @@
+moggi: ErrorCall: Negative exponent
+  at Main.main (tests/backend/runtime/Exec-Pow-Negative-Exponent.mog:5:24)
+  at Main.main (tests/backend/runtime/Exec-Pow-Negative-Exponent.mog:5:8)

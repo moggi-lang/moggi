@@ -1,0 +1,30 @@
+program
+  foreign_type php PDO "PDO"
+  function strlen :: String -> Int
+    pat_var a1
+    foreign_call php function "strlen" dispatch=global io=none
+      variable a1
+  function pdoDrivers :: IO [String]
+    io_action
+      foreign_call php function "PDO:getAvailableDrivers" dispatch=static io=none
+  function pdoPrepare :: PDO -> String -> IO String
+    pat_var a1
+    pat_var a2
+    io_action
+      foreign_call php function "PDO.prepare" dispatch=instance io=none
+        variable a1
+        variable a2
+  function newPdo :: String -> String -> IO PDO
+    pat_var a1
+    pat_var a2
+    io_action
+      foreign_call php function "PDO:__con" dispatch=constructor io=none
+        variable a1
+        variable a2
+  function pdoAttrCase :: Int
+    foreign_call php const "PDO::ATTR_CASE" dispatch=static io=none
+  function readFile :: String -> IO Either String String
+    pat_var a1
+    io_action
+      foreign_call php function "file_get_contents" dispatch=global io=either
+        variable a1

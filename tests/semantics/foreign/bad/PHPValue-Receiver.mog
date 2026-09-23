@@ -1,0 +1,8 @@
+-- Fail: PHPValue must not be used as an instance-method receiver (not a handle).
+-- Local ADT with the same name is enough to fire the receiver-name ban without
+-- importing Platform.PHP (which is PHP-backend heavy).
+data PHPValue = PhpNull
+
+foreign php function bad "foo.bar" :: PHPValue -> Int
+
+main = bad

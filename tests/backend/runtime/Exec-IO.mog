@@ -1,0 +1,191 @@
+import Data.Foldable
+import Data.Maybe
+import System.Filesystem (createDirectory, removeTree, writeTextFile)
+import System.Filesystem.Path
+import System.IO
+import System.IO.Error
+
+-- ---- Exec-IO-BatchActions ----
+
+runIOBatchActions :: IO ()
+runIOBatchActions = do
+  sequenceA_ [putStrLn "a", putStrLn "b"]
+  traverse_ putStrLn ["c", "d"]
+
+-- ---- Exec-IO-Bind-Order ----
+
+runIOBindOrder :: IO ()
+runIOBindOrder = do
+  pure "1" >>= putStrLn
+  putStrLn "2"
+
+-- ---- Exec-IO-Console ----
+
+runIOConsole :: IO ()
+runIOConsole = do
+  putStrLn "console-ok"
+  putStr "done"
+
+-- ---- Exec-IO-DeferredAction ----
+
+runDeferred :: String -> String -> IO ()
+runDeferred first second = do
+  let act = putStrLn second
+  putStrLn first
+  act
+
+runIODeferredAction :: IO ()
+runIODeferredAction = do
+  runDeferred "first" "later"
+  runDeferred "y" "x"
+
+-- ---- Exec-IO-GetContents ----
+
+runIOGetContents :: IO ()
+runIOGetContents = do
+  let p = "/tmp/moggi-exec-io-get-contents.txt"
+  hw <- openFile p WriteMode
+  hPutStr hw "alpha\nbeta"
+  hClose hw
+  hr <- openFile p ReadMode
+  contents <- hGetContents hr
+  hClose hr
+  putStr contents
+
+-- ---- Exec-IO-HgetlineEof ----
+
+useLine :: Maybe String -> IO ()
+useLine m = case m of
+  Nothing -> putStrLn "eof"
+  Just s -> putStrLn s
+
+readFirst :: Handle -> IO ()
+readFirst h = do
+  m <- hGetLine h
+  useLine m
+
+runIOHgetlineEof :: IO ()
+runIOHgetlineEof = do
+  hw <- openFile ("/tmp/moggi-exec-io-hgetline-eof.txt") WriteMode
+  hClose hw
+  hr <- openFile ("/tmp/moggi-exec-io-hgetline-eof.txt") ReadMode
+  readFirst hr
+  hClose hr
+
+-- ---- Exec-IO-NeverBuilt ----
+
+runIONeverBuilt :: IO ()
+runIONeverBuilt = do
+  let unused = putStrLn "never"
+  putStrLn "only"
+
+-- ---- Exec-IO-OpenError ----
+
+-- A failed open reports an IOErrorType read from the path, and every backend
+-- agrees on which one.
+
+missingPath :: FilePath
+missingPath = "/tmp/moggi-open-error-missing.txt"
+
+directoryPath :: FilePath
+directoryPath = "/tmp/moggi-open-error-dir"
+
+filePath :: FilePath
+filePath = "/tmp/moggi-open-error-file.txt"
+
+openType :: FilePath -> IO String
+openType p = do
+  r <- tryIOError (openFile p ReadMode)
+  case r of
+    Left e -> pure (show (ioeGetErrorType e))
+    Right h -> do
+      hClose h
+      pure "opened"
+
+runIOOpenError :: IO ()
+runIOOpenError = do
+  removeTree missingPath
+  removeTree directoryPath
+  createDirectory False directoryPath
+  missing <- openType missingPath
+  directory <- openType directoryPath
+  writeTextFile filePath "ok"
+  file <- openType filePath
+  removeTree filePath
+  removeTree directoryPath
+  putStrLn ("missing   " <> missing)
+  putStrLn ("directory " <> directory)
+  putStrLn ("file      " <> file)
+
+-- ---- Exec-IO-Stress ----
+
+twiceMsg :: String -> IO ()
+twiceMsg message = do
+  putStrLn message
+  putStrLn message
+
+countDown :: Int -> IO ()
+countDown n = case n of
+  0 -> putStrLn "zero"
+  _ -> do
+    putStrLn "tick"
+    countDown (n - 1)
+
+runIOStress :: IO ()
+runIOStress = do
+  putStrLn "stored"
+  twiceMsg "ping"
+  countDown 2
+
+-- ---- Exec-IO-Twice ----
+
+runTwice :: IO () -> IO ()
+runTwice act = do
+  act
+  act
+
+applyTwice :: (IO () -> IO ()) -> IO () -> IO ()
+applyTwice f act = f act
+
+mainDirect :: IO ()
+mainDirect = runTwice (putStrLn "direct")
+
+mainOpaque :: IO ()
+mainOpaque = applyTwice runTwice (putStrLn "opaque")
+
+runIOTwice :: IO ()
+runIOTwice = do
+  putStrLn "direct-start"
+  mainDirect
+  putStrLn "opaque-start"
+  mainOpaque
+
+-- ---- Exec-IO-TypeAscription ----
+
+-- `(action :: IO a)` is the action. The annotation is a type-checking artifact,
+-- so it must not turn the effect into a pure value that is built and never run.
+runAnnotated :: IO ()
+runAnnotated = do
+  r <- (pure "bound" :: IO String)
+  putStrLn r
+  (putStrLn "statement" :: IO ())
+
+runIOTypeAscription :: IO ()
+runIOTypeAscription = do
+  runAnnotated
+  putStrLn "done"
+
+-- ---- combined entry point ----
+main :: IO ()
+main = do
+  runIOBatchActions
+  runIOBindOrder
+  runIOConsole
+  runIODeferredAction
+  runIOGetContents
+  runIOHgetlineEof
+  runIONeverBuilt
+  runIOOpenError
+  runIOStress
+  runIOTwice
+  runIOTypeAscription

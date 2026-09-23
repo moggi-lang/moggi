@@ -1,0 +1,25 @@
+import System.IO
+import Data.ByteString.Char8 qualified as C
+import Data.String
+import Data.Bool
+import Data.Eq
+import Data.Int
+import Data.Either
+import Data.Map (Map, fromList, size)
+import Data.JSON
+
+main :: IO ()
+main = do
+  C.putStrLn (encode (fromList (("a", 1) : ("b", 2) : [])))
+  r1 <- eitherDecode (C.pack "{\"x\":0}")
+  putStrLn (showDec r1)
+  r2 <- eitherDecode (encode (fromList (("x", 0) : [])))
+  putStrLn (showDec r2)
+
+showDec :: Either String (Map String Int) -> String
+showDec e = case e of
+  Left err -> "ERR:" <> err
+  Right m -> case size m of
+    0 -> "ok-0"
+    1 -> "ok-1"
+    _ -> "ok-n"

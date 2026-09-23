@@ -1,0 +1,4 @@
+tests/semantics/Bad-Duplicate-Function.mog:2:5: parse error: function `foo` has inconsistent clause arities
+
+  2 | foo x = x
+    |     ^

@@ -1,0 +1,32 @@
+program
+  function fromTo
+    apply
+      apply
+        variable enumFromTo
+        integer 1
+      integer 5
+  function fromThenTo
+    apply
+      apply
+        apply
+          variable enumFromThenTo
+          integer 2
+        integer 4
+      integer 10
+  function singleton
+    apply
+      apply
+        variable enumFromTo
+        integer 3
+      integer 3
+  function emptyBackwards
+    apply
+      apply
+        variable enumFromTo
+        integer 5
+      integer 2
+  function plain
+    list
+      integer 1
+      integer 2
+      integer 3

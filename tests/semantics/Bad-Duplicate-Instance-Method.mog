@@ -1,0 +1,10 @@
+class Check a where
+  check :: a -> a
+  other :: a -> a
+
+data Box = Box
+
+instance Check Box where
+  check x = x
+  other x = x
+  check x = Box

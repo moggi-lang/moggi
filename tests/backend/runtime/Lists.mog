@@ -1,0 +1,23 @@
+import Data.Foldable hiding (find)
+import Data.Int
+import Data.List
+import Text.Show
+import System.IO
+
+-- Backend drift risk: list representation, structural equality, ordering and left folds.
+total :: [Int] -> Int
+total xs = foldl (\acc x -> acc + x) 0 xs
+
+doubleAll :: [Int] -> [Int]
+doubleAll xs = map (\x -> x * 2) xs
+
+main :: IO ()
+main = do
+  putStrLn (show (reverse [1, 2, 3, 4]))
+  putStrLn (show (doubleAll [1, 2, 3]))
+  putStrLn (show (total [1, 2, 3, 4]))
+  putStrLn (show ([1, 2] == [1, 2]))
+  putStrLn (show ([1, 2] == [1, 3]))
+  putStrLn (show (1 : 2 : []))
+  putStrLn (show (sort [3, 1, 2]))
+  putStrLn (show ([1, 2] < [1, 3]))

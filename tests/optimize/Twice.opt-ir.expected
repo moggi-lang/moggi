@@ -1,0 +1,3 @@
+module
+  function twice(x)
+      ret intrinsic intMul#(x, 2)

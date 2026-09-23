@@ -1,0 +1,265 @@
+program
+  data Pair a b
+    constructor Pair
+      field  :: a
+      field  :: b
+    deriving (Eq, Ord, Bounded)
+  function == :: __Dict_Eq -> __Dict_Eq -> Pair t10 t11 -> Pair t10 t11 -> Bool
+    pat_var __ev_Eq
+    pat_var __ev_Eq_1
+    pat_var __l
+    pat_var __r
+    case
+      variable __l
+      alt
+        pat_con Pair
+          pat_var __a0
+          pat_var __a1
+        case
+          variable __r
+          alt
+            pat_con Pair
+              pat_var __b0
+              pat_var __b1
+            infix &&
+              apply
+                apply
+                  evidence_method Eq.== evidence=__ev_Eq nullary=0
+                  variable __a0
+                variable __b0
+              apply
+                apply
+                  evidence_method Eq.== evidence=__ev_Eq_1 nullary=0
+                  variable __a1
+                variable __b1
+          alt
+            pat_wild _
+            constructor_ref False
+  function /= :: __Dict_Eq -> __Dict_Eq -> Pair t10 t11 -> Pair t10 t11 -> Bool
+    pat_var __ev_Eq
+    pat_var __ev_Eq_1
+    pat_var __l
+    pat_var __r
+    case
+      case
+        variable __l
+        alt
+          pat_con Pair
+            pat_var __a0
+            pat_var __a1
+          case
+            variable __r
+            alt
+              pat_con Pair
+                pat_var __b0
+                pat_var __b1
+              infix &&
+                apply
+                  apply
+                    evidence_method Eq.== evidence=__ev_Eq nullary=0
+                    variable __a0
+                  variable __b0
+                apply
+                  apply
+                    evidence_method Eq.== evidence=__ev_Eq_1 nullary=0
+                    variable __a1
+                  variable __b1
+            alt
+              pat_wild _
+              constructor_ref False
+      alt
+        pat_con True
+        constructor_ref False
+      alt
+        pat_con False
+        constructor_ref True
+  function compare :: __Dict_Eq -> __Dict_Ord -> __Dict_Eq -> __Dict_Ord -> Pair t44 t45 -> Pair t44 t45 -> Ordering
+    pat_var __ev_Eq
+    pat_var __ev_Ord_1
+    pat_var __ev_Eq_2
+    pat_var __ev_Ord_3
+    pat_var __l
+    pat_var __r
+    case
+      variable __l
+      alt
+        pat_con Pair
+          pat_var __a0
+          pat_var __a1
+        case
+          variable __r
+          alt
+            pat_con Pair
+              pat_var __b0
+              pat_var __b1
+            case
+              apply
+                apply
+                  evidence_method Ord.compare evidence=__ev_Ord_1 nullary=0
+                  variable __a0
+                variable __b0
+              alt
+                pat_con EQ
+                case
+                  apply
+                    apply
+                      evidence_method Ord.compare evidence=__ev_Ord_3 nullary=0
+                      variable __a1
+                    variable __b1
+                  alt
+                    pat_con EQ
+                    constructor_ref EQ
+                  alt
+                    pat_con LT
+                    constructor_ref LT
+                  alt
+                    pat_con GT
+                    constructor_ref GT
+              alt
+                pat_con LT
+                constructor_ref LT
+              alt
+                pat_con GT
+                constructor_ref GT
+  function < :: __Dict_Eq -> __Dict_Ord -> __Dict_Eq -> __Dict_Ord -> Pair t44 t45 -> Pair t44 t45 -> Bool
+    pat_var __ev_Eq
+    pat_var __ev_Ord_1
+    pat_var __ev_Eq_2
+    pat_var __ev_Ord_3
+    pat_var x
+    pat_var y
+    case
+      apply
+        apply
+          evidence_method Ord.compare evidence= nullary=0
+            instance Pair a b
+          variable x
+        variable y
+      alt
+        pat_con LT
+        constructor_ref True
+      alt
+        pat_wild _
+        constructor_ref False
+  function <= :: __Dict_Eq -> __Dict_Ord -> __Dict_Eq -> __Dict_Ord -> Pair t44 t45 -> Pair t44 t45 -> Bool
+    pat_var __ev_Eq
+    pat_var __ev_Ord_1
+    pat_var __ev_Eq_2
+    pat_var __ev_Ord_3
+    pat_var x
+    pat_var y
+    case
+      apply
+        apply
+          evidence_method Ord.compare evidence= nullary=0
+            instance Pair a b
+          variable x
+        variable y
+      alt
+        pat_con GT
+        constructor_ref False
+      alt
+        pat_wild _
+        constructor_ref True
+  function > :: __Dict_Eq -> __Dict_Ord -> __Dict_Eq -> __Dict_Ord -> Pair t44 t45 -> Pair t44 t45 -> Bool
+    pat_var __ev_Eq
+    pat_var __ev_Ord_1
+    pat_var __ev_Eq_2
+    pat_var __ev_Ord_3
+    pat_var x
+    pat_var y
+    case
+      apply
+        apply
+          evidence_method Ord.compare evidence= nullary=0
+            instance Pair a b
+          variable x
+        variable y
+      alt
+        pat_con GT
+        constructor_ref True
+      alt
+        pat_wild _
+        constructor_ref False
+  function >= :: __Dict_Eq -> __Dict_Ord -> __Dict_Eq -> __Dict_Ord -> Pair t44 t45 -> Pair t44 t45 -> Bool
+    pat_var __ev_Eq
+    pat_var __ev_Ord_1
+    pat_var __ev_Eq_2
+    pat_var __ev_Ord_3
+    pat_var x
+    pat_var y
+    case
+      apply
+        apply
+          evidence_method Ord.compare evidence= nullary=0
+            instance Pair a b
+          variable x
+        variable y
+      alt
+        pat_con LT
+        constructor_ref False
+      alt
+        pat_wild _
+        constructor_ref True
+  function max :: __Dict_Eq -> __Dict_Ord -> __Dict_Eq -> __Dict_Ord -> Pair t44 t45 -> Pair t44 t45 -> Pair t44 t45
+    pat_var __ev_Eq
+    pat_var __ev_Ord_1
+    pat_var __ev_Eq_2
+    pat_var __ev_Ord_3
+    pat_var x
+    pat_var y
+    case
+      apply
+        apply
+          evidence_method Ord.<= evidence= nullary=0
+            instance Pair a b
+          variable x
+        variable y
+      alt
+        pat_con True
+        variable y
+      alt
+        pat_con False
+        variable x
+  function min :: __Dict_Eq -> __Dict_Ord -> __Dict_Eq -> __Dict_Ord -> Pair t44 t45 -> Pair t44 t45 -> Pair t44 t45
+    pat_var __ev_Eq
+    pat_var __ev_Ord_1
+    pat_var __ev_Eq_2
+    pat_var __ev_Ord_3
+    pat_var x
+    pat_var y
+    case
+      apply
+        apply
+          evidence_method Ord.<= evidence= nullary=0
+            instance Pair a b
+          variable x
+        variable y
+      alt
+        pat_con True
+        variable x
+      alt
+        pat_con False
+        variable y
+  function minBound :: __Dict_Bounded -> __Dict_Bounded -> Pair t239 t240
+    pat_var __ev_Bounded
+    pat_var __ev_Bounded_1
+    apply
+      apply
+        constructor_ref Pair
+        evidence_method Bounded.minBound evidence=__ev_Bounded nullary=1
+      evidence_method Bounded.minBound evidence=__ev_Bounded_1 nullary=1
+  function maxBound :: __Dict_Bounded -> __Dict_Bounded -> Pair t239 t240
+    pat_var __ev_Bounded
+    pat_var __ev_Bounded_1
+    apply
+      apply
+        constructor_ref Pair
+        evidence_method Bounded.maxBound evidence=__ev_Bounded nullary=1
+      evidence_method Bounded.maxBound evidence=__ev_Bounded_1 nullary=1
+  function lo :: Pair Int Int
+    evidence_method Bounded.minBound evidence= nullary=1
+      instance Pair a b
+  function hi :: Pair Int Int
+    evidence_method Bounded.maxBound evidence= nullary=1
+      instance Pair a b

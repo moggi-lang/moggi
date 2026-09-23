@@ -1,0 +1,9 @@
+module
+  function pair(a, b)
+      t0 = call __tuple2(a, b)
+      ret t0
+  function swap(p)
+      t1 = call snd(p)
+      t2 = call fst(p)
+      t3 = call __tuple2(t1, t2)
+      ret t3

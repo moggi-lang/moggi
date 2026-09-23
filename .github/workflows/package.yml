@@ -1,0 +1,352 @@
+name: package
+
+# The release distributions.
+#
+# One build per OS/architecture target: the compiler archive, the launcher, and
+# every runtime that target can ship. All five distributions are derived from
+# that one installation — nothing is downloaded or built twice — and each variant
+# is smoke-tested (the launcher reports its version, then an example is compiled
+# and run on each bundled backend) before anything is archived.
+#
+# Runtimes come from upstream through `scripts/dist/runtimes.php`, pinned by hash
+# in `dist/runtimes.lock.json`; the runners' own installations are never used as
+# bundled runtimes. PHP is the one toolchain the build itself needs before
+# anything exists, so it does come from a setup action.
+#
+# The Linux targets build inside an `ubuntu:22.04` container. A bundled binary
+# cannot be more portable than the machine that produced it, and a build on the
+# runner's own image would raise the floor to that image's glibc (2.39 on
+# ubuntu-24.04) and quietly break every older distribution. The two Linux targets
+# are therefore their own job, with the container pinned for both architectures;
+# `--glibc-floor` then refuses to publish a binary above the floor.
+#
+# Publishing is a separate job, after every target has finished: one publisher
+# means no race between five jobs over the same release, and the checksums are
+# generated from the files that were actually uploaded.
+
+# A release is triggered by a tag that *is* the version — `0.0.1`, not `v0.0.1` —
+# so the tag, `VERSION` and every archive name agree without a prefix to strip.
+on:
+  workflow_dispatch:
+  push:
+    tags: ['*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  linux:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    container: ubuntu:22.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {target: linux-x86_64,  runner: ubuntu-24.04}
+          - {target: linux-aarch64, runner: ubuntu-24.04-arm}
+
+    steps:
+      # The build root is a bare Ubuntu image, and even `checkout` needs git.
+      # `zstd` is what `actions/cache` compresses with.
+      - name: Install the build root's own prerequisites
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            git ca-certificates curl unzip zstd sudo
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up PHP for the build scripts
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.5'
+          extensions: bcmath, mbstring, zip, phar, ctype
+          ini-values: memory_limit=1G
+          coverage: none
+
+      # php.net publishes Windows binaries only, so Linux and macOS build PHP
+      # from the official source release; these are the few libraries it links
+      # against. `binutils` is what the glibc floor check reads the binary with.
+      - name: Install the build dependencies
+        run: |
+          apt-get install -y --no-install-recommends \
+            clang binutils autoconf make pkg-config libzip-dev libonig-dev
+
+      - name: Cache downloads and builds
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            .dist-cache/downloads
+            .dist-cache/build
+          key: dist-${{ matrix.target }}-${{ hashFiles('dist/runtimes.lock.json') }}
+
+      # Reachability, checksum and architecture checks on every asset this target
+      # needs, before anything is downloaded in earnest.
+      - name: Validate the pinned runtimes
+        run: php scripts/dist/pin.php --check --target ${{ matrix.target }}
+
+      - name: Build the distributions
+        run: |
+          php scripts/dist/assemble.php \
+            --target ${{ matrix.target }} \
+            --glibc-floor \
+            --archives \
+            --out dist-out
+
+      - name: Upload the archives
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ matrix.target }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            dist-out/${{ matrix.target }}/*.tar.gz
+            dist-out/${{ matrix.target }}/*.zip
+
+  native:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The last x86_64 macOS image. If GitHub retires it, this target needs
+          # a self-hosted x86_64 macOS runner: the launcher and the runtimes can
+          # be cross-built on ARM64, but a distribution that cannot be run is not
+          # validated, and an unvalidated distribution is not published.
+          - {target: macos-x86_64,   runner: macos-13}
+          - {target: macos-aarch64,  runner: macos-latest}
+          - {target: windows-x86_64, runner: windows-2022}
+          # windows-aarch64 is deliberately absent: php.net publishes no ARM64
+          # Windows build, so there is no PHP to bundle *and* no PHP to run the
+          # build with. `php scripts/dist/pin.php` reports it as unsupported.
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up PHP for the build scripts
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.5'
+          extensions: bcmath, mbstring, zip, phar, ctype
+          ini-values: memory_limit=1G
+          coverage: none
+
+      # The launcher is built with Clang on every platform.
+      - name: Install Clang (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command clang -ErrorAction SilentlyContinue)) {
+            choco install llvm -y --no-progress
+          }
+          clang --version
+
+      # These are the few libraries a source-built PHP links against.
+      - name: Install the PHP build dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install libzip oniguruma
+          {
+            echo "PKG_CONFIG_PATH=$(brew --prefix libzip)/lib/pkgconfig:$(brew --prefix oniguruma)/lib/pkgconfig"
+          } >> "$GITHUB_ENV"
+
+      # `bin/schnorr` is a C program and its Makefile needs a POSIX shell: on
+      # Windows it is built under MSYS2 and handed to the assembler, which builds
+      # it itself everywhere else.
+      - name: Install MSYS2 (MinGW) for the schnorr CLI
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@f84a36b4009b96413f91c01441130855db9392e5 # v2.9.0
+        with:
+          msystem: UCRT64
+          update: false
+          install: mingw-w64-ucrt-x86_64-gcc make
+
+      - name: Build the schnorr CLI (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: php scripts/dist/schnorr.php
+
+      - name: Point the assembler at the schnorr binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $schnorr = if (Test-Path schnorr/schnorr.exe) { 'schnorr\schnorr.exe' } else { 'schnorr\schnorr' }
+          "MOGGI_DIST_SCHNORR=$env:GITHUB_WORKSPACE\$schnorr" >> $env:GITHUB_ENV
+
+      - name: Cache downloads and builds
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            .dist-cache/downloads
+            .dist-cache/build
+          key: dist-${{ matrix.target }}-${{ hashFiles('dist/runtimes.lock.json') }}
+
+      - name: Validate the pinned runtimes
+        run: php scripts/dist/pin.php --check --target ${{ matrix.target }}
+
+      - name: Build the distributions
+        run: |
+          php scripts/dist/assemble.php \
+            --target ${{ matrix.target }} \
+            --archives \
+            --out dist-out
+
+      - name: Upload the archives
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ matrix.target }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            dist-out/${{ matrix.target }}/*.tar.gz
+            dist-out/${{ matrix.target }}/*.zip
+
+  # The VS Code extension is deliberately absent here. It is its own repository
+  # (moggi-lang/moggi-vscode-plugin) with its own release, because a `.vsix` is
+  # installed through VS Code and never sits inside a distribution archive. A
+  # plugin release wants to track this compiler, not be welded to its tag.
+
+  # One publisher, after every target: five jobs creating and uploading to the
+  # same release concurrently is a race, and a release that is half-uploaded
+  # while users can see it is worse than no release.
+  publish:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [linux, native]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # A mis-tagged release must fail here rather than publish a version that
+      # does not match its tag.
+      - name: The tag and VERSION must agree
+        run: |
+          version="$(cat VERSION)"
+          if [ "$version" != "$GITHUB_REF_NAME" ]; then
+            echo "VERSION says ${version}, the tag says ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
+          echo "releasing ${version}"
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: dist-out
+          merge-multiple: true
+
+      # Generated from the files that are about to be uploaded, so a checksum can
+      # never describe something other than what a user downloads.
+      - name: Write SHA256SUMS
+        run: |
+          cd dist-out
+          find . -type f \( -name '*.tar.gz' -o -name '*.zip' \) -print0 \
+            | sort -z | xargs -0 sha256sum > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Attest the provenance of the archives
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-path: |
+            dist-out/*.tar.gz
+            dist-out/*.zip
+
+      # A draft is invisible, so the release is created, filled and only then
+      # made public: it is either complete or it does not exist.
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --draft \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes
+
+      - name: Upload the archives and the checksums
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "$GITHUB_REF_NAME" \
+            dist-out/*.tar.gz dist-out/*.zip dist-out/SHA256SUMS
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false
+
+  # The in-job smoke test proves the *staged* tree. This proves the bytes a user
+  # downloads: the published release, re-downloaded, checksummed and run.
+  verify:
+    needs: publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Download the published release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release download "$GITHUB_REF_NAME" --dir release --repo "$GITHUB_REPOSITORY"
+
+      - name: Every published archive must match its checksum
+        run: cd release && sha256sum -c SHA256SUMS
+
+      - name: A published installation must run
+        run: |
+          cd release
+          mkdir -p run && tar -xzf moggi-minimal-*-linux-x86_64.tar.gz -C run
+          cd /tmp
+          "$GITHUB_WORKSPACE/release/run/moggi-minimal/bin/moggi" version
+          "$GITHUB_WORKSPACE/release/run/moggi-minimal/bin/moggi" run \
+            "$GITHUB_WORKSPACE/release/run/moggi-minimal/examples/factorial"
+
+      - name: The bundled runtimes must work from the archive
+        run: |
+          cd release
+          tar -xzf moggi-php-*-linux-x86_64.tar.gz -C run
+          cd /tmp
+          "$GITHUB_WORKSPACE/release/run/moggi-php/bin/moggi" version --json
+          "$GITHUB_WORKSPACE/release/run/moggi-php/bin/moggi" run \
+            "$GITHUB_WORKSPACE/release/run/moggi-php/examples/factorial"
+
+  verify-native:
+    needs: publish
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {target: macos-aarch64,  runner: macos-latest, archive: 'moggi-php-*-macos-aarch64.tar.gz'}
+          - {target: windows-x86_64, runner: windows-2022, archive: 'moggi-php-*-windows-x86_64.zip'}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - name: Download the published archive for this platform
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download "$GITHUB_REF_NAME" \
+            --dir release --pattern "${{ matrix.archive }}" --repo "$GITHUB_REPOSITORY"
+          ls -la release
+
+      - name: The published archive must run here
+        shell: bash
+        run: |
+          if [ "${RUNNER_OS}" = "Windows" ]; then
+            unzip -o release/*.zip -d release/run
+            exe=".exe"
+          else
+            mkdir -p release/run && tar -xzf release/*.tar.gz -C release/run
+            exe=""
+          fi
+          ls release/run
+          ( cd /tmp && "$GITHUB_WORKSPACE/release/run/moggi-php/bin/moggi${exe}" version )

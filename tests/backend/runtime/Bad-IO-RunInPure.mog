@@ -1,0 +1,11 @@
+module Bad.IO.RunInPure
+
+import System.IO
+
+f :: String -> String
+f s = do
+  putStrLn s
+  pure s
+
+main :: IO ()
+main = putStrLn (f "x")

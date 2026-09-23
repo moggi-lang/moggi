@@ -1,0 +1,11 @@
+module Tc.IO.Linear
+
+import System.IO (putStrLn as renamedPrint)
+
+emit :: String -> IO ()
+emit msg = renamedPrint msg
+
+main :: IO ()
+main = do
+  renamedPrint "hello"
+  emit "wrapped"

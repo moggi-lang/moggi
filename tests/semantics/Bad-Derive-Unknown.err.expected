@@ -1,0 +1,4 @@
+tests/semantics/Bad-Derive-Unknown.mog:1:26: type error: unknown class `NotAClass` in deriving clause
+
+  1 | data Foo = Foo deriving (NotAClass)
+    |                          ^^^^^^^^^

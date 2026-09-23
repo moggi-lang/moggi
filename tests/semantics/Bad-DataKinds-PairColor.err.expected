@@ -1,0 +1,4 @@
+tests/semantics/Bad-DataKinds-PairColor.mog:6:23: type error: kind mismatch applying `PairColor`: expected `Color`, got `Bool`
+
+  6 | bad :: PairColor 'Red 'True
+    |                       ^^^^

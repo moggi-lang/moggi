@@ -1,0 +1,59 @@
+import Control.Applicative
+import Control.Monad
+import Data.Bool
+import Data.Foldable
+import Data.Int
+import Data.Maybe
+import Data.Monoid
+import Data.Ord
+import Data.Semigroup
+import Text.Show
+import System.IO
+
+sumFoldDemo :: Bool
+sumFoldDemo = getSum (foldMap Sum [1, 2, 3]) == 6
+
+sumCombineDemo :: Bool
+sumCombineDemo = getSum (Sum 3 <> Sum 7) == 10
+
+sumShowDemo :: Bool
+sumShowDemo = show (Sum (3 :: Int)) == "Sum {getSum = 3}"
+
+optionalDemo :: Bool
+optionalDemo =
+  case optional (Just (1 :: Int)) of
+    Just (Just 1) -> True
+    _ -> False
+
+optionalEmptyDemo :: Bool
+optionalEmptyDemo =
+  case optional (Nothing :: Maybe Int) of
+    Just Nothing -> True
+    _ -> False
+
+replicateMDemo :: Bool
+replicateMDemo =
+  case replicateM 3 (Just (1 :: Int)) of
+    Just xs -> xs == [1, 1, 1]
+    Nothing -> False
+
+minMemptyDemo :: Bool
+minMemptyDemo = getMin (mempty :: Min Int) == maxBound
+
+maxMemptyDemo :: Bool
+maxMemptyDemo = getMax (mempty :: Max Int) == minBound
+
+dualDemo :: Bool
+dualDemo = getDual (Dual (Sum (1 :: Int)) <> Dual (Sum 2)) == Sum 3
+
+main :: IO ()
+main = do
+  putStrLn (show sumFoldDemo)
+  putStrLn (show sumCombineDemo)
+  putStrLn (show sumShowDemo)
+  putStrLn (show optionalDemo)
+  putStrLn (show optionalEmptyDemo)
+  putStrLn (show replicateMDemo)
+  putStrLn (show minMemptyDemo)
+  putStrLn (show maxMemptyDemo)
+  putStrLn (show dualDemo)

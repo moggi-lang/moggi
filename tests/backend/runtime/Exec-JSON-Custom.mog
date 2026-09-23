@@ -1,0 +1,209 @@
+import System.IO
+import Data.ByteString.Char8 qualified as C
+import Data.ByteString (ByteString)
+import Data.String
+import Data.JSON
+import Data.Int
+import Data.Eq
+import Data.Map (Map, lookup)
+import Moggi.Generics
+
+runDecode :: FromJSON a => (Either String a -> String) -> ByteString -> IO ()
+runDecode showFn bs = do
+  mr <- eitherDecode bs
+  putStrLn (showFn mr)
+
+data User = User { name :: String, age :: Int }
+  deriving (Generic, Eq)
+
+instance ToJSON User where
+  toJSON u = encodeUser u
+  toEncoding u = encodeUserEnc u
+
+encodeUser :: User -> Value
+encodeUser u = case u of
+  User n a -> jsonObject
+    [ ("user_name", toJSON n)
+    , ("user_age", toJSON a)
+    ]
+
+encodeUserEnc :: User -> Encoding
+encodeUserEnc u = case u of
+  User n a -> encObject ["user_name", "user_age"] [toEncoding n, toEncoding a]
+
+instance FromJSON User where
+  parseJSON v = case v of
+    Object m -> parseUserObj m
+    Array ignored -> Left "expected object"
+    String ignored -> Left "expected object"
+    Number ignored -> Left "expected object"
+    Bool ignored -> Left "expected object"
+    Null -> Left "expected object"
+  parseEncoding enc = parseUserEnc enc
+
+parseUserEnc :: Encoding -> Either String User
+parseUserEnc enc = case lookupField enc "user_name" of
+  Nothing -> Left "missing user_name"
+  Just nv -> parseUserNameEnc nv enc
+
+parseUserNameEnc :: Encoding -> Encoding -> Either String User
+parseUserNameEnc nv enc = case parseEncoding nv of
+  Left err -> Left err
+  Right n -> parseUserAgeEnc n enc
+
+parseUserAgeEnc :: String -> Encoding -> Either String User
+parseUserAgeEnc n enc = case lookupField enc "user_age" of
+  Nothing -> Left "missing user_age"
+  Just av -> parseUserAgeValEnc n av
+
+parseUserAgeValEnc :: String -> Encoding -> Either String User
+parseUserAgeValEnc n av = case parseEncoding av of
+  Left err -> Left err
+  Right a -> Right (User n a)
+
+parseUserObj :: Map String Value -> Either String User
+parseUserObj m = case lookup "user_name" m of
+  Nothing -> Left "missing user_name"
+  Just nv -> parseUserName nv m
+
+parseUserName :: Value -> Map String Value -> Either String User
+parseUserName nv m = case parseJSON nv of
+  Left err -> Left err
+  Right n -> parseUserAge n m
+
+parseUserAge :: String -> Map String Value -> Either String User
+parseUserAge n m = case lookup "user_age" m of
+  Nothing -> Left "missing user_age"
+  Just av -> parseUserAgeVal n av
+
+parseUserAgeVal :: String -> Value -> Either String User
+parseUserAgeVal n av = case parseJSON av of
+  Left err -> Left err
+  Right a -> Right (User n a)
+
+data Point = Point { x :: Int, y :: Int }
+  deriving (Generic, Eq)
+
+instance ToJSON Point where
+  toJSON = genericToJSON defaultOptions
+  toEncoding = genericToEncoding defaultOptions
+
+instance FromJSON Point where
+  parseJSON v = case v of
+    Array xs -> parsePointArr xs
+    Object ignored -> Left "expected array"
+    String ignored -> Left "expected array"
+    Number ignored -> Left "expected array"
+    Bool ignored -> Left "expected array"
+    Null -> Left "expected array"
+  parseEncoding enc = case arrayElems enc of
+    Left err -> Left err
+    Right xs -> parsePointEncArr xs
+
+parsePointEncArr :: [Encoding] -> Either String Point
+parsePointEncArr xs = case xs of
+  [] -> Left "expected two-element array"
+  a : rest -> parsePointEncArr2 a rest
+
+parsePointEncArr2 :: Encoding -> [Encoding] -> Either String Point
+parsePointEncArr2 a xs = case xs of
+  [] -> Left "expected two-element array"
+  b : rest -> parsePointEncArr3 a b rest
+
+parsePointEncArr3 :: Encoding -> Encoding -> [Encoding] -> Either String Point
+parsePointEncArr3 a b xs = case xs of
+  [] -> finishPointEnc a b
+  c : ignored -> Left "expected two-element array"
+
+finishPointEnc :: Encoding -> Encoding -> Either String Point
+finishPointEnc a b = case parseEncoding a of
+  Left err -> Left err
+  Right xi -> finishPointEncY xi b
+
+finishPointEncY :: Int -> Encoding -> Either String Point
+finishPointEncY xi b = case parseEncoding b of
+  Left err -> Left err
+  Right yi -> Right (Point xi yi)
+
+parsePointArr :: [Value] -> Either String Point
+parsePointArr xs = case xs of
+  [] -> Left "expected two-element array"
+  a : rest -> parsePointArr2 a rest
+
+parsePointArr2 :: Value -> [Value] -> Either String Point
+parsePointArr2 a xs = case xs of
+  [] -> Left "expected two-element array"
+  b : rest -> parsePointArr3 a b rest
+
+parsePointArr3 :: Value -> Value -> [Value] -> Either String Point
+parsePointArr3 a b xs = case xs of
+  [] -> finishPoint a b
+  c : ignored -> Left "expected two-element array"
+
+finishPoint :: Value -> Value -> Either String Point
+finishPoint a b = case parseJSON a of
+  Left err -> Left err
+  Right xi -> finishPointY xi b
+
+finishPointY :: Int -> Value -> Either String Point
+finishPointY xi b = case parseJSON b of
+  Left err -> Left err
+  Right yi -> Right (Point xi yi)
+
+data PairI = PairI { left :: Int, right :: Int }
+  deriving (Generic, Eq)
+
+instance ToJSON PairI where
+  toJSON p = encodePairI p
+  toEncoding p = encodePairIEnc p
+
+encodePairI :: PairI -> Value
+encodePairI p = case p of
+  PairI l r -> Array [toJSON l, toJSON r]
+
+encodePairIEnc :: PairI -> Encoding
+encodePairIEnc p = case p of
+  PairI l r -> encArray [toEncoding l, toEncoding r]
+
+instance FromJSON PairI where
+  parseJSON = genericParseJSON defaultOptions
+  parseEncoding = genericParseEncoding defaultOptions
+
+main :: IO ()
+main = do
+  C.putStrLn (encode (User "ada" 36))
+  runDecode showUser ((encode (User "ada" 36)))
+  C.putStrLn (encode (Point 1 2))
+  runDecode showPoint ((C.pack "[1,2]"))
+  C.putStrLn (encode (PairI 3 4))
+  runDecode showPair ((C.pack "{\"left\":3,\"right\":4}"))
+
+showUser :: Either String User -> String
+showUser e = case e of
+  Right u -> eqUser u
+  Left ignored -> "bad-user"
+
+eqUser :: User -> String
+eqUser u = case u == (User "ada" 36) of
+  True -> "ok-user"
+  False -> "bad-user"
+
+showPoint :: Either String Point -> String
+showPoint e = case e of
+  Right p -> eqPoint p
+  Left ignored -> "bad-point"
+
+eqPoint :: Point -> String
+eqPoint p = case p == (Point 1 2) of
+  True -> "ok-point"
+  False -> "bad-point"
+
+showPair :: Either String PairI -> String
+showPair e = case e of
+  Right p -> eqPair p
+  Left ignored -> "bad-pair"
+
+eqPair :: PairI -> String
+eqPair p = case p == (PairI 3 4) of
+  True -> "ok-pair"
+  False -> "bad-pair"

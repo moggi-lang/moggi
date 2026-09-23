@@ -1,0 +1,132 @@
+<?php declare(strict_types=1);
+
+namespace Main;
+
+const __MOGGI_MAP = [[47 => ['Main.apply', 'tests/backend/codegen/Core-Functions.mog', 23, 13], 51 => ['Main.useAdd', 'tests/backend/codegen/Core-Functions.mog', 26, 12], 55 => ['Main.passPartial', 'tests/backend/codegen/Core-Functions.mog', 29, 17], 83 => ['Main.justHi', 'tests/backend/codegen/Core-Functions.mog', 50, 10]], ['Main\\add' => ['Main.add', 'tests/backend/codegen/Core-Functions.mog', 2, 11], 'Main\\inc' => ['Main.inc', 'tests/backend/codegen/Core-Functions.mog', 5, 7], 'Main\\useInc' => ['Main.useInc', 'tests/backend/codegen/Core-Functions.mog', 8, 12], 'Main\\sum2' => ['Main.sum2', 'tests/backend/codegen/Core-Functions.mog', 11, 8], 'Main\\viaLet' => ['Main.viaLet', 'tests/backend/codegen/Core-Functions.mog', 13, 1], 'Main\\id' => ['Main.id', 'tests/backend/codegen/Core-Functions.mog', 17, 8], 'Main\\ho' => ['Main.ho', 'tests/backend/codegen/Core-Functions.mog', 20, 6], 'Main\\apply' => ['Main.apply', 'tests/backend/codegen/Core-Functions.mog', 23, 13], 'Main\\useAdd' => ['Main.useAdd', 'tests/backend/codegen/Core-Functions.mog', 26, 12], 'Main\\passPartial' => ['Main.passPartial', 'tests/backend/codegen/Core-Functions.mog', 29, 17], 'Main\\__op_plus' => ['Main.+', 'tests/backend/codegen/Core-Functions.mog', 32, 9], 'Main\\plus10' => ['Main.plus10', 'tests/backend/codegen/Core-Functions.mog', 35, 11], 'Main\\triple' => ['Main.triple', 'tests/backend/codegen/Core-Functions.mog', 38, 16], 'Main\\step1' => ['Main.step1', 'tests/backend/codegen/Core-Functions.mog', 41, 9], 'Main\\step2' => ['Main.step2', 'tests/backend/codegen/Core-Functions.mog', 44, 9], 'Main\\step3' => ['Main.step3', 'tests/backend/codegen/Core-Functions.mog', 47, 9], 'Main\\justHi' => ['Main.justHi', 'tests/backend/codegen/Core-Functions.mog', 50, 10], 'Main\\always' => ['Main.always', 'tests/backend/codegen/Core-Functions.mog', 53, 14], 'Main\\polyPartial' => ['Main.polyPartial', 'tests/backend/codegen/Core-Functions.mog', 56, 15], 'Main\\incLambda' => ['Main.incLambda', 'tests/backend/codegen/Core-Functions.mog', 59, 15], 'Main\\typedParam' => ['Main.typedParam', 'tests/backend/codegen/Core-Functions.mog', 62, 14], 'Main\\twoParams' => ['Main.twoParams', 'tests/backend/codegen/Core-Functions.mog', 65, 13], 'Main\\ascribedLambda' => ['Main.ascribedLambda', 'tests/backend/codegen/Core-Functions.mog', 68, 19], 'Main\\bodyAsc' => ['Main.bodyAsc', 'tests/backend/codegen/Core-Functions.mog', 71, 11], 'Main\\__lambda_0' => ['Main.λ0', 'tests/backend/codegen/Core-Functions.mog', 59, 21], 'Main\\__lambda_1' => ['Main.λ1', 'tests/backend/codegen/Core-Functions.mog', 62, 27], 'Main\\__lambda_2' => ['Main.λ2', 'tests/backend/codegen/Core-Functions.mog', 65, 35], 'Main\\__lambda_3' => ['Main.λ3', 'tests/backend/codegen/Core-Functions.mog', 68, 25], 'Main\\__lambda_4' => ['Main.λ4', 'tests/backend/codegen/Core-Functions.mog', 71, 18]]];
+
+require_once __DIR__ . '/../../../_runtime.php';
+
+use function Moggi\__apply;
+
+require_once __DIR__ . '/../../../lib/Data/Maybe.php';
+
+function moggi_u64_add(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao + $bo; $c = ($lo >> 32) & 0xffffffff; $hi = ($ah + $bh + $c) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }
+function moggi_u64_sub(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao - $bo; $bw = $lo < 0 ? 1 : 0; $hi = ($ah - $bh - $bw) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }
+function moggi_u64_mul(int $a, int $b): int { $a0 = $a & 0xffff; $a1 = ($a >> 16) & 0xffff; $a2 = ($a >> 32) & 0xffff; $a3 = ($a >> 48) & 0xffff; $b0 = $b & 0xffff; $b1 = ($b >> 16) & 0xffff; $b2 = ($b >> 32) & 0xffff; $b3 = ($b >> 48) & 0xffff; $low = $a0 * $b0; $cy = ($low >> 16) & 0xffff; $m1 = $a0 * $b1 + $a1 * $b0 + $cy; $cy = ($m1 >> 16) & 0xffffffff; $m2 = $a0 * $b2 + $a1 * $b1 + $a2 * $b0 + $cy; $cy = ($m2 >> 16) & 0xffffffff; $hi = $a0 * $b3 + $a1 * $b2 + $a2 * $b1 + $a3 * $b0 + $cy; return (($hi & 0xffff) << 48) | (($m2 & 0xffff) << 32) | (($m1 & 0xffff) << 16) | ($low & 0xffff); }
+function moggi_i64_add(int $a, int $b): int { $r = $a + $b; return \is_int($r) ? $r : moggi_u64_add($a, $b); }
+
+function add($x, $y) {
+    return (\is_int($__m64 = $x + $y) ? $__m64 : moggi_u64_add($x, $y));
+}
+
+function inc($_p1) {
+    return add(1, $_p1);
+}
+
+function useInc($x) {
+    return add(1, $x);
+}
+
+function sum2() {
+    return 3;
+}
+
+function viaLet() {
+    return add(1, 2);
+}
+
+function id($x) {
+    return $x;
+}
+
+function ho() {
+    return add(1, 2);
+}
+
+function apply($f, $x) {
+    return __apply($f, $x);
+}
+
+function useAdd($x) {
+    return apply(['__partial', 2, '\\Main\\add', 1], $x);
+}
+
+function passPartial($g) {
+    return __apply($g, 5);
+}
+
+function __op_plus($x, $y) {
+    return (\is_int($__m64 = $x + $y) ? $__m64 : moggi_u64_add($x, $y));
+}
+
+function plus10($_p1) {
+    return __op_plus(10, $_p1);
+}
+
+function triple($a, $b, $c) {
+    return moggi_i64_add((\is_int($__m64 = $a + $b) ? $__m64 : moggi_u64_add($a, $b)), $c);
+}
+
+function step1($_p1, $_p2) {
+    return triple(1, $_p1, $_p2);
+}
+
+function step2($_p1) {
+    return triple(1, 2, $_p1);
+}
+
+function step3() {
+    return 6;
+}
+
+function justHi() {
+    return ["Just", "hi"];
+}
+
+function always($x, $_p1) {
+    return $x;
+}
+
+function polyPartial($_p1) {
+    return always(42, $_p1);
+}
+
+function incLambda($x) {
+    return ['__partial', 2, '\\Main\\__lambda_0', $x];
+}
+
+function typedParam() {
+    return fn($x) => (\is_int($__m64 = $x + 1) ? $__m64 : moggi_u64_add($x, 1));
+}
+
+function twoParams() {
+    return fn($x, $y) => (\is_int($__m64 = $x + $y) ? $__m64 : moggi_u64_add($x, $y));
+}
+
+function ascribedLambda() {
+    return fn($x) => (\is_int($__m64 = $x + 1) ? $__m64 : moggi_u64_add($x, 1));
+}
+
+function bodyAsc() {
+    return fn($x) => (\is_int($__m64 = $x + 1) ? $__m64 : moggi_u64_add($x, 1));
+}
+
+function __lambda_0($x, $y) {
+    return (\is_int($__m64 = $x + $y) ? $__m64 : moggi_u64_add($x, $y));
+}
+
+function __lambda_1($x) {
+    return (\is_int($__m64 = $x + 1) ? $__m64 : moggi_u64_add($x, 1));
+}
+
+function __lambda_2($x, $y) {
+    return (\is_int($__m64 = $x + $y) ? $__m64 : moggi_u64_add($x, $y));
+}
+
+function __lambda_3($x) {
+    return (\is_int($__m64 = $x + 1) ? $__m64 : moggi_u64_add($x, 1));
+}
+
+function __lambda_4($x) {
+    return (\is_int($__m64 = $x + 1) ? $__m64 : moggi_u64_add($x, 1));
+}

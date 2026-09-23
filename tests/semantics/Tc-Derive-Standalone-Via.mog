@@ -1,0 +1,10 @@
+import Data.Eq
+import Text.Show
+
+newtype MyInt = MyInt Int
+
+deriving via (Int) instance Eq MyInt
+deriving via (Int) instance Show MyInt
+
+main :: String
+main = show (MyInt 42 == MyInt 42)

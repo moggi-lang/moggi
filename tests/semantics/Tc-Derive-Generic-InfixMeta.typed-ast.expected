@@ -1,0 +1,162 @@
+program
+  data :| a b
+    constructor :|
+      field  :: a
+      field  :: b
+    deriving (Generic)
+  function __ev_Generic_h_596c037b701a328a_from :: t2 :| t3 -> Rep t2 :| t3 t10
+    pat_var __x
+    case
+      variable __x
+      alt
+        pat_infix_con :|
+          pat_var __f0
+          pat_var __f1
+        apply
+          constructor_ref M1
+          apply
+            constructor_ref M1
+            infix_con :*:
+              apply
+                constructor_ref M1
+                apply
+                  constructor_ref K1
+                  variable __f0
+              apply
+                constructor_ref M1
+                apply
+                  constructor_ref K1
+                  variable __f1
+  function __ev_Generic_h_596c037b701a328a_to :: Rep t2 :| t3 t39 -> t2 :| t3
+    pat_var __r
+    case
+      variable __r
+      alt
+        pat_con M1
+          pat_con M1
+            pat_infix_con :*:
+              pat_con M1
+                pat_con K1
+                  pat_var __t0
+              pat_con M1
+                pat_con K1
+                  pat_var __t1
+        infix_con :|
+          variable __t0
+          variable __t1
+  function __ev_Datatype_h_7f5794130e50dfb9_datatypeName :: MetaProxy MetaData ":|" "Main" "moggi" 'False -> String
+    pat_var _d
+    string ":|"
+  function __ev_Datatype_h_7f5794130e50dfb9_moduleName :: MetaProxy MetaData ":|" "Main" "moggi" 'False -> String
+    pat_var _d
+    string "Main"
+  function __ev_Datatype_h_7f5794130e50dfb9_packageName :: MetaProxy MetaData ":|" "Main" "moggi" 'False -> String
+    pat_var _d
+    string "moggi"
+  function __ev_Datatype_h_7f5794130e50dfb9_isNewtype :: MetaProxy MetaData ":|" "Main" "moggi" 'False -> Bool
+    pat_var _d
+    constructor_ref False
+  function __ev_Datatype_h_7f5794130e50dfb9_isAllNullary :: MetaProxy MetaData ":|" "Main" "moggi" 'False -> Bool
+    pat_var _d
+    constructor_ref False
+  function __ev_Datatype_h_7f5794130e50dfb9_isSum :: MetaProxy MetaData ":|" "Main" "moggi" 'False -> Bool
+    pat_var _d
+    constructor_ref False
+  function __ev_Constructor_h_73e49bcb690392d5_conName :: MetaProxy MetaCons ":|" 'InfixI 'LeftAssociative 'False -> String
+    pat_var _c
+    string ":|"
+  function __ev_Constructor_h_73e49bcb690392d5_conIsRecord :: MetaProxy MetaCons ":|" 'InfixI 'LeftAssociative 'False -> Bool
+    pat_var _c
+    constructor_ref False
+  function __ev_Constructor_h_73e49bcb690392d5_conArity :: MetaProxy MetaCons ":|" 'InfixI 'LeftAssociative 'False -> Int
+    pat_var _c
+    integer 2
+  function selName :: MetaProxy MetaSel Nothing 'NoSourceUnpackedness 'NoSourceStrictness 'DecidedLazy -> String
+    pat_var _s
+    string ""
+  data :/ a b
+    constructor :/
+      field  :: a
+      field  :: b
+    deriving (Generic)
+  function __ev_Generic_h_992f11d0582e63da_from :: t73 :/ t74 -> Rep t73 :/ t74 t81
+    pat_var __x
+    case
+      variable __x
+      alt
+        pat_infix_con :/
+          pat_var __f0
+          pat_var __f1
+        apply
+          constructor_ref M1
+          apply
+            constructor_ref M1
+            infix_con :*:
+              apply
+                constructor_ref M1
+                apply
+                  constructor_ref K1
+                  variable __f0
+              apply
+                constructor_ref M1
+                apply
+                  constructor_ref K1
+                  variable __f1
+  function __ev_Generic_h_992f11d0582e63da_to :: Rep t73 :/ t74 t110 -> t73 :/ t74
+    pat_var __r
+    case
+      variable __r
+      alt
+        pat_con M1
+          pat_con M1
+            pat_infix_con :*:
+              pat_con M1
+                pat_con K1
+                  pat_var __t0
+              pat_con M1
+                pat_con K1
+                  pat_var __t1
+        infix_con :/
+          variable __t0
+          variable __t1
+  function __ev_Datatype_h_8d7328ef65e4354a_datatypeName :: MetaProxy MetaData ":/" "Main" "moggi" 'False -> String
+    pat_var _d
+    string ":\/"
+  function __ev_Datatype_h_8d7328ef65e4354a_moduleName :: MetaProxy MetaData ":/" "Main" "moggi" 'False -> String
+    pat_var _d
+    string "Main"
+  function __ev_Datatype_h_8d7328ef65e4354a_packageName :: MetaProxy MetaData ":/" "Main" "moggi" 'False -> String
+    pat_var _d
+    string "moggi"
+  function __ev_Datatype_h_8d7328ef65e4354a_isNewtype :: MetaProxy MetaData ":/" "Main" "moggi" 'False -> Bool
+    pat_var _d
+    constructor_ref False
+  function __ev_Datatype_h_8d7328ef65e4354a_isAllNullary :: MetaProxy MetaData ":/" "Main" "moggi" 'False -> Bool
+    pat_var _d
+    constructor_ref False
+  function __ev_Datatype_h_8d7328ef65e4354a_isSum :: MetaProxy MetaData ":/" "Main" "moggi" 'False -> Bool
+    pat_var _d
+    constructor_ref False
+  function __ev_Constructor_h_5cf7947f3a67fa14_conName :: MetaProxy MetaCons ":/" 'InfixI 'RightAssociative 'False -> String
+    pat_var _c
+    string ":\/"
+  function __ev_Constructor_h_5cf7947f3a67fa14_conIsRecord :: MetaProxy MetaCons ":/" 'InfixI 'RightAssociative 'False -> Bool
+    pat_var _c
+    constructor_ref False
+  function __ev_Constructor_h_5cf7947f3a67fa14_conArity :: MetaProxy MetaCons ":/" 'InfixI 'RightAssociative 'False -> Int
+    pat_var _c
+    integer 2
+  function id :: a -> a
+    pat_var x
+    variable x
+  type SelInt = S1 MetaSel Nothing 'NoSourceUnpackedness 'NoSourceStrictness 'DecidedLazy Rec0 Int
+  type SelBool = S1 MetaSel Nothing 'NoSourceUnpackedness 'NoSourceStrictness 'DecidedLazy Rec0 Bool
+  type ProdIB = SelInt :*: SelBool
+  type ConsLeft = C1 MetaCons ":|" 'InfixI 'LeftAssociative 'False ProdIB
+  type ConsRight = C1 MetaCons ":/" 'InfixI 'RightAssociative 'False ProdIB
+  type LeftPipeRep x = D1 MetaData ":|" "Main" "moggi" 'False ConsLeft x
+  type RightPipeRep x = D1 MetaData ":/" "Main" "moggi" 'False ConsRight x
+  function checkLeft :: Rep Int :| Bool x -> M1 D MetaData ":|" "Main" "moggi" 'False M1 C MetaCons ":|" 'InfixI 'LeftAssociative 'False M1 S MetaSel Nothing 'NoSourceUnpackedness 'NoSourceStrictness 'DecidedLazy K1 R Int :*: M1 S MetaSel Nothing 'NoSourceUnpackedness 'NoSourceStrictness 'DecidedLazy K1 R Bool x
+    variable id
+  function checkRight :: Rep Int :/ Bool x -> M1 D MetaData ":/" "Main" "moggi" 'False M1 C MetaCons ":/" 'InfixI 'RightAssociative 'False M1 S MetaSel Nothing 'NoSourceUnpackedness 'NoSourceStrictness 'DecidedLazy K1 R Int :*: M1 S MetaSel Nothing 'NoSourceUnpackedness 'NoSourceStrictness 'DecidedLazy K1 R Bool x
+    variable id

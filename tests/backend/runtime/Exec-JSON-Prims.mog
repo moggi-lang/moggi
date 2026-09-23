@@ -1,0 +1,107 @@
+import System.IO
+import Data.ByteString.Char8 qualified as C
+import Data.String qualified as S
+import Data.String
+import Data.JSON
+import Data.ByteString (ByteString)
+import Data.Either
+import Data.Maybe
+import Data.Bool
+import Data.Int
+import Moggi.Internal.Integer
+import Moggi.Internal.Num
+import Moggi.Internal.Float
+
+runDecode :: FromJSON a => (Either String a -> String) -> ByteString -> IO ()
+runDecode showFn bs = do
+  mr <- eitherDecode bs
+  putStrLn (showFn mr)
+
+bsToStr b = S.pack (C.unpack b)
+
+main :: IO ()
+main = do
+  C.putStrLn (encode (True :: Bool))
+  C.putStrLn (encode (False :: Bool))
+  C.putStrLn (encode (42 :: Int))
+  C.putStrLn (encode ("hi" :: String))
+  C.putStrLn (encode ([1, 2, 3] :: [Int]))
+  C.putStrLn (encode (Nothing :: Maybe Int))
+  C.putStrLn (encode (Just (7 :: Int)))
+  C.putStrLn (encode (jsonObject [("a", Null), ("b", toJSON (1 :: Int))]))
+  C.putStrLn (encode ([] :: [Int]))
+  C.putStrLn (encode (jsonObject ([] :: [(String, Value)])))
+  C.putStrLn (encode ("café" :: String))
+  -- Large integer via JSON text (avoids a Num Integer codegen issue with (*)).
+  runDecode showBig ((C.pack "9223372036854775808"))
+  runDecode showBoolRoundtrip ((encode (True :: Bool)))
+  runDecode showListRoundtrip ((encode ([1, 2] :: [Int])))
+  runDecode showMaybeNothing ((encode (Nothing :: Maybe Int)))
+  runDecode showMaybeJust ((encode (Just (7 :: Int))))
+  runDecode showObjRoundtrip ((encode (jsonObject [("k", String "v")])))
+  runDecode showEmptyArr ((encode ([] :: [Int])))
+  runDecode showEmptyObj ((encode (jsonObject ([] :: [(String, Value)]))))
+  runDecode showDoubleFromInt ((C.pack "3"))
+  runDecode showDecodeErr ((C.pack "{bad"))
+  runDecode showBoolMismatch ((C.pack "1"))
+  runDecode showIntMismatch ((C.pack "true"))
+
+showBig :: Either String Integer -> String
+showBig e = case e of
+  Right n -> bsToStr (encode n)
+  Left ignored -> "bad-big"
+
+showBoolRoundtrip :: Either String Bool -> String
+showBoolRoundtrip e = case e of
+  Right True -> "ok-bool"
+  _ -> "bad-bool"
+
+showListRoundtrip :: Either String [Int] -> String
+showListRoundtrip e = case e of
+  Right (1 : 2 : []) -> "ok-list"
+  _ -> "bad-list"
+
+showMaybeNothing :: Either String (Maybe Int) -> String
+showMaybeNothing e = case e of
+  Right Nothing -> "ok-nothing"
+  _ -> "bad-nothing"
+
+showMaybeJust :: Either String (Maybe Int) -> String
+showMaybeJust e = case e of
+  Right (Just 7) -> "ok-just"
+  _ -> "bad-just"
+
+showObjRoundtrip :: Either String Value -> String
+showObjRoundtrip e = case e of
+  Right (Object _) -> "ok-object"
+  _ -> "bad-object"
+
+showEmptyArr :: Either String [Int] -> String
+showEmptyArr e = case e of
+  Right [] -> "ok-empty-arr"
+  _ -> "bad-empty-arr"
+
+showEmptyObj :: Either String Value -> String
+showEmptyObj e = case e of
+  Right (Object _) -> "ok-empty-obj"
+  _ -> "bad-empty-obj"
+
+showDoubleFromInt :: Either String Double -> String
+showDoubleFromInt e = case e of
+  Right _ -> "ok-double-from-int"
+  Left _ -> "bad-double-from-int"
+
+showDecodeErr :: Either String Value -> String
+showDecodeErr e = case e of
+  Left _ -> "ok-err"
+  Right _ -> "bad-err"
+
+showBoolMismatch :: Either String Bool -> String
+showBoolMismatch e = case e of
+  Left _ -> "ok-bool-mismatch"
+  Right _ -> "bad-bool-mismatch"
+
+showIntMismatch :: Either String Int -> String
+showIntMismatch e = case e of
+  Left _ -> "ok-int-mismatch"
+  Right _ -> "bad-int-mismatch"

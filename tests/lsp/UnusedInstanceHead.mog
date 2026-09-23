@@ -1,0 +1,14 @@
+module UnusedInstanceHead where
+
+import Data.Bool
+import Data.Eq
+import Moggi.Internal.Integer
+import Moggi.Internal.Prim
+
+-- Uses the imported class only as an instance head, the imported primitive
+-- type only in a type synonym, and the imported primops only in bodies.
+type Count = Natural#
+
+instance Eq Count where
+  (==) a b = integerEq (naturalToInteger# a) (naturalToInteger# b)
+  (/=) a b = not (integerEq (naturalToInteger# a) (naturalToInteger# b))

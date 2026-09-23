@@ -1,0 +1,250 @@
+-- What a module gets for free: the implicit Prelude, name by name. Nothing is
+-- imported here on purpose, so a name dropped from `lib/Prelude.mog` turns this
+-- fixture into a compile error instead of a silent gap.
+--
+-- `fromRational` is the one method not exercised: it takes a `Rational`, and
+-- that type is still missing (tower task T35).
+
+composed :: Int -> String
+composed = show . (\x -> x * 2)
+
+data Swatch = Sand | Sea deriving (Eq, Ord, Show)
+
+basicTypes :: (Bool, Maybe Int, Either String Int, Ordering, Char, String, Word)
+basicTypes = (True, Just 1, Left "e", LT, 'c', "s", 7)
+
+-- Strings are host-native (R1), so the two branches are shown, not listed.
+eitherString :: Either String Int -> String
+eitherString = either id show
+
+bools :: (Bool, Bool, Bool)
+bools = ((&&) True (not False), (||) False otherwise, (1 < 2) && (2 <= 2) && (3 > 2) && (3 >= 3))
+
+-- Eq and Ord, including the class methods base lists one by one.
+compared :: (Bool, Bool, Ordering, Ordering, Bool, Bool, Int)
+compared = (Sand == Sand, Sand /= Sea, compare Sand Sea, compare 1 2, 1 < 2, 2 >= 2, min 3 4 + max 3 4)
+
+enums :: (Int, Int, Int, Int, [Int], [Int])
+enums = (succ 1, pred 3, toEnum 2, fromEnum 2, enumFromTo 1 3, enumFromThenTo 1 3 5)
+
+-- Compared rather than printed for Int: `minBound`/`maxBound` are still 32-bit there (T17),
+-- and a golden should not enshrine that.
+bounds :: (Bool, Bool, Word, Word)
+bounds = (minBound == (minBound :: Int), maxBound > (minBound :: Int), minBound, maxBound)
+
+numeric :: (Int, Int, Int, Int, Int, Int, Int, Int, Int, Integer, Int)
+numeric =
+  ( 1 + 2
+  , 5 - 2
+  , 2 * 3
+  , negate 2
+  , abs (-2)
+  , signum (-2)
+  , 5 `quot` 2
+  , 5 `rem` 2
+  , 5 `div` 2 + 5 `mod` 2
+  , toInteger (7 :: Int)
+  , fromIntegral (2 :: Int) + fromInteger (3 :: Integer)
+  )
+
+quotRemSum :: Int -> Int -> Int
+quotRemSum a b = case a `quotRem` b of
+  (q, r) -> q + r
+
+divModSum :: Int -> Int -> Int
+divModSum a b = case a `divMod` b of
+  (q, r) -> q + r
+
+numericPairs :: (Int, Int)
+numericPairs = (quotRemSum 5 2, divModSum 5 2)
+
+fractional :: (Double, Double)
+fractional = (1.0 / 2.0, recip 2.0)
+
+-- `subtract`, `even`, `odd`, `gcd`, `lcm` and `(^^)`, plus `asTypeOf`. `(^)` at
+-- a pinned `Int` is left out: specializing it diverges in the compiler, and this
+-- fixture is not the place to trip over that.
+numericHelpers :: (Int, Bool, Bool, Int, Int, Int, Double, Int)
+numericHelpers =
+  ( subtract 3 10
+  , even 4
+  , odd 4
+  , gcd 12 18
+  , lcm 4 6
+  , fromIntegral (2 :: Int) + fromInteger (3 :: Integer)
+  , (2.0 :: Double) ^^ (-1)
+  , asTypeOf 7 (8 :: Int)
+  )
+
+monoidics :: (String, [Int], String)
+monoidics = (mempty <> "a" <> "b" <> mconcat ["c", "d"], mempty <> [1] <> [2], mconcat ["x", "y"])
+
+-- Functor, Applicative, Monad and MonadFail, all at Maybe so the values print.
+functorial :: (Maybe Int, Maybe Int, Maybe Int, Maybe Int, Maybe Int, Maybe Int, Int)
+functorial =
+  ( map (\x -> x + 1) (Just 1)
+  , (\x -> x + 1) <$> Just 1
+  , (\_ -> 1) <$> Just 2
+  , (+) <$> Just 1 <*> Just 2
+  , (pure () *> pure ()) >> Just 1
+  , (pure (1 :: Int) <* pure ()) >>= (\x -> pure (x + 1))
+  , case fail "no" :: Maybe Int of
+      Nothing -> 0
+      Just n -> n
+  )
+
+folds :: (Int, Int, Int, Int, Int, Int, Bool, Bool)
+folds =
+  ( foldr (+) 0 [1, 2]
+  , foldl (+) 0 [1, 2]
+  , foldr1 (+) [1, 2]
+  , foldl1 (+) [1, 2]
+  , sum (foldMap (\x -> [x]) [1, 2])
+  , length [1, 2, 3]
+  , null ([] :: [Int])
+  , elem 2 [1, 2]
+  )
+
+folds2 :: (Bool, Bool, Bool, Bool, Int, Int, Int)
+folds2 =
+  ( notElem 9 [1, 2]
+  , any (> 1) [1, 2]
+  , all (> 0) [1, 2]
+  , and [True, False] || or [False, True]
+  , length (concat [[1], [2]])
+  , sum (concatMap (\x -> [x, x]) [1])
+  , sum [1, 2] + product [2, 3] + maximum [1, 2] + minimum [1, 2]
+  )
+
+traversals :: (Maybe [Int], Maybe [Int], Maybe [Int], Maybe [Int])
+traversals =
+  ( traverse (\x -> Just (x + 1)) [1, 2]
+  , sequenceA [Just 1, Just 2]
+  , mapM (\x -> Just (x + 1)) [1, 2]
+  , sequence [Just 1, Just 2]
+  )
+
+pairSum :: (Int, Int) -> Int
+pairSum p = case p of
+  (a, b) -> a + b
+
+functions :: (Int, Int, Int, Int, Int, Int, Int, Int, Int, Int)
+functions =
+  ( id 1
+  , const 2 9
+  , ((\x -> x + 1) . (\x -> x * 2)) 3
+  , flip (-) 1 2
+  , (+) 1 $ 2
+  , fst (1, 2)
+  , snd (1, 2)
+  , curry pairSum 1 2
+  , uncurry (+) (1, 2)
+  , pairSum (3, 4)
+  )
+
+listOps :: ([Int], [Int], Int, Int, [Int], [Int], [Int], [Int], [Int], [Int], [Int], [Int], [Int], Int, Int)
+listOps =
+  ( filter (> 1) [1, 2, 3]
+  , reverse [1, 2]
+  , head [1, 2]
+  , last [1, 2]
+  , tail [1, 2]
+  , init [1, 2]
+  , scanl (+) 0 [1, 2]
+  , scanl1 (+) [1, 2]
+  , scanr (+) 0 [1, 2]
+  , scanr1 (+) [1, 2]
+  , take 1 [1, 2] ++ drop 1 [1, 2] ++ replicate 2 7
+  , takeWhile (< 3) [1, 2] ++ dropWhile (< 3) [1, 2]
+  , spanAll (< 2) [1, 2] ++ breakAll (> 1) [1, 2] ++ splitFirst 1 [1, 2]
+  , [1, 2] !! 1
+  , length (words "a b" ++ lines "c")
+  )
+
+-- Tuples themselves: `Show` covers 1..15, base's ceiling.
+listCombining :: (Maybe Int, Int, Int, Int, Int, Int)
+listCombining =
+  ( lookup 1 [(1 :: Int, 2)]
+  , length (zip [1] [2])
+  , length (zip3 [1] [2] [3])
+  , length (zipWith (+) [1] [2])
+  , length (zipWith3 (\a b c -> a + b + c) [1] [2] [3])
+  , length (case unzip [(1, 2)] of (a, b) -> a ++ b) + length (case unzip3 [(1, 2, 3)] of (a, b, c) -> a ++ b ++ c)
+  )
+
+-- The String helpers are host-native (R1): their results are Strings, not [Char].
+strings :: (String, String)
+strings = (unwords ["a", "b"], unlines ["c"])
+
+spanAll :: (a -> Bool) -> [a] -> [a]
+spanAll p xs = case span p xs of
+  (a, b) -> a ++ b
+
+breakAll :: (a -> Bool) -> [a] -> [a]
+breakAll p xs = case break p xs of
+  (a, b) -> a ++ b
+
+splitFirst :: Int -> [a] -> [a]
+splitFirst n xs = case splitAt n xs of
+  (a, b) -> a ++ b
+
+showBits :: (String, String, String, String, String, String, String, String)
+showBits =
+  ( shows 1 ""
+  , showsPrec 0 (1 :: Int) ""
+  , showList [1, 2] ""
+  , show (1 :: Int)
+  , showChar 'c' ""
+  , showString "s" ""
+  , showParen True (shows 1) ""
+  , shows 2 ""
+  )
+
+-- `error` and `undefined` are values of any type. They are referenced only as
+-- function values and never applied, so the fixture has no failing path.
+usesError :: String -> Int
+usesError = error
+
+usesUndefined :: () -> Int
+usesUndefined _ = undefined
+
+-- The bare-report raise, referenced only as a value for the same reason.
+usesErrorWithoutStackTrace :: String -> Int
+usesErrorWithoutStackTrace = errorWithoutStackTrace
+
+unreached :: (String -> Int, () -> Int, String -> Int)
+unreached = (usesError, usesUndefined, usesErrorWithoutStackTrace)
+
+ioBasics :: IO ()
+ioBasics = do
+  putStr ""
+  putStrLn ""
+  _ <- mapM_ putStr ["", ""]
+  sequence_ [putStr "", putStrLn ""]
+  pure ()
+
+main :: IO ()
+main = do
+  putStr (composed 21 <> "\n")
+  putStrLn (show basicTypes)
+  putStrLn (show bools)
+  putStrLn (eitherString (Right 1) <> eitherString (Left "e"))
+  putStrLn (show compared)
+  putStrLn (show enums)
+  putStrLn (show bounds)
+  putStrLn (show numeric)
+  putStrLn (show numericPairs)
+  putStrLn (show fractional)
+  putStrLn (show numericHelpers)
+  putStrLn (show monoidics)
+  putStrLn (show functorial)
+  putStrLn (show folds)
+  putStrLn (show folds2)
+  putStrLn (show traversals)
+  putStrLn (show functions)
+  putStrLn (show listOps)
+  putStrLn (show listCombining)
+  putStrLn (show strings)
+  putStrLn (show showBits)
+  putStrLn (show (const 1 usesError + const 2 usesUndefined))
+  ioBasics

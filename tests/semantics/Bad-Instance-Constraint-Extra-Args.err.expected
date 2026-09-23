@@ -1,0 +1,4 @@
+tests/semantics/Bad-Instance-Constraint-Extra-Args.mog:4:10: type error: class `Eq` applied to too many arguments
+
+  4 | instance Eq Bool Bool => Boxed Bool where
+    |          ^^

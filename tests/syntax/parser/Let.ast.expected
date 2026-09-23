@@ -1,0 +1,11 @@
+program
+  function addOne :: Int -> Int
+    pat_var x
+    let
+      binding
+        pat_var y
+        type_asc Int
+          integer 1
+      infix +
+        variable x
+        variable y

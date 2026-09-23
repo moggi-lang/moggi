@@ -1,0 +1,228 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module System.IO.JVM
+  ( stdin
+  , stdout
+  , stderr
+  , openFile
+  , hClose
+  , hGetLine
+  , hGetChar
+  , getLine
+  , getChar
+  , hIsEOF
+  , hGetContents
+  , hFileSize
+  , hSetFileSize
+  , hPutStr
+  , hPutStrLn
+  , hPutChar
+  , hFlush
+  , putStr
+  , putStrLn
+  , print
+  ) where
+
+import Text.Show
+import Data.Bool
+import Control.Applicative
+import Control.Exception (catch)
+import Control.Monad
+import System.IO.Base (IO, FilePath)
+import Moggi.Err
+import Moggi.IO.Exception
+import Data.Char (Char, chr)
+import Data.Int
+import Moggi.Internal.Integer
+import Data.Maybe
+import Data.String
+import Moggi.Internal.Prim
+import System.IO.Error (mkIOError)
+import System.IO.Types
+
+foreign jvm type StandardCharsets "java.nio.charset.StandardCharsets"
+
+foreign jvm type RawFile "java.io.File"
+
+foreign jvm function platformStdin "moggi.rt.Platform:stdin" :: Handle
+
+foreign jvm const rawStdout "java.lang.System:out" :: Handle
+
+foreign jvm const rawStderr "java.lang.System:err" :: Handle
+
+foreign jvm const rawStdin "java.lang.System:in" :: Handle
+
+foreign jvm function rawPrint "java.io.PrintStream.print" :: Handle -> String -> IO ()
+
+foreign jvm function rawFlush "java.io.PrintStream.flush" :: Handle -> IO ()
+
+foreign jvm function newFileInputStream "java.io.FileInputStream:__con" :: String -> Handle
+
+foreign jvm function newInputStreamReader "java.io.InputStreamReader:__con" :: Handle -> StandardCharsets -> Handle
+
+foreign jvm function newBufferedReader "java.io.BufferedReader:__con" :: Handle -> Handle
+
+foreign jvm function newFileOutputStream "java.io.FileOutputStream:__con" :: String -> Bool -> Handle
+
+foreign jvm function newPrintStream "java.io.PrintStream:__con" :: Handle -> Bool -> StandardCharsets -> Handle
+
+foreign jvm function newStringWriter "java.io.StringWriter:__con" :: Handle
+
+foreign jvm const rawUTF8 "java.nio.charset.StandardCharsets:UTF_8" :: StandardCharsets
+
+foreign jvm function brReadLine "java.io.BufferedReader.readLine" :: Handle -> IO String
+
+foreign jvm function brMark "java.io.BufferedReader.mark" :: Handle -> Int32 -> IO ()
+
+foreign jvm function brRead "java.io.BufferedReader.read" :: Handle -> IO Int32
+
+foreign jvm function brReset "java.io.BufferedReader.reset" :: Handle -> IO ()
+
+foreign jvm function closeableClose "java.io.Closeable.close" :: Handle -> IO ()
+
+foreign jvm function newRawFile "java.io.File:__con" :: String -> RawFile
+
+foreign jvm function rawFileIsDirectory "java.io.File.isDirectory" :: RawFile -> Bool
+
+foreign jvm function rawFileExists "java.io.File.exists" :: RawFile -> Bool
+
+foreign jvm function rawFileCanRead "java.io.File.canRead" :: RawFile -> Bool
+
+foreign jvm function rawFileCanWrite "java.io.File.canWrite" :: RawFile -> Bool
+
+foreign jvm function readerTransferTo "java.io.Reader.transferTo" :: Handle -> Handle -> IO Int
+
+foreign jvm function stringWriterToString "java.io.StringWriter.toString" :: Handle -> String
+
+stdin :: Handle
+stdin = platformStdin
+
+stdout :: Handle
+stdout = rawStdout
+
+stderr :: Handle
+stderr = rawStderr
+
+openFile :: FilePath -> IOMode -> IO Handle
+openFile p mode = catch (openMode (p) mode) (openFileFailed p mode)
+
+openMode :: String -> IOMode -> IO Handle
+openMode pathStr mode = case mode of
+  ReadMode -> openReadMode pathStr
+  WriteMode -> openWriteMode pathStr
+  AppendMode -> openAppendMode pathStr
+  ReadWriteMode -> error "openFile: ReadWriteMode is not supported on JVM"
+
+openFileFailed :: FilePath -> IOMode -> HostException -> IO Handle
+openFileFailed p mode _ =
+  ioError (mkIOError (openErrorType p mode) "openFile" Nothing (Just (p)))
+
+-- | Java reports every failed open as `FileNotFoundException`, whichever way it
+-- failed, so the error type is read from the path.
+openErrorType :: FilePath -> IOMode -> IOErrorType
+openErrorType p mode = probePath (newRawFile (p)) mode
+
+probePath :: RawFile -> IOMode -> IOErrorType
+probePath f mode = case rawFileIsDirectory f of
+  True -> InappropriateType
+  False -> case rawFileExists f of
+    False -> NoSuchThing
+    True -> case writableMode mode of
+      True -> case rawFileCanWrite f of
+        False -> PermissionDenied
+        True -> OtherError
+      False -> case rawFileCanRead f of
+        False -> PermissionDenied
+        True -> OtherError
+
+writableMode :: IOMode -> Bool
+writableMode mode = case mode of
+  ReadMode -> False
+  WriteMode -> True
+  AppendMode -> True
+  ReadWriteMode -> True
+
+openReadMode :: String -> IO Handle
+openReadMode pathStr =
+  pure (newBufferedReader (newInputStreamReader (newFileInputStream pathStr) rawUTF8))
+
+openWriteMode :: String -> IO Handle
+openWriteMode pathStr =
+  pure (newPrintStream (newFileOutputStream pathStr False) True rawUTF8)
+
+openAppendMode :: String -> IO Handle
+openAppendMode pathStr =
+  pure (newPrintStream (newFileOutputStream pathStr True) True rawUTF8)
+
+hClose :: Handle -> IO ()
+hClose h = closeableClose h
+
+hGetLine :: Handle -> IO (Maybe String)
+hGetLine h = hGetLineFile h
+
+hIsEOF :: Handle -> IO Bool
+hIsEOF h = hIsEOFFile h
+
+hGetContents :: Handle -> IO String
+hGetContents h = do
+  let writer = newStringWriter
+  _ <- readerTransferTo h writer
+  pure (stringWriterToString writer)
+
+hFileSize :: Handle -> IO Integer
+hFileSize _ = error "hFileSize: not supported on JVM"
+
+hSetFileSize :: Handle -> Integer -> IO ()
+hSetFileSize _ _ = error "hSetFileSize: not supported on JVM"
+
+hPutStr h s = rawPrint h s
+
+hPutStrLn h s = hPutStr h (s <> "\n")
+
+hPutChar :: Handle -> Char -> IO ()
+hPutChar h c = hPutStr h (singleton c)
+
+hGetChar :: Handle -> IO Char
+hGetChar h = do
+  n <- brRead h
+  let i = int32ToInt# n
+  if i == -1 then error "hGetChar: end of input" else pure (chr i)
+
+hFlush h = rawFlush h
+
+getLineFromMaybe :: Maybe String -> IO String
+getLineFromMaybe m = case m of
+  Nothing -> error "getLine: end of input"
+  Just s -> pure s
+
+getLine :: IO String
+getLine = do
+  m <- hGetLine stdin
+  getLineFromMaybe m
+
+getChar :: IO Char
+getChar = hGetChar stdin
+
+print :: Show a => a -> IO ()
+print x = putStr (show x)
+
+putStr s = hPutStr stdout s
+
+putStrLn s = hPutStrLn stdout s
+
+-- Internal helpers
+
+hGetLineFile :: Handle -> IO (Maybe String)
+hGetLineFile h = do
+  isEof <- hIsEOFFile h
+  case isEof of
+    True -> pure Nothing
+    False -> do
+      line <- brReadLine h
+      pure (Just line)
+
+hIsEOFFile :: Handle -> IO Bool
+hIsEOFFile h = do
+  brMark h (int32FromInt# 1)
+  c <- brRead h
+  brReset h
+  pure (int32ToInt# c == -1)

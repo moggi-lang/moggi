@@ -1,0 +1,4 @@
+import Data.Ord
+
+-- Ord requires an Eq superclass instance.
+data Color = Red | Blue deriving (Ord)

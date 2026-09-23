@@ -1,0 +1,25 @@
+import System.IO
+import Data.ByteString.Char8 qualified as C
+import Data.String
+import Data.Bool
+import Data.Eq
+import Data.Either
+import Data.Int
+import Data.JSON
+rt :: Either Int String -> IO String
+rt e = do
+  mr <- eitherDecode (encode e)
+  pure (case mr of
+    Left err -> "ERR"
+    Right e2 -> case e2 == e of
+      True -> "ok"
+      False -> "bad")
+
+main :: IO ()
+main = do
+  C.putStrLn (encode (Left 1 :: Either Int String))
+  C.putStrLn (encode (Right "hi" :: Either Int String))
+  r <- rt (Left 0)
+  putStrLn r
+  r <- rt (Right "world")
+  putStrLn r

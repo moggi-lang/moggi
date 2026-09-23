@@ -1,0 +1,5 @@
+module Bad.IO.Pure.Main
+
+import Prelude ()
+
+main = pure 1

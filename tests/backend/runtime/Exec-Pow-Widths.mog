@@ -1,0 +1,60 @@
+import Data.Int
+import Data.Word
+
+-- `^` at every machine integer width. Each result is reduced modulo its own
+-- width by that width's `*`, so one expected output covers all three backends.
+-- The `Double` cases compare against the arithmetic instead of printing the
+-- value: `Show Double` is not identical across the three backends yet, while the
+-- value is what is under test. `18446744073709551615` is left out on purpose: a
+-- `Word64` literal at or above `2^63` throws on .NET, which is not this fixture's job.
+
+powWord8 :: (Word8, Word8, Word8)
+powWord8 = (3 ^ (10 :: Int), 255 ^ (2 :: Int), 7 ^ (0 :: Int))
+
+powInt8 :: (Int8, Int8, Int8, Int8)
+powInt8 = ((-3) ^ (3 :: Int), 2 ^ (8 :: Int), (-2) ^ (7 :: Int), 5 ^ (0 :: Int))
+
+powWord16 :: (Word16, Word16)
+powWord16 = (300 ^ (10 :: Int), 65535 ^ (2 :: Int))
+
+powInt16 :: (Int16, Int16)
+powInt16 = ((-3000) ^ (3 :: Int), 2 ^ (15 :: Int))
+
+powWord32 :: (Word32, Word32)
+powWord32 = (100000 ^ (3 :: Int), 4294967295 ^ (2 :: Int))
+
+powInt32 :: (Int32, Int32)
+powInt32 = ((-100000) ^ (3 :: Int), 2 ^ (31 :: Int))
+
+powWord64 :: (Word64, Word64)
+powWord64 = (1000000000 ^ (4 :: Int), 4294967295 ^ (2 :: Int))
+
+powInt64 :: (Int64, Int64)
+powInt64 = ((-1000000000) ^ (3 :: Int), 2 ^ (62 :: Int))
+
+powWord :: (Word, Int)
+powWord = (3 ^ (5 :: Int), 5 ^ (0 :: Int))
+
+-- The value, not its printing: `2.0 ^ 10` and `1.5 ^^ 3` are exactly
+-- representable, and `1.1 ^^ 2` has to be the same multiplication the library
+-- body performs (`powAcc` squares the base, so it is `1.1 * 1.1`).
+powDouble :: (Bool, Bool, Bool, Bool)
+powDouble =
+  ( 2.0 ^ (10 :: Int) == 1024.0
+  , (1.5 :: Double) ^^ (3 :: Int) == 3.375
+  , (2.0 :: Double) ^^ (-1 :: Int) == 0.5
+  , (1.1 :: Double) ^^ (2 :: Int) == 1.1 * 1.1
+  )
+
+main :: IO ()
+main = do
+  putStrLn (show powWord8)
+  putStrLn (show powInt8)
+  putStrLn (show powWord16)
+  putStrLn (show powInt16)
+  putStrLn (show powWord32)
+  putStrLn (show powInt32)
+  putStrLn (show powWord64)
+  putStrLn (show powInt64)
+  putStrLn (show powWord)
+  putStrLn (show powDouble)

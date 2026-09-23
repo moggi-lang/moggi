@@ -1,0 +1,4 @@
+tests/semantics/Bad-Infer-Branches.mog:1:1: type error: unresolved type class constraint: `Num ()`
+
+  1 | pick mx = case mx of
+    | ^^^^

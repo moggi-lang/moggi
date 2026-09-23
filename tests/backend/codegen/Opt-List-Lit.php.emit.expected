@@ -1,0 +1,13 @@
+<?php declare(strict_types=1);
+
+function oneTwoThree() {
+    return [1, 2, 3];
+}
+
+function foo() {
+    return "x";
+}
+
+function items() {
+    return [foo(), "y"];
+}

@@ -1,0 +1,7 @@
+data Color = Red | Blue
+
+data OnlyColor (c :: Color) = OnlyColor
+
+-- Wrong kind: string literals have kind Symbol, not Color.
+bad :: OnlyColor "Red" -> String
+bad OnlyColor = "no"

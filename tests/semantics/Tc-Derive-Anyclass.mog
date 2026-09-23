@@ -1,0 +1,14 @@
+import Data.Eq
+import Text.Show
+
+-- Test anyclass deriving
+class MyConstraint a where
+  myMethod :: a -> String
+  myMethod _ = "default"
+
+data Foo = Foo | Bar
+  deriving (Eq, Show)
+  deriving anyclass (MyConstraint)
+
+-- anyclass generates empty instance: instance MyConstraint Foo where {}
+-- myMethod uses default implementation

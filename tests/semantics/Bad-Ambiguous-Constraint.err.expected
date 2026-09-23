@@ -1,0 +1,4 @@
+tests/semantics/Bad-Ambiguous-Constraint.mog:6:8: type error: ambiguous constraint `Show a`; add a type signature
+
+  6 | main = show []
+    |        ^^^^^^

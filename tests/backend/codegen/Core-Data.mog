@@ -1,0 +1,14 @@
+fromMaybe :: Int -> Maybe Int -> Int
+fromMaybe d mx = case mx of
+  Just a -> a
+  Nothing -> d
+
+data User = User { name :: Int, age :: Int }
+
+makeUser = User { name = 1, age = 30 }
+
+getAge user = user.age
+
+showUser User { name = n, age = a } = n + a
+
+ageOf User { age = a } = a

@@ -1,0 +1,5 @@
+module Bad.ImportAfterForeign where
+
+import Data.Bool
+foreign php type Foo "mixed"
+import Data.Int

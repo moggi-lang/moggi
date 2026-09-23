@@ -1,0 +1,9 @@
+program
+  function twice :: __Dict_Num -> a -> a
+    pat_var __ev_Num
+    pat_var x
+    apply
+      apply
+        evidence_method Num.+ evidence=__ev_Num nullary=0
+        variable x
+      variable x

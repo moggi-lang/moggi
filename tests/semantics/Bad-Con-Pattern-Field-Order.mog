@@ -1,0 +1,5 @@
+data PairBox = MkPair { first :: Int, second :: String }
+
+bad :: PairBox -> Int
+bad p = case p of
+  MkPair { first = x, second = y } -> y + 1

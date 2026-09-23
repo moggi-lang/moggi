@@ -1,0 +1,182 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | The implicit Prelude: the types, classes and functions every module sees.
+--
+-- Historic spellings are gone: no `return` (`pure` covers it), no `mappend`
+-- (`(<>)` covers it), no `foldl'`/`seq`/`($!)` (evaluation is strict, so one
+-- `foldl` is enough). The effects that touch the outside world (`print`,
+-- `getLine`, `readFile`, ...) come from an explicit `import System.IO` rather
+-- than sitting in every module's scope.
+module Prelude
+  ( -- Basic data types
+    Bool(False, True)
+  , (&&)
+  , (||)
+  , not
+  , otherwise
+  , Maybe(Nothing, Just)
+  , maybe
+  , Either(Left, Right)
+  , either
+  , Ordering(LT, EQ, GT)
+  , Char
+  , String
+    -- Tuples
+  , fst
+  , snd
+  , curry
+  , uncurry
+    -- Basic type classes
+  , Eq((==), (/=))
+  , Ord(compare, (<), (<=), (>), (>=), max, min)
+  , Enum(succ, pred, toEnum, fromEnum)
+  , enumFromTo
+  , enumFromThenTo
+  , Bounded(minBound, maxBound)
+    -- Numeric types and classes
+  , Int
+  , Integer
+  , Double
+  , Word
+  , Num(..)
+  , Integral(..)
+  , fromIntegral
+  , Fractional(..)
+  , subtract
+  , even
+  , odd
+  , (^)
+  , (^^)
+  , gcd
+  , lcm
+    -- Semigroups and monoids
+  , Semigroup((<>))
+  , Monoid(mempty, mconcat)
+    -- Monads, functors and their helpers
+  , Functor(map)
+  , (<$>)
+  , (<$)
+  , Applicative(pure, (<*>))
+  , (*>)
+  , (<*)
+  , Monad((>>=))
+  , (>>)
+  , MonadFail(fail)
+  , mapM_
+  , sequence_
+  , (=<<)
+    -- Folds and traversals
+  , Foldable(foldr)
+  , foldMap
+  , foldl
+  , foldl1
+  , foldr1
+  , null
+  , length
+  , elem
+  , notElem
+  , any
+  , all
+  , and
+  , or
+  , concat
+  , concatMap
+  , sum
+  , product
+  , maximum
+  , minimum
+  , Traversable(traverse, sequenceA, mapM, sequence)
+    -- Miscellaneous
+  , id
+  , const
+  , (.)
+  , flip
+  , ($)
+  , error
+  , errorWithoutStackTrace
+  , undefined
+  , asTypeOf
+    -- List operations
+  , (++)
+  , filter
+  , head
+  , last
+  , tail
+  , init
+  , (!!)
+  , reverse
+  , scanl
+  , scanl1
+  , scanr
+  , scanr1
+  , take
+  , drop
+  , takeWhile
+  , dropWhile
+  , span
+  , break
+  , splitAt
+  , replicate
+  , lookup
+  , zip
+  , zip3
+  , zipWith
+  , zipWith3
+  , unzip
+  , unzip3
+  , lines
+  , words
+  , unlines
+  , unwords
+    -- Converting to and from String
+  , ShowS
+  , Show(showsPrec, showList, show)
+  , shows
+  , showChar
+  , showString
+  , showParen
+    -- Basic input and output (see D-6: nothing file- or read-side here)
+  , IO
+  , putStr
+  , putStrLn
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Control.Monad.Fail
+import Data.Eq
+import Data.Foldable
+import Data.Functor hiding (unzip)
+import Data.Monoid
+import Moggi.Internal.Num
+import Moggi.Internal.Real
+import Data.Semigroup
+import Text.Show
+import Data.Ord
+import Data.Enum
+import Data.Bounded
+import Data.Function (id, const, (.), flip, ($))
+import Moggi.Internal.Base (asTypeOf)
+
+import Data.Bool
+import Data.Char (Char)
+import Data.Int
+import Moggi.Internal.Integer
+import Moggi.Internal.Float
+import Data.String hiding (singleton, pack, unpack, length, take, drop, isPrefixOf, isSuffixOf)
+import Data.Maybe hiding (fromJust, listToMaybe, maybeToList, catMaybes, mapMaybe)
+import Data.Either
+import Data.Traversable
+import Data.Tuple (fst, snd, curry, uncurry)
+import Data.Word (Word)
+import Moggi.Err
+import Data.List hiding (
+  uncons,
+  unsnoc,
+  subsequences,
+  permutations,
+  intercalate,
+  transpose,
+  intersperse,
+  find
+)
+import System.IO (IO, putStr, putStrLn)

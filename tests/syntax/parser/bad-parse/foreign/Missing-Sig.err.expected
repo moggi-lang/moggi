@@ -1,0 +1,4 @@
+tests/syntax/parser/bad-parse/foreign/Missing-Sig.mog:3:35: parse error: expected `::`, found constructor 'String'
+
+  3 | foreign php function bad "strlen" String -> Int
+    |                                   ^^^^^^

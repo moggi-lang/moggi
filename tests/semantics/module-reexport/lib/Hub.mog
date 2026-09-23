@@ -1,0 +1,8 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Hub
+  ( module Alpha
+  , module Beta
+  ) where
+
+import Alpha
+import Beta

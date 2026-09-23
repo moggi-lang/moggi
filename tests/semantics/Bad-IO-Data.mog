@@ -1,0 +1,3 @@
+module Bad.IO.Data
+
+data IO a = IO a

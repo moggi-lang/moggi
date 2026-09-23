@@ -1,0 +1,3 @@
+data Box a = Box { value :: a }
+
+both = (Box { value = 1 }, Box { value = "x" })

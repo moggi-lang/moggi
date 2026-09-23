@@ -1,0 +1,4 @@
+data Unit = Unit
+
+bad :: Unti -> ()
+bad x = Unit

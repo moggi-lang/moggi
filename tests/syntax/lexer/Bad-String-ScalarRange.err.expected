@@ -1,0 +1,4 @@
+tests/syntax/lexer/Bad-String-ScalarRange.mog:3:6: lex error: invalid Unicode scalar value in numeric escape (U+110000 is out of range or a surrogate)
+
+  3 | s = "\u{110000}"
+    |      ^^^^^^^^^^^

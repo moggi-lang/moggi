@@ -1,0 +1,20 @@
+<?php declare(strict_types=1);
+
+namespace Tc\IO\Linear;
+
+const __MOGGI_MAP = [[12 => ['Tc.IO.Linear.emit', 'tests/backend/codegen/Tc-IO-Linear.mog', 6, 12], 17 => ['Tc.IO.Linear.main', 'tests/backend/codegen/Tc-IO-Linear.mog', 10, 3], 18 => ['Tc.IO.Linear.main', 'tests/backend/codegen/Tc-IO-Linear.mog', 11, 3]], ['Tc\\IO\\Linear\\emit' => ['Tc.IO.Linear.emit', 'tests/backend/codegen/Tc-IO-Linear.mog', 6, 12], 'Tc\\IO\\Linear\\main' => ['Tc.IO.Linear.main', 'tests/backend/codegen/Tc-IO-Linear.mog', 9, 8]]];
+
+require_once __DIR__ . '/../../../lib/System/IO/PHP.php';
+
+use function System\IO\PHP\putStrLn as renamedPrint;
+
+function emit($msg) {
+    renamedPrint($msg);
+    return null;
+}
+
+function main() {
+    renamedPrint("hello");
+    emit("wrapped");
+    return null;
+}

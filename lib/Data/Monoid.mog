@@ -1,0 +1,303 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | A type @a@ is a 'Monoid' if it provides an associative function ('<>')
+-- that lets you combine any two values of type @a@ into one, and a neutral
+-- element ('mempty') such that
+--
+-- > a <> mempty == mempty <> a == a
+--
+-- A 'Monoid' is a 'Semigroup' with the added requirement of a neutral element,
+-- so every 'Monoid' is a 'Semigroup' and not the other way around. The
+-- wrappers below put a monoid on a type that has no such instance of its own:
+-- 'Sum' and 'Product' for numeric addition and multiplication, 'All' and 'Any'
+-- for conjunction and disjunction, 'First' and 'Last' to keep one end of a
+-- 'Maybe' chain, 'Dual' to flip the order of combination, and 'Endo' for
+-- endofunctions composed with @(.)@.
+module Data.Monoid
+  ( Monoid(..)
+  , (<>)
+  , Dual(Dual)
+  , getDual
+  , Endo(Endo)
+  , appEndo
+  , All(All)
+  , getAll
+  , Any(Any)
+  , getAny
+  , Sum(Sum)
+  , getSum
+  , Product(Product)
+  , getProduct
+  , First(First)
+  , getFirst
+  , Last(Last)
+  , getLast
+  ) where
+
+import Data.Bool
+import Data.Bounded
+import Data.Eq
+import Data.Function
+import Data.Functor
+import Data.Maybe
+import Moggi.Internal.Num
+import Data.Ord
+import Data.Semigroup
+import Text.Show
+import Moggi.Internal.Prim
+
+class Semigroup a => Monoid a where
+  {-# MINIMAL mempty | mconcat #-}
+
+  mempty :: a
+  mempty = mconcat []
+
+  mconcat :: [a] -> a
+  mconcat xs = case xs of
+    [] -> mempty
+    x : rest -> x <> mconcat rest
+
+instance Monoid Ordering where
+  mempty = EQ
+
+eqBool :: Bool -> Bool -> Bool
+eqBool a b = a == b
+
+neBool :: Bool -> Bool -> Bool
+neBool a b = a /= b
+
+cmpBool :: Bool -> Bool -> Ordering
+cmpBool a b = compare a b
+
+
+-- | A monoid on @a@ whose combination runs the other way round.
+data Dual a = Dual a
+
+getDual :: Dual a -> a
+getDual d = case d of
+  Dual x -> x
+
+instance Semigroup a => Semigroup (Dual a) where
+  (<>) a b = Dual (getDual b <> getDual a)
+
+instance Monoid a => Monoid (Dual a) where
+  mempty = Dual mempty
+
+instance Functor Dual where
+  map f d = Dual (f (getDual d))
+
+instance Show a => Show (Dual a) where
+  showsPrec d x = showParen (d > 10)
+    (\r -> showString "Dual {getDual = " (showsPrec 0 (getDual x) (showString "}" r)))
+
+
+-- | Endofunctions @a -> a@, composed with '(<>)' the way @(.)@ composes them.
+data Endo a = Endo (a -> a)
+
+appEndo :: Endo a -> a -> a
+appEndo e x = case e of
+  Endo f -> f x
+
+instance Semigroup (Endo a) where
+  (<>) e1 e2 = Endo ((.) (appEndo e1) (appEndo e2))
+
+instance Monoid (Endo a) where
+  mempty = Endo id
+
+-- All / Any
+
+-- | Conjunction of 'Bool's.
+data All = All Bool
+
+getAll :: All -> Bool
+getAll x = case x of
+  All b -> b
+
+instance Semigroup All where
+  (<>) a b = All (getAll a && getAll b)
+
+instance Monoid All where
+  mempty = All True
+
+instance Eq All where
+  (==) a b = eqBool (getAll a) (getAll b)
+  (/=) a b = neBool (getAll a) (getAll b)
+
+instance Ord All where
+  compare a b = cmpBool (getAll a) (getAll b)
+
+instance Show All where
+  showsPrec d a = showParen (d > 10)
+    (\r -> showString "All {getAll = " (showsPrec 0 (getAll a) (showString "}" r)))
+
+instance Bounded All where
+  minBound = All False
+  maxBound = All True
+
+-- | Disjunction of 'Bool's.
+data Any = Any Bool
+
+getAny :: Any -> Bool
+getAny x = case x of
+  Any b -> b
+
+instance Semigroup Any where
+  (<>) a b = Any (getAny a || getAny b)
+
+instance Monoid Any where
+  mempty = Any False
+
+instance Eq Any where
+  (==) a b = eqBool (getAny a) (getAny b)
+  (/=) a b = neBool (getAny a) (getAny b)
+
+instance Ord Any where
+  compare a b = cmpBool (getAny a) (getAny b)
+
+instance Show Any where
+  showsPrec d a = showParen (d > 10)
+    (\r -> showString "Any {getAny = " (showsPrec 0 (getAny a) (showString "}" r)))
+
+instance Bounded Any where
+  minBound = Any False
+  maxBound = Any True
+
+-- Sum / Product
+
+-- | Addition of a 'Num'.
+data Sum a = Sum a
+
+getSum :: Sum a -> a
+getSum s = case s of
+  Sum x -> x
+
+instance Num a => Semigroup (Sum a) where
+  (<>) sa sb = Sum (getSum sa + getSum sb)
+
+instance Num a => Monoid (Sum a) where
+  mempty = Sum 0
+
+instance Functor Sum where
+  map f s = Sum (f (getSum s))
+
+instance Eq a => Eq (Sum a) where
+  (==) a b = getSum a == getSum b
+  (/=) a b = getSum a /= getSum b
+
+instance Ord a => Ord (Sum a) where
+  compare a b = compare (getSum a) (getSum b)
+
+instance Show a => Show (Sum a) where
+  showsPrec d s = showParen (d > 10)
+    (\r -> showString "Sum {getSum = " (showsPrec 0 (getSum s) (showString "}" r)))
+
+instance Bounded a => Bounded (Sum a) where
+  minBound = Sum minBound
+  maxBound = Sum maxBound
+
+instance Num a => Num (Sum a) where
+  (+) a b = Sum (getSum a + getSum b)
+  (-) a b = Sum (getSum a - getSum b)
+  (*) a b = Sum (getSum a * getSum b)
+  negate a = Sum (negate (getSum a))
+  abs a = Sum (abs (getSum a))
+  signum a = Sum (signum (getSum a))
+  fromInteger n = Sum (fromInteger n)
+
+-- | Multiplication of a 'Num'.
+data Product a = Product a
+
+getProduct :: Product a -> a
+getProduct p = case p of
+  Product x -> x
+
+instance Num a => Semigroup (Product a) where
+  (<>) pa pb = Product (getProduct pa * getProduct pb)
+
+instance Num a => Monoid (Product a) where
+  mempty = Product 1
+
+instance Functor Product where
+  map f p = Product (f (getProduct p))
+
+instance Eq a => Eq (Product a) where
+  (==) a b = getProduct a == getProduct b
+  (/=) a b = getProduct a /= getProduct b
+
+instance Ord a => Ord (Product a) where
+  compare a b = compare (getProduct a) (getProduct b)
+
+instance Show a => Show (Product a) where
+  showsPrec d p = showParen (d > 10)
+    (\r -> showString "Product {getProduct = " (showsPrec 0 (getProduct p) (showString "}" r)))
+
+instance Bounded a => Bounded (Product a) where
+  minBound = Product minBound
+  maxBound = Product maxBound
+
+instance Num a => Num (Product a) where
+  (+) a b = Product (getProduct a + getProduct b)
+  (-) a b = Product (getProduct a - getProduct b)
+  (*) a b = Product (getProduct a * getProduct b)
+  negate a = Product (negate (getProduct a))
+  abs a = Product (abs (getProduct a))
+  signum a = Product (signum (getProduct a))
+  fromInteger n = Product (fromInteger n)
+
+-- First / Last
+
+-- | Maybe monoid returning the leftmost non-'Nothing' value.
+data First a = First (Maybe a)
+
+getFirst :: First a -> Maybe a
+getFirst f = case f of
+  First x -> x
+
+instance Semigroup (First a) where
+  (<>) a b = case getFirst a of
+    Nothing -> b
+    Just _ -> a
+
+instance Monoid (First a) where
+  mempty = First Nothing
+
+instance Show a => Show (First a) where
+  showsPrec d x = showParen (d > 10)
+    (\r -> showString "First {getFirst = " (showsPrec 0 (getFirst x) (showString "}" r)))
+
+mapMaybeF :: (a -> b) -> Maybe a -> Maybe b
+mapMaybeF f mx = case mx of
+  Nothing -> Nothing
+  Just x -> Just (f x)
+
+instance Functor First where
+  map f x = First (mapMaybeF f (getFirst x))
+
+-- | Maybe monoid returning the rightmost non-'Nothing' value.
+data Last a = Last (Maybe a)
+
+getLast :: Last a -> Maybe a
+getLast x = case x of
+  Last m -> m
+
+instance Semigroup (Last a) where
+  (<>) a b = case getLast b of
+    Nothing -> a
+    Just _ -> b
+
+instance Monoid (Last a) where
+  mempty = Last Nothing
+
+instance Show a => Show (Last a) where
+  showsPrec d x = showParen (d > 10)
+    (\r -> showString "Last {getLast = " (showsPrec 0 (getLast x) (showString "}" r)))
+
+instance Functor Last where
+  map f x = Last (mapMaybeF f (getLast x))
+
+-- Min / Max Monoid instances (the types live in Data.Semigroup)
+
+instance (Ord a, Bounded a) => Monoid (Min a) where
+  mempty = maxBound
+
+instance (Ord a, Bounded a) => Monoid (Max a) where
+  mempty = minBound

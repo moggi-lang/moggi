@@ -1,0 +1,373 @@
+program
+  data Color
+    constructor Red
+    constructor Blue
+    constructor Green
+    deriving (Eq, Ord, Show, Enum, Bounded, Read)
+  function == :: Color -> Color -> Bool
+    pat_var __l
+    pat_var __r
+    case
+      variable __l
+      alt
+        pat_con Red
+        case
+          variable __r
+          alt
+            pat_con Red
+            constructor_ref True
+          alt
+            pat_wild _
+            constructor_ref False
+      alt
+        pat_con Blue
+        case
+          variable __r
+          alt
+            pat_con Blue
+            constructor_ref True
+          alt
+            pat_wild _
+            constructor_ref False
+      alt
+        pat_con Green
+        case
+          variable __r
+          alt
+            pat_con Green
+            constructor_ref True
+          alt
+            pat_wild _
+            constructor_ref False
+  function /= :: Color -> Color -> Bool
+    pat_var __l
+    pat_var __r
+    case
+      case
+        variable __l
+        alt
+          pat_con Red
+          case
+            variable __r
+            alt
+              pat_con Red
+              constructor_ref True
+            alt
+              pat_wild _
+              constructor_ref False
+        alt
+          pat_con Blue
+          case
+            variable __r
+            alt
+              pat_con Blue
+              constructor_ref True
+            alt
+              pat_wild _
+              constructor_ref False
+        alt
+          pat_con Green
+          case
+            variable __r
+            alt
+              pat_con Green
+              constructor_ref True
+            alt
+              pat_wild _
+              constructor_ref False
+      alt
+        pat_con True
+        constructor_ref False
+      alt
+        pat_con False
+        constructor_ref True
+  function compare :: Color -> Color -> Ordering
+    pat_var __l
+    pat_var __r
+    case
+      variable __l
+      alt
+        pat_con Red
+        case
+          variable __r
+          alt
+            pat_con Red
+            constructor_ref EQ
+          alt
+            pat_con Blue
+            constructor_ref LT
+          alt
+            pat_con Green
+            constructor_ref LT
+      alt
+        pat_con Blue
+        case
+          variable __r
+          alt
+            pat_con Red
+            constructor_ref GT
+          alt
+            pat_con Blue
+            constructor_ref EQ
+          alt
+            pat_con Green
+            constructor_ref LT
+      alt
+        pat_con Green
+        case
+          variable __r
+          alt
+            pat_con Red
+            constructor_ref GT
+          alt
+            pat_con Blue
+            constructor_ref GT
+          alt
+            pat_con Green
+            constructor_ref EQ
+  function < :: Color -> Color -> Bool
+    pat_var x
+    pat_var y
+    case
+      apply
+        apply
+          evidence_method Ord.compare evidence= nullary=0
+            instance Color
+          variable x
+        variable y
+      alt
+        pat_con LT
+        constructor_ref True
+      alt
+        pat_wild _
+        constructor_ref False
+  function <= :: Color -> Color -> Bool
+    pat_var x
+    pat_var y
+    case
+      apply
+        apply
+          evidence_method Ord.compare evidence= nullary=0
+            instance Color
+          variable x
+        variable y
+      alt
+        pat_con GT
+        constructor_ref False
+      alt
+        pat_wild _
+        constructor_ref True
+  function > :: Color -> Color -> Bool
+    pat_var x
+    pat_var y
+    case
+      apply
+        apply
+          evidence_method Ord.compare evidence= nullary=0
+            instance Color
+          variable x
+        variable y
+      alt
+        pat_con GT
+        constructor_ref True
+      alt
+        pat_wild _
+        constructor_ref False
+  function >= :: Color -> Color -> Bool
+    pat_var x
+    pat_var y
+    case
+      apply
+        apply
+          evidence_method Ord.compare evidence= nullary=0
+            instance Color
+          variable x
+        variable y
+      alt
+        pat_con LT
+        constructor_ref False
+      alt
+        pat_wild _
+        constructor_ref True
+  function max :: Color -> Color -> Color
+    pat_var x
+    pat_var y
+    case
+      apply
+        apply
+          evidence_method Ord.<= evidence= nullary=0
+            instance Color
+          variable x
+        variable y
+      alt
+        pat_con True
+        variable y
+      alt
+        pat_con False
+        variable x
+  function min :: Color -> Color -> Color
+    pat_var x
+    pat_var y
+    case
+      apply
+        apply
+          evidence_method Ord.<= evidence= nullary=0
+            instance Color
+          variable x
+        variable y
+      alt
+        pat_con True
+        variable x
+      alt
+        pat_con False
+        variable y
+  function showsPrec :: Int -> Color -> String -> String
+    pat_var __d
+    pat_var __x
+    pat_var __s
+    case
+      variable __x
+      alt
+        pat_con Red
+        intrinsic stringAppend#
+          string "Red"
+          variable __s
+      alt
+        pat_con Blue
+        intrinsic stringAppend#
+          string "Blue"
+          variable __s
+      alt
+        pat_con Green
+        intrinsic stringAppend#
+          string "Green"
+          variable __s
+  function show :: Color -> String
+    pat_var x
+    apply
+      apply
+        apply
+          variable shows
+          evidence_ref Show Color
+        variable x
+      string ""
+  function showList :: [Color] -> String -> String
+    pat_var ls
+    pat_var s
+    apply
+      apply
+        apply
+          variable showListWith
+          apply
+            variable shows
+            evidence_ref Show Color
+        variable ls
+      variable s
+  function fromEnum :: Color -> Int
+    pat_var __x
+    case
+      variable __x
+      alt
+        pat_con Red
+        integer 0
+      alt
+        pat_con Blue
+        integer 1
+      alt
+        pat_con Green
+        integer 2
+  function toEnum :: Int -> Color
+    pat_var __i
+    case
+      variable __i
+      alt
+        pat_lit 0
+        constructor_ref Red
+      alt
+        pat_lit 1
+        constructor_ref Blue
+      alt
+        pat_lit 2
+        constructor_ref Green
+      alt
+        pat_wild _
+        apply
+          variable error
+          string "Enum.toEnum: out of range"
+  function succ :: Color -> Color
+    pat_var __x
+    case
+      variable __x
+      alt
+        pat_con Red
+        constructor_ref Blue
+      alt
+        pat_con Blue
+        constructor_ref Green
+      alt
+        pat_con Green
+        apply
+          variable error
+          string "Enum.succ: bad argument"
+  function pred :: Color -> Color
+    pat_var __x
+    case
+      variable __x
+      alt
+        pat_con Red
+        apply
+          variable error
+          string "Enum.pred: bad argument"
+      alt
+        pat_con Blue
+        constructor_ref Red
+      alt
+        pat_con Green
+        constructor_ref Blue
+  function minBound :: Color
+    constructor_ref Red
+  function maxBound :: Color
+    constructor_ref Green
+  function read :: String -> Color
+    pat_var __s
+    case
+      variable __s
+      alt
+        pat_lit "Red"
+        constructor_ref Red
+      alt
+        pat_lit "Blue"
+        constructor_ref Blue
+      alt
+        pat_lit "Green"
+        constructor_ref Green
+      alt
+        pat_wild _
+        apply
+          variable error
+          string "Read.read: no parse"
+  function cmp :: Ordering
+    apply
+      apply
+        evidence_method Ord.compare evidence= nullary=0
+          instance Color
+        constructor_ref Red
+      constructor_ref Blue
+  function shown :: String
+    apply
+      evidence_method Show.show evidence= nullary=0
+        instance Color
+      constructor_ref Green
+  function e :: Int
+    apply
+      evidence_method Enum.fromEnum evidence= nullary=0
+        instance Color
+      constructor_ref Blue
+  function bmin :: Color
+    evidence_method Bounded.minBound evidence= nullary=1
+      instance Color
+  function parsed :: Color
+    apply
+      evidence_method Read.read evidence= nullary=0
+        instance Color
+      string "Red"

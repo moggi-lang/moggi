@@ -1,0 +1,20 @@
+import Moggi.Generics
+
+-- Applied promoted constructors: InfixI :: Associativity -> FixityI
+type FixL = 'InfixI 'LeftAssociative
+type FixR = 'InfixI 'RightAssociative
+type FixN = 'InfixI 'NotAssociative
+
+-- Unsaturated head remains Associativity -> FixityI
+type FixHead = 'InfixI
+
+data OnlyFix (f :: FixityI) = OnlyFix
+
+leftProxy :: OnlyFix ('InfixI 'LeftAssociative)
+leftProxy = OnlyFix
+
+rightProxy :: OnlyFix FixR
+rightProxy = OnlyFix
+
+viaSyn :: OnlyFix FixL
+viaSyn = OnlyFix

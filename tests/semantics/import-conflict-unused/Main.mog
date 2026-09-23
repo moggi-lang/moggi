@@ -1,0 +1,10 @@
+module Main
+
+-- Two entities under one name are legal to import; only naming one is an
+-- error, so these compile as long as `foo` is never used unqualified.
+import Conflict.A (foo)
+import Conflict.B (foo)
+import Conflict.A qualified as A
+import Conflict.B qualified as B
+
+main = putStrLn (show (A.foo 1 + B.foo 2))

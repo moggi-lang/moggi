@@ -1,0 +1,4 @@
+{-# LANGUAGE NotARealExtension #-}
+module Main where
+
+main = 1

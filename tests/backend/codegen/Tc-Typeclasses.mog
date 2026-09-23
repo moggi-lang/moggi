@@ -1,0 +1,101 @@
+module Tc.Typeclasses
+
+import Control.Applicative
+import Data.Functor
+import Control.Monad
+import Data.Either
+import Data.List hiding (unzip)
+import Data.Maybe
+
+fmapFn :: Functor f => (a -> b) -> f a -> f b
+fmapFn f xs = map f xs
+
+fmapListDemo :: [Int] -> [Int]
+fmapListDemo xs = fmapFn (\x -> x + 1) xs
+
+fmapEitherDemo :: Either String Int -> Either String Int
+fmapEitherDemo mx = fmapFn (\x -> x + 1) mx
+
+inc :: Int -> Int
+inc x = x + 1
+
+double :: Int -> Int
+double x = x * 2
+
+applPure :: Applicative f => a -> f a
+applPure x = pure x
+
+applAp :: Applicative f => f (a -> b) -> f a -> f b
+applAp fs xs = fs <*> xs
+
+pureDemo :: [Int]
+pureDemo = applPure 42
+
+apDemo :: [Int]
+apDemo = applAp [inc, double] [10, 20]
+
+monadBind :: Monad m => m a -> (a -> m b) -> m b
+monadBind m f = m >>= f
+
+monadListDemo :: [Int]
+monadListDemo = monadBind [1, 2] (\x -> [x, x * 10])
+
+eitherBindOk :: Either String Int
+eitherBindOk = monadBind (Right 2) (\x -> Right (x + 1))
+
+eitherShort :: Either String Int
+eitherShort = monadBind (Left "err") (\x -> Right x)
+
+listDo :: Monad m => m Int -> (Int -> m Int) -> m Int
+listDo xs f = do
+  x <- xs
+  y <- f x
+  pure y
+
+doListDemo :: [Int]
+doListDemo = listDo [1, 2] (\x -> [x, x * 10])
+
+listLet :: Monad m => m Int -> m Int
+listLet m = do
+  x <- m
+  let y = x + 1
+  pure y
+
+listLetDemo :: [Int]
+listLetDemo = listLet [41]
+
+maybeDo :: Monad m => m Int -> m Int
+maybeDo m = do
+  x <- m
+  pure (x + 1)
+
+maybeDemo :: Maybe Int
+maybeDemo = maybeDo (Just 41)
+
+maybeNothing :: Maybe Int
+maybeNothing = maybeDo Nothing
+
+eitherDo :: Monad m => m Int -> m Int
+eitherDo m = do
+  x <- m
+  pure (x * 2)
+
+eitherDoOk :: Either String Int
+eitherDoOk = eitherDo (Right 3)
+
+eitherErr :: Either String Int
+eitherErr = eitherDo (Left "nope")
+
+listDiscard :: Monad m => m a -> m b -> m b
+listDiscard a b = do
+  a
+  b
+
+discardDemo :: [Int]
+discardDemo = listDiscard [1, 2] [10, 20]
+
+fmapG :: Functor g => (a -> b) -> g a -> g b
+fmapG f xs = map f xs
+
+hktDemo :: [Int]
+hktDemo = fmapG (\x -> x + 1) [1, 2]

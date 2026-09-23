@@ -1,0 +1,49 @@
+data Color = Red | Blue | Yellow
+
+data OnlyColor (c :: Color) = OnlyColor
+
+data PairColor (a :: Color) (b :: Color) = PairColor
+
+-- Must-have: phantom kind + promoted ctor
+acceptOnlyRed :: OnlyColor 'Red -> String
+acceptOnlyRed OnlyColor = "ok"
+
+acceptOnlyBlue :: OnlyColor 'Blue -> String
+acceptOnlyBlue OnlyColor = "blue"
+
+-- Polymorphic over the kind parameter
+forgetColor :: OnlyColor c -> String
+forgetColor OnlyColor = "any"
+
+-- Multiple kind parameters; order matters at the type level
+rb :: PairColor 'Red 'Blue
+rb = PairColor
+
+br :: PairColor 'Blue 'Red
+br = PairColor
+
+-- Value namespace still works for ordinary constructors
+pickRed :: Color
+pickRed = Red
+
+describe :: Color -> String
+describe c = case c of
+  Red -> "Red"
+  Blue -> "Blue"
+  Yellow -> "Yellow"
+
+-- Uses of promoted forms in types (nullary)
+redProxy :: OnlyColor 'Red
+redProxy = OnlyColor
+
+yellowProxy :: OnlyColor 'Yellow
+yellowProxy = OnlyColor
+
+useForgetRed :: String
+useForgetRed = forgetColor redProxy
+
+useForgetBlue :: String
+useForgetBlue = forgetColor (OnlyColor :: OnlyColor 'Blue)
+
+useAccept :: String
+useAccept = acceptOnlyRed redProxy

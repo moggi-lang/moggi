@@ -1,0 +1,4 @@
+tests/semantics/Bad-Missing-Superclass.mog:5:10: type error: missing superclass instance: `Eq Foo`
+
+  5 | instance Ord Foo where
+    |          ^^^

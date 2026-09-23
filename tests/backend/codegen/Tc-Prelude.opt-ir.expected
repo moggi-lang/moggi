@@ -1,0 +1,15 @@
+module
+  function sum()
+      ret 3
+  function flag()
+      ret intrinsic boolNot#(@False)
+  function m()
+      ret call Just(3)
+  function xs()
+      ret [1, 2]
+  function isTrue(b)
+      match_return b
+        arm True
+            ret @True
+        arm False
+            ret @False

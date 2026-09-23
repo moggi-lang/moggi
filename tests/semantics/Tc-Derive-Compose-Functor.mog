@@ -1,0 +1,7 @@
+import Data.Functor
+
+-- Higher-kinded field head: need Functor f in the context.
+data Compose f a = Compose (f a) deriving (Functor)
+
+mapped :: Compose Maybe Int
+mapped = map (\x -> x + 1) (Compose (Just 1))

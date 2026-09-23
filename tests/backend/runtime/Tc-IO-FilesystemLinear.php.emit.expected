@@ -1,0 +1,31 @@
+<?php declare(strict_types=1);
+
+namespace Tc\IO\FilesystemLinear;
+
+const __MOGGI_MAP = [[23 => ['Tc.IO.FilesystemLinear.main', 'tests/backend/runtime/Tc-IO-FilesystemLinear.mog', 15, 3], 24 => ['Tc.IO.FilesystemLinear.main', 'tests/backend/runtime/Tc-IO-FilesystemLinear.mog', 16, 3], 25 => ['Tc.IO.FilesystemLinear.main', 'tests/backend/runtime/Tc-IO-FilesystemLinear.mog', 17, 3], 26 => ['Tc.IO.FilesystemLinear.main', 'tests/backend/runtime/Tc-IO-FilesystemLinear.mog', 17, 31], 27 => ['Tc.IO.FilesystemLinear.main', 'tests/backend/runtime/Tc-IO-FilesystemLinear.mog', 18, 3], 28 => ['Tc.IO.FilesystemLinear.main', 'tests/backend/runtime/Tc-IO-FilesystemLinear.mog', 19, 11], 29 => ['Tc.IO.FilesystemLinear.main', 'tests/backend/runtime/Tc-IO-FilesystemLinear.mog', 21, 3]], ['Tc\\IO\\FilesystemLinear\\bindPath' => ['Tc.IO.FilesystemLinear.bindPath', 'tests/backend/runtime/Tc-IO-FilesystemLinear.mog', 8, 12], 'Tc\\IO\\FilesystemLinear\\letPath' => ['Tc.IO.FilesystemLinear.letPath', 'tests/backend/runtime/Tc-IO-FilesystemLinear.mog', 11, 11], 'Tc\\IO\\FilesystemLinear\\main' => ['Tc.IO.FilesystemLinear.main', 'tests/backend/runtime/Tc-IO-FilesystemLinear.mog', 14, 8]]];
+
+require_once __DIR__ . '/../../../lib/System/Filesystem/PHP.php';
+require_once __DIR__ . '/../../../lib/System/IO/PHP.php';
+
+use function System\Filesystem\PHP\readTextFile;
+use function System\Filesystem\PHP\writeTextFile;
+use function System\IO\PHP\putStrLn;
+
+function bindPath() {
+    return "/tmp/moggi-tc-io-fs-linear-bind.txt";
+}
+
+function letPath() {
+    return "/tmp/moggi-tc-io-fs-linear-let.txt";
+}
+
+function main() {
+    putStrLn("bind");
+    writeTextFile(bindPath(), "bind-linear");
+    $__t0 = readTextFile(bindPath());
+    putStrLn($__t0);
+    putStrLn("let");
+    $__t1 = readTextFile(letPath());
+    putStrLn($__t1);
+    return null;
+}

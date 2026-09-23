@@ -1,0 +1,7 @@
+tests/semantics/foreign/bad/Export.mog:4:22: type error: foreign import backend `jvm` does not match compile backend `php`
+
+Did you mean this?
+    php
+
+  4 | foreign jvm function getPath "java.nio.file.Paths:get" :: String -> IO Path
+    |                      ^^^^^^^

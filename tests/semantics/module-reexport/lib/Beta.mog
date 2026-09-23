@@ -1,0 +1,7 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Beta
+  ( beta
+  ) where
+
+beta :: Int
+beta = 2

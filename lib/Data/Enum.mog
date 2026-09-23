@@ -1,0 +1,157 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.Enum
+  ( Enum(succ, pred, toEnum, fromEnum)
+  , enumFromTo
+  , enumFromThenTo
+  ) where
+
+import Data.Bool
+import Data.Bounded
+import Data.Ord
+import Moggi.Err
+import Moggi.Internal.Prim
+
+-- | Class 'Enum' defines operations on sequentially ordered types.
+--
+-- Instances of 'Enum' may be derived for any enumeration type (types whose
+-- constructors have no fields). The nullary constructors are assumed to be
+-- numbered left-to-right by 'fromEnum' from @0@ through @n-1@.
+--
+-- For any type that is an instance of class 'Bounded' as well as 'Enum', the
+-- following should hold:
+--
+-- * The calls @'succ' 'maxBound'@ and @'pred' 'minBound'@ should result in a
+-- runtime error.
+--
+-- * 'fromEnum' and 'toEnum' should give a runtime error if the result value is
+-- not representable in the result type. For example, @'toEnum' 7 :: 'Bool'@ is
+-- an error.
+class Enum a where
+  -- | Successor of a value. For numeric types, 'succ' adds 1.
+  succ :: a -> a
+  -- | Predecessor of a value. For numeric types, 'pred' subtracts 1.
+  pred :: a -> a
+  -- | Convert from an 'Int'.
+  toEnum :: Int -> a
+  -- | Convert to an 'Int'.
+  -- It is implementation-dependent what 'fromEnum' returns when applied to a
+  -- value that is too large to fit in an 'Int'.
+  fromEnum :: a -> Int
+
+-- The rest of the class — @enumFrom@, @enumFromThen@ @enumFromTo@ and
+-- @enumFromThenTo@ — are the range methods, and are module-level functions here.
+-- They are spelled out rather than defaulted so that the recursion below never
+-- carries an `Enum` dictionary: an `Int` range is the only recursion any instance
+-- needs.
+
+-- | Build a list from an element and a tail. Named so the recursive helpers
+-- below read as enumeration rather than as cons.
+enumConsE :: a -> [a] -> [a]
+enumConsE x xs = x : xs
+
+enumLteInt :: Int -> Int -> Bool
+enumLteInt a b = orderingIsLte# (intCompare# a b)
+
+enumGteInt :: Int -> Int -> Bool
+enumGteInt a b = orderingIsGte# (intCompare# a b)
+
+enumAddInt :: Int -> Int -> Int
+enumAddInt a b = intAdd# a b
+
+enumSubInt :: Int -> Int -> Int
+enumSubInt a b = intSub# a b
+
+-- Unconstrained Int recursion, kept separate from the constrained `toEnum`
+-- mapping so the recursive helpers never carry an `Enum` dictionary.
+enumIntRange :: Int -> Int -> [Int]
+enumIntRange i j = case enumLteInt i j of
+  True -> enumConsE i (enumIntRange (enumAddInt i 1) j)
+  False -> []
+
+enumDirOk :: Bool -> Int -> Int -> Bool
+enumDirOk asc i j = case asc of
+  True -> enumLteInt i j
+  False -> enumGteInt i j
+
+enumIntStep :: Int -> Int -> Int -> Bool -> [Int]
+enumIntStep i step j asc = case enumDirOk asc i j of
+  True -> enumConsE i (enumIntStep (enumAddInt i step) step j asc)
+  False -> []
+
+enumMapToEnum :: (a -> b) -> [a] -> [b]
+enumMapToEnum f xs = case xs of
+  [] -> []
+  x : rest -> enumConsE (f x) (enumMapToEnum f rest)
+
+-- | The distance from one element to the next, as the range syntax measures it.
+enumStep :: Enum a => a -> a -> Int
+enumStep lo nxt = enumSubInt (fromEnum nxt) (fromEnum lo)
+
+-- | Used in the translation of @[lo .. hi]@ with @[lo .. hi] = enumFromTo lo
+-- hi@.
+--
+-- >>> enumFromTo 6 10 :: [Int]
+-- [6,7,8,9,10]
+-- >>> enumFromTo 42 1 :: [Integer]
+-- []
+enumFromTo :: Enum a => a -> a -> [a]
+enumFromTo lo hi = enumMapToEnum toEnum (enumIntRange (fromEnum lo) (fromEnum hi))
+
+-- | Used in the translation of @[lo, nxt .. hi]@ with
+-- @[lo, nxt .. hi] = enumFromThenTo lo nxt hi@.
+--
+-- >>> enumFromThenTo 4 2 (-6) :: [Integer]
+-- [4,2,0,-2,-4,-6]
+-- >>> enumFromThenTo 6 8 2 :: [Int]
+-- []
+enumFromThenTo :: Enum a => a -> a -> a -> [a]
+enumFromThenTo lo nxt hi =
+  enumMapToEnum
+    toEnum
+    (enumIntStep
+      (fromEnum lo)
+      (enumStep lo nxt)
+      (fromEnum hi)
+      (enumGteInt (enumStep lo nxt) 1))
+
+instance Bounded Bool where
+  minBound = False
+  maxBound = True
+
+instance Enum Bool where
+  succ b = case b of
+    False -> True
+    True -> error "Prelude.Enum.Bool.succ: bad argument"
+  pred b = case b of
+    True -> False
+    False -> error "Prelude.Enum.Bool.pred: bad argument"
+  toEnum n = case n of
+    0 -> False
+    1 -> True
+    _ -> error "Prelude.Enum.Bool.toEnum: bad argument"
+  fromEnum b = case b of
+    True -> 1
+    False -> 0
+
+instance Bounded Ordering where
+  minBound = LT
+  maxBound = GT
+
+instance Enum Ordering where
+  succ o = case o of
+    LT -> EQ
+    EQ -> GT
+    GT -> error "Prelude.Enum.Ordering.succ: bad argument"
+  pred o = case o of
+    GT -> EQ
+    EQ -> LT
+    LT -> error "Prelude.Enum.Ordering.pred: bad argument"
+  toEnum n = case n of
+    0 -> LT
+    1 -> EQ
+    2 -> GT
+    _ -> error "Prelude.Enum.Ordering.toEnum: bad argument"
+  fromEnum o = case o of
+    LT -> 0
+    EQ -> 1
+    GT -> 2

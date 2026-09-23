@@ -1,0 +1,55 @@
+module System.IO.Types
+  ( Handle
+  , Resource
+  , IOMode(ReadMode, WriteMode, AppendMode, ReadWriteMode)
+  ) where
+
+import Data.Bool
+import Data.Eq
+import Data.Ord
+import Text.Show
+import Moggi.Internal.Prim
+
+data Resource = MkResource
+
+data Handle = MkHandle Resource
+
+data IOMode = ReadMode | WriteMode | AppendMode | ReadWriteMode
+
+-- Handles are opaque resources: the generated code compares them by identity,
+-- which for an unconstructed resource host is never (two handles are only
+-- equal to themselves).
+instance Eq Handle where
+  (==) _ _ = False
+  (/=) _ _ = True
+
+instance Show Handle where
+  show _ = "<handle>"
+
+instance Eq Resource where
+  (==) _ _ = False
+  (/=) _ _ = True
+
+instance Show Resource where
+  show _ = "<resource>"
+
+ioModeTag :: IOMode -> Int
+ioModeTag mode = case mode of
+  ReadMode -> 0
+  WriteMode -> 1
+  AppendMode -> 2
+  ReadWriteMode -> 3
+
+instance Eq IOMode where
+  (==) a b = intEq# (ioModeTag a) (ioModeTag b)
+  (/=) a b = intNe# (ioModeTag a) (ioModeTag b)
+
+instance Ord IOMode where
+  compare a b = intCompare# (ioModeTag a) (ioModeTag b)
+
+instance Show IOMode where
+  show mode = case mode of
+    ReadMode -> "ReadMode"
+    WriteMode -> "WriteMode"
+    AppendMode -> "AppendMode"
+    ReadWriteMode -> "ReadWriteMode"

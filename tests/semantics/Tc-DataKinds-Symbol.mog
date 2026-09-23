@@ -1,0 +1,18 @@
+-- Symbol kind + string type literals (DataKinds).
+data Label (s :: Symbol) = Label
+
+hello :: Label "hello"
+hello = Label
+
+world :: Label "world"
+world = Label
+
+-- Polymorphic over Symbol
+forgetLabel :: Label s -> String
+forgetLabel Label = "any"
+
+useHello :: String
+useHello = forgetLabel hello
+
+useWorld :: String
+useWorld = forgetLabel world

@@ -1,0 +1,70 @@
+program
+  function describe :: [a] -> String
+    pat_var _p0
+    case
+      variable _p0
+      alt
+        pat_nil
+        string "empty"
+      alt
+        pat_cons
+          pat_wild _
+          pat_nil
+        string "one element"
+      alt
+        pat_cons
+          pat_wild _
+          pat_cons
+            pat_wild _
+            pat_wild _
+        string "many elements"
+  function origin :: Tuple2 Int Int -> Bool
+    pat_var _p0
+    case
+      variable _p0
+      alt
+        pat_tuple
+          pat_lit 0
+          pat_lit 0
+        constructor_ref True
+      alt
+        pat_wild _
+        constructor_ref False
+  function swap :: Tuple2 Int String -> Tuple2 String Int
+    pat_tuple
+      pat_var x
+      pat_var y
+    tuple
+      variable y
+      variable x
+  function first :: [t18] -> Maybe t18
+    pat_var _p0
+    case
+      variable _p0
+      alt
+        pat_nil
+        constructor_ref Nothing
+      alt
+        pat_cons
+          pat_var x
+          pat_wild _
+        apply
+          constructor_ref Just
+          variable x
+  data Color
+    constructor Red
+    constructor Green
+    constructor Blue
+  function describeColor :: Color -> String
+    pat_var _p0
+    case
+      variable _p0
+      alt
+        pat_con Red
+        string "red"
+      alt
+        pat_con Green
+        string "green"
+      alt
+        pat_con Blue
+        string "blue"

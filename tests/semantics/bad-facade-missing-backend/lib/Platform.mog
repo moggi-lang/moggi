@@ -1,0 +1,13 @@
+{-# BACKEND
+  jvm    = Platform.Jvm
+  dotnet = Platform.DotNet
+#-}
+module Platform
+  ( hostToString
+  ) where
+
+-- One API, two hosts: the library implements it for the JVM and for .NET, and deliberately has
+-- no php entry. Compiling this module for php is therefore an error, not a broken map — see
+-- docs/development/design.md ("A facade may omit a backend").
+
+hostToString :: Int -> String

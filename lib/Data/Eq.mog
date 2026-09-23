@@ -1,0 +1,15 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.Eq
+  ( Eq(..)
+  ) where
+
+import Moggi.Internal.Prim
+
+infix 4 ==, /=
+
+-- | The 'Eq' class defines equality ('==') and inequality ('/=').
+class Eq a where
+  (==), (/=) :: a -> a -> Bool
+
+  (/=) x y = boolNot# (x == y)
+  (==) x y = boolNot# (x /= y)

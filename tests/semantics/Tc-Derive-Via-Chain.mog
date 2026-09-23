@@ -1,0 +1,9 @@
+import Data.Eq
+
+-- The target is a newtype over a newtype, so deriving via (Int) must unwrap
+-- both `Outer` and `Inner` to reach the representation.
+newtype Inner = Inner Int
+  deriving (Eq)
+
+newtype Outer = Outer Inner
+  deriving via (Int) Eq

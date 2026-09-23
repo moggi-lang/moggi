@@ -1,0 +1,57 @@
+-- System.IO.Error: the IOError record's accessors and setters, and the two
+-- handler shapes catch accepts (an inline lambda and a named function).
+import Control.Exception
+import System.IO.Error
+
+-- A cross-module nullary constructor used as a value, not applied.
+errorTypes :: [IOErrorType]
+errorTypes = [doesNotExistErrorType, permissionErrorType]
+
+sample :: IOError
+sample = mkIOError doesNotExistErrorType "sample-location" Nothing (Just "file.txt")
+
+fileNameText :: IOError -> String
+fileNameText e = case ioeGetFileName e of
+  Just f -> f
+  Nothing -> "none"
+
+showParts :: IOError -> String
+showParts e = ioeGetErrorString e <> " | " <> ioeGetLocation e <> " | " <> fileNameText e
+
+raise :: IO ()
+raise = ioError sample
+
+-- A lambda handler: it must be applied, and the error it raises must win.
+inlineHandler :: IO ()
+inlineHandler = catch raise (\e -> ioError (ioeSetErrorString e "replaced"))
+
+namedHandler :: IOError -> IO ()
+namedHandler e = ioError (ioeSetErrorString e "named")
+
+-- `modifyIOError` must rethrow the modified error, not swallow it.
+modifiedHandler :: IO ()
+modifiedHandler = modifyIOError (\e -> ioeSetErrorString e "modified") raise
+
+report :: String -> IO () -> IO ()
+report label action = do
+  r <- tryIOError action
+  putStrLn (case r of
+    Left e -> label <> ": " <> showParts e
+    Right _ -> label <> ": no error")
+
+main :: IO ()
+main = do
+  putStrLn ("description: " <> ioeGetErrorString sample)
+  putStrLn ("setter: " <> ioeGetErrorString (ioeSetErrorString sample "wrapped"))
+  putStrLn ("location: " <> ioeGetLocation (ioeSetLocation sample "here"))
+  putStrLn ("filename: " <> fileNameText sample)
+  report "inline" inlineHandler
+  report "named" (catch raise namedHandler)
+  report "modified" modifiedHandler
+  putStrLn ("types: " <> show (length errorTypes))
+  putStrLn ("kind match: " <> show (permissionErrorType == doesNotExistErrorType))
+  putStrLn ("kind: " <> show (ioeGetErrorType (ioeSetErrorType sample permissionErrorType)))
+  report "kind in action" (putStrLn (show (map (\t -> show t) errorTypes)))
+  putStrLn ("isUserError: " <> show (isUserError (userError "boom")))
+  putStrLn ("userError: " <> show (userError "boom"))
+  putStrLn ("location of userError: " <> ioeGetLocation (annotateIOError (userError "boom") "ctx" Nothing (Just "f.txt")))

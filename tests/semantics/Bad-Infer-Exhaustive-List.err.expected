@@ -1,0 +1,4 @@
+tests/semantics/Bad-Infer-Exhaustive-List.mog:6:8: type error: non-exhaustive case: missing patterns: (_ : _)
+
+  6 | f xs = case xs of
+    |        ^^^^^^^

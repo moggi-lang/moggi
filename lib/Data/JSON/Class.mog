@@ -1,0 +1,482 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.JSON.Class
+  ( ToJSON(..)
+  , FromJSON(..)
+  , ToJSONKey(..)
+  , FromJSONKey(..)
+    -- * Generic codec machinery
+  , GToJSON(..)
+  , GFromJSON(..)
+  , GToEncoding(..)
+  , GFromEncoding(..)
+  , genericToJSON
+  , genericParseJSON
+  , genericToEncoding
+  , genericParseEncoding
+  ) where
+
+import Data.Bool
+import Data.Char
+import Moggi.Internal.Float
+import Data.Either
+import Data.Int
+import Moggi.Internal.Integer
+import Moggi.Internal.Real (fromIntegral)
+import Data.List hiding (lookup, singleton)
+import Data.Map (Map, toList, fromList, lookup)
+import Data.Ord
+import Data.Maybe
+import Moggi.Internal.Num (fromInteger)
+import Data.String (String, singleton, unpack)
+import Moggi.Generics
+import Data.JSON.Types
+import Data.JSON.Encoding
+
+-- `ToJSON` / `FromJSON` are ordinary library classes. Their Generic-based
+-- defaults live here, owned by the library: the compiler has no JSON knowledge.
+-- A type that also has `Generic` gets a codec with `deriving anyclass
+-- (ToJSON, FromJSON)`; the `Generic a` / `GToJSON (Rep a)` context is solved at
+-- each instance site.
+class ToJSON a where
+  toJSON :: a -> Value
+  toJSON x = genericToJSON defaultOptions x
+  toEncoding :: a -> Encoding
+  toEncoding x = genericToEncoding defaultOptions x
+
+class FromJSON a where
+  parseJSON :: Value -> Parser a
+  parseJSON v = genericParseJSON defaultOptions v
+  parseEncoding :: Encoding -> Parser a
+  parseEncoding v = genericParseEncoding defaultOptions v
+
+-- Generic codec classes. Their structural instances live in
+-- `Data.JSON.Generic` / `Data.JSON.GenericEncoding`, which import this module.
+class GToJSON f where
+  gToJSON :: Options -> f p -> Value
+
+class GFromJSON f where
+  gParseJSON :: Options -> Value -> Parser (f p)
+
+class GToEncoding f where
+  gToEncoding :: Options -> f p -> Encoding
+
+class GFromEncoding f where
+  gParseEncoding :: Options -> Encoding -> Parser (f p)
+
+genericToJSON :: (Generic a, GToJSON (Rep a)) => Options -> a -> Value
+genericToJSON opts x = gToJSON opts (from x)
+
+genericParseJSON :: (Generic a, GFromJSON (Rep a)) => Options -> Value -> Parser a
+genericParseJSON opts v = case gParseJSON opts v of
+  Left err -> Left err
+  Right rep -> Right (to rep)
+
+genericToEncoding :: (Generic a, GToEncoding (Rep a)) => Options -> a -> Encoding
+genericToEncoding opts x = gToEncoding opts (from x)
+
+genericParseEncoding :: (Generic a, GFromEncoding (Rep a)) => Options -> Encoding -> Parser a
+genericParseEncoding opts v = case gParseEncoding opts v of
+  Left err -> Left err
+  Right rep -> Right (to rep)
+
+instance ToJSON Bool where
+  toJSON b = Bool b
+  toEncoding b = encBool b
+
+instance FromJSON Bool where
+  parseJSON v = case v of
+    Bool b -> Right b
+    _ -> Left "expected Bool"
+  parseEncoding enc = case encKind enc of
+    1 -> Right (encGetBool enc)
+    _ -> Left "expected Bool"
+
+instance ToJSON Int where
+  toJSON n = Number (NumInteger (fromIntegral n))
+  toEncoding n = encInt n
+
+instance FromJSON Int where
+  parseJSON v = case v of
+    Number (NumInteger n) -> Right (fromIntegral n)
+    Number (NumDouble ignored) -> Left "expected integer Number, got Double"
+    _ -> Left "expected Number"
+  parseEncoding enc = case encKind enc of
+    3 -> Right (encGetInt enc)
+    _ -> Left "expected Number"
+
+instance ToJSON Integer where
+  toJSON n = Number (NumInteger n)
+  toEncoding n = encInteger n
+
+instance FromJSON Integer where
+  parseJSON v = case v of
+    Number (NumInteger n) -> Right n
+    Number (NumDouble ignored) -> Left "expected integer Number, got Double"
+    _ -> Left "expected Number"
+  parseEncoding enc = case encKind enc of
+    3 -> Right (integerFromInt (encGetInt enc))
+    7 -> Right (encGetInteger enc)
+    _ -> Left "expected Number"
+
+instance ToJSON Double where
+  toJSON d = Number (NumDouble d)
+  toEncoding d = encDouble d
+
+instance FromJSON Double where
+  parseJSON v = case v of
+    Number (NumDouble d) -> Right d
+    Number (NumInteger n) -> Right (fromInteger n)
+    _ -> Left "expected Number"
+  parseEncoding enc = case encKind enc of
+    4 -> Right (encGetDouble enc)
+    3 -> Right (fromInteger (integerFromInt (encGetInt enc)))
+    _ -> Left "expected Number"
+
+instance ToJSON Number where
+  toJSON n = Number n
+  toEncoding n = case n of
+    NumInteger i -> encInteger i
+    NumDouble d -> encDouble d
+
+instance FromJSON Number where
+  parseJSON v = case v of
+    Number n -> Right n
+    _ -> Left "expected Number"
+  parseEncoding enc = case encKind enc of
+    3 -> Right (NumInteger (integerFromInt (encGetInt enc)))
+    4 -> Right (NumDouble (encGetDouble enc))
+    7 -> Right (NumInteger (encGetInteger enc))
+    _ -> Left "expected Number"
+
+instance ToJSON String where
+  toJSON s = String s
+  toEncoding s = encString s
+
+instance FromJSON String where
+  parseJSON v = case v of
+    String s -> Right s
+    _ -> Left "expected String"
+  parseEncoding enc = case encKind enc of
+    2 -> Right (encStringOrFail enc)
+    _ -> Left "expected String"
+
+instance ToJSON Char where
+  toJSON c = String (singleton c)
+  toEncoding c = encString (singleton c)
+
+instance FromJSON Char where
+  parseJSON v = case v of
+    String s -> parseSingleChar s
+    Object ignored -> Left "expected String"
+    Array ignored -> Left "expected String"
+    Number ignored -> Left "expected String"
+    Bool ignored -> Left "expected String"
+    Null -> Left "expected String"
+  parseEncoding enc = case encKind enc of
+    2 -> parseSingleChar (encStringOrFail enc)
+    _ -> Left "expected String"
+
+parseSingleChar :: String -> Parser Char
+parseSingleChar s = case unpack s of
+  [] -> Left "expected single-character String"
+  c : rest -> case rest of
+    [] -> Right c
+    _ -> Left "expected single-character String"
+
+instance ToJSON Value where
+  toJSON v = v
+  toEncoding v = valueEnc v
+
+instance FromJSON Value where
+  parseJSON v = Right v
+  parseEncoding enc = valueFromEnc enc
+
+valueEnc :: Value -> Encoding
+valueEnc v = case v of
+  Null -> encNull
+  Bool b -> encBool b
+  String s -> encString s
+  Number (NumInteger n) -> encInteger n
+  Number (NumDouble d) -> encDouble d
+  Array xs -> encArray (valueEncList xs)
+  Object m -> encObject (pairKeys (toList m)) (pairVals (toList m))
+
+valueEncList :: [Value] -> [Encoding]
+valueEncList [] = []
+valueEncList (x : rest) = valueEnc x : valueEncList rest
+
+pairKeys :: [Pair] -> [String]
+pairKeys [] = []
+pairKeys ((k, ignored) : rest) = k : pairKeys rest
+
+pairVals :: [Pair] -> [Encoding]
+pairVals [] = []
+pairVals ((ignored, v) : rest) = valueEnc v : pairVals rest
+
+valueFromEnc :: Encoding -> Parser Value
+valueFromEnc enc = case encKind enc of
+  0 -> Right Null
+  1 -> Right (Bool (encGetBool enc))
+  2 -> Right (String (encStringOrFail enc))
+  3 -> Right (Number (NumInteger (integerFromInt (encGetInt enc))))
+  4 -> Right (Number (NumDouble (encGetDouble enc)))
+  5 -> valueFromEncArray enc
+  6 -> valueFromEncObject enc
+  7 -> Right (Number (NumInteger (encGetInteger enc)))
+  _ -> Left "unknown JSON node kind"
+
+valueFromEncArray :: Encoding -> Parser Value
+valueFromEncArray enc = case arrayElems enc of
+  Left err -> Left err
+  Right xs -> case mapEncToValue xs of
+    Left err -> Left err
+    Right vs -> Right (Array vs)
+
+valueFromEncObject :: Encoding -> Parser Value
+valueFromEncObject enc = case mapEncToValue (objectVals enc) of
+  Left err -> Left err
+  Right vs -> Right (Object (fromList (zipObjectKeys (objectKeys enc) vs)))
+
+zipObjectKeys :: [String] -> [Value] -> [Pair]
+zipObjectKeys [] ignored = []
+zipObjectKeys (k : ks) vs = case vs of
+  [] -> []
+  v : rest -> (k, v) : zipObjectKeys ks rest
+
+mapEncToValue :: [Encoding] -> Either String [Value]
+mapEncToValue [] = Right []
+mapEncToValue (x : rest) = case valueFromEnc x of
+  Left err -> Left err
+  Right v -> case mapEncToValue rest of
+    Left err -> Left err
+    Right vs -> Right (v : vs)
+
+instance ToJSON a => ToJSON (Maybe a) where
+  toJSON m = case m of
+    Nothing -> Null
+    Just x -> toJSON x
+  toEncoding m = case m of
+    Nothing -> encNull
+    Just x -> toEncoding x
+
+instance FromJSON a => FromJSON (Maybe a) where
+  parseJSON v = case v of
+    Null -> Right Nothing
+    _ -> case parseJSON v of
+      Left err -> Left err
+      Right x -> Right (Just x)
+  parseEncoding enc = case encKind enc of
+    0 -> Right Nothing
+    _ -> case parseEncoding enc of
+      Left err -> Left err
+      Right x -> Right (Just x)
+
+instance ToJSON a => ToJSON [a] where
+  toJSON xs = Array (mapToJSON xs)
+  toEncoding xs = encArray (mapToEncoding xs)
+
+instance FromJSON a => FromJSON [a] where
+  parseJSON v = case v of
+    Array xs -> parseList xs
+    _ -> Left "expected Array"
+  parseEncoding enc = case arrayElems enc of
+    Left err -> Left err
+    Right xs -> parseEncList xs
+
+parseList :: FromJSON a => [Value] -> Parser [a]
+parseList xs = case xs of
+  [] -> Right []
+  v : rest -> case parseJSON v of
+    Left err -> Left err
+    Right x -> case parseList rest of
+      Left err -> Left err
+      Right xs2 -> Right (x : xs2)
+
+parseEncList :: FromJSON a => [Encoding] -> Parser [a]
+parseEncList xs = case xs of
+  [] -> Right []
+  enc : rest -> case parseEncoding enc of
+    Left err -> Left err
+    Right x -> case parseEncList rest of
+      Left err -> Left err
+      Right xs2 -> Right (x : xs2)
+
+mapToJSON :: ToJSON a => [a] -> [Value]
+mapToJSON xs = case xs of
+  [] -> []
+  x : rest -> toJSON x : mapToJSON rest
+
+mapToEncoding :: ToJSON a => [a] -> [Encoding]
+mapToEncoding xs = case xs of
+  [] -> []
+  x : rest -> toEncoding x : mapToEncoding rest
+
+-- ---------------------------------------------------------------------------
+-- Either (Aeson: ObjectWithSingleField {"Left":…} / {"Right":…})
+-- ---------------------------------------------------------------------------
+
+instance (ToJSON a, ToJSON b) => ToJSON (Either a b) where
+  toJSON e = case e of
+    Left x -> jsonObject [("Left", toJSON x)]
+    Right y -> jsonObject [("Right", toJSON y)]
+  toEncoding e = case e of
+    Left x -> encObject ["Left"] (encodeField x : [])
+    Right y -> encObject ["Right"] (encodeField y : [])
+
+encodeField :: ToJSON a => a -> Encoding
+encodeField x = toEncoding x
+
+instance (FromJSON a, FromJSON b) => FromJSON (Either a b) where
+  parseJSON v = case v of
+    Object m -> parseEitherObject m
+    _ -> Left "expected object for Either"
+  parseEncoding enc = case encKind enc of
+    6 -> parseEitherEncoding enc
+    _ -> Left "expected object for Either"
+
+parseEitherObject :: (FromJSON a, FromJSON b) => Map String Value -> Parser (Either a b)
+parseEitherObject m = case lookup "Left" m of
+  Just lv -> parseEitherLeftValue lv
+  Nothing -> parseEitherRightObject m
+
+parseEitherLeftValue :: (FromJSON a, FromJSON b) => Value -> Parser (Either a b)
+parseEitherLeftValue lv = case parseJSONLeft lv of
+  Left err -> Left err
+  Right x -> Right (Left x)
+
+parseJSONLeft :: FromJSON a => Value -> Parser a
+parseJSONLeft v = parseJSON v
+
+parseEitherRightObject :: (FromJSON a, FromJSON b) => Map String Value -> Parser (Either a b)
+parseEitherRightObject m = case lookup "Right" m of
+  Just rv -> parseEitherRightValue rv
+  Nothing -> Left "expected Left or Right field"
+
+parseEitherRightValue :: (FromJSON a, FromJSON b) => Value -> Parser (Either a b)
+parseEitherRightValue rv = case parseJSONRight rv of
+  Left err -> Left err
+  Right y -> Right (Right y)
+
+parseJSONRight :: FromJSON b => Value -> Parser b
+parseJSONRight v = parseJSON v
+
+parseEitherEncoding :: (FromJSON a, FromJSON b) => Encoding -> Parser (Either a b)
+parseEitherEncoding enc = case lookupField enc "Left" of
+  Just lv -> parseEitherLeftEnc lv
+  Nothing -> parseEitherRightEnc enc
+
+parseEitherLeftEnc :: (FromJSON a, FromJSON b) => Encoding -> Parser (Either a b)
+parseEitherLeftEnc lv = case parseEncodingLeft lv of
+  Left err -> Left err
+  Right x -> Right (Left x)
+
+parseEncodingLeft :: FromJSON a => Encoding -> Parser a
+parseEncodingLeft enc = parseEncoding enc
+
+parseEitherRightEnc :: (FromJSON a, FromJSON b) => Encoding -> Parser (Either a b)
+parseEitherRightEnc enc = case lookupField enc "Right" of
+  Just rv -> parseEitherRightEncVal rv
+  Nothing -> Left "expected Left or Right field"
+
+parseEitherRightEncVal :: (FromJSON a, FromJSON b) => Encoding -> Parser (Either a b)
+parseEitherRightEncVal rv = case parseEncodingRight rv of
+  Left err -> Left err
+  Right y -> Right (Right y)
+
+parseEncodingRight :: FromJSON b => Encoding -> Parser b
+parseEncodingRight enc = parseEncoding enc
+
+-- ---------------------------------------------------------------------------
+-- Map keys (Aeson ToJSONKey / FromJSONKey, text-key subset)
+-- ---------------------------------------------------------------------------
+
+class ToJSONKey a where
+  toJSONKey :: a -> String
+
+class FromJSONKey a where
+  parseJSONKey :: String -> Parser a
+
+instance ToJSONKey String where
+  toJSONKey s = s
+
+instance FromJSONKey String where
+  parseJSONKey s = Right s
+
+instance (Ord k, ToJSONKey k, ToJSON v) => ToJSON (Map k v) where
+  toJSON m = Object (fromList (mapAssocsToJSON (toList m)))
+  toEncoding m = encObject (mapAssocKeys (toList m)) (mapAssocEncVals (toList m))
+
+instance (Ord k, FromJSONKey k, FromJSON v) => FromJSON (Map k v) where
+  parseJSON v = case v of
+    Object m -> parseMapObject (toList m)
+    _ -> Left "expected object for Map"
+  parseEncoding enc = case encKind enc of
+    6 -> parseMapEncoding (objectKeys enc) (objectVals enc)
+    _ -> Left "expected object for Map"
+
+mapAssocsToJSON :: (ToJSONKey k, ToJSON v) => [(k, v)] -> [Pair]
+mapAssocsToJSON xs = case xs of
+  [] -> []
+  p : rest -> mapAssocToJSON p : mapAssocsToJSON rest
+
+mapAssocToJSON :: (ToJSONKey k, ToJSON v) => (k, v) -> Pair
+mapAssocToJSON p = case p of
+  (k, v) -> (toJSONKey k, toJSON v)
+
+mapAssocKeys :: ToJSONKey k => [(k, v)] -> [String]
+mapAssocKeys xs = case xs of
+  [] -> []
+  p : rest -> mapAssocKey p : mapAssocKeys rest
+
+mapAssocKey :: ToJSONKey k => (k, v) -> String
+mapAssocKey p = case p of
+  (k, ignored) -> toJSONKey k
+
+mapAssocEncVals :: ToJSON v => [(k, v)] -> [Encoding]
+mapAssocEncVals xs = case xs of
+  [] -> []
+  p : rest -> mapAssocEncVal p : mapAssocEncVals rest
+
+mapAssocEncVal :: ToJSON v => (k, v) -> Encoding
+mapAssocEncVal p = case p of
+  (ignored, v) -> encodeField v
+
+parseMapObject :: (Ord k, FromJSONKey k, FromJSON v) => [(String, Value)] -> Parser (Map k v)
+parseMapObject xs = case parseMapPairs xs of
+  Left err -> Left err
+  Right ps -> Right (fromList ps)
+
+parseMapPairs :: (FromJSONKey k, FromJSON v) => [(String, Value)] -> Parser [(k, v)]
+parseMapPairs xs = case xs of
+  [] -> Right []
+  p : rest -> case parseMapPair p of
+    Left err -> Left err
+    Right q -> case parseMapPairs rest of
+      Left err -> Left err
+      Right qs -> Right (q : qs)
+
+parseMapPair :: (FromJSONKey k, FromJSON v) => (String, Value) -> Parser (k, v)
+parseMapPair p = case p of
+  (ks, v) -> case parseJSONKey ks of
+    Left err -> Left err
+    Right k -> case parseJSON v of
+      Left err -> Left err
+      Right val -> Right (k, val)
+
+parseMapEncoding :: (Ord k, FromJSONKey k, FromJSON v) => [String] -> [Encoding] -> Parser (Map k v)
+parseMapEncoding ks vs = case parseMapEncPairs ks vs of
+  Left err -> Left err
+  Right ps -> Right (fromList ps)
+
+parseMapEncPairs :: (FromJSONKey k, FromJSON v) => [String] -> [Encoding] -> Parser [(k, v)]
+parseMapEncPairs ks vs = case ks of
+  [] -> Right []
+  k : krest -> case vs of
+    [] -> Right []
+    e : erest -> case parseJSONKey k of
+      Left err -> Left err
+      Right key -> case parseEncoding e of
+        Left err -> Left err
+        Right val -> case parseMapEncPairs krest erest of
+          Left err -> Left err
+          Right rest -> Right ((key, val) : rest)

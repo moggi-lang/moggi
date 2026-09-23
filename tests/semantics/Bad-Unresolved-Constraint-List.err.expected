@@ -1,0 +1,4 @@
+tests/semantics/Bad-Unresolved-Constraint-List.mog:10:1: type error: unresolved type class constraint: `Tag Box`
+
+  10 | bad :: [String]
+     | ^^^

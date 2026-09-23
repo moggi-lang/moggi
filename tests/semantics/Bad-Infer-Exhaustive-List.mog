@@ -1,0 +1,7 @@
+module Bad.Infer.Exhaustive.List
+
+import Data.Int
+import Data.List
+
+f xs = case xs of
+  [] -> 0

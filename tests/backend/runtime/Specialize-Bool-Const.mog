@@ -1,0 +1,30 @@
+-- A `Foldable` method specialized for `[]` burns a `Bool` constant into the
+-- clone (`null [] = foldr (\_ _ -> False) True []`). Specialization rewrites the
+-- source module's imports, so that constant must stay the host boolean rather
+-- than become `Data.Bool::False`; php would then emit the constructor tag
+-- `["False"]` and `show` would fail, while jvm and .NET print the right
+-- answer.
+nullEmpty :: Bool
+nullEmpty = null ([] :: [Int])
+
+allEmpty :: Bool
+allEmpty = all (\x -> x == 1) ([] :: [Int])
+
+anyEmpty :: Bool
+anyEmpty = any (\x -> x == 1) ([] :: [Int])
+
+foldrEmpty :: Bool
+foldrEmpty = foldr (\_ _ -> False) True ([] :: [Int])
+
+foldlEmpty :: Bool
+foldlEmpty = foldl (\acc _ -> acc) False ([] :: [Int])
+
+elemEmpty :: Bool
+elemEmpty = 1 `elem` ([] :: [Int])
+
+main :: IO ()
+main = do
+  putStrLn (show (nullEmpty, allEmpty, anyEmpty))
+  putStrLn (show (foldrEmpty, foldlEmpty, elemEmpty))
+  putStrLn (show (null [1, 2], foldr (\_ _ -> False) True [1, 2]))
+  putStrLn (show (all (\x -> x == 1) ([] :: [Int]), any (\x -> x == 1) ([] :: [Int])))

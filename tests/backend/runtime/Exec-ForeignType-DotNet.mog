@@ -1,0 +1,12 @@
+-- A declared foreign *type* must be usable in signatures: `Stream` is declared locally, produced
+-- by the constructor across the FFI boundary and consumed by `streamLength`, so the emitted
+-- interop carries the type both ways instead of degrading it to object/string.
+foreign dotnet type Stream "System.IO.MemoryStream"
+
+foreign dotnet function newStream "System.IO.MemoryStream:__con" :: Stream
+foreign dotnet function streamLength "System.IO.MemoryStream.get_Length" :: Stream -> Int
+
+main :: IO ()
+main = do
+  let s = newStream
+  putStrLn (show (streamLength s))

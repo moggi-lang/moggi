@@ -1,0 +1,180 @@
+module Basic where
+
+import Data.Maybe
+import Data.List
+
+-- Primitive types
+
+anInt :: Int
+anInt = 42
+
+anotherInt = anInt + 10
+
+aBool :: Bool
+aBool = True
+
+aChar :: Char
+aChar = 'x'
+
+aString :: String
+aString = "hello"
+
+-- Functions / inferred types
+
+identity x = x
+
+bump x = x + 1
+
+compose f g x = f (g x)
+
+double x = x * 2
+
+incremented = bump 41
+
+composed = compose double bump 20
+
+-- Polymorphism
+
+firstOf x y = x
+
+constValue = firstOf "hello" 42
+
+identityInt = identity 23
+
+identityString = identity "hello"
+
+-- Maybe
+
+nothingValue = Nothing
+
+justValue = Just 42
+
+fromJustValue = fromJust justValue
+
+maybeValue = maybe 0 bump justValue
+
+-- Lists
+
+numbers = [1, 2, 3, 4, 5]
+
+strings = ["one", "two", "three"]
+
+moreNumbers = 0 : numbers
+
+combined = numbers <> [6, 7, 8]
+
+firstNumber = head numbers
+
+restNumbers = tail numbers
+
+-- List functions
+
+mapped = map bump numbers
+
+doubled = map double numbers
+
+filtered = filter (\x -> x > 2) numbers
+
+reversed = reverse numbers
+
+-- ADTs / constructors
+
+data Color
+  = Red
+  | Blue
+  | Green
+
+red = Red
+
+blue = Blue
+
+favoriteColor = red
+
+-- ADT with fields
+
+data Person
+  = Person String Int
+
+alice = Person "Alice" 42
+
+personName = case alice of
+  Person name age -> name
+
+personAge = case alice of
+  Person name age -> age
+
+-- Pattern matching
+
+describeColor color =
+  case color of
+    Red -> "red"
+    Blue -> "blue"
+    Green -> "green"
+
+describeMaybe value =
+  case value of
+    Nothing -> "nothing"
+    Just x -> x
+
+-- Nested expressions / let bindings
+
+nested =
+  let x = 10
+      y = x + 20
+  in y * 2
+
+localExample x =
+  let doubledLocal = x * 2
+      incrementedLocal = doubledLocal + 1
+  in incrementedLocal
+
+-- Tuples
+
+pair = (42, "hello")
+
+triple = (True, 42, "hello")
+
+-- Operators
+
+sumOf = 10 + 20
+
+difference = 30 - 10
+
+productOf = 6 * 7
+
+quotient = 42 / 2
+
+comparison = 10 < 20
+
+equality = 10 == 10
+
+-- Cross-reference targets
+
+targetValue = 123
+
+useTarget = targetValue + targetValue
+
+targetFunction x = x + targetValue
+
+useTargetFunction = targetFunction 10
+
+-- Mogdoc documentation exposed via hover
+
+-- | Documented value for hover tests.
+documentedValue :: Int
+documentedValue = 7
+
+-- | Documented function for hover tests.
+-- Second line of documentation.
+documentedFunction :: Int -> Int
+documentedFunction n = n + documentedValue
+
+-- Multi-equation functions (rename fixtures)
+
+-- | Multi-equation function: signature plus two pattern-matching equations.
+someFun :: [a] -> Int
+someFun [] = 0
+someFun (a : xs) = 1 + someFun xs
+
+useSomeFun = someFun [1, 2, 3]
+anotherUse = someFun []

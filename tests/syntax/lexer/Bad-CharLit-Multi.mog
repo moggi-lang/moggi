@@ -1,0 +1,3 @@
+module Bad.CharLitMulti
+-- Multi-scalar char literal (e + combining acute) must be rejected.
+main = '\u{65}\u{301}'

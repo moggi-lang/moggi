@@ -1,0 +1,7 @@
+tests/semantics/bad-foreign-import-jvm/lib/Platform.mog:9:22: type error: foreign import backend `jvm` does not match compile backend `php`
+
+Did you mean this?
+    php
+
+   9 | foreign jvm function hostToString "java.lang.Long:toString" :: Int -> String
+     |                      ^^^^^^^^^^^^

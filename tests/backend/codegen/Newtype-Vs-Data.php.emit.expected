@@ -1,0 +1,29 @@
+<?php declare(strict_types=1);
+
+namespace Main;
+
+const __MOGGI_MAP = [[28 => ['Main.wrapBox', 'tests/backend/codegen/Newtype-Vs-Data.mog', 15, 13]], ['Main\\unwrapAge' => ['Main.unwrapAge', 'tests/backend/codegen/Newtype-Vs-Data.mog', 6, 21], 'Main\\unwrapBox' => ['Main.unwrapBox', 'tests/backend/codegen/Newtype-Vs-Data.mog', 9, 21], 'Main\\wrapAge' => ['Main.wrapAge', 'tests/backend/codegen/Newtype-Vs-Data.mog', 12, 13], 'Main\\wrapBox' => ['Main.wrapBox', 'tests/backend/codegen/Newtype-Vs-Data.mog', 15, 13]]];
+
+function Age($v0) {
+    return $v0;
+}
+
+function Box($v0) {
+    return ['Box', $v0];
+}
+
+function unwrapAge($_p0) {
+    return $_p0;
+}
+
+function unwrapBox($_p0) {
+    return $_p0[1];
+}
+
+function wrapAge($n) {
+    return $n;
+}
+
+function wrapBox($n) {
+    return Box($n);
+}

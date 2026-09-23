@@ -1,0 +1,5 @@
+module Platform.Jvm
+  ( hostToString
+  ) where
+
+foreign jvm function hostToString "java.lang.Long:toString" :: Int -> String

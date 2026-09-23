@@ -1,0 +1,7 @@
+{-# BACKEND
+  php = Data.Char.PHP
+  php = Data.String.PHP
+#-}
+module Test.Facade ( f ) where
+
+f :: Int

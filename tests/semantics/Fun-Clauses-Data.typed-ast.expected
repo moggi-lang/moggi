@@ -1,0 +1,82 @@
+program
+  data Person
+    constructor Person
+      field name :: String
+      field age :: Int
+  function greet :: Person -> String
+    pat_con Person
+      pat_var name
+      pat_var age
+    variable name
+  data Shape
+    constructor Circle
+      field r :: Int
+    constructor Rectangle
+      field w :: Int
+      field h :: Int
+  function area :: Shape -> Int
+    pat_var _p0
+    case
+      variable _p0
+      alt
+        pat_con Circle
+          pat_var r
+        infix *
+          variable r
+          variable r
+      alt
+        pat_con Rectangle
+          pat_var w
+          pat_var h
+        infix *
+          variable w
+          variable h
+  data User
+    constructor User
+      field name :: String
+      field age :: Int
+  function greetUser :: User -> String
+    pat_con User
+      pat_var name
+      pat_var age
+    variable name
+  function greetUserByField :: User -> String
+    pat_record User
+      name =
+        pat_var n
+      age =
+        pat_var a
+    variable n
+  data Expr
+    constructor Lit
+      field n :: Int
+    constructor Add
+      field l :: Expr
+      field r :: Expr
+  function eval :: Expr -> Int
+    pat_var _p0
+    case
+      variable _p0
+      alt
+        pat_con Lit
+          pat_var n
+        variable n
+      alt
+        pat_con Add
+          pat_con Lit
+            pat_lit 0
+          pat_var e
+        apply
+          variable eval
+          variable e
+      alt
+        pat_con Add
+          pat_var l
+          pat_var r
+        infix +
+          apply
+            variable eval
+            variable l
+          apply
+            variable eval
+            variable r

@@ -1,0 +1,16 @@
+program
+  function abs :: Int -> Int
+    pat_var x
+    guards
+      guarded
+        guard
+          infix <
+            variable x
+            integer 0
+        apply
+          variable negate
+          variable x
+      guarded
+        guard
+          variable otherwise
+        variable x

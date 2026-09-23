@@ -1,0 +1,3 @@
+-- A numeric escape must denote a Unicode scalar value; U+110000 is past the
+-- range and surrogates are rejected too.
+s = "\u{110000}"

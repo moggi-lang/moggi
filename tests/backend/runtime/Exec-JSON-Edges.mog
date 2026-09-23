@@ -1,0 +1,143 @@
+import System.IO
+import Data.ByteString.Char8 qualified as C
+import Data.ByteString (ByteString)
+import Data.String qualified as S
+import Data.String
+import Data.JSON
+import Data.Either
+import Data.Maybe
+import Data.Bool
+import Data.Char
+import Data.Int
+import Moggi.Internal.Integer
+import Moggi.Internal.Num
+import Data.Eq
+import Moggi.Internal.Float
+import Data.Map (Map, lookup)
+
+runDecode :: FromJSON a => (Either String a -> String) -> ByteString -> IO ()
+runDecode showFn bs = do
+  mr <- eitherDecode bs
+  putStrLn (showFn mr)
+
+-- High-value Aeson-inspired edges (not a port of Aeson's suite).
+-- Each line labels a semantic class a failure would expose.
+
+bsToStr b = S.pack (C.unpack b)
+
+main :: IO ()
+main = do
+  -- Nested Maybe lossiness (Aeson SerializationFormatSpec): both encode to null.
+  C.putStrLn (encode (Nothing :: Maybe (Maybe Int)))
+  C.putStrLn (encode (Just (Nothing :: Maybe Int)))
+  runDecode showNestedMaybe ((C.pack "null"))
+
+  -- Char: single codepoint only.
+  runDecode showCharOk ((C.pack "\"x\""))
+  runDecode showCharBad ((C.pack "\"xy\""))
+  runDecode showCharEmpty ((C.pack "\"\""))
+
+  -- Numbers: zero, negative Int, scientific Double, trailing junk reject.
+  runDecode showZero ((C.pack "0"))
+  runDecode showNeg ((C.pack "-7"))
+  runDecode showSci ((C.pack "1.5e2"))
+  runDecode showTrailing ((C.pack "1 2"))
+
+  -- Malformed / control: unescaped tab in string (Aeson Issue1138 — reject).
+  runDecode showTab ((C.pack "\"\t\""))
+
+  -- Legal unicode escape.
+  runDecode showEscape ((C.pack "\"\\u00e9\""))
+
+  -- Duplicate object keys: host → Value; Map.fromList prefers last.
+  runDecode showDup ((C.pack "{\"k\":1,\"k\":2}"))
+
+  -- Empty string / whitespace-only document.
+  runDecode showEmptyDoc ((C.pack ""))
+  runDecode showWs ((C.pack "  null  "))
+
+showNestedMaybe :: Either String (Maybe (Maybe Int)) -> String
+showNestedMaybe e = case e of
+  Right Nothing -> "ok-nested-maybe"
+  _ -> "bad-nested-maybe"
+
+showCharOk :: Either String Char -> String
+showCharOk e = case e of
+  Right 'x' -> "ok-char"
+  _ -> "bad-char"
+
+showCharBad :: Either String Char -> String
+showCharBad e = case e of
+  Left _ -> "ok-char-multi"
+  Right _ -> "bad-char-multi"
+
+showCharEmpty :: Either String Char -> String
+showCharEmpty e = case e of
+  Left _ -> "ok-char-empty"
+  Right _ -> "bad-char-empty"
+
+showZero :: Either String Int -> String
+showZero e = case e of
+  Right 0 -> "ok-zero"
+  _ -> "bad-zero"
+
+showNeg :: Either String Int -> String
+showNeg e = case e of
+  Right n -> eqNeg n
+  Left _ -> "bad-neg"
+
+eqNeg :: Int -> String
+eqNeg n = case n == (0 - 7) of
+  True -> "ok-neg"
+  False -> "bad-neg"
+
+showSci :: Either String Double -> String
+showSci e = case e of
+  Right _ -> "ok-sci"
+  Left _ -> "bad-sci"
+
+showTrailing :: Either String Int -> String
+showTrailing e = case e of
+  Left _ -> "ok-trailing"
+  Right _ -> "bad-trailing"
+
+showTab :: Either String String -> String
+showTab e = case e of
+  Left _ -> "ok-tab-reject"
+  Right _ -> "bad-tab-accept"
+
+showEscape :: Either String String -> String
+showEscape e = case e of
+  Right s -> eqEscape s
+  Left _ -> "bad-escape"
+
+eqEscape :: String -> String
+eqEscape s = case s == "é" of
+  True -> "ok-escape"
+  False -> "bad-escape-val"
+
+showDup :: Either String Value -> String
+showDup e = case e of
+  Right (Object m) -> showDupLookup (lookup "k" m)
+  _ -> "bad-dup"
+
+showDupLookup :: Maybe Value -> String
+showDupLookup mv = case mv of
+  Just (Number (NumInteger n)) -> eqDup n
+  _ -> "bad-dup-lookup"
+
+eqDup :: Integer -> String
+eqDup n = case bsToStr (encode n) of
+  "2" -> "ok-dup-last"
+  "1" -> "ok-dup-first"
+  _ -> "bad-dup-val"
+
+showEmptyDoc :: Either String Value -> String
+showEmptyDoc e = case e of
+  Left _ -> "ok-empty-doc"
+  Right _ -> "bad-empty-doc"
+
+showWs :: Either String Value -> String
+showWs e = case e of
+  Right Null -> "ok-ws-null"
+  _ -> "bad-ws-null"

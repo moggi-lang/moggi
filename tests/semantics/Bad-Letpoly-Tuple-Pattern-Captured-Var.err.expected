@@ -1,0 +1,4 @@
+tests/semantics/Bad-Letpoly-Tuple-Pattern-Captured-Var.mog:1:1: type error: unresolved type class constraint: `Num (Bool -> a)`
+
+  1 | bad x = let (y, z) = (x, x) in (y + 1, z True)
+    | ^^^

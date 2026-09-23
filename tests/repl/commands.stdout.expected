@@ -1,0 +1,25 @@
+Commands (start with `:`):
+  :backend php|jvm|dotnet  switch evaluation backend
+  :help                show this help
+  :quit, :q            exit the REPL
+  :type expr|decl, :t  show the type of an expression or binding
+  :kind Type|expr, :k  show the kind of a type (or of an expression's type)
+  :info Name, :i       show declaration information
+  :ast [expr|decl]     show AST (fragment or last)
+  :ir [expr|decl]      show IR
+  :ir-opt [expr|decl]  show optimized IR
+  :emit [expr|decl]    show emitted code for a fragment binding
+  :emit-opt [expr|decl] show optimized emit for a fragment
+  :dump ast|typed-ast|ir|ir-opt|emit|emit-opt
+                       dump stage of the full interactive module
+  :load file, :l       load a Moggi module
+  :reload, :r          reload the current module
+  :browse              list interactive bindings
+  :show imports        show active imports
+  :module [Name]       show or set interactive module name
+  :history             show command history
+  :clear               reset interactive state
+
+Declarations and prompt statements persist; expressions are evaluated.
+Type
+Type -> Type

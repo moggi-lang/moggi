@@ -1,0 +1,173 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module System.IO.DotNet
+  ( stdin
+  , stdout
+  , stderr
+  , openFile
+  , hClose
+  , hGetLine
+  , hGetChar
+  , getLine
+  , getChar
+  , hIsEOF
+  , hGetContents
+  , hFileSize
+  , hSetFileSize
+  , hPutStr
+  , hPutStrLn
+  , hPutChar
+  , hFlush
+  , putStr
+  , putStrLn
+  , print
+  ) where
+
+import Text.Show
+import Data.Bool
+import System.IO.Types
+import Control.Applicative
+import Control.Exception (catch)
+import Control.Monad
+import System.IO.Base (IO, FilePath)
+import Moggi.Err
+import Moggi.IO.Exception
+import Data.Char (Char, chr)
+import Data.Int
+import Moggi.Internal.Integer
+import Data.Maybe
+import Data.String
+import Moggi.Internal.Prim
+import System.IO.Error (mkIOError)
+
+foreign dotnet const rawStdout "System.Console:Out" :: Handle
+
+foreign dotnet const rawStderr "System.Console:Error" :: Handle
+
+foreign dotnet const rawStdin "System.Console:In" :: Handle
+
+foreign dotnet function rawPrint "System.IO.TextWriter.Write" :: Handle -> String -> IO ()
+
+foreign dotnet function rawFlush "System.IO.TextWriter.Flush" :: Handle -> IO ()
+
+foreign dotnet function newStreamReader "System.IO.StreamReader:__con" :: String -> Handle
+
+foreign dotnet function newStreamWriter "System.IO.StreamWriter:__con" :: String -> Bool -> Handle
+
+foreign dotnet function textReaderPeek "System.IO.TextReader.Peek" :: Handle -> IO Int32
+
+foreign dotnet function textReaderReadLine "System.IO.TextReader.ReadLine" :: Handle -> IO String
+
+foreign dotnet function textReaderRead "System.IO.TextReader.Read" :: Handle -> IO Int32
+
+foreign dotnet function textReaderReadToEnd "System.IO.TextReader.ReadToEnd" :: Handle -> IO String
+
+foreign dotnet function idisposableDispose "System.IDisposable.Dispose" :: Handle -> IO ()
+
+foreign dotnet function rawFileExists "System.IO.File:Exists" :: String -> Bool
+
+foreign dotnet function rawDirectoryExists "System.IO.Directory:Exists" :: String -> Bool
+
+stdin :: Handle
+stdin = rawStdin
+
+stdout :: Handle
+stdout = rawStdout
+
+stderr :: Handle
+stderr = rawStderr
+
+openFile :: FilePath -> IOMode -> IO Handle
+openFile p mode = catch (openMode (p) mode) (openFileFailed p mode)
+
+openMode :: String -> IOMode -> IO Handle
+openMode pathStr mode = case mode of
+  ReadMode -> pure (newStreamReader pathStr)
+  WriteMode -> pure (newStreamWriter pathStr False)
+  AppendMode -> pure (newStreamWriter pathStr True)
+  ReadWriteMode -> error "openFile: ReadWriteMode is not supported on DotNet"
+
+openFileFailed :: FilePath -> IOMode -> HostException -> IO Handle
+openFileFailed p mode h =
+  ioError (mkIOError (openErrorType p mode h) "openFile" Nothing (Just (p)))
+
+-- | The CLR names the failure in the exception type. `UnauthorizedAccessException`
+-- covers both "permission denied" and "is a directory", so that one reads the path.
+openErrorType :: FilePath -> IOMode -> HostException -> IOErrorType
+openErrorType p _ (HostException _be nativeTy _msg) = case nativeTy of
+  "System.IO.FileNotFoundException" -> NoSuchThing
+  "System.IO.DirectoryNotFoundException" -> NoSuchThing
+  "System.UnauthorizedAccessException" -> unauthorizedErrorType (p)
+  _ -> otherErrorType (p)
+
+unauthorizedErrorType :: String -> IOErrorType
+unauthorizedErrorType pathStr = case rawDirectoryExists pathStr of
+  True -> InappropriateType
+  False -> PermissionDenied
+
+otherErrorType :: String -> IOErrorType
+otherErrorType pathStr = case rawDirectoryExists pathStr of
+  True -> InappropriateType
+  False -> case rawFileExists pathStr of
+    False -> NoSuchThing
+    True -> OtherError
+
+hClose :: Handle -> IO ()
+hClose h = idisposableDispose h
+
+hGetLine :: Handle -> IO (Maybe String)
+hGetLine h = do
+  isEof <- hIsEOF h
+  case isEof of
+    True -> pure Nothing
+    False -> do
+      line <- textReaderReadLine h
+      pure (Just line)
+
+hIsEOF :: Handle -> IO Bool
+hIsEOF h = do
+  peeked <- textReaderPeek h
+  pure (int32ToInt# peeked == -1)
+
+hGetContents :: Handle -> IO String
+hGetContents h = textReaderReadToEnd h
+
+hFileSize :: Handle -> IO Integer
+hFileSize _ = error "hFileSize: not supported on DotNet"
+
+hSetFileSize :: Handle -> Integer -> IO ()
+hSetFileSize _ _ = error "hSetFileSize: not supported on DotNet"
+
+hPutStr h s = rawPrint h s
+
+hPutStrLn h s = hPutStr h (s <> "\n")
+
+hPutChar :: Handle -> Char -> IO ()
+hPutChar h c = hPutStr h (singleton c)
+
+hGetChar :: Handle -> IO Char
+hGetChar h = do
+  n <- textReaderRead h
+  let i = int32ToInt# n
+  if i == -1 then error "hGetChar: end of input" else pure (chr i)
+
+hFlush h = rawFlush h
+
+getLineFromMaybe :: Maybe String -> IO String
+getLineFromMaybe m = case m of
+  Nothing -> error "getLine: end of input"
+  Just s -> pure s
+
+getLine :: IO String
+getLine = do
+  m <- hGetLine stdin
+  getLineFromMaybe m
+
+getChar :: IO Char
+getChar = hGetChar stdin
+
+print :: Show a => a -> IO ()
+print x = putStr (show x)
+
+putStr s = hPutStr stdout s
+
+putStrLn s = hPutStrLn stdout s

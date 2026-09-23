@@ -1,0 +1,39 @@
+program
+  class MyEq a
+    method === :: a -> a -> Bool
+  function __ev_MyEq_Int__3d_3d_3d :: Int -> Int -> Bool
+    pat_var x
+    pat_var y
+    infix ==
+      variable x
+      variable y
+  data Box
+    constructor Box
+      field  :: Int
+  function __ev_MyEq_Box__3d_3d_3d :: Box -> Box -> Bool
+    pat_con Box
+      pat_var a
+    pat_con Box
+      pat_var b
+    infix ==
+      variable a
+      variable b
+  function intEq :: Int -> Int -> Bool
+    evidence_method MyEq.=== evidence= nullary=0
+      instance Int
+  function polyEq :: __Dict_MyEq -> a -> a -> Bool
+    pat_var __ev_MyEq
+    evidence_method MyEq.=== evidence=__ev_MyEq nullary=0
+  function localEq :: Int -> Int -> Bool
+    pat_var x
+    pat_var y
+    where
+      apply
+        apply
+          variable go
+          variable x
+        variable y
+      binding
+        pat_var go
+        evidence_method MyEq.=== evidence= nullary=0
+          instance Int

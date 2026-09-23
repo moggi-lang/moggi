@@ -1,0 +1,30 @@
+<?php declare(strict_types=1);
+
+namespace Tc\Infix\Constructor\Fixity;
+
+const __MOGGI_MAP = [[], ['Tc\\Infix\\Constructor\\Fixity\\nested' => ['Tc.Infix.Constructor.Fixity.nested', 'tests/backend/codegen/Tc-Infix-Constructor-Fixity.mog', 14, 1], 'Tc\\Infix\\Constructor\\Fixity\\ok' => ['Tc.Infix.Constructor.Fixity.ok', 'tests/backend/codegen/Tc-Infix-Constructor-Fixity.mog', 18, 6]]];
+
+require_once __DIR__ . '/../../../lib/Data/Bool.php';
+
+function __fn_3a7c($v0, $v1) {
+    return [':|', $v0, $v1];
+}
+
+function nested() {
+    return __fn_3a7c(1, [2, 3]);
+}
+
+function ok() {
+    if (((nested())[0] ?? null) === ':|') {
+        $__scrut_0 = nested();
+        $x = $__scrut_0[1];
+        $xs = $__scrut_0[2];
+        if (($x === 1) === true) {
+            $__t4 = ($xs === [2, 3]);
+        }
+        elseif (($x === 1) === false) {
+            $__t4 = false;
+        }
+        return $__t4;
+    }
+}

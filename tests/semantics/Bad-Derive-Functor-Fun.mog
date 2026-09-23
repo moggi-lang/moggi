@@ -1,0 +1,4 @@
+import Data.Functor
+
+-- Function field: not Functor-derivable
+data Bad a = Bad (a -> Int) deriving (Functor)

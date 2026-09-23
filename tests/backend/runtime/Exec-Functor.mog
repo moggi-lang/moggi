@@ -1,0 +1,35 @@
+import Data.Bool
+import Data.Eq
+import Data.Functor
+import Data.Int
+import Data.List hiding (unzip)
+import Data.Maybe
+import Text.Show
+import System.IO
+
+fmapOpDemo :: Bool
+fmapOpDemo = (\x -> x + 1) <$> [1, 2, 3] == [2, 3, 4]
+
+replaceDemo :: Bool
+replaceDemo = (0 <$ Just 9) == Just 0
+
+flippedReplaceDemo :: Bool
+flippedReplaceDemo = (Just 9 $> 0) == Just 0
+
+flippedMapDemo :: Bool
+flippedMapDemo = ([1, 2, 3] <&> (\x -> x * 2)) == [2, 4, 6]
+
+voidMaybeDemo :: Bool
+voidMaybeDemo = void (Just 3) == Just ()
+
+voidListDemo :: Bool
+voidListDemo = void [1, 2] == [(), ()]
+
+main :: IO ()
+main = do
+  putStrLn (show fmapOpDemo)
+  putStrLn (show replaceDemo)
+  putStrLn (show flippedReplaceDemo)
+  putStrLn (show flippedMapDemo)
+  putStrLn (show voidMaybeDemo)
+  putStrLn (show voidListDemo)

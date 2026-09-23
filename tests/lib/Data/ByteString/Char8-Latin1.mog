@@ -1,0 +1,37 @@
+import Data.Bool
+import Data.ByteString.Char8 qualified as C
+import Data.ByteString qualified as B
+import Data.Char (chr, ord)
+import Data.Enum
+import Data.Eq
+import Data.Ord
+import Text.Show
+import Data.Word
+
+mapOrd cs = case cs of
+  [] -> []
+  c : rest -> ord c : mapOrd rest
+
+showOrds b = show (mapOrd (C.unpack b))
+
+main :: IO ()
+main = do
+  putStrLn (case C.unpack (C.pack "abc") of
+    'a' : 'b' : 'c' : [] -> "ascii-ok"
+    _ -> "ascii-bad")
+  putStrLn (case B.unpack (C.singleton (chr 256)) of
+    w : [] -> case fromEnum w == 0 of
+      True -> "trunc-0100-ok"
+      False -> "trunc-0100-bad"
+    _ -> "trunc-0100-bad")
+  putStrLn (case B.unpack (C.singleton (chr 8364)) of
+    w : [] -> case fromEnum w == 172 of
+      True -> "trunc-20ac-ok"
+      False -> "trunc-20ac-bad"
+    _ -> "trunc-20ac-bad")
+  putStrLn (case C.unpack (B.singleton (toEnum 172)) of
+    c : [] -> case ord c == 172 of
+      True -> "zext-ok"
+      False -> "zext-bad"
+    _ -> "zext-bad")
+  putStrLn (showOrds (C.pack "Hi"))

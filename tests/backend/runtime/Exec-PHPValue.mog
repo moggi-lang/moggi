@@ -1,0 +1,57 @@
+import Control.Exception
+import Data.Bool
+import Data.Either
+import Data.String
+import Moggi.Exception.Type
+import Moggi.IO.Exception
+import Platform.PHP
+import System.IO
+
+-- ---- Exec-PHPValue-Reify ----
+
+-- Explicit mixed → PHPValue at the FFI boundary; ordinary match in Moggi.
+foreign php function boxBool "boolval" :: Bool -> PHPValue
+foreign php function boxString "strval" :: String -> PHPValue
+
+showPV :: PHPValue -> String
+showPV v = case v of
+  PhpNull -> "null"
+  PhpBool True -> "true"
+  PhpBool False -> "false"
+  PhpInt _ -> "int"
+  PhpDouble _ -> "double"
+  PhpString s -> "string:" <> s
+  PhpArray _ -> "array"
+  PhpObject _ -> "object"
+  PhpResource _ -> "resource"
+
+runPHPValueReify :: IO ()
+runPHPValueReify = do
+  putStrLn (showPV (boxBool True))
+  putStrLn (showPV (boxBool False))
+  putStrLn (showPV (boxString "hi"))
+
+-- ---- Exec-PHPValue-RejectOpaque ----
+
+-- Opaque class instances (not stdClass property bags) must not reify via phpValueBox.
+foreign php type Client "ArrayObject"
+foreign php function newClient "ArrayObject:__con" :: Client
+foreign php function ser "serialize" :: Client -> String
+foreign php function unserializePhp "unserialize" :: String -> IO PHPValue
+
+tryHost :: IO a -> IO (Either HostException a)
+tryHost action = try action
+
+runPHPValueRejectOpaque :: IO ()
+runPHPValueRejectOpaque = do
+  let c = newClient
+  r <- tryHost (unserializePhp (ser c))
+  putStrLn (case r of
+    Left _ -> "reject-ok"
+    Right _ -> "reject-fail")
+
+-- ---- combined entry point ----
+main :: IO ()
+main = do
+  runPHPValueReify
+  runPHPValueRejectOpaque

@@ -1,0 +1,4 @@
+addOne :: Int -> Int
+addOne x =
+  let go y = y + 1
+  in go x

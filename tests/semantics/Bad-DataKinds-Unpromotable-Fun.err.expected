@@ -1,0 +1,4 @@
+tests/semantics/Bad-DataKinds-Unpromotable-Fun.mog:8:18: type error: data constructor `Bad` is not promotable (fields must have promotable kinds)
+
+   8 | bad :: OnlyColor 'Bad -> String
+     |                  ^^^

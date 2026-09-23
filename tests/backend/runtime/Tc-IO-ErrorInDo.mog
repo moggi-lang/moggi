@@ -1,0 +1,11 @@
+module Tc.IO.ErrorInDo
+
+import System.IO
+
+abort :: IO ()
+abort = do
+  putStrLn "before"
+  error "boom"
+
+main :: IO ()
+main = abort

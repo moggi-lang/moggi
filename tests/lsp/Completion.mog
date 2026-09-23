@@ -1,0 +1,21 @@
+-- Incomplete code for context-sensitive LSP features (completion, signature help).
+-- Deliberately partial; not expected to typecheck cleanly.
+
+-- incomplete expression: cursor after the operator
+incomplete1 = foo +
+
+-- incomplete application: map with no argument
+incomplete2 = map
+
+-- incomplete case: missing final branch body
+incomplete3 =
+  case Nothing of
+    Just x -> x
+    Nothing ->
+
+-- incomplete declaration: no body
+incomplete4 x =
+
+-- cursor commonly ends up here (bare reference on its own line)
+completionTarget =
+  map

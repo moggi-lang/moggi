@@ -1,0 +1,11 @@
+import Control.Exception
+import System.IO
+
+-- Uncaught host failure raised by a JDK method across the FFI boundary: the
+-- report must name it HostException, keep the native cause, and show the Mogg
+-- frame the call came from. `Long:parseLong` is a static method whose JDK
+-- signature (String -> long) is exactly what the Moggi type lowers to.
+foreign jvm function throwHost "java.lang.Long:parseLong" :: String -> Int
+
+main :: IO ()
+main = putStrLn (show (throwHost "uncaught-host"))

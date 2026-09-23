@@ -1,0 +1,2 @@
+-- A char literal must contain exactly one scalar value.
+c = ''

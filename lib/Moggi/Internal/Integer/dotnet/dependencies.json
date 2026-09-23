@@ -1,0 +1,9 @@
+{
+  "assemblies": {
+    "System.Runtime.Numerics": {
+      "types": {
+        "System.Numerics.BigInteger": { "valueType": true }
+      }
+    }
+  }
+}

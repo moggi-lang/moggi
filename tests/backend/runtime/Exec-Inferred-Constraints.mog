@@ -1,0 +1,78 @@
+import Prelude
+
+-- A function without a signature gets the constraints its body needs, so it is
+-- as general as one that spells them out: `shw x = show x` is `Show a => a ->
+-- String`, not a monomorphic `Int -> String`.
+
+shw x = show x
+
+-- A call to another constrained function threads this function's dictionary.
+myNull xs = null xs
+
+-- Mutual recursion, both inferred and both constrained.
+isEven n = if n <= 0 then True else isOdd (n - 1)
+isOdd n = if n <= 0 then False else isEven (n - 1)
+
+-- No parameters, signature spelled out: with the type written down the whole
+-- RHS is a constrained function like any other.
+renderIt :: Show a => a -> String
+renderIt = \x -> show x
+
+-- Constrained and higher-order: `null` makes `xs` a foldable, `listHead` then
+-- pins that type down to a list.
+both p xs = if null xs then True else p (listHead xs) && both p (listTail xs)
+
+listHead (x : _) = x
+listTail (_ : xs) = xs
+
+-- An inferred constrained function used as a value, at two element types.
+rendered = map renderIt [1, 2, 3]
+
+-- An inferred function with several constraints in one body.
+describe text xs = text <> shw (myNull xs) <> " " <> shw (length xs)
+
+-- A `where` binding is generalized like a top-level function, so its call site
+-- supplies the dictionary for the type it is used at.
+scaled :: Int
+scaled = double 21
+  where double y = y + y
+
+bignum :: Integer
+bignum = toInteger 2000000000000
+
+fromWhere :: Integer
+fromWhere = double bignum
+  where double y = y + y
+
+-- The same shape at a type a signature pins: the operator stays on the
+-- operation for that type instead of going through a dictionary.
+pinned :: Int
+pinned = 6 * 7 + 8 - 5
+
+pinnedBig :: Integer
+pinnedBig = bignum + bignum * bignum
+
+main :: IO ()
+main = do
+  putStrLn (shw 42)
+  putStrLn (shw "text")
+  putStrLn (shw True)
+  putStrLn (show (myNull []))
+  putStrLn (show (myNull [1, 2, 3]))
+  putStrLn (show (isEven 8))
+  putStrLn (show (isOdd 8))
+  putStrLn (renderIt 7)
+  putStrLn (renderIt "t")
+  putStrLn (show (both (\n -> n > 0) [1, 2, 3]))
+  putStrLn (show (both (\n -> n > 0) []))
+  putStrLn (describe "null? " [1, 2, 3])
+  putStrLn (show scaled)
+  putStrLn (show fromWhere)
+  putStrLn (show pinned)
+  putStrLn (show pinnedBig)
+  printAll rendered
+
+printAll :: [String] -> IO ()
+printAll xs = case xs of
+  [] -> pure ()
+  y : ys -> putStrLn y >> printAll ys

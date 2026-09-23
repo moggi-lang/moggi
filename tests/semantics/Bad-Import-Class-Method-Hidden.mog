@@ -1,0 +1,7 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+
+-- `Traversable(traverse)` names one method of the class, so the class's other
+-- methods are not in scope here.
+import Data.Traversable (Traversable(traverse))
+
+notInScope = sequenceA

@@ -1,0 +1,108 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.Semigroup
+  ( Semigroup((<>))
+  , stimes
+  , Min(Min)
+  , getMin
+  , Max(Max)
+  , getMax
+  ) where
+
+import Moggi.Err
+import Data.Bool
+import Data.Bounded
+import Data.Eq
+import Data.Functor
+import Data.Ord
+import Text.Show
+import Moggi.Internal.Prim
+
+infixr 6 <>
+
+class Semigroup a where
+  (<>) :: a -> a -> a
+
+instance Semigroup Ordering where
+  (<>) a b = case a of
+    LT -> LT
+    EQ -> b
+    GT -> GT
+
+-- | Repeat a value @n@ times. @n@ must be positive.
+-- Uses int intrinsics only to avoid importing Data.Int (cycle via Integral/Tuple/Foldable).
+stimes :: Semigroup a => Int -> a -> a
+stimes n x = case intCompare# n 0 of
+  GT -> stimesGo n x
+  _ -> error "stimes: positive multiplier expected"
+
+stimesGo :: Semigroup a => Int -> a -> a
+stimesGo n x = case intCompare# n 1 of
+  EQ -> x
+  _ ->
+    let q = intDiv# n 2
+        r = intSub# n (intMul# q 2)
+        half = stimesGo q x
+        doubled = half <> half
+    in case intCompare# r 0 of
+      EQ -> doubled
+      _ -> doubled <> x
+
+-- Min / Max wrapper types
+
+data Min a = Min a
+
+getMin :: Min a -> a
+getMin m = case m of
+  Min x -> x
+
+instance Ord a => Semigroup (Min a) where
+  (<>) a b = case getMin a <= getMin b of
+    True -> a
+    False -> b
+
+instance Functor Min where
+  map f m = Min (f (getMin m))
+
+instance Eq a => Eq (Min a) where
+  (==) a b = getMin a == getMin b
+  (/=) a b = getMin a /= getMin b
+
+instance Ord a => Ord (Min a) where
+  compare a b = compare (getMin a) (getMin b)
+
+instance Show a => Show (Min a) where
+  showsPrec d m = showParen (d > 10)
+    (\r -> showString "Min {getMin = " (showsPrec 0 (getMin m) (showString "}" r)))
+
+instance Bounded a => Bounded (Min a) where
+  minBound = Min minBound
+  maxBound = Min maxBound
+
+data Max a = Max a
+
+getMax :: Max a -> a
+getMax m = case m of
+  Max x -> x
+
+instance Ord a => Semigroup (Max a) where
+  (<>) a b = case getMax a >= getMax b of
+    True -> a
+    False -> b
+
+instance Functor Max where
+  map f m = Max (f (getMax m))
+
+instance Eq a => Eq (Max a) where
+  (==) a b = getMax a == getMax b
+  (/=) a b = getMax a /= getMax b
+
+instance Ord a => Ord (Max a) where
+  compare a b = compare (getMax a) (getMax b)
+
+instance Show a => Show (Max a) where
+  showsPrec d m = showParen (d > 10)
+    (\r -> showString "Max {getMax = " (showsPrec 0 (getMax m) (showString "}" r)))
+
+instance Bounded a => Bounded (Max a) where
+  minBound = Max minBound
+  maxBound = Max maxBound

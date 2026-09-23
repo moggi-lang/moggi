@@ -1,0 +1,46 @@
+import System.IO
+import Data.ByteString.Char8 qualified as C
+import Data.String
+import Data.Eq
+import Data.Int
+import Data.Either
+import Data.JSON
+import Moggi.Generics
+
+-- Medium nested payload: four record levels + list at the leaves.
+-- Avoid Generic meta names (L1/R1/…); use Nest*.
+data Leaf = Leaf { n :: Int, label :: String }
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+data Nest3 = Nest3 { leaf :: Leaf, xs :: [Int] }
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+data Nest2 = Nest2 { mid :: Nest3, tag :: String }
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+data Nest1 = Nest1 { outer :: Nest2, count :: Int }
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+rt :: Nest1 -> IO String
+rt p = do
+  mr <- eitherDecode (encode p)
+  pure (case mr of
+    Left err -> "ERR:" <> err
+    Right p2 -> case p2 == p of
+      True -> "ok"
+      False -> "eq-fail")
+
+sample :: Nest1
+sample = Nest1
+  (Nest2 (Nest3 (Leaf 7 "deep") (1 : 2 : 3 : [])) "mid")
+  4
+
+main :: IO ()
+main = do
+  C.putStrLn (encode sample)
+  r <- rt sample
+  putStrLn r

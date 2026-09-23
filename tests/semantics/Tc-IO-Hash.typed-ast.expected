@@ -1,0 +1,9 @@
+program
+  function idHash :: IO a -> IO a
+    pat_var x
+    io_action
+      variable x
+  function idSynonym :: IO a -> IO a
+    pat_var x
+    io_action
+      variable x

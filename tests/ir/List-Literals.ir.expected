@@ -1,0 +1,9 @@
+module
+  function xs()
+      ret [1, 2, 3]
+  function cons(y, ys)
+      ret intrinsic listCons#(y, ys)
+  function empty()
+      ret []
+  function prepend()
+      ret intrinsic listCons#(0, @xs)

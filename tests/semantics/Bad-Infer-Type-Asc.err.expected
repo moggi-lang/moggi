@@ -1,0 +1,4 @@
+tests/semantics/Bad-Infer-Type-Asc.mog:2:30: type error: could not unify `Int` with `String`
+
+  2 | f x = let y = 1 :: String in x + y
+    |                              ^^^^^

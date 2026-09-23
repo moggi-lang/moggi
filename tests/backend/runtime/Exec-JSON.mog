@@ -1,0 +1,197 @@
+import Data.Bool
+import Data.ByteString (ByteString)
+import Data.ByteString.Char8 qualified as C
+import Data.Either
+import Data.Eq
+import Data.Int
+import Data.JSON
+import Moggi.Internal.Num
+import Data.String
+import Data.String qualified as S
+import Moggi.Generics
+import System.IO
+
+-- ---- Exec-JSON-AllNullary ----
+
+runDecode :: FromJSON a => (Either String a -> String) -> ByteString -> IO ()
+runDecode showFn bs = do
+  mr <- eitherDecode bs
+  putStrLn (showFn mr)
+
+-- Aeson defaultOptions: all-nullary sums encode as bare string tags.
+data Color = Red | Green | Blue
+  deriving (Generic, Eq)
+
+instance ToJSON Color where
+  toJSON = genericToJSON defaultOptions
+  toEncoding = genericToEncoding defaultOptions
+instance FromJSON Color where
+  parseJSON = genericParseJSON defaultOptions
+  parseEncoding = genericParseEncoding defaultOptions
+
+-- Mixed sum: isAllNullary=False → tagged objects even with Options True.
+data Result = Ok | Error String
+  deriving (Generic, Eq)
+
+instance ToJSON Result where
+  toJSON = genericToJSON defaultOptions
+  toEncoding = genericToEncoding defaultOptions
+instance FromJSON Result where
+  parseJSON = genericParseJSON defaultOptions
+  parseEncoding = genericParseEncoding defaultOptions
+
+-- Every constructor has fields: never string-tag.
+data Shape = Circle Int | Rect Int Int
+  deriving (Generic, Eq)
+
+instance ToJSON Shape where
+  toJSON = genericToJSON defaultOptions
+  toEncoding = genericToEncoding defaultOptions
+instance FromJSON Shape where
+  parseJSON = genericParseJSON defaultOptions
+  parseEncoding = genericParseEncoding defaultOptions
+
+-- Nested all-nullary ADT field.
+data Badge = Badge { color :: Color }
+  deriving (Generic, Eq)
+
+instance ToJSON Badge where
+  toJSON = genericToJSON defaultOptions
+  toEncoding = genericToEncoding defaultOptions
+instance FromJSON Badge where
+  parseJSON = genericParseJSON defaultOptions
+  parseEncoding = genericParseEncoding defaultOptions
+
+forceObjectTags :: Options
+forceObjectTags = allNullaryToStringTag False defaultOptions
+
+forceStringTags :: Options
+forceStringTags = allNullaryToStringTag True defaultOptions
+
+data ColorObj = CRed | CGreen
+  deriving (Generic, Eq)
+
+instance ToJSON ColorObj where
+  toJSON = genericToJSON forceObjectTags
+  toEncoding = genericToEncoding forceObjectTags
+instance FromJSON ColorObj where
+  parseJSON = genericParseJSON forceObjectTags
+  parseEncoding = genericParseEncoding forceObjectTags
+
+data ColorStr = SRed | SGreen
+  deriving (Generic, Eq)
+
+instance ToJSON ColorStr where
+  toJSON = genericToJSON forceStringTags
+  toEncoding = genericToEncoding forceStringTags
+instance FromJSON ColorStr where
+  parseJSON = genericParseJSON forceStringTags
+  parseEncoding = genericParseEncoding forceStringTags
+
+runJSONAllNullary :: IO ()
+runJSONAllNullary = do
+  C.putStrLn (encode Green)
+  runDecode showColor ((C.pack "\"Green\""))
+  runDecode showColorRejectObj ((C.pack "{\"tag\":\"Green\"}"))
+
+  C.putStrLn (encode Ok)
+  C.putStrLn (encode (Error "x"))
+  runDecode showResultOk ((encode Ok))
+  runDecode showResultErr ((encode (Error "x")))
+  runDecode showResultRejectStr ((C.pack "\"Ok\""))
+
+  C.putStrLn (encode (Circle 1))
+  runDecode showShape ((encode (Circle 1)))
+
+  C.putStrLn (encode (Badge Green))
+  runDecode showBadge ((encode (Badge Green)))
+
+  C.putStrLn (encode CGreen)
+  runDecode showColorObj ((encode CGreen))
+  runDecode showColorObjRejectStr ((C.pack "\"CGreen\""))
+
+  C.putStrLn (encode SGreen)
+  runDecode showColorStr ((C.pack "\"SGreen\""))
+
+showColor :: Either String Color -> String
+showColor e = case e of
+  Right Green -> "ok-color-string"
+  _ -> "bad-color-string"
+
+showColorRejectObj :: Either String Color -> String
+showColorRejectObj e = case e of
+  Left _ -> "ok-color-reject-obj"
+  Right _ -> "bad-color-reject-obj"
+
+showResultOk :: Either String Result -> String
+showResultOk e = case e of
+  Right Ok -> "ok-result-ok"
+  _ -> "bad-result-ok"
+
+showResultErr :: Either String Result -> String
+showResultErr e = case e of
+  Right (Error "x") -> "ok-result-err"
+  _ -> "bad-result-err"
+
+showResultRejectStr :: Either String Result -> String
+showResultRejectStr e = case e of
+  Left _ -> "ok-result-reject-str"
+  Right _ -> "bad-result-reject-str"
+
+showShape :: Either String Shape -> String
+showShape e = case e of
+  Right (Circle 1) -> "ok-shape"
+  _ -> "bad-shape"
+
+showBadge :: Either String Badge -> String
+showBadge e = case e of
+  Right (Badge Green) -> "ok-badge"
+  _ -> "bad-badge"
+
+showColorObj :: Either String ColorObj -> String
+showColorObj e = case e of
+  Right CGreen -> "ok-color-obj"
+  _ -> "bad-color-obj"
+
+showColorObjRejectStr :: Either String ColorObj -> String
+showColorObjRejectStr e = case e of
+  Left _ -> "ok-color-obj-reject-str"
+  Right _ -> "bad-color-obj-reject-str"
+
+showColorStr :: Either String ColorStr -> String
+showColorStr e = case e of
+  Right SGreen -> "ok-color-str-explicit"
+  _ -> "bad-color-str-explicit"
+
+-- ---- Exec-JSON-Generic-Encode-Loop ----
+-- PE must not fold `encode sample` inside a pure loop to Bool False
+-- (temp reuse / copy-prop of isAllNullary @False into encodeEncText's dest).
+
+bsToStr b = S.pack (C.unpack b)
+
+data Person = Person { name :: String, age :: Int }
+  deriving (Generic, Eq)
+
+instance ToJSON Person where
+  toJSON = genericToJSON defaultOptions
+  toEncoding = genericToEncoding defaultOptions
+
+sample :: Person
+sample = Person "ada" 36
+
+expectedJson :: String
+expectedJson = "{\"name\":\"ada\",\"age\":36}"
+
+step :: Int -> Int
+step n = case bsToStr (encode sample) == expectedJson of
+  True -> n + 1
+  False -> n
+
+runJSONGenericEncodeLoop :: IO ()
+runJSONGenericEncodeLoop = C.putStrLn (encode (step 0 == 1))
+
+-- ---- combined entry point ----
+main :: IO ()
+main = do
+  runJSONAllNullary
+  runJSONGenericEncodeLoop

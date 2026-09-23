@@ -1,0 +1,2 @@
+bad :: Int -> Int
+bad = \x :: String -> x + 1

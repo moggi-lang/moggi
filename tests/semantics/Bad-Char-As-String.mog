@@ -1,0 +1,3 @@
+module Bad.CharAsString
+-- String literal is not a Char.
+main = "7" :: Char

@@ -1,0 +1,15 @@
+data NonEmpty a = a :| [a]
+
+infixr 5 :|
+
+data Prefixed a = (:~) a [a]
+
+headNe xs = case xs of
+  x :| rest -> x
+
+build = 1 :| [2, 3]
+
+pref = (:~) 1 [2]
+
+-- Same fixity as list cons (`infixr 5`), so this is `1 :| (2 : [3])`.
+nested = 1 :| 2 : [3]

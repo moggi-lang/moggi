@@ -1,0 +1,39 @@
+import Data.Bool
+import Data.ByteString.Char8 qualified as C
+import Data.Eq
+import Data.Ord
+
+inc n ignored = n + 1
+
+checkThree xs = case xs of
+  a : b : c : [] -> checkThreeUnpacked (C.unpack a) (C.unpack b) (C.unpack c)
+  _ -> False
+
+checkThreeUnpacked a b c = case a of
+  'a' : [] -> case b of
+    'b' : [] -> case c of
+      'c' : [] -> True
+      _ -> False
+    _ -> False
+  _ -> False
+
+main :: IO ()
+main = do
+  putStrLn (case checkThree (C.lines (C.pack "a\nb\nc")) of
+    True -> "lines-ok"
+    False -> "lines-bad")
+  putStrLn (case C.unpack (C.unlines (C.lines (C.pack "a\nb"))) of
+    'a' : '\n' : 'b' : '\n' : [] -> "unlines-ok"
+    _ -> "unlines-bad")
+  putStrLn (case checkThree (C.words (C.pack "a b  c")) of
+    True -> "words-ok"
+    False -> "words-bad")
+  putStrLn (case C.unpack (C.takeWhile (\c -> c /= ' ') (C.pack "hi there")) of
+    'h' : 'i' : [] -> "takeWhile-ok"
+    _ -> "takeWhile-bad")
+  putStrLn (case C.foldl inc 0 (C.pack "abcd") == 4 of
+    True -> "foldl-ok"
+    False -> "foldl-bad")
+  putStrLn (case checkThree (C.split ',' (C.pack "a,b,c")) of
+    True -> "split-ok"
+    False -> "split-bad")

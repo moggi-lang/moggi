@@ -1,0 +1,4 @@
+module Platform.IO
+  ( IoError(..) ) where
+
+data IoError = IoError String

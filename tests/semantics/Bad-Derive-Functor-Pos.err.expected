@@ -1,0 +1,4 @@
+tests/semantics/Bad-Derive-Functor-Pos.mog:5:43: type error: cannot derive Functor: field type `Either a Int` is not Functor-derivable (type parameter in non-last argument)
+
+  5 | data Bad a = Bad (Either a Int) deriving (Functor)
+    |                                           ^^^^^^^

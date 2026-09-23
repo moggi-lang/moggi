@@ -1,0 +1,28 @@
+import Data.Bool
+import Data.ByteString.Char8 qualified as C
+import Data.Char
+import Data.Eq
+import Data.Maybe
+import Data.Ord
+import Text.Show
+import Data.Tuple
+
+main :: IO ()
+main = do
+  putStrLn (case C.uncons (C.cons 'x' (C.pack "yz")) of
+    Just pair -> case (fst pair, C.unpack (snd pair)) of
+      ('x', 'y' : 'z' : []) -> "cons-ok"
+      _ -> "cons-bad"
+    _ -> "cons-bad")
+  putStrLn (case C.unpack (C.map toUpper (C.pack "ab")) of
+    'A' : 'B' : [] -> "map-ok"
+    _ -> "map-bad")
+  putStrLn (case C.elem 'b' (C.pack "abc") of
+    True -> "elem-ok"
+    False -> "elem-bad")
+  putStrLn (case C.unpack (C.filter (\c -> c /= 'b') (C.pack "abc")) of
+    'a' : 'c' : [] -> "filter-ok"
+    _ -> "filter-bad")
+  putStrLn (case C.unpack (C.replicate 3 'z') of
+    'z' : 'z' : 'z' : [] -> "repl-ok"
+    _ -> "repl-bad")

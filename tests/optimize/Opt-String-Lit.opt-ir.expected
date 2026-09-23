@@ -1,0 +1,5 @@
+module
+  function greeting()
+      ret "a\nb"
+  function tag(label)
+      ret intrinsic stringAppend#("[", intrinsic stringAppend#(label, "]"))

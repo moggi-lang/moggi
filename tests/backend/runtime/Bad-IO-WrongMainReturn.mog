@@ -1,0 +1,9 @@
+module Bad.IO.WrongMainReturn
+
+import System.Filesystem
+import System.Filesystem.Path
+
+main :: IO ()
+main = do
+  let x = readFile ("a.txt")
+  x

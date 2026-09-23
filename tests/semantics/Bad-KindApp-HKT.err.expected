@@ -1,0 +1,4 @@
+tests/semantics/Bad-KindApp-HKT.mog:4:20: type error: kind mismatch applying `M1`: expected `Type -> Type`, got `Type`
+
+  4 | bad :: M1 Int Bool Int Int -> Int
+    |                    ^^^

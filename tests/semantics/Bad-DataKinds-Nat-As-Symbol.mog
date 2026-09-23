@@ -1,0 +1,5 @@
+data Label (s :: Symbol) = Label
+
+-- Wrong kind: numeric literals have kind Nat, not Symbol.
+bad :: Label 1024 -> String
+bad Label = "no"

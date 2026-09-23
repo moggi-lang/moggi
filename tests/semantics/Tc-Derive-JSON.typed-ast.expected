@@ -1,0 +1,154 @@
+program
+  data Person
+    constructor Person
+      field name :: String
+      field age :: Int
+    deriving (Generic, anyclass ToJSON, anyclass FromJSON)
+  function from :: Person -> Rep Person t10
+    pat_var __x
+    case
+      variable __x
+      alt
+        pat_con Person
+          pat_var __f0
+          pat_var __f1
+        apply
+          constructor_ref M1
+          apply
+            constructor_ref M1
+            infix_con :*:
+              apply
+                constructor_ref M1
+                apply
+                  constructor_ref K1
+                  variable __f0
+              apply
+                constructor_ref M1
+                apply
+                  constructor_ref K1
+                  variable __f1
+  function to :: Rep Person t37 -> Person
+    pat_var __r
+    case
+      variable __r
+      alt
+        pat_con M1
+          pat_con M1
+            pat_infix_con :*:
+              pat_con M1
+                pat_con K1
+                  pat_var __t0
+              pat_con M1
+                pat_con K1
+                  pat_var __t1
+        apply
+          apply
+            constructor_ref Person
+            variable __t0
+          variable __t1
+  function datatypeName :: MetaProxy MetaData "Person" "Main" "moggi" 'False -> String
+    pat_var _d
+    string "Person"
+  function moduleName :: MetaProxy MetaData "Person" "Main" "moggi" 'False -> String
+    pat_var _d
+    string "Main"
+  function packageName :: MetaProxy MetaData "Person" "Main" "moggi" 'False -> String
+    pat_var _d
+    string "moggi"
+  function isNewtype :: MetaProxy MetaData "Person" "Main" "moggi" 'False -> Bool
+    pat_var _d
+    constructor_ref False
+  function isAllNullary :: MetaProxy MetaData "Person" "Main" "moggi" 'False -> Bool
+    pat_var _d
+    constructor_ref False
+  function isSum :: MetaProxy MetaData "Person" "Main" "moggi" 'False -> Bool
+    pat_var _d
+    constructor_ref False
+  function conName :: MetaProxy MetaCons "Person" 'PrefixI 'True -> String
+    pat_var _c
+    string "Person"
+  function conIsRecord :: MetaProxy MetaCons "Person" 'PrefixI 'True -> Bool
+    pat_var _c
+    constructor_ref True
+  function conArity :: MetaProxy MetaCons "Person" 'PrefixI 'True -> Int
+    pat_var _c
+    integer 2
+  function __ev_Selector_h_889479886aa965ff_selName :: MetaProxy MetaSel Just "name" 'NoSourceUnpackedness 'NoSourceStrictness 'DecidedLazy -> String
+    pat_var _s
+    string "name"
+  function __ev_Selector_h_5a8bc8e1b8f7e7c4_selName :: MetaProxy MetaSel Just "age" 'NoSourceUnpackedness 'NoSourceStrictness 'DecidedLazy -> String
+    pat_var _s
+    string "age"
+  function toJSON :: Person -> Value
+    pat_var x
+    apply
+      apply
+        apply
+          apply
+            variable genericToJSON
+            evidence_ref Generic Person
+          evidence_ref GToJSON M1 D d f
+        variable defaultOptions
+      variable x
+  function toEncoding :: Person -> Encoding
+    pat_var x
+    apply
+      apply
+        apply
+          apply
+            variable genericToEncoding
+            evidence_ref Generic Person
+          evidence_ref GToEncoding M1 D d f
+        variable defaultOptions
+      variable x
+  function parseJSON :: Value -> Either String Person
+    pat_var v
+    apply
+      apply
+        apply
+          apply
+            variable genericParseJSON
+            evidence_ref Generic Person
+          evidence_ref GFromJSON M1 D d f
+        variable defaultOptions
+      variable v
+  function parseEncoding :: Encoding -> Either String Person
+    pat_var v
+    apply
+      apply
+        apply
+          apply
+            variable genericParseEncoding
+            evidence_ref Generic Person
+          evidence_ref GFromEncoding M1 D d f
+        variable defaultOptions
+      variable v
+  function x :: Person
+    apply
+      apply
+        constructor_ref Person
+        string "ada"
+      integer 36
+  function y :: Value
+    apply
+      evidence_method ToJSON.toJSON evidence= nullary=0
+        instance Person
+      variable x
+  function z :: Person
+    case
+      apply
+        evidence_method FromJSON.parseJSON evidence= nullary=0
+          instance Person
+        variable y
+      alt
+        pat_con Right
+          pat_var p
+        variable p
+      alt
+        pat_con Left
+          pat_var err
+        apply
+          apply
+            constructor_ref Person
+            string "x"
+          integer 0

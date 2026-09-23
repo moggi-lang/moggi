@@ -1,0 +1,298 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Moggi.Internal.Float
+  ( Double(..)
+  ) where
+
+import Data.Bool
+import Data.Char
+import Data.Eq
+import Data.List
+import Data.Maybe
+import Data.Ord
+import Data.String qualified as S
+import Data.Tuple
+import Moggi.Internal.Num
+import Moggi.Internal.Integer
+import Moggi.Internal.Real
+import Moggi.Internal.Show
+import Moggi.Internal.Prim
+
+-- IEEE binary64, the same on every backend.
+type Double = Double#
+
+instance Eq Double where
+  (==) a b = doubleEq# a b
+  (/=) a b = doubleNe# a b
+
+instance Ord Double where
+  compare a b = doubleCompare# a b
+
+instance Num Double where
+  (+) a b = doubleAdd# a b
+  (-) a b = doubleSub# a b
+  (*) a b = doubleMul# a b
+  negate a = doubleNegate# a
+  abs a = doubleAbs# a
+  signum a = doubleSignum# a
+  fromInteger n = doubleFromInteger# n
+
+instance Fractional Double where
+  (/) a b = doubleDiv# a b
+  recip x = doubleDiv# (fromInteger (intToInteger# 1)) x
+
+instance Show Double where
+  show x = S.pack (showSignedChars x)
+
+-- The formatter works on @[Char]@; @str@ lifts a 'String' literal into it.
+str :: String -> [Char]
+str = S.unpack
+
+-- ---------------------------------------------------------------------------
+-- IsNaN / isInfinite / isNegativeZero, derived from the IEEE operations.
+-- ---------------------------------------------------------------------------
+
+doubleLessThan :: Double -> Double -> Bool
+doubleLessThan a b = case doubleCompare# a b of
+  LT -> True
+  _ -> False
+
+isNaNDouble :: Double -> Bool
+isNaNDouble x = doubleNe# x x
+
+isInfiniteDouble :: Double -> Bool
+isInfiniteDouble x = case doubleEq# x x of
+  False -> False
+  True -> case doubleNe# x 0.0 of
+    False -> False
+    True -> doubleEq# (doubleMul# x 2.0) x
+
+isNegativeZeroDouble :: Double -> Bool
+isNegativeZeroDouble x = case doubleEq# x 0.0 of
+  False -> False
+  True -> case doubleCompare# (doubleDiv# 1.0 x) 0.0 of
+    LT -> True
+    _ -> False
+
+-- ---------------------------------------------------------------------------
+-- Showing
+-- ---------------------------------------------------------------------------
+
+-- | Show a signed 'Double' to full precision using standard decimal notation
+-- for arguments whose absolute value lies between @0.1@ and @9,999,999@, and
+-- scientific notation otherwise.
+showSignedChars :: Double -> [Char]
+showSignedChars x = case doubleLessThan x 0.0 of
+  True -> '-' : formatRealFloatChars FFGeneric Nothing (doubleNegate# x)
+  False -> case isNegativeZeroDouble x of
+    True -> '-' : formatRealFloatChars FFGeneric Nothing (doubleNegate# x)
+    False -> formatRealFloatChars FFGeneric Nothing x
+
+-- The format kinds. Not exported.
+data FFFormat = FFExponent | FFFixed | FFGeneric
+
+formatRealFloatChars :: FFFormat -> Maybe Int -> Double -> [Char]
+formatRealFloatChars fmt decs x = case isNaNDouble x of
+  True -> str "NaN"
+  False -> case isInfiniteDouble x of
+    True -> case doubleLessThan x 0.0 of
+      True -> str "-Infinity"
+      False -> str "Infinity"
+    False -> case doubleLessThan x 0.0 of
+      True -> '-' : doFmt decs fmt (floatToDigitsDouble (doubleNegate# x))
+      False -> case isNegativeZeroDouble x of
+        True -> '-' : doFmt decs fmt (floatToDigitsDouble (doubleNegate# x))
+        False -> doFmt decs fmt (floatToDigitsDouble x)
+
+doFmt :: Maybe Int -> FFFormat -> ([Int], Int) -> [Char]
+doFmt decs format digits =
+  let is = fst digits
+      e = snd digits
+      ds = map intToDigit is
+  in case format of
+    FFGeneric -> doFmt decs (case e < 0 || e > 7 of True -> FFExponent; False -> FFFixed) digits
+    FFExponent -> case decs of
+      Nothing -> case ds of
+        ['0'] -> str "0.0e0"
+        [d] -> d : str ".0e" ++ str (show (e - 1))
+        (d:ds') -> d : '.' : ds' ++ str "e" ++ str (show (e - 1))
+        [] -> error "formatRealFloat/doFmt/FFExponent: []"
+      Just d -> case d <= 0 of
+        True -> case is of
+          [0] -> str "0e0"
+          _ ->
+            let rounded = roundTo 10 1 is
+                ei = fst rounded
+                is' = snd rounded
+                ns = map intToDigit (case ei > 0 of True -> init is'; False -> is')
+            in head ns : 'e' : str (show (e - 1 + ei))
+        False ->
+          let dec' = max d 1
+          in case is of
+            [0] -> '0' : '.' : replicate dec' '0' ++ str "e0"
+            _ ->
+              let rounded = roundTo 10 (dec' + 1) is
+                  ei = fst rounded
+                  is' = snd rounded
+                  ns = map intToDigit (case ei > 0 of True -> init is'; False -> is')
+              in head ns : '.' : tail ns ++ ('e' : str (show (e - 1 + ei)))
+    FFFixed -> case decs of
+      Nothing -> case e <= 0 of
+        True -> str "0." ++ replicate (negate e) '0' ++ ds
+        False -> fixedDigits e [] ds
+      Just d ->
+        let dec' = max d 0
+        in case e >= 0 of
+          True ->
+            let rounded = roundTo 10 (dec' + e) is
+                ei = fst rounded
+                is' = snd rounded
+                all' = map intToDigit is'
+                ls = take (e + ei) all'
+                rs = drop (e + ei) all'
+            in mk0 ls ++ (case null rs of True -> []; False -> '.' : rs)
+          False ->
+            let rounded = roundTo 10 dec' (replicate (negate e) 0 ++ is)
+                ei = fst rounded
+                is' = snd rounded
+                ns = map intToDigit (case ei > 0 of True -> is'; False -> 0 : is')
+            in head ns : (case null (tail ns) of True -> []; False -> '.' : tail ns)
+
+mk0 :: [Char] -> [Char]
+mk0 [] = ['0']
+mk0 ls = ls
+
+fixedDigits :: Int -> [Char] -> [Char] -> [Char]
+fixedDigits 0 s rs = mk0 (reverse s) ++ '.' : mk0 rs
+fixedDigits n s [] = fixedDigits (n - 1) ('0' : s) []
+fixedDigits n s (r:rs) = fixedDigits (n - 1) (r : s) rs
+
+roundTo :: Int -> Int -> [Int] -> (Int, [Int])
+roundTo base d is =
+  let b2 = base `quot` 2
+      r = roundToGo b2 d True is
+  in case r of
+    (0, _) -> r
+    (1, xs) -> (1, 1 : xs)
+    _ -> error "roundTo: bad Value"
+
+roundToGo :: Int -> Int -> Bool -> [Int] -> (Int, [Int])
+roundToGo b2 n _ [] = (0, replicate n 0)
+roundToGo b2 0 e (x:xs) = case x == b2 && e && all (== 0) xs of
+  True -> (0, [])
+  False -> ((case x >= b2 of True -> 1; False -> 0), [])
+roundToGo b2 n _ (i:xs) =
+  let inner = roundToGo b2 (n - 1) (even i) xs
+      c = fst inner
+      ds = snd inner
+      i' = c + i
+  in case i' == b2 * 2 of
+    True -> (1, 0 : ds)
+    False -> (0, i' : ds)
+
+-- ---------------------------------------------------------------------------
+-- floatToDigits: ([d1..dn], e) with x = 0.d1..dn * 10^e.
+--
+-- Based on "Printing Floating-Point Numbers Quickly and Accurately" by
+-- R.G. Burger and R.K. Dybvig, PLDI 96, over 'Integer'.
+-- ---------------------------------------------------------------------------
+
+floatToDigitsDouble :: Double -> ([Int], Int)
+floatToDigitsDouble x = case doubleEq# x 0.0 of
+  True -> ([0], 0)
+  False -> floatToDigitsNonZero x
+
+floatToDigitsNonZero :: Double -> ([Int], Int)
+floatToDigitsNonZero x =
+  let decoded = decodeDouble x
+      f0 = fst decoded
+      e0 = snd decoded
+      b = integerFromInt 2
+      base = integerFromInt 10
+      p = 53
+      minExp = -1074
+      n = minExp - e0
+      adjusted = case n > 0 of
+        True -> (integerQuot f0 (b ^ n), e0 + n)
+        False -> (f0, e0)
+      f = fst adjusted
+      e = snd adjusted
+      factors = floatToDigitsFactors b p minExp f e
+      r = fst (fst factors)
+      s = snd (fst factors)
+      mUp = fst (snd factors)
+      mDn = snd (snd factors)
+      k = floatToDigitsK p e0 base r s mUp mDn
+      rds = case k >= 0 of
+        True -> floatToDigitsGen base r (s * base ^ k) mUp mDn []
+        False ->
+          let bk = base ^ intNegate# k
+          in floatToDigitsGen base (r * bk) s (mUp * bk) (mDn * bk) []
+  in (map integerToInt (reverse rds), k)
+
+floatToDigitsFactors :: Integer -> Int -> Int -> Integer -> Int -> ((Integer, Integer), (Integer, Integer))
+floatToDigitsFactors b p minExp f e = case e >= 0 of
+  True ->
+    let be = b ^ e
+    in case f == b ^ (p - 1) of
+      True -> ((f * be * b * 2, 2 * b), (be * b, be))
+      False -> ((f * be * 2, 2), (be, be))
+  False -> case e > minExp && f == b ^ (p - 1) of
+    True -> ((f * b * 2, b ^ (intNegate# e + 1) * 2), (b, 1))
+    False -> ((f * 2, b ^ intNegate# e * 2), (1, 1))
+
+floatToDigitsK :: Int -> Int -> Integer -> Integer -> Integer -> Integer -> Integer -> Int
+floatToDigitsK p e0 base r s mUp mDn =
+  let lx = p - 1 + e0
+      k1 = (lx * 8651) `quot` 28738
+      k0 = case lx >= 0 of
+        True -> k1 + 1
+        False -> k1
+  in floatToDigitsFixup base r s mUp mDn k0
+
+floatToDigitsFixup :: Integer -> Integer -> Integer -> Integer -> Integer -> Int -> Int
+floatToDigitsFixup base r s mUp mDn n = case n >= 0 of
+  True -> case r + mUp <= base ^ n * s of
+    True -> n
+    False -> floatToDigitsFixup base r s mUp mDn (n + 1)
+  False -> case base ^ intNegate# n * (r + mUp) <= s of
+    True -> n
+    False -> floatToDigitsFixup base r s mUp mDn (n + 1)
+
+floatToDigitsGen :: Integer -> Integer -> Integer -> Integer -> Integer -> [Integer] -> [Integer]
+floatToDigitsGen base rn sN mUpN mDnN ds =
+  let qr = (rn * base) `quotRem` sN
+      dn = fst qr
+      rn' = snd qr
+      mUpN' = mUpN * base
+      mDnN' = mDnN * base
+  in case (rn' < mDnN', rn' + mUpN' > sN) of
+    (True, False) -> dn : ds
+    (False, True) -> (dn + 1) : ds
+    (True, True) -> case rn' * 2 < sN of
+      True -> dn : ds
+      False -> (dn + 1) : ds
+    (False, False) -> floatToDigitsGen base rn' sN mUpN' mDnN' (dn : ds)
+
+-- ---------------------------------------------------------------------------
+-- decodeFloat: (m, e) with x = m * 2^e and m a 53-bit integer for normal
+-- values. The magnitude is brought into [2^52, 2^53) by exact scaling with
+-- powers of two, so no bit-level primitive is needed.
+-- ---------------------------------------------------------------------------
+
+decodeDouble :: Double -> (Integer, Int)
+decodeDouble x = case doubleLessThan x 0.0 of
+  True -> let decoded = decodeMagnitude (doubleNegate# x) in (negate (fst decoded), snd decoded)
+  False -> decodeMagnitude x
+
+decodeMagnitude :: Double -> (Integer, Int)
+decodeMagnitude x = decodeScaleDown x 0
+
+decodeScaleDown :: Double -> Int -> (Integer, Int)
+decodeScaleDown x e = case doubleCompare# x 9007199254740992.0 of
+  LT -> decodeScaleUp x e
+  _ -> decodeScaleDown (doubleMul# x 0.5) (e + 1)
+
+decodeScaleUp :: Double -> Int -> (Integer, Int)
+decodeScaleUp x e = case doubleCompare# x 4503599627370496.0 of
+  LT -> decodeScaleUp (doubleMul# x 2.0) (e - 1)
+  _ -> (integerFromInt (doubleToInt# x), e)

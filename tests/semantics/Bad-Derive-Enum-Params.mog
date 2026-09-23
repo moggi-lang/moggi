@@ -1,0 +1,4 @@
+import Data.Enum
+
+-- Nullary ctors but the type itself is parameterized.
+data Tag a = A | B deriving (Enum)

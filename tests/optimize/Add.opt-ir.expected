@@ -1,0 +1,3 @@
+module
+  function add(x, y)
+      ret intrinsic intAdd#(x, y)

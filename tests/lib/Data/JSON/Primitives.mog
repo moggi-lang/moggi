@@ -1,0 +1,83 @@
+import System.IO
+import Data.ByteString.Char8 qualified as C
+import Data.String
+import Data.Bool
+import Data.Eq
+import Data.Int
+import Data.Maybe
+import Data.Either
+import Data.JSON
+roundTripBool :: Bool -> IO String
+roundTripBool b = do
+  mr <- eitherDecode (encode b)
+  pure (case mr of
+    Left err -> "ERR"
+    Right b2 -> case b2 == b of
+      True -> "ok"
+      False -> "bad")
+
+roundTripInt :: Int -> IO String
+roundTripInt n = do
+  mr <- eitherDecode (encode n)
+  pure (case mr of
+    Left err -> "ERR"
+    Right n2 -> case n2 == n of
+      True -> "ok"
+      False -> "bad")
+
+roundTripStr :: String -> IO String
+roundTripStr s = do
+  mr <- eitherDecode (encode s)
+  pure (case mr of
+    Left err -> "ERR"
+    Right s2 -> case s2 == s of
+      True -> "ok"
+      False -> "bad")
+
+roundTripMaybe :: Maybe Int -> IO String
+roundTripMaybe m = do
+  mr <- eitherDecode (encode m)
+  pure (case mr of
+    Left err -> "ERR"
+    Right m2 -> case m == m2 of
+      True -> "ok"
+      False -> "bad")
+
+roundTripList :: [Int] -> IO String
+roundTripList xs = do
+  mr <- eitherDecode (encode xs)
+  pure (case mr of
+    Left err -> "ERR"
+    Right xs2 -> case xs == xs2 of
+      True -> "ok"
+      False -> "bad")
+
+main :: IO ()
+main = do
+  C.putStrLn (encode True)
+  C.putStrLn (encode False)
+  r <- roundTripBool True
+  putStrLn r
+  r <- roundTripBool False
+  putStrLn r
+  C.putStrLn (encode (42 :: Int))
+  r <- roundTripInt 0
+  putStrLn r
+  r <- roundTripInt 42
+  putStrLn r
+  r <- roundTripStr "hello"
+  putStrLn r
+  r <- roundTripStr ""
+  putStrLn r
+  r <- roundTripStr "a\"b"
+  putStrLn r
+  r <- roundTripMaybe Nothing
+  putStrLn r
+  r <- roundTripMaybe (Just 7)
+  putStrLn r
+  r <- roundTripList []
+  putStrLn r
+  r <- roundTripList (1 : 2 : 3 : [])
+  putStrLn r
+  C.putStrLn (encode (Nothing :: Maybe Int))
+  C.putStrLn (encode (Just 5 :: Maybe Int))

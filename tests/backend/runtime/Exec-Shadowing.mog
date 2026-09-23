@@ -1,0 +1,75 @@
+import Data.Int
+import Data.Maybe
+import Text.Show
+import System.IO
+
+nested =
+  let x = 1
+  in let x = 2
+     in x
+
+-- Outer remains after inner scope
+outerAfter =
+  let x = 1
+  in
+    let y =
+      let x = 2
+      in x
+    in x + y
+
+multi =
+  let x = 1
+  in let x = 2
+     in let x = 3
+        in x
+
+-- Different types
+diffTypes =
+  let x = 1
+  in
+    let x = "hello"
+    in x
+
+-- Lambda parameter shadowing
+lamShadow =
+  let x = 1
+  in (\x -> x) 10
+
+-- Nested lambda / let: RHS of a recursive let refers to the let binder,
+-- not the lambda param. Use a fresh name to read the outer x.
+-- (\x -> let y = x + 1 in y) 10  ⇒ 11
+lamLetShadow =
+  let x = 1
+  in (\x -> let y = x + 1 in y) 10
+
+-- Function parameter shadows top-level
+x = 10
+f x = x + 1
+
+-- Case pattern shadows parameter; binders do not leak across alts
+caseShadow n =
+  case n of
+    Just x -> x
+    Nothing -> 0
+
+-- Closures capture the outer binding
+closureCapture =
+  let x = 1
+  in
+    let f = \z -> x
+    in
+      let x = 2
+      in f 0
+
+main :: IO ()
+main = do
+  putStrLn (show nested)
+  putStrLn (show outerAfter)
+  putStrLn (show multi)
+  putStrLn diffTypes
+  putStrLn (show lamShadow)
+  putStrLn (show lamLetShadow)
+  putStrLn (show (f 5))
+  putStrLn (show (caseShadow (Just 42)))
+  putStrLn (show (caseShadow Nothing))
+  putStrLn (show closureCapture)

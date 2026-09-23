@@ -1,0 +1,2 @@
+class Functor t, Foldable t => Traversable t where
+  traverse :: (a -> b) -> t a -> t b

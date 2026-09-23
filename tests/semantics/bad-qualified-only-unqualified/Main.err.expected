@@ -1,0 +1,4 @@
+tests/semantics/bad-qualified-only-unqualified/Main.mog:6:10: type error: undefined variable `secret`
+
+  6 | main n = secret n
+    |          ^^^^^^

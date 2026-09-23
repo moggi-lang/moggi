@@ -1,0 +1,5 @@
+pragma "LANGUAGE NoImplicitPrelude" @ 1:1
+varid "x" @ 4:1
+op "=" @ 4:3
+integer "1" @ 4:5
+eof "" @ 5:1

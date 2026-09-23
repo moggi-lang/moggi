@@ -1,0 +1,3 @@
+addOne :: Int -> Int
+addOne x = let y = 1 :: Int in x + y
+

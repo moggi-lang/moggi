@@ -1,0 +1,4 @@
+tests/semantics/foreign/bad/Wrong-Backend.mog:4:25: type error: foreign type `Path` is declared for backend `jvm` but used with `dotnet`
+
+  4 | foreign dotnet function usePath "java.nio.file.Paths:get" :: Path -> IO String
+    |                         ^^^^^^^

@@ -1,0 +1,32 @@
+program
+  function bothNested :: Either String String -> Either String String -> String
+    pat_var x
+    pat_var y
+    case
+      variable x
+      alt
+        pat_con Left
+          pat_var a
+        case
+          variable y
+          alt
+            pat_con Left
+              pat_var b
+            string "LL"
+          alt
+            pat_con Right
+              pat_var ignored
+            string "LR"
+      alt
+        pat_con Right
+          pat_var a
+        case
+          variable y
+          alt
+            pat_con Left
+              pat_var ignored
+            string "RL"
+          alt
+            pat_con Right
+              pat_var b
+            string "RR"

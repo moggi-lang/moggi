@@ -1,0 +1,4 @@
+tests/syntax/parser/bad-parse/Import-Qualified-Pre.mog:3:8: parse error: use `import M qualified as Alias`, not `import qualified M`
+
+  3 | import qualified Data.List as L
+    |        ^^^^^^^^^

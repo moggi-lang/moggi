@@ -1,0 +1,7 @@
+module Ir.LambdaFnRef where
+
+-- A lambda lifts to a top-level function referenced by name; applying a
+-- function value is a `call_value`, not a named call.
+applyTo f x = f x
+const = \a b -> a
+flip' f a b = f b a

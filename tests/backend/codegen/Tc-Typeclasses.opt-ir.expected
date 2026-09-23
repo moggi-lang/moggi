@@ -1,0 +1,97 @@
+module
+  function fmapFn(__ev_Functor, f, xs)
+      t0 = dict_call __ev_Functor->map(f, xs)
+      ret t0
+  function fmapListDemo(xs)
+      ret call fmapFn(@__ev_Functor_List, @λ0, xs)
+  function fmapEitherDemo(mx)
+      ret call fmapFn(@__ev_Functor_Either, @λ1, mx)
+  function inc(x)
+      ret intrinsic intAdd#(x, 1)
+  function double(x)
+      ret intrinsic intMul#(x, 2)
+  function applPure(__ev_Functor, __ev_Applicative_1, x)
+      t3 = dict_call __ev_Applicative_1->pure(x)
+      ret t3
+  function applAp(__ev_Functor, __ev_Applicative_1, fs, xs)
+      t4 = dict_call __ev_Applicative_1-><*>(fs, xs)
+      ret t4
+  function pureDemo()
+      ret call applPure(@__ev_Functor_List, @__ev_Applicative_List, 42)
+  function apDemo()
+      ret call applAp(@__ev_Functor_List, @__ev_Applicative_List, [@inc, @double], [10, 20])
+  function monadBind(__ev_Functor, __ev_Applicative_1, __ev_Monad_2, m, f)
+      t7 = dict_call __ev_Monad_2->>>=(m, f)
+      ret t7
+  function monadListDemo()
+      ret call monadBind(@__ev_Functor_List, @__ev_Applicative_List, @__ev_Monad_List, [1, 2], @λ2)
+  function eitherBindOk()
+      ret call monadBind(@__ev_Functor_Either, @__ev_Applicative_Either, @__ev_Monad_Either, call Right(2), @λ3)
+  function eitherShort()
+      ret call monadBind(@__ev_Functor_Either, @__ev_Applicative_Either, @__ev_Monad_Either, call Left("err"), @λ4)
+  function listDo(__ev_Functor, __ev_Applicative_1, __ev_Monad_2, xs, f)
+      t18 = dict_call __ev_Monad_2->>>=(xs, partial λ5(f, __ev_Monad_2, __ev_Applicative_1))
+      ret t18
+  function doListDemo()
+      ret call listDo(@__ev_Functor_List, @__ev_Applicative_List, @__ev_Monad_List, [1, 2], @λ7)
+  function listLet(__ev_Functor, __ev_Applicative_1, __ev_Monad_2, m)
+      t21 = dict_call __ev_Monad_2->>>=(m, partial λ8(__ev_Applicative_1))
+      ret t21
+  function listLetDemo()
+      ret call listLet(@__ev_Functor_List, @__ev_Applicative_List, @__ev_Monad_List, [41])
+  function maybeDo(__ev_Functor, __ev_Applicative_1, __ev_Monad_2, m)
+      t24 = dict_call __ev_Monad_2->>>=(m, partial λ9(__ev_Applicative_1))
+      ret t24
+  function maybeDemo()
+      ret call maybeDo(@__ev_Functor_Maybe, @__ev_Applicative_Maybe, @__ev_Monad_Maybe, call Just(41))
+  function maybeNothing()
+      ret call maybeDo(@__ev_Functor_Maybe, @__ev_Applicative_Maybe, @__ev_Monad_Maybe, @Nothing)
+  function eitherDo(__ev_Functor, __ev_Applicative_1, __ev_Monad_2, m)
+      t29 = dict_call __ev_Monad_2->>>=(m, partial λ10(__ev_Applicative_1))
+      ret t29
+  function eitherDoOk()
+      ret call eitherDo(@__ev_Functor_Either, @__ev_Applicative_Either, @__ev_Monad_Either, call Right(3))
+  function eitherErr()
+      ret call eitherDo(@__ev_Functor_Either, @__ev_Applicative_Either, @__ev_Monad_Either, call Left("nope"))
+  function listDiscard(__ev_Functor, __ev_Applicative_1, __ev_Monad_2, a, b)
+      t34 = dict_call __ev_Monad_2->>>=(a, partial λ11(b))
+      ret t34
+  function discardDemo()
+      ret call listDiscard(@__ev_Functor_List, @__ev_Applicative_List, @__ev_Monad_List, [1, 2], [10, 20])
+  function fmapG(__ev_Functor, f, xs)
+      t36 = dict_call __ev_Functor->map(f, xs)
+      ret t36
+  function hktDemo()
+      ret call fmapG(@__ev_Functor_List, @λ12, [1, 2])
+  function λ0(x)
+      ret intrinsic intAdd#(x, 1)
+  function λ1(x)
+      ret intrinsic intAdd#(x, 1)
+  function λ2(x)
+      ret [x, intrinsic intMul#(x, 10)]
+  function λ3(x)
+      ret call Right(intrinsic intAdd#(x, 1))
+  function λ4(x)
+      ret call Right(x)
+  function λ6(y)
+      t15 = dict_call __ev_Applicative_1->pure(y)
+      ret t15
+  function λ5(x)
+      t16 = call_value f(x)
+      t17 = dict_call __ev_Monad_2->>>=(t16, partial λ6(__ev_Applicative_1))
+      ret t17
+  function λ7(x)
+      ret [x, intrinsic intMul#(x, 10)]
+  function λ8(x)
+      t20 = dict_call __ev_Applicative_1->pure(intrinsic intAdd#(x, 1))
+      ret t20
+  function λ9(x)
+      t23 = dict_call __ev_Applicative_1->pure(intrinsic intAdd#(x, 1))
+      ret t23
+  function λ10(x)
+      t28 = dict_call __ev_Applicative_1->pure(intrinsic intMul#(x, 2))
+      ret t28
+  function λ11(__doUnit)
+      ret b
+  function λ12(x)
+      ret intrinsic intAdd#(x, 1)

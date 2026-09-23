@@ -1,0 +1,4 @@
+tests/semantics/Bad-Infer-Exhaustive-Fun-Clauses.mog:2:1: type error: non-exhaustive case: missing patterns: C
+
+  2 | f A = 1
+    | ^

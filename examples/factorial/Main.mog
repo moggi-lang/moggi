@@ -1,0 +1,16 @@
+-- Example application (not a compiler fixture).
+-- Build:  moggi compile examples/factorial -o /tmp/factorial.phar
+-- Run:    php /tmp/factorial.phar
+
+module Main
+
+factorial :: Int -> Int
+factorial n = fact n 1
+
+fact :: Int -> Int -> Int
+fact n acc = case n of
+  0 -> acc
+  _ -> fact (n - 1) (n * acc)
+
+main :: IO ()
+main = putStrLn (show (factorial 10))

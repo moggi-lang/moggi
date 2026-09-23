@@ -1,0 +1,4 @@
+tests/semantics/Bad-Infer-Occurs.mog:1:7: type error: infinite type: `a` occurs in itself
+
+  1 | f x = x x
+    |       ^^^

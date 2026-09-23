@@ -1,0 +1,84 @@
+import System.IO
+import Text.Show
+import Data.Semigroup
+import Data.Eq
+
+-- Local (let/where) bindings with class constraints are generalized and take
+-- dictionary parameters exactly like top-level constrained functions. Cover
+-- both inferred constraints and explicit constrained signatures.
+
+class MyEq a where
+  (===) :: a -> a -> Bool
+
+instance MyEq Int where
+  (===) x y = x == y
+
+data Box = Box Int
+  deriving (Show)
+
+instance MyEq Box where
+  (===) (Box a) (Box b) = a == b
+
+class Tag a where
+  tag :: a -> String
+
+instance Tag Int where
+  tag x = "int"
+
+instance Tag Bool where
+  tag x = "bool"
+
+instance Tag Box where
+  tag x = "box"
+
+-- inferred constraint, generalized from `show` and used at two types. A local
+-- *function* binding carries a scheme of its own; `go = show` -- a pattern
+-- binding -- would not be generalized (`Show a` would stay undetermined).
+twoShows :: (String, String)
+twoShows = (go 42, go True)
+  where
+    go x = show x
+
+-- inferred constraint from an operator projection, used at two types
+twoEqs :: (Bool, Bool)
+twoEqs = (go (1 :: Int) 1, go (Box 1) (Box 1))
+  where
+    go x y = x === y
+
+-- explicit constrained signature, used at two types: the call site picks the
+-- instance through the local dictionary parameter.
+twoTags :: (String, String)
+twoTags = (go (1 :: Int), go False)
+  where
+    go :: Tag a => a -> String
+    go x = tag x
+
+-- an explicit signature whose body needs more than the class's own method
+showTag :: (String, String)
+showTag = (go (7 :: Int), go (Box 8))
+  where
+    go :: (Tag a, Show a) => a -> String
+    go x = tag x <> ":" <> show x
+
+-- a constrained local binding used as a higher-order value
+applyTag :: Tag a => a -> String
+applyTag = go
+  where
+    go :: Tag a => a -> String
+    go x = tag x
+
+main :: IO ()
+main = do
+  let (a1, a2) = twoShows
+  putStrLn a1
+  putStrLn a2
+  let (b1, b2) = twoEqs
+  putStrLn (show b1)
+  putStrLn (show b2)
+  let (c1, c2) = twoTags
+  putStrLn c1
+  putStrLn c2
+  let (d1, d2) = showTag
+  putStrLn d1
+  putStrLn d2
+  putStrLn (applyTag (9 :: Int))

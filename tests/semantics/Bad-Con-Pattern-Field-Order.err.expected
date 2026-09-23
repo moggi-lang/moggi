@@ -1,0 +1,4 @@
+tests/semantics/Bad-Con-Pattern-Field-Order.mog:4:9: type error: could not unify `String` with `Int`
+
+  4 | bad p = case p of
+    |         ^^^^^^

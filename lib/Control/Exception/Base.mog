@@ -1,0 +1,127 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Core exception combinators.
+--
+-- bracket/finally restore the handler on every path, which is the whole
+-- contract under synchronous-only exceptions: there is no async delivery to
+-- interleave between acquisition and release (no mask).
+module Control.Exception.Base
+  ( SomeException
+  , Exception(..)
+  , IOException(..)
+  , HostException(..)
+  , ErrorCall(..)
+  , throw
+  , throwIO
+  , rethrowIO
+  , ioError
+  , catch
+  , catchJust
+  , handle
+  , handleJust
+  , try
+  , tryJust
+  , onException
+  , mapException
+  , bracket
+  , bracket_
+  , bracketOnError
+  , finally
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Either
+import Data.Maybe
+import Moggi.Exception (throw)
+import Moggi.Exception.Type
+import Moggi.Internal.IO
+import Moggi.Internal.Prim
+import System.IO.Base (IO)
+import Moggi.IO.Exception
+
+throwIO :: Exception e => e -> IO a
+throwIO e = exceptionThrowIo# (toException e)
+
+rethrowIO :: Exception e => e -> IO a
+rethrowIO e = throwIO e
+
+-- Handler is a named top-level so catch does not rely on IO-returning lambdas.
+mkCatchHandler :: Exception e => (e -> IO a) -> SomeException -> IO a
+mkCatchHandler handler se =
+  maybe (exceptionThrowIo# se) handler (fromException se)
+
+catch :: Exception e => IO a -> (e -> IO a) -> IO a
+catch action handler =
+  exceptionCatch# action (mkCatchHandler handler)
+
+catchJust :: Exception e => (e -> Maybe b) -> IO a -> (b -> IO a) -> IO a
+catchJust p action handler =
+  catch action (mkCatchJustHandler p handler)
+
+mkCatchJustHandler :: Exception e => (e -> Maybe b) -> (b -> IO a) -> e -> IO a
+mkCatchJustHandler p handler e =
+  maybe (throwIO e) handler (p e)
+
+handle :: Exception e => (e -> IO a) -> IO a -> IO a
+handle handler action = catch action handler
+
+handleJust :: Exception e => (e -> Maybe b) -> (b -> IO a) -> IO a -> IO a
+handleJust p handler action = catchJust p action handler
+
+try :: Exception e => IO a -> IO (Either e a)
+try action =
+  catch (mkTrySuccess action) mkTryFailure
+
+mkTrySuccess :: IO a -> IO (Either e a)
+mkTrySuccess action = do
+  x <- action
+  pure (Right x)
+
+mkTryFailure :: Exception e => e -> IO (Either e a)
+mkTryFailure e = pure (Left e)
+
+tryJust :: Exception e => (e -> Maybe b) -> IO a -> IO (Either b a)
+tryJust p action =
+  catch (mkTrySuccess action) (mkTryJustHandler p)
+
+mkTryJustHandler :: Exception e => (e -> Maybe b) -> e -> IO (Either b a)
+mkTryJustHandler p e =
+  maybe (throwIO e) (mkLeftPure) (p e)
+
+mkLeftPure :: b -> IO (Either b a)
+mkLeftPure b = pure (Left b)
+
+onException :: IO a -> IO b -> IO a
+onException action what =
+  exceptionCatch# action (mkOnExceptionHandler what)
+
+mkOnExceptionHandler :: IO b -> SomeException -> IO a
+mkOnExceptionHandler what se = do
+  _ <- what
+  exceptionThrowIo# se
+
+finally :: IO a -> IO b -> IO a
+finally action cleanup = exceptionFinally# action cleanup
+
+bracket :: IO a -> (a -> IO b) -> (a -> IO c) -> IO c
+bracket before after thing = do
+  a <- before
+  finally (thing a) (after a)
+
+bracket_ :: IO a -> IO b -> IO c -> IO c
+bracket_ before after thing =
+  bracket before (mkIgnore after) (mkIgnore thing)
+
+mkIgnore :: IO b -> a -> IO b
+mkIgnore m _ = m
+
+bracketOnError :: IO a -> (a -> IO b) -> (a -> IO c) -> IO c
+bracketOnError before after thing = do
+  a <- before
+  onException (thing a) (after a)
+
+-- Mapping an exception in pure code needs imprecise exceptions, which strict
+-- evaluation does not have, so this is the identity until a sync strategy is
+-- designed.
+mapException :: (Exception e1, Exception e2) => (e1 -> e2) -> a -> a
+mapException _ x = x

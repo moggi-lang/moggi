@@ -1,0 +1,4 @@
+tests/syntax/parser/bad-parse/Backend-Pragma-Module.mog:1:1: parse error: `data.char` is not a module name; expected dot-separated constructors, as in `Data.Char.PHP`
+
+  1 | {-# BACKEND php = data.char #-}
+    | ^^^^^^^^^^^^^^^^^^^^^^^

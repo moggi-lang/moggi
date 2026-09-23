@@ -1,0 +1,18 @@
+module Tc.IO.BatchActions
+
+import Data.Foldable
+import System.IO
+
+sequenceLocal :: List (IO ()) -> IO ()
+sequenceLocal [] = pure ()
+sequenceLocal (a : rest) = do
+  _ <- a
+  sequenceLocal rest
+
+main :: IO ()
+main = do
+  putStrLn "custom-sequence"
+  let acts = [putStrLn "a", putStrLn "b"]
+  sequenceLocal acts
+  putStrLn "traverse_"
+  traverse_ putStrLn ["c", "d"]

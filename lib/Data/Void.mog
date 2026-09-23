@@ -1,0 +1,19 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.Void
+  ( Void
+  , absurd
+  , vacuous
+  ) where
+
+import Data.Functor
+import Moggi.Err
+
+-- | Intentionally uninhabited at the API level. Moggi requires a constructor
+-- form; clients must not construct Void values.
+data Void = Void
+
+absurd :: Void -> a
+absurd ignored = error "Data.Void.absurd"
+
+vacuous :: Functor f => f Void -> f a
+vacuous x = map absurd x

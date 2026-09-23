@@ -1,0 +1,56 @@
+program
+  data Person
+    constructor Person
+      field name :: String
+      field age :: Int
+  data Box a
+    constructor Box
+      field  :: a
+  data Ok a
+    constructor Ok
+      field  :: a
+    constructor Fail
+      field  :: String
+  function pick :: Ok Person -> String
+    pat_var e
+    case
+      variable e
+      alt
+        pat_con Fail
+          pat_var err
+        variable err
+      alt
+        pat_con Ok
+          pat_con Person
+            pat_var n
+            pat_var a
+        variable n
+  function deep :: Box Ok Int -> Int
+    pat_var m
+    case
+      variable m
+      alt
+        pat_con Box
+          pat_con Fail
+            pat_var ignored
+        integer 0
+      alt
+        pat_con Box
+          pat_con Ok
+            pat_var x
+        variable x
+  function nestedApp :: Ok Box Person -> String
+    pat_var e
+    case
+      variable e
+      alt
+        pat_con Ok
+          pat_con Box
+            pat_con Person
+              pat_var n
+              pat_var a
+        variable n
+      alt
+        pat_con Fail
+          pat_var err
+        variable err

@@ -1,0 +1,63 @@
+import Data.Int
+import Data.List
+import Text.Show
+import System.IO
+
+-- ---- Exec-Let-ForwardRef ----
+
+f = let y = x + 1
+        x = 1
+    in y
+
+runLetForwardRef :: IO ()
+runLetForwardRef = putStrLn (show f)
+
+-- ---- Exec-Let-PolyRec ----
+
+data Nested a = Tip a | Bin (Nested (List a))
+
+size :: Nested a -> Int
+size t =
+  let go :: Nested b -> Int
+      go (Tip _) = 1
+      go (Bin v) = go v
+  in go t
+
+runLetPolyRec :: IO ()
+runLetPolyRec = putStrLn (show (size (Bin (Tip (1 : [])))))
+
+-- ---- Exec-Let-SelfRec ----
+
+fact :: Int -> Int
+fact n =
+  let go = \k acc ->
+        case k of
+          0 -> acc
+          _ -> go (k - 1) (k * acc)
+  in go n 1
+
+runLetSelfRec :: IO ()
+runLetSelfRec = putStrLn (show (fact 5))
+
+-- ---- Exec-Let-Captured-Value ----
+
+-- `step` is recursive and captures `n`, and it is used as a *value* here, so
+-- the lifted `__letrec` function has to carry `n` as a capture around the
+-- `map` that applies it.
+climb :: Int -> [String]
+climb n = map step [1, 2, 9]
+  where
+    step x = if x > n then show x else step (x + 1)
+
+runLetCaptured :: IO ()
+runLetCaptured = do
+  putStrLn (show (climb 2))
+  putStrLn (show (climb 8))
+
+-- ---- combined entry point ----
+main :: IO ()
+main = do
+  runLetForwardRef
+  runLetPolyRec
+  runLetSelfRec
+  runLetCaptured

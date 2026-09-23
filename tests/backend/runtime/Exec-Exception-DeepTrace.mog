@@ -1,0 +1,13 @@
+import Control.Exception
+import Data.Int
+import System.IO
+
+-- Deep, non-tail recursion: every level keeps a host stack frame, so the
+-- uncaught report has more frames than the cap and must elide the tail.
+descend :: Int -> Int
+descend n = case n of
+  0 -> error "deep"
+  _ -> descend (n - 1) + 1
+
+main :: IO ()
+main = putStrLn (show (descend 80))

@@ -1,0 +1,4 @@
+tests/semantics/Bad-Infer-Cons.mog:6:1: type error: unresolved type class constraint: `Num a`
+
+  6 | x = 1 : 2
+    | ^

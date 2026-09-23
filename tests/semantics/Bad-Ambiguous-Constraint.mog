@@ -1,0 +1,6 @@
+-- `[]` has type `[a]`, so `Show [a]` needs the element dictionary `Show a`,
+-- and nothing determines `a`. The instance context cannot be resolved, which is
+-- error, not a failure deferred to run time.
+import Text.Show
+
+main = show []

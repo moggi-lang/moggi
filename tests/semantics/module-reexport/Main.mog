@@ -1,0 +1,8 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Main where
+
+import Hub
+
+-- Re-exported from Alpha / Beta via Hub — no direct import needed.
+useAlpha = alpha
+useBeta = beta

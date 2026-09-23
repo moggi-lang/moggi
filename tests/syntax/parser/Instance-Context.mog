@@ -1,0 +1,9 @@
+instance (Eq a, Show a) => Eq (Pair a) where
+  (==) x y = same x y
+
+instance Eq a => Eq (Box a) where
+  (==) x y = same x y
+
+-- The `where` is optional: an instance that declares no method of its own takes
+-- every one of them from the class defaults.
+instance Show (Pair a)

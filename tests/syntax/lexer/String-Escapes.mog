@@ -1,0 +1,6 @@
+-- String escapes: the named ones, the `\xNN` byte escape and the `\u{...}`
+-- scalar escape; an unknown escape falls back to the escaped character itself.
+named = "a\nb\tc\rd\\e\"f"
+hex = "\x41\x42"
+scalar = "\u{1F600}"
+fallback = "\q"

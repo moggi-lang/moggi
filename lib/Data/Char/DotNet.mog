@@ -1,0 +1,108 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.Char.DotNet
+  ( isControl
+  , isSpace
+  , isLower
+  , isUpper
+  , isAlpha
+  , isLetter
+  , isAlphaNum
+  , isPrint
+  , isDigit
+  , isNumber
+  , isPunctuation
+  , isSymbol
+  , isSeparator
+  , toUpper
+  , toLower
+  , toTitle
+  , digitToInt
+  ) where
+
+import Data.Bool
+import Moggi.Err
+import Data.Int
+import Data.Ord
+import Moggi.Internal.Prim
+
+foreign dotnet function isControl "System.Char:IsControl" :: Char -> Bool
+
+foreign dotnet function isSpace "System.Char:IsWhiteSpace" :: Char -> Bool
+
+foreign dotnet function isLower "System.Char:IsLower" :: Char -> Bool
+
+foreign dotnet function isUpper "System.Char:IsUpper" :: Char -> Bool
+
+foreign dotnet function isAlpha "System.Char:IsLetter" :: Char -> Bool
+
+foreign dotnet function isAlphaNum "System.Char:IsLetterOrDigit" :: Char -> Bool
+
+foreign dotnet function isDigit "System.Char:IsDigit" :: Char -> Bool
+
+foreign dotnet function toUpper "System.Char:ToUpper" :: Char -> Char
+
+foreign dotnet function toLower "System.Char:ToLower" :: Char -> Char
+
+-- BCL has no Char.ToTitleCase; ToUpper is the closest single-scalar stand-in.
+foreign dotnet function toTitle "System.Char:ToUpper" :: Char -> Char
+
+foreign dotnet function rawGetType "System.Globalization.CharUnicodeInfo:GetUnicodeCategory" :: Char -> Int32
+
+-- GetNumericValue returns a double (fractions like ½ are non-integral).
+foreign dotnet function rawGetNumericValue "System.Char:GetNumericValue" :: Char -> Double
+
+getType c = int32ToInt# (rawGetType c)
+
+getNumericValue c = doubleToInt# (rawGetNumericValue c)
+
+isLetter = isAlpha
+
+isPrint c = not (isControl c)
+
+intEq a b = a == b
+
+lteInt a b = case intCompare# a b of
+  GT -> False
+  _ -> True
+
+gteInt a b = case intCompare# a b of
+  LT -> False
+  _ -> True
+
+inRange lo hi n = gteInt n lo && lteInt n hi
+
+-- Category ints are System.Globalization.UnicodeCategory enum ordinals.
+isNumber c =
+  let t = getType c
+  in intEq t 8 || intEq t 9 || intEq t 10
+
+isSymbol c =
+  let t = getType c
+  in intEq t 25 || intEq t 26 || intEq t 27 || intEq t 28
+
+isSeparator c =
+  let t = getType c
+  in intEq t 11 || intEq t 12 || intEq t 13
+
+isPunctuation c =
+  let t = getType c
+  in intEq t 18 || intEq t 19 || intEq t 20 || intEq t 21 || intEq t 22 || intEq t 23 || intEq t 24
+
+digitToIntUnicode c = getNumericValue c
+
+digitToIntHexUpper n c =
+  case inRange 65 70 n of
+    True -> n - 55
+    False -> digitToIntUnicode c
+
+digitToIntHexLower n c =
+  case inRange 97 102 n of
+    True -> n - 87
+    False -> digitToIntHexUpper n c
+
+digitToIntFromOrd n c =
+  case inRange 48 57 n of
+    True -> n - 48
+    False -> digitToIntHexLower n c
+
+digitToInt c = digitToIntFromOrd (charToInt# c) c

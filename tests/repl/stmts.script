@@ -1,0 +1,8 @@
+putStrLn "hi"
+x <- pure 41
+y <- pure (x + 1)
+y
+:browse
+:clear
+:browse
+:quit

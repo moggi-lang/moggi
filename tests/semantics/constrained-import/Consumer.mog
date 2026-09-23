@@ -1,0 +1,8 @@
+module Constrained.Consumer
+
+import Constrained.Provider
+
+import Data.List
+
+useDemo :: [Int]
+useDemo = applPure 7

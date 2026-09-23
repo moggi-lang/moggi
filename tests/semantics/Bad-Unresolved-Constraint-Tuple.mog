@@ -1,0 +1,12 @@
+import Text.Show
+
+-- A missing instance used inside a tuple must still be reported: the
+-- pending-constraint sweep has to descend into tuple (and list) elements.
+
+class Tag a where
+  tag :: a -> String
+
+data Box = Box Int
+
+bad :: (String, String)
+bad = (tag (Box 1), "x")

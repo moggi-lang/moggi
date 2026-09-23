@@ -1,0 +1,19 @@
+import Moggi.Internal.Real
+import Text.Show
+import System.IO
+
+-- Backend drift risk: boxing of Int and the rounding of quot/rem (truncate) on negatives.
+half :: Int -> Int
+half x = quot x 2
+
+remainder :: Int -> Int
+remainder x = rem x 2
+
+main :: IO ()
+main = do
+  putStrLn (show (1 + 2 * 3))
+  putStrLn (show (negate 5))
+  putStrLn (show (half 7))
+  putStrLn (show (remainder 7))
+  putStrLn (show (half (negate 7)))
+  putStrLn (show (remainder (negate 7)))

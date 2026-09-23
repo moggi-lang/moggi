@@ -1,0 +1,1 @@
+bad x = let (y, z) = (x, x) in (y + 1, z True)

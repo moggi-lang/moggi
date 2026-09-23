@@ -1,0 +1,6 @@
+-- Operators are maximal runs of symbol characters; `|` is its own token unless
+-- doubled into `||`, and `#` only continues an identifier.
+a = x >>= f
+b = y <$> z
+c = p && q || r
+d = f .: g

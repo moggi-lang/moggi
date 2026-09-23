@@ -1,0 +1,3 @@
+module Test.Foreignimp where
+
+foreign php function bad "strlen" String -> Int

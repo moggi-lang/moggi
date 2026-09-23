@@ -1,0 +1,132 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.Char.PHP
+  ( isControl
+  , isSpace
+  , isLower
+  , isUpper
+  , isAlpha
+  , isLetter
+  , isAlphaNum
+  , isPrint
+  , isDigit
+  , isNumber
+  , isPunctuation
+  , isSymbol
+  , isSeparator
+  , toUpper
+  , toLower
+  , toTitle
+  , digitToInt
+  ) where
+
+import Data.Bool
+import Moggi.Err
+import Data.Int
+import Data.Ord
+import Moggi.Internal.Prim
+
+-- Requires PHP intl. All bodies are Moggi + foreign IntlChar / intval.
+-- Category results follow the host's Unicode tables, so they can differ between PHP builds.
+
+foreign php function isControl "IntlChar:iscntrl" :: Char -> Bool
+
+foreign php function isSpace "IntlChar:isUWhiteSpace" :: Char -> Bool
+
+foreign php function isLower "IntlChar:islower" :: Char -> Bool
+
+foreign php function isUpper "IntlChar:isupper" :: Char -> Bool
+
+foreign php function isAlpha "IntlChar:isalpha" :: Char -> Bool
+
+foreign php function isAlphaNum "IntlChar:isalnum" :: Char -> Bool
+
+foreign php function isPrint "IntlChar:isprint" :: Char -> Bool
+
+foreign php function isDigit "IntlChar:isdigit" :: Char -> Bool
+
+foreign php function isPunctuation "IntlChar:ispunct" :: Char -> Bool
+
+foreign php function toUpper "IntlChar:toupper" :: Char -> Char
+
+foreign php function toLower "IntlChar:tolower" :: Char -> Char
+
+foreign php function toTitle "IntlChar:totitle" :: Char -> Char
+
+foreign php function getType "IntlChar:getType" :: Char -> Int
+
+foreign php function getNumericValue "IntlChar:getNumericValue" :: Char -> Double
+
+foreign php function floatToInt "intval" :: Double -> Int
+
+foreign php const catDecimal "IntlChar:CHAR_CATEGORY_DECIMAL_NUMBER" :: Int
+
+foreign php const catLetterNumber "IntlChar:CHAR_CATEGORY_LETTER_NUMBER" :: Int
+
+foreign php const catOtherNumber "IntlChar:CHAR_CATEGORY_OTHER_NUMBER" :: Int
+
+foreign php const catMathSymbol "IntlChar:CHAR_CATEGORY_MATH_SYMBOL" :: Int
+
+foreign php const catCurrencySymbol "IntlChar:CHAR_CATEGORY_CURRENCY_SYMBOL" :: Int
+
+foreign php const catModifierSymbol "IntlChar:CHAR_CATEGORY_MODIFIER_SYMBOL" :: Int
+
+foreign php const catOtherSymbol "IntlChar:CHAR_CATEGORY_OTHER_SYMBOL" :: Int
+
+foreign php const catSpaceSep "IntlChar:CHAR_CATEGORY_SPACE_SEPARATOR" :: Int
+
+foreign php const catLineSep "IntlChar:CHAR_CATEGORY_LINE_SEPARATOR" :: Int
+
+foreign php const catParaSep "IntlChar:CHAR_CATEGORY_PARAGRAPH_SEPARATOR" :: Int
+
+isLetter = isAlpha
+
+intEq a b = case intCompare# a b of
+  EQ -> True
+  _ -> False
+
+lteInt a b = case intCompare# a b of
+  GT -> False
+  _ -> True
+
+gteInt a b = case intCompare# a b of
+  LT -> False
+  _ -> True
+
+inRange lo hi n = gteInt n lo && lteInt n hi
+
+isNumber c =
+  let t = getType c
+  in intEq t catDecimal || intEq t catLetterNumber || intEq t catOtherNumber
+
+isSymbol c =
+  let t = getType c
+  in intEq t catMathSymbol
+     || intEq t catCurrencySymbol
+     || intEq t catModifierSymbol
+     || intEq t catOtherSymbol
+
+isSeparator c =
+  let t = getType c
+  in intEq t catSpaceSep || intEq t catLineSep || intEq t catParaSep
+
+digitToIntUnicode c = case isDigit c of
+  True -> floatToInt (getNumericValue c)
+  False -> error "Data.Char.digitToInt: not a digit"
+
+digitToIntHexUpper n c =
+  case inRange 65 70 n of
+    True -> n - 55
+    False -> digitToIntUnicode c
+
+digitToIntHexLower n c =
+  case inRange 97 102 n of
+    True -> n - 87
+    False -> digitToIntHexUpper n c
+
+digitToIntFromOrd n c =
+  case inRange 48 57 n of
+    True -> n - 48
+    False -> digitToIntHexLower n c
+
+-- ASCII digits / hex in Moggi; other decimal digits via IntlChar numeric value.
+digitToInt c = digitToIntFromOrd (charToInt# c) c

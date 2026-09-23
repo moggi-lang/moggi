@@ -1,0 +1,51 @@
+import System.IO
+import Data.ByteString.Char8 qualified as C
+import Data.ByteString (ByteString)
+import Data.String
+import Data.JSON
+import Data.Int
+import Data.Eq
+import Moggi.Generics
+
+runDecode :: FromJSON a => (Either String a -> String) -> ByteString -> IO ()
+runDecode showFn bs = do
+  mr <- eitherDecode bs
+  putStrLn (showFn mr)
+
+data Person = Person { name :: String, age :: Int }
+  deriving (Generic, Eq)
+
+instance ToJSON Person where
+  toJSON = genericToJSON defaultOptions
+  toEncoding = genericToEncoding defaultOptions
+
+instance FromJSON Person where
+  parseJSON = genericParseJSON defaultOptions
+  parseEncoding = genericParseEncoding defaultOptions
+
+main :: IO ()
+main = do
+  C.putStrLn (encode (Person "ada" 36))
+  runDecode showRound ((encode (Person "ada" 36)))
+  runDecode showMissing ((C.pack "{\"name\":\"ada\"}"))
+  runDecode showWrong ((C.pack "null"))
+
+showRound :: Either String Person -> String
+showRound e = case e of
+  Right p -> eqRound p
+  Left ignored -> "bad-round"
+
+eqRound :: Person -> String
+eqRound p = case p == (Person "ada" 36) of
+  True -> "ok-round"
+  False -> "bad-round"
+
+showMissing :: Either String Person -> String
+showMissing e = case e of
+  Left ignored -> "ok-missing"
+  Right ignored -> "bad-missing"
+
+showWrong :: Either String Person -> String
+showWrong e = case e of
+  Left ignored -> "ok-wrong"
+  Right ignored -> "bad-wrong"

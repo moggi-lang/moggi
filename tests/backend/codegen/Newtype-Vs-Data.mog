@@ -1,0 +1,15 @@
+newtype Age = Age Int
+
+data Box = Box Int
+
+unwrapAge :: Age -> Int
+unwrapAge (Age n) = n
+
+unwrapBox :: Box -> Int
+unwrapBox (Box n) = n
+
+wrapAge :: Int -> Age
+wrapAge n = Age n
+
+wrapBox :: Int -> Box
+wrapBox n = Box n

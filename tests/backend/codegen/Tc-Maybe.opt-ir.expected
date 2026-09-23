@@ -1,0 +1,38 @@
+module
+  function fmapMaybe(__ev_Functor, f, mx)
+      t0 = dict_call __ev_Functor->map(f, mx)
+      ret t0
+  function apMaybe(__ev_Functor, __ev_Applicative_1, mf, mx)
+      t1 = dict_call __ev_Applicative_1-><*>(mf, mx)
+      ret t1
+  function bindMaybe(__ev_Functor, __ev_Applicative_1, __ev_Monad_2, mx, f)
+      t2 = dict_call __ev_Monad_2->>>=(mx, f)
+      ret t2
+  function justDemo()
+      ret call fmapMaybe(@__ev_Functor_Maybe, @λ0, call Just(41))
+  function apDemo()
+      ret call apMaybe(@__ev_Functor_Maybe, @__ev_Applicative_Maybe, call Just(@λ1), call Just(21))
+  function bindDemo()
+      ret call bindMaybe(@__ev_Functor_Maybe, @__ev_Applicative_Maybe, @__ev_Monad_Maybe, call Just(2), @λ2)
+  function nothingShort()
+      ret call bindMaybe(@__ev_Functor_Maybe, @__ev_Applicative_Maybe, @__ev_Monad_Maybe, @Nothing, @λ3)
+  function fromMaybeDemo()
+      ret call fromMaybe(0, @Nothing)
+  function catMaybesDemo()
+      ret call catMaybes([@Nothing, call Just(1), @Nothing, call Just(2)])
+  function dropTwo(x)
+      match_return intrinsic intEq#(x, 2)
+        arm True
+            ret @Nothing
+        arm False
+            ret call Just(x)
+  function mapMaybeDemo()
+      ret call mapMaybe(@dropTwo, [1, 2, 3])
+  function λ0(x)
+      ret intrinsic intAdd#(x, 1)
+  function λ1(x)
+      ret intrinsic intMul#(x, 2)
+  function λ2(x)
+      ret call Just(intrinsic intAdd#(x, 1))
+  function λ3(x)
+      ret call Just(x)

@@ -1,0 +1,20 @@
+module Parser.GuardCaseAlts where
+
+-- Guards travel with the alternative that owns them: a `case` alternative's
+-- body is a guard list terminated by `->`, and the alternative after it still
+-- belongs to the same case.
+describe :: Int -> String
+describe n =
+  case n of
+    m | m < 0 -> "negative"
+      | otherwise -> "not-negative"
+    0 -> "zero"
+
+-- A guard whose expression is a bare application (`positive n`), not an
+-- operator or a parenthesised term: the `=` after it closes the clause.
+positive :: Int -> Bool
+positive n = n > 0
+
+classify :: Int -> String
+classify n | positive n = "positive"
+           | otherwise = "not-positive"

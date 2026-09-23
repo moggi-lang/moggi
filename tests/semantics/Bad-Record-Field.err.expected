@@ -1,0 +1,4 @@
+tests/semantics/Bad-Record-Field.mog:3:8: type error: record type `User` has no field `missing`
+
+  3 | main = User { name = 1, age = 30 }.missing
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

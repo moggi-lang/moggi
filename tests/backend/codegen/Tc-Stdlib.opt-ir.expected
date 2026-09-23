@@ -1,0 +1,23 @@
+module
+  function mapLookupDemo()
+      ret call lookup(@__ev_Eq_Int, @__ev_Ord_Int, 2, call insert(@__ev_Eq_Int, @__ev_Ord_Int, 1, 10, call insert(@__ev_Eq_Int, @__ev_Ord_Int, 2, 20, @empty)))
+  function mapSizeDemo()
+      ret call size(call insert(@__ev_Eq_Int, @__ev_Ord_Int, 1, 2, @empty))
+  function setMemberDemo()
+      ret call member(@__ev_Eq_Int, @__ev_Ord_Int, 2, call setFromList(@__ev_Eq_Int, @__ev_Ord_Int, [1, 2, 3]))
+  function setUnionDemo()
+      ret call setSize(call union(@__ev_Eq_Int, @__ev_Ord_Int, call setFromList(@__ev_Eq_Int, @__ev_Ord_Int, [1, 2]), call setFromList(@__ev_Eq_Int, @__ev_Ord_Int, [2, 3])))
+  function clampDemo()
+      ret call clamp(@__ev_Eq_Int, @__ev_Ord_Int, call __tuple2(0, 10), 99)
+  function charDemo()
+      ret call isDigit('\u{37}')
+  function altMaybeDemo()
+      t14 = call Just(2)
+      t15 = call Just(1)
+      t16 = dict_call @__ev_Alternative_Maybe-><|>(t15, t14)
+      ret t16
+  function altListDemo()
+      t17 = dict_call @__ev_Alternative_List-><|>([1], [2, 3])
+      ret t17
+  function pairDemo()
+      ret call fst(call __tuple2(41, @True))

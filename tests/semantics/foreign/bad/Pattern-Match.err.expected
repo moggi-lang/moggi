@@ -1,0 +1,4 @@
+tests/semantics/foreign/bad/Pattern-Match.mog:11:3: type error: unknown constructor MkPath
+
+  11 |   MkPath -> pure ()
+     |   ^^^^^^

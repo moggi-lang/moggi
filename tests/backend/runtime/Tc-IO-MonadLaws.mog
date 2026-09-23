@@ -1,0 +1,8 @@
+module Tc.IO.MonadLaws
+
+import System.IO
+
+main :: IO ()
+main = do
+  pure "a" >>= putStrLn
+  putStrLn "left-id"

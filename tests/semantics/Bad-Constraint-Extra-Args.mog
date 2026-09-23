@@ -1,0 +1,2 @@
+bad :: Eq a b => a -> a
+bad x = x

@@ -1,0 +1,8 @@
+-- A record with two constructors cannot be updated: which fields the receiver
+-- has depends on the constructor it was built with, and that is not known until
+-- it runs.
+data Shape = Circle { radius :: Int, label :: String } | Square { side :: Int }
+
+c = Circle { radius = 1, label = "one" }
+
+widened = c { radius = 2 }

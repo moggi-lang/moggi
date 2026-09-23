@@ -1,0 +1,8 @@
+module Bad.Foreign.ConstructorUsage where
+
+foreign jvm type Path "java.nio.file.Path"
+
+main :: IO ()
+main = do
+  let p = Path
+  pure ()

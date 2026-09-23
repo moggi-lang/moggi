@@ -1,0 +1,6 @@
+module Provider
+  ( secret
+  ) where
+
+secret :: Int -> Int
+secret n = n + 1

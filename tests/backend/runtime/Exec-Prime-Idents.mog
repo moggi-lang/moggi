@@ -1,0 +1,53 @@
+import System.IO
+import Text.Show
+import Data.List
+
+-- Primes are part of an identifier: `one`, `one'`, `one''` and `one'''` are
+-- four distinct bindings. This pins the whole pipeline — lexing, parsing,
+-- typechecking, and every backend's name mangling, which must escape `'` rather
+-- than fold it away.
+
+one :: Int -> Int
+one x = x + 1
+
+one' :: Int -> Int
+one' x = x + 2
+
+one'' :: Int -> Int
+one'' x = x + 3
+
+one''' :: Int -> Int
+one''' x = x + 4
+
+-- A primed local binding, and a binding whose name differs from a primed one
+-- only by the character that sanitizing would rewrite: `decoy_` must stay
+-- distinct from `one'` when either is passed as a first-class value.
+local' :: Int -> Int
+local' n = step'' n
+  where
+    step'' x = x * 10
+
+decoy_ :: Int -> Int
+decoy_ x = x + 100
+
+applyTo' :: (Int -> Int) -> Int -> Int
+applyTo' f' x' = f' x'
+
+-- Primed class method: the evidence/dictionary naming has to survive the prime.
+class Bump a where
+  bump' :: a -> a
+
+instance Bump Int where
+  bump' x = x + 5
+
+main :: IO ()
+main = do
+  putStrLn (show (one 0))
+  putStrLn (show (one' 0))
+  putStrLn (show (one'' 0))
+  putStrLn (show (one''' 0))
+  putStrLn (show (local' 1))
+  putStrLn (show (applyTo' one' 10))
+  putStrLn (show (applyTo' decoy_ 10))
+  putStrLn (show (map one' [1, 2]))
+  putStrLn (show (bump' (1 :: Int)))

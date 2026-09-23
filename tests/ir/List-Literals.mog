@@ -1,0 +1,7 @@
+module Ir.ListLiterals where
+
+-- A list literal lowers to cons cells; `:` is the cons intrinsic.
+xs = [1, 2, 3]
+cons y ys = y : ys
+empty = []
+prepend = 0 : xs

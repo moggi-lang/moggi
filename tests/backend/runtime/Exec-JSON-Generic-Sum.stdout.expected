@@ -1,0 +1,12 @@
+3
+ok-box
+"Red"
+"Green"
+"Blue"
+ok-color
+{"tag":"Circle","radius":5}
+{"tag":"Rect","width":2,"height":4}
+{"tag":"Point"}
+ok-shape
+ok-shape
+ok-bad-tag

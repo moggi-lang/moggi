@@ -1,0 +1,26 @@
+-- A pattern binding with no signature is settled at the end of the module, so a
+-- later `asInt :: Int` pins `count` to `Int` and its arithmetic stays machine
+-- arithmetic. Nothing pins `unpinned`, so it takes the default type and its
+-- literals are built at that type.
+
+import Moggi.Internal.Num
+import Text.Show
+import System.IO
+
+count = 1 + 1
+
+asInt :: Int
+asInt = count
+
+pinned = 1 + 1
+
+pinnedInt :: Int
+pinnedInt = pinned
+
+unpinned = 1 + 1
+
+main :: IO ()
+main = do
+  putStrLn (show asInt)
+  putStrLn (show pinnedInt)
+  putStrLn (show unpinned)

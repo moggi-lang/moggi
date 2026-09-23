@@ -1,0 +1,46 @@
+import Data.Bool
+import Data.Int
+import Data.List
+import Data.Maybe
+import Text.Show
+import System.IO
+
+isJustDemo :: Bool
+isJustDemo = isJust (Just 1)
+
+isNothingDemo :: Bool
+isNothingDemo = isNothing Nothing
+
+fromMaybeDemo :: Bool
+fromMaybeDemo = fromMaybe 0 (Just 42) == 42
+
+maybeDemo :: Bool
+maybeDemo = maybe 0 (\x -> x + 1) (Just 1) == 2
+
+listToMaybeDemo :: Bool
+listToMaybeDemo = listToMaybe [7, 8] == Just 7
+
+maybeToListDemo :: Bool
+maybeToListDemo = maybeToList (Just 3) == [3]
+
+catMaybesDemo :: Bool
+catMaybesDemo = catMaybes [Nothing, Just 5] == [5]
+
+skipZero :: Int -> Maybe Int
+skipZero x = case x == 0 of
+  True -> Nothing
+  False -> Just x
+
+mapMaybeDemo :: Bool
+mapMaybeDemo = mapMaybe skipZero [0, 1] == [1]
+
+main :: IO ()
+main = do
+  putStrLn (show isJustDemo)
+  putStrLn (show isNothingDemo)
+  putStrLn (show fromMaybeDemo)
+  putStrLn (show maybeDemo)
+  putStrLn (show listToMaybeDemo)
+  putStrLn (show maybeToListDemo)
+  putStrLn (show catMaybesDemo)
+  putStrLn (show mapMaybeDemo)

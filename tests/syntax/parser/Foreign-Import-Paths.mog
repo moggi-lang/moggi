@@ -1,0 +1,8 @@
+module Test.Foreignimp where
+
+foreign php function strlen "strlen" :: String -> Int
+foreign php function pdoDrivers "PDO:getAvailableDrivers" :: IO (List String)
+foreign php function pdoPrepare "PDO.prepare" :: PdoHandle -> String -> IO String
+foreign php function newPdo "PDO:__con" :: String -> String -> IO PdoHandle
+foreign php const pdoAttrCase "PDO:ATTR_CASE" :: Int
+foreign php function prepare "Illuminate.Database.PDO.prepare" :: PdoHandle -> String -> IO String

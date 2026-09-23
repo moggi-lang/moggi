@@ -1,0 +1,4 @@
+tests/syntax/parser/bad-parse/module/Import-After-Data.mog:5:1: parse error: all `import` declarations must appear at the top of the module, before `backend` declarations and other top-level items (found `import` after data declaration `Foo`)
+
+  5 | import Data.Int
+    | ^^^^^^

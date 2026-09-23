@@ -1,0 +1,3 @@
+-- A newline ends the line, so a char literal cannot span one.
+c = 'a
+d = 1

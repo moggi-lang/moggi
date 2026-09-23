@@ -1,0 +1,9 @@
+{-# BACKEND php = System.Filesystem.PHP #-}
+{-# BACKEND
+  js  = Platform.JS.FS
+  jvm = System.Filesystem.JVM
+#-}
+module Test.Facade
+  ( readFile ) where
+
+readFile :: String -> IO String

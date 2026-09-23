@@ -1,0 +1,80 @@
+{
+  "assemblies": {
+    "System.Text.Json": {
+      "types": {
+        "System.Text.Json.Nodes.JsonNode": {},
+        "System.Text.Json.Nodes.JsonValue": {},
+        "System.Text.Json.Nodes.JsonArray": {},
+        "System.Text.Json.Nodes.JsonObject": {},
+        "System.Text.Json.JsonDocument": {},
+        "System.Text.Json.JsonElement": { "valueType": true },
+        "System.Text.Json.JsonProperty": { "valueType": true },
+        "System.Text.Json.JsonElement/ObjectEnumerator": { "valueType": true },
+        "System.Text.Json.JsonValueKind": { "valueType": true },
+        "System.Text.Json.JsonSerializerOptions": {}
+      },
+      "signatures": {
+        "jsonNodeParse": [
+          "string",
+          "valuetype [System.Runtime]System.Nullable`1<valuetype [System.Text.Json]System.Text.Json.Nodes.JsonNodeOptions>",
+          "valuetype [System.Text.Json]System.Text.Json.JsonDocumentOptions"
+        ],
+        "jsonNodeParseIO": [
+          "string",
+          "valuetype [System.Runtime]System.Nullable`1<valuetype [System.Text.Json]System.Text.Json.Nodes.JsonNodeOptions>",
+          "valuetype [System.Text.Json]System.Text.Json.JsonDocumentOptions"
+        ],
+        "docParse": [
+          "string",
+          "valuetype [System.Text.Json]System.Text.Json.JsonDocumentOptions"
+        ],
+        "docParseIO": [
+          "string",
+          "valuetype [System.Text.Json]System.Text.Json.JsonDocumentOptions"
+        ],
+        "toJsonPlainRaw": [
+          "class [System.Text.Json]System.Text.Json.JsonSerializerOptions"
+        ],
+        "mkBoolVal": [
+          "bool",
+          "valuetype [System.Runtime]System.Nullable`1<valuetype [System.Text.Json]System.Text.Json.Nodes.JsonNodeOptions>"
+        ],
+        "mkStringVal": [
+          "string",
+          "valuetype [System.Runtime]System.Nullable`1<valuetype [System.Text.Json]System.Text.Json.Nodes.JsonNodeOptions>"
+        ],
+        "mkIntVal": [
+          "int64",
+          "valuetype [System.Runtime]System.Nullable`1<valuetype [System.Text.Json]System.Text.Json.Nodes.JsonNodeOptions>"
+        ],
+        "mkDoubleVal": [
+          "float64",
+          "valuetype [System.Runtime]System.Nullable`1<valuetype [System.Text.Json]System.Text.Json.Nodes.JsonNodeOptions>"
+        ],
+        "newArray": [
+          "valuetype [System.Runtime]System.Nullable`1<valuetype [System.Text.Json]System.Text.Json.Nodes.JsonNodeOptions>"
+        ],
+        "newObject": [
+          "valuetype [System.Runtime]System.Nullable`1<valuetype [System.Text.Json]System.Text.Json.Nodes.JsonNodeOptions>"
+        ],
+        "propGetValue": [
+          "object",
+          "object[]"
+        ],
+        "parseInt64": [
+          "string",
+          "class [System.Runtime]System.IFormatProvider"
+        ],
+        "parseDouble": [
+          "string",
+          "class [System.Runtime]System.IFormatProvider"
+        ]
+      }
+    },
+    "System.Text.Encodings.Web": {
+      "types": {
+        "System.Text.Encodings.Web.JavaScriptEncoder": {}
+      }
+    }
+  }
+}

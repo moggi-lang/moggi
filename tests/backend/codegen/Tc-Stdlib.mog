@@ -1,0 +1,39 @@
+module Tc.Stdlib
+
+import Control.Applicative hiding (empty)
+import Data.Char
+import Data.List hiding (insert, lookup, union, find)
+import Data.Map (empty, insert, lookup, size)
+import Data.Maybe
+import Data.Ord
+import Data.Set (member, fromList as setFromList, union, size as setSize)
+import Data.Tuple
+
+mapLookupDemo :: Maybe Int
+mapLookupDemo =
+  lookup 2 (insert 1 10 (insert 2 20 empty))
+
+mapSizeDemo :: Int
+mapSizeDemo = size (insert 1 2 empty)
+
+setMemberDemo :: Bool
+setMemberDemo = member 2 (setFromList [1, 2, 3])
+
+setUnionDemo :: Int
+setUnionDemo =
+  setSize (union (setFromList [1, 2]) (setFromList [2, 3]))
+
+clampDemo :: Int
+clampDemo = clamp (0, 10) 99
+
+charDemo :: Bool
+charDemo = isDigit '7'
+
+altMaybeDemo :: Maybe Int
+altMaybeDemo = Just 1 <|> Just 2
+
+altListDemo :: List Int
+altListDemo = [1] <|> [2, 3]
+
+pairDemo :: Int
+pairDemo = fst (41, True)

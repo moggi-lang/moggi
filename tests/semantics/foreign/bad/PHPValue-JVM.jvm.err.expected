@@ -1,0 +1,4 @@
+tests/semantics/foreign/bad/PHPValue-JVM.mog:6:22: type error: `PHPValue` reification is only available on the php backend, but it is used with `jvm`
+
+  6 | foreign jvm function badValue "java.lang.String.toUpperCase" :: String -> PHPValue
+    |                      ^^^^^^^^

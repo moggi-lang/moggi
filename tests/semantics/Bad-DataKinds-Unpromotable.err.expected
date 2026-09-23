@@ -1,0 +1,4 @@
+tests/semantics/Bad-DataKinds-Unpromotable.mog:4:10: type error: data constructor `Bad` is not promotable (fields must have promotable kinds)
+
+  4 | type T = 'Bad
+    |          ^^^

@@ -1,0 +1,13 @@
+type UserId = Int
+type UserList = List User
+
+data User = User { id :: UserId }
+
+getId :: User -> UserId
+getId u = u.id
+
+emptyUsers :: UserList
+emptyUsers = []
+
+doubleId :: UserId -> UserId
+doubleId x = x + x

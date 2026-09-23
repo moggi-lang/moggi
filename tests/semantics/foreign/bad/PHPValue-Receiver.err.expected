@@ -1,0 +1,4 @@
+tests/semantics/foreign/bad/PHPValue-Receiver.mog:6:22: type error: PHPValue cannot be an instance-method receiver; use a specific foreign type or Handle
+
+  6 | foreign php function bad "foo.bar" :: PHPValue -> Int
+    |                      ^^^

@@ -1,0 +1,28 @@
+import Data.Eq
+
+-- Point-free projection of an operator class method: `(===)` as a value must
+-- resolve through the instance dictionary.
+class MyEq a where
+  (===) :: a -> a -> Bool
+
+instance MyEq Int where
+  (===) x y = x == y
+
+data Box = Box Int
+
+instance MyEq Box where
+  (===) (Box a) (Box b) = a == b
+
+-- monomorphic projection
+intEq :: Int -> Int -> Bool
+intEq = (===)
+
+-- polymorphic projection (ambient constraint)
+polyEq :: MyEq a => a -> a -> Bool
+polyEq = (===)
+
+-- local projection: the use site fixes the type and discharges the constraint
+localEq :: Int -> Int -> Bool
+localEq x y = go x y
+  where
+    go = (===)

@@ -1,0 +1,13 @@
+program
+  function eqInt :: Int -> Int -> Bool
+    pat_var x
+    pat_var y
+    infix ==
+      variable x
+      variable y
+  function neInt :: Int -> Int -> Bool
+    pat_var x
+    pat_var y
+    infix /=
+      variable x
+      variable y

@@ -1,0 +1,5 @@
+module
+  function add(x, y)
+      ret intrinsic intAdd#(x, y)
+  function bump(x)
+      ret intrinsic intAdd#(x, 5)

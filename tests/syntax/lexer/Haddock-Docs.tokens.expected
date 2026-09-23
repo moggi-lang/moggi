@@ -1,0 +1,14 @@
+doc_comment "A leading Haddock doc comment documents the next declaration.\n| It may span several lines." @ 1:1
+varid "doc1" @ 3:1
+op "=" @ 3:6
+integer "1" @ 3:8
+doc_section "A section heading groups the declarations that follow." @ 5:1
+varid "doc2" @ 7:1
+op "=" @ 7:6
+integer "2" @ 7:8
+doc_trailing "An end-of-line doc attaches to the declaration before it." @ 7:10
+doc_block "A block doc comment." @ 9:1
+varid "doc3" @ 10:1
+op "=" @ 10:6
+integer "3" @ 10:8
+eof "" @ 11:1

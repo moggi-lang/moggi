@@ -1,0 +1,6 @@
+module A (value) where
+
+import B
+
+value :: Int
+value = B.value

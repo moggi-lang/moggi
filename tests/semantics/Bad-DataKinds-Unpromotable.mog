@@ -1,0 +1,4 @@
+data Bad = Bad (Int -> Int)
+
+-- 'Bad should fail: function field is not promotable
+type T = 'Bad

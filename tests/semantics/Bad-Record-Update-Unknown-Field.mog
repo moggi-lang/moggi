@@ -1,0 +1,5 @@
+data Person = Person { name :: String, age :: Int }
+
+alice = Person { name = "Alice", age = 30 }
+
+renamed = alice { nickname = "Bob" }

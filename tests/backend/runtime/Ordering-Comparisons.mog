@@ -1,0 +1,52 @@
+import Data.Char
+import Moggi.Internal.Float
+import Data.Int
+import Data.Maybe
+import Data.Ord
+import Text.Show
+import Data.String hiding (singleton)
+import System.IO
+
+-- Backend drift risk: the ordering operators on every concrete Ord type.
+--
+-- `<`, `<=`, `>` and `>=` on monomorphic operands are each backend's own comparison of two boxed
+-- values, and `sort`/`min`/`max` route through the same `Ord` instances, so all of them are
+-- covered here for Double, String, Char, Int, Ordering and Maybe.
+--
+-- The Int cases use variables: a comparison of two literals is folded before codegen, so only a
+-- computed operand reaches the branch each backend emits.
+lt :: Int -> Int -> Bool
+lt a b = a < b
+
+le :: Int -> Int -> Bool
+le a b = a <= b
+
+gt :: Int -> Int -> Bool
+gt a b = a > b
+
+ge :: Int -> Int -> Bool
+ge a b = a >= b
+
+main :: IO ()
+main = do
+  putStrLn (show (1.5 < 2.5))
+  putStrLn (show (2.5 < 1.5))
+  putStrLn (show (1.5 <= 1.5))
+  putStrLn (show (2.5 >= 2.5))
+  putStrLn (show (2.5 > 1.5))
+  putStrLn (show ("a" < "b"))
+  putStrLn (show ("b" <= "a"))
+  putStrLn (show ("aa" > "a"))
+  putStrLn (show ('a' < 'b'))
+  putStrLn (show (1 < 2))
+  putStrLn (show (lt 1 2))
+  putStrLn (show (le 2 2))
+  putStrLn (show (gt 1 2))
+  putStrLn (show (ge 3 2))
+  putStrLn (show (min 2.5 1.5))
+  putStrLn (show (max 2.5 1.5))
+  putStrLn (show (min "b" "a"))
+  putStrLn (show (compare 1 2 < compare 3 4))
+  putStrLn (show (LT < GT))
+  putStrLn (show (min LT GT))
+  putStrLn (show (Just 1 < Just 2))

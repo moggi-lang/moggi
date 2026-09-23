@@ -1,0 +1,5 @@
+import Control.Monad
+import Data.Maybe
+
+-- GND does not support arbitrary * -> * classes (only Functor/Foldable/Traversable).
+newtype Box a = Box (Maybe a) deriving newtype (Monad)

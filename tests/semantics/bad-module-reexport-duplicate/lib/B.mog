@@ -1,0 +1,7 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Clash.B
+  ( foo
+  ) where
+
+foo :: Int
+foo = 2

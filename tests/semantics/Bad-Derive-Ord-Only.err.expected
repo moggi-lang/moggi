@@ -1,0 +1,4 @@
+tests/semantics/Bad-Derive-Ord-Only.mog:4:35: type error: missing superclass instance: `Eq Color`
+
+  4 | data Color = Red | Blue deriving (Ord)
+    |                                   ^^^

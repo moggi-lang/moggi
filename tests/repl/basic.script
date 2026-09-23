@@ -1,0 +1,8 @@
+:t 1 + 1
+x = 10
+y = x + 10
+y + x
+:browse
+x = 100
+x
+:quit

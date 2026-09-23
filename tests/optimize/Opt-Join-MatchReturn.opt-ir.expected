@@ -1,0 +1,16 @@
+module
+  function neq(l, r)
+      match_return l
+        arm True
+            t11 = match r
+              arm True
+                  t11 = @True
+              arm False
+                  t11 = @False
+            match_return t11
+              arm True
+                  ret @False
+              arm False
+                  ret @True
+        arm False
+            ret @True

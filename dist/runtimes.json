@@ -1,0 +1,137 @@
+{
+  "_comment": "Third-party runtimes bundled into Moggi distributions. Versions mirror the development environment in flake.nix; update both together, then run `php scripts/dist/pin.php` to refresh dist/runtimes.lock.json (exact URLs + hashes). A target/runtime pair that is not listed here has no upstream build and is reported as unsupported rather than substituted.",
+  "linuxGlibcFloor": "2.35",
+
+  "targets": {
+    "linux-x86_64":    {"os": "linux",   "arch": "x86_64",  "phpPlatform": "unix",    "dotnetRid": "linux-x64",   "jvmOs": "linux",   "jvmArch": "x64",       "graalvmAsset": "linux-x64",     "archiveExt": "tar.gz"},
+    "linux-aarch64":   {"os": "linux",   "arch": "aarch64", "phpPlatform": "unix",    "dotnetRid": "linux-arm64", "jvmOs": "linux",   "jvmArch": "aarch64",   "graalvmAsset": "linux-aarch64", "archiveExt": "tar.gz"},
+    "macos-x86_64":    {"os": "macos",   "arch": "x86_64",  "phpPlatform": "unix",    "dotnetRid": "osx-x64",     "jvmOs": "mac",     "jvmArch": "x64",       "graalvmAsset": "macos-x64",     "archiveExt": "tar.gz"},
+    "macos-aarch64":   {"os": "macos",   "arch": "aarch64", "phpPlatform": "unix",    "dotnetRid": "osx-arm64",   "jvmOs": "mac",     "jvmArch": "aarch64",   "graalvmAsset": "macos-aarch64", "archiveExt": "tar.gz"},
+    "windows-x86_64":  {"os": "windows", "arch": "x86_64",  "phpPlatform": "windows", "dotnetRid": "win-x64",     "jvmOs": "windows", "jvmArch": "x64",       "graalvmAsset": "windows-x64",   "archiveExt": "zip"},
+    "windows-aarch64": {"os": "windows", "arch": "aarch64", "phpPlatform": "unavailable", "dotnetRid": "win-arm64", "jvmOs": "windows", "jvmArch": "aarch64", "graalvmAsset": null,          "archiveExt": "zip"}
+  },
+
+  "runtimes": {
+    "php": {
+      "version": "8.5.7",
+      "upstream": "php.net",
+      "license": {
+        "name": "PHP License 3.01",
+        "file": "LICENSE",
+        "url": "https://www.php.net/license/3_01.txt",
+        "acknowledgement": "This product includes PHP software, freely available from <https://www.php.net/software/>."
+      },
+      "note": "php.net publishes Windows binaries only. On Linux and macOS the official source release is built with a pinned minimal configuration — this is the only official upstream PHP for those platforms, and it keeps every architecture on a genuine build of the same source release.",
+      "checksumsUrl": "https://www.php.net/releases/index.php?json&version={version}",
+      "extensions": ["phar", "bcmath", "mbstring", "zip", "ctype"],
+      "configureFlags": [
+        "--disable-all",
+        "--disable-cgi",
+        "--enable-cli",
+        "--enable-phar",
+        "--enable-bcmath",
+        "--enable-mbstring",
+        "--with-zip",
+        "--enable-ctype",
+        "--without-pear"
+      ],
+      "unix": {
+        "format": "tar.gz",
+        "url": "https://www.php.net/distributions/php-{version}.tar.gz",
+        "stripComponents": 0,
+        "build": true,
+        "binary": "sapi/cli/php"
+      },
+      "windows-x86_64": {
+        "format": "zip",
+        "url": "https://downloads.php.net/~windows/releases/archives/php-{version}-nts-Win32-vs17-x64.zip",
+        "stripComponents": 0,
+        "binary": "php.exe"
+      },
+      "unsupported": {
+        "windows-aarch64": "php.net publishes no Windows ARM64 build (the Windows release page offers x64 and x86 only)"
+      }
+    },
+
+    "dotnet": {
+      "version": "8.0.425",
+      "upstream": "dotnet.microsoft.com",
+      "license": {
+        "name": "MIT (Linux and macOS); .NET Library License (Windows)",
+        "file": "LICENSE.txt"
+      },
+      "note": ".NET 8 SDK, at the newest patch upstream publishes metadata for (the flake pins the `dotnet = 8` series; the patch level follows upstream so the official SHA-512 from the release metadata is available for every asset).",
+      "asset": {
+        "format": "tar.gz",
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/{version}/dotnet-sdk-{version}-{dotnetRid}.tar.gz",
+        "stripComponents": 0,
+        "binary": "dotnet"
+      },
+      "assetZip": {
+        "format": "zip",
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/{version}/dotnet-sdk-{version}-{dotnetRid}.zip",
+        "stripComponents": 0,
+        "binary": "dotnet.exe"
+      },
+      "checksumsUrl": "https://builds.dotnet.microsoft.com/dotnet/release-metadata/8.0/releases.json"
+    },
+
+    "jvm": {
+      "version": "21",
+      "upstream": "Eclipse Temurin (Adoptium)",
+      "license": {
+        "name": "GPLv2 with Classpath Exception",
+        "file": "NOTICE"
+      },
+      "note": "A plain JDK, separate from GraalVM: the jvm backend targets Java 21, and `javac`/`java` come from here. The Adoptium API redirects to a pinned GitHub release asset; `scripts/dist/pin.php` records the exact URL and SHA-256.",
+      "asset": {
+        "format": "tar.gz",
+        "url": "https://api.adoptium.net/v3/binary/latest/{version}/ga/{jvmOs}/{jvmArch}/jdk/hotspot/normal/eclipse",
+        "stripComponents": 1,
+        "binary": "bin/java"
+      },
+      "assetZip": {
+        "format": "zip",
+        "url": "https://api.adoptium.net/v3/binary/latest/{version}/ga/{jvmOs}/{jvmArch}/jdk/hotspot/normal/eclipse",
+        "stripComponents": 1,
+        "binary": "bin/java.exe"
+      },
+      "checksumsUrl": "https://api.adoptium.net/v3/assets/latest/{version}/hotspot?architecture={jvmArch}&image_type=jdk&os={jvmOs}&vendor=eclipse"
+    },
+
+    "graalvm": {
+      "version": "21.0.2",
+      "upstream": "graalvm-community-jdk (github.com/graalvm/graalvm-ce-builds)",
+      "license": {
+        "name": "GPLv2 with Classpath Exception (Community Edition)",
+        "file": "LICENSE_NATIVEIMAGE.txt"
+      },
+      "note": "GraalVM Community for JDK 21.0.2: the last line that ships a macOS x86_64 build, and the same Java 21 the jvm backend targets. Windows ARM64 has no GraalVM build at all, so distributions that need native-image are not produced for it.",
+      "asset": {
+        "format": "tar.gz",
+        "url": "https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-{version}/graalvm-community-jdk-{version}_{graalvmAsset}_bin.tar.gz",
+        "sha256Url": "https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-{version}/graalvm-community-jdk-{version}_{graalvmAsset}_bin.tar.gz.sha256",
+        "stripComponents": 1,
+        "binary": "bin/native-image"
+      },
+      "assetZip": {
+        "format": "zip",
+        "url": "https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-{version}/graalvm-community-jdk-{version}_{graalvmAsset}_bin.zip",
+        "sha256Url": "https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-{version}/graalvm-community-jdk-{version}_{graalvmAsset}_bin.zip.sha256",
+        "stripComponents": 1,
+        "binary": "bin/native-image.cmd"
+      },
+      "unsupported": {
+        "windows-aarch64": "GraalVM publishes no Windows ARM64 build (linux-x64, linux-aarch64, macos-x64, macos-aarch64, windows-x64 only)"
+      }
+    }
+  },
+
+  "variants": {
+    "moggi":         {"runtimes": ["php", "dotnet", "jvm", "graalvm"]},
+    "moggi-php":     {"runtimes": ["php"]},
+    "moggi-dotnet":  {"runtimes": ["php", "dotnet"]},
+    "moggi-jvm":     {"runtimes": ["php", "jvm", "graalvm"]},
+    "moggi-minimal": {"runtimes": []}
+  }
+}

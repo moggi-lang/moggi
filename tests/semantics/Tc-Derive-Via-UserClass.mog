@@ -1,0 +1,13 @@
+import Data.Eq
+
+-- Every method of a user-defined class is delegated through the via instance.
+class MyEq a where
+  (===) :: a -> a -> Bool
+  (/==) :: a -> a -> Bool
+
+instance MyEq Int where
+  (===) x y = x == y
+  (/==) x y = x /= y
+
+newtype MyInt = MyInt Int
+  deriving via (Int) MyEq

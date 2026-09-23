@@ -1,0 +1,6 @@
+module Internal () where
+
+data Secret = Secret Int
+
+peek :: Secret -> Int
+peek (Secret value) = value

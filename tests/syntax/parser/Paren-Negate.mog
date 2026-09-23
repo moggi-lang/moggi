@@ -1,0 +1,10 @@
+-- `(-)` is an operator reference, while `(-7)` and `(- 7)` are negated
+-- literals. Prefix minus desugars to `negate`, so its operand is not pinned
+-- to `Int` the way the zero of a subtraction would be.
+minus = (-)
+plus = (+)
+negated = (-7)
+negatedSpaced = (- 7)
+negatedVariable x = -x
+subtracted x = x - 7
+nested = (1 - 2) - 3

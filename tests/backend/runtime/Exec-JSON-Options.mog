@@ -1,0 +1,132 @@
+import System.IO
+import Data.ByteString.Char8 qualified as C
+import Data.ByteString (ByteString)
+import Data.String
+import Data.JSON
+import Data.Int
+import Data.Maybe
+import Data.Eq
+import Moggi.Generics
+
+runDecode :: FromJSON a => (Either String a -> String) -> ByteString -> IO ()
+runDecode showFn bs = do
+  mr <- eitherDecode bs
+  putStrLn (showFn mr)
+
+-- Rename fields by stripping a leading underscore via Options.
+stripUnderscore :: String -> String
+stripUnderscore s = case unpack s of
+  '_' : rest -> pack rest
+  _ -> s
+
+-- Prefix constructor tags (Aeson-style constructorTagModifier).
+tagPrefix :: String -> String
+tagPrefix s = "T_" <> s
+
+data Item = Item { _name :: String, _note :: Maybe String }
+  deriving (Generic, Eq)
+
+optsRename :: Options
+optsRename = fieldLabelModifier stripUnderscore defaultOptions
+
+optsOmit :: Options
+optsOmit = omitNothingFields True defaultOptions
+
+instance ToJSON Item where
+  toJSON = genericToJSON optsRename
+  toEncoding = genericToEncoding optsRename
+
+instance FromJSON Item where
+  parseJSON = genericParseJSON optsRename
+  parseEncoding = genericParseEncoding optsRename
+
+data Opt = Opt { label :: String, extra :: Maybe Int }
+  deriving (Generic, Eq)
+
+instance ToJSON Opt where
+  toJSON = genericToJSON optsOmit
+  toEncoding = genericToEncoding optsOmit
+
+instance FromJSON Opt where
+  parseJSON = genericParseJSON optsOmit
+  parseEncoding = genericParseEncoding optsOmit
+
+data Color = Red | Green | Blue deriving (Generic, Eq)
+
+nullaryOpts :: Options
+nullaryOpts = allNullaryToStringTag True defaultOptions
+
+instance ToJSON Color where
+  toJSON = genericToJSON nullaryOpts
+  toEncoding = genericToEncoding nullaryOpts
+
+instance FromJSON Color where
+  parseJSON = genericParseJSON nullaryOpts
+  parseEncoding = genericParseEncoding nullaryOpts
+
+data Shape = Circle { radius :: Int } | Rect { width :: Int, height :: Int }
+  deriving (Generic, Eq)
+
+tagOpts :: Options
+tagOpts = constructorTagModifier tagPrefix defaultOptions
+
+instance ToJSON Shape where
+  toJSON = genericToJSON tagOpts
+  toEncoding = genericToEncoding tagOpts
+
+instance FromJSON Shape where
+  parseJSON = genericParseJSON tagOpts
+  parseEncoding = genericParseEncoding tagOpts
+
+main :: IO ()
+main = do
+  C.putStrLn (encode (Item "x" (Just "hi")))
+  C.putStrLn (encode (Item "x" Nothing))
+  runDecode showItem ((C.pack "{\"name\":\"x\",\"note\":null}"))
+  C.putStrLn (encode (Opt "a" Nothing))
+  C.putStrLn (encode (Opt "a" (Just 1)))
+  runDecode showOpt ((C.pack "{\"label\":\"a\"}"))
+  C.putStrLn (encode Green)
+  runDecode showColor ((encode Green))
+  C.putStrLn (encode (Circle 5))
+  runDecode showShape ((C.pack "{\"radius\":5,\"tag\":\"T_Circle\"}"))
+
+showItem :: Either String Item -> String
+showItem e = case e of
+  Right i -> eqItem i
+  Left ignored -> "bad-item"
+
+eqItem :: Item -> String
+eqItem i = case i == (Item "x" Nothing) of
+  True -> "ok-item"
+  False -> "bad-item"
+
+showOpt :: Either String Opt -> String
+showOpt e = case e of
+  Right o -> eqOpt o
+  Left ignored -> "bad-opt"
+
+eqOpt :: Opt -> String
+eqOpt o = case o == (Opt "a" Nothing) of
+  True -> "ok-opt"
+  False -> "bad-opt"
+
+showColor :: Either String Color -> String
+showColor e = case e of
+  Right c -> eqColor c
+  Left ignored -> "bad-color"
+
+eqColor :: Color -> String
+eqColor c = case c == Green of
+  True -> "ok-color"
+  False -> "bad-color"
+
+showShape :: Either String Shape -> String
+showShape e = case e of
+  Right s -> eqShape s
+  Left ignored -> "bad-shape"
+
+eqShape :: Shape -> String
+eqShape s = case s == (Circle 5) of
+  True -> "ok-shape-tag"
+  False -> "bad-shape"

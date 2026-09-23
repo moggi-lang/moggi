@@ -1,0 +1,7 @@
+program
+  foreign_type jvm Path "java.nio.file.Path"
+  foreign_type dotnet Stream "System.IO.Stream"
+  foreign_type php PDO "PDO"
+  function main :: IO ()
+    io_pure
+      tuple

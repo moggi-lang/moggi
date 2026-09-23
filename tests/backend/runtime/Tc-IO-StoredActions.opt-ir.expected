@@ -1,0 +1,30 @@
+module
+  function idIO(act)
+      io_run act
+      ret ()
+  function scenarioLet()
+      io_call putStrLn("first")
+      io_call putStrLn("later")
+      ret ()
+  function scenarioPass()
+      t0 = io_assign_action
+          io_call putStrLn("x")
+        result ()
+      io_call idIO(t0)
+      ret ()
+  function scenarioWhen()
+      io_call putStrLn("system-io-ok")
+      t1 = io_assign_action
+          io_call putStrLn("when")
+        result ()
+      t2 = io_call when(@__ev_Functor_IO, @__ev_Applicative_IO, @True, t1)
+      io_run t2
+      ret ()
+  function main()
+      io_call putStrLn("let")
+      io_call scenarioLet()
+      io_call putStrLn("pass")
+      io_call scenarioPass()
+      io_call putStrLn("when")
+      io_call scenarioWhen()
+      ret ()

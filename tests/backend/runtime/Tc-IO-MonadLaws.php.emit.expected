@@ -1,0 +1,15 @@
+<?php declare(strict_types=1);
+
+namespace Tc\IO\MonadLaws;
+
+const __MOGGI_MAP = [[12 => ['Tc.IO.MonadLaws.main', 'tests/backend/runtime/Tc-IO-MonadLaws.mog', 7, 16], 13 => ['Tc.IO.MonadLaws.main', 'tests/backend/runtime/Tc-IO-MonadLaws.mog', 8, 3]], ['Tc\\IO\\MonadLaws\\main' => ['Tc.IO.MonadLaws.main', 'tests/backend/runtime/Tc-IO-MonadLaws.mog', 6, 8]]];
+
+require_once __DIR__ . '/../../../lib/System/IO/PHP.php';
+
+use function System\IO\PHP\putStrLn;
+
+function main() {
+    putStrLn("a");
+    putStrLn("left-id");
+    return null;
+}

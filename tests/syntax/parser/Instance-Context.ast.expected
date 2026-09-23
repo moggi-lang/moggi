@@ -1,0 +1,4 @@
+program
+  instance Eq Pair a
+  instance Eq Box a
+  instance Show Pair a

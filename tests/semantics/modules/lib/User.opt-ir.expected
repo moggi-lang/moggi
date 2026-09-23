@@ -1,0 +1,7 @@
+module
+  data User
+    constructor User id
+  function getId(u)
+      ret call __field0(u)
+  function makeUser(id)
+      ret call User(id)

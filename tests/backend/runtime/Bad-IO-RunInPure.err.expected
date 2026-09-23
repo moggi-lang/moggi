@@ -1,0 +1,4 @@
+tests/backend/runtime/Bad-IO-RunInPure.mog:6:7: type error: could not unify `IO String` with `String`
+
+   6 | f s = do
+     |       ^^

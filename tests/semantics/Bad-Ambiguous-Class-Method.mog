@@ -1,0 +1,9 @@
+class Foo a where
+  dup :: a -> Int
+
+class Bar a where
+  dup :: a -> Int
+
+data Unit = Unit
+
+ambiguous = dup

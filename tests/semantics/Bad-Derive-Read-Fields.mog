@@ -1,0 +1,3 @@
+import Text.Read
+
+data Pair a b = Pair a b deriving (Read)

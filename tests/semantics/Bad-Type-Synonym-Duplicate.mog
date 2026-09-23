@@ -1,0 +1,5 @@
+type UserId = Int
+type UserId = Int
+
+toInt :: UserId -> UserId
+toInt x = x

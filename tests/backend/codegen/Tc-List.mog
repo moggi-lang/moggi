@@ -1,0 +1,108 @@
+module Tc.List
+
+import Data.Foldable
+import Text.Show
+import Data.Bool
+import Data.Int
+import Data.List hiding (find)
+
+literal :: [Int]
+literal = [1, 2, 3]
+
+joined :: [Int]
+joined = [1, 2, 3] <> [4, 5]
+
+listLength :: Foldable t => t a -> Int
+listLength xs = length xs
+
+listFoldl :: Foldable t => (b -> a -> b) -> b -> t a -> b
+listFoldl f z xs = foldl f z xs
+
+len :: Int
+len = listLength joined
+
+total :: Int
+total = sum joined
+
+doubled :: [Int]
+doubled = concatMap (\x -> [x * 2]) joined
+
+leftFold :: Int
+leftFold = listFoldl (\acc x -> acc + x) 0 joined
+
+built :: [Int]
+built = 1 : 2 : 3 : []
+
+fromCons :: [Int]
+fromCons = 1 : tail built
+
+same :: Bool
+same = built == [1, 2, 3]
+
+builtLen :: Int
+builtLen = listLength built
+
+sumHead :: [Int] -> Int
+sumHead xs = case xs of
+  x : _ -> x
+  [] -> 0
+
+sumList :: [Int] -> Int
+sumList xs = case xs of
+  [] -> 0
+  x : rest -> x + sumList rest
+
+headOrZero :: [Int] -> Int
+headOrZero xs = case xs of
+  [] -> 0
+  h : _ -> h
+
+pairSum :: [Int] -> Int
+pairSum xs = case xs of
+  [a, b] -> a + b
+  _ -> 0
+
+xs :: [Int]
+xs = [1, 2, 3, 4, 5]
+
+taken :: [Int]
+taken = take 3 xs
+
+dropped :: [Int]
+dropped = drop 2 xs
+
+evens :: [Int]
+evens = filter (\x -> x `elem` [2, 4]) xs
+
+triples :: [Int]
+triples = replicate 3 7
+
+zipped :: [Tuple2 Int Int]
+zipped = zip taken dropped
+
+found :: Bool
+found = elem 3 xs
+
+whileTaken :: [Int]
+whileTaken = takeWhile (\x -> elem x [1, 2, 3]) xs
+
+whileDropped :: [Int]
+whileDropped = dropWhile (\x -> elem x [1, 2]) xs
+
+compDoubled :: [Int]
+compDoubled = [x * 2 | x <- [1, 2, 3, 4]]
+
+compEvens :: [Int]
+compEvens = [x | x <- [1, 2, 3, 4, 5], elem x [3, 4, 5]]
+
+pairs :: [Int]
+pairs = [x + y | x <- [1, 2], y <- [10, 20], elem (x + y) [21, 22]]
+
+emptyGuard :: [Int]
+emptyGuard = [x | x <- [1, 2, 3], False]
+
+format :: Show a => [a] -> String
+format xs = show xs
+
+shown :: String
+shown = format [True, False]

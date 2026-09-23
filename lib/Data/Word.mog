@@ -1,0 +1,368 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- Unsigned words as MagicHash primitives, including platform-sized `Word`.
+-- Type + Eq/Ord/Show/Num/Enum/Integral/Bounded live here.
+-- Fixed-width values share the Int host rep; width is enforced by wordN_from_int masks.
+-- Word64 arithmetic uses wrapping word64*# intrinsics (not host Int ops).
+module Data.Word
+  ( Word
+  , Word8
+  , Word16
+  , Word32
+  , Word64
+  , byteSwap16
+  , byteSwap32
+  , byteSwap64
+  , bitReverse8
+  , bitReverse16
+  , bitReverse32
+  , bitReverse64
+  ) where
+
+import Data.Bool
+import Data.Bounded
+import Data.Enum
+import Data.Eq
+-- For `Show Int` (the `Enum` error messages render an `Int` tag).
+import Data.Int
+import Data.Semigroup
+import Moggi.Internal.Real
+import Moggi.Internal.Num
+import Data.Ord
+import Text.Show
+import Data.Tuple
+import Moggi.Err
+import Moggi.Exception
+import Moggi.Internal.Prim
+
+type Word = Word#
+type Word8 = Word8#
+type Word16 = Word16#
+type Word32 = Word32#
+type Word64 = Word64#
+
+wordZero = wordFromInt# 0
+wordOne = wordFromInt# 1
+
+word8Zero = word8FromInt# 0
+word8One = word8FromInt# 1
+word16Zero = word16FromInt# 0
+word16One = word16FromInt# 1
+word32Zero = word32FromInt# 0
+word32One = word32FromInt# 1
+word64Zero = word64FromInt# 0
+word64One = word64FromInt# 1
+word64Max = word64FromInt# (intNegate# 1)
+
+byteSwap16 w = byteSwap16# w
+byteSwap32 w = byteSwap32# w
+byteSwap64 w = byteSwap64# w
+
+bitReverse8 w = bitReverse8# w
+bitReverse16 w = bitReverse16# w
+bitReverse32 w = bitReverse32# w
+bitReverse64 w = bitReverse64# w
+
+instance Eq Word where
+  (==) a b = wordEq# a b
+  (/=) a b = wordNe# a b
+
+instance Eq Word8 where
+  (==) a b = word8Eq# a b
+  (/=) a b = word8Ne# a b
+
+instance Eq Word16 where
+  (==) a b = word16Eq# a b
+  (/=) a b = word16Ne# a b
+
+instance Eq Word32 where
+  (==) a b = word32Eq# a b
+  (/=) a b = word32Ne# a b
+
+instance Eq Word64 where
+  (==) a b = word64Eq# a b
+  (/=) a b = word64Ne# a b
+
+instance Ord Word where
+  compare a b = wordCompare# a b
+
+instance Ord Word8 where
+  compare a b = word8Compare# a b
+
+instance Ord Word16 where
+  compare a b = word16Compare# a b
+
+instance Ord Word32 where
+  compare a b = word32Compare# a b
+
+instance Ord Word64 where
+  compare a b = word64Compare# a b
+
+instance Bounded Word where
+  minBound = wordZero
+  maxBound = wordFromInt# (intNegate# 1)
+
+instance Bounded Word8 where
+  minBound = word8Zero
+  maxBound = word8FromInt# 255
+
+instance Bounded Word16 where
+  minBound = word16Zero
+  maxBound = word16FromInt# 65535
+
+instance Bounded Word32 where
+  minBound = word32Zero
+  maxBound = word32FromInt# 4294967295
+
+instance Bounded Word64 where
+  minBound = word64Zero
+  maxBound = word64Max
+
+-- Each of these messages names the bound that was passed. They are not public
+-- API, so they live beside the instances that raise them (a module the
+-- instances import cannot use `show` on an `Int`, which is the instance this
+-- module defines).
+enumSuccError :: String -> a
+enumSuccError ty = error ("Enum.succ{" <> ty <> "}: tried to take `succ' of last tag in enumeration")
+
+enumPredError :: String -> a
+enumPredError ty = error ("Enum.pred{" <> ty <> "}: tried to take `pred' of first tag in enumeration")
+
+-- The bounds arrive already rendered: a `Word64` bound does not fit in an `Int`,
+-- and the message has to name the type's own extremes either way.
+enumToEnumError :: String -> Int -> String -> String -> a
+enumToEnumError ty i lo hi =
+  error ("Enum.toEnum{" <> ty <> "}: tag (" <> show i <> ") is outside of enumeration's range (" <> lo <> "," <> hi <> ")")
+
+-- `show` is the `Word64`'s own; the `Int` bounds in the message are the two
+-- fixed i64 extremes, which no `Int` value in the message needs to be built from.
+enumFromEnumError :: String -> Word64 -> a
+enumFromEnumError ty x =
+  error ("Enum.fromEnum{" <> ty <> "}: value (" <> show x <> ") is outside of Int's bounds (-9223372036854775808,9223372036854775807)")
+
+-- A tag is an `Int`; the unsigned widths are all narrower than `Int`, so the
+-- range decides both the error and the conversion.
+enumTagInRange :: Int -> Int -> Int -> Bool
+enumTagInRange i lo hi = case orderingIsLte# (intCompare# lo i) of
+  True -> orderingIsLte# (intCompare# i hi)
+  False -> False
+
+enumTagNonNegative :: Int -> Bool
+enumTagNonNegative i = orderingIsGte# (intCompare# i 0)
+
+instance Enum Word where
+  succ n = case wordCompare# n maxBound of
+    EQ -> enumSuccError "Word"
+    _ -> wordFromInt# (intAdd# (wordToInt# n) 1)
+  pred n = case wordCompare# n wordZero of
+    EQ -> enumPredError "Word"
+    _ -> wordFromInt# (intSub# (wordToInt# n) 1)
+  toEnum n = case enumTagNonNegative n of
+    True -> wordFromInt# n
+    False -> enumToEnumError "Word" n "0" (show (maxBound :: Word))
+  fromEnum n = wordToInt# n
+
+instance Enum Word8 where
+  succ n = case word8Compare# n (word8FromInt# 255) of
+    EQ -> enumSuccError "Word8"
+    _ -> word8FromInt# (intAdd# (word8ToInt# n) 1)
+  pred n = case word8Compare# n word8Zero of
+    EQ -> enumPredError "Word8"
+    _ -> word8FromInt# (intSub# (word8ToInt# n) 1)
+  toEnum n = case enumTagInRange n 0 255 of
+    True -> word8FromInt# n
+    False -> enumToEnumError "Word8" n "0" "255"
+  fromEnum n = word8ToInt# n
+
+instance Enum Word16 where
+  succ n = case word16Compare# n (word16FromInt# 65535) of
+    EQ -> enumSuccError "Word16"
+    _ -> word16FromInt# (intAdd# (word16ToInt# n) 1)
+  pred n = case word16Compare# n word16Zero of
+    EQ -> enumPredError "Word16"
+    _ -> word16FromInt# (intSub# (word16ToInt# n) 1)
+  toEnum n = case enumTagInRange n 0 65535 of
+    True -> word16FromInt# n
+    False -> enumToEnumError "Word16" n "0" "65535"
+  fromEnum n = word16ToInt# n
+
+instance Enum Word32 where
+  succ n = case word32Compare# n (word32FromInt# 4294967295) of
+    EQ -> enumSuccError "Word32"
+    _ -> word32FromInt# (intAdd# (word32ToInt# n) 1)
+  pred n = case word32Compare# n word32Zero of
+    EQ -> enumPredError "Word32"
+    _ -> word32FromInt# (intSub# (word32ToInt# n) 1)
+  toEnum n = case enumTagInRange n 0 4294967295 of
+    True -> word32FromInt# n
+    False -> enumToEnumError "Word32" n "0" "4294967295"
+  fromEnum n = word32ToInt# n
+
+instance Enum Word64 where
+  succ n = case word64Compare# n word64Max of
+    EQ -> enumSuccError "Word64"
+    _ -> word64Add# n word64One
+  pred n = case word64Compare# n word64Zero of
+    EQ -> enumPredError "Word64"
+    _ -> word64Sub# n word64One
+  toEnum n = case enumTagNonNegative n of
+    True -> word64FromInt# n
+    False -> enumToEnumError "Word64" n "0" (show word64Max)
+  -- `Int` cannot hold every `Word64`; one that does not fit is an error, not a
+  -- wrap. The bound is `maxBound :: Int` (`Int` is 64-bit on every backend).
+  fromEnum n = case word64Compare# n (word64FromInt# 9223372036854775807) of
+    GT -> enumFromEnumError "Word64" n
+    _ -> word64ToInt# n
+
+instance Num Word where
+  (+) a b = wordFromInt# (intAdd# (wordToInt# a) (wordToInt# b))
+  (-) a b = wordFromInt# (intSub# (wordToInt# a) (wordToInt# b))
+  (*) a b = wordFromInt# (intMul# (wordToInt# a) (wordToInt# b))
+  negate a = wordFromInt# (intNegate# (wordToInt# a))
+  abs a = a
+  signum a = case wordCompare# a wordZero of
+    EQ -> wordZero
+    _ -> wordOne
+  fromInteger n = wordFromInt# (intFromInteger# n)
+
+instance Num Word8 where
+  (+) a b = word8Add# a b
+  (-) a b = word8Sub# a b
+  (*) a b = word8Mul# a b
+  negate a = word8FromInt# (intNegate# (word8ToInt# a))
+  abs a = a
+  signum a = case word8Compare# a word8Zero of
+    EQ -> word8Zero
+    _ -> word8One
+  fromInteger n = word8FromInt# (intFromInteger# n)
+
+instance Num Word16 where
+  (+) a b = word16Add# a b
+  (-) a b = word16Sub# a b
+  (*) a b = word16Mul# a b
+  negate a = word16FromInt# (intNegate# (word16ToInt# a))
+  abs a = a
+  signum a = case word16Compare# a word16Zero of
+    EQ -> word16Zero
+    _ -> word16One
+  fromInteger n = word16FromInt# (intFromInteger# n)
+
+instance Num Word32 where
+  (+) a b = word32Add# a b
+  (-) a b = word32Sub# a b
+  (*) a b = word32Mul# a b
+  negate a = word32FromInt# (intNegate# (word32ToInt# a))
+  abs a = a
+  signum a = case word32Compare# a word32Zero of
+    EQ -> word32Zero
+    _ -> word32One
+  fromInteger n = word32FromInt# (intFromInteger# n)
+
+instance Num Word64 where
+  (+) a b = word64Add# a b
+  (-) a b = word64Sub# a b
+  (*) a b = word64Mul# a b
+  negate a = word64Sub# word64Zero a
+  abs a = a
+  signum a = case word64Compare# a word64Zero of
+    EQ -> word64Zero
+    _ -> word64One
+  fromInteger n = word64FromInteger# n
+
+-- See Data.Int: a zero divisor raises `DivideByZero` on every backend
+-- instead of surfacing each host's own trap.
+wordQuotZeroError :: a
+wordQuotZeroError = throw DivideByZero
+
+wordQuotChecked :: Int -> Int -> Int
+wordQuotChecked a b = case intEq# b 0 of
+  True -> wordQuotZeroError
+  _ -> intDiv# a b
+
+instance Integral Word where
+  quot a b = wordFromInt# (wordQuotChecked (wordToInt# a) (wordToInt# b))
+  rem a b = wordFromInt# (intSub# (wordToInt# a) (intMul# (wordToInt# (quot a b)) (wordToInt# b)))
+  quotRem a b = (quot a b, rem a b)
+  div = quot
+  mod = rem
+  divMod = quotRem
+  toInteger n = intToInteger# (wordToInt# n)
+
+instance Integral Word8 where
+  quot a b = word8FromInt# (wordQuotChecked (word8ToInt# a) (word8ToInt# b))
+  rem a b = word8FromInt# (intSub# (word8ToInt# a) (intMul# (word8ToInt# (quot a b)) (word8ToInt# b)))
+  quotRem a b = (quot a b, rem a b)
+  div = quot
+  mod = rem
+  divMod = quotRem
+  toInteger n = intToInteger# (word8ToInt# n)
+
+instance Integral Word16 where
+  quot a b = word16FromInt# (wordQuotChecked (word16ToInt# a) (word16ToInt# b))
+  rem a b = word16FromInt# (intSub# (word16ToInt# a) (intMul# (word16ToInt# (quot a b)) (word16ToInt# b)))
+  quotRem a b = (quot a b, rem a b)
+  div = quot
+  mod = rem
+  divMod = quotRem
+  toInteger n = intToInteger# (word16ToInt# n)
+
+instance Integral Word32 where
+  quot a b = word32FromInt# (wordQuotChecked (word32ToInt# a) (word32ToInt# b))
+  rem a b = word32FromInt# (intSub# (word32ToInt# a) (intMul# (word32ToInt# (quot a b)) (word32ToInt# b)))
+  quotRem a b = (quot a b, rem a b)
+  div = quot
+  mod = rem
+  divMod = quotRem
+  toInteger n = intToInteger# (word32ToInt# n)
+
+instance Integral Word64 where
+  quot a b = word64Quot# a b
+  rem a b = word64Rem# a b
+  quotRem a b = (word64Quot# a b, word64Rem# a b)
+  div = quot
+  mod = rem
+  divMod = quotRem
+  toInteger n = word64ToInteger# n
+
+-- `Word` holds the full unsigned 64-bit range, so a value above
+-- @maxBound :: Int@ has a negative host representation; the decimal conversion
+-- has to be the unsigned one.
+instance Show Word where
+  show w = word64Show# (word64FromInt# (wordToInt# w))
+
+instance Show Word8 where
+  show w = showNonNegInt (word8ToInt# w)
+
+instance Show Word16 where
+  show w = showNonNegInt (word16ToInt# w)
+
+instance Show Word32 where
+  show w = showNonNegInt (word32ToInt# w)
+
+instance Show Word64 where
+  show w = word64Show# w
+
+-- Helper functions
+
+showNonNegInt :: Int -> String
+showNonNegInt n = case orderingIsGt# (intCompare# n 9) of
+  True -> showNonNegIntGo n
+  False -> showDigit n
+
+showNonNegIntGo n =
+  let q = intDiv# n 10
+      r = intSub# n (intMul# q 10)
+  in stringAppend# (showNonNegInt q) (showDigit r)
+
+showDigit :: Int -> String
+showDigit d = case d of
+  0 -> "0"
+  1 -> "1"
+  2 -> "2"
+  3 -> "3"
+  4 -> "4"
+  5 -> "5"
+  6 -> "6"
+  7 -> "7"
+  8 -> "8"
+  9 -> "9"
+  _ -> "?"

@@ -1,0 +1,14 @@
+module
+  function scale(x)
+      let y = intrinsic intAdd#(x, 1)
+      ret intrinsic intMul#(y, 2)
+  function helper(x)
+      let double = @λ0
+      t1 = call_value double(@__ev_Num_Int)
+      t2 = call_value t1(x)
+      ret t2
+  function λ1(y)
+      t0 = dict_call __ev_dict0->+(y, y)
+      ret t0
+  function λ0(__ev_dict0)
+      ret @λ1

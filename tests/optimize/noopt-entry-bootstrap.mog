@@ -1,0 +1,5 @@
+import System.IO
+
+main :: IO ()
+main = do
+  putStrLn "noopt-main"

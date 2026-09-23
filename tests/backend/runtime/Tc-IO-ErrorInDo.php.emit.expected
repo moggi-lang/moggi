@@ -1,0 +1,22 @@
+<?php declare(strict_types=1);
+
+namespace Tc\IO\ErrorInDo;
+
+const __MOGGI_MAP = [[14 => ['Tc.IO.ErrorInDo.abort', 'tests/backend/runtime/Tc-IO-ErrorInDo.mog', 7, 3], 15 => ['Tc.IO.ErrorInDo.abort', 'tests/backend/runtime/Tc-IO-ErrorInDo.mog', 8, 3], 20 => ['Tc.IO.ErrorInDo.main', 'tests/backend/runtime/Tc-IO-ErrorInDo.mog', 11, 8]], ['Tc\\IO\\ErrorInDo\\abort' => ['Tc.IO.ErrorInDo.abort', 'tests/backend/runtime/Tc-IO-ErrorInDo.mog', 6, 9], 'Tc\\IO\\ErrorInDo\\main' => ['Tc.IO.ErrorInDo.main', 'tests/backend/runtime/Tc-IO-ErrorInDo.mog', 11, 8]]];
+
+require_once __DIR__ . '/../../../lib/Moggi/Err.php';
+require_once __DIR__ . '/../../../lib/System/IO/PHP.php';
+
+use function Moggi\Err\error;
+use function System\IO\PHP\putStrLn;
+
+function abort() {
+    putStrLn("before");
+    error("boom");
+    return null;
+}
+
+function main() {
+    abort();
+    return null;
+}

@@ -1,0 +1,54 @@
+program
+  data Color
+    constructor Red
+    constructor Blue
+    constructor Yellow
+  data OnlyColor (c :: Color)
+    constructor OnlyColor
+  data PairColor (a :: Color) (b :: Color)
+    constructor PairColor
+  function acceptOnlyRed :: OnlyColor 'Red -> String
+    pat_con OnlyColor
+    string "ok"
+  function acceptOnlyBlue :: OnlyColor 'Blue -> String
+    pat_con OnlyColor
+    string "blue"
+  function forgetColor :: OnlyColor t2 -> String
+    pat_con OnlyColor
+    string "any"
+  function rb :: PairColor 'Red 'Blue
+    constructor_ref PairColor
+  function br :: PairColor 'Blue 'Red
+    constructor_ref PairColor
+  function pickRed :: Color
+    constructor_ref Red
+  function describe :: Color -> String
+    pat_var c
+    case
+      variable c
+      alt
+        pat_con Red
+        string "Red"
+      alt
+        pat_con Blue
+        string "Blue"
+      alt
+        pat_con Yellow
+        string "Yellow"
+  function redProxy :: OnlyColor 'Red
+    constructor_ref OnlyColor
+  function yellowProxy :: OnlyColor 'Yellow
+    constructor_ref OnlyColor
+  function useForgetRed :: String
+    apply
+      variable forgetColor
+      variable redProxy
+  function useForgetBlue :: String
+    apply
+      variable forgetColor
+      type_asc OnlyColor 'Blue
+        constructor_ref OnlyColor
+  function useAccept :: String
+    apply
+      variable acceptOnlyRed
+      variable redProxy

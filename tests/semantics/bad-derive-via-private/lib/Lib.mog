@@ -1,0 +1,14 @@
+module Lib (MyEq(..), WrapA(..)) where
+
+class MyEq a where
+  (===) :: a -> a -> Int
+
+-- The via type is private, so the derived `MyEq WrapA` instance cannot be used
+-- from an importing module: `RepB` is not in scope there.
+newtype RepB = RepB Int
+
+instance MyEq RepB where
+  (===) (RepB _) (RepB _) = 0
+
+newtype WrapA = WrapA Int
+  deriving via (RepB) MyEq

@@ -1,0 +1,4 @@
+tests/semantics/Bad-DataKinds-Nat-KindName.mog:2:8: type error: `Nat` is a kind, not a type
+
+  2 | bad :: Nat -> String
+    |        ^^^

@@ -1,0 +1,10 @@
+-- | A leading Haddock doc comment documents the next declaration.
+-- | It may span several lines.
+doc1 = 1
+
+-- * A section heading groups the declarations that follow.
+
+doc2 = 2 -- ^ An end-of-line doc attaches to the declaration before it.
+
+{-| A block doc comment. -}
+doc3 = 3

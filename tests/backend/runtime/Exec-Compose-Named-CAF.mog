@@ -1,0 +1,27 @@
+-- Two nullary CAFs whose bodies are partial applications, one used both
+-- directly and as a value. Arity-raising the CAF and then rolling the caller
+-- back (unbound-temp recovery) must leave the definition and its call sites at
+-- the same arity, or JVM/.NET throw NoSuchMethodError / MissingMethodException
+-- at run time.
+--
+-- Deliberately written with prefix `(.)` so it does not depend on spaced-dot
+-- composition parsing.
+module Main
+  ( main
+  ) where
+
+import System.IO
+import Text.Show
+import Data.Function
+
+inc n = n + 1
+double n = n * 2
+
+composed = (.) double inc
+chained = (.) double ((.) inc double)
+
+main :: IO ()
+main = do
+  putStrLn (show (composed 5))
+  putStrLn (show (chained 1))
+  putStrLn (show (map composed [1, 2, 3]))

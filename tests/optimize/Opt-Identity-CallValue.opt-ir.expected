@@ -1,0 +1,3 @@
+module
+  function label()
+      ret "tVal"

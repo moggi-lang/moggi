@@ -1,0 +1,16 @@
+<?php declare(strict_types=1);
+
+namespace Constrained\Consumer;
+
+const __MOGGI_MAP = [[15 => ['Constrained.Consumer.useDemo', 'tests/semantics/constrained-import/Consumer.mog', 8, 11]], ['Constrained\\Consumer\\useDemo' => ['Constrained.Consumer.useDemo', 'tests/semantics/constrained-import/Consumer.mog', 8, 11]]];
+
+require_once __DIR__ . '/../../../lib/Data/List.php';
+require_once __DIR__ . '/Provider.php';
+
+use function Constrained\Provider\applPure;
+use function Data\List\__ev_Applicative_List;
+use function Data\List\__ev_Functor_List;
+
+function useDemo() {
+    return applPure(__ev_Functor_List(), __ev_Applicative_List(), 7);
+}

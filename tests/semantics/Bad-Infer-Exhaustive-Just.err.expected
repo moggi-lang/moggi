@@ -1,0 +1,4 @@
+tests/semantics/Bad-Infer-Exhaustive-Just.mog:1:8: type error: non-exhaustive case: missing patterns: Nothing
+
+  1 | f mx = case mx of
+    |        ^^^^^^^

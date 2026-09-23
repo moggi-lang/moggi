@@ -1,0 +1,8 @@
+module Parser.Imports
+
+import Data.List (filter)
+import Data.Functor (map)
+import Data.Maybe hiding (fromJust)
+import Data.Function ((.), ($), id)
+
+f xs = map filter xs

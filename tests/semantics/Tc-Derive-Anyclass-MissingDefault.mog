@@ -1,0 +1,16 @@
+import Text.Show
+import System.IO
+
+-- `deriving anyclass` does not require every method to have a default.
+-- `half` is filled in from the class default; `required` gets an `error` body
+-- so the instance is complete and only calling it fails.
+class Half a where
+  half :: a -> Int
+  half _ = 1
+  required :: a -> Int
+
+data Foo = Foo
+  deriving anyclass (Half)
+
+main :: IO ()
+main = putStrLn (show (half Foo))

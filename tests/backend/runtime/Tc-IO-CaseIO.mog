@@ -1,0 +1,29 @@
+module Tc.IO.CaseIO
+
+import System.IO
+
+emitWhen :: Bool -> IO ()
+emitWhen b = case b of
+  True -> putStrLn "y"
+  False -> putStrLn "n"
+
+pick :: Bool -> IO ()
+pick b = case b of
+  True -> putStrLn "yes"
+  False -> putStrLn "no"
+
+pickOrError :: Bool -> IO ()
+pickOrError b = case b of
+  True -> putStrLn "yes"
+  False -> error "no"
+
+main :: IO ()
+main = do
+  putStrLn "linear"
+  emitWhen True
+  putStrLn "deferred"
+  let act = pick True
+  putStrLn "before"
+  act
+  putStrLn "error-branch"
+  pickOrError True

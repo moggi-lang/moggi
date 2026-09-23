@@ -1,0 +1,14 @@
+program
+  function addOne :: Int -> Int
+    pat_var x
+    let
+      binding
+        pat_var go
+        lambda
+          pat_var y
+          infix +
+            variable y
+            integer 1
+      apply
+        variable go
+        variable x

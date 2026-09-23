@@ -1,0 +1,5 @@
+module
+  function double(x)
+      ret intrinsic intMul#(x, 2)
+  function quad(x)
+      ret intrinsic intMul#(x, 4)

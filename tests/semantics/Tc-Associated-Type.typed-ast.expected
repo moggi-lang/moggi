@@ -1,0 +1,17 @@
+program
+  class Family a
+    associated F a
+    method get :: a -> F a
+  function get :: Bool -> F Bool
+    pat_var b
+    apply
+      evidence_method Num.fromInteger evidence= nullary=0
+        instance Int
+      intrinsic intToInteger#
+        integer 0
+  function asInt :: F Bool -> Int
+    pat_var x
+    variable x
+  function fromInt :: Int -> F Bool
+    pat_var x
+    variable x

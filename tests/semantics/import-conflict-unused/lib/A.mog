@@ -1,0 +1,6 @@
+module Conflict.A
+  ( foo
+  ) where
+
+foo :: Int -> Int
+foo x = x

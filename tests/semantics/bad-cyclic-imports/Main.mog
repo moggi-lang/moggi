@@ -1,0 +1,7 @@
+module Main where
+
+import A
+
+-- Not a program entry; name must not be nullary `main` (entries are `IO ()`).
+result :: Int
+result = A.value

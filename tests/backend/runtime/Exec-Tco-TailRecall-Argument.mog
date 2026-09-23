@@ -1,0 +1,56 @@
+import Data.Int
+import Text.Show
+import System.IO
+
+-- Tail-recursion elimination must keep the `call_value` statement that
+-- *computes an argument* of the recall: dropping it leaves
+-- `tail_recall(rest, t1)` with `t1` undefined (on PHP that reads an undefined
+-- variable and prints 0). The same shape is a wrong-answer bug wherever
+-- `Ir\Loop` / `Ir\TailRecall` are emitted.
+--
+-- `f x` below is the argument temp in question: it is an indirect application
+-- of a list element, so it stays a `call_value` instead of folding to a direct
+-- call.
+
+inc :: Int -> Int
+inc x = x + 1
+
+double :: Int -> Int
+double x = x * 2
+
+applyAll :: [Int -> Int] -> Int -> Int
+applyAll fs x = case fs of
+  [] -> x
+  f : rest -> applyAll rest (f x)
+
+-- Same shape with the computed temp as the *first* argument, so argument order
+-- cannot mask the bug.
+applyAllRev :: Int -> [Int -> Int] -> Int
+applyAllRev x fs = case fs of
+  [] -> x
+  f : rest -> applyAllRev (f x) rest
+
+-- Two computed temps in one recall: both definitions must survive.
+applyPair :: [Int -> Int] -> Int -> Int -> Int
+applyPair fs x y = case fs of
+  [] -> x + y
+  f : rest -> applyPair rest (f x) (f y)
+
+-- The recall arguments read each other's parameters (`b` becomes the new `a`,
+-- `a - 1` becomes the new `b`), so every argument has to be evaluated before
+-- any parameter slot is written. A naive left-to-right assignment would compute
+-- `a - 1` from the *new* `a`.
+swapAndDec :: Int -> Int -> Int
+swapAndDec a b = case b of
+  0 -> a
+  _ -> swapAndDec b (a - 1)
+
+main :: IO ()
+main = do
+  putStrLn (show (applyAll [inc, double] 10))
+  putStrLn (show (applyAll [] 7))
+  putStrLn (show (applyAll [inc, inc, inc] 0))
+  putStrLn (show (applyAllRev 5 [inc, double, inc]))
+  putStrLn (show (applyPair [inc, inc] 10 20))
+  putStrLn (show (swapAndDec 3 5))
+  putStrLn (show (swapAndDec 0 1))

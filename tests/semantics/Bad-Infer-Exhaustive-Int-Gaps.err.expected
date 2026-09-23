@@ -1,0 +1,4 @@
+tests/semantics/Bad-Infer-Exhaustive-Int-Gaps.mog:1:7: type error: non-exhaustive case: missing patterns: 1; add a catch-all (_) pattern
+
+  1 | f x = case x of
+    |       ^^^^^^

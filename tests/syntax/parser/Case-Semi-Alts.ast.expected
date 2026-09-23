@@ -1,0 +1,11 @@
+program
+  function semi :: Bool -> Int
+    pat_var b
+    case
+      variable b
+      alt
+        pat_con True
+        integer 1
+      alt
+        pat_con False
+        integer 0

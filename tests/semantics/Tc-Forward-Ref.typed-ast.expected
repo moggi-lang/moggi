@@ -1,0 +1,11 @@
+program
+  function wrapper :: Int -> Int
+    pat_var n
+    apply
+      variable helper
+      variable n
+  function helper :: Int -> Int
+    pat_var x
+    infix +
+      variable x
+      integer 1

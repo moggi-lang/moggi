@@ -1,0 +1,4 @@
+tests/semantics/Bad-Type-Too-Many-Con-Args.mog:1:5: type error: could not unify `Maybe a` with `b -> c`
+
+  1 | f = Just 1 2
+    |     ^^^^^^^^

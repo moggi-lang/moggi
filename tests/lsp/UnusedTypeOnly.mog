@@ -1,0 +1,7 @@
+module UnusedTypeOnly where
+
+import Data.Maybe
+
+-- `Maybe` is named only in a signature: that is a use of Data.Maybe.
+count :: Maybe Int -> Int
+count m = 0

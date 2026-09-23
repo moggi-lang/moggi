@@ -1,0 +1,6 @@
+module StructureTailRecursion where
+
+countDown :: Int -> Int -> Int
+countDown n acc = case n of
+  0 -> acc
+  _ -> countDown (n - 1) (acc + 1)

@@ -1,0 +1,6 @@
+module CaseSemiAlts where
+
+-- Semicolon-separated alternatives must parse even when the next alt is
+-- indented deeper than the first (layout column of `A`).
+semi :: Bool -> Int
+semi b = case b of True -> 1; False -> 0

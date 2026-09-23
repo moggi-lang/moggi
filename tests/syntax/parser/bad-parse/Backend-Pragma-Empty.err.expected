@@ -1,0 +1,4 @@
+tests/syntax/parser/bad-parse/Backend-Pragma-Empty.mog:1:1: parse error: BACKEND pragma needs at least one `<backend> = <Module>` entry
+
+  1 | {-# BACKEND #-}
+    | ^^^^^^^

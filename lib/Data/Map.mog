@@ -1,0 +1,326 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.Map
+  ( Map
+  , empty
+  , singleton
+  , null
+  , size
+  , lookup
+  , findWithDefault
+  , member
+  , notMember
+  , insert
+  , insertWith
+  , delete
+  , adjust
+  , update
+  , alter
+  , union
+  , unionWith
+  , unions
+  , difference
+  , intersection
+  , map
+  , mapWithKey
+  , elems
+  , keys
+  , assocs
+  , toList
+  , fromList
+  , fromListWith
+  , filter
+  , filterWithKey
+  ) where
+
+import Control.Applicative
+import Data.Bool
+import Data.Eq
+import Data.Foldable hiding (null)
+import Data.Functor hiding (unzip)
+import Data.List hiding (
+  map, filter, null, lookup, singleton, union, find, insert
+  )
+import Data.Maybe
+import Data.Ord
+import Text.Show
+import Data.Traversable hiding (mapAccumL, mapAccumR)
+import Moggi.Err
+
+data AssocEntry k v = AssocEntry k v
+
+data Map k v = MkMap [AssocEntry k v]
+
+empty :: Map k v
+empty = MkMap []
+
+singleton :: k -> v -> Map k v
+singleton k v = MkMap [AssocEntry k v]
+
+null :: Map k v -> Bool
+null m = case m of
+  MkMap xs -> case xs of
+    [] -> True
+    _ -> False
+
+size :: Map k v -> Int
+size m = case m of
+  MkMap xs -> length xs
+
+lookup :: Ord k => k -> Map k v -> Maybe v
+lookup k m = case m of
+  MkMap xs -> lookupList k xs
+
+lookupList :: Ord k => k -> [AssocEntry k v] -> Maybe v
+lookupList _ [] = Nothing
+lookupList k (AssocEntry kk vv : rest) = case compare k kk of
+  EQ -> Just vv
+  LT -> Nothing
+  GT -> lookupList k rest
+
+findWithDefault :: Ord k => v -> k -> Map k v -> v
+findWithDefault def k m = case lookup k m of
+  Just v -> v
+  Nothing -> def
+
+member :: Ord k => k -> Map k v -> Bool
+member k m = case lookup k m of
+  Just _ -> True
+  Nothing -> False
+
+notMember :: Ord k => k -> Map k v -> Bool
+notMember k m = case member k m of
+  True -> False
+  False -> True
+
+insert :: Ord k => k -> v -> Map k v -> Map k v
+insert k v m = insertWith preferNew k v m
+
+-- | Keep the newly inserted value when keys collide.
+preferNew :: v -> v -> v
+preferNew new ignored = new
+
+insertWith :: Ord k => (v -> v -> v) -> k -> v -> Map k v -> Map k v
+insertWith f k v m = case m of
+  MkMap xs -> MkMap (insertList f k v xs)
+
+insertList :: Ord k => (v -> v -> v) -> k -> v -> [AssocEntry k v] -> [AssocEntry k v]
+insertList f k v [] = [AssocEntry k v]
+insertList f k v (AssocEntry kk vv : rest) = case compare k kk of
+  EQ -> AssocEntry k (f v vv) : rest
+  LT -> AssocEntry k v : AssocEntry kk vv : rest
+  GT -> AssocEntry kk vv : insertList f k v rest
+
+delete :: Ord k => k -> Map k v -> Map k v
+delete k m = case m of
+  MkMap xs -> MkMap (deleteList k xs)
+
+deleteList :: Ord k => k -> [AssocEntry k v] -> [AssocEntry k v]
+deleteList _ [] = []
+deleteList k (AssocEntry kk vv : rest) = case compare k kk of
+  EQ -> rest
+  LT -> AssocEntry kk vv : rest
+  GT -> AssocEntry kk vv : deleteList k rest
+
+adjust :: Ord k => (v -> v) -> k -> Map k v -> Map k v
+adjust f k m = update (\v -> Just (f v)) k m
+
+update :: Ord k => (v -> Maybe v) -> k -> Map k v -> Map k v
+update f k m = alter (updateMaybe f) k m
+
+updateMaybe :: (v -> Maybe v) -> Maybe v -> Maybe v
+updateMaybe f mv = case mv of
+  Nothing -> Nothing
+  Just v -> f v
+
+alter :: Ord k => (Maybe v -> Maybe v) -> k -> Map k v -> Map k v
+alter f k m = case m of
+  MkMap xs -> MkMap (alterList f k xs)
+
+alterList :: Ord k => (Maybe v -> Maybe v) -> k -> [AssocEntry k v] -> [AssocEntry k v]
+alterList f k [] = alterEmpty f k
+alterList f k (AssocEntry kk vv : rest) = alterCons f k kk vv rest
+
+alterEmpty :: (Maybe v -> Maybe v) -> k -> [AssocEntry k v]
+alterEmpty f k = case f Nothing of
+  Nothing -> []
+  Just v -> [AssocEntry k v]
+
+alterCons :: Ord k => (Maybe v -> Maybe v) -> k -> k -> v -> [AssocEntry k v] -> [AssocEntry k v]
+alterCons f k kk vv rest = case compare k kk of
+  EQ -> alterEq f k vv rest
+  LT -> alterLt f k kk vv rest
+  GT -> AssocEntry kk vv : alterList f k rest
+
+alterEq :: (Maybe v -> Maybe v) -> k -> v -> [AssocEntry k v] -> [AssocEntry k v]
+alterEq f k vv rest = case f (Just vv) of
+  Nothing -> rest
+  Just v -> AssocEntry k v : rest
+
+alterLt :: (Maybe v -> Maybe v) -> k -> k -> v -> [AssocEntry k v] -> [AssocEntry k v]
+alterLt f k kk vv rest = case f Nothing of
+  Nothing -> AssocEntry kk vv : rest
+  Just v -> AssocEntry k v : AssocEntry kk vv : rest
+
+union :: Ord k => Map k v -> Map k v -> Map k v
+union a b = unionWith preferLeft a b
+
+-- | Keep the left map's value when keys collide.
+preferLeft :: v -> v -> v
+preferLeft x ignored = x
+
+unionWith :: Ord k => (v -> v -> v) -> Map k v -> Map k v -> Map k v
+unionWith f a b = case a of
+  MkMap xs -> unionWithList f xs b
+
+unionWithList :: Ord k => (v -> v -> v) -> [AssocEntry k v] -> Map k v -> Map k v
+unionWithList _ [] b = b
+unionWithList f (e : rest) b = unionWithList f rest (insertEntry f b e)
+
+insertEntry :: Ord k => (v -> v -> v) -> Map k v -> AssocEntry k v -> Map k v
+insertEntry f m e = case e of
+  AssocEntry k v -> insertWith f k v m
+
+unions :: Ord k => [Map k v] -> Map k v
+unions ms = unionsGo ms empty
+
+unionsGo :: Ord k => [Map k v] -> Map k v -> Map k v
+unionsGo [] acc = acc
+unionsGo (m : rest) acc = unionsGo rest (union acc m)
+
+difference :: Ord k => Map k a -> Map k b -> Map k a
+difference a b = case a of
+  MkMap xs -> MkMap (diffList xs b)
+
+diffList :: Ord k => [AssocEntry k a] -> Map k b -> [AssocEntry k a]
+diffList [] _ = []
+diffList (AssocEntry k v : rest) b = case member k b of
+  True -> diffList rest b
+  False -> AssocEntry k v : diffList rest b
+
+intersection :: Ord k => Map k a -> Map k b -> Map k a
+intersection a b = case a of
+  MkMap xs -> MkMap (intersectList xs b)
+
+intersectList :: Ord k => [AssocEntry k a] -> Map k b -> [AssocEntry k a]
+intersectList [] _ = []
+intersectList (AssocEntry k v : rest) b = case member k b of
+  True -> AssocEntry k v : intersectList rest b
+  False -> intersectList rest b
+
+map :: (a -> b) -> Map k a -> Map k b
+map f m = case m of
+  MkMap xs -> MkMap (mapEntries f xs)
+
+mapEntries :: (a -> b) -> [AssocEntry k a] -> [AssocEntry k b]
+mapEntries _ [] = []
+mapEntries f (AssocEntry k v : rest) = AssocEntry k (f v) : mapEntries f rest
+
+mapWithKey :: (k -> a -> b) -> Map k a -> Map k b
+mapWithKey f m = case m of
+  MkMap xs -> MkMap (mapEntriesKey f xs)
+
+mapEntriesKey :: (k -> a -> b) -> [AssocEntry k a] -> [AssocEntry k b]
+mapEntriesKey _ [] = []
+mapEntriesKey f (AssocEntry k v : rest) = AssocEntry k (f k v) : mapEntriesKey f rest
+
+elems :: Map k v -> [v]
+elems m = case m of
+  MkMap xs -> elemsList xs
+
+elemsList :: [AssocEntry k v] -> [v]
+elemsList [] = []
+elemsList (AssocEntry ignored v : rest) = v : elemsList rest
+
+keys :: Map k v -> [k]
+keys m = case m of
+  MkMap xs -> keysList xs
+
+keysList :: [AssocEntry k v] -> [k]
+keysList [] = []
+keysList (AssocEntry k ignored : rest) = k : keysList rest
+
+assocs :: Map k v -> [(k, v)]
+assocs m = toList m
+
+toList :: Map k v -> [(k, v)]
+toList m = case m of
+  MkMap xs -> toListEntries xs
+
+toListEntries :: [AssocEntry k v] -> [(k, v)]
+toListEntries [] = []
+toListEntries (AssocEntry k v : rest) = (k, v) : toListEntries rest
+
+fromList :: Ord k => [(k, v)] -> Map k v
+fromList xs = fromListWith preferNew xs
+
+fromListWith :: Ord k => (v -> v -> v) -> [(k, v)] -> Map k v
+fromListWith f xs = fromListWithGo f xs empty
+
+fromListWithGo :: Ord k => (v -> v -> v) -> [(k, v)] -> Map k v -> Map k v
+fromListWithGo _ [] acc = acc
+fromListWithGo f (pair : rest) acc = fromListWithGo f rest (insertPair f acc pair)
+
+insertPair :: Ord k => (v -> v -> v) -> Map k v -> (k, v) -> Map k v
+insertPair f m pair = case pair of
+  (k, v) -> insertWith f k v m
+
+filter :: (v -> Bool) -> Map k v -> Map k v
+filter p m = case m of
+  MkMap xs -> MkMap (filterEntries (\ignored v -> p v) xs)
+
+filterWithKey :: (k -> v -> Bool) -> Map k v -> Map k v
+filterWithKey p m = case m of
+  MkMap xs -> MkMap (filterEntries p xs)
+
+filterEntries :: (k -> v -> Bool) -> [AssocEntry k v] -> [AssocEntry k v]
+filterEntries _ [] = []
+filterEntries p (AssocEntry k v : rest) = case p k v of
+  True -> AssocEntry k v : filterEntries p rest
+  False -> filterEntries p rest
+
+foldlList :: (b -> a -> b) -> b -> [a] -> b
+foldlList _ z [] = z
+foldlList f z (x : xs) = foldlList f (f z x) xs
+
+foldrEntries :: (v -> b -> b) -> b -> [AssocEntry k v] -> b
+foldrEntries _ z [] = z
+foldrEntries f z (AssocEntry ignored v : rest) = f v (foldrEntries f z rest)
+
+traverseEntries :: Applicative f => (a -> f b) -> [AssocEntry k a] -> f [AssocEntry k b]
+traverseEntries _ [] = pure []
+traverseEntries f (AssocEntry k v : rest) =
+  liftA2 (\v2 rest2 -> AssocEntry k v2 : rest2) (f v) (traverseEntries f rest)
+
+instance Functor (Map k) where
+  map f m = case m of
+    MkMap xs -> MkMap (mapEntries f xs)
+
+instance Foldable (Map k) where
+  foldr f z m = case m of
+    MkMap xs -> foldrEntries f z xs
+
+instance Traversable (Map k) where
+  traverse f m = case m of
+    MkMap xs -> map MkMap (traverseEntries f xs)
+
+-- | Association lists are key-ordered (see insert); equal maps share that order.
+instance (Eq k, Eq v) => Eq (Map k v) where
+  (==) a b = case a of
+    MkMap xs -> case b of
+      MkMap ys -> assocEntriesEq xs ys
+  (/=) a b = case a == b of
+    True -> False
+    False -> True
+
+assocEntriesEq :: (Eq k, Eq v) => [AssocEntry k v] -> [AssocEntry k v] -> Bool
+assocEntriesEq xs ys = case xs of
+  [] -> case ys of
+    [] -> True
+    AssocEntry ignoredK ignoredV : ignoredRest -> False
+  AssocEntry k1 v1 : rest1 -> case ys of
+    [] -> False
+    AssocEntry k2 v2 : rest2 -> case k1 == k2 of
+      False -> False
+      True -> case v1 == v2 of
+        False -> False
+        True -> assocEntriesEq rest1 rest2

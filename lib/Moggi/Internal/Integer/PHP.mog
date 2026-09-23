@@ -1,0 +1,93 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Moggi.Internal.Integer.PHP
+  ( integerAdd
+  , integerSub
+  , integerMul
+  , integerNegate
+  , integerAbs
+  , integerSignum
+  , integerQuot
+  , integerRem
+  , integerCompare
+  , integerEq
+  , integerShow
+  , integerFromInt
+  , integerToInt
+  ) where
+
+import Data.Bool
+import Data.Ord
+import Moggi.Internal.Prim
+
+-- Integer# is a decimal string for BCMath; PHP 8 bc* require string operands.
+foreign php function bcadd "bcadd" :: Integer -> Integer -> Integer
+foreign php function bcsub "bcsub" :: Integer -> Integer -> Integer
+foreign php function bcmul "bcmul" :: Integer -> Integer -> Integer
+foreign php function bcdiv "bcdiv" :: Integer -> Integer -> Integer
+foreign php function bcmod "bcmod" :: Integer -> Integer -> Integer
+foreign php function bccomp "bccomp" :: Integer -> Integer -> Int
+foreign php function rawFromInt "strval" :: Int -> Integer
+foreign php function rawIntval "intval" :: Integer -> Int
+foreign php function rawToString "strval" :: Integer -> String
+
+integerZero :: Integer
+integerZero = rawFromInt 0
+
+integerOne :: Integer
+integerOne = rawFromInt 1
+
+integerMinusOne :: Integer
+integerMinusOne = rawFromInt (0 - 1)
+
+integerAdd :: Integer -> Integer -> Integer
+integerAdd a b = bcadd a b
+
+integerSub :: Integer -> Integer -> Integer
+integerSub a b = bcsub a b
+
+integerMul :: Integer -> Integer -> Integer
+integerMul a b = bcmul a b
+
+integerNegate :: Integer -> Integer
+integerNegate a = bcsub integerZero a
+
+integerAbs :: Integer -> Integer
+integerAbs a = case integerCompare a integerZero of
+  LT -> integerNegate a
+  _ -> a
+
+integerSignum :: Integer -> Integer
+integerSignum a = case integerCompare a integerZero of
+  LT -> integerMinusOne
+  EQ -> integerZero
+  GT -> integerOne
+
+integerQuot :: Integer -> Integer -> Integer
+integerQuot a b = bcdiv a b
+
+integerRem :: Integer -> Integer -> Integer
+integerRem a b = bcmod a b
+
+integerCompare :: Integer -> Integer -> Ordering
+integerCompare a b = intToOrdering (bccomp a b)
+
+integerEq :: Integer -> Integer -> Bool
+integerEq a b = case integerCompare a b of
+  EQ -> True
+  LT -> False
+  GT -> False
+
+integerShow :: Integer -> String
+integerShow a = rawToString a
+
+integerFromInt :: Int -> Integer
+integerFromInt n = rawFromInt n
+
+integerToInt :: Integer -> Int
+integerToInt n = rawIntval n
+
+intToOrdering :: Int -> Ordering
+intToOrdering n = case intCompare# n 0 of
+  EQ -> EQ
+  LT -> LT
+  GT -> GT

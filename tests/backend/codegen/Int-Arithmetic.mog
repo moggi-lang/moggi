@@ -1,0 +1,4 @@
+module StructureIntArithmetic where
+
+mix :: Int -> Int -> Int
+mix a b = a * b + a - b

@@ -1,0 +1,20 @@
+-- A module may name the class methods it re-exports: `Traversable(traverse, sequenceA)`.
+module ReexportClassMethods.Provider (Traversable(traverse, sequenceA), Pair(..)) where
+
+import Data.Traversable
+
+data Pair a = Pair a a
+
+instance Functor Pair where
+  map f p = case p of
+    Pair x y -> Pair (f x) (f y)
+
+instance Foldable Pair where
+  foldr f z p = case p of
+    Pair x y -> f x (f y z)
+
+-- Writes only `sequenceA`; `traverse` is the class default, checked here in the
+-- module that declared the instance.
+instance Traversable Pair where
+  sequenceA p = case p of
+    Pair fx fy -> pure Pair <*> fx <*> fy

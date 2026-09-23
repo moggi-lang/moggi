@@ -1,0 +1,9 @@
+module Tc.Semigroup.String
+
+import Data.String
+
+join2 :: String -> String -> String
+join2 a b = a <> b
+
+joined :: String
+joined = join2 "foo" "bar"

@@ -1,0 +1,11 @@
+module
+  function doubleIt(n)
+      ret intrinsic intMul#(n, 2)
+  function quad(n)
+      ret intrinsic intMul#(n, 4)
+  function area(w, h)
+      ret intrinsic intAdd#(intrinsic intMul#(w, h), 2)
+  function hypot2(x, y)
+      ret intrinsic intAdd#(intrinsic intMul#(x, x), intrinsic intMul#(y, y))
+  function score()
+      ret 81

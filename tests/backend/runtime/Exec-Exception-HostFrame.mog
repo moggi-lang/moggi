@@ -1,0 +1,13 @@
+import Data.Int
+import Moggi.Internal.Prim
+import System.IO
+
+-- A native failure raised *inside generated code* (the raw i64 division
+-- primop, which is deliberately unchecked), not through an FFI call: the
+-- report must still render the Mogg frames it can map and keep the raw host
+-- throwable visible as the cause.
+boom :: Int
+boom = intDiv# 1 0
+
+main :: IO ()
+main = putStrLn (show boom)

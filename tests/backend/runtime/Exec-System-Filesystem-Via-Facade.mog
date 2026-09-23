@@ -1,0 +1,9 @@
+import System.Filesystem hiding (readFile, writeFile, appendFile)
+import System.Filesystem.Path
+import System.IO
+
+main :: IO ()
+main = do
+  _ <- writeTextFile ("/tmp/moggi-fs-facade-test.txt") "facade-ok"
+  content <- readTextFile ("/tmp/moggi-fs-facade-test.txt")
+  putStrLn content

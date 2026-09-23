@@ -1,0 +1,30 @@
+-- Moggi.Internal.Real's arithmetic helpers: `subtract`, `even`/`odd`, `gcd`/`lcm`,
+-- `(^)` and `(^^)`. The sign and zero cases are the ones base calls out, and the
+-- powers cover the exponent shapes the squaring loop has to get right (0, 1,
+-- even, odd, and negative for `(^^)`). `Int` and `Integer` both, because
+-- base's own bodies write their local base case as a literal pattern and the
+-- clause has to work at every instance (a literal pattern is an overloaded
+-- literal, not an `Int` pattern).
+
+-- Two `Num` dictionaries in scope, so `negate` and `*` have no single meaning
+-- as names: the operand type is what says which dictionary a use means.
+chooseDict :: (Num a, Integral b) => a -> b -> (a, b, a, b)
+chooseDict x n = (negate x, negate n, x * x, n * n)
+
+main :: IO ()
+main = do
+  putStrLn (show (subtract 3 10, subtract 1 0, subtract 0 5, subtract (-2) (-5)))
+  putStrLn (show (even 0, even 7, odd 0, odd 7, even (-4), odd (-3)))
+  putStrLn (show (gcd 4 2, gcd (-4) 6, gcd 4 (-6), gcd 0 4, gcd 4 0, gcd 0 0))
+  putStrLn (show (lcm 4 6, lcm (-4) 6, lcm 0 5, lcm 5 0, lcm 0 0))
+  putStrLn (show (gcd (12 :: Integer) 18, gcd (0 :: Integer) 4, gcd (4 :: Integer) 0))
+  putStrLn (show (lcm (4 :: Integer) 6, lcm (0 :: Integer) 5, lcm (5 :: Integer) 0))
+  putStrLn (show (0 ^ 0, 5 ^ 0, 5 ^ 1, 2 ^ 10, (-2) ^ 3, (-2) ^ 4))
+  putStrLn (show (7 ^ 0, 7 ^ 1, 7 ^ 2))
+-- `(^^)` only over results that a backend cannot print differently: an
+-- integral `Double` is `8.0` on one backend and `8` on another until the single
+-- `Show Double` lands.
+  putStrLn (show ((2 :: Double) ^^ (-1), (2 :: Double) ^^ (-2), (0.5 :: Double) ^^ 3))
+  putStrLn (show ((1.5 :: Double) ^^ 3, (0.5 :: Double) ^^ 2))
+  putStrLn (show (asTypeOf 1 (2 :: Int), asTypeOf 'a' 'b', asTypeOf "x" "y"))
+  putStrLn (show (chooseDict (2.5 :: Double) (3 :: Int)))

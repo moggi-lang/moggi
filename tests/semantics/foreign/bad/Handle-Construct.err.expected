@@ -1,0 +1,7 @@
+tests/semantics/foreign/bad/Handle-Construct.mog:3:8: type error: module `System.IO.Types` does not export `MkHandle`
+
+Did you mean this?
+    Handle
+
+  3 | import System.IO.Types (Handle, MkHandle, Resource, MkResource)
+    |        ^^^^^^^^^^^^^^^

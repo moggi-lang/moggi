@@ -1,0 +1,26 @@
+-- The monomorphism restriction spans the module: a pattern binding with no
+-- signature is settled once every use site has had its say, so `count` is an
+-- `Int` because `asInt` below pins it. Nothing pins `unpinned`, so that one
+-- takes the default type instead.
+
+import Moggi.Internal.Num
+
+count = 1 + 1
+
+asInt :: Int
+asInt = count
+
+unpinned = 1 + 1
+
+-- A restricted declaration is still monomorphic across the module: the two uses
+-- of `pinned` have to agree.
+pinned = 1 + 1
+
+pinnedInt :: Int
+pinnedInt = pinned
+
+pinnedAgain :: Int
+pinnedAgain = pinned
+
+main :: Int
+main = asInt + pinnedInt + pinnedAgain

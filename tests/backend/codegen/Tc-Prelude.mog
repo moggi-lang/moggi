@@ -1,0 +1,20 @@
+module Tc.Prelude
+
+import Data.Bool
+
+sum :: Int
+sum = 1 + 2
+
+flag :: Bool
+flag = True && not False
+
+m :: Maybe Int
+m = Just 3
+
+xs :: [Int]
+xs = 1 : 2 : []
+
+isTrue :: Bool -> Bool
+isTrue b = case b of
+  True -> True
+  False -> False

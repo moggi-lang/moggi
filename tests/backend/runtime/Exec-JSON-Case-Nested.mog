@@ -1,0 +1,50 @@
+import System.IO
+import Data.ByteString.Char8 qualified as C
+import Data.String
+import Data.Bool
+import Data.Eq
+import Data.Int
+import Data.Either
+import Data.JSON
+import Data.ByteString (ByteString)
+import Moggi.Generics
+
+
+runDecode :: FromJSON a => (Either String a -> String) -> ByteString -> IO ()
+runDecode showFn bs = do
+  mr <- eitherDecode bs
+  putStrLn (showFn mr)
+
+-- Nested case in both the Left/Right sense and Eq sense — exercises parser
+-- offside for nested cases and PE MatchReturn-in-MatchStmt folding.
+-- Keep nested cases in named functions (not bare `main` do-arms): JVM match
+-- join stackmaps still miscompile nested case directly under do-desugaring.
+data Person = Person { name :: String, age :: Int }
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+rt :: Person -> IO String
+rt p = do
+  mr <- eitherDecode (encode p)
+  pure (case mr of
+    Left err -> "ERR:" <> err
+    Right p2 -> case p2 == p of
+      True -> "ok"
+      False -> "bad")
+
+decodedName :: Either String Person -> String
+decodedName e = case e of
+  Left err -> err
+  Right (Person n a) -> case a == 44 of
+    True -> n
+    False -> "age-bad"
+
+sample :: Person
+sample = Person "Sasa" 44
+
+main :: IO ()
+main = do
+  C.putStrLn (encode sample)
+  s <- rt sample
+  putStrLn s
+  runDecode decodedName (C.pack "{\"name\":\"Sasa\",\"age\":44}")

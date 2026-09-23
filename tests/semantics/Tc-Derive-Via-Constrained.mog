@@ -1,0 +1,21 @@
+import Data.Eq
+import Text.Show
+
+data Pair a = Pair a a
+
+newtype WrappedPair a = WrappedPair (Pair a)
+
+instance Eq a => Eq (Pair a) where
+  (==) (Pair a b) (Pair c d) = a == c && b == d
+  (/=) x y = case x == y of
+    True -> False
+    False -> True
+
+instance Show a => Show (Pair a) where
+  show (Pair a b) = "Pair " <> show a <> " " <> show b
+
+deriving via (Pair a) instance Eq (WrappedPair a)
+deriving via (Pair a) instance Show (WrappedPair a)
+
+main :: String
+main = show (WrappedPair (Pair 1 2) == WrappedPair (Pair 1 2))

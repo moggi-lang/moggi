@@ -1,0 +1,28 @@
+import Data.Int
+import Text.Show
+import System.IO
+
+-- Backend drift risk: constructor tagging, pattern-match order and recursion.
+data Shape = Circle Int | Square Int
+
+area :: Shape -> Int
+area s = case s of
+  Circle r -> r * r * 3
+  Square w -> w * w
+
+factorial :: Int -> Int
+factorial n = case n == 0 of
+  True -> 1
+  False -> n * factorial (n - 1)
+
+fib :: Int -> Int
+fib n = case n < 2 of
+  True -> n
+  False -> fib (n - 1) + fib (n - 2)
+
+main :: IO ()
+main = do
+  putStrLn (show (area (Circle 3)))
+  putStrLn (show (area (Square 4)))
+  putStrLn (show (factorial 10))
+  putStrLn (show (fib 15))

@@ -1,0 +1,87 @@
+import System.IO
+import Data.ByteString.Char8 qualified as C
+import Data.String qualified as S
+import Data.String
+import Data.Bool
+import Data.Eq
+import Data.Int
+import Data.Maybe
+import Data.Either
+import Data.JSON
+import Moggi.Generics
+bsToStr b = S.pack (C.unpack b)
+
+data Shape
+  = Circle { radius :: Int }
+  | Square { side :: Int }
+  | Point
+  deriving (Generic, Eq)
+
+taggedOpts :: Options
+taggedOpts = defaultOptions
+
+twoElemOpts :: Options
+twoElemOpts = sumEncoding TwoElemArray defaultOptions
+
+singleFieldOpts :: Options
+singleFieldOpts = sumEncoding ObjectWithSingleField defaultOptions
+
+customTagOpts :: Options
+customTagOpts = sumEncoding (TaggedObject "type" "data") defaultOptions
+
+enc :: Options -> Shape -> String
+enc opts s = bsToStr (encodeEncoding (genericToEncoding opts s))
+
+dec :: Options -> String -> IO (Either String Shape)
+dec opts json = do
+  mr <- decodeEncoding (C.pack json)
+  pure (case mr of
+    Left err -> Left err
+    Right e -> genericParseEncoding opts e)
+
+roundTrip :: Options -> Shape -> IO String
+roundTrip opts s = do
+  mr <- dec opts (enc opts s)
+  pure (case mr of
+    Left err -> "ERR:" <> err
+    Right s2 -> case s2 == s of
+      True -> "ok"
+      False -> "bad")
+
+untaggedOpts :: Options
+untaggedOpts = sumEncoding UntaggedValue defaultOptions
+
+main :: IO ()
+main = do
+  putStrLn (enc taggedOpts (Circle 5))
+  putStrLn (enc taggedOpts (Square 3))
+  putStrLn (enc taggedOpts Point)
+  r <- roundTrip taggedOpts (Circle 5)
+  putStrLn r
+  r <- roundTrip taggedOpts (Square 3)
+  putStrLn r
+  r <- roundTrip taggedOpts Point
+  putStrLn r
+  putStrLn (enc twoElemOpts (Circle 5))
+  putStrLn (enc twoElemOpts Point)
+  r <- roundTrip twoElemOpts (Circle 5)
+  putStrLn r
+  r <- roundTrip twoElemOpts Point
+  putStrLn r
+  putStrLn (enc singleFieldOpts (Circle 5))
+  putStrLn (enc singleFieldOpts Point)
+  r <- roundTrip singleFieldOpts (Circle 5)
+  putStrLn r
+  r <- roundTrip singleFieldOpts Point
+  putStrLn r
+  putStrLn (enc customTagOpts (Circle 5))
+  r <- roundTrip customTagOpts (Circle 5)
+  putStrLn r
+  putStrLn (enc untaggedOpts (Circle 5))
+  putStrLn (enc untaggedOpts Point)
+  r <- roundTrip untaggedOpts (Circle 5)
+  putStrLn r
+  r <- roundTrip untaggedOpts (Square 3)
+  putStrLn r
+  r <- roundTrip untaggedOpts Point
+  putStrLn r

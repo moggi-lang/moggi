@@ -1,0 +1,149 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+{-# BACKEND
+  php = System.IO.PHP
+  jvm = System.IO.JVM
+  dotnet = System.IO.DotNet
+#-}
+module System.IO
+  ( IO
+  , FilePath
+  , Handle
+  , IOMode(ReadMode, WriteMode, AppendMode, ReadWriteMode)
+  , stdin
+  , stdout
+  , stderr
+  , openFile
+  , hClose
+  , hPutStr
+  , hPutStrLn
+  , hPutChar
+  , hGetChar
+  , hGetLine
+  , hFlush
+  , hGetContents
+  , hIsEOF
+  , isEOF
+  , hFileSize
+  , hSetFileSize
+  , readFile
+  , readFile'
+  , writeFile
+  , appendFile
+  , putStr
+  , putStrLn
+  , putChar
+  , getChar
+  , getLine
+  , getContents
+  , interact
+  , readIO
+  , readLn
+  , print
+  , withFile
+  ) where
+
+import Control.Applicative hiding (empty)
+import Control.Exception (bracket)
+import Control.Monad
+import Data.Bool
+import Data.Eq
+import Data.Int
+import Moggi.Internal.Integer
+import Data.Maybe (Maybe)
+import Data.Ord
+import Text.Show
+import Text.Read
+import System.IO.Base (IO, FilePath)
+import Moggi.Internal.Prim
+import System.IO.Types
+
+stdin :: Handle
+
+stdout :: Handle
+
+stderr :: Handle
+
+openFile :: FilePath -> IOMode -> IO Handle
+
+hClose :: Handle -> IO ()
+
+hPutStr :: Handle -> String -> IO ()
+
+hPutStrLn :: Handle -> String -> IO ()
+
+hPutChar :: Handle -> Char -> IO ()
+
+hGetChar :: Handle -> IO Char
+
+hGetLine :: Handle -> IO (Maybe String)
+
+hFlush :: Handle -> IO ()
+
+hGetContents :: Handle -> IO String
+
+hIsEOF :: Handle -> IO Bool
+
+hFileSize :: Handle -> IO Integer
+
+hSetFileSize :: Handle -> Integer -> IO ()
+
+putStr :: String -> IO ()
+
+putStrLn :: String -> IO ()
+
+putChar :: Char -> IO ()
+putChar c = hPutChar stdout c
+
+getChar :: IO Char
+getChar = hGetChar stdin
+
+getLine :: IO String
+
+-- Strict: the whole input is read before anything is written.
+getContents :: IO String
+getContents = hGetContents stdin
+
+interact :: (String -> String) -> IO ()
+interact f = do
+  s <- getContents
+  putStr (f s)
+
+readIO :: Read a => String -> IO a
+readIO s = pure (read s)
+
+readLn :: Read a => IO a
+readLn = do
+  s <- getLine
+  readIO s
+
+print :: Show a => a -> IO ()
+
+isEOF :: IO Bool
+isEOF = hIsEOF stdin
+
+-- readFile and readFile' both read the whole file before returning.
+readFile :: FilePath -> IO String
+readFile p = do
+  h <- openFile p ReadMode
+  s <- hGetContents h
+  hClose h
+  pure s
+
+readFile' :: FilePath -> IO String
+readFile' p = readFile p
+
+writeFile :: FilePath -> String -> IO ()
+writeFile p s = do
+  h <- openFile p WriteMode
+  hPutStr h s
+  hClose h
+
+appendFile :: FilePath -> String -> IO ()
+appendFile p s = do
+  h <- openFile p AppendMode
+  hPutStr h s
+  hClose h
+
+withFile :: FilePath -> IOMode -> (Handle -> IO r) -> IO r
+withFile p mode use =
+  bracket (openFile p mode) hClose use

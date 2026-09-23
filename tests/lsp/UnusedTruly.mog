@@ -1,0 +1,7 @@
+module UnusedTruly where
+
+import Data.Bool
+import Data.Enum
+
+flag :: Bool
+flag = True

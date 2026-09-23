@@ -1,0 +1,7 @@
+data Color = Red | Blue | Yellow
+
+data OnlyColor (c :: Color) = OnlyColor
+
+-- Wrong kind: 'True has kind Bool, OnlyColor expects Color
+badUse :: OnlyColor 'True -> String
+badUse OnlyColor = "bad"

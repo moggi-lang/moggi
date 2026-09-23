@@ -1,0 +1,11 @@
+program
+  function putStrLn :: String -> ()
+    pat_wild _
+    tuple
+  function readFile :: String -> String
+    pat_var path
+    variable path
+  function pureUse :: String
+    apply
+      variable readFile
+      string "not-io"

@@ -1,0 +1,6 @@
+module Bad.Infer.Cons
+
+import Data.Int
+import Data.List
+
+x = 1 : 2

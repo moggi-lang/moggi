@@ -1,0 +1,270 @@
+import System.IO
+import Data.ByteString.Char8 qualified as C
+import Data.String
+import Data.JSON
+import Data.ByteString (ByteString)
+import Data.Either
+import Data.Maybe
+import Data.Int
+import Data.Eq
+import Moggi.Generics
+
+runDecode :: FromJSON a => (Either String a -> String) -> ByteString -> IO ()
+runDecode showFn bs = do
+  mr <- eitherDecode bs
+  putStrLn (showFn mr)
+
+-- Aeson-inspired Generic edges: omit matrix, nullary contents:[], arity, sum shapes.
+
+data Opt = Opt { label :: String, extra :: Maybe Int }
+  deriving (Generic, Eq)
+
+optsOmit :: Options
+optsOmit = omitNothingFields True defaultOptions
+
+optsKeep :: Options
+optsKeep = omitNothingFields False defaultOptions
+
+instance ToJSON Opt where
+  toJSON = genericToJSON optsOmit
+  toEncoding = genericToEncoding optsOmit
+
+instance FromJSON Opt where
+  parseJSON = genericParseJSON optsOmit
+  parseEncoding = genericParseEncoding optsOmit
+
+-- Separate codecs under different Options (encode uses omit; decode tests both).
+parseOmit :: Value -> Either String Opt
+parseOmit v = genericParseJSON optsOmit v
+
+parseKeep :: Value -> Either String Opt
+parseKeep v = genericParseJSON optsKeep v
+
+data Color = Red | Green | Blue deriving (Generic, Eq)
+
+-- Object-tagged nullary (legacy contents:[]) — not the Aeson all-nullary string default.
+colorObjOpts :: Options
+colorObjOpts = allNullaryToStringTag False defaultOptions
+
+instance ToJSON Color where
+  toJSON = genericToJSON colorObjOpts
+  toEncoding = genericToEncoding colorObjOpts
+instance FromJSON Color where
+  parseJSON = genericParseJSON colorObjOpts
+  parseEncoding = genericParseEncoding colorObjOpts
+
+data Box = Box Int deriving (Generic, Eq)
+instance ToJSON Box where
+  toJSON = genericToJSON defaultOptions
+  toEncoding = genericToEncoding defaultOptions
+instance FromJSON Box where
+  parseJSON = genericParseJSON defaultOptions
+  parseEncoding = genericParseEncoding defaultOptions
+
+data PairI = PairI Int Int deriving (Generic, Eq)
+instance ToJSON PairI where
+  toJSON = genericToJSON defaultOptions
+  toEncoding = genericToEncoding defaultOptions
+instance FromJSON PairI where
+  parseJSON = genericParseJSON defaultOptions
+  parseEncoding = genericParseEncoding defaultOptions
+
+data Shape
+  = Circle { radius :: Int }
+  | Point
+  deriving (Generic, Eq)
+
+instance ToJSON Shape where
+  toJSON = genericToJSON defaultOptions
+  toEncoding = genericToEncoding defaultOptions
+instance FromJSON Shape where
+  parseJSON = genericParseJSON defaultOptions
+  parseEncoding = genericParseEncoding defaultOptions
+
+data Nested = Nested { inner :: Opt }
+  deriving (Generic, Eq)
+
+instance ToJSON Nested where
+  toJSON = genericToJSON optsOmit
+  toEncoding = genericToEncoding optsOmit
+instance FromJSON Nested where
+  parseJSON = genericParseJSON optsOmit
+  parseEncoding = genericParseEncoding optsOmit
+
+main :: IO ()
+main = do
+  -- omit=True: missing Maybe field → Nothing; explicit null → Nothing.
+  runParseOmit showOmitMiss "{\"label\":\"a\"}"
+  runParseOmit showOmitNull "{\"label\":\"a\",\"extra\":null}"
+  runParseOmit showOmitJust "{\"label\":\"a\",\"extra\":3}"
+  -- omit=True: missing required field fails.
+  runParseOmit showOmitReq "{\"extra\":1}"
+
+  -- omit=False decode: missing Maybe still Nothing (Aeson allowOmittedFields default).
+  runParseKeep showKeepMiss "{\"label\":\"a\"}"
+
+  -- Nullary TaggedObject with legacy contents:[].
+  runDecode showNullary ((C.pack "{\"tag\":\"Green\",\"contents\":[]}"))
+
+  -- Unary product: bare value ok; array/object reject.
+  runDecode showBoxOk ((C.pack "3"))
+  runDecode showBoxArr ((C.pack "[3]"))
+  runDecode showBoxObj ((C.pack "{\"tag\":\"Box\",\"contents\":3}"))
+
+  -- Positional arity.
+  runDecode showPairEmpty ((C.pack "[]"))
+  runDecode showPairShort ((C.pack "[1]"))
+  runDecode showPairLong ((C.pack "[1,2,3]"))
+  runDecode showPairObj ((C.pack "{}"))
+
+  -- Sum: record ctor missing field; nullary Point ok as tagged object.
+  runDecode showCircleMiss ((C.pack "{\"tag\":\"Circle\"}"))
+  runDecode showPoint ((C.pack "{\"tag\":\"Point\"}"))
+
+  -- Nested Generic record.
+  C.putStrLn (encode (Nested (Opt "a" Nothing)))
+  runDecode showNested ((C.pack "{\"inner\":{\"label\":\"a\"}}"))
+
+runParseOmit :: (Either String Opt -> String) -> String -> IO ()
+runParseOmit showFn s = do
+  e <- parseOmitDecode s
+  putStrLn (showFn e)
+
+runParseKeep :: (Either String Opt -> String) -> String -> IO ()
+runParseKeep showFn s = do
+  e <- parseKeepDecode s
+  putStrLn (showFn e)
+
+parseOmitDecode :: String -> IO (Either String Opt)
+parseOmitDecode s = do
+  mr <- eitherDecode (C.pack s)
+  pure (case mr of
+    Left err -> Left err
+    Right v -> parseOmit v)
+
+parseKeepDecode :: String -> IO (Either String Opt)
+parseKeepDecode s = do
+  mr <- eitherDecode (C.pack s)
+  pure (case mr of
+    Left err -> Left err
+    Right v -> parseKeep v)
+
+showOmitMiss :: Either String Opt -> String
+showOmitMiss e = case e of
+  Right o -> eqOmitMiss o
+  Left ignored -> "bad-omit-miss-err"
+
+eqOmitMiss :: Opt -> String
+eqOmitMiss o = case o == (Opt "a" Nothing) of
+  True -> "ok-omit-miss"
+  False -> "bad-omit-miss"
+
+showOmitNull :: Either String Opt -> String
+showOmitNull e = case e of
+  Right o -> eqOmitNull o
+  Left ignored -> "bad-omit-null-err"
+
+eqOmitNull :: Opt -> String
+eqOmitNull o = case o == (Opt "a" Nothing) of
+  True -> "ok-omit-null"
+  False -> "bad-omit-null"
+
+showOmitJust :: Either String Opt -> String
+showOmitJust e = case e of
+  Right o -> eqOmitJust o
+  Left ignored -> "bad-omit-just-err"
+
+eqOmitJust :: Opt -> String
+eqOmitJust o = case o == (Opt "a" (Just 3)) of
+  True -> "ok-omit-just"
+  False -> "bad-omit-just"
+
+showOmitReq :: Either String Opt -> String
+showOmitReq e = case e of
+  Left ignored -> "ok-omit-req"
+  Right ignored -> "bad-omit-req"
+
+showKeepMiss :: Either String Opt -> String
+showKeepMiss e = case e of
+  Right o -> eqKeepMiss o
+  Left ignored -> "bad-keep-miss-err"
+
+eqKeepMiss :: Opt -> String
+eqKeepMiss o = case o == (Opt "a" Nothing) of
+  True -> "ok-keep-miss"
+  False -> "bad-keep-miss"
+
+showNullary :: Either String Color -> String
+showNullary e = case e of
+  Right c -> eqNullary c
+  Left ignored -> "bad-nullary-err"
+
+eqNullary :: Color -> String
+eqNullary c = case c == Green of
+  True -> "ok-nullary-contents"
+  False -> "bad-nullary-contents"
+
+showBoxOk :: Either String Box -> String
+showBoxOk e = case e of
+  Right b -> eqBoxOk b
+  Left ignored -> "bad-box-err"
+
+eqBoxOk :: Box -> String
+eqBoxOk b = case b == (Box 3) of
+  True -> "ok-box"
+  False -> "bad-box"
+
+showBoxArr :: Either String Box -> String
+showBoxArr e = case e of
+  Left ignored -> "ok-box-arr"
+  Right ignored -> "bad-box-arr"
+
+showBoxObj :: Either String Box -> String
+showBoxObj e = case e of
+  Left ignored -> "ok-box-obj"
+  Right ignored -> "bad-box-obj"
+
+showPairEmpty :: Either String PairI -> String
+showPairEmpty e = case e of
+  Left ignored -> "ok-pair-empty"
+  Right ignored -> "bad-pair-empty"
+
+showPairShort :: Either String PairI -> String
+showPairShort e = case e of
+  Left ignored -> "ok-pair-short"
+  Right ignored -> "bad-pair-short"
+
+showPairLong :: Either String PairI -> String
+showPairLong e = case e of
+  Left ignored -> "ok-pair-long"
+  Right ignored -> "bad-pair-long"
+
+showPairObj :: Either String PairI -> String
+showPairObj e = case e of
+  Left ignored -> "ok-pair-obj"
+  Right ignored -> "bad-pair-obj"
+
+showCircleMiss :: Either String Shape -> String
+showCircleMiss e = case e of
+  Left ignored -> "ok-circle-miss"
+  Right ignored -> "bad-circle-miss"
+
+showPoint :: Either String Shape -> String
+showPoint e = case e of
+  Right s -> eqPoint s
+  Left ignored -> "bad-point-err"
+
+eqPoint :: Shape -> String
+eqPoint s = case s == Point of
+  True -> "ok-point"
+  False -> "bad-point"
+
+showNested :: Either String Nested -> String
+showNested e = case e of
+  Right n -> eqNested n
+  Left ignored -> "bad-nested-err"
+
+eqNested :: Nested -> String
+eqNested n = case n == (Nested (Opt "a" Nothing)) of
+  True -> "ok-nested"
+  False -> "bad-nested"

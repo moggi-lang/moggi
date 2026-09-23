@@ -1,0 +1,6 @@
+-- A char literal holds exactly one Unicode scalar value; escapes mirror the
+-- string ones and a trailing tick can never be part of the literal.
+plain = 'a'
+quote = '\''
+newline = '\n'
+byte = '\x41'

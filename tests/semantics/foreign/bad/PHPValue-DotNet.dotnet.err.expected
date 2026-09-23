@@ -1,0 +1,4 @@
+tests/semantics/foreign/bad/PHPValue-DotNet.mog:5:25: type error: `PHPValue` reification is only available on the php backend, but it is used with `dotnet`
+
+  5 | foreign dotnet function badValue "System.String.ToUpper" :: String -> PHPValue
+    |                         ^^^^^^^^

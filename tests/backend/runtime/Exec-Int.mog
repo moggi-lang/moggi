@@ -1,0 +1,158 @@
+import Control.Exception
+import Data.Bool
+import Data.Bounded
+import Data.Eq
+import Data.Int
+import Moggi.Internal.Real
+import Moggi.Internal.Num
+import Data.Ord
+import Text.Show
+import Moggi.Internal.Prim
+import System.IO
+
+-- ---- Exec-Int-BitOps ----
+
+-- Bit primitives. Counts are in [0,63] by contract, so these are the raw
+-- pattern operations Data.Bits builds its saturating shifts on. Every value
+-- here is a signedness trap on at least one backend (PHP has no unsigned
+-- integer type; the JVM/CLR mask shift counts and extend sign bits).
+runIntBitOps :: IO ()
+runIntBitOps = do
+  putStrLn (show (intAnd# 12 10))
+  putStrLn (show (intAnd# (intNegate# 1) 255))
+  putStrLn (show (intOr# 12 10))
+  putStrLn (show (intXor# 12 10))
+  putStrLn (show (intNot# 0))
+  putStrLn (show (intNot# 5))
+  putStrLn (show (intShiftL# 21 2))
+  putStrLn (show (intShiftL# 1 63))
+  putStrLn (show (intShiftL# 5 0))
+  putStrLn (show (intShiftRA# (intNegate# 8) 1))
+  putStrLn (show (intShiftRA# (intNegate# 1) 63))
+  putStrLn (show (intShiftRL# (intNegate# 1) 1))
+  putStrLn (show (intShiftRL# (intNegate# 2) 63))
+  putStrLn (show (intShiftRL# (intNegate# 1) 0))
+  putStrLn (show (intPopCnt# 0))
+  putStrLn (show (intPopCnt# 255))
+  putStrLn (show (intPopCnt# (intNegate# 1)))
+  putStrLn (show (intClz# 0))
+  putStrLn (show (intClz# 1))
+  putStrLn (show (intClz# (intNegate# 1)))
+  putStrLn (show (intCtz# 0))
+  putStrLn (show (intCtz# 8))
+  putStrLn (show (intCtz# (intNegate# 1)))
+  putStrLn (show (intCtz# (intShiftL# 1 63)))
+
+-- ---- Exec-Int-Fixed-Wrap ----
+
+-- Fixed-width signed wrap (two's complement) and Integral/Enum/Bounded.
+runIntFixedWrap :: IO ()
+runIntFixedWrap = do
+  putStrLn (show (int8FromInt# 127 + int8FromInt# 1))
+  putStrLn (show (minBound :: Int8))
+  putStrLn (show (maxBound :: Int8))
+  putStrLn (show (int16FromInt# 32767 + int16FromInt# 1))
+  putStrLn (show (minBound :: Int16))
+  putStrLn (show (int32FromInt# 2147483647 + int32FromInt# 1))
+  putStrLn (show (minBound :: Int32))
+  putStrLn (show (maxBound :: Int32))
+  putStrLn (show (int64FromInt# 9223372036854775807 + int64FromInt# 1))
+  putStrLn (show (minBound :: Int64))
+  putStrLn (show (maxBound :: Int64))
+  putStrLn (show (negate (int32FromInt# 5)))
+  putStrLn (show (quot (negate (int16FromInt# 7)) (int16FromInt# 2)))
+  putStrLn (show (div (negate (int16FromInt# 7)) (int16FromInt# 2)))
+  putStrLn (show (mod (negate (int16FromInt# 7)) (int16FromInt# 2)))
+  putStrLn (show (abs (negate (int8FromInt# 42))))
+  putStrLn (show (signum (negate (int32FromInt# 3))))
+  putStrLn (show (int8FromInt# 100 * int8FromInt# 100))
+  putStrLn (show (succ (int32FromInt# 1)))
+  putStrLn (show (pred (int32FromInt# 1)))
+  putStrLn (show (fromEnum (int8FromInt# 42)))
+  putStrLn (show (toInteger (int32FromInt# 7)))
+  putStrLn (show (int32FromInt# 3 == int32FromInt# 3))
+  putStrLn (show (int32FromInt# 3 == int32FromInt# 4))
+  putStrLn (show (compare (int8FromInt# 3) (negate (int8FromInt# 5))))
+
+-- ---- Exec-Int-Machine-Wrap ----
+
+-- Machine `Int` arithmetic wraps at 64 bits, the way the host ops of the JVM
+-- and the CLR do. PHP promotes to float instead, so every operation here has to
+-- be forced back onto the host int. Sign boundaries of all of them, including
+-- the folded-at-compile-time shapes and the literals the host int cannot hold.
+intMax :: Int
+intMax = 9223372036854775807
+
+intMin :: Int
+intMin = -9223372036854775808
+
+intHalfMax :: Int
+intHalfMax = 4611686018427387904
+
+runMachineIntWrap :: IO ()
+runMachineIntWrap = do
+  putStrLn (show (intMax + 1))
+  putStrLn (show (intMin + (-1)))
+  putStrLn (show (intMin - 1))
+  putStrLn (show (intHalfMax * 2))
+  putStrLn (show (intMax * 2))
+  putStrLn (show (negate intMin))
+  putStrLn (show (abs intMin))
+  putStrLn (show (signum intMin))
+  putStrLn (show (minBound :: Int))
+  putStrLn (show (maxBound :: Int))
+  putStrLn (show (succ (intMax - 1)))
+  putStrLn (show (pred (intMin + 1)))
+  putStrLn (show (2 ^ (63 :: Int)))
+  putStrLn (show (3 ^ (40 :: Int)))
+  putStrLn (show (quot intMin (-1)))
+  putStrLn (show (rem intMin (-1)))
+  putStrLn (show (div intMin (-1)))
+  putStrLn (show (mod intMin (-1)))
+  putStrLn (show (fromInteger (18446744073709551615 :: Integer)))
+  putStrLn (show 9223372036854775808)
+  putStrLn (show 18446744073709551615)
+  putStrLn (show (-9223372036854775809))
+  putStrLn (show (intHalfMax * 2 + 1))
+  putStrLn (show (intMax + 1 == intMin))
+
+-- ---- Exec-Int-Enum-Bounds ----
+
+-- Every `Enum` bound and range failure of the integer tower is an `ErrorCall`
+-- carrying the message `base` names it with. They are caught here rather than
+-- left uncaught, so one case covers all of them.
+reportEnumError :: IO a -> IO ()
+reportEnumError act = do
+  r <- (try act :: IO (Either SomeException a))
+  putStrLn (case r of
+    Left e -> displayException e
+    Right _ -> "no error")
+
+runIntEnumBounds :: IO ()
+runIntEnumBounds = do
+  reportEnumError (pure (succ (maxBound :: Int)))
+  reportEnumError (pure (pred (minBound :: Int)))
+  reportEnumError (pure (succ (maxBound :: Int8)))
+  reportEnumError (pure (pred (minBound :: Int8)))
+  reportEnumError (pure (succ (maxBound :: Int16)))
+  reportEnumError (pure (succ (maxBound :: Int32)))
+  reportEnumError (pure (succ (maxBound :: Int64)))
+  reportEnumError (pure (toEnum 200 :: Int8))
+  reportEnumError (pure (toEnum (-1) :: Word8))
+  reportEnumError (pure (toEnum 300 :: Word8))
+  reportEnumError (pure (toEnum 70000 :: Word16))
+  reportEnumError (pure (toEnum 5000000000 :: Word32))
+  reportEnumError (pure (succ (maxBound :: Word8)))
+  reportEnumError (pure (pred (minBound :: Word64)))
+  reportEnumError (pure (toEnum (-1) :: Word64))
+  reportEnumError (pure (fromEnum (maxBound :: Word64)))
+  putStrLn (show (toEnum 100 :: Int8))
+  putStrLn (show (toEnum 255 :: Word8))
+
+-- ---- combined entry point ----
+main :: IO ()
+main = do
+  runIntBitOps
+  runIntFixedWrap
+  runMachineIntWrap
+  runIntEnumBounds

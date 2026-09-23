@@ -1,0 +1,5 @@
+class (Functor t, Foldable t) => Traversable t where
+  traverse :: (a -> b) -> t a -> t b
+
+class Applicative m => Monad m where
+  (>>=) :: m a -> (a -> m b) -> m b

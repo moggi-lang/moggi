@@ -1,0 +1,5 @@
+program
+  class Traversable t
+    method traverse :: a -> b -> t a -> t b
+  class Monad m
+    method >>= :: m a -> a -> m b -> m b

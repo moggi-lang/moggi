@@ -1,0 +1,4 @@
+tests/semantics/Bad-Duplicate-Let-Group.mog:3:7: parse error: duplicate binding `x` in the same group
+
+  3 |       x = 2
+    |       ^^^^^

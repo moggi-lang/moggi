@@ -1,0 +1,4 @@
+tests/syntax/parser/bad-parse/case/Alt.mog:4:6: parse error: expected `->`, found end of file
+
+  4 |     a
+    |      ^

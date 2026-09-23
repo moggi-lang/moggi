@@ -1,0 +1,4 @@
+tests/semantics/Bad-Record-Update-Many-Constructors.mog:8:13: type error: record update needs a `Shape` with one constructor, but it has: `Circle`, `Square`
+
+  8 | widened = c { radius = 2 }
+    |             ^

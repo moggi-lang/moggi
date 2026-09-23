@@ -1,0 +1,54 @@
+program
+  class Tag a
+    method tag :: a -> String
+  function __ev_Tag_Int_tag :: Int -> String
+    pat_var x
+    string "int"
+  function __ev_Tag_Bool_tag :: Bool -> String
+    pat_var x
+    string "bool"
+  function inferredLocal :: Tuple2 String String
+    where
+      tuple
+        apply
+          apply
+            variable go
+            evidence_ref Show Int
+          integer 1
+        apply
+          apply
+            variable go
+            evidence_ref Show Bool
+          constructor_ref True
+      binding
+        pat_var go
+        lambda
+          pat_var __ev_dict0
+          lambda
+            pat_var x
+            apply
+              evidence_method Show.show evidence=__ev_dict0 nullary=0
+              variable x
+  function annotatedLocal :: Tuple2 String String
+    where
+      tuple
+        apply
+          apply
+            variable go
+            evidence_ref Tag Int
+          type_asc Int
+            integer 1
+        apply
+          apply
+            variable go
+            evidence_ref Tag Bool
+          constructor_ref False
+      binding
+        pat_var go
+        lambda
+          pat_var __ev_dict1
+          lambda
+            pat_var x
+            apply
+              evidence_method Tag.tag evidence=__ev_dict1 nullary=0
+              variable x

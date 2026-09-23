@@ -1,0 +1,14 @@
+module
+  data NonEmpty a
+    constructor :|  
+  function nested()
+      ret call :|(1, [2, 3])
+  function ok()
+      match_return @nested
+        arm x :| xs
+            t4 = match intrinsic intEq#(x, 1)
+              arm True
+                  t4 = intrinsic listEq#(xs, [2, 3])
+              arm False
+                  t4 = @False
+            ret t4

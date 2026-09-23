@@ -1,0 +1,5 @@
+import System.IO
+
+-- Uncaught ErrorCall must print a Moggi report (not a raw host dump).
+main :: IO ()
+main = error "boom"

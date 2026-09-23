@@ -1,0 +1,48 @@
+import System.IO
+import Data.ByteString.Char8 qualified as C
+import Data.String qualified as S
+import Data.String
+import Data.Bool
+import Data.Eq
+import Data.Int
+import Data.Either
+import Data.JSON
+import Moggi.Generics
+bsToStr b = S.pack (C.unpack b)
+
+data Wrapper = Wrapper { value :: Int }
+  deriving (Generic, Eq)
+
+noTagOpts :: Options
+noTagOpts = defaultOptions
+
+taggedSingleOpts :: Options
+taggedSingleOpts = tagSingleConstructors True defaultOptions
+
+enc :: Options -> Wrapper -> String
+enc opts w = bsToStr (encodeEncoding (genericToEncoding opts w))
+
+dec :: Options -> String -> IO (Either String Wrapper)
+dec opts json = do
+  mr <- decodeEncoding (C.pack json)
+  pure (case mr of
+    Left err -> Left err
+    Right e -> genericParseEncoding opts e)
+
+roundTrip :: Options -> Wrapper -> IO String
+roundTrip opts w = do
+  mr <- dec opts (enc opts w)
+  pure (case mr of
+    Left err -> "ERR:" <> err
+    Right w2 -> case w2 == w of
+      True -> "ok"
+      False -> "bad")
+
+main :: IO ()
+main = do
+  putStrLn (enc noTagOpts (Wrapper 42))
+  putStrLn (enc taggedSingleOpts (Wrapper 42))
+  r <- roundTrip noTagOpts (Wrapper 42)
+  putStrLn r
+  r <- roundTrip taggedSingleOpts (Wrapper 42)
+  putStrLn r

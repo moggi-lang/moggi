@@ -1,0 +1,4 @@
+tests/semantics/bad-pub-import-unknown/lib/Hub.mog:5:8: type error: unknown module `No.Such` imported by `Hub`
+
+  5 | import No.Such
+    |        ^^^^^^^

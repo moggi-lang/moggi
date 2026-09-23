@@ -1,0 +1,3 @@
+module
+  function dup(x)
+      ret intrinsic intMul#(intrinsic intAdd#(x, 1), intrinsic intAdd#(x, 1))

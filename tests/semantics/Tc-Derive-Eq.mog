@@ -1,0 +1,15 @@
+import Data.Eq
+
+data Color = Red | Blue | Green deriving (Eq)
+
+eqColors :: Color -> Color -> Bool
+eqColors a b = a == b
+
+neColors :: Color -> Color -> Bool
+neColors a b = a /= b
+
+same :: Bool
+same = eqColors Red Red
+
+diff :: Bool
+diff = eqColors Red Blue

@@ -1,0 +1,4 @@
+tests/semantics/Bad-Free-Constructor-Type-Var.mog:1:16: type error: unbound type variable `a` in constructor field
+
+  1 | data Box = Box a
+    |                ^

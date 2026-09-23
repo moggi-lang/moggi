@@ -1,0 +1,15 @@
+import Data.Int
+import Data.Maybe
+import Text.Show
+import System.IO
+
+nested :: Maybe (Maybe Int) -> Int
+nested value = case value of
+  Just (Just x) -> x
+  Just Nothing -> 0
+  Nothing -> 99
+
+main :: IO ()
+main = do
+  putStrLn (show (nested (Just Nothing)))
+  putStrLn (show (nested (Just (Just 7))))

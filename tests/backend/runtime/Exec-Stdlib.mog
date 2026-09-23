@@ -1,0 +1,38 @@
+import Data.Bool
+import Data.Char
+import Data.Map (insert, lookup, fromList, size)
+import Data.Ord
+import Text.Show
+import Data.Set (member, fromList as setFromList, union, size as setSize)
+import System.IO
+
+mapLookupDemo :: Bool
+mapLookupDemo =
+  case lookup 2 (insert 1 10 (insert 2 20 (fromList []))) of
+    Just 20 -> True
+    _ -> False
+
+mapSizeDemo :: Bool
+mapSizeDemo = size (insert 1 2 (fromList [])) == 1
+
+setMemberDemo :: Bool
+setMemberDemo = member 2 (setFromList [1, 2, 3])
+
+setUnionDemo :: Bool
+setUnionDemo =
+  setSize (union (setFromList [1, 2]) (setFromList [2, 3])) == 3
+
+clampDemo :: Bool
+clampDemo = clamp (0, 10) 99 == 10
+
+charDemo :: Bool
+charDemo = isDigit '7' && not (isDigit 'x')
+
+main :: IO ()
+main = do
+  putStrLn (show mapLookupDemo)
+  putStrLn (show mapSizeDemo)
+  putStrLn (show setMemberDemo)
+  putStrLn (show setUnionDemo)
+  putStrLn (show clampDemo)
+  putStrLn (show charDemo)

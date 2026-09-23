@@ -1,0 +1,5 @@
+idLocal :: Int -> Int
+idLocal x =
+  let f :: Int -> Int
+      f = \y -> y
+  in f x

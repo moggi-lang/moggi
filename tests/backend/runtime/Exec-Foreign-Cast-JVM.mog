@@ -1,0 +1,14 @@
+-- Succeed: __cast re-types a value the host returned, so an interface-typed
+-- foreign type is reachable without going through a constructor.
+module Main where
+
+foreign jvm type Chars "interface java.lang.CharSequence"
+
+foreign jvm function asChars "java.lang.CharSequence:__cast" :: String -> Chars
+foreign jvm function charsLen "java.lang.CharSequence.length" :: Chars -> Int32
+foreign jvm function asText "java.lang.CharSequence.toString" :: Chars -> String
+
+main :: IO ()
+main = do
+  putStrLn (show (charsLen (asChars "hello")))
+  putStrLn (asText (asChars "abc"))

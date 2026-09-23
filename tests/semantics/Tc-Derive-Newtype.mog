@@ -1,0 +1,20 @@
+import Data.Eq
+import Data.Ord
+import Text.Show
+import Moggi.Internal.Num
+import Data.Functor
+
+-- Explicit newtype vs single-field data
+newtype Age = Age Int
+  deriving (Eq, Ord, Show)
+  deriving newtype (Num)
+
+data NotAge = NotAge Int deriving (Eq, Show)
+
+newtype Id a = Id a deriving (Functor)
+
+addAge :: Age -> Age -> Age
+addAge x y = x + y
+
+mapId :: Id Int
+mapId = map (\x -> x + 1) (Id 1)

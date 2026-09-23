@@ -1,0 +1,47 @@
+import Data.Functor ((<$>), (<$), ($>), (<&>), void)
+import Data.Traversable
+
+-- The container classes: `Functor`'s operators and the `Traversable` methods
+-- (`traverse`, `sequenceA`, `mapM`, `sequence`, `for`, `forM`, `fmapDefault`,
+-- `foldMapDefault`) through the `Maybe`/`Either` instances. `fmapDefault` is the
+-- interesting one for dictionary passing: it calls `traverse` with an
+-- `Applicative` whose superclass is `Functor` at the *same* type, so both
+-- dictionaries have to survive to the call.
+
+fmapOpDemo :: Bool
+fmapOpDemo = (\x -> x + 1) <$> [1, 2, 3] == [2, 3, 4]
+
+replaceDemo :: Bool
+replaceDemo = (0 <$ Just 9) == Just 0
+
+flippedReplaceDemo :: Bool
+flippedReplaceDemo = (Just 9 $> 0) == Just 0
+
+flippedMapDemo :: Bool
+flippedMapDemo = ([1, 2, 3] <&> (\x -> x * 2)) == [2, 4, 6]
+
+voidMaybeDemo :: Bool
+voidMaybeDemo = void (Just 3) == Just ()
+
+voidListDemo :: Bool
+voidListDemo = void [1, 2] == [(), ()]
+
+main :: IO ()
+main = do
+  putStrLn (show fmapOpDemo)
+  putStrLn (show replaceDemo)
+  putStrLn (show flippedReplaceDemo)
+  putStrLn (show flippedMapDemo)
+  putStrLn (show voidMaybeDemo)
+  putStrLn (show voidListDemo)
+  putStrLn (show (traverse (\x -> Just (x + 1)) (Just (1 :: Int))))
+  putStrLn (show (traverse (\x -> Just (x + 1)) (Nothing :: Maybe Int)))
+  putStrLn (show (sequenceA (Just (Just (2 :: Int)))))
+  putStrLn (show (mapM (\x -> Just (x * 2)) (Just (3 :: Int))))
+  putStrLn (show (sequence (Just (Just (4 :: Int)))))
+  putStrLn (show (for (Just (5 :: Int)) (\x -> Just (x - 1))))
+  putStrLn (show (forM (Just (6 :: Int)) (\x -> Just (x + 10))))
+  putStrLn (show (fmapDefault (\x -> x + 1) (Just (7 :: Int))))
+  putStrLn (show (foldMapDefault (\x -> [x, x]) (Just (8 :: Int))))
+  putStrLn (show (traverse (\x -> Just (x + 1)) (Right (9 :: Int) :: Either String Int)))
+  putStrLn (show (traverse (\x -> Just (x + 1)) (Left "no" :: Either String Int)))

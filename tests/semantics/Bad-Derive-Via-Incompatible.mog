@@ -1,0 +1,5 @@
+import Data.Eq
+
+newtype MyChar = MyChar Char
+
+deriving via (Int) instance Eq MyChar

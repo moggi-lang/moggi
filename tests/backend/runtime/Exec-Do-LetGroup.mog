@@ -1,0 +1,10 @@
+import Text.Show
+import System.IO
+
+-- Multi-bind let inside do must bind all names before the continuation.
+main :: IO ()
+main = do
+  let a = 1
+      b = 2
+  putStrLn (show a)
+  putStrLn (show b)

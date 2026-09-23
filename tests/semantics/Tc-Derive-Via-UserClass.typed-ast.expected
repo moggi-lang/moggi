@@ -1,0 +1,44 @@
+program
+  class MyEq a
+    method === :: a -> a -> Bool
+    method /== :: a -> a -> Bool
+  function __ev_MyEq_Int__3d_3d_3d :: Int -> Int -> Bool
+    pat_var x
+    pat_var y
+    infix ==
+      variable x
+      variable y
+  function __ev_MyEq_Int__2f_3d_3d :: Int -> Int -> Bool
+    pat_var x
+    pat_var y
+    infix /=
+      variable x
+      variable y
+  newtype MyInt
+    constructor MyInt
+      field  :: Int
+    deriving (via (Int) MyEq)
+  function __ev_MyEq_MyInt__3d_3d_3d :: __Dict_MyEq -> MyInt -> MyInt -> Bool
+    pat_var __ev_MyEq
+    pat_con MyInt
+      pat_var __v0
+    pat_con MyInt
+      pat_var __v1
+    apply
+      apply
+        evidence_method MyEq.=== evidence= nullary=0
+          instance Int
+        variable __v0
+      variable __v1
+  function __ev_MyEq_MyInt__2f_3d_3d :: __Dict_MyEq -> MyInt -> MyInt -> Bool
+    pat_var __ev_MyEq
+    pat_con MyInt
+      pat_var __v0
+    pat_con MyInt
+      pat_var __v1
+    apply
+      apply
+        evidence_method MyEq./== evidence= nullary=0
+          instance Int
+        variable __v0
+      variable __v1

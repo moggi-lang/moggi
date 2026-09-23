@@ -1,0 +1,31 @@
+<?php declare(strict_types=1);
+
+namespace Tc\Prelude;
+
+const __MOGGI_MAP = [[19 => ['Tc.Prelude.m', 'tests/backend/codegen/Tc-Prelude.mog', 12, 5]], ['Tc\\Prelude\\sum' => ['Tc.Prelude.sum', 'tests/backend/codegen/Tc-Prelude.mog', 6, 7], 'Tc\\Prelude\\flag' => ['Tc.Prelude.flag', 'tests/backend/codegen/Tc-Prelude.mog', 9, 8], 'Tc\\Prelude\\m' => ['Tc.Prelude.m', 'tests/backend/codegen/Tc-Prelude.mog', 12, 5], 'Tc\\Prelude\\xs' => ['Tc.Prelude.xs', 'tests/backend/codegen/Tc-Prelude.mog', 15, 6], 'Tc\\Prelude\\isTrue' => ['Tc.Prelude.isTrue', 'tests/backend/codegen/Tc-Prelude.mog', 18, 12]]];
+
+require_once __DIR__ . '/../../../lib/Data/Bool.php';
+require_once __DIR__ . '/../../../lib/Data/Maybe.php';
+
+function sum() {
+    return 3;
+}
+
+function flag() {
+    return (!false);
+}
+
+function m() {
+    return ["Just", 3];
+}
+
+function xs() {
+    return [1, 2];
+}
+
+function isTrue($b) {
+    return match ($b) {
+        true => true,
+        false => false,
+    };
+}

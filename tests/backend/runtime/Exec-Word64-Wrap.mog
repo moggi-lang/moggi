@@ -1,0 +1,29 @@
+import Data.Bool
+import Data.Bounded
+import Data.Eq
+import Moggi.Internal.Real
+import Moggi.Internal.Num
+import Data.Ord
+import Text.Show
+import Data.Word
+import Moggi.Internal.Prim
+import System.IO
+
+main :: IO ()
+main = do
+  let w0 = word64FromInt# (0)
+  let w1 = word64FromInt# (1)
+  let w3 = word64FromInt# (3)
+  let wMax = maxBound :: Word64
+  let q = quot wMax w3
+  let r = rem wMax w3
+  let prod = q * w3
+  -- PHP footgun: host Int past 2^63-1 must wrap as u64, not become float.
+  putStrLn (show ((wMax + w1) == w0))
+  putStrLn (show ((w0 - w1) == wMax))
+  putStrLn (show (prod == (wMax - r)))
+  -- (2^64-1)^2 ≡ 1 (mod 2^64); catches mul that fails to take mod 2^64.
+  putStrLn (show ((wMax * wMax) == w1))
+  putStrLn (show (compare wMax w0))
+  putStrLn (word64Show# wMax)
+  putStrLn (word64Show# (wMax + w1))

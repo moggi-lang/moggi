@@ -1,0 +1,4 @@
+tests/semantics/Bad-Record-Missing-Field.mog:3:8: type error: missing field `age` in record construction
+
+  3 | main = User { name = 1 }
+    |        ^^^^

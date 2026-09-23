@@ -1,0 +1,6 @@
+-- Fail: PHPValue reification is php-only, so no native signature may mention it.
+-- A local ADT of that name reaches the name-based rule; Platform.PHP does not
+-- typecheck on this backend at all.
+data PHPValue = PhpNull
+
+foreign jvm function badValue "java.lang.String.toUpperCase" :: String -> PHPValue

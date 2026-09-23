@@ -1,0 +1,4 @@
+tests/semantics/Bad-DataKinds-Nat-As-Symbol.mog:4:14: type error: kind mismatch applying `Label`: expected `Symbol`, got `Nat`
+
+  4 | bad :: Label 1024 -> String
+    |              ^^^^

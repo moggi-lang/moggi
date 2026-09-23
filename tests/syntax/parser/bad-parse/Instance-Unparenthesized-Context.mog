@@ -1,0 +1,2 @@
+instance Eq a, Eq b => Eq (Either a b) where
+  (==) x y = same x y

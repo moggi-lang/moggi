@@ -1,0 +1,4 @@
+tests/semantics/Bad-DataKinds-Nat-Symbol.mog:4:19: type error: kind mismatch applying `FixedBytes`: expected `Nat`, got `Symbol`
+
+  4 | bad :: FixedBytes "1024" -> String
+    |                   ^^^^^^

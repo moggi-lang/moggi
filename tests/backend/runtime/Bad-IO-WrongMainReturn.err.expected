@@ -1,0 +1,4 @@
+tests/backend/runtime/Bad-IO-WrongMainReturn.mog:7:8: type error: could not unify `ByteString` with `()`
+
+   7 | main = do
+     |        ^^

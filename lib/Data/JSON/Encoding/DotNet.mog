@@ -1,0 +1,521 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | .NET backend: Encoding is a System.Text.Json.Nodes.JsonNode.
+-- Host access is ordinary BCL FFI only (System.Text.Json / Encodings.Web).
+-- No Json.Lib, no compiler-packaged helpers.
+module Data.JSON.Encoding.DotNet
+  ( Encoding
+  , encNull
+  , encBool
+  , encString
+  , encInt
+  , encInteger
+  , encDouble
+  , encArray
+  , encObject
+  , encKind
+  , lookupField
+  , arrayElems
+  , encStringOrFail
+  , encodeEncoding
+  , decodeEncoding
+  , objectKeys
+  , objectVals
+  , encGetBool
+  , encGetInt
+  , encGetDouble
+  , encGetInteger
+  ) where
+
+import Data.Bool
+import Control.Applicative
+import Control.Monad
+import Data.ByteString.Char8 qualified as C
+import Data.Either
+import Data.Eq
+import Data.Int
+import Moggi.Internal.Integer
+import Data.List hiding (lookup, map, singleton)
+import Data.Maybe
+import Data.Ord
+import Data.String hiding (pack, unpack, length, take, drop, isPrefixOf, isSuffixOf)
+import Data.ByteString (ByteString)
+import Data.JSON.Types
+import Moggi.Internal.Prim
+import System.IO (IO)
+import Control.Exception (try)
+import Moggi.IO.Exception
+import Moggi.Exception.Type (displayException)
+
+-- Encoding is the JsonNode value tree. Other BCL shapes are distinct foreign types.
+-- The CLR details the compiler cannot infer (defining assembly, value-type-ness,
+-- real method signatures) live in this library's dotnet/ metadata, not in FFI.
+foreign dotnet type Encoding "System.Text.Json.Nodes.JsonNode"
+foreign dotnet type JsonValue "System.Text.Json.Nodes.JsonValue"
+foreign dotnet type JsonArray "System.Text.Json.Nodes.JsonArray"
+foreign dotnet type JsonObject "System.Text.Json.Nodes.JsonObject"
+foreign dotnet type JsonDocument "System.Text.Json.JsonDocument"
+foreign dotnet type JsonElement "System.Text.Json.JsonElement"
+foreign dotnet type JsonProperty "System.Text.Json.JsonProperty"
+foreign dotnet type ObjectEnumerator "System.Text.Json.JsonElement/ObjectEnumerator"
+foreign dotnet type JsonValueKind "System.Text.Json.JsonValueKind"
+foreign dotnet type JsonSerializerOptions "System.Text.Json.JsonSerializerOptions"
+foreign dotnet type JavaScriptEncoder "System.Text.Encodings.Web.JavaScriptEncoder"
+foreign dotnet type CultureInfo "System.Globalization.CultureInfo"
+foreign dotnet type ClrType "System.Type"
+foreign dotnet type PropertyInfo "System.Reflection.PropertyInfo"
+foreign dotnet type IEnumerator "System.Collections.IEnumerator"
+foreign dotnet type IEnumerable "System.Collections.IEnumerable"
+foreign dotnet type BclObject "System.Object"
+
+-- Emit intrinsics: reference cast / typed null (Object.ReferenceEquals uses object ABI).
+foreign dotnet function objectAsEncoding "System.Text.Json.Nodes.JsonNode:__cast" :: BclObject -> Encoding
+foreign dotnet function vkAsObject "System.Object:__cast" :: JsonValueKind -> BclObject
+foreign dotnet function asEncoding "System.Text.Json.Nodes.JsonNode:__cast" :: JsonValue -> Encoding
+foreign dotnet function arrayAsEncoding "System.Text.Json.Nodes.JsonNode:__cast" :: JsonArray -> Encoding
+foreign dotnet function objectAsEncodingNode "System.Text.Json.Nodes.JsonNode:__cast" :: JsonObject -> Encoding
+foreign dotnet function encodingAsArray "System.Text.Json.Nodes.JsonArray:__cast" :: Encoding -> JsonArray
+foreign dotnet function encodingAsObject "System.Text.Json.Nodes.JsonObject:__cast" :: Encoding -> JsonObject
+foreign dotnet function encodingAsEnumerable "System.Collections.IEnumerable:__cast" :: Encoding -> IEnumerable
+
+-- These BCL APIs have optional parameters that IL call sites must still
+-- supply; their exact IL signatures are declared in dotnet/ metadata.
+foreign dotnet function jsonNodeParse "System.Text.Json.Nodes.JsonNode:Parse" :: String -> Encoding
+foreign dotnet function jsonNodeParseIO "System.Text.Json.Nodes.JsonNode:Parse" :: String -> IO Encoding
+foreign dotnet function docParse "System.Text.Json.JsonDocument:Parse" :: String -> JsonDocument
+foreign dotnet function rootEl "System.Text.Json.JsonDocument.get_RootElement" :: JsonDocument -> JsonElement
+foreign dotnet function elKindRaw "System.Text.Json.JsonElement.get_ValueKind" :: JsonElement -> JsonValueKind
+foreign dotnet function elGetString "System.Text.Json.JsonElement.GetString" :: JsonElement -> String
+foreign dotnet function elRawText "System.Text.Json.JsonElement.GetRawText" :: JsonElement -> String
+foreign dotnet function rawElArrLen "System.Text.Json.JsonElement.GetArrayLength" :: JsonElement -> Int32
+foreign dotnet function rawElArrItem "System.Text.Json.JsonElement.get_Item" :: JsonElement -> Int32 -> JsonElement
+foreign dotnet function elEnumObject "System.Text.Json.JsonElement.EnumerateObject" :: JsonElement -> ObjectEnumerator
+foreign dotnet function objEnumMoveNext "System.Text.Json.JsonElement/ObjectEnumerator.MoveNext" :: ObjectEnumerator -> Bool
+foreign dotnet function objEnumCurrent "System.Text.Json.JsonElement/ObjectEnumerator.get_Current" :: ObjectEnumerator -> JsonProperty
+foreign dotnet function jsonPropName "System.Text.Json.JsonProperty.get_Name" :: JsonProperty -> String
+foreign dotnet function jsonPropValue "System.Text.Json.JsonProperty.get_Value" :: JsonProperty -> JsonElement
+
+foreign dotnet function toJsonPlainRaw "System.Text.Json.Nodes.JsonNode.ToJsonString" :: Encoding -> String
+foreign dotnet function toJsonOpts "System.Text.Json.Nodes.JsonNode.ToJsonString" :: Encoding -> JsonSerializerOptions -> String
+foreign dotnet function nodeValueKindRaw "System.Text.Json.Nodes.JsonNode.GetValueKind" :: Encoding -> JsonValueKind
+
+foreign dotnet function newJsonOpts "System.Text.Json.JsonSerializerOptions:__con" :: JsonSerializerOptions
+foreign dotnet function setEncoder "System.Text.Json.JsonSerializerOptions.set_Encoder" :: JsonSerializerOptions -> JavaScriptEncoder -> ()
+foreign dotnet function getRelaxed "System.Text.Encodings.Web.JavaScriptEncoder:get_UnsafeRelaxedJsonEscaping" :: JavaScriptEncoder
+
+foreign dotnet function mkBoolVal "System.Text.Json.Nodes.JsonValue:Create" :: Bool -> JsonValue
+foreign dotnet function mkStringVal "System.Text.Json.Nodes.JsonValue:Create" :: String -> JsonValue
+foreign dotnet function mkIntVal "System.Text.Json.Nodes.JsonValue:Create" :: Int -> JsonValue
+foreign dotnet function mkDoubleVal "System.Text.Json.Nodes.JsonValue:Create" :: Double -> JsonValue
+
+foreign dotnet function newArray "System.Text.Json.Nodes.JsonArray:__con" :: JsonArray
+foreign dotnet function arrayAdd "System.Text.Json.Nodes.JsonArray.Add" :: JsonArray -> Encoding -> ()
+foreign dotnet function rawArrayCount "System.Text.Json.Nodes.JsonArray.get_Count" :: JsonArray -> Int32
+foreign dotnet function rawArrayGet "System.Text.Json.Nodes.JsonArray.get_Item" :: JsonArray -> Int32 -> Encoding
+
+foreign dotnet function newObject "System.Text.Json.Nodes.JsonObject:__con" :: JsonObject
+foreign dotnet function objectSet "System.Text.Json.Nodes.JsonObject.set_Item" :: JsonObject -> String -> Encoding -> ()
+foreign dotnet function objectContains "System.Text.Json.Nodes.JsonObject.ContainsKey" :: JsonObject -> String -> Bool
+foreign dotnet function objectGet "System.Text.Json.Nodes.JsonObject.get_Item" :: JsonObject -> String -> Encoding
+
+foreign dotnet function enumerableGetEnum "System.Collections.IEnumerable.GetEnumerator" :: IEnumerable -> IEnumerator
+foreign dotnet function enumMoveNext "System.Collections.IEnumerator.MoveNext" :: IEnumerator -> Bool
+foreign dotnet function enumCurrent "System.Collections.IEnumerator.get_Current" :: IEnumerator -> BclObject
+
+foreign dotnet function objGetType "System.Object.GetType" :: BclObject -> ClrType
+foreign dotnet function typeGetProperty "System.Type.GetProperty" :: ClrType -> String -> PropertyInfo
+foreign dotnet function propGetValue "System.Reflection.PropertyInfo.GetValue" :: PropertyInfo -> BclObject -> BclObject
+foreign dotnet function unsafeObjAsString "System.Convert:ToString" :: BclObject -> String
+foreign dotnet function convertToInt64 "System.Convert:ToInt64" :: BclObject -> Int
+
+foreign dotnet function refEq "System.Object:ReferenceEquals" :: Encoding -> Encoding -> Bool
+foreign dotnet function strContains "System.String.Contains" :: String -> String -> Bool
+foreign dotnet function strLen "System.String.get_Length" :: String -> Int32
+foreign dotnet function parseInt64 "System.Int64:Parse" :: String -> CultureInfo -> Int
+foreign dotnet function parseDouble "System.Double:Parse" :: String -> CultureInfo -> Double
+foreign dotnet function cultureInvariant "System.Globalization.CultureInfo:get_InvariantCulture" :: CultureInfo
+
+foreign dotnet function biParse "System.Numerics.BigInteger:Parse" :: String -> Integer
+foreign dotnet function biValueOf "System.Numerics.BigInteger:op_Implicit" :: Int -> Integer
+foreign dotnet function rawBiCompareTo "System.Numerics.BigInteger.CompareTo" :: Integer -> Integer -> Int32
+
+foreign dotnet function docParseIO "System.Text.Json.JsonDocument:Parse" :: String -> IO JsonDocument
+foreign dotnet function docDispose "System.Text.Json.JsonDocument.Dispose" :: JsonDocument -> ()
+
+-- Int-width adapters: BCL JSON/BigInteger APIs are int32-based.
+elArrLen el = int32ToInt# (rawElArrLen el)
+
+elArrItem el i = rawElArrItem el (int32FromInt# i)
+
+arrayCount xs = int32ToInt# (rawArrayCount xs)
+
+arrayGet xs i = rawArrayGet xs (int32FromInt# i)
+
+biCompareTo a b = int32ToInt# (rawBiCompareTo a b)
+
+vkToInt :: JsonValueKind -> Int
+vkToInt k = convertToInt64 (vkAsObject k)
+
+elKind :: JsonElement -> Int
+elKind el = vkToInt (elKindRaw el)
+
+nodeValueKind :: Encoding -> Int
+nodeValueKind enc = vkToInt (nodeValueKindRaw enc)
+
+toJsonPlain :: Encoding -> String
+toJsonPlain enc = toJsonPlainRaw enc
+
+bsToStr b = C.toString b
+
+encodeEncoding :: Encoding -> ByteString
+encodeEncoding enc = case isNullEnc enc of
+  True -> C.fromString "null"
+  False -> C.fromString (toJsonOpts enc sharedUnescapedOpts)
+
+-- One shared JsonSerializerOptions (relaxed escaping). Allocating per encode
+-- was measurable on Hand roundtrip; Options is immutable after construction.
+sharedUnescapedOpts :: JsonSerializerOptions
+sharedUnescapedOpts = initSharedOpts newJsonOpts
+
+initSharedOpts :: JsonSerializerOptions -> JsonSerializerOptions
+initSharedOpts o = case setEncoder o getRelaxed of () -> o
+
+decodeEncoding :: ByteString -> IO (Either String Encoding)
+decodeEncoding bs = do
+  r <- try (parseDocRoot (bsToStr bs))
+  pure (mapTryResult r)
+
+parseDocRoot :: String -> IO Encoding
+parseDocRoot s = do
+  doc <- docParseIO s
+  decodeDocRoot doc
+
+-- Host parse failures may classify as IOException or HostException depending
+-- on the native exception type: catch SomeException.
+mapTryResult :: Either SomeException Encoding -> Either String Encoding
+mapTryResult (Left e) = Left (displayException e)
+mapTryResult (Right enc) = Right enc
+
+-- Rebuild JsonNodes from JsonElement (duplicate keys last-wins via objectSet),
+-- then dispose the JsonDocument so pooled buffers are released.
+decodeDocRoot :: JsonDocument -> IO Encoding
+decodeDocRoot doc = do
+  enc <- fromElement (rootEl doc)
+  case docDispose doc of
+    () -> pure enc
+
+fromElement :: JsonElement -> IO Encoding
+fromElement el = fromElementKind (elKind el) el
+
+fromElementKind :: Int -> JsonElement -> IO Encoding
+fromElementKind k el = case intCompare# k 1 of
+  EQ -> fromObjectEl el
+  LT -> pure encNull
+  GT -> fromElementKindGt1 k el
+
+fromElementKindGt1 :: Int -> JsonElement -> IO Encoding
+fromElementKindGt1 k el = case intCompare# k 2 of
+  EQ -> fromArrayEl el
+  LT -> pure encNull
+  GT -> fromElementKindGt2 k el
+
+fromElementKindGt2 :: Int -> JsonElement -> IO Encoding
+fromElementKindGt2 k el = case intCompare# k 3 of
+  EQ -> pure (encString (elGetString el))
+  LT -> pure encNull
+  GT -> fromElementKindGt3 k el
+
+fromElementKindGt3 :: Int -> JsonElement -> IO Encoding
+fromElementKindGt3 k el = case intCompare# k 4 of
+  EQ -> jsonNodeParseIO (elRawText el)
+  LT -> pure encNull
+  GT -> fromElementKindGt4 k el
+
+fromElementKindGt4 :: Int -> JsonElement -> IO Encoding
+fromElementKindGt4 k el = case intCompare# k 5 of
+  EQ -> pure (encBool True)
+  LT -> pure encNull
+  GT -> fromElementKindGt5 k el
+
+fromElementKindGt5 :: Int -> JsonElement -> IO Encoding
+fromElementKindGt5 k el = case intCompare# k 6 of
+  EQ -> pure (encBool False)
+  LT -> pure encNull
+  GT -> fromElementKindGt6 k el
+
+fromElementKindGt6 :: Int -> JsonElement -> IO Encoding
+fromElementKindGt6 k el = case intCompare# k 7 of
+  EQ -> pure encNull
+  LT -> pure encNull
+  GT -> pure encNull
+
+fromArrayEl :: JsonElement -> IO Encoding
+fromArrayEl el = do
+  acc <- fillArrayEl (newArray) 0 (elArrLen el) el
+  pure (arrayAsEncoding acc)
+
+fillArrayEl :: JsonArray -> Int -> Int -> JsonElement -> IO JsonArray
+fillArrayEl acc i n el = case intCompare# i n of
+  EQ -> pure acc
+  GT -> pure acc
+  LT -> fillArrayElStep acc i n el
+
+fillArrayElStep :: JsonArray -> Int -> Int -> JsonElement -> IO JsonArray
+fillArrayElStep acc i n el = do
+  x <- fromElement (elArrItem el i)
+  fillArrayEl (arrayAddKeepArr acc x) (i + 1) n el
+
+fromObjectEl :: JsonElement -> IO Encoding
+fromObjectEl el = do
+  acc <- fillObjectEnum (newObject) (elEnumObject el)
+  pure (objectAsEncodingNode acc)
+
+fillObjectEnum :: JsonObject -> ObjectEnumerator -> IO JsonObject
+fillObjectEnum acc en = case objEnumMoveNext en of
+  False -> pure acc
+  True -> fillObjectEnumStep acc en
+
+fillObjectEnumStep :: JsonObject -> ObjectEnumerator -> IO JsonObject
+fillObjectEnumStep acc en =
+  let cur = objEnumCurrent en in
+  do
+    v <- fromElement (jsonPropValue cur)
+    fillObjectEnum (objectSetKeepObj acc (jsonPropName cur) v) en
+
+arrayAddKeepArr :: JsonArray -> Encoding -> JsonArray
+arrayAddKeepArr acc x = case arrayAdd acc x of
+  () -> acc
+
+objectSetKeepObj :: JsonObject -> String -> Encoding -> JsonObject
+objectSetKeepObj acc k v = case objectSet acc k v of
+  () -> acc
+
+encNull :: Encoding
+-- BCL: JsonNode.Parse("null") yields a null reference (not a Null-kind node).
+encNull = jsonNodeParse "null"
+
+isNullEnc :: Encoding -> Bool
+isNullEnc enc = refEq enc encNull
+
+encBool :: Bool -> Encoding
+encBool b = asEncoding (mkBoolVal b)
+
+encString :: String -> Encoding
+encString s = asEncoding (mkStringVal s)
+
+encInt :: Int -> Encoding
+encInt n = asEncoding (mkIntVal n)
+
+encInteger :: Integer -> Encoding
+encInteger n =
+  let s = integerShow n in
+  case isBigIntDigits s of
+    True -> jsonNodeParse s
+    False -> encInt (integerToInt n)
+
+encDouble :: Double -> Encoding
+encDouble d = asEncoding (mkDoubleVal d)
+
+encArray :: [Encoding] -> Encoding
+encArray xs = arrayAsEncoding (fillArray (newArray) xs)
+
+-- `arrayAdd` mutates its receiver and returns (). Always keep the receiver
+-- reference so PE cannot rematerialize `newArray` as a fresh empty array.
+fillArray :: JsonArray -> [Encoding] -> JsonArray
+fillArray acc [] = acc
+fillArray acc (x : xs) = fillArray (arrayAddKeepArr acc x) xs
+
+encObject :: [String] -> [Encoding] -> Encoding
+encObject ks vs = objectAsEncodingNode (fillObject (newObject) ks vs)
+
+-- `objectSet` mutates its receiver and returns (). Always keep the receiver
+-- reference so PE cannot rematerialize `newObject` as a fresh empty object
+-- (Person encode was dropping `name` and keeping only `age`).
+fillObject :: JsonObject -> [String] -> [Encoding] -> JsonObject
+fillObject acc [] ignored = acc
+fillObject acc (k : ks) vs = case vs of
+  [] -> acc
+  v : vs' -> fillObject (objectSetKeepObj acc k v) ks vs'
+
+encKind :: Encoding -> Int
+encKind enc = case isNullEnc enc of
+  True -> 0
+  False -> encKindNode enc
+
+encKindNode :: Encoding -> Int
+encKindNode enc = encKindNodeVK (nodeValueKind enc) enc
+
+encKindNodeVK :: Int -> Encoding -> Int
+encKindNodeVK vk enc = case intCompare# vk 1 of
+  EQ -> 6
+  LT -> 0
+  GT -> encKindNodeVKGt1 vk enc
+
+encKindNodeVKGt1 :: Int -> Encoding -> Int
+encKindNodeVKGt1 vk enc = case intCompare# vk 2 of
+  EQ -> 5
+  LT -> 0
+  GT -> encKindNodeVKGt2 vk enc
+
+encKindNodeVKGt2 :: Int -> Encoding -> Int
+encKindNodeVKGt2 vk enc = case intCompare# vk 3 of
+  EQ -> 2
+  LT -> 0
+  GT -> encKindNodeVKGt3 vk enc
+
+encKindNodeVKGt3 :: Int -> Encoding -> Int
+encKindNodeVKGt3 vk enc = case intCompare# vk 4 of
+  EQ -> encKindNumber enc
+  LT -> 0
+  GT -> encKindNodeVKGt4 vk enc
+
+encKindNodeVKGt4 :: Int -> Encoding -> Int
+encKindNodeVKGt4 vk enc = case intCompare# vk 5 of
+  EQ -> 1
+  LT -> 0
+  GT -> encKindNodeVKGt5 vk enc
+
+encKindNodeVKGt5 :: Int -> Encoding -> Int
+encKindNodeVKGt5 vk ignored = case intCompare# vk 6 of
+  EQ -> 1
+  LT -> 0
+  GT -> 0
+
+encKindNumber :: Encoding -> Int
+encKindNumber enc =
+  let raw = toJsonPlain enc in
+  case numberIsFloat raw of
+    True -> 4
+    False -> case int64FitsDigits raw of
+      True -> 3
+      False -> 7
+
+numberIsFloat :: String -> Bool
+numberIsFloat s = case strContains s "." of
+  True -> True
+  False -> case strContains s "e" of
+    True -> True
+    False -> strContains s "E"
+
+-- Kind 3 iff the digit string fits signed Int64 (not merely length ≤ 18).
+int64FitsDigits :: String -> Bool
+int64FitsDigits s =
+  let n = biParse s in
+  case intCompare# (biCompareTo n int64MinBi) 0 of
+    LT -> False
+    _ -> case intCompare# (biCompareTo n int64MaxBi) 0 of
+      GT -> False
+      _ -> True
+
+int64MinBi :: Integer
+int64MinBi = biParse "-9223372036854775808"
+
+int64MaxBi :: Integer
+int64MaxBi = biParse "9223372036854775807"
+
+isBigIntDigits :: String -> Bool
+isBigIntDigits s = case int64FitsDigits s of
+  True -> False
+  False -> True
+
+lookupField :: Encoding -> String -> Maybe Encoding
+lookupField enc key = lookupFieldKind (encKind enc) enc key
+
+lookupFieldKind :: Int -> Encoding -> String -> Maybe Encoding
+lookupFieldKind k enc key = case intCompare# k 6 of
+  EQ -> lookupObjectField enc key
+  LT -> Nothing
+  GT -> Nothing
+
+lookupObjectField :: Encoding -> String -> Maybe Encoding
+lookupObjectField enc key =
+  let obj = encodingAsObject enc in
+  case objectContains obj key of
+    True -> Just (objectGet obj key)
+    False -> Nothing
+
+arrayElems :: Encoding -> Either String [Encoding]
+arrayElems enc = arrayElemsKind (encKind enc) enc
+
+arrayElemsKind :: Int -> Encoding -> Either String [Encoding]
+arrayElemsKind k enc = case intCompare# k 5 of
+  EQ -> Right (arrayElemsFrom enc)
+  LT -> Left "expected JSON array"
+  GT -> Left "expected JSON array"
+
+arrayElemsFrom :: Encoding -> [Encoding]
+arrayElemsFrom enc =
+  let arr = encodingAsArray enc in
+  listFromIndexed arr 0 (arrayCount arr)
+
+listFromIndexed :: JsonArray -> Int -> Int -> [Encoding]
+listFromIndexed arr i n = case intCompare# i n of
+  EQ -> []
+  LT -> arrayGet arr i : listFromIndexed arr (i + 1) n
+  GT -> []
+
+encStringOrFail :: Encoding -> String
+encStringOrFail enc =
+  let doc = docParse (toJsonPlain enc) in
+  let s = elGetString (rootEl doc) in
+  case docDispose doc of
+    () -> s
+
+encGetBool :: Encoding -> Bool
+encGetBool enc = case toJsonPlain enc == "true" of
+  True -> True
+  False -> False
+
+encGetInt :: Encoding -> Int
+encGetInt enc = parseInt64 (toJsonPlain enc) cultureInvariant
+
+encGetDouble :: Encoding -> Double
+encGetDouble enc = parseDouble (toJsonPlain enc) cultureInvariant
+
+encGetInteger :: Encoding -> Integer
+encGetInteger enc = encGetIntegerKind (encKind enc) enc
+
+encGetIntegerKind :: Int -> Encoding -> Integer
+encGetIntegerKind k enc = case intCompare# k 7 of
+  EQ -> biParse (toJsonPlain enc)
+  LT -> encGetIntegerKindLt7 k enc
+  GT -> biParse (toJsonPlain enc)
+
+encGetIntegerKindLt7 :: Int -> Encoding -> Integer
+encGetIntegerKindLt7 k enc = case intCompare# k 3 of
+  EQ -> biValueOf (encGetInt enc)
+  LT -> biParse (toJsonPlain enc)
+  GT -> biParse (toJsonPlain enc)
+
+objectKeys :: Encoding -> [String]
+objectKeys enc = objectKeysKind (encKind enc) enc
+
+objectKeysKind :: Int -> Encoding -> [String]
+objectKeysKind k enc = case intCompare# k 6 of
+  EQ -> keysFromEnum (enumerableGetEnum (encodingAsEnumerable enc))
+  LT -> []
+  GT -> []
+
+objectVals :: Encoding -> [Encoding]
+objectVals enc = objectValsKind (encKind enc) enc
+
+objectValsKind :: Int -> Encoding -> [Encoding]
+objectValsKind k enc = case intCompare# k 6 of
+  EQ -> valsFromEnum (enumerableGetEnum (encodingAsEnumerable enc))
+  LT -> []
+  GT -> []
+
+keysFromEnum :: IEnumerator -> [String]
+keysFromEnum en = case enumMoveNext en of
+  False -> []
+  True -> kvpKey (enumCurrent en) : keysFromEnum en
+
+valsFromEnum :: IEnumerator -> [Encoding]
+valsFromEnum en = case enumMoveNext en of
+  False -> []
+  True -> kvpVal (enumCurrent en) : valsFromEnum en
+
+kvpKey :: BclObject -> String
+kvpKey cur = unsafeObjAsString (propGetValue (typeGetProperty (objGetType cur) "Key") cur)
+
+kvpVal :: BclObject -> Encoding
+kvpVal cur = objectAsEncoding (propGetValue (typeGetProperty (objGetType cur) "Value") cur)

@@ -1,0 +1,29 @@
+import Text.Show
+import Data.Eq
+
+-- A local (let/where) binding with class constraints is generalized and takes
+-- dictionary parameters exactly like a top-level constrained function, whether
+-- the constraint is inferred or spelled out in a signature.
+
+class Tag a where
+  tag :: a -> String
+
+instance Tag Int where
+  tag x = "int"
+
+instance Tag Bool where
+  tag x = "bool"
+
+-- inferred: `go :: Show a => a -> String`, used at two types
+inferredLocal :: (String, String)
+inferredLocal = (go 1, go True)
+  where
+    go x = show x
+
+-- explicit signature: the call sites select the instance through the local
+-- dictionary parameter
+annotatedLocal :: (String, String)
+annotatedLocal = (go (1 :: Int), go False)
+  where
+    go :: Tag a => a -> String
+    go x = tag x

@@ -1,0 +1,7 @@
+program
+  foreign_import php function strlen "strlen" :: String -> Int
+  foreign_import php function pdoDrivers "PDO:getAvailableDrivers" :: IO [String]
+  foreign_import php function pdoPrepare "PDO.prepare" :: PdoHandle -> String -> IO String
+  foreign_import php function newPdo "PDO:__con" :: String -> String -> IO PdoHandle
+  foreign_import php const pdoAttrCase "PDO:ATTR_CASE" :: Int
+  foreign_import php function prepare "Illuminate.Database.PDO.prepare" :: PdoHandle -> String -> IO String

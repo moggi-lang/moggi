@@ -1,0 +1,23 @@
+-- Calling .NET from Moggi: a static method, an instance method, and a class of
+-- the host held as a foreign type.
+--
+-- Build:  moggi compile examples/host-dotnet -o /tmp/host-dotnet.dll --backend dotnet
+-- Run:    dotnet /tmp/host-dotnet.dll
+
+module Main
+
+import Data.Int
+
+foreign dotnet type StringBuilder "System.Text.StringBuilder"
+
+foreign dotnet function shout "System.String.ToUpper" :: String -> String
+foreign dotnet function parseInt "System.Int32:Parse" :: String -> Int32
+foreign dotnet function newBuilder "System.Text.StringBuilder:__con" :: StringBuilder
+foreign dotnet function append "System.Text.StringBuilder.Append" :: StringBuilder -> String -> StringBuilder
+foreign dotnet function render "System.Text.StringBuilder.ToString" :: StringBuilder -> String
+
+main :: IO ()
+main = do
+  putStrLn (shout "hi")
+  putStrLn ("parsed: " <> show (fromIntegral (parseInt "43")))
+  putStrLn ("built: " <> render (append (append newBuilder "foo") "bar"))

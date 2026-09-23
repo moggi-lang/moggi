@@ -1,0 +1,4 @@
+tests/semantics/Bad-Type-Undefined-Constructor.mog:1:5: type error: undefined constructor `Bogus`
+
+  1 | f = Bogus 1
+    |     ^^^^^

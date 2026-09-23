@@ -1,0 +1,5 @@
+module
+  function report()
+      ret "hello"
+  function summary()
+      ret @report

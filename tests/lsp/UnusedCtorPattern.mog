@@ -1,0 +1,10 @@
+module UnusedCtorPattern where
+
+import Data.Bool
+
+-- `True` / `False` appear only as constructor patterns: that is a use of
+-- Data.Bool, which declares the constructors.
+flag :: Bool -> Int
+flag b = case b of
+  True -> 1
+  False -> 0

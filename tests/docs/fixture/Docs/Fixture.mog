@@ -1,0 +1,14 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Smoke-test module for mogdoc and moogle.
+module Docs.Fixture
+  ( id
+  , twice
+  ) where
+
+-- | Identity function.
+id :: a -> a
+id x = x
+
+-- | Apply a function twice.
+twice :: (a -> a) -> a -> a
+twice f x = f (f x)

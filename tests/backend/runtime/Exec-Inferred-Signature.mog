@@ -1,0 +1,24 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+
+-- A declaration with no signature still has a type its callers can use.
+--
+-- No `Moggi.Internal.Num` here, so `+` and `-` are the standalone `Int` operations, as in
+-- `Data.List` itself: `countGo` is inferred with no dictionary at all.
+
+import Data.Int
+import Text.Show
+import System.IO
+
+-- The counter's type reaches `countGo`'s callers, so the `0` below is an `Int`
+-- and `countGo` is called with one. A caller that saw only a placeholder with
+-- unrelated variables defaulted the literal to `Integer` instead, while the
+-- body still did machine-int arithmetic -- which the backends that unbox a
+-- machine integer reject at run time.
+countFrom :: Int -> [Int]
+countFrom n = countGo n 0
+
+countGo 0 k = [k]
+countGo m k = k : countGo (m - 1) (k + 1)
+
+main :: IO ()
+main = putStrLn (show (countFrom 3))

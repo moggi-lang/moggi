@@ -1,0 +1,7 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.Bounded
+  ( Bounded(minBound, maxBound)
+  ) where
+
+class Bounded a where
+  minBound, maxBound :: a

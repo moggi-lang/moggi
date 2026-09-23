@@ -1,0 +1,616 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.JSON.GenericEncoding
+  ( GToEncoding(..)
+  , GFromEncoding(..)
+  , genericToEncoding
+  , genericParseEncoding
+  ) where
+
+import Data.Bool
+import Data.Eq
+import Data.Either
+import Data.List hiding (lookup, map, singleton)
+import Data.Maybe
+import Data.Semigroup
+import Data.String hiding (length, take, drop, isPrefixOf, isSuffixOf)
+import Data.Tuple (fst, snd)
+import Moggi.Generics
+import Data.JSON.Types
+import Data.JSON.Encoding
+import Data.JSON.Class
+import Moggi.Internal.Prim (listAppend#)
+
+-- The `GToEncoding` / `GFromEncoding` classes and the `genericToEncoding` /
+-- `genericParseEncoding` entry points live in `Data.JSON.Class`, so the library
+-- owns the `ToJSON` / `FromJSON` Generic defaults (the compiler has no JSON
+-- knowledge). They are re-exported from there; this module provides their
+-- structural instances.
+
+-- ---------------------------------------------------------------------------
+-- Helpers (disambiguate recursive class methods)
+-- ---------------------------------------------------------------------------
+
+class GRecordEncFields f where
+  gRecordEncFields :: Options -> f p -> [(String, Encoding)]
+
+class GRecordFromEnc f where
+  gParseEncRecord :: Options -> Encoding -> Parser (f p)
+
+class GTaggedEnc f where
+  gTaggedEnc :: Options -> f p -> Encoding
+  gParseTaggedEnc :: Options -> String -> Maybe Encoding -> Parser (f p)
+
+class GParsePrefixEnc f where
+  parsePrefixEnc :: Options -> [Encoding] -> Parser (f p, [Encoding])
+
+-- Product spines contribute one Value per leaf field (Aeson WriteProduct).
+-- Nested Arrays from field ToJSON instances must stay nested — never splice
+-- a K1 payload Array into the parent product (Nest PairI Int → [[1,2],3]).
+class GProductEncElems f where
+  gProductEncElems :: Options -> f p -> [Encoding]
+
+gToEncodingInner :: GToEncoding f => Options -> f p -> Encoding
+gToEncodingInner opts x = gToEncoding opts x
+
+gParseEncodingInner :: GFromEncoding f => Options -> Encoding -> Parser (f p)
+gParseEncodingInner opts v = gParseEncoding opts v
+
+parsePrefixEncInner :: GParsePrefixEnc f => Options -> [Encoding] -> Parser (f p, [Encoding])
+parsePrefixEncInner opts xs = parsePrefixEnc opts xs
+
+-- ---------------------------------------------------------------------------
+-- U1 / K1
+-- ---------------------------------------------------------------------------
+
+instance GToEncoding U1 where
+  gToEncoding ignored U1 = encArray []
+
+instance GFromEncoding U1 where
+  gParseEncoding ignored enc = case arrayElems enc of
+    Right [] -> Right U1
+    Right _ -> Left "expected [] for nullary constructor"
+    Left _ -> Left "expected [] for nullary constructor"
+
+instance ToJSON a => GToEncoding (K1 i a) where
+  gToEncoding ignored (K1 x) = toEncoding x
+
+instance FromJSON a => GFromEncoding (K1 i a) where
+  gParseEncoding ignored v = case parseEncoding v of
+    Left err -> Left err
+    Right x -> Right (K1 x)
+
+instance GParsePrefixEnc U1 where
+  parsePrefixEnc ignored xs = Right (U1, xs)
+
+instance FromJSON a => GParsePrefixEnc (K1 i a) where
+  parsePrefixEnc ignored xs = case xs of
+    [] -> Left "missing positional field"
+    v : rest -> case parseEncoding v of
+      Left err -> Left err
+      Right x -> Right (K1 x, rest)
+
+-- Stock Generic always wraps fields as S1 (K1 …); specialize record pairs to
+-- FromJSON/ToJSON directly so we do not need GFromJSON (K1 …) in a nested
+-- instance context (kind-checking currently fails that path).
+instance GRecordEncFields U1 where
+  gRecordEncFields ignored1 ignored2 = []
+
+instance GRecordFromEnc U1 where
+  gParseEncRecord ignored1 ignored2 = Right U1
+
+-- More specific than the general `K1 i a` instance below: registered first so
+-- instance search prefers it for `Maybe` fields (omitNothingFields).
+instance (Selector s, ToJSON a) => GRecordEncFields (M1 S s (K1 i (Maybe a))) where
+  gRecordEncFields opts (M1 kx) = case kx of
+    K1 m -> maybeEncFieldPairs opts (modifyFieldLabel opts (selName MetaProxy)) m
+
+instance (Selector s, FromJSON a) => GRecordFromEnc (M1 S s (K1 i (Maybe a))) where
+  gParseEncRecord opts enc =
+    let key = modifyFieldLabel opts (selName MetaProxy) in
+    parseMaybeEncRecordField opts key (lookupField enc key)
+
+parseMaybeEncRecordField :: FromJSON a => Options -> String -> Maybe Encoding -> Parser (M1 S s (K1 i (Maybe a)) p)
+parseMaybeEncRecordField opts key mv = case mv of
+  Nothing -> parseOmittedMaybeEncField opts key
+  Just v -> parseMaybeEncField v
+
+parseOmittedMaybeEncField :: Options -> String -> Parser (M1 S s (K1 i (Maybe a)) p)
+parseOmittedMaybeEncField opts key = case getAllowOmittedFields opts of
+  True -> Right (M1 (K1 Nothing))
+  False -> Left ("missing field " <> key)
+
+maybeEncFieldPairs :: ToJSON a => Options -> String -> Maybe a -> [(String, Encoding)]
+maybeEncFieldPairs opts key m = case getOmitNothingFields opts of
+  True -> omitNothingEncPair key m
+  False -> alwaysMaybeEncPair key m
+
+omitNothingEncPair :: ToJSON a => String -> Maybe a -> [(String, Encoding)]
+omitNothingEncPair key m = case m of
+  Nothing -> []
+  Just x -> (key, toEncoding x) : []
+
+alwaysMaybeEncPair :: ToJSON a => String -> Maybe a -> [(String, Encoding)]
+alwaysMaybeEncPair key m = case m of
+  Nothing -> (key, encNull) : []
+  Just x -> (key, toEncoding x) : []
+
+parseMaybeEncField :: FromJSON a => Encoding -> Parser (M1 S s (K1 i (Maybe a)) p)
+parseMaybeEncField enc = case encKind enc of
+  0 -> Right (M1 (K1 Nothing))
+  _ -> parseMaybeEncJust enc
+
+parseMaybeEncJust :: FromJSON a => Encoding -> Parser (M1 S s (K1 i (Maybe a)) p)
+parseMaybeEncJust enc = case parseEncoding enc of
+  Left err -> Left err
+  Right x -> Right (M1 (K1 (Just x)))
+
+instance (Selector s, ToJSON a) => GRecordEncFields (M1 S s (K1 i a)) where
+  gRecordEncFields opts (M1 kx) = case kx of
+    K1 x -> (modifyFieldLabel opts (selName MetaProxy), toEncoding x) : []
+
+instance (Selector s, FromJSON a) => GRecordFromEnc (M1 S s (K1 i a)) where
+  gParseEncRecord opts enc =
+    let key = modifyFieldLabel opts (selName MetaProxy) in
+    case lookupField enc key of
+      Nothing -> Left ("missing field " <> key)
+      Just v -> parseSelK1Enc v
+
+parseSelK1Enc :: FromJSON a => Encoding -> Parser (M1 S s (K1 i a) p)
+parseSelK1Enc v = case parseEncoding v of
+  Left err -> Left err
+  Right x -> Right (M1 (K1 x))
+
+instance (GRecordEncFields f, GRecordEncFields g) => GRecordEncFields (f :*: g) where
+  gRecordEncFields opts (a :*: b) =
+    appendEncFields (gRecordEncFieldsLeft opts a) (gRecordEncFieldsRight opts b)
+
+instance (GRecordFromEnc f, GRecordFromEnc g) => GRecordFromEnc (f :*: g) where
+  gParseEncRecord opts enc = case parseEncRecordLeft opts enc of
+    Left err -> Left err
+    Right a -> case parseEncRecordRight opts enc of
+      Left err -> Left err
+      Right b -> Right (a :*: b)
+
+gRecordEncFieldsLeft :: GRecordEncFields f => Options -> f p -> [(String, Encoding)]
+gRecordEncFieldsLeft opts x = gRecordEncFields opts x
+
+gRecordEncFieldsRight :: GRecordEncFields g => Options -> g p -> [(String, Encoding)]
+gRecordEncFieldsRight opts x = gRecordEncFields opts x
+
+parseEncRecordLeft :: GRecordFromEnc f => Options -> Encoding -> Parser (f p)
+parseEncRecordLeft opts enc = gParseEncRecord opts enc
+
+parseEncRecordRight :: GRecordFromEnc g => Options -> Encoding -> Parser (g p)
+parseEncRecordRight opts enc = gParseEncRecord opts enc
+
+appendEncFields :: [(String, Encoding)] -> [(String, Encoding)] -> [(String, Encoding)]
+appendEncFields xs ys = listAppend# xs ys
+
+-- ---------------------------------------------------------------------------
+-- Products (:*:) — positional arrays (Aeson WriteProduct / ProductFromJSON)
+-- ---------------------------------------------------------------------------
+
+instance ToJSON a => GProductEncElems (K1 i a) where
+  gProductEncElems ignored (K1 x) = toEncoding x : []
+
+instance GProductEncElems U1 where
+  gProductEncElems ignored U1 = []
+
+instance GProductEncElems f => GProductEncElems (M1 i c f) where
+  gProductEncElems opts (M1 x) = gProductEncElems opts x
+
+instance (GProductEncElems f, GProductEncElems g) => GProductEncElems (f :*: g) where
+  gProductEncElems opts (a :*: b) =
+    appendEncs (gProductEncElemsLeft opts a) (gProductEncElemsRight opts b)
+
+gProductEncElemsLeft :: GProductEncElems f => Options -> f p -> [Encoding]
+gProductEncElemsLeft opts x = gProductEncElems opts x
+
+gProductEncElemsRight :: GProductEncElems g => Options -> g p -> [Encoding]
+gProductEncElemsRight opts x = gProductEncElems opts x
+
+instance (GProductEncElems f, GProductEncElems g) => GToEncoding (f :*: g) where
+  gToEncoding opts (a :*: b) =
+    encArray (appendEncs (gProductEncElemsLeft opts a) (gProductEncElemsRight opts b))
+
+instance (GFromEncoding f, GFromEncoding g, GParsePrefixEnc f, GParsePrefixEnc g) => GFromEncoding (f :*: g) where
+  gParseEncoding opts enc = case arrayElems enc of
+    Right xs -> parseProductEncArray opts xs
+    Left _ -> Left "expected array for positional fields"
+
+parseProductEncArray :: (GParsePrefixEnc f, GParsePrefixEnc g) => Options -> [Encoding] -> Parser ((f :*: g) p)
+parseProductEncArray opts xs = bindPrefixEnc2 (parseLeftPrefixEnc opts xs) opts
+
+parseLeftPrefixEnc :: GParsePrefixEnc f => Options -> [Encoding] -> Parser (f p, [Encoding])
+parseLeftPrefixEnc opts xs = parsePrefixEnc opts xs
+
+bindPrefixEnc2 :: GParsePrefixEnc g => Parser (f p, [Encoding]) -> Options -> Parser ((f :*: g) p)
+bindPrefixEnc2 p1 opts = case p1 of
+  Left err -> Left err
+  Right pr1 -> case parsePrefixEnc opts (snd pr1) of
+    Left err -> Left err
+    Right pr2 -> case snd pr2 of
+      [] -> Right (fst pr1 :*: fst pr2)
+      _ -> Left "too many positional fields"
+
+instance (GParsePrefixEnc f, GParsePrefixEnc g) => GParsePrefixEnc (f :*: g) where
+  parsePrefixEnc opts xs = bindPrefixEncPair (parseLeftPrefixEnc opts xs) opts
+
+bindPrefixEncPair :: GParsePrefixEnc g => Parser (f p, [Encoding]) -> Options -> Parser ((f :*: g) p, [Encoding])
+bindPrefixEncPair p1 opts = case p1 of
+  Left err -> Left err
+  Right pr1 -> case parsePrefixEnc opts (snd pr1) of
+    Left err -> Left err
+    Right pr2 -> Right (fst pr1 :*: fst pr2, snd pr2)
+
+appendEncs :: [Encoding] -> [Encoding] -> [Encoding]
+appendEncs xs ys = listAppend# xs ys
+
+-- ---------------------------------------------------------------------------
+-- Selectors (S1)
+-- ---------------------------------------------------------------------------
+
+instance (Selector s, GToEncoding f) => GToEncoding (M1 S s f) where
+  gToEncoding opts (M1 x) = gToEncodingInner opts x
+
+-- Specialized to K1 payloads (stock Generic) so decoding does not require
+-- resolving `GFromJSON (K1 …)` inside another instance context.
+instance (Selector s, FromJSON a) => GFromEncoding (M1 S s (K1 i a)) where
+  gParseEncoding ignored v = case parseEncoding v of
+    Left err -> Left err
+    Right x -> Right (M1 (K1 x))
+
+instance FromJSON a => GParsePrefixEnc (M1 S s (K1 i a)) where
+  parsePrefixEnc ignored xs = case xs of
+    [] -> Left "missing positional field"
+    v : rest -> case parseEncoding v of
+      Left err -> Left err
+      Right x -> Right (M1 (K1 x), rest)
+
+-- ---------------------------------------------------------------------------
+-- Constructors (C1)
+-- ---------------------------------------------------------------------------
+
+instance (Constructor c, GToEncoding f, GRecordEncFields f) => GToEncoding (M1 C c f) where
+  gToEncoding opts (M1 x) =
+    let isRec = conIsRecord MetaProxy in
+    let unwrap = andBool (getUnwrapUnaryRecords opts) (conArity MetaProxy == 1) in
+    encodeC1EncBody isRec unwrap opts x
+
+encodeC1EncBody :: (GToEncoding f, GRecordEncFields f) => Bool -> Bool -> Options -> f p -> Encoding
+encodeC1EncBody isRec unwrap opts x = case isRec of
+  False -> gToEncodingInner opts x
+  True -> case unwrap of
+    True -> gToEncodingInner opts x
+    False -> encObjectFromFields (gRecordEncFields opts x)
+
+instance (Constructor c, GFromEncoding f, GRecordFromEnc f) => GFromEncoding (M1 C c f) where
+  gParseEncoding opts v =
+    let isRec = conIsRecord MetaProxy in
+    let unwrap = andBool (getUnwrapUnaryRecords opts) (conArity MetaProxy == 1) in
+    case parseC1EncBody isRec unwrap opts v of
+      Left err -> Left err
+      Right x -> Right (M1 x)
+
+parseC1EncBody :: (GFromEncoding f, GRecordFromEnc f) => Bool -> Bool -> Options -> Encoding -> Parser (f p)
+parseC1EncBody isRec unwrap opts v = case isRec of
+  False -> gParseEncodingInner opts v
+  True -> case unwrap of
+    True -> gParseEncodingInner opts v
+    False -> parseEncRecordPayload opts v
+
+parseEncRecordPayload :: GRecordFromEnc f => Options -> Encoding -> Parser (f p)
+parseEncRecordPayload opts enc = case encKind enc of
+  6 -> gParseEncRecord opts enc
+  _ -> Left "expected object for record constructor"
+
+instance GParsePrefixEnc f => GParsePrefixEnc (M1 C c f) where
+  parsePrefixEnc opts xs = case parsePrefixEncInner opts xs of
+    Left err -> Left err
+    Right pr -> Right (M1 (fst pr), snd pr)
+
+-- ---------------------------------------------------------------------------
+-- Tagged constructors (sums)
+-- ---------------------------------------------------------------------------
+
+instance (Constructor c, GToEncoding f, GFromEncoding f, GRecordEncFields f, GRecordFromEnc f) => GTaggedEnc (M1 C c f) where
+  gTaggedEnc opts (M1 x) =
+    let name = modifyConstructorTag opts (conName MetaProxy) in
+    case conIsRecord MetaProxy of
+      True -> taggedEncRecord opts name (gRecordEncFields opts x)
+      False -> taggedEncContents opts name (gToEncodingInner opts x)
+  gParseTaggedEnc opts name contents = case name == "" of
+    True -> parseTaggedEncC1Payload opts contents
+    False -> case modifyConstructorTag opts (conName MetaProxy) == name of
+      False -> Left ("unexpected constructor " <> name)
+      True -> parseTaggedEncC1Payload opts contents
+
+parseTaggedEncC1Payload :: (Constructor c, GFromEncoding f, GRecordFromEnc f) => Options -> Maybe Encoding -> Parser (M1 C c f p)
+parseTaggedEncC1Payload opts contents = case
+  (case conIsRecord MetaProxy of
+    True -> parseTaggedEncRecordPayload opts contents
+    False -> gParseEncodingInner opts (positionalEncPayload contents)) of
+  Left err -> Left err
+  Right x -> Right (M1 x)
+
+parseTaggedEncRecordPayload :: GRecordFromEnc f => Options -> Maybe Encoding -> Parser (f p)
+parseTaggedEncRecordPayload opts mv = case mv of
+  Just enc -> parseTaggedEncRecordValue opts enc
+  Nothing -> Left "missing contents for record constructor"
+
+parseTaggedEncRecordValue :: GRecordFromEnc f => Options -> Encoding -> Parser (f p)
+parseTaggedEncRecordValue opts enc = case encKind enc of
+  6 -> gParseEncRecord opts enc
+  _ -> Left "expected object contents for record constructor"
+
+maybeEnc :: Maybe Encoding -> Encoding
+maybeEnc (Just v) = v
+maybeEnc Nothing = encArray []
+
+-- Positional sum payloads: missing/`{"tag":…}`-only objects mean nullary (U1);
+-- `contents` arrays/values decode as usual. Objects without a separate contents
+-- field are the TaggedObject wrapper (or inline records); positional decode
+-- treats a bare object as empty product (Aeson / Value positionalPayload).
+positionalEncPayload :: Maybe Encoding -> Encoding
+positionalEncPayload Nothing = encArray []
+positionalEncPayload (Just enc) = case encKind enc of
+  6 -> encArray []
+  _ -> enc
+
+isEmptyEncArray :: Encoding -> Bool
+isEmptyEncArray enc = case arrayElems enc of
+  Right [] -> True
+  _ -> False
+
+taggedEncContents :: Options -> String -> Encoding -> Encoding
+taggedEncContents opts name contents = case isEmptyEncArray contents of
+  True -> encodeNullarySumEnc opts name
+  False -> encodeTaggedPayloadEnc opts name contents
+
+encodeTaggedPayloadEnc :: Options -> String -> Encoding -> Encoding
+encodeTaggedPayloadEnc opts name payload = case getSumEncoding opts of
+  TaggedObject tag contents -> encObject [tag, contents] [encString name, payload]
+  UntaggedValue -> payload
+  ObjectWithSingleField -> encObject [name] [payload]
+  TwoElemArray -> encArray (encString name : payload : [])
+
+encodeNullarySumEnc :: Options -> String -> Encoding
+encodeNullarySumEnc opts name = case getAllNullaryToStringTag opts of
+  True -> encString name
+  False -> case getSumEncoding opts of
+    TaggedObject tag ignored -> encObject [tag] [encString name]
+    UntaggedValue -> encArray []
+    ObjectWithSingleField -> encObject [name] [encArray []]
+    TwoElemArray -> encArray (encString name : encArray [] : [])
+
+nullaryTaggedEnc :: Options -> String -> Encoding
+nullaryTaggedEnc opts name = encodeNullarySumEnc opts name
+
+taggedEncRecord :: Options -> String -> [(String, Encoding)] -> Encoding
+taggedEncRecord opts name pairs = case getSumEncoding opts of
+  TaggedObject tag ignored -> encObjectFromFields ((tag, encString name) : pairs)
+  UntaggedValue -> encObjectFromFields pairs
+  ObjectWithSingleField -> encObject [name] [encObjectFromFields pairs]
+  TwoElemArray -> encArray (encString name : encObjectFromFields pairs : [])
+
+-- ---------------------------------------------------------------------------
+-- Datatype (D1)
+-- ---------------------------------------------------------------------------
+
+instance (Datatype d, GToEncoding f, GTaggedEnc f) => GToEncoding (M1 D d f) where
+  gToEncoding opts (M1 x) =
+    let opts2 =
+          allNullaryToStringTag
+            (andBool (getAllNullaryToStringTag opts) (isAllNullary MetaProxy))
+            opts in
+    let isSumTy = isSum MetaProxy in
+    let tagSingle = getTagSingleConstructors opts2 in
+    encodeD1EncBody isSumTy tagSingle opts2 x
+
+encodeD1EncBody :: (GToEncoding f, GTaggedEnc f) => Bool -> Bool -> Options -> f p -> Encoding
+encodeD1EncBody isSumTy tagSingle opts x = case isSumTy of
+  True -> gToEncodingInner opts x
+  False -> case tagSingle of
+    True -> gTaggedEnc opts x
+    False -> gToEncodingInner opts x
+
+instance (Datatype d, GFromEncoding f, GTaggedEnc f) => GFromEncoding (M1 D d f) where
+  gParseEncoding opts v =
+    let opts2 =
+          allNullaryToStringTag
+            (andBool (getAllNullaryToStringTag opts) (isAllNullary MetaProxy))
+            opts in
+    let isSumTy = isSum MetaProxy in
+    let tagSingle = getTagSingleConstructors opts2 in
+    case parseD1EncBody isSumTy tagSingle opts2 v of
+      Left err -> Left err
+      Right x -> Right (M1 x)
+
+parseD1EncBody :: (GFromEncoding f, GTaggedEnc f) => Bool -> Bool -> Options -> Encoding -> Parser (f p)
+parseD1EncBody isSumTy tagSingle opts v = case isSumTy of
+  True -> gParseEncodingInner opts v
+  False -> case tagSingle of
+    True -> parseSingleTaggedEnc opts v
+    False -> gParseEncodingInner opts v
+
+parseSingleTaggedEnc :: GTaggedEnc f => Options -> Encoding -> Parser (f p)
+parseSingleTaggedEnc opts enc = case encKind enc of
+  2 -> gParseTaggedEnc opts (encStringOrFail enc) Nothing
+  6 -> parseSingleTaggedEncObject opts enc
+  5 -> parseSingleTaggedEncArray opts enc
+  _ -> Left "expected tagged single constructor"
+
+parseSingleTaggedEncObject :: GTaggedEnc f => Options -> Encoding -> Parser (f p)
+parseSingleTaggedEncObject opts enc = case getSumEncoding opts of
+  ObjectWithSingleField -> parseSingleFieldEncObject opts enc
+  TaggedObject tag ignored -> parseSingleTaggedEncObjectTagged opts enc tag
+  UntaggedValue -> gParseTaggedEnc opts "" (Just enc)
+  TwoElemArray -> Left "expected two-element array for sum"
+
+parseSingleFieldEncObject :: GTaggedEnc f => Options -> Encoding -> Parser (f p)
+parseSingleFieldEncObject opts enc = case objectKeys enc of
+  name : [] -> parseSingleFieldEncPayload opts enc name
+  _ -> Left "expected single-field object for sum"
+
+parseSingleFieldEncPayload :: GTaggedEnc f => Options -> Encoding -> String -> Parser (f p)
+parseSingleFieldEncPayload opts enc name = case lookupField enc name of
+  Just payload -> gParseTaggedEnc opts name (Just payload)
+  Nothing -> Left "missing single-field payload"
+
+parseSingleTaggedEncObjectTagged :: GTaggedEnc f => Options -> Encoding -> String -> Parser (f p)
+parseSingleTaggedEncObjectTagged opts enc tag = case lookupField enc tag of
+  Nothing -> Left "missing tag field"
+  Just tagV -> parseSingleTaggedEncTagValue opts enc tagV
+
+parseSingleTaggedEncTagValue :: GTaggedEnc f => Options -> Encoding -> Encoding -> Parser (f p)
+parseSingleTaggedEncTagValue opts enc tagV = case encKind tagV of
+  2 -> gParseTaggedEnc opts (encStringOrFail tagV) (Just enc)
+  _ -> Left "tag must be a string"
+
+-- Aeson: allNullaryToStringTag applies only when every constructor is nullary.
+-- Datatype.isAllNullary MetaProxy is typed from the D1 instance head.
+andBool :: Bool -> Bool -> Bool
+andBool a b = case a of
+  False -> False
+  True -> b
+
+-- ---------------------------------------------------------------------------
+-- Sums (:+:)
+-- ---------------------------------------------------------------------------
+
+instance (GTaggedEnc f, GTaggedEnc g) => GToEncoding (f :+: g) where
+  gToEncoding opts s = case s of
+    L1 x -> gTaggedEncLeft opts x
+    R1 x -> gTaggedEncRight opts x
+
+instance (GTaggedEnc f, GTaggedEnc g) => GFromEncoding (f :+: g) where
+  gParseEncoding opts v = parseSumEnc opts v
+
+instance (GTaggedEnc f, GTaggedEnc g) => GTaggedEnc (f :+: g) where
+  gTaggedEnc opts s = case s of
+    L1 x -> gTaggedEncLeft opts x
+    R1 x -> gTaggedEncRight opts x
+  gParseTaggedEnc opts name contents = parseSumEncTagged opts name contents
+
+gTaggedEncLeft :: GTaggedEnc f => Options -> f p -> Encoding
+gTaggedEncLeft opts x = gTaggedEnc opts x
+
+gTaggedEncRight :: GTaggedEnc g => Options -> g p -> Encoding
+gTaggedEncRight opts x = gTaggedEnc opts x
+
+parseSumEnc :: (GTaggedEnc f, GTaggedEnc g) => Options -> Encoding -> Parser ((f :+: g) p)
+parseSumEnc opts enc = case getSumEncoding opts of
+  TwoElemArray -> parseSumEncTwoElem opts enc
+  ObjectWithSingleField -> parseSumEncSingleField opts enc
+  UntaggedValue -> parseSumEncTagged opts "" (Just enc)
+  TaggedObject ignored1 ignored2 -> parseSumEncTaggedObject opts enc
+
+parseSumEncTaggedObject :: (GTaggedEnc f, GTaggedEnc g) => Options -> Encoding -> Parser ((f :+: g) p)
+parseSumEncTaggedObject opts enc = case encKind enc of
+  2 -> parseSumEncStringTag opts (encStringOrFail enc)
+  6 -> parseSumEncObjectOrReject opts enc
+  _ -> Left "expected string or tagged object for sum"
+
+parseSumEncObjectOrReject :: (GTaggedEnc f, GTaggedEnc g) => Options -> Encoding -> Parser ((f :+: g) p)
+parseSumEncObjectOrReject opts enc = case getAllNullaryToStringTag opts of
+  True -> Left "expected string tag for all-nullary sum"
+  False -> parseSumEncObject opts enc
+
+parseSumEncStringTag :: (GTaggedEnc f, GTaggedEnc g) => Options -> String -> Parser ((f :+: g) p)
+parseSumEncStringTag opts name = case getAllNullaryToStringTag opts of
+  True -> parseSumEncTagged opts name Nothing
+  False -> Left "expected tagged object for sum"
+
+parseSumEncTwoElem :: (GTaggedEnc f, GTaggedEnc g) => Options -> Encoding -> Parser ((f :+: g) p)
+parseSumEncTwoElem opts enc = case arrayElems enc of
+  Right xs -> parseSumEncTwoElemList opts xs
+  Left _ -> Left "expected two-element array for sum"
+
+parseSumEncTwoElemList :: (GTaggedEnc f, GTaggedEnc g) => Options -> [Encoding] -> Parser ((f :+: g) p)
+parseSumEncTwoElemList opts xs = case xs of
+  tagE : payload : [] -> parseSumEncTwoElemTag opts tagE payload
+  _ -> Left "expected [tag, contents] array"
+
+parseSumEncTwoElemTag :: (GTaggedEnc f, GTaggedEnc g) => Options -> Encoding -> Encoding -> Parser ((f :+: g) p)
+parseSumEncTwoElemTag opts tagE payload = case encKind tagE of
+  2 -> parseSumEncTagged opts (encStringOrFail tagE) (Just payload)
+  _ -> Left "tag must be a string"
+
+parseSingleTaggedEncArray :: GTaggedEnc f => Options -> Encoding -> Parser (f p)
+parseSingleTaggedEncArray opts enc = case arrayElems enc of
+  Right xs -> parseSingleTaggedEncArrayList opts xs
+  Left err -> Left err
+
+parseSingleTaggedEncArrayList :: GTaggedEnc f => Options -> [Encoding] -> Parser (f p)
+parseSingleTaggedEncArrayList opts xs = case xs of
+  tagE : payload : [] -> parseSingleTaggedEncArrayTag opts tagE payload
+  _ -> Left "expected [tag, contents] array"
+
+parseSingleTaggedEncArrayTag :: GTaggedEnc f => Options -> Encoding -> Encoding -> Parser (f p)
+parseSingleTaggedEncArrayTag opts tagE payload = case encKind tagE of
+  2 -> gParseTaggedEnc opts (encStringOrFail tagE) (Just payload)
+  _ -> Left "tag must be a string"
+
+parseSumEncObject :: (GTaggedEnc f, GTaggedEnc g) => Options -> Encoding -> Parser ((f :+: g) p)
+parseSumEncObject opts enc = case getSumEncoding opts of
+  TaggedObject tag ignored -> parseSumEncObjectLookup opts enc tag
+  _ -> parseSumEncObjectLookup opts enc "tag"
+
+parseSumEncObjectLookup :: (GTaggedEnc f, GTaggedEnc g) => Options -> Encoding -> String -> Parser ((f :+: g) p)
+parseSumEncObjectLookup opts enc tag = case lookupField enc tag of
+  Nothing -> Left "missing tag field"
+  Just tagV -> parseSumEncTagValue opts enc tagV
+
+parseSumEncSingleField :: (GTaggedEnc f, GTaggedEnc g) => Options -> Encoding -> Parser ((f :+: g) p)
+parseSumEncSingleField opts enc = case objectKeys enc of
+  name : [] -> parseSumEncSingleFieldPayload opts enc name
+  _ -> Left "expected single-field object for sum"
+
+parseSumEncSingleFieldPayload :: (GTaggedEnc f, GTaggedEnc g) => Options -> Encoding -> String -> Parser ((f :+: g) p)
+parseSumEncSingleFieldPayload opts enc name = case lookupField enc name of
+  Just payload -> parseSumEncTagged opts name (Just payload)
+  Nothing -> Left "missing single-field payload"
+
+parseSumEncTagValue :: (GTaggedEnc f, GTaggedEnc g) => Options -> Encoding -> Encoding -> Parser ((f :+: g) p)
+parseSumEncTagValue opts enc tagV = case encKind tagV of
+  2 -> parseSumEncTagString opts enc tagV
+  _ -> Left "tag must be a string"
+
+parseSumEncTagString :: (GTaggedEnc f, GTaggedEnc g) => Options -> Encoding -> Encoding -> Parser ((f :+: g) p)
+parseSumEncTagString opts enc tagV = case contentsFieldNameEnc opts of
+  contentsKey -> case lookupField enc contentsKey of
+    Just contents -> parseSumEncTagged opts (encStringOrFail tagV) (Just contents)
+    Nothing -> parseSumEncTagged opts (encStringOrFail tagV) (Just enc)
+
+contentsFieldNameEnc :: Options -> String
+contentsFieldNameEnc opts = case getSumEncoding opts of
+  TaggedObject ignored c -> c
+  _ -> "contents"
+
+parseLeftTaggedEnc :: GTaggedEnc f => Options -> String -> Maybe Encoding -> Parser (f p)
+parseLeftTaggedEnc opts name contents = gParseTaggedEnc opts name contents
+
+parseRightTaggedEnc :: GTaggedEnc g => Options -> String -> Maybe Encoding -> Parser (g p)
+parseRightTaggedEnc opts name contents = gParseTaggedEnc opts name contents
+
+parseSumEncTagged :: (GTaggedEnc f, GTaggedEnc g) => Options -> String -> Maybe Encoding -> Parser ((f :+: g) p)
+parseSumEncTagged opts name contents = case parseLeftTaggedEnc opts name contents of
+  Right x -> Right (L1 x)
+  Left ignored -> case parseRightTaggedEnc opts name contents of
+    Left err -> Left err
+    Right y -> Right (R1 y)
+
+
+-- Split pairs then encObject. Prefer this over an accumulator+reverse:
+-- Foldable.reverse left heavy PE residue; fieldKeys/fieldVals are trivial.
+-- Specialize binds multi-use burned pair producers once (see specialize.php).
+encObjectFromFields :: [(String, Encoding)] -> Encoding
+encObjectFromFields pairs = encObject (fieldKeys pairs) (fieldVals pairs)
+
+fieldKeys :: [(String, Encoding)] -> [String]
+fieldKeys [] = []
+fieldKeys ((k, ignored) : rest) = k : fieldKeys rest
+
+fieldVals :: [(String, Encoding)] -> [Encoding]
+fieldVals [] = []
+fieldVals ((ignored, v) : rest) = v : fieldVals rest

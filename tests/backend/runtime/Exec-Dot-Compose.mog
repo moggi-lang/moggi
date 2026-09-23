@@ -1,0 +1,32 @@
+-- `.` is whitespace-sensitive:
+--   `f . g`   (spaced)  -> the composition operator from Data.Function
+--   `rec.field` (tight) -> record projection
+-- The spaced form is the composition operator, never a field access named `g`.
+module Main
+  ( main
+  ) where
+
+import System.IO
+import Text.Show
+import Data.Function
+
+data P = P { x :: Int, y :: Int }
+
+p = P { x = 40, y = 2 }
+
+inc n = n + 1
+double n = n * 2
+
+composed = double . inc
+chained = double . inc . double
+
+main :: IO ()
+main = do
+  -- tight dot: projection
+  putStrLn (show (p.x))
+  putStrLn (show (p.y))
+  -- spaced dot: composition, including chained and with a stdlib function
+  putStrLn (show (composed 5))
+  putStrLn (show (chained 1))
+  putStrLn (show ((id . composed) 5))
+  putStrLn (show (map composed [1, 2, 3]))

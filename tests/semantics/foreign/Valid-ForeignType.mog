@@ -1,0 +1,12 @@
+module Semantics.Foreign.ValidType where
+
+import Prelude
+
+-- Foreign *types* may be declared for any implemented backend in one module.
+-- Foreign *functions* must still match the compile backend (see Dispatch.mog).
+foreign jvm type Path "java.nio.file.Path"
+foreign dotnet type Stream "System.IO.Stream"
+foreign php type PDO "PDO"
+
+main :: IO ()
+main = pure ()

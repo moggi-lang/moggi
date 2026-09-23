@@ -1,0 +1,113 @@
+import Data.Bool
+import Data.Eq
+import Data.Foldable
+import Data.Functor
+import Data.Semigroup
+import Text.Show
+import Moggi.Generics
+import System.IO
+
+-- ---- Exec-Derive-Default-Extra-Constraint ----
+
+-- A default implementation may use a constraint that does not appear in the
+-- declared type of the method it implements. `tag :: a -> String` says nothing
+-- about `Show a`, but its default body calls `show`.
+--
+-- A default body is type-checked at each instance site with the class
+-- parameter substituted, so the missing constraint is solved there, with no
+-- signature extension needed.
+class Tag a where
+  tag :: a -> String
+  tag x = "tag:" <> show x
+
+data Suit = Hearts | Spades
+  deriving (Show)
+
+-- Hand-written instance that omits `tag`; the default body resolves
+-- `Show Suit` from the instance above.
+instance Tag Suit where
+
+-- anyclass derives the instance from the same default, again needing
+-- `Show Rank` at the instance site.
+data Rank = Ace | King
+  deriving (Show)
+  deriving anyclass (Tag)
+
+runDeriveDefaultExtraConstraint :: IO ()
+runDeriveDefaultExtraConstraint = do
+  putStrLn (tag Hearts)
+  putStrLn (tag Spades)
+  putStrLn (tag Ace)
+  putStrLn (tag King)
+
+-- ---- Exec-Derive-Default-Method ----
+
+-- A default implementation that calls another method of the same class.
+class MyEq a where
+  eq :: a -> a -> Bool
+  ne :: a -> a -> Bool
+  ne x y = case eq x y of
+    True -> False
+    False -> True
+
+-- The instance implements only `eq`; `ne` is the class default.
+instance MyEq Bool where
+  eq x y = x == y
+
+-- anyclass: an empty instance whose methods all come from class defaults.
+class Greet a where
+  greet :: a -> String
+  greet _ = "hi"
+
+data Foo = Foo
+  deriving anyclass (Greet)
+
+runDeriveDefaultMethod :: IO ()
+runDeriveDefaultMethod = do
+  putStrLn (show (ne True False))
+  putStrLn (show (ne True True))
+  putStrLn (greet Foo)
+
+-- ---- Exec-Derive-Functorial ----
+
+data Box a = Box a deriving (Eq, Show, Functor, Foldable)
+
+data Tree a = Leaf a | Node (Tree a) (Tree a)
+  deriving (Eq, Show, Functor, Foldable)
+
+runDeriveFunctorial :: IO ()
+runDeriveFunctorial = do
+  putStrLn (show (map (\x -> x + 1) (Box 10)))
+  putStrLn (show (foldr (\x y -> x + y) 0 (Box 7)))
+  putStrLn (show (map (\x -> x + 1) (Node (Leaf 1) (Leaf 2))))
+  putStrLn (show (foldr (\x y -> x + y) 0 (Node (Leaf 1) (Leaf 2))))
+  putStrLn (show (Box 1 == Box 1))
+
+-- ---- Exec-Derive-Generic ----
+
+data Color = Red | Blue deriving (Generic, Eq)
+
+data Pair a b = MkPair a b deriving (Generic, Eq)
+
+data Person = Person { name :: String, age :: Int } deriving (Generic, Eq)
+
+newtype Age = Age Int deriving (Generic, Eq)
+
+runDeriveGeneric :: IO ()
+runDeriveGeneric = do
+  putStrLn (show (to (from Red) == Red))
+  putStrLn (show (to (from Blue) == Blue))
+  putStrLn (show (to (from Red) == Blue))
+  putStrLn (show (to (from (MkPair 1 True)) == MkPair 1 True))
+  putStrLn (show (to (from (MkPair 1 True)) == MkPair 2 True))
+  putStrLn (show (to (from (Person "a" 1)) == Person "a" 1))
+  putStrLn (show (to (from (Age 9)) == Age 9))
+  putStrLn (show (to (from (Age 9)) == Age 8))
+
+-- ---- combined entry point ----
+main :: IO ()
+main = do
+  runDeriveDefaultExtraConstraint
+  runDeriveDefaultMethod
+  runDeriveFunctorial
+  runDeriveGeneric

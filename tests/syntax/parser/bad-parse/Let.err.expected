@@ -1,0 +1,4 @@
+tests/syntax/parser/bad-parse/Let.mog:1:17: parse error: expected expression, found end of file
+
+  1 | f = let x = 1 in
+    |                 ^

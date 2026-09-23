@@ -1,0 +1,2 @@
+f x = case x
+  Just a -> a

@@ -1,0 +1,4 @@
+tests/semantics/foreign/bad/Duplicate-Name.mog:4:18: type error: duplicate type `Path`
+
+  4 | foreign jvm type Path "java.lang.String"
+    |                  ^^^^

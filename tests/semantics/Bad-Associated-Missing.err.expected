@@ -1,0 +1,4 @@
+tests/semantics/Bad-Associated-Missing.mog:7:10: type error: instance for `Family` missing associated type `F`
+
+  7 | instance Family Bool where
+    |          ^^^^^^

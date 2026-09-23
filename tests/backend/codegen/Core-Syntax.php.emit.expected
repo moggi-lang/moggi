@@ -1,0 +1,66 @@
+<?php declare(strict_types=1);
+
+namespace Main;
+
+const __MOGGI_MAP = [[51 => ['Main.list_', 'tests/backend/codegen/Core-Syntax.mog', 19, 15], 57 => ['Main.fn_list', 'tests/backend/codegen/Core-Syntax.mog', 20, 17], 63 => ['Main.useKeywords', 'tests/backend/codegen/Core-Syntax.mog', 22, 15], 64 => ['Main.useKeywords', 'tests/backend/codegen/Core-Syntax.mog', 22, 15]], ['Main\\add' => ['Main.add', 'tests/backend/codegen/Core-Syntax.mog', 4, 1], 'Main\\sub' => ['Main.sub', 'tests/backend/codegen/Core-Syntax.mog', 6, 1], 'Main\\id' => ['Main.id', 'tests/backend/codegen/Core-Syntax.mog', 8, 8], 'Main\\f' => ['Main.f', 'tests/backend/codegen/Core-Syntax.mog', 12, 11], 'Main\\list_' => ['Main.list', 'tests/backend/codegen/Core-Syntax.mog', 14, 10], 'Main\\echo_' => ['Main.echo', 'tests/backend/codegen/Core-Syntax.mog', 15, 10], 'Main\\match_' => ['Main.match', 'tests/backend/codegen/Core-Syntax.mog', 16, 11], 'Main\\function_' => ['Main.function', 'tests/backend/codegen/Core-Syntax.mog', 17, 14], 'Main\\list_2' => ['Main.list_', 'tests/backend/codegen/Core-Syntax.mog', 19, 1], 'Main\\fn_list' => ['Main.fn_list', 'tests/backend/codegen/Core-Syntax.mog', 20, 1], 'Main\\useKeywords' => ['Main.useKeywords', 'tests/backend/codegen/Core-Syntax.mog', 22, 15]]];
+
+require_once __DIR__ . '/../../../lib/Data/Int.php';
+
+use function Data\Int\__ev_Num_Int;
+
+function moggi_u64_add(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao + $bo; $c = ($lo >> 32) & 0xffffffff; $hi = ($ah + $bh + $c) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }
+function moggi_u64_sub(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao - $bo; $bw = $lo < 0 ? 1 : 0; $hi = ($ah - $bh - $bw) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }
+function moggi_u64_mul(int $a, int $b): int { $a0 = $a & 0xffff; $a1 = ($a >> 16) & 0xffff; $a2 = ($a >> 32) & 0xffff; $a3 = ($a >> 48) & 0xffff; $b0 = $b & 0xffff; $b1 = ($b >> 16) & 0xffff; $b2 = ($b >> 32) & 0xffff; $b3 = ($b >> 48) & 0xffff; $low = $a0 * $b0; $cy = ($low >> 16) & 0xffff; $m1 = $a0 * $b1 + $a1 * $b0 + $cy; $cy = ($m1 >> 16) & 0xffffffff; $m2 = $a0 * $b2 + $a1 * $b1 + $a2 * $b0 + $cy; $cy = ($m2 >> 16) & 0xffffffff; $hi = $a0 * $b3 + $a1 * $b2 + $a2 * $b1 + $a3 * $b0 + $cy; return (($hi & 0xffff) << 48) | (($m2 & 0xffff) << 32) | (($m1 & 0xffff) << 16) | ($low & 0xffff); }
+function moggi_i64_add(int $a, int $b): int { $r = $a + $b; return \is_int($r) ? $r : moggi_u64_add($a, $b); }
+
+function add($__ev_Num, $x, $y) {
+    $__t0 = ($__ev_Num["+"])($x, $y);
+    return $__t0;
+}
+
+function sub($__ev_Num, $x, $y) {
+    $__t1 = ($__ev_Num["-"])($x, $y);
+    return $__t1;
+}
+
+function id($x) {
+    return $x;
+}
+
+function f($x, $y) {
+    return $x;
+}
+
+function list_($x) {
+    return $x;
+}
+
+function echo_($x) {
+    return $x;
+}
+
+function match_($x) {
+    return $x;
+}
+
+function function_($x) {
+    return $x;
+}
+
+function list_2($__ev_Num, $x) {
+    $__t2 = ($__ev_Num["fromInteger"])(\strval(1));
+    $__t3 = ($__ev_Num["+"])($x, $__t2);
+    return $__t3;
+}
+
+function fn_list($__ev_Num, $x) {
+    $__t4 = ($__ev_Num["fromInteger"])(\strval(2));
+    $__t5 = ($__ev_Num["+"])($x, $__t4);
+    return $__t5;
+}
+
+function useKeywords() {
+    $__t10 = list_2(__ev_Num_Int(), 5);
+    $__t11 = fn_list(__ev_Num_Int(), 6);
+    return moggi_i64_add((\is_int($__m64 = 10 + $__t10) ? $__m64 : moggi_u64_add(10, $__t10)), $__t11);
+}

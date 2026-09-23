@@ -1,0 +1,4 @@
+tests/semantics/Bad-Unresolved-Constraint-Tuple.mog:11:1: type error: unresolved type class constraint: `Tag Box`
+
+  11 | bad :: (String, String)
+     | ^^^

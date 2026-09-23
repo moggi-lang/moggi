@@ -1,0 +1,4 @@
+tests/syntax/parser/bad-parse/Expr.mog:1:14: parse error: expected expression, found end of file
+
+  1 | add x y = x +
+    |              ^

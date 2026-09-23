@@ -1,0 +1,64 @@
+program
+  function applyWhen :: Bool -> a -> b -> a -> b
+    pat_var _p0
+    pat_var f
+    pat_var x
+    case
+      tuple
+        variable _p0
+        variable f
+        variable x
+      alt
+        pat_tuple
+          pat_con True
+          pat_var f
+          pat_var x
+        apply
+          variable f
+          variable x
+      alt
+        pat_tuple
+          pat_con False
+          pat_wild _
+          pat_var x
+        variable x
+  function fromMaybe :: a -> Maybe a -> a
+    pat_var d
+    pat_var _p1
+    case
+      tuple
+        variable d
+        variable _p1
+      alt
+        pat_tuple
+          pat_var d
+          pat_con Nothing
+        variable d
+      alt
+        pat_tuple
+          pat_wild _
+          pat_con Just
+            pat_var x
+        variable x
+  function isNil :: [a] -> Bool
+    pat_var _p0
+    case
+      variable _p0
+      alt
+        pat_nil
+        constructor_ref True
+      alt
+        pat_cons
+          pat_wild _
+          pat_wild _
+        constructor_ref False
+  function pick :: Pair -> String
+    pat_con Pair
+      pat_var x
+      pat_wild _
+    variable x
+  function nameOf :: User -> String
+    pat_record User
+      name =
+        pat_var n
+    variable n

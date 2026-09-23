@@ -1,0 +1,11 @@
+module
+  function runTwice(act)
+      io_run act
+      io_run act
+      ret ()
+  function main()
+      t0 = io_assign_action
+          io_call putStrLn("x")
+        result ()
+      io_call runTwice(t0)
+      ret ()

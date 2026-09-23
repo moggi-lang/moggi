@@ -1,0 +1,3 @@
+module Test.BadHostType where
+
+foreign jvm type Path

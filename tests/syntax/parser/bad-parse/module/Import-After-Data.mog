@@ -1,0 +1,5 @@
+module Bad.ImportAfterData where
+
+import Data.Bool
+data Foo = Bar
+import Data.Int

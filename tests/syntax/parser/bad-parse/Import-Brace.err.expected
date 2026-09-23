@@ -1,0 +1,4 @@
+tests/syntax/parser/bad-parse/Import-Brace.mog:1:18: parse error: expected parenthesized import list `(…)`, found '{'
+
+  1 | import Data.List { filter }
+    |                  ^

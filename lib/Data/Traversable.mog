@@ -1,0 +1,142 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.Traversable
+  ( Traversable(..)
+  , for
+  , forM
+  , mapAccumL
+  , mapAccumR
+  , fmapDefault
+  , foldMapDefault
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Foldable
+import Data.Functor
+import Data.Maybe
+import Data.Monoid
+import Data.Semigroup
+
+class (Functor t, Foldable t) => Traversable t where
+  {-# MINIMAL traverse | sequenceA #-}
+
+  -- | Map each element of a structure to an action, evaluate these actions
+  -- from left to right, and collect the results. For a version that ignores
+  -- the results see 'Data.Foldable.traverse_'.
+  traverse :: Applicative f => (a -> f b) -> t a -> f (t b)
+  traverse f t = sequenceA (map f t)
+
+  -- | Evaluate each action in the structure from left to right, and collect
+  -- the results. For a version that ignores the results see
+  -- 'Data.Foldable.sequenceA_'.
+  sequenceA :: Applicative f => t (f a) -> f (t a)
+  sequenceA t = traverse (\x -> x) t
+
+  -- | Map each element of a structure to a monadic action, evaluate these
+  -- actions from left to right, and collect the results.
+  mapM :: Monad m => (a -> m b) -> t a -> m (t b)
+  mapM f t = traverse f t
+
+  -- | Evaluate each monadic action in the structure from left to right, and
+  -- collect the results.
+  sequence :: Monad m => t (m a) -> m (t a)
+  sequence t = sequenceA t
+
+for :: (Traversable t, Applicative f) => t a -> (a -> f b) -> f (t b)
+for t f = traverse f t
+
+forM :: (Traversable t, Monad m) => t a -> (a -> m b) -> m (t b)
+forM t f = mapM f t
+
+-- | The 'mapAccumL' function behaves like a combination of 'map' and 'foldl';
+-- it applies a function to each element of a structure, passing an accumulating
+-- parameter from left to right, and returning a final value of this accumulator
+-- together with the new structure.
+--
+-- ==== __Examples__
+--
+-- Basic usage:
+--
+-- >>> mapAccumL (\a b -> (a + b, a)) 0 [1..10]
+-- (55,[0,1,3,6,10,15,21,28,36,45])
+--
+-- >>> mapAccumL (\a b -> (a <> show b, a)) "0" [1..5]
+-- ("012345",["0","01","012","0123","01234"])
+mapAccumL :: Traversable t => (s -> a -> (s, b)) -> s -> t a -> (s, t b)
+mapAccumL f s t = case traverse (\a -> StateL (\acc -> f acc a)) t of
+  StateL step -> step s
+
+-- | The 'mapAccumR' function behaves like a combination of 'map' and 'foldr';
+-- it applies a function to each element of a structure, passing an accumulating
+-- parameter from right to left, and returning a final value of this accumulator
+-- together with the new structure.
+--
+-- ==== __Examples__
+--
+-- Basic usage:
+--
+-- >>> mapAccumR (\a b -> (a + b, a)) 0 [1..10]
+-- (55,[54,52,49,45,40,34,27,19,10,0])
+--
+-- >>> mapAccumR (\a b -> (a <> show b, a)) "0" [1..5]
+-- ("054321",["05432","0543","054","05","0"])
+mapAccumR :: Traversable t => (s -> a -> (s, b)) -> s -> t a -> (s, t b)
+mapAccumR f s t = case traverse (\a -> StateR (\acc -> f acc a)) t of
+  StateR step -> step s
+
+-- The two state threading transformers behind 'mapAccumL' and 'mapAccumR'.
+-- They differ only in which side of '<*>' runs first.
+newtype StateL s a = StateL (s -> (s, a))
+
+newtype StateR s a = StateR (s -> (s, a))
+
+instance Functor (StateL s) where
+  map g st = case st of
+    StateL step -> StateL (\acc -> case step acc of
+      (acc', v) -> (acc', g v))
+
+instance Applicative (StateL s) where
+  pure x = StateL (\acc -> (acc, x))
+  (<*>) gf gv = StateL (\acc -> case gf of
+    StateL stepF -> case gv of
+      StateL stepV -> case stepF acc of
+        (acc', g) -> case stepV acc' of
+          (acc'', v) -> (acc'', g v))
+
+instance Functor (StateR s) where
+  map g st = case st of
+    StateR step -> StateR (\acc -> case step acc of
+      (acc', v) -> (acc', g v))
+
+instance Applicative (StateR s) where
+  pure x = StateR (\acc -> (acc, x))
+  (<*>) gf gv = StateR (\acc -> case gv of
+    StateR stepV -> case gf of
+      StateR stepF -> case stepV acc of
+        (acc', v) -> case stepF acc' of
+          (acc'', g) -> (acc'', g v))
+
+data Identity a = MkIdentity a
+
+runIdentity (MkIdentity x) = x
+
+fmapDefault :: Traversable t => (a -> b) -> t a -> t b
+fmapDefault f t = runIdentity (traverse (\a -> MkIdentity (f a)) t)
+
+foldMapDefault :: (Traversable t, Monoid m) => (a -> m) -> t a -> m
+foldMapDefault f t = foldr (\a acc -> f a <> acc) mempty t
+
+instance Functor Identity where
+  map f i = case i of
+    MkIdentity x -> MkIdentity (f x)
+
+instance Applicative Identity where
+  pure x = MkIdentity x
+  (<*>) fa fb = case fa of
+    MkIdentity f -> case fb of
+      MkIdentity x -> MkIdentity (f x)
+
+instance Traversable Maybe where
+  traverse f mx = case mx of
+    Nothing -> pure Nothing
+    Just x -> pure Just <*> (f x)

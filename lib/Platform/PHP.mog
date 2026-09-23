@@ -1,0 +1,102 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | The PHP side of the FFI: 'PHPValue' reifies an untyped host value into an
+-- inspectable Moggi ADT (Composer interop), plus helpers for walking one.
+--
+-- Reification is a PHP-backend facility: a value is boxed into 'PHPValue' as it
+-- crosses a @foreign php@ call. Prefer a precise type (Maybe String, …) when
+-- the host API is precise, and give a known host object its own
+-- @foreign php type@ declaration instead of reifying it.
+module Platform.PHP
+  ( PhpError(..)
+  , PHPValue(..)
+  , PHPArray
+  , PHPObject
+  , PHPList(MkPHPList)
+  , PHPMap(MkPHPMap)
+  , MapEntry(MapEntry)
+  , indexIntList
+  , pushIntList
+  , lookupStringIntMap
+  , insertStringIntMap
+  , lookupStringPHPValue
+  ) where
+
+import Data.Bool
+import Moggi.Internal.Float
+import Data.Int
+import Data.List hiding (singleton, take, drop, length, isPrefixOf, isSuffixOf)
+import Data.Maybe
+import Data.String
+import System.IO.Types (Resource)
+import Moggi.Internal.Prim
+
+data PhpError = PhpError String
+
+data MapEntry k v = MapEntry k v
+
+-- | Host-dynamic value reified as a Moggi ADT for inspection after FFI.
+-- Only structurally reifiable PHP values (null/bool/int/float/string/array/
+-- stdClass property bags/resources). Opaque class instances must use a
+-- concrete 'foreign php type' — phpValueBox rejects them.
+data PHPValue
+  = PhpNull
+  | PhpBool Bool
+  | PhpInt Int
+  | PhpDouble Double
+  | PhpString String
+  | PhpArray [PHPValue]
+  | PhpObject [MapEntry String PHPValue]
+  | PhpResource Resource
+
+type PHPArray = [PHPValue]
+type PHPObject = [MapEntry String PHPValue]
+
+data PHPList a = MkPHPList (List a)
+
+data PHPMap k v = MkPHPMap (List (MapEntry k v))
+
+itemsOfList lst = case lst of
+  MkPHPList xs -> xs
+
+indexNegative n = orderingIsLt# (intCompare# n 0)
+
+indexAt xs n = case indexNegative n of
+  True -> Nothing
+  False -> indexAtPos xs n
+
+indexAtPos [] _ = Nothing
+indexAtPos (x:_) 0 = Just x
+indexAtPos (_:rest) n = indexAtPos rest (n - 1)
+
+indexIntList lst i = indexAt (itemsOfList lst) i
+
+pushIntList lst x = MkPHPList (itemsOfList lst <> (x : []))
+
+entriesOfMap mp = case mp of
+  MkPHPMap xs -> xs
+
+lookupEntry :: String -> List (MapEntry String Int) -> Maybe Int
+lookupEntry _ [] = Nothing
+lookupEntry k (MapEntry k' v : rest) = case k == k' of
+  True -> Just v
+  False -> lookupEntry k rest
+
+lookupStringIntMap mp k = lookupEntry k (entriesOfMap mp)
+
+insertEntry :: String -> Int -> List (MapEntry String Int) -> List (MapEntry String Int)
+insertEntry k v [] = MapEntry k v : []
+insertEntry k v (MapEntry k' v' : rest) = case k == k' of
+  True -> MapEntry k v : rest
+  False -> MapEntry k' v' : insertEntry k v rest
+
+insertStringIntMap mp k v = MkPHPMap (insertEntry k v (entriesOfMap mp))
+
+lookupPHPEntry :: String -> PHPObject -> Maybe PHPValue
+lookupPHPEntry _ [] = Nothing
+lookupPHPEntry k (MapEntry k' v : rest) = case k == k' of
+  True -> Just v
+  False -> lookupPHPEntry k rest
+
+-- | The value stored under a string key of a reified host array or object.
+lookupStringPHPValue :: String -> PHPObject -> Maybe PHPValue
+lookupStringPHPValue k entries = lookupPHPEntry k entries

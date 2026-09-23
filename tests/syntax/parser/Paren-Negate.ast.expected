@@ -1,0 +1,25 @@
+program
+  function minus
+    operator_ref -
+  function plus
+    operator_ref +
+  function negated
+    integer -7
+  function negatedSpaced
+    integer -7
+  function negatedVariable
+    pat_var x
+    apply
+      variable negate
+      variable x
+  function subtracted
+    pat_var x
+    infix -
+      variable x
+      integer 7
+  function nested
+    infix -
+      infix -
+        integer 1
+        integer 2
+      integer 3

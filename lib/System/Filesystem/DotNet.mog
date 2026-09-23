@@ -1,0 +1,191 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | .NET filesystem via ordinary System.IO BCL FFI. No Moggi.Rt.Platform FS helpers.
+module System.Filesystem.DotNet
+  ( readFile
+  , readTextFile
+  , writeFile
+  , writeTextFile
+  , appendFile
+  , appendTextFile
+  , isFile
+  , getModified
+  , getSize
+  , copyFile
+  , copyFileContent
+  , copyPermissions
+  , removeFile
+  , isDirectory
+  , canonicalizePath
+  , listDirectory
+  , createDirectory
+  , createTree
+  , removeDirectory
+  , removeTree
+  , getWorkingDirectory
+  , setWorkingDirectory
+  , rename
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Bool
+import Data.ByteString (ByteString)
+import Data.ByteString qualified as B
+import Data.Char (ord, chr)
+import Data.Int
+import Data.List hiding (singleton, stripPrefix)
+import Data.Ord
+import Data.String hiding (singleton, pack, unpack, length, take, drop, isPrefixOf, isSuffixOf)
+import Data.String qualified as S
+import Data.Time.Clock
+import Data.Time.Clock.DotNet (DateTimeOffset, dtoToUnixTimeSeconds)
+import Moggi.Err
+import System.IO.Base (IO)
+import Moggi.Internal.Prim (word8FromInt#, word8ToInt#)
+import System.Filesystem.Path (FilePath)
+import Moggi.Internal.Prim
+
+foreign dotnet type FileInfo "System.IO.FileInfo"
+foreign dotnet type DirectoryInfo "System.IO.DirectoryInfo"
+foreign dotnet type Array "System.Array"
+
+foreign dotnet function fileReadAllText "System.IO.File:ReadAllText" :: String -> IO String
+foreign dotnet function fileWriteAllText "System.IO.File:WriteAllText" :: String -> String -> IO ()
+foreign dotnet function fileAppendAllText "System.IO.File:AppendAllText" :: String -> String -> IO ()
+foreign dotnet function fileExists "System.IO.File:Exists" :: String -> Bool
+foreign dotnet function fileDelete "System.IO.File:Delete" :: String -> IO ()
+foreign dotnet function fileCopy "System.IO.File:Copy" :: String -> String -> Bool -> IO ()
+foreign dotnet function fileGetLastWriteTimeUtc "System.IO.File:GetLastWriteTimeUtc" :: String -> DateTimeOffset
+foreign dotnet function fileGetLength "System.IO.FileInfo.get_Length" :: FileInfo -> Int
+foreign dotnet function newFileInfo "System.IO.FileInfo:__con" :: String -> FileInfo
+
+foreign dotnet function directoryExists "System.IO.Directory:Exists" :: String -> Bool
+foreign dotnet function directoryCreateDirectory "System.IO.Directory:CreateDirectory" :: String -> DirectoryInfo
+foreign dotnet function directoryDelete "System.IO.Directory:Delete" :: String -> Bool -> IO ()
+foreign dotnet function directoryGetFiles "System.IO.Directory:GetFiles" :: String -> IO Array
+foreign dotnet function directoryGetDirectories "System.IO.Directory:GetDirectories" :: String -> IO Array
+foreign dotnet function directoryGetCurrentDirectory "System.IO.Directory:GetCurrentDirectory" :: IO String
+foreign dotnet function directorySetCurrentDirectory "System.IO.Directory:SetCurrentDirectory" :: String -> IO ()
+foreign dotnet function directoryMove "System.IO.Directory:Move" :: String -> String -> IO ()
+foreign dotnet function fileMove "System.IO.File:Move" :: String -> String -> IO ()
+
+foreign dotnet function pathGetFullPath "System.IO.Path:GetFullPath" :: String -> String
+foreign dotnet function pathGetFileName "System.IO.Path:GetFileName" :: String -> String
+
+foreign dotnet function rawArrLength "System.Array.get_Length" :: Array -> Int32
+foreign dotnet function rawArrGet "System.Array.GetValue" :: Array -> Int32 -> Array
+foreign dotnet function stringValueOf "System.Convert:ToString" :: Array -> String
+
+arrLength arr = int32ToInt# (rawArrLength arr)
+
+arrGet arr i = rawArrGet arr (int32FromInt# i)
+
+readTextFile :: FilePath -> IO String
+readTextFile p = fileReadAllText (p)
+
+writeTextFile :: FilePath -> String -> IO ()
+writeTextFile p content = fileWriteAllText (p) content
+
+appendTextFile :: FilePath -> String -> IO ()
+appendTextFile p content = fileAppendAllText (p) content
+
+readFile :: FilePath -> IO ByteString
+readFile p = readTextFile p >>= (\s -> pure (fsFromString s))
+
+writeFile :: FilePath -> ByteString -> IO ()
+writeFile p content = writeTextFile p (fsToString content)
+
+appendFile :: FilePath -> ByteString -> IO ()
+appendFile p content = appendTextFile p (fsToString content)
+
+fsMap :: (a -> b) -> [a] -> [b]
+fsMap f xs = case xs of
+  [] -> []
+  x : rest -> f x : fsMap f rest
+
+fsFromString :: String -> ByteString
+fsFromString s = B.pack (fsMap (\c -> word8FromInt# (ord c)) (S.unpack s))
+
+fsToString :: ByteString -> String
+fsToString b = S.pack (fsMap (\w -> chr (word8ToInt# w)) (B.unpack b))
+
+isFile :: FilePath -> IO Bool
+isFile p = pure (fileExists (p))
+
+isDirectory :: FilePath -> IO Bool
+isDirectory p = pure (directoryExists (p))
+
+getModified :: FilePath -> IO UTCTime
+getModified p =
+  let dt = fileGetLastWriteTimeUtc (p) in
+  pure (utcTimeFromUnix (dtoToUnixTimeSeconds dt))
+
+getSize :: FilePath -> IO Int
+getSize p = pure (fileGetLength (newFileInfo (p)))
+
+copyFile :: FilePath -> FilePath -> IO ()
+copyFile src dst = fileCopy (src) (dst) True
+
+copyFileContent :: FilePath -> FilePath -> IO ()
+copyFileContent src dst = copyFile src dst
+
+copyPermissions :: FilePath -> FilePath -> IO ()
+copyPermissions _ _ = pure ()
+
+removeFile :: FilePath -> IO ()
+removeFile p = fileDelete (p)
+
+canonicalizePath :: FilePath -> IO FilePath
+canonicalizePath p = pure (pathGetFullPath (p))
+
+arrToPaths :: Array -> [FilePath]
+arrToPaths arr = arrToPathsAt arr 0 (arrLength arr)
+
+arrToPathsAt :: Array -> Int -> Int -> [FilePath]
+arrToPathsAt arr i n = case intCompare# i n of
+  EQ -> []
+  _ -> pathGetFileName (stringValueOf (arrGet arr i)) : arrToPathsAt arr (i + 1) n
+
+listDirectory :: FilePath -> IO [FilePath]
+listDirectory p = do
+  files <- directoryGetFiles (p)
+  dirs <- directoryGetDirectories (p)
+  pure (arrToPaths files <> arrToPaths dirs)
+
+createDirectory :: Bool -> FilePath -> IO ()
+createDirectory _ p = do
+  _ <- pure (directoryCreateDirectory (p))
+  pure ()
+
+createTree :: FilePath -> IO ()
+createTree p = createDirectory True p
+
+removeDirectory :: FilePath -> IO ()
+removeDirectory p = case directoryExists (p) of
+  True -> directoryDelete (p) False
+  False -> pure ()
+
+removeTree :: FilePath -> IO ()
+removeTree p = case directoryExists (p) of
+  True -> directoryDelete (p) True
+  False -> case fileExists (p) of
+    True -> fileDelete (p)
+    False -> pure ()
+
+getWorkingDirectory :: IO FilePath
+getWorkingDirectory = do
+  s <- directoryGetCurrentDirectory
+  pure s
+
+setWorkingDirectory :: FilePath -> IO ()
+setWorkingDirectory p = directorySetCurrentDirectory (p)
+
+rename :: FilePath -> FilePath -> IO ()
+rename src dst = do
+  dir <- isDirectory src
+  renameByKind dir src dst
+
+renameByKind :: Bool -> FilePath -> FilePath -> IO ()
+renameByKind dir src dst = case dir of
+  True -> directoryMove (src) (dst)
+  False -> fileMove (src) (dst)

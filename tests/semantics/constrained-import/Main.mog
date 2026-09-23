@@ -1,0 +1,9 @@
+module Main where
+
+import Constrained.Consumer
+import System.IO
+
+-- The point of the case: `applPure` is imported from a module that constrains it to
+-- `Applicative f`, and the only thing fixing `f ~ []` here is this use site.
+main :: IO ()
+main = print useDemo

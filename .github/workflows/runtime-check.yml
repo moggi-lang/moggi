@@ -1,0 +1,105 @@
+name: runtime-check
+
+# Upstream moves under us: an asset withdrawn, a version superseded, a release
+# replaced. None of that is visible until a packaging run fails on a tag, so
+# `pin.php --check` — reachability, upstream host, version, architecture, upstream
+# checksum, for every target — runs daily instead.
+#
+# A failed check opens (or updates) one issue rather than failing the workflow: the
+# report is the deliverable. When the pins are corrected the next run closes it.
+
+on:
+  schedule:
+    # Off-peak UTC, deliberately not on the hour.
+    - cron: '23 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runtime-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    # The only job that may touch issues, and only to file this report.
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.5'
+          extensions: bcmath, mbstring, zip, phar, ctype, curl
+          coverage: none
+
+      # php.net publishes no digest for its Windows binary, so that one asset is
+      # hashed after a real download.
+      - name: Cache downloaded assets
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .dist-cache/downloads
+          key: runtime-check-${{ hashFiles('dist/runtimes.lock.json') }}
+
+      - name: Validate every pinned runtime URL
+        id: check
+        run: |
+          set +e
+          php scripts/dist/pin.php --check > report.txt 2>&1
+          status=$?
+          cat report.txt
+          echo "status=${status}" >> "$GITHUB_OUTPUT"
+
+      - name: Report the finding
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STATUS: ${{ steps.check.outputs.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -eu
+          label=runtime-pins
+          title='A pinned runtime asset needs attention'
+          existing="$(gh issue list --label "$label" --state open --json number --jq '.[0].number // empty')"
+
+          if [ "$STATUS" = "0" ]; then
+            if [ -n "$existing" ]; then
+              gh issue close "$existing" --comment "The pinned runtime assets validate again — closing."
+            fi
+            exit 0
+          fi
+
+          gh label create "$label" \
+            --description "A pinned upstream runtime asset needs attention" \
+            --color FBCA04 >/dev/null 2>&1 || true
+
+          {
+            echo "The scheduled runtime check failed for the pins in \`dist/runtimes.lock.json\`."
+            echo
+            echo '```'
+            cat report.txt
+            echo '```'
+            echo
+            echo "Fix it by bumping the version in \`dist/runtimes.json\` and \`flake.nix\`, then"
+            echo "re-resolving the assets:"
+            echo
+            echo '```bash'
+            echo 'php scripts/dist/pin.php'
+            echo '```'
+            echo
+            echo "This issue closes itself once the check passes again."
+            echo
+            echo "[Run]($RUN_URL)"
+          } > issue.md
+
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --body-file issue.md
+          else
+            gh issue create --title "$title" --label "$label" --body-file issue.md
+          fi

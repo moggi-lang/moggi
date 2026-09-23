@@ -1,0 +1,4 @@
+tests/semantics/Bad-Type-Synonym-Duplicate.mog:2:6: type error: duplicate type synonym `UserId`
+
+  2 | type UserId = Int
+    |      ^

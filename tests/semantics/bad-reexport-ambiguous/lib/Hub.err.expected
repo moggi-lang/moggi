@@ -1,0 +1,4 @@
+tests/semantics/bad-reexport-ambiguous/lib/Hub.mog:2:5: type error: ambiguous occurrence `foo`: it could refer to `Clash.A.foo` or `Clash.B.foo`
+
+  2 |   ( foo
+    |     ^^^

@@ -1,0 +1,248 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.JSON.Types
+  ( Number(..)
+  , Value(..)
+  , Object
+  , Pair
+  , jsonObject
+  , Parser
+  , Options(..)
+  , SumEncoding(..)
+  , defaultOptions
+  , defaultTaggedObject
+  , fieldLabelModifier
+  , constructorTagModifier
+  , allNullaryToStringTag
+  , omitNothingFields
+  , allowOmittedFields
+  , sumEncoding
+  , unwrapUnaryRecords
+  , tagSingleConstructors
+  , rejectUnknownFields
+  , getFieldLabelModifier
+  , getConstructorTagModifier
+  , getAllNullaryToStringTag
+  , getOmitNothingFields
+  , getAllowOmittedFields
+  , getSumEncoding
+  , getUnwrapUnaryRecords
+  , getTagSingleConstructors
+  , getRejectUnknownFields
+  , modifyFieldLabel
+  , modifyConstructorTag
+  , objectLookup
+) where
+
+import Data.Bool
+import Moggi.Internal.Float
+import Data.Either
+import Data.Eq
+import Data.Function (id)
+import Moggi.Internal.Integer
+import Data.Map (Map, fromList, lookup)
+import Data.Maybe (Maybe)
+import Data.String
+
+-- | JSON number: exact integer or IEEE float.
+data Number
+  = NumInteger Integer
+  | NumDouble Double
+
+-- | Portable JSON AST. `Object` payload is `Map String Value` (see `Object`).
+data Value
+  = Object (Map String Value)
+  | Array [Value]
+  | String String
+  | Number Number
+  | Bool Bool
+  | Null
+
+eqInteger :: Integer -> Integer -> Bool
+eqInteger x y = x == y
+
+eqDouble :: Double -> Double -> Bool
+eqDouble x y = x == y
+
+numberEq :: Number -> Number -> Bool
+numberEq a b = case a of
+  NumInteger x -> case b of
+    NumInteger y -> eqInteger x y
+    NumDouble ignored -> False
+  NumDouble x -> case b of
+    NumInteger ignored -> False
+    NumDouble y -> eqDouble x y
+
+valueEq :: Value -> Value -> Bool
+valueEq a b = case a of
+  Object m1 -> case b of
+    Object m2 -> m1 == m2
+    Array ignored -> False
+    String ignored -> False
+    Number ignored -> False
+    Bool ignored -> False
+    Null -> False
+  Array xs -> case b of
+    Object ignored -> False
+    Array ys -> xs == ys
+    String ignored -> False
+    Number ignored -> False
+    Bool ignored -> False
+    Null -> False
+  String s1 -> case b of
+    Object ignored -> False
+    Array ignored -> False
+    String s2 -> s1 == s2
+    Number ignored -> False
+    Bool ignored -> False
+    Null -> False
+  Number n1 -> case b of
+    Object ignored -> False
+    Array ignored -> False
+    String ignored -> False
+    Number n2 -> numberEq n1 n2
+    Bool ignored -> False
+    Null -> False
+  Bool b1 -> case b of
+    Object ignored -> False
+    Array ignored -> False
+    String ignored -> False
+    Number ignored -> False
+    Bool b2 -> b1 == b2
+    Null -> False
+  Null -> case b of
+    Object ignored -> False
+    Array ignored -> False
+    String ignored -> False
+    Number ignored -> False
+    Bool ignored -> False
+    Null -> True
+
+instance Eq Number where
+  (==) a b = numberEq a b
+  (/=) a b = case numberEq a b of
+    True -> False
+    False -> True
+
+instance Eq Value where
+  (==) a b = valueEq a b
+  (/=) a b = case valueEq a b of
+    True -> False
+    False -> True
+
+type Object = Map String Value
+
+type Pair = (String, Value)
+
+-- | Build an 'Object' 'Value' from key/value pairs.
+-- (Not named `object`: PHP function names are case-insensitive, so that
+-- would collide with the 'Object' constructor at import sites.)
+jsonObject :: [Pair] -> Value
+jsonObject kvs = Object (fromList kvs)
+
+objectLookup :: Object -> String -> Maybe Value
+objectLookup m k = lookup k m
+
+-- | Decode failures use the language 'Either' (no separate Parser monad).
+type Parser a = Either String a
+
+-- | Aeson `SumEncoding`. Default is `TaggedObject "tag" "contents"`.
+data SumEncoding
+  = TaggedObject String String
+  | UntaggedValue
+  | ObjectWithSingleField
+  | TwoElemArray
+
+defaultTaggedObject :: SumEncoding
+defaultTaggedObject = TaggedObject "tag" "contents"
+
+-- | Aeson `Options`. Construct with helpers (no record update).
+--
+-- Defaults match aeson-2.2+ `defaultOptions`:
+--   fieldLabelModifier / constructorTagModifier = id
+--   allNullaryToStringTag = True (ANDed with Datatype.isAllNullary at D1)
+--   omitNothingFields = False
+--   allowOmittedFields = True
+--   sumEncoding = TaggedObject "tag" "contents"
+--   unwrapUnaryRecords = False
+--   tagSingleConstructors = False
+--   rejectUnknownFields = False  -- reserved; not enforced yet
+data Options = Options
+  { optFieldLabelModifier     :: String -> String
+  , optConstructorTagModifier :: String -> String
+  , optAllNullaryToStringTag  :: Bool
+  , optOmitNothingFields      :: Bool
+  , optAllowOmittedFields     :: Bool
+  , optSumEncoding            :: SumEncoding
+  , optUnwrapUnaryRecords     :: Bool
+  , optTagSingleConstructors  :: Bool
+  , optRejectUnknownFields    :: Bool
+  }
+
+defaultOptions :: Options
+defaultOptions =
+  Options id id True False True defaultTaggedObject False False False
+
+fieldLabelModifier :: (String -> String) -> Options -> Options
+fieldLabelModifier f (Options _ c a o u s w t r) = Options f c a o u s w t r
+
+constructorTagModifier :: (String -> String) -> Options -> Options
+constructorTagModifier c (Options f _ a o u s w t r) = Options f c a o u s w t r
+
+allNullaryToStringTag :: Bool -> Options -> Options
+allNullaryToStringTag a (Options f c _ o u s w t r) = Options f c a o u s w t r
+
+omitNothingFields :: Bool -> Options -> Options
+omitNothingFields o (Options f c a _ u s w t r) = Options f c a o u s w t r
+
+allowOmittedFields :: Bool -> Options -> Options
+allowOmittedFields u (Options f c a o _ s w t r) = Options f c a o u s w t r
+
+sumEncoding :: SumEncoding -> Options -> Options
+sumEncoding s (Options f c a o u _ w t r) = Options f c a o u s w t r
+
+unwrapUnaryRecords :: Bool -> Options -> Options
+unwrapUnaryRecords w (Options f c a o u s _ t r) = Options f c a o u s w t r
+
+tagSingleConstructors :: Bool -> Options -> Options
+tagSingleConstructors t (Options f c a o u s w _ r) = Options f c a o u s w t r
+
+rejectUnknownFields :: Bool -> Options -> Options
+rejectUnknownFields r (Options f c a o u s w t _) = Options f c a o u s w t r
+
+getFieldLabelModifier :: Options -> (String -> String)
+getFieldLabelModifier (Options f _ _ _ _ _ _ _ _) = f
+
+getConstructorTagModifier :: Options -> (String -> String)
+getConstructorTagModifier (Options _ c _ _ _ _ _ _ _) = c
+
+getAllNullaryToStringTag :: Options -> Bool
+getAllNullaryToStringTag (Options _ _ a _ _ _ _ _ _) = a
+
+getOmitNothingFields :: Options -> Bool
+getOmitNothingFields (Options _ _ _ o _ _ _ _ _) = o
+
+getAllowOmittedFields :: Options -> Bool
+getAllowOmittedFields (Options _ _ _ _ u _ _ _ _) = u
+
+getSumEncoding :: Options -> SumEncoding
+getSumEncoding (Options _ _ _ _ _ s _ _ _) = s
+
+getUnwrapUnaryRecords :: Options -> Bool
+getUnwrapUnaryRecords (Options _ _ _ _ _ _ w _ _) = w
+
+getTagSingleConstructors :: Options -> Bool
+getTagSingleConstructors (Options _ _ _ _ _ _ _ t _) = t
+
+getRejectUnknownFields :: Options -> Bool
+getRejectUnknownFields (Options _ _ _ _ _ _ _ _ r) = r
+
+-- Apply a returned String->String: avoid `getter opts s` which the PHP
+-- backend compiles as a single two-arg call instead of nested apply.
+modifyFieldLabel :: Options -> String -> String
+modifyFieldLabel opts s = appStringMod (getFieldLabelModifier opts) s
+
+modifyConstructorTag :: Options -> String -> String
+modifyConstructorTag opts s = appStringMod (getConstructorTagModifier opts) s
+
+appStringMod :: (String -> String) -> String -> String
+appStringMod f s = f s

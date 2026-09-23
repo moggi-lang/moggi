@@ -1,0 +1,25 @@
+module Core.Guards where
+
+-- A guarded clause that does not hold falls through to the next clause, and a
+-- guard reads what its own clause's pattern bound. Guards that are not
+-- operand-shaped (`positive (twice m)`) need statements of their own, which run
+-- between the pattern test and the guard test — the optimizer must not drop
+-- them as unused.
+positive :: Int -> Bool
+positive n = n > 0
+
+twice :: Int -> Int
+twice n = n * 2
+
+firstSign :: [Int] -> String
+firstSign (x : _) | x < 0 = "neg-first"
+                  | x == 0 = "zero-first"
+firstSign (_ : _) = "other-list"
+firstSign [] = "empty"
+
+classify :: Int -> String
+classify n =
+  case n of
+    m | positive (twice m) -> "positive-double"
+      | otherwise -> "not-positive-double"
+    _ -> "other"

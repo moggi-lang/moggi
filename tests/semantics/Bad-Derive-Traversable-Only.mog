@@ -1,0 +1,4 @@
+import Data.Traversable
+
+-- Traversable requires Functor and Foldable superclasses.
+data Box a = Box a deriving (Traversable)

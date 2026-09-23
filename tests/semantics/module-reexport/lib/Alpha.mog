@@ -1,0 +1,7 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Alpha
+  ( alpha
+  ) where
+
+alpha :: Int
+alpha = 1

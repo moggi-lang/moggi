@@ -1,0 +1,9 @@
+-- Reading a character past the end of input fails with the standard report:
+-- `getChar` has no `Nothing` to return.
+import System.IO
+
+main :: IO ()
+main = do
+  _ <- getLine
+  c <- getChar
+  putStrLn ("char: " <> show c)

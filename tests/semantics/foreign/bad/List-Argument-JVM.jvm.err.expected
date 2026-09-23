@@ -1,0 +1,4 @@
+tests/semantics/foreign/bad/List-Argument-JVM.mog:2:22: type error: `[a]` cannot be an argument of a jvm foreign call — only php's array is the same value as a Moggi list; call it element by element or declare the host's own type
+
+  2 | foreign jvm function join "java.lang.String:join" :: String -> [String] -> String
+    |                      ^^^^

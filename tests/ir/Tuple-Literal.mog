@@ -1,0 +1,8 @@
+module Ir.TupleLiteral where
+
+import Data.Tuple (fst, snd)
+
+-- A tuple literal lowers to a fixed-arity constructor; projection goes through
+-- the stdlib `fst`/`snd`, which pattern-match it.
+pair a b = (a, b)
+swap p = (snd p, fst p)

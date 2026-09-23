@@ -1,0 +1,4 @@
+tests/semantics/Bad-IO-Data.mog:3:6: type error: `IO` is a compiler primitive and cannot be redefined
+
+  3 | data IO a = IO a
+    |      ^^

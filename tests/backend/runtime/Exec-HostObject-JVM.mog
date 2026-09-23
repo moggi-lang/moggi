@@ -1,0 +1,15 @@
+import System.IO
+import Data.String
+
+foreign jvm type StringBuilder "java.lang.StringBuilder"
+
+foreign jvm function newSB "java.lang.StringBuilder:__con" :: StringBuilder
+foreign jvm function append "java.lang.StringBuilder.append" :: StringBuilder -> String -> StringBuilder
+foreign jvm function sbToString "java.lang.StringBuilder.toString" :: StringBuilder -> String
+
+main :: IO ()
+main = do
+  let sb0 = newSB
+  let sb1 = append sb0 "host"
+  let sb2 = append sb1 "-object"
+  putStrLn (sbToString sb2)

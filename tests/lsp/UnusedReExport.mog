@@ -1,0 +1,4 @@
+module UnusedReExport (Bool(..), not) where
+
+-- Re-exporting names from the import is a use of it.
+import Data.Bool

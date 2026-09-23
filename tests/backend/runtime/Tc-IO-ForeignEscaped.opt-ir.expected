@@ -1,0 +1,10 @@
+module
+  function isFileP(p)
+      t1 = io_assign_action
+          t0 = io_call isFile(p)
+        result t0
+      ret t1
+  function main()
+      t3 = io_call isFileP("\/tmp\/moggi-tc-io-foreign.txt")
+      t2 = io_run t3
+      ret call __tuple0()

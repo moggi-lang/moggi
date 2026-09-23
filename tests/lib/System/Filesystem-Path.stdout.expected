@@ -1,0 +1,115 @@
+isPathSeparator pathSeparator: True
+isSearchPathSeparator : True
+isExtSeparator .: True
+splitExtension file.tar.gz: ("file.tar",".gz")
+takeExtension: .ext
+dropExtension: /directory/file
+replaceExtension: /directory/path.ext
+(-<.>): /directory/path.ext
+addExtension file.txt bib: file.txt.bib
+addExtension file ".": file.bib
+takeExtensions file.tar.gz: .tar.gz
+dropExtensions file.tar.gz: file
+splitExtensions file.tar.gz: ("file",".tar.gz")
+splitFileName: ("/directory/","file.ext")
+splitFileName bob: ("./","bob")
+takeFileName: file.ext
+takeBaseName: file
+dropFileName: /directory/
+replaceFileName: /directory/file.ext
+replaceBaseName: /dave/fred/new.tar
+takeDirectory: /directory
+takeDirectory /foo/bar/baz/: /foo/bar/baz
+replaceDirectory: /directory/file.ext
+combine: /directory/file.ext
+(</>) not combined: /bob
+splitPath: ["/","directory/","file.ext"]
+splitDirectories: ["/","test","file"]
+joinPath: /directory/file.ext
+splitDrive /test: ("/","test")
+splitDrive //test: ("//","test")
+splitDrive test/file: ("","test/file")
+takeDrive: //
+dropDrive: test
+joinDrive: /foo
+addTrailingPathSeparator: test/rest/
+dropTrailingPathSeparator: file/test
+dropTrailingPathSeparator /: /
+normalise /file/./test: /file/test
+normalise ./bob/fred/: bob/fred/
+normalise //home: /home
+normalise /a/../c: /a/../c
+normalise .: .
+normalise ./: ./
+normalise bob/fred/.: bob/fred/
+makeRelative: bob/foo/bar
+makeRelative x x: .
+makeRelative /fred bob: bob
+isValid empty: False
+isValid /random_ path:*: True
+makeValid empty: _
+splitSearchPath: ["File1","File2","File3"]
+splitSearchPath empty item: ["File1",".","File2","File3"]
+ok   takeExtension == snd (splitExtension x)
+ok   dropExtension == fst (splitExtension x)
+ok   uncurry (<>) (splitExtension x) == x
+ok   splitExtension file == (file, "")
+ok   splitExtension file/path.txt/ has no extension
+ok   splitExtension file/path.txt.bob.fred
+ok   addExtension then takeExtension
+ok   replaceExtension then takeExtension
+ok   addExtension x "" == x
+ok   stripExtension hs.o foo.x.hs.o
+ok   stripExtension hi.o foo.x.hs.o == Nothing
+ok   stripExtension empty is Just x
+ok   stripExtension .c.d a.b..c.d
+ok   isExtensionOf png
+ok   not isExtensionOf ar.gz
+ok   not isExtensionOf csv/table.csv
+ok   hasExtension
+ok   not hasExtension of path
+ok   takeFileName
+ok   joinPath (splitPath x) == x
+ok   uncurry (</>) (splitFileName x) == x
+ok   replaceFileName then takeFileName
+ok   (x </> fred) takeFileName
+ok   takeFileName test/ == ""
+ok   takeBaseName addTrailingPathSeparator == ""
+ok   replaceBaseName keeps extension
+ok   takeDirectory foo == .
+ok   takeDirectory / == /
+ok   takeDirectory /foo == /
+ok   takeDirectory foo/bar/baz
+ok   addTrailingPathSeparator idempotent
+ok   normalise / == /
+ok   normalise /./ == /
+ok   normalise ../bob/fred/ unchanged
+ok   normalise does not remove ..
+ok   equalFilePath foo foo/
+ok   not equalFilePath foo /foo
+ok   not equalFilePath /a/../c /c
+ok   isRelative test/path
+ok   not isRelative /test
+ok   isAbsolute == not isRelative
+ok   makeRelative x x == .
+ok   makeRelative takeDirectory x
+ok   makeRelative some/path
+ok   makeRelative different roots
+ok   makeRelative /file/test fred/
+ok   isValid makeValid always holds
+ok   makeValid x == x when valid
+ok   hasDrive //test
+ok   not hasDrive test
+ok   isDrive /
+ok   not isDrive /foo
+ok   splitDrive uncurry (<>) == x
+ok   dropTrailingPathSeparator keeps /
+ok   splitDirectories /test/file
+ok   splitDirectories empty
+ok   splitPath keeps redundant separators
+ok   joinPath []
+ok   joinPath splitPath round trip
+ok   splitSearchPath blank item becomes .
+ok   pathSeparator isPathSeparator
+ok   isSearchPathSeparator
+ok   isExtSeparator

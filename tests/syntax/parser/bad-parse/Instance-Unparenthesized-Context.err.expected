@@ -1,0 +1,4 @@
+tests/syntax/parser/bad-parse/Instance-Unparenthesized-Context.mog:1:14: parse error: multiple instance constraints must share one parenthesized context: write `instance (C1 a, C2 a) => Head where`
+
+  1 | instance Eq a, Eq b => Eq (Either a b) where
+    |              ^

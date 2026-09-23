@@ -1,0 +1,40 @@
+-- Data.Ord: `compare` plus the class defaults `< <= > >= min max`, on a derived
+-- instance and on a hand-written one. The defaults dispatch through the instance
+-- dictionary, so both instances must answer the same way.
+
+data Pair a b = Pair a b deriving (Eq, Ord, Show)
+
+data Ver = Ver Int Int deriving (Show)
+
+instance Eq Ver where
+  (==) (Ver a b) (Ver c d) = a == c && b == d
+  (/=) x y = not (x == y)
+
+instance Ord Ver where
+  compare (Ver a b) (Ver c d) = case compare a c of
+    EQ -> compare b d
+    o -> o
+
+main :: IO ()
+main = do
+  let p = Pair 1 2
+      q = Pair 3 4
+      v = Ver 1 2
+      w = Ver 3 4
+  putStrLn (show (p < q))
+  putStrLn (show (p <= q))
+  putStrLn (show (q > p))
+  putStrLn (show (q >= p))
+  putStrLn (show (p < p))
+  putStrLn (show (p >= p))
+  putStrLn (show (min p q))
+  putStrLn (show (max p q))
+  putStrLn (show (min p p))
+  putStrLn (show (compare p q))
+  putStrLn (show (v < w))
+  putStrLn (show (v <= v))
+  putStrLn (show (w > v))
+  putStrLn (show (v >= w))
+  putStrLn (show (min v w))
+  putStrLn (show (max v w))
+  putStrLn (show (compare v w))

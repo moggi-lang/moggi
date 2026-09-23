@@ -1,0 +1,42 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+import Control.Monad
+import Data.Bool
+import Data.Bounded
+import Data.Eq
+import Moggi.Internal.Real
+import Moggi.Internal.Num
+import Data.Ord
+import Text.Show
+import Data.Word
+import System.IO
+
+-- `Word` and `Word64` hold the full unsigned 64-bit range, so their
+-- host representation is negative above @maxBound :: Int@. Showing, ordering and
+-- comparing such values has to treat the bits as unsigned.
+
+w :: Int -> Word
+w = fromIntegral
+
+w32 :: Int -> Word32
+w32 = fromIntegral
+
+w64 :: Int -> Word64
+w64 = fromIntegral
+
+main :: IO ()
+main = do
+  putStrLn (show (maxBound :: Word))
+  putStrLn (show (minBound :: Word))
+  putStrLn (show (maxBound :: Word > w 0))
+  putStrLn (show (w 0 > maxBound :: Word))
+  putStrLn (show (w 1 < maxBound :: Word))
+  putStrLn (show (signum (maxBound :: Word)))
+  putStrLn (show (signum (w 0)))
+  putStrLn (show (max (maxBound :: Word) (w 1)))
+  putStrLn (show (min (maxBound :: Word) (w 1)))
+  putStrLn (show (maxBound :: Word64))
+  putStrLn (show (maxBound :: Word64 > w64 0))
+  putStrLn (show (w64 1 < maxBound :: Word64))
+  putStrLn (show (w64 0 < maxBound :: Word64))
+  putStrLn (show (maxBound :: Word32))
+  putStrLn (show (maxBound :: Word32 > w32 0))

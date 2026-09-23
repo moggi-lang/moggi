@@ -1,0 +1,19 @@
+import Data.Int
+import Data.List
+import Text.Show
+import System.IO
+
+data NonEmpty a = a :| [a]
+
+infixr 5 :|
+
+main :: IO ()
+main = do
+  putStrLn (show (case 1 :| [2, 3] of
+    x :| xs -> x))
+  putStrLn (show (case (:|) 9 [8] of
+    y :| _ -> y))
+  putStrLn (show (case 1 :| 2 : [3] of
+    a :| rest -> case rest of
+      b : _ -> a + b
+      [] -> a))

@@ -1,0 +1,29 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Moggi.Internal.Num
+  ( Num(..)
+  , subtract
+  ) where
+
+-- Integer is a bootstrap primitive synonym; this module does not import the
+-- module that defines `Integer`'s operations, so `Moggi.Internal.Integer` can
+-- define `instance Num Integer` without an import cycle.
+--
+--   * Num         -- arithmetic shared by Int, Integer, Double
+--   * Integral    -- integer division (Int, Integer)   [Moggi.Internal.Real]
+--   * Fractional  -- real division (Double)            [Moggi.Internal.Real]
+
+infixl 6 +, -
+infixl 7 *
+
+class Num a where
+  (+), (-), (*) :: a -> a -> a
+  negate, abs, signum :: a -> a
+  fromInteger :: Integer -> a
+
+-- | the same as @'flip' ('-')@.
+--
+-- Because @-@ is treated specially in the grammar, @(-@ /e/@)@ is not a
+-- section, but an application of prefix negation. However, @('subtract'@ /exp/@)@
+-- is equivalent to the disallowed section.
+subtract :: Num a => a -> a -> a
+subtract x y = y - x

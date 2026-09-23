@@ -1,0 +1,10 @@
+module Tc.IO.FakeName
+
+putStrLn :: String -> ()
+putStrLn _ = ()
+
+readFile :: String -> String
+readFile path = path
+
+pureUse :: String
+pureUse = readFile "not-io"

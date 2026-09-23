@@ -1,0 +1,58 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.ByteString.PHP
+  ( bsLength
+  , bsTake
+  , bsDrop
+  , bsIndex
+  , bsPackInts
+  , bsUnpackInts
+  ) where
+
+import Data.Int
+import Data.List hiding (singleton)
+import Data.Ord
+import Moggi.Err
+
+foreign php function rawStrlen "strlen" :: ByteString -> Int
+
+foreign php function rawSubstr "substr" :: ByteString -> Int -> Int -> ByteString
+
+foreign php function rawSubstrFrom "substr" :: ByteString -> Int -> ByteString
+
+foreign php function rawChr "chr" :: Int -> ByteString
+
+foreign php function rawOrd "ord" :: ByteString -> Int
+
+foreign php function rawImplode "implode" :: String -> [ByteString] -> ByteString
+
+foreign php function rawStrSplit "str_split" :: ByteString -> Int -> [ByteString]
+
+bsLength :: ByteString -> Int
+bsLength b = rawStrlen b
+
+bsTake :: Int -> ByteString -> ByteString
+bsTake n b = rawSubstr b 0 n
+
+bsDrop :: Int -> ByteString -> ByteString
+bsDrop n b = rawSubstrFrom b n
+
+bsIndex :: ByteString -> Int -> Int
+bsIndex b n = case compare n 0 of
+  LT -> error "Data.ByteString.index: negative index"
+  _ -> case compare n (bsLength b) of
+    LT -> rawOrd (rawSubstr b n 1)
+    _ -> error "Data.ByteString.index: index too large"
+
+bsPackInts :: [Int] -> ByteString
+bsPackInts xs = rawImplode "" (mapInts xs)
+
+mapInts [] = []
+mapInts (x : xs) = rawChr x : mapInts xs
+
+bsUnpackInts :: ByteString -> [Int]
+bsUnpackInts b = case compare (bsLength b) 0 of
+  EQ -> []
+  _ -> mapOrds (rawStrSplit b 1)
+
+mapOrds [] = []
+mapOrds (x : xs) = rawOrd x : mapOrds xs

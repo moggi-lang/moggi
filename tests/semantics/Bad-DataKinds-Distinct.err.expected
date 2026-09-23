@@ -1,0 +1,4 @@
+tests/semantics/Bad-DataKinds-Distinct.mog:7:16: type error: could not unify `'Red` with `'Blue`
+
+  7 | coerceBlue x = x
+    |                ^

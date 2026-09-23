@@ -1,0 +1,33 @@
+-- The character and read-side IO: `getChar`/`putChar`, `getLine`,
+-- `getContents` and `interact` over one stdin script, plus the `Read`
+-- entry points `readLn`/`readIO`. The `.stdin` file beside this fixture is
+-- what the program reads.
+import Data.Char (ord)
+import Text.Read
+import System.IO
+
+data Colour = Red | Green deriving Show
+
+instance Read Colour where
+  read s = case s of
+    "red" -> Red
+    _ -> Green
+
+main :: IO ()
+main = do
+  a <- getChar
+  b <- getChar
+  putChar b
+  putChar a
+  putStrLn ""
+  putStrLn ("codes: " <> show (ord a) <> " " <> show (ord b))
+  l <- getLine
+  putStrLn ("line: " <> l)
+  colour <- (readLn :: IO Colour)
+  putStrLn ("colour: " <> show colour)
+  same <- (readIO "red" :: IO Colour)
+  putStrLn ("read: " <> show same)
+  more <- getContents
+  putStrLn ("rest: " <> more)
+  interact (\s -> "[" <> s <> "]")
+  putStrLn ""

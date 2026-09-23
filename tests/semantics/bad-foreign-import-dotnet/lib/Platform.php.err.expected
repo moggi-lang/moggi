@@ -1,0 +1,7 @@
+tests/semantics/bad-foreign-import-dotnet/lib/Platform.mog:9:25: type error: foreign import backend `dotnet` does not match compile backend `php`
+
+Did you mean this?
+    php
+
+   9 | foreign dotnet function hostToString "System.Convert:ToString" :: Int -> String
+     |                         ^^^^^^^^^^^^

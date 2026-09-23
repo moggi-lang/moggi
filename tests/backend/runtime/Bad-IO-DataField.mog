@@ -1,0 +1,8 @@
+module Bad.IO.DataField
+
+import System.IO
+
+data Wrapper = Wrap (IO ())
+
+main :: IO ()
+main = pure ()

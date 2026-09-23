@@ -1,0 +1,16 @@
+import Control.Exception
+import Data.Either
+import System.IO
+
+-- rethrowIO must preserve the original throw site (not the catch site).
+boom :: IO ()
+boom = error "origin"
+
+rethrow :: SomeException -> IO ()
+rethrow e = throwIO e
+
+showOk :: () -> IO ()
+showOk _ = putStrLn "should-not-print"
+
+main :: IO ()
+main = catch boom rethrow

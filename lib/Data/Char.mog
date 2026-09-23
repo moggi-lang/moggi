@@ -1,0 +1,258 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+{-# BACKEND
+  php = Data.Char.PHP
+  jvm = Data.Char.JVM
+  dotnet = Data.Char.DotNet
+#-}
+module Data.Char
+  ( Char
+  , ord
+  , chr
+  , isControl
+  , isSpace
+  , isLower
+  , isUpper
+  , isAlpha
+  , isLetter
+  , isAlphaNum
+  , isPrint
+  , isDigit
+  , isOctDigit
+  , isHexDigit
+  , isNumber
+  , isPunctuation
+  , isSymbol
+  , isSeparator
+  , isAscii
+  , isLatin1
+  , isAsciiUpper
+  , isAsciiLower
+  , toUpper
+  , toLower
+  , toTitle
+  , digitToInt
+  , intToDigit
+  , showLitChar
+  ) where
+
+import Data.Bool
+import Data.Bounded
+import Data.Enum
+import Data.Eq
+import Moggi.Err
+import Data.Int
+import Data.Ord
+import Text.Show
+import Moggi.Internal.Prim
+
+-- Char = Unicode scalar value (U+0000..U+10FFFF excluding surrogates).
+-- Not a grapheme. Classification/case use the backend Unicode database.
+-- Grapheme segmentation and normalization are separate APIs.
+type Char = Char#
+
+-- Zero-cost representation coercions (Char and Int are both backend ints).
+ord :: Char -> Int
+ord c = charToInt# c
+
+-- Partial: traps on non-scalars (including surrogates).
+coerceChar n = intToChar# n
+
+chr :: Int -> Char
+chr n = case isUnicodeScalar n of
+  True -> coerceChar n
+  False -> error "Data.Char.chr: not a Unicode scalar value"
+
+isControl :: Char -> Bool
+
+isSpace :: Char -> Bool
+
+isLower :: Char -> Bool
+
+isUpper :: Char -> Bool
+
+isAlpha :: Char -> Bool
+
+isLetter :: Char -> Bool
+
+isAlphaNum :: Char -> Bool
+
+isPrint :: Char -> Bool
+
+isDigit :: Char -> Bool
+
+isNumber :: Char -> Bool
+
+isPunctuation :: Char -> Bool
+
+isSymbol :: Char -> Bool
+
+isSeparator :: Char -> Bool
+
+toUpper :: Char -> Char
+
+toLower :: Char -> Char
+
+toTitle :: Char -> Char
+
+digitToInt :: Char -> Int
+
+-- Code-range predicates: pure Moggi on ord.
+
+intLt a b = case intCompare# a b of
+  LT -> True
+  EQ -> False
+  GT -> False
+
+intGt a b = case intCompare# a b of
+  LT -> False
+  EQ -> False
+  GT -> True
+
+intGte a b = case intCompare# a b of
+  LT -> False
+  EQ -> True
+  GT -> True
+
+intLte a b = case intCompare# a b of
+  LT -> True
+  EQ -> True
+  GT -> False
+
+inRange lo hi n = intGte n lo && intLte n hi
+
+charEqInt a b = case intCompare# a b of
+  EQ -> True
+  _ -> False
+
+-- Surrogates U+D800..U+DFFF are code points but not Unicode scalar values.
+isUnicodeScalar n =
+  intGte n 0
+  && intLte n 1114111
+  && (intLt n 55296 || intGt n 57343)
+
+isAscii :: Char -> Bool
+isAscii c = intLt (ord c) 128
+
+isLatin1 :: Char -> Bool
+isLatin1 c = intLt (ord c) 256
+
+isAsciiUpper :: Char -> Bool
+isAsciiUpper c = inRange 65 90 (ord c)
+
+isAsciiLower :: Char -> Bool
+isAsciiLower c = inRange 97 122 (ord c)
+
+isOctDigit :: Char -> Bool
+isOctDigit c = inRange 48 55 (ord c)
+
+isHexDigit :: Char -> Bool
+isHexDigit c =
+  let n = ord c
+  in isDigit c || inRange 65 70 n || inRange 97 102 n
+
+intToDigit :: Int -> Char
+intToDigit n = case inRange 0 9 n of
+  True -> chr (n + 48)
+  False -> intToDigitHex n
+
+intToDigitHex n = case inRange 10 15 n of
+  True -> chr (n + 87)
+  False -> error "Data.Char.intToDigit: not a digit"
+
+charSuccN n = case charEqInt n 55295 of
+  True -> 57344
+  False -> case charEqInt n 1114111 of
+    True -> error "Data.Char.succ: maxBound"
+    False -> n + 1
+
+charPredN n = case charEqInt n 57344 of
+  True -> 55295
+  False -> case charEqInt n 0 of
+    True -> error "Data.Char.pred: minBound"
+    False -> n - 1
+
+instance Eq Char where
+  (==) a b = charEq# a b
+  (/=) a b = charNe# a b
+
+instance Ord Char where
+  compare a b = charCompare# a b
+
+instance Bounded Char where
+  minBound = chr 0
+  maxBound = chr 1114111
+
+instance Enum Char where
+  succ c = chr (charSuccN (ord c))
+  pred c = chr (charPredN (ord c))
+  toEnum = chr
+  fromEnum = ord
+
+-- | Show a character the way it is written in a source literal: a printable
+-- character stands for itself and everything else uses an escape (the named
+-- control escapes, @\\DEL@, the ASCII control names from @NUL@ to @US@, or the
+-- decimal code of a character above @DEL@).
+showLitChar :: Char -> ShowS
+showLitChar c s = case ord c of
+  n -> case n > 127 of
+    True -> showChar '\\' (showString (show n) s)
+    False -> case n == 127 of
+      True -> showString "\\DEL" s
+      False -> case n == 92 of
+        True -> showString "\\\\" s
+        False -> case n >= 32 of
+          True -> showChar c s
+          False -> showControlName n s
+
+-- The ASCII control names, indexed by code point.
+showControlName :: Int -> ShowS
+showControlName n s = case n of
+  7 -> showString "\\a" s
+  8 -> showString "\\b" s
+  9 -> showString "\\t" s
+  10 -> showString "\\n" s
+  11 -> showString "\\v" s
+  12 -> showString "\\f" s
+  13 -> showString "\\r" s
+  14 -> showString "\\SO" s
+  _ -> showString (stringCons# '\\' (asciiName n)) s
+
+asciiName :: Int -> String
+asciiName n = case n of
+  0 -> "NUL"
+  1 -> "SOH"
+  2 -> "STX"
+  3 -> "ETX"
+  4 -> "EOT"
+  5 -> "ENQ"
+  6 -> "ACK"
+  7 -> "BEL"
+  8 -> "BS"
+  9 -> "HT"
+  10 -> "LF"
+  11 -> "VT"
+  12 -> "FF"
+  13 -> "CR"
+  14 -> "SO"
+  15 -> "SI"
+  16 -> "DLE"
+  17 -> "DC1"
+  18 -> "DC2"
+  19 -> "DC3"
+  20 -> "DC4"
+  21 -> "NAK"
+  22 -> "SYN"
+  23 -> "ETB"
+  24 -> "CAN"
+  25 -> "EM"
+  26 -> "SUB"
+  27 -> "ESC"
+  28 -> "FS"
+  29 -> "GS"
+  30 -> "RS"
+  _ -> "US"
+
+instance Show Char where
+  show c = case c == '\'' of
+    True -> "'\\''"
+    False -> stringAppend# "'" (stringAppend# (showLitChar c "") "'")

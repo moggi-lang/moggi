@@ -1,0 +1,4 @@
+tests/semantics/bad-import-conflict/Main.mog:6:8: type error: ambiguous occurrence `foo`: it could refer to `Conflict.A.foo` or `Conflict.B.foo`
+
+  6 | main = foo 1
+    |        ^^^

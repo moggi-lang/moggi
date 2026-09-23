@@ -1,0 +1,16 @@
+-- A class whose two methods are mutually defaulted declares which of them an
+-- instance has to write. An instance that writes neither is rejected: the
+-- defaults would call each other forever.
+class Counter t where
+  {-# MINIMAL count | countUp #-}
+  count :: t -> Int
+  count x = countUp x
+  countUp :: t -> Int
+  countUp x = count x
+
+data W = W
+
+instance Counter W where
+
+main :: IO ()
+main = putStrLn (show (count W))

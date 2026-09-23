@@ -1,0 +1,105 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.Char.JVM
+  ( isControl
+  , isSpace
+  , isLower
+  , isUpper
+  , isAlpha
+  , isLetter
+  , isAlphaNum
+  , isPrint
+  , isDigit
+  , isNumber
+  , isPunctuation
+  , isSymbol
+  , isSeparator
+  , toUpper
+  , toLower
+  , toTitle
+  , digitToInt
+  ) where
+
+import Data.Bool
+import Moggi.Err
+import Data.Int
+import Data.Ord
+import Moggi.Internal.Prim
+
+foreign jvm function isControl "java.lang.Character:isISOControl" :: Char -> Bool
+
+foreign jvm function isSpace "java.lang.Character:isWhitespace" :: Char -> Bool
+
+foreign jvm function isLower "java.lang.Character:isLowerCase" :: Char -> Bool
+
+foreign jvm function isUpper "java.lang.Character:isUpperCase" :: Char -> Bool
+
+foreign jvm function isAlpha "java.lang.Character:isLetter" :: Char -> Bool
+
+foreign jvm function isAlphaNum "java.lang.Character:isLetterOrDigit" :: Char -> Bool
+
+foreign jvm function isDigit "java.lang.Character:isDigit" :: Char -> Bool
+
+foreign jvm function toUpper "java.lang.Character:toUpperCase" :: Char -> Char
+
+foreign jvm function toLower "java.lang.Character:toLowerCase" :: Char -> Char
+
+foreign jvm function toTitle "java.lang.Character:toTitleCase" :: Char -> Char
+
+foreign jvm function rawGetType "java.lang.Character:getType" :: Char -> Int32
+
+foreign jvm function rawGetNumericValue "java.lang.Character:getNumericValue" :: Char -> Int32
+
+getType c = int32ToInt# (rawGetType c)
+
+getNumericValue c = int32ToInt# (rawGetNumericValue c)
+
+isLetter = isAlpha
+
+isPrint c = not (isControl c)
+
+intEq a b = a == b
+
+lteInt a b = case intCompare# a b of
+  GT -> False
+  _ -> True
+
+gteInt a b = case intCompare# a b of
+  LT -> False
+  _ -> True
+
+inRange lo hi n = gteInt n lo && lteInt n hi
+
+isNumber c =
+  let t = getType c
+  in intEq t 9 || intEq t 10 || intEq t 11
+
+isSymbol c =
+  let t = getType c
+  in intEq t 25 || intEq t 26 || intEq t 27 || intEq t 28
+
+isSeparator c =
+  let t = getType c
+  in intEq t 12 || intEq t 13 || intEq t 14
+
+isPunctuation c =
+  let t = getType c
+  in intEq t 20 || intEq t 21 || intEq t 22 || intEq t 23 || intEq t 24 || intEq t 29 || intEq t 30
+
+digitToIntUnicode c = getNumericValue c
+
+digitToIntHexUpper n c =
+  case inRange 65 70 n of
+    True -> n - 55
+    False -> digitToIntUnicode c
+
+digitToIntHexLower n c =
+  case inRange 97 102 n of
+    True -> n - 87
+    False -> digitToIntHexUpper n c
+
+digitToIntFromOrd n c =
+  case inRange 48 57 n of
+    True -> n - 48
+    False -> digitToIntHexLower n c
+
+digitToInt c = digitToIntFromOrd (charToInt# c) c

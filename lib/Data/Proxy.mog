@@ -1,0 +1,99 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.Proxy
+  ( Proxy(..)
+  , asProxyTypeOf
+  , KProxy(..)
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Bool
+import Data.Bounded
+import Data.Enum
+import Data.Eq
+import Text.Read
+import Data.Functor
+import Data.Monoid
+import Data.Ord
+import Data.Semigroup
+import Text.Show
+
+-- | 'Proxy' is a type that holds no data, but has a phantom parameter of
+-- arbitrary type (or even kind). Its use is to provide type information, even
+-- though there is no value available of that type (or it may be too costly to
+-- create one).
+--
+-- Historically, @'Proxy' :: 'Proxy' a@ is a safer alternative to the
+-- @undefined :: a@ idiom.
+--
+-- >>> Proxy :: Proxy (Int -> Int)
+-- Proxy
+--
+-- Proxy can even hold types of higher kinds,
+--
+-- >>> Proxy :: Proxy Either
+-- Proxy
+--
+-- >>> Proxy :: Proxy Functor
+-- Proxy
+data Proxy t = Proxy
+  deriving (Bounded, Read)
+
+-- | A concrete, promotable proxy type, for use at the kind level.
+-- There are no instances for this because it is intended at the kind level only.
+data KProxy t = KProxy
+
+-- It's common to use (undefined :: Proxy t) and (Proxy :: Proxy t)
+-- interchangeably, so all of these instances are hand-written to be
+-- lazy in Proxy arguments.
+instance Eq (Proxy s) where
+  (==) _ _ = True
+  (/=) _ _ = False
+
+instance Ord (Proxy s) where
+  compare _ _ = EQ
+
+instance Show (Proxy s) where
+  showsPrec _ _ = showString "Proxy"
+
+instance Enum (Proxy s) where
+  succ _ = error "Proxy.succ"
+  pred _ = error "Proxy.pred"
+  fromEnum _ = 0
+  toEnum n = case n of
+    0 -> Proxy
+    _ -> error "Proxy.toEnum: 0 expected"
+
+-- `Semigroup` defines `sconcat`/`stimes` in terms of `(<>)` here; a `Proxy`
+-- ignores both operands.
+instance Semigroup (Proxy s) where
+  (<>) _ _ = Proxy
+
+instance Monoid (Proxy s) where
+  mempty = Proxy
+
+instance Functor Proxy where
+  map _ _ = Proxy
+
+instance Applicative Proxy where
+  pure _ = Proxy
+  (<*>) _ _ = Proxy
+
+instance Alternative Proxy where
+  empty = Proxy
+  (<|>) _ _ = Proxy
+
+instance Monad Proxy where
+  (>>=) _ _ = Proxy
+
+instance MonadPlus Proxy
+
+-- | 'asProxyTypeOf' is a type-restricted version of 'const'.
+-- It is usually used as an infix operator, and its typing forces its first
+-- argument (which is usually overloaded) to have the same type as the tag
+-- of the second.
+--
+-- >>> :type asProxyTypeOf 123 (Proxy :: Proxy Int)
+-- asProxyTypeOf 123 (Proxy :: Proxy Int) :: Int
+asProxyTypeOf :: a -> Proxy a -> a
+asProxyTypeOf x _ = x

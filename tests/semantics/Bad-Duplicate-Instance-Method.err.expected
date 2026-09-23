@@ -1,0 +1,4 @@
+tests/semantics/Bad-Duplicate-Instance-Method.mog:10:3: type error: duplicate method `check` in instance for `Check`
+
+  10 |   check x = Box
+     |   ^^^^^

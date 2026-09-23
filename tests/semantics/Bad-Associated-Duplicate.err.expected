@@ -1,0 +1,4 @@
+tests/semantics/Bad-Associated-Duplicate.mog:9:8: type error: duplicate associated type equation `F` in instance for `Family`
+
+   9 |   type F Bool = Bool
+     |        ^

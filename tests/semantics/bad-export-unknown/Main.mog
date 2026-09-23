@@ -1,0 +1,8 @@
+module Main where
+
+import Thing
+
+-- A module in its own directory: an export list is only collected for a module that something
+-- imports, so a bad one is reported here. The program never runs — the compile is rejected first.
+main :: IO ()
+main = pure ()

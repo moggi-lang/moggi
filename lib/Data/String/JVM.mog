@@ -1,0 +1,145 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.String.JVM
+  ( singleton
+  , unpack
+  , pack
+  , length
+  , take
+  , drop
+  , strNull
+  , strConcat
+  , strReverse
+  , strMap
+  , isPrefixOf
+  , isSuffixOf
+  , splitOn
+  , lines
+  , words
+  , unlines
+  , unwords
+  ) where
+
+import Data.Bool
+import Data.Char
+import Data.Int
+import Data.List hiding (singleton, take, drop, isPrefixOf, isSuffixOf)
+import Data.Ord
+import Moggi.Internal.Prim
+
+-- Ordinary JDK FFI only (no moggi.rt.StringOps).
+-- Width-exact signatures: JDK String/Character APIs are int32-based.
+
+-- Character.toString(int) — codepoint overload (Char is a Unicode scalar).
+foreign jvm function rawSingleton "java.lang.Character:toString" :: Int32 -> String
+
+singleton c = rawSingleton (int32FromInt# (charToInt# c))
+
+foreign jvm function rawUtf16Length "java.lang.String.length" :: String -> Int32
+
+foreign jvm function rawCodePointCount "java.lang.String.codePointCount" :: String -> Int32 -> Int32 -> Int32
+
+foreign jvm function rawOffsetByCodePoints "java.lang.String.offsetByCodePoints" :: String -> Int32 -> Int32 -> Int32
+
+foreign jvm function rawCodePointAt "java.lang.String.codePointAt" :: String -> Int32 -> Int32
+
+foreign jvm function rawSubstring "java.lang.String.substring" :: String -> Int32 -> Int32 -> String
+
+foreign jvm function rawStartsWith "java.lang.String.startsWith" :: String -> String -> Bool
+
+foreign jvm function rawEndsWith "java.lang.String.endsWith" :: String -> String -> Bool
+
+foreign jvm function lines "java.lang.String.lines" :: String -> [String]
+
+foreign jvm function rawIndexOfFrom "java.lang.String.indexOf" :: String -> String -> Int32 -> Int32
+
+utf16Length s = int32ToInt# (rawUtf16Length s)
+
+codePointCount s a b = int32ToInt# (rawCodePointCount s (int32FromInt# a) (int32FromInt# b))
+
+offsetByCodePoints s a b = int32ToInt# (rawOffsetByCodePoints s (int32FromInt# a) (int32FromInt# b))
+
+codePointAt s i = int32ToInt# (rawCodePointAt s (int32FromInt# i))
+
+substring s a b = rawSubstring s (int32FromInt# a) (int32FromInt# b)
+
+indexOfFrom s sep start = int32ToInt# (rawIndexOfFrom s sep (int32FromInt# start))
+
+unpack :: String -> [Char]
+unpack s = unpackAt s 0 (utf16Length s)
+
+unpackAt :: String -> Int -> Int -> [Char]
+unpackAt s i end = case intCompare# i end of
+  EQ -> []
+  _ -> chr (codePointAt s i) : unpackAt s (offsetByCodePoints s i 1) end
+
+splitOn :: String -> String -> [String]
+splitOn sep s = case utf16Length sep of
+  0 -> s : []
+  _ -> splitOnAt sep s 0
+
+splitOnAt :: String -> String -> Int -> [String]
+splitOnAt sep s start =
+  let i = indexOfFrom s sep start in
+  case intCompare# i (0 - 1) of
+    EQ -> substring s start (utf16Length s) : []
+    _ -> substring s start i : splitOnAt sep s (i + utf16Length sep)
+
+packChars :: [Char] -> String
+packChars xs = case xs of
+  [] -> ""
+  c : rest -> singleton c <> packChars rest
+
+length :: String -> Int
+length s = codePointCount s 0 (utf16Length s)
+
+take :: Int -> String -> String
+take n s = substring s 0 (offsetByCodePoints s 0 n)
+
+drop :: Int -> String -> String
+drop n s =
+  let len = length s
+  in case intCompare# n len of
+    LT -> substring s (offsetByCodePoints s 0 n) (utf16Length s)
+    _ -> ""
+
+strNull :: String -> Bool
+strNull s = case length s of
+  0 -> True
+  _ -> False
+
+strConcat :: [String] -> String
+strConcat xs = case xs of
+  [] -> ""
+  x : rest -> x <> strConcat rest
+
+pack :: [Char] -> String
+pack xs = packChars xs
+
+strReverse :: String -> String
+strReverse s = packChars (reverse (unpack s))
+
+strMap :: (Char -> Char) -> String -> String
+strMap f s = packChars (listMapChar f (unpack s))
+
+listMapChar :: (Char -> Char) -> [Char] -> [Char]
+listMapChar f xs = case xs of
+  [] -> []
+  x : rest -> f x : listMapChar f rest
+
+isPrefixOf :: String -> String -> Bool
+isPrefixOf prefix s = rawStartsWith s prefix
+
+isSuffixOf :: String -> String -> Bool
+isSuffixOf suffix s = rawEndsWith s suffix
+
+words :: String -> [String]
+words s = filter (\w -> w /= "") (splitOn " " s)
+
+unlines :: [String] -> String
+unlines [] = ""
+unlines (line : rest) = line <> "\n" <> unlines rest
+
+unwords :: [String] -> String
+unwords [] = ""
+unwords [x] = x
+unwords (x : rest) = x <> " " <> unwords rest

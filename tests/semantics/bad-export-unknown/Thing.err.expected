@@ -1,0 +1,8 @@
+tests/semantics/bad-export-unknown/Thing.mog:2:5: type error: module `Thing` cannot export unknown value `widht`
+
+Did you mean one of these?
+    Right
+    width
+
+  2 |   ( widht
+    |     ^^^^^

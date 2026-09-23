@@ -1,0 +1,313 @@
+import Control.Exception
+import Data.Bits
+import Data.Either
+import Data.Int
+import Moggi.Internal.Real
+import Data.Maybe
+import Text.Show
+import Moggi.Exception.Type
+import Moggi.Internal.Prim
+import System.Filesystem (readTextFile)
+import System.Filesystem.Path
+import System.IO
+import System.IO.Error
+
+-- ---- Exec-Exception-Arith ----
+
+-- A negative shift count and a mathematically undefined integer division are
+-- ordinary `ArithException` values, thrown from the library and catchable like
+-- any other exception: they must never surface as the host's own arithmetic
+-- fault (`DivisionByZeroError` / `ArithmeticException` / `DivideByZeroException`).
+shiftBoom :: IO Int
+shiftBoom = do
+  let n = shiftL 1 (negate 1)
+  pure n
+
+quotBoom :: IO Int
+quotBoom = do
+  let n = quot 1 0
+  pure n
+
+report :: Either ArithException Int -> IO ()
+report r = putStrLn (case r of
+  Left e -> displayException e
+  Right n -> show n)
+
+runExceptionArith :: IO ()
+runExceptionArith = do
+  shiftResult <- try shiftBoom
+  report shiftResult
+  quotResult <- try quotBoom
+  report quotResult
+
+-- ---- Exec-Exception-Bracket ----
+
+log :: String -> IO ()
+log s = putStrLn s
+
+acquire :: IO String
+acquire = do
+  log "acquire"
+  pure "res"
+
+acquireFail :: IO String
+acquireFail = do
+  log "acquire-fail"
+  throwIO (ErrorCall "no-res")
+
+release :: String -> IO ()
+release _ = log "release"
+
+useOk :: String -> IO ()
+useOk _ = log "use-ok"
+
+useFail :: String -> IO ()
+useFail _ = do
+  log "use-fail"
+  throwIO (ErrorCall "use-boom")
+
+showEx :: Either ErrorCall () -> IO ()
+showEx r = putStrLn (case r of
+  Left e -> displayException e
+  Right _ -> "unexpected")
+
+runExceptionBracket :: IO ()
+runExceptionBracket = do
+  bracket acquire release useOk
+  r1 <- try (bracket acquire release useFail)
+  showEx r1
+  r2 <- try (bracket acquireFail release useOk)
+  showEx r2
+
+-- ---- Exec-Exception-Default ----
+
+-- An instance may omit `displayException`: the class default renders the value
+-- with `show`, and that is the text the wrapper records for rethrows.
+data MyException = MyException
+  deriving (Show)
+
+instance Exception MyException where
+  toException e = exceptionWrap# "MyException" (displayException e) e
+  fromException se = exceptionUnwrap# "MyException" se
+
+boom :: IO ()
+boom = throw MyException
+
+report_d :: Either MyException () -> IO ()
+report_d r = case r of
+  Left e -> putStrLn ("caught: " <> displayException e)
+  Right _ -> putStrLn "no exception"
+
+runExceptionDefault :: IO ()
+runExceptionDefault = do
+  try boom >>= report_d
+  putStrLn ("show: " <> show MyException)
+
+-- ---- Exec-Exception-ErrorCall ----
+
+-- error# must become catchable ErrorCall (not a raw host abort).
+boom_e :: IO ()
+boom_e = error "from-error"
+
+showResult :: Either ErrorCall () -> IO ()
+showResult r = putStrLn (case r of
+  Left e -> displayException e
+  Right _ -> "unexpected")
+
+runExceptionErrorCall :: IO ()
+runExceptionErrorCall = do
+  r <- try boom_e
+  showResult r
+
+-- ---- Exec-Exception-Finally ----
+
+log_f :: String -> IO ()
+log_f s = putStrLn s
+
+succeed :: IO String
+succeed = do
+  log_f "action-ok"
+  pure "result"
+
+failAction :: IO String
+failAction = do
+  log_f "action-fail"
+  throwIO (ErrorCall "fail")
+
+cleanupOk :: IO ()
+cleanupOk = log_f "cleanup-ok"
+
+cleanupFail :: IO ()
+cleanupFail = do
+  log_f "cleanup-fail"
+  throwIO (ErrorCall "cleanup-boom")
+
+showEx_f :: Either ErrorCall String -> IO ()
+showEx_f r = putStrLn (case r of
+  Left e -> displayException e
+  Right _ -> "unexpected")
+
+runExceptionFinally :: IO ()
+runExceptionFinally = do
+  r <- finally succeed cleanupOk
+  log_f r
+  r2 <- try (finally failAction cleanupOk)
+  showEx_f r2
+  r3 <- try (finally succeed cleanupFail)
+  showEx_f r3
+
+-- ---- Exec-Exception-HostException ----
+
+hostBoom :: IO ()
+hostBoom = throwIO (HostException "test" "Synthetic.Type" "host-boom")
+
+errorBoom :: IO ()
+errorBoom = throwIO (ErrorCall "error-boom")
+
+tryHost :: IO a -> IO (Either HostException a)
+tryHost action = try action
+
+tryIOE :: IO a -> IO (Either IOException a)
+tryIOE action = try action
+
+tryErr :: IO a -> IO (Either ErrorCall a)
+tryErr action = try action
+
+pastIOE :: IO ()
+pastIOE = do
+  _ <- tryIOE hostBoom
+  pure ()
+
+pastErr :: IO ()
+pastErr = do
+  _ <- tryErr hostBoom
+  pure ()
+
+showHost :: Either HostException () -> IO ()
+showHost r = putStrLn (case r of
+  Left (HostException _ _ msg) -> msg
+  Right _ -> "unexpected")
+
+showErr :: Either ErrorCall () -> IO ()
+showErr r = putStrLn (case r of
+  Left (ErrorCall s) -> s
+  Right _ -> "unexpected")
+
+runExceptionHostException :: IO ()
+runExceptionHostException = do
+  r1 <- tryHost hostBoom
+  showHost r1
+  r2 <- tryHost pastIOE
+  showHost r2
+  r3 <- tryErr errorBoom
+  showErr r3
+  r4 <- tryHost pastErr
+  showHost r4
+
+-- ---- Exec-Exception-HostNormalize ----
+
+-- A host failure the library does not translate stays a HostException; only
+-- `System.IO` turns a failed operation into an IOException. Neither may be read
+-- as the other, and every backend reports the same failure type.
+
+missing :: FilePath
+missing = "/definitely/not/here"
+
+tryHost_h2 :: IO a -> IO (Either HostException a)
+tryHost_h2 action = try action
+
+tryIOE_h2 :: IO a -> IO (Either IOException a)
+tryIOE_h2 action = try action
+
+runExceptionHostNormalize :: IO ()
+runExceptionHostNormalize = do
+  raw <- tryHost_h2 (tryIOE_h2 (readTextFile missing))
+  putStrLn (case raw of
+    Left _ -> "host-failure"
+    Right _ -> "wrong: host failure read as an IO error")
+  translated <- tryHost_h2 (tryIOE_h2 (openFile missing ReadMode))
+  putStrLn (case translated of
+    Left _ -> "wrong: IO error read as a host failure"
+    Right _ -> "io-error")
+  detail <- tryIOE_h2 (openFile missing ReadMode)
+  putStrLn (case detail of
+    Left e -> show (ioeGetErrorType e)
+    Right _ -> "unexpected")
+
+-- ---- Exec-Exception-IOError ----
+
+boom_i :: IO String
+boom_i = ioError (mkIOError doesNotExistErrorType "gone" Nothing Nothing)
+
+classify :: Either IOException String -> String
+classify r = case r of
+  Left e -> classifyIOE e
+  Right _ -> "unexpected"
+
+classifyIOE :: IOException -> String
+classifyIOE e = case isDoesNotExistError e of
+  True -> "missing"
+  False -> "other-ioe"
+
+runExceptionIOError :: IO ()
+runExceptionIOError = do
+  r <- tryIOError boom_i
+  putStrLn (classify r)
+
+-- ---- Exec-Exception-NoSwallow ----
+
+boom_n :: IO ()
+boom_n = throwIO (ErrorCall "not-io")
+
+-- try @IOException must not catch ErrorCall; outer try @SomeException should.
+ignoreIOException :: IOException -> IO ()
+ignoreIOException _ = pure ()
+
+showResult_n :: Either SomeException () -> IO ()
+showResult_n r = putStrLn (case r of
+  Left e -> displayException e
+  Right _ -> "unexpected")
+
+runExceptionNoSwallow :: IO ()
+runExceptionNoSwallow = do
+  r <- try (catch boom_n ignoreIOException)
+  showResult_n r
+
+-- ---- Exec-Exception-Try ----
+
+boom_t :: IO ()
+boom_t = throwIO (ErrorCall "boom")
+
+ok :: IO ()
+ok = putStrLn "ok"
+
+showTry :: Either ErrorCall () -> IO ()
+showTry r = putStrLn (case r of
+  Left e -> displayException e
+  Right _ -> "unexpected-success")
+
+showOk :: Either ErrorCall () -> IO ()
+showOk r = putStrLn (case r of
+  Left _ -> "unexpected-fail"
+  Right _ -> "recovered-ok")
+
+runExceptionTry :: IO ()
+runExceptionTry = do
+  r1 <- try boom_t
+  showTry r1
+  r2 <- try ok
+  showOk r2
+
+-- ---- combined entry point ----
+main :: IO ()
+main = do
+  runExceptionArith
+  runExceptionBracket
+  runExceptionDefault
+  runExceptionErrorCall
+  runExceptionFinally
+  runExceptionHostException
+  runExceptionHostNormalize
+  runExceptionIOError
+  runExceptionNoSwallow
+  runExceptionTry

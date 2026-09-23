@@ -1,0 +1,195 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- |
+-- The 'Maybe' type, and associated operations.
+module Data.Maybe
+  ( Maybe(Nothing, Just)
+  , maybe
+  , isJust
+  , isNothing
+  , fromJust
+  , fromMaybe
+  , listToMaybe
+  , maybeToList
+  , catMaybes
+  , mapMaybe
+  ) where
+
+import Data.Bool
+import Data.Eq
+import Moggi.Err
+import Data.Functor
+import Data.Ord
+import Text.Show
+import Moggi.Internal.Prim
+
+-- Applicative / Alternative / Monad / MonadPlus instances live in
+-- Control.Applicative and Control.Monad so those modules can use Maybe
+-- (e.g. optional) without an import cycle.
+
+-- | The 'Maybe' type encapsulates an optional value. A value of type
+-- @'Maybe' a@ either contains a value of type @a@ (represented as @'Just' a@),
+-- or it is empty (represented as 'Nothing'). Using 'Maybe' is a good way to
+-- deal with errors or exceptional cases without resorting to drastic measures
+-- such as 'error'.
+--
+-- The 'Maybe' type is also a monad. It is a simple kind of error monad, where
+-- all errors are represented by 'Nothing'. A richer error monad can be built
+-- using the 'Either' type.
+data Maybe a = Nothing | Just a
+
+-- | The 'maybe' function takes a default value, a function, and a 'Maybe'
+-- value. If the 'Maybe' value is 'Nothing', the function returns the default
+-- value. Otherwise, it applies the function to the value inside the 'Just' and
+-- returns the result.
+--
+-- >>> maybe False odd (Just 3)
+-- True
+-- >>> maybe False odd Nothing
+-- False
+--
+-- Apply 'show' to a @Maybe Int@. If we have @Just n@, we want to show the
+-- underlying 'Int' @n@. But if we have 'Nothing', we return the empty string
+-- instead of (for example) "Nothing":
+--
+-- >>> maybe "" show (Just 5)
+-- "5"
+-- >>> maybe "" show Nothing
+-- ""
+maybe :: b -> (a -> b) -> Maybe a -> b
+maybe d f mx = case mx of
+  Nothing -> d
+  Just x -> f x
+
+-- | 'isJust' @x@ returns 'True' when @x@ is of the form @Just _@ and 'False'
+-- otherwise.
+--
+-- >>> isJust (Just 3)
+-- True
+-- >>> isJust Nothing
+-- False
+--
+-- Only the outer constructor is taken into consideration:
+--
+-- >>> isJust (Just Nothing)
+-- True
+isJust :: Maybe a -> Bool
+isJust mx = case mx of
+  Just _ -> True
+  Nothing -> False
+
+-- | 'isNothing' @x@ returns 'True' when @x@ is 'Nothing' and 'False' otherwise.
+--
+-- >>> isNothing (Just 3)
+-- False
+-- >>> isNothing Nothing
+-- True
+--
+-- Only the outer constructor is taken into consideration:
+--
+-- >>> isNothing (Just Nothing)
+-- False
+isNothing :: Maybe a -> Bool
+isNothing mx = case mx of
+  Nothing -> True
+  Just _ -> False
+
+-- | The 'fromJust' function extracts the element out of a 'Just' and throws an
+-- error if its argument is 'Nothing'.
+--
+-- >>> fromJust (Just 1)
+-- 1
+-- >>> 2 * (fromJust (Just 10))
+-- 20
+--
+-- WARNING: This function is partial. You can use case-matching instead.
+fromJust :: Maybe a -> a
+fromJust mx = case mx of
+  Just x -> x
+  Nothing -> error "Data.Maybe.fromJust: Nothing"
+
+-- | The 'fromMaybe' function takes a default value and a 'Maybe' value. If the
+-- 'Maybe' is 'Nothing', it returns the default value; otherwise, it returns the
+-- value contained in the 'Maybe'.
+--
+-- >>> fromMaybe "" (Just "Hello, World!")
+-- "Hello, World!"
+-- >>> fromMaybe "" Nothing
+-- ""
+fromMaybe :: a -> Maybe a -> a
+fromMaybe d mx = case mx of
+  Nothing -> d
+  Just x -> x
+
+-- | The 'listToMaybe' function returns 'Nothing' on an empty list or @'Just' a@
+-- where @a@ is the first element of the list.
+--
+-- >>> listToMaybe []
+-- Nothing
+-- >>> listToMaybe [9]
+-- Just 9
+-- >>> listToMaybe [1,2,3]
+-- Just 1
+listToMaybe :: [a] -> Maybe a
+listToMaybe xs = case xs of
+  [] -> Nothing
+  x : _ -> Just x
+
+-- | The 'maybeToList' function returns an empty list when given 'Nothing' or a
+-- singleton list when given 'Just'.
+--
+-- >>> maybeToList (Just 7)
+-- [7]
+-- >>> maybeToList Nothing
+-- []
+maybeToList :: Maybe a -> [a]
+maybeToList mx = maybe [] (\x -> [x]) mx
+
+-- | The 'catMaybes' function takes a list of 'Maybe's and returns a list of all
+-- the 'Just' values.
+--
+-- >>> catMaybes [Just 1, Nothing, Just 3]
+-- [1,3]
+catMaybes :: [Maybe a] -> [a]
+catMaybes xs = case xs of
+  [] -> []
+  Nothing : rest -> catMaybes rest
+  Just x : rest -> x : catMaybes rest
+
+-- | The 'mapMaybe' function is a version of 'map' which can throw out elements.
+-- In particular, the functional argument returns something of type
+-- @'Maybe' b@. If this is 'Nothing', no element is added on to the result list.
+-- If it is @'Just' b@, then @b@ is included in the result list.
+--
+-- Using @'mapMaybe' f x@ is a shortcut for @'catMaybes' $ 'map' f x@ in most
+-- cases:
+--
+-- >>> mapMaybe (\x -> case x of { 1 -> Just 9; _ -> Nothing }) [1, 2, 1]
+-- [9,9]
+--
+-- If we map the 'Just' constructor, the entire list should be returned:
+--
+-- >>> mapMaybe Just [1,2,3]
+-- [1,2,3]
+mapMaybe :: (a -> Maybe b) -> [a] -> [b]
+mapMaybe f xs = case xs of
+  [] -> []
+  x : rest -> case f x of
+    Nothing -> mapMaybe f rest
+    Just y -> y : mapMaybe f rest
+
+instance Functor Maybe where
+  map f mx = case mx of
+    Nothing -> Nothing
+    Just x -> Just (f x)
+
+instance Eq (Maybe a) where
+  (==) a b = maybeEq# a b
+  (/=) a b = maybeNe# a b
+
+instance Ord (Maybe a) where
+  compare a b = maybeCompare# a b
+
+instance Show a => Show (Maybe a) where
+  showsPrec d mx = case mx of
+    Nothing -> showString "Nothing"
+    Just x -> showParen (d > 10) (\r -> showString "Just " (showsPrec 11 x r))

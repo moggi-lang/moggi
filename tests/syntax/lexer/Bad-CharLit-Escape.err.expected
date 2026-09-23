@@ -1,0 +1,4 @@
+tests/syntax/lexer/Bad-CharLit-Escape.mog:3:6: lex error: invalid escape sequence \q in character literal
+
+  3 | c = '\q'
+    |      ^^^

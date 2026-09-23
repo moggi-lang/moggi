@@ -1,0 +1,4 @@
+tests/syntax/parser/bad-parse/foreign/Bad-HostType.mog:3:22: parse error: expected string literal, found end of file
+
+  3 | foreign jvm type Path
+    |                      ^

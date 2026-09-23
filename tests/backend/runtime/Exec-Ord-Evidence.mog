@@ -1,0 +1,13 @@
+import Data.Ord
+import Data.Int
+import Text.Show
+import System.IO
+
+ltCheck :: Ord a => a -> a -> Bool
+ltCheck x y = x < y
+
+demo :: Bool
+demo = ltCheck 1 2
+
+main :: IO ()
+main = putStrLn (show demo)

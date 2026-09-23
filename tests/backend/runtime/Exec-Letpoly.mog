@@ -1,0 +1,17 @@
+import Data.Bool
+import Data.Int
+import Text.Show
+import System.IO
+
+id x = x
+
+asInt :: Int
+asInt = id 1
+
+asBool :: Bool
+asBool = id True
+
+main :: IO ()
+main = do
+  putStrLn (show asInt)
+  putStrLn (show asBool)

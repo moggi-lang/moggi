@@ -1,0 +1,120 @@
+import Data.Bool
+import Data.Int
+import Data.List
+import Data.Ord
+import Text.Show
+import System.IO
+
+-- ---- Exec-Guard ----
+
+abs :: Int -> Int
+abs x =
+  case compare x 0 of
+    LT -> 0 - x
+    _ -> x
+
+runGuard :: IO ()
+runGuard = do
+  putStrLn (show (abs (0 - 5)))
+  putStrLn (show (abs 3))
+  putStrLn (show (abs 0))
+
+-- ---- Exec-Guard-Fallthrough ----
+
+-- A guard that does not hold falls through to the *next clause*, exactly like a
+-- clause whose pattern did not match. Running the clause's body instead would
+-- print "neg-first" for the last three inputs.
+firstSign :: [Int] -> String
+firstSign (x : _) | x < 0 = "neg-first"
+                  | x == 0 = "zero-first"
+firstSign (_ : _) = "other-list"
+firstSign [] = "empty"
+
+-- A clause whose guard fails falls through to a clause with a different
+-- pattern shape.
+sign :: Int -> String
+sign n | n > 0 = "positive"
+sign _ = "not-positive"
+
+-- A guard reads what its own clause's pattern bound.
+headSign :: [Int] -> String
+headSign (x : _) | x > 0 = "positive-head"
+                 | otherwise = "non-positive-head"
+headSign [] = "empty"
+
+-- A guard whose test is not operand-shaped: the statements it needs run before
+-- the guard is tested, and only for the clause whose pattern matched. The
+-- `[]` clause below reaches neither `twice` nor `strictlyPositive`; running
+-- them on a head that is not there would raise on every backend.
+twice :: Int -> Int
+twice n = n * 2
+
+strictlyPositive :: Int -> Bool
+strictlyPositive n = n > 0
+
+onlyCons :: [Int] -> String
+onlyCons (x : _) | strictlyPositive (twice x) = "positive-head"
+                 | otherwise = "non-positive-head"
+onlyCons [] = "empty"
+
+-- Guards on case alternatives, falling through to the alternatives after them.
+classify :: [Int] -> String
+classify xs =
+  case xs of
+    (y : _) | y > 0 -> "positive-head"
+            | otherwise -> "non-positive-head"
+    [] -> "empty"
+
+-- A guard at a constrained type: `i` is not an `Int`, so the comparison is the
+-- `Ord i` dictionary's and the `0` is the `Num i` one. Reading either as the
+-- host int gave the wrong list for `Integer` and raised on the JVM.
+taken :: Integral i => i -> [a] -> [a]
+taken n xs
+  | n <= 0 = []
+taken _ [] = []
+taken n (x : xs) = x : taken (n - 1) xs
+
+-- Guards on the alternatives of a case whose bodies are *actions*: the tests
+-- are pure and the arm that wins is the one whose guard held, so a guard that
+-- does not hold has to move on to the next alternative instead of running its
+-- own body.
+sizeWord :: Int -> IO String
+sizeWord n =
+  case n of
+    k | k > 5 -> pure "big"
+      | k > 0 -> pure "small"
+      | otherwise -> pure "none"
+
+runGuardFallthrough :: IO ()
+runGuardFallthrough = do
+  putStrLn (firstSign [-1, 2])
+  putStrLn (firstSign [0, 2])
+  putStrLn (firstSign [5, 2])
+  putStrLn (firstSign [])
+  putStrLn (sign 4)
+  putStrLn (sign (-4))
+  putStrLn (headSign [7, 1])
+  putStrLn (headSign [-7, 1])
+  putStrLn (headSign [])
+  putStrLn (onlyCons [3])
+  putStrLn (onlyCons [-3])
+  putStrLn (onlyCons [])
+  putStrLn (classify [1, 2])
+  putStrLn (classify [-1, 2])
+  putStrLn (classify [])
+  putStrLn (show (taken (2 :: Int) [1, 2, 3, 4] :: [Int]))
+  putStrLn (show (taken (2 :: Integer) [1, 2, 3, 4] :: [Integer]))
+  putStrLn (show (taken (0 :: Integer) [1, 2, 3]))
+  putStrLn (show (taken (-1 :: Integer) [1, 2, 3]))
+  big <- sizeWord 9
+  putStrLn big
+  small <- sizeWord 3
+  putStrLn small
+  none <- sizeWord 0
+  putStrLn none
+
+-- ---- combined entry point ----
+main :: IO ()
+main = do
+  runGuard
+  runGuardFallthrough

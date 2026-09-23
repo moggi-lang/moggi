@@ -1,0 +1,6 @@
+program
+  backend_map
+    php: System.Filesystem.PHP
+    js: Platform.JS.FS
+    jvm: System.Filesystem.JVM
+  function readFile :: String -> IO String signature_only

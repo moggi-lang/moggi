@@ -1,0 +1,4 @@
+tests/syntax/lexer/Bad-Lex-Unclosed-String.mog:3:26: lex error: unterminated string literal
+
+  3 | foreign php function bad "unclosed
+    |                          ^

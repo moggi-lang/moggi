@@ -1,0 +1,5 @@
+newtype Age = Age Int
+
+newtype Identity a = MkIdentity a
+
+newtype Named = Named { unNamed :: Int }

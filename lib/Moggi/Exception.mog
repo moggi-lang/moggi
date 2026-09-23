@@ -1,0 +1,27 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Exceptions and exception-handling functions.
+--
+-- `Exception` carries `Show` as its superclass; there is no `Typeable` and no
+-- implicit call stack, `SomeException` is a compiler-provided tagged value with
+-- no constructor, and `CallStack`/`SrcLoc` are not reified yet.
+module Moggi.Exception
+  ( Exception(..)
+  , SomeException
+  , throw
+  , ArithException(..)
+  , divZeroException
+  , overflowException
+  , ratioZeroDenomException
+  , underflowException
+  , ErrorCall(..)
+  , errorCallException
+  ) where
+
+import Moggi.Exception.Type
+import Moggi.Internal.Prim
+
+throw :: Exception e => e -> a
+throw e = exceptionThrow# (toException e)
+
+errorCallException :: String -> SomeException
+errorCallException s = toException (ErrorCall s)

@@ -1,0 +1,4 @@
+tests/semantics/bad-module-reexport-missing/lib/Hub.mog:3:5: type error: module `Clash.Hub` cannot re-export module `Clash.A`; it is not imported
+
+  3 |   ( module Clash.A
+    |     ^^^^^^

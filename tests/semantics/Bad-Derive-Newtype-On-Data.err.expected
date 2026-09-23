@@ -1,0 +1,4 @@
+tests/semantics/Bad-Derive-Newtype-On-Data.mog:5:46: type error: cannot derive newtype `Num`: not a newtype declaration
+
+  5 | data Wrapper = Wrapper Int deriving newtype (Num)
+    |                                              ^^^

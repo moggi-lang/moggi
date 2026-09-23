@@ -1,0 +1,4 @@
+tests/semantics/Bad-Derive-Generic1.mog:3:30: type error: expected kind `Type -> Type`, got `Type`
+
+  3 | data Foo = Foo Int deriving (Generic1)
+    |                              ^^^^^^^^

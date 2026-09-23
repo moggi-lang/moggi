@@ -1,0 +1,4 @@
+tests/syntax/lexer/Bad-CharLit-Empty.mog:2:5: lex error: empty character literal
+
+  2 | c = ''
+    |     ^^^

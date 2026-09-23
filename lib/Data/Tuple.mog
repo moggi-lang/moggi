@@ -1,0 +1,378 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.Tuple
+  ( fst
+  , snd
+  , curry
+  , uncurry
+  , swap
+  , Tuple0
+  , Tuple1
+  , Unit(..)
+  , Solo (Solo, MkSolo)
+  , getSolo
+  , Tuple2(..)
+  , Tuple3(..)
+  , Tuple4(..)
+  , Tuple5(..)
+  , Tuple6(..)
+  , Tuple7(..)
+  , Tuple8(..)
+  , Tuple9(..)
+  , Tuple10(..)
+  , Tuple11(..)
+  , Tuple12(..)
+  , Tuple13(..)
+  , Tuple14(..)
+  , Tuple15(..)
+  , Tuple16(..)
+  , Tuple17(..)
+  , Tuple18(..)
+  , Tuple19(..)
+  , Tuple20(..)
+  , Tuple21(..)
+  , Tuple22(..)
+  , Tuple23(..)
+  , Tuple24(..)
+  , Tuple25(..)
+  , Tuple26(..)
+  , Tuple27(..)
+  , Tuple28(..)
+  , Tuple29(..)
+  , Tuple30(..)
+  , Tuple31(..)
+  , Tuple32(..)
+  , Tuple33(..)
+  , Tuple34(..)
+  , Tuple35(..)
+  , Tuple36(..)
+  , Tuple37(..)
+  , Tuple38(..)
+  , Tuple39(..)
+  , Tuple40(..)
+  , Tuple41(..)
+  , Tuple42(..)
+  , Tuple43(..)
+  , Tuple44(..)
+  , Tuple45(..)
+  , Tuple46(..)
+  , Tuple47(..)
+  , Tuple48(..)
+  , Tuple49(..)
+  , Tuple50(..)
+  , Tuple51(..)
+  , Tuple52(..)
+  , Tuple53(..)
+  , Tuple54(..)
+  , Tuple55(..)
+  , Tuple56(..)
+  , Tuple57(..)
+  , Tuple58(..)
+  , Tuple59(..)
+  , Tuple60(..)
+  , Tuple61(..)
+  , Tuple62(..)
+  , Tuple63(..)
+  , Tuple64(..)
+  ) where
+
+import Control.Applicative
+import Data.Bool
+import Data.Eq
+import Data.Foldable
+import Data.Functor
+import Data.Ord
+import Text.Show
+import Data.Traversable
+import Moggi.Internal.Prim
+
+-- | The unit type.
+type Unit = ()
+
+-- | The unit type, also known as Tuple0.
+type Tuple0 = Unit
+
+-- | A 1-tuple, also known as Solo.
+-- `MkSolo` is the data constructor; `Solo` is the one-field tuple constructor.
+data Solo a = MkSolo a
+
+-- | Extract the sole element of a Solo.
+getSolo :: Solo a -> a
+getSolo (MkSolo a) = a
+
+-- | Tuple1 is a type synonym for Solo.
+type Tuple1 = Solo
+
+-- | Extract the first component of a pair.
+fst (x, _) = x
+
+-- | Extract the second component of a pair.
+snd (_, y) = y
+
+-- | 'curry' converts an uncurried function to a curried function.
+curry f x y = f (x, y)
+
+-- | 'uncurry' converts a curried function to a function on pairs.
+uncurry f p = f (fst p) (snd p)
+
+-- | Swap the components of a pair.
+swap (x, y) = (y, x)
+
+-- ---------------------------------------------------------------------------
+
+-- Shared Show helper: keeps instance methods shallow (O(1) nest) so parse/TC
+-- stay near-linear in arity instead of building depth-2N stringAppend trees.
+tupleShowParts :: [String] -> String
+tupleShowParts [] = ""
+tupleShowParts [x] = x
+tupleShowParts (x:xs) = stringAppend# x (stringAppend# "," (tupleShowParts xs))
+
+tupleShow :: [String] -> String
+tupleShow xs = stringAppend# "(" (stringAppend# (tupleShowParts xs) ")")
+
+-- Avoid recursive `show` binding inside Show instance methods.
+showOne :: Show a => a -> String
+showOne x = show x
+
+-- Functor, Foldable, Traversable, Show for Solo and Tuple2..Tuple64
+-- (kinds/exports cover Tuple2..64; class instances match that ceiling).
+-- Each Functorial instance acts on the LAST type parameter; Foldable uses
+-- wildcards for leading components. Unit/Tuple0 have kind * and are not Functor.
+
+instance Functor Solo where
+  map f (MkSolo a) = MkSolo (f a)
+
+instance Foldable Solo where
+  foldr f z (MkSolo a) = f a z
+
+instance Traversable Solo where
+  traverse f (MkSolo a) = MkSolo <$> f a
+
+instance Show a => Show (Solo a) where
+  showsPrec d (MkSolo a) =
+    showParen (d > 10) (\r -> showString "MkSolo " (showsPrec 11 a r))
+
+
+instance Functor (Tuple2 a1) where
+  map f t = case t of
+    (x1, x2) -> (x1, f x2)
+
+instance Foldable (Tuple2 a1) where
+  foldr f z t = case t of
+    (_, x2) -> f x2 z
+
+instance Traversable (Tuple2 a1) where
+  traverse f t = case t of
+    (x1, x2) -> pure (\y2 -> (x1, y2)) <*> f x2
+
+instance (Show a1, Show a2) => Show (Tuple2 a1 a2) where
+  show t = case t of
+    (x1, x2) -> tupleShow [showOne x1, showOne x2]
+
+instance Functor (Tuple3 a1 a2) where
+  map f t = case t of
+    (x1, x2, x3) -> (x1, x2, f x3)
+
+instance Foldable (Tuple3 a1 a2) where
+  foldr f z t = case t of
+    (_, _, x3) -> f x3 z
+
+instance Traversable (Tuple3 a1 a2) where
+  traverse f t = case t of
+    (x1, x2, x3) -> pure (\y3 -> (x1, x2, y3)) <*> f x3
+
+instance (Show a1, Show a2, Show a3) => Show (Tuple3 a1 a2 a3) where
+  show t = case t of
+    (x1, x2, x3) -> tupleShow [showOne x1, showOne x2, showOne x3]
+
+instance Functor (Tuple4 a1 a2 a3) where
+  map f t = case t of
+    (x1, x2, x3, x4) -> (x1, x2, x3, f x4)
+
+instance Foldable (Tuple4 a1 a2 a3) where
+  foldr f z t = case t of
+    (_, _, _, x4) -> f x4 z
+
+instance Traversable (Tuple4 a1 a2 a3) where
+  traverse f t = case t of
+    (x1, x2, x3, x4) -> pure (\y4 -> (x1, x2, x3, y4)) <*> f x4
+
+instance (Show a1, Show a2, Show a3, Show a4) => Show (Tuple4 a1 a2 a3 a4) where
+  show t = case t of
+    (x1, x2, x3, x4) -> tupleShow [showOne x1, showOne x2, showOne x3, showOne x4]
+
+instance Functor (Tuple5 a1 a2 a3 a4) where
+  map f t = case t of
+    (x1, x2, x3, x4, x5) -> (x1, x2, x3, x4, f x5)
+
+instance Foldable (Tuple5 a1 a2 a3 a4) where
+  foldr f z t = case t of
+    (_, _, _, _, x5) -> f x5 z
+
+instance Traversable (Tuple5 a1 a2 a3 a4) where
+  traverse f t = case t of
+    (x1, x2, x3, x4, x5) -> pure (\y5 -> (x1, x2, x3, x4, y5)) <*> f x5
+
+instance (Show a1, Show a2, Show a3, Show a4, Show a5) => Show (Tuple5 a1 a2 a3 a4 a5) where
+  show t = case t of
+    (x1, x2, x3, x4, x5) -> tupleShow [showOne x1, showOne x2, showOne x3, showOne x4, showOne x5]
+
+instance Functor (Tuple6 a1 a2 a3 a4 a5) where
+  map f t = case t of
+    (x1, x2, x3, x4, x5, x6) -> (x1, x2, x3, x4, x5, f x6)
+
+instance Foldable (Tuple6 a1 a2 a3 a4 a5) where
+  foldr f z t = case t of
+    (_, _, _, _, _, x6) -> f x6 z
+
+instance Traversable (Tuple6 a1 a2 a3 a4 a5) where
+  traverse f t = case t of
+    (x1, x2, x3, x4, x5, x6) -> pure (\y6 -> (x1, x2, x3, x4, x5, y6)) <*> f x6
+
+instance (Show a1, Show a2, Show a3, Show a4, Show a5, Show a6) => Show (Tuple6 a1 a2 a3 a4 a5 a6) where
+  show t = case t of
+    (x1, x2, x3, x4, x5, x6) -> tupleShow [showOne x1, showOne x2, showOne x3, showOne x4, showOne x5, showOne x6]
+
+instance Functor (Tuple7 a1 a2 a3 a4 a5 a6) where
+  map f t = case t of
+    (x1, x2, x3, x4, x5, x6, x7) -> (x1, x2, x3, x4, x5, x6, f x7)
+
+instance Foldable (Tuple7 a1 a2 a3 a4 a5 a6) where
+  foldr f z t = case t of
+    (_, _, _, _, _, _, x7) -> f x7 z
+
+instance Traversable (Tuple7 a1 a2 a3 a4 a5 a6) where
+  traverse f t = case t of
+    (x1, x2, x3, x4, x5, x6, x7) -> pure (\y7 -> (x1, x2, x3, x4, x5, x6, y7)) <*> f x7
+
+instance (Show a1, Show a2, Show a3, Show a4, Show a5, Show a6, Show a7) => Show (Tuple7 a1 a2 a3 a4 a5 a6 a7) where
+  show t = case t of
+    (x1, x2, x3, x4, x5, x6, x7) -> tupleShow [showOne x1, showOne x2, showOne x3, showOne x4, showOne x5, showOne x6, showOne x7]
+
+instance Functor (Tuple8 a1 a2 a3 a4 a5 a6 a7) where
+  map f t = case t of
+    (x1, x2, x3, x4, x5, x6, x7, x8) -> (x1, x2, x3, x4, x5, x6, x7, f x8)
+
+instance Foldable (Tuple8 a1 a2 a3 a4 a5 a6 a7) where
+  foldr f z t = case t of
+    (_, _, _, _, _, _, _, x8) -> f x8 z
+
+instance Traversable (Tuple8 a1 a2 a3 a4 a5 a6 a7) where
+  traverse f t = case t of
+    (x1, x2, x3, x4, x5, x6, x7, x8) -> pure (\y8 -> (x1, x2, x3, x4, x5, x6, x7, y8)) <*> f x8
+
+instance (Show a1, Show a2, Show a3, Show a4, Show a5, Show a6, Show a7, Show a8) => Show (Tuple8 a1 a2 a3 a4 a5 a6 a7 a8) where
+  show t = case t of
+    (x1, x2, x3, x4, x5, x6, x7, x8) -> tupleShow [showOne x1, showOne x2, showOne x3, showOne x4, showOne x5, showOne x6, showOne x7, showOne x8]
+
+instance Functor (Tuple9 a1 a2 a3 a4 a5 a6 a7 a8) where
+  map f t = case t of
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9) -> (x1, x2, x3, x4, x5, x6, x7, x8, f x9)
+
+instance Foldable (Tuple9 a1 a2 a3 a4 a5 a6 a7 a8) where
+  foldr f z t = case t of
+    (_, _, _, _, _, _, _, _, x9) -> f x9 z
+
+instance Traversable (Tuple9 a1 a2 a3 a4 a5 a6 a7 a8) where
+  traverse f t = case t of
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9) -> pure (\y9 -> (x1, x2, x3, x4, x5, x6, x7, x8, y9)) <*> f x9
+
+instance (Show a1, Show a2, Show a3, Show a4, Show a5, Show a6, Show a7, Show a8, Show a9) => Show (Tuple9 a1 a2 a3 a4 a5 a6 a7 a8 a9) where
+  show t = case t of
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9) -> tupleShow [showOne x1, showOne x2, showOne x3, showOne x4, showOne x5, showOne x6, showOne x7, showOne x8, showOne x9]
+
+instance Functor (Tuple10 a1 a2 a3 a4 a5 a6 a7 a8 a9) where
+  map f t = case t of
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10) -> (x1, x2, x3, x4, x5, x6, x7, x8, x9, f x10)
+
+instance Foldable (Tuple10 a1 a2 a3 a4 a5 a6 a7 a8 a9) where
+  foldr f z t = case t of
+    (_, _, _, _, _, _, _, _, _, x10) -> f x10 z
+
+instance Traversable (Tuple10 a1 a2 a3 a4 a5 a6 a7 a8 a9) where
+  traverse f t = case t of
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10) -> pure (\y10 -> (x1, x2, x3, x4, x5, x6, x7, x8, x9, y10)) <*> f x10
+
+instance (Show a1, Show a2, Show a3, Show a4, Show a5, Show a6, Show a7, Show a8, Show a9, Show a10) => Show (Tuple10 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10) where
+  show t = case t of
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10) -> tupleShow [showOne x1, showOne x2, showOne x3, showOne x4, showOne x5, showOne x6, showOne x7, showOne x8, showOne x9, showOne x10]
+
+instance Functor (Tuple11 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10) where
+  map f t = case t of
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11) -> (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, f x11)
+
+instance Foldable (Tuple11 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10) where
+  foldr f z t = case t of
+    (_, _, _, _, _, _, _, _, _, _, x11) -> f x11 z
+
+instance Traversable (Tuple11 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10) where
+  traverse f t = case t of
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11) -> pure (\y11 -> (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, y11)) <*> f x11
+
+instance (Show a1, Show a2, Show a3, Show a4, Show a5, Show a6, Show a7, Show a8, Show a9, Show a10, Show a11) => Show (Tuple11 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11) where
+  show t = case t of
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11) -> tupleShow [showOne x1, showOne x2, showOne x3, showOne x4, showOne x5, showOne x6, showOne x7, showOne x8, showOne x9, showOne x10, showOne x11]
+
+instance Functor (Tuple12 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11) where
+  map f t = case t of
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12) -> (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, f x12)
+
+instance Foldable (Tuple12 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11) where
+  foldr f z t = case t of
+    (_, _, _, _, _, _, _, _, _, _, _, x12) -> f x12 z
+
+instance Traversable (Tuple12 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11) where
+  traverse f t = case t of
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12) -> pure (\y12 -> (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, y12)) <*> f x12
+
+instance (Show a1, Show a2, Show a3, Show a4, Show a5, Show a6, Show a7, Show a8, Show a9, Show a10, Show a11, Show a12) => Show (Tuple12 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12) where
+  show t = case t of
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12) -> tupleShow [showOne x1, showOne x2, showOne x3, showOne x4, showOne x5, showOne x6, showOne x7, showOne x8, showOne x9, showOne x10, showOne x11, showOne x12]
+
+instance Functor (Tuple13 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12) where
+  map f t = case t of
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13) -> (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, f x13)
+
+instance Foldable (Tuple13 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12) where
+  foldr f z t = case t of
+    (_, _, _, _, _, _, _, _, _, _, _, _, x13) -> f x13 z
+
+instance Traversable (Tuple13 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12) where
+  traverse f t = case t of
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13) -> pure (\y13 -> (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, y13)) <*> f x13
+
+instance (Show a1, Show a2, Show a3, Show a4, Show a5, Show a6, Show a7, Show a8, Show a9, Show a10, Show a11, Show a12, Show a13) => Show (Tuple13 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13) where
+  show t = case t of
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13) -> tupleShow [showOne x1, showOne x2, showOne x3, showOne x4, showOne x5, showOne x6, showOne x7, showOne x8, showOne x9, showOne x10, showOne x11, showOne x12, showOne x13]
+
+instance Functor (Tuple14 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13) where
+  map f t = case t of
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14) -> (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, f x14)
+
+instance Foldable (Tuple14 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13) where
+  foldr f z t = case t of
+    (_, _, _, _, _, _, _, _, _, _, _, _, _, x14) -> f x14 z
+
+instance Traversable (Tuple14 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13) where
+  traverse f t = case t of
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14) -> pure (\y14 -> (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, y14)) <*> f x14
+
+instance (Show a1, Show a2, Show a3, Show a4, Show a5, Show a6, Show a7, Show a8, Show a9, Show a10, Show a11, Show a12, Show a13, Show a14) => Show (Tuple14 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14) where
+  show t = case t of
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14) -> tupleShow [showOne x1, showOne x2, showOne x3, showOne x4, showOne x5, showOne x6, showOne x7, showOne x8, showOne x9, showOne x10, showOne x11, showOne x12, showOne x13, showOne x14]
+
+instance Functor (Tuple15 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14) where
+  map f t = case t of
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15) -> (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, f x15)
+
+instance Foldable (Tuple15 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14) where
+  foldr f z t = case t of
+    (_, _, _, _, _, _, _, _, _, _, _, _, _, _, x15) -> f x15 z
+
+instance Traversable (Tuple15 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14) where
+  traverse f t = case t of
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15) -> pure (\y15 -> (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, y15)) <*> f x15
+
+instance (Show a1, Show a2, Show a3, Show a4, Show a5, Show a6, Show a7, Show a8, Show a9, Show a10, Show a11, Show a12, Show a13, Show a14, Show a15) => Show (Tuple15 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15) where
+  show t = case t of
+    (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15) -> tupleShow [showOne x1, showOne x2, showOne x3, showOne x4, showOne x5, showOne x6, showOne x7, showOne x8, showOne x9, showOne x10, showOne x11, showOne x12, showOne x13, showOne x14, showOne x15]
+

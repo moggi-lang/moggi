@@ -1,0 +1,4 @@
+tests/semantics/Bad-Import-Class-Method-Hidden.mog:7:14: type error: undefined variable `sequenceA`
+
+  7 | notInScope = sequenceA
+    |              ^^^^^^^^^

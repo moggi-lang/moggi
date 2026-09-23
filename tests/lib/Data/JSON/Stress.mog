@@ -1,0 +1,88 @@
+import System.IO
+import Data.ByteString.Char8 qualified as C
+import Data.String
+import Data.Bool
+import Data.Eq
+import Data.Int
+import Data.Maybe
+import Data.Either
+import Data.Map (Map, fromList)
+import Data.JSON
+import Moggi.Generics
+
+-- Stress: stock Generic ToJSON/FromJSON across nested records, lists,
+-- Maybe, Either, and Map — with structural Eq roundtrips.
+
+data Contact = Contact { email :: String, verified :: Bool }
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+data Document = Document
+  { title :: String
+  , count :: Int
+  , active :: Bool
+  , note :: Maybe String
+  , tags :: [String]
+  , contact :: Contact
+  , backup :: Maybe Contact
+  , choice :: Either String Int
+  , attrs :: Map String Int
+  }
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+sample :: Document
+sample = Document
+  "handbook"
+  42
+  True
+  Nothing
+  ("alpha" : "beta" : [])
+  (Contact "ada@example.com" True)
+  (Just (Contact "backup@example.com" False))
+  (Right 7)
+  (fromList (("x", 1) : ("y", 2) : []))
+
+alt :: Document
+alt = Document
+  "x"
+  0
+  False
+  (Just "hi")
+  []
+  (Contact "a" False)
+  Nothing
+  (Left "e")
+  (fromList ([] :: [(String, Int)]))
+
+rtOk :: Document -> IO String
+rtOk d = do
+  mr <- eitherDecode (encode d)
+  pure (case mr of
+    Left err -> "ERR:" <> err
+    Right d2 -> case d2 == d of
+      True -> "ok"
+      False -> "bad")
+
+fromText :: IO String
+fromText = do
+  mr <- eitherDecode (C.pack text)
+  pure (case mr of
+    Left err -> "ERR:" <> err
+    Right d -> case d == sample of
+      True -> "ok-text"
+      False -> "bad-text")
+
+text :: String
+text = "{\"title\":\"handbook\",\"count\":42,\"active\":true,\"note\":null,\"tags\":[\"alpha\",\"beta\"],\"contact\":{\"email\":\"ada@example.com\",\"verified\":true},\"backup\":{\"email\":\"backup@example.com\",\"verified\":false},\"choice\":{\"Right\":7},\"attrs\":{\"x\":1,\"y\":2}}"
+
+main :: IO ()
+main = do
+  C.putStrLn (encode sample)
+  r <- rtOk sample
+  putStrLn r
+  r <- fromText
+  putStrLn r
+  r <- rtOk alt
+  putStrLn r
+  C.putStrLn (encode alt)

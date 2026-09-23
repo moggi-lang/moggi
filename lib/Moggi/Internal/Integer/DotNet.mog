@@ -1,0 +1,86 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Moggi.Internal.Integer.DotNet
+  ( integerAdd
+  , integerSub
+  , integerMul
+  , integerNegate
+  , integerAbs
+  , integerSignum
+  , integerQuot
+  , integerRem
+  , integerCompare
+  , integerEq
+  , integerShow
+  , integerFromInt
+  , integerToInt
+  ) where
+
+import Data.Bool
+import Data.Int
+import Data.Ord
+import Moggi.Internal.Prim
+
+-- Integer# is System.Numerics.BigInteger.
+foreign dotnet function biValueOf "System.Numerics.BigInteger:op_Implicit" :: Int -> Integer
+foreign dotnet function biAdd "System.Numerics.BigInteger:Add" :: Integer -> Integer -> Integer
+foreign dotnet function biSubtract "System.Numerics.BigInteger:Subtract" :: Integer -> Integer -> Integer
+foreign dotnet function biMultiply "System.Numerics.BigInteger:Multiply" :: Integer -> Integer -> Integer
+foreign dotnet function biNegate "System.Numerics.BigInteger:Negate" :: Integer -> Integer
+foreign dotnet function biAbs "System.Numerics.BigInteger:Abs" :: Integer -> Integer
+foreign dotnet function rawBiSignum "System.Numerics.BigInteger.get_Sign" :: Integer -> Int32
+foreign dotnet function biDivide "System.Numerics.BigInteger:Divide" :: Integer -> Integer -> Integer
+foreign dotnet function biRemainder "System.Numerics.BigInteger:Remainder" :: Integer -> Integer -> Integer
+foreign dotnet function rawBiCompareTo "System.Numerics.BigInteger.CompareTo" :: Integer -> Integer -> Int32
+foreign dotnet function biToString "System.Numerics.BigInteger.ToString" :: Integer -> String
+foreign dotnet function biLongValue "System.Numerics.BigInteger:op_Explicit" :: Integer -> Int
+
+biSignum a = int32ToInt# (rawBiSignum a)
+
+biCompareTo a b = int32ToInt# (rawBiCompareTo a b)
+
+integerAdd :: Integer -> Integer -> Integer
+integerAdd a b = biAdd a b
+
+integerSub :: Integer -> Integer -> Integer
+integerSub a b = biSubtract a b
+
+integerMul :: Integer -> Integer -> Integer
+integerMul a b = biMultiply a b
+
+integerNegate :: Integer -> Integer
+integerNegate a = biNegate a
+
+integerAbs :: Integer -> Integer
+integerAbs a = biAbs a
+
+integerSignum :: Integer -> Integer
+integerSignum a = biValueOf (biSignum a)
+
+integerQuot :: Integer -> Integer -> Integer
+integerQuot a b = biDivide a b
+
+integerRem :: Integer -> Integer -> Integer
+integerRem a b = biRemainder a b
+
+integerCompare :: Integer -> Integer -> Ordering
+integerCompare a b = intToOrdering (biCompareTo a b)
+
+integerEq :: Integer -> Integer -> Bool
+integerEq a b = case biCompareTo a b of
+  0 -> True
+  _ -> False
+
+integerShow :: Integer -> String
+integerShow a = biToString a
+
+integerFromInt :: Int -> Integer
+integerFromInt n = biValueOf n
+
+integerToInt :: Integer -> Int
+integerToInt n = biLongValue n
+
+intToOrdering :: Int -> Ordering
+intToOrdering n = case intCompare# n 0 of
+  EQ -> EQ
+  LT -> LT
+  GT -> GT

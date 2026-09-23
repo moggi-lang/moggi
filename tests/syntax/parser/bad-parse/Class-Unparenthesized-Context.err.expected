@@ -1,0 +1,4 @@
+tests/syntax/parser/bad-parse/Class-Unparenthesized-Context.mog:1:16: parse error: multiple superclasses must share one parenthesized context: write `class (C1 t, C2 t) => Head t`
+
+  1 | class Functor t, Foldable t => Traversable t where
+    |                ^

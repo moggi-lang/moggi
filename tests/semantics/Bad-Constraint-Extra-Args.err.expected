@@ -1,0 +1,4 @@
+tests/semantics/Bad-Constraint-Extra-Args.mog:1:1: type error: class `Eq` applied to too many arguments
+
+  1 | bad :: Eq a b => a -> a
+    | ^^^

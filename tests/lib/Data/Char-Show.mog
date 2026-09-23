@@ -1,0 +1,37 @@
+import Data.Char
+import Data.String qualified as S
+
+-- `show` for Char and String: printable characters stand for themselves,
+-- control characters use the named or `NUL`..`US` escapes, characters above
+-- `DEL` their decimal code, and a `\&` disambiguates a decimal escape from a
+-- following digit.
+
+main :: IO ()
+main = do
+  putStrLn (show 'b')
+  putStrLn (show '\n')
+  putStrLn (show '\t')
+  putStrLn (show '\r')
+  putStrLn (show (chr 7))
+  putStrLn (show (chr 8))
+  putStrLn (show (chr 12))
+  putStrLn (show (chr 11))
+  putStrLn (show '\'')
+  putStrLn (show '"')
+  putStrLn (show '\\')
+  putStrLn (show (chr 0))
+  putStrLn (show (chr 1))
+  putStrLn (show (chr 27))
+  putStrLn (show (chr 31))
+  putStrLn (show (chr 32))
+  putStrLn (show (chr 127))
+  putStrLn (show (chr 128512))
+  putStrLn (show "hello")
+  putStrLn (show "a\nb")
+  putStrLn (show "tab\there")
+  putStrLn (show "quote\"inside")
+  putStrLn (show "back\\slash")
+  putStrLn (show (S.singleton (chr 128512) <> "5"))
+  putStrLn (show (S.singleton (chr 14) <> "H"))
+  putStrLn (show (S.singleton (chr 14) <> "x"))
+  putStrLn (show [chr 128512, '5'])

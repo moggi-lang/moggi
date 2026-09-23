@@ -1,0 +1,8 @@
+-- Phase 4: instance must provide equations for every associated type.
+
+class Family a where
+  type F a
+  get :: a -> F a
+
+instance Family Bool where
+  get b = False

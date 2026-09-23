@@ -1,0 +1,105 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.String.PHP
+  ( singleton
+  , unpack
+  , pack
+  , length
+  , take
+  , drop
+  , strNull
+  , strConcat
+  , strReverse
+  , strMap
+  , isPrefixOf
+  , isSuffixOf
+  , splitOn
+  , lines
+  , words
+  , unlines
+  , unwords
+  ) where
+
+import Data.Bool
+import Data.Char
+import Data.Int
+import Data.List hiding (singleton, take, drop, isPrefixOf, isSuffixOf)
+import Data.Ord
+import Moggi.Internal.Prim
+
+-- Scalar-aware String ops via PHP mbstring / IntlChar foreigns + Moggi.
+-- No custom PHP helpers.
+
+foreign php function mbStrLen "mb_strlen" :: String -> String -> Int
+
+foreign php function mbSubstr "mb_substr" :: String -> Int -> Int -> String -> String
+
+foreign php function mbStrSplit "mb_str_split" :: String -> Int -> String -> [String]
+
+foreign php function intlChr "IntlChar:chr" :: Char -> String
+
+foreign php function intlOrd "IntlChar:ord" :: String -> Int
+
+foreign php function implode "implode" :: String -> [String] -> String
+
+foreign php function rawStartsWith "str_starts_with" :: String -> String -> Bool
+
+foreign php function rawEndsWith "str_ends_with" :: String -> String -> Bool
+
+foreign php function rawExplode "explode" :: String -> String -> [String]
+
+utf8 = "UTF-8"
+
+singleton c = intlChr c
+
+coerceIntToChar n = intToChar# n
+
+chunkToChar ch = coerceIntToChar (intlOrd ch)
+
+listMap f xs = case xs of
+  [] -> []
+  x : rest -> f x : listMap f rest
+
+unpack s = listMap chunkToChar (mbStrSplit s 1 utf8)
+
+pack cs = implode "" (listMap singleton cs)
+
+length s = mbStrLen s utf8
+
+take n s = mbSubstr s 0 n utf8
+
+drop n s =
+  let len = length s
+  in case intCompare# n len of
+    LT -> mbSubstr s n (len - n) utf8
+    _ -> ""
+
+strNull s = case length s of
+  0 -> True
+  _ -> False
+
+strConcat xs = case xs of
+  [] -> ""
+  x : rest -> x <> strConcat rest
+
+strReverse s = pack (reverse (unpack s))
+
+strMap f s = pack (listMap f (unpack s))
+
+isPrefixOf prefix s = rawStartsWith s prefix
+
+isSuffixOf suffix s = rawEndsWith s suffix
+
+splitOn :: String -> String -> [String]
+splitOn sep s = rawExplode sep s
+
+lines "" = ([] :: [String])
+lines s = reverse (dropWhile (\x -> x == "") (reverse (splitOn "\n" s)))
+
+words s = (filter (\w -> w /= "") (splitOn " " s) :: [String])
+
+unlines [] = ""
+unlines (line : rest) = line <> "\n" <> unlines rest
+
+unwords [] = ""
+unwords [x] = x
+unwords (x : rest) = x <> " " <> unwords rest

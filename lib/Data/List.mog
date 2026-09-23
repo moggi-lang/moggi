@@ -1,0 +1,787 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- |
+-- Operations on lists.
+--
+-- Several names are re-exported here but documented at their defining module:
+-- the folds, @null@, @length@, @elem@ and friends in @Data.Foldable@, @map@ in
+-- @Data.Functor@, and @lines@/@words@/@unlines@/@unwords@ in @Data.String@.
+module Data.List
+  ( List
+  , (:)
+  , (++)
+  , head
+  , last
+  , tail
+  , init
+  , uncons
+  , unsnoc
+  , singleton
+  , null
+  , length
+  , map
+  , reverse
+  , intersperse
+  , intercalate
+  , transpose
+  , subsequences
+  , permutations
+  , scanl
+  , scanl1
+  , scanr
+  , scanr1
+  , mapAccumL
+  , mapAccumR
+  , replicate
+  , unfoldr
+  , take
+  , drop
+  , splitAt
+  , takeWhile
+  , dropWhile
+  , dropWhileEnd
+  , span
+  , break
+  , stripPrefix
+  , group
+  , groupBy
+  , inits
+  , tails
+  , isPrefixOf
+  , isSuffixOf
+  , isInfixOf
+  , isSubsequenceOf
+  , foldl
+  , foldl1
+  , foldr
+  , foldr1
+  , concat
+  , concatMap
+  , and
+  , or
+  , any
+  , all
+  , sum
+  , product
+  , maximum
+  , minimum
+  , elem
+  , notElem
+  , maximumBy
+  , minimumBy
+  , lookup
+  , find
+  , filter
+  , partition
+  , (!!)
+  , (!?)
+  , compareLength
+  , elemIndex
+  , elemIndices
+  , findIndex
+  , findIndices
+  , zip
+  , zip3
+  , zip4
+  , zip5
+  , zip6
+  , zip7
+  , zipWith
+  , zipWith3
+  , zipWith4
+  , zipWith5
+  , zipWith6
+  , zipWith7
+  , unzip
+  , unzip3
+  , unzip4
+  , unzip5
+  , unzip6
+  , unzip7
+  , nub
+  , delete
+  , union
+  , intersect
+  , (\\)
+  , sort
+  , sortOn
+  , insert
+  , nubBy
+  , deleteBy
+  , deleteFirstsBy
+  , unionBy
+  , intersectBy
+  , sortBy
+  , insertBy
+  , genericLength
+  , genericTake
+  , genericDrop
+  , genericSplitAt
+  , genericIndex
+  , genericReplicate
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Bool
+import Data.Enum
+import Data.Eq
+import Moggi.Err
+import Data.Foldable
+import Data.Functor
+import Data.Int
+import Moggi.Internal.Real
+import Data.Maybe
+import Data.Monoid
+import Data.Ord
+import Data.Semigroup
+import Text.Show
+import Data.Traversable
+import Data.Tuple
+import Moggi.Internal.Prim
+
+type List = List#
+
+infixr 5 :
+infixr 5 ++
+infixl 9 !!
+infixl 9 !?
+infix 5 \\
+
+(:) :: a -> [a] -> [a]
+(:) a xs = listCons# a xs
+
+(++) :: [a] -> [a] -> [a]
+(++) xs ys = listAppend# xs ys
+
+listFoldr :: (a -> b -> b) -> b -> [a] -> b
+listFoldr f z xs = case xs of
+  [] -> z
+  x : rest -> f x (listFoldr f z rest)
+
+listFoldl :: (b -> a -> b) -> b -> [a] -> b
+listFoldl f z xs = case xs of
+  [] -> z
+  x : rest -> listFoldl f (f z x) rest
+
+-- Basic functions -----------------------------------------------------------
+
+head :: [a] -> a
+head (x:_) = x
+head [] = error "Data.List.head: empty list"
+
+last :: [a] -> a
+last [x] = x
+last (_:xs) = last xs
+last [] = error "Data.List.last: empty list"
+
+tail :: [a] -> [a]
+tail (_:xs) = xs
+tail [] = error "Data.List.tail: empty list"
+
+init :: [a] -> [a]
+init [_] = []
+init (x:xs) = x : init xs
+init [] = error "Data.List.init: empty list"
+
+uncons :: [a] -> Maybe (a, [a])
+uncons [] = Nothing
+uncons (x:xs) = Just (x, xs)
+
+unsnoc :: [a] -> Maybe ([a], a)
+unsnoc xs = case reverse xs of
+  [] -> Nothing
+  y : ys -> Just (reverse ys, y)
+
+singleton :: a -> [a]
+singleton x = [x]
+
+reverse :: [a] -> [a]
+reverse xs = foldl (\acc x -> x : acc) [] xs
+
+-- Transformations -----------------------------------------------------------
+
+-- | \(\mathcal{O}(n)\). The 'intersperse' function takes an element and a list
+-- and `intersperses' that element between the elements of the list.
+intersperse :: a -> [a] -> [a]
+intersperse _ [] = []
+intersperse _ [x] = [x]
+intersperse sep (x:xs) = x : sep : intersperse sep xs
+
+-- | 'intercalate' @xs xss@ is equivalent to @('concat' ('intersperse' xs xss))@.
+-- It inserts the list @xs@ in between the lists in @xss@ and concatenates the
+-- result.
+intercalate :: [a] -> [[a]] -> [a]
+intercalate xs xss = concat (intersperse xs xss)
+
+-- | The 'transpose' function transposes the rows and columns of its argument.
+-- If some of the rows are shorter than the following rows, their elements are
+-- skipped, so the outer list must be finite.
+transpose :: [[a]] -> [[a]]
+transpose [] = []
+transpose ([] : xss) = transpose xss
+transpose ((x:xs) : xss) =
+  (x : [head ys | ys <- xss, not (null ys)])
+    : transpose (xs : [tail ys | ys <- xss, not (null ys)])
+
+subsequences :: [a] -> [[a]]
+subsequences [] = [[]]
+subsequences (x:xs) =
+  let ys = subsequences xs
+  in ys <> map (\zs -> x : zs) ys
+
+permutations :: [a] -> [[a]]
+permutations [] = [[]]
+permutations (x:xs) =
+  concatMap
+    (\ys -> [take n ys <> [x] <> drop n ys | n <- [0 .. length ys]])
+    (permutations xs)
+
+-- Building lists ------------------------------------------------------------
+
+scanl :: (b -> a -> b) -> b -> [a] -> [b]
+scanl f q ls = q : case ls of
+  [] -> []
+  x : xs -> scanl f (f q x) xs
+
+scanl1 :: (a -> a -> a) -> [a] -> [a]
+scanl1 _ [] = []
+scanl1 f (x:xs) = scanl f x xs
+
+scanr :: (a -> b -> b) -> b -> [a] -> [b]
+scanr _ q0 [] = [q0]
+scanr f q0 (x:xs) = case scanr f q0 xs of
+  [] -> error "Data.List.scanr: impossible"
+  q : qs -> f x q : q : qs
+
+scanr1 :: (a -> a -> a) -> [a] -> [a]
+scanr1 _ [] = []
+scanr1 _ [x] = [x]
+scanr1 f (x:xs) = case scanr1 f xs of
+  [] -> error "Data.List.scanr1: impossible"
+  q : qs -> f x q : q : qs
+
+replicate :: Int -> a -> [a]
+replicate n x = case n <= 0 of
+  True -> []
+  False -> x : replicate (n - 1) x
+
+unfoldr :: (b -> Maybe (a, b)) -> b -> [a]
+unfoldr f b = maybe [] (\pair -> fst pair : unfoldr f (snd pair)) (f b)
+
+-- Sublists ------------------------------------------------------------------
+
+take :: Int -> [a] -> [a]
+take _ [] = []
+take n (x:xs) = case n <= 0 of
+  True -> []
+  False -> x : take (n - 1) xs
+
+drop :: Int -> [a] -> [a]
+drop _ [] = []
+drop n (x:xs) = case n <= 0 of
+  True -> x : xs
+  False -> drop (n - 1) xs
+
+splitAt :: Int -> [a] -> ([a], [a])
+splitAt n xs = (take n xs, drop n xs)
+
+takeWhile :: (a -> Bool) -> [a] -> [a]
+takeWhile _ [] = []
+takeWhile p (x:xs) = case p x of
+  True -> x : takeWhile p xs
+  False -> []
+
+dropWhile :: (a -> Bool) -> [a] -> [a]
+dropWhile _ [] = []
+dropWhile p (x:xs) = case p x of
+  True -> dropWhile p xs
+  False -> x : xs
+
+-- | The 'dropWhileEnd' function drops the largest suffix of a list
+-- in which the given predicate holds for all elements.
+dropWhileEnd :: (a -> Bool) -> [a] -> [a]
+dropWhileEnd p xs = reverse (dropWhile p (reverse xs))
+
+span :: (a -> Bool) -> [a] -> ([a], [a])
+span _ [] = ([], [])
+span p (x:xs) = case p x of
+  False -> ([], x : xs)
+  True ->
+    let s = span p xs
+    in (x : fst s, snd s)
+
+break :: (a -> Bool) -> [a] -> ([a], [a])
+break p xs = span (\x -> not (p x)) xs
+
+-- | \(\mathcal{O}(\min(m,n))\). The 'stripPrefix' function drops the given
+-- prefix from a list. It returns 'Nothing' if the list did not start with the
+-- prefix given, or 'Just' the list after the prefix, if it does.
+stripPrefix :: Eq a => [a] -> [a] -> Maybe [a]
+stripPrefix [] ys = Just ys
+stripPrefix (x:xs) (y:ys) = case x == y of
+  True -> stripPrefix xs ys
+  False -> Nothing
+stripPrefix (_:_) [] = Nothing
+
+group :: Eq a => [a] -> [[a]]
+group xs = groupBy (\a b -> a == b) xs
+
+groupBy :: (a -> a -> Bool) -> [a] -> [[a]]
+groupBy _ [] = []
+groupBy eq (x:xs) =
+  let s = span (eq x) xs
+  in (x : fst s) : groupBy eq (snd s)
+
+inits :: [a] -> [[a]]
+inits [] = [[]]
+inits (x:xs) = [] : map (\ys -> x : ys) (inits xs)
+
+tails :: [a] -> [[a]]
+tails [] = [[]]
+tails (x:xs) = (x:xs) : tails xs
+
+-- Predicates ----------------------------------------------------------------
+
+-- | \(\mathcal{O}(\min(m,n))\). The 'isPrefixOf' function takes two lists and
+-- returns 'True' iff the first list is a prefix of the second. For the result
+-- to be 'True' the first list must be finite; 'False' results from any
+-- mismatch.
+isPrefixOf :: Eq a => [a] -> [a] -> Bool
+isPrefixOf [] _ = True
+isPrefixOf _ [] = False
+isPrefixOf (x:xs) (y:ys) = case x == y of
+  True -> isPrefixOf xs ys
+  False -> False
+
+-- | The 'isSuffixOf' function takes two lists and returns 'True' iff
+-- the first list is a suffix of the second. The second list must be finite; the
+-- first may be infinite.
+isSuffixOf :: Eq a => [a] -> [a] -> Bool
+isSuffixOf ns hs = isPrefixOf (reverse ns) (reverse hs)
+
+-- | The 'isInfixOf' function takes two lists and returns 'True'
+-- iff the first list is contained, wholly and intact,
+-- anywhere within the second. For the result to be 'True' the first list must be
+-- finite; for 'False' the second must be.
+isInfixOf :: Eq a => [a] -> [a] -> Bool
+isInfixOf needle haystack = any (isPrefixOf needle) (tails haystack)
+
+isSubsequenceOf :: Eq a => [a] -> [a] -> Bool
+isSubsequenceOf [] _ = True
+isSubsequenceOf _ [] = False
+isSubsequenceOf (x:xs) (y:ys) = case x == y of
+  True -> isSubsequenceOf xs ys
+  False -> isSubsequenceOf (x:xs) ys
+
+-- Searching -----------------------------------------------------------------
+
+lookup :: Eq a => a -> [(a, b)] -> Maybe b
+lookup _ [] = Nothing
+lookup key ((x, y) : xys) = case key == x of
+  True -> Just y
+  False -> lookup key xys
+
+filter :: (a -> Bool) -> [a] -> [a]
+filter _ [] = []
+filter p (x:xs) = case p x of
+  True -> x : filter p xs
+  False -> filter p xs
+
+-- | The 'partition' function takes a predicate and a list, and returns
+-- the pair of lists of elements which do and do not satisfy the
+-- predicate, respectively; i.e., @partition p xs == (filter p xs, filter (not . p) xs)@.
+partition :: (a -> Bool) -> [a] -> ([a], [a])
+partition p xs = (filter p xs, filter (\x -> not (p x)) xs)
+
+-- Indexing ------------------------------------------------------------------
+
+(!!) :: [a] -> Int -> a
+(!!) xs n = case n < 0 of
+  True -> error "Data.List.!!: negative index"
+  False -> indexAt xs n
+
+indexAt (x:_) 0 = x
+indexAt (_:xs) n = indexAt xs (n - 1)
+indexAt [] _ = error "Data.List.!!: index too large"
+
+(!?) :: [a] -> Int -> Maybe a
+(!?) xs n = case n < 0 of
+  True -> Nothing
+  False -> indexMaybe xs n
+
+indexMaybe (x:_) 0 = Just x
+indexMaybe (_:xs) n = indexMaybe xs (n - 1)
+indexMaybe [] _ = Nothing
+
+-- | Use 'compareLength' @xs@ @n@ as a safer and faster alternative
+-- to 'compare' ('length' @xs@) @n@. Similarly, it's better
+-- to write @compareLength xs 10 == LT@ instead of @length xs < 10@.
+--
+-- While 'length' traverses the entire spine of @xs@,
+-- 'compareLength' traverses at most @n@ elements to determine its result.
+compareLength :: [a] -> Int -> Ordering
+compareLength xs n = case n < 0 of
+  True -> GT
+  False -> compareLengthGo xs n
+
+compareLengthGo [] k = case k > 0 of
+  True -> LT
+  False -> EQ
+compareLengthGo (_:rest) k = case k <= 0 of
+  True -> GT
+  False -> compareLengthGo rest (k - 1)
+
+-- | The 'elemIndex' function returns the index of the first element
+-- in the given list which is equal (by '==') to the query element,
+-- or 'Nothing' if there is no such element.
+-- For the result to be 'Nothing', the list must be finite.
+elemIndex :: Eq a => a -> [a] -> Maybe Int
+elemIndex x xs = findIndex (\y -> x == y) xs
+
+-- | The 'elemIndices' function extends 'elemIndex', by returning the
+-- indices of all elements equal to the query element, in ascending order.
+elemIndices :: Eq a => a -> [a] -> [Int]
+elemIndices x xs = findIndices (\y -> x == y) xs
+
+-- | The 'findIndex' function takes a predicate and a list and returns
+-- the index of the first element in the list satisfying the predicate,
+-- or 'Nothing' if there is no such element.
+-- For the result to be 'Nothing', the list must be finite.
+findIndex :: (a -> Bool) -> [a] -> Maybe Int
+findIndex p xs = listToMaybe (findIndices p xs)
+
+-- | The 'findIndices' function extends 'findIndex', by returning the
+-- indices of all elements satisfying the predicate, in ascending order.
+findIndices :: (a -> Bool) -> [a] -> [Int]
+findIndices p xs = findIndicesGo p xs 0
+
+findIndicesGo _ [] _ = []
+findIndicesGo p (x : xs) k = case p x of
+  True -> k : findIndicesGo p xs (k + 1)
+  False -> findIndicesGo p xs (k + 1)
+
+-- Generalised indexing -------------------------------------------------------
+
+-- | \(\mathcal{O}(n)\). The 'genericLength' function is an overloaded version
+-- of 'length'. In particular, instead of returning an 'Int', it returns any
+-- type which is an instance of 'Num'. It is, however, less efficient than
+-- 'length'.
+--
+-- Users should take care to pick a return type that is wide enough to contain
+-- the full length of the list. If the width is insufficient, the overflow
+-- behaviour will depend on the @(+)@ implementation in the selected 'Num'
+-- instance.
+--
+-- >>> genericLength [1, 2, 3] :: Int
+-- 3
+-- >>> genericLength [1, 2, 3] :: Integer
+-- 3
+genericLength :: Num i => [a] -> i
+genericLength [] = 0
+genericLength (_ : l) = 1 + genericLength l
+
+-- | The 'genericTake' function is an overloaded version of 'take', which
+-- accepts any 'Integral' value as the number of elements to take.
+genericTake :: Integral i => i -> [a] -> [a]
+genericTake n xs
+  | n <= 0 = []
+genericTake _ [] = []
+genericTake n (x : xs) = x : genericTake (n - 1) xs
+
+-- | The 'genericDrop' function is an overloaded version of 'drop', which
+-- accepts any 'Integral' value as the number of elements to drop.
+genericDrop :: Integral i => i -> [a] -> [a]
+genericDrop n xs
+  | n <= 0 = xs
+genericDrop _ [] = []
+genericDrop n (_ : xs) = genericDrop (n - 1) xs
+
+-- | The 'genericSplitAt' function is an overloaded version of 'splitAt', which
+-- accepts any 'Integral' value as the position at which to split.
+genericSplitAt :: Integral i => i -> [a] -> ([a], [a])
+genericSplitAt n xs
+  | n <= 0 = ([], xs)
+genericSplitAt _ [] = ([], [])
+genericSplitAt n (x : xs) =
+  let (xs', xs'') = genericSplitAt (n - 1) xs
+  in (x : xs', xs'')
+
+-- | The 'genericIndex' function is an overloaded version of '!!', which
+-- accepts any 'Integral' value as the index.
+genericIndex :: Integral i => [a] -> i -> a
+genericIndex (x : _) 0 = x
+genericIndex (_ : xs) n
+  | n > 0 = genericIndex xs (n - 1)
+  | otherwise = error "List.genericIndex: negative argument."
+genericIndex _ _ = error "List.genericIndex: index too large."
+
+-- | The 'genericReplicate' function is an overloaded version of 'replicate',
+-- which accepts any 'Integral' value as the number of repetitions to make.
+genericReplicate :: Integral i => i -> a -> [a]
+genericReplicate n x = case n <= 0 of
+  True -> []
+  False -> x : genericReplicate (n - 1) x
+
+-- Zips ----------------------------------------------------------------------
+
+zip :: [a] -> [b] -> [(a, b)]
+zip xs ys = zipWith (\a b -> (a, b)) xs ys
+
+zip3 :: [a] -> [b] -> [c] -> [(a, b, c)]
+zip3 xs ys zs = zipWith3 (\a b c -> (a, b, c)) xs ys zs
+
+zipWith :: (a -> b -> c) -> [a] -> [b] -> [c]
+zipWith _ [] _ = []
+zipWith _ _ [] = []
+zipWith f (x:xs) (y:ys) = f x y : zipWith f xs ys
+
+zipWith3 :: (a -> b -> c -> d) -> [a] -> [b] -> [c] -> [d]
+zipWith3 _ [] _ _ = []
+zipWith3 _ _ [] _ = []
+zipWith3 _ _ _ [] = []
+zipWith3 f (x:xs) (y:ys) (z:zs) = f x y z : zipWith3 f xs ys zs
+
+unzip :: [(a, b)] -> ([a], [b])
+unzip [] = ([], [])
+unzip ((a, b) : xs) =
+  let u = unzip xs
+  in (a : fst u, b : snd u)
+
+unzip3 :: [(a, b, c)] -> ([a], [b], [c])
+unzip3 [] = ([], [], [])
+unzip3 ((a, b, c) : xs) =
+  let u = unzip3 xs
+      firsts = case u of (xs1, _, _) -> xs1
+      seconds = case u of (_, xs2, _) -> xs2
+      thirds = case u of (_, _, xs3) -> xs3
+  in (a : firsts, b : seconds, c : thirds)
+
+zip4 :: [a] -> [b] -> [c] -> [d] -> [(a, b, c, d)]
+zip4 xs ys zs ws = zipWith4 (\a b c d -> (a, b, c, d)) xs ys zs ws
+
+zip5 :: [a] -> [b] -> [c] -> [d] -> [e] -> [(a, b, c, d, e)]
+zip5 us vs ws xs ys = zipWith5 (\a b c d e -> (a, b, c, d, e)) us vs ws xs ys
+
+zip6 :: [a] -> [b] -> [c] -> [d] -> [e] -> [f] -> [(a, b, c, d, e, f)]
+zip6 us vs ws xs ys zs = zipWith6 (\a b c d e f -> (a, b, c, d, e, f)) us vs ws xs ys zs
+
+zip7 :: [a] -> [b] -> [c] -> [d] -> [e] -> [f] -> [g] -> [(a, b, c, d, e, f, g)]
+zip7 us vs ws xs ys zs ts = zipWith7 (\a b c d e f g -> (a, b, c, d, e, f, g)) us vs ws xs ys zs ts
+
+zipWith4 :: (a -> b -> c -> d -> e) -> [a] -> [b] -> [c] -> [d] -> [e]
+zipWith4 _ [] _ _ _ = []
+zipWith4 _ _ [] _ _ = []
+zipWith4 _ _ _ [] _ = []
+zipWith4 _ _ _ _ [] = []
+zipWith4 f (a:as') (b:bs') (c:cs') (d:ds') = f a b c d : zipWith4 f as' bs' cs' ds'
+
+zipWith5 :: (a -> b -> c -> d -> e -> f) -> [a] -> [b] -> [c] -> [d] -> [e] -> [f]
+zipWith5 _ [] _ _ _ _ = []
+zipWith5 _ _ [] _ _ _ = []
+zipWith5 _ _ _ [] _ _ = []
+zipWith5 _ _ _ _ [] _ = []
+zipWith5 _ _ _ _ _ [] = []
+zipWith5 g (a:as') (b:bs') (c:cs') (d:ds') (e:es) = g a b c d e : zipWith5 g as' bs' cs' ds' es
+
+zipWith6 :: (a -> b -> c -> d -> e -> f -> g) -> [a] -> [b] -> [c] -> [d] -> [e] -> [f] -> [g]
+zipWith6 _ [] _ _ _ _ _ = []
+zipWith6 _ _ [] _ _ _ _ = []
+zipWith6 _ _ _ [] _ _ _ = []
+zipWith6 _ _ _ _ [] _ _ = []
+zipWith6 _ _ _ _ _ [] _ = []
+zipWith6 _ _ _ _ _ _ [] = []
+zipWith6 h (a:as') (b:bs') (c:cs') (d:ds') (e:es) (f:fs) =
+  h a b c d e f : zipWith6 h as' bs' cs' ds' es fs
+
+zipWith7 :: (a -> b -> c -> d -> e -> f -> g -> h) -> [a] -> [b] -> [c] -> [d] -> [e] -> [f] -> [g] -> [h]
+zipWith7 _ [] _ _ _ _ _ _ = []
+zipWith7 _ _ [] _ _ _ _ _ = []
+zipWith7 _ _ _ [] _ _ _ _ = []
+zipWith7 _ _ _ _ [] _ _ _ = []
+zipWith7 _ _ _ _ _ [] _ _ = []
+zipWith7 _ _ _ _ _ _ [] _ = []
+zipWith7 _ _ _ _ _ _ _ [] = []
+zipWith7 k (a:as') (b:bs') (c:cs') (d:ds') (e:es) (f:fs) (g:gs) =
+  k a b c d e f g : zipWith7 k as' bs' cs' ds' es fs gs
+
+unzip4 :: [(a, b, c, d)] -> ([a], [b], [c], [d])
+unzip4 [] = ([], [], [], [])
+unzip4 ((a, b, c, d) : xs) =
+  let u = unzip4 xs
+      firsts = case u of (q, _, _, _) -> q
+      seconds = case u of (_, q, _, _) -> q
+      thirds = case u of (_, _, q, _) -> q
+      fourths = case u of (_, _, _, q) -> q
+  in (a : firsts, b : seconds, c : thirds, d : fourths)
+
+unzip5 :: [(a, b, c, d, e)] -> ([a], [b], [c], [d], [e])
+unzip5 [] = ([], [], [], [], [])
+unzip5 ((a, b, c, d, e) : xs) =
+  let u = unzip5 xs
+      firsts = case u of (q, _, _, _, _) -> q
+      seconds = case u of (_, q, _, _, _) -> q
+      thirds = case u of (_, _, q, _, _) -> q
+      fourths = case u of (_, _, _, q, _) -> q
+      fifths = case u of (_, _, _, _, q) -> q
+  in (a : firsts, b : seconds, c : thirds, d : fourths, e : fifths)
+
+unzip6 :: [(a, b, c, d, e, f)] -> ([a], [b], [c], [d], [e], [f])
+unzip6 [] = ([], [], [], [], [], [])
+unzip6 ((a, b, c, d, e, f) : xs) =
+  let u = unzip6 xs
+      firsts = case u of (q, _, _, _, _, _) -> q
+      seconds = case u of (_, q, _, _, _, _) -> q
+      thirds = case u of (_, _, q, _, _, _) -> q
+      fourths = case u of (_, _, _, q, _, _) -> q
+      fifths = case u of (_, _, _, _, q, _) -> q
+      sixths = case u of (_, _, _, _, _, q) -> q
+  in (a : firsts, b : seconds, c : thirds, d : fourths, e : fifths, f : sixths)
+
+unzip7 :: [(a, b, c, d, e, f, g)] -> ([a], [b], [c], [d], [e], [f], [g])
+unzip7 [] = ([], [], [], [], [], [], [])
+unzip7 ((a, b, c, d, e, f, g) : xs) =
+  let u = unzip7 xs
+      firsts = case u of (q, _, _, _, _, _, _) -> q
+      seconds = case u of (_, q, _, _, _, _, _) -> q
+      thirds = case u of (_, _, q, _, _, _, _) -> q
+      fourths = case u of (_, _, _, q, _, _, _) -> q
+      fifths = case u of (_, _, _, _, q, _, _) -> q
+      sixths = case u of (_, _, _, _, _, q, _) -> q
+      sevenths = case u of (_, _, _, _, _, _, q) -> q
+  in (a : firsts, b : seconds, c : thirds, d : fourths, e : fifths, f : sixths, g : sevenths)
+
+-- Set operations ------------------------------------------------------------
+
+-- | \(\mathcal{O}(n^2)\). The 'nub' function removes duplicate elements from a
+-- list. In particular, it keeps only the first occurrence of each element. (The
+-- name 'nub' means `essence'.) It is a special case of 'nubBy', which allows
+-- the programmer to supply their own equality test.
+nub :: Eq a => [a] -> [a]
+nub xs = nubBy (\a b -> a == b) xs
+
+-- | The 'nubBy' function behaves just like 'nub', except it uses a
+-- user-supplied equality predicate instead of the overloaded '(==)'
+-- function.
+nubBy :: (a -> a -> Bool) -> [a] -> [a]
+nubBy _ [] = []
+nubBy eq (x:xs) = x : nubBy eq (filter (\y -> not (eq x y)) xs)
+
+-- | \(\mathcal{O}(n)\). 'delete' @x@ removes the first occurrence of @x@ from
+-- its list argument. It is a special case of 'deleteBy', which allows the
+-- programmer to supply their own equality test.
+delete :: Eq a => a -> [a] -> [a]
+delete x xs = deleteBy (\a b -> a == b) x xs
+
+-- | \(\mathcal{O}(n)\). The 'deleteBy' function behaves like 'delete', but
+-- takes a user-supplied equality predicate.
+deleteBy :: (a -> a -> Bool) -> a -> [a] -> [a]
+deleteBy _ _ [] = []
+deleteBy eq x (y:ys) = case eq x y of
+  True -> ys
+  False -> y : deleteBy eq x ys
+
+deleteFirstsBy :: (a -> a -> Bool) -> [a] -> [a] -> [a]
+deleteFirstsBy eq xs ys = foldl (\acc y -> deleteBy eq y acc) xs ys
+
+-- | The 'union' function returns the list union of the two lists.
+-- It is a special case of 'unionBy', which allows the programmer to supply
+-- their own equality test. If equal elements are present in both lists, an
+-- element from the first list is used, and duplicates in the first list are
+-- kept.
+union :: Eq a => [a] -> [a] -> [a]
+union xs ys = unionBy (\a b -> a == b) xs ys
+
+-- | The 'unionBy' function is the non-overloaded version of 'union'.
+unionBy :: (a -> a -> Bool) -> [a] -> [a] -> [a]
+unionBy eq xs ys = xs <> foldl (\acc y -> deleteBy eq y acc) (nubBy eq ys) xs
+
+-- | The 'intersect' function takes the list intersection of two lists.
+-- It is a special case of 'intersectBy', which allows the programmer to
+-- supply their own equality test. If equal elements are present in both lists,
+-- an element from the first list is used, and all duplicates from the second
+-- list are quashed.
+intersect :: Eq a => [a] -> [a] -> [a]
+intersect xs ys = intersectBy (\a b -> a == b) xs ys
+
+-- | The 'intersectBy' function is the non-overloaded version of 'intersect'.
+intersectBy :: (a -> a -> Bool) -> [a] -> [a] -> [a]
+intersectBy _ [] _ = []
+intersectBy _ _ [] = []
+intersectBy eq xs ys = [x | x <- xs, any (eq x) ys]
+
+(\\) :: Eq a => [a] -> [a] -> [a]
+(\\) xs ys = foldl (\acc y -> delete y acc) xs ys
+
+-- Ordered lists -------------------------------------------------------------
+
+sort :: Ord a => [a] -> [a]
+sort xs = sortBy compare xs
+
+sortBy :: (a -> a -> Ordering) -> [a] -> [a]
+sortBy cmp xs = listFoldr (insertBy cmp) [] xs
+
+-- | \(\mathcal{O}(n)\). The 'insert' function takes an element and a list and
+-- inserts the element into the list at the first position where it is less than
+-- or equal to the next element. In particular, if the list is sorted before the
+-- call, the result will also be sorted. It is a special case of 'insertBy',
+-- which allows the programmer to supply their own comparison function.
+insert :: Ord a => a -> [a] -> [a]
+insert x xs = insertBy compare x xs
+
+-- | \(\mathcal{O}(n)\). The non-overloaded version of 'insert'.
+insertBy :: (a -> a -> Ordering) -> a -> [a] -> [a]
+insertBy _ x [] = [x]
+insertBy cmp x (y:ys) = case cmp x y of
+  GT -> y : insertBy cmp x ys
+  LT -> x : y : ys
+  EQ -> x : y : ys
+
+sortOn :: Ord b => (a -> b) -> [a] -> [a]
+sortOn f xs = map snd (sortBy (\a b -> compare (fst a) (fst b)) (map (\x -> (f x, x)) xs))
+
+-- Instances -----------------------------------------------------------------
+
+instance Semigroup (List a) where
+  (<>) = (++)
+
+instance Monoid (List a) where
+  mempty = []
+
+instance Eq (List a) where
+  (==) a b = listEq# a b
+  (/=) a b = listNe# a b
+
+instance Ord (List a) where
+  compare a b = listCompare# a b
+
+instance Foldable List where
+  foldr f z xs = listFoldr f z xs
+
+instance Functor List where
+  map f xs = case xs of
+    [] -> []
+    x : rest -> f x : map f rest
+
+instance Traversable List where
+  traverse f xs = case xs of
+    [] -> pure []
+    x : rest -> pure (\y ys -> y : ys) <*> (f x) <*> (traverse f rest)
+
+instance Applicative List where
+  pure x = [x]
+  (<*>) fs xs = concatMap (\f -> map f xs) fs
+
+instance Monad List where
+  (>>=) xs f = concatMap f xs
+
+instance Alternative List where
+  empty = []
+  (<|>) a b = a <> b
+
+instance Show a => Show (List a) where
+  show xs = case xs of
+    [] -> "[]"
+    x : rest ->
+      stringAppend# "["
+        (stringAppend# (show x)
+          (listFoldr (\y s -> stringAppend# (stringAppend# "," (show y)) s) "]" rest))

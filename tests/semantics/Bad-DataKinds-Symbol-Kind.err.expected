@@ -1,0 +1,4 @@
+tests/semantics/Bad-DataKinds-Symbol-Kind.mog:6:18: type error: kind mismatch applying `OnlyColor`: expected `Color`, got `Symbol`
+
+  6 | bad :: OnlyColor "Red" -> String
+    |                  ^^^^^

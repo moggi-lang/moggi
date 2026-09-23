@@ -1,0 +1,17 @@
+<?php declare(strict_types=1);
+
+namespace User;
+
+const __MOGGI_MAP = [[12 => ['User.getId', 'lib/User.mog', 12, 11], 16 => ['User.makeUser', 'lib/User.mog', 15, 15]], ['User\\getId' => ['User.getId', 'lib/User.mog', 12, 11], 'User\\makeUser' => ['User.makeUser', 'lib/User.mog', 15, 15]]];
+
+function User($id) {
+    return ['User', $id];
+}
+
+function getId($u) {
+    return $u[1];
+}
+
+function makeUser($id) {
+    return User($id);
+}

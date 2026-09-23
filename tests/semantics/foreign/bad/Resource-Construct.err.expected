@@ -1,0 +1,7 @@
+tests/semantics/foreign/bad/Resource-Construct.mog:3:8: type error: module `System.IO.Types` does not export `MkResource`
+
+Did you mean this?
+    Resource
+
+  3 | import System.IO.Types (Resource, MkResource)
+    |        ^^^^^^^^^^^^^^^

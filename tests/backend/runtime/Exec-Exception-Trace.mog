@@ -1,0 +1,13 @@
+import Control.Exception
+import System.IO
+
+boom :: IO ()
+boom = throwIO (ErrorCall "mapped")
+
+indirect :: IO ()
+indirect = boom
+
+main :: IO ()
+main = do
+  putStrLn "before"
+  indirect

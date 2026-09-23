@@ -1,0 +1,8 @@
+tests/semantics/Bad-Type.mog:2:19: type error: undefined variable `notInt`
+
+Did you mean one of these?
+    Nothing
+    not
+
+  2 | add x y = x + y + notInt
+    |                   ^^^^^^

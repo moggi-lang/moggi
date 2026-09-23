@@ -1,0 +1,11 @@
+-- A constrained *pattern* binding (`h = checkEq`) is not generalized, so `h` is
+-- monomorphic and its `Eq` constraint is discharged where it is bound: `apply h
+-- False True` pins `h` to `Bool -> Bool -> Bool` and selects `Eq Bool` there.
+
+checkEq :: Eq a => a -> a -> Bool
+checkEq x y = x == y
+
+apply f x y = f x y
+
+main :: Bool
+main = let h = checkEq in apply h False True

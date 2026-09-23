@@ -1,0 +1,116 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Exception class, SomeException and the arithmetic exceptions.
+--
+-- Exceptions are matched by a stable tag (`fromException`), so no type
+-- representation is involved and `Exception` needs only a `Show` superclass.
+module Moggi.Exception.Type
+  ( SomeException
+  , Exception(toException, fromException, displayException)
+  , ErrorCall(ErrorCall)
+  , ArithException(..)
+  , divZeroException
+  , overflowException
+  , ratioZeroDenomException
+  , underflowException
+  ) where
+
+import Data.Eq
+import Data.Maybe
+import Data.Ord
+import Text.Show
+import Moggi.Internal.Prim
+
+type SomeException = SomeException#
+
+class Show e => Exception e where
+  toException :: e -> SomeException
+  fromException :: SomeException -> Maybe e
+  displayException :: e -> String
+  displayException e = show e
+
+data ErrorCall = ErrorCall String
+
+instance Show ErrorCall where
+  show (ErrorCall s) = s
+
+errorCallMessage :: ErrorCall -> String
+errorCallMessage e = case e of
+  ErrorCall s -> s
+
+-- The monomorphic operator fast path would resolve `==` to this instance
+-- again, so the underlying String comparison uses the same intrinsics
+-- `Data.String` builds its `Eq String` from.
+instance Eq ErrorCall where
+  (==) a b = stringEq# (errorCallMessage a) (errorCallMessage b)
+  (/=) a b = stringNe# (errorCallMessage a) (errorCallMessage b)
+
+instance Ord ErrorCall where
+  compare a b = stringCompare# (errorCallMessage a) (errorCallMessage b)
+
+instance Exception ErrorCall where
+  toException e = exceptionWrap# "ErrorCall" (displayException e) e
+  fromException se = exceptionUnwrap# "ErrorCall" se
+  displayException (ErrorCall s) = s
+
+instance Show SomeException where
+  show se = exceptionDisplay# se
+
+instance Exception SomeException where
+  toException se = se
+  fromException se = Just se
+  displayException se = exceptionDisplay# se
+
+-- | Arithmetic exceptions. The tags are the declaration order, which is also
+-- the derived `Ord`.
+data ArithException
+  = Overflow
+  | Underflow
+  | LossOfPrecision
+  | DivideByZero
+  | Denormal
+  | RatioZeroDenominator
+
+arithExceptionTag :: ArithException -> Int
+arithExceptionTag e = case e of
+  Overflow -> 0
+  Underflow -> 1
+  LossOfPrecision -> 2
+  DivideByZero -> 3
+  Denormal -> 4
+  RatioZeroDenominator -> 5
+
+arithExceptionString :: ArithException -> String
+arithExceptionString e = case e of
+  Overflow -> "arithmetic overflow"
+  Underflow -> "arithmetic underflow"
+  LossOfPrecision -> "loss of precision"
+  DivideByZero -> "divide by zero"
+  Denormal -> "denormal"
+  RatioZeroDenominator -> "Ratio has zero denominator"
+
+instance Show ArithException where
+  show = arithExceptionString
+
+instance Eq ArithException where
+  (==) a b = intEq# (arithExceptionTag a) (arithExceptionTag b)
+  (/=) a b = intNe# (arithExceptionTag a) (arithExceptionTag b)
+
+instance Ord ArithException where
+  compare a b = intCompare# (arithExceptionTag a) (arithExceptionTag b)
+
+instance Exception ArithException where
+  toException e = exceptionWrap# "ArithException" (displayException e) e
+  fromException se = exceptionUnwrap# "ArithException" se
+  displayException e = arithExceptionString e
+
+divZeroException :: SomeException
+divZeroException = toException DivideByZero
+
+overflowException :: SomeException
+overflowException = toException Overflow
+
+ratioZeroDenomException :: SomeException
+ratioZeroDenomException = toException RatioZeroDenominator
+
+underflowException :: SomeException
+underflowException = toException Underflow

@@ -1,0 +1,3 @@
+dispatch mx = case mx of
+  Just n -> \y -> n + y
+  Nothing -> 0

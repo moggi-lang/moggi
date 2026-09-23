@@ -1,0 +1,3 @@
+data User = User { name :: Int, age :: Int }
+
+main = User { name = 1, age = 30 }.missing

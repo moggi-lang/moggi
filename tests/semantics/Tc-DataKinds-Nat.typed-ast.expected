@@ -1,0 +1,38 @@
+program
+  data FixedBytes (n :: Nat)
+    constructor FixedBytes
+  function zero :: FixedBytes 0
+    constructor_ref FixedBytes
+  function one :: FixedBytes 1
+    constructor_ref FixedBytes
+  function kilo :: FixedBytes 1024
+    constructor_ref FixedBytes
+  function onePadded :: FixedBytes 1
+    constructor_ref FixedBytes
+  data Matrix (rows :: Nat) (cols :: Nat)
+    constructor Matrix
+  function m34 :: Matrix 3 4
+    constructor_ref Matrix
+  function same :: FixedBytes 1024 -> FixedBytes 1024
+    pat_var x
+    variable x
+  function samePadded :: FixedBytes 1 -> FixedBytes 1
+    pat_var x
+    variable x
+  function forgetSize :: FixedBytes t6 -> String
+    pat_con FixedBytes
+    string "any"
+  function useZero :: String
+    apply
+      variable forgetSize
+      variable zero
+  function useKilo :: String
+    apply
+      variable forgetSize
+      variable kilo
+  function huge :: FixedBytes 18446744073709551616
+    constructor_ref FixedBytes
+  function useHuge :: String
+    apply
+      variable forgetSize
+      variable huge

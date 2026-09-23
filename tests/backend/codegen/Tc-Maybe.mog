@@ -1,0 +1,43 @@
+module Tc.Maybe
+
+import Control.Applicative
+import Data.Functor
+import Control.Monad
+import Data.Bool
+import Data.Int
+import Data.Maybe
+
+fmapMaybe :: Functor f => (a -> b) -> f a -> f b
+fmapMaybe f mx = map f mx
+
+apMaybe :: Applicative f => f (a -> b) -> f a -> f b
+apMaybe mf mx = mf <*> mx
+
+bindMaybe :: Monad m => m a -> (a -> m b) -> m b
+bindMaybe mx f = mx >>= f
+
+justDemo :: Maybe Int
+justDemo = fmapMaybe (\x -> x + 1) (Just 41)
+
+apDemo :: Maybe Int
+apDemo = apMaybe (Just (\x -> x * 2)) (Just 21)
+
+bindDemo :: Maybe Int
+bindDemo = bindMaybe (Just 2) (\x -> Just (x + 1))
+
+nothingShort :: Maybe Int
+nothingShort = bindMaybe Nothing (\x -> Just x)
+
+fromMaybeDemo :: Int
+fromMaybeDemo = fromMaybe 0 Nothing
+
+catMaybesDemo :: [Int]
+catMaybesDemo = catMaybes [Nothing, Just 1, Nothing, Just 2]
+
+dropTwo :: Int -> Maybe Int
+dropTwo x = case x == 2 of
+  True -> Nothing
+  False -> Just x
+
+mapMaybeDemo :: [Int]
+mapMaybeDemo = mapMaybe dropTwo [1, 2, 3]

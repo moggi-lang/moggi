@@ -1,0 +1,23 @@
+import System.IO
+import Data.Eq
+import Data.Ord
+import Text.Show
+import Data.Enum
+import Data.Bounded
+
+data Color = Red | Blue | Green
+  deriving (Eq, Ord, Show, Enum, Bounded)
+
+main :: IO ()
+main = do
+  putStrLn (show (compare Red Blue))
+  putStrLn (show (compare Blue Red))
+  putStrLn (show (compare Red Red))
+  putStrLn (show Green)
+  putStrLn (show (fromEnum Green))
+  putStrLn (show (succ Red))
+  putStrLn (show (pred Green))
+  putStrLn (show (minBound :: Color))
+  putStrLn (show (maxBound :: Color))
+  putStrLn (show (Red == Red))
+  putStrLn (show (Red == Blue))

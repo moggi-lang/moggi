@@ -1,0 +1,33 @@
+import Data.Bool
+import Data.ByteString.Char8 qualified as C
+import Data.Eq
+import Data.Int
+import Moggi.Internal.Integer
+import Data.Maybe
+import Data.Ord
+import Text.Show
+import Data.Tuple
+
+main :: IO ()
+main = do
+  putStrLn (case C.readInt (C.pack "42xyz") of
+    Just pair -> case (fst pair, C.unpack (snd pair)) of
+      (42, 'x' : 'y' : 'z' : []) -> "int-ok"
+      _ -> "int-rest-bad"
+    _ -> "int-bad")
+  putStrLn (case C.readInt (C.pack "-7") of
+    Just pair -> case (fst pair == (0 - 7), C.null (snd pair)) of
+      (True, True) -> "neg-ok"
+      _ -> "neg-bad"
+    _ -> "neg-bad")
+  putStrLn (case C.readInt (C.pack "abc") of
+    Nothing -> "fail-ok"
+    _ -> "fail-bad")
+  putStrLn (case C.readInteger (C.pack "1000!") of
+    Just pair -> case (fst pair == integerFromInt 1000, C.unpack (snd pair)) of
+      (True, '!' : []) -> "integer-ok"
+      _ -> "integer-bad"
+    _ -> "integer-bad")
+  putStrLn (case C.readInt (C.pack "") of
+    Nothing -> "empty-ok"
+    _ -> "empty-bad")

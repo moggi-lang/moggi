@@ -1,0 +1,513 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.List.NonEmpty
+  ( NonEmpty(..)
+  , map
+  , intersperse
+  , scanl
+  , scanr
+  , scanl1
+  , scanr1
+  , transpose
+  , sortBy
+  , sortWith
+  , length
+  , compareLength
+  , head
+  , tail
+  , last
+  , init
+  , singleton
+  , (<|)
+  , cons
+  , uncons
+  , unfoldr
+  , sort
+  , sortOn
+  , reverse
+  , inits
+  , inits1
+  , tails
+  , tails1
+  , append
+  , appendList
+  , prependList
+  , unfold
+  , insert
+  , some1
+  , take
+  , drop
+  , splitAt
+  , takeWhile
+  , dropWhile
+  , span
+  , break
+  , filter
+  , partition
+  , group
+  , groupBy
+  , groupWith
+  , groupAllWith
+  , group1
+  , groupBy1
+  , groupWith1
+  , groupAllWith1
+  , permutations
+  , permutations1
+  , isPrefixOf
+  , nub
+  , nubBy
+  , (!!)
+  , zip
+  , zipWith
+  , unzip
+  , fromList
+  , toList
+  , nonEmpty
+  , xor
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Bool
+import Data.Eq
+import Moggi.Err
+import Data.Foldable hiding (length, toList, find)
+import Data.Function
+import Data.Functor hiding (unzip)
+import Data.Int
+import Data.Maybe
+import Data.Ord
+import Data.Semigroup
+import Text.Show
+import Data.Traversable hiding (mapAccumL, mapAccumR)
+import Data.Tuple
+-- Bring List in qualified-only so wrappers can call DL.take etc. after local
+-- bindings that would otherwise clash with unqualified List names.
+import Data.List qualified as DL
+import Moggi.Internal.Prim
+
+data NonEmpty a = a :| [a]
+  deriving (Eq, Ord, Show)
+
+infixr 5 :|
+infixr 5 <|
+infixl 9 !!
+
+-- Helpers (must appear before instances; instance bodies absorb following decls)
+
+listMap :: (a -> b) -> [a] -> [b]
+listMap f xs = case xs of
+  [] -> []
+  x : rest -> f x : listMap f rest
+
+listAppend :: [a] -> [a] -> [a]
+listAppend xs ys = listAppend# xs ys
+
+listLength :: [a] -> Int
+listLength xs = case xs of
+  [] -> 0
+  ignored : rest -> 1 + listLength rest
+
+foldableToList :: Foldable t => t a -> [a]
+foldableToList t = foldr (\x xs -> x : xs) [] t
+
+liftList :: ([a] -> [a]) -> NonEmpty a -> NonEmpty a
+liftList f xs = fromList (f (toList xs))
+
+bindNe :: NonEmpty a -> (a -> NonEmpty b) -> NonEmpty b
+bindNe ne f = case ne of
+  a :| rest -> case f a of
+    b :| bs -> b :| (listAppend bs (bindList rest f))
+
+bindList :: [a] -> (a -> NonEmpty b) -> [b]
+bindList xs f = case xs of
+  [] -> []
+  x : rest -> listAppend (toList (f x)) (bindList rest f)
+
+xorBool :: Bool -> Bool -> Bool
+xorBool x y = case x of
+  True -> not y
+  False -> y
+
+unfoldrGo :: (a -> (b, Maybe a)) -> a -> [b]
+unfoldrGo f c = case f c of
+  pair -> fst pair : maybe [] (unfoldrGo f) (snd pair)
+
+neInits1 :: [a] -> [NonEmpty a]
+neInits1 xs = case xs of
+  [] -> error "Data.List.NonEmpty.inits1: empty list"
+  x : rest -> listMap (\ys -> x :| ys) (localInits rest)
+
+localInits :: [a] -> [[a]]
+localInits zs = case zs of
+  [] -> [[]]
+  y : ys -> [] : listMap (\ws -> y : ws) (localInits ys)
+
+neTails1 :: [a] -> [NonEmpty a]
+neTails1 xs = case xs of
+  [] -> []
+  y : ys -> (y :| ys) : neTails1 ys
+
+groupByList :: (a -> a -> Bool) -> [a] -> [NonEmpty a]
+groupByList eq xs = case xs of
+  [] -> []
+  x : rest ->
+    let s = DL.span (eq x) rest
+    in (x :| (fst s)) : groupByList eq (snd s)
+
+interleavePerms :: a -> [a] -> [a] -> [a] -> [[a]] -> [[a]]
+interleavePerms t ts is xs r =
+  let pair = interleavePermsGo t ts id xs r
+  in snd pair
+
+interleavePermsGo :: a -> [a] -> ([a] -> [a]) -> [a] -> [[a]] -> ([a], [[a]])
+interleavePermsGo t ts f xs r = case xs of
+  [] -> (ts, r)
+  y : ys ->
+    let pair = interleavePermsGo t ts (\zs -> f (y : zs)) ys r
+        us = fst pair
+        zs = snd pair
+    in (y : us, f (t : y : us) : zs)
+
+permsList :: [a] -> [a] -> [[a]]
+permsList xs is = case xs of
+  [] -> []
+  t : ts ->
+    listFoldrPerm
+      (\ys r -> interleavePerms t ts is ys r)
+      (permsList ts (t : is))
+      (DL.permutations is)
+
+listFoldrPerm :: ([a] -> [[a]] -> [[a]]) -> [[a]] -> [[a]] -> [[a]]
+listFoldrPerm f z xs = case xs of
+  [] -> z
+  y : ys -> f y (listFoldrPerm f z ys)
+
+indexAt :: [a] -> Int -> a
+indexAt xs n = case xs of
+  [] -> error "Data.List.NonEmpty.index: index too large"
+  x : rest -> case n == 0 of
+    True -> x
+    False -> indexAt rest (n - 1)
+
+-- Non-empty stream transformations ------------------------------------------
+
+intersperse :: a -> NonEmpty a -> NonEmpty a
+intersperse a ne = case ne of
+  b :| bs -> b :| (case bs of
+    [] -> []
+    _ -> a : DL.intersperse a bs)
+
+scanl :: Foldable f => (b -> a -> b) -> b -> f a -> NonEmpty b
+scanl f z xs = fromList (DL.scanl f z (foldableToList xs))
+
+scanr :: Foldable f => (a -> b -> b) -> b -> f a -> NonEmpty b
+scanr f z xs = fromList (DL.scanr f z (foldableToList xs))
+
+scanl1 :: (a -> a -> a) -> NonEmpty a -> NonEmpty a
+scanl1 f ne = case ne of
+  a :| xs -> fromList (DL.scanl f a xs)
+
+scanr1 :: (a -> a -> a) -> NonEmpty a -> NonEmpty a
+scanr1 f ne = case ne of
+  a :| xs -> fromList (DL.scanr1 f (a : xs))
+
+transpose :: NonEmpty (NonEmpty a) -> NonEmpty (NonEmpty a)
+transpose xss =
+  map fromList (fromList (DL.transpose (toList (map toList xss))))
+
+sortBy :: (a -> a -> Ordering) -> NonEmpty a -> NonEmpty a
+sortBy f xs = liftList (DL.sortBy f) xs
+
+sortWith :: Ord o => (a -> o) -> NonEmpty a -> NonEmpty a
+sortWith f xs = sortBy (comparing f) xs
+
+-- Basic functions -----------------------------------------------------------
+
+length :: NonEmpty a -> Int
+length ne = case ne of
+  ignored :| xs -> 1 + listLength xs
+
+compareLength :: NonEmpty a -> Int -> Ordering
+compareLength xs n = case n < 1 of
+  True -> GT
+  False -> compareLengthList (toList xs) n
+
+compareLengthList :: [a] -> Int -> Ordering
+compareLengthList xs n = case xs of
+  [] -> compareLengthEmpty n
+  ignored : rest -> compareLengthCons rest n
+
+compareLengthEmpty :: Int -> Ordering
+compareLengthEmpty n = case n > 0 of
+  True -> LT
+  False -> EQ
+
+compareLengthCons :: [a] -> Int -> Ordering
+compareLengthCons rest n = case n > 0 of
+  True -> compareLengthList rest (n - 1)
+  False -> GT
+
+head :: NonEmpty a -> a
+head ne = case ne of
+  a :| _ -> a
+
+tail :: NonEmpty a -> [a]
+tail ne = case ne of
+  _ :| xs -> xs
+
+last :: NonEmpty a -> a
+last ne = case ne of
+  a :| xs -> case xs of
+    [] -> a
+    x : rest -> last (x :| rest)
+
+init :: NonEmpty a -> [a]
+init ne = case ne of
+  a :| xs -> case xs of
+    [] -> []
+    a2 : rest -> a : init (a2 :| rest)
+
+singleton :: a -> NonEmpty a
+singleton a = a :| []
+
+(<|) :: a -> NonEmpty a -> NonEmpty a
+(<|) a xs = a :| (toList xs)
+
+cons :: a -> NonEmpty a -> NonEmpty a
+cons a xs = a <| xs
+
+uncons :: NonEmpty a -> (a, Maybe (NonEmpty a))
+uncons ne = case ne of
+  a :| xs -> (a, nonEmpty xs)
+
+unfoldr :: (a -> (b, Maybe a)) -> a -> NonEmpty b
+unfoldr f a = case f a of
+  pair -> (fst pair) :| (maybe [] (unfoldrGo f) (snd pair))
+
+sort :: Ord a => NonEmpty a -> NonEmpty a
+sort xs = liftList (DL.sort) xs
+
+sortOn :: Ord b => (a -> b) -> NonEmpty a -> NonEmpty a
+sortOn f xs = liftList (DL.sortOn f) xs
+
+reverse :: NonEmpty a -> NonEmpty a
+reverse xs = liftList (DL.reverse) xs
+
+inits :: Foldable f => f a -> NonEmpty [a]
+inits xs = fromList (DL.inits (foldableToList xs))
+
+inits1 :: NonEmpty a -> NonEmpty (NonEmpty a)
+inits1 xs = fromList (neInits1 (toList xs))
+
+tails :: Foldable f => f a -> NonEmpty [a]
+tails xs = fromList (DL.tails (foldableToList xs))
+
+tails1 :: NonEmpty a -> NonEmpty (NonEmpty a)
+tails1 xs = xs :| (neTails1 (tail xs))
+
+append :: NonEmpty a -> NonEmpty a -> NonEmpty a
+append xs ys = xs <> ys
+
+appendList :: NonEmpty a -> [a] -> NonEmpty a
+appendList ne ys = case ne of
+  x :| xs -> x :| (listAppend xs ys)
+
+prependList :: [a] -> NonEmpty a -> NonEmpty a
+prependList ls ne = case ls of
+  [] -> ne
+  x : xs -> x :| (listAppend xs (toList ne))
+
+-- Building streams ----------------------------------------------------------
+
+-- `iterate`, `repeat` and `cycle` are deliberately absent: each one builds an
+-- infinite structure, and strict evaluation would diverge on every use.
+
+unfold :: (a -> (b, Maybe a)) -> a -> NonEmpty b
+unfold f a = case f a of
+  pair -> case snd pair of
+    Nothing -> (fst pair) :| []
+    Just c -> fst pair <| unfold f c
+
+insert :: (Foldable f, Ord a) => a -> f a -> NonEmpty a
+insert a xs = fromList (DL.insert a (foldableToList xs))
+
+some1 :: Alternative f => f a -> f (NonEmpty a)
+some1 x = liftA2 (:|) x (many x)
+
+-- Extracting sublists -------------------------------------------------------
+
+take :: Int -> NonEmpty a -> [a]
+take n xs = DL.take n (toList xs)
+
+drop :: Int -> NonEmpty a -> [a]
+drop n xs = DL.drop n (toList xs)
+
+splitAt :: Int -> NonEmpty a -> ([a], [a])
+splitAt n xs = DL.splitAt n (toList xs)
+
+takeWhile :: (a -> Bool) -> NonEmpty a -> [a]
+takeWhile p xs = DL.takeWhile p (toList xs)
+
+dropWhile :: (a -> Bool) -> NonEmpty a -> [a]
+dropWhile p xs = DL.dropWhile p (toList xs)
+
+span :: (a -> Bool) -> NonEmpty a -> ([a], [a])
+span p xs = DL.span p (toList xs)
+
+break :: (a -> Bool) -> NonEmpty a -> ([a], [a])
+break p xs = span (\x -> not (p x)) xs
+
+filter :: (a -> Bool) -> NonEmpty a -> [a]
+filter p xs = DL.filter p (toList xs)
+
+partition :: (a -> Bool) -> NonEmpty a -> ([a], [a])
+partition p xs = DL.partition p (toList xs)
+
+group :: (Foldable f, Eq a) => f a -> [NonEmpty a]
+group xs = groupBy (\a b -> a == b) xs
+
+groupBy :: Foldable f => (a -> a -> Bool) -> f a -> [NonEmpty a]
+groupBy eq xs = groupByList eq (foldableToList xs)
+
+groupWith :: (Foldable f, Eq b) => (a -> b) -> f a -> [NonEmpty a]
+groupWith f xs = groupBy (on (\a b -> a == b) f) xs
+
+groupAllWith :: Ord b => (a -> b) -> [a] -> [NonEmpty a]
+groupAllWith f xs = groupWith f (DL.sortBy (on compare f) xs)
+
+group1 :: Eq a => NonEmpty a -> NonEmpty (NonEmpty a)
+group1 xs = groupBy1 (\a b -> a == b) xs
+
+groupBy1 :: (a -> a -> Bool) -> NonEmpty a -> NonEmpty (NonEmpty a)
+groupBy1 eq ne = case ne of
+  x :| xs ->
+    let s = DL.span (eq x) xs
+    in (x :| (fst s)) :| (groupBy eq (snd s))
+
+groupWith1 :: Eq b => (a -> b) -> NonEmpty a -> NonEmpty (NonEmpty a)
+groupWith1 f xs = groupBy1 (on (\a b -> a == b) f) xs
+
+groupAllWith1 :: Ord b => (a -> b) -> NonEmpty a -> NonEmpty (NonEmpty a)
+groupAllWith1 f xs = groupWith1 f (sortWith f xs)
+
+permutations :: [a] -> NonEmpty [a]
+permutations xs0 = xs0 :| (permsList xs0 [])
+
+permutations1 :: NonEmpty a -> NonEmpty (NonEmpty a)
+permutations1 xs = map fromList (permutations (toList xs))
+
+-- Sublist predicates --------------------------------------------------------
+
+isPrefixOf :: Eq a => [a] -> NonEmpty a -> Bool
+isPrefixOf prefix ne = case prefix of
+  [] -> True
+  y : ys -> isPrefixOfCons y ys ne
+
+isPrefixOfCons :: Eq a => a -> [a] -> NonEmpty a -> Bool
+isPrefixOfCons y ys ne = case ne of
+  x :| xs -> isPrefixOfEq y ys x xs
+
+isPrefixOfEq :: Eq a => a -> [a] -> a -> [a] -> Bool
+isPrefixOfEq y ys x xs = case y == x of
+  True -> DL.isPrefixOf ys xs
+  False -> False
+
+-- Set operations ------------------------------------------------------------
+
+nub :: Eq a => NonEmpty a -> NonEmpty a
+nub xs = nubBy (\a b -> a == b) xs
+
+nubBy :: (a -> a -> Bool) -> NonEmpty a -> NonEmpty a
+nubBy eq ne = case ne of
+  a :| xs -> a :| (DL.nubBy eq (DL.filter (\b -> not (eq a b)) xs))
+
+-- Indexing ------------------------------------------------------------------
+
+(!!) :: NonEmpty a -> Int -> a
+(!!) ne n = case ne of
+  x :| xs -> case n == 0 of
+    True -> x
+    False -> case n > 0 of
+      True -> indexAt xs (n - 1)
+      False -> error "Data.List.NonEmpty.index: negative index"
+
+-- Zips ----------------------------------------------------------------------
+
+zip :: NonEmpty a -> NonEmpty b -> NonEmpty (a, b)
+zip xs ys = zipWith (\a b -> (a, b)) xs ys
+
+zipWith :: (a -> b -> c) -> NonEmpty a -> NonEmpty b -> NonEmpty c
+zipWith f na nb = case na of
+  a :| xs -> case nb of
+    b :| ys -> (f a b) :| (DL.zipWith f xs ys)
+
+unzip :: NonEmpty (a, b) -> (NonEmpty a, NonEmpty b)
+unzip ne = case ne of
+  ab :| rest -> case ab of
+    (a, b) ->
+      let u = DL.unzip rest
+      in (a :| (fst u), b :| (snd u))
+
+-- Converting ----------------------------------------------------------------
+
+fromList :: [a] -> NonEmpty a
+fromList (a : xs) = a :| xs
+fromList [] = error "Data.List.NonEmpty.fromList: empty list"
+
+toList :: NonEmpty a -> [a]
+toList ne = case ne of
+  a :| xs -> a : xs
+
+nonEmpty :: [a] -> Maybe (NonEmpty a)
+nonEmpty [] = Nothing
+nonEmpty (a : xs) = Just (a :| xs)
+
+xor :: NonEmpty Bool -> Bool
+xor ne = case ne of
+  x :| xs -> listFoldXor xorBool x xs
+
+listFoldXor :: (Bool -> Bool -> Bool) -> Bool -> [Bool] -> Bool
+listFoldXor f z xs = case xs of
+  [] -> z
+  y : ys -> f y (listFoldXor f z ys)
+
+-- Instances -----------------------------------------------------------------
+
+listFoldrNe :: (a -> b -> b) -> b -> [a] -> b
+listFoldrNe f z xs = case xs of
+  [] -> z
+  x : rest -> f x (listFoldrNe f z rest)
+
+traverseList :: Applicative f => (a -> f b) -> [a] -> f [b]
+traverseList f xs = case xs of
+  [] -> pure []
+  x : rest -> pure (\y ys -> y : ys) <*> (f x) <*> (traverseList f rest)
+
+instance Semigroup (NonEmpty a) where
+  (<>) na nb = case na of
+    a :| xs -> case nb of
+      b :| ys -> a :| (listAppend xs (b : ys))
+
+instance Functor NonEmpty where
+  map f ne = case ne of
+    a :| xs -> (f a) :| (listMap f xs)
+
+instance Foldable NonEmpty where
+  foldr f z ne = case ne of
+    a :| xs -> f a (listFoldrNe f z xs)
+
+instance Traversable NonEmpty where
+  traverse f ne = case ne of
+    a :| xs ->
+      pure (\b ys -> b :| ys) <*> (f a) <*> (traverseList f xs)
+
+instance Applicative NonEmpty where
+  pure x = x :| []
+  (<*>) fs xs = bindNe fs (\f -> map f xs)
+
+instance Monad NonEmpty where
+  (>>=) xs f = bindNe xs f
+
+
+

@@ -1,0 +1,2 @@
+-- Fail: only a php array is the same value as a Moggi list, so a jvm call cannot take one.
+foreign jvm function join "java.lang.String:join" :: String -> [String] -> String

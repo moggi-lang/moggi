@@ -1,0 +1,9 @@
+program
+  function fail :: IO String
+    io_action
+      intrinsic error#
+        string "boom"
+  function abort :: IO ()
+    io_action
+      intrinsic error#
+        string "in do"

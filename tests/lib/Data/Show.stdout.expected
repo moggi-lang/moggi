@@ -1,0 +1,33 @@
+Ack
+Just Ack
+Leaf 1
+Just (Leaf 1)
+Node Tip Tip
+Just (Node Tip Tip)
+1 :*: 2
+Just (1 :*: 2)
+(1 :*: 2) :*: (3 :*: 4)
+Point {px = 1, py = True}
+Just (Point {px = 1, py = True})
+Wrapped {unwrapped = Leaf 3}
+Just (Wrapped {unwrapped = Leaf 3})
+Just Nothing
+Just (Just 3)
+Just (MkSolo 5)
+Min {getMin = 1}
+Just (Min {getMin = 1})
+Max {getMax = 2}
+Sum {getSum = 3}
+Product {getProduct = 4}
+All {getAll = True}
+Any {getAny = False}
+Dual {getDual = 5}
+First {getFirst = Just 6}
+Last {getLast = Just 7}
+Just (And {getAnd = 3})
+Just (Ior {getIor = 3})
+Left 1
+Just (Right 2)
+LT
+Right 2
+Right 2

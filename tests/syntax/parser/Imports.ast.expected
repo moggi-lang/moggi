@@ -1,0 +1,8 @@
+program
+  function f
+    pat_var xs
+    apply
+      apply
+        variable map
+        variable filter
+      variable xs

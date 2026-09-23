@@ -1,0 +1,99 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.JSON
+  ( -- * Core types
+    Number(..)
+  , Value(..)
+  , Object
+  , Pair
+  , jsonObject
+  , Parser
+  , Encoding
+    -- * Type classes
+  , ToJSON(..)
+  , FromJSON(..)
+  , ToJSONKey(..)
+  , FromJSONKey(..)
+    -- * Options
+  , Options(..)
+  , SumEncoding(..)
+  , defaultOptions
+  , defaultTaggedObject
+  , fieldLabelModifier
+  , constructorTagModifier
+  , allNullaryToStringTag
+  , omitNothingFields
+  , allowOmittedFields
+  , sumEncoding
+  , unwrapUnaryRecords
+  , tagSingleConstructors
+  , rejectUnknownFields
+  , modifyFieldLabel
+  , modifyConstructorTag
+    -- * Encoding / decoding
+  , encode
+  , eitherDecode
+  , decode
+  , encodeValue
+  , decodeValue
+  , fromJSON
+  , genericToJSON
+  , genericParseJSON
+  , genericToEncoding
+  , genericParseEncoding
+    -- * Native encoding helpers (hand-written instances)
+  , encObject
+  , encArray
+  , encNull
+  , lookupField
+  , arrayElems
+  , encodeEncoding
+  , decodeEncoding
+  ) where
+
+import Data.Bool
+import Data.ByteString
+import Data.Either
+import Data.Maybe
+import Control.Applicative
+import Control.Monad
+import System.IO (IO)
+import Data.JSON.Types
+import Data.JSON.Class
+import Data.JSON.Generic
+import Data.JSON.GenericEncoding
+import Data.JSON.Encoding
+  ( Encoding
+  , encObject
+  , encArray
+  , encNull
+  , lookupField
+  , arrayElems
+  , encodeEncoding
+  , decodeEncoding
+  )
+
+encode :: ToJSON a => a -> ByteString
+encode x = encodeEncoding (toEncoding x)
+
+eitherDecode :: FromJSON a => ByteString -> IO (Either String a)
+eitherDecode bs = do
+  mr <- decodeEncoding bs
+  case mr of
+    Left err -> pure (Left err)
+    Right enc -> pure (parseEncoding enc)
+
+decode :: FromJSON a => ByteString -> IO (Maybe a)
+decode bs = do
+  mr <- eitherDecode bs
+  pure (case mr of
+    Left ignored -> Nothing
+    Right x -> Just x)
+
+fromJSON :: FromJSON a => Value -> Either String a
+fromJSON v = parseJSON v
+
+encodeValue :: Value -> ByteString
+encodeValue v = encode v
+
+decodeValue :: ByteString -> IO (Either String Value)
+decodeValue bs = eitherDecode bs

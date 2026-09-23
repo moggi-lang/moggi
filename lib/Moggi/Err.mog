@@ -1,0 +1,20 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Moggi.Err (error, errorWithoutStackTrace, undefined) where
+
+import Moggi.Internal.Prim
+
+error :: String -> a
+error msg = error# msg
+
+-- | A variant of 'error' that reports no call stack.
+--
+-- The call stack an @error@ carries is a compile-time one (the call sites of
+-- the functions between the raise and the handler), and Moggi does not reify
+-- one yet, so today this is the same raise as 'error'. It is the name the bare
+-- report keeps: once the stack is reified, 'error' grows it and this stays the
+-- unadorned @ErrorCall@.
+errorWithoutStackTrace :: String -> a
+errorWithoutStackTrace msg = error# msg
+
+undefined :: a
+undefined = error "Prelude.undefined"

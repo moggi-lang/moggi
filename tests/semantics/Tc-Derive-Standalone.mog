@@ -1,0 +1,11 @@
+import Data.Eq
+import Text.Show
+
+data Foo a = Foo a
+
+deriving instance Eq a => Eq (Foo a)
+
+deriving instance Show a => Show (Foo a)
+
+main :: String
+main = show (Foo 42 == Foo 42)

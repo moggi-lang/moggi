@@ -1,0 +1,4 @@
+tests/semantics/Bad-Kind-Data.mog:1:6: type error: kind error in data type `Bad`: could not unify kind `Type` with `Type -> k3`
+
+  1 | data Bad a = Bad a (a Int)
+    |      ^^^

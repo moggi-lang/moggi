@@ -1,0 +1,7 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Converting strings to values: the 'Read' class and its functions.
+module Text.Read
+  ( Read(..)
+  ) where
+
+import Moggi.Internal.Read

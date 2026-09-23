@@ -1,0 +1,30 @@
+import System.IO
+
+data Color = Red | Blue | Yellow
+
+data OnlyColor (c :: Color) = OnlyColor
+
+data PairColor (a :: Color) (b :: Color) = PairColor
+
+acceptOnlyRed :: OnlyColor 'Red -> String
+acceptOnlyRed OnlyColor = "ok"
+
+forgetColor :: OnlyColor c -> String
+forgetColor OnlyColor = "any"
+
+rb :: PairColor 'Red 'Blue
+rb = PairColor
+
+pickRed :: Color
+pickRed = Red
+
+main :: IO ()
+main = do
+  putStrLn (acceptOnlyRed OnlyColor)
+  putStrLn (forgetColor (OnlyColor :: OnlyColor 'Blue))
+  putStrLn (case pickRed of
+    Red -> "Red"
+    Blue -> "Blue"
+    Yellow -> "Yellow")
+  putStrLn (case rb of
+    PairColor -> "rb")

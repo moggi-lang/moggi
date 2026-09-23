@@ -1,0 +1,13 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+import Data.Bits
+import Moggi.Internal.Real
+import Moggi.Internal.Num
+import Text.Show
+import System.IO
+
+-- `bitSize` has no answer for a type without a fixed number of bits: the
+-- Integer instance fails, and the failure reaches the top as an uncaught error
+-- with the standard report. Word8/Int/Word64 (and Bool) are covered by
+-- libtest/Data/Bits-Operations.mog, and `bitSizeMaybe` reports `Nothing` here.
+main :: IO ()
+main = putStrLn (show (bitSize (fromIntegral 0 :: Integer)))

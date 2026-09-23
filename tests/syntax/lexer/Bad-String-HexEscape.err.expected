@@ -1,0 +1,4 @@
+tests/syntax/lexer/Bad-String-HexEscape.mog:2:9: lex error: invalid \x escape: expected exactly 2 hex digits
+
+  2 | s = "ok \xZZ bad"
+    |         ^^^

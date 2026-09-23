@@ -1,0 +1,23 @@
+-- Data.Enum: the `Bounded` and `Enum` instances for `Bool` and `Ordering`,
+-- including the boundary behaviour of `succ`/`pred` and the enumeration.
+
+main :: IO ()
+main = do
+  putStrLn (show (minBound :: Bool))
+  putStrLn (show (maxBound :: Bool))
+  putStrLn (show (succ False :: Bool))
+  putStrLn (show (pred True :: Bool))
+  putStrLn (show (fromEnum True :: Int))
+  putStrLn (show (toEnum 0 :: Bool))
+  putStrLn (show (toEnum 1 :: Bool))
+  putStrLn (show (enumFromTo False True :: [Bool]))
+  putStrLn (show (minBound :: Ordering))
+  putStrLn (show (maxBound :: Ordering))
+  putStrLn (show (succ LT :: Ordering))
+  putStrLn (show (succ EQ :: Ordering))
+  putStrLn (show (pred GT :: Ordering))
+  putStrLn (show (fromEnum GT :: Int))
+  putStrLn (show (toEnum 0 :: Ordering))
+  putStrLn (show (toEnum 1 :: Ordering))
+  putStrLn (show (toEnum 2 :: Ordering))
+  putStrLn (show (enumFromTo LT GT :: [Ordering]))

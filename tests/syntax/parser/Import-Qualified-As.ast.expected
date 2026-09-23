@@ -1,0 +1,7 @@
+program
+  function f
+    pat_var xs
+    apply
+      field_access .filter
+        constructor_ref L
+      variable xs

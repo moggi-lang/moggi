@@ -1,0 +1,38 @@
+program
+  data NonEmpty a
+    constructor :|
+      field  :: a
+      field  :: [a]
+  data Prefixed a
+    constructor :~
+      field  :: a
+      field  :: [a]
+  function headNe
+    pat_var xs
+    case
+      variable xs
+      alt
+        pat_infix_con :|
+          pat_var x
+          pat_var rest
+        variable x
+  function build
+    infix :|
+      integer 1
+      list
+        integer 2
+        integer 3
+  function pref
+    apply
+      apply
+        operator_ref :~
+        integer 1
+      list
+        integer 2
+  function nested
+    infix :|
+      integer 1
+      infix :
+        integer 2
+        list
+          integer 3

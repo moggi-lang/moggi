@@ -1,0 +1,2 @@
+f mx = case mx of
+  Just n -> n

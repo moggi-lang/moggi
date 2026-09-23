@@ -1,0 +1,246 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | JVM filesystem via ordinary {@code java.io.File} / {@code java.nio.file}
+-- FFI. No {@code moggi.rt.Platform} FS helpers.
+module System.Filesystem.JVM
+  ( readFile
+  , readTextFile
+  , writeFile
+  , writeTextFile
+  , appendFile
+  , appendTextFile
+  , isFile
+  , getModified
+  , getSize
+  , copyFile
+  , copyFileContent
+  , copyPermissions
+  , removeFile
+  , isDirectory
+  , canonicalizePath
+  , listDirectory
+  , createDirectory
+  , createTree
+  , removeDirectory
+  , removeTree
+  , getWorkingDirectory
+  , setWorkingDirectory
+  , rename
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Bool
+import Data.ByteString (ByteString)
+import Data.ByteString qualified as B
+import Data.Char (ord, chr)
+import Data.Int
+import Moggi.Internal.Real (quot)
+import Data.String hiding (pack, unpack, length, take, drop, isPrefixOf, isSuffixOf)
+import Data.String qualified as S
+import Data.Time.Clock
+import Moggi.Err
+import System.IO.Base (IO)
+import Moggi.Internal.Prim (word8FromInt#, word8ToInt#)
+import System.Filesystem.Path
+import Moggi.Internal.Prim
+
+foreign jvm type File "java.io.File"
+foreign jvm type Path "java.nio.file.Path"
+foreign jvm type Iterator "interface java.util.Iterator"
+foreign jvm type DirectoryStream "java.nio.file.DirectoryStream"
+foreign jvm type Writer "java.io.Writer"
+
+foreign jvm function newFile "java.io.File:__con" :: String -> File
+foreign jvm function fileToPath "java.io.File.toPath" :: File -> Path
+foreign jvm function fileGetCanonicalPath "java.io.File.getCanonicalPath" :: File -> IO String
+foreign jvm function fileExists "java.io.File.exists" :: File -> Bool
+foreign jvm function fileIsFile "java.io.File.isFile" :: File -> Bool
+foreign jvm function fileIsDirectory "java.io.File.isDirectory" :: File -> Bool
+foreign jvm function fileLastModified "java.io.File.lastModified" :: File -> Int
+foreign jvm function fileLength "java.io.File.length" :: File -> Int
+foreign jvm function fileMkdir "java.io.File.mkdir" :: File -> Bool
+foreign jvm function fileMkdirs "java.io.File.mkdirs" :: File -> Bool
+foreign jvm function fileDelete "java.io.File.delete" :: File -> Bool
+foreign jvm function fileRenameTo "java.io.File.renameTo" :: File -> File -> Bool
+
+foreign jvm function pathToString "java.nio.file.Path.toString" :: Path -> String
+foreign jvm function pathGetFileName "java.nio.file.Path.getFileName" :: Path -> Path
+
+foreign jvm function filesReadString "java.nio.file.Files:readString" :: Path -> IO String
+foreign jvm function filesDelete "java.nio.file.Files:delete" :: Path -> IO ()
+foreign jvm function filesNewDirectoryStream "java.nio.file.Files:newDirectoryStream" :: Path -> IO DirectoryStream
+
+foreign jvm function systemGetProperty "java.lang.System:getProperty" :: String -> String
+foreign jvm function systemSetProperty "java.lang.System:setProperty" :: String -> String -> String
+
+foreign jvm function iterableIterator "java.lang.Iterable.iterator" :: DirectoryStream -> Iterator
+foreign jvm function iterHasNext "java.util.Iterator.hasNext" :: Iterator -> Bool
+foreign jvm function iterNext "java.util.Iterator.next" :: Iterator -> Path
+foreign jvm function objectsIsNull "java.util.Objects:isNull" :: Path -> Bool
+
+foreign jvm function newFileWriter "java.io.FileWriter:__con" :: String -> Writer
+foreign jvm function newFileWriterAppend "java.io.FileWriter:__con" :: String -> Bool -> Writer
+foreign jvm function fwWrite "java.io.Writer.write" :: Writer -> String -> IO ()
+foreign jvm function fwClose "java.io.Writer.close" :: Writer -> IO ()
+
+toFile :: FilePath -> File
+toFile p = newFile (p)
+
+toPath :: FilePath -> Path
+toPath p = fileToPath (toFile p)
+
+readTextFile :: FilePath -> IO String
+readTextFile p = filesReadString (toPath p)
+
+writeTextFile :: FilePath -> String -> IO ()
+writeTextFile p content =
+  let fw = newFileWriter (p) in
+  do
+    fwWrite fw content
+    fwClose fw
+
+appendTextFile :: FilePath -> String -> IO ()
+appendTextFile p content =
+  let fw = newFileWriterAppend (p) True in
+  do
+    fwWrite fw content
+    fwClose fw
+
+readFile :: FilePath -> IO ByteString
+readFile p = readTextFile p >>= (\s -> pure (fsFromString s))
+
+writeFile :: FilePath -> ByteString -> IO ()
+writeFile p content = writeTextFile p (fsToString content)
+
+appendFile :: FilePath -> ByteString -> IO ()
+appendFile p content = appendTextFile p (fsToString content)
+
+fsMap :: (a -> b) -> [a] -> [b]
+fsMap f xs = case xs of
+  [] -> []
+  x : rest -> f x : fsMap f rest
+
+fsFromString :: String -> ByteString
+fsFromString s = B.pack (fsMap (\c -> word8FromInt# (ord c)) (S.unpack s))
+
+fsToString :: ByteString -> String
+fsToString b = S.pack (fsMap (\w -> chr (word8ToInt# w)) (B.unpack b))
+
+isFile :: FilePath -> IO Bool
+isFile p = pure (fileIsFile (toFile p))
+
+isDirectory :: FilePath -> IO Bool
+isDirectory p = pure (fileIsDirectory (toFile p))
+
+getModified :: FilePath -> IO UTCTime
+getModified p = pure (utcTimeFromUnix (quot (fileLastModified (toFile p)) 1000))
+
+getSize :: FilePath -> IO Int
+getSize p = pure (fileLength (toFile p))
+
+copyFile :: FilePath -> FilePath -> IO ()
+copyFile src dst = do
+  content <- readTextFile src
+  writeTextFile dst content
+
+copyFileContent :: FilePath -> FilePath -> IO ()
+copyFileContent src dst = copyFile src dst
+
+copyPermissions :: FilePath -> FilePath -> IO ()
+copyPermissions _ _ = pure ()
+
+removeFile :: FilePath -> IO ()
+removeFile p = filesDelete (toPath p)
+
+canonicalizePath :: FilePath -> IO FilePath
+canonicalizePath p = do
+  resolved <- fileGetCanonicalPath (toFile p)
+  pure resolved
+
+iterToList :: Iterator -> [Path]
+iterToList it = case iterHasNext it of
+  False -> []
+  True -> iterNext it : iterToList it
+
+pathEntryName :: Path -> String
+pathEntryName pe = case objectsIsNull (pathGetFileName pe) of
+  True -> pathToString pe
+  False -> pathToString (pathGetFileName pe)
+
+mapPathEntries :: [Path] -> [FilePath]
+mapPathEntries [] = []
+mapPathEntries (e : rest) = pathEntryName e : mapPathEntries rest
+
+listDirectory :: FilePath -> IO [FilePath]
+listDirectory p = do
+  stream <- filesNewDirectoryStream (toPath p)
+  pure (mapPathEntries (iterToList (iterableIterator stream)))
+
+createDirectory :: Bool -> FilePath -> IO ()
+createDirectory parents p = case parents of
+  True -> createDirectoryParents p
+  False -> createDirectoryFresh p
+
+createDirectoryParents :: FilePath -> IO ()
+createDirectoryParents p = case fileMkdirs (toFile p) of
+  True -> pure ()
+  False -> pure ()
+
+createDirectoryFresh :: FilePath -> IO ()
+createDirectoryFresh p = case fileMkdir (toFile p) of
+  True -> pure ()
+  False -> pure ()
+
+createTree :: FilePath -> IO ()
+createTree p = createDirectory True p
+
+removeDirectory :: FilePath -> IO ()
+removeDirectory p = case fileDelete (toFile p) of
+  True -> pure ()
+  False -> pure ()
+
+removeTree :: FilePath -> IO ()
+removeTree p = case fileExists (toFile p) of
+  False -> pure ()
+  True -> removeTreePresent p
+
+removeTreePresent :: FilePath -> IO ()
+removeTreePresent p = case fileIsDirectory (toFile p) of
+  True -> removeTreeDirectory p
+  False -> removeTreeFile p
+
+removeTreeDirectory :: FilePath -> IO ()
+removeTreeDirectory p = do
+  entries <- listDirectory p
+  removeTreeEntries entries
+  removeDirectory p
+
+removeTreeFile :: FilePath -> IO ()
+removeTreeFile p = case fileDelete (toFile p) of
+  True -> pure ()
+  False -> pure ()
+
+removeTreeEntries :: [FilePath] -> IO ()
+removeTreeEntries [] = pure ()
+removeTreeEntries (e : rest) = do
+  dir <- isDirectory e
+  removeTreeEntry dir e
+  removeTreeEntries rest
+
+removeTreeEntry :: Bool -> FilePath -> IO ()
+removeTreeEntry dir e = case dir of
+  True -> removeTree e
+  False -> removeFile e
+
+getWorkingDirectory :: IO FilePath
+getWorkingDirectory = pure (systemGetProperty "user.dir")
+
+setWorkingDirectory :: FilePath -> IO ()
+setWorkingDirectory p = do
+  _ <- pure (systemSetProperty "user.dir" (p))
+  pure ()
+
+rename :: FilePath -> FilePath -> IO ()
+rename src dst = case fileRenameTo (toFile src) (toFile dst) of
+  True -> pure ()
+  False -> pure ()

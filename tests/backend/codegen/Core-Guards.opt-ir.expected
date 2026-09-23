@@ -1,0 +1,28 @@
+module
+  function positive(n)
+      ret n > 0
+  function twice(n)
+      ret intrinsic intMul#(n, 2)
+  function firstSign(_p0)
+      match_return _p0
+        t2 = x < 0
+        arm x : _ when t2
+            ret "neg-first"
+        arm x__0 : _ when intrinsic intEq#(x__0, 0)
+            ret "zero-first"
+        arm _ : _
+            ret "other-list"
+        arm []
+            ret "empty"
+  function classify(n)
+      match_return n
+        let m = n
+        t4 = call twice(m)
+        t5 = call positive(t4)
+        arm m when t5
+            ret "positive-double"
+        let m__0 = n
+        arm m__0 when @True
+            ret "not-positive-double"
+        arm _
+            ret "other"

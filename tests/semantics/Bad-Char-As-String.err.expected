@@ -1,0 +1,4 @@
+tests/semantics/Bad-Char-As-String.mog:3:8: type error: could not unify `String` with `Char`
+
+  3 | main = "7" :: Char
+    |        ^

@@ -1,0 +1,7 @@
+foreign php type DateTimeImmutable "DateTimeImmutable"
+
+foreign php function newDate "DateTimeImmutable:__con" :: String -> DateTimeImmutable
+foreign php function format "DateTimeImmutable.format" :: DateTimeImmutable -> String -> String
+
+main :: IO ()
+main = putStrLn (format (newDate "2020-01-15") "Y-m")

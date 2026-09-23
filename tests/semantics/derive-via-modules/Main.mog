@@ -1,0 +1,11 @@
+module Main where
+
+import DeriveVia.Check
+import System.IO
+
+-- `checkExported` uses an instance derived via a type another module exports; the same-module
+-- private case dispatches inside the provider.
+main :: IO ()
+main = do
+  print checkExported
+  print checkPrivateSameModule

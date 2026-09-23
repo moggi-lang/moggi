@@ -1,0 +1,2 @@
+-- `if` requires both branches: the error must point at the missing `else`.
+pick b = if b then 1

@@ -1,0 +1,7 @@
+module
+  function h(x)
+      ret intrinsic intMul#(x, 2)
+  function g(x)
+      ret intrinsic intAdd#(intrinsic intMul#(x, 2), 1)
+  function f(x)
+      ret intrinsic intAdd#(intrinsic intMul#(x, 2), 1)

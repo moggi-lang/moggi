@@ -1,0 +1,24 @@
+import Data.Eq
+import Data.Ord
+import Text.Show
+import Data.Enum
+import Data.Bounded
+import Text.Read
+
+data Color = Red | Blue | Green
+  deriving (Eq, Ord, Show, Enum, Bounded, Read)
+
+cmp :: Ordering
+cmp = compare Red Blue
+
+shown :: String
+shown = show Green
+
+e :: Int
+e = fromEnum Blue
+
+bmin :: Color
+bmin = minBound
+
+parsed :: Color
+parsed = read "Red"

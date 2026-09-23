@@ -1,0 +1,49 @@
+program
+  function beforeBody :: Int
+    integer 1
+  function beforeBlockComment :: Int
+    integer 7
+  function beforeListElement :: [Int]
+    list
+      integer 1
+      integer 2
+  function beforeArgument :: Int -> Int -> Int
+    pat_var a
+    pat_wild _
+    variable a
+  function applied :: Int
+    apply
+      apply
+        variable beforeArgument
+        integer 1
+      integer 2
+  function beforeWhereSignature :: Int
+    where
+      variable helper
+      binding
+        pat_var helper
+        type_asc Int
+          integer 3
+  function beforeLetSignature :: Int
+    let
+      binding
+        pat_var local
+        type_asc Int
+          integer 4
+      variable local
+  function beforeCaseAlternative :: Int -> Int
+    pat_var n
+    case
+      variable n
+      alt
+        pat_lit 0
+        integer 10
+      alt
+        pat_wild _
+        integer 20
+  function beforeDoStatement :: IO ()
+    do
+      do_stmt
+        apply
+          variable pure
+          tuple

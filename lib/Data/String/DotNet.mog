@@ -1,0 +1,204 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.String.DotNet
+  ( singleton
+  , unpack
+  , pack
+  , length
+  , take
+  , drop
+  , strNull
+  , strConcat
+  , strReverse
+  , strMap
+  , isPrefixOf
+  , isSuffixOf
+  , splitOn
+  , lines
+  , words
+  , unlines
+  , unwords
+  ) where
+
+import Data.Bool
+import Data.Char
+import Data.Int
+import Data.List hiding (singleton, take, drop, isPrefixOf, isSuffixOf)
+import Data.Ord
+import Moggi.Internal.Prim
+
+-- Ordinary BCL FFI only (no Moggi.Rt.StringOps).
+-- Width-exact signatures: BCL String/Char APIs are int32/UTF-16-char based.
+
+foreign dotnet function rawConvertFromUtf32 "System.Char:ConvertFromUtf32" :: Int32 -> String
+
+singleton c = rawConvertFromUtf32 (int32FromInt# (charToInt# c))
+
+foreign dotnet function rawUtf16Length "System.String.get_Length" :: String -> Int32
+
+foreign dotnet function rawConvertToUtf32At "System.Char:ConvertToUtf32" :: String -> Int32 -> Int32
+
+foreign dotnet function rawCharAt "System.String.get_Chars" :: String -> Int32 -> Char
+
+foreign dotnet function rawIsHighSurrogate "System.Char:IsHighSurrogate" :: Char -> Bool
+
+foreign dotnet function rawIsLowSurrogate "System.Char:IsLowSurrogate" :: Char -> Bool
+
+foreign dotnet function rawSubstringLen "System.String.Substring" :: String -> Int32 -> Int32 -> String
+
+foreign dotnet function rawStartsWith "System.String.StartsWith" :: String -> String -> Bool
+
+foreign dotnet function rawEndsWith "System.String.EndsWith" :: String -> String -> Bool
+
+foreign dotnet function rawIndexOfFrom "System.String.IndexOf" :: String -> String -> Int32 -> Int32
+
+utf16Length s = int32ToInt# (rawUtf16Length s)
+
+convertToUtf32At s i = int32ToInt# (rawConvertToUtf32At s (int32FromInt# i))
+
+charAt s i = rawCharAt s (int32FromInt# i)
+
+substringLen s start len = rawSubstringLen s (int32FromInt# start) (int32FromInt# len)
+
+indexOfFrom s needle start = int32ToInt# (rawIndexOfFrom s needle (int32FromInt# start))
+
+utf16WidthAt :: String -> Int -> Int
+utf16WidthAt s i =
+  let c = charAt s i in
+  case rawIsHighSurrogate c of
+    False -> 1
+    True -> utf16WidthHigh s i
+
+utf16WidthHigh :: String -> Int -> Int
+utf16WidthHigh s i =
+  let j = i + 1
+      end = utf16Length s
+  in case intCompare# j end of
+    LT -> utf16WidthLow (charAt s j)
+    EQ -> 1
+    GT -> 1
+
+utf16WidthLow :: Char -> Int
+utf16WidthLow lo = case rawIsLowSurrogate lo of
+  True -> 2
+  False -> 1
+
+offsetByCodePoints :: String -> Int -> Int -> Int
+offsetByCodePoints s i n = case intCompare# n 0 of
+  EQ -> i
+  LT -> i
+  GT -> offsetByCodePointsStep s i n
+
+offsetByCodePointsStep :: String -> Int -> Int -> Int
+offsetByCodePointsStep s i n =
+  let end = utf16Length s in
+  case intCompare# i end of
+    EQ -> i
+    GT -> i
+    LT -> offsetByCodePointsAfter s i n end
+
+offsetByCodePointsAfter :: String -> Int -> Int -> Int -> Int
+offsetByCodePointsAfter s i n end = case intCompare# n 0 of
+  EQ -> i
+  LT -> i
+  GT -> offsetByCodePointsStep s (i + utf16WidthAt s i) (n - 1)
+
+codePointCount :: String -> Int -> Int -> Int
+codePointCount s start endBound = codePointCountGo s start endBound 0
+
+codePointCountGo :: String -> Int -> Int -> Int -> Int
+codePointCountGo s i endBound acc = case intCompare# i endBound of
+  EQ -> acc
+  GT -> acc
+  LT -> codePointCountGo s (i + utf16WidthAt s i) endBound (acc + 1)
+
+unpack :: String -> [Char]
+unpack s = unpackAt s 0 (utf16Length s)
+
+unpackAt :: String -> Int -> Int -> [Char]
+unpackAt s i end = case intCompare# i end of
+  EQ -> []
+  GT -> []
+  LT -> chr (convertToUtf32At s i) : unpackAt s (i + utf16WidthAt s i) end
+
+splitOn :: String -> String -> [String]
+splitOn sep s = case utf16Length sep of
+  0 -> s : []
+  _ -> splitOnAt sep s 0
+
+splitOnAt :: String -> String -> Int -> [String]
+splitOnAt sep s start =
+  let i = indexOfFrom s sep start in
+  case intCompare# i (0 - 1) of
+    EQ -> substringLen s start (intSub# (utf16Length s) start) : []
+    LT -> substringLen s start (intSub# (utf16Length s) start) : []
+    GT -> substringLen s start (intSub# i start) : splitOnAt sep s (i + utf16Length sep)
+
+listMap :: (a -> b) -> [a] -> [b]
+listMap f xs = case xs of
+  [] -> []
+  x : rest -> f x : listMap f rest
+
+packChars :: [Char] -> String
+packChars xs = case xs of
+  [] -> ""
+  c : rest -> singleton c <> packChars rest
+
+length :: String -> Int
+length s = codePointCount s 0 (utf16Length s)
+
+take :: Int -> String -> String
+take n s =
+  let end = offsetByCodePoints s 0 n
+  in substringLen s 0 end
+
+dropFrom :: Int -> String -> String
+dropFrom start s = substringLen s start (intSub# (utf16Length s) start)
+
+drop :: Int -> String -> String
+drop n s =
+  let len = length s
+  in case intCompare# n len of
+    LT -> dropFrom (offsetByCodePoints s 0 n) s
+    EQ -> ""
+    GT -> ""
+
+strNull :: String -> Bool
+strNull s = case length s of
+  0 -> True
+  _ -> False
+
+strConcat :: [String] -> String
+strConcat xs = case xs of
+  [] -> ""
+  x : rest -> x <> strConcat rest
+
+pack :: [Char] -> String
+pack xs = packChars xs
+
+strReverse :: String -> String
+strReverse s = packChars (reverse (unpack s))
+
+strMap :: (Char -> Char) -> String -> String
+strMap f s = packChars (listMap f (unpack s))
+
+isPrefixOf :: String -> String -> Bool
+isPrefixOf prefix s = rawStartsWith s prefix
+
+isSuffixOf :: String -> String -> Bool
+isSuffixOf suffix s = rawEndsWith s suffix
+
+lines :: String -> [String]
+lines "" = ([] :: [String])
+lines s = reverse (dropWhile (\x -> x == "") (reverse (splitOn "\n" s)))
+
+words :: String -> [String]
+words s = filter (\w -> w /= "") (splitOn " " s)
+
+unlines :: [String] -> String
+unlines [] = ""
+unlines (line : rest) = line <> "\n" <> unlines rest
+
+unwords :: [String] -> String
+unwords [] = ""
+unwords [x] = x
+unwords (x : rest) = x <> " " <> unwords rest

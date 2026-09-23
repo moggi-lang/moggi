@@ -1,0 +1,4 @@
+tests/semantics/Bad-DataKinds-Nat.mog:5:12: type error: could not unify `1024` with `2048`
+
+  5 | coerce x = x
+    |            ^

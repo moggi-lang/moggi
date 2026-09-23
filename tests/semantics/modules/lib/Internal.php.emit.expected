@@ -1,0 +1,13 @@
+<?php declare(strict_types=1);
+
+namespace Internal;
+
+const __MOGGI_MAP = [[], ['Internal\\peek' => ['Internal.peek', 'lib/Internal.mog', 6, 23]]];
+
+function Secret($v0) {
+    return ['Secret', $v0];
+}
+
+function peek($_p0) {
+    return $_p0[1];
+}

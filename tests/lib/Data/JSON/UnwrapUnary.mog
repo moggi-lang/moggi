@@ -1,0 +1,47 @@
+import System.IO
+import Data.ByteString.Char8 qualified as C
+import Data.String qualified as S
+import Data.String
+import Data.Bool
+import Data.Eq
+import Data.Either
+import Data.JSON
+import Moggi.Generics
+bsToStr b = S.pack (C.unpack b)
+
+data Name = Name { unName :: String }
+  deriving (Generic, Eq)
+
+wrapOpts :: Options
+wrapOpts = defaultOptions
+
+unwrapOpts :: Options
+unwrapOpts = unwrapUnaryRecords True defaultOptions
+
+enc :: Options -> Name -> String
+enc opts n = bsToStr (encodeEncoding (genericToEncoding opts n))
+
+dec :: Options -> String -> IO (Either String Name)
+dec opts json = do
+  mr <- decodeEncoding (C.pack json)
+  pure (case mr of
+    Left err -> Left err
+    Right e -> genericParseEncoding opts e)
+
+roundTrip :: Options -> Name -> IO String
+roundTrip opts n = do
+  mr <- dec opts (enc opts n)
+  pure (case mr of
+    Left err -> "ERR:" <> err
+    Right n2 -> case n2 == n of
+      True -> "ok"
+      False -> "bad")
+
+main :: IO ()
+main = do
+  putStrLn (enc wrapOpts (Name "alice"))
+  putStrLn (enc unwrapOpts (Name "alice"))
+  r <- roundTrip wrapOpts (Name "alice")
+  putStrLn r
+  r <- roundTrip unwrapOpts (Name "alice")
+  putStrLn r

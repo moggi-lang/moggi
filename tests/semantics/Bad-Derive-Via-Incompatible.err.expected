@@ -1,0 +1,4 @@
+tests/semantics/Bad-Derive-Via-Incompatible.mog:5:1: type error: via type `Int` is not representationally compatible with target type
+
+  5 | deriving via (Int) instance Eq MyChar
+    | ^^^^^^^^

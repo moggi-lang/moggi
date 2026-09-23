@@ -1,0 +1,18 @@
+import Data.Eq
+import Data.Semigroup
+import System.IO
+
+-- Backend drift risk: string concat and non-ASCII bytes through each runtime.
+greeting :: String
+greeting = "grüße"
+
+who :: String
+who = "wörld"
+
+main :: IO ()
+main = do
+  putStrLn (greeting <> ", " <> who)
+  putStrLn (show ("ab" == "ab"))
+  putStrLn (show ("ab" <> "" == "ab"))
+  putStrLn "tab\there"
+  putStrLn "quote\"inside"

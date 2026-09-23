@@ -1,0 +1,72 @@
+<?php declare(strict_types=1);
+
+namespace Tc\Stdlib;
+
+const __MOGGI_MAP = [[35 => ['Tc.Stdlib.mapLookupDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 14, 3], 39 => ['Tc.Stdlib.mapSizeDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 17, 15], 43 => ['Tc.Stdlib.setMemberDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 20, 17], 47 => ['Tc.Stdlib.setUnionDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 24, 3], 51 => ['Tc.Stdlib.clampDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 27, 13], 55 => ['Tc.Stdlib.charDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 30, 12], 59 => ['Tc.Stdlib.altMaybeDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 33, 27], 60 => ['Tc.Stdlib.altMaybeDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 33, 16], 71 => ['Tc.Stdlib.pairDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 39, 12]], ['Tc\\Stdlib\\mapLookupDemo' => ['Tc.Stdlib.mapLookupDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 14, 3], 'Tc\\Stdlib\\mapSizeDemo' => ['Tc.Stdlib.mapSizeDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 17, 15], 'Tc\\Stdlib\\setMemberDemo' => ['Tc.Stdlib.setMemberDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 20, 17], 'Tc\\Stdlib\\setUnionDemo' => ['Tc.Stdlib.setUnionDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 24, 3], 'Tc\\Stdlib\\clampDemo' => ['Tc.Stdlib.clampDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 27, 13], 'Tc\\Stdlib\\charDemo' => ['Tc.Stdlib.charDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 30, 12], 'Tc\\Stdlib\\altMaybeDemo' => ['Tc.Stdlib.altMaybeDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 32, 1], 'Tc\\Stdlib\\altListDemo' => ['Tc.Stdlib.altListDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 35, 1], 'Tc\\Stdlib\\pairDemo' => ['Tc.Stdlib.pairDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 39, 12]]];
+
+require_once __DIR__ . '/../../../lib/Control/Applicative.php';
+require_once __DIR__ . '/../../../lib/Data/Bool.php';
+require_once __DIR__ . '/../../../lib/Data/Char/PHP.php';
+require_once __DIR__ . '/../../../lib/Data/Int.php';
+require_once __DIR__ . '/../../../lib/Data/List.php';
+require_once __DIR__ . '/../../../lib/Data/Map.php';
+require_once __DIR__ . '/../../../lib/Data/Maybe.php';
+require_once __DIR__ . '/../../../lib/Data/Ord.php';
+require_once __DIR__ . '/../../../lib/Data/Set.php';
+require_once __DIR__ . '/../../../lib/Data/Tuple.php';
+
+use function Control\Applicative\__ev_Alternative_Maybe;
+use function Data\Char\PHP\isDigit;
+use function Data\Int\__ev_Eq_Int;
+use function Data\Int\__ev_Ord_Int;
+use function Data\List\__ev_Alternative_List;
+use function Data\Map\empty_;
+use function Data\Map\insert;
+use function Data\Map\lookup;
+use function Data\Map\size;
+use function Data\Ord\clamp;
+use function Data\Set\fromList as setFromList;
+use function Data\Set\member;
+use function Data\Set\size as setSize;
+use function Data\Set\union;
+use function Data\Tuple\fst;
+
+function mapLookupDemo() {
+    return lookup(__ev_Eq_Int(), __ev_Ord_Int(), 2, insert(__ev_Eq_Int(), __ev_Ord_Int(), 1, 10, insert(__ev_Eq_Int(), __ev_Ord_Int(), 2, 20, empty_())));
+}
+
+function mapSizeDemo() {
+    return size(insert(__ev_Eq_Int(), __ev_Ord_Int(), 1, 2, empty_()));
+}
+
+function setMemberDemo() {
+    return member(__ev_Eq_Int(), __ev_Ord_Int(), 2, setFromList(__ev_Eq_Int(), __ev_Ord_Int(), [1, 2, 3]));
+}
+
+function setUnionDemo() {
+    return setSize(union(__ev_Eq_Int(), __ev_Ord_Int(), setFromList(__ev_Eq_Int(), __ev_Ord_Int(), [1, 2]), setFromList(__ev_Eq_Int(), __ev_Ord_Int(), [2, 3])));
+}
+
+function clampDemo() {
+    return clamp(__ev_Eq_Int(), __ev_Ord_Int(), [0, 10], 99);
+}
+
+function charDemo() {
+    return isDigit(55);
+}
+
+function altMaybeDemo() {
+    $__t14 = ["Just", 2];
+    $__t15 = ["Just", 1];
+    $__t16 = (__ev_Alternative_Maybe()["<|>"])($__t15, $__t14);
+    return $__t16;
+}
+
+function altListDemo() {
+    $__t17 = (__ev_Alternative_List()["<|>"])([1], [2, 3]);
+    return $__t17;
+}
+
+function pairDemo() {
+    return fst([41, true]);
+}

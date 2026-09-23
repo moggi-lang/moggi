@@ -1,0 +1,19 @@
+module
+  function positive(n)
+      t0 = n > 0
+      ret t0
+  function twice(n)
+      ret intrinsic intMul#(n, 2)
+  function classify(n)
+      t1 = match n
+        let m = n
+        t2 = call twice(m)
+        t3 = call positive(t2)
+        arm m when t3
+            t1 = "positive-double"
+        let m__0 = n
+        arm m__0 when @True
+            t1 = "not-positive-double"
+        arm _
+            t1 = "unused"
+      ret t1

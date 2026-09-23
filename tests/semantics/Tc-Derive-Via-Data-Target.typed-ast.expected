@@ -1,0 +1,43 @@
+program
+  class MyEq a
+    method === :: a -> a -> Bool
+  data T
+    constructor T
+      field  :: Int
+  newtype TV
+    constructor TV
+      field  :: T
+  function __ev_MyEq_TV__3d_3d_3d :: TV -> TV -> Bool
+    pat_con TV
+      pat_con T
+        pat_var a
+    pat_con TV
+      pat_con T
+        pat_var b
+    infix ==
+      variable a
+      variable b
+  function __ev_MyEq_T__3d_3d_3d :: __Dict_MyEq -> T -> T -> Bool
+    pat_var __ev_MyEq
+    pat_var __v0
+    pat_var __v1
+    apply
+      apply
+        evidence_method MyEq.=== evidence=__ev_MyEq nullary=0
+        apply
+          constructor_ref TV
+          variable __v0
+      apply
+        constructor_ref TV
+        variable __v1
+  function main :: Bool
+    apply
+      apply
+        evidence_method MyEq.=== evidence= nullary=0
+          instance T
+        apply
+          constructor_ref T
+          integer 1
+      apply
+        constructor_ref T
+        integer 1

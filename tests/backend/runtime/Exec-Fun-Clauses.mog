@@ -1,0 +1,142 @@
+import Data.Bool
+import Data.Int
+import Data.List hiding (singleton)
+import Data.Maybe
+import Text.Show
+import Data.Word
+import System.IO
+
+describeList :: [Int] -> String
+describeList []      = "empty"
+describeList [_]     = "one element"
+describeList (_:_:_) = "many elements"
+
+origin :: Tuple2 Int Int -> Bool
+origin (0, 0) = True
+origin _      = False
+
+firstInt :: [Int] -> Maybe Int
+firstInt []    = Nothing
+firstInt (x:_) = Just x
+
+data Color = Red | Green | Blue
+
+describeColor :: Color -> String
+describeColor Red   = "red"
+describeColor Green = "green"
+describeColor Blue  = "blue"
+
+data Expr
+  = Lit { n :: Int }
+  | Add { l :: Expr, r :: Expr }
+
+eval :: Expr -> Int
+eval (Lit n)         = n
+eval (Add (Lit 0) e) = eval e
+eval (Add l r)       = eval l + eval r
+
+describeDemo :: Bool
+describeDemo =
+  describeList [] == "empty"
+  && describeList [1] == "one element"
+  && describeList [1, 2] == "many elements"
+
+originDemo :: Bool
+originDemo = origin (0, 0) && not (origin (1, 0))
+
+firstDemo :: Bool
+firstDemo = isNothing (firstInt []) && fromMaybe 0 (firstInt [7]) == 7
+
+colorDemo :: Bool
+colorDemo = describeColor Red == "red"
+
+evalDemo :: Bool
+evalDemo = eval (Add (Lit 0) (Lit 5)) == 5
+
+-- A record pattern names only the fields it reads; the rest are not read.
+leftOf :: Expr -> Maybe Expr
+leftOf Add { l = l } = Just l
+leftOf _             = Nothing
+
+leftDemo :: Bool
+leftDemo = case leftOf (Add (Lit 1) (Lit 2)) of
+  Just (Lit n) -> n == 1
+  _            -> False
+
+-- A literal in a pattern is an overloaded literal, not an `Int` pattern: the
+-- value is bound and compared with the scrutinee's own `Eq`/`Num`, so the same
+-- clause works at every `Integral` instance instead of pinning the function to
+-- `Int`.
+zeroName :: Integral i => i -> String
+zeroName 0 = "zero"
+zeroName 1 = "one"
+zeroName _ = "many"
+
+-- The same rule inside a `case` alternative.
+caseZeroName :: Integral i => i -> String
+caseZeroName n =
+  case n of
+    0 -> "zero"
+    1 -> "one"
+    _ -> "many"
+
+-- The same rule in an alternative of a `case` over an action, where the
+-- alternative's body is the action. A literal that does not match has to move
+-- on to the next alternative.
+ioZeroName :: Integer -> IO String
+ioZeroName n =
+  case n of
+    0 -> pure "zero"
+    _ -> do
+      let rest = n - 1
+      pure ("not-zero:" <> show rest)
+
+-- `Word64` is not `Int`: the literal is the word's own zero, not a host int.
+wordZeroName :: Word64 -> String
+wordZeroName 0 = "w-zero"
+wordZeroName _ = "w-many"
+
+-- A literal pattern and a guard on the same alternative: the literal is still a
+-- *test*, so a value the literal does not match has to reach the alternative
+-- after it even when the guard would have held.
+guardedZero :: Integral i => i -> String
+guardedZero n =
+  case n of
+    0 | n == 0 -> "zero"
+    _ -> "not-zero"
+
+litPatternDemo :: Bool
+litPatternDemo = zeroName (0 :: Int) == "zero"
+  && zeroName (1 :: Int) == "one"
+  && zeroName (2 :: Int) == "many"
+  && zeroName (0 :: Integer) == "zero"
+  && zeroName (1 :: Integer) == "one"
+  && zeroName (2 :: Integer) == "many"
+  && zeroName (0 :: Word64) == "zero"
+  && zeroName (1 :: Word64) == "one"
+  && zeroName (2 :: Word64) == "many"
+
+caseLitPatternDemo :: Bool
+caseLitPatternDemo = caseZeroName (0 :: Integer) == "zero"
+  && caseZeroName (1 :: Integer) == "one"
+  && caseZeroName (2 :: Integer) == "many"
+  && wordZeroName 0 == "w-zero"
+  && wordZeroName 3 == "w-many"
+  && guardedZero (0 :: Integer) == "zero"
+  && guardedZero (4 :: Integer) == "not-zero"
+  && guardedZero (0 :: Int) == "zero"
+
+main :: IO ()
+main = do
+  putStrLn (show describeDemo)
+  putStrLn (show originDemo)
+  putStrLn (show firstDemo)
+  putStrLn (show colorDemo)
+  putStrLn (show evalDemo)
+  putStrLn (show leftDemo)
+  putStrLn (show litPatternDemo)
+  putStrLn (show caseLitPatternDemo)
+  z0 <- ioZeroName 0
+  putStrLn z0
+  z4 <- ioZeroName 4
+  putStrLn z4

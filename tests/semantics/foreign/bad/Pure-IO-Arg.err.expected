@@ -1,0 +1,4 @@
+tests/semantics/foreign/bad/Pure-IO-Arg.mog:3:22: type error: foreign import cannot use IO in argument types
+
+  3 | foreign php function bad "strlen" :: IO String -> String
+    |                      ^^^

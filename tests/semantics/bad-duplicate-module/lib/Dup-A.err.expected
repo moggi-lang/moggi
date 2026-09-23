@@ -1,0 +1,4 @@
+tests/semantics/bad-duplicate-module/lib/Dup-A.mog:1:8: type error: duplicate module `Dup.A` in project (tests/semantics/bad-duplicate-module/lib/A.mog and tests/semantics/bad-duplicate-module/lib/Dup-A.mog)
+
+  1 | module Dup.A
+    |        ^^^

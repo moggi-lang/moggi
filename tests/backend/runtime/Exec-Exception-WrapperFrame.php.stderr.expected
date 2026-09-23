@@ -1,0 +1,7 @@
+moggi: ArithException: arithmetic overflow
+  at Moggi.Exception.throw (lib/Moggi/Exception.mog:24:11)
+  at Data.Bits.bitsNegativeShiftError (lib/Data/Bits.mog:233:26)
+  at Data.Bits.__ev_Bits_Int_shiftL (lib/Data/Bits.mog:597:16)
+  at Main.go (tests/backend/runtime/Exec-Exception-WrapperFrame.mog:9:10)
+  at Main.boom (tests/backend/runtime/Exec-Exception-WrapperFrame.mog:12:8)
+  at Main.main (tests/backend/runtime/Exec-Exception-WrapperFrame.mog:15:8)

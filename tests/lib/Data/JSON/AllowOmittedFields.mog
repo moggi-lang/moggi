@@ -1,0 +1,44 @@
+import System.IO
+import Data.ByteString.Char8 qualified as C
+import Data.String
+import Data.Bool
+import Data.Eq
+import Data.Int
+import Data.Maybe
+import Data.Either
+import Data.JSON
+import Moggi.Generics
+data Config = Config { port :: Int, host :: Maybe String }
+  deriving (Generic, Eq)
+
+allowOpts :: Options
+allowOpts = allowOmittedFields True defaultOptions
+
+noAllowOpts :: Options
+noAllowOpts = allowOmittedFields False defaultOptions
+
+dec :: Options -> String -> IO (Either String Config)
+dec opts json = do
+  mr <- decodeEncoding (C.pack json)
+  pure (case mr of
+    Left err -> Left err
+    Right e -> genericParseEncoding opts e)
+
+showResult :: Either String Config -> String
+showResult e = case e of
+  Left err -> "ERR"
+  Right c -> case c == (Config 8080 Nothing) of
+    True -> "ok"
+    False -> "bad"
+
+main :: IO ()
+main = do
+  r1 <- dec allowOpts "{\"port\":8080}"
+  putStrLn (showResult r1)
+  r2 <- dec noAllowOpts "{\"port\":8080}"
+  putStrLn (showNoAllow r2)
+
+showNoAllow :: Either String Config -> String
+showNoAllow e = case e of
+  Left ignored -> "err-ok"
+  Right ignored -> "bad-no-err"

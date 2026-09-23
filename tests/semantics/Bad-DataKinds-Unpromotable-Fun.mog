@@ -1,0 +1,9 @@
+data Color = Red | Blue
+
+data OnlyColor (c :: Color) = OnlyColor
+
+-- Function-typed fields are not promotable.
+data Bad = Bad (Int -> Int)
+
+bad :: OnlyColor 'Bad -> String
+bad OnlyColor = "no"

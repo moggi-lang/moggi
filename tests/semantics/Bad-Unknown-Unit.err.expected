@@ -1,0 +1,7 @@
+tests/semantics/Bad-Unknown-Unit.mog:3:6: type error: unknown type constructor `Unit`
+
+Did you mean this?
+    Int
+
+  3 | f :: Unit -> Int
+    |      ^^^^

@@ -1,0 +1,32 @@
+module Tc.IO.StoredActions
+
+import Control.Monad (when)
+import System.IO
+
+idIO :: IO () -> IO ()
+idIO act = act
+
+scenarioLet :: IO ()
+scenarioLet = do
+  let act = putStrLn "later"
+  putStrLn "first"
+  act
+
+scenarioPass :: IO ()
+scenarioPass = do
+  let act = putStrLn "x"
+  idIO act
+
+scenarioWhen :: IO ()
+scenarioWhen = do
+  putStrLn "system-io-ok"
+  when True (putStrLn "when")
+
+main :: IO ()
+main = do
+  putStrLn "let"
+  scenarioLet
+  putStrLn "pass"
+  scenarioPass
+  putStrLn "when"
+  scenarioWhen

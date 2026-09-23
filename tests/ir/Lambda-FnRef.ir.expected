@@ -1,0 +1,12 @@
+module
+  function applyTo(f, x)
+      t0 = call_value f(x)
+      ret t0
+  function const()
+      ret @λ0
+  function flip'(f, a, b)
+      t1 = call_value f(b)
+      t2 = call_value t1(a)
+      ret t2
+  function λ0(a, b)
+      ret a

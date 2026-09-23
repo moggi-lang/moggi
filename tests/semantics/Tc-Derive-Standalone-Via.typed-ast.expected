@@ -1,0 +1,77 @@
+program
+  newtype MyInt
+    constructor MyInt
+      field  :: Int
+  function == :: __Dict_Eq -> MyInt -> MyInt -> Bool
+    pat_var __ev_Eq
+    pat_con MyInt
+      pat_var __v0
+    pat_con MyInt
+      pat_var __v1
+    apply
+      apply
+        evidence_method Eq.== evidence= nullary=0
+          instance Int
+        variable __v0
+      variable __v1
+  function /= :: __Dict_Eq -> MyInt -> MyInt -> Bool
+    pat_var __ev_Eq
+    pat_con MyInt
+      pat_var __v0
+    pat_con MyInt
+      pat_var __v1
+    apply
+      apply
+        evidence_method Eq./= evidence= nullary=0
+          instance Int
+        variable __v0
+      variable __v1
+  function showsPrec :: __Dict_Show -> Int -> MyInt -> String -> String
+    pat_var __ev_Show
+    pat_var __v0
+    pat_con MyInt
+      pat_var __v1
+    pat_var __v2
+    apply
+      apply
+        apply
+          evidence_method Show.showsPrec evidence= nullary=0
+            instance Int
+          variable __v0
+        variable __v1
+      variable __v2
+  function show :: __Dict_Show -> MyInt -> String
+    pat_var __ev_Show
+    pat_con MyInt
+      pat_var __v0
+    apply
+      evidence_method Show.show evidence= nullary=0
+        instance Int
+      variable __v0
+  function showList :: __Dict_Show -> [MyInt] -> String -> String
+    pat_var __ev_Show
+    pat_var ls
+    pat_var s
+    apply
+      apply
+        apply
+          variable showListWith
+          apply
+            variable shows
+            evidence_ref Show MyInt
+        variable ls
+      variable s
+  function main :: String
+    apply
+      evidence_method Show.show evidence= nullary=0
+        instance Bool
+      apply
+        apply
+          evidence_method Eq.== evidence= nullary=0
+            instance MyInt
+          apply
+            constructor_ref MyInt
+            integer 42
+        apply
+          constructor_ref MyInt
+          integer 42

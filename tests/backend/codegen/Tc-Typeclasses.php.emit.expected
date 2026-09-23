@@ -1,0 +1,207 @@
+<?php declare(strict_types=1);
+
+namespace Tc\Typeclasses;
+
+const __MOGGI_MAP = [[34 => ['Tc.Typeclasses.fmapFn', 'tests/backend/codegen/Tc-Typeclasses.mog', 11, 15], 39 => ['Tc.Typeclasses.fmapListDemo', 'tests/backend/codegen/Tc-Typeclasses.mog', 14, 19], 43 => ['Tc.Typeclasses.fmapEitherDemo', 'tests/backend/codegen/Tc-Typeclasses.mog', 17, 21], 55 => ['Tc.Typeclasses.applPure', 'tests/backend/codegen/Tc-Typeclasses.mog', 26, 14], 65 => ['Tc.Typeclasses.pureDemo', 'tests/backend/codegen/Tc-Typeclasses.mog', 32, 12], 69 => ['Tc.Typeclasses.apDemo', 'tests/backend/codegen/Tc-Typeclasses.mog', 35, 10], 78 => ['Tc.Typeclasses.monadListDemo', 'tests/backend/codegen/Tc-Typeclasses.mog', 41, 17], 82 => ['Tc.Typeclasses.eitherBindOk', 'tests/backend/codegen/Tc-Typeclasses.mog', 44, 16], 86 => ['Tc.Typeclasses.eitherShort', 'tests/backend/codegen/Tc-Typeclasses.mog', 47, 15], 90 => ['Tc.Typeclasses.listDo', 'tests/backend/codegen/Tc-Typeclasses.mog', 50, 15], 95 => ['Tc.Typeclasses.doListDemo', 'tests/backend/codegen/Tc-Typeclasses.mog', 56, 14], 99 => ['Tc.Typeclasses.listLet', 'tests/backend/codegen/Tc-Typeclasses.mog', 59, 13], 104 => ['Tc.Typeclasses.listLetDemo', 'tests/backend/codegen/Tc-Typeclasses.mog', 65, 15], 108 => ['Tc.Typeclasses.maybeDo', 'tests/backend/codegen/Tc-Typeclasses.mog', 68, 13], 113 => ['Tc.Typeclasses.maybeDemo', 'tests/backend/codegen/Tc-Typeclasses.mog', 73, 13], 117 => ['Tc.Typeclasses.maybeNothing', 'tests/backend/codegen/Tc-Typeclasses.mog', 76, 16], 121 => ['Tc.Typeclasses.eitherDo', 'tests/backend/codegen/Tc-Typeclasses.mog', 79, 14], 126 => ['Tc.Typeclasses.eitherDoOk', 'tests/backend/codegen/Tc-Typeclasses.mog', 84, 14], 130 => ['Tc.Typeclasses.eitherErr', 'tests/backend/codegen/Tc-Typeclasses.mog', 87, 13], 134 => ['Tc.Typeclasses.listDiscard', 'tests/backend/codegen/Tc-Typeclasses.mog', 90, 19], 139 => ['Tc.Typeclasses.discardDemo', 'tests/backend/codegen/Tc-Typeclasses.mog', 95, 15], 143 => ['Tc.Typeclasses.fmapG', 'tests/backend/codegen/Tc-Typeclasses.mog', 98, 14], 148 => ['Tc.Typeclasses.hktDemo', 'tests/backend/codegen/Tc-Typeclasses.mog', 101, 11], 164 => ['Tc.Typeclasses.λ3', 'tests/backend/codegen/Tc-Typeclasses.mog', 44, 43], 168 => ['Tc.Typeclasses.λ4', 'tests/backend/codegen/Tc-Typeclasses.mog', 47, 45], 172 => ['Tc.Typeclasses.λ6', 'tests/backend/codegen/Tc-Typeclasses.mog', 53, 3], 177 => ['Tc.Typeclasses.listDo', 'tests/backend/codegen/Tc-Typeclasses.mog', 50, 15], 178 => ['Tc.Typeclasses.listDo', 'tests/backend/codegen/Tc-Typeclasses.mog', 50, 15], 187 => ['Tc.Typeclasses.listLet', 'tests/backend/codegen/Tc-Typeclasses.mog', 59, 13], 192 => ['Tc.Typeclasses.λ9', 'tests/backend/codegen/Tc-Typeclasses.mog', 70, 3], 197 => ['Tc.Typeclasses.λ10', 'tests/backend/codegen/Tc-Typeclasses.mog', 81, 3]], ['Tc\\Typeclasses\\fmapFn' => ['Tc.Typeclasses.fmapFn', 'tests/backend/codegen/Tc-Typeclasses.mog', 11, 15], 'Tc\\Typeclasses\\fmapListDemo' => ['Tc.Typeclasses.fmapListDemo', 'tests/backend/codegen/Tc-Typeclasses.mog', 14, 19], 'Tc\\Typeclasses\\fmapEitherDemo' => ['Tc.Typeclasses.fmapEitherDemo', 'tests/backend/codegen/Tc-Typeclasses.mog', 17, 21], 'Tc\\Typeclasses\\inc' => ['Tc.Typeclasses.inc', 'tests/backend/codegen/Tc-Typeclasses.mog', 20, 9], 'Tc\\Typeclasses\\double' => ['Tc.Typeclasses.double', 'tests/backend/codegen/Tc-Typeclasses.mog', 23, 12], 'Tc\\Typeclasses\\applPure' => ['Tc.Typeclasses.applPure', 'tests/backend/codegen/Tc-Typeclasses.mog', 26, 14], 'Tc\\Typeclasses\\applAp' => ['Tc.Typeclasses.applAp', 'tests/backend/codegen/Tc-Typeclasses.mog', 28, 1], 'Tc\\Typeclasses\\pureDemo' => ['Tc.Typeclasses.pureDemo', 'tests/backend/codegen/Tc-Typeclasses.mog', 32, 12], 'Tc\\Typeclasses\\apDemo' => ['Tc.Typeclasses.apDemo', 'tests/backend/codegen/Tc-Typeclasses.mog', 35, 10], 'Tc\\Typeclasses\\monadBind' => ['Tc.Typeclasses.monadBind', 'tests/backend/codegen/Tc-Typeclasses.mog', 37, 1], 'Tc\\Typeclasses\\monadListDemo' => ['Tc.Typeclasses.monadListDemo', 'tests/backend/codegen/Tc-Typeclasses.mog', 41, 17], 'Tc\\Typeclasses\\eitherBindOk' => ['Tc.Typeclasses.eitherBindOk', 'tests/backend/codegen/Tc-Typeclasses.mog', 44, 16], 'Tc\\Typeclasses\\eitherShort' => ['Tc.Typeclasses.eitherShort', 'tests/backend/codegen/Tc-Typeclasses.mog', 47, 15], 'Tc\\Typeclasses\\listDo' => ['Tc.Typeclasses.listDo', 'tests/backend/codegen/Tc-Typeclasses.mog', 50, 15], 'Tc\\Typeclasses\\doListDemo' => ['Tc.Typeclasses.doListDemo', 'tests/backend/codegen/Tc-Typeclasses.mog', 56, 14], 'Tc\\Typeclasses\\listLet' => ['Tc.Typeclasses.listLet', 'tests/backend/codegen/Tc-Typeclasses.mog', 59, 13], 'Tc\\Typeclasses\\listLetDemo' => ['Tc.Typeclasses.listLetDemo', 'tests/backend/codegen/Tc-Typeclasses.mog', 65, 15], 'Tc\\Typeclasses\\maybeDo' => ['Tc.Typeclasses.maybeDo', 'tests/backend/codegen/Tc-Typeclasses.mog', 68, 13], 'Tc\\Typeclasses\\maybeDemo' => ['Tc.Typeclasses.maybeDemo', 'tests/backend/codegen/Tc-Typeclasses.mog', 73, 13], 'Tc\\Typeclasses\\maybeNothing' => ['Tc.Typeclasses.maybeNothing', 'tests/backend/codegen/Tc-Typeclasses.mog', 76, 16], 'Tc\\Typeclasses\\eitherDo' => ['Tc.Typeclasses.eitherDo', 'tests/backend/codegen/Tc-Typeclasses.mog', 79, 14], 'Tc\\Typeclasses\\eitherDoOk' => ['Tc.Typeclasses.eitherDoOk', 'tests/backend/codegen/Tc-Typeclasses.mog', 84, 14], 'Tc\\Typeclasses\\eitherErr' => ['Tc.Typeclasses.eitherErr', 'tests/backend/codegen/Tc-Typeclasses.mog', 87, 13], 'Tc\\Typeclasses\\listDiscard' => ['Tc.Typeclasses.listDiscard', 'tests/backend/codegen/Tc-Typeclasses.mog', 90, 19], 'Tc\\Typeclasses\\discardDemo' => ['Tc.Typeclasses.discardDemo', 'tests/backend/codegen/Tc-Typeclasses.mog', 95, 15], 'Tc\\Typeclasses\\fmapG' => ['Tc.Typeclasses.fmapG', 'tests/backend/codegen/Tc-Typeclasses.mog', 98, 14], 'Tc\\Typeclasses\\hktDemo' => ['Tc.Typeclasses.hktDemo', 'tests/backend/codegen/Tc-Typeclasses.mog', 101, 11], 'Tc\\Typeclasses\\__lambda_0' => ['Tc.Typeclasses.λ0', 'tests/backend/codegen/Tc-Typeclasses.mog', 14, 33], 'Tc\\Typeclasses\\__lambda_1' => ['Tc.Typeclasses.λ1', 'tests/backend/codegen/Tc-Typeclasses.mog', 17, 35], 'Tc\\Typeclasses\\__lambda_2' => ['Tc.Typeclasses.λ2', 'tests/backend/codegen/Tc-Typeclasses.mog', 41, 41], 'Tc\\Typeclasses\\__lambda_3' => ['Tc.Typeclasses.λ3', 'tests/backend/codegen/Tc-Typeclasses.mog', 44, 43], 'Tc\\Typeclasses\\__lambda_4' => ['Tc.Typeclasses.λ4', 'tests/backend/codegen/Tc-Typeclasses.mog', 47, 45], 'Tc\\Typeclasses\\__lambda_6' => ['Tc.Typeclasses.λ6', 'tests/backend/codegen/Tc-Typeclasses.mog', 53, 3], 'Tc\\Typeclasses\\__lambda_7' => ['Tc.Typeclasses.λ7', 'tests/backend/codegen/Tc-Typeclasses.mog', 56, 35], 'Tc\\Typeclasses\\__lambda_9' => ['Tc.Typeclasses.λ9', 'tests/backend/codegen/Tc-Typeclasses.mog', 70, 3], 'Tc\\Typeclasses\\__lambda_10' => ['Tc.Typeclasses.λ10', 'tests/backend/codegen/Tc-Typeclasses.mog', 81, 3], 'Tc\\Typeclasses\\__lambda_11' => ['Tc.Typeclasses.λ11', 'tests/backend/codegen/Tc-Typeclasses.mog', 92, 3], 'Tc\\Typeclasses\\__lambda_12' => ['Tc.Typeclasses.λ12', 'tests/backend/codegen/Tc-Typeclasses.mog', 101, 24]]];
+
+require_once __DIR__ . '/../../../_runtime.php';
+
+use function Moggi\__apply;
+
+require_once __DIR__ . '/../../../lib/Control/Applicative.php';
+require_once __DIR__ . '/../../../lib/Control/Monad.php';
+require_once __DIR__ . '/../../../lib/Data/Either.php';
+require_once __DIR__ . '/../../../lib/Data/List.php';
+require_once __DIR__ . '/../../../lib/Data/Maybe.php';
+
+use function Control\Applicative\__ev_Applicative_Maybe;
+use function Control\Monad\__ev_Monad_Maybe;
+use function Data\Either\__ev_Applicative_Either;
+use function Data\Either\__ev_Functor_Either;
+use function Data\Either\__ev_Monad_Either;
+use function Data\List\__ev_Applicative_List;
+use function Data\List\__ev_Functor_List;
+use function Data\List\__ev_Monad_List;
+use function Data\Maybe\__ev_Functor_Maybe;
+
+function moggi_u64_add(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao + $bo; $c = ($lo >> 32) & 0xffffffff; $hi = ($ah + $bh + $c) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }
+function moggi_u64_sub(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao - $bo; $bw = $lo < 0 ? 1 : 0; $hi = ($ah - $bh - $bw) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }
+function moggi_u64_mul(int $a, int $b): int { $a0 = $a & 0xffff; $a1 = ($a >> 16) & 0xffff; $a2 = ($a >> 32) & 0xffff; $a3 = ($a >> 48) & 0xffff; $b0 = $b & 0xffff; $b1 = ($b >> 16) & 0xffff; $b2 = ($b >> 32) & 0xffff; $b3 = ($b >> 48) & 0xffff; $low = $a0 * $b0; $cy = ($low >> 16) & 0xffff; $m1 = $a0 * $b1 + $a1 * $b0 + $cy; $cy = ($m1 >> 16) & 0xffffffff; $m2 = $a0 * $b2 + $a1 * $b1 + $a2 * $b0 + $cy; $cy = ($m2 >> 16) & 0xffffffff; $hi = $a0 * $b3 + $a1 * $b2 + $a2 * $b1 + $a3 * $b0 + $cy; return (($hi & 0xffff) << 48) | (($m2 & 0xffff) << 32) | (($m1 & 0xffff) << 16) | ($low & 0xffff); }
+function moggi_i64_add(int $a, int $b): int { $r = $a + $b; return \is_int($r) ? $r : moggi_u64_add($a, $b); }
+function moggi_i64_mul(int $a, int $b): int { $r = $a * $b; return \is_int($r) ? $r : moggi_u64_mul($a, $b); }
+
+function fmapFn($__ev_Functor, $f, $xs) {
+    $__t0 = ($__ev_Functor["map"])($f, $xs);
+    return $__t0;
+}
+
+function fmapListDemo($xs) {
+    return fmapFn(__ev_Functor_List(), fn($x) => (\is_int($__m64 = $x + 1) ? $__m64 : moggi_u64_add($x, 1)), $xs);
+}
+
+function fmapEitherDemo($mx) {
+    return fmapFn(__ev_Functor_Either(), fn($x) => (\is_int($__m64 = $x + 1) ? $__m64 : moggi_u64_add($x, 1)), $mx);
+}
+
+function inc($x) {
+    return (\is_int($__m64 = $x + 1) ? $__m64 : moggi_u64_add($x, 1));
+}
+
+function double($x) {
+    return (\is_int($__m64 = $x * 2) ? $__m64 : moggi_u64_mul($x, 2));
+}
+
+function applPure($__ev_Functor, $__ev_Applicative_1, $x) {
+    $__t3 = ($__ev_Applicative_1["pure"])($x);
+    return $__t3;
+}
+
+function applAp($__ev_Functor, $__ev_Applicative_1, $fs, $xs) {
+    $__t4 = ($__ev_Applicative_1["<*>"])($fs, $xs);
+    return $__t4;
+}
+
+function pureDemo() {
+    return applPure(__ev_Functor_List(), __ev_Applicative_List(), 42);
+}
+
+function apDemo() {
+    return applAp(__ev_Functor_List(), __ev_Applicative_List(), [inc(...), double(...)], [10, 20]);
+}
+
+function monadBind($__ev_Functor, $__ev_Applicative_1, $__ev_Monad_2, $m, $f) {
+    $__t7 = ($__ev_Monad_2[">>="])($m, $f);
+    return $__t7;
+}
+
+function monadListDemo() {
+    return monadBind(__ev_Functor_List(), __ev_Applicative_List(), __ev_Monad_List(), [1, 2], fn($x) => [$x, (\is_int($__m64 = $x * 10) ? $__m64 : moggi_u64_mul($x, 10))]);
+}
+
+function eitherBindOk() {
+    return monadBind(__ev_Functor_Either(), __ev_Applicative_Either(), __ev_Monad_Either(), ["Right", 2], fn($x) => ["Right", (\is_int($__m64 = $x + 1) ? $__m64 : moggi_u64_add($x, 1))]);
+}
+
+function eitherShort() {
+    return monadBind(__ev_Functor_Either(), __ev_Applicative_Either(), __ev_Monad_Either(), ["Left", "err"], fn($x) => ["Right", $x]);
+}
+
+function listDo($__ev_Functor, $__ev_Applicative_1, $__ev_Monad_2, $xs, $f) {
+    $__t18 = ($__ev_Monad_2[">>="])($xs, ['__partial', 4, '\\Tc\\Typeclasses\\__lambda_5', $f, $__ev_Monad_2, $__ev_Applicative_1]);
+    return $__t18;
+}
+
+function doListDemo() {
+    return listDo(__ev_Functor_List(), __ev_Applicative_List(), __ev_Monad_List(), [1, 2], fn($x) => [$x, (\is_int($__m64 = $x * 10) ? $__m64 : moggi_u64_mul($x, 10))]);
+}
+
+function listLet($__ev_Functor, $__ev_Applicative_1, $__ev_Monad_2, $m) {
+    $__t21 = ($__ev_Monad_2[">>="])($m, ['__partial', 2, '\\Tc\\Typeclasses\\__lambda_8', $__ev_Applicative_1]);
+    return $__t21;
+}
+
+function listLetDemo() {
+    return listLet(__ev_Functor_List(), __ev_Applicative_List(), __ev_Monad_List(), [41]);
+}
+
+function maybeDo($__ev_Functor, $__ev_Applicative_1, $__ev_Monad_2, $m) {
+    $__t24 = ($__ev_Monad_2[">>="])($m, ['__partial', 2, '\\Tc\\Typeclasses\\__lambda_9', $__ev_Applicative_1]);
+    return $__t24;
+}
+
+function maybeDemo() {
+    return maybeDo(__ev_Functor_Maybe(), __ev_Applicative_Maybe(), __ev_Monad_Maybe(), ["Just", 41]);
+}
+
+function maybeNothing() {
+    return maybeDo(__ev_Functor_Maybe(), __ev_Applicative_Maybe(), __ev_Monad_Maybe(), ["Nothing"]);
+}
+
+function eitherDo($__ev_Functor, $__ev_Applicative_1, $__ev_Monad_2, $m) {
+    $__t29 = ($__ev_Monad_2[">>="])($m, ['__partial', 2, '\\Tc\\Typeclasses\\__lambda_10', $__ev_Applicative_1]);
+    return $__t29;
+}
+
+function eitherDoOk() {
+    return eitherDo(__ev_Functor_Either(), __ev_Applicative_Either(), __ev_Monad_Either(), ["Right", 3]);
+}
+
+function eitherErr() {
+    return eitherDo(__ev_Functor_Either(), __ev_Applicative_Either(), __ev_Monad_Either(), ["Left", "nope"]);
+}
+
+function listDiscard($__ev_Functor, $__ev_Applicative_1, $__ev_Monad_2, $a, $b) {
+    $__t34 = ($__ev_Monad_2[">>="])($a, ['__partial', 2, '\\Tc\\Typeclasses\\__lambda_11', $b]);
+    return $__t34;
+}
+
+function discardDemo() {
+    return listDiscard(__ev_Functor_List(), __ev_Applicative_List(), __ev_Monad_List(), [1, 2], [10, 20]);
+}
+
+function fmapG($__ev_Functor, $f, $xs) {
+    $__t36 = ($__ev_Functor["map"])($f, $xs);
+    return $__t36;
+}
+
+function hktDemo() {
+    return fmapG(__ev_Functor_List(), fn($x) => (\is_int($__m64 = $x + 1) ? $__m64 : moggi_u64_add($x, 1)), [1, 2]);
+}
+
+function __lambda_0($x) {
+    return (\is_int($__m64 = $x + 1) ? $__m64 : moggi_u64_add($x, 1));
+}
+
+function __lambda_1($x) {
+    return (\is_int($__m64 = $x + 1) ? $__m64 : moggi_u64_add($x, 1));
+}
+
+function __lambda_2($x) {
+    return [$x, (\is_int($__m64 = $x * 10) ? $__m64 : moggi_u64_mul($x, 10))];
+}
+
+function __lambda_3($x) {
+    return ["Right", (\is_int($__m64 = $x + 1) ? $__m64 : moggi_u64_add($x, 1))];
+}
+
+function __lambda_4($x) {
+    return ["Right", $x];
+}
+
+function __lambda_6($__ev_Applicative_1, $y) {
+    $__t15 = ($__ev_Applicative_1["pure"])($y);
+    return $__t15;
+}
+
+function __lambda_5($f, $__ev_Monad_2, $__ev_Applicative_1, $x) {
+    $__t16 = __apply($f, $x);
+    $__t17 = ($__ev_Monad_2[">>="])($__t16, ['__partial', 2, '\\Tc\\Typeclasses\\__lambda_6', $__ev_Applicative_1]);
+    return $__t17;
+}
+
+function __lambda_7($x) {
+    return [$x, (\is_int($__m64 = $x * 10) ? $__m64 : moggi_u64_mul($x, 10))];
+}
+
+function __lambda_8($__ev_Applicative_1, $x) {
+    $__t20 = ($__ev_Applicative_1["pure"])((\is_int($__m64 = $x + 1) ? $__m64 : moggi_u64_add($x, 1)));
+    return $__t20;
+}
+
+function __lambda_9($__ev_Applicative_1, $x) {
+    $__t23 = ($__ev_Applicative_1["pure"])((\is_int($__m64 = $x + 1) ? $__m64 : moggi_u64_add($x, 1)));
+    return $__t23;
+}
+
+function __lambda_10($__ev_Applicative_1, $x) {
+    $__t28 = ($__ev_Applicative_1["pure"])((\is_int($__m64 = $x * 2) ? $__m64 : moggi_u64_mul($x, 2)));
+    return $__t28;
+}
+
+function __lambda_11($b, $__doUnit) {
+    return $b;
+}
+
+function __lambda_12($x) {
+    return (\is_int($__m64 = $x + 1) ? $__m64 : moggi_u64_add($x, 1));
+}

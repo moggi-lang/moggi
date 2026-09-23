@@ -1,0 +1,39 @@
+import Data.Bool
+import Data.Function (fix)
+import Data.Int
+import Data.List
+import Text.Show
+import System.IO
+import Moggi.Internal.Prim (boolNot#, intAdd#)
+
+-- A bare primop reference is a first-class value: `boolNot#` has arity 1, so
+-- the compiler eta-expands it into a lambda instead of failing to lower it.
+notAlias :: Bool -> Bool
+notAlias = boolNot#
+
+-- A primop passed as an argument is first-class too.
+flipAll :: [Bool] -> [Bool]
+flipAll xs = map boolNot# xs
+
+-- A partially applied primop captures its leading arguments.
+addOne :: Int -> Int
+addOne = intAdd# 1
+
+-- `fix` ties the recursive knot through a self-reference that the function
+-- only forces when it actually recurses (strict evaluation).
+fact :: Int -> Int
+fact = fix (\rec n -> case n <= 1 of
+  True  -> 1
+  False -> n * rec (n - 1))
+
+-- `fix` of a function that ignores its argument still terminates.
+constant :: String
+constant = fix (\unused -> "constant")
+
+main :: IO ()
+main = do
+  putStrLn (show (notAlias False))
+  putStrLn (show (flipAll [True, False, True]))
+  putStrLn (show (addOne 41))
+  putStrLn (show (fact 5))
+  putStrLn constant

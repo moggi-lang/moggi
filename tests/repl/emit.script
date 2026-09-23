@@ -1,0 +1,4 @@
+foo = 1
+:emit foo
+:emit data Per = Per String Int Bool
+:quit

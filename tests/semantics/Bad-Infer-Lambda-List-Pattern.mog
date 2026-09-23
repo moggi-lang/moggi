@@ -1,0 +1,5 @@
+module Bad.Infer.Lambda.List.Pattern
+
+import Data.Int
+
+f = \[] -> 0

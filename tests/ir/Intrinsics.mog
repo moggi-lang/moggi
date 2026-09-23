@@ -1,0 +1,13 @@
+module Ir.Intrinsics where
+
+-- Primitive words lower straight to intrinsics. The signatures are explicit: an
+-- unannotated body would leave the operand types to defaulting, and this stage
+-- must pin lowering rather than type inference.
+add :: Int -> Int -> Int
+add x y = x + y
+
+mul :: Int -> Int -> Int
+mul x y = x * y
+
+neg :: Int -> Int
+neg x = 0 - x

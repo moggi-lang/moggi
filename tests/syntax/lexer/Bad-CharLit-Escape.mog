@@ -1,0 +1,3 @@
+-- Character literals only accept the handful of named escapes that decode to a
+-- single scalar; `\q` is not one of them (unlike in strings).
+c = '\q'

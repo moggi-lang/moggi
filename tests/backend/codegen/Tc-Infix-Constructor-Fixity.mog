@@ -1,0 +1,19 @@
+module Tc.Infix.Constructor.Fixity
+
+import Data.Eq
+import Moggi.Internal.Num
+import Data.Int
+import Data.List
+import Text.Show
+
+data NonEmpty a = a :| [a]
+
+infixr 5 :|
+
+-- Same precedence as `:`; both infixr 5, so `1 :| 2 : [3]` is `1 :| (2 : [3])`.
+nested :: NonEmpty Int
+nested = 1 :| 2 : [3]
+
+ok :: Bool
+ok = case nested of
+  x :| xs -> x == 1 && xs == [2, 3]

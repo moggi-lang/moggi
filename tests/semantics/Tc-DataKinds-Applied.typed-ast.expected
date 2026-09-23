@@ -1,0 +1,13 @@
+program
+  type FixL = 'InfixI 'LeftAssociative
+  type FixR = 'InfixI 'RightAssociative
+  type FixN = 'InfixI 'NotAssociative
+  type FixHead = 'InfixI
+  data OnlyFix (f :: FixityI)
+    constructor OnlyFix
+  function leftProxy :: OnlyFix 'InfixI 'LeftAssociative
+    constructor_ref OnlyFix
+  function rightProxy :: OnlyFix 'InfixI 'RightAssociative
+    constructor_ref OnlyFix
+  function viaSyn :: OnlyFix 'InfixI 'LeftAssociative
+    constructor_ref OnlyFix

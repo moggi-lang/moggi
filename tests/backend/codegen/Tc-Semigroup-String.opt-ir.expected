@@ -1,0 +1,5 @@
+module
+  function join2(a, b)
+      ret intrinsic stringAppend#(a, b)
+  function joined()
+      ret "foobar"

@@ -1,0 +1,50 @@
+import Prelude
+import Text.Show
+import System.IO
+import Data.List qualified as DL
+
+-- A constrained function that forwards its dictionary to another constrained
+-- function (`eqBoth`) whose type variable is still polymorphic at the call site.
+eqBoth :: Eq a => a -> a -> Bool
+eqBoth x y = x == y
+
+useEq :: Eq a => a -> a -> Bool
+useEq p q = eqBoth p q
+
+-- A self-recursive constrained function: the recursive call must forward the
+-- enclosing evidence parameter rather than demand a concrete instance.
+memEq :: Eq a => a -> [a] -> Bool
+memEq x ys = case ys of
+  [] -> False
+  y : rest -> case x == y of
+    True -> True
+    False -> memEq x rest
+
+demoEqTrue :: Bool
+demoEqTrue = useEq 3 3
+
+demoEqFalse :: Bool
+demoEqFalse = useEq 3 4
+
+demoMemTrue :: Bool
+demoMemTrue = memEq 3 [1, 2, 3]
+
+demoMemFalse :: Bool
+demoMemFalse = memEq 9 [1, 2, 3]
+
+-- A qualified reference to a constrained function used as a *value*: the
+-- evidence has to travel with the value to the use site, where the type
+-- variable is fixed (`a ~ Int`), not at the reference itself.
+applyListFn :: ([a] -> [a]) -> [a] -> [a]
+applyListFn f xs = f xs
+
+demoQualifiedValue :: [Int]
+demoQualifiedValue = applyListFn DL.sort [3, 1, 2]
+
+main :: IO ()
+main = do
+  putStrLn (show demoEqTrue)
+  putStrLn (show demoEqFalse)
+  putStrLn (show demoMemTrue)
+  putStrLn (show demoMemFalse)
+  putStrLn (show demoQualifiedValue)

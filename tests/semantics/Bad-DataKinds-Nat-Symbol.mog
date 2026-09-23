@@ -1,0 +1,5 @@
+data FixedBytes (n :: Nat) = FixedBytes
+
+-- Wrong kind: string literals have kind Symbol, not Nat.
+bad :: FixedBytes "1024" -> String
+bad FixedBytes = "no"

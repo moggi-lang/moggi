@@ -1,0 +1,4 @@
+tests/semantics/Bad-Hole-Arg.mog:2:11: type error: Found hole with type: `Int`
+
+  2 | f x = x + _
+    |           ^

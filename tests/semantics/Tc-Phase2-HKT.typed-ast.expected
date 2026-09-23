@@ -1,0 +1,41 @@
+program
+  data V1 p
+  data :+: f g p
+    constructor L1
+      field  :: f p
+    constructor R1
+      field  :: g p
+  data :*: f g p
+    constructor Pair
+      field  :: f p
+      field  :: g p
+  data K1 i c
+    constructor K1
+      field  :: c
+  data R
+    constructor R
+  type Rec0 = K1 R
+  type Id a = a
+  function useRec0 :: K1 R Int -> Int
+    pat_con K1
+      pat_var x
+    variable x
+  function useId :: Bool -> Bool
+    pat_var x
+    variable x
+  function leftOnly :: :+: Maybe Either Int Int -> Maybe Int
+    pat_con L1
+      pat_var x
+    variable x
+  function rightOnly :: :+: Maybe Either Int Int -> Either Int Int
+    pat_con R1
+      pat_var x
+    variable x
+  function pair :: :*: Maybe Maybe Int -> Maybe Int
+    pat_con Pair
+      pat_var x
+      pat_var y
+    variable x
+  function absurdV1 :: V1 Int -> Int
+    pat_wild _
+    integer 0

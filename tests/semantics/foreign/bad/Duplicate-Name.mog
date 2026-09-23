@@ -1,0 +1,4 @@
+module Bad.Foreign.DuplicateName where
+
+foreign jvm type Path "java.nio.file.Path"
+foreign jvm type Path "java.lang.String"

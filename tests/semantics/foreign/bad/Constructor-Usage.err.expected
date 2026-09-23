@@ -1,0 +1,4 @@
+tests/semantics/foreign/bad/Constructor-Usage.mog:7:11: type error: undefined constructor `Path`
+
+  7 |   let p = Path
+    |           ^^^^

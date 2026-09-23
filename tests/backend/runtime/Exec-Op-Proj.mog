@@ -1,0 +1,94 @@
+-- Operators as values: a point-free use of an operator (*projection*,
+-- `(===)`) and an operator with one operand left out (*section*, `(* 2)` and
+-- `(2 *)`). A section is a lambda over the missing operand, and it has to bind
+-- like the operator in a hand-written `\x -> …` does -- inside the section the
+-- parser's precedence and associativity apply, not the section's.
+
+class MyEq a where
+  (===) :: a -> a -> Bool
+
+instance MyEq Int where
+  (===) x y = x == y
+
+data Box = Box Int
+
+instance MyEq Box where
+  (===) (Box a) (Box b) = a == b
+
+class Add a where
+  (<+>) :: a -> a -> a
+
+instance Add Int where
+  (<+>) x y = x + y
+
+-- projection at a primitive type
+intEq :: Int -> Int -> Bool
+intEq = (===)
+
+-- projection at a user type: needs the instance method, not a primitive op
+boxEq :: Box -> Box -> Bool
+boxEq = (===)
+
+-- projection under an ambient constraint
+polyEq :: MyEq a => a -> a -> Bool
+polyEq = (===)
+
+-- higher-order argument
+apply2 :: MyEq a => (a -> a -> Bool) -> a -> a -> Bool
+apply2 f x y = f x y
+
+-- projection of a non-standard operator
+add :: Int -> Int -> Int
+add = (<+>)
+
+-- projection bound locally; the use site fixes the type, which discharges
+-- the constraint
+localEq :: Int -> Int -> Bool
+localEq x y = go x y
+  where
+    go = (===)
+
+-- right section: the operand on the right is fixed, `\x -> x * 2`
+double :: [Int]
+double = map (* 2) [1, 2, 3]
+
+-- left section: the operand on the left is fixed, `\x -> 1 + x`
+addOne :: [Int]
+addOne = map (1 +) [1, 2, 3]
+
+-- the section keeps the operator's precedence: `\x -> (x * 2) + 3`
+precedence :: Int
+precedence = (* 2 + 3) 4
+
+-- and its associativity: `\x -> (10 - 3) - x`, not `10 - (3 - x)`
+associativity :: Int
+associativity = (10 - 3 -) 2
+
+-- a backticked operator sections like a symbolic one
+backticked :: Int
+backticked = (2 `div`) 5
+
+-- `-` starts no right section (`(- 7)` is negation), but closes a left one
+negated :: Int
+negated = (-7) + (- 3)
+
+sectionNegate :: Int
+sectionNegate = (10 -) 4
+
+main :: IO ()
+main = do
+  putStrLn (show (intEq 1 1))
+  putStrLn (show (intEq 1 2))
+  putStrLn (show (boxEq (Box 3) (Box 3)))
+  putStrLn (show (polyEq (Box 4) (Box 5)))
+  putStrLn (show (apply2 (===) (Box 6) (Box 6)))
+  putStrLn (show (add 2 3))
+  putStrLn (show (localEq 7 7))
+  putStrLn (show double)
+  putStrLn (show addOne)
+  putStrLn (show precedence)
+  putStrLn (show associativity)
+  putStrLn (show backticked)
+  putStrLn (show negated)
+  putStrLn (show sectionNegate)
+  putStrLn (show (map (=== 1) [1, 2]))

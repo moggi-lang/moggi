@@ -1,0 +1,15 @@
+-- Module-system fixture: `main` here is a normal function name, not `main :: IO ()`.
+-- See tests/modules/README.md — exercises imports, qualified names, and user fixtures.
+
+module Main where
+
+import Prelude hiding (max)
+import User
+import User qualified as U
+
+main :: Int -> User -> Int
+main n user = getId user + n
+
+-- `import M qualified as Alias` binds only under Alias (not unqualified).
+qualifiedMain :: U.User -> U.UserId
+qualifiedMain u = U.getId u

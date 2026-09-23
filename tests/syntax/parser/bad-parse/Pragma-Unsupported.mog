@@ -1,0 +1,4 @@
+{-# FOO #-}
+module Test.Facade ( f ) where
+
+f :: Int

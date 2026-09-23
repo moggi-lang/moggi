@@ -1,0 +1,169 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.Set
+  ( Set
+  , empty
+  , singleton
+  , insert
+  , delete
+  , member
+  , notMember
+  , null
+  , size
+  , union
+  , unions
+  , difference
+  , intersection
+  , isSubsetOf
+  , filter
+  , toList
+  , fromList
+  , map
+  ) where
+
+import Data.Bool
+import Data.Foldable hiding (null)
+import Data.List hiding (map, filter, null, singleton, union, insert, find)
+import Data.Ord
+import Moggi.Err
+
+data Set a = MkSet [a]
+
+empty :: Set a
+empty = MkSet []
+
+singleton :: a -> Set a
+singleton x = MkSet [x]
+
+null :: Set a -> Bool
+null s = case s of
+  MkSet xs -> case xs of
+    [] -> True
+    _ -> False
+
+size :: Set a -> Int
+size s = case s of
+  MkSet xs -> length xs
+
+member :: Ord a => a -> Set a -> Bool
+member x s = case s of
+  MkSet xs -> memberList x xs
+
+memberList :: Ord a => a -> [a] -> Bool
+memberList _ [] = False
+memberList x (y : ys) = case compare x y of
+  EQ -> True
+  LT -> False
+  GT -> memberList x ys
+
+notMember :: Ord a => a -> Set a -> Bool
+notMember x s = case member x s of
+  True -> False
+  False -> True
+
+insert :: Ord a => a -> Set a -> Set a
+insert x s = case s of
+  MkSet xs -> MkSet (insertList x xs)
+
+insertList :: Ord a => a -> [a] -> [a]
+insertList x [] = [x]
+insertList x (y : ys) = case compare x y of
+  EQ -> y : ys
+  LT -> x : y : ys
+  GT -> y : insertList x ys
+
+delete :: Ord a => a -> Set a -> Set a
+delete x s = case s of
+  MkSet xs -> MkSet (deleteList x xs)
+
+deleteList :: Ord a => a -> [a] -> [a]
+deleteList _ [] = []
+deleteList x (y : ys) = case compare x y of
+  EQ -> ys
+  LT -> y : ys
+  GT -> y : deleteList x ys
+
+union :: Ord a => Set a -> Set a -> Set a
+union a s = case a of
+  MkSet xs -> unionList xs s
+
+unionList :: Ord a => [a] -> Set a -> Set a
+unionList [] s = s
+unionList (x : xs) s = unionList xs (insert x s)
+
+unions :: Ord a => [Set a] -> Set a
+unions ss = unionsGo ss empty
+
+unionsGo :: Ord a => [Set a] -> Set a -> Set a
+unionsGo [] acc = acc
+unionsGo (s : rest) acc = unionsGo rest (union acc s)
+
+difference :: Ord a => Set a -> Set a -> Set a
+difference a s = case a of
+  MkSet xs -> MkSet (diffList xs s)
+
+diffList :: Ord a => [a] -> Set a -> [a]
+diffList [] _ = []
+diffList (x : xs) s = case member x s of
+  True -> diffList xs s
+  False -> x : diffList xs s
+
+intersection :: Ord a => Set a -> Set a -> Set a
+intersection a s = case a of
+  MkSet xs -> MkSet (intersectList xs s)
+
+intersectList :: Ord a => [a] -> Set a -> [a]
+intersectList [] _ = []
+intersectList (x : xs) s = case member x s of
+  True -> x : intersectList xs s
+  False -> intersectList xs s
+
+isSubsetOf :: Ord a => Set a -> Set a -> Bool
+isSubsetOf a s = case a of
+  MkSet xs -> allMember xs s
+
+allMember :: Ord a => [a] -> Set a -> Bool
+allMember [] _ = True
+allMember (x : xs) s = case member x s of
+  True -> allMember xs s
+  False -> False
+
+filter :: (a -> Bool) -> Set a -> Set a
+filter p s = case s of
+  MkSet xs -> MkSet (filterList p xs)
+
+filterList :: (a -> Bool) -> [a] -> [a]
+filterList _ [] = []
+filterList p (x : xs) = case p x of
+  True -> x : filterList p xs
+  False -> filterList p xs
+
+toList :: Set a -> [a]
+toList s = case s of
+  MkSet xs -> xs
+
+fromList :: Ord a => [a] -> Set a
+fromList xs = fromListGo xs empty
+
+fromListGo :: Ord a => [a] -> Set a -> Set a
+fromListGo [] s = s
+fromListGo (x : xs) s = fromListGo xs (insert x s)
+
+map :: Ord b => (a -> b) -> Set a -> Set b
+map f s = case s of
+  MkSet xs -> fromList (mapList f xs)
+
+mapList :: (a -> b) -> [a] -> [b]
+mapList _ [] = []
+mapList f (x : xs) = f x : mapList f xs
+
+foldlList :: (b -> a -> b) -> b -> [a] -> b
+foldlList _ z [] = z
+foldlList f z (x : xs) = foldlList f (f z x) xs
+
+foldrList :: (a -> b -> b) -> b -> [a] -> b
+foldrList _ z [] = z
+foldrList f z (x : xs) = f x (foldrList f z xs)
+
+instance Foldable Set where
+  foldr f z s = case s of
+    MkSet xs -> foldrList f z xs

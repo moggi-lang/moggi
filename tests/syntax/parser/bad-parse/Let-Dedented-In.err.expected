@@ -1,0 +1,4 @@
+tests/syntax/parser/bad-parse/Let-Dedented-In.mog:3:1: parse error: `in` must be indented deeper than the enclosing declaration: dedenting it to the declaration's own column (1) ends the declaration instead of continuing it
+
+  3 | in x
+    | ^^

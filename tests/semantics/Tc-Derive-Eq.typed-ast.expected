@@ -1,0 +1,113 @@
+program
+  data Color
+    constructor Red
+    constructor Blue
+    constructor Green
+    deriving (Eq)
+  function == :: Color -> Color -> Bool
+    pat_var __l
+    pat_var __r
+    case
+      variable __l
+      alt
+        pat_con Red
+        case
+          variable __r
+          alt
+            pat_con Red
+            constructor_ref True
+          alt
+            pat_wild _
+            constructor_ref False
+      alt
+        pat_con Blue
+        case
+          variable __r
+          alt
+            pat_con Blue
+            constructor_ref True
+          alt
+            pat_wild _
+            constructor_ref False
+      alt
+        pat_con Green
+        case
+          variable __r
+          alt
+            pat_con Green
+            constructor_ref True
+          alt
+            pat_wild _
+            constructor_ref False
+  function /= :: Color -> Color -> Bool
+    pat_var __l
+    pat_var __r
+    case
+      case
+        variable __l
+        alt
+          pat_con Red
+          case
+            variable __r
+            alt
+              pat_con Red
+              constructor_ref True
+            alt
+              pat_wild _
+              constructor_ref False
+        alt
+          pat_con Blue
+          case
+            variable __r
+            alt
+              pat_con Blue
+              constructor_ref True
+            alt
+              pat_wild _
+              constructor_ref False
+        alt
+          pat_con Green
+          case
+            variable __r
+            alt
+              pat_con Green
+              constructor_ref True
+            alt
+              pat_wild _
+              constructor_ref False
+      alt
+        pat_con True
+        constructor_ref False
+      alt
+        pat_con False
+        constructor_ref True
+  function eqColors :: Color -> Color -> Bool
+    pat_var a
+    pat_var b
+    apply
+      apply
+        evidence_method Eq.== evidence= nullary=0
+          instance Color
+        variable a
+      variable b
+  function neColors :: Color -> Color -> Bool
+    pat_var a
+    pat_var b
+    apply
+      apply
+        evidence_method Eq./= evidence= nullary=0
+          instance Color
+        variable a
+      variable b
+  function same :: Bool
+    apply
+      apply
+        variable eqColors
+        constructor_ref Red
+      constructor_ref Red
+  function diff :: Bool
+    apply
+      apply
+        variable eqColors
+        constructor_ref Red
+      constructor_ref Blue

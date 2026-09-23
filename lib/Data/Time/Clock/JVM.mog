@@ -1,0 +1,24 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.Time.Clock.JVM
+  ( currentTimeSeconds
+  , getMonotonicNanos
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import System.IO.Base (IO)
+import Moggi.Internal.Prim
+
+foreign jvm type Instant "java.time.Instant"
+
+foreign jvm function instantNow "java.time.Instant:now" :: IO Instant
+foreign jvm function instantEpochSecond "java.time.Instant.getEpochSecond" :: Instant -> Int
+foreign jvm function systemNanoTime "java.lang.System:nanoTime" :: IO Int
+
+currentTimeSeconds :: IO Int
+currentTimeSeconds = do
+  inst <- instantNow
+  pure (instantEpochSecond inst)
+
+getMonotonicNanos :: IO Int
+getMonotonicNanos = systemNanoTime

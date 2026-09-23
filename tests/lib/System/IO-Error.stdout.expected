@@ -1,0 +1,15 @@
+description: 
+setter: wrapped
+location: here
+filename: file.txt
+inline: replaced | sample-location | file.txt
+named: named | sample-location | file.txt
+modified: modified | sample-location | file.txt
+types: 2
+kind match: False
+kind: permission denied
+["does not exist","permission denied"]
+kind in action: no error
+isUserError: True
+userError: user error (boom)
+location of userError: ctx

@@ -1,0 +1,25 @@
+program
+  function count :: Int
+    infix +
+      integer 1
+      integer 1
+  function asInt :: Int
+    variable count
+  function unpinned :: Int
+    infix +
+      integer 1
+      integer 1
+  function pinned :: Int
+    infix +
+      integer 1
+      integer 1
+  function pinnedInt :: Int
+    variable pinned
+  function pinnedAgain :: Int
+    variable pinned
+  function main :: Int
+    infix +
+      infix +
+        variable asInt
+        variable pinnedInt
+      variable pinnedAgain

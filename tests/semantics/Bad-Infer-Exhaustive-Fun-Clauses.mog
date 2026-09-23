@@ -1,0 +1,3 @@
+data Three = A | B | C
+f A = 1
+f B = 2

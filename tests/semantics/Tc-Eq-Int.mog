@@ -1,0 +1,5 @@
+eqInt :: Int -> Int -> Bool
+eqInt x y = x == y
+
+neInt :: Int -> Int -> Bool
+neInt x y = x /= y

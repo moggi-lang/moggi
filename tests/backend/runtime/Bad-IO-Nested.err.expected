@@ -1,0 +1,4 @@
+tests/backend/runtime/Bad-IO-Nested.mog:7:15: type error: nested IO actions are not supported
+
+   7 |   let outer = pure (putStrLn "inner")
+     |               ^^^^^^^^^^^^^^^^^^^^

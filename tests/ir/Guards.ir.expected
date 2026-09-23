@@ -1,0 +1,12 @@
+module
+  function clamp(x)
+      t1 = x < 0
+      t2 = x > 10
+      t0 = match 0
+        arm _ when t1
+            t0 = 0
+        arm _ when t2
+            t0 = 10
+        arm _ when intrinsic boolNot#(@False)
+            t0 = x
+      ret t0

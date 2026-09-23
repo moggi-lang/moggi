@@ -1,0 +1,10 @@
+import Data.Functor
+import Moggi.Internal.Num
+import Text.Show
+import System.IO
+
+-- Separate from Solo: Tuple3 map/Show exercises product encoding on all backends.
+main :: IO ()
+main = do
+  let t3 = (1, 2, 3)
+  putStrLn (show (map (\x -> x + 1) t3))

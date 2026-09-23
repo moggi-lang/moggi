@@ -1,0 +1,13 @@
+<?php declare(strict_types=1);
+
+namespace Tc\Semigroup\String;
+
+const __MOGGI_MAP = [[], ['Tc\\Semigroup\\String\\join2' => ['Tc.Semigroup.String.join2', 'tests/backend/codegen/Tc-Semigroup-String.mog', 6, 13], 'Tc\\Semigroup\\String\\joined' => ['Tc.Semigroup.String.joined', 'tests/backend/codegen/Tc-Semigroup-String.mog', 9, 10]]];
+
+function join2($a, $b) {
+    return ($a . $b);
+}
+
+function joined() {
+    return "foobar";
+}

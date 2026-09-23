@@ -1,0 +1,23 @@
+<?php declare(strict_types=1);
+
+namespace Tc\IO\ForeignEscaped;
+
+const __MOGGI_MAP = [[12 => ['Tc.IO.ForeignEscaped.isFileP', 'tests/backend/runtime/Tc-IO-ForeignEscaped.mog', 7, 13], 13 => ['Tc.IO.ForeignEscaped.isFileP', 'tests/backend/runtime/Tc-IO-ForeignEscaped.mog', 7, 13], 20 => ['Tc.IO.ForeignEscaped.main', 'tests/backend/runtime/Tc-IO-ForeignEscaped.mog', 11, 15], 21 => ['Tc.IO.ForeignEscaped.main', 'tests/backend/runtime/Tc-IO-ForeignEscaped.mog', 11, 15], 22 => ['Tc.IO.ForeignEscaped.main', 'tests/backend/runtime/Tc-IO-ForeignEscaped.mog', 13, 3]], ['Tc\\IO\\ForeignEscaped\\isFileP' => ['Tc.IO.ForeignEscaped.isFileP', 'tests/backend/runtime/Tc-IO-ForeignEscaped.mog', 7, 13], 'Tc\\IO\\ForeignEscaped\\main' => ['Tc.IO.ForeignEscaped.main', 'tests/backend/runtime/Tc-IO-ForeignEscaped.mog', 10, 8]]];
+
+require_once __DIR__ . '/../../../lib/System/Filesystem/PHP.php';
+
+use function System\Filesystem\PHP\isFile;
+
+function isFileP($p) {
+    $__t1 = ['__io', static function() use ($p): mixed {
+        $__t0 = isFile($p);
+        return (\is_array($__t0) && ($__t0[0] ?? null) === '__io' ? ($__t0[1])() : $__t0);
+    }];
+    return $__t1;
+}
+
+function main() {
+    $__t3 = isFileP("/tmp/moggi-tc-io-foreign.txt");
+    $__t2 = (\is_array($__t3) && ($__t3[0] ?? null) === '__io' ? ($__t3[1])() : $__t3);
+    return null;
+}

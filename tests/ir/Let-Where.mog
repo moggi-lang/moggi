@@ -1,0 +1,10 @@
+module Ir.LetWhere where
+
+-- `let` locals become temporary registers; `where` bindings are lifted to
+-- top-level functions.
+scale :: Int -> Int
+scale x = let y = x + 1 in y * 2
+
+helper :: Int -> Int
+helper x = double x
+  where double y = y + y

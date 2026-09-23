@@ -1,0 +1,46 @@
+-- Nat kind + numeric type literals (DataKinds).
+data FixedBytes (n :: Nat) = FixedBytes
+
+zero :: FixedBytes 0
+zero = FixedBytes
+
+one :: FixedBytes 1
+one = FixedBytes
+
+kilo :: FixedBytes 1024
+kilo = FixedBytes
+
+-- Leading zeros canonicalize (01 ≡ 1).
+onePadded :: FixedBytes 01
+onePadded = FixedBytes
+
+-- Multiple Nat parameters.
+data Matrix (rows :: Nat) (cols :: Nat) = Matrix
+
+m34 :: Matrix 3 4
+m34 = Matrix
+
+-- Identical numeric literals unify.
+same :: FixedBytes 1024 -> FixedBytes 1024
+same x = x
+
+-- Leading-zero form unifies with canonical.
+samePadded :: FixedBytes 01 -> FixedBytes 1
+samePadded x = x
+
+-- Polymorphic over Nat.
+forgetSize :: FixedBytes n -> String
+forgetSize FixedBytes = "any"
+
+useZero :: String
+useZero = forgetSize zero
+
+useKilo :: String
+useKilo = forgetSize kilo
+
+-- Large literal (beyond 64-bit int range).
+huge :: FixedBytes 18446744073709551616
+huge = FixedBytes
+
+useHuge :: String
+useHuge = forgetSize huge

@@ -1,0 +1,35 @@
+arithmetic overflow
+divide by zero
+acquire
+use-ok
+release
+acquire
+use-fail
+release
+use-boom
+acquire-fail
+no-res
+caught: MyException
+show: MyException
+from-error
+action-ok
+cleanup-ok
+result
+action-fail
+cleanup-ok
+fail
+action-ok
+cleanup-fail
+cleanup-boom
+host-boom
+host-boom
+error-boom
+host-boom
+host-failure
+io-error
+does not exist
+missing
+not-io
+boom
+ok
+recovered-ok

@@ -1,0 +1,59 @@
+import Data.Eq
+import Data.Ord
+import Text.Show
+
+-- IEEE 754 semantics and `Show`: NaN, infinities, negative zero, and the
+-- shortest round-trip decimal form, all identical on every backend.
+
+half :: Double -> Double
+half x = x / (1.0 + 1.0)
+
+zero :: Double
+zero = half 0.0
+
+one :: Double
+one = half 2.0
+
+nan :: Double
+nan = zero / zero
+
+inf :: Double
+inf = one / zero
+
+negInf :: Double
+negInf = negate one / zero
+
+report :: String -> Bool -> IO ()
+report label b = putStrLn (label <> ": " <> show b)
+
+main :: IO ()
+main = do
+  report "nan==nan" (nan == nan)
+  report "nan/=nan" (nan /= nan)
+  report "0.0==-0.0" (zero == negate zero)
+  report "cmp nan 1" (compare nan one == GT)
+  report "cmp nan nan" (compare nan nan == GT)
+  report "cmp -0.0 0.0" (compare (negate zero) zero == EQ)
+  report "nan<1" (nan < one)
+  report "nan>1" (nan > one)
+  report "nan<=nan" (nan <= nan)
+  report "inf==1/0" (inf == one / zero)
+  report "inf+1==inf" (inf + one == inf)
+  report "inf-inf is nan" (inf - inf /= inf - inf)
+  report "recip 0 == inf" (recip zero == inf)
+  report "signum -0.0 neg" (one / signum (negate zero) == negInf)
+  report "signum 0.0 pos" (one / signum zero == inf)
+  putStrLn (show (8.0 :: Double))
+  putStrLn (show (0.1 :: Double))
+  putStrLn (show (1.0e10 :: Double))
+  putStrLn (show (100.0 :: Double))
+  putStrLn (show (0.0001 :: Double))
+  putStrLn (show (123456789.0 :: Double))
+  putStrLn (show (1.0e-10 :: Double))
+  putStrLn (show (0.0 :: Double))
+  putStrLn (show inf)
+  putStrLn (show nan)
+  putStrLn (show (negate zero))
+  putStrLn (show (0.1 + 0.2 :: Double))
+  putStrLn (show (3.141592653589793 :: Double))
+  putStrLn (show (negate 1.0e10 :: Double))

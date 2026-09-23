@@ -1,0 +1,88 @@
+program
+  newtype Inner
+    constructor Inner
+      field  :: Int
+    deriving (Eq)
+  function __ev_Eq_Inner_eq :: Inner -> Inner -> Bool
+    pat_var __l
+    pat_var __r
+    case
+      variable __l
+      alt
+        pat_con Inner
+          pat_var __a0
+        case
+          variable __r
+          alt
+            pat_con Inner
+              pat_var __b0
+            apply
+              apply
+                evidence_method Eq.== evidence= nullary=0
+                  instance Int
+                variable __a0
+              variable __b0
+          alt
+            pat_wild _
+            constructor_ref False
+  function __ev_Eq_Inner_ne :: Inner -> Inner -> Bool
+    pat_var __l
+    pat_var __r
+    case
+      case
+        variable __l
+        alt
+          pat_con Inner
+            pat_var __a0
+          case
+            variable __r
+            alt
+              pat_con Inner
+                pat_var __b0
+              apply
+                apply
+                  evidence_method Eq.== evidence= nullary=0
+                    instance Int
+                  variable __a0
+                variable __b0
+            alt
+              pat_wild _
+              constructor_ref False
+      alt
+        pat_con True
+        constructor_ref False
+      alt
+        pat_con False
+        constructor_ref True
+  newtype Outer
+    constructor Outer
+      field  :: Inner
+    deriving (via (Int) Eq)
+  function __ev_Eq_Outer_eq :: __Dict_Eq -> Outer -> Outer -> Bool
+    pat_var __ev_Eq
+    pat_con Outer
+      pat_con Inner
+        pat_var __v0
+    pat_con Outer
+      pat_con Inner
+        pat_var __v1
+    apply
+      apply
+        evidence_method Eq.== evidence= nullary=0
+          instance Int
+        variable __v0
+      variable __v1
+  function __ev_Eq_Outer_ne :: __Dict_Eq -> Outer -> Outer -> Bool
+    pat_var __ev_Eq
+    pat_con Outer
+      pat_con Inner
+        pat_var __v0
+    pat_con Outer
+      pat_con Inner
+        pat_var __v1
+    apply
+      apply
+        evidence_method Eq./= evidence= nullary=0
+          instance Int
+        variable __v0
+      variable __v1

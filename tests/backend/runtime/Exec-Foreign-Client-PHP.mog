@@ -1,0 +1,20 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- Succeed: opaque Composer-style host object as foreign type (not PHPValue).
+module Main where
+
+import Control.Monad
+import Data.String
+import System.IO
+
+foreign php type Client "stdClass"
+foreign php type DateTime "DateTime"
+
+foreign php function newClient "stdClass:__con" :: Client
+foreign php function clientClass "get_class" :: Client -> String
+foreign php function dateOf "DateTime::createFromFormat" :: String -> String -> DateTime
+foreign php function showDate "DateTime.format" :: DateTime -> String -> String
+
+main :: IO ()
+main = do
+  putStrLn (clientClass newClient)
+  putStrLn (showDate (dateOf "Y-m-d" "2026-09-21") "d/m/Y")

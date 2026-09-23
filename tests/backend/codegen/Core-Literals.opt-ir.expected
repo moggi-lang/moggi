@@ -1,0 +1,9 @@
+module
+  function unitVal()
+      ret call __tuple0()
+  function pair()
+      ret call __tuple2(1, 2)
+  function items()
+      ret [1, 2, 3]
+  function +(x, y)
+      ret intrinsic intAdd#(x, y)

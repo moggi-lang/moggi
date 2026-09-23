@@ -1,0 +1,4 @@
+tests/semantics/Bad-Infer-Lambda-List-Pattern.mog:5:6: type error: lambda parameters must be variables
+
+  5 | f = \[] -> 0
+    |      ^

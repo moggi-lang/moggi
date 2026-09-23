@@ -1,0 +1,16 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.Time.Clock.PHP
+  ( currentTimeSeconds
+  , getMonotonicNanos
+  ) where
+
+import Data.Bool
+
+foreign php function rawTime "time" :: IO Int
+foreign php function rawHrtime "hrtime" :: Bool -> IO Int
+
+currentTimeSeconds :: IO Int
+currentTimeSeconds = rawTime
+
+getMonotonicNanos :: IO Int
+getMonotonicNanos = rawHrtime True

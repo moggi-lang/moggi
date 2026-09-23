@@ -1,0 +1,29 @@
+program
+  newtype MyInt
+    constructor MyInt
+      field  :: Int
+    deriving (via (Int) Eq)
+  function == :: __Dict_Eq -> MyInt -> MyInt -> Bool
+    pat_var __ev_Eq
+    pat_con MyInt
+      pat_var __v0
+    pat_con MyInt
+      pat_var __v1
+    apply
+      apply
+        evidence_method Eq.== evidence= nullary=0
+          instance Int
+        variable __v0
+      variable __v1
+  function /= :: __Dict_Eq -> MyInt -> MyInt -> Bool
+    pat_var __ev_Eq
+    pat_con MyInt
+      pat_var __v0
+    pat_con MyInt
+      pat_var __v1
+    apply
+      apply
+        evidence_method Eq./= evidence= nullary=0
+          instance Int
+        variable __v0
+      variable __v1

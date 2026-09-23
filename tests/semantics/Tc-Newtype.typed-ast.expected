@@ -1,0 +1,24 @@
+program
+  newtype Age
+    constructor Age
+      field  :: Int
+  newtype Wrap a
+    constructor MkWrap
+      field  :: a
+  function incAge :: Age -> Age
+    pat_con Age
+      pat_var n
+    apply
+      constructor_ref Age
+      infix +
+        variable n
+        integer 1
+  function unwrap :: Wrap Int -> Int
+    pat_con MkWrap
+      pat_var x
+    variable x
+  function wrap :: Int -> Wrap Int
+    pat_var x
+    apply
+      constructor_ref MkWrap
+      variable x

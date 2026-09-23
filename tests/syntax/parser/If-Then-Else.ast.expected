@@ -1,0 +1,61 @@
+program
+  function pick
+    pat_var b
+    case
+      variable b
+      alt
+        pat_con True
+        integer 1
+      alt
+        pat_con False
+        integer 0
+  function branches
+    pat_var n
+    case
+      infix <
+        variable n
+        integer 0
+      alt
+        pat_con True
+        string "neg"
+      alt
+        pat_con False
+        case
+          infix ==
+            variable n
+            integer 0
+          alt
+            pat_con True
+            string "zero"
+          alt
+            pat_con False
+            string "pos"
+  function nested
+    pat_var x
+    case
+      variable x
+      alt
+        pat_con True
+        case
+          variable x
+          alt
+            pat_con True
+            integer 1
+          alt
+            pat_con False
+            integer 2
+      alt
+        pat_con False
+        integer 3
+  function applied
+    pat_var x
+    apply
+      variable f
+      case
+        variable x
+        alt
+          pat_con True
+          integer 1
+        alt
+          pat_con False
+          integer 2

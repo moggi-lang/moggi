@@ -1,0 +1,3 @@
+foo = let
+  x = "hello"
+in x

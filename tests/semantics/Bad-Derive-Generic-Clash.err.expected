@@ -1,0 +1,4 @@
+tests/semantics/Bad-Derive-Generic-Clash.mog:3:30: type error: duplicate instance for `Generic Foo`
+
+  3 | data Foo = Foo Int deriving (Generic)
+    |                              ^^^^^^^

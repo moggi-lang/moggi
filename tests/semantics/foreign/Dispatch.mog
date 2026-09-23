@@ -1,0 +1,10 @@
+module Semantics.Foreign.Dispatch where
+
+foreign php type PDO "PDO"
+
+foreign php function strlen "strlen" :: String -> Int
+foreign php function pdoDrivers "PDO:getAvailableDrivers" :: IO (List String)
+foreign php function pdoPrepare "PDO.prepare" :: PDO -> String -> IO String
+foreign php function newPdo "PDO:__con" :: String -> String -> IO PDO
+foreign php const pdoAttrCase "PDO::ATTR_CASE" :: Int
+foreign php function readFile "file_get_contents" :: String -> IO (Either String String)

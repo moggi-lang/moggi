@@ -1,0 +1,185 @@
+{
+    "generated": "2026-09-21T23:38:10+00:00",
+    "assets": {
+        "php/linux-x86_64": {
+            "url": "https://www.php.net/distributions/php-8.5.7.tar.gz",
+            "format": "tar.gz",
+            "stripComponents": 0,
+            "binary": "sapi/cli/php",
+            "version": "8.5.7",
+            "sha256": "e5eba93fd6dd3241d0e61e932eb99a3783b40568553fb0e511b660ecd863a049",
+            "build": true
+        },
+        "jvm/linux-x86_64": {
+            "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jdk_x64_linux_hotspot_21.0.12.1_1.tar.gz",
+            "format": "tar.gz",
+            "stripComponents": 1,
+            "binary": "bin/java",
+            "version": "21",
+            "sha256": "ce79869e1307ed8ee1e2baa86a412b1eb5b75d10a01006d788a6f968bcfaee94"
+        },
+        "graalvm/linux-x86_64": {
+            "url": "https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-21.0.2/graalvm-community-jdk-21.0.2_linux-x64_bin.tar.gz",
+            "format": "tar.gz",
+            "stripComponents": 1,
+            "binary": "bin/native-image",
+            "version": "21.0.2",
+            "sha256": "b048069aaa3a99b84f5b957b162cc181a32a4330cbc35402766363c5be76ae48"
+        },
+        "jvm/windows-aarch64": {
+            "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jdk_aarch64_windows_hotspot_21.0.12.1_1.zip",
+            "format": "zip",
+            "stripComponents": 1,
+            "binary": "bin/java.exe",
+            "version": "21",
+            "sha256": "ccf2e51f527d542a70ba5794a600d3aac04b4e967950e227834c7566cb1bec7b"
+        },
+        "dotnet/linux-x86_64": {
+            "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.425/dotnet-sdk-8.0.425-linux-x64.tar.gz",
+            "format": "tar.gz",
+            "stripComponents": 0,
+            "binary": "dotnet",
+            "version": "8.0.425",
+            "sha512": "934b8060a7190e5909ad1fd0785db542f487b3bbf6cdd14826b02095fdd0d0394298b1634085eff302928fccc33f7c1a7253e9b87df555fc36fce819bcd2e798"
+        },
+        "php/linux-aarch64": {
+            "url": "https://www.php.net/distributions/php-8.5.7.tar.gz",
+            "format": "tar.gz",
+            "stripComponents": 0,
+            "binary": "sapi/cli/php",
+            "version": "8.5.7",
+            "sha256": "e5eba93fd6dd3241d0e61e932eb99a3783b40568553fb0e511b660ecd863a049",
+            "build": true
+        },
+        "dotnet/linux-aarch64": {
+            "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.425/dotnet-sdk-8.0.425-linux-arm64.tar.gz",
+            "format": "tar.gz",
+            "stripComponents": 0,
+            "binary": "dotnet",
+            "version": "8.0.425",
+            "sha512": "84a4d017d74d7aa842e981679d1b044e6be1f35b9b2b214021e30bc40871d016d29611cca373d8502ad5c890e3ad360ee698f9cf2d7a4d5a9fba102d88ba310f"
+        },
+        "jvm/linux-aarch64": {
+            "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jdk_aarch64_linux_hotspot_21.0.12.1_1.tar.gz",
+            "format": "tar.gz",
+            "stripComponents": 1,
+            "binary": "bin/java",
+            "version": "21",
+            "sha256": "23e37e026f12f3e706f18938ff611db3032d075b09d0879a25d06718c773e223"
+        },
+        "graalvm/linux-aarch64": {
+            "url": "https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-21.0.2/graalvm-community-jdk-21.0.2_linux-aarch64_bin.tar.gz",
+            "format": "tar.gz",
+            "stripComponents": 1,
+            "binary": "bin/native-image",
+            "version": "21.0.2",
+            "sha256": "a34be691ce68f0acf4655c7c6c63a9a49ed276a11859d7224fd94fc2f657cd7a"
+        },
+        "php/macos-x86_64": {
+            "url": "https://www.php.net/distributions/php-8.5.7.tar.gz",
+            "format": "tar.gz",
+            "stripComponents": 0,
+            "binary": "sapi/cli/php",
+            "version": "8.5.7",
+            "sha256": "e5eba93fd6dd3241d0e61e932eb99a3783b40568553fb0e511b660ecd863a049",
+            "build": true
+        },
+        "dotnet/macos-x86_64": {
+            "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.425/dotnet-sdk-8.0.425-osx-x64.tar.gz",
+            "format": "tar.gz",
+            "stripComponents": 0,
+            "binary": "dotnet",
+            "version": "8.0.425",
+            "sha512": "3b27552358905f1bde600dd0315a23051ef1cbd055a50eb64c675ee25a04e658c2ed735177125436c5bec38dfcd958fee338299611348299cd34a9bea8b8011f"
+        },
+        "jvm/macos-x86_64": {
+            "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jdk_x64_mac_hotspot_21.0.12.1_1.tar.gz",
+            "format": "tar.gz",
+            "stripComponents": 1,
+            "binary": "bin/java",
+            "version": "21",
+            "sha256": "44db0f08196daf19a47f90d13388b0c943b67663cb537f998fe29e836fa842ce"
+        },
+        "graalvm/macos-x86_64": {
+            "url": "https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-21.0.2/graalvm-community-jdk-21.0.2_macos-x64_bin.tar.gz",
+            "format": "tar.gz",
+            "stripComponents": 1,
+            "binary": "bin/native-image",
+            "version": "21.0.2",
+            "sha256": "7a8aa93fa45d1721908477abf4732a32637d420ffcb66ada9fb6456440b0d9e1"
+        },
+        "php/macos-aarch64": {
+            "url": "https://www.php.net/distributions/php-8.5.7.tar.gz",
+            "format": "tar.gz",
+            "stripComponents": 0,
+            "binary": "sapi/cli/php",
+            "version": "8.5.7",
+            "sha256": "e5eba93fd6dd3241d0e61e932eb99a3783b40568553fb0e511b660ecd863a049",
+            "build": true
+        },
+        "dotnet/macos-aarch64": {
+            "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.425/dotnet-sdk-8.0.425-osx-arm64.tar.gz",
+            "format": "tar.gz",
+            "stripComponents": 0,
+            "binary": "dotnet",
+            "version": "8.0.425",
+            "sha512": "d42156be70b489236479a415536013a89a9fd6eaca57d5716a7017612fcc65bdb459068973d7cffd6fe710f2799af8bee95b2046ba032762d47df176f5c4a7d6"
+        },
+        "jvm/macos-aarch64": {
+            "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jdk_aarch64_mac_hotspot_21.0.12.1_1.tar.gz",
+            "format": "tar.gz",
+            "stripComponents": 1,
+            "binary": "bin/java",
+            "version": "21",
+            "sha256": "3623232f33a9c3baadf304480b2535f9a3cba8a58d42ecbb438ba267315d9998"
+        },
+        "graalvm/macos-aarch64": {
+            "url": "https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-21.0.2/graalvm-community-jdk-21.0.2_macos-aarch64_bin.tar.gz",
+            "format": "tar.gz",
+            "stripComponents": 1,
+            "binary": "bin/native-image",
+            "version": "21.0.2",
+            "sha256": "515e3a93acc7e1938daba83eda4272e5495fd302d7cdd99ec7ebf408ed505ab7"
+        },
+        "dotnet/windows-aarch64": {
+            "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.425/dotnet-sdk-8.0.425-win-arm64.zip",
+            "format": "zip",
+            "stripComponents": 0,
+            "binary": "dotnet.exe",
+            "version": "8.0.425",
+            "sha512": "2a75864daac54fe8360498d0a7260e3f8d851c3d811d864d7229f00ae51eac9e534998b7c3d221fc423319b9c8147dd43fa80690c969e43b2045cc2f1f93e537"
+        },
+        "dotnet/windows-x86_64": {
+            "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.425/dotnet-sdk-8.0.425-win-x64.zip",
+            "format": "zip",
+            "stripComponents": 0,
+            "binary": "dotnet.exe",
+            "version": "8.0.425",
+            "sha512": "f0b6f15bf6f1a0507205c0cb102ab99e1dee875c4682c8ed94665be1d580186a06b21455e83b3a01a0ff7f4cd887b67420f2e2fe09ed985534a4cea488ae1af9"
+        },
+        "jvm/windows-x86_64": {
+            "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jdk_x64_windows_hotspot_21.0.12.1_1.zip",
+            "format": "zip",
+            "stripComponents": 1,
+            "binary": "bin/java.exe",
+            "version": "21",
+            "sha256": "f9d6e191ab098c0d416e7d588a24420a8621cd2f4720dab2459b8b7b2d2d8b4e"
+        },
+        "graalvm/windows-x86_64": {
+            "url": "https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-21.0.2/graalvm-community-jdk-21.0.2_windows-x64_bin.zip",
+            "format": "zip",
+            "stripComponents": 1,
+            "binary": "bin/native-image.cmd",
+            "version": "21.0.2",
+            "sha256": "e17b7bead097bf372a5c75df17815b0a2f30b777a019d25eff7706b21421f7fa"
+        },
+        "php/windows-x86_64": {
+            "url": "https://downloads.php.net/~windows/releases/archives/php-8.5.7-nts-Win32-vs17-x64.zip",
+            "format": "zip",
+            "stripComponents": 0,
+            "binary": "php.exe",
+            "version": "8.5.7",
+            "sha256": "2ff43fea9a243085493b48c7c47152c0678cff0b05c61a3b4f4b43ba22de212c"
+        }
+    }
+}

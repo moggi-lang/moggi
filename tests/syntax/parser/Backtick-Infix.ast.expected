@@ -1,0 +1,13 @@
+program
+  function plus :: Int -> Int -> Int
+    pat_var a
+    pat_var b
+    infix +
+      variable a
+      variable b
+  function main :: Int
+    infix *
+      infix plus
+        integer 1
+        integer 2
+      integer 3

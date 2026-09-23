@@ -1,0 +1,5 @@
+-- A primop belongs to `Moggi.Internal.Prim`: importing a module that *uses*
+-- primops does not put them in scope.
+import Data.Int
+
+main = putStrLn (show (intAdd# 1 2))

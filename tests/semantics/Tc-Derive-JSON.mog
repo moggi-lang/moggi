@@ -1,0 +1,18 @@
+import Data.JSON
+import Data.Int
+import Moggi.Generics
+
+data Person = Person { name :: String, age :: Int }
+  deriving (Generic)
+  deriving anyclass (ToJSON, FromJSON)
+
+x :: Person
+x = Person "ada" 36
+
+y :: Value
+y = toJSON x
+
+z :: Person
+z = case parseJSON y of
+  Right p -> p
+  Left err -> Person "x" 0

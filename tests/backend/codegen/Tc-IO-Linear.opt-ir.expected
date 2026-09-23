@@ -1,0 +1,8 @@
+module
+  function emit(msg)
+      io_call renamedPrint(msg)
+      ret ()
+  function main()
+      io_call renamedPrint("hello")
+      io_call emit("wrapped")
+      ret ()

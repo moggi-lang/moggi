@@ -1,0 +1,28 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.Bifunctor
+  ( Bifunctor(bimap, first, second)
+  ) where
+
+import Data.Either
+import Data.Tuple
+
+class Bifunctor (p :: Type -> Type -> Type) where
+  bimap :: (a -> b) -> (c -> d) -> p a c -> p b d
+  first :: (a -> b) -> p a c -> p b c
+  second :: (b -> c) -> p a b -> p a c
+
+instance Bifunctor Either where
+  bimap f g mx = case mx of
+    Left e -> Left (f e)
+    Right x -> Right (g x)
+  first f mx = case mx of
+    Left e -> Left (f e)
+    Right x -> Right x
+  second g mx = case mx of
+    Left e -> Left e
+    Right x -> Right (g x)
+
+instance Bifunctor Tuple2 where
+  bimap f g (x, y) = (f x, g y)
+  first f (x, y) = (f x, y)
+  second g (x, y) = (x, g y)

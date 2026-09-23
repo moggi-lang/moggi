@@ -1,0 +1,43 @@
+module IO.Hybrid.Stress
+
+import System.IO
+import System.Filesystem hiding (readFile, writeFile, appendFile)
+import System.Filesystem.Path
+
+logMsg :: String -> IO ()
+logMsg msg = putStrLn msg
+
+emitA :: IO ()
+emitA = putStrLn "A"
+
+emitB :: IO ()
+emitB = putStrLn "B"
+
+equalBranch :: IO ()
+equalBranch = do
+  putStrLn "equal"
+  z <- readTextFile ("input.txt")
+  putStrLn z
+
+notEqualBranch :: String -> IO ()
+notEqualBranch y = do
+  putStrLn "not equal"
+  w <- readTextFile (y)
+  putStrLn w
+
+branchOn :: String -> String -> IO ()
+branchOn x y = case x == y of
+  True -> equalBranch
+  False -> notEqualBranch y
+
+main :: IO ()
+main = do
+  x <- readTextFile ("input.txt")
+  y <- readTextFile (x)
+
+  logMsg "start processing"
+
+  branchOn x y
+
+  emitA
+  emitB

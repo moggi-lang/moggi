@@ -1,0 +1,4 @@
+module Bad.Foreign.WrongBackend where
+
+foreign jvm type Path "java.nio.file.Path"
+foreign dotnet function usePath "java.nio.file.Paths:get" :: Path -> IO String

@@ -1,0 +1,21 @@
+module Tc.IO.FilesystemLinear
+
+import System.IO
+import System.Filesystem hiding (readFile, writeFile, appendFile)
+import System.Filesystem.Path
+
+bindPath :: String
+bindPath = "/tmp/moggi-tc-io-fs-linear-bind.txt"
+
+letPath :: String
+letPath = "/tmp/moggi-tc-io-fs-linear-let.txt"
+
+main :: IO ()
+main = do
+  putStrLn "bind"
+  writeTextFile (bindPath) "bind-linear"
+  readTextFile (bindPath) >>= putStrLn
+  putStrLn "let"
+  let x = readTextFile (letPath)
+  y <- x
+  putStrLn y

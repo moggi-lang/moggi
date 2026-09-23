@@ -1,0 +1,18 @@
+import Data.Int
+import Text.Show
+import System.IO
+
+-- Backend drift risk: side-effect ordering and mixing pure values into an IO block.
+step :: Int -> IO Int
+step n = do
+  putStrLn ("step " <> show n)
+  pure (n + 1)
+
+main :: IO ()
+main = do
+  putStrLn "start"
+  a <- step 1
+  b <- step a
+  putStrLn (show (a + b))
+  putStrLn ("literal " <> show 42)
+  putStrLn "end"

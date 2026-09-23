@@ -1,0 +1,5 @@
+data FixedBytes (n :: Nat) = FixedBytes
+
+-- Negatives are not inhabitants of Nat.
+bad :: FixedBytes -1 -> String
+bad FixedBytes = "no"

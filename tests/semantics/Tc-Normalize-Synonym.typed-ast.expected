@@ -1,0 +1,18 @@
+program
+  data K1 i c
+    constructor K1
+      field  :: c
+  data R
+    constructor R
+  type Rec0 = K1 R
+  type Id a = a
+  function useRec0 :: K1 R Int -> Int
+    pat_con K1
+      pat_var x
+    variable x
+  function useId :: Bool -> Bool
+    pat_var x
+    variable x
+  function idToId :: Int -> Int
+    pat_var x
+    variable x

@@ -1,0 +1,15 @@
+module
+  function listMax(__ev_Ord_1, xs)
+      match_return xs
+        arm []
+            ret 0
+        arm x : rest
+            ret call_value dict_method __ev_Ord_1->max(x, rest)
+  function maximum(xs)
+      match_return xs
+        arm []
+            ret 0
+        arm x : rest
+            ret call_value dict_method @__ev_Ord_Char->max(x, rest)
+  function apply2(f, a, b)
+      ret call_value f(a, b)

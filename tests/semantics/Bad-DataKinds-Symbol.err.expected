@@ -1,0 +1,4 @@
+tests/semantics/Bad-DataKinds-Symbol.mog:5:12: type error: could not unify `"hello"` with `"world"`
+
+  5 | coerce x = x
+    |            ^

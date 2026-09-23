@@ -1,0 +1,25 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Control.Monad.Fail
+  ( MonadFail(fail)
+  ) where
+
+import Control.Monad
+import Data.List
+import Data.Maybe
+import Moggi.Err
+import Moggi.IO.Exception (ioError, userError)
+
+class Monad m => MonadFail m where
+  fail :: String -> m a
+
+instance MonadFail Maybe where
+  fail ignored = Nothing
+
+instance MonadFail List where
+  fail ignored = []
+
+-- | A failed pattern match, or an explicit 'fail', in the 'IO' monad is an
+-- 'IOError' of type 'userErrorType': a program error rather than a native
+-- failure, caught by 'tryIOError' like any other 'IOError'.
+instance MonadFail IO where
+  fail msg = ioError (userError msg)

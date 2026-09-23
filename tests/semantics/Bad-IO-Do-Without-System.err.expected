@@ -1,0 +1,4 @@
+tests/semantics/Bad-IO-Do-Without-System.mog:7:3: type error: undefined variable `putStrLn`
+
+  7 |   putStrLn "hello"
+    |   ^^^^^^^^

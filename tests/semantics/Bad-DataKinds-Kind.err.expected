@@ -1,0 +1,4 @@
+tests/semantics/Bad-DataKinds-Kind.mog:6:21: type error: kind mismatch applying `OnlyColor`: expected `Color`, got `Bool`
+
+  6 | badUse :: OnlyColor 'True -> String
+    |                     ^^^^

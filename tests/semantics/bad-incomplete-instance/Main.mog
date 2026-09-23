@@ -1,0 +1,15 @@
+module Main where
+
+data Flag = Off | On
+
+class Equal a where
+  (==), (/=) :: a -> a -> Flag
+
+instance Equal Flag where
+  (==) a b = Off
+  (/=) a b = On
+
+data Two = A | B
+
+instance Equal Two where
+  (==) a b = Off

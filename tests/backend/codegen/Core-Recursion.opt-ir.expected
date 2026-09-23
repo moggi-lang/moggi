@@ -1,0 +1,21 @@
+module
+  function sign(x)
+      match_return x
+        arm 0
+            ret 0
+        arm _
+            ret 1
+  function fact(n, acc)
+      loop
+          match_return n
+            arm 0
+                ret acc
+            arm _
+                tail_recall(intrinsic intSub#(n, 1), intrinsic intMul#(n, acc))
+  function countdown(n)
+      loop
+          match_return n
+            arm 0
+                ret 0
+            arm _
+                tail_recall(intrinsic intSub#(n, 1))

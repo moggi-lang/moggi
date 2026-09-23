@@ -1,0 +1,4 @@
+{-# BACKEND php Data.Char.PHP #-}
+module Test.Facade ( f ) where
+
+f :: Int

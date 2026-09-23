@@ -1,0 +1,4 @@
+tests/semantics/Bad-Intrinsic-Not-Imported.mog:5:24: type error: undefined variable `intAdd#`
+
+  5 | main = putStrLn (show (intAdd# 1 2))
+    |                        ^^^^^^^

@@ -1,0 +1,5 @@
+data Label (s :: Symbol) = Label
+
+-- Distinct Symbol literals must not unify.
+coerce :: Label "hello" -> Label "world"
+coerce x = x

@@ -1,0 +1,3 @@
+module
+  function zero(x)
+      ret intrinsic intSub#(x, x)

@@ -1,0 +1,23 @@
+module Parser.Fun.Clauses.CtorPatterns
+
+-- Function-clause arguments are atomic patterns (`apat`): a nullary
+-- constructor is one argument even when more arguments follow, and a
+-- constructor with arguments must be parenthesised.
+
+applyWhen :: Bool -> (a -> b) -> a -> b
+applyWhen True  f x = f x
+applyWhen False _ x = x
+
+fromMaybe :: a -> Maybe a -> a
+fromMaybe d Nothing  = d
+fromMaybe _ (Just x) = x
+
+isNil :: [a] -> Bool
+isNil []      = True
+isNil (_ : _) = False
+
+pick :: Pair -> String
+pick (Pair x _) = x
+
+nameOf :: User -> String
+nameOf User { name = n } = n

@@ -1,0 +1,3 @@
+module Bad.Foreign.EmptyHostType where
+
+foreign jvm type Path ""

@@ -1,0 +1,18 @@
+module Tc.Fixity
+
+import Data.Eq
+import Moggi.Internal.Num
+import Data.Int
+import Data.List
+
+eqAdd :: Bool
+eqAdd = 1 == 2 + 3
+
+addEq :: Bool
+addEq = 1 + 2 == 3
+
+cons :: [Int]
+cons = 1 : 2 : 3 : []
+
+append :: [Int]
+append = [1, 2] <> [3, 4]

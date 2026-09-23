@@ -1,0 +1,9 @@
+module Bad.IO.Nested
+
+import System.IO
+
+main :: IO ()
+main = do
+  let outer = pure (putStrLn "inner")
+  inner <- outer
+  inner

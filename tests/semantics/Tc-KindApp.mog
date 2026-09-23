@@ -1,0 +1,39 @@
+-- Phase 1: kind application engine stress (nested apps, HKT vars, promoted args).
+
+-- Inferred higher-kinded data param from field use `f a`
+data Compose f a = Compose (f a)
+
+-- Explicit multi-param higher-kinded shape (Generics-style M1 saturation)
+data M1 (i :: Type) (c :: Type) (f :: Type -> Type) (p :: Type) = M1 (f p)
+
+nested :: Maybe (Either Int Bool) -> Int
+nested m = case m of
+  Nothing -> 0
+  Just e -> case e of
+    Left n -> n
+    Right _ -> 1
+
+-- Higher-kinded data use
+fromCompose :: Compose Maybe Int -> Maybe Int
+fromCompose (Compose x) = x
+
+fromM1 :: M1 Int Bool Maybe Int -> Maybe Int
+fromM1 (M1 x) = x
+
+-- Free higher-kinded type variable in a signature (kinds invented via apps)
+idF :: f a -> f a
+idF x = x
+
+useIdF :: Maybe Int -> Maybe Int
+useIdF x = idF x
+
+-- Promoted args still kind-check under nested apps
+data Color = Red | Blue
+data OnlyColor (c :: Color) = OnlyColor
+data PairColor (a :: Color) (b :: Color) = PairColor
+
+rb :: PairColor 'Red 'Blue
+rb = PairColor
+
+okColor :: OnlyColor 'Red -> String
+okColor OnlyColor = "ok"

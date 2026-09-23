@@ -1,0 +1,4 @@
+tests/semantics/Bad-Derive-Enum-Fields.mog:3:36: type error: cannot derive Enum: constructor `Pair` has fields (only nullary constructors are allowed)
+
+  3 | data Pair a b = Pair a b deriving (Enum)
+    |                                    ^^^^

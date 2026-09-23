@@ -1,0 +1,301 @@
+module System.Filesystem.PHP
+  ( readFile
+  , readTextFile
+  , writeFile
+  , writeTextFile
+  , appendFile
+  , appendTextFile
+  , isFile
+  , getModified
+  , getSize
+  , copyFile
+  , copyFileContent
+  , copyPermissions
+  , removeFile
+  , isDirectory
+  , canonicalizePath
+  , listDirectory
+  , createDirectory
+  , createTree
+  , removeDirectory
+  , removeTree
+  , getWorkingDirectory
+  , setWorkingDirectory
+  , rename
+  ) where
+
+import Control.Applicative hiding (empty)
+import Control.Exception (throwIO)
+import Control.Monad
+import System.IO.Base (IO)
+import Data.ByteString (ByteString)
+import Data.Bool
+import Data.Int
+import Data.Semigroup
+import Data.String hiding (pack, unpack, length, take, drop, isPrefixOf, isSuffixOf)
+import Data.Time.Clock
+import Moggi.IO.Exception
+import Platform.PHP
+import System.Filesystem.Path
+
+foreign php function readFileBytes "file_get_contents" :: String -> IO ByteString
+
+foreign php function readTextFileBytes "file_get_contents" :: String -> IO String
+
+foreign php function writeFileBytes "file_put_contents" :: String -> ByteString -> IO ()
+
+foreign php function writeTextFileBytes "file_put_contents" :: String -> String -> IO ()
+
+foreign php const fileAppend "PHP:FILE_APPEND" :: Int
+
+foreign php function putBytesFlags "file_put_contents" :: String -> ByteString -> Int -> IO ()
+
+foreign php function putTextFlags "file_put_contents" :: String -> String -> Int -> IO ()
+
+foreign php function rawIsFile "is_file" :: String -> IO Bool
+
+foreign php function rawIsDir "is_dir" :: String -> IO Bool
+
+foreign php function rawFileExists "file_exists" :: String -> IO Bool
+
+foreign php function rawFilemtime "filemtime" :: String -> IO Int
+
+foreign php function rawFilesize "filesize" :: String -> IO Int
+
+foreign php function rawCopy "copy" :: String -> String -> IO Bool
+
+foreign php function rawUnlink "unlink" :: String -> IO Bool
+
+foreign php function rawRename "rename" :: String -> String -> IO Bool
+
+foreign php function rawRealpath "realpath" :: String -> IO String
+
+foreign php function rawScandir "scandir" :: String -> IO [String]
+
+foreign php function rawMkdir "mkdir" :: String -> IO Bool
+
+foreign php function rawRmdir "rmdir" :: String -> IO Bool
+
+foreign php function rawGetcwd "getcwd" :: IO String
+
+foreign php function rawChdir "chdir" :: String -> IO Bool
+
+foreign php function rawDirname "dirname" :: String -> String
+
+foreign php function rawChmod "chmod" :: String -> Int -> IO Bool
+
+foreign php function rawFileperms "fileperms" :: String -> IO Int
+
+foreign php function rawErrorClearLast "error_clear_last" :: IO ()
+
+foreign php function rawErrorGetLast "error_get_last" :: IO PHPValue
+
+-- | PHP reports a failed host call through a diagnostic rather than a return
+-- value, so the call is bracketed and the diagnostic becomes the host failure it
+-- stands for, message and all. Nothing is decided about the failure here — that
+-- belongs to `System.IO`.
+checked :: String -> String -> IO a -> IO a
+checked call pathStr action = do
+  rawErrorClearLast
+  result <- action
+  hostFailureIfAny call pathStr
+  pure result
+
+hostFailureIfAny :: String -> String -> IO ()
+hostFailureIfAny call pathStr = do
+  lastError <- rawErrorGetLast
+  case lastError of
+    PhpNull -> pure ()
+    PhpObject entries -> throwIO (HostException "php" call (hostMessage pathStr entries))
+    _ -> throwIO (HostException "php" call pathStr)
+
+hostMessage :: String -> PHPObject -> String
+hostMessage pathStr entries =
+  describeLastError (lookupStringPHPValue "message" entries) pathStr
+
+describeLastError :: Maybe PHPValue -> String -> String
+describeLastError lastError pathStr = case lastError of
+  Just (PhpString msg) -> msg
+  _ -> pathStr <> ": host call failed"
+
+readFile :: FilePath -> IO ByteString
+readFile p = checked "file_get_contents" (p) (readFileBytes (p))
+
+readTextFile :: FilePath -> IO String
+readTextFile p = checked "file_get_contents" (p) (readTextFileBytes (p))
+
+writeFile :: FilePath -> ByteString -> IO ()
+writeFile p content =
+  checked "file_put_contents" (p) (writeFileBytes (p) content)
+
+writeTextFile :: FilePath -> String -> IO ()
+writeTextFile p content =
+  checked "file_put_contents" (p) (writeTextFileBytes (p) content)
+
+appendFile :: FilePath -> ByteString -> IO ()
+appendFile p content =
+  checked "file_put_contents" (p) (putBytesFlags (p) content fileAppend)
+
+appendTextFile :: FilePath -> String -> IO ()
+appendTextFile p content =
+  checked "file_put_contents" (p) (putTextFlags (p) content fileAppend)
+
+isFile :: FilePath -> IO Bool
+isFile p = rawIsFile (p)
+
+getModified :: FilePath -> IO UTCTime
+getModified p = do
+  secs <- rawFilemtime (p)
+  pure (utcTimeFromUnix secs)
+
+getSize :: FilePath -> IO Int
+getSize p = rawFilesize (p)
+
+copyFile :: FilePath -> FilePath -> IO ()
+copyFile src dst = do
+  _ <- rawCopy (src) (dst)
+  pure ()
+
+copyFileContent :: FilePath -> FilePath -> IO ()
+copyFileContent src dst = do
+  content <- readFile src
+  writeFile dst content
+  pure ()
+
+copyPermissions :: FilePath -> FilePath -> IO ()
+copyPermissions src dst = do
+  perms <- rawFileperms (src)
+  _ <- rawChmod (dst) perms
+  pure ()
+
+removeFile :: FilePath -> IO ()
+removeFile p = do
+  _ <- rawUnlink (p)
+  pure ()
+
+isDirectory :: FilePath -> IO Bool
+isDirectory p = rawIsDir (p)
+
+canonicalizePath :: FilePath -> IO FilePath
+canonicalizePath p = do
+  resolved <- rawRealpath (p)
+  pure resolved
+
+filterScandir [] = []
+filterScandir ("." : rest) = filterScandir rest
+filterScandir (".." : rest) = filterScandir rest
+filterScandir (x : rest) = x : filterScandir rest
+
+mapPaths [] = []
+mapPaths (x : rest) = x : mapPaths rest
+
+listDirectory :: FilePath -> IO [FilePath]
+listDirectory p = do
+  names <- rawScandir (p)
+  pure (mapPaths (filterScandir names))
+
+mkdirUnlessExists :: Bool -> String -> IO ()
+mkdirUnlessExists exists dirPath = case exists of
+  True -> pure ()
+  False -> mkdirFresh dirPath
+
+mkdirFresh :: String -> IO ()
+mkdirFresh dirPath = do
+  _ <- rawMkdir dirPath
+  pure ()
+
+createDirectoryAllow :: String -> IO ()
+createDirectoryAllow dirPath = do
+  exists <- rawIsDir dirPath
+  mkdirUnlessExists exists dirPath
+
+createDirectoryFresh :: String -> IO ()
+createDirectoryFresh dirPath = do
+  _ <- rawMkdir dirPath
+  pure ()
+
+createDirectory :: Bool -> FilePath -> IO ()
+createDirectory existOk p = case existOk of
+  True -> createDirectoryAllow (p)
+  False -> createDirectoryFresh (p)
+
+createTreePath :: String -> IO ()
+createTreePath "" = pure ()
+createTreePath dirPath = do
+  exists <- rawIsDir dirPath
+  createTreePathUnlessExists exists dirPath
+
+createTreePathUnlessExists :: Bool -> String -> IO ()
+createTreePathUnlessExists exists dirPath = case exists of
+  True -> pure ()
+  False -> createTreePathMissing dirPath
+
+createTreePathMissing :: String -> IO ()
+createTreePathMissing dirPath = do
+  _ <- createTreePath (rawDirname dirPath)
+  _ <- rawMkdir dirPath
+  pure ()
+
+createTree :: FilePath -> IO ()
+createTree p = createTreePath (p)
+
+removeTreePath :: String -> IO ()
+removeTreePath target = do
+  exists <- rawFileExists target
+  removeTreePathWhenExists exists target
+
+removeTreePathWhenExists :: Bool -> String -> IO ()
+removeTreePathWhenExists exists target = case exists of
+  False -> pure ()
+  True -> removeTreePathPresent target
+
+removeTreePathPresent :: String -> IO ()
+removeTreePathPresent target = do
+  isDir <- rawIsDir target
+  removeTreePathEntry isDir target
+
+removeTreePathEntry :: Bool -> String -> IO ()
+removeTreePathEntry isDir target = case isDir of
+  False -> removeTreePathEntryFile target
+  True -> removeTreePathEntryDir target
+
+removeTreePathEntryFile :: String -> IO ()
+removeTreePathEntryFile target = do
+  _ <- rawUnlink target
+  pure ()
+
+removeTreePathEntryDir :: String -> IO ()
+removeTreePathEntryDir target = do
+  entries <- rawScandir target
+  removeTreeEntries target (filterScandir entries)
+  _ <- rawRmdir target
+  pure ()
+
+removeTreeEntries :: String -> [String] -> IO ()
+removeTreeEntries _ [] = pure ()
+removeTreeEntries target (entry : rest) = do
+  _ <- removeTreePath (target <> "/" <> entry)
+  removeTreeEntries target rest
+
+removeTree :: FilePath -> IO ()
+removeTree p = removeTreePath (p)
+
+removeDirectory :: FilePath -> IO ()
+removeDirectory p = do
+  _ <- rawRmdir (p)
+  pure ()
+
+getWorkingDirectory :: IO FilePath
+getWorkingDirectory = do
+  cwd <- rawGetcwd
+  pure cwd
+
+setWorkingDirectory :: FilePath -> IO ()
+setWorkingDirectory p = do
+  _ <- rawChdir (p)
+  pure ()
+
+rename :: FilePath -> FilePath -> IO ()
+rename src dst = do
+  _ <- rawRename (src) (dst)
+  pure ()

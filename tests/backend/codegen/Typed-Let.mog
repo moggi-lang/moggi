@@ -1,0 +1,25 @@
+useInt :: Int -> Int
+useInt x = let y = 1 :: Int in x + y
+
+useDouble :: Double
+useDouble = let y = 1.0 :: Double in y
+
+useMaybe :: Maybe String
+useMaybe = let xs = Just "hello" :: Maybe String in xs
+
+fromMaybe :: String -> Maybe String -> String
+fromMaybe d m = case m of
+  Just s -> s
+  Nothing -> d
+
+useFromMaybe :: String
+useFromMaybe = let m = Just "ok" :: Maybe String in fromMaybe "default" m
+
+nested :: Int -> Int
+nested x = let y = let z = 2 :: Int in z + 1 :: Int in x + y
+
+useString :: String
+useString = let s = "hi" :: String in s
+
+ascribedCall :: Int -> Int
+ascribedCall x = (x + 1) :: Int

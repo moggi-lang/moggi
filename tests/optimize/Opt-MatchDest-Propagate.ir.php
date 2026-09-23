@@ -1,0 +1,8 @@
+<?php declare(strict_types=1);
+
+// Regression: propagateCopies must keep Assigns to MatchStmt dest. Arm-local
+// use counts look like zero (uses live after the match), so dropping those
+// Assigns left empty arms and undefined match results (JSON omitNothingPairs).
+return json_decode(<<<'JSON'
+{"tag":"module","functions":[{"tag":"function","name":"pick","params":["flag","m"],"type":{"tag":"type_arrow","from":{"tag":"type_con","name":"Bool"},"to":{"tag":"type_arrow","from":{"tag":"type_app","con":{"tag":"type_con","name":"Maybe"},"args":[{"tag":"type_con","name":"Int"}]},"to":{"tag":"type_app","con":{"tag":"type_con","name":"List"},"args":[{"tag":"type_con","name":"Int"}]}}},"body":{"tag":"block","items":[{"tag":"match","scrutinee":{"tag":"local","name":"m"},"dest":10,"exhaustive":true,"arms":[{"tag":"arm","pattern":{"tag":"pat_con","name":"Nothing","args":[]},"body":{"tag":"block","items":[{"tag":"assign","dest":10,"value":{"tag":"list_lit","elements":[]}}]}},{"tag":"arm","pattern":{"tag":"pat_con","name":"Just","args":[{"tag":"pat_var","name":"x"}]},"body":{"tag":"block","items":[{"tag":"assign","dest":10,"value":{"tag":"list_lit","elements":[{"tag":"local","name":"x"}]}}]}}]},{"tag":"match_return","scrutinee":{"tag":"local","name":"flag"},"exhaustive":true,"arms":[{"tag":"arm","pattern":{"tag":"pat_con","name":"True","args":[]},"body":{"tag":"block","items":[{"tag":"ret","value":{"tag":"temp","id":10}}]}},{"tag":"arm","pattern":{"tag":"pat_con","name":"False","args":[]},"body":{"tag":"block","items":[{"tag":"ret","value":{"tag":"list_lit","elements":[]}}]}}]}]},"export":false,"instanceMethod":false,"entryPoint":false}],"data":[],"instanceEvidence":[],"entryMain":null}
+JSON, true, flags: JSON_THROW_ON_ERROR);

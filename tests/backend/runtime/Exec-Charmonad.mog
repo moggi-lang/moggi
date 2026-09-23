@@ -1,0 +1,71 @@
+import Control.Applicative
+import Control.Monad
+import Data.Char
+import Data.Either
+import Data.Functor
+import Data.Int
+import Data.List hiding (unzip)
+import Text.Show
+import System.IO
+
+addI :: Int -> Int -> Int
+addI a b = a + b
+
+addOne :: Int -> Int
+addOne x = x + 1
+
+timesTwo :: Int -> Int
+timesTwo x = x * 2
+
+charDemo :: [Int]
+charDemo =
+  [ ord (toUpper 'a')
+  , ord (toLower 'Z')
+  , digitToInt 'f'
+  , digitToInt '7'
+  , ord (chr 66)
+  ]
+
+sampleEithers :: [Either Int Int]
+sampleEithers = [Left 1, Right 2, Left 3, Right 4]
+
+leftsDemo :: [Int]
+leftsDemo = lefts sampleEithers
+
+rightsDemo :: [Int]
+rightsDemo = rights sampleEithers
+
+joinDemo :: [Int]
+joinDemo = join [[1, 2], [3]]
+
+bindLeftDemo :: [Int]
+bindLeftDemo = (\x -> [x, x * 10]) =<< [1, 2]
+
+apList :: Applicative f => f (a -> b) -> f a -> f b
+apList fs xs = fs <*> xs
+
+liftA2Demo :: [Int]
+liftA2Demo = apList (map addI [1, 2]) [10, 20]
+
+apDemo :: [Int]
+apDemo = apList [addOne, timesTwo] [10, 20]
+
+kleisliF :: Int -> [Int]
+kleisliF x = [x, x + 1]
+
+kleisliG :: Int -> [Int]
+kleisliG y = [y * 10]
+
+kleisliDemo :: [Int]
+kleisliDemo = (kleisliF >=> kleisliG) 1
+
+main :: IO ()
+main = do
+  putStrLn (show (charDemo == [65, 122, 15, 7, 66]))
+  putStrLn (show (leftsDemo == [1, 3]))
+  putStrLn (show (rightsDemo == [2, 4]))
+  putStrLn (show (joinDemo == [1, 2, 3]))
+  putStrLn (show (bindLeftDemo == [1, 10, 2, 20]))
+  putStrLn (show (liftA2Demo == [11, 21, 12, 22]))
+  putStrLn (show (apDemo == [11, 21, 20, 40]))
+  putStrLn (show (kleisliDemo == [10, 20]))

@@ -1,0 +1,4 @@
+tests/semantics/Bad-KindApp-Overapply.mog:2:8: type error: type constructor `List` applied to too many arguments
+
+  2 | bad :: List Int Bool -> Int
+    |        ^^^^

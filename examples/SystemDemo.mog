@@ -1,0 +1,47 @@
+module Main where
+
+import System.Filesystem
+import System.Filesystem.Path
+
+demoPath :: String
+demoPath = "/tmp/moggi-system-demo.txt"
+
+firstLine :: [String] -> String
+firstLine ls = case ls of
+  [] -> ""
+  x : _ -> x
+
+countLines :: [String] -> Int
+countLines xs = case xs of
+  [] -> 0
+  _ : rest -> 1 + countLines rest
+
+showReport :: String -> String -> IO ()
+showReport path content = do
+  putStrLn ("file: " <> path)
+  putStrLn ("preview: " <> firstLine (lines content))
+  putStrLn ("lines: " <> describeLineCount (countLines (lines content)))
+
+describeLineCount :: Int -> String
+describeLineCount n = case n of
+  0 -> "none"
+  1 -> "one"
+  2 -> "two"
+  3 -> "three"
+  4 -> "four"
+  5 -> "five"
+  6 -> "six"
+  _ -> "many"
+
+seedFile :: IO ()
+seedFile = do
+  writeTextFile (demoPath) (unlines ["alpha", "beta", "gamma"])
+  appendTextFile (demoPath) (unlines ["delta"])
+
+main :: IO ()
+main = do
+  seedFile
+  content <- readTextFile (demoPath)
+  putStrLn "=== file report ==="
+  showReport demoPath content
+  putStrLn "done"

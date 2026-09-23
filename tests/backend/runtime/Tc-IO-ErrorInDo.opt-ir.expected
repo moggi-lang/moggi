@@ -1,0 +1,8 @@
+module
+  function abort()
+      io_call putStrLn("before")
+      io_call error("boom")
+      ret ()
+  function main()
+      io_call abort()
+      ret ()

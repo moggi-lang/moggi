@@ -1,0 +1,7 @@
+module Test.Foreign.Export
+  ( Path
+  , getPath
+  ) where
+
+foreign php type Path "SplFileInfo"
+foreign php function getPath "SplFileInfo:__con" :: String -> IO Path

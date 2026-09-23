@@ -1,0 +1,4 @@
+tests/semantics/foreign/bad/Maybe-Argument.mog:2:22: type error: `Maybe` cannot be an argument of a foreign call — only a result is converted; pass the payload instead
+
+  2 | foreign php function f "strval" :: Maybe Int -> Int
+    |                      ^

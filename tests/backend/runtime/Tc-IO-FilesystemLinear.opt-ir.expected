@@ -1,0 +1,14 @@
+module
+  function bindPath()
+      ret "\/tmp\/moggi-tc-io-fs-linear-bind.txt"
+  function letPath()
+      ret "\/tmp\/moggi-tc-io-fs-linear-let.txt"
+  function main()
+      io_call putStrLn("bind")
+      io_call writeTextFile(@bindPath, "bind-linear")
+      t0 = io_call readTextFile(@bindPath)
+      io_call putStrLn(t0)
+      io_call putStrLn("let")
+      t1 = io_call readTextFile(@letPath)
+      io_call putStrLn(t1)
+      ret ()

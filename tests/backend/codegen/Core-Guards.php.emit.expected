@@ -1,0 +1,77 @@
+<?php declare(strict_types=1);
+
+namespace Core\Guards;
+
+const __MOGGI_MAP = [[58 => ['Core.Guards.classify', 'tests/backend/codegen/Core-Guards.mog', 23, 31], 59 => ['Core.Guards.classify', 'tests/backend/codegen/Core-Guards.mog', 23, 31]], ['Core\\Guards\\positive' => ['Core.Guards.positive', 'tests/backend/codegen/Core-Guards.mog', 9, 14], 'Core\\Guards\\twice' => ['Core.Guards.twice', 'tests/backend/codegen/Core-Guards.mog', 12, 11], 'Core\\Guards\\firstSign' => ['Core.Guards.firstSign', 'tests/backend/codegen/Core-Guards.mog', 14, 1], 'Core\\Guards\\classify' => ['Core.Guards.classify', 'tests/backend/codegen/Core-Guards.mog', 22, 3]]];
+
+require_once __DIR__ . '/../../../lib/Data/Bool.php';
+
+function moggi_u64_add(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao + $bo; $c = ($lo >> 32) & 0xffffffff; $hi = ($ah + $bh + $c) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }
+function moggi_u64_sub(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao - $bo; $bw = $lo < 0 ? 1 : 0; $hi = ($ah - $bh - $bw) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }
+function moggi_u64_mul(int $a, int $b): int { $a0 = $a & 0xffff; $a1 = ($a >> 16) & 0xffff; $a2 = ($a >> 32) & 0xffff; $a3 = ($a >> 48) & 0xffff; $b0 = $b & 0xffff; $b1 = ($b >> 16) & 0xffff; $b2 = ($b >> 32) & 0xffff; $b3 = ($b >> 48) & 0xffff; $low = $a0 * $b0; $cy = ($low >> 16) & 0xffff; $m1 = $a0 * $b1 + $a1 * $b0 + $cy; $cy = ($m1 >> 16) & 0xffffffff; $m2 = $a0 * $b2 + $a1 * $b1 + $a2 * $b0 + $cy; $cy = ($m2 >> 16) & 0xffffffff; $hi = $a0 * $b3 + $a1 * $b2 + $a2 * $b1 + $a3 * $b0 + $cy; return (($hi & 0xffff) << 48) | (($m2 & 0xffff) << 32) | (($m1 & 0xffff) << 16) | ($low & 0xffff); }
+function moggi_i64_mul(int $a, int $b): int { $r = $a * $b; return \is_int($r) ? $r : moggi_u64_mul($a, $b); }
+
+function positive($n) {
+    return $n > 0;
+}
+
+function twice($n) {
+    return (\is_int($__m64 = $n * 2) ? $__m64 : moggi_u64_mul($n, 2));
+}
+
+function firstSign($_p0) {
+    do {
+        if ($_p0 !== []) {
+            $__scrut_0 = $_p0;
+            $x = $__scrut_0[0];
+            $__t2 = $x < 0;
+            if ($__t2) {
+                return "neg-first";
+                break;
+            }
+        }
+        if ($_p0 !== []) {
+            $__scrut_1 = $_p0;
+            $x__0 = $__scrut_1[0];
+            if (($x__0 === 0)) {
+                return "zero-first";
+                break;
+            }
+        }
+        if ($_p0 !== []) {
+            $__scrut_2 = $_p0;
+            return "other-list";
+            break;
+        }
+        if ($_p0 === []) {
+            return "empty";
+            break;
+        }
+        throw new \RuntimeException('non-exhaustive match');
+    } while (false);
+}
+
+function classify($n) {
+    do {
+        if (true) {
+            $m = $n;
+            $__t4 = twice($m);
+            $__t5 = positive($__t4);
+            if ($__t5) {
+                return "positive-double";
+                break;
+            }
+        }
+        if (true) {
+            $m__0 = $n;
+            if (true) {
+                return "not-positive-double";
+                break;
+            }
+        }
+        if (true) {
+            return "other";
+            break;
+        }
+    } while (false);
+}

@@ -1,0 +1,21 @@
+import Moggi.Internal.Float
+import Data.Eq
+import Data.Ord
+import Text.Show
+import System.IO
+
+-- Backend drift risk: Double boxing and arithmetic.
+--
+-- Compared rather than printed: rendering a fractional Double is a formatting decision, and a
+-- golden on it would test each backend's float formatter instead of its arithmetic.
+quarter :: Double -> Double
+quarter x = x * 0.5 + 0.25
+
+main :: IO ()
+main = do
+  putStrLn (show (quarter 4.0 == 2.25))
+  putStrLn (show (1.5 + 2.5 == 4.0))
+  putStrLn (show (2.0 * 3.0 == 6.0))
+  putStrLn (show (10.0 / 4.0 == 2.5))
+  putStrLn (show (compare 1.5 2.5))
+  putStrLn (show (2.5 > 1.5))

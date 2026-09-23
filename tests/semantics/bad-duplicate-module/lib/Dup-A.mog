@@ -1,0 +1,3 @@
+module Dup.A
+
+bar x = x

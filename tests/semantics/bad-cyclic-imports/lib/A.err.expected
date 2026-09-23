@@ -1,0 +1,4 @@
+tests/semantics/bad-cyclic-imports/lib/A.mog:3:8: type error: cyclic module imports: `A` imports `B` -> `B` imports `A`
+
+  3 | import B
+    |        ^

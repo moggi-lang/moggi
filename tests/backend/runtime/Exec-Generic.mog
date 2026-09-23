@@ -1,0 +1,50 @@
+import Data.Int
+import Data.String
+import Moggi.Generics
+import System.IO
+
+-- ---- Exec-Generic-Identity ----
+
+-- Generic identity: to . from should not allocate a live Rep at runtime
+-- after case-of-known-constructor elimination.
+data User = User { name :: String, age :: Int }
+  deriving Generic
+
+roundtrip :: User -> User
+roundtrip u = to (from u)
+
+runGenericIdentity :: IO ()
+runGenericIdentity = case roundtrip (User "ada" 36) of
+  User n a -> do
+    putStrLn n
+    putStrLn (case a of
+      36 -> "ok"
+      _ -> "bad")
+
+-- ---- Exec-Generic-Meta ----
+
+data Person = Person { name :: String, age :: Int } deriving (Generic)
+
+nameMeta :: MetaProxy (MetaSel (Just "name") 'NoSourceUnpackedness 'NoSourceStrictness 'DecidedLazy)
+nameMeta = MetaProxy
+
+ageMeta :: MetaProxy (MetaSel (Just "age") 'NoSourceUnpackedness 'NoSourceStrictness 'DecidedLazy)
+ageMeta = MetaProxy
+
+personCons :: MetaProxy (MetaCons "Person" 'PrefixI 'True)
+personCons = MetaProxy
+
+runGenericMeta :: IO ()
+runGenericMeta = do
+  putStrLn (selName nameMeta)
+  putStrLn (selName ageMeta)
+  putStrLn (conName personCons)
+  putStrLn (case conIsRecord personCons of
+    True -> "record"
+    False -> "positional")
+
+-- ---- combined entry point ----
+main :: IO ()
+main = do
+  runGenericIdentity
+  runGenericMeta

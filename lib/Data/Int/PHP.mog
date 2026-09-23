@@ -1,0 +1,26 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.Int.PHP
+  ( showInt
+  , intQuot
+  , intMinBound
+  , intMaxBound
+  ) where
+
+import Moggi.Internal.Prim
+
+foreign php function rawShowInt "strval" :: Int -> String
+
+-- `Int` is the signed 64-bit machine integer; the host int is the same width.
+-- minBound is built from maxBound - 1 because the literal `-9223372036854775808`
+-- is not a host int literal (PHP reads it as a float).
+intMinBound :: Int
+intMinBound = intSub# (intNegate# 9223372036854775807) 1
+
+intMaxBound :: Int
+intMaxBound = 9223372036854775807
+
+showInt :: Int -> String
+showInt n = rawShowInt n
+
+-- Toward-zero quot; floor `div` is derived in Data.Int.
+intQuot a b = intDiv# a b

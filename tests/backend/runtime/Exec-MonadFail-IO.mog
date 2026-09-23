@@ -1,0 +1,33 @@
+-- A failing `fail` in the IO monad is an IOError of type userErrorType, so it is
+-- catchable by tryIOError and classifiable by isUserError. It also survives the
+-- round trip through SomeException, which is what the second catch proves.
+import Control.Exception
+import Control.Monad.Fail
+import Text.Show
+import System.IO
+import System.IO.Error
+
+-- `fail` needs a non-() return type to be the last action of the do block.
+boom :: IO String
+boom = do
+  fail "boom"
+
+tryAny :: IO a -> IO (Either SomeException a)
+tryAny = try
+
+main :: IO ()
+main = do
+  r1 <- tryIOError boom
+  putStrLn (case r1 of
+    Left e -> show e
+    Right s -> s)
+  putStrLn (case r1 of
+    Left e -> show (ioeGetErrorType e)
+    Right _ -> "no-error")
+  putStrLn (case r1 of
+    Left e -> show (isUserError e)
+    Right _ -> "no-error")
+  r2 <- tryAny boom
+  putStrLn (case r2 of
+    Left se -> displayException se
+    Right _ -> "no-exception")

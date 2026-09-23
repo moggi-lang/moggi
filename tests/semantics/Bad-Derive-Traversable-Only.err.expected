@@ -1,0 +1,4 @@
+tests/semantics/Bad-Derive-Traversable-Only.mog:4:30: type error: missing superclass instance: `Functor Box`
+
+  4 | data Box a = Box a deriving (Traversable)
+    |                              ^^^^^^^^^^^

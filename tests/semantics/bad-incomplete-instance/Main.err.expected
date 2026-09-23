@@ -1,0 +1,4 @@
+tests/semantics/bad-incomplete-instance/Main.mog:14:10: type error: instance for `Equal` missing method `/=`
+
+  14 | instance Equal Two where
+     |          ^^^^^

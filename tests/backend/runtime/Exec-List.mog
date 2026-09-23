@@ -1,0 +1,151 @@
+import Data.Bool
+import Data.Eq
+import Data.Foldable
+import Data.Functor
+import Data.Int
+import Data.List hiding (find, unzip)
+import Data.Maybe
+import Data.Ord
+import Text.Show
+import System.IO
+
+-- ---- Exec-List ----
+
+sortDemo :: Bool
+sortDemo = sort [3, 1, 2] == [1, 2, 3]
+
+sortOnDemo :: Bool
+sortOnDemo = sortOn (\x -> 0 - x) [1, 3, 2] == [3, 2, 1]
+
+groupDemo :: Bool
+groupDemo = group [1, 1, 2, 3, 3] == [[1, 1], [2], [3, 3]]
+
+nubByDemo :: Bool
+nubByDemo = nubBy (\a b -> a == b) [1, 1, 2, 1, 3] == [1, 2, 3]
+
+insertDemo :: Bool
+insertDemo = insert 2 [1, 3] == [1, 2, 3]
+
+deleteDemo :: Bool
+deleteDemo = delete 2 [1, 2, 3] == [1, 3]
+
+prefixDemo :: Bool
+prefixDemo = isPrefixOf [1, 2] [1, 2, 3] && not (isPrefixOf [2] [1, 2, 3])
+
+suffixDemo :: Bool
+suffixDemo = isSuffixOf [2, 3] [1, 2, 3]
+
+infixDemo :: Bool
+infixDemo = isInfixOf [2, 3] [1, 2, 3, 4]
+
+initsDemo :: Bool
+initsDemo = inits [1, 2] == [[], [1], [1, 2]]
+
+tailsDemo :: Bool
+tailsDemo = tails [1, 2] == [[1, 2], [2], []]
+
+zipWith3Demo :: Bool
+zipWith3Demo = zipWith3 (\a b c -> a + b + c) [1, 2] [10, 20] [100, 200] == [111, 222]
+
+unionDemo :: Bool
+unionDemo = union [1, 2] [2, 3] == [1, 2, 3]
+
+intersectDemo :: Bool
+intersectDemo = intersect [1, 2, 3] [2, 3, 4] == [2, 3]
+
+foldl1Demo :: Bool
+foldl1Demo = foldl1 (\a b -> a + b) [1, 2, 3, 4] == 10
+
+singletonDemo :: Bool
+singletonDemo = singleton 5 == [5]
+
+findIndexDemo :: Bool
+findIndexDemo = findIndex (\x -> x == 2) [1, 2, 3] == Just 1
+
+elemIndexDemo :: Bool
+elemIndexDemo = elemIndex 3 [1, 2, 3] == Just 2
+
+unfoldrStep :: Int -> Maybe (Int, Int)
+unfoldrStep n = case n == 0 of
+  True -> Nothing
+  False -> Just (n, n - 1)
+
+unfoldrDemo :: Bool
+unfoldrDemo = unfoldr unfoldrStep 3 == [3, 2, 1]
+
+rangeAscending :: Bool
+rangeAscending = [1..5] == [1, 2, 3, 4, 5]
+
+rangeDescendingEmpty :: Bool
+rangeDescendingEmpty = [5..2] == []
+
+rangeSingleton :: Bool
+rangeSingleton = [3..3] == [3]
+
+rangeThenAscending :: Bool
+rangeThenAscending = [2, 4..10] == [2, 4, 6, 8, 10]
+
+rangeThenDescending :: Bool
+rangeThenDescending = [10, 8..2] == [10, 8, 6, 4, 2]
+
+fmapDemo :: Bool
+fmapDemo = map (\x -> x + 1) [1, 2, 3] == [2, 3, 4]
+
+runList :: IO ()
+runList = do
+  putStrLn (show sortDemo)
+  putStrLn (show sortOnDemo)
+  putStrLn (show groupDemo)
+  putStrLn (show nubByDemo)
+  putStrLn (show insertDemo)
+  putStrLn (show deleteDemo)
+  putStrLn (show prefixDemo)
+  putStrLn (show suffixDemo)
+  putStrLn (show infixDemo)
+  putStrLn (show initsDemo)
+  putStrLn (show tailsDemo)
+  putStrLn (show zipWith3Demo)
+  putStrLn (show unionDemo)
+  putStrLn (show intersectDemo)
+  putStrLn (show foldl1Demo)
+  putStrLn (show singletonDemo)
+  putStrLn (show findIndexDemo)
+  putStrLn (show elemIndexDemo)
+  putStrLn (show unfoldrDemo)
+  putStrLn (show rangeAscending)
+  putStrLn (show rangeDescendingEmpty)
+  putStrLn (show rangeSingleton)
+  putStrLn (show rangeThenAscending)
+  putStrLn (show rangeThenDescending)
+  putStrLn (show fmapDemo)
+
+-- ---- Exec-List-Patterns ----
+
+pairSum :: [Int] -> Int
+pairSum xs = case xs of
+  [a, b] -> a + b
+  _ -> 0
+
+sumList :: [Int] -> Int
+sumList xs = case xs of
+  [] -> 0
+  x : rest -> x + sumList rest
+
+headOrZero :: [Int] -> Int
+headOrZero xs = case xs of
+  [] -> 0
+  h : _ -> h
+
+runListPatterns :: IO ()
+runListPatterns = do
+  putStrLn (show (pairSum [1, 2] == 3))
+  putStrLn (show (pairSum [1] == 0))
+  putStrLn (show (sumList [1, 2, 3] == 6))
+  putStrLn (show (headOrZero [] == 0))
+  putStrLn (show (headOrZero [9, 1] == 9))
+
+-- ---- combined entry point ----
+main :: IO ()
+main = do
+  runList
+  runListPatterns

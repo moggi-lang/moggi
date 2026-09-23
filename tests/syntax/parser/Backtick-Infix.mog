@@ -1,0 +1,9 @@
+module Bt where
+
+plus :: Int -> Int -> Int
+plus a b = a + b
+
+-- Backtick infix: a VarId between two backticks is applied as an operator,
+-- binding tighter than `*` (default fixity 9).
+main :: Int
+main = 1 `plus` 2 * 3

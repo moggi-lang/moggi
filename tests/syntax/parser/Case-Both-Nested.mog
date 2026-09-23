@@ -1,0 +1,14 @@
+module CaseBothNested where
+
+import Data.Either
+import Data.String
+
+-- Both arms nest a case; outer arms must not be absorbed by the inner case.
+bothNested :: Either String String -> Either String String -> String
+bothNested x y = case x of
+  Left a -> case y of
+    Left b -> "LL"
+    Right ignored -> "LR"
+  Right a -> case y of
+    Left ignored -> "RL"
+    Right b -> "RR"

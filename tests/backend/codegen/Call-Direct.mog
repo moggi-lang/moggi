@@ -1,0 +1,10 @@
+module StructureCallDirect where
+
+addOne :: Int -> Int
+addOne n = n + 1
+
+twice :: Int -> Int
+twice n = addOne (addOne n)
+
+pairUp :: Int -> (Int, Int)
+pairUp n = (n, twice n)

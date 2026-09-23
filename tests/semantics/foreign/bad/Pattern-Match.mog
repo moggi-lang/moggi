@@ -1,0 +1,11 @@
+module Bad.Foreign.PatternMatch where
+
+foreign jvm type Path "java.nio.file.Path"
+
+-- Foreign types have no constructors; a Path-typed scrutinee must not match MkPath.
+pathHole :: Path
+pathHole = pathHole
+
+main :: IO ()
+main = case pathHole of
+  MkPath -> pure ()

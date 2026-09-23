@@ -1,0 +1,4 @@
+tests/syntax/lexer/Bad-Lex-Unclosed-Comment.mog:1:17: lex error: unterminated block comment
+
+  1 | add x y = x + y {- oops
+    |                 ^^

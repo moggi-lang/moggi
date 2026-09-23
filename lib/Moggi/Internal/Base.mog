@@ -1,0 +1,18 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | The few tiny functions around the intrinsic types.
+--
+-- The intrinsic types and their operations are the compiler-synthesized
+-- {@link Moggi.Internal.Prim}; everything with a real definition lives in the
+-- public module it belongs to (`Data.Bool`, `Data.Function`, `Data.List`, …)
+-- and is re-exported from the Prelude. `asTypeOf` has no public module of its
+-- own, so it lives here.
+module Moggi.Internal.Base (asTypeOf) where
+
+import Data.Function (const)
+
+-- | @'asTypeOf' x y@ returns @x@. The second argument is only there for its
+-- type: @'asTypeOf' x y@ pins @y@ to the type of @x@, which is how a value is
+-- attached to an expected type in an expression that has nothing else to say
+-- about it.
+asTypeOf :: a -> a -> a
+asTypeOf = const

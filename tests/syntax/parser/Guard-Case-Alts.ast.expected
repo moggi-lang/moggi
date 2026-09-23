@@ -1,0 +1,39 @@
+program
+  function describe :: Int -> String
+    pat_var n
+    case
+      variable n
+      alt
+        pat_var m
+        guards
+          guarded
+            guard
+              infix <
+                variable m
+                integer 0
+            string "negative"
+          guarded
+            guard
+              variable otherwise
+            string "not-negative"
+      alt
+        pat_lit 0
+        string "zero"
+  function positive :: Int -> Bool
+    pat_var n
+    infix >
+      variable n
+      integer 0
+  function classify :: Int -> String
+    pat_var n
+    guards
+      guarded
+        guard
+          apply
+            variable positive
+            variable n
+        string "positive"
+      guarded
+        guard
+          variable otherwise
+        string "not-positive"

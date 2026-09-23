@@ -1,0 +1,61 @@
+<?php declare(strict_types=1);
+
+namespace IO\Hybrid\Stress;
+
+const __MOGGI_MAP = [[14 => ['IO.Hybrid.Stress.logMsg', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 8, 14], 19 => ['IO.Hybrid.Stress.emitA', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 11, 9], 24 => ['IO.Hybrid.Stress.emitB', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 14, 9], 29 => ['IO.Hybrid.Stress.equalBranch', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 18, 3], 30 => ['IO.Hybrid.Stress.equalBranch', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 19, 8], 31 => ['IO.Hybrid.Stress.equalBranch', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 20, 3], 36 => ['IO.Hybrid.Stress.notEqualBranch', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 24, 3], 37 => ['IO.Hybrid.Stress.notEqualBranch', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 25, 8], 38 => ['IO.Hybrid.Stress.notEqualBranch', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 26, 3], 44 => ['IO.Hybrid.Stress.branchOn', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 30, 11], 48 => ['IO.Hybrid.Stress.branchOn', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 31, 12], 54 => ['IO.Hybrid.Stress.main', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 35, 8], 55 => ['IO.Hybrid.Stress.main', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 36, 8], 56 => ['IO.Hybrid.Stress.main', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 38, 3], 57 => ['IO.Hybrid.Stress.main', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 40, 3], 58 => ['IO.Hybrid.Stress.main', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 42, 3], 59 => ['IO.Hybrid.Stress.main', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 43, 3]], ['IO\\Hybrid\\Stress\\logMsg' => ['IO.Hybrid.Stress.logMsg', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 8, 14], 'IO\\Hybrid\\Stress\\emitA' => ['IO.Hybrid.Stress.emitA', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 11, 9], 'IO\\Hybrid\\Stress\\emitB' => ['IO.Hybrid.Stress.emitB', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 14, 9], 'IO\\Hybrid\\Stress\\equalBranch' => ['IO.Hybrid.Stress.equalBranch', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 17, 15], 'IO\\Hybrid\\Stress\\notEqualBranch' => ['IO.Hybrid.Stress.notEqualBranch', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 23, 20], 'IO\\Hybrid\\Stress\\branchOn' => ['IO.Hybrid.Stress.branchOn', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 29, 16], 'IO\\Hybrid\\Stress\\main' => ['IO.Hybrid.Stress.main', 'tests/backend/codegen/IO-Hybrid-Stress.mog', 34, 8]]];
+
+require_once __DIR__ . '/../../../lib/System/Filesystem/PHP.php';
+require_once __DIR__ . '/../../../lib/System/IO/PHP.php';
+
+use function System\Filesystem\PHP\readTextFile;
+use function System\IO\PHP\putStrLn;
+
+function logMsg($msg) {
+    putStrLn($msg);
+    return null;
+}
+
+function emitA() {
+    putStrLn("A");
+    return null;
+}
+
+function emitB() {
+    putStrLn("B");
+    return null;
+}
+
+function equalBranch() {
+    putStrLn("equal");
+    $__t0 = readTextFile("input.txt");
+    putStrLn($__t0);
+    return null;
+}
+
+function notEqualBranch($y) {
+    putStrLn("not equal");
+    $__t1 = readTextFile($y);
+    putStrLn($__t1);
+    return null;
+}
+
+function branchOn($x, $y) {
+    if (($x === $y) === true) {
+        equalBranch();
+        return null;
+    }
+    elseif (($x === $y) === false) {
+        notEqualBranch($y);
+        return null;
+    }
+}
+
+function main() {
+    $__t2 = readTextFile("input.txt");
+    $__t3 = readTextFile($__t2);
+    logMsg("start processing");
+    branchOn($__t2, $__t3);
+    emitA();
+    emitB();
+    return null;
+}

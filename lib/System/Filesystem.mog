@@ -1,0 +1,81 @@
+{-# BACKEND
+  php = System.Filesystem.PHP
+  jvm = System.Filesystem.JVM
+  dotnet = System.Filesystem.DotNet
+#-}
+module System.Filesystem
+  ( readFile
+  , readTextFile
+  , writeFile
+  , writeTextFile
+  , appendFile
+  , appendTextFile
+  , isFile
+  , getModified
+  , getSize
+  , copyFile
+  , copyFileContent
+  , copyPermissions
+  , removeFile
+  , isDirectory
+  , canonicalizePath
+  , listDirectory
+  , createDirectory
+  , createTree
+  , removeDirectory
+  , removeTree
+  , getWorkingDirectory
+  , setWorkingDirectory
+  , rename
+  ) where
+
+import Data.ByteString (ByteString)
+import Data.Int
+import Data.Time.Clock
+import System.Filesystem.Path
+
+readFile :: FilePath -> IO ByteString
+
+readTextFile :: FilePath -> IO String
+
+writeFile :: FilePath -> ByteString -> IO ()
+
+writeTextFile :: FilePath -> String -> IO ()
+
+appendFile :: FilePath -> ByteString -> IO ()
+
+appendTextFile :: FilePath -> String -> IO ()
+
+isFile :: FilePath -> IO Bool
+
+getModified :: FilePath -> IO UTCTime
+
+getSize :: FilePath -> IO Int
+
+copyFile :: FilePath -> FilePath -> IO ()
+
+copyFileContent :: FilePath -> FilePath -> IO ()
+
+copyPermissions :: FilePath -> FilePath -> IO ()
+
+removeFile :: FilePath -> IO ()
+
+isDirectory :: FilePath -> IO Bool
+
+canonicalizePath :: FilePath -> IO FilePath
+
+listDirectory :: FilePath -> IO [FilePath]
+
+createDirectory :: Bool -> FilePath -> IO ()
+
+createTree :: FilePath -> IO ()
+
+removeDirectory :: FilePath -> IO ()
+
+removeTree :: FilePath -> IO ()
+
+getWorkingDirectory :: IO FilePath
+
+setWorkingDirectory :: FilePath -> IO ()
+
+rename :: FilePath -> FilePath -> IO ()

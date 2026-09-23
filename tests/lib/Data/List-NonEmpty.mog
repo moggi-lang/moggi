@@ -1,0 +1,32 @@
+-- Data.List.NonEmpty: the `:|` type, its indexing (`!!`, the same name base
+-- uses), the total `head`/`tail`/`last`/`init`, the conversions, and the
+-- `Show` that renders `:|` infix.
+
+import Data.List.NonEmpty
+
+xs :: NonEmpty Int
+xs = 1 :| [2, 3, 4]
+
+main :: IO ()
+main = do
+  putStrLn (show (xs !! 0))
+  putStrLn (show (xs !! 3))
+  putStrLn (show (length xs))
+  putStrLn (show (head xs))
+  putStrLn (show (tail xs))
+  putStrLn (show (last xs))
+  putStrLn (show (init xs))
+  putStrLn (show (reverse xs))
+  putStrLn (show (map (* 2) xs))
+  putStrLn (show (nub (3 :| [3, 1, 3])))
+  putStrLn (show (sort (3 :| [1, 2])))
+  putStrLn (show (sortWith negate (1 :| [3, 2])))
+  putStrLn (show (take 2 xs))
+  putStrLn (show (drop 2 xs))
+  putStrLn (show (zip xs (fromList ['a', 'b', 'c'])))
+  putStrLn (show (unzip ((1, 'a') :| [(2, 'b')])))
+  putStrLn (show (toList xs))
+  putStrLn (show (fromList [7, 8] :: NonEmpty Int))
+  putStrLn (show (intersperse 0 xs))
+  putStrLn (show (xs == (1 :| [2, 3, 4])))
+  putStrLn (show (compare (1 :| []) (1 :| [2])))

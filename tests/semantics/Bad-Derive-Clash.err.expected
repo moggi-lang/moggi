@@ -1,0 +1,4 @@
+tests/semantics/Bad-Derive-Clash.mog:3:30: type error: duplicate instance for `Eq Foo`
+
+  3 | data Foo = Foo Int deriving (Eq)
+    |                              ^^

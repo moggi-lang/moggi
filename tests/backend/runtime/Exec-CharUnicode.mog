@@ -1,0 +1,55 @@
+import Data.Bool
+import Data.Char
+import Data.Eq
+import Data.Int
+import Data.List hiding (singleton, take, drop, length, isPrefixOf, isSuffixOf)
+import Data.Ord
+import Text.Show
+import Data.String
+import System.IO
+
+-- BMP, supplementary, and combining (scalar-sequence, not grapheme).
+bmpDemo :: Bool
+bmpDemo = ord 'a' == 97 && isAlpha 'a' && isAscii 'a'
+
+accentDemo :: Bool
+accentDemo = isAlpha 'é' && length "é" == 1 && unpack "é" == ['é']
+
+emojiDemo :: Bool
+emojiDemo =
+  length "😀" == 1
+  && take 1 "😀" == "😀"
+  && unpack "😀" == ['😀']
+  && singleton '😀' == "😀"
+
+-- NFC vs NFD: equality is scalar-sequence (not normalized).
+nfc :: String
+nfc = "\u{00E9}"
+
+nfd :: String
+nfd = "\u{0065}\u{0301}"
+
+normDemo :: Bool
+normDemo = nfc /= nfd && length nfc == 1 && length nfd == 2
+
+singletonDemo :: Bool
+singletonDemo = singleton 'a' == "a" && pack (unpack "hi") == "hi"
+
+hexDemo :: Bool
+hexDemo = digitToInt 'f' == 15 && isHexDigit 'A'
+
+caseDemo :: Bool
+caseDemo = toUpper 'é' /= 'é' || toLower 'A' == 'a'
+
+allDemo :: Bool
+allDemo =
+  bmpDemo
+  && accentDemo
+  && emojiDemo
+  && normDemo
+  && singletonDemo
+  && hexDemo
+  && caseDemo
+
+main :: IO ()
+main = putStrLn (show allDemo)

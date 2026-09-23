@@ -1,0 +1,32 @@
+import System.IO
+import Data.ByteString.Char8 qualified as C
+import Data.String
+import Data.Bool
+import Data.Eq
+import Data.Int
+import Data.Either
+import Data.JSON
+import Moggi.Generics
+data Tree = Leaf | Node { tVal :: Int, tLeft :: Tree, tRight :: Tree }
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+rt :: Tree -> IO String
+rt t = do
+  mr <- eitherDecode (encode t)
+  pure (case mr of
+    Left err -> "ERR:" <> err
+    Right t2 -> case t2 == t of
+      True -> "ok"
+      False -> "bad")
+
+tree :: Tree
+tree = Node 1 (Node 2 Leaf Leaf) (Node 3 Leaf Leaf)
+
+main :: IO ()
+main = do
+  r <- rt Leaf
+  putStrLn r
+  r <- rt tree
+  putStrLn r
+  C.putStrLn (encode Leaf)

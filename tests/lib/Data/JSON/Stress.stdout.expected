@@ -1,0 +1,5 @@
+{"title":"handbook","count":42,"active":true,"note":null,"tags":["alpha","beta"],"contact":{"email":"ada@example.com","verified":true},"backup":{"email":"backup@example.com","verified":false},"choice":{"Right":7},"attrs":{"x":1,"y":2}}
+ok
+ok-text
+ok
+{"title":"x","count":0,"active":false,"note":"hi","tags":[],"contact":{"email":"a","verified":false},"backup":null,"choice":{"Left":"e"},"attrs":{}}

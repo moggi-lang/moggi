@@ -1,0 +1,20 @@
+import Text.Show
+import System.IO
+
+classify :: Int -> String
+classify n =
+  if n < 0
+  then "neg"
+  else if n == 0 then "zero" else "pos"
+
+pick :: Bool -> Int
+pick b = if b then 1 else 0
+
+main :: IO ()
+main = do
+  putStrLn (classify (-3))
+  putStrLn (classify 0)
+  putStrLn (classify 7)
+  putStrLn (show (pick True))
+  putStrLn (show (pick False))
+  putStrLn (show (if 1 < 2 then 10 else 20))

@@ -1,0 +1,43 @@
+import Data.Bool
+import Data.Either
+import Data.Maybe
+import Data.String
+import System.IO
+
+foreign php function strlen "strlen" :: String -> Int
+foreign php function checkMissing "is_file" :: String -> IO Bool
+foreign php function divideBad "intdiv" :: Int -> Int -> IO (Either String String)
+foreign php function readEnv "getenv" :: String -> IO (Maybe String)
+
+checkStrlen :: IO ()
+checkStrlen = putStrLn (case strlen "hello" == 5 of
+  True  -> "strlen-ok"
+  False -> "strlen-fail")
+
+checkMissingFile :: IO ()
+checkMissingFile = do
+  exists <- checkMissing "/nonexistent/moggi-foreign-io-test"
+  putStrLn (case exists of
+    False -> "missing-ok"
+    True -> "missing-fail")
+
+checkDivide :: IO ()
+checkDivide = do
+  result <- divideBad 1 0
+  putStrLn (case result of
+    Left _  -> "divide-ok"
+    Right _ -> "divide-fail")
+
+checkEnv :: IO ()
+checkEnv = do
+  mv <- readEnv "MOGGI_FOREIGN_PHPVALUE_TEST_UNSET_VAR"
+  putStrLn (case mv of
+    Nothing -> "env-unset"
+    Just v  -> "env-string:" <> v)
+
+main :: IO ()
+main = do
+  checkStrlen
+  checkMissingFile
+  checkDivide
+  checkEnv

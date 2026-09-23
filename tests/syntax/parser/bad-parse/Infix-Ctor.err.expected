@@ -1,0 +1,4 @@
+tests/syntax/parser/bad-parse/Infix-Ctor.mog:1:16: parse error: expected constructor operator starting with `:`, found operator '+'
+
+  1 | data Bad a = a + [a]
+    |                ^

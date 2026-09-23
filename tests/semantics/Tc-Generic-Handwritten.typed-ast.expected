@@ -1,0 +1,79 @@
+program
+  data Foo
+    constructor Bar
+      field  :: Int
+    constructor Baz
+  function from :: Foo -> Rep Foo t2
+    pat_var x
+    case
+      variable x
+      alt
+        pat_con Bar
+          pat_var n
+        apply
+          constructor_ref M1
+          apply
+            constructor_ref L1
+            apply
+              constructor_ref M1
+              apply
+                constructor_ref M1
+                apply
+                  constructor_ref K1
+                  variable n
+      alt
+        pat_con Baz
+        apply
+          constructor_ref M1
+          apply
+            constructor_ref R1
+            apply
+              constructor_ref M1
+              constructor_ref U1
+  function to :: Rep Foo t35 -> Foo
+    pat_var r
+    case
+      variable r
+      alt
+        pat_con M1
+          pat_con L1
+            pat_con M1
+              pat_con M1
+                pat_con K1
+                  pat_var n
+        apply
+          constructor_ref Bar
+          variable n
+      alt
+        pat_con M1
+          pat_con R1
+            pat_con M1
+              pat_con U1
+        constructor_ref Baz
+  function roundtrip :: Foo -> Foo
+    pat_var x
+    apply
+      evidence_method Generic.to evidence= nullary=0
+        instance Foo
+      apply
+        evidence_method Generic.from evidence= nullary=0
+          instance Foo
+        variable x
+  function asRep :: Foo -> Rep Foo x
+    pat_var x
+    apply
+      evidence_method Generic.from evidence= nullary=0
+        instance Foo
+      variable x
+  function fromRep :: Rep Foo x -> Foo
+    pat_var r
+    apply
+      evidence_method Generic.to evidence= nullary=0
+        instance Foo
+      variable r
+  function sample :: Foo
+    apply
+      variable roundtrip
+      apply
+        constructor_ref Bar
+        integer 3

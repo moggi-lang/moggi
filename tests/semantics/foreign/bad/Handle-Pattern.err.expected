@@ -1,0 +1,4 @@
+tests/semantics/foreign/bad/Handle-Pattern.mog:10:3: type error: unknown constructor MkHandle
+
+  10 |   MkHandle _ -> pure ()
+     |   ^^^^^^^^

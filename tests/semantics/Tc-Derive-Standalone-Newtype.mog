@@ -1,0 +1,10 @@
+import Data.Eq
+import Text.Show
+
+newtype Age = Age Int
+
+deriving newtype instance Eq Age
+deriving newtype instance Show Age
+
+main :: String
+main = show (Age 10 == Age 20)

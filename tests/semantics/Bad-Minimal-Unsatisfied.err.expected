@@ -1,0 +1,4 @@
+tests/semantics/Bad-Minimal-Unsatisfied.mog:13:10: type error: instance for `Counter` implements none of the alternatives its MINIMAL pragma requires: count | countUp
+
+  13 | instance Counter W where
+     |          ^^^^^^^

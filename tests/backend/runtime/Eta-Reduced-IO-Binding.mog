@@ -1,0 +1,39 @@
+-- A binding whose type is a function may be written without its parameters.
+-- `tryAny = try` and `alias = report` are eta-reduced: the declaration promises
+-- arguments its body only has as a function *value*, so the binding must still
+-- be called with those arguments rather than running the dictionary application
+-- as if it were the action itself.
+import Control.Exception
+import Control.Monad.Fail
+import Text.Show
+import System.IO
+
+tryAny :: IO a -> IO (Either SomeException a)
+tryAny = try
+
+combine :: Int -> Int -> Int
+combine a b = a + b
+
+report :: Int -> Int -> IO ()
+report a b = putStrLn (show (combine a b))
+
+alias :: Int -> Int -> IO ()
+alias = report
+
+-- A lambda is the other spelling of the same thing.
+greet :: String -> IO ()
+greet = \who -> putStrLn who
+
+main :: IO ()
+main = do
+  ok <- tryAny (pure "ok")
+  putStrLn (case ok of
+    Left se -> displayException se
+    Right s -> s)
+  bad <- tryAny (fail "no")
+  putStrLn (case bad of
+    Left se -> displayException se
+    Right s -> s)
+  alias 40 2
+  alias (-1) 1
+  greet "hi"

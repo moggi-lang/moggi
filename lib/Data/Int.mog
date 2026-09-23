@@ -1,0 +1,357 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+{-# BACKEND
+  php = Data.Int.PHP
+  jvm = Data.Int.JVM
+  dotnet = Data.Int.DotNet
+#-}
+-- Signed fixed-width ints as MagicHash primitives, alongside platform `Int`.
+-- Type + Eq/Ord/Show/Num/Enum/Integral/Bounded live here.
+-- Fixed-width values share the Int host rep (sign-extended); width is enforced
+-- by intNFromInt# sign-extension after every operation.
+module Data.Int
+  ( Int(..)
+  , Int8(..)
+  , Int16(..)
+  , Int32(..)
+  , Int64(..)
+  ) where
+
+import Data.Eq
+import Data.Ord
+import Data.Semigroup
+import Moggi.Internal.Num
+import Moggi.Internal.Real
+import Data.Bool
+import Data.Bounded
+import Data.Enum
+import Text.Show
+import Data.Tuple
+import Moggi.Err
+import Moggi.Exception
+import Moggi.Internal.Prim
+
+type Int = Int#
+type Int8 = Int8#
+type Int16 = Int16#
+type Int32 = Int32#
+type Int64 = Int64#
+
+instance Eq Int where
+  (==) a b = intEq# a b
+  (/=) a b = intNe# a b
+
+instance Ord Int where
+  compare a b = intCompare# a b
+
+instance Num Int where
+  (+) a b = intAdd# a b
+  (-) a b = intSub# a b
+  (*) a b = intMul# a b
+  negate a = intNegate# a
+  abs a = intAbs# a
+  signum a = intSignum# a
+  fromInteger n = intFromInteger# n
+
+instance Enum Int where
+  succ n = case intEq# n intMaxBound of
+    True -> enumSuccError "Int"
+    _ -> intAdd# n 1
+  pred n = case intEq# n intMinBound of
+    True -> enumPredError "Int"
+    _ -> intSub# n 1
+  toEnum n = n
+  fromEnum n = n
+
+enumSuccError :: String -> a
+enumSuccError ty = error ("Enum.succ{" <> ty <> "}: tried to take `succ' of last tag in enumeration")
+
+enumPredError :: String -> a
+enumPredError ty = error ("Enum.pred{" <> ty <> "}: tried to take `pred' of first tag in enumeration")
+
+-- The bounds arrive already rendered: a `Word64` bound does not fit in an `Int`,
+-- and the message has to name the type's own extremes either way.
+enumToEnumError :: String -> Int -> String -> String -> a
+enumToEnumError ty i lo hi =
+  error ("Enum.toEnum{" <> ty <> "}: tag (" <> show i <> ") is outside of enumeration's range (" <> lo <> "," <> hi <> ")")
+
+-- A fixed-width `toEnum` takes an `Int` tag; the fixed widths are all narrower
+-- than `Int`, so the range check decides both the error and the conversion.
+enumTagInRange :: Int -> Int -> Int -> Bool
+enumTagInRange i lo hi = case orderingIsLte# (intCompare# lo i) of
+  True -> orderingIsLte# (intCompare# i hi)
+  False -> False
+
+-- A zero divisor is `ArithException DivideByZero`. Each host traps it its own
+-- way (`intdiv` throwing DivisionByZeroError, `idiv` faulting), so the check
+-- lives here and every backend reports the same exception.
+intQuotZeroError :: a
+intQuotZeroError = throw DivideByZero
+
+-- `quot` by -1 is the negation, which wraps; this keeps the host division op
+-- away from `minBound quot -1`, the one pair it traps on instead.
+intQuotChecked :: Int -> Int -> Int
+intQuotChecked a b = case intEq# b 0 of
+  True -> intQuotZeroError
+  _ -> case intEq# b (-1) of
+    True -> intNegate# a
+    _ -> intQuot a b
+
+instance Integral Int where
+  quot a b = intQuotChecked a b
+  rem a b = a - (quot a b) * b
+  quotRem a b = (quot a b, rem a b)
+  divMod a b =
+    let qr = quotRem a b
+        q = fst qr
+        r = snd qr
+    in case integralNeedFloorAdjust r b of
+      True -> (pred q, r + b)
+      False -> (q, r)
+  div a b = fst (divMod a b)
+  mod a b = snd (divMod a b)
+  toInteger n = intToInteger# n
+
+instance Bounded Int where
+  minBound = intMinBound
+  maxBound = intMaxBound
+
+instance Show Int where
+  show n = showInt n
+
+-- ---------------------------------------------------------------------------
+-- Fixed-width signed ints
+-- ---------------------------------------------------------------------------
+
+int8Zero = int8FromInt# 0
+int16Zero = int16FromInt# 0
+int32Zero = int32FromInt# 0
+int64Zero = int64FromInt# 0
+
+instance Eq Int8 where
+  (==) a b = int8Eq# a b
+  (/=) a b = int8Ne# a b
+
+instance Eq Int16 where
+  (==) a b = int16Eq# a b
+  (/=) a b = int16Ne# a b
+
+instance Eq Int32 where
+  (==) a b = int32Eq# a b
+  (/=) a b = int32Ne# a b
+
+instance Eq Int64 where
+  (==) a b = int64Eq# a b
+  (/=) a b = int64Ne# a b
+
+instance Ord Int8 where
+  compare a b = int8Compare# a b
+
+instance Ord Int16 where
+  compare a b = int16Compare# a b
+
+instance Ord Int32 where
+  compare a b = int32Compare# a b
+
+instance Ord Int64 where
+  compare a b = int64Compare# a b
+
+instance Bounded Int8 where
+  minBound = int8FromInt# (intNegate# 128)
+  maxBound = int8FromInt# 127
+
+instance Bounded Int16 where
+  minBound = int16FromInt# (intNegate# 32768)
+  maxBound = int16FromInt# 32767
+
+instance Bounded Int32 where
+  minBound = int32FromInt# (intNegate# 2147483648)
+  maxBound = int32FromInt# 2147483647
+
+instance Bounded Int64 where
+  -- 2^63 is not host-int-representable on every backend; compute from maxBound.
+  minBound = int64FromInt# (intSub# (intNegate# 9223372036854775807) 1)
+  maxBound = int64FromInt# 9223372036854775807
+
+instance Num Int8 where
+  (+) a b = int8Add# a b
+  (-) a b = int8Sub# a b
+  (*) a b = int8Mul# a b
+  negate a = int8FromInt# (intNegate# (int8ToInt# a))
+  abs a = int8FromInt# (intAbs# (int8ToInt# a))
+  signum a = case int8Compare# a int8Zero of
+    LT -> int8FromInt# (intNegate# 1)
+    EQ -> int8Zero
+    GT -> int8FromInt# 1
+  fromInteger n = int8FromInt# (intFromInteger# n)
+
+instance Num Int16 where
+  (+) a b = int16Add# a b
+  (-) a b = int16Sub# a b
+  (*) a b = int16Mul# a b
+  negate a = int16FromInt# (intNegate# (int16ToInt# a))
+  abs a = int16FromInt# (intAbs# (int16ToInt# a))
+  signum a = case int16Compare# a int16Zero of
+    LT -> int16FromInt# (intNegate# 1)
+    EQ -> int16Zero
+    GT -> int16FromInt# 1
+  fromInteger n = int16FromInt# (intFromInteger# n)
+
+instance Num Int32 where
+  (+) a b = int32Add# a b
+  (-) a b = int32Sub# a b
+  (*) a b = int32Mul# a b
+  negate a = int32FromInt# (intNegate# (int32ToInt# a))
+  abs a = int32FromInt# (intAbs# (int32ToInt# a))
+  signum a = case int32Compare# a int32Zero of
+    LT -> int32FromInt# (intNegate# 1)
+    EQ -> int32Zero
+    GT -> int32FromInt# 1
+  fromInteger n = int32FromInt# (intFromInteger# n)
+
+instance Num Int64 where
+  (+) a b = int64Add# a b
+  (-) a b = int64Sub# a b
+  (*) a b = int64Mul# a b
+  -- negate/abs via wrapping sub: -minBound overflows host negation (PHP float).
+  negate a = int64Zero - a
+  abs a = case int64Compare# a int64Zero of
+    LT -> int64Zero - a
+    _ -> a
+  signum a = case int64Compare# a int64Zero of
+    LT -> int64FromInt# (intNegate# 1)
+    EQ -> int64Zero
+    GT -> int64FromInt# 1
+  fromInteger n = int64FromInt# (intFromInteger# n)
+
+instance Enum Int8 where
+  succ n = case int8Compare# n maxBound of
+    EQ -> enumSuccError "Int8"
+    _ -> int8FromInt# (intAdd# (int8ToInt# n) 1)
+  pred n = case int8Compare# n minBound of
+    EQ -> enumPredError "Int8"
+    _ -> int8FromInt# (intSub# (int8ToInt# n) 1)
+  toEnum n = case enumTagInRange n (intNegate# 128) 127 of
+    True -> int8FromInt# n
+    False -> enumToEnumError "Int8" n "-128" "127"
+  fromEnum n = int8ToInt# n
+
+instance Enum Int16 where
+  succ n = case int16Compare# n maxBound of
+    EQ -> enumSuccError "Int16"
+    _ -> int16FromInt# (intAdd# (int16ToInt# n) 1)
+  pred n = case int16Compare# n minBound of
+    EQ -> enumPredError "Int16"
+    _ -> int16FromInt# (intSub# (int16ToInt# n) 1)
+  toEnum n = case enumTagInRange n (intNegate# 32768) 32767 of
+    True -> int16FromInt# n
+    False -> enumToEnumError "Int16" n "-32768" "32767"
+  fromEnum n = int16ToInt# n
+
+instance Enum Int32 where
+  succ n = case int32Compare# n maxBound of
+    EQ -> enumSuccError "Int32"
+    _ -> int32FromInt# (intAdd# (int32ToInt# n) 1)
+  pred n = case int32Compare# n minBound of
+    EQ -> enumPredError "Int32"
+    _ -> int32FromInt# (intSub# (int32ToInt# n) 1)
+  toEnum n = case enumTagInRange n (intNegate# 2147483648) 2147483647 of
+    True -> int32FromInt# n
+    False -> enumToEnumError "Int32" n "-2147483648" "2147483647"
+  fromEnum n = int32ToInt# n
+
+instance Enum Int64 where
+  succ n = case int64Compare# n maxBound of
+    EQ -> enumSuccError "Int64"
+    _ -> int64FromInt# (intAdd# (int64ToInt# n) 1)
+  pred n = case int64Compare# n minBound of
+    EQ -> enumPredError "Int64"
+    _ -> int64FromInt# (intSub# (int64ToInt# n) 1)
+  -- `Int` is itself i64, so every `Int` is a representable tag here.
+  toEnum n = int64FromInt# n
+  fromEnum n = int64ToInt# n
+
+instance Integral Int8 where
+  quot a b = int8FromInt# (intQuotChecked (int8ToInt# a) (int8ToInt# b))
+  rem a b = a - (quot a b) * b
+  quotRem a b = (quot a b, rem a b)
+  divMod a b =
+    let qr = quotRem a b
+        q = fst qr
+        r = snd qr
+    in case integralNeedFloorAdjust (int8ToInt# r) (int8ToInt# b) of
+      True -> (pred q, r + b)
+      False -> (q, r)
+  div a b = fst (divMod a b)
+  mod a b = snd (divMod a b)
+  toInteger n = intToInteger# (int8ToInt# n)
+
+instance Integral Int16 where
+  quot a b = int16FromInt# (intQuotChecked (int16ToInt# a) (int16ToInt# b))
+  rem a b = a - (quot a b) * b
+  quotRem a b = (quot a b, rem a b)
+  divMod a b =
+    let qr = quotRem a b
+        q = fst qr
+        r = snd qr
+    in case integralNeedFloorAdjust (int16ToInt# r) (int16ToInt# b) of
+      True -> (pred q, r + b)
+      False -> (q, r)
+  div a b = fst (divMod a b)
+  mod a b = snd (divMod a b)
+  toInteger n = intToInteger# (int16ToInt# n)
+
+instance Integral Int32 where
+  quot a b = int32FromInt# (intQuotChecked (int32ToInt# a) (int32ToInt# b))
+  rem a b = a - (quot a b) * b
+  quotRem a b = (quot a b, rem a b)
+  divMod a b =
+    let qr = quotRem a b
+        q = fst qr
+        r = snd qr
+    in case integralNeedFloorAdjust (int32ToInt# r) (int32ToInt# b) of
+      True -> (pred q, r + b)
+      False -> (q, r)
+  div a b = fst (divMod a b)
+  mod a b = snd (divMod a b)
+  toInteger n = intToInteger# (int32ToInt# n)
+
+instance Integral Int64 where
+  quot a b = int64FromInt# (intQuotChecked (int64ToInt# a) (int64ToInt# b))
+  rem a b = a - (quot a b) * b
+  quotRem a b = (quot a b, rem a b)
+  divMod a b =
+    let qr = quotRem a b
+        q = fst qr
+        r = snd qr
+    in case integralNeedFloorAdjust (int64ToInt# r) (int64ToInt# b) of
+      True -> (pred q, r + b)
+      False -> (q, r)
+  div a b = fst (divMod a b)
+  mod a b = snd (divMod a b)
+  toInteger n = intToInteger# (int64ToInt# n)
+
+instance Show Int8 where
+  show n = showInt (int8ToInt# n)
+
+instance Show Int16 where
+  show n = showInt (int16ToInt# n)
+
+instance Show Int32 where
+  show n = showInt (int32ToInt# n)
+
+instance Show Int64 where
+  show n = showInt (int64ToInt# n)
+
+integralNeedFloorAdjust :: Int -> Int -> Bool
+integralNeedFloorAdjust r b = case r == 0 of
+  True -> False
+  False -> signum r == negate (signum b)
+
+-- Backend-provided (not exported).
+showInt :: Int -> String
+
+intQuot :: Int -> Int -> Int
+
+intMinBound :: Int
+
+intMaxBound :: Int

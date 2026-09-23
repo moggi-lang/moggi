@@ -1,0 +1,209 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Moggi.Generics
+  ( -- * Representation types
+    V1
+  , U1(..)
+  , Par1(..)
+  , Rec1(..)
+  , K1(..)
+  , M1(..)
+  , (:+:)(..)
+  , (:*:)(..)
+  , (:.:)(..)
+    -- * Synonyms
+  , Rec0
+  , R
+  , D1
+  , C1
+  , S1
+  , D
+  , C
+  , S
+    -- * Metadata
+  , MetaData
+  , MetaCons
+  , MetaSel
+  , Nothing
+  , Just
+  , FixityI(..)
+  , Associativity(..)
+  , SourceUnpackedness(..)
+  , SourceStrictness(..)
+  , DecidedStrictness(..)
+    -- * Metadata reflection
+  , Datatype(..)
+  , Constructor(..)
+  , Selector(..)
+  , KnownSymbol(..)
+  , MetaProxy(..)
+  , SymbolProxy(..)
+  , Fixity(..)
+  , prec
+    -- * Generic classes
+  , Generic(..)
+  , Generic1(..)
+    -- * Wrappers
+  , Generically(..)
+  , Generically1(..)
+  ) where
+
+import Data.Bool
+import Data.Int
+import Data.String
+
+--
+-- Representation types
+--
+
+-- | Void: used for datatypes without constructors.
+data V1 p
+
+-- | Unit: used for constructors without arguments.
+data U1 p = U1
+
+-- | Used for marking occurrences of the parameter (Generic1).
+newtype Par1 p = Par1 { unPar1 :: p }
+
+-- | Recursive calls of kind @Type -> Type@ (Generic1).
+newtype Rec1 f p = Rec1 { unRec1 :: f p }
+
+-- | Constants, additional parameters and recursion of kind Type.
+data K1 i c p = K1 { unK1 :: c }
+
+-- | Meta-information (constructor names, etc.).
+newtype M1 i c f p = M1 { unM1 :: f p }
+
+infixr 5 :+:
+-- | Sums: encode choice between constructors.
+data (f :+: g) p = L1 (f p) | R1 (g p)
+
+infixr 6 :*:
+-- | Products: encode multiple arguments to constructors.
+data (f :*: g) p = (f p) :*: (g p)
+
+infixr 7 :.:
+-- | Composition of functors (Generic1).
+newtype (f :.: g) p = Comp1 { unComp1 :: f (g p) }
+
+--
+-- Tags and synonyms
+--
+
+-- | Tag for K1: recursion / constants.
+data R
+
+-- | Tag for M1: datatype.
+data D
+-- | Tag for M1: constructor.
+data C
+-- | Tag for M1: record selector.
+data S
+
+type Rec0 = K1 R
+type D1 = M1 D
+type C1 = M1 C
+type S1 = M1 S
+
+--
+-- Metadata carriers (type-level; empty data with kind parameters)
+-- These are phantom type constructors, so @MetaData "Foo" "Mod" "moggi"
+-- 'False@ is an ordinary type application rather than a datatype constructor.
+--
+
+data Associativity
+  = LeftAssociative
+  | RightAssociative
+  | NotAssociative
+
+data FixityI = PrefixI | InfixI Associativity
+
+data SourceUnpackedness
+  = NoSourceUnpackedness
+  | SourceNoUnpack
+  | SourceUnpack
+
+data SourceStrictness
+  = NoSourceStrictness
+  | SourceLazy
+  | SourceStrict
+
+data DecidedStrictness
+  = DecidedLazy
+  | DecidedStrict
+  | DecidedUnpack
+
+-- | Type-level optional @Symbol@ (@'Nothing@ / @'Just "field"@), used for
+-- record field names.
+data Nothing
+data Just (s :: Symbol)
+
+data MetaData (n :: Symbol) (m :: Symbol) (p :: Symbol) (nt :: Bool)
+data MetaCons (n :: Symbol) (f :: FixityI) (r :: Bool)
+data MetaSel mn (su :: SourceUnpackedness) (ss :: SourceStrictness) (ds :: DecidedStrictness)
+
+--
+-- Metadata reflection
+--
+-- Stock `deriving Generic` also emits Datatype / Constructor / Selector
+-- instances that bake names from type-level Symbol metadata into method
+-- bodies (elaborate-time demotion for derived Reps). KnownSymbol supports
+-- the same demotion for concrete Symbol arguments at call sites.
+--
+
+data Fixity = Prefix | Infix Associativity Int
+
+prec :: Fixity -> Int
+prec f = case f of
+  Prefix -> 10
+  Infix _ n -> n
+
+-- | Witness for phantom metadata types (MetaData / MetaCons / MetaSel apps are kind Type).
+data MetaProxy c = MetaProxy
+
+-- | Witness for a type-level Symbol (kind Symbol, not Type).
+data SymbolProxy (s :: Symbol) = SymbolProxy
+
+class KnownSymbol (s :: Symbol) where
+  symbolVal :: SymbolProxy s -> String
+
+class Datatype d where
+  datatypeName :: MetaProxy d -> String
+  moduleName :: MetaProxy d -> String
+  packageName :: MetaProxy d -> String
+  isNewtype :: MetaProxy d -> Bool
+  -- | True when every constructor has zero fields (Aeson all-nullary sums).
+  isAllNullary :: MetaProxy d -> Bool
+  -- | True when the datatype has two or more constructors (Aeson sum).
+  isSum :: MetaProxy d -> Bool
+
+class Constructor c where
+  conName :: MetaProxy c -> String
+  conIsRecord :: MetaProxy c -> Bool
+  -- | Number of fields (Aeson unwrapUnaryRecords).
+  conArity :: MetaProxy c -> Int
+
+class Selector s where
+  -- | Record field name, or empty string for positional fields (MetaSel Nothing).
+  selName :: MetaProxy s -> String
+
+--
+-- Generic / Generic1
+--
+
+class Generic a where
+  type Rep a :: Type -> Type
+  from :: a -> Rep a x
+  to :: Rep a x -> a
+
+class Generic1 f where
+  type Rep1 f :: Type -> Type
+  from1 :: f a -> Rep1 f a
+  to1 :: Rep1 f a -> f a
+
+--
+-- Wrappers (no Coercible / role promise)
+--
+
+newtype Generically a = Generically a
+
+newtype Generically1 f a = Generically1 (f a)

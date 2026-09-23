@@ -1,0 +1,14 @@
+-- A standalone program (no imports) must be able to resolve its own
+-- hand-written instance. This exercises the bare `checkRaw` path, where the
+-- import context is empty and the program's instances are the only source.
+
+class Cz a where
+  cz :: a -> a -> Int
+
+data B = T | F
+
+instance Cz B where
+  cz a b = 0
+
+check :: B -> B -> Int
+check x y = cz x y

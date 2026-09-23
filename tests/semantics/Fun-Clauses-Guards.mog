@@ -1,0 +1,11 @@
+import Data.Int
+
+describe :: [Int] -> String
+describe [] = "empty"
+
+describe [x]
+  | x == 0    = "one zero"
+  | otherwise = "one element"
+
+describe (_:_)
+  | otherwise = "many elements"

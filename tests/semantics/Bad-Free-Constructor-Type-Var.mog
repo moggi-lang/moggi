@@ -1,0 +1,1 @@
+data Box = Box a

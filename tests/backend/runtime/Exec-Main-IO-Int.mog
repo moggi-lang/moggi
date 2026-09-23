@@ -1,0 +1,6 @@
+import System.IO
+
+main :: IO Int
+main = do
+  putStrLn "io-int"
+  pure 42

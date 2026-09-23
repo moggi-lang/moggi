@@ -1,0 +1,9 @@
+tests/semantics/Bad-Unknown-Type-Constructor.mog:3:8: type error: unknown type constructor `Unti`
+
+Did you mean one of these?
+    Int
+    Int8
+    Unit
+
+  3 | bad :: Unti -> ()
+    |        ^^^^

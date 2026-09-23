@@ -1,0 +1,6 @@
+-- A tick followed by an uppercase letter and *no* closing tick promotes a data
+-- constructor to a type; `'A'` with a closing tick stays a char literal.
+data Colour = Red | Green
+
+type Promoted = 'Red
+plainChar = 'A'

@@ -1,0 +1,17 @@
+True
+True
+True
+True
+True
+True
+Just (Just 2)
+Just Nothing
+Just (Just 2)
+Just (Just 6)
+Just (Just 4)
+Just (Just 4)
+Just (Just 16)
+Just 8
+[8,8]
+Just (Right 10)
+Just (Left "no")

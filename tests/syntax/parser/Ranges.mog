@@ -1,0 +1,5 @@
+fromTo = [1..5]
+fromThenTo = [2, 4..10]
+singleton = [3..3]
+emptyBackwards = [5..2]
+plain = [1, 2, 3]

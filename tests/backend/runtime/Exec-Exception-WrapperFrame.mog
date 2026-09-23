@@ -1,0 +1,15 @@
+import Data.Bits
+import System.IO
+
+-- The fault is raised inside the `Bits Int` dictionary wrapper that `go`
+-- reaches through the class method. The wrapper's own generated line has no
+-- mapping, so the report has to fall back to the site the wrapper was declared
+-- at — on every backend, never a raw generated name with `:0`.
+go :: Bits a => a -> Int -> a
+go x n = shiftL x n
+
+boom :: Int
+boom = go 1 (negate 1)
+
+main :: IO ()
+main = putStrLn (show boom)

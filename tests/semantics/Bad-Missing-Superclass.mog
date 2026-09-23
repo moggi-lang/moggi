@@ -1,0 +1,6 @@
+module Bad.Missing.Superclass
+
+import Data.Ord
+data Foo = Foo
+instance Ord Foo where
+  compare a b = LT

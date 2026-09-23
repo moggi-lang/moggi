@@ -1,0 +1,830 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- Bitwise operations for signed and unsigned integers.
+--
+-- Bits are numbered from 0, bit 0 being the least significant bit.
+--
+-- The operations behave as follows:
+--
+--   * `shift` and `rotate` take a signed count and work in the other
+--     direction for a negative count;
+--   * `shiftL` and `shiftR` raise `Overflow` for a negative count, while
+--     `unsafeShiftL` and `unsafeShiftR` are undefined there;
+--   * right shifts sign-extend for signed types;
+--   * a count greater than or equal to the type's width is the identity for
+--     rotates, 0 for left shifts and unsigned right shifts, and 0 or -1
+--     (following the sign) for signed right shifts;
+--   * `rotate` rotates left by the count modulo the width;
+--   * `complement zeroBits == oneBits`, and for a finite type
+--     `countLeadingZeros zeroBits == finiteBitSize zeroBits`;
+--   * for an `Integer` a negative value behaves as if it had infinitely many
+--     leading 1 bits, and the `popCount` of a negative value is the negated
+--     population count of its absolute value.
+--
+-- Every integral type has a `Bits` instance, including the fixed-width
+-- `Int8`..`Int64` and `Word8`..`Word64`, and every finite width has a
+-- `FiniteBits` instance.
+--
+-- `bitSize` is provided for compatibility and deprecated: `bitSizeMaybe`
+-- distinguishes types without a fixed size, and `finiteBitSize` is total.
+module Data.Bits
+  ( Bits(..)
+  , FiniteBits(..)
+  , bitDefault
+  , testBitDefault
+  , popCountDefault
+  , toIntegralSized
+  , oneBits
+  , (.^.)
+  , (.>>.)
+  , (.<<.)
+  , (!>>.)
+  , (!<<.)
+  , And(And)
+  , getAnd
+  , Ior(Ior)
+  , getIor
+  , Xor(Xor)
+  , getXor
+  , Iff(Iff)
+  , getIff
+  ) where
+
+import Data.Bool
+import Data.Bounded
+import Data.Enum
+import Data.Eq
+import Data.Int
+import Moggi.Internal.Integer
+import Moggi.Internal.Real
+import Data.Maybe
+import Data.Monoid
+import Moggi.Internal.Num
+import Data.Ord
+import Data.Semigroup
+import Text.Show
+import Data.Word
+import Moggi.Err
+import Moggi.Exception
+import Moggi.Internal.Prim
+
+infixl 8 `shift`, `rotate`, `shiftL`, `shiftR`, `rotateL`, `rotateR`
+infixl 8 .>>., .<<., !>>., !<<.
+infixl 7 .&.
+infixl 6 `xor`, .^.
+infixl 5 .|.
+
+-- | The 'Bits' class defines bitwise operations over integral types.
+class Eq a => Bits a where
+  -- | Bitwise "and".
+  (.&.) :: a -> a -> a
+  -- | Bitwise "or".
+  (.|.) :: a -> a -> a
+  -- | Bitwise "xor".
+  xor :: a -> a -> a
+  -- | Reverse all the bits in the argument.
+  complement :: a -> a
+  -- | @shift x i@ shifts @x@ left by @i@ bits if @i@ is positive, or right by
+  -- @-i@ bits otherwise. Right shifts sign-extend for signed types.
+  shift :: a -> Int -> a
+  -- | @rotate x i@ rotates @x@ left by @i@ bits if @i@ is positive, or right
+  -- by @-i@ bits otherwise. For unbounded types like 'Integer', 'rotate' is
+  -- the same as 'shift'.
+  rotate :: a -> Int -> a
+  -- | 'zeroBits' is the value with all bits unset.
+  zeroBits :: a
+  -- | @bit i@ is a value with the @i@th bit set and all other bits clear.
+  bit :: Int -> a
+  -- | @setBit x i@ is the same as @x .|. bit i@.
+  setBit :: a -> Int -> a
+  -- | @clearBit x i@ is the same as @x .&. complement (bit i)@.
+  clearBit :: a -> Int -> a
+  -- | @complementBit x i@ is the same as @x `xor` bit i@.
+  complementBit :: a -> Int -> a
+  -- | @testBit x i@ is the same as @x .&. bit i /= 0@.
+  testBit :: a -> Int -> Bool
+  -- | The number of bits in the type of the argument, or 'Nothing' for types
+  -- without a fixed size such as 'Integer'. The value is ignored.
+  bitSizeMaybe :: a -> Maybe Int
+  -- | The number of bits in the type of the argument. The value is ignored.
+  -- Fails for types without a fixed size such as 'Integer' and 'Natural'.
+  -- Deprecated: use 'bitSizeMaybe' or 'finiteBitSize' instead.
+  bitSize :: a -> Int
+  -- | Whether the argument is a signed type. The value is ignored.
+  isSigned :: a -> Bool
+  -- | Shift left; fails on a negative shift amount.
+  shiftL :: a -> Int -> a
+  -- | Shift right; fails on a negative shift amount. Signed types sign-extend.
+  shiftR :: a -> Int -> a
+  -- | Like 'shiftL', but out-of-range shift amounts need not be checked:
+  -- this implementation treats them exactly like 'shiftL'.
+  unsafeShiftL :: a -> Int -> a
+  -- | Like 'shiftR', but out-of-range shift amounts need not be checked:
+  -- this implementation treats them exactly like 'shiftR'.
+  unsafeShiftR :: a -> Int -> a
+  -- | Rotate left.
+  rotateL :: a -> Int -> a
+  -- | Rotate right.
+  rotateR :: a -> Int -> a
+  -- | The number of set bits in the argument (population count).
+  popCount :: a -> Int
+
+  shift x i = case intCompare# i 0 of
+    LT -> shiftR x (intNegate# i)
+    GT -> shiftL x i
+    EQ -> x
+  rotate x i = case intCompare# i 0 of
+    LT -> rotateR x (intNegate# i)
+    GT -> rotateL x i
+    EQ -> x
+  zeroBits = clearBit (bit 0) 0
+  setBit x i = x .|. bit i
+  clearBit x i = x .&. complement (bit i)
+  complementBit x i = x `xor` bit i
+  shiftL x i = shift x i
+  shiftR x i = shift x (intNegate# i)
+  unsafeShiftL x i = shiftL x i
+  unsafeShiftR x i = shiftR x i
+  rotateL x i = rotate x i
+  rotateR x i = rotate x (intNegate# i)
+  bitSize b = case bitSizeMaybe b of
+    Nothing -> error "bitSize is undefined"
+    Just n -> n
+
+-- | Types with a finite, fixed number of bits.
+class Bits b => FiniteBits b where
+  -- | The number of bits in the type of the argument. The value is ignored.
+  -- Unlike 'bitSizeMaybe' this is total.
+  finiteBitSize :: b -> Int
+  -- | The number of zero bits preceding the most significant set bit.
+  countLeadingZeros :: b -> Int
+  -- | The number of zero bits following the least significant set bit.
+  countTrailingZeros :: b -> Int
+
+  countLeadingZeros x = intSub# (intSub# (finiteBitSize x) 1) (leadingZerosGo x (intSub# (finiteBitSize x) 1))
+  countTrailingZeros x = trailingZerosGo x (finiteBitSize x) 0
+
+-- Naive default: walk down from the top bit.
+leadingZerosGo :: FiniteBits b => b -> Int -> Int
+leadingZerosGo x i = case intCompare# i 0 of
+  LT -> i
+  _ -> case testBit x i of
+    True -> i
+    False -> leadingZerosGo x (intSub# i 1)
+
+-- Naive default: walk up from bit 0.
+trailingZerosGo :: FiniteBits b => b -> Int -> Int -> Int
+trailingZerosGo x w i = case intCompare# i w of
+  LT -> case testBit x i of
+    True -> i
+    False -> trailingZerosGo x w (intAdd# i 1)
+  _ -> i
+
+-- | A more concise version of @complement zeroBits@.
+oneBits :: FiniteBits a => a
+oneBits = complement zeroBits
+
+-- | Infix version of 'xor'.
+(.^.) :: Bits a => a -> a -> a
+(.^.) x y = xor x y
+
+-- | Infix version of 'shiftR'.
+(.>>.) :: Bits a => a -> Int -> a
+(.>>.) x i = shiftR x i
+
+-- | Infix version of 'shiftL'.
+(.<<.) :: Bits a => a -> Int -> a
+(.<<.) x i = shiftL x i
+
+-- | Infix version of 'unsafeShiftR'.
+(!>>.) :: Bits a => a -> Int -> a
+(!>>.) x i = unsafeShiftR x i
+
+-- | Infix version of 'unsafeShiftL'.
+(!<<.) :: Bits a => a -> Int -> a
+(!<<.) x i = unsafeShiftL x i
+
+-- Numeric literals have type `Int`, so a value of a numeric type variable
+-- has to be built through `fromInteger` to avoid pinning it to `Int`.
+bitsNum :: Num a => Int -> a
+bitsNum n = fromInteger (integerFromInt n)
+
+-- | Default implementation for 'bit': @bitDefault i = 1 `shiftL` i@.
+bitDefault :: (Bits a, Num a) => Int -> a
+bitDefault i = shiftL (bitsNum 1) i
+
+-- | Default implementation for 'testBit': @testBitDefault x i = x .&. bit i /= 0@.
+testBitDefault :: (Bits a, Num a) => a -> Int -> Bool
+testBitDefault x i = (x .&. bit i) /= bitsNum 0
+
+-- | Default implementation for 'popCount'. Naive on purpose: instances are
+-- expected to provide an optimized implementation for their size.
+popCountDefault :: (Bits a, Num a) => a -> Int
+popCountDefault w = popCountGo w 0
+
+popCountGo :: (Bits a, Num a) => a -> Int -> Int
+popCountGo w c = case w == bitsNum 0 of
+  True -> c
+  -- Clear the least significant set bit and count it.
+  False -> popCountGo (w .&. (w - bitsNum 1)) (intAdd# c 1)
+
+-- | A negative shift amount is a programming error: report it rather than
+-- silently shifting in the other direction.
+bitsNegativeShiftError :: a
+bitsNegativeShiftError = throw Overflow
+
+-- ---------------------------------------------------------------------------
+-- Bool: a one-bit bit field
+-- ---------------------------------------------------------------------------
+
+instance Bits Bool where
+  (.&.) a b = a && b
+  (.|.) a b = a || b
+  xor a b = a /= b
+  complement a = not a
+  shift x i = case intCompare# i 0 of
+    EQ -> x
+    _ -> False
+  rotate x _ = x
+  bit i = case intCompare# i 0 of
+    EQ -> True
+    _ -> False
+  testBit x i = case intCompare# i 0 of
+    EQ -> x
+    _ -> False
+  zeroBits = False
+  bitSizeMaybe _ = Just 1
+  bitSize _ = 1
+  isSigned _ = False
+  popCount x = case x of
+    True -> 1
+    False -> 0
+
+instance FiniteBits Bool where
+  finiteBitSize _ = 1
+  countLeadingZeros x = case x of
+    True -> 0
+    False -> 1
+  countTrailingZeros x = case x of
+    True -> 0
+    False -> 1
+
+instance Bits Integer where
+  (.&.) a b = integerAndBits a b
+  (.|.) a b = integerOrBits a b
+  xor a b = integerXorBits a b
+  complement a = integerComplementBits a
+  shift a i = case intCompare# i 0 of
+    LT -> integerShiftRBits a (intNegate# i)
+    GT -> integerShiftLBits a i
+    EQ -> a
+  shiftL a i = case intCompare# i 0 of
+    LT -> bitsNegativeShiftError
+    _ -> integerShiftLBits a i
+  shiftR a i = case intCompare# i 0 of
+    LT -> bitsNegativeShiftError
+    _ -> integerShiftRBits a i
+  unsafeShiftL a i = shiftL a i
+  unsafeShiftR a i = shiftR a i
+  -- An Integer is unbounded, so it never wraps around.
+  rotate a i = shift a i
+  rotateL a i = rotate a i
+  rotateR a i = rotate a (intNegate# i)
+  bit i = integerBitBits i
+  testBit a i = integerTestBitBits a i
+  zeroBits = integerBitZeroI
+  setBit a i = integerOrBits a (integerBitBits i)
+  clearBit a i = integerAndBits a (integerComplementBits (integerBitBits i))
+  complementBit a i = integerXorBits a (integerBitBits i)
+  popCount a = integerPopCountBits a
+  bitSizeMaybe _ = Nothing
+  bitSize _ = error "Data.Bits.bitSize(Integer)"
+  isSigned _ = True
+
+-- ---------------------------------------------------------------------------
+-- Monoids under bitwise operations
+-- ---------------------------------------------------------------------------
+
+-- | Monoid under bitwise AND.
+newtype And a = And a
+  deriving newtype (Bounded, Enum, Bits, FiniteBits, Eq)
+
+getAnd :: And a -> a
+getAnd x = case x of
+  And a -> a
+
+instance Bits a => Semigroup (And a) where
+  (<>) x y = And (getAnd x .&. getAnd y)
+
+-- The constraint is stronger than 'Semigroup' needs because some types (such as
+-- 'Natural') have no defined 'complement' and so no 'oneBits'.
+instance FiniteBits a => Monoid (And a) where
+  mempty = And oneBits
+
+instance Show a => Show (And a) where
+  showsPrec d x = showParen (d > 10)
+    (\r -> showString "And {getAnd = " (showsPrec 0 (getAnd x) (showString "}" r)))
+
+-- | Monoid under bitwise inclusive OR.
+newtype Ior a = Ior a
+  deriving newtype (Bounded, Enum, Bits, FiniteBits, Eq)
+
+getIor :: Ior a -> a
+getIor x = case x of
+  Ior a -> a
+
+instance Bits a => Semigroup (Ior a) where
+  (<>) x y = Ior (getIor x .|. getIor y)
+
+instance Bits a => Monoid (Ior a) where
+  mempty = Ior zeroBits
+
+instance Show a => Show (Ior a) where
+  showsPrec d x = showParen (d > 10)
+    (\r -> showString "Ior {getIor = " (showsPrec 0 (getIor x) (showString "}" r)))
+
+-- | Monoid under bitwise XOR.
+newtype Xor a = Xor a
+  deriving newtype (Bounded, Enum, Bits, FiniteBits, Eq)
+
+getXor :: Xor a -> a
+getXor x = case x of
+  Xor a -> a
+
+instance Bits a => Semigroup (Xor a) where
+  (<>) x y = Xor (xor (getXor x) (getXor y))
+
+instance Bits a => Monoid (Xor a) where
+  mempty = Xor zeroBits
+
+instance Show a => Show (Xor a) where
+  showsPrec d x = showParen (d > 10)
+    (\r -> showString "Xor {getXor = " (showsPrec 0 (getXor x) (showString "}" r)))
+
+-- | Monoid under bitwise equality: 1 where the corresponding bits match, 0
+-- otherwise.
+newtype Iff a = Iff a
+  deriving newtype (Bounded, Enum, Bits, FiniteBits, Eq)
+
+getIff :: Iff a -> a
+getIff x = case x of
+  Iff a -> a
+
+instance FiniteBits a => Semigroup (Iff a) where
+  (<>) x y = Iff (complement (xor (getIff x) (getIff y)))
+
+instance FiniteBits a => Monoid (Iff a) where
+  mempty = Iff oneBits
+
+instance Show a => Show (Iff a) where
+  showsPrec d x = showParen (d > 10)
+    (\r -> showString "Iff {getIff = " (showsPrec 0 (getIff x) (showString "}" r)))
+
+-- ---------------------------------------------------------------------------
+-- toIntegralSized
+-- ---------------------------------------------------------------------------
+
+-- | Convert an 'Integral' value to another 'Integral' type, yielding 'Nothing'
+-- when the value is not representable in the target type. A type without a
+-- fixed width (such as 'Integer') is treated as unbounded in that direction.
+--
+-- The check uses the source type's width and signedness against the target's:
+-- a signed source into an unsigned target is bounded below by 0, an unsigned
+-- source into a smaller target is bounded above by the target's maximum, and
+-- nothing needs checking when the source is already a sub-type of the target.
+--
+-- Note that the compare-and-bound helpers below have to be split by type: a
+-- single function may only mention one type variable's classes, because a class
+-- method name is resolved per function, not per argument type.
+-- @'zeroBits'@ as an ordinary function: a body that constrains `Bits` at two
+-- types cannot name `zeroBits` itself, because a method name is ambiguous there.
+bitsZero :: Bits b => b
+bitsZero = zeroBits
+
+-- The target type is inspected through `bitsZero`, which is total for every
+-- instance, and the conversion is applied only in the branch that returns it:
+-- converting first would fail on a value the target cannot represent, which is
+-- exactly the case that has to yield `Nothing`.
+toIntegralSized :: (Integral a, Integral b, Bits a, Bits b) => a -> Maybe b
+toIntegralSized x = toIntegralSizedAt x (bitSizeOf (bitsZero :: b)) (signedOf (bitsZero :: b))
+
+toIntegralSizedAt :: (Integral a, Integral b, Bits a, Bits b) => a -> Maybe Int -> Bool -> Maybe b
+toIntegralSizedAt x yWidth ySigned =
+  case toIntegralFits (bitSizeOf x) (signedOf x) yWidth ySigned x of
+    True -> Just (fromIntegral x)
+    False -> Nothing
+
+-- The width and signedness of a type, as measured by its own instance. Each of
+-- these has a single constrained type variable.
+bitSizeOf :: Bits a => a -> Maybe Int
+bitSizeOf x = bitSizeMaybe x
+
+signedOf :: Bits a => a -> Bool
+signedOf x = isSigned x
+
+-- The whole range check, performed in the source type.
+toIntegralFits :: (Integral a, Bits a) => Maybe Int -> Bool -> Maybe Int -> Bool -> a -> Bool
+toIntegralFits xWidth xSigned yWidth ySigned x =
+  case toIntegralReachesLower (toIntegralLowerBound xWidth xSigned yWidth ySigned) x of
+    False -> False
+    True -> toIntegralReachesUpper (toIntegralUpperBound xWidth xSigned yWidth ySigned) x
+
+toIntegralReachesLower :: Ord a => Maybe a -> a -> Bool
+toIntegralReachesLower bound x = case bound of
+  Nothing -> True
+  Just lo -> case compare lo x of
+    GT -> False
+    _ -> True
+
+toIntegralReachesUpper :: Ord a => Maybe a -> a -> Bool
+toIntegralReachesUpper bound x = case bound of
+  Nothing -> True
+  Just hi -> case compare x hi of
+    GT -> False
+    _ -> True
+
+-- The smallest target value that the source range does not already imply.
+toIntegralLowerBound :: (Integral a, Bits a) => Maybe Int -> Bool -> Maybe Int -> Bool -> Maybe a
+toIntegralLowerBound xWidth xSigned yWidth ySigned =
+  case toIntegralSubType xWidth xSigned yWidth ySigned of
+    True -> Nothing
+    False -> case xSigned of
+      True -> case ySigned of
+        -- A signed source into an unsigned target is bounded below by 0.
+        False -> Just (bitsNum 0)
+        True -> case yWidth of
+          Just yw -> Just (negate (bit (intSub# yw 1)))
+          Nothing -> Nothing
+      False -> Nothing
+
+-- The largest target value that the source range does not already imply.
+toIntegralUpperBound :: (Integral a, Bits a) => Maybe Int -> Bool -> Maybe Int -> Bool -> Maybe a
+toIntegralUpperBound xWidth xSigned yWidth ySigned =
+  case toIntegralSubType xWidth xSigned yWidth ySigned of
+    True -> Nothing
+    False -> case xSigned of
+      True -> case ySigned of
+        False -> case toIntegralUnsignedCovers xWidth yWidth of
+          -- Every non-negative source value fits the target.
+          True -> Nothing
+          False -> toIntegralTargetMax yWidth ySigned
+        True -> toIntegralTargetMax yWidth ySigned
+      False -> toIntegralTargetMax yWidth ySigned
+
+-- The largest value of the target type, produced in the source type.
+toIntegralTargetMax :: (Integral a, Bits a) => Maybe Int -> Bool -> Maybe a
+toIntegralTargetMax yWidth ySigned = case yWidth of
+  Nothing -> Nothing
+  Just yw -> case ySigned of
+    True -> Just (bit (intSub# yw 1) - bitsNum 1)
+    False -> Just (bit yw - bitsNum 1)
+
+-- Whether every non-negative value of the source fits the unsigned target:
+-- @xWidth <= yWidth + 1@, which needs both widths to be known.
+toIntegralUnsignedCovers :: Maybe Int -> Maybe Int -> Bool
+toIntegralUnsignedCovers xWidth yWidth = case xWidth of
+  Nothing -> False
+  Just xw -> case yWidth of
+    Nothing -> False
+    Just yw -> case intCompare# xw (intAdd# yw 1) of
+      GT -> False
+      _ -> True
+
+-- Whether the source type is a bit sub-type of the target type.
+toIntegralSubType :: Maybe Int -> Bool -> Maybe Int -> Bool -> Bool
+toIntegralSubType xWidth xSigned yWidth ySigned = case toIntegralWidthEq xWidth yWidth of
+  True -> xSigned == ySigned
+  False -> case yWidth of
+    -- Anything non-negative is a sub-type of an unbounded type.
+    Nothing -> case ySigned of
+      True -> True
+      False -> case xSigned of
+        True -> False
+        False -> True
+    Just yw -> case xSigned == ySigned of
+      True -> case xWidth of
+        Just xw -> case intCompare# xw yw of
+          GT -> False
+          _ -> True
+        Nothing -> False
+      False -> case xSigned of
+        False -> case ySigned of
+          True -> case xWidth of
+            Just xw -> case intCompare# xw yw of
+              LT -> True
+              _ -> False
+            Nothing -> False
+          False -> False
+        True -> False
+
+toIntegralWidthEq :: Maybe Int -> Maybe Int -> Bool
+toIntegralWidthEq xWidth yWidth = case xWidth of
+  Nothing -> case yWidth of
+    Nothing -> True
+    Just _ -> False
+  Just xw -> case yWidth of
+    Nothing -> False
+    Just yw -> intEq# xw yw
+
+-- ---------------------------------------------------------------------------
+-- Instances for the fixed-width integral types
+-- ---------------------------------------------------------------------------
+--
+-- Every fixed-width type shares the host `Int` representation, so an operation
+-- runs on that representation and narrows the result again; narrowing is what
+-- makes a shift or a complement of an 8-bit value behave as an 8-bit
+-- operation. `Int` and `Word` are already the host width, `Int8`..`Int64` are
+-- stored sign-extended and `Word8`..`Word64` zero-extended, and right shifts
+-- are logical for the unsigned types because their representation has no sign
+-- bit.
+--
+-- The instances live here rather than beside their types because an instance
+-- needs the type's `Eq` and `Num` dictionaries, which live with the type; a
+-- module that both owns the type and imports this one would close an import
+-- cycle.
+
+-- A shift count at or above the host width shifts every bit out, so these
+-- wrap the raw primitives, whose counts are only defined in [0,63].
+bitsShiftL :: Int -> Int -> Int
+bitsShiftL x n = case intCompare# n 63 of
+  GT -> 0
+  _ -> intShiftL# x n
+
+bitsShiftRL :: Int -> Int -> Int
+bitsShiftRL x n = case intCompare# n 63 of
+  GT -> 0
+  _ -> intShiftRL# x n
+
+-- An arithmetic shift keeps the sign: shifting a negative value by its whole
+-- width leaves -1, a non-negative one leaves 0.
+bitsShiftRA :: Int -> Int -> Int
+bitsShiftRA x n = case intCompare# n 63 of
+  GT -> case intCompare# x 0 of
+    LT -> -1
+    _ -> 0
+  _ -> intShiftRA# x n
+
+-- The low @w@ bits of @v@.
+bitsMask :: Int -> Int -> Int
+bitsMask v w = intAnd# v (intSub# (bitsShiftL 1 w) 1)
+
+-- Leading zeros of the low @w@ bits. The host count covers 64 bits, so the
+-- bits above the width are subtracted from it.
+bitsClz :: Int -> Int -> Int
+bitsClz v w = intSub# (intClz# (bitsMask v w)) (intSub# 64 w)
+
+-- Trailing zeros of the low @w@ bits; a zero value counts as the full width.
+bitsCtz :: Int -> Int -> Int
+bitsCtz v w = bitsCtzClip (intCtz# (bitsMask v w)) w
+
+bitsCtzClip :: Int -> Int -> Int
+bitsCtzClip c w = case intCompare# c w of
+  LT -> c
+  _ -> w
+
+-- Rotate the low @w@ bits left by @i@, for any count.
+bitsRotate :: Int -> Int -> Int -> Int
+bitsRotate v w i = bitsRotateShift (bitsMask v w) w (intAnd# i (intSub# w 1))
+
+-- Shifting by the full width yields 0, so a zero count is the identity.
+bitsRotateShift :: Int -> Int -> Int -> Int
+bitsRotateShift m w i = intOr# (bitsShiftL m i) (bitsShiftRL m (intSub# w i))
+
+instance Bits Int where
+  (.&.) a b = intAnd# a b
+  (.|.) a b = intOr# a b
+  xor a b = intXor# a b
+  complement a = intNot# a
+  shiftL a i = case intCompare# i 0 of
+    LT -> bitsNegativeShiftError
+    _ -> bitsShiftL a i
+  shiftR a i = case intCompare# i 0 of
+    LT -> bitsNegativeShiftError
+    _ -> bitsShiftRA a i
+  rotate a i = bitsRotate a 64 i
+  bit i = bitDefault i
+  testBit a i = testBitDefault a i
+  popCount a = intPopCnt# a
+  bitSizeMaybe _ = Just 64
+  bitSize a = finiteBitSize a
+  isSigned _ = True
+
+instance FiniteBits Int where
+  finiteBitSize _ = 64
+  countLeadingZeros a = bitsClz a 64
+  countTrailingZeros a = bitsCtz a 64
+
+instance Bits Int8 where
+  (.&.) a b = int8FromInt# (intAnd# (int8ToInt# a) (int8ToInt# b))
+  (.|.) a b = int8FromInt# (intOr# (int8ToInt# a) (int8ToInt# b))
+  xor a b = int8FromInt# (intXor# (int8ToInt# a) (int8ToInt# b))
+  complement a = int8FromInt# (intNot# (int8ToInt# a))
+  shiftL a i = case intCompare# i 0 of
+    LT -> bitsNegativeShiftError
+    _ -> int8FromInt# (bitsShiftL (int8ToInt# a) i)
+  shiftR a i = case intCompare# i 0 of
+    LT -> bitsNegativeShiftError
+    _ -> int8FromInt# (bitsShiftRA (int8ToInt# a) i)
+  rotate a i = int8FromInt# (bitsRotate (int8ToInt# a) 8 i)
+  bit i = bitDefault i
+  testBit a i = testBitDefault a i
+  popCount a = intPopCnt# (bitsMask (int8ToInt# a) 8)
+  bitSizeMaybe _ = Just 8
+  bitSize a = finiteBitSize a
+  isSigned _ = True
+
+instance FiniteBits Int8 where
+  finiteBitSize _ = 8
+  countLeadingZeros a = bitsClz (int8ToInt# a) 8
+  countTrailingZeros a = bitsCtz (int8ToInt# a) 8
+
+instance Bits Int16 where
+  (.&.) a b = int16FromInt# (intAnd# (int16ToInt# a) (int16ToInt# b))
+  (.|.) a b = int16FromInt# (intOr# (int16ToInt# a) (int16ToInt# b))
+  xor a b = int16FromInt# (intXor# (int16ToInt# a) (int16ToInt# b))
+  complement a = int16FromInt# (intNot# (int16ToInt# a))
+  shiftL a i = case intCompare# i 0 of
+    LT -> bitsNegativeShiftError
+    _ -> int16FromInt# (bitsShiftL (int16ToInt# a) i)
+  shiftR a i = case intCompare# i 0 of
+    LT -> bitsNegativeShiftError
+    _ -> int16FromInt# (bitsShiftRA (int16ToInt# a) i)
+  rotate a i = int16FromInt# (bitsRotate (int16ToInt# a) 16 i)
+  bit i = bitDefault i
+  testBit a i = testBitDefault a i
+  popCount a = intPopCnt# (bitsMask (int16ToInt# a) 16)
+  bitSizeMaybe _ = Just 16
+  bitSize a = finiteBitSize a
+  isSigned _ = True
+
+instance FiniteBits Int16 where
+  finiteBitSize _ = 16
+  countLeadingZeros a = bitsClz (int16ToInt# a) 16
+  countTrailingZeros a = bitsCtz (int16ToInt# a) 16
+
+instance Bits Int32 where
+  (.&.) a b = int32FromInt# (intAnd# (int32ToInt# a) (int32ToInt# b))
+  (.|.) a b = int32FromInt# (intOr# (int32ToInt# a) (int32ToInt# b))
+  xor a b = int32FromInt# (intXor# (int32ToInt# a) (int32ToInt# b))
+  complement a = int32FromInt# (intNot# (int32ToInt# a))
+  shiftL a i = case intCompare# i 0 of
+    LT -> bitsNegativeShiftError
+    _ -> int32FromInt# (bitsShiftL (int32ToInt# a) i)
+  shiftR a i = case intCompare# i 0 of
+    LT -> bitsNegativeShiftError
+    _ -> int32FromInt# (bitsShiftRA (int32ToInt# a) i)
+  rotate a i = int32FromInt# (bitsRotate (int32ToInt# a) 32 i)
+  bit i = bitDefault i
+  testBit a i = testBitDefault a i
+  popCount a = intPopCnt# (bitsMask (int32ToInt# a) 32)
+  bitSizeMaybe _ = Just 32
+  bitSize a = finiteBitSize a
+  isSigned _ = True
+
+instance FiniteBits Int32 where
+  finiteBitSize _ = 32
+  countLeadingZeros a = bitsClz (int32ToInt# a) 32
+  countTrailingZeros a = bitsCtz (int32ToInt# a) 32
+
+instance Bits Int64 where
+  (.&.) a b = int64FromInt# (intAnd# (int64ToInt# a) (int64ToInt# b))
+  (.|.) a b = int64FromInt# (intOr# (int64ToInt# a) (int64ToInt# b))
+  xor a b = int64FromInt# (intXor# (int64ToInt# a) (int64ToInt# b))
+  complement a = int64FromInt# (intNot# (int64ToInt# a))
+  shiftL a i = case intCompare# i 0 of
+    LT -> bitsNegativeShiftError
+    _ -> int64FromInt# (bitsShiftL (int64ToInt# a) i)
+  shiftR a i = case intCompare# i 0 of
+    LT -> bitsNegativeShiftError
+    _ -> int64FromInt# (bitsShiftRA (int64ToInt# a) i)
+  rotate a i = int64FromInt# (bitsRotate (int64ToInt# a) 64 i)
+  bit i = bitDefault i
+  testBit a i = testBitDefault a i
+  popCount a = intPopCnt# (bitsMask (int64ToInt# a) 64)
+  bitSizeMaybe _ = Just 64
+  bitSize a = finiteBitSize a
+  isSigned _ = True
+
+instance FiniteBits Int64 where
+  finiteBitSize _ = 64
+  countLeadingZeros a = bitsClz (int64ToInt# a) 64
+  countTrailingZeros a = bitsCtz (int64ToInt# a) 64
+
+instance Bits Word where
+  (.&.) a b = wordFromInt# (intAnd# (wordToInt# a) (wordToInt# b))
+  (.|.) a b = wordFromInt# (intOr# (wordToInt# a) (wordToInt# b))
+  xor a b = wordFromInt# (intXor# (wordToInt# a) (wordToInt# b))
+  complement a = wordFromInt# (intNot# (wordToInt# a))
+  shiftL a i = case intCompare# i 0 of
+    LT -> bitsNegativeShiftError
+    _ -> wordFromInt# (bitsShiftL (wordToInt# a) i)
+  shiftR a i = case intCompare# i 0 of
+    LT -> bitsNegativeShiftError
+    _ -> wordFromInt# (bitsShiftRL (wordToInt# a) i)
+  rotate a i = wordFromInt# (bitsRotate (wordToInt# a) 64 i)
+  bit i = bitDefault i
+  testBit a i = testBitDefault a i
+  popCount a = intPopCnt# (wordToInt# a)
+  bitSizeMaybe _ = Just 64
+  bitSize a = finiteBitSize a
+  isSigned _ = False
+
+instance FiniteBits Word where
+  finiteBitSize _ = 64
+  countLeadingZeros a = bitsClz (wordToInt# a) 64
+  countTrailingZeros a = bitsCtz (wordToInt# a) 64
+
+instance Bits Word8 where
+  (.&.) a b = word8FromInt# (intAnd# (word8ToInt# a) (word8ToInt# b))
+  (.|.) a b = word8FromInt# (intOr# (word8ToInt# a) (word8ToInt# b))
+  xor a b = word8FromInt# (intXor# (word8ToInt# a) (word8ToInt# b))
+  complement a = word8FromInt# (intNot# (word8ToInt# a))
+  shiftL a i = case intCompare# i 0 of
+    LT -> bitsNegativeShiftError
+    _ -> word8FromInt# (bitsShiftL (word8ToInt# a) i)
+  shiftR a i = case intCompare# i 0 of
+    LT -> bitsNegativeShiftError
+    _ -> word8FromInt# (bitsShiftRL (word8ToInt# a) i)
+  rotate a i = word8FromInt# (bitsRotate (word8ToInt# a) 8 i)
+  bit i = bitDefault i
+  testBit a i = testBitDefault a i
+  popCount a = intPopCnt# (word8ToInt# a)
+  bitSizeMaybe _ = Just 8
+  bitSize a = finiteBitSize a
+  isSigned _ = False
+
+instance FiniteBits Word8 where
+  finiteBitSize _ = 8
+  countLeadingZeros a = bitsClz (word8ToInt# a) 8
+  countTrailingZeros a = bitsCtz (word8ToInt# a) 8
+
+instance Bits Word16 where
+  (.&.) a b = word16FromInt# (intAnd# (word16ToInt# a) (word16ToInt# b))
+  (.|.) a b = word16FromInt# (intOr# (word16ToInt# a) (word16ToInt# b))
+  xor a b = word16FromInt# (intXor# (word16ToInt# a) (word16ToInt# b))
+  complement a = word16FromInt# (intNot# (word16ToInt# a))
+  shiftL a i = case intCompare# i 0 of
+    LT -> bitsNegativeShiftError
+    _ -> word16FromInt# (bitsShiftL (word16ToInt# a) i)
+  shiftR a i = case intCompare# i 0 of
+    LT -> bitsNegativeShiftError
+    _ -> word16FromInt# (bitsShiftRL (word16ToInt# a) i)
+  rotate a i = word16FromInt# (bitsRotate (word16ToInt# a) 16 i)
+  bit i = bitDefault i
+  testBit a i = testBitDefault a i
+  popCount a = intPopCnt# (word16ToInt# a)
+  bitSizeMaybe _ = Just 16
+  bitSize a = finiteBitSize a
+  isSigned _ = False
+
+instance FiniteBits Word16 where
+  finiteBitSize _ = 16
+  countLeadingZeros a = bitsClz (word16ToInt# a) 16
+  countTrailingZeros a = bitsCtz (word16ToInt# a) 16
+
+instance Bits Word32 where
+  (.&.) a b = word32FromInt# (intAnd# (word32ToInt# a) (word32ToInt# b))
+  (.|.) a b = word32FromInt# (intOr# (word32ToInt# a) (word32ToInt# b))
+  xor a b = word32FromInt# (intXor# (word32ToInt# a) (word32ToInt# b))
+  complement a = word32FromInt# (intNot# (word32ToInt# a))
+  shiftL a i = case intCompare# i 0 of
+    LT -> bitsNegativeShiftError
+    _ -> word32FromInt# (bitsShiftL (word32ToInt# a) i)
+  shiftR a i = case intCompare# i 0 of
+    LT -> bitsNegativeShiftError
+    _ -> word32FromInt# (bitsShiftRL (word32ToInt# a) i)
+  rotate a i = word32FromInt# (bitsRotate (word32ToInt# a) 32 i)
+  bit i = bitDefault i
+  testBit a i = testBitDefault a i
+  popCount a = intPopCnt# (word32ToInt# a)
+  bitSizeMaybe _ = Just 32
+  bitSize a = finiteBitSize a
+  isSigned _ = False
+
+instance FiniteBits Word32 where
+  finiteBitSize _ = 32
+  countLeadingZeros a = bitsClz (word32ToInt# a) 32
+  countTrailingZeros a = bitsCtz (word32ToInt# a) 32
+
+instance Bits Word64 where
+  (.&.) a b = word64FromInt# (intAnd# (word64ToInt# a) (word64ToInt# b))
+  (.|.) a b = word64FromInt# (intOr# (word64ToInt# a) (word64ToInt# b))
+  xor a b = word64FromInt# (intXor# (word64ToInt# a) (word64ToInt# b))
+  complement a = word64FromInt# (intNot# (word64ToInt# a))
+  shiftL a i = case intCompare# i 0 of
+    LT -> bitsNegativeShiftError
+    _ -> word64FromInt# (bitsShiftL (word64ToInt# a) i)
+  shiftR a i = case intCompare# i 0 of
+    LT -> bitsNegativeShiftError
+    _ -> word64FromInt# (bitsShiftRL (word64ToInt# a) i)
+  rotate a i = word64FromInt# (bitsRotate (word64ToInt# a) 64 i)
+  bit i = bitDefault i
+  testBit a i = testBitDefault a i
+  popCount a = intPopCnt# (word64ToInt# a)
+  bitSizeMaybe _ = Just 64
+  bitSize a = finiteBitSize a
+  isSigned _ = False
+
+instance FiniteBits Word64 where
+  finiteBitSize _ = 64
+  countLeadingZeros a = bitsClz (word64ToInt# a) 64
+  countTrailingZeros a = bitsCtz (word64ToInt# a) 64

@@ -1,0 +1,55 @@
+program
+  data Compose f a
+    constructor Compose
+      field  :: f a
+  data M1 (i :: Type) (c :: Type) (f :: Type -> Type) (p :: Type)
+    constructor M1
+      field  :: f p
+  function nested :: Maybe Either Int Bool -> Int
+    pat_var m
+    case
+      variable m
+      alt
+        pat_con Nothing
+        integer 0
+      alt
+        pat_con Just
+          pat_var e
+        case
+          variable e
+          alt
+            pat_con Left
+              pat_var n
+            variable n
+          alt
+            pat_con Right
+              pat_wild _
+            integer 1
+  function fromCompose :: Compose Maybe Int -> Maybe Int
+    pat_con Compose
+      pat_var x
+    variable x
+  function fromM1 :: M1 Int Bool Maybe Int -> Maybe Int
+    pat_con M1
+      pat_var x
+    variable x
+  function idF :: f a -> f a
+    pat_var x
+    variable x
+  function useIdF :: Maybe Int -> Maybe Int
+    pat_var x
+    apply
+      variable idF
+      variable x
+  data Color
+    constructor Red
+    constructor Blue
+  data OnlyColor (c :: Color)
+    constructor OnlyColor
+  data PairColor (a :: Color) (b :: Color)
+    constructor PairColor
+  function rb :: PairColor 'Red 'Blue
+    constructor_ref PairColor
+  function okColor :: OnlyColor 'Red -> String
+    pat_con OnlyColor
+    string "ok"

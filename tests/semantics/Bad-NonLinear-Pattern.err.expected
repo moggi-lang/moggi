@@ -1,0 +1,4 @@
+tests/semantics/Bad-NonLinear-Pattern.mog:1:7: type error: conflicting definitions for `x`
+
+  1 | f (x, x) = x
+    |       ^

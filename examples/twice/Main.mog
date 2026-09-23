@@ -1,0 +1,7 @@
+module Main
+
+twice :: Int -> Int
+twice x = x + x
+
+main :: IO ()
+main = putStrLn (show (twice 21))

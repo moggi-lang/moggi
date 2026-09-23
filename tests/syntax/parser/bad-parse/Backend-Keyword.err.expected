@@ -1,0 +1,4 @@
+tests/syntax/parser/bad-parse/Backend-Keyword.mog:3:1: parse error: a module names its implementations in a `{-# BACKEND … #-}` pragma above the module header, as in `{-# BACKEND php = Data.Char.PHP #-}`
+
+  3 | backend php Data.Char.PHP
+    | ^^^^^^^

@@ -1,0 +1,3 @@
+module Bad.Foreign.Backend where
+
+foreign unknownBackend function strlen "strlen" :: String -> Int

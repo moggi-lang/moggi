@@ -1,0 +1,4 @@
+tests/syntax/parser/bad-parse/Backend-Pragma-Duplicate.mog:1:1: parse error: backend `php` is listed twice in the BACKEND pragma
+
+  1 | {-# BACKEND
+    | ^^^^^^^

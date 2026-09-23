@@ -1,0 +1,4 @@
+tests/syntax/parser/bad-parse/Newtype-NoField.mog:1:22: parse error: a newtype constructor must have exactly one field
+
+  1 | newtype Empty = Empty
+    |                      ^

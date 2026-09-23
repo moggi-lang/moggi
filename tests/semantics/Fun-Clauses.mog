@@ -1,0 +1,22 @@
+describe :: [a] -> String
+describe []      = "empty"
+describe [_]     = "one element"
+describe (_:_:_) = "many elements"
+
+origin :: Tuple2 Int Int -> Bool
+origin (0, 0) = True
+origin _      = False
+
+swap :: Tuple2 Int String -> Tuple2 String Int
+swap (x, y) = (y, x)
+
+first :: [a] -> Maybe a
+first []    = Nothing
+first (x:_) = Just x
+
+data Color = Red | Green | Blue
+
+describeColor :: Color -> String
+describeColor Red   = "red"
+describeColor Green = "green"
+describeColor Blue  = "blue"

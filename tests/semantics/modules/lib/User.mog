@@ -1,0 +1,15 @@
+module User
+  ( User()
+  , UserId
+  , getId
+  ) where
+
+type UserId = Int
+
+data User = User { id :: UserId }
+
+getId :: User -> UserId
+getId u = u.id
+
+makeUser :: UserId -> User
+makeUser id = User { id = id }

@@ -1,0 +1,3 @@
+-- `€` is neither an identifier character nor an operator symbol, so it starts
+-- no token. (`?` is an operator symbol, because base's `Data.List` has `(!?)`.)
+x = €

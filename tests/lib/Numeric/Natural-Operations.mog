@@ -1,0 +1,113 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+import Control.Monad
+import Data.Bits
+import Data.Bool
+import Data.Enum
+import Data.Eq
+import Moggi.Internal.Integer
+import Moggi.Internal.Real
+import Data.Maybe
+import Moggi.Internal.Num
+import Data.Ord
+import Text.Show
+import Data.Tuple
+import Data.Word
+import Moggi.Internal.Prim
+import Numeric.Natural
+import System.IO
+
+-- A Natural is an arbitrary-precision non-negative integer: it is exact well
+-- past the width of `Word64`, and the operations whose result could be
+-- negative yield `Nothing` (minusNaturalMaybe) or fail (the underflow and
+-- complement fixtures).
+
+nat :: Int -> Natural
+nat x = fromIntegral x
+
+-- `fromInteger`, the only conversion that can reject a value.
+z :: Integer -> Natural
+z x = fromInteger x
+
+bitNat :: Int -> Natural
+bitNat i = bit i
+
+toNat :: Int -> Natural
+toNat i = toEnum i
+
+main :: IO ()
+main = do
+  -- Literals (Int-typed, hence converted), `fromInteger`, and Show.
+  putStrLn (show (nat 0))
+  putStrLn (show (nat 5))
+  putStrLn (show (z (integerFromInt 12345)))
+  putStrLn (show (nat 1000000000 * nat 1000000000 * nat 1000000000 * nat 1000000000))
+
+  -- Exact arithmetic beyond any fixed width (2^64 and 2^70 do not overflow).
+  putStrLn (show (nat 4294967296 * nat 4294967296))
+  putStrLn (show (nat 1024 * nat 1024 * nat 1024 * nat 1024 * nat 1024 * nat 1024 * nat 1024))
+  putStrLn (show (nat 1000000007 * nat 1000000007 + nat 1))
+  putStrLn (show (nat 5 + nat 7 - nat 3))
+
+  -- Division: every operand is non-negative, so quot and div agree.
+  putStrLn (show (nat 1000 `quot` nat 7))
+  putStrLn (show (nat 1000 `rem` nat 7))
+  putStrLn (show (nat 1000 `div` nat 7))
+  putStrLn (show (nat 1000 `mod` nat 7))
+  putStrLn (show (fst (nat 1000 `quotRem` nat 7)))
+  putStrLn (show (snd (nat 1000 `quotRem` nat 7)))
+  putStrLn (show (fst (nat 1000 `divMod` nat 7)))
+  putStrLn (show (snd (nat 1000 `divMod` nat 7)))
+  putStrLn (show (toInteger (nat 42)))
+  putStrLn (show (toInteger (nat 4294967296 * nat 4294967296)))
+
+  -- Num and Ord.
+  putStrLn (show (negate (nat 0)))
+  putStrLn (show (abs (nat 0)))
+  putStrLn (show (signum (nat 0)))
+  putStrLn (show (signum (nat 9)))
+  putStrLn (show (nat 3 < nat 4))
+  putStrLn (show (max (nat 3) (nat 4)))
+
+  -- Enum.
+  putStrLn (show (succ (nat 5)))
+  putStrLn (show (pred (nat 5)))
+  putStrLn (show (toNat 7))
+  putStrLn (show (fromEnum (nat 7)))
+  putStrLn (show (enumFromTo (nat 2) (nat 5)))
+
+  -- Bits: unbounded, so a shift never wraps and rotate is shift.
+  putStrLn (show (nat 171 .&. nat 18))
+  putStrLn (show (nat 171 .|. nat 18))
+  putStrLn (show (nat 171 `xor` nat 18))
+  putStrLn (show (nat 1 `shiftL` 70))
+  putStrLn (show (nat 1 `shiftL` 0))
+  putStrLn (show ((nat 1 `shiftL` 70) `shiftR` 65))
+  putStrLn (show (nat 171 `shiftR` 4))
+  putStrLn (show (nat 5 `rotate` 3))
+  putStrLn (show (bitNat 70))
+  putStrLn (show (testBit (nat 171) 0))
+  putStrLn (show (testBit (nat 171) 1))
+  putStrLn (show (testBit (nat 171) 2))
+  putStrLn (show (setBit (nat 0) 70))
+  putStrLn (show (clearBit (nat 171) 1))
+  putStrLn (show (complementBit (nat 0) 3))
+  putStrLn (show (popCount (nat 171)))
+  putStrLn (show (popCount (nat 0)))
+  putStrLn (show (zeroBits :: Natural))
+  putStrLn (show (bitSizeMaybe (nat 0)))
+  putStrLn (show (isSigned (nat 0)))
+
+  -- Subtraction that stays inside the type.
+  putStrLn (show (nat 7 - nat 3))
+  putStrLn (show (minusNaturalMaybe (nat 7) (nat 3)))
+  putStrLn (show (minusNaturalMaybe (nat 3) (nat 7)))
+  putStrLn (show (minusNaturalMaybe (nat 7) (nat 7)))
+
+  -- Conversions in both directions, including the ones that cannot fit.
+  putStrLn (show (toIntegralSized (nat 100) :: Maybe Int))
+  putStrLn (show (toIntegralSized (nat 300) :: Maybe Word8))
+  putStrLn (show (toIntegralSized (nat 200) :: Maybe Word8))
+  putStrLn (show (toIntegralSized (nat 1 `shiftL` 70) :: Maybe Word64))
+  putStrLn (show (toIntegralSized (nat 1 `shiftL` 40) :: Maybe Word64))
+  putStrLn (show (toIntegralSized (100 :: Int) :: Maybe Natural))
+  putStrLn (show (toIntegralSized (negate 5 :: Int) :: Maybe Natural))

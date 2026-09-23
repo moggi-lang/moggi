@@ -1,0 +1,5 @@
+import Moggi.Internal.Num
+import Data.Eq
+
+-- GND rejected on ordinary data (even single ctor / single field)
+data Wrapper = Wrapper Int deriving newtype (Num)

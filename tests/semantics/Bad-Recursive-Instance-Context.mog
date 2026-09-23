@@ -1,0 +1,13 @@
+class Loop a where
+  loop :: a -> a
+
+class Loop a => Use a where
+  use :: a -> a
+
+data Box = Box
+
+instance Loop Box => Loop Box where
+  loop x = x
+
+instance Use Box where
+  use x = x

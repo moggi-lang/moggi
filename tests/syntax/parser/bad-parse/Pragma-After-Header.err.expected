@@ -1,0 +1,4 @@
+tests/syntax/parser/bad-parse/Pragma-After-Header.mog:3:1: parse error: a pragma comes before the module header
+
+  3 | {-# BACKEND php = Data.Char.PHP #-}
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^

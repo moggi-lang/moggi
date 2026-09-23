@@ -1,0 +1,12 @@
+program
+  data Box a
+    constructor Box
+      field value :: a
+  function both :: Tuple2 Box Int Box String
+    tuple
+      record_con Box
+        value =
+          integer 1
+      record_con Box
+        value =
+          string "x"

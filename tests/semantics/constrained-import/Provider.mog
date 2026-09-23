@@ -1,0 +1,9 @@
+module Constrained.Provider
+  ( applPure
+  ) where
+
+import Control.Applicative
+import Data.List
+
+applPure :: Applicative f => a -> f a
+applPure x = pure x

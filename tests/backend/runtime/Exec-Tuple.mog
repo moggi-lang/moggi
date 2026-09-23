@@ -1,0 +1,63 @@
+import Data.Bool
+import Data.Functor
+import Moggi.Internal.Num
+import Text.Show
+import Data.Tuple
+import System.IO
+
+-- ---- Exec-Tuple-Arity64 ----
+
+-- Tuple64 is kind-registered; identity preserves a 64-tuple value.
+id64 :: (Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int) -> (Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int)
+id64 x = x
+
+runTupleArity64 :: IO ()
+runTupleArity64 = do
+  let t = (1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1)
+  case id64 t of
+    (a,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_) -> putStrLn (show a)
+
+-- ---- Exec-Tuple-Solo ----
+
+runTupleSolo :: IO ()
+runTupleSolo = do
+  let s = Solo 21
+  let s2 = MkSolo 7
+  putStrLn (show (getSolo s))
+  putStrLn (show (getSolo s2))
+  putStrLn (show (map (\x -> x + 1) s))
+  putStrLn (show (fst (10, 20)))
+  putStrLn (show (snd (10, 20)))
+  putStrLn (show (swap (True, False)))
+
+-- ---- Exec-Tuple-Unit ----
+
+asUnit :: Unit
+asUnit = ()
+
+asTuple0 :: Tuple0
+asTuple0 = ()
+
+asTuple1 :: Tuple1 Int
+asTuple1 = Solo 9
+
+unitLabel :: Unit -> String
+unitLabel u = case u of
+  () -> "unit"
+
+tuple0Label :: Tuple0 -> String
+tuple0Label t = case t of
+  () -> "tuple0"
+
+runTupleUnit :: IO ()
+runTupleUnit = do
+  putStrLn (show (getSolo asTuple1))
+  putStrLn (unitLabel asUnit)
+  putStrLn (tuple0Label asTuple0)
+
+-- ---- combined entry point ----
+main :: IO ()
+main = do
+  runTupleArity64
+  runTupleSolo
+  runTupleUnit

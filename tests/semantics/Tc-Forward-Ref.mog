@@ -1,0 +1,7 @@
+module Tc.Forward.Ref
+
+wrapper :: Int -> Int
+wrapper n = helper n
+
+helper :: Int -> Int
+helper x = x + 1

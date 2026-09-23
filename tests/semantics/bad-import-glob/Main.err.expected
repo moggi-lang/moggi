@@ -1,0 +1,4 @@
+tests/semantics/bad-import-glob/Main.mog:3:17: parse error: expected expression, found operator '.*'
+
+  3 | import Data.Bool.*
+    |                 ^^

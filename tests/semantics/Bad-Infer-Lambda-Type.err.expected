@@ -1,0 +1,4 @@
+tests/semantics/Bad-Infer-Lambda-Type.mog:2:7: type error: could not unify `String` with `Int`
+
+  2 | bad = \x :: String -> x + 1
+    |       ^^^^^^^^^^^^^^^^^^^^^

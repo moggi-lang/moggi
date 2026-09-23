@@ -1,0 +1,8 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Clash.Hub
+  ( module Clash.A
+  , module Clash.B
+  ) where
+
+import Clash.A
+import Clash.B

@@ -1,0 +1,4 @@
+tests/syntax/parser/bad-parse/Newtype-TwoFields.mog:1:43: parse error: a newtype constructor must have exactly one field
+
+  1 | newtype Pair = Pair { a :: Int, b :: Int }
+    |                                           ^

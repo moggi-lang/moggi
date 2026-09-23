@@ -1,0 +1,66 @@
+import Data.Word
+
+-- Numeric literal tokens.
+
+-- ---- Prefix minus is `negate` ----
+--
+-- It has to work at every numeric type instead of only at the `Int` the old
+-- `0 - x` zero pinned it to; `(-7)` has to parse as a negated literal rather
+-- than an operator reference; and an exponent is part of the literal token.
+--
+-- Doubles are compared rather than printed: rendering a fractional Double is a
+-- formatting decision and belongs to the formatter, not to this program.
+negateInt :: Int -> Int
+negateInt x = -x
+
+negateDouble :: Double -> Double
+negateDouble x = -x
+
+negateWord :: Word -> Word
+negateWord x = -x
+
+-- ---- A literal the host `Int` cannot hold keeps its digits ----
+--
+-- Pinned to `Integer` it is exact on every backend, in a pattern as well as in
+-- an expression. `9223372036854775808` and `18446744073709551615` are the values
+-- just past `Int`'s range, where a clamped reading would lose the digits; the
+-- last line is the same literal at a type that really is `Int`, which wraps.
+
+big :: Integer
+big = 123456789012345678901234567890
+
+classify :: Integer -> String
+classify x = case x of
+  123456789012345678901234567890 -> "big"
+  9223372036854775808 -> "2^63"
+  _ -> "other"
+
+main :: IO ()
+main = do
+  putStrLn (show (-7))
+  putStrLn (show (- 7))
+  putStrLn (show (negateInt 7))
+  putStrLn (show (negateInt 0))
+  putStrLn (show (7 - 2))
+  putStrLn (show ((-7) + 2))
+  putStrLn (show ((- 2) * (- 3)))
+  putStrLn (show (negateDouble 2.5 == (0.0 - 2.5)))
+  putStrLn (show (negateDouble 0.0 == -0.0))
+  putStrLn (show (1.5e3 == 1500.0))
+  putStrLn (show (1.5e-3 == 0.0015))
+  putStrLn (show (2E3 == 2000.0))
+  putStrLn (show (negateWord (fromIntegral 7)))
+  putStrLn (show big)
+  putStrLn (show (123456789012345678901234567890 :: Integer))
+  putStrLn (show (-123456789012345678901234567890 :: Integer))
+  putStrLn (show (0 - big))
+  putStrLn (show (9223372036854775808 :: Integer))
+  putStrLn (show (18446744073709551615 :: Integer))
+  putStrLn (show (big + 1 :: Integer))
+  putStrLn (show (big * 2 :: Integer))
+  putStrLn (show (big `div` 10 :: Integer))
+  putStrLn (show (big > 9223372036854775807))
+  putStrLn (classify big)
+  putStrLn (classify 9223372036854775808)
+  putStrLn (classify 7)
+  putStrLn (show (123456789012345678901234567890 :: Int))

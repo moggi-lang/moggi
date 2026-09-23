@@ -1,0 +1,30 @@
+module DeriveVia.Provider (MyEq(..), RepA(..), WrapA(..), LocalA(..), checkLocal) where
+
+import Data.Eq
+
+class MyEq a where
+  (===) :: a -> a -> Bool
+
+-- Exported via type: another module may use instances derived through it.
+newtype RepA = RepA Int
+
+instance MyEq RepA where
+  (===) x y = x == y
+
+-- Private via type: only usable inside this module.
+newtype RepB = RepB Int
+
+instance MyEq RepB where
+  (===) x y = x == y
+
+-- Same-module deriving via the private type: visibility is ordinary, so this
+-- is allowed.
+newtype LocalA = LocalA Int
+  deriving via (RepB) MyEq
+
+-- Exported target derived via the exported type.
+newtype WrapA = WrapA Int
+  deriving via (RepA) MyEq
+
+checkLocal :: LocalA -> LocalA -> Bool
+checkLocal x y = x === y

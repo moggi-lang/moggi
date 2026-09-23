@@ -1,0 +1,72 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.Ord
+  ( Ord(..)
+  , Ordering(..)
+  , comparing
+  , clamp
+  ) where
+
+import Data.Eq
+import Text.Show
+import Moggi.Internal.Prim
+
+infix 4 <, <=, >, >=
+
+data Ordering = LT | EQ | GT
+
+-- | The 'Ord' class is used for totally ordered datatypes.
+class Eq a => Ord a where
+  compare :: a -> a -> Ordering
+  (<), (<=), (>), (>=) :: a -> a -> Bool
+  max, min :: a -> a -> a
+
+  compare x y = case x == y of
+    True -> EQ
+    False -> case x <= y of
+      True -> LT
+      False -> GT
+
+  (<=) x y = case compare x y of
+    GT -> False
+    _ -> True
+  (>=) x y = case compare x y of
+    LT -> False
+    _ -> True
+  (>) x y = case compare x y of
+    GT -> True
+    _ -> False
+  (<) x y = case compare x y of
+    LT -> True
+    _ -> False
+
+  -- These two default methods use '<=' rather than 'compare'
+  -- because the latter is often more expensive
+  max x y = case x <= y of
+    True -> y
+    False -> x
+  min x y = case x <= y of
+    True -> x
+    False -> y
+
+comparing :: Ord b => (a -> b) -> a -> a -> Ordering
+comparing f x y = compare (f x) (f y)
+
+-- | Restrict a value to be within the given lower and upper bounds.
+clamp :: Ord a => (a, a) -> a -> a
+clamp bounds a = case bounds of
+  (low, high) -> min high (max a low)
+
+orderingShow :: Ordering -> String
+orderingShow LT = "LT"
+orderingShow EQ = "EQ"
+orderingShow GT = "GT"
+
+instance Eq Ordering where
+  (==) a b = orderingEq# a b
+  (/=) a b = orderingNe# a b
+
+instance Ord Ordering where
+  compare a b = orderingCompare# a b
+
+instance Show Ordering where
+  show o = orderingShow o

@@ -1,0 +1,17 @@
+module Ir.GuardsCaseAlts where
+
+-- Guards on a `case` alternative. A guard that is not operand-shaped gets its
+-- own preparation statements, which run after the alternative's pattern bound
+-- its variables and before the guard is tested.
+positive :: Int -> Bool
+positive n = n > 0
+
+twice :: Int -> Int
+twice n = n * 2
+
+classify :: Int -> String
+classify n =
+  case n of
+    m | positive (twice m) -> "positive-double"
+      | otherwise -> "not-positive-double"
+    _ -> "unused"

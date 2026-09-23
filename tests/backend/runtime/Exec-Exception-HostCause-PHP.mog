@@ -1,0 +1,12 @@
+import System.IO
+
+-- A host failure raised by a PHP function across the FFI boundary: the report
+-- must name it HostException and keep the native cause, never flatten it to
+-- ErrorCall. `intdiv` is a host function that fails by throwing.
+
+foreign php function rawIntdiv "intdiv" :: Int -> Int -> IO Int
+
+main :: IO ()
+main = do
+  _ <- rawIntdiv 1 0
+  pure ()

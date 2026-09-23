@@ -1,0 +1,5 @@
+add :: Int -> Int -> Int
+add x y = x + y
+
+sum3 :: Int
+sum3 = add 1 2

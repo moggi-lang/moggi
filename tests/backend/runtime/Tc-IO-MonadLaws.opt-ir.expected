@@ -1,0 +1,5 @@
+module
+  function main()
+      io_call putStrLn("a")
+      io_call putStrLn("left-id")
+      ret ()

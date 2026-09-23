@@ -1,0 +1,4 @@
+tests/syntax/parser/bad-parse/If-Missing-Else.mog:2:21: parse error: expected keyword `else`, found end of file
+
+  2 | pick b = if b then 1
+    |                     ^

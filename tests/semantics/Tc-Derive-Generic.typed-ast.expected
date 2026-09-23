@@ -1,0 +1,574 @@
+program
+  data Color
+    constructor Red
+    constructor Blue
+    constructor Green
+    deriving (Generic, Eq)
+  function __ev_Generic_Color_from :: Color -> Rep Color t6
+    pat_var __x
+    case
+      variable __x
+      alt
+        pat_con Red
+        apply
+          constructor_ref M1
+          apply
+            constructor_ref L1
+            apply
+              constructor_ref M1
+              constructor_ref U1
+      alt
+        pat_con Blue
+        apply
+          constructor_ref M1
+          apply
+            constructor_ref R1
+            apply
+              constructor_ref L1
+              apply
+                constructor_ref M1
+                constructor_ref U1
+      alt
+        pat_con Green
+        apply
+          constructor_ref M1
+          apply
+            constructor_ref R1
+            apply
+              constructor_ref R1
+              apply
+                constructor_ref M1
+                constructor_ref U1
+  function __ev_Generic_Color_to :: Rep Color t52 -> Color
+    pat_var __r
+    case
+      variable __r
+      alt
+        pat_con M1
+          pat_con L1
+            pat_con M1
+              pat_con U1
+        constructor_ref Red
+      alt
+        pat_con M1
+          pat_con R1
+            pat_con L1
+              pat_con M1
+                pat_con U1
+        constructor_ref Blue
+      alt
+        pat_con M1
+          pat_con R1
+            pat_con R1
+              pat_con M1
+                pat_con U1
+        constructor_ref Green
+  function __ev_Datatype_h_055cabcc5963af3b_datatypeName :: MetaProxy MetaData "Color" "Main" "moggi" 'False -> String
+    pat_var _d
+    string "Color"
+  function __ev_Datatype_h_055cabcc5963af3b_moduleName :: MetaProxy MetaData "Color" "Main" "moggi" 'False -> String
+    pat_var _d
+    string "Main"
+  function __ev_Datatype_h_055cabcc5963af3b_packageName :: MetaProxy MetaData "Color" "Main" "moggi" 'False -> String
+    pat_var _d
+    string "moggi"
+  function __ev_Datatype_h_055cabcc5963af3b_isNewtype :: MetaProxy MetaData "Color" "Main" "moggi" 'False -> Bool
+    pat_var _d
+    constructor_ref False
+  function __ev_Datatype_h_055cabcc5963af3b_isAllNullary :: MetaProxy MetaData "Color" "Main" "moggi" 'False -> Bool
+    pat_var _d
+    constructor_ref True
+  function __ev_Datatype_h_055cabcc5963af3b_isSum :: MetaProxy MetaData "Color" "Main" "moggi" 'False -> Bool
+    pat_var _d
+    constructor_ref True
+  function __ev_Constructor_h_5096496d04dfd586_conName :: MetaProxy MetaCons "Red" 'PrefixI 'False -> String
+    pat_var _c
+    string "Red"
+  function __ev_Constructor_h_5096496d04dfd586_conIsRecord :: MetaProxy MetaCons "Red" 'PrefixI 'False -> Bool
+    pat_var _c
+    constructor_ref False
+  function __ev_Constructor_h_5096496d04dfd586_conArity :: MetaProxy MetaCons "Red" 'PrefixI 'False -> Int
+    pat_var _c
+    integer 0
+  function __ev_Constructor_h_e9b7cc3899d8b9f6_conName :: MetaProxy MetaCons "Blue" 'PrefixI 'False -> String
+    pat_var _c
+    string "Blue"
+  function __ev_Constructor_h_e9b7cc3899d8b9f6_conIsRecord :: MetaProxy MetaCons "Blue" 'PrefixI 'False -> Bool
+    pat_var _c
+    constructor_ref False
+  function __ev_Constructor_h_e9b7cc3899d8b9f6_conArity :: MetaProxy MetaCons "Blue" 'PrefixI 'False -> Int
+    pat_var _c
+    integer 0
+  function __ev_Constructor_h_9f5f0117ee0fb413_conName :: MetaProxy MetaCons "Green" 'PrefixI 'False -> String
+    pat_var _c
+    string "Green"
+  function __ev_Constructor_h_9f5f0117ee0fb413_conIsRecord :: MetaProxy MetaCons "Green" 'PrefixI 'False -> Bool
+    pat_var _c
+    constructor_ref False
+  function __ev_Constructor_h_9f5f0117ee0fb413_conArity :: MetaProxy MetaCons "Green" 'PrefixI 'False -> Int
+    pat_var _c
+    integer 0
+  function == :: Color -> Color -> Bool
+    pat_var __l
+    pat_var __r
+    case
+      variable __l
+      alt
+        pat_con Red
+        case
+          variable __r
+          alt
+            pat_con Red
+            constructor_ref True
+          alt
+            pat_wild _
+            constructor_ref False
+      alt
+        pat_con Blue
+        case
+          variable __r
+          alt
+            pat_con Blue
+            constructor_ref True
+          alt
+            pat_wild _
+            constructor_ref False
+      alt
+        pat_con Green
+        case
+          variable __r
+          alt
+            pat_con Green
+            constructor_ref True
+          alt
+            pat_wild _
+            constructor_ref False
+  function /= :: Color -> Color -> Bool
+    pat_var __l
+    pat_var __r
+    case
+      case
+        variable __l
+        alt
+          pat_con Red
+          case
+            variable __r
+            alt
+              pat_con Red
+              constructor_ref True
+            alt
+              pat_wild _
+              constructor_ref False
+        alt
+          pat_con Blue
+          case
+            variable __r
+            alt
+              pat_con Blue
+              constructor_ref True
+            alt
+              pat_wild _
+              constructor_ref False
+        alt
+          pat_con Green
+          case
+            variable __r
+            alt
+              pat_con Green
+              constructor_ref True
+            alt
+              pat_wild _
+              constructor_ref False
+      alt
+        pat_con True
+        constructor_ref False
+      alt
+        pat_con False
+        constructor_ref True
+  data Pair a b
+    constructor MkPair
+      field  :: a
+      field  :: b
+    deriving (Generic)
+  function __ev_Generic_Pair_from :: Pair t123 t124 -> Rep Pair t123 t124 t131
+    pat_var __x
+    case
+      variable __x
+      alt
+        pat_con MkPair
+          pat_var __f0
+          pat_var __f1
+        apply
+          constructor_ref M1
+          apply
+            constructor_ref M1
+            infix_con :*:
+              apply
+                constructor_ref M1
+                apply
+                  constructor_ref K1
+                  variable __f0
+              apply
+                constructor_ref M1
+                apply
+                  constructor_ref K1
+                  variable __f1
+  function __ev_Generic_Pair_to :: Rep Pair t123 t124 t160 -> Pair t123 t124
+    pat_var __r
+    case
+      variable __r
+      alt
+        pat_con M1
+          pat_con M1
+            pat_infix_con :*:
+              pat_con M1
+                pat_con K1
+                  pat_var __t0
+              pat_con M1
+                pat_con K1
+                  pat_var __t1
+        apply
+          apply
+            constructor_ref MkPair
+            variable __t0
+          variable __t1
+  function __ev_Datatype_h_5c9669ed58ab24a7_datatypeName :: MetaProxy MetaData "Pair" "Main" "moggi" 'False -> String
+    pat_var _d
+    string "Pair"
+  function __ev_Datatype_h_5c9669ed58ab24a7_moduleName :: MetaProxy MetaData "Pair" "Main" "moggi" 'False -> String
+    pat_var _d
+    string "Main"
+  function __ev_Datatype_h_5c9669ed58ab24a7_packageName :: MetaProxy MetaData "Pair" "Main" "moggi" 'False -> String
+    pat_var _d
+    string "moggi"
+  function __ev_Datatype_h_5c9669ed58ab24a7_isNewtype :: MetaProxy MetaData "Pair" "Main" "moggi" 'False -> Bool
+    pat_var _d
+    constructor_ref False
+  function __ev_Datatype_h_5c9669ed58ab24a7_isAllNullary :: MetaProxy MetaData "Pair" "Main" "moggi" 'False -> Bool
+    pat_var _d
+    constructor_ref False
+  function __ev_Datatype_h_5c9669ed58ab24a7_isSum :: MetaProxy MetaData "Pair" "Main" "moggi" 'False -> Bool
+    pat_var _d
+    constructor_ref False
+  function __ev_Constructor_h_2b5aa0174a16097d_conName :: MetaProxy MetaCons "MkPair" 'PrefixI 'False -> String
+    pat_var _c
+    string "MkPair"
+  function __ev_Constructor_h_2b5aa0174a16097d_conIsRecord :: MetaProxy MetaCons "MkPair" 'PrefixI 'False -> Bool
+    pat_var _c
+    constructor_ref False
+  function __ev_Constructor_h_2b5aa0174a16097d_conArity :: MetaProxy MetaCons "MkPair" 'PrefixI 'False -> Int
+    pat_var _c
+    integer 2
+  function __ev_Selector_h_267033c39ff05e23_selName :: MetaProxy MetaSel Nothing 'NoSourceUnpackedness 'NoSourceStrictness 'DecidedLazy -> String
+    pat_var _s
+    string ""
+  data Person
+    constructor Person
+      field name :: String
+      field age :: Int
+    deriving (Generic)
+  function __ev_Generic_Person_from :: Person -> Rep Person t194
+    pat_var __x
+    case
+      variable __x
+      alt
+        pat_con Person
+          pat_var __f0
+          pat_var __f1
+        apply
+          constructor_ref M1
+          apply
+            constructor_ref M1
+            infix_con :*:
+              apply
+                constructor_ref M1
+                apply
+                  constructor_ref K1
+                  variable __f0
+              apply
+                constructor_ref M1
+                apply
+                  constructor_ref K1
+                  variable __f1
+  function __ev_Generic_Person_to :: Rep Person t221 -> Person
+    pat_var __r
+    case
+      variable __r
+      alt
+        pat_con M1
+          pat_con M1
+            pat_infix_con :*:
+              pat_con M1
+                pat_con K1
+                  pat_var __t0
+              pat_con M1
+                pat_con K1
+                  pat_var __t1
+        apply
+          apply
+            constructor_ref Person
+            variable __t0
+          variable __t1
+  function __ev_Datatype_h_1b0cf02a53daec8a_datatypeName :: MetaProxy MetaData "Person" "Main" "moggi" 'False -> String
+    pat_var _d
+    string "Person"
+  function __ev_Datatype_h_1b0cf02a53daec8a_moduleName :: MetaProxy MetaData "Person" "Main" "moggi" 'False -> String
+    pat_var _d
+    string "Main"
+  function __ev_Datatype_h_1b0cf02a53daec8a_packageName :: MetaProxy MetaData "Person" "Main" "moggi" 'False -> String
+    pat_var _d
+    string "moggi"
+  function __ev_Datatype_h_1b0cf02a53daec8a_isNewtype :: MetaProxy MetaData "Person" "Main" "moggi" 'False -> Bool
+    pat_var _d
+    constructor_ref False
+  function __ev_Datatype_h_1b0cf02a53daec8a_isAllNullary :: MetaProxy MetaData "Person" "Main" "moggi" 'False -> Bool
+    pat_var _d
+    constructor_ref False
+  function __ev_Datatype_h_1b0cf02a53daec8a_isSum :: MetaProxy MetaData "Person" "Main" "moggi" 'False -> Bool
+    pat_var _d
+    constructor_ref False
+  function __ev_Constructor_h_6d9be31ddbf04cdc_conName :: MetaProxy MetaCons "Person" 'PrefixI 'True -> String
+    pat_var _c
+    string "Person"
+  function __ev_Constructor_h_6d9be31ddbf04cdc_conIsRecord :: MetaProxy MetaCons "Person" 'PrefixI 'True -> Bool
+    pat_var _c
+    constructor_ref True
+  function __ev_Constructor_h_6d9be31ddbf04cdc_conArity :: MetaProxy MetaCons "Person" 'PrefixI 'True -> Int
+    pat_var _c
+    integer 2
+  function __ev_Selector_h_889479886aa965ff_selName :: MetaProxy MetaSel Just "name" 'NoSourceUnpackedness 'NoSourceStrictness 'DecidedLazy -> String
+    pat_var _s
+    string "name"
+  function __ev_Selector_h_5a8bc8e1b8f7e7c4_selName :: MetaProxy MetaSel Just "age" 'NoSourceUnpackedness 'NoSourceStrictness 'DecidedLazy -> String
+    pat_var _s
+    string "age"
+  newtype Age
+    constructor Age
+      field  :: Int
+    deriving (Generic)
+  function __ev_Generic_Age_from :: Age -> Rep Age t253
+    pat_var __x
+    case
+      variable __x
+      alt
+        pat_con Age
+          pat_var __f0
+        apply
+          constructor_ref M1
+          apply
+            constructor_ref M1
+            apply
+              constructor_ref M1
+              apply
+                constructor_ref K1
+                variable __f0
+  function __ev_Generic_Age_to :: Rep Age t270 -> Age
+    pat_var __r
+    case
+      variable __r
+      alt
+        pat_con M1
+          pat_con M1
+            pat_con M1
+              pat_con K1
+                pat_var __t0
+        apply
+          constructor_ref Age
+          variable __t0
+  function __ev_Datatype_h_007f711399bfb383_datatypeName :: MetaProxy MetaData "Age" "Main" "moggi" 'True -> String
+    pat_var _d
+    string "Age"
+  function __ev_Datatype_h_007f711399bfb383_moduleName :: MetaProxy MetaData "Age" "Main" "moggi" 'True -> String
+    pat_var _d
+    string "Main"
+  function __ev_Datatype_h_007f711399bfb383_packageName :: MetaProxy MetaData "Age" "Main" "moggi" 'True -> String
+    pat_var _d
+    string "moggi"
+  function __ev_Datatype_h_007f711399bfb383_isNewtype :: MetaProxy MetaData "Age" "Main" "moggi" 'True -> Bool
+    pat_var _d
+    constructor_ref True
+  function __ev_Datatype_h_007f711399bfb383_isAllNullary :: MetaProxy MetaData "Age" "Main" "moggi" 'True -> Bool
+    pat_var _d
+    constructor_ref False
+  function __ev_Datatype_h_007f711399bfb383_isSum :: MetaProxy MetaData "Age" "Main" "moggi" 'True -> Bool
+    pat_var _d
+    constructor_ref False
+  function __ev_Constructor_h_1035541180fb6ede_conName :: MetaProxy MetaCons "Age" 'PrefixI 'False -> String
+    pat_var _c
+    string "Age"
+  function __ev_Constructor_h_1035541180fb6ede_conIsRecord :: MetaProxy MetaCons "Age" 'PrefixI 'False -> Bool
+    pat_var _c
+    constructor_ref False
+  function __ev_Constructor_h_1035541180fb6ede_conArity :: MetaProxy MetaCons "Age" 'PrefixI 'False -> Int
+    pat_var _c
+    integer 1
+  data Empty
+    deriving (Generic)
+  function __ev_Generic_Empty_from :: Empty -> Rep Empty t292
+    pat_var __x
+    apply
+      evidence_method Generic.from evidence= nullary=0
+        instance Empty
+      variable __x
+  function __ev_Generic_Empty_to :: Rep Empty t295 -> Empty
+    pat_var __r
+    apply
+      evidence_method Generic.to evidence= nullary=0
+        instance Empty
+      variable __r
+  function __ev_Datatype_h_603e1f30f9e7caac_datatypeName :: MetaProxy MetaData "Empty" "Main" "moggi" 'False -> String
+    pat_var _d
+    string "Empty"
+  function __ev_Datatype_h_603e1f30f9e7caac_moduleName :: MetaProxy MetaData "Empty" "Main" "moggi" 'False -> String
+    pat_var _d
+    string "Main"
+  function __ev_Datatype_h_603e1f30f9e7caac_packageName :: MetaProxy MetaData "Empty" "Main" "moggi" 'False -> String
+    pat_var _d
+    string "moggi"
+  function __ev_Datatype_h_603e1f30f9e7caac_isNewtype :: MetaProxy MetaData "Empty" "Main" "moggi" 'False -> Bool
+    pat_var _d
+    constructor_ref False
+  function __ev_Datatype_h_603e1f30f9e7caac_isAllNullary :: MetaProxy MetaData "Empty" "Main" "moggi" 'False -> Bool
+    pat_var _d
+    constructor_ref False
+  function __ev_Datatype_h_603e1f30f9e7caac_isSum :: MetaProxy MetaData "Empty" "Main" "moggi" 'False -> Bool
+    pat_var _d
+    constructor_ref False
+  data :| a b
+    constructor :|
+      field  :: a
+      field  :: b
+    deriving (Generic)
+  function __ev_Generic_h_e5bf5a3d33ed1a67_from :: t302 :| t303 -> Rep t302 :| t303 t310
+    pat_var __x
+    case
+      variable __x
+      alt
+        pat_infix_con :|
+          pat_var __f0
+          pat_var __f1
+        apply
+          constructor_ref M1
+          apply
+            constructor_ref M1
+            infix_con :*:
+              apply
+                constructor_ref M1
+                apply
+                  constructor_ref K1
+                  variable __f0
+              apply
+                constructor_ref M1
+                apply
+                  constructor_ref K1
+                  variable __f1
+  function __ev_Generic_h_e5bf5a3d33ed1a67_to :: Rep t302 :| t303 t339 -> t302 :| t303
+    pat_var __r
+    case
+      variable __r
+      alt
+        pat_con M1
+          pat_con M1
+            pat_infix_con :*:
+              pat_con M1
+                pat_con K1
+                  pat_var __t0
+              pat_con M1
+                pat_con K1
+                  pat_var __t1
+        infix_con :|
+          variable __t0
+          variable __t1
+  function __ev_Datatype_h_7f5794130e50dfb9_datatypeName :: MetaProxy MetaData ":|" "Main" "moggi" 'False -> String
+    pat_var _d
+    string ":|"
+  function __ev_Datatype_h_7f5794130e50dfb9_moduleName :: MetaProxy MetaData ":|" "Main" "moggi" 'False -> String
+    pat_var _d
+    string "Main"
+  function __ev_Datatype_h_7f5794130e50dfb9_packageName :: MetaProxy MetaData ":|" "Main" "moggi" 'False -> String
+    pat_var _d
+    string "moggi"
+  function __ev_Datatype_h_7f5794130e50dfb9_isNewtype :: MetaProxy MetaData ":|" "Main" "moggi" 'False -> Bool
+    pat_var _d
+    constructor_ref False
+  function __ev_Datatype_h_7f5794130e50dfb9_isAllNullary :: MetaProxy MetaData ":|" "Main" "moggi" 'False -> Bool
+    pat_var _d
+    constructor_ref False
+  function __ev_Datatype_h_7f5794130e50dfb9_isSum :: MetaProxy MetaData ":|" "Main" "moggi" 'False -> Bool
+    pat_var _d
+    constructor_ref False
+  function __ev_Constructor_h_73e49bcb690392d5_conName :: MetaProxy MetaCons ":|" 'InfixI 'LeftAssociative 'False -> String
+    pat_var _c
+    string ":|"
+  function __ev_Constructor_h_73e49bcb690392d5_conIsRecord :: MetaProxy MetaCons ":|" 'InfixI 'LeftAssociative 'False -> Bool
+    pat_var _c
+    constructor_ref False
+  function __ev_Constructor_h_73e49bcb690392d5_conArity :: MetaProxy MetaCons ":|" 'InfixI 'LeftAssociative 'False -> Int
+    pat_var _c
+    integer 2
+  function roundtrip :: Color -> Color
+    pat_var c
+    apply
+      evidence_method Generic.to evidence= nullary=0
+        instance Color
+      apply
+        evidence_method Generic.from evidence= nullary=0
+          instance Color
+        variable c
+  function roundtripPair :: Pair Int Bool -> Pair Int Bool
+    pat_var p
+    apply
+      evidence_method Generic.to evidence= nullary=0
+        instance Pair a b
+      apply
+        evidence_method Generic.from evidence= nullary=0
+          instance Pair a b
+        variable p
+  function roundtripPerson :: Person -> Person
+    pat_var p
+    apply
+      evidence_method Generic.to evidence= nullary=0
+        instance Person
+      apply
+        evidence_method Generic.from evidence= nullary=0
+          instance Person
+        variable p
+  function roundtripAge :: Age -> Age
+    pat_var a
+    apply
+      evidence_method Generic.to evidence= nullary=0
+        instance Age
+      apply
+        evidence_method Generic.from evidence= nullary=0
+          instance Age
+        variable a
+  function roundtripPipe :: Int :| Bool -> Int :| Bool
+    pat_var x
+    apply
+      evidence_method Generic.to evidence= nullary=0
+        instance a :| b
+      apply
+        evidence_method Generic.from evidence= nullary=0
+          instance a :| b
+        variable x
+  function same :: Bool
+    apply
+      apply
+        evidence_method Eq.== evidence= nullary=0
+          instance Color
+        apply
+          variable roundtrip
+          constructor_ref Red
+      constructor_ref Red
+  function asRep :: Color -> Rep Color x
+    pat_var c
+    apply
+      evidence_method Generic.from evidence= nullary=0
+        instance Color
+      variable c
+  function fromRep :: Rep Color x -> Color
+    pat_var r
+    apply
+      evidence_method Generic.to evidence= nullary=0
+        instance Color
+      variable r

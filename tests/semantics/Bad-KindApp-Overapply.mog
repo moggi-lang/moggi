@@ -1,0 +1,3 @@
+-- List :: Type -> Type; second argument is over-application
+bad :: List Int Bool -> Int
+bad _ = 0

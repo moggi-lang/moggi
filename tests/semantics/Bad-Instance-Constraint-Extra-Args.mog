@@ -1,0 +1,5 @@
+class Boxed a where
+  box :: a -> a
+
+instance Eq Bool Bool => Boxed Bool where
+  box x = x

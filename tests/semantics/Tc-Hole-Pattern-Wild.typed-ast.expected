@@ -1,0 +1,8 @@
+program
+  function f :: Int -> Int
+    pat_var x
+    case
+      variable x
+      alt
+        pat_wild _
+        integer 1

@@ -1,0 +1,5 @@
+fail :: IO ()
+fail = error "boom"
+
+main :: IO ()
+main = fail

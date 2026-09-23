@@ -1,0 +1,44 @@
+import Moggi.Generics
+import Data.Eq
+import Data.Bool
+import Data.String
+
+-- Stock Generic: sums, products, records, newtype flag, empty data.
+data Color = Red | Blue | Green deriving (Generic, Eq)
+
+data Pair a b = MkPair a b deriving (Generic)
+
+data Person = Person { name :: String, age :: Int } deriving (Generic)
+
+newtype Age = Age Int deriving (Generic)
+
+data Empty deriving (Generic)
+
+-- Infix data constructor (value-level :|); stock MetaCons uses
+-- 'InfixI 'LeftAssociative (the default infixl 9).
+data (a :| b) = a :| b deriving (Generic)
+
+roundtrip :: Color -> Color
+roundtrip c = to (from c)
+
+roundtripPair :: Pair Int Bool -> Pair Int Bool
+roundtripPair p = to (from p)
+
+roundtripPerson :: Person -> Person
+roundtripPerson p = to (from p)
+
+roundtripAge :: Age -> Age
+roundtripAge a = to (from a)
+
+roundtripPipe :: (Int :| Bool) -> (Int :| Bool)
+roundtripPipe x = to (from x)
+
+same :: Bool
+same = roundtrip Red == Red
+
+-- Rep stays usable as a nominal associated type in signatures.
+asRep :: Color -> Rep Color x
+asRep c = from c
+
+fromRep :: Rep Color x -> Color
+fromRep r = to r

@@ -1,0 +1,104 @@
+program
+  class MyConstraint a
+    method myMethod :: a -> String = default
+  data Foo
+    constructor Foo
+    constructor Bar
+    deriving (Eq, Show, anyclass MyConstraint)
+  function == :: Foo -> Foo -> Bool
+    pat_var __l
+    pat_var __r
+    case
+      variable __l
+      alt
+        pat_con Foo
+        case
+          variable __r
+          alt
+            pat_con Foo
+            constructor_ref True
+          alt
+            pat_wild _
+            constructor_ref False
+      alt
+        pat_con Bar
+        case
+          variable __r
+          alt
+            pat_con Bar
+            constructor_ref True
+          alt
+            pat_wild _
+            constructor_ref False
+  function /= :: Foo -> Foo -> Bool
+    pat_var __l
+    pat_var __r
+    case
+      case
+        variable __l
+        alt
+          pat_con Foo
+          case
+            variable __r
+            alt
+              pat_con Foo
+              constructor_ref True
+            alt
+              pat_wild _
+              constructor_ref False
+        alt
+          pat_con Bar
+          case
+            variable __r
+            alt
+              pat_con Bar
+              constructor_ref True
+            alt
+              pat_wild _
+              constructor_ref False
+      alt
+        pat_con True
+        constructor_ref False
+      alt
+        pat_con False
+        constructor_ref True
+  function showsPrec :: Int -> Foo -> String -> String
+    pat_var __d
+    pat_var __x
+    pat_var __s
+    case
+      variable __x
+      alt
+        pat_con Foo
+        intrinsic stringAppend#
+          string "Foo"
+          variable __s
+      alt
+        pat_con Bar
+        intrinsic stringAppend#
+          string "Bar"
+          variable __s
+  function show :: Foo -> String
+    pat_var x
+    apply
+      apply
+        apply
+          variable shows
+          evidence_ref Show Foo
+        variable x
+      string ""
+  function showList :: [Foo] -> String -> String
+    pat_var ls
+    pat_var s
+    apply
+      apply
+        apply
+          variable showListWith
+          apply
+            variable shows
+            evidence_ref Show Foo
+        variable ls
+      variable s
+  function myMethod :: Foo -> String
+    pat_wild _
+    string "default"

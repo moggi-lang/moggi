@@ -1,0 +1,35 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module System.Environment.PHP
+  ( getArgs
+  , getEnv
+  , lookupEnv
+  , getProgName
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.List hiding (singleton, take, drop, length, isPrefixOf, isSuffixOf)
+import Data.Maybe
+import Data.String
+import Moggi.Err
+import System.IO.Base (IO)
+import Moggi.Internal.Prim
+
+foreign php function rawGetenv "getenv" :: String -> IO (Maybe String)
+
+getArgs :: IO [String]
+getArgs = platformArgv#
+
+lookupEnv :: String -> IO (Maybe String)
+lookupEnv k = rawGetenv k
+
+getEnvFromMaybe :: Maybe String -> IO String
+getEnvFromMaybe m = case m of
+  Just v -> pure v
+  Nothing -> error "getEnv: missing environment variable"
+
+getEnv :: String -> IO String
+getEnv k = lookupEnv k >>= getEnvFromMaybe
+
+getProgName :: IO String
+getProgName = pure "moggi"

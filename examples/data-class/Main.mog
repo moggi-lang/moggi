@@ -1,0 +1,32 @@
+-- A data type, a class of your own, a standard instance, and IO.
+--
+-- Build:  moggi compile examples/data-class -o /tmp/data-class.phar
+-- Run:    php /tmp/data-class.phar
+
+module Main
+
+data Shape
+  = Circle Double
+  | Rect Double Double
+  deriving Show
+
+class Area a where
+  area :: a -> Double
+
+instance Area Shape where
+  area shape = case shape of
+    Circle r -> 3.141592653589793 * r * r
+    Rect w h -> w * h
+
+data Reading = Reading { label :: String, shape :: Shape }
+
+render :: Reading -> String
+render reading =
+  let thisShape = reading.shape
+  in reading.label <> ": " <> show (area thisShape)
+
+main :: IO ()
+main = do
+  putStrLn (render (Reading { label = "unit circle", shape = Circle 1.0 }))
+  putStrLn (render (Reading { label = "3x4", shape = Rect 3.0 4.0 }))
+  putStrLn (show (Rect 2.0 2.0))

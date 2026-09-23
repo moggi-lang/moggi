@@ -1,0 +1,7 @@
+program
+  foreign_type php Path "SplFileInfo"
+  function getPath :: String -> IO Path
+    pat_var a1
+    io_action
+      foreign_call php function "SplFileInfo:__con" dispatch=constructor io=none
+        variable a1

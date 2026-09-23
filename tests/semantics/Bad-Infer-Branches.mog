@@ -1,0 +1,3 @@
+pick mx = case mx of
+  Just n -> n + 1
+  Nothing -> ()

@@ -1,0 +1,19 @@
+program
+  class Cz a
+    method cz :: a -> a -> Int
+  data B
+    constructor T
+    constructor F
+  function cz :: B -> B -> Int
+    pat_var a
+    pat_var b
+    integer 0
+  function check :: B -> B -> Int
+    pat_var x
+    pat_var y
+    apply
+      apply
+        evidence_method Cz.cz evidence= nullary=0
+          instance B
+        variable x
+      variable y

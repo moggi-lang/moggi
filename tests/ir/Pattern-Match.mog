@@ -1,0 +1,13 @@
+module Ir.PatternMatch where
+
+data Colour = Red | Green | Blue
+
+-- Constructor patterns lower to tag tests in the order written.
+rank c = case c of
+  Red -> 1
+  Green -> 2
+  Blue -> 3
+
+first xs = case xs of
+  [] -> 0
+  y : _ -> y

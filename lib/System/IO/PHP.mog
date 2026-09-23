@@ -1,0 +1,213 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module System.IO.PHP
+  ( stdin
+  , stdout
+  , stderr
+  , openFile
+  , hClose
+  , hGetLine
+  , hGetChar
+  , getLine
+  , getChar
+  , hIsEOF
+  , hGetContents
+  , hFileSize
+  , hSetFileSize
+  , hPutStr
+  , hPutStrLn
+  , hPutChar
+  , hFlush
+  , putStr
+  , putStrLn
+  , print
+  ) where
+
+import Text.Show
+import Control.Exception (catch)
+import Moggi.IO.Exception
+import System.IO.Error (mkIOError)
+import System.IO.Types
+
+import Data.Bool
+import Control.Applicative
+import Control.Monad
+import Data.Char (Char)
+import System.IO.Base (IO, FilePath)
+import Moggi.Err
+import Moggi.Internal.Integer (integerFromInt)
+import Data.Maybe
+import Data.String
+
+foreign php type StatArray "array"
+
+foreign php const rawStdin "PHP:STDIN" :: Handle
+
+foreign php const rawStdout "PHP:STDOUT" :: Handle
+
+foreign php const rawStderr "PHP:STDERR" :: Handle
+
+foreign php function rawFopen "fopen" :: String -> String -> IO Handle
+
+foreign php function rawPathExists "file_exists" :: String -> Bool
+
+foreign php function rawIsDir "is_dir" :: String -> Bool
+
+foreign php function rawIsReadable "is_readable" :: String -> Bool
+
+foreign php function rawIsWritable "is_writable" :: String -> Bool
+
+foreign php function rawClose "fclose" :: Handle -> IO ()
+
+foreign php function rawFwrite "fwrite" :: Handle -> String -> IO Int
+
+foreign php function rawFgets "fgets" :: Handle -> IO (Maybe String)
+
+foreign php function rawFgetc "fgetc" :: Handle -> IO (Maybe String)
+
+foreign php function rawFflush "fflush" :: Handle -> IO ()
+
+foreign php function rawFeof "feof" :: Handle -> IO Bool
+
+foreign php function rawStreamGetContents "stream_get_contents" :: Handle -> IO String
+
+foreign php function rawFstat "fstat" :: Handle -> IO StatArray
+
+foreign php function rawFtruncate "ftruncate" :: Handle -> Integer -> IO Bool
+
+foreign php function isArray "is_array" :: StatArray -> Bool
+
+foreign php function arrayKeyExists "array_key_exists" :: String -> StatArray -> Bool
+
+foreign php function arrayIntersectKey "array_intersect_key" :: StatArray -> StatArray -> StatArray
+
+foreign php function arrayFlip "array_flip" :: [String] -> StatArray
+
+foreign php function arrayValuesStat "array_values" :: StatArray -> [StatArray]
+
+foreign php function phpIntval "intval" :: StatArray -> Int
+
+stdin :: Handle
+stdin = rawStdin
+
+stdout :: Handle
+stdout = rawStdout
+
+stderr :: Handle
+stderr = rawStderr
+
+-- | `fopen` opens a directory as happily as a file, which the other backends
+-- refuse; the check keeps the three of them agreeing. Otherwise PHP reports no
+-- errno for a failed `fopen`, so the error type is decided from the path — the
+-- same signals errno would carry.
+openFile :: FilePath -> IOMode -> IO Handle
+openFile p mode = case rawIsDir (p) of
+  True -> ioError (mkIOError InappropriateType "openFile" Nothing (Just (p)))
+  False -> catch (rawFopen (p) (ioModeToString mode)) (openFileFailed p mode)
+
+openFileFailed :: FilePath -> IOMode -> HostException -> IO Handle
+openFileFailed p mode _ =
+  ioError (mkIOError (openErrorType p mode) "openFile" Nothing (Just (p)))
+
+openErrorType :: FilePath -> IOMode -> IOErrorType
+openErrorType p mode = case rawIsDir (p) of
+  True -> InappropriateType
+  False -> case rawPathExists (p) of
+    False -> NoSuchThing
+    True -> case writableMode mode of
+      True -> case rawIsWritable (p) of
+        False -> PermissionDenied
+        True -> OtherError
+      False -> case rawIsReadable (p) of
+        False -> PermissionDenied
+        True -> OtherError
+
+writableMode :: IOMode -> Bool
+writableMode mode = case mode of
+  ReadMode -> False
+  WriteMode -> True
+  AppendMode -> True
+  ReadWriteMode -> True
+
+ioModeToString :: IOMode -> String
+ioModeToString mode = case mode of
+  ReadMode -> "r"
+  WriteMode -> "w"
+  AppendMode -> "a"
+  ReadWriteMode -> "c+"
+
+hClose :: Handle -> IO ()
+hClose h = rawClose h
+
+hPutStr :: Handle -> String -> IO ()
+hPutStr h s = do
+  _ <- rawFwrite h s
+  pure ()
+
+hPutStrLn :: Handle -> String -> IO ()
+hPutStrLn h s = hPutStr h (s <> "\n")
+
+hPutChar :: Handle -> Char -> IO ()
+hPutChar h c = hPutStr h (singleton c)
+
+hGetChar :: Handle -> IO Char
+hGetChar h = do
+  m <- rawFgetc h
+  case m of
+    Nothing -> error "hGetChar: end of input"
+    Just s -> case unpack s of
+      c : _ -> pure c
+      [] -> error "hGetChar: empty read"
+
+hFlush :: Handle -> IO ()
+hFlush h = rawFflush h
+
+hGetLine :: Handle -> IO (Maybe String)
+hGetLine h = rawFgets h
+
+putStr :: String -> IO ()
+putStr s = hPutStr stdout s
+
+putStrLn :: String -> IO ()
+putStrLn s = hPutStrLn stdout s
+
+getLineFromMaybe :: Maybe String -> IO String
+getLineFromMaybe m = case m of
+  Nothing -> error "getLine: end of input"
+  Just s -> pure s
+
+getLine :: IO String
+getLine = do
+  m <- hGetLine stdin
+  getLineFromMaybe m
+
+getChar :: IO Char
+getChar = hGetChar stdin
+
+hIsEOF :: Handle -> IO Bool
+hIsEOF h = rawFeof h
+
+hGetContents :: Handle -> IO String
+hGetContents h = rawStreamGetContents h
+
+hFileSize :: Handle -> IO Integer
+hFileSize h = do
+  stat <- rawFstat h
+  case isArray stat of
+    False -> error "handleFileSize: fstat failed"
+    True -> case arrayKeyExists "size" stat of
+      False -> error "handleFileSize: fstat failed"
+      True -> pure (integerFromInt (phpIntval (statField stat "size")))
+
+statField :: StatArray -> String -> StatArray
+statField arr key = case arrayValuesStat (arrayIntersectKey arr (arrayFlip (key : []))) of
+  v : _ -> v
+  [] -> arr
+
+hSetFileSize :: Handle -> Integer -> IO ()
+hSetFileSize h size = do
+  _ <- rawFtruncate h size
+  pure ()
+
+print :: Show a => a -> IO ()
+print x = putStr (show x)
+

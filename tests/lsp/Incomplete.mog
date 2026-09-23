@@ -1,0 +1,18 @@
+-- incomplete expression
+incomplete1 = foo +
+
+-- incomplete application
+incomplete2 = map
+
+-- incomplete case
+incomplete3 =
+  case test of
+    Just x -> x
+    Nothing ->
+
+-- incomplete declaration
+incomplete4 x =
+
+-- cursor commonly ends up here
+completionTarget =
+  map

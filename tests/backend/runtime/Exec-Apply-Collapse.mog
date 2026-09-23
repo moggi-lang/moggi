@@ -1,0 +1,62 @@
+import Data.Int
+import Text.Show
+import System.IO
+
+-- Coverage for the optimizer's apply collapsing.
+--
+-- Curried application to a statically known function (`apply3 add3 1 2 3`)
+-- reaches the optimizer as a chain of `partial f(x)` / `call_value t(y)` pairs.
+-- Those must fold into a single direct call; a partial fold or a wrong
+-- argument order silently changes the answer, so every shape below is checked
+-- against an exact expected stdout on php, jvm and dotnet.
+
+add3 :: Int -> Int -> Int -> Int
+add3 a b c = a + b + c
+
+mul :: Int -> Int -> Int
+mul a b = a * b
+
+triple :: Int -> Int
+triple x = mul 3 x
+
+addOne :: Int -> Int
+addOne x = x + 1
+
+-- Known function applied through a wrapper that inlines away.
+apply3 :: (Int -> Int -> Int -> Int) -> Int -> Int -> Int -> Int
+apply3 f a b c = f a b c
+
+-- Curried application through a function-valued parameter whose declared type
+-- fixes its arity: `f x y` must flatten to one apply, not two.
+apply2 :: (Int -> Int -> Int) -> Int -> Int -> Int
+apply2 f x y = f x y
+
+-- Nested currying on a function-valued parameter returned by another function.
+compose :: (Int -> Int) -> (Int -> Int) -> Int -> Int
+compose f g x = f (g x)
+
+twice :: (Int -> Int) -> Int -> Int
+twice f x = f (f x)
+
+-- Stepwise saturation of a partial application.
+stepwise :: Int
+stepwise = let
+  plusTen = add3 10
+  plusTenTwenty = plusTen 20
+  in plusTenTwenty 12
+
+-- Parameters feeding each other: collapsing must neither reorder nor drop the
+-- intermediate evaluations.
+countdown :: Int -> Int -> Int
+countdown acc n = case compare n 0 of
+  EQ -> acc
+  _  -> countdown (acc + n) (n - 1)
+
+main :: IO ()
+main = do
+  putStrLn (show (apply3 add3 1 2 3))
+  putStrLn (show (apply2 mul 6 7))
+  putStrLn (show stepwise)
+  putStrLn (show (twice addOne 40))
+  putStrLn (show (compose addOne triple 7))
+  putStrLn (show (countdown 0 4))

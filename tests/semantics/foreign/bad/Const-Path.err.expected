@@ -1,0 +1,4 @@
+tests/semantics/foreign/bad/Const-Path.mog:3:19: type error: foreign const import requires static class path (`Class:NAME`)
+
+  3 | foreign php const bad "PDO.prepare" :: Int
+    |                   ^^^

@@ -1,0 +1,13 @@
+-- System.DateTimeOffset is a CLR *value* type. If it is not resolved as one,
+-- the emitted methodref for dtoUtcNow / dtoToUnixTimeSeconds cannot bind and the
+-- program dies with MissingMethodException, so simply reaching `putStrLn` here
+-- is the assertion. It also exercises the PHP and JVM clock bindings.
+import System.IO
+import Data.Ord
+import Text.Show
+import Data.Time.Clock
+
+main :: IO ()
+main = do
+  t <- getCurrentTime
+  putStrLn (show (dayNumber (utctDay t) > 0))

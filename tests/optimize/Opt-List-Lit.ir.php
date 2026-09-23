@@ -1,0 +1,5 @@
+<?php declare(strict_types=1);
+
+return json_decode(<<<'JSON'
+{"tag":"module","functions":[{"tag":"function","name":"oneTwoThree","params":[],"type":{"tag":"type_app","con":{"tag":"type_con","name":"List"},"args":[{"tag":"type_con","name":"Int"}]},"body":{"tag":"block","items":[{"tag":"ret","value":{"tag":"list_lit","elements":[{"tag":"const","value":1},{"tag":"const","value":2},{"tag":"const","value":3}]}}]},"export":false,"instanceMethod":false,"entryPoint":false},{"tag":"function","name":"foo","params":[],"type":{"tag":"type_con","name":"String"},"body":{"tag":"block","items":[{"tag":"ret","value":{"tag":"const_str","value":"x"}}]},"export":false,"instanceMethod":false,"entryPoint":false},{"tag":"function","name":"items","params":[],"type":{"tag":"type_app","con":{"tag":"type_con","name":"List"},"args":[{"tag":"type_con","name":"String"}]},"body":{"tag":"block","items":[{"tag":"ret","value":{"tag":"list_lit","elements":[{"tag":"fn","name":"foo"},{"tag":"const_str","value":"y"}]}}]},"export":false,"instanceMethod":false,"entryPoint":false}],"data":[],"instanceEvidence":[],"entryMain":null}
+JSON, true, flags: JSON_THROW_ON_ERROR);

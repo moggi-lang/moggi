@@ -1,0 +1,71 @@
+add :: Int -> Int -> Int
+add x y = x + y
+
+inc :: Int -> Int
+inc = add 1
+
+useInc :: Int -> Int
+useInc x = inc x
+
+sum2 :: Int
+sum2 = add 1 2
+
+viaLet :: Int
+viaLet = let f = add 1 in f 2
+
+id :: a -> a
+id x = x
+
+ho :: Int
+ho = id (add 1) 2
+
+apply :: (Int -> Int) -> Int -> Int
+apply f x = f x
+
+useAdd :: Int -> Int
+useAdd x = apply (add 1) x
+
+passPartial :: (Int -> Int) -> Int
+passPartial g = g 5
+
+(+) :: Int -> Int -> Int
+x + y = x + y
+
+plus10 :: Int -> Int
+plus10 = (+) 10
+
+triple :: Int -> Int -> Int -> Int
+triple a b c = a + b + c
+
+step1 :: Int -> Int -> Int
+step1 = triple 1
+
+step2 :: Int -> Int
+step2 = triple 1 2
+
+step3 :: Int
+step3 = triple 1 2 3
+
+justHi :: Maybe String
+justHi = Just "hi"
+
+always :: a -> b -> a
+always x _ = x
+
+polyPartial :: Int -> Int
+polyPartial = always 42
+
+incLambda :: Int -> Int -> Int
+incLambda x = \y -> x + y
+
+typedParam :: Int -> Int
+typedParam = \x :: Int -> x + 1
+
+twoParams :: Int -> Int -> Int
+twoParams = \x :: Int y :: Int -> x + y
+
+ascribedLambda :: Int -> Int
+ascribedLambda = (\x -> x + 1) :: Int -> Int
+
+bodyAsc :: Int -> Int
+bodyAsc = \x -> (x + 1) :: Int

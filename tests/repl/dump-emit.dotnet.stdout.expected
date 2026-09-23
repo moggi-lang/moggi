@@ -1,0 +1,15 @@
+.class public abstract auto ansi sealed beforefieldinit Moggi.Interactive
+       extends [System.Runtime]System.Object
+{
+.method public hidebysig static object 'foo'() cil managed
+{
+  .maxstack 64
+  .line 3, 3 : 7, 7 'Interactive.mog'
+  ldc.i8 1
+  call object Moggi.Rt.RT::BoxInt(int64)
+  ret
+  ldnull
+  ret
+}
+
+}

@@ -1,0 +1,12 @@
+foreign dotnet type StringBuilder "System.Text.StringBuilder"
+
+foreign dotnet function newSB "System.Text.StringBuilder:__con" :: StringBuilder
+foreign dotnet function append "System.Text.StringBuilder.Append" :: StringBuilder -> String -> StringBuilder
+foreign dotnet function sbToString "System.Text.StringBuilder.ToString" :: StringBuilder -> String
+
+main :: IO ()
+main = do
+  let sb0 = newSB
+  let sb1 = append sb0 "host"
+  let sb2 = append sb1 "-object"
+  putStrLn (sbToString sb2)

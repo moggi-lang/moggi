@@ -1,0 +1,31 @@
+module
+  function add(__ev_Num, x, y)
+      t0 = dict_call __ev_Num->+(x, y)
+      ret t0
+  function sub(__ev_Num, x, y)
+      t1 = dict_call __ev_Num->-(x, y)
+      ret t1
+  function id(x)
+      ret x
+  function f(x, y)
+      ret x
+  function list(x)
+      ret x
+  function echo(x)
+      ret x
+  function match(x)
+      ret x
+  function function(x)
+      ret x
+  function list_(__ev_Num, x)
+      t2 = dict_call __ev_Num->fromInteger(intrinsic intToInteger#(1))
+      t3 = dict_call __ev_Num->+(x, t2)
+      ret t3
+  function fn_list(__ev_Num, x)
+      t4 = dict_call __ev_Num->fromInteger(intrinsic intToInteger#(2))
+      t5 = dict_call __ev_Num->+(x, t4)
+      ret t5
+  function useKeywords()
+      t10 = call list_(@__ev_Num_Int, 5)
+      t11 = call fn_list(@__ev_Num_Int, 6)
+      ret intrinsic intAdd#(intrinsic intAdd#(10, t10), t11)

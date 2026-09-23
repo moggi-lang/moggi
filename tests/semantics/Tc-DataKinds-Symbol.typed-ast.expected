@@ -1,0 +1,18 @@
+program
+  data Label (s :: Symbol)
+    constructor Label
+  function hello :: Label "hello"
+    constructor_ref Label
+  function world :: Label "world"
+    constructor_ref Label
+  function forgetLabel :: Label t2 -> String
+    pat_con Label
+    string "any"
+  function useHello :: String
+    apply
+      variable forgetLabel
+      variable hello
+  function useWorld :: String
+    apply
+      variable forgetLabel
+      variable world

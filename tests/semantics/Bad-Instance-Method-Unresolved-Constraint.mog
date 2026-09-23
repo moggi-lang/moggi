@@ -1,0 +1,10 @@
+class Check a where
+  check :: a -> Bool
+
+data Box = Box
+
+same :: Eq a => a -> a -> Bool
+same x y = x == y
+
+instance Check Box where
+  check x = same x x

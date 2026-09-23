@@ -1,0 +1,2596 @@
+program
+  data Box a
+    constructor Box
+      field  :: a
+    deriving (Functor, Foldable, Traversable, Eq)
+  function __ev_Functor_Box_map :: t324 -> t325 -> Box t324 -> Box t325
+    pat_var __f
+    pat_var __x
+    case
+      variable __x
+      alt
+        pat_con Box
+          pat_var __v0
+        apply
+          constructor_ref Box
+          apply
+            variable __f
+            variable __v0
+  function __ev_Foldable_Box_foldr :: t346 -> t347 -> t347 -> t347 -> Box t346 -> t347
+    pat_var __f
+    pat_var __z
+    pat_var __x
+    case
+      variable __x
+      alt
+        pat_con Box
+          pat_var __v0
+        apply
+          apply
+            variable __f
+            variable __v0
+          variable __z
+  function __ev_Foldable_Box_fold :: __Dict_Semigroup -> __Dict_Monoid -> Box t350 -> t350
+    pat_var __ev_Semigroup
+    pat_var __ev_Monoid_1
+    pat_var t
+    apply
+      apply
+        apply
+          apply
+            evidence_method Foldable.foldMap evidence= nullary=0
+              instance Box
+            variable __ev_Semigroup
+          variable __ev_Monoid_1
+        lambda
+          pat_var x
+          variable x
+      variable t
+  function __ev_Foldable_Box_foldMap :: __Dict_Semigroup -> __Dict_Monoid -> t366 -> t371 -> Box t366 -> t371
+    pat_var __ev_Semigroup
+    pat_var __ev_Monoid_1
+    pat_var f
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldr evidence= nullary=0
+            instance Box
+          lambda
+            pat_var x
+            pat_var acc
+            apply
+              apply
+                evidence_method Semigroup.<> evidence=__ev_Semigroup nullary=0
+                apply
+                  variable f
+                  variable x
+              variable acc
+        evidence_method Monoid.mempty evidence=__ev_Monoid_1 nullary=1
+      variable t
+  function __ev_Foldable_Box_foldl :: t383 -> t380 -> t383 -> t383 -> Box t380 -> t383
+    pat_var f
+    pat_var z
+    pat_var t
+    apply
+      apply
+        variable appEndo
+        apply
+          variable getDual
+          apply
+            apply
+              apply
+                apply
+                  evidence_method Foldable.foldMap evidence= nullary=0
+                    instance Box
+                  evidence_ref Semigroup Dual a
+                evidence_ref Monoid Dual a
+              lambda
+                pat_var x
+                apply
+                  constructor_ref Dual
+                  apply
+                    constructor_ref Endo
+                    lambda
+                      pat_var acc
+                      apply
+                        apply
+                          variable f
+                          variable acc
+                        variable x
+            variable t
+      variable z
+  function __ev_Foldable_Box_toList :: Box t407 -> [t407]
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldr evidence= nullary=0
+            instance Box
+          lambda
+            pat_var x
+            pat_var xs
+            infix :
+              variable x
+              variable xs
+        list
+      variable t
+  function __ev_Foldable_Box_null :: Box t417 -> Bool
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldr evidence= nullary=0
+            instance Box
+          lambda
+            pat_var ignoredX
+            pat_var ignoredAcc
+            constructor_ref False
+        constructor_ref True
+      variable t
+  function __ev_Foldable_Box_length :: Box t424 -> Int
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldl evidence= nullary=0
+            instance Box
+          lambda
+            pat_var n
+            pat_var ignored
+            infix +
+              variable n
+              integer 1
+        integer 0
+      variable t
+  function __ev_Foldable_Box_elem :: __Dict_Eq -> t441 -> Box t441 -> Bool
+    pat_var __ev_Eq
+    pat_var x
+    pat_var t
+    apply
+      apply
+        apply
+          variable any
+          evidence_ref Foldable Box
+        lambda
+          pat_var y
+          apply
+            apply
+              evidence_method Eq.== evidence=__ev_Eq nullary=0
+              variable x
+            variable y
+      variable t
+  function __ev_Foldable_Box_maximum :: __Dict_Eq -> __Dict_Ord -> Box t461 -> t461
+    pat_var __ev_Eq
+    pat_var __ev_Ord_1
+    pat_var t
+    case
+      apply
+        evidence_method Foldable.toList evidence= nullary=0
+          instance Box
+        variable t
+      alt
+        pat_nil
+        apply
+          variable error
+          string "Foldable.maximum: empty structure"
+      alt
+        pat_cons
+          pat_var x
+          pat_var xs
+        let
+          binding
+            pat_var go
+            lambda
+              pat_var __ev_dict0
+              pat_var __ev_dict1
+              lambda
+                pat_var acc
+                pat_var ys
+                case
+                  variable ys
+                  alt
+                    pat_nil
+                    variable acc
+                  alt
+                    pat_cons
+                      pat_var y
+                      pat_var rest
+                    apply
+                      apply
+                        apply
+                          apply
+                            variable go
+                            variable __ev_dict0
+                          variable __ev_dict1
+                        apply
+                          apply
+                            evidence_method Ord.max evidence=__ev_dict1 nullary=0
+                            variable acc
+                          variable y
+                      variable rest
+          apply
+            apply
+              apply
+                apply
+                  variable go
+                  variable __ev_Eq
+                variable __ev_Ord_1
+              variable x
+            variable xs
+  function __ev_Foldable_Box_minimum :: __Dict_Eq -> __Dict_Ord -> Box t490 -> t490
+    pat_var __ev_Eq
+    pat_var __ev_Ord_1
+    pat_var t
+    case
+      apply
+        evidence_method Foldable.toList evidence= nullary=0
+          instance Box
+        variable t
+      alt
+        pat_nil
+        apply
+          variable error
+          string "Foldable.minimum: empty structure"
+      alt
+        pat_cons
+          pat_var x
+          pat_var xs
+        let
+          binding
+            pat_var go
+            lambda
+              pat_var __ev_dict2
+              pat_var __ev_dict3
+              lambda
+                pat_var acc
+                pat_var ys
+                case
+                  variable ys
+                  alt
+                    pat_nil
+                    variable acc
+                  alt
+                    pat_cons
+                      pat_var y
+                      pat_var rest
+                    apply
+                      apply
+                        apply
+                          apply
+                            variable go
+                            variable __ev_dict2
+                          variable __ev_dict3
+                        apply
+                          apply
+                            evidence_method Ord.min evidence=__ev_dict3 nullary=0
+                            variable acc
+                          variable y
+                      variable rest
+          apply
+            apply
+              apply
+                apply
+                  variable go
+                  variable __ev_Eq
+                variable __ev_Ord_1
+              variable x
+            variable xs
+  function __ev_Foldable_Box_sum :: __Dict_Num -> Box t503 -> t503
+    pat_var __ev_Num
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldl evidence= nullary=0
+            instance Box
+          lambda
+            pat_var a
+            pat_var b
+            apply
+              apply
+                evidence_method Num.+ evidence=__ev_Num nullary=0
+                variable a
+              variable b
+        apply
+          evidence_method Num.fromInteger evidence=__ev_Num nullary=0
+          intrinsic intToInteger#
+            integer 0
+      variable t
+  function __ev_Foldable_Box_product :: __Dict_Num -> Box t520 -> t520
+    pat_var __ev_Num
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldl evidence= nullary=0
+            instance Box
+          lambda
+            pat_var a
+            pat_var b
+            apply
+              apply
+                evidence_method Num.* evidence=__ev_Num nullary=0
+                variable a
+              variable b
+        apply
+          evidence_method Num.fromInteger evidence=__ev_Num nullary=0
+          intrinsic intToInteger#
+            integer 1
+      variable t
+  function __ev_Foldable_Box_foldr1 :: t539 -> t539 -> t539 -> Box t539 -> t539
+    pat_var f
+    pat_var t
+    let
+      binding
+        pat_var go
+        lambda
+          pat_var ys
+          case
+            variable ys
+            alt
+              pat_nil
+              apply
+                variable error
+                string "Foldable.foldr1: empty structure"
+            alt
+              pat_cons
+                pat_var x
+                pat_nil
+              variable x
+            alt
+              pat_cons
+                pat_var x
+                pat_var zs
+              apply
+                apply
+                  variable f
+                  variable x
+                apply
+                  variable go
+                  variable zs
+      apply
+        variable go
+        apply
+          evidence_method Foldable.toList evidence= nullary=0
+            instance Box
+          variable t
+  function __ev_Foldable_Box_foldl1 :: t560 -> t560 -> t560 -> Box t560 -> t560
+    pat_var f
+    pat_var t
+    case
+      apply
+        evidence_method Foldable.toList evidence= nullary=0
+          instance Box
+        variable t
+      alt
+        pat_nil
+        apply
+          variable error
+          string "Foldable.foldl1: empty structure"
+      alt
+        pat_cons
+          pat_var x
+          pat_var xs
+        let
+          binding
+            pat_var go
+            lambda
+              pat_var acc
+              pat_var ys
+              case
+                variable ys
+                alt
+                  pat_nil
+                  variable acc
+                alt
+                  pat_cons
+                    pat_var y
+                    pat_var rest
+                  apply
+                    apply
+                      variable go
+                      apply
+                        apply
+                          variable f
+                          variable acc
+                        variable y
+                    variable rest
+          apply
+            apply
+              variable go
+              variable x
+            variable xs
+  function __ev_Traversable_Box_traverse :: __Dict_Functor -> __Dict_Applicative -> t579 -> t581 t580 -> Box t579 -> t581 Box t580
+    pat_var __ev_Functor
+    pat_var __ev_Applicative_1
+    pat_var __f
+    pat_var __x
+    case
+      variable __x
+      alt
+        pat_con Box
+          pat_var __v0
+        apply
+          apply
+            evidence_method Applicative.<*> evidence=__ev_Applicative_1 nullary=0
+            apply
+              evidence_method Applicative.pure evidence=__ev_Applicative_1 nullary=0
+              constructor_ref Box
+          apply
+            variable __f
+            variable __v0
+  function __ev_Traversable_Box_sequenceA :: __Dict_Functor -> __Dict_Applicative -> Box t596 t595 -> t596 Box t595
+    pat_var __ev_Functor
+    pat_var __ev_Applicative_1
+    pat_var t
+    apply
+      apply
+        apply
+          apply
+            evidence_method Traversable.traverse evidence= nullary=0
+              instance Box
+            variable __ev_Functor
+          variable __ev_Applicative_1
+        lambda
+          pat_var x
+          variable x
+      variable t
+  function __ev_Traversable_Box_mapM :: __Dict_Functor -> __Dict_Applicative -> __Dict_Monad -> t608 -> t610 t609 -> Box t608 -> t610 Box t609
+    pat_var __ev_Functor
+    pat_var __ev_Applicative_1
+    pat_var __ev_Monad_2
+    pat_var f
+    pat_var t
+    apply
+      apply
+        apply
+          apply
+            evidence_method Traversable.traverse evidence= nullary=0
+              instance Box
+            variable __ev_Functor
+          variable __ev_Applicative_1
+        variable f
+      variable t
+  function __ev_Traversable_Box_sequence :: __Dict_Functor -> __Dict_Applicative -> __Dict_Monad -> Box t623 t622 -> t623 Box t622
+    pat_var __ev_Functor
+    pat_var __ev_Applicative_1
+    pat_var __ev_Monad_2
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Traversable.sequenceA evidence= nullary=0
+            instance Box
+          variable __ev_Functor
+        variable __ev_Applicative_1
+      variable t
+  function == :: __Dict_Eq -> Box t635 -> Box t635 -> Bool
+    pat_var __ev_Eq
+    pat_var __l
+    pat_var __r
+    case
+      variable __l
+      alt
+        pat_con Box
+          pat_var __a0
+        case
+          variable __r
+          alt
+            pat_con Box
+              pat_var __b0
+            apply
+              apply
+                evidence_method Eq.== evidence=__ev_Eq nullary=0
+                variable __a0
+              variable __b0
+          alt
+            pat_wild _
+            constructor_ref False
+  function /= :: __Dict_Eq -> Box t635 -> Box t635 -> Bool
+    pat_var __ev_Eq
+    pat_var __l
+    pat_var __r
+    case
+      case
+        variable __l
+        alt
+          pat_con Box
+            pat_var __a0
+          case
+            variable __r
+            alt
+              pat_con Box
+                pat_var __b0
+              apply
+                apply
+                  evidence_method Eq.== evidence=__ev_Eq nullary=0
+                  variable __a0
+                variable __b0
+            alt
+              pat_wild _
+              constructor_ref False
+      alt
+        pat_con True
+        constructor_ref False
+      alt
+        pat_con False
+        constructor_ref True
+  data Pair a b
+    constructor Pair
+      field  :: a
+      field  :: b
+    deriving (Functor, Foldable, Traversable)
+  function __ev_Functor_Pair_map :: t979 -> t980 -> Pair t975 t979 -> Pair t975 t980
+    pat_var __f
+    pat_var __x
+    case
+      variable __x
+      alt
+        pat_con Pair
+          pat_var __v0
+          pat_var __v1
+        apply
+          apply
+            constructor_ref Pair
+            variable __v0
+          apply
+            variable __f
+            variable __v1
+  function __ev_Foldable_Pair_foldr :: t1019 -> t1020 -> t1020 -> t1020 -> Pair t987 t1019 -> t1020
+    pat_var __f
+    pat_var __z
+    pat_var __x
+    case
+      variable __x
+      alt
+        pat_con Pair
+          pat_var __v0
+          pat_var __v1
+        apply
+          apply
+            variable __f
+            variable __v1
+          variable __z
+  function __ev_Foldable_Pair_fold :: __Dict_Semigroup -> __Dict_Monoid -> Pair t987 t1024 -> t1024
+    pat_var __ev_Semigroup
+    pat_var __ev_Monoid_1
+    pat_var t
+    apply
+      apply
+        apply
+          apply
+            evidence_method Foldable.foldMap evidence= nullary=0
+              instance Pair a
+            variable __ev_Semigroup
+          variable __ev_Monoid_1
+        lambda
+          pat_var x
+          variable x
+      variable t
+  function __ev_Foldable_Pair_foldMap :: __Dict_Semigroup -> __Dict_Monoid -> t1044 -> t1049 -> Pair t987 t1044 -> t1049
+    pat_var __ev_Semigroup
+    pat_var __ev_Monoid_1
+    pat_var f
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldr evidence= nullary=0
+            instance Pair a
+          lambda
+            pat_var x
+            pat_var acc
+            apply
+              apply
+                evidence_method Semigroup.<> evidence=__ev_Semigroup nullary=0
+                apply
+                  variable f
+                  variable x
+              variable acc
+        evidence_method Monoid.mempty evidence=__ev_Monoid_1 nullary=1
+      variable t
+  function __ev_Foldable_Pair_foldl :: t1064 -> t1061 -> t1064 -> t1064 -> Pair t987 t1061 -> t1064
+    pat_var f
+    pat_var z
+    pat_var t
+    apply
+      apply
+        variable appEndo
+        apply
+          variable getDual
+          apply
+            apply
+              apply
+                apply
+                  evidence_method Foldable.foldMap evidence= nullary=0
+                    instance Pair a
+                  evidence_ref Semigroup Dual a
+                evidence_ref Monoid Dual a
+              lambda
+                pat_var x
+                apply
+                  constructor_ref Dual
+                  apply
+                    constructor_ref Endo
+                    lambda
+                      pat_var acc
+                      apply
+                        apply
+                          variable f
+                          variable acc
+                        variable x
+            variable t
+      variable z
+  function __ev_Foldable_Pair_toList :: Pair t987 t1087 -> [t1087]
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldr evidence= nullary=0
+            instance Pair a
+          lambda
+            pat_var x
+            pat_var xs
+            infix :
+              variable x
+              variable xs
+        list
+      variable t
+  function __ev_Foldable_Pair_null :: Pair t987 t1100 -> Bool
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldr evidence= nullary=0
+            instance Pair a
+          lambda
+            pat_var ignoredX
+            pat_var ignoredAcc
+            constructor_ref False
+        constructor_ref True
+      variable t
+  function __ev_Foldable_Pair_length :: Pair t987 t1110 -> Int
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldl evidence= nullary=0
+            instance Pair a
+          lambda
+            pat_var n
+            pat_var ignored
+            infix +
+              variable n
+              integer 1
+        integer 0
+      variable t
+  function __ev_Foldable_Pair_elem :: __Dict_Eq -> t1130 -> Pair t987 t1130 -> Bool
+    pat_var __ev_Eq
+    pat_var x
+    pat_var t
+    apply
+      apply
+        apply
+          variable any
+          evidence_ref Foldable Pair a
+        lambda
+          pat_var y
+          apply
+            apply
+              evidence_method Eq.== evidence=__ev_Eq nullary=0
+              variable x
+            variable y
+      variable t
+  function __ev_Foldable_Pair_maximum :: __Dict_Eq -> __Dict_Ord -> Pair t987 t1156 -> t1156
+    pat_var __ev_Eq
+    pat_var __ev_Ord_1
+    pat_var t
+    case
+      apply
+        evidence_method Foldable.toList evidence= nullary=0
+          instance Pair a
+        variable t
+      alt
+        pat_nil
+        apply
+          variable error
+          string "Foldable.maximum: empty structure"
+      alt
+        pat_cons
+          pat_var x
+          pat_var xs
+        let
+          binding
+            pat_var go
+            lambda
+              pat_var __ev_dict4
+              pat_var __ev_dict5
+              lambda
+                pat_var acc
+                pat_var ys
+                case
+                  variable ys
+                  alt
+                    pat_nil
+                    variable acc
+                  alt
+                    pat_cons
+                      pat_var y
+                      pat_var rest
+                    apply
+                      apply
+                        apply
+                          apply
+                            variable go
+                            variable __ev_dict4
+                          variable __ev_dict5
+                        apply
+                          apply
+                            evidence_method Ord.max evidence=__ev_dict5 nullary=0
+                            variable acc
+                          variable y
+                      variable rest
+          apply
+            apply
+              apply
+                apply
+                  variable go
+                  variable __ev_Eq
+                variable __ev_Ord_1
+              variable x
+            variable xs
+  function __ev_Foldable_Pair_minimum :: __Dict_Eq -> __Dict_Ord -> Pair t987 t1188 -> t1188
+    pat_var __ev_Eq
+    pat_var __ev_Ord_1
+    pat_var t
+    case
+      apply
+        evidence_method Foldable.toList evidence= nullary=0
+          instance Pair a
+        variable t
+      alt
+        pat_nil
+        apply
+          variable error
+          string "Foldable.minimum: empty structure"
+      alt
+        pat_cons
+          pat_var x
+          pat_var xs
+        let
+          binding
+            pat_var go
+            lambda
+              pat_var __ev_dict6
+              pat_var __ev_dict7
+              lambda
+                pat_var acc
+                pat_var ys
+                case
+                  variable ys
+                  alt
+                    pat_nil
+                    variable acc
+                  alt
+                    pat_cons
+                      pat_var y
+                      pat_var rest
+                    apply
+                      apply
+                        apply
+                          apply
+                            variable go
+                            variable __ev_dict6
+                          variable __ev_dict7
+                        apply
+                          apply
+                            evidence_method Ord.min evidence=__ev_dict7 nullary=0
+                            variable acc
+                          variable y
+                      variable rest
+          apply
+            apply
+              apply
+                apply
+                  variable go
+                  variable __ev_Eq
+                variable __ev_Ord_1
+              variable x
+            variable xs
+  function __ev_Foldable_Pair_sum :: __Dict_Num -> Pair t987 t1201 -> t1201
+    pat_var __ev_Num
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldl evidence= nullary=0
+            instance Pair a
+          lambda
+            pat_var a
+            pat_var b
+            apply
+              apply
+                evidence_method Num.+ evidence=__ev_Num nullary=0
+                variable a
+              variable b
+        apply
+          evidence_method Num.fromInteger evidence=__ev_Num nullary=0
+          intrinsic intToInteger#
+            integer 0
+      variable t
+  function __ev_Foldable_Pair_product :: __Dict_Num -> Pair t987 t1221 -> t1221
+    pat_var __ev_Num
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldl evidence= nullary=0
+            instance Pair a
+          lambda
+            pat_var a
+            pat_var b
+            apply
+              apply
+                evidence_method Num.* evidence=__ev_Num nullary=0
+                variable a
+              variable b
+        apply
+          evidence_method Num.fromInteger evidence=__ev_Num nullary=0
+          intrinsic intToInteger#
+            integer 1
+      variable t
+  function __ev_Foldable_Pair_foldr1 :: t1243 -> t1243 -> t1243 -> Pair t987 t1243 -> t1243
+    pat_var f
+    pat_var t
+    let
+      binding
+        pat_var go
+        lambda
+          pat_var ys
+          case
+            variable ys
+            alt
+              pat_nil
+              apply
+                variable error
+                string "Foldable.foldr1: empty structure"
+            alt
+              pat_cons
+                pat_var x
+                pat_nil
+              variable x
+            alt
+              pat_cons
+                pat_var x
+                pat_var zs
+              apply
+                apply
+                  variable f
+                  variable x
+                apply
+                  variable go
+                  variable zs
+      apply
+        variable go
+        apply
+          evidence_method Foldable.toList evidence= nullary=0
+            instance Pair a
+          variable t
+  function __ev_Foldable_Pair_foldl1 :: t1270 -> t1270 -> t1270 -> Pair t987 t1270 -> t1270
+    pat_var f
+    pat_var t
+    case
+      apply
+        evidence_method Foldable.toList evidence= nullary=0
+          instance Pair a
+        variable t
+      alt
+        pat_nil
+        apply
+          variable error
+          string "Foldable.foldl1: empty structure"
+      alt
+        pat_cons
+          pat_var x
+          pat_var xs
+        let
+          binding
+            pat_var go
+            lambda
+              pat_var acc
+              pat_var ys
+              case
+                variable ys
+                alt
+                  pat_nil
+                  variable acc
+                alt
+                  pat_cons
+                    pat_var y
+                    pat_var rest
+                  apply
+                    apply
+                      variable go
+                      apply
+                        apply
+                          variable f
+                          variable acc
+                        variable y
+                    variable rest
+          apply
+            apply
+              variable go
+              variable x
+            variable xs
+  function __ev_Traversable_Pair_traverse :: __Dict_Functor -> __Dict_Applicative -> t1296 -> t1298 t1297 -> Pair t1283 t1296 -> t1298 Pair t1283 t1297
+    pat_var __ev_Functor
+    pat_var __ev_Applicative_1
+    pat_var __f
+    pat_var __x
+    case
+      variable __x
+      alt
+        pat_con Pair
+          pat_var __v0
+          pat_var __v1
+        apply
+          apply
+            evidence_method Applicative.<*> evidence=__ev_Applicative_1 nullary=0
+            apply
+              apply
+                evidence_method Applicative.<*> evidence=__ev_Applicative_1 nullary=0
+                apply
+                  evidence_method Applicative.pure evidence=__ev_Applicative_1 nullary=0
+                  constructor_ref Pair
+              apply
+                evidence_method Applicative.pure evidence=__ev_Applicative_1 nullary=0
+                variable __v0
+          apply
+            variable __f
+            variable __v1
+  function __ev_Traversable_Pair_sequenceA :: __Dict_Functor -> __Dict_Applicative -> Pair t1283 t1320 t1319 -> t1320 Pair t1283 t1319
+    pat_var __ev_Functor
+    pat_var __ev_Applicative_1
+    pat_var t
+    apply
+      apply
+        apply
+          apply
+            evidence_method Traversable.traverse evidence= nullary=0
+              instance Pair a
+            variable __ev_Functor
+          variable __ev_Applicative_1
+        lambda
+          pat_var x
+          variable x
+      variable t
+  function __ev_Traversable_Pair_mapM :: __Dict_Functor -> __Dict_Applicative -> __Dict_Monad -> t1342 -> t1344 t1343 -> Pair t1283 t1342 -> t1344 Pair t1283 t1343
+    pat_var __ev_Functor
+    pat_var __ev_Applicative_1
+    pat_var __ev_Monad_2
+    pat_var f
+    pat_var t
+    apply
+      apply
+        apply
+          apply
+            evidence_method Traversable.traverse evidence= nullary=0
+              instance Pair a
+            variable __ev_Functor
+          variable __ev_Applicative_1
+        variable f
+      variable t
+  function __ev_Traversable_Pair_sequence :: __Dict_Functor -> __Dict_Applicative -> __Dict_Monad -> Pair t1283 t1366 t1365 -> t1366 Pair t1283 t1365
+    pat_var __ev_Functor
+    pat_var __ev_Applicative_1
+    pat_var __ev_Monad_2
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Traversable.sequenceA evidence= nullary=0
+            instance Pair a
+          variable __ev_Functor
+        variable __ev_Applicative_1
+      variable t
+  data Tree a
+    constructor Leaf
+      field  :: a
+    constructor Node
+      field  :: Tree a
+      field  :: Tree a
+    deriving (Functor, Foldable, Traversable)
+  function __ev_Functor_Tree_map :: t1707 -> t1708 -> Tree t1707 -> Tree t1708
+    pat_var __f
+    pat_var __x
+    case
+      variable __x
+      alt
+        pat_con Leaf
+          pat_var __v0
+        apply
+          constructor_ref Leaf
+          apply
+            variable __f
+            variable __v0
+      alt
+        pat_con Node
+          pat_var __v0
+          pat_var __v1
+        apply
+          apply
+            constructor_ref Node
+            apply
+              apply
+                evidence_method Functor.map evidence= nullary=0
+                  instance Tree
+                variable __f
+              variable __v0
+          apply
+            apply
+              evidence_method Functor.map evidence= nullary=0
+                instance Tree
+              variable __f
+            variable __v1
+  function __ev_Foldable_Tree_foldr :: t1739 -> t1740 -> t1740 -> t1740 -> Tree t1739 -> t1740
+    pat_var __f
+    pat_var __z
+    pat_var __x
+    case
+      variable __x
+      alt
+        pat_con Leaf
+          pat_var __v0
+        apply
+          apply
+            variable __f
+            variable __v0
+          variable __z
+      alt
+        pat_con Node
+          pat_var __v0
+          pat_var __v1
+        apply
+          apply
+            apply
+              evidence_method Foldable.foldr evidence= nullary=0
+                instance Tree
+              variable __f
+            apply
+              apply
+                apply
+                  evidence_method Foldable.foldr evidence= nullary=0
+                    instance Tree
+                  variable __f
+                variable __z
+              variable __v1
+          variable __v0
+  function __ev_Foldable_Tree_fold :: __Dict_Semigroup -> __Dict_Monoid -> Tree t1751 -> t1751
+    pat_var __ev_Semigroup
+    pat_var __ev_Monoid_1
+    pat_var t
+    apply
+      apply
+        apply
+          apply
+            evidence_method Foldable.foldMap evidence= nullary=0
+              instance Tree
+            variable __ev_Semigroup
+          variable __ev_Monoid_1
+        lambda
+          pat_var x
+          variable x
+      variable t
+  function __ev_Foldable_Tree_foldMap :: __Dict_Semigroup -> __Dict_Monoid -> t1767 -> t1772 -> Tree t1767 -> t1772
+    pat_var __ev_Semigroup
+    pat_var __ev_Monoid_1
+    pat_var f
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldr evidence= nullary=0
+            instance Tree
+          lambda
+            pat_var x
+            pat_var acc
+            apply
+              apply
+                evidence_method Semigroup.<> evidence=__ev_Semigroup nullary=0
+                apply
+                  variable f
+                  variable x
+              variable acc
+        evidence_method Monoid.mempty evidence=__ev_Monoid_1 nullary=1
+      variable t
+  function __ev_Foldable_Tree_foldl :: t1784 -> t1781 -> t1784 -> t1784 -> Tree t1781 -> t1784
+    pat_var f
+    pat_var z
+    pat_var t
+    apply
+      apply
+        variable appEndo
+        apply
+          variable getDual
+          apply
+            apply
+              apply
+                apply
+                  evidence_method Foldable.foldMap evidence= nullary=0
+                    instance Tree
+                  evidence_ref Semigroup Dual a
+                evidence_ref Monoid Dual a
+              lambda
+                pat_var x
+                apply
+                  constructor_ref Dual
+                  apply
+                    constructor_ref Endo
+                    lambda
+                      pat_var acc
+                      apply
+                        apply
+                          variable f
+                          variable acc
+                        variable x
+            variable t
+      variable z
+  function __ev_Foldable_Tree_toList :: Tree t1804 -> [t1804]
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldr evidence= nullary=0
+            instance Tree
+          lambda
+            pat_var x
+            pat_var xs
+            infix :
+              variable x
+              variable xs
+        list
+      variable t
+  function __ev_Foldable_Tree_null :: Tree t1814 -> Bool
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldr evidence= nullary=0
+            instance Tree
+          lambda
+            pat_var ignoredX
+            pat_var ignoredAcc
+            constructor_ref False
+        constructor_ref True
+      variable t
+  function __ev_Foldable_Tree_length :: Tree t1821 -> Int
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldl evidence= nullary=0
+            instance Tree
+          lambda
+            pat_var n
+            pat_var ignored
+            infix +
+              variable n
+              integer 1
+        integer 0
+      variable t
+  function __ev_Foldable_Tree_elem :: __Dict_Eq -> t1838 -> Tree t1838 -> Bool
+    pat_var __ev_Eq
+    pat_var x
+    pat_var t
+    apply
+      apply
+        apply
+          variable any
+          evidence_ref Foldable Tree
+        lambda
+          pat_var y
+          apply
+            apply
+              evidence_method Eq.== evidence=__ev_Eq nullary=0
+              variable x
+            variable y
+      variable t
+  function __ev_Foldable_Tree_maximum :: __Dict_Eq -> __Dict_Ord -> Tree t1858 -> t1858
+    pat_var __ev_Eq
+    pat_var __ev_Ord_1
+    pat_var t
+    case
+      apply
+        evidence_method Foldable.toList evidence= nullary=0
+          instance Tree
+        variable t
+      alt
+        pat_nil
+        apply
+          variable error
+          string "Foldable.maximum: empty structure"
+      alt
+        pat_cons
+          pat_var x
+          pat_var xs
+        let
+          binding
+            pat_var go
+            lambda
+              pat_var __ev_dict8
+              pat_var __ev_dict9
+              lambda
+                pat_var acc
+                pat_var ys
+                case
+                  variable ys
+                  alt
+                    pat_nil
+                    variable acc
+                  alt
+                    pat_cons
+                      pat_var y
+                      pat_var rest
+                    apply
+                      apply
+                        apply
+                          apply
+                            variable go
+                            variable __ev_dict8
+                          variable __ev_dict9
+                        apply
+                          apply
+                            evidence_method Ord.max evidence=__ev_dict9 nullary=0
+                            variable acc
+                          variable y
+                      variable rest
+          apply
+            apply
+              apply
+                apply
+                  variable go
+                  variable __ev_Eq
+                variable __ev_Ord_1
+              variable x
+            variable xs
+  function __ev_Foldable_Tree_minimum :: __Dict_Eq -> __Dict_Ord -> Tree t1887 -> t1887
+    pat_var __ev_Eq
+    pat_var __ev_Ord_1
+    pat_var t
+    case
+      apply
+        evidence_method Foldable.toList evidence= nullary=0
+          instance Tree
+        variable t
+      alt
+        pat_nil
+        apply
+          variable error
+          string "Foldable.minimum: empty structure"
+      alt
+        pat_cons
+          pat_var x
+          pat_var xs
+        let
+          binding
+            pat_var go
+            lambda
+              pat_var __ev_dict10
+              pat_var __ev_dict11
+              lambda
+                pat_var acc
+                pat_var ys
+                case
+                  variable ys
+                  alt
+                    pat_nil
+                    variable acc
+                  alt
+                    pat_cons
+                      pat_var y
+                      pat_var rest
+                    apply
+                      apply
+                        apply
+                          apply
+                            variable go
+                            variable __ev_dict10
+                          variable __ev_dict11
+                        apply
+                          apply
+                            evidence_method Ord.min evidence=__ev_dict11 nullary=0
+                            variable acc
+                          variable y
+                      variable rest
+          apply
+            apply
+              apply
+                apply
+                  variable go
+                  variable __ev_Eq
+                variable __ev_Ord_1
+              variable x
+            variable xs
+  function __ev_Foldable_Tree_sum :: __Dict_Num -> Tree t1900 -> t1900
+    pat_var __ev_Num
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldl evidence= nullary=0
+            instance Tree
+          lambda
+            pat_var a
+            pat_var b
+            apply
+              apply
+                evidence_method Num.+ evidence=__ev_Num nullary=0
+                variable a
+              variable b
+        apply
+          evidence_method Num.fromInteger evidence=__ev_Num nullary=0
+          intrinsic intToInteger#
+            integer 0
+      variable t
+  function __ev_Foldable_Tree_product :: __Dict_Num -> Tree t1917 -> t1917
+    pat_var __ev_Num
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldl evidence= nullary=0
+            instance Tree
+          lambda
+            pat_var a
+            pat_var b
+            apply
+              apply
+                evidence_method Num.* evidence=__ev_Num nullary=0
+                variable a
+              variable b
+        apply
+          evidence_method Num.fromInteger evidence=__ev_Num nullary=0
+          intrinsic intToInteger#
+            integer 1
+      variable t
+  function __ev_Foldable_Tree_foldr1 :: t1936 -> t1936 -> t1936 -> Tree t1936 -> t1936
+    pat_var f
+    pat_var t
+    let
+      binding
+        pat_var go
+        lambda
+          pat_var ys
+          case
+            variable ys
+            alt
+              pat_nil
+              apply
+                variable error
+                string "Foldable.foldr1: empty structure"
+            alt
+              pat_cons
+                pat_var x
+                pat_nil
+              variable x
+            alt
+              pat_cons
+                pat_var x
+                pat_var zs
+              apply
+                apply
+                  variable f
+                  variable x
+                apply
+                  variable go
+                  variable zs
+      apply
+        variable go
+        apply
+          evidence_method Foldable.toList evidence= nullary=0
+            instance Tree
+          variable t
+  function __ev_Foldable_Tree_foldl1 :: t1957 -> t1957 -> t1957 -> Tree t1957 -> t1957
+    pat_var f
+    pat_var t
+    case
+      apply
+        evidence_method Foldable.toList evidence= nullary=0
+          instance Tree
+        variable t
+      alt
+        pat_nil
+        apply
+          variable error
+          string "Foldable.foldl1: empty structure"
+      alt
+        pat_cons
+          pat_var x
+          pat_var xs
+        let
+          binding
+            pat_var go
+            lambda
+              pat_var acc
+              pat_var ys
+              case
+                variable ys
+                alt
+                  pat_nil
+                  variable acc
+                alt
+                  pat_cons
+                    pat_var y
+                    pat_var rest
+                  apply
+                    apply
+                      variable go
+                      apply
+                        apply
+                          variable f
+                          variable acc
+                        variable y
+                    variable rest
+          apply
+            apply
+              variable go
+              variable x
+            variable xs
+  function __ev_Traversable_Tree_traverse :: __Dict_Functor -> __Dict_Applicative -> t1977 -> t1979 t1978 -> Tree t1977 -> t1979 Tree t1978
+    pat_var __ev_Functor
+    pat_var __ev_Applicative_1
+    pat_var __f
+    pat_var __x
+    case
+      variable __x
+      alt
+        pat_con Leaf
+          pat_var __v0
+        apply
+          apply
+            evidence_method Applicative.<*> evidence=__ev_Applicative_1 nullary=0
+            apply
+              evidence_method Applicative.pure evidence=__ev_Applicative_1 nullary=0
+              constructor_ref Leaf
+          apply
+            variable __f
+            variable __v0
+      alt
+        pat_con Node
+          pat_var __v0
+          pat_var __v1
+        apply
+          apply
+            evidence_method Applicative.<*> evidence=__ev_Applicative_1 nullary=0
+            apply
+              apply
+                evidence_method Applicative.<*> evidence=__ev_Applicative_1 nullary=0
+                apply
+                  evidence_method Applicative.pure evidence=__ev_Applicative_1 nullary=0
+                  constructor_ref Node
+              apply
+                apply
+                  apply
+                    apply
+                      evidence_method Traversable.traverse evidence= nullary=0
+                        instance Tree
+                      variable __ev_Functor
+                    variable __ev_Applicative_1
+                  variable __f
+                variable __v0
+          apply
+            apply
+              apply
+                apply
+                  evidence_method Traversable.traverse evidence= nullary=0
+                    instance Tree
+                  variable __ev_Functor
+                variable __ev_Applicative_1
+              variable __f
+            variable __v1
+  function __ev_Traversable_Tree_sequenceA :: __Dict_Functor -> __Dict_Applicative -> Tree t2013 t2012 -> t2013 Tree t2012
+    pat_var __ev_Functor
+    pat_var __ev_Applicative_1
+    pat_var t
+    apply
+      apply
+        apply
+          apply
+            evidence_method Traversable.traverse evidence= nullary=0
+              instance Tree
+            variable __ev_Functor
+          variable __ev_Applicative_1
+        lambda
+          pat_var x
+          variable x
+      variable t
+  function __ev_Traversable_Tree_mapM :: __Dict_Functor -> __Dict_Applicative -> __Dict_Monad -> t2025 -> t2027 t2026 -> Tree t2025 -> t2027 Tree t2026
+    pat_var __ev_Functor
+    pat_var __ev_Applicative_1
+    pat_var __ev_Monad_2
+    pat_var f
+    pat_var t
+    apply
+      apply
+        apply
+          apply
+            evidence_method Traversable.traverse evidence= nullary=0
+              instance Tree
+            variable __ev_Functor
+          variable __ev_Applicative_1
+        variable f
+      variable t
+  function __ev_Traversable_Tree_sequence :: __Dict_Functor -> __Dict_Applicative -> __Dict_Monad -> Tree t2040 t2039 -> t2040 Tree t2039
+    pat_var __ev_Functor
+    pat_var __ev_Applicative_1
+    pat_var __ev_Monad_2
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Traversable.sequenceA evidence= nullary=0
+            instance Tree
+          variable __ev_Functor
+        variable __ev_Applicative_1
+      variable t
+  data Phantom a b
+    constructor Phantom
+      field  :: a
+    deriving (Functor, Foldable, Traversable)
+  function __ev_Functor_Phantom_map :: t2375 -> t2376 -> Phantom t2371 t2375 -> Phantom t2371 t2376
+    pat_var __f
+    pat_var __x
+    case
+      variable __x
+      alt
+        pat_con Phantom
+          pat_var __v0
+        apply
+          constructor_ref Phantom
+          variable __v0
+  function __ev_Foldable_Phantom_foldr :: t2416 -> t2417 -> t2417 -> t2417 -> Phantom t2384 t2416 -> t2417
+    pat_var __f
+    pat_var __z
+    pat_var __x
+    case
+      variable __x
+      alt
+        pat_con Phantom
+          pat_var __v0
+        variable __z
+  function __ev_Foldable_Phantom_fold :: __Dict_Semigroup -> __Dict_Monoid -> Phantom t2384 t2421 -> t2421
+    pat_var __ev_Semigroup
+    pat_var __ev_Monoid_1
+    pat_var t
+    apply
+      apply
+        apply
+          apply
+            evidence_method Foldable.foldMap evidence= nullary=0
+              instance Phantom a
+            variable __ev_Semigroup
+          variable __ev_Monoid_1
+        lambda
+          pat_var x
+          variable x
+      variable t
+  function __ev_Foldable_Phantom_foldMap :: __Dict_Semigroup -> __Dict_Monoid -> t2441 -> t2446 -> Phantom t2384 t2441 -> t2446
+    pat_var __ev_Semigroup
+    pat_var __ev_Monoid_1
+    pat_var f
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldr evidence= nullary=0
+            instance Phantom a
+          lambda
+            pat_var x
+            pat_var acc
+            apply
+              apply
+                evidence_method Semigroup.<> evidence=__ev_Semigroup nullary=0
+                apply
+                  variable f
+                  variable x
+              variable acc
+        evidence_method Monoid.mempty evidence=__ev_Monoid_1 nullary=1
+      variable t
+  function __ev_Foldable_Phantom_foldl :: t2461 -> t2458 -> t2461 -> t2461 -> Phantom t2384 t2458 -> t2461
+    pat_var f
+    pat_var z
+    pat_var t
+    apply
+      apply
+        variable appEndo
+        apply
+          variable getDual
+          apply
+            apply
+              apply
+                apply
+                  evidence_method Foldable.foldMap evidence= nullary=0
+                    instance Phantom a
+                  evidence_ref Semigroup Dual a
+                evidence_ref Monoid Dual a
+              lambda
+                pat_var x
+                apply
+                  constructor_ref Dual
+                  apply
+                    constructor_ref Endo
+                    lambda
+                      pat_var acc
+                      apply
+                        apply
+                          variable f
+                          variable acc
+                        variable x
+            variable t
+      variable z
+  function __ev_Foldable_Phantom_toList :: Phantom t2384 t2484 -> [t2484]
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldr evidence= nullary=0
+            instance Phantom a
+          lambda
+            pat_var x
+            pat_var xs
+            infix :
+              variable x
+              variable xs
+        list
+      variable t
+  function __ev_Foldable_Phantom_null :: Phantom t2384 t2497 -> Bool
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldr evidence= nullary=0
+            instance Phantom a
+          lambda
+            pat_var ignoredX
+            pat_var ignoredAcc
+            constructor_ref False
+        constructor_ref True
+      variable t
+  function __ev_Foldable_Phantom_length :: Phantom t2384 t2507 -> Int
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldl evidence= nullary=0
+            instance Phantom a
+          lambda
+            pat_var n
+            pat_var ignored
+            infix +
+              variable n
+              integer 1
+        integer 0
+      variable t
+  function __ev_Foldable_Phantom_elem :: __Dict_Eq -> t2527 -> Phantom t2384 t2527 -> Bool
+    pat_var __ev_Eq
+    pat_var x
+    pat_var t
+    apply
+      apply
+        apply
+          variable any
+          evidence_ref Foldable Phantom a
+        lambda
+          pat_var y
+          apply
+            apply
+              evidence_method Eq.== evidence=__ev_Eq nullary=0
+              variable x
+            variable y
+      variable t
+  function __ev_Foldable_Phantom_maximum :: __Dict_Eq -> __Dict_Ord -> Phantom t2384 t2553 -> t2553
+    pat_var __ev_Eq
+    pat_var __ev_Ord_1
+    pat_var t
+    case
+      apply
+        evidence_method Foldable.toList evidence= nullary=0
+          instance Phantom a
+        variable t
+      alt
+        pat_nil
+        apply
+          variable error
+          string "Foldable.maximum: empty structure"
+      alt
+        pat_cons
+          pat_var x
+          pat_var xs
+        let
+          binding
+            pat_var go
+            lambda
+              pat_var __ev_dict12
+              pat_var __ev_dict13
+              lambda
+                pat_var acc
+                pat_var ys
+                case
+                  variable ys
+                  alt
+                    pat_nil
+                    variable acc
+                  alt
+                    pat_cons
+                      pat_var y
+                      pat_var rest
+                    apply
+                      apply
+                        apply
+                          apply
+                            variable go
+                            variable __ev_dict12
+                          variable __ev_dict13
+                        apply
+                          apply
+                            evidence_method Ord.max evidence=__ev_dict13 nullary=0
+                            variable acc
+                          variable y
+                      variable rest
+          apply
+            apply
+              apply
+                apply
+                  variable go
+                  variable __ev_Eq
+                variable __ev_Ord_1
+              variable x
+            variable xs
+  function __ev_Foldable_Phantom_minimum :: __Dict_Eq -> __Dict_Ord -> Phantom t2384 t2585 -> t2585
+    pat_var __ev_Eq
+    pat_var __ev_Ord_1
+    pat_var t
+    case
+      apply
+        evidence_method Foldable.toList evidence= nullary=0
+          instance Phantom a
+        variable t
+      alt
+        pat_nil
+        apply
+          variable error
+          string "Foldable.minimum: empty structure"
+      alt
+        pat_cons
+          pat_var x
+          pat_var xs
+        let
+          binding
+            pat_var go
+            lambda
+              pat_var __ev_dict14
+              pat_var __ev_dict15
+              lambda
+                pat_var acc
+                pat_var ys
+                case
+                  variable ys
+                  alt
+                    pat_nil
+                    variable acc
+                  alt
+                    pat_cons
+                      pat_var y
+                      pat_var rest
+                    apply
+                      apply
+                        apply
+                          apply
+                            variable go
+                            variable __ev_dict14
+                          variable __ev_dict15
+                        apply
+                          apply
+                            evidence_method Ord.min evidence=__ev_dict15 nullary=0
+                            variable acc
+                          variable y
+                      variable rest
+          apply
+            apply
+              apply
+                apply
+                  variable go
+                  variable __ev_Eq
+                variable __ev_Ord_1
+              variable x
+            variable xs
+  function __ev_Foldable_Phantom_sum :: __Dict_Num -> Phantom t2384 t2598 -> t2598
+    pat_var __ev_Num
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldl evidence= nullary=0
+            instance Phantom a
+          lambda
+            pat_var a
+            pat_var b
+            apply
+              apply
+                evidence_method Num.+ evidence=__ev_Num nullary=0
+                variable a
+              variable b
+        apply
+          evidence_method Num.fromInteger evidence=__ev_Num nullary=0
+          intrinsic intToInteger#
+            integer 0
+      variable t
+  function __ev_Foldable_Phantom_product :: __Dict_Num -> Phantom t2384 t2618 -> t2618
+    pat_var __ev_Num
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldl evidence= nullary=0
+            instance Phantom a
+          lambda
+            pat_var a
+            pat_var b
+            apply
+              apply
+                evidence_method Num.* evidence=__ev_Num nullary=0
+                variable a
+              variable b
+        apply
+          evidence_method Num.fromInteger evidence=__ev_Num nullary=0
+          intrinsic intToInteger#
+            integer 1
+      variable t
+  function __ev_Foldable_Phantom_foldr1 :: t2640 -> t2640 -> t2640 -> Phantom t2384 t2640 -> t2640
+    pat_var f
+    pat_var t
+    let
+      binding
+        pat_var go
+        lambda
+          pat_var ys
+          case
+            variable ys
+            alt
+              pat_nil
+              apply
+                variable error
+                string "Foldable.foldr1: empty structure"
+            alt
+              pat_cons
+                pat_var x
+                pat_nil
+              variable x
+            alt
+              pat_cons
+                pat_var x
+                pat_var zs
+              apply
+                apply
+                  variable f
+                  variable x
+                apply
+                  variable go
+                  variable zs
+      apply
+        variable go
+        apply
+          evidence_method Foldable.toList evidence= nullary=0
+            instance Phantom a
+          variable t
+  function __ev_Foldable_Phantom_foldl1 :: t2667 -> t2667 -> t2667 -> Phantom t2384 t2667 -> t2667
+    pat_var f
+    pat_var t
+    case
+      apply
+        evidence_method Foldable.toList evidence= nullary=0
+          instance Phantom a
+        variable t
+      alt
+        pat_nil
+        apply
+          variable error
+          string "Foldable.foldl1: empty structure"
+      alt
+        pat_cons
+          pat_var x
+          pat_var xs
+        let
+          binding
+            pat_var go
+            lambda
+              pat_var acc
+              pat_var ys
+              case
+                variable ys
+                alt
+                  pat_nil
+                  variable acc
+                alt
+                  pat_cons
+                    pat_var y
+                    pat_var rest
+                  apply
+                    apply
+                      variable go
+                      apply
+                        apply
+                          variable f
+                          variable acc
+                        variable y
+                    variable rest
+          apply
+            apply
+              variable go
+              variable x
+            variable xs
+  function __ev_Traversable_Phantom_traverse :: __Dict_Functor -> __Dict_Applicative -> t2694 -> t2696 t2695 -> Phantom t2681 t2694 -> t2696 Phantom t2681 t2695
+    pat_var __ev_Functor
+    pat_var __ev_Applicative_1
+    pat_var __f
+    pat_var __x
+    case
+      variable __x
+      alt
+        pat_con Phantom
+          pat_var __v0
+        apply
+          apply
+            evidence_method Applicative.<*> evidence=__ev_Applicative_1 nullary=0
+            apply
+              evidence_method Applicative.pure evidence=__ev_Applicative_1 nullary=0
+              constructor_ref Phantom
+          apply
+            evidence_method Applicative.pure evidence=__ev_Applicative_1 nullary=0
+            variable __v0
+  function __ev_Traversable_Phantom_sequenceA :: __Dict_Functor -> __Dict_Applicative -> Phantom t2681 t2715 t2714 -> t2715 Phantom t2681 t2714
+    pat_var __ev_Functor
+    pat_var __ev_Applicative_1
+    pat_var t
+    apply
+      apply
+        apply
+          apply
+            evidence_method Traversable.traverse evidence= nullary=0
+              instance Phantom a
+            variable __ev_Functor
+          variable __ev_Applicative_1
+        lambda
+          pat_var x
+          variable x
+      variable t
+  function __ev_Traversable_Phantom_mapM :: __Dict_Functor -> __Dict_Applicative -> __Dict_Monad -> t2737 -> t2739 t2738 -> Phantom t2681 t2737 -> t2739 Phantom t2681 t2738
+    pat_var __ev_Functor
+    pat_var __ev_Applicative_1
+    pat_var __ev_Monad_2
+    pat_var f
+    pat_var t
+    apply
+      apply
+        apply
+          apply
+            evidence_method Traversable.traverse evidence= nullary=0
+              instance Phantom a
+            variable __ev_Functor
+          variable __ev_Applicative_1
+        variable f
+      variable t
+  function __ev_Traversable_Phantom_sequence :: __Dict_Functor -> __Dict_Applicative -> __Dict_Monad -> Phantom t2681 t2761 t2760 -> t2761 Phantom t2681 t2760
+    pat_var __ev_Functor
+    pat_var __ev_Applicative_1
+    pat_var __ev_Monad_2
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Traversable.sequenceA evidence= nullary=0
+            instance Phantom a
+          variable __ev_Functor
+        variable __ev_Applicative_1
+      variable t
+  data Multi a
+    constructor Multi
+      field  :: a
+      field  :: a
+      field  :: Int
+    deriving (Functor, Foldable, Traversable)
+  function __ev_Functor_Multi_map :: t3103 -> t3104 -> Multi t3103 -> Multi t3104
+    pat_var __f
+    pat_var __x
+    case
+      variable __x
+      alt
+        pat_con Multi
+          pat_var __v0
+          pat_var __v1
+          pat_var __v2
+        apply
+          apply
+            apply
+              constructor_ref Multi
+              apply
+                variable __f
+                variable __v0
+            apply
+              variable __f
+              variable __v1
+          variable __v2
+  function __ev_Foldable_Multi_foldr :: t3127 -> t3128 -> t3128 -> t3128 -> Multi t3127 -> t3128
+    pat_var __f
+    pat_var __z
+    pat_var __x
+    case
+      variable __x
+      alt
+        pat_con Multi
+          pat_var __v0
+          pat_var __v1
+          pat_var __v2
+        apply
+          apply
+            variable __f
+            variable __v0
+          apply
+            apply
+              variable __f
+              variable __v1
+            variable __z
+  function __ev_Foldable_Multi_fold :: __Dict_Semigroup -> __Dict_Monoid -> Multi t3131 -> t3131
+    pat_var __ev_Semigroup
+    pat_var __ev_Monoid_1
+    pat_var t
+    apply
+      apply
+        apply
+          apply
+            evidence_method Foldable.foldMap evidence= nullary=0
+              instance Multi
+            variable __ev_Semigroup
+          variable __ev_Monoid_1
+        lambda
+          pat_var x
+          variable x
+      variable t
+  function __ev_Foldable_Multi_foldMap :: __Dict_Semigroup -> __Dict_Monoid -> t3147 -> t3152 -> Multi t3147 -> t3152
+    pat_var __ev_Semigroup
+    pat_var __ev_Monoid_1
+    pat_var f
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldr evidence= nullary=0
+            instance Multi
+          lambda
+            pat_var x
+            pat_var acc
+            apply
+              apply
+                evidence_method Semigroup.<> evidence=__ev_Semigroup nullary=0
+                apply
+                  variable f
+                  variable x
+              variable acc
+        evidence_method Monoid.mempty evidence=__ev_Monoid_1 nullary=1
+      variable t
+  function __ev_Foldable_Multi_foldl :: t3164 -> t3161 -> t3164 -> t3164 -> Multi t3161 -> t3164
+    pat_var f
+    pat_var z
+    pat_var t
+    apply
+      apply
+        variable appEndo
+        apply
+          variable getDual
+          apply
+            apply
+              apply
+                apply
+                  evidence_method Foldable.foldMap evidence= nullary=0
+                    instance Multi
+                  evidence_ref Semigroup Dual a
+                evidence_ref Monoid Dual a
+              lambda
+                pat_var x
+                apply
+                  constructor_ref Dual
+                  apply
+                    constructor_ref Endo
+                    lambda
+                      pat_var acc
+                      apply
+                        apply
+                          variable f
+                          variable acc
+                        variable x
+            variable t
+      variable z
+  function __ev_Foldable_Multi_toList :: Multi t3184 -> [t3184]
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldr evidence= nullary=0
+            instance Multi
+          lambda
+            pat_var x
+            pat_var xs
+            infix :
+              variable x
+              variable xs
+        list
+      variable t
+  function __ev_Foldable_Multi_null :: Multi t3194 -> Bool
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldr evidence= nullary=0
+            instance Multi
+          lambda
+            pat_var ignoredX
+            pat_var ignoredAcc
+            constructor_ref False
+        constructor_ref True
+      variable t
+  function __ev_Foldable_Multi_length :: Multi t3201 -> Int
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldl evidence= nullary=0
+            instance Multi
+          lambda
+            pat_var n
+            pat_var ignored
+            infix +
+              variable n
+              integer 1
+        integer 0
+      variable t
+  function __ev_Foldable_Multi_elem :: __Dict_Eq -> t3218 -> Multi t3218 -> Bool
+    pat_var __ev_Eq
+    pat_var x
+    pat_var t
+    apply
+      apply
+        apply
+          variable any
+          evidence_ref Foldable Multi
+        lambda
+          pat_var y
+          apply
+            apply
+              evidence_method Eq.== evidence=__ev_Eq nullary=0
+              variable x
+            variable y
+      variable t
+  function __ev_Foldable_Multi_maximum :: __Dict_Eq -> __Dict_Ord -> Multi t3238 -> t3238
+    pat_var __ev_Eq
+    pat_var __ev_Ord_1
+    pat_var t
+    case
+      apply
+        evidence_method Foldable.toList evidence= nullary=0
+          instance Multi
+        variable t
+      alt
+        pat_nil
+        apply
+          variable error
+          string "Foldable.maximum: empty structure"
+      alt
+        pat_cons
+          pat_var x
+          pat_var xs
+        let
+          binding
+            pat_var go
+            lambda
+              pat_var __ev_dict16
+              pat_var __ev_dict17
+              lambda
+                pat_var acc
+                pat_var ys
+                case
+                  variable ys
+                  alt
+                    pat_nil
+                    variable acc
+                  alt
+                    pat_cons
+                      pat_var y
+                      pat_var rest
+                    apply
+                      apply
+                        apply
+                          apply
+                            variable go
+                            variable __ev_dict16
+                          variable __ev_dict17
+                        apply
+                          apply
+                            evidence_method Ord.max evidence=__ev_dict17 nullary=0
+                            variable acc
+                          variable y
+                      variable rest
+          apply
+            apply
+              apply
+                apply
+                  variable go
+                  variable __ev_Eq
+                variable __ev_Ord_1
+              variable x
+            variable xs
+  function __ev_Foldable_Multi_minimum :: __Dict_Eq -> __Dict_Ord -> Multi t3267 -> t3267
+    pat_var __ev_Eq
+    pat_var __ev_Ord_1
+    pat_var t
+    case
+      apply
+        evidence_method Foldable.toList evidence= nullary=0
+          instance Multi
+        variable t
+      alt
+        pat_nil
+        apply
+          variable error
+          string "Foldable.minimum: empty structure"
+      alt
+        pat_cons
+          pat_var x
+          pat_var xs
+        let
+          binding
+            pat_var go
+            lambda
+              pat_var __ev_dict18
+              pat_var __ev_dict19
+              lambda
+                pat_var acc
+                pat_var ys
+                case
+                  variable ys
+                  alt
+                    pat_nil
+                    variable acc
+                  alt
+                    pat_cons
+                      pat_var y
+                      pat_var rest
+                    apply
+                      apply
+                        apply
+                          apply
+                            variable go
+                            variable __ev_dict18
+                          variable __ev_dict19
+                        apply
+                          apply
+                            evidence_method Ord.min evidence=__ev_dict19 nullary=0
+                            variable acc
+                          variable y
+                      variable rest
+          apply
+            apply
+              apply
+                apply
+                  variable go
+                  variable __ev_Eq
+                variable __ev_Ord_1
+              variable x
+            variable xs
+  function __ev_Foldable_Multi_sum :: __Dict_Num -> Multi t3280 -> t3280
+    pat_var __ev_Num
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldl evidence= nullary=0
+            instance Multi
+          lambda
+            pat_var a
+            pat_var b
+            apply
+              apply
+                evidence_method Num.+ evidence=__ev_Num nullary=0
+                variable a
+              variable b
+        apply
+          evidence_method Num.fromInteger evidence=__ev_Num nullary=0
+          intrinsic intToInteger#
+            integer 0
+      variable t
+  function __ev_Foldable_Multi_product :: __Dict_Num -> Multi t3297 -> t3297
+    pat_var __ev_Num
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldl evidence= nullary=0
+            instance Multi
+          lambda
+            pat_var a
+            pat_var b
+            apply
+              apply
+                evidence_method Num.* evidence=__ev_Num nullary=0
+                variable a
+              variable b
+        apply
+          evidence_method Num.fromInteger evidence=__ev_Num nullary=0
+          intrinsic intToInteger#
+            integer 1
+      variable t
+  function __ev_Foldable_Multi_foldr1 :: t3316 -> t3316 -> t3316 -> Multi t3316 -> t3316
+    pat_var f
+    pat_var t
+    let
+      binding
+        pat_var go
+        lambda
+          pat_var ys
+          case
+            variable ys
+            alt
+              pat_nil
+              apply
+                variable error
+                string "Foldable.foldr1: empty structure"
+            alt
+              pat_cons
+                pat_var x
+                pat_nil
+              variable x
+            alt
+              pat_cons
+                pat_var x
+                pat_var zs
+              apply
+                apply
+                  variable f
+                  variable x
+                apply
+                  variable go
+                  variable zs
+      apply
+        variable go
+        apply
+          evidence_method Foldable.toList evidence= nullary=0
+            instance Multi
+          variable t
+  function __ev_Foldable_Multi_foldl1 :: t3337 -> t3337 -> t3337 -> Multi t3337 -> t3337
+    pat_var f
+    pat_var t
+    case
+      apply
+        evidence_method Foldable.toList evidence= nullary=0
+          instance Multi
+        variable t
+      alt
+        pat_nil
+        apply
+          variable error
+          string "Foldable.foldl1: empty structure"
+      alt
+        pat_cons
+          pat_var x
+          pat_var xs
+        let
+          binding
+            pat_var go
+            lambda
+              pat_var acc
+              pat_var ys
+              case
+                variable ys
+                alt
+                  pat_nil
+                  variable acc
+                alt
+                  pat_cons
+                    pat_var y
+                    pat_var rest
+                  apply
+                    apply
+                      variable go
+                      apply
+                        apply
+                          variable f
+                          variable acc
+                        variable y
+                    variable rest
+          apply
+            apply
+              variable go
+              variable x
+            variable xs
+  function __ev_Traversable_Multi_traverse :: __Dict_Functor -> __Dict_Applicative -> t3358 -> t3381 t3359 -> Multi t3358 -> t3381 Multi t3359
+    pat_var __ev_Functor
+    pat_var __ev_Applicative_1
+    pat_var __f
+    pat_var __x
+    case
+      variable __x
+      alt
+        pat_con Multi
+          pat_var __v0
+          pat_var __v1
+          pat_var __v2
+        apply
+          apply
+            evidence_method Applicative.<*> evidence=__ev_Applicative_1 nullary=0
+            apply
+              apply
+                evidence_method Applicative.<*> evidence=__ev_Applicative_1 nullary=0
+                apply
+                  apply
+                    evidence_method Applicative.<*> evidence=__ev_Applicative_1 nullary=0
+                    apply
+                      evidence_method Applicative.pure evidence=__ev_Applicative_1 nullary=0
+                      constructor_ref Multi
+                  apply
+                    variable __f
+                    variable __v0
+              apply
+                variable __f
+                variable __v1
+          apply
+            evidence_method Applicative.pure evidence=__ev_Applicative_1 nullary=0
+            variable __v2
+  function __ev_Traversable_Multi_sequenceA :: __Dict_Functor -> __Dict_Applicative -> Multi t3383 t3382 -> t3383 Multi t3382
+    pat_var __ev_Functor
+    pat_var __ev_Applicative_1
+    pat_var t
+    apply
+      apply
+        apply
+          apply
+            evidence_method Traversable.traverse evidence= nullary=0
+              instance Multi
+            variable __ev_Functor
+          variable __ev_Applicative_1
+        lambda
+          pat_var x
+          variable x
+      variable t
+  function __ev_Traversable_Multi_mapM :: __Dict_Functor -> __Dict_Applicative -> __Dict_Monad -> t3395 -> t3397 t3396 -> Multi t3395 -> t3397 Multi t3396
+    pat_var __ev_Functor
+    pat_var __ev_Applicative_1
+    pat_var __ev_Monad_2
+    pat_var f
+    pat_var t
+    apply
+      apply
+        apply
+          apply
+            evidence_method Traversable.traverse evidence= nullary=0
+              instance Multi
+            variable __ev_Functor
+          variable __ev_Applicative_1
+        variable f
+      variable t
+  function __ev_Traversable_Multi_sequence :: __Dict_Functor -> __Dict_Applicative -> __Dict_Monad -> Multi t3410 t3409 -> t3410 Multi t3409
+    pat_var __ev_Functor
+    pat_var __ev_Applicative_1
+    pat_var __ev_Monad_2
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Traversable.sequenceA evidence= nullary=0
+            instance Multi
+          variable __ev_Functor
+        variable __ev_Applicative_1
+      variable t
+  function mapped :: Box Int
+    apply
+      apply
+        evidence_method Functor.map evidence= nullary=0
+          instance Box
+        lambda
+          pat_var x
+          infix +
+            variable x
+            integer 1
+      apply
+        constructor_ref Box
+        integer 1
+  function folded :: Int
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldr evidence= nullary=0
+            instance Box
+          lambda
+            pat_var x
+            pat_var y
+            infix +
+              variable x
+              variable y
+        integer 0
+      apply
+        constructor_ref Box
+        integer 3
+  function trav :: Maybe Box Int
+    apply
+      apply
+        apply
+          apply
+            evidence_method Traversable.traverse evidence= nullary=0
+              instance Box
+            evidence_ref Functor Maybe
+          evidence_ref Applicative Maybe
+        constructor_ref Just
+      apply
+        constructor_ref Box
+        integer 1
+  function pairMap :: Pair Bool Int
+    apply
+      apply
+        evidence_method Functor.map evidence= nullary=0
+          instance Pair a
+        lambda
+          pat_var x
+          infix +
+            variable x
+            integer 1
+      apply
+        apply
+          constructor_ref Pair
+          constructor_ref True
+        integer 2
+  function treeMap :: Tree Int
+    apply
+      apply
+        evidence_method Functor.map evidence= nullary=0
+          instance Tree
+        lambda
+          pat_var x
+          infix +
+            variable x
+            integer 1
+      apply
+        apply
+          constructor_ref Node
+          apply
+            constructor_ref Leaf
+            integer 1
+        apply
+          constructor_ref Leaf
+          integer 2
+  function phantomMap :: Phantom Int Bool
+    apply
+      apply
+        evidence_method Functor.map evidence= nullary=0
+          instance Phantom a
+        lambda
+          pat_var ignored
+          constructor_ref True
+      apply
+        constructor_ref Phantom
+        integer 9
+  function multiMap :: Multi Int
+    apply
+      apply
+        evidence_method Functor.map evidence= nullary=0
+          instance Multi
+        lambda
+          pat_var x
+          infix +
+            variable x
+            integer 1
+      apply
+        apply
+          apply
+            constructor_ref Multi
+            integer 1
+          integer 2
+        integer 3

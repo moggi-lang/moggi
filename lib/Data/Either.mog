@@ -1,0 +1,219 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- |
+-- The 'Either' type, and associated operations.
+module Data.Either
+  ( Either(Left, Right)
+  , either
+  , lefts
+  , rights
+  , partitionEithers
+  , isLeft
+  , isRight
+  , fromLeft
+  , fromRight
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Bool
+import Data.Eq
+import Data.Foldable
+import Data.Functor
+import Data.Ord
+import Data.Semigroup
+import Text.Show
+import Data.Traversable
+
+-- | The 'Either' type represents values with two possibilities: a value of
+-- type @'Either' a b@ is either @'Left' a@ or @'Right' b@.
+--
+-- The 'Either' type is sometimes used to represent a value which is either
+-- correct or an error; by convention, the 'Left' constructor is used to hold an
+-- error value and the 'Right' constructor is used to hold a correct value
+-- (mnemonic: "right" also means "correct").
+--
+-- The type @'Either' 'String' 'Int'@ is the type of values which can be either
+-- a 'String' or an 'Int'. The 'Left' constructor can be used only on
+-- 'String's, and the 'Right' constructor can be used only on 'Int's:
+--
+-- >>> let s = Left "foo" :: Either String Int
+-- >>> s
+-- Left "foo"
+-- >>> let n = Right 3 :: Either String Int
+-- >>> n
+-- Right 3
+--
+-- The 'map' from our 'Functor' instance ignores 'Left' values, but applies the
+-- supplied function to values contained in a 'Right':
+--
+-- >>> map (*2) (Left "foo" :: Either String Int)
+-- Left "foo"
+-- >>> map (*2) (Right 3 :: Either String Int)
+-- Right 6
+--
+-- The 'Monad' instance chains together multiple actions which may fail, and
+-- fails overall if any of the individual steps failed:
+--
+-- >>> (Right 3 :: Either String Int) >>= (\x -> Right (x + 1))
+-- Right 4
+-- >>> (Left "parse error" :: Either String Int) >>= (\x -> Right (x + 1))
+-- Left "parse error"
+data Either a b = Left a | Right b
+
+-- | Case analysis for the 'Either' type.
+-- If the value is @'Left' a@, apply the first function to @a@;
+-- if it is @'Right' b@, apply the second function to @b@.
+--
+-- >>> either length (*2) (Left "foo" :: Either String Int)
+-- 3
+-- >>> either length (*2) (Right 3 :: Either String Int)
+-- 6
+either :: (a -> c) -> (b -> c) -> Either a b -> c
+either f g mx = case mx of
+  Left e -> f e
+  Right x -> g x
+
+-- | Return `True` if the given value is a `Left`-value, `False` otherwise.
+--
+-- >>> isLeft (Left "foo" :: Either String Int)
+-- True
+-- >>> isLeft (Right 3 :: Either String Int)
+-- False
+isLeft :: Either a b -> Bool
+isLeft mx = case mx of
+  Left _ -> True
+  Right _ -> False
+
+-- | Return `True` if the given value is a `Right`-value, `False` otherwise.
+--
+-- >>> isRight (Left "foo" :: Either String Int)
+-- False
+-- >>> isRight (Right 3 :: Either String Int)
+-- True
+isRight :: Either a b -> Bool
+isRight mx = case mx of
+  Left _ -> False
+  Right _ -> True
+
+-- | Return the contents of a 'Left'-value or a default value otherwise.
+--
+-- >>> fromLeft 1 (Left 3)
+-- 3
+-- >>> fromLeft 1 (Right "foo")
+-- 1
+fromLeft :: a -> Either a b -> a
+fromLeft d mx = case mx of
+  Left x -> x
+  Right _ -> d
+
+-- | Return the contents of a 'Right'-value or a default value otherwise.
+--
+-- >>> fromRight 1 (Right 3)
+-- 3
+-- >>> fromRight 1 (Left "foo")
+-- 1
+fromRight :: b -> Either a b -> b
+fromRight d mx = case mx of
+  Left _ -> d
+  Right x -> x
+
+-- | Extracts from a list of 'Either' all the 'Left' elements.
+-- All the 'Left' elements are extracted in order.
+--
+-- >>> lefts [Left "foo", Right 3, Left "bar", Right 7, Left "baz"]
+-- ["foo","bar","baz"]
+lefts :: [Either a b] -> [a]
+lefts xs = case xs of
+  [] -> []
+  y : rest -> case y of
+    Left e -> e : lefts rest
+    Right _ -> lefts rest
+
+-- | Extracts from a list of 'Either' all the 'Right' elements.
+-- All the 'Right' elements are extracted in order.
+--
+-- >>> rights [Left "foo", Right 3, Left "bar", Right 7, Left "baz"]
+-- [3,7]
+rights :: [Either a b] -> [b]
+rights xs = case xs of
+  [] -> []
+  y : rest -> case y of
+    Left _ -> rights rest
+    Right x -> x : rights rest
+
+-- | Partitions a list of 'Either' into two lists.
+-- All the 'Left' elements are extracted, in order, to the first component of
+-- the output. Similarly the 'Right' elements are extracted to the second
+-- component of the output.
+--
+-- >>> partitionEithers [Left "foo", Right 3, Left "bar", Right 7, Left "baz"]
+-- (["foo","bar","baz"],[3,7])
+--
+-- The pair returned by @'partitionEithers' x@ should be the same pair as
+-- @('lefts' x, 'rights' x)@.
+partitionEithers :: [Either a b] -> ([a], [b])
+partitionEithers xs = case xs of
+  [] -> ([], [])
+  y : rest -> case partitionEithers rest of
+    (ls, rs) -> case y of
+      Left e -> (e : ls, rs)
+      Right x -> (ls, x : rs)
+
+instance Functor (Either a) where
+  map f mx = case mx of
+    Left a -> Left a
+    Right b -> Right (f b)
+
+instance Applicative (Either a) where
+  pure x = Right x
+  (<*>) mf mx = case mf of
+    Left a -> Left a
+    Right f -> case mx of
+      Left a -> Left a
+      Right b -> Right (f b)
+
+instance Monad (Either a) where
+  (>>=) mx f = case mx of
+    Left a -> Left a
+    Right b -> f b
+
+instance Foldable (Either a) where
+  foldr f z mx = case mx of
+    Left _ -> z
+    Right b -> f b z
+
+instance Traversable (Either a) where
+  traverse f mx = case mx of
+    Left a -> pure (Left a)
+    Right b -> Right <$> (f b)
+
+instance (Eq a, Eq b) => Eq (Either a b) where
+  (==) x y = case x of
+    Left a -> case y of
+      Left b -> a == b
+      Right ignored -> False
+    Right a -> case y of
+      Left ignored -> False
+      Right b -> a == b
+  (/=) x y = case x == y of
+    True -> False
+    False -> True
+
+instance (Ord a, Ord b) => Ord (Either a b) where
+  compare x y = case x of
+    Left a -> case y of
+      Left b -> compare a b
+      Right _ -> LT
+    Right a -> case y of
+      Left _ -> GT
+      Right b -> compare a b
+
+instance Semigroup (Either a b) where
+  (<>) x y = case x of
+    Left _ -> y
+    Right _ -> x
+
+instance (Show a, Show b) => Show (Either a b) where
+  showsPrec d mx = case mx of
+    Left a -> showParen (d > 10) (\r -> showString "Left " (showsPrec 11 a r))
+    Right b -> showParen (d > 10) (\r -> showString "Right " (showsPrec 11 b r))

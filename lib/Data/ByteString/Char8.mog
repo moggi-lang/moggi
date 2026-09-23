@@ -1,0 +1,681 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.ByteString.Char8
+  ( ByteString
+  , empty
+  , singleton
+  , pack
+  , unpack
+  , cons
+  , snoc
+  , append
+  , head
+  , uncons
+  , unsnoc
+  , last
+  , tail
+  , init
+  , null
+  , length
+  , map
+  , reverse
+  , intersperse
+  , intercalate
+  , transpose
+  , foldl
+  , foldl1
+  , foldr
+  , foldr1
+  , concat
+  , concatMap
+  , any
+  , all
+  , maximum
+  , minimum
+  , scanl
+  , scanl1
+  , scanr
+  , scanr1
+  , mapAccumL
+  , mapAccumR
+  , replicate
+  , unfoldr
+  , unfoldrN
+  , take
+  , takeEnd
+  , drop
+  , dropEnd
+  , splitAt
+  , takeWhile
+  , takeWhileEnd
+  , dropWhile
+  , dropWhileEnd
+  , dropSpace
+  , span
+  , spanEnd
+  , break
+  , breakEnd
+  , group
+  , groupBy
+  , inits
+  , tails
+  , initsNE
+  , tailsNE
+  , strip
+  , stripPrefix
+  , stripSuffix
+  , split
+  , splitWith
+  , lines
+  , words
+  , unlines
+  , unwords
+  , isPrefixOf
+  , isSuffixOf
+  , isInfixOf
+  , breakSubstring
+  , elem
+  , notElem
+  , find
+  , filter
+  , partition
+  , index
+  , indexMaybe
+  , elemIndex
+  , elemIndices
+  , elemIndexEnd
+  , findIndex
+  , findIndices
+  , findIndexEnd
+  , count
+  , zip
+  , zipWith
+  , packZipWith
+  , unzip
+  , sort
+  , readInt
+  , readInteger
+  , copy
+  , getLine
+  , getContents
+  , putStr
+  , putStrLn
+  , interact
+  , readFile
+  , writeFile
+  , appendFile
+  , hGetLine
+  , hGetContents
+  , hPut
+  , hPutStr
+  , hPutStrLn
+    -- Moggi host bridges (not in bytestring-0.12.2.0 Char8):
+  , fromString
+  , toString
+  ) where
+
+import Data.Bool
+import Control.Applicative hiding (empty)
+import Control.Monad
+import Data.ByteString qualified as B
+import Data.ByteString
+  ( ByteString
+  , empty
+  , append
+  , tail
+  , init
+  , null
+  , length
+  , reverse
+  , concat
+  , take
+  , drop
+  , splitAt
+  , isPrefixOf
+  , isSuffixOf
+  )
+import Data.Char (Char, ord, chr, isSpace, isDigit, digitToInt)
+import Data.Eq
+import Data.Int
+import Moggi.Internal.Integer (Integer, integerFromInt)
+import Data.List qualified as L
+import Data.List.NonEmpty qualified as NE
+import Data.Maybe
+import Moggi.Internal.Num
+import Data.Ord
+import Data.String qualified as S
+import Data.Tuple
+import Data.Word (Word8)
+import Moggi.Err
+import Moggi.Internal.Prim (bytesToString#, bytesFromString#, word8FromInt#, word8ToInt#)
+import System.Filesystem (readTextFile, writeTextFile, appendTextFile)
+import System.Filesystem.Path (FilePath)
+import System.IO qualified as IO
+import System.IO (IO, Handle, stdin)
+
+-- Latin-1 view helpers (not exported)
+c2w :: Char -> Word8
+c2w c = word8FromInt# (ord c)
+
+w2c :: Word8 -> Char
+w2c w = chr (word8ToInt# w)
+
+packChars :: [Char] -> ByteString
+packChars cs = B.pack (listMap c2w cs)
+
+listMap :: (a -> b) -> [a] -> [b]
+listMap f xs = case xs of
+  [] -> []
+  x : rest -> f x : listMap f rest
+
+listMaximum :: Ord a => [a] -> a
+listMaximum xs = case xs of
+  [] -> error "Data.ByteString.Char8.maximum: empty"
+  x : rest -> foldCharsL max x rest
+
+listMinimum :: Ord a => [a] -> a
+listMinimum xs = case xs of
+  [] -> error "Data.ByteString.Char8.minimum: empty"
+  x : rest -> foldCharsL min x rest
+
+listFoldl1 :: (a -> a -> a) -> [a] -> a
+listFoldl1 f xs = case xs of
+  [] -> error "Data.ByteString.Char8.foldl1: empty"
+  x : rest -> foldCharsL f x rest
+
+listFoldr1 :: (a -> a -> a) -> [a] -> a
+listFoldr1 f xs = case xs of
+  [] -> error "Data.ByteString.Char8.foldr1: empty"
+  [x] -> x
+  x : rest -> f x (listFoldr1 f rest)
+
+-- Introducing / eliminating
+
+singleton :: Char -> ByteString
+singleton c = B.singleton (c2w c)
+
+pack :: String -> ByteString
+pack s = packChars (S.unpack s)
+
+unpack :: ByteString -> [Char]
+unpack b = listMap w2c (B.unpack b)
+
+-- Basic interface (Char wrappers)
+
+cons :: Char -> ByteString -> ByteString
+cons c b = B.cons (c2w c) b
+
+snoc :: ByteString -> Char -> ByteString
+snoc b c = B.snoc b (c2w c)
+
+head :: ByteString -> Char
+head b = w2c (B.head b)
+
+last :: ByteString -> Char
+last b = w2c (B.last b)
+
+uncons :: ByteString -> Maybe (Char, ByteString)
+uncons b = case unpack b of
+  [] -> Nothing
+  c : rest -> Just (c, packChars rest)
+
+unsnoc :: ByteString -> Maybe (ByteString, Char)
+unsnoc b = case L.unsnoc (unpack b) of
+  Nothing -> Nothing
+  Just pair -> Just (packChars (fst pair), snd pair)
+
+-- Transforming
+
+map :: (Char -> Char) -> ByteString -> ByteString
+map f b = B.map (\w -> c2w (f (w2c w))) b
+
+intersperse :: Char -> ByteString -> ByteString
+intersperse c b = packChars (L.intersperse c (unpack b))
+
+intercalate :: ByteString -> [ByteString] -> ByteString
+intercalate sep bss = concat (L.intersperse sep bss)
+
+transpose :: [ByteString] -> [ByteString]
+transpose bss = listMap packChars (L.transpose (listMap unpack bss))
+
+-- Folds
+
+-- Local list folds (avoid Fold.foldr/foldl name clash with Char8.foldr/foldl).
+foldCharsR :: (Char -> a -> a) -> a -> [Char] -> a
+foldCharsR f z cs = case cs of
+  [] -> z
+  c : rest -> f c (foldCharsR f z rest)
+
+foldCharsL :: (a -> Char -> a) -> a -> [Char] -> a
+foldCharsL f z cs = foldCharsR (\c acc -> f acc c) z (L.reverse cs)
+
+foldl :: (a -> Char -> a) -> a -> ByteString -> a
+foldl f z b = foldCharsL f z (unpack b)
+
+foldr :: (Char -> a -> a) -> a -> ByteString -> a
+foldr f z b = foldCharsR f z (unpack b)
+
+foldl1 :: (Char -> Char -> Char) -> ByteString -> Char
+foldl1 f b = listFoldl1 f (unpack b)
+
+foldr1 :: (Char -> Char -> Char) -> ByteString -> Char
+foldr1 f b = listFoldr1 f (unpack b)
+
+concatMap :: (Char -> ByteString) -> ByteString -> ByteString
+concatMap f b = concat (listMap f (unpack b))
+
+any :: (Char -> Bool) -> ByteString -> Bool
+any p b = B.any (\w -> p (w2c w)) b
+
+all :: (Char -> Bool) -> ByteString -> Bool
+all p b = B.all (\w -> p (w2c w)) b
+
+maximum :: ByteString -> Char
+maximum b = listMaximum (unpack b)
+
+minimum :: ByteString -> Char
+minimum b = listMinimum (unpack b)
+
+-- Scans / mapAccum / unfold
+
+scanl :: (Char -> Char -> Char) -> Char -> ByteString -> ByteString
+scanl f z b = packChars (L.scanl f z (unpack b))
+
+scanl1 :: (Char -> Char -> Char) -> ByteString -> ByteString
+scanl1 f b = packChars (L.scanl1 f (unpack b))
+
+scanr :: (Char -> Char -> Char) -> Char -> ByteString -> ByteString
+scanr f z b = packChars (L.scanr f z (unpack b))
+
+scanr1 :: (Char -> Char -> Char) -> ByteString -> ByteString
+scanr1 f b = packChars (L.scanr1 f (unpack b))
+
+mapAccumL :: (acc -> Char -> (acc, Char)) -> acc -> ByteString -> (acc, ByteString)
+mapAccumL f z b =
+  let pair = L.mapAccumL f z (unpack b)
+  in (fst pair, packChars (snd pair))
+
+mapAccumR :: (acc -> Char -> (acc, Char)) -> acc -> ByteString -> (acc, ByteString)
+mapAccumR f z b =
+  let pair = L.mapAccumR f z (unpack b)
+  in (fst pair, packChars (snd pair))
+
+replicate :: Int -> Char -> ByteString
+replicate n c = B.replicate n (c2w c)
+
+unfoldr :: (a -> Maybe (Char, a)) -> a -> ByteString
+unfoldr f z = packChars (L.unfoldr f z)
+
+unfoldrN :: Int -> (a -> Maybe (Char, a)) -> a -> (ByteString, Maybe a)
+unfoldrN n f z =
+  let pair = unfoldrNGo n f z
+  in (packChars (fst pair), snd pair)
+
+unfoldrNGo :: Int -> (a -> Maybe (Char, a)) -> a -> ([Char], Maybe a)
+unfoldrNGo k f s = case compare k 0 of
+  GT -> unfoldrNGoPos k f s
+  _ -> ([], Just s)
+
+unfoldrNGoPos :: Int -> (a -> Maybe (Char, a)) -> a -> ([Char], Maybe a)
+unfoldrNGoPos k f s = case f s of
+  Nothing -> ([], Nothing)
+  Just pair -> unfoldrNGoCons k f (fst pair) (snd pair)
+
+unfoldrNGoCons :: Int -> (a -> Maybe (Char, a)) -> Char -> a -> ([Char], Maybe a)
+unfoldrNGoCons k f c s2 =
+  let rest = unfoldrNGo (k - 1) f s2
+  in (c : fst rest, snd rest)
+
+-- Substrings
+
+takeEnd :: Int -> ByteString -> ByteString
+takeEnd n b =
+  let len = length b
+  in case compare n 0 of
+    LT -> empty
+    _ -> case compare n len of
+      GT -> b
+      _ -> drop (len - n) b
+
+dropEnd :: Int -> ByteString -> ByteString
+dropEnd n b =
+  let len = length b
+  in case compare n 0 of
+    LT -> b
+    _ -> case compare n len of
+      GT -> empty
+      _ -> take (len - n) b
+
+takeWhile :: (Char -> Bool) -> ByteString -> ByteString
+takeWhile p b = packChars (L.takeWhile p (unpack b))
+
+takeWhileEnd :: (Char -> Bool) -> ByteString -> ByteString
+takeWhileEnd p b = packChars (L.reverse (L.takeWhile p (L.reverse (unpack b))))
+
+dropWhile :: (Char -> Bool) -> ByteString -> ByteString
+dropWhile p b = packChars (L.dropWhile p (unpack b))
+
+dropWhileEnd :: (Char -> Bool) -> ByteString -> ByteString
+dropWhileEnd p b = packChars (L.dropWhileEnd p (unpack b))
+
+dropSpace :: ByteString -> ByteString
+dropSpace b = dropWhile isSpace b
+
+span :: (Char -> Bool) -> ByteString -> (ByteString, ByteString)
+span p b =
+  let pair = L.span p (unpack b)
+  in (packChars (fst pair), packChars (snd pair))
+
+spanEnd :: (Char -> Bool) -> ByteString -> (ByteString, ByteString)
+spanEnd p b =
+  let pair = L.span p (L.reverse (unpack b))
+  in (packChars (L.reverse (snd pair)), packChars (L.reverse (fst pair)))
+
+break :: (Char -> Bool) -> ByteString -> (ByteString, ByteString)
+break p b =
+  let pair = L.break p (unpack b)
+  in (packChars (fst pair), packChars (snd pair))
+
+breakEnd :: (Char -> Bool) -> ByteString -> (ByteString, ByteString)
+breakEnd p b = spanEnd (\c -> not (p c)) b
+
+group :: ByteString -> [ByteString]
+group b = listMap packChars (L.group (unpack b))
+
+groupBy :: (Char -> Char -> Bool) -> ByteString -> [ByteString]
+groupBy eq b = listMap packChars (L.groupBy eq (unpack b))
+
+inits :: ByteString -> [ByteString]
+inits b = listMap packChars (L.inits (unpack b))
+
+tails :: ByteString -> [ByteString]
+tails b = listMap packChars (L.tails (unpack b))
+
+initsNE :: ByteString -> NE.NonEmpty ByteString
+initsNE b = NE.fromList (inits b)
+
+tailsNE :: ByteString -> NE.NonEmpty ByteString
+tailsNE b = NE.fromList (tails b)
+
+strip :: ByteString -> ByteString
+strip b = dropWhile isSpace (dropWhileEnd isSpace b)
+
+stripPrefix :: ByteString -> ByteString -> Maybe ByteString
+stripPrefix pre b = case L.stripPrefix (unpack pre) (unpack b) of
+  Nothing -> Nothing
+  Just cs -> Just (packChars cs)
+
+stripSuffix :: ByteString -> ByteString -> Maybe ByteString
+stripSuffix suf b =
+  let rsuf = L.reverse (unpack suf)
+      rb = L.reverse (unpack b)
+  in case L.stripPrefix rsuf rb of
+    Nothing -> Nothing
+    Just cs -> Just (packChars (L.reverse cs))
+
+split :: Char -> ByteString -> [ByteString]
+split c b = splitWith (\x -> x == c) b
+
+splitWith :: (Char -> Bool) -> ByteString -> [ByteString]
+splitWith p b = case null b of
+  True -> []
+  False -> splitWithGo p (unpack b)
+
+splitWithGo p cs =
+  let pair = L.break p cs
+      hd = fst pair
+      tl = snd pair
+  in case tl of
+    [] -> [packChars hd]
+    _ : rest -> packChars hd : splitWithGo p rest
+
+lines :: ByteString -> [ByteString]
+lines b = linesChars (unpack b)
+
+linesChars :: [Char] -> [ByteString]
+linesChars cs = case cs of
+  [] -> []
+  _ ->
+    let pair = L.break (\c -> c == '\n') cs
+        hd = fst pair
+        tl = snd pair
+    in case tl of
+      [] -> [packChars hd]
+      ignored : rest -> packChars hd : linesChars rest
+
+words :: ByteString -> [ByteString]
+words b = L.filter (\x -> not (null x)) (splitWith isSpace b)
+
+unlines :: [ByteString] -> ByteString
+unlines bss = concat (listMap (\b -> snoc b '\n') bss)
+
+unwords :: [ByteString] -> ByteString
+unwords bss = intercalate (singleton ' ') bss
+
+-- Predicates / search
+
+isInfixOf :: ByteString -> ByteString -> Bool
+isInfixOf needle hay = L.isInfixOf (unpack needle) (unpack hay)
+
+breakSubstring :: ByteString -> ByteString -> (ByteString, ByteString)
+breakSubstring needle hay =
+  let ncs = unpack needle
+      hcs = unpack hay
+  in breakSubstringGo ncs hcs []
+
+breakSubstringGo ncs hcs acc = case L.isPrefixOf ncs hcs of
+  True -> (packChars (L.reverse acc), packChars hcs)
+  False -> case hcs of
+    [] -> (packChars (L.reverse acc), empty)
+    c : rest -> breakSubstringGo ncs rest (c : acc)
+
+elem :: Char -> ByteString -> Bool
+elem c b = B.elem (c2w c) b
+
+notElem :: Char -> ByteString -> Bool
+notElem c b = B.notElem (c2w c) b
+
+find :: (Char -> Bool) -> ByteString -> Maybe Char
+find p b = case B.find (\w -> p (w2c w)) b of
+  Nothing -> Nothing
+  Just w -> Just (w2c w)
+
+filter :: (Char -> Bool) -> ByteString -> ByteString
+filter p b = B.filter (\w -> p (w2c w)) b
+
+partition :: (Char -> Bool) -> ByteString -> (ByteString, ByteString)
+partition p b =
+  let pair = L.partition p (unpack b)
+  in (packChars (fst pair), packChars (snd pair))
+
+-- Indexing
+
+index :: ByteString -> Int -> Char
+index b n = w2c (B.index b n)
+
+indexMaybe :: ByteString -> Int -> Maybe Char
+indexMaybe b n = case compare n 0 of
+  LT -> Nothing
+  _ -> case compare n (length b) of
+    LT -> Just (index b n)
+    _ -> Nothing
+
+elemIndex :: Char -> ByteString -> Maybe Int
+elemIndex c b = L.elemIndex c (unpack b)
+
+elemIndices :: Char -> ByteString -> [Int]
+elemIndices c b = L.elemIndices c (unpack b)
+
+elemIndexEnd :: Char -> ByteString -> Maybe Int
+elemIndexEnd c b =
+  let m = elemIndex c (reverse b) in
+  case m of
+    Nothing -> Nothing
+    Just i -> Just ((length b - 1) - i)
+
+findIndex :: (Char -> Bool) -> ByteString -> Maybe Int
+findIndex p b = L.findIndex p (unpack b)
+
+findIndices :: (Char -> Bool) -> ByteString -> [Int]
+findIndices p b = L.findIndices p (unpack b)
+
+findIndexEnd :: (Char -> Bool) -> ByteString -> Maybe Int
+findIndexEnd p b =
+  let m = findIndex p (reverse b) in
+  case m of
+    Nothing -> Nothing
+    Just i -> Just ((length b - 1) - i)
+
+count :: Char -> ByteString -> Int
+count c b = listLength (elemIndices c b)
+
+listLength :: [a] -> Int
+listLength xs = case xs of
+  [] -> 0
+  ignored : rest -> 1 + listLength rest
+
+-- Zip / ordered
+
+zip :: ByteString -> ByteString -> [(Char, Char)]
+zip a b = L.zip (unpack a) (unpack b)
+
+zipWith :: (Char -> Char -> a) -> ByteString -> ByteString -> [a]
+zipWith f a b = L.zipWith f (unpack a) (unpack b)
+
+packZipWith :: (Char -> Char -> Char) -> ByteString -> ByteString -> ByteString
+packZipWith f a b = packChars (L.zipWith f (unpack a) (unpack b))
+
+unzip :: [(Char, Char)] -> (ByteString, ByteString)
+unzip pairs =
+  let pair = L.unzip pairs
+  in (packChars (fst pair), packChars (snd pair))
+
+sort :: ByteString -> ByteString
+sort b = packChars (L.sort (unpack b))
+
+copy :: ByteString -> ByteString
+copy b = b
+
+-- Reading
+
+readInt :: ByteString -> Maybe (Int, ByteString)
+readInt b = case uncons b of
+  Nothing -> Nothing
+  Just pair -> readIntAfterUncons (fst pair) (snd pair)
+
+readIntAfterUncons :: Char -> ByteString -> Maybe (Int, ByteString)
+readIntAfterUncons c rest = case c of
+  '-' -> case readUnsignedInt rest of
+    Nothing -> Nothing
+    Just pair -> Just (negate (fst pair), snd pair)
+  '+' -> readUnsignedInt rest
+  _ -> readUnsignedInt (cons c rest)
+
+readUnsignedInt :: ByteString -> Maybe (Int, ByteString)
+readUnsignedInt b = case uncons b of
+  Nothing -> Nothing
+  Just pair -> readUnsignedIntAfter (fst pair) (snd pair)
+
+readUnsignedIntAfter :: Char -> ByteString -> Maybe (Int, ByteString)
+readUnsignedIntAfter c rest = case isDigit c of
+  False -> Nothing
+  True -> Just (readDigitsInt (digitToInt c) rest)
+
+readDigitsInt :: Int -> ByteString -> (Int, ByteString)
+readDigitsInt acc b = case uncons b of
+  Nothing -> (acc, empty)
+  Just pair -> readDigitsIntCont acc (fst pair) (snd pair) b
+
+readDigitsIntCont :: Int -> Char -> ByteString -> ByteString -> (Int, ByteString)
+readDigitsIntCont acc c rest b = case isDigit c of
+  False -> (acc, b)
+  True -> readDigitsInt (acc * 10 + digitToInt c) rest
+
+readInteger :: ByteString -> Maybe (Integer, ByteString)
+readInteger b = case uncons b of
+  Nothing -> Nothing
+  Just pair -> readIntegerAfterUncons (fst pair) (snd pair)
+
+readIntegerAfterUncons :: Char -> ByteString -> Maybe (Integer, ByteString)
+readIntegerAfterUncons c rest = case c of
+  '-' -> case readUnsignedInteger rest of
+    Nothing -> Nothing
+    Just pair -> Just (negate (fst pair), snd pair)
+  '+' -> readUnsignedInteger rest
+  _ -> readUnsignedInteger (cons c rest)
+
+readUnsignedInteger :: ByteString -> Maybe (Integer, ByteString)
+readUnsignedInteger b = case uncons b of
+  Nothing -> Nothing
+  Just pair -> readUnsignedIntegerAfter (fst pair) (snd pair)
+
+readUnsignedIntegerAfter :: Char -> ByteString -> Maybe (Integer, ByteString)
+readUnsignedIntegerAfter c rest = case isDigit c of
+  False -> Nothing
+  True -> Just (readDigitsInteger (integerFromInt (digitToInt c)) rest)
+
+readDigitsInteger :: Integer -> ByteString -> (Integer, ByteString)
+readDigitsInteger acc b = case uncons b of
+  Nothing -> (acc, empty)
+  Just pair -> readDigitsIntegerCont acc (fst pair) (snd pair) b
+
+readDigitsIntegerCont :: Integer -> Char -> ByteString -> ByteString -> (Integer, ByteString)
+readDigitsIntegerCont acc c rest b = case isDigit c of
+  False -> (acc, b)
+  True ->
+    readDigitsInteger
+      (acc * integerFromInt 10 + integerFromInt (digitToInt c))
+      rest
+
+-- I/O (private # coerce allowed only in this module + ByteString backends)
+
+-- Host text I/O uses fromString/toString (bytesFromString#/bytesToString#) for
+-- symmetric String↔ByteString coercion; pack/unpack remain the Latin-1 Char view.
+fromString :: String -> ByteString
+fromString s = bytesFromString# s
+
+toString :: ByteString -> String
+toString b = bytesToString# b
+
+bsToString :: ByteString -> String
+bsToString b = toString b
+
+putStr :: ByteString -> IO ()
+putStr b = IO.putStr (bsToString b)
+
+putStrLn :: ByteString -> IO ()
+putStrLn b = IO.putStrLn (bsToString b)
+
+getLine :: IO ByteString
+getLine = IO.getLine >>= (\s -> pure (fromString s))
+
+getContents :: IO ByteString
+getContents = IO.hGetContents stdin >>= (\s -> pure (fromString s))
+
+interact :: (ByteString -> ByteString) -> IO ()
+interact f = getContents >>= (\bs -> putStr (f bs))
+
+readFile :: FilePath -> IO ByteString
+readFile p = readTextFile p >>= (\s -> pure (fromString s))
+
+writeFile :: FilePath -> ByteString -> IO ()
+writeFile p b = writeTextFile p (bsToString b)
+
+appendFile :: FilePath -> ByteString -> IO ()
+appendFile p b = appendTextFile p (bsToString b)
+
+hGetLine :: Handle -> IO ByteString
+hGetLine h = IO.hGetLine h >>= (\m -> case m of
+  Nothing -> error "Data.ByteString.Char8.hGetLine: end of input"
+  Just s -> pure (fromString s))
+
+hGetContents :: Handle -> IO ByteString
+hGetContents h = IO.hGetContents h >>= (\s -> pure (fromString s))
+
+hPutStr :: Handle -> ByteString -> IO ()
+hPutStr h b = IO.hPutStr h (bsToString b)
+
+hPutStrLn :: Handle -> ByteString -> IO ()
+hPutStrLn h b = IO.hPutStrLn h (bsToString b)
+
+hPut :: Handle -> ByteString -> IO ()
+hPut h b = hPutStr h b

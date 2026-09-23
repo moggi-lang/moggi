@@ -1,0 +1,4 @@
+tests/semantics/Bad-IO-Pure-Main.mog:5:8: type error: undefined variable `pure`
+
+  5 | main = pure 1
+    |        ^^^^

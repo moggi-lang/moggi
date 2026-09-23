@@ -1,0 +1,9 @@
+module
+  function eqAdd()
+      ret intrinsic intEq#(1, 5)
+  function addEq()
+      ret intrinsic intEq#(3, 3)
+  function cons()
+      ret [1, 2, 3]
+  function append()
+      ret [1, 2, 3, 4]

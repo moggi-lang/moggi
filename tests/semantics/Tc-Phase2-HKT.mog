@@ -1,0 +1,36 @@
+-- Phase 2: empty data, infix type ops, parametric synonyms + expand-under-app.
+
+-- Empty data (V1-shaped)
+data V1 p
+
+-- Infix type constructor
+data (f :+: g) p = L1 (f p) | R1 (g p)
+
+data (f :*: g) p = Pair (f p) (g p)
+
+-- Parametric synonym + expand-under-app
+data K1 i c = K1 c
+data R = R
+type Rec0 = K1 R
+
+type Id a = a
+
+useRec0 :: Rec0 Int -> Int
+useRec0 (K1 x) = x
+
+useId :: Id Bool -> Bool
+useId x = x
+
+-- Infix type apps
+leftOnly :: (Maybe :+: Either Int) Int -> Maybe Int
+leftOnly (L1 x) = x
+
+rightOnly :: (Maybe :+: Either Int) Int -> Either Int Int
+rightOnly (R1 x) = x
+
+pair :: (Maybe :*: Maybe) Int -> Maybe Int
+pair (Pair x y) = x
+
+-- Empty data is uninhabited; wildcards are exhaustive
+absurdV1 :: V1 Int -> Int
+absurdV1 _ = 0

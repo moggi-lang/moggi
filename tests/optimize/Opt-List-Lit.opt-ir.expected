@@ -1,0 +1,7 @@
+module
+  function oneTwoThree()
+      ret [1, 2, 3]
+  function foo()
+      ret "x"
+  function items()
+      ret [@foo, "y"]

@@ -1,0 +1,4 @@
+tests/semantics/bad-module-reexport-duplicate/lib/Hub.mog:4:5: type error: duplicate export `foo` in module `Clash.Hub`
+
+  4 |   , module Clash.B
+    |     ^^^^^^

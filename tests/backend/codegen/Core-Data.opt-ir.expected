@@ -1,0 +1,19 @@
+module
+  data User
+    constructor User name age
+  function fromMaybe(d, mx)
+      match_return mx
+        arm Just a
+            ret a
+        arm Nothing
+            ret d
+  function makeUser()
+      ret call User(1, 30)
+  function getAge(user)
+      ret call __field1(user)
+  function showUser(_p0)
+      t4 = call __field0(_p0)
+      t5 = call __field1(_p0)
+      ret intrinsic intAdd#(t4, t5)
+  function ageOf(_p0)
+      ret call __field1(_p0)

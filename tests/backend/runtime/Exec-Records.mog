@@ -1,0 +1,99 @@
+-- Records: construction, projection, update, patterns, and the same field name
+-- in two records. Projection takes the position from the receiver's own type, so
+-- `name` and `city` may be at different positions in different records.
+data Address = Address
+  { city :: String
+  , zip  :: String
+  } deriving (Show)
+
+data Person = Person
+  { name    :: String
+  , age     :: Int
+  , address :: Address
+  } deriving (Show)
+
+data Company = Company
+  { name :: String
+  , city :: String
+  } deriving (Show)
+
+data Age = Age { unAge :: Int } deriving (Show)
+
+person :: Person
+person = Person
+  { name = "Alice"
+  , age = 30
+  , address = Address { city = "Berlin", zip = "10115" }
+  }
+
+company :: Company
+company = Company { name = "Moggi", city = "Berlin" }
+
+-- `p { f = e }` is the receiver with the named fields replaced; the fields it
+-- does not mention are read back off the receiver.
+rename :: String -> Person -> Person
+rename n p = p { name = n }
+
+-- One level down, with the receiver of the inner update a projection of the
+-- outer one.
+moveTo :: String -> Person -> Person
+moveTo c p = p { address = p.address { city = c } }
+
+-- Every field named at once is a rebuild spelled as an update.
+born :: Person
+born = person { name = "Baby", age = 0, address = Address { city = "Berlin", zip = "10115" } }
+
+-- A local function gets the receiver's type from the fields the update names,
+-- the way a projection in the same position does.
+bumpAge :: Person -> Person
+bumpAge = go
+  where
+    go p = p { age = p.age + 1 }
+
+-- A `newtype` record is its one field, so updating it is that field's value.
+older :: Age -> Int
+older a = (a { unAge = a.unAge + 1 }).unAge
+
+-- A record pattern may name a subset of the fields, in any order.
+greet :: Person -> String
+greet p = case p of
+  Person { name = n } -> "hello " <> n
+
+zipOf :: Person -> String
+zipOf p = case p of
+  Person { address = Address { zip = z } } -> z
+
+ageOf :: Person -> Int
+ageOf p = case p of
+  Person { age = a, name = _ } -> a
+
+-- A record pattern also binds in a `do` block, where the pattern is not a match
+-- but a binding.
+cityIn :: Person -> IO String
+cityIn p = do
+  let Person { address = Address { city = c } } = p
+  putStrLn c
+  pure c
+
+main :: IO ()
+main = do
+  putStrLn (show person)
+  putStrLn (show company)
+  putStrLn person.name
+  putStrLn company.name
+  putStrLn person.address.city
+  putStrLn company.city
+  putStrLn (show person.age)
+  putStrLn (greet person)
+  putStrLn (zipOf person)
+  putStrLn (show (ageOf person))
+  _ <- cityIn person
+  putStrLn (show (moveTo "Munich" person))
+  putStrLn (show (Age { unAge = 7 }))
+  putStrLn (show ((Age { unAge = 7 }).unAge))
+  putStrLn (show (rename "Bob" person))
+  putStrLn (show (bumpAge person))
+  putStrLn (show born)
+  putStrLn (show (older (Age { unAge = 7 })))
+  putStrLn (show (person { age = person.age + 1 }).name)
+  putStrLn (show (company { city = "Hamburg" }).city)

@@ -1,0 +1,3 @@
+module Bad.IO.Hash.Data
+
+data IO# a = MkIO a

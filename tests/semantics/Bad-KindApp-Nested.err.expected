@@ -1,0 +1,4 @@
+tests/semantics/Bad-KindApp-Nested.mog:6:19: type error: kind mismatch applying `PairColor`: expected `Color`, got `Type`
+
+  6 | bad :: PairColor (OnlyColor 'Red) 'Blue -> Int
+    |                   ^^^^^^^^^

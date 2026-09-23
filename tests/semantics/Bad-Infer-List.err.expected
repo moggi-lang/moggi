@@ -1,0 +1,4 @@
+tests/semantics/Bad-Infer-List.mog:1:1: type error: unresolved type class constraint: `Num ()`
+
+  1 | mixed = [1, (), 3]
+    | ^^^^^

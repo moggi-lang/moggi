@@ -1,0 +1,4 @@
+tests/semantics/Bad-Derive-Functor-Fun.mog:4:39: type error: cannot derive Functor: field type `a -> Int` is not Functor-derivable (function)
+
+  4 | data Bad a = Bad (a -> Int) deriving (Functor)
+    |                                       ^^^^^^^

@@ -1,0 +1,74 @@
+import Data.Bool
+import Data.Int
+import Text.Show
+import System.IO
+
+-- ---- Exec-Where-Equations ----
+
+fact :: Int -> Int
+fact n = go n 1
+  where
+    go 0 acc = acc
+    go k acc = go (k - 1) (k * acc)
+
+runWhereEquations :: IO ()
+runWhereEquations = putStrLn (show (fact 5))
+
+-- ---- Exec-Where-Mutual ----
+
+parity :: Int -> Bool
+parity n = even n
+  where
+    even 0 = True
+    even k = odd (k - 1)
+    odd 0 = False
+    odd k = even (k - 1)
+
+runWhereMutual :: IO ()
+runWhereMutual = putStrLn (show (parity 4))
+
+-- ---- Exec-Where-Pinned ----
+
+-- No literal pattern in sight: `go`'s `k` is only determined by the call in
+-- `fact`'s body, so the `Num`/`Eq` obligations `k == 0`, `k - 1` and `k * acc`
+-- create have to wait for that call site instead of being defaulted while the
+-- variable is still open.
+pinned :: Int -> Int
+pinned n = go n 3
+  where
+    go k acc = if k == 0 then acc else go (k - 1) (k * acc)
+
+runWherePinned :: IO ()
+runWherePinned = putStrLn (show (pinned 5))
+
+-- ---- Exec-Where-Generalized ----
+
+-- The same local function at two numeric types. `sumTo` is generalized over
+-- the obligations its body carries (`<=`, `-`, `+`, the literals), so each use
+-- site supplies its own dictionaries -- and the recursive call inside the body
+-- runs on the dictionaries of the member it is called from.
+sums = (sumTo (3 :: Int), sumTo (3 :: Integer))
+  where
+    sumTo n = if n <= 0 then 0 else sumTo (n - 1) + n
+
+runWhereGeneralized :: IO ()
+runWhereGeneralized = putStrLn (show sums)
+
+-- The same for a mutually recursive pair: one dictionary set is handed to both
+-- members of the group, not one set per member.
+alternating = (evenStep (4 :: Int) 0, evenStep (4 :: Integer) 0)
+  where
+    evenStep n acc = if n <= 0 then acc else oddStep (n - 1) (acc + n)
+    oddStep n acc = if n <= 0 then acc else evenStep (n - 1) (acc + 2)
+
+runWhereMutualGeneralized :: IO ()
+runWhereMutualGeneralized = putStrLn (show alternating)
+
+-- ---- combined entry point ----
+main :: IO ()
+main = do
+  runWhereEquations
+  runWhereMutual
+  runWherePinned
+  runWhereGeneralized
+  runWhereMutualGeneralized

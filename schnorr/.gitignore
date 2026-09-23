@@ -1,0 +1,7 @@
+build
+schnorr
+tests/bech32_enc
+
+# Fetched dependencies (see README.md): cloned at the pinned tags, never committed.
+libsecp256k1-0.8.0/
+libbech32-1.1p1/

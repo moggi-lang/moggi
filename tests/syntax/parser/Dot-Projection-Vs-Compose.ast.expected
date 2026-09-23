@@ -1,0 +1,78 @@
+program
+  function inc
+    pat_var n
+    infix +
+      variable n
+      integer 1
+  function double
+    pat_var n
+    infix *
+      variable n
+      integer 2
+  function composed
+    infix .
+      variable double
+      variable inc
+  function chained
+    infix .
+      variable double
+      infix .
+        variable inc
+        variable double
+  function projected
+    field_access .field
+      variable rec
+  function argProjected
+    apply
+      variable show
+      field_access .field
+        variable rec
+  function chained
+    field_access .inner
+      field_access .field
+        variable rec
+  function applied
+    apply
+      field_access .field
+        variable rec
+      variable other
+  function qualifiedRef
+    field_access .filter
+      constructor_ref L
+  function qualifiedArg
+    apply
+      field_access .filter
+        constructor_ref L
+      variable xs
+  function updated
+    record_update
+      receiver
+        variable rec
+      field =
+        integer 1
+  function appliedUpdate
+    apply
+      variable show
+      record_update
+        receiver
+          variable rec
+        field =
+          integer 1
+  function chainedUpdate
+    record_update
+      receiver
+        record_update
+          receiver
+            variable rec
+          a =
+            integer 1
+      b =
+        integer 2
+  function parenUpdate
+    record_update
+      receiver
+        apply
+          variable make
+          integer 3
+      field =
+        integer 4

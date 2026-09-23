@@ -1,0 +1,4 @@
+module Internal (narrow) where
+
+narrow :: Int -> Int
+narrow x = x

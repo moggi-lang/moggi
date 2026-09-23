@@ -1,0 +1,3 @@
+module Foreign.Bad.Const where
+
+foreign php const bad "PDO.prepare" :: Int

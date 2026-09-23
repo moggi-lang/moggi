@@ -1,0 +1,4 @@
+tests/syntax/parser/bad-parse/case/Case.mog:1:12: parse error: case expression requires `of` before alternatives; write `case <expr> of`
+
+  1 | f x = case x
+    |            ^

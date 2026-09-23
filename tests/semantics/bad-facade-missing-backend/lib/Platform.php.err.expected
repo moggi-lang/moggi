@@ -1,0 +1,4 @@
+tests/semantics/bad-facade-missing-backend/lib/Platform.mog:5:8: type error: module `Platform` has no `php` implementation (it implements: jvm, dotnet)
+
+   5 | module Platform
+     |        ^^^^^^^^

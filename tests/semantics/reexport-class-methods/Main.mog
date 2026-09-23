@@ -1,0 +1,15 @@
+-- The method list on both the provider's export list and this import list names
+-- `traverse` and `sequenceA`; `traverse` here is the class default of the
+-- provider's instance.
+module Main where
+
+import ReexportClassMethods.Provider (Traversable(traverse, sequenceA), Pair(..))
+
+main :: IO ()
+main = do
+  putStrLn (case traverse (\x -> Just (x + 1)) (Pair 1 2) of
+    Just (Pair x y) -> show x <> " " <> show y
+    Nothing -> "Nothing")
+  putStrLn (case sequenceA (Pair (Just 1) (Just 2)) of
+    Just (Pair x y) -> show x <> " " <> show y
+    Nothing -> "Nothing")

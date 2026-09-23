@@ -1,0 +1,29 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+
+import Moggi.Generics
+import Data.Bool
+import Data.Int
+
+-- Handwritten Generic (provenance-agnostic vs stock deriving): sum + product field.
+data Foo = Bar Int | Baz
+
+instance Generic Foo where
+  type Rep Foo = D1 (MetaData "Foo" "Main" "moggi" 'False) ((C1 (MetaCons "Bar" 'PrefixI 'False) (S1 (MetaSel Nothing 'NoSourceUnpackedness 'NoSourceStrictness 'DecidedLazy) (Rec0 Int))) :+: (C1 (MetaCons "Baz" 'PrefixI 'False) U1))
+  from x = case x of
+    Bar n -> M1 (L1 (M1 (M1 (K1 n))))
+    Baz -> M1 (R1 (M1 U1))
+  to r = case r of
+    M1 (L1 (M1 (M1 (K1 n)))) -> Bar n
+    M1 (R1 (M1 U1)) -> Baz
+
+roundtrip :: Foo -> Foo
+roundtrip x = to (from x)
+
+asRep :: Foo -> Rep Foo x
+asRep x = from x
+
+fromRep :: Rep Foo x -> Foo
+fromRep r = to r
+
+sample :: Foo
+sample = roundtrip (Bar 3)

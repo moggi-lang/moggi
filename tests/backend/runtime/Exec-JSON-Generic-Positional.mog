@@ -1,0 +1,42 @@
+import System.IO
+import Data.ByteString.Char8 qualified as C
+import Data.ByteString (ByteString)
+import Data.String
+import Data.JSON
+import Data.Either
+import Data.Int
+import Data.Eq
+import Moggi.Generics
+
+runDecode :: FromJSON a => (Either String a -> String) -> ByteString -> IO ()
+runDecode showFn bs = do
+  mr <- eitherDecode bs
+  putStrLn (showFn mr)
+
+-- Positional (non-record) product must encode as a JSON array.
+data PairI = PairI Int Int
+  deriving (Generic, Eq)
+
+instance ToJSON PairI where
+  toJSON = genericToJSON defaultOptions
+  toEncoding = genericToEncoding defaultOptions
+
+instance FromJSON PairI where
+  parseJSON = genericParseJSON defaultOptions
+  parseEncoding = genericParseEncoding defaultOptions
+
+main :: IO ()
+main = do
+  C.putStrLn (encode (PairI 3 4))
+  runDecode showPair ((C.pack "[3,4]"))
+  runDecode showRound ((encode (PairI 3 4)))
+
+showPair :: Either String PairI -> String
+showPair e = case e of
+  Right (PairI 3 4) -> "ok-pair"
+  _ -> "bad-pair"
+
+showRound :: Either String PairI -> String
+showRound e = case e of
+  Right (PairI 3 4) -> "ok-round"
+  _ -> "bad-round"

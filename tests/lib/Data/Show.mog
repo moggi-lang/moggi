@@ -1,0 +1,75 @@
+-- `Show`: the constructor form a value renders as, and the parentheses a nested
+-- value needs. A nullary constructor never takes parentheses, a prefix or infix
+-- constructor is rendered at its own precedence, a record as `C {f = v}` with
+-- fields at precedence 0.
+
+import Data.Bits
+import Data.Either
+import Data.Monoid
+import Data.Semigroup
+import Data.Tuple
+
+data Ack = Ack
+  deriving Show
+
+data Leaf = Leaf Int
+  deriving Show
+
+data Tree = Tip | Node Tree Tree
+  deriving Show
+
+data Pair a = a :*: a
+  deriving Show
+
+infixr 6 :*:
+
+data Point = Point { px :: Int, py :: Bool }
+  deriving Show
+
+data Wrapped = Wrapped { unwrapped :: Leaf }
+  deriving Show
+
+nested :: Maybe (Maybe Int)
+nested = Just Nothing
+
+leftVal :: Either Int Int
+leftVal = Left 1
+
+rightVal :: Either Int Int
+rightVal = Right 2
+
+main :: IO ()
+main = do
+  putStrLn (show Ack)
+  putStrLn (show (Just Ack))
+  putStrLn (show (Leaf 1))
+  putStrLn (show (Just (Leaf 1)))
+  putStrLn (show (Node Tip Tip))
+  putStrLn (show (Just (Node Tip Tip)))
+  putStrLn (show (1 :*: 2))
+  putStrLn (show (Just (1 :*: 2)))
+  putStrLn (show ((1 :*: 2) :*: (3 :*: 4)))
+  putStrLn (show (Point 1 True))
+  putStrLn (show (Just (Point 1 True)))
+  putStrLn (show (Wrapped (Leaf 3)))
+  putStrLn (show (Just (Wrapped (Leaf 3))))
+  putStrLn (show nested)
+  putStrLn (show (Just (Just 3)))
+  putStrLn (show (Just (Solo 5)))
+  putStrLn (show (Min 1))
+  putStrLn (show (Just (Min 1)))
+  putStrLn (show (Max 2))
+  putStrLn (show (Sum 3))
+  putStrLn (show (Product 4))
+  putStrLn (show (All True))
+  putStrLn (show (Any False))
+  putStrLn (show (Dual 5))
+  putStrLn (show (First (Just 6)))
+  putStrLn (show (Last (Just 7)))
+  putStrLn (show (Just (And (3 :: Word8))))
+  putStrLn (show (Just (Ior (3 :: Word8))))
+  putStrLn (show leftVal)
+  putStrLn (show (Just rightVal))
+  putStrLn (show (compare leftVal rightVal))
+  putStrLn (show (leftVal <> rightVal))
+  putStrLn (show (rightVal <> Right 3))

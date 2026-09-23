@@ -1,0 +1,158 @@
+program
+  data Pair a
+    constructor Pair
+      field  :: a
+      field  :: a
+  newtype WrappedPair a
+    constructor WrappedPair
+      field  :: Pair a
+  function __ev_Eq_Pair_eq :: __Dict_Eq -> Pair t6 -> Pair t6 -> Bool
+    pat_var __ev_Eq
+    pat_con Pair
+      pat_var a
+      pat_var b
+    pat_con Pair
+      pat_var c
+      pat_var d
+    infix &&
+      apply
+        apply
+          evidence_method Eq.== evidence=__ev_Eq nullary=0
+          variable a
+        variable c
+      apply
+        apply
+          evidence_method Eq.== evidence=__ev_Eq nullary=0
+          variable b
+        variable d
+  function __ev_Eq_Pair_ne :: __Dict_Eq -> Pair t0 -> Pair t0 -> Bool
+    pat_var __ev_Eq
+    pat_var x
+    pat_var y
+    case
+      apply
+        apply
+          evidence_method Eq.== evidence= nullary=0
+            instance Pair a
+          variable x
+        variable y
+      alt
+        pat_con True
+        constructor_ref False
+      alt
+        pat_con False
+        constructor_ref True
+  function __ev_Show_Pair_show :: __Dict_Show -> Pair t34 -> String
+    pat_var __ev_Show
+    pat_con Pair
+      pat_var a
+      pat_var b
+    infix <>
+      string "Pair "
+      infix <>
+        apply
+          evidence_method Show.show evidence=__ev_Show nullary=0
+          variable a
+        infix <>
+          string " "
+          apply
+            evidence_method Show.show evidence=__ev_Show nullary=0
+            variable b
+  function __ev_Show_Pair_showsPrec :: __Dict_Show -> Int -> Pair t27 -> String -> String
+    pat_var __ev_Show
+    pat_wild _
+    pat_var x
+    pat_var s
+    intrinsic stringAppend#
+      apply
+        evidence_method Show.show evidence= nullary=0
+          instance Pair a
+        variable x
+      variable s
+  function __ev_Show_Pair_showList :: __Dict_Show -> [Pair t27] -> String -> String
+    pat_var __ev_Show
+    pat_var ls
+    pat_var s
+    apply
+      apply
+        apply
+          variable showListWith
+          apply
+            variable shows
+            evidence_ref Show Pair a
+        variable ls
+      variable s
+  function __ev_Eq_WrappedPair_eq :: __Dict_Eq -> WrappedPair t66 -> WrappedPair t66 -> Bool
+    pat_var __ev_Eq
+    pat_con WrappedPair
+      pat_var __v0
+    pat_con WrappedPair
+      pat_var __v1
+    apply
+      apply
+        evidence_method Eq.== evidence=__ev_Eq nullary=0
+        variable __v0
+      variable __v1
+  function __ev_Eq_WrappedPair_ne :: __Dict_Eq -> WrappedPair t71 -> WrappedPair t71 -> Bool
+    pat_var __ev_Eq
+    pat_con WrappedPair
+      pat_var __v0
+    pat_con WrappedPair
+      pat_var __v1
+    apply
+      apply
+        evidence_method Eq./= evidence=__ev_Eq nullary=0
+        variable __v0
+      variable __v1
+  function __ev_Show_WrappedPair_showsPrec :: __Dict_Show -> Int -> WrappedPair t80 -> String -> String
+    pat_var __ev_Show
+    pat_var __v0
+    pat_con WrappedPair
+      pat_var __v1
+    pat_var __v2
+    apply
+      apply
+        apply
+          evidence_method Show.showsPrec evidence=__ev_Show nullary=0
+          variable __v0
+        variable __v1
+      variable __v2
+  function __ev_Show_WrappedPair_show :: __Dict_Show -> WrappedPair t85 -> String
+    pat_var __ev_Show
+    pat_con WrappedPair
+      pat_var __v0
+    apply
+      evidence_method Show.show evidence=__ev_Show nullary=0
+      variable __v0
+  function __ev_Show_WrappedPair_showList :: __Dict_Show -> [WrappedPair t76] -> String -> String
+    pat_var __ev_Show
+    pat_var ls
+    pat_var s
+    apply
+      apply
+        apply
+          variable showListWith
+          apply
+            variable shows
+            evidence_ref Show WrappedPair a
+        variable ls
+      variable s
+  function main :: String
+    apply
+      evidence_method Show.show evidence= nullary=0
+        instance Bool
+      infix ==
+        apply
+          constructor_ref WrappedPair
+          apply
+            apply
+              constructor_ref Pair
+              integer 1
+            integer 2
+        apply
+          constructor_ref WrappedPair
+          apply
+            apply
+              constructor_ref Pair
+              integer 1
+            integer 2

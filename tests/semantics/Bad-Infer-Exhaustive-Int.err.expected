@@ -1,0 +1,4 @@
+tests/semantics/Bad-Infer-Exhaustive-Int.mog:1:7: type error: non-exhaustive case: add a catch-all (_) pattern
+
+  1 | f x = case x of
+    |       ^^^^^^

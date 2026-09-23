@@ -1,0 +1,6 @@
+module Parser.Fun.Clauses.String
+
+greet :: String -> String
+greet "Alice" = "Hello Alice!"
+greet "Bob"   = "Hi Bob!"
+greet _       = "Hello stranger!"

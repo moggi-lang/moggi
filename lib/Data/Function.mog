@@ -1,0 +1,248 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+module Data.Function
+  ( -- * "Prelude" re-exports
+    id, const, (.), flip, ($)
+    -- * Other combinators
+  , (&)
+  , fix
+  , on
+  , applyWhen
+  ) where
+
+import Data.Bool
+import Moggi.Internal.Prim (fix#)
+
+infixl 0 `on`
+infixl 1 &
+infixr 9 .
+infixr 0 $
+
+----------------------------------------------
+-- The function type
+----------------------------------------------
+
+-- | Identity function.
+--
+-- > id x = x
+--
+-- This function might seem useless at first glance, but it can be very useful
+-- in a higher order context.
+--
+-- ==== __Examples__
+--
+-- >>> length $ filter id [True, True, False, True]
+-- 3
+--
+-- >>> Just (Just 3) >>= id
+-- Just 3
+--
+-- >>> foldr id 0 [(^3), (*5), (+2)]
+-- 1000
+id :: a -> a
+id x = x
+
+-- | @const x y@ always evaluates to @x@, ignoring its second argument.
+--
+-- > const x = \_ -> x
+--
+-- This function might seem useless at first glance, but it can be very useful
+-- in a higher order context.
+--
+-- ==== __Examples__
+--
+-- >>> const 42 "hello"
+-- 42
+--
+-- >>> map (const 42) [0..3]
+-- [42,42,42,42]
+const :: a -> b -> a
+const x _ = x
+
+-- | Right to left function composition.
+--
+-- prop> (f . g) x = f (g x)
+--
+-- prop> f . id = f = id . f
+--
+-- ==== __Examples__
+--
+-- >>> map ((*2) . length) [[], [0, 1, 2], [0]]
+-- [0,6,2]
+--
+-- >>> foldr (.) id [(+1), (*3), (^3)] 2
+-- 25
+--
+-- >>> let (...) = (.).(.) in ((*2)...(+)) 5 10
+-- 30
+-- Make sure it has TWO args only on the left, so that it inlines
+-- when applied to two functions, even if there is no final argument
+(.)    :: (b -> c) -> (a -> b) -> a -> c
+(.) f g = \x -> f (g x)
+
+-- | @'flip' f@ takes its (first) two arguments in the reverse order of @f@.
+--
+-- prop> flip f x y = f y x
+--
+-- prop> flip . flip = id
+--
+-- ==== __Examples__
+--
+-- >>> flip (++) "hello" "world"
+-- "worldhello"
+--
+-- >>> let (.>) = flip (.) in (+1) .> show $ 5
+-- "6"
+flip :: (a -> b -> c) -> b -> a -> c
+flip f x y = f y x
+
+{- | @'($)'@ is the __function application__ operator.
+
+Applying @'($)'@ to a function @f@ and an argument @x@ gives the same result as applying @f@ to @x@ directly. The definition is akin to this:
+
+@
+($) :: (a -> b) -> a -> b
+($) f x = f x
+@
+
+This is @'id'@ specialized from @a -> a@ to @(a -> b) -> (a -> b)@ which by the associativity of @(->)@
+is the same as @(a -> b) -> a -> b@.
+
+On the face of it, this may appear pointless! But it's actually one of the most useful and important operators in Moggi.
+
+The order of operations is very different between @($)@ and normal function application. Normal function application has precedence 10 - higher than any operator - and associates to the left. So these two definitions are equivalent:
+
+@
+expr = min 5 1 + 5
+expr = ((min 5) 1) + 5
+@
+
+@($)@ has precedence 0 (the lowest) and associates to the right, so these are equivalent:
+
+@
+expr = min 5 $ 1 + 5
+expr = (min 5) (1 + 5)
+@
+
+==== __Examples__
+
+A common use cases of @($)@ is to avoid parentheses in complex expressions.
+
+For example, instead of using nested parentheses in the following
+ Moggi function:
+
+@
+-- | Sum numbers in a string: strSum "100  5 -7" == 98
+strSum :: 'String' -> 'Int'
+strSum s = 'sum' ('Data.Maybe.mapMaybe' 'Text.Read.readMaybe' ('words' s))
+@
+
+we can deploy the function application operator:
+
+@
+-- | Sum numbers in a string: strSum "100  5 -7" == 98
+strSum :: 'String' -> 'Int'
+strSum s = 'sum' '$' 'Data.Maybe.mapMaybe' 'Text.Read.readMaybe' '$' 'words' s
+@
+
+@($)@ is also used as a section (a partially applied operator), in order to indicate that we wish to apply some yet-unspecified function to a given value. For example, to apply the argument @5@ to a list of functions:
+
+@
+applyFive :: [Int]
+applyFive = map ($ 5) [(+1), (2^)]
+>>> [6, 32]
+@
+-}
+($) :: (a -> b) -> a -> b
+($) f = f
+
+-- | '&' is a reverse application operator.  This provides notational
+-- convenience.  Its precedence is one higher than that of the forward
+-- application operator '$', which allows '&' to be nested in '$'.
+--
+--
+-- This is a version of @'flip' 'id'@, where 'id' is specialized from @a -> a@ to @(a -> b) -> (a -> b)@
+-- which by the associativity of @(->)@ is @(a -> b) -> a -> b@.
+-- flipping this yields @a -> (a -> b) -> b@ which is the type signature of '&'
+--
+-- ==== __Examples__
+--
+-- >>> 5 & (+1) & show
+-- "6"
+--
+-- >>> sqrt $ [1 / n^2 | n <- [1..1000]] & sum & (*6)
+-- 3.1406380562059946
+(&) :: a -> (a -> b) -> b
+x & f = f x
+
+-- | @'fix' f@ is the least fixed point of the function @f@,
+-- i.e. the least defined @x@ such that @f x = x@.
+--
+-- 'fix' is a compiler intrinsic. It is not implemented using an
+-- ordinary recursive @let@ binding; the compiler provides the
+-- necessary recursive binding semantics through 'fix#'.
+--
+-- ==== __Examples__
+--
+-- We can write the factorial function using direct recursion as
+--
+-- >>> let fac n = if n <= 1 then 1 else n * fac (n-1) in fac 5
+-- 120
+--
+-- This uses the fact that Moggi's @let@ introduces recursive bindings.
+-- We can rewrite this definition using 'fix':
+--
+-- >>> fix (\rec n -> if n <= 1 then 1 else n * rec (n-1)) 5
+-- 120
+--
+-- Instead of making a recursive call directly, we introduce a parameter
+-- @rec@. When used within 'fix', this parameter refers to the recursive
+-- value, thereby reintroducing the recursion.
+fix :: (a -> a) -> a
+fix = fix#
+
+-- | @'on' b u x y@ runs the binary function @b@ /on/ the results of applying
+-- unary function @u@ to two arguments @x@ and @y@. From the opposite
+-- perspective, it transforms two inputs and combines the outputs.
+--
+-- @(op \``on`\` f) x y = f x \``op`\` f y@
+--
+-- ==== __Examples__
+--
+-- >>> sortBy (compare `on` length) [[0, 1, 2], [0, 1], [], [0]]
+-- [[],[0],[0,1],[0,1,2]]
+--
+-- >>> ((+) `on` length) [1, 2, 3] [-1]
+-- 4
+--
+-- >>> ((,) `on` (*2)) 2 3
+-- (4,6)
+--
+-- ==== __Algebraic properties__
+--
+-- * @(*) \`on\` 'id' = (*) -- (if (*) &#x2209; {&#x22a5;, 'const' &#x22a5;})@
+--
+-- * @((*) \`on\` f) \`on\` g = (*) \`on\` (f . g)@
+--
+-- * @'flip' on f . 'flip' on g = 'flip' on (g . f)@
+on :: (b -> b -> c) -> (a -> b) -> a -> a -> c
+on op f x y = op (f x) (f y)
+
+-- | 'applyWhen' applies a function to a value if a condition is true,
+-- otherwise, it returns the value unchanged.
+--
+-- ==== __Examples__
+--
+-- >>> map (\x -> applyWhen (odd x) (*2) x) [1..10]
+-- [2,2,6,4,10,6,14,8,18,10]
+--
+-- >>> map (\x -> applyWhen (length x > 6) ((++ "...") . take 3) x) ["Hi!", "This is amazing", "Hope you're doing well today!", ":D"]
+-- ["Hi!","Thi...","Hop...",":D"]
+--
+-- ==== __Algebraic properties__
+--
+-- * @applyWhen 'True' = 'id'@
+--
+-- * @applyWhen 'False' f = 'id'@
+applyWhen :: Bool -> (a -> a) -> a -> a
+applyWhen True  f x = f x
+applyWhen False _ x = x

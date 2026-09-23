@@ -1,0 +1,22 @@
+{-# BACKEND
+  php = System.Environment.PHP
+  jvm = System.Environment.JVM
+  dotnet = System.Environment.DotNet
+#-}
+module System.Environment
+  ( getArgs
+  , getEnv
+  , lookupEnv
+  , getProgName
+  ) where
+
+import Data.Maybe
+import Data.String
+
+getArgs :: IO [String]
+
+getEnv :: String -> IO String
+
+lookupEnv :: String -> IO (Maybe String)
+
+getProgName :: IO String

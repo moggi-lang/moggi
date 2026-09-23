@@ -1,0 +1,7 @@
+import Data.Eq
+
+data Foo = Foo Int deriving (Eq)
+
+instance Eq Foo where
+  (==) _ _ = True
+  (/=) _ _ = False

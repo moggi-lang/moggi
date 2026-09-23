@@ -1,0 +1,7 @@
+-- The MagicHash types come with the same import as the primops.
+import Data.Int
+
+v :: Int#
+v = 5
+
+main = putStrLn "ok"

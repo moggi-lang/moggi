@@ -1,0 +1,21 @@
+module
+  function useInt(x)
+      ret intrinsic intAdd#(x, 1)
+  function useDouble()
+      ret 1.0
+  function useMaybe()
+      ret call Just("hello")
+  function fromMaybe(d, m)
+      match_return m
+        arm Just s
+            ret s
+        arm Nothing
+            ret d
+  function useFromMaybe()
+      ret "ok"
+  function nested(x)
+      ret intrinsic intAdd#(x, 3)
+  function useString()
+      ret "hi"
+  function ascribedCall(x)
+      ret intrinsic intAdd#(x, 1)

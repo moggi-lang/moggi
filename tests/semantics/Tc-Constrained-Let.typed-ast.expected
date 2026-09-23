@@ -1,0 +1,33 @@
+program
+  function checkEq :: __Dict_Eq -> a -> a -> Bool
+    pat_var __ev_Eq
+    pat_var x
+    pat_var y
+    apply
+      apply
+        evidence_method Eq.== evidence=__ev_Eq nullary=0
+        variable x
+      variable y
+  function apply :: a -> b -> c -> a -> b -> c
+    pat_var f
+    pat_var x
+    pat_var y
+    apply
+      apply
+        variable f
+        variable x
+      variable y
+  function main :: Bool
+    let
+      binding
+        pat_var h
+        apply
+          variable checkEq
+          evidence_ref Eq Bool
+      apply
+        apply
+          apply
+            variable apply
+            variable h
+          constructor_ref False
+        constructor_ref True

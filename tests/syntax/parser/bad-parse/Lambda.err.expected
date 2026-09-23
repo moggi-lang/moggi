@@ -1,0 +1,4 @@
+tests/syntax/parser/bad-parse/Lambda.mog:1:10: parse error: expected `->`, found operator '+'
+
+  1 | f = \x x + 1
+    |          ^

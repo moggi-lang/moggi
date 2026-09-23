@@ -1,0 +1,26 @@
+module
+  data Colour
+    constructor Red
+    constructor Green
+    constructor Blue
+  function rank(__ev_Num, c)
+      t0 = match c
+        arm Red
+            t1 = dict_call __ev_Num->fromInteger(intrinsic intToInteger#(1))
+            t0 = t1
+        arm Green
+            t2 = dict_call __ev_Num->fromInteger(intrinsic intToInteger#(2))
+            t0 = t2
+        arm Blue
+            t3 = dict_call __ev_Num->fromInteger(intrinsic intToInteger#(3))
+            t0 = t3
+      ret t0
+  function first(__ev_Num, xs)
+      t4 = match xs
+        arm []
+            t5 = dict_call __ev_Num->fromInteger(intrinsic intToInteger#(0))
+            t4 = t5
+        arm y : _
+            let y = intrinsic listHead#(xs)
+            t4 = y
+      ret t4

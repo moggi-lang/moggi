@@ -1,0 +1,32 @@
+program
+  data NonEmpty a
+    constructor :|
+      field  :: a
+      field  :: [a]
+  function headNe :: NonEmpty Int -> Int
+    pat_var xs
+    case
+      variable xs
+      alt
+        pat_infix_con :|
+          pat_var x
+          pat_var rest
+        variable x
+  function build :: NonEmpty Int
+    infix_con :|
+      integer 1
+      list
+        integer 2
+        integer 3
+  function fromOp :: NonEmpty Int
+    infix_con :|
+      integer 4
+      list
+        integer 5
+  function nested :: NonEmpty Int
+    infix_con :|
+      integer 1
+      infix :
+        integer 2
+        list
+          integer 3

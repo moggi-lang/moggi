@@ -1,0 +1,288 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | PHP backend: Encoding is a native json_decode value.
+--
+-- Host access is ordinary PHP builtins via FFI only — no Host.php adapter,
+-- no runtime JSON helpers. Encode walks containers in Moggi; scalar leaves use
+-- {@code json_encode}. Oversized integers are stored as digit strings (kind 7)
+-- and emitted as unquoted JSON numbers on encode. Decode uses
+-- {@code JSON_BIGINT_AS_STRING}; long digit strings are treated as kind 7
+-- (PHP cannot distinguish those from JSON string values that happen to be
+-- long digits).
+module Data.JSON.Encoding.PHP
+  ( Encoding
+  , encNull
+  , encBool
+  , encString
+  , encInt
+  , encInteger
+  , encDouble
+  , encArray
+  , encObject
+  , encKind
+  , lookupField
+  , arrayElems
+  , encStringOrFail
+  , encodeEncoding
+  , decodeEncoding
+  , encGetBool
+  , encGetInt
+  , encGetDouble
+  , encGetInteger
+  , objectKeys
+  , objectVals
+  ) where
+
+import Data.Bool
+import Control.Applicative
+import Control.Monad
+import Data.ByteString.Char8 qualified as C
+import Data.Either
+import Data.Eq
+import Data.Int
+import Moggi.Internal.Integer
+import Data.List hiding (lookup, map, singleton)
+import Data.Maybe
+import Data.Ord
+import Data.Semigroup
+import Data.String hiding (pack, unpack, length, take, drop, isPrefixOf, isSuffixOf)
+import Data.ByteString (ByteString)
+import Data.JSON.Types
+import Moggi.Internal.Prim
+import System.IO (IO)
+
+foreign php type Encoding "mixed"
+
+foreign php function jsonDecode "json_decode" :: String -> Bool -> Int -> Int -> Encoding
+foreign php function jsonDecodeIO "json_decode" :: String -> Bool -> Int -> Int -> IO Encoding
+foreign php function jsonEncode "json_encode" :: Encoding -> Int -> String
+foreign php function jsonLastError "json_last_error" :: IO Int
+foreign php function jsonLastErrorMsg "json_last_error_msg" :: IO String
+
+foreign php function isNull "is_null" :: Encoding -> Bool
+foreign php function isBool "is_bool" :: Encoding -> Bool
+foreign php function isString "is_string" :: Encoding -> Bool
+foreign php function isInt "is_int" :: Encoding -> Bool
+foreign php function isFloat "is_float" :: Encoding -> Bool
+foreign php function isArray "is_array" :: Encoding -> Bool
+foreign php function isObject "is_object" :: Encoding -> Bool
+foreign php function arrayIsList "array_is_list" :: Encoding -> Bool
+foreign php function arrayCombine "array_combine" :: [String] -> [Encoding] -> Encoding
+foreign php function arrayKeys "array_keys" :: Encoding -> [String]
+foreign php function arrayValuesEnc "array_values" :: Encoding -> [Encoding]
+foreign php function listAsEnc "array_values" :: [Encoding] -> Encoding
+foreign php function getObjectVars "get_object_vars" :: Encoding -> Encoding
+foreign php function arrayKeyExists "array_key_exists" :: String -> Encoding -> Bool
+foreign php function arrayIntersectKey "array_intersect_key" :: Encoding -> Encoding -> Encoding
+foreign php function arrayFlip "array_flip" :: [String] -> Encoding
+foreign php function phpBoolval "boolval" :: Encoding -> Bool
+foreign php function phpStrval "strval" :: Encoding -> String
+foreign php function phpIntval "intval" :: Encoding -> Int
+foreign php function phpFloatval "floatval" :: Encoding -> Double
+foreign php function phpStrlen "strlen" :: String -> Int
+foreign php function asIntEnc "intval" :: Int -> Encoding
+foreign php function asBoolEnc "boolval" :: Bool -> Encoding
+foreign php function asStringEnc "strval" :: String -> Encoding
+foreign php function asDoubleEnc "floatval" :: Double -> Encoding
+foreign php function integerIsInt "is_int" :: Integer -> Bool
+foreign php function digitsToInteger "bcadd" :: String -> String -> Integer
+foreign php function implode "implode" :: String -> [String] -> String
+
+bsToStr b = C.toString b
+
+-- JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+jsonEncodeFlags :: Int
+jsonEncodeFlags = 320
+
+jsonDecodeFlags :: Int
+jsonDecodeFlags = 2
+
+encodeEncoding :: Encoding -> ByteString
+encodeEncoding enc = C.fromString (encodeEncText enc)
+
+-- Containers are walked in Moggi so kind-7 digit strings emit as raw JSON
+-- numbers. Scalar leaves go through json_encode (correct escaping / floats).
+encodeEncText :: Encoding -> String
+encodeEncText enc = case encKind enc of
+  5 -> encodeArrText enc
+  6 -> encodeObjText enc
+  7 -> phpStrval enc
+  _ -> jsonEncode enc jsonEncodeFlags
+
+encodeArrText :: Encoding -> String
+encodeArrText enc = case arrayValuesEnc enc of
+  xs -> "[" <> implode "," (encodeEncTextList xs) <> "]"
+
+encodeObjText :: Encoding -> String
+encodeObjText enc =
+  let ks = objectKeys enc in
+  let vs = objectVals enc in
+  "{" <> implode "," (encodeObjPairs ks vs) <> "}"
+
+encodeEncTextList :: [Encoding] -> [String]
+encodeEncTextList [] = []
+encodeEncTextList (x : xs) = encodeEncText x : encodeEncTextList xs
+
+encodeObjPairs :: [String] -> [Encoding] -> [String]
+encodeObjPairs [] _ = []
+encodeObjPairs _ [] = []
+encodeObjPairs (k : ks) (v : vs) =
+  (jsonEncode (asStringEnc k) jsonEncodeFlags <> ":" <> encodeEncText v)
+  : encodeObjPairs ks vs
+
+decodeEncoding :: ByteString -> IO (Either String Encoding)
+decodeEncoding bs = do
+  v <- jsonDecodeIO (bsToStr bs) False 512 jsonDecodeFlags
+  err <- jsonLastError
+  case err of
+    0 -> pure (Right v)
+    _ -> do
+      msg <- jsonLastErrorMsg
+      pure (Left msg)
+
+encNull :: Encoding
+encNull = jsonDecode "null" False 512 0
+
+encBool :: Bool -> Encoding
+encBool b = asBoolEnc b
+
+encString :: String -> Encoding
+encString s = asStringEnc s
+
+encInt :: Int -> Encoding
+encInt n = asIntEnc n
+
+encInteger :: Integer -> Encoding
+encInteger n = case integerIsInt n of
+  True -> asIntEnc (integerToInt n)
+  False -> encIntegerBc n
+
+-- BCMath Integers are decimal strings. Coerce short values to PHP ints so
+-- json_encode emits unquoted JSON numbers; oversized digit strings stay
+-- kind 7 and are emitted unquoted by encodeEncText.
+encIntegerBc :: Integer -> Encoding
+encIntegerBc n =
+  let s = integerShow n in
+  case intCompare# (phpStrlen s) 18 of
+    GT -> asStringEnc s
+    _ -> asIntEnc (integerToInt n)
+
+encDouble :: Double -> Encoding
+encDouble d = asDoubleEnc d
+
+encArray :: [Encoding] -> Encoding
+encArray xs = listAsEnc xs
+
+encObject :: [String] -> [Encoding] -> Encoding
+encObject ks vs = case ks of
+  [] -> jsonDecode "{}" False 512 0
+  _ -> arrayCombine ks vs
+
+encKind :: Encoding -> Int
+encKind enc = case isNull enc of
+  True -> 0
+  False -> encKindNonNull enc
+
+encKindNonNull :: Encoding -> Int
+encKindNonNull enc = case isBool enc of
+  True -> 1
+  False -> encKindNotBool enc
+
+encKindNotBool :: Encoding -> Int
+encKindNotBool enc = case isInt enc of
+  True -> 3
+  False -> encKindNotInt enc
+
+encKindNotInt :: Encoding -> Int
+encKindNotInt enc = case isFloat enc of
+  True -> 4
+  False -> encKindNotFloat enc
+
+encKindNotFloat :: Encoding -> Int
+encKindNotFloat enc = case isString enc of
+  True -> encKindString enc
+  False -> encKindContainer enc
+
+-- JSON_BIGINT_AS_STRING turns oversized JSON numbers into PHP strings. Treat
+-- long digit strings as kind 7 so Integer/Number codecs still work. JSON string
+-- values that happen to be long digits are indistinguishable (PHP host limit).
+encKindString :: Encoding -> Int
+encKindString enc = case isBigIntDigits (phpStrval enc) of
+  True -> 7
+  False -> 2
+
+encKindContainer :: Encoding -> Int
+encKindContainer enc = case isArray enc of
+  True -> encKindArray enc
+  False -> encKindObjectOrUnknown enc
+
+encKindArray :: Encoding -> Int
+encKindArray enc = case arrayIsList enc of
+  True -> 5
+  False -> 6
+
+encKindObjectOrUnknown :: Encoding -> Int
+encKindObjectOrUnknown enc = case isObject enc of
+  True -> 6
+  False -> 0
+
+isBigIntDigits :: String -> Bool
+isBigIntDigits s = case intCompare# (phpStrlen s) 18 of
+  GT -> True
+  EQ -> False
+  LT -> False
+
+lookupField :: Encoding -> String -> Maybe Encoding
+lookupField enc key = case isObject enc of
+  True -> lookupAssoc (getObjectVars enc) key
+  False -> case isArray enc of
+    True -> lookupAssoc enc key
+    False -> Nothing
+
+lookupAssoc :: Encoding -> String -> Maybe Encoding
+lookupAssoc arr key = case arrayKeyExists key arr of
+  True -> Just (assocGet arr key)
+  False -> Nothing
+
+-- Pure FFI field read: intersect with a singleton key map, then take the value.
+assocGet :: Encoding -> String -> Encoding
+assocGet arr key = case arrayValuesEnc (arrayIntersectKey arr (arrayFlip (key : []))) of
+  v : _ -> v
+  [] -> encNull
+
+arrayElems :: Encoding -> Either String [Encoding]
+arrayElems enc = case encKind enc of
+  5 -> Right (arrayValuesEnc enc)
+  _ -> Left "expected JSON array"
+
+encStringOrFail :: Encoding -> String
+encStringOrFail enc = phpStrval enc
+
+encGetBool :: Encoding -> Bool
+encGetBool enc = phpBoolval enc
+
+encGetInt :: Encoding -> Int
+encGetInt enc = phpIntval enc
+
+encGetDouble :: Encoding -> Double
+encGetDouble enc = phpFloatval enc
+
+encGetInteger :: Encoding -> Integer
+encGetInteger enc = case encKind enc of
+  7 -> digitsToInteger (phpStrval enc) "0"
+  3 -> integerFromInt (phpIntval enc)
+  2 -> digitsToInteger (phpStrval enc) "0"
+  _ -> digitsToInteger (phpStrval enc) "0"
+
+objectKeys :: Encoding -> [String]
+objectKeys enc = case isObject enc of
+  True -> arrayKeys (getObjectVars enc)
+  False -> case isArray enc of
+    True -> arrayKeys enc
+    False -> []
+
+objectVals :: Encoding -> [Encoding]
+objectVals enc = case isObject enc of
+  True -> arrayValuesEnc (getObjectVars enc)
+  False -> case isArray enc of
+    True -> arrayValuesEnc enc
+    False -> []

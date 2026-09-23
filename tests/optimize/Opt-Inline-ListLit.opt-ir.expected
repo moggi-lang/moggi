@@ -1,0 +1,7 @@
+module
+  function twin(x)
+      ret x
+  function pairList(a, b)
+      ret [a, b]
+  function use(x, y)
+      ret [x, y]

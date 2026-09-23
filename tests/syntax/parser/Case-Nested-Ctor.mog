@@ -1,0 +1,26 @@
+module Test where
+
+data Person =
+  Person
+    { name :: String
+    , age  :: Int
+    }
+
+data Box a = Box a
+
+data Ok a = Ok a | Fail String
+
+pick :: Ok Person -> String
+pick e = case e of
+  Fail err -> err
+  Ok (Person n a) -> n
+
+deep :: Box (Ok Int) -> Int
+deep m = case m of
+  Box (Fail ignored) -> 0
+  Box (Ok x) -> x
+
+nestedApp :: Ok (Box Person) -> String
+nestedApp e = case e of
+  Ok (Box (Person n a)) -> n
+  Fail err -> err

@@ -1,0 +1,14 @@
+.direnv/
+.moggi/
+.vscode/
+# `moggi compile` without -o writes the artifact next to the entry source's name
+# into the working directory, so keep those out of the tree.
+/*.phar
+/*.jar
+/*.dll
+# Build output: the compiler archive and launcher, staged distributions, and the
+# distribution build cache (downloads, PHP build tree, prepared runtimes).
+/bin/
+/.dist/
+/dist-out/
+/.dist-cache/

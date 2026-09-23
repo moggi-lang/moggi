@@ -1,0 +1,2 @@
+-- Fail: an argument is never converted, so a container cannot be passed.
+foreign php function f "strval" :: Maybe Int -> Int

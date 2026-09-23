@@ -1,0 +1,7 @@
+module
+  function add(x, y)
+      ret intrinsic intAdd#(x, y)
+  function mul(x, y)
+      ret intrinsic intMul#(x, y)
+  function neg(x)
+      ret intrinsic intSub#(0, x)

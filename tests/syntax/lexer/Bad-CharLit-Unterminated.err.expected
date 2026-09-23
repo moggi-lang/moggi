@@ -1,0 +1,4 @@
+tests/syntax/lexer/Bad-CharLit-Unterminated.mog:2:5: lex error: unterminated character literal
+
+  2 | c = 'a
+    |     ^

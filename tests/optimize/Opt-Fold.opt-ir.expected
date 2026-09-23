@@ -1,0 +1,3 @@
+module
+  function six(x)
+      ret intrinsic intAdd#(5, x)

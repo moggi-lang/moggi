@@ -1,0 +1,4 @@
+tests/semantics/Bad-Prim-Type-Not-Imported.mog:4:6: type error: unknown type constructor `Int#` (import `Moggi.Internal.Prim` to use compiler primitives)
+
+  4 | v :: Int#
+    |      ^^^^

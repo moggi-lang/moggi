@@ -1,0 +1,19 @@
+import Data.Eq
+
+class MyEq a where
+  (===) :: a -> a -> Bool
+
+data T = T Int
+
+-- A newtype over the data type; its instance provides the derived behavior.
+newtype TV = TV T
+
+instance MyEq TV where
+  (===) (TV (T a)) (TV (T b)) = a == b
+
+-- The target is ordinary data. `via` is gated on representation compatibility
+-- (unwrapping newtype chains), not on the target being a newtype.
+deriving via (TV) instance MyEq T
+
+main :: Bool
+main = T 1 === T 1

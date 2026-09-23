@@ -1,0 +1,4 @@
+tests/backend/runtime/Bad-IO-PureLet.mog:6:15: type error: IO expressions cannot be used as pure values
+
+   6 | f n = let x = putStrLn "no" in n
+     |               ^^^^^^^^^^^

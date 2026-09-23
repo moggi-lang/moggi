@@ -1,0 +1,2 @@
+f :: Int -> Int
+f x = let y = 1 :: String in x + y
