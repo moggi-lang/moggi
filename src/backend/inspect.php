@@ -7,6 +7,7 @@ use Moggi\Backend\Backend;
 use function Moggi\Backend\backendById;
 use function Moggi\Compiler\findExecutable;
 use function Moggi\Compiler\findToolchainExecutable;
+use function Moggi\Compiler\runProcess;
 
 require_once __DIR__ . '/Backend.php';
 require_once __DIR__ . '/../executables.php';
@@ -544,23 +545,7 @@ function extractPhpFunction(string $php, string $functionName): ?string
  */
 function captureProcess(array $cmd, string $cwd): array
 {
-    $desc = [
-        0 => ['pipe', 'r'],
-        1 => ['pipe', 'w'],
-        2 => ['pipe', 'w'],
-    ];
-    $proc = \proc_open($cmd, $desc, $pipes, $cwd);
-    if (!\is_resource($proc)) {
-        return ['stdout' => '', 'stderr' => 'failed to start process', 'exitCode' => 1];
-    }
-    \fclose($pipes[0]);
-    $stdout = \stream_get_contents($pipes[1]) ?: '';
-    $stderr = \stream_get_contents($pipes[2]) ?: '';
-    \fclose($pipes[1]);
-    \fclose($pipes[2]);
-    $code = \proc_close($proc);
-
-    return ['stdout' => $stdout, 'stderr' => $stderr, 'exitCode' => $code];
+    return runProcess($cmd, $cwd);
 }
 
 /** Recursively delete a directory tree. */

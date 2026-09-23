@@ -5,6 +5,7 @@ namespace Moggi\Dist;
 require_once __DIR__ . '/../../src/executables.php';
 
 use function Moggi\Compiler\findExecutable;
+use function Moggi\Compiler\runProcess as runCompilerProcess;
 
 /**
  * Third-party runtime acquisition for the distributions.
@@ -207,20 +208,17 @@ function sha256File(string $path): string
     return \strtolower($hash);
 }
 
-/** Run a command and return [exitCode, stdout, stderr]. */
-function runProcess(array $command, ?string $cwd = null, ?array $env = null): array
+/**
+ * Run a command and return [exitCode, stdout, stderr].
+ *
+ * `$echo` passes the child's own output through as it arrives, so a build that
+ * stops producing output shows which command it stopped at.
+ */
+function runProcess(array $command, ?string $cwd = null, ?array $env = null, bool $echo = false): array
 {
-    $descriptors = [1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
-    $process = \proc_open($command, $descriptors, $pipes, $cwd, $env);
-    if (!\is_resource($process)) {
-        throw new \RuntimeException('cannot start: ' . \implode(' ', $command));
-    }
-    $stdout = (string) \stream_get_contents($pipes[1]);
-    $stderr = (string) \stream_get_contents($pipes[2]);
-    \fclose($pipes[1]);
-    \fclose($pipes[2]);
+    $result = runCompilerProcess($command, $cwd, $env, $echo);
 
-    return [\proc_close($process), $stdout, $stderr];
+    return [$result['exitCode'], $result['stdout'], $result['stderr']];
 }
 
 function extractArchive(string $archive, string $format, string $destination, int $stripComponents): void
@@ -815,13 +813,17 @@ function runWithLibraryPath(array $command, string $libDir): string
     return \trim($stdout . "\n" . $stderr);
 }
 
-/** Run a command, echoing it, and abort the build when it fails. */
-function runOrFail(array $command, ?string $cwd = null): void
+/**
+ * Run a command, echoing it, and abort the build when it fails.
+ *
+ * `$echo` prints what the command prints, as it prints it.
+ */
+function runOrFail(array $command, ?string $cwd = null, bool $echo = false): void
 {
     $label = \implode(' ', $command);
     \fwrite(STDOUT, '  ' . $label . "\n");
     $started = \microtime(true);
-    [$code, $stdout, $stderr] = runProcess($command, $cwd);
+    [$code, $stdout, $stderr] = runProcess($command, $cwd, null, $echo);
     if ($code !== 0) {
         throw new \RuntimeException(
             "{$label} failed ({$code})\n" . \substr($stdout . "\n" . $stderr, -4000),

@@ -257,10 +257,14 @@ try {
     $assert($result['exitCode'] === 127, 'a launcher without its archive must exit 127');
     $assert(\str_contains($result['stderr'], 'compiler archive'), 'the error must name the archive: ' . $result['stderr']);
 
-    // A backend is required only when it is asked for, and only when it is not
-    // on `PATH` either.
-    $phpOnly = $install('php-only', ['php']);
-    $withoutBackends = ['PATH' => $phpOnlyPath] + \getenv();
+// A backend is required only when it is asked for, and only when it is not
+// on `PATH` either. `PATH` is an empty directory, not PHP's own: this
+// installation carries PHP, and `dirname(PHP_BINARY)` is `/usr/bin` on a CI
+// image, which holds the very runtimes these cases say are missing.
+$phpOnly = $install('php-only', ['php']);
+$noRuntimes = $work . '/no-runtimes';
+\mkdir($noRuntimes, 0777, true);
+$withoutBackends = ['PATH' => $noRuntimes] + \getenv();
     foreach (['--backend jvm', '--backend dotnet', '--backend=dotnet'] as $request) {
         $args = \array_merge(['compile', 'Main.mog'], \explode(' ', $request));
         $result = $run($phpOnly, $args, $withoutBackends);

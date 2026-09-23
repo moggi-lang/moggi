@@ -11,6 +11,7 @@ use function Moggi\Compiler\compilerVersion;
 use function Moggi\Compiler\distributionVariant;
 use function Moggi\Compiler\findExecutable;
 use function Moggi\Compiler\findToolchainExecutable;
+use function Moggi\Compiler\runProcess;
 use function Moggi\Compiler\stdlibVersion;
 
 /**
@@ -134,19 +135,10 @@ function dotnetVersion(): ?string
  */
 function captureProcessOutput(array $argv, ?array $env = null): ?string
 {
-    $descriptors = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
-    $proc = $env === null
-        ? \proc_open($argv, $descriptors, $pipes)
-        : \proc_open($argv, $descriptors, $pipes, null, $env);
-    if (!\is_resource($proc)) {
+    $result = runProcess($argv, null, $env);
+    if ($result['exitCode'] === -1) {
         return null;
     }
-    \fclose($pipes[0]);
-    $stdout = (string) \stream_get_contents($pipes[1]);
-    $stderr = (string) \stream_get_contents($pipes[2]);
-    \fclose($pipes[1]);
-    \fclose($pipes[2]);
-    \proc_close($proc);
 
-    return $stdout . $stderr;
+    return $result['stdout'] . $result['stderr'];
 }

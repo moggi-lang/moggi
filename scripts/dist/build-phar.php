@@ -2,6 +2,10 @@
 
 namespace Moggi\Dist;
 
+use function Moggi\Compiler\runProcess;
+
+require_once __DIR__ . '/../../src/executables.php';
+
 /**
  * Build `bin/moggi.phar` — the compiler as one self-contained PHP archive.
  *
@@ -74,17 +78,9 @@ function compilerBuildVersion(string $sourceRoot): string
 /** One `git` command in `$repo`, or null when git is absent or it fails. */
 function gitOutput(string $repo, array $args): ?string
 {
-    $pipes = [];
-    $process = @\proc_open(['git', '-C', $repo, ...$args], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
-    if (!\is_resource($process)) {
-        return null;
-    }
-    $output = (string) \stream_get_contents($pipes[1]);
-    \stream_get_contents($pipes[2]);
-    \fclose($pipes[1]);
-    \fclose($pipes[2]);
+    $result = runProcess(['git', '-C', $repo, ...$args]);
 
-    return \proc_close($process) === 0 ? \trim($output) : null;
+    return $result['exitCode'] === 0 ? \trim($result['stdout']) : null;
 }
 
 /**

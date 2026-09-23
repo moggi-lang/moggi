@@ -155,8 +155,10 @@ try {
 
     // A backend that is neither bundled nor on the host has to be reported, not
     // skipped and not fatal: the answer is `not found`, never an empty field.
-    $env = ['PATH' => distributionPhpOnlyPath()] + \getenv();
-    unset($env['JAVA_HOME'], $env['DOTNET_ROOT'], $env['GRAALVM_HOME'], $env['JDK_HOME']);
+$noRuntimes = $work . '/no-runtimes';
+\mkdir($noRuntimes, 0777, true);
+$env = ['PATH' => $noRuntimes] + \getenv();
+unset($env['JAVA_HOME'], $env['DOTNET_ROOT'], $env['GRAALVM_HOME'], $env['JDK_HOME']);
     $bare = runCompiledProcess([$php, $stage . '/bin/moggi.phar', 'version'], 120, $env, $work);
     $assert($bare['exitCode'] === 0, 'a missing backend toolchain must not fail `version`: ' . $bare['stderr']);
     foreach (['php', 'java', 'dotnet', 'native-image'] as $tool) {

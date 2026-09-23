@@ -4,6 +4,7 @@ namespace Moggi\Backend\DotNet;
 
 use function Moggi\Compiler\findExecutable;
 use function Moggi\Compiler\findToolchainExecutable;
+use function Moggi\Compiler\runProcess;
 use function Moggi\Debug\sourceMapFrames;
 
 require_once __DIR__ . '/../../executables.php';
@@ -402,21 +403,13 @@ function assembleDotNetWithIlasm(
         '-OUTPUT=' . $dllPath,
         ...$ilFiles,
     ];
-    $desc = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
-    $proc = \proc_open($args, $desc, $pipes, $outputRoot);
-    if (!\is_resource($proc)) {
-        throw new \RuntimeException('failed to start ilasm');
-    }
-    \fclose($pipes[0]);
-    $stdout = (string) \stream_get_contents($pipes[1]);
-    $stderr = (string) \stream_get_contents($pipes[2]);
-    \fclose($pipes[1]);
-    \fclose($pipes[2]);
-    $code = \proc_close($proc);
-    if ($code !== 0 || !\is_file($dllPath)) {
+    $result = runProcess($args, $outputRoot);
+    if ($result['exitCode'] !== 0 || !\is_file($dllPath)) {
         throw new \RuntimeException(
             'ilasm failed'
-            . ($stdout !== '' || $stderr !== '' ? "\n" . \trim($stdout . "\n" . $stderr) : ''),
+            . ($result['stdout'] !== '' || $result['stderr'] !== ''
+                ? "\n" . \trim($result['stdout'] . "\n" . $result['stderr'])
+                : ''),
         );
     }
 
@@ -717,20 +710,10 @@ function mirrorIlTree(string $from, string $to): void
 function runDotnetCli(string $dotnet, array $args, string $cwd, array $env): void
 {
     $cmd = \array_merge([$dotnet], $args);
-    $desc = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
-    $proc = \proc_open($cmd, $desc, $pipes, $cwd, $env);
-    if (!\is_resource($proc)) {
-        throw new \RuntimeException('failed to start: ' . \implode(' ', $cmd));
-    }
-    \fclose($pipes[0]);
-    $stdout = (string) \stream_get_contents($pipes[1]);
-    $stderr = (string) \stream_get_contents($pipes[2]);
-    \fclose($pipes[1]);
-    \fclose($pipes[2]);
-    $code = \proc_close($proc);
-    if ($code !== 0) {
+    $result = runProcess($cmd, $cwd, $env);
+    if ($result['exitCode'] !== 0) {
         throw new \RuntimeException(
-            \implode(' ', $cmd) . " failed\n" . \trim($stdout . "\n" . $stderr),
+            \implode(' ', $cmd) . " failed\n" . \trim($result['stdout'] . "\n" . $result['stderr']),
         );
     }
 }
@@ -765,20 +748,13 @@ function buildDotNetNativeExecutable(
         '--nologo',
         '-v', 'q',
     ];
-    $desc = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
-    $proc = \proc_open($cmd, $desc, $pipes, $outputRoot, dotnetCliEnv());
-    if (!\is_resource($proc)) {
-        return false;
-    }
-    \fclose($pipes[0]);
-    $stdout = (string) \stream_get_contents($pipes[1]);
-    $stderr = (string) \stream_get_contents($pipes[2]);
-    \fclose($pipes[1]);
-    \fclose($pipes[2]);
-    $code = \proc_close($proc);
+    $result = runProcess($cmd, $outputRoot, dotnetCliEnv());
     $built = $pubDir . DIRECTORY_SEPARATOR . $binaryName;
-    if ($code !== 0 || !\is_file($built)) {
-        \fwrite(STDERR, "error: Native AOT publish failed\n" . \trim($stdout . "\n" . $stderr) . "\n");
+    if ($result['exitCode'] !== 0 || !\is_file($built)) {
+        \fwrite(
+            STDERR,
+            "error: Native AOT publish failed\n" . \trim($result['stdout'] . "\n" . $result['stderr']) . "\n",
+        );
 
         return false;
     }

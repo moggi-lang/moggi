@@ -4,7 +4,8 @@
 # see README.md (Dependencies) for the upstream repositories and pinned tags.
 
 CC = gcc
-CFLAGS = -Wall -Wextra -pedantic -std=c99 -O2
+# bech32.h marks its declarations with GCC's __access__; clang warns on each use.
+CFLAGS = -Wall -Wextra -pedantic -std=c99 -O2 -Wno-unknown-attributes
 
 SECP_DIR = libsecp256k1-0.8.0
 BECH32_DIR = libbech32-1.1p1

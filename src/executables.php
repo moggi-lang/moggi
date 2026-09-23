@@ -72,3 +72,59 @@ function findToolchainExecutable(string $rootEnv, string $name, string $subdir =
 
     return \is_file($candidate) && \is_executable($candidate) ? $candidate : null;
 }
+
+/**
+ * Run a command and return its exit code with everything it printed.
+ *
+ * Both pipes are read while the process runs, never one to EOF before the
+ * other: a child that fills the pipe nobody is reading blocks on the write, so
+ * it never closes the stream being waited on. That buffer is ~4 KB on Windows
+ * and 64 KB elsewhere, and an ordinary program printing to stderr reaches it.
+ *
+ * `$echo` passes the child's output through as it arrives.
+ *
+ * @param list<string> $command
+ * @param ?array<string, string> $env
+ * @return array{exitCode: int, stdout: string, stderr: string} `exitCode` is -1
+ *   when the command could not be started.
+ */
+function runProcess(array $command, ?string $cwd = null, ?array $env = null, bool $echo = false): array
+{
+    $descriptors = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
+    // A toolchain that is not installed is an expected answer here, not a
+    // warning: the caller sees it in the return value.
+    $process = @\proc_open($command, $descriptors, $pipes, $cwd, $env);
+    if (!\is_resource($process)) {
+        return ['exitCode' => -1, 'stdout' => '', 'stderr' => 'cannot start ' . \implode(' ', $command)];
+    }
+    \fclose($pipes[0]);
+    \stream_set_blocking($pipes[1], false);
+    \stream_set_blocking($pipes[2], false);
+
+    $stdout = '';
+    $stderr = '';
+    while (true) {
+        $out = (string) \stream_get_contents($pipes[1]);
+        if ($out !== '') {
+            $stdout .= $out;
+            if ($echo) {
+                \fwrite(STDOUT, $out);
+            }
+        }
+        $err = (string) \stream_get_contents($pipes[2]);
+        if ($err !== '') {
+            $stderr .= $err;
+            if ($echo) {
+                \fwrite(STDERR, $err);
+            }
+        }
+        if (\feof($pipes[1]) && \feof($pipes[2])) {
+            break;
+        }
+        \usleep(2000);
+    }
+    \fclose($pipes[1]);
+    \fclose($pipes[2]);
+
+    return ['exitCode' => \proc_close($process), 'stdout' => $stdout, 'stderr' => $stderr];
+}
