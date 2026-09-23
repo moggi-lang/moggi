@@ -1,14 +1,19 @@
 <?php declare(strict_types=1);
 
 /**
- * Drop what the compiler memoized for the case that just finished: prepared projects are memoized by
- * fixture path set, so a run would otherwise retain one import closure per fixture.
+ * Drop what the compiler memoized for the case that just finished.
+ *
+ * Cases are separate projects that never recur, so their import closures and their own checked
+ * modules are pure retention; the dependency closure stays memoized, because every case shares it.
  */
-function releasePreparedProjects(): void
+function releaseCaseMemos(): void
 {
-    if (\class_exists(\Moggi\Modules\ProjectCache::class)) {
-        \Moggi\Modules\ProjectCache::clearPreparedProjects();
+    if (!\class_exists(\Moggi\Modules\ProjectCache::class)) {
+        return;
     }
+
+    \Moggi\Modules\ProjectCache::clearPreparedProjects();
+    \Moggi\Modules\ProjectCache::releaseProjectCheckedModules();
 }
 
 function removeDirectory(string $path): void

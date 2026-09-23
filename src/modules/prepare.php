@@ -362,7 +362,7 @@ function prepareProject(array $paths, string $rootDir, ?string $onlyTypecheckMod
                     $moduleName,
                     $fromDisk->exportedInferredSchemes,
                 );
-                ProjectCache::rememberCheckedModule($cacheKey, $fromDisk);
+                ProjectCache::rememberCheckedModule($cacheKey, $fromDisk, !isStdlibSourcePath($path));
                 $checked[$moduleName] = $fromDisk->program;
                 $units[$moduleName]['checkedProgram'] = $fromDisk->program;
                 if ($onlyTypecheckModule === null || $moduleName === $onlyTypecheckModule) {
@@ -447,6 +447,7 @@ function prepareProject(array $paths, string $rootDir, ?string $onlyTypecheckMod
         ProjectCache::rememberCheckedModule(
             $cacheKey,
             new CheckedModule($checkedFull, $exportedInferredSchemes),
+            !isStdlibSourcePath($path),
         );
         $checked[$moduleName] = $checkedFull;
         $units[$moduleName]['checkedProgram'] = $checkedFull;
@@ -492,6 +493,16 @@ function clearPrepareProjectCaches(): void
 {
     ProjectCache::clearPreparedProjects();
     ProjectCache::clearCheckedModules();
+}
+
+/**
+ * Is this file part of the standard library — the closure that every project in the process shares?
+ */
+function isStdlibSourcePath(string $path): bool
+{
+    $stdlib = locateStdlibRoot($path);
+
+    return $stdlib !== null && \str_starts_with(resolvePath($path), $stdlib . DIRECTORY_SEPARATOR);
 }
 
 /** @param list<string> $paths */
@@ -705,6 +716,7 @@ function prepareProjectExtendingFocus(
     ProjectCache::rememberCheckedModule(
         checkedModuleCacheKey($focusPath),
         new CheckedModule($checkedFull, $checkedFull->exportedInferredSchemes),
+        !isStdlibSourcePath($focusPath),
     );
 
     $checked = $base->checked;
