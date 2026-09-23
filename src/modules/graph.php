@@ -714,6 +714,11 @@ function projectSourceClosure(array $inputFiles, array $libDirs): array
         }
 
         if (isset($entryModules[$moduleName])) {
+            // Two spellings of one file — a symlinked temporary directory and its resolved path —
+            // are the same module, not a duplicate.
+            if (canonicalPath($byModule[$moduleName]) === canonicalPath($real)) {
+                continue;
+            }
             throw new TypeError(
                 "duplicate module `{$moduleName}` in project ({$byModule[$moduleName]} and {$real})",
                 $real,

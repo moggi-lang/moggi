@@ -55,6 +55,11 @@ function prepareProject(array $paths, string $rootDir, ?string $onlyTypecheckMod
         }
 
         if (isset($pending[$moduleName])) {
+            // One file can arrive under two spellings — a symlinked temporary directory and the
+            // path it resolves to — and that is one module, not two.
+            if (canonicalPath($pending[$moduleName]['path']) === canonicalPath($path)) {
+                continue;
+            }
             $span = $header['headerSpan'] ?? null;
             throw new TypeError(
                 "duplicate module `{$moduleName}` in project ({$pending[$moduleName]['path']} and {$path})",

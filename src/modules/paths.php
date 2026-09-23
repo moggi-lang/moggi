@@ -57,10 +57,33 @@ function relativeRequirePath(string $fromOutputRelative, string $toOutputRelativ
     return '__DIR__ . \'/' . join('/', $relParts) . '\'';
 }
 
+/**
+ * `realpath()` for a path whose own file may not exist yet: the deepest existing ancestor is
+ * resolved and the missing tail re-appended. macOS is why this is not just `realpath()` — its
+ * temporary directory is reached through `/var`, a symlink to `/private/var`, so a path left
+ * unresolved never compares equal to the `realpath()` of the same file.
+ */
+function canonicalPath(string $path): string
+{
+    $path = \str_replace('\\', '/', $path);
+    $tail = [];
+    $candidate = $path;
+    while (($resolved = \realpath($candidate)) === false) {
+        $parent = dirname($candidate);
+        if ($parent === $candidate) {
+            return $path;
+        }
+        $tail[] = basename($candidate);
+        $candidate = $parent;
+    }
+
+    return $tail === [] ? $resolved : rtrim($resolved, '/') . '/' . \implode('/', \array_reverse($tail));
+}
+
 function relativeFilePath(string $fromFile, string $toFile): string
 {
-    $fromDir = \str_replace('\\', '/', dirname(realpath($fromFile) ?: $fromFile));
-    $toPath = \str_replace('\\', '/', realpath($toFile) ?: $toFile);
+    $fromDir = canonicalPath(dirname($fromFile));
+    $toPath = canonicalPath($toFile);
 
     $fromParts = $fromDir === '' ? [] : explode('/', $fromDir);
     $toParts = explode('/', $toPath);

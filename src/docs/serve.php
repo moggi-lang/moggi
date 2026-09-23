@@ -2,6 +2,8 @@
 
 namespace Moggi\Docs;
 
+use function Moggi\Modules\canonicalPath;
+
 /**
  * Resolve a static file under $docRoot for $requestPath.
  *
@@ -16,10 +18,16 @@ function resolveStaticDocPath(string $docRoot, string $requestPath): ?string
     if (!str_contains(basename($staticPath), '.')) {
         return null;
     }
-    $file = $docRoot . $staticPath;
+    // The file is resolved below, which follows symlinks, so the root has to be resolved the
+    // same way before the two can be compared: macOS reaches its temporary directory through
+    // `/var`, a symlink to `/private/var`.
+    $root = canonicalPath($docRoot);
+    $file = $root . $staticPath;
     $resolved = realpath($file);
-    if ($resolved !== false && \is_file($resolved) && pathIsUnderDocRoot($resolved, $docRoot)) {
-        return $resolved;
+    if ($resolved !== false && \is_file($resolved) && pathIsUnderDocRoot($resolved, $root)) {
+        // The caller's spelling of the root, not the resolved one: everything it does with the
+        // answer compares against the root it passed in.
+        return rtrim(str_replace('\\', '/', $docRoot), '/') . $staticPath;
     }
 
     return '';

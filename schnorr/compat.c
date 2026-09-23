@@ -1,6 +1,6 @@
 #include "compat.h"
 
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(_WIN32)
 
 void *moggi_memrchr(const void *s, int c, size_t n)
 {

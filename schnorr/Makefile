@@ -4,8 +4,13 @@
 # see README.md (Dependencies) for the upstream repositories and pinned tags.
 
 CC = gcc
-# bech32.h marks its declarations with GCC's __access__; clang warns on each use.
-CFLAGS = -Wall -Wextra -pedantic -std=c99 -O2 -Wno-unknown-attributes
+CFLAGS = -Wall -Wextra -pedantic -std=c99 -O2
+
+# bech32.h marks its declarations with GCC's __access__; clang warns on every use of
+# them, GCC has the attribute itself and does not know this flag.
+ifneq (,$(findstring clang,$(shell $(CC) --version 2>/dev/null | head -1)))
+  CFLAGS += -Wno-unknown-attributes
+endif
 
 SECP_DIR = libsecp256k1-0.8.0
 BECH32_DIR = libbech32-1.1p1
@@ -47,13 +52,23 @@ SECP_OBJS = $(BUILD_DIR)/secp256k1.o \
 # the Windows compiler is simply `gcc`.
 LDLIBS =
 LDFLAGS =
-ifneq (,$(findstring mingw,$(shell $(CC) -dumpmachine 2>/dev/null)))
+PLATFORM = $(shell $(CC) -dumpmachine 2>/dev/null)
+ifneq (,$(findstring mingw,$(PLATFORM)))
   LDLIBS += -lbcrypt
   LDFLAGS += -static
 endif
 
-# macOS: libSystem has no memrchr, and Mach-O has no weak symbol aliases.
-ifneq (,$(findstring apple,$(shell $(CC) -dumpmachine 2>/dev/null)))
+# compat.h covers what these platforms lack in C: memrchr (libSystem and the Windows
+# CRT), the weak-alias attribute (Mach-O and PE/COFF cannot express it) and the
+# size_t-typed overflow builtins (Windows is LLP64, where size_t is wider than
+# unsigned long).
+ifneq (,$(findstring apple,$(PLATFORM)))
+  COMPAT = 1
+endif
+ifneq (,$(findstring mingw,$(PLATFORM)))
+  COMPAT = 1
+endif
+ifdef COMPAT
   BECH32_CFLAGS += -include $(CURDIR)/compat.h
   COMPAT_OBJS = $(BUILD_DIR)/compat.o
 endif

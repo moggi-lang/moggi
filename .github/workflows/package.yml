@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
   push:
     tags: ['*']
+    branches: [build]
 
 permissions:
   contents: read
@@ -166,7 +167,7 @@ jobs:
             dist-out/${{ matrix.target }}/*.zip
 
   publish:
-    if: startsWith(github.ref, 'refs/tags/')
+    if: github.ref_type == 'tag' || github.ref == 'refs/heads/build'
     needs: [linux, native]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -174,11 +175,29 @@ jobs:
       contents: write
       id-token: write
       attestations: write
+    outputs:
+      tag: ${{ steps.name.outputs.tag }}
+      channel: ${{ steps.name.outputs.channel }}
 
     steps:
       - uses: actions/checkout@v7.0.1
 
+      - name: Name the build
+        id: name
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            tag="${GITHUB_REF_NAME}"
+            channel=release
+          else
+            tag="dev-$(date -u +%Y%m%d)-$(git rev-parse --short=7 HEAD)"
+            channel=dev
+          fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "channel=${channel}" >> "$GITHUB_OUTPUT"
+          echo "publishing ${tag} (${channel})"
+
       - name: The tag and VERSION must agree
+        if: github.ref_type == 'tag'
         run: |
           version="$(cat VERSION)"
           if [ "$version" != "$GITHUB_REF_NAME" ]; then
@@ -206,36 +225,70 @@ jobs:
             dist-out/*.tar.gz
             dist-out/*.zip
 
-      - name: Create the draft release
+      - name: Create the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --draft \
-            --title "$GITHUB_REF_NAME" \
-            --generate-notes
+          if [ "${{ steps.name.outputs.channel }}" = "release" ]; then
+            gh release create "${{ steps.name.outputs.tag }}" \
+              --draft \
+              --title "${{ steps.name.outputs.tag }}" \
+              --generate-notes
+          else
+            gh release create "${{ steps.name.outputs.tag }}" \
+              --prerelease \
+              --target "${{ github.sha }}" \
+              --title "${{ steps.name.outputs.tag }}" \
+              --notes "Dev build of ${{ github.sha }}, from the \`build\` branch. Not a release: expect it to be pruned, and verify SHA256SUMS before using it."
+          fi
 
       - name: Upload the archives and the checksums
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "$GITHUB_REF_NAME" \
+          gh release upload "${{ steps.name.outputs.tag }}" \
             dist-out/*.tar.gz dist-out/*.zip dist-out/SHA256SUMS
 
-      - name: Publish
+      - name: Move the dev alias
+        if: steps.name.outputs.channel == 'dev'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release edit "$GITHUB_REF_NAME" --draft=false
+        run: |
+          gh release delete dev --yes --cleanup-tag || true
+          gh release create dev \
+            --prerelease \
+            --target "${{ github.sha }}" \
+            --title "dev" \
+            --notes "Latest dev build: ${{ steps.name.outputs.tag }}."
+
+      - name: Keep the last five dev builds
+        if: steps.name.outputs.channel == 'dev'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq '[.[] | select(.tag_name | startswith("dev-"))] | sort_by(.created_at) | reverse | .[5:] | .[].tag_name' \
+            | while read -r stale; do
+                gh release delete "${stale}" --yes --cleanup-tag
+              done
+
+      - name: Publish
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${{ steps.name.outputs.tag }}" --draft=false
 
   verify:
     needs: publish
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    env:
+      RELEASE_TAG: ${{ needs.publish.outputs.tag }}
     steps:
       - name: Download the published release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release download "$GITHUB_REF_NAME" --dir release --repo "$GITHUB_REPOSITORY"
+        run: gh release download "$RELEASE_TAG" --dir release --repo "$GITHUB_REPOSITORY"
 
       - name: Every published archive must match its checksum
         run: cd release && sha256sum -c SHA256SUMS
@@ -273,8 +326,9 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.publish.outputs.tag }}
         run: |
-          gh release download "$GITHUB_REF_NAME" \
+          gh release download "$RELEASE_TAG" \
             --dir release --pattern "${{ matrix.archive }}" --repo "$GITHUB_REPOSITORY"
           ls -la release
 
