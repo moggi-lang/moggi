@@ -227,7 +227,12 @@ try {
         $full . $phpDir,
     ]);
     $entries = \array_map($norm, \explode(\PATH_SEPARATOR, (string) $seen['path']));
-    $assert(\array_slice($entries, 0, 4) === $expectedOrder, 'bundled runtimes must precede the host, JDK before GraalVM');
+    $assert(
+        \array_slice($entries, 0, 4) === $expectedOrder,
+        'bundled runtimes must precede the host, JDK before GraalVM'
+            . "\n  expected: " . \implode(' | ', $expectedOrder)
+            . "\n  actual:   " . \implode(' | ', \array_slice($entries, 0, 4)),
+    );
 
     // Nothing bundled: the host's PHP is used. A PATH holding PHP and nothing
     // else is what makes the backend cases below mean what they say.

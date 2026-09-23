@@ -210,6 +210,66 @@ static char *executable_directory(void)
 }
 
 /*
+ * PATH as this process sees it, and how to put a new value in its place.
+ *
+ * Windows matches an environment name without regard to case but keeps the
+ * spelling it was given: writing `PATH` while the inherited entry is `Path`
+ * leaves the host's value in the block, where a reader that matches
+ * case-insensitively can still find it first — and then the prepended
+ * directories would not win after all. Reading goes through the same API for the
+ * same reason, the other spelling is removed so the two cannot disagree, and the
+ * value comes back on the heap so every caller frees it the same way.
+ */
+#if defined(_WIN32)
+static char *current_path(void)
+{
+    DWORD size = GetEnvironmentVariableA("PATH", NULL, 0);
+    if (size == 0) {
+        return NULL;
+    }
+    char *value = (char *)malloc(size);
+    if (value == NULL) {
+        fail("out of memory");
+    }
+    if (GetEnvironmentVariableA("PATH", value, size) == 0) {
+        free(value);
+
+        return NULL;
+    }
+
+    return value;
+}
+
+static void set_path(const char *value)
+{
+    static const char *const names[] = {"PATH", "Path"};
+    for (int i = 0; i < 2; ++i) {
+        SetEnvironmentVariableA(names[i], value);
+    }
+}
+#else
+static char *current_path(void)
+{
+    const char *value = getenv("PATH");
+    if (value == NULL) {
+        return NULL;
+    }
+    char *copy = (char *)malloc(strlen(value) + 1);
+    if (copy == NULL) {
+        fail("out of memory");
+    }
+    strcpy(copy, value);
+
+    return copy;
+}
+
+static void set_path(const char *value)
+{
+    setenv("PATH", value, 1);
+}
+#endif
+
+/*
  * Search PATH for an executable, without a shell and without `which`. PATH is
  * read as it currently stands, so a bundled directory this process has already
  * prepended is searched first. On Windows a bare name is not a file name — a
@@ -218,8 +278,10 @@ static char *executable_directory(void)
  */
 static char *find_on_path(const char *name)
 {
-    const char *path = getenv("PATH");
+    char *path = current_path();
     if (path == NULL || *path == '\0') {
+        free(path);
+
         return NULL;
     }
 
@@ -230,13 +292,7 @@ static char *find_on_path(const char *name)
         {""};
 #endif
 
-    char *copy = (char *)malloc(strlen(path) + 1);
-    if (copy == NULL) {
-        fail("out of memory");
-    }
-    strcpy(copy, path);
-
-    char *cursor = copy;
+    char *cursor = path;
     char *candidate = NULL;
     while (cursor != NULL && *cursor != '\0') {
         char *separator = strchr(cursor, MOGGI_PATH_SEP);
@@ -265,7 +321,7 @@ static char *find_on_path(const char *name)
         }
         cursor = separator == NULL ? NULL : separator + 1;
     }
-    free(copy);
+    free(path);
 
     return candidate;
 }
@@ -280,7 +336,7 @@ static char *find_on_path(const char *name)
  */
 static void prepend_paths(char **directories, int count)
 {
-    const char *current = getenv("PATH");
+    char *current = current_path();
     size_t needed = 1;
     for (int i = 0; i < count; ++i) {
         needed += strlen(directories[i]) + 1;
@@ -300,13 +356,10 @@ static void prepend_paths(char **directories, int count)
     }
     strcpy(final + offset, current != NULL ? current : "");
 
-#if defined(_WIN32)
-    SetEnvironmentVariableA("PATH", final);
-#else
-    setenv("PATH", final, 1);
-#endif
+    set_path(final);
 
     free(final);
+    free(current);
 }
 
 static void set_environment(const char *name, const char *value)

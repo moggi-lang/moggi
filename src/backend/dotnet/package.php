@@ -742,17 +742,82 @@ function buildDotNetNativeExecutable(
     ];
     $result = runProcess($cmd, $outputRoot, dotnetCliEnv());
     $binary = executableName($binaryName);
-    $built = $pubDir . DIRECTORY_SEPARATOR . $binary;
-    if ($result['exitCode'] !== 0 || !\is_file($built)) {
+    $built = $result['exitCode'] === 0 ? nativeAotArtifact($pubDir, $binary) : null;
+    if ($built === null) {
         \fwrite(
             STDERR,
             "error: Native AOT publish failed (exit {$result['exitCode']})\n"
+            . nativeAotDryReport($pubDir, $binary)
             . \trim($result['stdout'] . "\n" . $result['stderr']) . "\n",
         );
 
         return false;
     }
+    if ($built !== $pubDir . DIRECTORY_SEPARATOR . $binary) {
+        \fwrite(STDOUT, "native: the publish wrote {$built}\n");
+    }
     \rename($built, $outputRoot . DIRECTORY_SEPARATOR . $binary);
 
     return true;
+}
+
+/**
+ * The executable a publish left, when it is there and under the name we asked for.
+ *
+ * `-p:AssemblyName` is a request, not a guarantee — and a publish that reports success while writing
+ * nothing under that name has been seen. The requested name wins; failing that the only file in the
+ * publish directory that could be a program is taken, which a caller cannot be misled by: the
+ * artifact is executed, and an executable that is not this program does not print this program's
+ * output.
+ */
+function nativeAotArtifact(string $pubDir, string $binary): ?string
+{
+    $wanted = $pubDir . DIRECTORY_SEPARATOR . $binary;
+    if (\is_file($wanted)) {
+        return $wanted;
+    }
+
+    $candidates = [];
+    foreach (\scandir($pubDir) ?: [] as $entry) {
+        if ($entry === '.' || $entry === '..') {
+            continue;
+        }
+        $path = $pubDir . DIRECTORY_SEPARATOR . $entry;
+        if (\is_file($path) && isNativeAotProgram($entry)) {
+            $candidates[] = $path;
+        }
+    }
+
+    return \count($candidates) === 1 ? $candidates[0] : null;
+}
+
+/** Is this publish output a program rather than a library, a symbol file or a manifest? */
+function isNativeAotProgram(string $name): bool
+{
+    $library = ['.dll', '.pdb', '.json', '.lib', '.exp', '.obj', '.ilk', '.dbg', '.so', '.a', '.o'];
+    foreach ($library as $suffix) {
+        if (\str_ends_with(\strtolower($name), $suffix)) {
+            return false;
+        }
+    }
+
+    return \PHP_OS_FAMILY === 'Windows' ? \str_ends_with(\strtolower($name), '.exe') : !\str_contains($name, '.');
+}
+
+/** What a publish directory holds, so a failure names the reason there is nothing to run. */
+function nativeAotDryReport(string $pubDir, string $binary): string
+{
+    if (!\is_dir($pubDir)) {
+        return "  the publish wrote no {$pubDir}\n";
+    }
+
+    $entries = [];
+    foreach (\scandir($pubDir) ?: [] as $entry) {
+        if ($entry !== '.' && $entry !== '..') {
+            $entries[] = $entry;
+        }
+    }
+    \sort($entries);
+
+    return '  no ' . $binary . ' in ' . $pubDir . ': ' . ($entries === [] ? '(empty)' : \implode(', ', $entries)) . "\n";
 }
