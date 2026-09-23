@@ -1,31 +1,5 @@
 name: package
 
-# The release distributions.
-#
-# One build per OS/architecture target: the compiler archive, the launcher, and
-# every runtime that target can ship. All five distributions are derived from
-# that one installation — nothing is downloaded or built twice — and each variant
-# is smoke-tested (the launcher reports its version, then an example is compiled
-# and run on each bundled backend) before anything is archived.
-#
-# Runtimes come from upstream through `scripts/dist/runtimes.php`, pinned by hash
-# in `dist/runtimes.lock.json`; the runners' own installations are never used as
-# bundled runtimes. PHP is the one toolchain the build itself needs before
-# anything exists, so it does come from a setup action.
-#
-# The Linux targets build inside an `ubuntu:22.04` container. A bundled binary
-# cannot be more portable than the machine that produced it, and a build on the
-# runner's own image would raise the floor to that image's glibc (2.39 on
-# ubuntu-24.04) and quietly break every older distribution. The two Linux targets
-# are therefore their own job, with the container pinned for both architectures;
-# `--glibc-floor` then refuses to publish a binary above the floor.
-#
-# Publishing is a separate job, after every target has finished: one publisher
-# means no race between five jobs over the same release, and the checksums are
-# generated from the files that were actually uploaded.
-
-# A release is triggered by a tag that *is* the version — `0.0.1`, not `v0.0.1` —
-# so the tag, `VERSION` and every archive name agree without a prefix to strip.
 on:
   workflow_dispatch:
   push:
@@ -52,8 +26,6 @@ jobs:
           - {target: linux-aarch64, runner: ubuntu-24.04-arm}
 
     steps:
-      # The build root is a bare Ubuntu image, and even `checkout` needs git.
-      # `zstd` is what `actions/cache` compresses with.
       - name: Install the build root's own prerequisites
         run: |
           apt-get update
@@ -70,9 +42,6 @@ jobs:
           ini-values: memory_limit=1G
           coverage: none
 
-      # php.net publishes Windows binaries only, so Linux and macOS build PHP
-      # from the official source release; these are the few libraries it links
-      # against. `binutils` is what the glibc floor check reads the binary with.
       - name: Install the build dependencies
         run: |
           apt-get install -y --no-install-recommends \
@@ -86,8 +55,6 @@ jobs:
             .dist-cache/build
           key: dist-${{ matrix.target }}-${{ hashFiles('dist/runtimes.lock.json') }}
 
-      # Reachability, checksum and architecture checks on every asset this target
-      # needs, before anything is downloaded in earnest.
       - name: Validate the pinned runtimes
         run: php scripts/dist/pin.php --check --target ${{ matrix.target }}
 
@@ -117,16 +84,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # The last x86_64 macOS image. If GitHub retires it, this target needs
-          # a self-hosted x86_64 macOS runner: the launcher and the runtimes can
-          # be cross-built on ARM64, but a distribution that cannot be run is not
-          # validated, and an unvalidated distribution is not published.
           - {target: macos-x86_64,   runner: macos-13}
           - {target: macos-aarch64,  runner: macos-latest}
           - {target: windows-x86_64, runner: windows-2022}
-          # windows-aarch64 is deliberately absent: php.net publishes no ARM64
-          # Windows build, so there is no PHP to bundle *and* no PHP to run the
-          # build with. `php scripts/dist/pin.php` reports it as unsupported.
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -139,7 +99,6 @@ jobs:
           ini-values: memory_limit=1G
           coverage: none
 
-      # The launcher is built with Clang on every platform.
       - name: Install Clang (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -149,7 +108,6 @@ jobs:
           }
           clang --version
 
-      # These are the few libraries a source-built PHP links against.
       - name: Install the PHP build dependencies (macOS)
         if: runner.os == 'macOS'
         run: |
@@ -158,9 +116,6 @@ jobs:
             echo "PKG_CONFIG_PATH=$(brew --prefix libzip)/lib/pkgconfig:$(brew --prefix oniguruma)/lib/pkgconfig"
           } >> "$GITHUB_ENV"
 
-      # `bin/schnorr` is a C program and its Makefile needs a POSIX shell: on
-      # Windows it is built under MSYS2 and handed to the assembler, which builds
-      # it itself everywhere else.
       - name: Install MSYS2 (MinGW) for the schnorr CLI
         if: runner.os == 'Windows'
         uses: msys2/setup-msys2@f84a36b4009b96413f91c01441130855db9392e5 # v2.9.0
@@ -209,14 +164,6 @@ jobs:
             dist-out/${{ matrix.target }}/*.tar.gz
             dist-out/${{ matrix.target }}/*.zip
 
-  # The VS Code extension is deliberately absent here. It is its own repository
-  # (moggi-lang/moggi-vscode-plugin) with its own release, because a `.vsix` is
-  # installed through VS Code and never sits inside a distribution archive. A
-  # plugin release wants to track this compiler, not be welded to its tag.
-
-  # One publisher, after every target: five jobs creating and uploading to the
-  # same release concurrently is a race, and a release that is half-uploaded
-  # while users can see it is worse than no release.
   publish:
     if: startsWith(github.ref, 'refs/tags/')
     needs: [linux, native]
@@ -230,8 +177,6 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      # A mis-tagged release must fail here rather than publish a version that
-      # does not match its tag.
       - name: The tag and VERSION must agree
         run: |
           version="$(cat VERSION)"
@@ -246,8 +191,6 @@ jobs:
           path: dist-out
           merge-multiple: true
 
-      # Generated from the files that are about to be uploaded, so a checksum can
-      # never describe something other than what a user downloads.
       - name: Write SHA256SUMS
         run: |
           cd dist-out
@@ -262,8 +205,6 @@ jobs:
             dist-out/*.tar.gz
             dist-out/*.zip
 
-      # A draft is invisible, so the release is created, filled and only then
-      # made public: it is either complete or it does not exist.
       - name: Create the draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -285,8 +226,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release edit "$GITHUB_REF_NAME" --draft=false
 
-  # The in-job smoke test proves the *staged* tree. This proves the bytes a user
-  # downloads: the published release, re-downloaded, checksummed and run.
   verify:
     needs: publish
     runs-on: ubuntu-24.04
