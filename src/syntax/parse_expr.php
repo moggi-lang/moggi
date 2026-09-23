@@ -380,6 +380,8 @@ function parseCase(ParserState $state): Ast\AstNode
     // arm after a nested arm is absorbed as a further alternative.
     skipDocComments($state);
     $altCol = peek($state)->col;
+    $prevAltCol = $state->caseAltCol;
+    $state->caseAltCol = $altCol;
     $alts = [parseAlt($state)];
 
     $afterSemi = false;
@@ -410,6 +412,8 @@ function parseCase(ParserState $state): Ast\AstNode
 
         $alts[] = parseAlt($state);
     }
+
+    $state->caseAltCol = $prevAltCol;
 
     return spannedRange(new Ast\CaseExpr($scrutinee, $alts), $start, $scrutinee);
 }
@@ -560,18 +564,22 @@ function parseDoLetItem(ParserState $state): array
     }
 }
 
+/**
+ * Whether the next token ends the current do statement. Case arms manage their own layout
+ * (`stopBeforeCaseAlt` / `startsCaseAlt`), so a same-line argument (`Left err -> putStrLn err`)
+ * is not a new statement; a token left of the case's offside column has left the case.
+ */
 function reachedDoExprBoundary(ParserState $state): bool
 {
     if (!$state->inDoBlock || $state->doExprStartLine === null) {
         return false;
     }
 
-    // Case arms manage layout via stopBeforeCaseAlt / startsCaseAlt, so a same-line
-    // argument (`Left err -> putStrLn err`) is not read as a new do-statement.
     if (
         $state->stopBeforeCaseAlt
         && $state->caseAltBodyLine !== null
         && $state->doExprStartLine < $state->caseAltBodyLine
+        && ($state->caseAltCol === null || peek($state)->col >= $state->caseAltCol)
     ) {
         return false;
     }

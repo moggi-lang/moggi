@@ -2,7 +2,8 @@
 
 namespace Moggi\Docs;
 
-use function Moggi\Modules\canonicalPath;
+use function Moggi\Paths\canonicalPath;
+use function Moggi\Paths\canonicalSeparators;
 
 /**
  * Resolve a static file under $docRoot for $requestPath.
@@ -27,7 +28,7 @@ function resolveStaticDocPath(string $docRoot, string $requestPath): ?string
     if ($resolved !== false && \is_file($resolved) && pathIsUnderDocRoot($resolved, $root)) {
         // The caller's spelling of the root, not the resolved one: everything it does with the
         // answer compares against the root it passed in.
-        return rtrim(str_replace('\\', '/', $docRoot), '/') . $staticPath;
+        return rtrim(canonicalSeparators($docRoot), '/') . $staticPath;
     }
 
     return '';
@@ -154,8 +155,8 @@ function renderSearchPage(DocIndex $index, string $query, array $hits, ?string $
 
 function pathIsUnderDocRoot(string $path, string $root): bool
 {
-    $path = rtrim(str_replace('\\', '/', $path), '/');
-    $root = rtrim(str_replace('\\', '/', $root), '/');
+    $path = rtrim(canonicalSeparators($path), '/');
+    $root = rtrim(canonicalSeparators($root), '/');
 
     return $path === $root || str_starts_with($path, $root . '/');
 }

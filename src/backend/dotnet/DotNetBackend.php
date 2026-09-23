@@ -11,6 +11,7 @@ use function Moggi\Backend\DotNet\Dependencies\dotNetDeclaredSignature;
 use function Moggi\Backend\DotNet\Foreign\clrSigFromMoggiType;
 use function Moggi\Backend\DotNet\Naming\artifactPath;
 use function Moggi\Backend\DotNet\Naming\symbolName;
+use function Moggi\Backend\DotNet\Naming\typeArtifactPath;
 use function Moggi\Backend\Inspect\describeDotNetEmit;
 use function Moggi\Debug\mapPathForArtifact;
 
@@ -65,7 +66,7 @@ final class DotNetBackend implements Backend
                 $out[mapPathForArtifact($artifact)] = $il;
                 continue;
             }
-            $out[\str_replace('.', '/', $typeName) . '.il'] = $il;
+            $out[typeArtifactPath($typeName)] = $il;
         }
 
         return $out;

@@ -215,6 +215,17 @@ function lowerIoReturnOrAction(Ast\AstNode $expr, LowerCtx $ctx, bool $asStateme
         }
     }
 
+    // A match's arms leave through `Ret`, so a match is only an action in tail position: anywhere
+    // its value is needed it is boxed and run, exactly as the statement path below does.
+    if ($expr instanceof Ast\IoCase) {
+        $boxed = lowerIoActionToBox($expr, $ctx);
+        $dest = $asStatement ? null : freshTemp($ctx);
+        $ctx->items[] = new IoRun($boxed, $dest, ioStmtSrcLoc($expr, $ctx));
+        $ctx->hasIoRun = true;
+
+        return $dest === null ? new Unit() : new Temp($dest);
+    }
+
     $dest = ($asStatement || ioActionExprReturnsUnit($expr)) ? null : freshTemp($ctx);
     if (!lowerIoAction($expr, $ctx, $dest)) {
         // Higher-order applies (e.g. `k x` where `k` is a parameter) are not

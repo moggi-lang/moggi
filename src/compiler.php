@@ -31,6 +31,7 @@ require __DIR__ . '/errors.php';
 require __DIR__ . '/cache/cache.php';
 require __DIR__ . '/version.php';
 require __DIR__ . '/executables.php';
+require __DIR__ . '/paths.php';
 require __DIR__ . '/IR/types.php';
 require __DIR__ . '/pipeline/types.php';
 require __DIR__ . '/syntax/lexer.php';

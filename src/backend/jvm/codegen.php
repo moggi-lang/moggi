@@ -2926,6 +2926,7 @@ function emitForeignMaybeStringWrap(EmitEnv $env): void
         true,
     );
     $env->c->label($done);
+    $env->c->noteFrame($env->frameLocals(), ['moggi/rt/Con']);
 }
 
 /** @param list<string> $kinds */

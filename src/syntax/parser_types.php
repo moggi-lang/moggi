@@ -58,6 +58,7 @@ final class ParserState
         public bool $parsingGuardExpr = false,
         public bool $stopBeforeCaseAlt = false,
         public ?int $caseAltBodyLine = null,
+        public ?int $caseAltCol = null,
         public ?int $stopApplyAtLine = null,
         /**
          * Column of the first token of the top-level item being parsed (0 when

@@ -413,10 +413,10 @@ function packageAndCapture(string $backend, string $outDir, string $entryModule,
     ]);
 
     if ($backend === 'php') {
-        $entry = $entryRelative ?? (str_replace('.', '/', $entryModule) . '.php');
+        $entry = $entryRelative ?? (Modules\moduleNameToPath($entryModule) . '.php');
         $candidates = [
-            $outDir . '/Main.php',
-            $outDir . '/' . $entry,
+            $outDir . DIRECTORY_SEPARATOR . 'Main.php',
+            $outDir . DIRECTORY_SEPARATOR . $entry,
         ];
         $phpFile = null;
         foreach ($candidates as $c) {

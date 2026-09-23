@@ -11,8 +11,8 @@ function resolveJdkBinary(string $name): ?string
         }
     }
 
-    $which = trim((string) shell_exec('command -v ' . escapeshellarg($name) . ' 2>/dev/null'));
-    if ($which !== '' && is_executable($which)) {
+    $which = \Moggi\Compiler\findExecutable($name);
+    if ($which !== null) {
         return $which;
     }
 
@@ -502,6 +502,10 @@ function readAppendedBytes(string $path, int $offset): array
     return [$chunk, $offset + \strlen($chunk)];
 }
 
+/**
+ * A diagnostic as the goldens spell it: the project root stripped, and the location `/`-separated.
+ * Only the location — a message may quote a `\` of its own.
+ */
 function normalizeDiagnosticPaths(string $text, string $projectRoot): string
 {
     $root = realpath($projectRoot);
@@ -512,9 +516,14 @@ function normalizeDiagnosticPaths(string $text, string $projectRoot): string
     // The root reaches the text with whatever separators built the path. A Windows checkout is the
     // awkward one: `__DIR__` is `D:\a\moggi\moggi` while the case paths below it are joined with
     // `/`, so the text carries `D:\a\moggi\moggi/tests/…` and no single prefix covers every case.
-    return \str_replace(
+    $text = \str_replace(
         [$root . DIRECTORY_SEPARATOR, $root . '/', \str_replace('\\', '/', $root) . '/'],
         '',
         $text,
     );
+    return \preg_replace_callback(
+        '#^([^\n]*?:[0-9]+:[0-9]+:)#m',
+        static fn (array $m): string => \str_replace([DIRECTORY_SEPARATOR, '\\'], '/', $m[1]),
+        $text,
+    ) ?? $text;
 }

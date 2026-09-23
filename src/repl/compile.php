@@ -10,6 +10,7 @@ use Moggi\Pipeline\PipelineStage;
 use Moggi\Syntax\Ast\Program;
 
 use function Moggi\Backend\backendById;
+use function Moggi\Paths\moduleNameToPath;
 use function Moggi\Pipeline\run as pipelineRun;
 
 /**
@@ -88,7 +89,7 @@ function emitOptionsForInteractive(State $state, array $ctx): array
         'namespace' => $unit['namespace'],
         'moduleName' => $state->moduleName,
         'imports' => $codegen,
-        'outputRelative' => str_replace('.', '/', $state->moduleName)
+        'outputRelative' => moduleNameToPath($state->moduleName)
             . backendById($state->backend)->extension(),
         'externalFns' => $codegen['externalFns'] ?? [],
         'externalFnRuntimeArity' => $ctx['importContext']['externalFnRuntimeArity'] ?? [],

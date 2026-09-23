@@ -9,6 +9,7 @@ use Moggi\Semantics\Types\TypeError;
 use Moggi\Syntax\Ast;
 
 use function Moggi\Backend\Php\Naming\basePhpFunctionName;
+use function Moggi\Paths\relativeRequirePath;
 use function Moggi\Backend\compileBackend;
 use function Moggi\Errors\appendDidYouMean;
 use function Moggi\IR\Visit\collectIrCodegenUsage;

@@ -9,6 +9,7 @@ use Moggi\Syntax\Parser\ParseError;
 
 use function Moggi\Backend\compileBackend;
 use function Moggi\Errors\appendDidYouMean;
+use function Moggi\Paths\canonicalPath;
 use function Moggi\Syntax\Ast\moduleName;
 use function Moggi\Syntax\Lexer\lex;
 use function Moggi\Syntax\Parser\importedFixityForImports;

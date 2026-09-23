@@ -838,7 +838,7 @@ assertTrue(count($idNameHits) > 0 && $idNameHits[0]->entity->name === 'id', 'sin
 $uniqueTargets = ['Docs.Only.foo' => 'Only.html'];
 assertEq('Docs.Only.foo', Docs\qualifiedNameFromIdent('foo', $uniqueTargets), 'unambiguous qualified link target resolves');
 
-$serveRoot = sys_get_temp_dir() . '/moggi-serve-' . getmypid();
+$serveRoot = \Moggi\Paths\canonicalSeparators(sys_get_temp_dir()) . '/moggi-serve-' . getmypid();
 @mkdir($serveRoot, 0777, true);
 file_put_contents($serveRoot . '/index.html', '<html></html>');
 assertEq($serveRoot . '/index.html', Docs\resolveStaticDocPath($serveRoot, '/'), 'serve resolves / to index.html');

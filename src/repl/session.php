@@ -23,6 +23,7 @@ use function Moggi\Modules\indexProjectInstances;
 use function Moggi\Modules\injectPreludeImport;
 use function Moggi\Modules\mergeModuleLocalTypesIntoImportContext;
 use function Moggi\Modules\moduleNameToNamespace;
+use function Moggi\Paths\moduleNameToPath;
 use function Moggi\Semantics\Effects\checkAndNormalize;
 use function Moggi\Syntax\Lexer\lex;
 use function Moggi\Syntax\Parser\importedFixityForImports;
@@ -246,7 +247,7 @@ function prepareInteractive(State $state, string $extra = '', bool $normalizeIo 
 
     buildModuleLocalTypes($units, $moduleName, $projectClasses, $projectInstanceIndex);
 
-    $outputRelative = str_replace('.', '/', $moduleName)
+    $outputRelative = moduleNameToPath($moduleName)
         . backendById($state->backend)->extension();
     $importContext = buildImportContext(
         $imports,

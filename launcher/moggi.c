@@ -25,6 +25,11 @@
  *   clang -std=c11 -O2 -Wall -Wextra -o bin/moggi launcher/moggi.c
  */
 
+#if defined(_WIN32)
+/* The UCRT marks strcpy/strcat/getenv deprecated, and the launcher builds with -Werror. */
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+
 #if !defined(_WIN32)
 #define _POSIX_C_SOURCE 200809L
 #if defined(__APPLE__)

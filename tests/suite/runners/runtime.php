@@ -599,12 +599,9 @@ function writeLibPhpOutputs(string $projectRoot): string
 /** Point a compiled fixture at the published stdlib build instead of the source tree's `lib/`. */
 function rewriteLibRequires(string $php, string $libPhpDir, string $compiledFile): string
 {
-    $libDir = rtrim(\str_replace('\\', '/', $libPhpDir), '/');
-    $rewrite = static function (array $matches) use ($libDir, $compiledFile): string {
-        $relative = \Moggi\Modules\relativeFilePath($compiledFile, $libDir . '/' . $matches[1]);
-
-        return "require_once __DIR__ . '/{$relative}'";
-    };
+    $libDir = rtrim(\Moggi\Paths\canonicalSeparators($libPhpDir), '/');
+    $rewrite = static fn (array $matches): string => 'require_once '
+        . \Moggi\Paths\requirePathExpression($compiledFile, $libDir . '/' . $matches[1]);
 
     $php = preg_replace_callback("#require_once __DIR__ \. '/(?:\.\./)+lib/([^']+)'#", $rewrite, $php) ?? $php;
 

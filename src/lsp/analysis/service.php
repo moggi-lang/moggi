@@ -114,6 +114,8 @@ final class VirtualFS
     /**
      * Write overlay content for $uri into the session tree and return the
      * absolute path used for analysis. Skips rewrite when fingerprint matches.
+     * A path outside the project keeps its own spelling, with a drive letter
+     * escaped: no directory may be named after one on Windows.
      *
      * @param array<string, string> $overlayFingerprints uri → sha256
      */
@@ -123,14 +125,11 @@ final class VirtualFS
         if ($content === null) {
             return uriToPath($uri);
         }
-        $real = uriToPath($uri);
-        $rel = $real;
-        if (str_starts_with($real, $projectRoot)) {
-            $rel = ltrim(substr($real, strlen($projectRoot)), '/');
-        } else {
-            $rel = ltrim($real, '/');
-        }
-        $dest = $this->sessionRoot . '/files/' . $rel;
+        $real = str_replace('\\', '/', uriToPath($uri));
+        $root = rtrim(str_replace('\\', '/', $projectRoot), '/');
+        $rel = str_starts_with($real, $root . '/') ? substr($real, strlen($root) + 1) : $real;
+        $rel = preg_replace('#^([A-Za-z]):#', '$1_', $rel) ?? $rel;
+        $dest = $this->sessionRoot . '/files/' . ltrim($rel, '/');
         $fp = hash('sha256', $content);
         if (($overlayFingerprints[$uri] ?? null) === $fp && is_file($dest)) {
             return $dest;

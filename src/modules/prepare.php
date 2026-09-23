@@ -7,6 +7,8 @@ use Moggi\Pipeline\CompilePurpose;
 use Moggi\Semantics\Types\TypeError;
 
 use function Moggi\Backend\compileBackend;
+use function Moggi\Paths\canonicalPath;
+use function Moggi\Paths\moduleNameToPath;
 use function Moggi\Semantics\Effects\checkAndNormalize;
 use function Moggi\Syntax\Ast\moduleName;
 use function Moggi\Syntax\Lexer\lex;
@@ -822,14 +824,14 @@ function moduleCacheRelPath(string $path): string
         $libRoot = locateStdlibRoot($path);
         $realLib = $libRoot !== null ? (realpath($libRoot) ?: $libRoot) : null;
         if ($realLib !== null && str_starts_with($real, $realLib . DIRECTORY_SEPARATOR)) {
-            return 'lib/' . substr($real, strlen($realLib) + 1);
+            return 'lib' . DIRECTORY_SEPARATOR . substr($real, strlen($realLib) + 1);
         }
 
-        return 'lib/' . basename($real);
+        return 'lib' . DIRECTORY_SEPARATOR . basename($real);
     }
 
     // Module outside the working directory: keep a stable, collision-free name.
-    return Cache\hashContent($real) . '/' . basename($real);
+    return Cache\hashContent($real) . DIRECTORY_SEPARATOR . basename($real);
 }
 
 /** @param array<string, array<string, mixed>> $units @param list<string> $sortedModules */
@@ -838,7 +840,7 @@ function assignModuleCacheKeys(array &$units, array $sortedModules): void
     foreach (computeModuleContentKeys($units, $sortedModules) as $moduleName => $contentKey) {
         $units[$moduleName]['contentKey'] = $contentKey;
         if (($units[$moduleName]['synthetic'] ?? false) === true) {
-            $units[$moduleName]['cacheRelPath'] = 'synthetic/' . str_replace('.', '/', $moduleName) . '.mog';
+            $units[$moduleName]['cacheRelPath'] = 'synthetic' . DIRECTORY_SEPARATOR . moduleNameToPath($moduleName) . '.mog';
             continue;
         }
         $units[$moduleName]['cacheRelPath'] = moduleCacheRelPath($units[$moduleName]['path']);
