@@ -785,6 +785,9 @@ function writeBundledPhpIni(string $dir, array $compiledIn, array $enable): void
  * `configure` and `make` run with the source tree as their working directory rather than through a
  * `chdir` here: changing this process's directory would re-base every relative path the caller still
  * holds, and `MOGGI_DIST_CACHE` is a path a user can give relative.
+ *
+ * `configure` is named absolutely (`./configure` is not enough): a program path is resolved against
+ * this process's directory, not the child's, so a relative one is looked for where we are not.
  */
 function buildPhpFromSource(string $runtime, string $target, array $config, string $archive, string $dir, array $entry): string
 {
@@ -805,8 +808,9 @@ function buildPhpFromSource(string $runtime, string $target, array $config, stri
     $tree = $source . '/' . $roots[0];
 
     $jobs = (string) max(1, cpuCount());
-    runOrFail(['./configure', '--prefix=' . $work . '/install', ...(array) $spec['configureFlags']], $tree);
-    runOrFail(['make', '-j' . $jobs], $tree);
+    $make = findExecutable('make') ?? 'make';
+    runOrFail([$tree . '/configure', '--prefix=' . $work . '/install', ...(array) $spec['configureFlags']], $tree);
+    runOrFail([$make, '-j' . $jobs], $tree);
 
     if (\is_file($tree . '/LICENSE')) {
         \copy($tree . '/LICENSE', $dir . '/LICENSE');
