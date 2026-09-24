@@ -9,6 +9,8 @@ that compiles to **PHP**, **JVM** and **.NET**. One `.mog` source — algebraic
 data types, GADT's, pattern matching, type classes, explicit-effect IO — becomes a
 `.phar`, a `.jar` or a `.dll` or native executable.
 
+[YouTube Introduction](https://www.youtube.com/watch?v=hCKdsw2_0FI)
+
 ```moggi
 data Shape = Circle Double | Rect Double Double
   deriving (Show, Eq)
