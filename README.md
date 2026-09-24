@@ -6,7 +6,7 @@
 
 A **statically typed, purely functional, strictly evaluated** programming language
 that compiles to **PHP**, **JVM** and **.NET**. One `.mog` source — algebraic
-data types, pattern matching, type classes, explicit-effect IO — becomes a
+data types, GADT's, pattern matching, type classes, explicit-effect IO — becomes a
 `.phar`, a `.jar` or a `.dll` or native executable.
 
 ```moggi
@@ -35,7 +35,7 @@ Download the distribution for your platform from the releases page and unpack
 it — it is a complete installation, and running it needs nothing else:
 
 ```bash
-tar -xzf moggi-0.0.1-linux-x86_64.tar.gz   # or the .zip on Windows
+tar -xzf moggi-0.1.0-linux-x86_64.tar.gz   # or the .zip on Windows
 cd moggi
 ./bin/moggi version
 ```

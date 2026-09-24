@@ -180,7 +180,7 @@ jobs:
             tag="${GITHUB_REF_NAME}"
             channel=release
           else
-            tag="dev-$(date -u +%Y%m%d)-$(git rev-parse --short=7 HEAD)"
+            tag=dev-build
             channel=dev
           fi
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
@@ -226,11 +226,12 @@ jobs:
               --title "${{ steps.name.outputs.tag }}" \
               --generate-notes
           else
+            gh release delete "${{ steps.name.outputs.tag }}" --yes --cleanup-tag || true
             gh release create "${{ steps.name.outputs.tag }}" \
               --prerelease \
               --target "${{ github.sha }}" \
               --title "${{ steps.name.outputs.tag }}" \
-              --notes "Dev build of ${{ github.sha }}, from the \`build\` branch. Not a release: expect it to be pruned, and verify SHA256SUMS before using it."
+              --notes "Dev build of ${{ github.sha }}, from the \`build\` branch. Not a release: this tag is moved onto the newest dev build, and verify SHA256SUMS before using it."
           fi
 
       - name: Upload the archives and the checksums
@@ -240,25 +241,13 @@ jobs:
           gh release upload "${{ steps.name.outputs.tag }}" \
             dist-out/*.tar.gz dist-out/*.zip dist-out/SHA256SUMS
 
-      - name: Move the dev alias
-        if: steps.name.outputs.channel == 'dev'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release delete dev --yes --cleanup-tag || true
-          gh release create dev \
-            --prerelease \
-            --target "${{ github.sha }}" \
-            --title "dev" \
-            --notes "Latest dev build: ${{ steps.name.outputs.tag }}."
-
-      - name: Keep the last five dev builds
+      - name: Remove the older dev tags
         if: steps.name.outputs.channel == 'dev'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
-            --jq '[.[] | select(.tag_name | startswith("dev-"))] | sort_by(.created_at) | reverse | .[5:] | .[].tag_name' \
+            --jq '[.[].tag_name] | map(select(. != "dev-build" and (. == "dev" or startswith("dev-")))) | .[]' \
             | while read -r stale; do
                 gh release delete "${stale}" --yes --cleanup-tag
               done

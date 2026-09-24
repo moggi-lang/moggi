@@ -18,7 +18,7 @@ use function Moggi\Modules\bundledStdlibLibPath;
  * Compiler version, from `<compiler root>/VERSION`.
  *
  * Inside a packaged archive that file carries the build identity rather than the
- * release number: the tag for a release, `0.0.1-dev.20260922+f60fb9f` for a build
+ * release number: the tag for a release, `0.1.0-dev.20260922+f60fb9f` for a build
  * of an unreleased commit (see `scripts/dist/build-phar.php`).
  */
 function compilerVersion(): ?string

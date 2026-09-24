@@ -14,7 +14,7 @@ Download the distribution for your platform from the releases page, unpack it,
 and run it. There is nothing to install, configure or build:
 
 ```bash
-tar -xzf moggi-0.0.1-linux-x86_64.tar.gz
+tar -xzf moggi-0.1.0-linux-x86_64.tar.gz
 cd moggi
 ./bin/moggi version
 ```
@@ -132,7 +132,7 @@ hints, plus **Moggi: Run Current File** and a compile task. It is not on the
 Marketplace yet, so install the file:
 
 ```bash
-code --install-extension moggi-lsp-0.0.1.vsix
+code --install-extension moggi-lsp-0.1.0.vsix
 ```
 
 The extension carries no compiler; it starts the one you already have and talks

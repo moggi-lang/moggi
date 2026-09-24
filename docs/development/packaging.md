@@ -155,8 +155,8 @@ php scripts/dist/schnorr.php                 # fetch the pinned sources and buil
 identity into the archive's own `VERSION` entry, so a distribution still carries no file for a user
 to edit by accident and `moggi version` reads it from inside the phar:
 
-* a clean commit that *is* a tag reports the tag (`0.0.1`);
-* anything else reports `0.0.1-dev.20260922+f60fb9f` — the version file, the commit date and the
+* a clean commit that *is* a tag reports the tag (`0.1.0`);
+* anything else reports `0.1.0-dev.20260922+f60fb9f` — the version file, the commit date and the
   short commit, with `.dirty` appended when tracked files were modified;
 * without git (a source tarball) the version file is used verbatim.
 
@@ -167,7 +167,7 @@ installation actually bundles — so a bug report identifies the archive it came
 pipeline may use a `-dev.` string to decide which of two builds is newer: the tag is authoritative.
 
 The release job asserts that the tag and `VERSION` agree — the tag *is* the version string
-(`0.0.1`, no `v` prefix) — so a mis-tagged release fails instead of publishing under a number it does
+(`0.1.0`, no `v` prefix) — so a mis-tagged release fails instead of publishing under a number it does
 not match.
 
 The VS Code extension is not part of this release: it lives in its own repository
@@ -181,14 +181,16 @@ distribution.
 
 | Channel | Built from | Tag | Release |
 |---|---|---|---|
-| official | a version tag (`0.0.1`, no `v` prefix) | the tag | public (`-alpha`/`-beta` marked as pre-releases) |
-| dev | the `build` branch | `dev-<date>-<sha>` plus the moving alias `dev` | pre-release, never `latest` |
+| official | a version tag (`0.1.0`, no `v` prefix) | the tag | public (`-alpha`/`-beta` marked as pre-releases) |
+| dev | the `build` branch | `dev-build` (one tag, moved onto every new build) | pre-release, never `latest` |
 | snapshot | the default branch, daily | `snapshot-<date>` plus the moving alias `snapshot` | pre-release, never `latest` |
 
 A snapshot or dev build is always a pre-release: GitHub treats the newest non-prerelease as
 `releases/latest`, so marking one as normal would silently change what users download by default.
-Dev and snapshot releases are pruned (last few kept), official releases are kept forever, and a
-snapshot that would rebuild the commit already published is skipped.
+Official releases are kept forever, one per version tag. A dev build keeps no history at all:
+`dev-build` is the only dev tag, deleted and recreated on each build of `build`, so it always names
+the newest one and the per-build tags an earlier scheme left behind are removed. A snapshot that
+would rebuild the commit already published is skipped.
 
 Nothing merges *into* `build`: it marks the commit that should be built, and pushing to it triggers
 the dev build. `workflow_dispatch` on `package` builds any ref on demand.
