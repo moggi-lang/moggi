@@ -56,6 +56,74 @@ function bindingGroupSccs(array $bindings): array
 }
 
 /**
+ * Strongly connected components of a module's top-level declarations, in
+ * dependency order (producers before consumers).
+ *
+ * An edge runs from a declaration to every other declaration of the module its
+ * body uses; a name that is not declared here -- an import, a constructor, a
+ * primop -- induces no edge. `recursive` marks a component whose members need
+ * each other, which is the unit a signature has to be discovered for jointly.
+ * The returned indices are positions in `$items`, so a caller keeps its own item
+ * list. Call it after `deriving` and instances have expanded that list.
+ *
+ * @param array<int, Ast\AstNode> $items
+ * @return list<array{indices: list<int>, recursive: bool}>
+ */
+function topLevelBindingSccs(array $items): array
+{
+    /** @var array<int, Ast\FunctionDecl> $declarations */
+    $declarations = [];
+    /** @var array<int, int> $itemOf dense index to position in $items */
+    $itemOf = [];
+    /** @var array<string, list<int>> $binderIndex */
+    $binderIndex = [];
+    foreach ($items as $itemIndex => $item) {
+        if (! $item instanceof Ast\FunctionDecl || $item->signatureOnly) {
+            continue;
+        }
+
+        $dense = count($declarations);
+        $declarations[$dense] = $item;
+        $itemOf[$dense] = $itemIndex;
+        $binderIndex[$item->name][] = $dense;
+    }
+
+    if ($declarations === []) {
+        return [];
+    }
+
+    /** @var array<int, array<int, int>> $deps adjacency: dense i -> the binders i uses */
+    $deps = [];
+    foreach ($declarations as $i => $fn) {
+        $bound = [];
+        foreach ($fn->params as $param) {
+            foreach (patternBoundNames($param) as $name) {
+                $bound[$name] = true;
+            }
+        }
+
+        $deps[$i] = [];
+        foreach (letExprFreeVars($fn->body, $bound) as $free) {
+            foreach ($binderIndex[$free] ?? [] as $j) {
+                $deps[$i][$j] = $j;
+            }
+        }
+    }
+
+    $components = [];
+    foreach (tarjanScc($deps) as $indices) {
+        $recursive = count($indices) > 1
+            || ($indices !== [] && isset($deps[$indices[0]][$indices[0]]));
+        $components[] = [
+            'indices' => array_map(static fn (int $dense): int => $itemOf[$dense], $indices),
+            'recursive' => $recursive,
+        ];
+    }
+
+    return $components;
+}
+
+/**
  * @param array<int, array<int, int>> $deps
  * @return list<list<int>>
  */
