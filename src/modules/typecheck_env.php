@@ -40,10 +40,6 @@ function buildProjectTypeEnvironments(
     ?array $projectInstanceIndex = null,
 ): array {
     $projectClasses = [];
-    $sharedData = [];
-    $sharedTypeSynonyms = [];
-    $sharedKindEnv = [];
-    $sharedPromoted = [];
     $instanceIndex = $projectInstanceIndex ?? indexProjectInstances($projectInstances);
 
     foreach ($sortedModules as $moduleName) {
@@ -67,10 +63,6 @@ function buildProjectTypeEnvironments(
             $units,
             $moduleName,
             $projectClasses,
-            $sharedData,
-            $sharedTypeSynonyms,
-            $sharedKindEnv,
-            $sharedPromoted,
             $instanceIndex,
         );
     }
@@ -81,10 +73,6 @@ function buildProjectTypeEnvironments(
 /**
  * @param array<string, array<string, mixed>> $units
  * @param array<string, mixed> $projectClasses
- * @param array<string, mixed> $sharedData
- * @param array<string, mixed> $sharedTypeSynonyms
- * @param array<string, mixed> $sharedKindEnv
- * @param array<string, mixed> $sharedPromoted
  * @param array{
  *   byClass: array<string, list<array<string, mixed>>>,
  *   byClassHead: array<string, array<string, list<array<string, mixed>>>>,
@@ -95,56 +83,30 @@ function buildModuleTypeEnvironment(
     array &$units,
     string $moduleName,
     array &$projectClasses,
-    array &$sharedData,
-    array &$sharedTypeSynonyms,
-    array &$sharedKindEnv,
-    array &$sharedPromoted,
     array $projectInstanceIndex,
 ): void {
     $unit = $units[$moduleName];
 
-    updateProjectClassesForModule(
-        $unit,
-        $units,
-        $moduleName,
-        $projectClasses,
-        $sharedData,
-        $sharedTypeSynonyms,
-        $sharedKindEnv,
-        $sharedPromoted,
-    );
+    updateProjectClassesForModule($unit, $units, $moduleName, $projectClasses);
     buildModuleLocalTypes($units, $moduleName, $projectClasses, $projectInstanceIndex);
 }
 
 /**
+ * Types stay module-scoped: the state starts from the module's declared names and
+ * the exported types of its imports, never from a project-wide union.
+ *
  * @param array<string, mixed> $unit
  * @param array<string, array<string, mixed>> $units
  * @param array<string, mixed> $projectClasses
- * @param array<string, mixed> $sharedData
- * @param array<string, mixed> $sharedTypeSynonyms
- * @param array<string, mixed> $sharedKindEnv
- * @param array<string, mixed> $sharedPromoted
  */
 function updateProjectClassesForModule(
     array $unit,
     array $units,
     string $moduleName,
     array &$projectClasses,
-    array &$sharedData,
-    array &$sharedTypeSynonyms,
-    array &$sharedKindEnv,
-    array &$sharedPromoted,
 ): void {
     $state = Types\newState($unit['source'], $unit['path']);
     $state->classes = $projectClasses;
-    $state->data = $sharedData;
-    $state->typeSynonyms = $sharedTypeSynonyms;
-    foreach ($sharedKindEnv as $name => $kind) {
-        $state->kindEnv[$name] = $kind;
-    }
-    foreach ($sharedPromoted as $name => $info) {
-        $state->promoted[$name] = $info;
-    }
 
     foreach ($unit['program']->imports as $import) {
         $targetName = moduleName($import->path);
@@ -180,11 +142,6 @@ function updateProjectClassesForModule(
 
         $projectClasses[$name] = $state->classes[$name];
     }
-
-    $sharedData = $state->data;
-    $sharedTypeSynonyms = $state->typeSynonyms;
-    $sharedKindEnv = $state->kindEnv;
-    $sharedPromoted = $state->promoted;
 }
 
 /**
