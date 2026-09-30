@@ -4,6 +4,13 @@
   jvm = Data.String.JVM
   dotnet = Data.String.DotNet
 #-}
+-- |
+-- The 'String' type and associated operations.
+--
+-- A 'String' is a backend-native sequence of 'Char' (Unicode scalar values).
+-- The operations below count and index scalars, not bytes or UTF-16 code
+-- units. Where that differs from the list-of-'Char' 'String' of Haskell, the
+-- scalar behaviour is the one documented here.
 module Data.String
   ( String
   , singleton
@@ -47,18 +54,29 @@ instance Semigroup String where
 -- | Construct a string from a single char.
 singleton :: Char -> String
 
+-- | The scalars of a string, left to right. The inverse of 'pack'.
 unpack :: String -> [Char]
 
+-- | A string built from the given scalars. The inverse of 'unpack'.
 pack :: [Char] -> String
 pack xs = case xs of
   [] -> ""
   c : cs -> singleton c <> pack cs
 
 
+-- | The number of Unicode scalars in a string.
 length :: String -> Int
 
+-- | The prefix of @s@ holding its first @n@ scalars.
+--
+-- A count past the end gives the whole string; a non-positive count gives
+-- @""@.
 take :: Int -> String -> String
 
+-- | @s@ without its first @n@ scalars.
+--
+-- A count at or past the end gives @""@; a non-positive count leaves @s@
+-- unchanged.
 drop :: Int -> String -> String
 
 -- | Split after the first @n@ scalars; either side stops at the end of the
@@ -66,40 +84,57 @@ drop :: Int -> String -> String
 splitAt :: Int -> String -> (String, String)
 splitAt n s = (take n s, drop n s)
 
+-- | Whether the first string is a prefix of the second.
 isPrefixOf :: String -> String -> Bool
 
+-- | Whether the first string is a suffix of the second.
 isSuffixOf :: String -> String -> Bool
 
+-- | Split on every occurrence of @sep@, which is left out of the pieces.
+-- Adjacent separators produce empty pieces.
 splitOn :: String -> String -> [String]
 
+-- | The lines of a string: split on newline, with the separators removed.
+-- A trailing newline adds no final empty line; blank lines between content
+-- are kept.
 lines :: String -> [String]
 
+-- | The words of a string: split on the space character, with runs of spaces
+-- contributing nothing.
+--
+-- Only U+0020 SPACE separates words here; unlike Haskell's 'words', a tab or
+-- other whitespace is an ordinary character.
 words :: String -> [String]
 
+-- | Every string followed by a newline, concatenated.
 unlines :: [String] -> String
 
+-- | The strings joined with a single space between neighbours.
 unwords :: [String] -> String
 
-filterChars :: (Char -> Bool) -> [Char] -> [Char]
-filterChars p cs = case cs of
-  [] -> []
-  c : rest -> case p c of
-    True -> c : filterChars p rest
-    False -> filterChars p rest
-
+-- | The characters that satisfy the predicate, in order.
 filter :: (Char -> Bool) -> String -> String
-filter p s = pack (filterChars p (unpack s))
+filter p s =
+  let filterChars cs = case cs of
+        [] -> []
+        c : rest -> case p c of
+          True -> c : filterChars rest
+          False -> filterChars rest
+  in pack (filterChars (unpack s))
 
-mapChars :: (Char -> Char) -> [Char] -> [Char]
-mapChars f cs = case cs of
-  [] -> []
-  c : rest -> f c : mapChars f rest
-
+-- | The string with the function applied to every character.
 map :: (Char -> Char) -> String -> String
-map f s = pack (mapChars f (unpack s))
+map f s =
+  let mapChars cs = case cs of
+        [] -> []
+        c : rest -> f c : mapChars rest
+  in pack (mapChars (unpack s))
 
+-- | The string with its scalars in reverse order. A scalar that UTF-16
+-- splits into a surrogate pair is kept whole.
 reverse :: String -> String
 
+-- | Whether the string is empty.
 null :: String -> Bool
 null s = length s == 0
 
@@ -109,26 +144,23 @@ null s = length s == 0
 -- A decimal escape followed by a digit, or the @SO@ escape followed by @H@,
 -- would re-read as one longer escape, so those get a @\&@ separator. The
 -- separator goes against the character that follows in the source: the rendered
--- tail is a 'String', which has no first-character access to test it from.
+-- tail is a 'String', which has no first-character access to test it from, so
+-- the guard reads the code point of the next character itself.
 showLitString :: [Char] -> ShowS
-showLitString cs = \s -> case cs of
-  [] -> s
-  c : rest -> case ord c of
-    34 -> showString "\\\"" (showLitString rest s)
-    _ -> case needsEscapeGuard (ord c) rest of
-      True -> showLitChar c (showString "\\&" (showLitString rest s))
-      False -> showLitChar c (showLitString rest s)
-
--- | Whether the escape of the character with code point @n@ would swallow the
--- character that follows it: a decimal escape is followed by a digit, and the
--- @SO@ escape by @H@.
-needsEscapeGuard :: Int -> [Char] -> Bool
-needsEscapeGuard n rest = case rest of
-  [] -> False
-  d : _ -> case ord d of
-    m -> case n > 127 of
-      True -> m >= 48 && m <= 57
-      False -> n == 14 && m == 72
+showLitString cs = \s ->
+  let needsEscapeGuard n rest = case rest of
+        [] -> False
+        d : _ -> case ord d of
+          m -> case n > 127 of
+            True -> m >= 48 && m <= 57
+            False -> n == 14 && m == 72
+  in case cs of
+    [] -> s
+    c : rest -> case ord c of
+      34 -> showString "\\\"" (showLitString rest s)
+      _ -> case needsEscapeGuard (ord c) rest of
+        True -> showLitChar c (showString "\\&" (showLitString rest s))
+        False -> showLitChar c (showLitString rest s)
 
 instance Eq String where
   (==) a b = stringEq# a b

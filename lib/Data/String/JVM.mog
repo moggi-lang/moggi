@@ -60,65 +60,61 @@ foreign jvm function sbToString "java.lang.StringBuilder.toString" :: StringBuil
 
 utf16Length s = int32ToInt# (rawUtf16Length s)
 
-codePointCount s a b = int32ToInt# (rawCodePointCount s (int32FromInt# a) (int32FromInt# b))
-
 offsetByCodePoints s a b = int32ToInt# (rawOffsetByCodePoints s (int32FromInt# a) (int32FromInt# b))
-
-codePointAt s i = int32ToInt# (rawCodePointAt s (int32FromInt# i))
 
 substring s a b = rawSubstring s (int32FromInt# a) (int32FromInt# b)
 
-indexOfFrom s sep start = int32ToInt# (rawIndexOfFrom s sep (int32FromInt# start))
+-- Each walk below closes over the string it walks, so its helper takes only the
+-- argument the walk itself varies.
 
 unpack :: String -> [Char]
-unpack s = unpackAt s 0 (utf16Length s)
-
-unpackAt :: String -> Int -> Int -> [Char]
-unpackAt s i end = case intCompare# i end of
-  EQ -> []
-  _ -> chr (codePointAt s i) : unpackAt s (offsetByCodePoints s i 1) end
+unpack s =
+  let codePointAt i = int32ToInt# (rawCodePointAt s (int32FromInt# i))
+      unpackAt i end = case intCompare# i end of
+        EQ -> []
+        _ -> chr (codePointAt i) : unpackAt (offsetByCodePoints s i 1) end
+  in unpackAt 0 (utf16Length s)
 
 splitOn :: String -> String -> [String]
-splitOn sep s = case utf16Length sep of
-  0 -> s : []
-  _ -> splitOnAt sep s 0
-
-splitOnAt :: String -> String -> Int -> [String]
-splitOnAt sep s start =
-  let i = indexOfFrom s sep start in
-  case intCompare# i (0 - 1) of
-    EQ -> substring s start (utf16Length s) : []
-    _ -> substring s start i : splitOnAt sep s (i + utf16Length sep)
+splitOn sep s =
+  let splitOnAt start =
+        let i = int32ToInt# (rawIndexOfFrom s sep (int32FromInt# start))
+        in case intCompare# i (0 - 1) of
+          EQ -> substring s start (utf16Length s) : []
+          _ -> substring s start i : splitOnAt (i + utf16Length sep)
+  in case utf16Length sep of
+    0 -> s : []
+    _ -> splitOnAt 0
 
 length :: String -> Int
-length s = codePointCount s 0 (utf16Length s)
-
-take :: Int -> String -> String
-take n s = case intCompare# n 0 of
-  GT -> takeWithin n s
-  _ -> ""
+length s =
+  let codePointCount a b = int32ToInt# (rawCodePointCount s (int32FromInt# a) (int32FromInt# b))
+  in codePointCount 0 (utf16Length s)
 
 -- `offsetByCodePoints` reads "n scalars from 0", which is an unchecked index:
 -- a count past the end throws, and a negative one walks off the front. Clamp
 -- here so only a positive, in-bounds count reaches it.
-takeWithin :: Int -> String -> String
-takeWithin n s =
-  let len = length s
-  in case intCompare# n len of
-    LT -> substring s 0 (offsetByCodePoints s 0 n)
-    _ -> s
+take :: Int -> String -> String
+take n s =
+  let takeWithin k =
+        let len = length s
+        in case intCompare# k len of
+          LT -> substring s 0 (offsetByCodePoints s 0 k)
+          _ -> s
+  in case intCompare# n 0 of
+    GT -> takeWithin n
+    _ -> ""
 
 drop :: Int -> String -> String
-drop n s = case intCompare# n 0 of
-  GT -> dropWithin n s
-  _ -> s
-
-dropWithin :: Int -> String -> String
-dropWithin n s =
-  let len = length s
-  in case intCompare# n len of
-    LT -> substring s (offsetByCodePoints s 0 n) (utf16Length s)
-    _ -> ""
+drop n s =
+  let dropWithin k =
+        let len = length s
+        in case intCompare# k len of
+          LT -> substring s (offsetByCodePoints s 0 k) (utf16Length s)
+          _ -> ""
+  in case intCompare# n 0 of
+    GT -> dropWithin n
+    _ -> s
 
 reverse :: String -> String
 reverse s = sbToString (sbReverse (newStringBuilder s))

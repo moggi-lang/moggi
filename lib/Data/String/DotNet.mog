@@ -46,40 +46,26 @@ foreign dotnet function rawEndsWith "System.String.EndsWith" :: String -> String
 
 foreign dotnet function rawIndexOfFrom "System.String.IndexOf" :: String -> String -> Int32 -> Int32
 
-foreign dotnet function rawToCharArray "System.String:ToCharArray" :: String -> [Char]
-
 singleton c = rawConvertFromUtf32 (int32FromInt# (charToInt# c))
 
 utf16Length s = int32ToInt# (rawUtf16Length s)
 
-convertToUtf32At s i = int32ToInt# (rawConvertToUtf32At s (int32FromInt# i))
-
-charAt s i = rawCharAt s (int32FromInt# i)
-
 substringLen s start len = rawSubstringLen s (int32FromInt# start) (int32FromInt# len)
 
-indexOfFrom s needle start = int32ToInt# (rawIndexOfFrom s needle (int32FromInt# start))
-
+-- | UTF-16 width of the scalar starting at @i@: 2 for a surrogate pair, else 1.
+-- The pair's low half is read through the same walk, so it stays here.
 utf16WidthAt :: String -> Int -> Int
 utf16WidthAt s i =
-  let c = charAt s i in
-  case rawIsHighSurrogate c of
-    False -> 1
-    True -> utf16WidthHigh s i
-
-utf16WidthHigh :: String -> Int -> Int
-utf16WidthHigh s i =
-  let j = i + 1
+  let charAt j = rawCharAt s (int32FromInt# j)
       end = utf16Length s
-  in case intCompare# j end of
-    LT -> utf16WidthLow (charAt s j)
-    EQ -> 1
-    GT -> 1
-
-utf16WidthLow :: Char -> Int
-utf16WidthLow lo = case rawIsLowSurrogate lo of
-  True -> 2
-  False -> 1
+  in case rawIsHighSurrogate (charAt i) of
+    False -> 1
+    True -> case intCompare# (i + 1) end of
+      LT -> case rawIsLowSurrogate (charAt (i + 1)) of
+        True -> 2
+        False -> 1
+      EQ -> 1
+      GT -> 1
 
 offsetByCodePoints :: String -> Int -> Int -> Int
 offsetByCodePoints s i n = case intCompare# n 0 of
@@ -101,58 +87,46 @@ offsetByCodePointsAfter s i n end = case intCompare# n 0 of
   LT -> i
   GT -> offsetByCodePointsStep s (i + utf16WidthAt s i) (n - 1)
 
-codePointCount :: String -> Int -> Int -> Int
-codePointCount s start endBound = codePointCountGo s start endBound 0
-
-codePointCountGo :: String -> Int -> Int -> Int -> Int
-codePointCountGo s i endBound acc = case intCompare# i endBound of
-  EQ -> acc
-  GT -> acc
-  LT -> codePointCountGo s (i + utf16WidthAt s i) endBound (acc + 1)
-
 unpack :: String -> [Char]
-unpack s = unpackAt s 0 (utf16Length s)
-
-unpackAt :: String -> Int -> Int -> [Char]
-unpackAt s i end = case intCompare# i end of
-  EQ -> []
-  GT -> []
-  LT -> chr (convertToUtf32At s i) : unpackAt s (i + utf16WidthAt s i) end
+unpack s =
+  let convertToUtf32At i = int32ToInt# (rawConvertToUtf32At s (int32FromInt# i))
+      unpackAt i end = case intCompare# i end of
+        EQ -> []
+        GT -> []
+        LT -> chr (convertToUtf32At i) : unpackAt (i + utf16WidthAt s i) end
+  in unpackAt 0 (utf16Length s)
 
 splitOn :: String -> String -> [String]
-splitOn sep s = case utf16Length sep of
-  0 -> s : []
-  _ -> splitOnAt sep s 0
-
-splitOnAt :: String -> String -> Int -> [String]
-splitOnAt sep s start =
-  let i = indexOfFrom s sep start in
-  case intCompare# i (0 - 1) of
-    EQ -> substringLen s start (intSub# (utf16Length s) start) : []
-    LT -> substringLen s start (intSub# (utf16Length s) start) : []
-    GT -> substringLen s start (intSub# i start) : splitOnAt sep s (i + utf16Length sep)
-
-listMap :: (a -> b) -> [a] -> [b]
-listMap f xs = case xs of
-  [] -> []
-  x : rest -> f x : listMap f rest
+splitOn sep s =
+  let splitOnAt start =
+        let i = int32ToInt# (rawIndexOfFrom s sep (int32FromInt# start))
+        in case intCompare# i (0 - 1) of
+          EQ -> substringLen s start (intSub# (utf16Length s) start) : []
+          LT -> substringLen s start (intSub# (utf16Length s) start) : []
+          GT -> substringLen s start (intSub# i start) : splitOnAt (i + utf16Length sep)
+  in case utf16Length sep of
+    0 -> s : []
+    _ -> splitOnAt 0
 
 length :: String -> Int
-length s = codePointCount s 0 (utf16Length s)
+length s =
+  let codePointCountGo i endBound acc = case intCompare# i endBound of
+        EQ -> acc
+        GT -> acc
+        LT -> codePointCountGo (i + utf16WidthAt s i) endBound (acc + 1)
+  in codePointCountGo 0 (utf16Length s) 0
 
 take :: Int -> String -> String
 take n s =
   let end = offsetByCodePoints s 0 n
   in substringLen s 0 end
 
-dropFrom :: Int -> String -> String
-dropFrom start s = substringLen s start (intSub# (utf16Length s) start)
-
 drop :: Int -> String -> String
 drop n s =
   let len = length s
+      dropFrom start = substringLen s start (intSub# (utf16Length s) start)
   in case intCompare# n len of
-    LT -> dropFrom (offsetByCodePoints s 0 n) s
+    LT -> dropFrom (offsetByCodePoints s 0 n)
     EQ -> ""
     GT -> ""
 
@@ -160,17 +134,14 @@ drop n s =
 -- a time: the BCL reverses a `char[]` in place, and a list cannot be handed to
 -- a foreign call, so `System.Array.Reverse` is not reachable from here.
 reverse :: String -> String
-reverse s = packChars (reverseChars (unpack s) [])
-
-reverseChars :: [Char] -> [Char] -> [Char]
-reverseChars cs acc = case cs of
-  [] -> acc
-  c : rest -> reverseChars rest (c : acc)
-
-packChars :: [Char] -> String
-packChars cs = case cs of
-  [] -> ""
-  c : rest -> stringAppend# (singleton c) (packChars rest)
+reverse s =
+  let reverseChars cs acc = case cs of
+        [] -> acc
+        c : rest -> reverseChars rest (c : acc)
+      packChars cs = case cs of
+        [] -> ""
+        c : rest -> stringAppend# (singleton c) (packChars rest)
+  in packChars (reverseChars (unpack s) [])
 
 isPrefixOf :: String -> String -> Bool
 isPrefixOf prefix s = rawStartsWith s prefix

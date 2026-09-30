@@ -50,11 +50,9 @@ utf8 = "UTF-8"
 
 singleton c = intlChr c
 
-coerceIntToChar n = intToChar# n
-
-chunkToChar ch = coerceIntToChar (intlOrd ch)
-
-unpack s = L.map chunkToChar (mbStrSplit s 1 utf8)
+unpack s =
+  let chunkToChar ch = intToChar# (intlOrd ch)
+  in L.map chunkToChar (mbStrSplit s 1 utf8)
 
 length s = mbStrLen s utf8
 
@@ -66,16 +64,15 @@ take n s = case intCompare# n 0 of
   _ -> ""
 
 drop :: Int -> String -> String
-drop n s = case intCompare# n 0 of
-  GT -> dropWithin n s
-  _ -> s
-
-dropWithin :: Int -> String -> String
-dropWithin n s =
-  let len = length s
-  in case intCompare# n len of
-    LT -> mbSubstr s n (len - n) utf8
-    _ -> ""
+drop n s =
+  let dropFrom k =
+        let len = length s
+        in case intCompare# k len of
+          LT -> mbSubstr s k (len - k) utf8
+          _ -> ""
+  in case intCompare# n 0 of
+    GT -> dropFrom n
+    _ -> s
 
 -- | Reverse by Unicode scalar. `strrev` is byte-wise and would split a
 -- multi-byte scalar, so split on codes and reverse the chunks instead: three
