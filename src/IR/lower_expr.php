@@ -21,8 +21,6 @@ function lowerExpr(Ast\AstNode $expr, LowerCtx $ctx): Operand
         Ast\StringLit::class => new ConstStr($expr->value),
         Ast\CharLit::class => new ConstChar($expr->value),
         Ast\Variable::class => (static function () use ($expr, $ctx): Operand {
-            // A primop used as a value: nullary primops are values already,
-            // others are eta-expanded (see lowerIntrinsicValue).
             if ($expr->intrinsicWrapper !== null) {
                 return lowerIntrinsicValue($expr->intrinsicWrapper, [], $expr, $ctx);
             }
@@ -156,8 +154,6 @@ function lowerEvidenceRefValue(string $class, Ast\TypeNode $head, array $context
         return $fn;
     }
 
-    // Constrained instances (`Num a => Monoid (Sum a)`) are real functions of
-    // their context dicts. Emit a saturated Call (not CallValue/`__apply`).
     $args = [];
     foreach ($context as $ev) {
         $args[] = lowerExpr($ev, $ctx);
@@ -168,8 +164,6 @@ function lowerEvidenceRefValue(string $class, Ast\TypeNode $head, array $context
 
 function lowerInfix(Ast\Infix $expr, LowerCtx $ctx): Operand
 {
-    // `&&`/`||` are conditional syntax: `a && b` lowers as `case a of True -> b` and its
-    // mirror, so the right operand sits in a branch and backends see an `if` shape.
     if ($expr->resolvedIntrinsic === 'boolAnd#' || $expr->resolvedIntrinsic === 'boolOr#') {
         return lowerShortCircuitAndOr($expr, $ctx);
     }
@@ -181,8 +175,6 @@ function lowerInfix(Ast\Infix $expr, LowerCtx $ctx): Operand
         ], srcLocFromAst($expr, $ctx->moduleName, $ctx->functionName, $ctx->sourceFile));
     }
 
-    // A user-defined infix function is a normal top-level function: `($) f = f` has one
-    // parameter and is applied to two operands, so arity-aware lowering applies it.
     if (isIdentifierInfixFunction($expr->operator) || !isPrimitiveSymbolicBinop($expr->operator)) {
         $args = [lowerExpr($expr->left, $ctx), lowerExpr($expr->right, $ctx)];
 
@@ -192,9 +184,6 @@ function lowerInfix(Ast\Infix $expr, LowerCtx $ctx): Operand
             ?? lowerCall($expr->operator, $args, $ctx, $infixLoc);
     }
 
-    // Symbolic primitives without a monomorphic intrinsic (e.g. derived Eq on
-    // an ADT): emit host Binop. Integer overloads are rewritten to evidence
-    // Apply during inference so they never reach this path.
     $leftOp = lowerExpr($expr->left, $ctx);
     $rightOp = lowerExpr($expr->right, $ctx);
     $dest = freshTemp($ctx);
@@ -508,15 +497,18 @@ function applyCalleeName(Ast\AstNode $expr, LowerCtx $ctx): ?string
         Ast\ConstructorRef::class,
         Ast\OperatorRef::class => $expr->name,
         Ast\QualifiedRef::class => $expr->backendResolved ?? $expr->name,
-        // The *resolved* name, not the written one: a local binding may share a
-        // name with a function the module imports (`even 0 = True` in a `where`
-        // while `Data.Integral.even` is in scope), and the lifted function it
-        // became is what the call means. Reporting the written name here would
-        // hand it to `lowerNamedApply`, which knows the imported function by
-        // that name and would call it instead.
-        Ast\Variable::class => ($binding = $ctx->env[$expr->name] ?? null) instanceof FnRef
-            ? $binding->name
-            : (\in_array($expr->name, $ctx->externalFnNames, true) ? $expr->name : null),
+        Ast\Variable::class => (static function () use ($expr, $ctx): ?string {
+            $binding = $ctx->env[$expr->name] ?? null;
+            if ($binding instanceof FnRef) {
+                return $binding->name;
+            }
+
+            if ($binding !== null) {
+                return null;
+            }
+
+            return \in_array($expr->name, $ctx->externalFnNames, true) ? $expr->name : null;
+        })(),
         default => null,
     };
 }
@@ -526,9 +518,6 @@ function lowerCall(string $callee, array $args, LowerCtx $ctx, ?SrcLoc $srcLoc =
 {
     $callee = $ctx->constructorRenames[$callee] ?? $callee;
 
-    // Newtype constructors are identity at runtime (backends emit `return $payload`).
-    // Erase them at lower so IR does not allocate transparent M1-style wrappers that
-    // later block case-of-known / field folding for Generic consumers.
     if (isset($ctx->newtypes[$callee]) && count($args) === 1) {
         return $args[0];
     }
@@ -602,7 +591,6 @@ function lowerNamedLambda(string $name, array $params, Ast\AstNode $body, LowerC
     $fnCtx->functionArity = $ctx->functionArity;
     $fnCtx->externalFnNames = $ctx->externalFnNames;
     $fnCtx->functionName = $name;
-    // The lambda body is its own statement scope.
     if ($body->line > 0) {
         $fnCtx->stmtSrcLoc = srcLocFromAst($body, $ctx->moduleName, $name, $ctx->sourceFile);
     }
@@ -694,8 +682,6 @@ function lowerRecursiveBindings(array $bindings, LowerCtx $ctx): void
         }
         [$rhs] = peelBindingAnnotation($binding->value);
         $name = $binding->pattern->name;
-        // Non-λ names so backends emit real functions (direct self-calls work;
-        // capturing λ wrappers break recursive arity).
         $fnName = '__letrec' . $ctx->state->nextLambda++;
         if ($rhs instanceof Ast\Lambda) {
             $planned[$name] = ['kind' => 'lambda', 'fnName' => $fnName, 'rhs' => $rhs];
@@ -736,17 +722,9 @@ function lowerCase(Ast\AstNode $scrutinee, array $alts, LowerCtx $ctx, bool $exh
     $scrutineeOp = lowerExpr($scrutinee, $ctx);
     $dest = freshTemp($ctx);
     $arms = [];
-    // Matching every pattern is not enough to have a value: a guarded clause
-    // whose guards all fail is no more taken than one whose pattern failed, and
-    // when it is the last one that is a pattern-match failure. The exhaustiveness
-    // the type checker proved says nothing about the guards, so the match stays
-    // fallible as long as one of them can fail.
     $guardsAlwaysHold = true;
 
     foreach ($alts as $alt) {
-        // A failing guard falls through to the next clause, not out of the whole
-        // match, so a guarded clause contributes one arm per guard: the clause's
-        // own pattern plus that guard as the arm's condition.
         if ($alt->body instanceof Ast\GuardsExpr) {
             $guardsAlwaysHold = $guardsAlwaysHold && guardsExhaustive($alt->body);
             $clauses = \array_map(
@@ -764,11 +742,6 @@ function lowerCase(Ast\AstNode $scrutinee, array $alts, LowerCtx $ctx, bool $exh
             if ($guard === null) {
                 $guards = [];
             } else {
-                // A guard is tested before the arm body, so whatever it reads has
-                // to exist by then. A variable pattern is bound by a statement
-                // of its own (`let m = _p0`) and that statement runs with the
-                // guard; every other pattern's binders are bound by the pattern
-                // test itself, so their statements stay in the body.
                 $bindings = $armCtx->items;
                 $isVarPattern = $alt->pattern instanceof Ast\PatVar;
                 $armCtx->items = [];
@@ -795,9 +768,6 @@ function lowerGuards(Ast\GuardsExpr $expr, LowerCtx $ctx): Operand
     $arms = [];
 
     foreach ($expr->clauses as $clause) {
-        // A guard of a bare `GuardsExpr` has no pattern to wait for, so its
-        // statements belong to the enclosing block, before the match that tests
-        // them.
         $guard = lowerGuardExpr($clause->guard, $ctx);
         $armCtx = newArmCtx($ctx, $clause->body);
         $value = lowerExpr($clause->body, $armCtx);
@@ -821,8 +791,6 @@ function newArmCtx(LowerCtx $ctx, Ast\AstNode $body): LowerCtx
 {
     $armCtx = newCtx([], $ctx->state, $ctx->data, $ctx->newtypes, $ctx);
     $armCtx->env = $ctx->env;
-    // An arm body is its own statement: a call in it is this frame, not the
-    // enclosing `case`.
     if ($body->line > 0) {
         $armCtx->stmtSrcLoc = srcLocFromAst(
             $body,
@@ -903,8 +871,6 @@ function lowerRecordUpdate(Ast\RecordUpdate $expr, LowerCtx $ctx): Operand
         $byName[$field->name] = $field->expr;
     }
 
-    // The receiver is forced first, as `base` does, and read once per field the
-    // update keeps — hence the temp when the operand is not one already.
     $receiver = stabilizeOperand(lowerExpr($expr->object, $ctx), $ctx);
     $args = [];
     foreach ($order as $position => $name) {
@@ -913,7 +879,6 @@ function lowerRecordUpdate(Ast\RecordUpdate $expr, LowerCtx $ctx): Operand
             continue;
         }
 
-        // A newtype record is its one field, so reading that field is identity.
         $args[] = $expr->fieldOnNewtype
             ? $receiver
             : lowerCall('__field' . $position, [$receiver], $ctx);

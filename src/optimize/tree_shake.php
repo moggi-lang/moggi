@@ -51,7 +51,6 @@ function treeShakeModules(array $modulesByName): array
             $key = $moduleName . '::' . $short;
             $functionsByKey[$key] = $fn;
             $keysByShort[$short][] = $key;
-            // Main and ReplExpression are both live roots.
             if ($fn->entryKind !== null) {
                 $rootKeys[$key] = true;
             }
@@ -85,7 +84,6 @@ function treeShakeModules(array $modulesByName): array
                     $queue[] = $methodKey;
                 }
             }
-            // Evidence constructor itself is not a FunctionDecl; mark for keep.
             $reachable[$ev['module'] . '::' . $short] = true;
         }
 
@@ -114,9 +112,6 @@ function treeShakeModules(array $modulesByName): array
                 continue;
             }
 
-            // Cross-module call: keep every definition of that short name.
-            // (Ambiguous only when multiple modules export the same binder;
-            // import resolution already picked one at typecheck time.)
             foreach ($keysByShort[$callee] ?? [] as $calleeKey) {
                 if (!isset($reachable[$calleeKey])) {
                     $reachable[$calleeKey] = true;
@@ -124,7 +119,6 @@ function treeShakeModules(array $modulesByName): array
                 }
             }
 
-            // Evidence zero-arg refs (e.g. @__ev_Show_Int) are not functions.
             if (isset($evidenceByShort[$callee])) {
                 $evKey = $evidenceByShort[$callee]['module'] . '::' . $callee;
                 if (!isset($reachable[$evKey])) {
@@ -170,8 +164,6 @@ function shortName(string $name): string
         return $parsed['name'];
     }
 
-    // A bare operator can contain a backslash (`\\`); only a really qualified
-    // name has a member to strip, or the key would come out empty.
     if (!isQualifiedSymbol($name)) {
         return $name;
     }

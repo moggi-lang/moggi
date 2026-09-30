@@ -29,8 +29,6 @@ use function Moggi\Syntax\Parser\parseModuleHeader;
 /** @return list<string> */
 function findMogFilesUnder(string $rootDir): array
 {
-    // A standard library inside `bin/moggi.phar` is a `phar://` root, where
-    // `realpath()` fails; iterating the stream works.
     $root = resolvePath($rootDir);
     if (!\is_dir($root)) {
         return [];
@@ -41,10 +39,6 @@ function findMogFilesUnder(string $rootDir): array
         \FilesystemIterator::SKIP_DOTS,
     );
 
-    // Never descend into symlinked directories, hidden directories, or common
-    // build/dependency output directories. Following symlinks here can escape the
-    // project entirely (e.g. `.direnv/flake-profile` points into the nix store) and
-    // cause the recursive scan to hang on the enormous or cyclic target tree.
     $filtered = new \RecursiveCallbackFilterIterator(
         $directories,
         static function (\SplFileInfo $current): bool {
@@ -73,9 +67,6 @@ function findMogFilesUnder(string $rootDir): array
             }
         }
     } catch (\UnexpectedValueException) {
-        // A directory that vanished mid-scan: a concurrent compile publishing or replacing an
-        // output tree under the same root. Keep what the scan found; the index this feeds is a
-        // cache and a missing module is reported by the caller that needs it.
     }
 
     sort($files);
@@ -174,15 +165,10 @@ function isStandaloneWorkspaceTest(string $filePath): bool
         return false;
     }
 
-    // Multi-file fixtures under tests/modules/ need local root discovery.
-    // Every other tests/ path (lexer, parser, semantics, runtime, …) is a
-    // standalone entry that resolves imports against the stdlib only —
-    // walking parent dirs with findMogFilesUnder is pure overhead.
     if (str_contains($file, '/tests/modules/')) {
         return false;
     }
 
-    // A directory holding a project entry (`Main.mog`) is a project fixture, not a standalone entry.
     if (\is_file(\dirname($file) . '/Main.mog')) {
         return false;
     }
@@ -288,9 +274,6 @@ function preludeDependencyClosure(string $fromPath): array
             $header['imports'],
         );
 
-        // A facade whose map has no entry for the compile backend contributes no dependency here;
-        // the module that must be built for this backend reports that itself (see
-        // `facadeImplModuleNameFor`).
         $implName = resolveImplModuleName($header['backendMap'] ?? []);
         if ($implName !== null) {
             $dependencies[] = $implName;
@@ -483,7 +466,6 @@ function moduleFileClosure(string $path): array
 
         $needed[$moduleName] = $modulePath;
 
-        // Compiler-provided Prim/IO have no source headers or further imports.
         if (isSyntheticCompilerPath($modulePath)) {
             continue;
         }
@@ -578,7 +560,6 @@ function moduleFileClosureCached(string $path): array
     $stdlibMtime = $stdlibRoot !== null ? stdlibMaxMtime($stdlibRoot) : 0;
     $backend = compileBackend();
 
-    // Facade resolution depends on compile backend (*/JVM vs */PHP).
     $key = $realPath . ':' . (filemtime($realPath) ?: 0) . ':' . $stdlibMtime . ':' . $backend;
     if (isset($closures[$key])) {
         return $closures[$key];
@@ -702,22 +683,16 @@ function projectSourceClosure(array $inputFiles, array $libDirs): array
         $byModule = [...$byModule, ...moduleIndexFromPaths(findMogFilesUnder($dir))];
     }
 
-    // Input modules override any library module of the same name and form the
-    // root set (every module the user wrote is kept; a library or multi-entry
-    // project therefore retains everything, with deps pulled in transitively).
     $entryModules = [];
     foreach ($inputFiles as $path) {
         $real = realpath($path) ?: $path;
         $header = cachedModuleHeader($real);
         $moduleName = $header['module'] ?? null;
         if ($moduleName === null) {
-            // Non-module script; not part of the module graph.
             continue;
         }
 
         if (isset($entryModules[$moduleName])) {
-            // Two spellings of one file — a symlinked temporary directory and its resolved path —
-            // are the same module, not a duplicate.
             if (canonicalPath($byModule[$moduleName]) === canonicalPath($real)) {
                 continue;
             }
@@ -914,8 +889,6 @@ function throwCyclicModuleImports(array $units, array $pending, array $sortedSet
         $chain[] = "`{$moduleName}` imports `{$next}`";
     }
 
-    // Point at the import that closes the cycle in the module the chain starts from; without a
-    // location this would be the one diagnostic the editor could not place.
     $start = $cycle[0];
     $next = $cycle[1] ?? $start;
     throw new TypeError(

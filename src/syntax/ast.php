@@ -104,8 +104,6 @@ function desugarDo(array $stmts): AstNode
         DoBind::class => (function () use ($first, $rest): AstNode {
             $inner = desugarDo($rest);
             $pattern = $first->pattern;
-            // IR lowering still requires variable lambda params; wildcards from
-            // `_ <- expr` become throwaway names.
             if ($pattern instanceof PatWild) {
                 $pattern = new PatVar('__doWild');
             }

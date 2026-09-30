@@ -27,15 +27,11 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
     $moduleName = $program->module ?? '';
     $constructorRenames = $program->constructorRenames;
 
-    // What this module binds itself, which the bare-name tables for other modules must never
-    // overwrite (`null x = x + 1` is a call, not an under-applied `Foldable.null`).
     $localBindings = [];
 
     foreach ($program->items as $item) {
         if ($item instanceof Ast\FunctionDecl) {
             $knownFunctions[$item->name] = true;
-            // A signature without a body is a promise the body lives elsewhere, so its arity is the
-            // import table's to say — an empty parameter list is not a definition.
             if ($item->signatureOnly) {
                 continue;
             }
@@ -54,8 +50,6 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
         }
     }
 
-    // Constructors are first-class and curried; without arity, unsaturated apps
-    // lower to CallValue and survive as runtime __partial/__apply.
     foreach ($dataIndex as $ctorName => $fields) {
         $knownFunctions[$ctorName] = true;
         if (! isset($localBindings[$ctorName])) {
@@ -105,7 +99,6 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
             );
         }
 
-        // Bare top-level expressions are type-checked only; they do not become functions.
     }
 
     $functions = [...$functions, ...$state->functions];
@@ -224,7 +217,6 @@ function lowerFunction(
     string $sourceFile = '',
     array $constructorRenames = [],
 ): FunctionDecl {
-    // Fresh local-name supply per top-level function (lambdas share this state).
     $state->usedLocals = [];
     $state->nextLocalSuffix = 0;
     $slotNames = functionParamSlots($fn->params);
@@ -259,8 +251,6 @@ function lowerFunction(
         bindPattern(lowerPattern($pattern, $ctx->constructorRenames, $dataIndex), new Local($slotNames[$i]), $ctx);
     }
 
-    // The function body is the first source statement, so nested calls in it
-    // are frames of this location until a statement sets its own.
     if ($fn->body->line > 0) {
         $ctx->stmtSrcLoc = srcLocFromAst($fn->body, $moduleName, $fn->name, $sourceFile);
     }
@@ -305,9 +295,6 @@ function lowerFunction(
         ioStraightLine: $straightLineIo,
         foreign: $fn->foreign,
         ioBodyKind: $ioBodyKind,
-        // The location a backend records for a function — its debug line and its frame in an
-        // exception report — describes the code that runs, so it comes from the body. The
-        // declaration's own span (its signature) is for diagnostics.
         srcLoc: $fn->body->line > 0
             ? srcLocFromAst($fn->body, $moduleName, $fn->name, $sourceFile)
             : srcLocFromAst($fn, $moduleName, $fn->name, $sourceFile),
@@ -363,9 +350,6 @@ function lowerPattern(
         Ast\PatTuple::class => new PatTuple(
             \array_map($lower, $pattern->elements),
         ),
-        // A record pattern is a constructor pattern: the fields the source named, positionally,
-        // with a wildcard for every field it did not. The IR has no record pattern, so every
-        // backend reads a constructor's fields by position and nothing re-derives the order.
         Ast\PatRecord::class => new PatCon(
             $constructorRenames[$pattern->name] ?? $pattern->name,
             recordPatternArgs($pattern, $fieldOrderByData, $lower),
@@ -393,7 +377,6 @@ function recordPatternArgs(Ast\AstNode $pattern, array $fieldOrderByData, callab
 
     $args = [];
     foreach ($order as $fieldName) {
-        // A field the pattern does not name is not read.
         $sub = $byName[$fieldName] ?? null;
         $args[] = $sub === null ? new PatWild() : $lower($sub);
     }
@@ -427,17 +410,12 @@ function newCtx(
         newtypes: $newtypeIndex,
     );
 
-    // Nested scopes must keep their enclosing module/function identity, or their SrcLocs lower
-    // with an empty identity and source-map symbols come out `<unknown>`.
     if ($from !== null) {
         $ctx->moduleName = $from->moduleName;
         $ctx->sourceFile = $from->sourceFile;
         $ctx->functionName = $from->functionName;
         $ctx->stmtSrcLoc = $from->stmtSrcLoc;
 
-        // Lookup tables describing the *program*, not the scope: a nested
-        // context (case arm, action box) must answer the same questions about a
-        // callee, or it lowers the call differently from its enclosing scope.
         $ctx->externalFnNames = $from->externalFnNames;
         $ctx->functionArity = $from->functionArity;
         $ctx->ioActionReturnFns = $from->ioActionReturnFns;
@@ -513,10 +491,6 @@ function freeVarsExpr(Ast\AstNode $expr, array $bound): array
             ...(isset($bound[$expr->evidence]) ? [] : [$expr->evidence]),
             ...freeVarsInExprs($expr->contextEvidence, $bound),
         ],
-        // Every binder-carrying form is listed above, so anything else holds
-        // plain sub-expressions: recurse into them rather than listing the node
-        // types, since a node that carries a value somewhere must not drop the
-        // variables it holds.
         default => freeVarsInChildren($expr, $bound),
     };
 }
@@ -600,9 +574,6 @@ function patternParams(array $patterns): array
     foreach ($patterns as $index => $pattern) {
         $pattern = lambdaParamPattern($pattern);
         if ($pattern instanceof Ast\PatWild) {
-            // `\_ -> e`: the argument is unused, but the IR parameter still needs a
-            // name. Positional, so this is the same name here and in the free-variable
-            // analysis that also calls this.
             $params[] = '__wild' . $index;
             continue;
         }

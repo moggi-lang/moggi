@@ -51,8 +51,6 @@ function optimize(Module $module): Module
     clearHostEffectFunctions();
 
     $functions = fuseAppliedLambdas($functions, $module->moduleName);
-    // Specialize known local dict_calls before inlining so match-wrappers
-    // like Generic from/to become direct Call targets.
     $functions = specializeDictCallsFunctions($functions, $evidenceByName);
     $functions = inlineFunctions($functions, $module->moduleName);
     $functions = specializeDictCallsFunctions($functions, $evidenceByName);
@@ -60,12 +58,7 @@ function optimize(Module $module): Module
     setHostEffectFunctions(hostEffectFunctionNames($functions, $module->moduleName));
     $functions = \array_map(optimizeFunctionAfterInline(...), $functions);
     clearHostEffectFunctions();
-    // Canonicalize applies whose callee arity is statically known, so the
-    // partial fold below can turn them into direct calls instead of runtime
-    // `__apply`. Runs after inlining, which is what creates those shapes.
     $functions = normalizeKnownApplies($functions, $module->moduleName);
-    // Rewrite `@λN` uses into `partial λN(captures…)` so specialize can burn captures; a bare
-    // `@Module::λN` would make foldr return `__partial` thunks.
     $functions = bindLambdaCaptures($functions);
     $functions = foldPartialApply($functions, $module->moduleName);
     $captureMeta = buildLambdaMeta(indexCapturedFunctions($functions));
@@ -91,8 +84,6 @@ function optimize(Module $module): Module
     setHostEffectFunctions(hostEffectFunctionNames($functions, $module->moduleName));
     $functions = \array_map(optimizeFunctionFinal(...), $functions);
     $functions = annotateIoEffects($functions, $module->moduleName);
-    // Recompute host effects after io annotation; final DCE must still see them
-    // so Unit-returning foreign calls are not deleted as unused.
     setHostEffectFunctions(hostEffectFunctionNames($functions, $module->moduleName));
     $functions = \array_map(static fn (FunctionDecl $function): FunctionDecl => $function->withBody(
         $function->ioStraightLine ? $function->body : dceBlock($function->body),
@@ -143,8 +134,6 @@ function optimizeFunctionEarly(FunctionDecl $function): FunctionDecl
 
     $body = cseBlock($body);
     $body = dceBlock($body);
-    // Every backend emits IR\Loop / IR\TailRecall, so self-tail-recursion is
-    // always rewritten (no per-backend capability flag).
     $body = eliminateTailRecursion($function->name, $function->params, $body);
     $body = new Block(foldMatchReturn($body->items));
 
@@ -154,12 +143,6 @@ function optimizeFunctionEarly(FunctionDecl $function): FunctionDecl
 function optimizeFunctionAfterInline(FunctionDecl $function): FunctionDecl
 {
     if ($function->ioStraightLine) {
-        // A straight-line IO body is already in its final effect order, so the
-        // passes that move statements around stay off it. Folding a match whose
-        // scrutinee is a known constructor is not one of them: it selects the one
-        // arm that can run and drops the others, so nothing is duplicated or
-        // reordered. Without it a conditional over a known value — `if`, and
-        // `&&`/`||`, which lower to one — emits `if (true === true) …`.
         return $function->withBody(new Block(foldKnownMatchesInItems($function->body->items)));
     }
 
@@ -179,11 +162,6 @@ function optimizeFunctionAfterInline(FunctionDecl $function): FunctionDecl
 function optimizeFunctionFinal(FunctionDecl $function): FunctionDecl
 {
     if ($function->ioStraightLine) {
-        // Same reasoning as the pass above: copy propagation only rewrites a
-        // value into its use sites, and it keeps a compound binding when the
-        // temp is used more than once, so a straight-line IO body gets it too.
-        // Without it `putStrLn (show x)` keeps a temp for every literal and
-        // every call result.
         $body = propagateCopiesBlock($function->body);
         $items = foldSingleUseCallResults(foldTailReturn($body->items));
 

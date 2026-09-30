@@ -1,3 +1,8 @@
 addOne :: Int -> Int
 addOne x = x + y where y = 1
 
+pairUp :: Int -> String -> (Int, String)
+pairUp a b = (x, y) where
+  x = a + 1
+  y = b <> " World"
+

@@ -39,8 +39,6 @@ function svcWillDeleteFiles(AnalysisService $svc, array $files): array
                 ],
                 'newText' => '',
             ];
-            // Store computed text for the test/consumer; the server wraps the
-            // uri→edits map as {changes: …} exactly like willRenameFiles.
             $changes[$docUri][0]['newText'] = $newSrc;
             $changes[$docUri][0]['range'] = wholeDocumentRange($newSrc);
         }
@@ -95,9 +93,6 @@ function svcWillRenameFiles(AnalysisService $svc, array $files): array
         if ($oldMod === null || $newMod === null || $oldMod === $newMod) {
             continue;
         }
-        // Directory rename (URI without a trailing .mog): rewrite the whole
-        // dotted prefix (Ancient.Alpha → Modern.Alpha). File rename: rewrite
-        // one trailing segment only, so submodule references survive.
         $wholePrefix = !str_ends_with(strtolower(uriToPath($oldUri)), '.mog');
         foreach ($svc->vfs->all() as $uri => $doc) {
             $src = $doc['content'];
@@ -154,7 +149,6 @@ function rewriteImportModule(string $src, string $oldMod, string $newMod): strin
     if ($out === null) {
         return $src;
     }
-    // `import M qualified` and `import M as A` / `import M qualified as A`
     $out2 = preg_replace(
         '/\bimport\s+' . $q . '(\s+qualified)?(\s+as\s+[A-Za-z_][A-Za-z0-9_\']*)?/',
         'import ' . $newMod . '$1$2',
@@ -208,9 +202,6 @@ function rewriteQualifiedReferences(string $src, string $oldMod, string $newMod,
         : '/(?<![\\w\'.])\\b' . $q . '\\.([A-Za-z_][A-Za-z0-9_\']*)(?![.\\w\'])/';
     $replacement = $wholePrefix ? $newMod . '.' : $newMod . '.$1';
 
-    // Split into code / double-quoted-literal / line-comment segments so
-    // literal contents and `-- comments` are never touched. Block comments
-    // are treated as code (they may legitimately contain doc examples).
     $parts = preg_split(
         '/("(?:[^"\\\\\n]|\\\\.)*"|--[^\n\r]*)/',
         $src,
@@ -223,7 +214,6 @@ function rewriteQualifiedReferences(string $src, string $oldMod, string $newMod,
     $out = '';
     foreach ($parts as $i => $part) {
         if ($i % 2 === 1) {
-            // Captured literal or line comment: keep verbatim.
             $out .= $part;
             continue;
         }
@@ -241,13 +231,10 @@ function uriToModuleGuess(string $uri, ?string $workspaceRoot = null): ?string
         $path = rtrim($path, '/');
     }
 
-    // Strip a trailing .mog for files; directories keep their full relative
-    // path so a folder rename maps to a module-name prefix (LibA → LibB).
     $stripExtension = static function (string $rel) use ($isFile): string {
         return $isFile ? (preg_replace('/\.mog$/i', '', $rel) ?? $rel) : $rel;
     };
 
-    // Prefer path relative to lib/ or workspace for nested modules.
     foreach (['/lib/', '/tests/', '/examples/'] as $marker) {
         $pos = strpos($path, $marker);
         if ($pos !== false) {
@@ -271,7 +258,6 @@ function uriToModuleGuess(string $uri, ?string $workspaceRoot = null): ?string
         }
     }
     if (!$isFile) {
-        // A directory outside any known root has no reliable module prefix.
         return null;
     }
     $base = basename($path, '.mog');

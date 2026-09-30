@@ -88,7 +88,6 @@ function desugarLetItems(array $items, array $context): array
                 );
             }
             $pendingSigs[$item['name']] = $item['type'];
-            // Kept so an unmatched signature can still be reported at the line it was written on.
             $sigSpans[$item['name']] = ['line' => $item['line'], 'col' => $item['col'], 'endCol' => $item['endCol']];
             continue;
         }
@@ -129,7 +128,6 @@ function desugarLetItems(array $items, array $context): array
             continue;
         }
 
-        // pattern binding
         $flushFun();
         $pattern = $item['pattern'];
         $value = $item['value'];
@@ -183,8 +181,6 @@ function finalizeLocalFunctionBinding(array $fn, array $context): Ast\Binding
         $fn['col'],
         $fn['endCol'],
     );
-    // `f p = e` is a function binding, `x = e` a pattern binding; the distinction is
-    // kept here because the monomorphism restriction depends on it.
     $binding->functionBinding = ($fn['clauses'][0]['params'] ?? []) !== [];
 
     return $binding;

@@ -16,9 +16,6 @@ function emitMatchStmt(IR\Stmt $stmt, int $indent, array $ctx, bool $isReturn): 
         $body = canUsePhpMatch($stmt, $ctx)
             ? emitPhpMatch($stmt, $indent, $ctx, $isReturn)
             : emitIfMatch($stmt, $indent, $ctx);
-        // Nested matches often reuse specialize binders (`__f0`, …). Save any
-        // already-bound outer `__f*` and restore after this match so later
-        // statements in the same arm still see the outer values.
         if ($depth > 0) {
             return emitWithSavedFieldBinders($body, $indent, $depth);
         }
@@ -89,7 +86,6 @@ function canUsePhpMatch(IR\Stmt $stmt, array $ctx = []): bool
             }
             $mode = 'literal';
         } elseif ($pattern instanceof IR\PatCon) {
-            // Newtypes are identity-represented; PHP `match` on tag `[0]` does not apply.
             if (isset($ctx['newtypeConstructors'][patternConstructorName($pattern, $ctx)])) {
                 return false;
             }
@@ -114,8 +110,6 @@ function canUsePhpMatch(IR\Stmt $stmt, array $ctx = []): bool
             return false;
         }
 
-        // PHP `match` arms are expressions. Multi-statement bodies would force
-        // IIFE wrappers; prefer if/elseif so those arms stay straight-line.
         if (count($items) !== 1) {
             return false;
         }
@@ -154,8 +148,6 @@ function isBoolConstructorMatch(IR\Stmt $stmt, array $ctx): bool
     $boolArms = 0;
 
     foreach ($stmt->arms as $arm) {
-        // A catch-all arm emits `default`, so it proves nothing about a Bool match and must not
-        // switch the arm to the tagged path (`((bool)[0] ?? null)`).
         if (isCatchAllPattern($arm->pattern)) {
             continue;
         }
@@ -206,8 +198,6 @@ function emitPhpMatch(IR\Stmt $stmt, int $indent, array $ctx, bool $isReturn): s
 
     foreach ($stmt->arms as $arm) {
         $pattern = $arm->pattern;
-        // Merge with outer patternLocals so nested matches still inline
-        // bindings from enclosing arms (e.g. `Just f -> case mx of ... f x`).
         $armCtx = [
             ...$ctx,
             'patternLocals' => buildPatternLocals($pattern, $scrutinee)
@@ -320,8 +310,6 @@ function matchArmClosureUses(IR\Block $block, array $ctx): array
         }
     }
 
-    // Pattern bindings are inlined via patternLocals (e.g. `$ne[2]`), so the
-    // scrutinee expression must be captured whenever pattern locals are used.
     $patternLocals = $ctx['patternLocals'] ?? [];
     $captured = [];
     if ($patternLocals !== [] && isset($ctx['matchScrutineeOperand'])) {
@@ -582,8 +570,6 @@ function emitIfMatch(IR\Stmt $stmt, int $indent, array $ctx): string
 function emitGuardedIfMatch(IR\Stmt $stmt, int $indent, array $ctx, string $scrutinee, bool $exhaustive): string
 {
     $pad = str_repeat('    ', $indent);
-    // `do { … } while (false)` is the join: an arm leaves it with `break`, and a
-    // failed guard falls off its own arm into the next one.
     $out = $pad . "do {\n";
 
     foreach ($stmt->arms as $arm) {
@@ -596,8 +582,6 @@ function emitGuardedIfMatch(IR\Stmt $stmt, int $indent, array $ctx, string $scru
         } else {
             $conditions = [];
             foreach ($arm->guards as $guard) {
-                // A guard may need statements of its own (`| ok (g x) = …`);
-                // they run after the bindings and before the test.
                 foreach ($guard->prep->items as $prepItem) {
                     $out .= emitStmt($prepItem, $indent + 2, $ctx);
                 }
@@ -656,9 +640,6 @@ function nextPhpBinderFreshenId(): int
 function collectPatternBinderNames(IR\Pattern $pattern, array &$map, int $id, int &$n): void
 {
     if ($pattern instanceof IR\PatVar) {
-        // Only freshen specialize/PE synthetic field binders. Renaming source
-        // binders (enc, a, err, …) breaks PHP `match` expression arms and
-        // parameter references that share those names.
         if (!str_starts_with($pattern->name, '__f')) {
             return;
         }
@@ -768,7 +749,6 @@ function renameNestedMatchArmPreservingBinders(IR\MatchArm $arm, array $map): IR
 {
     $bound = [];
     $n = 0;
-    // Reuse collector only for names; discard generated fresh names.
     $tmp = [];
     collectPatternBinderNames($arm->pattern, $tmp, 0, $n);
     foreach ($tmp as $old => $_fresh) {
@@ -963,9 +943,6 @@ function emitConPatternBindings(IR\Pattern $pattern, string $scrutinee, int $ind
         return '';
     }
 
-    // Snapshot before binding: nested Match arms often reuse binder names
-    // (`arm RecNest __f0 __f1` then `arm PairI __f0 __f1`). Sequential
-    // `$__f0 = $__f0[1]; $__f1 = $__f0[2]` would read the rebound Int as PairI.
     $pad = str_repeat('    ', $indent);
     $snap = nextPhpScrutineeSnapshot();
     $out = $pad . "{$snap} = {$scrutinee};\n";

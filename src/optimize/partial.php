@@ -329,8 +329,6 @@ function tryFuseAssignPartialCallValue(IR\Assign $assign, IR\CallValue $callValu
         return null;
     }
 
-    // Both spellings reach here: `IR\Partial` from the frontend / lambda
-    // captures, `IR\ExprPartial` from a preceding fusion in this same pass.
     $partial = partialFromOperand($assign->value);
     if ($partial === null) {
         return null;
@@ -512,8 +510,6 @@ function substituteProviderParams(IR\ExprPartial $expr, IR\FunctionDecl $provide
             if (\array_key_exists($operand->name, $subst)) {
                 return $subst[$operand->name];
             }
-            // A capture the provider cannot hand over (a `let`-bound or
-            // pattern-bound local): the fusion would leak it to the caller.
             $resolved = false;
 
             return $operand;
@@ -753,7 +749,6 @@ function knownFunctionArity(array $functions, string $moduleName): array
         }
         $count = count($function->params);
         $arity[$function->name] = $count;
-        // Specialize qualifies local callees as `Module::name`.
         if ($moduleName !== '') {
             $arity[$moduleName . '::' . $function->name] ??= $count;
         }
@@ -846,9 +841,6 @@ function normalizeApplyStmt(IR\Stmt $stmt, array $arity, array $paramArities): I
         }
     }
 
-    // `mapStmtNestedBlocks` after `rewriteStmtOperands`: the latter already
-    // rebuilds match arms and loop bodies, and this re-descends into them
-    // (idempotent) plus any other nested-block statement.
     return mapStmtNestedBlocks(
         rewriteStmtOperands($stmt, $rewriteOp),
         static fn (IR\Block $block): IR\Block => new IR\Block(
@@ -1075,8 +1067,6 @@ function exprNeedsRuntimeApply(IR\Operand $expr, array $lambdaIndex): bool
             $expr->elements,
             static fn (IR\Operand $arg): bool => operandExprNeedsRuntimeApply($arg, $lambdaIndex),
         ),
-        // A partial is emitted as an array, so building it needs no `__apply` --
-        // but its arguments do, and they are emitted.
         IR\ExprPartial::class => array_any(
             $expr->args,
             static fn (IR\Operand $arg): bool => operandExprNeedsRuntimeApply($arg, $lambdaIndex),
@@ -1117,11 +1107,7 @@ function calleeNeedsRuntimeApply(IR\Operand $callee, array $lambdaIndex): bool
         IR\Local::class, IR\Temp::class => true,
         IR\DictMethod::class => true,
         IR\ExprCall::class => true,
-        // A primop / foreign call used as a function value is emitted as an
-        // opaque callable, so its application is `__apply`.
         IR\Intrinsic::class, IR\ForeignCall::class => true,
-        // An application result used as a callee always goes through `__apply`, so it must be
-        // reported here or codegen emits `__apply` without importing it.
         IR\ExprBinop::class, IR\ExprCallValue::class => true,
         default => false,
     };

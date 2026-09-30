@@ -47,9 +47,6 @@ function compileProject(array $paths, string $rootDir, bool $optimize = true, bo
  */
 function compileProjectBoth(array $paths, string $rootDir, bool $optimize = true, bool $strip = false): array
 {
-    // Emitted output is a pure function of the prepared closure + opt level, so
-    // cache it directly and skip lower/optimize/codegen for the whole project on
-    // a warm hit (the build path emits every module).
     $outputsKey = Cache\hashContent(
         preparedProjectDiskKey($paths, $rootDir, null)
             . '|opt=' . ($optimize ? '1' : '0')
@@ -138,7 +135,6 @@ function compilePreparedProject(PreparedProject $prepared, bool $optimize = true
         $optByModule = treeShakeModules($optByModule)['modules'];
     }
 
-    // Whole-program evidence maps for JVM DictCall static resolution across modules.
     $globalEvidenceMaps = [];
     foreach ($optByModule as $moduleName => $optimizedIr) {
         foreach ($optimizedIr->instanceEvidence as $ev) {
@@ -188,8 +184,6 @@ function compilePreparedProject(PreparedProject $prepared, bool $optimize = true
 
         $optIrOutputs[preg_replace('/\.mog$/', '.opt-ir', $relative) ?? $relative] = dumpIr($optimizedIr);
 
-        // Nothing to emit and nothing that could name it: optimized away (an inlined prelude leaf),
-        // and a module with no declarations cannot be referenced by another module's code.
         if ($optimizedIr->entry === null && !moduleDeclaresCode($optimizedIr)) {
             continue;
         }

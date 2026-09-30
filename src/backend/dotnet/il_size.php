@@ -52,17 +52,14 @@ function ilCanonicalize(string $line): string
         return $indent . ilIntConstForm((int) $m[1]);
     }
 
-    // Local/argument slots are symbolic (`V12`) or numeric (`arg:3`).
     if (preg_match('/^(ldloca|ldarga|ldloc|stloc)\s+(V\d+|arg:\d+)$/', $trimmed, $m) === 1) {
         return $indent . ilLocalForm($m[1], ilSlotIndex($m[2]));
     }
 
-    // `ldarg <n>` is also written numerically by the tail-call back-edge.
     if (preg_match('/^(ldarga|ldarg|starg)\s+(arg:|)(\d+)$/', $trimmed, $m) === 1) {
         return $indent . ilLocalForm($m[1], (int) $m[3]);
     }
 
-    // Normalize short branches to their long encoding: distance-independent size.
     if (preg_match('/^(br|brtrue|brfalse|beq|bge|bgt|ble|blt|bne\.un|bge\.un|bgt\.un|ble\.un|blt\.un|leave)\.s(\s+.*)$/', $trimmed, $m) === 1) {
         return $indent . $m[1] . $m[2];
     }
@@ -93,8 +90,6 @@ function ilIntConstForm(int $n): string
 
 function ilLocalForm(string $op, int $idx): string
 {
-    // Only ldarg/ldloc/stloc have compact `.0`..`.3` encodings; the
-    // address-of and store-argument forms are indexed only.
     if ($idx >= 0 && $idx <= 3 && isset(IL_COMPACT_LOCAL[$op])) {
         return $op . '.' . $idx;
     }

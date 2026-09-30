@@ -36,14 +36,10 @@ function packagePhpOutput(string $outputRoot, array $options, array $runtimeFile
 {
     copyRuntimeToOutputDir($runtimeFiles, $outputRoot);
 
-    // Explicit unpacked/development build: leave the generated PHP tree on disk
-    // for inspection (same layout as the JVM/.NET unpacked build).
     if (!empty($options['unpacked'])) {
         return;
     }
 
-    // Default: package the output directory into a single PHAR (the PHP counterpart of the
-    // JVM JAR / .NET DLL); each module carries its own source map.
     $pharName = (string) ($options['pharName'] ?? 'moggi-app.phar');
     packagePhar($outputRoot, $outputRoot . '/' . $pharName, $options);
 }
@@ -122,8 +118,6 @@ function pharBuilderCommand(): ?array
         return null;
     }
 
-    // Required, never named as a script: PHP's CLI cannot open a `phar://`
-    // argument, and a distribution runs the compiler from inside one.
     return [
         \PHP_BINARY,
         '-d', 'phar.readonly=0',
@@ -159,9 +153,6 @@ function buildPharStub(): string
 #!/usr/bin/env php
 <?php declare(strict_types=1);
 
-// The runtime must be loaded before the entry module's bootstrap routes an
-// uncaught exception through Moggi\reportUncaught. Source maps stay where they
-// were emitted; a report loads only the ones its frames name.
 require_once 'phar://' . __FILE__ . '/_runtime.php';
 
 $entryFile = null;
@@ -181,8 +172,6 @@ foreach ($it as $file) {
     }
 }
 
-// The entry module's embedded bootstrap runs main() (and routes uncaught
-// exceptions through Moggi\reportUncaught) when required.
 if ($entryFile !== null) {
     require_once $entryFile;
 }

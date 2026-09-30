@@ -269,7 +269,6 @@ final class AnalysisService
             $path = uriToPath($uri);
             $this->workspaceRoot = dirname($path);
         }
-        // Open: analyze soon (short debounce) so the first hover is warm.
         $this->scheduleAnalyze($uri, 0.05);
     }
 
@@ -373,7 +372,6 @@ final class AnalysisService
                 continue;
             }
             $ver = $this->vfs->version($uri);
-            // Superseded: a newer edit already rescheduled; drop this ticket.
             if ($ver !== $pending['version']) {
                 unset($this->pendingAnalyze[$uri]);
                 continue;
@@ -433,7 +431,6 @@ final class AnalysisService
             }
             $kept[] = $d;
         }
-        // If parse failed, prefer parse-only (type diags are stale/misleading).
         if ($parseDiags !== []) {
             return $parseDiags;
         }
@@ -472,7 +469,6 @@ final class AnalysisService
     {
         $ver = $this->vfs->version($uri);
         if ($expectedVersion !== null && $ver !== $expectedVersion) {
-            // Stale request — a newer edit won.
             return $this->results[$uri] ?? null;
         }
 
@@ -516,7 +512,6 @@ final class AnalysisService
             } else {
                 $filename = $this->vfs->materializeOverlay($uri, $root, $this->overlayFingerprints);
             }
-            // Bail if a newer keystroke arrived mid-flight before heavy work.
             if ($expectedVersion !== null && $this->vfs->version($uri) !== $expectedVersion) {
                 $this->dirty[$uri] = true;
                 return $this->results[$uri] ?? null;
@@ -540,7 +535,6 @@ final class AnalysisService
             );
         }
 
-        // Supersede: discard if version moved during analyze.
         if ($expectedVersion !== null && $this->vfs->version($uri) !== $expectedVersion) {
             $this->dirty[$uri] = true;
             $this->scheduleAnalyze($uri);
@@ -558,8 +552,6 @@ final class AnalysisService
         $diagnostics = [];
         $parsed = null;
         $checked = null;
-        // Null when the project fails to prepare, so the unused-import hints are skipped instead
-        // of reading an undefined variable.
         $prepared = null;
 
         try {
@@ -578,12 +570,9 @@ final class AnalysisService
             );
         }
 
-        // Instances are desugared out of the checked AST — index hierarchy from parse.
         indexTypeRelations($this->modules, $uri, $content, $parsed);
 
         try {
-            // Lib-dir precedence (last wins): explicit --lib dirs override the stdlib, and the implicit
-            // workspace scan is weakest, so stray fixtures never shadow it.
             $libs = [];
             if ($this->workspaceRoot !== null && is_dir($this->workspaceRoot)) {
                 $libs[] = $this->workspaceRoot;
@@ -597,8 +586,6 @@ final class AnalysisService
             }
             $libs = array_values(array_unique($libs));
 
-            // Overlay dirty open buffers keyed by realpath; do NOT seed every open buffer as a project
-            // input, which typechecks unrelated scratch modules together.
             /** @var array<string, string> realpath => overlayOrDiskPath */
             $overlayByReal = [];
             foreach ($this->vfs->all() as $openUri => $_) {
@@ -633,7 +620,6 @@ final class AnalysisService
                 },
                 $files,
             );
-            // Ensure the buffer being analyzed is in the file set (overlay path).
             if (!in_array($filename, $files, true)) {
                 $files[] = $filename;
             }
@@ -641,9 +627,6 @@ final class AnalysisService
             $prepared = prepareProjectCached($files, $projRoot, $parsed->module ?? null);
             $this->project = $prepared;
             $mod = $parsed->module ?? 'Main';
-            // Modules the current file directly imports: index these even when
-            // they are stdlib, so go-to-definition / hover resolve across the
-            // import boundary without re-walking the whole stdlib.
             $importNames = [];
             foreach ($parsed->imports as $imp) {
                 $importNames[implode('.', $imp->path)] = true;
@@ -651,9 +634,6 @@ final class AnalysisService
             if (isset($prepared->checked[$mod])) {
                 $checked = $prepared->checked[$mod];
             }
-            // Reindex the current module plus open / workspace modules only.
-            // Re-walking the entire stdlib on every analyze hangs unit tests and
-            // editor keystrokes (occurrence walk × preg_split per node).
             $stdlibRoot = $stdlib !== null ? realpath($stdlib) : false;
             $wsRoot = $this->workspaceRoot !== null ? realpath($this->workspaceRoot) : false;
             /** @var array<string, string> path => uri */
@@ -686,7 +666,6 @@ final class AnalysisService
                 if (!$isCurrent && !$isOpen && !$isDirectImport && ($inStdlib || !$inWorkspace)) {
                     continue;
                 }
-                // Prefer open-buffer content for this module when available.
                 if ($isCurrent) {
                     $mUri = $uri;
                     $mSource = $content;
@@ -697,10 +676,6 @@ final class AnalysisService
                 $this->indexModule($mUri, $mSource, $prog, $mName, $prog->externalFns ?? []);
             }
         } catch (TypeError|LexError|ParseError $e) {
-            // The project is prepared from the file's whole closure, so the
-            // failure can belong to a module this file merely imports. Publishing
-            // it here would paint a squiggle at a position from that other
-            // module's source; that module reports it when it is opened.
             if (!$e instanceof TypeError || $e->filename === '' || $e->filename === $filename) {
                 $diagnostics[] = enrichDiagnostic(errorToDiagnostic($e, $uri, $content), $e);
             }
@@ -726,11 +701,6 @@ final class AnalysisService
             $this->collectHoleDiagnostics($checked, $uri, $content, $diagnostics);
         }
 
-        // Unused-import hints (Unnecessary tag) come from the parsed program's
-        // import list, cross-checked against the project's checked declaration
-        // names, reading the *checked* program for the usage walk. A file that
-        // did not check (or whose project did not prepare) gets no hints: a
-        // half-typed file would otherwise report most of its imports.
         if ($checked !== null && $prepared !== null) {
             foreach (unusedImportDiagnostics($parsed, $uri, $prepared, $checked) as $unusedDiag) {
                 $diagnostics[] = $unusedDiag;
@@ -769,8 +739,6 @@ final class AnalysisService
             $this->modules->put($moduleName, uriToPath($uri), $uri, $decls, $externalFns);
             $frag = buildOccurrenceIndex($uri, $source, $program, $moduleName, $externalFns);
             $this->occurrences->merge($frag);
-            // Do NOT re-run indexTypeRelations here: checked AST has instances
-            // desugared away; analyzeFile already indexed the parse tree.
         }
     }
 
@@ -803,7 +771,6 @@ final class AnalysisService
                 ];
             }
             foreach (get_object_vars($node) as $key => $prop) {
-                // inferredType is a type AST / can share structure — never walk it.
                 if ($key === 'inferredType') {
                     continue;
                 }

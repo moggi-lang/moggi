@@ -54,7 +54,6 @@ function buildProjectTypeEnvironments(
             continue;
         }
         if (($units[$moduleName]['parsed'] ?? false) !== true) {
-            // Disk-hydrated function-only modules already carry localTypes.
             if (isset($units[$moduleName]['localTypes'])
                 && !moduleSourceDeclaresProjectTypes($units[$moduleName]['source'])
             ) {
@@ -140,9 +139,6 @@ function updateProjectClassesForModule(
     $state->classes = $projectClasses;
     $state->data = $sharedData;
     $state->typeSynonyms = $sharedTypeSynonyms;
-    // Carry kind/promoted maps forward instead of re-deriving them from every
-    // shared datatype on each module (was O(modules × data)). Merge into the
-    // bootstrapped env from newState — do not replace it.
     foreach ($sharedKindEnv as $name => $kind) {
         $state->kindEnv[$name] = $kind;
     }
@@ -206,9 +202,6 @@ function buildModuleLocalTypes(
     array $projectClasses,
     array $projectInstanceIndex = [],
 ): void {
-    // Disk cache: local type environment is a pure function of the module's
-    // source and its transitive dependencies (captured by contentKey), so
-    // unchanged modules skip inference entirely.
     $contentKey = $units[$moduleName]['contentKey'] ?? null;
     if ($contentKey !== null) {
         $cached = moduleGet(
@@ -265,15 +258,12 @@ function buildModuleLocalTypes(
 
     Types\applyPrimitiveTypeSynonymBootstrap($state, $definedTypeSynonyms);
 
-    // Declared names are known before any body, so a declaration may refer to a later one.
     foreach ($unit['program']->items as $item) {
         if ($item instanceof Ast\DataDecl || $item instanceof Ast\TypeSynonymDecl) {
             $state->declaredTypeNames[$item->name] = true;
         }
     }
 
-    // Likewise for values: an instance's specialized scheme for a class method
-    // must not claim the env slot of a function the module declares itself.
     foreach ($unit['program']->items as $item) {
         if ($item instanceof Ast\FunctionDecl || $item instanceof Ast\ForeignImportDecl) {
             $state->localDeclNames[$item->name] = true;
@@ -321,8 +311,6 @@ function buildModuleLocalTypes(
         if (Ast\hasDeclaredSignature($item)) {
             Types\registerFunctionScheme($state, $item);
         } elseif ($item->inferredSignatureType !== null) {
-            // A signature an earlier walk discovered: install it here too, so a
-            // declaration checked before it does not see a bare placeholder.
             Types\registerInferredSignatureScheme($state, $item);
         } elseif (!$item->signatureOnly) {
             $inferredFunctions[] = $item;
@@ -333,18 +321,12 @@ function buildModuleLocalTypes(
         Types\registerInferredFunctionPlaceholder($state, $function);
     }
 
-    // Every inferred declaration's dictionaries have to be known before the
-    // first body is checked, so a call between two mutually recursive ones is
-    // lowered with the dictionary its callee takes.
     Types\discoverInferredSignatures($state, $inferredFunctions);
 
     foreach ($inferredFunctions as $function) {
         Types\checkFunction($state, $function);
     }
 
-    // A restricted declaration is settled by the whole module, not by itself.
-    // This pass only publishes a type for it: the module is checked again with
-    // its use sites in scope, and that pass owns the body.
     $state->provisionalRestrictedSettle = true;
     try {
         Types\finishRestrictedDeclarations($state);
@@ -407,9 +389,6 @@ function mergeImportedEnv(Types\TypeCheckState $state, array $units, string $mod
                 continue;
             }
 
-            // A fallback operator scheme gives way to the declaration a module
-            // actually imports: `+` in a module that imports `Data.Num` is
-            // `Num`'s method, not the standalone `Int` fallback.
             if (!isset($state->env[$name]) || isset($state->standaloneEnvNames[$name])) {
                 $state->env[$name] = $scheme;
                 unset($state->standaloneEnvNames[$name]);
@@ -449,10 +428,6 @@ function mergeExportedTypes(Types\TypeCheckState $state, array $unit, array $uni
             if (!isset($state->data[$name])) {
                 $state->data[$name] = $info;
             }
-            // Prefer stored paramKinds so HKT imports (Rec1, M1, :+:, …) keep
-            // their real kinds instead of collapsing to Type -> … -> Type.
-            // Re-install promoted ctors: earlier imports may lack kinds needed
-            // for field promotion that become available later.
             Kinds\registerTypeKind($state, $name, Kinds\kindFromDataInfo($info));
             Kinds\installPromotedFromDataInfo($state, $name, $info);
         }
@@ -518,9 +493,6 @@ function classModuleScopes(array $units, array $projectClasses): array
                 $referenced[$module][$name] = true;
             }
 
-            // A constructor is not a free *variable* -- it is resolved statically
-            // -- but the module doing the re-check still needs its declaration to
-            // build the value, so it is collected here.
             foreach (classScopeConstructorRefs($body) as $name => $_) {
                 $referenced[$module][$name] = true;
             }
@@ -540,9 +512,6 @@ function classModuleScopes(array $units, array $projectClasses): array
         $constructorArity = [];
         foreach (\array_keys($names) as $name) {
             $scheme = $env[$name] ?? null;
-            // Class methods dispatch through the instance's dictionary, and
-            // primops carry their own identity; only ordinary functions need a
-            // symbol reference.
             if (!$scheme instanceof Scheme || $scheme->classMethod) {
                 continue;
             }
@@ -551,12 +520,6 @@ function classModuleScopes(array $units, array $projectClasses): array
                 continue;
             }
 
-            // A constructor (`Dual`, `Endo`) is a value of its datatype, not a
-            // function of the module: the instance's module needs the *data*
-            // declaration to build one, and on jvm/.NET the name of the
-            // constructor function that builds it in the declaring module --
-            // without both, a default body materialized here emits a local
-            // `Endo(...)` that does not exist.
             $owner = declaringDataTypeFor($units, $origin['module'], $name);
             if ($owner !== null) {
                 $dataRefs[$owner] = $units[$origin['module']]['localTypes']['data'][$owner];
@@ -649,8 +612,6 @@ function classModuleValueOrigins(array $units, string $moduleName, array $names)
     $namespace = $unit['namespace'] ?? moduleNameToNamespace($moduleName);
     $origins = [];
 
-    // Declarations win over imports, exactly as they do when the module's own
-    // env is built: a name the module defines is its own, not a re-export.
     foreach ($unit['program']->items as $item) {
         if (($item instanceof Ast\FunctionDecl || $item instanceof Ast\ForeignImportDecl)
             && isset($names[$item->name])
@@ -836,8 +797,6 @@ function classScopeFunctionRefs(array $units, array $classScopes): array
         foreach ($scope['fns'] ?? [] as $name => $fn) {
             $origin = $fn['origin'];
             $externalFns[$name] = resolvedSymbol($origin['module'], $origin['phpName']);
-            // A constructor's runtime arity is its field count, not the arrow
-            // count of the class method scheme it shares an env slot with.
             $arity[$name] = $scope['constructorArity'][$name]
                 ?? externalFunctionRuntimeArity($units, $origin['module'], $name, $fn['scheme']);
         }
@@ -873,8 +832,6 @@ function mergeClassScopeRefs(
         $importContext['externalFnRuntimeArity'][$name] ??= $refs['arity'][$name] ?? 0;
     }
 
-    // The datatypes those bodies build, reachable through the class's module but not
-    // this one's imports; a type already visible here is left alone.
     foreach ($refs['dataRefs'] ?? [] as $typeName => $info) {
         if (isset($seenData[$typeName])) {
             continue;

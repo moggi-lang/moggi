@@ -31,9 +31,6 @@ function __apply(callable|array $fn, mixed ...$args): mixed
 {
     if (\is_array($fn)) {
         if (($fn[0] ?? null) !== '__partial') {
-            // A callable array (`[$object, 'method']`, `['Class', 'method']`) is
-            // invoked directly: PHP resolves its own arity and raises
-            // ArgumentCountError on a short call, so there is no cell to build.
             return $fn(...$args);
         }
 
@@ -160,8 +157,6 @@ function fix(callable|array $f): mixed
  */
 function phpValueBox(mixed $value): array
 {
-    // Order matters: PHP scalars are matched before the container cases, and
-    // anything else is a host value we refuse to invent a shape for.
     return match (true) {
         $value === null => ['PhpNull'],
         \is_bool($value) => ['PhpBool', $value],
@@ -269,9 +264,6 @@ function moduleMap(string $function): ?array
  */
 function resolveThrowSite(array $site): array
 {
-    // The stamped site is authoritative and self-describing. `siteId` values
-    // are allocated per module, so looking one up across every loaded map can
-    // resolve to an unrelated module's site; the compact fields cannot.
     return [
         'symbolId' => (string) ($site['symbolId'] ?? ''),
         'displayPath' => displaySourcePath((string) ($site['displayPath'] ?? '')),
@@ -295,7 +287,6 @@ final class MoggiException extends \RuntimeException
         $payload = $someException[2] ?? null;
         $stored = $someException[3] ?? null;
         $msg = \is_string($stored) ? $stored : exceptionDisplayMessage($tag, $payload);
-        // Only true host throwables are causes — never nest MoggiException as previous.
         $cause = ($previous instanceof MoggiException) ? null : $previous;
         parent::__construct($msg, 0, $cause);
     }
@@ -347,8 +338,6 @@ function throwSomeException(mixed $se, ?array $throwSite = null): never
     }
 
     if (\is_array($se) && ($se[0] ?? null) === '__se') {
-        // A payload handed to a catch handler names the wrapper it was caught as
-        // (`exceptionAttachWrapper`), which holds the original throwSite.
         $origin = $se[4] ?? null;
         if ($origin instanceof MoggiException) {
             throw $origin;
@@ -411,8 +400,6 @@ function formatExceptionReport(\Throwable $e): string
             $shown[$throwKey] = true;
         }
 
-        // Untranslatable frames are printed in host terms only when no host section follows;
-        // repeats are kept (recursion depth), only the throw site is deduplicated.
         foreach (moggCallerFrames($e, !$hasHostSection) as $frame) {
             $key = frameKey($frame);
             if ($throwKey !== null && $key === $throwKey) {
@@ -508,9 +495,6 @@ function moggCallerFrames(MoggiException $e, bool $includeUnmapped = true): arra
 {
     try {
         $cause = $e->getPrevious();
-        // A native failure wrapped at report time has no Mogg stack of its own
-        // (the wrapper was built here, in the reporter), so translate the native
-        // stack — it is the same call chain.
         $frames = ($e->throwSite === null && $cause !== null && !($cause instanceof MoggiException))
             ? javaStyleFrames($cause->getFile(), $cause->getLine(), $cause->getTrace())
             : javaStyleFrames($e->getFile(), $e->getLine(), $e->getTrace());
@@ -522,13 +506,9 @@ function moggCallerFrames(MoggiException $e, bool $includeUnmapped = true): arra
             if (isMoggiRuntimeFile($frame['file'])) {
                 continue;
             }
-            // A generated line the emitter did not mark still names its function, and the map knows
-            // where it was declared — the fallback the other backends get from debug info.
             $resolved = lookupGeneratedFrame($frame['line'], $frame['name'])
                 ?? lookupGeneratedFunction($frame['name']);
             if ($resolved !== null) {
-                // A raise site and its caller can share one generated line, which is one physical call
-                // and is kept once; repeats of the same host function are recursion depth.
                 $key = frameKey($resolved);
                 if ($key === $prevKey && $frame['name'] !== $prevName) {
                     continue;
@@ -538,8 +518,6 @@ function moggCallerFrames(MoggiException $e, bool $includeUnmapped = true): arra
                 $prevName = $frame['name'];
                 continue;
             }
-            // Not translatable with a real location: print it in host terms
-            // rather than dropping it.
             if (!$includeUnmapped || $frame['name'] === '' || $frame['line'] <= 0) {
                 continue;
             }
@@ -573,8 +551,6 @@ function hostCauseFrames(\Throwable $cause, array $shown): string
                 continue;
             }
             $mapped = lookupGeneratedFrame($frame['line'], $frame['name']);
-            // The innermost frame is what faulted (native mechanism, exact generated line); callers
-            // the Mogg trace already carries are dropped.
             if ($index > 0 && $mapped !== null && isset($shown[frameKey($mapped)])) {
                 continue;
             }
@@ -749,7 +725,6 @@ function exceptionDisplayMessage(string $tag, mixed $payload): string
         return (string) ($payload[1] ?? 'error');
     }
     if ($tag === EX_TAG_HOST && \is_array($payload)) {
-        // HostException backend nativeType message
         if (($payload[0] ?? null) === 'HostException') {
             return (string) ($payload[3] ?? $payload[2] ?? 'host exception');
         }

@@ -16,7 +16,6 @@ function pathToUri(string $path): string
     $parts = explode('/', $path);
     $encoded = [];
     foreach ($parts as $i => $part) {
-        // Keep empty segments (leading slash → first empty part).
         $encoded[] = $part === '' && $i === 0 ? '' : rawurlencode($part);
     }
 
@@ -74,7 +73,6 @@ function readMessage($stream = null, ?bool &$malformed = null): array|null|false
     while (true) {
         $line = fgets($stream);
         if ($line === false) {
-            // EOF before any header byte of this frame → clean shutdown.
             return $sawHeaderLine ? false : null;
         }
         if ($line === "\r\n" || $line === "\n") {
@@ -87,8 +85,6 @@ function readMessage($stream = null, ?bool &$malformed = null): array|null|false
     }
 
     if ($contentLength === null || $contentLength <= 0) {
-        // Frame without a (valid) Content-Length header. The caller answers
-        // InvalidRequest upstream and resynchronizes on the next frame.
         $malformed = true;
         return false;
     }
@@ -106,7 +102,6 @@ function readMessage($stream = null, ?bool &$malformed = null): array|null|false
 
     $decoded = json_decode($body, true);
     if (!\is_array($decoded)) {
-        // Known body length → stream stays in sync; answer ParseError and go on.
         $malformed = true;
         return false;
     }
@@ -139,11 +134,8 @@ function readMessageOrTimeout($stream = null, ?float $timeoutSec = null, ?bool &
     $write = null;
     $except = null;
     try {
-        // PHP reports non-selectable wrappers (notably php://memory in tests)
-        // as a warning rather than an exception; false is the intended idle result.
         $n = @stream_select($read, $write, $except, $sec, $usec);
     } catch (\Throwable) {
-        // php://memory and other non-selectable streams
         return false;
     }
     if ($n === false || $n === 0 || $read === []) {

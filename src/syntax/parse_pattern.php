@@ -36,8 +36,6 @@ function parseRecordPatFields(ParserState $state): array
  */
 function parsePattern(ParserState $state): Ast\AstNode
 {
-    // A doc comment may sit in front of a pattern (a `case` alternative, a
-    // `where`/`let` binding, a `do` binder, a lambda parameter).
     skipDocComments($state);
 
     return parsePatternInfix($state, 0);
@@ -236,9 +234,6 @@ function parsePatternParen(ParserState $state): Ast\AstNode
         }
         $close = expect($state, TokenKind::RParen);
 
-        // The span must cover the opening parenthesis: a pattern's column is how
-        // the offside rule locates a `where`/`let` binder, and one that reported
-        // 0 let the block continue past a dedented declaration.
         return spannedRange(new Ast\PatTuple($elements), $open, $close);
     }
 

@@ -14,8 +14,6 @@ function deriveOrd(
     Ast\DerivingClassRef $ref,
 ): DerivedInstance {
     $head = dataDeclHeadAst($decl);
-    // Stock Ord context: Ord on parameters that appear in fields (Eq comes
-    // from the Ord superclass).
     $constraints = paramClassConstraints($decl, 'Ord');
 
     return new DerivedInstance(
@@ -41,7 +39,6 @@ function synthesizeOrdCompare(Ast\DataDecl $decl, string $left, string $right): 
         return new Ast\ConstructorRef('EQ');
     }
 
-    // Tag index: earlier constructor is smaller.
     $alts = [];
     foreach ($decl->constructors as $i => $ctor) {
         $leftPats = freshPatVars('__a', count($ctor->fields));
@@ -81,7 +78,6 @@ function synthesizeFieldCompares(array $left, array $right): Ast\AstNode
         return new Ast\ConstructorRef('EQ');
     }
 
-    // Lexicographic: compare field0; on EQ continue.
     $expr = new Ast\ConstructorRef('EQ');
     for ($i = count($left) - 1; $i >= 0; --$i) {
         $cmp = compareCall(new Ast\Variable($left[$i]), new Ast\Variable($right[$i]));

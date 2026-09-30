@@ -26,11 +26,11 @@ namespace Moggi\Backend\DotNet;
  *   Moggi.Rt.MList(head,t)  = Cons  (tail is MList|null)
  *
  * Dictionary (typeclass evidence)
- *   Class Moggi.Rt.Dict { object[] methods; }  // name/Fn slot pairs
+ *   Class Moggi.Rt.Dict { object[] methods; }
  *   Resolved evidence is a static method returning Dict.
  *
  * IO
- *   Class Moggi.Rt.IO { object action; }   // RT.Apply(action, []) runs it
+ *   Class Moggi.Rt.IO { object action; }
  *   RT.IoRun(IO) executes; Main entry runs IO mains via IoRun.
  *   RT.IoCatch / IoFinally / ThrowSomeException back IoCatch/IoFinally/IoThrow.
  *
@@ -170,7 +170,6 @@ function mListClassIl(): string
     ret
   }
 
-  // Structural equality so `==` on lists works via Object.Equals (RT.ListEq).
   .method public hidebysig virtual instance bool Equals(object obj) cil managed
   {
     .maxstack 8
@@ -216,8 +215,6 @@ function conClassIl(): string
     ret
   }
 
-  // Structural equality so `==` on ADTs (Sum, Maybe, ...) works via
-  // Object.Equals, matching MList and RT.ValueEq used by ListEq.
   .method public hidebysig virtual instance bool Equals(object obj) cil managed
   {
     .maxstack 8
@@ -263,9 +260,6 @@ function moggiExceptionClassIl(): string
 {
   .field public object[] someException
   .field public object[] throwSite
-  // Host stack captured at construction. .NET's ExceptionDispatchInfo rethrow
-  // preserves the original trace but *appends* the rethrow frames, so walking
-  // this instead keeps the origin chain (the same shape as the other runtimes).
   .field public class [System.Diagnostics.StackTrace]System.Diagnostics.StackTrace originalTrace
 
   .method public hidebysig specialname rtspecialname
@@ -721,10 +715,6 @@ function rtApplyIl(): string
 IL;
 }
 
-// Scalar-argument specialization of Apply. The emitters route single-argument
-// calls here; it skips the caller-side object[] and, on the saturate path,
-// allocates one array instead of two. Non-Partial callees and already-saturated
-// cells defer to Apply so the visible behaviour is identical.
 function rtApply1Il(): string
 {
     return <<<'IL'
@@ -828,8 +818,6 @@ function rtApply1Il(): string
 IL;
 }
 
-// ConcatArgs(prefix, TakeArgs(src, n)) without the intermediate array: one
-// allocation and two copies instead of two allocations and three.
 function rtConcatTakeIl(): string
 {
     return <<<'IL'
@@ -1222,7 +1210,6 @@ function rtValueEqIl(): string
     ldc.i4.0
     ret
 
-    // Tuples are `object[]`: element-wise, and an array does not compare its elements.
     NotCon:
     ldarg.0
     isinst object[]
@@ -1841,9 +1828,6 @@ IL;
 function rtExceptionWrapIl(): string
 {
     return <<<'IL'
-  // SomeException# = object[]{"__se", tag, payload, display}. `display` is the
-  // text rendered where the value still had its Exception dictionary (null for
-  // payloads the runtime builds itself).
   .method public hidebysig static object[] ExceptionWrap(string tag, string display, object payload) cil managed
   {
     .maxstack 8
@@ -1952,8 +1936,6 @@ function rtExceptionDisplayIl(): string
     call bool [System.Runtime]System.Object::Equals(object, object)
     brfalse Fallback
 
-    // A stored display wins; it is the text the value rendered for itself,
-    // which the payload's shape alone cannot reproduce.
     ldloc arr
     ldlen
     conv.i4
@@ -2034,7 +2016,6 @@ function rtExceptionDisplayMessageIl(): string
     conv.i4
     ldc.i4.4
     blt TryHost
-    // IOError's description field is the display text.
     ldloc c
     ldfld object[] Moggi.Rt.Con::fields
     ldc.i4.3
@@ -2133,8 +2114,6 @@ function rtExceptionAttachWrapperIl(): string
   {
     .maxstack 6
     .locals init (object[] grown, int32 n)
-    // One extra slot carries the wrapper a caught payload came from, so a rethrow
-    // of this value recovers the site it was thrown at.
     ldc.i4.5
     newarr object
     stloc grown
@@ -2363,8 +2342,6 @@ function rtAppendMoggFramesIl(): string
     ret
 
     HasE:
-    // Prefer the native cause's own stack; otherwise the trace captured when
-    // the Mogg exception was created (a rethrow must not add catch-site frames).
     ldnull
     stloc st
     ldarg.1
@@ -2399,9 +2376,6 @@ function rtAppendMoggFramesIl(): string
     callvirt instance class [System.Diagnostics.StackTrace]System.Diagnostics.StackFrame[] [System.Diagnostics.StackTrace]System.Diagnostics.StackTrace::GetFrames()
     stloc frames
 
-    // The stamped throw site is exact and is already the innermost frame. Render
-    // it once here only so its host-stack duplicates can be dropped, and count
-    // it against the frame cap.
     ldnull
     stloc siteText
     ldarg.2
@@ -2457,7 +2431,6 @@ function rtAppendMoggFramesIl(): string
     ldloc typeName
     brfalse Next
 
-    // The Mogg trace never names the runtime's own frames.
     ldloc typeName
     ldstr "Moggi.Rt."
     callvirt instance bool [System.Runtime]System.String::StartsWith(string)
@@ -2485,7 +2458,6 @@ function rtAppendMoggFramesIl(): string
     ldloc text
     brfalse Next
 
-    // Drop host-stack duplicates of the stamped throw site.
     ldloc siteText
     brfalse UseFrame
     ldloc text
@@ -2612,8 +2584,6 @@ function rtAppendHostFramesIl(): string
     ldloc limit
     bge Elide
 
-    // No PDB in this toolchain, so the raw host frame carries the IL offset
-    // rather than a file:line. It is still the unedited evidence.
     ldarg.0
     ldstr "  #"
     callvirt instance class [System.Runtime]System.Text.StringBuilder [System.Runtime]System.Text.StringBuilder::Append(string)
@@ -2728,7 +2698,6 @@ function rtFormatExceptionReportIl(): string
       ldfld object[] Moggi.Rt.MoggiException::throwSite
       call void Moggi.Rt.RT::AppendFrameReport(class [System.Runtime]System.Text.StringBuilder, object[])
 
-      // Caller frames, translated from the host stack through the baked table.
       ldloc sb
       ldloc me
       ldloc me
@@ -2785,8 +2754,6 @@ function rtReportUncaughtIl(): string
   .method public hidebysig static void ReportUncaught(class [System.Runtime]System.Exception e) cil managed
   {
     .maxstack 8
-    // The report is diagnostics, not program output: like PHP (`STDERR`) and
-    // the JVM (`System.err`), it must not be mixed into stdout.
     call class [System.Runtime]System.IO.TextWriter [System.Console]System.Console::get_Error()
     ldarg.0
     call string Moggi.Rt.RT::FormatExceptionReport(class [System.Runtime]System.Exception)
@@ -2810,8 +2777,6 @@ function rtThrowSomeExceptionIl(): string
     ldarg.0
     isinst Moggi.Rt.MoggiException
     brfalse NotMe
-    // Re-throwing an existing MoggiException must preserve its original host
-    // stack; a plain `throw` would reset it to the catch site.
     ldarg.0
     castclass [System.Runtime]System.Exception
     call class [System.Runtime]System.Runtime.ExceptionServices.ExceptionDispatchInfo [System.Runtime]System.Runtime.ExceptionServices.ExceptionDispatchInfo::Capture(class [System.Runtime]System.Exception)
@@ -2837,8 +2802,6 @@ function rtThrowSomeExceptionIl(): string
     ldstr "__se"
     call bool [System.Runtime]System.Object::Equals(object, object)
     brfalse WrapHost
-    // A payload that came out of a catch handler names the wrapper it was caught
-    // as (AttachWrapper); throw that one back to keep the site it was thrown at.
     ldloc arr
     ldlen
     conv.i4
@@ -2932,8 +2895,6 @@ function rtThrowErrorCallIl(): string
 IL;
 }
 
-// The only constructor of the Natural# type: the bignum representation is
-// shared with Integer#, so a negative input is rejected here.
 function rtIntPowIl(): string
 {
     return <<<'IL'
@@ -3125,9 +3086,6 @@ function rtNormalizeHostExceptionIl(): string
     stloc msg
 
     HaveMsg:
-    // Anything the host threw that is not already a Moggi exception is reported
-    // as HostException (backend, nativeType, message); `System.IO` turns the
-    // ones it knows into IOError.
     ldarg.0
     callvirt instance class [System.Runtime]System.Type [System.Runtime]System.Exception::GetType()
     callvirt instance string [System.Runtime]System.Type::get_FullName()
@@ -3266,7 +3224,6 @@ function rtIoFinallyIl(): string
     }
     catch [System.Runtime]System.Exception
     {
-      // Cleanup failure wins: normalize so catch handlers never see raw host exceptions.
       call object[] Moggi.Rt.RT::NormalizeHostException(class [System.Runtime]System.Exception)
       ldnull
       call object Moggi.Rt.RT::ThrowSomeException(object, object[])
@@ -3678,8 +3635,6 @@ function word64ClassIl(): string
     ret
   }
 
-  // The low 64 bits of the value: `op_Explicit` throws on an out-of-range
-  // BigInteger, while `fromInteger` wraps at the machine width.
   .method public hidebysig static int64 FromBigInteger(valuetype [System.Runtime.Numerics]System.Numerics.BigInteger a) cil managed
   {
     .maxstack 3

@@ -186,7 +186,6 @@ function buildDeclsFromProgram(string $uri, string $source, Ast\Program $program
  */
 function indexTypeRelations(ModuleIndex $modules, string $uri, string $source, Ast\Program $program): void
 {
-    // Drop prior instance entries sourced from this uri (re-analyze).
     foreach ($modules->classInstances as $cls => $list) {
         $modules->classInstances[$cls] = array_values(array_filter(
             $list,
@@ -263,8 +262,8 @@ function scanClassMethodDefs(string $uri, string $source): array
 
     $defs = [];
     $count = count($tokens);
-    $block = null; // 'class' | 'instance' | null
-    $owner = null; // class name owning the current block
+    $block = null;
+    $owner = null;
     $isNameTok = static fn (Token $t): bool => $t->kind === TokenKind::VarId || $t->kind === TokenKind::ConId;
 
     for ($i = 0; $i < $count; $i++) {
@@ -272,8 +271,6 @@ function scanClassMethodDefs(string $uri, string $source): array
         if ($tok->kind === TokenKind::KwClass || $tok->kind === TokenKind::KwInstance) {
             $block = $tok->kind === TokenKind::KwClass ? 'class' : 'instance';
             $owner = null;
-            // Header: `class C a where`, `instance (C a, D b) => E x where`,
-            // `instance P.C x where`.
             for ($j = $i + 1; $j < $count; $j++) {
                 $h = $tokens[$j];
                 if ($h->col === 1) {

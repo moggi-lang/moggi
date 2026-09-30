@@ -317,7 +317,6 @@ function classifyFunctorField(Ast\TypeNode $type, string $param): array
         if ($args === []) {
             return ['tag' => 'bad', 'reason' => 'unsupported'];
         }
-        // Only the final argument may mention the parameter (covariant last slot).
         for ($i = 0; $i < count($args) - 1; ++$i) {
             if (typeMentionsParam($args[$i], $param)) {
                 return ['tag' => 'bad', 'reason' => 'type parameter in non-last argument'];

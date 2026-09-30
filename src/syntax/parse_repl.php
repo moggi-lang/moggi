@@ -48,7 +48,6 @@ function parseReplFragment(
         return new ReplFragment(ReplFragment::KIND_INCOMPLETE, source: $source);
     }
 
-    // REPL sugar: `let x = …` → top-level `x = …` (not for multi-stmt / `<-` input).
     if (preg_match('/^let\b/s', $trimmed) === 1) {
         $afterLet = ltrim(substr($trimmed, 3));
         if ($afterLet !== '' && !str_starts_with($afterLet, '{') && !looksLikeReplStatementSource($trimmed)) {
@@ -56,8 +55,6 @@ function parseReplFragment(
         }
     }
 
-    // Common typo / Python-ish binding: `x:10` → `x = 10` when the RHS is a literal.
-    // Real list cons (`xs:x`, `1:[]`) is left alone.
     $asDecl = replColonLiteralToAssignment($trimmed);
     if ($asDecl !== null) {
         $trimmed = $asDecl;
@@ -82,8 +79,6 @@ function parseReplFragment(
             return new ReplFragment(ReplFragment::KIND_DECL, $decl, null, $trimmed);
         }
 
-        // Prompt statements: `x <- e`, `let x = e` in stmt position, `;`-sequences.
-        // Prefer this over parsing `<-` as a plain infix expression.
         $stmtFrag = tryParseReplStatements($tokens, $trimmed, $filename, $fixity);
         if ($stmtFrag !== null) {
             return $stmtFrag;
@@ -107,7 +102,6 @@ function parseReplFragment(
 
 function looksLikeReplStatementSource(string $source): bool
 {
-    // `let …` with another stmt (`<-` or `;`) → statement block, not decl sugar.
     return str_contains($source, ';') || str_contains($source, '<-');
 }
 
@@ -126,12 +120,8 @@ function tryParseReplStatements(
 ): ?ReplFragment {
     try {
         $state = new ParserState($tokens, 0, $fixity, $source, $filename);
-        if (isAt($state, TokenKind::Eof)) {
-            return null;
-        }
-
-        // A leading `do` is an expression, not prompt-statement sugar.
-        if (isAt($state, TokenKind::KwDo)) {
+        if (isAt($state, TokenKind::Eof) || isAt($state, TokenKind::KwDo)
+        ){
             return null;
         }
 
@@ -156,7 +146,6 @@ function tryParseReplStatements(
             return null;
         }
 
-        // Lone expression statement → normal expression evaluation / printing.
         if (count($stmts) === 1 && $stmts[0] instanceof Ast\DoExprStmt) {
             return null;
         }
@@ -186,12 +175,10 @@ function replColonLiteralToAssignment(string $source): ?string
     }
 
     $rhs = ltrim($m[2]);
-    // Type signature uses `::`, not a single `:`.
     if (str_starts_with($rhs, ':')) {
         return null;
     }
 
-    // Only rewrite when the RHS starts like a literal (not `xs:x` / `1:[]`).
     if (!preg_match('/^(?:-?\d|\"|\'|True\b|False\b)/', $rhs)) {
         return null;
     }

@@ -32,7 +32,6 @@ function findExecutable(string $name): ?string
         return \is_file($name) && \is_executable($name) ? $name : null;
     }
 
-    // On Windows a program is found by its extension, not by its exec bit.
     $suffixes = \PHP_OS_FAMILY === 'Windows' ? ['', '.exe', '.cmd', '.bat', '.com'] : [''];
     $directories = \explode(\PATH_SEPARATOR, (string) \getenv('PATH'));
     foreach ($directories as $directory) {
@@ -109,17 +108,11 @@ function runProcess(
     bool $echo = false,
     ?int $timeoutSeconds = null,
 ): array {
-    // There is no non-blocking pipe on Windows: `stream_set_blocking` only
-    // reaches sockets there, so reading a pipe waits for it to close and the
-    // child blocks on whichever stream nobody is draining — a hang with no
-    // output. Files carry both streams instead, which cannot fill up.
     if (\PHP_OS_FAMILY === 'Windows') {
         return runProcessThroughFiles($command, $cwd, $env, $echo, $timeoutSeconds);
     }
 
     $descriptors = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
-    // A toolchain that is not installed is an expected answer here, not a
-    // warning: the caller sees it in the return value.
     $process = @\proc_open($command, $descriptors, $pipes, $cwd, $env);
     if (!\is_resource($process)) {
         return ['exitCode' => -1, 'stdout' => '', 'stderr' => 'cannot start ' . \implode(' ', $command)];
@@ -166,7 +159,6 @@ function runProcess(
         \usleep(2000);
     }
 
-    // Drains what the command buffered; a closed pipe ends this at once.
     $grace = \microtime(true) + 0.2;
     while (!\feof($pipes[1]) || !\feof($pipes[2])) {
         $drain();

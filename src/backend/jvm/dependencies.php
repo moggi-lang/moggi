@@ -105,7 +105,6 @@ function vendorPackageNeedles(array $jars, string $jarDir): array
                 if ($slash === false) {
                     continue;
                 }
-                // Use the top two package segments when present (stable demand gate).
                 $parts = explode('/', substr($name, 0, $slash));
                 if (count($parts) >= 2) {
                     $needles[$parts[0] . '/' . $parts[1] . '/'] = true;

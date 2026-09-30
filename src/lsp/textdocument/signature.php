@@ -22,14 +22,10 @@ function svcSignatureHelp(AnalysisService $svc, string $uri, array $pos): ?array
     }
     $comp = lspPosToCompiler($analysis->source, $pos);
 
-    // Walk outwards through the AST chain and collect every enclosing application, so the
-    // innermost function with a signature wins and parameters count exactly.
     $chain = findNodeChainAt($analysis->program, $comp['line'], $comp['col']);
     $applications = []; // innermost-first list of [functionNode, consumedArgs]
     foreach ($chain as $node) {
         if ($node instanceof Ast\Apply) {
-            // Count how many arguments the cursor's branch contributes:
-            // flattened application spine, so `f a b c` yields arity 3.
             $fn = $node;
             $argc = 0;
             $cursorInArgs = false;
@@ -44,11 +40,7 @@ function svcSignatureHelp(AnalysisService $svc, string $uri, array $pos): ?array
         }
     }
 
-    // Client-provided activeSignatureHelp keeps a shown signature stable; this server
-    // re-derives from the AST, which is strictly more accurate.
 
-    // Innermost-first: pick the first application whose function names a
-    // function we can describe.
     foreach ($applications as $app) {
         $fnNode = $app['fn'];
         $name = functionNameOf($fnNode);
@@ -59,8 +51,6 @@ function svcSignatureHelp(AnalysisService $svc, string $uri, array $pos): ?array
         if ($sig === null) {
             continue;
         }
-        // activeParameter: arguments consumed so far *within this application*,
-        // clamped to the last declared parameter (spec: never out of range).
         $paramCount = count($sig['parameters'] ?? []);
         $active = $paramCount > 0 ? min($app['argc'], $paramCount - 1) : 0;
         if ($paramCount === 0) {
@@ -73,8 +63,6 @@ function svcSignatureHelp(AnalysisService $svc, string $uri, array $pos): ?array
         ];
     }
 
-    // No AST coverage (parse error / incomplete code): fall back to the
-    // line-prefix heuristic so signature help still works while typing.
     return signatureHelpHeuristic($svc, $analysis, $comp, $pos);
 }
 
@@ -147,7 +135,6 @@ function signatureForFunction(AnalysisService $svc, object $analysis, string $na
         }
     }
 
-    // Cross-module: look up DeclInfo
     if ($params === [] && $label === null && $analysis->program instanceof Ast\Program) {
         $ext = $analysis->program->externalFns[$name] ?? null;
         if ($ext !== null) {
@@ -163,7 +150,6 @@ function signatureForFunction(AnalysisService $svc, object $analysis, string $na
     }
 
     if ($label === null) {
-        // Name only — still useful while typing, but only when the word exists.
         return isset($analysis->declarations[$name]) || $analysis->program instanceof Ast\Program
             ? ['label' => $name, 'parameters' => []]
             : null;
@@ -217,7 +203,6 @@ function signatureHelpHeuristic(AnalysisService $svc, object $analysis, array $c
     if ($sig === null) {
         return null;
     }
-    // Argument count on this line before the cursor.
     $after = '';
     if (preg_match('/' . preg_quote($name, '/') . '\s*(.*)$/', $prefix, $mm)) {
         $after = $mm[1];

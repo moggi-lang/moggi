@@ -35,7 +35,6 @@ function bindingGroupSccs(array $bindings): array
     $deps = [];
     for ($i = 0; $i < $n; ++$i) {
         $deps[$i] = [];
-        // Own pattern names stay free on the RHS so self-refs become self-edges.
         foreach (letExprFreeVars($bindings[$i]->value, []) as $free) {
             foreach ($binderIndex[$free] ?? [] as $j) {
                 $deps[$i][$j] = $j;
@@ -107,7 +106,6 @@ function tarjanScc(array $deps): array
                 unset($onStack[$w]);
                 $component[] = $w;
             } while ($w !== $v);
-            // Stable binder order within the component.
             $sccs[] = array_reverse($component);
         }
     };
@@ -118,7 +116,6 @@ function tarjanScc(array $deps): array
         }
     }
 
-    // Tarjan emits sinks first when edges mean "depends on" → producers first.
     return $sccs;
 }
 

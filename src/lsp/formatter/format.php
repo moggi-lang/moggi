@@ -60,7 +60,6 @@ function svcFormatRange(AnalysisService $svc, string $uri, array $range): array
         if ($region['end'] < $selStart || $region['start'] > $selEnd) {
             continue;
         }
-        // Skip module / import headers for range format — only value/type decls.
         if ($region['kind'] === 'header') {
             continue;
         }
@@ -74,7 +73,6 @@ function svcFormatRange(AnalysisService $svc, string $uri, array $range): array
     $spanEnd = $picked[array_key_last($picked)]['end'];
     $slice = sourceLinesSlice($source, $spanStart, $spanEnd);
 
-    // Pretty-print the slice as a synthetic module body.
     $synthetic = "module RangeFmt where\n\n" . $slice;
     if (!str_ends_with($synthetic, "\n")) {
         $synthetic .= "\n";
@@ -134,7 +132,6 @@ function topLevelSourceRegions(string $source): array
         return [];
     }
 
-    // Merge signature + body for the same name into one region.
     $merged = [];
     $m = count($starts);
     for ($i = 0; $i < $m; $i++) {
@@ -158,7 +155,6 @@ function topLevelSourceRegions(string $source): array
             }
             break;
         }
-        // Include leading `--` comments immediately above.
         $startLine = $cur['line'];
         for ($l = $startLine - 1; $l >= 1; $l--) {
             $t = $lines[$l - 1] ?? '';
@@ -305,8 +301,6 @@ function formatMoggiSource(string $source): string
     foreach ($program->items as $item) {
         $line = (int) ($item->line ?? 0);
         $parts = array_merge($parts, commentsBefore($commentsByLine, $line));
-        // When the parser emits the signature as its own item, the following
-        // body item for the same name must not print the signature again.
         $skipSig = $prevWasSig
             && $item instanceof Ast\FunctionDecl
             && $item->name === $prevSigName;
@@ -402,8 +396,6 @@ function formatDecl(object $item, bool $skipSignature = false): ?string
         $bodyChunk = str_contains($body, "\n")
             ? $lhs . " =\n  " . str_replace("\n", "\n  ", $body)
             : $lhs . ' = ' . $body;
-        // The parser merges `name :: T` + `name = …` into one decl; keep the
-        // signature instead of silently dropping it.
         return $sig !== null ? $sig . "\n" . $bodyChunk : $bodyChunk;
     }
     if ($item instanceof Ast\DataDecl) {

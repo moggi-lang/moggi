@@ -202,8 +202,6 @@ function scheme(Type $type, array $bound, array $constraints = [], ?int $runtime
         $bound,
         $constraints,
         $runtimeConstraintCount ?? count($constraints),
-        // Precomputed once so environment-wide free-variable queries during
-        // generalization don't re-walk every scheme's type.
         schemeFreeTypeVars($type, $bound, $constraints),
     );
 }

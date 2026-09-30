@@ -119,7 +119,6 @@ function typeSchemes(): array
         'word64ToInteger#' => scheme(new TArrow(new TWord64(), $integer), []),
         'word64FromInteger#' => scheme(new TArrow($integer, new TWord64()), []),
         'word64Show#' => scheme(new TArrow(new TWord64(), $str), []),
-        // Machine word (platform-sized word, same as Int)
         'wordEq#' => scheme(new TArrow(new TWord(), new TArrow(new TWord(), $bool)), []),
         'wordNe#' => scheme(new TArrow(new TWord(), new TArrow(new TWord(), $bool)), []),
         'wordCompare#' => scheme(new TArrow(new TWord(), new TArrow(new TWord(), $ordering)), []),
@@ -131,12 +130,7 @@ function typeSchemes(): array
         'intAdd#' => scheme(new TArrow($int, new TArrow($int, $int)), []),
         'intSub#' => scheme(new TArrow($int, new TArrow($int, $int)), []),
         'intMul#' => scheme(new TArrow($int, new TArrow($int, $int)), []),
-        // `x ^ n` at machine `Int`, so it need not go through Num/Integral dictionaries: the
-        // same square-and-multiply as the library body, same ErrorCall for `n < 0`.
         'intPow#' => scheme(new TArrow($int, new TArrow($int, $int)), []),
-        // The same primop at the fixed-width machine integers. There the wrapped
-        // multiply is the width's own `*`, so the loop reduces modulo the width
-        // each step. The exponent stays the machine `Int`.
         'int8Pow#' => scheme(new TArrow(new TInt8(), new TArrow($int, new TInt8())), []),
         'int16Pow#' => scheme(new TArrow(new TInt16(), new TArrow($int, new TInt16())), []),
         'int32Pow#' => scheme(new TArrow(new TInt32(), new TArrow($int, new TInt32())), []),
@@ -145,9 +139,6 @@ function typeSchemes(): array
         'word16Pow#' => scheme(new TArrow(new TWord16(), new TArrow($int, new TWord16())), []),
         'word32Pow#' => scheme(new TArrow(new TWord32(), new TArrow($int, new TWord32())), []),
         'word64Pow#' => scheme(new TArrow(new TWord64(), new TArrow($int, new TWord64())), []),
-        // `^`/`^^` at `Double`: the library body's own multiplication order
-        // (`powAcc`'s left-to-right accumulator), so the results are the same
-        // values the dictionaries would have produced.
         'doublePow#' => scheme(new TArrow($float, new TArrow($int, $float)), []),
         'intDiv#' => scheme(new TArrow($int, new TArrow($int, $int)), []),
         'intNegate#' => scheme(new TArrow($int, $int), []),
@@ -155,16 +146,9 @@ function typeSchemes(): array
         'intSignum#' => scheme(new TArrow($int, $int), []),
         'intFromInteger#' => scheme(new TArrow($integer, $int), []),
         'intToInteger#' => scheme(new TArrow($int, $integer), []),
-        // An integer literal that does not fit the host `Int`, carried as its
-        // decimal digits: the only way to reach a value the host integer cannot
-        // hold without losing digits.
         'integerFromDigits#' => scheme(new TArrow($str, $integer), []),
-        // Non-negative bignum; the conversion into it is the only constructor and rejects a
-        // negative value, which makes a negative `Natural` unrepresentable.
         'naturalToInteger#' => scheme(new TArrow($natural, $integer), []),
         'integerToNatural#' => scheme(new TArrow($integer, $natural), []),
-        // Data.Bits i64 ops. Shift counts are in [0,63] (Data.Bits clamps/masks first), so
-        // the saturating and width-specific behaviour stays in the library.
         'intAnd#' => scheme(new TArrow($int, new TArrow($int, $int)), []),
         'intOr#' => scheme(new TArrow($int, new TArrow($int, $int)), []),
         'intXor#' => scheme(new TArrow($int, new TArrow($int, $int)), []),
@@ -175,8 +159,6 @@ function typeSchemes(): array
         'intPopCnt#' => scheme(new TArrow($int, $int), []),
         'intClz#' => scheme(new TArrow($int, $int), []),
         'intCtz#' => scheme(new TArrow($int, $int), []),
-        // Signed fixed-width ints (Data.Int): same i64 host rep as Int;
-        // from_int / arithmetic sign-extend-truncate to the declared width.
         'int8Eq#' => scheme(new TArrow(new TInt8(), new TArrow(new TInt8(), $bool)), []),
         'int8Ne#' => scheme(new TArrow(new TInt8(), new TArrow(new TInt8(), $bool)), []),
         'int8Compare#' => scheme(new TArrow(new TInt8(), new TArrow(new TInt8(), $ordering)), []),
@@ -245,12 +227,7 @@ function typeSchemes(): array
         'maybeNe#' => scheme(new TArrow($maybeA, new TArrow($maybeA, $bool)), ['a']),
         'maybeCompare#' => scheme(new TArrow($maybeA, new TArrow($maybeA, $ordering)), ['a']),
         'error#' => scheme(new TArrow($str, $a), ['a']),
-        // Least fixed point of a function (Data.Function.fix). Strict
-        // recursion cannot be expressed with an ordinary Moggi `let`, so it is
-        // a primop; each backend lowers it to a self-referential closure.
         'fix#' => scheme(new TArrow(new TArrow($a, $a), $a), ['a']),
-        // Exception Magichash ops: tag → display → payload → SomeException#. The display is
-        // computed by `displayException`, since the runtime has no dictionaries.
         'exceptionWrap#' => scheme(
             new TArrow($str, new TArrow($str, new TArrow($a, new TCon('SomeException', [])))),
             ['a'],
@@ -282,8 +259,6 @@ function typeSchemes(): array
             ),
             ['a', 'b'],
         ),
-        // Strict IO primitives: erased to IoPure / IoBind by strict_io_normalize.
-        // Not a state encoding — just the argument types the Monad IO methods need.
         'ioPure#' => scheme(new TArrow($a, new TCon('IO', [$a])), ['a']),
         'ioBind#' => scheme(
             new TArrow(
@@ -295,9 +270,6 @@ function typeSchemes(): array
             ),
             ['a', 'b'],
         ),
-        // Entry-point ABI only: argv must be captured by the generated `main`
-        // stub (Platform.setArgs); no JDK/BCL FFI surface exposes process args.
-        // Everything else platform-level is ordinary FFI in the System.* stdlib.
         'platformArgv#' => scheme(new TCon('IO', [new TCon('List', [$str])]), []),
     ];
 }
@@ -340,8 +312,6 @@ function standaloneOperatorSchemes(): array
 
 function resolveMonomorphicOperator(string $op, Type $left, Type $right): ?string
 {
-    // `:` is cons whenever the right operand is a list, checked first so a list-of-lists
-    // cons is not shadowed by the List/List branch below.
     if ($op === ':' && $right instanceof TCon && $right->name === 'List') {
         return 'listCons#';
     }
@@ -357,8 +327,6 @@ function resolveMonomorphicOperator(string $op, Type $left, Type $right): ?strin
         };
     }
 
-    // Word64 must not fall through to host Binop: PHP `*`/`+`/`-` overflow to
-    // float past 2^63-1. Resolve to wrapping u64 intrinsics (see Data.Word).
     if ($left instanceof TWord64 && $right instanceof TWord64) {
         return match ($op) {
             '+' => 'word64Add#',
@@ -370,7 +338,6 @@ function resolveMonomorphicOperator(string $op, Type $left, Type $right): ?strin
         };
     }
 
-    // Fixed-width words: host Binop skips from_int masks (255+1 → 256, not 0).
     if ($left instanceof TWord8 && $right instanceof TWord8) {
         return match ($op) {
             '+' => 'word8Add#',
@@ -402,7 +369,6 @@ function resolveMonomorphicOperator(string $op, Type $left, Type $right): ?strin
         };
     }
 
-    // Signed fixed-width ints: host Binop skips from_int sign-extension.
     if ($left instanceof TInt8 && $right instanceof TInt8) {
         return match ($op) {
             '+' => 'int8Add#',

@@ -31,9 +31,6 @@ function isSimpleEvidenceHead(Ast\TypeNode $head): bool
         return true;
     }
 
-    // Polymorphic apps like `Tuple64 a1 … a64` / `Maybe a`: the constructor
-    // name alone distinguishes same-class instances; avoid sha256(json) of the
-    // full head on every colliding-method uniquify.
     if ($head instanceof Ast\TypeApp && $head->con instanceof Ast\TypeCon) {
         if (preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $head->con->name) !== 1) {
             return false;

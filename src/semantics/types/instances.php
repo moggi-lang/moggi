@@ -181,10 +181,6 @@ function instanceMethodSchemes(TypeCheckState $state, Ast\InstanceDecl $decl): a
         $provided[$method->name] = true;
     }
 
-    // Class methods with a parsed default implementation are available even
-    // when the instance omits them. `deriving anyclass` relies on this
-    // entirely: it declares an empty instance and every method comes from the
-    // class defaults.
     foreach ($classInfo['methods'] as $methodName => $methodInfo) {
         if (isset($provided[$methodName]) || ($methodInfo['defaultBody'] ?? null) === null) {
             continue;
@@ -218,17 +214,11 @@ function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
     $className = $decl->class;
     $classInfo = $state->classes[$className];
     $functions = [];
-    // The getter's context parameters, and the same constraints as written for
-    // the method bodies (which expand them together with their own).
     $contextConstraints = instanceContextConstraints($state, $decl, $headType);
     $instanceConstraints = expandConstraintsWithSuperclasses($state, $contextConstraints);
-    // Non-nullary context methods stay monomorphized for primitive ops (`==`); nullary
-    // ones (`maxBound`) must not, and stock deriving skips ambient projections.
     $constraintEnv = $state->stockDeriving
         ? []
         : buildInstanceConstraintEnv($state, $decl->constraints, $headType);
-    // Declared methods plus synthesized bodies for class defaults the instance
-    // omits. Anything still missing is a hard error below.
     $declaredMethodNames = [];
     foreach ($decl->methods as $declaredMethod) {
         $declaredMethodNames[$declaredMethod->name] = true;
@@ -239,9 +229,6 @@ function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
         if (isset($declaredMethodNames[$defaultName]) || ($defaultInfo['defaultBody'] ?? null) === null) {
             continue;
         }
-        // The default body/params belong to the class registration and are
-        // re-checked at every instance site; checking rewrites them in place,
-        // so hand each site its own copy.
         $instanceMethods[] = new Ast\FunctionDecl(
             $defaultName,
             null,
@@ -276,8 +263,6 @@ function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
             $substitutedConstraints,
             $keepHeadVars,
         );
-        // Eta-expand partial instance methods so dictionaries store a real arity-N function
-        // instead of a nullary one returning a `__partial` cell.
         [$etaParams, $etaBody] = etaExpandInstanceMethod(
             $method->params,
             $method->body,
@@ -293,9 +278,6 @@ function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
         if ($method->doc !== null) {
             $fn->doc = $method->doc;
         }
-        // A default body was written in the class's module, so the names, types
-        // and primops it uses are the ones in scope there. The body is re-checked
-        // here, so hand it the scope it was written in.
         $defaulted = isset($defaultedMethods[$method->name]);
         $scope = $defaulted ? defaultBodyScope($state, $classInfo) : [];
         $installedTypes = $defaulted
@@ -317,9 +299,6 @@ function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
             removeDefaultBodyTypes($state, $installedTypes);
         }
         $state->instanceMethodNames[$fn->name] = true;
-        // Keep the polymorphic class-method scheme (`Bounded a => a`) so bare
-        // uses like `maxBound` / `mempty = maxBound` still quantify over a fresh
-        // constraint. Instance methods are dispatched via evidence dictionaries.
         $existing = $state->env[$fn->name] ?? null;
         if (!($existing?->classMethod)) {
             $state->env[$fn->name] = $registration['schemes'][$method->name];
@@ -342,8 +321,6 @@ function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
         }
     }
 
-    // `{-# MINIMAL #-}` is a disjunction of conjunctions: an alternative whose methods all
-    // have defaults would compile into a mutual recursion that never reaches a value.
     $minimalGroups = $classInfo['minimalGroups'] ?? [];
     $satisfied = false;
     foreach ($minimalGroups as $group) {
@@ -384,9 +361,6 @@ function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
             $methodMap[$fn->name] = $fn->name;
         }
     }
-    // Prefer the declared instance head for stable evidence naming so
-    // findProjectInstanceHeadAst (which returns the project-instance AST)
-    // agrees with the registered evidence function name.
     $evidenceHeadAst = $decl->head instanceof TypeNode
         ? $decl->head
         : $headAst;
@@ -696,7 +670,6 @@ function validateInstanceSuperclasses(TypeCheckState $state, Ast\InstanceDecl $d
             $superHead = astType($state, substituteInstanceTypeAst($super, $mapping));
         }
 
-        // Constrained peer: `Num a => Monoid (Sum a)` may rely on `Num a => Semigroup (Sum a)`.
         if (peerInstanceCoversSuperclass($state, $superClass, $superHead, $decl)) {
             continue;
         }
@@ -726,8 +699,6 @@ function peerInstanceCoversSuperclass(
     }
 
     $headKey = instanceHeadIndexKeyFromType($superHead);
-    // Concrete heads: empty head-bucket ⇒ no peer. Full-class fallback re-unifies
-    // against every TupleN-sized head (pathological with arity 64).
     $candidates = $headKey !== '*'
         ? ($state->projectInstancesByClassHead[$superClass][$headKey] ?? [])
         : ($state->projectInstancesByClass[$superClass] ?? []);
@@ -872,11 +843,6 @@ function validateNoDuplicateInstance(TypeCheckState $state, Ast\InstanceDecl $de
             continue;
         }
 
-        // A checked-instance head is an internal type object, never an AST
-        // head, so compare the two structurally with type variables renamed:
-        // alpha-equivalent heads (`Eq [a]` vs `Eq [b]`) are the same instance.
-        // Without this, two hand-written instances in one module slip past and
-        // only collide at codegen ("Cannot redeclare function ... __ev_...").
         if (freshenStableTypeKey(prune($state, $headType))
             === freshenStableTypeKey(prune($state, $instance['head']))) {
             throw typeFail(
@@ -952,8 +918,6 @@ function instanceHeadIndexKeyFromType(Type $head): string
     if ($head instanceof TPromoted) {
         return $head->name;
     }
-    // Primitives must not share the `*` bucket — that re-unified every Eq Int
-    // against Eq Word / Word8 / … during duplicate checks.
     return match ($head::class) {
         TInt::class => 'Int',
         TStr::class => 'String',
@@ -975,9 +939,6 @@ function instanceHeadIndexKeyFromType(Type $head): string
 
 function instanceMappingCacheKey(array $instance, Type $requiredHead): string
 {
-    // Project-instance heads are AST nodes, not internal types. Required-head
-    // keys must be freshen-stable (see instanceLookupKey) so polymorphic
-    // TupleN lookups reuse mappings instead of re-unifying every time.
     $instanceHeadKey = $instance['head'] instanceof Type
         ? instanceLookupKey($instance['class'], $instance['head'])
         : ($instance['head'] instanceof Ast\AstNode
@@ -993,10 +954,6 @@ function instanceMappingCacheKey(array $instance, Type $requiredHead): string
 function findProjectInstance(TypeCheckState $state, string $className, Type $requiredHead, array $visited = []): bool
 {
     $requiredHead = prune($state, $requiredHead);
-    // Cache key must use the same normalization as findProjectInstanceRecord
-    // (reduce Rep/families); otherwise a hit on an unreduced key disagrees with
-    // HeadAst naming and we emit __ev_* hashes for concrete trees that were never
-    // generated (MissingMethod at runtime).
     $normalized = prune($state, normalizeType($state, $requiredHead, reduceFamilies: true));
     $lookupKey = instanceLookupKey($className, $normalized);
     if (\array_key_exists($lookupKey, $state->instanceLookupCache)) {
@@ -1016,8 +973,6 @@ function findProjectInstance(TypeCheckState $state, string $className, Type $req
 function findProjectInstanceRecord(TypeCheckState $state, string $className, Type $requiredHead, array $visited = []): ?array
 {
     $requiredHead = prune($state, $requiredHead);
-    // Reduce associated families (`Rep Foo`) so `C (Rep Foo)` can match concrete
-    // instances; unify alone keeps `Rep` stuck on a polymorphic `Rep a`.
     $requiredHead = normalizeType($state, $requiredHead, reduceFamilies: true);
     $requiredHead = prune($state, $requiredHead);
     $lookupKey = instanceLookupKey($className, $requiredHead);
@@ -1026,16 +981,11 @@ function findProjectInstanceRecord(TypeCheckState $state, string $className, Typ
     }
     $visited[$lookupKey] = true;
 
-    // One-way matching: a wanted constraint with a bare type-variable head
-    // (e.g. `Eq a`) must not select concrete instances like `Eq (Min a)` by
-    // unifying the variable with `Min …` — that loops on `C a => C (F a)`.
     if ($requiredHead instanceof TVar) {
         return null;
     }
 
     $headKey = instanceHeadIndexKeyFromType($requiredHead);
-    // Concrete heads: empty head-bucket ⇒ no instance. Falling back to the full
-    // class list re-introduces O(|instances|) unify against Tuple64-sized heads.
     $candidates = $headKey !== '*'
         ? ($state->projectInstancesByClassHead[$className][$headKey] ?? [])
         : ($state->projectInstancesByClass[$className] ?? []);
@@ -1136,16 +1086,11 @@ function instanceMappingForUse(TypeCheckState $state, array $instance, Type $req
         return null;
     }
 
-    // Only a shape mismatch is remembered, with the head's type variables normalized away;
-    // a hit is stated in terms of the head it was built from.
     $cacheKey = instanceMappingCacheKey($instance, $requiredHead);
     if (\array_key_exists($cacheKey, $state->instanceMappingCache)) {
         return null;
     }
 
-    // Bind head vars from the *wanted* head before the subst frame so they
-    // survive popSubstFrame (unify inside the frame would otherwise leave
-    // ephemeral bindings that evaporate).
     $wantedHead = prune($state, $requiredHead);
     $headVarMapping = matchInstanceHeadVars($state, $instance['head'], $wantedHead);
     if ($headVarMapping === null) {
@@ -1154,16 +1099,12 @@ function instanceMappingForUse(TypeCheckState $state, array $instance, Type $req
         return null;
     }
 
-    // Prefer structural head match + param binding. Re-elaborating the AST head
-    // (astType + freshen + unify) is linear in TupleN arity and was the bulk of
-    // Traversable superclass checks; matchInstanceHeadVars already validated shape.
     try {
         $mapping = instanceParamMapping($state, $classInfo['params'], $wantedHead, $instance['head']);
         $mapping['__headVars'] = $headVarMapping;
 
         return $mapping;
     } catch (TypeError) {
-        // Kind failures on exotic heads: fall back to unify path below.
     }
 
     pushSubstFrame($state);
@@ -1176,9 +1117,6 @@ function instanceMappingForUse(TypeCheckState $state, array $instance, Type $req
 
         return $mapping;
     } catch (TypeError) {
-        // Structural matching already bound head vars. Kind/unify failures on
-        // polymorphic heads (e.g. `M1 D d f` vs MetaData/Symbol apps) should
-        // not reject an otherwise valid instance.
         $mapping = instanceParamMapping($state, $classInfo['params'], prune($state, $requiredHead), $instance['head']);
         $mapping['__headVars'] = $headVarMapping;
 
@@ -1205,8 +1143,6 @@ function instanceContextSatisfied(TypeCheckState $state, array $instance, array 
         $ctxHead = count($constraint->args) === 1
             ? prune($state, $constraint->args[0])
             : new TCon('__InstanceHead', $constraint->args);
-        // Polymorphic context obligations (`Eq a` on `Eq (Min a)`) are discharged by the
-        // caller's context, not by searching concrete instances for a bare variable.
         if ($ctxHead instanceof TVar) {
             continue;
         }
@@ -1273,7 +1209,6 @@ function matchInstanceHeadVars(TypeCheckState $state, Ast\AstNode $pattern, Type
         if ($target instanceof TPromoted && $target->name === $pattern->name && $target->args === []) {
             return [];
         }
-        // Some promoted nullaries elaborate to TCon.
         if ($target instanceof TCon && $target->name === $pattern->name && $target->args === []) {
             return [];
         }
@@ -1282,21 +1217,16 @@ function matchInstanceHeadVars(TypeCheckState $state, Ast\AstNode $pattern, Type
     }
 
     if ($pattern instanceof Ast\TypeCon) {
-        // Nullary constructors compare by name when the target is concrete; target args need
-        // not be empty (D/C/S under TypeApp), but different names must not match.
         if ($target instanceof TCon) {
             return $target->name === $pattern->name ? [] : null;
         }
         if ($target instanceof TPromoted) {
             return $target->name === $pattern->name ? [] : null;
         }
-        // Non-concrete targets: keep prior lenient behavior for prim/synonym heads.
         return [];
     }
 
     if ($pattern instanceof Ast\TypeApp) {
-        // Instance heads are often left-nested (`((M1 D) d) f`); flatten so we
-        // match the same shape as internal TCon apps (`M1 D d f`).
         $flat = flattenInstanceHeadTypeApp($pattern);
         if ($flat === null) {
             return null;
@@ -1358,9 +1288,6 @@ function matchInstanceHeadVars(TypeCheckState $state, Ast\AstNode $pattern, Type
  */
 function flattenInstanceHeadTypeApp(Ast\TypeNode $type): ?array
 {
-    // Iterative: left-nested `((Tuple64 a1) a2)…` is depth-N; the previous
-    // recursive `[...$inner, ...$args]` rebuild was O(N²) and dominated
-    // Traversable superclass checks for Tuple32+.
     $args = [];
     while ($type instanceof Ast\TypeApp) {
         for ($i = count($type->args) - 1; $i >= 0; $i--) {
@@ -1382,16 +1309,10 @@ function flattenInstanceHeadTypeApp(Ast\TypeNode $type): ?array
 
 function instanceHeadsMatch(TypeCheckState $state, Type $requiredHead, Ast\AstNode|Type $instanceHeadAst): bool
 {
-    // A checked-instance head is an internal type object, never an AST head.
-    // astType previously failed to re-parse it and this always returned false;
-    // preserve that without hitting a (fatal) argument type error.
     if ($instanceHeadAst instanceof Type) {
         return false;
     }
 
-    // Unify-based match (not matchInstanceHeadVars alone): the TypeCon fallback
-    // that returns [] for non-TCon targets made every TWord/TInt head match any
-    // nullary TypeCon, so `Eq Word` collided with `Eq Int` / `Eq Word8`.
     pushSubstFrame($state);
     try {
         $other = freshenTypeVars($state, astType($state, $instanceHeadAst));
@@ -1506,8 +1427,6 @@ function buildInstanceConstraintEnv(TypeCheckState $state, array $constraints, T
 
         foreach ($classInfo['methods'] as $methodName => $methodInfo) {
             $mappedType = prune($state, substitute($methodInfo['type'], $mapping));
-            // Nullary methods must stay as polymorphic class methods so
-            // `maxBound` / `mempty = maxBound` can select a different head.
             if (!$mappedType instanceof TArrow) {
                 continue;
             }
@@ -1620,16 +1539,12 @@ function checkInstanceMethod(
         $env = [...$env, ...$extraEnv];
     }
 
-    // Instance context dictionaries (`Bounded a` on `Bounded (Min a)`) plus any
-    // method-local constraints become leading evidence parameters.
     $constraints = expandConstraintsWithSuperclasses($state, [
         ...$instanceConstraints,
         ...$methodUserConstraints,
     ]);
     $peeledType = peelDictArrows($expectedType, count($methodUserConstraints));
 
-    // Match checkFunction: dict params for every expanded constraint (including
-    // superclasses), then the user-facing parameters.
     $fnType = $peeledType;
     foreach (array_reverse($constraints) as $constraint) {
         $fnType = new TArrow(new TCon('__Dict_' . $constraint->class), $fnType);
@@ -1692,9 +1607,6 @@ function checkInstanceMethod(
                     substitute($methodInfo['type'], $mapping),
                     count($nestedUserConstraints),
                 );
-                // Nullary ambient methods (`maxBound :: a`) must not shadow the
-                // polymorphic class method: `mempty = maxBound` in
-                // `Monoid (Min a)` needs `Bounded (Min a)`, not ambient `Bounded a`.
                 if (!prune($state, $methodType) instanceof TArrow) {
                     continue;
                 }
@@ -1712,14 +1624,10 @@ function checkInstanceMethod(
                 if (isset($state->constraintMethods[$methodName])) {
                     $existing = $state->constraintMethods[$methodName];
                     if (($existing['class'] ?? null) !== $info['class']) {
-                        // Truly ambiguous: same name from different classes.
                         unset($state->constraintMethods[$methodName]);
                         $state->constraintMethodAmbiguities[$methodName] = true;
                         unset($env[$methodName]);
                     } elseif (($existing['evidence'] ?? null) !== $info['evidence']) {
-                        // Same class, multiple dictionaries (`Show a`, `Show b`):
-                        // drop projection and keep the polymorphic class method so
-                        // pending constraints pick the right ambient dict.
                         unset($state->constraintMethods[$methodName]);
                         $orig = $state->env[$methodName] ?? null;
                         if ($orig?->classMethod) {
@@ -1741,15 +1649,10 @@ function checkInstanceMethod(
     }
 
     $methodConstraintEnv = buildConstraintEnv($state, $constraints);
-    // Stock deriving keeps polymorphic class methods in `$env` so field
-    // `(==)` calls emit pending `Eq τ` constraints. Merging ambient
-    // projections here would overwrite them with monomorphic `a -> a -> Bool`.
     if ($methodConstraintEnv !== [] && !$state->stockDeriving) {
         $env = [...$env, ...$methodConstraintEnv];
     }
 
-    // A method of the instance's own class (or a superclass) is never the context
-    // dictionary's method — projecting it would hand the body the wrong dictionary.
     if ($className !== '') {
         $state->instanceOwnMethods = ownClassMethodNames($state, $className);
         $ownSchemes = ownClassMethodSchemes($state, $className);
@@ -1762,8 +1665,6 @@ function checkInstanceMethod(
             if ($scheme !== null) {
                 $env[$methodName] = $scheme;
                 $existing = $state->env[$methodName] ?? null;
-                // Another class owning the same method name keeps its scheme
-                // (the ambiguity the module machinery already tracks).
                 if ($existing === null
                     || !($existing->classMethod ?? false)
                     || $existing->class === $scheme->class) {
@@ -1786,13 +1687,9 @@ function checkInstanceMethod(
     }
     $state->ambientConstraintsByClass = $byClass;
 
-    // The polymorphic class-method scheme wins over the instance's own, so a call in the
-    // body dispatches through the dictionary (including the recursive one).
     if ($savedClassMethod !== null) {
         $env[$fn->name] = $savedClassMethod;
     } elseif (!isset($env[$fn->name])) {
-        // The member's own parameters, as written: a recursive call inside the
-        // body re-expands them and must land on exactly `$constraints`.
         $env[$fn->name] = scheme(
             $peeledType,
             [],
@@ -1806,8 +1703,6 @@ function checkInstanceMethod(
     $state->constraintMethodAmbiguities = $savedConstraintMethodAmbiguities;
     unify($state, $bodyType, $bodyExpected, $fn);
     defaultAmbiguousNumericVars($state, $fn->body, quantifiedVars($state, $peeledType));
-    // Before the evidence pass: an operator whose operands the method's type pinned to a
-    // primitive numeric type is emitted as that type's operation.
     resolveDeferredNativeInfixes($state, $fn->body);
     resolvePendingEvidenceInExpr($state, $fn->body);
     tryResolveValueEvidence($state, $fn->body);
@@ -1826,8 +1721,6 @@ function checkInstanceMethod(
     if ($wrapper !== null) {
         $fn->intrinsicWrapper = $wrapper;
     }
-    // Deliberately not in `intrinsicWrappers`: that table is keyed by the name a source
-    // uses, and an instance method is only reachable through its dictionary.
 
     $fn->type = internalTypeToAst(prune($state, $fnType), $state->subst);
     $state->instanceHeadInScope = $savedInstanceHead;
@@ -1838,8 +1731,6 @@ function checkInstanceMethod(
 
 function findProjectInstanceHeadAst(TypeCheckState $state, string $className, Type $requiredHead): Ast\TypeNode
 {
-    // Evidence factory names are keyed by the *declared* instance head, not the wanted
-    // concrete tree; the wanted head caused MissingMethod.
     $match = findProjectInstanceRecord($state, $className, $requiredHead);
     if ($match !== null) {
         $head = $match['instance']['head'] ?? null;

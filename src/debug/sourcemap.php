@@ -117,7 +117,6 @@ final class SourceMapBuilder
             'col' => $col,
             'path' => $path,
             'symbol' => $symbol,
-            // Pre-rendered so native runtimes need no formatting logic.
             'text' => formatFrameLine($symbol, $path, $line, $col),
         ];
     }
@@ -153,7 +152,6 @@ final class SourceMapBuilder
             'col' => $col,
             'path' => $path,
             'symbol' => $symbol,
-            // Pre-rendered so native runtimes need no formatting logic.
             'text' => formatFrameLine($symbol, $path, $line, $col),
         ];
     }
@@ -496,7 +494,6 @@ function normalizeDisplayPath(string $file): string
             return $file;
         }
     }
-    // Strip common absolute prefixes down to basename if unknown.
     if (str_starts_with($file, '/') || preg_match('#^[A-Za-z]:/#', $file) === 1) {
         return basename($file);
     }

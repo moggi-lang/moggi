@@ -1,3 +1,9 @@
 addOne :: Int -> Int
 addOne x = let y = 1 :: Int in x + y
 
+pairUp :: Int -> String -> (Int, String)
+pairUp a b =
+  let x = a + 1
+      y = b <> " World"
+  in (x, y)
+

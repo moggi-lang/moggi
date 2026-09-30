@@ -71,8 +71,6 @@ function applyImportContext(TypeCheckState $state, Ast\Program $program, array $
     $state->ambiguousImports = $importContext['ambiguousNames'] ?? [];
     $state->classModuleScopes = $importContext['classScopes'] ?? [];
     $state->externalFns = $importContext['codegen']['externalFns'] ?? [];
-    // Prefer a project-wide precomputed index (prepare once) over rebuilding
-    // class/head/equation maps on every module typecheck.
     $instanceIndex = $importContext['projectInstanceIndex'] ?? null;
     if ($instanceIndex !== null) {
         $state->projectInstancesByClass = $instanceIndex['byClass'];
@@ -89,13 +87,6 @@ function applyImportContext(TypeCheckState $state, Ast\Program $program, array $
         foreach ($importContext['projectInstances'] ?? [] as $instance) {
             $addInstance($instance);
         }
-        // A program must be able to resolve its *own* hand-written instances even
-        // without an import context (standalone `checkRaw`, single-file compiles):
-        // the import context is otherwise the only source for these tables, so a
-        // program that imported nothing could not use its own instances. Derived
-        // instances are excluded here because `commitProjectInstance` commits them
-        // separately and flags them `fromDeriving`. Tag with the current module so
-        // the duplicate-instance check treats them as same-module.
         $currentModule = $importContext['currentModule'] ?? '';
         foreach ($program->items as $item) {
             if (!$item instanceof Ast\InstanceDecl) {
@@ -111,9 +102,6 @@ function applyImportContext(TypeCheckState $state, Ast\Program $program, array $
         }
         $state->projectInstancesByClass = $instancesByClass;
         $state->projectInstancesByClassHead = $instancesByClassHead;
-        // Associated equations: from the project set when present, else this program
-        // (standalone fixtures). Indexed separately so we do not change instance
-        // constraint lookup for bare checkRaw.
         $equationSource = $importContext['projectInstances'] ?? [];
         if ($equationSource === []) {
             $equationSource = projectInstancesFromProgram($program);
@@ -137,7 +125,6 @@ function applyImportContext(TypeCheckState $state, Ast\Program $program, array $
         }
     }
     $state->declaredTypeNames = $declaredTypeNames;
-    // Re-install associated family names wiped by the assignment above.
     syncAssociatedFamiliesFromClasses($state);
 
     applyPrimitiveTypeSynonymBootstrap($state, $definedTypeSynonyms);
@@ -173,9 +160,6 @@ function registerTypeDeclarations(TypeCheckState $state, Ast\Program $program): 
             if (!isset($state->classes[$item->name])) {
                 registerClass($state, $item, $state->currentModule ?? '');
             }
-            // Class methods must be in env during checkRaw so instance bodies
-            // like `mempty = Dual mempty` / `maxBound = Min maxBound` quantify a
-            // fresh constraint instead of self-binding.
             registerClassMethodExportSchemes($state, $item);
         }
     }
@@ -186,8 +170,6 @@ function registerFunctionSchemesFromProgram(TypeCheckState $state, Ast\Program $
     $seenFunctions = [];
     $inferredFunctions = [];
 
-    // Recorded before any scheme is registered, so an instance checked later in
-    // the module cannot take a declared name's env slot.
     foreach ($program->items as $item) {
         if ($item instanceof Ast\FunctionDecl || $item instanceof Ast\ForeignImportDecl) {
             $state->localDeclNames[$item->name] = true;
@@ -216,11 +198,6 @@ function registerFunctionSchemesFromProgram(TypeCheckState $state, Ast\Program $
         if (Ast\hasDeclaredSignature($item)) {
             registerFunctionScheme($state, $item);
         } elseif ($item->inferredSignatureType !== null) {
-            // An earlier walk already discovered this declaration's signature: a
-            // module is inferred more than once per process, and a later walk
-            // must install the real scheme before the bodies checked against it
-            // run -- a placeholder's variables are unrelated to each other, so
-            // `findIndicesGo p xs 0` could not tell that the counter is `Int`.
             registerInferredSignatureScheme($state, $item);
         } elseif (!$item->signatureOnly) {
             $inferredFunctions[] = $item;

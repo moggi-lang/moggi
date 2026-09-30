@@ -90,7 +90,6 @@ function parseForeignDecl(ParserState $state): Ast\AstNode
     expect($state, TokenKind::KwForeign);
     $backend = expect($state, TokenKind::VarId)->lexeme;
 
-    // Check for `foreign type` (KwType) vs `foreign function/const` (VarId)
     $token = peek($state);
 
     if ($token->kind === TokenKind::KwType) {
@@ -99,8 +98,6 @@ function parseForeignDecl(ParserState $state): Ast\AstNode
         $name = $nameToken->lexeme;
         $hostType = expect($state, TokenKind::StringLit)->lexeme;
 
-        // Positioned at the declared name, like `data`/`class`, so a diagnostic about the
-        // declaration can be rendered against the source line it was written on.
         return new Ast\ForeignTypeDecl(
             $backend,
             $name,
@@ -111,7 +108,6 @@ function parseForeignDecl(ParserState $state): Ast\AstNode
         );
     }
 
-    // Must be function or const
     if ($token->kind === TokenKind::VarId) {
         $kindToken = advance($state);
         $kindLexeme = $kindToken->lexeme;

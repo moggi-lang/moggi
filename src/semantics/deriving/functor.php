@@ -105,14 +105,12 @@ function collectFunctorHeadConstraints(
     }
     if ($type instanceof Ast\TypeApp) {
         $head = $type->con;
-        // Drop last arg and recurse into earlier args + head.
         $args = $type->args;
         if ($args !== []) {
             $last = $args[count($args) - 1];
             collectFunctorHeadConstraints($last, $param, $className, $needed);
             for ($i = 0; $i < count($args) - 1; ++$i) {
                 if (typeMentionsParam($args[$i], $param)) {
-                    // Param in non-last position of an application — reject elsewhere.
                 }
             }
         }
@@ -161,7 +159,6 @@ function synthesizeFunctorFieldMap(
     return match ($c['tag']) {
         'param' => new Ast\Apply($f, $value),
         'skip' => $value,
-        // `map f`, `map (map f)`, … applied to the field value.
         'app' => new Ast\Apply(functorMapComposer($type, $param, $f), $value),
         default => $value,
     };

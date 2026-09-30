@@ -102,12 +102,10 @@ function bclAssemblyFor(string $fullTypeName): string
         return $exact[$fullTypeName];
     }
 
-    // Library-owned metadata may declare the defining assembly of the type.
     $declared = dotNetTypeAssembly($fullTypeName);
     if ($declared !== null) {
         return $declared;
     }
 
-    // System.Runtime type-forwards the overwhelming majority of CoreLib.
     return 'System.Runtime';
 }

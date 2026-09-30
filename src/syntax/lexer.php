@@ -316,8 +316,6 @@ function lexNumericEscape(
         ++$i;
         ++$col;
 
-        // More than 6 hex digits can never fit in 0..0x10FFFF; avoid feeding
-        // hexdec() an arbitrarily large string and just force the range check below to fail.
         $cp = strlen($digits) > 6 ? 0x110000 : (int) hexdec($digits);
     }
 
@@ -352,7 +350,6 @@ function lexPragma(
 ): Token {
     $startLine = $line;
     $startCol = $col;
-    // Skip `{-#`
     $i += 3;
     $col += 3;
     $bodyStart = $i;
@@ -418,20 +415,14 @@ function lexDocCommentLine(
             if ($nextStart >= $len || $source[$nextStart] === "\n") {
                 break;
             }
-            // Match the following line on its own (not the rest of the
-            // source), so any non-comment line always ends the doc comment.
             $lineEnd = strpos($source, "\n", $nextStart);
             $lineText = $lineEnd === false
                 ? substr($source, $nextStart)
                 : substr($source, $nextStart, $lineEnd - $nextStart);
-            // A CRLF source keeps its `\r` in the line: dropping it here makes the
-            // continuation test below and the text it captures identical to LF's.
             $lineText = rtrim($lineText, "\r");
 
             $pattern = $kind === TokenKind::DocTrailing
                 ? '/^[ \t]*-- \^[ \t]*(.*)$/'
-                // Continue on `-- …` (including a bare `--`), but stop at a
-                // `---` rule or a new `-- |`/`-- ^` doc comment.
                 : '/^[ \t]*--(?!-|\|)(?: (.*))?$/';
             if (!preg_match($pattern, $lineText, $m)) {
                 break;
@@ -440,8 +431,6 @@ function lexDocCommentLine(
             $contLine = $m[1] ?? '';
             $text .= ($text === '' ? '' : "\n") . $contLine;
 
-            // Leave `$i` on the newline; the loop head consumes it so the next
-            // line is examined too (multi-line doc comments).
             $i = $lineEnd === false ? $len : $lineEnd;
         }
     }
@@ -577,7 +566,6 @@ function lex(string $source, string $filename = ''): array
 
         if ($c === '-' && $i + 1 < $len && $source[$i + 1] === '-') {
             $third = $i + 2 < $len ? $source[$i + 2] : '';
-            // A run of dashes is a line comment (`-----`); `-->` stays an operator.
             if ($third !== '>') {
                 $startLine = $line;
                 $startCol = $col;
@@ -661,8 +649,6 @@ function lex(string $source, string $filename = ''): array
                     ++$col;
                 }
             }
-            // An exponent needs at least one digit after the optional sign;
-            // `1e` stays an integer followed by an identifier `e`.
             if ($i < $len && ($source[$i] === 'e' || $source[$i] === 'E')) {
                 $afterSign = $i + 1;
                 if ($afterSign < $len && ($source[$afterSign] === '+' || $source[$afterSign] === '-')) {
@@ -727,10 +713,6 @@ function lex(string $source, string $filename = ''): array
         }
 
         if ($c === '\'') {
-            // DataKinds: `'Red` (tick immediately followed by an uppercase letter,
-            // with no closing tick right after) promotes a data constructor to a
-            // type. A lone uppercase char literal like `'A'` still lexes as CharLit
-            // since the closing tick follows immediately.
             if ($i + 1 < $len && isLarge($source[$i + 1]) && !($i + 2 < $len && $source[$i + 2] === '\'')) {
                 ++$i;
                 ++$col;
@@ -821,7 +803,6 @@ function lex(string $source, string $filename = ''): array
                 ++$i;
                 ++$col;
             }
-            // MagicHash-style: `List#` is one constructor id, not `List` + op `#`.
             if ($i < $len && $source[$i] === '#') {
                 ++$i;
                 ++$col;
@@ -926,8 +907,6 @@ function lex(string $source, string $filename = ''): array
             continue;
         }
 
-        // A lone `\` is the lambda token; a longer run of symbol characters is
-        // an operator, so `\\` (Data.List's list difference) lexes as one Op.
         if ($c === '\\' && !($i + 1 < $len && isSymbol($source[$i + 1]))) {
             $tokens[] = new Token(TokenKind::Backslash, '\\', $startLine, $startCol);
             ++$i;

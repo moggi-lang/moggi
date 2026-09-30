@@ -39,8 +39,6 @@ function emitForeignExpressionRaw(IR\ForeignCall $foreign, array $argExprs): str
         default => throw new \RuntimeException("unsupported foreign dispatch `{$info['dispatch']}`"),
     };
 
-    // A host diagnostic is not a Moggi value: the caller reads the failure from
-    // the call's result (including error_get_last), and reports it itself.
     return '@' . $call;
 }
 
@@ -94,7 +92,6 @@ function emitForeignIoStatement(
     string $pad,
     string $ioWrap,
 ): string {
-    // Pure expression emit boxes PHPValue; IO path boxes once in emitForeignIoResult.
     $call = emitForeignExpressionRaw($foreign, $argExprs);
     $destVar = $dest === null ? null : phpTemp($dest);
     $assignPrefix = $destVar === null ? '' : $destVar . ' = ';
@@ -155,8 +152,6 @@ function emitForeignIoResult(string $call, bool $phpValueBox, bool $handleBox): 
 
 function emitHandleBox(string $expr): string
 {
-    // Evaluate once — fopen (and similar) must not run twice. A `false` return is
-    // a raw host failure; `System.IO` classifies it (the emitter knows no errno).
     return '(static fn ($__moggiHandle) => is_resource($__moggiHandle)'
         . " ? ['MkHandle', ['MkResource', \$__moggiHandle]]"
         . " : throw new \\RuntimeException('fopen failed'))({$expr})";

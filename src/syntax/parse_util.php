@@ -214,8 +214,6 @@ function parseError(ParserState $state, string $message, ?Token $at = null, stri
     if ($at === null) {
         $loc = errorLocation($state, peek($state));
     } else {
-        // A token can span lines (a multi-line pragma, a `{-| … -}` block). The caret stops at the
-        // end of the line the token starts on instead of running past it.
         $firstLineEnd = strpos($at->lexeme, "\n");
         $span = $firstLineEnd === false ? strlen($at->lexeme) : $firstLineEnd;
         $loc = [
@@ -344,7 +342,6 @@ function bracketDepthBefore(array $tokens): array
         }
     }
 
-    // The position past the last token (EOF) needs an entry too.
     $depths[\count($tokens)] = $depth;
 
     return $depths;

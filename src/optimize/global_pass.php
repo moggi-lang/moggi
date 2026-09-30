@@ -4,10 +4,13 @@ namespace Moggi\Optimize\GlobalPass;
 
 use Moggi\IR;
 
+use function Moggi\IR\Visit\boundLocalsInBlock;
+use function Moggi\IR\Visit\freeLocalsInBlock;
 use function Moggi\IR\Visit\mapOperandChildren;
 use function Moggi\Optimize\Interproc\countLocalUsesInItems;
 use function Moggi\Optimize\Interproc\operandIsNonDuplicable;
 use function Moggi\Optimize\Support\combineOperandsToExpr;
+use function Moggi\Optimize\Support\isCapturedFnName;
 use function Moggi\Optimize\Support\isLambdaName;
 use function Moggi\Optimize\Support\isPropagatableExpr;
 use function Moggi\Optimize\Support\isSimpleOperand;
@@ -62,10 +65,6 @@ function cseKey(IR\Stmt $stmt): ?string
 {
     return match ($stmt::class) {
         IR\Binop::class => 'binop:' . $stmt->op . ':' . operandKey($stmt->left) . ':' . operandKey($stmt->right),
-        // Do not CSE calls that may allocate or mutate host state (foreign /
-        // host-effect). Nullary constructors like `newStringWriter` must not
-        // collapse to a shared temp across unrelated uses, and must not be
-        // treated as pure CAFs by later rematerialization.
         IR\Call::class => isHostEffectCallee($stmt->callee)
             ? null
             : 'call:' . $stmt->callee . ':' . join(',', \array_map(operandKey(...), $stmt->args)),
@@ -173,35 +172,99 @@ function usedInItems(array $items): array
  */
 function markLambdaCaptureLocalsUsed(array $items, array &$used): void
 {
-    global $propagateCopiesLambdaBodies, $propagateCopiesLambdaParams;
+    global $propagateCopiesLambdaBodies;
 
-    /** @var array<string, array<string, true>> */
-    $freeLocalsByLambda = [];
+    /** @var array<string, array<string, true>> $memo */
+    $memo = [];
 
     foreach ($items as $item) {
         foreach (lambdaNamesReferencedInStmt($item) as $lambdaName) {
-            $body = $propagateCopiesLambdaBodies[$lambdaName] ?? null;
-            if ($body === null) {
+            if (!isset($propagateCopiesLambdaBodies[$lambdaName])) {
                 continue;
             }
 
-            $free = $freeLocalsByLambda[$lambdaName] ?? null;
-            if ($free === null) {
-                $params = \array_fill_keys($propagateCopiesLambdaParams[$lambdaName] ?? [], true);
-                $free = [];
-                foreach (lambdaBodyLocals($body) as $localName => $_) {
-                    if (!isset($params[$localName])) {
-                        $free[$localName] = true;
-                    }
-                }
-                $freeLocalsByLambda[$lambdaName] = $free;
-            }
-
-            foreach ($free as $localName => $_) {
+            foreach (lambdaCapturedLocals($lambdaName, $memo) as $localName => $_) {
                 $used['locals'][$localName] = true;
             }
         }
     }
+}
+
+/**
+ * Locals a lifted lambda captures, following the lifted lambdas its body
+ * refers to.
+ *
+ * A body that only mentions another lifted lambda still needs that lambda's
+ * captures: the callee is reached from this body's scope, so those locals have
+ * to stay live in the enclosing block. `lambdaMetaFromCaptures` folds the same
+ * transitivity into the capture set the emitters pass, so leaving it out here
+ * makes the two disagree. For `f -> λ2 -> λ3 -> x`, where `λ2`'s body is only
+ * `ret @λ3`, DCE then deleted the `let x = ...` the emitted call site still
+ * passes and the generated code read an undefined variable. What the lambda
+ * binds itself -- parameters, `let`s, match binders -- is not a capture of it,
+ * even when a nested lambda reaches it. The lambdas of one `let`/`where` group
+ * refer to each other, so `$memo` is seeded before the walk recurses and a name
+ * already in flight ends it.
+ *
+ * @param array<string, array<string, true>> $memo
+ * @return array<string, true>
+ */
+function lambdaCapturedLocals(string $lambdaName, array &$memo): array
+{
+    global $propagateCopiesLambdaBodies, $propagateCopiesLambdaParams;
+
+    $body = $propagateCopiesLambdaBodies[$lambdaName] ?? null;
+    if ($body === null) {
+        return [];
+    }
+
+    if (isset($memo[$lambdaName])) {
+        return $memo[$lambdaName];
+    }
+
+    $memo[$lambdaName] = [];
+
+    $params = \array_fill_keys($propagateCopiesLambdaParams[$lambdaName] ?? [], true);
+    $captures = \array_fill_keys(freeLocalsInBlock($body, $params), true);
+    $owned = boundLocalsInBlock($body) + $params;
+
+    foreach (lambdaNamesReferencedInBlock($body) as $referenced) {
+        if ($referenced === $lambdaName) {
+            continue;
+        }
+
+        foreach (lambdaCapturedLocals($referenced, $memo) as $localName => $_) {
+            if (!isset($owned[$localName])) {
+                $captures[$localName] = true;
+            }
+        }
+    }
+
+    $memo[$lambdaName] = $captures;
+
+    return $captures;
+}
+
+/**
+ * Lifted lambdas a whole block refers to, at any nesting depth.
+ *
+ * @return list<string>
+ */
+function lambdaNamesReferencedInBlock(IR\Block $block): array
+{
+    $names = [];
+    IR\Visit\walkBlock(
+        $block,
+        static function (IR\Stmt $stmt) use (&$names): void {
+            foreach (lambdaNamesReferencedInStmt($stmt) as $name) {
+                $names[] = $name;
+            }
+        },
+        static function (IR\Operand $operand): void {
+        },
+    );
+
+    return \array_values(\array_unique($names));
 }
 
 /** @param array{temps: array<int, true>, locals: array<string, true>} $used */
@@ -425,8 +488,6 @@ function cleanupConstructorArm(IR\MatchArm $arm, IR\Operand $scrutinee): IR\Matc
     }
 
     $cleanup = cleanupFieldExtractLets($arm->body->items, $pattern, $scrutinee);
-    // skipped temps are pattern locals (names), not temp-id remaps — replace
-    // Temp(tN) uses with Local(var) so removing `__fieldN(scrut)` defs is safe.
     $items = rewriteSkippedFieldTempsToLocals($cleanup['items'], $cleanup['temps']);
     $items = rewriteFieldExprUses($items, $pattern, $scrutinee);
 
@@ -843,12 +904,7 @@ function rewriteFieldExpr(IR\Operand $expr, array $fieldVars, IR\Operand $scruti
 function propagateCopiesBlock(IR\Block $block, array $temps = [], array $locals = [], ?int $matchDest = null): IR\Block
 {
     $items = [];
-    // Temps are single-assignment, so counting uses across the block says whether inlining a
-    // compound value would duplicate it; computed lazily.
     $useCounts = null;
-    // local-name => last statement index at which a referenced lambda captures
-    // it; lazily built once so the let-vs-lambda-capture guard is O(1) per let
-    // instead of re-slicing + re-walking every remaining lambda body.
     $captureIndex = null;
 
     foreach ($block->items as $itemIndex => $item) {
@@ -865,9 +921,6 @@ function propagateCopiesBlock(IR\Block $block, array $temps = [], array $locals 
                 continue;
             }
 
-            // Nullary foreign seeds (@newStringWriter) rematerialize on every
-            // FnRef use — keep the Assign when the temp is used more than once.
-            // Single-use seeds may still copy-prop (Opt-Nullary-Ref / @report).
             if (operandIsNonDuplicable($item->value)) {
                 $useCounts ??= tempUseCountsInItems($block->items);
                 if (($useCounts[$item->dest] ?? 0) > 1) {
@@ -876,9 +929,6 @@ function propagateCopiesBlock(IR\Block $block, array $temps = [], array $locals 
                 }
             }
 
-            // Trivial operands are free to duplicate; compound expressions are
-            // only inlined when the temp is used at most once, otherwise keep
-            // the binding materialized to avoid duplication / blow-up.
             if (isSimpleOperand($item->value)) {
                 $temps[$item->dest] = $item->value;
                 if ($item->value instanceof IR\Temp) {
@@ -907,8 +957,6 @@ function propagateCopiesBlock(IR\Block $block, array $temps = [], array $locals 
                 continue;
             }
 
-            // Multi-use Local of a nullary seed must stay bound (a host-writer
-            // seed pinned across calls). Single-use @report may still fold.
             if (operandIsNonDuplicable($item->value)) {
                 $localUses = countLocalUsesInItems($block->items, $item->name);
                 if ($localUses > 1) {
@@ -973,8 +1021,6 @@ function propagateCopiesBlock(IR\Block $block, array $temps = [], array $locals 
 function mapCopyStmt(IR\Stmt $stmt, array &$temps, array &$locals): IR\Stmt
 {
     $mapArm = static function (IR\MatchArm $arm, ?int $armMatchDest = null) use (&$temps, &$locals): IR\MatchArm {
-        // A guard and its preparation run before the arm body, so they see the
-        // copies in scope at the arm start — not the ones the body adds.
         $guardTemps = $temps;
         $guardLocals = $locals;
 
@@ -1059,11 +1105,6 @@ function mapCopyOperand(IR\Operand $operand, array $temps, array $locals): IR\Op
         return mapCopyOperand($locals[$operand->name], $temps, $locals);
     }
 
-    // Every operand kind that can carry children must be rewritten here, or a
-    // copy-propagated binding is dropped while a use of it survives (Partial
-    // args were the concrete case: the use counter walks them, this mapper did
-    // not, and `t = @f` was deleted under `partial g(t)`). `mapOperandChildren`
-    // is the shared child walk, so the mapper cannot drift from the walker.
     return mapOperandChildren(
         $operand,
         static fn (IR\Operand $child): IR\Operand => mapCopyOperand($child, $temps, $locals),
@@ -1083,7 +1124,7 @@ function setPropagateCopiesLambdaBodies(array $functions): void
     $propagateCopiesLambdaBodies = [];
     $propagateCopiesLambdaParams = [];
     foreach ($functions as $function) {
-        if (isLambdaName($function->name)) {
+        if (isCapturedFnName($function->name)) {
             $propagateCopiesLambdaBodies[$function->name] = $function->body;
             $propagateCopiesLambdaParams[$function->name] = $function->params;
         }
@@ -1105,29 +1146,19 @@ function setPropagateCopiesLambdaBodies(array $functions): void
  */
 function lambdaCaptureIndex(array $items): array
 {
-    global $propagateCopiesLambdaBodies, $propagateCopiesLambdaParams;
+    global $propagateCopiesLambdaBodies;
 
+    /** @var array<string, array<string, true>> $memo */
+    $memo = [];
     $lambdaLocals = [];
     $lastIndex = [];
     foreach ($items as $index => $item) {
         foreach (lambdaNamesReferencedInStmt($item) as $lambdaName) {
-            $body = $propagateCopiesLambdaBodies[$lambdaName] ?? null;
-            if ($body === null) {
+            if (!isset($propagateCopiesLambdaBodies[$lambdaName])) {
                 continue;
             }
 
-            $locals = $lambdaLocals[$lambdaName] ??= (static function () use ($body, $lambdaName): array {
-                global $propagateCopiesLambdaParams;
-                $params = \array_fill_keys($propagateCopiesLambdaParams[$lambdaName] ?? [], true);
-                $free = [];
-                foreach (lambdaBodyLocals($body) as $localName => $_) {
-                    if (!isset($params[$localName])) {
-                        $free[$localName] = true;
-                    }
-                }
-
-                return $free;
-            })();
+            $locals = $lambdaLocals[$lambdaName] ??= lambdaCapturedLocals($lambdaName, $memo);
             foreach ($locals as $localName => $_) {
                 $lastIndex[$localName] = $index;
             }
@@ -1137,39 +1168,38 @@ function lambdaCaptureIndex(array $items): array
     return $lastIndex;
 }
 
-/** @param IR\Block $block @return array<string, true> */
-function lambdaBodyLocals(IR\Block $block): array
-{
-    $locals = [];
-    IR\Visit\walkBlock(
-        $block,
-        static function (IR\Stmt $stmt): void {
-        },
-        static function (IR\Operand $operand) use (&$locals): void {
-            if ($operand instanceof IR\Local) {
-                $locals[$operand->name] = true;
-            }
-        },
-    );
-
-    return $locals;
-}
-
-/** @return array<int, string> */
+/**
+ * Lifted-function names a statement refers to.
+ *
+ * A recursive `let`/`where` group is reached by name, not through an operand:
+ * `call __letrecN(…)` carries its callee as a string, so it is read off the
+ * statement and off `ExprCall` operands rather than the operand tree.
+ *
+ * @return array<int, string>
+ */
 function lambdaNamesReferencedInStmt(IR\Stmt $stmt): array
 {
     $names = [];
+
+    if ($stmt instanceof IR\Call && isCapturedFnName($stmt->callee)) {
+        $names[] = $stmt->callee;
+    }
+
     $visit = static function (IR\Operand $operand) use (&$names): void {
-        if ($operand instanceof IR\FnRef && isLambdaName($operand->name)) {
+        if ($operand instanceof IR\FnRef && isCapturedFnName($operand->name)) {
             $names[] = $operand->name;
         }
 
-        if ($operand instanceof IR\Partial && isLambdaName($operand->fn)) {
+        if ($operand instanceof IR\Partial && isCapturedFnName($operand->fn)) {
             $names[] = $operand->fn;
         }
 
-        if ($operand instanceof IR\ExprPartial && isLambdaName($operand->fn)) {
+        if ($operand instanceof IR\ExprPartial && isCapturedFnName($operand->fn)) {
             $names[] = $operand->fn;
+        }
+
+        if ($operand instanceof IR\ExprCall && isCapturedFnName($operand->callee)) {
+            $names[] = $operand->callee;
         }
     };
 

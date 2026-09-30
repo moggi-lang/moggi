@@ -44,7 +44,6 @@ function svcCodeActions(AnalysisService $svc, string $uri, array $range, array $
                             'newText' => $stub,
                         ]]),
             ];
-            // Extra ctor fills when the type env has several constructors.
             foreach (holeCtorFillCandidates($holeType, $svc, $analysis) as $ctorStub) {
                 if ($ctorStub === $stub) {
                     continue;
@@ -184,7 +183,6 @@ function holeFillStub(string $type, ?AnalysisService $svc = null, ?AnalysisResul
     if (preg_match('/^IO\b/', $t)) {
         return 'pure undefined';
     }
-    // Tuple: (a, b, …)
     if (preg_match('/^\((.+)\)$/', $t, $tm) && str_contains($tm[1], ',')) {
         $arity = substr_count($tm[1], ',') + 1;
         return '(' . implode(', ', array_fill(0, $arity, 'undefined')) . ')';
@@ -210,7 +208,6 @@ function normalizeHoleType(string $type): string
     if (preg_match('/^(.*?)\s*=>\s*(.+)$/', $t, $m)) {
         $t = trim($m[2]);
     }
-    // Drop applied args: `Maybe Int` → `Maybe`
     if (preg_match('/^([A-Z][A-Za-z0-9_\']*)\b/', $t, $hm)) {
         if (str_contains($t, ' ') && !str_contains($t, '->')) {
             return $hm[1];
@@ -259,13 +256,11 @@ function holeCtorFillCandidates(string $type, ?AnalysisService $svc, ?AnalysisRe
                 continue;
             }
             foreach ($decl->children as $child) {
-                // Index lacks arity — prefer bare name (nullary / newtype unwrap).
                 $out[] = $child->name;
             }
             break;
         }
     }
-    // Prefer nullary / shorter stubs first.
     usort($out, static fn (string $a, string $b): int => strlen($a) <=> strlen($b));
     return array_values(array_unique($out));
 }
@@ -330,7 +325,6 @@ function buildExhaustivenessArmEdits(string $source, object $program, array $dia
     }
     $lines = splitLines($source);
     $lineText = $lines[$insertLine] ?? ($lines[$insertLine - 1] ?? '');
-    // Insert after the end of the last arm line (0-based LSP line = insertLine for 1-based last arm).
     $lspLine = max(0, $insertLine - 1);
     if ($caseExpr instanceof Ast\CaseExpr && $caseExpr->alts !== []) {
         $lspLine = max(0, $insertLine - 1);

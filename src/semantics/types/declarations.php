@@ -21,8 +21,6 @@ require_once __DIR__ . '/infer.php';
 
 function standalonePrimitiveTypeSynonyms(): array
 {
-    // Public IO synonym lives in System.IO.Base (re-exported by System.IO) and is
-    // never ambient-bootstrapped.
     $rhs = static fn (string $prim): array => synonymEntry(new Ast\TypeCon($prim));
 
     return [
@@ -58,9 +56,6 @@ function applyPrimitiveTypeSynonymBootstrap(TypeCheckState $state, array $define
             continue;
         }
 
-        // Magichash RHS resolves during synonym expansion even without a Prim
-        // import, so public names like `Int` stay usable in standalone scripts.
-        // Writing `Int#` directly still requires importing Moggi.Internal.Prim.
         $state->typeSynonyms[$name] = $type;
     }
 }
@@ -79,15 +74,9 @@ function applyPrimitiveDataBootstrap(TypeCheckState $state): void
         ];
     }
 
-    // Bool is wired in: `if` desugars to a case on `True`/`False`, so the
-    // constructors have to resolve in a module that never names Data.Bool -- and
-    // they stay wired in when the type itself arrived another way (from a
-    // module that imports `Data.Bool`).
     $state->env['True'] ??= scheme(new TCon('Bool'), []);
     $state->env['False'] ??= scheme(new TCon('Bool'), []);
 
-    // DataKinds: `'True` / `'False` are usable as promoted types even though
-    // Bool is bootstrapped rather than going through registerData.
     foreach (['False', 'True'] as $ctorName) {
         $state->promoted[$ctorName] ??= ['data' => 'Bool'];
     }
@@ -182,13 +171,9 @@ function registerData(TypeCheckState $state, Ast\DataDecl $decl): void
             $bound = $params;
             $state->env[$ctor->name] = scheme($ctorType, $bound);
 
-            // DataKinds: register promotable constructors (nullary, or fields
-            // whose types are themselves datatypes usable as kinds).
             registerPromotedConstructor($state, $decl->name, $ctor, $fieldTypes);
         }
 
-        // `Solo a = MkSolo a` is a constructor alias: both names construct and
-        // the same tagged value. Solo is a constructor alias of MkSolo.
         if ($decl->name === 'Solo'
             && isset($state->data['Solo']['constructors']['MkSolo'])
             && !isset($state->data['Solo']['constructors']['Solo'])
@@ -315,7 +300,6 @@ function registerTypeSynonym(TypeCheckState $state, Ast\TypeSynonymDecl $decl): 
         throw typeFail($state, "type synonym `{$name}` conflicts with data type", $decl);
     }
 
-    // Elaborate RHS under the synonym parameters so free vars are kind-bound.
     $kindScope = Kinds\pushKindScope($state);
     foreach ($decl->params as $param) {
         $state->varKinds[$param] = new Kinds\KType();
@@ -326,9 +310,6 @@ function registerTypeSynonym(TypeCheckState $state, Ast\TypeSynonymDecl $decl): 
     } finally {
         Kinds\restoreKindScope($state, $kindScope);
     }
-    // The elaborated body is kept beside the RHS: a module that imports the
-    // synonym must expand it the way its own module resolved it, not by
-    // re-resolving the RHS names in the importing module's scope.
     $state->typeSynonyms[$name] = synonymEntry($decl->type, $decl->params, $body);
 }
 
@@ -404,16 +385,10 @@ function registerClass(TypeCheckState $state, Ast\ClassDecl $decl, string $modul
         'methods' => $methods,
         'superclasses' => $decl->superclasses,
         'associatedTypes' => $associatedTypes,
-        // The `{-# MINIMAL … #-}` alternatives, or `[]` for the default reading
-        // (every method without a default has to be implemented).
         'minimalGroups' => $decl->minimalGroups,
-        // A default body is re-checked at every instance site, in the instance's
-        // module; `module` names the scope it must be resolved in.
         'module' => $module,
     ];
 
-    // The polymorphic scheme of every method, as `Class(..)` exports them, so an instance
-    // body resolves a method of its own class through the class.
     $state->classes[$name]['methodSchemes'] = classMethodExportSchemes($state, $decl);
 }
 
@@ -480,7 +455,6 @@ function registerClassAssociatedTypes(TypeCheckState $state, Ast\ClassDecl $decl
 
         foreach ($assoc->params as $paramName) {
             if (!isset($paramKinds[$paramName])) {
-                // Family binders that are not class params default to Type.
                 $state->varKinds[$paramName] = new Kinds\KType();
             }
         }
@@ -597,8 +571,6 @@ function classMethodExportSchemes(TypeCheckState $state, Ast\ClassDecl $classDec
     $schemes = [];
     foreach ($classInfo['methods'] as $methodName => $methodInfo) {
         $methodLocalConstraints = $methodInfo['userConstraints'] ?? [];
-        // The scheme keeps the constraints *as written*: expanding them here would make the
-        // call site expand them a second time, under a second root identity.
         $freshened = freshenTypeWithConstraints($state, $methodInfo['type'], [
             ...$methodLocalConstraints,
             ...$classConstraints,
@@ -624,9 +596,6 @@ function classMethodExportSchemes(TypeCheckState $state, Ast\ClassDecl $classDec
 function registerClassMethodExportSchemes(TypeCheckState $state, Ast\ClassDecl $classDecl): void
 {
     foreach (classMethodExportSchemes($state, $classDecl) as $methodName => $scheme) {
-        // Instance methods may already have marked `$methodName` in
-        // `instanceMethodNames`; still install the polymorphic class-method
-        // scheme so bare uses quantify a fresh constraint.
         $existing = $state->env[$methodName] ?? null;
         if ($existing?->classMethod && $existing->class !== $scheme->class) {
             unset($state->env[$methodName]);
@@ -647,8 +616,6 @@ function registerInstanceSchemes(TypeCheckState $state, Ast\AstNode $decl): void
     $registration = instanceMethodSchemes($state, $decl);
     foreach ($registration['schemes'] as $methodName => $scheme) {
         $state->instanceMethodNames[$methodName] = true;
-        // Keep class-method schemes in env for `Class(..)` exports. Instance
-        // methods are still recorded for IR/evidence and uniquified later.
         $existing = $state->env[$methodName] ?? null;
         if ($existing?->classMethod || isset($state->localDeclNames[$methodName])) {
             continue;
@@ -681,8 +648,6 @@ function registerInferredFunctionPlaceholder(TypeCheckState $state, Ast\ClassDec
         $fnType = new TArrow(freshType($state), $fnType);
     }
 
-    // A restricted declaration (`x = e`, no signature) is settled at module end: mark it
-    // before any body is inferred so a probe cannot abstract its variable.
     if ($fn instanceof Ast\FunctionDecl && isRestrictedDeclaration($fn)) {
         foreach (\array_keys(quantifiedVars($state, $fnType)) as $var) {
             $state->restrictedVars[$var] = true;

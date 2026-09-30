@@ -165,8 +165,6 @@ function utf16ToCodepointCol(string $lineText, int $utf16Char0): int
 /** @return list<string> */
 function splitLines(string $source): array
 {
-    // Occurrence indexing calls nodeToLspRange per AST node; re-splitting the
-    // same buffer thousands of times was burning CPU like an infinite loop.
     static $cachedSource = null;
     static $cachedLines = null;
     if ($cachedSource === $source && \is_array($cachedLines)) {

@@ -10,9 +10,6 @@ use function Moggi\LSP\Protocol\splitLines;
 
 function svcOnTypeFormatting(AnalysisService $svc, string $uri, array $position, string $ch, array $options): array
 {
-    // The capability advertises '{', '}', ';' as trigger characters; requests
-    // for any other character must be rejected as unsupported rather than
-    // reformatted whole-document.
     if (!in_array($ch, ['{', '}', ';'], true)) {
         return [];
     }

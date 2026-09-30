@@ -17,16 +17,12 @@ use function Moggi\formatExceptionReport;
 
 function formatReplThrowable(\Throwable $e, string $userSource = ''): string
 {
-    // JVM/dotnet subprocess already printed a Moggi report into the exception message.
     $msg = $e->getMessage();
     if (str_starts_with(ltrim($msg), 'moggi:')) {
         return remapReplExceptionReport(rtrim($msg, "\r\n") . "\n", $userSource);
     }
 
     if (!\function_exists('\\Moggi\\formatExceptionReport')) {
-        // The same runtime the evaluated modules load: see
-        // EvalRunner\writeDepsRuntimeShim. Loading a second copy of it would
-        // redeclare its top-level functions.
         foreach (backendById('php')->runtimeFiles() as $runtime) {
             require_once $runtime;
         }
@@ -50,7 +46,6 @@ function remapReplExceptionReport(string $report, string $userSource = ''): stri
     $out = [];
     $sawInteractive = false;
     foreach ($lines as $line) {
-        // Subprocess Main wrapper used only to run Interactive.__repl_eval.
         if (preg_match('/^\s*at Main\.main\s*\(.*Main\.mog:/', $line) === 1) {
             continue;
         }
@@ -69,7 +64,6 @@ function remapReplExceptionReport(string $report, string $userSource = ''): stri
         }
         $out[] = $line;
     }
-    // Throw-site-only reports have no Interactive frame — still show the user line.
     if ($userSource !== '' && !$sawInteractive) {
         $out[] = "  at <interactive>:{$userLine}:{$userCol}";
     }
@@ -79,8 +73,6 @@ function remapReplExceptionReport(string $report, string $userSource = ''): stri
 
 function helpText(): string
 {
-    // Derive the backend list from the registry so help cannot drift from what
-    // `:backend` actually accepts.
     $backends = implode('|', knownBackendIds());
 
     return <<<TXT
@@ -272,8 +264,6 @@ function handleFragment(State $state, string $source, ?ReplFragment $frag = null
 {
     $frag ??= parseReplFragment($source, '<interactive>');
     if ($frag->kind === ReplFragment::KIND_INCOMPLETE) {
-        // Callers hand over one complete input unit (see runLoop, which keeps
-        // buffering); a partial buffer here is a bug, not user input.
         throw new \LogicException('handleFragment requires complete input');
     }
     if ($frag->kind === ReplFragment::KIND_ERROR) {

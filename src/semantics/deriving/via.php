@@ -62,17 +62,12 @@ function deriveVia(
     $classInfo = $state->classes[$className];
     $classParam = $classInfo['params'][0]['name'] ?? 'a';
 
-    // The required context is `C V`; a concrete V resolves to the instance
-    // directly, a polymorphic one becomes the instance dictionary parameter.
     $constraints = [
         new Ast\TypeApp(new Ast\TypeCon($className), [$viaType]),
     ];
 
     $methods = [];
     foreach ($classInfo['methods'] as $methodName => $methodInfo) {
-        // A method taking the value under a constructor (`showList`) cannot be
-        // converted by unwrapping one argument; its class default dispatches
-        // through the methods that can.
         if (typeHasNestedClassParam($methodInfo['type'], $classParam)) {
             continue;
         }

@@ -4,6 +4,7 @@ namespace Moggi\Backend\Meta;
 
 use Moggi\IR;
 
+use function Moggi\IR\Visit\boundLocalsInBlock;
 use function Moggi\IR\Visit\collectLambdaRefsInBlock;
 use function Moggi\IR\Visit\walkOperand;
 use function Moggi\Optimize\Support\isCapturedFnName;
@@ -142,7 +143,12 @@ function boolConstructorMapFromRegistry(array $registryData): array
  * `$capturesOf` supplies each lifted function's direct free locals; this
  * propagates the captures a function needs from the functions it references, to
  * a fixpoint. A target may derive the direct captures itself, so that rule is a
- * parameter rather than a copy of the whole closure.
+ * parameter rather than a copy of the whole closure. What the function itself
+ * binds -- its parameters, its `let`s, its match binders -- is never added: a
+ * local a nested lambda reaches there is that body's own, and passing it would
+ * put an undefined name in the caller's scope.
+ *
+ * @see boundLocalsInBlock
  *
  * @param array<string, IR\FunctionDecl> $byName
  * @param callable(IR\FunctionDecl): list<string> $capturesOf
@@ -151,11 +157,14 @@ function boolConstructorMapFromRegistry(array $registryData): array
 function lambdaMetaFromCaptures(array $byName, callable $capturesOf): array
 {
     $meta = [];
+    $owned = [];
     foreach ($byName as $name => $function) {
         $meta[$name] = [
             'captures' => $capturesOf($function),
             'params' => $function->params,
         ];
+        $owned[$name] = boundLocalsInBlock($function->body)
+            + \array_fill_keys($function->params, true);
     }
 
     $changed = true;
@@ -169,9 +178,11 @@ function lambdaMetaFromCaptures(array $byName, callable $capturesOf): array
                     continue;
                 }
                 foreach ($child['captures'] as $capture) {
-                    if (!\in_array($capture, $info['params'], true) && !\in_array($capture, $info['captures'], true)) {
-                        $needed[] = $capture;
+                    if (isset($owned[$name][$capture]) || \in_array($capture, $info['captures'], true)) {
+                        continue;
                     }
+
+                    $needed[] = $capture;
                 }
             }
             $needed = \array_values(\array_unique($needed));

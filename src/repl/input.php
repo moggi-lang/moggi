@@ -9,9 +9,6 @@ namespace Moggi\Repl;
  */
 function readLineFrom($in, string $prompt, bool $echoPrompt = true): string|false
 {
-    // Interactive TTY: use readline so ↑/↓ walk command history instead of
-    // dumping raw CSI sequences like `^[[A`. Call the global `\readline`
-    // (case-insensitive name would otherwise recurse into a local helper).
     if ($echoPrompt && $in === STDIN && \stream_isatty($in) && \function_exists('readline')) {
         return \readline($prompt);
     }

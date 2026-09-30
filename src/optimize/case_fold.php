@@ -136,11 +136,8 @@ function operandShapeKey(IR\Operand $op): string
 function foldKnownConstructorsBlock(IR\Block $block): IR\Block
 {
     $items = denseStmtItems($block->items);
-    // Always sanitize MatchReturn/Ret shapes — specialized derived-instance
-    // clones routinely exceed the fold size cap below.
     $items = rewriteMatchStmtArmRets($items);
     $items = rewriteMidBlockMatchReturns($items);
-    // Skip expensive known-ctor fold on huge bodies.
     if (count($items) > 80) {
         return new IR\Block($items);
     }
@@ -251,9 +248,6 @@ function joinMatchStmtConsumer(array $items, int $depth = 0): array
             $dest = $item->dest;
             $out[] = mapMatchArms($item, static function (IR\MatchArm $arm) use ($depth, $dest): IR\MatchArm {
                 $body = joinMatchStmtConsumer($arm->body->items, $depth + 1);
-                // Inner joins may leave MatchReturn/Ret in MatchStmt arms —
-                // rewrite to assigns so emit never sees function-level returns
-                // mid-statement (mapMaybeDemo MList→Bool / DotNet match_end).
                 $body = rewriteRetsToAssigns($body, $dest);
 
                 return new IR\MatchArm($arm->pattern, new IR\Block($body), $arm->guards);
@@ -431,7 +425,6 @@ function appendMatchReturnToArm(array $armItems, int $dest, IR\MatchReturn $cons
 
     $last = $armItems[count($armItems) - 1];
 
-    // Arm already returns — consume that value (not an undefined `$dest` temp).
     if ($last instanceof IR\Ret) {
         array_pop($armItems);
         $rewritten = rewriteMatchReturnConsumerDest($consumer, $dest, $last->value);
@@ -440,7 +433,6 @@ function appendMatchReturnToArm(array $armItems, int $dest, IR\MatchReturn $cons
         return denseStmtItems($armItems);
     }
 
-    // Nested MatchReturn: push the consumer into each leaf return.
     if ($last instanceof IR\MatchReturn) {
         array_pop($armItems);
         $arms = [];
@@ -456,9 +448,6 @@ function appendMatchReturnToArm(array $armItems, int $dest, IR\MatchReturn $cons
         return denseStmtItems($armItems);
     }
 
-    // Keep Assign/Call bindings that define `$dest`. Rewriting them into an
-    // expression scrutinee while consumer arms still mention Temp($dest) leaves
-    // unbound temps (Generic `to . from` identity after match-wrapper inline).
     if (
         ($last instanceof IR\Assign || $last instanceof IR\Call)
         && $last->dest === $dest
@@ -468,8 +457,6 @@ function appendMatchReturnToArm(array $armItems, int $dest, IR\MatchReturn $cons
         return denseStmtItems($armItems);
     }
 
-    // Dest may be bound earlier in the arm; match on it without inventing
-    // `dest = dest` (that left unknown temps after Ret-conversion).
     $armItems[] = new IR\MatchReturn(new IR\Temp($dest), $consumer->arms, $consumer->exhaustive);
 
     return denseStmtItems($armItems);
@@ -525,8 +512,6 @@ function appendConsumerToArm(array $armItems, int $dest, array $consumer): array
 
     $last = $armItems[count($armItems) - 1];
 
-    // Nested MatchReturn: push the consumer into each leaf (same as
-    // appendMatchReturnToArm) — do not append `ret $dest` after it.
     if ($last instanceof IR\MatchReturn) {
         array_pop($armItems);
         $arms = [];
@@ -600,9 +585,6 @@ function foldKnownMatchesInItems(array $items, int $depth = 0): array
                 );
             });
 
-            // MatchStmt arms must assign to dest — nested MatchReturn/Ret left
-            // by PE (e.g. inlined encObject empty-check) would return from the
-            // enclosing function instead of binding the field encoding.
             if ($item instanceof IR\MatchStmt) {
                 $dest = $item->dest;
                 $item = mapMatchArms($item, static function (IR\MatchArm $arm) use ($dest): IR\MatchArm {
@@ -614,8 +596,6 @@ function foldKnownMatchesInItems(array $items, int $depth = 0): array
                 });
             }
 
-            // Mid-block MatchReturn skips subsequent statements: convert only when following
-            // statements need exactly one undefined temp, never invent a fresh dest.
             if ($item instanceof IR\MatchReturn && $i !== $n - 1) {
                 $dest = midBlockMatchReturnDest($out, \array_slice($items, $i + 1), $items);
                 if ($dest !== null) {
@@ -625,7 +605,6 @@ function foldKnownMatchesInItems(array $items, int $depth = 0): array
                         $out[] = $item;
                         continue;
                     }
-                    // Fall through: fold the MatchStmt like any other.
                 }
             }
 
@@ -743,7 +722,6 @@ function collectTempDefsInItems(array $items, array &$defs): void
             }
         }
         if ($item instanceof IR\Let) {
-            // Lets bind names, not temps.
         }
     }
 }
@@ -853,7 +831,6 @@ function rewriteRetsToAssigns(array $items, int $dest): array
             continue;
         }
         if ($stmt instanceof IR\MatchReturn) {
-            // Nested MatchReturn inside a MatchStmt fold — convert to MatchStmt.
             $arms = [];
             foreach ($stmt->arms as $arm) {
                 $arms[] = new IR\MatchArm(
@@ -882,9 +859,6 @@ function tryFoldMatch(
     array $ctors,
     array $aliases,
 ): ?array {
-    // Resolve ListLit spines into `:` CtorTrees (and `__tupleN` heads into
-    // `()` trees) so PatCons/PatTuple/PatNil of known lists fold the same way
-    // as ordinary constructor matches.
     $scrut = resolveMatchScrutinee($scrut, $ctors, $aliases);
     if (
         !($scrut instanceof CtorTree)
@@ -899,18 +873,12 @@ function tryFoldMatch(
 
     foreach ($match->arms as $arm) {
         if ($arm->guards !== []) {
-            // An arm that is tried before this one decides the match at run time
-            // (its pattern may hold and its guard may fall through), so nothing
-            // after it can be folded into the whole match.
             return null;
         }
 
         $bindings = [];
         $decisive = true;
         if (!matchPatternDecisive($arm->pattern, $scrut, $bindings, $decisive)) {
-            // Arm does not match. If the failure was due to a non-constant
-            // literal/char leaf, a later arm must not be treated as proven —
-            // that deleted `go 0 acc = acc` when matching `(0,acc)` vs `(n,acc)`.
             if (!$decisive) {
                 return null;
             }
@@ -925,8 +893,6 @@ function tryFoldMatch(
             continue;
         }
 
-        // Prefer reconstructing the arm result from pattern leaves (they already have the right
-        // operands); MatchStmt arms assign to dest and must not become bare `ret`.
         if ($match instanceof IR\MatchReturn) {
             $rewritten = rewriteArmRetFromLeaves($arm->body->items, $bindings);
             if ($rewritten !== null) {
@@ -935,9 +901,6 @@ function tryFoldMatch(
         }
 
         $body = [];
-        // Substitute pattern binders with their leaf operands. Non-duplicable
-        // seeds (nullary foreign allocators) are Let-bound once so multi-use
-        // arms cannot rematerialize a fresh host object per occurrence.
         static $seedSeq = 0;
         $params = [];
         $args = [];
@@ -973,9 +936,6 @@ function tryFoldMatch(
 function rewriteArmRetFromLeaves(array $items, array $bindings): ?array
 {
     $items = denseStmtItems($items);
-    // Only rewrite pure single-Ret arms. Multi-stmt arms often bind pattern
-    // names (`Let x = …`) before `ret String(x)`; dropping those Lets while
-    // replacing args from leaves left unbound locals (Generic codecs).
     if (count($items) !== 1 || $bindings === []) {
         return null;
     }
@@ -1432,8 +1392,6 @@ function foldFieldExtractsInItems(array $items, int $depth = 0): array
             }
         }
 
-        // Fold nested `__fieldN(knownCtor)` inside call args / ret payloads —
-        // common after specializing record codecs then inlining derived methods.
         $folded = foldNestedFieldExtractsInStmt($item, $ctors, $aliases);
         $out[] = $folded;
         recordCtorDef($folded, $ctors, $aliases);
@@ -1503,7 +1461,6 @@ function foldNestedFieldExtractsInStmt(IR\Stmt $stmt, array $ctors, array $alias
  */
 function foldNestedFieldExtractOperand(IR\Operand $operand, array $ctors, array $aliases): IR\Operand
 {
-    // Recurse into children first so `__field0(M1(__field0(:*:(…))))` chains fold.
     $operand = mapOperandChildren(
         $operand,
         static fn (IR\Operand $child): IR\Operand => foldNestedFieldExtractOperand($child, $ctors, $aliases),
@@ -1523,8 +1480,6 @@ function foldNestedFieldExtractOperand(IR\Operand $operand, array $ctors, array 
         }
     }
 
-    // Whole-program field accessors (`getTagSingleConstructors` = `__field7`)
-    // registered alongside nullary ctor CAFs.
     if ($operand instanceof IR\ExprCall && count($operand->args) === 1) {
         $idx = fieldAccessorCafIndex($operand->callee);
         if ($idx !== null) {
@@ -1636,11 +1591,6 @@ function isPlausibleConstructorName(string $name): bool
         return false;
     }
 
-    // Qualified Module::name / ns\name — only the leaf identifier is a ctor
-    // candidate. Treating `Data.Int::compare` as a Con (leading `D`) caused
-    // case-of-known-ctor to drop the LT arm of `abs` and leave `ret x`.
-    // Symbolic function ops like `Control.Applicative::<|>` must not count as
-    // ctors either (`<` is non-alnum) — that PE'd optionalDemo to False.
     $leaf = constructorLeafName($name);
 
     if ($leaf === '' || str_starts_with($leaf, '__')) {
@@ -1695,14 +1645,10 @@ function resolveOperand(IR\Operand $operand, array $ctors, array $aliases, array
         );
     }
 
-    // Nullary constructors as bare FnRefs (`@True`, `@False`, `@Nothing`, …).
     if ($operand instanceof IR\FnRef && isPlausibleConstructorName($operand->name)) {
         return new CtorTree($operand->name, []);
     }
 
-    // `call_value @Just(1)` — constructor applied as a function value. Without
-    // this, nested patterns like `Just (Just 1)` fail to match after PE of
-    // `optional` / `fmap` and fall through to `_` → False.
     if ($operand instanceof IR\ExprCallValue) {
         $callee = resolveOperand($operand->callee, $ctors, $aliases, $seen);
         $ctorName = null;
@@ -1722,9 +1668,6 @@ function resolveOperand(IR\Operand $operand, array $ctors, array $aliases, array
         }
     }
 
-    // Nullary CAF FnRefs (e.g. `@defaultOptions` → `Options(...)`) registered by
-    // whole-program specialize so `__fieldN(@caf)` can fold across modules.
-    // Library Options CAFs — not a domain special case.
     if ($operand instanceof IR\FnRef) {
         $caf = nullaryCtorCaf($operand->name);
         if ($caf !== null) {
@@ -1732,8 +1675,6 @@ function resolveOperand(IR\Operand $operand, array $ctors, array $aliases, array
         }
     }
 
-    // Known list spines from Intrinsic listCons# / list_nil — same as ListLit
-    // for PatCons / PatNil case-of-known.
     if ($operand instanceof IR\Intrinsic) {
         if ($operand->name === 'list_nil' && $operand->args === []) {
             return new IR\ListLit([]);
@@ -1745,7 +1686,6 @@ function resolveOperand(IR\Operand $operand, array $ctors, array $aliases, array
                 return new IR\ListLit([$head instanceof CtorTree ? materializeOperand($head) : $head, ...$tail->elements]);
             }
 
-            // Keep as cons tree so PatCons can still bind head/tail.
             return $operand instanceof IR\Intrinsic
                 ? new IR\Intrinsic('listCons#', [
                     $head instanceof CtorTree ? materializeOperand($head) : $head,
@@ -1804,8 +1744,6 @@ function materializeOperand(CtorTree|IR\Operand $value): IR\Operand
         return $value;
     }
 
-    // Nullary constructors as FnRefs (`@False`) so case-of-known matches them;
-    // `call False()` would leave a residual match.
     if ($value->args === []) {
         return new IR\FnRef($value->name);
     }

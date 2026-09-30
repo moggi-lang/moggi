@@ -89,7 +89,6 @@ function runServer(array $libDirs = []): int
 
     while (true) {
         $timeout = $svc->secondsUntilNextPending();
-        // Cap select wait; also wake periodically even without pending work.
         if ($timeout === null) {
             $timeout = 1.0;
         } elseif ($timeout < 0) {
@@ -100,15 +99,11 @@ function runServer(array $libDirs = []): int
         $msg = readMessageOrTimeout(\STDIN, $timeout, $malformed);
         if ($msg === false) {
             if ($malformed) {
-                // Base protocol: answer invalid frames instead of dying; the
-                // stream stays positionally in sync for length-prefixed bodies.
                 sendNotification('window/showMessage', [
                     'type' => 2,
                     'message' => 'Moggi language server received a malformed JSON-RPC message.',
                 ]);
             } else {
-                // Idle tick — flush due analyzes, and notice a compiler that
-                // moved on without us.
                 publishFlushedDiagnostics($svc, $workDoneProgress);
                 watchCompilerRevision();
             }
@@ -123,8 +118,6 @@ function runServer(array $libDirs = []): int
         $params = $msg['params'] ?? [];
         $result = $msg['result'] ?? null;
 
-        // Client replies to server→client requests (no method): configuration
-        // pull replies are matched by id prefix; everything else is ignored.
         if ($method === null) {
             handleConfigurationReply($svc, $id, $result);
             continue;
@@ -154,7 +147,6 @@ function runServer(array $libDirs = []): int
                 continue;
             }
             if ($shutdownReceived) {
-                // 3.18: repeated shutdown is invalid — error it.
                 if ($id !== null) {
                     sendError($id, -32600, 'Invalid Request: server is already shut down');
                 }
@@ -164,9 +156,6 @@ function runServer(array $libDirs = []): int
             continue;
         }
 
-        // 3.18: every request other than initialize/exit received before the
-        // initialize request must be answered with ServerNotInitialized;
-        // notifications before initialize must be dropped.
         if (!$initialized) {
             if ($id !== null && $method !== 'initialized') {
                 sendError($id, -32002, 'Server not initialized');
@@ -174,8 +163,6 @@ function runServer(array $libDirs = []): int
             continue;
         }
 
-        // 3.18: after shutdown, all requests error with InvalidRequest and all
-        // notifications (except exit) are ignored.
         if ($shutdownReceived) {
             if ($id !== null) {
                 sendError($id, -32600, 'Invalid Request: server is shut down');
@@ -184,7 +171,6 @@ function runServer(array $libDirs = []): int
         }
 
         if ($method === '$/cancelRequest') {
-            // 3.18: `id` is int|string, or an empty array meaning "cancel all".
             $cancelId = $params['id'] ?? null;
             if (\is_array($cancelId) && $cancelId === []) {
                 $cancellations->cancelAll();
@@ -199,7 +185,6 @@ function runServer(array $libDirs = []): int
             continue;
         }
 
-        // 3.18: emit $/logTrace when the client asked for trace output.
         if ($trace === 'verbose' || $trace === 'messages') {
             $logTrace = ['message' => "Received request '{$method}'"];
             if ($trace === 'verbose') {
@@ -242,7 +227,6 @@ function runServer(array $libDirs = []): int
 
             case 'textDocument/didChange':
                 handleDidChange($svc, $params);
-                // Opportunistically flush anything already due.
                 publishFlushedDiagnostics($svc, $workDoneProgress);
                 continue 2;
 
@@ -259,8 +243,6 @@ function runServer(array $libDirs = []): int
                 break;
         }
 
-        // 3.18: requests whose method starts with '$/' that the server does
-        // not understand must error with MethodNotFound (not silently ignore).
         if (str_starts_with($method, '$/') && !isset($handlers[$method])) {
             if ($id !== null) {
                 sendError($id, -32601, "Method not found: $method");
@@ -296,7 +278,6 @@ function runHandler(
     bool $clientSupportsProgress,
 ): void {
     if ($id === null) {
-        // Unadvertised-as-request corner: handle without progress/cancel.
         try {
             $handler($svc, $params);
         } catch (\Throwable) {
@@ -310,7 +291,6 @@ function runHandler(
         workDoneParamsToken($params),
         'Moggi',
     );
-    // Pre-existing cancellation for an id the client already gave up on.
     if ($cancellations->isCancelled($id)) {
         $cancellations->clear($id);
         endRequestProgress($token, true);
@@ -345,7 +325,6 @@ function publishFlushedDiagnostics(AnalysisService $svc, bool $workDoneProgress 
     $token = null;
     if ($willWork && $workDoneProgress) {
         $token = 'moggi-tc-' . (++$progressSeq);
-        // Fire-and-forget create; do not block the stdio loop on the client reply.
         writeMessage([
             'jsonrpc' => '2.0',
             'id' => 'moggi-wdp-' . $progressSeq,

@@ -42,9 +42,6 @@ function parseModuleHeader(array $tokens, string $source = '', string $filename 
     $implicitMain = false;
     $moduleNameToken = null;
     if (isAt($state, TokenKind::KwModule)) {
-        // Kept for diagnostics about the module as a whole — a facade with no implementation for
-        // the compile backend, say — which are rendered against the name here. This header pass is
-        // the only one that sees the tokens of a module that never gets parsed into a program.
         $moduleNameToken = isAt($state, TokenKind::ConId, 1) ? peekAt($state, 1) : null;
         [$module, $exports, $moduleBackend] = parseModuleDecl($state);
     } else {
@@ -130,8 +127,6 @@ function parse(
         $implicitMain = true;
     }
 
-    // Prepare may pre-seed imports (header parse + injectPrelude). Consume the
-    // source import decls without appending so they are not doubled.
     if ($imports !== []) {
         while (isAt($state, TokenKind::KwImport)) {
             skipModuleHeaderDocs($state);
@@ -187,8 +182,6 @@ function parse(
             continue;
         }
 
-        // Offside boundary for this declaration: continuation keywords (`in`,
-        // `where`) must stay strictly deeper than the item's first column.
         $state->declCol = peek($state)->col;
         $item = parseTopLevel($state);
         $trailingDoc = consumeTrailingDoc($state);
@@ -342,12 +335,6 @@ function mergeFunctionClauses(array $items, string $source = '', string $filenam
         }
 
         if ($pending !== null && $pending['name'] === $item->name) {
-            // A leading `name :: T` (parsed as a signature-only clause in
-            // backend modules) only carries the type; the following
-            // definition supplies the real body. Replace the placeholder
-            // rather than accumulating it as a second clause, so that
-            // `name :: T` + `name x = ...` is one typed function instead of
-            // two clauses with mismatched arities.
             $pendingIsSigOnly = count($pending['clauses']) === 1
                 && $pending['clauses'][0]['body'] instanceof Ast\SignatureOnly;
             $incomingIsSigOnly = $item->signatureOnly || $item->body instanceof Ast\SignatureOnly;
@@ -356,8 +343,6 @@ function mergeFunctionClauses(array $items, string $source = '', string $filenam
             } else {
                 $pending['clauses'][] = ['params' => $item->params, 'body' => $item->body];
             }
-            // The first positioned equation names the declaration; later ones are the same
-            // declaration and must not move it.
             $pending['span'] ??= declarationSpan($item);
             if ($pending['type'] === null && $item->type !== null) {
                 $pending['type'] = $item->type;

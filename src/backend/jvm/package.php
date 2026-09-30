@@ -21,7 +21,6 @@ use function Moggi\Backend\Jvm\Naming\moduleInternalName;
  */
 function packageJvmOutput(string $outputRoot, array $options = []): void
 {
-    // Language ABI (Platform / remaining RT for string_* and platform_* intrinsics).
     $classes = languageRuntime() + platformRuntime();
     $resources = [];
     $frameRows = [];
@@ -35,7 +34,6 @@ function packageJvmOutput(string $outputRoot, array $options = []): void
         $full = $file->getPathname();
         $rel = substr($full, strlen(rtrim($outputRoot, DIRECTORY_SEPARATOR)) + 1);
         $rel = \str_replace('\\', '/', $rel);
-        // Ignore packaging intermediates / prior jars sitting in the output tree.
         if (str_ends_with($rel, '.jar') || str_contains(basename($rel), '.tmp.')) {
             continue;
         }
@@ -45,8 +43,6 @@ function packageJvmOutput(string $outputRoot, array $options = []): void
             continue;
         }
         if (str_ends_with($rel, '.moggi.map')) {
-            // Bake the frames; the map itself stays in the build tree, since
-            // nothing reads it out of the jar.
             $raw = (string) file_get_contents($full);
             foreach (sourceMapFrames($raw) as $frame) {
                 $key = (string) ($frame['class'] ?? '')
@@ -60,8 +56,6 @@ function packageJvmOutput(string $outputRoot, array $options = []): void
         }
     }
 
-    // Host stack traces name the generated class/method/line; the baked
-    // table translates them to `.mog` frames (path and column included).
     $classes['moggi/rt/Frames'] = buildFrames($frameRows);
 
     $entry = $options['entryModule'] ?? null;
@@ -72,14 +66,9 @@ function packageJvmOutput(string $outputRoot, array $options = []): void
         $mainClass = 'moggi.Main';
     }
 
-    // Demand-driven: merge vendored jars (any lib's `jvm/` dir) when
-    // emitted bytecode references packages from those jars.
     mergeDemandClasspathJars($classes, $resources);
 
     if (!empty($options['unpacked'])) {
-        // Explicit unpacked/development build: leave the generated classes
-        // and the runtime on disk (runnable with `java -cp <root> ...`);
-        // jar packaging is skipped, like the PHAR in the PHP backend.
         foreach ($classes as $internal => $bytes) {
             if (!\is_string($bytes) || $bytes === '') {
                 continue;
@@ -115,9 +104,6 @@ function writeJar(string $jarPath, array $classes, ?string $mainClass = null, ar
         throw new \RuntimeException("cannot create jar directory {$dir}");
     }
 
-    // Write to a sibling temp file, then rename. ZipArchive::OVERWRITE can fail
-    // on close() with "Renaming temporary file failed" when replacing an
-    // existing jar in-place (seen under test packageOutput paths).
     $tmpPath = $jarPath . '.tmp.' . getmypid() . '.' . bin2hex(random_bytes(4));
     if (\is_file($tmpPath)) {
         @unlink($tmpPath);
@@ -155,7 +141,6 @@ function writeJar(string $jarPath, array $classes, ?string $mainClass = null, ar
             throw new \RuntimeException("cannot finalize jar {$tmpPath}");
         }
     } catch (\Throwable $e) {
-        // close() may already have run; ignore secondary failures while cleaning up.
         try {
             @$zip->unchangeAll();
             @$zip->close();

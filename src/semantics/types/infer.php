@@ -76,12 +76,8 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
         unset($state->env[$fn->name]);
     }
 
-    // A body without a signature is scanned for its constraints, materialized as a
-    // signature and checked like any other function; that signature is then the truth.
     if (! $hadDeclaredSignature && $fn->inferredSignatureType === null && ! isRestrictedDeclaration($fn)) {
         $discovered = discoverFunctionConstraints($state, $fn);
-        // Only a declaration that takes dictionaries gets a signature here; the rest is left
-        // to `discoverInferredSignatures`.
         if ($discovered !== null && $discovered['constraints'] !== []) {
             materializeInferredSignature(
                 $state,
@@ -106,16 +102,12 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
             [$constraintAsts, $bodyTypeAst] = splitTypeAst($fn->inferredSignatureType ?? $fn->type);
             $userConstraints = parseConstraints($state, $constraintAsts, $fn);
             if ($fn->inferredSignatureType !== null) {
-                // Dictionary parameters a previous check of this declaration
-                // prepended are dropped here and rebuilt below.
                 $fn->params = userParamsOf($fn);
             }
 
             $constraints = expandConstraintsWithSuperclasses($state, $userConstraints);
             applyConstraintVarKinds($state, $constraints);
             $constraintEnv = buildConstraintEnv($state, $constraints);
-            // `astType` reads the variable kinds `applyConstraintVarKinds` set, so
-            // the body type is only elaborated once those are in place.
             $fnType = astType($state, $bodyTypeAst);
             Kinds\assertKind($state, $fnType, new Kinds\KType(), $state->varKinds, $fn);
             foreach (array_reverse($constraints) as $constraint) {
@@ -156,8 +148,6 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
         }
     }
 
-    // An inferred signature is checked once: a later walk would infer the body again and
-    // insert the dictionaries of its call sites a second time.
     if (! $hadDeclaredSignature && $fn->inferredSignatureChecked) {
         $userFnType = peelDictArrows($fnType, count($constraints));
         $prunedUserConstraints = refreshConstraintArgs($state, $userConstraints);
@@ -178,12 +168,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
     }
 
     $bodyEnv = $constraintEnv === [] ? $env : [...$env, ...$constraintEnv];
-    // The self-reference carries the user-facing type (dict arrows peeled) plus the
-    // runtime constraint count, exactly like the exported scheme below.
     $selfType = peelDictArrows($fnType, count($constraints));
-    // As written, not expanded: a recursive call re-expands them into the same
-    // dictionary arguments, which is only stable while the list is the
-    // user-level one (see expandConstraintsWithSuperclasses).
     $bodyEnv[$fn->name] = scheme($selfType, [], $userConstraints, count($constraints));
 
     $savedConstraintMethods = $state->constraintMethods;
@@ -192,13 +177,8 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
     $state->constraintMethods = [];
     $state->constraintMethodAmbiguities = [];
     $state->constraintMethodCandidates = [];
-    // `$constraints` is already the superclass-expanded list (and the list of
-    // dictionary parameters); expanding it again would re-add every superclass
-    // under the next root's identity.
     $methodConstraints = $constraints;
 
-    // The constraints written as opposed to superclass-implied: a derived constraint is
-    // a weaker provider, so the operand decides first and the written one after.
     $declaredConstraintKeys = [];
     foreach ($userConstraints as $userConstraint) {
         $declaredConstraintKeys[$userConstraint->class . ':' . constraintArgsKey($userConstraint->args)] = true;
@@ -250,9 +230,6 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
 
                 if (isset($state->constraintMethods[$methodName])) {
                     $existing = $state->constraintMethods[$methodName];
-                    // A second dictionary of the same class at the same head is
-                    // the same provider (`(Monad m, Functor m)`); a different
-                    // head is genuinely ambiguous (`(Functor f, Functor g)`).
                     if (($existing['class'] ?? null) !== $info['class']
                         || constraintArgKey($existing['constraintHead']) !== constraintArgKey($info['constraintHead'])
                     ) {
@@ -281,9 +258,6 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
         $bodyEnv = [...$bodyEnv, ...$methodConstraintEnv];
     }
 
-    // Ambient constraints let calls to *other* constrained functions (and this
-    // function's own recursive calls) forward the enclosing evidence parameters
-    // instead of demanding a concrete instance for a still-polymorphic type var.
     $savedAmbientConstraints = $state->ambientConstraints;
     $savedAmbientByClass = $state->ambientConstraintsByClass;
     $state->ambientConstraints = $methodConstraints;
@@ -305,8 +279,6 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
     $openRestricted = openRestrictedVarsInExpr($state, $fn->body);
 
     if ($ownsOpenVars || $openRestricted !== []) {
-        // The monomorphism restriction leaves a declaration's variables open to module end:
-        // what no use pinned is defaulted, and bodies using such a variable wait.
         deferDeclaration(
             $state,
             $fn,
@@ -327,8 +299,6 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
 
     $fnType = settleCheckedBody($state, $fn, $fnType, $restricted, $hadDeclaredSignature, $constraints, $userConstraints);
 
-    // Lower saturated `#` primop applications to IntrinsicCall so IO normalize
-    // and IR lowering carry the canonical `#` name end to end.
     resolveMachineIntPow($state, $fn->body);
     $fn->body = rewriteIntrinsicApplies($fn->body);
 
@@ -338,14 +308,10 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
         $state->intrinsicWrappers[$fn->name] = $wrapper;
     }
 
-    // Latch the check only when the body carries dictionaries (a second inference would
-    // duplicate them); a declaration needing none must be resolved again.
     if (! $hadDeclaredSignature && $fn->inferredSignatureType !== null && $constraints !== []) {
         $fn->inferredSignatureChecked = true;
     }
 
-    // This declaration's use of a restricted declaration is the last chance to
-    // read what it pinned it to.
     recordRestrictedSolutions($state);
 
     return $fn;
@@ -372,8 +338,6 @@ function settleCheckedBody(
     array $constraints,
     array $userConstraints,
 ): Type {
-    // A literal the declaration's own type does not determine is defaulted before the
-    // evidence pass; a restricted declaration exempts none of its constraints.
     defaultAmbiguousNumericVars(
         $state,
         $fn->body,
@@ -381,16 +345,11 @@ function settleCheckedBody(
             ? []
             : quantifiedVars($state, peelDictArrows($fnType, count($constraints))),
     );
-    // Everything below writes into the body, so it belongs to the pass with the last
-    // word: a provisional settle stops after the type.
+
     if (! $state->provisionalRestrictedSettle) {
-        // Before the evidence pass: an operator whose operands the signature pinned to a
-        // primitive numeric type must be decided while the `infix` node still exists.
         resolveDeferredNativeInfixes($state, $fn->body);
         resolvePendingEvidenceInExpr($state, $fn->body);
         tryResolveValueEvidence($state, $fn->body);
-        // While the declaration's dictionaries are still in scope: a literal of a
-        // polymorphic type is its `fromInteger`, projected from that dictionary.
         $fn->body = elaborateNumericLiterals($state, $fn->body);
         assertNoPendingConstraintsInExpr($state, $fn->body, $fn);
         zonkInferredTypesInExpr($state, $fn->body);
@@ -400,23 +359,14 @@ function settleCheckedBody(
     }
     reportTypedHoles($state);
     $fnType = prune($state, $fnType);
-    // `signatureTypeAst` rather than `internalTypeToAst`: an unbound higher-kinded
-    // parameter written as a type application could not be elaborated later.
     $fn->type = signatureTypeAst(
         $fnType,
         \array_flip(knownTypeConstructorNames($state)),
         $state->subst,
     );
-    // `$type` is the resolved type either way now, so record where it came from
-    // for the later passes over this AST (`Ast\hasDeclaredSignature`).
     $fn->typeInferred = !$hadDeclaredSignature;
     $userFnType = peelDictArrows($fnType, count($constraints));
-    // A signature type variable can be bound to a fresh internal var while checking the
-    // body, so the constraints must be pruned along with the function type.
     $prunedUserConstraints = refreshConstraintArgs($state, $userConstraints);
-    // A restricted declaration is registered *monomorphically*: every use site
-    // has to see the same type variables, which is what lets `n = 1 + 1` and a
-    // later `m = n :: Int` agree on `Int`.
     $state->env[$fn->name] = $restricted
         ? scheme($userFnType, [], [])
         : scheme(
@@ -489,13 +439,8 @@ function deferDeclaration(
     if (! $hadDeclaredSignature) {
         $userFnType = peelDictArrows($fnType, count($constraints));
         if ($restricted) {
-            // Monomorphically (no bound variables): every use site sees the same
-            // type variables, which is the point of holding the declaration
-            // back.
             $state->env[$fn->name] = scheme($userFnType, [], []);
         } else {
-            // A declaration held back for what it *uses* is called like any
-            // other, with the dictionaries its own constraints need.
             $state->env[$fn->name] = scheme(
                 $userFnType,
                 schemeBoundVars($userFnType, $state->env, $userConstraints),
@@ -523,12 +468,7 @@ function deferDeclaration(
         'declared' => $hadDeclaredSignature,
         'constraints' => $constraints,
         'userConstraints' => $userConstraints,
-        // The body was typed against these, and the passes at the module end
-        // still need them: what the declaration solved for itself is not
-        // repeated there.
         'subst' => $state->subst,
-        // Those passes resolve against the class-method and declaration context
-        // of this check -- the next declaration's check overwrites both.
         'methods' => $state->constraintMethods,
         'ambiguities' => $state->constraintMethodAmbiguities,
         'methodCandidates' => $state->constraintMethodCandidates,
@@ -536,11 +476,6 @@ function deferDeclaration(
     ];
 }
 
-/**
- * Settle the declarations the monomorphism restriction held back (`n = 1 + 1`
- * is an `Integer` unless a later `m = n :: Int` says otherwise) now that every
- * use site has been checked.
- */
 /**
  * Remember what the declaration just checked pinned the variables of a
  * restricted declaration to.
@@ -588,26 +523,36 @@ function resolveRestrictedSolution(TypeCheckState $state, string $var): ?Type
     return null;
 }
 
+/**
+ * Settle the declarations the monomorphism restriction held back (`n = 1 + 1`
+ * is an `Integer` unless a later `m = n :: Int` says otherwise) now that every
+ * use site has been checked.
+ *
+ * A declaration that owns restricted variables settles before one that merely
+ * uses them, so a use site can read the owner's settled type.
+ */
 function finishRestrictedDeclarations(TypeCheckState $state): void
 {
     $deferred = $state->deferredRestricted;
     $state->deferredRestricted = [];
 
-    // The declarations that own the open variables go first: what they settle is
-    // what the declarations using them are waiting for.
+    $owners = [];
+    $users = [];
     foreach ($deferred as $entry) {
         if ($entry['owns']) {
-            settleDeferredDeclaration($state, $entry);
+            $owners[] = $entry;
+        } else {
+            $users[] = $entry;
         }
     }
-    foreach ($deferred as $entry) {
-        if (! $entry['owns']) {
-            settleDeferredDeclaration($state, $entry);
-        }
+
+    foreach ([...$owners, ...$users] as $entry) {
+        settleDeferredDeclaration($state, $entry);
     }
 }
 
-/** @param array<string, mixed> $entry a record of {@see deferDeclaration} */function settleDeferredDeclaration(TypeCheckState $state, array $entry): void
+/** @param array<string, mixed> $entry a record of {@see deferDeclaration} */
+function settleDeferredDeclaration(TypeCheckState $state, array $entry): void
 {
     $fn = $entry['fn'];
     $saved = [
@@ -620,10 +565,6 @@ function finishRestrictedDeclarations(TypeCheckState $state): void
         $state->ambientConstraintsByClass,
     ];
 
-    // What the use sites pinned, on top of the substitution this declaration
-    // was typed against. A solution can itself be stated in terms of another
-    // open variable, so the table is walked until every entry sees the ones
-    // installed before it; a chain is at most as long as the table.
     $state->subst = $entry['subst'];
     $waiting = \array_unique([
         ...\array_keys($state->restrictedSolutions),
@@ -661,8 +602,6 @@ function finishRestrictedDeclarations(TypeCheckState $state): void
             $entry['constraints'],
             $entry['userConstraints'],
         );
-        // A declaration that only mentioned another restricted declaration now
-        // has an answer for itself.
         recordRestrictedSolutions($state);
         resolveMachineIntPow($state, $fn->body);
         $fn->body = rewriteIntrinsicApplies($fn->body);
@@ -684,20 +623,6 @@ function finishRestrictedDeclarations(TypeCheckState $state): void
     }
 }
 
-/**
- * Discover what every inferred declaration needs to be called with before any
- * body is checked.
- *
- * A call site is lowered with the dictionaries of the function it calls, so a
- * declaration checked later can be called correctly by an earlier one -- but a
- * mutually recursive pair has no order in which both are already known, and
- * `isEven` calling `isOdd` would be lowered without a dictionary. Discovering
- * everything first, and repeating until no declaration gains a constraint, is
- * what a chain (`f n = g n`, `g n = show n`) needs: `g` learns `Show` in the
- * first round and `f` only in the second.
- *
- * @param list<Ast\FunctionDecl> $functions
- */
 /**
  * Whether a constraint is over a variable a restricted declaration owns.
  *
@@ -724,6 +649,20 @@ function constraintOverRestrictedVar(TypeCheckState $state, Ast\PendingConstrain
     return false;
 }
 
+/**
+ * Discover what every inferred declaration needs to be called with before any
+ * body is checked.
+ *
+ * A call site is lowered with the dictionaries of the function it calls, so a
+ * declaration checked later can be called correctly by an earlier one -- but a
+ * mutually recursive pair has no order in which both are already known, and
+ * `isEven` calling `isOdd` would be lowered without a dictionary. Discovering
+ * everything first, and repeating until no declaration gains a constraint, is
+ * what a chain (`f n = g n`, `g n = show n`) needs: `g` learns `Show` in the
+ * first round and `f` only in the second.
+ *
+ * @param list<Ast\FunctionDecl> $functions
+ */
 function discoverInferredSignatures(TypeCheckState $state, array $functions): void
 {
     do {
@@ -816,8 +755,6 @@ function discoverFunctionConstraints(TypeCheckState $state, Ast\FunctionDecl $fn
 {
     $savedSubst = $state->subst;
     $savedHoles = $state->holes;
-    // Those probe variables are rolled back with the substitution, so their names can be
-    // handed out again and reported types do not shift.
     $savedFresh = $state->fresh;
     $savedMethods = [
         $state->constraintMethods,
@@ -826,9 +763,6 @@ function discoverFunctionConstraints(TypeCheckState $state, Ast\FunctionDecl $fn
     ];
     $savedSpan = $state->declSpan;
     $savedAmbient = installAmbientConstraints($state, []);
-    // The probe checks this declaration's body, so a diagnostic it raises belongs
-    // to the declaration: parts of a desugared body (the `case` matching function
-    // clauses) carry no position of their own and are reported at the span.
     $state->declSpan = [
         'line' => $fn->line,
         'col' => $fn->col,
@@ -854,9 +788,6 @@ function discoverFunctionConstraints(TypeCheckState $state, Ast\FunctionDecl $fn
             $expected = $expected->to;
         }
 
-        // The self reference carries no dictionaries here: this run only has to
-        // find out which ones the function needs, and adding them later would
-        // give the recursive call site a dictionary argument it does not have.
         $bodyEnv[$fn->name] = scheme($fnType, [], [], 0);
         $bodyType = inferExpr($state, $fn->body, $bodyEnv);
         unify($state, $bodyType, $expected, $fn->body);
@@ -868,12 +799,8 @@ function discoverFunctionConstraints(TypeCheckState $state, Ast\FunctionDecl $fn
         ));
 
         return [
-            // Pruned against this run's substitution, so the caller can turn the
-            // type into a signature without the variables that have been solved.
             'type' => prune($state, $fnType),
             'constraints' => refreshConstraintArgs($state, $constraints),
-            // A constraint dropped because it belongs to a restricted declaration's open
-            // variable: the declaration's type is not its own to name (`targetFunction`).
             'deferredOverRestricted' => $constraints === [] && $found !== [],
         ];
     } finally {
@@ -888,18 +815,10 @@ function discoverFunctionConstraints(TypeCheckState $state, Ast\FunctionDecl $fn
         $state->fresh = $savedFresh;
         $state->declSpan = $savedSpan;
         clearPendingConstraintsDeep($fn->body);
-        // ...and the types it annotated the body with: they belong to the
-        // substitution that was just rolled back (`clearInferredAnnotationsDeep`).
         clearInferredAnnotationsDeep($fn->body);
     }
 }
 
-/**
- * The user-written parameters of a function, without the dictionary parameters
- * an earlier check of the same declaration prepended.
- *
- * @return array<int, Ast\AstNode>
- */
 /**
  * Whether a declaration is *restricted*: a pattern binding -- `x = e`,
  * `f = \p -> e`, `(a, b) = e` -- with no type signature, where the pattern on
@@ -917,6 +836,12 @@ function isRestrictedDeclaration(Ast\FunctionDecl $fn): bool
         && userParamsOf($fn) === [];
 }
 
+/**
+ * The user-written parameters of a function, without the dictionary parameters
+ * an earlier check of the same declaration prepended.
+ *
+ * @return array<int, Ast\AstNode>
+ */
 function userParamsOf(Ast\FunctionDecl $fn): array
 {
     $params = $fn->params;
@@ -989,9 +914,6 @@ function materializeInferredSignature(
         );
     }
 
-    // A declaration that needs no dictionaries carries the type itself: there is
-    // nothing to constrain, and ` => ` around it would only be noise in every
-    // later reader of the signature (`splitTypeAst` reads both shapes).
     $fn->inferredSignatureType = $constraintNodes === []
         ? $toSignatureType($userType)
         : new Ast\TypeConstrained(
@@ -1126,171 +1048,147 @@ function signatureVarsInType(Type $type, array $known): array
  */
 function rewriteIntrinsicApplies(Ast\AstNode $expr): Ast\AstNode
 {
-    if ($expr instanceof Ast\Variable || $expr instanceof Ast\QualifiedRef) {
-        $wrapper = $expr->intrinsicWrapper;
-        if ($wrapper !== null) {
-            $internal = resolveIntrinsicName($wrapper) ?? $wrapper;
-            $schemes = typeSchemes();
-            $scheme = $schemes[$internal] ?? null;
-            if ($scheme !== null && schemeArity($scheme) === 0) {
-                $call = new Ast\IntrinsicCall($internal, [], $expr->line, $expr->col, $expr->endCol);
-                $call->intrinsicId = $internal;
-                $call->inferredType = $expr->inferredType;
-                $call->pendingConstraints = $expr->pendingConstraints;
-
-                return $call;
-            }
-        }
-
-        return $expr;
-    }
-
-    if ($expr instanceof Ast\Apply) {
-        $expr->function = rewriteIntrinsicApplies($expr->function);
-        $expr->argument = rewriteIntrinsicApplies($expr->argument);
-
-        $parts = flattenApplyForIntrinsicWrapper($expr);
-        $callee = $parts['function'];
-        $wrapper = null;
-        if ($callee instanceof Ast\Variable || $callee instanceof Ast\QualifiedRef) {
-            $wrapper = $callee->intrinsicWrapper;
-        }
-        if ($wrapper === null && $expr->intrinsicWrapper !== null) {
+    return match ($expr::class) {
+        Ast\Variable::class, Ast\QualifiedRef::class => (static function () use ($expr): Ast\AstNode {
             $wrapper = $expr->intrinsicWrapper;
-        }
-        if ($wrapper !== null) {
-            $internal = resolveIntrinsicName($wrapper) ?? $wrapper;
-            $schemes = typeSchemes();
-            $scheme = $schemes[$internal] ?? null;
-            if ($scheme !== null
-                && count($parts['args']) === schemeArity($scheme)
-            ) {
-                $call = new Ast\IntrinsicCall($internal, $parts['args'], $expr->line, $expr->col, $expr->endCol);
-                $call->intrinsicId = $internal;
-                $call->inferredType = $expr->inferredType;
-                $call->pendingConstraints = $expr->pendingConstraints;
-
-                return $call;
+            if ($wrapper === null) {
+                return $expr;
             }
-        }
 
-        return $expr;
-    }
+            $internal = resolveIntrinsicName($wrapper) ?? $wrapper;
+            $scheme = typeSchemes()[$internal] ?? null;
+            if ($scheme === null || schemeArity($scheme) !== 0) {
+                return $expr;
+            }
 
-    if ($expr instanceof Ast\IntrinsicCall) {
-        $internal = resolveIntrinsicName($expr->name) ?? $expr->name;
-        $expr->name = $internal;
-        $expr->intrinsicId = $internal;
-        foreach ($expr->args as $i => $arg) {
-            $expr->args[$i] = rewriteIntrinsicApplies($arg);
-        }
+            $call = new Ast\IntrinsicCall($internal, [], $expr->line, $expr->col, $expr->endCol);
+            $call->intrinsicId = $internal;
+            $call->inferredType = $expr->inferredType;
+            $call->pendingConstraints = $expr->pendingConstraints;
 
-        return $expr;
-    }
+            return $call;
+        })(),
+        Ast\Apply::class => (static function () use ($expr): Ast\AstNode {
+            $expr->function = rewriteIntrinsicApplies($expr->function);
+            $expr->argument = rewriteIntrinsicApplies($expr->argument);
 
-    if ($expr instanceof Ast\Lambda) {
-        $expr->body = rewriteIntrinsicApplies($expr->body);
+            $parts = flattenApplyForIntrinsicWrapper($expr);
+            $callee = $parts['function'];
+            $wrapper = ($callee instanceof Ast\Variable || $callee instanceof Ast\QualifiedRef)
+                ? $callee->intrinsicWrapper
+                : null;
+            $wrapper ??= $expr->intrinsicWrapper;
+            if ($wrapper === null) {
+                return $expr;
+            }
 
-        return $expr;
-    }
+            $internal = resolveIntrinsicName($wrapper) ?? $wrapper;
+            $scheme = typeSchemes()[$internal] ?? null;
+            if ($scheme === null || count($parts['args']) !== schemeArity($scheme)) {
+                return $expr;
+            }
 
-    if ($expr instanceof Ast\Let) {
-        foreach ($expr->bindings as $binding) {
-            $binding->value = rewriteIntrinsicApplies($binding->value);
-        }
-        $expr->body = rewriteIntrinsicApplies($expr->body);
+            $call = new Ast\IntrinsicCall($internal, $parts['args'], $expr->line, $expr->col, $expr->endCol);
+            $call->intrinsicId = $internal;
+            $call->inferredType = $expr->inferredType;
+            $call->pendingConstraints = $expr->pendingConstraints;
 
-        return $expr;
-    }
+            return $call;
+        })(),
+        Ast\IntrinsicCall::class => (static function () use ($expr): Ast\AstNode {
+            $internal = resolveIntrinsicName($expr->name) ?? $expr->name;
+            $expr->name = $internal;
+            $expr->intrinsicId = $internal;
+            foreach ($expr->args as $i => $arg) {
+                $expr->args[$i] = rewriteIntrinsicApplies($arg);
+            }
 
-    if ($expr instanceof Ast\Where) {
-        foreach ($expr->bindings as $binding) {
-            $binding->value = rewriteIntrinsicApplies($binding->value);
-        }
-        $expr->expr = rewriteIntrinsicApplies($expr->expr);
+            return $expr;
+        })(),
+        Ast\Lambda::class => (static function () use ($expr): Ast\AstNode {
+            $expr->body = rewriteIntrinsicApplies($expr->body);
 
-        return $expr;
-    }
+            return $expr;
+        })(),
+        Ast\Let::class => (static function () use ($expr): Ast\AstNode {
+            foreach ($expr->bindings as $binding) {
+                $binding->value = rewriteIntrinsicApplies($binding->value);
+            }
+            $expr->body = rewriteIntrinsicApplies($expr->body);
 
-    if ($expr instanceof Ast\CaseExpr) {
-        $expr->scrutinee = rewriteIntrinsicApplies($expr->scrutinee);
-        foreach ($expr->alts as $alt) {
-            $alt->body = rewriteIntrinsicApplies($alt->body);
-        }
+            return $expr;
+        })(),
+        Ast\Where::class => (static function () use ($expr): Ast\AstNode {
+            foreach ($expr->bindings as $binding) {
+                $binding->value = rewriteIntrinsicApplies($binding->value);
+            }
+            $expr->expr = rewriteIntrinsicApplies($expr->expr);
 
-        return $expr;
-    }
+            return $expr;
+        })(),
+        Ast\CaseExpr::class => (static function () use ($expr): Ast\AstNode {
+            $expr->scrutinee = rewriteIntrinsicApplies($expr->scrutinee);
+            foreach ($expr->alts as $alt) {
+                $alt->body = rewriteIntrinsicApplies($alt->body);
+            }
 
-    if ($expr instanceof Ast\GuardsExpr) {
-        foreach ($expr->clauses as $clause) {
-            $clause->guard = rewriteIntrinsicApplies($clause->guard);
-            $clause->body = rewriteIntrinsicApplies($clause->body);
-        }
+            return $expr;
+        })(),
+        Ast\GuardsExpr::class => (static function () use ($expr): Ast\AstNode {
+            foreach ($expr->clauses as $clause) {
+                $clause->guard = rewriteIntrinsicApplies($clause->guard);
+                $clause->body = rewriteIntrinsicApplies($clause->body);
+            }
 
-        return $expr;
-    }
+            return $expr;
+        })(),
+        Ast\DoExpr::class => (static function () use ($expr): Ast\AstNode {
+            if ($expr->desugared !== null) {
+                $expr->desugared = rewriteIntrinsicApplies($expr->desugared);
+            }
 
-    if ($expr instanceof Ast\DoExpr) {
-        if ($expr->desugared !== null) {
-            $expr->desugared = rewriteIntrinsicApplies($expr->desugared);
-        }
+            return $expr;
+        })(),
+        Ast\Infix::class => (static function () use ($expr): Ast\AstNode {
+            $expr->left = rewriteIntrinsicApplies($expr->left);
+            $expr->right = rewriteIntrinsicApplies($expr->right);
 
-        return $expr;
-    }
+            return $expr;
+        })(),
+        Ast\Tuple::class, Ast\ListLit::class => (static function () use ($expr): Ast\AstNode {
+            foreach ($expr->elements as $i => $el) {
+                $expr->elements[$i] = rewriteIntrinsicApplies($el);
+            }
 
-    if ($expr instanceof Ast\Infix) {
-        $expr->left = rewriteIntrinsicApplies($expr->left);
-        $expr->right = rewriteIntrinsicApplies($expr->right);
+            return $expr;
+        })(),
+        Ast\TypeAsc::class => (static function () use ($expr): Ast\AstNode {
+            $expr->expr = rewriteIntrinsicApplies($expr->expr);
 
-        return $expr;
-    }
+            return $expr;
+        })(),
+        Ast\RecordCon::class => (static function () use ($expr): Ast\AstNode {
+            foreach ($expr->fields as $field) {
+                $field->expr = rewriteIntrinsicApplies($field->expr);
+            }
 
-    if ($expr instanceof Ast\Tuple) {
-        foreach ($expr->elements as $i => $el) {
-            $expr->elements[$i] = rewriteIntrinsicApplies($el);
-        }
+            return $expr;
+        })(),
+        Ast\RecordUpdate::class => (static function () use ($expr): Ast\AstNode {
+            $expr->object = rewriteIntrinsicApplies($expr->object);
+            foreach ($expr->fields as $field) {
+                $field->expr = rewriteIntrinsicApplies($field->expr);
+            }
 
-        return $expr;
-    }
+            return $expr;
+        })(),
+        Ast\FieldAccess::class => (static function () use ($expr): Ast\AstNode {
+            $expr->object = rewriteIntrinsicApplies($expr->object);
 
-    if ($expr instanceof Ast\ListLit) {
-        foreach ($expr->elements as $i => $el) {
-            $expr->elements[$i] = rewriteIntrinsicApplies($el);
-        }
-
-        return $expr;
-    }
-
-    if ($expr instanceof Ast\TypeAsc) {
-        $expr->expr = rewriteIntrinsicApplies($expr->expr);
-
-        return $expr;
-    }
-
-    if ($expr instanceof Ast\RecordCon) {
-        foreach ($expr->fields as $field) {
-            $field->expr = rewriteIntrinsicApplies($field->expr);
-        }
-
-        return $expr;
-    }
-
-    if ($expr instanceof Ast\RecordUpdate) {
-        $expr->object = rewriteIntrinsicApplies($expr->object);
-        foreach ($expr->fields as $field) {
-            $field->expr = rewriteIntrinsicApplies($field->expr);
-        }
-
-        return $expr;
-    }
-
-    if ($expr instanceof Ast\FieldAccess) {
-        $expr->object = rewriteIntrinsicApplies($expr->object);
-
-        return $expr;
-    }
-
-    return $expr;
+            return $expr;
+        })(),
+        default => $expr,
+    };
 }
 
 /**
@@ -1309,7 +1207,6 @@ function validateEntryPoint(
         return;
     }
 
-    // Only `Main.main` is the program entry; elsewhere `main` is ordinary.
     if ($moduleName !== 'Main') {
         return;
     }
@@ -1388,8 +1285,6 @@ function trivialIntrinsicWrapper(Ast\FunctionDecl $fn): ?string
             ?? resolveIntrinsicName($callee->name);
     }
 
-    // Inlining is fine for pure primops, but not for ones whose lowering embeds the call
-    // site (error, throw): those must stay real functions.
     if ($internalId !== null && capturesCallSite($internalId)) {
         return null;
     }
@@ -1428,7 +1323,6 @@ function flattenApplyForIntrinsicWrapper(Ast\AstNode $expr): array
         $args[] = $expr->argument;
         $expr = $expr->function;
     }
-    // Collect then reverse: array_unshift in a loop is O(n²) on long spines.
     if ($args !== []) {
         $args = array_reverse($args);
     }
@@ -1515,7 +1409,6 @@ function reportTypedHoles(TypeCheckState $state): void
     );
     $err->diagnosticCode = 'hole';
     $err->holeType = $typeStr;
-    // Extra holes (same function) as related info — CLI still fails on first.
     if (count($state->holes) > 1) {
         $related = [];
         for ($i = 1, $n = count($state->holes); $i < $n; $i++) {
@@ -1538,8 +1431,6 @@ function reportTypedHoles(TypeCheckState $state): void
 
 function inferDoExpr(TypeCheckState $state, Ast\DoExpr $expr, array $env): Type
 {
-    // Single path: do → >>= → (later) strict_io_normalize. Concrete IO no longer
-    // has a separate typer; Monad IO is an ordinary instance.
     $desugared = desugarDo($expr->stmts);
     $type = inferExpr($state, $desugared, $env);
     $expr->desugared = $desugared;
@@ -1607,8 +1498,6 @@ function inferVariable(TypeCheckState $state, Ast\AstNode &$expr, array $env): T
     if (isset($state->intrinsicWrappers[$expr->name])) {
         $expr->intrinsicWrapper = $state->intrinsicWrappers[$expr->name];
     } else if (isset($env[$expr->name]) && resolveIntrinsicName($expr->name) !== null) {
-        // A class default body re-checked outside its module still sees its primops: scope is
-        // what makes a primop visible, so being in `$env` is the whole test.
         $expr->intrinsicWrapper = $expr->name;
     }
     if ($scheme->binderId !== null) {
@@ -1632,7 +1521,6 @@ function inferOperatorRef(TypeCheckState $state, Ast\AstNode &$expr, array $env)
         throw typeFail($state, 'expected operator_ref', $expr);
     }
 
-    // Parenthesized constructor operators `(:|)` are ordinary constructors.
     if (isConstructorOperator($expr->name) && lookupConstructorMeta($state, $expr->name) !== null) {
         $expr = new Ast\ConstructorRef($expr->name);
 
@@ -1770,21 +1658,10 @@ function inferApply(TypeCheckState $state, Ast\Apply $expr, array $env): Type
     $fnType = prune($state, inferMethodByArgument($state, $expr, $env));
     $argType = prune($state, inferExpr($state, $expr->argument, $env));
 
-    // A dictionary handed over as an explicit argument. A call to a constrained
-    // function resolves its evidence by inserting the dictionary at the call
-    // site, and that rewritten body is inferred again whenever the enclosing
-    // declaration is checked more than once (a module is inferred more than
-    // once, and the rewrite is part of the body). Dictionaries are erased at run
-    // time and never show up in a type, so consuming one leaves the callee's
-    // type as it is -- the callee's own arrows are the ones that remain.
     if ($argType instanceof TCon && \str_starts_with($argType->name, '__Dict_')) {
         return $fnType;
     }
 
-    // Peel the arrow directly instead of `unify(fn, arg -> ρ)`. Unifying whole
-    // arrows runs `normalizeType` on both sides and can reduce `Rep Foo x` to a
-    // concrete M1-tree, which then fails to unify with polymorphic `Rep a b`
-    // from class methods like `to`/`from`.
     if ($fnType instanceof TVar) {
         $result = freshType($state);
         unify($state, $fnType, new TArrow($argType, $result), $expr);
@@ -1808,8 +1685,6 @@ function inferApply(TypeCheckState $state, Ast\Apply $expr, array $env): Type
 
     $fnType = normalizeType($state, $fnType, reduceFamilies: false);
     if (!$fnType instanceof TArrow) {
-        // Fall back to full-arrow unify so non-function heads keep the familiar
-        // `could not unify τ with σ -> ρ` diagnostic (see Bad-Letpoly-Captured-Var).
         $result = freshType($state);
         unify($state, $fnType, new TArrow($argType, $result), $expr);
         $pending = pendingConstraintsFromExpr($expr->function);
@@ -1876,10 +1751,6 @@ function resolvePendingEvidenceInExpr(TypeCheckState $state, Ast\AstNode &$expr)
 {
     match ($expr::class) {
         Ast\Apply::class => (static function () use ($state, $expr): void {
-            // Resolve at the top of the application spine *first*: inferApply
-            // copies pendingConstraints onto every apply node, so resolving
-            // bottom-up would let an outer node's stale copy prepend evidence a
-            // second time. Clearing the whole spine here prevents that.
             tryResolveApplyEvidence($state, $expr);
             resolvePendingEvidenceInExpr($state, $expr->function);
             resolvePendingEvidenceInExpr($state, $expr->argument);
@@ -1899,11 +1770,6 @@ function resolvePendingEvidenceInExpr(TypeCheckState $state, Ast\AstNode &$expr)
             tryResolveValueEvidence($state, $expr->left);
             tryResolveValueEvidence($state, $expr->right);
 
-            // A symbolic operator whose operand is not a machine integer needs
-            // its dictionary, and an operator is just a class method: rewrite it
-            // into the call every other method call takes, so the same evidence
-            // machinery applies. The node is replaced, not mutated -- the parent
-            // sees the call.
             if ($expr->pendingConstraints === []) {
                 return;
             }
@@ -1936,18 +1802,14 @@ function resolvePendingEvidenceInExpr(TypeCheckState $state, Ast\AstNode &$expr)
         })(),
         Ast\Lambda::class => (static function () use ($state, $expr): void {
             resolvePendingEvidenceInExpr($state, $expr->body);
-            // A lambda whose body is a bare constrained value (`\_ -> mempty`).
             tryResolveValueEvidence($state, $expr->body);
         })(),
         Ast\Let::class => (static function () use ($state, $expr): void {
             foreach ($expr->bindings as $binding) {
                 resolvePendingEvidenceInExpr($state, $binding->value);
-                // A bare nullary class method (`mempty`, `maxBound`) bound in a
-                // let keeps its pending constraint on the reference itself.
                 tryResolveValueEvidence($state, $binding->value);
             }
             resolvePendingEvidenceInExpr($state, $expr->body);
-            // The body may itself be a bare constrained value (`let go = top in go`).
             tryResolveValueEvidence($state, $expr->body);
         })(),
         Ast\Where::class => (static function () use ($state, $expr): void {
@@ -1956,25 +1818,17 @@ function resolvePendingEvidenceInExpr(TypeCheckState $state, Ast\AstNode &$expr)
                 tryResolveValueEvidence($state, $binding->value);
             }
             resolvePendingEvidenceInExpr($state, $expr->expr);
-            // The body may be a bare constrained value (`go where go :: C a => ...`).
             tryResolveValueEvidence($state, $expr->expr);
         })(),
         Ast\CaseExpr::class => (static function () use ($state, $expr): void {
             resolvePendingEvidenceInExpr($state, $expr->scrutinee);
-            // A nullary class method as scrutinee is a bare value reference.
             tryResolveValueEvidence($state, $expr->scrutinee);
             foreach ($expr->alts as $alt) {
                 resolvePendingEvidenceInExpr($state, $alt->body);
-                // An alternative's body may itself be a bare constrained value
-                // (`case xs of [] -> mempty; ...`), not just an application.
                 tryResolveValueEvidence($state, $alt->body);
             }
         })(),
-        Ast\GuardsExpr::class => (static function () use ($state, $expr): void {
-            // A guard and the body it selects are elaborated on their own: a
-            // constrained value in either (`pure 1` at `IO`, `n <= 0` at a
-            // dictionary type) keeps its pending evidence until this walk.
-            foreach ($expr->clauses as $clause) {
+        Ast\GuardsExpr::class => (static function () use ($state, $expr): void {            foreach ($expr->clauses as $clause) {
                 resolvePendingEvidenceInExpr($state, $clause->guard);
                 tryResolveValueEvidence($state, $clause->guard);
                 resolvePendingEvidenceInExpr($state, $clause->body);
@@ -1982,8 +1836,6 @@ function resolvePendingEvidenceInExpr(TypeCheckState $state, Ast\AstNode &$expr)
             }
         })(),
         Ast\ListLit::class => (static function () use ($state, $expr): void {
-            // List elements that are constrained apps (`showOne x`) keep pending
-            // evidence until this walk; skipping them left PHP partials in lists.
             foreach ($expr->elements as &$elem) {
                 resolvePendingEvidenceInExpr($state, $elem);
                 if ($elem instanceof Ast\Apply) {
@@ -2010,10 +1862,6 @@ function resolvePendingEvidenceInExpr(TypeCheckState $state, Ast\AstNode &$expr)
         })(),
         Ast\TypeAsc::class => (static function () use ($state, $expr): void {
             resolvePendingEvidenceInExpr($state, $expr->expr);
-            // Nullary class methods used with a type annotation
-            // (`mempty :: Min Int`) keep pending constraints on the inner
-            // reference; resolve them here (Apply only value-resolves its
-            // argument when that argument is already a Variable).
             tryResolveValueEvidence($state, $expr->expr);
         })(),
         default => null,
@@ -2070,10 +1918,7 @@ function tryResolveValueEvidence(TypeCheckState $state, Ast\AstNode &$expr): voi
         return;
     }
 
-    $expr->pendingConstraints = [];
-    // Same projection path as applied calls: class methods become
-    // EvidenceMethod; ordinary constrained functions keep leading dict Applies.
-    $expr = prependEvidenceToCall($state, $expr, $evidence);
+    $expr->pendingConstraints = [];    $expr = prependEvidenceToCall($state, $expr, $evidence);
 }
 
 function refreshConstraintArgs(TypeCheckState $state, array $constraints): array
@@ -2133,9 +1978,6 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
         throw new \InvalidArgumentException('inferInfix expects an infix expression');
     }
 
-    // An infix the compiler built itself is already resolved: a literal pattern's
-    // conjunction is `boolAnd#`, and such a node is built where the module's `&&`
-    // is not necessarily in scope.
     if ($expr->compilerIntrinsic !== null) {
         $bool = new TCon('Bool');
         unify($state, inferExpr($state, $expr->left, $env), $bool, $expr);
@@ -2147,12 +1989,8 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
 
     $op = $expr->operator;
 
-    // A module is inferred more than once per process -- a preliminary pass that has no
-    // imported values, then the authoritative one -- and both walk the same AST, so a
-    // resolution recorded by the earlier pass must be cleared before deciding again.
     $expr->resolvedIntrinsic = null;
 
-    // Infix data constructors lower to ordinary constructor application.
     if (lookupConstructorMeta($state, $op) !== null) {
         $left = $expr->left;
         $right = $expr->right;
@@ -2168,8 +2006,6 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
         return inferRewrittenInfix($state, $surface, $expr, $env);
     }
 
-    // Non-primitive class-method operators (`<|>`, `>>=`) need the Apply/evidence path;
-    // primitive-shaped ones stay on the fast infix path.
     if (isset($state->constraintMethods[$op])
         || (isClassMethodOperator($state, $op)
             && !isPrimitiveInfixOperator($op))) {
@@ -2187,8 +2023,6 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
         return inferRewrittenInfix($state, $surface, $expr, $env);
     }
 
-    // Operators mapping to a host/intrinsic binary op stay on the fast infix path; any
-    // other in-scope operator must lower as a call `op a b` with evidence.
     if (!isPrimitiveInfixOperator($op)
         && !isClassMethodOperator($state, $op)
         && (isset($env[$op]) || isset($state->env[$op]))) {
@@ -2207,9 +2041,6 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
     }
 
     $opScheme = $env[$op] ?? $state->env[$op] ?? throw typeFail($state, "undefined operator `{$op}`", $expr);
-    // The scheme's own constraints are part of the operator's type: `+` at a
-    // variable operand means `Num a`, and the constraint is what carries the
-    // operation once `a` is not a machine integer. `instantiate` alone drops it.
     $instantiated = instantiateScheme($state, $opScheme);
     $opType = $instantiated['type'];
     $leftType = inferExpr($state, $expr->left, $env);
@@ -2236,14 +2067,12 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
             refreshConstraintArgs($state, $instantiated['constraints']),
         );
 
-    // A still-polymorphic operand dispatches through its dictionary; the host Binop it
-    // would otherwise become is an Int/Double assumption. With no dictionary in scope the
-    // constraint stays on the node for the declaration to abstract.
     if ($classOperator
         && $constraints !== []
         && isset($state->constraintMethodAmbiguities[$op])
         && operandTypeIsUnresolved($state, $leftType, $rightType)
-        && constraintsResolvable($state, $constraints)) {
+        && constraintsResolvable($state, $constraints)
+    ) {
         $chosen = constraintMethodForOperandTypes(
             $state,
             $op,
@@ -2275,7 +2104,8 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
     if ($classOperator
         && $constraints !== []
         && !isset($state->constraintMethodAmbiguities[$op])
-        && operandTypeIsUnresolved($state, $leftType, $rightType)) {
+        && operandTypeIsUnresolved($state, $leftType, $rightType)
+    ) {
         if (constraintsResolvable($state, $constraints)) {
             $left = $expr->left;
             $right = $expr->right;
@@ -2292,8 +2122,6 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
         return $result;
     }
 
-    // Integer class-method ops must take the evidence Apply path: an unresolved symbolic
-    // Infix is emitted as an Int/Double Binop and unboxed as Int64/Long.
     if (
         (isClassMethodOperator($state, $op) || isset($state->constraintMethods[$op]))
         && (typeIsIntegerLike($state, $leftType)
@@ -2319,16 +2147,6 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
 }
 
 /**
- * Infer an operator use that was rewritten into a call, and mirror the call's
- * type onto the `Infix` node the rewrite replaced.
- *
- * The rewrite swaps the node in the tree it was handed, but a do block keeps a
- * second handle on the same node: its statement list holds the surface shape
- * while inference runs over the desugared tree. Passes that read the surface
- * tree (the IO boundary pass reads `>>=` there) need a type on the nodes they
- * hold, and the node they hold is the one the rewrite moved away from.
- */
-/**
  * The type of a call head, resolving a method name two in-scope dictionaries
  * provide by looking at the argument.
  *
@@ -2350,16 +2168,12 @@ function inferMethodByArgument(TypeCheckState $state, Ast\Apply $expr, array $en
     $argType = argumentType($state, $expr->argument, $env);
     $chosen = $argType === null ? null : constraintMethodForOperandTypes($state, $name, $argType);
     if ($chosen === null) {
-        // Nothing in the argument decides it: a written constraint is what the method's type
-        // variable meets, a superclass projection is not (`fromIntegral`).
         $chosen = declaredMethodCandidate($state, $name);
     }
     if ($chosen === null) {
         return inferExpr($state, $expr->function, $env);
     }
 
-    // Resolving the name once, for this call only: the surrounding body keeps
-    // seeing it as ambiguous, so a second use has to decide again.
     $savedMethods = $state->constraintMethods;
     $savedAmbiguities = $state->constraintMethodAmbiguities;
     $state->constraintMethods[$name] = $chosen;
@@ -2424,9 +2238,6 @@ function declaredMethodCandidate(TypeCheckState $state, string $method): ?array
  */
 function constraintMethodForOperandTypes(TypeCheckState $state, string $method, Type ...$types): ?array
 {
-    // Pruned on both sides: a signature's type variable is an alias of the fresh
-    // variable its constraint carries (`a` is what the candidate calls `t318`),
-    // so the two only meet after following that chain.
     $keys = [];
     foreach ($types as $type) {
         $keys[constraintArgKey(prune($state, $type))] = true;
@@ -2446,6 +2257,16 @@ function constraintMethodForOperandTypes(TypeCheckState $state, string $method, 
     return $match;
 }
 
+/**
+ * Infer an operator use that was rewritten into a call, and mirror the call's
+ * type onto the `Infix` node the rewrite replaced.
+ *
+ * The rewrite swaps the node in the tree it was handed, but a do block keeps a
+ * second handle on the same node: its statement list holds the surface shape
+ * while inference runs over the desugared tree. Passes that read the surface
+ * tree (the IO boundary pass reads `>>=` there) need a type on the nodes they
+ * hold, and the node they hold is the one the rewrite moved away from.
+ */
 function inferRewrittenInfix(TypeCheckState $state, Ast\AstNode $surface, Ast\Apply $call, array $env): Type
 {
     $type = inferApply($state, $call, $env);
@@ -2482,9 +2303,6 @@ function resolveMachineIntPow(TypeCheckState $state, Ast\AstNode $body): void
             return;
         }
 
-        // The operands are the last two arguments, and the ones before them are
-        // the evidence. A `^` without that evidence is a plain function's call
-        // site and not this operator at all.
         $parts = flattenApplyForIntrinsicWrapper($node);
         $callee = $parts['function'];
         $argCount = \count($parts['args']);
@@ -2500,9 +2318,7 @@ function resolveMachineIntPow(TypeCheckState $state, Ast\AstNode $body): void
         }
 
         $operands = \array_slice($parts['args'], -2);
-        // The exponent is the primop's own machine `Int` slot: any other
-        // integral type keeps the library body, which is where that type's own
-        // `even`/`quot` live.
+
         if (! operandIsMachineInt($state, $operands[1])) {
             return;
         }
@@ -2512,8 +2328,6 @@ function resolveMachineIntPow(TypeCheckState $state, Ast\AstNode $body): void
             return;
         }
 
-        // Two operands and the operator is the whole call: drop the evidence
-        // spine so the ordinary wrapper lowering turns this into the primop.
         $spine = $node->function;
         if (! $spine instanceof Ast\Apply) {
             return;
@@ -2563,9 +2377,6 @@ function powPrimopForOperand(TypeCheckState $state, Ast\AstNode $operand): ?stri
         'Int16' => 'int16Pow#',
         'Int32' => 'int32Pow#',
         'Int64' => 'int64Pow#',
-        // `Word` has no primop of its own: its whole `Num` instance is the
-        // `Int` one on the same bits (`wordFromInt# (intMul# (wordToInt# a) …)`,)
-        // and both conversions are identity on every backend.
         'Word' => 'intPow#',
         'Word8' => 'word8Pow#',
         'Word16' => 'word16Pow#',
@@ -2693,8 +2504,6 @@ function orderingNeedsEvidence(TypeCheckState $state, string $op, Type $left, Ty
         return true;
     }
 
-    // `Word`/`Word64` hold the full unsigned range, so a value above `maxBound::Int` has a
-    // negative host representation; their `Ord` compares the bits unsigned.
     return typeIsUnsigned64($left) || typeIsUnsigned64($right);
 }
 
@@ -2722,6 +2531,7 @@ function equalityNeedsEvidence(TypeCheckState $state, string $op, Type $left, Ty
 
     $left = prune($state, $left);
     $right = prune($state, $right);
+
     if ($left instanceof TVar || $right instanceof TVar) {
         return false;
     }
@@ -2960,16 +2770,10 @@ function inferSequentialBindings(TypeCheckState $state, array $bindings, array $
         $alreadyAbstracted = abstractedLocalConstraints($binding->value);
         $annotatedConstraints = localConstrainedAnnotation($binding->value);
         if ($alreadyAbstracted !== []) {
-            // Re-checking an already-abstracted binding (the same AST is checked
-            // more than once): reuse the recorded constraints and peel the
-            // dictionary arrows the synthetic lambda contributed to the type.
             $constraints = $alreadyAbstracted;
             $rawType = inferExpr($state, $binding->value, $local);
             $valueType = peelDictArrows($rawType, \count($constraints));
         } elseif ($annotatedConstraints !== null) {
-            // `go :: C a => a -> T` in a let/where: check the body against the
-            // annotation's dictionaries and make the binding a function of
-            // them, exactly like a top-level signature does.
             [$binding->value, $valueType, $constraints] = abstractAnnotatedLocalBinding(
                 $state,
                 $binding->value,
@@ -2977,19 +2781,16 @@ function inferSequentialBindings(TypeCheckState $state, array $bindings, array $
             );
         } else {
             $valueType = inferExpr($state, $binding->value, $local);
-            // A literal whose type the binding already pins is that type's value, converted before
-            // the constraints are collected; a restricted binding stays a constraint.
             if ($generalize) {
                 $binding->value = elaborateNumericLiterals($state, $binding->value);
             }
-            // The binding's value can carry its constraints anywhere: `where double y = y + y` is
-            // a lambda whose body is the constrained operator.
             $constraints = pendingConstraintsDeep($binding->value, $state);
             if ($generalize && $constraints !== []) {
-                // Abstract the constraints into dictionary parameters so the binding
-                // can be generalized (`where go = show` is `Show a => a -> String`,
-                // exactly like a top-level function of the same signature).
-                [$binding->value, $constraints] = abstractLocalConstraints($state, $binding->value, $constraints);
+                [$binding->value] = abstractLocalConstraints(
+                    $state,
+                    $binding->value,
+                    expandConstraintsWithSuperclasses($state, $constraints),
+                );
             }
         }
         [, $local] = bindPattern(
@@ -3056,9 +2857,6 @@ function abstractAnnotatedLocalBinding(TypeCheckState $state, Ast\AstNode $value
 
     [$params, $abstracted, $dictTypes] = allocateDictParams($state, $constraints);
 
-    // Give the function's parameters the annotation's types, so the body is
-    // checked against the annotation's type variables and its class-method
-    // calls match the synthesized dictionary parameters.
     $inner = $value->expr;
     if ($inner instanceof Ast\Lambda) {
         $paramAsts = functionParamTypeAsts($bodyTypeAst);
@@ -3079,8 +2877,6 @@ function abstractAnnotatedLocalBinding(TypeCheckState $state, Ast\AstNode $value
         $bodyExpected = astType($state, $bodyTypeAst);
         unify($state, $valueType, $bodyExpected, $value);
         $valueType = prune($state, $bodyExpected);
-        // Resolve any evidence the body left pending against the new
-        // dictionaries (a call to a superclass method, say).
         if (pendingConstraintsFromExpr($inner) !== []) {
             resolvePendingEvidenceInExpr($state, $inner);
             tryResolveValueEvidence($state, $inner);
@@ -3105,6 +2901,10 @@ function abstractAnnotatedLocalBinding(TypeCheckState $state, Ast\AstNode $value
  * local helper such as `where go = show` could only ever be used at the single
  * type its body happened to fix.
  *
+ * `$constraints` is expanded with its superclasses, the list the parameters are
+ * allocated for; the binding's scheme keeps the unexpanded list its use sites
+ * expand, so both sides build the same dictionaries in the same order.
+ *
  * @param list<Ast\PendingConstraint> $constraints
  * @return array{0: Ast\AstNode, 1: list<Ast\PendingConstraint>}
  */
@@ -3116,17 +2916,12 @@ function abstractLocalConstraints(TypeCheckState $state, Ast\AstNode $rhs, array
     try {
         resolvePendingEvidenceInExpr($state, $rhs);
         tryResolveValueEvidence($state, $rhs);
-        // Every constraint in the value was abstracted into a parameter, so a
-        // literal in it is its `fromInteger` projected from one of them.
         $rhs = elaborateNumericLiterals($state, $rhs);
     } finally {
         restoreAmbientConstraints($state, $saved);
     }
 
     $lambda = wrapDictLambda($state, $rhs, $params, $dictTypes);
-    // Marks the lambda as compiler-synthesized so re-checking this binding (the
-    // same AST is checked more than once) reuses the constraints instead of
-    // wrapping the already-wrapped lambda again.
     $lambda->abstractedConstraints = $abstracted;
 
     return [$lambda, $abstracted];
@@ -3147,20 +2942,6 @@ function abstractedLocalConstraints(Ast\AstNode $value): array
 }
 
 
-/**
- * The constraints a recursive binding group is generalized over: the union of
- * the obligations its members' bodies carry, one dictionary per class and type.
- *
- * A group is generalized as a whole, because its members share the variables
- * their bodies tie together: `go` calling itself at the variable its caller
- * pinned is one obligation, not one per member. Members with a signature are
- * left out -- their dictionaries come from the annotation.
- *
- * @param list<Ast\Binding> $bindings
- * @param array<int, list<Ast\PendingConstraint>> $bodyConstraints
- * @param array<string, true> $annotated
- * @return list<Ast\PendingConstraint>
- */
 /**
  * The scheme a group member was generalized to when its group was abstracted.
  *
@@ -3389,8 +3170,6 @@ function allocateDictParams(TypeCheckState $state, array $constraints): array
         $param = new Ast\PatVar($name);
         $dictAst = internalTypeToAst($dictType, $state->subst);
         $param->inferredType = $dictAst;
-        // The parameter carries its type as well as its pattern does: a synthesized lambda has
-        // to come back with the dictionary arrow it was built with.
         $params[] = new Ast\LambdaParam($param, $dictAst);
         $abstracted[] = new Ast\PendingConstraint(
             $constraint->class,
@@ -3492,6 +3271,7 @@ function inferRecursiveBindings(TypeCheckState $state, array $bindings, array $e
             inferExpr($state, $rhs, $local),
             \count($abstracted),
         );
+
         if ($annot !== null) {
             $annotType = $binding->pattern instanceof Ast\PatVar
                 ? $expected[$binding->pattern->name]
@@ -3499,9 +3279,7 @@ function inferRecursiveBindings(TypeCheckState $state, array $bindings, array $e
             unify($state, $valueType, $annotType, $binding->value);
             $valueType = prune($state, $annotType);
         }
-        // A literal this binding's type already pins is that type's value, not a
-        // constraint to generalize over, and a restricted group is not
-        // generalized at all (see `inferSequentialBindings`).
+
         if ($generalize) {
             if ($binding->value instanceof Ast\TypeAsc) {
                 $binding->value->expr = elaborateNumericLiterals($state, $rhs);
@@ -3509,9 +3287,11 @@ function inferRecursiveBindings(TypeCheckState $state, array $bindings, array $e
                 $binding->value = elaborateNumericLiterals($state, $binding->value);
             }
         }
+
         $constraints = $abstracted !== [] ? $abstracted : pendingConstraintsFromExpr($rhs);
         $rhsConstraints[$bi] = $constraints;
         $bodyConstraints[$bi] = $generalize ? pendingConstraintsDeep($rhs, $state) : [];
+
         if ($binding->value instanceof Ast\TypeAsc) {
             $binding->value->pendingConstraints = $constraints;
         }
@@ -3531,17 +3311,9 @@ function inferRecursiveBindings(TypeCheckState $state, array $bindings, array $e
         );
     }
 
-    // Generalize the group over the constraints its bodies carry, the way a
-    // top-level function is generalized over the constraints of its signature:
-    // each member becomes a function of the group's dictionaries, and each use
-    // site supplies them -- its own parameters when the caller is a member, an
-    // instance when the type is concrete.
     $groupConstraints = $generalize && !groupWasAbstracted($bindings, $annotated)
         ? recursiveGroupConstraints($state, $bindings, $bodyConstraints, $annotated)
         : [];
-    // The members are abstracted over the *expanded* constraints -- one
-    // dictionary per superclass, exactly what a use site's re-expansion of the
-    // recorded list yields; the scheme keeps the list as written.
     $groupDictConstraints = $groupConstraints === []
         ? []
         : expandConstraintsWithSuperclasses($state, $groupConstraints);
@@ -3576,10 +3348,6 @@ function inferRecursiveBindings(TypeCheckState $state, array $bindings, array $e
     $abstractedThisPass = $groupConstraints !== [];
 
     foreach ($bindings as $bi => $binding) {
-        // The obligations are read off the bodies, so their arguments have to be
-        // the types those arguments have *here* -- the same ones the scheme's own
-        // type is built from -- or a use site would instantiate the type and the
-        // constraints from two different variables.
         $constraints = refreshConstraintArgs($state, $rhsConstraints[$bi] ?? []);
         if ($binding->pattern instanceof Ast\PatVar) {
             $name = $binding->pattern->name;
@@ -3597,9 +3365,6 @@ function inferRecursiveBindings(TypeCheckState $state, array $bindings, array $e
                 unset($schemeEnv[$name]);
             }
             $quantify = isset($annotated[$name]) || $generalize;
-            // A generalized group member carries the group's constraints as
-            // written, with the dictionary count every member was abstracted
-            // over: a use site re-expands the written list into those.
             $schemeConstraints = $abstractedThisPass ? $groupConstraints : $constraints;
             $local[$name] = scheme(
                 $pruned,
@@ -3637,10 +3402,6 @@ function inferCase(TypeCheckState $state, Ast\CaseExpr $expr, array $env): Type
     checkCaseExhaustiveness($state, $expr, $scrutineeType);
     $expr->exhaustive = caseExhaustivenessProven($state, $expr, $scrutineeType);
 
-    // After exhaustiveness has read the literals, and before the bodies are
-    // checked: an overloaded literal pattern becomes a binder compared with the
-    // literal. Doing it here is what keeps `f 0 = …` free of the `Int`
-    // assumption while still reporting a gap when no alternative is a catch-all.
     foreach ($expr->alts as $i => $alt) {
         $altEnvs[$i] = overloadedLiteralPatterns($state, $alt, $altEnvs[$i]);
     }
@@ -3677,8 +3438,6 @@ function literalPatternHostPrimitive(Type $type): bool
         return true;
     }
 
-    // The same machine integers also travel as plain type constructors
-    // (`TCon('Int')`), depending on where the type came from.
     return $type instanceof TCon && \in_array($type->name, [
         'Int', 'Int8', 'Int16', 'Int32', 'Int64',
         'Word', 'Word8', 'Word16', 'Word32', 'Word64',
@@ -3740,8 +3499,6 @@ function overloadedLiteralPatternNode(TypeCheckState $state, Ast\AstNode $patter
             $pattern,
         )));
         if (!literalPatternIsOverloaded($state, $type)) {
-            // A host machine type: the pattern test the lowering emits is the
-            // native comparison (`$x === 0`), not an `Eq`-dispatch.
             return $pattern;
         }
 
@@ -3841,8 +3598,6 @@ function inferGuardExpr(TypeCheckState $state, Ast\AstNode &$guard, array $env):
         return new TCon('Bool');
     }
 
-    // By reference: a guard whose operator was replaced by a dictionary call must keep the
-    // replacement, or it stays a host comparison (an `Int` assumption).
     return inferExpr($state, $guard, $env);
 }
 
@@ -3893,17 +3648,17 @@ function resolveDeferredNativeInfixes(TypeCheckState $state, Ast\AstNode $expr):
 
         $left = $node->left->inferredType;
         $right = $node->right->inferredType;
+
         if ($left === null || $right === null) {
             return;
         }
 
-        // These annotations round-tripped through the type printer, so a machine type arrives
-        // as `TCon('Int')`; normalise or the operands stay unresolved.
         $resolved = resolveMonomorphicOperator(
             $node->operator,
             canonicalPrimitiveType(prune($state, inferredTypeAstToInternal($left))),
             canonicalPrimitiveType(prune($state, inferredTypeAstToInternal($right))),
         );
+
         if ($resolved === null) {
             return;
         }
@@ -4075,10 +3830,6 @@ function bindPattern(TypeCheckState $state, Ast\AstNode $pattern, Type $expected
             if (\is_string($pattern->value)) {
                 unify($state, $expected, new TStr());
             }
-            // A numeric literal pattern is typed here only far enough to record
-            // where it lands: whether it is the host `Int`'s literal or an
-            // overloaded one is decided in `inferCase`, once the pattern has been
-            // unified with the scrutinee.
             $pattern->inferredType = internalTypeToAst(prune($state, $expected), $state->subst);
 
             return [$expected, $env];
@@ -4153,9 +3904,7 @@ function pruneEnvSchemes(TypeCheckState $state, array $env): array
                 $constraint->instanceHeadAst,
             );
         }
-        // Keep the cached free-variable set consistent with the freshly pruned
-        // type/constraints so envFreeVars (used right after by schemeBoundVars)
-        // reflects the substitution instead of a stale pre-prune snapshot.
+
         $env[$name] = $entry->withPruned(
             $type,
             $constraints,
@@ -4211,6 +3960,7 @@ function bindConsPattern(TypeCheckState $state, Ast\PatCons $pattern, Type $expe
     unify($state, $expected, new TCon('List', [$elemType]));
     [$_, $env] = bindPattern($state, $pattern->head, $elemType, $env, generalize: false, constraints: $constraints);
     [$_, $env] = bindPattern($state, $pattern->tail, new TCon('List', [$elemType]), $env, generalize: false, constraints: $constraints);
+
     if ($generalize) {
         $env = generalizePatternBindings($state, $pattern, $env, $constraints);
     }
@@ -4737,7 +4487,6 @@ function recordPatternFields(TypeCheckState $state, Ast\PatRecord $pattern, arra
 
     $subpatterns = [];
     foreach ($meta['fields'] as $fieldName) {
-        // A field the pattern does not name is not an error: it is not read.
         $subpatterns[] = $byName[$fieldName] ?? new Ast\PatWild($pattern->line, $pattern->col, $pattern->endCol);
     }
 
@@ -5054,7 +4803,6 @@ function applyTypeApp(TypeCheckState $state, Ast\TypeNode $con, array $argAsts, 
         return new TCon($con->name, $args);
     }
 
-    // Nested TypeApp head (e.g. from synonym expand-under-app AST shaping): flatten.
     if ($con instanceof Ast\TypeApp) {
         $flat = flattenTypeAppAst($con);
         if ($flat !== null) {
@@ -5159,7 +4907,6 @@ function applyPromotedTypeAppKinds(
  */
 function flattenTypeAppAst(Ast\TypeNode $type): ?array
 {
-    // Iterative flatten — see flattenInstanceHeadTypeApp.
     $args = [];
     while ($type instanceof Ast\TypeApp) {
         for ($i = count($type->args) - 1; $i >= 0; $i--) {
@@ -5303,8 +5050,6 @@ function applyTypeAppKinds(
             throw typeFail($state, "type variable `{$headName}` is not a type constructor", $headAt);
         }
 
-        // Concrete type-constructor spines peel in O(1); `isVarHead` params must keep their
-        // full kind across apps, so the unify path below handles those.
         if (!$isVarHead && $headKind instanceof Kinds\KArrow) {
             checkTypeAppArgKind($state, $arg, $headKind->from, $argAsts[$i], $headAt);
             $headKind = $headKind->to;
@@ -5393,8 +5138,6 @@ function inferIntrinsic(TypeCheckState $state, Ast\IntrinsicCall $expr, array $e
         throw typeFail($state, \sprintf("unknown intrinsic `%s`", $expr->name), $expr);
     }
 
-    // IntrinsicCall is compiler-internal AST (rewritten `#` apps, Ord defaults).
-    // User-facing scope is enforced when resolving `#` names as ordinary Vars.
     $schemes = typeSchemes();
     $scheme = $schemes[$internal];
     $type = instantiate($state, $scheme);

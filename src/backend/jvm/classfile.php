@@ -77,7 +77,6 @@ final class ConstantPool
 
     public function integer(int $v): int
     {
-        // Signed 32-bit CONSTANT_Integer (still used for rare int immediates).
         $key = $v & 0xFFFFFFFF;
         if (isset($this->ints[$key])) {
             return $this->ints[$key];
@@ -466,7 +465,6 @@ final class CodeBuilder
     public function invokevirtual(int $methodRef, int $argSlots, bool|int $returnsValue = false): void
     {
         $retSlots = \is_int($returnsValue) ? $returnsValue : ($returnsValue ? 1 : 0);
-        // objectref + args consumed; return may push (doubles/longs = 2)
         $this->opcode(0xb6, -($argSlots + 1) + $retSlots);
         $this->code .= u2($methodRef);
     }
@@ -930,9 +928,6 @@ function buildStackMapTable(ConstantPool $cp, array $frames, array $initialLocal
         return '';
     }
 
-    // Sort and uniquify by offset, keeping the last frame at a given label so
-    // repeated noteFrame calls do not produce negative deltas. Offset 0 needs an
-    // explicit frame when a backward branch targets the method's first byte.
     usort($frames, static fn ($a, $b) => $a['offset'] <=> $b['offset']);
     $deduped = [];
     foreach ($frames as $frame) {
@@ -945,7 +940,6 @@ function buildStackMapTable(ConstantPool $cp, array $frames, array $initialLocal
         $off = $frame['offset'];
         $offsetDelta = $prevOffset < 0 ? $off : ($off - $prevOffset - 1);
         $prevOffset = $off;
-        // full_frame = 255
         $entries .= chr(255) . u2($offsetDelta);
         $entries .= u2(count($frame['locals']));
         foreach ($frame['locals'] as $t) {
@@ -1018,7 +1012,6 @@ final class ClassBuilder
     public function setSourceFile(string $displayPath): void
     {
         $this->sourceFile = $displayPath;
-        // Must be in the constant pool before write().
         $this->cp->utf8(basename(\str_replace('\\', '/', $displayPath)));
     }
 
@@ -1101,13 +1094,11 @@ function u2(int $v): string
 
 function u4(int $v): string
 {
-    // unsigned 32-bit big-endian; PHP pack('N') treats as unsigned
     return pack('N', $v & 0xffffffff);
 }
 
 function u8(int $v): string
 {
-    // big-endian 64-bit two's complement
     return pack('NN', ($v >> 32) & 0xffffffff, $v & 0xffffffff);
 }
 

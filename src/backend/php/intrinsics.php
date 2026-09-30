@@ -54,7 +54,6 @@ function emitSrcLocExpr(?SrcLoc $loc, array $ctx = []): string
             . (int) $site['col'] . ')';
     }
 
-    // Fallback without a map builder (still compact, no absolute path identity).
     $display = normalizeDisplayPath($loc->file);
     $symbolId = symbolId($loc->module, $loc->function);
 
@@ -145,8 +144,6 @@ function emitQualifiedCall(string $name, array $argExprs, ?SrcLoc $srcLoc = null
         || $width !== null || $name === 'doublePow#';
     $locExpr = $needsSite ? emitSrcLocExpr($srcLoc, $ctx) : 'null';
 
-    // A negative exponent is `base`'s own `ErrorCall`, raised at the `^` expression, so the
-    // check sits at the call site and the loop helper cannot fail.
     if ($width !== null) {
         return '((' . $argExprs[1] . ' < 0) ? \\Moggi\\throwErrorCall("Negative exponent", ' . $locExpr
             . ') : ' . $width['helper'] . '(' . $argExprs[0] . ', ' . $argExprs[1] . '))';
@@ -197,13 +194,11 @@ function emitQualifiedCall(string $name, array $argExprs, ?SrcLoc $srcLoc = null
         'word32FromInt#' => '((' . $argExprs[0] . ') & 0xffffffff)',
         'word32Add#' => '(((' . $argExprs[0] . ' + ' . $argExprs[1] . ') & 0xffffffff))',
         'word32Sub#' => '(((' . $argExprs[0] . ' - ' . $argExprs[1] . ') & 0xffffffff))',
-        // Word32 mul can exceed PHP_INT_MAX; wrap via u64 helpers then mask.
         'word32Mul#' => '(moggi_u64_mul(' . $argExprs[0] . ', ' . $argExprs[1] . ') & 0xffffffff)',
         'word64Eq#' => "({$argExprs[0]} === {$argExprs[1]})",
         'word64Ne#' => "({$argExprs[0]} !== {$argExprs[1]})",
         'word64Compare#' => "match (moggi_u64_cmp({$argExprs[0]}, {$argExprs[1]})) { -1 => ['LT'], 0 => ['EQ'], 1 => ['GT'] }",
         'word64ToInt#' => $argExprs[0],
-        // Full unsigned 64-bit wrap is host Int width; identity on this backend.
         'word64FromInt#' => $argExprs[0],
         'word64Add#' => "moggi_u64_add({$argExprs[0]}, {$argExprs[1]})",
         'word64Sub#' => "moggi_u64_sub({$argExprs[0]}, {$argExprs[1]})",
@@ -220,7 +215,6 @@ function emitQualifiedCall(string $name, array $argExprs, ?SrcLoc $srcLoc = null
         'word64ToInteger#' => "moggi_u64_to_str({$argExprs[0]})",
         'word64FromInteger#' => "moggi_wrap_decimal({$argExprs[0]})",
         'word64Show#' => "moggi_u64_to_str({$argExprs[0]})",
-        // Machine Word is host Int-width (same representation as Int on PHP).
         'wordEq#' => "({$argExprs[0]} === {$argExprs[1]})",
         'wordNe#' => "({$argExprs[0]} !== {$argExprs[1]})",
         'wordCompare#' => "match (moggi_u64_cmp({$argExprs[0]}, {$argExprs[1]})) { -1 => ['LT'], 0 => ['EQ'], 1 => ['GT'] }",
@@ -228,14 +222,9 @@ function emitQualifiedCall(string $name, array $argExprs, ?SrcLoc $srcLoc = null
         'wordFromInt#' => $argExprs[0],
         'intEq#' => "({$argExprs[0]} === {$argExprs[1]})",
         'intNe#' => "({$argExprs[0]} !== {$argExprs[1]})",
-        // Every machine-Int arithmetic op routes through a helper: PHP promotes
-        // an overflowing host op to float instead of wrapping, and doing that
-        // inline would repeat the operand expressions in the fallback.
         'intAdd#' => intWrapExpr('moggi_i64_add', 'moggi_u64_add', '+', $argExprs, $argLeaves),
         'intSub#' => intWrapExpr('moggi_i64_sub', 'moggi_u64_sub', '-', $argExprs, $argLeaves),
         'intMul#' => intWrapExpr('moggi_i64_mul', 'moggi_u64_mul', '*', $argExprs, $argLeaves),
-        // The check is at the call site so the report names the `^` expression, and the multiply
-        // is the same one `intMul#` emits.
         'intPow#' => '((' . $argExprs[1] . ' < 0) ? \\Moggi\\throwErrorCall("Negative exponent", ' . $locExpr . ') : moggi_int_pow(' . $argExprs[0] . ', ' . $argExprs[1] . '))',
         'intDiv#' => '\\intdiv(' . $argExprs[0] . ', ' . $argExprs[1] . ')',
         'intNegate#' => "moggi_i64_negate({$argExprs[0]})",
@@ -243,31 +232,20 @@ function emitQualifiedCall(string $name, array $argExprs, ?SrcLoc $srcLoc = null
         'intSignum#' => intSignumExpr($argExprs[0]),
         'intFromInteger#' => 'moggi_wrap_decimal((string) ' . $argExprs[0] . ')',
         'intToInteger#' => '\\strval(' . $argExprs[0] . ')',
-        // The Integer# representation is the decimal string itself, so the
-        // digits of an out-of-range literal are the value already.
         'integerFromDigits#' => $argExprs[0],
-        // Natural# shares the Integer# representation (a decimal string, which
-        // carries no sign of its own); entering the type rejects a negative
-        // value, so no Natural can be negative.
         'naturalToInteger#' => $argExprs[0],
         'integerToNatural#' => "(function (\$v) { if (\$v !== '' && \$v[0] === '-') { \\Moggi\\throwErrorCall('arithmetic underflow', {$locExpr}); } return \$v; })({$argExprs[0]})",
-        // Bit ops on the i64 pattern. Shift counts are in [0,63] by contract
-        // (Data.Bits clamps/masks first), so the native shifts are total here.
         'intAnd#' => "({$argExprs[0]} & {$argExprs[1]})",
         'intOr#' => "({$argExprs[0]} | {$argExprs[1]})",
         'intXor#' => "({$argExprs[0]} ^ {$argExprs[1]})",
         'intNot#' => "(~{$argExprs[0]})",
         'intShiftL#' => "({$argExprs[0]} << {$argExprs[1]})",
         'intShiftRA#' => "({$argExprs[0]} >> {$argExprs[1]})",
-        // PHP's >> is arithmetic; clear the sign extension for Word semantics.
         'intShiftRL#' => "(({$argExprs[0]} >> {$argExprs[1]}) & ~(-1 << (64 - {$argExprs[1]})))",
-        // decbin() renders negatives as their 64-bit two's complement pattern.
         'intPopCnt#' => '\\substr_count(\\decbin(' . $argExprs[0] . '), "1")',
         'intClz#' => '(' . $argExprs[0] . ' === 0 ? 64 : 64 - \\strlen(\\decbin(' . $argExprs[0] . ')))',
         'intCtz#' => '(' . $argExprs[0] . ' === 0 ? 64 : \\strspn(\\strrev(\\decbin(' . $argExprs[0] . ')), "0"))',
         'intCompare#' => intCompareExpr($argExprs[0], $argExprs[1]),
-        // Signed fixed-width ints: PHP int is i64; from_int sign-extends the
-        // low N bits (arithmetic >>), arithmetic wraps at the declared width.
         'int8Eq#' => "({$argExprs[0]} === {$argExprs[1]})",
         'int8Ne#' => "({$argExprs[0]} !== {$argExprs[1]})",
         'int8Compare#' => intCompareExpr($argExprs[0], $argExprs[1]),
@@ -292,9 +270,6 @@ function emitQualifiedCall(string $name, array $argExprs, ?SrcLoc $srcLoc = null
         'int32Add#' => '((((' . $argExprs[0] . ' + ' . $argExprs[1] . ') << 32) >> 32))',
         'int32Sub#' => '((((' . $argExprs[0] . ' - ' . $argExprs[1] . ') << 32) >> 32))',
         'int32Mul#' => '((((' . $argExprs[0] . ' * ' . $argExprs[1] . ') << 32) >> 32))',
-        // Int64 is host-int width: coercions are identity. Arithmetic reuses
-        // the wrapping u64 helpers — two's-complement wrap is the same bit
-        // pattern; PHP `+` would overflow to float past PHP_INT_MAX.
         'int64Eq#' => "({$argExprs[0]} === {$argExprs[1]})",
         'int64Ne#' => "({$argExprs[0]} !== {$argExprs[1]})",
         'int64Compare#' => intCompareExpr($argExprs[0], $argExprs[1]),
@@ -308,8 +283,6 @@ function emitQualifiedCall(string $name, array $argExprs, ?SrcLoc $srcLoc = null
         'doubleAdd#' => "({$argExprs[0]} + {$argExprs[1]})",
         'doubleSub#' => "({$argExprs[0]} - {$argExprs[1]})",
         'doubleMul#' => "({$argExprs[0]} * {$argExprs[1]})",
-        // `fdiv` is IEEE division: `1.0 / 0.0` and `0.0 / 0.0` are Infinity and
-        // NaN, where PHP's `/` raises a DivisionByZeroError.
         'doubleDiv#' => '\\fdiv(' . $argExprs[0] . ', ' . $argExprs[1] . ')',
         'doubleNegate#' => "(-{$argExprs[0]})",
         'doubleAbs#' => '\\abs(' . $argExprs[0] . ')',
@@ -346,11 +319,9 @@ function emitQualifiedCall(string $name, array $argExprs, ?SrcLoc $srcLoc = null
         'exceptionUnwrap#' => '\\Moggi\\exceptionUnwrap(' . $argExprs[0] . ', ' . $argExprs[1] . ')',
         'exceptionThrow#' => '\\Moggi\\throwSomeException(' . $argExprs[0] . ', ' . $locExpr . ')',
         'exceptionDisplay#' => '\\Moggi\\exceptionDisplay(' . $argExprs[0] . ')',
-        // IO exception combinators are lowered to IoThrow/IoCatch/IoFinally.
         'exceptionThrowIo#', 'exceptionCatch#', 'exceptionFinally#' => throw new \InvalidArgumentException(
             "intrinsic `{$name}` must be lowered to IO exception IR",
         ),
-        // Erased by strict_io_normalize before codegen; reaching here is a bug.
         'ioPure#', 'ioBind#' => throw new \InvalidArgumentException(
             "intrinsic `{$name}` must be erased by strict IO normalization",
         ),
@@ -386,8 +357,6 @@ function intSignumExpr(string $expr): string
 
 function doubleSignumExpr(string $expr): string
 {
-    // Only the two strict orderings select ±1; NaN and (-0.0) are their own
-    // signum, so they fall through to the value itself.
     return "(({$expr}) > 0.0 ? 1.0 : (({$expr}) < 0.0 ? -1.0 : ({$expr})))";
 }
 
@@ -435,13 +404,10 @@ function phpHelpersForModule(array $used): string
     $helpers = [];
 
     if (isset($used['intPow#'])) {
-        // The library's own `powAcc` order, on the same wrapping multiply.
         $helpers[] = 'function moggi_int_pow(int $b, int $e): int { $r = 1; while ($e !== 0) { if (($e & 1) !== 0) { $r = moggi_i64_mul($r, $b); } $b = moggi_i64_mul($b, $b); $e >>= 1; } return $r; }';
     }
 
     if (isset($used['doublePow#'])) {
-        // `Double` is a host float here, and the loop is the library's own
-        // multiplication order, so the value is the one `powAcc` would give.
         $helpers[] = 'function moggi_double_pow(float $b, int $e): float { $r = 1.0; while ($e !== 0) { if (($e & 1) !== 0) { $r = $r * $b; } $b = $b * $b; $e >>= 1; } return $r; }';
     }
 
@@ -455,13 +421,9 @@ function phpHelpersForModule(array $used): string
         \count(\array_filter($names, static fn ($n): bool => isset($used[$n]))) > 0;
 
     if ($any64('intAdd#', 'intSub#', 'intMul#', 'intNegate#', 'intAbs#', 'intPow#', 'intFromInteger#', 'word64Add#', 'word64Sub#', 'word64Mul#', 'word64Quot#', 'word64Rem#', 'word64ToInteger#', 'word64FromInteger#', 'word64Show#', 'word64Compare#', 'wordCompare#', 'byteSwap64#', 'bitReverse64#', 'word32Mul#', 'int64Add#', 'int64Sub#', 'int64Mul#', 'int32Pow#', 'int64Pow#', 'word32Pow#', 'word64Pow#')) {
-        // Split into 32-bit halves so +/− never promote past PHP_INT_MAX into float.
         $helpers[] = 'function moggi_u64_add(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao + $bo; $c = ($lo >> 32) & 0xffffffff; $hi = ($ah + $bh + $c) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }';
         $helpers[] = 'function moggi_u64_sub(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao - $bo; $bw = $lo < 0 ? 1 : 0; $hi = ($ah - $bh - $bw) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }';
-        // Low 64 bits of a*b from 16-bit limbs: a 32-bit split still overflows.
         $helpers[] = 'function moggi_u64_mul(int $a, int $b): int { $a0 = $a & 0xffff; $a1 = ($a >> 16) & 0xffff; $a2 = ($a >> 32) & 0xffff; $a3 = ($a >> 48) & 0xffff; $b0 = $b & 0xffff; $b1 = ($b >> 16) & 0xffff; $b2 = ($b >> 32) & 0xffff; $b3 = ($b >> 48) & 0xffff; $low = $a0 * $b0; $cy = ($low >> 16) & 0xffff; $m1 = $a0 * $b1 + $a1 * $b0 + $cy; $cy = ($m1 >> 16) & 0xffffffff; $m2 = $a0 * $b2 + $a1 * $b1 + $a2 * $b0 + $cy; $cy = ($m2 >> 16) & 0xffffffff; $hi = $a0 * $b3 + $a1 * $b2 + $a2 * $b1 + $a3 * $b0 + $cy; return (($hi & 0xffff) << 48) | (($m2 & 0xffff) << 32) | (($m1 & 0xffff) << 16) | ($low & 0xffff); }';
-        // The host op first: PHP only leaves the int domain when it overflows,
-        // and then the exact 64-bit pattern is computed from the operands.
         $int64Wrappers = [
             'intAdd#' => 'function moggi_i64_add(int $a, int $b): int { $r = $a + $b; return \\is_int($r) ? $r : moggi_u64_add($a, $b); }',
             'intSub#' => 'function moggi_i64_sub(int $a, int $b): int { $r = $a - $b; return \\is_int($r) ? $r : moggi_u64_sub($a, $b); }',
@@ -480,8 +442,6 @@ function phpHelpersForModule(array $used): string
     }
 
     if ($any64('intFromInteger#', 'word64FromInteger#', 'word64Quot#', 'word64Rem#')) {
-        // The host int cast of out-of-range digits clamps, so the wrap is
-        // computed from the digits themselves.
         $helpers[] = 'function moggi_wrap_decimal(string $s): int { $neg = $s !== "" && $s[0] === "-"; $d = $neg ? \\substr($s, 1) : $s; if (\\strlen($d) <= 18) { return (int) ($neg ? "-" . $d : $d); } $v = 0; foreach (\\str_split($d, 9) as $chunk) { $v = moggi_u64_add(moggi_u64_mul($v, 10 ** \\strlen($chunk)), (int) $chunk); } return $neg ? moggi_u64_sub(0, $v) : $v; }';
     }
 
@@ -498,7 +458,6 @@ function phpHelpersForModule(array $used): string
     if ($anySwap('byteSwap16#', 'byteSwap32#', 'byteSwap64#', 'bitReverse8#', 'bitReverse16#', 'bitReverse32#', 'bitReverse64#')) {
         $helpers[] = 'function moggi_byte_swap_16(int $x): int { $x = $x & 0xffff; return (($x & 0xff) << 8) | (($x >> 8) & 0xff); }';
         $helpers[] = 'function moggi_byte_swap_32(int $x): int { $x = $x & 0xffffffff; return ((($x & 0x000000ff) << 24) | (($x & 0x0000ff00) << 8) | (($x & 0x00ff0000) >> 8) | (($x >> 24) & 0xff)) & 0xffffffff; }';
-        // Byte-reverse within each half, then swap halves (lo bytes → high word).
         $helpers[] = 'function moggi_byte_swap_64(int $a): int { $lo = $a & 0xffffffff; $hi = ($a >> 32) & 0xffffffff; $revLo = (($lo & 0xff) << 24) | (($lo & 0xff00) << 8) | (($lo >> 8) & 0xff00) | (($lo >> 24) & 0xff); $revHi = (($hi & 0xff) << 24) | (($hi & 0xff00) << 8) | (($hi >> 8) & 0xff00) | (($hi >> 24) & 0xff); return (($revLo & 0xffffffff) << 32) | ($revHi & 0xffffffff); }';
         $helpers[] = 'function moggi_bit_reverse_n(int $x, int $bits, int $mask): int { $r = 0; for ($i = 0; $i < $bits; $i++) { if (($x & (1 << $i)) !== 0) { $r |= (1 << ($bits - 1 - $i)); } } return $r & $mask; }';
         $helpers[] = 'function moggi_bit_reverse_8(int $x): int { return moggi_bit_reverse_n($x, 8, 0xff); }';

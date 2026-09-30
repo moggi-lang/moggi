@@ -8,3 +8,20 @@ program
       binding
         pat_var y
         integer 1
+  function pairUp :: Int -> String -> Tuple2 Int String
+    pat_var a
+    pat_var b
+    where
+      tuple
+        variable x
+        variable y
+      binding
+        pat_var x
+        infix +
+          variable a
+          integer 1
+      binding
+        pat_var y
+        infix <>
+          variable b
+          string " World"

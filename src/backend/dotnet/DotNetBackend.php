@@ -49,7 +49,7 @@ final class DotNetBackend implements Backend
     /** @return list<string> */
     public function runtimeFiles(): array
     {
-        return []; // Moggi.Rt is generated into the build, not copied
+        return [];
     }
 
     /**

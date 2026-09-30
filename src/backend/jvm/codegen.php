@@ -57,8 +57,6 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
     $ioThunkRegistry = new JvmIoThunkRegistry();
 
     $functionArity = [];
-    // The import tables are keyed by bare name, so a name this module defines must
-    // win: an arity taken from an import would emit the call as a runtime partial.
     /** @var array<string, true> $localBindings */
     $localBindings = [];
     foreach ($module->functions as $fn) {
@@ -76,8 +74,6 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
         }
     }
     foreach (\array_keys($options['globalEvidenceMaps'] ?? []) as $evidenceName) {
-        // Fallback only; imports overwrite via externalFnRuntimeArity, and local
-        // instance evidence overwrites via contextParams below.
         if (!isset($functionArity[$evidenceName])) {
             $functionArity[$evidenceName] = 0;
         }
@@ -102,8 +98,6 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
     foreach ($module->instanceEvidence as $ev) {
         $functionArity[$ev->evidenceName] = count($ev->contextParams);
     }
-    // Specialize qualifies local callees as `Module::name`; emit must resolve
-    // those FnRefs the same as bare local names.
     if ($moduleName !== '') {
         foreach ($functionArity as $name => $arity) {
             if (!\is_string($name) || str_contains($name, '::')) {
@@ -226,9 +220,6 @@ function emitFunction(
             foreach ($params as $i => $p) {
                 $env->locals[$p] = $i;
             }
-            // `IR\TailRecall` re-assigns the declared parameters in place. The
-            // slot is captured now, before the body can shadow a parameter name
-            // with a pattern binder, and before any local is allocated.
             $env->tailRecSlots = array_map(
                 static fn (string $p): int => $env->locals[$p],
                 $fn->params,
@@ -239,7 +230,6 @@ function emitFunction(
             } catch (\RuntimeException $e) {
                 throw new \RuntimeException($e->getMessage() . " while emitting `{$fn->name}`", 0, $e);
             }
-            // Dead fallthrough after body returns — needs a stack map for the verifier.
             $env->c->noteFrame($env->frameLocals($arity));
             $env->c->aconst_null();
             emitJvmFunctionReturn($env);
@@ -272,11 +262,9 @@ function emitEvidence(
             'arity' => $arity,
         ];
     }
-    // Instance context dictionaries (`Num a => Monoid (Sum a)`) become leading
-    // parameters. Method slots close over them as Partial args.
     $desc = '(' . str_repeat('Ljava/lang/Object;', $ctxArity) . ')Ljava/lang/Object;';
     $paramV = \array_fill(0, $ctxArity, 'java/lang/Object');
-    $methodsLocal = $ctxArity; // do not clobber context params
+    $methodsLocal = $ctxArity;
     $maxLocals = max($ctxArity + 2, 4);
     $b->addMethod(
         $name,
@@ -314,9 +302,7 @@ function emitEvidence(
                     false,
                 );
                 if ($ctxArity > 0) {
-                    // Partial(fullArity, TopLevelFn, [ctx0, ...]) so surface
-                    // calls only supply the remaining user arguments.
-                    $c->astore($methodsLocal + 1); // temp: TopLevelFn
+                    $c->astore($methodsLocal + 1);
                     $c->new_($cp->class_('moggi/rt/Partial'));
                     $c->dup();
                     $c->iconst($entry['arity']);
@@ -497,10 +483,6 @@ final class EmitEnv
         $locals = [];
         for ($i = 0; $i < $limit; ++$i) {
             $t = $this->localTypes[$i] ?? 'top';
-            // ITEM_Long / ITEM_Double occupy two interpreter slots but one
-            // StackMapTable entry — skip only the synthetic second half.
-            // Uninitialized reference holes must remain ITEM_Top; skipping them
-            // shifts later locals left and causes VerifyError at merges.
             if ($t === 'long' || $t === 'double') {
                 $locals[] = $t;
                 ++$i;
@@ -952,9 +934,6 @@ function emitTailLoop(EmitEnv $env, IR\Loop $stmt): void
     $env->c->noteFrame($env->frameLocals());
 
     emitBlock($env, $stmt->body);
-    // Only a body that can fall out of its end needs the explicit back-edge;
-    // emitting it after an unconditional `goto`/`return` leaves unreachable
-    // code the verifier still wants a stack map frame for.
     if (!jvmBlockTerminates($stmt->body)) {
         $env->c->goto_($head);
     }
@@ -1012,7 +991,6 @@ function jvmResolveDictMethod(EmitEnv $env, IR\Operand $evidence, string $method
         return null;
     }
 
-    // Legacy: evidenceName => methods map
     if (isset($entry[$method]) && \is_string($entry[$method])) {
         return ['name' => $entry[$method], 'module' => null];
     }
@@ -1047,7 +1025,6 @@ function emitIoCall(EmitEnv $env, IR\IoCall $stmt): void
         if (!($foreign instanceof IR\ForeignCall)) {
             throw new \RuntimeException('foreign IO call missing metadata');
         }
-        // Eager: run foreign effect and optionally store result (IO () → null).
         $call = new IR\ForeignCall(
             $foreign->backend,
             $foreign->kind,
@@ -1121,8 +1098,6 @@ function emitIoAssignAction(EmitEnv $env, IR\IoAssignAction $stmt): void
             $captures[$name] = true;
         }
     }
-    // A lambda this body builds closes over its own captures, so they are
-    // needed here too even though no operand names them.
     foreach (lambdaCaptureNamesInBlock($stmt->body, $env->lambdaMeta) as $capture) {
         if (!isset($assigned[$capture])) {
             $captures[$capture] = true;
@@ -1193,10 +1168,6 @@ function emitStaticCall(EmitEnv $env, string $name, array $args, ?string $ownerM
         return;
     }
     $callArgs = jvmCallArgs($env, $name, $args);
-    // A lifted function is callable at its captures followed by its parameters,
-    // and applying it to fewer arguments than that is a *partial*, not a call:
-    // the adapter a constrained local binding lowers to (`λ(dict, p) ->
-    // λ3(dict, p)`) applies its body lambda before the last argument arrives.
     if (isCapturedFnName($name)) {
         $meta = $env->lambdaMeta[$name] ?? ['captures' => [], 'params' => []];
         $fullArity = count($meta['captures']) + count($meta['params']);
@@ -1244,8 +1215,6 @@ function jvmResolveCallableTarget(
             $targetOwner = moduleInternalName($parsed['module']);
             $sym = symbolName($parsed['name']);
         } elseif (!isset($localCallables[$name]) && isset($externalFns[$name])) {
-            // Prefer a local definition over an imported short name (e.g. List.map
-            // must not resolve to Maybe.map / IO.map via externalFns).
             $extParsed = parseResolvedSymbol($externalFns[$name]);
             if ($extParsed !== null) {
                 $targetOwner = moduleInternalName($extParsed['module']);
@@ -1331,8 +1300,6 @@ function emitIntBinopToStack(EmitEnv $env, string $op, IR\Operand $left, IR\Oper
     if ($op === '==' || $op === '/=') {
         emitOperand($env, $left);
         emitOperand($env, $right);
-        // Structural, not `Object.equals`: a tuple is an `Object[]` and an array does not compare
-        // its elements.
         $env->c->invokestatic($env->cp->methodRef('moggi/rt/RT', 'valueEq', '(Ljava/lang/Object;Ljava/lang/Object;)Z'), 2, true);
         if ($op === '/=') {
             $env->c->iconst(1);
@@ -1355,26 +1322,20 @@ function emitIntBinopToStack(EmitEnv $env, string $op, IR\Operand $left, IR\Oper
             unboxInt($env);
         }
         $env->c->invokestatic($env->cp->methodRef('java/lang/Long', 'compare', '(JJ)I'), 4, true);
-        // `cmp` is -1/0/1 for the emitted operand order. The predicate is read
-        // off its sign arithmetically rather than with a branch: a comparison is
-        // an operand, so it can be emitted while an enclosing argument list is
-        // already building its array on the stack, and a branch target there
-        // needs that whole stack in its StackMapTable frame.
         $cmp = $env->freshLocal('int');
         $env->c->istore($cmp);
         $env->c->iload($cmp);
         if ($op === '<=') {
-            // `<=` is `cmp < 1`, so the sign is taken one below the compare.
             $env->c->iconst(1);
             $env->c->isub();
         }
         $env->c->iconst(31);
-        $env->c->opcode(0x7a, -1); // ishr: sign bit of the adjusted compare
+        $env->c->opcode(0x7a, -1);
         $env->c->iconst(1);
-        $env->c->opcode(0x7e, -1); // iand: 1 when the strict relation holds
+        $env->c->opcode(0x7e, -1);
         if ($op === '>=') {
             $env->c->iconst(1);
-            $env->c->opcode(0x82, -1); // ixor: >= is the negation of <
+            $env->c->opcode(0x82, -1);
         }
         $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
 
@@ -1388,7 +1349,6 @@ function emitIntBinopToStack(EmitEnv $env, string $op, IR\Operand $left, IR\Oper
         '+', 'intAdd#' => $env->c->ladd(),
         '-', 'intSub#' => $env->c->lsub(),
         '*', 'intMul#' => $env->c->lmul(),
-        // Toward 0. Library Integral Int.div uses Math.floorDiv.
         '/', 'intDiv#' => $env->c->ldiv(),
         default => throw new \RuntimeException("JVM emit: unsupported binop {$op}"),
     };
@@ -1495,9 +1455,6 @@ function emitOperand(EmitEnv $env, IR\Operand $op): void
     if ($op instanceof IR\DictMethod) {
         $resolved = jvmResolveDictMethod($env, $op->evidence, $op->method);
         if ($resolved !== null) {
-            // Method IR often lives in the evidence's defining module; arity is
-            // keyed as `Module::name` in globalFnArity (bare short names are
-            // frequently absent in the consumer module, e.g. Char8 → Ord.max).
             $arity = $env->functionArity[$resolved['name']] ?? null;
             if ($arity === null && \is_string($resolved['module'] ?? null) && $resolved['module'] !== '') {
                 $arity = $env->functionArity[
@@ -1522,10 +1479,6 @@ function emitOperand(EmitEnv $env, IR\Operand $op): void
         return;
     }
     if ($op instanceof IR\FnRef) {
-        // `Bool` is wired in: every module has its constructors in scope, including
-        // one that never imports Data.Bool (Data.Ord's class defaults are one).
-        // The host boolean is what an imported `Data.Bool` lowers to as well, so
-        // both spellings agree without a module to call.
         if ($op->name === 'True' || $op->name === 'False') {
             $env->c->iconst($op->name === 'True' ? 1 : 0);
             $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
@@ -1536,8 +1489,6 @@ function emitOperand(EmitEnv $env, IR\Operand $op): void
             $meta = $env->lambdaMeta[$op->name] ?? ['captures' => [], 'params' => []];
             $captures = $meta['captures'] ?? [];
             if ($captures !== []) {
-                // Close over free locals: Partial(fullArity, fn, [capture…]).
-                // (IR keeps bare @λ refs; bindLambdaCaptures only rewrites Partial/Call.)
                 $captureArgs = \array_map(
                     static fn (string $capture): IR\Operand => new IR\Local($capture),
                     $captures,
@@ -1551,8 +1502,6 @@ function emitOperand(EmitEnv $env, IR\Operand $op): void
         $arity = $env->functionArity[$op->name] ?? null;
         if ($arity === null) {
             $parsed = parseResolvedSymbol($op->name);
-            // Never fall back to a bare `λN` from another module — short lambda
-            // names collide across modules and pick the wrong arity.
             if ($parsed !== null && !isLambdaName($parsed['name'])) {
                 $arity = $env->functionArity[$parsed['name']] ?? null;
             }
@@ -1575,18 +1524,15 @@ function emitOperand(EmitEnv $env, IR\Operand $op): void
 
 function jvmOperandNeverReturns(IR\Operand $op): bool
 {
-    // throwErrorCall / throwSomeException are typed as returning Object for the
-    // verifier; emit sites must still areturn/astore/pop the dead result.
     return false;
 }
 
 function pushBoxedInt(EmitEnv $env, int $v): void
 {
-    // Language Int is signed 64-bit (java.lang.Long).
     if ($v === 0 || $v === 1) {
         $env->c->lconst($v);
     } elseif ($v >= -32768 && $v <= 32767) {
-        $env->c->iconst($v); // iconst/bipush/sipush range via iconst helper
+        $env->c->iconst($v);
         $env->c->i2l();
     } else {
         $env->c->ldc2_w($env->cp->long($v));
@@ -1716,7 +1662,6 @@ function emitSignExtend(EmitEnv $env, string $opName): void
 
         return;
     }
-    // int32
     $env->c->l2i();
     $env->c->i2l();
 }
@@ -1768,7 +1713,7 @@ function emitDoubleCmpFlag(EmitEnv $env, IR\Operand $left, IR\Operand $right): v
     unboxDouble($env);
     emitOperand($env, $right);
     unboxDouble($env);
-    $env->c->opcode(0x97, -3); // dcmpl: two doubles → int
+    $env->c->opcode(0x97, -3);
     $env->c->dup();
     $env->c->imul();
 }
@@ -1815,7 +1760,7 @@ function emitOrderingTagNe(EmitEnv $env, IR\Operand $ord, string $tag): void
     $env->c->ldc($env->cp->string_($tag));
     $env->c->invokevirtual($env->cp->methodRef('java/lang/Object', 'equals', '(Ljava/lang/Object;)Z'), 1, true);
     $env->c->iconst(1);
-    $env->c->opcode(0x82, -1); // ixor → not
+    $env->c->opcode(0x82, -1);
     $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
 }
 
@@ -1834,7 +1779,7 @@ function emitJvmBitReverse(EmitEnv $env, IR\Operand $arg, int $bits, int $finalM
     $env->c->invokestatic($env->cp->methodRef('java/lang/Integer', 'reverse', '(I)I'), 1, true);
     if ($bits < 32) {
         $env->c->iconst(32 - $bits);
-        $env->c->opcode(0x7c, -1); // iushr
+        $env->c->opcode(0x7c, -1);
     }
     $env->c->i2l();
     $env->c->ldc2_w($env->cp->long((int) $finalMask));
@@ -1874,7 +1819,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             emitDoubleCmpFlag($env, $args[0], $args[1]);
             $env->c->iconst(1);
             $env->c->swap();
-            $env->c->isub(); // 1 - flag: the int compares equal only when the doubles do
+            $env->c->isub();
             $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
             return;
         case 'doubleNe#':
@@ -1886,9 +1831,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             unboxDouble($env);
             emitOperand($env, $args[1]);
             unboxDouble($env);
-            // `dcmpg` yields -1/0/1 with NaN on the greater side, which is what
-            // `compare` specifies, so only the int → Ordering step is left.
-            $env->c->opcode(0x98, -3); // dcmpg: two doubles → int
+            $env->c->opcode(0x98, -3);
             emitCompareIntToOrdering($env);
             return;
         case 'doubleAbs#':
@@ -1922,11 +1865,11 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             if ($op->name === 'intAnd#') {
                 $env->c->land();
             } elseif ($op->name === 'intOr#') {
-                $env->c->opcode(0x81, -2); // lor
+                $env->c->opcode(0x81, -2); 
             } elseif ($op->name === 'intXor#') {
-                $env->c->opcode(0x83, -2); // lxor
+                $env->c->opcode(0x83, -2); 
             } else {
-                $env->c->l2i(); // shift count is in [0,63]
+                $env->c->l2i(); 
                 $env->c->opcode(
                     ['intShiftL#' => 0x79, 'intShiftRA#' => 0x7b, 'intShiftRL#' => 0x7d][$op->name],
                     -1
@@ -1938,7 +1881,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             emitOperand($env, $args[0]);
             unboxInt($env);
             $env->c->ldc2_w($env->cp->long(-1));
-            $env->c->opcode(0x83, -2); // lxor: ~x == x xor -1
+            $env->c->opcode(0x83, -2); 
             boxInt($env);
             return;
         case 'intPopCnt#':
@@ -1993,7 +1936,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             emitOperand($env, $args[1]);
             $env->c->invokevirtual($env->cp->methodRef('java/lang/Object', 'equals', '(Ljava/lang/Object;)Z'), 1, true);
             $env->c->iconst(1);
-            $env->c->opcode(0x82, -1); // ixor
+            $env->c->opcode(0x82, -1); 
             $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
             return;
         case 'intCompare#':
@@ -2005,9 +1948,6 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
         case 'int16Compare#':
         case 'int32Compare#':
         case 'int64Compare#':
-            // Spill both sides before Long.compare: the right operand may
-            // itself contain ordering_pick / intCompare# with branches; leaving
-            // the left long on the stack corrupts nested StackMapFrames.
             emitOperand($env, $args[0]);
             unboxInt($env);
             $left = $env->freshLocal('long');
@@ -2037,7 +1977,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             emitOperand($env, $args[1]);
             $env->c->checkcast($env->cp->class_('java/lang/Boolean'));
             $env->c->invokevirtual($env->cp->methodRef('java/lang/Boolean', 'booleanValue', '()Z'), 0, true);
-            $env->c->opcode(0x7e, -1); // iand
+            $env->c->opcode(0x7e, -1); 
             $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
             return;
         case 'boolOr#':
@@ -2047,7 +1987,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             emitOperand($env, $args[1]);
             $env->c->checkcast($env->cp->class_('java/lang/Boolean'));
             $env->c->invokevirtual($env->cp->methodRef('java/lang/Boolean', 'booleanValue', '()Z'), 0, true);
-            $env->c->opcode(0x80, -1); // ior
+            $env->c->opcode(0x80, -1); 
             $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
             return;
         case 'boolNot#':
@@ -2055,7 +1995,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->c->checkcast($env->cp->class_('java/lang/Boolean'));
             $env->c->invokevirtual($env->cp->methodRef('java/lang/Boolean', 'booleanValue', '()Z'), 0, true);
             $env->c->iconst(1);
-            $env->c->opcode(0x82, -1); // ixor
+            $env->c->opcode(0x82, -1); 
             $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
             return;
         case 'stringCompare#':
@@ -2065,7 +2005,6 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             emitOperand($env, $args[1]);
             $env->c->checkcast($env->cp->class_('java/lang/String'));
             $env->c->invokevirtual($env->cp->methodRef('java/lang/String', 'compareTo', '(Ljava/lang/String;)I'), 1, true);
-            // compareTo already yields a three-way int; do not feed ints to Long.compare.
             emitCompareIntToOrdering($env);
             return;
         case 'stringNe#':
@@ -2107,13 +2046,10 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->c->getfield($env->cp->fieldRef('moggi/rt/Con', 'tag', 'Ljava/lang/String;'));
             $env->c->invokevirtual($env->cp->methodRef('java/lang/Object', 'equals', '(Ljava/lang/Object;)Z'), 1, true);
             $env->c->iconst(1);
-            $env->c->opcode(0x82, -1); // ixor
+            $env->c->opcode(0x82, -1); 
             $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
             return;
         case 'orderingCompare#':
-            // Compare Ordering tags via RT.orderingToInt then int compare → Ordering.
-            // `orderingToInt` yields ints, so the pair goes through Integer.compare
-            // and the result is one three-way int.
             emitOperand($env, $args[0]);
             $env->c->checkcast($env->cp->class_('moggi/rt/Con'));
             $env->c->invokestatic($env->cp->methodRef('moggi/rt/RT', 'orderingToInt', '(Lmoggi/rt/Con;)I'), 1, true);
@@ -2197,7 +2133,6 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
         case 'bytesToString#':
             emitOperand($env, $args[0]);
             return;
-            // Unsigned 64-bit operations via moggi.rt.Word64 (wrapping / unsigned).
         case 'word64Eq#':
         case 'word64Ne#':
             emitOperand($env, $args[0]);
@@ -2212,8 +2147,6 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             );
             $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
             return;
-            // `Word` is the unsigned 64-bit type, so its comparison is unsigned too
-            // (the bit pattern of a value above `maxBound :: Int` is negative).
         case 'wordCompare#':
         case 'word64Compare#':
             emitOperand($env, $args[0]);
@@ -2353,8 +2286,6 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->c->land();
             boxInt($env);
             return;
-            // Signed fixed-width ints: i64 host rep, sign-extend-truncate after
-            // each op (l2i/i2b/i2s/i2l) so values stay normalized for compares.
         case 'int8FromInt#':
         case 'int16FromInt#':
         case 'int32FromInt#':
@@ -2402,7 +2333,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->c->l2i();
             $env->c->invokestatic($env->cp->methodRef('java/lang/Integer', 'reverseBytes', '(I)I'), 1, true);
             $env->c->iconst(16);
-            $env->c->opcode(0x7c, -1); // iushr: high 16 bits hold the swapped word16
+            $env->c->opcode(0x7c, -1); 
             $env->c->i2l();
             $env->c->ldc2_w($env->cp->long(0xffff));
             $env->c->land();
@@ -2484,7 +2415,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->c->checkcast($env->cp->class_('java/lang/Boolean'));
             $env->c->invokevirtual($env->cp->methodRef('java/lang/Boolean', 'booleanValue', '()Z'), 0, true);
             $env->c->iconst(1);
-            $env->c->opcode(0x82, -1); // ixor
+            $env->c->opcode(0x82, -1); 
             $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
             return;
         case 'listCompare#':
@@ -2516,7 +2447,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->c->checkcast($env->cp->class_('java/lang/Boolean'));
             $env->c->invokevirtual($env->cp->methodRef('java/lang/Boolean', 'booleanValue', '()Z'), 0, true);
             $env->c->iconst(1);
-            $env->c->opcode(0x82, -1); // ixor
+            $env->c->opcode(0x82, -1); 
             $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
             return;
         case 'maybeCompare#':
@@ -2581,9 +2512,6 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->c->opcode(0x82, -1);
             $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
             return;
-            // Natural# shares the Integer# representation (java.math.BigInteger);
-            // the conversion into it is the only constructor and rejects a
-            // negative value, so a Natural can never be negative.
         case 'naturalToInteger#':
             emitOperand($env, $args[0]);
             return;
@@ -2612,9 +2540,6 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             );
             return;
         case 'exceptionWrap#':
-            // tag -> display -> payload: the rendered text travels with the
-            // exception so a rethrow or an uncaught report can print it without
-            // a dictionary.
             emitOperand($env, $args[0]);
             $env->c->checkcast($env->cp->class_('java/lang/String'));
             emitOperand($env, $args[1]);
@@ -2849,7 +2774,7 @@ function emitForeign(EmitEnv $env, IR\ForeignCall $op): void
     if ($resolved['dispatch'] === 'constructor') {
         emitForeignIoWrap($env, $op->ioWrap);
 
-        return; // object ref already on stack
+        return; 
     }
 
     if ($retSlots === 0) {
@@ -2944,7 +2869,7 @@ function countJvmArgSlots(array $kinds): int
 function parseJvmParamKinds(string $desc): array
 {
     if ($desc[0] !== '(') {
-        return []; // field descriptor
+        return []; 
     }
     $i = 1;
     $kinds = [];
@@ -3002,12 +2927,10 @@ function jvmReturnStackSlots(string $methodDesc): int
 function unboxForeignArg(EmitEnv $env, string $kind): void
 {
     match ($kind) {
-        // JDK int: Moggi Int/Char are Long — Number.intValue truncates safely for Char.
         'I' => (static function () use ($env): void {
             $env->c->checkcast($env->cp->class_('java/lang/Number'));
             $env->c->invokevirtual($env->cp->methodRef('java/lang/Number', 'intValue', '()I'), 0, true);
         })(),
-        // Fixed-width Int8/Int16: truncate through int.
         'B' => (static function () use ($env): void {
             $env->c->checkcast($env->cp->class_('java/lang/Number'));
             $env->c->invokevirtual($env->cp->methodRef('java/lang/Number', 'intValue', '()I'), 0, true);
@@ -3049,7 +2972,6 @@ function boxForeignReturn(EmitEnv $env, string $retOrFieldDesc): void
         : $retOrFieldDesc;
 
     match ($ret) {
-        // JDK int → Moggi Int (Long)
         'I', 'B', 'S', 'C' => (static function () use ($env): void {
             $env->c->i2l();
             boxInt($env);
@@ -3071,14 +2993,12 @@ function boxForeignReturn(EmitEnv $env, string $retOrFieldDesc): void
         ),
         'J' => boxInt($env),
         'V' => $env->c->aconst_null(),
-        default => null, // already a reference
+        default => null, 
     };
 }
 
 function emitMatchReturn(EmitEnv $env, IR\MatchReturn $stmt): void
 {
-    // Nested MatchReturn must not inherit MatchStmt yieldDest: otherwise Ret
-    // branches to this match's join label, which is omitted when dest=null.
     $prevDest = $env->matchYieldDest;
     $prevJoin = $env->matchJoinLabel;
     $env->matchYieldDest = null;
@@ -3129,13 +3049,7 @@ function emitMatchCommon(EmitEnv $env, IR\Operand $scrutinee, array $arms, ?int 
         $fail = 'match_fail_' . $matchId . '_' . $armId;
         ++$armId;
         emitPatternTest($env, $arm->pattern, $scrut, $fail);
-        // A guard is tested after the pattern bound its variables, and a guard
-        // that does not hold tries the next arm -- the same `$fail` a failed
-        // pattern leaves through.
         foreach ($arm->guards as $guard) {
-            // Statements the guard needs (`| ok (g x) = …`) run first: the arm
-            // is only left through `$fail`, so a guard that does not hold tries
-            // the next arm exactly like a failed pattern does.
             emitBlock($env, $guard->prep);
             emitOperand($env, $guard->cond);
             $env->c->checkcast($env->cp->class_('java/lang/Boolean'));
@@ -3161,8 +3075,6 @@ function emitMatchCommon(EmitEnv $env, IR\Operand $scrutinee, array $arms, ?int 
     $env->c->athrow();
     $env->matchJoinLabel = $prevJoin;
     if (!$needsEndLabel) {
-        // No arm needed the join, so nothing jumps over the `athrow` above -- but the code the
-        // caller emits next still begins a basic block, and the verifier wants a frame at it.
         $env->c->noteFrame($env->frameLocals());
 
         return;
@@ -3239,7 +3151,6 @@ function emitPatternTest(EmitEnv $env, IR\Pattern $pat, int $scrutLocal, string 
         return;
     }
     if ($pat instanceof IR\PatLit) {
-        // IR\PatLit carries int|string (e.g. derived Read `case s of "Ctor" → …`).
         if (\is_string($pat->value)) {
             $env->c->aload($scrutLocal);
             $env->c->checkcast($env->cp->class_('java/lang/String'));
@@ -3267,7 +3178,6 @@ function emitPatternTest(EmitEnv $env, IR\Pattern $pat, int $scrutLocal, string 
         return;
     }
     if ($pat instanceof IR\PatCon) {
-        // Boolean may be java.lang.Boolean; ADTs are moggi.rt.Con
         if ($pat->name === 'True' || $pat->name === 'False') {
             $env->c->aload($scrutLocal);
             $env->c->checkcast($env->cp->class_('java/lang/Boolean'));
@@ -3281,7 +3191,6 @@ function emitPatternTest(EmitEnv $env, IR\Pattern $pat, int $scrutLocal, string 
             return;
         }
         if (isset($env->newtypeConstructors[$pat->name])) {
-            // Newtype: identity representation — bind the single field to the scrutinee.
             foreach ($pat->args as $sub) {
                 if ($sub instanceof IR\PatWild) {
                     continue;

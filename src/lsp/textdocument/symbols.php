@@ -28,7 +28,6 @@ function svcDocumentSymbols(AnalysisService $svc, string $uri): array
     if ($modEntry !== null) {
         $out = [];
         foreach ($modEntry['decls'] as $decl) {
-            // Skip declarations with invalid ranges (e.g., constructors with zero positions)
             if (($decl->range['start']['line'] ?? 0) === 0 && ($decl->range['start']['character'] ?? 0) === 0) {
                 continue;
             }
@@ -89,8 +88,6 @@ function svcFoldingRanges(AnalysisService $svc, string $uri): array
     }
     $ranges = [];
     if ($analysis->program instanceof Ast\Program) {
-        // How far a declaration reaches is the indentation block its name starts, which only the
-        // token map knows: a decl carries the line of its own name and no extent.
         $maps = declTokenMaps($analysis->source, $uri);
         $endLines = $maps['endLines'];
         $seenLines = [];
@@ -143,7 +140,6 @@ function svcSelectionRange(AnalysisService $svc, string $uri, array $positions):
             $out[] = ['range' => ['start' => $pos, 'end' => $pos]];
             continue;
         }
-        // Chain is outer→inner. Nest so result is innermost with parent=larger spans.
         $nested = null;
         foreach ($chain as $node) {
             if (($node->line ?? 0) <= 0) {
@@ -165,7 +161,6 @@ function svcWorkspaceSymbol(AnalysisService $svc, string $query): array
     $out = [];
     $seen = [];
 
-    // Moogle-ranked hits first when DocIndex is available.
     $docIndex = $svc->docIndex;
     if ($query !== '' && $docIndex !== null) {
         try {

@@ -164,7 +164,6 @@ function checkRaw(
                 $items[] = checkFunction($state, $fn);
             })(),
             Ast\ForeignTypeDecl::class => (function () use ($state, $item, &$items): void {
-                // Already registered in registerTypeDeclarations (like DataDecl).
                 validateForeignTypeDecl($state, $item);
                 $items[] = $item;
             })(),
@@ -189,7 +188,6 @@ function checkRaw(
         };
     }
 
-    // A restricted declaration is settled by the whole module, not by itself.
     finishRestrictedDeclarations($state);
 
     validateEntryPoint($state, $items, $program->module, $purpose);
@@ -287,7 +285,6 @@ function isErrorCallExpr(Ast\AstNode $expr): bool
         return true;
     }
 
-    // Bare `undefined` is a polymorphic bottom (defined as `error "…"` in Moggi.Err).
     if ($expr instanceof Ast\Variable || $expr instanceof Ast\QualifiedRef) {
         return $expr->name === 'undefined';
     }

@@ -18,7 +18,6 @@ function svcCallHierarchyPrepare(AnalysisService $svc, string $uri, array $pos):
     if ($target === null || ($target['resolved'] ?? null) === null) {
         return [];
     }
-    // Only advertise prepare when we can produce at least one edge or a def.
     $resolved = $target['resolved'];
     $hasEdge = $svc->occurrences->incomingCalls($resolved) !== []
         || $svc->occurrences->outgoingCalls($resolved) !== []
@@ -63,7 +62,6 @@ function svcCallHierarchyIncoming(AnalysisService $svc, array $item): array
             'fromRanges' => [$edge->range],
         ];
     }
-    // Fallback: uses of the symbol whose enclosing function is known
     if ($out === []) {
         foreach ($svc->occurrences->findByResolved($resolved) as $occ) {
             if ($occ->kind === 'def' || $occ->enclosing === null) {
@@ -137,9 +135,6 @@ function svcTypeHierarchyPrepare(AnalysisService $svc, string $uri, array $pos):
         if (!$isClass && !$isData) {
             continue;
         }
-        // Every remaining candidate is a class or data declaration, so there is
-        // nothing left to filter: advertise it (its supertypes/instances may be
-        // empty, and `typeHierarchySupertypes` returns `[]` for those).
         return [[
             'name' => $decl->name,
             'kind' => $decl->kind,
@@ -175,7 +170,6 @@ function svcTypeHierarchySubtypes(AnalysisService $svc, array $item): array
         return [];
     }
     $out = [];
-    // Instances of this class are subtypes in the LSP type-hierarchy sense.
     foreach ($svc->modules->classInstances[$name] ?? [] as $inst) {
         $out[] = [
             'name' => $inst['name'],
@@ -186,7 +180,6 @@ function svcTypeHierarchySubtypes(AnalysisService $svc, array $item): array
             'data' => ['name' => $name, 'kind' => 'instance'],
         ];
     }
-    // Classes that list this as a superclass
     foreach ($svc->modules->classSupers as $cls => $supers) {
         if (!in_array($name, $supers, true)) {
             continue;
@@ -214,6 +207,5 @@ function typeHierarchyItemForName(AnalysisService $svc, string $name): ?array
             ];
         }
     }
-    // Synthetic leaf when we know the name but not a decl (stdlib not indexed)
     return null;
 }

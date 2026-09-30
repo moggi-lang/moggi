@@ -9,3 +9,20 @@ program
       infix +
         variable x
         variable y
+  function pairUp :: Int -> String -> Tuple2 Int String
+    pat_var a
+    pat_var b
+    let
+      binding
+        pat_var x
+        infix +
+          variable a
+          integer 1
+      binding
+        pat_var y
+        infix <>
+          variable b
+          string " World"
+      tuple
+        variable x
+        variable y

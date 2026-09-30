@@ -64,8 +64,6 @@ function lowerIoSequence(array $stmts, LowerCtx $ctx): bool
     for ($i = 0; $i <= $lastIndex; ++$i) {
         $stmt = $stmts[$i];
         $last = $i === $lastIndex;
-        // Each `do` statement is one frame; the calls inside it are operands of
-        // that statement, not frames of their own.
         $ctx->stmtSrcLoc = ioStmtSrcLoc(
             match (true) {
                 $stmt instanceof Ast\IoExpr,
@@ -188,13 +186,6 @@ function lowerIoReturnOrAction(Ast\AstNode $expr, LowerCtx $ctx, bool $asStateme
             return new Unit();
         }
 
-        // `pure <action>` is an IO-typed *value* (`pure (putStrLn "x")`,
-        // `pure getLine`): the action runs where the value is run, not where it
-        // is written. Lowering it as a pure expression emits the call on the
-        // spot and runs the effect early — `nested = do putStrLn "outer";
-        // pure (putStrLn "inner")` printed "inner" before its caller's next
-        // statement. Boxing the value is what a tuple or list element of IO
-        // type already does.
         return lowerIoValueExpr($expr->expr, $ctx);
     }
 
@@ -221,9 +212,6 @@ function lowerIoReturnOrAction(Ast\AstNode $expr, LowerCtx $ctx, bool $asStateme
         }
     }
 
-    // A match's arms leave through `Ret`, so a match is only an action in tail position: anywhere
-    // its value is needed it is boxed and run, exactly as the statement path below does. Building
-    // that box calls this function, so inside one the match is the body itself.
     if ($expr instanceof Ast\IoCase) {
         if ($ctx->inActionBox) {
             return lowerIoCase($expr, $ctx) ? new Unit() : null;
@@ -239,9 +227,6 @@ function lowerIoReturnOrAction(Ast\AstNode $expr, LowerCtx $ctx, bool $asStateme
 
     $dest = ($asStatement || ioActionExprReturnsUnit($expr)) ? null : freshTemp($ctx);
     if (!lowerIoAction($expr, $ctx, $dest)) {
-        // Higher-order applies (e.g. `k x` where `k` is a parameter) are not known IO callees:
-        // lower as an ordinary expression, whose value is either the action the callee returned
-        // or, when it ran the effect itself, its result.
         $inner = $expr instanceof Ast\IoAction ? $expr->expr : $expr;
         try {
             $value = lowerExpr($inner, $ctx);
@@ -288,8 +273,6 @@ function lowerIoActionToBox(Ast\AstNode $expr, LowerCtx $ctx): Operand
         $result = new Unit();
     }
 
-    // lowerIoSequence ends with Ret; peel it into the box result so codegen
-    // emits a single return (and can capture locals from that operand).
     $items = $subCtx->items;
     if ($items !== []) {
         $last = $items[count($items) - 1];
@@ -365,8 +348,6 @@ function lowerIoAction(Ast\AstNode $expr, LowerCtx $ctx, ?int $dest): bool
             return true;
         }
 
-        // Effectful IO intrinsics (platform_*, error, …): run as IoCall so
-        // Unit effects mid-sequence are not turned into Ret.
         $ctx->items[] = new IoCall(
             $call->name,
             $call->args,
@@ -386,7 +367,6 @@ function lowerIoAction(Ast\AstNode $expr, LowerCtx $ctx, ?int $dest): bool
         $tmp = freshTemp($ctx);
         $call->dest = $tmp;
         if ($ctx->inActionBox && $dest === null) {
-            // First-class IO value: keep the ActionReturn box, do not run it.
             $ctx->items[] = new Ret(new Temp($tmp));
         } elseif ($dest === null) {
             $ctx->items[] = new IoRun(new Temp($tmp), null, ioStmtSrcLoc($expr, $ctx));
@@ -423,7 +403,6 @@ function lowerIoNullaryCall(string $name, LowerCtx $ctx, ?int $dest, ?SrcLoc $sr
     $call->dest = $tmp;
     $ctx->items[] = $call;
     if ($ctx->inActionBox && $dest === null) {
-        // First-class IO value: keep the ActionReturn box, do not run it.
         $ctx->items[] = new Ret(new Temp($tmp));
 
         return true;
@@ -450,8 +429,6 @@ function ioCallNeedsRunBoxedResult(IoCall $call, LowerCtx $ctx): bool
         return true;
     }
 
-    // Polymorphic Monad helpers return boxed IO (their bodies are not
-    // IO-normalized). Calling them as IO statements must run the box.
     return \in_array($call->callee, boxedIoMonadHelperNames(), true);
 }
 
@@ -465,15 +442,9 @@ function lowerIoCase(Ast\IoCase $expr, LowerCtx $ctx): bool
 {
     $scrutinee = lowerExpr($expr->scrutinee, $ctx);
     $arms = [];
-    // A guarded alternative whose guards all fail is no more taken than one
-    // whose pattern failed, so the match stays fallible while a guard can fail.
     $guardsAlwaysHold = true;
 
     foreach ($expr->alts as $alt) {
-        // A guarded alternative contributes one arm per guarded clause: the
-        // alternative's pattern plus that guard as the arm's condition, so a
-        // guard that does not hold tries the next alternative instead of ending
-        // the match.
         if ($alt->body instanceof Ast\GuardsExpr) {
             $guardsAlwaysHold = $guardsAlwaysHold && guardsExhaustive($alt->body);
             $clauses = \array_map(
@@ -493,9 +464,6 @@ function lowerIoCase(Ast\IoCase $expr, LowerCtx $ctx): bool
             bindPattern($pattern, $scrutinee, $armCtx);
             $guards = [];
             if ($guard !== null) {
-                // A variable pattern is bound by a statement of its own, which
-                // the guard reads and therefore runs with the guard; every other
-                // pattern's binders are bound by the pattern test itself.
                 $bindings = $armCtx->items;
                 $isVarPattern = $alt->pattern instanceof Ast\PatVar;
                 $armCtx->items = [];
@@ -525,8 +493,6 @@ function lowerIoCase(Ast\IoCase $expr, LowerCtx $ctx): bool
  */
 function ioActionCall(Ast\AstNode $expr, LowerCtx $ctx): Intrinsic|IoCall|null
 {
-    // `(action :: IO a)` is the action — the annotation says nothing about how it runs — so
-    // the wrapper must not lower the inner expression as a pure value.
     while ($expr instanceof Ast\TypeAsc) {
         $expr = $expr->expr;
     }
@@ -604,7 +570,6 @@ function ioActionCall(Ast\AstNode $expr, LowerCtx $ctx): Intrinsic|IoCall|null
     $args = [];
     foreach ($parts['args'] as $arg) {
         if (astExprReturnsIo($arg)) {
-            // Functions that take `IO a` need the boxed action, not its result.
             $args[] = lowerIoActionToBox(
                 $arg instanceof Ast\IoAction ? $arg : new Ast\IoAction($arg),
                 $ctx,
@@ -637,8 +602,6 @@ function resolveIoActionCalleeName(Ast\AstNode $fnExpr, LowerCtx $ctx): ?string
         }
 
         $envRef = $ctx->env[$base->name] ?? null;
-        // Higher-order local (parameter / let-bound function value): not a
-        // known top-level IO callee — fall back to ordinary apply lowering.
         if ($envRef instanceof Local || $envRef instanceof Temp) {
             return null;
         }

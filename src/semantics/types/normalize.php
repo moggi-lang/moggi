@@ -59,7 +59,6 @@ function normalizeType(
     }
 
     if (!$type instanceof TCon) {
-        // TVar / TStringLit / TNatLit / primitives / TUnit — already pruned.
         return $type;
     }
 
@@ -87,9 +86,6 @@ function normalizeType(
         return $type;
     }
 
-    // Already expanding this synonym: treat the head as nominal. Magichash
-    // public aliases (`type List = List#`) collapse back to `TCon('List')`;
-    // true cycles are reported while elaborating the RHS (see below).
     if (isset($expanding[$type->name])) {
         return $type;
     }
@@ -98,7 +94,6 @@ function normalizeType(
     $params = $syn['params'];
     $arity = \count($params);
 
-    // Under-applied parametric synonym: leave the unsaturated head as-is.
     if (\count($args) < $arity) {
         return $type;
     }
@@ -276,7 +271,6 @@ function flattenTypeAppPattern(Ast\TypeNode $pattern): ?array
         return null;
     }
 
-    // Iterative flatten — see flattenInstanceHeadTypeApp.
     $args = [];
     $type = $pattern;
     while ($type instanceof Ast\TypeApp) {
@@ -332,8 +326,6 @@ function expandSynonymInNormalizedType(
     $params = $syn['params'];
     $arity = \count($params);
 
-    // The body was elaborated where the synonym was declared, so the RHS names
-    // never need to resolve in the importing module's scope.
     $body = $syn['body'] ?? null;
     if ($body !== null) {
         $bodyMapping = [];
@@ -370,8 +362,6 @@ function expandSynonymInNormalizedType(
         $head = new TCon($head->name, [...$head->args, ...$remaining]);
     }
 
-    // Re-enter with the synonym guarded so Magichash collapses (List# → List)
-    // stay nominal; leftover expand-under-app args normalize recursively.
     return normalizeType($state, $head, $rhsExpanding, $reduceFamilies);
 }
 

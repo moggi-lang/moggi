@@ -28,13 +28,13 @@ namespace Moggi\Backend\Jvm;
  *   moggi.rt.MList(head,t)  = Cons  (tail is MList|null)
  *
  * Dictionary (typeclass evidence)
- *   Class moggi.rt.Dict { Object[] methods; }  // surface/ir name pairs or Fn slots
+ *   Class moggi.rt.Dict { Object[] methods; }  
  *   Resolved evidence is a static method returning Dict; arity is the instance
  *   context count (`Num a => Monoid (Sum a)` → one dict parameter). Constrained
  *   evidence closes context into method Partials.
  *
  * IO
- *   Class moggi.rt.IO { Object action; }   // RT.apply(action, empty) runs the effect
+ *   Class moggi.rt.IO { Object action; }   
  *   RT.ioRun(IO) executes; Main entry runs IO mains via ioRun.
  *   RT.ioCatch / ioFinally / throwSomeException back IoCatch/IoFinally/IoThrow.
  *
@@ -102,7 +102,6 @@ function languageRuntime(): array
         'moggi/rt/Rec' => buildRecClass(),
         'moggi/rt/TopLevelFn' => buildTopLevelFnClass(),
         'moggi/rt/Word64' => buildWord64Class(),
-        // Platform: argv + IO handle helpers (System.IO.JVM). FS/StringOps via JDK FFI.
         'moggi/rt/Platform' => buildPlatformClass(),
     ];
 
@@ -239,8 +238,6 @@ function buildConClass(): string
         }
     );
 
-    // Structural equality so `==` on ADTs (Sum, Maybe, …) works via Object.equals,
-    // matching MList and RT.valueEq used by listEq.
     $b->addMethod(
         'equals',
         '(Ljava/lang/Object;)Z',
@@ -289,7 +286,6 @@ function buildMoggiExceptionClass(): string
     $b->addField('someException', '[Ljava/lang/Object;', 0x0011);
     $b->addField('throwSite', '[Ljava/lang/Object;', 0x0011);
 
-    // Compatibility: MoggiException(se) → full ctor with null site/cause.
     $b->addMethod(
         '<init>',
         '([Ljava/lang/Object;)V',
@@ -314,7 +310,6 @@ function buildMoggiExceptionClass(): string
         }
     );
 
-    // (someException, throwSite, cause) — never nest MoggiException as cause.
     $b->addMethod(
         '<init>',
         '([Ljava/lang/Object;[Ljava/lang/Object;Ljava/lang/Throwable;)V',
@@ -322,8 +317,6 @@ function buildMoggiExceptionClass(): string
         5,
         ['moggi/rt/MoggiException', '[Ljava/lang/Object;', '[Ljava/lang/Object;', 'java/lang/Throwable'],
         static function (CodeBuilder $c, ConstantPool $cp): void {
-            // locals: 0=this, 1=se, 2=site, 3=cause, 4=msg
-            // Call super(String) before any branch so this is initialized for stack maps.
             $c->aload(1);
             $c->invokestatic(
                 $cp->methodRef('moggi/rt/RT', 'exceptionDisplay', '(Ljava/lang/Object;)Ljava/lang/String;'),
@@ -348,7 +341,6 @@ function buildMoggiExceptionClass(): string
             $c->aload(2);
             $c->putfield($cp->fieldRef('moggi/rt/MoggiException', 'throwSite', '[Ljava/lang/Object;'));
 
-            // Attach native cause only (never nest MoggiException).
             $c->aload(3);
             $c->ifnull('done');
             $c->aload(3);
@@ -500,8 +492,6 @@ function buildRecClass(): string
 {
     $b = new ClassBuilder('moggi/rt/Rec');
     $b->implement('moggi/rt/Fn');
-    // `value`/`done` are memo cells written by `invoke`, so they must not be
-    // final (the JVM only allows final writes from the initializer method).
     $b->addField('fn', 'Ljava/lang/Object;', 0x0011);
     $b->addField('value', 'Ljava/lang/Object;', 0x0001);
     $b->addField('done', 'I', 0x0001);
@@ -533,7 +523,6 @@ function buildRecClass(): string
             $c->getfield($cp->fieldRef('moggi/rt/Rec', 'done', 'I'));
             $c->ifne('computed');
 
-            // value = RT.apply(fn, [this]); done = true;
             $c->aload(0);
             $c->iconst(1);
             $c->putfield($cp->fieldRef('moggi/rt/Rec', 'done', 'I'));
@@ -665,17 +654,12 @@ function addRtFrameAppenders(ClassBuilder $b): void
         11,
         ['java/lang/StringBuilder', 'java/lang/Throwable', '[Ljava/lang/Object;'],
         static function (CodeBuilder $c, ConstantPool $cp) use ($mgLocals): void {
-            // locals: 0=sb, 1=t, 2=throwSite, 3=stack, 4=i, 5=shown,
-            //         6=limit, 7=el, 8=text, 9=key, 10=throwSiteText
             $c->aload(1);
             $c->ifnonnull('has_t');
             $c->return_();
 
             $c->label('has_t');
             $c->noteFrame(['java/lang/StringBuilder', 'java/lang/Throwable', '[Ljava/lang/Object;']);
-            // Walk the most specific trace: a wrapped host failure carries the
-            // frames that actually threw, while the wrapper's own trace is only
-            // the report site. Falls back to the throwable itself.
             $c->aload(1);
             $c->invokevirtual($cp->methodRef('java/lang/Throwable', 'getCause', '()Ljava/lang/Throwable;'), 0, true);
             $c->dup();
@@ -700,9 +684,6 @@ function addRtFrameAppenders(ClassBuilder $b): void
             $c->aconst_null();
             $c->astore(9);
 
-            // The stamped throw site is already the innermost frame: render its
-            // line so its host-stack duplicates can be dropped, and count it
-            // against the frame cap.
             $c->aload(2);
             $c->ifnull('no_site');
             $c->new_($cp->class_('java/lang/StringBuilder'));
@@ -765,7 +746,6 @@ function addRtFrameAppenders(ClassBuilder $b): void
             $c->checkcast($cp->class_('java/lang/StackTraceElement'));
             $c->astore(7);
 
-            // The Mogg trace never names the runtime's own frames.
             $c->aload(7);
             $c->invokevirtual($cp->methodRef('java/lang/StackTraceElement', 'getClassName', '()Ljava/lang/String;'), 0, true);
             $c->ldc($cp->string_('moggi.rt.'));
@@ -778,7 +758,7 @@ function addRtFrameAppenders(ClassBuilder $b): void
             $c->aload(7);
             $c->invokevirtual($cp->methodRef('java/lang/StackTraceElement', 'getClassName', '()Ljava/lang/String;'), 0, true);
             rtAppendTop($c, $cp);
-            rtAppendChar($c, $cp, 35); // '#'
+            rtAppendChar($c, $cp, 35); 
             $c->aload(7);
             $c->invokevirtual($cp->methodRef('java/lang/StackTraceElement', 'getMethodName', '()Ljava/lang/String;'), 0, true);
             rtAppendTop($c, $cp);
@@ -795,7 +775,6 @@ function addRtFrameAppenders(ClassBuilder $b): void
             $c->aload(8);
             $c->ifnull('next');
 
-            // Drop host-stack duplicates of the stamped throw site.
             $c->aload(10);
             $c->ifnull('use_frame');
             $c->aload(8);
@@ -863,7 +842,6 @@ function addRtFrameAppenders(ClassBuilder $b): void
         8,
         ['java/lang/StringBuilder', 'java/lang/Throwable'],
         static function (CodeBuilder $c, ConstantPool $cp) use ($hostLocals): void {
-            // locals: 0=sb, 1=t, 2=stack, 3=i, 4=shown, 5=limit, 6=el
             $c->aload(1);
             $c->ifnonnull('has_t');
             $c->return_();
@@ -918,12 +896,10 @@ function addRtFrameAppenders(ClassBuilder $b): void
             $c->aload(6);
             $c->invokevirtual($cp->methodRef('java/lang/StackTraceElement', 'getClassName', '()Ljava/lang/String;'), 0, true);
             rtAppendTop($c, $cp);
-            rtAppendChar($c, $cp, 46); // '.'
+            rtAppendChar($c, $cp, 46); 
             $c->aload(6);
             $c->invokevirtual($cp->methodRef('java/lang/StackTraceElement', 'getMethodName', '()Ljava/lang/String;'), 0, true);
             rtAppendTop($c, $cp);
-            // Only a Moggi frame gets a location: a host frame's line number
-            // belongs to that library's build, not to this one.
             $c->aload(6);
             $c->invokevirtual($cp->methodRef('java/lang/StackTraceElement', 'getFileName', '()Ljava/lang/String;'), 0, true);
             $c->ldc($cp->string_('.mog'));
@@ -935,17 +911,17 @@ function addRtFrameAppenders(ClassBuilder $b): void
             $c->aload(6);
             $c->invokevirtual($cp->methodRef('java/lang/StackTraceElement', 'getFileName', '()Ljava/lang/String;'), 0, true);
             rtAppendTop($c, $cp);
-            rtAppendChar($c, $cp, 58); // ':'
+            rtAppendChar($c, $cp, 58); 
             $c->aload(6);
             $c->invokevirtual($cp->methodRef('java/lang/StackTraceElement', 'getLineNumber', '()I'), 0, true);
             rtAppendInt($c, $cp);
-            rtAppendChar($c, $cp, 41); // ')'
+            rtAppendChar($c, $cp, 41); 
             $c->pop_();
 
             $c->label('no_location');
             $c->noteFrame($hostLocals, ['java/lang/StringBuilder']);
             $c->aload(0);
-            rtAppendChar($c, $cp, 10); // '\n'
+            rtAppendChar($c, $cp, 10); 
             $c->pop_();
             $c->pop_();
             $c->iinc(4, 1);
@@ -982,7 +958,6 @@ function addRtFrameAppenders(ClassBuilder $b): void
  */
 function addRtLogicalExceptionMethods(ClassBuilder $b): void
 {
-    // throwSite(siteId, symbolId, displayPath, line, col)
     $b->addMethod(
         'throwSite',
         '(ILjava/lang/String;Ljava/lang/String;II)[Ljava/lang/Object;',
@@ -1019,8 +994,6 @@ function addRtLogicalExceptionMethods(ClassBuilder $b): void
         },
     );
 
-    // Deprecated compact fallback: srcLoc(module, function, file, line, col)
-    // → throwSite(0, module.function, displayPath(file), line, col).
     $b->addMethod(
         'srcLoc',
         '(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;II)[Ljava/lang/Object;',
@@ -1028,7 +1001,6 @@ function addRtLogicalExceptionMethods(ClassBuilder $b): void
         6,
         ['java/lang/String', 'java/lang/String', 'java/lang/String', 'int', 'int'],
         static function (CodeBuilder $c, ConstantPool $cp): void {
-            // locals: 0=module, 1=function, 2=file, 3=line, 4=col, 5=symbolId
             $c->aload(0);
             $c->invokevirtual($cp->methodRef('java/lang/String', 'isEmpty', '()Z'), 0, true);
             $c->ifeq('with_mod');
@@ -1042,7 +1014,7 @@ function addRtLogicalExceptionMethods(ClassBuilder $b): void
             $c->invokespecial($cp->methodRef('java/lang/StringBuilder', '<init>', '()V'), 0, false);
             $c->aload(0);
             $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(Ljava/lang/String;)Ljava/lang/StringBuilder;'), 1, true);
-            $c->bipush(46); // '.'
+            $c->bipush(46); 
             $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(C)Ljava/lang/StringBuilder;'), 1, true);
             $c->aload(1);
             $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(Ljava/lang/String;)Ljava/lang/StringBuilder;'), 1, true);
@@ -1076,8 +1048,6 @@ function addRtLogicalExceptionMethods(ClassBuilder $b): void
         2,
         ['[Ljava/lang/Object;', 'moggi/rt/MoggiException'],
         static function (CodeBuilder $c, ConstantPool $cp): void {
-            // One extra slot carries the wrapper a caught payload came from, so a
-            // rethrow of this value recovers the site it was thrown at.
             $c->aload(0);
             $c->iconst(5);
             $c->invokestatic(
@@ -1121,8 +1091,8 @@ function addRtLogicalExceptionMethods(ClassBuilder $b): void
             $c->label('normalize');
             $c->noteFrame(['java/lang/String']);
             $c->aload(0);
-            $c->bipush(92); // '\\'
-            $c->bipush(47); // '/'
+            $c->bipush(92);
+            $c->bipush(47);
             $c->invokevirtual($cp->methodRef('java/lang/String', 'replace', '(CC)Ljava/lang/String;'), 2, true);
             $c->astore(1);
 
@@ -1139,7 +1109,7 @@ function addRtLogicalExceptionMethods(ClassBuilder $b): void
                 $c->aload(1);
                 $c->iload(2);
                 $c->iconst(1);
-                $c->opcode(0x60, -1); // iadd → skip leading '/'
+                $c->opcode(0x60, -1); 
                 $c->invokevirtual($cp->methodRef('java/lang/String', 'substring', '(I)Ljava/lang/String;'), 1, true);
                 $c->areturn();
                 $c->label($next);
@@ -1168,7 +1138,6 @@ function addRtLogicalExceptionMethods(ClassBuilder $b): void
         }
     );
 
-    // Append "  at symbolId (displayPath:line:col)\n" for throwSite layout.
     $b->addMethod(
         'appendFrameReport',
         '(Ljava/lang/StringBuilder;[Ljava/lang/Object;)V',
@@ -1176,7 +1145,6 @@ function addRtLogicalExceptionMethods(ClassBuilder $b): void
         6,
         ['java/lang/StringBuilder', '[Ljava/lang/Object;'],
         static function (CodeBuilder $c, ConstantPool $cp): void {
-            // locals: 0=sb, 1=site, 2=symbolId, 3=file, 4=line
             $c->aload(1);
             $c->ifnonnull('have');
             $c->return_();
@@ -1239,7 +1207,7 @@ function addRtLogicalExceptionMethods(ClassBuilder $b): void
             $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(Ljava/lang/String;)Ljava/lang/StringBuilder;'), 1, true);
             $c->aload(3);
             $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(Ljava/lang/String;)Ljava/lang/StringBuilder;'), 1, true);
-            $c->bipush(58); // ':'
+            $c->bipush(58); 
             $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(C)Ljava/lang/StringBuilder;'), 1, true);
             $c->iload(4);
             $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(I)Ljava/lang/StringBuilder;'), 1, true);
@@ -1251,7 +1219,7 @@ function addRtLogicalExceptionMethods(ClassBuilder $b): void
             $c->checkcast($cp->class_('java/lang/Integer'));
             $c->invokevirtual($cp->methodRef('java/lang/Integer', 'intValue', '()I'), 0, true);
             $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(I)Ljava/lang/StringBuilder;'), 1, true);
-            $c->bipush(41); // ')'
+            $c->bipush(41); 
             $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(C)Ljava/lang/StringBuilder;'), 1, true);
             $c->bipush(10);
             $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(C)Ljava/lang/StringBuilder;'), 1, true);
@@ -1286,7 +1254,6 @@ function addRtLogicalExceptionMethods(ClassBuilder $b): void
         6,
         ['java/lang/Throwable'],
         static function (CodeBuilder $c, ConstantPool $cp): void {
-            // Fail-safe: any unexpected error while formatting yields a fixed message.
             $throwable = $cp->class_('java/lang/Throwable');
             $meInit = $cp->methodRef(
                 'moggi/rt/MoggiException',
@@ -1295,7 +1262,6 @@ function addRtLogicalExceptionMethods(ClassBuilder $b): void
             );
 
             $c->label('try_start');
-            // locals: 0=e, 1=me, 2=sb, 3=tag, 4=cause
             $c->aload(0);
             $c->instanceof_($cp->class_('moggi/rt/MoggiException'));
             $c->ifne('is_me');
@@ -1307,8 +1273,8 @@ function addRtLogicalExceptionMethods(ClassBuilder $b): void
                 1,
                 true,
             );
-            $c->aconst_null(); // throwSite
-            $c->aload(0); // cause
+            $c->aconst_null(); 
+            $c->aload(0); 
             $c->invokespecial($meInit, 3, false);
             $c->invokestatic(
                 $cp->methodRef('moggi/rt/RT', 'formatExceptionReport', '(Ljava/lang/Throwable;)Ljava/lang/String;'),
@@ -1349,7 +1315,6 @@ function addRtLogicalExceptionMethods(ClassBuilder $b): void
             $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(C)Ljava/lang/StringBuilder;'), 1, true);
             $c->pop_();
 
-            // Throw site: stamped at the throw, always exact.
             $c->aload(2);
             $c->aload(1);
             $c->getfield($cp->fieldRef('moggi/rt/MoggiException', 'throwSite', '[Ljava/lang/Object;'));
@@ -1363,7 +1328,6 @@ function addRtLogicalExceptionMethods(ClassBuilder $b): void
                 false,
             );
 
-            // Caller frames, translated from the host stack through the baked table.
             $c->aload(2);
             $c->aload(1);
             $c->aload(1);
@@ -1538,8 +1502,6 @@ function buildRTClass(): string
             $c->getfield($cp->fieldRef('moggi/rt/Partial', 'args', '[Ljava/lang/Object;'));
             $c->aload(1);
             $c->iload(3);
-            // Single allocation: the old takeArgs+concatArgs pair allocated twice
-            // and copied the applied arguments three times.
             $c->invokestatic($cp->methodRef('moggi/rt/RT', 'concatTake', '([Ljava/lang/Object;[Ljava/lang/Object;I)[Ljava/lang/Object;'), 3, true);
             $c->astore(5);
             $c->aload(2);
@@ -1572,9 +1534,6 @@ function buildRTClass(): string
         }
     );
 
-    // Scalar-argument specialization of apply — the dominant call shape: it skips
-    // the caller-side Object[] and allocates one array instead of two. Non-Partial
-    // callees and already-saturated cells defer to apply.
     $b->addMethod(
         'apply1',
         '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;',
@@ -1593,7 +1552,6 @@ function buildRTClass(): string
             $c->checkcast($partial);
             $c->astore(2);
 
-            // remaining = partial.arity - partial.args.length
             $c->aload(2);
             $c->getfield($cp->fieldRef('moggi/rt/Partial', 'arity', 'I'));
             $c->aload(2);
@@ -1602,16 +1560,11 @@ function buildRTClass(): string
             $c->isub();
             $c->istore(3);
 
-            // Already saturated (remaining <= 0): defer, so surplus handling
-            // stays in one place.
             $c->iload(3);
             $c->iconst(1);
             $c->if_icmplt('general');
             $c->noteFrame(['java/lang/Object', 'java/lang/Object', 'moggi/rt/Partial', 'int']);
 
-            // Object[] grown = new Object[partial.args.length + 1];
-            // System.arraycopy(partial.args, 0, grown, 0, partial.args.length);
-            // grown[partial.args.length] = arg;
             $c->aload(2);
             $c->getfield($cp->fieldRef('moggi/rt/Partial', 'args', '[Ljava/lang/Object;'));
             $c->arraylength();
@@ -1640,7 +1593,6 @@ function buildRTClass(): string
             $c->if_icmpne('extend');
             $c->noteFrame(['java/lang/Object', 'java/lang/Object', 'moggi/rt/Partial', 'int', '[Ljava/lang/Object;']);
 
-            // Exactly saturated: invoke directly.
             $c->aload(2);
             $c->getfield($cp->fieldRef('moggi/rt/Partial', 'target', 'Lmoggi/rt/Fn;'));
             $c->aload(4);
@@ -1707,8 +1659,6 @@ function buildRTClass(): string
         }
     );
 
-    // concatArgs(prefix, takeArgs(src, n)) without the intermediate array:
-    // one allocation and two copies instead of two allocations and three.
     $b->addMethod(
         'concatTake',
         '([Ljava/lang/Object;[Ljava/lang/Object;I)[Ljava/lang/Object;',
@@ -1716,14 +1666,12 @@ function buildRTClass(): string
         4,
         ['[Ljava/lang/Object;', '[Ljava/lang/Object;', 'int'],
         static function (CodeBuilder $c, ConstantPool $cp): void {
-            // Object[] out = new Object[prefix.length + n];
             $c->aload(0);
             $c->arraylength();
             $c->iload(2);
             $c->iadd();
             $c->anewarray($cp->class_('java/lang/Object'));
             $c->astore(3);
-            // System.arraycopy(prefix, 0, out, 0, prefix.length);
             $c->aload(0);
             $c->iconst(0);
             $c->aload(3);
@@ -1731,7 +1679,6 @@ function buildRTClass(): string
             $c->aload(0);
             $c->arraylength();
             $c->invokestatic($cp->methodRef('java/lang/System', 'arraycopy', '(Ljava/lang/Object;ILjava/lang/Object;II)V'), 5, false);
-            // System.arraycopy(src, 0, out, prefix.length, n);
             $c->aload(1);
             $c->iconst(0);
             $c->aload(3);
@@ -1824,9 +1771,9 @@ function buildRTClass(): string
             $c->label('append_loop');
             $c->noteFrame(['moggi/rt/MList', 'moggi/rt/MList']);
             $c->aconst_null();
-            $c->astore(2); // rev prefix
+            $c->astore(2); 
             $c->aload(0);
-            $c->astore(3); // cursor
+            $c->astore(3); 
 
             $c->label('append_scan');
             $c->noteFrame(['moggi/rt/MList', 'moggi/rt/MList', 'moggi/rt/MList', 'moggi/rt/MList']);
@@ -1870,7 +1817,6 @@ function buildRTClass(): string
         }
     );
 
-    // Structural equality for scalars, lists, and Cons (tag + fields).
     $b->addMethod(
         'valueEq',
         '(Ljava/lang/Object;Ljava/lang/Object;)Z',
@@ -1971,7 +1917,6 @@ function buildRTClass(): string
             $c->iconst(0);
             $c->ireturn();
 
-            // Tuples are `Object[]`: element-wise, and an array does not compare its elements.
             $c->label('ve_not_con');
             $c->noteFrame(['java/lang/Object', 'java/lang/Object']);
             $c->aload(0);
@@ -1986,8 +1931,6 @@ function buildRTClass(): string
             $c->aload(1);
             $c->checkcast($cp->class_('[Ljava/lang/Object;'));
             $c->astore(3);
-            // Lengths into locals first: every edge into the loop labels must already
-            // declare the counter slot.
             $c->aload(2);
             $c->arraylength();
             $c->istore(4);
@@ -2016,7 +1959,6 @@ function buildRTClass(): string
             $c->iinc(4, 1);
             $c->goto_('ve_tuple_loop');
 
-            // Own targets: the Con loop reaches `ve_true`/`ve_false` with `Con` in those slots.
             $c->label('ve_tuple_true');
             $c->noteFrame(['java/lang/Object', 'java/lang/Object', '[Ljava/lang/Object;', '[Ljava/lang/Object;', 'int', 'int']);
             $c->iconst(1);
@@ -2092,7 +2034,6 @@ function buildRTClass(): string
         }
     );
 
-    // int (-1/0/1) → Ordering Con
     $b->addMethod(
         'orderingFromInt',
         '(I)Lmoggi/rt/Con;',
@@ -2122,7 +2063,6 @@ function buildRTClass(): string
         }
     );
 
-    // Ordering Con → int (-1/0/1)
     $b->addMethod(
         'orderingToInt',
         '(Lmoggi/rt/Con;)I',
@@ -2185,7 +2125,6 @@ function buildRTClass(): string
         }
     );
 
-    // Structural/Comparable value ordering used by list/maybe compare.
     $b->addMethod(
         'valueCompare',
         '(Ljava/lang/Object;Ljava/lang/Object;)I',
@@ -2248,12 +2187,9 @@ function buildRTClass(): string
             $c->invokevirtual($cp->methodRef('java/lang/Object', 'equals', '(Ljava/lang/Object;)Z'), 1, true);
             $c->ifeq('tags_differ');
             $c->iconst(0);
-            $c->istore(4); // unused at entry; field_loop stores cmp here
+            $c->istore(4); 
             $c->goto_('same_tag');
 
-            // Different tags: Ordering uses semantic order (LT<EQ<GT); others
-            // fall back to lexicographic tag order (declaration order is not
-            // available at runtime).
             $c->label('tags_differ');
             $c->noteFrame(['java/lang/Object', 'java/lang/Object', 'moggi/rt/Con', 'moggi/rt/Con']);
             $c->aload(2);
@@ -2281,7 +2217,7 @@ function buildRTClass(): string
             $c->label('same_tag');
             $c->noteFrame(['java/lang/Object', 'java/lang/Object', 'moggi/rt/Con', 'moggi/rt/Con', 'int']);
             $c->iconst(0);
-            $c->istore(5); // i
+            $c->istore(5); 
             $c->label('field_loop');
             $c->noteFrame(['java/lang/Object', 'java/lang/Object', 'moggi/rt/Con', 'moggi/rt/Con', 'int', 'int']);
             $c->iload(5);
@@ -2595,9 +2531,6 @@ function buildRTClass(): string
         }
     );
 
-    // SomeException# = Object[]{"__se", tag, payload, display}. `display` is the
-    // text rendered where the value still had its Exception dictionary; without it
-    // a rethrow or an uncaught report could only guess the text from the payload.
     $b->addMethod(
         'exceptionWrap',
         '(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Object;)[Ljava/lang/Object;',
@@ -2703,8 +2636,6 @@ function buildRTClass(): string
             $c->invokevirtual($cp->methodRef('java/lang/Object', 'equals', '(Ljava/lang/Object;)Z'), 1, true);
             $c->ifeq('fallback');
 
-            // A stored display wins; it is the text the value rendered for
-            // itself, which the payload's shape alone cannot reproduce.
             $c->aload(1);
             $c->arraylength();
             $c->iconst(4);
@@ -2753,7 +2684,6 @@ function buildRTClass(): string
         4,
         ['java/lang/String', 'java/lang/Object'],
         static function (CodeBuilder $c, ConstantPool $cp): void {
-            // ErrorCall / IOException / HostException payloads are Con
             $c->aload(1);
             $c->instanceof_($cp->class_('moggi/rt/Con'));
             $c->ifeq('not_con');
@@ -2788,7 +2718,6 @@ function buildRTClass(): string
             $c->arraylength();
             $c->iconst(4);
             $c->if_icmplt('try_host');
-            // IOError's description field is the display text.
             $c->aload(2);
             $c->getfield($cp->fieldRef('moggi/rt/Con', 'fields', '[Ljava/lang/Object;'));
             $c->iconst(3);
@@ -2843,8 +2772,6 @@ function buildRTClass(): string
         }
     );
 
-    // Declared Object return so callers can store/pop; always throws.
-    // throwSite may be null.
     $b->addMethod(
         'throwSomeException',
         '(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;',
@@ -2884,8 +2811,6 @@ function buildRTClass(): string
             $c->invokevirtual($cp->methodRef('java/lang/Object', 'equals', '(Ljava/lang/Object;)Z'), 1, true);
             $c->ifeq('wrap_host');
 
-            // A payload that came out of a catch handler names the wrapper it was
-            // caught as (exceptionAttachWrapper); throw that one to keep its site.
             $c->iconst(4);
             $c->aload(3);
             $c->arraylength();
@@ -2906,8 +2831,8 @@ function buildRTClass(): string
             $c->new_($cp->class_('moggi/rt/MoggiException'));
             $c->dup();
             $c->aload(3);
-            $c->aload(1); // throwSite
-            $c->aconst_null(); // cause
+            $c->aload(1); 
+            $c->aconst_null(); 
             $c->invokespecial($meInit, 3, false);
             $c->athrow();
 
@@ -2938,7 +2863,7 @@ function buildRTClass(): string
             $c->invokestatic($cp->methodRef('moggi/rt/RT', 'con', '(Ljava/lang/String;[Ljava/lang/Object;)Lmoggi/rt/Con;'), 2, true);
             $c->astore(4);
             $c->ldc($cp->string_('HostException'));
-            $c->aconst_null();  // runtime-built payload: display comes from its shape
+            $c->aconst_null();  
             $c->aload(4);
             $c->invokestatic(
                 $cp->methodRef('moggi/rt/RT', 'exceptionWrap', '(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Object;)[Ljava/lang/Object;'),
@@ -2949,17 +2874,13 @@ function buildRTClass(): string
             $c->new_($cp->class_('moggi/rt/MoggiException'));
             $c->dup();
             $c->aload(3);
-            $c->aload(1); // throwSite
-            $c->aconst_null(); // cause
+            $c->aload(1); 
+            $c->aconst_null(); 
             $c->invokespecial($meInit, 3, false);
             $c->athrow();
         }
     );
 
-    // Machine-integer exponentiation, reduced modulo `mask` at every step: the
-    // `Num` body's square-and-multiply with its dictionaries and per-step boxing
-    // removed, and base's own `ErrorCall` for a negative exponent. `mask = -1`
-    // is the machine `Int`, whose own multiply already wraps at 64 bits.
     $b->addMethod(
         'intPow',
         '(JJJ[Ljava/lang/Object;)J',
@@ -2967,10 +2888,7 @@ function buildRTClass(): string
         9,
         ['long', 'long', 'long', '[Ljava/lang/Object;'],
         static function (CodeBuilder $c, ConstantPool $cp): void {
-            // A long occupies two interpreter slots but one StackMapTable entry.
             $locals = ['long', 'long', 'long', '[Ljava/lang/Object;', 'long'];
-            // Defined before the exponent is tested: a stack map frame describes
-            // the locals every path to its label agrees on.
             $c->lconst(1);
             $c->lstore(7);
             $c->lload(2);
@@ -3007,7 +2925,7 @@ function buildRTClass(): string
             $c->lstore(0);
             $c->lload(2);
             $c->iconst(1);
-            $c->opcode(0x7b, -1); // lshr -- the exponent is known non-negative here
+            $c->opcode(0x7b, -1); 
             $c->lstore(2);
             $c->goto_('int_pow_loop');
 
@@ -3025,16 +2943,12 @@ function buildRTClass(): string
                 2,
                 true,
             );
-            // Never reached: the call always throws.
             $c->pop_();
             $c->lconst(0);
             $c->lreturn();
         }
     );
 
-    // `Double` exponentiation: the same loop on unboxed doubles, in the library
-    // body's own multiplication order, so the value is the one the dictionaries
-    // would have produced.
     $b->addMethod(
         'doublePow',
         '(DJ[Ljava/lang/Object;)D',
@@ -3076,7 +2990,7 @@ function buildRTClass(): string
             $c->dstore(0);
             $c->lload(2);
             $c->iconst(1);
-            $c->opcode(0x7b, -1); // lshr -- the exponent is known non-negative here
+            $c->opcode(0x7b, -1); 
             $c->lstore(2);
             $c->goto_('double_pow_loop');
 
@@ -3094,7 +3008,6 @@ function buildRTClass(): string
                 2,
                 true,
             );
-            // Never reached: the call always throws.
             $c->pop_();
             $c->lconst(0);
             $c->l2d();
@@ -3119,7 +3032,7 @@ function buildRTClass(): string
             $c->invokestatic($cp->methodRef('moggi/rt/RT', 'con', '(Ljava/lang/String;[Ljava/lang/Object;)Lmoggi/rt/Con;'), 2, true);
             $c->astore(2);
             $c->ldc($cp->string_('ErrorCall'));
-            $c->aconst_null();  // runtime-built payload: display comes from its shape
+            $c->aconst_null();  
             $c->aload(2);
             $c->invokestatic(
                 $cp->methodRef('moggi/rt/RT', 'exceptionWrap', '(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Object;)[Ljava/lang/Object;'),
@@ -3130,8 +3043,8 @@ function buildRTClass(): string
             $c->new_($cp->class_('moggi/rt/MoggiException'));
             $c->dup();
             $c->aload(2);
-            $c->aload(1); // throwSite
-            $c->aconst_null(); // cause
+            $c->aload(1); 
+            $c->aconst_null(); 
             $c->invokespecial(
                 $cp->methodRef(
                     'moggi/rt/MoggiException',
@@ -3145,8 +3058,6 @@ function buildRTClass(): string
         }
     );
 
-    // The only constructor of the Natural# type: the bignum representation is
-    // shared with Integer#, so a negative input is rejected here.
     $b->addMethod(
         'naturalFromInteger',
         '(Ljava/math/BigInteger;[Ljava/lang/Object;)Ljava/math/BigInteger;',
@@ -3198,9 +3109,6 @@ function buildRTClass(): string
             $c->ldc($cp->string_(''));
             $c->astore(1);
 
-            // Every host Throwable → HostException (backend, nativeType, message).
-            // Classification into IOException belongs to System.IO, which knows
-            // the path an operation used.
             $c->label('have_msg');
             $c->noteFrame(['java/lang/Throwable', 'java/lang/String']);
             $c->aload(0);
@@ -3225,7 +3133,7 @@ function buildRTClass(): string
             $c->invokestatic($cp->methodRef('moggi/rt/RT', 'con', '(Ljava/lang/String;[Ljava/lang/Object;)Lmoggi/rt/Con;'), 2, true);
             $c->astore(3);
             $c->ldc($cp->string_('HostException'));
-            $c->aconst_null();  // runtime-built payload: display comes from its shape
+            $c->aconst_null();  
             $c->aload(3);
             $c->invokestatic(
                 $cp->methodRef('moggi/rt/RT', 'exceptionWrap', '(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Object;)[Ljava/lang/Object;'),
@@ -3296,8 +3204,8 @@ function buildRTClass(): string
                 1,
                 true,
             );
-            $c->aconst_null(); // throwSite
-            $c->aload(2); // cause
+            $c->aconst_null(); 
+            $c->aload(2); 
             $c->invokespecial($meInit, 3, false);
             $c->astore(3);
             $c->aload(3);
@@ -3344,7 +3252,6 @@ function buildRTClass(): string
         ['moggi/rt/IO', 'moggi/rt/IO'],
         static function (CodeBuilder $c, ConstantPool $cp): void {
             $throwable = $cp->class_('java/lang/Throwable');
-            // locals: 0=action, 1=cleanup, 2=savedEx, 3=result
             $c->aconst_null();
             $c->astore(2);
             $c->aconst_null();
@@ -3383,7 +3290,6 @@ function buildRTClass(): string
                 ['moggi/rt/IO', 'moggi/rt/IO', 'java/lang/Throwable', 'java/lang/Object'],
                 ['java/lang/Throwable'],
             );
-            // Cleanup failure wins: normalize so catch handlers never see raw host throwables.
             $c->invokestatic(
                 $cp->methodRef('moggi/rt/RT', 'normalizeHostException', '(Ljava/lang/Throwable;)[Ljava/lang/Object;'),
                 1,
@@ -3422,7 +3328,6 @@ function buildRTClass(): string
         }
     );
 
-    // Already-evaluated IO value (eager boxing MVP for straight-line main).
     $b->addMethod(
         'ioPure',
         '(Ljava/lang/Object;)Lmoggi/rt/IO;',
@@ -3430,9 +3335,6 @@ function buildRTClass(): string
         3,
         ['java/lang/Object'],
         static function (CodeBuilder $c, ConstantPool $cp): void {
-            // IO with a Fn that returns the captured value — use Con as cheap holder?
-            // Simpler: store value in Partial-like — for MVP return IO whose Fn ignores args and returns value.
-            // Without nested classes, use RT.constFn helper:
             $c->aload(0);
             $c->invokestatic(
                 $cp->methodRef('moggi/rt/RT', 'constFn', '(Ljava/lang/Object;)Lmoggi/rt/Fn;'),
@@ -3448,7 +3350,6 @@ function buildRTClass(): string
         }
     );
 
-    // Fn that ignores args and returns a constant (for ioPure).
     $b->addMethod(
         'constFn',
         '(Ljava/lang/Object;)Lmoggi/rt/Fn;',
@@ -3456,7 +3357,6 @@ function buildRTClass(): string
         2,
         ['java/lang/Object'],
         static function (CodeBuilder $c, ConstantPool $cp): void {
-            // `Fn` is an interface, so a constant function needs a concrete class.
             $c->new_($cp->class_('moggi/rt/ConstFn'));
             $c->dup();
             $c->aload(0);
@@ -3465,8 +3365,6 @@ function buildRTClass(): string
         }
     );
 
-    // Strict fixpoint (`Data.Function.fix`): apply `fn` to a memoising
-    // self-reference standing for `fix fn` applied to further arguments.
     $b->addMethod(
         'fix',
         '(Ljava/lang/Object;)Ljava/lang/Object;',
@@ -3515,7 +3413,6 @@ function buildRTClass(): string
         }
     );
 
-    // Convert JDK Stream → MList (used when Moggi `[a]` is inferred as Stream for java.* foreigns).
     $b->addMethod(
         'streamToList',
         '(Ljava/util/stream/Stream;)Lmoggi/rt/MList;',
@@ -3527,7 +3424,7 @@ function buildRTClass(): string
             $c->invokeinterface($cp->ifaceMethodRef('java/util/stream/Stream', 'iterator', '()Ljava/util/Iterator;'), 0, true);
             $c->astore(1);
             $c->aconst_null();
-            $c->astore(2); // acc = Nil
+            $c->astore(2); 
 
             $c->label('loop');
             $c->noteFrame(['java/util/stream/Stream', 'java/util/Iterator', 'moggi/rt/MList']);
@@ -3578,14 +3475,10 @@ function buildRTClass(): string
 function buildPlatformClass(): string
 {
     $b = new ClassBuilder('moggi/rt/Platform');
-    $b->addField('argv', '[Ljava/lang/String;', 0x000a); // private static
+    $b->addField('argv', '[Ljava/lang/String;', 0x000a); 
 
-    // Standard input as one reader, kept across references. A fresh BufferedReader per
-    // reference buffers the whole pipe into the reader it then discards, so the next one
-    // sees EOF: `x <- getLine` twice read one line and then failed.
-    $b->addField('stdin', 'Ljava/io/BufferedReader;', 0x000a); // private static
+    $b->addField('stdin', 'Ljava/io/BufferedReader;', 0x000a); 
 
-    // Returns Object: that is the host type the foreign-import boundary uses for a Handle.
     $b->addMethod(
         'stdin',
         '()Ljava/lang/Object;',
@@ -3632,9 +3525,6 @@ function buildPlatformClass(): string
         }
     );
 
-    // Moggi text is UTF-8. `System.out` follows the platform's default charset, which on a POSIX
-    // locale is ASCII — `putStrLn "café"` would print `caf?`. Replace both streams before any
-    // module runs.
     $b->addMethod(
         'useUtf8Console',
         '()V',

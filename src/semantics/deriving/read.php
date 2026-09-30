@@ -16,8 +16,6 @@ function deriveRead(
     Ast\DataDecl $decl,
     Ast\DerivingClassRef $ref,
 ): DerivedInstance {
-    // Type parameters are fine: a nullary constructor holds no field that would
-    // need `Read`, so `data Proxy t = Proxy` derives an instance with no context.
     assertNullaryConstructors($state, $decl, $ref, 'Read');
 
     return new DerivedInstance(

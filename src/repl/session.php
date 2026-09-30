@@ -266,8 +266,6 @@ function prepareInteractive(State $state, string $extra = '', bool $normalizeIo 
         $units[$moduleName]['localTypes'],
     );
 
-    // :type probes must not run the IO boundary: wrapping `putStrLn` as a
-    // binding is fine for inference but fails "IO function body" validation.
     $checked = $normalizeIo
         ? checkAndNormalize(
             $program,
@@ -315,8 +313,6 @@ function commitDeclaration(State $state, string $declSource): string
 {
     $name = leadingBindingName($declSource);
     if ($name !== null && bindingNameExists($state, $name)) {
-        // Later interactive bindings shadow earlier ones. Prior
-        // binders are renamed to unique names so closures keep the old binding.
         shadowInteractiveBinding($state, $name);
     }
 
@@ -328,7 +324,6 @@ function commitDeclaration(State $state, string $declSource): string
         throw $e;
     }
 
-    // Successful declarations are silent (use :type / :browse).
     return '';
 }
 
@@ -407,13 +402,10 @@ function evaluateExpression(State $state, string $exprSource): string
     try {
         prepareInteractive($state, $pureExtra);
         $out = runEvalEntry($state, $evalName);
-        // Persist `it` without an eager re-prepare: the next command rebuilds the
-        // module from `declSources` anyway, so the restore is done lazily there.
         $state->declSources[] = 'it = (' . $exprSource . ')';
 
         return rtrim($out);
     } catch (TypeError $pureErr) {
-        // IO (): run for effects only (no `it` — unit is not Showable here).
         $ioUnitExtra = "{$evalName} :: IO ()\n{$evalName} = ({$exprSource})\n";
         try {
             prepareInteractive($state, $ioUnitExtra);
@@ -421,7 +413,6 @@ function evaluateExpression(State $state, string $exprSource): string
 
             return rtrim($out);
         } catch (TypeError) {
-            // IO a: run, print Show result, persist `it` from shown form.
             $ioValExtra = "{$evalName} :: IO ()\n"
                 . "{$evalName} = do\n"
                 . "  __moggi_it <- ({$exprSource})\n"
@@ -691,8 +682,6 @@ function typeOfInput(State $state, string $source): string
         return $line;
     }
 
-    // Bare name: prefer env/scheme lookup (avoids IO-boundary issues on values
-    // like `putStrLn :: String -> IO ()`).
     $trimmed = trim($frag->source);
     if ($frag->kind !== ReplFragment::KIND_STMT
         && preg_match('/^([A-Za-z_][A-Za-z0-9_\']*)$/', $trimmed, $m) === 1) {
@@ -712,7 +701,6 @@ function typeOfInput(State $state, string $source): string
         throw new TypeError('could not infer type', '<interactive>', $source);
     }
 
-    // Strip the synthetic name prefix: `__repl_ty :: T` → `T`
     return preg_replace('/^__repl_ty :: /', '', $line) ?? $line;
 }
 
@@ -741,7 +729,6 @@ function kindOfInput(State $state, string $source): string
     try {
         return kindOfParsedType($state, $source);
     } catch (LexError|ParseError) {
-        // Fall through: treat as expression/decl and report the kind of its type.
     }
 
     $typeLine = typeOfInput($state, $source);
@@ -919,7 +906,6 @@ function loadModuleFile(State $state, string $path): string
     try {
         prepareInteractive($state);
     } catch (\Throwable $e) {
-        // A `:load` that fails to typecheck must leave the session untouched.
         $state->loadedPaths = $loadedBefore;
         $state->loadedPrimary = $primaryBefore;
         $state->importLines = $importsBefore;

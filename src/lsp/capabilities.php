@@ -114,8 +114,6 @@ const SERVER_INFO = [
 function serverCapabilities(): array
 {
     return [
-        // Server is UTF-16 throughout (see protocol/positions.php); echo the
-        // encoding explicitly for clients sending positionEncodings.
         'positionEncoding' => 'utf-16',
         'textDocumentSync' => [
             'openClose' => true,
@@ -168,9 +166,7 @@ function serverCapabilities(): array
             'resolveProvider' => true,
         ],
         'inlineValueProvider' => ['dynamicRegistration' => true],
-        // Spec: plain DocumentColorOptions ({}) — no extra payload.
         'colorProvider' => [],
-        // Spec: server capability key is documentOnTypeFormattingProvider.
         'documentOnTypeFormattingProvider' => [
             'firstTriggerCharacter' => '{',
             'moreTriggerCharacter' => ['}', ';'],
@@ -180,9 +176,6 @@ function serverCapabilities(): array
         'diagnosticProvider' => [
             'identifier' => 'moggi-diagnostics',
             'interFileDependencies' => true,
-            // Diagnostics reach clients as push (`publishDiagnostics`), so a
-            // workspace pull would only duplicate them — while clients that
-            // see `true` poll `workspace/diagnostic` on a fixed timer.
             'workspaceDiagnostics' => false,
             'dynamicRegistration' => true,
         ],
@@ -240,8 +233,6 @@ function lspMethodHandlers(): array
         'textDocument/signatureHelp' => static fn (AnalysisService $svc, array $params): mixed => svcSignatureHelp($svc, dispatchUri($params), dispatchPos($params)),
         'textDocument/documentSymbol' => static fn (AnalysisService $svc, array $params): mixed => svcDocumentSymbols($svc, dispatchUri($params)),
         'textDocument/semanticTokens/full' => static fn (AnalysisService $svc, array $params): mixed => svcSemanticTokens($svc, dispatchUri($params)),
-        // Only meaningful when the client asked for a delta (previousResultId present);
-        // otherwise behave exactly like the full request.
         'textDocument/semanticTokens/full/delta' => static fn (AnalysisService $svc, array $params): mixed => isset($params['previousResultId'])
             ? svcSemanticTokensFullDelta($svc, dispatchUri($params), $params)
             : svcSemanticTokens($svc, dispatchUri($params)),
@@ -273,16 +264,9 @@ function lspMethodHandlers(): array
         'textDocument/moniker' => static fn (AnalysisService $svc, array $params): mixed => svcMoniker($svc, dispatchUri($params), dispatchPos($params)),
         'textDocument/diagnostic' => static fn (AnalysisService $svc, array $params): mixed => svcDiagnostic($svc, dispatchUri($params), $params),
         'workspace/diagnostic/refresh' => static fn (AnalysisService $svc, array $params): mixed => null,
-        // Not advertised (diagnosticProvider.workspaceDiagnostics is false);
-        // kept serving so pull clients still get correct reports.
         'workspace/diagnostic' => static fn (AnalysisService $svc, array $params): mixed => svcWorkspaceDiagnostic($svc, $params),
         'workspace/symbol' => static fn (AnalysisService $svc, array $params): mixed => svcWorkspaceSymbol($svc, (string) ($params['query'] ?? '')),
-        // 3.17+ workspace symbols carry no resultId → no resolve round-trip;
-        // echo the item back so resolvable-capability clients never hang.
-        // Spec method name is workspaceSymbol/resolve (no second slash).
         'workspaceSymbol/resolve' => static fn (AnalysisService $svc, array $params): mixed => $params,
-        // 3.18 WorkspaceEdit: documentChanges carries versions; the legacy
-        // `changes` form is deprecated and never emitted by this server.
         'workspace/willRenameFiles' => static fn (AnalysisService $svc, array $params): mixed => documentChangesWorkspaceEdit(
             $svc,
             svcWillRenameFiles($svc, $params['files'] ?? []),

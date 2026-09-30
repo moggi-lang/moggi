@@ -54,7 +54,6 @@ function inspectInput(State $state, string $source, PipelineStage $stopAt, bool 
     if ($frag->kind === ReplFragment::KIND_DECL) {
         $name = fragmentDeclaredName($frag);
         $focus = $name !== null ? [$name] : [];
-        // Already in the session: dump the interactive module (includes that binding).
         if ($name !== null && bindingNameExists($state, $name)) {
             $artifacts = compileInteractiveInspect($state, $stopAt, $optimize);
             $state->lastFragment = $artifacts;
@@ -63,7 +62,6 @@ function inspectInput(State $state, string $source, PipelineStage $stopAt, bool 
             return formatStage($state->backend, $artifacts, $stage, $focus);
         }
 
-        // Probe with the declaration as a temporary extra; do not commit.
         $ctx = prepareInteractive($state, $frag->source);
         $artifacts = compileFromInteractiveCtx($state, $ctx, $stopAt, $optimize);
         $state->lastFragment = $artifacts;
@@ -150,14 +148,12 @@ function mapErrorSpanToUserSource(
         if ($open === false) {
             continue;
         }
-        // Map 1-based cols on the wrapper line into the parenthesized payload.
         $innerCol = max(1, $col - $open);
         $innerEnd = max($innerCol, $endCol - $open);
 
         return spanWithinUserSource($userSource, $innerCol, $innerEnd);
     }
 
-    // Decl / probe line that is exactly the user fragment.
     if (trim($text) === trim($userSource)) {
         return spanWithinUserSource($userSource, max(1, $col), max(1, $endCol));
     }
@@ -177,7 +173,6 @@ function spanWithinUserSource(string $userSource, int $col, int $endCol): array
         return [1, min(max(1, $col), $len), min(max(1, $endCol), $len)];
     }
 
-    // Multi-line payload: cols count across the joined text with newlines.
     $offset = max(0, $col - 1);
     $endOffset = max($offset, $endCol - 1);
     $line = 1;

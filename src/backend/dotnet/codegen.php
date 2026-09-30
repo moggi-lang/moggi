@@ -68,8 +68,6 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
     $ioThunkRegistry = new IoThunkRegistry();
 
     $functionArity = [];
-    // Import tables are keyed by bare name, so a name this module defines must
-    // win: an imported arity would emit the call as a runtime partial.
     /** @var array<string, true> $localBindings */
     $localBindings = [];
     foreach ($module->functions as $fn) {
@@ -87,8 +85,6 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
         }
     }
     foreach (\array_keys($options['globalEvidenceMaps'] ?? []) as $evidenceName) {
-        // Fallback only; imports overwrite via externalFnRuntimeArity, and local
-        // instance evidence overwrites via contextParams below.
         if (!isset($functionArity[$evidenceName])) {
             $functionArity[$evidenceName] = 0;
         }
@@ -108,8 +104,6 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
     foreach ($module->instanceEvidence as $ev) {
         $functionArity[$ev->evidenceName] = \count($ev->contextParams);
     }
-    // Specialize qualifies local callees as `Module::name`; emit must resolve
-    // those FnRefs the same as bare local names.
     if ($moduleName !== '') {
         foreach ($functionArity as $name => $arity) {
             if (!\is_string($name) || str_contains($name, '::')) {
@@ -258,7 +252,6 @@ final class MethodIl
 
             return;
         }
-        // The encoded offset is this instruction's sequence point (see render()).
         $line = ilCanonicalize($line);
         if ($this->pendingLoc !== null) {
             $this->sequencePoints[] = [$this->codeOffset, $this->pendingLoc];
@@ -309,8 +302,6 @@ final class MethodIl
     public function store(string $slot): void
     {
         if (\str_starts_with($slot, 'arg:')) {
-            // Only the TCO loop back-edge stores into a parameter slot
-            // ({@see storeArg}); every other store gets a fresh local.
             throw new \RuntimeException('DotNet emit: cannot store into a parameter slot');
         }
         $this->emit('stloc ' . $slot);
@@ -531,8 +522,6 @@ function emitFunction(
     foreach ($params as $i => $p) {
         $env->locals[$p] = 'arg:' . $i;
     }
-    // `IR\TailRecall` re-assigns the parameters in place, so capture their slots
-    // before a pattern binder or `let` rebinds the name.
     $env->tailRecSlots = \array_map(
         static fn (string $p): string => $env->locals[$p],
         $fn->params,
@@ -572,8 +561,6 @@ function emitEvidence(
         $env->locals[$p] = 'arg:' . $i;
     }
 
-    // Instance context dictionaries (`Num a => Monoid (Sum a)`) become leading
-    // parameters; method slots close over them as Partial args on the evidence fn.
     $pairs = [];
     foreach ($ev->methods as $surface => $irName) {
         $arity = $functionArity[$irName] ?? null;
@@ -788,8 +775,6 @@ function emitBlock(EmitEnv $env, IR\Block $block): void
 
 function emitStmt(EmitEnv $env, IR\Stmt $stmt): void
 {
-    // Only statements that are themselves a call site become frames; this
-    // mirrors the PHP backend so all three traces agree.
     $frameLoc = match ($stmt::class) {
         IR\Ret::class => operandCallSrcLoc($stmt->value),
         IR\Call::class,
@@ -1023,8 +1008,6 @@ function emitTailLoop(EmitEnv $env, IR\Loop $stmt): void
 
     $env->m->label($head);
     emitBlock($env, $stmt->body);
-    // Only a body that can fall out of its end needs the explicit back-edge;
-    // after an unconditional `br`/`ret` it would be unreachable code.
     if (!dotNetBlockTerminates($stmt->body)) {
         $env->m->emit('br ' . $head);
     }
@@ -1082,7 +1065,6 @@ function resolveDictMethod(EmitEnv $env, IR\Operand $evidence, string $method): 
         return null;
     }
 
-    // Legacy: evidenceName => methods map
     if (isset($entry[$method]) && \is_string($entry[$method])) {
         return ['name' => $entry[$method], 'module' => null];
     }
@@ -1117,7 +1099,6 @@ function emitIoCall(EmitEnv $env, IR\IoCall $stmt): void
         if (!($foreign instanceof IR\ForeignCall)) {
             throw new \RuntimeException('foreign IO call missing metadata');
         }
-        // Eager, and the result is optional (IO () → null).
         $call = new IR\ForeignCall(
             $foreign->backend,
             $foreign->kind,
@@ -1190,8 +1171,6 @@ function emitIoAssignAction(EmitEnv $env, IR\IoAssignAction $stmt): void
             $captures[$name] = true;
         }
     }
-    // A lambda this body builds closes over its own captures, so they are
-    // needed here too even though no operand names them.
     foreach (lambdaCaptureNamesInBlock($stmt->body, $env->lambdaMeta) as $capture) {
         if (!isset($assigned[$capture])) {
             $captures[$capture] = true;
@@ -1251,9 +1230,6 @@ function emitStaticCall(EmitEnv $env, string $name, array $args, ?string $ownerM
         return;
     }
     $callArgs = callArgsForLambda($env, $name, $args);
-    // A lifted function is callable at its captures then its parameters, so
-    // applying it to fewer is a partial: the adapter a constrained local binding
-    // lowers to applies its body lambda before the last argument arrives.
     if (isCapturedFnName($name)) {
         $meta = $env->lambdaMeta[$name] ?? ['captures' => [], 'params' => []];
         $fullArity = count($meta['captures']) + count($meta['params']);
@@ -1375,8 +1351,6 @@ function emitIntBinopToStack(EmitEnv $env, string $op, IR\Operand $left, IR\Oper
     if ($op === '==' || $op === '/=') {
         emitOperand($env, $left);
         emitOperand($env, $right);
-        // Structural, not `Object.Equals`: a tuple is an `object[]` and an array does not compare
-        // its elements.
         $env->m->emit('call bool Moggi.Rt.RT::ValueEq(object, object)');
         if ($op === '/=') {
             invertBool($env);
@@ -1414,7 +1388,6 @@ function emitIntBinopToStack(EmitEnv $env, string $op, IR\Operand $left, IR\Oper
         '+', 'intAdd#' => $env->m->emit('add'),
         '-', 'intSub#' => $env->m->emit('sub'),
         '*', 'intMul#' => $env->m->emit('mul'),
-        // Toward 0 (CIL signed `div`).
         '/', 'intDiv#' => $env->m->emit('div'),
         default => throw new \RuntimeException("DotNet emit: unsupported binop {$op}"),
     };
@@ -1552,7 +1525,6 @@ function emitOperand(EmitEnv $env, IR\Operand $op): void
         return;
     }
     if ($op instanceof IR\Intrinsic) {
-        // Throw sites emit their own sequence point via emitDotNetPushSrcLoc().
         emitIntrinsic($env, $op);
 
         return;
@@ -1591,8 +1563,6 @@ function emitOperand(EmitEnv $env, IR\Operand $op): void
     if ($op instanceof IR\DictMethod) {
         $resolved = resolveDictMethod($env, $op->evidence, $op->method);
         if ($resolved !== null) {
-            // See JVM DictMethod: arity for cross-module evidence methods is
-            // stored under `Module::name` in globalFnArity.
             $arity = $env->functionArity[$resolved['name']] ?? null;
             if ($arity === null && \is_string($resolved['module'] ?? null) && $resolved['module'] !== '') {
                 $arity = $env->functionArity[
@@ -1613,8 +1583,6 @@ function emitOperand(EmitEnv $env, IR\Operand $op): void
         return;
     }
     if ($op instanceof IR\FnRef) {
-        // `Bool` is wired in (Data.Ord's class defaults never import it), and an
-        // imported `Data.Bool` lowers to the host boolean as well.
         if ($op->name === 'True' || $op->name === 'False') {
             $env->m->emit($op->name === 'True' ? 'ldc.i4.1' : 'ldc.i4.0');
             $env->m->emit('box bool');
@@ -1660,14 +1628,11 @@ function emitOperand(EmitEnv $env, IR\Operand $op): void
 
 function operandNeverReturns(IR\Operand $op): bool
 {
-    // ThrowErrorCall / ThrowSomeException are typed as returning object for the
-    // verifier; emit sites must still ret/store/pop the dead result.
     return false;
 }
 
 function pushBoxedInt(EmitEnv $env, int $v): void
 {
-    // Moggi Int is signed 64-bit (boxed int64 on the CLR).
     $env->m->emit("ldc.i8 {$v}");
     boxInt($env);
 }
@@ -1799,8 +1764,6 @@ function boxDouble(EmitEnv $env): void
 function formatIlDouble(float $v): string
 {
     if (\is_nan($v) || \is_infinite($v)) {
-        // Rare in generated code; encode as raw IEEE-754 bytes (ilasm accepts
-        // a parenthesized hex byte sequence for float64 literals).
         $bytes = \unpack('C8', \pack('e', $v));
         $hex = \implode(' ', \array_map(static fn (int $b): string => \sprintf('%02X', $b), $bytes));
 
@@ -1816,7 +1779,6 @@ function formatIlDouble(float $v): string
 
 function emitListLit(EmitEnv $env, IR\ListLit $op): void
 {
-    // Built right-to-left via an accumulator local (CIL has no `swap`).
     $acc = $env->freshLocal();
     $env->m->emit('ldnull');
     $env->m->store($acc);
@@ -1867,8 +1829,6 @@ function emitRuntimeApply(EmitEnv $env, array $args): void
 
 function qualifyType(string $dotted): string
 {
-    // Same-assembly types must not carry an [Assembly] qualifier.
-    // Same-assembly language ABI (Moggi.Rt.*) — never [Assembly]-qualify.
     if (\str_starts_with($dotted, 'Moggi.')) {
         return $dotted;
     }
@@ -1940,7 +1900,6 @@ function emitForeign(EmitEnv $env, IR\ForeignCall $op): void
         }
         emitOperand($env, $args[0]);
         if ($valueTypeReceiver) {
-            // Valuetype instance `this` is a managed pointer (&T), not T.
             $env->m->emit('unbox valuetype ' . $typeRef);
         } else {
             $env->m->emit("castclass {$typeRef}");
@@ -1976,7 +1935,6 @@ function emitForeign(EmitEnv $env, IR\ForeignCall $op): void
     };
 
     if ($resolved['dispatch'] === 'constructor') {
-        // newobj of a valuetype leaves an unboxed value; box into Moggi's object ABI.
         if (dotNetForeignClassIsValueType($resolved['class'])) {
             $env->m->emit('box valuetype ' . $typeRef);
         }
@@ -2052,8 +2010,6 @@ function emitForeignIntrinsic(
         }
         emitOperand($env, $args[0]);
         $src = $sig['params'][0] ?? 'object';
-        // Boxed valuetype → object is already a ref; unbox.any then re-box if
-        // casting between valuetypes is not supported — only ref casts here.
         if (\str_starts_with($src, 'valuetype ')) {
         } elseif (\str_starts_with($src, 'class ') || $src === 'object') {
         }
@@ -2067,7 +2023,6 @@ function emitForeignIntrinsic(
             return;
         }
         if (\str_starts_with($ret, 'valuetype ')) {
-            // object/boxed → boxed valuetype.
             $env->m->emit('unbox.any ' . $ret);
             $env->m->emit('box ' . $ret);
 
@@ -2124,12 +2079,10 @@ function emitDefaultForeignArg(EmitEnv $env, string $kind): void
 function unboxForeignArg(EmitEnv $env, string $kind): void
 {
     match ($kind) {
-        // JIT-visible int32: Moggi Int/Char are boxed int64 — narrow via RT.
         'int32' => (static function (EmitEnv $env): void {
             unboxInt($env);
             $env->m->emit('conv.i4');
         })($env),
-        // Fixed-width Int8/Int16: narrow through int64.
         'int8' => (static function (EmitEnv $env): void {
             unboxInt($env);
             $env->m->emit('conv.i1');
@@ -2258,7 +2211,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             return;
         case 'doubleEq#':
             emitDoubleCmpFlag($env, $args[0], $args[1]);
-            invertBool($env); // 1 - flag: the ints compare equal exactly when the doubles do
+            invertBool($env);
             $env->m->emit('box bool');
 
             return;
@@ -2268,8 +2221,6 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
 
             return;
         case 'doubleCompare#':
-            // `ceq` is false for NaN and true for (-0.0, 0.0), so a NaN neither
-            // equals nor is less than anything: it lands on GT, like `base`.
             emitOperand($env, $args[0]);
             unboxDouble($env);
             $l = $env->freshLocal('float64');
@@ -2288,7 +2239,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->m->load($l);
             $env->m->load($r);
             $env->m->emit('ceq');
-            $env->m->emit('sub'); // 1 - 2*less - equal
+            $env->m->emit('sub');
             $env->m->emit('call class Moggi.Rt.Con Moggi.Rt.RT::OrderingFromInt(int32)');
 
             return;
@@ -2300,8 +2251,6 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
 
             return;
         case 'doubleSignum#':
-            // `Math.Sign` throws on NaN and flattens (-0.0) to 0.0; only the two
-            // strict orderings select ±1, everything else is its own signum.
             emitOperand($env, $args[0]);
             unboxDouble($env);
             $x = $env->freshLocal('float64');
@@ -2351,7 +2300,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             } elseif ($op->name === 'intXor#') {
                 $env->m->emit('xor');
             } else {
-                $env->m->emit('conv.i4'); // shift count is in [0,63]
+                $env->m->emit('conv.i4');
                 $env->m->emit([
                     'intShiftL#' => 'shl',
                     'intShiftRA#' => 'shr',
@@ -2531,8 +2480,6 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
         case 'intAbs#':
             emitOperand($env, $args[0]);
             unboxInt($env);
-            // Not `Math.Abs`: that throws on `minBound`, whose own absolute
-            // value is itself (all arithmetic is modulo 2^n).
             $env->m->emit('call int64 Moggi.Rt.RT::IntAbs(int64)');
             boxInt($env);
 
@@ -2548,8 +2495,6 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
         case 'intFromInteger#':
             emitOperand($env, $args[0]);
             $env->m->emit('unbox.any valuetype [System.Runtime.Numerics]System.Numerics.BigInteger');
-            // The low 64 bits, like the JVM's `longValue`: `Int` and `Word64`
-            // share the pattern, so this is the one wrapping conversion.
             $env->m->emit('call int64 Moggi.Rt.Word64::FromBigInteger(valuetype [System.Runtime.Numerics]System.Numerics.BigInteger)');
             boxInt($env);
 
@@ -2605,8 +2550,6 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             boxInt($env);
 
             return;
-            // Signed fixed-width ints: i64 host rep, sign-extend-truncate after
-            // each op (conv.i1/i2/i4 + conv.i8) so values stay normalized.
         case 'int8FromInt#':
         case 'int16FromInt#':
         case 'int32FromInt#':
@@ -2727,7 +2670,6 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             boxInt($env);
 
             return;
-            // Unsigned 64-bit operations via BigInteger helper methods.
         case 'word64Eq#':
         case 'word64Ne#':
             emitOperand($env, $args[0]);
@@ -2799,7 +2741,6 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->m->emit('box bool');
             return;
         case 'wordCompare#':
-            // `Word` is the unsigned 64-bit type, so its comparison is unsigned.
             emitOperand($env, $args[0]);
             unboxInt($env);
             emitOperand($env, $args[1]);
@@ -2989,8 +2930,6 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->m->emit('box bool');
 
             return;
-            // Same representation as Integer#; its only constructor rejects a
-            // negative value, so a Natural can never be negative.
         case 'naturalToInteger#':
             emitOperand($env, $args[0]);
             return;
@@ -3014,8 +2953,6 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
 
             return;
         case 'exceptionWrap#':
-            // The rendered text travels with the exception (tag → display →
-            // payload), so a rethrow can print it without a dictionary.
             emitOperand($env, $args[0]);
             $env->m->emit('castclass string');
             emitOperand($env, $args[1]);
@@ -3092,9 +3029,6 @@ function emitMatchCommon(EmitEnv $env, IR\Operand $scrutinee, array $arms, ?int 
     $scrut = $env->freshLocal();
     $env->m->store($scrut);
     $end = 'match_end_' . $scrut;
-    // Always emit the join label. MatchReturn publishes `$end` as
-    // matchJoinLabel for nested MatchStmt yields; skipping the label when
-    // every arm ends with Ret leaves `br match_end_*` unresolved (ilasm).
     $needsEndLabel = true;
     if ($dest !== null) {
         $env->localSlot('t' . $dest);
@@ -3108,8 +3042,6 @@ function emitMatchCommon(EmitEnv $env, IR\Operand $scrutinee, array $arms, ?int 
         $fail = 'match_fail_' . $scrut . '_' . $armId;
         ++$armId;
         emitPatternTest($env, $arm->pattern, $scrut, $fail);
-        // A guard runs after the pattern bound its variables and tries the next
-        // arm through the same `$fail` a failed pattern leaves through.
         foreach ($arm->guards as $guard) {
             emitBlock($env, $guard->prep);
             emitOperand($env, $guard->cond);
@@ -3192,8 +3124,6 @@ function emitPatternTest(EmitEnv $env, IR\Pattern $pat, string $scrut, string $f
         return;
     }
     if ($pat instanceof IR\PatLit) {
-        // IR\PatLit carries int|string (e.g. `lines "" = …`); emit a distinct
-        // CIL comparison per representation.
         if (\is_string($pat->value)) {
             $env->m->load($scrut);
             $env->m->emit('castclass string');
@@ -3221,7 +3151,6 @@ function emitPatternTest(EmitEnv $env, IR\Pattern $pat, string $scrut, string $f
         return;
     }
     if ($pat instanceof IR\PatCon) {
-        // Boolean may be a boxed bool; ADTs are Moggi.Rt.Con.
         if ($pat->name === 'True' || $pat->name === 'False') {
             $env->m->load($scrut);
             $env->m->emit('unbox.any bool');

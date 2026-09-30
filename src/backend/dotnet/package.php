@@ -133,8 +133,6 @@ function resolveIlasmExecutable(?string $dotnet = null): ?string
         try {
             ensureIlasmPackageRestored($dotnet);
         } catch (\RuntimeException) {
-            // Offline, or a platform the RID mapping does not cover: leave the
-            // build to the `dotnet build` path rather than failing here.
             return $resolved = null;
         }
         $found = findIlasmInNuGetCaches();
@@ -173,7 +171,6 @@ function findIlasmInNuGetCaches(): ?string
         if (\is_file($candidate) && \is_executable($candidate)) {
             return $candidate;
         }
-        // Prefer any installed version if 6.0.0 is absent.
         $pkgDir = $root . DIRECTORY_SEPARATOR . $package;
         if (!\is_dir($pkgDir)) {
             continue;
@@ -218,7 +215,6 @@ function nugetPackageRoots(): array
     if (\is_string($home) && $home !== '') {
         $add($home . DIRECTORY_SEPARATOR . '.nuget' . DIRECTORY_SEPARATOR . 'packages');
     }
-    // Nix / custom DOTNET_ROOT layouts sometimes mirror packages under the SDK.
     $dotnetRoot = \getenv('DOTNET_ROOT');
     if (\is_string($dotnetRoot) && $dotnetRoot !== '') {
         $add(\rtrim($dotnetRoot, '/\\') . DIRECTORY_SEPARATOR . 'packages');
@@ -319,16 +315,11 @@ function packageDotNetOutput(string $outputRoot, array $options = []): void
     }
     \file_put_contents($rtPath, languageRuntime());
 
-    // The frame table is assembled from every module's compile-time sequence
-    // points, so it is emitted once here rather than per module.
     \file_put_contents(
         $outputRoot . DIRECTORY_SEPARATOR . 'rt' . DIRECTORY_SEPARATOR . 'Moggi.Frames.il',
         buildFrames(collectDotNetFrames($outputRoot)),
     );
 
-    // Demand-driven: emit externs for exactly the assemblies the generated IL
-    // references (beyond the fixed preamble). The set is discovered from the IL
-    // itself, so no backend knowledge of any particular assembly is required.
     $extraAssemblies = dotNetOutputReferencedAssemblies($outputRoot);
 
     $headerPath = $outputRoot . DIRECTORY_SEPARATOR . '_header.il';
@@ -338,7 +329,6 @@ function packageDotNetOutput(string $outputRoot, array $options = []): void
         . ".module '{$assemblyName}.dll'\n";
     \file_put_contents($headerPath, $header);
 
-    // Kept for Native AOT / Sdk.IL fallback.
     $ilprojBody = <<<XML
 <Project Sdk="Microsoft.NET.Sdk.IL/8.0.0">
   <PropertyGroup>
@@ -362,10 +352,6 @@ XML;
     \file_put_contents($projPath, $ilprojBody);
 
     if (!empty($options['unpacked'])) {
-        // Explicit unpacked/development build: keep the generated IL, runtime
-        // sources, header and project file on disk (the tree can be rebuilt by
-        // hand with `dotnet build <name>.ilproj`); assembly packaging is
-        // skipped, like the PHAR in the PHP backend.
         return;
     }
 
@@ -403,10 +389,6 @@ function assembleDotNetWithIlasm(
     }
 
     $dllPath = $outputRoot . DIRECTORY_SEPARATOR . $assemblyName . '.dll';
-    // Framework-dependent apps are always a .dll; OutputType=Exe only adds an
-    // apphost via the SDK. `dotnet app.dll` runs either shape.
-    // No `-OPTIMIZE`: it rewrites long branches to short, which would invalidate
-    // the compile-time IL offsets baked into Moggi.Frames.
     $bundlePath = bundleIlSources($outputRoot, $ilFiles);
     $result = runProcess([
         $ilasm,
@@ -426,7 +408,6 @@ function assembleDotNetWithIlasm(
         );
     }
 
-    // Sidecars so `dotnet app.dll` resolves the shared framework.
     writeDotNetRuntimeConfig($outputRoot, $assemblyName);
     if ($isExe) {
         writeDotNetDepsJson($outputRoot, $assemblyName);
@@ -573,7 +554,6 @@ JSON;
 function writeDotNetDepsJson(string $outputRoot, string $assemblyName): void
 {
     $path = $outputRoot . DIRECTORY_SEPARATOR . $assemblyName . '.deps.json';
-    // Minimal deps document; framework-dependent host resolves Microsoft.NETCore.App.
     $json = \json_encode([
         'runtimeTarget' => [
             'name' => '.NETCoreApp,Version=v8.0',
@@ -629,7 +609,6 @@ function buildDotNetIlProject(
             throw new \RuntimeException("cannot create {$ws}");
         }
 
-        // Drop previous IL sources; keep obj/ so restore stays warm.
         clearDotNetWorkspaceSources($ws);
         mirrorIlTree($outputRoot, $ws);
 
@@ -660,7 +639,6 @@ function buildDotNetIlProject(
         if (!\rename($built, $dest) && !(\copy($built, $dest) && \unlink($built))) {
             throw new \RuntimeException("failed to copy DLL to {$dest}");
         }
-        // Sidecar deps/runtimeconfig when present (Exe).
         foreach ([$assemblyName . '.deps.json', $assemblyName . '.runtimeconfig.json'] as $side) {
             $src = $buildOut . DIRECTORY_SEPARATOR . $side;
             if (\is_file($src)) {

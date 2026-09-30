@@ -16,7 +16,7 @@ final class SymbolOccurrence
     public function __construct(
         public string $uri,
         public array $range,
-        public string $kind, // def|use|type|import|call
+        public string $kind,
         public string $name,
         public ?string $resolved = null,
         /** Enclosing function resolved id when this is a call-site use. */
@@ -182,8 +182,6 @@ function buildOccurrenceIndex(
         ));
     };
 
-    // Token-derived decl locations: the parser leaves top-level decls and constructors
-    // unpositioned, so every column-1 occurrence of the name is a defining line.
     $maps = declTokenMaps($source, $uri);
     $fakeDeclPos = static function (string $name, object $item, array $tokenMap) use ($source): object {
         if (($item->line ?? 0) > 0) {
@@ -202,8 +200,6 @@ function buildOccurrenceIndex(
     };
 
     $addDefTokens = static function (string $name, string $kind) use ($index, $uri, $moduleName, $maps): void {
-        // A name reached through a data/type/class decl is a type; function
-        // decls (and constructors) are plain defs.
         $toks = $maps['defs'][$name] ?? [];
         if ($toks === []) {
             return;
@@ -330,8 +326,6 @@ function buildOccurrenceIndex(
             ));
         }
 
-        // Skip type ASTs / inferredType: they are huge, may share structure, and
-        // are irrelevant for name occurrences (walking them hangs the LSP).
         if ($node instanceof Ast\TypeNode) {
             $enclosing = $prevEnclosing;
             $enclosingName = $prevName;

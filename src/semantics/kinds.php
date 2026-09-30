@@ -207,7 +207,6 @@ function pruneKind(KindInferCtx $ctx, Kind $kind): Kind
     }
 
     if ($kind instanceof KArrow) {
-        // Avoid rebuilding concrete * → * → … spines when nothing is substituted.
         if ($ctx->subst === []) {
             return $kind;
         }
@@ -469,8 +468,6 @@ function inferClassParamKinds(TypeCheckState $state, Ast\ClassDecl $decl): array
         unifyKind($ctx, $methodKind, new KType());
     }
 
-    // Associated `type F a :: k` binds class params at Type (or annotated kind)
-    // and does not itself contribute a Type-kinded result for class params.
     foreach ($decl->associatedTypes as $assoc) {
         foreach ($assoc->params as $paramName) {
             if (!isset($ctx->varKinds[$paramName])) {
@@ -478,7 +475,6 @@ function inferClassParamKinds(TypeCheckState $state, Ast\ClassDecl $decl): array
             }
         }
         if ($assoc->resultKind !== null) {
-            // Touch result kind for well-formedness; no class-param constraint.
             astKind($state, $assoc->resultKind, $assoc);
         }
     }
@@ -505,9 +501,6 @@ function astKind(TypeCheckState $state, Ast\KindNode $kindAst, ?Ast\AstNode $at 
 {
     return match ($kindAst::class) {
         Ast\KindType::class => new KType(),
-        // DataKinds: a named kind like `Color` promoted from `data Color = …`.
-        // Compared nominally by name; the underlying data type need not have
-        // been checked yet (forward references are fine, only the name matters).
         Ast\KindCon::class => new KCon($kindAst->name),
         Ast\KindArrow::class => new KArrow(
             astKind($state, $kindAst->from, $at),
@@ -559,8 +552,6 @@ function kindOfPromoted(TypeCheckState $state, string $name): Kind
 {
     $info = $state->promoted[$name] ?? null;
     if ($info === null) {
-        // astType/resolvePromotedType already rejects unknown promoted names
-        // before this is reached; fall back leniently rather than throw here.
         return new KType();
     }
 
@@ -710,9 +701,6 @@ function kindFromDataInfo(array $info): Kind
 function installPromotedFromDataInfo(TypeCheckState $state, string $dataName, array $info): void
 {
     foreach ($info['constructors'] ?? [] as $ctorName => $ctor) {
-        // Already installed (possibly from an earlier import). Skip the
-        // promotableImportedFieldKind walk — the common prepare path calls
-        // this for the same datatype via many modules.
         if (isset($state->promoted[$ctorName])) {
             continue;
         }
@@ -752,9 +740,6 @@ function installPromotedFromDataInfo(TypeCheckState $state, string $dataName, ar
 /** @param mixed $fieldType */
 function promotableImportedFieldKind(TypeCheckState $state, mixed $fieldType): ?Kind
 {
-    // Trust exported field types: a nullary TCon is the promoted field's kind.
-    // Do not require `$state->data` yet — export merge order may install
-    // `FixityI` before `Associativity`.
     if (!$fieldType instanceof TCon || $fieldType->args !== []) {
         return null;
     }
@@ -764,8 +749,6 @@ function promotableImportedFieldKind(TypeCheckState $state, mixed $fieldType): ?
 
 function bootstrapKindEnv(TypeCheckState $state): void
 {
-    // Canonical names only. MagicHash forms (Int#, List#, IO#, …)
-    // are resolved in resolveTypeCon and do not need kindEnv entries.
     $state->kindEnv = [
         'Int' => new KType(),
         'Char' => new KType(),

@@ -58,7 +58,6 @@ function deriveEq(
 function synthesizeEqBody(Ast\DataDecl $decl, string $left, string $right): Ast\AstNode
 {
     if ($decl->constructors === []) {
-        // Empty data: no values; still a total function on the uninhabited type.
         return new Ast\ConstructorRef('True');
     }
 
@@ -109,8 +108,6 @@ function synthesizeFieldEqualities(array $leftBinders, array $rightBinders): Ast
 
     $expr = null;
     foreach ($leftBinders as $i => $leftName) {
-        // Use Apply/OperatorRef (not Infix) so `==` goes through class-method
-        // evidence / pending `Eq τ` rather than the primitive infix fast path.
         $cmp = eqCall(new Ast\Variable($leftName), new Ast\Variable($rightBinders[$i]));
         $expr = $expr === null ? $cmp : new Ast\Infix('&&', $expr, $cmp);
     }

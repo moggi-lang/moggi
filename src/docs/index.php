@@ -339,7 +339,6 @@ function buildIndex(
             }
         }
 
-        // Keep export-only facades (e.g. Prelude) so re-export entries can attach below.
         $isSynthetic = isSyntheticCompilerModuleName($moduleName);
         $hasIndexedBody = count($entities) > 1 || $program->fixityDocs !== [];
         if (!$isSynthetic && !$hasIndexedBody && ($program->exports === null || $program->exports === [])) {

@@ -94,8 +94,6 @@ function clrSigFromMoggiType(
     }
     $result = clrForeignIoInnerType($type);
 
-    // Instance methods take an explicit receiver as the first Moggi argument.
-    // Constructors do not — every arrow argument is a .ctor parameter.
     if ($dispatch === 'instance') {
         if ($argTypes === []) {
             throw new \RuntimeException('dotnet instance foreign requires a receiver argument');
@@ -108,9 +106,6 @@ function clrSigFromMoggiType(
         $params[] = clrTypeName($arg, $classPath, $member, false, $dispatch);
     }
 
-    // A library-declared host signature overrides the derived parameter list.
-    // This is how libs express APIs whose real CLR signature differs from the
-    // Moggi type (C# optional parameters, interface-typed parameters, ...).
     if ($explicitParams !== null) {
         $params = $explicitParams;
     }
@@ -214,9 +209,6 @@ function clrTypeName(
         return 'void';
     }
 
-    // Maybe a / Either e a are ordinary Moggi ADTs. Host APIs return the value
-    // payload (nullable); emit applies IoWrap to build Just/Nothing or Left/Right.
-    // Never look them up as foreign types (fail-closed object fallback).
     if ($type instanceof Ast\TypeApp && $type->con instanceof Ast\TypeCon) {
         $container = $type->con->name;
         if ($container === 'Maybe') {
@@ -235,20 +227,15 @@ function clrTypeName(
 
     $con = clrForeignTypeConName($type);
 
-    // Object.ReferenceEquals(object, object) — never narrow to a more specific
-    // class type; null must stay a plain object reference.
     if ($classPath === 'System.Object' && $member === 'ReferenceEquals' && !$isReturn) {
         return 'object';
     }
 
-    // Convert.ToString(object) — do not narrow the arg to a declared host type.
     if ($classPath === 'System.Convert' && $member === 'ToString' && !$isReturn) {
         return 'object';
     }
 
     return match ($con) {
-        // Platform word Int is i64. Fixed-width Ints map to exact CLR
-        // primitives; Char maps to the UTF-16 unit System.Char APIs take.
         'Int' => 'int64',
         'Int8' => 'int8',
         'Int16' => 'int16',
@@ -299,7 +286,6 @@ function clrHostTypeToIl(string $host): string
         return 'object';
     }
     if (\str_starts_with($host, 'class ') || \str_starts_with($host, 'valuetype ') || \str_ends_with($host, '[]')) {
-        // Allow fully-qualified IL snippets (e.g. Nullable`1<…> with assembly refs).
         if (\str_starts_with($host, 'class [') || \str_starts_with($host, 'valuetype [') || $host === 'object[]') {
             return $host;
         }
@@ -323,8 +309,6 @@ function clrHostTypeToIl(string $host): string
         return $host;
     }
 
-    // Plain CLR type name: value-type-ness is a host ABI fact a library may
-    // declare alongside the type; otherwise assume a reference type.
     $kind = dotNetTypeIsValueType($host) === true ? 'valuetype ' : 'class ';
 
     return $kind . qualifyTypeForOpaque($host);
@@ -356,7 +340,6 @@ function qualifyTypeForOpaque(string $dotted): string
  */
 function dotNetHostIsValueType(string $classPath): bool
 {
-    // Library-declared CLR types carry an explicit value-type flag.
     $declared = dotNetTypeIsValueType($classPath);
     if ($declared !== null) {
         return $declared;
@@ -368,7 +351,6 @@ function dotNetHostIsValueType(string $classPath): bool
             continue;
         }
         $rest = \trim(\substr($host, \strlen('valuetype ')));
-        // Strip optional [Assembly] qualifier for comparison.
         if (\str_starts_with($rest, '[')) {
             $close = \strpos($rest, ']');
             if ($close !== false) {
@@ -378,7 +360,6 @@ function dotNetHostIsValueType(string $classPath): bool
         if ($rest === $classPath || \str_ends_with($rest, '/' . $classPath)) {
             return true;
         }
-        // Nested types are spelled `Outer/Inner`; `+` is the C# spelling.
         $normHost = \str_replace('+', '/', $rest);
         $normClass = \str_replace('+', '/', $classPath);
         if ($normHost === $normClass || \str_ends_with($normHost, '/' . $normClass)) {

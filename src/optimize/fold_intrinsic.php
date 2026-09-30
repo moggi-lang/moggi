@@ -34,7 +34,6 @@ function foldIntrinsicsItems(array $items): array
                 $known[$folded->dest] = $val;
             }
         } elseif ($folded instanceof IR\Call) {
-            // Pure ctor applications sometimes lower as Call.
             $asExpr = new IR\ExprCall($folded->callee, $folded->args);
             if (isKnownCtorOperand($asExpr)) {
                 $known[$folded->dest] = $asExpr;
@@ -115,8 +114,6 @@ function foldOperand(IR\Operand $operand, array $known = []): IR\Operand
 {
     $resolve = static fn (IR\Operand $op): IR\Operand => foldOperandResolving($op, $known);
 
-    // Intrinsic args are resolved once here; a second resolution re-walked every nested spine
-    // and made arity-15+ optimization effectively non-terminating.
     return match ($operand::class) {
         IR\Intrinsic::class => foldIntrinsicNode(
             new IR\Intrinsic($operand->name, \array_map($resolve, $operand->args), $operand->srcLoc),
@@ -138,7 +135,6 @@ function foldOperand(IR\Operand $operand, array $known = []): IR\Operand
         IR\ExprCallValue::class => (static function () use ($operand, $resolve): IR\Operand {
             $callee = $resolve($operand->callee);
             $args = \array_map($resolve, $operand->args);
-            // call_value @id(x) / @Module::id(x) → x (field-label / tag wrappers)
             if (
                 count($args) === 1
                 && $callee instanceof IR\FnRef
@@ -198,9 +194,6 @@ function foldIntrinsicNode(IR\Intrinsic $node, array $known = [], bool $argsAlre
     };
 
     if ($folded !== null) {
-        // Recurse only for arithmetic/string rewrites that may still be
-        // Intrinsic. Known-list folds must not re-enter (listCons#↔ListLit).
-        // Rewrites rebuild args from already-resolved operands — do not resolve again.
         if (
             $folded instanceof IR\Intrinsic
             && !\in_array($folded->name, ['listCons#', 'listAppend#', 'list_nil', 'listHead#', 'listTail#'], true)
@@ -304,7 +297,6 @@ function foldListConsSpine(array $args): ?IR\Operand
     if ($flat === null) {
         return null;
     }
-    // Always ListLit — never re-emit listCons# (that re-enters this fold).
     return new IR\ListLit($flat);
 }
 

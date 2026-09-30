@@ -29,9 +29,6 @@ function svcInlayHints(AnalysisService $svc, string $uri, array $range): array
         if (!is_object($node)) {
             return;
         }
-        // Function parameters: slice each parameter's type out of the
-        // function's own type so the letters match its hover, then continue
-        // with the body only (params are handled here, not re-walked).
         if ($node instanceof Ast\FunctionDecl) {
             if ($node->type !== null) {
                 $rename = friendlyAstTypeVarNames([$node->type]);
@@ -57,8 +54,6 @@ function svcInlayHints(AnalysisService $svc, string $uri, array $range): array
                     }
                 }
             }
-            // Non-trivial parameter patterns (tuples, lists, …) keep their
-            // inner binders: descend so the generic PatVar branch hints them.
             foreach ($node->params as $param) {
                 if (!$param instanceof Ast\PatVar) {
                     $walk($param);
@@ -68,8 +63,6 @@ function svcInlayHints(AnalysisService $svc, string $uri, array $range): array
 
             return;
         }
-        // Other binders (case patterns, let/where, lambda params) and typed
-        // holes: render with a per-node friendly rename (t62 → a).
         if ($node instanceof Ast\PatVar
             && $node->inferredType !== null
             && ($node->line ?? 0) > 0
@@ -113,8 +106,6 @@ function svcInlayHints(AnalysisService $svc, string $uri, array $range): array
         }
     };
     $walk($analysis->program);
-    // Also surface hole types from diagnostics when check aborted on the hole
-    // (checked AST unavailable, but TypeError carried the refined type).
     foreach ($analysis->diagnostics as $diag) {
         if (($diag['code'] ?? '') !== 'hole') {
             continue;
@@ -190,15 +181,11 @@ function svcInlineValues(AnalysisService $svc, string $uri, array $range): array
     if ($analysis->program instanceof Ast\Program) {
         $startLine = (int) ($range['start']['line'] ?? 0);
         $endLine = (int) ($range['end']['line'] ?? $startLine);
-        // The parser leaves top-level decls unpositioned; derive the decl
-        // location from the token map so inline values are not silently empty.
         $maps = declTokenMaps($analysis->source, $uri);
         foreach ($analysis->program->items as $item) {
             if (!($item instanceof Ast\FunctionDecl) || $item->signatureOnly) {
                 continue;
             }
-            // Types do not live on the decl node: prefer the checked signature,
-            // then the declaration table entry, then the node's inferred type.
             $typeStr = null;
             if ($item->type !== null) {
                 $typeStr = surfaceTypeSignature($item->type);
@@ -225,7 +212,6 @@ function svcInlineValues(AnalysisService $svc, string $uri, array $range): array
             }
             if ((int) $declRange['start']['line'] >= $startLine
                 && (int) $declRange['start']['line'] <= $endLine) {
-                // InlineValueText {range, text} — the spec's text variant.
                 $result[] = [
                     'range' => $declRange,
                     'text' => "{$item->name} :: {$typeStr}",

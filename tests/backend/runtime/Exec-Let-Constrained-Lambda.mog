@@ -1,0 +1,72 @@
+import Data.Bool
+import Data.Eq
+import Data.Int
+import Data.List
+import Data.Ord
+import Text.Show
+import System.IO
+
+-- A `let`-bound function whose body carries obligations of its own is lifted
+-- with leading dictionary parameters. The definition expands those obligations
+-- with their superclasses, so the use site has to build the same list in the
+-- same order; it used to pass one dictionary fewer whenever a superclass was
+-- also an explicit obligation, which shifted every later dictionary argument.
+
+clampedLet :: Int -> Int
+clampedLet = \n ->
+  let boundedBy k = case k > 4 of
+        True -> k
+        False -> 0
+  in boundedBy n
+
+clampedWhere :: Int -> Int
+clampedWhere n = boundedBy n
+  where
+    boundedBy k = case k > 4 of
+      True -> k
+      False -> 0
+
+-- `stepUp` needs `Ord` (its `>`), an explicit `Eq` (its `==`) and `Num` (its
+-- literals): `Ord`'s `Eq` superclass and the written `Eq` are one dictionary
+-- at the use site, and the definition has to count them the same way.
+mixedLet :: Int -> Int
+mixedLet n =
+  let stepUp k = case k > 3 of
+        True -> k + 1
+        False -> case k == 0 of
+          True -> n * 2
+          False -> n
+  in stepUp n
+
+-- The local function reaches the enclosing parameter while carrying dictionary
+-- parameters of its own.
+scaled :: Int -> Int
+scaled n =
+  let growBy k = case k > 0 of
+        True -> k + n
+        False -> n
+  in growBy n
+
+-- One lambda, two dictionary-carrying binders, and one of them calls the other
+-- twice, so the sibling is a capture of the lifted body as well.
+pairUp :: Int -> Int
+pairUp = \n ->
+  let twiceOver k = k + k
+      climb k = case twiceOver k > n of
+        True -> twiceOver k
+        False -> k
+  in climb n
+
+main :: IO ()
+main = do
+  putStrLn (show (clampedLet 5))
+  putStrLn (show (clampedLet 4))
+  putStrLn (show (clampedWhere 5))
+  putStrLn (show (clampedWhere 1))
+  putStrLn (show (mixedLet 5))
+  putStrLn (show (mixedLet 0))
+  putStrLn (show (mixedLet 2))
+  putStrLn (show (scaled 3))
+  putStrLn (show (scaled 0))
+  putStrLn (show (pairUp 9))
+  putStrLn (show (pairUp 3))

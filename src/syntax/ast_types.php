@@ -475,7 +475,7 @@ final class Program extends AstNode
         $refs = [];
         foreach ($this->exports ?? [] as $export) {
             if (($export['tag'] ?? '') === 'module') {
-                continue; // A module re-export is not a name; see reExportedModules().
+                continue;
             }
             $names = [$export['name'] ?? null, ...($export['children']['names'] ?? [])];
             foreach ($names as $name) {

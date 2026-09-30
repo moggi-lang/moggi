@@ -30,8 +30,6 @@ function svcDefinition(AnalysisService $svc, string $uri, array $pos): mixed
     }
     $result = navigationResult($svc, $targets, 'definition');
 
-    // Single target keeps the plain Location/LocationLink shape the tests
-    // (and most clients) rely on; arrays are reserved for multiple results.
     return count($targets) === 1 ? $result[0] : $result;
 }
 
@@ -113,8 +111,6 @@ function resolveNavTargets(AnalysisService $svc, string $uri, array $pos): array
     }
     $target['originRange'] = originRangeAt($svc, $uri, $pos);
     $out = [$target];
-    // Secondary target: the import line that brings the symbol's module in
-    // (distinct from the declaration; helps "where did this come from?").
     $resolved = $target['resolved'] ?? null;
     if (\is_string($resolved) && str_contains($resolved, '::')) {
         $mod = explode('::', $resolved, 2)[0];
@@ -149,13 +145,11 @@ function svcTypeDefinition(AnalysisService $svc, string $uri, array $pos): mixed
             $typeName = $t->con->name;
         }
     }
-    // A constructor reference takes you to the type that declares it.
     if ($node instanceof Ast\ConstructorRef) {
         $typeName = $node->name;
     }
     $word = wordAt($analysis->source, $comp['line'], $comp['col']);
     if ($typeName === null && $word !== null && isset($analysis->declarations[$word]['type'])) {
-        // Value name: derive the type head from its declared/inferred surface type.
         $surface = (string) $analysis->declarations[$word]['type'];
         if (!in_array($surface, ['function', 'data', 'newtype', 'type', 'class'], true)
             && preg_match("/[A-Z][A-Za-z0-9_']*/", $surface, $m)) {
@@ -167,7 +161,6 @@ function svcTypeDefinition(AnalysisService $svc, string $uri, array $pos): mixed
         return null;
     }
     $module = $analysis->program instanceof Ast\Program ? ($analysis->program->module ?? 'Main') : 'Main';
-    // Prefer any module that defines this type name.
     foreach ($svc->modules->defsByResolved as $res => $decl) {
         $parts = parseResolvedSymbol($res);
         if ($parts !== null && $parts['name'] === $typeName && in_array($decl->type, ['data', 'newtype', 'type', 'class'], true)) {
@@ -179,8 +172,6 @@ function svcTypeDefinition(AnalysisService $svc, string $uri, array $pos): mixed
             ]], 'typeDefinition')[0];
         }
     }
-    // Fallback: find the type declaration by name in the module index
-    // (covers imported types like Maybe and constructors like Red).
     $decl = findTypeDeclForName($svc, $module, $typeName);
     if ($decl !== null) {
         return navigationResult($svc, [[
@@ -215,11 +206,8 @@ function svcImplementation(AnalysisService $svc, string $uri, array $pos): mixed
         return null;
     }
 
-    // Resolve the word at the position to the class it refers to, if any.
     $classes = [];
     $onMethodSite = false; // cursor sits exactly on an indexed method sig/def
-    // 1. The cursor may sit exactly on an indexed method signature/definition;
-    //    its owning class is the one that matters.
     foreach ($svc->modules->classMethodDefs[$word] ?? [] as $def) {
         $r = $def['range'];
         $onStart = $r['start']['line'] === $pos['line'] && $r['start']['character'] <= ($pos['character'] ?? 0);
@@ -229,13 +217,10 @@ function svcImplementation(AnalysisService $svc, string $uri, array $pos): mixed
             $onMethodSite = true;
         }
     }
-    // 2. The word may name a class (decl or indexed instances).
     if (!$onMethodSite
         && (isset($svc->modules->classSupers[$word]) || isset($svc->modules->classInstances[$word]))) {
         $classes[] = $word;
     }
-    // 2b. Type-directed: method *uses* are tagged with the class the dictionary was selected
-    // for, which is exact even when several classes define the same name.
     if (!$onMethodSite) {
         $node = findNodeAt($analysis->program, $comp['line'], $comp['col']);
         if ($node instanceof Ast\EvidenceMethod) {
@@ -255,14 +240,10 @@ function svcImplementation(AnalysisService $svc, string $uri, array $pos): mixed
             }
         }
     }
-    // 3. Fall back to the navigation target's resolved symbol, which may carry
-    //    the class scope a method use belongs to.
     if (!$onMethodSite) {
         $target = resolveNavTarget($svc, $uri, $pos);
         $resolved = is_array($target) ? ($target['resolved'] ?? null) : null;
         if (is_string($resolved) && str_contains($resolved, '::')) {
-            // `Module::Class` scope (or `Module::Class::method` owner) — keep
-            // the segment that names a known class.
             $segments = explode('::', $resolved);
             foreach ($segments as $seg) {
                 if ($seg !== ''
@@ -283,15 +264,12 @@ function svcImplementation(AnalysisService $svc, string $uri, array $pos): mixed
         }
     };
     if ($classes !== [] && !$onMethodSite) {
-        // Class name: every instance block of that class implements it.
         foreach ($classes as $cls) {
             foreach ($svc->modules->classInstances[$cls] ?? [] as $inst) {
                 $addLoc($inst['uri'], $inst['range']);
             }
         }
     }
-    // Method name (or use): concrete definitions inside instance blocks, restricted to the
-    // owning class when one resolved — never instance heads or class signatures.
     foreach ($svc->modules->classMethodDefs[$word] ?? [] as $def) {
         if ($def['sig'] ?? false) {
             continue;
@@ -343,7 +321,6 @@ function svcReferences(AnalysisService $svc, string $uri, array $pos, bool $incl
 {
     $target = resolveNavTarget($svc, $uri, $pos);
     if ($target === null || ($target['resolved'] ?? null) === null) {
-        // Fallback: same-uri name
         $analysis = $svc->ensureAnalyzed($uri);
         if ($analysis === null) {
             return [];
@@ -387,9 +364,6 @@ function svcDocumentHighlight(AnalysisService $svc, string $uri, array $pos): ar
 
 function svcDeclaration(AnalysisService $svc, string $uri, array $pos): mixed
 {
-    // Same resolution path as go-to-definition: declaration vs definition only
-    // differ for local binders, which resolveNavTarget already handles by
-    // jumping to the PatVar with the same binderId.
     $targets = resolveNavTargets($svc, $uri, $pos);
     if ($targets === []) {
         return null;
@@ -426,7 +400,6 @@ function findModuleDeclByName(AnalysisService $svc, ?string $module, string $nam
             return $hit;
         }
     }
-    // Last resort: any module in the index.
     foreach ($svc->modules->modules as $entry) {
         $hit = $search($entry);
         if ($hit !== null) {
@@ -504,7 +477,6 @@ function resolveNavTarget(AnalysisService $svc, string $uri, array $pos): ?array
         $name = $node->name;
         if ($node->binderId !== null) {
             $resolved = binderResolved($module, $node->binderId);
-            // Local: definition is the PatVar with same binderId
             foreach ($svc->occurrences->findByResolved($resolved) as $occ) {
                 if ($occ->kind === 'def') {
                     return [
@@ -537,8 +509,6 @@ function resolveNavTarget(AnalysisService $svc, string $uri, array $pos): ?array
     } elseif ($node instanceof Ast\FunctionDecl) {
         $name = $node->name;
     }
-    // Fallback: if node is a literal/expression inside a function, walk up the chain
-    // to find the parent FunctionDecl and use its name.
     if ($name === null && $node !== null) {
         $chain = findNodeChainAt($analysis->program, $comp['line'], $comp['col']);
         foreach (array_reverse($chain) as $cand) {
@@ -588,8 +558,6 @@ function resolveNavTarget(AnalysisService $svc, string $uri, array $pos): ?array
             'name' => $name,
         ];
     }
-    // Fallback: constructors / class methods live as children of their parent
-    // declaration in the module index, not in $analysis->declarations.
     $mod = $analysis->program instanceof Ast\Program ? ($analysis->program->module ?? 'Main') : 'Main';
     $decl = findModuleDeclByName($svc, $mod, $name);
     if ($decl !== null) {
@@ -643,7 +611,6 @@ function svcDocumentLinks(AnalysisService $svc, string $uri): array
         if (preg_match_all('/https?:\/\/[^\s)]+/', $line, $matches, PREG_OFFSET_CAPTURE)) {
             foreach ($matches[0] as $match) {
                 $url = $match[0];
-                // preg offsets are bytes; LSP character offsets are UTF-16 units.
                 $start = codepointColToUtf16($line, $match[1] + 1);
                 $end = $start + utf16Length($url);
                 $links[] = [

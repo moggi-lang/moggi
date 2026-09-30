@@ -27,10 +27,6 @@ use function Moggi\Optimize\Support\tempUsedInItems;
 /** @param array<int, mixed> $items @return list<IR\Stmt> */
 function denseStmtItems(array $items): array
 {
-    // Fast path: the overwhelming majority of inputs are already dense
-    // statement lists (contiguous integer keys, every entry a tagged stmt), so
-    // detect that and return the original array instead of rebuilding a copy on
-    // every one of the many inliner passes.
     $dense = array_is_list($items);
     if ($dense) {
         foreach ($items as $item) {
@@ -71,8 +67,6 @@ function indexFunctions(array $functions, string $moduleName = ''): array
     $index = [];
     foreach ($functions as $function) {
         $index[$function->name] = $function;
-        // Specialize qualifies same-module callees as `Module::name`; dual-index
-        // so post-specialize inline / match-wrapper PE still finds them.
         if ($moduleName !== '' && !str_contains($function->name, '::')) {
             $index[resolvedSymbol($moduleName, $function->name)] = $function;
         }
@@ -97,8 +91,6 @@ function lookupIndexedFunction(array $index, string $callee): ?IR\FunctionDecl
         return $pe[$callee];
     }
 
-    // Only resolve `Module::__spec_*` / `Module::__ev_*` to a local short name
-    // — never bare names like `map`, which collide across modules.
     $leaf = specializationLookupNameSafe($callee);
     if ($leaf !== $callee && (str_starts_with($leaf, '__spec_') || str_starts_with($leaf, '__ev_'))) {
         if (isset($index[$leaf])) {
@@ -136,8 +128,6 @@ function inlineFunctions(array $functions, string $moduleName = ''): array
 {
     for ($round = 0; $round < 4; ++$round) {
         $index = indexFunctions($functions, $moduleName);
-        // Mutual recursion (e.g. where-bound even/odd) must not be inlined into
-        // itself across SCC members — that unrolls into nested intSub# towers.
         $recursive = functionNamesInRecursiveSccs($index);
         $next = [];
         $changed = false;
@@ -180,7 +170,6 @@ function inlineFunctions(array $functions, string $moduleName = ''): array
             $next[] = $function->withBody($joined);
         }
 
-        // Sync mutated callees from `$index` back into `$next`.
         clearActiveInlineTargetBoundNames();
 
         if ($rewrittenNames !== []) {
@@ -224,7 +213,6 @@ function functionNamesInRecursiveSccs(array $index): array
         $edges[$name] = \array_keys($callees);
     }
 
-    // Tarjan SCC; any component with a self-loop or size > 1 is recursive.
     $indexOf = [];
     $lowlink = [];
     $onStack = [];
@@ -323,7 +311,6 @@ function collectLocalCalleesInStmt(IR\Stmt $stmt, array $index, array &$callees)
             $callees[$stmt->value->callee] = true;
         }
         if ($stmt->value instanceof IR\FnRef && isset($index[$stmt->value->name])) {
-            // Reference alone is not a call edge for SCC purposes.
         }
     }
 
@@ -353,8 +340,6 @@ function inlineBlock(
     array &$peBlocked = [],
     ?int &$nextTemp = null,
 ): IR\Block {
-    // Temps are single-assignment: nested match-arm inlineBlock calls must not recompute
-    // nextTemp from the arm alone (it reused outer dests and poisoned bytesFromString#).
     $localMax = maxTempInItems($block->items) + 1;
     if ($nextTemp === null) {
         $nextTemp = $localMax;
@@ -384,9 +369,6 @@ function inlineItems(
     $out = [];
 
     foreach (denseStmtItems(flattenNestedRetExprCalls($items, $nextTemp)) as $item) {
-        // Reduce local match-wrapper ExprCalls nested in Call args (i.e. after
-        // flattening a nested call into a call to an imported function that
-        // still carries ExprCall args).
         if ($item instanceof IR\Call) {
             $item = new IR\Call(
                 $item->callee,
@@ -536,9 +518,6 @@ function inlineCallsInExpr(IR\Operand $expr, string $selfName, array $index, int
         $fakeCall = new IR\Call($expr->callee, $expr->args, $nextTemp++, $expr->srcLoc);
         $inlined = tryInlineCall($index[$expr->callee], $fakeCall, $selfName, $index, $nextTemp);
         if ($inlined !== null) {
-            // Fold prefix temp bindings into the Ret. Taking only the last Ret
-            // dropped statements like `t2 = listMap(c2w, cs)` and left
-            // `pack(t2)` with an unbound temp (Char8.dropSpace / JVM emit).
             $folded = foldInlinedItemsToExpr($inlined);
             if ($folded !== null) {
                 return inlineCallsInExpr($folded, $selfName, $index, $nextTemp);
@@ -579,8 +558,6 @@ function inlineRetCalls(array $items, string $selfName, array $index, int &$next
 
     foreach (denseStmtItems($items) as $item) {
         if (!($item instanceof IR\Ret) || !($item->value instanceof IR\ExprCall)) {
-            // Also lift nested ExprCalls in Call args so match wrappers like
-            // gRecordPairsLeft(K1(…)) become statement Calls (inlinable).
             if ($item instanceof IR\Call) {
                 $args = [];
                 $prefix = [];
@@ -629,7 +606,6 @@ function inlineRetCalls(array $items, string $selfName, array $index, int &$next
             continue;
         }
 
-        // Match-wrapper inlining yields MatchStmt; convert to MatchReturn in ret position.
         $inlined = denseStmtItems($inlined);
         if (count($inlined) === 1 && $inlined[0] instanceof IR\MatchStmt) {
             $ms = $inlined[0];
@@ -844,9 +820,6 @@ function tryInlineCall(IR\FunctionDecl $target, IR\Stmt $call, string $selfName,
         return null;
     }
 
-    // Materialize effectful / allocating args once before substitute so
-    // nullary foreign constructors (e.g. newStringWriter) are not
-    // rematerialized at every param use after inlining.
     $materialized = materializeInlineArgs($call->args, $nextTemp);
     $prefix = $materialized['prefix'];
     $args = $materialized['args'];
@@ -859,7 +832,6 @@ function tryInlineCall(IR\FunctionDecl $target, IR\Stmt $call, string $selfName,
             $bound[$item->name] = true;
         }
     }
-    // $body (and $last) are already remapped; do not apply $remap again.
     $value = substituteExpr($last->value, $target->params, $args, $bound);
 
     $inlined = denseStmtItems([...$prefix, ...inlineExprAsItems($value, $call->dest)]);
@@ -884,9 +856,6 @@ function materializeInlineArgs(array $args, int $nextTemp): array
             $out[] = new IR\Temp($dest);
             continue;
         }
-        // Nullary function-as-value (e.g. newLinkedHashMap): emit invokes the
-        // FnRef at every use. Bind once so substitute / expr-fold cannot
-        // allocate a fresh host object per occurrence.
         if ($arg instanceof IR\FnRef && operandIsNonDuplicable($arg)) {
             $dest = $nextTemp++;
             $prefix[] = new IR\Assign($dest, $arg);
@@ -1120,8 +1089,6 @@ function inlinedItemsToRet(array $inlined): ?array
         return null;
     }
 
-    // DictCall defines $dest; dropping it and returning Temp(dest) leaves an
-    // unbound temp. Keep the defining statement, then Ret the dest.
     if ($last instanceof IR\DictCall) {
         return denseStmtItems([...$inlined, new IR\Ret(new IR\Temp($last->dest))]);
     }
@@ -1224,14 +1191,11 @@ function tryReduceMatchWrapperToExpr(IR\FunctionDecl $target, array $args): ?IR\
 
         $armBound = $bound;
         foreach (matchArmPatternBoundNames($pat) as $name) {
-            // Protect pattern binders from outer-param substitution when names
-            // shadow (e.g. both the wrapper param and K1 binder are `x`).
             $armBound[$name] = true;
         }
 
         $reduced = reduceMatchArmBodyToExpr($arm->body->items, $envParams, $envArgs, $armBound);
         if ($reduced !== null) {
-            // Bind pattern vars to constructor payloads (armBound blocked this above).
             return substituteOperand($reduced, $patParams, $patArgs, []);
         }
     }
@@ -1261,9 +1225,6 @@ function reduceMatchArmBodyToExpr(
         return null;
     }
 
-    // Refuse when a non-duplicable arg would be substituted at multiple Local
-    // uses across the arm (not only the Ret). Expr-folding after that rematerializes
-    // allocators like newLinkedHashMap at each use.
     foreach ($envParams as $i => $param) {
         $arg = $envArgs[$i] ?? null;
         if ($arg === null || !operandIsNonDuplicable($arg)) {
@@ -1327,9 +1288,6 @@ function reduceMatchArmBodyToExpr(
             continue;
         }
         if ($stmt instanceof IR\DictCall) {
-            // Represent unresolved dictionary method calls as expressions so
-            // case-of-known match wrappers (e.g. specialized gRecordPairs*) can
-            // still PE when the arm body uses dict_call for field codecs.
             $val = new IR\ExprCallValue(
                 new IR\DictMethod(
                     replaceTempsInOperand($stmt->evidence, $tempEnv, $sticky),
@@ -1436,7 +1394,6 @@ function nullaryFnNameIsNonDuplicableSeed(string $name): bool
     if (nullaryCtorCaf($name) !== null) {
         return false;
     }
-    // Evidence dictionaries / known multi-arg values are never nullary seeds.
     if (str_starts_with($leaf, '__ev_')) {
         return false;
     }
@@ -1448,10 +1405,6 @@ function nullaryFnNameIsNonDuplicableSeed(string $name): bool
         }
     }
     if ($arity === null) {
-        // Fail closed: an unknown nullary FnRef/call may be a foreign seed
-        // (e.g. a host-writer constructor). Expanding it at every use
-        // rematerializes a fresh host object. Pure unknowns only lose a
-        // copy-prop; that is preferable to silent double-allocation.
         return true;
     }
 
@@ -1569,8 +1522,6 @@ function replaceTempsInOperand(IR\Operand $operand, array $tempEnv, array $stick
     }
 
     if ($operand instanceof IR\Temp && isset($tempEnv[$operand->id])) {
-        // Sticky non-duplicable bindings stay as Temp so multi-use can be
-        // detected; final expansion happens only when uses ≤ 1.
         if (isset($sticky[$operand->id])) {
             return $operand;
         }
@@ -1915,9 +1866,6 @@ function isInlineCandidate(IR\FunctionDecl $function): bool
         return false;
     }
 
-    // Allow `ret @True` / `ret @False` (metadata predicates, bool CAF). Other
-    // bare FnRefs stay non-inlineable to avoid materializing large function
-    // values at every call site.
     if ($last->value instanceof IR\FnRef && !isWiredInBoolCtor($last->value->name)) {
         return false;
     }
@@ -2150,8 +2098,6 @@ function substituteStmt(IR\Stmt $stmt, array $params, array $args, array $bound 
  */
 function substituteOperand(IR\Operand $operand, array $params, array $args, array $bound = []): IR\Operand
 {
-    // Capture-safe: replace Locals in the *callee* tree without walking into replacement
-    // arguments, which would stack substitutions until the visit depth cap.
     if ($operand instanceof IR\Local) {
         return substituteLocal($operand, $params, $args, $bound);
     }
@@ -2378,10 +2324,6 @@ function remapTempsInOperand(IR\Operand $operand, array $remap): IR\Operand
             static fn (IR\Operand $a): IR\Operand => remapTempsInOperand($a, $remap),
             $operand->args,
         ), $operand->srcLoc),
-        // List literals carry temps (e.g. `buildRecord([t1, t2])`); skipping them
-        // leaves stale ids after inline remapping while the defining Calls are
-        // remapped — DCE then drops the Calls as unused and emit references
-        // unbound `$tN`.
         IR\ListLit::class => new IR\ListLit(\array_map(
             static fn (IR\Operand $a): IR\Operand => remapTempsInOperand($a, $remap),
             $operand->elements,
@@ -2431,8 +2373,6 @@ function remapTempId(int $id, array $remap): int
  */
 function substituteExpr(IR\Operand $expr, array $params, array $args, array $bound = []): IR\Operand
 {
-    // Prefer substituteOperand for nested operands so DictMethod/ForeignCall/ListLit evidence
-    // rematerializes; substituteExpr left unbound `__ev_*` locals.
     return match ($expr::class) {
         IR\ConstInt::class, IR\FnRef::class => $expr,
         IR\Local::class => substituteLocal($expr, $params, $args, $bound),
@@ -2717,8 +2657,6 @@ function appendConsumerToArm(array $armItems, int $dest, array $consumer): array
 
     $last = $armItems[count($armItems) - 1];
 
-    // Nested MatchReturn: push the consumer into each leaf (same as
-    // appendMatchReturnToArm) — do not append `ret $dest` after it.
     if ($last instanceof IR\MatchReturn) {
         array_pop($armItems);
         $arms = [];
@@ -2884,8 +2822,6 @@ function isPeFusionInlineCandidate(IR\FunctionDecl $function): bool
         return false;
     }
 
-    // Only specialization clones — unrestricted PE-fusion inlining of ordinary
-    // match-heavy locals (e.g. `/=`) explodes via recursive re-inline.
     $leaf = specializationLookupNameSafe($function->name);
     if (!str_starts_with($leaf, '__spec_')) {
         return false;
@@ -3028,13 +2964,9 @@ function qualifyBareName(string $name, string $module, array $index = []): strin
     if ($name === '' || str_contains($name, '::') || str_contains($name, '\\')) {
         return $name;
     }
-    // Data constructors stay unqualified — they are resolved by backend/data.
     if (isPlausibleConstructorName($name)) {
         return $name;
     }
-    // Only qualify callees actually defined in the inlined function's module.
-    // Imported symbols (e.g. a helper from an imported lib module) must stay
-    // bare for destination codegen to resolve via use/function imports.
     if ($index !== [] && !isset($index[$name])) {
         return $name;
     }

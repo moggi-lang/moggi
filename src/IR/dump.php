@@ -89,8 +89,6 @@ function dumpMatchArm(IR\MatchArm $arm, int $indent): string
 {
     $pad = str_repeat('  ', $indent);
 
-    // Statements a guard needs run before the guard is tested, so they are
-    // printed above the arm rather than among its body items.
     $prep = '';
     foreach ($arm->guards as $guard) {
         foreach ($guard->prep->items as $item) {
@@ -98,7 +96,6 @@ function dumpMatchArm(IR\MatchArm $arm, int $indent): string
         }
     }
 
-    // Without the guard, `x | p = a | q = b` reads as two identical arms.
     $guard = $arm->guards === []
         ? ''
         : ' when ' . join(', ', \array_map(

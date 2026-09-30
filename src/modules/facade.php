@@ -157,8 +157,6 @@ function redirectFacadeOrigins(array &$available, Ast\Program $program, array $u
         );
     }
 
-    // Foreign types (and other data) declared only in the impl must be
-    // available for facade export lists and signature elaborations.
     foreach ($implExports['data'] ?? [] as $name => $info) {
         if (!isset($available['data'][$name])) {
             $available['data'][$name] = $info;
@@ -270,9 +268,6 @@ function mergeModuleLocalTypesIntoImportContext(array &$importContext, Ast\Progr
     $declaredData = [];
     $declaredTypeSynonyms = [];
     foreach ($program->items as $item) {
-        // DataDecl and ForeignTypeDecl both live in localTypes['data'] and are
-        // re-registered during checkProgram — exclude them here so they are not
-        // applied twice via import context (duplicate type error).
         if ($item instanceof Ast\DataDecl || $item instanceof Ast\ForeignTypeDecl) {
             $declaredData[$item->name] = true;
         }
@@ -302,9 +297,6 @@ function mergeFacadeTypesForImpl(TypeCheckState $state, array $units, string $im
         return;
     }
 
-    // Facade synonyms like `type Double = Double#` need Magichash types in scope.
-    // Impl modules are typechecked before their facade (facade depends on impl),
-    // so pull primitive type data from the synthetic Prim/IO units directly.
     foreach ([
         MODULE_PRIM,
         MODULE_IO,

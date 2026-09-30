@@ -198,10 +198,8 @@ function specializeDictCall(
 
         $resolved = resolveMethodCallee($evidence->name, $method, $evidenceByName);
         if ($resolved !== null) {
-            // Nullary evidence FnRef: method takes only the dictionary method args.
             $ev = $evidenceByName[$evidence->name] ?? null;
             if ($ev !== null && $ev->contextParams !== []) {
-                // Unsaturated factory — not a dictionary value.
                 return $stmt;
             }
 
@@ -251,9 +249,6 @@ function resolveMethodCallee(
         return $ev->methods[$method] ?? null;
     }
 
-    // Do not invent `$evidence_$method` names for unknown evidence. Cross-module
-    // evidence stays as DictCall until import maps / specialize resolve it —
-    // inventing hashed names that are not in the IR is unsafe.
     return null;
 }
 
@@ -315,8 +310,6 @@ function specializeDictMethodOperand(IR\DictMethod $operand, array $evidenceByNa
                 return new IR\FnRef($ir);
             }
         }
-        // Cross-module DictMethod stays as DictMethod; emit-time resolution
-        // + import filtering handle nullary calls.
     }
 
     return new IR\DictMethod(specializeDictCallsOperand($evidence, $evidenceByName), $operand->method);

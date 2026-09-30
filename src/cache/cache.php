@@ -188,8 +188,6 @@ function ensureCache(): void
         return;
     }
 
-    // The old tree is gone before the new name exists, so every process starting during the
-    // transition sees a mismatch; the lock keeps them from deleting each other's tree.
     $lock = @fopen(cacheLockPath(), 'c');
     if ($lock === false || !flock($lock, LOCK_EX)) {
         resetCacheTree($base, $fingerprint);
@@ -249,7 +247,6 @@ function mirrorPath(string $relPath): string
 {
     $relPath = \str_replace('\\', '/', $relPath);
     $relPath = preg_replace('/\.mog$/', '', $relPath) ?? $relPath;
-    // Defensive: never let `..` escape the cache root.
     $relPath = \str_replace('..', '__', $relPath);
 
     return ltrim($relPath, '/');

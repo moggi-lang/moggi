@@ -102,8 +102,6 @@ function emitIoAssignAction(IR\Stmt $stmt, int $indent, array $ctx): string
 
     $inner = emitBlock($body, $indent + 1, $ctx);
     $value = emitRetValue($result, $ctx);
-    // Nested IO from continuations may return a box; a unit result never can, so the unwrap
-    // is a real test and not dead code.
     $return = 'return ' . ($result instanceof IR\Unit ? $value : emitIoRunResultExpr($value)) . ';';
 
     return $pad . $dest . " = ['__io', static function(){$useList}: mixed {\n"
@@ -116,8 +114,6 @@ function emitIoRun(IR\Stmt $stmt, int $indent, array $ctx): string
 {
     $pad = str_repeat('    ', $indent);
     $action = emitOperand($stmt->action, $ctx);
-    // Accept both boxed `__io` actions and already-executed/null results
-    // (straight-line IO () callees return null when used as first-class values).
     $run = emitIoRunResultExpr($action);
     $dest = $stmt->dest;
 
@@ -134,7 +130,6 @@ function emitIoThrow(IR\Stmt $stmt, int $indent, array $ctx): string
     $ex = emitOperand($stmt->exception, $ctx);
     $loc = emitSrcLocExpr($stmt->srcLoc, $ctx);
     $out = $pad . '\\Moggi\\throwSomeException(' . $ex . ', ' . $loc . ");\n";
-    // Unreachable, but keeps SSA result temps defined when throw is the box result.
     if ($stmt->dest !== null) {
         $out .= $pad . phpTemp($stmt->dest) . " = null;\n";
     }
@@ -189,7 +184,6 @@ function emitIoFinally(IR\Stmt $stmt, int $indent, array $ctx): string
     $run = emitIoRunResultExpr($action);
     $cleanupRun = emitIoRunResultExpr($cleanup);
 
-    // Sync finally: always cleanup; if cleanup throws it wins; else rethrow original.
     $out = $pad . "\$__moggiFinallyEx = null;\n";
     $out .= $pad . "\$__moggiFinallyResult = null;\n";
     $out .= $pad . "try {\n";

@@ -111,8 +111,6 @@ function parseTopLevel(ParserState $state): Ast\AstNode
     $start = peek($state);
     $decl = parseTopLevelDecl($state) ?? parseExprWithWhere($state);
 
-    // A `FunctionDecl` reaches here unpositioned (the clause parsers carry no span), so
-    // the declaration is located by the token its name starts at.
     if ($decl instanceof Ast\FunctionDecl && $decl->line === 0) {
         $decl->setLocation(
             $start->line,
@@ -273,9 +271,6 @@ function looksLikeFunctionDecl(ParserState $state): bool
             return false;
         }
 
-        // `f x | g = e` on one line is the same shape as a comprehension's
-        // `[head ys | ys <- xss]`, so a same-line guard only counts outside
-        // brackets, where no declaration can begin.
         return peek($state)->line > $startLine || !insideBrackets($state);
     } catch (ParseError) {
         return false;
@@ -315,8 +310,6 @@ function parseGuardBody(ParserState $state, string $separator = '=', bool $caseA
         expectOp($state, $separator);
         $state->stopBeforeGuardClause = true;
         $state->guardRhsLine = peek($state)->line;
-        // A case alternative's guards end where the next alternative begins:
-        // `case x of p | g -> e; q -> f` must not read `q` as an argument of `e`.
         $body = $caseAlt ? parseCaseAltBody($state) : parseExprWithWhere($state);
         $state->stopBeforeGuardClause = false;
         $state->guardRhsLine = null;
@@ -515,8 +508,6 @@ function parseDataParams(ParserState $state): array
 {
     $params = [];
     while (isAt($state, TokenKind::VarId) || isAt($state, TokenKind::LParen)) {
-        // Stop before `=` or a following top-level construct; kind-annotated
-        // params are `(c :: k)` and still start with LParen.
         if (isAt($state, TokenKind::LParen) && !looksLikeKindAnnotatedDataParam($state)) {
             break;
         }
@@ -608,7 +599,6 @@ function parseOneDerivingClause(ParserState $state): array
     expect($state, TokenKind::KwDeriving);
     $strategy = parseDerivingStrategy($state);
 
-    // `deriving via (ViaType) ClassName` or `deriving via (ViaType) (C1, C2)`
     if ($strategy === 'via') {
         expect($state, TokenKind::LParen);
         $viaType = parseType($state);
@@ -705,7 +695,6 @@ function parseStandaloneDerivingHead(ParserState $state): array
         $constraints = [$firstType];
         advance($state);
         $headType = parseTypeAtom($state);
-        // Continue to parse type application args (e.g. `C a b`).
         $headLine = peek($state)->line;
         while (isTypeArgStart($state, $headLine)) {
             $headType = new Ast\TypeApp($headType, [parseTypeHead($state)]);
@@ -731,7 +720,7 @@ function parseStandaloneDerivingHead(ParserState $state): array
 function looksLikeStandaloneDeriving(ParserState $state): bool
 {
     $saved = $state->pos;
-    advance($state); // consuming `deriving`
+    advance($state);
 
     if (isAt($state, TokenKind::VarId, 0, 'stock')
         || isAt($state, TokenKind::VarId, 0, 'anyclass')
@@ -740,7 +729,6 @@ function looksLikeStandaloneDeriving(ParserState $state): bool
     } elseif (isAt($state, TokenKind::KwNewtype)) {
         advance($state);
     } elseif (isAt($state, TokenKind::VarId, 0, 'via')) {
-        // `deriving via (Type) instance ...` — skip the via type in parens.
         advance($state);
         if (isAt($state, TokenKind::LParen)) {
             $depth = 0;
@@ -778,7 +766,6 @@ function parseStandaloneDeriving(ParserState $state): Ast\StandaloneDerivingDecl
     $strategy = parseDerivingStrategy($state);
 
     if ($strategy === 'via') {
-        // `deriving via (ViaType) instance C T` or `deriving via (ViaType) instance C a => C (T a)`
         expect($state, TokenKind::LParen);
         $viaType = parseType($state);
         expect($state, TokenKind::RParen);
@@ -800,9 +787,6 @@ function parseStandaloneDeriving(ParserState $state): Ast\StandaloneDerivingDecl
         );
     }
 
-    // `deriving instance C a => C (T a)` or
-    // `deriving stock instance C a => C (T a)` or
-    // `deriving newtype instance C T`
     expect($state, TokenKind::KwInstance);
 
     [$constraints, $headType] = parseStandaloneDerivingHead($state);
@@ -872,9 +856,6 @@ function parseClassDecl(ParserState $state): Ast\ClassDecl
     $superclasses = [];
     $headType = parseTypeAtom($state);
 
-    // `class (C1 t, C2 t) => Head t`: parseTypeHead folds a parenthesized
-    // constraint tuple into TypeConstrained; a bare comma is not a context
-    // separator, so `class C1 t, C2 t => Head t` is rejected below.
     if ($headType instanceof Ast\TypeConstrained) {
         $superclasses = $headType->constraints;
         $headType = $headType->body;
@@ -952,8 +933,6 @@ function parseClassDecl(ParserState $state): Ast\ClassDecl
         }
     }
 
-    // Defaults may be written before the signature they implement, so attach
-    // them only once the whole class body is parsed.
     foreach ($defaults as $default) {
         attachClassMethodDefault($state, $methods, $default['fn'], $default['doc']);
     }
@@ -973,8 +952,6 @@ function parseClassDecl(ParserState $state): Ast\ClassDecl
         }
     }
 
-    // `$headLoc` is a token or the head's type node; both carry a position, so the class decl is
-    // located rather than span-less (a diagnostic on a class needs somewhere to point).
     $headLine = $headLoc->line;
     $headCol = $headLoc->col;
     $headEndCol = $headCol + max(0, strlen($name) - 1);
@@ -1221,8 +1198,6 @@ function parseInstanceDecl(ParserState $state): Ast\AstNode
     $before = $state->pos;
     $firstType = parseTypeAtom($state);
 
-    // `instance (Ord a, Bounded a) => Class Head where`
-    // parseTypeHead already folds `(C1, C2) => Body` into TypeConstrained.
     if ($firstType instanceof Ast\TypeConstrained) {
         $constraints = $firstType->constraints;
         [$className, $head, $line, $col, $endCol] = instanceClassAndHeadFromType($firstType->body, $state);
@@ -1240,8 +1215,6 @@ function parseInstanceDecl(ParserState $state): Ast\AstNode
         );
     }
 
-    // One bare `Eq a =>` per instance; several constraints must share one parenthesized
-    // context — a bare comma is not a context separator.
     if (isAt($state, TokenKind::Op) && peek($state)->lexeme === '=>') {
         $constraints = [$firstType];
         advance($state);
@@ -1282,7 +1255,6 @@ function instanceClassAndHeadFromType(Ast\TypeNode $type, ParserState $state): a
     $args = [];
     $cur = $type;
     while ($cur instanceof Ast\TypeApp) {
-        // Prepend in reverse of each app's args without O(n²) array_unshift loops.
         $args = [...array_reverse($cur->args), ...$args];
         $cur = $cur->con;
     }
@@ -1314,8 +1286,6 @@ function instanceClassAndHeadFromType(Ast\TypeNode $type, ParserState $state): a
 
 function isFollowingClassBodyBoundary(ParserState $state): bool
 {
-    // Associated `type F a` belongs in the class body only when indented past
-    // the `class` keyword. A same-column `type` starts a top-level synonym.
     if (isAt($state, TokenKind::KwType)) {
         return peek($state)->col <= classBodyColumn($state);
     }
@@ -1328,9 +1298,6 @@ function isFollowingClassBodyBoundary(ParserState $state): bool
         return true;
     }
 
-    // Method signatures use `name :: Type`; a bare `name pat = …` starts a
-    // top-level function only when it sits at (or left of) the `class` keyword.
-    // Indented past it, the same shape is a default method implementation.
     if (peek($state)->col <= classBodyColumn($state)
         && isAt($state, TokenKind::VarId)
         && !isAt($state, TokenKind::Op, 1, '::')
@@ -1402,10 +1369,6 @@ function instanceBodyColumn(ParserState $state): int
 
 function isFollowingInstanceBoundary(ParserState $state): bool
 {
-    // Associated `type F … = …` belongs in the instance body only when indented
-    // past the `instance` keyword. A same-column `type` is a top-level synonym
-    // (removing a following `data` decl previously hid this bug: `data` was a
-    // hard boundary, so `type Object` after instances never ran this path).
     if (isAt($state, TokenKind::KwType)) {
         return peek($state)->col <= instanceBodyColumn($state);
     }
@@ -1434,8 +1397,6 @@ function parseAssociatedTypeDecl(ParserState $state): Ast\AssociatedTypeDecl
     $nameToken = expect($state, TokenKind::ConId);
     $name = $nameToken->lexeme;
     $params = [];
-    // Binders must stay on the declaration line so the next method (`get :: …`)
-    // is not consumed as a type parameter.
     while (isAt($state, TokenKind::VarId) && peek($state)->line === $nameToken->line) {
         $params[] = advance($state)->lexeme;
     }
@@ -1511,8 +1472,6 @@ function parseInstanceBody(ParserState $state, int $bodyCol = 0): array
     $methods = [];
     $associatedEquations = [];
     while (!isAt($state, TokenKind::Eof) && !isFollowingInstanceBoundary($state)) {
-        // Same-column (or left) tokens end the instance body — including a
-        // top-level `type` synonym. Associated type equations must be indented.
         if (peek($state)->col <= $bodyCol) {
             break;
         }
@@ -1540,9 +1499,6 @@ function parseInstanceBody(ParserState $state, int $bodyCol = 0): array
         }
     }
 
-    // Consecutive equations of one name are clauses of one binding, as at top
-    // level; only a repeated method with something else in between is a
-    // duplicate.
     return [mergeFunctionClauses($methods, $state->source, $state->filename), $associatedEquations];
 }
 
@@ -1577,9 +1533,6 @@ function parseInstanceHead(ParserState $state): Ast\AstNode
 
 function isFollowingTopLevelDecl(ParserState $state): bool
 {
-    // Inside a do, only less-indented tokens can close the block as a
-    // subsequent top-level declaration. Same-column `putStrLn` / deeper
-    // `b = 2` let binders must stay in the do.
     if ($state->inDoBlock
         && $state->doBlockCol !== null
         && peek($state)->col >= $state->doBlockCol

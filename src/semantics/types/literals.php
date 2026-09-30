@@ -254,8 +254,6 @@ function constraintsHoldAtType(TypeCheckState $state, array $constraints, string
     try {
         return tryResolveEvidenceExprs($state, expandConstraintsWithSuperclasses($state, $substituted)) !== null;
     } catch (TypeError) {
-        // A context the candidate leaves unselectable (`Show [a]` needing `Show a`) is not
-        // satisfied by it; reporting belongs to the resolution site.
         return false;
     }
 }
@@ -400,11 +398,8 @@ function elaborateNumericLiteral(TypeCheckState $state, Ast\IntegerLit $expr): A
     }
 
     $constraints = refreshConstraintArgs($state, $expr->pendingConstraints);
-    // The literal's type may spell a machine type as the constructor the printer writes
-    // (`TCon('Int')`); normalise before asking whether it is the host integer.
     $type = canonicalPrimitiveType(prune($state, $constraints[0]->args[0] ?? freshType($state)));
 
-    // The host integer is the `Int` value itself.
     if ($type instanceof TInt) {
         $expr->pendingConstraints = [];
 
@@ -415,8 +410,6 @@ function elaborateNumericLiteral(TypeCheckState $state, Ast\IntegerLit $expr): A
         return $expr;
     }
 
-    // `fromInteger` takes an `Integer`, so the argument is a bignum on every backend; a
-    // literal too large for the host int is built from its digits.
     $integerValue = $expr->digits === null
         ? new Ast\IntrinsicCall(
             'intToInteger#',

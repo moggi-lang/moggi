@@ -122,8 +122,6 @@ require __DIR__ . '/docs/moogle_search.php';
 require __DIR__ . '/docs/emit_moogle_js.php';
 require __DIR__ . '/docs/moogle.php';
 require __DIR__ . '/docs/serve.php';
-// LSP — load order = dependency order (support layers first, then
-// feature handlers, then the server loop last).
 require __DIR__ . '/lsp/protocol/transport.php';
 require __DIR__ . '/lsp/protocol/positions.php';
 require __DIR__ . '/lsp/protocol/messages.php';
@@ -197,7 +195,6 @@ use function Moggi\Syntax\Parser\parse;
 function normalizeOutputMode(string $mode): string
 {
     return match ($mode) {
-        // 'php' remains a CLI alias for emitted backend output.
         'php', 'emit', 'ir', 'opt-ir', 'tokens', 'ast', 'typed-ast' => $mode,
         default => throw new \InvalidArgumentException("unknown output mode `{$mode}`"),
     };

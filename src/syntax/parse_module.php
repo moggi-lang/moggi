@@ -380,12 +380,10 @@ function parseImportItems(ParserState $state): array
 
 function parseImportItem(ParserState $state): Ast\ImportItem
 {
-    // A name or a parenthesized operator, the way `C(…)` names methods.
     $name = parseImportChildName($state);
     $asName = null;
     $methods = null;
 
-    // `C(..)` or `C(a, b)`: the methods of a class to bring along.
     if (isAt($state, TokenKind::LParen)) {
         advance($state);
         if (isAt($state, TokenKind::Op, 0, '..')) {

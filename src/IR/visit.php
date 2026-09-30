@@ -237,8 +237,6 @@ function stmtDirectOperands(IR\Stmt $stmt): array
 function stmtNestedBlocks(IR\Stmt $stmt): array
 {
     return match ($stmt::class) {
-        // Arm bodies and the statements their guards need: both are part of the
-        // match for every walk (reachability, liveness, import collection).
         IR\MatchStmt::class, IR\MatchReturn::class, IR\IoMatch::class => \array_merge(
             \array_map(
                 static fn ($arm) => $arm->body,
@@ -346,9 +344,6 @@ function moduleUsesMoggiRuntime(IR\Module $module): bool
         }
     };
     $visitStmt = static function (IR\Stmt $stmt) use ($noteForeignPath, $runtimeIntrinsics, &$found): void {
-        // IO normalization turns an IO-typed primop call into a statement with
-        // the intrinsic as the callee string (`error "x" :: IO a` → `io_call
-        // error#`), so runtime-backed intrinsics must be recognised here too.
         if ($stmt instanceof IR\IoCall) {
             if (isset($runtimeIntrinsics[$stmt->callee])) {
                 $found = true;
@@ -492,6 +487,43 @@ function irPatternBoundNames(IR\Pattern $pattern): array
 }
 
 /**
+ * Names `$block` binds for itself: `let` binders and match-arm pattern
+ * binders, at any nesting depth.
+ *
+ * Together with {@see freeLocalsInBlock} this tells a lambda's own locals from
+ * its captures: a name a nested lambda captures but this body binds belongs to
+ * this body, so it is not a capture of it.
+ *
+ * @return array<string, true>
+ */
+function boundLocalsInBlock(IR\Block $block): array
+{
+    $bound = [];
+    walkBlock(
+        $block,
+        static function (IR\Stmt $stmt) use (&$bound): void {
+            if ($stmt instanceof IR\Let) {
+                $bound[$stmt->name] = true;
+
+                return;
+            }
+
+            if ($stmt instanceof IR\MatchStmt || $stmt instanceof IR\MatchReturn || $stmt instanceof IR\IoMatch) {
+                foreach ($stmt->arms as $arm) {
+                    foreach (irPatternBoundNames($arm->pattern) as $name) {
+                        $bound[$name] = true;
+                    }
+                }
+            }
+        },
+        static function (IR\Operand $operand): void {
+        },
+    );
+
+    return $bound;
+}
+
+/**
  * Locals referenced in `$block` that are not among `$bound` and not bound by
  * match-arm patterns / Lets inside the block. Used for lambda capture sets:
  * pattern binders (e.g. `arm a :| xs`) must not be treated as free captures.
@@ -518,8 +550,6 @@ function freeLocalsInItems(array $items, array $bound, array &$free): void
         if (!($item instanceof IR\Stmt)) {
             continue;
         }
-        // A match is walked by hand: each arm binds its own pattern names and
-        // its guards.
         if ($item instanceof IR\MatchStmt || $item instanceof IR\MatchReturn || $item instanceof IR\IoMatch) {
             freeLocalsInOperand($item->scrutinee, $bound, $free);
             foreach ($item->arms as $arm) {
@@ -535,8 +565,6 @@ function freeLocalsInItems(array $items, array $bound, array &$free): void
             }
             continue;
         }
-        // A `let` binds its name after its value, so the rest of the block sees
-        // it as bound.
         if ($item instanceof IR\Let) {
             freeLocalsInOperand($item->value, $bound, $free);
             $bound[$item->name] = true;

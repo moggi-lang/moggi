@@ -39,8 +39,6 @@ function parseKindAtom(ParserState $state): Ast\KindNode
         return new Ast\KindType();
     }
 
-    // Built-in kind `Symbol` (string type literals). Parsed as KindCon so it
-    // shares the nominal named-kind path with DataKinds promotions like `Color`.
     if (isAt($state, TokenKind::ConId)) {
         $token = advance($state);
 
@@ -204,11 +202,9 @@ function parseTypeHead(ParserState $state): Ast\TypeNode
         return withTypeLocation(new Ast\TypePromoted($token->lexeme), $token);
     }
 
-    // DataKinds: `"hello"` is a type of kind `Symbol` (not a term-level String).
     if (isAt($state, TokenKind::StringLit)) {
         $token = advance($state);
         $node = new Ast\TypeStringLit($token->lexeme);
-        // Span covers the quotes; escape sequences make this approximate.
         $node->setLocation(
             $token->line,
             $token->col,
@@ -218,8 +214,6 @@ function parseTypeHead(ParserState $state): Ast\TypeNode
         return $node;
     }
 
-    // DataKinds: `1024` is a type of kind `Nat` (not a term-level Integer).
-    // Unary `-` + integer is accepted so elaboration can reject non-Nats cleanly.
     if (isAt($state, TokenKind::Op, 0, '-') && isAt($state, TokenKind::Integer, 1)) {
         $minus = advance($state);
         $int = advance($state);
@@ -270,7 +264,6 @@ function parseTypeHead(ParserState $state): Ast\TypeNode
             return new Ast\TypeUnit();
         }
 
-        // Parenthesized type operator used as a prefix constructor: `(:+:) f g`
         if (
             isAt($state, TokenKind::Op)
             && isTypeOperator(peek($state)->lexeme)
@@ -301,7 +294,6 @@ function parseTypeHead(ParserState $state): Ast\TypeNode
             }
             expect($state, TokenKind::RParen);
 
-            // `(C1, C2) => …` is a constraint context; otherwise it's a tuple type.
             if (isAt($state, TokenKind::Op) && peek($state)->lexeme === '=>') {
                 advance($state);
 
@@ -311,8 +303,6 @@ function parseTypeHead(ParserState $state): Ast\TypeNode
             return new Ast\TypeApp(new Ast\TypeCon('Tuple' . count($elements)), $elements);
         }
 
-        // Common case `(Tuple64 a1 … a64)` / `(IO a)`: already fully parsed.
-        // Only reparse for constrained forms like `(Eq a => a -> a)`.
         if (isAt($state, TokenKind::RParen)) {
             advance($state);
 
@@ -351,7 +341,6 @@ function isTypeArgStart(ParserState $state, ?int $headLine = null): bool
         return true;
     }
 
-    // Unary minus + integer as a Nat literal (rejected later if negative).
     if ($kind === TokenKind::Op
         && peek($state)->lexeme === '-'
         && isAt($state, TokenKind::Integer, 1)

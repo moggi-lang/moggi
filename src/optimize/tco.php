@@ -202,10 +202,6 @@ function convertTailRecMatch(string $name, array $params, IR\MatchStmt $match): 
         );
     }
 
-    // The arms now end in `ret` / `tail_recall` themselves, so the match no
-    // longer produces a value. It must be a `MatchReturn`: a `MatchStmt` carries
-    // a result temp, and codegen turns an arm's `ret` into a *yield* into that
-    // temp instead of a return when the match has a dest.
     return new IR\MatchReturn($match->scrutinee, $arms, false);
 }
 
@@ -246,11 +242,6 @@ function stripRecursiveTail(array $items, int $matchDest, string $name): array
     if ($retValue !== null && $retValue instanceof IR\ExprCallValue && $retValue->callee instanceof IR\Temp) {
         $items = removeCallDefiningTemp($items, $retValue->callee->id);
     } elseif ($retValue === null && $items !== [] && $items[count($items) - 1] instanceof IR\CallValue) {
-        // Only a `call_value` statement that *performs* the recursive call may
-        // be stripped. When the ret value contained the recall directly (the
-        // previous branch's shape) the trailing `call_value`, if any, merely
-        // computes an argument of that recall — e.g. `t1 = f(x)` feeding
-        // `tail_recall(rest, t1)` — and removing it leaves a dangling temp.
         $callValue = $items[count($items) - 1];
         if ($callValue->callee instanceof IR\Temp && isSelfCallDefiningTemp($items, $callValue->callee->id, $name)) {
             array_pop($items);

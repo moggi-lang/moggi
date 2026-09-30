@@ -32,7 +32,6 @@ function bindListConsPattern(PatCons $pattern, Operand $value, LowerCtx $ctx): v
 function bindConPattern(PatCon $pattern, Operand $value, LowerCtx $ctx): void
 {
     if (isset($ctx->newtypes[$pattern->name])) {
-        // Newtype: identity unwrap — the value is the single field.
         bindPattern($pattern->args[0], $value, $ctx);
 
         return;

@@ -75,7 +75,6 @@ function syntheticPrimitiveData(array $typeTable): array
     foreach ($typeTable as $name => $info) {
         $params = $info['params'];
         $args = \array_map(static fn (string $p): TVar => new TVar($p), $params);
-        // Canonical internal head (Int# → Int) for TCon result identity.
         $canonical = canonicalTypeConName($name);
         $data[$name] = [
             'params' => $params,
@@ -144,7 +143,6 @@ function syntheticExports(string $moduleName, array $localTypes): array
 
     foreach ($localTypes['env'] as $name => $scheme) {
         $exports['env'][$name] = $scheme;
-        // No origins: primops lower to IR\Intrinsic, not external PHP/JVM functions.
         $exports['intrinsicWrappers'][$name] = $localTypes['intrinsicWrappers'][$name];
     }
 
@@ -207,7 +205,6 @@ function buildSyntheticCompilerUnit(string $moduleName): array
         'language' => ['NoImplicitPrelude' => true],
         'backendMap' => [],
         'implicitMain' => false,
-        // Checked program is the empty synthetic program; no bodies to check.
         'checkedProgram' => $program,
     ];
 }

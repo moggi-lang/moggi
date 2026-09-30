@@ -19,15 +19,12 @@ function declTokenMaps(string $source, string $filename): array
     $ctors = [];
     $endLines = [];
     $count = count($tokens);
-    $currentData = null;  // name of the data/newtype/type/class block being scanned
-    $currentName = null;  // column-1 name that started the current top-level item
+    $currentData = null;
+    $currentName = null;
 
     for ($i = 0; $i < $count; $i++) {
         $tok = $tokens[$i];
         if ($tok->col !== 1) {
-            // Inside a data/newtype/type/class block: constructor names appear
-            // directly after `=` or `|`. Anything else (field types like
-            // `(f :: Type)`, kind annotations) is NOT a constructor.
             if ($currentData !== null && $tok->kind === TokenKind::ConId) {
                 $prev = $tokens[$i - 1] ?? null;
                 if ($prev !== null && $prev->kind === TokenKind::Op
@@ -38,7 +35,6 @@ function declTokenMaps(string $source, string $filename): array
             continue;
         }
 
-        // A column-1 token ends the previous top-level item's span.
         if ($currentName !== null) {
             $endLines[$currentName] = max($endLines[$currentName] ?? 1, $tok->line - 1);
             $currentName = null;
@@ -48,9 +44,6 @@ function declTokenMaps(string $source, string $filename): array
         if ($tok->kind === TokenKind::VarId) {
             $currentName = $tok->lexeme;
             $names[$tok->lexeme] ??= $tok;
-            // Every column-1 occurrence of a name is a defining line: the
-            // type signature plus every pattern-matching equation of a
-            // multi-equation function.
             $defs[$tok->lexeme][] = $tok;
             continue;
         }
@@ -67,8 +60,6 @@ function declTokenMaps(string $source, string $filename): array
             continue;
         }
         if ($tok->kind === TokenKind::KwPub) {
-            // `pub` [abstract…] name — register the declared name; its token
-            // is indented, but positions are still correct for ranges.
             $j = $i + 1;
             while ($j < $count && $tokens[$j]->kind === TokenKind::KwAbstract) {
                 $j++;
@@ -82,13 +73,11 @@ function declTokenMaps(string $source, string $filename): array
             }
             continue;
         }
-        // `module`, `import`, `backend`, comments, … — not declarations.
     }
     if ($currentName !== null) {
         $endLines[$currentName] = max($endLines[$currentName] ?? 1, substr_count($source, "\n") + 1);
     }
 
-    // Trim trailing blank lines from every span.
     $lines = $source === '' ? [''] : explode("\n", $source);
     foreach ($endLines as $name => $end) {
         $start = $names[$name]->line ?? $end;

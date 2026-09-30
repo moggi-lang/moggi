@@ -1,12 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 
--- Two hand-written instances for the same class and head in one module. Dispatch
--- cannot tell them apart, so this is a compile error, not a codegen collision
--- ("Cannot redeclare function ... __ev_..." at run time).
---
--- NoImplicitPrelude keeps the fixture about the typechecker's rule rather than
--- about any one class in the standard library.
-
 class Check a where
   check :: a -> a
 

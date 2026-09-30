@@ -24,8 +24,6 @@ function deriveTraversable(
 
     validateFunctorialStructure($state, $decl, $param, $ref, 'Traversable');
 
-    // Superclasses Functor/Foldable are required by the class; stock also
-    // needs Traversable constraints on nested heads.
     return new DerivedInstance(
         'Traversable',
         functorialHeadAst($decl),
@@ -73,7 +71,6 @@ function synthesizeTraverseConstructor(
     Ast\AstNode $f,
     array $fieldNames,
 ): Ast\AstNode {
-    // pure Ctor <*> t0 <*> t1 <*> …
     $expr = pureCall(new Ast\ConstructorRef($ctor->name));
     foreach ($ctor->fields as $i => $field) {
         $ti = synthesizeTraverseField(
@@ -98,7 +95,6 @@ function synthesizeTraverseField(
     return match ($c['tag']) {
         'param' => new Ast\Apply($f, $value),
         'skip' => pureCall($value),
-        // traverse f, traverse (traverse f), …
         'app' => new Ast\Apply(traverseComposer($type, $param, $f), $value),
         default => pureCall($value),
     };

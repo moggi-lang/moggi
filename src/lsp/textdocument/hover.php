@@ -97,7 +97,6 @@ function functionParamTypeSlice(Ast\FunctionDecl $fn, int $index): ?Ast\TypeNode
         return null;
     }
 
-    // Skip leading dict arrows (class constraints) like the signature printer.
     $type = $fn->type;
     while ($type instanceof Ast\TypeArrow
         && $type->from instanceof Ast\TypeCon
@@ -262,9 +261,6 @@ function svcHover(AnalysisService $svc, string $uri, array $pos): ?array
 
     $module = $analysis->program instanceof Ast\Program ? ($analysis->program->module ?? 'Main') : 'Main';
 
-    // Identifier tokens span [col, col+len); a 1-char variable hovered at its
-    // end column has no covering AST node (end is exclusive). Retry at the
-    // token's start so short binders still resolve.
     if ($node === null && $word !== null && $word !== '') {
         $lines = splitLines($analysis->source);
         $text = $lines[$comp['line'] - 1] ?? '';
@@ -282,14 +278,12 @@ function svcHover(AnalysisService $svc, string $uri, array $pos): ?array
         ? enclosingFunctionOfNode($analysis->program, $node)
         : null;
 
-    // ---- A record field label answers for the field, not for a declaration.
     $fieldHover = recordFieldHover($svc, $analysis, $node, $word, $comp['line'], $comp['col'], $uri);
     if ($fieldHover !== null || ($node !== null && !$node instanceof Ast\AstNode)) {
         return $fieldHover;
     }
 
     if ($node !== null) {
-        // ---- Typed holes keep their dedicated presentation.
         if ($node instanceof Ast\ExprHole) {
             $holeType = '';
             if ($node->inferredType !== null) {
@@ -301,7 +295,6 @@ function svcHover(AnalysisService $svc, string $uri, array $pos): ?array
             if ($holeType !== '') {
                 $pushType("_ :: {$holeType}");
                 $push('_typed hole_ — expected type shown above');
-                // Show expression context (e.g. "1.2 + _")
                 $chain = findNodeChainAt($analysis->program, $comp['line'], $comp['col']);
                 $ctxNode = null;
                 foreach (array_reverse($chain) as $cand) {
@@ -335,14 +328,11 @@ function svcHover(AnalysisService $svc, string $uri, array $pos): ?array
             ];
         }
 
-        // ---- References resolve by name first.
         if ($node instanceof Ast\Variable
             || $node instanceof Ast\OperatorRef
             || $node instanceof Ast\ConstructorRef) {
             $name = $node->name;
             if ($node instanceof Ast\Variable && $node->binderId !== null) {
-                // Binder identity wins: resolvedOrigin names the binder's
-                // *home* function (`Basic::f`), which is not a navigable def.
                 $resolved = binderResolved($module, $node->binderId);
                 $push('_local binding_');
             } else {
@@ -369,19 +359,14 @@ function svcHover(AnalysisService $svc, string $uri, array $pos): ?array
             $name = $node->name;
             $resolved = resolvedSymbol($module, $node->name);
         } elseif ($node instanceof Ast\ConstructorDecl) {
-            // Hovering the constructor name inside its `data` declaration.
             $name = $node->name;
         }
     }
 
-    // ---- Type shown for the hovered identifier.
     $typeSig = null;
     $kindLabel = null;
     $definedIn = null; // [file, 1-based line] for local declaration nodes
     if ($node instanceof Ast\FunctionDecl) {
-        // The signature the declaration spells, inferred or written: the
-        // checker's own type carries the dictionary arrows it passes around
-        // (`__Dict_Num -> t -> t`), which is not what the source says.
         $signature = $node->inferredSignatureType ?? $node->type;
         if ($signature !== null) {
             $typeSig = nameTypeSignature($node->name, $signature);
@@ -418,9 +403,6 @@ function svcHover(AnalysisService $svc, string $uri, array $pos): ?array
             $definedIn = [basename(str_replace('file:///', '', $uri)), $node->line];
         }
     } elseif (($node instanceof Ast\ConstructorRef || $node instanceof Ast\ConstructorDecl) && $name !== null) {
-        // Show the constructor's own signature, not the bare result type.
-        // Covers both the use site (ConstructorRef) and the name inside the
-        // `data` declaration (ConstructorDecl).
         $ctorInfo = findCtorDecl($svc, $module, $name);
         if ($ctorInfo !== null) {
             $typeSig = constructorTypeSignature($ctorInfo['decl'], $ctorInfo['ctor']);
@@ -433,40 +415,27 @@ function svcHover(AnalysisService $svc, string $uri, array $pos): ?array
             }
         }
     }
-    // ---- Parameter / binder / use hovers.
     if ($typeSig === null && $node !== null) {
         if ($node instanceof Ast\PatVar) {
-            // Binder positions: their own inferred type (re-snapshotted after
-            // checking), else the enclosing function's scheme.
             $typeSig = selfBinderSignature($enclosingFn, $node)
                 ?? nameTypeSignature($node->name, $node->inferredType);
         } elseif ($node instanceof Ast\Variable && $node->binderId !== null) {
-            // Use of a local binder: for parameters, slice the type out of the
-            // enclosing function's scheme so the letters match its hover;
-            // otherwise the binder's own type.
             $typeSig = paramSignatureForUse($enclosingFn, $node)
                 ?? nameTypeSignature($node->name, $node->inferredType);
         } elseif ($node instanceof Ast\Infix) {
-            // Operator application: the expression's type *plus* the operator
-            // function's own signature, docs and definition location.
             if ($node->inferredType !== null) {
                 $typeSig = nameTypeSignature(null, $node->inferredType);
             }
             $name = $node->operator;
         }
-        // Top-level / imported references (Variables without a binderId) fall
-        // through to the declaration lookup below so their hover carries the
-        // full `name :: type` signature instead of a bare type.
     }
     if ($typeSig === null && $node !== null && $name === null && $node->inferredType !== null) {
-        // Plain expression hover (applications, literals, lambdas, …): the type.
         $typeSig = nameTypeSignature(null, $node->inferredType);
     }
     if ($typeSig !== null) {
         $pushType($typeSig);
     }
 
-    // ---- Constraints (class context) from pending evidence.
     if ($node !== null && $node->pendingConstraints !== []) {
         $cs = [];
         foreach ($node->pendingConstraints as $c) {
@@ -489,12 +458,10 @@ function svcHover(AnalysisService $svc, string $uri, array $pos): ?array
         }
     }
 
-    // ---- Documentation from the node itself (parser attaches mogdoc).
     if ($node !== null && $node->doc) {
         $push($node->doc);
     }
 
-    // ---- Cross-module docs + origin.
     if ($name !== null) {
         $resolved ??= $analysis->program->externalFns[$name]
             ?? (isset($analysis->declarations[$name])
@@ -556,14 +523,12 @@ function svcHover(AnalysisService $svc, string $uri, array $pos): ?array
         }
     }
     if ($kindLabel === 'function' && ($lastTypeSig === null || !str_contains($lastTypeSig, '->'))) {
-        // A nullary top-level binding is a value, not a function.
         $kindLabel = null;
     }
     if ($kindLabel !== null) {
         $push("_{$kindLabel}_");
     }
 
-    // ---- Moogle docs for stdlib / imported entities without local mogdoc.
     if (!$mogdocDone && $name !== null && $svc->docIndex !== null) {
         $doc = docForEntityName($svc->docIndex, $name, $seen);
         if ($doc !== null) {
@@ -571,13 +536,11 @@ function svcHover(AnalysisService $svc, string $uri, array $pos): ?array
         }
     }
 
-    // ---- Fallbacks for keyword / word-only positions.
     if ($parts === [] && $word !== null) {
         $mod = $module;
         $decl = findModuleDeclByName($svc, $mod, $word);
         if ($decl !== null) {
             if (in_array($decl->type, ['data', 'newtype'], true)) {
-                // A constructor child word on its `data` line: real signature.
                 $ctorData = findCtorDecl($svc, $mod, $word);
                 if ($ctorData !== null) {
                     $sig = constructorTypeSignature($ctorData['decl'], $ctorData['ctor']);
@@ -602,14 +565,12 @@ function svcHover(AnalysisService $svc, string $uri, array $pos): ?array
         }
     }
     if ($parts === [] && $node !== null && $node->inferredType !== null) {
-        // Last resort: a typed expression whose declaration is not indexed.
         $sig = nameTypeSignature(null, $node->inferredType);
         if ($sig !== null) {
             $pushType($sig);
         }
     }
     if ($parts === []) {
-        // Bare `_` may not resolve as a word; still show hole type from diags.
         $holeType = holeTypeFromDiagnostics($analysis->diagnostics ?? [], $pos);
         if ($holeType !== '') {
             return [
@@ -653,8 +614,6 @@ function recordFieldHover(AnalysisService $svc, object $analysis, ?object $node,
         $owner = recordFieldOwner($program, $line, $col);
         $range = nodeToLspRange($analysis->source, $node);
     } elseif ($node instanceof Ast\FieldAccess && $word === $node->field && $node->endCol > $node->col) {
-        // The projection node spans receiver *and* label; point at the label,
-        // whose last character is `endCol` (inclusive).
         $field = $node->field;
         $owner = recordTypeHeadOf($program, $node->object);
         $range = [
@@ -690,8 +649,6 @@ function recordFieldHover(AnalysisService $svc, object $analysis, ?object $node,
         $parts[] = "```moggi\n{$signature}\n```";
     }
     $parts[] = 'field of `' . $record['decl']->name . '`';
-    // The field's own line in the open file; the `data` line for an import,
-    // which is where the module index knows the record from.
     [$file, $declLine] = $record['program'] === $analysis->program && $fieldDecl->line > 0
         ? [basename(str_replace('file:///', '', $uri)), $fieldDecl->line]
         : recordDeclLocation($svc, $record, $uri);

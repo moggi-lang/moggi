@@ -32,8 +32,6 @@ function moduleEvidenceMeta(
     string $namespace,
     string $cacheKey = '',
 ): array {
-    // Stdlib evidence seeding runs on every prepare. Cache by module+source so
-    // LSP analyzing many small files does not re-hash TupleN heads each time.
     static $cache = [];
     $key = $cacheKey !== ''
         ? $cacheKey
@@ -393,8 +391,6 @@ function buildImportContext(
                 ? $selected['origins'][$name]
                 : null;
 
-            // Always record under the module prefix so qualified refs work
-            // (including `import M qualified as P` and local shadowing).
             if (!$scheme->classMethod) {
                 $qualifiedEnv[$localPrefix][$name] = $scheme;
                 if ($origin !== null && $origin['module'] !== $targetName) {
@@ -409,9 +405,6 @@ function buildImportContext(
             }
 
             if ($import->qualifiedOnly) {
-                // Codegen still needs bare-name → resolved mapping (and arity)
-                // for `Alias.name` FnRefs even when the name is not in scope.
-                // Never clobber an origin already established by an unqualified import.
                 if ($origin !== null && !isset($fnOriginModules[$name])) {
                     $externalFns[$name] = resolvedSymbol($origin['module'], $origin['phpName']);
                     $externalFnRuntimeArity[$name] = externalFunctionRuntimeArity(
@@ -434,21 +427,15 @@ function buildImportContext(
                 }
 
                 if ($env[$name]->classMethod !== $scheme->classMethod) {
-                    // Class-method slots and concrete exports may share a name.
                 } elseif (!isset($implicitNames[$name])
                     && !($env[$name]->classMethod && $scheme->classMethod)
                     && (($fnOriginModules[$name] ?? null) !== ($selected['origins'][$name]['module'] ?? null))) {
-                    // Importing two entities under one name is legal -- the name is
-                    // simply ambiguous, and naming it is the error. Recorded here,
-                    // reported where it is used or re-exported.
                     $ambiguousNames[$name] = [
                         'origins' => \array_values(\array_unique([
                             ...($ambiguousNames[$name]['origins'] ?? [$fnOriginModules[$name] ?? '']),
                             $selected['origins'][$name]['module'] ?? '',
                         ])),
                     ];
-                    // No symbol either: an unspellable name needs no import, and a
-                    // `use function` for one alias would collide in the artifact.
                     unset($externalFns[$name], $externalFnRuntimeArity[$name]);
                 }
             }
@@ -494,7 +481,6 @@ function buildImportContext(
             }
         }
 
-        // Types remain resolvable for `Alias.T` even under qualified-only imports.
         foreach ($selected['typeSynonyms'] as $name => $type) {
             $typeSynonyms[$name] = $type;
         }
@@ -524,8 +510,6 @@ function buildImportContext(
         }
     }
 
-    // Instances resolve globally, so every project instance's evidence is seeded as a
-    // codegen candidate; import pruning keeps only what is used.
     foreach ($units as $unitName => $unit) {
         if ($unitName === $currentModule) {
             continue;
@@ -674,8 +658,6 @@ function mergeFacadeBackendEnv(
         return;
     }
 
-    // A facade with no implementation for this backend is a compile error, reported here rather
-    // than silently leaving its API unimplemented.
     $implName = facadeImplModuleNameFor($currentModule, $units);
     if ($implName === null || !isset($units[$implName])) {
         return;
@@ -698,8 +680,6 @@ function mergeFacadeBackendEnv(
         }
     }
 
-    // Facade signatures name foreign types declared only in the impl
-    // (e.g. Encoding). Install those types into the facade typecheck state.
     if ($state !== null) {
         foreach ($implExports['data'] ?? [] as $name => $info) {
             if (isset($state->data[$name])) {
@@ -939,10 +919,6 @@ function dedupeUseLines(array $lines): array
 
 function functionUseLine(string $localName, string $resolvedName): string
 {
-    // `$resolvedName` is a backend-neutral `Module::name`. Split it *before*
-    // mangling: an operator name can contain `\` itself (`Data.List::\\`), and
-    // splitting on the last backslash of the assembled PHP FQN then cuts the
-    // operator in half.
     $parsed = parseResolvedSymbol($resolvedName);
     $namespace = $parsed === null ? '' : moduleNameToNamespace($parsed['module']);
     $rawBase = $parsed === null ? $resolvedName : $parsed['name'];
@@ -980,8 +956,6 @@ function filterCodegenImportsForIr(
         $usedCallees = collectIrCodegenUsage($ir)['callees'];
     }
 
-    // Emit-time DictCall resolution (PHP) needs instance methods imported even
-    // when IR still has dict_call with evidence FnRefs.
     foreach (dictCallResolvedMethods($ir, $globalEvidenceMaps) as $methodName => $originModule) {
         $usedCallees[$methodName] = true;
         if (!isset($codegen['externalFns'][$methodName])) {
@@ -992,9 +966,6 @@ function filterCodegenImportsForIr(
         }
     }
 
-    // After specialization rewrites concrete DictCalls into direct Calls, those
-    // method / evidence-factory IR names must still be importable even though
-    // no DictCall remains in the IR.
     foreach (evidenceSymbolOrigins($globalEvidenceMaps) as $symbol => $originModule) {
         if (!isset($usedCallees[$symbol])) {
             continue;
@@ -1012,8 +983,6 @@ function filterCodegenImportsForIr(
         $localFnNames[$fn->name] = true;
     }
 
-    // Tree-shake may drop instanceEvidence while leaving method functions live.
-    // Fall back to a whole-program function→module map for remaining callees.
     foreach (\array_keys($usedCallees) as $symbol) {
         if (isset($codegen['externalFns'][$symbol]) || isset($localFnNames[$symbol])) {
             continue;
@@ -1097,13 +1066,9 @@ function filterCodegenImportsForIr(
         if (\in_array($local, ['True', 'False'], true)) {
             continue;
         }
-        // Constructors cross modules as tag values, never as calls, so importing their PHP
-        // function would be dead (and the name may not exist).
         if (isConstructorName($local)) {
             continue;
         }
-        // Local definitions shadow imported names; emitting `use function`
-        // for the import would conflict with the local `function` declaration.
         if (isset($localFnNames[$local])) {
             continue;
         }

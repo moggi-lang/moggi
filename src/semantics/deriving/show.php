@@ -90,7 +90,6 @@ function synthesizeShowConstructor(
     string $d,
     string $s,
 ): Ast\AstNode {
-    // A nullary constructor is its own name at every context.
     if ($fieldNames === []) {
         return applyVar(
             'showString',
@@ -109,8 +108,6 @@ function synthesizeShowConstructor(
         ? ($ctor->fixityPrec ?? SHOW_DEFAULT_OP_PREC)
         : SHOW_APP_PREC;
 
-    // The rendered form is a `ShowS`, so `showParen` applies it to the
-    // continuation it was handed.
     $rendered = $ctor->declaredInfix
         ? showInfixConstructor($ctor->name, $fieldNames, $prec + 1)
         : showPrefixConstructor(showConstructorName($ctor), $fieldNames, $prec + 1);

@@ -19,8 +19,6 @@ final class PhpBackend implements Backend
 
     public function artifactPath(string $moduleName): ?string
     {
-        // PHP modules map to files by source path, not by module name; the
-        // caller keeps the source-relative layout.
         return null;
     }
 

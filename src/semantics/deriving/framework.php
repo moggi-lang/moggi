@@ -52,16 +52,11 @@ function deriveAnyClass(
 
     $head = dataDeclHeadAst($decl);
 
-    // `deriving anyclass`: a method without a default is not an error there — it gets an
-    // `error` body, so the instance is complete and only calling that method fails.
     $methods = [];
     foreach ($state->classes[$ref->name]['methods'] as $methodName => $methodInfo) {
         if (($methodInfo['defaultBody'] ?? null) !== null) {
             continue;
         }
-        // `error` is a module-code builtin injected as the class default
-        // for every module by the module pipeline; using the intrinsic `error#`
-        // directly is not possible outside its owning module.
         $methods[] = methodDecl(
             $methodName,
             [],
@@ -132,13 +127,10 @@ function stockDeriveBackends(): array
  */
 function hasDeriveBackend(string $className, ?string $strategy = null): bool
 {
-    // Explicit `via` delegates to an existing instance of any class.
     if ($strategy === 'via') {
         return true;
     }
 
-    // Explicit `anyclass` is always available: methods come from class
-    // defaults, and methods without a default become `error` bodies.
     if ($strategy === 'anyclass') {
         return true;
     }
@@ -151,9 +143,6 @@ function hasDeriveBackend(string $className, ?string $strategy = null): bool
         return !refusesNewtypeDeriving($className);
     }
 
-    // Default strategy for a non-stock class is `anyclass` (the
-    // DeriveAnyClass default), which is always available: methods come from the
-    // class defaults and the rest get `error` bodies.
     return true;
 }
 
@@ -216,8 +205,6 @@ function resolveDeriveStrategy(
         return 'Via';
     }
 
-    // Default strategy: stock classes use stock, a non-stock class on a newtype uses GND
-    // when derivable, everything else uses anyclass.
     if (isset(stockDeriveBackends()[$ref->name])) {
         return 'Stock';
     }
@@ -240,7 +227,6 @@ function processDeriving(TypeCheckState $state, Ast\DataDecl $decl): array
         return [];
     }
 
-    // 1–2. Validate: class exists; duplicates; some deriving path exists.
     $seenInClause = [];
     foreach ($decl->derivingClasses as $ref) {
         if (isset($seenInClause[$ref->name])) {
@@ -268,9 +254,6 @@ function processDeriving(TypeCheckState $state, Ast\DataDecl $decl): array
         }
     }
 
-    // 3. Generate DerivedInstances (source order, no commit).
-    //    Stock Generic also emits Datatype/Constructor/Selector metadata
-    //    instances so conName/selName demote Symbol literals to String.
     $derived = [];
     foreach ($decl->derivingClasses as $ref) {
         $item = resolveAndDerive($state, $decl, $ref);
@@ -282,7 +265,6 @@ function processDeriving(TypeCheckState $state, Ast\DataDecl $decl): array
         }
     }
 
-    // 4. Check instance uniqueness vs existing (before any commit).
     foreach ($derived as $item) {
         $inst = derivedInstanceToDecl($item);
         $headType = astType($state, $item->typeHead);
@@ -291,18 +273,12 @@ function processDeriving(TypeCheckState $state, Ast\DataDecl $decl): array
 
     $saved = snapshotInstanceState($state);
 
-    // `$stockDeriving` also covers generalized newtype deriving: both paths
-    // synthesize InstanceDecls and need polymorphic class-method dispatch
-    // (no ambient monomorphic projections of `==` / `map` / …).
     $state->stockDeriving = true;
     try {
         $functions = [];
         foreach ($derived as $item) {
             $inst = derivedInstanceToDecl($item);
             commitProjectInstance($state, $inst);
-            // Identical MetaSel heads (positional "" across Pair/Age) share one
-            // Selector dictionary. A prior decl may already have elaborated it;
-            // elaborating again emits duplicate `__ev_*` PHP functions.
             $evName = evidenceFunctionName($item->className, $item->typeHead);
             if (instanceEvidenceAlreadyElaborated($state, $evName)) {
                 continue;
@@ -369,14 +345,10 @@ function processStandaloneDeriving(
     $derived = resolveAndDerive($state, $dataDecl, $ref);
     $inst = derivedInstanceToDecl($derived);
 
-    // Standalone declarations state their own context for stock deriving; `via` and
-    // polymorphic `newtype` need the implicit context merged in.
     $constraints = $decl->constraints;
     if ($derived->strategy === 'Via') {
         $constraints = mergeDerivedConstraints($constraints, $derived->constraints);
     } elseif ($derived->strategy === 'Newtype' && $constraints === []) {
-        // A polymorphic representation (`newtype Id a = Id a`) needs its
-        // constraint; a concrete one (`newtype Age = Age Int`) does not.
         $constraints = mergeDerivedConstraints(
             $constraints,
             array_values(array_filter(
@@ -667,8 +639,6 @@ function derivedProjectInstanceRecords(Ast\DataDecl $decl, string $moduleName): 
             continue;
         }
 
-        // Via stubs carry `C V` in their context (what the generated methods
-        // need). Full validation still runs in processDeriving.
         if ($ref->strategy === 'via') {
             $records[] = [
                 'module' => $moduleName,
@@ -683,7 +653,6 @@ function derivedProjectInstanceRecords(Ast\DataDecl $decl, string $moduleName): 
             continue;
         }
 
-        // Approximate strategy for stubs (full validation runs in processDeriving).
         $strategy = $ref->strategy;
         $useNewtype = $strategy === 'newtype'
             || ($strategy === null
@@ -723,7 +692,6 @@ function projectStubConstraints(Ast\DataDecl $decl, string $className, bool $use
     if ($useNewtype && $decl->isNewtype && $decl->constructors !== []) {
         $field = $decl->constructors[0]->fields[0]->type ?? null;
         if ($field !== null && isFunctorialClass($className)) {
-            // newtype T a = T (f a) ⇒ Functor f
             if ($field instanceof Ast\TypeApp && $field->args !== []) {
                 $underArgs = array_slice($field->args, 0, -1);
                 $under = $underArgs === []

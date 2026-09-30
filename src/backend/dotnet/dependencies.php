@@ -125,9 +125,6 @@ function dotNetLibMetadata(): array
                         continue;
                     }
                     $valueType = \is_array($typeSpec) ? (bool) ($typeSpec['valueType'] ?? false) : false;
-                    // Overlap is a hard error: a CLR type has exactly one
-                    // defining assembly and one value-type-ness, so two libs
-                    // disagreeing cannot silently resolve either way.
                     if (isset($types[$clrType])) {
                         if ($types[$clrType]['assembly'] !== $assembly) {
                             throw new \RuntimeException(
@@ -176,7 +173,6 @@ function dotNetTypeAssembly(string $clrType): ?string
     if (isset($types[$clrType])) {
         return $types[$clrType]['assembly'];
     }
-    // Nested types are spelled `Outer/Inner`.
     foreach ($types as $name => $spec) {
         if (\str_starts_with($clrType, $name . '/')) {
             return $spec['assembly'];

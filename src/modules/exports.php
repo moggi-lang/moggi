@@ -26,8 +26,6 @@ function resolvedSymbol(string $moduleName, string $name): string
 /** @return ?array{module: string, name: string} */
 function parseResolvedSymbol(string $resolved): ?array
 {
-    // First `::` only: operator constructors can start with `:` (e.g. `:*:`), so
-    // `Module:::*:` would make strrpos pick the wrong split.
     $pos = strpos($resolved, '::');
     if ($pos === false) {
         return null;
@@ -312,8 +310,6 @@ function collectExportsUncached(Ast\Program $program, array $localTypes, array $
         };
     }
 
-    // An instance method may provide an export the module does not declare, but never
-    // over one it does (`Data.Map.toList` vs `Foldable (Map k)`).
     $declared = $available['env'];
     foreach ($program->items as $item) {
         if (!$item instanceof Ast\InstanceDecl) {
@@ -326,8 +322,6 @@ function collectExportsUncached(Ast\Program $program, array $localTypes, array $
             if ($scheme === null || isset($declared[$name])) {
                 continue;
             }
-            // Prefer class-method schemes so `Ord(..)` / `Eq(..)` exports stay stable
-            // when this module also defines instances of that class.
             if (($available['env'][$name] ?? null)?->classMethod) {
                 continue;
             }
@@ -346,7 +340,6 @@ function collectExportsUncached(Ast\Program $program, array $localTypes, array $
         return $exports;
     }
 
-    // Omitted header exports only `main`; if it is undefined, export nothing.
     if ($program->implicitMain
         && count($exportItems) === 1
         && ($exportItems[0]['tag'] ?? '') === 'value'
@@ -599,9 +592,6 @@ function mergeImportExportsIntoAvailable(array &$available, array $imports, arra
 
         $target = $units[$targetName];
         $targetExports = collectExports($target['program'], $target['localTypes'], $units, $targetName);
-        // Only an unqualified import puts a name in scope: `import M qualified as
-        // A` cannot be named bare, so it can make no name available -- and so it
-        // cannot clash with (or be re-exported as) one that is in scope.
         if (!$import->qualifiedOnly) {
             $selected = selectImportedNames($import, $targetExports);
             mergeIntoExports($available, $selected, $moduleName);
@@ -663,7 +653,6 @@ function exportAllLocalDeclarations(
                     $units,
                 )
                 : null,
-            // A data declaration exported whole exports its constructors too.
             Ast\DataDecl::class => addExportedType(
                 $exports,
                 $available,
@@ -773,17 +762,11 @@ function addExportedType(
             throw exportError("duplicate export `{$name}` in module `{$moduleName}`", $item, $unit);
         }
 
-        // Type synonyms have no constructors; `Int` and `Int(..)` both export the type.
-        // Class methods live on Num/Integral/…; instances are linked with the module.
         $exports['typeSynonyms'][$name] = $available['typeSynonyms'][$name];
 
         return;
     }
 
-    // Built-in Tuple2..Tuple64 live in the kind env (not as data decls). Allow
-    // type-only re-export (`TupleN` / `TupleN(..)`) from Data.Tuple without
-    // installing a real synonym — parametric synonyms would block partial
-    // apps such as `Functor (Tuple3 a1 a2)`.
     if (isBuiltinTupleExportName($name)) {
         if (isset($exports['ambientTypes'][$name]) || isset($exports['typeSynonyms'][$name]) || isset($exports['data'][$name])) {
             throw exportError("duplicate export `{$name}` in module `{$moduleName}`", $item, $unit);
@@ -803,8 +786,6 @@ function addExportedType(
     }
     if ($classMethods !== null) {
         $exportedMethods = exportItemChildNames($item, $classMethods);
-        // The class name itself is importable (`import M (C(..))`), which is
-        // also what brings its methods along.
         $exports['classes'][$name] = $exportedMethods;
         foreach ($exportedMethods as $methodName) {
             addExportedValue($exports, $available, $methodName, $moduleName, $item, $units);
@@ -864,7 +845,6 @@ function withSurfaceConstructorAliases(string $typeName, array $constructors): a
 /** @return list<string> */
 function exportItemChildren(Ast\Program $program, array $available, array $item, string $moduleName): array
 {
-    // Prefer typecheck-time constructors (includes aliases like Solo→MkSolo).
     if (isset($available['data'][$item['name']]['constructors'])) {
         $constructors = withSurfaceConstructorAliases(
             $item['name'],
@@ -970,9 +950,6 @@ function mergeIntoExports(array &$exports, array $selected, string $moduleName):
 {
     foreach ($selected['env'] as $name => $scheme) {
         if (isset($exports['env'][$name])) {
-            // Two imports of one name as different entities: legal to import,
-            // so the name stays usable as an *available* one for a while -- but
-            // re-exporting or naming it is the error (reported at the item).
             $existing = $exports['origins'][$name] ?? null;
             $incoming = $selected['origins'][$name] ?? null;
             if ($existing !== null && $incoming !== null
@@ -1166,9 +1143,6 @@ function selectImportedNames(Ast\ImportDecl $import, array $exports): array
                 $matched = true;
             }
 
-            // `import M (C)`, `(C(..))`, `(C(m))`: importing a class brings its
-            // methods, which are the env entries the export of the class made.
-            // A data type's sublist selects constructors the same way.
             $classMethods = $exports['classes'][$name] ?? null;
             if ($classMethods !== null) {
                 selectImportedChildren(

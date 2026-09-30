@@ -39,8 +39,6 @@ function optimizeBlock(IR\Block $block, ?int $matchDest = null): IR\Block
             }
 
             if (Support\isPropagatableExpr($item->value)) {
-                // Nullary foreign seeds (@newLinkedHashMap) rematerialize on
-                // every FnRef use — keep the Assign so one allocation is shared.
                 if (operandIsNonDuplicable($item->value)) {
                     $items[] = $item;
                     continue;
@@ -55,7 +53,6 @@ function optimizeBlock(IR\Block $block, ?int $matchDest = null): IR\Block
 
         if ($item instanceof IR\Let) {
             if (Support\isPropagatableExpr($item->value)) {
-                // Never bind a Local to itself — that creates a copy-prop cycle.
                 if (
                     $item->value instanceof IR\Local
                     && $item->value->name === $item->name
@@ -121,9 +118,6 @@ function optimizeBlock(IR\Block $block, ?int $matchDest = null): IR\Block
         }
 
         if ($item instanceof IR\Call || $item instanceof IR\CallValue) {
-            // Temps are single-assignment in well-formed IR; if a Call reuses a
-            // dest that was copy-propagated earlier, drop the stale mapping so
-            // later uses see the Call result (not the prior simple assign).
             unset($temps[$item->dest]);
             $items[] = $item;
             continue;
@@ -188,8 +182,6 @@ function mapMatchArm(IR\MatchArm $arm, array $temps, array $locals, ?int $matchD
         return $optimized;
     }
 
-    // A guard is tested before the body but after the bindings, so it sees the
-    // substitutions in scope when the arm starts -- not the ones the body grows.
     $guardTemps = $temps;
     $guardLocals = $locals;
 
@@ -398,8 +390,6 @@ function mapMatchArmOperands(IR\MatchArm $arm, array $temps, array $locals): IR\
 /** @param array<int, IR\Operand> $temps @param array<string, IR\Operand> $locals */
 function mapOperand(IR\Operand $operand, array $temps, array $locals): IR\Operand
 {
-    // Cycle-safe alias chase. Identity lets (`let n = n`) or a↔b Local cycles
-    // previously recursed until OOM when PE-fusion left broken locals maps.
     $seenTemps = [];
     $seenLocals = [];
     while (true) {

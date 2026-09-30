@@ -42,7 +42,6 @@ function rewriteDeclSourceForShadow(string $source, string $from, string $to): s
         }
         collectFreeRenameSpans($node->body, $from, $bound, $replacements, $to);
     } else {
-        // data / class / instance / etc.: only rename a leading value-like binder if present
         return renameLeadingBinder($source, $from, $to);
     }
 

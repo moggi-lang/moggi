@@ -33,9 +33,6 @@ function deriveBounded(
     }
 
     if ($allNullary) {
-        // Type parameters are fine here — the constructors hold no fields, so
-        // nothing about them has to be `Bounded` (`data Proxy t = Proxy` derives
-        // an instance with no context).
         $first = $decl->constructors[0]->name;
         $last = $decl->constructors[count($decl->constructors) - 1]->name;
 

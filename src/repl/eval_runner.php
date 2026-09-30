@@ -75,8 +75,6 @@ function runEntryPhp(State $state, string $entryName): string
     if (!\is_string($phpSource)) {
         throw new \RuntimeException('expected PHP emit string');
     }
-    // The module carries its own map, so an interactive trace resolves the same
-    // way a compiled module's does.
     file_put_contents($phpPath, $phpSource);
 
     $fqEntry = '\\' . $ns . '\\' . backendById('php')->symbolName($entryName);
@@ -88,8 +86,6 @@ function runEntryPhp(State $state, string $entryName): string
             throw new \RuntimeException("missing entry {$fqEntry}");
         }
         $result = $fqEntry();
-        // Nullary IO () thunks return a boxed `__io` action; Main bootstrap runs
-        // them, so the in-process REPL must unwrap here too.
         while (\is_array($result) && ($result[0] ?? null) === '__io' && \is_callable($result[1] ?? null)) {
             $result = ($result[1])();
         }
@@ -185,8 +181,6 @@ function ensurePhpDeps(State $state): string
         return $depsDir;
     }
 
-    // A rebuilt dependency tree goes to an empty directory: a stale module left behind would
-    // be a second copy of one this process already loaded (`Cannot redeclare`).
     if (is_dir($depsDir)) {
         removeTree($depsDir);
     }
@@ -194,7 +188,6 @@ function ensurePhpDeps(State $state): string
         throw new \RuntimeException("cannot create {$depsDir}");
     }
 
-    // Reuse the typecheck backdrop prepare (same Prelude/:load closure).
     $prepared = ensureBasePrepared($state);
     $files = [];
     foreach ($prepared->units as $unit) {
@@ -308,7 +301,6 @@ function emitInteractivePhp(
     $ir = $artifacts->irOpt ?? throw new \RuntimeException('missing optimized IR');
     $codegen = $ctx['importContext']['codegen'] ?? [];
     if ($absoluteDepsRoot !== null && $state->phpDepsModuleRel !== []) {
-        // Prefer deps-layout paths so requires resolve under php-deps/.
         $codegen = [
             ...$codegen,
             'moduleOutputPaths' => [

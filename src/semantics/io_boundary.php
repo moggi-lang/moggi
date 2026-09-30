@@ -30,7 +30,6 @@ function validateItem(Ast\AstNode $item, string $source, string $filename): void
 
 function validateTypeSynonym(Ast\TypeSynonymDecl $item, string $source, string $filename): void
 {
-    // Official primitive type synonym: `type IO = IO#` (same pattern as Int/List).
     if ($item->name === 'IO'
         && $item->type instanceof Ast\TypeCon
         && $item->type->name === 'IO#') {
@@ -61,8 +60,6 @@ function validateFunction(Ast\FunctionDecl $fn, string $source, string $filename
     }
 
     if (functionReturnsIo($fn->type)) {
-        // A binding that *is* a function has no IO-typed body: its action is the function's
-        // body (`tryAny = try` is `tryAny action = try action`).
         if ($fn->params === [] && hasLeadingArrow($fn->type)) {
             $inner = lambdaChainBody($fn->body);
             if ($inner !== null) {
@@ -220,8 +217,6 @@ function typeMentionsIo(Ast\TypeNode $type): bool
 function validateStraightLineIoBody(Ast\AstNode $expr, string $source, string $filename): void
 {
     if ($expr instanceof Ast\DoExpr) {
-        // Validate surface statements. The desugared >>= form is for typechecking
-        // and normalization; bind continuations are IO bodies, not pure values.
         validateStraightLineDo($expr->stmts, $source, $filename);
         return;
     }
@@ -329,7 +324,6 @@ function validateIoBindContinuation(Ast\AstNode $expr, string $source, string $f
         return;
     }
 
-    // Partial handlers like `mkCatchHandler handler` :: SomeException -> IO a
     if (exprIsIoContinuation($expr)) {
         validateIoActionArgs($expr, $source, $filename);
         return;

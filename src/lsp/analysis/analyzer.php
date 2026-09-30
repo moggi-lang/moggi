@@ -52,7 +52,6 @@ function analyze(string $uri, string $content, array $libDirs = []): AnalysisRes
     $path = uriToPath($uri);
     $filename = $path;
     if ($path === '' || str_contains($path, '://')) {
-        // untitled: or unknown scheme — fall back to a temp file named after the module.
         $tmpTokens = lex($content, $uri);
         $tmpProg = parse($tmpTokens, $content, $uri);
         $moduleName = $tmpProg->module ?? 'Main';
@@ -118,8 +117,6 @@ function analyze(string $uri, string $content, array $libDirs = []): AnalysisRes
         $declarations = locateTopLevelDecls($parsedProgram, $source, $uri, $checkedProgram);
         $symbols = buildDocumentSymbols($declarations, $uri, $source);
 
-        // Unused-import hints (Unnecessary tag) come from the parsed program,
-        // cross-checked against the project's checked declaration names.
         foreach (unusedImportDiagnostics($parsedProgram, $uri, $prepared ?? null) as $unusedDiag) {
             $diagnostics[] = $unusedDiag;
         }
@@ -189,15 +186,11 @@ function locateTopLevelDecls(Ast\Program $program, string $source, string $uri, 
         return $result;
     }
 
-    // SymbolKind: File=1 … Function=12, Variable=13, Constant=14, …
-    // CompletionItemKind: Text=1 … Function=3, … Class=7, … Struct=22, …
     $i = 0;
     $count = count($tokens);
     while ($i < $count) {
         $tok = $tokens[$i];
         $kind = $tok->kind;
-        // Only treat left-aligned tokens as top-level declarations. Nested
-        // binders / calls (`x =`, `pure ()`) must not enter the outline.
         $topLevel = $tok->col === 1;
 
         if ($topLevel && $kind === TokenKind::VarId) {
@@ -296,8 +289,6 @@ function locateTopLevelDecls(Ast\Program $program, string $source, string $uri, 
             }
         }
 
-        // `pub` then a declaration — treat the following name as top-level even
-        // when it is indented past column 1.
         if ($topLevel && $kind === TokenKind::KwPub) {
             $j = $i + 1;
             while ($j < $count && $tokens[$j]->kind === TokenKind::KwAbstract) {
@@ -337,7 +328,6 @@ function locateTopLevelDecls(Ast\Program $program, string $source, string $uri, 
                     }
                 } elseif ($follow->kind === TokenKind::KwData || $follow->kind === TokenKind::KwNewtype
                     || $follow->kind === TokenKind::KwType || $follow->kind === TokenKind::KwClass) {
-                    // Fall through: rewrite current token scan from the keyword.
                     $i = $j;
                     continue;
                 }
@@ -349,7 +339,6 @@ function locateTopLevelDecls(Ast\Program $program, string $source, string $uri, 
         $i++;
     }
 
-    // Attach doc comments + surface types from the checked / parsed program.
     $prog = $checked ?? $program;
     foreach ($prog->items as $item) {
         if ($item instanceof Ast\FunctionDecl) {
@@ -442,8 +431,6 @@ function findNodeChainAt($ast, int $line, int $col, array &$seen = []): array
 
     $covers = true;
     if ($hasPosition) {
-        // Same-line leaf/span: require column within [startCol, endCol].
-        // Different line: still allow descent into children (parent spans are incomplete).
         if ($line === $startLine) {
             if ($col < $startCol || $col > $endCol) {
                 $covers = false;
@@ -455,7 +442,6 @@ function findNodeChainAt($ast, int $line, int $col, array &$seen = []): array
 
     $bestChildChain = [];
     foreach (get_object_vars($ast) as $key => $prop) {
-        // Type ASTs / inferredType are shared and irrelevant for selection nesting.
         if ($key === 'inferredType' || $prop instanceof Ast\TypeNode) {
             continue;
         }
@@ -479,9 +465,6 @@ function findNodeChainAt($ast, int $line, int $col, array &$seen = []): array
     if (!$hasPosition) {
         return $bestChildChain;
     }
-    // Parent spans are frequently only the declaration/operator token rather
-    // than the full expression. A matching child proves that the positioned
-    // ancestor contains the cursor even when its own same-line endCol does not.
     if ($covers || $bestChildChain !== []) {
         return [$ast, ...$bestChildChain];
     }

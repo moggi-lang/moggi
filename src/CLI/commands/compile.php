@@ -81,8 +81,6 @@ function compileIntoRoot(
 
     $libDirs = resolveLibraryDirs($libDirs);
 
-    // Resolve the whole-project module closure (app + every reachable library
-    // module) so the output is a self-contained bundle.
     if ($libDirs !== []) {
         foreach ($libDirs as $dir) {
             if (\is_file(rtrim($dir, '/') . '/Data/Eq.mog')) {
@@ -300,8 +298,6 @@ function runCompile(
     }
 
     if ($unpacked) {
-        // Development build: -o names the output directory that keeps the
-        // whole generated tree (files + directory structure) for inspection.
         if ($outputPath === null) {
             \fwrite(STDERR, "error: --unpacked requires -o <output-dir>\n\n");
             printUsage();
@@ -314,7 +310,6 @@ function runCompile(
         return $result + ['artifactPath' => null];
     }
 
-    // Packaged build: -o names the artifact file itself.
     if ($outputPath !== null && \is_dir($outputPath)) {
         \fwrite(STDERR, "error: output path is a directory (pass --unpacked to build a directory): {$outputPath}\n");
 
@@ -443,7 +438,6 @@ function movePackagedArtifacts(string $staging, string $destBase, string $backen
         return true;
     };
 
-    // -o is the exact artifact path, so sidecar names derive from it.
     $sideBase = preg_replace('/\.dll$/', '', $destBase) ?? $destBase;
 
     if ($backend === 'php') {
@@ -556,8 +550,6 @@ function projectUsesModules(array $files): bool
 {
     foreach ($files as $path) {
         try {
-            // Memoized by realpath+mtime; shares the parse with later header reads
-            // instead of doing an independent lex+parse for the pre-check.
             $header = Modules\cachedModuleHeader($path);
         } catch (\Throwable) {
             continue;
@@ -584,8 +576,6 @@ function parseCompileArgs(array $argv): array
     $output = null;
     $mode = 'php';
     $optimize = true;
-    // Dead-binding elimination is on by default for executable builds; it is a
-    // no-op for libraries (no `main`), so it never drops reachable exports.
     $strip = true;
     $backend = 'php';
     $libDirs = [];
@@ -876,8 +866,6 @@ function runCompileCommand(array $argv): int
         }
     }
 
-    // Introspection (`--tokens`/`--ast`/`--typed-ast`/`--ir`/`--opt-ir`) compiles a single file to
-    // stdout (or to the -o FILE dump target).
     if ($options['mode'] !== 'php') {
         return compileSingleFile($input, $options);
     }
@@ -931,8 +919,6 @@ function compileSingleFile(string $input, array $options): int
     }
 
     if (\is_array($output)) {
-        // jvm/.NET also emit an optional `.moggi.map` beside the artifact;
-        // ignore it so one primary artifact can be piped to stdout.
         $primary = [];
         foreach ($output as $rel => $bytes) {
             if (!str_ends_with((string) $rel, '.moggi.map')) {

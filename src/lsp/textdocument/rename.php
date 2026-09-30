@@ -75,14 +75,9 @@ function documentChangesWorkspaceEdit(AnalysisService $svc, array $changes): arr
 {
     $docEdits = [];
     foreach ($changes as $docUri => $edits) {
-        // Ordered by position descending like most clients expect? No — spec
-        // applies edits simultaneously; keep source order for readability.
         $docEdits[] = [
             'textDocument' => [
                 'uri' => $docUri,
-                // Version 0 = unknown on-disk document; open buffers carry
-                // their didOpen/didChange version so clients can reject
-                // stale rename batches.
                 'version' => $svc->vfs->has($docUri) ? $svc->vfs->version($docUri) : 0,
             ],
             'edits' => array_values($edits),
@@ -101,8 +96,6 @@ function svcPrepareRename(AnalysisService $svc, string $uri, array $pos): ?array
 {
     $target = resolveNavTarget($svc, $uri, $pos);
     if ($target !== null) {
-        // 3.18: PrepareRenameResult is { range, placeholder } (or range with
-        // an embedded placeholder string); a bare Range is not a valid result.
         return ['range' => $target['range'], 'placeholder' => (string) ($target['name'] ?? '')];
     }
     $analysis = $svc->ensureAnalyzed($uri);
@@ -125,8 +118,7 @@ function svcPrepareRename(AnalysisService $svc, string $uri, array $pos): ?array
     while ($right < strlen($text) && preg_match('/[A-Za-z0-9_\']/', $text[$right] ?? '')) {
         $right++;
     }
-    // 3.18: a bare Range is deprecated here; always return {range, placeholder}
-    // so clients can show the rename input with the current name pre-filled.
+
     return [
         'range' => [
             'start' => compilerPosToLsp($analysis->source, $comp['line'], $left + 1),

@@ -59,7 +59,6 @@ function svcSemanticTokensFullDelta(AnalysisService $svc, string $uri, array $pa
             'edits' => $edits,
         ];
     }
-    // Client cache miss — full tokens
     return ['resultId' => (string) $version, 'data' => $data];
 }
 
@@ -142,20 +141,17 @@ function filterTokensInRange(array $tokens, array $range): array
     foreach ($tokens as $token) {
         $tokenStartLine = $token['line'];
         $tokenStartChar = $token['startChar'];
-        $tokenEndLine = $token['line']; // tokens are single-line
+        $tokenEndLine = $token['line'];
         $tokenEndChar = $token['endChar'];
 
-        // Token line outside the requested line span.
         if ($tokenStartLine > $rangeEndLine || $tokenEndLine < $rangeStartLine) {
             continue;
         }
 
-        // Token lies entirely before the range start (on the start line).
         if ($tokenStartLine === $rangeStartLine && $tokenEndChar <= $rangeStartChar) {
             continue;
         }
 
-        // Token lies entirely after the range end (on the end line; end is exclusive).
         if ($tokenEndLine === $rangeEndLine && $tokenStartChar >= $rangeEndChar) {
             continue;
         }
@@ -217,7 +213,6 @@ function semanticTokenDeltaEdits(array $old, array $new): array
     if ($old === $new) {
         return [];
     }
-    // Cheap whole-replace delta (correct; avoids O(n²) LCS for large buffers).
     return [[
         'start' => 0,
         'deleteCount' => count($old),
@@ -245,7 +240,6 @@ function buildAstSemanticTokens(AnalysisResult $analysis): array
         $raw[] = [$line1 - 1, $start, $len, $type, $mod];
     };
 
-    // Lexer pass: keywords, comments, literals, operators as base layer.
     try {
         $tokens = lex($analysis->source, '');
         foreach ($tokens as $tok) {
@@ -253,7 +247,6 @@ function buildAstSemanticTokens(AnalysisResult $analysis): array
             if ($type === null) {
                 continue;
             }
-            // Skip identifiers — AST pass reclassifies them.
             if ($tok->kind === TokenKind::VarId || $tok->kind === TokenKind::ConId) {
                 continue;
             }
@@ -312,7 +305,6 @@ function buildAstSemanticTokens(AnalysisResult $analysis): array
         return $a[0] <=> $b[0] ?: $a[1] <=> $b[1];
     });
 
-    // Deduplicate overlapping same-start tokens (AST wins over later duplicates).
     $dedup = [];
     $seen = [];
     foreach ($raw as $t) {

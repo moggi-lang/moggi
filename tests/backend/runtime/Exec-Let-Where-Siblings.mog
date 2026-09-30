@@ -1,0 +1,88 @@
+import Data.Bool
+import Data.Eq
+import Data.Int
+import Text.Show
+import System.IO
+
+-- A `let`/`where` function binder that calls a sibling function binder: the
+-- callee is lifted out of the group, so its name becomes a capture of the
+-- caller. The binding used to be dropped by DCE while the emitted call site
+-- still passed it, so the program read an undefined variable at run time.
+
+forwardLet :: Int -> Int
+forwardLet n =
+  let double k = k * 2
+      go k = double k + 1
+  in go n
+
+-- Same group written with the callee first; the group is not ordered by
+-- dependency for this purpose.
+backwardLet :: Int -> Int
+backwardLet n =
+  let go k = double k + 1
+      double k = k * 2
+  in go n
+
+forwardWhere :: Int -> Int
+forwardWhere n = go n
+  where
+    double k = k * 2
+    go k = double k + 1
+
+-- Three siblings, each calling the previous one.
+chain :: Int -> Int
+chain n =
+  let a k = k + 1
+      b k = a k * 2
+      c k = b k - 3
+  in c n
+
+-- A sibling that reaches a binding of the enclosing scope through another
+-- sibling: `twice -> add1 -> base`.
+closedOver :: Int -> Int
+closedOver n =
+  let base = n * 10
+      add1 k = k + base
+      twice k = add1 (add1 k)
+  in twice 1
+
+-- A self-recursive sibling: `walk` is lifted to a `__letrec` group, so its
+-- group is entered by name and `step` is one of its captures.
+recursiveLet :: Int -> [Int]
+recursiveLet n =
+  let step k = k - 1
+      walk k = case k == 0 of
+        True -> []
+        False -> k : walk (step k)
+  in walk n
+
+recursiveWhere :: Int -> [Int]
+recursiveWhere n = walk n
+  where
+    step k = k - 1
+    walk k = case k == 0 of
+        True -> []
+        False -> k : walk (step k)
+
+-- Mutual recursion in a group has to keep working alongside the above.
+mutual :: Int -> Bool
+mutual n =
+  let ev k = case k == 0 of
+        True -> True
+        False -> od (k - 1)
+      od k = case k == 0 of
+        True -> False
+        False -> ev (k - 1)
+  in ev n
+
+main :: IO ()
+main = do
+  putStrLn (show (forwardLet 5))
+  putStrLn (show (backwardLet 5))
+  putStrLn (show (forwardWhere 5))
+  putStrLn (show (chain 5))
+  putStrLn (show (closedOver 5))
+  putStrLn (show (recursiveLet 3))
+  putStrLn (show (recursiveWhere 3))
+  putStrLn (show (mutual 4))
+  putStrLn (show (mutual 5))

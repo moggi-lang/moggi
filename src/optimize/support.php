@@ -49,8 +49,6 @@ function operandEqual(IR\Operand $left, IR\Operand $right): bool
 
 function operandKey(IR\Operand $operand): string
 {
-    // Structural keys: CSE must distinguish nested ExprCalls (`__ev_*(@Eq_Pair)` vs
-    // `__ev_*(@Eq_Int)`), or the wrong codec is used for a field.
     return match ($operand::class) {
         IR\ConstInt::class, IR\ConstDouble::class, IR\ConstStr::class, IR\ConstChar::class => 'c' . $operand->value,
         IR\Local::class => 'l' . $operand->name,
@@ -428,8 +426,6 @@ function mapStmtNestedBlocks(IR\Stmt $stmt, callable $mapBlock): IR\Stmt
  */
 function buildLambdaMeta(array $byName): array
 {
-    // Direct captures only (the transitive closure lives in the shared helper); pattern
-    // binders and Lets are bound, not captured.
     return lambdaMetaFromCaptures(
         $byName,
         static fn (IR\FunctionDecl $function): array => freeLocalsInBlock(

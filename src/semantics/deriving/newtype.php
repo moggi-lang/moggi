@@ -138,9 +138,6 @@ function deriveNewtypeNominal(
         if ($className === 'Ord' && in_array($methodName, ['<', '<=', '>', '>=', 'min', 'max'], true)) {
             continue;
         }
-        // A method taking the wrapped value under a constructor (`showList`) has
-        // no unwrap/wrap to generate; its class default dispatches through the
-        // methods that do exist.
         if (typeHasNestedClassParam($methodInfo['type'], $classParam)) {
             continue;
         }
@@ -209,7 +206,6 @@ function internalTypeIsVar(Type $type, string $name): bool
  */
 function peelFunTypeInternal(Type $type): array
 {
-    // Drop constraint dictionaries inserted when registering class methods.
     while (
         $type instanceof TArrow
         && $type->from instanceof TCon
@@ -269,7 +265,6 @@ function deriveNewtypeFunctorial(
         );
     }
 
-    // Underlying type constructor: field without last arg.
     $underArgs = array_slice($field->args, 0, -1);
     $underHead = $field->con;
     $underlying = $underArgs === []
@@ -309,7 +304,6 @@ function deriveNewtypeFunctorial(
             methodDecl(
                 'traverse',
                 [new Ast\PatVar('__f'), new Ast\PatCon($ctor, [new Ast\PatVar('__x')])],
-                // map Ctor (traverse f x)
                 mapCall(
                     new Ast\ConstructorRef($ctor),
                     traverseCall(new Ast\Variable('__f'), new Ast\Variable('__x')),

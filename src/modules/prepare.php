@@ -30,8 +30,6 @@ function prepareProject(array $paths, string $rootDir, ?string $onlyTypecheckMod
         throw new \RuntimeException("cannot resolve project root {$rootDir}");
     }
 
-    // When the common root is `/`, `$root . DIRECTORY_SEPARATOR` becomes `//`, and
-    // `substr('/home/...', 2)` yields the broken `ome/...` relative paths.
     $rootPrefix = ($root === '/' || $root === '\\')
         ? '/'
         : $root . DIRECTORY_SEPARATOR;
@@ -40,8 +38,6 @@ function prepareProject(array $paths, string $rootDir, ?string $onlyTypecheckMod
     $pending = [];
 
     foreach ($paths as $path) {
-        // Prefer the header already parsed during module-closure discovery so we
-        // do not re-lex every file just to read the module name / imports.
         $header = cachedModuleHeader($path);
         $source = $header['__source'] ?? null;
         if (!\is_string($source)) {
@@ -58,8 +54,6 @@ function prepareProject(array $paths, string $rootDir, ?string $onlyTypecheckMod
         }
 
         if (isset($pending[$moduleName])) {
-            // One file can arrive under two spellings — a symlinked temporary directory and the
-            // path it resolves to — and that is one module, not two.
             if (canonicalPath($pending[$moduleName]['path']) === canonicalPath($path)) {
                 continue;
             }
@@ -79,8 +73,6 @@ function prepareProject(array $paths, string $rootDir, ?string $onlyTypecheckMod
         $pending[$moduleName] = [
             'path' => $path,
             'source' => $source,
-            // Tokens are produced lazily in ensureUnitProgram when a full parse
-            // is required — header discovery already consumed a lex pass.
             'tokens' => null,
             'imports' => $header['imports'],
             'backendMap' => $header['backendMap'] ?? [],
@@ -127,27 +119,21 @@ function prepareProject(array $paths, string $rootDir, ?string $onlyTypecheckMod
         ];
     }
 
-    // Prim/IO are always available for import; they are not on-disk sources.
     injectSyntheticCompilerUnits($units);
 
     $fullParseModules = modulesNeedingFullProgram($pending, $onlyTypecheckModule);
 
-    // Disk cache keys use header import graphs; order only affects dep-key
-    // chaining and falls back to per-file fingerprints when a dep is not keyed yet.
     $moduleNames = \array_keys($units);
     \sort($moduleNames);
     assignModuleCacheKeys($units, $moduleNames);
     hydrateModuleDiskArtifacts($units, $moduleNames);
 
-    // Parse before dependency sorting so invalid import syntax fails as a parse
-    // error instead of being reported later as an unknown-module type error.
     $sortedModules = null;
     if ($onlyTypecheckModule === null) {
         foreach ($fullParseModules as $moduleName) {
             ensureUnitProgram($units, $moduleName);
         }
     } else {
-        // Type/class declarations must be parsed before dependents build project env.
         foreach ($fullParseModules as $moduleName) {
             if ($moduleName === $onlyTypecheckModule) {
                 ensureUnitProgram($units, $moduleName);
@@ -167,7 +153,6 @@ function prepareProject(array $paths, string $rootDir, ?string $onlyTypecheckMod
                 continue;
             }
 
-            // Facade impl modules must stay parsed so facades can merge their exports.
             if (facadeModuleForImpl($units, $moduleName) !== null) {
                 ensureUnitProgram($units, $moduleName);
                 continue;
@@ -208,7 +193,6 @@ function prepareProject(array $paths, string $rootDir, ?string $onlyTypecheckMod
             continue;
         }
 
-        // Synthetic Prim/IO already carry canonical exports.
         if (isSyntheticCompilerModuleName($moduleName) || ($units[$moduleName]['synthetic'] ?? false) === true) {
             if (!isset($units[$moduleName]['exports'])) {
                 $units[$moduleName]['exports'] = syntheticExports(
@@ -260,8 +244,6 @@ function prepareProject(array $paths, string $rootDir, ?string $onlyTypecheckMod
         }
     }
 
-    // Class scopes resolve default-body names through the modules' export
-    // tables, so they are built once those exist.
     $classScopes = classModuleScopes($units, $projectClasses);
     $classScopeFns = classScopeFunctionRefs($units, $classScopes);
 
@@ -318,9 +300,6 @@ function prepareProject(array $paths, string $rootDir, ?string $onlyTypecheckMod
             );
             $checked[$moduleName] = $memoized->program;
             $units[$moduleName]['checkedProgram'] = $memoized->program;
-            // Full builds still need importContexts for codegen. LSP-style
-            // onlyTypecheck prepares only need the focus module's context —
-            // building import context for every inferred-export dep was ~1s+.
             if ($onlyTypecheckModule === null || $moduleName === $onlyTypecheckModule) {
                 $outputRelative = mogPathToOutputRelative($path, $rootPrefix);
                 $importContext = buildImportContext(
@@ -346,9 +325,6 @@ function prepareProject(array $paths, string $rootDir, ?string $onlyTypecheckMod
             continue;
         }
 
-        // Disk L2 for the (expensive) type-check + normalize step, keyed by the
-        // module's content key. Unchanged modules — the whole stdlib when only
-        // the user's module was edited — are loaded instead of re-checked.
         $contentKey = $units[$moduleName]['contentKey'] ?? null;
         if ($contentKey !== null) {
             $cachedCheck = Cache\moduleGet(
@@ -457,10 +433,6 @@ function prepareProject(array $paths, string $rootDir, ?string $onlyTypecheckMod
         $units[$moduleName]['checkedProgram'] = $checkedFull;
     }
 
-    // Single-file compiles (`onlyTypecheckModule`) only need the target's
-    // import context, which was already built during typecheck. Building
-    // contexts for every other parsed dep is pure waste (hundreds of ms on
-    // closures this large).
     if ($onlyTypecheckModule === null) {
         foreach ($sortedModules as $moduleName) {
             if (isset($importContexts[$moduleName]) || !isset($units[$moduleName]['program'], $units[$moduleName]['localTypes'])) {
@@ -518,8 +490,6 @@ function prepareProjectCached(array $paths, string $rootDir, ?string $onlyTypech
     }
     sort($parts);
 
-    // Omit rootDir from the key: warm uses root=`lib/` while projectSourceClosure
-    // often uses `/` for the same path set — including root forced ~2s re-prepares.
     $key = \implode('|', $parts)
         . '@' . ($onlyTypecheckModule ?? '*')
         . '@' . compileBackend();
@@ -528,8 +498,6 @@ function prepareProjectCached(array $paths, string $rootDir, ?string $onlyTypech
         return $memoized;
     }
 
-    // LSP / onlyTypecheck: reuse a memoized base prepare for paths sans the
-    // focus module (typically the warm stdlib) and typecheck only the focus.
     if ($onlyTypecheckModule !== null) {
         $focusPaths = [];
         $basePaths = [];
@@ -628,7 +596,6 @@ function prepareProjectExtendingFocus(
         break;
     }
     if ($sampleCtx === null) {
-        // Base had no import contexts (shouldn't happen after warm); fall back.
         $fallbackPaths = [$focusPath];
         foreach ($base->units as $unit) {
             if (isset($unit['path']) && \is_string($unit['path']) && ($unit['synthetic'] ?? false) !== true) {
@@ -643,7 +610,6 @@ function prepareProjectExtendingFocus(
     $projectInstanceIndex = $sampleCtx['projectInstanceIndex'] ?? indexProjectInstances($projectInstances);
     $projectClasses = $sampleCtx['classes'] ?? [];
 
-    // Merge instances declared in the focus module (e.g. Hier test).
     $focusExtra = collectProjectInstances($units, [$focusModule]);
     if ($focusExtra !== []) {
         $projectInstances = array_merge($projectInstances, $focusExtra);
@@ -787,8 +753,6 @@ function computeModuleContentKeys(array $units, array $sortedModules): array
             if (isset($keys[$dep])) {
                 $depKeys[] = $keys[$dep];
             } elseif (isset($units[$dep]['path'])) {
-                // Dependency not yet keyed (e.g. facade impl ordering); fall back
-                // to its own source hash so the key still reflects it.
                 if (($units[$dep]['synthetic'] ?? false) === true) {
                     $depKeys[] = $keys[$dep] ?? Cache\hashContent('synthetic;' . $dep);
                 } else {
@@ -832,7 +796,6 @@ function moduleCacheRelPath(string $path): string
         return 'lib' . DIRECTORY_SEPARATOR . basename($real);
     }
 
-    // Module outside the working directory: keep a stable, collision-free name.
     return Cache\hashContent($real) . DIRECTORY_SEPARATOR . basename($real);
 }
 

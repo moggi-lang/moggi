@@ -1,5 +1,6 @@
 import Data.Int
 import Data.Maybe
+import Data.Ord
 import Text.Show
 import System.IO
 
@@ -61,6 +62,24 @@ closureCapture =
       let x = 2
       in f 0
 
+-- A local binding hides an imported function of the same name: the call is on
+-- the let-bound helper -- which carries a dictionary of its own -- and not on
+-- `Data.Ord.clamp`. The helper is lifted, so the name is the only thing left to
+-- tell the two apart.
+shadowedImport :: Int -> Int
+shadowedImport n =
+  let clamp k = case k > 4 of
+        True -> k
+        False -> 0
+  in clamp n
+
+shadowedImportLambda :: Int -> Int
+shadowedImportLambda = \n ->
+  let clamp k = case k > 4 of
+        True -> k + 1
+        False -> 0
+  in clamp n
+
 main :: IO ()
 main = do
   putStrLn (show nested)
@@ -73,3 +92,7 @@ main = do
   putStrLn (show (caseShadow (Just 42)))
   putStrLn (show (caseShadow Nothing))
   putStrLn (show closureCapture)
+  putStrLn (show (shadowedImport 5))
+  putStrLn (show (shadowedImport 4))
+  putStrLn (show (shadowedImportLambda 5))
+  putStrLn (show (shadowedImportLambda 4))

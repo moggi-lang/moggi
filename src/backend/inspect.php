@@ -263,7 +263,6 @@ function filterJavapMethods(string $javapOut, array $methodNames): string
     $keptAny = false;
 
     while ($i < $n) {
-        // Class / interface header through opening brace.
         while ($i < $n) {
             $out[] = $lines[$i];
             if (\str_contains($lines[$i], '{')) {
@@ -278,7 +277,6 @@ function filterJavapMethods(string $javapOut, array $methodNames): string
             if (\preg_match('/^\s*\}/', $line) === 1) {
                 $out[] = $line;
                 $i++;
-                // Possible blank line between classes.
                 if ($i < $n && \trim($lines[$i]) === '') {
                     $out[] = $lines[$i];
                     $i++;
@@ -286,7 +284,6 @@ function filterJavapMethods(string $javapOut, array $methodNames): string
                 break;
             }
 
-            // Method / field member: two-space indent, non-space after.
             if (\preg_match('/^  \S/', $line) === 1 && \str_contains($line, '(')) {
                 $block = [$line];
                 $i++;
@@ -353,7 +350,6 @@ function filterIlMethods(string $il, array $methodNames): string
 
     while ($i < $n) {
         $line = $lines[$i];
-        // `.method …` header plus its body through the closing brace.
         if (\preg_match('/^\s*\.method\b/', $line) === 1) {
             $block = [$line];
             $i++;
@@ -365,8 +361,6 @@ function filterIlMethods(string $il, array $methodNames): string
                 $block[] = $lines[$i];
                 $i++;
             }
-            // Separator blanks belong to the method, so a dropped method does
-            // not leave stray empty lines behind.
             while ($i < $n && \trim($lines[$i]) === '') {
                 $block[] = $lines[$i];
                 $i++;
@@ -388,7 +382,6 @@ function filterIlMethods(string $il, array $methodNames): string
             continue;
         }
 
-        // Class header/body lines; blank separators ride along with methods.
         if (\trim($line) !== '') {
             $out[] = $line;
         }
@@ -451,9 +444,6 @@ function presentPhpModule(string $emit): string
 {
     $lines = \preg_split('/\R/', $emit) ?: [];
 
-    // The generated preamble is one contiguous block of `require_once` and
-    // `use function` lines with blank lines between the two groups. Locate it
-    // first: the note that replaces it states both totals.
     $first = null;
     $last = null;
     $requires = 0;
@@ -488,7 +478,7 @@ function presentPhpModule(string $emit): string
             if ($i === $first) {
                 $kept[] = '// imports elided: ' . $requires . ' require_once, ' . $uses . ' use';
             }
-            // The import block, and the blank lines that separated its rows.
+
             if ($line === '' || isPhpImportLine($line)) {
                 continue;
             }

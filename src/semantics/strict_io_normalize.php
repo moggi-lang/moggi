@@ -100,11 +100,6 @@ function arrowArity(?Ast\TypeNode $type): int
 
 function normalizeIoBody(Ast\AstNode $expr, int &$counter): Ast\AstNode
 {
-    // `(action :: IO a)` is the action; the annotation says only what the type
-    // checker already used. Classifying the wrapper instead of the expression
-    // made every annotated action an opaque `IoAction`, so `(pure x :: IO a)`
-    // stopped being a pure step and was lowered as a value: the effect was
-    // built and never run.
     if ($expr instanceof Ast\TypeAsc) {
         $inner = normalizeIoBody($expr->expr, $counter);
         if ($inner->line === 0 && $expr->line > 0) {
@@ -133,14 +128,10 @@ function normalizeIoBody(Ast\AstNode $expr, int &$counter): Ast\AstNode
     }
 
     if ($expr instanceof Ast\DoExpr) {
-        // Typecheck always elaborates do → >>=; normalize that single path.
         if ($expr->desugared === null) {
             throw new \LogicException('IO do expression missing desugared form');
         }
 
-        // The desugared `>>=` tree is synthesized and unpositioned. Carry the
-        // original `do` span onto the result so IR lowering and source maps can
-        // still locate the action (otherwise a whole body lowers at line 0).
         $normalized = normalizeIoBody($expr->desugared, $counter);
         if ($normalized->line === 0 && $expr->line > 0) {
             $normalized->setLocation($expr->line, $expr->col, $expr->endCol);
@@ -154,7 +145,6 @@ function normalizeIoBody(Ast\AstNode $expr, int &$counter): Ast\AstNode
     }
 
     if ($expr instanceof Ast\Where) {
-        // where-bindings are pure; only the body may perform IO.
         foreach ($expr->bindings as $binding) {
             $binding->value = normalizePureExpr($binding->value, $counter);
         }
@@ -163,10 +153,6 @@ function normalizeIoBody(Ast\AstNode $expr, int &$counter): Ast\AstNode
     }
 
     if ($expr instanceof Ast\GuardsExpr) {
-        // A guarded clause's body is an action of its own (`0 -> pure v | otherwise ->
-        // …`); the guards are pure tests. The list is kept as a list: the arms
-        // are tried in order, so a guard that fails has to fall through to the
-        // next alternative rather than end the match.
         foreach ($expr->clauses as $clause) {
             $clause->guard = normalizePureExpr($clause->guard, $counter);
             $clause->body = normalizeIoBody($clause->body, $counter);
@@ -230,7 +216,6 @@ function ioBindToSequence(Ast\AstNode $first, Ast\AstNode $fn, int &$counter): A
         $param = $fn->params[0];
         $pattern = $param instanceof Ast\LambdaParam ? $param->pattern : $param;
 
-        // Desugared do uses __doUnit / __doWild for discarded statements; omit the binder.
         if ($pattern instanceof Ast\PatVar
             && ($pattern->name === '__doUnit' || $pattern->name === '__doWild')) {
             return new Ast\IoSequence([

@@ -33,8 +33,6 @@ function checkForeignImportItem(TypeCheckState $state, Ast\ForeignImportDecl $it
         validateInstanceForeignType($state, $item);
     }
 
-    // Declared-backend rules run before compile-backend match (preserve
-    // diagnostics like PHP handle-receiver on a JVM compile). Skip unknown ids.
     if (isBackendImplemented($item->backend)) {
         $receiverIsHandle = false;
         if ($pathInfo['dispatch'] === 'instance' && $item->type instanceof Ast\TypeArrow) {
@@ -126,7 +124,6 @@ function validateInstanceForeignType(TypeCheckState $state, Ast\ForeignImportDec
     if ($receiverName === 'Handle' || $receiverName === 'Resource') {
         return;
     }
-    // Magichash spellings are not FFI surface; use public aliases (Integer, …).
     if ($receiverName !== null && isMagicHashName($receiverName)) {
         throw typeFail(
             $state,
@@ -146,8 +143,6 @@ function validateInstanceForeignType(TypeCheckState $state, Ast\ForeignImportDec
 
         return;
     }
-    // Public nullary alias of a Magichash prim (Integer = Integer#, String = String#, …).
-    // Any `*#` RHS counts — no host-ref allowlist to grow when new prim aliases appear.
     if (foreignIsMagicHashAlias($state, $receiver)) {
         return;
     }
@@ -365,9 +360,6 @@ function foreignHandleBox(Ast\TypeNode $type): bool
 
 function validateForeignTypeDecl(TypeCheckState $state, Ast\ForeignTypeDecl $decl): void
 {
-    // Type decls may name any implemented backend: they are nominal metadata.
-    // Compile-backend matching applies to foreign *functions/consts* and to
-    // using a foreign type inside another backend's foreign signature.
     if (!isBackendImplemented($decl->backend)) {
         throw typeFail(
             $state,
@@ -449,10 +441,6 @@ function validateForeignTypeCon(
         return;
     }
 
-    // PHPValue is an ordinary Moggi ADT used for deliberate mixed → inspectable
-    // value reification at the FFI boundary (e.g., Composer interop).
-    // It is NOT a foreign type / NOT a host handle, and only the php backend
-    // boxes a host value into it.
     if ($name === 'PHPValue') {
         if ($backend !== 'php') {
             throw typeFail(
@@ -473,8 +461,6 @@ function validateForeignTypeCon(
         return;
     }
 
-    // Container types. A host result is converted into these; an argument has
-    // no marshalling, so the host would receive Moggi's own representation.
     if (in_array($name, ['Maybe', 'Either', 'Tuple'], true)) {
         if ($argument) {
             throw typeFail(
@@ -487,8 +473,6 @@ function validateForeignTypeCon(
     }
 
     if ($name === 'List') {
-        // A Moggi list *is* a php array, which is why a list argument works
-        // there; on jvm/.NET it is the runtime's own list, never the host's.
         if ($argument && $backend !== 'php') {
             throw typeFail(
                 $state,
@@ -499,17 +483,14 @@ function validateForeignTypeCon(
         return;
     }
 
-    // IO is allowed in result position (outermost only, checked elsewhere)
     if ($name === 'IO') {
         return;
     }
 
-    // IOMode is a primitive enum for foreign I/O functions
     if ($name === 'IOMode') {
         return;
     }
 
-    // Everything else is an error
     throw typeFail(
         $state,
         "type `{$name}` is not legal in a foreign signature; use a specific foreign type, a primitive, or PHPValue for reification",

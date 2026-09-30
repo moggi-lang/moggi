@@ -30,8 +30,6 @@ function watchCompilerRevision(): void
     static $lastCheck = 0.0;
 
     if ($running === null) {
-        // Memoized on first use, by any caller: this is the revision the process
-        // is running with, not the one on disk now.
         $running = compilerFingerprint();
     }
 

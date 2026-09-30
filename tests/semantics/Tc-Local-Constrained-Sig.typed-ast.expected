@@ -52,3 +52,50 @@ program
             apply
               evidence_method Tag.tag evidence=__ev_dict1 nullary=0
               variable x
+  function ordSuperclass :: Tuple2 Int Int
+    where
+      tuple
+        apply
+          apply
+            apply
+              apply
+                variable bigger
+                evidence_ref Eq Int
+              evidence_ref Ord Int
+            evidence_ref Num Int
+          integer 5
+        apply
+          apply
+            apply
+              apply
+                variable bigger
+                evidence_ref Eq Int
+              evidence_ref Ord Int
+            evidence_ref Num Int
+          integer 2
+      binding
+        pat_var bigger
+        lambda
+          pat_var __ev_dict2
+          pat_var __ev_dict3
+          pat_var __ev_dict4
+          lambda
+            pat_var k
+            case
+              apply
+                apply
+                  evidence_method Ord.> evidence=__ev_dict3 nullary=0
+                  variable k
+                apply
+                  evidence_method Num.fromInteger evidence=__ev_dict4 nullary=0
+                  intrinsic intToInteger#
+                    integer 4
+              alt
+                pat_con True
+                variable k
+              alt
+                pat_con False
+                apply
+                  evidence_method Num.fromInteger evidence=__ev_dict4 nullary=0
+                  intrinsic intToInteger#
+                    integer 0

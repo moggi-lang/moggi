@@ -70,14 +70,9 @@ function specializeAcrossModules(array $modules, array $externalFnsByModule = []
     $cacheHits = 0;
     $changedModules = [];
 
-    // Register nullary ctor CAFs up front so concrete-arg checks can treat
-    // library Options/Bool CAFs as burnable without hardcoding their names.
     setNullaryCtorCafs(collectNullaryCtorCafs($modules, $externalFnsByModule));
     setFieldAccessorCafs(collectFieldAccessorCafs($modules));
 
-    // Several rounds: specialize → resolve concrete dict_calls → re-optimize →
-    // specialize nested callees exposed by folding (e.g. fieldPairs under
-    // buildRecord after conIsRecord PE). Cap keeps compile time bounded.
     for ($round = 0; $round < 4; ++$round) {
         $world = activateSpecializeWorld($modules, $externalFnsByModule);
         $roundChanged = false;
@@ -107,10 +102,6 @@ function specializeAcrossModules(array $modules, array $externalFnsByModule = []
         }
     }
 
-    // Final optimize on roots so late-grown thin __spec_* callees (single-Ret)
-    // are inlined and case-folded against concrete constructors from `from`.
-    // Two root passes: first optimize exposes concrete ExprCall(K1, …) sites
-    // after flatten/join; the second PE-reduces those match wrappers.
     setNullaryCtorCafs(collectNullaryCtorCafs($modules, $externalFnsByModule));
     setFieldAccessorCafs(collectFieldAccessorCafs($modules));
     try {
@@ -119,13 +110,6 @@ function specializeAcrossModules(array $modules, array $externalFnsByModule = []
         hoistSpecializeEvidenceCafs($modules, $changedModules);
         setNullaryCtorCafs(collectNullaryCtorCafs($modules, $externalFnsByModule));
         setFieldAccessorCafs(collectFieldAccessorCafs($modules));
-        // After CAF field-fold, concrete Bool/Options args appear. Keep
-        // specialize→optimize while the rounds still pay: optimize often exposes
-        // wrappers such as encodeC1EncBody only after a clone is case-folded.
-        // Only the functions the previous round changed -- and the clones it
-        // added -- can hold a new opportunity, so the next round walks those
-        // instead of the whole root module; a round adding a tenth of the best
-        // round's clones is where the curve flattens.
         $extraBestGain = 0;
         $onlyFunctions = null;
         for ($extra = 0; $extra < 8; ++$extra) {
@@ -276,8 +260,6 @@ function activateSpecializeWorld(array $modules, array $externalFnsByModule): ar
                 'module' => $moduleName,
                 'function' => $function,
             ];
-            // Always index qualified names; bare short names only when unique
-            // across the program (avoid specializing the wrong `map`, etc.).
             $globalIndex[$qualified] = $entry;
             if (isset($ambiguousShortNames[$short])) {
                 continue;
@@ -355,17 +337,12 @@ function specializeOneRootModule(
     $moduleChanged = false;
 
     foreach ($module->functions as $function) {
-        // A fixpoint round only has to re-walk the functions the previous round
-        // touched: `specializeItems` decides from a function's own body and the
-        // callee index, so re-walking an unchanged body cannot find anything new.
         if ($onlyFunctions !== null && ! isset($onlyFunctions[$function->name])) {
             $newFunctions[] = $function;
             continue;
         }
 
         if ($function->ioStraightLine) {
-            // A straight-line IO body is not specialized, but a concrete dictionary call is a plain
-            // substitution, so `main` gets it too.
             $resolved = resolveConcreteDictCallsInItems($function->body->items, $globalEvidence);
             if ($resolved['changed']) {
                 $moduleChanged = true;
@@ -378,8 +355,6 @@ function specializeOneRootModule(
         $nextTemp = maxTempInItems($function->body->items) + 1;
         $bodyItems = $function->body->items;
 
-        // Resolve dict_calls whose evidence is a concrete FnRef / __ev_
-        // ExprCall into direct Calls (cross-module allowed here).
         $resolved = resolveConcreteDictCallsInItems($bodyItems, $globalEvidence);
         if ($resolved['changed']) {
             $moduleChanged = true;
@@ -404,8 +379,6 @@ function specializeOneRootModule(
         $newFunctions[] = $function->withBody(new IR\Block($result['items']));
     }
 
-    // Emit every clone created (call sites point at them); nested specialization is budgeted
-    // and leftovers are picked up by the next round.
     $pending = $added;
     $cloneNestBudget = 64;
     while ($pending !== []) {
@@ -557,8 +530,6 @@ function cafRetToCtorTree(IR\Operand $value, string $moduleName = '', array $ext
             return new CtorTree($value->name, []);
         }
 
-        // Non-constructor CAF leaves (e.g. `id` inside Options CAFs) must stay
-        // module-qualified so destination modules can emit/import them.
         return null;
     }
     if ($value instanceof IR\ExprCall && isPlausibleConstructorName($value->callee)) {
@@ -606,8 +577,6 @@ function cafRetToCtorTree(IR\Operand $value, string $moduleName = '', array $ext
  */
 function optimizeSpecializationRoots(array &$modules, array $rootNames, int $passes): void
 {
-    // Refresh define/import maps so pe-fusion qualifyBareName can resolve
-    // evidence imports to their origin module (not the pe-fusion source).
     $fnsByModule = [];
     foreach ($modules as $moduleName => $module) {
         foreach ($module->functions as $function) {
@@ -616,7 +585,6 @@ function optimizeSpecializationRoots(array &$modules, array $rootNames, int $pas
         registerModuleConstructorNames($fnsByModule, $moduleName, $module);
     }
     setActiveSpecializeFnsByModule($fnsByModule);
-    // externalFnsByModule stays as last setActiveSpecializeExternalFnsByModule.
     $fnArity = [];
     foreach ($modules as $moduleName => $module) {
         foreach ($module->functions as $function) {
@@ -633,8 +601,6 @@ function optimizeSpecializationRoots(array &$modules, array $rootNames, int $pas
                 continue;
             }
             for ($optPass = 0; $optPass < $passes; ++$optPass) {
-                // Qualified-only pe index of pe-fusion candidates (no short names)
-                // so list consumers like fieldKeys can unfold at known ListLit sites.
                 setPeFusionIndexFromModules($modules);
                 $beforeByName = [];
                 foreach ($module->functions as $fn) {
@@ -717,9 +683,6 @@ function setPeFusionIndexFromModules(array $modules): void
     $index = [];
     foreach ($modules as $moduleName => $module) {
         $mn = $module->moduleName !== '' ? $module->moduleName : (string) $moduleName;
-        // Only register pe-fusion candidates under qualified names. Short-name
-        // keys pulled unrelated helpers (e.g. Path.empty) into Main. Skip
-        // host/foreign bodies — those must stay in their defining module.
         foreach ($module->functions as $fn) {
             if ($mn === ''
                 || !isPeFusionInlineCandidate($fn)
@@ -755,11 +718,6 @@ function restoreUnboundAfterOptimize(IR\Module $optimized, array $beforeByName):
         return $optimized;
     }
 
-    // Arity-raising must move with the rollback. A restored body may call a CAF
-    // whose parameter list this optimize pass raised, and a raised signature is
-    // only valid while every caller was rewritten to match it — the restored
-    // callers were not. Restoring the changed definitions keeps the two halves
-    // consistent (otherwise JVM/.NET call a method the class no longer has).
     foreach ($optimized->functions as $fn) {
         $prev = $beforeByName[$fn->name] ?? null;
         if ($prev === null || isset($restore[$fn->name])) {
@@ -869,8 +827,6 @@ function tryResolveConcreteDictCall(IR\DictCall $stmt, array $concreteTemps, arr
     $evidence = resolveConcreteOperand($stmt->evidence, $concreteTemps);
     $binding = null;
 
-    // Cross-module specialize qualifies evidence factories as `Module::__ev_…`;
-    // the evidence map is keyed by the bare `__ev_` leaf name.
     if ($evidence instanceof IR\FnRef && isEvidenceFactoryName($evidence->name)) {
         $binding = ['name' => specializationLookupName($evidence->name), 'args' => []];
     } elseif (
@@ -897,15 +853,10 @@ function tryResolveConcreteDictCall(IR\DictCall $stmt, array $concreteTemps, arr
             $methodModule = $evInfo['module'];
         }
     }
-    // Do not invent `factory_method` names — hashes often differ from the
-    // method IR name, and missing map entries must stay as DictCall.
     if ($methodIr === null) {
         return null;
     }
 
-    // Qualify with the evidence module so a destination that defines the same
-    // short name (e.g. derived `compare` for Age) does not bind the call to
-    // itself — that caused StackOverflow on newtype Ord/Eq/Show.
     if (
         $methodModule !== ''
         && $methodIr !== ''
@@ -1332,21 +1283,16 @@ function resolveSpecializedCallee(
         return null;
     }
 
-    // Prefer the fully-qualified key when the call site was already qualified;
-    // fall back to a unique bare short name.
     $targetInfo = $globalIndex[$callee] ?? $globalIndex[$lookup] ?? null;
     if ($targetInfo === null || !isset($targetInfo['function'])) {
         return null;
     }
 
-    // If the call was already qualified, the origin module must match.
     $parsed = parseResolvedSymbol($callee);
     if ($parsed !== null && ($targetInfo['module'] ?? null) !== $parsed['module']) {
         return null;
     }
 
-    // Cross-module only — specializing within a module (e.g. Generic codecs)
-    // explodes into combinatorial clones of mutually-recursive dict methods.
     if ($targetInfo['module'] === $moduleName) {
         return null;
     }
@@ -1361,8 +1307,6 @@ function resolveSpecializedCallee(
         return null;
     }
 
-    // Must burn every leading evidence/options param; only ordinary value
-    // parameters may remain (otherwise clones retain unbound __ev_* locals).
     $runtimeParams = \array_slice($target->params, $burned);
     foreach ($runtimeParams as $param) {
         if (str_starts_with($param, '__ev_') || $param === 'opts' || str_starts_with($param, '__ev')) {
@@ -1374,16 +1318,12 @@ function resolveSpecializedCallee(
         return null;
     }
 
-    // Qualify dest-local FnRefs in burned args before cloning so they are not rewritten to the
-    // source module's same short λ name.
     $burnedArgs = qualifyBurnedFnRefsForDest(
         \array_slice($args, 0, $burned),
         $moduleName,
         $localNames,
     );
 
-    // Key includes source + dest module so A::foo and B::foo with identical
-    // burned args cannot share a clone name that only exists in one module.
     $key = specializationKey(
         $targetInfo['module'] . '::' . $lookup,
         $moduleName,
@@ -1399,8 +1339,6 @@ function resolveSpecializedCallee(
     }
 
     $specName = '__spec_' . preg_replace('/[^A-Za-z0-9_]/', '_', $lookup) . '_' . substr(sha1($key), 0, 12);
-    // The clone enters the cache *before* its body is rewritten, so a recursive function
-    // resolves to this name instead of starting a clone that never terminates.
     $cache[$key] = [
         'module' => $moduleName,
         'sourceModule' => $targetInfo['module'],
@@ -1421,8 +1359,6 @@ function resolveSpecializedCallee(
     }
     $runtimeParams = \array_slice($target->params, $burned);
     if (unboundEvidenceLocals($clone, $runtimeParams) !== []) {
-        // Refuse clones that would emit free evidence locals (e.g. Match-arm
-        // params missed by substitution). Prefer leaving the original call.
         unset($cache[$key]);
 
         return null;
@@ -1433,8 +1369,6 @@ function resolveSpecializedCallee(
         return null;
     }
     if (unresolvedNonNullaryDictCalls($clone) !== []) {
-        // Concrete non-nullary evidence still in a DictCall cannot be emitted
-        // safely (method missing from the evidence map).
         unset($cache[$key]);
 
         return null;
@@ -1525,8 +1459,6 @@ function isSpecializeCandidate(IR\FunctionDecl $function): bool
 
     $stmtBudget = 0;
     foreach ($items as $item) {
-        // Loop/TailRecall bodies are not substituted today; refuse rather than
-        // emit clones with unburned evidence params still free inside the loop.
         if ($item instanceof IR\Loop || $item instanceof IR\TailRecall) {
             return false;
         }
@@ -1571,8 +1503,6 @@ function countConcretePrefix(array $args): int
 function isConcreteSpecializeArg(IR\Operand $arg): bool
 {
     if ($arg instanceof IR\FnRef) {
-        // Do not burn host allocators / foreign nullaries — substituting them
-        // into multi-use params rematerializes a fresh object per use.
         if (operandIsNonDuplicable($arg)) {
             return false;
         }
@@ -1594,13 +1524,6 @@ function isConcreteSpecializeArg(IR\Operand $arg): bool
             }
         }
 
-        // A concrete dictionary is a *nullary* value: the evidence constant
-        // itself, a CAF, or a nullary constructor. A call to a dictionary
-        // *member* (`__ev_Num_Int_mul(x, y)`) or to a CAF, with arguments, is
-        // runtime arithmetic, not a compile-time constant. Burning it makes
-        // the recursive call of a specialized function (`powAcc`'s `x * x`)
-        // look like a fresh specialization each time it is cloned, and the
-        // burned operand doubles per level -- unbounded clone chains.
         if ($arg->args === []) {
             return isEvidenceFactoryName($arg->callee)
                 || isSpecCloneName($arg->callee)
@@ -1627,8 +1550,6 @@ function isSpecCloneName(string $name): bool
 function isPlausibleConstFn(string $name): bool
 {
     $leaf = specializationLookupName($name);
-    // Hoisted specialize CAFs, or any nullary ctor CAF registered for case-fold
-    // (Options, Bool, …). Do not hardcode library binding names here.
     if (str_starts_with($leaf, '__caf_')) {
         return true;
     }
@@ -1677,7 +1598,6 @@ function specializationKey(string $sourceCallee, string $destModule, array $burn
         $parts[] = concreteArgKey($arg);
     }
 
-    // Hash structured parts so ConstStr payloads cannot collide via `|` / `,`.
     return hash('sha256', json_encode($parts, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: implode("\0", $parts));
 }
 
@@ -1750,7 +1670,6 @@ function burnedSpecializeArgMustBindOnce(IR\Operand $arg, array $bodyItems, stri
     if ($arg instanceof IR\ExprCall && isTransparentEvidenceFactoryCall($arg)) {
         return false;
     }
-    // Constructor spines must stay transparent for case-fold / record PE.
     if (
         $arg instanceof IR\ExprCall
         && isPlausibleConstructorName(
@@ -1770,7 +1689,6 @@ function isTransparentEvidenceFactoryCall(IR\ExprCall $call): bool
     if (!str_starts_with($leaf, '__ev_')) {
         return false;
     }
-    // Method: __ev_…_h_<hash>_<methodName>
     if (preg_match('/^__ev_.+_h_[0-9a-f]+_[A-Za-z]/', $leaf) === 1) {
         return false;
     }
@@ -1793,12 +1711,6 @@ function cloneSpecializedFunction(IR\FunctionDecl $target, string $specName, arr
         $nextTemp = max($remap) + 1;
     }
 
-    // Multi-use burned args must not rematerialize at every substitute site:
-    // - non-duplicable seeds (@newLinkedHashMap) are incorrect if duplicated;
-    // - pure computations (e.g. gRecordEncFields → field list) re-run on every
-    //   match scrutinee / recursive step after specialize burns the arg.
-    // Evidence *factories* stay transparent so nested specialize still sees
-    // concrete `__ev_*` spines; evidence *method* calls are computations.
     $prefix = [];
     $substArgs = [];
     foreach ($target->params as $i => $param) {
@@ -1880,22 +1792,15 @@ function qualifySourceModuleCallees(
         if ($name === '' || str_contains($name, '::') || str_contains($name, '\\')) {
             return $name;
         }
-        // A wired-in `Bool` constructor stays bare: qualifying it (the source
-        // module's import binding is `Data.Bool::False`) would hide it from the
-        // backends' host-boolean lowering.
         if (isWiredInBoolCtor($name)) {
             return $name;
         }
-        // Prefer dest locals for ordinary names, but NEVER for lambdas: Main's
-        // `λ2` must not capture Foldable.toList's `λ2` (Partial→MList bugs).
         if (isset($destLocalNames[$name]) && !isLambdaName($name)) {
             return $name;
         }
         if (isset($sourceFnNames[$name])) {
             return resolvedSymbol($sourceModule, $name);
         }
-        // Preserve the source module's import binding when short names collide
-        // across libraries (Map.lookup vs List.lookup, etc.).
         if (isset($sourceExternalFns[$name])) {
             return $sourceExternalFns[$name];
         }
@@ -1905,8 +1810,6 @@ function qualifySourceModuleCallees(
 
     $rewriteOperand = null;
     $rewriteOperand = static function (IR\Operand $op) use (&$rewriteOperand, $rewriteName): IR\Operand {
-        // Callee/fn names live as strings, not operand children, so they must be rewritten
-        // explicitly; everything else goes through Visit\mapOperandChildren.
         if ($op instanceof IR\FnRef) {
             return new IR\FnRef($rewriteName($op->name));
         }
@@ -2172,8 +2075,6 @@ function collectFreeLocalsInOperand(IR\Operand $operand, array $bound, array &$f
         return;
     }
 
-    // Walk all operand children (ListLit, DictMethod, ForeignCall, Partial, …)
-    // so evidence / opts trapped only inside list payloads are still refused.
     foreach (Visit\operandChildren($operand) as $child) {
         collectFreeLocalsInOperand($child, $bound, $free);
     }

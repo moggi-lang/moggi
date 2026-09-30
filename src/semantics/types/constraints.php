@@ -166,8 +166,6 @@ function expandConstraintsWithSuperclasses(TypeCheckState $state, array $constra
 {
     $expanded = [];
 
-    // `seen` guards superclass diamonds within one constraint's expansion and is reset
-    // per constraint: two constraints are two dictionary parameters.
     foreach ($constraints as $constraint) {
         $seen = [];
         $add = function (Ast\PendingConstraint $constraint) use ($state, &$expanded, &$seen, &$add): void {
@@ -179,8 +177,6 @@ function expandConstraintsWithSuperclasses(TypeCheckState $state, array $constra
             $classInfo = $state->classes[$constraint->class]
                 ?? throw typeFail($state, "unknown class `{$constraint->class}` in constraint");
 
-            // Keep higher-kinded parameters as TVar (or concrete TCon heads): the TCon('f')
-            // encoding does not prune through subst and breaks instance lookup.
             $mapping = [];
             foreach ($classInfo['params'] as $i => $param) {
                 $mapping[$param['name']] = prune($state, $constraint->args[$i]);
@@ -201,8 +197,6 @@ function expandConstraintsWithSuperclasses(TypeCheckState $state, array $constra
         $add($constraint);
     }
 
-    // Rebuild rather than assign in place: callers keep their own list (e.g. the
-    // unexpanded user constraints) and must not see the renamed evidence.
     foreach ($expanded as $i => $constraint) {
         $expanded[$i] = new Ast\PendingConstraint(
             $constraint->class,
@@ -314,8 +308,6 @@ function buildConstraintEnv(TypeCheckState $state, array $constraints): array
 
         foreach ($classInfo['methods'] as $methodName => $methodInfo) {
             $mappedType = prune($state, substitute($methodInfo['type'], $mapping));
-            // Nullary methods must remain polymorphic class methods so
-            // `maxBound` / `mempty = maxBound` can select a different head.
             if (!$mappedType instanceof TArrow) {
                 continue;
             }
@@ -348,9 +340,6 @@ function resolveConstraintEvidence(TypeCheckState $state, array $constraints, ?A
         $className = $constraint->class;
         $classInfo = $state->classes[$className] ?? throw typeFail($state, "unknown class `{$className}`", $at);
 
-        // A given/context dictionary wins over a global instance (see
-        // `tryResolveEvidenceExprs`): instance contexts such as `Eq (Pair a)`
-        // from `deriving via` must be forwarded, not replaced by a fresh lookup.
         $ambient = ambientEvidenceFor($state, $constraint);
         if ($ambient !== null) {
             $exprs[] = new Ast\Variable($ambient);
@@ -485,9 +474,6 @@ function tryResolveEvidenceExprs(
 
         $head = prune($state, $head);
 
-        // An in-scope given/context dictionary wins over a global instance,
-        // including when the constraint head is an applied type (`Eq (Pair a)`):
-        // `deriving via` puts the via type's instance in the instance context.
         $ambient = ambientEvidenceFor($state, $constraint);
         if ($ambient !== null) {
             $exprs[] = new Ast\Variable($ambient);
@@ -596,9 +582,6 @@ function prependEvidenceToCall(TypeCheckState $state, Ast\AstNode $expr, array $
         || $expr instanceof Ast\OperatorRef
         || $expr instanceof Ast\QualifiedRef
     ) {
-        // Superclass dictionaries may precede the owning class in `$evidence`
-        // (e.g. Functor before Applicative for `pure`). Project the method from
-        // the owning class's evidence, not blindly from `$evidence[0]`.
         foreach ($evidence as $ev) {
             if (
                 $ev instanceof Ast\EvidenceRef
@@ -614,8 +597,6 @@ function prependEvidenceToCall(TypeCheckState $state, Ast\AstNode $expr, array $
                     'contextEvidence' => $ev->context,
                 ]);
 
-                // Method-local constraints stay ordinary leading dictionary arguments; the owning
-                // class's group is only for projection.
                 $ownerIndexes = ownerEvidenceIndexes($state, $evidence, $ev);
                 foreach ($evidence as $i => $other) {
                     if (isset($ownerIndexes[$i]) || $other === $ev) {
@@ -627,8 +608,6 @@ function prependEvidenceToCall(TypeCheckState $state, Ast\AstNode $expr, array $
                 return $methodExpr;
             }
 
-            // Ambient dictionary parameter: project the method from it instead of leaving a bare
-            // `Variable` IR cannot lower (and uniquify would rewrite into a self-reference).
             if (
                 $ev instanceof Ast\Variable
                 && ($className = classNameForAmbientEvidence($state, $ev->name)) !== null
@@ -680,8 +659,6 @@ function prependEvidenceToCall(TypeCheckState $state, Ast\AstNode $expr, array $
         return $fn;
     }
 
-    // Method-local constraints on an already-projected EvidenceMethod
-    // (e.g. Applicative on Traversable.traverse) are ordinary leading dict args.
     if ($expr instanceof Ast\EvidenceMethod) {
         $fn = $expr;
         foreach ($evidence as $ev) {
@@ -769,18 +746,11 @@ function resolveProjectInstanceContextEvidence(
         }
         $raw[] = [
             'constraint' => new Ast\PendingConstraint($ctxClass, $args, ''),
-            // Kept for the diagnostic below: the declared context names its own
-            // variables (`Show a`), which reads better and does not move when
-            // the instantiated type variable is renamed.
             'declared' => $constraintAst,
         ];
     }
 
     $exprs = [];
-    // Expand each instance-context constraint independently. Deduping across
-    // the whole list collapses `C f, C g` when f≡g after
-    // substitution, under-applying the evidence factory (arity mismatch).
-    // Superclass expansion still runs per constraint so `Ord a` yields Eq+Ord.
     foreach ($raw as $rawEntry) {
         foreach (expandConstraintsWithSuperclasses($state, [$rawEntry['constraint']]) as $constraint) {
             $ctxHead = count($constraint->args) === 1
@@ -790,12 +760,6 @@ function resolveProjectInstanceContextEvidence(
                     $constraint->args,
                 ));
 
-            // A given/context dictionary wins over a global instance here as it
-            // does at every other constraint site. Inside a `deriving via`
-            // instance the candidate's own context supplies exactly the via
-            // type's dictionary, which is what makes the derived method bodies
-            // (and the recursive reference they make to the dictionary being
-            // built) resolve.
             $ambient = ambientEvidenceFor($state, $constraint);
             if ($ambient !== null) {
                 $exprs[] = new Ast\Variable($ambient);
@@ -803,12 +767,6 @@ function resolveProjectInstanceContextEvidence(
             }
 
             if ($ctxHead instanceof TVar) {
-                // The instance context is headed by a type variable that
-                // nothing determines (`show []` reaches `Show a` through
-                // `Show [a]`), so no dictionary can be selected. Returning
-                // an empty context left the evidence factory partially
-                // applied: it compiled and then failed on the dictionary
-                // lookup at run time, so this is an error here.
                 throw typeFail(
                     $state,
                     'ambiguous constraint `' . $constraint->class . ' '
@@ -862,8 +820,6 @@ function isSuperclassNameOf(TypeCheckState $state, string $maybeSuper, string $c
 function prependEvidenceAtRoot(TypeCheckState $state, Ast\AstNode $expr, array $evidence): Ast\AstNode
 {
     if ($expr instanceof Ast\Apply) {
-        // Dictionaries already at the head of this call are not handed over again: a call
-        // site is rewritten in place and a body may be inferred more than once.
         $evidence = \array_values(\array_filter(
             $evidence,
             static fn (Ast\AstNode $ev): bool => !\in_array(evidenceNodeKey($ev), appliedEvidenceKeys($expr), true),
@@ -1065,8 +1021,6 @@ function constraintsResolvable(TypeCheckState $state, array $constraints): bool
 
         $head = prune($state, $head);
 
-        // A matching given/context dictionary is evidence by itself — this is
-        // what lets instance methods dispatch through a `C (V a)` context.
         if (ambientEvidenceFor($state, $constraint) !== null) {
             continue;
         }
@@ -1075,9 +1029,6 @@ function constraintsResolvable(TypeCheckState $state, array $constraints): bool
             return false;
         }
 
-        // The instance's own context has to be selectable too. `Show (List t)`
-        // needs `Show t`, and while `t` is open no dictionary can be picked for
-        // it yet -- a later pass either knows the type, or defaults it.
         foreach (instanceLeafConstraints($state, $constraint) ?? [$constraint] as $leaf) {
             $leafHead = count($leaf->args) === 1
                 ? prune($state, $leaf->args[0])

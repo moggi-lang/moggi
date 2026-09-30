@@ -27,3 +27,13 @@ annotatedLocal = (go (1 :: Int), go False)
   where
     go :: Tag a => a -> String
     go x = tag x
+
+-- inferred, with a superclass among the obligations: `k > 4` asks for `Ord Int`,
+-- whose `Eq Int` is a dictionary of its own, so `bigger` takes two and every use
+-- site hands over both, superclass first.
+ordSuperclass :: (Int, Int)
+ordSuperclass = (bigger 5, bigger 2)
+  where
+    bigger k = case k > 4 of
+      True -> k
+      False -> 0

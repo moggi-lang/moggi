@@ -57,8 +57,6 @@ function annotateFunction(Ast\FunctionDecl $fn, bool $backendImpl = false): void
         return;
     }
 
-    // Functor/Applicative/Monad IO methods are dictionary entries: callers must
-    // receive a boxed action, not an eagerly executed effect.
     if ($fn->instanceMethod) {
         $fn->ioBodyKind = IoBodyKind::ActionReturn;
         return;

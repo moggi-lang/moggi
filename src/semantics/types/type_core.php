@@ -436,9 +436,6 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
     $left = prune($state, $left);
     $right = prune($state, $right);
 
-    // Same associated family application: unify arguments without reducing.
-    // Otherwise `Rep Foo x` normalizes to a concrete M1-tree and cannot unify
-    // with a polymorphic `Rep a b` from an instantiated class method (`to`/`from`).
     if ($left instanceof TCon && $right instanceof TCon
         && $left->name === $right->name
         && isset($state->associatedFamilies[$left->name])
@@ -453,16 +450,11 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
         return;
     }
 
-    // Bind type variables before associated-family reduction so
-    // `from x :: Rep Foo t` stays `Rep Foo t` (not a concrete M1-tree) when
-    // composed with polymorphic `to :: Rep a x -> a`.
     if ($left instanceof TVar) {
         if ($right instanceof TVar) {
             if ($left->name === $right->name) {
                 return;
             }
-            // A restricted variable is the representative every use site shares, and the module end
-            // names it; binding it away would lose that identity.
             if (isset($state->restrictedVars[$left->name]) && ! isset($state->restrictedVars[$right->name])) {
                 unify($state, $right, $left, $at);
 
@@ -481,8 +473,6 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
         return;
     }
 
-    // Normalize synonyms only — associated families stay stuck so `Rep Foo x` can still
-    // unify with a polymorphic `Rep a b`.
     $left = normalizeType($state, $left, reduceFamilies: false);
     $right = normalizeType($state, $right, reduceFamilies: false);
 
@@ -579,8 +569,6 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
         return;
     }
 
-    // Symmetric case: concrete constructor on the left, HKT variable on the right
-    // (e.g. unifying `IO ()` with `t0 ()` from an instantiated `f a`).
     if ($rightHeadIsVar && !$leftHeadIsVar && count($left->args) === count($right->args)) {
         unify($state, new TVar($right->name), new TCon($left->name), $at);
         foreach ($left->args as $i => $arg) {
@@ -590,9 +578,6 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
         return;
     }
 
-    // Partial applications of concrete constructors as HKT heads, e.g.
-    // `t0 a` ~ `K1 R Int Bool` ⇒ `t0 := K1 R Int`, `a := Bool`.
-    // (Previously only the +1-arg case `t0 a` ~ `Maybe Int` was handled.)
     if ($leftHeadIsVar && !$rightHeadIsVar
         && count($left->args) >= 1
         && count($right->args) > count($left->args)) {
@@ -715,8 +700,6 @@ function typeVarLetter(int $index): string
 
 function prune(TypeCheckState $state, Type $type): Type
 {
-    // Unification subst is empty during most registration / scheme work; skip
-    // walking type spines that cannot change.
     if ($state->subst === []) {
         return $type;
     }
@@ -743,9 +726,6 @@ function prune(TypeCheckState $state, Type $type): Type
             }
         }
 
-        // Higher-kinded variables are encoded as nullary/applied TCon heads.
-        // Unification binds a TVar of the same name; rewrite the head here so
-        // `t0 a` becomes `IO a` after `t0 := IO`.
         if (!isset($state->kindEnv[$type->name]) && isset($state->subst[$type->name])) {
             $head = prune($state, $state->subst[$type->name]);
             if ($head instanceof TCon) {
@@ -776,8 +756,6 @@ function prune(TypeCheckState $state, Type $type): Type
 function zonkInferredTypesInExpr(TypeCheckState $state, Ast\AstNode $expr): void
 {
     if ($expr->inferredType !== null) {
-        // Round-trip through prune: inferredType was snapshotted mid-inference,
-        // before later unifications (e.g. HKT `t0 := IO`) landed in subst.
         $expr->inferredType = internalTypeToAst(
             prune($state, inferredTypeAstToInternal($expr->inferredType)),
             $state->subst,
@@ -1112,8 +1090,6 @@ function typeToString(Type $type, array $rename = []): string
             if ($type->name === 'List' && count($type->args) === 1) {
                 return '[' . typeToString($type->args[0], $rename) . ']';
             }
-            // A tuple is a `TupleN` constructor internally, `(a, b)` on the
-            // surface — the shape every other printer and the source use.
             if (preg_match('/^Tuple(\d+)$/', $type->name, $tuple) === 1 && count($type->args) === (int) $tuple[1]) {
                 return '(' . join(', ', \array_map(
                     static fn (Type $arg): string => typeToStringDomain($arg, $rename),
@@ -1125,8 +1101,6 @@ function typeToString(Type $type, array $rename = []): string
                 ? ' ' . join(' ', \array_map(static fn (Type $arg): string => typeToString($arg, $rename), $type->args))
                 : '');
         })(),
-        // An arrow domain needs its parentheses, or `(a -> b) -> c` would read
-        // as `a -> b -> c`.
         TArrow::class => typeToStringDomain($type->from, $rename) . ' -> ' . typeToString($type->to, $rename),
     };
 }
@@ -1204,8 +1178,6 @@ function typeFail(TypeCheckState $state, string $message, Ast\AstNode|Ast\TypeNo
         $col = $at->col;
         $endCol = $at->endCol;
     } elseif ($state->declSpan['line'] !== 0) {
-        // A node without a position (a type node, a desugared match) still belongs to a
-        // declaration, and pointing at it beats rendering against line 0.
         $line = $state->declSpan['line'];
         $col = $state->declSpan['col'];
         $endCol = $state->declSpan['endCol'];

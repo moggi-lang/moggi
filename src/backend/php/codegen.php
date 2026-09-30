@@ -61,10 +61,6 @@ function emit(IR\Module $module, string $sourcePath, array $options = []): strin
     $phpNames = buildPhpNameMap($module);
     $importOptions = $options['imports'] ?? [];
     $functionArity = $analysis['functionArity'];
-    // The import tables are keyed by bare name, so a name this module defines
-    // itself must not be overwritten by one: the call site resolves to the local
-    // binding, and an arity that came from an import would emit it as an
-    // under-applied runtime partial.
     /** @var array<string, true> $localBindings */
     $localBindings = [];
     foreach ($module->functions as $fn) {
@@ -99,8 +95,6 @@ function emit(IR\Module $module, string $sourcePath, array $options = []): strin
         'externalFns' => $importOptions['externalFns'] ?? [],
         'functionArity' => $functionArity,
         'boolConstructors' => [
-            // Bool is wired in: `if` desugars to a match on these, so a module
-            // that never names Data.Bool must still compile them as booleans.
             'False' => false,
             'True' => true,
             ...boolConstructorMapFromRegistry($importOptions['importedData'] ?? []),
@@ -120,21 +114,14 @@ function emit(IR\Module $module, string $sourcePath, array $options = []): strin
         $lines[] = '';
     }
 
-    // Where the module's source map goes: right below the namespace, once it is
-    // known whether the module carries one at all.
     $mapLineIndex = \count($lines);
 
     if (moduleUsesPartialApply($module) || moduleUsesMoggiRuntime($module) || moduleHasMainEntry($module)) {
-        // An entry module calls into the runtime from its own bootstrap
-        // (`reportUncaught`), whether or not its code does.
         $runtime = $options['runtimeRequire'] ?? runtimeRequirePath($sourcePath, $options);
         $lines[] = 'require_once ' . $runtime . ';';
         $lines[] = '';
     }
 
-    // Library-owned PHP helpers: the generically discovered `php/` dependency
-    // dir for this module (`lib/<path>/php/` for `lib/<path>/PHP.mog`). Only the
-    // PHP-backend module owns PHP helpers; a sibling JVM/.NET variant does not.
     $hostCompanionRequires = [];
     $hostCompanionArtifacts = [];
     $hostFiles = phpCompanionFilesForModule($sourcePath);
@@ -220,18 +207,11 @@ function emit(IR\Module $module, string $sourcePath, array $options = []): strin
             $function->srcLoc ?? new IR\SrcLoc($moduleName, $function->name, $displaySource, 0, 0),
             $gen,
         );
-        // Always emit lambda definitions. Arrow-inlining at call sites remains;
-        // skipping the def breaks cross-module Partials/FnRefs (Main may hold
-        // `Data.List::λ23` while List's local walk never sees that use).
 
         $lines[] = rtrim(emitFunction($function, $lambdaMeta, $lambdaIndex, $phpNames, $codegenCtx), "\n");
         $lines[] = '';
     }
 
-    // The map travels inside the module as a single constant line: the runtime
-    // reads it only when a frame in this module is reported, and a run that
-    // never reports never touches one. The line is held back until the map is
-    // known, since it can only be built from the final line numbers.
     if ($sourceMap->carriesRuntimeMap()) {
         array_splice($lines, $mapLineIndex, 0, [MAP_PLACEHOLDER, '']);
     }
@@ -268,8 +248,6 @@ function emitEvidenceFunction(IR\InstanceEvidence $evidence, array $phpNames): s
     $entries = [];
     foreach ($evidence->methods as $surfaceName => $irName) {
         $methodName = phpFunctionName($irName, $phpNames);
-        // Capture instance-context dictionaries in the method closure so
-        // `Bounded a => Bounded (Min a)` can project `maxBound` from `$__ev_Bounded`.
         if ($ctxParams === []) {
             $entries[] = '        ' . json_encode($surfaceName, JSON_UNESCAPED_UNICODE)
                 . " => {$methodName}(...)";
@@ -344,9 +322,6 @@ function analyzeFunctionsForCodegen(array $functions): array
         'lambdaIndex' => $lambdaIndex,
         'lambdaMeta' => lambdaMetaFromCaptures(
             $lambdaIndex,
-            // The function's free locals; the shared helper owns the
-            // transitive closure. Scope-aware, so a name a match arm binds in
-            // the body is not mistaken for a capture.
             static fn (IR\FunctionDecl $fn): array => freeLocalsInBlock(
                 $fn->body,
                 array_fill_keys($fn->params, true),
@@ -529,10 +504,6 @@ function emitStmt(IR\Stmt $stmt, int $indent, array $ctx): string
     $pad = str_repeat('    ', $indent);
 
     return match ($stmt::class) {
-        // A statement is attributed to the innermost call or faulting intrinsic
-        // it evaluates, else to its own site: a `Ret` whose value is a plain
-        // function (no call site of its own) still needs a frame, or the host
-        // reports the generated line under its PHP name with no `.mog` mapping.
         IR\Ret::class => frameMark($ctx, operandCallSrcLoc($stmt->value) ?? ($stmt->srcLoc ?? null))
             . $pad . 'return ' . emitRetValue($stmt->value, $ctx) . ";\n",
         IR\Binop::class => frameMark($ctx, operandCallSrcLoc($stmt->left) ?? operandCallSrcLoc($stmt->right) ?? ($stmt->srcLoc ?? null))
@@ -630,7 +601,6 @@ function moduleHasMainEntry(IR\Module $module): bool
 function emitEntryBootstrap(IR\Module $module, array $phpNames): string
 {
     $entry = $module->entry;
-    // Only application Main auto-runs. ReplExpression is invoked by the REPL loader.
     if (!moduleHasMainEntry($module)) {
         return '';
     }

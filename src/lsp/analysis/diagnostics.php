@@ -67,7 +67,6 @@ function errorToDiagnostic(\Throwable $e, string $uri, string $source): array
             'start' => compilerToLsp($line, $col),
             'end' => compilerToLsp($line, $endCol + 1),
         ],
-        // Holes are actionable info, not hard errors (HLS-style).
         'severity' => ($code === 'hole') ? 2 : 1,
         'message' => $message,
         'source' => 'moggi',
@@ -138,8 +137,6 @@ function unusedImportDiagnostics(
     $usedResolvedModules = [];
     collectImportUsage($program, $usedQualifiers, $usedResolvedModules);
 
-    // Names referenced anywhere in the file (values, constructors, types,
-    // classes, instance heads), for declaration-name matching below.
     $bareNames = [];
     collectBareNames($program, $bareNames);
     if ($usage !== null && $usage !== $program) {
@@ -147,7 +144,6 @@ function unusedImportDiagnostics(
         collectBareNames($usage, $bareNames);
     }
 
-    // Decl names per module from the checked project.
     $declNamesByModule = [];
     if ($prepared !== null) {
         foreach ($prepared->checked as $mName => $prog) {
@@ -166,15 +162,11 @@ function unusedImportDiagnostics(
                     }
                 }
             }
-            // An export list names what a module provides, including re-exports: the facade
-            // `Data.Monoid` provides `Monoid`, which lives in its internal module.
             foreach ($prog->nameRefs() as $ref) {
                 $names[$ref['name']] = true;
             }
             $declNamesByModule[$mName] = $names;
         }
-        // Modules with no source AST of their own (the synthesized Prim/IO modules) declare
-        // nothing to scan, so take their names from the prepared unit's export tables.
         foreach ($prepared->units as $mName => $unit) {
             if (!\is_array($unit) || ($declNamesByModule[$mName] ?? []) !== []) {
                 continue;
@@ -205,8 +197,6 @@ function unusedImportDiagnostics(
             || isset($usedQualifiers[$modulePath])
             || isset($usedResolvedModules[$modulePath]);
         if (!$used && isset($declNamesByModule[$modulePath])) {
-            // A bare identifier that names a declaration of the imported module
-            // counts as a use (we cannot always tell which import supplied it).
             foreach ($bareNames as $n => $_) {
                 if (isset($declNamesByModule[$modulePath][$n])) {
                     $used = true;

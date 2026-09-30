@@ -25,7 +25,6 @@ const FRAMES_CHUNK = 800;
  */
 function buildFrames(array $frames): string
 {
-    // First-wins on duplicate keys, matching the runtime's expectations.
     $rows = [];
     foreach ($frames as $frame) {
         if (!\is_array($frame)) {
@@ -43,7 +42,6 @@ function buildFrames(array $frames): string
         }
     }
     $entries = \array_values($rows);
-    // Deterministic artifact; the lookup is a scan, so order is purely cosmetic.
     \sort($entries, SORT_STRING);
 
     $initCalls = '';
@@ -143,7 +141,6 @@ IL;
     call int32 [System.Runtime]System.Int32::Parse(string)
     stloc ilOff
 
-    // Keep the greatest sequence point at or before the reported offset.
     ldloc ilOff
     ldarg.2
     bgt Next

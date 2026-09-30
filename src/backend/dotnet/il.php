@@ -55,9 +55,6 @@ final class IlText
 /** Escape a string for ILASM `ldstr "..."` / custom attributes. */
 function ilString(string $s): string
 {
-    // Prefer raw UTF-8 in the .il source (Sdk.IL accepts UTF-8 files). Only
-    // escape quotes, backslashes, and C0 controls — \uXXXX is unreliable across
-    // ilasm flavours for supplementary-plane text.
     $out = '';
     $len = \strlen($s);
     $i = 0;

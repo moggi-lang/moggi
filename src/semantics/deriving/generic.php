@@ -133,8 +133,6 @@ function metaDataType(TypeCheckState $state, Ast\DataDecl $decl): Ast\TypeNode
 
 function metaConsType(Ast\ConstructorDecl $ctor): Ast\TypeNode
 {
-    // The `FixityI` metadata carries associativity (and precedence via
-    // a separate Fixity form). Moggi's FixityI is PrefixI | InfixI Associativity.
     $fixity = metaConsFixityType($ctor);
     $isRecord = constructorIsRecord($ctor)
         ? new Ast\TypePromoted('True')
@@ -149,8 +147,6 @@ function metaConsType(Ast\ConstructorDecl $ctor): Ast\TypeNode
 
 function metaConsFixityType(Ast\ConstructorDecl $ctor): Ast\TypeNode
 {
-    // `(:|) a [a]` is a prefix declaration even though the name is an operator,
-    // so only `a :| [a]` is an infix `MetaCons`.
     if (!$ctor->declaredInfix) {
         return new Ast\TypePromoted('PrefixI');
     }
@@ -226,8 +222,6 @@ function synthesizeGenericTo(Ast\DataDecl $decl, Ast\DerivingClassRef $ref): Ast
 function synthesizeFromBody(Ast\DataDecl $decl, string $scrutinee): Ast\AstNode
 {
     if ($decl->constructors === []) {
-        // Uninhabited datatype: wildcard is exhaustive; result is also uninhabited
-        // (Rep = D1 … V1). Looping `from` is a total inhabitant of an empty type.
         return new Ast\Apply(
             new Ast\Variable('from'),
             new Ast\Variable($scrutinee),

@@ -30,7 +30,6 @@ function svcCompletion(AnalysisService $svc, string $uri, array $pos): array
         $beforePrefix = rtrim(substr($before, 0, strlen($before) - strlen($prefix)));
         $module = $analysis->program instanceof Ast\Program ? ($analysis->program->module ?? 'Main') : 'Main';
 
-        // ---- Import context: complete known module paths.
         if (preg_match('/\bimport\s+(?:qualified\s+)?(?:([A-Za-z_][A-Za-z0-9_.]*)\s+as\s+)?([A-Za-z0-9_.]*)$/', $beforePrefix . $prefix, $im)) {
             $typed = $im[2] !== '' ? $im[2] : ($im[1] ?? '');
             $seenMods = [];
@@ -65,22 +64,18 @@ function svcCompletion(AnalysisService $svc, string $uri, array $pos): array
             return ['isIncomplete' => false, 'items' => $items];
         }
 
-        // ---- Member context: completing after `.` on a typed receiver.
         if (str_ends_with(rtrim($beforePrefix), '.') || preg_match('/\.\s*[A-Za-z0-9_\']*$/', $before)) {
             $memberItems = memberCompletionItems($svc, $analysis, $comp['line'], $comp['col'], $prefix);
             if ($memberItems !== null) {
                 return ['isIncomplete' => false, 'items' => $memberItems];
             }
-            // Unknown receiver type: fall through to plain identifier completion.
         }
 
-        // ---- Record-label context: completing a field name inside `{ … }`.
         $recordItems = recordLabelItemsAtCursor($svc, $analysis, $comp, $prefix);
         if ($recordItems !== null) {
             return ['isIncomplete' => false, 'items' => $recordItems];
         }
 
-        // Boost constructors when completing after `case`/`of`/`->` patterns.
         $window = implode("\n", array_slice($lines, max(0, $comp['line'] - 4), 5));
         $nearCase = (bool) preg_match('/\b(case|of)\b/', $window);
         foreach ($analysis->declarations as $name => $decl) {
@@ -118,7 +113,6 @@ function svcCompletion(AnalysisService $svc, string $uri, array $pos): array
                 ],
             ];
         }
-        // Moogle-ranked cross-module suggestions (use index if already warm)
         $ranked = [];
         if ($prefix !== '' && $svc->docIndex !== null) {
             try {
@@ -198,7 +192,6 @@ function memberCompletionItems(AnalysisService $svc, object $analysis, int $line
     if (!$analysis->program instanceof Ast\Program) {
         return null;
     }
-    // The dot sits immediately before the typed prefix (whitespace tolerated).
     $src = splitLines($analysis->source);
     $lineText = $src[$line - 1] ?? '';
     $dotAt = $cursorCol - strlen($prefix) - strlen(rtrim(substr($lineText, 0, max(0, $cursorCol - strlen($prefix) - 1)), " \t")) - 1;
@@ -210,7 +203,6 @@ function memberCompletionItems(AnalysisService $svc, object $analysis, int $line
     if ($dotAt < 1) {
         return null;
     }
-    // Receiver expression: the token(s) before the dot on this line.
     $head = trim(substr($lineText, 0, $dotAt - 1));
     if (preg_match('/([A-Za-z_][A-Za-z0-9_\']*)$/', $head, $m)) {
         $receiverName = $m[1];
@@ -219,7 +211,6 @@ function memberCompletionItems(AnalysisService $svc, object $analysis, int $line
     }
 
     $typeHead = null;
-    // Layer 1: covering FieldAccess node with receiver type (fully-checked file).
     $chain = findNodeChainAt($analysis->program, $line, $dotAt - 1);
     foreach ($chain as $node) {
         if ($node instanceof Ast\FieldAccess) {
@@ -230,7 +221,6 @@ function memberCompletionItems(AnalysisService $svc, object $analysis, int $line
             break;
         }
     }
-    // Layer 2: binder signature / parse-tree construction (error recovery).
     if ($typeHead === null) {
         $typeHead = binderTypeHead($analysis->program, $receiverName);
     }
@@ -241,7 +231,6 @@ function memberCompletionItems(AnalysisService $svc, object $analysis, int $line
     if ($fields !== []) {
         return $fields;
     }
-    // Fall back to nullary constructors of the receiver type.
     $items = [];
     foreach ($svc->project->checked ?? [] as $prog) {
         if (!$prog instanceof Ast\Program) {
@@ -490,7 +479,6 @@ function completionSortText(string $prefix, string $name, int $tier): string
     } elseif ($pl !== '' && str_contains($nl, $pl)) {
         $rank = 2;
     } elseif ($pl !== '') {
-        // Camel-hump / subsequence soft match
         $pi = 0;
         $plen = strlen($pl);
         for ($i = 0, $n = strlen($nl); $i < $n && $pi < $plen; $i++) {
@@ -604,7 +592,6 @@ function buildAutoImportEdits(string $source, string $uri, string $module): arra
  */
 function keywordCompletionItems(): array
 {
-    // CompletionItemKind: Keyword=14, Snippet=15
     $kw = 14;
     $snip = 15;
     $fmt = 2; // InsertTextFormat.Snippet

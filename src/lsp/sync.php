@@ -33,9 +33,6 @@ function applyFullContentChanges(string $previous, array $changes): string
  */
 function applyContentChanges(string $content, array $changes): string
 {
-    // 3.18: '\n', '\r\n' and '\r' are all valid EOL sequences. Remember the
-    // document's dominant EOL so ranged edits don't rewrite the whole file's
-    // line endings when splicing back together.
     $crlf = substr_count($content, "\r\n");
     $lf = substr_count($content, "\n") - $crlf;
     $cr = substr_count($content, "\r") - $crlf;

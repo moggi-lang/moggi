@@ -56,7 +56,6 @@ function synthesizeFoldableFoldr(
     foreach ($decl->constructors as $ctor) {
         $pats = freshPatVars('__v', count($ctor->fields));
         $names = patVarNames($pats);
-        // Left-to-right: foldr f (foldr_fields_rest) field0
         $acc = new Ast\Variable($z);
         for ($i = count($ctor->fields) - 1; $i >= 0; --$i) {
             $acc = synthesizeFoldableField(

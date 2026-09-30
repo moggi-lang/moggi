@@ -70,8 +70,6 @@ function resolveJvmForeignPath(string $path): array
     if (str_contains($path, ':')) {
         $dispatch = match ($member) {
             '__con' => 'constructor',
-            // A cast is not a member of the host class: it is a checkcast the
-            // emitter writes, exactly as .NET treats __cast/__default/__null.
             '__cast' => 'intrinsic',
             default => 'static',
         };
@@ -120,7 +118,6 @@ function jvmIsInterface(string $internalName): bool
         'java/nio/file/DirectoryStream' => true,
         'java/util/concurrent/ConcurrentMap' => true,
         'moggi/rt/Fn' => true,
-        // Handle-level close() dispatches via interface.
         'java/io/Closeable' => true,
     ];
 
@@ -164,9 +161,6 @@ function jvmDescriptorFromMoggiType(
     }
     $result = jvmForeignIoInnerType($type);
 
-    // Instance methods take an explicit receiver as the first Moggi argument.
-    // Constructors do not — every arrow argument is a <init> parameter; the
-    // constructed object is the Moggi result (descriptor returns void).
     if ($dispatch === 'instance') {
         if ($argTypes === []) {
             throw new \RuntimeException('JVM instance foreign requires a receiver argument');
@@ -193,7 +187,6 @@ function jvmDescriptorFromMoggiType(
 
 function jvmFieldDescriptorFromMoggiType(Ast\TypeNode $type, ?string $classPath, ?string $member): string
 {
-    // JDK static fields whose binary type differs from the Moggi Int mapping.
     $key = ($classPath ?? '') . ':' . ($member ?? '');
     $known = [
         'java.lang.Long:MIN_VALUE' => 'J',
@@ -221,8 +214,6 @@ function jvmTypeDescriptorFromMoggiType(
         return 'V';
     }
 
-    // Maybe a / Either e a are ordinary Moggi ADTs. Host APIs return the value
-    // payload (nullable); emit applies IoWrap to build Just/Nothing or Left/Right.
     if ($type instanceof Ast\TypeApp && $type->con instanceof Ast\TypeCon) {
         $container = $type->con->name;
         if ($container === 'Maybe') {
@@ -255,7 +246,6 @@ function jvmTypeDescriptorFromMoggiType(
 
     $con = jvmForeignTypeConName($type);
 
-    // Objects.* APIs erase reference args (and requireNonNull's return) to Object.
     if ($classPath === 'java.util.Objects') {
         if ($member === 'isNull' || $member === 'nonNull') {
             if (!$isReturn) {
@@ -267,22 +257,16 @@ function jvmTypeDescriptorFromMoggiType(
         }
     }
 
-    // writeString(Path, CharSequence[, OpenOption...]) — String is a CharSequence.
     if (!$isReturn && $classPath === 'java.nio.file.Files' && $member === 'writeString' && $con === 'String') {
         return 'Ljava/lang/CharSequence;';
     }
 
-    // Handle-level overrides for specific constructors/methods (arg indices
-    // are 0-based into the *Moggi* argument list; for instance dispatch the
-    // receiver is already shifted out, so index 0 = first caller arg).
     $argOverride = jvmArgDescriptorOverride($classPath, $member, $dispatch, $isReturn, $argIndex);
     if ($argOverride !== null) {
         return $argOverride;
     }
 
     return match ($con) {
-        // Platform word Int is i64 (J). Fixed-width Ints map to exact JVM
-        // primitives; Char is a Unicode codepoint (JVM char APIs take int).
         'Int' => 'J',
         'Int8' => 'B',
         'Int16' => 'S',
@@ -339,7 +323,6 @@ function jvmOpaqueObjectDescriptor(?string $classPath, bool $isReturn, string $d
 
 function jvmListDescriptor(?string $classPath, ?string $member = null): string
 {
-    // Only known JDK APIs that return Stream; do not map every java.* List.
     $key = ($classPath ?? '') . '.' . ($member ?? '');
     $streamReturns = [
         'java.lang.String.lines' => true,
@@ -391,7 +374,6 @@ function jvmArgDescriptorOverride(
     bool $isReturn,
     int $argIndex = 0,
 ): ?string {
-    // java.io.Console.reader — instance method returning BufferedReader.
     if (
         $classPath === 'java.io.Console'
         && $member === 'reader'
@@ -400,7 +382,6 @@ function jvmArgDescriptorOverride(
     ) {
         return 'Ljava/io/BufferedReader;';
     }
-    // java.lang.System:console — static field returning Console.
     if (
         $classPath === 'java.lang.System'
         && $member === 'console'
@@ -409,7 +390,6 @@ function jvmArgDescriptorOverride(
     ) {
         return 'Ljava/io/Console;';
     }
-    // java.nio.charset.StandardCharsets:UTF_8 — static field Charset.
     if (
         $classPath === 'java.nio.charset.StandardCharsets'
         && $member === 'UTF_8'
@@ -428,23 +408,19 @@ function jvmArgDescriptorOverride(
         return 'Ljava/io/Writer;';
     }
 
-    // Constructor argument narrowing:
     if ($dispatch !== 'constructor') {
         return null;
     }
 
     $ctorKey = ($classPath ?? '') . ':__con';
     $overridden = [
-        // InputStreamReader(InputStream, Charset) — both args are narrower than Object.
         'java.io.InputStreamReader:__con' => [
             0 => 'Ljava/io/InputStream;',
             1 => 'Ljava/nio/charset/Charset;',
         ],
-        // BufferedReader(Reader) — narrower than Object.
         'java.io.BufferedReader:__con' => [
             0 => 'Ljava/io/Reader;',
         ],
-        // PrintStream(OutputStream, boolean, Charset) — narrowed.
         'java.io.PrintStream:__con' => [
             0 => 'Ljava/io/OutputStream;',
             2 => 'Ljava/nio/charset/Charset;',

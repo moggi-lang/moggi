@@ -124,8 +124,6 @@ function requireDeeperThanDecl(ParserState $state, string $keyword): void
 function parseBindings(ParserState $state): array
 {
     skipDocComments($state);
-    // The block's column comes from the token, not the parsed item: an item with no
-    // column would leave the block unbounded and swallow following declarations.
     $blockCol = peek($state)->col;
     $items = [parseLetItem($state)];
 
@@ -134,8 +132,6 @@ function parseBindings(ParserState $state): array
             advance($state);
         }
 
-        // Docs before a local binding must not end the group; skip them only when a binding
-        // at this block's column follows, so dedented docs stay with their declaration.
         skipDocCommentsBefore($state, static function (ParserState $s) use ($blockCol): bool {
             return looksLikeLetItem($s) && peek($s)->col >= $blockCol;
         });
@@ -144,8 +140,6 @@ function parseBindings(ParserState $state): array
             break;
         }
 
-        // Offside: a less-indented binder ends the let/where group (so a
-        // following top-level `main ::` is not swallowed as a local signature).
         if (peek($state)->col < $blockCol) {
             break;
         }
@@ -235,7 +229,7 @@ function looksLikeFunEquation(ParserState $state): bool
 
     $saved = $state->pos;
     try {
-        advance($state); // name
+        advance($state);
         while (startsPattern($state)
             && !isAt($state, TokenKind::Op, 0, '=')
             && !isAt($state, TokenKind::Pipe)
@@ -243,8 +237,6 @@ function looksLikeFunEquation(ParserState $state): bool
             parsePatternArg($state);
         }
 
-        // `name =` is a nullary fun equation so signatures attach cleanly;
-        // ConId/tuple pattern binds use looksLikePatternBinding.
         return isAt($state, TokenKind::Op, 0, '=') || isAt($state, TokenKind::Pipe);
     } catch (ParseError) {
         return false;
@@ -303,8 +295,6 @@ function parseLambdaParam(ParserState $state): Ast\LambdaParam
         $type = parseTypeAtom($state);
     }
 
-    // The parameter stands for a real piece of source ("lambda parameters must be variables" is
-    // reported against it), so it carries the pattern's own position.
     return spannedRange(new Ast\LambdaParam($pattern, $type), $pattern, $type ?? $pattern);
 }
 
@@ -376,8 +366,6 @@ function parseCase(ParserState $state): Ast\AstNode
     $scrutinee = parseInfix($state, 0);
     $state->parsingCaseScrutinee = false;
     expectCaseOf($state, $scrutinee);
-    // Layout: the first alternative's column is the offside column; without it an outer
-    // arm after a nested arm is absorbed as a further alternative.
     skipDocComments($state);
     $altCol = peek($state)->col;
     $prevAltCol = $state->caseAltCol;
@@ -391,8 +379,6 @@ function parseCase(ParserState $state): Ast\AstNode
             $afterSemi = true;
         }
 
-        // Docs before an alternative are comments; skip them only when the
-        // alternative belongs to this case (same column, or after a `;`).
         skipDocCommentsBefore($state, static function (ParserState $s) use ($altCol, $afterSemi): bool {
             return startsPattern($s)
                 && !startsTopLevelDecl($s)
@@ -403,8 +389,6 @@ function parseCase(ParserState $state): Ast\AstNode
             break;
         }
 
-        // Layout continuation: same column as the first alt. Semicolon-separated
-        // alts (`A -> 1; B -> 2`) may sit deeper than `$altCol` — accept those.
         if (!$afterSemi && peek($state)->col !== $altCol) {
             break;
         }
@@ -427,9 +411,6 @@ function parseDo(ParserState $state): Ast\AstNode
     $prevInDo = $state->inDoBlock;
     $prevDoCol = $state->doBlockCol;
     $state->inDoBlock = true;
-    // Offside column for this do: first statement's column. Binders/stmts at
-    // this column or deeper stay inside the do; less-indented `name =` is a
-    // following top-level decl.
     skipDocComments($state);
     $state->doBlockCol = peek($state)->col;
     $lastStmtStart = peek($state);
@@ -448,8 +429,6 @@ function parseDo(ParserState $state): Ast\AstNode
             break;
         }
 
-        // Layout: a statement left of this block's column belongs to an enclosing one, which is
-        // what lets a `do` sit on the right of a `<-` without swallowing the binding's siblings.
         if (peek($state)->col < $state->doBlockCol) {
             break;
         }
@@ -461,7 +440,6 @@ function parseDo(ParserState $state): Ast\AstNode
     $state->inDoBlock = $prevInDo;
     $state->doBlockCol = $prevDoCol;
 
-    // A block yields the value of its last statement, so that statement has to be an expression.
     $last = $stmts[count($stmts) - 1];
     if ($last instanceof Ast\DoBind || $last instanceof Ast\DoLet) {
         throw parseError(
@@ -544,8 +522,6 @@ function parseDoBindings(ParserState $state): array
     $items = [parseDoLetItem($state)];
     $blockCol = $items[0]['col'] ?? peek($state)->col;
 
-    // Same continuation rule as parseBindings, but not startsDoStmt: every binder also
-    // looks like an expression start and would abort the group.
     while (true) {
         if (isAt($state, TokenKind::Semicolon)) {
             advance($state);
@@ -624,15 +600,12 @@ function parseAlt(ParserState $state): Ast\Alt
     $pattern = parsePattern($state);
     $state->inCaseAltPattern = false;
 
-    // `p | guard -> body`: the alternative's body is a guard list, exactly like a
-    // function clause's, only terminated by `->`.
     if (isAt($state, TokenKind::Pipe)) {
         return new Ast\Alt($pattern, parseGuardBody($state, '->', caseAlt: true));
     }
 
     expectOp($state, '->');
     $arrowLine = $state->tokens[$state->pos - 1]->line;
-    // A doc comment between `->` and the body is a comment, not the body's line.
     skipDocComments($state);
 
     if (peek($state)->line === $arrowLine
@@ -651,8 +624,6 @@ function parseAlt(ParserState $state): Ast\Alt
  */
 function parseCaseAltBody(ParserState $state): Ast\AstNode
 {
-    // Layout for the body is measured from its first *real* token, so a doc
-    // comment on the line before it does not look like a nested body.
     skipDocComments($state);
     $prevStop = $state->stopBeforeCaseAlt;
     $prevLine = $state->caseAltBodyLine;
@@ -676,8 +647,6 @@ function startsCaseAlt(ParserState $state): bool
         return false;
     }
 
-    // Ask the pattern parser rather than listing pattern-start tokens: a missing one
-    // silently ends the alternative list (`(_, _)` becoming an application).
     $saved = $state->pos;
     $savedInAltPattern = $state->inCaseAltPattern;
     $state->inCaseAltPattern = true;
@@ -688,9 +657,6 @@ function startsCaseAlt(ParserState $state): bool
             return true;
         }
 
-        // A guarded alternative starts the same way: `p | g -> e`. A list
-        // comprehension element (`[x | x <- xs]`) has the same prefix but is
-        // inside brackets, where no alternative can begin.
         return isAt($state, TokenKind::Pipe) && !insideBrackets($state);
     } catch (ParseError) {
         return false;
@@ -705,8 +671,6 @@ function startsCaseAlt(ParserState $state): bool
  */
 function parseInfix(ParserState $state, int $minPrec): Ast\AstNode
 {
-    // Doc comments in front of an expression are comments (bodies, list
-    // elements, `do` statements, operator right-hand sides, …).
     skipDocComments($state);
 
     $left = parseAscription($state);
@@ -791,8 +755,6 @@ function parseApplication(ParserState $state): Ast\AstNode
     $expr = parseProjection($state);
 
     while (true) {
-        // A doc comment before an argument is a comment, not the end of the
-        // application (only when a real argument follows it).
         while (isArgumentStart($state) || skipDocCommentsBefore($state, isArgumentStart(...))) {
             if ($state->parsingCaseScrutinee && startsCaseAlt($state)) {
                 break 2;
@@ -816,9 +778,6 @@ function parseApplication(ParserState $state): Ast\AstNode
                 break 2;
             }
 
-            // Nothing can start a declaration inside a guard expression: the
-            // `=` that follows `| positive n` closes the clause, it does not
-            // bind a new `n`. And a mid-line token is never a declaration.
             if (!$state->parsingGuardExpr
                 && tokenStartsLine($state)
                 && (startsTopLevelDecl($state) || isFollowingTopLevelDecl($state) || looksLikeParenOperatorMethodDecl($state) || looksLikeParenOperatorTypedDecl($state))) {
@@ -867,9 +826,6 @@ function parseProjection(ParserState $state): Ast\AstNode
             continue;
         }
 
-        // `p { age = 31 }` — the record the expression already is, with the named
-        // fields replaced. It is an atom-level suffix like projection, so
-        // `f p { age = 31 }` updates `p` and passes the result to `f`.
         if (isAt($state, TokenKind::LBrace)) {
             $brace = peek($state);
             $fields = parseRecordConFields($state);
@@ -937,9 +893,6 @@ function isExprStart(ParserState $state): bool
 
 function isArgumentStart(ParserState $state): bool
 {
-    // A guard expression cannot be followed by a declaration: `| positive n =
-    // "yes"` applies `positive` to `n`, the `=` closes the clause. And only a
-    // token that begins a line can begin a declaration at all.
     if (!$state->parsingGuardExpr
         && tokenStartsLine($state)
         && (isFollowingTopLevelDecl($state) || looksLikeParenOperatorMethodDecl($state) || looksLikeParenOperatorTypedDecl($state))) {
@@ -978,11 +931,7 @@ function parseAtom(ParserState $state): Ast\AstNode
         advance($state);
         $operand = parseAtom($state);
 
-        // A negated literal is still a literal, so `-2147483648` is a constant
-        // even in a module that has no `Num` in scope.
         if ($operand instanceof Ast\IntegerLit) {
-            // Negating at the literal keeps `-9223372036854775808` a constant
-            // (its own negation wraps back to itself) instead of a float.
             $lexeme = $operand->digits ?? (string) $operand->value;
             $negated = spanned(new Ast\IntegerLit(integerLitValue('-' . $lexeme)), $token);
             if ($operand->digits !== null) {
@@ -996,9 +945,6 @@ function parseAtom(ParserState $state): Ast\AstNode
             return spanned(new Ast\DoubleLit(-$operand->value), $token);
         }
 
-        // Prefix minus on anything else is `negate`, not `0 - x`: the zero
-        // would pin the operand to the `Int` instance and reject
-        // Double/Integer/Word ones.
         return spanned(new Ast\Apply(new Ast\Variable('negate'), $operand), $token);
     }
 
@@ -1157,15 +1103,11 @@ function spliceOperatorSection(ParserState $state, int $open): bool
         return false;
     }
 
-    // A right section's operand goes in front of the operator (`(* 2)`); a
-    // left section's behind it (`(2 *)`).
     $first = operatorTokensAt($state, $open + 1);
     if ($first !== null && $first['end'] < $close && isSectionOperator($first['lexeme'], leading: true)) {
         return spliceSectionVar($state, $open + 1);
     }
 
-    // The closing operator is the section's: a symbolic one is the token before
-    // `)`, a backticked one the three tokens ending there.
     foreach ([$close - 1, $close - 3] as $at) {
         $last = operatorTokensAt($state, $at);
         if ($last !== null && $last['end'] === $close && $at > $open + 1 && isSectionOperator($last['lexeme'], leading: false)) {
@@ -1224,8 +1166,6 @@ function parseParen(ParserState $state): Ast\AstNode
         return spanned(new Ast\Tuple([]), $start);
     }
 
-    // `(+)` is an operator reference, but `(-7)` and `(- 7)` are negated
-    // literals: the operator-reference branch needs the closing paren.
     if (isAt($state, TokenKind::Op) && peekAt($state, 1)->kind === TokenKind::RParen) {
         $opToken = advance($state);
         advance($state);
