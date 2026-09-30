@@ -65,7 +65,7 @@ jobs:
 
       - name: Install MSYS2 for the schnorr CLI
         if: runner.os == 'Windows'
-        uses: msys2/setup-msys2@v2.32.0
+        uses: msys2/setup-msys2@v2.33.0
         with:
           msystem: ${{ matrix.msystem }}
           update: false
