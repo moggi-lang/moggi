@@ -2,14 +2,10 @@
 module Data.String.DotNet
   ( singleton
   , unpack
-  , pack
   , length
   , take
   , drop
-  , strNull
-  , strConcat
-  , strReverse
-  , strMap
+  , reverse
   , isPrefixOf
   , isSuffixOf
   , splitOn
@@ -23,6 +19,7 @@ import Data.Bool
 import Data.Char
 import Data.Int
 import Data.List hiding (singleton, take, drop, isPrefixOf, isSuffixOf)
+import Data.List qualified as L
 import Data.Ord
 import Moggi.Internal.Prim
 
@@ -30,8 +27,6 @@ import Moggi.Internal.Prim
 -- Width-exact signatures: BCL String/Char APIs are int32/UTF-16-char based.
 
 foreign dotnet function rawConvertFromUtf32 "System.Char:ConvertFromUtf32" :: Int32 -> String
-
-singleton c = rawConvertFromUtf32 (int32FromInt# (charToInt# c))
 
 foreign dotnet function rawUtf16Length "System.String.get_Length" :: String -> Int32
 
@@ -50,6 +45,10 @@ foreign dotnet function rawStartsWith "System.String.StartsWith" :: String -> St
 foreign dotnet function rawEndsWith "System.String.EndsWith" :: String -> String -> Bool
 
 foreign dotnet function rawIndexOfFrom "System.String.IndexOf" :: String -> String -> Int32 -> Int32
+
+foreign dotnet function rawToCharArray "System.String:ToCharArray" :: String -> [Char]
+
+singleton c = rawConvertFromUtf32 (int32FromInt# (charToInt# c))
 
 utf16Length s = int32ToInt# (rawUtf16Length s)
 
@@ -138,11 +137,6 @@ listMap f xs = case xs of
   [] -> []
   x : rest -> f x : listMap f rest
 
-packChars :: [Char] -> String
-packChars xs = case xs of
-  [] -> ""
-  c : rest -> singleton c <> packChars rest
-
 length :: String -> Int
 length s = codePointCount s 0 (utf16Length s)
 
@@ -162,24 +156,21 @@ drop n s =
     EQ -> ""
     GT -> ""
 
-strNull :: String -> Bool
-strNull s = case length s of
-  0 -> True
-  _ -> False
+-- | Reverse by Unicode scalar. The reversed scalars have to be rebuilt one at
+-- a time: the BCL reverses a `char[]` in place, and a list cannot be handed to
+-- a foreign call, so `System.Array.Reverse` is not reachable from here.
+reverse :: String -> String
+reverse s = packChars (reverseChars (unpack s) [])
 
-strConcat :: [String] -> String
-strConcat xs = case xs of
+reverseChars :: [Char] -> [Char] -> [Char]
+reverseChars cs acc = case cs of
+  [] -> acc
+  c : rest -> reverseChars rest (c : acc)
+
+packChars :: [Char] -> String
+packChars cs = case cs of
   [] -> ""
-  x : rest -> x <> strConcat rest
-
-pack :: [Char] -> String
-pack xs = packChars xs
-
-strReverse :: String -> String
-strReverse s = packChars (reverse (unpack s))
-
-strMap :: (Char -> Char) -> String -> String
-strMap f s = packChars (listMap f (unpack s))
+  c : rest -> stringAppend# (singleton c) (packChars rest)
 
 isPrefixOf :: String -> String -> Bool
 isPrefixOf prefix s = rawStartsWith s prefix
@@ -189,7 +180,7 @@ isSuffixOf suffix s = rawEndsWith s suffix
 
 lines :: String -> [String]
 lines "" = ([] :: [String])
-lines s = reverse (dropWhile (\x -> x == "") (reverse (splitOn "\n" s)))
+lines s = L.reverse (dropWhile (\x -> x == "") (L.reverse (splitOn "\n" s)))
 
 words :: String -> [String]
 words s = filter (\w -> w /= "") (splitOn " " s)

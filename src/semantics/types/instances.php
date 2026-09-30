@@ -872,7 +872,13 @@ function validateNoDuplicateInstance(TypeCheckState $state, Ast\InstanceDecl $de
             continue;
         }
 
-        if (instanceHeadsMatch($state, $headType, $instance['head'])) {
+        // A checked-instance head is an internal type object, never an AST
+        // head, so compare the two structurally with type variables renamed:
+        // alpha-equivalent heads (`Eq [a]` vs `Eq [b]`) are the same instance.
+        // Without this, two hand-written instances in one module slip past and
+        // only collide at codegen ("Cannot redeclare function ... __ev_...").
+        if (freshenStableTypeKey(prune($state, $headType))
+            === freshenStableTypeKey(prune($state, $instance['head']))) {
             throw typeFail(
                 $state,
                 'duplicate instance for `' . $decl->class . ' ' . typeToString($headType, friendlyTypeVarNames([$headType])) . '`',

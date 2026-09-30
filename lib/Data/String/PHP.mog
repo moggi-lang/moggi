@@ -2,14 +2,10 @@
 module Data.String.PHP
   ( singleton
   , unpack
-  , pack
   , length
   , take
   , drop
-  , strNull
-  , strConcat
-  , strReverse
-  , strMap
+  , reverse
   , isPrefixOf
   , isSuffixOf
   , splitOn
@@ -23,6 +19,7 @@ import Data.Bool
 import Data.Char
 import Data.Int
 import Data.List hiding (singleton, take, drop, isPrefixOf, isSuffixOf)
+import Data.List qualified as L
 import Data.Ord
 import Moggi.Internal.Prim
 
@@ -47,6 +44,8 @@ foreign php function rawEndsWith "str_ends_with" :: String -> String -> Bool
 
 foreign php function rawExplode "explode" :: String -> String -> [String]
 
+foreign php function rawArrayReverse "array_reverse" :: [String] -> [String]
+
 utf8 = "UTF-8"
 
 singleton c = intlChr c
@@ -55,35 +54,34 @@ coerceIntToChar n = intToChar# n
 
 chunkToChar ch = coerceIntToChar (intlOrd ch)
 
-listMap f xs = case xs of
-  [] -> []
-  x : rest -> f x : listMap f rest
-
-unpack s = listMap chunkToChar (mbStrSplit s 1 utf8)
-
-pack cs = implode "" (listMap singleton cs)
+unpack s = L.map chunkToChar (mbStrSplit s 1 utf8)
 
 length s = mbStrLen s utf8
 
-take n s = mbSubstr s 0 n utf8
+-- A negative length is not "zero chars" to `mb_substr`: it means "all but the
+-- last |n|", so the sign has to be rejected before the call.
+take :: Int -> String -> String
+take n s = case intCompare# n 0 of
+  GT -> mbSubstr s 0 n utf8
+  _ -> ""
 
-drop n s =
+drop :: Int -> String -> String
+drop n s = case intCompare# n 0 of
+  GT -> dropWithin n s
+  _ -> s
+
+dropWithin :: Int -> String -> String
+dropWithin n s =
   let len = length s
   in case intCompare# n len of
     LT -> mbSubstr s n (len - n) utf8
     _ -> ""
 
-strNull s = case length s of
-  0 -> True
-  _ -> False
-
-strConcat xs = case xs of
-  [] -> ""
-  x : rest -> x <> strConcat rest
-
-strReverse s = pack (reverse (unpack s))
-
-strMap f s = pack (listMap f (unpack s))
+-- | Reverse by Unicode scalar. `strrev` is byte-wise and would split a
+-- multi-byte scalar, so split on codes and reverse the chunks instead: three
+-- linear passes over the string rather than the list round-trip through `pack`.
+reverse :: String -> String
+reverse s = implode "" (rawArrayReverse (mbStrSplit s 1 utf8))
 
 isPrefixOf prefix s = rawStartsWith s prefix
 
@@ -93,7 +91,7 @@ splitOn :: String -> String -> [String]
 splitOn sep s = rawExplode sep s
 
 lines "" = ([] :: [String])
-lines s = reverse (dropWhile (\x -> x == "") (reverse (splitOn "\n" s)))
+lines s = L.reverse (dropWhile (\x -> x == "") (L.reverse (splitOn "\n" s)))
 
 words s = (filter (\w -> w /= "") (splitOn " " s) :: [String])
 

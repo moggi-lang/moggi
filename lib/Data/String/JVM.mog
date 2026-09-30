@@ -2,14 +2,10 @@
 module Data.String.JVM
   ( singleton
   , unpack
-  , pack
   , length
   , take
   , drop
-  , strNull
-  , strConcat
-  , strReverse
-  , strMap
+  , reverse
   , isPrefixOf
   , isSuffixOf
   , splitOn
@@ -22,7 +18,7 @@ module Data.String.JVM
 import Data.Bool
 import Data.Char
 import Data.Int
-import Data.List hiding (singleton, take, drop, isPrefixOf, isSuffixOf)
+import Data.List qualified as L
 import Data.Ord
 import Moggi.Internal.Prim
 
@@ -51,6 +47,16 @@ foreign jvm function rawEndsWith "java.lang.String.endsWith" :: String -> String
 foreign jvm function lines "java.lang.String.lines" :: String -> [String]
 
 foreign jvm function rawIndexOfFrom "java.lang.String.indexOf" :: String -> String -> Int32 -> Int32
+
+foreign jvm type StringBuilder "java.lang.StringBuilder"
+
+-- StringBuilder.reverse treats a surrogate pair as one character, so an
+-- astral scalar survives the reversal.
+foreign jvm function newStringBuilder "java.lang.StringBuilder:__con" :: String -> StringBuilder
+
+foreign jvm function sbReverse "java.lang.StringBuilder.reverse" :: StringBuilder -> StringBuilder
+
+foreign jvm function sbToString "java.lang.StringBuilder.toString" :: StringBuilder -> String
 
 utf16Length s = int32ToInt# (rawUtf16Length s)
 
@@ -84,47 +90,38 @@ splitOnAt sep s start =
     EQ -> substring s start (utf16Length s) : []
     _ -> substring s start i : splitOnAt sep s (i + utf16Length sep)
 
-packChars :: [Char] -> String
-packChars xs = case xs of
-  [] -> ""
-  c : rest -> singleton c <> packChars rest
-
 length :: String -> Int
 length s = codePointCount s 0 (utf16Length s)
 
 take :: Int -> String -> String
-take n s = substring s 0 (offsetByCodePoints s 0 n)
+take n s = case intCompare# n 0 of
+  GT -> takeWithin n s
+  _ -> ""
+
+-- `offsetByCodePoints` reads "n scalars from 0", which is an unchecked index:
+-- a count past the end throws, and a negative one walks off the front. Clamp
+-- here so only a positive, in-bounds count reaches it.
+takeWithin :: Int -> String -> String
+takeWithin n s =
+  let len = length s
+  in case intCompare# n len of
+    LT -> substring s 0 (offsetByCodePoints s 0 n)
+    _ -> s
 
 drop :: Int -> String -> String
-drop n s =
+drop n s = case intCompare# n 0 of
+  GT -> dropWithin n s
+  _ -> s
+
+dropWithin :: Int -> String -> String
+dropWithin n s =
   let len = length s
   in case intCompare# n len of
     LT -> substring s (offsetByCodePoints s 0 n) (utf16Length s)
     _ -> ""
 
-strNull :: String -> Bool
-strNull s = case length s of
-  0 -> True
-  _ -> False
-
-strConcat :: [String] -> String
-strConcat xs = case xs of
-  [] -> ""
-  x : rest -> x <> strConcat rest
-
-pack :: [Char] -> String
-pack xs = packChars xs
-
-strReverse :: String -> String
-strReverse s = packChars (reverse (unpack s))
-
-strMap :: (Char -> Char) -> String -> String
-strMap f s = packChars (listMapChar f (unpack s))
-
-listMapChar :: (Char -> Char) -> [Char] -> [Char]
-listMapChar f xs = case xs of
-  [] -> []
-  x : rest -> f x : listMapChar f rest
+reverse :: String -> String
+reverse s = sbToString (sbReverse (newStringBuilder s))
 
 isPrefixOf :: String -> String -> Bool
 isPrefixOf prefix s = rawStartsWith s prefix
@@ -133,7 +130,7 @@ isSuffixOf :: String -> String -> Bool
 isSuffixOf suffix s = rawEndsWith s suffix
 
 words :: String -> [String]
-words s = filter (\w -> w /= "") (splitOn " " s)
+words s = L.filter (\w -> w /= "") (splitOn " " s)
 
 unlines :: [String] -> String
 unlines [] = ""

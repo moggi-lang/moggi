@@ -7,13 +7,19 @@
 module Data.String
   ( String
   , singleton
-  , unpack
   , pack
+  , unpack
   , length
   , take
   , drop
+  , splitAt
+  , null
+  , filter
+  , map
+  , reverse
   , isPrefixOf
   , isSuffixOf
+  , splitOn
   , lines
   , words
   , unlines
@@ -35,22 +41,36 @@ import Moggi.Internal.Prim
 -- Equality is scalar-sequence identity (no implicit normalization).
 type String = String#
 
+instance Semigroup String where
+  (<>) a b = stringAppend# a b
+
+-- | Construct a string from a single char.
 singleton :: Char -> String
 
 unpack :: String -> [Char]
 
 pack :: [Char] -> String
+pack xs = case xs of
+  [] -> ""
+  c : cs -> singleton c <> pack cs
 
--- Public length/take/drop count Unicode scalar values, not bytes.
+
 length :: String -> Int
 
 take :: Int -> String -> String
 
 drop :: Int -> String -> String
 
+-- | Split after the first @n@ scalars; either side stops at the end of the
+-- string, so @n@ past the length puts everything on the left.
+splitAt :: Int -> String -> (String, String)
+splitAt n s = (take n s, drop n s)
+
 isPrefixOf :: String -> String -> Bool
 
 isSuffixOf :: String -> String -> Bool
+
+splitOn :: String -> String -> [String]
 
 lines :: String -> [String]
 
@@ -59,6 +79,29 @@ words :: String -> [String]
 unlines :: [String] -> String
 
 unwords :: [String] -> String
+
+filterChars :: (Char -> Bool) -> [Char] -> [Char]
+filterChars p cs = case cs of
+  [] -> []
+  c : rest -> case p c of
+    True -> c : filterChars p rest
+    False -> filterChars p rest
+
+filter :: (Char -> Bool) -> String -> String
+filter p s = pack (filterChars p (unpack s))
+
+mapChars :: (Char -> Char) -> [Char] -> [Char]
+mapChars f cs = case cs of
+  [] -> []
+  c : rest -> f c : mapChars f rest
+
+map :: (Char -> Char) -> String -> String
+map f s = pack (mapChars f (unpack s))
+
+reverse :: String -> String
+
+null :: String -> Bool
+null s = length s == 0
 
 -- | Show a string the way it is written in a source literal: the double quote
 -- that delimits it is escaped, every other character through 'showLitChar'.
@@ -93,9 +136,6 @@ instance Eq String where
 
 instance Ord String where
   compare a b = stringCompare# a b
-
-instance Semigroup String where
-  (<>) a b = stringAppend# a b
 
 instance Monoid String where
   mempty = ""

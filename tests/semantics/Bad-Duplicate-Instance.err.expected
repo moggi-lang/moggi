@@ -1,0 +1,4 @@
+tests/semantics/Bad-Duplicate-Instance.mog:18:10: type error: duplicate instance for `Check Box`
+
+  18 | instance Check Box where
+     |          ^^^^^
