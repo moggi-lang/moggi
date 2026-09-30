@@ -31,7 +31,6 @@ function parseLspArgs(array $argv): array
             $cursor->takeNoCache();
             continue;
         }
-        // vscode-languageclient passes --stdio when using stdio transport; ignore it.
         if ($arg === '--stdio') {
             $cursor->take();
             continue;
@@ -51,7 +50,6 @@ function runLsp(array $argv): int
     $parsed = parseLspArgs($argv);
     Backend\setCompileBackend($parsed['backend']);
 
-    // The LSP runs over stdio, so suppress any non-LSP output to stdout.
     return runServer($parsed['libDirs']);
 }
 

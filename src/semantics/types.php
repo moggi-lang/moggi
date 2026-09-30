@@ -113,6 +113,10 @@ function inferredFunctionDecls(Ast\Program $program): array
 
 /**
  * @param array<string, mixed> $importContext
+ * @param ?array{env: array<string, mixed>, data: array<string, mixed>, typeSynonyms: array<string, mixed>, intrinsicWrappers: array<string, string>} $interface
+ *   receives the local type environment this check commits (its env, data,
+ *   type synonyms and intrinsic wrappers), so the module interface is a product
+ *   of the check rather than of a separate preliminary pass
  */
 function checkRaw(
     Ast\Program $program,
@@ -120,6 +124,7 @@ function checkRaw(
     string $filename = '',
     array $importContext = [],
     CompilePurpose $purpose = CompilePurpose::Executable,
+    ?array &$interface = null,
 ): Ast\Program {
     $state = newState($source, $filename);
 
@@ -127,6 +132,15 @@ function checkRaw(
     Registry\registerTypeDeclarations($state, $program);
     Registry\registerFunctionSchemesFromProgram($state, $program);
     discoverInferredSignatures($state, inferredFunctionDecls($program));
+
+    $interface = [
+        'env' => $state->env,
+        'data' => $state->data,
+        'typeSynonyms' => $state->typeSynonyms,
+        'intrinsicWrappers' => $state->intrinsicWrappers,
+    ];
+
+    $state->declSpan = ['line' => 0, 'col' => 0, 'endCol' => 0];
 
     $items = [];
     $seenData = [];
@@ -191,6 +205,7 @@ function checkRaw(
     finishRestrictedDeclarations($state);
 
     validateEntryPoint($state, $items, $program->module, $purpose);
+
     $freeFnNames = [];
     foreach ($items as $item) {
         if ($item instanceof Ast\FunctionDecl

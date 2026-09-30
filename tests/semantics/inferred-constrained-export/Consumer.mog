@@ -1,0 +1,6 @@
+module Inferred.Consumer (consumerValue) where
+
+import Inferred.Provider
+
+consumerValue :: String
+consumerValue = renderOne (1 :: Int)

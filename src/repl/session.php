@@ -18,10 +18,9 @@ use Moggi\Syntax\Parser\ReplFragment;
 use function Moggi\Backend\backendById;
 use function Moggi\Backend\setCompileBackend;
 use function Moggi\Modules\buildImportContext;
-use function Moggi\Modules\buildModuleLocalTypes;
 use function Moggi\Modules\indexProjectInstances;
 use function Moggi\Modules\injectPreludeImport;
-use function Moggi\Modules\mergeModuleLocalTypesIntoImportContext;
+use function Moggi\Modules\moduleFacadeExtraTypes;
 use function Moggi\Modules\moduleNameToNamespace;
 use function Moggi\Paths\moduleNameToPath;
 use function Moggi\Semantics\Effects\checkAndNormalize;
@@ -245,8 +244,6 @@ function prepareInteractive(State $state, string $extra = '', bool $normalizeIo 
     $projectInstanceIndex = $sampleCtx['projectInstanceIndex']
         ?? indexProjectInstances($projectInstances);
 
-    buildModuleLocalTypes($units, $moduleName, $projectClasses, $projectInstanceIndex);
-
     $outputRelative = moduleNameToPath($moduleName)
         . backendById($state->backend)->extension();
     $importContext = buildImportContext(
@@ -260,12 +257,14 @@ function prepareInteractive(State $state, string $extra = '', bool $normalizeIo 
     $importContext['projectInstances'] = $projectInstances;
     $importContext['projectInstanceIndex'] = $projectInstanceIndex;
     $importContext['currentModule'] = $moduleName;
-    mergeModuleLocalTypesIntoImportContext(
-        $importContext,
-        $program,
-        $units[$moduleName]['localTypes'],
-    );
 
+    foreach (moduleFacadeExtraTypes($units, $moduleName, $projectClasses, $projectInstanceIndex) as $kind => $entries) {
+        foreach ($entries as $name => $entry) {
+            $importContext[$kind][$name] ??= $entry;
+        }
+    }
+
+    $interface = null;
     $checked = $normalizeIo
         ? checkAndNormalize(
             $program,
@@ -273,6 +272,7 @@ function prepareInteractive(State $state, string $extra = '', bool $normalizeIo 
             $path,
             $importContext,
             CompilePurpose::Repl,
+            $interface,
         )
         : Types\checkRaw(
             $program,
@@ -280,7 +280,9 @@ function prepareInteractive(State $state, string $extra = '', bool $normalizeIo 
             $path,
             $importContext,
             CompilePurpose::Repl,
+            $interface,
         );
+    $units[$moduleName]['localTypes'] = $interface;
 
     $checkedMap = $base->checked;
     $checkedMap[$moduleName] = $checked;

@@ -35,6 +35,10 @@ require_once __DIR__ . '/constraints.php';
 /**
  * Scope a class's default bodies were written in.
  *
+ * A class module being checked is its own scope: its interface is the live env
+ * (the interface is published by the check, so `classModuleScopes` has no entry
+ * for it yet).
+ *
  * @param array<string, mixed> $classInfo
  * @return array<string, Scheme>
  */
@@ -43,6 +47,10 @@ function defaultBodyScope(TypeCheckState $state, array $classInfo): array
     $module = $classInfo['module'] ?? '';
     if ($module === '') {
         return [];
+    }
+
+    if ($module === $state->currentModule) {
+        return $state->env;
     }
 
     $scope = $state->classModuleScopes[$module] ?? null;
@@ -55,7 +63,9 @@ function defaultBodyScope(TypeCheckState $state, array $classInfo): array
  *
  * A default body is re-checked here, in the instance's module, so a type the
  * class module imported (`Endo`, `Dual`) is not in this module's type tables.
- * {@see installDefaultBodyTypes} installs them for the check.
+ * {@see installDefaultBodyTypes} installs them for the check. No such install is
+ * needed when the class's own module is the one being checked -- the types are
+ * already in scope there.
  *
  * @param array<string, mixed> $classInfo
  * @return array{types: array<string, int|null>, synonyms: array<string, mixed>}
@@ -63,6 +73,10 @@ function defaultBodyScope(TypeCheckState $state, array $classInfo): array
 function defaultBodyVisibleTypes(TypeCheckState $state, array $classInfo): array
 {
     $module = $classInfo['module'] ?? '';
+    if ($module === $state->currentModule) {
+        return ['types' => [], 'synonyms' => []];
+    }
+
     $scope = $module === '' ? null : ($state->classModuleScopes[$module] ?? null);
     $visible = \is_array($scope) ? ($scope['visible'] ?? null) : null;
     if (! \is_array($visible)) {

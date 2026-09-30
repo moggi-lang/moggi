@@ -173,7 +173,7 @@ function svcTypeHierarchySubtypes(AnalysisService $svc, array $item): array
     foreach ($svc->modules->classInstances[$name] ?? [] as $inst) {
         $out[] = [
             'name' => $inst['name'],
-            'kind' => 5, // Class
+            'kind' => 5,
             'uri' => $inst['uri'],
             'range' => $inst['range'],
             'selectionRange' => $inst['range'],

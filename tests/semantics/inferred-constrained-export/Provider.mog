@@ -1,0 +1,7 @@
+module Inferred.Provider (renderOne) where
+
+import Prelude
+
+-- Inferred signature: the constraint comes from the use of `show`, and a
+-- consumer in another module is what fixes `a` there.
+renderOne x = show x

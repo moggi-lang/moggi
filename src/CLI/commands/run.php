@@ -112,8 +112,6 @@ function runRun(array $argv): int
     $keepOutput = $parsed['outputDir'] !== null;
     $outputDir = $parsed['outputDir'] ?? (sys_get_temp_dir() . '/moggi-run-' . getmypid());
 
-    // PHP compiles to runnable files, so `run` skips PHAR packaging;
-    // JVM/.NET run the packaged jar/dll from the build root.
     $built = compileIntoRoot(
         $input,
         $outputDir,

@@ -22,6 +22,9 @@ use function Moggi\Semantics\Types\checkRaw;
  */
 /**
  * @param array<string, mixed> $importContext
+ * @param ?array{env: array<string, mixed>, data: array<string, mixed>, typeSynonyms: array<string, mixed>, intrinsicWrappers: array<string, string>} $interface
+ *   receives the local type environment the check commits, so a caller can
+ *   publish it as the module interface instead of building one separately
  */
 function checkAndNormalize(
     Program $program,
@@ -29,8 +32,9 @@ function checkAndNormalize(
     string $filename = '',
     array $importContext = [],
     CompilePurpose $purpose = CompilePurpose::Executable,
+    ?array &$interface = null,
 ): Program {
-    $typed = checkRaw($program, $source, $filename, $importContext, $purpose);
+    $typed = checkRaw($program, $source, $filename, $importContext, $purpose, $interface);
     validate($typed, $source, $filename);
 
     return analyze(normalize($typed));

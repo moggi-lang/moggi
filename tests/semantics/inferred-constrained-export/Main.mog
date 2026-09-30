@@ -1,0 +1,7 @@
+module Main where
+
+import Inferred.Consumer
+import System.IO
+
+main :: IO ()
+main = putStrLn consumerValue

@@ -256,40 +256,6 @@ function facadeModuleForImpl(array $units, string $implModuleName): ?string
  *
  * @param array<string, array<string, mixed>> $units
  */
-/**
- * Types registered in localTypes but not declared in the module program (e.g. facade
- * ADTs copied into backend impl modules) must appear in the typecheck import context.
- *
- * @param array<string, mixed> $importContext
- * @param array{data?: array<string, mixed>, typeSynonyms?: array<string, mixed>} $localTypes
- */
-function mergeModuleLocalTypesIntoImportContext(array &$importContext, Ast\Program $program, array $localTypes): void
-{
-    $declaredData = [];
-    $declaredTypeSynonyms = [];
-    foreach ($program->items as $item) {
-        if ($item instanceof Ast\DataDecl || $item instanceof Ast\ForeignTypeDecl) {
-            $declaredData[$item->name] = true;
-        }
-
-        if ($item instanceof Ast\TypeSynonymDecl) {
-            $declaredTypeSynonyms[$item->name] = true;
-        }
-    }
-
-    foreach ($localTypes['data'] ?? [] as $name => $info) {
-        if (!isset($declaredData[$name]) && !isset($importContext['data'][$name])) {
-            $importContext['data'][$name] = $info;
-        }
-    }
-
-    foreach ($localTypes['typeSynonyms'] ?? [] as $name => $type) {
-        if (!isset($declaredTypeSynonyms[$name]) && !isset($importContext['typeSynonyms'][$name])) {
-            $importContext['typeSynonyms'][$name] = $type;
-        }
-    }
-}
-
 function mergeFacadeTypesForImpl(TypeCheckState $state, array $units, string $implModuleName): void
 {
     $facadeName = facadeModuleForImpl($units, $implModuleName);

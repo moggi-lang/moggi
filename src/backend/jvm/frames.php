@@ -20,7 +20,6 @@ function buildFrames(array $rows): string
 {
     $b = new ClassBuilder('moggi/rt/Frames');
 
-    // Rows are de-duplicated by the compiler; keep first-wins here too.
     $table = [];
     foreach ($rows as $row) {
         if (!\is_array($row)) {

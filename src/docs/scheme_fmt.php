@@ -401,7 +401,6 @@ function constructorSignature(Ast\DataDecl $decl, Ast\ConstructorDecl $ctor): st
 function docForEntityName(DocIndex $index, string $name, array $existing = []): ?string
 {
     $candidates = [$name];
-    // `Module.name` → also try bare `name`; `name` → also try `Module::name`.
     $dot = strrpos($name, '.');
     if ($dot !== false && $dot > 0 && $dot < strlen($name) - 1) {
         $candidates[] = substr($name, $dot + 1);

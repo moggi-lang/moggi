@@ -140,20 +140,6 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
         }
     }
 
-    if (! $hadDeclaredSignature && $fn->inferredSignatureChecked) {
-        $userFnType = peelDictArrows($fnType, count($constraints));
-        $prunedUserConstraints = refreshConstraintArgs($state, $userConstraints);
-        $state->env[$fn->name] = scheme(
-            $userFnType,
-            schemeBoundVars($userFnType, $state->env, $prunedUserConstraints),
-            $prunedUserConstraints,
-            count($constraints),
-        );
-        $fn->typeInferred = true;
-
-        return $fn;
-    }
-
     assertParamListLinear($state, $fn->params);
     foreach ($fn->params as $i => $param) {
         [$_, $env] = bindPattern($state, $param, $paramTypes[$i], $env, generalize: false);
@@ -302,10 +288,6 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
         $state->intrinsicWrappers[$fn->name] = $wrapper;
     }
 
-    if (! $hadDeclaredSignature && $fn->inferredSignatureType !== null && $constraints !== []) {
-        $fn->inferredSignatureChecked = true;
-    }
-
     recordRestrictedSolutions($state);
 
     return $fn;
@@ -340,16 +322,14 @@ function settleCheckedBody(
             : quantifiedVars($state, peelDictArrows($fnType, count($constraints))),
     );
 
-    if (! $state->provisionalRestrictedSettle) {
-        resolveDeferredNativeInfixes($state, $fn->body);
-        resolvePendingEvidenceInExpr($state, $fn->body);
-        tryResolveValueEvidence($state, $fn->body);
-        $fn->body = elaborateNumericLiterals($state, $fn->body);
-        assertNoPendingConstraintsInExpr($state, $fn->body, $fn);
-        zonkInferredTypesInExpr($state, $fn->body);
-        foreach ($fn->params as $param) {
-            zonkInferredTypesInPattern($state, $param);
-        }
+    resolveDeferredNativeInfixes($state, $fn->body);
+    resolvePendingEvidenceInExpr($state, $fn->body);
+    tryResolveValueEvidence($state, $fn->body);
+    $fn->body = elaborateNumericLiterals($state, $fn->body);
+    assertNoPendingConstraintsInExpr($state, $fn->body, $fn);
+    zonkInferredTypesInExpr($state, $fn->body);
+    foreach ($fn->params as $param) {
+        zonkInferredTypesInPattern($state, $param);
     }
     reportTypedHoles($state);
     $fnType = prune($state, $fnType);

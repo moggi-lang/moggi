@@ -66,8 +66,6 @@ function runRepl(array $argv): int
 
         return runLoop($state);
     } finally {
-        // The scratch tree is only ever fed back into this process, so it dies
-        // with the session instead of accumulating in the temp dir.
         destroySession($state);
     }
 }

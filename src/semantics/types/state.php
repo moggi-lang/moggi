@@ -292,21 +292,6 @@ final class TypeCheckState
     public array $deferredRestricted = [];
 
     /**
-     * Settle a restricted declaration for its *type* only, leaving its body
-     * alone.
-     *
-     * A module's environment is built before any of its bodies are checked for
-     * real, and the declarations it cannot finish yet are settled there so the
-     * published environment has their defaulted types. That settle is only
-     * provisional: the module is checked again afterwards, with every use site
-     * of it in scope (`m = n :: Int` pins `n = 1 + 1` to `Int`), and the second
-     * pass is the one that has to elaborate the body. Rewriting the body here
-     * would leave the literal at the type this earlier pass defaulted it to,
-     * and the second pass would have nothing left to re-infer.
-     */
-    public bool $provisionalRestrictedSettle = false;
-
-    /**
      * Imported (and re-exported) value names → `Module::name` from codegen.
      *
      * @var array<string, string>

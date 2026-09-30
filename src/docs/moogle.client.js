@@ -1,5 +1,4 @@
 'use strict';
-// Browser Moogle search — keep in sync with moogle_search.php (parity: tests/docs/moogle/parity_test.php)
 
 function compareNullable(a, b) {
   return a < b ? -1 : a > b ? 1 : 0;

@@ -14,7 +14,7 @@ namespace Moggi\Backend\Jvm\Classfile;
 final class ConstantPool
 {
     /** @var list<array<string, mixed>|null> */
-    private array $entries = [null]; // 1-based; index 0 unused
+    private array $entries = [null];
 
     /** @var array<string, int> */
     private array $utf8 = [];
@@ -97,7 +97,7 @@ final class ConstantPool
         }
         $i = count($this->entries);
         $this->entries[] = ['tag' => 5, 'bytes' => $v];
-        $this->entries[] = ['tag' => 0, 'pad' => true]; // second slot
+        $this->entries[] = ['tag' => 0, 'pad' => true];
         $this->longs[$key] = $i;
 
         return $i;
@@ -160,7 +160,7 @@ final class ConstantPool
         for ($i = 1; $i < count($this->entries); ++$i) {
             $e = $this->entries[$i];
             if (($e['tag'] ?? null) === 0) {
-                continue; // second slot of Long/Double
+                continue;
             }
             $out .= match ($e['tag']) {
                 1 => chr(1) . utf8Info($e['bytes']),
@@ -395,7 +395,7 @@ final class CodeBuilder
             $this->opcode(0x84, 0);
             $this->code .= chr($i) . chr($delta & 0xff);
         } else {
-            $this->opcode(0xc4, 0); // wide
+            $this->opcode(0xc4, 0);
             $this->code .= chr(0x84) . pack('n', $i) . pack('n', $delta & 0xffff);
         }
         $this->maxLocals = max($this->maxLocals, $i + 1);
@@ -419,7 +419,7 @@ final class CodeBuilder
         if ($i > 65535) {
             throw new \RuntimeException("JVM local index {$i} exceeds wide limit");
         }
-        $this->opcode(0xc4, $stackDelta); // wide
+        $this->opcode(0xc4, $stackDelta);
         $this->code .= chr($opcode) . pack('n', $i);
     }
 
@@ -452,7 +452,7 @@ final class CodeBuilder
 
     public function getfield(int $fieldRef): void
     {
-        $this->opcode(0xb4, 0); // -1 +1
+        $this->opcode(0xb4, 0);
         $this->code .= u2($fieldRef);
     }
 
@@ -506,13 +506,13 @@ final class CodeBuilder
 
     public function instanceof_(int $classIndex): void
     {
-        $this->opcode(0xc1, 0); // pop ref, push int
+        $this->opcode(0xc1, 0);
         $this->code .= u2($classIndex);
     }
 
     public function anewarray(int $classIndex): void
     {
-        $this->opcode(0xbd, 0); // pop count, push arrayref
+        $this->opcode(0xbd, 0);
         $this->code .= u2($classIndex);
     }
 
@@ -715,7 +715,7 @@ final class CodeBuilder
 
     public function lcmp(): void
     {
-        $this->opcode(0x94, -3); // two longs → int
+        $this->opcode(0x94, -3);
     }
 
     public function l2i(): void
@@ -787,9 +787,9 @@ final class CodeBuilder
     public function lconst(int $v): void
     {
         if ($v === 0) {
-            $this->opcode(0x09, 2); // lconst_0
+            $this->opcode(0x09, 2);
         } elseif ($v === 1) {
-            $this->opcode(0x0a, 2); // lconst_1
+            $this->opcode(0x0a, 2);
         } else {
             throw new \RuntimeException('lconst only supports 0/1; use ldc2_w');
         }
@@ -803,7 +803,7 @@ final class CodeBuilder
 
     public function dadd(): void
     {
-        $this->opcode(0x63, -2); // two doubles → one double
+        $this->opcode(0x63, -2);
     }
 
     public function dsub(): void
@@ -1000,7 +1000,7 @@ final class ClassBuilder
         $this->cp = new ConstantPool();
         $this->thisInternal = $thisInternal;
         $this->superInternal = $superInternal;
-        $this->access = $access; // public + super
+        $this->access = $access;
         $this->cp->class_($thisInternal);
         $this->cp->class_($superInternal);
         $this->cp->utf8('Code');
@@ -1059,8 +1059,8 @@ final class ClassBuilder
         }
 
         $out = u4(0xCAFEBABE)
-            . u2(0)   // minor
-            . u2(65)  // major — Java 21
+            . u2(0)
+            . u2(65)
             . $this->cp->write()
             . u2($this->access)
             . u2($thisClass)
@@ -1080,7 +1080,7 @@ final class ClassBuilder
             $fileIdx = $this->cp->utf8(basename(\str_replace('\\', '/', $this->sourceFile)));
             $out .= u2(1) . u2($nameIdx) . u4(2) . u2($fileIdx);
         } else {
-            $out .= u2(0); // attributes
+            $out .= u2(0);
         }
 
         return $out;

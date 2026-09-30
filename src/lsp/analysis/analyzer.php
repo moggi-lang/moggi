@@ -202,8 +202,8 @@ function locateTopLevelDecls(Ast\Program $program, string $source, string $uri, 
                     'line' => $tok->line,
                     'col' => $tok->col,
                     'endCol' => $tok->col + max(1, mb_strlen($tok->lexeme)) - 1,
-                    'kind' => 12, // SymbolKind.Function
-                    'completionKind' => 3, // CompletionItemKind.Function
+                    'kind' => 12,
+                    'completionKind' => 3,
                     'type' => 'function',
                 ];
                 $i += 2;
@@ -241,8 +241,8 @@ function locateTopLevelDecls(Ast\Program $program, string $source, string $uri, 
                     'line' => $next->line,
                     'col' => $next->col,
                     'endCol' => $next->col + max(1, mb_strlen($next->lexeme)) - 1,
-                    'kind' => 23, // SymbolKind.Struct
-                    'completionKind' => 22, // CompletionItemKind.Struct
+                    'kind' => 23,
+                    'completionKind' => 22,
                     'type' => $kind === TokenKind::KwNewtype ? 'newtype' : 'data',
                 ];
                 $i += 2;

@@ -657,20 +657,9 @@ final class FunctionDecl extends AstNode
     /**
      * The signature `checkFunction` inferred for a declaration that has none,
      * from the constraints its body turned out to need. Once set, the
-     * declaration is checked like one that spells its context out, and a later
-     * check of the same AST (modules with exported inferred functions are
-     * type-checked twice) reuses this signature instead of re-deriving it -- by
-     * then the body's dictionary projections are already in place.
+     * declaration is checked like one that spells its context out.
      */
     public ?TypeNode $inferredSignatureType = null;
-
-    /**
-     * Set once the body has been checked against `inferredSignatureType`. A
-     * later check of the same declaration reuses the scheme instead of inferring
-     * the body again, which would add a second copy of the dictionaries the
-     * first check already placed at the call sites.
-     */
-    public bool $inferredSignatureChecked = false;
 
     public ?string $intrinsicWrapper = null;
 

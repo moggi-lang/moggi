@@ -1,0 +1,4 @@
+module
+  function renderOne(__ev_Show, x)
+      t0 = dict_call __ev_Show->show(x)
+      ret t0

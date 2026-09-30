@@ -41,7 +41,7 @@ final class JvmBackend implements Backend
     /** @return list<string> */
     public function runtimeFiles(): array
     {
-        return []; // generated into the jar via packageOutput
+        return [];
     }
 
     public function emit(Module $ir, string $sourcePath, array $options = []): string|array

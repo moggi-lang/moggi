@@ -1036,12 +1036,3 @@ function sortModulesByDependencies(array $units): array
 
     return $sorted;
 }
-
-/** Whether a module source may register classes, datatypes, synonyms, or instances. */
-function moduleSourceDeclaresProjectTypes(string $source): bool
-{
-    $stripped = preg_replace('/--[^\n]*/', '', $source) ?? $source;
-    $stripped = preg_replace('/\{-[^-]*-?\}/', '', $stripped) ?? $stripped;
-
-    return (bool) preg_match('/\b(class|data|type|instance)\b/', $stripped);
-}

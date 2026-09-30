@@ -25,73 +25,6 @@ require_once dirname(__DIR__) . '/semantics/deriving/framework.php';
  */
 
 /**
- * Build project-wide class index and per-module local type environments in one
- * topological pass (replaces separate collectProjectClasses + registerLocalTypes).
- *
- * @param array<string, array<string, mixed>> $units
- * @param list<string> $sortedModules
- * @param list<array<string, mixed>> $projectInstances
- * @return array<string, mixed>
- */
-function buildProjectTypeEnvironments(
-    array &$units,
-    array $sortedModules,
-    array $projectInstances = [],
-    ?array $projectInstanceIndex = null,
-): array {
-    $projectClasses = [];
-    $instanceIndex = $projectInstanceIndex ?? indexProjectInstances($projectInstances);
-
-    foreach ($sortedModules as $moduleName) {
-        if (($units[$moduleName]['synthetic'] ?? false) === true) {
-            continue;
-        }
-        if (!isModuleActiveForCompileBackend($units, $moduleName)) {
-            continue;
-        }
-        if (($units[$moduleName]['parsed'] ?? false) !== true) {
-            if (isset($units[$moduleName]['localTypes'])
-                && !moduleSourceDeclaresProjectTypes($units[$moduleName]['source'])
-            ) {
-                continue;
-            }
-
-            continue;
-        }
-
-        buildModuleTypeEnvironment(
-            $units,
-            $moduleName,
-            $projectClasses,
-            $instanceIndex,
-        );
-    }
-
-    return $projectClasses;
-}
-
-/**
- * @param array<string, array<string, mixed>> $units
- * @param array<string, mixed> $projectClasses
- * @param array{
- *   byClass: array<string, list<array<string, mixed>>>,
- *   byClassHead: array<string, array<string, list<array<string, mixed>>>>,
- *   associatedEquations: array<string, array<string, list<array<string, mixed>>>>
- * } $projectInstanceIndex
- */
-function buildModuleTypeEnvironment(
-    array &$units,
-    string $moduleName,
-    array &$projectClasses,
-    array $projectInstanceIndex,
-): void {
-    $unit = $units[$moduleName];
-
-    updateProjectClassesForModule($unit, $units, $moduleName, $projectClasses);
-    buildModuleLocalTypes($units, $moduleName, $projectClasses, $projectInstanceIndex);
-}
-
-/**
  * Types stay module-scoped: the state starts from the module's declared names and
  * the exported types of its imports, never from a project-wide union.
  *
@@ -280,12 +213,6 @@ function buildModuleLocalTypes(
 
     Types\discoverInferredSignatures($state, $inferredFunctions);
 
-    $state->provisionalRestrictedSettle = true;
-    try {
-        Types\finishRestrictedDeclarations($state);
-    } finally {
-        $state->provisionalRestrictedSettle = false;
-    }
 
     $units[$moduleName]['localTypes'] = [
         'env' => $state->env,
@@ -421,18 +348,24 @@ function mergeExportedTypes(Types\TypeCheckState $state, array $unit, array $uni
  *
  * A default body is re-checked at each instance site, in the instance's module,
  * so it needs the scope it was written in (a helper it calls, a primop it uses).
+ * A module's interface is a product of its own check, so the caller adds each
+ * module's scope as it is checked; `$onlyModules` limits the pass to the ones
+ * whose interface just became available.
  *
  * @param array<string, array<string, mixed>> $units
  * @param array<string, array<string, mixed>> $projectClasses
+ * @param ?list<string> $onlyModules
  * @return array<string, array<string, mixed>>
  */
-function classModuleScopes(array $units, array $projectClasses): array
+function classModuleScopes(array $units, array $projectClasses, ?array $onlyModules = null): array
 {
+    $wanted = $onlyModules !== null ? \array_fill_keys($onlyModules, true) : null;
+
     /** @var array<string, array<string, true>> $referenced */
     $referenced = [];
     foreach ($projectClasses as $classInfo) {
         $module = $classInfo['module'] ?? '';
-        if ($module === '') {
+        if ($module === '' || ($wanted !== null && !isset($wanted[$module]))) {
             continue;
         }
 
@@ -502,6 +435,119 @@ function classModuleScopes(array $units, array $projectClasses): array
     }
 
     return $scopes;
+}
+
+/**
+ * Types a facade module needs from the impl it re-exports: the impl's foreign
+ * types and the facade ADTs copied into it.
+ *
+ * @param array<string, array<string, mixed>> $units
+ * @return array{data: array<string, mixed>, typeSynonyms: array<string, mixed>}
+ */
+function facadeImplExtraTypes(array $units, string $moduleName, Ast\Program $program): array
+{
+    $implName = facadeImplModuleNameFor($moduleName, $units);
+    if ($implName === null || !isset($units[$implName])) {
+        return ['data' => [], 'typeSynonyms' => []];
+    }
+
+    $implExports = implExportsForFacadeMerge($units[$implName], $units, $implName);
+    if ($implExports === null) {
+        return ['data' => [], 'typeSynonyms' => []];
+    }
+
+    $declaredData = [];
+    foreach ($program->items as $item) {
+        if ($item instanceof Ast\DataDecl || $item instanceof Ast\ForeignTypeDecl) {
+            $declaredData[$item->name] = true;
+        }
+    }
+
+    $data = [];
+    foreach ($implExports['data'] ?? [] as $name => $info) {
+        if (!isset($declaredData[$name])) {
+            $data[$name] = $info;
+        }
+    }
+
+    return ['data' => $data, 'typeSynonyms' => []];
+}
+
+/**
+ * Types a module needs but does not declare: the facade's ADTs and the
+ * primitive data its facade introduces (for an impl), or the impl's foreign
+ * types and ADTs (for a facade).
+ *
+ * A module's check registers its own declarations, so the only interface data it
+ * cannot derive is what the other side of the facade contributes; the caller
+ * merges this into the check's import context, where the interface pass used to
+ * put it as `localTypes`.
+ *
+ * @param array<string, array<string, mixed>> $units
+ * @param array<string, mixed> $projectClasses
+ * @param array<string, mixed> $projectInstanceIndex
+ * @return array{data: array<string, mixed>, typeSynonyms: array<string, mixed>}
+ */
+function moduleFacadeExtraTypes(
+    array $units,
+    string $moduleName,
+    array $projectClasses,
+    array $projectInstanceIndex = [],
+): array {
+    $unit = $units[$moduleName];
+    $program = $unit['program'] ?? null;
+    if (! $program instanceof Ast\Program) {
+        return ['data' => [], 'typeSynonyms' => []];
+    }
+
+    if (isFacadeProgram($program)) {
+        return facadeImplExtraTypes($units, $moduleName, $program);
+    }
+
+    if (facadeModuleForImpl($units, $moduleName) === null) {
+        return ['data' => [], 'typeSynonyms' => []];
+    }
+
+    $state = Types\newState($unit['source'], $unit['path']);
+    $state->classes = $projectClasses;
+    installProjectInstanceIndex($state, $projectInstanceIndex);
+
+    foreach ($unit['program']->imports as $import) {
+        $targetName = moduleName($import->path);
+        if (isset($units[$targetName])) {
+            mergeExportedTypes($state, $units[$targetName], $units);
+        }
+    }
+
+    mergeFacadeTypesForImpl($state, $units, $moduleName);
+
+    $declaredData = [];
+    $declaredSynonyms = [];
+    foreach ($unit['program']->items as $item) {
+        if ($item instanceof Ast\DataDecl || $item instanceof Ast\ForeignTypeDecl) {
+            $declaredData[$item->name] = true;
+        }
+
+        if ($item instanceof Ast\TypeSynonymDecl) {
+            $declaredSynonyms[$item->name] = true;
+        }
+    }
+
+    $data = [];
+    foreach ($state->data as $name => $info) {
+        if (!isset($declaredData[$name])) {
+            $data[$name] = $info;
+        }
+    }
+
+    $synonyms = [];
+    foreach ($state->typeSynonyms as $name => $type) {
+        if (!isset($declaredSynonyms[$name])) {
+            $synonyms[$name] = $type;
+        }
+    }
+
+    return ['data' => $data, 'typeSynonyms' => $synonyms];
 }
 
 /**
@@ -903,107 +949,6 @@ function syncExportedInferredSchemesFromTypeEnv(
             $units[$moduleName]['exports']['env'][$name] = $scheme;
         }
     }
-}
-
-/** @param array<string, array<string, mixed>> $units */
-function moduleHasExportedInferredFunctions(array $units, string $moduleName): bool
-{
-    if (!isset($units[$moduleName]['program'])) {
-        return false;
-    }
-
-    $exports = $units[$moduleName]['program']->exports;
-    $exportedNames = null;
-    if ($exports !== null) {
-        $exportedNames = [];
-        foreach ($exports as $export) {
-            if (($export['tag'] ?? '') === 'value') {
-                $exportedNames[$export['name']] = true;
-            }
-        }
-
-        if ($exportedNames === []) {
-            return false;
-        }
-    }
-
-    foreach ($units[$moduleName]['program']->items as $item) {
-        if (!$item instanceof Ast\FunctionDecl) {
-            continue;
-        }
-
-        if ($exportedNames !== null && !isset($exportedNames[$item->name])) {
-            continue;
-        }
-
-        if (!Ast\hasDeclaredSignature($item) && !$item->signatureOnly) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-/**
- * @param array<string, array<string, mixed>> $units
- * @param list<string> $sortedModules
- * @param array<string, true>|null $inferredExportModules optional precomputed set
- * @return list<string>
- */
-function modulesForTypecheck(
-    array $units,
-    array $sortedModules,
-    ?string $onlyTypecheckModule,
-    ?array $inferredExportModules = null,
-): array {
-    if ($onlyTypecheckModule === null) {
-        return array_values(array_filter(
-            $sortedModules,
-            static fn (string $moduleName): bool => isModuleActiveForCompileBackend($units, $moduleName),
-        ));
-    }
-
-    $needed = [];
-    $queue = [$onlyTypecheckModule];
-    while ($queue !== []) {
-        $current = array_shift($queue);
-        if (isset($needed[$current]) || !isset($units[$current])) {
-            continue;
-        }
-
-        $needed[$current] = true;
-
-        foreach (facadeDependencyModules($units, $current) as $implName) {
-            if (!isset($needed[$implName])) {
-                $queue[] = $implName;
-            }
-        }
-
-        $imports = $units[$current]['program']->imports
-            ?? ($units[$current]['imports'] ?? []);
-        foreach ($imports as $import) {
-            $dep = moduleName($import->path);
-            if (!isset($needed[$dep])) {
-                $queue[] = $dep;
-            }
-        }
-    }
-
-    $ordered = [];
-    foreach ($sortedModules as $moduleName) {
-        if (!isset($needed[$moduleName])) {
-            continue;
-        }
-
-        $hasInferred = $inferredExportModules !== null
-            ? isset($inferredExportModules[$moduleName])
-            : moduleHasExportedInferredFunctions($units, $moduleName);
-        if ($moduleName === $onlyTypecheckModule || $hasInferred) {
-            $ordered[] = $moduleName;
-        }
-    }
-
-    return $ordered;
 }
 
 /**

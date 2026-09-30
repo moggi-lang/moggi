@@ -49,7 +49,7 @@ function compileProject(array $paths, string $rootDir, bool $optimize = true, bo
 function compileProjectBoth(array $paths, string $rootDir, bool $optimize = true, bool $strip = false): array
 {
     $outputsKey = Cache\hashContent(
-        preparedProjectDiskKey($paths, $rootDir, null)
+        preparedProjectDiskKey($paths, $rootDir)
             . '|opt=' . ($optimize ? '1' : '0')
             . '|strip=' . ($strip ? '1' : '0')
             . '|backend=' . compileBackend()

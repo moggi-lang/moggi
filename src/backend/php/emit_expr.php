@@ -115,9 +115,6 @@ function emitRetValue(IR\Operand $value, array $ctx): string
         IR\ExprCallValue::class => emitApplyExpr($value->callee, $value->args, $ctx),
         IR\ExprPartial::class => emitPartialArray($value, $ctx),
         IR\Intrinsic::class => emitOperand($value, $ctx),
-        // A lifted function's name is a capture array; every other reference is
-        // the top-level name, which is where Bool constructors become
-        // `true`/`false`.
         IR\FnRef::class => isCapturedFnName($value->name)
             ? emitLambdaReference($value->name, $ctx)
             : emitTopLevelFnUse($value->name, $ctx),
@@ -499,9 +496,6 @@ function emitPartialCallableName(string $name, array $ctx): string
         );
     }
 
-    // A partial's callable is a *string*, invoked from the runtime's namespace,
-    // so an imported function has to be spelled out in full: `use function`
-    // aliases and the global-function fallback only work for direct calls.
     $external = $ctx['externalFns'][$name] ?? null;
     if ($external !== null) {
         return var_export(formatQualifiedCallee($external, $ctx), true);
