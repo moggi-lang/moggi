@@ -1,0 +1,175 @@
+program
+  class Tag a
+    method tag :: a -> String
+  function __ev_Tag_Int_tag :: Int -> String
+    pat_var x
+    string "int"
+  function __ev_Tag_Bool_tag :: Bool -> String
+    pat_var x
+    string "bool"
+  function probedLocal :: Tuple2 String String
+    where
+      tuple
+        apply
+          apply
+            apply
+              variable both
+              evidence_ref Show Int
+            evidence_ref Tag Int
+          integer 1
+        apply
+          apply
+            apply
+              variable both
+              evidence_ref Show Bool
+            evidence_ref Tag Bool
+          constructor_ref True
+      binding
+        pat_var both
+        lambda
+          pat_var __ev_dict0
+          pat_var __ev_dict1
+          lambda
+            pat_var x
+            infix <>
+              apply
+                evidence_method Show.show evidence=__ev_dict0 nullary=0
+                variable x
+              apply
+                evidence_method Tag.tag evidence=__ev_dict1 nullary=0
+                variable x
+  function probedNested :: Int
+    where
+      apply
+        apply
+          apply
+            variable walk
+            evidence_ref Eq Int
+          evidence_ref Num Int
+        integer 3
+      binding
+        pat_var walk
+        lambda
+          pat_var __ev_dict4
+          pat_var __ev_dict5
+          lambda
+            pat_var n
+            case
+              apply
+                apply
+                  evidence_method Eq.== evidence=__ev_dict4 nullary=0
+                  variable n
+                apply
+                  evidence_method Num.fromInteger evidence=__ev_dict5 nullary=0
+                  intrinsic intToInteger#
+                    integer 0
+              alt
+                pat_con True
+                apply
+                  evidence_method Num.fromInteger evidence=__ev_dict5 nullary=0
+                  intrinsic intToInteger#
+                    integer 0
+              alt
+                pat_con False
+                apply
+                  apply
+                    variable step
+                    variable __ev_dict5
+                  apply
+                    apply
+                      evidence_method Num.- evidence=__ev_dict5 nullary=0
+                      variable n
+                    apply
+                      evidence_method Num.fromInteger evidence=__ev_dict5 nullary=0
+                      intrinsic intToInteger#
+                        integer 1
+      binding
+        pat_var step
+        lambda
+          pat_var __ev_dict3
+          lambda
+            pat_var n
+            apply
+              apply
+                evidence_method Num.+ evidence=__ev_dict3 nullary=0
+                apply
+                  apply
+                    variable inner
+                    variable __ev_dict3
+                  variable n
+              apply
+                evidence_method Num.fromInteger evidence=__ev_dict3 nullary=0
+                intrinsic intToInteger#
+                  integer 1
+      binding
+        pat_var inner
+        lambda
+          pat_var __ev_dict2
+          lambda
+            pat_var n
+            apply
+              apply
+                evidence_method Num.* evidence=__ev_dict2 nullary=0
+                variable n
+              apply
+                evidence_method Num.fromInteger evidence=__ev_dict2 nullary=0
+                intrinsic intToInteger#
+                  integer 2
+  function probedLambda :: Tuple2 String String
+    where
+      tuple
+        apply
+          apply
+            apply
+              variable render
+              evidence_ref Show Int
+            evidence_ref Num Int
+          lambda
+            pat_var x
+            infix +
+              variable x
+              integer 1
+        apply
+          apply
+            apply
+              variable render
+              evidence_ref Show Int
+            evidence_ref Num Int
+          lambda
+            pat_var x
+            infix *
+              variable x
+              integer 2
+      binding
+        pat_var render
+        lambda
+          pat_var __ev_dict6
+          pat_var __ev_dict7
+          lambda
+            pat_var f
+            apply
+              evidence_method Show.show evidence=__ev_dict6 nullary=0
+              apply
+                variable f
+                apply
+                  evidence_method Num.fromInteger evidence=__ev_dict7 nullary=0
+                  intrinsic intToInteger#
+                    integer 3
+  function probedAnnotated :: Tuple2 String String
+    where
+      tuple
+        apply
+          variable asTag
+          integer 1
+        apply
+          variable asTag
+          integer 2
+      binding
+        pat_var asTag
+        lambda
+          pat_var x
+          apply
+            evidence_method Tag.tag evidence= nullary=0
+              instance Int
+            type_asc Int
+              variable x

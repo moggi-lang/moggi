@@ -55,6 +55,7 @@ require __DIR__ . '/semantics/effects.php';
 require __DIR__ . '/IR/lower.php';
 require __DIR__ . '/IR/dump.php';
 require __DIR__ . '/IR/visit.php';
+require __DIR__ . '/debug/metrics.php';
 require __DIR__ . '/debug/sourcemap.php';
 require __DIR__ . '/pipeline/pipeline.php';
 require __DIR__ . '/optimize/support.php';
@@ -169,6 +170,7 @@ require __DIR__ . '/CLI/commands/version.php';
 require __DIR__ . '/CLI/main.php';
 
 use Moggi\Pipeline\CompilePurpose;
+use function Moggi\Pipeline\entryPurpose;
 use Moggi\Pipeline\PipelineRequest;
 use Moggi\Pipeline\PipelineStage;
 use Moggi\Semantics\Types\TypeError;
@@ -248,9 +250,7 @@ function compile(string $source, string $filename, string $mode = 'php', bool $o
         $program = parse(lex($source, $filename), $source, $filename);
     }
 
-    $purpose = ($program->module === 'Main')
-        ? CompilePurpose::Executable
-        : CompilePurpose::Library;
+    $purpose = entryPurpose($program->module);
 
     $stopAt = stageFromOutputMode($mode);
 
@@ -349,9 +349,7 @@ function compileFileCapturingErrorsBoth(string $path, bool $optimize = true, ?st
             ];
         }
 
-        $purpose = ($program->module === 'Main')
-            ? CompilePurpose::Executable
-            : CompilePurpose::Library;
+        $purpose = entryPurpose($program->module);
         $artifacts = pipelineRun(new PipelineRequest(
             purpose: $purpose,
             source: $source,

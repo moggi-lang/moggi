@@ -30,6 +30,7 @@ use Moggi\Semantics\TypeExpr\TWord8;
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Syntax\Ast;
 
+use function Moggi\Debug\metric;
 use function Moggi\Errors\appendDidYouMean;
 use function Moggi\Modules\resolvedSymbol;
 use function Moggi\Patterns\Walk\patternDuplicateBinder;
@@ -69,6 +70,9 @@ function isIoTypeCon(TypeCheckState $state, Type $type): bool
 
 function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\FunctionDecl
 {
+    metric('checkFunction.calls');
+    metric('checkFunction.module.' . ($state->currentModule ?? '(none)'));
+
     $hadDeclaredSignature = Ast\hasDeclaredSignature($fn);
     $state->subst = [];
     $state->holes = [];
@@ -267,6 +271,8 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
     }
     $state->ambientConstraintsByClass = $byClass;
 
+    metric('checkFunction.bodyChecked');
+    metric('checkFunction.bodyChecked.module.' . ($state->currentModule ?? '(none)'));
     $bodyType = inferExpr($state, $fn->body, $bodyEnv);
     $state->constraintMethods = $savedConstraintMethods;
     $state->constraintMethodAmbiguities = $savedConstraintMethodAmbiguities;
@@ -689,6 +695,45 @@ function discoverInferredSignatures(TypeCheckState $state, array $functions): vo
     } while ($materialized);
 
     materializeDictionaryFreeSignatures($state, $functions);
+    materializeRestrictedSignatures($state, $functions);
+}
+
+/**
+ * Give a restricted declaration the type the probe found, so the interface a
+ * module publishes does not depend on a body check.
+ *
+ * `isLetter = isAlpha` has no signature and no parameters, so it is settled by
+ * the monomorphism restriction rather than generalized, and discovery left it at
+ * `registerInferredFunctionPlaceholder`'s bare variable. A bare variable unifies
+ * with anything, so an importer reading that interface entry saw `t0` -- the
+ * facade/implementation type check reported `export isLetter type Char -> Bool
+ * does not match implementation t0`. The probe's type is registered as it is --
+ * no quantification, no dictionaries, its variables marked restricted like the
+ * placeholder's -- with the probe's variables renamed first: the probe rolls its
+ * own numbering back, so an unrenamed type would alias whatever the next run
+ * allocates under the same names.
+ *
+ * @param list<Ast\FunctionDecl> $functions
+ */
+function materializeRestrictedSignatures(TypeCheckState $state, array $functions): void
+{
+    foreach ($functions as $fn) {
+        if (! isRestrictedDeclaration($fn)) {
+            continue;
+        }
+
+        $discovered = discoverFunctionConstraints($state, $fn);
+        if ($discovered === null) {
+            continue;
+        }
+
+        [$type] = renameRecordedVars(prune($state, $discovered['type']), []);
+        foreach (\array_keys(quantifiedVars($state, $type)) as $var) {
+            $state->restrictedVars[$var] = true;
+        }
+
+        $state->env[$fn->name] = scheme($type, [], []);
+    }
 }
 
 /**
@@ -753,6 +798,8 @@ function needsInferredSignature(Ast\FunctionDecl $fn): bool
  */
 function discoverFunctionConstraints(TypeCheckState $state, Ast\FunctionDecl $fn): ?array
 {
+    metric('discoverFunctionConstraints.calls');
+
     $savedSubst = $state->subst;
     $savedHoles = $state->holes;
     $savedFresh = $state->fresh;
@@ -1332,6 +1379,8 @@ function flattenApplyForIntrinsicWrapper(Ast\AstNode $expr): array
 
 function inferExpr(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
 {
+    metric('inferExpr.calls');
+
     $type = match ($expr::class) {
         Ast\IntegerLit::class => inferIntegerLit($state, $expr),
         Ast\DoubleLit::class => new TDouble(),

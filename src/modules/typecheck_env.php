@@ -280,10 +280,6 @@ function buildModuleLocalTypes(
 
     Types\discoverInferredSignatures($state, $inferredFunctions);
 
-    foreach ($inferredFunctions as $function) {
-        Types\checkFunction($state, $function);
-    }
-
     $state->provisionalRestrictedSettle = true;
     try {
         Types\finishRestrictedDeclarations($state);

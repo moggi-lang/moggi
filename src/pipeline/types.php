@@ -17,6 +17,16 @@ enum CompilePurpose: string
     case Repl = 'repl';
 }
 
+/**
+ * The purpose of compiling `$module`: `Main` is the executable, every other
+ * module is a library. Deriving it in one place keeps the entry-point policy
+ * from drifting between the single-file, project and focus paths.
+ */
+function entryPurpose(?string $module): CompilePurpose
+{
+    return $module === 'Main' ? CompilePurpose::Executable : CompilePurpose::Library;
+}
+
 /** How far Pipeline::run should go before returning artifacts. */
 enum PipelineStage: string
 {

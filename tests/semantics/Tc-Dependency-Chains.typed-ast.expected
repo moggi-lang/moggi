@@ -1,0 +1,141 @@
+program
+  function f :: Int
+    infix +
+      variable g
+      integer 1
+  function g :: Int
+    infix *
+      variable h
+      integer 2
+  function h :: Int
+    integer 3
+  function isEven :: Int -> Bool
+    pat_var n
+    case
+      infix ==
+        variable n
+        integer 0
+      alt
+        pat_con True
+        constructor_ref True
+      alt
+        pat_con False
+        apply
+          variable isOdd
+          infix -
+            variable n
+            integer 1
+  function isOdd :: Int -> Bool
+    pat_var n
+    case
+      infix ==
+        variable n
+        integer 0
+      alt
+        pat_con True
+        constructor_ref False
+      alt
+        pat_con False
+        apply
+          variable isEven
+          infix -
+            variable n
+            integer 1
+  function inGroup :: Int
+    where
+      apply
+        apply
+          variable outer
+          evidence_ref Num Int
+        integer 2
+      binding
+        pat_var outer
+        lambda
+          pat_var __ev_dict1
+          lambda
+            pat_var x
+            apply
+              apply
+                evidence_method Num.+ evidence=__ev_dict1 nullary=0
+                apply
+                  apply
+                    variable inner
+                    variable __ev_dict1
+                  variable x
+              apply
+                evidence_method Num.fromInteger evidence=__ev_dict1 nullary=0
+                intrinsic intToInteger#
+                  integer 1
+      binding
+        pat_var inner
+        lambda
+          pat_var __ev_dict0
+          lambda
+            pat_var y
+            apply
+              apply
+                evidence_method Num.* evidence=__ev_dict0 nullary=0
+                variable y
+              apply
+                evidence_method Num.fromInteger evidence=__ev_dict0 nullary=0
+                intrinsic intToInteger#
+                  integer 10
+  function chainUse :: Tuple2 Int Int
+    tuple
+      variable c1
+      variable c1
+  function c1 :: Int
+    infix +
+      variable c2
+      integer 1
+  function c2 :: Int
+    infix *
+      variable c3
+      integer 2
+  function c3 :: Int
+    integer 3
+  function pairUse :: Tuple2 String String
+    where
+      tuple
+        apply
+          apply
+            apply
+              variable p1
+              evidence_ref Show Int
+            evidence_ref Num Int
+          integer 1
+        apply
+          apply
+            apply
+              variable p1
+              evidence_ref Show Int
+            evidence_ref Num Int
+          integer 2
+      binding
+        pat_var p1
+        lambda
+          pat_var __ev_dict3
+          pat_var __ev_dict4
+          lambda
+            pat_var x
+            apply
+              evidence_method Show.show evidence=__ev_dict3 nullary=0
+              apply
+                apply
+                  variable p2
+                  variable __ev_dict4
+                variable x
+      binding
+        pat_var p2
+        lambda
+          pat_var __ev_dict2
+          lambda
+            pat_var x
+            apply
+              apply
+                evidence_method Num.+ evidence=__ev_dict2 nullary=0
+                variable x
+              apply
+                evidence_method Num.fromInteger evidence=__ev_dict2 nullary=0
+                intrinsic intToInteger#
+                  integer 0

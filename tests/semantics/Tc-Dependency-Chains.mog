@@ -1,0 +1,54 @@
+import Data.Eq
+import Data.Bool
+
+-- The dependency shapes the later phases rewrite: top-level chains, mutual
+-- recursion, an inferred group that has to be discovered together, and a
+-- signature-less chain whose members are only pinned by their use. The golden
+-- is the oracle for Phases 2 and 3 -- a dependency-ordered rewrite must keep it.
+
+-- f -> g -> h, declared
+f :: Int
+f = g + 1
+
+g :: Int
+g = h * 2
+
+h :: Int
+h = 3
+
+-- mutual recursion, declared
+isEven :: Int -> Bool
+isEven n = case n == 0 of
+  True -> True
+  False -> isOdd (n - 1)
+
+isOdd :: Int -> Bool
+isOdd n = case n == 0 of
+  True -> False
+  False -> isEven (n - 1)
+
+-- a chain inside a where group, inferred
+inGroup :: Int
+inGroup = outer 2
+  where
+    outer x = inner x + 1
+    inner y = y * 10
+
+-- a signature-less top-level chain: no member declares its type, so each one's
+-- scheme comes from the member it depends on
+chainUse :: (Int, Int)
+chainUse = (c1, c1)
+
+c1 = c2 + 1
+
+c2 = c3 * 2
+
+c3 = 3
+
+-- an inferred group whose members constrain each other: discovery has to settle
+-- both schemes before either body can be checked
+pairUse :: (String, String)
+pairUse = (p1 1, p1 2)
+  where
+    p1 x = show (p2 x)
+    p2 x = x + 0

@@ -4,6 +4,7 @@ namespace Moggi\Modules;
 
 use Moggi\Cache;
 use Moggi\Pipeline\CompilePurpose;
+use function Moggi\Pipeline\entryPurpose;
 use Moggi\Semantics\Types\TypeError;
 
 use function Moggi\Backend\compileBackend;
@@ -392,9 +393,7 @@ function prepareProject(array $paths, string $rootDir, ?string $onlyTypecheckMod
         $importContext['currentModule'] = $moduleName;
         $importContexts[$moduleName] = $importContext;
 
-        $purpose = $moduleName === 'Main'
-            ? CompilePurpose::Executable
-            : CompilePurpose::Library;
+        $purpose = entryPurpose($moduleName);
         mergeModuleLocalTypesIntoImportContext(
             $importContext,
             $units[$moduleName]['program'],
@@ -662,9 +661,7 @@ function prepareProjectExtendingFocus(
     $importContext['projectInstanceIndex'] = $projectInstanceIndex;
     $importContext['currentModule'] = $focusModule;
 
-    $purpose = $focusModule === 'Main'
-        ? CompilePurpose::Executable
-        : CompilePurpose::Library;
+    $purpose = entryPurpose($focusModule);
     mergeModuleLocalTypesIntoImportContext(
         $importContext,
         $units[$focusModule]['program'],

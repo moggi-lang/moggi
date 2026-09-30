@@ -13,6 +13,7 @@ use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Syntax\Ast;
 use Moggi\Syntax\Ast\AstNode;
 
+use function Moggi\Debug\metric;
 use function Moggi\Errors\appendDidYouMean;
 use function Moggi\Semantics\TypeExpr\scheme;
 
@@ -164,6 +165,8 @@ function assertConstraintArity(
  */
 function expandConstraintsWithSuperclasses(TypeCheckState $state, array $constraints): array
 {
+    metric('expandConstraintsWithSuperclasses.calls');
+
     $expanded = [];
 
     foreach ($constraints as $constraint) {
@@ -921,6 +924,8 @@ function clearPendingConstraints(Ast\AstNode $expr): void
  */
 function pendingConstraintsDeep(Ast\AstNode $expr, ?TypeCheckState $state = null): array
 {
+    metric('pendingConstraintsDeep.calls');
+
     $found = [];
     $seen = [];
     $visit = static function (Ast\AstNode $node) use (&$found, &$seen, $state): void {

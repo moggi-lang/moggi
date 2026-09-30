@@ -1,0 +1,154 @@
+program
+  class Tag a
+    method tag :: a -> String
+  function __ev_Tag_Int_tag :: Int -> String
+    pat_var x
+    string "int"
+  function __ev_Tag_Bool_tag :: Bool -> String
+    pat_var x
+    string "bool"
+  function twoConstraints :: Tuple2 String String
+    where
+      tuple
+        apply
+          apply
+            apply
+              variable both
+              evidence_ref Show Int
+            evidence_ref Tag Int
+          integer 1
+        apply
+          apply
+            apply
+              variable both
+              evidence_ref Show Bool
+            evidence_ref Tag Bool
+          constructor_ref True
+      binding
+        pat_var both
+        lambda
+          pat_var __ev_dict0
+          pat_var __ev_dict1
+          lambda
+            pat_var x
+            infix <>
+              apply
+                evidence_method Show.show evidence=__ev_dict0 nullary=0
+                variable x
+              apply
+                evidence_method Tag.tag evidence=__ev_dict1 nullary=0
+                variable x
+  function chain :: Tuple2 Int Int
+    where
+      tuple
+        apply
+          apply
+            apply
+              apply
+                variable bigger
+                evidence_ref Eq Int
+              evidence_ref Ord Int
+            evidence_ref Num Int
+          integer 5
+        apply
+          apply
+            apply
+              apply
+                variable bigger
+                evidence_ref Eq Int
+              evidence_ref Ord Int
+            evidence_ref Num Int
+          integer 2
+      binding
+        pat_var bigger
+        lambda
+          pat_var __ev_dict2
+          pat_var __ev_dict3
+          pat_var __ev_dict4
+          lambda
+            pat_var k
+            case
+              apply
+                apply
+                  evidence_method Ord.> evidence=__ev_dict3 nullary=0
+                  variable k
+                apply
+                  evidence_method Num.fromInteger evidence=__ev_dict4 nullary=0
+                  intrinsic intToInteger#
+                    integer 4
+              alt
+                pat_con True
+                variable k
+              alt
+                pat_con False
+                apply
+                  evidence_method Num.fromInteger evidence=__ev_dict4 nullary=0
+                  intrinsic intToInteger#
+                    integer 0
+  function declaredSuper :: Tuple2 Int Int
+    where
+      tuple
+        apply
+          apply
+            apply
+              apply
+                variable pick
+                evidence_ref Eq Int
+              evidence_ref Ord Int
+            evidence_ref Num Int
+          integer 3
+        apply
+          apply
+            apply
+              apply
+                variable pick
+                evidence_ref Eq Int
+              evidence_ref Ord Int
+            evidence_ref Num Int
+          integer 0
+      binding
+        pat_var pick
+        lambda
+          pat_var __ev_dict5
+          pat_var __ev_dict6
+          pat_var __ev_dict7
+          lambda
+            pat_var x
+            case
+              apply
+                apply
+                  evidence_method Ord.> evidence=__ev_dict6 nullary=0
+                  variable x
+                integer 0
+              alt
+                pat_con True
+                apply
+                  apply
+                    evidence_method Num.+ evidence=__ev_dict7 nullary=0
+                    variable x
+                  integer 1
+              alt
+                pat_con False
+                variable x
+  function topLevel :: Tuple2 Int Int
+    tuple
+      apply
+        variable bump
+        integer 5
+      apply
+        variable bump
+        integer 2
+  function bump :: Int -> Int
+    pat_var k
+    case
+      infix >
+        variable k
+        integer 4
+      alt
+        pat_con True
+        infix +
+          variable k
+          integer 1
+      alt
+        pat_con False
+        variable k

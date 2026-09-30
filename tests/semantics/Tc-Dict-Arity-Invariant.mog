@@ -1,0 +1,55 @@
+import Data.Ord
+import Text.Show
+
+-- The dictionary arity invariant: a definition takes exactly the dictionaries
+-- its obligations need -- superclass dictionaries first, in the order the
+-- constraint expansion produced them -- and every use site passes exactly that
+-- many, in that order. The typed-ast golden pins both sides of the matrix, so
+-- an arity mismatch on either side is a diff.
+--
+-- Ambiguity is the negative half of the same invariant and is covered by
+-- Bad-Ambiguous-Constraint.
+
+class Tag a where
+  tag :: a -> String
+
+instance Tag Int where
+  tag x = "int"
+
+instance Tag Bool where
+  tag x = "bool"
+
+-- Two obligations on one inferred definition, used at two types.
+twoConstraints :: (String, String)
+twoConstraints = (both 1, both True)
+  where
+    both x = show x <> tag x
+
+-- A superclass chain: `Ord` asks for `Eq`, so `bigger` takes two dictionaries
+-- and each use site hands over both, superclass first.
+chain :: (Int, Int)
+chain = (bigger 5, bigger 2)
+  where
+    bigger k = case k > 4 of
+      True -> k
+      False -> 0
+
+-- A declared signature with an implicit superclass among its obligations:
+-- `Eq` comes from `Ord`, so the dictionary list is `Eq, Ord, Num`.
+declaredSuper :: (Int, Int)
+declaredSuper = (pick 3, pick 0)
+  where
+    pick :: (Ord a, Num a) => a -> a
+    pick x = case x > 0 of
+      True -> x + 1
+      False -> x
+
+-- A top-level inferred definition in the same shape, so the matrix covers the
+-- top-level and local paths with the same obligations.
+topLevel :: (Int, Int)
+topLevel = (bump 5, bump 2)
+
+bump :: Int -> Int
+bump k = case k > 4 of
+  True -> k + 1
+  False -> k

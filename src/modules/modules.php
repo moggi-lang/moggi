@@ -7,6 +7,7 @@ use Moggi\IR\EntryPointKind;
 use Moggi\IR\Module;
 use Moggi\Pipeline\CompilePurpose;
 use Moggi\Pipeline\PipelineRequest;
+use function Moggi\Pipeline\entryPurpose;
 use Moggi\Pipeline\PipelineStage;
 use Moggi\Semantics\Types\TypeError;
 use Moggi\Syntax\Ast;
@@ -90,9 +91,7 @@ function compilePreparedProject(PreparedProject $prepared, bool $optimize = true
 
         $relative = substr($unit['path'], strlen($prepared->rootPrefix));
         $relativeByModule[$moduleName] = $relative;
-        $purpose = $moduleName === 'Main'
-            ? CompilePurpose::Executable
-            : CompilePurpose::Library;
+        $purpose = entryPurpose($moduleName);
 
         $irCacheKey = isset($unit['cacheRelPath'])
             ? ($unit['contentKey'] ?? '') . '|opt=' . ($optimize ? '1' : '0') . '|' . $purpose->name
@@ -254,9 +253,7 @@ function compileModuleFile(
 ): string|array {
     if ($mode === 'ast' || $mode === 'ir') {
         $context = moduleCompileContext($path, $routingProgram);
-        $purpose = ($context['checked']->module === 'Main')
-            ? CompilePurpose::Executable
-            : CompilePurpose::Library;
+        $purpose = entryPurpose($context['checked']->module);
         $artifacts = pipelineRun(new PipelineRequest(
             purpose: $purpose,
             filename: $path,
@@ -290,9 +287,7 @@ function compileModuleFileOutputs(
     ?Ast\Program $routingProgram = null,
 ): array {
     $context = moduleCompileContext($path, $routingProgram);
-    $purpose = ($context['checked']->module === 'Main')
-        ? CompilePurpose::Executable
-        : CompilePurpose::Library;
+    $purpose = entryPurpose($context['checked']->module);
     $artifacts = pipelineRun(new PipelineRequest(
         purpose: $purpose,
         filename: $path,

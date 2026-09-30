@@ -1,0 +1,53 @@
+import Data.Ord
+import Text.Show
+
+-- What a probe must not leave behind.
+--
+-- A signature-less declaration is checked twice: the discovery probe infers its
+-- body to find its constraints, then the real body check runs. The probe writes
+-- evidence and annotations on the way through and has to clear them, or the
+-- real pass sees obligations twice. What it can leave behind is
+-- `pendingConstraints`, and those are exactly what the typed-ast dump shows as
+-- `evidence_ref`/`evidence_method` arguments -- so a leftover argument no call
+-- site passes is a diff here.
+--
+-- The shapes below cover the probe reaching every child of a body: an operator
+-- projection, a lambda, a case, a nested group, and an annotation inside the
+-- probed body.
+
+class Tag a where
+  tag :: a -> String
+
+instance Tag Int where
+  tag x = "int"
+
+instance Tag Bool where
+  tag x = "bool"
+
+-- probed: inferred, constrained, used at two types
+probedLocal :: (String, String)
+probedLocal = (both 1, both True)
+  where
+    both x = show x <> tag x
+
+-- probed: the body is a case over an operator, with a nested inferred group
+probedNested :: Int
+probedNested = walk 3
+  where
+    walk n = case n == 0 of
+      True -> 0
+      False -> step (n - 1)
+    step n = inner n + 1
+    inner n = n * 2
+
+-- probed: the body is a lambda, and the obligation comes from inside it
+probedLambda :: (String, String)
+probedLambda = (render (\x -> x + 1), render (\x -> x * 2))
+  where
+    render f = show (f 3)
+
+-- probed: the body carries an annotation that the probe also has to clear
+probedAnnotated :: (String, String)
+probedAnnotated = (asTag 1, asTag 2)
+  where
+    asTag x = tag (x :: Int)
