@@ -695,9 +695,6 @@ function emitStmt(EmitEnv $env, IR\Stmt $stmt): void
         case IR\Ret::class:
             /** @var IR\Ret $stmt */
             emitOperand($env, $stmt->value);
-            if (jvmOperandNeverReturns($stmt->value)) {
-                return;
-            }
             if ($env->matchYieldDest !== null) {
                 $env->c->astore($env->localSlot('t' . $env->matchYieldDest));
                 if ($env->matchJoinLabel !== null) {
@@ -1520,11 +1517,6 @@ function emitOperand(EmitEnv $env, IR\Operand $op): void
     }
 
     throw new \RuntimeException('JVM emit: unsupported operand ' . $op::class);
-}
-
-function jvmOperandNeverReturns(IR\Operand $op): bool
-{
-    return false;
 }
 
 function pushBoxedInt(EmitEnv $env, int $v): void

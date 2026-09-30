@@ -790,9 +790,6 @@ function emitStmt(EmitEnv $env, IR\Stmt $stmt): void
         case IR\Ret::class:
             /** @var IR\Ret $stmt */
             emitOperand($env, $stmt->value);
-            if (operandNeverReturns($stmt->value)) {
-                return;
-            }
             if ($env->matchYieldDest !== null) {
                 $env->m->store($env->localSlot('t' . $env->matchYieldDest));
                 if ($env->matchJoinLabel !== null) {
@@ -1624,11 +1621,6 @@ function emitOperand(EmitEnv $env, IR\Operand $op): void
     }
 
     throw new \RuntimeException('DotNet emit: unsupported operand ' . $op::class);
-}
-
-function operandNeverReturns(IR\Operand $op): bool
-{
-    return false;
 }
 
 function pushBoxedInt(EmitEnv $env, int $v): void
