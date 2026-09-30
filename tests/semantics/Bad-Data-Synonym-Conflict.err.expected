@@ -1,0 +1,4 @@
+tests/semantics/Bad-Data-Synonym-Conflict.mog:3:6: type error: data type `Foo` conflicts with type synonym
+
+  3 | data Foo = Foo
+    |      ^^^

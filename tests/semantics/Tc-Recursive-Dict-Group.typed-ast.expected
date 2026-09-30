@@ -1,0 +1,72 @@
+program
+  class Tag a
+    method tag :: a -> String
+  class Labelled a
+    method label :: a -> String
+  function __ev_Tag_Int_tag :: Int -> String
+    pat_var x
+    string "int"
+  function __ev_Labelled_Int_label :: Int -> String
+    pat_var x
+    apply
+      evidence_method Tag.tag evidence= nullary=0
+        instance Int
+      variable x
+  function __ev_Tag_Bool_tag :: Bool -> String
+    pat_var x
+    string "bool"
+  function __ev_Labelled_Bool_label :: Bool -> String
+    pat_var x
+    apply
+      evidence_method Tag.tag evidence= nullary=0
+        instance Bool
+      variable x
+  function mutualGroup :: Tuple2 String String
+    where
+      tuple
+        apply
+          apply
+            apply
+              variable go
+              evidence_ref Tag Int
+            evidence_ref Labelled Int
+          integer 1
+        apply
+          apply
+            apply
+              variable go
+              evidence_ref Tag Bool
+            evidence_ref Labelled Bool
+          constructor_ref True
+      binding
+        pat_var go
+        lambda
+          pat_var __ev_dict0
+          pat_var __ev_dict1
+          lambda
+            pat_var x
+            infix <>
+              apply
+                evidence_method Labelled.label evidence=__ev_dict1 nullary=0
+                variable x
+              apply
+                apply
+                  apply
+                    variable hop
+                    variable __ev_dict0
+                  variable __ev_dict1
+                variable x
+      binding
+        pat_var hop
+        lambda
+          pat_var __ev_dict2
+          pat_var __ev_dict3
+          lambda
+            pat_var x
+            apply
+              apply
+                apply
+                  variable go
+                  variable __ev_dict2
+                variable __ev_dict3
+              variable x

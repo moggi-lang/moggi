@@ -51,6 +51,12 @@ function updateProjectClassesForModule(
     }
 
     foreach ($unit['program']->items as $item) {
+        if ($item instanceof Ast\DataDecl || $item instanceof Ast\TypeSynonymDecl) {
+            $state->declaredTypeNames[$item->name] = true;
+        }
+    }
+
+    foreach ($unit['program']->items as $item) {
         if ($item instanceof Ast\DataDecl) {
             Types\registerData($state, $item);
         }

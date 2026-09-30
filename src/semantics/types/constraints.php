@@ -13,7 +13,6 @@ use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Syntax\Ast;
 use Moggi\Syntax\Ast\AstNode;
 
-use function Moggi\Debug\metric;
 use function Moggi\Errors\appendDidYouMean;
 use function Moggi\Semantics\TypeExpr\scheme;
 
@@ -165,8 +164,6 @@ function assertConstraintArity(
  */
 function expandConstraintsWithSuperclasses(TypeCheckState $state, array $constraints): array
 {
-    metric('expandConstraintsWithSuperclasses.calls');
-
     $expanded = [];
 
     foreach ($constraints as $constraint) {
@@ -211,6 +208,44 @@ function expandConstraintsWithSuperclasses(TypeCheckState $state, array $constra
     }
 
     return $expanded;
+}
+
+/**
+ * The solved form of a dictionary group.
+ *
+ * `user` is the group as written or generated -- unexpanded, arguments pruned
+ * -- the shape a scheme records and a use site re-expands. `dicts` is the
+ * superclass-closed list that a definition's dictionary parameters and a use
+ * site's dictionary arguments are both projected from. Because they come from
+ * one solve, the two sides cannot disagree on arity.
+ */
+final class SolvedGroup
+{
+    /**
+     * @param list<Ast\PendingConstraint> $user
+     * @param list<Ast\PendingConstraint> $dicts
+     */
+    public function __construct(
+        public readonly array $user,
+        public readonly array $dicts,
+    ) {
+    }
+}
+
+/**
+ * Solve a pending constraint list once: prune its arguments, close it under
+ * superclasses, and name each dictionary's evidence parameter.
+ *
+ * This is the only producer of a {@see SolvedGroup}, so both sides of a
+ * dictionary boundary read the same solve rather than expanding independently.
+ *
+ * @param list<Ast\PendingConstraint> $pending
+ */
+function solveConstraints(TypeCheckState $state, array $pending): SolvedGroup
+{
+    $user = refreshConstraintArgs($state, $pending);
+
+    return new SolvedGroup($user, expandConstraintsWithSuperclasses($state, $user));
 }
 
 /** @param list<Type> $args */
@@ -924,8 +959,6 @@ function clearPendingConstraints(Ast\AstNode $expr): void
  */
 function pendingConstraintsDeep(Ast\AstNode $expr, ?TypeCheckState $state = null): array
 {
-    metric('pendingConstraintsDeep.calls');
-
     $found = [];
     $seen = [];
     $visit = static function (Ast\AstNode $node) use (&$found, &$seen, $state): void {

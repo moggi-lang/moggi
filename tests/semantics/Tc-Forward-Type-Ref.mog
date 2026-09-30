@@ -1,0 +1,19 @@
+-- A module's type declarations are visible to each other regardless of source
+-- order: a synonym may name a data type declared later, and a constructor field
+-- may name a synonym declared later. Resolution must not depend on the order the
+-- declarations appear in.
+
+type Names = List User
+
+data User = User { id :: UserId }
+
+type UserId = Int
+
+firstId :: User -> UserId
+firstId u = u.id
+
+zero :: UserId
+zero = 0
+
+count :: Names -> Int
+count _ = 0

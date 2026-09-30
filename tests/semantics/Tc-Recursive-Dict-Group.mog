@@ -1,0 +1,41 @@
+import Data.Ord
+import Text.Show
+
+-- The dictionary arity invariant on the recursive-group path.
+--
+-- A mutually recursive binding group is generalized once, as a whole, so every
+-- member is lifted with the same dictionary parameters and every recursive call
+-- passes the same evidence. A superclass among the group's obligations
+-- (`Labelled` asks for `Tag`) makes the two sides disagree in arity if either
+-- side expands the obligation set on its own instead of reading the one solve
+-- the group took.
+--
+-- The typed-ast golden pins both sides of that matrix: the `__ev_dict` params
+-- the members are lifted with, and the `evidence_ref`/dictionary arguments the
+-- two use sites and the recursive calls hand over.
+
+class Tag a where
+  tag :: a -> String
+
+class Tag a => Labelled a where
+  label :: a -> String
+
+instance Tag Int where
+  tag x = "int"
+
+instance Labelled Int where
+  label x = tag x
+
+instance Tag Bool where
+  tag x = "bool"
+
+instance Labelled Bool where
+  label x = tag x
+
+-- `go` and `hop` call each other, so the pair is a single recursive group; its
+-- `Labelled a` obligation closes under its `Tag a` superclass.
+mutualGroup :: (String, String)
+mutualGroup = (go 1, go True)
+  where
+    go x = label x <> hop x
+    hop x = go x

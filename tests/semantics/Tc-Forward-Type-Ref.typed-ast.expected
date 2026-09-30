@@ -1,0 +1,15 @@
+program
+  type Names = [User]
+  data User
+    constructor User
+      field id :: UserId
+  type UserId = Int
+  function firstId :: User -> Int
+    pat_var u
+    field_access .id
+      variable u
+  function zero :: Int
+    integer 0
+  function count :: [User] -> Int
+    pat_wild _
+    integer 0

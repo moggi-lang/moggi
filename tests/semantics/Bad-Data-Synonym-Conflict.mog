@@ -1,0 +1,6 @@
+type Foo = Int
+
+data Foo = Foo
+
+use :: Foo -> Foo
+use x = x

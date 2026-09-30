@@ -30,7 +30,6 @@ use Moggi\Semantics\TypeExpr\TWord8;
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Syntax\Ast;
 
-use function Moggi\Debug\metric;
 use function Moggi\Errors\appendDidYouMean;
 use function Moggi\Modules\resolvedSymbol;
 use function Moggi\Patterns\Walk\patternDuplicateBinder;
@@ -70,9 +69,6 @@ function isIoTypeCon(TypeCheckState $state, Type $type): bool
 
 function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\FunctionDecl
 {
-    metric('checkFunction.calls');
-    metric('checkFunction.module.' . ($state->currentModule ?? '(none)'));
-
     $hadDeclaredSignature = Ast\hasDeclaredSignature($fn);
     $state->subst = [];
     $state->holes = [];
@@ -87,6 +83,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
     $constraints = [];
     $userConstraints = [];
     $constraintEnv = [];
+    $group = new SolvedGroup([], []);
 
     if ($hasSignature) {
         $kindScope = Kinds\pushKindScope($state);
@@ -97,7 +94,8 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
                 $fn->params = userParamsOf($fn);
             }
 
-            $constraints = expandConstraintsWithSuperclasses($state, $userConstraints);
+            $group = solveConstraints($state, $userConstraints);
+            $constraints = $group->dicts;
             applyConstraintVarKinds($state, $constraints);
             $constraintEnv = buildConstraintEnv($state, $constraints);
             $fnType = astType($state, $bodyTypeAst);
@@ -245,8 +243,6 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
     }
     $state->ambientConstraintsByClass = $byClass;
 
-    metric('checkFunction.bodyChecked');
-    metric('checkFunction.bodyChecked.module.' . ($state->currentModule ?? '(none)'));
     $bodyType = inferExpr($state, $fn->body, $bodyEnv);
     $state->constraintMethods = $savedConstraintMethods;
     $state->constraintMethodAmbiguities = $savedConstraintMethodAmbiguities;
@@ -265,8 +261,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
             $fnType,
             $restricted,
             $hadDeclaredSignature,
-            $constraints,
-            $userConstraints,
+            $group,
             $ownsOpenVars,
             $openRestricted,
         );
@@ -277,7 +272,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
         return $fn;
     }
 
-    $fnType = settleCheckedBody($state, $fn, $fnType, $restricted, $hadDeclaredSignature, $constraints, $userConstraints);
+    $fnType = settleCheckedBody($state, $fn, $fnType, $restricted, $hadDeclaredSignature, $group);
 
     resolveMachineIntPow($state, $fn->body);
     $fn->body = rewriteIntrinsicApplies($fn->body);
@@ -302,8 +297,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
  * module, once every use site has had its say about the declaration's
  * variables.
  *
- * @param list<Ast\PendingConstraint> $constraints expanded, with superclasses
- * @param list<Ast\PendingConstraint> $userConstraints as written
+ * @param SolvedGroup $group the declaration's constraints, solved once
  */
 function settleCheckedBody(
     TypeCheckState $state,
@@ -311,15 +305,14 @@ function settleCheckedBody(
     Type $fnType,
     bool $restricted,
     bool $hadDeclaredSignature,
-    array $constraints,
-    array $userConstraints,
+    SolvedGroup $group,
 ): Type {
     defaultAmbiguousNumericVars(
         $state,
         $fn->body,
         $restricted
             ? []
-            : quantifiedVars($state, peelDictArrows($fnType, count($constraints))),
+            : quantifiedVars($state, peelDictArrows($fnType, count($group->dicts))),
     );
 
     resolveDeferredNativeInfixes($state, $fn->body);
@@ -339,15 +332,15 @@ function settleCheckedBody(
         $state->subst,
     );
     $fn->typeInferred = !$hadDeclaredSignature;
-    $userFnType = peelDictArrows($fnType, count($constraints));
-    $prunedUserConstraints = refreshConstraintArgs($state, $userConstraints);
+    $userFnType = peelDictArrows($fnType, count($group->dicts));
+    $prunedUserConstraints = refreshConstraintArgs($state, $group->user);
     $state->env[$fn->name] = $restricted
         ? scheme($userFnType, [], [])
         : scheme(
             $userFnType,
             schemeBoundVars($userFnType, $state->env, $prunedUserConstraints),
             $prunedUserConstraints,
-            count($constraints),
+            count($group->dicts),
         );
 
     return $fnType;
@@ -392,8 +385,7 @@ function openRestrictedVarsInExpr(TypeCheckState $state, Ast\AstNode $body): arr
  * once no use can say anything more. A declaration that merely *uses* one of
  * those variables is finished in the same pass, after the declaration owning it.
  *
- * @param list<Ast\PendingConstraint> $constraints expanded, with superclasses
- * @param list<Ast\PendingConstraint> $userConstraints as written
+ * @param SolvedGroup $group the declaration's constraints, solved once
  */
 function deferDeclaration(
     TypeCheckState $state,
@@ -401,8 +393,7 @@ function deferDeclaration(
     Type $fnType,
     bool $restricted,
     bool $hadDeclaredSignature,
-    array $constraints,
-    array $userConstraints,
+    SolvedGroup $group,
     bool $ownsOpenVars,
     array $openVars,
 ): void {
@@ -411,15 +402,15 @@ function deferDeclaration(
 
     $fnType = prune($state, $fnType);
     if (! $hadDeclaredSignature) {
-        $userFnType = peelDictArrows($fnType, count($constraints));
+        $userFnType = peelDictArrows($fnType, count($group->dicts));
         if ($restricted) {
             $state->env[$fn->name] = scheme($userFnType, [], []);
         } else {
             $state->env[$fn->name] = scheme(
                 $userFnType,
-                schemeBoundVars($userFnType, $state->env, $userConstraints),
-                $userConstraints,
-                count($constraints),
+                schemeBoundVars($userFnType, $state->env, $group->user),
+                $group->user,
+                count($group->dicts),
             );
         }
     }
@@ -440,8 +431,7 @@ function deferDeclaration(
         'owns' => $ownsOpenVars,
         'restricted' => $restricted,
         'declared' => $hadDeclaredSignature,
-        'constraints' => $constraints,
-        'userConstraints' => $userConstraints,
+        'group' => $group,
         'subst' => $state->subst,
         'methods' => $state->constraintMethods,
         'ambiguities' => $state->constraintMethodAmbiguities,
@@ -573,8 +563,7 @@ function settleDeferredDeclaration(TypeCheckState $state, array $entry): void
             $entry['type'],
             $entry['restricted'],
             $entry['declared'],
-            $entry['constraints'],
-            $entry['userConstraints'],
+            $entry['group'],
         );
         recordRestrictedSolutions($state);
         resolveMachineIntPow($state, $fn->body);
@@ -785,8 +774,6 @@ function needsInferredSignature(Ast\FunctionDecl $fn): bool
  */
 function discoverFunctionConstraints(TypeCheckState $state, Ast\FunctionDecl $fn): ?array
 {
-    metric('discoverFunctionConstraints.calls');
-
     $savedSubst = $state->subst;
     $savedHoles = $state->holes;
     $savedFresh = $state->fresh;
@@ -1366,8 +1353,6 @@ function flattenApplyForIntrinsicWrapper(Ast\AstNode $expr): array
 
 function inferExpr(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
 {
-    metric('inferExpr.calls');
-
     $type = match ($expr::class) {
         Ast\IntegerLit::class => inferIntegerLit($state, $expr),
         Ast\DoubleLit::class => new TDouble(),
@@ -1703,10 +1688,7 @@ function inferApply(TypeCheckState $state, Ast\Apply $expr, array $env): Type
         unify($state, $fnType, new TArrow($argType, $result), $expr);
         $pending = pendingConstraintsFromExpr($expr->function);
         if ($pending !== []) {
-            $constraints = expandConstraintsWithSuperclasses(
-                $state,
-                refreshConstraintArgs($state, $pending),
-            );
+            $constraints = solveConstraints($state, $pending)->dicts;
             if (constraintsResolvable($state, $constraints)) {
                 clearPendingConstraints($expr);
                 $expr = prependEvidenceAtRoot($state, $expr, resolveConstraintEvidence($state, $constraints, $expr));
@@ -1725,10 +1707,7 @@ function inferApply(TypeCheckState $state, Ast\Apply $expr, array $env): Type
         unify($state, $fnType, new TArrow($argType, $result), $expr);
         $pending = pendingConstraintsFromExpr($expr->function);
         if ($pending !== []) {
-            $constraints = expandConstraintsWithSuperclasses(
-                $state,
-                refreshConstraintArgs($state, $pending),
-            );
+            $constraints = solveConstraints($state, $pending)->dicts;
             if (constraintsResolvable($state, $constraints)) {
                 clearPendingConstraints($expr);
                 $expr = prependEvidenceAtRoot($state, $expr, resolveConstraintEvidence($state, $constraints, $expr));
@@ -1746,10 +1725,7 @@ function inferApply(TypeCheckState $state, Ast\Apply $expr, array $env): Type
 
     $pending = pendingConstraintsFromExpr($expr->function);
     if ($pending !== []) {
-        $constraints = expandConstraintsWithSuperclasses(
-            $state,
-            refreshConstraintArgs($state, $pending),
-        );
+        $constraints = solveConstraints($state, $pending)->dicts;
         if (constraintsResolvable($state, $constraints)) {
             clearPendingConstraints($expr);
             $expr = prependEvidenceAtRoot($state, $expr, resolveConstraintEvidence($state, $constraints, $expr));
@@ -1810,10 +1786,7 @@ function resolvePendingEvidenceInExpr(TypeCheckState $state, Ast\AstNode &$expr)
                 return;
             }
 
-            $constraints = expandConstraintsWithSuperclasses(
-                $state,
-                refreshConstraintArgs($state, $expr->pendingConstraints),
-            );
+            $constraints = solveConstraints($state, $expr->pendingConstraints)->dicts;
             $evidence = tryResolveEvidenceExprs($state, $constraints, $expr);
             if ($evidence === null) {
                 return;
@@ -1915,10 +1888,7 @@ function tryResolveApplyEvidence(TypeCheckState $state, Ast\Apply $expr): void
         return;
     }
 
-    $constraints = expandConstraintsWithSuperclasses(
-        $state,
-        refreshConstraintArgs($state, $pending),
-    );
+    $constraints = solveConstraints($state, $pending)->dicts;
     $evidence = tryResolveEvidenceExprs($state, $constraints, $expr);
     if ($evidence === null) {
         return;
@@ -1945,10 +1915,7 @@ function tryResolveValueEvidence(TypeCheckState $state, Ast\AstNode &$expr): voi
         return;
     }
 
-    $constraints = expandConstraintsWithSuperclasses(
-        $state,
-        refreshConstraintArgs($state, $expr->pendingConstraints),
-    );
+    $constraints = solveConstraints($state, $expr->pendingConstraints)->dicts;
     $evidence = tryResolveEvidenceExprs($state, $constraints, $expr);
     if ($evidence === null) {
         return;
@@ -2098,10 +2065,7 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
     $classOperator = isClassMethodOperator($state, $op) || isset($state->constraintMethods[$op]);
     $constraints = $instantiated['constraints'] === []
         ? []
-        : expandConstraintsWithSuperclasses(
-            $state,
-            refreshConstraintArgs($state, $instantiated['constraints']),
-        );
+        : solveConstraints($state, $instantiated['constraints'])->dicts;
 
     if ($classOperator
         && $constraints !== []
@@ -2825,7 +2789,7 @@ function inferSequentialBindings(TypeCheckState $state, array $bindings, array $
                 [$binding->value] = abstractLocalConstraints(
                     $state,
                     $binding->value,
-                    expandConstraintsWithSuperclasses($state, $constraints),
+                    solveConstraints($state, $constraints)->dicts,
                 );
             }
         }
@@ -2893,7 +2857,7 @@ function abstractAnnotatedLocalBinding(TypeCheckState $state, Ast\AstNode $value
 
     [$constraintAsts, $bodyTypeAst] = splitTypeAst($value->type);
     $userConstraints = parseConstraints($state, $constraintAsts, $value);
-    $constraints = expandConstraintsWithSuperclasses($state, $userConstraints);
+    $constraints = solveConstraints($state, $userConstraints)->dicts;
     applyConstraintVarKinds($state, $constraints);
 
     [$params, $abstracted, $dictTypes] = allocateDictParams($state, $constraints);
@@ -3368,12 +3332,14 @@ function inferRecursiveBindings(TypeCheckState $state, array $bindings, array $e
         );
     }
 
-    $groupConstraints = $generalize && !groupWasAbstracted($bindings, $annotated)
+    $groupPending = $generalize && !groupWasAbstracted($bindings, $annotated)
         ? recursiveGroupConstraints($state, $bindings, $bodyConstraints, $annotated)
         : [];
-    $groupDictConstraints = $groupConstraints === []
-        ? []
-        : expandConstraintsWithSuperclasses($state, $groupConstraints);
+    $group = $groupPending === []
+        ? new SolvedGroup([], [])
+        : solveConstraints($state, $groupPending);
+    $groupConstraints = $group->user;
+    $groupDictConstraints = $group->dicts;
     if ($groupConstraints !== []) {
         $members = [];
         foreach ($bindings as $bi => $binding) {

@@ -108,6 +108,10 @@ function registerData(TypeCheckState $state, Ast\DataDecl $decl): void
         throw typeFail($state, "duplicate data type `{$decl->name}`", $decl);
     }
 
+    if (isset($state->typeSynonyms[$decl->name])) {
+        throw typeFail($state, "data type `{$decl->name}` conflicts with type synonym", $decl);
+    }
+
     $params = \array_map(static fn (Ast\DataParam $p): string => $p->name, $decl->params);
     $paramTypes = \array_map(static fn (string $p): Type => new TVar($p), $params);
     $result = new TCon($decl->name, $paramTypes);

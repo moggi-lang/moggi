@@ -55,7 +55,6 @@ require __DIR__ . '/semantics/effects.php';
 require __DIR__ . '/IR/lower.php';
 require __DIR__ . '/IR/dump.php';
 require __DIR__ . '/IR/visit.php';
-require __DIR__ . '/debug/metrics.php';
 require __DIR__ . '/debug/sourcemap.php';
 require __DIR__ . '/pipeline/pipeline.php';
 require __DIR__ . '/optimize/support.php';
