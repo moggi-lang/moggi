@@ -2841,6 +2841,11 @@ function functionParamTypeAsts(Ast\TypeNode $type): array
  * dictionary parameters, the function's own parameters take the annotation's
  * types, and the body resolves its evidence through the new dictionaries.
  *
+ * The returned constraints are the annotation's own, superclasses unexpanded:
+ * the parameters are allocated for the expanded list (kept on the lambda's
+ * `abstractedConstraints`), while the binding's scheme keeps this one so a use
+ * site expands it exactly once.
+ *
  * @param array<string, Scheme> $env
  * @return array{0: Ast\AstNode, 1: Type, 2: list<Ast\PendingConstraint>}
  */
@@ -2888,7 +2893,7 @@ function abstractAnnotatedLocalBinding(TypeCheckState $state, Ast\AstNode $value
     $lambda = wrapDictLambda($state, $inner, $params, $dictTypes);
     $lambda->abstractedConstraints = $abstracted;
 
-    return [$lambda, $valueType, $abstracted];
+    return [$lambda, $valueType, $userConstraints];
 }
 
 /**

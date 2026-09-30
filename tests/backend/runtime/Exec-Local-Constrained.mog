@@ -67,6 +67,19 @@ applyTag = go
     go :: Tag a => a -> String
     go x = tag x
 
+-- an explicit signature whose obligations include a superclass: `Ord` asks for
+-- `Eq`, so `go` takes three dictionaries -- `Eq`, `Ord` and `Num`, superclass
+-- first -- and each call site hands over exactly those. A call site that
+-- expanded the already-expanded list would pass a second `Eq` where `Ord`
+-- belongs, and `Ord.>` would fail to resolve.
+superClass :: (Int, Int)
+superClass = (go 5, go 2)
+  where
+    go :: (Ord a, Num a) => a -> a
+    go x = case x > 4 of
+      True -> x + 1
+      False -> x
+
 main :: IO ()
 main = do
   let (a1, a2) = twoShows
@@ -82,3 +95,5 @@ main = do
   putStrLn d1
   putStrLn d2
   putStrLn (applyTag (9 :: Int))
+  let (e1, e2) = superClass
+  putStrLn (show (e1, e2))
