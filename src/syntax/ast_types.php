@@ -1015,6 +1015,18 @@ final class Lambda extends AstNode
     public array $abstractedConstraints = [];
 
     /**
+     * The user-written constraints behind `abstractedConstraints`, when the
+     * abstracted lambda implements a constrained annotation.
+     *
+     * A use site expands a binding's scheme with its superclasses, so the
+     * scheme has to keep the list as written; a later run reads it back here
+     * instead of expanding the dictionary parameters a second time.
+     *
+     * @var list<PendingConstraint>
+     */
+    public array $abstractedUserConstraints = [];
+
+    /**
      * The scheme a binding group was generalized to when it was abstracted.
      *
      * A group of recursive bindings is abstracted over its dictionaries only

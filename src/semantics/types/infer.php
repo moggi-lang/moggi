@@ -80,18 +80,6 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
         unset($state->env[$fn->name]);
     }
 
-    if (! $hadDeclaredSignature && $fn->inferredSignatureType === null && ! isRestrictedDeclaration($fn)) {
-        $discovered = discoverFunctionConstraints($state, $fn);
-        if ($discovered !== null && $discovered['constraints'] !== []) {
-            materializeInferredSignature(
-                $state,
-                $fn,
-                $discovered['type'],
-                $discovered['constraints'],
-            );
-        }
-    }
-
     $hasSignature = $hadDeclaredSignature || $fn->inferredSignatureType !== null;
 
     $env = $state->env;
@@ -660,20 +648,56 @@ function constraintOverRestrictedVar(TypeCheckState $state, Ast\PendingConstrain
  * body is checked.
  *
  * A call site is lowered with the dictionaries of the function it calls, so a
- * declaration checked later can be called correctly by an earlier one -- but a
- * mutually recursive pair has no order in which both are already known, and
- * `isEven` calling `isOdd` would be lowered without a dictionary. Discovering
- * everything first, and repeating until no declaration gains a constraint, is
- * what a chain (`f n = g n`, `g n = show n`) needs: `g` learns `Show` in the
- * first round and `f` only in the second.
+ * declaration has to know its own before any caller is checked -- but a
+ * mutually recursive pair has no order in which both could be. Grouping the
+ * declarations into the strongly connected components of the name-reference
+ * graph and walking those in dependency order gives every probe the schemes of
+ * everything it can reach: `f n = g n`, `g n = show n` is two components, and
+ * `g` is discovered and published before `f` is probed, so `f` learns `Show`
+ * in one pass. Only a cycle -- `isEven`/`isOdd` -- has to be discovered
+ * together, and that is the one place the probe repeats.
  *
  * @param list<Ast\FunctionDecl> $functions
  */
 function discoverInferredSignatures(TypeCheckState $state, array $functions): void
 {
+    $byIndex = $functions;
+    foreach (topLevelBindingSccs($functions) as $component) {
+        $members = [];
+        foreach ($component['indices'] as $index) {
+            $members[] = $byIndex[$index];
+        }
+
+        discoverComponentSignatures($state, $members);
+    }
+}
+
+/**
+ * Settle one component's declarations, using only schemes from components
+ * already discovered.
+ *
+ * A cycle's members are probed together and repeated until none gains a
+ * constraint, because neither sees the other's dictionaries until the other is
+ * materialized. An acyclic component settles with one probe per member. A
+ * signature-less declaration that gains no dictionary is given the probe's
+ * type as it stands -- a call site can only use such a declaration once its
+ * type is known, and while it is a bare placeholder its variables are unrelated
+ * to each other, so `k : findIndicesGo p xs (0 :: ?)` cannot tell that the
+ * counter is the list's index type and the literal is defaulted instead of
+ * unified.
+ *
+ * The restricted declarations settle before that last sweep: a pattern
+ * binding's variables are not that declaration's to generalize, so settling
+ * them first lets a declaration that only looked constrained through one of
+ * those variables see its real type instead of staying a placeholder.
+ *
+ * @param list<Ast\FunctionDecl> $members
+ */
+function discoverComponentSignatures(TypeCheckState $state, array $members): void
+{
     do {
         $materialized = false;
-        foreach ($functions as $fn) {
+        foreach ($members as $fn) {
             if (! needsInferredSignature($fn)) {
                 continue;
             }
@@ -694,8 +718,26 @@ function discoverInferredSignatures(TypeCheckState $state, array $functions): vo
         }
     } while ($materialized);
 
-    materializeDictionaryFreeSignatures($state, $functions);
-    materializeRestrictedSignatures($state, $functions);
+    materializeRestrictedSignatures($state, $members);
+
+    foreach ($members as $fn) {
+        if (! needsInferredSignature($fn)) {
+            continue;
+        }
+
+        $discovered = discoverFunctionConstraints($state, $fn);
+        if ($discovered === null || ($discovered['deferredOverRestricted'] ?? false)) {
+            continue;
+        }
+
+        materializeInferredSignature(
+            $state,
+            $fn,
+            $discovered['type'],
+            $discovered['constraints'],
+        );
+        registerInferredSignatureScheme($state, $fn);
+    }
 }
 
 /**
@@ -737,41 +779,6 @@ function materializeRestrictedSignatures(TypeCheckState $state, array $functions
 }
 
 /**
- * Give the declarations that need no dictionaries the type the probe found.
- *
- * A call site can only use such a declaration once its type is known. While it
- * is a bare placeholder its variables are unrelated to each other, so `k :
- * findIndicesGo p xs (0 :: ?)` cannot tell that the counter is the list's index
- * type and the literal is defaulted instead of unified -- which left
- * `findIndices` passing an `Integer` into a function whose parameter the body
- * uses as `Int`. Every declaration that gains dictionaries is materialized
- * above, so what the probe reports here is final.
- *
- * @param list<Ast\FunctionDecl> $functions
- */
-function materializeDictionaryFreeSignatures(TypeCheckState $state, array $functions): void
-{
-    foreach ($functions as $fn) {
-        if (! needsInferredSignature($fn)) {
-            continue;
-        }
-
-        $discovered = discoverFunctionConstraints($state, $fn);
-        if ($discovered === null || ($discovered['deferredOverRestricted'] ?? false)) {
-            continue;
-        }
-
-        materializeInferredSignature(
-            $state,
-            $fn,
-            $discovered['type'],
-            $discovered['constraints'],
-        );
-        registerInferredSignatureScheme($state, $fn);
-    }
-}
-
-/**
  * Whether a declaration is still waiting for the signature the probe discovers:
  * one the user did not spell out, that is not a pattern binding (the
  * monomorphism restriction settles those, not generalization), and that no
@@ -781,7 +788,7 @@ function needsInferredSignature(Ast\FunctionDecl $fn): bool
 {
     return ! Ast\hasDeclaredSignature($fn)
         && $fn->inferredSignatureType === null
-        && ! isRestrictedDeclaration($fn);
+        && userParamsOf($fn) !== [];
 }
 
 /**
@@ -2819,9 +2826,9 @@ function inferSequentialBindings(TypeCheckState $state, array $bindings, array $
         $alreadyAbstracted = abstractedLocalConstraints($binding->value);
         $annotatedConstraints = localConstrainedAnnotation($binding->value);
         if ($alreadyAbstracted !== []) {
-            $constraints = $alreadyAbstracted;
+            $constraints = abstractedLocalUserConstraints($binding->value) ?: $alreadyAbstracted;
             $rawType = inferExpr($state, $binding->value, $local);
-            $valueType = peelDictArrows($rawType, \count($constraints));
+            $valueType = peelDictArrows($rawType, \count($alreadyAbstracted));
         } elseif ($annotatedConstraints !== null) {
             [$binding->value, $valueType, $constraints] = abstractAnnotatedLocalBinding(
                 $state,
@@ -2941,6 +2948,7 @@ function abstractAnnotatedLocalBinding(TypeCheckState $state, Ast\AstNode $value
 
     $lambda = wrapDictLambda($state, $inner, $params, $dictTypes);
     $lambda->abstractedConstraints = $abstracted;
+    $lambda->abstractedUserConstraints = $userConstraints;
 
     return [$lambda, $valueType, $userConstraints];
 }
@@ -2995,6 +3003,21 @@ function abstractedLocalConstraints(Ast\AstNode $value): array
     return $value instanceof Ast\Lambda ? $value->abstractedConstraints : [];
 }
 
+/**
+ * The user-written constraints of an already-abstracted constrained annotation.
+ *
+ * `abstractedConstraints` is the expanded list the dictionary parameters were
+ * allocated for, but a binding's scheme has to keep the unexpanded list -- a use
+ * site expands it once. Reusing the expanded list as the scheme's constraints
+ * would make a re-check of the same AST expand the superclasses a second time
+ * (`(Ord a, Num a) =>` would pass `Eq, Eq, Ord, Num`).
+ *
+ * @return list<Ast\PendingConstraint>
+ */
+function abstractedLocalUserConstraints(Ast\AstNode $value): array
+{
+    return $value instanceof Ast\Lambda ? $value->abstractedUserConstraints : [];
+}
 
 /**
  * The scheme a group member was generalized to when its group was abstracted.

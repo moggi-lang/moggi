@@ -662,6 +662,10 @@ function registerInferredFunctionPlaceholder(TypeCheckState $state, Ast\ClassDec
  * body is checked. A call to this declaration from a sibling then learns its
  * dictionaries, which is what a mutually recursive pair needs: whichever of the
  * two is checked first must already see the other's dictionary parameters.
+ *
+ * The intrinsic wrapper goes with the scheme: a declaration that is a thin
+ * binding over a `#` primop has to publish that in the interface, because an
+ * importer rewrites its uses to the primop and never checks the wrapper's body.
  */
 function registerInferredSignatureScheme(TypeCheckState $state, Ast\FunctionDecl $fn): void
 {
@@ -687,6 +691,11 @@ function registerInferredSignatureScheme(TypeCheckState $state, Ast\FunctionDecl
         $userConstraints,
         count($constraints),
     );
+
+    $wrapper = trivialIntrinsicWrapper($fn);
+    if ($wrapper !== null) {
+        $state->intrinsicWrappers[$fn->name] = $wrapper;
+    }
 }
 
 function registerFunctionScheme(TypeCheckState $state, Ast\FunctionDecl $fn): void

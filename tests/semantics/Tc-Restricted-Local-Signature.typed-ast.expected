@@ -1,0 +1,39 @@
+program
+  function value :: Int
+    where
+      variable r
+      binding
+        pat_var r
+        apply
+          apply
+            apply
+              apply
+                variable pick
+                evidence_ref Eq Int
+              evidence_ref Ord Int
+            evidence_ref Num Int
+          integer 3
+      binding
+        pat_var pick
+        lambda
+          pat_var __ev_dict0
+          pat_var __ev_dict1
+          pat_var __ev_dict2
+          lambda
+            pat_var x
+            case
+              apply
+                apply
+                  evidence_method Ord.> evidence=__ev_dict1 nullary=0
+                  variable x
+                integer 0
+              alt
+                pat_con True
+                apply
+                  apply
+                    evidence_method Num.+ evidence=__ev_dict2 nullary=0
+                    variable x
+                  integer 1
+              alt
+                pat_con False
+                variable x

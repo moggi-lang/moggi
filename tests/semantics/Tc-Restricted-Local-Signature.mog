@@ -1,0 +1,17 @@
+import Data.Ord
+
+-- A restricted declaration -- no signature and no parameters -- whose body has
+-- a `where` group with a constrained local. Discovery probes the declaration
+-- before its body is checked, so the probe abstracts the local first, and the
+-- real check reuses the annotation's own constraints rather than expanding its
+-- superclasses a second time: `pick` is passed `Eq, Ord, Num`, not
+-- `Eq, Eq, Ord, Num`.
+
+value = r
+  where
+    r = pick 3
+
+    pick :: (Ord a, Num a) => a -> a
+    pick x = case x > 0 of
+      True -> x + 1
+      False -> x
