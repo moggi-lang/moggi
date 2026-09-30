@@ -75,13 +75,7 @@ function lowerIoSequence(array $stmts, LowerCtx $ctx): bool
         ) ?? $ctx->stmtSrcLoc;
         $ok = match ($stmt::class) {
             Ast\IoLet::class => (function () use ($stmt, $ctx): bool {
-                foreach ($stmt->bindings as $binding) {
-                    bindPattern(
-                        lowerPattern($binding->pattern, $ctx->constructorRenames, $ctx->data),
-                        lowerExpr($binding->value, $ctx),
-                        $ctx,
-                    );
-                }
+                lowerBindingGroups($stmt->bindings, $ctx);
 
                 return true;
             })(),

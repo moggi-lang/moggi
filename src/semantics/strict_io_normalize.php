@@ -141,15 +141,11 @@ function normalizeIoBody(Ast\AstNode $expr, int &$counter): Ast\AstNode
     }
 
     if ($expr instanceof Ast\Let) {
-        return normalizeIoLet($expr, $counter);
+        return normalizeIoBindings($expr->bindings, $expr->body, $expr, $counter);
     }
 
     if ($expr instanceof Ast\Where) {
-        foreach ($expr->bindings as $binding) {
-            $binding->value = normalizePureExpr($binding->value, $counter);
-        }
-
-        return normalizeIoBody($expr->expr, $counter);
+        return normalizeIoBindings($expr->bindings, $expr->expr, $expr, $counter);
     }
 
     if ($expr instanceof Ast\GuardsExpr) {
@@ -179,11 +175,21 @@ function normalizeIoBody(Ast\AstNode $expr, int &$counter): Ast\AstNode
     return new Ast\IoAction(normalizePureExpr($expr, $counter), $expr->line, $expr->col, $expr->endCol);
 }
 
-function normalizeIoLet(Ast\Let $expr, int &$counter): Ast\AstNode
+/**
+ * Sequence a `let`/`where` group in front of the IO body it scopes.
+ *
+ * A `where` on an IO body used to normalize its bindings and then drop them,
+ * leaving every reference in the body unresolved in IR. A pure binding becomes
+ * an `IoLet` and an IO-typed one an `IoLetAction`, which is what a `let` in the
+ * same position already produced.
+ *
+ * @param list<Ast\Binding> $bindings
+ */
+function normalizeIoBindings(array $bindings, Ast\AstNode $bodyExpr, Ast\AstNode $location, int &$counter): Ast\AstNode
 {
     $stmts = [];
     $pureBindings = [];
-    foreach ($expr->bindings as $binding) {
+    foreach ($bindings as $binding) {
         if (exprHasIoType($binding->value)) {
             $stmts[] = new Ast\IoLetAction(
                 $binding->pattern,
@@ -200,14 +206,14 @@ function normalizeIoLet(Ast\Let $expr, int &$counter): Ast\AstNode
         $stmts[] = new Ast\IoLet($pureBindings);
     }
 
-    $body = normalizeIoBody($expr->body, $counter);
+    $body = normalizeIoBody($bodyExpr, $counter);
     if ($body instanceof Ast\IoSequence) {
         array_push($stmts, ...$body->stmts);
     } else {
         $stmts[] = new Ast\IoExpr($body);
     }
 
-    return new Ast\IoSequence($stmts, $expr->line, $expr->col, $expr->endCol);
+    return new Ast\IoSequence($stmts, $location->line, $location->col, $location->endCol);
 }
 
 function ioBindToSequence(Ast\AstNode $first, Ast\AstNode $fn, int &$counter): Ast\AstNode

@@ -1,0 +1,47 @@
+import System.IO
+import Data.Ord
+import Text.Show
+
+-- A `where` on an IO body scopes the bindings over the whole action.
+--
+-- The IO normalizer used to normalize those bindings and then return only the
+-- normalized body, so every reference to one was unresolved in IR -- and the
+-- lowering of an IO `let` bound its entries in source order, so a binding that
+-- referred to a later sibling, or to itself, never resolved either.
+
+-- a pattern binding with a constrained local, and no signature on the action
+whereValue = putStrLn (show r)
+  where
+    r = pick 3
+    pick :: (Ord a, Num a) => a -> a
+    pick x = case x > 0 of
+      True -> x + 1
+      False -> x
+
+-- a function binder, plus one that refers to a later sibling
+whereFunction :: IO ()
+whereFunction = putStrLn (show (twice 4))
+  where
+    twice n = helper n + helper n
+    helper n = n + 1
+
+-- a self-recursive binder
+whereRecursive :: IO ()
+whereRecursive = putStrLn (show (fact 5))
+  where
+    fact n = case n == 0 of
+      True -> 1
+      False -> n * fact (n - 1)
+
+-- an IO-typed binding in the group
+whereAction :: IO ()
+whereAction = shout
+  where
+    shout = putStrLn "shouted"
+
+main :: IO ()
+main = do
+  whereValue
+  whereFunction
+  whereRecursive
+  whereAction
