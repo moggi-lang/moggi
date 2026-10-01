@@ -47,15 +47,11 @@ function evidenceHeadArgSuffix(Ast\TypeNode $arg): ?string
         return sanitizeEvidenceNamePart($arg->name);
     }
 
-    if ($arg instanceof Ast\TypeCon
-        && preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $arg->name) === 1
-    ) {
+    if ($arg instanceof Ast\TypeCon && isBareEvidenceName($arg->name)) {
         return sanitizeEvidenceNamePart($arg->name);
     }
 
-    if ($arg instanceof Ast\TypePromoted
-        && preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $arg->name) === 1
-    ) {
+    if ($arg instanceof Ast\TypePromoted && isBareEvidenceName($arg->name)) {
         return 'p_' . sanitizeEvidenceNamePart($arg->name);
     }
 
@@ -69,14 +65,12 @@ function hashedEvidenceHeadSuffix(Ast\TypeNode $head): string
 
 function isSimpleEvidenceHead(Ast\TypeNode $head): bool
 {
-    if ($head instanceof Ast\TypeCon
-        && preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $head->name) === 1
-    ) {
+    if ($head instanceof Ast\TypeCon && isBareEvidenceName($head->name)) {
         return true;
     }
 
     if ($head instanceof Ast\TypeApp && $head->con instanceof Ast\TypeCon) {
-        if (preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $head->con->name) !== 1) {
+        if (!isBareEvidenceName($head->con->name)) {
             return false;
         }
         foreach ($head->args as $arg) {
@@ -89,6 +83,12 @@ function isSimpleEvidenceHead(Ast\TypeNode $head): bool
     }
 
     return false;
+}
+
+/** True when `$name` can appear verbatim in an evidence symbol. */
+function isBareEvidenceName(string $name): bool
+{
+    return preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $name) === 1;
 }
 
 function sanitizeEvidenceNamePart(string $name): string

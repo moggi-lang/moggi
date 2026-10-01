@@ -359,6 +359,21 @@ function solveConstraints(TypeCheckState $state, array $pending): SolvedGroup
     return new SolvedGroup($user, expandConstraintsWithSuperclasses($state, $user));
 }
 
+/**
+ * The dictionary list to elaborate a node's obligations with: the solved list a
+ * scheme handed the node (`Scheme::$dicts` via `pendingDicts`) when it has one,
+ * otherwise the solve of its pending constraints. The two lists are the same
+ * shape, so an evidence pass does not distinguish them.
+ *
+ * @param list<Ast\PendingConstraint> $pending
+ * @param list<Ast\PendingConstraint> $dicts
+ * @return list<Ast\PendingConstraint>
+ */
+function dictsForPending(TypeCheckState $state, array $pending, array $dicts): array
+{
+    return $dicts !== [] ? $dicts : solveConstraints($state, $pending)->dicts;
+}
+
 /** @param list<Type> $args */
 function constraintArgsKey(array $args): string
 {
@@ -622,6 +637,36 @@ function typesMatchForAmbient(TypeCheckState $state, Type $left, Type $right): b
 }
 
 /**
+ * The resolved instance head of one constraint, and the ambient dictionary that
+ * would satisfy it if the enclosing scope already has one.
+ *
+ * Shared opening walk of the eager guard ({@see constraintsResolvable}) and the
+ * resolver ({@see tryResolveEvidenceExprs}); the caller applies its own extra
+ * checks (context leaves, instance uniqueness, evidence construction). Returns
+ * null when the class is unknown or the head cannot be formed.
+ *
+ * @return array{head: Type, ambient: ?string}|null
+ */
+function constraintInstanceHead(TypeCheckState $state, Ast\PendingConstraint $constraint): ?array
+{
+    $classInfo = $state->classes[$constraint->class] ?? null;
+    if ($classInfo === null) {
+        return null;
+    }
+
+    try {
+        $head = instanceHeadFromConstraintArgs($state, $classInfo['params'], $constraint->args);
+    } catch (TypeError) {
+        return null;
+    }
+
+    return [
+        'head' => prune($state, $head),
+        'ambient' => ambientEvidenceFor($state, $constraint),
+    ];
+}
+
+/**
  * Resolve a constraint list into evidence expressions, using a concrete project
  * instance where the head is known and otherwise forwarding an ambient evidence
  * parameter. Returns null if any constraint cannot be resolved either way.
@@ -636,25 +681,17 @@ function tryResolveEvidenceExprs(
 ): ?array {
     $exprs = [];
     foreach ($constraints as $constraint) {
-        $classInfo = $state->classes[$constraint->class] ?? null;
-        if ($classInfo === null) {
+        $resolved = constraintInstanceHead($state, $constraint);
+        if ($resolved === null) {
             return null;
         }
 
-        try {
-            $head = instanceHeadFromConstraintArgs($state, $classInfo['params'], $constraint->args);
-        } catch (TypeError) {
-            return null;
-        }
-
-        $head = prune($state, $head);
-
-        $ambient = ambientEvidenceFor($state, $constraint);
-        if ($ambient !== null) {
-            $exprs[] = new Ast\Variable($ambient);
+        if ($resolved['ambient'] !== null) {
+            $exprs[] = new Ast\Variable($resolved['ambient']);
             continue;
         }
 
+        $head = $resolved['head'];
         if ($head instanceof TVar) {
             return null;
         }
@@ -944,12 +981,7 @@ function resolveProjectInstanceContextEvidence(
     $exprs = [];
     foreach ($raw as $rawEntry) {
         foreach (expandConstraintsWithSuperclasses($state, [$rawEntry['constraint']]) as $constraint) {
-            $ctxHead = count($constraint->args) === 1
-                ? prune($state, $constraint->args[0])
-                : new TCon('__InstanceHead', \array_map(
-                    static fn (Type $arg): Type => prune($state, $arg),
-                    $constraint->args,
-                ));
+            $ctxHead = constraintHeadType($state, $constraint->args);
 
             $ambient = ambientEvidenceFor($state, $constraint);
             if ($ambient !== null) {
@@ -1179,7 +1211,10 @@ function clearPendingConstraintsDeep(Ast\AstNode $expr): void
  * guess, would be read back by the passes that do have the last word -- the
  * native-operator pass in particular, which turns an `infix` node into the
  * operation of its operands' type while the node still exists. The real check
- * re-derives all of this, so the probe leaves the body as it found it.
+ * re-derives these annotations. This clears *only* the annotations: the
+ * abstraction the let/where machinery recorded on nested bindings is the reuse
+ * cache the real pass reads and is deliberately left in place (see
+ * `discoverFunctionConstraints`).
  */
 function clearInferredAnnotationsDeep(Ast\AstNode $expr): void
 {
@@ -1278,31 +1313,22 @@ function assertPendingDictsConsistentInExpr(TypeCheckState $state, Ast\AstNode $
 function constraintsResolvable(TypeCheckState $state, array $constraints): bool
 {
     foreach ($constraints as $constraint) {
-        $classInfo = $state->classes[$constraint->class] ?? null;
-        if ($classInfo === null) {
+        $resolved = constraintInstanceHead($state, $constraint);
+        if ($resolved === null) {
             return false;
         }
 
-        try {
-            $head = instanceHeadFromConstraintArgs($state, $classInfo['params'], $constraint->args);
-        } catch (TypeError) {
-            return false;
-        }
-
-        $head = prune($state, $head);
-
-        if (ambientEvidenceFor($state, $constraint) !== null) {
+        if ($resolved['ambient'] !== null) {
             continue;
         }
 
+        $head = $resolved['head'];
         if ($head instanceof TVar) {
             return false;
         }
 
         foreach (instanceLeafConstraints($state, $constraint) ?? [$constraint] as $leaf) {
-            $leafHead = count($leaf->args) === 1
-                ? prune($state, $leaf->args[0])
-                : new TCon('__InstanceHead', $leaf->args);
+            $leafHead = constraintHeadType($state, $leaf->args);
             if ($leafHead instanceof TVar && ambientEvidenceFor($state, $leaf) === null) {
                 return false;
             }

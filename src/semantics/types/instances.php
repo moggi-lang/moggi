@@ -983,6 +983,25 @@ function projectInstanceCandidates(TypeCheckState $state, string $className, Typ
         : ($state->projectInstancesByClass[$className] ?? []);
 }
 
+/**
+ * The project instances whose head unifies with `$requiredHead` (already
+ * normalized by the caller), in declaration order.
+ *
+ * Yielded lazily so a caller that only needs the first match, or needs to stop
+ * at the second to reject an ambiguous one, does no more unification than it
+ * has to.
+ *
+ * @return \Generator<int, array<string, mixed>>
+ */
+function matchingProjectInstances(TypeCheckState $state, string $className, Type $requiredHead): \Generator
+{
+    foreach (projectInstanceCandidates($state, $className, $requiredHead) as $instance) {
+        if (instanceHeadsMatch($state, $requiredHead, $instance['head'])) {
+            yield $instance;
+        }
+    }
+}
+
 function findProjectInstance(TypeCheckState $state, string $className, Type $requiredHead, array $visited = []): bool
 {
     $lookupKey = instanceLookupKey($className, normalizedInstanceHead($state, $requiredHead));
@@ -1008,16 +1027,10 @@ function findProjectInstance(TypeCheckState $state, string $className, Type $req
 function findUniqueProjectInstance(TypeCheckState $state, string $className, Type $requiredHead): bool
 {
     $requiredHead = normalizedInstanceHead($state, $requiredHead);
-    $candidates = projectInstanceCandidates($state, $className, $requiredHead);
 
     $count = 0;
-    foreach ($candidates as $instance) {
-        if (!instanceHeadsMatch($state, $requiredHead, $instance['head'])) {
-            continue;
-        }
-
-        ++$count;
-        if ($count > 1) {
+    foreach (matchingProjectInstances($state, $className, $requiredHead) as $_) {
+        if (++$count > 1) {
             return false;
         }
     }
@@ -1042,13 +1055,7 @@ function findProjectInstanceRecord(TypeCheckState $state, string $className, Typ
         return null;
     }
 
-    $candidates = projectInstanceCandidates($state, $className, $requiredHead);
-
-    foreach ($candidates as $instance) {
-        if (!instanceHeadsMatch($state, $requiredHead, $instance['head'])) {
-            continue;
-        }
-
+    foreach (matchingProjectInstances($state, $className, $requiredHead) as $instance) {
         $mapping = instanceMappingForUse($state, $instance, $requiredHead);
         if ($mapping === null || !instanceContextSatisfied($state, $instance, $mapping, $visited)) {
             continue;
@@ -1194,9 +1201,7 @@ function instanceContextSatisfied(TypeCheckState $state, array $instance, array 
     }
 
     foreach ($context as $constraint) {
-        $ctxHead = count($constraint->args) === 1
-            ? prune($state, $constraint->args[0])
-            : new TCon('__InstanceHead', $constraint->args);
+        $ctxHead = constraintHeadType($state, $constraint->args);
         if ($ctxHead instanceof TVar) {
             continue;
         }
@@ -1803,8 +1808,32 @@ function findProjectInstanceHeadAst(TypeCheckState $state, string $className, Ty
     return internalTypeToAst($normalized, $state->subst);
 }
 
-/** @param list<array{name: string, kind: array<string, mixed>}> $classParams @param list<array<string, mixed>> $args */
+/**
+ * The instance head type for a class's argument list: the single argument
+ * itself for a one-parameter class, or the `__InstanceHead` marker applied to
+ * all of them for a multi-parameter class. Arguments are pruned.
+ *
+ * @param list<Type> $args
+ */
+function constraintHeadType(TypeCheckState $state, array $args): Type
+{
+    if (count($args) === 1) {
+        return prune($state, $args[0]);
+    }
 
+    return new TCon(Ast\instanceHeadMarker(), \array_map(
+        static fn (Type $arg): Type => prune($state, $arg),
+        $args,
+    ));
+}
+
+/**
+ * The instance head type a class's constraint arguments denote, after the
+ * argument count is checked against the class's parameter list.
+ *
+ * @param list<array{name: string, kind: array<string, mixed>}> $classParams
+ * @param list<array<string, mixed>> $args
+ */
 function instanceHeadFromConstraintArgs(TypeCheckState $state, array $classParams, array $args, ?Ast\AstNode $at = null): Type
 {
     if (count($classParams) === 1) {
@@ -1815,10 +1844,7 @@ function instanceHeadFromConstraintArgs(TypeCheckState $state, array $classParam
         throw typeFail($state, 'constraint class arity mismatch', $at);
     }
 
-    return new TCon('__InstanceHead', \array_map(
-        static fn (Type $arg): Type => prune($state, $arg),
-        $args,
-    ));
+    return constraintHeadType($state, $args);
 }
 
 /** @param list<array<string, mixed>> $evidence */

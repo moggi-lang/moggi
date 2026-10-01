@@ -1,0 +1,19 @@
+-- An instance whose context is a variable the use-site's head leaves open.
+--
+-- `C [b]` needs `Show b`, but `c []` types `[]` at an open element type, so the
+-- context variable `b` is never determined by the head and the instance context
+-- cannot be resolved. This drives the shared constraint walk
+-- (`constraintInstanceHead`): the eager guard (`constraintsResolvable`) declines
+-- because the context leaf is unresolved, and the post-pass resolver reaches
+-- `resolveProjectInstanceContextEvidence` and reports the ambiguity rather than
+-- dropping the dictionary.
+import Text.Show
+
+class C a where
+  c :: a -> String
+
+instance Show b => C [b] where
+  c xs = show xs
+
+main :: String
+main = c []

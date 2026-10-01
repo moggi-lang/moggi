@@ -769,12 +769,19 @@ function needsInferredSignature(Ast\FunctionDecl $fn): bool
  * constraints its own type carries.
  *
  * The body is typed against throwaway variables and the substitution is rolled
- * back: the caller re-checks the body with the constraints in scope, so this run
- * must leave nothing behind but the answer. Pending constraints are cleared for
- * the same reason -- they are re-recorded by the real pass.
+ * back: the caller re-checks the body with the constraints in scope. The probe
+ * clears the pending constraints and the inferred annotations it wrote, but it
+ * deliberately leaves the abstraction the let/where machinery recorded on nested
+ * bindings (`Lambda::$abstractedConstraints` / `::$abstractedUserConstraints` /
+ * `::$abstractedScheme`). That residue is the reuse cache the real pass reads so
+ * it does not re-abstract the same binding; see the field docs. The probe is
+ * therefore *not* residue-free.
  *
- * @return ?array{type: Type, constraints: list<Ast\PendingConstraint>}
- *   null only when the probe cannot see the body's type at all
+ * @return ?array{
+ *   type: Type,
+ *   constraints: list<Ast\PendingConstraint>,
+ *   deferredOverRestricted: bool,
+ * } null only when the probe cannot see the body's type at all
  */
 function discoverFunctionConstraints(TypeCheckState $state, Ast\FunctionDecl $fn): ?array
 {
@@ -1732,7 +1739,7 @@ function resolveApplyPendingEvidence(TypeCheckState $state, Ast\Apply $expr): vo
         return;
     }
 
-    $constraints = $dicts !== [] ? $dicts : solveConstraints($state, $pending)->dicts;
+    $constraints = dictsForPending($state, $pending, $dicts);
     if (constraintsResolvable($state, $constraints)) {
         clearPendingConstraints($expr);
         prependEvidenceAtRoot($state, $expr, resolveConstraintEvidence($state, $constraints, $expr));
@@ -1791,9 +1798,7 @@ function resolvePendingEvidenceInExpr(TypeCheckState $state, Ast\AstNode &$expr)
                 return;
             }
 
-            $constraints = $expr->pendingDicts !== []
-                ? $expr->pendingDicts
-                : solveConstraints($state, $expr->pendingConstraints)->dicts;
+            $constraints = dictsForPending($state, $expr->pendingConstraints, $expr->pendingDicts);
             $evidence = tryResolveEvidenceExprs($state, $constraints, $expr);
             if ($evidence === null) {
                 return;
@@ -1913,7 +1918,7 @@ function tryResolveApplyEvidence(TypeCheckState $state, Ast\Apply $expr): void
         return;
     }
 
-    $constraints = $dicts !== [] ? $dicts : solveConstraints($state, $pending)->dicts;
+    $constraints = dictsForPending($state, $pending, $dicts);
     $evidence = tryResolveEvidenceExprs($state, $constraints, $expr);
     if ($evidence === null) {
         return;
@@ -1940,9 +1945,7 @@ function tryResolveValueEvidence(TypeCheckState $state, Ast\AstNode &$expr): voi
         return;
     }
 
-    $constraints = $expr->pendingDicts !== []
-        ? $expr->pendingDicts
-        : solveConstraints($state, $expr->pendingConstraints)->dicts;
+    $constraints = dictsForPending($state, $expr->pendingConstraints, $expr->pendingDicts);
     $evidence = tryResolveEvidenceExprs($state, $constraints, $expr);
     if ($evidence === null) {
         return;
@@ -4050,20 +4053,7 @@ function pruneEnvSchemes(TypeCheckState $state, array $env): array
 {
     foreach ($env as $name => $entry) {
         $type = prune($state, $entry->type);
-        $constraints = $entry->constraints;
-        foreach ($constraints as $ci => $constraint) {
-            $args = $constraint->args;
-            foreach ($args as $ai => $arg) {
-                $args[$ai] = prune($state, $arg);
-            }
-            $constraints[$ci] = new Ast\PendingConstraint(
-                $constraint->class,
-                $args,
-                $constraint->evidence,
-                $constraint->implicit,
-                $constraint->instanceHeadAst,
-            );
-        }
+        $constraints = refreshConstraintArgs($state, $entry->constraints);
 
         $env[$name] = $entry->withPruned(
             $type,
@@ -4965,6 +4955,9 @@ function applyTypeApp(TypeCheckState $state, Ast\TypeNode $con, array $argAsts, 
         return new TCon($con->name, $args);
     }
 
+    // The multi-parameter instance head marker is compiler-built only (the
+    // registration guard rejects the name as a user type), so it carries no
+    // kind to check.
     if ($con instanceof Ast\TypeCon && $con->name === Ast\instanceHeadMarker()) {
         $args = [];
         foreach ($argAsts as $argAst) {

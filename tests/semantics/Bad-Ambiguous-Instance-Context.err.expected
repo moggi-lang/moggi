@@ -1,0 +1,4 @@
+tests/semantics/Bad-Ambiguous-Instance-Context.mog:19:8: type error: ambiguous constraint `Show b`; add a type signature
+
+  19 | main = c []
+     |        ^^^
