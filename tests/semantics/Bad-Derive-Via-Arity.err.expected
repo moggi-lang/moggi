@@ -1,0 +1,4 @@
+tests/semantics/Bad-Derive-Via-Arity.mog:14:1: type error: instance head arity mismatch
+
+  14 | deriving via (W) instance Both P
+     | ^^^^^^^^

@@ -30,10 +30,19 @@ use function Moggi\Semantics\Types\typeToString;
  * type-level; they exist so the unqualified class-method call resolves at the
  * via type and therefore dispatches through the `C V` context.
  */
+/**
+ * Build a `deriving via` instance. `$headArgs` is the instance head's class
+ * argument list; the via type replaces its first argument (the target's
+ * representation) and the remaining arguments are carried verbatim, so a
+ * multi-parameter class gets a full context like `Both W Bool`.
+ *
+ * @param ?list<Ast\TypeNode> $headArgs
+ */
 function deriveVia(
     TypeCheckState $state,
     Ast\DataDecl $decl,
     Ast\DerivingClassRef $ref,
+    ?array $headArgs = null,
 ): DerivedInstance {
     $className = $ref->name;
     $viaType = $ref->viaType;
@@ -45,6 +54,7 @@ function deriveVia(
         throw typeFail($state, "unknown class `{$className}`", $ref);
     }
     $head = dataDeclHeadAst($decl);
+    $headArgs ??= [$head];
     $headType = astType($state, $head);
     $viaInternalType = astType($state, $viaType);
 
@@ -62,8 +72,12 @@ function deriveVia(
     $classInfo = $state->classes[$className];
     $classParam = $classInfo['params'][0]['name'] ?? 'a';
 
+    // The via type stands in for the instance head's first argument; the
+    // remaining class arguments (multi-parameter classes) are carried verbatim.
+    $constraintArgs = $headArgs;
+    $constraintArgs[0] = $viaType;
     $constraints = [
-        new Ast\TypeApp(new Ast\TypeCon($className), [$viaType]),
+        new Ast\TypeApp(new Ast\TypeCon($className), $constraintArgs),
     ];
 
     $methods = [];

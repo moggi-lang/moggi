@@ -12,6 +12,19 @@ function evidenceFunctionName(string $className, Ast\TypeNode $head): string
 
 function evidenceHeadSuffix(Ast\TypeNode $head): string
 {
+    if (Ast\isInstanceHeadMarker($head)) {
+        $parts = [];
+        foreach ($head->args as $arg) {
+            $part = evidenceHeadArgSuffix($arg);
+            if ($part === null) {
+                return hashedEvidenceHeadSuffix($head);
+            }
+            $parts[] = $part;
+        }
+
+        return join('_', $parts);
+    }
+
     if (isSimpleEvidenceHead($head)) {
         if ($head instanceof Ast\TypeApp && $head->con instanceof Ast\TypeCon) {
             return sanitizeEvidenceNamePart($head->con->name);
@@ -20,6 +33,37 @@ function evidenceHeadSuffix(Ast\TypeNode $head): string
         return sanitizeEvidenceNamePart($head->name);
     }
 
+    return hashedEvidenceHeadSuffix($head);
+}
+
+/**
+ * Name part for one argument of a multi-parameter instance head. Only the
+ * spellings that read as themselves (`Int`, `a`, `'Red`) are used; anything
+ * applied or qualified falls back to the hash, so the name stays unique.
+ */
+function evidenceHeadArgSuffix(Ast\TypeNode $arg): ?string
+{
+    if ($arg instanceof Ast\TypeVar) {
+        return sanitizeEvidenceNamePart($arg->name);
+    }
+
+    if ($arg instanceof Ast\TypeCon
+        && preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $arg->name) === 1
+    ) {
+        return sanitizeEvidenceNamePart($arg->name);
+    }
+
+    if ($arg instanceof Ast\TypePromoted
+        && preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $arg->name) === 1
+    ) {
+        return 'p_' . sanitizeEvidenceNamePart($arg->name);
+    }
+
+    return null;
+}
+
+function hashedEvidenceHeadSuffix(Ast\TypeNode $head): string
+{
     return 'h_' . substr(hash('sha256', canonicalTypeKey($head)), 0, 16);
 }
 

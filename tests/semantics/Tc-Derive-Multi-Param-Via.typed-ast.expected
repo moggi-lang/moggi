@@ -1,0 +1,46 @@
+program
+  data P
+    constructor P
+  newtype W
+    constructor W
+      field  :: P
+  class Both a b
+    method both :: a -> b -> String = default
+  function __ev_Both_W_Bool_both :: W -> Bool -> String
+    pat_var _p0
+    pat_var _p1
+    case
+      tuple
+        variable _p0
+        variable _p1
+      alt
+        pat_tuple
+          pat_con W
+            pat_con P
+          pat_con True
+        string "wt"
+      alt
+        pat_tuple
+          pat_con W
+            pat_con P
+          pat_con False
+        string "wf"
+  function __ev_Both_P_Bool_both :: __Dict_Both -> P -> Bool -> String
+    pat_var __ev_Both
+    pat_var __v0
+    pat_var __v1
+    apply
+      apply
+        evidence_method Both.both evidence= nullary=0
+          instance W Bool
+        apply
+          constructor_ref W
+          variable __v0
+      variable __v1
+  function test :: String
+    apply
+      apply
+        evidence_method Both.both evidence= nullary=0
+          instance P Bool
+        constructor_ref P
+      constructor_ref True

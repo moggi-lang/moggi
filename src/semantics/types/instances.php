@@ -967,11 +967,25 @@ function instanceMappingCacheKey(array $instance, Type $requiredHead): string
         . instanceLookupKey($instance['class'], $requiredHead);
 }
 
+/** The head form instance lookup indexes on: prune, reduce families, prune. */
+function normalizedInstanceHead(TypeCheckState $state, Type $head): Type
+{
+    return prune($state, normalizeType($state, prune($state, $head), reduceFamilies: true));
+}
+
+/** @return list<array<string, mixed>> */
+function projectInstanceCandidates(TypeCheckState $state, string $className, Type $head): array
+{
+    $headKey = instanceHeadIndexKeyFromType($head);
+
+    return $headKey !== '*'
+        ? ($state->projectInstancesByClassHead[$className][$headKey] ?? [])
+        : ($state->projectInstancesByClass[$className] ?? []);
+}
+
 function findProjectInstance(TypeCheckState $state, string $className, Type $requiredHead, array $visited = []): bool
 {
-    $requiredHead = prune($state, $requiredHead);
-    $normalized = prune($state, normalizeType($state, $requiredHead, reduceFamilies: true));
-    $lookupKey = instanceLookupKey($className, $normalized);
+    $lookupKey = instanceLookupKey($className, normalizedInstanceHead($state, $requiredHead));
     if (\array_key_exists($lookupKey, $state->instanceLookupCache)) {
         return $state->instanceLookupCache[$lookupKey];
     }
@@ -993,14 +1007,8 @@ function findProjectInstance(TypeCheckState $state, string $className, Type $req
  */
 function findUniqueProjectInstance(TypeCheckState $state, string $className, Type $requiredHead): bool
 {
-    $requiredHead = prune($state, $requiredHead);
-    $requiredHead = normalizeType($state, $requiredHead, reduceFamilies: true);
-    $requiredHead = prune($state, $requiredHead);
-
-    $headKey = instanceHeadIndexKeyFromType($requiredHead);
-    $candidates = $headKey !== '*'
-        ? ($state->projectInstancesByClassHead[$className][$headKey] ?? [])
-        : ($state->projectInstancesByClass[$className] ?? []);
+    $requiredHead = normalizedInstanceHead($state, $requiredHead);
+    $candidates = projectInstanceCandidates($state, $className, $requiredHead);
 
     $count = 0;
     foreach ($candidates as $instance) {
@@ -1023,9 +1031,7 @@ function findUniqueProjectInstance(TypeCheckState $state, string $className, Typ
  */
 function findProjectInstanceRecord(TypeCheckState $state, string $className, Type $requiredHead, array $visited = []): ?array
 {
-    $requiredHead = prune($state, $requiredHead);
-    $requiredHead = normalizeType($state, $requiredHead, reduceFamilies: true);
-    $requiredHead = prune($state, $requiredHead);
+    $requiredHead = normalizedInstanceHead($state, $requiredHead);
     $lookupKey = instanceLookupKey($className, $requiredHead);
     if (isset($visited[$lookupKey])) {
         return null;
@@ -1036,10 +1042,7 @@ function findProjectInstanceRecord(TypeCheckState $state, string $className, Typ
         return null;
     }
 
-    $headKey = instanceHeadIndexKeyFromType($requiredHead);
-    $candidates = $headKey !== '*'
-        ? ($state->projectInstancesByClassHead[$className][$headKey] ?? [])
-        : ($state->projectInstancesByClass[$className] ?? []);
+    $candidates = projectInstanceCandidates($state, $className, $requiredHead);
 
     foreach ($candidates as $instance) {
         if (!instanceHeadsMatch($state, $requiredHead, $instance['head'])) {

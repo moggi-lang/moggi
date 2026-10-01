@@ -1,11 +1,11 @@
 program
   class Both a b
     method both :: a -> b -> String
-  function __ev_Both_h_845b57060c84796b_both :: Int -> Bool -> String
+  function __ev_Both_Int_Bool_both :: Int -> Bool -> String
     pat_var x
     pat_var y
     string "int-bool"
-  function __ev_Both_h_6df6cd216634599b_both :: Int -> Int -> String
+  function __ev_Both_Int_Int_both :: Int -> Int -> String
     pat_var x
     pat_var y
     string "int-int"

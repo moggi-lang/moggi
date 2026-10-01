@@ -82,8 +82,32 @@ function applyPrimitiveDataBootstrap(TypeCheckState $state): void
     }
 }
 
+/**
+ * The `__InstanceHead` marker is the synthetic type constructor that carries a
+ * multi-parameter instance head (`instance Both Int Bool`). User type
+ * constructors are lexed as upper-case `ConId`s, so a name starting with `_` can
+ * never be spelled in source; this rejects it at registration anyway, so the
+ * marker cannot be shadowed if an AST is built programmatically.
+ */
+function assertNotInstanceHeadMarkerName(
+    TypeCheckState $state,
+    string $name,
+    Ast\AstNode $at,
+    string $what,
+): void {
+    if ($name === Ast\instanceHeadMarker()) {
+        throw typeFail(
+            $state,
+            "`{$name}` is reserved for the compiler and cannot name a {$what}",
+            $at,
+        );
+    }
+}
+
 function registerData(TypeCheckState $state, Ast\DataDecl $decl): void
 {
+    assertNotInstanceHeadMarkerName($state, $decl->name, $decl, 'data type');
+
     if (isMagicHashName($decl->name)
         || $decl->name === 'IO'
     ) {
@@ -287,6 +311,8 @@ function validateConstructorFieldTypeVars(TypeCheckState $state, Ast\Constructor
 function registerTypeSynonym(TypeCheckState $state, Ast\TypeSynonymDecl $decl): void
 {
     $name = $decl->name;
+
+    assertNotInstanceHeadMarkerName($state, $name, $decl, 'type synonym');
 
     if (isMagicHashName($name)) {
         throw typeFail(

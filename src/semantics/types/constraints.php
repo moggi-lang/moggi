@@ -708,7 +708,10 @@ function ownerEvidenceIndexes(TypeCheckState $state, array $evidence, Ast\Eviden
         if (!($entry instanceof Ast\EvidenceRef) || $entry->class !== $expected[$i]->class) {
             return [];
         }
-        if (chainHeadKeyForEvidence($state, $entry) !== chainHeadKeyForConstraint($state, $expected[$i])) {
+        $entryArgs = instanceConstraintArgsFromHeadAst($state, $entry->head);
+        if (instanceChainHeadKey($state, $entry->class, $entryArgs)
+            !== instanceChainHeadKey($state, $expected[$i]->class, $expected[$i]->args)
+        ) {
             return [];
         }
     }
@@ -738,32 +741,21 @@ function instanceConstraintArgsFromHeadAst(TypeCheckState $state, Ast\TypeNode $
     return [$head];
 }
 
-/** α-equivalent key for the instance head an evidence reference names. */
-function chainHeadKeyForEvidence(TypeCheckState $state, Ast\EvidenceRef $entry): string
+/**
+ * Alpha-equivalent key for a class's resolved instance head from its arguments:
+ * the `__InstanceHead` marker application for a multi-parameter class, the one
+ * argument otherwise, with fresh variable names normalized.
+ *
+ * @param list<Type> $args
+ */
+function instanceChainHeadKey(TypeCheckState $state, string $className, array $args): string
 {
-    $classInfo = $state->classes[$entry->class] ?? null;
+    $classInfo = $state->classes[$className] ?? null;
     if ($classInfo === null) {
         return '';
     }
 
-    return chainHeadKey($state, $classInfo['params'], instanceConstraintArgsFromHeadAst($state, $entry->head));
-}
-
-/** α-equivalent key for a chain constraint's resolved head. */
-function chainHeadKeyForConstraint(TypeCheckState $state, Ast\PendingConstraint $constraint): string
-{
-    $classInfo = $state->classes[$constraint->class] ?? null;
-    if ($classInfo === null) {
-        return '';
-    }
-
-    return chainHeadKey($state, $classInfo['params'], $constraint->args);
-}
-
-/** @param list<array{name: string, kind?: mixed}> $params @param list<Type> $args */
-function chainHeadKey(TypeCheckState $state, array $params, array $args): string
-{
-    return freshenStableTypeKey(prune($state, instanceHeadFromConstraintArgs($state, $params, $args)));
+    return freshenStableTypeKey(prune($state, instanceHeadFromConstraintArgs($state, $classInfo['params'], $args)));
 }
 
 /**

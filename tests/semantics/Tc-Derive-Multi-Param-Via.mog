@@ -1,0 +1,22 @@
+-- Standalone `deriving via` for a class with more than one parameter.
+--
+-- The via type stands in for the instance head's first argument (`P`), and the
+-- remaining class arguments (`Bool`) are carried verbatim, so the derived
+-- context is `Both W Bool`. The synthesized method unwraps to the shared
+-- representation and re-wraps as the via type before dispatching.
+
+data P = P
+newtype W = W P
+
+class Both a b where
+  both :: a -> b -> String
+  both x y = "default"
+
+instance Both W Bool where
+  both (W P) True = "wt"
+  both (W P) False = "wf"
+
+deriving via (W) instance Both P Bool
+
+test :: String
+test = both P True

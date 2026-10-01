@@ -1,0 +1,27 @@
+import Text.Show
+import System.IO
+
+-- Standalone `deriving via` of a multi-parameter class, dispatched at run time.
+--
+-- `Both` has two parameters, so the derived head is the class applied to two
+-- arguments. The via type replaces the first argument (`P` becomes `W`) and the
+-- rest are carried verbatim, giving the context `Both W Bool`. Calling `both` at
+-- `P Bool` unwraps `P` into `W` and runs the `Both W Bool` instance.
+
+data P = P
+newtype W = W P
+
+class Both a b where
+  both :: a -> b -> String
+  both x y = "default"
+
+instance Both W Bool where
+  both (W P) True = "wt"
+  both (W P) False = "wf"
+
+deriving via (W) instance Both P Bool
+
+main :: IO ()
+main = do
+  putStrLn (both P True)
+  putStrLn (both P False)

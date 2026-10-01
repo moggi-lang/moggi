@@ -1,0 +1,14 @@
+-- A `deriving via` head that supplies too few class arguments.
+--
+-- `Both` has two parameters, so the derived head `Both P` is rejected for arity
+-- (`instance head arity mismatch`) before the via representation is used. The
+-- via type replaces the head's first argument and the rest are carried
+-- verbatim, so a short head cannot be completed by the via type.
+
+data P = P
+newtype W = W P
+
+class Both a b where
+  both :: a -> b -> String
+
+deriving via (W) instance Both P

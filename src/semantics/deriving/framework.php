@@ -150,6 +150,7 @@ function resolveAndDerive(
     TypeCheckState $state,
     Ast\DataDecl $decl,
     Ast\DerivingClassRef $ref,
+    ?array $headArgs = null,
 ): DerivedInstance {
     $strategy = resolveDeriveStrategy($state, $decl, $ref);
     if ($strategy === 'Newtype') {
@@ -159,7 +160,7 @@ function resolveAndDerive(
         return deriveAnyClass($state, $decl, $ref);
     }
     if ($strategy === 'Via') {
-        return deriveVia($state, $decl, $ref);
+        return deriveVia($state, $decl, $ref, $headArgs);
     }
 
     $backends = stockDeriveBackends();
@@ -314,11 +315,12 @@ function processStandaloneDeriving(
         throw typeFail($state, "unknown class `{$decl->className}`", $decl);
     }
 
-    $targetName = extractTypeConstructorName($decl->head);
+    $targetAst = standaloneDerivingTarget($decl->head);
+    $targetName = extractTypeConstructorName($targetAst);
     if ($targetName === null || !isset($state->data[$targetName])) {
         throw typeFail(
             $state,
-            "standalone deriving: target type `" . Ast\dumpTypeInline($decl->head) .
+            "standalone deriving: target type `" . Ast\dumpTypeInline($targetAst) .
             "` is not a known data/newtype",
             $decl,
         );
@@ -342,7 +344,7 @@ function processStandaloneDeriving(
         viaType: $decl->viaType,
     );
 
-    $derived = resolveAndDerive($state, $dataDecl, $ref);
+    $derived = resolveAndDerive($state, $dataDecl, $ref, standaloneDerivingHeadArgs($decl->head));
     $inst = derivedInstanceToDecl($derived);
 
     $constraints = $decl->constraints;
@@ -406,6 +408,41 @@ function mergeDerivedConstraints(array $user, array $derived): array
     }
 
     return $user;
+}
+
+/**
+ * The data/newtype a standalone deriving clause derives from. For a
+ * multi-parameter class the head is the `__InstanceHead` marker, and only its
+ * first argument names a type to derive from; the rest are the class
+ * parameters.
+ */
+function standaloneDerivingTarget(Ast\TypeNode $head): Ast\TypeNode
+{
+    if (Ast\isInstanceHeadMarker($head) && $head->args !== []) {
+        return $head->args[0];
+    }
+
+    return $head;
+}
+
+/**
+ * The class arguments of a standalone deriving head. A multi-parameter class
+ * stores them under the `__InstanceHead` marker; a single argument is the bare
+ * type and a nullary class head is the unit type.
+ *
+ * @return list<Ast\TypeNode>
+ */
+function standaloneDerivingHeadArgs(Ast\TypeNode $head): array
+{
+    if (Ast\isInstanceHeadMarker($head)) {
+        return $head->args;
+    }
+
+    if ($head instanceof Ast\TypeUnit) {
+        return [];
+    }
+
+    return [$head];
 }
 
 function extractTypeConstructorName(Ast\TypeNode $type): ?string
