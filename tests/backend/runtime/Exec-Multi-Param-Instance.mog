@@ -1,0 +1,35 @@
+import Text.Show
+import System.IO
+
+-- A multi-parameter class, its instance head carried as `__InstanceHead a b`.
+--
+-- `Pairish` has two parameters and a `Tag a` superclass, and two instances that
+-- differ only in the second argument. Resolving `Pairish Int a` before `a` is
+-- known would pick whichever instance came first, so the obligation waits until
+-- the second argument is concrete. `generic` selects through the instance at a
+-- concrete call and forwards the superclass dictionary from it.
+
+class Tag a where
+  tag :: a -> String
+
+class Tag a => Pairish a b where
+  describe :: a -> b -> String
+
+instance Pairish Int Int where
+  describe x y = "ii:" <> tag x
+
+instance Pairish Int Bool where
+  describe x y = "ib:" <> tag x
+
+instance Tag Int where
+  tag x = "int"
+
+generic :: Pairish a b => a -> b -> String
+generic x y = describe x y
+
+main :: IO ()
+main = do
+  putStrLn (describe (1 :: Int) (2 :: Int))
+  putStrLn (describe (1 :: Int) True)
+  putStrLn (generic (1 :: Int) (2 :: Int))
+  putStrLn (generic (1 :: Int) True)

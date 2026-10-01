@@ -596,6 +596,9 @@ function formatType(object $t): string
     }
     if ($t instanceof Ast\TypeApp) {
         $args = array_map(formatType(...), $t->args);
+        if (Ast\isInstanceHeadMarker($t)) {
+            return implode(' ', $args);
+        }
         return formatType($t->con) . ($args !== [] ? ' ' . implode(' ', $args) : '');
     }
     if ($t instanceof Ast\TypeArrow) {

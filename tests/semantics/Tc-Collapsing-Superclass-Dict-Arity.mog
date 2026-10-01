@@ -1,0 +1,25 @@
+-- A multi-parameter class whose two superclasses collapse once a use site
+-- unifies the class's arguments. `Both a b` needs `Tag a` and `Tag b`, so the
+-- definition `pairUp :: Both a b => ...` is elaborated with `a` and `b` still
+-- distinct and takes three dictionaries: `Tag a`, `Tag b`, `Both a b`. At
+-- `Both A A` those two `Tag` obligations coincide, and a use site that expanded
+-- the obligation again after unification would build only two dictionaries.
+--
+-- Reading the definition's solved list is what keeps the call at three. There
+-- is no instance to select here: `test` takes `Both A A` as a constraint and
+-- the call forwards its ambient evidence (`__ev_Tag`, `__ev_Tag`,
+-- `__ev_Both`), which is the shape a dictionary boundary must preserve.
+
+data A = A
+
+class Tag a where
+  tag :: a -> String
+
+class (Tag a, Tag b) => Both a b where
+  both :: a -> b -> String
+
+pairUp :: Both a b => a -> b -> String
+pairUp x y = both x y
+
+test :: Both A A => String
+test = pairUp A A

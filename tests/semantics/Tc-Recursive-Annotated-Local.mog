@@ -1,0 +1,33 @@
+import Data.Ord
+import Text.Show
+
+-- A recursive local group whose member spells out a constrained signature.
+--
+-- The annotation is the member's own scheme, so its recursive call forwards the
+-- annotated dictionaries and its body resolves to the dictionary parameters the
+-- annotation allocates -- not a second set derived from the recursive pass. The
+-- typed-ast golden pins both: the member's `__ev_dict` parameters and the
+-- `evidence_ref` handed to its recursive call.
+--
+-- `Ord` implies `Eq`, so the annotation's obligation set closes under a
+-- superclass; a pass that expanded it twice, or not at all, would build a
+-- dictionary list that disagrees with the lambda the member was lifted into.
+--
+-- `probedDeclared` has no signature, so the discovery probe checks its body --
+-- and this group -- once before the real check runs, and the second pass has to
+-- read the same dictionaries off the lambda it finds.
+
+recursiveDeclared :: Int -> [Int]
+recursiveDeclared n = go n []
+  where
+    go :: (Ord a, Num a) => a -> [a] -> [a]
+    go k acc = case k == 0 of
+      True -> acc
+      False -> go (k - 1) (k : acc)
+
+probedDeclared n = walk n []
+  where
+    walk :: (Ord a, Num a) => a -> [a] -> [a]
+    walk k acc = case k == 0 of
+      True -> acc
+      False -> walk (k - 1) (k : acc)

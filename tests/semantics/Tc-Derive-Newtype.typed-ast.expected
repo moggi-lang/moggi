@@ -242,8 +242,7 @@ program
       constructor_ref Age
       apply
         apply
-          evidence_method Num.+ evidence= nullary=0
-            instance Int
+          evidence_method Num.+ evidence=__ev_Num nullary=0
           variable __n0
         variable __n1
   function - :: __Dict_Num -> Age -> Age -> Age
@@ -256,8 +255,7 @@ program
       constructor_ref Age
       apply
         apply
-          evidence_method Num.- evidence= nullary=0
-            instance Int
+          evidence_method Num.- evidence=__ev_Num nullary=0
           variable __n0
         variable __n1
   function * :: __Dict_Num -> Age -> Age -> Age
@@ -270,8 +268,7 @@ program
       constructor_ref Age
       apply
         apply
-          evidence_method Num.* evidence= nullary=0
-            instance Int
+          evidence_method Num.* evidence=__ev_Num nullary=0
           variable __n0
         variable __n1
   function negate :: __Dict_Num -> Age -> Age
@@ -281,8 +278,7 @@ program
     apply
       constructor_ref Age
       apply
-        evidence_method Num.negate evidence= nullary=0
-          instance Int
+        evidence_method Num.negate evidence=__ev_Num nullary=0
         variable __n0
   function abs :: __Dict_Num -> Age -> Age
     pat_var __ev_Num
@@ -291,8 +287,7 @@ program
     apply
       constructor_ref Age
       apply
-        evidence_method Num.abs evidence= nullary=0
-          instance Int
+        evidence_method Num.abs evidence=__ev_Num nullary=0
         variable __n0
   function signum :: __Dict_Num -> Age -> Age
     pat_var __ev_Num
@@ -301,8 +296,7 @@ program
     apply
       constructor_ref Age
       apply
-        evidence_method Num.signum evidence= nullary=0
-          instance Int
+        evidence_method Num.signum evidence=__ev_Num nullary=0
         variable __n0
   function fromInteger :: __Dict_Num -> Integer -> Age
     pat_var __ev_Num
@@ -310,8 +304,7 @@ program
     apply
       constructor_ref Age
       apply
-        evidence_method Num.fromInteger evidence= nullary=0
-          instance Int
+        evidence_method Num.fromInteger evidence=__ev_Num nullary=0
         variable __n0
   data NotAge
     constructor NotAge

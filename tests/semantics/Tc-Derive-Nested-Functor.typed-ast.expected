@@ -56,7 +56,7 @@ program
       alt
         pat_con False
         constructor_ref True
-  function showsPrec :: __Dict_Show -> Int -> Nest t370 -> String -> String
+  function showsPrec :: __Dict_Show -> Int -> Nest t372 -> String -> String
     pat_var __ev_Show
     pat_var __d
     pat_var __x
@@ -89,7 +89,7 @@ program
                     variable __f0
                   variable __r
           variable __s
-  function show :: __Dict_Show -> Nest t370 -> String
+  function show :: __Dict_Show -> Nest t372 -> String
     pat_var __ev_Show
     pat_var x
     apply
@@ -99,7 +99,7 @@ program
           evidence_ref Show Nest a
         variable x
       string ""
-  function showList :: __Dict_Show -> [Nest t370] -> String -> String
+  function showList :: __Dict_Show -> [Nest t372] -> String -> String
     pat_var __ev_Show
     pat_var ls
     pat_var s
@@ -112,7 +112,7 @@ program
             evidence_ref Show Nest a
         variable ls
       variable s
-  function map :: t410 -> t411 -> Nest t410 -> Nest t411
+  function map :: t414 -> t415 -> Nest t414 -> Nest t415
     pat_var __f
     pat_var __x
     case
@@ -131,7 +131,7 @@ program
                   instance Maybe
                 variable __f
             variable __v0
-  function foldr :: t438 -> t445 -> t445 -> t445 -> Nest t438 -> t445
+  function foldr :: t442 -> t449 -> t449 -> t449 -> Nest t442 -> t449
     pat_var __f
     pat_var __z
     pat_var __x
@@ -158,7 +158,7 @@ program
                   variable __x
             variable __z
           variable __v0
-  function fold :: __Dict_Semigroup -> __Dict_Monoid -> Nest t451 -> t451
+  function fold :: __Dict_Semigroup -> __Dict_Monoid -> Nest t455 -> t455
     pat_var __ev_Semigroup
     pat_var __ev_Monoid_1
     pat_var t
@@ -174,7 +174,7 @@ program
           pat_var x
           variable x
       variable t
-  function foldMap :: __Dict_Semigroup -> __Dict_Monoid -> t467 -> t472 -> Nest t467 -> t472
+  function foldMap :: __Dict_Semigroup -> __Dict_Monoid -> t471 -> t476 -> Nest t471 -> t476
     pat_var __ev_Semigroup
     pat_var __ev_Monoid_1
     pat_var f
@@ -196,7 +196,7 @@ program
               variable acc
         evidence_method Monoid.mempty evidence=__ev_Monoid_1 nullary=1
       variable t
-  function foldl :: t484 -> t481 -> t484 -> t484 -> Nest t481 -> t484
+  function foldl :: t488 -> t485 -> t488 -> t488 -> Nest t485 -> t488
     pat_var f
     pat_var z
     pat_var t
@@ -228,7 +228,7 @@ program
                         variable x
             variable t
       variable z
-  function toList :: Nest t508 -> [t508]
+  function toList :: Nest t516 -> [t516]
     pat_var t
     apply
       apply
@@ -243,7 +243,7 @@ program
               variable xs
         list
       variable t
-  function null :: Nest t518 -> Bool
+  function null :: Nest t526 -> Bool
     pat_var t
     apply
       apply
@@ -256,7 +256,7 @@ program
             constructor_ref False
         constructor_ref True
       variable t
-  function length :: Nest t525 -> Int
+  function length :: Nest t533 -> Int
     pat_var t
     apply
       apply
@@ -271,7 +271,7 @@ program
               integer 1
         integer 0
       variable t
-  function elem :: __Dict_Eq -> t542 -> Nest t542 -> Bool
+  function elem :: __Dict_Eq -> t550 -> Nest t550 -> Bool
     pat_var __ev_Eq
     pat_var x
     pat_var t
@@ -288,7 +288,7 @@ program
               variable x
             variable y
       variable t
-  function maximum :: __Dict_Eq -> __Dict_Ord -> Nest t562 -> t562
+  function maximum :: __Dict_Eq -> __Dict_Ord -> Nest t570 -> t570
     pat_var __ev_Eq
     pat_var __ev_Ord_1
     pat_var t
@@ -346,7 +346,7 @@ program
                 variable __ev_Ord_1
               variable x
             variable xs
-  function minimum :: __Dict_Eq -> __Dict_Ord -> Nest t591 -> t591
+  function minimum :: __Dict_Eq -> __Dict_Ord -> Nest t599 -> t599
     pat_var __ev_Eq
     pat_var __ev_Ord_1
     pat_var t
@@ -404,7 +404,7 @@ program
                 variable __ev_Ord_1
               variable x
             variable xs
-  function sum :: __Dict_Num -> Nest t604 -> t604
+  function sum :: __Dict_Num -> Nest t612 -> t612
     pat_var __ev_Num
     pat_var t
     apply
@@ -425,7 +425,7 @@ program
           intrinsic intToInteger#
             integer 0
       variable t
-  function product :: __Dict_Num -> Nest t621 -> t621
+  function product :: __Dict_Num -> Nest t629 -> t629
     pat_var __ev_Num
     pat_var t
     apply
@@ -446,7 +446,7 @@ program
           intrinsic intToInteger#
             integer 1
       variable t
-  function foldr1 :: t640 -> t640 -> t640 -> Nest t640 -> t640
+  function foldr1 :: t648 -> t648 -> t648 -> Nest t648 -> t648
     pat_var f
     pat_var t
     let
@@ -483,7 +483,7 @@ program
           evidence_method Foldable.toList evidence= nullary=0
             instance Nest
           variable t
-  function foldl1 :: t661 -> t661 -> t661 -> Nest t661 -> t661
+  function foldl1 :: t669 -> t669 -> t669 -> Nest t669 -> t669
     pat_var f
     pat_var t
     case

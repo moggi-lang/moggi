@@ -1,0 +1,26 @@
+import Data.Maybe
+import Data.Traversable
+
+-- Dictionary arity at two boundaries the typed-ast golden pins on both sides.
+--
+-- Class-method arity: `Traversable` has `Functor`/`Foldable` superclasses and
+-- its method `traverse` carries its own `Applicative` obligation. A method is
+-- projected out of a dictionary, so its owning class's group travels with the
+-- instance head rather than as a parameter, while the method's own obligation
+-- expands (`Applicative f` asks for `Functor f`) into an argument it does take.
+-- At `f = t = Maybe` those two `Functor Maybe` dictionaries coincide: the
+-- owning group is the trailing run, and the method-local `Functor` must survive
+-- in front of it for the call to match the instance method's parameter count.
+--
+-- Multi-obligation arity: `forM`'s two obligations, `Traversable t` and
+-- `Monad m`, close over the same `Functor` when both are `Maybe`. The use site
+-- passes one dictionary per expanded obligation -- the list the definition was
+-- lifted with -- rather than a deduplicated one.
+
+-- class method, method-local obligation collapsing with the owning superclass
+methodArity :: Maybe (Maybe Int)
+methodArity = traverse (\x -> Just (x + 1)) (Just (1 :: Int))
+
+-- two obligations whose superclass closures overlap
+multiObligation :: Maybe (Maybe Int)
+multiObligation = forM (Just (2 :: Int)) (\x -> Just (x + 1))

@@ -1272,16 +1272,7 @@ function instanceClassAndHeadFromType(Ast\TypeNode $type, ParserState $state): a
         return [$className, new Ast\TypeUnit($line, $col, $endCol), $line, $col, $endCol];
     }
 
-    if (count($args) === 1) {
-        return [$className, $args[0], $line, $col, $endCol];
-    }
-
-    $head = $args[0];
-    for ($i = 1, $n = count($args); $i < $n; ++$i) {
-        $head = new Ast\TypeApp($head, [$args[$i]]);
-    }
-
-    return [$className, $head, $line, $col, $endCol];
+    return [$className, Ast\instanceHeadFromArgs($args), $line, $col, $endCol];
 }
 
 function isFollowingClassBodyBoundary(ParserState $state): bool
@@ -1522,13 +1513,13 @@ function parseInstanceHead(ParserState $state): Ast\AstNode
         return new Ast\TypeUnit();
     }
 
-    $head = parseTypeHead($state);
+    $args = [parseTypeHead($state)];
     $headLine = $state->tokens[$state->pos - 1]->line;
     while (isTypeArgStart($state, $headLine)) {
-        $head = new Ast\TypeApp($head, [parseTypeHead($state)]);
+        $args[] = parseTypeHead($state);
     }
 
-    return $head;
+    return Ast\instanceHeadFromArgs($args);
 }
 
 function isFollowingTopLevelDecl(ParserState $state): bool

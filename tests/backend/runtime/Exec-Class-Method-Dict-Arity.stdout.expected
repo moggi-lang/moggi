@@ -1,0 +1,5 @@
+label-int
+label-int:tag-bool
+label-int:tag-int
+tag-int+tag-bool
+tag-bool+tag-bool

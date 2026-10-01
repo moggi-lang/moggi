@@ -6,7 +6,9 @@ use Moggi\Semantics\Kinds;
 use Moggi\Semantics\TypeExpr\Scheme;
 use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TCon;
+use Moggi\Semantics\TypeExpr\TNatLit;
 use Moggi\Semantics\TypeExpr\TPromoted;
+use Moggi\Semantics\TypeExpr\TStringLit;
 use Moggi\Semantics\TypeExpr\TUnit;
 use Moggi\Semantics\TypeExpr\TVar;
 use Moggi\Semantics\TypeExpr\Type;
@@ -159,11 +161,104 @@ function assertConstraintArity(
 }
 
 /**
+ * Whether a constraint list is already closed under its classes' superclasses.
+ *
+ * Such a list is a fixed point of {@see expandConstraintsWithSuperclasses}:
+ * expanding it again could only re-emit dictionaries it already names. Testing
+ * for it makes expansion idempotent without deduplicating across obligations,
+ * which must stay separate -- a definition elaborates its dictionaries while
+ * its own variables are still distinct, so two obligations that coincide only
+ * after a call site unifies them still reach it as two arguments.
+ *
+ * @param list<Ast\PendingConstraint> $constraints
+ */
+function constraintsSuperclassClosed(TypeCheckState $state, array $constraints): bool
+{
+    if ($constraints === []) {
+        return true;
+    }
+
+    $present = [];
+    foreach ($constraints as $constraint) {
+        $present[constraintClosureKey($constraint)] = true;
+    }
+
+    $visited = [];
+    foreach ($constraints as $constraint) {
+        if (! constraintClosurePresent($state, $constraint, $present, $visited)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/**
+ * Whether the constraint and every superclass above it is named by `$present`.
+ *
+ * @param array<string, true> $present
+ * @param array<string, true> $visited
+ */
+function constraintClosurePresent(TypeCheckState $state, Ast\PendingConstraint $constraint, array $present, array &$visited): bool
+{
+    $key = constraintClosureKey($constraint);
+    if (isset($visited[$key])) {
+        return true;
+    }
+    $visited[$key] = true;
+
+    $classInfo = $state->classes[$constraint->class] ?? null;
+    if ($classInfo === null) {
+        return true;
+    }
+
+    $mapping = [];
+    foreach ($classInfo['params'] as $i => $param) {
+        $mapping[$param['name']] = prune($state, $constraint->args[$i]);
+    }
+
+    foreach ($classInfo['superclasses'] as $super) {
+        if (! $super instanceof Ast\TypeApp || ! $super->con instanceof Ast\TypeCon) {
+            continue;
+        }
+
+        $superConstraint = constraintFromSuperclassAst($state, $super, $mapping);
+        if (! isset($present[constraintClosureKey($superConstraint)])) {
+            return false;
+        }
+
+        if (! constraintClosurePresent($state, $superConstraint, $present, $visited)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+function constraintClosureKey(Ast\PendingConstraint $constraint): string
+{
+    return $constraint->class . ':' . constraintArgsKey($constraint->args);
+}
+
+/**
+ * Close a constraint list under its classes' superclasses, once.
+ *
+ * A list that is already superclass-closed is returned as it is, which is what
+ * makes this idempotent: the expansion always produces a closed list, so a
+ * second expansion adds nothing. A list that is not closed takes exactly the
+ * per-obligation expansion it always has, so a definition's dictionary
+ * parameters and a call site's dictionary arguments keep the same length and
+ * order.
+ *
  * @param list<Ast\PendingConstraint> $constraints
  * @return list<Ast\PendingConstraint>
  */
 function expandConstraintsWithSuperclasses(TypeCheckState $state, array $constraints): array
 {
+    if (constraintsSuperclassClosed($state, $constraints)) {
+        return constraintsWithPositionalEvidence($constraints);
+    }
+
     $expanded = [];
 
     foreach ($constraints as $constraint) {
@@ -197,8 +292,24 @@ function expandConstraintsWithSuperclasses(TypeCheckState $state, array $constra
         $add($constraint);
     }
 
-    foreach ($expanded as $i => $constraint) {
-        $expanded[$i] = new Ast\PendingConstraint(
+    $result = constraintsWithPositionalEvidence($expanded);
+    if (getenv('MOGGI_ASSERT_EXPAND_CLOSED') !== false && ! constraintsSuperclassClosed($state, $result)) {
+        throw new \RuntimeException('dictionary expansion did not close its constraint list');
+    }
+
+    return $result;
+}
+
+/**
+ * Name each constraint's evidence dictionary by its position in the list.
+ *
+ * @param list<Ast\PendingConstraint> $constraints
+ * @return list<Ast\PendingConstraint>
+ */
+function constraintsWithPositionalEvidence(array $constraints): array
+{
+    foreach ($constraints as $i => $constraint) {
+        $constraints[$i] = new Ast\PendingConstraint(
             $constraint->class,
             $constraint->args,
             evidenceParamName($constraint->class, $i),
@@ -207,7 +318,7 @@ function expandConstraintsWithSuperclasses(TypeCheckState $state, array $constra
         );
     }
 
-    return $expanded;
+    return $constraints;
 }
 
 /**
@@ -441,17 +552,32 @@ function ambientEvidenceFor(TypeCheckState $state, Ast\PendingConstraint $constr
     return null;
 }
 
-/** Structural equality for ambient constraint args — avoids typeToString on hot path. */
+/**
+ * Structural equality for ambient constraint args — avoids typeToString on hot
+ * path.
+ *
+ * Every shape the checker carries is compared: variables by name, constructors
+ * and promoted constructors recursively, arrows, and the literal types by
+ * value. The primitive types (`Int`, `Char`, `Double`, the fixed-width words and
+ * ints, ...) are singletons with no fields, so they match by class; without
+ * that an ambient `Eq Int` could never be found and a call would be left
+ * unresolved.
+ */
 function typesMatchForAmbient(TypeCheckState $state, Type $left, Type $right): bool
 {
     $left = prune($state, $left);
     $right = prune($state, $right);
 
-    if ($left instanceof TVar && $right instanceof TVar) {
-        return $left->name === $right->name;
+    if ($left instanceof TVar || $right instanceof TVar) {
+        return $left instanceof TVar
+            && $right instanceof TVar
+            && $left->name === $right->name;
     }
 
-    if ($left instanceof TCon && $right instanceof TCon) {
+    if ($left instanceof TCon || $right instanceof TCon) {
+        if (! $left instanceof TCon || ! $right instanceof TCon) {
+            return false;
+        }
         if ($left->name !== $right->name || count($left->args) !== count($right->args)) {
             return false;
         }
@@ -464,11 +590,10 @@ function typesMatchForAmbient(TypeCheckState $state, Type $left, Type $right): b
         return true;
     }
 
-    if ($left instanceof TUnit && $right instanceof TUnit) {
-        return true;
-    }
-
-    if ($left instanceof TPromoted && $right instanceof TPromoted) {
+    if ($left instanceof TPromoted || $right instanceof TPromoted) {
+        if (! $left instanceof TPromoted || ! $right instanceof TPromoted) {
+            return false;
+        }
         if ($left->name !== $right->name || count($left->args) !== count($right->args)) {
             return false;
         }
@@ -481,7 +606,19 @@ function typesMatchForAmbient(TypeCheckState $state, Type $left, Type $right): b
         return true;
     }
 
-    return false;
+    if ($left instanceof TArrow || $right instanceof TArrow) {
+        return false;
+    }
+
+    if ($left instanceof TStringLit && $right instanceof TStringLit) {
+        return $left->value === $right->value;
+    }
+
+    if ($left instanceof TNatLit && $right instanceof TNatLit) {
+        return $left->digits === $right->digits;
+    }
+
+    return $left::class === $right::class;
 }
 
 /**
@@ -537,33 +674,6 @@ function tryResolveEvidenceExprs(
 }
 
 /**
- * A class and its superclasses, superclasses first, in the order
- * {@see expandConstraintsWithSuperclasses} emits them.
- *
- * @return list<string>
- */
-function superclassChainNames(TypeCheckState $state, string $class): array
-{
-    $names = [];
-    $visit = function (string $name) use ($state, &$names, &$visit): void {
-        if (isset($names[$name]) || !isset($state->classes[$name])) {
-            return;
-        }
-
-        foreach ($state->classes[$name]['superclasses'] as $super) {
-            if ($super instanceof Ast\TypeApp && $super->con instanceof Ast\TypeCon) {
-                $visit($super->con->name);
-            }
-        }
-
-        $names[$name] = $name;
-    };
-    $visit($class);
-
-    return \array_values($names);
-}
-
-/**
  * Indexes of the owning class's own dictionary group in `$evidence`, i.e. the
  * class and its superclasses at the instance head. A class-method scheme lists
  * the owning class last, so the group is the trailing run; these dictionaries
@@ -577,22 +687,28 @@ function superclassChainNames(TypeCheckState $state, string $class): array
  */
 function ownerEvidenceIndexes(TypeCheckState $state, array $evidence, Ast\EvidenceRef $ev): array
 {
-    $group = superclassChainNames($state, $ev->class);
-    $size = \count($group);
     $count = \count($evidence);
+    $ownArgs = instanceConstraintArgsFromHeadAst($state, $ev->head);
+    $ownClass = $state->classes[$ev->class] ?? null;
+    if ($count === 0 || $ownClass === null || \count($ownClass['params']) !== \count($ownArgs)) {
+        return [];
+    }
+
+    $expected = expandConstraintsWithSuperclasses($state, [
+        new Ast\PendingConstraint($ev->class, $ownArgs, $ev->evidence ?? '', false, $ev->head),
+    ]);
+    $size = \count($expected);
     if ($size === 0 || $size > $count) {
         return [];
     }
 
-    $ownHead = canonicalTypeKey($ev->head);
     $start = $count - $size;
     for ($i = 0; $i < $size; $i++) {
         $entry = $evidence[$start + $i];
-        if (
-            !($entry instanceof Ast\EvidenceRef)
-            || $entry->class !== $group[$i]
-            || canonicalTypeKey($entry->head) !== $ownHead
-        ) {
+        if (!($entry instanceof Ast\EvidenceRef) || $entry->class !== $expected[$i]->class) {
+            return [];
+        }
+        if (chainHeadKeyForEvidence($state, $entry) !== chainHeadKeyForConstraint($state, $expected[$i])) {
             return [];
         }
     }
@@ -603,6 +719,51 @@ function ownerEvidenceIndexes(TypeCheckState $state, array $evidence, Ast\Eviden
     }
 
     return $indexes;
+}
+
+/**
+ * Class arguments named by an evidence reference's head. A multi-parameter head
+ * is the `__InstanceHead` marker applied to them; a single-parameter head is the
+ * one argument itself.
+ *
+ * @return list<Type>
+ */
+function instanceConstraintArgsFromHeadAst(TypeCheckState $state, Ast\TypeNode $headAst): array
+{
+    $head = prune($state, astType($state, $headAst));
+    if ($head instanceof TCon && $head->name === Ast\instanceHeadMarker()) {
+        return $head->args;
+    }
+
+    return [$head];
+}
+
+/** α-equivalent key for the instance head an evidence reference names. */
+function chainHeadKeyForEvidence(TypeCheckState $state, Ast\EvidenceRef $entry): string
+{
+    $classInfo = $state->classes[$entry->class] ?? null;
+    if ($classInfo === null) {
+        return '';
+    }
+
+    return chainHeadKey($state, $classInfo['params'], instanceConstraintArgsFromHeadAst($state, $entry->head));
+}
+
+/** α-equivalent key for a chain constraint's resolved head. */
+function chainHeadKeyForConstraint(TypeCheckState $state, Ast\PendingConstraint $constraint): string
+{
+    $classInfo = $state->classes[$constraint->class] ?? null;
+    if ($classInfo === null) {
+        return '';
+    }
+
+    return chainHeadKey($state, $classInfo['params'], $constraint->args);
+}
+
+/** @param list<array{name: string, kind?: mixed}> $params @param list<Type> $args */
+function chainHeadKey(TypeCheckState $state, array $params, array $args): string
+{
+    return freshenStableTypeKey(prune($state, instanceHeadFromConstraintArgs($state, $params, $args)));
 }
 
 /**
@@ -934,9 +1095,35 @@ function pendingConstraintsFromExpr(Ast\AstNode $expr): array
     return [];
 }
 
+/**
+ * The pending constraints {@see pendingConstraintsFromExpr} returns together
+ * with the solved dictionaries stored beside them.
+ *
+ * A scheme that carries its own solved list (§ Scheme::$dicts) hands it to the
+ * node at instantiation, so a use site passes exactly the list the definition
+ * was elaborated with. The second element is empty for a node whose constraints
+ * came from somewhere that only produces obligations, and the caller then
+ * solves them itself.
+ *
+ * @return array{0: list<Ast\PendingConstraint>, 1: list<Ast\PendingConstraint>}
+ */
+function pendingConstraintsAndDicts(Ast\AstNode $expr): array
+{
+    if ($expr->pendingConstraints !== []) {
+        return [$expr->pendingConstraints, $expr->pendingDicts];
+    }
+
+    if ($expr instanceof Ast\Apply) {
+        return pendingConstraintsAndDicts($expr->function);
+    }
+
+    return [[], []];
+}
+
 function clearPendingConstraints(Ast\AstNode $expr): void
 {
     $expr->pendingConstraints = [];
+    $expr->pendingDicts = [];
     if ($expr instanceof Ast\Apply) {
         clearPendingConstraints($expr->function);
     }
@@ -986,6 +1173,7 @@ function clearPendingConstraintsDeep(Ast\AstNode $expr): void
 {
     walkAstValues($expr, static function (Ast\AstNode $node): void {
         $node->pendingConstraints = [];
+        $node->pendingDicts = [];
     });
 }
 
@@ -1042,6 +1230,58 @@ function walkAstValues(Ast\AstNode $expr, callable $visit): void
     $walk($expr);
 }
 
+/**
+ * Assert that every node still carrying pending constraints carries solved
+ * dictionaries that describe the same obligations, or none at all.
+ *
+ * The two lists are written together -- the constraints a scheme was
+ * instantiated with and the dictionaries that scheme was elaborated with -- and
+ * the evidence passes read the second. A path that refreshes one without the
+ * other leaves a list over variables the other never had (`Tag a` where the
+ * definition took `Tag t122`), which the arity assertions cannot see because
+ * both sides are still the same length. Gated, because it walks a body.
+ */
+function assertPendingDictsConsistentInExpr(TypeCheckState $state, Ast\AstNode $expr): void
+{
+    if (getenv('MOGGI_ASSERT_PENDING_DICTS') === false) {
+        return;
+    }
+
+    walkAstValues($expr, static function (Ast\AstNode $node) use ($state): void {
+        if ($node->pendingConstraints === [] || $node->pendingDicts === []) {
+            return;
+        }
+
+        $dictClasses = [];
+        $dictVars = [];
+        foreach ($node->pendingDicts as $dict) {
+            $dictClasses[$dict->class] = true;
+            foreach ($dict->args as $arg) {
+                $dictVars += typeVars($arg);
+            }
+        }
+
+        $constraintClasses = [];
+        $constraintVars = [];
+        foreach ($node->pendingConstraints as $constraint) {
+            $constraintClasses[$constraint->class] = true;
+            foreach ($constraint->args as $arg) {
+                $constraintVars += typeVars($arg);
+            }
+        }
+
+        $missing = \array_diff_key($constraintClasses, $dictClasses);
+        $stray = \array_diff_key($dictVars, $constraintVars);
+        if ($missing !== [] || $stray !== []) {
+            throw new \RuntimeException(
+                'pending dictionary list does not match its constraints at line ' . $node->line
+                . ': missing classes [' . \implode(',', \array_keys($missing)) . ']'
+                . ', stray vars [' . \implode(',', \array_keys($stray)) . ']',
+            );
+        }
+    });
+}
+
 /** @param list<Ast\PendingConstraint> $constraints */
 function constraintsResolvable(TypeCheckState $state, array $constraints): bool
 {
@@ -1077,6 +1317,10 @@ function constraintsResolvable(TypeCheckState $state, array $constraints): bool
         }
 
         if (!findProjectInstance($state, $constraint->class, $head)) {
+            return false;
+        }
+
+        if (!findUniqueProjectInstance($state, $constraint->class, $head)) {
             return false;
         }
     }

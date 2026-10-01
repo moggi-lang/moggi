@@ -1,0 +1,19 @@
+import Data.Ord
+import Text.Show
+
+-- A signature-less declaration is probed to discover its constraints, and the
+-- probe leaves the dictionary-taking lambda it built on the shared AST. The real
+-- body check reads that lambda back instead of re-abstracting it, so the scheme
+-- it installs has to come from the probe's own unexpanded obligations: `cmp`
+-- takes `Eq, Ord, Num`, and each of its two use sites passes exactly those
+-- three. Expanding the lambda's dictionary list again would pass `Eq` twice.
+--
+-- `f` is intentionally signature-less -- a signature would skip the probe and
+-- the fixture would not exercise the reuse path at all.
+
+g :: (Bool, Bool)
+g = f
+
+f = (cmp 3, cmp 1)
+  where
+    cmp x = x > 0

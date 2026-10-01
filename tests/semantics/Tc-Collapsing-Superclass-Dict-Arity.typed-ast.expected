@@ -1,0 +1,32 @@
+program
+  data A
+    constructor A
+  class Tag a
+    method tag :: a -> String
+  class Both a b
+    method both :: a -> b -> String
+  function pairUp :: __Dict_Tag -> __Dict_Tag -> __Dict_Both -> a -> b -> String
+    pat_var __ev_Tag
+    pat_var __ev_Tag_1
+    pat_var __ev_Both_2
+    pat_var x
+    pat_var y
+    apply
+      apply
+        evidence_method Both.both evidence=__ev_Both_2 nullary=0
+        variable x
+      variable y
+  function test :: __Dict_Tag -> __Dict_Both -> String
+    pat_var __ev_Tag
+    pat_var __ev_Both_1
+    apply
+      apply
+        apply
+          apply
+            apply
+              variable pairUp
+              variable __ev_Tag
+            variable __ev_Tag
+          variable __ev_Both_1
+        constructor_ref A
+      constructor_ref A

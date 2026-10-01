@@ -186,11 +186,13 @@ function instanceMethodSchemes(TypeCheckState $state, Ast\InstanceDecl $decl): a
             $substitutedConstraints,
         );
         $peeled = peelDictArrows($freshened['type'], count($freshened['constraints']));
+        $methodDicts = expandConstraintsWithSuperclasses($state, $freshened['constraints']);
         $schemes[$method->name] = scheme(
             prune($state, $peeled),
             [],
             $freshened['constraints'],
-            count(expandConstraintsWithSuperclasses($state, $freshened['constraints'])),
+            count($methodDicts),
+            $methodDicts,
         );
         $provided[$method->name] = true;
     }
@@ -981,6 +983,41 @@ function findProjectInstance(TypeCheckState $state, string $className, Type $req
 }
 
 /**
+ * True when exactly one project instance's head unifies with `$requiredHead`.
+ *
+ * A head with unresolved arguments can match several instances at once --
+ * `Both Int a` matches both `Both Int Bool` and `Both Int Int` -- and taking
+ * whichever is declared first would be unsound. Such an obligation has to wait
+ * until unification makes the choice unique, so the eager solver declines it and
+ * the post-pass retries once the argument is known.
+ */
+function findUniqueProjectInstance(TypeCheckState $state, string $className, Type $requiredHead): bool
+{
+    $requiredHead = prune($state, $requiredHead);
+    $requiredHead = normalizeType($state, $requiredHead, reduceFamilies: true);
+    $requiredHead = prune($state, $requiredHead);
+
+    $headKey = instanceHeadIndexKeyFromType($requiredHead);
+    $candidates = $headKey !== '*'
+        ? ($state->projectInstancesByClassHead[$className][$headKey] ?? [])
+        : ($state->projectInstancesByClass[$className] ?? []);
+
+    $count = 0;
+    foreach ($candidates as $instance) {
+        if (!instanceHeadsMatch($state, $requiredHead, $instance['head'])) {
+            continue;
+        }
+
+        ++$count;
+        if ($count > 1) {
+            return false;
+        }
+    }
+
+    return $count === 1;
+}
+
+/**
  * @param array<string, true> $visited
  * @return array{instance: array<string, mixed>, mapping: array<string, mixed>}|null
  */
@@ -1709,10 +1746,12 @@ function checkInstanceMethod(
             [],
             [...$instanceConstraints, ...$methodUserConstraints],
             count($constraints),
+            $constraints,
         );
     }
 
     $bodyType = inferExpr($state, $fn->body, $env);
+    assertPendingDictsConsistentInExpr($state, $fn->body);
     $state->constraintMethods = $savedConstraintMethods;
     $state->constraintMethodAmbiguities = $savedConstraintMethodAmbiguities;
     unify($state, $bodyType, $bodyExpected, $fn);

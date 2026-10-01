@@ -10,8 +10,7 @@ program
       pat_var __v1
     apply
       apply
-        evidence_method Eq.== evidence= nullary=0
-          instance Int
+        evidence_method Eq.== evidence=__ev_Eq nullary=0
         variable __v0
       variable __v1
   function /= :: __Dict_Eq -> MyInt -> MyInt -> Bool
@@ -22,8 +21,7 @@ program
       pat_var __v1
     apply
       apply
-        evidence_method Eq./= evidence= nullary=0
-          instance Int
+        evidence_method Eq./= evidence=__ev_Eq nullary=0
         variable __v0
       variable __v1
   function showsPrec :: __Dict_Show -> Int -> MyInt -> String -> String
@@ -35,8 +33,7 @@ program
     apply
       apply
         apply
-          evidence_method Show.showsPrec evidence= nullary=0
-            instance Int
+          evidence_method Show.showsPrec evidence=__ev_Show nullary=0
           variable __v0
         variable __v1
       variable __v2
@@ -45,8 +42,7 @@ program
     pat_con MyInt
       pat_var __v0
     apply
-      evidence_method Show.show evidence= nullary=0
-        instance Int
+      evidence_method Show.show evidence=__ev_Show nullary=0
       variable __v0
   function showList :: __Dict_Show -> [MyInt] -> String -> String
     pat_var __ev_Show

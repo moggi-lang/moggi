@@ -241,7 +241,7 @@ program
       alt
         pat_con False
         variable y
-  function minBound :: __Dict_Bounded -> __Dict_Bounded -> Pair t239 t240
+  function minBound :: __Dict_Bounded -> __Dict_Bounded -> Pair t263 t264
     pat_var __ev_Bounded
     pat_var __ev_Bounded_1
     apply
@@ -249,7 +249,7 @@ program
         constructor_ref Pair
         evidence_method Bounded.minBound evidence=__ev_Bounded nullary=1
       evidence_method Bounded.minBound evidence=__ev_Bounded_1 nullary=1
-  function maxBound :: __Dict_Bounded -> __Dict_Bounded -> Pair t239 t240
+  function maxBound :: __Dict_Bounded -> __Dict_Bounded -> Pair t263 t264
     pat_var __ev_Bounded
     pat_var __ev_Bounded_1
     apply

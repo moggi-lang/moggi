@@ -168,7 +168,7 @@ function freshType(TypeCheckState $state): Type
     return new TVar('t' . ($state->fresh++));
 }
 
-/** @return array{type: Type, constraints: list<Ast\PendingConstraint>} */
+/** @return array{type: Type, constraints: list<Ast\PendingConstraint>, dicts: list<Ast\PendingConstraint>} */
 
 function instantiateScheme(TypeCheckState $state, Scheme $scheme): array
 {
@@ -189,10 +189,46 @@ function instantiateScheme(TypeCheckState $state, Scheme $scheme): array
         );
     }
 
+    $dicts = substituteSchemeDicts($scheme->dicts, $mapping);
+    if ($dicts === [] && $constraints !== []) {
+        $dicts = expandConstraintsWithSuperclasses($state, $constraints);
+    }
+
     return [
         'type' => substitute($scheme->type, $mapping),
         'constraints' => $constraints,
+        'dicts' => $dicts,
     ];
+}
+
+/**
+ * A scheme's solved dictionaries with its bound variables freshened. These are
+ * the arguments a use site hands a definition, so they are read as they are
+ * rather than re-derived by expanding after unification -- two obligations that
+ * collapse into one dictionary then still arrive as the two the definition was
+ * elaborated with.
+ *
+ * @param list<Ast\PendingConstraint> $dicts
+ * @param array<string, Type> $mapping
+ * @return list<Ast\PendingConstraint>
+ */
+function substituteSchemeDicts(array $dicts, array $mapping): array
+{
+    $substituted = [];
+    foreach ($dicts as $constraint) {
+        $substituted[] = new Ast\PendingConstraint(
+            $constraint->class,
+            \array_map(
+                static fn (Type $arg): Type => substitute($arg, $mapping),
+                $constraint->args,
+            ),
+            $constraint->evidence,
+            $constraint->implicit,
+            $constraint->instanceHeadAst,
+        );
+    }
+
+    return $substituted;
 }
 
 function instantiate(TypeCheckState $state, Scheme $scheme): Type

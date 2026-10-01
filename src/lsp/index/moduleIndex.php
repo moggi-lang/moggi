@@ -318,6 +318,9 @@ function typeHeadName(object $t): ?string
         return $t->name;
     }
     if ($t instanceof Ast\TypeApp) {
+        if (Ast\isInstanceHeadMarker($t)) {
+            return $t->args === [] ? null : typeHeadName($t->args[0]);
+        }
         return typeHeadName($t->con);
     }
     return null;

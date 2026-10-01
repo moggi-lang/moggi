@@ -584,11 +584,13 @@ function classMethodExportSchemes(TypeCheckState $state, Ast\ClassDecl $classDec
             count($methodLocalConstraints),
         );
         $bound = schemeBoundVars($methodType, [], $freshened['constraints']);
+        $methodDicts = expandConstraintsWithSuperclasses($state, $freshened['constraints']);
         $schemes[$methodName] = scheme(
             prune($state, $methodType),
             $bound,
             $freshened['constraints'],
-            count(expandConstraintsWithSuperclasses($state, $freshened['constraints'])),
+            count($methodDicts),
+            $methodDicts,
         )->asClassMethod($className);
     }
 
@@ -694,6 +696,7 @@ function registerInferredSignatureScheme(TypeCheckState $state, Ast\FunctionDecl
         schemeBoundVars($userFnType, $state->env, $userConstraints),
         $userConstraints,
         count($constraints),
+        $constraints,
     );
 
     $wrapper = trivialIntrinsicWrapper($fn);
@@ -744,6 +747,7 @@ function registerFunctionScheme(TypeCheckState $state, Ast\FunctionDecl $fn): vo
         schemeBoundVars($userFnType, $state->env, $userConstraints),
         $userConstraints,
         count($constraints),
+        $constraints,
     );
     $wrapper = trivialIntrinsicWrapper($fn);
     if ($wrapper !== null) {

@@ -1,0 +1,36 @@
+-- Multi-parameter class instances.
+--
+-- A class with more than one parameter has no single head type, so the parser
+-- collects the class arguments and stores them as `__InstanceHead Int Bool`.
+-- Two instances that differ only in their second argument must not be chosen
+-- before that argument is known: `both (1 :: Int) True` and
+-- `both (1 :: Int) (2 :: Int)` each stay pending until their second argument is
+-- concrete, then select `Both Int Bool` and `Both Int Int` respectively.
+--
+-- A grouped argument (`Both (Maybe a) (Maybe b)`) stays one application, so the
+-- head is the two-argument `__InstanceHead (Maybe a) (Maybe b)` built from the
+-- parenthesized atoms rather than from a left-nested application of the first.
+
+class Both a b where
+  both :: a -> b -> String
+
+instance Both Int Bool where
+  both x y = "int-bool"
+
+instance Both Int Int where
+  both x y = "int-int"
+
+instance Both (Maybe a) (Maybe b) where
+  both x y = "maybe-maybe"
+
+intBool :: String
+intBool = both (1 :: Int) True
+
+intInt :: String
+intInt = both (1 :: Int) (2 :: Int)
+
+maybeBoth :: String
+maybeBoth = both (Just (1 :: Int)) (Just True)
+
+generic :: Both a b => a -> b -> String
+generic x y = both x y

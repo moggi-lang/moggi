@@ -1,0 +1,41 @@
+import Text.Show
+import System.IO
+
+-- The runtime counterpart of the class-method and multi-obligation dictionary
+-- fixtures.
+--
+-- `combine` is a method of `Labelled`, whose class has the `Tag` superclass, and
+-- it carries a `Tag b` obligation of its own. A call projects it out of the
+-- `Labelled Int` dictionary, hands it the method-local `Tag b`, and leaves the
+-- owning `Tag`/`Labelled` group with the instance head. `pair` has two
+-- independent obligations resolved through instances. Each cell would resolve
+-- an operator against the wrong dictionary and throw if the two sides of the
+-- boundary disagreed on length or order.
+
+class Tag a where
+  tag :: a -> String
+
+class Tag a => Labelled a where
+  label :: a -> String
+  combine :: Tag b => a -> b -> String
+
+instance Tag Int where
+  tag x = "tag-int"
+
+instance Tag Bool where
+  tag x = "tag-bool"
+
+instance Labelled Int where
+  label x = "label-int"
+  combine x y = label x <> ":" <> tag y
+
+pair :: (Tag a, Tag b) => a -> b -> String
+pair x y = tag x <> "+" <> tag y
+
+main :: IO ()
+main = do
+  putStrLn (label (1 :: Int))
+  putStrLn (combine (1 :: Int) True)
+  putStrLn (combine (1 :: Int) (2 :: Int))
+  putStrLn (pair (1 :: Int) True)
+  putStrLn (pair True False)

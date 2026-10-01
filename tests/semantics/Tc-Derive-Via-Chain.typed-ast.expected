@@ -68,8 +68,7 @@ program
         pat_var __v1
     apply
       apply
-        evidence_method Eq.== evidence= nullary=0
-          instance Int
+        evidence_method Eq.== evidence=__ev_Eq nullary=0
         variable __v0
       variable __v1
   function __ev_Eq_Outer_ne :: __Dict_Eq -> Outer -> Outer -> Bool
@@ -82,7 +81,6 @@ program
         pat_var __v1
     apply
       apply
-        evidence_method Eq./= evidence= nullary=0
-          instance Int
+        evidence_method Eq./= evidence=__ev_Eq nullary=0
         variable __v0
       variable __v1

@@ -1,0 +1,9 @@
+import Text.Show
+
+data Big = Big { s :: Int -> String, n :: Int }
+
+useBig :: Big
+useBig = Big { s = show, n = 1 }
+
+main :: IO ()
+main = putStrLn (useBig.s 3)

@@ -1,0 +1,15 @@
+-- An ambient class constraint over a primitive type. The evidence matcher
+-- compares constraint arguments structurally, and the primitive types are
+-- singletons with no fields, so `Tag Int` has to be matched by class.
+-- Otherwise `tag x` in a body whose constraint is `Tag Int` finds no ambient
+-- dictionary and the obligation is left unresolved, while the polymorphic
+-- `Tag a` case (matched by variable name) still works.
+
+class Tag a where
+  tag :: a -> String
+
+use :: Tag Int => Int -> String
+use x = tag x
+
+usePoly :: Tag a => a -> String
+usePoly x = tag x

@@ -229,6 +229,13 @@ function dumpAstTypeForDocs(Ast\TypeNode $node, array $rename = []): string
                 return '[' . dumpAstTypeForDocs($node->args[0], $rename) . ']';
             }
 
+            if (Ast\isInstanceHeadMarker($node)) {
+                return join(' ', \array_map(
+                    static fn (Ast\TypeNode $arg): string => dumpAstTypeAtom($arg, $rename),
+                    $node->args,
+                ));
+            }
+
             if (
                 $node->con instanceof Ast\TypeCon
                 && isTypeOperator($node->con->name)
@@ -325,6 +332,9 @@ function dataDeclSignature(Ast\DataDecl $decl): string
 
 function instanceParentTypeName(Ast\TypeNode $head): ?string
 {
+    if (Ast\isInstanceHeadMarker($head)) {
+        return $head->args === [] ? null : instanceParentTypeName($head->args[0]);
+    }
     if ($head instanceof Ast\TypeCon) {
         return $head->name;
     }

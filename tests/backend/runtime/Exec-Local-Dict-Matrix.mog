@@ -1,0 +1,89 @@
+import Data.Ord
+import Text.Show
+import System.IO
+
+-- The local dictionary-arity matrix, run on every backend.
+--
+-- A local (let/where) binding with class constraints is lifted to a function of
+-- its dictionaries. Every cell below pins one shape of that lifting -- inferred
+-- versus declared, let versus where, plain versus recursive, with and without a
+-- superclass among the obligations -- because the definition's dictionary list
+-- and the use site's have to agree on length and order for each. A cell whose
+-- arity drifted apart would resolve an operator against the wrong dictionary and
+-- throw at runtime instead of printing the line here.
+
+-- inferred / where / superclass chain: `cmp` takes `Eq, Ord, Num`.
+inferredWhere :: (Bool, Bool)
+inferredWhere = (cmp 3, cmp 1)
+  where
+    cmp x = x > 0
+
+-- inferred / let / superclass chain
+inferredLet :: (Bool, Bool)
+inferredLet =
+  let cmp x = x > 0
+  in (cmp 3, cmp 1)
+
+-- inferred / where / generalized and used at two types
+inferredPoly :: (String, String)
+inferredPoly = (render 1, render True)
+  where
+    render x = show x
+
+-- declared / where / superclass chain: `Eq, Ord, Num`, superclass first
+declaredWhere :: (Int, Int)
+declaredWhere = (pick 5, pick 2)
+  where
+    pick :: (Ord a, Num a) => a -> a
+    pick x = case x > 0 of
+      True -> x + 1
+      False -> x
+
+-- declared / let / superclass chain
+declaredLet :: (Int, Int)
+declaredLet =
+  let pick :: (Ord a, Num a) => a -> a
+      pick x = case x > 0 of
+        True -> x + 1
+        False -> x
+  in (pick 5, pick 2)
+
+-- recursive / where / inferred: the group is generalized over the dictionaries
+-- its call cycle needs (`Eq` and `Num` from `==`, `-` and the literals).
+recursiveWhere :: Int -> [Int]
+recursiveWhere n = go n []
+  where
+    go k acc = case k == 0 of
+      True -> acc
+      False -> go (k - 1) (k : acc)
+
+-- recursive / where / declared: the member's own annotation is the group's,
+-- so its recursive calls forward the annotated dictionaries.
+recursiveDeclared :: Int -> [Int]
+recursiveDeclared n = go n []
+  where
+    go :: (Eq a, Num a) => a -> [a] -> [a]
+    go k acc = case k == 0 of
+      True -> acc
+      False -> go (k - 1) (k : acc)
+
+-- probed / where / declared recursive: the outer declaration has no signature,
+-- so the group is checked once by the discovery probe and once for real, and
+-- the second pass has to read the same dictionaries off the lambda it finds.
+probedRecursive n = go n []
+  where
+    go :: (Eq a, Num a) => a -> [a] -> [a]
+    go k acc = case k == 0 of
+      True -> acc
+      False -> go (k - 1) (k : acc)
+
+main :: IO ()
+main = do
+  putStrLn (show inferredWhere)
+  putStrLn (show inferredLet)
+  putStrLn (show inferredPoly)
+  putStrLn (show declaredWhere)
+  putStrLn (show declaredLet)
+  putStrLn (show (recursiveWhere 5))
+  putStrLn (show (recursiveDeclared 5))
+  putStrLn (show (probedRecursive 5))

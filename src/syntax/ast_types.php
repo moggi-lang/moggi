@@ -114,6 +114,16 @@ abstract class AstNode implements AstWalkable
     /** @var list<PendingConstraint> */
     public array $pendingConstraints = [];
 
+    /**
+     * The solved dictionaries behind {@see $pendingConstraints}, when they came
+     * from a scheme that carried them: the expand-once list the definition was
+     * elaborated with, so a use site passes that list rather than expanding the
+     * obligations again after unification.
+     *
+     * @var list<PendingConstraint>
+     */
+    public array $pendingDicts = [];
+
     public function __construct(
         public int $line = 0,
         public int $col = 0,

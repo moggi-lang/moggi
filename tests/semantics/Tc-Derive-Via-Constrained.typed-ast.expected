@@ -42,7 +42,7 @@ program
       alt
         pat_con False
         constructor_ref True
-  function __ev_Show_Pair_show :: __Dict_Show -> Pair t34 -> String
+  function __ev_Show_Pair_show :: __Dict_Show -> Pair t35 -> String
     pat_var __ev_Show
     pat_con Pair
       pat_var a
@@ -58,7 +58,7 @@ program
           apply
             evidence_method Show.show evidence=__ev_Show nullary=0
             variable b
-  function __ev_Show_Pair_showsPrec :: __Dict_Show -> Int -> Pair t27 -> String -> String
+  function __ev_Show_Pair_showsPrec :: __Dict_Show -> Int -> Pair t28 -> String -> String
     pat_var __ev_Show
     pat_wild _
     pat_var x
@@ -69,7 +69,7 @@ program
           instance Pair a
         variable x
       variable s
-  function __ev_Show_Pair_showList :: __Dict_Show -> [Pair t27] -> String -> String
+  function __ev_Show_Pair_showList :: __Dict_Show -> [Pair t28] -> String -> String
     pat_var __ev_Show
     pat_var ls
     pat_var s
@@ -82,7 +82,7 @@ program
             evidence_ref Show Pair a
         variable ls
       variable s
-  function __ev_Eq_WrappedPair_eq :: __Dict_Eq -> WrappedPair t66 -> WrappedPair t66 -> Bool
+  function __ev_Eq_WrappedPair_eq :: __Dict_Eq -> WrappedPair t68 -> WrappedPair t68 -> Bool
     pat_var __ev_Eq
     pat_con WrappedPair
       pat_var __v0
@@ -93,7 +93,7 @@ program
         evidence_method Eq.== evidence=__ev_Eq nullary=0
         variable __v0
       variable __v1
-  function __ev_Eq_WrappedPair_ne :: __Dict_Eq -> WrappedPair t71 -> WrappedPair t71 -> Bool
+  function __ev_Eq_WrappedPair_ne :: __Dict_Eq -> WrappedPair t73 -> WrappedPair t73 -> Bool
     pat_var __ev_Eq
     pat_con WrappedPair
       pat_var __v0
@@ -104,7 +104,7 @@ program
         evidence_method Eq./= evidence=__ev_Eq nullary=0
         variable __v0
       variable __v1
-  function __ev_Show_WrappedPair_showsPrec :: __Dict_Show -> Int -> WrappedPair t80 -> String -> String
+  function __ev_Show_WrappedPair_showsPrec :: __Dict_Show -> Int -> WrappedPair t82 -> String -> String
     pat_var __ev_Show
     pat_var __v0
     pat_con WrappedPair
@@ -117,14 +117,14 @@ program
           variable __v0
         variable __v1
       variable __v2
-  function __ev_Show_WrappedPair_show :: __Dict_Show -> WrappedPair t85 -> String
+  function __ev_Show_WrappedPair_show :: __Dict_Show -> WrappedPair t87 -> String
     pat_var __ev_Show
     pat_con WrappedPair
       pat_var __v0
     apply
       evidence_method Show.show evidence=__ev_Show nullary=0
       variable __v0
-  function __ev_Show_WrappedPair_showList :: __Dict_Show -> [WrappedPair t76] -> String -> String
+  function __ev_Show_WrappedPair_showList :: __Dict_Show -> [WrappedPair t78] -> String -> String
     pat_var __ev_Show
     pat_var ls
     pat_var s

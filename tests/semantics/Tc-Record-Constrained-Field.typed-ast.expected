@@ -1,0 +1,25 @@
+program
+  data Big
+    constructor Big
+      field s :: Int -> String
+      field n :: Int
+  function useBig :: Big
+    record_con Big
+      s =
+        evidence_method Show.show evidence= nullary=0
+          instance Int
+      n =
+        integer 1
+  function update :: Big -> Big
+    pat_var b
+    record_update
+      receiver
+        variable b
+      s =
+        evidence_method Show.show evidence= nullary=0
+          instance Int
+  function applied :: String
+    apply
+      field_access .s
+        variable useBig
+      integer 3

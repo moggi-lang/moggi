@@ -1,0 +1,112 @@
+program
+  function recursiveDeclared :: Int -> [Int]
+    pat_var n
+    where
+      apply
+        apply
+          apply
+            apply
+              apply
+                variable go
+                evidence_ref Eq Int
+              evidence_ref Ord Int
+            evidence_ref Num Int
+          variable n
+        list
+      binding
+        pat_var go
+        lambda
+          pat_var __ev_dict3
+          pat_var __ev_dict4
+          pat_var __ev_dict5
+          lambda
+            pat_var k
+            pat_var acc
+            case
+              apply
+                apply
+                  evidence_method Eq.== evidence=__ev_dict3 nullary=0
+                  variable k
+                integer 0
+              alt
+                pat_con True
+                variable acc
+              alt
+                pat_con False
+                apply
+                  apply
+                    apply
+                      apply
+                        apply
+                          variable go
+                          variable __ev_dict3
+                        variable __ev_dict4
+                      variable __ev_dict5
+                    apply
+                      apply
+                        evidence_method Num.- evidence=__ev_dict5 nullary=0
+                        variable k
+                      integer 1
+                  infix :
+                    variable k
+                    variable acc
+  function probedDeclared :: __Dict_Eq -> __Dict_Ord -> __Dict_Num -> t66 -> [t66]
+    pat_var __ev_Eq
+    pat_var __ev_Ord_1
+    pat_var __ev_Num_2
+    pat_var n
+    where
+      apply
+        apply
+          apply
+            apply
+              apply
+                variable walk
+                variable __ev_Eq
+              variable __ev_Ord_1
+            variable __ev_Num_2
+          variable n
+        list
+      binding
+        pat_var walk
+        lambda
+          pat_var __ev_dict0
+          pat_var __ev_dict1
+          pat_var __ev_dict2
+          lambda
+            pat_var k
+            pat_var acc
+            case
+              apply
+                apply
+                  evidence_method Eq.== evidence=__ev_Eq nullary=0
+                  variable k
+                apply
+                  evidence_method Num.fromInteger evidence=__ev_Num_2 nullary=0
+                  intrinsic intToInteger#
+                    integer 0
+              alt
+                pat_con True
+                variable acc
+              alt
+                pat_con False
+                apply
+                  apply
+                    apply
+                      apply
+                        apply
+                          variable walk
+                          variable __ev_dict0
+                        variable __ev_dict1
+                      variable __ev_dict2
+                    apply
+                      apply
+                        evidence_method Num.- evidence=__ev_Num_2 nullary=0
+                        variable k
+                      apply
+                        evidence_method Num.fromInteger evidence=__ev_Num_2 nullary=0
+                        intrinsic intToInteger#
+                          integer 1
+                  infix :
+                    variable k
+                    variable acc

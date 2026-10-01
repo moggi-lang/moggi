@@ -26,8 +26,7 @@ program
       pat_var __v1
     apply
       apply
-        evidence_method MyEq.=== evidence= nullary=0
-          instance Int
+        evidence_method MyEq.=== evidence=__ev_MyEq nullary=0
         variable __v0
       variable __v1
   function __ev_MyEq_MyInt__2f_3d_3d :: __Dict_MyEq -> MyInt -> MyInt -> Bool
@@ -38,7 +37,6 @@ program
       pat_var __v1
     apply
       apply
-        evidence_method MyEq./== evidence= nullary=0
-          instance Int
+        evidence_method MyEq./== evidence=__ev_MyEq nullary=0
         variable __v0
       variable __v1

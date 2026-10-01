@@ -1,0 +1,17 @@
+import Text.Show
+
+-- A constrained value used as a record field, in a record update, and as the
+-- object of a field access must have its evidence resolved exactly like one in a
+-- tuple or a list: the resolver has to descend into records. Missing those arms
+-- left `Show Int` unresolved and rejected valid source.
+
+data Big = Big { s :: Int -> String, n :: Int }
+
+useBig :: Big
+useBig = Big { s = show, n = 1 }
+
+update :: Big -> Big
+update b = b { s = show }
+
+applied :: String
+applied = useBig.s 3

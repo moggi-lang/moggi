@@ -1,0 +1,30 @@
+import Text.Show
+import System.IO
+
+-- A multi-parameter class whose two superclasses are the same class applied to
+-- different arguments (`Tag a` and `Tag b`).
+--
+-- Expanding `Both Int Bool` yields `Tag Int`, `Tag Bool`, `Both Int Bool`. When
+-- `both` is projected out of the `Both Int Bool` dictionary those three form the
+-- owning group and must not be passed as arguments, which the old head-equality
+-- test could not see once the two `Tag` heads differed. The method body resolves
+-- `tag x`/`tag y` through the `Tag Int`/`Tag Bool` instances directly.
+
+class Tag a where
+  tag :: a -> String
+
+class (Tag a, Tag b) => Both a b where
+  both :: a -> b -> String
+
+instance Tag Int where
+  tag x = "int"
+
+instance Tag Bool where
+  tag x = "bool"
+
+instance Both Int Bool where
+  both x y = tag x <> "+" <> tag y
+
+main :: IO ()
+main = do
+  putStrLn (both (1 :: Int) True)

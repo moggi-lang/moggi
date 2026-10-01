@@ -135,8 +135,14 @@ final class Scheme
 {
     /**
      * @param array<int, string> $bound
-     * @param list<PendingConstraint> $constraints
+     * @param list<PendingConstraint> $constraints the obligations as written
      * @param array<string, true> $freeTypeVars
+     * @param list<PendingConstraint> $dicts the solved dictionary list: the same
+     *   obligations closed under their classes' superclasses, computed once
+     *   while this scheme's own variables were still distinct. A use site
+     *   substitutes this list instead of expanding `$constraints` itself, so the
+     *   dictionaries a definition takes and the arguments a call passes come
+     *   from one solve and cannot disagree
      */
     public function __construct(
         public readonly Type $type,
@@ -146,6 +152,7 @@ final class Scheme
         public readonly array $freeTypeVars,
         public readonly bool $classMethod = false,
         public readonly ?string $class = null,
+        public readonly array $dicts = [],
     ) {
     }
 
@@ -159,8 +166,10 @@ final class Scheme
      *
      * @param list<PendingConstraint> $constraints
      * @param array<string, true> $freeTypeVars
+     * @param ?list<PendingConstraint> $dicts the solved list pruned to match, or
+     *   null to keep this scheme's own (its variables are unchanged)
      */
-    public function withPruned(Type $type, array $constraints, array $freeTypeVars): self
+    public function withPruned(Type $type, array $constraints, array $freeTypeVars, ?array $dicts = null): self
     {
         $out = new self(
             $type,
@@ -170,6 +179,7 @@ final class Scheme
             $freeTypeVars,
             $this->classMethod,
             $this->class,
+            $dicts ?? $this->dicts,
         );
         $out->binderId = $this->binderId;
 
@@ -187,6 +197,7 @@ final class Scheme
             $this->freeTypeVars,
             true,
             $class,
+            $this->dicts,
         );
         $out->binderId = $this->binderId;
 
@@ -194,8 +205,8 @@ final class Scheme
     }
 }
 
-/** @param array<int, string> $bound @param list<PendingConstraint> $constraints */
-function scheme(Type $type, array $bound, array $constraints = [], ?int $runtimeConstraintCount = null): Scheme
+/** @param array<int, string> $bound @param list<PendingConstraint> $constraints @param list<PendingConstraint> $dicts */
+function scheme(Type $type, array $bound, array $constraints = [], ?int $runtimeConstraintCount = null, array $dicts = []): Scheme
 {
     return new Scheme(
         $type,
@@ -203,6 +214,9 @@ function scheme(Type $type, array $bound, array $constraints = [], ?int $runtime
         $constraints,
         $runtimeConstraintCount ?? count($constraints),
         schemeFreeTypeVars($type, $bound, $constraints),
+        false,
+        null,
+        $dicts,
     );
 }
 

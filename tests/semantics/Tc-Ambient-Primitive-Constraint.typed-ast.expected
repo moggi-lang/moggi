@@ -1,0 +1,15 @@
+program
+  class Tag a
+    method tag :: a -> String
+  function use :: __Dict_Tag -> Int -> String
+    pat_var __ev_Tag
+    pat_var x
+    apply
+      evidence_method Tag.tag evidence=__ev_Tag nullary=0
+      variable x
+  function usePoly :: __Dict_Tag -> a -> String
+    pat_var __ev_Tag
+    pat_var x
+    apply
+      evidence_method Tag.tag evidence=__ev_Tag nullary=0
+      variable x

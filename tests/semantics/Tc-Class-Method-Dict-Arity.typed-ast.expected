@@ -1,0 +1,48 @@
+program
+  function methodArity :: Maybe Maybe Int
+    apply
+      apply
+        apply
+          apply
+            evidence_method Traversable.traverse evidence= nullary=0
+              instance Maybe
+            evidence_ref Functor Maybe
+          evidence_ref Applicative Maybe
+        lambda
+          pat_var x
+          apply
+            constructor_ref Just
+            infix +
+              variable x
+              integer 1
+      apply
+        constructor_ref Just
+        type_asc Int
+          integer 1
+  function multiObligation :: Maybe Maybe Int
+    apply
+      apply
+        apply
+          apply
+            apply
+              apply
+                apply
+                  apply
+                    variable forM
+                    evidence_ref Functor Maybe
+                  evidence_ref Foldable Maybe
+                evidence_ref Traversable Maybe
+              evidence_ref Functor Maybe
+            evidence_ref Applicative Maybe
+          evidence_ref Monad Maybe
+        apply
+          constructor_ref Just
+          type_asc Int
+            integer 2
+      lambda
+        pat_var x
+        apply
+          constructor_ref Just
+          infix +
+            variable x
+            integer 1

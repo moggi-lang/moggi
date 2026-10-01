@@ -1,0 +1,40 @@
+program
+  function g :: Tuple2 Bool Bool
+    variable f
+  function f :: Tuple2 Bool Bool
+    where
+      tuple
+        apply
+          apply
+            apply
+              apply
+                variable cmp
+                evidence_ref Eq Int
+              evidence_ref Ord Int
+            evidence_ref Num Int
+          integer 3
+        apply
+          apply
+            apply
+              apply
+                variable cmp
+                evidence_ref Eq Int
+              evidence_ref Ord Int
+            evidence_ref Num Int
+          integer 1
+      binding
+        pat_var cmp
+        lambda
+          pat_var __ev_dict0
+          pat_var __ev_dict1
+          pat_var __ev_dict2
+          lambda
+            pat_var x
+            apply
+              apply
+                evidence_method Ord.> evidence=__ev_dict1 nullary=0
+                variable x
+              apply
+                evidence_method Num.fromInteger evidence=__ev_dict2 nullary=0
+                intrinsic intToInteger#
+                  integer 0

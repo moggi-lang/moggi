@@ -523,6 +523,38 @@ function dumpKindInline(KindNode $node): string
     };
 }
 
+/**
+ * Name of the synthetic constructor that carries a multi-parameter instance
+ * head: `instance Both Int Bool` is stored as `__InstanceHead Int Bool` so the
+ * whole head stays one type application for matching, indexing and evidence.
+ */
+function instanceHeadMarker(): string
+{
+    return '__InstanceHead';
+}
+
+/**
+ * @param list<TypeNode> $args
+ */
+function instanceHeadFromArgs(array $args): TypeNode
+{
+    if ($args === []) {
+        return new TypeUnit();
+    }
+    if (\count($args) === 1) {
+        return $args[0];
+    }
+
+    return new TypeApp(new TypeCon(instanceHeadMarker()), $args);
+}
+
+function isInstanceHeadMarker(TypeNode $type): bool
+{
+    return $type instanceof TypeApp
+        && $type->con instanceof TypeCon
+        && $type->con->name === instanceHeadMarker();
+}
+
 /** Dump a surface type AST (not TypeExpr — that uses Types\typeToString). */
 function dumpTypeInline(TypeNode $node): string
 {
@@ -541,6 +573,13 @@ function dumpTypeInline(TypeNode $node): string
                 && count($node->args) === 1
             ) {
                 return '[' . dumpTypeInline($node->args[0]) . ']';
+            }
+
+            if (isInstanceHeadMarker($node)) {
+                return join(' ', \array_map(
+                    static fn (TypeNode $arg): string => dumpTypeInline($arg),
+                    $node->args,
+                ));
             }
 
             if (
