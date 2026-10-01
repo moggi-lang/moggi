@@ -4,12 +4,12 @@ import Text.Show
 -- What a probe must not leave behind.
 --
 -- A signature-less declaration is checked twice: the discovery probe infers its
--- body to find its constraints, then the real body check runs. The probe writes
--- evidence and annotations on the way through and has to clear them, or the
--- real pass sees obligations twice. What it can leave behind is
--- `pendingConstraints`, and those are exactly what the typed-ast dump shows as
--- `evidence_ref`/`evidence_method` arguments -- so a leftover argument no call
--- site passes is a diff here.
+-- body to find its constraints, then the real body check runs. The probe runs
+-- on a deep copy of the declaration, so it cannot touch the original at all --
+-- no evidence, no annotations, no abstraction residue. The real pass therefore
+-- derives every obligation itself, and a leftover `evidence_ref`/
+-- `evidence_method` argument that no call site passes -- what a probe leaking
+-- into the original would leave -- is a diff here.
 --
 -- The shapes below cover the probe reaching every child of a body: an operator
 -- projection, a lambda, a case, a nested group, and an annotation inside the

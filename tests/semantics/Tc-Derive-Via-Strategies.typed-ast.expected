@@ -1,0 +1,224 @@
+program
+  newtype ViaSimple
+    constructor ViaSimple
+      field  :: Int
+    deriving (via (Int) Eq)
+  function __ev_Eq_ViaSimple_eq :: __Dict_Eq -> ViaSimple -> ViaSimple -> Bool
+    pat_var __ev_Eq
+    pat_con ViaSimple
+      pat_var __v0
+    pat_con ViaSimple
+      pat_var __v1
+    apply
+      apply
+        evidence_method Eq.== evidence=__ev_Eq nullary=0
+        variable __v0
+      variable __v1
+  function __ev_Eq_ViaSimple_ne :: __Dict_Eq -> ViaSimple -> ViaSimple -> Bool
+    pat_var __ev_Eq
+    pat_con ViaSimple
+      pat_var __v0
+    pat_con ViaSimple
+      pat_var __v1
+    apply
+      apply
+        evidence_method Eq./= evidence=__ev_Eq nullary=0
+        variable __v0
+      variable __v1
+  newtype ViaSum
+    constructor ViaSum
+      field  :: Int
+    deriving (Eq)
+  function __ev_Eq_ViaSum_eq :: ViaSum -> ViaSum -> Bool
+    pat_var __l
+    pat_var __r
+    case
+      variable __l
+      alt
+        pat_con ViaSum
+          pat_var __a0
+        case
+          variable __r
+          alt
+            pat_con ViaSum
+              pat_var __b0
+            apply
+              apply
+                evidence_method Eq.== evidence= nullary=0
+                  instance Int
+                variable __a0
+              variable __b0
+          alt
+            pat_wild _
+            constructor_ref False
+  function __ev_Eq_ViaSum_ne :: ViaSum -> ViaSum -> Bool
+    pat_var __l
+    pat_var __r
+    case
+      case
+        variable __l
+        alt
+          pat_con ViaSum
+            pat_var __a0
+          case
+            variable __r
+            alt
+              pat_con ViaSum
+                pat_var __b0
+              apply
+                apply
+                  evidence_method Eq.== evidence= nullary=0
+                    instance Int
+                  variable __a0
+                variable __b0
+            alt
+              pat_wild _
+              constructor_ref False
+      alt
+        pat_con True
+        constructor_ref False
+      alt
+        pat_con False
+        constructor_ref True
+  newtype ViaWrapped
+    constructor ViaWrapped
+      field  :: Int
+    deriving (via (ViaSum) Eq)
+  function __ev_Eq_ViaWrapped_eq :: __Dict_Eq -> ViaWrapped -> ViaWrapped -> Bool
+    pat_var __ev_Eq
+    pat_con ViaWrapped
+      pat_var __v0
+    pat_con ViaWrapped
+      pat_var __v1
+    apply
+      apply
+        evidence_method Eq.== evidence=__ev_Eq nullary=0
+        apply
+          constructor_ref ViaSum
+          variable __v0
+      apply
+        constructor_ref ViaSum
+        variable __v1
+  function __ev_Eq_ViaWrapped_ne :: __Dict_Eq -> ViaWrapped -> ViaWrapped -> Bool
+    pat_var __ev_Eq
+    pat_con ViaWrapped
+      pat_var __v0
+    pat_con ViaWrapped
+      pat_var __v1
+    apply
+      apply
+        evidence_method Eq./= evidence=__ev_Eq nullary=0
+        apply
+          constructor_ref ViaSum
+          variable __v0
+      apply
+        constructor_ref ViaSum
+        variable __v1
+  newtype ViaInner
+    constructor ViaInner
+      field  :: Int
+    deriving (Eq)
+  function __ev_Eq_ViaInner_eq :: ViaInner -> ViaInner -> Bool
+    pat_var __l
+    pat_var __r
+    case
+      variable __l
+      alt
+        pat_con ViaInner
+          pat_var __a0
+        case
+          variable __r
+          alt
+            pat_con ViaInner
+              pat_var __b0
+            apply
+              apply
+                evidence_method Eq.== evidence= nullary=0
+                  instance Int
+                variable __a0
+              variable __b0
+          alt
+            pat_wild _
+            constructor_ref False
+  function __ev_Eq_ViaInner_ne :: ViaInner -> ViaInner -> Bool
+    pat_var __l
+    pat_var __r
+    case
+      case
+        variable __l
+        alt
+          pat_con ViaInner
+            pat_var __a0
+          case
+            variable __r
+            alt
+              pat_con ViaInner
+                pat_var __b0
+              apply
+                apply
+                  evidence_method Eq.== evidence= nullary=0
+                    instance Int
+                  variable __a0
+                variable __b0
+            alt
+              pat_wild _
+              constructor_ref False
+      alt
+        pat_con True
+        constructor_ref False
+      alt
+        pat_con False
+        constructor_ref True
+  newtype ViaOuter
+    constructor ViaOuter
+      field  :: ViaInner
+    deriving (via (Int) Eq)
+  function __ev_Eq_ViaOuter_eq :: __Dict_Eq -> ViaOuter -> ViaOuter -> Bool
+    pat_var __ev_Eq
+    pat_con ViaOuter
+      pat_con ViaInner
+        pat_var __v0
+    pat_con ViaOuter
+      pat_con ViaInner
+        pat_var __v1
+    apply
+      apply
+        evidence_method Eq.== evidence=__ev_Eq nullary=0
+        variable __v0
+      variable __v1
+  function __ev_Eq_ViaOuter_ne :: __Dict_Eq -> ViaOuter -> ViaOuter -> Bool
+    pat_var __ev_Eq
+    pat_con ViaOuter
+      pat_con ViaInner
+        pat_var __v0
+    pat_con ViaOuter
+      pat_con ViaInner
+        pat_var __v1
+    apply
+      apply
+        evidence_method Eq./= evidence=__ev_Eq nullary=0
+        variable __v0
+      variable __v1
+  class ViaEq a
+    method === :: a -> a -> Bool
+  function __ev_ViaEq_Int__3d_3d_3d :: Int -> Int -> Bool
+    pat_var x
+    pat_var y
+    infix ==
+      variable x
+      variable y
+  newtype ViaUser
+    constructor ViaUser
+      field  :: Int
+    deriving (via (Int) ViaEq)
+  function __ev_ViaEq_ViaUser__3d_3d_3d :: __Dict_ViaEq -> ViaUser -> ViaUser -> Bool
+    pat_var __ev_ViaEq
+    pat_con ViaUser
+      pat_var __v0
+    pat_con ViaUser
+      pat_var __v1
+    apply
+      apply
+        evidence_method ViaEq.=== evidence=__ev_ViaEq nullary=0
+        variable __v0
+      variable __v1

@@ -742,7 +742,7 @@ function materializeRestrictedSignatures(TypeCheckState $state, array $functions
             continue;
         }
 
-        [$type] = renameRecordedVars(prune($state, $discovered['type']), []);
+        [$type] = renameProbeTypeVars(prune($state, $discovered['type']), []);
         foreach (\array_keys(quantifiedVars($state, $type)) as $var) {
             $state->restrictedVars[$var] = true;
         }
@@ -768,14 +768,14 @@ function needsInferredSignature(Ast\FunctionDecl $fn): bool
  * Infer a signature-less function's body once, only to find out which
  * constraints its own type carries.
  *
- * The body is typed against throwaway variables and the substitution is rolled
- * back: the caller re-checks the body with the constraints in scope. The probe
- * clears the pending constraints and the inferred annotations it wrote, but it
- * deliberately leaves the abstraction the let/where machinery recorded on nested
- * bindings (`Lambda::$abstractedConstraints` / `::$abstractedUserConstraints` /
- * `::$abstractedScheme`). That residue is the reuse cache the real pass reads so
- * it does not re-abstract the same binding; see the field docs. The probe is
- * therefore *not* residue-free.
+ * The probe runs on a copy of the declaration: the body and the parameters are
+ * deep-copied first, the copy is typed against throwaway variables, and the
+ * substitution is rolled back. The caller then checks the untouched original
+ * with the constraints in scope, deriving its own abstraction from scratch. The
+ * copy is the whole contract -- because every field the let/where machinery
+ * writes (the `Lambda::$abstractedConstraints` cache, the rewrites the evidence
+ * passes make inside a binding's value) lands on a tree that is thrown away, the
+ * probe is observationally equivalent to not having run.
  *
  * @return ?array{
  *   type: Type,
@@ -794,6 +794,8 @@ function discoverFunctionConstraints(TypeCheckState $state, Ast\FunctionDecl $fn
         $state->constraintMethodCandidates,
     ];
     $savedSpan = $state->declSpan;
+    $savedEvidenceParam = $state->nextEvidenceParam;
+    $savedBinderId = $state->nextBinderId;
     $savedAmbient = installAmbientConstraints($state, []);
     $state->declSpan = [
         'line' => $fn->line,
@@ -807,12 +809,16 @@ function discoverFunctionConstraints(TypeCheckState $state, Ast\FunctionDecl $fn
     try {
         $bodyEnv = $state->env;
         $fnType = freshType($state);
-        foreach (array_reverse($fn->params) as $_) {
+        $probeParams = [];
+        foreach ($fn->params as $param) {
+            $probeParams[] = Ast\copyNode($param);
+        }
+        foreach (array_reverse($probeParams) as $_) {
             $fnType = new TArrow(freshType($state), $fnType);
         }
 
         $expected = $fnType;
-        foreach ($fn->params as $param) {
+        foreach ($probeParams as $param) {
             if (! $expected instanceof TArrow) {
                 throw typeFail($state, "function `{$fn->name}` has too many parameters", $fn);
             }
@@ -820,11 +826,12 @@ function discoverFunctionConstraints(TypeCheckState $state, Ast\FunctionDecl $fn
             $expected = $expected->to;
         }
 
+        $body = Ast\copyNode($fn->body);
         $bodyEnv[$fn->name] = scheme($fnType, [], [], 0);
-        $bodyType = inferExpr($state, $fn->body, $bodyEnv);
-        unify($state, $bodyType, $expected, $fn->body);
+        $bodyType = inferExpr($state, $body, $bodyEnv);
+        unify($state, $bodyType, $expected, $body);
 
-        $found = inferredFunctionConstraints($state, $fn->body, $fnType);
+        $found = inferredFunctionConstraints($state, $body, $fnType);
         $constraints = \array_values(\array_filter(
             $found,
             static fn (Ast\PendingConstraint $constraint): bool => !constraintOverRestrictedVar($state, $constraint),
@@ -846,8 +853,8 @@ function discoverFunctionConstraints(TypeCheckState $state, Ast\FunctionDecl $fn
         $state->holes = $savedHoles;
         $state->fresh = $savedFresh;
         $state->declSpan = $savedSpan;
-        clearPendingConstraintsDeep($fn->body);
-        clearInferredAnnotationsDeep($fn->body);
+        $state->nextEvidenceParam = $savedEvidenceParam;
+        $state->nextBinderId = $savedBinderId;
     }
 }
 
@@ -1380,7 +1387,7 @@ function inferExpr(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
             $expr,
         )),
         Ast\OperatorRef::class => inferOperatorRef($state, $expr, $env),
-        Ast\Apply::class => inferApply($state, $expr, $env),
+        Ast\Apply::class => inferApplyAndElaborate($state, $expr, $env),
         Ast\Infix::class => inferInfix($state, $expr, $env),
         Ast\Tuple::class => inferTuple($state, $expr, $env),
         Ast\ListLit::class => inferList($state, $expr, $env),
@@ -1687,6 +1694,14 @@ function inferEvidenceMethod(TypeCheckState $state, Ast\AstNode &$expr): Type
     return $instantiated['type'];
 }
 
+/**
+ * The type of an application: unify the argument against the callee's domain and
+ * park whatever the callee owes as an obligation.
+ *
+ * Inference only -- it never inserts evidence. The obligation is parked by
+ * {@see parkApplyConstraints} and discharged by {@see elaborateApplyEvidence},
+ * which every caller reaches through {@see inferApplyAndElaborate}.
+ */
 function inferApply(TypeCheckState $state, Ast\Apply $expr, array $env): Type
 {
     $fnType = prune($state, inferMethodByArgument($state, $expr, $env));
@@ -1699,7 +1714,7 @@ function inferApply(TypeCheckState $state, Ast\Apply $expr, array $env): Type
     if ($fnType instanceof TVar) {
         $result = freshType($state);
         unify($state, $fnType, new TArrow($argType, $result), $expr);
-        resolveApplyPendingEvidence($state, $expr);
+        parkApplyConstraints($state, $expr);
         propagateCallMetadata($expr);
 
         return $result;
@@ -1709,7 +1724,7 @@ function inferApply(TypeCheckState $state, Ast\Apply $expr, array $env): Type
     if (!$fnType instanceof TArrow) {
         $result = freshType($state);
         unify($state, $fnType, new TArrow($argType, $result), $expr);
-        resolveApplyPendingEvidence($state, $expr);
+        parkApplyConstraints($state, $expr);
         propagateCallMetadata($expr);
 
         return $result;
@@ -1718,37 +1733,84 @@ function inferApply(TypeCheckState $state, Ast\Apply $expr, array $env): Type
     unify($state, $fnType->from, $argType, $expr);
     $result = $fnType->to;
 
-    resolveApplyPendingEvidence($state, $expr);
+    parkApplyConstraints($state, $expr);
     propagateCallMetadata($expr);
 
     return $result;
 }
 
 /**
- * Insert the evidence a curried call's callee is waiting for, or park the
- * obligation on the call for the post-pass to resolve.
+ * Park the obligation a curried call's callee is waiting for on the call.
  *
- * The three shapes `inferApply` reaches this from -- an unresolved callee, a
- * non-arrow callee, and an arrow callee -- separated only in how the argument is
- * unified; the evidence decision is the same, so it lives once here.
+ * Constraint generation, not elaboration: whether the obligation can be
+ * discharged right now is decided by {@see elaborateApplyEvidence}, which runs
+ * as a separate step, so inference never inserts evidence of its own.
  */
-function resolveApplyPendingEvidence(TypeCheckState $state, Ast\Apply $expr): void
+function parkApplyConstraints(TypeCheckState $state, Ast\Apply $expr): void
 {
     [$pending, $dicts] = pendingConstraintsAndDicts($expr->function);
     if ($pending === []) {
         return;
     }
 
-    $constraints = dictsForPending($state, $pending, $dicts);
-    if (constraintsResolvable($state, $constraints)) {
-        clearPendingConstraints($expr);
-        prependEvidenceAtRoot($state, $expr, resolveConstraintEvidence($state, $constraints, $expr));
+    $expr->pendingConstraints = $pending;
+    $expr->pendingDicts = $dicts;
+}
 
+/**
+ * Discharge a call's parked obligation now, or leave it parked for the
+ * post-pass.
+ *
+ * The elaboration half of the boundary: {@see tryResolveEvidenceStrict} decides
+ * whether the call can be discharged now, and it is deliberately stricter than
+ * the post-pass's {@see tryResolveEvidenceExprs}. Inference has to *park* an
+ * obligation whose instance context still has an open variable -- that open
+ * variable becomes a dictionary parameter of the enclosing binding -- where the
+ * post-pass has to *try* the elaboration so an impossible one surfaces as
+ * `ambiguous constraint` at the call rather than as a bare leftover. A single
+ * shared predicate loses one diagnostic or the other (`Bad-Ambiguous-Constraint`,
+ * `Bad-Ambiguous-Instance-Context`).
+ *
+ * The decision belongs here, right after the apply is inferred and its operand
+ * types are known, and not at the end of the enclosing scope: resolvability is a
+ * property of the substitutions in place at this moment, and a later pass sees
+ * a different one. `Ord [t]` for `[1, 2] < [1, 3]` is discharged here through
+ * the list instance, but is no longer a leaf any pass can default by the time
+ * the body finishes, so moving it out changes which obligations numeric
+ * defaulting can see (`Lists.mog`, `Ordering-Comparisons.mog`).
+ */
+function elaborateApplyEvidence(TypeCheckState $state, Ast\Apply $expr): void
+{
+    [$pending, $dicts] = pendingConstraintsAndDicts($expr->function);
+    if ($pending === []) {
         return;
     }
 
-    $expr->pendingConstraints = $pending;
-    $expr->pendingDicts = $dicts;
+    $evidence = tryResolveEvidenceStrict($state, dictsForPending($state, $pending, $dicts), $expr);
+    if ($evidence === null) {
+        return;
+    }
+
+    clearPendingConstraints($expr);
+    prependEvidenceAtRoot($state, $expr, $evidence);
+}
+
+/**
+ * Infer an apply and then discharge what its callee owes.
+ *
+ * The only way into `inferApply`: generation and elaboration stay separate
+ * functions, and a caller that needs the call elaborated goes through here.
+ * `inferApply` itself only parks; an apply it declines to elaborate (one whose
+ * argument is already a dictionary) leaves nothing parked, and is skipped.
+ */
+function inferApplyAndElaborate(TypeCheckState $state, Ast\Apply $expr, array $env): Type
+{
+    $type = inferApply($state, $expr, $env);
+    if ($expr->pendingConstraints !== [] || $expr->pendingDicts !== []) {
+        elaborateApplyEvidence($state, $expr);
+    }
+
+    return $type;
 }
 
 function propagateCallMetadata(Ast\Apply $expr): void
@@ -2123,7 +2185,7 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
                     $right,
                 );
 
-                return inferApply($state, $expr, $env);
+                return inferApplyAndElaborate($state, $expr, $env);
             } finally {
                 $state->constraintMethods = $savedMethods;
                 $state->constraintMethodAmbiguities = $savedAmbiguities;
@@ -2144,7 +2206,7 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
                 $right,
             );
 
-            return inferApply($state, $expr, $env);
+            return inferApplyAndElaborate($state, $expr, $env);
         }
 
         $expr->pendingConstraints = $instantiated['constraints'];
@@ -2300,7 +2362,7 @@ function constraintMethodForOperandTypes(TypeCheckState $state, string $method, 
  */
 function inferRewrittenInfix(TypeCheckState $state, Ast\AstNode $surface, Ast\Apply $call, array $env): Type
 {
-    $type = inferApply($state, $call, $env);
+    $type = inferApplyAndElaborate($state, $call, $env);
     annotateExprType($state, $call, $type);
     $surface->inferredType = $call->inferredType;
 
@@ -2826,21 +2888,8 @@ function inferSequentialBindings(TypeCheckState $state, array $bindings, array $
 {
     $local = $env;
     foreach ($bindings as $binding) {
-        $alreadyAbstracted = abstractedLocalConstraints($binding->value);
         $annotatedConstraints = localConstrainedAnnotation($binding->value);
-        if ($alreadyAbstracted !== []) {
-            $recorded = recordedGroupScheme($binding->value);
-            if ($recorded !== null && $binding->pattern instanceof Ast\PatVar) {
-                $scheme = materializeGroupScheme($state, $recorded);
-                assertDictArity($state, $scheme, $alreadyAbstracted, $binding->value);
-                $local[$binding->pattern->name] = $scheme;
-                continue;
-            }
-
-            $constraints = abstractedLocalUserConstraints($binding->value) ?: $alreadyAbstracted;
-            $rawType = inferExpr($state, $binding->value, $local);
-            $valueType = peelDictArrows($rawType, \count($alreadyAbstracted));
-        } elseif ($annotatedConstraints !== null) {
+        if ($annotatedConstraints !== null) {
             [$binding->value, $valueType, $constraints] = abstractAnnotatedLocalBinding(
                 $state,
                 $binding->value,
@@ -2859,7 +2908,6 @@ function inferSequentialBindings(TypeCheckState $state, array $bindings, array $
                     $binding->value,
                     $solved->dicts,
                 );
-                recordGroupScheme($binding->value, prune($state, $valueType), $solved->user);
             }
         }
         [, $local] = bindPattern(
@@ -2997,7 +3045,6 @@ function abstractAnnotatedLocalBinding(TypeCheckState $state, Ast\AstNode $value
 
     $lambda = wrapDictLambda($state, $inner, $params, $dictTypes);
     $lambda->abstractedConstraints = $abstracted;
-    $lambda->abstractedUserConstraints = $userConstraints;
 
     return [$lambda, $valueType, $userConstraints];
 }
@@ -3039,11 +3086,12 @@ function abstractLocalConstraints(TypeCheckState $state, Ast\AstNode $rhs, array
 }
 
 /**
- * The constraints a local binding was already abstracted over, if any.
+ * The dictionary parameters a local binding was abstracted over, if any.
  *
- * The same AST is checked more than once: a binding this pass turned into a
- * dictionary-taking adapter comes back as that adapter, and its dictionaries
- * are read off it instead of being allocated a second time.
+ * `abstractLocalConstraints` turns a constrained binding's value into a lambda
+ * whose leading parameters are the dictionaries the binding takes; the list is
+ * kept on the lambda so the binding's scheme can be asserted against the
+ * adapter it was built for.
  *
  * @return list<Ast\PendingConstraint>
  */
@@ -3053,72 +3101,17 @@ function abstractedLocalConstraints(Ast\AstNode $value): array
 }
 
 /**
- * The user-written constraints of an already-abstracted constrained annotation.
+ * Rename a type's variables to a fresh, process-unique prefix.
  *
- * `abstractedConstraints` is the expanded list the dictionary parameters were
- * allocated for, but a binding's scheme has to keep the unexpanded list -- a use
- * site expands it once. Reusing the expanded list as the scheme's constraints
- * would make a re-check of the same AST expand the superclasses a second time
- * (`(Ord a, Num a) =>` would pass `Eq, Eq, Ord, Num`).
+ * `materializeRestrictedSignatures` installs the probe's type as a scheme in
+ * the module environment. The probe rolls its own variable numbering back, so
+ * an unrenamed type would name the same `t<n>` variables the next run is about
+ * to allocate; renaming keeps the installed scheme from aliasing them.
  *
- * @return list<Ast\PendingConstraint>
- */
-function abstractedLocalUserConstraints(Ast\AstNode $value): array
-{
-    return $value instanceof Ast\Lambda ? $value->abstractedUserConstraints : [];
-}
-
-/**
- * The scheme a group member was generalized to when its group was abstracted.
- *
- * @return array{type: Ast\TypeNode, bound: list<string>, constraints: list<array{class: string, args: list<Ast\TypeNode>}>}|null
- */
-function recordedGroupScheme(Ast\AstNode $value): ?array
-{
-    [$peeled] = peelBindingAnnotation($value);
-
-    return $peeled instanceof Ast\Lambda ? $peeled->abstractedScheme : null;
-}
-
-/**
- * Record the scheme a member of a just-abstracted group was generalized to.
- *
- * The scheme's variables are renamed first: what is recorded outlives the run
- * that produced it, and every later run allocates its own variables from the
- * same `t<n>` names. The rename keeps the member's type and its obligations
- * sharing their variables -- which is what makes a later run resolve the right
- * dictionary at a use site -- while making it impossible for that run to alias
- * them with a variable of its own.
- */
-function recordGroupScheme(Ast\AstNode $value, Type $type, array $constraints): void
-{
-    [$peeled] = peelBindingAnnotation($value);
-    if (! $peeled instanceof Ast\Lambda) {
-        return;
-    }
-
-    [$renamedType, $renamedConstraints, $bound] = renameRecordedVars($type, $constraints);
-    $recorded = [];
-    foreach ($renamedConstraints as $constraint) {
-        $args = [];
-        foreach ($constraint->args as $arg) {
-            $args[] = internalTypeToAst($arg, []);
-        }
-        $recorded[] = ['class' => $constraint->class, 'args' => $args];
-    }
-
-    $peeled->abstractedScheme = [
-        'type' => internalTypeToAst($renamedType, []),
-        'bound' => $bound,
-        'constraints' => $recorded,
-    ];
-}
-
-/**
  * @param list<Ast\PendingConstraint> $constraints
  * @return array{0: Type, 1: list<Ast\PendingConstraint>, 2: list<string>}
  */
-function renameRecordedVars(Type $type, array $constraints): array
+function renameProbeTypeVars(Type $type, array $constraints): array
 {
     static $recordId = 0;
 
@@ -3161,60 +3154,6 @@ function constraintTypeVars(array $constraints): array
     }
 
     return $vars;
-}
-
-/**
- * @param array{type: Ast\TypeNode, bound: list<string>, constraints: list<array{class: string, args: list<Ast\TypeNode>}>} $record
- */
-function materializeGroupScheme(TypeCheckState $state, array $record): Scheme
-{
-    $constraints = [];
-    foreach ($record['constraints'] as $constraint) {
-        $args = [];
-        foreach ($constraint['args'] as $arg) {
-            $args[] = astType($state, $arg);
-        }
-        $constraints[] = new Ast\PendingConstraint($constraint['class'], $args);
-    }
-
-    $dicts = expandConstraintsWithSuperclasses($state, $constraints);
-
-    return scheme(
-        astType($state, $record['type']),
-        $record['bound'],
-        $constraints,
-        count($dicts),
-        $dicts,
-    );
-}
-
-/**
- * Whether the group already carries its dictionary parameters.
- *
- * The same AST is checked more than once, so a group that was abstracted stays
- * abstracted: inferring its bodies again re-derives a constraint for every
- * literal in them, and taking those as obligations to abstract would put a
- * second set of dictionary parameters in front of the first.
- *
- * @param list<Ast\Binding> $bindings
- * @param array<string, true> $annotated
- */
-function groupWasAbstracted(array $bindings, array $annotated): bool
-{
-    foreach ($bindings as $binding) {
-        if (! $binding->pattern instanceof Ast\PatVar
-            || isset($annotated[$binding->pattern->name])
-        ) {
-            continue;
-        }
-
-        [$value] = peelBindingAnnotation($binding->value);
-        if (abstractedLocalConstraints($value) !== []) {
-            return true;
-        }
-    }
-
-    return false;
 }
 
 /**
@@ -3410,11 +3349,7 @@ function inferRecursiveBindings(TypeCheckState $state, array $bindings, array $e
         }
 
         [$rhs, $annot] = peelBindingAnnotation($binding->value);
-        $abstracted = abstractedLocalConstraints($rhs);
-        $valueType = peelDictArrows(
-            inferExpr($state, $rhs, $local),
-            \count($abstracted),
-        );
+        $valueType = inferExpr($state, $rhs, $local);
 
         if ($annot !== null) {
             $annotType = $binding->pattern instanceof Ast\PatVar
@@ -3432,9 +3367,7 @@ function inferRecursiveBindings(TypeCheckState $state, array $bindings, array $e
             }
         }
 
-        $constraints = $abstracted !== []
-            ? (abstractedLocalUserConstraints($rhs) ?: $abstracted)
-            : pendingConstraintsFromExpr($rhs);
+        $constraints = pendingConstraintsFromExpr($rhs);
         $rhsConstraints[$bi] = $constraints;
         $bodyConstraints[$bi] = $generalize ? pendingConstraintsDeep($rhs, $state) : [];
 
@@ -3457,7 +3390,7 @@ function inferRecursiveBindings(TypeCheckState $state, array $bindings, array $e
         );
     }
 
-    $groupPending = $generalize && !groupWasAbstracted($bindings, $annotated)
+    $groupPending = $generalize
         ? recursiveGroupConstraints($state, $bindings, $bodyConstraints, $annotated)
         : [];
     $group = $groupPending === []
@@ -3499,16 +3432,6 @@ function inferRecursiveBindings(TypeCheckState $state, array $bindings, array $e
         $constraints = refreshConstraintArgs($state, $rhsConstraints[$bi] ?? []);
         if ($binding->pattern instanceof Ast\PatVar) {
             $name = $binding->pattern->name;
-            if (! $abstractedThisPass) {
-                $recorded = recordedGroupScheme($binding->value);
-                if ($recorded !== null) {
-                    $scheme = materializeGroupScheme($state, $recorded);
-                    assertDictArity($state, $scheme, $constraints, $binding->value);
-                    $local[$name] = $scheme;
-                    continue;
-                }
-            }
-
             $isAnnotated = isset($annotated[$name]);
             $groupAbstracted = $abstractedThisPass && ! $isAnnotated;
             $pruned = prune($state, $expected[$name]);
@@ -3532,11 +3455,9 @@ function inferRecursiveBindings(TypeCheckState $state, array $bindings, array $e
                 $schemeDicts !== [] ? \count($schemeDicts) : null,
                 $schemeDicts,
             );
-            if ($groupAbstracted && $quantify) {
-                recordGroupScheme($binding->value, $pruned, $groupConstraints);
-            }
-            if (abstractedLocalUserConstraints($binding->value) !== []) {
-                assertDictArity($state, $local[$name], abstractedLocalConstraints($binding->value), $binding->value);
+            $abstracted = abstractedLocalConstraints($binding->value);
+            if ($abstracted !== []) {
+                assertDictArity($state, $local[$name], $abstracted, $binding->value);
             }
             continue;
         }
@@ -4955,9 +4876,6 @@ function applyTypeApp(TypeCheckState $state, Ast\TypeNode $con, array $argAsts, 
         return new TCon($con->name, $args);
     }
 
-    // The multi-parameter instance head marker is compiler-built only (the
-    // registration guard rejects the name as a user type), so it carries no
-    // kind to check.
     if ($con instanceof Ast\TypeCon && $con->name === Ast\instanceHeadMarker()) {
         $args = [];
         foreach ($argAsts as $argAst) {

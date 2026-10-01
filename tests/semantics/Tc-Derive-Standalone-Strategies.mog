@@ -1,0 +1,35 @@
+import Data.Eq
+import Text.Show
+
+-- Standalone deriving strategies in one module: the default strategy on a
+-- parameterised data type, an explicit stock strategy, a newtype strategy, and
+-- a via strategy. Each declaration keeps its own name so the instances do not
+-- collide.
+
+data DefFoo a = DefFoo a
+
+deriving instance Eq a => Eq (DefFoo a)
+deriving instance Show a => Show (DefFoo a)
+
+data StockFoo a = StockFoo a
+
+deriving stock instance Eq a => Eq (StockFoo a)
+deriving stock instance Show a => Show (StockFoo a)
+
+newtype Age = Age Int
+
+deriving newtype instance Eq Age
+deriving newtype instance Show Age
+
+newtype ViaInt = ViaInt Int
+
+deriving via (Int) instance Eq ViaInt
+deriving via (Int) instance Show ViaInt
+
+main :: String
+main = show
+  ( DefFoo 42 == DefFoo 42
+  , StockFoo 42 == StockFoo 42
+  , Age 10 == Age 20
+  , ViaInt 42 == ViaInt 42
+  )

@@ -1,0 +1,36 @@
+import Data.Eq
+
+-- The via-deriving strategies in one module. Each declaration keeps its own
+-- name so the shapes can share a fixture: the direct representation, a distinct
+-- newtype wrapper that has to be re-wrapped, a chain that must be unwrapped to
+-- the representation, and a user class with no stdlib instance.
+
+-- Direct: the via type is the representation itself.
+newtype ViaSimple = ViaSimple Int
+  deriving via (Int) Eq
+
+-- Wrapper: the via type is a distinct newtype over the same representation, so
+-- every argument must be re-wrapped as `ViaSum` before dispatching `Eq`.
+newtype ViaSum = ViaSum Int
+  deriving (Eq)
+
+newtype ViaWrapped = ViaWrapped Int
+  deriving via (ViaSum) Eq
+
+-- Chain: the target is a newtype over a newtype, so deriving via (Int) must
+-- unwrap both `ViaOuter` and `ViaInner` to reach the representation.
+newtype ViaInner = ViaInner Int
+  deriving (Eq)
+
+newtype ViaOuter = ViaOuter ViaInner
+  deriving via (Int) Eq
+
+-- Minimal: a user-defined class with no stdlib instance.
+class ViaEq a where
+  (===) :: a -> a -> Bool
+
+instance ViaEq Int where
+  (===) x y = x == y
+
+newtype ViaUser = ViaUser Int
+  deriving via (Int) ViaEq

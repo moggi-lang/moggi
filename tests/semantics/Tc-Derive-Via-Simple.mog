@@ -1,4 +1,0 @@
-import Data.Eq
-
-newtype MyInt = MyInt Int
-  deriving via (Int) Eq

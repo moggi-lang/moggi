@@ -14,8 +14,10 @@ import Text.Show
 -- dictionary list that disagrees with the lambda the member was lifted into.
 --
 -- `probedDeclared` has no signature, so the discovery probe checks its body --
--- and this group -- once before the real check runs, and the second pass has to
--- read the same dictionaries off the lambda it finds.
+-- and this group -- once, on a copy, before the real check runs. The probe
+-- leaves the declaration untouched, so the real check derives this group's
+-- dictionaries itself: the golden pins the second pass's own `__ev_dict`
+-- parameters, not any the probe happened to allocate.
 
 recursiveDeclared :: Int -> [Int]
 recursiveDeclared n = go n []

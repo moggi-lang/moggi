@@ -1006,38 +1006,12 @@ final class Lambda extends AstNode
     /**
      * Class constraints the type checker abstracted into this lambda's leading
      * dictionary parameters. Empty for a source-level lambda; set only on the
-     * synthetic lambda that implements a constrained let/where binding, so a
-     * re-check of the same AST recognises it instead of wrapping it again.
+     * synthetic lambda that implements a constrained let/where binding, so the
+     * binding's scheme can be asserted against the adapter it was built for.
      *
      * @var list<PendingConstraint>
      */
     public array $abstractedConstraints = [];
-
-    /**
-     * The user-written constraints behind `abstractedConstraints`, when the
-     * abstracted lambda implements a constrained annotation.
-     *
-     * A use site expands a binding's scheme with its superclasses, so the
-     * scheme has to keep the list as written; a later run reads it back here
-     * instead of expanding the dictionary parameters a second time.
-     *
-     * @var list<PendingConstraint>
-     */
-    public array $abstractedUserConstraints = [];
-
-    /**
-     * The scheme a binding group was generalized to when it was abstracted.
-     *
-     * A group of recursive bindings is abstracted over its dictionaries only
-     * once, but the same AST is inferred again on every later run, and the
-     * obligations it carries were read off the bodies of that first run. Its
-     * variables are renamed to names no inference run allocates, so a later run
-     * cannot alias them with variables of its own; the recorded scheme is what a
-     * later run installs.
-     *
-     * @var array{type: TypeNode, bound: list<string>, constraints: list<array{class: string, args: list<TypeNode>}>}|null
-     */
-    public ?array $abstractedScheme = null;
 
     /** @param array<int, LambdaParam> $params */
     public function __construct(

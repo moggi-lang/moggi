@@ -520,14 +520,53 @@ function resolveConstraintEvidence(TypeCheckState $state, array $constraints, ?A
             );
         }
 
-        $exprs[] = new Ast\EvidenceRef(
-            $className,
-            findProjectInstanceHeadAst($state, $className, $instanceHead),
-            resolveProjectInstanceContextEvidence($state, $className, $instanceHead, $at),
-        );
+        $exprs[] = evidenceRefFor($state, $className, $instanceHead, $at);
     }
 
     return $exprs;
+}
+
+/**
+ * The dictionary expression for a constraint's resolved instance head.
+ *
+ * Shared by both elaboration predicates -- {@see resolveConstraintEvidence}
+ * (inference) and {@see tryResolveEvidenceExprs} (post-pass) -- so the reference
+ * and its instance-context evidence are built one way even though the two
+ * disagree about *whether* a constraint is resolvable.
+ */
+function evidenceRefFor(TypeCheckState $state, string $className, Type $instanceHead, ?AstNode $at = null): Ast\AstNode
+{
+    return new Ast\EvidenceRef(
+        $className,
+        findProjectInstanceHeadAst($state, $className, $instanceHead),
+        resolveProjectInstanceContextEvidence($state, $className, $instanceHead, $at),
+    );
+}
+
+/**
+ * Inference's elaboration rule: the evidence for a call's obligations when every
+ * one of them can be discharged here, otherwise null.
+ *
+ * Strictly stronger than the post-pass's {@see tryResolveEvidenceExprs}: it also
+ * refuses a head whose instance context still has an open variable, so an
+ * obligation that can only become a dictionary parameter is parked rather than
+ * committed. The post-pass has the opposite job -- it must attempt the
+ * elaboration so an impossible one surfaces as `ambiguous constraint` at the
+ * call site -- which is why the two phases keep separate predicates.
+ *
+ * `constraintsResolvable` is the predicate and `resolveConstraintEvidence`
+ * builds the dictionaries from it.
+ *
+ * @param list<Ast\PendingConstraint> $constraints
+ * @return ?list<AstNode>
+ */
+function tryResolveEvidenceStrict(TypeCheckState $state, array $constraints, ?AstNode $at = null): ?array
+{
+    if (!constraintsResolvable($state, $constraints)) {
+        return null;
+    }
+
+    return resolveConstraintEvidence($state, $constraints, $at);
 }
 
 /**
@@ -700,11 +739,7 @@ function tryResolveEvidenceExprs(
             return null;
         }
 
-        $exprs[] = new Ast\EvidenceRef(
-            $constraint->class,
-            findProjectInstanceHeadAst($state, $constraint->class, $head),
-            resolveProjectInstanceContextEvidence($state, $constraint->class, $head, $at),
-        );
+        $exprs[] = evidenceRefFor($state, $constraint->class, $head, $at);
     }
 
     return $exprs;
@@ -1190,40 +1225,6 @@ function pendingConstraintsDeep(Ast\AstNode $expr, ?TypeCheckState $state = null
     walkAstValues($expr, $visit);
 
     return $found;
-}
-
-/** Drop every pending constraint in an expression, recursively. */
-function clearPendingConstraintsDeep(Ast\AstNode $expr): void
-{
-    walkAstValues($expr, static function (Ast\AstNode $node): void {
-        $node->pendingConstraints = [];
-        $node->pendingDicts = [];
-    });
-}
-
-/**
- * Drop the annotations an inference run left on a body.
- *
- * The probe that discovers a signature-less function's constraints infers the
- * body with throwaway variables and rolls the substitution back, so anything it
- * wrote on the shared AST describes a typing that no longer exists: an operand
- * annotated with a type the probe guessed, or an operator it resolved for that
- * guess, would be read back by the passes that do have the last word -- the
- * native-operator pass in particular, which turns an `infix` node into the
- * operation of its operands' type while the node still exists. The real check
- * re-derives these annotations. This clears *only* the annotations: the
- * abstraction the let/where machinery recorded on nested bindings is the reuse
- * cache the real pass reads and is deliberately left in place (see
- * `discoverFunctionConstraints`).
- */
-function clearInferredAnnotationsDeep(Ast\AstNode $expr): void
-{
-    walkAstValues($expr, static function (Ast\AstNode $node): void {
-        $node->inferredType = null;
-        if ($node instanceof Ast\Infix) {
-            $node->resolvedIntrinsic = null;
-        }
-    });
 }
 
 /**
