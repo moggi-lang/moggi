@@ -1,0 +1,72 @@
+import Data.Functor
+import Data.Foldable
+import Data.Traversable
+import Data.Maybe
+import Data.Eq
+import Data.Ord
+import Data.Bounded
+import Text.Show
+import Control.Applicative
+
+-- Deriving for the functorial classes in one module: a plain container, a
+-- higher-kinded field head (which needs `Functor f` in the derived context), a
+-- nested last-slot application (`map (map f)` / `foldr (foldr f)`), a phantom
+-- parameter, extra ignored fields, and a Bounded product.
+
+data Box a = Box a deriving (Functor, Foldable, Traversable, Eq)
+
+data Pair a b = Pair a b deriving (Functor, Foldable, Traversable)
+
+data Tree a = Leaf a | Node (Tree a) (Tree a)
+  deriving (Functor, Foldable, Traversable)
+
+data Phantom a b = Phantom a deriving (Functor, Foldable, Traversable)
+
+data Multi a = Multi a a Int deriving (Functor, Foldable, Traversable)
+
+-- Higher-kinded field head: needs Functor f in the context.
+data Compose f a = Compose (f a) deriving (Functor)
+
+-- Nested last-slot applications must compose as `map (map f)` and
+-- `foldr (\x acc -> foldr f acc x)`. Checked here; exercised at runtime in
+-- tests/lib/Data/Foldable.mog, whose output is byte-identical to base's.
+data Nest a = Nest (Maybe (Maybe a)) deriving (Eq, Show, Functor, Foldable)
+
+data BPair a b = BPair a b deriving (Eq, Ord, Bounded)
+
+mapped :: Box Int
+mapped = map (\x -> x + 1) (Box 1)
+
+folded :: Int
+folded = foldr (\x y -> x + y) 0 (Box 3)
+
+-- Traversable via Identity-like: use Maybe as Applicative
+trav :: Maybe (Box Int)
+trav = traverse Just (Box 1)
+
+pairMap :: Pair Bool Int
+pairMap = map (\x -> x + 1) (Pair True 2)
+
+treeMap :: Tree Int
+treeMap = map (\x -> x + 1) (Node (Leaf 1) (Leaf 2))
+
+phantomMap :: Phantom Int Bool
+phantomMap = map (\ignored -> True) (Phantom 9)
+
+multiMap :: Multi Int
+multiMap = map (\x -> x + 1) (Multi 1 2 3)
+
+composeMap :: Compose Maybe Int
+composeMap = map (\x -> x + 1) (Compose (Just 1))
+
+nestMap :: Nest Int
+nestMap = map (\x -> x + 1) (Nest (Just (Just 1)))
+
+nestFold :: Int
+nestFold = foldr (\x y -> x + y) 0 (Nest (Just (Just 4)))
+
+lo :: BPair Int Int
+lo = minBound
+
+hi :: BPair Int Int
+hi = maxBound

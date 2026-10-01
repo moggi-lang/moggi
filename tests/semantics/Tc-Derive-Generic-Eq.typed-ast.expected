@@ -560,6 +560,36 @@ program
           variable roundtrip
           constructor_ref Red
       constructor_ref Red
+  function eqColors :: Color -> Color -> Bool
+    pat_var a
+    pat_var b
+    apply
+      apply
+        evidence_method Eq.== evidence= nullary=0
+          instance Color
+        variable a
+      variable b
+  function neColors :: Color -> Color -> Bool
+    pat_var a
+    pat_var b
+    apply
+      apply
+        evidence_method Eq./= evidence= nullary=0
+          instance Color
+        variable a
+      variable b
+  function eqSame :: Bool
+    apply
+      apply
+        variable eqColors
+        constructor_ref Red
+      constructor_ref Red
+  function diff :: Bool
+    apply
+      apply
+        variable eqColors
+        constructor_ref Red
+      constructor_ref Blue
   function asRep :: Color -> Rep Color x
     pat_var c
     apply

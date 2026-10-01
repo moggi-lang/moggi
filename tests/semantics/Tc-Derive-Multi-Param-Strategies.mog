@@ -1,0 +1,43 @@
+-- Standalone deriving strategies for a class with more than one parameter.
+--
+-- The derived head is the class applied to two arguments, so the deriving
+-- framework takes its target data type from the head's first argument rather
+-- than from the whole `__InstanceHead` head, and the instance still resolves as
+-- `Both P Bool` at the use site. Two `anyclass` instances of the same class
+-- give each `both` an evidence name built from its argument list
+-- (`__ev_Both_P_Bool_both` vs `__ev_Both_Q_Int_both`) instead of a hash.
+--
+-- The `via` case stands the via type in for the head's first argument and
+-- carries the remaining class arguments verbatim, so the derived context is
+-- `Both VW Bool`; the synthesized method unwraps to the shared representation
+-- and re-wraps as the via type before dispatching. It uses its own target type
+-- so the two strategies do not derive a duplicate `Both P Bool`.
+
+data P = P
+data Q = Q
+
+class Both a b where
+  both :: a -> b -> String
+  both x y = "default"
+
+deriving anyclass instance Both P Bool
+
+deriving anyclass instance Both Q Int
+
+test :: String
+test = both P True
+
+other :: String
+other = both Q (1 :: Int)
+
+data VP = VP
+newtype VW = VW VP
+
+instance Both VW Bool where
+  both (VW VP) True = "wt"
+  both (VW VP) False = "wf"
+
+deriving via (VW) instance Both VP Bool
+
+viaTest :: String
+viaTest = both VP True

@@ -465,7 +465,7 @@ program
           variable __ev_Functor
         variable __ev_Applicative_1
       variable t
-  function == :: __Dict_Eq -> Box t639 -> Box t639 -> Bool
+  function __ev_Eq_Box_eq :: __Dict_Eq -> Box t639 -> Box t639 -> Bool
     pat_var __ev_Eq
     pat_var __l
     pat_var __r
@@ -487,7 +487,7 @@ program
           alt
             pat_wild _
             constructor_ref False
-  function /= :: __Dict_Eq -> Box t639 -> Box t639 -> Bool
+  function __ev_Eq_Box_ne :: __Dict_Eq -> Box t639 -> Box t639 -> Bool
     pat_var __ev_Eq
     pat_var __l
     pat_var __r
@@ -2490,6 +2490,814 @@ program
           variable __ev_Functor
         variable __ev_Applicative_1
       variable t
+  data Compose f a
+    constructor Compose
+      field  :: f a
+    deriving (Functor)
+  function __ev_Functor_Compose_map :: __Dict_Functor -> t3598 -> t3599 -> Compose t3594 t3598 -> Compose t3594 t3599
+    pat_var __ev_Functor
+    pat_var __f
+    pat_var __x
+    case
+      variable __x
+      alt
+        pat_con Compose
+          pat_var __v0
+        apply
+          constructor_ref Compose
+          apply
+            apply
+              evidence_method Functor.map evidence=__ev_Functor nullary=0
+              variable __f
+            variable __v0
+  data Nest a
+    constructor Nest
+      field  :: Maybe Maybe a
+    deriving (Eq, Show, Functor, Foldable)
+  function __ev_Eq_Nest_eq :: __Dict_Eq -> Nest t3952 -> Nest t3952 -> Bool
+    pat_var __ev_Eq
+    pat_var __l
+    pat_var __r
+    case
+      variable __l
+      alt
+        pat_con Nest
+          pat_var __a0
+        case
+          variable __r
+          alt
+            pat_con Nest
+              pat_var __b0
+            apply
+              apply
+                evidence_method Eq.== evidence= nullary=0
+                  instance Maybe a
+                variable __a0
+              variable __b0
+          alt
+            pat_wild _
+            constructor_ref False
+  function __ev_Eq_Nest_ne :: __Dict_Eq -> Nest t3952 -> Nest t3952 -> Bool
+    pat_var __ev_Eq
+    pat_var __l
+    pat_var __r
+    case
+      case
+        variable __l
+        alt
+          pat_con Nest
+            pat_var __a0
+          case
+            variable __r
+            alt
+              pat_con Nest
+                pat_var __b0
+              apply
+                apply
+                  evidence_method Eq.== evidence= nullary=0
+                    instance Maybe a
+                  variable __a0
+                variable __b0
+            alt
+              pat_wild _
+              constructor_ref False
+      alt
+        pat_con True
+        constructor_ref False
+      alt
+        pat_con False
+        constructor_ref True
+  function showsPrec :: __Dict_Show -> Int -> Nest t3983 -> String -> String
+    pat_var __ev_Show
+    pat_var __d
+    pat_var __x
+    pat_var __s
+    case
+      variable __x
+      alt
+        pat_con Nest
+          pat_var __f0
+        apply
+          apply
+            apply
+              variable showParen
+              apply
+                apply
+                  evidence_method Ord.> evidence= nullary=0
+                    instance Int
+                  variable __d
+                integer 10
+            lambda
+              pat_var __r
+              intrinsic stringAppend#
+                string "Nest "
+                apply
+                  apply
+                    apply
+                      evidence_method Show.showsPrec evidence= nullary=0
+                        instance Maybe a
+                      integer 11
+                    variable __f0
+                  variable __r
+          variable __s
+  function show :: __Dict_Show -> Nest t3983 -> String
+    pat_var __ev_Show
+    pat_var x
+    apply
+      apply
+        apply
+          variable shows
+          evidence_ref Show Nest a
+        variable x
+      string ""
+  function showList :: __Dict_Show -> [Nest t3983] -> String -> String
+    pat_var __ev_Show
+    pat_var ls
+    pat_var s
+    apply
+      apply
+        apply
+          variable showListWith
+          apply
+            variable shows
+            evidence_ref Show Nest a
+        variable ls
+      variable s
+  function __ev_Functor_Nest_map :: t4028 -> t4029 -> Nest t4028 -> Nest t4029
+    pat_var __f
+    pat_var __x
+    case
+      variable __x
+      alt
+        pat_con Nest
+          pat_var __v0
+        apply
+          constructor_ref Nest
+          apply
+            apply
+              evidence_method Functor.map evidence= nullary=0
+                instance Maybe
+              apply
+                evidence_method Functor.map evidence= nullary=0
+                  instance Maybe
+                variable __f
+            variable __v0
+  function __ev_Foldable_Nest_foldr :: t4058 -> t4065 -> t4065 -> t4065 -> Nest t4058 -> t4065
+    pat_var __f
+    pat_var __z
+    pat_var __x
+    case
+      variable __x
+      alt
+        pat_con Nest
+          pat_var __v0
+        apply
+          apply
+            apply
+              evidence_method Foldable.foldr evidence= nullary=0
+                instance Maybe
+              lambda
+                pat_var __x
+                pat_var __acc
+                apply
+                  apply
+                    apply
+                      evidence_method Foldable.foldr evidence= nullary=0
+                        instance Maybe
+                      variable __f
+                    variable __acc
+                  variable __x
+            variable __z
+          variable __v0
+  function __ev_Foldable_Nest_fold :: __Dict_Semigroup -> __Dict_Monoid -> Nest t4071 -> t4071
+    pat_var __ev_Semigroup
+    pat_var __ev_Monoid_1
+    pat_var t
+    apply
+      apply
+        apply
+          apply
+            evidence_method Foldable.foldMap evidence= nullary=0
+              instance Nest
+            variable __ev_Semigroup
+          variable __ev_Monoid_1
+        lambda
+          pat_var x
+          variable x
+      variable t
+  function __ev_Foldable_Nest_foldMap :: __Dict_Semigroup -> __Dict_Monoid -> t4087 -> t4092 -> Nest t4087 -> t4092
+    pat_var __ev_Semigroup
+    pat_var __ev_Monoid_1
+    pat_var f
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldr evidence= nullary=0
+            instance Nest
+          lambda
+            pat_var x
+            pat_var acc
+            apply
+              apply
+                evidence_method Semigroup.<> evidence=__ev_Semigroup nullary=0
+                apply
+                  variable f
+                  variable x
+              variable acc
+        evidence_method Monoid.mempty evidence=__ev_Monoid_1 nullary=1
+      variable t
+  function __ev_Foldable_Nest_foldl :: t4104 -> t4101 -> t4104 -> t4104 -> Nest t4101 -> t4104
+    pat_var f
+    pat_var z
+    pat_var t
+    apply
+      apply
+        variable appEndo
+        apply
+          variable getDual
+          apply
+            apply
+              apply
+                apply
+                  evidence_method Foldable.foldMap evidence= nullary=0
+                    instance Nest
+                  evidence_ref Semigroup Dual a
+                evidence_ref Monoid Dual a
+              lambda
+                pat_var x
+                apply
+                  constructor_ref Dual
+                  apply
+                    constructor_ref Endo
+                    lambda
+                      pat_var acc
+                      apply
+                        apply
+                          variable f
+                          variable acc
+                        variable x
+            variable t
+      variable z
+  function __ev_Foldable_Nest_toList :: Nest t4128 -> [t4128]
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldr evidence= nullary=0
+            instance Nest
+          lambda
+            pat_var x
+            pat_var xs
+            infix :
+              variable x
+              variable xs
+        list
+      variable t
+  function __ev_Foldable_Nest_null :: Nest t4138 -> Bool
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldr evidence= nullary=0
+            instance Nest
+          lambda
+            pat_var ignoredX
+            pat_var ignoredAcc
+            constructor_ref False
+        constructor_ref True
+      variable t
+  function __ev_Foldable_Nest_length :: Nest t4145 -> Int
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldl evidence= nullary=0
+            instance Nest
+          lambda
+            pat_var n
+            pat_var ignored
+            infix +
+              variable n
+              integer 1
+        integer 0
+      variable t
+  function __ev_Foldable_Nest_elem :: __Dict_Eq -> t4162 -> Nest t4162 -> Bool
+    pat_var __ev_Eq
+    pat_var x
+    pat_var t
+    apply
+      apply
+        apply
+          variable any
+          evidence_ref Foldable Nest
+        lambda
+          pat_var y
+          apply
+            apply
+              evidence_method Eq.== evidence=__ev_Eq nullary=0
+              variable x
+            variable y
+      variable t
+  function __ev_Foldable_Nest_maximum :: __Dict_Eq -> __Dict_Ord -> Nest t4182 -> t4182
+    pat_var __ev_Eq
+    pat_var __ev_Ord_1
+    pat_var t
+    case
+      apply
+        evidence_method Foldable.toList evidence= nullary=0
+          instance Nest
+        variable t
+      alt
+        pat_nil
+        apply
+          variable error
+          string "Foldable.maximum: empty structure"
+      alt
+        pat_cons
+          pat_var x
+          pat_var xs
+        let
+          binding
+            pat_var go
+            lambda
+              pat_var __ev_dict20
+              pat_var __ev_dict21
+              lambda
+                pat_var acc
+                pat_var ys
+                case
+                  variable ys
+                  alt
+                    pat_nil
+                    variable acc
+                  alt
+                    pat_cons
+                      pat_var y
+                      pat_var rest
+                    apply
+                      apply
+                        apply
+                          apply
+                            variable go
+                            variable __ev_dict20
+                          variable __ev_dict21
+                        apply
+                          apply
+                            evidence_method Ord.max evidence=__ev_dict21 nullary=0
+                            variable acc
+                          variable y
+                      variable rest
+          apply
+            apply
+              apply
+                apply
+                  variable go
+                  variable __ev_Eq
+                variable __ev_Ord_1
+              variable x
+            variable xs
+  function __ev_Foldable_Nest_minimum :: __Dict_Eq -> __Dict_Ord -> Nest t4211 -> t4211
+    pat_var __ev_Eq
+    pat_var __ev_Ord_1
+    pat_var t
+    case
+      apply
+        evidence_method Foldable.toList evidence= nullary=0
+          instance Nest
+        variable t
+      alt
+        pat_nil
+        apply
+          variable error
+          string "Foldable.minimum: empty structure"
+      alt
+        pat_cons
+          pat_var x
+          pat_var xs
+        let
+          binding
+            pat_var go
+            lambda
+              pat_var __ev_dict22
+              pat_var __ev_dict23
+              lambda
+                pat_var acc
+                pat_var ys
+                case
+                  variable ys
+                  alt
+                    pat_nil
+                    variable acc
+                  alt
+                    pat_cons
+                      pat_var y
+                      pat_var rest
+                    apply
+                      apply
+                        apply
+                          apply
+                            variable go
+                            variable __ev_dict22
+                          variable __ev_dict23
+                        apply
+                          apply
+                            evidence_method Ord.min evidence=__ev_dict23 nullary=0
+                            variable acc
+                          variable y
+                      variable rest
+          apply
+            apply
+              apply
+                apply
+                  variable go
+                  variable __ev_Eq
+                variable __ev_Ord_1
+              variable x
+            variable xs
+  function __ev_Foldable_Nest_sum :: __Dict_Num -> Nest t4224 -> t4224
+    pat_var __ev_Num
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldl evidence= nullary=0
+            instance Nest
+          lambda
+            pat_var a
+            pat_var b
+            apply
+              apply
+                evidence_method Num.+ evidence=__ev_Num nullary=0
+                variable a
+              variable b
+        apply
+          evidence_method Num.fromInteger evidence=__ev_Num nullary=0
+          intrinsic intToInteger#
+            integer 0
+      variable t
+  function __ev_Foldable_Nest_product :: __Dict_Num -> Nest t4241 -> t4241
+    pat_var __ev_Num
+    pat_var t
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldl evidence= nullary=0
+            instance Nest
+          lambda
+            pat_var a
+            pat_var b
+            apply
+              apply
+                evidence_method Num.* evidence=__ev_Num nullary=0
+                variable a
+              variable b
+        apply
+          evidence_method Num.fromInteger evidence=__ev_Num nullary=0
+          intrinsic intToInteger#
+            integer 1
+      variable t
+  function __ev_Foldable_Nest_foldr1 :: t4260 -> t4260 -> t4260 -> Nest t4260 -> t4260
+    pat_var f
+    pat_var t
+    let
+      binding
+        pat_var go
+        lambda
+          pat_var ys
+          case
+            variable ys
+            alt
+              pat_nil
+              apply
+                variable error
+                string "Foldable.foldr1: empty structure"
+            alt
+              pat_cons
+                pat_var x
+                pat_nil
+              variable x
+            alt
+              pat_cons
+                pat_var x
+                pat_var zs
+              apply
+                apply
+                  variable f
+                  variable x
+                apply
+                  variable go
+                  variable zs
+      apply
+        variable go
+        apply
+          evidence_method Foldable.toList evidence= nullary=0
+            instance Nest
+          variable t
+  function __ev_Foldable_Nest_foldl1 :: t4281 -> t4281 -> t4281 -> Nest t4281 -> t4281
+    pat_var f
+    pat_var t
+    case
+      apply
+        evidence_method Foldable.toList evidence= nullary=0
+          instance Nest
+        variable t
+      alt
+        pat_nil
+        apply
+          variable error
+          string "Foldable.foldl1: empty structure"
+      alt
+        pat_cons
+          pat_var x
+          pat_var xs
+        let
+          binding
+            pat_var go
+            lambda
+              pat_var acc
+              pat_var ys
+              case
+                variable ys
+                alt
+                  pat_nil
+                  variable acc
+                alt
+                  pat_cons
+                    pat_var y
+                    pat_var rest
+                  apply
+                    apply
+                      variable go
+                      apply
+                        apply
+                          variable f
+                          variable acc
+                        variable y
+                    variable rest
+          apply
+            apply
+              variable go
+              variable x
+            variable xs
+  data BPair a b
+    constructor BPair
+      field  :: a
+      field  :: b
+    deriving (Eq, Ord, Bounded)
+  function __ev_Eq_BPair_eq :: __Dict_Eq -> __Dict_Eq -> BPair t4305 t4306 -> BPair t4305 t4306 -> Bool
+    pat_var __ev_Eq
+    pat_var __ev_Eq_1
+    pat_var __l
+    pat_var __r
+    case
+      variable __l
+      alt
+        pat_con BPair
+          pat_var __a0
+          pat_var __a1
+        case
+          variable __r
+          alt
+            pat_con BPair
+              pat_var __b0
+              pat_var __b1
+            infix &&
+              apply
+                apply
+                  evidence_method Eq.== evidence=__ev_Eq nullary=0
+                  variable __a0
+                variable __b0
+              apply
+                apply
+                  evidence_method Eq.== evidence=__ev_Eq_1 nullary=0
+                  variable __a1
+                variable __b1
+          alt
+            pat_wild _
+            constructor_ref False
+  function __ev_Eq_BPair_ne :: __Dict_Eq -> __Dict_Eq -> BPair t4305 t4306 -> BPair t4305 t4306 -> Bool
+    pat_var __ev_Eq
+    pat_var __ev_Eq_1
+    pat_var __l
+    pat_var __r
+    case
+      case
+        variable __l
+        alt
+          pat_con BPair
+            pat_var __a0
+            pat_var __a1
+          case
+            variable __r
+            alt
+              pat_con BPair
+                pat_var __b0
+                pat_var __b1
+              infix &&
+                apply
+                  apply
+                    evidence_method Eq.== evidence=__ev_Eq nullary=0
+                    variable __a0
+                  variable __b0
+                apply
+                  apply
+                    evidence_method Eq.== evidence=__ev_Eq_1 nullary=0
+                    variable __a1
+                  variable __b1
+            alt
+              pat_wild _
+              constructor_ref False
+      alt
+        pat_con True
+        constructor_ref False
+      alt
+        pat_con False
+        constructor_ref True
+  function compare :: __Dict_Eq -> __Dict_Ord -> __Dict_Eq -> __Dict_Ord -> BPair t4339 t4340 -> BPair t4339 t4340 -> Ordering
+    pat_var __ev_Eq
+    pat_var __ev_Ord_1
+    pat_var __ev_Eq_2
+    pat_var __ev_Ord_3
+    pat_var __l
+    pat_var __r
+    case
+      variable __l
+      alt
+        pat_con BPair
+          pat_var __a0
+          pat_var __a1
+        case
+          variable __r
+          alt
+            pat_con BPair
+              pat_var __b0
+              pat_var __b1
+            case
+              apply
+                apply
+                  evidence_method Ord.compare evidence=__ev_Ord_1 nullary=0
+                  variable __a0
+                variable __b0
+              alt
+                pat_con EQ
+                case
+                  apply
+                    apply
+                      evidence_method Ord.compare evidence=__ev_Ord_3 nullary=0
+                      variable __a1
+                    variable __b1
+                  alt
+                    pat_con EQ
+                    constructor_ref EQ
+                  alt
+                    pat_con LT
+                    constructor_ref LT
+                  alt
+                    pat_con GT
+                    constructor_ref GT
+              alt
+                pat_con LT
+                constructor_ref LT
+              alt
+                pat_con GT
+                constructor_ref GT
+  function < :: __Dict_Eq -> __Dict_Ord -> __Dict_Eq -> __Dict_Ord -> BPair t4339 t4340 -> BPair t4339 t4340 -> Bool
+    pat_var __ev_Eq
+    pat_var __ev_Ord_1
+    pat_var __ev_Eq_2
+    pat_var __ev_Ord_3
+    pat_var x
+    pat_var y
+    case
+      apply
+        apply
+          evidence_method Ord.compare evidence= nullary=0
+            instance BPair a b
+          variable x
+        variable y
+      alt
+        pat_con LT
+        constructor_ref True
+      alt
+        pat_wild _
+        constructor_ref False
+  function <= :: __Dict_Eq -> __Dict_Ord -> __Dict_Eq -> __Dict_Ord -> BPair t4339 t4340 -> BPair t4339 t4340 -> Bool
+    pat_var __ev_Eq
+    pat_var __ev_Ord_1
+    pat_var __ev_Eq_2
+    pat_var __ev_Ord_3
+    pat_var x
+    pat_var y
+    case
+      apply
+        apply
+          evidence_method Ord.compare evidence= nullary=0
+            instance BPair a b
+          variable x
+        variable y
+      alt
+        pat_con GT
+        constructor_ref False
+      alt
+        pat_wild _
+        constructor_ref True
+  function > :: __Dict_Eq -> __Dict_Ord -> __Dict_Eq -> __Dict_Ord -> BPair t4339 t4340 -> BPair t4339 t4340 -> Bool
+    pat_var __ev_Eq
+    pat_var __ev_Ord_1
+    pat_var __ev_Eq_2
+    pat_var __ev_Ord_3
+    pat_var x
+    pat_var y
+    case
+      apply
+        apply
+          evidence_method Ord.compare evidence= nullary=0
+            instance BPair a b
+          variable x
+        variable y
+      alt
+        pat_con GT
+        constructor_ref True
+      alt
+        pat_wild _
+        constructor_ref False
+  function >= :: __Dict_Eq -> __Dict_Ord -> __Dict_Eq -> __Dict_Ord -> BPair t4339 t4340 -> BPair t4339 t4340 -> Bool
+    pat_var __ev_Eq
+    pat_var __ev_Ord_1
+    pat_var __ev_Eq_2
+    pat_var __ev_Ord_3
+    pat_var x
+    pat_var y
+    case
+      apply
+        apply
+          evidence_method Ord.compare evidence= nullary=0
+            instance BPair a b
+          variable x
+        variable y
+      alt
+        pat_con LT
+        constructor_ref False
+      alt
+        pat_wild _
+        constructor_ref True
+  function max :: __Dict_Eq -> __Dict_Ord -> __Dict_Eq -> __Dict_Ord -> BPair t4339 t4340 -> BPair t4339 t4340 -> BPair t4339 t4340
+    pat_var __ev_Eq
+    pat_var __ev_Ord_1
+    pat_var __ev_Eq_2
+    pat_var __ev_Ord_3
+    pat_var x
+    pat_var y
+    case
+      apply
+        apply
+          evidence_method Ord.<= evidence= nullary=0
+            instance BPair a b
+          variable x
+        variable y
+      alt
+        pat_con True
+        variable y
+      alt
+        pat_con False
+        variable x
+  function min :: __Dict_Eq -> __Dict_Ord -> __Dict_Eq -> __Dict_Ord -> BPair t4339 t4340 -> BPair t4339 t4340 -> BPair t4339 t4340
+    pat_var __ev_Eq
+    pat_var __ev_Ord_1
+    pat_var __ev_Eq_2
+    pat_var __ev_Ord_3
+    pat_var x
+    pat_var y
+    case
+      apply
+        apply
+          evidence_method Ord.<= evidence= nullary=0
+            instance BPair a b
+          variable x
+        variable y
+      alt
+        pat_con True
+        variable x
+      alt
+        pat_con False
+        variable y
+  function minBound :: __Dict_Bounded -> __Dict_Bounded -> BPair t4558 t4559
+    pat_var __ev_Bounded
+    pat_var __ev_Bounded_1
+    apply
+      apply
+        constructor_ref BPair
+        evidence_method Bounded.minBound evidence=__ev_Bounded nullary=1
+      evidence_method Bounded.minBound evidence=__ev_Bounded_1 nullary=1
+  function maxBound :: __Dict_Bounded -> __Dict_Bounded -> BPair t4558 t4559
+    pat_var __ev_Bounded
+    pat_var __ev_Bounded_1
+    apply
+      apply
+        constructor_ref BPair
+        evidence_method Bounded.maxBound evidence=__ev_Bounded nullary=1
+      evidence_method Bounded.maxBound evidence=__ev_Bounded_1 nullary=1
   function mapped :: Box Int
     apply
       apply
@@ -2594,3 +3402,61 @@ program
             integer 1
           integer 2
         integer 3
+  function composeMap :: Compose Maybe Int
+    apply
+      apply
+        evidence_method Functor.map evidence= nullary=0
+          instance Compose f
+        lambda
+          pat_var x
+          infix +
+            variable x
+            integer 1
+      apply
+        constructor_ref Compose
+        apply
+          constructor_ref Just
+          integer 1
+  function nestMap :: Nest Int
+    apply
+      apply
+        evidence_method Functor.map evidence= nullary=0
+          instance Nest
+        lambda
+          pat_var x
+          infix +
+            variable x
+            integer 1
+      apply
+        constructor_ref Nest
+        apply
+          constructor_ref Just
+          apply
+            constructor_ref Just
+            integer 1
+  function nestFold :: Int
+    apply
+      apply
+        apply
+          evidence_method Foldable.foldr evidence= nullary=0
+            instance Nest
+          lambda
+            pat_var x
+            pat_var y
+            infix +
+              variable x
+              variable y
+        integer 0
+      apply
+        constructor_ref Nest
+        apply
+          constructor_ref Just
+          apply
+            constructor_ref Just
+            integer 4
+  function lo :: BPair Int Int
+    evidence_method Bounded.minBound evidence= nullary=1
+      instance BPair a b
+  function hi :: BPair Int Int
+    evidence_method Bounded.maxBound evidence= nullary=1
+      instance BPair a b

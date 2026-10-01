@@ -3,7 +3,10 @@ import Data.Eq
 import Data.Bool
 import Data.String
 
--- Stock Generic: sums, products, records, newtype flag, empty data.
+-- Eq and Generic over the same declarations: the stock Generic derivation
+-- (sums, products, records, a newtype flag, empty data, and an infix
+-- constructor) together with the Eq instances the same types use.
+
 data Color = Red | Blue | Green deriving (Generic, Eq)
 
 data Pair a b = MkPair a b deriving (Generic)
@@ -35,6 +38,18 @@ roundtripPipe x = to (from x)
 
 same :: Bool
 same = roundtrip Red == Red
+
+eqColors :: Color -> Color -> Bool
+eqColors a b = a == b
+
+neColors :: Color -> Color -> Bool
+neColors a b = a /= b
+
+eqSame :: Bool
+eqSame = eqColors Red Red
+
+diff :: Bool
+diff = eqColors Red Blue
 
 -- Rep stays usable as a nominal associated type in signatures.
 asRep :: Color -> Rep Color x

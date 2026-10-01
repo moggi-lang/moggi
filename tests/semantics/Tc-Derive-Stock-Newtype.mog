@@ -1,0 +1,50 @@
+import Data.Eq
+import Data.Ord
+import Text.Show
+import Data.Enum
+import Data.Bounded
+import Text.Read
+import Data.Functor
+import Moggi.Internal.Num
+
+-- The stock and newtype deriving strategies in one module: explicit `newtype`
+-- vs single-field `data`, the default (stock) strategy over a full class list,
+-- and an explicit `stock` keyword.
+
+newtype Age = Age Int
+  deriving (Eq, Ord, Show)
+  deriving newtype (Num)
+
+data NotAge = NotAge Int deriving (Eq, Show)
+
+newtype Id a = Id a deriving (Functor)
+
+addAge :: Age -> Age -> Age
+addAge x y = x + y
+
+mapId :: Id Int
+mapId = map (\x -> x + 1) (Id 1)
+
+data Color = Red | Blue | Green
+  deriving (Eq, Ord, Show, Enum, Bounded, Read)
+
+cmp :: Ordering
+cmp = compare Red Blue
+
+shown :: String
+shown = show Green
+
+e :: Int
+e = fromEnum Blue
+
+bmin :: Color
+bmin = minBound
+
+parsed :: Color
+parsed = read "Red"
+
+-- Explicit stock strategy keyword.
+data StockColor = StockRed | StockBlue deriving stock (Eq)
+
+same :: Bool
+same = StockRed == StockRed

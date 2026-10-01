@@ -1,0 +1,73 @@
+program
+  data P
+    constructor P
+  data Q
+    constructor Q
+  class Both a b
+    method both :: a -> b -> String = default
+  function __ev_Both_P_Bool_both :: P -> Bool -> String
+    pat_var x
+    pat_var y
+    string "default"
+  function __ev_Both_Q_Int_both :: Q -> Int -> String
+    pat_var x
+    pat_var y
+    string "default"
+  function test :: String
+    apply
+      apply
+        evidence_method Both.both evidence= nullary=0
+          instance P Bool
+        constructor_ref P
+      constructor_ref True
+  function other :: String
+    apply
+      apply
+        evidence_method Both.both evidence= nullary=0
+          instance Q Int
+        constructor_ref Q
+      type_asc Int
+        integer 1
+  data VP
+    constructor VP
+  newtype VW
+    constructor VW
+      field  :: VP
+  function __ev_Both_VW_Bool_both :: VW -> Bool -> String
+    pat_var _p0
+    pat_var _p1
+    case
+      tuple
+        variable _p0
+        variable _p1
+      alt
+        pat_tuple
+          pat_con VW
+            pat_con VP
+          pat_con True
+        string "wt"
+      alt
+        pat_tuple
+          pat_con VW
+            pat_con VP
+          pat_con False
+        string "wf"
+  function __ev_Both_VP_Bool_both :: __Dict_Both -> VP -> Bool -> String
+    pat_var __ev_Both
+    pat_var __v0
+    pat_var __v1
+    apply
+      apply
+        evidence_method Both.both evidence= nullary=0
+          instance VW Bool
+        apply
+          constructor_ref VW
+          variable __v0
+      variable __v1
+  function viaTest :: String
+    apply
+      apply
+        evidence_method Both.both evidence= nullary=0
+          instance VP Bool
+        constructor_ref VP
+      constructor_ref True

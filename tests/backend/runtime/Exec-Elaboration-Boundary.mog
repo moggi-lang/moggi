@@ -1,0 +1,47 @@
+import Data.Ord
+import Data.Eq
+import Text.Show
+import System.IO
+
+-- Where a call's dictionaries get attached, pinned at runtime.
+--
+-- Inference parks what a callee owes and the elaboration step then decides
+-- whether to discharge it at the call or leave it to become a dictionary
+-- parameter of the enclosing binding. Each cell below depends on that decision
+-- landing in the right place: an obligation discharged too late changes what
+-- numeric defaulting sees (the list comparison), one discharged too eagerly
+-- would drop a parameter a use site still passes (the polymorphic local and the
+-- bare value), and one never discharged would leave the call without its
+-- dictionary and throw here.
+
+-- discharged at the call: the head is concrete
+concrete :: String
+concrete = show (length [1, 2, 3] + 1)
+
+-- discharged at the call, and that is what lets `Num t` default: the `Ord [t]`
+-- obligation is satisfied at the apply through the list instance, so by the
+-- time the body defaults only `Num t` remains and the literal becomes Integer
+listCompare :: Bool
+listCompare = [1, 2] < [1, 3]
+
+-- parked, then a dictionary parameter of the local binding: used at two types
+polyLocal :: (String, String)
+polyLocal = (render 1, render True)
+  where
+    render x = show x <> "!"
+
+-- parked and forwarded as a leading argument: `show` is passed as a value
+bareValue :: [String]
+bareValue = map show [1, 2, 3]
+
+-- a superclass chain that has to be discharged in order (Eq before Ord)
+superclassed :: Bool
+superclassed = (3 :: Int) > 0
+
+main :: IO ()
+main = do
+  putStrLn concrete
+  putStrLn (show listCompare)
+  putStrLn (show polyLocal)
+  putStrLn (show bareValue)
+  putStrLn (show superclassed)
