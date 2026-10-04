@@ -18,13 +18,49 @@ enum CompilePurpose: string
 }
 
 /**
- * The purpose of compiling `$module`: `Main` is the executable, every other
- * module is a library. Deriving it in one place keeps the entry-point policy
- * from drifting between the single-file, project and focus paths.
+ * The module names this compilation treats as entry points.
+ *
+ * A package can declare several executables and test suites, so an entry point
+ * cannot be identified by name alone — `Main` is only the default. The CLI sets
+ * the declared entry (the file it was handed, or the descriptor's `main`) before
+ * compiling; every other caller keeps the conventional `Main`.
+ *
+ * A static holder rather than a function local, so the getter and setter share
+ * one slot; `null` means "never configured", which reads as `Main` alone.
+ */
+final class EntryPointPolicy
+{
+    public static ?array $modules = null;
+}
+
+/**
+ * @param ?list<string> $modules entry module names, or null for the `Main` default
+ */
+function setEntryModules(?array $modules): void
+{
+    EntryPointPolicy::$modules = $modules === null ? null : \array_fill_keys($modules, true);
+}
+
+/** @return array<string, true> */
+function entryModules(): array
+{
+    return EntryPointPolicy::$modules ?? ['Main' => true];
+}
+
+/** Whether `$module` is one of this compilation's entry points. */
+function isEntryModule(?string $module): bool
+{
+    return $module !== null && isset(entryModules()[$module]);
+}
+
+/**
+ * The purpose of compiling `$module`: an entry module is the executable, every
+ * other module is a library. Deriving it in one place keeps the entry-point
+ * policy from drifting between the single-file, project and focus paths.
  */
 function entryPurpose(?string $module): CompilePurpose
 {
-    return $module === 'Main' ? CompilePurpose::Executable : CompilePurpose::Library;
+    return isEntryModule($module) ? CompilePurpose::Executable : CompilePurpose::Library;
 }
 
 /** How far Pipeline::run should go before returning artifacts. */

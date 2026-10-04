@@ -1,0 +1,22 @@
+-- Two modules that each derive `Generic` for a record sharing a field name:
+-- their `Selector` metadata is identical, so the two derived instances must
+-- coincide in the project index instead of colliding.
+module Main where
+
+import Moggi.Generics
+import LibA (A(..))
+import LibB (B(..))
+
+class Describe (f :: Type -> Type) where
+  describe :: f a -> String
+
+instance Datatype d => Describe (M1 D d f) where
+  describe _ = "ok"
+
+describeRep :: (Generic a, Describe (Rep a)) => a -> String
+describeRep x = describe (from x)
+
+main :: IO ()
+main = do
+  putStrLn (describeRep (A 1))
+  putStrLn (describeRep (B 2))

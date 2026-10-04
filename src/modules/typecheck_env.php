@@ -888,6 +888,11 @@ function collectProjectInstances(array $units, ?array $onlyModules = null): arra
 /**
  * Build class/head/associated-equation indexes once for the project instance set.
  *
+ * Two modules that derive the same metadata instance for a shared shape
+ * (`Selector` for a field name, say) produce identical heads and one evidence
+ * name, so the first is indexed once and the second module's copy stands as its
+ * own unused evidence.
+ *
  * @param list<array<string, mixed>> $projectInstances
  * @return array{
  *   byClass: array<string, list<array<string, mixed>>>,
@@ -900,10 +905,20 @@ function indexProjectInstances(array $projectInstances): array
     $byClass = [];
     $byClassHead = [];
     $associatedEquations = [];
+    $seenDerivedHeads = [];
     foreach ($projectInstances as $instance) {
         $className = $instance['class'];
-        $byClass[$className][] = $instance;
         $headKey = Types\instanceHeadIndexKeyFromAst($instance['head']);
+
+        if (($instance['fromDeriving'] ?? false) === true && $instance['head'] instanceof Ast\AstNode) {
+            $headText = $className . "\0" . Ast\dumpTypeInline($instance['head']);
+            if (isset($seenDerivedHeads[$headText])) {
+                continue;
+            }
+            $seenDerivedHeads[$headText] = true;
+        }
+
+        $byClass[$className][] = $instance;
         $byClassHead[$className][$headKey][] = $instance;
         $module = $instance['module'] ?? '';
         foreach ($instance['associatedEquations'] ?? [] as $famName => $eq) {

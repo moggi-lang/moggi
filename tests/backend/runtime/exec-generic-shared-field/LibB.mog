@@ -1,0 +1,6 @@
+module LibB (B(..)) where
+
+import Moggi.Generics
+
+data B = B { value :: Int }
+  deriving (Generic, Eq)

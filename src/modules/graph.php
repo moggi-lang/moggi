@@ -660,6 +660,43 @@ function commonPathPrefix(array $paths): string
 }
 
 /**
+ * The merged module index across library roots, refusing a module that two roots
+ * both offer.
+ *
+ * A name offered by two different roots is ambiguous — the compiler cannot know
+ * which the author meant — so the refusal is located and names the module and
+ * both roots. Synthetic compiler modules (`Prim`, `IO`) live off disk, so a root
+ * that ships a module under one of those names owns it.
+ *
+ * @param list<string> $libDirs
+ * @return array<string, string> module name => source path
+ */
+function libraryModuleIndex(array $libDirs): array
+{
+    $index = [];
+    $owner = [];
+    foreach ($libDirs as $dir) {
+        foreach (moduleIndexFromPaths(findMogFilesUnder($dir)) as $moduleName => $path) {
+            $previous = $owner[$moduleName] ?? null;
+            if ($previous !== null && canonicalPath($previous) !== canonicalPath($dir)) {
+                $header = cachedModuleHeader($path);
+                throw new TypeError(
+                    "duplicate module `{$moduleName}` offered by two library roots ("
+                        . canonicalSeparators($previous) . ' and ' . canonicalSeparators($dir) . ')',
+                    $path,
+                    (string) ($header['__source'] ?? ''),
+                    ...moduleHeaderPoint($header),
+                );
+            }
+            $index[$moduleName] = $path;
+            $owner[$moduleName] = $dir;
+        }
+    }
+
+    return $index;
+}
+
+/**
  * Whole-project source closure across explicit library roots (`moggi compile --lib`).
  *
  * Unlike `moduleFileClosure`, which starts from a single entry file and auto-
@@ -669,8 +706,9 @@ function commonPathPrefix(array $paths): string
  * sources needed to emit a self-contained bundle: the user's own modules plus
  * every reachable library module.
  *
- * Precedence: later `--lib` dirs win over earlier ones on a module-name clash,
- * and the input directory always wins over any library.
+ * A module offered by two different `--lib` roots is refused by name and roots
+ * (`libraryModuleIndex`); the input directory's own modules win over a library of
+ * the same name, which is how a project shadows a dependency.
  *
  * @param list<string> $inputFiles project `.mog` files (roots to keep)
  * @param list<string> $libDirs    additional module search roots
@@ -678,10 +716,7 @@ function commonPathPrefix(array $paths): string
  */
 function projectSourceClosure(array $inputFiles, array $libDirs): array
 {
-    $byModule = [...syntheticCompilerModuleIndex()];
-    foreach ($libDirs as $dir) {
-        $byModule = [...$byModule, ...moduleIndexFromPaths(findMogFilesUnder($dir))];
-    }
+    $byModule = [...syntheticCompilerModuleIndex(), ...libraryModuleIndex($libDirs)];
 
     $entryModules = [];
     foreach ($inputFiles as $path) {

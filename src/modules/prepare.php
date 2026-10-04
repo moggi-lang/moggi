@@ -4,6 +4,7 @@ namespace Moggi\Modules;
 
 use Moggi\Cache;
 use Moggi\Pipeline\CompilePurpose;
+use function Moggi\Pipeline\entryModules;
 use function Moggi\Pipeline\entryPurpose;
 use Moggi\Semantics\Types\TypeError;
 
@@ -540,10 +541,18 @@ function addModuleClassScope(
     $classScopeFns = classScopeFunctionRefs($units, $classScopes);
 }
 
-/** Memo key for a single module: path identity and compile backend. */
+/**
+ * Memo key for a single module: path identity, compile backend, and purpose.
+ *
+ * Purpose is part of the key because it is no longer a function of the module's
+ * name: the same module can be an entry for one compilation and a library for
+ * another, and the checked program differs (the entry's `main` is promoted).
+ */
 function checkedModuleCacheKey(string $path): string
 {
-    return sourceIdentityKey($path) . ':' . compileBackend();
+    $module = cachedModuleHeader($path)['module'] ?? null;
+
+    return sourceIdentityKey($path) . ':' . compileBackend() . ':' . entryPurpose($module)->name;
 }
 
 function clearPrepareProjectCaches(): void
@@ -788,7 +797,13 @@ function prepareProjectExtendingFocus(
 function preparedProjectDiskKey(array $paths, string $rootDir): string
 {
     $root = realpath($rootDir) ?: $rootDir;
-    $parts = ['root=' . $root, 'backend=' . compileBackend()];
+    $entryNames = \array_keys(entryModules());
+    sort($entryNames);
+    $parts = [
+        'root=' . $root,
+        'backend=' . compileBackend(),
+        'entries=' . \implode(',', $entryNames),
+    ];
 
     $fps = [];
     foreach ($paths as $path) {
@@ -846,7 +861,9 @@ function computeModuleContentKeys(array $units, array $sortedModules): array
         sort($depKeys);
 
         $keys[$moduleName] = Cache\hashContent(
-            'b=' . $backend . ';m=' . $moduleName . ';s=' . $srcHash . ';d=' . \implode(',', $depKeys),
+            'b=' . $backend . ';m=' . $moduleName . ';s=' . $srcHash
+                . ';d=' . \implode(',', $depKeys)
+                . ';p=' . entryPurpose($moduleName)->name,
         );
     }
 

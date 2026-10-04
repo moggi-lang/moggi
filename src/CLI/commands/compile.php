@@ -18,6 +18,8 @@ use function Moggi\Compiler\compileFile;
 use function Moggi\Compiler\executableName;
 use function Moggi\Compiler\findExecutable;
 use function Moggi\Compiler\findToolchainExecutable;
+use function Moggi\Modules\cachedModuleHeader;
+use function Moggi\Pipeline\setEntryModules;
 
 /**
  * Compile into a build root directory.
@@ -27,6 +29,11 @@ use function Moggi\Compiler\findToolchainExecutable;
  * deployment artifact stays inside $buildRoot (php run skips packaging).
  *
  * $packageUnpacked mirrors the `--unpacked` flag for the backend packager.
+ *
+ * The entry is the module this compile was handed a file for; a directory build
+ * keeps the conventional `Main`. Naming it here lets a package carry several
+ * executables without forcing every entry to be called `Main`, and lets
+ * `main = Suite` name a module called `Suite`.
  *
  * @return array{
  *   exitCode: int, outputRoot: ?string, entryModule: ?string, entryRelative: ?string,
@@ -78,6 +85,16 @@ function compileIntoRoot(
 
         return $empty(1);
     }
+
+    $entryModule = 'Main';
+    $realInput = \realpath($inputPath);
+    if ($realInput !== false && \is_file($realInput)) {
+        $header = cachedModuleHeader($realInput);
+        if (\is_string($header['module'] ?? null) && $header['module'] !== '') {
+            $entryModule = $header['module'];
+        }
+    }
+    setEntryModules([$entryModule]);
 
     $libDirs = resolveLibraryDirs($libDirs);
 

@@ -660,9 +660,15 @@ function associatedEquationLhsEqual(array $left, array $right): bool
 }
 
 /**
- * Lightweight project-instance records for data decls with deriving clauses.
+ * Lightweight project-instance records for data decls with deriving clauses,
+ * including the Datatype / Constructor / Selector instances a `deriving Generic`
+ * also contributes.
  *
- * @return list<array{module: string, class: string, head: Ast\TypeNode, constraints: list<Ast\TypeNode>, associatedEquations: array<string, mixed>}>
+ * Those metadata instances are what a different module's `GToJSON (M1 D …)`
+ * context reaches for, so publishing them for the declaring module lets that
+ * obligation be solved wherever the type is used.
+ *
+ * @return list<array{module: string, class: string, head: Ast\TypeNode, constraints: list<Ast\TypeNode>, associatedEquations: array<string, mixed>, fromDeriving: true}>
  */
 function derivedProjectInstanceRecords(Ast\DataDecl $decl, string $moduleName): array
 {
@@ -671,9 +677,14 @@ function derivedProjectInstanceRecords(Ast\DataDecl $decl, string $moduleName): 
     }
 
     $records = [];
+    $derivesGeneric = false;
     foreach ($decl->derivingClasses as $ref) {
         if (!hasDeriveBackend($ref->name, $ref->strategy)) {
             continue;
+        }
+
+        if ($ref->name === 'Generic') {
+            $derivesGeneric = true;
         }
 
         if ($ref->strategy === 'via') {
@@ -714,6 +725,70 @@ function derivedProjectInstanceRecords(Ast\DataDecl $decl, string $moduleName): 
             'associatedEquations' => $associatedEquations,
             'fromDeriving' => true,
         ];
+    }
+
+    if ($derivesGeneric) {
+        $records = [...$records, ...genericMetadataProjectInstances($decl, $moduleName)];
+    }
+
+    return $records;
+}
+
+/**
+ * Project-instance records for the Datatype / Constructor / Selector instances a
+ * `deriving Generic` also generates.
+ *
+ * These mirror `deriveGenericMetadataInstances` name for name and dedupe rule for
+ * rule: one Datatype per decl, one Constructor per (name, is-record), one Selector
+ * per field name — a positional record's fields all share the empty name and so
+ * share the one `MetaSel Nothing` instance.
+ *
+ * @return list<array{module: string, class: string, head: Ast\TypeNode, constraints: list<Ast\TypeNode>, associatedEquations: array<string, mixed>, fromDeriving: true}>
+ */
+function genericMetadataProjectInstances(Ast\DataDecl $decl, string $moduleName): array
+{
+    $state = newState('');
+    $state->currentModule = $moduleName;
+
+    $records = [[
+        'module' => $moduleName,
+        'class' => 'Datatype',
+        'head' => metaDataType($state, $decl),
+        'constraints' => [],
+        'associatedEquations' => [],
+        'fromDeriving' => true,
+    ]];
+
+    $seenCons = [];
+    $seenSels = [];
+    foreach ($decl->constructors as $ctor) {
+        $consKey = $ctor->name . "\0" . (constructorIsRecord($ctor) ? '1' : '0');
+        if (!isset($seenCons[$consKey])) {
+            $seenCons[$consKey] = true;
+            $records[] = [
+                'module' => $moduleName,
+                'class' => 'Constructor',
+                'head' => metaConsType($ctor),
+                'constraints' => [],
+                'associatedEquations' => [],
+                'fromDeriving' => true,
+            ];
+        }
+
+        foreach ($ctor->fields as $field) {
+            if (isset($seenSels[$field->name])) {
+                continue;
+            }
+            $seenSels[$field->name] = true;
+            $records[] = [
+                'module' => $moduleName,
+                'class' => 'Selector',
+                'head' => metaSelType($field),
+                'constraints' => [],
+                'associatedEquations' => [],
+                'fromDeriving' => true,
+            ];
+        }
     }
 
     return $records;
