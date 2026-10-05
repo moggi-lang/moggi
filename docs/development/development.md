@@ -67,13 +67,14 @@ Run `moggi --help` for the full option list.
 
 ## Versions
 
-Two plain-text files hold the version numbers, and `moggi version` reports them
+The compiler's version is a plain-text `VERSION` file; the standard library's is
+the `[package] version` of its own manifest. `moggi version` reports both
 alongside the compiler fingerprint and the host toolchains:
 
 ```bash
-cat VERSION        # compiler version
-cat lib/VERSION    # standard-library version
-moggi version      # versions + fingerprint + php/java/dotnet
+cat VERSION            # compiler version
+cat lib/base.moggi     # standard-library version, from [package]
+moggi version          # versions + fingerprint + php/java/dotnet
 moggi version --json
 ```
 

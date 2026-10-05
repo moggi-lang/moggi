@@ -188,7 +188,7 @@ try {
     // The standard library ships as ordinary sources beside the compiler, not
     // inside it: users can read it, and the installation's LICENSE covers it.
     $assert(\is_file($stage . '/lib/Data/Eq.mog'), 'the standard library sources must be shipped');
-    $assert(\is_file($stage . '/lib/VERSION'), 'the standard library must carry its version');
+    $assert(\is_file($stage . '/lib/base.moggi'), 'the standard library must carry its manifest');
 
     // The compiler runs itself: no PHP install stands in front of it, and none is
     // on PATH for this run. `version` reports the variant from what is bundled.

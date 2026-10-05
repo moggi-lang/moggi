@@ -4,14 +4,14 @@ namespace Moggi\Compiler;
 
 use function Moggi\Cache\projectRoot;
 use function Moggi\Modules\bundledStdlibLibPath;
+use const Moggi\Modules\LIBRARY_ROOT_MARKER;
 
 /**
  * Version strings for the compiler and its bundled standard library.
  *
- * Both come from plain-text `VERSION` files — the compiler root and the library
- * root — so a release is a one-line edit that needs no code change. Everything
- * that reports a version reads them from here, so there is exactly one number
- * to bump per component.
+ * The compiler's is a plain-text `VERSION` file at the compiler root; the
+ * standard library's is the `[package] version` of its own manifest, so there is
+ * exactly one number to bump per component and no second file to keep in step.
  */
 
 /**
@@ -90,14 +90,55 @@ function distributionVariant(): ?string
 }
 
 /**
- * Standard-library version, from `<stdlib root>/VERSION`.
+ * Standard-library version: the `[package] version` of its own manifest.
  *
- * The root honors `MOGGI_ROOT`, so this reports the stdlib actually in use
- * rather than the one shipped next to the compiler.
+ * The manifest is the library's descriptor, so its version is the single place
+ * that number lives — a `lib/VERSION` beside it would be one fact in two files,
+ * free to drift. The root honors `MOGGI_ROOT`, so this reports the stdlib
+ * actually in use rather than the one shipped next to the compiler.
  */
 function stdlibVersion(): ?string
 {
-    return readVersionFile((bundledStdlibLibPath() ?? projectRoot() . '/lib') . '/VERSION');
+    return readManifestVersion(
+        (bundledStdlibLibPath() ?? projectRoot() . '/lib') . '/' . LIBRARY_ROOT_MARKER,
+    );
+}
+
+/**
+ * The `version` of the `[package]` table in a library manifest, or null.
+ *
+ * Only the leading `[package]` table is read: the same file carries a `version`
+ * per target further down (`[php] version = 8.5`), and the package's own version
+ * is the one that names the library.
+ */
+function readManifestVersion(string $path): ?string
+{
+    if (!\is_file($path)) {
+        return null;
+    }
+    $raw = @file_get_contents($path);
+    if (!\is_string($raw)) {
+        return null;
+    }
+
+    $table = '';
+    foreach (\preg_split('/\R/', $raw) ?: [] as $line) {
+        $text = \trim($line);
+        if ($text === '' || \str_starts_with($text, '#')) {
+            continue;
+        }
+        if (\preg_match('/^\[([^\]]+)\]$/', $text, $match) === 1) {
+            $table = \trim($match[1]);
+            continue;
+        }
+        if ($table === 'package' && \preg_match('/^version\s*=\s*(.+)$/', $text, $match) === 1) {
+            $value = \trim(\trim($match[1]), "\"'");
+
+            return $value === '' ? null : $value;
+        }
+    }
+
+    return null;
 }
 
 /**

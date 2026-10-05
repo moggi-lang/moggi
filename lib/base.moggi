@@ -1,6 +1,6 @@
 [package]
 name = base
-version = 0.1.0-alpha
+version = 0.2.0
 license = BSD-3-Clause
 license-file = LICENSE
 copyright = 2026 Sascha-Oliver Prolić
