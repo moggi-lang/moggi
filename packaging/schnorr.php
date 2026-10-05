@@ -3,7 +3,7 @@
 namespace Moggi\Dist;
 
 require_once __DIR__ . '/runtimes.php';
-require_once __DIR__ . '/../../src/executables.php';
+require_once __DIR__ . '/../src/executables.php';
 
 use function Moggi\Compiler\findExecutable;
 
@@ -103,11 +103,6 @@ function buildSchnorr(string $repo, bool $windows = false): string
     }
 
     $dir = $repo . '/' . SCHNORR_DIR;
-    // Run make from the directory rather than with `-C`: under MSYS2 the recipe
-    // shell is POSIX but the path Windows PHP would hand over is not.
-    //
-    // Serial on Windows: MSYS2's make hands its jobserver to recipes that
-    // cannot use it, and the build is a handful of files.
     $jobs = $windows ? [] : ['-j' . cpuCount()];
     runOrFail([$make, 'CC=' . schnorrCompiler($windows), ...$jobs], $dir, true, 600);
 
@@ -122,7 +117,7 @@ function buildSchnorr(string $repo, bool $windows = false): string
 
 if (\realpath($argv[0] ?? '') === \realpath(__FILE__)) {
     try {
-        $repo = \dirname(__DIR__, 2);
+        $repo = \dirname(__DIR__);
         for ($i = 1; $i < \count($argv); ++$i) {
             if ($argv[$i] === '--source') {
                 $repo = $argv[++$i] ?? $repo;

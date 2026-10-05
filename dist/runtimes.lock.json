@@ -1,5 +1,5 @@
 {
-    "generated": "2026-09-21T23:38:10+00:00",
+    "generated": "2026-10-05T02:40:34+00:00",
     "assets": {
         "php/linux-x86_64": {
             "url": "https://www.php.net/distributions/php-8.5.7.tar.gz",
@@ -25,14 +25,6 @@
             "binary": "bin/native-image",
             "version": "21.0.2",
             "sha256": "b048069aaa3a99b84f5b957b162cc181a32a4330cbc35402766363c5be76ae48"
-        },
-        "jvm/windows-aarch64": {
-            "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jdk_aarch64_windows_hotspot_21.0.12.1_1.zip",
-            "format": "zip",
-            "stripComponents": 1,
-            "binary": "bin/java.exe",
-            "version": "21",
-            "sha256": "ccf2e51f527d542a70ba5794a600d3aac04b4e967950e227834c7566cb1bec7b"
         },
         "dotnet/linux-x86_64": {
             "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.425/dotnet-sdk-8.0.425-linux-x64.tar.gz",
@@ -141,14 +133,6 @@
             "version": "21.0.2",
             "sha256": "515e3a93acc7e1938daba83eda4272e5495fd302d7cdd99ec7ebf408ed505ab7"
         },
-        "dotnet/windows-aarch64": {
-            "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.425/dotnet-sdk-8.0.425-win-arm64.zip",
-            "format": "zip",
-            "stripComponents": 0,
-            "binary": "dotnet.exe",
-            "version": "8.0.425",
-            "sha512": "2a75864daac54fe8360498d0a7260e3f8d851c3d811d864d7229f00ae51eac9e534998b7c3d221fc423319b9c8147dd43fa80690c969e43b2045cc2f1f93e537"
-        },
         "dotnet/windows-x86_64": {
             "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.425/dotnet-sdk-8.0.425-win-x64.zip",
             "format": "zip",
@@ -180,6 +164,142 @@
             "binary": "php.exe",
             "version": "8.5.7",
             "sha256": "2ff43fea9a243085493b48c7c47152c0678cff0b05c61a3b4f4b43ba22de212c"
+        },
+        "composer/linux-x86_64": {
+            "url": "https://getcomposer.org/download/2.10.1/composer.phar",
+            "format": "plain",
+            "stripComponents": 0,
+            "binary": "composer.phar",
+            "version": "2.10.1",
+            "sha256": "345b9c6a98da5c30dcbd4b0d99fc8710bf0ae98a3898eea18f7b2ad9dec93f06"
+        },
+        "maven/linux-x86_64": {
+            "url": "https://archive.apache.org/dist/maven/maven-3/3.9.12/binaries/apache-maven-3.9.12-bin.tar.gz",
+            "format": "tar.gz",
+            "stripComponents": 1,
+            "binary": "bin/mvn",
+            "version": "3.9.12",
+            "sha512": "0a1be79f02466533fc1a80abbef8796e4f737c46c6574ede5658b110899942a94db634477dfd3745501c80aef9aac0d4f841d38574373f7e2d24cce89d694f70"
+        },
+        "composer/linux-aarch64": {
+            "url": "https://getcomposer.org/download/2.10.1/composer.phar",
+            "format": "plain",
+            "stripComponents": 0,
+            "binary": "composer.phar",
+            "version": "2.10.1",
+            "sha256": "345b9c6a98da5c30dcbd4b0d99fc8710bf0ae98a3898eea18f7b2ad9dec93f06"
+        },
+        "maven/linux-aarch64": {
+            "url": "https://archive.apache.org/dist/maven/maven-3/3.9.12/binaries/apache-maven-3.9.12-bin.tar.gz",
+            "format": "tar.gz",
+            "stripComponents": 1,
+            "binary": "bin/mvn",
+            "version": "3.9.12",
+            "sha512": "0a1be79f02466533fc1a80abbef8796e4f737c46c6574ede5658b110899942a94db634477dfd3745501c80aef9aac0d4f841d38574373f7e2d24cce89d694f70"
+        },
+        "composer/macos-x86_64": {
+            "url": "https://getcomposer.org/download/2.10.1/composer.phar",
+            "format": "plain",
+            "stripComponents": 0,
+            "binary": "composer.phar",
+            "version": "2.10.1",
+            "sha256": "345b9c6a98da5c30dcbd4b0d99fc8710bf0ae98a3898eea18f7b2ad9dec93f06"
+        },
+        "maven/macos-x86_64": {
+            "url": "https://archive.apache.org/dist/maven/maven-3/3.9.12/binaries/apache-maven-3.9.12-bin.tar.gz",
+            "format": "tar.gz",
+            "stripComponents": 1,
+            "binary": "bin/mvn",
+            "version": "3.9.12",
+            "sha512": "0a1be79f02466533fc1a80abbef8796e4f737c46c6574ede5658b110899942a94db634477dfd3745501c80aef9aac0d4f841d38574373f7e2d24cce89d694f70"
+        },
+        "composer/macos-aarch64": {
+            "url": "https://getcomposer.org/download/2.10.1/composer.phar",
+            "format": "plain",
+            "stripComponents": 0,
+            "binary": "composer.phar",
+            "version": "2.10.1",
+            "sha256": "345b9c6a98da5c30dcbd4b0d99fc8710bf0ae98a3898eea18f7b2ad9dec93f06"
+        },
+        "maven/macos-aarch64": {
+            "url": "https://archive.apache.org/dist/maven/maven-3/3.9.12/binaries/apache-maven-3.9.12-bin.tar.gz",
+            "format": "tar.gz",
+            "stripComponents": 1,
+            "binary": "bin/mvn",
+            "version": "3.9.12",
+            "sha512": "0a1be79f02466533fc1a80abbef8796e4f737c46c6574ede5658b110899942a94db634477dfd3745501c80aef9aac0d4f841d38574373f7e2d24cce89d694f70"
+        },
+        "composer/windows-x86_64": {
+            "url": "https://getcomposer.org/download/2.10.1/composer.phar",
+            "format": "plain",
+            "stripComponents": 0,
+            "binary": "composer.phar",
+            "version": "2.10.1",
+            "sha256": "345b9c6a98da5c30dcbd4b0d99fc8710bf0ae98a3898eea18f7b2ad9dec93f06"
+        },
+        "maven/windows-x86_64": {
+            "url": "https://archive.apache.org/dist/maven/maven-3/3.9.12/binaries/apache-maven-3.9.12-bin.zip",
+            "format": "zip",
+            "stripComponents": 1,
+            "binary": "bin/mvn.cmd",
+            "version": "3.9.12",
+            "sha512": "0ef0d074761a55e7b982fd7f2cd6ea2da028289c73156ebd488c0513efbff8a64ac5bc0c11c3b8bbced930ce15238ecef344b0e065ae54f7cdca8c86cf39e736"
+        },
+        "spc/linux-x86_64": {
+            "url": "https://github.com/crazywhalecc/static-php-cli/releases/download/2.8.5/spc-linux-x86_64.tar.gz",
+            "format": "tar.gz",
+            "stripComponents": 0,
+            "binary": "spc",
+            "version": "2.8.5",
+            "sha256": "523ba4279c54c7a377156c0dd3a36adf92ee64b01e9a7f5e9e2ec084b8e458e5"
+        },
+        "spc/linux-aarch64": {
+            "url": "https://github.com/crazywhalecc/static-php-cli/releases/download/2.8.5/spc-linux-aarch64.tar.gz",
+            "format": "tar.gz",
+            "stripComponents": 0,
+            "binary": "spc",
+            "version": "2.8.5",
+            "sha256": "675a3840dcdc4ed041fe20eaa54310ce019a9984c1c03951df9ec66df5795213"
+        },
+        "spc/macos-x86_64": {
+            "url": "https://github.com/crazywhalecc/static-php-cli/releases/download/2.8.5/spc-macos-x86_64.tar.gz",
+            "format": "tar.gz",
+            "stripComponents": 0,
+            "binary": "spc",
+            "version": "2.8.5",
+            "sha256": "e8b798048f62ca4960764196543b60ae703f7174aa418824cf542aeec1d2cd6a"
+        },
+        "spc/macos-aarch64": {
+            "url": "https://github.com/crazywhalecc/static-php-cli/releases/download/2.8.5/spc-macos-aarch64.tar.gz",
+            "format": "tar.gz",
+            "stripComponents": 0,
+            "binary": "spc",
+            "version": "2.8.5",
+            "sha256": "acf2f25d56d0cbf8e65aa82e5054fef555f7be7c5c38046c6e0819f266d83225"
+        },
+        "spc/windows-x86_64": {
+            "url": "https://github.com/crazywhalecc/static-php-cli/releases/download/2.8.5/spc-windows-x64.exe",
+            "format": "raw",
+            "stripComponents": 0,
+            "binary": "spc.exe",
+            "version": "2.8.5",
+            "sha256": "425b54ab857e21409c1fd9b818899ffebabd1e2817ef0a0ed5ae8a3d9f5b463b"
+        },
+        "zig/linux-x86_64": {
+            "url": "https://ziglang.org/download/0.15.2/zig-x86_64-linux-0.15.2.tar.xz",
+            "format": "tar.xz",
+            "stripComponents": 1,
+            "binary": "zig",
+            "version": "0.15.2",
+            "sha256": "02aa270f183da276e5b5920b1dac44a63f1a49e55050ebde3aecc9eb82f93239"
+        },
+        "zig/linux-aarch64": {
+            "url": "https://ziglang.org/download/0.15.2/zig-aarch64-linux-0.15.2.tar.xz",
+            "format": "tar.xz",
+            "stripComponents": 1,
+            "binary": "zig",
+            "version": "0.15.2",
+            "sha256": "958ed7d1e00d0ea76590d27666efbf7a932281b3d7ba0c6b01b0ff26498f667f"
         }
     }
 }

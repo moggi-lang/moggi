@@ -15,7 +15,7 @@ require __DIR__ . '/runtimes.php';
  *
  * Usage:
  *
- *   php scripts/dist/pin.php [--target T]… [--runtime R]… [--check] [--quiet]
+ *   php packaging/pin.php [--target T]… [--runtime R]… [--check] [--quiet]
  *
  * Every asset is fetched one byte of to prove it resolves, and the asset's own
  * filename must name the target's architecture, so a URL that quietly starts
@@ -29,11 +29,15 @@ const UPSTREAM_HOSTS = [
     'dotnet' => ['builds.dotnet.microsoft.com', 'dotnetcli.azureedge.net'],
     'jvm' => ['api.adoptium.net', 'github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com'],
     'graalvm' => ['github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com'],
+    'composer' => ['getcomposer.org'],
+    'maven' => ['archive.apache.org'],
+    'spc' => ['github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com'],
+    'zig' => ['ziglang.org'],
 ];
 
 function usage(): int
 {
-    \fwrite(STDOUT, "usage: php scripts/dist/pin.php [--target T]… [--runtime R]… [--check]\n");
+    \fwrite(STDOUT, "usage: php packaging/pin.php [--target T]… [--runtime R]… [--check]\n");
 
     return 0;
 }
@@ -91,17 +95,30 @@ function expectedAssetToken(string $runtime, string $target, array $config): ?st
         'dotnet' => (string) $coords['dotnetRid'],
         'jvm' => (string) $coords['jvmArch'],
         'graalvm' => (string) ($coords['graalvmAsset'] ?? ''),
+        'spc' => (string) ($coords['spcAsset'] ?? ''),
+        'zig' => (string) ($coords['zigAsset'] ?? ''),
         default => null,
     };
 }
 
+/**
+ * Assert the asset names the target's architecture, so a URL that quietly starts
+ * serving a different architecture cannot slip into the lock.
+ *
+ * The name is the one upstream chose: each runtime spells the coordinate into
+ * its filename (`spc-linux-x86_64.tar.gz`, `spc-windows-x64.exe`), so the
+ * filename alone decides, and the whole path is the fallback for an asset that
+ * names it in a directory instead.
+ */
 function assertAssetMatchesTarget(string $runtime, string $url, string $target, array $config): void
 {
     $token = expectedAssetToken($runtime, $target, $config);
     if ($token === null || $token === '') {
         return;
     }
-    if (!\str_contains(\basename((string) \parse_url($url, \PHP_URL_PATH)), $token)) {
+    $path = (string) \parse_url($url, \PHP_URL_PATH);
+    $name = \basename($path);
+    if (!\str_contains(\str_contains($name, $token) ? $name : $path, $token)) {
         throw new \RuntimeException("{$runtime}: asset name does not name {$target} ({$token})");
     }
 }
@@ -132,16 +149,57 @@ function assertAssetReachable(string $url): int
     return $size;
 }
 
-function upstreamSha256(string $runtime, string $url, array $asset, string $target, array $config): ?array
+function upstreamChecksum(string $runtime, string $url, array $asset, string $target, array $config): ?array
 {
-    if (isset($asset['sha256Url'])) {
-        $sidecar = expandAssetTemplate((string) $asset['sha256Url'], $runtime, $target, $config);
+    if ($runtime === 'zig') {
+        $index = \json_decode(httpGetContent((string) $config['runtimes'][$runtime]['checksumsUrl']), true);
+        $version = (string) $config['runtimes'][$runtime]['version'];
+        $wanted = \basename((string) \parse_url($url, \PHP_URL_PATH));
+        foreach ((array) ($index[$version] ?? []) as $entry) {
+            $tarball = $entry['tarball'] ?? null;
+            if (\is_string($tarball)
+                && \basename((string) \parse_url($tarball, \PHP_URL_PATH)) === $wanted
+                && \is_string($entry['shasum'] ?? null)) {
+                return ['sha256' => \strtolower($entry['shasum']), 'source' => 'ziglang-index'];
+            }
+        }
+
+        throw new \RuntimeException(
+            "zig: {$wanted} is not in ziglang's index for {$version} (has the release been withdrawn?)",
+        );
+    }
+
+    if ($runtime === 'spc') {
+        try {
+            $release = \json_decode(httpGetContent(expandAssetTemplate((string) $config['runtimes'][$runtime]['checksumsUrl'], $runtime, $target, $config)), true);
+        } catch (\RuntimeException) {
+            return null;
+        }
+
+        $wanted = \basename((string) \parse_url($url, \PHP_URL_PATH));
+        foreach ((array) ($release['assets'] ?? []) as $entry) {
+            $digest = $entry['digest'] ?? null;
+            if (($entry['name'] ?? '') === $wanted && \is_string($digest) && \str_starts_with($digest, 'sha256:')) {
+                return ['sha256' => \strtolower(\substr($digest, 7)), 'source' => 'github-release'];
+            }
+        }
+
+        throw new \RuntimeException(
+            "spc: {$wanted} is not an asset of the pinned static-php-cli release (has the tag moved?)",
+        );
+    }
+
+    foreach ([['sha256Url', 'sha256', 64], ['sha512Url', 'sha512', 128]] as [$sidecarKey, $field, $length]) {
+        if (!isset($asset[$sidecarKey])) {
+            continue;
+        }
+        $sidecar = expandAssetTemplate((string) $asset[$sidecarKey], $runtime, $target, $config);
         try {
             $file = httpGet($sidecar);
             $text = (string) \file_get_contents($file);
             @\unlink($file);
-            if (\preg_match('/\b([0-9a-f]{64})\b/i', $text, $m) === 1) {
-                return ['sha256' => \strtolower($m[1]), 'source' => 'sidecar'];
+            if (\preg_match('/\b([0-9a-f]{' . $length . '})\b/i', $text, $m) === 1) {
+                return [$field => \strtolower($m[1]), 'source' => 'sidecar'];
             }
         } catch (\Throwable) {
         }
@@ -215,12 +273,12 @@ function upstreamSha256(string $runtime, string $url, array $asset, string $targ
 
 function resolveChecksum(string $runtime, string $url, array $asset, string $target, array $config): array
 {
-    $published = upstreamSha256($runtime, $url, $asset, $target, $config);
+    $published = upstreamChecksum($runtime, $url, $asset, $target, $config);
     if ($published !== null) {
         return $published;
     }
 
-    $cacheDir = distRoot() . '/../.dist-cache/downloads';
+    $cacheDir = distCacheRoot() . '/downloads';
     if (!\is_dir($cacheDir)) {
         \mkdir($cacheDir, 0777, true);
     }
@@ -257,25 +315,42 @@ function selectTargets(array $config, array $requested): array
     return $requested;
 }
 
+/**
+ * Resolve the configured assets and, unless `--check`, rewrite the lock.
+ *
+ * A write keeps the entries a partial selection (`--runtime php`) does not
+ * cover, but drops every entry whose runtime or target the configuration no
+ * longer defines: otherwise a runtime that becomes derived or is removed, or a
+ * target that is withdrawn, leaves a dead asset in the lock forever.
+ *
+ * @param list<string> $argv
+ */
 function main(array $argv): int
 {
     $options = parsePinArgv($argv);
     $config = loadRuntimeConfig();
     $targets = selectTargets($config, $options['targets']);
-    $runtimes = $options['runtimes'] !== [] ? $options['runtimes'] : RUNTIME_NAMES;
+    $runtimes = $options['runtimes'] !== [] ? $options['runtimes'] : pinnedRuntimeNames();
 
     $lockPath = distRoot() . '/runtimes.lock.json';
     $lock = ['generated' => \gmdate('c'), 'assets' => []];
     if (!$options['check'] && \is_file($lockPath)) {
         $existing = \json_decode((string) \file_get_contents($lockPath), true);
         if (\is_array($existing['assets'] ?? null)) {
-            $lock['assets'] = $existing['assets'];
+            $knownRuntimes = lockedRuntimeNames($config);
+            $knownTargets = knownTargets($config);
+            $lock['assets'] = \array_filter(
+                $existing['assets'],
+                static fn (mixed $entry, string $key): bool => \in_array(\explode('/', $key, 2)[0] ?? '', $knownRuntimes, true)
+                    && \in_array(\explode('/', $key, 2)[1] ?? '', $knownTargets, true),
+                \ARRAY_FILTER_USE_BOTH,
+            );
         }
     }
 
     $report = [];
     $failed = false;
-    $cacheDir = distRoot() . '/../.dist-cache';
+    $cacheDir = distCacheRoot();
     if (!\is_dir($cacheDir)) {
         \mkdir($cacheDir, 0777, true);
     }
@@ -285,6 +360,33 @@ function main(array $argv): int
             $reason = unsupportedReason($runtime, $target, $config);
             if ($reason !== null) {
                 $report[] = \sprintf('%-16s %-8s unsupported  %s', $target, $runtime, $reason);
+                continue;
+            }
+
+            $recipe = buildRecipe($runtime, $config);
+            if ($recipe !== null) {
+                $tool = (string) ($recipe['tool'] ?? '');
+                $toolAsset = $tool !== '' ? runtimeAsset($tool, $target, $config) : null;
+                if ($toolAsset === null) {
+                    $report[] = \sprintf('%-16s %-8s unsupported  build tool `%s` has no asset for this target', $target, $runtime, $tool);
+                    continue;
+                }
+
+                try {
+                    assertUpstreamHost($tool, $toolAsset['url']);
+                    assertAssetMatchesTarget($tool, $toolAsset['url'], $target, $config);
+                    $report[] = \sprintf(
+                        '%-16s %-8s derived      built by %s %s',
+                        $target,
+                        $runtime,
+                        $tool,
+                        (string) ($config['runtimes'][$tool]['version'] ?? ''),
+                    );
+                } catch (\Throwable $e) {
+                    $failed = true;
+                    $report[] = \sprintf('%-16s %-8s FAILED       %s', $target, $runtime, $e->getMessage());
+                }
+
                 continue;
             }
 
@@ -355,7 +457,6 @@ function main(array $argv): int
 
     \file_put_contents($lockPath, \json_encode($lock, \JSON_PRETTY_PRINT | \JSON_UNESCAPED_SLASHES) . "\n");
     \fwrite(STDOUT, 'lock: ' . $lockPath . ' (' . \count($lock['assets']) . " asset(s))\n");
-    unset($cacheDir);
 
     return $failed ? 1 : 0;
 }

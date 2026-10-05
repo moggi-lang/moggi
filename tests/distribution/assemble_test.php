@@ -2,23 +2,29 @@
 <?php declare(strict_types=1);
 
 // A distribution is what users actually get, so its shape is asserted rather
-// than assumed: one launcher and one compiler archive, no compiler sources
-// beside it, user-facing documentation only, examples that run, and an archive
-// that unpacks somewhere clean and works from there.
+// than assumed: `bin/moggi` *is* the compiler (the micro PHP runtime with the
+// archive appended), the archive is not shipped where PHP is not, no compiler
+// sources beside it, user-facing documentation only, examples that run, and an
+// archive that unpacks somewhere clean and works from there.
 //
-// The variant built here is `moggi-minimal`, which bundles no runtimes — that
-// keeps the check honest (it exercises the system-runtime path, which is the
-// path a minimal installation really takes) and keeps it cheap enough to run
-// with the rest of the suite. The variants that do bundle runtimes are built and
-// tested by the packaging workflow, which has to download them anyway.
+// The variant built here is `moggi-minimal`, which bundles no runtime: the
+// compiler still runs itself natively, which is the whole point. The variants
+// that bundle toolchains are built and tested by the packaging workflow, which
+// has to prepare them anyway.
+//
+// `bin/moggi` is built from the micro PHP runtime, and that runtime is compiled
+// rather than downloaded — so a machine that has not prepared it cannot assemble
+// any distribution, and the assembly half of this test is skipped there. The
+// resolution and preflight checks above it run everywhere.
 
 $root = __DIR__;
-while (!is_file($root . '/scripts/dist/assemble.php') && \dirname($root) !== $root) {
+while (!is_file($root . '/packaging/assemble.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/tests/suite/support/process.php';
 require $root . '/tests/suite/support/workspace.php';
 require $root . '/tests/suite/support/distribution.php';
+require_once $root . '/packaging/assemble.php';
 
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
@@ -36,21 +42,97 @@ $work = \realpath($work) ?: $work;
 $out = $work . '/out';
 $exe = \PHP_OS_FAMILY === 'Windows' ? '.exe' : '';
 
-// Clang is what a distribution is built with; a machine that has another C
-// compiler says so explicitly, exactly as a maintainer without Clang would.
+// Schnorr is built from C at assembly time, so a machine with no C compiler
+// cannot produce a distribution.
 $compiler = distributionCompiler();
 if ($compiler === null) {
     \fwrite(STDERR, "distribution test: no C compiler on PATH (tried clang, cc, gcc)\n");
     exit(1);
 }
 
+$runtimeConfig = \Moggi\Dist\loadRuntimeConfig();
+$locked = \Moggi\Dist\lockedRuntimeNames($runtimeConfig);
+
+$assert(
+    \in_array('php-native', \Moggi\Dist\pinnedRuntimeNames(), true) && \in_array('spc', \Moggi\Dist\TOOL_NAMES, true),
+    'the micro runtime and its build tool must be pinned runtimes',
+);
+$assert(
+    !\in_array('php-native', $locked, true) && \in_array('spc', $locked, true),
+    'a derived runtime has no lock entry; its build tool does',
+);
+// The lock records what each target truly fetches, so a key naming a runtime or
+// target the configuration no longer defines is drift: it would be handed to the
+// assembler as an asset for a build that can no longer exist.
+$lock = \Moggi\Dist\loadRuntimeLock();
+$knownTargets = \Moggi\Dist\knownTargets($runtimeConfig);
+$strayKeys = \array_values(\array_filter(
+    \array_keys($lock),
+    static function (string $key) use ($locked, $knownTargets): bool {
+        [$runtime, $target] = \explode('/', $key, 2) + ['', ''];
+
+        return !\in_array($runtime, $locked, true) || !\in_array($target, $knownTargets, true);
+    },
+));
+$assert(
+    $strayKeys === [],
+    'every lock entry must name a locked runtime and a configured target (stray: ' . \implode(', ', $strayKeys) . ')',
+);
+$assert(\Moggi\Dist\buildRecipe('php-native', $runtimeConfig) !== null, 'php-native must be a derived runtime');
+$assert(
+    \Moggi\Dist\runtimeAsset('php-native', 'linux-x86_64', $runtimeConfig) === null,
+    'a derived runtime has no upstream asset to fetch',
+);
+$spc = \Moggi\Dist\runtimeAsset('spc', 'linux-x86_64', $runtimeConfig);
+$assert(\is_array($spc) && ($spc['format'] ?? '') === 'tar.gz', 'the spc build tool must be a pinned download');
+$assert(
+    \str_contains((string) \Moggi\Dist\unsupportedReason('php-native', 'windows-aarch64', $runtimeConfig), 'ARM64'),
+    'php-native is only as available as spc, which has no Windows ARM64 build',
+);
+$assert(
+    !\in_array('windows-aarch64', \Moggi\Dist\knownTargets($runtimeConfig), true),
+    'Windows ARM64 is not a target: the compiler itself cannot be built there',
+);
+$assert(
+    \Moggi\Dist\unsupportedReason('zig', 'macos-x86_64', $runtimeConfig) !== null,
+    'the Zig toolchain is a Linux-only build input',
+);
+// The C-toolchain preflight fails before the build, naming the build that needed
+// it, rather than deep inside `configure`. An empty PATH is a host with none.
+$noToolchain = $work . '/no-toolchain';
+\mkdir($noToolchain, 0777, true);
+$realPath = \getenv('PATH');
+\putenv('PATH=' . $noToolchain);
+try {
+    \Moggi\Dist\assertCToolchain('linux-x86_64', 'building the bundled php from source');
+    $assert(false, 'a build without a C toolchain must fail before it starts');
+} catch (\RuntimeException $e) {
+    $assert(
+        \str_contains($e->getMessage(), 'C toolchain') && \str_contains($e->getMessage(), 'from source'),
+        'the C-toolchain error must name the build that needed it: ' . $e->getMessage(),
+    );
+} finally {
+    \putenv('PATH=' . ($realPath === false ? '' : $realPath));
+}
+
+$host = \Moggi\Dist\hostTarget($runtimeConfig);
+if (!\Moggi\Dist\runtimeIsPrepared('php-native', $host, $runtimeConfig)) {
+    \fwrite(
+        STDOUT,
+        "distribution: skipped the assembly — php-native for {$host} is not prepared,"
+        . " and bin/moggi is built from it (it is compiled, not downloaded)\n",
+    );
+    removeDirectory($work);
+    exit(0);
+}
+
 try {
     // `--out` relative to a cwd that is not the staged tree, which is what CI passes.
     $relativeOut = \basename($work) . '/out';
     $built = runCompiledProcess(
-        [\PHP_BINARY, $root . '/scripts/dist/assemble.php', '--variants', 'moggi-minimal', '--archives', '--out', $relativeOut],
-        600,
-        ['MOGGI_DIST_CC' => $compiler] + \getenv(),
+        [\PHP_BINARY, $root . '/packaging/assemble.php', '--variants', 'moggi-minimal', '--archives', '--out', $relativeOut],
+        900,
+        \getenv(),
         \dirname($work),
     );
     if ($built['exitCode'] !== 0) {
@@ -62,11 +144,19 @@ try {
     $assert(\count($targets) === 1, 'exactly one target must be staged');
     $target = \basename($targets[0]);
     $stage = $targets[0] . '/moggi-minimal';
+    $compilerExe = $stage . '/bin/moggi' . $exe;
 
-    $assert(\is_file($stage . '/bin/moggi' . $exe), 'bin/moggi' . $exe . ' must exist');
-    $assert(\is_executable($stage . '/bin/moggi' . $exe), 'the launcher must be executable');
-    $assert(\is_file($stage . '/bin/moggi.phar'), 'bin/moggi.phar must exist');
-    $assert(\is_file($stage . '/bin/schnorr' . $exe), 'bin/schnorr' . $exe . ' must ship beside the launcher');
+    $assert(\is_file($compilerExe), 'bin/moggi' . $exe . ' must exist');
+    $assert(\is_executable($compilerExe), 'the compiler must be executable');
+    $assert(
+        \Moggi\Dist\isNativeBinary($compilerExe),
+        'bin/moggi must be the native compiler, not a script',
+    );
+    $assert(
+        !\is_file($stage . '/bin/moggi.phar'),
+        'a variant that bundles no PHP must not ship the compiler archive',
+    );
+    $assert(\is_file($stage . '/bin/schnorr' . $exe), 'bin/schnorr' . $exe . ' must ship beside the compiler');
     $assert(\is_executable($stage . '/bin/schnorr' . $exe), 'the bundled schnorr must be executable');
 
     foreach (['src', 'tests', 'scripts', 'dist', 'launcher', 'editors', '.git', '.moggi'] as $leak) {
@@ -93,27 +183,33 @@ try {
         return $found;
     };
     $stray = $find($stage, static fn (string $name): bool => \str_ends_with($name, '.phar'));
-    $assert($stray === [$stage . '/bin/moggi.phar'], 'bin/moggi.phar is the only archive: ' . \implode(', ', $stray));
+    $assert($stray === [], 'a variant with no PHP ships no archive: ' . \implode(', ', $stray));
 
-    // The standard library ships as ordinary sources next to the archive, not
+    // The standard library ships as ordinary sources beside the compiler, not
     // inside it: users can read it, and the installation's LICENSE covers it.
     $assert(\is_file($stage . '/lib/Data/Eq.mog'), 'the standard library sources must be shipped');
     $assert(\is_file($stage . '/lib/VERSION'), 'the standard library must carry its version');
-    $archived = new \Phar($stage . '/bin/moggi.phar');
-    $assert(!isset($archived['lib/Data/Eq.mog']), 'the archive must not carry the standard library');
-    $assert(isset($archived['src/compiler.php']), 'the archive must carry the compiler');
 
-    // The version travels inside the archive, so a distribution carries no file
-    // for a user to edit by accident, and a build that is not a release says so.
-    $php = \PHP_BINARY;
-    $reported = runCompiledProcess([$php, $stage . '/bin/moggi.phar', 'version'], 120, null, $work);
-    $assert($reported['exitCode'] === 0, 'the packaged archive must run: ' . $reported['stderr']);
+    // The compiler runs itself: no PHP install stands in front of it, and none is
+    // on PATH for this run. `version` reports the variant from what is bundled.
+    $noRuntimes = $work . '/no-runtimes';
+    \mkdir($noRuntimes, 0777, true);
+    $env = ['PATH' => $noRuntimes] + \getenv();
+    unset($env['JAVA_HOME'], $env['DOTNET_ROOT'], $env['GRAALVM_HOME'], $env['JDK_HOME'], $env['MOGGI_ROOT']);
+    $reported = runCompiledProcess([$compilerExe, 'version'], 120, $env, $work);
+    $assert($reported['exitCode'] === 0, 'the native compiler must run with no PHP on PATH: ' . $reported['stderr']);
     $assert(
         \preg_match('/^compiler:\s+' . \preg_quote($version, '/') . '/m', $reported['stdout']) === 1,
-        'the packaged compiler must report its version: ' . $reported['stdout'],
+        'the native compiler must report its version: ' . $reported['stdout'],
     );
+    foreach (['php', 'java', 'dotnet', 'native-image'] as $tool) {
+        $assert(
+            \preg_match('/^' . \preg_quote($tool, '/') . ':\s+\S/m', $reported['stdout']) === 1,
+            "a toolchain field must never be empty ({$tool}): " . $reported['stdout'],
+        );
+    }
 
-    $json = runCompiledProcess([$php, $stage . '/bin/moggi.phar', 'version', '--json'], 120, null, $work);
+    $json = runCompiledProcess([$compilerExe, 'version', '--json'], 120, $env, $work);
     $info = \json_decode($json['stdout'], true);
     $assert($json['exitCode'] === 0 && \is_array($info), '`version --json` must emit JSON: ' . $json['stdout']);
     $assert(
@@ -123,10 +219,27 @@ try {
     $assert(($info['commit'] ?? null) !== null || ($info['channel'] ?? '') === 'release', 'a dev build names the commit it came from: ' . $json['stdout']);
     $assert(($info['variant'] ?? null) === 'moggi-minimal', 'the variant is derived from what is bundled: ' . $json['stdout']);
 
+    // A real compile with no PHP anywhere on PATH: writing the archive is
+    // in-process, which is what the INI block in the executable is for.
+    $artifact = $work . '/factorial.phar';
+    $compiled = runCompiledProcess(
+        [$compilerExe, 'compile', $stage . '/examples/factorial', '-o', $artifact],
+        300,
+        $env,
+        $work,
+    );
+    $assert($compiled['exitCode'] === 0, 'compiling with no PHP on PATH must work: ' . $compiled['stdout'] . $compiled['stderr']);
+    $assert(\is_file($artifact), 'the compiler must write the archive');
+
+    // The artifact is an ordinary PHAR, run by any PHP (here, the build host's).
+    $ranPhar = runCompiledProcess([\PHP_BINARY, $artifact], 120, null, $work);
+    $assert($ranPhar['exitCode'] === 0, 'the packaged archive must run: ' . $ranPhar['stderr']);
+    $assert(\str_contains($ranPhar['stdout'], '3628800'), 'the packaged archive must produce its output: ' . $ranPhar['stdout']);
+
     // The version a distribution reports is derived from git, which is not
     // exercised by the build above unless the checkout happens to be tagged.
     if (distributionFindExecutable('git') !== null) {
-        require_once $root . '/scripts/dist/build-phar.php';
+        require_once $root . '/packaging/build-phar.php';
 
         $scratch = createTempDir('moggi-build-version');
         \file_put_contents($scratch . '/VERSION', "1.2.3\n");
@@ -158,21 +271,6 @@ try {
         $assert(\str_ends_with(\Moggi\Dist\compilerBuildVersion($scratch), '.dirty'), 'a modified tree is marked dirty');
     }
 
-    // A backend that is neither bundled nor on the host has to be reported, not
-    // skipped and not fatal: the answer is `not found`, never an empty field.
-$noRuntimes = $work . '/no-runtimes';
-\mkdir($noRuntimes, 0777, true);
-$env = ['PATH' => $noRuntimes] + \getenv();
-unset($env['JAVA_HOME'], $env['DOTNET_ROOT'], $env['GRAALVM_HOME'], $env['JDK_HOME']);
-    $bare = runCompiledProcess([$php, $stage . '/bin/moggi.phar', 'version'], 120, $env, $work);
-    $assert($bare['exitCode'] === 0, 'a missing backend toolchain must not fail `version`: ' . $bare['stderr']);
-    foreach (['php', 'java', 'dotnet', 'native-image'] as $tool) {
-        $assert(
-            \preg_match('/^' . \preg_quote($tool, '/') . ':\s+\S/m', $bare['stdout']) === 1,
-            "a toolchain field must never be empty ({$tool}): " . $bare['stdout'],
-        );
-    }
-
     // Documentation ships whole, and every link inside it still resolves — an index that points at pages the
     // archive does not contain is worse than no index.
     $assert(\is_file($stage . '/docs/quickstart.md'), 'the quickstart must be shipped');
@@ -200,6 +298,7 @@ unset($env['JAVA_HOME'], $env['DOTNET_ROOT'], $env['GRAALVM_HOME'], $env['JDK_HO
     $readme = (string) \file_get_contents($stage . '/README.md');
     $assert(\str_contains($readme, 'moggi-minimal'), 'the README must describe the variant it is in');
     $assert(\str_contains($readme, 'bin/moggi'), 'the README must show how to run it');
+    $assert(!\str_contains($readme, 'bin/moggi.phar'), 'a README for a PHP-less variant must not name an archive');
     $assert(!\str_contains($readme, 'nix develop'), 'the README must not send users to a development shell');
     $assert(\str_contains($readme, 'No runtime is bundled'), 'the minimal README must say that nothing is bundled');
 
@@ -217,11 +316,12 @@ unset($env['JAVA_HOME'], $env['DOTNET_ROOT'], $env['GRAALVM_HOME'], $env['JDK_HO
         $assert(\str_contains($notices, $required), "the notices must carry {$required}");
     }
 
-    // The installation runs from somewhere else entirely, using the host's PHP.
+    // The installation runs from somewhere else entirely, using the host's PHP
+    // for the compiled program (the compiler itself needs none).
     $elsewhere = $work . '/elsewhere';
     \mkdir($elsewhere, 0777, true);
-    $ran = runCompiledProcess([$stage . '/bin/moggi' . $exe, 'run', $stage . '/examples/factorial'], 300, null, $elsewhere);
-    $assert($ran['exitCode'] === 0, 'the launcher must run an example from another directory: ' . $ran['stdout'] . $ran['stderr']);
+    $ran = runCompiledProcess([$compilerExe, 'run', $stage . '/examples/factorial'], 300, null, $elsewhere);
+    $assert($ran['exitCode'] === 0, 'the compiler must run an example from another directory: ' . $ran['stdout'] . $ran['stderr']);
     $assert(\str_contains($ran['stdout'], '3628800'), 'the example must produce its output: ' . $ran['stdout']);
 
     // The bundled tool, run from the same place: a binary that only exists is not
@@ -235,7 +335,7 @@ unset($env['JAVA_HOME'], $env['DOTNET_ROOT'], $env['GRAALVM_HOME'], $env['JDK_HO
 
     $build = (string) ($info['compiler'] ?? $version);
     // The archive's format follows the target, not the host running the test: a
-    // Windows distribution is a zip (see scripts/dist/assemble.php).
+    // Windows distribution is a zip (see packaging/assemble.php).
     $windowsTarget = \str_starts_with($target, 'windows-');
     $archive = $out . '/' . $target . '/moggi-minimal-' . $build . '-' . $target
         . ($windowsTarget ? '.zip' : '.tar.gz');

@@ -21,6 +21,13 @@ SIG_DET=$(echo "$NSEC" | ./schnorr sign "$MSG_HEX" "$AUX_RAND_HEX")
 
 # Verify against the same raw message
 ./schnorr verify "$NPUB" "$SIG" "$MSG_HEX"      # prints: valid
+
+# Batch verification: one `<npub> <sig_hex> <msg_hex>` per line on stdin
+# (the message may be empty), one `valid`/`invalid` per line on stdout, flushed
+# as each is produced. One process checks many signatures, which is what the
+# compiler's registry client uses so a resolution does not spawn once per
+# release.
+./schnorr verify-batch < requests.txt > verdicts.txt
 ```
 
 Signatures are raw BIP-340: the message is fed directly into the algorithm's
@@ -55,7 +62,7 @@ are git-ignored, so a checkout never carries them.
 `deps.json` pins both tags *and* their commits, and the fetch/build is scripted:
 
 ```sh
-php scripts/dist/schnorr.php    # clone what is missing, verify the commit, build
+php packaging/schnorr.php    # clone what is missing, verify the commit, build
 ```
 
 or by hand:

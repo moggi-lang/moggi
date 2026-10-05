@@ -3,9 +3,9 @@
 /**
  * Helpers for the distribution tests (`tests/distribution/`).
  *
- * Both of them have to find a C compiler and to control `PATH` precisely, and
- * both need that without invoking a shell: what they assert is what the launcher
- * and the assembler do, and a shell in the middle would blur it.
+ * They have to find a C compiler and to control `PATH` precisely, and need that
+ * without invoking a shell: what they assert is what the assembler and the native
+ * compiler do, and a shell in the middle would blur it.
  */
 
 /** Resolve an executable the way a shell would: an explicit path, or a name on `PATH`. */

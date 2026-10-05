@@ -40,7 +40,7 @@ jobs:
         id: check
         run: |
           set +e
-          php scripts/dist/pin.php --check > report.txt 2>&1
+          php packaging/pin.php --check > report.txt 2>&1
           status=$?
           cat report.txt
           echo "status=${status}" >> "$GITHUB_OUTPUT"
@@ -78,7 +78,7 @@ jobs:
             echo "re-resolving the assets:"
             echo
             echo '```bash'
-            echo 'php scripts/dist/pin.php'
+            echo 'php packaging/pin.php'
             echo '```'
             echo
             echo "This issue closes itself once the check passes again."

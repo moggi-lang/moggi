@@ -1,14 +1,13 @@
 {
-  "_comment": "Third-party runtimes bundled into Moggi distributions. Versions mirror the development environment in flake.nix; update both together, then run `php scripts/dist/pin.php` to refresh dist/runtimes.lock.json (exact URLs + hashes). A target/runtime pair that is not listed here has no upstream build and is reported as unsupported rather than substituted.",
+  "_comment": "Third-party runtimes bundled into Moggi distributions. Versions mirror the development environment in flake.nix; update both together, then run `php packaging/pin.php` to refresh dist/runtimes.lock.json (exact URLs + hashes). A target/runtime pair that is not listed here has no upstream build and is reported as unsupported rather than substituted. `composer` and `maven` are the host tools `[php] composer` and `[jvm] maven` dependencies are resolved with: a variant bundles the tool for the backend it is named after (`moggi` both, `moggi-php` composer, `moggi-jvm` maven), and `[dotnet] nuget` needs no runtime of its own because the bundled .NET SDK already carries `dotnet nuget`.",
   "linuxGlibcFloor": "2.35",
 
   "targets": {
-    "linux-x86_64":    {"os": "linux",   "arch": "x86_64",  "phpPlatform": "unix",    "dotnetRid": "linux-x64",   "jvmOs": "linux",   "jvmArch": "x64",       "graalvmAsset": "linux-x64",     "archiveExt": "tar.gz"},
-    "linux-aarch64":   {"os": "linux",   "arch": "aarch64", "phpPlatform": "unix",    "dotnetRid": "linux-arm64", "jvmOs": "linux",   "jvmArch": "aarch64",   "graalvmAsset": "linux-aarch64", "archiveExt": "tar.gz"},
-    "macos-x86_64":    {"os": "macos",   "arch": "x86_64",  "phpPlatform": "unix",    "dotnetRid": "osx-x64",     "jvmOs": "mac",     "jvmArch": "x64",       "graalvmAsset": "macos-x64",     "archiveExt": "tar.gz"},
-    "macos-aarch64":   {"os": "macos",   "arch": "aarch64", "phpPlatform": "unix",    "dotnetRid": "osx-arm64",   "jvmOs": "mac",     "jvmArch": "aarch64",   "graalvmAsset": "macos-aarch64", "archiveExt": "tar.gz"},
-    "windows-x86_64":  {"os": "windows", "arch": "x86_64",  "phpPlatform": "windows", "dotnetRid": "win-x64",     "jvmOs": "windows", "jvmArch": "x64",       "graalvmAsset": "windows-x64",   "archiveExt": "zip"},
-    "windows-aarch64": {"os": "windows", "arch": "aarch64", "phpPlatform": "unavailable", "dotnetRid": "win-arm64", "jvmOs": "windows", "jvmArch": "aarch64", "graalvmAsset": null,          "archiveExt": "zip"}
+    "linux-x86_64":    {"os": "linux",   "arch": "x86_64",  "phpPlatform": "unix",    "dotnetRid": "linux-x64",   "jvmOs": "linux",   "jvmArch": "x64",       "graalvmAsset": "linux-x64",     "spcAsset": "linux-x86_64",   "zigAsset": "x86_64-linux",  "archiveExt": "tar.gz"},
+    "linux-aarch64":   {"os": "linux",   "arch": "aarch64", "phpPlatform": "unix",    "dotnetRid": "linux-arm64", "jvmOs": "linux",   "jvmArch": "aarch64",   "graalvmAsset": "linux-aarch64", "spcAsset": "linux-aarch64",  "zigAsset": "aarch64-linux", "archiveExt": "tar.gz"},
+    "macos-x86_64":    {"os": "macos",   "arch": "x86_64",  "phpPlatform": "unix",    "dotnetRid": "osx-x64",     "jvmOs": "mac",     "jvmArch": "x64",       "graalvmAsset": "macos-x64",     "spcAsset": "macos-x86_64",   "zigAsset": null,            "archiveExt": "tar.gz"},
+    "macos-aarch64":   {"os": "macos",   "arch": "aarch64", "phpPlatform": "unix",    "dotnetRid": "osx-arm64",   "jvmOs": "mac",     "jvmArch": "aarch64",   "graalvmAsset": "macos-aarch64", "spcAsset": "macos-aarch64",  "zigAsset": null,            "archiveExt": "tar.gz"},
+    "windows-x86_64":  {"os": "windows", "arch": "x86_64",  "phpPlatform": "windows", "dotnetRid": "win-x64",     "jvmOs": "windows", "jvmArch": "x64",       "graalvmAsset": "windows-x64",   "spcAsset": "windows-x64",    "zigAsset": null,            "archiveExt": "zip"}
   },
 
   "runtimes": {
@@ -84,7 +83,7 @@
         "name": "GPLv2 with Classpath Exception",
         "file": "NOTICE"
       },
-      "note": "A plain JDK, separate from GraalVM: the jvm backend targets Java 21, and `javac`/`java` come from here. The Adoptium API redirects to a pinned GitHub release asset; `scripts/dist/pin.php` records the exact URL and SHA-256.",
+      "note": "A plain JDK, separate from GraalVM: the jvm backend targets Java 21, and `javac`/`java` come from here. The Adoptium API redirects to a pinned GitHub release asset; `packaging/pin.php` records the exact URL and SHA-256.",
       "asset": {
         "format": "tar.gz",
         "url": "https://api.adoptium.net/v3/binary/latest/{version}/ga/{jvmOs}/{jvmArch}/jdk/hotspot/normal/eclipse",
@@ -125,14 +124,116 @@
       "unsupported": {
         "windows-aarch64": "GraalVM publishes no Windows ARM64 build (linux-x64, linux-aarch64, macos-x64, macos-aarch64, windows-x64 only)"
       }
+    },
+
+    "composer": {
+      "version": "2.10.1",
+      "upstream": "getcomposer.org",
+      "license": {
+        "name": "MIT",
+        "file": "LICENSE",
+        "url": "https://raw.githubusercontent.com/composer/composer/{version}/LICENSE"
+      },
+      "note": "Composer is distributed as a single phar, not an archive, so this asset is `format: plain`: the file is downloaded and hash-checked, a `bin/composer` shim beside it runs it on the bundled PHP (or the one on PATH), and the identical phar is used on every platform. Like the compiler itself, it is a PHP program rather than a native binary, so the glibc floor does not apply to it.",
+      "asset": {
+        "format": "plain",
+        "url": "https://getcomposer.org/download/{version}/composer.phar",
+        "sha256Url": "https://getcomposer.org/download/{version}/composer.phar.sha256sum",
+        "stripComponents": 0,
+        "binary": "composer.phar"
+      }
+    },
+
+    "maven": {
+      "version": "3.9.12",
+      "upstream": "Apache Maven (archive.apache.org)",
+      "license": {
+        "name": "Apache License 2.0",
+        "file": "LICENSE"
+      },
+      "note": "A plain Apache Maven binary distribution: JVM bytecode plus the `mvn` launcher scripts, so one asset serves every architecture. It runs on the bundled JDK — the compiler exports JAVA_HOME when `runtime/jvm` is present — and only variants that bundle a JDK ship it. Apache publishes a `.sha512` sidecar rather than a `.sha256`, which is why the asset names `sha512Url`.",
+      "asset": {
+        "format": "tar.gz",
+        "url": "https://archive.apache.org/dist/maven/maven-3/{version}/binaries/apache-maven-{version}-bin.tar.gz",
+        "sha512Url": "https://archive.apache.org/dist/maven/maven-3/{version}/binaries/apache-maven-{version}-bin.tar.gz.sha512",
+        "stripComponents": 1,
+        "binary": "bin/mvn"
+      },
+      "assetZip": {
+        "format": "zip",
+        "url": "https://archive.apache.org/dist/maven/maven-3/{version}/binaries/apache-maven-{version}-bin.zip",
+        "sha512Url": "https://archive.apache.org/dist/maven/maven-3/{version}/binaries/apache-maven-{version}-bin.zip.sha512",
+        "stripComponents": 1,
+        "binary": "bin/mvn.cmd"
+      }
+    },
+
+    "php-native": {
+      "version": "8.5",
+      "static": true,
+      "upstream": "static-php-cli's micro SAPI, compiled for this target by spc 2.8.5",
+      "license": {
+        "name": "PHP License 3.01, plus the licences of everything the runtime statically links (ICU and friends)",
+        "file": "LICENSE",
+        "url": "https://www.php.net/license/3_01.txt",
+        "acknowledgement": "This product includes PHP software, freely available from <https://www.php.net/software/>.",
+        "dump": true
+      },
+      "note": "The runtime a native executable is built from: PHP with the micro SAPI, statically linked, which runs whatever PHAR is appended to it. It is not downloaded — `build` says how it is made, and `packaging/runtimes.php` compiles it for the target with the `spc` build tool, so it carries the same extensions as the `php` runtime (intl included, which is what the IntlChar foreigns in Data.Char and Data.String need) and the patch level follows the PHP series spc pins. The whole set of licences it links is dumped into runtime/php-native/license/ by spc itself, because a statically linked PHP with ICU has more terms than PHP's own.",
+      "build": {
+        "tool": "spc",
+        "php": "8.5",
+        "sapi": "micro"
+      }
+    },
+
+    "spc": {
+      "version": "2.8.5",
+      "upstream": "github.com/crazywhalecc/static-php-cli",
+      "note": "static-php-cli's `spc`, the build tool that compiles the micro PHP runtime. It is a build input and is never bundled or put on PATH: `packaging/runtimes.php` runs it to produce `runtime/php-native/micro.sfx` and throws the tool away. The asset is the self-contained binary from the project's own GitHub release — not a Composer checkout — so a packaging run needs no PHP toolchain beyond the one already building the compiler.",
+      "checksumsUrl": "https://api.github.com/repos/crazywhalecc/static-php-cli/releases/tags/{version}",
+      "unix": {
+        "format": "tar.gz",
+        "url": "https://github.com/crazywhalecc/static-php-cli/releases/download/{version}/spc-{spcAsset}.tar.gz",
+        "stripComponents": 0,
+        "binary": "spc"
+      },
+      "windows": {
+        "format": "raw",
+        "url": "https://github.com/crazywhalecc/static-php-cli/releases/download/{version}/spc-{spcAsset}.exe",
+        "stripComponents": 0,
+        "binary": "spc.exe"
+      },
+      "unsupported": {
+        "windows-aarch64": "static-php-cli publishes no Windows ARM64 build (linux x86_64/aarch64, macOS x86_64/aarch64 and Windows x64 only)"
+      }
+    },
+
+    "zig": {
+      "version": "0.15.2",
+      "upstream": "ziglang.org",
+      "note": "The compiler static-php-cli's Zig toolchain builds the micro PHP runtime with. It is a build input that is never bundled, but it has to be pinned: when `pkgroot/zig` is not already complete, `spc` installs whatever Zig is newest, and Zig 0.16.0 miscompiles static-musl code — its `strnlen` reads past the buffer, so any such binary (the micro runtime included) segfaults before it can do anything. `packaging/runtimes.php` installs this Zig, and the wrappers `spc` looks for beside it, into the build's `pkgroot/zig`, so `spc` uses the pinned compiler instead of fetching one.",
+      "checksumsUrl": "https://ziglang.org/download/index.json",
+      "unix": {
+        "format": "tar.xz",
+        "url": "https://ziglang.org/download/{version}/zig-{zigAsset}-{version}.tar.xz",
+        "stripComponents": 1,
+        "binary": "zig"
+      },
+      "unsupported": {
+        "macos-x86_64": "only the Linux toolchain compiles with Zig; macOS uses Clang",
+        "macos-aarch64": "only the Linux toolchain compiles with Zig; macOS uses Clang",
+        "windows-x86_64": "only the Linux toolchain compiles with Zig; Windows uses MSVC",
+        "windows-aarch64": "only the Linux toolchain compiles with Zig; Windows uses MSVC"
+      }
     }
   },
 
   "variants": {
-    "moggi":         {"runtimes": ["php", "dotnet", "jvm", "graalvm"]},
-    "moggi-php":     {"runtimes": ["php"]},
-    "moggi-dotnet":  {"runtimes": ["php", "dotnet"]},
-    "moggi-jvm":     {"runtimes": ["php", "jvm", "graalvm"]},
+    "moggi":         {"runtimes": ["php", "php-native", "dotnet", "jvm", "graalvm", "composer", "maven"]},
+    "moggi-php":     {"runtimes": ["php", "php-native", "composer"]},
+    "moggi-dotnet":  {"runtimes": ["dotnet"]},
+    "moggi-jvm":     {"runtimes": ["jvm", "graalvm", "maven"]},
     "moggi-minimal": {"runtimes": []}
   }
 }

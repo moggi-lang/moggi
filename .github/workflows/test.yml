@@ -75,12 +75,12 @@ jobs:
       - name: Build the schnorr CLI
         if: runner.os != 'Windows'
         shell: bash
-        run: php scripts/dist/schnorr.php
+        run: php packaging/schnorr.php
 
       - name: Build the schnorr CLI (Windows)
         if: runner.os == 'Windows'
         shell: msys2 {0}
-        run: php scripts/dist/schnorr.php
+        run: php packaging/schnorr.php
 
       - name: Run the schnorr BIP-340 vectors
         if: runner.os != 'Windows'

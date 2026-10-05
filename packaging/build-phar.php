@@ -2,9 +2,11 @@
 
 namespace Moggi\Dist;
 
+use const Moggi\Install\INSTALL_ROOT_CONSTANT;
 use function Moggi\Compiler\runProcess;
 
-require_once __DIR__ . '/../../src/executables.php';
+require_once __DIR__ . '/../src/executables.php';
+require_once __DIR__ . '/../src/installation.php';
 
 /**
  * Build `bin/moggi.phar` — the compiler as one self-contained PHP archive.
@@ -15,7 +17,7 @@ require_once __DIR__ . '/../../src/executables.php';
  * `phar.readonly=0`, which the PHP default forbids, so this re-executes itself
  * with it.
  *
- *   php scripts/dist/build-phar.php [--source <repo>] [--out <path>]
+ *   php packaging/build-phar.php [--source <repo>] [--out <path>]
  */
 
 const PHAR_STUB = <<<'PHP'
@@ -28,6 +30,12 @@ if (\PHP_VERSION_ID < 80500) {
     \fwrite(STDERR, "moggi: PHP 8.5+ is required, this is " . \PHP_VERSION . "\n");
     exit(1);
 }
+
+// The directory this archive was started from: `<root>/bin` whether it is run
+// as `php bin/moggi.phar` or appended to a micro runtime as `bin/moggi`. The
+// appended case has no `Phar::running`, so the root is recorded here, before
+// `__DIR__` stops meaning anything outside the archive.
+\define('@INSTALL_ROOT_CONSTANT@', \dirname(__FILE__, 2));
 
 // `__DIR__` resolves inside the PHAR, so the compiler loads itself from here.
 require 'phar://' . __FILE__ . '/src/compiler.php';
@@ -42,6 +50,19 @@ const PHAR_INCLUDES = ['src'];
 
 /** A basename that starts with this is a working note, and is never archived. */
 const PHAR_EXCLUDES_PREFIX = '_';
+
+/**
+ * The archive stub with the install-root constant named from the module that
+ * owns that contract.
+ *
+ * The stub is a string, so it cannot read `Moggi\Install` for itself; this one
+ * substitution keeps the name it defines and the name `installationRoot()`
+ * looks up from ever drifting apart.
+ */
+function pharStub(): string
+{
+    return \str_replace('@INSTALL_ROOT_CONSTANT@', INSTALL_ROOT_CONSTANT, PHAR_STUB);
+}
 
 function compilerBuildVersion(string $sourceRoot): string
 {
@@ -101,7 +122,7 @@ function parseBuildPharArgv(array $argv): array
         }
     }
 
-    $repo = \dirname(__DIR__, 2);
+    $repo = \dirname(__DIR__);
 
     return [
         'source' => $source ?? $repo,
@@ -163,7 +184,7 @@ function buildCompilerPhar(string $sourceRoot, string $outPath): void
     }
 
     $phar->addFromString('VERSION', $version . "\n");
-    $phar->setStub(PHAR_STUB);
+    $phar->setStub(pharStub());
     $phar->stopBuffering();
     unset($phar);
 

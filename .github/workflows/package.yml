@@ -44,9 +44,13 @@ jobs:
           coverage: none
 
       - name: Install the build dependencies
+        # The tools on the second line are what static-php-cli's `spc` checks for
+        # before it compiles the micro PHP runtime; declaring them here keeps the
+        # build from installing anything of its own midway through.
         run: |
           apt-get install -y --no-install-recommends \
-            clang binutils autoconf make pkg-config libzip-dev libonig-dev libicu-dev
+            clang binutils autoconf make pkg-config libzip-dev libonig-dev libicu-dev \
+            re2c flex bison automake autopoint libtool zlib1g-dev
 
       - name: Cache downloads and builds
         uses: actions/cache@v6.1.0
@@ -57,10 +61,13 @@ jobs:
           key: dist-${{ matrix.target }}-${{ hashFiles('dist/runtimes.lock.json') }}
 
       - name: Validate the pinned runtimes
-        run: php scripts/dist/pin.php --check --target ${{ matrix.target }}
+        run: php packaging/pin.php --check --target ${{ matrix.target }}
 
       - name: Build the distributions
-        run: php scripts/dist/assemble.php --target ${{ matrix.target }} --glibc-floor --archives --out dist-out
+        # `--native-smoke` builds one native executable with each bundled
+        # toolchain a variant ships, so the published archives are shown to
+        # produce natives, not only managed artifacts.
+        run: php packaging/assemble.php --target ${{ matrix.target }} --glibc-floor --native-smoke --archives --out dist-out
 
       - name: Upload the archives
         uses: actions/upload-artifact@v7.0.1
@@ -107,7 +114,7 @@ jobs:
       - name: Install the PHP build dependencies (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew install libzip oniguruma icu4c
+          brew install libzip oniguruma icu4c re2c bison automake autoconf libtool cmake
           {
             echo "PKG_CONFIG_PATH=$(brew --prefix libzip)/lib/pkgconfig:$(brew --prefix oniguruma)/lib/pkgconfig:$(brew --prefix icu4c)/lib/pkgconfig"
           } >> "$GITHUB_ENV"
@@ -124,7 +131,7 @@ jobs:
       - name: Build the schnorr CLI (Windows)
         if: runner.os == 'Windows'
         shell: msys2 {0}
-        run: php scripts/dist/schnorr.php
+        run: php packaging/schnorr.php
 
       - name: Point the assembler at the schnorr binary (Windows)
         if: runner.os == 'Windows'
@@ -132,6 +139,18 @@ jobs:
         run: |
           $schnorr = if (Test-Path schnorr/schnorr.exe) { 'schnorr\schnorr.exe' } else { 'schnorr\schnorr' }
           "MOGGI_DIST_SCHNORR=$env:GITHUB_WORKSPACE\$schnorr" >> $env:GITHUB_ENV
+
+      - name: Put the Git tools on PATH (Windows)
+        # `spc` wants the MinGW `patch.exe` that ships with Git for Windows
+        # before it builds the micro PHP runtime.
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $mingw = 'C:\Program Files\Git\usr\bin'
+          if (-not (Test-Path "$mingw\patch.exe")) { throw "patch.exe is not in $mingw" }
+          if (-not (Get-Command patch.exe -ErrorAction SilentlyContinue)) {
+            $mingw | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          }
 
       - name: Cache downloads and builds
         uses: actions/cache@v6.1.0
@@ -142,10 +161,10 @@ jobs:
           key: dist-${{ matrix.target }}-${{ hashFiles('dist/runtimes.lock.json') }}
 
       - name: Validate the pinned runtimes
-        run: php scripts/dist/pin.php --check --target ${{ matrix.target }}
+        run: php packaging/pin.php --check --target ${{ matrix.target }}
 
       - name: Build the distributions
-        run: php scripts/dist/assemble.php --target ${{ matrix.target }} --archives --out dist-out
+        run: php packaging/assemble.php --target ${{ matrix.target }} --archives --out dist-out
 
       - name: Upload the archives
         uses: actions/upload-artifact@v7.0.1
@@ -257,6 +276,49 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release edit "${{ steps.name.outputs.tag }}" --draft=false
+
+  website:
+    # Rewrite the release-dependent links on moggi-lang.org, so a release is a
+    # command and not a hand edit of 25 links. The site is a separate repository,
+    # so this stays inert until WEBSITE_REPOSITORY (a variable) and WEBSITE_TOKEN
+    # (a secret with push access to it) are configured.
+    if: github.ref_type == 'tag' && vars.WEBSITE_REPOSITORY != ''
+    needs: publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      RELEASE_TAG: ${{ needs.publish.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Set up PHP for the build scripts
+        uses: shivammathur/setup-php@2.37.2
+        with:
+          php-version: '8.5'
+          coverage: none
+
+      - name: Check out the website
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: ${{ vars.WEBSITE_REPOSITORY }}
+          token: ${{ secrets.WEBSITE_TOKEN }}
+          path: website
+
+      - name: Rewrite the release links
+        run: php packaging/website.php --tag "$RELEASE_TAG" --file website/index.html
+
+      - name: Commit and push
+        working-directory: website
+        run: |
+          if git diff --quiet; then
+            echo "website already names ${RELEASE_TAG}"
+            exit 0
+          fi
+          git config user.name "moggi-bot"
+          git config user.email "noreply@moggi-lang.org"
+          git add index.html
+          git commit -m "release ${RELEASE_TAG}"
+          git push
 
   verify:
     needs: publish
