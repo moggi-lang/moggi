@@ -44,18 +44,14 @@ function parseTestArgs(array $argv): array
         'log' => null,
         'stopOnFailure' => false,
         'jobs' => 0,
-        // null = decide from the terminal; true/false = `--progress`/`--no-progress`.
         'progress' => null,
         'native' => false,
-        // The `--jobs` value as given (0 = auto), kept so the run can report how the count was
-        // arrived at even when a fallback changes how many workers actually run.
         'jobsRequested' => 0,
         'shard' => null,
         'help' => false,
         'errors' => [],
     ];
 
-    /** The value of a flag that takes one (`--backend` and friends). */
     $takeValue = static function (string $flag) use ($argv, &$i): ?string {
         return $argv[$i + 1] ?? null;
     };
@@ -158,8 +154,6 @@ function parseTestArgs(array $argv): array
             continue;
         }
         if ($arg === '--shard') {
-            // Internal: `test.php --shard I/N` runs one shard of the selection and prints
-            // JSON only. Used by `--jobs N`; not part of the public CLI.
             $value = $takeValue($arg);
             ++$i;
             if ($value === null || \preg_match('#^(\d+)/(\d+)$#', $value, $m) !== 1
@@ -192,10 +186,11 @@ Backends
                              (default: php)
 
 Modes
-  --native                   also build and run the native-executable smoke: GraalVM
-                             native-image on jvm, .NET Native AOT on dotnet. Slow. Skipped
-                             when the toolchain is not installed; needs one of those two
-                             backends to be selected, since php has no native toolchain.
+  --native                   also build and run the native-executable smoke: the micro PHP
+                             runtime on php, GraalVM native-image on jvm, .NET Native AOT on
+                             dotnet. Slow, and skipped when the toolchain is not installed —
+                             the php one needs the runtime `MOGGI_MICRO_SFX` names, since unlike
+                             the other two it is not looked up on PATH.
 
 Selection
   --group <name>             group or a subject path below one, repeatable

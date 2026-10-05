@@ -41,7 +41,6 @@ function runBackendCases(array $cases, string $backend, bool $multiBackend = fal
     $groupBuffer = [];
     $plain = '';
 
-    // Planned up front, so a row never appears late and shifts the block.
     $groupTotals = [];
     foreach ($cases as $case) {
         $groupTotals[$case->group] = ($groupTotals[$case->group] ?? 0) + 1;
@@ -81,7 +80,6 @@ function runBackendCases(array $cases, string $backend, bool $multiBackend = fal
         }
 
         $started = \microtime(true);
-        // Read by the shutdown handler (`installCaseDeathReporter`) when the process dies here.
         $GLOBALS['moggi_running_case'] = $case->name;
         try {
             $outcome = runTestCase($case, $backend, projectRootPath());
@@ -141,8 +139,6 @@ function runBackendCases(array $cases, string $backend, bool $multiBackend = fal
 
     $flush();
 
-    // The checked-module memo is keyed by the backend it was compiled for, and a run moves on to the
-    // next backend for good: keeping this one warm would hold a second copy of the stdlib closure.
     \Moggi\Modules\ProjectCache::clearCheckedModules();
 
     return ['set' => $set, 'stopped' => $stopped, 'plain' => $plain];
@@ -171,7 +167,6 @@ function resolveAutoJobs(int $selectedTotal): void
 
     $workers = 1;
     if (!$testArgs['stopOnFailure']) {
-        // One worker per physical CPU; the probe already clamps that to a cgroup quota or cpuset.
         $workers = \max(1, \min(detectedCpuCount(), $selectedTotal));
         $affordable = workerLimitForMemory(WORKER_MEMORY_BUDGET_BYTES);
         if ($affordable !== null) {
@@ -200,18 +195,13 @@ function runSuite(): int
 
     $backends = $testArgs['backends'] === [] ? ['php'] : $testArgs['backends'];
 
-    // php is the default backend and cannot build natively; say so instead of a green run that
-    // never ran the mode.
     $nativeBackends = \array_filter($backends, static fn (string $b): bool => nativeToolchainLabel($b) !== null);
     if ($testArgs['native'] && $nativeBackends === []) {
-        \fwrite(STDERR, "error: --native needs a backend with a native toolchain (jvm or dotnet)\n");
+        \fwrite(STDERR, "error: --native needs a backend with a native toolchain (php, jvm or dotnet)\n");
 
         return 2;
     }
 
-    // Take the cache generation for this run before any worker starts. A compiler change makes the
-    // first process delete and restamp the whole cache, and a worker doing that while its siblings
-    // compile reads directories that vanish under them.
     \Moggi\Cache\ensureCache();
 
     $cases = discoverTestCases();
@@ -362,7 +352,6 @@ function emitBackendTail(ResultSet $set, string $backend, float $startedAt): arr
     global $testArgs;
 
     $counts = $set->counts();
-    // Wall clock, not the sum of per-case durations: under `--jobs N` the cases overlap.
     $durationMs = \round((\microtime(true) - $startedAt) * 1000.0, 1);
     $out = '';
 
@@ -413,7 +402,6 @@ function finishRun(string $report, array $jsonBackends, array $backends, bool $f
         if ($testArgs['log'] !== null && !\str_ends_with((string) $testArgs['log'], '.json')) {
             @\file_put_contents((string) $testArgs['log'], $report);
         }
-        // Plain echo: in worker mode this document *is* the protocol stream.
         echo \json_encode($document, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
 
         return $failed ? 1 : 0;

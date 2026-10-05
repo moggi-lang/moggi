@@ -204,7 +204,6 @@ function goldensBeside(string $base): array
             $kind = $parts[1];
         }
         if (!isset($kinds[$kind])) {
-            // A golden whose kind nothing produces would never run; say so instead of skipping it.
             throw new \RuntimeException("unknown golden kind `{$kind}`: {$path}");
         }
         $goldens[] = ['base' => $base, 'kind' => $kind, 'backend' => $backend, 'path' => $path];
@@ -239,7 +238,7 @@ function discoverTestCases(): array
  *   a `.script` (a REPL transcript)    lower-kebab        dump-emit
  *   a script case                      snake_case_test    noopt_entry_bootstrap_test.php
  *
- * A path that mirrors a module path is exempt (`tests/lib/Data/JSON/`, a project's `lib/`), as is
+ * A path that mirrors a module path is exempt (`tests/lib/Data/ByteString/`, a project's `lib/`), as is
  * `examples/`: those are paths inside a source tree, not names.
  */
 function caseNamingProblem(TestCase $case, string $root): ?string
@@ -296,7 +295,7 @@ function collectCases(string $dir, string $root, array &$cases): void
         return;
     }
     if ($dir === MOGGI_PROJECT_ROOT . '/tests/suite') {
-        return; // the suite's own code is not a case
+        return;
     }
 
     $entries = \scandir($dir) ?: [];
@@ -335,7 +334,6 @@ function fixtureCase(string $path, string $root): ?TestCase
         $files[$golden['path']] = true;
     }
 
-    // A `.exec.php`-only fixture asserts in php, so it is a php-only case.
     $execOnly = $goldens === [] && \is_file($base . '.exec.php');
 
     return new TestCase(

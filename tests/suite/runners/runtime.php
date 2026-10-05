@@ -33,16 +33,12 @@ function runExecTest(string $path, string $projectRoot): array
 
         return runBackendStdoutFixture($path, $stdoutExpected, $backend, $projectRoot);
     }
-    // A php stderr report runs the packaged layout, like jvm/dotnet, so the run resolves exactly
-    // the frames the artifact ships.
     if (\is_file($stderrExpected)) {
         return runBackendReportFixture($path, $stderrExpected, 'php', $projectRoot);
     }
     if (!\is_file($stdoutExpected)) {
         return ['passed' => false, 'message' => "missing expected output file {$stdoutExpected}"];
     }
-    // A project entry builds its whole tree, like jvm/dotnet: the single-file path below compiles the
-    // entry alone and cannot carry the sibling modules it requires.
     if (\is_file(\dirname($path) . '/Main.mog')) {
         return runBackendStdoutFixture($path, $stdoutExpected, 'php', $projectRoot);
     }
@@ -56,7 +52,6 @@ function runExecTest(string $path, string $projectRoot): array
 
     $execDir = \Moggi\Cache\cacheScratchDir() . '/exec';
     @mkdir($execDir, 0777, true);
-    // Unique per run: `--jobs` workers share the scratch dir (each unlinks in `finally`).
     $compiled = $execDir . '/' . $name . '.' . getmypid() . '.' . uniqid('', true) . '.php';
 
     try {
@@ -227,6 +222,7 @@ function runBackendStdoutFixture(
             $moggi,
             'compile',
             $inputPath,
+            ...fixtureExtraLibArgs($projectRoot),
             ...fixtureCompileOutputArgs($outDir, $backend),
             '--backend',
             $backend,
@@ -263,24 +259,52 @@ function runBackendStdoutFixture(
     return ['passed' => true, 'message' => ''];
 }
 
-/** The native toolchain a backend can build with, or null when it has none (php). */
+/**
+ * The native toolchain a backend can build with, or null when it has none.
+ *
+ * All three backends have one now: the micro PHP runtime the PHP backend
+ * appends a PHAR to, GraalVM's `native-image`, and .NET's Native AOT.
+ */
 function nativeToolchainLabel(string $backend): ?string
 {
     return match ($backend) {
+        'php' => 'micro PHP runtime',
         'jvm' => 'GraalVM native-image',
         'dotnet' => '.NET Native AOT',
         default => null,
     };
 }
 
-/** Is the toolchain its label names installed? */
+/**
+ * Is the toolchain its label names installed?
+ *
+ * The micro runtime is not on `PATH` like the other two: `MOGGI_MICRO_SFX`, or
+ * one bundled by the distribution running the suite, is the only way to reach it.
+ */
 function nativeToolchainAvailable(string $backend): bool
 {
     return match ($backend) {
+        'php' => \Moggi\Backend\Php\resolveMicroSfx() !== null,
         'jvm' => resolveJdkBinary('native-image') !== null,
         'dotnet' => Backend\DotNet\resolveDotnetExecutable() !== null,
         default => false,
     };
+}
+
+/**
+ * Output arguments for a native fixture build.
+ *
+ * `--native` turns the managed artifact into the executable beside it, so the
+ * build must package one: php's `--unpacked` tree has no PHAR to append to a
+ * micro runtime, so it names the archive itself.
+ *
+ * @return list<string>
+ */
+function nativeSmokeOutputArgs(string $outDir, string $backend): array
+{
+    return $backend === 'php'
+        ? ['-o', $outDir . '/moggi-app.phar']
+        : fixtureCompileOutputArgs($outDir, $backend);
 }
 
 /**
@@ -314,7 +338,7 @@ function runNativeExampleSmoke(string $exampleDir, string $backend, string $proj
             $projectRoot . '/moggi.php',
             'compile',
             $exampleDir,
-            ...fixtureCompileOutputArgs($outDir, $backend),
+            ...nativeSmokeOutputArgs($outDir, $backend),
             '--backend',
             $backend,
             '--native',
@@ -380,6 +404,7 @@ function runBackendReportFixture(
             $moggi,
             'compile',
             $inputPath,
+            ...fixtureExtraLibArgs($projectRoot),
             ...fixtureCompileOutputArgs($outDir, $backend),
             '--backend',
             $backend,
@@ -474,8 +499,6 @@ function runReplScriptTest(string $scriptPath, string $expectedPath, string $bac
     if ($expected === false) {
         return ['passed' => false, 'message' => "{$name}: cannot read expected"];
     }
-    // Compared as text, not as bytes: a checkout that converted the golden to CRLF must not read as
-    // a mismatch in the REPL's output.
     if (normalize($actual) !== normalize($expected)) {
         return [
             'passed' => false,
@@ -520,14 +543,12 @@ function writeLibBackendOutputs(string $projectRoot, string $backend): string
         return $written[$backend];
     }
 
-    $libRoot = $projectRoot . '/lib';
-    $outDir = \Moggi\Cache\cacheBaseDir() . '/test-lib-' . $backend . '-' . substr(testLibSignature($projectRoot, $backend), 0, 12);
+    $outDir = \Moggi\Cache\cacheScratchDir() . '/lib-' . $backend . '-' . substr(testLibSignature($projectRoot, $backend), 0, 12);
     $complete = $outDir . '/.complete';
     if (\is_file($complete)) {
         return $written[$backend] = $outDir;
     }
 
-    // Outside the cache root, which a cache reset removes, and keyed by the tree it guards.
     $lockPath = sys_get_temp_dir() . '/moggi-test-lib-' . substr(\Moggi\Cache\hashContent($outDir), 0, 16) . '.lock';
     $lock = @fopen($lockPath, 'c');
     if ($lock !== false) {
@@ -541,7 +562,7 @@ function writeLibBackendOutputs(string $projectRoot, string $backend): string
 
         $staging = $outDir . '.tmp.' . getmypid() . '.' . bin2hex(random_bytes(4));
         Backend\setCompileBackend($backend);
-        $outputs = \Moggi\Modules\compileProject(findModuleMogFiles($libRoot), $libRoot);
+        $outputs = \Moggi\Modules\compileProject(testLibraryFiles($projectRoot), $projectRoot);
         foreach ($outputs as $relative => $source) {
             $target = $staging . '/' . $relative;
             @mkdir(dirname($target), 0777, true);
@@ -551,15 +572,11 @@ function writeLibBackendOutputs(string $projectRoot, string $backend): string
         if ($backend === 'php') {
             $runtimeDst = $staging . '/_runtime.php';
             @mkdir(dirname($runtimeDst), 0777, true);
-            // Link rather than copy: `require_once` de-duplicates by resolved path, so the fixture's
-            // runtime and the harness's in-process copy must be the same file.
             if (!@symlink($projectRoot . '/src/backend/php/runtime.php', $runtimeDst)) {
                 copy($projectRoot . '/src/backend/php/runtime.php', $runtimeDst);
             }
         }
 
-        // The marker goes in last, before the tree becomes visible: its presence is what says the
-        // tree is usable.
         \file_put_contents($staging . '/.complete', "");
         if (\is_dir($outDir)) {
             removeDirectory($outDir);
@@ -577,11 +594,59 @@ function writeLibBackendOutputs(string $projectRoot, string $backend): string
     }
 }
 
-/** Content signature of the stdlib build: backend + compiler + lib sources + the PHP runtime. */
+/**
+ * The library roots the harness compiles: the standard library plus any extra
+ * root registered beside it (the `json` package in this checkout).
+ *
+ * @return list<string>
+ */
+function testLibraryRoots(string $projectRoot): array
+{
+    $roots = \Moggi\Modules\configuredLibraryRoots();
+
+    return $roots === [] ? [$projectRoot . '/lib'] : $roots;
+}
+
+/**
+ * `--lib` arguments for the extra roots, for a fixture build that runs as a child
+ * process and so does not inherit what the harness registered in-process.
+ *
+ * The standard library is left out: the CLI discovers it on its own.
+ *
+ * @return list<string>
+ */
+function fixtureExtraLibArgs(string $projectRoot): array
+{
+    $primary = \Moggi\Modules\configuredStdlibLibPath();
+    $args = [];
+    foreach (testLibraryRoots($projectRoot) as $root) {
+        if ($primary !== null && \Moggi\Modules\resolvePath($root) === \Moggi\Modules\resolvePath($primary)) {
+            continue;
+        }
+        $args[] = '--lib';
+        $args[] = $root;
+    }
+
+    return $args;
+}
+
+/** @return list<string> every `.mog` under every library root, sorted */
+function testLibraryFiles(string $projectRoot): array
+{
+    $files = [];
+    foreach (testLibraryRoots($projectRoot) as $root) {
+        $files = [...$files, ...findModuleMogFiles($root)];
+    }
+    \sort($files);
+
+    return $files;
+}
+
+/** Content signature of the library build: backend + compiler + library sources + the PHP runtime. */
 function testLibSignature(string $projectRoot, string $backend): string
 {
     $parts = [$backend, \Moggi\Cache\compilerFingerprint()];
-    foreach (findModuleMogFiles($projectRoot . '/lib') as $file) {
+    foreach (testLibraryFiles($projectRoot) as $file) {
         $parts[] = testRelativePath($file) . ':' . \Moggi\Cache\fileFingerprint($file);
     }
     if ($backend === 'php') {
@@ -596,18 +661,59 @@ function writeLibPhpOutputs(string $projectRoot): string
     return writeLibBackendOutputs($projectRoot, 'php');
 }
 
-/** Point a compiled fixture at the published stdlib build instead of the source tree's `lib/`. */
+/**
+ * Project-relative prefixes of the library roots as they appear in emitted
+ * `require`s: `lib`, `json/src`. Longest first, so a nested root wins.
+ *
+ * @return list<string>
+ */
+function libraryRequirePrefixes(): array
+{
+    $primary = \Moggi\Modules\configuredStdlibLibPath() ?? \Moggi\Modules\bundledStdlibLibPath();
+    if ($primary === null) {
+        return ['lib'];
+    }
+    $projectRoot = rtrim(\Moggi\Paths\canonicalSeparators(dirname($primary)), '/') . '/';
+    $roots = \Moggi\Modules\configuredLibraryRoots() ?: [$primary];
+
+    $prefixes = [];
+    foreach ($roots as $root) {
+        $real = \Moggi\Paths\canonicalSeparators(\Moggi\Modules\resolvePath($root));
+        if (str_starts_with($real, $projectRoot)) {
+            $prefix = trim(substr($real, strlen($projectRoot)), '/');
+            if ($prefix !== '') {
+                $prefixes[] = $prefix;
+            }
+        }
+    }
+    $prefixes = array_values(array_unique($prefixes));
+    usort($prefixes, static fn (string $a, string $b): int => \strlen($b) <=> \strlen($a));
+
+    return $prefixes;
+}
+
+/** Point a compiled fixture at the published library build instead of the source tree. */
 function rewriteLibRequires(string $php, string $libPhpDir, string $compiledFile): string
 {
     $libDir = rtrim(\Moggi\Paths\canonicalSeparators($libPhpDir), '/');
-    $rewrite = static fn (array $matches): string => 'require_once '
-        . \Moggi\Paths\requirePathExpression($compiledFile, $libDir . '/' . $matches[1]);
-
-    $php = preg_replace_callback("#require_once __DIR__ \. '/(?:\.\./)+lib/([^']+)'#", $rewrite, $php) ?? $php;
+    $prefixes = libraryRequirePrefixes();
+    if ($prefixes !== []) {
+        $alternation = \implode('|', array_map(
+            static fn (string $prefix): string => \preg_quote($prefix, '#'),
+            $prefixes,
+        ));
+        $php = preg_replace_callback(
+            "#require_once __DIR__ \. '/(?:\.\./)+(?<lib>(?:{$alternation})/[^']+)'#",
+            static fn (array $matches): string => 'require_once '
+                . \Moggi\Paths\requirePathExpression($compiledFile, $libDir . '/' . $matches['lib']),
+            $php,
+        ) ?? $php;
+    }
 
     return preg_replace_callback(
         "#require_once __DIR__ \. '/(?:\.\./)+_runtime\.php'#",
-        static fn (): string => $rewrite([0, '_runtime.php']),
+        static fn (): string => 'require_once '
+            . \Moggi\Paths\requirePathExpression($compiledFile, $libDir . '/_runtime.php'),
         $php,
     ) ?? $php;
 }

@@ -32,6 +32,7 @@ tests/
 ├── docs/        # mogdoc / moogle
 ├── lsp/         # the language server
 ├── cache/       # the compile cache
+├── registry/    # packages, the canonical archive
 └── fuzz/        # the frontend fuzzer
 ```
 
@@ -72,6 +73,7 @@ Which **stage** owns a fixture is the directory it is in; which **golden kinds**
 | mogdoc / moogle | `tests/docs/` | a script |
 | the language server | `tests/lsp/` | a script |
 | the compile cache | `tests/cache/` | a script |
+| the canonical archive, and what a package hash covers | `tests/registry/` | a script |
 | that random input cannot crash the frontend | `tests/fuzz/` | a script |
 | what a compiled function *returns* (a native throwable, an exported function no `main` reaches) | any group, beside the fixture | `Foo.exec.php`, and no `stdout`/`stderr` golden |
 | that an example program still works | `examples/` | `Main.stdout.expected` |
@@ -92,12 +94,12 @@ runs:
 | REPL transcript (`.script`) | `lower-kebab` | `dump-emit` |
 | script | `snake_case_test.php` | `noopt_entry_bootstrap_test.php` |
 
-A path that mirrors a module path is exempt: `tests/lib/Data/JSON/` mirrors `lib/Data/JSON/`, and a
-project's own `lib/` is a source tree inside the fixture, not a name.
+A path that mirrors a module path is exempt: `tests/lib/Data/ByteString/` mirrors
+`lib/Data/ByteString/`, and a project's own `lib/` is a source tree inside the fixture, not a name.
 
 ## Not tests
 
 | Path | Role |
 |------|------|
 | `tests/suite/` | the harness itself |
-| `.moggi/test-artifacts/` | scratch trees and the log of every failing case |
+| `.moggi/test/` | scratch trees and the log of every failing case |

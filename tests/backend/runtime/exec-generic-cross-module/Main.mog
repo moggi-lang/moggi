@@ -1,0 +1,19 @@
+-- A derived `Generic` used from another module: the consumer's instance context
+-- reaches `Datatype (MetaData …)`, so the metadata instances `deriving Generic`
+-- generates must be visible project-wide, not only where the type is declared.
+module Main where
+
+import Moggi.Generics
+import Lib (Foo(..))
+
+class Describe (f :: Type -> Type) where
+  describe :: f a -> String
+
+instance Datatype d => Describe (M1 D d f) where
+  describe _ = "ok"
+
+describeRep :: (Generic a, Describe (Rep a)) => a -> String
+describeRep x = describe (from x)
+
+main :: IO ()
+main = putStrLn (describeRep (Foo 1))
