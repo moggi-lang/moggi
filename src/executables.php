@@ -15,6 +15,19 @@ function executableName(string $name): string
 }
 
 /**
+ * The file name an executable has on a distribution *target*.
+ *
+ * The packaging scripts build artifacts for a named target rather than for the
+ * host they run on, so the `.exe` rule is keyed on the target's OS and not on
+ * `PHP_OS_FAMILY`: `executableName()` is for a binary this host just produced,
+ * this one for a binary a distribution will ship.
+ */
+function targetExecutableName(string $name, string $target): string
+{
+    return \str_starts_with($target, 'windows-') ? $name . '.exe' : $name;
+}
+
+/**
  * Find an executable the way a shell would, without invoking one.
  *
  * Host toolchains are discovered by probing directories directly. Asking a

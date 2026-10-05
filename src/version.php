@@ -19,7 +19,7 @@ use function Moggi\Modules\bundledStdlibLibPath;
  *
  * Inside a packaged archive that file carries the build identity rather than the
  * release number: the tag for a release, `0.1.0-dev.20260922+f60fb9f` for a build
- * of an unreleased commit (see `scripts/dist/build-phar.php`).
+ * of an unreleased commit (see `packaging/build-phar.php`).
  */
 function compilerVersion(): ?string
 {
@@ -32,7 +32,7 @@ function compilerVersion(): ?string
  */
 function compilerChannel(?string $version): string
 {
-    if (\Phar::running(false) === '') {
+    if (\Moggi\Install\installationRoot() === null) {
         return 'source';
     }
 
@@ -52,30 +52,41 @@ function compilerCommit(?string $version): ?string
 /**
  * Which distribution this is, from the runtimes bundled beside the archive, or
  * null when this is not an installed distribution.
+ *
+ * The micro PHP runtime (`php-native`, see `Moggi\Backend\Php`) is a build input
+ * for native executables rather than a backend toolchain: it is never the thing
+ * that decides which distribution this is. Neither is `composer` or `maven`,
+ * which are host tools rather than backends. The compiler itself is native in
+ * every variant, so the PHP that is bundled is a *program* runtime, and its
+ * presence and absence are the difference between `moggi-php` and the variants
+ * that only target the JVM or .NET.
  */
 function distributionVariant(): ?string
 {
-    $archive = \Phar::running(false);
-    if ($archive === '') {
+    $root = \Moggi\Install\installationRoot();
+    if ($root === null) {
         return null;
     }
 
-    $root = \dirname($archive, 2);
-    $bundled = [];
-    foreach (['php', 'dotnet', 'jvm', 'graalvm'] as $runtime) {
-        if (\is_dir($root . '/runtime/' . $runtime)) {
-            $bundled[] = $runtime;
-        }
+    $has = static fn (string $runtime): bool => \is_dir($root . '/runtime/' . $runtime);
+
+    if (!$has('php') && !$has('dotnet') && !$has('jvm') && !$has('graalvm')) {
+        return 'moggi-minimal';
+    }
+    if ($has('dotnet') && $has('jvm') && $has('graalvm')) {
+        return 'moggi';
+    }
+    if ($has('jvm') && $has('graalvm')) {
+        return 'moggi-jvm';
+    }
+    if ($has('dotnet')) {
+        return 'moggi-dotnet';
+    }
+    if ($has('php')) {
+        return 'moggi-php';
     }
 
-    return match (\implode(',', $bundled)) {
-        '' => 'moggi-minimal',
-        'php' => 'moggi-php',
-        'php,dotnet' => 'moggi-dotnet',
-        'php,jvm,graalvm' => 'moggi-jvm',
-        'php,dotnet,jvm,graalvm' => 'moggi',
-        default => 'custom',
-    };
+    return 'custom';
 }
 
 /**

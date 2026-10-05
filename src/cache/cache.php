@@ -5,17 +5,30 @@ namespace Moggi\Cache;
 use function Moggi\Backend\compileBackend;
 
 /**
- * Per-project compile cache under `./.moggi` (override with MOGGI_CACHE_DIR):
- *   <cache>/<backend>/<source-mirror>.<kind>.mogc
+ * One cache root (`./.moggi`, override with MOGGI_CACHE_DIR) holding every kind of
+ * thing moggi keeps between runs, each under a directory named for what put it
+ * there:
  *
- * Mirrors the source tree under a per-backend directory so php/jvm/dotnet
- * caches coexist (switching backends must not overwrite each other). The
- * content key is stored inside and checked on read.
+ *   fingerprint                              the compiler that filled the rest
+ *   compile/<backend>/<mirror>.<kind>.mogc   a per-module compilation entry
+ *   compile/artifacts/<key>.blob             a whole-project artifact
+ *   compile/docs-index/<key>.json            the mogdoc/moogle index
+ *   docs/                                    `moggi mogdoc serve` output
+ *   catalog/<registry-key>/                  fetched registry metadata
+ *   packages/<name>/<digest>/                an unpacked package
+ *   runtime/<key>/                           an artifact a host tool fetched
+ *   test/                                    the test harness's scratch trees
  *
- * The cache belongs to one compiler. The fingerprint of the compiler's own
- * sources sits in `<cache>/.fingerprint`, and a compiler whose fingerprint does
- * not match that file throws the whole tree away and rebuilds instead of reading
- * entries another compiler wrote. Set MOGGI_NO_CACHE=1 to bypass.
+ * Entries mirror the source tree under a per-backend directory so php/jvm/dotnet
+ * caches coexist (switching backends must not overwrite each other). The content
+ * key is stored inside and checked on read.
+ *
+ * One compiler owns the tree: `fingerprint` holds the hash of its sources, and a
+ * compiler whose fingerprint does not match what is written there drops what the
+ * compiler *derives* (`compile/`, `docs/`) and keeps what it merely *found*
+ * (`catalog/`, `packages/`, `runtime/`) — those are addressed by digest, so they
+ * are as valid to the new compiler as they were to the old one, and re-fetching
+ * one costs a network round trip. Set MOGGI_NO_CACHE=1 to bypass.
  */
 
 /** Explicit `--no-cache`/`--cache` choice, overriding MOGGI_NO_CACHE. */
@@ -154,20 +167,20 @@ function fileFingerprint(string $path): string
     return $hash;
 }
 
-/** File naming the compiler the cache on disk was built by. */
+/** The file naming the compiler the rest of the cache was built by. */
 function fingerprintPath(): string
 {
-    return cacheBaseDir() . '/.fingerprint';
+    return cacheBaseDir() . '/fingerprint';
 }
 
 /**
  * One cache tree, owned by whichever compiler built it.
  *
  * Called before the first cache read or write: a stored fingerprint that is not
- * this compiler's means everything under the cache root was written by a
- * different compiler, so it is deleted and the fingerprint is written again.
- * Entries, harness artifacts and the docs index all live under the same root, so
- * none of them can outlive the compiler that produced them.
+ * this compiler's means everything derived from sources was written by a
+ * different compiler, so it is dropped and the fingerprint is written again.
+ * Entries, artifacts, the docs index and the served site all sit under that same
+ * compiler-owned half of the cache, so none of them outlives its compiler.
  */
 function ensureCache(): void
 {
@@ -217,29 +230,91 @@ function cacheLockPath(): string
     return rtrim(\sys_get_temp_dir(), '/') . '/moggi-cache-' . substr(hash('sha256', cacheBaseDir()), 0, 16) . '.lock';
 }
 
+/**
+ * Top-level cache directories a compiler change must not take with it.
+ *
+ * Fetched registry metadata, unpacked packages and tool-fetched runtime artifacts
+ * live under the cache root too (`./.moggi`), but none is derived from the
+ * compiler: all three are addressed by digest, so they are as valid after a
+ * compiler change as before it, and re-fetching one costs a network round trip.
+ * `moggi cache clear` still removes them — that is a user asking for the space back.
+ */
+const KEPT_ACROSS_RESET = ['catalog', 'packages', 'runtime'];
+
 /** Drop the tree the previous compiler filled and stamp the cache with the current one. */
 function resetCacheTree(string $base, string $fingerprint): void
 {
-    removeTree($base);
+    removeTreeExcept($base, KEPT_ACROSS_RESET);
     ensureDir($base);
     atomicWrite(fingerprintPath(), $fingerprint);
 }
 
-/**
- * Root the cache entries and the harness artifacts live under.
- *
- * Kept as a named function (rather than inlined `cacheBaseDir()` calls) because
- * the test harness publishes its scratch trees beside the entries.
- */
-function cacheGenerationDir(): string
+/** Remove everything under `$dir` except the named top-level entries. */
+function removeTreeExcept(string $dir, array $keep): void
 {
-    return cacheBaseDir();
+    if (!\is_dir($dir)) {
+        removeTree($dir);
+
+        return;
+    }
+
+    $entries = \scandir($dir);
+    if ($entries === false) {
+        return;
+    }
+    foreach ($entries as $entry) {
+        if ($entry === '.' || $entry === '..' || \in_array($entry, $keep, true)) {
+            continue;
+        }
+        removeTree($dir . '/' . $entry);
+    }
 }
 
-/** Scratch tree the test harness publishes under the *current* generation. */
+/**
+ * What the compiler derives from sources: the entries, the project artifacts and
+ * the docs index. Everything here is rebuildable, so a fingerprint mismatch takes
+ * the whole directory.
+ */
+function compileDir(): string
+{
+    return cacheBaseDir() . '/compile';
+}
+
+/** The static site `moggi mogdoc serve` generated, reused until its sources move. */
+function docsCacheDir(): string
+{
+    return cacheBaseDir() . '/docs';
+}
+
+/** Fetched registry metadata: one `<cache>/catalog/<base-key>/` per registry. */
+function catalogDir(): string
+{
+    return cacheBaseDir() . '/catalog';
+}
+
+/**
+ * Unpacked packages: `<cache>/packages/<name>/<digest>/`.
+ *
+ * Content-addressed, so one digest is unpacked once and re-used until the release
+ * record it was unpacked from changes. It sits in the *project* cache, beside the
+ * compiler cache it is built against: a package is compiled with one project's
+ * compiler and lock, so every project keeps its own unpacked copy.
+ */
+function packagesDir(): string
+{
+    return cacheBaseDir() . '/packages';
+}
+
+/** Artifacts a host tool fetched (maven, composer, nuget) — content-addressed too. */
+function runtimeCacheDir(): string
+{
+    return cacheBaseDir() . '/runtime';
+}
+
+/** The test harness's scratch trees: `exec/`, `logs/`, the stdlib build. */
 function cacheScratchDir(): string
 {
-    return cacheGenerationDir() . '/test-artifacts';
+    return cacheBaseDir() . '/test';
 }
 
 /** Sanitize a mirrored relative source path (drop extension, keep directories). */
@@ -356,7 +431,7 @@ function modulePath(string $relPath, string $kind): string
         $backend = 'unknown';
     }
 
-    return cacheGenerationDir() . '/' . $backend . '/' . mirrorPath($relPath) . '.' . $kind . '.mogc';
+    return compileDir() . '/' . $backend . '/' . mirrorPath($relPath) . '.' . $kind . '.mogc';
 }
 
 /**
@@ -379,7 +454,7 @@ function artifactGet(string $key): mixed
 
     ensureCache();
 
-    $path = cacheGenerationDir() . '/.artifacts/' . artifactFileName($key) . '.blob';
+    $path = compileDir() . '/artifacts/' . artifactFileName($key) . '.blob';
     if (!\is_file($path)) {
         return null;
     }
@@ -403,7 +478,7 @@ function artifactPut(string $key, mixed $payload): void
     ensureCache();
 
     $raw = serialize(['payload' => $payload]);
-    atomicWrite(cacheGenerationDir() . '/.artifacts/' . artifactFileName($key) . '.blob', $raw);
+    atomicWrite(compileDir() . '/artifacts/' . artifactFileName($key) . '.blob', $raw);
 }
 
 function removeTree(string $dir): int
@@ -433,8 +508,60 @@ function removeTree(string $dir): int
 }
 
 /**
- * Remove everything under the cache root: the entries, the harness artifacts and
- * the fingerprint that named the compiler.
+ * The areas `moggi cache clear` can drop one at a time.
+ *
+ * An area is named for what it costs to lose: `compiler` is a rebuild, `catalog`
+ * and `packages` a fetch. The user-level download cache is deliberately not here
+ * — it is shared by every project on the machine, so the command handles it by
+ * name rather than letting a project's clear reach it.
+ *
+ * @return array<string, list<string>>
+ */
+function cacheAreas(): array
+{
+    return [
+        'compiler' => [compileDir(), docsCacheDir()],
+        'catalog' => [catalogDir()],
+        'packages' => [packagesDir()],
+        'runtime' => [runtimeCacheDir()],
+        'test' => [cacheScratchDir()],
+    ];
+}
+
+/**
+ * Remove one area, or `all` of them under the project cache root.
+ *
+ * `all` is the whole root rather than a walk over the areas: the fingerprint goes
+ * with it, so the next compile starts from nothing instead of trusting a stamp
+ * whose tree is gone.
+ *
+ * @throws \InvalidArgumentException when `$area` names no area
+ */
+function clearArea(string $area): int
+{
+    if ($area === 'all') {
+        return clear();
+    }
+
+    $areas = cacheAreas();
+    if (!isset($areas[$area])) {
+        throw new \InvalidArgumentException(
+            "unknown cache area `{$area}` (expected: " . \implode(' | ', \array_keys($areas)) . ' | all)',
+        );
+    }
+
+    $removed = 0;
+    foreach ($areas[$area] as $root) {
+        $removed += removeTree($root);
+    }
+
+    return $removed;
+}
+
+/**
+ * Remove everything under the project cache root: the entries, the artifacts, the
+ * site, the harness scratch, the fingerprint that named the compiler, and — since
+ * they live under the same root — the fetched catalog and the installed packages.
  */
 function clear(): int
 {
@@ -447,11 +574,19 @@ function clear(): int
 }
 
 /**
- * Summary of the compiler cache for `moggi cache info`.
+ * Summary of the project cache for `moggi cache info`, area by area.
+ *
+ * `match` says whether the fingerprint on disk is this compiler's. When it is
+ * not, the compiler-derived areas are a previous compiler's and the next run
+ * drops them — which is what makes clearing after an upgrade optional rather than
+ * required.
  *
  * @return array{
  *   cache: string,
  *   fingerprint: string,
+ *   storedFingerprint: ?string,
+ *   match: bool,
+ *   areas: array<string, array{entries: int, bytes: int}>,
  *   entries: int,
  *   bytes: int,
  *   enabled: bool
@@ -459,14 +594,35 @@ function clear(): int
  */
 function info(): array
 {
-    $base = cacheBaseDir();
-    $size = \is_dir($base) ? treeSize($base) : ['entries' => 0, 'bytes' => 0];
+    $areas = [];
+    $entries = 0;
+    $bytes = 0;
+    foreach (cacheAreas() as $name => $roots) {
+        $size = ['entries' => 0, 'bytes' => 0];
+        foreach ($roots as $root) {
+            if (!\is_dir($root)) {
+                continue;
+            }
+            $part = treeSize($root);
+            $size['entries'] += $part['entries'];
+            $size['bytes'] += $part['bytes'];
+        }
+        $areas[$name] = $size;
+        $entries += $size['entries'];
+        $bytes += $size['bytes'];
+    }
+
+    $stored = @\file_get_contents(fingerprintPath());
+    $own = compilerFingerprint();
 
     return [
-        'cache' => $base,
-        'fingerprint' => compilerFingerprint(),
-        'entries' => $size['entries'],
-        'bytes' => $size['bytes'],
+        'cache' => cacheBaseDir(),
+        'fingerprint' => $own,
+        'storedFingerprint' => $stored === false ? null : $stored,
+        'match' => $stored === $own,
+        'areas' => $areas,
+        'entries' => $entries,
+        'bytes' => $bytes,
         'enabled' => cacheEnabled(),
     ];
 }

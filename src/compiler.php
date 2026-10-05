@@ -31,6 +31,7 @@ require __DIR__ . '/errors.php';
 require __DIR__ . '/cache/cache.php';
 require __DIR__ . '/version.php';
 require __DIR__ . '/executables.php';
+require __DIR__ . '/installation.php';
 require __DIR__ . '/paths.php';
 require __DIR__ . '/IR/types.php';
 require __DIR__ . '/pipeline/types.php';
@@ -81,6 +82,7 @@ require __DIR__ . '/backend/php/codegen.php';
 require __DIR__ . '/backend/Backend.php';
 require __DIR__ . '/backend/inspect.php';
 require __DIR__ . '/backend/php/package.php';
+require __DIR__ . '/backend/php/native.php';
 require __DIR__ . '/backend/php/PhpBackend.php';
 require __DIR__ . '/backend/jvm/JvmBackend.php';
 require __DIR__ . '/backend/dotnet/DotNetBackend.php';
@@ -158,6 +160,35 @@ require __DIR__ . '/lsp/sync.php';
 require __DIR__ . '/lsp/lifecycle.php';
 require __DIR__ . '/lsp/server.php';
 
+// The registry client: constraints, the signed catalog, the descriptor a
+// package declares itself with, and what installs come of it. Loaded in
+// dependency order, like everything else here.
+require __DIR__ . '/registry/constraint.php';
+require __DIR__ . '/registry/names.php';
+require __DIR__ . '/registry/schnorr.php';
+require __DIR__ . '/registry/manifest.php';
+require __DIR__ . '/registry/cache.php';
+require __DIR__ . '/registry/catalog.php';
+require __DIR__ . '/registry/descriptor.php';
+require __DIR__ . '/registry/lock.php';
+require __DIR__ . '/registry/cdcl.php';
+require __DIR__ . '/registry/resolve.php';
+require __DIR__ . '/registry/install.php';
+require __DIR__ . '/registry/extensions.php';
+require __DIR__ . '/registry/pack.php';
+require __DIR__ . '/registry/publish.php';
+require __DIR__ . '/registry/tools.php';
+
+require __DIR__ . '/CLI/commands/packaging.php';
+require __DIR__ . '/CLI/commands/pack.php';
+require __DIR__ . '/CLI/commands/publish.php';
+require __DIR__ . '/CLI/commands/update.php';
+require __DIR__ . '/CLI/commands/outdated.php';
+require __DIR__ . '/CLI/commands/why.php';
+require __DIR__ . '/CLI/commands/install.php';
+require __DIR__ . '/CLI/commands/build.php';
+require __DIR__ . '/CLI/commands/check.php';
+require __DIR__ . '/CLI/commands/verify.php';
 require __DIR__ . '/CLI/commands/compile.php';
 require __DIR__ . '/CLI/commands/run.php';
 require __DIR__ . '/CLI/commands/cache.php';

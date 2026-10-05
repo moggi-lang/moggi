@@ -314,7 +314,6 @@ function emitQualifiedCall(string $name, array $argExprs, ?SrcLoc $srcLoc = null
         'maybeNe#' => '(' . $argExprs[0] . ' !== ' . $argExprs[1] . ')',
         'maybeCompare#' => maybeCompareExpr($argExprs[0], $argExprs[1]),
         'error#' => '\\Moggi\\throwErrorCall(' . $argExprs[0] . ', ' . $locExpr . ')',
-        'fix#' => '\\Moggi\\fix(' . $argExprs[0] . ')',
         'exceptionWrap#' => '\\Moggi\\exceptionWrap(' . $argExprs[0] . ', ' . $argExprs[1] . ', ' . $argExprs[2] . ')',
         'exceptionUnwrap#' => '\\Moggi\\exceptionUnwrap(' . $argExprs[0] . ', ' . $argExprs[1] . ')',
         'exceptionThrow#' => '\\Moggi\\throwSomeException(' . $argExprs[0] . ', ' . $locExpr . ')',
@@ -322,6 +321,7 @@ function emitQualifiedCall(string $name, array $argExprs, ?SrcLoc $srcLoc = null
         'exceptionThrowIo#', 'exceptionCatch#', 'exceptionFinally#' => throw new \InvalidArgumentException(
             "intrinsic `{$name}` must be lowered to IO exception IR",
         ),
+        'fix#' => '\\Moggi\\fix(' . $argExprs[0] . ')',
         'ioPure#', 'ioBind#' => throw new \InvalidArgumentException(
             "intrinsic `{$name}` must be erased by strict IO normalization",
         ),

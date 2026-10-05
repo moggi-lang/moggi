@@ -44,6 +44,12 @@ final class JvmBackend implements Backend
         return [];
     }
 
+    /** The JVM emit is a function of the IR alone. */
+    public function emitCacheDiscriminator(): string
+    {
+        return '';
+    }
+
     public function emit(Module $ir, string $sourcePath, array $options = []): string|array
     {
         $emitted = emitModule($ir, $sourcePath, $options);

@@ -1,0 +1,24 @@
+[package]
+name = base
+version = 0.1.0-alpha
+license = BSD-3-Clause
+license-file = LICENSE
+copyright = 2026 Sascha-Oliver Prolić
+description = The Moggi standard library. Bundled with the compiler.
+
+[author]
+name = Sascha-Oliver Prolic
+email = saschaprolic@googlemail.com
+npub = npub1yywlmj053p4qp7z2qvqsrgcwz488mw0pr0t50xz3e5rx7s9uaelsjpdmfm
+
+[lib]
+source-dirs = .
+
+[php]
+version = 8.5
+
+[requires.program.php]
+extension = bcmath, intl, mbstring
+
+[requires.compiler.php]
+extension = phar, ctype, mbstring, zip

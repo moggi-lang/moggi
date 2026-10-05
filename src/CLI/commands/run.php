@@ -120,7 +120,7 @@ function runRun(array $argv): int
         $parsed['strip'],
         $parsed['libDirs'],
         $parsed['native'],
-        $parsed['backend'] === 'php',
+        $parsed['backend'] === 'php' && !$parsed['native'],
     );
 
     if ($built['exitCode'] !== 0 || $built['outputRoot'] === null) {

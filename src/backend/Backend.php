@@ -50,6 +50,19 @@ interface Backend
     public function emit(Module $ir, string $sourcePath, array $options = []): string|array;
 
     /**
+     * Extra state this backend's `emit()` reads that the module closure does not
+     * carry, folded into the emit cache key.
+     *
+     * Emitted output is cached per project, so an input the key cannot see is
+     * how a cached artifact gets reused for a build that would have emitted
+     * something else. The PHP backend is the case in point: when the library
+     * roots offer a Composer tree, its entry module also depends on the
+     * autoloader being there, which is not a module in the closure. Empty when
+     * `emit()` depends on the IR alone.
+     */
+    public function emitCacheDiscriminator(): string;
+
+    /**
      * Human-readable dump of an `emit()` result for tooling (`:emit` /
      * `:dump emit`). Each backend owns the shape of its own artifacts, so
      * callers never have to sniff file extensions.

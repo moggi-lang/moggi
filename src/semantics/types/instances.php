@@ -418,7 +418,6 @@ function uniquifyCollidingInstanceMethods(TypeCheckState $state, array $freeFnNa
         $bySurface[$entry['surfaceName']][] = $entry;
     }
 
-    /** @var array<int, array<string, string>> $renamesByEvidence */
     $renamesByEvidence = [];
     foreach ($bySurface as $surfaceName => $entries) {
         $collidesWithFree = isset($freeFnNames[$surfaceName]);
@@ -847,6 +846,14 @@ function expandConstraintsWithImpliedSuperclasses(TypeCheckState $state, array $
     return $out;
 }
 
+/**
+ * Refuse a duplicate instance whose head coincides with one already checked in
+ * this module or with the project's derived set.
+ *
+ * Two modules that derive the same metadata head produce one instance — the
+ * evidence name is a hash of the head — so a derived copy of an identical head
+ * coincides with the one already indexed and the first is kept.
+ */
 function validateNoDuplicateInstance(TypeCheckState $state, Ast\InstanceDecl $decl, Type $headType): void
 {
     $headKey = instanceHeadIndexKeyFromType($headType);
@@ -875,6 +882,14 @@ function validateNoDuplicateInstance(TypeCheckState $state, Ast\InstanceDecl $de
 
     foreach ($candidates as $instance) {
         if ($instance['module'] === ($state->currentModule ?? '')) {
+            continue;
+        }
+
+        if (($state->stockDeriving ?? false)
+            && ($instance['fromDeriving'] ?? false) === true
+            && freshenStableTypeKey(prune($state, $headType))
+                === freshenStableTypeKey(prune($state, astType($state, $instance['head'])))
+        ) {
             continue;
         }
 
@@ -1223,7 +1238,6 @@ function instanceContextSatisfied(TypeCheckState $state, array $instance, array 
  */
 function instanceContextRequirements(TypeCheckState $state, array $instance, array $mapping): ?array
 {
-    /** @var array<string, Type> $headVars */
     $headVars = $mapping['__headVars'] ?? [];
     $context = [];
 

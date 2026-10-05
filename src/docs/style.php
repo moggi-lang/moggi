@@ -2,121 +2,132 @@
 
 namespace Moggi\Docs;
 
-/** Classic late-90s programming-language manual aesthetic. */
+/**
+ * The stylesheet the API documentation is generated with.
+ *
+ * Old-school plain HTML, the same look as `moggi-lang.org` and the registry
+ * front end: one column, blue underlined links, monospace for signatures,
+ * thin-bordered tables. No framework, no dark mode, no rounded corners, and
+ * nothing fetched from the network — the whole sheet is inlined into every page
+ * by `docsPageShell()`, so a generated tree is a directory of self-contained
+ * files.
+ *
+ * The paper is a warm off-white rather than #fff, because pure white glares on a
+ * page you read for a while. The five tones are the same ones the site uses
+ * (`website/style.css`): paper #f7f3e8, panel #ece5d5, code #f1ebdd,
+ * line #c8bfa9, ink #1c1a16.
+ *
+ * Class names are load-bearing (the generator emits them); the Main entry point
+ * is `docsStylesheet()`. Keep the two in step.
+ */
 function docsStylesheet(): string
 {
     return <<<'CSS'
 body {
-  margin: 0;
-  padding: 0;
-  background: #fffff0;
-  color: #000;
-  font-family: "Times New Roman", Times, serif;
-  font-size: 16px;
-  line-height: 1.45;
+  margin: 0 auto 3em;
+  max-width: 62em;
+  padding: 0 1.25em;
+  background: #f7f3e8;
+  color: #1c1a16;
+  font: 15px/1.55 Arial, Helvetica, sans-serif;
 }
 a { color: #0000cc; }
 a:visited { color: #551a8b; }
 a:hover { color: #cc0000; }
-.docs-wrap {
-  max-width: 52rem;
-  margin: 0 auto;
-  padding: 1rem 1.25rem 2.5rem;
-}
+
+/* Header: a title, a line of links, a rule. No box. */
 .docs-banner {
-  border: 2px solid #000;
-  background: #e8e8d0;
-  padding: 0.5rem 0.75rem;
-  margin-bottom: 1rem;
+  border-bottom: 2px solid #000;
+  padding: 0.9em 0 0.4em;
+  margin-bottom: 1em;
 }
 .docs-banner h1 {
   margin: 0;
-  font-size: 1.35rem;
-  font-weight: bold;
+  font-size: 1.5em;
 }
+.docs-banner h1 a { color: inherit; text-decoration: none; }
+.docs-banner h1 a:hover { color: #0000cc; }
 .docs-banner .tagline {
-  margin: 0.15rem 0 0;
-  font-size: 0.9rem;
-  color: #333;
+  margin: 0.15em 0 0;
+  color: #5a5346;
+  font-size: 0.9em;
 }
-.docs-banner h1 a {
-  color: inherit;
-  text-decoration: none;
-}
-.docs-banner h1 a:hover {
-  color: #0000cc;
+.docs-nav {
+  margin: 0.3em 0 0;
+  font-size: 0.85em;
 }
 .docs-home {
-  margin: 0 0 0.75rem;
-  font-size: 0.95rem;
+  margin: 0 0 0.75em;
+  font-size: 0.9em;
 }
+
+/* Search */
 .docs-search input[type="search"],
 .docs-search input[type="text"] {
   width: 100%;
-  max-width: 36rem;
-  font-family: "Courier New", Courier, monospace;
-  font-size: 0.95rem;
-  padding: 0.2rem 0.35rem;
-  border: 2px inset #ccc;
-  background: #fff;
+  max-width: 34em;
   box-sizing: border-box;
+  padding: 0.25em 0.4em;
+  border: 1px solid #a89f8a;
+  background: #fdfbf4;
+  color: #1c1a16;
+  font: 15px/1.5 Arial, Helvetica, sans-serif;
 }
 .docs-search button {
-  font-family: inherit;
-  font-size: 0.9rem;
-  margin-top: 0.35rem;
-  padding: 0.15rem 0.6rem;
+  font: inherit;
+  font-size: 0.9em;
+  margin-top: 0.4em;
+  padding: 0.15em 0.6em;
 }
 #mogdoc-hits, .moogle-results {
   list-style: none;
   padding: 0;
-  margin: 0.75rem 0 0;
+  margin: 0.75em 0 0;
 }
 #mogdoc-hits li, .moogle-results li {
-  margin: 0.55rem 0;
-  padding: 0.25rem 0;
-  border-bottom: 1px dotted #aaa;
+  margin: 0.6em 0;
+  padding-bottom: 0.4em;
+  border-bottom: 1px solid #ded6c4;
 }
 #mogdoc-hits .sig, .moogle-results .sig {
-  font-family: "Courier New", Courier, monospace;
-  font-size: 0.88rem;
-  color: #222;
+  font-family: "DejaVu Sans Mono", Menlo, Consolas, monospace;
+  font-size: 0.85em;
+  color: #4a4438;
 }
+
+/* Headings */
 h1.page-title {
-  font-size: 1.5rem;
+  font-size: 1.45em;
   border-bottom: 2px solid #000;
-  padding-bottom: 0.2rem;
-  margin: 0 0 0.75rem;
+  padding-bottom: 0.15em;
+  margin: 0 0 0.7em;
 }
 h2.section {
-  margin: 1.75rem 0 0.5rem;
-  font-size: 1.1rem;
-  color: #000080;
-  border-bottom: 1px solid #666;
+  margin: 1.6em 0 0.4em;
+  font-size: 1.1em;
+  border-bottom: 1px solid #c8bfa9;
 }
-.decl {
-  margin: 1.25rem 0 1.5rem;
-  padding: 0;
+.subsection {
+  margin: 1em 0 0.3em;
+  font-size: 0.95em;
 }
+
+/* Declarations */
+.decl { margin: 1.1em 0 1.4em; }
 .decl-head {
-  font-family: "Courier New", Courier, monospace;
-  font-size: 0.95rem;
+  font-family: "DejaVu Sans Mono", Menlo, Consolas, monospace;
+  font-size: 0.9em;
   font-weight: bold;
-  background: #f0f0e0;
-  border: 1px solid #999;
-  padding: 0.35rem 0.5rem;
+  background: #ece5d5;
+  border: 1px solid #c8bfa9;
+  padding: 0.3em 0.5em;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 1rem;
+  gap: 1em;
 }
-.decl-head-main {
-  min-width: 0;
-}
-.decl-head.decl-signature-head .signature {
-  flex: 1;
-  min-width: 0;
-}
+.decl-head-main { min-width: 0; }
+.decl-head.decl-signature-head .signature { flex: 1; min-width: 0; }
 .decl-head .signature {
   margin: 0;
   border: none;
@@ -124,156 +135,148 @@ h2.section {
   padding: 0;
   font-weight: bold;
 }
-.decl-head .kind {
-  color: #000080;
-  font-weight: bold;
-}
+.decl-head .kind { font-weight: bold; }
 .decl-body {
-  border: 1px solid #bbb;
+  border: 1px solid #c8bfa9;
   border-top: none;
-  padding: 0.5rem 0.75rem;
-  background: #fff;
+  padding: 0.5em 0.75em;
 }
-.decl-body .doc { margin-top: 0.5rem; }
+.decl-body .doc { margin-top: 0.5em; }
+
 .sub-decls {
-  margin: 0.75rem 0 0;
+  margin: 0.7em 0 0;
   padding: 0;
   list-style: none;
 }
 .sub-decls li {
-  margin: 0.35rem 0;
-  padding-left: 1rem;
-  border-left: 3px solid #ccc;
+  margin: 0.35em 0;
+  padding-left: 0.9em;
+  border-left: 3px solid #d3cbb8;
 }
-.sub-decls .sub-label {
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #666;
-  margin-right: 0.35rem;
-}
-.sub-label::after {
-  content: '·';
-  margin-left: 0.25rem;
-  text-transform: none;
-  letter-spacing: normal;
-}
-.sub-decls pre.signature {
-  margin: 0.15rem 0 0;
-}
+
+/* A sub-declaration's own signature row, with its source link at the right. */
 .sub-decl-head,
 .sub-decl-signature-row {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 1rem;
+  gap: 1em;
 }
 .sub-decl-signature-row .signature {
   flex: 1;
   min-width: 0;
   margin: 0;
 }
-.fixity-decl {
-  margin: 0.25rem 0 0;
-  color: var(--muted);
-  font-family: var(--mono);
-  font-size: 0.9rem;
+
+.sub-decls .sub-label {
+  font-size: 0.8em;
+  text-transform: uppercase;
+  color: #5a5346;
+  margin-right: 0.3em;
 }
-.subsection {
-  margin: 0.75rem 0 0.35rem;
-  font-size: 0.95rem;
-  font-weight: bold;
-  color: #000080;
+.sub-label::after {
+  content: ':';
+  margin-left: 0.1em;
+  text-transform: none;
 }
+.sub-decls pre.signature { margin: 0.15em 0 0; }
+
+/* A dotted list of constructors, instances and the like. */
 .ctor-table {
   width: 100%;
   border-collapse: collapse;
-  margin: 0.25rem 0 0.5rem;
+  margin: 0.3em 0 0.5em;
 }
 .ctor-table td {
+  border: 1px solid #c8bfa9;
+  padding: 0.2em 0.5em;
   vertical-align: top;
-  padding: 0.15rem 0.35rem 0.15rem 0;
 }
-.ctor-table .ctor-name {
-  white-space: nowrap;
-  width: 1%;
-}
+.ctor-table .ctor-name { white-space: nowrap; width: 1%; }
+
 .instance-list {
-  margin: 0.25rem 0 0.5rem;
-  padding-left: 1.25rem;
+  margin: 0.3em 0 0.5em;
+  padding-left: 1.6em;
 }
-.instance-list li {
-  margin: 0.2rem 0;
+.instance-list li { margin: 0.2em 0; }
+
+.fixity-decl {
+  margin: 0.25em 0 0;
+  color: #5a5346;
+  font-family: "DejaVu Sans Mono", Menlo, Consolas, monospace;
+  font-size: 0.85em;
 }
+
 .source-link {
   flex-shrink: 0;
   margin: 0;
-  font-size: 0.85rem;
+  font-size: 0.85em;
   font-weight: normal;
   text-align: right;
   white-space: nowrap;
 }
 .source-link a {
-  font-family: "Courier New", Courier, monospace;
-  color: #000080;
+  font-family: "DejaVu Sans Mono", Menlo, Consolas, monospace;
   text-decoration: none;
 }
-.source-link a:hover {
-  text-decoration: underline;
-}
-.source-listing {
-  font-family: "Courier New", Courier, monospace;
-  font-size: 0.85rem;
-  background: #f8f8f0;
-  border: 1px solid #bbb;
-  padding: 0.5rem;
+.source-link a:hover { text-decoration: underline; }
+
+/* Source and signatures: plain boxes, monospace, nothing else. */
+.source-listing, pre.signature {
+  font-family: "DejaVu Sans Mono", Menlo, Consolas, monospace;
+  font-size: 0.85em;
+  background: #f1ebdd;
+  border: 1px solid #c8bfa9;
+  padding: 0.5em;
   overflow-x: auto;
+}
+pre.signature {
+  margin: 0.35em 0;
+  padding: 0.35em 0.5em;
 }
 .source-listing .line-no {
   display: inline-block;
-  width: 3rem;
-  color: #888;
-  user-select: none;
+  width: 3em;
+  color: #7a7364;
   text-align: right;
-  margin-right: 0.75rem;
+  margin-right: 0.75em;
+  user-select: none;
 }
-.source-listing .src-line:target {
-  background: #ffffcc;
-}
-pre.signature {
-  margin: 0.35rem 0;
-  padding: 0.35rem 0.5rem;
-  background: #f8f8f0;
-  border: 1px solid #ccc;
-  font-family: "Courier New", Courier, monospace;
-  font-size: 0.9rem;
-  overflow-x: auto;
-}
+.source-listing .src-line:target { background: #f5ecc0; }
+
 code, .mono {
-  font-family: "Courier New", Courier, monospace;
+  font-family: "DejaVu Sans Mono", Menlo, Consolas, monospace;
   font-size: 0.92em;
 }
 .meta, .aliases, .backends {
-  color: #444;
-  font-size: 0.9rem;
-  margin: 0.5rem 0;
+  color: #5a5346;
+  font-size: 0.9em;
+  margin: 0.5em 0;
 }
+
 ul.module-list {
   columns: 2;
-  column-gap: 2rem;
-  padding-left: 1.25rem;
+  column-gap: 2em;
+  padding-left: 1.4em;
 }
 ul.module-list li { break-inside: avoid; }
+
 .docs-footer {
-  margin-top: 2rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid #999;
-  font-size: 0.85rem;
-  color: #555;
+  margin-top: 2.5em;
+  padding-top: 0.5em;
+  border-top: 1px solid #c8bfa9;
+  color: #5a5346;
+  font-size: 0.85em;
 }
 CSS;
 }
 
+/**
+ * One generated page: the sheet inlined, the header, the body, the footer.
+ *
+ * Every page is self-contained, so a generated tree can be opened from disk, a
+ * static host or `mogdoc serve` without a single extra request.
+ */
 function docsPageShell(
     string $title,
     string $body,
@@ -298,15 +301,14 @@ function docsPageShell(
   {$extraHead}
 </head>
 <body>
-<div class="docs-wrap">
   <div class="docs-banner">
     <h1><a href="index.html">Moggi API Documentation</a></h1>
     <p class="tagline">Search by name and type, or browse modules below</p>
+    <p class="docs-nav"><a href="https://moggi-lang.org/">moggi-lang.org</a> | <a href="https://registry.moggi-lang.org/">packages</a> | <a href="https://github.com/moggi-lang/moggi">source</a></p>
   </div>
   {$home}
   {$body}
   <div class="docs-footer">Generated by mogdoc · {$year}</div>
-</div>
 {$extraScript}
 </body>
 </html>

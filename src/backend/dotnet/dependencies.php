@@ -2,7 +2,7 @@
 
 namespace Moggi\Backend\DotNet\Dependencies;
 
-use function Moggi\Modules\configuredStdlibLibPath;
+use function Moggi\Modules\libraryScanRoots;
 
 /**
  * Library-owned .NET host metadata.
@@ -42,41 +42,66 @@ use function Moggi\Modules\configuredStdlibLibPath;
  */
 
 /**
- * Absolute paths of `dotnet` directories under the stdlib root that contain
- * metadata files.
+ * Absolute paths of every `dotnet` directory under a library root.
+ *
+ * Both kinds of content count: the `.json` metadata a library declares, and the
+ * `.dll` assemblies it vendors. A directory with only assemblies is the shape a
+ * NuGet resolution materializes into.
  *
  * @return list<string>
  */
 function discoverDotNetLibDirs(): array
 {
-    $lib = configuredStdlibLibPath();
-    if ($lib === null || $lib === '') {
-        $fallback = dirname(__DIR__, 3) . DIRECTORY_SEPARATOR . 'lib';
-        $lib = \is_dir($fallback) ? $fallback : null;
-    }
-    if ($lib === null) {
-        return [];
-    }
-
     $dirs = [];
-    $iterator = new \RecursiveIteratorIterator(
-        new \RecursiveDirectoryIterator($lib, \FilesystemIterator::SKIP_DOTS),
-    );
-    foreach ($iterator as $file) {
-        if (!$file->isFile() || $file->getExtension() !== 'json') {
-            continue;
+    foreach (libraryScanRoots() as $lib) {
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($lib, \FilesystemIterator::SKIP_DOTS),
+        );
+        foreach ($iterator as $file) {
+            if (!$file->isFile()) {
+                continue;
+            }
+            $extension = $file->getExtension();
+            if ($extension !== 'json' && $extension !== 'dll') {
+                continue;
+            }
+            $dir = $file->getPath();
+            if (basename($dir) !== 'dotnet') {
+                continue;
+            }
+            $dirs[$dir] = true;
         }
-        $dir = $file->getPath();
-        if (basename($dir) !== 'dotnet') {
-            continue;
-        }
-        $dirs[$dir] = true;
     }
 
     $dirs = \array_keys($dirs);
     \sort($dirs);
 
     return $dirs;
+}
+
+/**
+ * Absolute paths of every assembly a library root vendors under `dotnet/`.
+ *
+ * Third-party packages resolved by NuGet are materialized here (see
+ * `Moggi\Registry\materializeHostToolArtifacts`), and a library may vendor a
+ * dependent assembly by hand the same way. The packager copies them beside the
+ * app so the runtime can load them, which is what a framework-dependent app
+ * needs instead of a machine-wide package cache.
+ *
+ * @return list<string>
+ */
+function dotNetVendoredAssemblies(): array
+{
+    $assemblies = [];
+    foreach (discoverDotNetLibDirs() as $dir) {
+        foreach (\glob($dir . DIRECTORY_SEPARATOR . '*.dll') ?: [] as $dll) {
+            $assemblies[\basename($dll)] = $dll;
+        }
+    }
+
+    \ksort($assemblies, \SORT_STRING);
+
+    return \array_values($assemblies);
 }
 
 /**

@@ -9,6 +9,7 @@ use Moggi\Docs;
 use Moggi\Syntax\Lexer\LexError;
 use Moggi\Syntax\Parser\ParseError;
 
+use function Moggi\Cache\docsCacheDir;
 use function Moggi\CLI\defaultDocsInput;
 use function Moggi\CLI\parseDocsToolOptions;
 use function Moggi\CLI\printUsage;
@@ -95,8 +96,7 @@ function runMogdoc(array $argv): int
         if ($parsed['sub'] === 'serve') {
             $docDir = $parsed['output'];
             if ($docDir === null) {
-                $docDir = rtrim(getenv('MOGGI_CACHE_DIR') ?: (getcwd() ?: '.') . '/.moggi', '/')
-                    . '/mogdoc-serve';
+                $docDir = docsCacheDir();
             }
             $docDir = rtrim($docDir, '/');
             $fingerprintPath = $docDir . '/.mogdoc-source-fingerprint';

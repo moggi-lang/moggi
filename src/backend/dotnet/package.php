@@ -2,6 +2,7 @@
 
 namespace Moggi\Backend\DotNet;
 
+use function Moggi\Backend\DotNet\Dependencies\dotNetVendoredAssemblies;
 use function Moggi\Compiler\executableName;
 use function Moggi\Compiler\findExecutable;
 use function Moggi\Compiler\findToolchainExecutable;
@@ -322,6 +323,8 @@ function packageDotNetOutput(string $outputRoot, array $options = []): void
 
     $extraAssemblies = dotNetOutputReferencedAssemblies($outputRoot);
 
+    stageDotNetVendoredAssemblies($outputRoot, $assemblyName);
+
     $headerPath = $outputRoot . DIRECTORY_SEPARATOR . '_header.il';
     $header = Il\assemblyExternPreamble()
         . Il\assemblyExternsFor($extraAssemblies)
@@ -411,6 +414,45 @@ function assembleDotNetWithIlasm(
     writeDotNetRuntimeConfig($outputRoot, $assemblyName);
     if ($isExe) {
         writeDotNetDepsJson($outputRoot, $assemblyName);
+    }
+}
+
+/**
+ * Assembly file names sitting beside the app assembly, sorted.
+ *
+ * @return list<string>
+ */
+function stagedDotNetAssemblyNames(string $outputRoot, string $assemblyName): array
+{
+    $names = [];
+    foreach (\glob($outputRoot . DIRECTORY_SEPARATOR . '*.dll') ?: [] as $dll) {
+        $name = \basename($dll);
+        if ($name !== $assemblyName . '.dll') {
+            $names[] = $name;
+        }
+    }
+    \sort($names, \SORT_STRING);
+
+    return $names;
+}
+
+/**
+ * Copy every assembly a library root vendors into the output root.
+ *
+ * The app is framework-dependent, so an assembly it references must be either
+ * in the shared framework or next to it. This is the second case.
+ */
+function stageDotNetVendoredAssemblies(string $outputRoot, string $assemblyName): void
+{
+    foreach (dotNetVendoredAssemblies() as $dll) {
+        $name = \basename($dll);
+        if ($name === $assemblyName . '.dll') {
+            continue;
+        }
+        $target = $outputRoot . DIRECTORY_SEPARATOR . $name;
+        if (!\is_file($target) && \copy($dll, $target) === false) {
+            throw new \RuntimeException("cannot copy {$dll} into {$outputRoot}");
+        }
     }
 }
 
@@ -554,28 +596,38 @@ JSON;
 function writeDotNetDepsJson(string $outputRoot, string $assemblyName): void
 {
     $path = $outputRoot . DIRECTORY_SEPARATOR . $assemblyName . '.deps.json';
+    $target = [
+        $assemblyName . '/1.0.0' => [
+            'runtime' => [
+                $assemblyName . '.dll' => new \stdClass(),
+            ],
+        ],
+    ];
+    $libraries = [
+        $assemblyName . '/1.0.0' => [
+            'type' => 'project',
+            'serviceable' => false,
+            'sha512' => '',
+        ],
+    ];
+    foreach (stagedDotNetAssemblyNames($outputRoot, $assemblyName) as $name) {
+        $key = \substr($name, 0, -\strlen('.dll')) . '/1.0.0';
+        $target[$key] = ['runtime' => [$name => new \stdClass()]];
+        $libraries[$key] = [
+            'type' => 'package',
+            'serviceable' => false,
+            'sha512' => '',
+        ];
+    }
+
     $json = \json_encode([
         'runtimeTarget' => [
             'name' => '.NETCoreApp,Version=v8.0',
             'signature' => '',
         ],
         'compilationOptions' => new \stdClass(),
-        'targets' => [
-            '.NETCoreApp,Version=v8.0' => [
-                $assemblyName . '/1.0.0' => [
-                    'runtime' => [
-                        $assemblyName . '.dll' => new \stdClass(),
-                    ],
-                ],
-            ],
-        ],
-        'libraries' => [
-            $assemblyName . '/1.0.0' => [
-                'type' => 'project',
-                'serviceable' => false,
-                'sha512' => '',
-            ],
-        ],
+        'targets' => ['.NETCoreApp,Version=v8.0' => $target],
+        'libraries' => $libraries,
     ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
     if ($json === false) {
         throw new \RuntimeException('failed to encode deps.json');

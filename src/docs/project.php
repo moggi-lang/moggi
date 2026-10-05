@@ -8,6 +8,7 @@ use Moggi\Syntax\Ast\Program;
 use function Moggi\Backend\setCompileBackend;
 use function Moggi\CLI\findMogFiles;
 use function Moggi\CLI\resolveLibraryDirs;
+use function Moggi\Modules\isLibraryRoot;
 use function Moggi\Modules\moduleFileClosureCached;
 use function Moggi\Modules\prepareProjectCached;
 use function Moggi\Modules\projectSourceClosure;
@@ -107,7 +108,7 @@ function resolveDocFileClosure(string $inputPath, array $extraLibDirs = []): arr
     $libDirs = resolveLibraryDirs($extraLibDirs);
     if ($libDirs !== []) {
         foreach ($libDirs as $dir) {
-            if (\is_file(rtrim($dir, '/') . '/Data/Eq.mog')) {
+            if (isLibraryRoot($dir)) {
                 setStdlibLibPath($dir);
                 break;
             }
@@ -126,7 +127,6 @@ function resolveDocFileClosure(string $inputPath, array $extraLibDirs = []): arr
 
                 return [$root, $files];
             } catch (\Throwable) {
-                // Keep the single-file input when closure discovery fails.
             }
         }
     }

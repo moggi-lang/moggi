@@ -2,7 +2,7 @@
 
 namespace Moggi\Backend\Jvm\Dependencies;
 
-use function Moggi\Modules\configuredStdlibLibPath;
+use function Moggi\Modules\libraryScanRoots;
 
 /**
  * Library-owned JVM dependency directories: `jvm/` next to a module's
@@ -44,41 +44,46 @@ function mergeDemandClasspathJars(array &$classes, array &$resources): void
 }
 
 /**
- * Absolute paths of lib/.../jvm dirs that contain jars or companion Java.
+ * Absolute paths of every `jvm` dir under a library root that holds jars or
+ * companion Java.
+ *
+ * Every root, not just the standard library: a package installed beside the
+ * standard library (or a dependency tree `moggi build` resolved) vendors its
+ * jars in its own root, and a root the compile was given but this scan skipped
+ * would silently drop those classes from the artifact.
  *
  * @return list<string>
  */
 function discoverVendorJvmDirs(): array
 {
-    $lib = configuredStdlibLibPath();
-    if ($lib === null || $lib === '') {
-        $fallback = dirname(__DIR__, 3) . DIRECTORY_SEPARATOR . 'lib';
-        $lib = \is_dir($fallback) ? $fallback : null;
-    }
-    if ($lib === null) {
-        return [];
-    }
     $dirs = [];
-    $it = new \RecursiveIteratorIterator(
-        new \RecursiveDirectoryIterator($lib, \FilesystemIterator::SKIP_DOTS),
-    );
-    foreach ($it as $file) {
-        if (!$file->isFile()) {
-            continue;
+    foreach (libraryScanRoots() as $lib) {
+        $it = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($lib, \FilesystemIterator::SKIP_DOTS),
+        );
+        foreach ($it as $file) {
+            if (!$file->isFile()) {
+                continue;
+            }
+            $name = $file->getFilename();
+            if (!str_ends_with($name, '.jar') && !str_ends_with($name, '.java')) {
+                continue;
+            }
+            $dir = $file->getPath();
+            if (basename($dir) !== 'jvm') {
+                continue;
+            }
+            $dirs[$dir] = true;
         }
-        $name = $file->getFilename();
-        if (!str_ends_with($name, '.jar') && !str_ends_with($name, '.java')) {
-            continue;
-        }
-        $dir = $file->getPath();
-        if (basename($dir) !== 'jvm') {
-            continue;
-        }
-        $dirs[$dir] = true;
     }
 
-    return \array_keys($dirs);
+    $paths = \array_keys($dirs);
+    \sort($paths);
+
+    return $paths;
 }
+
+
 
 /**
  * Package / class path substrings that, if present in emitted bytecode, mean

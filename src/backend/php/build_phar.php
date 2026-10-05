@@ -21,13 +21,17 @@ use function Moggi\Backend\setCompileBackend;
 
 require dirname(__DIR__, 3) . '/src/compiler.php';
 
-if ($argc !== 3) {
-    \fwrite(STDERR, "usage: php build_phar.php <output-root> <phar-path>\n");
+if ($argc !== 3 && $argc !== 4) {
+    \fwrite(STDERR, "usage: php build_phar.php <output-root> <phar-path> [entry-relative]\n");
 
     exit(1);
 }
 
 [, $outputRoot, $pharPath] = $argv;
+// The entry module's path inside the archive, when the caller knows it; the
+// stub scans for it otherwise. The compiler always passes it, which keeps a
+// bundled `vendor/` from being read on every startup.
+$entryRelative = $argv[3] ?? '';
 
 if (!\is_dir($outputRoot)) {
     \fwrite(STDERR, "error: output directory does not exist: {$outputRoot}\n");
@@ -37,7 +41,7 @@ if (!\is_dir($outputRoot)) {
 
 try {
     setCompileBackend('php');
-    writePhar($outputRoot, $pharPath);
+    writePhar($outputRoot, $pharPath, ['entryRelative' => $entryRelative]);
 } catch (\Throwable $e) {
     \fwrite(STDERR, 'error: ' . $e->getMessage() . "\n");
 

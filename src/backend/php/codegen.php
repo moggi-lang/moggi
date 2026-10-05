@@ -2,6 +2,8 @@
 
 namespace Moggi\Backend\Php\Codegen;
 
+use const Moggi\Backend\Php\Dependencies\COMPOSER_AUTOLOAD;
+use function Moggi\Backend\Php\Dependencies\composerIsBundled;
 use function Moggi\Backend\Php\Dependencies\phpCompanionFilesForModule;
 use function Moggi\Backend\Php\Foreign\emitForeignIoStatement;
 
@@ -61,7 +63,6 @@ function emit(IR\Module $module, string $sourcePath, array $options = []): strin
     $phpNames = buildPhpNameMap($module);
     $importOptions = $options['imports'] ?? [];
     $functionArity = $analysis['functionArity'];
-    /** @var array<string, true> $localBindings */
     $localBindings = [];
     foreach ($module->functions as $fn) {
         $localBindings[$fn->name] = true;
@@ -119,6 +120,12 @@ function emit(IR\Module $module, string $sourcePath, array $options = []): strin
     if (moduleUsesPartialApply($module) || moduleUsesMoggiRuntime($module) || moduleHasMainEntry($module)) {
         $runtime = $options['runtimeRequire'] ?? runtimeRequirePath($sourcePath, $options);
         $lines[] = 'require_once ' . $runtime . ';';
+
+        if (moduleHasMainEntry($module) && composerIsBundled()) {
+            $lines[] = 'require_once ' . ($options['composerAutoloadRequire']
+                ?? composerAutoloadRequirePath($sourcePath, $options)) . ';';
+        }
+
         $lines[] = '';
     }
 
@@ -589,6 +596,24 @@ function runtimeRequirePath(string $sourcePath, array $options = []): string
     $depth = ($dir === '.' || $dir === '') ? 0 : substr_count($dir, '/') + 1;
 
     return "__DIR__ . '/" . str_repeat('../', $depth) . RUNTIME_OUTPUT_PATH . "'";
+}
+
+/**
+ * Where the entry module reaches Composer's autoloader, relative to itself.
+ *
+ * Same depth arithmetic as the runtime require, pointed at the `vendor/`
+ * directory the build copies in beside it. Inside a PHAR the path resolves
+ * through the same `phar://` prefix, so one expression covers both artifact
+ * shapes.
+ */
+function composerAutoloadRequirePath(string $sourcePath, array $options = []): string
+{
+    $relative = $options['outputRelative'] ?? $sourcePath;
+    $relative = \str_replace('\\', '/', $relative);
+    $dir = dirname($relative);
+    $depth = ($dir === '.' || $dir === '') ? 0 : substr_count($dir, '/') + 1;
+
+    return "__DIR__ . '/" . str_repeat('../', $depth) . COMPOSER_AUTOLOAD . "'";
 }
 
 /** Whether the module carries the application entry an emitted bootstrap auto-runs. */

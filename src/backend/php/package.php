@@ -97,7 +97,7 @@ function packagePhar(string $outputRoot, string $pharPath, array $options): void
 
     $builder = pharBuilderCommand();
     if ($builder !== null) {
-        packagePharInSubprocess($builder, $outputRoot, $pharPath);
+        packagePharInSubprocess($builder, $outputRoot, $pharPath, $options);
 
         return;
     }
@@ -118,6 +118,12 @@ function pharBuilderCommand(): ?array
         return null;
     }
 
+    if (\PHP_BINARY === '') {
+        throw new \RuntimeException(
+            'this PHP build cannot create PHARs and has no second process to build one in (set phar.readonly=0)',
+        );
+    }
+
     return [
         \PHP_BINARY,
         '-d', 'phar.readonly=0',
@@ -126,10 +132,11 @@ function pharBuilderCommand(): ?array
     ];
 }
 
-/** @param list<string> $builder */
-function packagePharInSubprocess(array $builder, string $outputRoot, string $pharPath): void
+/** @param list<string> $builder @param array<string, mixed> $options */
+function packagePharInSubprocess(array $builder, string $outputRoot, string $pharPath, array $options = []): void
 {
-    $cmd = \array_merge($builder, [$outputRoot, $pharPath]);
+    $entry = (string) ($options['entryRelative'] ?? '');
+    $cmd = \array_merge($builder, [$outputRoot, $pharPath, $entry]);
     $cmdLine = \implode(' ', \array_map('escapeshellarg', $cmd));
     \passthru($cmdLine, $code);
     if ($code !== 0) {
@@ -143,18 +150,22 @@ function writePhar(string $outputRoot, string $pharPath, array $options = []): v
     $phar = new \Phar($pharPath);
     $phar->buildFromDirectory($outputRoot);
     $phar->setSignatureAlgorithm(\Phar::SHA256);
-    $phar->setStub(buildPharStub());
-    unset($phar); // flush to disk
+    $phar->setStub(buildPharStub((string) ($options['entryRelative'] ?? '')));
+    unset($phar);
 }
 
-function buildPharStub(): string
+/**
+ * The PHAR stub: load the runtime, find the module that bootstraps `main`, run it.
+ *
+ * The closing `__HALT_COMPILER();` is spelled exactly as PHP writes it. A PHP CLI
+ * accepts any spelling, but a micro SAPI runtime only registers an appended PHAR
+ * whose stub carries the canonical token, so this token's case is load-bearing.
+ */
+function buildPharStub(string $entryRelative = ''): string
 {
-    return <<<'PHPSTUB'
-#!/usr/bin/env php
-<?php declare(strict_types=1);
-
-require_once 'phar://' . __FILE__ . '/_runtime.php';
-
+    $entry = \str_replace("'", "\\'", \ltrim(\str_replace('\\', '/', $entryRelative), '/'));
+    $locate = $entry === ''
+        ? <<<'PHPSTUB'
 $entryFile = null;
 $it = new \RecursiveIteratorIterator(
     new \RecursiveDirectoryIterator('phar://' . __FILE__, \FilesystemIterator::SKIP_DOTS),
@@ -171,11 +182,26 @@ foreach ($it as $file) {
         break;
     }
 }
+PHPSTUB
+        : "\$entryFile = 'phar://' . __FILE__ . '/{$entry}';";
 
-if ($entryFile !== null) {
-    require_once $entryFile;
+    return <<<PHPSTUB
+#!/usr/bin/env php
+<?php declare(strict_types=1);
+
+// The runtime must be loaded before the entry module's bootstrap routes an
+// uncaught exception through Moggi\\reportUncaught. Source maps stay where they
+// were emitted; a report loads only the ones its frames name.
+require_once 'phar://' . __FILE__ . '/_runtime.php';
+
+{$locate}
+
+// The entry module's embedded bootstrap runs main() (and routes uncaught
+// exceptions through Moggi\\reportUncaught) when required.
+if (\$entryFile !== null) {
+    require_once \$entryFile;
 }
 
-__halt_compiler();
+__HALT_COMPILER();
 PHPSTUB;
 }

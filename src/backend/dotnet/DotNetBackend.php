@@ -52,6 +52,13 @@ final class DotNetBackend implements Backend
         return [];
     }
 
+    /** The .NET emit is a function of the IR alone (CLR metadata is read during
+     * type checking, not during emit). */
+    public function emitCacheDiscriminator(): string
+    {
+        return '';
+    }
+
     /**
      * @param array<string, mixed> $options
      * @return array<string, string>

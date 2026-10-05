@@ -10,6 +10,7 @@ use Moggi\Syntax\Lexer\LexError;
 use Moggi\Syntax\Parser\ParseError;
 use Moggi\CLI\ArgCursor;
 
+use function Moggi\Backend\Php\Dependencies\composerVendorRoots;
 use function Moggi\CLI\parseBackendValue;
 use function Moggi\CLI\printUsage;
 use function Moggi\CLI\resolveCompileInputs;
@@ -18,6 +19,42 @@ use function Moggi\Compiler\compileFile;
 use function Moggi\Compiler\executableName;
 use function Moggi\Compiler\findExecutable;
 use function Moggi\Compiler\findToolchainExecutable;
+use function Moggi\Modules\bundledStdlibLibPath;
+use function Moggi\Modules\cachedModuleHeader;
+use function Moggi\Pipeline\setEntryModules;
+
+/**
+ * Pin the library roots this compile searches, so the backend dependency scanners
+ * see the same set the module resolver does.
+ *
+ * The first root that carries a `base.moggi` becomes the primary standard library;
+ * every other root is registered as an extra. Extra roots matter beyond module
+ * lookup: a package's vendored jars, CLR metadata and PHP helpers live under
+ * whichever root it was installed into, and a dependency tree resolved by
+ * `moggi build` is one of those roots.
+ *
+ * @param list<string> $libDirs
+ */
+function registerLibraryRoots(array $libDirs): void
+{
+    $primary = null;
+    foreach ($libDirs as $dir) {
+        if (Modules\isLibraryRoot($dir)) {
+            $primary = $dir;
+            break;
+        }
+    }
+
+    if ($primary !== null) {
+        Modules\setStdlibLibPath($primary);
+    }
+
+    foreach ($libDirs as $dir) {
+        if ($dir !== $primary && \is_dir($dir)) {
+            Modules\addLibraryRoot($dir);
+        }
+    }
+}
 
 /**
  * Compile into a build root directory.
@@ -27,6 +64,11 @@ use function Moggi\Compiler\findToolchainExecutable;
  * deployment artifact stays inside $buildRoot (php run skips packaging).
  *
  * $packageUnpacked mirrors the `--unpacked` flag for the backend packager.
+ *
+ * The entry is the module this compile was handed a file for; a directory build
+ * keeps the conventional `Main`. Naming it here lets a package carry several
+ * executables without forcing every entry to be called `Main`, and lets
+ * `main = Suite` name a module called `Suite`.
  *
  * @return array{
  *   exitCode: int, outputRoot: ?string, entryModule: ?string, entryRelative: ?string,
@@ -52,8 +94,8 @@ function compileIntoRoot(
         'native' => $native,
     ];
 
-    if ($native && $backend !== 'jvm' && $backend !== 'dotnet') {
-        \fwrite(STDERR, "error: --native is only supported with --backend jvm or --backend dotnet\n");
+    if ($native && !backendSupportsNative($backend)) {
+        \fwrite(STDERR, "error: --native is only supported with --backend php, jvm or dotnet\n");
 
         return $empty(1);
     }
@@ -62,7 +104,7 @@ function compileIntoRoot(
     echo "backend: {$backend}\n";
 
     try {
-        [$root, $files] = resolveCompileInputs($inputPath);
+        [$root, $files] = resolveCompileInputs($inputPath, $libDirs);
     } catch (\InvalidArgumentException $e) {
         \fwrite(STDERR, 'error: ' . $e->getMessage() . "\n");
 
@@ -79,15 +121,20 @@ function compileIntoRoot(
         return $empty(1);
     }
 
+    $entryModule = 'Main';
+    $realInput = \realpath($inputPath);
+    if ($realInput !== false && \is_file($realInput)) {
+        $header = cachedModuleHeader($realInput);
+        if (\is_string($header['module'] ?? null) && $header['module'] !== '') {
+            $entryModule = $header['module'];
+        }
+    }
+    setEntryModules([$entryModule]);
+
     $libDirs = resolveLibraryDirs($libDirs);
 
     if ($libDirs !== []) {
-        foreach ($libDirs as $dir) {
-            if (\is_file(rtrim($dir, '/') . '/Data/Eq.mog')) {
-                Modules\setStdlibLibPath($dir);
-                break;
-            }
-        }
+        registerLibraryRoots($libDirs);
 
         try {
             [$files, $root] = Modules\projectSourceClosure($files, $libDirs);
@@ -171,7 +218,11 @@ function compileIntoRoot(
             }
         }
 
+        if (!bundleComposerVendor($outputRoot, $backend)) {
+            return $empty(1);
+        }
         if (!bundleRuntime($outputRoot, $backend, [
+            'entryRelative' => $entryRelative,
             'jarName' => 'moggi-app.jar',
             'assemblyName' => 'moggi-app',
             'unpacked' => $packageUnpacked,
@@ -227,8 +278,12 @@ function compileIntoRoot(
         echo "{$relative} -> {$outputPath}\n";
     }
 
+    if (!bundleComposerVendor($outputRoot, $backend)) {
+        return $empty(1);
+    }
     if (!bundleRuntime($outputRoot, $backend, [
         'entryModule' => $entryModule,
+        'entryRelative' => $entryRelative,
         'jarName' => 'moggi-app.jar',
         'assemblyName' => 'moggi-app',
         'unpacked' => $packageUnpacked,
@@ -263,8 +318,14 @@ function compileIntoRoot(
  * Backend artifacts: php moggi-app.phar / jvm moggi-app.jar / dotnet
  * moggi-app.dll (+ .runtimeconfig.json / .deps.json sidecars).
  *
+ * With --native a second artifact is written beside the archive — the
+ * executable — so the two never share a path: `-o app` names the executable
+ * and puts the archive at `app.phar`. The executable is the primary artifact
+ * then (`artifactPath`), reported first; without --native the archive is.
+ *
  * With --unpacked, `-o` names an output directory and the whole generated
- * tree is kept for inspection (no packaging).
+ * tree is kept for inspection (no packaging). A native executable is built
+ * from the packaged archive, so --native and --unpacked are refused together.
  *
  * @return array{
  *   exitCode: int, outputRoot: ?string, artifactPath: ?string,
@@ -291,8 +352,14 @@ function runCompile(
         'native' => $native,
     ];
 
-    if ($native && $backend !== 'jvm' && $backend !== 'dotnet') {
-        \fwrite(STDERR, "error: --native is only supported with --backend jvm or --backend dotnet\n");
+    if ($native && !backendSupportsNative($backend)) {
+        \fwrite(STDERR, "error: --native is only supported with --backend php, jvm or dotnet\n");
+
+        return $empty(1);
+    }
+
+    if ($native && $unpacked) {
+        \fwrite(STDERR, "error: --native cannot be combined with --unpacked; a native executable is built from the packaged archive, so drop one of the two\n");
 
         return $empty(1);
     }
@@ -329,15 +396,30 @@ function runCompile(
         ? $outputPath
         : getcwd() . DIRECTORY_SEPARATOR . $base . artifactExtension($backend);
 
-    $moved = movePackagedArtifacts($staging, $destBase, $backend, $native);
+    try {
+        $moved = movePackagedArtifacts($staging, $destBase, $backend, $native);
+    } catch (\RuntimeException $e) {
+        removeOutputTree($staging);
+        \fwrite(STDERR, 'error: ' . $e->getMessage() . "\n");
+
+        return $empty(1);
+    }
     removeOutputTree($staging);
 
+    $order = artifactPrimaryRel($backend, $native);
+    foreach ($order as $rel) {
+        if (isset($moved[$rel])) {
+            echo artifactLabel($rel) . ": {$moved[$rel]}\n";
+        }
+    }
     foreach ($moved as $rel => $final) {
-        echo artifactLabel($rel) . ": {$final}\n";
+        if (!\in_array($rel, $order, true)) {
+            echo artifactLabel($rel) . ": {$final}\n";
+        }
     }
 
     $primary = null;
-    foreach (artifactPrimaryRel($backend) as $rel) {
+    foreach ($order as $rel) {
         if (isset($moved[$rel])) {
             $primary = $moved[$rel];
 
@@ -348,16 +430,26 @@ function runCompile(
     return $result + ['artifactPath' => $primary];
 }
 
-/** Relative paths (inside the staging root) of each backend's packaged artifact, primary first. */
-function artifactPrimaryRel(string $backend): array
+/**
+ * Relative paths (inside the staging root) of each backend's packaged artifact,
+ * primary first. A native build's deliverable is the executable, so it leads
+ * the archive; without it the archive is what a consumer deploys.
+ */
+function artifactPrimaryRel(string $backend, bool $native = false): array
 {
-    $native = executableName('moggi-app');
-
-    return match ($backend) {
-        'php' => ['moggi-app.phar'],
-        'jvm' => ['moggi-app.jar', $native],
-        'dotnet' => ['moggi-app.dll', $native, 'moggi-app.runtimeconfig.json', 'moggi-app.deps.json'],
+    $archive = match ($backend) {
+        'php' => 'moggi-app.phar',
+        'jvm' => 'moggi-app.jar',
+        'dotnet' => 'moggi-app.dll',
     };
+    $executable = executableName('moggi-app');
+    $sidecars = $backend === 'dotnet'
+        ? ['moggi-app.runtimeconfig.json', 'moggi-app.deps.json']
+        : [];
+
+    return $native
+        ? [$executable, $archive, ...$sidecars]
+        : [$archive, $executable, ...$sidecars];
 }
 
 function artifactLabel(string $rel): string
@@ -412,50 +504,200 @@ function artifactExtension(string $backend): string
  * sidecars `app.runtimeconfig.json` / `app.deps.json` next to it, since the
  * runtime resolves the shared framework through them).
  *
+ * A native build writes two artifacts, so they must never share a path: the
+ * archive keeps the backend extension and the executable takes the name the
+ * caller asked for. An `-o` that already names the executable (`-o app`) gets
+ * the archive at `app.phar`; one that already carries the extension
+ * (`-o app.phar`) is unchanged.
+ *
+ * For .NET, third-party assemblies the app is linked against travel out beside
+ * it: the deps document names them, so they are packaged artifacts, not build
+ * leftovers.
+ *
+ * The destinations are enumerated before anything moves, so a path claimed by
+ * two artifacts of one run is refused instead of the second silently
+ * overwriting the first. A pre-existing file at a destination is replaced: that
+ * is what naming it with `-o` asks for.
+ *
+ * Nothing is written to a final destination until every artifact is on disk:
+ * each is first moved to a temporary name beside where it belongs, and only then
+ * renamed into place. A failure part way through therefore leaves no half-built
+ * artifact behind — the temporaries are removed, and so is any destination this
+ * run created that was not already there. A destination that *did* already exist
+ * is never deleted; the run replaced it, and removing the replacement would only
+ * lose the file the caller asked to overwrite.
+ *
  * @return array<string, string> rel => final absolute path, for the ones moved
+ *
+ * @throws \RuntimeException when two packaged artifacts resolve to one path, or
+ *                           when an artifact cannot be written to its destination
  */
 function movePackagedArtifacts(string $staging, string $destBase, string $backend, bool $native): array
 {
-    $moved = [];
+    $binBase = $native && backendSupportsNative($backend)
+        ? preg_replace('/\.(jar|dll|phar|exe)$/', '', $destBase) ?? $destBase
+        : null;
 
-    $move = static function (string $rel, string $dest) use ($staging, &$moved): bool {
-        $src = $staging . DIRECTORY_SEPARATOR . $rel;
-        if (!\is_file($src)) {
-            return false;
+    $archiveDest = $destBase;
+    if ($binBase !== null && executableName($binBase) === $destBase) {
+        $archiveDest = $destBase . artifactExtension($backend);
+    }
+
+    $sideBase = preg_replace('/\.dll$/', '', $archiveDest) ?? $archiveDest;
+
+    $plan = [];
+    if ($backend === 'php') {
+        $plan[] = ['moggi-app.phar', $archiveDest];
+    } elseif ($backend === 'jvm') {
+        $plan[] = ['moggi-app.jar', $archiveDest];
+    } elseif ($backend === 'dotnet') {
+        $plan[] = ['moggi-app.dll', $archiveDest];
+        $plan[] = ['moggi-app.runtimeconfig.json', $sideBase . '.runtimeconfig.json'];
+        $plan[] = ['moggi-app.deps.json', $sideBase . '.deps.json'];
+        foreach (\glob($staging . DIRECTORY_SEPARATOR . '*.dll') ?: [] as $dll) {
+            $name = \basename($dll);
+            if ($name !== 'moggi-app.dll') {
+                $plan[] = [$name, \dirname($archiveDest) . DIRECTORY_SEPARATOR . $name];
+            }
         }
+    }
+
+    if ($binBase !== null) {
+        $plan[] = [executableName('moggi-app'), executableName($binBase)];
+    }
+
+    $sources = [];
+    $destinations = [];
+    foreach ($plan as [$rel, $dest]) {
+        if (!\is_file($staging . DIRECTORY_SEPARATOR . $rel)) {
+            continue;
+        }
+        if (isset($destinations[$dest])) {
+            throw new \RuntimeException("output path {$dest} would be written twice by this build");
+        }
+        $sources[] = [$rel, $dest];
+        $destinations[$dest] = true;
+    }
+
+    $temporaries = [];
+    $staged = [];
+    foreach ($sources as [$rel, $dest]) {
         $dir = dirname($dest);
-        if (!\is_dir($dir) && !mkdir($dir, 0777, true) && !\is_dir($dir)) {
-            return false;
+        if (!\is_dir($dir) && !@mkdir($dir, 0777, true) && !\is_dir($dir)) {
+            throw new \RuntimeException("cannot create directory {$dir}");
         }
-        if (!@\rename($src, $dest)) {
-            if (!\copy($src, $dest)) {
-                return false;
+        $temporary = $dest . '.moggi-tmp-' . getmypid() . '-' . bin2hex(random_bytes(4));
+        $src = $staging . DIRECTORY_SEPARATOR . $rel;
+        if (!@\rename($src, $temporary)) {
+            if (!\copy($src, $temporary)) {
+                removeStagedArtifacts($temporaries);
+                throw new \RuntimeException("cannot write {$dest}");
             }
             @\unlink($src);
         }
-        $moved[$rel] = $dest;
-
-        return true;
-    };
-
-    $sideBase = preg_replace('/\.dll$/', '', $destBase) ?? $destBase;
-
-    if ($backend === 'php') {
-        $move('moggi-app.phar', $destBase);
-    } elseif ($backend === 'jvm') {
-        $move('moggi-app.jar', $destBase);
-    } elseif ($backend === 'dotnet') {
-        $move('moggi-app.dll', $destBase);
-        $move('moggi-app.runtimeconfig.json', $sideBase . '.runtimeconfig.json');
-        $move('moggi-app.deps.json', $sideBase . '.deps.json');
+        $temporaries[] = $temporary;
+        $staged[] = [$rel, $temporary, $dest];
     }
 
-    if ($native && ($backend === 'jvm' || $backend === 'dotnet')) {
-        $binBase = preg_replace('/\.(jar|dll|phar|exe)$/', '', $destBase) ?? $destBase;
-        $move(executableName('moggi-app'), executableName($binBase));
+    $moved = [];
+    $created = [];
+    foreach ($staged as $index => [$rel, $temporary, $dest]) {
+        $existed = \is_file($dest) || \is_link($dest);
+        if (!@\rename($temporary, $dest)) {
+            removeStagedArtifacts(\array_slice($temporaries, $index));
+            foreach ($created as $destination) {
+                @\unlink($destination);
+            }
+            throw new \RuntimeException("cannot write {$dest}");
+        }
+        if (!$existed) {
+            $created[] = $dest;
+        }
+        $moved[$rel] = $dest;
     }
 
     return $moved;
+}
+
+/**
+ * Remove the staging files of an interrupted artifact move.
+ *
+ * @param list<string> $paths
+ */
+function removeStagedArtifacts(array $paths): void
+{
+    foreach ($paths as $path) {
+        @\unlink($path);
+    }
+}
+
+/**
+ * Copy a resolved Composer tree into the build output.
+ *
+ * The entry module requires the autoloader by a path relative to itself, so the
+ * tree has to sit beside the generated files — inside the PHAR for a packaged
+ * build, on disk for `--unpacked`. One tree only: `moggi build` writes one
+ * manifest for the whole project, so two roots offering one would be two vendors
+ * with no defined merge order, which is an error rather than a silent pick.
+ */
+function bundleComposerVendor(string $outputRoot, string $backend): bool
+{
+    if ($backend !== 'php') {
+        return true;
+    }
+
+    $roots = composerVendorRoots();
+    if ($roots === []) {
+        return true;
+    }
+    if (\count($roots) > 1) {
+        \fwrite(
+            STDERR,
+            "error: more than one Composer tree in the library roots:\n  "
+                . \implode("\n  ", $roots)
+                . "\nrebuild so the coordinates resolve into one\n",
+        );
+
+        return false;
+    }
+
+    $source = \rtrim($roots[0], '/') . '/vendor';
+    $target = \rtrim($outputRoot, '/') . '/vendor';
+    if (!copyTreeInto($source, $target)) {
+        \fwrite(STDERR, "error: cannot copy {$source} into {$target}\n");
+
+        return false;
+    }
+
+    return true;
+}
+
+/** Copy a directory tree, replacing whatever is at the destination. */
+function copyTreeInto(string $source, string $target): bool
+{
+    $items = new \RecursiveIteratorIterator(
+        new \RecursiveDirectoryIterator($source, \FilesystemIterator::SKIP_DOTS),
+        \RecursiveIteratorIterator::SELF_FIRST,
+    );
+    foreach ($items as $item) {
+        $relative = \substr($item->getPathname(), \strlen($source) + 1);
+        $destination = $target . DIRECTORY_SEPARATOR . $relative;
+        if ($item->isDir()) {
+            if (!\is_dir($destination) && !\mkdir($destination, 0777, true) && !\is_dir($destination)) {
+                return false;
+            }
+            continue;
+        }
+        $parent = \dirname($destination);
+        if (!\is_dir($parent) && !\mkdir($parent, 0777, true) && !\is_dir($parent)) {
+            return false;
+        }
+        if (!\copy($item->getPathname(), $destination)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 /**
@@ -489,8 +731,17 @@ function resolveNativeImageExecutable(): ?string
     return findToolchainExecutable('JAVA_HOME', 'native-image') ?? findExecutable('native-image');
 }
 
+/** Does this backend have a native toolchain that builds an executable? */
+function backendSupportsNative(string $backend): bool
+{
+    return \in_array($backend, ['php', 'jvm', 'dotnet'], true);
+}
+
 function buildNativeExecutable(string $outputRoot, string $backend, string $binaryName = 'moggi-app'): bool
 {
+    if ($backend === 'php') {
+        return Backend\Php\buildPhpNativeExecutable($outputRoot, 'moggi-app.phar', $binaryName);
+    }
     if ($backend === 'jvm') {
         return buildJvmNativeExecutable($outputRoot, 'moggi-app.jar', $binaryName);
     }
@@ -673,6 +924,11 @@ function parseCompileArgs(array $argv): array
 
         if ($arg === '-o') {
             $output = $cursor->takeValue('-o');
+            if ($output === '') {
+                \fwrite(STDERR, "error: -o requires a non-empty path\n\n");
+                printUsage();
+                exit(1);
+            }
             continue;
         }
 
@@ -822,6 +1078,19 @@ function executeBuiltApp(
     }
 
     if ($backend === 'php') {
+        if ($native) {
+            $binary = $outputRoot . DIRECTORY_SEPARATOR . executableName('moggi-app');
+            if (!\is_file($binary)) {
+                \fwrite(STDERR, "error: missing {$binary}\n");
+
+                return 1;
+            }
+            $cmd = \array_merge([$binary], $appArgs);
+            $cmdLine = \implode(' ', \array_map('escapeshellarg', $cmd));
+            passthru($cmdLine, $code);
+
+            return $code;
+        }
         if ($entryRelative === null || $entryRelative === '') {
             \fwrite(STDERR, "error: no entry `main` found to run\n");
 
@@ -833,7 +1102,13 @@ function executeBuiltApp(
 
             return 1;
         }
-        $cmd = \array_merge([PHP_BINARY, $phpFile], $appArgs);
+        $php = resolvePhpInterpreter();
+        if ($php === null) {
+            \fwrite(STDERR, "error: no PHP interpreter to run generated code (build with --native, or put `php` on PATH)\n");
+
+            return 1;
+        }
+        $cmd = \array_merge([$php, $phpFile], $appArgs);
         $cmdLine = \implode(' ', \array_map('escapeshellarg', $cmd));
         passthru($cmdLine, $code);
 
@@ -843,6 +1118,31 @@ function executeBuiltApp(
     \fwrite(STDERR, "error: cannot run backend `{$backend}`\n");
 
     return 1;
+}
+
+/**
+ * The PHP that runs generated code: this process when it has one, else a bundled
+ * or on-`PATH` `php`.
+ *
+ * A micro SAPI runtime has no command line and cannot start a second process, so
+ * `PHP_BINARY` is empty in a native binary; with `--native` there is nothing to
+ * interpret, which is the other way to run generated code.
+ */
+function resolvePhpInterpreter(): ?string
+{
+    if (PHP_BINARY !== '') {
+        return PHP_BINARY;
+    }
+
+    $lib = bundledStdlibLibPath();
+    if ($lib !== null) {
+        $bundled = \dirname($lib) . '/runtime/php/bin/' . executableName('php');
+        if (\is_file($bundled)) {
+            return $bundled;
+        }
+    }
+
+    return findExecutable('php');
 }
 
 function runCompileCommand(array $argv): int
@@ -900,12 +1200,7 @@ function compileSingleFile(string $input, array $options): int
 
     try {
         Backend\setCompileBackend($options['backend']);
-        foreach ($options['libDirs'] as $dir) {
-            if (\is_file(rtrim($dir, '/') . '/Data/Eq.mog')) {
-                Modules\setStdlibLibPath($dir);
-                break;
-            }
-        }
+        registerLibraryRoots($options['libDirs']);
 
         $output = compileFile($input, $options['mode'], $options['optimize']);
     } catch (LexError|ParseError|TypeError $e) {

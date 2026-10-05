@@ -8,6 +8,7 @@ use Moggi\Syntax\Ast\TypeNode;
 
 use function Moggi\Backend\Inspect\describePhpEmit;
 use function Moggi\Backend\Php\Codegen\emit as emitPhp;
+use function Moggi\Backend\Php\Dependencies\composerIsBundled;
 use function Moggi\Backend\Php\Naming\basePhpFunctionName;
 
 final class PhpBackend implements Backend
@@ -54,6 +55,16 @@ final class PhpBackend implements Backend
     public function packageOutput(string $outputRoot, array $options = []): void
     {
         packagePhpOutput($outputRoot, $options, $this->runtimeFiles());
+    }
+
+    /**
+     * A bundled Composer tree changes what the entry module emits (it requires
+     * the autoloader), so the emit cache has to be able to tell the two builds
+     * apart.
+     */
+    public function emitCacheDiscriminator(): string
+    {
+        return composerIsBundled() ? 'composer' : '';
     }
 
     public function foreignNativeSig(

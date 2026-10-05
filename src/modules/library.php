@@ -35,19 +35,53 @@ function resolvePath(string $path): string
  * graphs, exports, or codegen.
  */
 
-/** The standard-library source root pinned with `--lib`, if any. */
+/** The file that marks a package root, named after the package: `base.moggi`. */
+const LIBRARY_ROOT_MARKER = 'base.moggi';
+
+/** Whether `$dir` is the root of the `base` package — a Moggi library root. */
+function isLibraryRoot(string $dir): bool
+{
+    return \is_file(\rtrim($dir, '/') . '/' . LIBRARY_ROOT_MARKER);
+}
+
+/**
+ * The standard-library source root pinned with `--lib`, and any extra library
+ * roots searched alongside it.
+ *
+ * The primary is "the" standard library, the root `base.moggi` marks. Extras are
+ * dependency trees that ship separately from it — the `json` package in this
+ * checkout — and the standard library wins a name clash, because extras are
+ * merged into its index rather than replacing it.
+ */
 final class ConfiguredStdlib
 {
     private static ?string $libPath = null;
 
+    /** @var list<string> */
+    private static array $extraPaths = [];
+
     public static function setLibPath(?string $path): void
     {
         self::$libPath = $path;
+        self::$extraPaths = [];
     }
 
     public static function libPath(): ?string
     {
         return self::$libPath;
+    }
+
+    public static function addPath(string $path): void
+    {
+        if (!\in_array($path, self::$extraPaths, true)) {
+            self::$extraPaths[] = $path;
+        }
+    }
+
+    /** @return list<string> */
+    public static function extraPaths(): array
+    {
+        return self::$extraPaths;
     }
 }
 
@@ -60,23 +94,76 @@ function setStdlibLibPath(?string $path): void
     }
 
     $real = resolvePath($path);
-    if (!\is_dir($real)) {
-        throw new TypeError("invalid stdlib path `{$path}`");
-    }
-
-    $marker = $real . DIRECTORY_SEPARATOR . 'Data' . DIRECTORY_SEPARATOR . 'Eq.mog';
-    if (!\is_file($marker)) {
+    if (!isLibraryRoot($real)) {
         throw new TypeError(
-            "library path `{$path}` is missing `Data/Eq.mog` (expected a Moggi library root)",
+            "library path `{$path}` is missing `" . LIBRARY_ROOT_MARKER . '` (expected a Moggi library root)',
         );
     }
 
     ConfiguredStdlib::setLibPath($real);
 }
 
+/**
+ * Add a library root searched alongside the standard library.
+ *
+ * The compiler gets extra roots from `--lib`; this is the one place a *bundled*
+ * extra is registered, so the compiler's own harness can reach a package that
+ * ships separately from `lib/` (`json`, in this checkout).
+ */
+function addLibraryRoot(string $path): void
+{
+    $real = resolvePath($path);
+    if (!\is_dir($real)) {
+        throw new TypeError("invalid library path `{$path}`");
+    }
+
+    ConfiguredStdlib::addPath($real);
+}
+
 function configuredStdlibLibPath(): ?string
 {
     return ConfiguredStdlib::libPath();
+}
+
+/**
+ * Every configured library root: the standard library first, then the extras.
+ *
+ * @return list<string>
+ */
+function configuredLibraryRoots(): array
+{
+    $roots = [];
+    $primary = ConfiguredStdlib::libPath();
+    if ($primary !== null) {
+        $roots[] = $primary;
+    }
+
+    return [...$roots, ...ConfiguredStdlib::extraPaths()];
+}
+
+/**
+ * Every root a library dependency scan walks.
+ *
+ * The backend scanners (JVM `jvm/` jars, .NET `dotnet/` metadata, PHP `php/`
+ * helpers) used to look only under the standard library. A package installed
+ * beside it — the `json` package in this checkout, a dependency tree `moggi
+ * build` resolved into the cache — vendors its dependencies in its own root, so
+ * a scan of just the primary would silently drop them. Falls back to the
+ * bundled `lib/` for the compiler's own runs, which configure no root at all.
+ *
+ * @return list<string>
+ */
+function libraryScanRoots(): array
+{
+    $roots = configuredLibraryRoots();
+    foreach ($roots as $root) {
+        if (isLibraryRoot($root)) {
+            return $roots;
+        }
+    }
+    $bundled = bundledStdlibLibPath();
+
+    return $bundled === null ? [] : [$bundled];
 }
 
 /**
@@ -98,15 +185,15 @@ function bundledStdlibLibPath(): ?string
     if (\is_string($envRoot) && $envRoot !== '') {
         $candidates[] = rtrim($envRoot, '/\\') . DIRECTORY_SEPARATOR . 'lib';
     }
-    $archive = \Phar::running(false);
-    if ($archive !== '') {
-        $candidates[] = \dirname($archive, 2) . DIRECTORY_SEPARATOR . 'lib';
+    $installRoot = \Moggi\Install\installationRoot();
+    if ($installRoot !== null) {
+        $candidates[] = $installRoot . DIRECTORY_SEPARATOR . 'lib';
     }
     $candidates[] = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'lib';
 
     foreach ($candidates as $candidate) {
         $real = resolvePath($candidate);
-        if (\is_file($real . DIRECTORY_SEPARATOR . 'Data' . DIRECTORY_SEPARATOR . 'Eq.mog')) {
+        if (isLibraryRoot($real)) {
             $path = $real;
 
             return $path;
@@ -130,8 +217,7 @@ function locateStdlibRoot(string $fromPath): ?string
 
     $dir = dirname(resolvePath($fromPath));
     while ($dir !== false) {
-        $marker = $dir . DIRECTORY_SEPARATOR . 'lib' . DIRECTORY_SEPARATOR . 'Data' . DIRECTORY_SEPARATOR . 'Eq.mog';
-        if (\is_file($marker)) {
+        if (isLibraryRoot($dir . DIRECTORY_SEPARATOR . 'lib')) {
             return $dir . DIRECTORY_SEPARATOR . 'lib';
         }
 
@@ -261,13 +347,28 @@ final class LibraryModuleIndex
 
 function stdlibMaxMtime(string $stdlibRoot): int
 {
-    return LibraryModuleIndex::maxMtime($stdlibRoot);
+    $mtime = LibraryModuleIndex::maxMtime($stdlibRoot);
+    foreach (ConfiguredStdlib::extraPaths() as $extra) {
+        $mtime = max($mtime, LibraryModuleIndex::maxMtime($extra));
+    }
+
+    return $mtime;
 }
 
-/** @return array<string, string> */
+/**
+ * The stdlib index merged with every extra root, standard library last so it
+ * wins a name clash.
+ *
+ * @return array<string, string>
+ */
 function stdlibModuleIndex(string $stdlibRoot): array
 {
-    return LibraryModuleIndex::index($stdlibRoot);
+    $index = [];
+    foreach (ConfiguredStdlib::extraPaths() as $extra) {
+        $index = [...$index, ...LibraryModuleIndex::index($extra)];
+    }
+
+    return [...$index, ...LibraryModuleIndex::index($stdlibRoot)];
 }
 
 /**

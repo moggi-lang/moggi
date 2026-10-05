@@ -2,63 +2,54 @@
 
 namespace Moggi\Backend\Php\Dependencies;
 
-use function Moggi\Modules\configuredStdlibLibPath;
+use function Moggi\Modules\libraryScanRoots;
 
 /**
- * Library-owned PHP dependency directories: `php/` next to a backend module's
- * `.mog` sources, mirroring the `jvm` (vendored jars) and `dotnet` (CLR
- * metadata) dependency directories.
+ * Library-owned PHP dependency directories, and the one external kind: a
+ * Composer project.
  *
  * A library may bundle PHP sources its backend module needs; those live in the
- * module's sibling `php/` directory. External packages stay the job of Composer
- * — this only covers code a library ships itself, and never reimplements a
- * dependency solver.
+ * module's sibling `php/` directory, and the codegen inlines them. External
+ * packages are Composer's job — `moggi build` writes the `composer.json` and
+ * runs it — and what arrives is a `vendor/` tree, which is *not* inlined: it is
+ * copied into the artifact and required at startup, because it is code the
+ * program calls into rather than helper functions it embeds.
  */
 
-/** Absolute path of the stdlib `lib` root, when it can be resolved. */
-function stdlibLibRoot(): ?string
-{
-    $lib = configuredStdlibLibPath();
-    if ($lib !== null && $lib !== '') {
-        return $lib;
-    }
-    $fallback = dirname(__DIR__, 3) . DIRECTORY_SEPARATOR . 'lib';
-
-    return \is_dir($fallback) ? $fallback : null;
-}
+/** Where a Composer project's autoloader sits inside a resolved tree. */
+const COMPOSER_AUTOLOAD = 'vendor/autoload.php';
 
 /**
- * Absolute paths of every `php` dependency directory under the stdlib root.
- * Generic discovery, analogous to the JVM `jvm/` directory scan.
+ * Library roots that hold a resolved Composer project.
+ *
+ * A resolved tree is a library root like any other (`moggi build` hands it to
+ * the compile as one), so discovery is the same generic walk the JVM and .NET
+ * scanners do. An entry is the root, not the autoloader, because the whole tree
+ * travels with the artifact.
  *
  * @return list<string>
  */
-function discoverVendorPhpDirs(): array
+function composerVendorRoots(): array
 {
-    $lib = stdlibLibRoot();
-    if ($lib === null) {
-        return [];
+    $roots = [];
+    foreach (libraryScanRoots() as $root) {
+        if (\is_file(\rtrim($root, '/') . '/' . COMPOSER_AUTOLOAD)) {
+            $roots[] = $root;
+        }
     }
 
-    $dirs = [];
-    $iterator = new \RecursiveIteratorIterator(
-        new \RecursiveDirectoryIterator($lib, \FilesystemIterator::SKIP_DOTS),
-    );
-    foreach ($iterator as $file) {
-        if (!$file->isFile() || $file->getExtension() !== 'php') {
-            continue;
-        }
-        $dir = $file->getPath();
-        if (basename($dir) !== 'php') {
-            continue;
-        }
-        $dirs[$dir] = true;
-    }
+    return $roots;
+}
 
-    $dirs = \array_keys($dirs);
-    \sort($dirs);
-
-    return $dirs;
+/**
+ * Whether this build has a Composer tree to carry.
+ *
+ * The single answer the emit and the artifact copy both ask, so a require is
+ * never emitted for a tree that is not also copied.
+ */
+function composerIsBundled(): bool
+{
+    return composerVendorRoots() !== [];
 }
 
 /**

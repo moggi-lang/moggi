@@ -7,7 +7,7 @@ use Moggi\Semantics\TypeExpr\Scheme;
 use Moggi\Syntax\Ast;
 
 use function Moggi\Cache\atomicWrite;
-use function Moggi\Cache\cacheGenerationDir;
+use function Moggi\Cache\compileDir;
 use function Moggi\CLI\resolveLibraryDirs;
 use function Moggi\Modules\isSyntheticCompilerModuleName;
 use function Moggi\Syntax\Parser\standardFixity;
@@ -15,10 +15,9 @@ use function Moggi\Syntax\Parser\standardFixity;
 /**
  * Version of the docs search-index schema.
  *
- * The index is stored under the compile cache's generation directory, beside
- * the module artifacts it was built from: it is only valid for the compiler
- * state that produced it, and a fingerprint-named parent is what keeps one
- * state's index out of another's way.
+ * The index is stored under `compile/docs-index/`, inside the half of the cache
+ * the fingerprint owns: it is only valid for the compiler state that produced it,
+ * and clear it with the entries it was built beside.
  */
 function docIndexSchemaVersion(): int
 {
@@ -1223,7 +1222,7 @@ function indexCachePath(string $inputPath, array $libDirs): string
         $inputPath . '|' . implode(',', $resolvedLibDirs) . '|docs-v' . docIndexSchemaVersion(),
     );
 
-    return cacheGenerationDir() . '/docs-index/' . substr($key, 0, 16) . '.json';
+    return compileDir() . '/docs-index/' . substr($key, 0, 16) . '.json';
 }
 
 function loadOrBuildIndex(
@@ -1252,7 +1251,6 @@ function loadOrBuildIndex(
 
                         return $index;
                     } catch (\Throwable) {
-                        // Fall through and rebuild corrupt cache payloads.
                     }
                 }
             }

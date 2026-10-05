@@ -32,6 +32,7 @@ use Moggi\Syntax\Ast;
 
 use function Moggi\Errors\appendDidYouMean;
 use function Moggi\Modules\resolvedSymbol;
+use function Moggi\Pipeline\isEntryModule;
 use function Moggi\Patterns\Walk\patternDuplicateBinder;
 use function Moggi\Patterns\Walk\patternVariableNames;
 use function Moggi\Patterns\Walk\patternVariableNamesOrdered;
@@ -1231,8 +1232,13 @@ function rewriteIntrinsicApplies(Ast\AstNode $expr): Ast\AstNode
 }
 
 /**
- * Mark `Main.main` as EntryPointKind::Main under Executable purpose only.
- * Library and Repl never promote `main` to an application entry.
+ * Mark `main` as EntryPointKind::Main under Executable purpose only, in the
+ * module this compilation treats as its entry (`isEntryModule`).
+ *
+ * A package may declare several executables, each with its own entry, so the
+ * entry module is named by the compilation rather than fixed at `Main`; the
+ * default policy marks only `Main`, which keeps single-file and REPL compiles
+ * unchanged, and Library / Repl purposes promote no entry at all.
  *
  * @param list<Ast\AstNode> $items
  */
@@ -1246,7 +1252,7 @@ function validateEntryPoint(
         return;
     }
 
-    if ($moduleName !== 'Main') {
+    if (!isEntryModule($moduleName)) {
         return;
     }
 
@@ -3305,9 +3311,7 @@ function wrapDictLambda(TypeCheckState $state, Ast\AstNode $rhs, array $params, 
 function inferRecursiveBindings(TypeCheckState $state, array $bindings, array $env, bool $generalize): array
 {
     $local = $env;
-    /** @var array<string, Type> $expected */
     $expected = [];
-    /** @var array<string, true> $annotated */
     $annotated = [];
 
     foreach ($bindings as $binding) {
@@ -3327,9 +3331,7 @@ function inferRecursiveBindings(TypeCheckState $state, array $bindings, array $e
         }
     }
 
-    /** @var array<int, list<Ast\PendingConstraint>> $rhsConstraints */
     $rhsConstraints = [];
-    /** @var array<int, list<Ast\PendingConstraint>> $bodyConstraints */
     $bodyConstraints = [];
 
     foreach ($bindings as $bi => $binding) {

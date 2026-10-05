@@ -53,6 +53,7 @@ function compileProjectBoth(array $paths, string $rootDir, bool $optimize = true
             . '|opt=' . ($optimize ? '1' : '0')
             . '|strip=' . ($strip ? '1' : '0')
             . '|backend=' . compileBackend()
+            . '|emit=' . currentBackend()->emitCacheDiscriminator()
             . '|out=emit',
     );
     $cached = Cache\artifactGet($outputsKey);
