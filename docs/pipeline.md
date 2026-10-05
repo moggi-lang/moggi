@@ -122,7 +122,7 @@ and keeps the same file set, so a concern has one home per target
 
 | Target | Generated tree | Artifact |
 |---|---|---|
-| `php` | one `.php` per module, plus `_runtime.php` at the root of the tree | `.phar` (or the bare tree with `--unpacked`) |
+| `php` | one `.php` per module, plus `_runtime.php` at the root of the tree | `.phar` (or the bare tree with `--unpacked`, or a native binary with `--native`, via the micro PHP runtime from `src/backend/php/native.php`) |
 | `jvm` | `.class` files per module, plus the emitted runtime | `.jar` (or a native binary with `--native`, via GraalVM `native-image`) |
 | `dotnet` | `.il` per module and an `.ilproj`, assembled by the SDK | `moggi-app.dll` (or a native binary with `--native`, via `dotnet publish -p:PublishAot=true`) |
 

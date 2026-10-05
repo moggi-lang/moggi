@@ -42,8 +42,9 @@ file regardless of target:
 Files that describe a specific toolchain keep their own names: `jvm/classfile.php`
 (class-file encoding), `dotnet/il.php` + `dotnet/il_size.php` (IL text and
 instruction sizing), `php/emit_expr.php` + `php/emit_match.php` (expression and
-match emission), and `php/intrinsics.php` + `php/io.php` (intrinsic and IO
-emission). The PHP runtime ships as `php/runtime.php` (deployed as `_runtime.php`)
+match emission), `php/intrinsics.php` + `php/io.php` (intrinsic and IO
+emission), and `php/native.php` (the micro PHP runtime `--native` appends the
+packaged PHAR to). The PHP runtime ships as `php/runtime.php` (deployed as `_runtime.php`)
 rather than generated
 `runtime_abi.php`, because the JVM/.NET runtimes are emitted per build.
 

@@ -44,7 +44,6 @@ Haskell `base`'s API (porting rules and the few deliberate differences are in
 | `Prelude` | implicitly imported everywhere; the re-export list |
 | `Control.*` | `Applicative`, `Monad`, `Monad.Fail`, `Exception` (+ `Exception.Base`) |
 | `Data.*` | `Bits`, `Bifunctor`, `Bool`, `Bounded`, `ByteString` (+ `Char8`), `Char`, `Either`, `Enum`, `Eq`, `Foldable`, `Function`, `Functor`, `Int`, `List` (+ `NonEmpty`), `Map`, `Maybe`, `Monoid`, `Ord`, `Proxy`, `Semigroup`, `Set`, `String`, `Traversable`, `Tuple`, `Void`, `Word` |
-| `Data.JSON.*` | `JSON` (the API), `Class`, `Encoding`, `Generic`, `GenericEncoding`, `Types` |
 | `Data.Time.*` | `Clock` |
 | `Numeric.*` | `Natural` |
 | `System.*` | `Environment`, `Exit`, `Filesystem` (+ `Filesystem.Path`), `IO` (+ `IO.Base`, `IO.Error`, `IO.Types`) |

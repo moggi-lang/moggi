@@ -314,11 +314,67 @@ static int cmd_verify(secp256k1_context* ctx, const char* pk_bech, const char* s
     return is_valid ? 0 : 1;
 }
 
+/* One verdict, without printing: 1 (valid) or 0. Shared by the batch loop. */
+static int verify_one(secp256k1_context* ctx, const char* pk_bech, const char* sig_hex, const char* msg_hex) {
+    unsigned char serialized_pubkey[KEY_LEN];
+    unsigned char signature[SIGNATURE_LEN];
+    unsigned char msg[MAX_MSG_LEN];
+    size_t msg_len;
+    secp256k1_xonly_pubkey pubkey;
+
+    if (!bech32_decode_bytes(serialized_pubkey, KEY_LEN, "npub", pk_bech)) return 0;
+    if (!hex_to_bytes(sig_hex, signature, sizeof(signature))) return 0;
+    if (!parse_message_hex(msg_hex, msg, MAX_MSG_LEN, &msg_len)) return 0;
+    if (!secp256k1_xonly_pubkey_parse(ctx, &pubkey, serialized_pubkey)) return 0;
+
+    return secp256k1_schnorrsig_verify(ctx, signature, msg, msg_len, &pubkey) ? 1 : 0;
+}
+
+/*
+ * Batch verification: one request per line of stdin, `<npub> <sig_hex> <msg_hex>`
+ * (the message may be empty, so the third field may be absent), and one verdict
+ * per line of stdout, `valid` or `invalid`, flushed as it is produced so a caller
+ * reading the pipe sees each result without closing stdin. The secp256k1 context
+ * is built once for the whole run rather than once per process, which is the
+ * point: checking a dependency tree is many signatures, not one.
+ */
+static int cmd_verify_batch(secp256k1_context* ctx) {
+    char line[4096];
+    while (fgets(line, sizeof(line), stdin) != NULL) {
+        size_t len = strlen(line);
+        while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r')) {
+            line[--len] = '\0';
+        }
+
+        char* npub = line;
+        char* space1 = strchr(line, ' ');
+        if (space1 == NULL) {
+            printf("invalid\n");
+            fflush(stdout);
+            continue;
+        }
+        *space1 = '\0';
+        char* sig = space1 + 1;
+        char* space2 = strchr(sig, ' ');
+        char* msg = (char*)"";
+        if (space2 != NULL) {
+            *space2 = '\0';
+            msg = space2 + 1;
+        }
+
+        printf("%s\n", verify_one(ctx, npub, sig, msg) ? "valid" : "invalid");
+        fflush(stdout);
+    }
+
+    return 0;
+}
+
 static void print_usage(const char* prog) {
     fprintf(stderr, "Usage:\n");
     fprintf(stderr, "  %s generate\n", prog);
     fprintf(stderr, "  %s sign <msg_hex> [aux_rand_hex]    (message: 0..%d hex chars, nsec read from stdin)\n", prog, MAX_MSG_LEN * 2);
     fprintf(stderr, "  %s verify <npub> <sig_hex> <msg_hex>  (message: 0..%d hex chars)\n", prog, MAX_MSG_LEN * 2);
+    fprintf(stderr, "  %s verify-batch                      (one `<npub> <sig> <msg>` per stdin line, one verdict per stdout line)\n", prog);
 }
 
 int main(int argc, char** argv) {
@@ -354,6 +410,13 @@ int main(int argc, char** argv) {
             ret = 1;
         } else {
             ret = cmd_sign(ctx, argv[2], argc == 4 ? argv[3] : NULL);
+        }
+    } else if (strcmp(argv[1], "verify-batch") == 0) {
+        if (argc != 2) {
+            print_usage(argv[0]);
+            ret = 1;
+        } else {
+            ret = cmd_verify_batch(ctx);
         }
     } else if (strcmp(argv[1], "verify") == 0) {
         if (argc != 5) {

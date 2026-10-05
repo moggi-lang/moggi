@@ -23,15 +23,18 @@ The distributions differ only in which runtimes they carry:
 
 | Distribution | Bundles |
 |---|---|
-| `moggi` | PHP, .NET SDK, JDK, GraalVM — everything, including `--native` |
-| `moggi-php` | PHP — the PHP backend |
-| `moggi-dotnet` | PHP and the .NET SDK |
-| `moggi-jvm` | PHP, JDK and GraalVM |
-| `moggi-minimal` | nothing — uses the `php`, `javac`/`java` and `dotnet` on your `PATH` |
+| `moggi` | PHP, the micro PHP runtime, .NET SDK, JDK, GraalVM — everything, including `--native` — plus Composer and Maven |
+| `moggi-php` | PHP, the micro PHP runtime and Composer — the PHP backend, `--native` included |
+| `moggi-dotnet` | PHP, the micro PHP runtime and the .NET SDK (whose `dotnet nuget` resolves `[dotnet] nuget`) |
+| `moggi-jvm` | PHP, the micro PHP runtime, JDK, GraalVM and Maven |
+| `moggi-minimal` | nothing — uses the `php`, `javac`/`java`, `dotnet`, `composer` and `mvn` on your `PATH` |
 
 A bundled runtime is preferred over the one on your `PATH`; anything the
 variant does not bundle has to be installed yourself. Only `moggi-minimal`
-needs PHP 8.5+ to be installed first.
+needs PHP 8.5+ to be installed first. The micro PHP runtime is not on `PATH` at
+all: it is the `micro.sfx` file a `--native` build on the `php` backend appends
+the artifact to, so a variant without it can only build a native executable from
+a runtime named by `MOGGI_MICRO_SFX`.
 
 If you would rather run the compiler from a checkout, `php moggi.php …` does the
 same thing — [development.md](development/development.md) covers that setup.
@@ -57,7 +60,9 @@ workaround until then.
 
 ## Hello, world
 
-A file with no module header is `Main`, and `main` is the entry point:
+A file with no module header is `Main`, and `main` is the entry point. A file
+with a header works the same way — `main` in the module you run is the entry,
+so a program need not call its module `Main`:
 
 ```moggi
 main = putStrLn "Hello, world!"
@@ -96,8 +101,11 @@ Three flags worth knowing now:
   the fastest way to read what your program became
   (`moggi compile hello.mog -o out --unpacked`).
 * `--native` produces a standalone executable instead of an artifact that needs
-  the host runtime: GraalVM `native-image` for `jvm`, `dotnet publish
-  -p:PublishAot=true` for `dotnet`. Slow, and the toolchain has to be installed.
+  the host runtime: the micro PHP runtime for `php` (the PHAR appended to a
+  statically linked PHP, so `./hello` runs with no PHP installed), GraalVM
+  `native-image` for `jvm`, `dotnet publish -p:PublishAot=true` for `dotnet`.
+  Slow, and the toolchain has to be installed — on `php`, a distribution that
+  bundles that runtime or `MOGGI_MICRO_SFX` naming one.
 * `--tokens`, `--ast`, `--typed-ast`, `--ir`, `--opt-ir` stop after the stage of
   the same name and print it ([repl.md](repl.md) shows the same stages
   interactively).
@@ -140,8 +148,8 @@ to it over the language server protocol. Point it at your installation:
 
 | Setting | Value |
 |---|---|
-| `moggi.serverPath` | `<installation>/bin/moggi.phar` (in a checkout: `<root>/moggi.php`) |
-| `moggi.phpPath` | a PHP 8.5 binary — the bundled `runtime/php/bin/php` will do |
+| `moggi.serverPath` | `<installation>/bin/moggi.phar` where PHP is bundled, `<installation>/bin/moggi` in a PHP-less variant, or `<root>/moggi.php` in a checkout |
+| `moggi.phpPath` | a PHP 8.5 binary — the bundled `runtime/php/bin/php` will do; not used when `serverPath` is the native `bin/moggi` |
 
 Any other editor works too: `moggi lsp` is a plain stdio language server.
 [lsp.md](lsp.md) describes the server and the extension's commands in full.

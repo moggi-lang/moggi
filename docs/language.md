@@ -283,9 +283,11 @@ doubleIt :: Int -> Int
 doubleIt n = n + n
 ```
 
-Only `Main.main` is the program entry point; it must have type `IO a` for some
-`a` (the result is discarded), with or without an explicit signature. A binding
-named `main` in another module is an ordinary function.
+`main` in the module compiled as the program is the entry point — `Main` by
+convention, or whichever module a package's descriptor names. It must have type
+`IO a` for some `a` (the result is discarded), with or without an explicit
+signature. A binding named `main` in a module that is only imported is an
+ordinary function.
 
 ```moggi
 module Main

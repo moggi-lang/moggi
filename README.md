@@ -78,10 +78,10 @@ Which distributions bundle which runtime, and how to use a checkout instead:
 
 | Distribution | Bundles |
 |---|---|
-| `moggi` | PHP, .NET SDK, JDK, GraalVM — everything, including `--native` |
-| `moggi-php` | PHP |
-| `moggi-dotnet` | PHP and the .NET SDK |
-| `moggi-jvm` | PHP, JDK and GraalVM |
+| `moggi` | PHP, .NET SDK, JDK, GraalVM — everything, including `--native` — plus Composer and Maven |
+| `moggi-php` | PHP and Composer |
+| `moggi-dotnet` | PHP and the .NET SDK (whose `dotnet nuget` resolves `[dotnet] nuget`) |
+| `moggi-jvm` | PHP, JDK, GraalVM and Maven |
 | `moggi-minimal` | nothing — uses the runtimes on your `PATH` |
 
 Without `-o` the artifact is named after the entry source file; pass a full file

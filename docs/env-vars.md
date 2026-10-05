@@ -17,38 +17,111 @@ configuration file, and no per-project settings beyond the compile cache.
 | Variable | Default | Effect |
 |----------|---------|--------|
 | `MOGGI_ROOT` | the installation or checkout | Locate the standard library: `<MOGGI_ROOT>/lib`. |
-| `MOGGI_CACHE_DIR` | `./.moggi` | Root of the per-project compile cache (and `moggi doc serve` output). |
+| `MOGGI_MICRO_SFX` | unset | The micro PHP runtime a `--native` build on the `php` backend appends the PHAR to. |
+| `MOGGI_CACHE_DIR` | `./.moggi` | Root of the per-project cache: compile entries, fetched metadata, unpacked packages, `moggi mogdoc serve` output. |
 | `MOGGI_NO_CACHE` | unset (cache on) | Disable the compile cache. |
+| `MOGGI_MAX_RESPONSE_BYTES` | `268435456` (256 MiB) | Cap on any single fetched body — registry metadata, a blob, or a `source` archive. |
+| `MOGGI_ALLOW_LOCAL_SOURCES` | unset | Allow a release's `source` to reproduce from a local path or `file://` URL when the registry does not serve its blob; without it, only `https` URLs are fetched. |
+| `MOGGI_REGISTRY` | the canonical registry | The registry a packaging command uses when `--registry` is not given. |
+| `MOGGI_REGISTRY_NPUB` | unset (trust on first use) | Pin the registry's signing key. |
+| `MOGGI_USER_CACHE` | `$XDG_CACHE_HOME/moggi`, else `$HOME/.cache/moggi` | The user-level cache: downloaded archives, plus the remembered key and accepted root version of each registry. |
+| `MOGGI_ALLOW_STALE_REGISTRY` | unset | Accept a signed root that has expired, or that is older than one this machine has already accepted. |
+| `MOGGI_SCHNORR` | the `schnorr` beside the installation | Path to the verifier/signer binary. A test and CI override; the search still never uses `PATH`. |
 
 ### `MOGGI_ROOT`
 
 Overrides where the standard library is looked for. `<MOGGI_ROOT>/lib` is tried
-*first*, and is only accepted if it actually contains `Data/Eq.mog`. Without it
+*first*, and is only accepted if it actually contains `base.moggi`. Without it
 the compiler looks for `lib/` beside its own installation — for a distribution
 that is `<installation>/lib`, next to `bin/` — and then next to its own sources
 in a checkout. Set it when the compiler has been relocated away from its `lib/`.
 
+### `MOGGI_MICRO_SFX`
+
+Names the micro PHP runtime that `moggi compile --backend php --native` appends the
+packaged PHAR to — the PHP counterpart of GraalVM's `native-image` for `jvm`. It
+accepts the runtime file itself, or a directory holding `micro.sfx`. A
+distribution that bundles PHP carries one under `runtime/php-native/`, which is
+where the compiler looks when this is unset, so setting it is only needed in a
+checkout, for an installation whose runtime lives somewhere else, or for the
+`--native` test smoke. Without a runtime, `--native` on `php` fails with an error
+naming this variable; it is never a silent fallback to the PHAR.
+
+### `MOGGI_ALLOW_LOCAL_SOURCES`
+
+A release's `source` (§4.3 of the registry spec) is the bytes of a package from
+another origin when the registry does not serve its blob. The release that names
+it is attacker-controlled in the case that matters — a registry answering `404`
+for `blobs/<digest>` can name any `source` — so the client fetches only ordinary
+`https` URLs: git remote helpers (`ext::sh -c …`), `file://`, and bare paths are
+refused. Set this variable to a truthy value (`1`, `true`, `yes`, `on`) to allow
+local paths and `file://` URLs as well, which is what reproducing a package from
+a checkout needs. A local `source` that does not pack to the blob digest reports
+the expected digest but withholds the one it produced.
+
+### `MOGGI_REGISTRY` and `MOGGI_REGISTRY_NPUB`
+
+`MOGGI_REGISTRY` selects the registry for `install`, `update`, `build`, `verify`
+and `publish`; it may be an `https` URL or a directory, which is how a mirror, a
+checkout and the canonical registry are one code path.
+
+A registry's signature proves the root is internally consistent, not that it is
+the registry you meant. `MOGGI_REGISTRY_NPUB` pins the signing key, and any
+difference is refused; without a pin the first key seen for a base is remembered
+and every later change is refused, so a key that changes after first contact is
+always an error rather than a silent trust refresh.
+
+### `MOGGI_ALLOW_STALE_REGISTRY`
+
+A signed root carries `version` and `expires` (RFC 3339), and the client refuses
+a root that is past its expiry or below the highest version it has already
+accepted for that base. That is what makes a **frozen** or **replayed** root
+visible: a signature over an old root verifies exactly as well as one over the
+current root, so freshness has to be signed and checked rather than assumed.
+
+Set this variable to a truthy value (`1`, `true`, `yes`, `on`) to waive both
+checks — for a development registry whose clock or counters are not maintained,
+or to accept a deliberate downgrade. The highest version seen is still recorded
+while the waiver is on, so a later run without it compares against the real
+high-water mark.
+
 ### `MOGGI_CACHE_DIR`
 
-Root of the compile cache. Defaults to `./.moggi` in the current working
-directory. Trailing slashes are trimmed. Layout:
+Root of the project cache. Defaults to `./.moggi` in the current working
+directory. Trailing slashes are trimmed. One root holds everything moggi keeps
+between runs, each kind of thing under a directory named for what put it there:
 
 ```text
-<cache>/.fingerprint                                 fingerprint of the compiler that built it
-<cache>/<backend>/<source-mirror>.<kind>.mogc        a compilation entry
-<cache>/test-lib-<backend>-<signature>/              the test harness's stdlib build
-<cache>/test-artifacts/{exec,logs}/                  harness scratch and failing-case logs
-<cache>/docs-index/                                  the mogdoc/moogle index
+<cache>/fingerprint                                    the compiler that filled the rest
+<cache>/compile/<backend>/<source-mirror>.<kind>.mogc  a compilation entry
+<cache>/compile/artifacts/<key>.blob                   a whole-project artifact
+<cache>/compile/docs-index/<key>.json                  the mogdoc/moogle index
+<cache>/docs/                                          `moggi mogdoc serve` output
+<cache>/catalog/<registry-key>/                        fetched registry metadata
+<cache>/packages/<name>/<digest>/                      an unpacked package
+<cache>/runtime/<key>/                                 an artifact a host tool fetched
+<cache>/test/                                          the test harness's scratch trees
 ```
 
-One cache tree belongs to one compiler. `.fingerprint` hashes the compiler's own
-sources; a compiler whose fingerprint does not match throws the whole tree away and
-rebuilds instead of reading entries another compiler wrote — that is why clearing
-the cache is never *required* after upgrading. `moggi cache clear` deletes the tree,
-and the next compile rebuilds it.
+One compiler owns the tree. `fingerprint` hashes the compiler's own sources; a
+compiler whose fingerprint does not match drops what the compiler *derives*
+(`compile/`, `docs/`) and keeps what it merely *found* (`catalog/`, `packages/`,
+`runtime/` — all addressed by digest), which is why clearing the cache is never
+*required* after upgrading. `moggi cache info` shows each area and its size, and
+`moggi cache clear [<area>]` drops one at a time:
 
-`moggi doc serve` reuses the same variable as its default output root, writing
-to `<cache>/mogdoc-serve` unless `--output` overrides it.
+| Area | What goes |
+|------|-----------|
+| `compiler` | module entries, project artifacts, the docs index and the served site |
+| `catalog` | fetched registry metadata |
+| `packages` | unpacked packages |
+| `runtime` | artifacts a host tool (maven, composer, nuget) fetched |
+| `test` | the test harness's scratch trees |
+| `downloads` | the user-level download cache, shared by every project |
+| `all` | every area above — the default |
+
+`moggi mogdoc serve` reuses the same variable as its default output root, writing
+to `<cache>/docs` unless `--output` overrides it.
 
 ### `MOGGI_NO_CACHE`
 
@@ -110,6 +183,7 @@ default.
 | `MOGGI_TEST_LINES` | `LINES`, the terminal, 24 | Progress-block height; a taller block folds its earliest rows. |
 | `NUMBER_OF_PROCESSORS` | probed | Windows' CPU count, used only to size an automatic `--jobs`. |
 | `JAVA_HOME` | probed | Locating `java` and `native-image` for jvm cases. |
+| `MOGGI_MICRO_SFX` | unset | The micro PHP runtime the `--native` smoke on php builds with. Without one the verdict is a skip, never a pass. |
 
 A case invokes the compiler in-process, or spawns `moggi.php` for the packaged backends, so the
 compiler's own variables apply to a run exactly as they apply to `moggi` itself.

@@ -195,9 +195,17 @@ consumes already-resolved IR plus backend import metadata.
 Target-specific files keep their own names where the toolchain differs
 (`jvm/classfile.php`, `dotnet/il.php` + `dotnet/il_size.php`,
 `php/emit_expr.php` + `php/emit_match.php`, `php/intrinsics.php` +
-`php/io.php`). The PHP backend ships a hand-written `php/runtime.php`, copied into
-every build as `_runtime.php` at the root of the generated tree;
+`php/io.php`, `php/native.php`). The PHP backend ships a hand-written
+`php/runtime.php`, copied into every build as `_runtime.php` at the root of the
+generated tree;
 the JVM and .NET backends generate their runtime in `runtime_abi.php`.
+`php/native.php` owns what the other two leave to an external driver: the micro
+SAPI runtime is resolved by path (bundled under `runtime/php-native/`, or
+`MOGGI_MICRO_SFX`) and the PHAR is appended to it directly, so `--native` on php
+needs no command-line toolchain — only the runtime file. That file is a build
+artifact rather than a download: at packaging time `packaging/runtimes.php`
+compiles it with static-php-cli's `spc` for the same extension set the `php`
+runtime carries.
 
 ### Intrinsics And Primitives
 

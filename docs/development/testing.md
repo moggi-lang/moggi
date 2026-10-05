@@ -13,6 +13,7 @@ runtest --group syntax/parser  # one subject, or any group: --group semantics
 runtest examples/twice         # one case, by logical name or by path
 runtest --list                 # discover everything, run nothing
 runtest --native --backend jvm # also build and run the native-executable smoke
+MOGGI_MICRO_SFX=/path/micro.sfx runtest --native   # …on php, which needs the runtime named
 ```
 
 | Flag | Meaning |
@@ -58,7 +59,7 @@ backends is counted as `n/a` in its group's row and gets no case line either way
 this run could say about it — and is left out of the backend summary.
 
 Under `--jobs N` the first line states the worker count. Every failing case's message is written to
-`.moggi/test-artifacts/logs/<group>-<case>.log`, which is the file the recap names. `--log` always
+`.moggi/test/logs/<group>-<case>.log`, which is the file the recap names. `--log` always
 gets the `--no-progress` form, so a log never carries terminal escapes.
 
 ## Backends
@@ -90,15 +91,18 @@ backend but the machine could not run it (a missing toolchain).
 
 ## The native smoke (`--native`)
 
-One example (`examples/twice`) is additionally built into a native executable — GraalVM
-`native-image` on jvm, .NET Native AOT on dotnet — and run, comparing stdout with the same golden the
-managed run uses. It is a **mode of that example's case, not a case of its own**: the example already
-compiles and runs on every backend, and the flag only adds "…and also as an executable".
+One example (`examples/twice`) is additionally built into a native executable — the micro PHP
+runtime on php, GraalVM `native-image` on jvm, .NET Native AOT on dotnet — and run, comparing stdout
+with the same golden the managed run uses. It is a **mode of that example's case, not a case of its
+own**: the example already compiles and runs on every backend, and the flag only adds "…and also as
+an executable".
 
-It is opt-in because the build takes minutes. If the toolchain is not installed, the case is reported
-as skipped with its name (`GraalVM native-image not available`); a build or run that fails once the
-toolchain is present is a real failure. php has no native toolchain, so the flag is rejected unless a
-backend that has one is selected.
+It is opt-in because the build takes minutes. If the toolchain is not at hand, the case is reported
+as skipped with its name (`GraalVM native-image not available`, `micro PHP runtime not available`);
+a build or run that fails once the toolchain is present is a real failure. The three toolchains are
+found differently: `native-image` on `PATH` or in `JAVA_HOME`, `dotnet` on `PATH` or in
+`DOTNET_ROOT`, and the micro runtime in `MOGGI_MICRO_SFX` or bundled by the installation — never on
+`PATH`, since it is a file the compiler reads rather than a command it runs.
 
 ## Discovery and naming
 

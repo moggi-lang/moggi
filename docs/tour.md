@@ -75,8 +75,10 @@ area s = case s of
 That header means: this file is the module `Demo.Shapes`, and it offers exactly
 `Shape` (with its constructors, because of `(..)`) and `area` to whoever imports
 it. Omitting the header entirely means `module Main (main) where`, which is why
-the smallest program is a single binding. Only `Main.main` is the entry point — a
-function called `main` in another module is an ordinary function.
+the smallest program is a single binding. `main` in the module compiled as the
+program is the entry point — `Main` by convention, or whichever module a
+package's descriptor names with `main`. A function called `main` in a module that
+is only imported is an ordinary function.
 
 Imports are explicit and there is no autoloading:
 

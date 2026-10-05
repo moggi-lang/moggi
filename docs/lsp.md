@@ -1,6 +1,7 @@
 # Moggi Language Server
 
-The Moggi compiler **is** the language service: one long-lived PHP process owns
+The Moggi compiler **is** the language service: one long-lived process (PHP in a
+checkout or a PHP-bundling distribution, the native `bin/moggi` otherwise) owns
 typed AST, Merkle caches, export origins, doc comments/moogle, and a project-wide
 occurrence index (module-scoped binder ids + call edges).
 
@@ -15,7 +16,10 @@ Flags: `--lib PATH` (repeatable), `--backend B` (default `php` for LSP).
 Install the extension from
 [moggi-lang/moggi-vscode-plugin](https://github.com/moggi-lang/moggi-vscode-plugin).
 It starts this server from a compiler it finds — a checkout, or an installed
-distribution via `moggi.serverPath` (`<dist>/bin/moggi.phar`).
+distribution via `moggi.serverPath`. In an installation that bundles PHP that is
+`<dist>/bin/moggi.phar`; where PHP is not bundled (`moggi-jvm`, `moggi-dotnet`,
+`moggi-minimal`) the compiler archive is not shipped and the native compiler is
+the entry point: `<dist>/bin/moggi lsp`.
 
 | Surface | Notes |
 |---------|--------|
