@@ -179,6 +179,7 @@ require __DIR__ . '/registry/resolve.php';
 require __DIR__ . '/registry/install.php';
 require __DIR__ . '/registry/extensions.php';
 require __DIR__ . '/registry/pack.php';
+require __DIR__ . '/registry/search.php';
 require __DIR__ . '/registry/publish.php';
 require __DIR__ . '/registry/tools.php';
 

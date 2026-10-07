@@ -4,7 +4,9 @@ The standard library is written in Moggi and lives in `lib/`. It is part of the
 compiler: every program is compiled against it automatically, so you never
 compile the library yourself — you just `import` from it. In an installation that
 is the `lib/` directory next to `bin/`, shipped as ordinary sources: read them
-whenever a signature is not obvious, they are covered by the same `LICENSE`.
+whenever a signature is not obvious, they are covered by the same `LICENSE`. It
+is one package, `base` — `lib/base.moggi` is its descriptor, and a release
+publishes it at `registry.moggi-lang.org/#/pkg/base`.
 
 ```moggi
 import Data.Map as M

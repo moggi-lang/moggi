@@ -56,6 +56,11 @@ const DESCRIPTOR_BACKEND_TABLES = ['php.extensions', 'jvm.maven', 'dotnet.nuget'
  * person's behalf — a CI job — rather than a person, so a reader can tell which
  * of a package's allowed users is a machine. It labels the key only; it grants
  * nothing, and the allowed-user list is still the catalog's `authors`.
+ *
+ * `npub` is optional on an `[author…]` block, and a block without one is a
+ * credit: someone who wrote the package and may no longer be involved. Credit
+ * cannot publish, so a package still needs at least one block that names a key —
+ * which is what the allowed-user list is built from.
  */
 const DESCRIPTOR_REPEATABLE_SECTIONS = [
     'author' => ['name', 'email', 'npub', 'automation'],
@@ -188,7 +193,7 @@ function descriptorProblems(string $path): array
         $authors[] = $npub;
     }
     if ($authors === []) {
-        $problems[] = "{$path}: [author] needs an npub — releases are signed by identity, not by name";
+        $problems[] = "{$path}: [author] needs at least one block with an npub — releases are signed by identity, not by name";
     }
     if (\count($authors) !== \count(\array_unique($authors))) {
         $problems[] = "{$path}: the same npub appears in more than one [author] block";
@@ -470,6 +475,7 @@ function isNpub(string $npub): bool
  *   version: string,
  *   authors: list<string>,
  *   automation: list<string>,
+ *   credits: list<array{name: ?string, email: ?string, npub: ?string, automation: bool}>,
  *   dependencies: array<string, string>,
  *   requirements: array<string, list<string>>,
  *   backends: list<string>,
@@ -505,22 +511,36 @@ function readDescriptor(string $path): array
     $package = \is_array($ini['package'] ?? null) ? $ini['package'] : [];
     $authors = [];
     $automation = [];
+    $credits = [];
     $authorEmails = [];
     foreach ($ini as $section => $values) {
         if (!\is_array($values) || !\preg_match('/^author(\.(.+))?$/', (string) $section)) {
             continue;
         }
-        if (isset($values['npub'])) {
-            $npub = (string) $values['npub'];
+        $npub = \trim((string) ($values['npub'] ?? ''));
+        $isAutomation = \strtolower(\trim((string) ($values['automation'] ?? ''))) === 'true';
+        $name = \trim((string) ($values['name'] ?? ''));
+        $email = \trim((string) ($values['email'] ?? ''));
+        if ($npub !== '') {
             $authors[] = $npub;
-            if (\strtolower(\trim((string) ($values['automation'] ?? ''))) === 'true') {
+            if ($isAutomation) {
                 $automation[] = $npub;
             }
         }
-        $email = \trim((string) ($values['email'] ?? ''));
         if ($email !== '') {
             $authorEmails[] = $email;
         }
+        // A block that says nothing at all is not a credit either: there would be
+        // no one to name, only a section header.
+        if ($name === '' && $email === '' && $npub === '') {
+            continue;
+        }
+        $credits[] = [
+            'name' => $name === '' ? null : $name,
+            'email' => $email === '' ? null : $email,
+            'npub' => $npub === '' ? null : $npub,
+            'automation' => $isAutomation,
+        ];
     }
 
     $dependencies = [];
@@ -536,6 +556,7 @@ function readDescriptor(string $path): array
         'version' => \trim((string) ($package['version'] ?? '')),
         'authors' => $authors,
         'automation' => $automation,
+        'credits' => $credits,
         'dependencies' => $dependencies,
         'requirements' => $requirements,
         'backends' => descriptorBackends($ini, $path),

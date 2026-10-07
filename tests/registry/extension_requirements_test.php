@@ -119,25 +119,34 @@ try {
     $assert($descriptors['demo']['requirements'] === ['php.extensions' => ['redis', 'gd']], 'the installed package contributes its own entries');
 
     // --- a runtime's recorded manifest --------------------------------------
+    // The running PHP's set is the host's, not this test's, so the manifest is
+    // built from a name this PHP certainly reports plus a name no runtime has:
+    // `$present` stands for an extension a runtime has, `$absent` for one it
+    // lacks. Neither the names nor the counts then depend on what a host ships.
+    $running = phpRuntimeExtensions();
+    $present = $running[0] ?? 'core';
+    $absent = 'moggi-no-such-extension';
+
     $sfxDir = $work . '/php-native';
     \mkdir($sfxDir, 0777, true);
     \file_put_contents($sfxDir . '/micro.sfx', "not a real runtime\n");
-    \file_put_contents($sfxDir . '/' . EXTENSION_MANIFEST, \json_encode(['runtime' => 'php-native', 'extensions' => ['standard', 'intl']]) . "\n");
+    $manifest = [$present];
+    \file_put_contents($sfxDir . '/' . EXTENSION_MANIFEST, \json_encode(['runtime' => 'php-native', 'extensions' => $manifest]) . "\n");
 
     $assert(runtimeExtensionsAt($work . '/absent') === null, 'a directory with no manifest records nothing');
-    $recorded = runtimeExtensionsAt($sfxDir);
-    $assert($recorded === ['standard', 'intl'], 'a runtime manifest is read back');
+    $assert(runtimeExtensionsAt($sfxDir) === $manifest, 'a runtime manifest is read back');
 
     \putenv('MOGGI_MICRO_SFX=' . $sfxDir . '/micro.sfx');
-    $assert(microRuntimeExtensions() === ['standard', 'intl'], 'the micro runtime records its extensions beside micro.sfx');
+    $assert(microRuntimeExtensions() === $manifest, 'the micro runtime records its extensions beside micro.sfx');
 
-    // `standard` is in every PHP; `redis` is in neither runtime here.
-    $rootDescriptor = ['backends' => ['php'], 'requirements' => ['php.extensions' => ['standard', 'redis']]];
+    $rootDescriptor = ['backends' => ['php'], 'requirements' => ['php.extensions' => [$present, $absent]]];
     $withManifest = phpExtensionProblems(phpExtensionDescriptors($rootDescriptor, []));
-    $assert($withManifest['blocking'] === ['redis'], 'an extension the micro runtime lacks is blocking: ' . \json_encode($withManifest));
-    $assert(\count($withManifest['problems']) === 2, 'the missing extension is reported against both the running PHP and the micro runtime');
+    $assert($withManifest['blocking'] === [$absent], 'an extension the micro runtime lacks is blocking: ' . \json_encode($withManifest));
+    $assert(\count($withManifest['problems']) === 2, 'the missing extension is reported against both the running PHP and the micro runtime: ' . \json_encode($withManifest));
     $assert(\str_contains($withManifest['problems'][0], 'the PHP running this'), 'the first problem names the running PHP');
     $assert(\str_contains($withManifest['problems'][1], 'the runtime a --native build uses'), 'the second problem names the native runtime');
+    $assert(\str_contains($withManifest['problems'][0], $absent) && \str_contains($withManifest['problems'][1], $absent), 'each problem names the extension that is missing');
+    $assert(!\str_contains(\implode("\n", $withManifest['problems']), '`' . $present . '`'), 'an extension both runtimes have is not reported');
     $assert(!\str_contains(\implode("\n", $withManifest['problems']), 'micro.sfx'), 'no message names the runtime mechanism');
 
     \unlink($sfxDir . '/' . EXTENSION_MANIFEST);

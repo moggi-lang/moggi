@@ -189,11 +189,18 @@ descriptor carries no `format` field of its own. `[package]` holds the identity 
 `version`, `license`, `license-file`, `copyright`, `description`), the backends the package can be
 built for, and the metadata a package page leads with: `homepage` and `repository` (absolute
 `http`/`https` URLs), `keywords` (comma-separated) and `maintainer` (a contact, defaulting to the
-first author's email when omitted). One `[author]` block per signing npub is required, and
-`[author.<id>] automation = true` marks a signing key as a job — a CI uploader — rather than a
+first author's email when omitted). Every signing key gets its own `[author]` block, and
+`[author.<id>] automation = true` marks such a key as a job — a CI uploader — rather than a
 person, so tooling can tell the two apart; the flag labels the key and grants nothing, and a
 package page leaves such a key out of its maintainers, since a reader wants someone to contact
-rather than a key. The allowed-user list is still the catalog's `authors`. A package
+rather than a key. The allowed-user list is still the catalog's `authors`.
+
+`npub` is optional, and a block without one is **credit only**: someone who wrote the package
+and may no longer be involved is named without being handed a way to publish. Credit never
+reaches the allowed-user list — a package still needs at least one block that names a key, and
+that is what `readDescriptor()` returns as `authors`, with every block, keyed or not, in
+`credits`. A package page shows the credits as authors and the keyed people as maintainers,
+which is how an original author keeps their name on a package they have handed over. A package
 does not carry `bug-reports`, `category`, `changelog`, `stability` or `tested-with` yet — they are
 deferred rather than forgotten. What a package needs *from* a backend is separate: its runtime
 floor (`[php] version`, `[jvm] version`, `[dotnet] version`), its runtime requirements

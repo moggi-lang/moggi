@@ -273,6 +273,14 @@ function sourceBlobFromDir(array $source): array
 }
 
 /**
+ * The tree a `git` source names, packed by the publish rule.
+ *
+ * The checkout is the tree the release hashed, so the bytes on disk must be the
+ * bytes the commit holds, not what this host's git would write: `core.autocrlf`
+ * and `core.eol` decide between LF and CRLF at checkout time, and a Windows git
+ * defaults to converting. Both are pinned to LF here, so the working tree is the
+ * same on every host and the digest matches the one the release declares.
+ *
  * @param array<string, mixed> $source
  * @return array{bytes: ?string, problem: ?string, origin: string}
  */
@@ -298,7 +306,7 @@ function sourceBlobFromGit(array $source): array
         if ($clone['exitCode'] !== 0) {
             return ['bytes' => null, 'problem' => 'cannot clone its `git` source: ' . sourceProcessError($clone), 'origin' => ''];
         }
-        $checkout = runProcess([$git, '-C', $work, 'checkout', '--quiet', $commit]);
+        $checkout = runProcess([$git, '-C', $work, '-c', 'core.autocrlf=false', '-c', 'core.eol=lf', 'checkout', '--quiet', $commit]);
         if ($checkout['exitCode'] !== 0) {
             return ['bytes' => null, 'problem' => "cannot check out commit {$commit} of its `git` source: " . sourceProcessError($checkout), 'origin' => ''];
         }

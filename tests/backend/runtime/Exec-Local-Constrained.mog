@@ -80,6 +80,26 @@ superClass = (go 5, go 2)
       True -> x + 1
       False -> x
 
+-- a constraint that is only inferred -- the operator and the literal between
+-- them ask for `Ord` and `Num` -- with the helper used at one concrete type, in
+-- the three places a local binding can sit: beside a function, beside a lambda,
+-- and inside one. The call site hands over the dictionaries the helper takes,
+-- in the helper's own order, and no others.
+inferredWhere :: Int -> Bool
+inferredWhere x = go x
+  where
+    go y = y > 4
+
+inferredWhereLambda :: Int -> Bool
+inferredWhereLambda = \x -> go x
+  where
+    go y = y > 4
+
+inferredLetLambda :: Int -> Bool
+inferredLetLambda = \x ->
+  let go y = y > 4
+  in go x
+
 main :: IO ()
 main = do
   let (a1, a2) = twoShows
@@ -97,3 +117,4 @@ main = do
   putStrLn (applyTag (9 :: Int))
   let (e1, e2) = superClass
   putStrLn (show (e1, e2))
+  putStrLn (show (inferredWhere 5, inferredWhere 2, inferredWhereLambda 5, inferredLetLambda 2))

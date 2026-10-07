@@ -117,6 +117,29 @@ try {
     $spaced = $write('spaced', "keywords = json, , parsing ,\n");
     $assert(readDescriptor($spaced)['keywords'] === ['json', 'parsing'], 'blank keyword entries are dropped and the rest trimmed');
 
+    // --- an author block without a key is credit, not a publisher ------------
+    $credited = $write('credited', '', "[author.original]\nname = Ada Example\nemail = ada@example.com\n");
+    $assert(descriptorProblems($credited) === [], 'a block that names no npub is credit, not an error: ' . $problems($credited));
+    $read = readDescriptor($credited);
+    $assert($read['authors'] === [$npub], 'only the keyed block gates the allowed list');
+    $assert(\count($read['credits']) === 2, 'both blocks read back as credits');
+    $assert($read['credits'][0]['npub'] === $npub, 'a keyed credit carries its npub');
+    $assert($read['credits'][1] === ['name' => 'Ada Example', 'email' => 'ada@example.com', 'npub' => null, 'automation' => false], 'a keyless credit is a name and an address, and nothing else');
+    $assert($read['credits'][0]['automation'] === false, 'a person is not automation');
+
+    // --- a credit keeps the order the descriptor wrote ----------------------
+    $ordered = $write('ordered', '', "[author.second]\nname = Second\nemail = second@example.com\n\n[author.first]\nname = First\nemail = first@example.com\n");
+    $names = \array_column(readDescriptor($ordered)['credits'], 'name');
+    $assert($names === ['Test', 'Second', 'First'], 'credits keep document order: ' . \implode(', ', $names));
+
+    // --- automation still needs its key, and a package still needs one -------
+    $labelled = $write('labelled', '', "[author.ci]\nname = Bot\nautomation = true\n");
+    $assert(\str_contains($problems($labelled), '`automation = true` names no npub'), 'an automation block without a key is still refused: ' . $problems($labelled));
+
+    $keyless = $work . '/keyless.moggi';
+    \file_put_contents($keyless, "[package]\nname = keyless\nversion = 1.0.0\n\n[author]\nname = Ada\nemail = ada@example.com\n");
+    $assert(\str_contains($problems($keyless), 'needs at least one block with an npub'), 'a package of credits alone is refused: ' . $problems($keyless));
+
     echo "descriptor metadata tests passed ({$checks} checks)\n";
 } finally {
     $remove($work);

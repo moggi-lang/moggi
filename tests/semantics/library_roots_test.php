@@ -11,6 +11,7 @@ use Moggi\Semantics\Types\TypeError;
 
 use function Moggi\Modules\libraryModuleIndex;
 use function Moggi\Modules\projectSourceClosure;
+use function Moggi\Paths\canonicalSeparators;
 
 $assert = static function (bool $condition, string $message): void {
     if (!$condition) {
@@ -40,8 +41,11 @@ try {
             \str_contains($error->getMessage(), 'duplicate module `Alpha`'),
             'the refusal names the duplicated module, got: ' . $error->getMessage(),
         );
+        // The message spells both roots the way every artifact path is spelled,
+        // so the expectation is canonicalised too rather than host-native.
+        $roots = \array_map(canonicalSeparators(...), $dirs);
         $assert(
-            \str_contains($error->getMessage(), $dirs['a']) && \str_contains($error->getMessage(), $dirs['b']),
+            \str_contains($error->getMessage(), $roots['a']) && \str_contains($error->getMessage(), $roots['b']),
             'the refusal names both roots, got: ' . $error->getMessage(),
         );
     }
