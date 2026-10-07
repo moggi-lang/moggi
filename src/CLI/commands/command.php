@@ -31,6 +31,10 @@ final class CommandSpec
      * @param int $positionals how many positionals the command accepts.
      * @param bool $passthrough whether `--` hands the rest of the line over
      *   verbatim (a program's own arguments), collected under `rest`.
+     * @param bool $write whether the command signs a write, so that its
+     *   `--registry` defaults to the write origin rather than the read one. The
+     *   two are different hosts, and a write sent to the read origin is refused
+     *   rather than redirected.
      */
     public function __construct(
         public readonly string $name,
@@ -39,6 +43,7 @@ final class CommandSpec
         public readonly bool $verb = false,
         public readonly int $positionals = 1,
         public readonly bool $passthrough = false,
+        public readonly bool $write = false,
     ) {
     }
 }
@@ -79,7 +84,9 @@ function parseArgs(array $argv, CommandSpec $spec, int $start = 2): array
 
     $options = [
         'path' => '.',
-        'registry' => (\getenv('MOGGI_REGISTRY') ?: DEFAULT_REGISTRY),
+        'registry' => $spec->write
+            ? writeRegistryDefault()
+            : (\getenv('MOGGI_REGISTRY') ?: DEFAULT_REGISTRY),
         'output' => null,
         'noCache' => false,
         'positionals' => [],

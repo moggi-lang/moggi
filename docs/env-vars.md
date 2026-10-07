@@ -25,7 +25,8 @@ configuration file, and no per-project settings beyond the compile cache.
 | `MOGGI_NO_CACHE` | unset (cache on) | Disable the compile cache. |
 | `MOGGI_MAX_RESPONSE_BYTES` | `268435456` (256 MiB) | Cap on any single fetched body — registry metadata, a blob, or a `source` archive. |
 | `MOGGI_ALLOW_LOCAL_SOURCES` | unset | Allow a release's `source` to reproduce from a local path or `file://` URL when the registry does not serve its blob; without it, only `https` URLs are fetched. |
-| `MOGGI_REGISTRY` | the canonical registry | The registry a packaging command uses when `--registry` is not given. |
+| `MOGGI_REGISTRY` | the canonical registry | The registry a *read* command uses when `--registry` is not given. |
+| `MOGGI_REGISTRY_WRITE` | the registry's write origin | The registry a *write* command — `publish`, `bad`, `unmaintained`, `takeover` — uses when `--registry` is not given; falls back to `MOGGI_REGISTRY`. |
 | `MOGGI_REGISTRY_NPUB` | unset (trust on first use) | Pin the registry's signing key. |
 | `MOGGI_USER_CACHE` | `$XDG_CACHE_HOME/moggi`, else `$HOME/.cache/moggi` | The user-level cache: downloaded archives, plus the remembered key and accepted root version of each registry. |
 | `MOGGI_ALLOW_STALE_REGISTRY` | unset | Accept a signed root that has expired, or that is older than one this machine has already accepted. |
@@ -62,11 +63,21 @@ local paths and `file://` URLs as well, which is what reproducing a package from
 a checkout needs. A local `source` that does not pack to the blob digest reports
 the expected digest but withholds the one it produced.
 
-### `MOGGI_REGISTRY` and `MOGGI_REGISTRY_NPUB`
+### `MOGGI_REGISTRY`, `MOGGI_REGISTRY_WRITE` and `MOGGI_REGISTRY_NPUB`
 
-`MOGGI_REGISTRY` selects the registry for `install`, `update`, `build`, `verify`
-and `publish`; it may be an `https` URL or a directory, which is how a mirror, a
-checkout and the canonical registry are one code path.
+`MOGGI_REGISTRY` selects the registry for `install`, `update`, `build`, `verify`,
+`show`, `search`, `outdated` and `why`; it may be an `https` URL or a directory,
+which is how a mirror, a checkout and the canonical registry are one code path.
+
+The registry's **reads and writes are two origins**. The tree is static and is
+served from the registry itself; the API that accepts a signed write answers on a
+host of its own, because every request signature binds the host it was made for
+— so a client pointed at the read origin would have every write refused as
+`bad-signature`, never quietly redirected. `MOGGI_REGISTRY_WRITE` selects that
+origin for `publish`, `bad`, `unmaintained` and `takeover`. A write with neither
+`--registry` nor this variable falls back to `MOGGI_REGISTRY`, because a machine
+pointed at another registry meant both halves of it, and only then to the
+project's write default.
 
 A registry's signature proves the root is internally consistent, not that it is
 the registry you meant. `MOGGI_REGISTRY_NPUB` pins the signing key, and any

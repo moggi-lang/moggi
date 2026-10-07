@@ -35,6 +35,37 @@ use function Moggi\Registry\writeLock;
 const DEFAULT_REGISTRY = 'https://registry.moggi-lang.org';
 
 /**
+ * The write server a packaging command defaults to.
+ *
+ * Reads and writes are two origins. The tree is static and is served from
+ * `DEFAULT_REGISTRY`; the API that accepts a signed write is the Worker that
+ * commits into that tree, and it answers on a host of its own. A write verb
+ * therefore has its own default: the signature binds the host, so a client
+ * pointed at the read origin is refused with `bad-signature` rather than
+ * quietly redirected somewhere that would accept it.
+ */
+const DEFAULT_REGISTRY_WRITE = 'https://registry-api.moggi-lang.org';
+
+/**
+ * The registry a write goes to when `--registry` does not name one.
+ *
+ * `MOGGI_REGISTRY_WRITE` is the write half of `MOGGI_REGISTRY`, and it falls back
+ * to it: a machine pointed at another registry has meant both halves of it, and a
+ * write that followed the read variable alone would be the one thing nobody
+ * wants it to be — a write to production. Nothing here is the read origin by
+ * accident; the two defaults are different hosts.
+ */
+function writeRegistryDefault(): string
+{
+    $write = \getenv('MOGGI_REGISTRY_WRITE');
+    if (\is_string($write) && $write !== '') {
+        return $write;
+    }
+
+    return (\getenv('MOGGI_REGISTRY') ?: null) ?: DEFAULT_REGISTRY_WRITE;
+}
+
+/**
  * Load a catalog for a command, refusing a root signature that does not verify
  * (§4).
  *

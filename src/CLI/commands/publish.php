@@ -36,7 +36,7 @@ use function Moggi\Registry\writeAuthHeaders;
  */
 function publishUsage(): string
 {
-    $default = DEFAULT_REGISTRY;
+    $default = writeRegistryDefault();
 
     return <<<HELP
     usage:
@@ -48,7 +48,8 @@ function publishUsage(): string
     key the release is signed with.
 
     options:
-      --registry URL|DIR   registry to publish to (default: MOGGI_REGISTRY, else {$default})
+      --registry URL|DIR   registry to publish to (default: MOGGI_REGISTRY_WRITE,
+                           else MOGGI_REGISTRY, else {$default})
       --as NPUB            which [author] signs (required when there is more than one)
       --nsec-file FILE     the signing key, mode 0600 (default: MOGGI_NSEC_FILE,
                            else a no-echo prompt on a terminal)
@@ -76,7 +77,7 @@ function runPublishCommand(array $argv): int
         ['name' => 'as', 'value' => true],
         ['name' => 'url', 'value' => true],
         ['name' => 'commit', 'value' => true],
-    ]);
+    ], write: true);
 
     if (wantsHelp($argv)) {
         echo commandHelp($spec);
