@@ -971,6 +971,35 @@ assertTrue(Docs\sourceUnderRoot('/pkg/src/A.mog', '/pkg/'), 'a file under the ro
 assertTrue(!Docs\sourceUnderRoot('/stdlib/lib/A.mog', '/pkg/'), 'a dependency file is not documented');
 assertTrue(Docs\sourceUnderRoot('', '/pkg/'), 'a synthetic module with no path stays');
 
+// A module's path arrives from `realpath`, so it is spelled with the host's
+// separator, while a prepared root prefix is canonical. These two paths are the
+// ones Windows hands over — `C:\a\moggi\lib\Data\Ord.mog` against
+// `C:/a/moggi/lib/` — and a prefix test that only holds on the host that
+// spelled the root cannot see that the file is the release's, nor subtract the
+// root to find the source page.
+$nativeRoot = 'C:' . DIRECTORY_SEPARATOR . 'a' . DIRECTORY_SEPARATOR . 'moggi'
+    . DIRECTORY_SEPARATOR . 'lib' . DIRECTORY_SEPARATOR;
+$nativeSource = $nativeRoot . 'Data' . DIRECTORY_SEPARATOR . 'Ord.mog';
+assertTrue(
+    Docs\sourceUnderRoot($nativeSource, 'C:/a/moggi/lib/'),
+    'a native-separator path under a canonical root is documented',
+);
+assertTrue(
+    !Docs\sourceUnderRoot($nativeSource, 'C:/a/other/'),
+    'a native-separator path outside the root is not documented',
+);
+assertEq(
+    'Data/Ord.mog',
+    Docs\relativeSourcePath($nativeSource, 'C:/a/moggi/lib/'),
+    'removing the root leaves a relative path on every host',
+);
+assertEq(
+    'src/Data-Ord.mog.html',
+    Docs\sourcePageName((string) Docs\relativeSourcePath($nativeSource, 'C:/a/moggi/lib/')),
+    'the source page names the file, not the drive it was read from',
+);
+assertEq(null, Docs\relativeSourcePath('', '/pkg/'), 'a module with no path has no source page');
+
 $scopeDir = sys_get_temp_dir() . '/moggi-mogdoc-scope-' . getmypid();
 @mkdir($scopeDir . '/src', 0777, true);
 @mkdir($scopeDir . '/tests', 0777, true);

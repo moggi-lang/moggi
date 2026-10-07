@@ -10,6 +10,8 @@ use function Moggi\Cache\atomicWrite;
 use function Moggi\Cache\compileDir;
 use function Moggi\CLI\resolveLibraryDirs;
 use function Moggi\Modules\isSyntheticCompilerModuleName;
+use function Moggi\Modules\outputRelativePath;
+use function Moggi\Paths\canonicalSeparators;
 use function Moggi\Syntax\Parser\standardFixity;
 
 /**
@@ -379,24 +381,37 @@ function buildIndex(
  *
  * `rootPrefix` is a documented root with a trailing separator, so this is a
  * prefix match. An empty prefix means the root is unknown, and nothing is
- * excluded.
+ * excluded. The comparison is spelled one way on every host: a path from the
+ * filesystem keeps the host's separator, while a prepared root prefix is
+ * canonical, so on Windows the two share no prefix until both are canonicalized
+ * — and a documented module would be dropped as if it were a dependency's.
  */
 function sourceUnderRoot(string $path, string $rootPrefix): bool
 {
-    return $rootPrefix === '' || $path === '' || str_starts_with($path, $rootPrefix);
+    return $rootPrefix === ''
+        || $path === ''
+        || str_starts_with(canonicalSeparators($path), canonicalSeparators($rootPrefix));
 }
 
+/**
+ * A module's source path with the documented root removed, spelled with `/` on
+ * every host, or `null` when there is no path to speak of.
+ *
+ * The unit's path comes from `realpath` and so keeps the host's separator, while
+ * the prepared root prefix is canonical: on Windows the prefix test fails and a
+ * naive subtraction hands back the absolute `C:\…` path, which then names a
+ * source page that is not the file's and links nowhere. `outputRelativePath` is
+ * this rule spelled once — the artifact tree asks the same question about the
+ * same two paths — so a path outside the root keeps its own structure instead of
+ * losing characters to a prefix it does not have.
+ */
 function relativeSourcePath(string $path, string $rootPrefix): ?string
 {
     if ($path === '') {
         return null;
     }
 
-    if ($rootPrefix !== '' && str_starts_with($path, $rootPrefix)) {
-        return ltrim(substr($path, strlen($rootPrefix)), '/\\');
-    }
-
-    return $path;
+    return outputRelativePath($path, $rootPrefix);
 }
 
 function declarationSourceLine(string $source, string $name, int $fallback = 0): int
