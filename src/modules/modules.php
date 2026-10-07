@@ -77,6 +77,14 @@ function compileProjectBoth(array $paths, string $rootDir, bool $optimize = true
  *   entryModule: ?string,
  *   entryRelative: ?string
  * }
+ *
+ * Every artifact path is spelled by `outputRelativePath()` — the same function
+ * the import contexts were planned with — so the tree a module is written to and
+ * the `require`s that count their way back to `_runtime.php` from inside it are
+ * one spelling. They are two independent computations of the same thing, and a
+ * root prefix that only one of them can subtract (a drive root on Windows) used
+ * to leave them disagreeing, which put every generated file at one depth and
+ * every require at another.
  */
 function compilePreparedProject(PreparedProject $prepared, bool $optimize = true, bool $strip = false): array
 {
@@ -90,7 +98,7 @@ function compilePreparedProject(PreparedProject $prepared, bool $optimize = true
             continue;
         }
 
-        $relative = substr($unit['path'], strlen($prepared->rootPrefix));
+        $relative = outputRelativePath($unit['path'], $prepared->rootPrefix);
         $relativeByModule[$moduleName] = $relative;
         $purpose = entryPurpose($moduleName);
 

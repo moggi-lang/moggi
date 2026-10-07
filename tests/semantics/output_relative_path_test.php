@@ -55,5 +55,15 @@ $assertSame(
     outputRelativePath('D:/a/moggi/moggi/lib/Data/Ord.mog', 'C://'),
     'a root the path cannot be joined to leaves the path intact, drive dropped',
 );
+$assertSame(
+    'Users/runneradmin/AppData/Local/Temp/app/src/App.mog',
+    outputRelativePath('C:/Users/runneradmin/AppData/Local/Temp/app/src/App.mog', 'C:\\'),
+    'a drive root as the prefix — the shape a closure with no common root produces — keeps every component',
+);
+$assertSame(
+    'a/moggi/moggi/lib/Data/Ord.mog',
+    outputRelativePath('C:/a/moggi/moggi/lib/Data/Ord.mog', 'C:\\'),
+    'a path on the prefixed drive keeps its structure below the drive, losing no characters',
+);
 
 echo "output relative path tests passed ({$checks} checks)\n";

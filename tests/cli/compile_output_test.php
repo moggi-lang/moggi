@@ -154,9 +154,12 @@ try {
 
     // A failure part way through must leave nothing this run created behind: the
     // archive would otherwise survive as a half-built artifact. A directory at
-    // the executable's destination makes that second rename fail.
+    // the executable's destination makes that second rename fail — and on this
+    // host that destination is `executableName()`, which carries `.exe` on
+    // Windows, so the directory has to be named through it rather than `Plain`.
     \mkdir($scratch . '/Roll', 0777, true);
-    \mkdir($scratch . '/Roll/Plain', 0777, true);
+    \mkdir($scratch . '/Roll/' . executableName('Plain'), 0777, true);
+    \file_put_contents($scratch . '/Roll/' . executableName('Plain') . '/keep', 'x');
     $rollbackThrew = false;
     try {
         movePackagedArtifacts(
@@ -175,7 +178,8 @@ try {
     // A pre-existing destination the run legitimately replaced is never deleted:
     // removing it would lose the file `-o` asked to overwrite.
     \mkdir($scratch . '/Keep', 0777, true);
-    \mkdir($scratch . '/Keep/Plain', 0777, true);
+    \mkdir($scratch . '/Keep/' . executableName('Plain'), 0777, true);
+    \file_put_contents($scratch . '/Keep/' . executableName('Plain') . '/keep', 'x');
     \file_put_contents($scratch . '/Keep/Plain.phar', 'old');
     $keepThrew = false;
     try {

@@ -31,9 +31,7 @@ function prepareProject(array $paths, string $rootDir): PreparedProject
         throw new \RuntimeException("cannot resolve project root {$rootDir}");
     }
 
-    $rootPrefix = ($root === '/' || $root === '\\')
-        ? '/'
-        : $root . DIRECTORY_SEPARATOR;
+    $rootPrefix = rtrim(canonicalSeparators($root), '/') . '/';
     $units = [];
     $fixityByModule = [];
     $pending = [];
