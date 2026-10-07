@@ -1,5 +1,5 @@
 {
-  "_comment": "Third-party runtimes bundled into Moggi distributions. Versions mirror the development environment in flake.nix; update both together, then run `php packaging/pin.php` to refresh dist/runtimes.lock.json (exact URLs + hashes). A target/runtime pair that is not listed here has no upstream build and is reported as unsupported rather than substituted. `composer` and `maven` are the host tools `[php] composer` and `[jvm] maven` dependencies are resolved with: a variant bundles the tool for the backend it is named after (`moggi` both, `moggi-php` composer, `moggi-jvm` maven), and `[dotnet] nuget` needs no runtime of its own because the bundled .NET SDK already carries `dotnet nuget`.",
+  "_comment": "Third-party runtimes bundled into Moggi distributions. Versions mirror the development environment in flake.nix; update both together, then run `php packaging/pin.php` to refresh dist/runtimes.lock.json (exact URLs + hashes). A target/runtime pair that is not listed here has no upstream build and is reported as unsupported rather than substituted. `composer` and `maven` are the host tools `[php] composer` and `[jvm.maven]` dependencies are resolved with: a variant bundles the tool for the backend it is named after (`moggi` both, `moggi-php` composer, `moggi-jvm` maven), and `[dotnet] nuget` needs no runtime of its own because the bundled .NET SDK already carries `dotnet nuget`.",
   "linuxGlibcFloor": "2.35",
 
   "targets": {
@@ -22,16 +22,13 @@
       },
       "note": "php.net publishes Windows binaries only. On Linux and macOS the official source release is built with a pinned minimal configuration — this is the only official upstream PHP for those platforms, and it keeps every architecture on a genuine build of the same source release.",
       "checksumsUrl": "https://www.php.net/releases/index.php?json&version={version}",
-      "extensions": ["phar", "bcmath", "mbstring", "zip", "ctype", "intl"],
+      "extensions": ["bcmath", "intl", "mbstring"],
       "configureFlags": [
         "--disable-all",
         "--disable-cgi",
         "--enable-cli",
-        "--enable-phar",
         "--enable-bcmath",
         "--enable-mbstring",
-        "--with-zip",
-        "--enable-ctype",
         "--enable-intl",
         "--without-pear"
       ],

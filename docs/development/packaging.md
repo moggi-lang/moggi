@@ -38,7 +38,7 @@ machine shape; a target that cannot be run is not published.
 `moggi` (PHP + the micro PHP runtime + .NET + JDK + GraalVM + Composer + Maven), `moggi-php`
 (PHP + the micro PHP runtime + Composer), `moggi-dotnet` (.NET only), `moggi-jvm`
 (JDK + GraalVM + Maven), `moggi-minimal` (nothing bundled). The tools a variant carries follow the
-backend it is named after — the host tools `[php] composer` and `[jvm] maven` are resolved with.
+backend it is named after — the host tools `[php] composer` and `[jvm.maven]` are resolved with.
 `bin/moggi` is the *native* compiler in every variant, so the PHP a variant bundles is a program
 runtime, never the compiler's, and `moggi-jvm`/`moggi-dotnet` carry no PHP at all. They differ only
 in `runtime/`: one target is built once — compiler archive, native compiler, docs, examples, one
@@ -148,8 +148,8 @@ A distribution that needs a newer libc than this is a bug, not a documentation p
 ## Host-tool dependencies
 
 A package declares third-party dependencies in the vocabulary of the tool that already owns
-them — `[php] composer = vendor/package:^1.0`, `[jvm] maven = group:artifact:version`,
-`[dotnet] nuget = Package:8.0.0`. The descriptor never names a file or a resolved artifact, and
+them — `[php] composer = vendor/package:^1.0`, then a table per backend: `[jvm.maven]`
+`group:artifact = version`, `[dotnet.nuget]` `Package = 8.0.0`. The descriptor never names a file or a resolved artifact, and
 Moggi has no dependency solver of its own: `moggi build` writes the manifest the tool reads
 (`composer.json`, `pom.xml`, `build.csproj`) and runs the tool.
 
@@ -191,8 +191,11 @@ built for, and the metadata a package page leads with: `homepage` and `repositor
 `http`/`https` URLs), `keywords` (comma-separated) and `maintainer` (a contact, defaulting to the
 first author's email when omitted). One `[author]` block per signing npub is required. A package
 does not carry `bug-reports`, `category`, `changelog`, `stability` or `tested-with` yet — they are
-deferred rather than forgotten. What a package needs *from* a backend is separate:
-`[requires.<role>.<backend>]` for runtime requirements, and the host-tool sections above.
+deferred rather than forgotten. What a package needs *from* a backend is separate: its runtime
+floor (`[php] version`, `[jvm] version`, `[dotnet] version`), its runtime requirements
+(`[php.extensions]`), and the host-tool tables above. The compiler is a native executable, so a
+descriptor declares only what a compiled program needs — there is one requirement set, not one per
+role.
 
 ## Licences
 

@@ -383,8 +383,8 @@ function readCheckLock(string $descriptorPath, ?string $output): ?array
  * build could use: the PHP running this, and the micro runtime a `--native`
  * build appends the PHAR to.
  *
- * Entries follow the descriptor's own syntax: `foo`, `?foo` (optional),
- * `foo^1.2` (a version), `foo=path/to/lib` (built against a path).
+ * Entries come from `[php.extensions]`: the key is the extension, the value its
+ * requirement — `*` for any, `foo^1.2` a version, `/path/to/lib` a build path.
  *
  * @param array<string, mixed> $descriptor
  * @param ?array<string, mixed> $lock
@@ -405,7 +405,7 @@ function checkPhpRequirements(array $descriptor, ?array $lock = null): array
             continue;
         }
         if (!\file_exists($parsed['path']) && !\file_exists(\dirname((string) $descriptor['path']) . '/' . $parsed['path'])) {
-            $findings[] = ['level' => 'warning', 'message' => "[php] extension `{$entry}` is built against `{$parsed['path']}`, which is not there"];
+            $findings[] = ['level' => 'warning', 'message' => "[php.extensions] `{$entry}` is built against `{$parsed['path']}`, which is not there"];
         }
     }
 

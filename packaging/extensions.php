@@ -91,53 +91,38 @@ function packageDescriptorFiles(string $dir): array
 }
 
 /**
- * The PHP extensions a distribution's packages require, by role.
+ * The PHP extensions a distribution's packages require.
  *
- * The roles are different contracts — `program` is what a compiled program
- * calls at run time, `compiler` is what running the compiler needs — and they
- * are collected apart so a name one role asks for cannot answer the other by
- * accident. One PHP serves both, so the runtime is built with their union
- * (`requiredPhpExtensions`); the roles themselves stay separate here.
+ * A package declares one set — what its compiled program calls at run time — and
+ * because a distribution ships its packages as sources, the set a bundled PHP
+ * must carry is derived from the descriptors rather than kept in a list beside
+ * the runtime's version.
  *
- * @return array{program: list<string>, compiler: list<string>}
+ * @return list<string>
  */
-function distributionExtensionRoles(): array
+function distributionPhpExtensions(): array
 {
-    $roles = ['program' => [], 'compiler' => []];
+    $names = [];
     foreach (distributionPackageRequirements() as $sections) {
-        foreach (\array_keys($roles) as $role) {
-            foreach ($sections["requires.{$role}.php"] ?? [] as $entry) {
-                $name = \Moggi\Registry\parsePhpExtensionEntry((string) $entry)['name'];
-                if ($name !== '') {
-                    $roles[$role][\Moggi\Registry\normalizeExtensionName($name)] = $name;
-                }
+        foreach ($sections['php.extensions'] ?? [] as $entry) {
+            $name = \Moggi\Registry\parsePhpExtensionEntry((string) $entry)['name'];
+            if ($name !== '') {
+                $names[\Moggi\Registry\normalizeExtensionName($name)] = $name;
             }
         }
     }
 
-    return [
-        'program' => extensionNamesSorted($roles['program']),
-        'compiler' => extensionNamesSorted($roles['compiler']),
-    ];
+    return extensionNamesSorted($names);
 }
 
 /**
- * The extension set the bundled PHP is built with: both roles as one list.
- *
- * One PHP answers both contracts — a compiled program and the compiler that
- * produced it — so a requirement only one role names still has to be there.
+ * The extension set the bundled PHP is built with.
  *
  * @return list<string>
  */
 function requiredPhpExtensions(): array
 {
-    $roles = distributionExtensionRoles();
-    $names = [];
-    foreach ([...$roles['program'], ...$roles['compiler']] as $name) {
-        $names[\Moggi\Registry\normalizeExtensionName($name)] = $name;
-    }
-
-    return extensionNamesSorted($names);
+    return distributionPhpExtensions();
 }
 
 /**

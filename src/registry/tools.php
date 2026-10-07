@@ -83,8 +83,8 @@ function hostToolDescriptor(string $iniBytes): array
     return [
         'backends' => declaredBackends($iniBytes),
         'php' => ['composer' => splitList((string) ($ini['php']['composer'] ?? ''))],
-        'jvm' => ['maven' => splitList((string) ($ini['jvm']['maven'] ?? ''))],
-        'dotnet' => ['nuget' => splitList((string) ($ini['dotnet']['nuget'] ?? ''))],
+        'jvm' => ['maven' => backendTableCoordinates($ini, 'jvm.maven')],
+        'dotnet' => ['nuget' => backendTableCoordinates($ini, 'dotnet.nuget')],
     ];
 }
 

@@ -80,7 +80,7 @@ Which distributions bundle which runtime, and how to use a checkout instead:
 |---|---|
 | `moggi` | PHP, .NET SDK, JDK, GraalVM — everything, including `--native` — plus Composer and Maven |
 | `moggi-php` | PHP and Composer |
-| `moggi-dotnet` | PHP and the .NET SDK (whose `dotnet nuget` resolves `[dotnet] nuget`) |
+| `moggi-dotnet` | PHP and the .NET SDK (whose `dotnet nuget` resolves `[dotnet.nuget]`) |
 | `moggi-jvm` | PHP, JDK, GraalVM and Maven |
 | `moggi-minimal` | nothing — uses the runtimes on your `PATH` |
 

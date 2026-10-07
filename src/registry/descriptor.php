@@ -32,39 +32,28 @@ const DESCRIPTOR_SCHEMA = [
     'dependencies' => [],
     'lib' => ['source-dirs'],
     'docs' => ['target-dir'],
-    'php' => ['version', 'composer', 'extension', 'git', 'files'],
-    'jvm' => ['maven', 'git', 'files'],
-    'dotnet' => ['nuget', 'git', 'files'],
+    'php' => ['version', 'composer', 'git', 'files'],
+    'jvm' => ['version', 'git', 'files'],
+    'dotnet' => ['version', 'git', 'files'],
 ];
+
+/**
+ * The `[<backend>.<vocabulary>]` tables: one package item per key, its
+ * requirement in the value.
+ *
+ * The keys are free-form — an extension name, a `group:artifact`, a NuGet id —
+ * because what each vocabulary accepts is the vocabulary's business, not the
+ * format's, exactly as `[dependencies]` keys are package names. A value is the
+ * requirement: `*` for any, a version or a constraint, or a path an extension is
+ * built against.
+ */
+const DESCRIPTOR_BACKEND_TABLES = ['php.extensions', 'jvm.maven', 'dotnet.nuget'];
 
 /** The sections that carry a `.<id>` suffix, and the keys they accept. */
 const DESCRIPTOR_REPEATABLE_SECTIONS = [
     'author' => ['name', 'email', 'npub'],
     'executable' => ['main', 'source-dirs', 'backend'],
     'test-suite' => ['main', 'source-dirs', 'backend'],
-];
-
-/**
- * The two roles a runtime requirement can be declared for.
- *
- * They are different contracts, answered by different runtimes: `program` is what
- * a compiled program needs at run time, `compiler` is what running the compiler
- * needs. The PHP CLI serves both, so its derived set is the union — but a
- * requirement only one role needs must not be built into the other.
- */
-const DESCRIPTOR_REQUIREMENT_ROLES = ['program', 'compiler'];
-
-/**
- * The keys a `[requires.<role>.<backend>]` section takes, per backend.
- *
- * Only `php` declares a requirement vocabulary today. `jvm` and `dotnet` are
- * reserved so the shape is fixed, and a key in one of their sections is refused
- * until they have a vocabulary of their own.
- */
-const DESCRIPTOR_REQUIREMENT_KEYS = [
-    'php' => ['extension'],
-    'jvm' => [],
-    'dotnet' => [],
 ];
 
 /**
@@ -218,43 +207,82 @@ function descriptorProblems(string $path): array
 }
 
 /**
- * Every `[requires.<role>.<backend>]` block in a parsed descriptor, keyed by the
- * section spelling, with its `extension` entries.
+ * Every requirement table in a parsed descriptor, keyed by the section spelling,
+ * each as the inline entries the rest of the compiler has always read.
  *
- * The legacy `[php] extension` key is included under `[requires.program.php]`, so
- * a caller reads one shape whether a package spelled the shorthand or the full
- * section. `[php] extension` is the program-side, php-backend requirement and
- * always was; the section is the canonical spelling and the shorthand is kept so
- * existing descriptors do not move.
+ * The table is `name = requirement`, so a checker still sees `bcmath`,
+ * `intl^8.0` or `libcurl=/path`; the spelling only changed at the file.
  *
  * @param array<string, mixed> $ini a parsed descriptor
  * @return array<string, list<string>> section => entries
  */
 function requirementSections(array $ini): array
 {
-    $sections = [];
-    foreach ($ini as $section => $values) {
-        if (!\is_array($values) || requirementSectionKeys((string) $section) === null) {
+    $extensions = [];
+    foreach (\is_array($ini['php.extensions'] ?? null) ? $ini['php.extensions'] : [] as $name => $requirement) {
+        $entry = phpExtensionRequirement((string) $name, (string) $requirement);
+        if ($entry !== null) {
+            $extensions[] = $entry;
+        }
+    }
+    $extensions = \array_values(\array_unique($extensions));
+    if ($extensions === []) {
+        return [];
+    }
+
+    return ['php.extensions' => $extensions];
+}
+
+/**
+ * One `[php.extensions]` line as the inline entry a checker reads: `bcmath` for
+ * `*`, `intl^8.0` for a constraint, `libcurl=/path` for a path.
+ *
+ * The key names the extension and the value is its requirement, so the inline
+ * entry keeps the one grammar it has always had. An empty name is not an entry.
+ */
+function phpExtensionRequirement(string $name, string $requirement): ?string
+{
+    $name = \trim($name);
+    if ($name === '') {
+        return null;
+    }
+    $requirement = \trim($requirement);
+    if ($requirement === '' || $requirement === '*') {
+        return $name;
+    }
+    if (\str_contains($requirement, '/')) {
+        return $name . '=' . $requirement;
+    }
+
+    return $name . $requirement;
+}
+
+/**
+ * The `group:artifact:version` coordinates a `[jvm.maven]` / `[dotnet.nuget]`
+ * table declares, in the one spelling the host-tool layer reads.
+ *
+ * @param array<string, mixed> $ini a parsed descriptor
+ * @return list<string>
+ */
+function backendTableCoordinates(array $ini, string $table): array
+{
+    $coordinates = [];
+    foreach (\is_array($ini[$table] ?? null) ? $ini[$table] : [] as $item => $requirement) {
+        $item = \trim((string) $item);
+        if ($item === '') {
             continue;
         }
-        $sections[(string) $section] = splitList((string) ($values['extension'] ?? ''));
+        $requirement = \trim((string) $requirement);
+        $coordinates[] = ($requirement === '' || $requirement === '*') ? $item : $item . ':' . $requirement;
     }
 
-    $legacy = splitList((string) ($ini['php']['extension'] ?? ''));
-    if ($legacy !== []) {
-        $key = 'requires.program.php';
-        $sections[$key] = \array_values(\array_unique([...($sections[$key] ?? []), ...$legacy]));
-    }
-
-    \ksort($sections, \SORT_STRING);
-
-    return $sections;
+    return $coordinates;
 }
 
 /**
  * What is wrong with one `[php] extension` entry, or null when it is one.
  *
- * The entry grammar is the descriptor's own: `foo`, `?foo`, `foo^1.2`, `foo=path`.
+ * The entry grammar is the descriptor's own: `foo`, `foo^1.2`, `foo=path`.
  * A typo here is invisible until a runtime is checked against it, which is a
  * refusal at the far end of a build rather than at the file that has it.
  */
@@ -317,12 +345,7 @@ function descriptorFormatProblems(string $path): array
                 $problems[] = "{$where}: section [{$section}] is declared twice";
             }
             $seenSections[$section] = true;
-            if (\str_starts_with($section, 'requires.')) {
-                $problem = requirementSectionProblem($section);
-                if ($problem !== null) {
-                    $problems[] = "{$where}: {$problem}";
-                }
-            } elseif (!descriptorSectionKnown($section)) {
+            if (!descriptorSectionKnown($section)) {
                 $problems[] = "{$where}: unknown section [{$section}]";
             }
 
@@ -335,7 +358,7 @@ function descriptorFormatProblems(string $path): array
 
             continue;
         }
-        \preg_match('/^([A-Za-z0-9_.\-]+)\s*=/', $trimmed, $match);
+        \preg_match('/^([A-Za-z0-9_.\-:\/]+)\s*=/', $trimmed, $match);
         $key = $match[1];
 
         if ($section === '') {
@@ -364,11 +387,6 @@ function descriptorUnknownKey(string $section, string $key): string
         return '[lib] takes no `backend` — a library has no entry point to build';
     }
 
-    if (\str_starts_with($section, 'requires.')) {
-        return "[{$section}] does not take `{$key}` (it takes: "
-            . \implode(', ', requirementSectionKeys($section) ?? []) . ')';
-    }
-
     $allowed = DESCRIPTOR_REPEATABLE_SECTIONS[$base] ?? DESCRIPTOR_SCHEMA[$section] ?? [];
     if ($allowed === []) {
         return "[{$section}] does not take `{$key}`";
@@ -378,62 +396,25 @@ function descriptorUnknownKey(string $section, string $key): string
 }
 
 /**
- * The keys a `[requires.<role>.<backend>]` section takes, or null when the
- * section is not a requirement section at all.
- *
- * @return ?list<string>
+ * Whether a section is a `[<backend>.<vocabulary>]` requirement table, whose keys
+ * are free-form and so checked by the vocabulary, not the format.
  */
-function requirementSectionKeys(string $section): ?array
+function descriptorSectionIsTable(string $section): bool
 {
-    $parts = \explode('.', $section);
-    if (\count($parts) !== 3 || $parts[0] !== 'requires') {
-        return null;
-    }
-
-    return DESCRIPTOR_REQUIREMENT_KEYS[$parts[2]] ?? [];
-}
-
-/**
- * What is wrong with a `[requires.<role>.<backend>]` header itself, or null.
- *
- * The header carries the whole schema: the role has to be one of two, the backend
- * one this compiler builds for, and both have to be present. A misspelled role
- * (`[requires.programm.php]`) would otherwise read as an empty requirement set,
- * which is the one thing an optional declaration must never mean by accident.
- */
-function requirementSectionProblem(string $section): ?string
-{
-    $parts = \explode('.', $section);
-    if (\count($parts) !== 3 || $parts[1] === '' || $parts[2] === '') {
-        return "[{$section}] is not `[requires.<role>.<backend>]` (roles: "
-            . \implode(', ', DESCRIPTOR_REQUIREMENT_ROLES) . ')';
-    }
-    if (!\in_array($parts[1], DESCRIPTOR_REQUIREMENT_ROLES, true)) {
-        return "[{$section}] names an unknown role `{$parts[1]}` (roles: "
-            . \implode(', ', DESCRIPTOR_REQUIREMENT_ROLES) . ')';
-    }
-    if (!\in_array($parts[2], allBackends(), true)) {
-        return "[{$section}] names an unknown backend `{$parts[2]}` (this compiler builds: "
-            . \implode(', ', allBackends()) . ')';
-    }
-
-    return null;
+    return \in_array($section, DESCRIPTOR_BACKEND_TABLES, true);
 }
 
 function descriptorSectionKnown(string $section): bool
 {
     return isset(DESCRIPTOR_SCHEMA[$section])
         || isset(DESCRIPTOR_REPEATABLE_SECTIONS[\explode('.', $section, 2)[0]])
-        || requirementSectionKeys($section) !== null;
+        || descriptorSectionIsTable($section);
 }
 
 function descriptorSectionAllows(string $section, string $key): bool
 {
-    if ($section === 'dependencies') {
+    if ($section === 'dependencies' || descriptorSectionIsTable($section)) {
         return true;
-    }
-    if (\str_starts_with($section, 'requires.')) {
-        return \in_array($key, requirementSectionKeys($section) ?? [], true);
     }
     $allowed = DESCRIPTOR_REPEATABLE_SECTIONS[\explode('.', $section, 2)[0]] ?? DESCRIPTOR_SCHEMA[$section] ?? null;
 
@@ -527,28 +508,32 @@ function readDescriptor(string $path): array
         $dependencies[(string) $dependency] = (string) $range;
     }
 
+    $requirements = requirementSections($ini);
+
     return [
         'path' => $path,
         'name' => \trim((string) ($package['name'] ?? '')),
         'version' => \trim((string) ($package['version'] ?? '')),
         'authors' => $authors,
         'dependencies' => $dependencies,
-        'requirements' => requirementSections($ini),
+        'requirements' => $requirements,
         'backends' => descriptorBackends($ini, $path),
         'php' => [
             'version' => isset($ini['php']['version']) ? (string) $ini['php']['version'] : null,
-            'extensions' => splitList((string) ($ini['php']['extension'] ?? '')),
+            'extensions' => $requirements['php.extensions'] ?? [],
             'composer' => splitList((string) ($ini['php']['composer'] ?? '')),
             'git' => optionalString($ini, 'php', 'git'),
             'files' => optionalString($ini, 'php', 'files'),
         ],
         'jvm' => [
-            'maven' => splitList((string) ($ini['jvm']['maven'] ?? '')),
+            'version' => isset($ini['jvm']['version']) ? (string) $ini['jvm']['version'] : null,
+            'maven' => backendTableCoordinates($ini, 'jvm.maven'),
             'git' => optionalString($ini, 'jvm', 'git'),
             'files' => optionalString($ini, 'jvm', 'files'),
         ],
         'dotnet' => [
-            'nuget' => splitList((string) ($ini['dotnet']['nuget'] ?? '')),
+            'version' => isset($ini['dotnet']['version']) ? (string) $ini['dotnet']['version'] : null,
+            'nuget' => backendTableCoordinates($ini, 'dotnet.nuget'),
             'git' => optionalString($ini, 'dotnet', 'git'),
             'files' => optionalString($ini, 'dotnet', 'files'),
         ],

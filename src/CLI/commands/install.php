@@ -142,7 +142,7 @@ function runInstallCommand(array $argv): int
 }
 
 /**
- * Print the `[php] extension` requirements the closure declares that neither the
+ * Print the `[php.extensions]` requirements the closure declares that neither the
  * PHP running this nor the micro runtime provides, now that every locked package
  * is unpacked and its descriptor can be read.
  *

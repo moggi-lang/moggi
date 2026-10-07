@@ -3,10 +3,10 @@
 
 // A runtime requirement a registry cannot fetch, so the resolver gathers it
 // across a closure and answers which runtime provides it. These checks cover the
-// `[requires.<role>.<backend>]` schema and its legacy `[php] extension`
-// shorthand, the entry syntax, the merge across the root and installed packages,
-// the optional marker, and the two runtimes: the PHP running this and the micro
-// runtime a `--native` build appends to.
+// `[php.extensions]` table and the entry syntax, the merge across the root and
+// installed packages, and the two runtimes: the PHP running this and the micro
+// runtime a `--native` build appends to. The compiler is a native executable, so
+// there is one requirement set and no role axis.
 
 $root = __DIR__;
 while (!is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
@@ -17,7 +17,6 @@ require $root . '/src/compiler.php';
 use const Moggi\Registry\EXTENSION_MANIFEST;
 
 use function Moggi\Registry\collectPhpExtensions;
-use function Moggi\Registry\collectRequirementEntries;
 use function Moggi\Registry\descriptorProblems;
 use function Moggi\Registry\descriptorRequirementEntries;
 use function Moggi\Registry\installDir;
@@ -65,45 +64,39 @@ $remove = static function (string $path) use (&$remove): void {
 try {
     // --- entry syntax --------------------------------------------------------
     $plain = parsePhpExtensionEntry('redis');
-    $assert($plain['name'] === 'redis' && $plain['optional'] === false && $plain['path'] === null, 'a bare entry is a required name');
+    $assert($plain['name'] === 'redis' && $plain['path'] === null, 'a bare entry is a name');
 
-    $optional = parsePhpExtensionEntry('?gd');
-    $assert($optional['name'] === 'gd' && $optional['optional'] === true, 'a leading `?` marks an entry optional');
-
-    $versioned = parsePhpExtensionEntry('intl^1.2');
-    $assert($versioned['name'] === 'intl' && $versioned['optional'] === false, 'a version constraint is dropped from the name');
+    $assert(parsePhpExtensionEntry('intl^1.2')['name'] === 'intl', 'a `^` constraint is dropped from the name');
     $assert(parsePhpExtensionEntry('intl<3')['name'] === 'intl', 'a `<` constraint is dropped from the name');
+    $assert(parsePhpExtensionEntry('intl>=8.0')['name'] === 'intl', 'a `>=` constraint is dropped from the name');
+    $assert(parsePhpExtensionEntry('intl>=8.0')['path'] === null, 'a `>=` constraint is not mistaken for a path');
 
     $pathed = parsePhpExtensionEntry('imagick=ext/imagick.so');
     $assert($pathed['name'] === 'imagick' && $pathed['path'] === 'ext/imagick.so', 'a `=` entry names a path');
 
-    $both = parsePhpExtensionEntry('?imagick=ext/imagick.so');
-    $assert($both['optional'] === true && $both['name'] === 'imagick' && $both['path'] === 'ext/imagick.so', 'optional and a path combine');
+    // --- the table is the whole requirement section set ----------------------
+    $sections = requirementSections(\parse_ini_string(
+        "[php.extensions]\nbcmath = *\n\n[jvm.maven]\ncom.acme:lib = 1.0\n",
+        true,
+        \INI_SCANNER_RAW,
+    ));
+    $assert($sections === ['php.extensions' => ['bcmath']], 'only php extensions are requirement sections: ' . \json_encode($sections));
 
     // --- the merge across the closure ---------------------------------------
     $collected = collectPhpExtensions([
-        'root' => ['php' => ['extensions' => ['bcmath', '?redis']]],
-        'demo' => ['php' => ['extensions' => ['redis', 'intl']]],
+        'root' => ['requirements' => ['php.extensions' => ['bcmath', 'redis']]],
+        'demo' => ['requirements' => ['php.extensions' => ['redis', 'intl']]],
     ]);
     $assert(\array_keys($collected) === ['bcmath', 'intl', 'redis'], 'the merged set is keyed case-folded and sorted');
-    $assert($collected['redis']['optional'] === false, 'one required source makes a name required');
     $assert($collected['redis']['sources'] === ['root', 'demo'], 'every label that asked is recorded');
     $assert($collected['bcmath']['sources'] === ['root'], 'a single source is recorded once');
-    $assert($collected['intl']['optional'] === false, 'a required name stays required');
-
-    $allOptional = collectPhpExtensions([
-        'root' => ['php' => ['extensions' => ['?redis']]],
-        'demo' => ['php' => ['extensions' => ['?redis']]],
-    ]);
-    $assert($allOptional['redis']['optional'] === true, 'a name optional everywhere stays optional');
 
     // --- comparing against a runtime ----------------------------------------
-    $requirements = collectPhpExtensions(['root' => ['php' => ['extensions' => ['Redis', '?gd', 'intl']]]]);
-    $unmet = unmetPhpExtensions($requirements, ['core', 'redis', 'INTL']);
-    $assert($unmet === [], 'a case-folded match is a match, and an optional entry is never unmet: ' . \implode(', ', $unmet));
+    $requirements = collectPhpExtensions(['root' => ['requirements' => ['php.extensions' => ['Redis', 'intl']]]]);
+    $assert(unmetPhpExtensions($requirements, ['core', 'redis', 'INTL']) === [], 'a case-folded match is a match');
 
     $missing = unmetPhpExtensions($requirements, ['core']);
-    $assert($missing === ['intl', 'Redis'], 'only required names are reported, in the descriptor spelling: ' . \implode(', ', $missing));
+    $assert($missing === ['intl', 'Redis'], 'only unmet names are reported, in the descriptor spelling: ' . \implode(', ', $missing));
 
     $running = phpRuntimeExtensions();
     $assert(\in_array('core', $running, true), 'the running PHP always reports its core');
@@ -114,18 +107,21 @@ try {
     if (!\is_dir($install) && !\mkdir($install, 0777, true) && !\is_dir($install)) {
         throw new \RuntimeException("cannot create {$install}");
     }
-    \file_put_contents($install . '/demo.moggi', "[package]\nname = demo\nversion = 1.0.0\n\n[php]\nextension = redis, ?gd\n");
+    \file_put_contents($install . '/demo.moggi', "[package]\nname = demo\nversion = 1.0.0\n\n[php.extensions]\nredis = *\ngd = *\n");
 
     $installed = installedPhpExtensions($install, 'demo');
-    $assert($installed === ['redis', '?gd'], 'an installed package\'s extensions are read from its descriptor');
+    $assert($installed === ['redis', 'gd'], 'an installed package\'s extensions are read from its descriptor');
     $assert(installedPhpExtensions($install, 'absent') === null, 'a package with no descriptor answers null');
 
+    $installedMap = installedRequirements($install, 'demo');
+    $assert($installedMap === ['php.extensions' => ['redis', 'gd']], 'an installed package\'s requirement map is read');
+
     $descriptors = phpExtensionDescriptors(
-        ['php' => ['extensions' => ['bcmath']]],
+        ['requirements' => ['php.extensions' => ['bcmath']]],
         ['packages' => ['demo' => ['version' => '1.0.0', 'digest' => $digest]]],
     );
     $assert(\array_keys($descriptors) === ['root', 'demo'], 'the closure is the root plus every installed package');
-    $assert($descriptors['demo']['requirements'] === ['requires.program.php' => ['redis', '?gd']], 'the installed package contributes its own entries');
+    $assert($descriptors['demo']['requirements'] === ['php.extensions' => ['redis', 'gd']], 'the installed package contributes its own entries');
 
     // --- a runtime's recorded manifest --------------------------------------
     $sfxDir = $work . '/php-native';
@@ -141,17 +137,13 @@ try {
     $assert(microRuntimeExtensions() === ['standard', 'intl'], 'the micro runtime records its extensions beside micro.sfx');
 
     // `standard` is in every PHP; `redis` is in neither runtime here.
-    $rootDescriptor = ['backends' => ['php'], 'php' => ['extensions' => ['standard', 'redis']]];
+    $rootDescriptor = ['backends' => ['php'], 'requirements' => ['php.extensions' => ['standard', 'redis']]];
     $withManifest = phpExtensionProblems(phpExtensionDescriptors($rootDescriptor, []));
     $assert($withManifest['blocking'] === ['redis'], 'an extension the micro runtime lacks is blocking: ' . \json_encode($withManifest));
     $assert(\count($withManifest['problems']) === 2, 'the missing extension is reported against both the running PHP and the micro runtime');
     $assert(\str_contains($withManifest['problems'][0], 'the PHP running this'), 'the first problem names the running PHP');
     $assert(\str_contains($withManifest['problems'][1], 'the runtime a --native build uses'), 'the second problem names the native runtime');
     $assert(!\str_contains(\implode("\n", $withManifest['problems']), 'micro.sfx'), 'no message names the runtime mechanism');
-
-    $optionalOnly = ['backends' => ['php'], 'php' => ['extensions' => ['standard', '?redis']]];
-    $satisfied = phpExtensionProblems(phpExtensionDescriptors($optionalOnly, []));
-    $assert($satisfied['problems'] === [], 'an optional extension the micro runtime lacks is not reported');
 
     \unlink($sfxDir . '/' . EXTENSION_MANIFEST);
     $unknown = phpExtensionProblems(phpExtensionDescriptors($rootDescriptor, []));
@@ -160,7 +152,7 @@ try {
 
     \putenv('MOGGI_MICRO_SFX');
 
-    // --- the `[requires.<role>.<backend>]` schema ---------------------------
+    // --- the `[php.extensions]` table ---------------------------------------
     $npub = 'npub1yywlmj053p4qp7z2qvqsrgcwz488mw0pr0t50xz3e5rx7s9uaelsjpdmfm';
     $descriptorFor = static function (string $name, string $body) use ($npub): string {
         return "[package]\nname = {$name}\nversion = 1.0.0\n\n[author]\nname = Test\nnpub = {$npub}\n\n{$body}";
@@ -172,77 +164,41 @@ try {
         return $path;
     };
 
-    // A section declares one role and one backend, and both roles are read.
-    $path = $writeDescriptor('roleful', "[lib]\nsource-dirs = .\n\n[requires.program.php]\nextension = intl, bcmath\n\n[requires.compiler.php]\nextension = phar\n");
-    $assert(descriptorProblems($path) === [], 'a descriptor with both requirement roles is valid: ' . \implode('; ', descriptorProblems($path)));
+    $path = $writeDescriptor('extensionful', "[lib]\nsource-dirs = .\n\n[php.extensions]\nintl = *\nbcmath = *\n");
+    $assert(descriptorProblems($path) === [], 'a `[php.extensions]` table is valid: ' . \implode('; ', descriptorProblems($path)));
     $read = readDescriptor($path);
-    $assert($read['requirements']['requires.program.php'] === ['intl', 'bcmath'], 'the program role is read');
-    $assert($read['requirements']['requires.compiler.php'] === ['phar'], 'the compiler role is read');
-    $assert(descriptorRequirementEntries($read, 'program', 'php') === ['intl', 'bcmath'], 'the program role is scoped out of the compiler set');
-    $assert(descriptorRequirementEntries($read, 'compiler', 'php') === ['phar'], 'the compiler role is scoped out of the program set');
-    $assert(descriptorRequirementEntries($read, 'program', 'jvm') === [], 'a backend with no section declares nothing');
+    $assert($read['requirements'] === ['php.extensions' => ['intl', 'bcmath']], 'the table is read as its entries');
+    $assert($read['php']['extensions'] === ['intl', 'bcmath'], 'the extensions are exposed where a checker reads them');
+    $assert(descriptorRequirementEntries($read, 'php') === ['intl', 'bcmath'], 'the php backend reads the table');
+    $assert(descriptorRequirementEntries($read, 'jvm') === [], 'a backend with no table declares nothing');
 
-    // The legacy `[php] extension` key is the same declaration, program-scoped.
-    $legacyPath = $writeDescriptor('legacy', "[lib]\nsource-dirs = .\n\n[php]\nextension = gd, ?redis\n");
-    $legacy = readDescriptor($legacyPath);
-    $assert($legacy['requirements']['requires.program.php'] === ['gd', '?redis'], '`[php] extension` reads as the program-side php requirement');
-    $assert($legacy['php']['extensions'] === ['gd', '?redis'], 'the legacy key is still exposed in its old place');
-    $assert(descriptorRequirementEntries($legacy, 'compiler', 'php') === [], 'the legacy key contributes nothing to the compiler role');
+    // A constraint and a path survive the table, and the `=` stays a path.
+    $shaped = $writeDescriptor('shaped', "[php.extensions]\nintl = ^8.0\nlibcurl = /usr/lib/libcurl.so\n");
+    $shapedRead = readDescriptor($shaped);
+    $assert($shapedRead['requirements']['php.extensions'] === ['intl^8.0', 'libcurl=/usr/lib/libcurl.so'], 'a constraint and a path are kept: ' . \implode(', ', $shapedRead['requirements']['php.extensions']));
+    $assert(parsePhpExtensionEntry($shapedRead['requirements']['php.extensions'][1])['path'] === '/usr/lib/libcurl.so', 'the path half is read as a path');
 
-    // Both spellings in one file are the one set, without a duplicate.
-    $bothPath = $writeDescriptor('both', "[lib]\nsource-dirs = .\n\n[requires.program.php]\nextension = intl\n\n[php]\nextension = intl, bcmath\n");
-    $assert(readDescriptor($bothPath)['requirements']['requires.program.php'] === ['intl', 'bcmath'], 'the two spellings fold into one set, deduplicated');
+    // --- the host-tool tables ------------------------------------------------
+    $jvm = $writeDescriptor('jvmful', "[jvm]\nversion = 21\n\n[jvm.maven]\ncom.fasterxml.jackson.core:jackson-core = 2.17.3\n");
+    $assert(descriptorProblems($jvm) === [], 'a `[jvm.maven]` table is valid: ' . \implode('; ', descriptorProblems($jvm)));
+    $jvmRead = readDescriptor($jvm);
+    $assert($jvmRead['jvm']['version'] === '21', 'the jvm runtime floor is read');
+    $assert($jvmRead['jvm']['maven'] === ['com.fasterxml.jackson.core:jackson-core:2.17.3'], 'a maven coordinate is read from its table');
 
-    // --- the header is the schema --------------------------------------------
-    $badRole = $writeDescriptor('badrole', "[requires.programm.php]\nextension = intl\n");
-    $assert(\str_contains(\implode('\n', descriptorProblems($badRole)), 'unknown role `programm`'), 'a misspelled role is refused, not read as empty');
+    $dotnet = $writeDescriptor('dotnetful', "[dotnet]\nversion = 8\n\n[dotnet.nuget]\nSystem.Text.Json = 8.0.0\n");
+    $dotnetRead = readDescriptor($dotnet);
+    $assert($dotnetRead['dotnet']['version'] === '8', 'the dotnet runtime floor is read');
+    $assert($dotnetRead['dotnet']['nuget'] === ['System.Text.Json:8.0.0'], 'a nuget coordinate is read from its table');
 
-    $badBackend = $writeDescriptor('badbackend', "[requires.program.ruby]\nextension = intl\n");
-    $assert(\str_contains(\implode('\n', descriptorProblems($badBackend)), 'unknown backend `ruby`'), 'an unknown backend is refused');
+    // --- the old shapes are gone --------------------------------------------
+    $roleSection = $writeDescriptor('rolesection', "[lib]\nsource-dirs = .\n\n[requires.program.php]\nextension = intl\n");
+    $assert(\str_contains(\implode("\n", descriptorProblems($roleSection)), 'unknown section [requires.program.php]'), 'the old role section is no longer valid');
 
-    $noBackend = $writeDescriptor('nobackend', "[requires.program]\nextension = intl\n");
-    $assert(\str_contains(\implode('\n', descriptorProblems($noBackend)), 'is not `[requires.<role>.<backend>]`'), 'a role with no backend is refused');
+    $legacyKey = $writeDescriptor('legacykey', "[lib]\nsource-dirs = .\n\n[php]\nextension = intl\n");
+    $assert(\str_contains(\implode("\n", descriptorProblems($legacyKey)), 'does not take `extension`'), 'the old `[php] extension` key is no longer valid');
 
-    $badKey = $writeDescriptor('badkey', "[requires.program.php]\nextensions = intl\n");
-    $assert(\str_contains(\implode('\n', descriptorProblems($badKey)), 'does not take `extensions`'), 'a key the section does not declare is refused');
-
-    $jvmKey = $writeDescriptor('jvmkey', "[requires.program.jvm]\nextension = intl\n");
-    $assert(\str_contains(\implode('\n', descriptorProblems($jvmKey)), 'does not take `extension`'), 'a reserved backend takes no requirement key yet');
-
-    $badEntry = $writeDescriptor('badentry', "[requires.program.php]\nextension = intl, 9lives\n");
-    $assert(\str_contains(\implode('\n', descriptorProblems($badEntry)), 'is not an extension name'), 'a malformed extension name is refused at the descriptor');
-
-    // --- the merge folds a name both roles ask for ---------------------------
-    $merged = collectRequirementEntries([
-        'root' => ['requirements' => ['requires.program.php' => ['intl']]],
-        'dep' => ['requirements' => ['requires.compiler.php' => ['intl', 'phar']]],
-    ], 'program', 'php');
-    $assert($merged['intl']['sources'] === ['root'], 'the program collection sees only the program role');
-    $compiler = collectRequirementEntries([
-        'root' => ['requirements' => ['requires.program.php' => ['intl']]],
-        'dep' => ['requirements' => ['requires.compiler.php' => ['intl', 'phar']]],
-    ], 'compiler', 'php');
-    $assert(\array_keys($compiler) === ['intl', 'phar'], 'the compiler collection sees only the compiler role');
-
-    // An installed package contributes both roles from its own descriptor.
-    $installDir = installDir('roleful', 'sha256:' . \str_repeat('b', 64));
-    if (!\is_dir($installDir) && !\mkdir($installDir, 0777, true) && !\is_dir($installDir)) {
-        throw new \RuntimeException("cannot create {$installDir}");
-    }
-    \file_put_contents($installDir . '/roleful.moggi', "[package]\nname = roleful\nversion = 1.0.0\n\n[requires.compiler.php]\nextension = phar\n");
-    $installedMap = installedRequirements($installDir, 'roleful');
-    $assert($installedMap === ['requires.compiler.php' => ['phar']], 'an installed package\'s requirement map is read');
-    $assert(installedRequirements($installDir, 'absent') === null, 'a package with no descriptor answers null');
-
-    // A compiler-role need the micro runtime lacks is blocking, like a program one.
-    \putenv('MOGGI_MICRO_SFX=' . $sfxDir . '/micro.sfx');
-    \file_put_contents($sfxDir . '/' . EXTENSION_MANIFEST, \json_encode(['runtime' => 'php-native', 'extensions' => ['standard', 'intl']]) . "\n");
-    $compilerNeed = phpExtensionProblems(phpExtensionDescriptors(
-        ['requirements' => ['requires.compiler.php' => ['redis']]],
-        [],
-    ));
-    $assert($compilerNeed['blocking'] === ['redis'], 'a compiler-role extension the runtime lacks blocks a --native build');
-    \putenv('MOGGI_MICRO_SFX');
+    $badEntry = $writeDescriptor('badentry', "[php.extensions]\n9lives = *\n");
+    $assert(\str_contains(\implode("\n", descriptorProblems($badEntry)), 'is not an extension name'), 'a malformed extension name is refused at the descriptor');
 
     echo "extension requirement tests passed ({$checks} checks)\n";
 } finally {

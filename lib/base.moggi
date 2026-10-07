@@ -17,8 +17,7 @@ source-dirs = .
 [php]
 version = 8.5
 
-[requires.program.php]
-extension = bcmath, intl, mbstring
-
-[requires.compiler.php]
-extension = phar, ctype, mbstring, zip
+[php.extensions]
+bcmath = *
+intl = *
+mbstring = *

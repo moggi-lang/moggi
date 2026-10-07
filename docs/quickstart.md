@@ -25,7 +25,7 @@ The distributions differ only in which runtimes they carry:
 |---|---|
 | `moggi` | PHP, the micro PHP runtime, .NET SDK, JDK, GraalVM — everything, including `--native` — plus Composer and Maven |
 | `moggi-php` | PHP, the micro PHP runtime and Composer — the PHP backend, `--native` included |
-| `moggi-dotnet` | PHP, the micro PHP runtime and the .NET SDK (whose `dotnet nuget` resolves `[dotnet] nuget`) |
+| `moggi-dotnet` | PHP, the micro PHP runtime and the .NET SDK (whose `dotnet nuget` resolves `[dotnet.nuget]`) |
 | `moggi-jvm` | PHP, the micro PHP runtime, JDK, GraalVM and Maven |
 | `moggi-minimal` | nothing — uses the `php`, `javac`/`java`, `dotnet`, `composer` and `mvn` on your `PATH` |
 

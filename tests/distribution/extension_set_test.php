@@ -2,10 +2,11 @@
 <?php declare(strict_types=1);
 
 // The extension set a distribution's bundled PHP is built with is derived from
-// the packages it ships, not typed beside the runtime's version. These checks
-// cover the derivation (base.moggi's two roles), the role separation, and the
-// two refusals: a pinned list that has drifted from what the packages require,
-// and a runtime that does not carry a declared name.
+// the packages it ships, not typed beside the runtime's version. The compiler is
+// a native executable, so only a program's needs are declared, and the set is one
+// list. These checks cover the derivation from `base.moggi`, and the two
+// refusals: a pinned list that has drifted from what the packages require, and a
+// runtime that does not carry a declared name.
 
 $root = __DIR__;
 while (!is_file($root . '/packaging/runtimes.php') && \dirname($root) !== $root) {
@@ -15,7 +16,7 @@ require $root . '/packaging/runtimes.php';
 
 use function Moggi\Dist\assertPhpRuntimeExtensions;
 use function Moggi\Dist\assertRuntimeExtensionsDeclared;
-use function Moggi\Dist\distributionExtensionRoles;
+use function Moggi\Dist\distributionPhpExtensions;
 use function Moggi\Dist\loadRuntimeConfig;
 use function Moggi\Dist\missingPhpExtensions;
 use function Moggi\Dist\requiredPhpExtensions;
@@ -28,40 +29,16 @@ $assert = static function (bool $condition, string $message) use (&$checks): voi
     }
 };
 
-$roles = distributionExtensionRoles();
-
+$declared = distributionPhpExtensions();
 $assert(
-    $roles['program'] === ['bcmath', 'intl', 'mbstring'],
-    'the program role is what a compiled program needs: ' . \implode(', ', $roles['program']),
-);
-$assert(
-    $roles['compiler'] === ['ctype', 'mbstring', 'phar', 'zip'],
-    'the compiler role is what running the compiler needs: ' . \implode(', ', $roles['compiler']),
+    $declared === ['bcmath', 'intl', 'mbstring'],
+    'the declared set is what a compiled program needs: ' . \implode(', ', $declared),
 );
 
-$assert(
-    \in_array('bcmath', $roles['program'], true) && !\in_array('bcmath', $roles['compiler'], true),
-    'a name only the program role declares must not appear in the compiler role',
-);
-$assert(
-    \in_array('phar', $roles['compiler'], true) && !\in_array('phar', $roles['program'], true),
-    'a name only the compiler role declares must not appear in the program role',
-);
-$assert(
-    \in_array('mbstring', $roles['program'], true) && \in_array('mbstring', $roles['compiler'], true),
-    'a name both roles need is in both',
-);
-
-$declaredUnion = \array_values(\array_unique([...$roles['program'], ...$roles['compiler']]));
-\sort($declaredUnion, \SORT_STRING);
 $derived = requiredPhpExtensions();
 $assert(
-    $derived === $declaredUnion,
-    'the runtime set is the union of both roles: ' . \implode(', ', $derived),
-);
-$assert(
-    $derived === ['bcmath', 'ctype', 'intl', 'mbstring', 'phar', 'zip'],
-    'the derived set is base.moggi\'s declared union: ' . \implode(', ', $derived),
+    $derived === $declared,
+    'the runtime set is the declared set: ' . \implode(', ', $derived),
 );
 
 $config = loadRuntimeConfig();

@@ -5,29 +5,20 @@ namespace Moggi\Registry;
 use function Moggi\Backend\Php\resolveMicroSfx;
 
 /**
- * PHP extension requirements: `[requires.<role>.<backend>]` in a descriptor.
+ * PHP extension requirements: the `[php.extensions]` table of a descriptor.
  *
  * An extension is compiled into, or loadable by, a particular PHP, so this
  * module gathers the requirement across a whole closure and answers which
- * runtime provides it. A requirement is declared for one of two roles — `program`
- * (what a compiled program needs at run time) or `compiler` (what running the
- * compiler needs) — and one backend, because the two roles are different
- * contracts answered by different runtimes:
+ * runtime provides it:
  *
- *   [requires.program.php]
- *   extension = intl, bcmath
+ *   [php.extensions]
+ *   bcmath  = *
+ *   intl    = ^8.0
+ *   libcurl = /path/to/lib
  *
- *   [requires.compiler.php]
- *   extension = phar
- *
- * The legacy `[php] extension` key is the same declaration under
- * `[requires.program.php]`, and stays accepted: it always meant the program-side,
- * php-backend requirement. Entries use the descriptor's own syntax:
- *
- *   foo              required
- *   ?foo             optional
- *   foo^1.2 / foo<3  a version constraint (the name is what gets compared)
- *   foo=path/to/lib  built against a path
+ * The key names the extension and the value is its requirement: `*` for any, a
+ * version constraint (the name is what gets compared), or a path it is built
+ * against.
  *
  * Two runtimes answer separately: the PHP running this process, and the micro
  * PHP runtime a `--native` build appends the PHAR to. The first reports its set
@@ -35,25 +26,22 @@ use function Moggi\Backend\Php\resolveMicroSfx;
  * packaging run records beside `micro.sfx`.
  */
 
-/** The section spelling the program-side, php-backend requirement set has. */
-const PROGRAM_PHP_REQUIREMENTS = 'requires.program.php';
-
 /** The file a prepared runtime records its extension set in, beside its binary. */
 const EXTENSION_MANIFEST = 'extensions.json';
 
 /**
- * One `[php] extension` entry, split into the name a runtime is checked for, its
- * optional marker, and a path it names.
+ * One `[php] extension` entry, split into the name a runtime is checked for and
+ * a path it names.
  *
- * @return array{entry: string, name: string, optional: bool, path: ?string}
+ * @return array{entry: string, name: string, path: ?string}
  */
 function parsePhpExtensionEntry(string $entry): array
 {
     $text = \trim($entry);
-    $optional = \str_starts_with($text, '?');
-    $name = \ltrim($text, '?');
+    $name = $text;
     $path = null;
-    if (\str_contains($name, '=')) {
+    $beforeEquals = \strstr($name, '=', true);
+    if (\is_string($beforeEquals) && !\str_ends_with($beforeEquals, '>') && !\str_ends_with($beforeEquals, '<')) {
         [$name, $path] = \explode('=', $name, 2);
         $path = \trim($path);
     }
@@ -62,7 +50,6 @@ function parsePhpExtensionEntry(string $entry): array
     return [
         'entry' => $text,
         'name' => $name,
-        'optional' => $optional,
         'path' => $path === '' ? null : $path,
     ];
 }
@@ -77,14 +64,14 @@ function parsePhpExtensionEntry(string $entry): array
  * @param array<string, mixed> $descriptor
  * @return list<string>
  */
-function descriptorRequirementEntries(array $descriptor, string $role, string $backend): array
+function descriptorRequirementEntries(array $descriptor, string $backend): array
 {
-    $key = "requires.{$role}.{$backend}";
+    $key = $backend . '.extensions';
     $sections = $descriptor['requirements'] ?? null;
     if (\is_array($sections) && isset($sections[$key])) {
         return \array_values(\array_map('strval', (array) $sections[$key]));
     }
-    if ($role === 'program' && $backend === 'php') {
+    if ($backend === 'php') {
         return descriptorPhpExtensions($descriptor);
     }
 
@@ -108,7 +95,7 @@ function descriptorPhpExtensions(array $descriptor): array
  *
  * @return ?list<string> the entries, or null when there is no descriptor to read
  */
-function installedRequirementEntries(string $installDir, string $name, string $role, string $backend): ?array
+function installedRequirementEntries(string $installDir, string $name, string $backend): ?array
 {
     $file = \rtrim($installDir, '/\\') . '/' . $name . '.moggi';
     if (!\is_file($file)) {
@@ -120,18 +107,18 @@ function installedRequirementEntries(string $installDir, string $name, string $r
     }
     $sections = requirementSections($ini);
 
-    return \array_values(\array_map('strval', $sections["requires.{$role}.{$backend}"] ?? []));
+    return \array_values(\array_map('strval', $sections[$backend . '.extensions'] ?? []));
 }
 
 /**
- * The program-side, php-backend requirement entries an installed package
- * declares, read from the `<name>.moggi` beside its sources.
+ * The php requirement entries an installed package declares, read from the
+ * `<name>.moggi` beside its sources.
  *
  * @return ?list<string> the entries, or null when there is no descriptor to read
  */
 function installedPhpExtensions(string $installDir, string $name): ?array
 {
-    return installedRequirementEntries($installDir, $name, 'program', 'php');
+    return installedRequirementEntries($installDir, $name, 'php');
 }
 
 /**
@@ -139,8 +126,8 @@ function installedPhpExtensions(string $installDir, string $name): ?array
  * project's own under the label `root`, and every installed package the lock
  * names under its own name.
  *
- * Each carries a `requirements` map — the canonical shape — so the program and
- * compiler roles both travel through.
+ * Each carries a `requirements` map — the canonical shape — so a requirement
+ * declared by an installed package is read the same way as the root's.
  *
  * @param array<string, mixed> $descriptor
  * @param array<string, mixed> $lock
@@ -182,7 +169,7 @@ function requirementSectionsFromDescriptor(array $descriptor): array
 
     $legacy = descriptorPhpExtensions($descriptor);
 
-    return $legacy === [] ? [] : [PROGRAM_PHP_REQUIREMENTS => $legacy];
+    return $legacy === [] ? [] : ['php.extensions' => $legacy];
 }
 
 /**
@@ -207,18 +194,15 @@ function installedRequirements(string $installDir, string $name): ?array
  * Merge the requirements of several descriptors into one set, keyed by the
  * lowercased extension name, with the labels that asked for each.
  *
- * A name is required when any source requires it, and optional when every source
- * marks it optional.
- *
  * @param array<string, array<string, mixed>> $descriptors label => descriptor
- * @return array<string, array{name: string, optional: bool, sources: list<string>, paths: list<string>}>
+ * @return array<string, array{name: string, sources: list<string>, paths: list<string>}>
  */
-function collectRequirementEntries(array $descriptors, string $role, string $backend): array
+function collectRequirementEntries(array $descriptors, string $backend): array
 {
     $collected = [];
     foreach ($descriptors as $label => $descriptor) {
         $label = (string) $label;
-        foreach (descriptorRequirementEntries($descriptor, $role, $backend) as $raw) {
+        foreach (descriptorRequirementEntries($descriptor, $backend) as $raw) {
             $entry = parsePhpExtensionEntry($raw);
             if ($entry['name'] === '') {
                 continue;
@@ -226,11 +210,9 @@ function collectRequirementEntries(array $descriptors, string $role, string $bac
             $key = normalizeExtensionName($entry['name']);
             $existing = $collected[$key] ?? [
                 'name' => $entry['name'],
-                'optional' => true,
                 'sources' => [],
                 'paths' => [],
             ];
-            $existing['optional'] = $existing['optional'] && $entry['optional'];
             if (!\in_array($label, $existing['sources'], true)) {
                 $existing['sources'][] = $label;
             }
@@ -247,57 +229,14 @@ function collectRequirementEntries(array $descriptors, string $role, string $bac
 }
 
 /**
- * Two collected requirement sets as one, folding a name both roles ask for into a
- * single entry that names both sources.
- *
- * @param array<string, array{name: string, optional: bool, sources: list<string>, paths: list<string>}> $a
- * @param array<string, array{name: string, optional: bool, sources: list<string>, paths: list<string>}> $b
- * @return array<string, array{name: string, optional: bool, sources: list<string>, paths: list<string>}>
- */
-function mergeRequirementSets(array $a, array $b): array
-{
-    $merged = $a;
-    foreach ($b as $key => $entry) {
-        $existing = $merged[$key] ?? null;
-        if ($existing === null) {
-            $merged[$key] = $entry;
-
-            continue;
-        }
-        $sources = $existing['sources'];
-        foreach ($entry['sources'] as $source) {
-            if (!\in_array($source, $sources, true)) {
-                $sources[] = $source;
-            }
-        }
-        $paths = $existing['paths'];
-        foreach ($entry['paths'] as $path) {
-            if (!\in_array($path, $paths, true)) {
-                $paths[] = $path;
-            }
-        }
-        $merged[$key] = [
-            'name' => $existing['name'],
-            'optional' => $existing['optional'] && $entry['optional'],
-            'sources' => $sources,
-            'paths' => $paths,
-        ];
-    }
-
-    \ksort($merged, \SORT_STRING);
-
-    return $merged;
-}
-
-/**
- * The program-side, php-backend requirement set of several descriptors, merged.
+ * The php requirement set of several descriptors, merged.
  *
  * @param array<string, array<string, mixed>> $descriptors label => descriptor
- * @return array<string, array{name: string, optional: bool, sources: list<string>, paths: list<string>}>
+ * @return array<string, array{name: string, sources: list<string>, paths: list<string>}>
  */
 function collectPhpExtensions(array $descriptors): array
 {
-    return collectRequirementEntries($descriptors, 'program', 'php');
+    return collectRequirementEntries($descriptors, 'php');
 }
 
 /** Extension names are case-insensitive, so comparison folds case. */
@@ -313,10 +252,10 @@ function phpRuntimeExtensions(): array
 }
 
 /**
- * The required names a runtime's extension set does not provide, as the display
- * spelling from `$requirements`. Optional entries are compared and skipped.
+ * The names a runtime's extension set does not provide, as the display spelling
+ * from `$requirements`.
  *
- * @param array<string, array{name: string, optional: bool, sources: list<string>, paths: list<string>}> $requirements
+ * @param array<string, array{name: string, sources: list<string>, paths: list<string>}> $requirements
  * @param list<string> $available
  * @return list<string> display names
  */
@@ -329,7 +268,7 @@ function unmetPhpExtensions(array $requirements, array $available): array
 
     $unmet = [];
     foreach ($requirements as $key => $requirement) {
-        if ($requirement['optional'] || isset($present[$key])) {
+        if (isset($present[$key])) {
             continue;
         }
         $unmet[] = $requirement['name'];
@@ -377,10 +316,9 @@ function microRuntimeExtensions(?string $sfxPath = null): ?array
  * The unmet requirement set of a closure, checked against both runtimes a build
  * can use.
  *
- * The program role and the compiler role are gathered separately and reported
- * separately, because they are answered by different runtimes: a program's needs
- * are what a built executable must be able to call, a compiler's needs are what
- * this process and the runtime a `--native` build uses must already carry.
+ * A package declares one set — what its program calls — and it is answered by
+ * two runtimes: the PHP running this process, and the micro PHP runtime a
+ * `--native` build appends the PHAR to.
  *
  * @param array<string, array<string, mixed>> $descriptors label => descriptor
  * @return array{problems: list<string>, blocking: list<string>} the human lines,
@@ -388,9 +326,7 @@ function microRuntimeExtensions(?string $sfxPath = null): ?array
  */
 function phpExtensionProblems(array $descriptors): array
 {
-    $program = collectRequirementEntries($descriptors, 'program', 'php');
-    $compiler = collectRequirementEntries($descriptors, 'compiler', 'php');
-    $requirements = mergeRequirementSets($program, $compiler);
+    $requirements = collectRequirementEntries($descriptors, 'php');
     $problems = [];
     $blocking = [];
 
@@ -422,7 +358,7 @@ function phpExtensionProblems(array $descriptors): array
 /**
  * One finding line, naming the labels that asked for the extension.
  *
- * @param array<string, array{name: string, optional: bool, sources: list<string>, paths: list<string>}> $requirements
+ * @param array<string, array{name: string, sources: list<string>, paths: list<string>}> $requirements
  */
 function extensionRequirementProblem(string $name, array $requirements, string $runtime): string
 {
