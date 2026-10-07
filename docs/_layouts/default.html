@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+{%- if page.title %}
+<title>{{ page.title }} — {{ site.title }}</title>
+<meta name="description" content="{{ page.description | default: site.description }}">
+{%- else %}
+<title>{{ site.title }}</title>
+<meta name="description" content="{{ site.description }}">
+{%- endif %}
+<link rel="stylesheet" href="{{ '/assets/style.css' | relative_url }}">
+<link rel="icon" type="image/svg+xml" href="{{ '/logo.svg' | relative_url }}">
+<link rel="icon" type="image/png" href="{{ '/icon.png' | relative_url }}">
+<link rel="apple-touch-icon" href="{{ '/icon.png' | relative_url }}">
+</head>
+<body>
+
+<div class="brand">
+<a href="{{ '/' | relative_url }}"><img class="logo" src="{{ '/logo.svg' | relative_url }}" alt="" width="44" height="44">Moggi</a>
+<span class="brand-note">documentation</span>
+</div>
+
+<div class="nav">
+<a href="{{ '/' | relative_url }}">Manual</a> |
+<a href="{{ '/quickstart.html' | relative_url }}">Quickstart</a> |
+<a href="{{ '/development/development.html' | relative_url }}">Development</a> |
+<a href="https://moggi-lang.org/">Website</a> |
+<a href="https://registry.moggi-lang.org/">Packages</a> |
+<a href="https://github.com/moggi-lang/moggi">Source</a>
+</div>
+
+<hr>
+
+<main class="markdown-body">
+{{ content }}
+</main>
+
+<hr>
+
+<p class="note">
+Moggi compiles to PHP, the JVM and .NET. This site is generated from
+<code>docs/</code> in the
+<a href="https://github.com/moggi-lang/moggi">moggi-lang/moggi</a> repository;
+the same pages are readable there as Markdown.
+</p>
+
+</body>
+</html>

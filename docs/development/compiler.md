@@ -1,3 +1,6 @@
+---
+title: "Compiler"
+---
 # Compiler
 
 The Moggi compiler and programs written in Moggi live under `src/`.

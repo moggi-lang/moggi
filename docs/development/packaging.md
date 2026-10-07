@@ -1,3 +1,6 @@
+---
+title: "Packaging and releases"
+---
 # Packaging and releases
 
 How Moggi is built, tested and published. This page is for people working on the

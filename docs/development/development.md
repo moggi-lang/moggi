@@ -1,3 +1,6 @@
+---
+title: "Development"
+---
 # Development
 
 Working on the compiler itself. To *use* Moggi, start at

@@ -1,3 +1,6 @@
+---
+title: "Moggi Language Server"
+---
 # Moggi Language Server
 
 The Moggi compiler **is** the language service: one long-lived process (PHP in a

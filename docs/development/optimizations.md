@@ -1,3 +1,6 @@
+---
+title: "IR optimizations"
+---
 # IR optimizations
 
 The compiler runs an optimization pass on IR after type checking and before PHP codegen. Optimizations are enabled by default; use `--no-opt` to skip them.

@@ -1,3 +1,6 @@
+---
+title: "Tests"
+---
 # Tests
 
 One entry point: `test.php`, wrapped by the dev shell as `runtest`. There is no test registry — the

@@ -1,0 +1,11 @@
+title: Moggi documentation
+description: The Moggi manual — the language, the standard library and the compiler.
+kramdown:
+  input: GFM
+plugins:
+  - jekyll-relative-links
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default

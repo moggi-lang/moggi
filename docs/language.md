@@ -1,3 +1,6 @@
+---
+title: "Language overview"
+---
 # Language overview
 
 This is the reference for the surface language: what a `.mog` file may contain

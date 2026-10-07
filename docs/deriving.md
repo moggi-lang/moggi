@@ -1,3 +1,6 @@
+---
+title: "Deriving"
+---
 # Deriving
 
 Moggi supports four deriving strategies:

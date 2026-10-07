@@ -1,3 +1,6 @@
+---
+title: "The REPL"
+---
 # The REPL
 
 The REPL is the fastest way to try a piece of Moggi: type an expression, get its

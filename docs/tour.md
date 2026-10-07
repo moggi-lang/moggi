@@ -1,3 +1,6 @@
+---
+title: "The language, by example"
+---
 # The language, by example
 
 This is the tour: the two ideas that explain most of Moggi, then the language as

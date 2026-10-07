@@ -1,3 +1,6 @@
+---
+title: "Quickstart"
+---
 # Quickstart
 
 Get something running, then change it. Nothing here needs a functional

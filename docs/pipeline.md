@@ -1,3 +1,6 @@
+---
+title: "The compiler, stage by stage"
+---
 # The compiler, stage by stage
 
 You give Moggi a `.mog` file; you get a `.phar`, a `.jar` or a `.dll`. This

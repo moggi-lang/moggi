@@ -1,3 +1,6 @@
+---
+title: "Documentation"
+---
 # Documentation
 
 Read the first four pages in order. Each one is short, and each ends where the

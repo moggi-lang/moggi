@@ -1,3 +1,6 @@
+---
+title: "Compiler Architecture"
+---
 # Compiler Architecture
 
 This document describes the bootstrap compiler as a set of phases. It is both

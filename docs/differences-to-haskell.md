@@ -1,3 +1,6 @@
+---
+title: "Differences to Haskell / GHC `base`"
+---
 # Differences to Haskell / GHC `base`
 
 Moggi ports the API surface of Haskell's `base`, but it is not Haskell and it is not GHC.

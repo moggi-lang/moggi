@@ -1,3 +1,6 @@
+---
+title: "Calling the host platform"
+---
 # Calling the host platform
 
 Moggi compiles to PHP, the JVM or .NET. A `foreign` declaration is how a Moggi

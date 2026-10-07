@@ -1,3 +1,6 @@
+---
+title: "Design notes"
+---
 # Design notes
 
 Work-in-progress decisions for primitives, type classes, and stdlib layout — a record for people

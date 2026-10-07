@@ -1,3 +1,6 @@
+---
+title: "Diagnostics"
+---
 # Diagnostics
 
 Moggi reports failures in terms of *your* code, not the generated artifact. A

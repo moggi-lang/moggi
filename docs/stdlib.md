@@ -1,3 +1,6 @@
+---
+title: "Standard library"
+---
 # Standard library
 
 The standard library is written in Moggi and lives in `lib/`. It is part of the
