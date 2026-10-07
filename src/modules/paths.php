@@ -28,10 +28,33 @@ function moduleFilenameWarning(string $path, string $moduleName): ?string
 
 function mogPathToOutputRelative(string $mogPath, string $rootPrefix, ?string $extension = null): string
 {
-    $relative = substr($mogPath, strlen($rootPrefix));
+    $relative = outputRelativePath($mogPath, $rootPrefix);
     $extension ??= currentBackend()->extension();
 
     return preg_replace('/\.mog$/', $extension, $relative) ?? $relative;
+}
+
+/**
+ * What is left of a source path once the project root is removed, spelled with `/`.
+ *
+ * A path that is not under the root keeps its own structure rather than losing
+ * characters to a prefix it does not have. A closure that spans two roots has no
+ * common one at all — `commonPathPrefix` reports the bare separator, and on
+ * Windows resolving that lands on a drive root — so a temporary application
+ * compiled against a checkout on the other drive is exactly this shape. Dropping
+ * the drive leaves a legal relative path, the tree still holds every file, and
+ * the paths that depend on the shape (`require`s between modules, the runtime's
+ * depth from each file) stay consistent with it, which is all the tree needs.
+ */
+function outputRelativePath(string $mogPath, string $rootPrefix): string
+{
+    $path = canonicalSeparators($mogPath);
+    $prefix = canonicalSeparators($rootPrefix);
+    if ($prefix !== '' && str_starts_with($path, $prefix)) {
+        return substr($path, strlen($prefix));
+    }
+
+    return ltrim(preg_replace('#^[A-Za-z]:#', '', $path) ?? $path, '/');
 }
 
 function projectRootFromPath(string $path): string

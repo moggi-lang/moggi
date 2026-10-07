@@ -9,7 +9,7 @@ require_once __DIR__ . '/manifest.php';
  * release tag, so publishing a release is a command and not a hand edit of 25
  * links.
  *
- *   php packaging/website.php --tag 0.1.0-alpha [--file ../website/index.html]
+ *   php packaging/website.php --tag 0.1.0-alpha [--file ../moggi-website/index.html]
  *                             [--check] [--upstream https://github.com/moggi-lang/moggi]
  *
  * The page names the release in several places and they are all rewritten
@@ -32,7 +32,7 @@ function websiteUsage(): int
 function parseWebsiteArgv(array $argv): array
 {
     $tag = '';
-    $file = \dirname(__DIR__) . '/../website/index.html';
+    $file = \dirname(__DIR__) . '/../moggi-website/index.html';
     $check = false;
     $upstream = 'https://github.com/moggi-lang/moggi';
 

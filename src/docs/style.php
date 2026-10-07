@@ -14,7 +14,7 @@ namespace Moggi\Docs;
  *
  * The paper is a warm off-white rather than #fff, because pure white glares on a
  * page you read for a while. The five tones are the same ones the site uses
- * (`website/style.css`): paper #f7f3e8, panel #ece5d5, code #f1ebdd,
+ * (`moggi-website/style.css`): paper #f7f3e8, panel #ece5d5, code #f1ebdd,
  * line #c8bfa9, ink #1c1a16.
  *
  * Class names are load-bearing (the generator emits them); the Main entry point

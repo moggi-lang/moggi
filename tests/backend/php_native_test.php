@@ -29,6 +29,7 @@ use function Moggi\Backend\Php\microIniObject;
 use function Moggi\Backend\Php\microSfxAt;
 use function Moggi\Backend\Php\packagePhar;
 use function Moggi\Backend\Php\resolveMicroSfx;
+use function Moggi\Paths\canonicalSeparators;
 use const Moggi\Backend\Php\MICRO_INI_MAGIC;
 use const Moggi\Backend\Php\MICRO_SFX_ENV;
 
@@ -46,6 +47,15 @@ $assertTrue = static function (bool $condition, string $message) use (&$failures
     if (!$condition) {
         $failures[] = $message;
     }
+};
+
+/**
+ * Path identity rather than path spelling: the test builds its paths with `/`
+ * while `microSfxAt` joins with the host's separator, so on Windows the same
+ * file has two spellings and only the canonical one compares equal.
+ */
+$assertSamePath = static function (string $expected, string $actual, string $message) use ($assertSame): void {
+    $assertSame(canonicalSeparators($expected), canonicalSeparators($actual), $message);
 };
 
 $scratch = \sys_get_temp_dir() . '/moggi-native-' . getmypid() . '-' . bin2hex(random_bytes(4));
@@ -117,19 +127,19 @@ try {
 
     // 3. Resolving the runtime: a file, or a directory holding `micro.sfx`.
 
-    $assertSame($sfx, microSfxAt($sfx), 'a file is the runtime');
-    $assertSame($sfx, microSfxAt($scratch), 'a directory resolves to the micro.sfx inside it');
-    $assertSame($sfx, microSfxAt($scratch . '/'), 'a trailing separator must not matter');
+    $assertSamePath($sfx, microSfxAt($sfx), 'a file is the runtime');
+    $assertSamePath($sfx, microSfxAt($scratch), 'a directory resolves to the micro.sfx inside it');
+    $assertSamePath($sfx, microSfxAt($scratch . '/'), 'a trailing separator must not matter');
     $assertSame(null, microSfxAt($scratch . '/nothing'), 'a missing path resolves to nothing');
-    $assertSame($payload, microSfxAt($payload), 'any named file is the runtime, whatever it is called');
+    $assertSamePath($payload, microSfxAt($payload), 'any named file is the runtime, whatever it is called');
     $bareDir = $scratch . '/no-runtime';
     \mkdir($bareDir, 0777, true);
     $assertSame(null, microSfxAt($bareDir), 'a directory without a micro.sfx resolves to nothing');
 
     \putenv(MICRO_SFX_ENV . '=' . $scratch);
-    $assertSame($sfx, resolveMicroSfx(), 'the environment may name a directory');
+    $assertSamePath($sfx, resolveMicroSfx(), 'the environment may name a directory');
     \putenv(MICRO_SFX_ENV . '=' . $payload);
-    $assertSame($payload, resolveMicroSfx(), 'the environment may name a file');
+    $assertSamePath($payload, resolveMicroSfx(), 'the environment may name a file');
     \putenv(MICRO_SFX_ENV . '=');
     \putenv('MOGGI_ROOT=');
     $assertSame(null, resolveMicroSfx(), 'a checkout with nothing bundled and nothing named has no runtime');

@@ -24,6 +24,7 @@ use function Moggi\Install\bundledPhpBinDirectory;
 use function Moggi\Install\installationRoot;
 use function Moggi\Install\loaderVariable;
 use function Moggi\Install\platformPath;
+use function Moggi\Paths\canonicalSeparators;
 
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
@@ -59,7 +60,8 @@ try {
     \mkdir($work . '/runtime/dotnet', 0777, true);
     \file_put_contents($work . '/runtime/php/php.ini', "; test\n");
 
-    \putenv('PATH=/usr/bin:/bin');
+    $hostPath = '/usr/bin' . \PATH_SEPARATOR . '/bin';
+    \putenv('PATH=' . $hostPath);
     activateBundledRuntimes();
 
     $entries = \explode(\PATH_SEPARATOR, (string) \getenv('PATH'));
@@ -67,26 +69,47 @@ try {
         $work . '/runtime/jvm/bin',
         $work . '/runtime/graalvm/bin',
         $work . '/runtime/dotnet',
-        $work . '/runtime/php/bin',
+        bundledPhpBinDirectory($work . '/runtime/php'),
         $work . '/runtime/maven/bin',
         $work . '/runtime/composer/bin',
     ];
     $assert(
-        \array_slice($entries, 0, \count($expected)) === $expected,
+        \array_map(canonicalSeparators(...), \array_slice($entries, 0, \count($expected)))
+            === \array_map(canonicalSeparators(...), $expected),
         'bundled runtimes must precede the host, JDK before GraalVM: ' . \implode(' | ', \array_slice($entries, 0, \count($expected))),
     );
-    $assert(\in_array('/usr/bin', $entries, true), 'the host PATH must be kept after the bundled directories');
-
-    $assert(\getenv('JAVA_HOME') === $work . '/runtime/jvm', 'a bundled JDK must be handed over through JAVA_HOME');
-    $assert(\getenv('DOTNET_ROOT') === $work . '/runtime/dotnet', 'a bundled .NET SDK must be handed over through DOTNET_ROOT');
-    $assert(\getenv('PHPRC') === $work . '/runtime/php', 'a bundled php.ini must be handed over through PHPRC');
-    $assert(\getenv('PHP_INI_SCAN_DIR') === '', 'a bundled PHP must not scan the host ini directory');
-
-    $loader = (string) \getenv('LD_LIBRARY_PATH') . (string) \getenv('DYLD_FALLBACK_LIBRARY_PATH');
     $assert(
-        \str_contains($loader, $work . '/runtime/php/lib'),
-        'the bundled PHP library directory must be on the loader path',
+        \str_ends_with((string) \getenv('PATH'), \PATH_SEPARATOR . $hostPath),
+        'the host PATH must be kept after the bundled directories: ' . \getenv('PATH'),
     );
+
+    $assert(
+        canonicalSeparators((string) \getenv('JAVA_HOME')) === canonicalSeparators($work . '/runtime/jvm'),
+        'a bundled JDK must be handed over through JAVA_HOME: ' . \getenv('JAVA_HOME'),
+    );
+    $assert(
+        canonicalSeparators((string) \getenv('DOTNET_ROOT')) === canonicalSeparators($work . '/runtime/dotnet'),
+        'a bundled .NET SDK must be handed over through DOTNET_ROOT: ' . \getenv('DOTNET_ROOT'),
+    );
+    $assert(
+        canonicalSeparators((string) \getenv('PHPRC')) === canonicalSeparators($work . '/runtime/php'),
+        'a bundled php.ini must be handed over through PHPRC: ' . \getenv('PHPRC'),
+    );
+    $assert((string) \getenv('PHP_INI_SCAN_DIR') === '', 'a bundled PHP must not scan the host ini directory');
+
+    $loaderName = loaderVariable();
+    if ($loaderName === null) {
+        $loader = (string) \getenv('LD_LIBRARY_PATH') . (string) \getenv('DYLD_FALLBACK_LIBRARY_PATH');
+        $assert(
+            !\str_contains($loader, $work . '/runtime/php/lib'),
+            'a platform without a loader variable must not add the bundled PHP library directory: ' . $loader,
+        );
+    } else {
+        $assert(
+            \str_contains((string) \getenv($loaderName), $work . '/runtime/php/lib'),
+            'the bundled PHP library directory must be on the loader path: ' . \getenv($loaderName),
+        );
+    }
 
     $assert(!\is_dir($work . '/runtime/php-native'), 'the micro runtime is a file, not a directory of commands');
 

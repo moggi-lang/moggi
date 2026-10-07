@@ -13,6 +13,7 @@ use function Moggi\Modules\moduleFileClosureCached;
 use function Moggi\Modules\prepareProjectCached;
 use function Moggi\Modules\projectSourceClosure;
 use function Moggi\Modules\setStdlibLibPath;
+use function Moggi\Paths\canonicalSeparators;
 
 final class ParsedModule
 {
@@ -270,6 +271,11 @@ function descriptorTestSourceDirs(string $root): array
 /**
  * The files with a descriptor's test-suite source directories removed.
  *
+ * The comparison is spelled one way on every host: a walked directory comes back
+ * with the host's separator and the descriptor's entry is the author's own, so a
+ * Windows root joined with `/` would match nothing and a suite would be
+ * documented as if it were API.
+ *
  * @param list<string> $files
  * @return list<string>
  */
@@ -282,14 +288,15 @@ function withoutTestSuiteSources(string $root, array $files): array
 
     $prefixes = [];
     foreach ($dirs as $dir) {
-        $prefixes[] = rtrim($root, '/\\') . '/' . trim($dir, '/\\') . '/';
+        $prefixes[] = canonicalSeparators(rtrim($root, '/\\')) . '/' . trim(canonicalSeparators($dir), '/\\') . '/';
     }
 
     return array_values(array_filter(
         $files,
         static function (string $file) use ($prefixes): bool {
+            $canonical = canonicalSeparators($file);
             foreach ($prefixes as $prefix) {
-                if (str_starts_with($file, $prefix)) {
+                if (str_starts_with($canonical, $prefix)) {
                     return false;
                 }
             }

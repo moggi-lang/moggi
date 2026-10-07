@@ -505,9 +505,11 @@ function artifactExtension(string $backend): string
  *
  * A native build writes two artifacts, so they must never share a path: the
  * archive keeps the backend extension and the executable takes the name the
- * caller asked for. An `-o` that already names the executable (`-o app`) gets
- * the archive at `app.phar`; one that already carries the extension
- * (`-o app.phar`) is unchanged.
+ * caller asked for. An `-o` that already carries that extension (`-o app.phar`)
+ * is unchanged and only the executable is derived from it; any other `-o` names
+ * the executable, so the archive gets the extension appended — `-o app` gives
+ * `app.phar` beside `app` (and beside `app.exe` on Windows, whose suffix is the
+ * executable's own), and `-o app.exe` gives `app.exe.phar` beside `app.exe`.
  *
  * For .NET, third-party assemblies the app is linked against travel out beside
  * it: the deps document names them, so they are packaged artifacts, not build
@@ -517,6 +519,11 @@ function artifactExtension(string $backend): string
  * two artifacts of one run is refused instead of the second silently
  * overwriting the first. A pre-existing file at a destination is replaced: that
  * is what naming it with `-o` asks for.
+ *
+ * Every destination is the caller's `-o` with something appended, never a path
+ * re-joined with the host's separator, so the two artifacts aimed at one file are
+ * compared in one spelling: a vendored assembly derived from the destination
+ * reaches the same string as the archive beside it on every host.
  *
  * Nothing is written to a final destination until every artifact is on disk:
  * each is first moved to a temporary name beside where it belongs, and only then
@@ -538,7 +545,7 @@ function movePackagedArtifacts(string $staging, string $destBase, string $backen
         : null;
 
     $archiveDest = $destBase;
-    if ($binBase !== null && executableName($binBase) === $destBase) {
+    if ($binBase !== null && ($binBase === $destBase || executableName($binBase) === $destBase)) {
         $archiveDest = $destBase . artifactExtension($backend);
     }
 
@@ -556,7 +563,7 @@ function movePackagedArtifacts(string $staging, string $destBase, string $backen
         foreach (\glob($staging . DIRECTORY_SEPARATOR . '*.dll') ?: [] as $dll) {
             $name = \basename($dll);
             if ($name !== 'moggi-app.dll') {
-                $plan[] = [$name, \dirname($archiveDest) . DIRECTORY_SEPARATOR . $name];
+                $plan[] = [$name, \dirname($archiveDest) . '/' . $name];
             }
         }
     }
