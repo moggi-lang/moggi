@@ -24,11 +24,12 @@ namespace Moggi\Registry;
 
 /**
  * @param array<string, string> $dependencies name => constraint, from the descriptor
+ * @param array<string, string> $provided name => version, the packages the compiler carries
  * @return array{ok: bool, chosen: array<string, string>, error: ?string}
  */
-function resolveDependencies(array $dependencies, Catalog $catalog, string $root = 'root'): array
+function resolveDependencies(array $dependencies, Catalog $catalog, string $root = 'root', array $provided = []): array
 {
-    return resolveWith(static fn (string $name): ?array => $catalog->entry($name), $dependencies, $root);
+    return resolveWith(static fn (string $name): ?array => $catalog->entry($name), $dependencies, $root, $provided);
 }
 
 /**
@@ -37,11 +38,12 @@ function resolveDependencies(array $dependencies, Catalog $catalog, string $root
  *
  * @param callable(string): ?array<string, mixed> $entry
  * @param array<string, string> $dependencies
+ * @param array<string, string> $provided
  * @return array{ok: bool, chosen: array<string, string>, error: ?string}
  */
-function resolveWith(callable $entry, array $dependencies, string $root = 'root'): array
+function resolveWith(callable $entry, array $dependencies, string $root = 'root', array $provided = []): array
 {
-    $resolution = resolveWithDetails($entry, $dependencies, $root);
+    $resolution = resolveWithDetails($entry, $dependencies, $root, $provided);
 
     return ['ok' => $resolution['ok'], 'chosen' => $resolution['chosen'], 'error' => $resolution['error']];
 }
@@ -60,10 +62,13 @@ function resolveWith(callable $entry, array $dependencies, string $root = 'root'
  *
  * @param callable(string): ?array<string, mixed> $entry
  * @param array<string, string> $dependencies
+ * @param array<string, string> $provided
  * @return array{ok: bool, chosen: array<string, string>, error: ?string, reasons: array<string, list<array{constraint: string, path: string}>>}
  */
-function resolveWithDetails(callable $entry, array $dependencies, string $root = 'root'): array
+function resolveWithDetails(callable $entry, array $dependencies, string $root = 'root', array $provided = []): array
 {
+    $entry = providedEntry($entry, $provided);
+
     $demands = [];
     foreach ($dependencies as $name => $constraint) {
         $demands[$name] = [['constraint' => (string) $constraint, 'path' => "{$root} -> {$name}"]];
@@ -77,6 +82,11 @@ function resolveWithDetails(callable $entry, array $dependencies, string $root =
     $chosen = cdclResolve($entry, $dependencies);
     if ($chosen !== null) {
         return ['ok' => true, 'chosen' => $chosen, 'error' => null, 'reasons' => $greedy['reasons']];
+    }
+
+    $toolchain = providedRequirementFailure($greedy['reasons'], $provided);
+    if ($toolchain !== null) {
+        return ['ok' => false, 'chosen' => $greedy['chosen'], 'error' => $toolchain, 'reasons' => $greedy['reasons']];
     }
 
     return $greedy;

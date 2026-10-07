@@ -30,7 +30,7 @@ use function Moggi\Backend\Php\resolveMicroSfx;
 const EXTENSION_MANIFEST = 'extensions.json';
 
 /**
- * One `[php] extension` entry, split into the name a runtime is checked for and
+ * One `[php.extensions]` entry, split into the name a runtime is checked for and
  * a path it names.
  *
  * @return array{entry: string, name: string, path: ?string}
@@ -52,73 +52,6 @@ function parsePhpExtensionEntry(string $entry): array
         'name' => $name,
         'path' => $path === '' ? null : $path,
     ];
-}
-
-/**
- * The requirement entries one role and backend declares, in declaration order.
- *
- * A descriptor read by `readDescriptor` carries a `requirements` map; a synthetic
- * descriptor built by a caller may carry only the legacy `[php] extension` shape,
- * which reads as the program-side, php-backend set.
- *
- * @param array<string, mixed> $descriptor
- * @return list<string>
- */
-function descriptorRequirementEntries(array $descriptor, string $backend): array
-{
-    $key = $backend . '.extensions';
-    $sections = $descriptor['requirements'] ?? null;
-    if (\is_array($sections) && isset($sections[$key])) {
-        return \array_values(\array_map('strval', (array) $sections[$key]));
-    }
-    if ($backend === 'php') {
-        return descriptorPhpExtensions($descriptor);
-    }
-
-    return [];
-}
-
-/**
- * The program-side, php-backend requirement entries a descriptor declares.
- *
- * @param array<string, mixed> $descriptor
- * @return list<string>
- */
-function descriptorPhpExtensions(array $descriptor): array
-{
-    return \array_values(\array_map('strval', (array) ($descriptor['php']['extensions'] ?? [])));
-}
-
-/**
- * The requirement entries an installed package declares, read from the
- * `<name>.moggi` beside its sources.
- *
- * @return ?list<string> the entries, or null when there is no descriptor to read
- */
-function installedRequirementEntries(string $installDir, string $name, string $backend): ?array
-{
-    $file = \rtrim($installDir, '/\\') . '/' . $name . '.moggi';
-    if (!\is_file($file)) {
-        return null;
-    }
-    $ini = @\parse_ini_string((string) \file_get_contents($file), true, \INI_SCANNER_RAW);
-    if (!\is_array($ini)) {
-        return null;
-    }
-    $sections = requirementSections($ini);
-
-    return \array_values(\array_map('strval', $sections[$backend . '.extensions'] ?? []));
-}
-
-/**
- * The php requirement entries an installed package declares, read from the
- * `<name>.moggi` beside its sources.
- *
- * @return ?list<string> the entries, or null when there is no descriptor to read
- */
-function installedPhpExtensions(string $installDir, string $name): ?array
-{
-    return installedRequirementEntries($installDir, $name, 'php');
 }
 
 /**
@@ -149,8 +82,7 @@ function phpExtensionDescriptors(array $descriptor, array $lock): array
 }
 
 /**
- * A descriptor's `requirements` map, whether it was read by `readDescriptor` or
- * built by a caller in the legacy `[php] extension` shape.
+ * A descriptor's `requirements` map, as read by `readDescriptor`.
  *
  * @param array<string, mixed> $descriptor
  * @return array<string, list<string>>
@@ -158,18 +90,15 @@ function phpExtensionDescriptors(array $descriptor, array $lock): array
 function requirementSectionsFromDescriptor(array $descriptor): array
 {
     $sections = $descriptor['requirements'] ?? null;
-    if (\is_array($sections) && $sections !== []) {
-        $out = [];
-        foreach ($sections as $section => $entries) {
-            $out[(string) $section] = \array_values(\array_map('strval', (array) $entries));
-        }
-
-        return $out;
+    if (!\is_array($sections)) {
+        return [];
+    }
+    $out = [];
+    foreach ($sections as $section => $entries) {
+        $out[(string) $section] = \array_values(\array_map('strval', (array) $entries));
     }
 
-    $legacy = descriptorPhpExtensions($descriptor);
-
-    return $legacy === [] ? [] : ['php.extensions' => $legacy];
+    return $out;
 }
 
 /**
@@ -191,18 +120,18 @@ function installedRequirements(string $installDir, string $name): ?array
 }
 
 /**
- * Merge the requirements of several descriptors into one set, keyed by the
- * lowercased extension name, with the labels that asked for each.
+ * Merge the `[php.extensions]` requirements of several descriptors into one set,
+ * keyed by the lowercased extension name, with the labels that asked for each.
  *
  * @param array<string, array<string, mixed>> $descriptors label => descriptor
  * @return array<string, array{name: string, sources: list<string>, paths: list<string>}>
  */
-function collectRequirementEntries(array $descriptors, string $backend): array
+function collectPhpExtensions(array $descriptors): array
 {
     $collected = [];
     foreach ($descriptors as $label => $descriptor) {
         $label = (string) $label;
-        foreach (descriptorRequirementEntries($descriptor, $backend) as $raw) {
+        foreach (requirementSectionsFromDescriptor($descriptor)['php.extensions'] ?? [] as $raw) {
             $entry = parsePhpExtensionEntry($raw);
             if ($entry['name'] === '') {
                 continue;
@@ -226,17 +155,6 @@ function collectRequirementEntries(array $descriptors, string $backend): array
     \ksort($collected, \SORT_STRING);
 
     return $collected;
-}
-
-/**
- * The php requirement set of several descriptors, merged.
- *
- * @param array<string, array<string, mixed>> $descriptors label => descriptor
- * @return array<string, array{name: string, sources: list<string>, paths: list<string>}>
- */
-function collectPhpExtensions(array $descriptors): array
-{
-    return collectRequirementEntries($descriptors, 'php');
 }
 
 /** Extension names are case-insensitive, so comparison folds case. */
@@ -326,7 +244,7 @@ function microRuntimeExtensions(?string $sfxPath = null): ?array
  */
 function phpExtensionProblems(array $descriptors): array
 {
-    $requirements = collectRequirementEntries($descriptors, 'php');
+    $requirements = collectPhpExtensions($descriptors);
     $problems = [];
     $blocking = [];
 

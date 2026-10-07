@@ -33,16 +33,11 @@ function annotateIoEffects(array $functions, string $moduleName = ''): array
 /** @param array<string, IR\FunctionDecl> $index */
 function functionIoEffect(IR\FunctionDecl $function, array $index): bool
 {
-    if ($function->type !== null && astTypeMentionsIo($function->type)) {
+    if ($function->type !== null && typeMentionsIo($function->type)) {
         return true;
     }
 
     return blockHasIoEffect($function->body, $index);
-}
-
-function astTypeMentionsIo(Ast\AstNode $type): bool
-{
-    return typeMentionsIo($type);
 }
 
 /** @param array<string, IR\FunctionDecl> $index */

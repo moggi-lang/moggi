@@ -181,13 +181,3 @@ function functionCalleeNames(FunctionDecl $fn): array
     return \array_keys($usage['callees']);
 }
 
-/** @return list<string> @deprecated use functionCalleeNames */
-function functionCalleeShortNames(FunctionDecl $fn): array
-{
-    $names = [];
-    foreach (functionCalleeNames($fn) as $callee) {
-        $names[shortName($callee)] = true;
-    }
-
-    return \array_keys($names);
-}

@@ -377,7 +377,7 @@ function assertNullaryConstructors(
     string $className,
 ): void {
     if ($decl->constructors === []) {
-        throw typeFailDerive(
+        throw typeFail(
             $state,
             "cannot derive {$className}: empty data type has no constructors",
             $ref,
@@ -386,7 +386,7 @@ function assertNullaryConstructors(
 
     foreach ($decl->constructors as $ctor) {
         if ($ctor->fields !== []) {
-            throw typeFailDerive(
+            throw typeFail(
                 $state,
                 "cannot derive {$className}: constructor `{$ctor->name}` has fields (only nullary constructors are allowed)",
                 $ref,
@@ -395,7 +395,3 @@ function assertNullaryConstructors(
     }
 }
 
-function typeFailDerive(TypeCheckState $state, string $message, Ast\AstNode $at): \Throwable
-{
-    return typeFail($state, $message, $at);
-}

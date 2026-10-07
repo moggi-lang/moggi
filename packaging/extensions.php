@@ -116,16 +116,6 @@ function distributionPhpExtensions(): array
 }
 
 /**
- * The extension set the bundled PHP is built with.
- *
- * @return list<string>
- */
-function requiredPhpExtensions(): array
-{
-    return distributionPhpExtensions();
-}
-
-/**
  * Extension names, keyed case-folded by the caller, in comparison order.
  *
  * @param array<string, string> $names folded name => the spelling to display
@@ -200,7 +190,7 @@ function assertRuntimeExtensionsDeclared(array $config): void
         $declared[\Moggi\Registry\normalizeExtensionName((string) $name)] = (string) $name;
     }
     $declaredList = extensionNamesSorted($declared);
-    $derived = requiredPhpExtensions();
+    $derived = distributionPhpExtensions();
     if (extensionSetsEqual($declaredList, $derived)) {
         return;
     }
@@ -280,7 +270,7 @@ function writeRuntimeExtensionManifest(string $dir, string $runtime, array $exte
 function assertPhpExtensions(string $binary, string $dir, string $target, array $config): array
 {
     assertRuntimeExtensionsDeclared($config);
-    $required = requiredPhpExtensions();
+    $required = distributionPhpExtensions();
     $compiledIn = phpModuleList($binary, $dir, ['-n']);
 
     $enable = [];

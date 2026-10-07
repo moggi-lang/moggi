@@ -1768,7 +1768,7 @@ function cloneSpecializedFunction(IR\FunctionDecl $target, string $specName, arr
  * source module (`$sourceExternalFns`).
  *
  * @param array<string, true> $sourceFnNames names defined in the source module
- * @param array<string, true> $destLocalNames unused; kept for call-site compatibility
+ * @param array<string, true> $destLocalNames names the destination module defines itself
  * @param array<string, string> $sourceExternalFns bare => `Origin::name`
  */
 function qualifySourceModuleCallees(

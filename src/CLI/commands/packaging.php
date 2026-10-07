@@ -2,14 +2,16 @@
 
 namespace Moggi\CLI\Commands;
 
-use Moggi\Cache;
 use Moggi\Registry\Catalog;
 use Moggi\Registry\FetchLog;
 
+use function Moggi\Registry\badPackagesAmong;
+use function Moggi\Registry\badPackagesRefusal;
 use function Moggi\Registry\loadCatalog;
 use function Moggi\Registry\lockDocument;
 use function Moggi\Registry\lockPath;
 use function Moggi\Registry\prettyJson;
+use function Moggi\Registry\providedPackages;
 use function Moggi\Registry\registryIdentityProblem;
 use function Moggi\Registry\rememberRootVersion;
 use function Moggi\Registry\resolveDependencies;
@@ -31,79 +33,6 @@ use function Moggi\Registry\writeLock;
  * speaking `registry-spec.md` works, and `MOGGI_REGISTRY` selects another.
  */
 const DEFAULT_REGISTRY = 'https://registry.moggi-lang.org';
-
-/**
- * Parse the options every packaging command accepts, plus the ones only some do.
- *
- * Flags are accepted as `--flag value` and `--flag=value`; the booleans have no
- * value. Anything unrecognised is an error rather than ignored, because a
- * mistyped `--registy` silently resolving against the wrong registry is exactly
- * the mistake that should not be quiet.
- *
- * @param list<string> $argv
- * @param list<string> $booleans boolean flags this command accepts, without `--`
- * @param list<string> $valued valued flags this command accepts, without `--`
- * @return array<string, mixed>
- */
-function packagingOptions(array $argv, array $booleans, array $valued): array
-{
-    $options = [
-        'path' => '.',
-        'registry' => (\getenv('MOGGI_REGISTRY') ?: DEFAULT_REGISTRY),
-        'output' => null,
-        'noCache' => false,
-    ];
-    foreach ($booleans as $flag) {
-        $options[$flag] = false;
-    }
-    foreach ($valued as $flag) {
-        $options[$flag] = null;
-    }
-
-    $positional = [];
-    for ($i = 2, $n = \count($argv); $i < $n; $i++) {
-        $argument = $argv[$i];
-        $value = null;
-        if (\str_contains($argument, '=')) {
-            [$argument, $value] = \explode('=', $argument, 2);
-        }
-        $name = \ltrim($argument, '-');
-        $short = match ($name) {
-            'r' => 'registry',
-            'o' => 'output',
-            'no-cache' => 'noCache',
-            'no-docs' => 'noDocs',
-            'dry-run' => 'dryRun',
-            default => $name,
-        };
-
-        if ($short === 'registry' || $short === 'output' || \in_array($short, $valued, true)) {
-            $options[$short] = $value ?? ($argv[++$i] ?? throw new \InvalidArgumentException("{$argument} needs a value"));
-            continue;
-        }
-        if (\in_array($short, $booleans, true)) {
-            $options[$short] = true;
-            continue;
-        }
-        if (\str_starts_with($argument, '-')) {
-            throw new \InvalidArgumentException("unknown option `{$argument}`");
-        }
-        $positional[] = $argument;
-    }
-
-    if (\count($positional) > 1) {
-        throw new \InvalidArgumentException('expected at most one path, got: ' . \implode(' ', $positional));
-    }
-    if ($positional !== []) {
-        $options['path'] = $positional[0];
-    }
-
-    if ($options['noCache']) {
-        Cache\setCacheEnabled(false);
-    }
-
-    return $options;
-}
 
 /**
  * Load a catalog for a command, refusing a root signature that does not verify
@@ -148,24 +77,45 @@ function loadVerifiedCatalog(string $registry, bool $useCache, FetchLog $log): C
  * Resolve a descriptor's dependencies and write the lock.
  *
  * The one place a lock is written, so `update` and `install` cannot
- * drift in what they produce.
+ * drift in what they produce. A resolved package the registry has marked bad is
+ * refused here, before the lock is written, so failing leaves no file behind —
+ * an operator has to pass `--allow-bad` to name one on purpose.
  *
  * @param array<string, mixed> $descriptor
  * @return array{document: array<string, mixed>, chosen: array<string, string>, lockFile: string}
  */
-function writeResolution(array $descriptor, string $descriptorPath, string $registry, Catalog $catalog, ?string $output, bool $dryRun = false): array
+function writeResolution(array $descriptor, string $descriptorPath, string $registry, Catalog $catalog, ?string $output, bool $dryRun = false, bool $allowBad = false): array
 {
-    $resolution = resolveDependencies($descriptor['dependencies'], $catalog, $descriptor['name']);
+    $provided = providedPackages();
+    $resolution = resolveDependencies($descriptor['dependencies'], $catalog, $descriptor['name'], $provided);
     if (!$resolution['ok']) {
         throw new \RuntimeException((string) $resolution['error']);
     }
 
+    $chosen = [];
     $packages = [];
+    $entries = [];
     foreach ($resolution['chosen'] as $name => $version) {
+        $name = (string) $name;
+        if (isset($provided[$name])) {
+            continue;
+        }
+        $entry = (array) $catalog->entry($name);
+        $chosen[$name] = $version;
         $packages[$name] = [
             'version' => $version,
-            'digest' => $catalog->entry($name)['digest'] ?? null,
+            'digest' => $entry['digest'] ?? null,
         ];
+        $entries[$name] = $entry;
+    }
+
+    $bad = badPackagesAmong($entries);
+    if ($bad !== [] && !$allowBad) {
+        throw new \RuntimeException(badPackagesRefusal(
+            $bad,
+            'this lock would name',
+            'pass --allow-bad to install them anyway',
+        ));
     }
 
     $document = lockDocument([
@@ -184,7 +134,7 @@ function writeResolution(array $descriptor, string $descriptorPath, string $regi
         writeLock($lockFile, $document);
     }
 
-    return ['document' => $document, 'chosen' => $resolution['chosen'], 'lockFile' => $lockFile];
+    return ['document' => $document, 'chosen' => $chosen, 'lockFile' => $lockFile];
 }
 
 /**

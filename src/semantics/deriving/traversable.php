@@ -5,6 +5,8 @@ namespace Moggi\Semantics\Deriving;
 use Moggi\Syntax\Ast;
 use Moggi\Semantics\Types\TypeCheckState;
 
+use function Moggi\Semantics\Types\typeFail;
+
 /**
  * Stock `deriving Traversable`: `traverse` with Applicative (`pure` / `<*>`).
  */
@@ -15,7 +17,7 @@ function deriveTraversable(
 ): DerivedInstance {
     $param = lastDataParamName($decl);
     if ($param === null) {
-        throw typeFailDerive(
+        throw typeFail(
             $state,
             'cannot derive Traversable: type has no type parameter',
             $ref,

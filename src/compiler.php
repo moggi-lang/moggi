@@ -164,6 +164,7 @@ require __DIR__ . '/lsp/server.php';
 // package declares itself with, and what installs come of it. Loaded in
 // dependency order, like everything else here.
 require __DIR__ . '/registry/constraint.php';
+require __DIR__ . '/registry/provided.php';
 require __DIR__ . '/registry/names.php';
 require __DIR__ . '/registry/schnorr.php';
 require __DIR__ . '/registry/manifest.php';
@@ -171,6 +172,8 @@ require __DIR__ . '/registry/cache.php';
 require __DIR__ . '/registry/catalog.php';
 require __DIR__ . '/registry/descriptor.php';
 require __DIR__ . '/registry/lock.php';
+require __DIR__ . '/registry/bad.php';
+require __DIR__ . '/registry/unmaintained.php';
 require __DIR__ . '/registry/cdcl.php';
 require __DIR__ . '/registry/resolve.php';
 require __DIR__ . '/registry/install.php';
@@ -179,12 +182,19 @@ require __DIR__ . '/registry/pack.php';
 require __DIR__ . '/registry/publish.php';
 require __DIR__ . '/registry/tools.php';
 
+require __DIR__ . '/CLI/commands/command.php';
 require __DIR__ . '/CLI/commands/packaging.php';
 require __DIR__ . '/CLI/commands/pack.php';
 require __DIR__ . '/CLI/commands/publish.php';
 require __DIR__ . '/CLI/commands/update.php';
 require __DIR__ . '/CLI/commands/outdated.php';
 require __DIR__ . '/CLI/commands/why.php';
+require __DIR__ . '/CLI/commands/show.php';
+require __DIR__ . '/CLI/commands/search.php';
+require __DIR__ . '/CLI/commands/governance.php';
+require __DIR__ . '/CLI/commands/bad.php';
+require __DIR__ . '/CLI/commands/unmaintained.php';
+require __DIR__ . '/CLI/commands/takeover.php';
 require __DIR__ . '/CLI/commands/install.php';
 require __DIR__ . '/CLI/commands/build.php';
 require __DIR__ . '/CLI/commands/check.php';

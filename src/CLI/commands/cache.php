@@ -43,37 +43,33 @@ function cacheUsage(): string
 
 function runCache(array $argv): int
 {
+    $spec = new CommandSpec('cache', cacheUsage(), [], verb: true, positionals: 1);
+
+    if (wantsHelp($argv)) {
+        echo commandHelp($spec);
+
+        return 0;
+    }
+
     $sub = $argv[2] ?? 'info';
+    if (!\in_array($sub, ['info', 'clear'], true)) {
+        \fwrite(STDERR, "error: unknown cache command `{$sub}` (expected: info | clear)\n\n" . cacheUsage() . "\n");
 
-    foreach (\array_slice($argv, 2) as $arg) {
-        if ($arg === 'help' || $arg === '--help' || $arg === '-h') {
-            echo cacheUsage() . "\n";
-
-            return 0;
-        }
+        return 1;
     }
 
-    if ($sub === 'info') {
-        return cacheInfo($argv);
+    try {
+        $options = parseArgs($argv, $spec, 3);
+    } catch (\InvalidArgumentException $error) {
+        return commandError($spec, $error);
     }
 
-    if ($sub === 'clear') {
-        return cacheClear($argv);
-    }
-
-    \fwrite(STDERR, "error: unknown cache command `{$sub}` (expected: info | clear)\n\n" . cacheUsage() . "\n");
-
-    return 1;
+    return $sub === 'info' ? cacheInfo($options) : cacheClear($options);
 }
 
-/** @param list<string> $argv */
-function cacheInfo(array $argv): int
+/** @param array<string, mixed> $options */
+function cacheInfo(array $options): int
 {
-    $unknown = unknownCacheFlags(\array_slice($argv, 3), []);
-    if ($unknown !== []) {
-        return cacheFlagError('info', $unknown);
-    }
-
     $info = Cache\info();
     \printf("cache:       %s\n", $info['enabled'] ? 'enabled' : 'disabled (MOGGI_NO_CACHE)');
     \printf("cache dir:   %s\n", $info['cache']);
@@ -102,23 +98,10 @@ function cacheInfo(array $argv): int
     return 0;
 }
 
-/** @param list<string> $argv */
-function cacheClear(array $argv): int
+/** @param array<string, mixed> $options */
+function cacheClear(array $options): int
 {
-    $rest = \array_slice($argv, 3);
-    $unknown = unknownCacheFlags($rest, []);
-    if ($unknown !== []) {
-        return cacheFlagError('clear', $unknown);
-    }
-
-    $named = \array_values(\array_filter($rest, static fn (string $arg): bool => !str_starts_with($arg, '-')));
-    if (\count($named) > 1) {
-        \fwrite(STDERR, "error: `moggi cache clear` takes at most one area\n\n" . cacheUsage() . "\n");
-
-        return 1;
-    }
-
-    $area = $named[0] ?? 'all';
+    $area = $options['positionals'][0] ?? 'all';
 
     try {
         $removed = match ($area) {
@@ -148,41 +131,5 @@ function clearDownloads(): int
     return removeTree(downloadsDir());
 }
 
-/**
- * Flags in `$args` that this subcommand does not accept.
- *
- * @param list<string> $args
- * @param list<string> $allowed
- * @return list<string>
- */
-function unknownCacheFlags(array $args, array $allowed): array
-{
-    $unknown = [];
-    foreach ($args as $arg) {
-        if (!str_starts_with($arg, '-')) {
-            continue;
-        }
-        $name = str_contains($arg, '=') ? substr($arg, 0, (int) strpos($arg, '=')) : $arg;
-        if (!\in_array($name, $allowed, true)) {
-            $unknown[] = $arg;
-        }
-    }
 
-    return $unknown;
-}
 
-/** @param list<string> $unknown */
-function cacheFlagError(string $sub, array $unknown): int
-{
-    \fwrite(
-        STDERR,
-        'error: unknown option ' . \implode(' ', $unknown) . " for `moggi cache {$sub}`\n\n",
-    );
-
-    return 1;
-}
-
-function runCacheCommand(array $argv): int
-{
-    return runCache($argv);
-}

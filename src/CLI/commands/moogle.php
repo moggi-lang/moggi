@@ -4,95 +4,94 @@ namespace Moggi\CLI\Commands;
 
 use Moggi\Backend;
 use Moggi\Cache;
-use Moggi\CLI\ArgCursor;
 use Moggi\Docs;
 use Moggi\Syntax\Lexer\LexError;
 use Moggi\Syntax\Parser\ParseError;
 
-use function Moggi\CLI\parseDocsToolOptions;
+use function Moggi\CLI\defaultDocsInput;
 use function Moggi\CLI\printUsage;
-use function Moggi\CLI\takeDocsSharedFlag;
-use function Moggi\CLI\unknownDocsOption;
 
-function parseMoogleArgs(array $argv): array
+/**
+ * `moggi moogle` — search the API by name or type.
+ *
+ * The query is the one positional, and `--` takes the rest of the line verbatim,
+ * so a query with spaces or leading dashes needs no quoting (`moogle -- "a -> a"`).
+ * With no query on the line, a pipe is read instead.
+ */
+function moogleUsage(): string
 {
-    $query = '';
-    $start = 2;
+    return <<<HELP
+    usage:
+      moggi moogle <query> [options]
+      moggi moogle -- <query with spaces>
 
-    if (isset($argv[2]) && !str_starts_with($argv[2], '-')) {
-        $query = $argv[2];
-        $start = 3;
+    Search the API by name or type. With no query argument, the query is read from
+    stdin, so it can be piped.
+
+    options:
+      --root PATH      the tree to search (default: the stdlib)
+      --lib PATH       extra module search root. Repeatable.
+      --json           machine-readable output
+      --rebuild        rebuild the index instead of using the cached one
+      --no-cache       bypass the on-disk cache for this run
+      -h, --help       show this help
+    HELP;
+}
+
+/** @param list<string> $argv */
+function runMoogle(array $argv): int
+{
+    $spec = new CommandSpec('moogle', moogleUsage(), [
+        ['name' => 'root', 'value' => true],
+        ['name' => 'lib', 'value' => true, 'repeat' => true],
+        ['name' => 'rebuild'],
+        ['name' => 'noCache'],
+        ['name' => 'json'],
+    ], positionals: 1, passthrough: true);
+
+    if (wantsHelp($argv)) {
+        echo commandHelp($spec);
+
+        return 0;
     }
 
-    $cursor = new ArgCursor($argv, $start);
-    $shared = parseDocsToolOptions($cursor);
-    $json = false;
-
-    while (($arg = $cursor->current()) !== null) {
-        if ($arg === '--') {
-            $cursor->take();
-            $query = trim(implode(' ', \array_slice($argv, $cursor->index)));
-            break;
+    try {
+        $options = parseArgs($argv, $spec);
+        requireDirectories($options['lib'], '--lib');
+        if ($options['root'] !== null && !\is_dir($options['root']) && !\is_file($options['root'])) {
+            throw new \InvalidArgumentException('--root requires a file or directory');
         }
-        if (takeDocsSharedFlag($cursor, $shared)) {
-            continue;
-        }
-        if ($arg === '--json') {
-            $cursor->take();
-            $json = true;
-            continue;
-        }
-        if (str_starts_with($arg, '-')) {
-            unknownDocsOption('moogle', $arg);
-        }
-        if ($query === '') {
-            $query = $cursor->take() ?? '';
-            continue;
-        }
-        \fwrite(STDERR, "error: unexpected argument {$arg}\n\n");
-        printUsage();
-        exit(1);
+    } catch (\InvalidArgumentException $error) {
+        return commandError($spec, $error);
     }
 
+    $query = $options['rest'] !== []
+        ? trim(implode(' ', $options['rest']))
+        : trim((string) ($options['positionals'][0] ?? ''));
     if ($query === '' && !stream_isatty(STDIN)) {
         $query = trim((string) stream_get_contents(STDIN));
     }
 
-    return [
-        'query' => $query,
-        'libDirs' => $shared['libDirs'],
-        'json' => $json,
-        'rebuild' => $shared['rebuild'],
-        'noCache' => $shared['noCache'],
-        'inputPath' => $shared['inputPath'],
-    ];
-}
-
-function runMoogle(array $argv): int
-{
-    $parsed = parseMoogleArgs($argv);
-    $inputPath = $parsed['inputPath'];
-
     try {
         Backend\setCompileBackend('php');
-        if ($parsed['noCache']) {
+        if ($options['noCache']) {
             Cache\setCacheEnabled(false);
         }
         $index = Docs\loadOrBuildIndex(
-            $inputPath,
-            $parsed['libDirs'],
-            $parsed['rebuild'],
+            $options['root'] ?? defaultDocsInput(),
+            $options['lib'],
+            $options['rebuild'],
         );
 
-        if ($parsed['query'] === '') {
+        if ($query === '') {
             \fwrite(STDERR, "error: moogle requires a query (or pipe one on stdin)\n\n");
             printUsage();
 
             return 1;
         }
 
-        $hits = Docs\search($index, $parsed['query'], 20);
-        echo Docs\formatSearchResults($hits, $parsed['json']);
+        $hits = Docs\search($index, $query, 20);
+        echo Docs\formatSearchResults($hits, $options['json']);
 
         return 0;
     } catch (LexError|ParseError $e) {
@@ -104,9 +103,4 @@ function runMoogle(array $argv): int
 
         return 1;
     }
-}
-
-function runMoogleCommand(array $argv): int
-{
-    return runMoogle($argv);
 }

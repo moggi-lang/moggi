@@ -8,7 +8,6 @@ use Moggi\Modules;
 use Moggi\Semantics\Types\TypeError;
 use Moggi\Syntax\Lexer\LexError;
 use Moggi\Syntax\Parser\ParseError;
-use Moggi\CLI\ArgCursor;
 
 use function Moggi\Backend\Php\Dependencies\composerVendorRoots;
 use function Moggi\CLI\parseBackendValue;
@@ -821,151 +820,112 @@ function projectUsesModules(array $files): bool
  *   unpacked: bool, libPhp: ?string
  * }
  */
+/** @param list<string> $argv */
 function parseCompileArgs(array $argv): array
 {
-    $input = null;
-    $output = null;
-    $mode = 'php';
-    $optimize = true;
-    $strip = true;
-    $backend = 'php';
-    $libDirs = [];
-    $native = false;
-    $unpacked = false;
-    $libPhp = null;
+    $spec = compileSpec();
 
-    $cursor = new ArgCursor($argv, 2);
+    if (wantsHelp($argv)) {
+        echo commandHelp($spec);
+        exit(0);
+    }
 
-    while (($arg = $cursor->current()) !== null) {
-        if ($cursor->atHelp()) {
-            exit(0);
-        }
-
-        if ($arg === '--tokens') {
-            $cursor->take();
-            $mode = 'tokens';
-            continue;
-        }
-
-        if ($arg === '--ast') {
-            $cursor->take();
-            $mode = 'ast';
-            continue;
-        }
-
-        if ($arg === '--typed-ast') {
-            $cursor->take();
-            $mode = 'typed-ast';
-            continue;
-        }
-
-        if ($arg === '--ir') {
-            $cursor->take();
-            $mode = 'ir';
-            continue;
-        }
-
-        if ($arg === '--opt-ir') {
-            $cursor->take();
-            $mode = 'opt-ir';
-            continue;
-        }
-
-        if ($arg === '--no-opt') {
-            $cursor->take();
-            $optimize = false;
-            continue;
-        }
-
-        if ($arg === '--native') {
-            $cursor->take();
-            $native = true;
-            continue;
-        }
-
-        if ($arg === '--unpacked') {
-            $cursor->take();
-            $unpacked = true;
-            continue;
-        }
-
-        if ($arg === '--lib') {
-            $libDirs[] = $cursor->takeLibDir();
-            continue;
-        }
-
-        if ($arg === '--lib-php') {
-            $libPhp = $cursor->takeValue('--lib-php');
-            continue;
-        }
-
-        if ($arg === '--strip') {
-            $cursor->take();
-            $strip = true;
-            continue;
-        }
-
-        if ($arg === '--no-strip') {
-            $cursor->take();
-            $strip = false;
-            continue;
-        }
-
-        if ($arg === '--no-cache') {
-            $cursor->take();
-            $cursor->takeNoCache();
-            continue;
-        }
-
-        if ($arg === '--backend') {
-            $backend = parseBackendValue($cursor->takeValue('--backend'));
-            continue;
-        }
-
-        if ($arg === '-o') {
-            $output = $cursor->takeValue('-o');
-            if ($output === '') {
-                \fwrite(STDERR, "error: -o requires a non-empty path\n\n");
-                printUsage();
-                exit(1);
-            }
-            continue;
-        }
-
-        if (str_starts_with($arg, '-')) {
-            \fwrite(STDERR, "error: unknown option {$arg}\n\n");
-            printUsage();
-            exit(1);
-        }
-
-        if ($input === null) {
-            $input = $cursor->take();
-            continue;
-        }
-
-        \fwrite(STDERR, "error: unexpected argument {$arg}\n\n");
-        printUsage();
+    try {
+        $options = parseArgs($argv, $spec);
+        requireDirectories($options['lib'], '--lib');
+    } catch (\InvalidArgumentException $error) {
+        \fwrite(STDERR, 'error: ' . $error->getMessage() . "\n\n" . $spec->help . "\n");
         exit(1);
     }
 
+    $input = $options['positionals'][0] ?? null;
     if ($input === null) {
-        \fwrite(STDERR, "error: compile requires <input-dir|source.mog>\n\n");
-        printUsage();
+        \fwrite(STDERR, "error: compile requires <input-dir|source.mog>\n\n" . $spec->help . "\n");
         exit(1);
+    }
+
+    $output = $options['output'];
+    if ($output === '') {
+        \fwrite(STDERR, "error: -o requires a non-empty path\n\n" . $spec->help . "\n");
+        exit(1);
+    }
+
+    $mode = 'php';
+    foreach (['tokens', 'ast', 'typed-ast', 'ir', 'opt-ir'] as $flag) {
+        if ($options[$flag]) {
+            $mode = $flag;
+            break;
+        }
     }
 
     return [
         'input' => $input,
         'output' => $output,
         'mode' => $mode,
-        'optimize' => $optimize,
-        'backend' => $backend,
-        'strip' => $strip,
-        'libDirs' => $libDirs,
-        'native' => $native,
-        'unpacked' => $unpacked,
-        'libPhp' => $libPhp,
+        'optimize' => !$options['noOpt'],
+        'backend' => parseBackendValue($options['backend']),
+        'strip' => !$options['noStrip'],
+        'libDirs' => $options['lib'],
+        'native' => (bool) $options['native'],
+        'unpacked' => (bool) $options['unpacked'],
+        'libPhp' => $options['lib-php'],
     ];
+}
+
+/**
+ * `moggi compile`'s command line: one input, the backend, the library roots, the
+ * print modes.
+ *
+ * The print modes (`--tokens`, `--ast`, `--typed-ast`, `--ir`, `--opt-ir`) are
+ * mutually exclusive in intent; if more than one is given the first in the list
+ * below wins, because a second would contradict the first.
+ */
+function compileUsage(): string
+{
+    return <<<HELP
+    usage:
+      moggi compile <input-dir|source.mog> [-o PATH] [options]
+
+    Compile a directory (or one file) to a single deployable artifact. Without
+    -o, the artifact is named after the entry source file.
+
+    options:
+      --backend B      compile target: php, jvm, dotnet (default: php)
+      -o PATH          the artifact to write (with --unpacked, an output directory)
+      --lib PATH       extra module search root. Repeatable.
+      --lib-php PATH   a precompiled stdlib PHP tree to link against
+      --unpacked       keep the generated tree on disk instead of packaging
+      --native         build a native executable
+      --no-opt         skip optimizations when generating code
+      --no-strip       keep bindings unreachable from `main`
+      --no-cache       bypass the on-disk compile cache for this run
+      --tokens         print the token stream
+      --ast            print the parsed AST
+      --typed-ast      print the type-checked AST
+      --ir             print IR before optimization
+      --opt-ir         print optimized IR
+      -h, --help       show this help
+    HELP;
+}
+
+function compileSpec(): CommandSpec
+{
+    return new CommandSpec('compile', compileUsage(), [
+        ['name' => 'tokens'],
+        ['name' => 'ast'],
+        ['name' => 'typed-ast'],
+        ['name' => 'ir'],
+        ['name' => 'opt-ir'],
+        ['name' => 'noOpt'],
+        ['name' => 'native'],
+        ['name' => 'unpacked'],
+        ['name' => 'strip'],
+        ['name' => 'noStrip'],
+        ['name' => 'noCache'],
+        ['name' => 'backend', 'value' => true],
+        ['name' => 'lib', 'value' => true, 'repeat' => true],
+        ['name' => 'lib-php', 'value' => true],
+    ]);
 }
 
 function removeOutputTree(string $dir): void

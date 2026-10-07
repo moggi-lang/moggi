@@ -276,6 +276,9 @@ CSS;
  *
  * Every page is self-contained, so a generated tree can be opened from disk, a
  * static host or `mogdoc serve` without a single extra request.
+ *
+ * `$siteTitle` is the banner heading — the package and version the tree
+ * documents, so a page names what it is instead of the tool that wrote it.
  */
 function docsPageShell(
     string $title,
@@ -283,10 +286,12 @@ function docsPageShell(
     string $extraHead = '',
     string $extraScript = '',
     bool $homeLink = false,
+    string $siteTitle = '',
 ): string {
     $css = docsStylesheet();
     $year = date('Y');
     $titleEsc = escapeHtml($title);
+    $siteEsc = escapeHtml($siteTitle === '' ? 'Moggi API Documentation' : $siteTitle);
     $home = $homeLink
         ? '<p class="docs-home"><a href="index.html">Moggi Index</a></p>'
         : '';
@@ -302,7 +307,7 @@ function docsPageShell(
 </head>
 <body>
   <div class="docs-banner">
-    <h1><a href="index.html">Moggi API Documentation</a></h1>
+    <h1><a href="index.html">{$siteEsc}</a></h1>
     <p class="tagline">Search by name and type, or browse modules below</p>
     <p class="docs-nav"><a href="https://moggi-lang.org/">moggi-lang.org</a> | <a href="https://registry.moggi-lang.org/">packages</a> | <a href="https://github.com/moggi-lang/moggi">source</a></p>
   </div>

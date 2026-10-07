@@ -18,9 +18,7 @@ use const Moggi\Registry\EXTENSION_MANIFEST;
 
 use function Moggi\Registry\collectPhpExtensions;
 use function Moggi\Registry\descriptorProblems;
-use function Moggi\Registry\descriptorRequirementEntries;
 use function Moggi\Registry\installDir;
-use function Moggi\Registry\installedPhpExtensions;
 use function Moggi\Registry\installedRequirements;
 use function Moggi\Registry\microRuntimeExtensions;
 use function Moggi\Registry\parsePhpExtensionEntry;
@@ -109,12 +107,9 @@ try {
     }
     \file_put_contents($install . '/demo.moggi', "[package]\nname = demo\nversion = 1.0.0\n\n[php.extensions]\nredis = *\ngd = *\n");
 
-    $installed = installedPhpExtensions($install, 'demo');
-    $assert($installed === ['redis', 'gd'], 'an installed package\'s extensions are read from its descriptor');
-    $assert(installedPhpExtensions($install, 'absent') === null, 'a package with no descriptor answers null');
-
     $installedMap = installedRequirements($install, 'demo');
     $assert($installedMap === ['php.extensions' => ['redis', 'gd']], 'an installed package\'s requirement map is read');
+    $assert(installedRequirements($install, 'absent') === null, 'a package with no descriptor answers null');
 
     $descriptors = phpExtensionDescriptors(
         ['requirements' => ['php.extensions' => ['bcmath']]],
@@ -169,8 +164,6 @@ try {
     $read = readDescriptor($path);
     $assert($read['requirements'] === ['php.extensions' => ['intl', 'bcmath']], 'the table is read as its entries');
     $assert($read['php']['extensions'] === ['intl', 'bcmath'], 'the extensions are exposed where a checker reads them');
-    $assert(descriptorRequirementEntries($read, 'php') === ['intl', 'bcmath'], 'the php backend reads the table');
-    $assert(descriptorRequirementEntries($read, 'jvm') === [], 'a backend with no table declares nothing');
 
     // A constraint and a path survive the table, and the `=` stays a path.
     $shaped = $writeDescriptor('shaped', "[php.extensions]\nintl = ^8.0\nlibcurl = /usr/lib/libcurl.so\n");

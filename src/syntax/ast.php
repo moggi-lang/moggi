@@ -2,12 +2,10 @@
 
 namespace Moggi\Syntax\Ast;
 
-use function Moggi\Syntax\isTypeOperator;
+use function Moggi\Syntax\isConstructorOperator;
 
 require_once __DIR__ . '/ast_types.php';
 require_once __DIR__ . '/names.php';
-
-use function Moggi\Syntax\isConstructorOperator;
 
 /**
  * Deep-copy an AST subtree.
@@ -584,7 +582,7 @@ function dumpTypeInline(TypeNode $node): string
 
             if (
                 $node->con instanceof TypeCon
-                && isTypeOperator($node->con->name)
+                && isConstructorOperator($node->con->name)
                 && count($node->args) === 2
             ) {
                 return dumpTypeInline($node->args[0]) . ' ' . $node->con->name . ' ' . dumpTypeInline($node->args[1]);

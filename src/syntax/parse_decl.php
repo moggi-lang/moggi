@@ -6,7 +6,6 @@ use Moggi\Syntax\Ast;
 use Moggi\Syntax\Lexer\TokenKind;
 
 use function Moggi\Syntax\isConstructorOperator;
-use function Moggi\Syntax\isTypeOperator;
 
 /**
  * Top-level declaration, or null if the next tokens are an expression/statement.
@@ -130,7 +129,7 @@ function parseInferredPrefixFunction(ParserState $state): Ast\FunctionDecl
     $name = expect($state, TokenKind::VarId)->lexeme;
     $params = [];
     while (startsPattern($state) && !isAt($state, TokenKind::Op, 0, '=') && !isAt($state, TokenKind::Pipe)) {
-        $params[] = parsePatternArg($state);
+        $params[] = parsePatternAtom($state);
     }
     $body = parseFunctionBody($state);
 
@@ -160,7 +159,7 @@ function parseParenOperatorFunctionDecl(ParserState $state): Ast\FunctionDecl
     expect($state, TokenKind::RParen);
     $params = [];
     while (startsPattern($state) && !isAt($state, TokenKind::Op, 0, '=') && !isAt($state, TokenKind::Pipe)) {
-        $params[] = parsePatternArg($state);
+        $params[] = parsePatternAtom($state);
     }
     $body = parseFunctionBody($state);
 
@@ -260,7 +259,7 @@ function looksLikeFunctionDecl(ParserState $state): bool
         while (startsPattern($state)
             && !isAt($state, TokenKind::Op, 0, '=')
             && !isAt($state, TokenKind::Pipe)) {
-            parsePatternArg($state);
+            parsePatternAtom($state);
         }
 
         if (isAt($state, TokenKind::Op, 0, '=')) {
@@ -330,7 +329,7 @@ function looksLikeSameLineFunctionDecl(ParserState $state): bool
 
     try {
         while (startsPattern($state) && peek($state)->line === $startLine) {
-            parsePatternArg($state);
+            parsePatternAtom($state);
         }
 
         return peek($state)->line === $startLine && isAt($state, TokenKind::Op, 0, '=');
@@ -374,7 +373,7 @@ function parseTypedParenOperatorFunctionDecl(ParserState $state, string $name, A
     expect($state, TokenKind::RParen);
     $params = [];
     while (startsPattern($state) && !isAt($state, TokenKind::Op, 0, '=') && !isAt($state, TokenKind::Pipe)) {
-        $params[] = parsePatternArg($state);
+        $params[] = parsePatternAtom($state);
     }
     $body = parseFunctionBody($state);
 
@@ -427,7 +426,7 @@ function parsePrefixFunctionDecl(ParserState $state, string $name, Ast\TypeNode 
 
     $params = [];
     while (startsPattern($state) && !isAt($state, TokenKind::Op, 0, '=') && !isAt($state, TokenKind::Pipe)) {
-        $params[] = parsePatternArg($state);
+        $params[] = parsePatternAtom($state);
     }
     $body = parseFunctionBody($state);
 
@@ -492,7 +491,7 @@ function parseInfixDataHead(ParserState $state): array
     expect($state, TokenKind::LParen);
     $left = parseDataParamAtom($state);
     $opToken = expect($state, TokenKind::Op);
-    if (!isTypeOperator($opToken->lexeme)) {
+    if (!isConstructorOperator($opToken->lexeme)) {
         throw parseError($state, 'expected a type operator (name starting with `:`)');
     }
     $right = parseDataParamAtom($state);
@@ -1578,7 +1577,7 @@ function parseInstanceMethod(ParserState $state): Ast\FunctionDecl
         expect($state, TokenKind::RParen);
         $params = [];
         while (startsPattern($state) && !isAt($state, TokenKind::Op, 0, '=')) {
-            $params[] = parsePatternArg($state);
+            $params[] = parsePatternAtom($state);
         }
         expectOp($state, '=');
         $body = parseExprWithWhere($state);
@@ -1597,7 +1596,7 @@ function parseInstanceMethod(ParserState $state): Ast\FunctionDecl
     $nameToken = expect($state, TokenKind::VarId);
     $params = [];
     while (startsPattern($state) && !isAt($state, TokenKind::Op, 0, '=') && !isAt($state, TokenKind::Pipe)) {
-        $params[] = parsePatternArg($state);
+        $params[] = parsePatternAtom($state);
     }
     $body = parseFunctionBody($state);
 
@@ -1806,7 +1805,7 @@ function looksLikeParenOperatorMethodDecl(ParserState $state): bool
         expect($state, TokenKind::RParen);
 
         while (startsPattern($state) && !isAt($state, TokenKind::Op, 0, '=')) {
-            parsePatternArg($state);
+            parsePatternAtom($state);
         }
 
         return isAt($state, TokenKind::Op, 0, '=');

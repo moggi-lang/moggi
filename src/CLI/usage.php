@@ -20,6 +20,12 @@ usage:
     moggi update  [<dir|<name>.moggi>] [--registry URL|DIR] [--dry-run]
     moggi outdated [<dir|<name>.moggi>] [--registry URL|DIR] [--json]
     moggi why     [<name>] [--registry URL|DIR] [--json]
+    moggi show    <name> [--registry URL|DIR] [--json]
+    moggi search  <term> [--registry URL|DIR] [--json]
+    moggi bad     <name> (--reason TEXT | --lift) [--registry URL] [--as NPUB] [--nsec-file FILE]
+    moggi unmaintained <name> [--note TEXT | --clear] [--registry URL] [--as NPUB]
+    moggi takeover request <name> --reason TEXT [--repo URL] [--registry URL] [--as NPUB]
+    moggi takeover approve|reject <name> [--note TEXT] [--registry URL] [--as NPUB]
     moggi build   [<dir|<name>.moggi>] [--exe NAME] [--backend B] [-o PATH]
     moggi check   [<dir|<name>.moggi>] [--json]
     moggi verify  [<dir|<name>.moggi>] [--registry URL|DIR] [--json]
@@ -50,6 +56,18 @@ commands:
                  what is newest in the registry
     why          explain which demands pulled a package into the lock, and which
                  constraints hold one back; with no name, the whole lock
+    show         what the signed catalog says about one package: owner, allowed
+                 users, versions, description, and the bad / unmaintained markers
+    search       list the packages whose name or description matches a term, and
+                 flag any the registry has marked bad
+    bad          mark a package bad — a package-level refusal whose reason is what
+                 a user reads — or lift the marker; a signed write by the owner or
+                 an admin (no login: the request is signed with your npub)
+    unmaintained declare a package unmaintained — a warning, not a refusal — or
+                 clear the marker; a signed write by the owner or an admin
+    takeover     ask to take over an abandoned package (Hackage-style: a public
+                 request, a waiting period, then an admin's recorded decision), or
+                 — as an admin — approve or reject such a request
     build        read the descriptor, add the installed dependencies as library
                  roots and delegate to `compile`
     check        look the package over for common mistakes, without touching the
@@ -131,7 +149,7 @@ HELP;
 /** @return list<string> */
 function knownSubcommands(): array
 {
-    return ['compile', 'run', 'repl', 'install', 'update', 'outdated', 'why', 'build', 'check', 'verify', 'pack', 'publish', 'cache', 'mogdoc', 'moogle', 'version'];
+    return \array_keys(commands());
 }
 
 function rejectUnknownSubcommand(string $command): never

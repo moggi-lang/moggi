@@ -19,7 +19,6 @@ use function Moggi\Dist\assertRuntimeExtensionsDeclared;
 use function Moggi\Dist\distributionPhpExtensions;
 use function Moggi\Dist\loadRuntimeConfig;
 use function Moggi\Dist\missingPhpExtensions;
-use function Moggi\Dist\requiredPhpExtensions;
 
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
@@ -33,12 +32,6 @@ $declared = distributionPhpExtensions();
 $assert(
     $declared === ['bcmath', 'intl', 'mbstring'],
     'the declared set is what a compiled program needs: ' . \implode(', ', $declared),
-);
-
-$derived = requiredPhpExtensions();
-$assert(
-    $derived === $declared,
-    'the runtime set is the declared set: ' . \implode(', ', $derived),
 );
 
 $config = loadRuntimeConfig();

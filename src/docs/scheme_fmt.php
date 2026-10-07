@@ -13,7 +13,7 @@ use function Moggi\Docs\search;
 use function Moggi\Semantics\Types\friendlyTypeVarNames;
 use function Moggi\Semantics\Types\internalTypeToAst;
 use function Moggi\Syntax\Ast\dumpTypeInline;
-use function Moggi\Syntax\isTypeOperator;
+use function Moggi\Syntax\isConstructorOperator;
 
 /**
  * Render a surface type with friendly type-variable names (t71 → a).
@@ -238,7 +238,7 @@ function dumpAstTypeForDocs(Ast\TypeNode $node, array $rename = []): string
 
             if (
                 $node->con instanceof Ast\TypeCon
-                && isTypeOperator($node->con->name)
+                && isConstructorOperator($node->con->name)
                 && count($node->args) === 2
             ) {
                 return dumpAstTypeForDocs($node->args[0], $rename) . ' ' . $node->con->name . ' '

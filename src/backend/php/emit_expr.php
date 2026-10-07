@@ -70,7 +70,7 @@ function emitCallExpr(string $callee, array $args, array $ctx): string
         return "[{$tag}, {$argsCode}]";
     }
 
-    if (isQualifiedCallee($callee)) {
+    if (isQualifiedSymbol($callee)) {
         return formatQualifiedCallee($callee, $ctx) . "({$argsCode})";
     }
 
@@ -285,7 +285,7 @@ function emitTopLevelFnUse(string $name, array $ctx): string
         );
     }
 
-    if (isQualifiedCallee($name)) {
+    if (isQualifiedSymbol($name)) {
         $member = str_contains($name, '::')
             ? substr($name, strrpos($name, '::') + 2)
             : substr($name, strrpos($name, '\\') + 1);
@@ -333,12 +333,6 @@ function emitConstructorValue(string $tag, ?int $arity): string
     return 'fn(' . join(', ', $params) . ") => [{$name}, " . join(', ', $params) . ']';
 }
 
-/** Is this a `Module::name` symbol or an already-qualified PHP FQN? */
-function isQualifiedCallee(string $name): bool
-{
-    return isQualifiedSymbol($name);
-}
-
 /** @param array{externalFns?: array<string, string>, moduleAsNames?: array<string, string>} $ctx */
 function formatQualifiedCallee(string $name, array $ctx): string
 {
@@ -354,7 +348,7 @@ function formatQualifiedCallee(string $name, array $ctx): string
     }
 
     $phpName = $name;
-    if (!isQualifiedCallee($phpName)) {
+    if (!isQualifiedSymbol($phpName)) {
         return basePhpFunctionName($phpName);
     }
 
@@ -395,7 +389,7 @@ function constructorTag(string $name): ?string
 
     $separator = str_contains($name, '::')
         ? strrpos($name, '::') + 2
-        : (isQualifiedCallee($name) ? strrpos($name, '\\') + 1 : null);
+        : (isQualifiedSymbol($name) ? strrpos($name, '\\') + 1 : null);
     if ($separator === null) {
         return null;
     }

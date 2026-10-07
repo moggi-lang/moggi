@@ -3,57 +3,58 @@
 namespace Moggi\CLI\Commands;
 
 use Moggi\Backend;
-use Moggi\CLI\ArgCursor;
 
 use function Moggi\CLI\parseBackendValue;
 use function Moggi\LSP\runServer;
 
-function parseLspArgs(array $argv): array
+/**
+ * `moggi lsp` — the Language Server Protocol server on stdin/stdout.
+ *
+ * The editor speaks LSP to the process directly: there is no input to name and no
+ * output file, so the command is only a choice of backend and library roots.
+ */
+function lspUsage(): string
 {
-    $backend = 'php';
-    $libDirs = [];
+    return <<<HELP
+    usage:
+      moggi lsp [options]
 
-    $cursor = new ArgCursor($argv, 2);
-    while (($arg = $cursor->current()) !== null) {
-        if ($cursor->atHelp()) {
-            exit(0);
-        }
-        if ($arg === '--backend') {
-            $backend = parseBackendValue($cursor->takeValue('--backend'));
-            continue;
-        }
-        if ($arg === '--lib') {
-            $libDirs[] = $cursor->takeLibDir();
-            continue;
-        }
-        if ($arg === '--no-cache') {
-            $cursor->take();
-            $cursor->takeNoCache();
-            continue;
-        }
-        if ($arg === '--stdio') {
-            $cursor->take();
-            continue;
-        }
-        \fwrite(STDERR, "error: unknown lsp option `{$arg}`\n\n");
-        exit(1);
-    }
+    Start the Language Server Protocol server. The editor launches it and speaks
+    the protocol over stdin/stdout; there is nothing to point it at.
 
-    return [
-        'backend' => $backend,
-        'libDirs' => $libDirs,
-    ];
+    options:
+      --backend B      compile target (default: php)
+      --lib PATH       extra module search root. Repeatable.
+      --no-cache       bypass the on-disk compile cache for this run
+      --stdio          accepted for compatibility; the server is always stdio
+      -h, --help       show this help
+    HELP;
 }
 
+/** @param list<string> $argv */
 function runLsp(array $argv): int
 {
-    $parsed = parseLspArgs($argv);
-    Backend\setCompileBackend($parsed['backend']);
+    $spec = new CommandSpec('lsp', lspUsage(), [
+        ['name' => 'backend', 'value' => true],
+        ['name' => 'lib', 'value' => true, 'repeat' => true],
+        ['name' => 'noCache'],
+        ['name' => 'stdio'],
+    ], positionals: 0);
 
-    return runServer($parsed['libDirs']);
-}
+    if (wantsHelp($argv)) {
+        echo commandHelp($spec);
 
-function runLspCommand(array $argv): int
-{
-    return runLsp($argv);
+        return 0;
+    }
+
+    try {
+        $options = parseArgs($argv, $spec);
+        requireDirectories($options['lib'], '--lib');
+    } catch (\InvalidArgumentException $error) {
+        return commandError($spec, $error);
+    }
+
+    Backend\setCompileBackend(parseBackendValue($options['backend']));
+
+    return runServer($options['lib']);
 }

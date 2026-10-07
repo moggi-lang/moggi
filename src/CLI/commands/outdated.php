@@ -5,15 +5,18 @@ namespace Moggi\CLI\Commands;
 use Moggi\Registry\Catalog;
 use Moggi\Registry\FetchLog;
 
+use function Moggi\Registry\badPackageMarker;
 use function Moggi\Registry\findDescriptor;
 use function Moggi\Registry\lockPath;
 use function Moggi\Registry\lockRegistryProblem;
 use function Moggi\Registry\newestFirst;
+use function Moggi\Registry\providedPackages;
 use function Moggi\Registry\readDescriptor;
 use function Moggi\Registry\readLock;
 use function Moggi\Registry\resolveWithDetails;
 use function Moggi\Registry\shortNpub;
 use function Moggi\Registry\satisfies;
+use function Moggi\Registry\unmaintainedMarker;
 
 /**
  * `moggi outdated` — what a lock could move to.
@@ -55,20 +58,21 @@ function outdatedUsage(): string
 /** @param list<string> $argv */
 function runOutdatedCommand(array $argv): int
 {
-    foreach (\array_slice($argv, 2) as $argument) {
-        if ($argument === 'help' || $argument === '--help' || $argument === '-h') {
-            echo outdatedUsage() . "\n";
+    $spec = new CommandSpec('outdated', outdatedUsage(), [
+        ['name' => 'json'],
+        ['name' => 'noCache'],
+    ]);
 
-            return 0;
-        }
+    if (wantsHelp($argv)) {
+        echo commandHelp($spec);
+
+        return 0;
     }
 
     try {
-        $options = packagingOptions($argv, ['json', 'noCache'], []);
+        $options = parseArgs($argv, $spec);
     } catch (\InvalidArgumentException $error) {
-        \fwrite(STDERR, 'error: ' . $error->getMessage() . "\n\n" . outdatedUsage() . "\n");
-
-        return 1;
+        return commandError($spec, $error);
     }
 
     try {
@@ -88,7 +92,7 @@ function runOutdatedCommand(array $argv): int
             throw new \RuntimeException($registryProblem . ' — point --registry at the registry the lock names');
         }
 
-        $resolution = resolveWithDetails($catalog->entry(...), $descriptor['dependencies']);
+        $resolution = resolveWithDetails($catalog->entry(...), $descriptor['dependencies'], 'root', providedPackages());
         if (!$resolution['ok']) {
             throw new \RuntimeException((string) $resolution['error']);
         }
@@ -121,7 +125,7 @@ function runOutdatedCommand(array $argv): int
  *
  * @param array<string, mixed> $lock
  * @param array{chosen: array<string, string>, reasons: array<string, list<array{constraint: string, path: string}>>} $resolution
- * @return list<array{name: string, current: string, wanted: ?string, latest: ?string, available: bool, constraint: ?string}>
+ * @return list<array{name: string, current: string, wanted: ?string, latest: ?string, available: bool, constraint: ?string, bad: ?array{reason: string, at: ?string, by: ?string}, unmaintained: ?array{note: ?string, at: ?string}}>
  */
 function outdatedRows(array $lock, array $resolution, Catalog $catalog): array
 {
@@ -143,6 +147,8 @@ function outdatedRows(array $lock, array $resolution, Catalog $catalog): array
             'latest' => $latest,
             'available' => \in_array($current, $versions, true),
             'constraint' => $constraint,
+            'bad' => badPackageMarker((array) ($catalog->entry($name) ?? [])),
+            'unmaintained' => unmaintainedMarker((array) ($catalog->entry($name) ?? [])),
         ];
     }
 
@@ -181,7 +187,7 @@ function bindingConstraint(array $reasons, string $version): ?string
 /**
  * @param array<string, mixed> $descriptor
  * @param array<string, mixed> $lock
- * @param list<array{name: string, current: string, wanted: ?string, latest: ?string, available: bool, constraint: ?string}> $rows
+ * @param list<array{name: string, current: string, wanted: ?string, latest: ?string, available: bool, constraint: ?string, bad: ?array{reason: string, at: ?string, by: ?string}, unmaintained: ?array{note: ?string, at: ?string}}> $rows
  */
 function reportOutdated(array $descriptor, array $lock, array $rows, FetchLog $log): void
 {
@@ -197,7 +203,9 @@ function reportOutdated(array $descriptor, array $lock, array $rows, FetchLog $l
 
     $moving = \array_values(\array_filter(
         $rows,
-        static fn (array $row): bool => !$row['available']
+        static fn (array $row): bool => $row['bad'] !== null
+            || $row['unmaintained'] !== null
+            || !$row['available']
             || ($row['wanted'] !== null && $row['wanted'] !== $row['current'])
             || ($row['latest'] !== null && $row['latest'] !== $row['current']),
     ));
@@ -224,11 +232,17 @@ function reportOutdated(array $descriptor, array $lock, array $rows, FetchLog $l
 }
 
 /**
- * @param array{name: string, current: string, wanted: ?string, latest: ?string, available: bool, constraint: ?string} $row
+ * @param array{name: string, current: string, wanted: ?string, latest: ?string, available: bool, constraint: ?string, bad: ?array{reason: string, at: ?string, by: ?string}, unmaintained: ?array{note: ?string, at: ?string}} $row
  */
 function outdatedNote(array $row): string
 {
     $notes = [];
+    if ($row['bad'] !== null) {
+        $notes[] = 'MARKED BAD — ' . $row['bad']['reason'];
+    }
+    if ($row['unmaintained'] !== null) {
+        $notes[] = 'MARKED UNMAINTAINED' . ($row['unmaintained']['note'] === null ? '' : ' — ' . $row['unmaintained']['note']);
+    }
     if (!$row['available']) {
         $notes[] = "(`{$row['current']}` is no longer published)";
     }

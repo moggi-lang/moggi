@@ -5,6 +5,8 @@ namespace Moggi\CLI\Commands;
 use Moggi\Registry\Catalog;
 use Moggi\Registry\FetchLog;
 
+use function Moggi\Registry\badPackageMarker;
+use function Moggi\Registry\badPackageProblem;
 use function Moggi\Registry\fetchVerifiedRelease;
 use function Moggi\Registry\findDescriptor;
 use function Moggi\Registry\lockPath;
@@ -13,6 +15,8 @@ use function Moggi\Registry\prettyJson;
 use function Moggi\Registry\readDescriptor;
 use function Moggi\Registry\readLock;
 use function Moggi\Registry\shortNpub;
+use function Moggi\Registry\unmaintainedMarker;
+use function Moggi\Registry\unmaintainedPackageNote;
 
 /**
  * `moggi verify` — check that the lock is exactly what the registry signs.
@@ -39,6 +43,9 @@ function verifyUsage(): string
     against the digest the catalog publishes, and its signature against the
     package's allowed authors. Nothing is downloaded and nothing is unpacked.
 
+    A package the registry has marked bad or unmaintained is reported beside its
+    verdict; the exit status still reflects the signature checks alone.
+
     options:
       --registry URL|DIR   registry to verify against
                            (default: MOGGI_REGISTRY, else {$default})
@@ -52,20 +59,21 @@ function verifyUsage(): string
 /** @param list<string> $argv */
 function runVerifyCommand(array $argv): int
 {
-    foreach (\array_slice($argv, 2) as $argument) {
-        if ($argument === 'help' || $argument === '--help' || $argument === '-h') {
-            echo verifyUsage() . "\n";
+    $spec = new CommandSpec('verify', verifyUsage(), [
+        ['name' => 'json'],
+        ['name' => 'noCache'],
+    ]);
 
-            return 0;
-        }
+    if (wantsHelp($argv)) {
+        echo commandHelp($spec);
+
+        return 0;
     }
 
     try {
-        $options = packagingOptions($argv, ['json', 'noCache'], []);
+        $options = parseArgs($argv, $spec);
     } catch (\InvalidArgumentException $error) {
-        \fwrite(STDERR, 'error: ' . $error->getMessage() . "\n\n" . verifyUsage() . "\n");
-
-        return 1;
+        return commandError($spec, $error);
     }
 
     try {
@@ -108,10 +116,10 @@ function runVerifyCommand(array $argv): int
 }
 
 /**
- * One verdict per locked package.
+ * One verdict per locked package, with the registry's markers beside it.
  *
  * @param array<string, mixed> $lock
- * @return list<array{name: string, version: string, ok: bool, detail: string}>
+ * @return list<array{name: string, version: string, ok: bool, detail: string, bad: ?array{reason: string, at: ?string, by: ?string}, unmaintained: ?array{note: ?string, at: ?string}}>
  */
 function verifyLockedReleases(string $registry, array $lock, Catalog $catalog, bool $useCache, FetchLog $log): array
 {
@@ -123,12 +131,12 @@ function verifyLockedReleases(string $registry, array $lock, Catalog $catalog, b
 
         $entry = $catalog->entry($name);
         if ($entry === null) {
-            $checks[] = ['name' => $name, 'version' => $version, 'ok' => false, 'detail' => 'no longer in the catalog'];
+            $checks[] = ['name' => $name, 'version' => $version, 'ok' => false, 'detail' => 'no longer in the catalog', 'bad' => null, 'unmaintained' => null];
 
             continue;
         }
         if (!isset($entry['versions'][$version])) {
-            $checks[] = ['name' => $name, 'version' => $version, 'ok' => false, 'detail' => 'not published any more'];
+            $checks[] = ['name' => $name, 'version' => $version, 'ok' => false, 'detail' => 'not published any more', 'bad' => badPackageMarker((array) $entry), 'unmaintained' => unmaintainedMarker((array) $entry)];
 
             continue;
         }
@@ -139,6 +147,8 @@ function verifyLockedReleases(string $registry, array $lock, Catalog $catalog, b
             'version' => $version,
             'ok' => $verified['ok'],
             'detail' => $verified['ok'] ? 'signed by ' . shortNpub((string) $verified['signer']) : $verified['detail'],
+            'bad' => badPackageMarker((array) $entry),
+            'unmaintained' => unmaintainedMarker((array) $entry),
         ];
     }
 
@@ -147,7 +157,7 @@ function verifyLockedReleases(string $registry, array $lock, Catalog $catalog, b
 
 /**
  * @param array<string, mixed> $descriptor
- * @param list<array{name: string, version: string, ok: bool, detail: string}> $checks
+ * @param list<array{name: string, version: string, ok: bool, detail: string, bad: ?array{reason: string, at: ?string, by: ?string}, unmaintained: ?array{note: ?string, at: ?string}}> $checks
  */
 function reportVerify(array $descriptor, array $checks, Catalog $catalog, FetchLog $log): void
 {
@@ -169,5 +179,11 @@ function reportVerify(array $descriptor, array $checks, Catalog $catalog, FetchL
     echo "\n";
     foreach ($checks as $check) {
         \printf("  %-20s %-12s %-4s %s\n", $check['name'], $check['version'], $check['ok'] ? 'ok' : 'FAIL', $check['detail']);
+        if (\is_array($check['bad'])) {
+            \printf("  %-38s %s\n", '', badPackageProblem($check['name'], $check['bad']));
+        }
+        if (\is_array($check['unmaintained'])) {
+            \printf("  %-38s %s\n", '', unmaintainedPackageNote($check['name'], $check['unmaintained']));
+        }
     }
 }

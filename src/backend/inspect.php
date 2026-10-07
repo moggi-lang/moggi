@@ -166,7 +166,7 @@ function formatJavapDump(array $classFiles, array $focusNames = []): string
         }
 
         $cmd = [$javap, '-c', '-p', '-classpath', $dir, ...$binaryNames];
-        $captured = captureProcess($cmd, $dir);
+        $captured = runProcess($cmd, $dir);
         if ($captured['exitCode'] !== 0) {
             $err = \trim($captured['stderr'] !== '' ? $captured['stderr'] : $captured['stdout']);
 
@@ -525,17 +525,6 @@ function extractPhpFunction(string $php, string $functionName): ?string
     }
 
     return null;
-}
-
-/**
- * Run a command, capturing stdout/stderr/exit code.
- *
- * @param list<string> $cmd
- * @return array{stdout: string, stderr: string, exitCode: int}
- */
-function captureProcess(array $cmd, string $cwd): array
-{
-    return runProcess($cmd, $cwd);
 }
 
 /** Recursively delete a directory tree. */

@@ -5,7 +5,7 @@ namespace Moggi\Syntax\Parser;
 use Moggi\Syntax\Ast;
 use Moggi\Syntax\Lexer\TokenKind;
 
-use function Moggi\Syntax\isTypeOperator;
+use function Moggi\Syntax\isConstructorOperator;
 
 /**
  * @return Ast\KindNode
@@ -112,7 +112,7 @@ function parseTypeInfix(ParserState $state): Ast\TypeNode
 
     while (
         isAt($state, TokenKind::Op)
-        && isTypeOperator(peek($state)->lexeme)
+        && isConstructorOperator(peek($state)->lexeme)
     ) {
         $opToken = advance($state);
         $right = parseTypeAtom($state);
@@ -142,7 +142,7 @@ function parseTypeAtom(ParserState $state): Ast\TypeNode
         || (
             $head instanceof Ast\TypeApp
             && $head->con instanceof Ast\TypeCon
-            && isTypeOperator($head->con->name)
+            && isConstructorOperator($head->con->name)
         );
     if (!$canApply) {
         return $head;
@@ -266,7 +266,7 @@ function parseTypeHead(ParserState $state): Ast\TypeNode
 
         if (
             isAt($state, TokenKind::Op)
-            && isTypeOperator(peek($state)->lexeme)
+            && isConstructorOperator(peek($state)->lexeme)
             && isAt($state, TokenKind::RParen, 1)
         ) {
             $opToken = advance($state);

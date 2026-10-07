@@ -1946,7 +1946,7 @@ function stmtReferencesFunction(IR\Stmt $stmt, string $name): bool
             || operandReferencesFunction($stmt->right, $name),
         IR\CallValue::class => operandReferencesFunction($stmt->callee, $name)
             || operandsReferenceFunction($stmt->args, $name),
-        IR\Ret::class => exprReferencesFunction($stmt->value, $name),
+        IR\Ret::class => operandReferencesFunction($stmt->value, $name),
         IR\MatchStmt::class, IR\MatchReturn::class => (static function () use ($stmt, $name): bool {
             if (operandReferencesFunction($stmt->scrutinee, $name)) {
                 return true;
@@ -1989,11 +1989,6 @@ function operandReferencesFunction(IR\Operand $operand, string $name): bool
             || operandReferencesFunction($operand->right, $name),
         default => false,
     };
-}
-
-function exprReferencesFunction(IR\Operand $expr, string $name): bool
-{
-    return operandReferencesFunction($expr, $name);
 }
 
 /**

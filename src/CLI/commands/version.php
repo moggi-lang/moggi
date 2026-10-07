@@ -25,9 +25,25 @@ use function Moggi\Compiler\stdlibVersion;
  */
 function runVersionCommand(array $argv): int
 {
+    $spec = new CommandSpec('version', versionUsage(), [
+        ['name' => 'json'],
+    ], positionals: 0);
+
+    if (wantsHelp($argv)) {
+        echo commandHelp($spec);
+
+        return 0;
+    }
+
+    try {
+        $options = parseArgs($argv, $spec);
+    } catch (\InvalidArgumentException $error) {
+        return commandError($spec, $error);
+    }
+
     $info = versionInfo();
 
-    if (\in_array('--json', $argv, true)) {
+    if ($options['json']) {
         echo \json_encode($info, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
 
         return 0;
@@ -48,6 +64,25 @@ function runVersionCommand(array $argv): int
     }
 
     return 0;
+}
+
+/**
+ * `moggi version`'s command line: a report, so the only choice is how to print
+ * it.
+ */
+function versionUsage(): string
+{
+    return <<<HELP
+    usage:
+      moggi version [--json]
+
+    Print the compiler and stdlib versions, the compiler source fingerprint, and
+    the host toolchain versions the backends need.
+
+    options:
+      --json           machine-readable output
+      -h, --help       show this help
+    HELP;
 }
 
 /**

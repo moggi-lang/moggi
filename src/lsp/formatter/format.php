@@ -195,50 +195,6 @@ function sourceLinesSlice(string $source, int $startLine, int $endLine): string
     return implode("\n", $slice) . "\n";
 }
 
-/**
- * @deprecated Prefer topLevelSourceRegions; kept for callers that still have positioned AST.
- * @param list<object> $items
- */
-function topLevelItemEndLine(object $item, array $items, int $index, string $source): int
-{
-    $end = (int) ($item->endLine ?? 0);
-    if ($end > 0) {
-        $nextStart = null;
-        for ($j = $index + 1; $j < count($items); $j++) {
-            $nl = (int) ($items[$j]->line ?? 0);
-            if ($nl > 0) {
-                $nextStart = $nl;
-                break;
-            }
-        }
-        if ($nextStart !== null && $nextStart - 1 > $end) {
-            $lines = splitLines($source);
-            $last = $nextStart - 1;
-            while ($last > $end) {
-                $text = $lines[$last - 1] ?? '';
-                if (trim($text) === '' || preg_match('/^\s*--/', $text)) {
-                    $last--;
-                    continue;
-                }
-                break;
-            }
-            return max($end, $last);
-        }
-        if ($nextStart === null) {
-            return max($end, count(splitLines($source)));
-        }
-        return $end;
-    }
-    $start = (int) ($item->line ?? 1);
-    for ($j = $index + 1; $j < count($items); $j++) {
-        $nl = (int) ($items[$j]->line ?? 0);
-        if ($nl > 0) {
-            return max($start, $nl - 1);
-        }
-    }
-    return count(splitLines($source));
-}
-
 function formatMoggiSource(string $source): string
 {
     try {

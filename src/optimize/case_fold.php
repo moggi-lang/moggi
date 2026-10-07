@@ -878,7 +878,7 @@ function tryFoldMatch(
 
         $bindings = [];
         $decisive = true;
-        if (!matchPatternDecisive($arm->pattern, $scrut, $bindings, $decisive)) {
+        if (!matchPattern($arm->pattern, $scrut, $bindings, $decisive)) {
             if (!$decisive) {
                 return null;
             }
@@ -1058,18 +1058,6 @@ function collectPatternLeaves(IR\Pattern $pattern, CtorTree|IR\Operand $value, a
 
 
     return false;
-}
-
-/**
- * @param array<string, CtorTree|IR\Operand> $bindings
- */
-function matchPatternDecisive(
-    IR\Pattern $pattern,
-    CtorTree|IR\Operand $value,
-    array &$bindings,
-    bool &$decisive,
-): bool {
-    return matchPattern($pattern, $value, $bindings, $decisive);
 }
 
 /**

@@ -5,6 +5,8 @@ namespace Moggi\Semantics\Deriving;
 use Moggi\Syntax\Ast;
 use Moggi\Semantics\Types\TypeCheckState;
 
+use function Moggi\Semantics\Types\typeFail;
+
 /**
  * Stock `deriving Foldable` over the last type parameter (`foldr` only).
  */
@@ -15,7 +17,7 @@ function deriveFoldable(
 ): DerivedInstance {
     $param = lastDataParamName($decl);
     if ($param === null) {
-        throw typeFailDerive(
+        throw typeFail(
             $state,
             'cannot derive Foldable: type has no type parameter',
             $ref,

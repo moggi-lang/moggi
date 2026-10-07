@@ -506,7 +506,7 @@ function astKind(TypeCheckState $state, Ast\KindNode $kindAst, ?Ast\AstNode $at 
             astKind($state, $kindAst->from, $at),
             astKind($state, $kindAst->to, $at),
         ),
-        default => throw kindFail($state, 'unknown kind', $at ?? ($kindAst instanceof Ast\AstNode ? $kindAst : null)),
+        default => throw typeFail($state, 'unknown kind', $at ?? ($kindAst instanceof Ast\AstNode ? $kindAst : null)),
     };
 }
 
@@ -654,7 +654,7 @@ function assertKind(
     try {
         unifyKind($ctx, $actual, $expectedKind);
     } catch (\InvalidArgumentException $e) {
-        throw kindFail(
+        throw typeFail(
             $state,
             'expected kind `' . kindToString(pruneKind($ctx, $expectedKind)) . '`, got `'
                 . kindToString(pruneKind($ctx, $actual)) . '`',
@@ -792,7 +792,3 @@ function classParamNames(array $params): array
     );
 }
 
-function kindFail(TypeCheckState $state, string $message, Ast\AstNode|Ast\TypeNode|null $at = null): TypeError
-{
-    return typeFail($state, $message, $at);
-}

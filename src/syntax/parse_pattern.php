@@ -42,20 +42,6 @@ function parsePattern(ParserState $state): Ast\AstNode
 }
 
 /**
- * Atomic pattern: the form a function argument takes directly, without an
- * function-clause left-hand side takes (`funlhs -> var apat {apat}`), so no
- * top-level application is parsed here: `f True x = …` has the two atomic
- * arguments `True` and `x`, not the single constructor application `True x`.
- * A constructor with arguments must be parenthesised: `f (Just x) = …`.
- *
- * @return Ast\AstNode
- */
-function parsePatternArg(ParserState $state): Ast\AstNode
-{
-    return parsePatternAtom($state);
-}
-
-/**
  * @return Ast\AstNode
  */
 function parsePatternInfix(ParserState $state, int $minPrec): Ast\AstNode

@@ -5,6 +5,8 @@ namespace Moggi\Semantics\Deriving;
 use Moggi\Syntax\Ast;
 use Moggi\Semantics\Types\TypeCheckState;
 
+use function Moggi\Semantics\Types\typeFail;
+
 /**
  * Stock `deriving Enum` for nullary-constructor enumerations.
  */
@@ -15,7 +17,7 @@ function deriveEnum(
 ): DerivedInstance {
     assertNullaryConstructors($state, $decl, $ref, 'Enum');
     if ($decl->params !== []) {
-        throw typeFailDerive(
+        throw typeFail(
             $state,
             'cannot derive Enum: type has parameters (Enum requires a nullary type)',
             $ref,

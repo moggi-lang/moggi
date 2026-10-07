@@ -21,7 +21,8 @@ namespace Moggi\Registry;
  *   - `<MOGGI_ROOT>/bin/schnorr`;
  *   - `<installation>/bin/schnorr`, where the installation is the phar's parent
  *     (`<install>/bin/moggi.phar` → `<install>`);
- *   - the development checkout's `<root>/schnorr/build/schnorr`.
+ *   - a source checkout's `<root>/bin/schnorr` and the binary `make` writes
+ *     beside the C sources, `<root>/schnorr/schnorr`.
  */
 function schnorrBinary(): ?string
 {
@@ -65,7 +66,7 @@ function schnorrCandidatePaths(): array
 
     $checkout = \dirname(__DIR__, 2);
     $candidates[] = $checkout . $separator . 'bin' . $separator . $name;
-    $candidates[] = $checkout . $separator . 'schnorr' . $separator . 'build' . $separator . $name;
+    $candidates[] = $checkout . $separator . 'schnorr' . $separator . $name;
 
     return $candidates;
 }
@@ -77,5 +78,6 @@ function schnorrMissingNote(): string
     $list = $tried === [] ? '' : ' (looked in: ' . \implode(', ', $tried) . ')';
 
     return 'no bundled `schnorr` binary found' . $list
-        . ' — install a distribution that ships it, or set MOGGI_SCHNORR to its path';
+        . ' — install a distribution that ships it, build it with `make -C schnorr` in a source checkout,'
+        . ' or set MOGGI_SCHNORR to its path';
 }

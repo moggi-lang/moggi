@@ -14,6 +14,7 @@ use function Moggi\Registry\prettyJson;
 use function Moggi\Registry\readDescriptor;
 use function Moggi\Registry\moggiIgnorePatterns;
 use function Moggi\Registry\readNsecKey;
+use function Moggi\Registry\registryError;
 use function Moggi\Registry\releaseMessage;
 use function Moggi\Registry\requestHost;
 use function Moggi\Registry\selectAuthor;
@@ -67,20 +68,26 @@ function publishUsage(): string
 /** @param list<string> $argv */
 function runPublishCommand(array $argv): int
 {
-    foreach (\array_slice($argv, 2) as $argument) {
-        if ($argument === 'help' || $argument === '--help' || $argument === '-h') {
-            echo publishUsage() . "\n";
+    $spec = new CommandSpec('publish', publishUsage(), [
+        ['name' => 'json'],
+        ['name' => 'noDocs'],
+        ['name' => 'yes'],
+        ['name' => 'nsec-file', 'value' => true],
+        ['name' => 'as', 'value' => true],
+        ['name' => 'url', 'value' => true],
+        ['name' => 'commit', 'value' => true],
+    ]);
 
-            return 0;
-        }
+    if (wantsHelp($argv)) {
+        echo commandHelp($spec);
+
+        return 0;
     }
 
     try {
-        $options = packagingOptions($argv, ['json', 'noDocs', 'yes'], ['nsec-file', 'as', 'url', 'commit']);
+        $options = parseArgs($argv, $spec);
     } catch (\InvalidArgumentException $error) {
-        \fwrite(\STDERR, 'error: ' . $error->getMessage() . "\n\n" . publishUsage() . "\n");
-
-        return 1;
+        return commandError($spec, $error);
     }
 
     try {
@@ -258,15 +265,4 @@ function putOrFail(string $url, string $method, string $body, string $nsec, stri
     if ($response['status'] !== 200) {
         throw new \RuntimeException("uploading {$what} failed ({$response['status']}): " . registryError($response['body']));
     }
-}
-
-/** A registry error body (`{error, message}`) as one line, or the raw text. */
-function registryError(string $body): string
-{
-    $decoded = \json_decode($body, true);
-    if (\is_array($decoded) && isset($decoded['error'])) {
-        return $decoded['error'] . ': ' . ($decoded['message'] ?? '');
-    }
-
-    return \trim($body) === '' ? 'no response body' : \trim($body);
 }

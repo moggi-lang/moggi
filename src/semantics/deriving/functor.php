@@ -5,6 +5,8 @@ namespace Moggi\Semantics\Deriving;
 use Moggi\Syntax\Ast;
 use Moggi\Semantics\Types\TypeCheckState;
 
+use function Moggi\Semantics\Types\typeFail;
+
 /**
  * Stock `deriving Functor` over the last type parameter.
  */
@@ -15,7 +17,7 @@ function deriveFunctor(
 ): DerivedInstance {
     $param = lastDataParamName($decl);
     if ($param === null) {
-        throw typeFailDerive(
+        throw typeFail(
             $state,
             'cannot derive Functor: type has no type parameter',
             $ref,
@@ -53,7 +55,7 @@ function validateFunctorialStructure(
             $c = classifyFunctorField($field->type, $param);
             if (($c['tag'] ?? '') === 'bad') {
                 $reason = $c['reason'] ?? 'unsupported';
-                throw typeFailDerive(
+                throw typeFail(
                     $state,
                     "cannot derive {$className}: field type `"
                         . Ast\dumpTypeInline($field->type)

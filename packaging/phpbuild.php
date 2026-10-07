@@ -117,7 +117,7 @@ function microExtensions(string $runtime, array $config): array
         return \array_values(\array_map('strval', $extensions));
     }
 
-    return requiredPhpExtensions();
+    return distributionPhpExtensions();
 }
 
 /**
@@ -468,7 +468,7 @@ function buildPhpFromSource(string $runtime, string $target, array $config, stri
 
     $jobs = (string) max(1, cpuCount());
     $make = findExecutable('make') ?? 'make';
-    $extensions = requiredPhpExtensions();
+    $extensions = distributionPhpExtensions();
     runOrFail([$tree . '/configure', '--prefix=' . $work . '/install', ...extensionBuildFlags($extensions, $config)], $tree);
     runOrFail([$make, '-j' . $jobs], $tree);
 

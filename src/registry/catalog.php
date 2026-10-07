@@ -332,6 +332,29 @@ final class Catalog
         return $entries;
     }
 
+    /**
+     * Every package the registry lists, by name.
+     *
+     * Unlike `entry()`, which reads the one shard a name lives in, this reads
+     * every shard the root names — a search has no name to key on. It is the one
+     * read proportional to the size of the catalog, which is why nothing else
+     * uses it. A shard that cannot be trusted refuses the whole read rather than
+     * answering from the rest.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public function packages(): array
+    {
+        foreach (\array_keys((array) ($this->root['shards'] ?? [])) as $prefix) {
+            $this->loadShard((string) $prefix);
+        }
+        if ($this->failures !== []) {
+            throw new \RuntimeException('the catalog is inconsistent: ' . \reset($this->failures));
+        }
+
+        return $this->entries;
+    }
+
     private function loadShard(string $prefix): void
     {
         if (isset($this->loaded[$prefix])) {

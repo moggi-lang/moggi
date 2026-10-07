@@ -2,13 +2,13 @@
 
 namespace Moggi\Docs;
 
-function generateMogdoc(DocIndex $index, string $outputDir): void
+function generateMogdoc(DocIndex $index, string $outputDir, string $siteTitle = ''): void
 {
     if (!\is_dir($outputDir) && !mkdir($outputDir, 0777, true) && !\is_dir($outputDir)) {
         throw new \RuntimeException("cannot create output directory {$outputDir}");
     }
 
-    writeSourcePages($index, $outputDir);
+    writeSourcePages($index, $outputDir, $siteTitle);
 
     $searchJson = json_encode(searchIndexToJson($index), JSON_UNESCAPED_UNICODE);
     if ($searchJson === false) {
@@ -38,7 +38,7 @@ function generateMogdoc(DocIndex $index, string $outputDir): void
     }
     $indexBody .= '</ul>';
 
-    writeHtmlFile($outputDir . '/index.html', 'Moggi Index', $indexBody, true, false, true);
+    writeHtmlFile($outputDir . '/index.html', 'Moggi Index', $indexBody, true, false, true, $siteTitle);
 
     $written = 0;
     foreach ($index->byModule as $moduleName => $entities) {
@@ -49,6 +49,8 @@ function generateMogdoc(DocIndex $index, string $outputDir): void
             $body,
             true,
             true,
+            false,
+            $siteTitle,
         );
         ++$written;
         if ($written % 25 === 0) {
@@ -329,7 +331,7 @@ function sourcePageHref(string $relativePath, int $line): string
     return sourcePageName($relativePath) . '#L' . $line;
 }
 
-function writeSourcePages(DocIndex $index, string $outputDir): void
+function writeSourcePages(DocIndex $index, string $outputDir, string $siteTitle = ''): void
 {
     $paths = [];
     foreach ($index->all as $entity) {
@@ -364,6 +366,9 @@ function writeSourcePages(DocIndex $index, string $outputDir): void
             basename($relativePath) . ' · source',
             renderSourcePage($relativePath, $source),
             false,
+            false,
+            false,
+            $siteTitle,
         );
     }
 }
@@ -450,11 +455,11 @@ function mogdocSearchScript(): string
 HTML;
 }
 
-function writeHtmlFile(string $path, string $title, string $body, bool $withSearch, bool $homeLink = false, bool $searchAutofocus = false): void
+function writeHtmlFile(string $path, string $title, string $body, bool $withSearch, bool $homeLink = false, bool $searchAutofocus = false, string $siteTitle = ''): void
 {
     $search = $withSearch ? renderMogdocSearchBox('', $searchAutofocus) : '';
     $script = $withSearch ? mogdocSearchScript() : '';
-    $html = docsPageShell($title, $search . $body, '', $script, $homeLink);
+    $html = docsPageShell($title, $search . $body, '', $script, $homeLink, $siteTitle);
 
     if (file_put_contents($path, $html) === false) {
         throw new \RuntimeException("cannot write {$path}");

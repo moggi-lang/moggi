@@ -12,7 +12,7 @@ while (!is_file($root . '/src/registry/names.php') && \dirname($root) !== $root)
     $root = \dirname($root);
 }
 // The whole compiler, not just the registry files: a descriptor names backends,
-// and `allBackends()` reaches the backend registry. Loading it once is also how
+// and `implementedBackendIds()` reaches the backend registry. Loading it once is also how
 // the suite loads it, so this test sees the same code the CLI does.
 require $root . '/src/compiler.php';
 require $root . '/tests/suite/support/workspace.php';
@@ -251,7 +251,9 @@ try {
         \putenv('PATH=' . $savedPath);
     }
 
-    \putenv('MOGGI_SCHNORR');
+    // A set-but-missing `MOGGI_SCHNORR` is how a caller says "no binary": the
+    // override wins and does not fall through to the bundled checkout copy.
+    \putenv('MOGGI_SCHNORR=' . $work . '/no-such-schnorr');
     $verdict = verifySignature('aa', 'bb', $seedNpub);
     $assert(
         $verdict['ok'] === false && \str_contains($verdict['note'], 'no bundled'),

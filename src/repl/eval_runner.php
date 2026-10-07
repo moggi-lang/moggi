@@ -14,7 +14,7 @@ use function Moggi\Repl\ensureBasePrepared;
 use function Moggi\Backend\backendById;
 use function Moggi\Backend\Php\runtimeOutputPath;
 use function Moggi\Backend\codegen;
-use function Moggi\Backend\Inspect\captureProcess;
+use function Moggi\Compiler\runProcess;
 use function Moggi\Backend\Inspect\removeTree;
 use function Moggi\Backend\DotNet\resolveDotnetExecutable;
 use function Moggi\Backend\setCompileBackend;
@@ -425,7 +425,7 @@ function packageAndCapture(string $backend, string $outDir, string $entryModule,
             return ['stdout' => '', 'stderr' => 'missing Main.php', 'exitCode' => 1];
         }
 
-        return captureProcess(['php', $phpFile], dirname($phpFile));
+        return runProcess(['php', $phpFile], dirname($phpFile));
     }
 
     if ($backend === 'dotnet') {
@@ -439,7 +439,7 @@ function packageAndCapture(string $backend, string $outDir, string $entryModule,
             return ['stdout' => '', 'stderr' => 'dotnet SDK not found', 'exitCode' => 1];
         }
 
-        return captureProcess([$dotnet, $dll], $outDir);
+        return runProcess([$dotnet, $dll], $outDir);
     }
 
     $jar = $outDir . '/moggi-app.jar';
@@ -447,5 +447,5 @@ function packageAndCapture(string $backend, string $outDir, string $entryModule,
         return ['stdout' => '', 'stderr' => 'missing moggi-app.jar', 'exitCode' => 1];
     }
 
-    return captureProcess(['java', '-jar', $jar], $outDir);
+    return runProcess(['java', '-jar', $jar], $outDir);
 }

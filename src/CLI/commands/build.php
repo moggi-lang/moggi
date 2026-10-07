@@ -4,6 +4,9 @@ namespace Moggi\CLI\Commands;
 
 use Moggi\Registry\FetchLog;
 
+use function Moggi\Registry\badPackageProblem;
+use function Moggi\Registry\badPackagesAmong;
+use function Moggi\Registry\badPackagesRefusal;
 use function Moggi\Registry\collectHostToolCoordinates;
 use function Moggi\Registry\declaredBackends;
 use function Moggi\Registry\fetchVerifiedRelease;
@@ -19,10 +22,13 @@ use function Moggi\Registry\lockedInstallDir;
 use function Moggi\Registry\mergeThirdParty;
 use function Moggi\Registry\phpExtensionDescriptors;
 use function Moggi\Registry\phpExtensionProblems;
+use function Moggi\Registry\providedDependencyProblems;
 use function Moggi\Registry\readDescriptor;
 use function Moggi\Registry\readLock;
 use function Moggi\Registry\resolveHostTools;
 use function Moggi\Registry\thirdPartyProblems;
+use function Moggi\Registry\unmaintainedPackageNote;
+use function Moggi\Registry\unmaintainedPackagesAmong;
 
 /**
  * `moggi build` — the descriptor's build front end.
@@ -47,12 +53,13 @@ function buildUsage(): string
     dependencies as library roots, and delegate to `moggi compile`.
 
     Refuses to build when the lock does not match the registry catalog (run
-    `moggi update`) or when a locked package is not installed (run
-    `moggi install`).
+    `moggi update`), when a package the registry has marked bad would be linked,
+    or when a locked package is not installed (run `moggi install`).
 
     options:
       --exe NAME           build [executable.NAME] instead of [executable]
       --backend B          override the descriptor's backend
+      --allow-bad          build even though a linked package is marked bad
       -o, --output PATH    artifact to produce (passed to compile; with
                            --unpacked, an output directory)
       --unpacked           keep the generated tree (passed to compile)
@@ -65,12 +72,18 @@ function buildUsage(): string
 /** @param list<string> $argv */
 function runBuildCommand(array $argv): int
 {
-    foreach (\array_slice($argv, 2) as $argument) {
-        if ($argument === 'help' || $argument === '--help' || $argument === '-h') {
-            echo buildUsage() . "\n";
+    $spec = new CommandSpec('build', buildUsage(), [
+        ['name' => 'unpacked'],
+        ['name' => 'noCache'],
+        ['name' => 'allowBad'],
+        ['name' => 'exe', 'value' => true],
+        ['name' => 'backend', 'value' => true],
+    ]);
 
-            return 0;
-        }
+    if (wantsHelp($argv)) {
+        echo commandHelp($spec);
+
+        return 0;
     }
 
     try {
@@ -78,17 +91,20 @@ function runBuildCommand(array $argv): int
         $forwarded = $split === false ? [] : \array_slice($argv, $split + 1);
         $own = $split === false ? $argv : \array_slice($argv, 0, $split);
 
-        $options = packagingOptions($own, ['unpacked', 'noCache'], ['exe', 'backend']);
+        $options = parseArgs($own, $spec);
     } catch (\InvalidArgumentException $error) {
-        \fwrite(STDERR, 'error: ' . $error->getMessage() . "\n\n" . buildUsage() . "\n");
-
-        return 1;
+        return commandError($spec, $error);
     }
 
     try {
         $descriptorPath = findDescriptor($options['path']);
         $descriptor = readDescriptor($descriptorPath);
         $root = \dirname($descriptorPath);
+
+        $provided = providedDependencyProblems($descriptor['dependencies']);
+        if ($provided !== []) {
+            throw new \RuntimeException(\implode("\n", $provided));
+        }
 
         $executable = selectExecutable($descriptor, $options['exe']);
         if ($executable === null) {
@@ -124,6 +140,21 @@ function runBuildCommand(array $argv): int
                 "the lock does not match the catalog:\n  " . \implode("\n  ", $problems)
                 . "\nrun `moggi update` to re-resolve",
             );
+        }
+
+        $bad = badPackagesAmong($entries);
+        if ($bad !== [] && !$options['allowBad']) {
+            throw new \RuntimeException(badPackagesRefusal(
+                $bad,
+                'this build links',
+                'pass --allow-bad to build anyway',
+            ));
+        }
+        foreach ($bad as $name => $marker) {
+            \fwrite(STDERR, 'warning: ' . badPackageProblem($name, $marker) . "\n");
+        }
+        foreach (unmaintainedPackagesAmong($entries) as $name => $marker) {
+            \fwrite(STDERR, 'warning: ' . unmaintainedPackageNote($name, $marker) . "\n");
         }
 
         $backend = (string) ($options['backend'] ?? $executable['backend'] ?? 'php');

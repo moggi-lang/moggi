@@ -21,7 +21,7 @@ use function Moggi\Syntax\Parser\standardFixity;
  */
 function docIndexSchemaVersion(): int
 {
-    return 1;
+    return 2;
 }
 
 final class DocEntity
@@ -371,6 +371,19 @@ function buildIndex(
     [$facadeBackends, $implFacades] = facadeBackendMaps($modules);
 
     return new DocIndex($byModule, $all, $search, $facadeBackends, $implFacades, $rootPrefix);
+}
+
+/**
+ * Whether a module's source belongs to the root being documented, rather than a
+ * library root it was type-checked against.
+ *
+ * `rootPrefix` is a documented root with a trailing separator, so this is a
+ * prefix match. An empty prefix means the root is unknown, and nothing is
+ * excluded.
+ */
+function sourceUnderRoot(string $path, string $rootPrefix): bool
+{
+    return $rootPrefix === '' || $path === '' || str_starts_with($path, $rootPrefix);
 }
 
 function relativeSourcePath(string $path, string $rootPrefix): ?string

@@ -1828,11 +1828,6 @@ function qualifyType(string $dotted): string
     return '[' . bclAssemblyFor($dotted) . ']' . $dotted;
 }
 
-function dotNetForeignClassIsValueType(string $classPath): bool
-{
-    return dotNetHostIsValueType($classPath);
-}
-
 /** @return array{params: list<string>, ret: string} */
 function parseClrSig(string $sig): array
 {
@@ -1884,7 +1879,7 @@ function emitForeign(EmitEnv $env, IR\ForeignCall $op): void
 
     $argOffset = 0;
     $valueTypeReceiver = $resolved['dispatch'] === 'instance'
-        && dotNetForeignClassIsValueType($resolved['class']);
+        && dotNetHostIsValueType($resolved['class']);
 
     if ($resolved['dispatch'] === 'instance') {
         if ($args === []) {
@@ -1927,7 +1922,7 @@ function emitForeign(EmitEnv $env, IR\ForeignCall $op): void
     };
 
     if ($resolved['dispatch'] === 'constructor') {
-        if (dotNetForeignClassIsValueType($resolved['class'])) {
+        if (dotNetHostIsValueType($resolved['class'])) {
             $env->m->emit('box valuetype ' . $typeRef);
         }
         emitForeignIoWrap($env, $op->ioWrap);

@@ -13,6 +13,7 @@ use function Moggi\Registry\parsePhpExtensionEntry;
 use function Moggi\Registry\phpExtensionDescriptors;
 use function Moggi\Registry\phpExtensionProblems;
 use function Moggi\Registry\prettyJson;
+use function Moggi\Registry\providedDependencyProblems;
 use function Moggi\Registry\readDescriptor;
 use function Moggi\Registry\readLock;
 
@@ -61,12 +62,14 @@ function checkUsage(): string
 /** @param list<string> $argv */
 function runCheckCommand(array $argv): int
 {
-    foreach (\array_slice($argv, 2) as $argument) {
-        if ($argument === 'help' || $argument === '--help' || $argument === '-h') {
-            echo checkUsage() . "\n";
+    $spec = new CommandSpec('check', checkUsage(), [
+        ['name' => 'json'],
+    ]);
 
-            return 0;
-        }
+    if (wantsHelp($argv)) {
+        echo commandHelp($spec);
+
+        return 0;
     }
 
     foreach (\array_slice($argv, 2) as $argument) {
@@ -78,11 +81,9 @@ function runCheckCommand(array $argv): int
     }
 
     try {
-        $options = packagingOptions($argv, ['json'], []);
+        $options = parseArgs($argv, $spec);
     } catch (\InvalidArgumentException $error) {
-        \fwrite(STDERR, 'error: ' . $error->getMessage() . "\n\n" . checkUsage() . "\n");
-
-        return 1;
+        return commandError($spec, $error);
     }
 
     try {
@@ -136,6 +137,10 @@ function checkPackage(string $path, ?string $output = null): array
         $sources = checkSources($root, $descriptor);
         $findings = [...$findings, ...$sources['findings']];
         $notes = $sources['notes'];
+
+        foreach (providedDependencyProblems($descriptor['dependencies']) as $problem) {
+            $findings[] = ['level' => 'error', 'message' => $problem];
+        }
 
         $findings = [...$findings, ...checkLock($descriptorPath, $descriptor, $output)];
         $findings = [...$findings, ...checkPhpRequirements($descriptor, readCheckLock($descriptorPath, $output))];

@@ -180,7 +180,7 @@ function parseLetItem(ParserState $state): array
             && !isAt($state, TokenKind::Op, 0, '=')
             && !isAt($state, TokenKind::Pipe)
         ) {
-            $params[] = parsePatternArg($state);
+            $params[] = parsePatternAtom($state);
         }
         $body = parseFunctionBody($state);
 
@@ -234,7 +234,7 @@ function looksLikeFunEquation(ParserState $state): bool
             && !isAt($state, TokenKind::Op, 0, '=')
             && !isAt($state, TokenKind::Pipe)
         ) {
-            parsePatternArg($state);
+            parsePatternAtom($state);
         }
 
         return isAt($state, TokenKind::Op, 0, '=') || isAt($state, TokenKind::Pipe);

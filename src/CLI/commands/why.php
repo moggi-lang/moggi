@@ -5,14 +5,19 @@ namespace Moggi\CLI\Commands;
 use Moggi\Registry\Catalog;
 use Moggi\Registry\FetchLog;
 
+use function Moggi\Registry\badPackageMarker;
+use function Moggi\Registry\badPackageProblem;
 use function Moggi\Registry\findDescriptor;
 use function Moggi\Registry\lockPath;
 use function Moggi\Registry\lockRegistryProblem;
+use function Moggi\Registry\providedPackages;
 use function Moggi\Registry\readDescriptor;
 use function Moggi\Registry\readLock;
 use function Moggi\Registry\resolveWithDetails;
 use function Moggi\Registry\shortNpub;
 use function Moggi\Registry\satisfies;
+use function Moggi\Registry\unmaintainedMarker;
+use function Moggi\Registry\unmaintainedPackageNote;
 
 /**
  * `moggi why` — which demands pulled a version in, and what holds it back.
@@ -53,20 +58,21 @@ function whyUsage(): string
 /** @param list<string> $argv */
 function runWhyCommand(array $argv): int
 {
-    foreach (\array_slice($argv, 2) as $argument) {
-        if ($argument === 'help' || $argument === '--help' || $argument === '-h') {
-            echo whyUsage() . "\n";
+    $spec = new CommandSpec('why', whyUsage(), [
+        ['name' => 'json'],
+        ['name' => 'noCache'],
+    ]);
 
-            return 0;
-        }
+    if (wantsHelp($argv)) {
+        echo commandHelp($spec);
+
+        return 0;
     }
 
     try {
-        $options = packagingOptions($argv, ['json', 'noCache'], []);
+        $options = parseArgs($argv, $spec);
     } catch (\InvalidArgumentException $error) {
-        \fwrite(STDERR, 'error: ' . $error->getMessage() . "\n\n" . whyUsage() . "\n");
-
-        return 1;
+        return commandError($spec, $error);
     }
 
     $only = $options['path'] === '.' ? null : (string) $options['path'];
@@ -90,7 +96,7 @@ function runWhyCommand(array $argv): int
 
         $names = whyNames($lock, $only);
 
-        $resolution = resolveWithDetails($catalog->entry(...), $descriptor['dependencies']);
+        $resolution = resolveWithDetails($catalog->entry(...), $descriptor['dependencies'], 'root', providedPackages());
         if (!$resolution['ok']) {
             throw new \RuntimeException((string) $resolution['error']);
         }
@@ -147,7 +153,7 @@ function whyNames(array $lock, ?string $only): array
  *
  * @param array<string, mixed> $lock
  * @param array{chosen: array<string, string>, reasons: array<string, list<array{constraint: string, path: string}>>} $resolution
- * @return array{version: string, wanted: ?string, requiredBy: list<array{path: string, constraint: string}>, heldBy: list<array{path: string, constraint: string}>, available: list<string>}
+ * @return array{version: string, wanted: ?string, requiredBy: list<array{path: string, constraint: string}>, heldBy: list<array{path: string, constraint: string}>, available: list<string>, bad: ?array{reason: string, at: ?string, by: ?string}, unmaintained: ?array{note: ?string, at: ?string}}
  */
 function whyEntry(string $name, array $lock, array $resolution, Catalog $catalog): array
 {
@@ -165,19 +171,23 @@ function whyEntry(string $name, array $lock, array $resolution, Catalog $catalog
         }
     }
 
+    $entry = (array) ($catalog->entry($name) ?? []);
+
     return [
         'version' => $version,
         'wanted' => isset($resolution['chosen'][$name]) ? (string) $resolution['chosen'][$name] : null,
         'requiredBy' => $reasons,
         'heldBy' => $heldBy,
         'available' => $available,
+        'bad' => badPackageMarker($entry),
+        'unmaintained' => unmaintainedMarker($entry),
     ];
 }
 
 /**
  * @param array<string, mixed> $descriptor
  * @param array<string, mixed> $lock
- * @param array<string, array{version: string, wanted: ?string, requiredBy: list<array{path: string, constraint: string}>, heldBy: list<array{path: string, constraint: string}>, available: list<string>}> $why
+ * @param array<string, array{version: string, wanted: ?string, requiredBy: list<array{path: string, constraint: string}>, heldBy: list<array{path: string, constraint: string}>, available: list<string>, bad: ?array{reason: string, at: ?string, by: ?string}, unmaintained: ?array{note: ?string, at: ?string}}> $why
  */
 function reportWhy(array $descriptor, array $lock, array $why, FetchLog $log): void
 {
@@ -193,6 +203,12 @@ function reportWhy(array $descriptor, array $lock, array $why, FetchLog $log): v
 
     foreach ($why as $name => $entry) {
         \printf("\n%s  %s\n", $name, $entry['version']);
+        if (\is_array($entry['bad'])) {
+            \printf("  %s\n", badPackageProblem((string) $name, $entry['bad']));
+        }
+        if (\is_array($entry['unmaintained'])) {
+            \printf("  %s\n", unmaintainedPackageNote((string) $name, $entry['unmaintained']));
+        }
 
         echo "\n  required by\n";
         if ($entry['requiredBy'] === []) {

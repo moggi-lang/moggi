@@ -33,7 +33,7 @@ function packDocs(string $directory, array $descriptor): array
     setCompileBackend('php');
 
     $index = loadOrBuildIndex($input, $libDirs, true);
-    generateMogdoc($index, $docsDir);
+    generateMogdoc($index, $docsDir, \trim($descriptor['name'] . ' ' . $descriptor['version']));
 
     return [
         'digest' => directoryDigest($docsDir, ['.mogdoc-source-fingerprint']),
@@ -132,20 +132,22 @@ function packUsage(): string
 /** @param list<string> $argv */
 function runPackCommand(array $argv): int
 {
-    foreach (\array_slice($argv, 2) as $argument) {
-        if ($argument === 'help' || $argument === '--help' || $argument === '-h') {
-            echo packUsage() . "\n";
+    $spec = new CommandSpec('pack', packUsage(), [
+        ['name' => 'list'],
+        ['name' => 'json'],
+        ['name' => 'noDocs'],
+    ]);
 
-            return 0;
-        }
+    if (wantsHelp($argv)) {
+        echo commandHelp($spec);
+
+        return 0;
     }
 
     try {
-        $options = packagingOptions($argv, ['list', 'json', 'noDocs'], []);
+        $options = parseArgs($argv, $spec);
     } catch (\InvalidArgumentException $error) {
-        \fwrite(STDERR, 'error: ' . $error->getMessage() . "\n\n" . packUsage() . "\n");
-
-        return 1;
+        return commandError($spec, $error);
     }
 
     try {

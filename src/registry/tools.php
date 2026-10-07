@@ -77,7 +77,7 @@ function hostToolDescriptor(string $iniBytes): array
 {
     $ini = @\parse_ini_string($iniBytes, true, \INI_SCANNER_RAW);
     if (!\is_array($ini)) {
-        return ['backends' => allBackends(), 'php' => [], 'jvm' => [], 'dotnet' => []];
+        return ['backends' => \Moggi\Backend\implementedBackendIds(), 'php' => [], 'jvm' => [], 'dotnet' => []];
     }
 
     return [

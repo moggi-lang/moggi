@@ -4,6 +4,9 @@ namespace Moggi\CLI\Commands;
 
 use Moggi\Registry\FetchLog;
 
+use function Moggi\Registry\badPackageProblem;
+use function Moggi\Registry\badPackagesAmong;
+use function Moggi\Registry\badPackagesRefusal;
 use function Moggi\Registry\findDescriptor;
 use function Moggi\Registry\installLockedPackages;
 use function Moggi\Registry\lockDisagreements;
@@ -11,9 +14,12 @@ use function Moggi\Registry\lockPath;
 use function Moggi\Registry\lockRegistryProblem;
 use function Moggi\Registry\phpExtensionDescriptors;
 use function Moggi\Registry\phpExtensionProblems;
+use function Moggi\Registry\providedDependencyProblems;
 use function Moggi\Registry\readDescriptor;
 use function Moggi\Registry\readLock;
 use function Moggi\Registry\shortNpub;
+use function Moggi\Registry\unmaintainedPackageNote;
+use function Moggi\Registry\unmaintainedPackagesAmong;
 
 /**
  * `moggi install` — make the lock true.
@@ -46,6 +52,7 @@ function installUsage(): string
       --registry URL|DIR   registry to install from
       -o, --output FILE    lock file to use (default: moggi.lock)
       --frozen             never resolve: the lock must exist and match
+      --allow-bad          install even though the registry marked a lock package bad
       --dry-run            report what would be installed, touch nothing
       --no-cache           re-fetch metadata instead of using what is held
       --json               machine-readable envelope
@@ -56,25 +63,34 @@ function installUsage(): string
 /** @param list<string> $argv */
 function runInstallCommand(array $argv): int
 {
-    foreach (\array_slice($argv, 2) as $argument) {
-        if ($argument === 'help' || $argument === '--help' || $argument === '-h') {
-            echo installUsage() . "\n";
+    $spec = new CommandSpec('install', installUsage(), [
+        ['name' => 'dryRun'],
+        ['name' => 'json'],
+        ['name' => 'noCache'],
+        ['name' => 'frozen'],
+        ['name' => 'allowBad'],
+    ]);
 
-            return 0;
-        }
+    if (wantsHelp($argv)) {
+        echo commandHelp($spec);
+
+        return 0;
     }
 
     try {
-        $options = packagingOptions($argv, ['dryRun', 'json', 'noCache', 'frozen'], []);
+        $options = parseArgs($argv, $spec);
     } catch (\InvalidArgumentException $error) {
-        \fwrite(STDERR, 'error: ' . $error->getMessage() . "\n\n" . installUsage() . "\n");
-
-        return 1;
+        return commandError($spec, $error);
     }
 
     try {
         $descriptorPath = findDescriptor($options['path']);
         $descriptor = readDescriptor($descriptorPath);
+
+        $provided = providedDependencyProblems($descriptor['dependencies']);
+        if ($provided !== []) {
+            throw new \RuntimeException(\implode("\n", $provided));
+        }
 
         $log = new FetchLog();
         $catalog = loadVerifiedCatalog($options['registry'], !$options['noCache'], $log);
@@ -87,11 +103,14 @@ function runInstallCommand(array $argv): int
             if ($options['frozen']) {
                 throw new \RuntimeException("--frozen needs a lock, and there is none at {$lockFile}");
             }
-            $resolution = writeResolution($descriptor, $descriptorPath, $options['registry'], $catalog, $options['output'], (bool) $options['dryRun']);
+            $resolution = writeResolution($descriptor, $descriptorPath, $options['registry'], $catalog, $options['output'], (bool) $options['dryRun'], (bool) $options['allowBad']);
             $lock = $resolution['document'];
             $resolved = true;
-        } else {
-            $problems = lockDisagreements($lock, $catalog->entries(lockedPackageNames($lock)));
+        }
+
+        $entries = $catalog->entries(lockedPackageNames($lock));
+        if (!$resolved) {
+            $problems = lockDisagreements($lock, $entries);
             if ($problems !== []) {
                 throw new \RuntimeException(
                     "the lock does not match the catalog:\n  " . \implode("\n  ", $problems)
@@ -105,6 +124,21 @@ function runInstallCommand(array $argv): int
             throw new \RuntimeException($registryProblem . ' — run `moggi update` against the registry you mean');
         }
 
+        $bad = badPackagesAmong($entries);
+        if ($bad !== [] && !$options['allowBad']) {
+            throw new \RuntimeException(badPackagesRefusal(
+                $bad,
+                'in this lock',
+                'pass --allow-bad to install them anyway',
+            ));
+        }
+        foreach ($bad as $name => $marker) {
+            \fwrite(STDERR, 'warning: ' . badPackageProblem($name, $marker) . "\n");
+        }
+        foreach (unmaintainedPackagesAmong($entries) as $name => $marker) {
+            \fwrite(STDERR, 'warning: ' . unmaintainedPackageNote($name, $marker) . "\n");
+        }
+
         if ($options['dryRun']) {
             \printf("would install %d package%s from %s\n", \count($lock['packages'] ?? []), \count($lock['packages'] ?? []) === 1 ? '' : 's', $options['registry']);
             foreach (($lock['packages'] ?? []) as $name => $entry) {
@@ -114,7 +148,7 @@ function runInstallCommand(array $argv): int
             return 0;
         }
 
-        $result = installLockedPackages($options['registry'], $lock, $catalog->entries(lockedPackageNames($lock)), !$options['noCache'], null, $log, $catalog->blobsBase());
+        $result = installLockedPackages($options['registry'], $lock, $entries, !$options['noCache'], null, $log, $catalog->blobsBase());
 
         $extensionProblems = phpExtensionProblems(phpExtensionDescriptors($descriptor, $lock))['problems'];
 

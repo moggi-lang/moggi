@@ -35,7 +35,7 @@ function resolveStaticDocPath(string $docRoot, string $requestPath): ?string
  * For production, run `moggi mogdoc lib -o public/api-doc` and serve the
  * generated directory as static files (nginx, Apache, S3, GitHub Pages, etc.).
  */
-function serveDocs(DocIndex $index, int $port, ?string $docDir = null): int
+function serveDocs(DocIndex $index, int $port, ?string $docDir = null, string $siteTitle = ''): int
 {
     $addr = "127.0.0.1:{$port}";
     $socket = @stream_socket_server("tcp://{$addr}", $errno, $errstr);
@@ -99,7 +99,7 @@ function serveDocs(DocIndex $index, int $port, ?string $docDir = null): int
         }
 
         $hits = search($index, $q, 30);
-        $body = renderSearchPage($index, $q, $hits, $docRoot !== false ? $docRoot : null);
+        $body = renderSearchPage($index, $q, $hits, $docRoot !== false ? $docRoot : null, $siteTitle);
         $response = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n"
             . 'Content-Length: ' . strlen($body) . "\r\n\r\n" . $body;
         fwrite($conn, $response);
@@ -112,7 +112,7 @@ function serveDocs(DocIndex $index, int $port, ?string $docDir = null): int
 }
 
 /** @param list<SearchHit> $hits */
-function renderSearchPage(DocIndex $index, string $query, array $hits, ?string $docRoot = null): string
+function renderSearchPage(DocIndex $index, string $query, array $hits, ?string $docRoot = null, string $siteTitle = ''): string
 {
     $qEsc = escapeHtml($query);
     $action = $docRoot !== null ? '/index.html' : '/';
@@ -145,7 +145,7 @@ function renderSearchPage(DocIndex $index, string $query, array $hits, ?string $
         $results .= '<p class="meta">No results.</p>';
     }
 
-    return docsPageShell('Moggi Index', $form . $results);
+    return docsPageShell('Moggi Index', $form . $results, '', '', false, $siteTitle);
 }
 
 function pathIsUnderDocRoot(string $path, string $root): bool

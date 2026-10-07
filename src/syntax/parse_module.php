@@ -7,7 +7,7 @@ use Moggi\Syntax\Ast\ImportDecl;
 use Moggi\Syntax\Lexer\TokenKind;
 
 use function Moggi\Syntax\Ast\moduleName;
-use function Moggi\Syntax\isTypeOperator;
+use function Moggi\Syntax\isConstructorOperator;
 
 /**
  * @return array{assoc: string, precedence: ?int, operators: array<int, string>}
@@ -139,7 +139,7 @@ function parseModuleExportItem(ParserState $state, ?string $section = null): arr
 
     if (isAt($state, TokenKind::LParen)) {
         $name = parseParenthesizedOperator($state);
-        if (isTypeOperator($name)) {
+        if (isConstructorOperator($name)) {
             $item = ['tag' => 'type', 'name' => $name];
             if (isAt($state, TokenKind::LParen)) {
                 $item['children'] = parseModuleExportChildren($state);

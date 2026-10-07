@@ -15,15 +15,6 @@ function isConstructorOperator(string $name): bool
 }
 
 /**
- * Type-level operators usable as type constructors (e.g. `:+:`, `:*:`, `:.:`).
- * Same surface rule as constructor operators for this roadmap.
- */
-function isTypeOperator(string $name): bool
-{
-    return isConstructorOperator($name);
-}
-
-/**
  * Data constructor names: ConId (uppercase start) or constructor operators.
  */
 function isConstructorName(string $name): bool

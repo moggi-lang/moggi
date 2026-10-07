@@ -466,7 +466,8 @@ assertTrue(isset($collisionTargets['Docs.Two.x']), 'qualified link target kept f
 $extraLibDir = __DIR__ . '/fixture-extra';
 $appDir = __DIR__ . '/fixture-app';
 $appProject = Docs\loadDocProject($appDir, [$extraLibDir]);
-assertTrue(isset($appProject['modules']['Lib.Extra']), 'loadDocProject resolves --lib modules');
+assertTrue(isset($appProject['prepared']->units['Lib.Extra']), 'loadDocProject type-checks --lib modules');
+assertTrue(!isset($appProject['modules']['Lib.Extra']), 'a --lib module is not documented');
 assertTrue(isset($appProject['modules']['Docs.App']), 'loadDocProject indexes app modules');
 
 foreach ($libIndex->byModule['Prelude'] as $entity) {
@@ -962,6 +963,38 @@ MOG;
 
 $interImportDocProgram = parseModule($interImportDocSource, 'InterImportDoc.mog');
 assertEq('Documents the next import.', $interImportDocProgram->imports[1]->doc ?? null, 'inter-import docs attach to following import');
+
+// A release's docs describe the release. `--lib` roots are how a package's
+// stdlib arrives; the modules there are type-checked but are the dependency's
+// pages, not this release's, and a test suite is not API at all.
+assertTrue(Docs\sourceUnderRoot('/pkg/src/A.mog', '/pkg/'), 'a file under the root is documented');
+assertTrue(!Docs\sourceUnderRoot('/stdlib/lib/A.mog', '/pkg/'), 'a dependency file is not documented');
+assertTrue(Docs\sourceUnderRoot('', '/pkg/'), 'a synthetic module with no path stays');
+
+$scopeDir = sys_get_temp_dir() . '/moggi-mogdoc-scope-' . getmypid();
+@mkdir($scopeDir . '/src', 0777, true);
+@mkdir($scopeDir . '/tests', 0777, true);
+file_put_contents(
+    $scopeDir . '/scope.moggi',
+    "[package]\nname = scope\nversion = 0.1.0\n\n[lib]\nsource-dirs = src\n\n[test-suite]\nmain = Suite\nsource-dirs = tests\n",
+);
+file_put_contents(
+    $scopeDir . '/src/Scope.mog',
+    "module Scope\n  ( idMaybe\n  ) where\n\nimport Data.Maybe\n\nidMaybe :: Maybe a -> Maybe a\nidMaybe m = m\n",
+);
+file_put_contents($scopeDir . '/tests/Suite.mog', "module Suite\n  ( check\n  ) where\n\ncheck :: Int\ncheck = 1\n");
+
+$scopeIndex = Docs\loadOrBuildIndex($scopeDir, [$root . '/lib'], true);
+assertTrue(isset($scopeIndex->byModule['Scope']), 'the documented root is indexed');
+assertTrue(!isset($scopeIndex->byModule['Data.Maybe']), 'a dependency module is not indexed');
+assertTrue(!isset($scopeIndex->byModule['Suite']), 'a test-suite module is not indexed');
+
+@unlink($scopeDir . '/src/Scope.mog');
+@unlink($scopeDir . '/tests/Suite.mog');
+@unlink($scopeDir . '/scope.moggi');
+@rmdir($scopeDir . '/src');
+@rmdir($scopeDir . '/tests');
+@rmdir($scopeDir);
 
 if ($prevCacheDir !== '') {
     putenv('MOGGI_CACHE_DIR=' . $prevCacheDir);

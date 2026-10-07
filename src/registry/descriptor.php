@@ -49,9 +49,16 @@ const DESCRIPTOR_SCHEMA = [
  */
 const DESCRIPTOR_BACKEND_TABLES = ['php.extensions', 'jvm.maven', 'dotnet.nuget'];
 
-/** The sections that carry a `.<id>` suffix, and the keys they accept. */
+/**
+ * The sections that carry a `.<id>` suffix, and the keys they accept.
+ *
+ * `[author.<id>]` takes `automation`: `true` marks a key that signs on a
+ * person's behalf — a CI job — rather than a person, so a reader can tell which
+ * of a package's allowed users is a machine. It labels the key only; it grants
+ * nothing, and the allowed-user list is still the catalog's `authors`.
+ */
 const DESCRIPTOR_REPEATABLE_SECTIONS = [
-    'author' => ['name', 'email', 'npub'],
+    'author' => ['name', 'email', 'npub', 'automation'],
     'executable' => ['main', 'source-dirs', 'backend'],
     'test-suite' => ['main', 'source-dirs', 'backend'],
 ];
@@ -164,8 +171,15 @@ function descriptorProblems(string $path): array
         if (!\is_array($values) || !\preg_match('/^author(\.(.+))?$/', (string) $section)) {
             continue;
         }
+        $automation = \trim((string) ($values['automation'] ?? ''));
+        if ($automation !== '' && !\in_array(\strtolower($automation), ['true', 'false'], true)) {
+            $problems[] = "{$path}: [{$section}] `automation = {$automation}` is not `true` or `false`";
+        }
         $npub = \trim((string) ($values['npub'] ?? ''));
         if ($npub === '') {
+            if (\strtolower($automation) === 'true') {
+                $problems[] = "{$path}: [{$section}] `automation = true` names no npub, so it labels no key";
+            }
             continue;
         }
         if (!isNpub($npub)) {
@@ -455,6 +469,7 @@ function isNpub(string $npub): bool
  *   name: string,
  *   version: string,
  *   authors: list<string>,
+ *   automation: list<string>,
  *   dependencies: array<string, string>,
  *   requirements: array<string, list<string>>,
  *   backends: list<string>,
@@ -489,13 +504,18 @@ function readDescriptor(string $path): array
 
     $package = \is_array($ini['package'] ?? null) ? $ini['package'] : [];
     $authors = [];
+    $automation = [];
     $authorEmails = [];
     foreach ($ini as $section => $values) {
         if (!\is_array($values) || !\preg_match('/^author(\.(.+))?$/', (string) $section)) {
             continue;
         }
         if (isset($values['npub'])) {
-            $authors[] = (string) $values['npub'];
+            $npub = (string) $values['npub'];
+            $authors[] = $npub;
+            if (\strtolower(\trim((string) ($values['automation'] ?? ''))) === 'true') {
+                $automation[] = $npub;
+            }
         }
         $email = \trim((string) ($values['email'] ?? ''));
         if ($email !== '') {
@@ -515,6 +535,7 @@ function readDescriptor(string $path): array
         'name' => \trim((string) ($package['name'] ?? '')),
         'version' => \trim((string) ($package['version'] ?? '')),
         'authors' => $authors,
+        'automation' => $automation,
         'dependencies' => $dependencies,
         'requirements' => $requirements,
         'backends' => descriptorBackends($ini, $path),
@@ -565,17 +586,6 @@ function optionalString(array $ini, string $section, string $key): ?string
 }
 
 /**
- * Every backend this compiler can build for, which is what an unset
- * `[package] backends` means.
- *
- * @return list<string>
- */
-function allBackends(): array
-{
-    return \Moggi\Backend\implementedBackendIds();
-}
-
-/**
  * `[package] backends` — the backends a package says it can be built for.
  *
  * Optional, and absent means every backend: a package that is pure Moggi works
@@ -597,10 +607,10 @@ function descriptorBackends(array $ini, string $path): array
     $package = \is_array($ini['package'] ?? null) ? $ini['package'] : [];
     $raw = \trim((string) ($package['backends'] ?? ''));
     if ($raw === '') {
-        return allBackends();
+        return \Moggi\Backend\implementedBackendIds();
     }
 
-    $known = allBackends();
+    $known = \Moggi\Backend\implementedBackendIds();
     $backends = [];
     foreach (splitList($raw) as $backend) {
         if ($path !== '' && !\in_array($backend, $known, true)) {

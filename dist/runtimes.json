@@ -1,5 +1,4 @@
 {
-  "_comment": "Third-party runtimes bundled into Moggi distributions. Versions mirror the development environment in flake.nix; update both together, then run `php packaging/pin.php` to refresh dist/runtimes.lock.json (exact URLs + hashes). A target/runtime pair that is not listed here has no upstream build and is reported as unsupported rather than substituted. `composer` and `maven` are the host tools `[php] composer` and `[jvm.maven]` dependencies are resolved with: a variant bundles the tool for the backend it is named after (`moggi` both, `moggi-php` composer, `moggi-jvm` maven), and `[dotnet] nuget` needs no runtime of its own because the bundled .NET SDK already carries `dotnet nuget`.",
   "linuxGlibcFloor": "2.35",
 
   "targets": {
@@ -20,7 +19,6 @@
         "url": "https://www.php.net/license/3_01.txt",
         "acknowledgement": "This product includes PHP software, freely available from <https://www.php.net/software/>."
       },
-      "note": "php.net publishes Windows binaries only. On Linux and macOS the official source release is built with a pinned minimal configuration — this is the only official upstream PHP for those platforms, and it keeps every architecture on a genuine build of the same source release.",
       "checksumsUrl": "https://www.php.net/releases/index.php?json&version={version}",
       "extensions": ["bcmath", "intl", "mbstring"],
       "configureFlags": [
@@ -57,7 +55,6 @@
         "name": "MIT (Linux and macOS); .NET Library License (Windows)",
         "file": "LICENSE.txt"
       },
-      "note": ".NET 8 SDK, at the newest patch upstream publishes metadata for (the flake pins the `dotnet = 8` series; the patch level follows upstream so the official SHA-512 from the release metadata is available for every asset).",
       "asset": {
         "format": "tar.gz",
         "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/{version}/dotnet-sdk-{version}-{dotnetRid}.tar.gz",
@@ -80,7 +77,6 @@
         "name": "GPLv2 with Classpath Exception",
         "file": "NOTICE"
       },
-      "note": "A plain JDK, separate from GraalVM: the jvm backend targets Java 21, and `javac`/`java` come from here. The Adoptium API redirects to a pinned GitHub release asset; `packaging/pin.php` records the exact URL and SHA-256.",
       "asset": {
         "format": "tar.gz",
         "url": "https://api.adoptium.net/v3/binary/latest/{version}/ga/{jvmOs}/{jvmArch}/jdk/hotspot/normal/eclipse",
@@ -103,7 +99,6 @@
         "name": "GPLv2 with Classpath Exception (Community Edition)",
         "file": "LICENSE_NATIVEIMAGE.txt"
       },
-      "note": "GraalVM Community for JDK 21.0.2: the last line that ships a macOS x86_64 build, and the same Java 21 the jvm backend targets. Windows ARM64 has no GraalVM build at all, so distributions that need native-image are not produced for it.",
       "asset": {
         "format": "tar.gz",
         "url": "https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-{version}/graalvm-community-jdk-{version}_{graalvmAsset}_bin.tar.gz",
@@ -131,7 +126,6 @@
         "file": "LICENSE",
         "url": "https://raw.githubusercontent.com/composer/composer/{version}/LICENSE"
       },
-      "note": "Composer is distributed as a single phar, not an archive, so this asset is `format: plain`: the file is downloaded and hash-checked, a `bin/composer` shim beside it runs it on the bundled PHP (or the one on PATH), and the identical phar is used on every platform. Like the compiler itself, it is a PHP program rather than a native binary, so the glibc floor does not apply to it.",
       "asset": {
         "format": "plain",
         "url": "https://getcomposer.org/download/{version}/composer.phar",
@@ -148,7 +142,6 @@
         "name": "Apache License 2.0",
         "file": "LICENSE"
       },
-      "note": "A plain Apache Maven binary distribution: JVM bytecode plus the `mvn` launcher scripts, so one asset serves every architecture. It runs on the bundled JDK — the compiler exports JAVA_HOME when `runtime/jvm` is present — and only variants that bundle a JDK ship it. Apache publishes a `.sha512` sidecar rather than a `.sha256`, which is why the asset names `sha512Url`.",
       "asset": {
         "format": "tar.gz",
         "url": "https://archive.apache.org/dist/maven/maven-3/{version}/binaries/apache-maven-{version}-bin.tar.gz",
@@ -176,7 +169,6 @@
         "acknowledgement": "This product includes PHP software, freely available from <https://www.php.net/software/>.",
         "dump": true
       },
-      "note": "The runtime a native executable is built from: PHP with the micro SAPI, statically linked, which runs whatever PHAR is appended to it. It is not downloaded — `build` says how it is made, and `packaging/runtimes.php` compiles it for the target with the `spc` build tool, so it carries the same extensions as the `php` runtime (intl included, which is what the IntlChar foreigns in Data.Char and Data.String need) and the patch level follows the PHP series spc pins. The whole set of licences it links is dumped into runtime/php-native/license/ by spc itself, because a statically linked PHP with ICU has more terms than PHP's own.",
       "build": {
         "tool": "spc",
         "php": "8.5",
@@ -187,7 +179,6 @@
     "spc": {
       "version": "2.8.5",
       "upstream": "github.com/crazywhalecc/static-php-cli",
-      "note": "static-php-cli's `spc`, the build tool that compiles the micro PHP runtime. It is a build input and is never bundled or put on PATH: `packaging/runtimes.php` runs it to produce `runtime/php-native/micro.sfx` and throws the tool away. The asset is the self-contained binary from the project's own GitHub release — not a Composer checkout — so a packaging run needs no PHP toolchain beyond the one already building the compiler.",
       "checksumsUrl": "https://api.github.com/repos/crazywhalecc/static-php-cli/releases/tags/{version}",
       "unix": {
         "format": "tar.gz",
@@ -209,7 +200,6 @@
     "zig": {
       "version": "0.15.2",
       "upstream": "ziglang.org",
-      "note": "The compiler static-php-cli's Zig toolchain builds the micro PHP runtime with. It is a build input that is never bundled, but it has to be pinned: when `pkgroot/zig` is not already complete, `spc` installs whatever Zig is newest, and Zig 0.16.0 miscompiles static-musl code — its `strnlen` reads past the buffer, so any such binary (the micro runtime included) segfaults before it can do anything. `packaging/runtimes.php` installs this Zig, and the wrappers `spc` looks for beside it, into the build's `pkgroot/zig`, so `spc` uses the pinned compiler instead of fetching one.",
       "checksumsUrl": "https://ziglang.org/download/index.json",
       "unix": {
         "format": "tar.xz",

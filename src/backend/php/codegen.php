@@ -582,12 +582,6 @@ function emitIoCall(IR\Stmt $stmt, int $indent, array $ctx): string
     };
 }
 
-/** @return list<string> */
-function localsUsedInBlock(IR\Block $block): array
-{
-    return collectLocalsInBlock($block);
-}
-
 function runtimeRequirePath(string $sourcePath, array $options = []): string
 {
     $relative = $options['outputRelative'] ?? $sourcePath;

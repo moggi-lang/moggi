@@ -229,6 +229,45 @@ function assertNsec(string $nsec, string $where): string
 }
 
 /**
+ * POST one signed JSON body to a registry route, and return the response.
+ *
+ * The bytes are signed and sent unchanged, and the path in the signature is the
+ * route the body is sent to, so a body cannot be moved to another route. A
+ * non-2xx is returned rather than thrown: the registry's errors are structured,
+ * and the caller decides how to report them.
+ *
+ * @return array{status: int, reason: string, body: string}
+ */
+function postSignedWrite(string $base, string $route, string $json, string $nsec, string $npub): array
+{
+    $url = \rtrim($base, '/') . $route;
+
+    return httpSend(
+        $url,
+        'POST',
+        [...writeAuthHeaders(requestHost($url), 'POST', $route, $json, $nsec, $npub), 'Content-Type: application/json'],
+        $json,
+        false,
+    );
+}
+
+/**
+ * A registry error body (`{error, message}`) as one line, or the raw text.
+ *
+ * Shared by every write verb, so a refused `publish`, `bad` or `unmaintained`
+ * reports the registry's machine code and message the same way.
+ */
+function registryError(string $body): string
+{
+    $decoded = \json_decode($body, true);
+    if (\is_array($decoded) && isset($decoded['error'])) {
+        return $decoded['error'] . ': ' . ($decoded['message'] ?? '');
+    }
+
+    return \trim($body) === '' ? 'no response body' : \trim($body);
+}
+
+/**
  * The author whose npub signs the release.
  *
  * `--as` names one; without it a single-author descriptor is unambiguous, and

@@ -8,7 +8,7 @@ use function Moggi\Backend\Meta\lambdaCaptureNamesInBlock;
 use function Moggi\Backend\Php\Codegen\emitBlock;
 use function Moggi\Backend\Php\Codegen\emitOperand;
 use function Moggi\Backend\Php\Codegen\emitRetValue;
-use function Moggi\Backend\Php\Codegen\localsUsedInBlock;
+use function Moggi\IR\Visit\collectLocalsInBlock;
 use function Moggi\Backend\Php\Intrinsics\emitSrcLocExpr;
 use function Moggi\Backend\Php\Naming\mangleVar;
 use function Moggi\Backend\Php\Naming\phpTemp;
@@ -61,7 +61,7 @@ function emitIoAssignAction(IR\Stmt $stmt, int $indent, array $ctx): string
     $collectAssigned($body);
 
     $captured = [];
-    foreach ([...localsUsedInBlock($body), ...IR\Visit\collectLocalsInOperand($result)] as $name) {
+    foreach ([...collectLocalsInBlock($body), ...IR\Visit\collectLocalsInOperand($result)] as $name) {
         if (!isset($assignedLocals[$name])) {
             $captured[$name] = '$' . mangleVar($name);
         }

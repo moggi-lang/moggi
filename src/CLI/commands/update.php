@@ -4,11 +4,15 @@ namespace Moggi\CLI\Commands;
 
 use Moggi\Registry\FetchLog;
 
+use function Moggi\Registry\badPackageProblem;
+use function Moggi\Registry\badPackagesAmong;
 use function Moggi\Registry\findDescriptor;
 use function Moggi\Registry\lockPath;
 use function Moggi\Registry\readDescriptor;
 use function Moggi\Registry\readLock;
 use function Moggi\Registry\shortNpub;
+use function Moggi\Registry\unmaintainedPackageNote;
+use function Moggi\Registry\unmaintainedPackagesAmong;
 
 /**
  * `moggi update` — the same resolution as `install`, but allowed to move, and the
@@ -35,6 +39,7 @@ function updateUsage(): string
                            (default: MOGGI_REGISTRY, else {$default})
       -o, --output FILE    lock file to rewrite (default: moggi.lock)
       --dry-run            report the changes without writing the lock
+      --allow-bad          resolve even though the registry marked a package bad
       --no-cache           re-fetch metadata instead of using what is held
       --json               machine-readable envelope
       -h, --help           show this help
@@ -44,20 +49,23 @@ function updateUsage(): string
 /** @param list<string> $argv */
 function runUpdateCommand(array $argv): int
 {
-    foreach (\array_slice($argv, 2) as $argument) {
-        if ($argument === 'help' || $argument === '--help' || $argument === '-h') {
-            echo updateUsage() . "\n";
+    $spec = new CommandSpec('update', updateUsage(), [
+        ['name' => 'dryRun'],
+        ['name' => 'json'],
+        ['name' => 'noCache'],
+        ['name' => 'allowBad'],
+    ]);
 
-            return 0;
-        }
+    if (wantsHelp($argv)) {
+        echo commandHelp($spec);
+
+        return 0;
     }
 
     try {
-        $options = packagingOptions($argv, ['dryRun', 'json', 'noCache'], []);
+        $options = parseArgs($argv, $spec);
     } catch (\InvalidArgumentException $error) {
-        \fwrite(STDERR, 'error: ' . $error->getMessage() . "\n\n" . updateUsage() . "\n");
-
-        return 1;
+        return commandError($spec, $error);
     }
 
     try {
@@ -69,7 +77,15 @@ function runUpdateCommand(array $argv): int
 
         $lockFile = lockPath($descriptorPath, $options['output']);
         $before = readLock($lockFile);
-        $resolution = writeResolution($descriptor, $descriptorPath, $options['registry'], $catalog, $options['output'], (bool) $options['dryRun']);
+        $resolution = writeResolution($descriptor, $descriptorPath, $options['registry'], $catalog, $options['output'], (bool) $options['dryRun'], (bool) $options['allowBad']);
+
+        $entries = $catalog->entries(\array_map('strval', \array_keys($resolution['chosen'])));
+        foreach (badPackagesAmong($entries) as $name => $marker) {
+            \fwrite(STDERR, 'warning: ' . badPackageProblem($name, $marker) . "\n");
+        }
+        foreach (unmaintainedPackagesAmong($entries) as $name => $marker) {
+            \fwrite(STDERR, 'warning: ' . unmaintainedPackageNote($name, $marker) . "\n");
+        }
 
         $changes = lockChanges($before, $resolution['chosen']);
 

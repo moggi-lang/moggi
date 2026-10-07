@@ -5,6 +5,8 @@ namespace Moggi\Semantics\Deriving;
 use Moggi\Syntax\Ast;
 use Moggi\Semantics\Types\TypeCheckState;
 
+use function Moggi\Semantics\Types\typeFail;
+
 /**
  * Stock `deriving Bounded`.
  *
@@ -17,7 +19,7 @@ function deriveBounded(
     Ast\DerivingClassRef $ref,
 ): DerivedInstance {
     if ($decl->constructors === []) {
-        throw typeFailDerive(
+        throw typeFail(
             $state,
             'cannot derive Bounded: empty data type has no constructors',
             $ref,
@@ -50,7 +52,7 @@ function deriveBounded(
     }
 
     if (count($decl->constructors) !== 1) {
-        throw typeFailDerive(
+        throw typeFail(
             $state,
             'cannot derive Bounded: multiple constructors with fields are not supported',
             $ref,

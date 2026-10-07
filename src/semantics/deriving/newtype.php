@@ -9,6 +9,8 @@ use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Semantics\Types\TypeCheckState;
 use Moggi\Syntax\Ast;
 
+use function Moggi\Semantics\Types\typeFail;
+
 /**
  * Generalized newtype deriving: reuse the underlying type's instance by
  * unwrapping / rewrapping the newtype constructor.
@@ -37,21 +39,21 @@ function deriveViaNewtype(
     Ast\DerivingClassRef $ref,
 ): DerivedInstance {
     if (!$decl->isNewtype) {
-        throw typeFailDerive(
+        throw typeFail(
             $state,
             "cannot derive newtype `{$ref->name}`: not a newtype declaration",
             $ref,
         );
     }
     if (refusesNewtypeDeriving($ref->name)) {
-        throw typeFailDerive(
+        throw typeFail(
             $state,
             "cannot derive newtype `{$ref->name}`: use stock deriving for Generic",
             $ref,
         );
     }
     if (!isset($state->classes[$ref->name])) {
-        throw typeFailDerive(
+        throw typeFail(
             $state,
             "unknown class `{$ref->name}` in deriving clause",
             $ref,
@@ -81,7 +83,7 @@ function assertNominalGndEligible(TypeCheckState $state, Ast\DerivingClassRef $r
             continue;
         }
         if (internalTypeUsesParamAsConstructor($methodInfo['type'], $classParam)) {
-            throw typeFailDerive(
+            throw typeFail(
                 $state,
                 "cannot derive newtype `{$ref->name}`: class is higher-kinded "
                     . '(only Functor, Foldable, and Traversable are supported for `* -> *`)',
@@ -240,7 +242,7 @@ function deriveNewtypeFunctorial(
 ): DerivedInstance {
     $param = lastDataParamName($decl);
     if ($param === null) {
-        throw typeFailDerive(
+        throw typeFail(
             $state,
             "cannot derive newtype `{$ref->name}`: newtype has no type parameter",
             $ref,
@@ -250,7 +252,7 @@ function deriveNewtypeFunctorial(
     $rep = newtypeRepresentation($decl);
     $field = $rep['field'];
     if (!$field instanceof Ast\TypeApp) {
-        throw typeFailDerive(
+        throw typeFail(
             $state,
             "cannot derive newtype `{$ref->name}`: representation must be an application `f {$param}`",
             $ref,
@@ -258,7 +260,7 @@ function deriveNewtypeFunctorial(
     }
     $lastArg = $field->args[count($field->args) - 1] ?? null;
     if (!$lastArg instanceof Ast\TypeVar || $lastArg->name !== $param) {
-        throw typeFailDerive(
+        throw typeFail(
             $state,
             "cannot derive newtype `{$ref->name}`: representation must end in type parameter `{$param}`",
             $ref,
@@ -311,7 +313,7 @@ function deriveNewtypeFunctorial(
                 $ref,
             ),
         ],
-        default => throw typeFailDerive($state, "internal: bad functorial class", $ref),
+        default => throw typeFail($state, "internal: bad functorial class", $ref),
     };
 
     return new DerivedInstance(
