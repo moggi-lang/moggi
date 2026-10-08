@@ -1,12 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
-{-# BACKEND
-  php = Data.Double.PHP
-  jvm = Data.Double.JVM
-  dotnet = Data.Double.DotNet
-#-}
 module Data.Double
   ( Double(..)
-  , Floating(..)
   ) where
 
 import Data.Bool
@@ -304,87 +298,26 @@ decodeScaleUp x e = case doubleCompare# x 4503599627370496.0 of
   _ -> (integerFromInt (doubleToInt# x), e)
 
 -- ---------------------------------------------------------------------------
--- Floating
--- ---------------------------------------------------------------------------
-
-infixr 8 **
-
--- | Trigonometric and hyperbolic functions and related functions.
+-- Floating Double: the semantic transcendental API on `Double`.
 --
--- The methods with a default body are exactly `base`'s: @('**')@, @'logBase'@,
--- @'sqrt'@, @'tan'@, @'tanh'@, @'log1p'@, @'expm1'@, @'log1pexp'@ and @'log1mexp'@.
-class Fractional a => Floating a where
-  -- | The constant @π@.
-  pi :: a
-  -- | @'exp' x@ is the exponential of @x@.
-  exp :: a -> a
-  -- | @'log' x@ is the natural logarithm of @x@.
-  log :: a -> a
-  -- | @'sqrt' x@ is the square root of @x@.
-  sqrt :: a -> a
-  -- | @'x' ** 'y'@ raises @x@ to the power @y@.
-  (**) :: a -> a -> a
-  -- | @'logBase' b x@ is the logarithm of @x@ to base @b@.
-  logBase :: a -> a -> a
-  -- | @'sin'@, @'cos'@ and @'tan'@ are the trigonometric functions.
-  sin, cos, tan :: a -> a
-  -- | @'asin'@, @'acos'@ and @'atan'@ are the inverse trigonometric functions.
-  asin, acos, atan :: a -> a
-  -- | @'sinh'@, @'cosh'@ and @'tanh'@ are the hyperbolic functions.
-  sinh, cosh, tanh :: a -> a
-  -- | @'asinh'@, @'acosh'@ and @'atanh'@ are the inverse hyperbolic functions.
-  asinh, acosh, atanh :: a -> a
-  -- | @'log1p' x@ computes @'log' (1 + x)@, but provides more precise results
-  -- for small (absolute) values of @x@ if possible.
-  log1p :: a -> a
-  -- | @'expm1' x@ computes @'exp' x - 1@, but provides more precise results for
-  -- small (absolute) values of @x@ if possible.
-  expm1 :: a -> a
-  -- | @'log1pexp' x@ computes @'log' (1 + 'exp' x)@, but provides more precise
-  -- results if possible.
-  log1pexp :: a -> a
-  -- | @'log1mexp' x@ computes @'log' (1 - 'exp' x)@, but provides more precise
-  -- results if possible.
-  log1mexp :: a -> a
-
-  (**) x y = exp (log x * y)
-  logBase x y = log y / log x
-  sqrt x = x ** 0.5
-  tan x = sin x / cos x
-  tanh x = sinh x / cosh x
-  log1p x = log (1 + x)
-  expm1 x = exp x - 1
-  log1pexp x = log1p (exp x)
-  log1mexp x = log1p (negate (exp x))
+-- `Floating` itself lives in `Data.Real`; the host math comes from the
+-- compiler's `double*#` intrinsics (via `Moggi.Internal.Prim`), the same way
+-- `Double`'s arithmetic does. `java.lang.Math` has no `asinh`/`acosh`/`atanh`,
+-- so those three are derived from `log` and `sqrt` on every backend.
+-- ---------------------------------------------------------------------------
 
 instance Floating Double where
   pi = 3.141592653589793
-  exp x = doubleExp x
-  log x = doubleLog x
-  sqrt x = doubleSqrt x
-  sin x = doubleSin x
-  cos x = doubleCos x
-  asin x = doubleAsin x
-  acos x = doubleAcos x
-  atan x = doubleAtan x
-  sinh x = doubleSinh x
-  cosh x = doubleCosh x
-  -- `java.lang.Math` has no `asinh`/`acosh`/`atanh`, so they are derived here
-  -- from `log` and `sqrt` (their standard algebraic forms) on every backend.
+  exp x = doubleExp# x
+  log x = doubleLog# x
+  sqrt x = doubleSqrt# x
+  sin x = doubleSin# x
+  cos x = doubleCos# x
+  asin x = doubleAsin# x
+  acos x = doubleAcos# x
+  atan x = doubleAtan# x
+  sinh x = doubleSinh# x
+  cosh x = doubleCosh# x
   asinh x = log (x + sqrt (x * x + 1.0))
   acosh x = log (x + sqrt (x * x - 1.0))
   atanh x = 0.5 * log ((1.0 + x) / (1.0 - x))
-
--- ---------------------------------------------------------------------------
--- The host math behind the `Floating` instance. Backend-provided (not exported):
--- each backend module fills these from its host's math library.
-doubleExp :: Double -> Double
-doubleLog :: Double -> Double
-doubleSqrt :: Double -> Double
-doubleSin :: Double -> Double
-doubleCos :: Double -> Double
-doubleAsin :: Double -> Double
-doubleAcos :: Double -> Double
-doubleAtan :: Double -> Double
-doubleSinh :: Double -> Double
-doubleCosh :: Double -> Double

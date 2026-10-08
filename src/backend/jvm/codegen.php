@@ -1368,6 +1368,15 @@ function emitDoubleBinopToStack(EmitEnv $env, string $op, IR\Operand $left, IR\O
     boxDouble($env);
 }
 
+/** One-argument `java.lang.Math` call on a boxed `Double` (sqrt, exp, sin, ...). */
+function emitDoubleUnaryMath(EmitEnv $env, string $method, IR\Operand $arg): void
+{
+    emitOperand($env, $arg);
+    unboxDouble($env);
+    $env->c->invokestatic($env->cp->methodRef('java/lang/Math', $method, '(D)D'), 2, 2);
+    boxDouble($env);
+}
+
 function emitOperand(EmitEnv $env, IR\Operand $op): void
 {
     if ($op instanceof IR\ConstInt || $op instanceof IR\ConstChar) {
@@ -1837,6 +1846,36 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             unboxDouble($env);
             $env->c->invokestatic($env->cp->methodRef('java/lang/Math', 'signum', '(D)D'), 2, 2);
             boxDouble($env);
+            return;
+        case 'doubleExp#':
+            emitDoubleUnaryMath($env, 'exp', $args[0]);
+            return;
+        case 'doubleLog#':
+            emitDoubleUnaryMath($env, 'log', $args[0]);
+            return;
+        case 'doubleSqrt#':
+            emitDoubleUnaryMath($env, 'sqrt', $args[0]);
+            return;
+        case 'doubleSin#':
+            emitDoubleUnaryMath($env, 'sin', $args[0]);
+            return;
+        case 'doubleCos#':
+            emitDoubleUnaryMath($env, 'cos', $args[0]);
+            return;
+        case 'doubleAsin#':
+            emitDoubleUnaryMath($env, 'asin', $args[0]);
+            return;
+        case 'doubleAcos#':
+            emitDoubleUnaryMath($env, 'acos', $args[0]);
+            return;
+        case 'doubleAtan#':
+            emitDoubleUnaryMath($env, 'atan', $args[0]);
+            return;
+        case 'doubleSinh#':
+            emitDoubleUnaryMath($env, 'sinh', $args[0]);
+            return;
+        case 'doubleCosh#':
+            emitDoubleUnaryMath($env, 'cosh', $args[0]);
             return;
         case 'intNegate#':
             emitOperand($env, $args[0]);

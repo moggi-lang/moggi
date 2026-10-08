@@ -115,6 +115,14 @@ function emit(IR\Module $module, string $sourcePath, array $options = []): strin
         $lines[] = '';
     }
 
+    if (moduleHasMainEntry($module)) {
+        $lines[] = 'if (\\PHP_INT_SIZE < 8) {';
+        $lines[] = '    \\fwrite(\\STDERR, "moggi: this program requires 64-bit PHP (PHP_INT_SIZE=8); detected " . \\PHP_INT_SIZE . "-byte int\\n");';
+        $lines[] = '    exit(70);';
+        $lines[] = '}';
+        $lines[] = '';
+    }
+
     $mapLineIndex = \count($lines);
 
     if (moduleUsesPartialApply($module) || moduleUsesMoggiRuntime($module) || moduleHasMainEntry($module)) {

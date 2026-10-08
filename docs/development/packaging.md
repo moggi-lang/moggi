@@ -207,7 +207,9 @@ which is how an original author keeps their name on a package they have handed o
 does not carry `bug-reports`, `category`, `changelog`, `stability` or `tested-with` yet — they are
 deferred rather than forgotten. What a package needs *from* a backend is separate: its runtime
 floor (`[php] version`, `[jvm] version`, `[dotnet] version`), its runtime requirements
-(`[php.extensions]`), and the host-tool tables above. The compiler is a native executable, so a
+(`[php.extensions]`), and the host-tool tables above. A 64-bit PHP host is a floor in its own
+right and is not declared: the compiler, the PHAR stub and every emitted entry module check
+`PHP_INT_SIZE >= 8` at startup and abort, since a 32-bit host cannot represent `Int`. The compiler is a native executable, so a
 descriptor declares only what a compiled program needs — there is one requirement set, not one per
 role.
 

@@ -58,7 +58,7 @@ Haskell `base`'s API (porting rules and the few deliberate differences are in
 Not there yet, and listed so nobody hunts for them: `Data.Ratio`,
 `Data.Complex`, `Data.Fixed`, `Data.Functor.Identity`, `Data.Functor.Const`, and
 `Control.Monad.Reader`/`State`/`ST`. Classes that exist only in part (`RealFrac`,
-`Floating`, `RealFloat`, most `Read` instances, `CallStack`) are listed in §7 of
+`RealFloat`, most `Read` instances, `CallStack`) are listed in §7 of
 [differences-to-haskell.md](differences-to-haskell.md), which is the one place
 that tracks what is still missing.
 

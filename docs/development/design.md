@@ -187,7 +187,7 @@ No magic operators or builtins in the typechecker. Everything is defined in stdl
 - **`Semigroup`**, **`Eq`**, **`Ord`**, **`Num`**, **`Integral`**, **`Fractional`**, **`Functor`**, **`Foldable`** (dictionary passing for constrained calls; class param kinds inferred when omitted).
 - **`Semigroup`:** `(<>) :: a -> a -> a` (Haskell-aligned append operator).
 - **`Ord` superclass `Eq`.**
-- **Numeric tower:** `Num` → `Int` / `Integer` / `Double`; `Integral` → `Int` / `Integer`; `Fractional` → `Double`. No `Real` / `Floating` / `Float`.
+- **Numeric tower:** `Num` → `Int` / `Integer` / `Double`; `Integral` → `Int` / `Integer`; `Fractional` → `Double`; `Floating` → `Double`. No `Real` / `RealFrac` / `RealFloat` / `Float`.
 - **Multi-constraint** from day one: `(Eq a, Ord a) => …` (several constraints share one parenthesized context).
 - **Instances anywhere** — no orphan restriction; e.g. `instance Eq Maybe` may live in `maybe.mog` but need not.
 - **One dictionary per class** per call; optimizer removes dicts when instance is known (monomorphic `1 + 1` → direct `intAdd#`).
@@ -260,7 +260,7 @@ Implementation: `src/semantics/kinds.php` (`inferKindAst`, `inferDataKind`, `inf
 ### `Integer` vs `Int`
 
 - **`Integer`** — a separate type, arbitrary precision, in `Data.Integer` with one implementation per backend. Numeric literals desugar through `fromInteger :: Integer -> a`, so `1 + 2` at `Integer` never goes near a machine word. PHP represents it as a decimal string and computes with [bcmath](https://www.php.net/manual/en/book.bc.php) (`lib/Data/Integer/PHP.mog`); the JVM and .NET use their own big-integer types. `Int` is a *view* of it (`integerToInt`), not its representation.
-- **`Int`** — signed 64-bit machine integer (JVM `long`, .NET `long`, PHP host `int` on a 64-bit build), with `Bounded` matching those 64 bits. It **wraps** on overflow on every backend and there is no `Overflow` exception: PHP's arithmetic promotes to `float` past `PHP_INT_MAX`, so the codegen clamps back into the 64-bit range and the optimizer refuses a constant fold that would leave it.
+- **`Int`** — signed 64-bit machine integer (JVM `long`, .NET `long`, PHP host `int` on a 64-bit build), with `Bounded` matching those 64 bits. It **wraps** on overflow on every backend and there is no `Overflow` exception: PHP's arithmetic promotes to `float` past `PHP_INT_MAX`, so the codegen clamps back into the 64-bit range and the optimizer refuses a constant fold that would leave it. A 64-bit PHP host is mandatory: the compiler and every emitted program abort at startup when `PHP_INT_SIZE < 8`.
 - **Defaulting** — an ambiguous numeric literal defaults to `Int`, not `Integer`. That is a deliberate deviation (Haskell defaults to `Integer`) and is listed in [differences-to-haskell.md](../differences-to-haskell.md).
 
 ## Where each decision is pinned

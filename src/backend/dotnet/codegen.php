@@ -1407,6 +1407,15 @@ function emitDoubleBinopToStack(EmitEnv $env, string $op, IR\Operand $left, IR\O
     boxDouble($env);
 }
 
+/** One-argument `System.Math` call on a boxed `Double` (Sqrt, Exp, Sin, ...). */
+function emitDotNetDoubleUnaryMath(EmitEnv $env, string $method, IR\Operand $arg): void
+{
+    emitOperand($env, $arg);
+    unboxDouble($env);
+    $env->m->emit('call float64 [System.Runtime]System.Math::' . $method . '(float64)');
+    boxDouble($env);
+}
+
 /** int32 0/1 boolean on the stack → its logical negation (still int32 0/1). */
 function invertBool(EmitEnv $env): void
 {
@@ -2235,6 +2244,46 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             unboxDouble($env);
             $env->m->emit('call float64 [System.Runtime]System.Math::Abs(float64)');
             boxDouble($env);
+
+            return;
+        case 'doubleExp#':
+            emitDotNetDoubleUnaryMath($env, 'Exp', $args[0]);
+
+            return;
+        case 'doubleLog#':
+            emitDotNetDoubleUnaryMath($env, 'Log', $args[0]);
+
+            return;
+        case 'doubleSqrt#':
+            emitDotNetDoubleUnaryMath($env, 'Sqrt', $args[0]);
+
+            return;
+        case 'doubleSin#':
+            emitDotNetDoubleUnaryMath($env, 'Sin', $args[0]);
+
+            return;
+        case 'doubleCos#':
+            emitDotNetDoubleUnaryMath($env, 'Cos', $args[0]);
+
+            return;
+        case 'doubleAsin#':
+            emitDotNetDoubleUnaryMath($env, 'Asin', $args[0]);
+
+            return;
+        case 'doubleAcos#':
+            emitDotNetDoubleUnaryMath($env, 'Acos', $args[0]);
+
+            return;
+        case 'doubleAtan#':
+            emitDotNetDoubleUnaryMath($env, 'Atan', $args[0]);
+
+            return;
+        case 'doubleSinh#':
+            emitDotNetDoubleUnaryMath($env, 'Sinh', $args[0]);
+
+            return;
+        case 'doubleCosh#':
+            emitDotNetDoubleUnaryMath($env, 'Cosh', $args[0]);
 
             return;
         case 'doubleSignum#':

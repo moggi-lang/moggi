@@ -189,15 +189,15 @@ PHPSTUB
 #!/usr/bin/env php
 <?php declare(strict_types=1);
 
-// The runtime must be loaded before the entry module's bootstrap routes an
-// uncaught exception through Moggi\\reportUncaught. Source maps stay where they
-// were emitted; a report loads only the ones its frames name.
+if (\PHP_INT_SIZE < 8) {
+    \fwrite(\STDERR, 'moggi: this program requires 64-bit PHP (PHP_INT_SIZE=8); detected ' . \PHP_INT_SIZE . '-byte int' . \PHP_EOL);
+    exit(70);
+}
+
 require_once 'phar://' . __FILE__ . '/_runtime.php';
 
 {$locate}
 
-// The entry module's embedded bootstrap runs main() (and routes uncaught
-// exceptions through Moggi\\reportUncaught) when required.
 if (\$entryFile !== null) {
     require_once \$entryFile;
 }

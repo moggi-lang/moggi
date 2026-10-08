@@ -27,6 +27,14 @@ namespace Moggi\Compiler;
     }
 })();
 
+// `Int` is 64-bit on every backend and the PHP backend's arithmetic assumes a
+// native 64-bit int; a 32-bit PHP host cannot represent Moggi's `Int` at all.
+if (\PHP_INT_SIZE < 8) {
+    \fwrite(\STDERR, 'moggi: the compiler requires 64-bit PHP (PHP_INT_SIZE=8); detected '
+        . \PHP_INT_SIZE . "-byte int\n");
+    exit(70);
+}
+
 require __DIR__ . '/errors.php';
 require __DIR__ . '/cache/cache.php';
 require __DIR__ . '/version.php';
