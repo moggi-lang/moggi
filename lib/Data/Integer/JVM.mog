@@ -1,5 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
-module Moggi.Internal.Integer.JVM
+module Data.Integer.JVM
   ( integerAdd
   , integerSub
   , integerMul

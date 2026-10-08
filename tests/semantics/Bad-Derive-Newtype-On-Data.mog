@@ -1,4 +1,4 @@
-import Moggi.Internal.Num
+import Data.Num
 import Data.Eq
 
 -- GND rejected on ordinary data (even single ctor / single field)

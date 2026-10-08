@@ -1,4 +1,4 @@
-import Moggi.Internal.Real
+import Data.Real
 import Text.Show
 import System.IO
 

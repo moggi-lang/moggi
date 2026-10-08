@@ -2,7 +2,7 @@
 
 -- A declaration with no signature still has a type its callers can use.
 --
--- No `Moggi.Internal.Num` here, so `+` and `-` are the standalone `Int` operations, as in
+-- No `Data.Num` here, so `+` and `-` are the standalone `Int` operations, as in
 -- `Data.List` itself: `countGo` is inferred with no dictionary at all.
 
 import Data.Int

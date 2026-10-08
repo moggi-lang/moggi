@@ -34,7 +34,7 @@ import Control.Monad
 import Data.Char (Char)
 import System.IO.Base (IO, FilePath)
 import Moggi.Err
-import Moggi.Internal.Integer (integerFromInt)
+import Data.Integer (integerFromInt)
 import Data.Maybe
 import Data.String
 

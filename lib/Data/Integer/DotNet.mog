@@ -1,5 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
-module Moggi.Internal.Integer.DotNet
+module Data.Integer.DotNet
   ( integerAdd
   , integerSub
   , integerMul

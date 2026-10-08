@@ -1,5 +1,5 @@
 import Data.Char
-import Moggi.Internal.Float
+import Data.Double
 import Data.Int
 import Data.Maybe
 import Data.Ord

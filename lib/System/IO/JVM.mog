@@ -32,7 +32,7 @@ import Moggi.Err
 import Moggi.IO.Exception
 import Data.Char (Char, chr)
 import Data.Int
-import Moggi.Internal.Integer
+import Data.Integer
 import Data.Maybe
 import Data.String
 import Moggi.Internal.Prim

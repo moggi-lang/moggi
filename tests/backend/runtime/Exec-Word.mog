@@ -1,7 +1,7 @@
 import Data.Bool
 import Data.Bounded
 import Data.Eq
-import Moggi.Internal.Num
+import Data.Num
 import Data.Ord
 import Text.Show
 import Data.Word

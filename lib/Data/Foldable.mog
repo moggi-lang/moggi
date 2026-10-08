@@ -30,7 +30,7 @@ import Moggi.Err
 import Data.Functor
 import Data.Maybe
 import Data.Monoid
-import Moggi.Internal.Num
+import Data.Num
 import Data.Ord
 import Data.Semigroup
 import Moggi.Internal.Prim

@@ -129,7 +129,7 @@ import Moggi.Err
 import Data.Foldable
 import Data.Functor
 import Data.Int
-import Moggi.Internal.Real
+import Data.Real
 import Data.Maybe
 import Data.Monoid
 import Data.Ord

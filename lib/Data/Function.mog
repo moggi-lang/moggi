@@ -2,6 +2,7 @@
 module Data.Function
   ( -- * "Prelude" re-exports
     id, const, (.), flip, ($)
+  , asTypeOf
     -- * Other combinators
   , (&)
   , fix
@@ -20,6 +21,13 @@ infixr 0 $
 ----------------------------------------------
 -- The function type
 ----------------------------------------------
+
+-- | @'asTypeOf' x y@ returns @x@. The second argument is only there for its
+-- type: @'asTypeOf' x y@ pins @y@ to the type of @x@, which is how a value is
+-- attached to an expected type in an expression that has nothing else to say
+-- about it.
+asTypeOf :: a -> a -> a
+asTypeOf = const
 
 -- | Identity function.
 --

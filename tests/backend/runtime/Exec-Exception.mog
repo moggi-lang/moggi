@@ -2,7 +2,7 @@ import Control.Exception
 import Data.Bits
 import Data.Either
 import Data.Int
-import Moggi.Internal.Real
+import Data.Real
 import Data.Maybe
 import Text.Show
 import Moggi.Exception.Type

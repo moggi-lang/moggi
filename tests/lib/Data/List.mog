@@ -2,7 +2,7 @@
 -- of base's API, the Foldable re-exports, and the `generic*` family. Strings are
 -- not lists in Moggi (`String` is host-native), so `<>` is the string append
 -- while `++` covers `[a]`.
-import Moggi.Internal.Real
+import Data.Real
 import Data.List
 
 main :: IO ()

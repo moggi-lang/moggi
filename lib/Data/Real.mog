@@ -1,5 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
-module Moggi.Internal.Real
+module Data.Real
   ( Integral(..)
   , Fractional(..)
   , fromIntegral
@@ -11,7 +11,7 @@ module Moggi.Internal.Real
   , lcm
   ) where
 
-import Moggi.Internal.Num
+import Data.Num
 import Data.Ord
 import Data.Enum
 import Data.Tuple
@@ -24,7 +24,7 @@ infixl 7 `quot`, `rem`, `div`, `mod`
 infixl 7 /
 
 -- Integer is bootstrap-available; instances live in the module that defines the
--- type (`Moggi.Internal.Integer`, `Data.Int`).
+-- type (`Data.Integer`, `Data.Int`).
 
 class Num a => Fractional a where
   (/) :: a -> a -> a

@@ -2,7 +2,7 @@ import Data.Bool
 import Data.ByteString.Char8 qualified as C
 import Data.Eq
 import Data.Int
-import Moggi.Internal.Integer
+import Data.Integer
 import Data.Maybe
 import Data.Ord
 import Text.Show

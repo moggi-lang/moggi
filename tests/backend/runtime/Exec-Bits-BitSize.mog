@@ -1,7 +1,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 import Data.Bits
-import Moggi.Internal.Real
-import Moggi.Internal.Num
+import Data.Real
+import Data.Num
 import Text.Show
 import System.IO
 

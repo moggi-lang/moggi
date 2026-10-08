@@ -41,6 +41,7 @@ module Prelude
   , Integral(..)
   , fromIntegral
   , Fractional(..)
+  , Floating(..)
   , subtract
   , even
   , odd
@@ -147,21 +148,20 @@ import Data.Eq
 import Data.Foldable
 import Data.Functor hiding (unzip)
 import Data.Monoid
-import Moggi.Internal.Num
-import Moggi.Internal.Real
+import Data.Num
+import Data.Real
 import Data.Semigroup
 import Text.Show
 import Data.Ord
 import Data.Enum
 import Data.Bounded
-import Data.Function (id, const, (.), flip, ($))
-import Moggi.Internal.Base (asTypeOf)
+import Data.Function (id, const, (.), flip, ($), asTypeOf)
 
 import Data.Bool
 import Data.Char (Char)
 import Data.Int
-import Moggi.Internal.Integer
-import Moggi.Internal.Float
+import Data.Integer
+import Data.Double
 import Data.String (String, lines, pack, words, unlines, unpack, unwords)
 import Data.Maybe (Maybe(..), maybe)
 import Data.Either

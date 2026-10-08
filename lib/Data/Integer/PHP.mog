@@ -1,5 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
-module Moggi.Internal.Integer.PHP
+module Data.Integer.PHP
   ( integerAdd
   , integerSub
   , integerMul

@@ -48,7 +48,7 @@ import Control.Monad
 import Data.Bool
 import Data.Eq
 import Data.Int
-import Moggi.Internal.Integer
+import Data.Integer
 import Data.Maybe (Maybe)
 import Data.Ord
 import Text.Show

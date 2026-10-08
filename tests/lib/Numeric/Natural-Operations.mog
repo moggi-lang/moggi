@@ -4,10 +4,10 @@ import Data.Bits
 import Data.Bool
 import Data.Enum
 import Data.Eq
-import Moggi.Internal.Integer
-import Moggi.Internal.Real
+import Data.Integer
+import Data.Real
 import Data.Maybe
-import Moggi.Internal.Num
+import Data.Num
 import Data.Ord
 import Text.Show
 import Data.Tuple

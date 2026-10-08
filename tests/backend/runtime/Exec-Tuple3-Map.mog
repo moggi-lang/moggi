@@ -1,5 +1,5 @@
 import Data.Functor
-import Moggi.Internal.Num
+import Data.Num
 import Text.Show
 import System.IO
 

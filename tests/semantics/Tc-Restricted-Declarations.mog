@@ -3,7 +3,7 @@
 -- `Int` because `asInt` below pins it. Nothing pins `unpinned`, so that one
 -- takes the default type instead.
 
-import Moggi.Internal.Num
+import Data.Num
 
 count = 1 + 1
 

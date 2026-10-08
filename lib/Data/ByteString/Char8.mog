@@ -136,11 +136,11 @@ import Data.ByteString
 import Data.Char (Char, ord, chr, isSpace, isDigit, digitToInt)
 import Data.Eq
 import Data.Int
-import Moggi.Internal.Integer (Integer, integerFromInt)
+import Data.Integer (Integer, integerFromInt)
 import Data.List qualified as L
 import Data.List.NonEmpty qualified as NE
 import Data.Maybe
-import Moggi.Internal.Num
+import Data.Num
 import Data.Ord
 import Data.String qualified as S
 import Data.Tuple

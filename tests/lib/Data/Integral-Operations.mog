@@ -1,4 +1,4 @@
--- Moggi.Internal.Real's arithmetic helpers: `subtract`, `even`/`odd`, `gcd`/`lcm`,
+-- Data.Real's arithmetic helpers: `subtract`, `even`/`odd`, `gcd`/`lcm`,
 -- `(^)` and `(^^)`. The sign and zero cases are the ones base calls out, and the
 -- powers cover the exponent shapes the squaring loop has to get right (0, 1,
 -- even, odd, and negative for `(^^)`). `Int` and `Integer` both, because

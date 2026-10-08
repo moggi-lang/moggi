@@ -259,7 +259,7 @@ Implementation: `src/semantics/kinds.php` (`inferKindAst`, `inferDataKind`, `inf
 
 ### `Integer` vs `Int`
 
-- **`Integer`** — a separate type, arbitrary precision, in `Moggi.Internal.Integer` with one implementation per backend. Numeric literals desugar through `fromInteger :: Integer -> a`, so `1 + 2` at `Integer` never goes near a machine word. PHP represents it as a decimal string and computes with [bcmath](https://www.php.net/manual/en/book.bc.php) (`lib/Moggi/Internal/Integer/PHP.mog`); the JVM and .NET use their own big-integer types. `Int` is a *view* of it (`integerToInt`), not its representation.
+- **`Integer`** — a separate type, arbitrary precision, in `Data.Integer` with one implementation per backend. Numeric literals desugar through `fromInteger :: Integer -> a`, so `1 + 2` at `Integer` never goes near a machine word. PHP represents it as a decimal string and computes with [bcmath](https://www.php.net/manual/en/book.bc.php) (`lib/Data/Integer/PHP.mog`); the JVM and .NET use their own big-integer types. `Int` is a *view* of it (`integerToInt`), not its representation.
 - **`Int`** — signed 64-bit machine integer (JVM `long`, .NET `long`, PHP host `int` on a 64-bit build), with `Bounded` matching those 64 bits. It **wraps** on overflow on every backend and there is no `Overflow` exception: PHP's arithmetic promotes to `float` past `PHP_INT_MAX`, so the codegen clamps back into the 64-bit range and the optimizer refuses a constant fold that would leave it.
 - **Defaulting** — an ambiguous numeric literal defaults to `Int`, not `Integer`. That is a deliberate deviation (Haskell defaults to `Integer`) and is listed in [differences-to-haskell.md](../differences-to-haskell.md).
 

@@ -25,8 +25,8 @@ import Data.Eq
 -- For `Show Int` (the `Enum` error messages render an `Int` tag).
 import Data.Int
 import Data.Semigroup
-import Moggi.Internal.Real
-import Moggi.Internal.Num
+import Data.Real
+import Data.Num
 import Data.Ord
 import Text.Show
 import Data.Tuple

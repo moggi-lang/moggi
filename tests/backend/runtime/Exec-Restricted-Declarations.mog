@@ -3,7 +3,7 @@
 -- arithmetic. Nothing pins `unpinned`, so it takes the default type and its
 -- literals are built at that type.
 
-import Moggi.Internal.Num
+import Data.Num
 import Text.Show
 import System.IO
 

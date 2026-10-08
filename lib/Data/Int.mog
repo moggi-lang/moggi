@@ -19,8 +19,8 @@ module Data.Int
 import Data.Eq
 import Data.Ord
 import Data.Semigroup
-import Moggi.Internal.Num
-import Moggi.Internal.Real
+import Data.Num
+import Data.Real
 import Data.Bool
 import Data.Bounded
 import Data.Enum

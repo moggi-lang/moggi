@@ -1,7 +1,7 @@
 module Tc.Fixity
 
 import Data.Eq
-import Moggi.Internal.Num
+import Data.Num
 import Data.Int
 import Data.List
 

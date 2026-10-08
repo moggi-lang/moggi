@@ -39,7 +39,7 @@ import Data.Eq
 import Data.Function
 import Data.Functor
 import Data.Maybe
-import Moggi.Internal.Num
+import Data.Num
 import Data.Ord
 import Data.Semigroup
 import Text.Show

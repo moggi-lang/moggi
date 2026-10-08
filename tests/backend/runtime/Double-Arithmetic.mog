@@ -1,4 +1,4 @@
-import Moggi.Internal.Float
+import Data.Double
 import Data.Eq
 import Data.Ord
 import Text.Show

@@ -1,6 +1,6 @@
 import Data.Bool
 import Data.Functor
-import Moggi.Internal.Num
+import Data.Num
 import Text.Show
 import Data.Tuple
 import System.IO

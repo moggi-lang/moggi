@@ -1,16 +1,16 @@
 {-# LANGUAGE NoImplicitPrelude #-}
-module Moggi.Internal.Num
+module Data.Num
   ( Num(..)
   , subtract
   ) where
 
 -- Integer is a bootstrap primitive synonym; this module does not import the
--- module that defines `Integer`'s operations, so `Moggi.Internal.Integer` can
+-- module that defines `Integer`'s operations, so `Data.Integer` can
 -- define `instance Num Integer` without an import cycle.
 --
 --   * Num         -- arithmetic shared by Int, Integer, Double
---   * Integral    -- integer division (Int, Integer)   [Moggi.Internal.Real]
---   * Fractional  -- real division (Double)            [Moggi.Internal.Real]
+--   * Integral    -- integer division (Int, Integer)   [Data.Real]
+--   * Fractional  -- real division (Double)            [Data.Real]
 
 infixl 6 +, -
 infixl 7 *

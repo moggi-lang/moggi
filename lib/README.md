@@ -21,12 +21,14 @@ signature is not obvious; nothing here is hidden behind a build step.
 
 - `Prelude.mog` is the re-export list — the names every module sees without an
   `import`. The public modules re-export from it, not the other way round.
-- `Moggi.Internal.*` is where implementation lives: the primitives
-  (`Moggi.Internal.Prim`, `Moggi.Internal.IO`), the numeric types, the
-  `Show`/`Read` machinery. Import it only when working on the library.
 - `Data.*`, `Control.*`, `System.*`, `Text.*` and `Numeric.*` are the names a
   program is meant to use: `Data.List`, `Data.Maybe`, `Data.Map`, `System.IO`,
-  `Control.Monad`, …
+  `Control.Monad`, … — including the numeric types and classes (`Data.Int`,
+  `Data.Integer`, `Data.Double`, `Data.Num`, `Data.Real`) and `Text.Show` /
+  `Text.Read`.
+- `Moggi.Internal.*` is reserved for the compiler/primitive boundary:
+  `Moggi.Internal.Prim` and `Moggi.Internal.IO` are compiler-synthesized and are
+  the only `Moggi.Internal` modules. Nothing else belongs there.
 - `Data.Foo.PHP`, `Data.Foo.JVM` and `Data.Foo.DotNet` are one module's
   per-backend implementations. A module that has them also has a facade that
   picks the right one, and the facade is what you import — never the backend.

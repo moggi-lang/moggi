@@ -34,7 +34,7 @@ import Data.ByteString (ByteString)
 import Data.ByteString qualified as B
 import Data.Char (ord, chr)
 import Data.Int
-import Moggi.Internal.Real (quot)
+import Data.Real (quot)
 import Data.String hiding (pack, unpack, length, take, drop, isPrefixOf, isSuffixOf)
 import Data.String qualified as S
 import Data.Time.Clock

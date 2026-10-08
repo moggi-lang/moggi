@@ -22,7 +22,7 @@ module Platform.PHP
   ) where
 
 import Data.Bool
-import Moggi.Internal.Float
+import Data.Double
 import Data.Int
 import Data.List hiding (singleton, take, drop, length, isPrefixOf, isSuffixOf)
 import Data.Maybe

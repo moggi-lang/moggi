@@ -22,7 +22,7 @@ import Data.Ord
 import Text.Show
 import Data.Bool
 import Data.Int
-import Moggi.Internal.Real
+import Data.Real
 import Data.String
 import Control.Applicative
 import Control.Monad

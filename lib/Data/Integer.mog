@@ -1,10 +1,10 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# BACKEND
-  php = Moggi.Internal.Integer.PHP
-  jvm = Moggi.Internal.Integer.JVM
-  dotnet = Moggi.Internal.Integer.DotNet
+  php = Data.Integer.PHP
+  jvm = Data.Integer.JVM
+  dotnet = Data.Integer.DotNet
 #-}
-module Moggi.Internal.Integer
+module Data.Integer
   ( Integer(..)
   -- The operations the class instances are built from, so that other modules
   -- defining an instance for a type over `Integer` can use them too: inside an
@@ -43,9 +43,9 @@ import Data.Enum
 import Data.Eq
 import Data.Ord
 import Data.Tuple
-import Moggi.Internal.Num
-import Moggi.Internal.Real
-import Moggi.Internal.Show
+import Data.Num
+import Data.Real
+import Text.Show
 import Moggi.Exception
 import Moggi.Internal.Prim
 

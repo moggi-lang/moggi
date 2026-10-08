@@ -3,8 +3,8 @@ import Control.Monad
 import Data.Bool
 import Data.Bounded
 import Data.Eq
-import Moggi.Internal.Real
-import Moggi.Internal.Num
+import Data.Real
+import Data.Num
 import Data.Ord
 import Text.Show
 import Data.Word

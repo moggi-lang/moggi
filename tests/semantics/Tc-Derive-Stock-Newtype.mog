@@ -5,7 +5,7 @@ import Data.Enum
 import Data.Bounded
 import Text.Read
 import Data.Functor
-import Moggi.Internal.Num
+import Data.Num
 
 -- The stock and newtype deriving strategies in one module: explicit `newtype`
 -- vs single-field `data`, the default (stock) strategy over a full class list,
