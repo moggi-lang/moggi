@@ -36,7 +36,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
 
       - name: Set up PHP for the build scripts
-        uses: shivammathur/setup-php@2.37.2
+        uses: shivammathur/setup-php@2.40.0
         with:
           php-version: '8.5'
           extensions: bcmath, mbstring, zip, phar, ctype, intl
@@ -95,7 +95,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
 
       - name: Set up PHP for the build scripts
-        uses: shivammathur/setup-php@2.37.2
+        uses: shivammathur/setup-php@2.40.0
         with:
           php-version: '8.5'
           extensions: bcmath, mbstring, zip, phar, ctype, intl
@@ -292,7 +292,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
 
       - name: Set up PHP for the build scripts
-        uses: shivammathur/setup-php@2.37.2
+        uses: shivammathur/setup-php@2.40.0
         with:
           php-version: '8.5'
           coverage: none
@@ -336,7 +336,7 @@ jobs:
         run: cd release && sha256sum -c SHA256SUMS
 
       - name: Set up the PHP that the minimal distribution runs on
-        uses: shivammathur/setup-php@2.37.2
+        uses: shivammathur/setup-php@2.40.0
         with:
           php-version: '8.5'
           extensions: bcmath, mbstring, zip, phar, ctype, intl

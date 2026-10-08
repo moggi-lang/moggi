@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
 
       - name: Set up PHP
-        uses: shivammathur/setup-php@2.37.2
+        uses: shivammathur/setup-php@2.40.0
         with:
           php-version: '8.5'
           extensions: bcmath, mbstring, zip, phar, ctype, intl
