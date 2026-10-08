@@ -22,6 +22,7 @@ use Moggi\Semantics\TypeExpr\TStr;
 use Moggi\Semantics\TypeExpr\TStringLit;
 use Moggi\Semantics\TypeExpr\TUnit;
 use Moggi\Semantics\TypeExpr\TVar;
+use Moggi\Semantics\TypeExpr\TVarApp;
 use Moggi\Semantics\TypeExpr\TWord;
 use Moggi\Semantics\TypeExpr\TWord16;
 use Moggi\Semantics\TypeExpr\TWord32;
@@ -170,23 +171,16 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
             }
 
             foreach ($classInfo['methods'] as $methodName => $methodInfo) {
-                $userConstraints = \array_map(
-                    static function (Ast\PendingConstraint $constraint) use ($mapping): Ast\PendingConstraint {
-                        return new Ast\PendingConstraint(
-                            $constraint->class,
-                            \array_map(
-                                static fn (Type $arg): Type => substitute($arg, $mapping),
-                                $constraint->args,
-                            ),
-                            $constraint->evidence,
-                            $constraint->implicit,
-                            $constraint->instanceHeadAst,
-                        );
-                    },
+                $substituted = substituteClassMethod(
+                    $state,
+                    $methodInfo['type'],
                     $methodInfo['userConstraints'] ?? [],
+                    $classInfo['params'],
+                    $mapping,
                 );
+                $userConstraints = $substituted['constraints'];
                 $methodType = peelDictArrows(
-                    substitute($methodInfo['type'], $mapping),
+                    $substituted['type'],
                     count($userConstraints),
                 );
                 $info = [
@@ -1049,10 +1043,10 @@ function inferredFunctionConstraints(TypeCheckState $state, Ast\AstNode $body, T
 }
 
 /**
- * Every variable a signature could quantify over: type variables, and the names
- * standing for higher-kinded parameters -- an unbound `Functor f` is carried as
- * a type constructor until something pins it down (`TCon('f', [arg])` applied,
- * `TCon('f')` bare), and it is a variable in both shapes.
+ * Every variable a signature could quantify over: type variables, bare and
+ * applied (`f` and `f a` are both the variable `f`), plus a type constructor
+ * nothing else has pinned down -- an unbound `Functor f` constraint can still
+ * arrive as a constructor-headed application on its way to being solved.
  *
  * @param array<string, int> $known
  * @return array<string, true>
@@ -1061,6 +1055,13 @@ function signatureVarsInType(Type $type, array $known): array
 {
     if ($type instanceof TVar) {
         return [$type->name => true];
+    }
+
+    if ($type instanceof TVarApp) {
+        return [$type->name => true] + \array_merge([], ...\array_map(
+            static fn (Type $arg): array => signatureVarsInType($arg, $known),
+            $type->args,
+        ));
     }
 
     if ($type instanceof TArrow) {
@@ -4847,7 +4848,10 @@ function resolveTypeCon(TypeCheckState $state, string $name, array $expanding, A
         );
     }
 
-    return new TCon($name);
+    // Not a declared constructor and not upper-case-initial: the parser reads a
+    // bare lower-case name as a type variable, so it stays one. Everything
+    // downstream dispatches on the node, never on the name.
+    return ctype_lower($name[0]) ? new TVar($name) : new TCon($name);
 }
 
 function isUndeclaredNominalTypeCon(TypeCheckState $state, string $name): bool
@@ -4875,7 +4879,7 @@ function applyTypeApp(TypeCheckState $state, Ast\TypeNode $con, array $argAsts, 
         }
         applyTypeAppKinds($state, $con->name, $args, $argAsts, $con, isVarHead: true);
 
-        return new TCon($con->name, $args);
+        return new TVarApp($con->name, $args);
     }
 
     if ($con instanceof Ast\TypeCon && $con->name === Ast\instanceHeadMarker()) {
@@ -4917,7 +4921,16 @@ function applyTypeApp(TypeCheckState $state, Ast\TypeNode $con, array $argAsts, 
         $args[] = astType($state, $argAst, $expanding);
     }
 
-    resolveTypeCon($state, $baseName, $expanding, $con);
+    $resolvedHead = resolveTypeCon($state, $baseName, $expanding, $con);
+
+    // A head that resolved to a type variable is a variable-headed
+    // application, not a constructor: `f a` stays a `TVarApp` all the way
+    // through, so no later stage has to ask whether `f` names a constructor.
+    if ($resolvedHead instanceof TVar) {
+        applyTypeAppKinds($state, $resolvedHead->name, $args, $argAsts, $con, isVarHead: true);
+
+        return new TVarApp($resolvedHead->name, $args);
+    }
 
     $canonical = Kinds\canonicalTypeConName($baseName);
     applyTypeAppKinds($state, $canonical, $args, $argAsts, $con, isVarHead: false);

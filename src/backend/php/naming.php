@@ -35,6 +35,7 @@ function isPhpBuiltin(string $name): bool
 {
     static $builtins = [
         'abs' => true,
+        'assert' => true,
     ];
 
     return isset($builtins[strtolower($name)]);
@@ -117,64 +118,29 @@ function basePhpFunctionName(string $name): string
         return '__lambda_' . substr($name, strlen('λ'));
     }
 
-    if ($name === '+') {
-        return '__op_plus';
-    }
+    $operator = match ($name) {
+        '+' => '__op_plus',
+        '-' => '__op_minus',
+        '*' => '__op_mul',
+        '/' => '__op_div',
+        '==' => '__op_eq',
+        '/=' => '__op_ne',
+        '<>' => '__op_concat',
+        '<' => '__op_lt',
+        '<=' => '__op_lte',
+        '>' => '__op_gt',
+        '>=' => '__op_gte',
+        '&&' => '__op_and',
+        '||' => '__op_or',
+        default => null,
+    };
 
-    if ($name === '-') {
-        return '__op_minus';
-    }
-
-    if ($name === '*') {
-        return '__op_mul';
-    }
-
-    if ($name === '/') {
-        return '__op_div';
-    }
-
-    if ($name === '==') {
-        return '__op_eq';
-    }
-
-    if ($name === '/=') {
-        return '__op_ne';
-    }
-
-    if ($name === '<>') {
-        return '__op_concat';
-    }
-
-    if ($name === '<') {
-        return '__op_lt';
-    }
-
-    if ($name === '<=') {
-        return '__op_lte';
-    }
-
-    if ($name === '>') {
-        return '__op_gt';
-    }
-
-    if ($name === '>=') {
-        return '__op_gte';
-    }
-
-    if ($name === '&&') {
-        return '__op_and';
-    }
-
-    if ($name === '||') {
-        return '__op_or';
+    if ($operator !== null) {
+        return $operator;
     }
 
     if (preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $name) === 1) {
-        if (isPhpKeyword($name) || isPhpBuiltin($name)) {
-            return $name . '_';
-        }
-
-        return $name;
+        return isPhpKeyword($name) || isPhpBuiltin($name) ? $name . '_' : $name;
     }
 
     return '__fn_' . bin2hex($name);

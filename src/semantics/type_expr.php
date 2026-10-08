@@ -78,6 +78,23 @@ final class TVar implements Type
     }
 }
 
+/**
+ * A type *variable* applied to arguments: `f a` where `f` is a variable, not a
+ * type constructor.
+ *
+ * The distinction is the whole point of the node: an applied variable is not a
+ * constructor application, so kind checking, unification, instance search and
+ * printing can dispatch on it instead of inspecting the name of a `TCon` and
+ * asking whether the kind environment happens to know it.
+ */
+final class TVarApp implements Type
+{
+    /** @param list<Type> $args */
+    public function __construct(public readonly string $name, public readonly array $args)
+    {
+    }
+}
+
 final class TCon implements Type
 {
     /** @param array<int, Type> $args */

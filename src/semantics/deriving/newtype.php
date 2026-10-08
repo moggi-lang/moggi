@@ -5,10 +5,13 @@ namespace Moggi\Semantics\Deriving;
 use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TVar;
+use Moggi\Semantics\Kinds;
+use Moggi\Semantics\TypeExpr\TVarApp;
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Semantics\Types\TypeCheckState;
 use Moggi\Syntax\Ast;
 
+use function Moggi\Semantics\Kinds\classParamKind;
 use function Moggi\Semantics\Types\typeFail;
 
 /**
@@ -78,11 +81,13 @@ function assertNominalGndEligible(TypeCheckState $state, Ast\DerivingClassRef $r
 {
     $classInfo = $state->classes[$ref->name];
     $classParam = $classInfo['params'][0]['name'] ?? 'a';
+    $paramIsHigherKinded = ($classInfo['params'][0] ?? null) !== null
+        && classParamKind($state, $classInfo['params'][0]) instanceof Kinds\KArrow;
     foreach ($classInfo['methods'] as $methodName => $methodInfo) {
         if ($ref->name === 'Ord' && in_array($methodName, ['<', '<=', '>', '>=', 'min', 'max'], true)) {
             continue;
         }
-        if (internalTypeUsesParamAsConstructor($methodInfo['type'], $classParam)) {
+        if (internalTypeUsesParamAsConstructor($methodInfo['type'], $classParam, $paramIsHigherKinded)) {
             throw typeFail(
                 $state,
                 "cannot derive newtype `{$ref->name}`: class is higher-kinded "
@@ -93,24 +98,37 @@ function assertNominalGndEligible(TypeCheckState $state, Ast\DerivingClassRef $r
     }
 }
 
-/** True when `$param` appears as a type-constructor head (e.g. `m a`). */
-function internalTypeUsesParamAsConstructor(Type $type, string $param): bool
+/**
+ * True when `$param` appears as a type-constructor head (e.g. `m a`).
+ *
+ * An applied variable (`TVarApp`) is such an occurrence by construction. A bare
+ * `TVar` only counts when the parameter is itself higher-kinded: at kind `Type`
+ * a variable is the parameter used *as* the type, which is exactly what
+ * nominal GND supports.
+ */
+function internalTypeUsesParamAsConstructor(Type $type, string $param, bool $paramIsHigherKinded): bool
 {
-    if ($type instanceof TCon) {
+    if ($type instanceof TVarApp) {
         if ($type->name === $param) {
             return true;
         }
+    } elseif ($type instanceof TVar && $paramIsHigherKinded && $type->name === $param) {
+        return true;
+    }
+
+    if ($type instanceof TVarApp || $type instanceof TCon) {
         foreach ($type->args as $arg) {
-            if (internalTypeUsesParamAsConstructor($arg, $param)) {
+            if (internalTypeUsesParamAsConstructor($arg, $param, $paramIsHigherKinded)) {
                 return true;
             }
         }
 
         return false;
     }
+
     if ($type instanceof TArrow) {
-        return internalTypeUsesParamAsConstructor($type->from, $param)
-            || internalTypeUsesParamAsConstructor($type->to, $param);
+        return internalTypeUsesParamAsConstructor($type->from, $param, $paramIsHigherKinded)
+            || internalTypeUsesParamAsConstructor($type->to, $param, $paramIsHigherKinded);
     }
 
     return false;

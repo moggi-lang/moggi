@@ -18,6 +18,7 @@ use Moggi\Semantics\TypeExpr\TStr;
 use Moggi\Semantics\TypeExpr\TStringLit;
 use Moggi\Semantics\TypeExpr\TUnit;
 use Moggi\Semantics\TypeExpr\TVar;
+use Moggi\Semantics\TypeExpr\TVarApp;
 use Moggi\Semantics\TypeExpr\TWord;
 use Moggi\Semantics\TypeExpr\TWord16;
 use Moggi\Semantics\TypeExpr\TWord32;
@@ -742,51 +743,49 @@ function peerInstanceCoversSuperclass(
  */
 function instanceConstraintsCoveredByDecl(TypeCheckState $state, array $needed, array $available): bool
 {
-    $available = expandConstraintsWithImpliedSuperclasses($state, $available);
+    $availableKeys = [];
+    foreach (expandConstraintsWithImpliedSuperclasses($state, $available) as $have) {
+        if ($have instanceof Ast\TypeApp && $have->con instanceof Ast\TypeCon) {
+            $availableKeys[typeAstKey($have)] = true;
+        }
+    }
 
     foreach ($needed as $need) {
         if (!$need instanceof Ast\TypeApp || !$need->con instanceof Ast\TypeCon) {
             return false;
         }
-        $found = false;
-        foreach ($available as $have) {
-            if (!$have instanceof Ast\TypeApp || !$have->con instanceof Ast\TypeCon) {
-                continue;
-            }
-            if ($have->con->name !== $need->con->name) {
-                continue;
-            }
-            if (count($have->args) !== count($need->args)) {
-                continue;
-            }
-            $argsMatch = true;
-            foreach ($need->args as $i => $needArg) {
-                $haveArg = $have->args[$i];
-                if ($needArg instanceof Ast\TypeVar && $haveArg instanceof Ast\TypeVar) {
-                    if ($needArg->name !== $haveArg->name) {
-                        $argsMatch = false;
-                        break;
-                    }
-                    continue;
-                }
-                if ($needArg instanceof Ast\TypeCon && $haveArg instanceof Ast\TypeCon
-                    && $needArg->name === $haveArg->name) {
-                    continue;
-                }
-                $argsMatch = false;
-                break;
-            }
-            if ($argsMatch) {
-                $found = true;
-                break;
-            }
-        }
-        if (!$found) {
+        if (!isset($availableKeys[typeAstKey($need)])) {
             return false;
         }
     }
 
     return true;
+}
+
+/**
+ * A structural key for a type AST: two nodes get the same key iff they are the
+ * same type, however deeply their arguments nest (variable names included —
+ * within one instance declaration a variable name denotes one type).
+ *
+ * The comparison it replaces looked only one level below the class head and
+ * only recognised `TypeVar`/`TypeCon` arguments, so a constraint whose argument
+ * is itself an application — `Eq (f a)` — never matched, and any instance whose
+ * superclass needed it was rejected as "missing superclass instance".
+ */
+function typeAstKey(TypeNode $type): string
+{
+    return match ($type::class) {
+        Ast\TypeVar::class => 'v:' . $type->name,
+        Ast\TypeCon::class => 'c:' . $type->name,
+        Ast\TypePromoted::class => 'p:' . $type->name,
+        Ast\TypeUnit::class => 'unit',
+        Ast\TypeNatLit::class => 'nat:' . ($type->negative ? '-' : '') . $type->digits,
+        Ast\TypeStringLit::class => 'str:' . $type->value,
+        Ast\TypeApp::class => 'app(' . typeAstKey($type->con) . ';'
+            . \implode(',', \array_map(static fn (TypeNode $arg): string => typeAstKey($arg), $type->args)) . ')',
+        Ast\TypeArrow::class => 'fn(' . typeAstKey($type->from) . '->' . typeAstKey($type->to) . ')',
+        default => 'node:' . $type::class,
+    };
 }
 
 /**
@@ -808,12 +807,7 @@ function expandConstraintsWithImpliedSuperclasses(TypeCheckState $state, array $
             continue;
         }
 
-        $key = $constraint->con->name . "\0" . count($constraint->args);
-        foreach ($constraint->args as $arg) {
-            $key .= "\0" . ($arg instanceof Ast\TypeVar
-                ? 'v:' . $arg->name
-                : ($arg instanceof Ast\TypeCon ? 'c:' . $arg->name : '?'));
-        }
+        $key = typeAstKey($constraint);
         if (isset($seen[$key])) {
             continue;
         }
@@ -1211,16 +1205,19 @@ function instanceMappingForUse(TypeCheckState $state, array $instance, Type $req
 function instanceContextSatisfied(TypeCheckState $state, array $instance, array $mapping, array $visited = []): bool
 {
     $context = instanceContextRequirements($state, $instance, $mapping);
+
     if ($context === null) {
         return false;
     }
 
     foreach ($context as $constraint) {
-        $ctxHead = constraintHeadType($state, $constraint->args);
-        if ($ctxHead instanceof TVar) {
+        $ctxHead = prune($state, constraintHeadType($state, $constraint->args));
+
+        if (typeHeadIsVariable($ctxHead)) {
             continue;
         }
-        if (!findProjectInstance($state, $constraint->class, prune($state, $ctxHead), $visited)) {
+
+        if (!findProjectInstance($state, $constraint->class, $ctxHead, $visited)) {
             return false;
         }
     }
@@ -1499,7 +1496,13 @@ function buildInstanceConstraintEnv(TypeCheckState $state, array $constraints, T
         }
 
         foreach ($classInfo['methods'] as $methodName => $methodInfo) {
-            $mappedType = prune($state, substitute($methodInfo['type'], $mapping));
+            $mappedType = prune($state, substituteClassMethod(
+                $state,
+                $methodInfo['type'],
+                [],
+                $classInfo['params'],
+                $mapping,
+            )['type']);
             if (!$mappedType instanceof TArrow) {
                 continue;
             }
@@ -1661,23 +1664,16 @@ function checkInstanceMethod(
             }
 
             foreach ($classInfo['methods'] as $methodName => $methodInfo) {
-                $nestedUserConstraints = \array_map(
-                    static function (Ast\PendingConstraint $nested) use ($mapping): Ast\PendingConstraint {
-                        return new Ast\PendingConstraint(
-                            $nested->class,
-                            \array_map(
-                                static fn (Type $arg): Type => substitute($arg, $mapping),
-                                $nested->args,
-                            ),
-                            $nested->evidence,
-                            $nested->implicit,
-                            $nested->instanceHeadAst,
-                        );
-                    },
+                $substituted = substituteClassMethod(
+                    $state,
+                    $methodInfo['type'],
                     $methodInfo['userConstraints'] ?? [],
+                    $classInfo['params'],
+                    $mapping,
                 );
+                $nestedUserConstraints = $substituted['constraints'];
                 $methodType = peelDictArrows(
-                    substitute($methodInfo['type'], $mapping),
+                    $substituted['type'],
                     count($nestedUserConstraints),
                 );
                 if (!prune($state, $methodType) instanceof TArrow) {

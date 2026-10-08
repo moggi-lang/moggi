@@ -20,6 +20,7 @@ use Moggi\Semantics\TypeExpr\TStr;
 use Moggi\Semantics\TypeExpr\TStringLit;
 use Moggi\Semantics\TypeExpr\TUnit;
 use Moggi\Semantics\TypeExpr\TVar;
+use Moggi\Semantics\TypeExpr\TVarApp;
 use Moggi\Semantics\TypeExpr\TWord;
 use Moggi\Semantics\TypeExpr\TWord16;
 use Moggi\Semantics\TypeExpr\TWord32;
@@ -40,7 +41,7 @@ function substituteInstanceTypeAst(Ast\TypeNode $type, array $mapping): Ast\Type
             ? internalTypeToAst($mapping[$type->name], [])
             : $type,
         Ast\TypeApp::class => new Ast\TypeApp(
-            $type->con,
+            substituteInstanceTypeAst($type->con, $mapping),
             \array_map(
                 static fn (Ast\TypeNode $arg): Ast\TypeNode => substituteInstanceTypeAst($arg, $mapping),
                 $type->args,
@@ -254,6 +255,7 @@ function typeVars(Type $type): array
 {
     return match ($type::class) {
         TVar::class => [$type->name => true],
+        TVarApp::class => [$type->name => true] + \array_merge([], ...\array_map(typeVars(...), $type->args)),
         TCon::class => \array_merge([], ...\array_map(typeVars(...), $type->args)),
         TArrow::class => [...typeVars($type->from), ...typeVars($type->to)],
         default => [],
@@ -402,10 +404,81 @@ function constructorMappingValue(TypeCheckState $state, array $param, Type $argT
 {
     $kind = Kinds\classParamKind($state, $param);
     if ($kind instanceof Kinds\KArrow && $argType instanceof TVar && $argType->name === $param['name']) {
-        return new TCon($param['name']);
+        return new TVar($param['name']);
     }
 
     return $argType;
+}
+
+/**
+ * Apply arguments to a type that is already a head, keeping a variable head a
+ * variable head (`f` applied to `a` is `TVarApp`, never a constructor).
+ *
+ * @param list<Type> $args
+ */
+function applyArgsToHead(Type $head, array $args): Type
+{
+    if ($args === []) {
+        return $head;
+    }
+
+    return match ($head::class) {
+        TVar::class => new TVarApp($head->name, $args),
+        TVarApp::class => new TVarApp($head->name, [...$head->args, ...$args]),
+        TCon::class => new TCon($head->name, [...$head->args, ...$args]),
+        TPromoted::class => new TPromoted($head->name, [...$head->args, ...$args]),
+        default => throw new \InvalidArgumentException('cannot apply arguments to ' . $head::class),
+    };
+}
+
+/**
+ * Substitute a class method's declared type, and its method-local constraints,
+ * with a class-parameter mapping.
+ *
+ * The mapping sends each of the class's parameters to the type the constraint
+ * was written at, and those types come from the enclosing scope. A mapped type
+ * that reuses a name from the method type would therefore capture it: mapping
+ * `Foldable t` to the argument `a` must not turn `t a -> Bool` into `a a ->
+ * Bool`. Every variable of the method type other than the class parameters is
+ * freshened first, so the mapping can only reach the parameters themselves.
+ *
+ * @param list<Ast\PendingConstraint> $constraints method-local constraints, freshened with the type
+ * @param list<array{name: string}> $params the class's parameters
+ * @param array<string, Type> $mapping
+ * @return array{type: Type, constraints: list<Ast\PendingConstraint>}
+ */
+function substituteClassMethod(
+    TypeCheckState $state,
+    Type $methodType,
+    array $constraints,
+    array $params,
+    array $mapping,
+): array {
+    $keep = [];
+    foreach ($params as $param) {
+        $keep[$param['name']] = true;
+    }
+
+    $freshened = freshenTypeWithConstraintsKeeping($state, $methodType, $constraints, $keep);
+
+    $nested = [];
+    foreach ($freshened['constraints'] as $constraint) {
+        $nested[] = new Ast\PendingConstraint(
+            $constraint->class,
+            \array_map(
+                static fn (Type $arg): Type => substitute($arg, $mapping),
+                $constraint->args,
+            ),
+            $constraint->evidence,
+            $constraint->implicit,
+            $constraint->instanceHeadAst,
+        );
+    }
+
+    return [
+        'type' => substitute($freshened['type'], $mapping),
+        'constraints' => $nested,
+    ];
 }
 
 /** @param array<int, Type> $extraArgs @param array<string, Type> $mapping */
@@ -422,10 +495,24 @@ function applyConSubst(TCon $head, array $extraArgs, array $mapping): Type
 
 /** @param array<string, Type> $mapping */
 
+function substituteVarApp(TVarApp $type, array $mapping): Type
+{
+    $args = \array_map(static fn (Type $arg): Type => substitute($arg, $mapping), $type->args);
+
+    $head = $mapping[$type->name] ?? null;
+
+    return $head === null
+        ? new TVarApp($type->name, $args)
+        : applyArgsToHead($head, $args);
+}
+
+/** @param array<string, Type> $mapping */
+
 function substitute(Type $type, array $mapping): Type
 {
     return match ($type::class) {
         TVar::class => $mapping[$type->name] ?? $type,
+        TVarApp::class => substituteVarApp($type, $mapping),
         TCon::class => substituteCon($type, $mapping),
         TPromoted::class => $type->args === []
             ? $type
@@ -446,7 +533,8 @@ function substitute(Type $type, array $mapping): Type
 
 /**
  * Substitute inside a type constructor. A mapping may rename the constructor
- * head itself (higher-kinded type variables are encoded as nullary `TCon`s).
+ * head itself, so a mapping may rename the constructor or turn it into the
+ * head of a variable application.
  *
  * @param array<string, Type> $mapping
  */
@@ -462,7 +550,7 @@ function substituteCon(TCon $type, array $mapping): Type
     return match (true) {
         $head === null => new TCon($type->name, $substitutedArgs()),
         $head instanceof TCon => applyConSubst($head, $type->args, $mapping),
-        $head instanceof TVar => new TCon($head->name, $substitutedArgs()),
+        $head instanceof TVar, $head instanceof TVarApp => applyArgsToHead($head, $substitutedArgs()),
         default => throw new \InvalidArgumentException('invalid mapping for type constructor'),
     };
 }
@@ -571,6 +659,16 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
         throw typeFail($state, formatUnifyError($state, $left, $right), $at, 'unify');
     }
 
+    if ($left instanceof TVarApp || $right instanceof TVarApp) {
+        if ($left instanceof TVarApp) {
+            unifyVarApp($state, $left, $right, $at);
+        } else {
+            unifyVarApp($state, $right, $left, $at);
+        }
+
+        return;
+    }
+
     if (!$left instanceof TCon || !$right instanceof TCon) {
         if ($left instanceof TArrow && $right instanceof TArrow) {
             unify($state, $left->from, $right->from, $at);
@@ -593,55 +691,48 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
         return;
     }
 
-    $leftHeadIsVar = !isset($state->kindEnv[$left->name]);
-    $rightHeadIsVar = !isset($state->kindEnv[$right->name]);
-
-    if ($leftHeadIsVar && !$rightHeadIsVar && count($left->args) === count($right->args)) {
-        unify($state, new TVar($left->name), new TCon($right->name), $at);
-        foreach ($left->args as $i => $arg) {
-            unify($state, $arg, $right->args[$i], $at);
-        }
-
-        return;
-    }
-
-    if ($rightHeadIsVar && !$leftHeadIsVar && count($left->args) === count($right->args)) {
-        unify($state, new TVar($right->name), new TCon($left->name), $at);
-        foreach ($left->args as $i => $arg) {
-            unify($state, $arg, $right->args[$i], $at);
-        }
-
-        return;
-    }
-
-    if ($leftHeadIsVar && !$rightHeadIsVar
-        && count($left->args) >= 1
-        && count($right->args) > count($left->args)) {
-        unifyHktPartialApp($state, $left, $right, $at);
-
-        return;
-    }
-
-    if ($rightHeadIsVar && !$leftHeadIsVar
-        && count($right->args) >= 1
-        && count($left->args) > count($right->args)) {
-        unifyHktPartialApp($state, $right, $left, $at);
-
-        return;
-    }
-
-    if ($leftHeadIsVar && $rightHeadIsVar
-        && count($left->args) === count($right->args)
-        && count($left->args) >= 1) {
-        unify($state, new TVar($left->name), new TVar($right->name), $at);
-        foreach ($left->args as $i => $arg) {
-            unify($state, $arg, $right->args[$i], $at);
-        }
-
-        return;
-    }
-
     throw typeFail($state, formatUnifyError($state, $left, $right), $at, 'unify');
+}
+
+/**
+ * Unify a variable-headed application (`f a`) with another type.
+ *
+ * The head is a type variable, so it can be bound to whatever the other side
+ * names; the arguments then have to match positionally. Two applied variables
+ * bind their heads to one another.
+ */
+function unifyVarApp(TypeCheckState $state, TVarApp $app, Type $other, ?Ast\AstNode $at): void
+{
+    if ($other instanceof TVarApp) {
+        if (count($app->args) !== count($other->args)) {
+            throw typeFail($state, formatUnifyError($state, $app, $other), $at, 'unify');
+        }
+        unify($state, new TVar($app->name), new TVar($other->name), $at);
+        foreach ($app->args as $i => $arg) {
+            unify($state, $arg, $other->args[$i], $at);
+        }
+
+        return;
+    }
+
+    if ($other instanceof TCon) {
+        if (count($app->args) === count($other->args)) {
+            unify($state, new TVar($app->name), new TCon($other->name), $at);
+            foreach ($app->args as $i => $arg) {
+                unify($state, $arg, $other->args[$i], $at);
+            }
+
+            return;
+        }
+
+        if (count($app->args) < count($other->args)) {
+            unifyHktPartialApp($state, $app, $other, $at);
+
+            return;
+        }
+    }
+
+    throw typeFail($state, formatUnifyError($state, $app, $other), $at, 'unify');
 }
 
 /**
@@ -650,7 +741,7 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
  */
 function unifyHktPartialApp(
     TypeCheckState $state,
-    TCon $hktApp,
+    TVarApp $hktApp,
     TCon $concrete,
     ?Ast\AstNode $at,
 ): void {
@@ -691,6 +782,19 @@ function friendlyTypeVarNames(array $types): array
                 $userVars[$type->name] = true;
             } elseif (!\in_array($type->name, $freshOrder, true)) {
                 $freshOrder[] = $type->name;
+            }
+
+            return;
+        }
+
+        if ($type instanceof TVarApp) {
+            if (preg_match('/^t\d+$/', $type->name) !== 1) {
+                $userVars[$type->name] = true;
+            } elseif (!\in_array($type->name, $freshOrder, true)) {
+                $freshOrder[] = $type->name;
+            }
+            foreach ($type->args as $arg) {
+                $collect($arg);
             }
 
             return;
@@ -751,7 +855,7 @@ function prune(TypeCheckState $state, Type $type): Type
         return $resolved;
     }
 
-    if ($type instanceof TCon) {
+    if ($type instanceof TVarApp) {
         $args = [];
         $changed = false;
         foreach ($type->args as $i => $arg) {
@@ -762,13 +866,21 @@ function prune(TypeCheckState $state, Type $type): Type
             }
         }
 
-        if (!isset($state->kindEnv[$type->name]) && isset($state->subst[$type->name])) {
-            $head = prune($state, $state->subst[$type->name]);
-            if ($head instanceof TCon) {
-                return new TCon($head->name, [...$head->args, ...$args]);
-            }
-            if ($head instanceof TVar) {
-                return new TCon($head->name, $args);
+        if (isset($state->subst[$type->name])) {
+            return applyArgsToHead(prune($state, $state->subst[$type->name]), $args);
+        }
+
+        return $changed ? new TVarApp($type->name, $args) : $type;
+    }
+
+    if ($type instanceof TCon) {
+        $args = [];
+        $changed = false;
+        foreach ($type->args as $i => $arg) {
+            $pruned = prune($state, $arg);
+            $args[$i] = $pruned;
+            if ($pruned !== $arg) {
+                $changed = true;
             }
         }
 
@@ -949,16 +1061,13 @@ function inferredTypeAstToInternal(Ast\TypeNode $type): Type
                 return new TPromoted($type->con->name, $args);
             }
 
-            return new TCon(
-                match (true) {
-                    $type->con instanceof Ast\TypeCon,
-                    $type->con instanceof Ast\TypeVar => $type->con->name,
-                    default => throw new \InvalidArgumentException(
-                        'unexpected inferred type app head: ' . $type->con::class,
-                    ),
-                },
-                $args,
-            );
+            return match ($type->con::class) {
+                Ast\TypeVar::class => new TVarApp($type->con->name, $args),
+                Ast\TypeCon::class => new TCon($type->con->name, $args),
+                default => throw new \InvalidArgumentException(
+                    'unexpected inferred type app head: ' . $type->con::class,
+                ),
+            };
         })(),
         Ast\TypeArrow::class => new TArrow(
             inferredTypeAstToInternal($type->from),
@@ -975,14 +1084,14 @@ function occurs(TypeCheckState $state, string $var, Type $type, ?Ast\AstNode $at
 {
     $type = prune($state, $type);
 
-    if ($type instanceof TVar && $type->name === $var) {
+    if (($type instanceof TVar || $type instanceof TVarApp) && $type->name === $var) {
         $rename = friendlyTypeVarNames([$type]);
         $shown = $rename[$var] ?? $var;
 
         throw typeFail($state, "infinite type: `{$shown}` occurs in itself", $at);
     }
 
-    if ($type instanceof TCon) {
+    if ($type instanceof TCon || $type instanceof TVarApp) {
         foreach ($type->args as $arg) {
             occurs($state, $var, $arg, $at);
         }
@@ -1117,6 +1226,11 @@ function typeToString(Type $type, array $rename = []): string
         TDouble::class => 'Double',
         TUnit::class => '()',
         TVar::class => $rename[$type->name] ?? $type->name,
+        TVarApp::class => ($rename[$type->name] ?? $type->name)
+            . ' ' . join(' ', \array_map(
+                static fn (Type $arg): string => typeToStringArgument($arg, $rename),
+                $type->args,
+            )),
         TPromoted::class => "'" . $type->name . (count($type->args) > 0
             ? ' ' . join(' ', \array_map(static fn (Type $arg): string => typeToString($arg, $rename), $type->args))
             : ''),
@@ -1180,12 +1294,27 @@ function internalTypeToAst(Type $type, array $subst): Ast\TypeNode
                 static fn (Type $arg): Ast\TypeNode => internalTypeToAst($arg, $subst),
                 $type->args,
             )),
+        TVarApp::class => new Ast\TypeApp(new Ast\TypeVar($type->name), \array_map(
+            static fn (Type $arg): Ast\TypeNode => internalTypeToAst($arg, $subst),
+            $type->args,
+        )),
         TArrow::class => new Ast\TypeArrow(
             internalTypeToAst($type->from, $subst),
             internalTypeToAst($type->to, $subst),
         ),
         default => throw new \InvalidArgumentException('unknown type: ' . $type::class),
     };
+}
+
+/**
+ * Whether this type's head is a type variable rather than a type constructor.
+ *
+ * A bare variable (`a`) and an applied one (`f a`) are both variable heads;
+ * the node decides, so nothing has to inspect a name.
+ */
+function typeHeadIsVariable(Type $type): bool
+{
+    return $type instanceof TVar || $type instanceof TVarApp;
 }
 
 function knownTypeConstructorNames(TypeCheckState $state): array

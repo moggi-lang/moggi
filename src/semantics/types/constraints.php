@@ -471,7 +471,13 @@ function buildConstraintEnv(TypeCheckState $state, array $constraints): array
         }
 
         foreach ($classInfo['methods'] as $methodName => $methodInfo) {
-            $mappedType = prune($state, substitute($methodInfo['type'], $mapping));
+            $mappedType = prune($state, substituteClassMethod(
+                $state,
+                $methodInfo['type'],
+                [],
+                $classInfo['params'],
+                $mapping,
+            )['type']);
             if (!$mappedType instanceof TArrow) {
                 continue;
             }
