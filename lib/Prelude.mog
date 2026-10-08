@@ -92,6 +92,7 @@ module Prelude
   , (.)
   , flip
   , ($)
+  , until
   , error
   , errorWithoutStackTrace
   , undefined
@@ -155,7 +156,7 @@ import Text.Show
 import Data.Ord
 import Data.Enum
 import Data.Bounded
-import Data.Function (id, const, (.), flip, ($), asTypeOf)
+import Data.Function (id, const, (.), flip, ($), until, asTypeOf)
 
 import Data.Bool
 import Data.Char (Char)

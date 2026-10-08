@@ -26,12 +26,14 @@ module Control.Exception.Base
   , bracket_
   , bracketOnError
   , finally
+  , assert
   ) where
 
 import Control.Applicative
 import Control.Monad
 import Data.Either
 import Data.Maybe
+import Moggi.Err (error)
 import Moggi.Exception (throw)
 import Moggi.Exception.Type
 import Moggi.Internal.IO
@@ -125,3 +127,12 @@ bracketOnError before after thing = do
 -- designed.
 mapException :: (Exception e1, Exception e2) => (e1 -> e2) -> a -> a
 mapException _ x = x
+
+-- | @'assert' pred x@ returns @x@ when @pred@ holds and fails otherwise.
+--
+-- @base@ raises the @AssertionFailed@ exception; Moggi has no such exception
+-- type yet, so this raises an 'ErrorCall' through 'error'.
+assert :: Bool -> a -> a
+assert pred x = case pred of
+  True -> x
+  False -> error "Assertion failed"

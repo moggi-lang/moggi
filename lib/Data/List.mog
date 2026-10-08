@@ -70,6 +70,8 @@ module Data.List
   , minimumBy
   , lookup
   , find
+  , mapMaybe
+  , catMaybes
   , filter
   , partition
   , (!!)

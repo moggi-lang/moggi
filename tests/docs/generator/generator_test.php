@@ -318,7 +318,7 @@ assertTrue(str_contains($ordHtml, 'comparing :: Ord b =&gt;'), 'Ord comparing sh
 assertTrue(!str_contains($ordHtml, '__Dict_'), 'Ord page hides compiler dict types');
 assertTrue(substr_count($ordHtml, '# Source</a>') >= 5, 'Ord operations and methods show source links');
 assertTrue(str_contains($ordHtml, 'id="v-Data.Ord.comparing"'), 'Ord comparing is indexed');
-assertTrue(str_contains($ordHtml, 'src/Data-Ord.mog.html#L20'), 'Ord comparing links to source line');
+assertTrue(str_contains($ordHtml, 'src/Data-Ord.mog.html#L54'), 'Ord comparing links to source line');
 
 $dictScheme = new \Moggi\Semantics\TypeExpr\Scheme(
     new \Moggi\Semantics\TypeExpr\TArrow(

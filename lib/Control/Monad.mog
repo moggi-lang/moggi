@@ -25,15 +25,15 @@ module Control.Monad
   , mfilter
   ) where
 
+-- mapM / sequence / forM live in Data.Traversable (traverse / sequenceA).
+-- foldM / filterM / zipWithM / replicateM stay list-Kleisli here to avoid a
+-- Control.Monad ↔ Data.Foldable import cycle.
+
 import Control.Applicative
 import Data.Bool
 import Data.Functor
 import Data.Maybe
 import Data.Ord
-
--- mapM / sequence / forM live in Data.Traversable (traverse / sequenceA).
--- foldM / filterM / zipWithM / replicateM stay list-Kleisli here to avoid a
--- Control.Monad ↔ Data.Foldable import cycle.
 
 infixl 1 >>=, >>
 infixr 1 =<<

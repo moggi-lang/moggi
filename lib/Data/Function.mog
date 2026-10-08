@@ -7,6 +7,7 @@ module Data.Function
   , (&)
   , fix
   , on
+  , until
   , applyWhen
   ) where
 
@@ -234,6 +235,20 @@ fix = fix#
 -- * @'flip' on f . 'flip' on g = 'flip' on (g . f)@
 on :: (b -> b -> c) -> (a -> b) -> a -> a -> c
 on op f x y = op (f x) (f y)
+
+-- | @'until' p f x@ applies @f@ to @x@ repeatedly until @p@ holds of the
+-- result, and returns that result. It is the strict loop @base@ keeps in
+-- `GHC.Base`; here it lives beside the other combinators because there is no
+-- internal module to put it in.
+--
+-- ==== __Examples__
+--
+-- >>> until (> 100) (* 2) 1
+-- 128
+until :: (a -> Bool) -> (a -> a) -> a -> a
+until p f x = case p x of
+  True -> x
+  False -> until p f (f x)
 
 -- | 'applyWhen' applies a function to a value if a condition is true,
 -- otherwise, it returns the value unchanged.

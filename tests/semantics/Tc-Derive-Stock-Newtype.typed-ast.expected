@@ -418,7 +418,7 @@ program
     constructor Id
       field  :: a
     deriving (Functor)
-  function map :: t443 -> t444 -> Id t443 -> Id t444
+  function map :: t448 -> t449 -> Id t448 -> Id t449
     pat_var __f
     pat_var __x
     case

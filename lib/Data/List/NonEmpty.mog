@@ -64,6 +64,7 @@ module Data.List.NonEmpty
   , toList
   , nonEmpty
   , xor
+  , sconcat
   ) where
 
 import Control.Applicative
@@ -508,6 +509,21 @@ instance Applicative NonEmpty where
 
 instance Monad NonEmpty where
   (>>=) xs f = bindNe xs f
+
+-- | @'sconcat'@ folds a non-empty structure with @('<>)'@, associating to the
+-- right as @base@'s does.
+--
+-- `base` keeps this in `Data.Semigroup`; that module cannot import this one
+-- (it would cycle — `NonEmpty` has a `Semigroup` instance), so it lives here,
+-- beside `NonEmpty`.
+sconcat :: Semigroup a => NonEmpty a -> a
+sconcat ne = case ne of
+  a :| xs -> sconcatList a xs
+
+sconcatList :: Semigroup a => a -> [a] -> a
+sconcatList acc xs = case xs of
+  [] -> acc
+  b : rest -> acc <> sconcatList b rest
 
 
 

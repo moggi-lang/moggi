@@ -31,8 +31,11 @@ module Data.Monoid
   , getFirst
   , Last(Last)
   , getLast
+  , Alt(Alt)
+  , getAlt
   ) where
 
+import Control.Applicative
 import Data.Bool
 import Data.Bounded
 import Data.Eq
@@ -301,3 +304,33 @@ instance (Ord a, Bounded a) => Monoid (Min a) where
 
 instance (Ord a, Bounded a) => Monoid (Max a) where
   mempty = minBound
+
+-- Alt
+
+-- | A monoid on an 'Alternative' value under its @('<|>')@, with 'empty' as
+-- the neutral element.
+data Alt f a = Alt (f a)
+
+getAlt :: Alt f a -> f a
+getAlt x = case x of
+  Alt fa -> fa
+
+instance Alternative f => Semigroup (Alt f a) where
+  (<>) a b = Alt (getAlt a <|> getAlt b)
+
+instance Alternative f => Monoid (Alt f a) where
+  mempty = Alt empty
+
+instance Functor f => Functor (Alt f) where
+  map f x = Alt (map f (getAlt x))
+
+instance Eq (f a) => Eq (Alt f a) where
+  (==) a b = getAlt a == getAlt b
+  (/=) a b = getAlt a /= getAlt b
+
+instance Ord (f a) => Ord (Alt f a) where
+  compare a b = compare (getAlt a) (getAlt b)
+
+instance Show (f a) => Show (Alt f a) where
+  showsPrec d x = showParen (d > 10)
+    (\r -> showString "Alt {getAlt = " (showsPrec 0 (getAlt x) (showString "}" r)))

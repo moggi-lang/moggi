@@ -1,0 +1,20 @@
+import Data.Function (until)
+import Data.List (mapMaybe, catMaybes)
+import Data.Maybe
+import Data.Eq
+import Text.Show
+
+-- `until` is the strict loop base keeps in GHC.Base; `mapMaybe`/`catMaybes`
+-- are re-exported from Data.List as base does.
+
+keep :: Int -> Maybe Int
+keep n = case n > 2 of
+  True -> Just (n * 10)
+  False -> Nothing
+
+main :: IO ()
+main = do
+  putStrLn (show (until (> 100) (* 2) 1))
+  putStrLn (show (until (>= 3) (+ 1) 1))
+  putStrLn (show (mapMaybe keep [1, 2, 3, 4]))
+  putStrLn (show (catMaybes [Just 1, Nothing, Just 3]))

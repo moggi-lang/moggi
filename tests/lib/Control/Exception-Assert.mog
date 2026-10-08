@@ -1,0 +1,12 @@
+import Control.Exception (assert)
+import Data.Eq
+import Data.Ord
+import Text.Show
+
+-- `assert` returns its value when the predicate holds. (The failing branch
+-- raises an ErrorCall; base raises AssertionFailed instead — see BASE-AUDIT.md.)
+
+main :: IO ()
+main = do
+  putStrLn (show (assert True 42))
+  putStrLn (show (assert (1 < 2) "ok"))

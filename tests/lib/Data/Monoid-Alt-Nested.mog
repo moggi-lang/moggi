@@ -1,0 +1,41 @@
+import Data.Eq
+import Data.Maybe
+import Data.Monoid
+import Data.Ord
+import Text.Show
+
+-- Instances whose context is an *applied* type variable.
+--
+-- `Eq (f a)` is not satisfiable by instance search alone: `f` is unknown until
+-- a use site fixes it. The solver used to lower the head of that context to a
+-- type constructor named after the variable, so the context never matched, the
+-- instance was reported unusable, and an obligation such as `Eq (Alt f a)`
+-- inside the instance itself was left unresolved.
+--
+-- `Nested` adds the nested case: its `Ord` instance needs the superclass
+-- obligation `Eq (Nested f a)`, whose own context `Eq (f a)` is only reachable
+-- from `Ord (f a)` by expanding that variable-headed constraint's superclasses.
+
+data Nested f a = Nested (f a)
+
+instance Eq (f a) => Eq (Nested f a) where
+  (==) (Nested x) (Nested y) = x == y
+  (/=) (Nested x) (Nested y) = x /= y
+
+instance Ord (f a) => Ord (Nested f a) where
+  compare (Nested x) (Nested y) = compare x y
+
+report :: String -> Bool -> IO ()
+report label b = putStrLn (label <> ": " <> show b)
+
+ordering :: String -> Ordering -> IO ()
+ordering label o = putStrLn (label <> ": " <> show o)
+
+main :: IO ()
+main = do
+  report "alt-eq" (Alt (Just 3) == Alt (Just 3))
+  ordering "alt-compare" (compare (Alt (Just 3)) (Alt (Just 4)))
+  report "alt-lt" (Alt [1, 2] < Alt [1, 3])
+  putStrLn ("alt-max: " <> show (max (Alt (Just 1)) (Alt (Just 2))))
+  report "nested-eq" (Nested (Just "a") == Nested (Just "a"))
+  ordering "nested-compare" (compare (Nested [1, 2]) (Nested [1, 3]))

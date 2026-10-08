@@ -2,11 +2,14 @@
 module Data.Ord
   ( Ord(..)
   , Ordering(..)
+  , Down(Down)
+  , getDown
   , comparing
   , clamp
   ) where
 
 import Data.Eq
+import Data.Functor
 import Text.Show
 import Moggi.Internal.Prim
 
@@ -50,6 +53,32 @@ class Eq a => Ord a where
 
 comparing :: Ord b => (a -> b) -> a -> a -> Ordering
 comparing f x y = compare (f x) (f y)
+
+-- | A wrapper whose 'Ord' is the reverse of the wrapped type's, so that
+-- sorting on it puts the larger values first.
+--
+-- > Down x <= Down y  ==  y <= x
+--
+-- Only the ordering is reversed: 'Eq' still compares the wrapped values.
+data Down a = Down a
+
+getDown :: Down a -> a
+getDown d = case d of
+  Down x -> x
+
+instance Eq a => Eq (Down a) where
+  (==) a b = getDown a == getDown b
+  (/=) a b = getDown a /= getDown b
+
+instance Ord a => Ord (Down a) where
+  compare a b = compare (getDown b) (getDown a)
+
+instance Functor Down where
+  map f d = Down (f (getDown d))
+
+instance Show a => Show (Down a) where
+  showsPrec d x = showParen (d > 10)
+    (\r -> showString "Down {getDown = " (showsPrec 0 (getDown x) (showString "}" r)))
 
 -- | Restrict a value to be within the given lower and upper bounds.
 clamp :: Ord a => (a, a) -> a -> a

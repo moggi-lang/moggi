@@ -26,6 +26,7 @@ module Control.Exception
   , bracketOnError
   , finally
   , onException
+  , assert
   ) where
 
 import Control.Exception.Base

@@ -1,0 +1,6 @@
+alt-eq: True
+alt-compare: LT
+alt-lt: True
+alt-max: Alt {getAlt = Just 2}
+nested-eq: True
+nested-compare: LT
