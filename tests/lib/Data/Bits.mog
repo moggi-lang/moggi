@@ -2,6 +2,7 @@
 import Control.Monad
 import Data.Bits
 import Data.Bool
+import Data.Bounded
 import Data.Int
 import Data.Real
 import Data.Maybe
@@ -279,6 +280,24 @@ main = do
   putStrLn (show (getAnd (And (i8 15) <> And (i8 3))))
   putStrLn (show (getIff (Iff (i8 0) <> Iff (i8 0))))
 
+  -- Word and Word64 hold the full unsigned 64-bit range, so their host
+  -- representation is negative above maxBound :: Int; showing and ordering
+  -- them has to treat the bits as unsigned.
+  putStrLn (show (maxBound :: Word))
+  putStrLn (show (minBound :: Word))
+  putStrLn (show (maxBound :: Word > w 0))
+  putStrLn (show (w 0 > maxBound :: Word))
+  putStrLn (show (w 1 < maxBound :: Word))
+  putStrLn (show (signum (maxBound :: Word)))
+  putStrLn (show (signum (w 0)))
+  putStrLn (show (max (maxBound :: Word) (w 1)))
+  putStrLn (show (min (maxBound :: Word) (w 1)))
+  putStrLn (show (maxBound :: Word64))
+  putStrLn (show (maxBound :: Word64 > w64 0))
+  putStrLn (show (w64 1 < maxBound :: Word64))
+  putStrLn (show (w64 0 < maxBound :: Word64))
+  putStrLn (show (maxBound :: Word32))
+  putStrLn (show (maxBound :: Word32 > w32 0))
 -- Leading zeros, the highest bit, and the width of a 16-bit value, as one
 -- composite line so the readers of a golden file can see the parts.
 unsignedParts :: Word16 -> String

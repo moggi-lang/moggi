@@ -1,0 +1,114 @@
+import Data.Bool
+import Data.ByteString.Char8 qualified as C
+import Data.ByteString qualified as B
+import Data.Char
+import Data.Enum
+import Data.Eq
+import Data.Int
+import Data.Integer
+import Data.Maybe
+import Data.Ord
+import Text.Show
+import Data.Tuple
+import Data.Word
+
+-- Data.ByteString.Char8: the whole surface of the module in one program —
+-- the Latin-1 `pack`/`unpack` truncation and zero extension, the list
+-- operations (`lines`/`words`/`split`/`foldl`/`takeWhile`), `readInt`/
+-- `readInteger`, and the `Char`-taking wrappers (`cons`/`map`/`filter`/
+-- `elem`/`replicate`). One assertion per `putStrLn`, in the order the
+-- sections below are described.
+
+mapOrd cs = case cs of
+  [] -> []
+  c : rest -> ord c : mapOrd rest
+showOrds b = show (mapOrd (C.unpack b))
+inc n ignored = n + 1
+checkThree xs = case xs of
+  a : b : c : [] -> checkThreeUnpacked (C.unpack a) (C.unpack b) (C.unpack c)
+  _ -> False
+checkThreeUnpacked a b c = case a of
+  'a' : [] -> case b of
+    'b' : [] -> case c of
+      'c' : [] -> True
+      _ -> False
+    _ -> False
+  _ -> False
+
+main :: IO ()
+main = do
+  putStrLn (case C.unpack (C.pack "abc") of
+    'a' : 'b' : 'c' : [] -> "ascii-ok"
+    _ -> "ascii-bad")
+  putStrLn (case B.unpack (C.singleton (chr 256)) of
+    w : [] -> case fromEnum w == 0 of
+      True -> "trunc-0100-ok"
+      False -> "trunc-0100-bad"
+    _ -> "trunc-0100-bad")
+  putStrLn (case B.unpack (C.singleton (chr 8364)) of
+    w : [] -> case fromEnum w == 172 of
+      True -> "trunc-20ac-ok"
+      False -> "trunc-20ac-bad"
+    _ -> "trunc-20ac-bad")
+  putStrLn (case C.unpack (B.singleton (toEnum 172)) of
+    c : [] -> case ord c == 172 of
+      True -> "zext-ok"
+      False -> "zext-bad"
+    _ -> "zext-bad")
+  putStrLn (showOrds (C.pack "Hi"))
+  putStrLn (case checkThree (C.lines (C.pack "a\nb\nc")) of
+    True -> "lines-ok"
+    False -> "lines-bad")
+  putStrLn (case C.unpack (C.unlines (C.lines (C.pack "a\nb"))) of
+    'a' : '\n' : 'b' : '\n' : [] -> "unlines-ok"
+    _ -> "unlines-bad")
+  putStrLn (case checkThree (C.words (C.pack "a b  c")) of
+    True -> "words-ok"
+    False -> "words-bad")
+  putStrLn (case C.unpack (C.takeWhile (\c -> c /= ' ') (C.pack "hi there")) of
+    'h' : 'i' : [] -> "takeWhile-ok"
+    _ -> "takeWhile-bad")
+  putStrLn (case C.foldl inc 0 (C.pack "abcd") == 4 of
+    True -> "foldl-ok"
+    False -> "foldl-bad")
+  putStrLn (case checkThree (C.split ',' (C.pack "a,b,c")) of
+    True -> "split-ok"
+    False -> "split-bad")
+  putStrLn (case C.readInt (C.pack "42xyz") of
+    Just pair -> case (fst pair, C.unpack (snd pair)) of
+      (42, 'x' : 'y' : 'z' : []) -> "int-ok"
+      _ -> "int-rest-bad"
+    _ -> "int-bad")
+  putStrLn (case C.readInt (C.pack "-7") of
+    Just pair -> case (fst pair == (0 - 7), C.null (snd pair)) of
+      (True, True) -> "neg-ok"
+      _ -> "neg-bad"
+    _ -> "neg-bad")
+  putStrLn (case C.readInt (C.pack "abc") of
+    Nothing -> "fail-ok"
+    _ -> "fail-bad")
+  putStrLn (case C.readInteger (C.pack "1000!") of
+    Just pair -> case (fst pair == integerFromInt 1000, C.unpack (snd pair)) of
+      (True, '!' : []) -> "integer-ok"
+      _ -> "integer-bad"
+    _ -> "integer-bad")
+  putStrLn (case C.readInt (C.pack "") of
+    Nothing -> "empty-ok"
+    _ -> "empty-bad")
+  putStrLn (case C.uncons (C.cons 'x' (C.pack "yz")) of
+    Just pair -> case (fst pair, C.unpack (snd pair)) of
+      ('x', 'y' : 'z' : []) -> "cons-ok"
+      _ -> "cons-bad"
+    _ -> "cons-bad")
+  putStrLn (case C.unpack (C.map toUpper (C.pack "ab")) of
+    'A' : 'B' : [] -> "map-ok"
+    _ -> "map-bad")
+  putStrLn (case C.elem 'b' (C.pack "abc") of
+    True -> "elem-ok"
+    False -> "elem-bad")
+  putStrLn (case C.unpack (C.filter (\c -> c /= 'b') (C.pack "abc")) of
+    'a' : 'c' : [] -> "filter-ok"
+    _ -> "filter-bad")
+  putStrLn (case C.unpack (C.replicate 3 'z') of
+    'z' : 'z' : 'z' : [] -> "repl-ok"
+    _ -> "repl-bad")

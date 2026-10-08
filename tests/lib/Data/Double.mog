@@ -3,6 +3,10 @@ import Data.Ord
 import Text.Show
 
 -- IEEE 754 semantics and `Show`: NaN, infinities, negative zero, and the
+-- shortest round-trip decimal form, all identical on every backend. The
+-- `Floating` surface continues below, on the same values.
+
+-- IEEE 754 semantics and `Show`: NaN, infinities, negative zero, and the
 -- shortest round-trip decimal form, all identical on every backend.
 
 half :: Double -> Double
@@ -26,6 +30,9 @@ negInf = negate one / zero
 report :: String -> Bool -> IO ()
 report label b = putStrLn (label <> ": " <> show b)
 
+
+near :: Double -> Double -> Bool
+near a b = abs (a - b) < 1.0e-9
 main :: IO ()
 main = do
   report "nan==nan" (nan == nan)
@@ -57,3 +64,24 @@ main = do
   putStrLn (show (0.1 + 0.2 :: Double))
   putStrLn (show (3.141592653589793 :: Double))
   putStrLn (show (negate 1.0e10 :: Double))
+  report "sqrt 4 == 2" (sqrt 4.0 == 2.0)
+  report "exp 0 == 1" (exp 0.0 == 1.0)
+  report "log 1 == 0" (log 1.0 == 0.0)
+  report "log (exp 1) ~ 1" (near (log (exp 1.0)) 1.0)
+  report "sin 0 == 0" (sin 0.0 == 0.0)
+  report "cos 0 == 1" (cos 0.0 == 1.0)
+  report "asin 0 == 0" (asin 0.0 == 0.0)
+  report "acos 1 == 0" (acos 1.0 == 0.0)
+  report "atan 0 == 0" (atan 0.0 == 0.0)
+  report "2 ** 10 ~ 1024" (near (2.0 ** 10.0) 1024.0)
+  report "logBase 2 8 ~ 3" (near (logBase 2.0 8.0) 3.0)
+  report "sinh 0 == 0" (sinh 0.0 == 0.0)
+  report "cosh 0 == 1" (cosh 0.0 == 1.0)
+  report "asinh 0 == 0" (asinh 0.0 == 0.0)
+  report "acosh 1 == 0" (acosh 1.0 == 0.0)
+  report "atanh 0 == 0" (atanh 0.0 == 0.0)
+  report "tan (pi/4) ~ 1" (near (tan (pi / 4.0)) 1.0)
+  report "tanh 0 == 0" (tanh 0.0 == 0.0)
+  report "pi ~ 3.141592653589793" (near pi 3.141592653589793)
+  putStrLn (show (sqrt 4.0))
+  putStrLn (show (pi :: Double))

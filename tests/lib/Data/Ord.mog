@@ -1,6 +1,11 @@
 -- Data.Ord: `compare` plus the class defaults `< <= > >= min max`, on a derived
 -- instance and on a hand-written one. The defaults dispatch through the instance
 -- dictionary, so both instances must answer the same way.
+-- `Down`, the reversed-ordering wrapper, and `comparing` are exercised on the
+-- same values at the end.
+
+import Data.List (sortBy)
+import Data.Ord (Down(Down), comparing, getDown)
 
 data Pair a b = Pair a b deriving (Eq, Ord, Show)
 
@@ -38,3 +43,7 @@ main = do
   putStrLn (show (min v w))
   putStrLn (show (max v w))
   putStrLn (show (compare v w))
+  putStrLn (show (compare (Down 1) (Down 2)))
+  putStrLn (show (compare (Down 2) (Down 1)))
+  putStrLn (show (getDown (Down 5)))
+  putStrLn (show (map getDown (sortBy (comparing getDown) (map Down ([1, 3, 2] :: [Int])))))

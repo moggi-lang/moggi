@@ -30,3 +30,4 @@ main = do
   putStrLn (show (intersperse 0 xs))
   putStrLn (show (xs == (1 :| [2, 3, 4])))
   putStrLn (show (compare (1 :| []) (1 :| [2])))
+  putStrLn (show (sconcat (([1, 2] :| [[3], [4, 5]]) :: NonEmpty [Int])))

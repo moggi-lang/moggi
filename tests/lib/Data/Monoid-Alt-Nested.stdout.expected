@@ -4,3 +4,5 @@ alt-lt: True
 alt-max: Alt {getAlt = Just 2}
 nested-eq: True
 nested-compare: LT
+Just 1
+Just 2

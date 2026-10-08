@@ -31,3 +31,30 @@ Just (Right 2)
 LT
 Right 2
 Right 2
+'b'
+'\n'
+'\t'
+'\r'
+'\a'
+'\b'
+'\f'
+'\v'
+'\''
+'"'
+'\\'
+'\NUL'
+'\SOH'
+'\ESC'
+'\US'
+' '
+'\DEL'
+'\128512'
+"hello"
+"a\nb"
+"tab\there"
+"quote\"inside"
+"back\\slash"
+"\128512\&5"
+"\SO\&H"
+"\SOx"
+['\128512','5']

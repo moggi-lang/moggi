@@ -39,3 +39,5 @@ main = do
   putStrLn ("alt-max: " <> show (max (Alt (Just 1)) (Alt (Just 2))))
   report "nested-eq" (Nested (Just "a") == Nested (Just "a"))
   ordering "nested-compare" (compare (Nested [1, 2]) (Nested [1, 3]))
+  putStrLn (show (getAlt ((Alt (Just 1)) <> (Alt (Just 2)))))
+  putStrLn (show (getAlt ((Alt (Nothing :: Maybe Int)) <> (Alt (Just 2)))))
