@@ -1,4 +1,20 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+-- |
+-- A set of values, kept in a balanced tree ordered by the values themselves:
+-- membership and construction cost a logarithmic number of comparisons, and
+-- 'toList' walks the elements in ascending order.
+--
+-- Because the tree is ordered, every element type needs an 'Ord' instance, and
+-- two sets can only be compared or combined when they hold the same type of
+-- element. Values that compare equal are the same element: inserting one that is
+-- already there keeps the set as it was.
+--
+-- The operations here are the ones a program reaches for most often. This module
+-- is a deliberate subset of the full set algebra: the operations that come back
+-- with the smallest or largest element, that split or partition a set, that work
+-- by key alongside a combining function, and the strictly ordered variants of
+-- the traversals are not defined here. Add what a program needs rather than
+-- assuming the rest exist.
 module Data.Set
   ( Set
   , empty

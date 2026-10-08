@@ -1,4 +1,14 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+-- |
+-- A type with two parameters that can be mapped over, either side at a time or
+-- both at once. 'Either' and the pair type are the two instances the library
+-- ships; a program that needs a mapping for its own two-parameter type writes
+-- the three methods below.
+--
+-- The methods are related: @'bimap' f g@ must give the same result as
+-- @'first' f@ followed by @'second' g@, and an instance that has a cheaper
+-- implementation of one of the three should still keep the other two
+-- consistent with it.
 module Data.Bifunctor
   ( Bifunctor(bimap, first, second)
   ) where
@@ -6,9 +16,18 @@ module Data.Bifunctor
 import Data.Either
 import Data.Tuple
 
+-- | A type of two parameters that can be mapped over either or both.
 class Bifunctor (p :: Type -> Type -> Type) where
+  {-# MINIMAL bimap | first, second #-}
+
+  -- | Map both parameters: the first function is applied to the value in the
+  -- first parameter, the second to the value in the second.
   bimap :: (a -> b) -> (c -> d) -> p a c -> p b d
+
+  -- | Map the first parameter and leave the second alone.
   first :: (a -> b) -> p a c -> p b c
+
+  -- | Map the second parameter and leave the first alone.
   second :: (b -> c) -> p a b -> p a c
 
 instance Bifunctor Either where

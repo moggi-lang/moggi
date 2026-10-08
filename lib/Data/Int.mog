@@ -4,10 +4,22 @@
   jvm = Data.Int.JVM
   dotnet = Data.Int.DotNet
 #-}
--- Signed fixed-width ints as MagicHash primitives, alongside platform `Int`.
--- Type + Eq/Ord/Show/Num/Enum/Integral/Bounded live here.
--- Fixed-width values share the Int host rep (sign-extended); width is enforced
--- by intNFromInt# sign-extension after every operation.
+-- |
+-- Signed integers available at several fixed widths: @'Int'@ is as wide as the
+-- host word, and @Int8@/@Int16@/@Int32@/@Int64@ are 8, 16, 32 and 64 bits wide
+-- on every backend. Each of the four is the same underlying machine integer
+-- with a smaller stated range, so arithmetic that leaves that range keeps the
+-- low bits and is read back as a two's-complement value: a fixed width is where
+-- wrapping is the defined behaviour, not an error.
+--
+-- Every width carries the expected instances — equality and ordering, 'Show',
+-- the arithmetic and conversion classes, the enumeration, and the two bounds —
+-- so 'fromIntegral' converts between widths (keeping the low bits when the
+-- target is narrower) and into a 'Data.Integer.Integer', where nothing is lost.
+--
+-- The instances are written against primitives rather than composed from one
+-- another: the values share the host's machine integer, and the width is
+-- imposed after every operation.
 module Data.Int
   ( Int(..)
   , Int8(..)

@@ -3,6 +3,14 @@
   jvm = System.Environment.JVM
   dotnet = System.Environment.DotNet
 #-}
+-- |
+-- What the process was started with: the arguments it was given, the program's
+-- own name, and the variables in its environment.
+--
+-- The four names are one per question. 'getArgs' is the argument list without
+-- the program name, 'getProgName' is that name, and the two lookups differ in
+-- what happens when the variable is not set: 'lookupEnv' says 'Nothing', while
+-- 'getEnv' fails.
 module System.Environment
   ( getArgs
   , getEnv
@@ -13,10 +21,18 @@ module System.Environment
 import Data.Maybe
 import Data.String
 
+-- | The arguments the program was started with, in order, without the program
+-- name (that is 'getProgName').
 getArgs :: IO [String]
 
+-- | The value of an environment variable, or an error when it is not set.
+-- Use 'lookupEnv' when an unset variable is an ordinary case.
 getEnv :: String -> IO String
 
+-- | The value of an environment variable, or 'Nothing' when it is not set.
+-- An empty value is not the same as an unset variable: it comes back as
+-- @'Just' ""@.
 lookupEnv :: String -> IO (Maybe String)
 
+-- | The name the program was started under, as the host reports it.
 getProgName :: IO String

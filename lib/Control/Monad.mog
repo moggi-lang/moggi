@@ -1,4 +1,19 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+-- |
+-- A 'Monad' is a type of actions that can be chained: @(>>=)@ takes the value an
+-- action produced and returns the next action to run, which is what the @do@
+-- notation is written in terms of. 'pure', from 'Applicative', is the action
+-- that produces a value and does nothing else.
+--
+-- Everything else here is a combination of those two: run an action for its
+-- effect and drop its value, lift a plain function over one or more actions,
+-- repeat an action until it fails, or use a condition as an action.
+--
+-- Some names in this module are older spellings of operations that are defined
+-- elsewhere and read better there: 'liftM' is 'map', 'liftM2' is 'liftA2', 'ap'
+-- is '(<*>)', and 'msum' is 'asum'. They are kept so that existing code keeps
+-- compiling; new code does not need them. The same is true of the class
+-- 'MonadPlus' and its two methods, which say what 'Alternative' already says.
 module Control.Monad
   ( Monad((>>=))
   , MonadPlus(mzero, mplus)

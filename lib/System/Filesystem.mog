@@ -3,6 +3,23 @@
   jvm = System.Filesystem.JVM
   dotnet = System.Filesystem.DotNet
 #-}
+-- |
+-- The filesystem, addressed by path: reading and writing whole files, asking
+-- what a path is, and creating, copying and removing files and directories.
+--
+-- Each read and write comes in two forms. The plain name takes and produces
+-- bytes — the same values 'Data.ByteString' holds — and is the one to use when
+-- the content is not text or when its encoding matters. The @Text@ name takes
+-- and produces a 'String' and applies the host's text encoding at the boundary,
+-- which is the convenient choice for a file that is meant to be read.
+--
+-- The operations that name a directory act on that path only; 'createTree' and
+-- 'removeTree' are the two that walk into it. 'copyFile' hands both paths to the
+-- host's own copy, which brings the permissions along, while 'copyFileContent'
+-- and 'copyPermissions' do one of the two explicitly.
+--
+-- The implementations are the host's, behind a facade: a program imports this
+-- module and never chooses a backend for it.
 module System.Filesystem
   ( readFile
   , readTextFile

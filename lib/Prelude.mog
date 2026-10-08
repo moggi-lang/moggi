@@ -136,7 +136,7 @@ module Prelude
   , showChar
   , showString
   , showParen
-    -- Basic input and output (see D-6: nothing file- or read-side here)
+    -- Basic input and output (see D20: nothing file- or read-side here)
   , IO
   , putStr
   , putStrLn

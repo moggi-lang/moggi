@@ -1,4 +1,10 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+-- |
+-- A 'Functor' is a type of values that can be transformed without changing the
+-- shape of the structure around them: a list keeps its length, a 'Maybe' keeps
+-- whether it is empty, a function keeps the same input. The transformation is
+-- the class method 'map'; the operators below are spellings of it that read
+-- better in a pipeline or that substitute a constant for every element.
 module Data.Functor
   ( Functor(..)
   , ($>)
@@ -12,21 +18,34 @@ module Data.Functor
 infixl 4 <$>, <$, $>
 infixl 1 <&>
 
+-- | Types that can be mapped over.
 class Functor f where
+  -- | Apply a function to every element, leaving the structure around them
+  -- alone. @'map' f@ must not change the number or the arrangement of the
+  -- elements, and @'map' id@ must be the identity on the structure.
   map :: (a -> b) -> (f a) -> (f b)
 
+-- | The same operation as 'map', written infix: @f <$> x@ is @map f x@.
 (<$>) :: Functor f => (a -> b) -> f a -> f b
 (<$>) f x = map f x
 
+-- | Replace every element with the same value: @x <$ fb@ is @fb@ with all of
+-- its elements replaced by @x@, which is useful when the shape matters and the
+-- values do not.
 (<$) :: Functor f => a -> f b -> f a
 (<$) x fb = map (\ignored -> x) fb
 
+-- | '(<$)' with the arguments the other way round: @fa $> x@ is @x <$ fa@.
 ($>) :: Functor f => f a -> b -> f b
 ($>) fa x = x <$ fa
 
+-- | '(<$>)' with the arguments the other way round, for a function that reads
+-- better after the value: @fa <&> f@ is @f <$> fa@.
 (<&>) :: Functor f => f a -> (a -> b) -> f b
 (<&>) fa f = map f fa
 
+-- | Split a structure of pairs into a pair of structures, keeping one element
+-- of each pair on each side.
 unzip :: Functor f => f (a, b) -> (f a, f b)
 unzip x = (map unzipFirst x, map unzipSecond x)
 
@@ -38,5 +57,7 @@ unzipSecond :: (a, b) -> b
 unzipSecond pair = case pair of
   (_, b) -> b
 
+-- | Discard the elements of a structure and keep its shape: @'void' x@ is @x@
+-- with every element replaced by @()@.
 void :: Functor f => f a -> f ()
 void x = () <$ x

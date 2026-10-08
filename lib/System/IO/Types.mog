@@ -1,3 +1,13 @@
+-- |
+-- The types the input/output operations pass around.
+--
+-- A 'Handle' is an open connection to a file: the operations that read and
+-- write take one, and the operations that open and close a file produce and
+-- finish one. A handle is opaque — what stands behind it belongs to the backend
+-- — so the only things a program can do with one are compare it and show it.
+--
+-- 'IOMode' says how a file is opened, which decides what the handle that comes
+-- back can do and where writing starts.
 module System.IO.Types
   ( Handle
   , Resource
@@ -10,10 +20,17 @@ import Data.Ord
 import Text.Show
 import Moggi.Internal.Prim
 
+-- | What a 'Handle' stands for, as the backend represents it. It is an
+-- implementation detail: a program holds a 'Handle' and passes it back.
 data Resource = MkResource
 
+-- | An open connection to a file, and the value the input/output operations
+-- read from and write to.
 data Handle = MkHandle Resource
 
+-- | How a file is opened: 'ReadMode' reads it, 'WriteMode' replaces its
+-- contents, 'AppendMode' keeps them and writes after the end, and
+-- 'ReadWriteMode' reads and writes the same open file.
 data IOMode = ReadMode | WriteMode | AppendMode | ReadWriteMode
 
 -- Handles are opaque resources: the generated code compares them by identity,

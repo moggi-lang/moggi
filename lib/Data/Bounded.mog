@@ -1,7 +1,17 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+-- |
+-- Types with a smallest and a largest value. A type is bounded when it has
+-- exactly one extreme at each end: an enumeration, a fixed-width integer, or
+-- 'Bool'. The two names are values, not functions, so an instance is a pair of
+-- definitions and nothing more.
 module Data.Bounded
   ( Bounded(minBound, maxBound)
   ) where
 
+-- | Types with a least and a greatest element.
 class Bounded a where
-  minBound, maxBound :: a
+  -- | The least element of the type.
+  minBound :: a
+
+  -- | The greatest element of the type.
+  maxBound :: a

@@ -1,8 +1,22 @@
 {-# LANGUAGE NoImplicitPrelude #-}
--- Unsigned words as MagicHash primitives, including platform-sized `Word`.
--- Type + Eq/Ord/Show/Num/Enum/Integral/Bounded live here.
--- Fixed-width values share the Int host rep; width is enforced by wordN_from_int masks.
--- Word64 arithmetic uses wrapping word64*# intrinsics (not host Int ops).
+-- |
+-- Unsigned integers at several fixed widths: @'Word'@ is as wide as the host
+-- word, and @Word8@/@Word16@/@Word32@/@Word64@ are 8, 16, 32 and 64 bits wide on
+-- every backend. Nothing here has a sign, so the range of a width starts at
+-- zero and ends at all-ones: @'maxBound' :: Word8@ is 255, and arithmetic wraps
+-- around within the width rather than being an error.
+--
+-- Each width carries the expected instances — equality and ordering, 'Show',
+-- arithmetic and conversion, the enumeration, and the two bounds — and the
+-- ordering and 'Show' of a wide value are the unsigned ones, which is what a
+-- value above @'maxBound' :: 'Int'@ would get wrong if it were treated as
+-- signed.
+--
+-- This module also holds the two operations that only make sense on a fixed
+-- width: 'byteSwap' reorders the bytes of a value, and 'bitReverse' reverses its
+-- bit order. Both come in one form per width. The bit-level operations for a
+-- value — setting, testing and counting bits, shifts and rotates — are in
+-- 'Data.Bits'.
 module Data.Word
   ( Word
   , Word8
@@ -53,13 +67,28 @@ word64Zero = word64FromInt# 0
 word64One = word64FromInt# 1
 word64Max = word64FromInt# (intNegate# 1)
 
+-- | Reverse the two bytes of a 16-bit value: the low byte becomes the high
+-- one. Reading a little-endian value written by a big-endian machine, and back,
+-- is this operation.
 byteSwap16 w = byteSwap16# w
+
+-- | Reverse the four bytes of a 32-bit value.
 byteSwap32 w = byteSwap32# w
+
+-- | Reverse the eight bytes of a 64-bit value.
 byteSwap64 w = byteSwap64# w
 
+-- | Reverse the bit order of an 8-bit value: bit 0 becomes bit 7, and so on.
+-- This is what a bit-reversed walk of a table uses.
 bitReverse8 w = bitReverse8# w
+
+-- | Reverse the bit order of a 16-bit value.
 bitReverse16 w = bitReverse16# w
+
+-- | Reverse the bit order of a 32-bit value.
 bitReverse32 w = bitReverse32# w
+
+-- | Reverse the bit order of a 64-bit value.
 bitReverse64 w = bitReverse64# w
 
 instance Eq Word where

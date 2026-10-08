@@ -4,6 +4,13 @@
   jvm = System.Exit.JVM
   dotnet = System.Exit.DotNet
 #-}
+-- |
+-- Ending a program with a result the shell can read.
+--
+-- 'ExitCode' is the status the process leaves behind: 'ExitSuccess' is the
+-- conventional zero, 'ExitFailure' carries the number the program chose. The
+-- rest of the module is the three ways of reaching it and 'die', which prints a
+-- message on the way out.
 module System.Exit
   ( ExitCode(ExitSuccess, ExitFailure)
   , exitWith
@@ -18,20 +25,30 @@ import Data.String
 import Moggi.Err
 import System.IO
 
+-- | The status a program ends with. 'ExitFailure' carries the number that
+-- becomes the process's exit status, so a program that wants a particular
+-- value uses @'ExitFailure' n@ and not 'exitFailure'.
 data ExitCode = ExitSuccess | ExitFailure Int
 
 exitWithCode :: Int -> IO a
 
+-- | End the program with this status. The result type is polymorphic because
+-- the call never returns.
 exitWith :: ExitCode -> IO a
 exitWith code = case code of
   ExitSuccess -> exitWithCode 0
   ExitFailure n -> exitWithCode n
 
+-- | End the program successfully.
 exitSuccess :: IO a
 exitSuccess = exitWith ExitSuccess
 
+-- | End the program with status 1, the conventional "it did not work". A
+-- program that wants a different status calls 'exitWith'.
 exitFailure :: IO a
 exitFailure = exitWith (ExitFailure 1)
 
+-- | Print a message on its own line and end the program with status 1. The
+-- message goes to standard output, and nothing else is printed afterwards.
 die :: String -> IO a
 die msg = putStrLn msg >> exitFailure

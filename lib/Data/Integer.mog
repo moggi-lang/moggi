@@ -4,6 +4,22 @@
   jvm = Data.Integer.JVM
   dotnet = Data.Integer.DotNet
 #-}
+-- |
+-- Integers of unbounded size: 'Integer' grows as far as memory allows, so
+-- arithmetic on it cannot overflow and there is no 'Bounded' instance to ask
+-- for a largest value. The price is that an operation costs what the numbers'
+-- widths cost, which is why a program that knows a value fits uses 'Data.Int'
+-- or 'Numeric.Natural' instead.
+--
+-- The exported operations are the ones the instances are built from: a module
+-- that defines an 'Integral' or 'Bits' instance for a type of its own over
+-- 'Integer' can build it from these rather than from a class method (inside an
+-- instance body a class method name means that instance, not 'Integer').
+--
+-- The bit operations are defined over the two's-complement view of a negative
+-- value, so a negative number behaves as if it had infinitely many leading one
+-- bits: 'complement' flips sign in the expected way, and 'testBit' at a high
+-- position of a negative value is 'True'.
 module Data.Integer
   ( Integer(..)
   -- The operations the class instances are built from, so that other modules

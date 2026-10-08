@@ -4,6 +4,24 @@
   jvm = Data.ByteString.JVM
   dotnet = Data.ByteString.DotNet
 #-}
+-- |
+-- A sequence of bytes: fixed-width 8-bit values with no encoding attached, so
+-- the same content can be read as text in several encodings or written out
+-- unchanged. The type is strict — appending copies, and there is no lazy view of
+-- a file — which makes the length of a value its cost predictable.
+--
+-- This module is the byte-oriented surface: construction and inspection, the
+-- prefix and suffix operations, indexing, and the conversions to and from the
+-- list and array-like views. The wider set of list-style operations — folding
+-- and scanning, splitting on a separator, lines and words, sorting, reading a
+-- number out of the bytes, and the file operations — lives in
+-- 'Data.ByteString.Char8', which works on the same values through 'Char'.
+-- Neither module is redundant: pick the one whose element type the problem is
+-- really about.
+--
+-- 'head', 'tail', 'last', 'init' and 'index' are the partial ones: on an empty
+-- value, or at a position outside it, they are undefined. 'uncons' and 'unsnoc'
+-- are the total ways to take one element off a value.
 module Data.ByteString
   ( ByteString
   , empty

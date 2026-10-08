@@ -1,4 +1,10 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+-- |
+-- The 'Bool' type, its two constructors, and the operations that build a
+-- condition out of one: conjunction, disjunction, negation, and the two ways of
+-- choosing between two values. The operators short-circuit, so the right
+-- operand is only evaluated when the left one has not already decided the
+-- answer.
 module Data.Bool
   ( Bool(..)
   , (&&)
@@ -13,19 +19,33 @@ import Data.Ord
 import Text.Show
 import Moggi.Internal.Prim
 
+-- | The type of truth values: 'False' and 'True'. A @case@ on a 'Bool' is
+-- the primitive branch of the language; the operations below are conveniences
+-- over it.
 data Bool = False | True
 
 infixr 3 &&
 infixr 2 ||
 
+-- | Conjunction: 'True' only when both operands are 'True'. The right operand
+-- is not evaluated when the left one is 'False'.
 (&&) a b = boolAnd# a b
 
+-- | Disjunction: 'True' when either operand is 'True'. The right operand is not
+-- evaluated when the left one is 'True'.
 (||) a b = boolOr# a b
 
+-- | Negation: 'True' becomes 'False' and 'False' becomes 'True'.
 not b = boolNot# b
 
+-- | The value 'True'. It reads better than a bare 'True' in a guard whose
+-- intent is "in every other case", and it keeps that meaning if the condition
+-- is later extended.
 otherwise = True
 
+-- | Choose between two values from a 'Bool': @'bool' x y b@ is @x@ when @b@ is
+-- 'True' and @y@ when @b@ is 'False'. The arguments come in the same order as
+-- the branches of a @case@ on the condition.
 bool x y b = case b of
   True -> x
   False -> y

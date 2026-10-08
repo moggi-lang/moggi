@@ -4,6 +4,21 @@
   jvm = System.IO.JVM
   dotnet = System.IO.DotNet
 #-}
+-- |
+-- Files, and the three handles every program starts with: 'stdin', 'stdout' and
+-- 'stderr'. An 'IO' value is a description of something that happens once it is
+-- run, which is why opening a file produces a 'Handle' inside 'IO' and why
+-- 'hClose' has to be called rather than being implied.
+--
+-- A program usually needs neither 'openFile' nor 'hClose' for a whole file: the
+-- functions here that take a path read or write it in one go and close it
+-- before returning.
+--
+-- This is the plain stream surface, deliberately: buffering, text encodings,
+-- seeking, binary mode and the temporary-file operations are not defined here,
+-- and neither is the ability to read or write a file as bytes without a
+-- character encoding. A program that needs one of those is better served by
+-- 'Data.ByteString.Char8', which owns the byte-level file operations.
 module System.IO
   ( IO
   , FilePath
