@@ -4,9 +4,7 @@ program
     method get :: a -> F a
   function get :: Bool -> F Bool
     pat_var b
-    apply
-      evidence_method Num.fromInteger evidence= nullary=0
-        instance Int
+    intrinsic intFromInteger#
       intrinsic intToInteger#
         integer 0
   function asInt :: F Bool -> Int

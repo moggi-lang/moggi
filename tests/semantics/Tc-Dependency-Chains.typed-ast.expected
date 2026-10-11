@@ -1,10 +1,10 @@
 program
   function f :: Int
-    infix +
+    intrinsic intAdd#
       variable g
       integer 1
   function g :: Int
-    infix *
+    intrinsic intMul#
       variable h
       integer 2
   function h :: Int
@@ -12,7 +12,7 @@ program
   function isEven :: Int -> Bool
     pat_var n
     case
-      infix ==
+      intrinsic intEq#
         variable n
         integer 0
       alt
@@ -22,13 +22,13 @@ program
         pat_con False
         apply
           variable isOdd
-          infix -
+          intrinsic intSub#
             variable n
             integer 1
   function isOdd :: Int -> Bool
     pat_var n
     case
-      infix ==
+      intrinsic intEq#
         variable n
         integer 0
       alt
@@ -38,7 +38,7 @@ program
         pat_con False
         apply
           variable isEven
-          infix -
+          intrinsic intSub#
             variable n
             integer 1
   function inGroup :: Int
@@ -85,11 +85,11 @@ program
       variable c1
       variable c1
   function c1 :: Int
-    infix +
+    intrinsic intAdd#
       variable c2
       integer 1
   function c2 :: Int
-    infix *
+    intrinsic intMul#
       variable c3
       integer 2
   function c3 :: Int

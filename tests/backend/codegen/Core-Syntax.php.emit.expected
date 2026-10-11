@@ -4,9 +4,9 @@ namespace Main;
 
 const __MOGGI_MAP = [[51 => ['Main.list_', 'tests/backend/codegen/Core-Syntax.mog', 19, 15], 57 => ['Main.fn_list', 'tests/backend/codegen/Core-Syntax.mog', 20, 17], 63 => ['Main.useKeywords', 'tests/backend/codegen/Core-Syntax.mog', 22, 15], 64 => ['Main.useKeywords', 'tests/backend/codegen/Core-Syntax.mog', 22, 15]], ['Main\\add' => ['Main.add', 'tests/backend/codegen/Core-Syntax.mog', 4, 1], 'Main\\sub' => ['Main.sub', 'tests/backend/codegen/Core-Syntax.mog', 6, 1], 'Main\\id' => ['Main.id', 'tests/backend/codegen/Core-Syntax.mog', 8, 8], 'Main\\f' => ['Main.f', 'tests/backend/codegen/Core-Syntax.mog', 12, 11], 'Main\\list_' => ['Main.list', 'tests/backend/codegen/Core-Syntax.mog', 14, 10], 'Main\\echo_' => ['Main.echo', 'tests/backend/codegen/Core-Syntax.mog', 15, 10], 'Main\\match_' => ['Main.match', 'tests/backend/codegen/Core-Syntax.mog', 16, 11], 'Main\\function_' => ['Main.function', 'tests/backend/codegen/Core-Syntax.mog', 17, 14], 'Main\\list_2' => ['Main.list_', 'tests/backend/codegen/Core-Syntax.mog', 19, 1], 'Main\\fn_list' => ['Main.fn_list', 'tests/backend/codegen/Core-Syntax.mog', 20, 1], 'Main\\useKeywords' => ['Main.useKeywords', 'tests/backend/codegen/Core-Syntax.mog', 22, 15]]];
 
-require_once __DIR__ . '/../../../lib/Data/Int.php';
+require_once __DIR__ . '/../../../lib/Data/Num.php';
 
-use function Data\Int\__ev_Num_Int;
+use function Data\Num\__ev_Num_Int;
 
 function moggi_u64_add(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao + $bo; $c = ($lo >> 32) & 0xffffffff; $hi = ($ah + $bh + $c) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }
 function moggi_u64_sub(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao - $bo; $bw = $lo < 0 ? 1 : 0; $hi = ($ah - $bh - $bw) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }

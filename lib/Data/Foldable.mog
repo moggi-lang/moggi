@@ -33,7 +33,6 @@ import Data.Monoid
 import Data.Num
 import Data.Ord
 import Data.Semigroup
-import Moggi.Internal.Prim
 
 class Foldable t where
   {-# MINIMAL foldMap | foldr #-}
@@ -163,11 +162,18 @@ minimumBy cmp t = case toList t of
           _ -> acc) rest
     in go x xs
 
+-- List append, spelled with the cons operator: `++` and the primitive behind
+-- it belong to Data.List, which imports this module, so neither is in reach.
+appendList :: [a] -> [a] -> [a]
+appendList xs ys = case xs of
+  [] -> ys
+  x : rest -> x : appendList rest ys
+
 concat :: Foldable t => t [a] -> [a]
-concat t = foldr (\x ys -> listAppend# x ys) [] t
+concat t = foldr appendList [] t
 
 concatMap :: Foldable t => (a -> [b]) -> t a -> [b]
-concatMap f t = foldr (\x ys -> listAppend# (f x) ys) [] t
+concatMap f t = foldr (\x ys -> appendList (f x) ys) [] t
 
 traverse_ :: (Foldable t, Applicative f) => (a -> f b) -> t a -> f ()
 traverse_ f t = foldl (\acc x -> (\ignored b -> b) <$> acc <*> f x) (pure ()) t

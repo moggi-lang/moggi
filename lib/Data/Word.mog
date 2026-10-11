@@ -248,17 +248,9 @@ instance Enum Word64 where
     GT -> enumFromEnumError "Word64" n
     _ -> word64ToInt# n
 
-instance Num Word where
-  (+) a b = wordFromInt# (intAdd# (wordToInt# a) (wordToInt# b))
-  (-) a b = wordFromInt# (intSub# (wordToInt# a) (wordToInt# b))
-  (*) a b = wordFromInt# (intMul# (wordToInt# a) (wordToInt# b))
-  negate a = wordFromInt# (intNegate# (wordToInt# a))
-  abs a = a
-  signum a = case wordCompare# a wordZero of
-    EQ -> wordZero
-    _ -> wordOne
-  fromInteger n = wordFromInt# (intFromInteger# n)
-
+-- `Num Word`, like `Num Int`, lives with the class in `Data.Num`: the library's
+-- low-level modules do machine-int arithmetic below this one. The fixed-width
+-- instances below stay here, as they do in base's `GHC.Internal.Word`.
 instance Num Word8 where
   (+) a b = word8Add# a b
   (-) a b = word8Sub# a b

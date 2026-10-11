@@ -21,6 +21,7 @@ module Data.Char.JVM
 
 import Data.Bool
 import Moggi.Err
+import Data.Eq
 import Data.Int
 import Data.Ord
 import Moggi.Internal.Prim

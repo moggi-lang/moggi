@@ -127,8 +127,6 @@ function recordFieldsForHead(AnalysisService $svc, object $analysis, string $hea
         return ['name' => (string) $typeHead, 'fields' => $fromBinder];
     }
 
-    // Unparsed buffer: `Person { … }` names the constructor, `p { … }` the
-    // receiver whose type is read off the enclosing signature.
     $fields = recordFieldsFromText($analysis->source, $head);
     if ($fields !== []) {
         return ['name' => $head, 'fields' => $fields];

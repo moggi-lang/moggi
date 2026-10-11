@@ -15,7 +15,6 @@ use function Moggi\Semantics\Deriving\restoreInstanceState;
 use function Moggi\Semantics\Deriving\snapshotInstanceState;
 use function Moggi\Semantics\Foreign\checkForeignImportItem;
 use function Moggi\Semantics\Foreign\validateForeignTypeDecl;
-use function Moggi\Semantics\IntrinsicRegistry\standaloneOperatorSchemes;
 
 require_once __DIR__ . '/type_expr.php';
 require_once __DIR__ . '/types/state.php';
@@ -285,11 +284,6 @@ function newState(string $source, string $filename = ''): TypeCheckState
     $state = new TypeCheckState($source, $filename);
 
     Kinds\bootstrapKindEnv($state);
-
-    foreach (standaloneOperatorSchemes() as $name => $scheme) {
-        $state->env[$name] = $scheme;
-        $state->standaloneEnvNames[$name] = true;
-    }
 
     return $state;
 }

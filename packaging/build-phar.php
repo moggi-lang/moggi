@@ -31,13 +31,8 @@ if (\PHP_VERSION_ID < 80500) {
     exit(1);
 }
 
-// The directory this archive was started from: `<root>/bin` whether it is run
-// as `php bin/moggi.phar` or appended to a micro runtime as `bin/moggi`. The
-// appended case has no `Phar::running`, so the root is recorded here, before
-// `__DIR__` stops meaning anything outside the archive.
 \define('@INSTALL_ROOT_CONSTANT@', \dirname(__FILE__, 2));
 
-// `__DIR__` resolves inside the PHAR, so the compiler loads itself from here.
 require 'phar://' . __FILE__ . '/src/compiler.php';
 
 exit(\Moggi\CLI\main($argv));

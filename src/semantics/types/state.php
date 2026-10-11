@@ -7,8 +7,6 @@ use Moggi\Semantics\TypeExpr\Scheme;
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Syntax\Ast;
 
-use function Moggi\Semantics\IntrinsicRegistry\standaloneOperatorSchemes;
-
 final class TypeCheckState
 {
     /**
@@ -272,18 +270,6 @@ final class TypeCheckState
      * @var array<string, true>
      */
     public array $restrictedVars = [];
-
-    /**
-     * Names in `env` that hold a compiler fallback from
-     * {@see standaloneOperatorSchemes()}
-     * rather than a declaration in scope. A module that imports the class
-     * declaring the operator replaces the fallback with the real scheme, so
-     * `+` is `Num`'s method in a module that imports `Data.Num` and stays the
-     * Int fallback in a script that imports nothing.
-     *
-     * @var array<string, true>
-     */
-    public array $standaloneEnvNames = [];
 
     /** @var array<string, Type> how a use site solved a restricted variable */
     public array $restrictedSolutions = [];

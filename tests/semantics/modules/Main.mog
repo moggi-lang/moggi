@@ -3,7 +3,10 @@
 
 module Main where
 
+-- The fixture's own `Prelude` exports nothing on purpose, so `+` comes from the
+-- library: `instance Num Int` in `Data.Num`, whose `+` is the machine adder.
 import Prelude hiding (max)
+import Data.Int
 import User
 import User qualified as U
 

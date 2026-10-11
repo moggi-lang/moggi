@@ -134,6 +134,7 @@ import Data.Int
 import Data.Real
 import Data.Maybe
 import Data.Monoid
+import Data.Num
 import Data.Ord
 import Data.Semigroup
 import Text.Show
@@ -744,7 +745,7 @@ sortOn f xs = map snd (sortBy (\a b -> compare (fst a) (fst b)) (map (\x -> (f x
 -- Instances -----------------------------------------------------------------
 
 instance Semigroup (List a) where
-  (<>) = (++)
+  (<>) xs ys = listAppend# xs ys
 
 instance Monoid (List a) where
   mempty = []

@@ -26,7 +26,7 @@ program
   function nested :: NonEmpty Int
     infix_con :|
       integer 1
-      infix :
+      intrinsic listCons#
         integer 2
         list
           integer 3

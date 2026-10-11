@@ -47,10 +47,10 @@ program
                         evidence_method Num.- evidence=__ev_dict2 nullary=0
                         variable k
                       integer 1
-                  infix :
+                  intrinsic listCons#
                     variable k
                     variable acc
-  function probedDeclared :: __Dict_Eq -> __Dict_Ord -> __Dict_Num -> t62 -> [t62]
+  function probedDeclared :: __Dict_Eq -> __Dict_Ord -> __Dict_Num -> t60 -> [t60]
     pat_var __ev_Eq
     pat_var __ev_Ord_1
     pat_var __ev_Num_2
@@ -107,6 +107,6 @@ program
                         evidence_method Num.fromInteger evidence=__ev_Num_2 nullary=0
                         intrinsic intToInteger#
                           integer 1
-                  infix :
+                  intrinsic listCons#
                     variable k
                     variable acc

@@ -42,11 +42,8 @@ program
           alt
             pat_con ViaSum
               pat_var __b0
-            apply
-              apply
-                evidence_method Eq.== evidence= nullary=0
-                  instance Int
-                variable __a0
+            intrinsic intEq#
+              variable __a0
               variable __b0
           alt
             pat_wild _
@@ -65,11 +62,8 @@ program
             alt
               pat_con ViaSum
                 pat_var __b0
-              apply
-                apply
-                  evidence_method Eq.== evidence= nullary=0
-                    instance Int
-                  variable __a0
+              intrinsic intEq#
+                variable __a0
                 variable __b0
             alt
               pat_wild _
@@ -131,11 +125,8 @@ program
           alt
             pat_con ViaInner
               pat_var __b0
-            apply
-              apply
-                evidence_method Eq.== evidence= nullary=0
-                  instance Int
-                variable __a0
+            intrinsic intEq#
+              variable __a0
               variable __b0
           alt
             pat_wild _
@@ -154,11 +145,8 @@ program
             alt
               pat_con ViaInner
                 pat_var __b0
-              apply
-                apply
-                  evidence_method Eq.== evidence= nullary=0
-                    instance Int
-                  variable __a0
+              intrinsic intEq#
+                variable __a0
                 variable __b0
             alt
               pat_wild _
@@ -204,7 +192,7 @@ program
   function __ev_ViaEq_Int__3d_3d_3d :: Int -> Int -> Bool
     pat_var x
     pat_var y
-    infix ==
+    intrinsic intEq#
       variable x
       variable y
   newtype ViaUser

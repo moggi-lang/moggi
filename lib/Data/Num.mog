@@ -4,6 +4,8 @@ module Data.Num
   , subtract
   ) where
 
+import Moggi.Internal.Prim
+
 -- Integer is a bootstrap primitive synonym; this module does not import the
 -- module that defines `Integer`'s operations, so `Data.Integer` can
 -- define `instance Num Integer` without an import cycle.
@@ -19,6 +21,33 @@ class Num a where
   (+), (-), (*) :: a -> a -> a
   negate, abs, signum :: a -> a
   fromInteger :: Integer -> a
+
+-- The machine-width integers' instances live with the class, as they do in
+-- base's `GHC.Internal.Num`: `Int` and `Word` are the widths the library's own
+-- low-level code is written at -- `Data.Foldable`'s `length`, `Control.Monad`'s
+-- `replicateM` -- and those modules sit below `Data.Int` and `Data.Word`, so the
+-- instance they need cannot be declared there. The fixed-width types' instances
+-- stay with `Data.Int`/`Data.Word`; `Integer`'s and `Natural`'s stay with theirs,
+-- whose arithmetic is written in terms of library functions rather than primops.
+instance Num Int where
+  (+) a b = intAdd# a b
+  (-) a b = intSub# a b
+  (*) a b = intMul# a b
+  negate a = intNegate# a
+  abs a = intAbs# a
+  signum a = intSignum# a
+  fromInteger n = intFromInteger# n
+
+instance Num Word where
+  (+) a b = wordFromInt# (intAdd# (wordToInt# a) (wordToInt# b))
+  (-) a b = wordFromInt# (intSub# (wordToInt# a) (wordToInt# b))
+  (*) a b = wordFromInt# (intMul# (wordToInt# a) (wordToInt# b))
+  negate a = wordFromInt# (intNegate# (wordToInt# a))
+  abs a = a
+  signum a = case wordEq# a (wordFromInt# 0) of
+    True -> wordFromInt# 0
+    _ -> wordFromInt# 1
+  fromInteger n = wordFromInt# (intFromInteger# n)
 
 -- | the same as @'flip' ('-')@.
 --

@@ -2,12 +2,12 @@ program
   function eqInt :: Int -> Int -> Bool
     pat_var x
     pat_var y
-    infix ==
+    intrinsic intEq#
       variable x
       variable y
   function neInt :: Int -> Int -> Bool
     pat_var x
     pat_var y
-    infix /=
+    intrinsic intNe#
       variable x
       variable y

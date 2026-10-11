@@ -87,14 +87,12 @@ try {
         'an extensionless destination must not put the two artifacts on one path',
     );
 
-    // Without --native there is one artifact, and `-o` still means exactly that path.
     $plain = movePackagedArtifacts($stage(3, ['moggi-app.phar']), $scratch . '/Solo', 'php', false);
     $assert(
         $plain === ['moggi-app.phar' => $scratch . '/Solo'],
         'a non-native build writes the archive to exactly `-o`, unchanged',
     );
 
-    // The jvm and dotnet backends follow the same rule.
     $jar = movePackagedArtifacts($stage(4, ['moggi-app.jar', executableName('moggi-app')]), $scratch . '/J', 'jvm', true);
     $assert(($jar['moggi-app.jar'] ?? null) === $scratch . '/J.jar', 'an extensionless jvm destination gives the jar its extension');
     $assert(
@@ -152,11 +150,6 @@ try {
     $assert($writeThrew, 'an unwritable destination must fail, not be skipped');
     $assert(!\is_file($scratch . '/blocker/App'), 'a refused write must produce nothing');
 
-    // A failure part way through must leave nothing this run created behind: the
-    // archive would otherwise survive as a half-built artifact. A directory at
-    // the executable's destination makes that second rename fail — and on this
-    // host that destination is `executableName()`, which carries `.exe` on
-    // Windows, so the directory has to be named through it rather than `Plain`.
     \mkdir($scratch . '/Roll', 0777, true);
     \mkdir($scratch . '/Roll/' . executableName('Plain'), 0777, true);
     \file_put_contents($scratch . '/Roll/' . executableName('Plain') . '/keep', 'x');

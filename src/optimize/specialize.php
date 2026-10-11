@@ -9,6 +9,8 @@ use Moggi\Optimize\CaseFold\CtorTree;
 use function Moggi\IR\Dump\dump;
 use function Moggi\IR\Visit\irPatternBoundNames;
 use function Moggi\IR\Visit\mapGuards;
+use function Moggi\IR\Visit\mapOperandChildren;
+use function Moggi\Optimize\GlobalPass\rewriteStmtOperands;
 use function Moggi\Modules\parseResolvedSymbol;
 use function Moggi\Modules\resolvedSymbol;
 use function Moggi\Optimize\CaseFold\clearNullaryCtorCafs;
@@ -812,10 +814,68 @@ function resolveConcreteDictCallsInItems(array $items, array $globalEvidence): a
             }
         }
 
+        if (!$item instanceof IR\MatchStmt && !$item instanceof IR\MatchReturn) {
+            $hit = false;
+            $item = rewriteStmtOperands(
+                $item,
+                static fn (IR\Operand $op): IR\Operand => rewriteConcreteDictMethodOperand($op, $concreteTemps, $globalEvidence, $hit),
+            );
+            $changed = $changed || $hit;
+        }
+
         $out[] = $item;
     }
 
     return ['items' => denseStmtItems($out), 'changed' => $changed];
+}
+
+/**
+ * A method read off compile-time-known evidence is the instance's method itself.
+ *
+ * `(__ev_Num_Int()["+"])(x, y)` is a `DictMethod` whose evidence is a nullary
+ * evidence factory call, so the method is `Num Int`'s `+` and needs no
+ * dictionary at runtime. Only nullary evidence is rewritten: its methods take
+ * no context dictionaries, so the reference is exact.
+ *
+ * @param array<int, IR\Operand> $concreteTemps
+ * @param array<string, array{module: string, methods: array<string, string>}> $globalEvidence
+ */
+function rewriteConcreteDictMethodOperand(
+    IR\Operand $operand,
+    array $concreteTemps,
+    array $globalEvidence,
+    bool &$hit,
+): IR\Operand {
+    if ($operand instanceof IR\DictMethod) {
+        $evidence = resolveConcreteOperand($operand->evidence, $concreteTemps);
+        $evName = null;
+        if ($evidence instanceof IR\FnRef && isEvidenceFactoryName($evidence->name)) {
+            $evName = specializationLookupName($evidence->name);
+        } elseif ($evidence instanceof IR\ExprCall
+            && isEvidenceFactoryName($evidence->callee)
+            && $evidence->args === []) {
+            $evName = specializationLookupName($evidence->callee);
+        }
+
+        $evInfo = $evName === null ? null : ($globalEvidence[$evName] ?? null);
+        $methodIr = \is_array($evInfo) ? ($evInfo['methods'][$operand->method] ?? null) : null;
+        if (\is_string($methodIr) && $methodIr !== '') {
+            $methodModule = (string) ($evInfo['module'] ?? '');
+            if ($methodModule !== ''
+                && !str_contains($methodIr, '::')
+                && !str_contains($methodIr, '\\')) {
+                $methodIr = resolvedSymbol($methodModule, $methodIr);
+            }
+            $hit = true;
+
+            return new IR\FnRef($methodIr);
+        }
+    }
+
+    return mapOperandChildren(
+        $operand,
+        static fn (IR\Operand $child): IR\Operand => rewriteConcreteDictMethodOperand($child, $concreteTemps, $globalEvidence, $hit),
+    );
 }
 
 /**

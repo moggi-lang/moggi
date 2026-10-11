@@ -14,7 +14,7 @@ program
     pat_con TV
       pat_con T
         pat_var b
-    infix ==
+    intrinsic intEq#
       variable a
       variable b
   function __ev_MyEq_T__3d_3d_3d :: __Dict_MyEq -> T -> T -> Bool

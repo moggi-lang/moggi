@@ -1,11 +1,8 @@
 {-# LANGUAGE NoImplicitPrelude #-}
--- | The implicit Prelude: the types, classes and functions every module sees.
---
--- Historic spellings are gone: no `return` (`pure` covers it), no `mappend`
--- (`(<>)` covers it), no `foldl'`/`seq`/`($!)` (evaluation is strict, so one
--- `foldl` is enough). The effects that touch the outside world (`print`,
--- `getLine`, `readFile`, ...) come from an explicit `import System.IO` rather
--- than sitting in every module's scope.
+-- | The Prelude - the standard module.
+-- 
+-- The Prelude is imported by default into all Moggi modules unless either there
+-- is an explicit import statement for it, or NoImplicitPrelude is enabled.
 module Prelude
   ( -- Basic data types
     Bool(False, True)
@@ -136,7 +133,7 @@ module Prelude
   , showChar
   , showString
   , showParen
-    -- Basic input and output (see D20: nothing file- or read-side here)
+    -- Basic input and output
   , IO
   , putStr
   , putStrLn

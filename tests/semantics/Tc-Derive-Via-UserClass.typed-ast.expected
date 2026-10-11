@@ -5,13 +5,13 @@ program
   function __ev_MyEq_Int__3d_3d_3d :: Int -> Int -> Bool
     pat_var x
     pat_var y
-    infix ==
+    intrinsic intEq#
       variable x
       variable y
   function __ev_MyEq_Int__2f_3d_3d :: Int -> Int -> Bool
     pat_var x
     pat_var y
-    infix /=
+    intrinsic intNe#
       variable x
       variable y
   newtype MyInt

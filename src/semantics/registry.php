@@ -13,6 +13,7 @@ use function Moggi\Semantics\Types\applyPrimitiveTypeSynonymBootstrap;
 use function Moggi\Semantics\Types\associatedEquationsMapFromDecl;
 use function Moggi\Semantics\Types\indexAssociatedEquations;
 use function Moggi\Semantics\Types\instanceHeadIndexKeyFromAst;
+use function Moggi\Semantics\Types\instanceIntrinsicMethods;
 use function Moggi\Semantics\Types\registerClass;
 use function Moggi\Semantics\Types\registerClassMethodExportSchemes;
 use function Moggi\Semantics\Types\registerData;
@@ -97,6 +98,7 @@ function applyImportContext(TypeCheckState $state, Ast\Program $program, array $
                 'class' => $item->class,
                 'head' => $item->head,
                 'constraints' => $item->constraints,
+                'intrinsicMethods' => instanceIntrinsicMethods($item),
                 'associatedEquations' => associatedEquationsMapFromDecl($item),
             ]);
         }

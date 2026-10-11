@@ -10,7 +10,7 @@ program
       pat_var n
     apply
       constructor_ref Age
-      infix +
+      intrinsic intAdd#
         variable n
         integer 1
   function unwrap :: Wrap Int -> Int

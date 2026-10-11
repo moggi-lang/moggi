@@ -16,6 +16,8 @@
 -- the arithmetic and conversion classes, the enumeration, and the two bounds —
 -- so 'fromIntegral' converts between widths (keeping the low bits when the
 -- target is narrower) and into a 'Data.Integer.Integer', where nothing is lost.
+-- The single exception is `Num Int`, which belongs with the class in `Data.Num`:
+-- the library's own low-level modules do `Int` arithmetic below this one.
 --
 -- The instances are written against primitives rather than composed from one
 -- another: the values share the host's machine integer, and the width is
@@ -54,15 +56,6 @@ instance Eq Int where
 
 instance Ord Int where
   compare a b = intCompare# a b
-
-instance Num Int where
-  (+) a b = intAdd# a b
-  (-) a b = intSub# a b
-  (*) a b = intMul# a b
-  negate a = intNegate# a
-  abs a = intAbs# a
-  signum a = intSignum# a
-  fromInteger n = intFromInteger# n
 
 instance Enum Int where
   succ n = case intEq# n intMaxBound of

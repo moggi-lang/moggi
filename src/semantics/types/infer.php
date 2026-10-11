@@ -43,7 +43,6 @@ use function Moggi\Semantics\Exhaustiveness\checkCaseExhaustiveness;
 use function Moggi\Semantics\IntrinsicRegistry\capturesCallSite;
 use function Moggi\Semantics\IntrinsicRegistry\primitiveTypeOwnerModule;
 use function Moggi\Semantics\IntrinsicRegistry\resolveIntrinsicName;
-use function Moggi\Semantics\IntrinsicRegistry\resolveMonomorphicOperator;
 use function Moggi\Semantics\IntrinsicRegistry\schemeArity;
 use function Moggi\Semantics\IntrinsicRegistry\typeSchemes;
 use function Moggi\Semantics\TypeExpr\canonicalNatDigits;
@@ -270,10 +269,11 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
 
     $fnType = settleCheckedBody($state, $fn, $fnType, $restricted, $hadDeclaredSignature, $group);
 
+    $wrapper = trivialIntrinsicWrapper($fn);
     resolveMachineIntPow($state, $fn->body);
+    resolveInstanceIntrinsicMethods($state, $fn->body);
     $fn->body = rewriteIntrinsicApplies($fn->body);
 
-    $wrapper = trivialIntrinsicWrapper($fn);
     if ($wrapper !== null) {
         $fn->intrinsicWrapper = $wrapper;
         $state->intrinsicWrappers[$fn->name] = $wrapper;
@@ -311,7 +311,7 @@ function settleCheckedBody(
             : quantifiedVars($state, peelDictArrows($fnType, count($group->dicts))),
     );
 
-    resolveDeferredNativeInfixes($state, $fn->body);
+    resolveDeferredInfixPrimops($state, $fn->body);
     resolvePendingEvidenceInExpr($state, $fn->body);
     tryResolveValueEvidence($state, $fn->body);
     $fn->body = elaborateNumericLiterals($state, $fn->body);
@@ -565,9 +565,10 @@ function settleDeferredDeclaration(TypeCheckState $state, array $entry): void
             $entry['group'],
         );
         recordRestrictedSolutions($state);
-        resolveMachineIntPow($state, $fn->body);
-        $fn->body = rewriteIntrinsicApplies($fn->body);
         $wrapper = trivialIntrinsicWrapper($fn);
+        resolveMachineIntPow($state, $fn->body);
+        resolveInstanceIntrinsicMethods($state, $fn->body);
+        $fn->body = rewriteIntrinsicApplies($fn->body);
         if ($wrapper !== null) {
             $fn->intrinsicWrapper = $wrapper;
             $state->intrinsicWrappers[$fn->name] = $wrapper;
@@ -1194,7 +1195,28 @@ function rewriteIntrinsicApplies(Ast\AstNode $expr): Ast\AstNode
             $expr->left = rewriteIntrinsicApplies($expr->left);
             $expr->right = rewriteIntrinsicApplies($expr->right);
 
-            return $expr;
+            $primop = $expr->resolvedIntrinsic;
+            if ($primop === null || $primop === 'boolAnd#' || $primop === 'boolOr#') {
+                return $expr;
+            }
+
+            $internal = resolveIntrinsicName($primop) ?? $primop;
+            $scheme = typeSchemes()[$internal] ?? null;
+            if ($scheme === null || schemeArity($scheme) !== 2) {
+                return $expr;
+            }
+
+            $call = new Ast\IntrinsicCall(
+                $internal,
+                [$expr->left, $expr->right],
+                $expr->line,
+                $expr->col,
+                $expr->endCol,
+            );
+            $call->intrinsicId = $internal;
+            $call->inferredType = $expr->inferredType;
+
+            return $call;
         })(),
         Ast\Tuple::class, Ast\ListLit::class => (static function () use ($expr): Ast\AstNode {
             foreach ($expr->elements as $i => $el) {
@@ -1532,15 +1554,17 @@ function inferVariable(TypeCheckState $state, Ast\AstNode &$expr, array $env): T
         throw typeFail($state, ambiguousImportMessage($expr->name, $state->ambiguousImports[$expr->name]), $expr);
     }
 
-    $scheme = $env[$expr->name] ?? throw typeFail(
-        $state,
-        appendDidYouMean(
-            \sprintf("undefined variable `%s`", $expr->name),
-            $expr->name,
-            \array_keys($env),
-        ),
-        $expr,
-    );
+    $scheme = $env[$expr->name]
+        ?? classMethodOperatorScheme($state, $expr->name)
+        ?? throw typeFail(
+            $state,
+            appendDidYouMean(
+                \sprintf("undefined variable `%s`", $expr->name),
+                $expr->name,
+                \array_keys($env),
+            ),
+            $expr,
+        );
     if (isset($state->intrinsicWrappers[$expr->name])) {
         $expr->intrinsicWrapper = $state->intrinsicWrappers[$expr->name];
     } else if (isset($env[$expr->name]) && resolveIntrinsicName($expr->name) !== null) {
@@ -1601,15 +1625,17 @@ function inferOperatorRef(TypeCheckState $state, Ast\AstNode &$expr, array $env)
         throw typeFail($state, ambiguousImportMessage($expr->name, $state->ambiguousImports[$expr->name]), $expr);
     }
 
-    $scheme = $env[$expr->name] ?? throw typeFail(
-        $state,
-        appendDidYouMean(
-            "undefined operator `{$expr->name}`",
-            $expr->name,
-            operatorCandidateNames($env, $state),
-        ),
-        $expr,
-    );
+    $scheme = $env[$expr->name]
+        ?? classMethodOperatorScheme($state, $expr->name)
+        ?? throw typeFail(
+            $state,
+            appendDidYouMean(
+                "undefined operator `{$expr->name}`",
+                $expr->name,
+                operatorCandidateNames($env, $state),
+            ),
+            $expr,
+        );
 
     if (isset($state->externalFns[$expr->name])) {
         $expr->resolvedOrigin = $state->externalFns[$expr->name];
@@ -1656,10 +1682,6 @@ function inferEvidenceMethod(TypeCheckState $state, Ast\AstNode &$expr): Type
 {
     if (!$expr instanceof Ast\EvidenceMethod) {
         throw typeFail($state, 'expected evidence_method', $expr);
-    }
-
-    if (isset($state->constraintMethodAmbiguities[$expr->method])) {
-        throw typeFail($state, "ambiguous class method `{$expr->method}`", $expr);
     }
 
     $info = $state->constraintMethods[$expr->method] ?? null;
@@ -1876,9 +1898,13 @@ function resolvePendingEvidenceInExpr(TypeCheckState $state, Ast\AstNode &$expr)
             $operator = $expr->operator;
             $expr = prependEvidenceAtRoot(
                 $state,
-                new Ast\Apply(
-                    new Ast\Apply(new Ast\OperatorRef($operator), $expr->left),
+                infixApplicationNode(
+                    $operator,
+                    $expr->left,
                     $expr->right,
+                    $expr->line,
+                    $expr->col,
+                    $expr->endCol,
                 ),
                 $evidence,
             );
@@ -2076,6 +2102,30 @@ function isClassMethodOperator(TypeCheckState $state, string $op): bool
     return false;
 }
 
+/**
+ * The application an infix expression stands for.
+ *
+ * The rewrite replaces a node the reader wrote with a tree they did not, so the
+ * replacement carries the infix's own source position: the generated code's
+ * statement map and its diagnostics both name the expression as written.
+ */
+function infixApplicationNode(string $op, Ast\AstNode $left, Ast\AstNode $right, int $line, int $col, int $endCol): Ast\Apply
+{
+    return new Ast\Apply(
+        new Ast\Apply(
+            new Ast\OperatorRef($op, $line, $col, $endCol),
+            $left,
+            $line,
+            $col,
+            $endCol,
+        ),
+        $right,
+        $line,
+        $col,
+        $endCol,
+    );
+}
+
 function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
 {
     if (!$expr instanceof Ast\Infix) {
@@ -2108,6 +2158,20 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
         );
 
         return inferRewrittenInfix($state, $surface, $expr, $env);
+    }
+
+    if ($op === ':'
+        && ! isset($state->localDeclNames[$op])
+        && ! isset($env[$op])
+        && ! isset($state->env[$op])
+    ) {
+        return applyOperatorPrimop(
+            $state,
+            $expr,
+            'listCons#',
+            inferExpr($state, $expr->left, $env),
+            inferExpr($state, $expr->right, $env),
+        );
     }
 
     if (isset($state->constraintMethods[$op])
@@ -2144,24 +2208,30 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
         return inferRewrittenInfix($state, $surface, $expr, $env);
     }
 
-    $opScheme = $env[$op] ?? $state->env[$op] ?? throw typeFail($state, "undefined operator `{$op}`", $expr);
-    $instantiated = instantiateScheme($state, $opScheme);
-    $opType = $instantiated['type'];
     $leftType = inferExpr($state, $expr->left, $env);
     $rightType = inferExpr($state, $expr->right, $env);
-    $result = freshType($state);
-    unify($state, $opType, new TArrow($leftType, new TArrow($rightType, $result)), $expr);
-
-    $resolved = resolveMonomorphicOperator(
-        $op,
-        prune($state, $leftType),
-        prune($state, $rightType),
-    );
-    if ($resolved !== null) {
-        $expr->resolvedIntrinsic = $resolved;
-
-        return $result;
+    $primop = instanceOperatorPrimop($state, $op, prune($state, $leftType), prune($state, $rightType));
+    if ($primop !== null) {
+        return applyOperatorPrimop($state, $expr, $primop, $leftType, $rightType);
     }
+
+    $declaredPrimop = $state->intrinsicWrappers[$op] ?? null;
+    if ($declaredPrimop !== null && ! isset($state->localDeclNames[$op])) {
+        return applyOperatorPrimop($state, $expr, $declaredPrimop, $leftType, $rightType);
+    }
+
+    $opScheme = $env[$op] ?? $state->env[$op] ?? classMethodOperatorScheme($state, $op);
+    if ($opScheme === null) {
+        if (isset($state->classMethodAmbiguities[$op])) {
+            throw typeFail($state, "ambiguous class method `{$op}`", $expr);
+        }
+
+        throw typeFail($state, "undefined operator `{$op}`", $expr);
+    }
+
+    $instantiated = instantiateScheme($state, $opScheme);
+    $result = freshType($state);
+    unify($state, $instantiated['type'], new TArrow($leftType, new TArrow($rightType, $result)), $expr);
 
     $classOperator = isClassMethodOperator($state, $op) || isset($state->constraintMethods[$op]);
     $constraints = $instantiated['dicts'];
@@ -2187,10 +2257,7 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
             try {
                 $left = $expr->left;
                 $right = $expr->right;
-                $expr = new Ast\Apply(
-                    new Ast\Apply(new Ast\OperatorRef($op), $left),
-                    $right,
-                );
+                $expr = infixApplicationNode($op, $left, $right, $expr->line, $expr->col, $expr->endCol);
 
                 return inferApplyAndElaborate($state, $expr, $env);
             } finally {
@@ -2208,10 +2275,7 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
         if (constraintsResolvable($state, $constraints)) {
             $left = $expr->left;
             $right = $expr->right;
-            $expr = new Ast\Apply(
-                new Ast\Apply(new Ast\OperatorRef($op), $left),
-                $right,
-            );
+            $expr = infixApplicationNode($op, $left, $right, $expr->line, $expr->col, $expr->endCol);
 
             return inferApplyAndElaborate($state, $expr, $env);
         }
@@ -2235,10 +2299,7 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
         $left = $expr->left;
         $right = $expr->right;
         $surface = $expr;
-        $expr = new Ast\Apply(
-            new Ast\Apply(new Ast\OperatorRef($op), $left),
-            $right,
-        );
+        $expr = infixApplicationNode($op, $left, $right, $expr->line, $expr->col, $expr->endCol);
 
         return inferRewrittenInfix($state, $surface, $expr, $env);
     }
@@ -2374,6 +2435,294 @@ function inferRewrittenInfix(TypeCheckState $state, Ast\AstNode $surface, Ast\Ap
     $surface->inferredType = $call->inferredType;
 
     return $type;
+}
+
+/**
+ * Resolve an infix whose operands only settled after the use site was typed.
+ *
+ * `replicateM n ma = case n <= 0 of ... replicateM (n - 1) ma` types `n - 1`
+ * while `n` is still the fresh variable the parameter was bound to, before the
+ * signature's `Int` reaches the binder. Neither operand then names an instance,
+ * so the use is typed through the class's dictionary and keeps the constraint it
+ * carries. By the time the body is settled the operands do name one, and the
+ * constraints are exactly the dispatch the primop replaces: the node takes the
+ * primop and drops them, the deferred form of what {@see instanceOperatorPrimop}
+ * does at the use site when the operands are already known.
+ *
+ * Nothing is guessed -- an operand whose settled type names no instance leaves
+ * the node and its constraint alone, and so does a constraint that is not a
+ * dictionary the primop makes unnecessary.
+ */
+function resolveDeferredInfixPrimops(TypeCheckState $state, Ast\AstNode $expr): void
+{
+    walkAstValues($expr, static function (Ast\AstNode $node) use ($state): void {
+        if ($node->pendingConstraints === [] && $node->pendingDicts === []) {
+            return;
+        }
+
+        if ($node instanceof Ast\Infix) {
+            $operator = $node->operator;
+            $operands = [$node->left, $node->right];
+            $target = $node;
+        } elseif ($node instanceof Ast\Apply) {
+            $parts = flattenApplyForIntrinsicWrapper($node);
+            if (! $parts['function'] instanceof Ast\OperatorRef || \count($parts['args']) !== 2) {
+                return;
+            }
+
+            $operator = $parts['function']->name;
+            $operands = $parts['args'];
+            $target = $node;
+        } else {
+            return;
+        }
+
+        $types = [];
+        foreach ($operands as $operand) {
+            if ($operand->inferredType === null) {
+                return;
+            }
+
+            $types[] = canonicalPrimitiveType(
+                prune($state, inferredTypeAstToInternal($operand->inferredType)),
+            );
+        }
+
+        $primop = instanceOperatorPrimop($state, $operator, ...$types);
+        if ($primop === null) {
+            return;
+        }
+
+        if ($target instanceof Ast\Infix) {
+            $target->resolvedIntrinsic = $primop;
+            $target->pendingConstraints = [];
+            $target->pendingDicts = [];
+
+            return;
+        }
+
+        $target->intrinsicWrapper = $primop;
+        $cursor = $target;
+        while ($cursor instanceof Ast\Apply) {
+            $cursor->pendingConstraints = [];
+            $cursor->pendingDicts = [];
+            $cursor = $cursor->function;
+        }
+        if ($cursor instanceof Ast\AstNode) {
+            $cursor->pendingConstraints = [];
+            $cursor->pendingDicts = [];
+        }
+    });
+}
+
+/**
+ * Lower a use of a class method whose instance declares the method as a primop
+ * to that primop.
+ *
+ * `(+)` on `Int` is `(+) a b = intAdd# a b`, so `x + 1` is the primop and needs
+ * neither a dictionary nor a call. Only a *known* instance is rewritten, and
+ * only when the application supplies exactly the primop's own arity: a partial
+ * application, or one that still carries context dictionaries, keeps the method
+ * call (those need a dictionary at runtime).
+ *
+ * The mark is what {@see rewriteIntrinsicApplies} turns into an `IntrinsicCall`,
+ * exactly as it does for an inlined wrapper.
+ */
+function resolveInstanceIntrinsicMethods(TypeCheckState $state, Ast\AstNode $body): void
+{
+    walkAstValues($body, static function (Ast\AstNode $node) use ($state): void {
+        if (! $node instanceof Ast\Apply || $node->intrinsicWrapper !== null) {
+            return;
+        }
+
+        $parts = flattenApplyForIntrinsicWrapper($node);
+        $callee = $parts['function'];
+        if (! $callee instanceof Ast\EvidenceMethod) {
+            return;
+        }
+
+        $intrinsic = instanceMethodIntrinsic($state, $callee);
+        if ($intrinsic === null) {
+            return;
+        }
+
+        $scheme = typeSchemes()[$intrinsic] ?? null;
+        if ($scheme === null || \count($parts['args']) !== schemeArity($scheme)) {
+            return;
+        }
+
+        $node->intrinsicWrapper = $intrinsic;
+    });
+}
+
+/**
+ * The primop a resolved class-method reference stands for, when the instance it
+ * came from declares the method as that primop.
+ *
+ * The reference records the instance's own head, so the project's instance
+ * index names the declaration. `*` is the index's "no head constructor" key:
+ * a use still open in the class variable has no instance to read and keeps its
+ * dictionary.
+ */
+function instanceMethodIntrinsic(TypeCheckState $state, Ast\EvidenceMethod $method): ?string
+{
+    $head = $method->evidenceInstance;
+    if (! $head instanceof Ast\TypeNode) {
+        return null;
+    }
+
+    $key = instanceHeadIndexKeyFromAst($head);
+    if ($key === '*') {
+        return null;
+    }
+
+    foreach ($state->projectInstancesByClassHead[$method->class][$key] ?? [] as $instance) {
+        if (($instance['constraints'] ?? []) !== []) {
+            continue;
+        }
+
+        $intrinsic = ($instance['intrinsicMethods'] ?? [])[$method->method] ?? null;
+        if (\is_string($intrinsic) && $intrinsic !== '') {
+            return $intrinsic;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * The primop an operator *is* at these operand types, read off the library's
+ * instance for them.
+ *
+ * `instance Num Int where (+) a b = intAdd# a b` says `+` at `Int` *is*
+ * `intAdd#`, and that declaration is the only place the mapping lives: a use
+ * site that reaches it needs neither the operator's name in scope nor a
+ * dictionary. The operand that names an instance decides -- `x + y` is `intAdd#`
+ * when either side is an `Int` -- so a use whose operands leave the type open
+ * (`Num a` at a type variable) names no instance and stays the call the
+ * dictionary path builds. `:` needs none of this: it is the language's list
+ * cons, and {@see inferInfix} resolves it on its own.
+ */
+function instanceOperatorPrimop(TypeCheckState $state, string $op, Type ...$operands): ?string
+{
+    $class = classDeclaringMethod($state, $op);
+    if ($class === null) {
+        return null;
+    }
+
+    foreach ($operands as $operand) {
+        $key = instanceHeadIndexKeyFromType(normalizeType($state, $operand, reduceFamilies: false));
+        if ($key === '*') {
+            continue;
+        }
+
+        foreach ($state->projectInstancesByClassHead[$class][$key] ?? [] as $instance) {
+            if (($instance['constraints'] ?? []) !== []) {
+                continue;
+            }
+
+            $primop = ($instance['intrinsicMethods'] ?? [])[$op] ?? null;
+            if (\is_string($primop) && isset(typeSchemes()[$primop])) {
+                return $primop;
+            }
+        }
+    }
+
+    return null;
+}
+
+/**
+ * The scheme a class-method operator carries even when the module never
+ * imported the class that declares it.
+ *
+ * `n + 1` means `Num`'s `+` whether or not this module imports `Data.Num`: the
+ * class declaration says so. The class still has to be part of the compile -- a
+ * module that imports nothing at all has no `Num` to read -- so what this
+ * replaces is the per-module import, not the class. The scheme is the very one
+ * an importer sees, so nothing downstream can tell the two apart -- the
+ * dictionary path types the use, and {@see instanceOperatorPrimop} turns it into
+ * the primop when the operand types name an instance.
+ */
+function classMethodOperatorScheme(TypeCheckState $state, string $op): ?Scheme
+{
+    if ($op === '' || ctype_alpha($op[0]) || $op[0] === '_') {
+        return null;
+    }
+
+    $class = classDeclaringMethod($state, $op);
+    if ($class === null) {
+        return null;
+    }
+
+    $scheme = $state->classes[$class]['methodSchemes'][$op] ?? null;
+
+    return $scheme instanceof Scheme ? $scheme : null;
+}
+
+/**
+ * The one class that declares `$op` as a method, or `null` when none or several
+ * do.
+ *
+ * Two classes claiming one name is an ambiguity to report, not a method to read
+ * a scheme off.
+ */
+function classDeclaringMethod(TypeCheckState $state, string $op): ?string
+{
+    if (isset($state->classMethodOwners[$op])) {
+        return $state->classMethodOwners[$op];
+    }
+
+    $found = null;
+    foreach ($state->classes as $className => $classInfo) {
+        if (! isset($classInfo['methods'][$op])) {
+            continue;
+        }
+        if ($found !== null) {
+            return null;
+        }
+        $found = $className;
+    }
+
+    return $found;
+}
+
+/**
+ * Resolve an infix expression as the primop the library declares for it.
+ *
+ * The primop's own scheme is what types the expression: its parameters are
+ * unified with the operands, which is what makes `x + 1` put the literal at the
+ * machine type the instance names rather than leaving it to default, and its
+ * result is the expression's. No result variable of its own is allocated, so the
+ * body's fresh-variable numbering does not depend on how many operators it
+ * spells.
+ *
+ * The node stays the infix it was written as, marked with the primop;
+ * {@see rewriteIntrinsicApplies} lowers the mark into an `IntrinsicCall` -- and
+ * leaves `&&`/`||` alone, whose short-circuit lowering reads the infix itself.
+ */
+function applyOperatorPrimop(
+    TypeCheckState $state,
+    Ast\AstNode &$expr,
+    string $primop,
+    Type $leftType,
+    Type $rightType,
+): Type {
+    if (!$expr instanceof Ast\Infix) {
+        throw new \InvalidArgumentException('applyOperatorPrimop expects an infix expression');
+    }
+
+    $scheme = typeSchemes()[$primop] ?? throw new \LogicException("primop `{$primop}` has no scheme");
+    $instantiated = instantiateScheme($state, $scheme);
+    $type = $instantiated['type'];
+    if (! $type instanceof TArrow || ! $type->to instanceof TArrow) {
+        throw new \LogicException("primop `{$primop}` is not a binary operator");
+    }
+
+    unify($state, $type->from, $leftType, $expr);
+    unify($state, $type->to->from, $rightType, $expr);
+    $expr->resolvedIntrinsic = $primop;
+
+    return $type->to->to;
 }
 
 /**
@@ -2612,12 +2961,12 @@ function orderingNeedsEvidence(TypeCheckState $state, string $op, Type $left, Ty
  * host Binop fast path.
  *
  * A host comparison asks whether the two runtime representations are the same,
- * which is the same question as `Eq` only while the operand is a machine
- * scalar or a type the monomorphic table resolved to an exact intrinsic
- * (`Int`, `String`, `Double`, `Bool`, `List`, `Maybe`, ...) -- those return
- * before this point. At every other concrete type the instance is the
- * authority: with `data W = W Int` and `(==) (W a) (W b) = a < b`, the answer
- * for `W 1 == W 3` is `True`, while comparing representations answers `False`.
+ * which is the same question as `Eq` only where the representation is the
+ * value -- and that is the instance's question to answer, not the checker's:
+ * with `data W = W Int` and `(==) (W a) (W b) = a < b`, the answer for
+ * `W 1 == W 3` is `True`, while comparing representations answers `False`.
+ * `Eq Int` is `intEq#` and `Eq String` is `stringEq#`, so a scalar reaches the
+ * same machine comparison it did before -- through the instance that defines it.
  *
  * A type nobody wrote an instance for keeps the previous lowering rather than
  * becoming a new diagnostic here; a still-polymorphic operand never reaches
@@ -2633,10 +2982,6 @@ function equalityNeedsEvidence(TypeCheckState $state, string $op, Type $left, Ty
     $right = prune($state, $right);
 
     if ($left instanceof TVar || $right instanceof TVar) {
-        return false;
-    }
-
-    if (typeIsMachineInt($left) && typeIsMachineInt($right)) {
         return false;
     }
 
@@ -2676,21 +3021,20 @@ function typeIsUnsigned64(Type $type): bool
 }
 
 /**
- * Whether `+`/`-`/`*` has to dispatch through its `Num` evidence rather than
- * the host Binop fast path.
+ * Whether `+`/`-`/`*` (and `Fractional`'s `/`) has to dispatch through its
+ * evidence rather than the host Binop fast path.
  *
  * Codegen lowers a leftover symbolic arithmetic Binop by unboxing both
  * operands as a machine integer, so that path is only correct while both
- * operands are shaped like one. `Integer` was the first case the evidence
- * rewrite covered; any other type with its own `Num` instance whose runtime
- * representation is not a machine scalar (a wrapper around `Integer` for
- * instance, as `Numeric.Natural` is) hits the same cast — and the unbox is a
- * hard cast to `Int64`/`Long`, so it fails at run time rather than wrapping.
- * Types the monomorphic table already resolved never reach here.
+ * operands are shaped like one — and `/` is not even that: a host `/` on two
+ * machine integers is integer division on some backends and a `DivisionByZero`
+ * on `0.0 / 0.0` where the instance's `doubleDiv#` is a float divide. The
+ * instance is the authority for every concrete operand; the dictionary's
+ * resolved method is what becomes the primop.
  */
 function arithmeticNeedsEvidence(TypeCheckState $state, string $op, Type $left, Type $right): bool
 {
-    if (!\in_array($op, ['+', '-', '*'], true)) {
+    if (!\in_array($op, ['+', '-', '*', '/'], true)) {
         return false;
     }
 
@@ -2700,8 +3044,7 @@ function arithmeticNeedsEvidence(TypeCheckState $state, string $op, Type $left, 
         return false;
     }
 
-    return !hasMachineIntRepresentation($state, $left)
-        || !hasMachineIntRepresentation($state, $right);
+    return true;
 }
 
 /**
@@ -3716,49 +4059,9 @@ function describeUnresolvedConstraints(TypeCheckState $state, array $constraints
     return "unresolved type class {$noun}: `" . \implode('`, `', $list) . '`';
 }
 
-/**
- * Drop the class constraint a symbolic operator recorded when its operand type
- * was still open and the body has since pinned it to a machine integer.
- *
- * `inferInfix` records `Num a` on the node when it cannot yet decide between the
- * native operation and the dictionary, and `let x = 5 in x + x` only learns that
- * `x` is an `Int` afterwards. For `Int`/`Word64` the native operation is exactly
- * right, so the constraint is answered here rather than reported as unresolved
- * (and the same node is recorded as the intrinsic the lowering must emit).
- */
-function resolveDeferredNativeInfixes(TypeCheckState $state, Ast\AstNode $expr): void
-{
-    walkAstValues($expr, static function (Ast\AstNode $node) use ($state): void {
-        if (! $node instanceof Ast\Infix || $node->pendingConstraints === []) {
-            return;
-        }
-
-        $left = $node->left->inferredType;
-        $right = $node->right->inferredType;
-
-        if ($left === null || $right === null) {
-            return;
-        }
-
-        $resolved = resolveMonomorphicOperator(
-            $node->operator,
-            canonicalPrimitiveType(prune($state, inferredTypeAstToInternal($left))),
-            canonicalPrimitiveType(prune($state, inferredTypeAstToInternal($right))),
-        );
-
-        if ($resolved === null) {
-            return;
-        }
-
-        $node->resolvedIntrinsic = $resolved;
-        $node->pendingConstraints = [];
-    });
-}
-
 function assertNoPendingConstraintsInExpr(TypeCheckState $state, Ast\AstNode $expr, ?Ast\AstNode $at = null): void
 {
-    if ($expr->pendingConstraints !== []) {
-        throw typeFail($state, describeUnresolvedConstraints($state, $expr->pendingConstraints), $at ?? $expr);
+    if ($expr->pendingConstraints !== []) {        throw typeFail($state, describeUnresolvedConstraints($state, $expr->pendingConstraints), $at ?? $expr);
     }
 
     match ($expr::class) {
@@ -4848,9 +5151,6 @@ function resolveTypeCon(TypeCheckState $state, string $name, array $expanding, A
         );
     }
 
-    // Not a declared constructor and not upper-case-initial: the parser reads a
-    // bare lower-case name as a type variable, so it stays one. Everything
-    // downstream dispatches on the node, never on the name.
     return ctype_lower($name[0]) ? new TVar($name) : new TCon($name);
 }
 
@@ -4923,9 +5223,6 @@ function applyTypeApp(TypeCheckState $state, Ast\TypeNode $con, array $argAsts, 
 
     $resolvedHead = resolveTypeCon($state, $baseName, $expanding, $con);
 
-    // A head that resolved to a type variable is a variable-headed
-    // application, not a constructor: `f a` stays a `TVarApp` all the way
-    // through, so no later stage has to ask whether `f` names a constructor.
     if ($resolvedHead instanceof TVar) {
         applyTypeAppKinds($state, $resolvedHead->name, $args, $argAsts, $con, isVarHead: true);
 

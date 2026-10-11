@@ -1,16 +1,16 @@
 program
   function count :: Int
-    infix +
+    intrinsic intAdd#
       integer 1
       integer 1
   function asInt :: Int
     variable count
   function unpinned :: Int
-    infix +
+    intrinsic intAdd#
       integer 1
       integer 1
   function pinned :: Int
-    infix +
+    intrinsic intAdd#
       integer 1
       integer 1
   function pinnedInt :: Int
@@ -18,8 +18,8 @@ program
   function pinnedAgain :: Int
     variable pinned
   function main :: Int
-    infix +
-      infix +
+    intrinsic intAdd#
+      intrinsic intAdd#
         variable asInt
         variable pinnedInt
       variable pinnedAgain

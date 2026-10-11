@@ -517,24 +517,27 @@ function readDescriptor(string $path): array
         if (!\is_array($values) || !\preg_match('/^author(\.(.+))?$/', (string) $section)) {
             continue;
         }
+
         $npub = \trim((string) ($values['npub'] ?? ''));
         $isAutomation = \strtolower(\trim((string) ($values['automation'] ?? ''))) === 'true';
         $name = \trim((string) ($values['name'] ?? ''));
         $email = \trim((string) ($values['email'] ?? ''));
+
         if ($npub !== '') {
             $authors[] = $npub;
             if ($isAutomation) {
                 $automation[] = $npub;
             }
         }
+
         if ($email !== '') {
             $authorEmails[] = $email;
         }
-        // A block that says nothing at all is not a credit either: there would be
-        // no one to name, only a section header.
+
         if ($name === '' && $email === '' && $npub === '') {
             continue;
         }
+
         $credits[] = [
             'name' => $name === '' ? null : $name,
             'email' => $email === '' ? null : $email,

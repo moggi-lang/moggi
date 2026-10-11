@@ -216,7 +216,7 @@ function isIdentifierInfixFunction(string $operator): bool
 
 function isPrimitiveSymbolicBinop(string $operator): bool
 {
-    return \in_array($operator, ['+', '-', '*', '/', '<', '>', '<=', '>=', '==', '/=', '&&', '||', ':'], true);
+    return \in_array($operator, ['+', '-', '*', '/', '<', '>', '<=', '>=', '==', '/=', '&&', '||'], true);
 }
 
 function lowerApplyFromExpr(Ast\Apply $expr, LowerCtx $ctx): Operand

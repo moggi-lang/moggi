@@ -4,7 +4,7 @@ program
   function __ev_MyEq_Int__3d_3d_3d :: Int -> Int -> Bool
     pat_var x
     pat_var y
-    infix ==
+    intrinsic intEq#
       variable x
       variable y
   data Box
@@ -15,7 +15,7 @@ program
       pat_var a
     pat_con Box
       pat_var b
-    infix ==
+    intrinsic intEq#
       variable a
       variable b
   function intEq :: Int -> Int -> Bool
