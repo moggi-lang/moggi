@@ -23,9 +23,11 @@ module Platform.PHP
 
 import Data.Bool
 import Data.Double
+import Data.Eq
 import Data.Int
 import Data.List hiding (singleton, take, drop, length, isPrefixOf, isSuffixOf)
 import Data.Maybe
+import Data.Num
 import Data.String
 import System.IO.Types (Resource)
 import Moggi.Internal.Prim

@@ -23,9 +23,6 @@ function svcMoniker(AnalysisService $svc, string $uri, array $pos): array
     $name = null;
     $resolved = null;
     if ($node === null) {
-        // Declaration-name positions have no positioned AST node (the parser
-        // leaves top-level decls unpositioned); fall back to the shared token
-        // map, same as occurrences and folding.
         $maps = declTokenMaps($analysis->source, $uri);
         foreach ($maps['names'] as $tok) {
             if ($tok->line === $comp['line']) {
