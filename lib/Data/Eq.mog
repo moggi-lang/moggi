@@ -8,7 +8,21 @@ import Moggi.Internal.Prim
 infix 4 ==, /=
 
 -- | The 'Eq' class defines equality ('==') and inequality ('/=').
+-- All the basic datatypes exported by the "Prelude" are instances of 'Eq',
+-- and 'Eq' may be derived for any datatype whose constituents are also
+-- instances of 'Eq'.
+--
+-- Moggi defines no laws for 'Eq'. However, instances are
+-- encouraged to follow these properties:
+--
+-- [__Reflexivity__]: @x == x@ = 'True'
+-- [__Symmetry__]: @x == y@ = @y == x@
+-- [__Transitivity__]: if @x == y && y == z@ = 'True', then @x == z@ = 'True'
+-- [__Extensionality__]: if @x == y@ = 'True' and @f@ is a function
+-- whose return type is an instance of 'Eq', then @f x == f y@ = 'True'
+-- [__Negation__]: @x /= y@ = @not (x == y)@
 class Eq a where
+  {-# MINIMAL (==) | (/=) #-}
   (==), (/=) :: a -> a -> Bool
 
   (/=) x y = boolNot# (x == y)
