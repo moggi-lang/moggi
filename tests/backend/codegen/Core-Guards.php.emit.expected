@@ -2,9 +2,12 @@
 
 namespace Core\Guards;
 
-const __MOGGI_MAP = [[58 => ['Core.Guards.classify', 'tests/backend/codegen/Core-Guards.mog', 23, 31], 59 => ['Core.Guards.classify', 'tests/backend/codegen/Core-Guards.mog', 23, 31]], ['Core\\Guards\\positive' => ['Core.Guards.positive', 'tests/backend/codegen/Core-Guards.mog', 9, 14], 'Core\\Guards\\twice' => ['Core.Guards.twice', 'tests/backend/codegen/Core-Guards.mog', 12, 11], 'Core\\Guards\\firstSign' => ['Core.Guards.firstSign', 'tests/backend/codegen/Core-Guards.mog', 14, 1], 'Core\\Guards\\classify' => ['Core.Guards.classify', 'tests/backend/codegen/Core-Guards.mog', 22, 3]]];
+const __MOGGI_MAP = [[18 => ['Core.Guards.positive', 'tests/backend/codegen/Core-Guards.mog', 9, 14], 31 => ['Core.Guards.firstSign', 'tests/backend/codegen/Core-Guards.mog', 15, 29], 62 => ['Core.Guards.classify', 'tests/backend/codegen/Core-Guards.mog', 23, 31], 63 => ['Core.Guards.classify', 'tests/backend/codegen/Core-Guards.mog', 23, 31]], ['Core\\Guards\\positive' => ['Core.Guards.positive', 'tests/backend/codegen/Core-Guards.mog', 9, 14], 'Core\\Guards\\twice' => ['Core.Guards.twice', 'tests/backend/codegen/Core-Guards.mog', 12, 11], 'Core\\Guards\\firstSign' => ['Core.Guards.firstSign', 'tests/backend/codegen/Core-Guards.mog', 14, 1], 'Core\\Guards\\classify' => ['Core.Guards.classify', 'tests/backend/codegen/Core-Guards.mog', 22, 3]]];
 
 require_once __DIR__ . '/../../../lib/Data/Bool.php';
+require_once __DIR__ . '/../../../lib/Data/Int.php';
+
+use function Data\Int\__ev_Ord_Int;
 
 function moggi_u64_add(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao + $bo; $c = ($lo >> 32) & 0xffffffff; $hi = ($ah + $bh + $c) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }
 function moggi_u64_sub(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao - $bo; $bw = $lo < 0 ? 1 : 0; $hi = ($ah - $bh - $bw) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }
@@ -12,7 +15,8 @@ function moggi_u64_mul(int $a, int $b): int { $a0 = $a & 0xffff; $a1 = ($a >> 16
 function moggi_i64_mul(int $a, int $b): int { $r = $a * $b; return \is_int($r) ? $r : moggi_u64_mul($a, $b); }
 
 function positive($n) {
-    return $n > 0;
+    $__t0 = (__ev_Ord_Int()[">"])($n, 0);
+    return $__t0;
 }
 
 function twice($n) {
@@ -24,7 +28,7 @@ function firstSign($_p0) {
         if ($_p0 !== []) {
             $__scrut_0 = $_p0;
             $x = $__scrut_0[0];
-            $__t2 = $x < 0;
+            $__t2 = (__ev_Ord_Int()["<"])($x, 0);
             if ($__t2) {
                 return "neg-first";
                 break;

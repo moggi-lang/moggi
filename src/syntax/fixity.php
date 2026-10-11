@@ -9,6 +9,7 @@ use Moggi\Syntax\Ast\ImportDecl;
 function mergeFixity(array ...$maps): array
 {
     $merged = [];
+
     foreach ($maps as $map) {
         foreach ($map as $operator => $info) {
             $merged[$operator] = $info;
@@ -63,6 +64,7 @@ function fixityFromImport(array $fixity, ImportDecl $import): array
 function importedFixityForImports(array $imports, array $fixityByModule): array
 {
     $merged = [];
+
     foreach ($imports as $import) {
         $moduleName = Ast\moduleName($import->path);
         $moduleFixity = $fixityByModule[$moduleName] ?? [];
@@ -73,28 +75,15 @@ function importedFixityForImports(array $imports, array $fixityByModule): array
 }
 
 /**
- * Default fixities for known operators.
- * Local `infix*` declarations in a module override these.
+ * The fixity of an operator nothing in scope declares.
  *
- * @return array{assoc: string, prec: int}|null
- */
-function standardFixity(string $operator): ?array
-{
-    return match ($operator) {
-        '>>=' => ['assoc' => 'infixl', 'prec' => 1],
-        '<>' => ['assoc' => 'infixr', 'prec' => 6],
-        ':' => ['assoc' => 'infixr', 'prec' => 5],
-        '==', '/=', '<', '<=', '>', '>=' => ['assoc' => 'infix', 'prec' => 4],
-        '<*>' => ['assoc' => 'infixl', 'prec' => 4],
-        '+', '-' => ['assoc' => 'infixl', 'prec' => 6],
-        '*' => ['assoc' => 'infixl', 'prec' => 7],
-        '&&' => ['assoc' => 'infixr', 'prec' => 3],
-        '||' => ['assoc' => 'infixr', 'prec' => 2],
-        default => null,
-    };
-}
-
-/**
+ * An operator's fixity comes from the `infix*` declaration of the module that
+ * declares it, reached through the imports that bring the name into scope (or
+ * written in the module itself). Two names are left: `:` is the language's list
+ * cons, which no import brings into scope and the inference pass resolves on its
+ * own, and anything declared by a module the file does not import -- which is a
+ * name error at type checking, and gets the default fixity until then.
+ *
  * @return array{assoc: string, prec: int}
  */
 function fixityFor(ParserState $state, string $operator): array
@@ -103,5 +92,7 @@ function fixityFor(ParserState $state, string $operator): array
         return $state->fixity[$operator];
     }
 
-    return standardFixity($operator) ?? ['assoc' => 'infixl', 'prec' => 9];
+    return $operator === ':'
+        ? ['assoc' => 'infixr', 'prec' => 5]
+        : ['assoc' => 'infixl', 'prec' => 9];
 }

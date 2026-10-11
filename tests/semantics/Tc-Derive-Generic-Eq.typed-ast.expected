@@ -4,7 +4,7 @@ program
     constructor Blue
     constructor Green
     deriving (Generic, Eq)
-  function __ev_Generic_Color_from :: Color -> Rep Color t6
+  function __ev_Generic_Color_from :: Color -> Rep Color t125
     pat_var __x
     case
       variable __x
@@ -39,7 +39,7 @@ program
               apply
                 constructor_ref M1
                 constructor_ref U1
-  function __ev_Generic_Color_to :: Rep Color t52 -> Color
+  function __ev_Generic_Color_to :: Rep Color t171 -> Color
     pat_var __r
     case
       variable __r
@@ -190,7 +190,7 @@ program
       field  :: a
       field  :: b
     deriving (Generic)
-  function __ev_Generic_Pair_from :: Pair t123 t124 -> Rep Pair t123 t124 t131
+  function __ev_Generic_Pair_from :: Pair t242 t243 -> Rep Pair t242 t243 t250
     pat_var __x
     case
       variable __x
@@ -213,7 +213,7 @@ program
                 apply
                   constructor_ref K1
                   variable __f1
-  function __ev_Generic_Pair_to :: Rep Pair t123 t124 t160 -> Pair t123 t124
+  function __ev_Generic_Pair_to :: Rep Pair t242 t243 t279 -> Pair t242 t243
     pat_var __r
     case
       variable __r
@@ -267,7 +267,7 @@ program
       field name :: String
       field age :: Int
     deriving (Generic)
-  function __ev_Generic_Person_from :: Person -> Rep Person t194
+  function __ev_Generic_Person_from :: Person -> Rep Person t313
     pat_var __x
     case
       variable __x
@@ -290,7 +290,7 @@ program
                 apply
                   constructor_ref K1
                   variable __f1
-  function __ev_Generic_Person_to :: Rep Person t221 -> Person
+  function __ev_Generic_Person_to :: Rep Person t340 -> Person
     pat_var __r
     case
       variable __r
@@ -346,7 +346,7 @@ program
     constructor Age
       field  :: Int
     deriving (Generic)
-  function __ev_Generic_Age_from :: Age -> Rep Age t253
+  function __ev_Generic_Age_from :: Age -> Rep Age t372
     pat_var __x
     case
       variable __x
@@ -362,7 +362,7 @@ program
               apply
                 constructor_ref K1
                 variable __f0
-  function __ev_Generic_Age_to :: Rep Age t270 -> Age
+  function __ev_Generic_Age_to :: Rep Age t389 -> Age
     pat_var __r
     case
       variable __r
@@ -404,13 +404,13 @@ program
     integer 1
   data Empty
     deriving (Generic)
-  function __ev_Generic_Empty_from :: Empty -> Rep Empty t292
+  function __ev_Generic_Empty_from :: Empty -> Rep Empty t411
     pat_var __x
     apply
       evidence_method Generic.from evidence= nullary=0
         instance Empty
       variable __x
-  function __ev_Generic_Empty_to :: Rep Empty t295 -> Empty
+  function __ev_Generic_Empty_to :: Rep Empty t414 -> Empty
     pat_var __r
     apply
       evidence_method Generic.to evidence= nullary=0
@@ -439,7 +439,7 @@ program
       field  :: a
       field  :: b
     deriving (Generic)
-  function __ev_Generic_h_e5bf5a3d33ed1a67_from :: t302 :| t303 -> Rep t302 :| t303 t310
+  function __ev_Generic_h_793b427a09240ef9_from :: t421 :| t422 -> Rep t421 :| t422 t429
     pat_var __x
     case
       variable __x
@@ -462,7 +462,7 @@ program
                 apply
                   constructor_ref K1
                   variable __f1
-  function __ev_Generic_h_e5bf5a3d33ed1a67_to :: Rep t302 :| t303 t339 -> t302 :| t303
+  function __ev_Generic_h_793b427a09240ef9_to :: Rep t421 :| t422 t458 -> t421 :| t422
     pat_var __r
     case
       variable __r

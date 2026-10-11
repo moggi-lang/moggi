@@ -434,14 +434,6 @@ function moduleFileClosure(string $path): array
             $origin = $enqueuedBy[$moduleName] ?? null;
             $requiredBy = $origin['module'] ?? $startModule;
 
-            if (\in_array($moduleName, ['Prelude', 'Control.Monad', 'Control.Applicative', 'Data.Functor'], true)) {
-                throw new TypeError(
-                    "cannot resolve standard library module `{$moduleName}`; pass --lib PATH to the Moggi `lib/` directory",
-                    $realPath,
-                    '',
-                );
-            }
-
             $originSource = '';
             if ($origin !== null) {
                 $read = file_get_contents($origin['path']);
@@ -691,6 +683,67 @@ function libraryModuleIndex(array $libDirs): array
     }
 
     return $index;
+}
+
+/**
+ * The standard library modules a program carries by default -- the closure of `Prelude` --
+ * minus the ones `$files` already provides.
+ *
+ * Which instances exist is a property of the project a module is checked in, not of the
+ * module's import list. `Data.Either`'s `Show` instance compares the precedence argument
+ * with `>` at `Int`, and `Ord Int` is declared by `Data.Int`, which the module neither
+ * imports nor needs to: a program that imports `Data.Either` has the instance because
+ * *some* module in it pulled `Data.Int` in, and every program has `Prelude`. A whole-program
+ * build names every module it carries; a checker looking at one file at a time has to name
+ * the ones a program would have anyway, and this returns them.
+ *
+ * The closure of `Prelude` rather than the whole library: an instance for a library module
+ * nothing imports is not in a program's project, and adding it would report a duplicate for
+ * a module that declares its own (`tests/lsp/UnusedInstanceHead.mog` does exactly that).
+ *
+ * A file already in `$files` keeps its place: a workspace module shadowing a library module
+ * of the same name is the one the project carries, and a project may not hold two modules
+ * of one name.
+ *
+ * @param list<string> $files
+ * @return list<string>
+ */
+function stdlibSourcesMissingFrom(array $files, ?string $stdlibDir): array
+{
+    if ($stdlibDir === null) {
+        return [];
+    }
+
+    $seed = rtrim($stdlibDir, '/') . '/Prelude.mog';
+    if (!\is_file($seed)) {
+        return [];
+    }
+
+    try {
+        [$closure] = moduleFileClosureCached($seed);
+    } catch (\Throwable) {
+        return [];
+    }
+
+    $have = [];
+    foreach ($files as $file) {
+        $header = cachedModuleHeader($file);
+        $module = $header['module'] ?? null;
+        if (\is_string($module)) {
+            $have[$module] = true;
+        }
+    }
+
+    $missing = [];
+    foreach ($closure as $file) {
+        $header = cachedModuleHeader($file);
+        $module = $header['module'] ?? null;
+        if (\is_string($module) && !isset($have[$module])) {
+            $missing[] = $file;
+        }
+    }
+
+    return $missing;
 }
 
 /**

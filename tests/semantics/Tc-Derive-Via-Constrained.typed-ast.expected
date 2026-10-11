@@ -141,14 +141,17 @@ program
     apply
       evidence_method Show.show evidence= nullary=0
         instance Bool
-      infix ==
+      apply
         apply
-          constructor_ref WrappedPair
+          evidence_method Eq.== evidence= nullary=0
+            instance WrappedPair a
           apply
+            constructor_ref WrappedPair
             apply
-              constructor_ref Pair
-              integer 1
-            integer 2
+              apply
+                constructor_ref Pair
+                integer 1
+              integer 2
         apply
           constructor_ref WrappedPair
           apply

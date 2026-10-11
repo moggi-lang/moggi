@@ -18,6 +18,7 @@ use Moggi\Syntax\Parser\ReplFragment;
 use function Moggi\Backend\backendById;
 use function Moggi\Backend\setCompileBackend;
 use function Moggi\Modules\buildImportContext;
+use function Moggi\Modules\computeEffectiveFixityByModule;
 use function Moggi\Modules\indexProjectInstances;
 use function Moggi\Modules\injectPreludeImport;
 use function Moggi\Modules\moduleFacadeExtraTypes;
@@ -212,12 +213,17 @@ function prepareInteractive(State $state, string $extra = '', bool $normalizeIo 
         $header['language'] ?? [],
     );
 
-    $fixityByModule = [];
-    foreach ($base->units as $name => $unit) {
-        $fixityByModule[$name] = $unit['localFixity'] ?? [];
-    }
     $localFixity = $header['localFixity'] ?? [];
-    $importedFixity = importedFixityForImports($imports, $fixityByModule);
+    $localFixityByModule = [];
+    $fixityPending = [$moduleName => ['imports' => $imports]];
+    foreach ($base->units as $name => $unit) {
+        $localFixityByModule[$name] = $unit['localFixity'] ?? [];
+        $fixityPending[$name] = ['imports' => $unit['imports'] ?? []];
+    }
+    $importedFixity = importedFixityForImports(
+        $imports,
+        computeEffectiveFixityByModule($fixityPending, $localFixityByModule),
+    );
     $program = parse($tokens, $source, $path, $importedFixity, $localFixity, $imports);
 
     $units = $base->units;

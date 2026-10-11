@@ -3,10 +3,12 @@
 
 module Main where
 
--- The fixture's own `Prelude` exports nothing on purpose, so `+` comes from the
--- library: `instance Num Int` in `Data.Num`, whose `+` is the machine adder.
+-- The fixture's own `Prelude` exports nothing on purpose, so `+` is imported
+-- from the library: `instance Num Int` in `Data.Num`, whose `+` is the machine
+-- adder.
 import Prelude hiding (max)
 import Data.Int
+import Data.Num
 import User
 import User qualified as U
 

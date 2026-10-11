@@ -270,7 +270,6 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
     $fnType = settleCheckedBody($state, $fn, $fnType, $restricted, $hadDeclaredSignature, $group);
 
     $wrapper = trivialIntrinsicWrapper($fn);
-    resolveMachineIntPow($state, $fn->body);
     resolveInstanceIntrinsicMethods($state, $fn->body);
     $fn->body = rewriteIntrinsicApplies($fn->body);
 
@@ -312,8 +311,8 @@ function settleCheckedBody(
     );
 
     resolveDeferredInfixPrimops($state, $fn->body);
-    resolvePendingEvidenceInExpr($state, $fn->body);
-    tryResolveValueEvidence($state, $fn->body);
+    $fn->body = resolvePendingEvidenceInExpr($state, $fn->body);
+    $fn->body = tryResolveValueEvidence($state, $fn->body);
     $fn->body = elaborateNumericLiterals($state, $fn->body);
     assertNoPendingConstraintsInExpr($state, $fn->body, $fn);
     zonkInferredTypesInExpr($state, $fn->body);
@@ -566,7 +565,6 @@ function settleDeferredDeclaration(TypeCheckState $state, array $entry): void
         );
         recordRestrictedSolutions($state);
         $wrapper = trivialIntrinsicWrapper($fn);
-        resolveMachineIntPow($state, $fn->body);
         resolveInstanceIntrinsicMethods($state, $fn->body);
         $fn->body = rewriteIntrinsicApplies($fn->body);
         if ($wrapper !== null) {
@@ -1676,7 +1674,7 @@ function operatorCandidateNames(array $env, TypeCheckState $state): array
     return array_values(array_unique($names));
 }
 
-function inferEvidenceMethod(TypeCheckState $state, Ast\AstNode &$expr): Type
+function inferEvidenceMethod(TypeCheckState $state, Ast\AstNode $expr): Type
 {
     if (!$expr instanceof Ast\EvidenceMethod) {
         throw typeFail($state, 'expected evidence_method', $expr);
@@ -1860,44 +1858,45 @@ function rootCalleeExpr(Ast\AstNode $expr): Ast\AstNode
     return $expr;
 }
 
-function resolvePendingEvidenceInExpr(TypeCheckState $state, Ast\AstNode &$expr): void
+function resolvePendingEvidenceInExpr(TypeCheckState $state, Ast\AstNode $expr): Ast\AstNode
 {
-    match ($expr::class) {
-        Ast\Apply::class => (static function () use ($state, $expr): void {
-            tryResolveApplyEvidence($state, $expr);
-            resolvePendingEvidenceInExpr($state, $expr->function);
-            resolvePendingEvidenceInExpr($state, $expr->argument);
-            tryResolveValueEvidence($state, $expr->argument);
-        })(),
-        Ast\Infix::class => (static function () use ($state, &$expr): void {
-            if (! $expr instanceof Ast\Infix) {
-                return;
+    return match ($expr::class) {
+        Ast\Apply::class => (static function () use ($state, $expr): Ast\AstNode {
+            if (! $expr instanceof Ast\Apply) {
+                return $expr;
             }
 
-            $left = $expr->left;
-            $right = $expr->right;
-            resolvePendingEvidenceInExpr($state, $left);
-            resolvePendingEvidenceInExpr($state, $right);
-            $expr->left = $left;
-            $expr->right = $right;
-            tryResolveValueEvidence($state, $expr->left);
-            tryResolveValueEvidence($state, $expr->right);
+            tryResolveApplyEvidence($state, $expr);
+            $expr->function = resolvePendingEvidenceInExpr($state, $expr->function);
+            $expr->argument = resolvePendingEvidenceInExpr($state, $expr->argument);
+            $expr->argument = tryResolveValueEvidence($state, $expr->argument);
+
+            return $expr;
+        })(),
+        Ast\Infix::class => (static function () use ($state, $expr): Ast\AstNode {
+            if (! $expr instanceof Ast\Infix) {
+                return $expr;
+            }
+
+            $expr->left = resolvePendingEvidenceInExpr($state, $expr->left);
+            $expr->right = resolvePendingEvidenceInExpr($state, $expr->right);
+            $expr->left = tryResolveValueEvidence($state, $expr->left);
+            $expr->right = tryResolveValueEvidence($state, $expr->right);
 
             if ($expr->pendingConstraints === []) {
-                return;
+                return $expr;
             }
 
             $constraints = dictsForPending($state, $expr->pendingConstraints, $expr->pendingDicts);
             $evidence = tryResolveEvidenceExprs($state, $constraints, $expr);
             if ($evidence === null) {
-                return;
+                return $expr;
             }
 
-            $operator = $expr->operator;
-            $expr = prependEvidenceAtRoot(
+            return prependEvidenceAtRoot(
                 $state,
                 infixApplicationNode(
-                    $operator,
+                    $expr->operator,
                     $expr->left,
                     $expr->right,
                     $expr->line,
@@ -1907,96 +1906,174 @@ function resolvePendingEvidenceInExpr(TypeCheckState $state, Ast\AstNode &$expr)
                 $evidence,
             );
         })(),
-        Ast\IntrinsicCall::class => (static function () use ($state, $expr): void {
+        Ast\IntrinsicCall::class => (static function () use ($state, $expr): Ast\AstNode {
+            if (! $expr instanceof Ast\IntrinsicCall) {
+                return $expr;
+            }
+
             foreach ($expr->args as &$arg) {
-                resolvePendingEvidenceInExpr($state, $arg);
-                tryResolveValueEvidence($state, $arg);
+                $arg = tryResolveValueEvidence($state, resolvePendingEvidenceInExpr($state, $arg));
             }
             unset($arg);
+
+            return $expr;
         })(),
-        Ast\Lambda::class => (static function () use ($state, $expr): void {
-            resolvePendingEvidenceInExpr($state, $expr->body);
-            tryResolveValueEvidence($state, $expr->body);
-        })(),
-        Ast\Let::class => (static function () use ($state, $expr): void {
-            foreach ($expr->bindings as $binding) {
-                resolvePendingEvidenceInExpr($state, $binding->value);
-                tryResolveValueEvidence($state, $binding->value);
+        Ast\Lambda::class => (static function () use ($state, $expr): Ast\AstNode {
+            if (! $expr instanceof Ast\Lambda) {
+                return $expr;
             }
-            resolvePendingEvidenceInExpr($state, $expr->body);
-            tryResolveValueEvidence($state, $expr->body);
+
+            $expr->body = resolvePendingEvidenceInExpr($state, $expr->body);
+            $expr->body = tryResolveValueEvidence($state, $expr->body);
+
+            return $expr;
         })(),
-        Ast\Where::class => (static function () use ($state, $expr): void {
-            foreach ($expr->bindings as $binding) {
-                resolvePendingEvidenceInExpr($state, $binding->value);
-                tryResolveValueEvidence($state, $binding->value);
+        Ast\Let::class => (static function () use ($state, $expr): Ast\AstNode {
+            if (! $expr instanceof Ast\Let) {
+                return $expr;
             }
-            resolvePendingEvidenceInExpr($state, $expr->expr);
-            tryResolveValueEvidence($state, $expr->expr);
+
+            foreach ($expr->bindings as $binding) {
+                $binding->value = resolvePendingEvidenceInExpr($state, $binding->value);
+                $binding->value = tryResolveValueEvidence($state, $binding->value);
+            }
+            $expr->body = resolvePendingEvidenceInExpr($state, $expr->body);
+            $expr->body = tryResolveValueEvidence($state, $expr->body);
+
+            return $expr;
         })(),
-        Ast\CaseExpr::class => (static function () use ($state, $expr): void {
-            resolvePendingEvidenceInExpr($state, $expr->scrutinee);
-            tryResolveValueEvidence($state, $expr->scrutinee);
+        Ast\Where::class => (static function () use ($state, $expr): Ast\AstNode {
+            if (! $expr instanceof Ast\Where) {
+                return $expr;
+            }
+
+            foreach ($expr->bindings as $binding) {
+                $binding->value = resolvePendingEvidenceInExpr($state, $binding->value);
+                $binding->value = tryResolveValueEvidence($state, $binding->value);
+            }
+            $expr->expr = resolvePendingEvidenceInExpr($state, $expr->expr);
+            $expr->expr = tryResolveValueEvidence($state, $expr->expr);
+
+            return $expr;
+        })(),
+        Ast\CaseExpr::class => (static function () use ($state, $expr): Ast\AstNode {
+            if (! $expr instanceof Ast\CaseExpr) {
+                return $expr;
+            }
+
+            $expr->scrutinee = resolvePendingEvidenceInExpr($state, $expr->scrutinee);
+            $expr->scrutinee = tryResolveValueEvidence($state, $expr->scrutinee);
             foreach ($expr->alts as $alt) {
-                resolvePendingEvidenceInExpr($state, $alt->body);
-                tryResolveValueEvidence($state, $alt->body);
+                $alt->body = resolvePendingEvidenceInExpr($state, $alt->body);
+                $alt->body = tryResolveValueEvidence($state, $alt->body);
             }
+
+            return $expr;
         })(),
-        Ast\GuardsExpr::class => (static function () use ($state, $expr): void {            foreach ($expr->clauses as $clause) {
-                resolvePendingEvidenceInExpr($state, $clause->guard);
-                tryResolveValueEvidence($state, $clause->guard);
-                resolvePendingEvidenceInExpr($state, $clause->body);
-                tryResolveValueEvidence($state, $clause->body);
+        Ast\GuardsExpr::class => (static function () use ($state, $expr): Ast\AstNode {
+            if (! $expr instanceof Ast\GuardsExpr) {
+                return $expr;
             }
+
+            foreach ($expr->clauses as $clause) {
+                $clause->guard = resolvePendingEvidenceInExpr($state, $clause->guard);
+                $clause->guard = tryResolveValueEvidence($state, $clause->guard);
+                $clause->body = resolvePendingEvidenceInExpr($state, $clause->body);
+                $clause->body = tryResolveValueEvidence($state, $clause->body);
+            }
+
+            return $expr;
         })(),
-        Ast\ListLit::class => (static function () use ($state, $expr): void {
+        Ast\ListLit::class => (static function () use ($state, $expr): Ast\AstNode {
+            if (! $expr instanceof Ast\ListLit) {
+                return $expr;
+            }
+
             foreach ($expr->elements as &$elem) {
-                resolvePendingEvidenceInExpr($state, $elem);
+                $elem = resolvePendingEvidenceInExpr($state, $elem);
                 if ($elem instanceof Ast\Apply) {
                     tryResolveApplyEvidence($state, $elem);
                 }
-                tryResolveValueEvidence($state, $elem);
+                $elem = tryResolveValueEvidence($state, $elem);
             }
             unset($elem);
+
+            return $expr;
         })(),
-        Ast\Tuple::class => (static function () use ($state, $expr): void {
+        Ast\Tuple::class => (static function () use ($state, $expr): Ast\AstNode {
+            if (! $expr instanceof Ast\Tuple) {
+                return $expr;
+            }
+
             foreach ($expr->elements as &$elem) {
-                resolvePendingEvidenceInExpr($state, $elem);
+                $elem = resolvePendingEvidenceInExpr($state, $elem);
                 if ($elem instanceof Ast\Apply) {
                     tryResolveApplyEvidence($state, $elem);
                 }
-                tryResolveValueEvidence($state, $elem);
+                $elem = tryResolveValueEvidence($state, $elem);
             }
             unset($elem);
+
+            return $expr;
         })(),
-        Ast\RecordCon::class => (static function () use ($state, $expr): void {
-            foreach ($expr->fields as $field) {
-                resolvePendingEvidenceInExpr($state, $field->expr);
-                tryResolveValueEvidence($state, $field->expr);
+        Ast\RecordCon::class => (static function () use ($state, $expr): Ast\AstNode {
+            if (! $expr instanceof Ast\RecordCon) {
+                return $expr;
             }
-        })(),
-        Ast\RecordUpdate::class => (static function () use ($state, $expr): void {
-            resolvePendingEvidenceInExpr($state, $expr->object);
-            tryResolveValueEvidence($state, $expr->object);
+
             foreach ($expr->fields as $field) {
-                resolvePendingEvidenceInExpr($state, $field->expr);
-                tryResolveValueEvidence($state, $field->expr);
+                $field->expr = resolvePendingEvidenceInExpr($state, $field->expr);
+                $field->expr = tryResolveValueEvidence($state, $field->expr);
             }
+
+            return $expr;
         })(),
-        Ast\FieldAccess::class => (static function () use ($state, $expr): void {
-            resolvePendingEvidenceInExpr($state, $expr->object);
-            tryResolveValueEvidence($state, $expr->object);
+        Ast\RecordUpdate::class => (static function () use ($state, $expr): Ast\AstNode {
+            if (! $expr instanceof Ast\RecordUpdate) {
+                return $expr;
+            }
+
+            $expr->object = resolvePendingEvidenceInExpr($state, $expr->object);
+            $expr->object = tryResolveValueEvidence($state, $expr->object);
+            foreach ($expr->fields as $field) {
+                $field->expr = resolvePendingEvidenceInExpr($state, $field->expr);
+                $field->expr = tryResolveValueEvidence($state, $field->expr);
+            }
+
+            return $expr;
         })(),
-        Ast\DoExpr::class => (static function () use ($state, $expr): void {
+        Ast\FieldAccess::class => (static function () use ($state, $expr): Ast\AstNode {
+            if (! $expr instanceof Ast\FieldAccess) {
+                return $expr;
+            }
+
+            $expr->object = resolvePendingEvidenceInExpr($state, $expr->object);
+            $expr->object = tryResolveValueEvidence($state, $expr->object);
+
+            return $expr;
+        })(),
+        Ast\DoExpr::class => (static function () use ($state, $expr): Ast\AstNode {
+            if (! $expr instanceof Ast\DoExpr) {
+                return $expr;
+            }
+
             if (isset($expr->desugared)) {
-                resolvePendingEvidenceInExpr($state, $expr->desugared);
+                $expr->desugared = resolvePendingEvidenceInExpr($state, $expr->desugared);
             }
+
+            return $expr;
         })(),
-        Ast\TypeAsc::class => (static function () use ($state, $expr): void {
-            resolvePendingEvidenceInExpr($state, $expr->expr);
-            tryResolveValueEvidence($state, $expr->expr);
+        Ast\TypeAsc::class => (static function () use ($state, $expr): Ast\AstNode {
+            if (! $expr instanceof Ast\TypeAsc) {
+                return $expr;
+            }
+
+            $expr->expr = resolvePendingEvidenceInExpr($state, $expr->expr);
+            $expr->expr = tryResolveValueEvidence($state, $expr->expr);
+
+            return $expr;
         })(),
-        default => null,
+        default => $expr,
     };
 }
 
@@ -2028,25 +2105,26 @@ function tryResolveApplyEvidence(TypeCheckState $state, Ast\Apply $expr): void
  * type. Only fires for reference nodes that directly carry pending constraints;
  * apply spines are handled by tryResolveApplyEvidence.
  */
-function tryResolveValueEvidence(TypeCheckState $state, Ast\AstNode &$expr): void
+function tryResolveValueEvidence(TypeCheckState $state, Ast\AstNode $expr): Ast\AstNode
 {
     if (!$expr instanceof Ast\Variable && !$expr instanceof Ast\OperatorRef && !$expr instanceof Ast\QualifiedRef) {
-        return;
+        return $expr;
     }
 
     if ($expr->pendingConstraints === []) {
-        return;
+        return $expr;
     }
 
     $constraints = dictsForPending($state, $expr->pendingConstraints, $expr->pendingDicts);
     $evidence = tryResolveEvidenceExprs($state, $constraints, $expr);
     if ($evidence === null) {
-        return;
+        return $expr;
     }
 
     $expr->pendingConstraints = [];
     $expr->pendingDicts = [];
-    $expr = prependEvidenceToCall($state, $expr, $evidence);
+
+    return prependEvidenceToCall($state, $expr, $evidence);
 }
 
 function refreshConstraintArgs(TypeCheckState $state, array $constraints): array
@@ -2063,20 +2141,6 @@ function refreshConstraintArgs(TypeCheckState $state, array $constraints): array
             $constraint->instanceHeadAst,
         ),
         $constraints,
-    );
-}
-
-/**
- * Operators that codegen may emit as a native PHP or intrinsic binary
- * operation. These keep the fast `infix` lowering path; every other operator
- * is treated as a plain function/method call.
- */
-function isPrimitiveInfixOperator(string $op): bool
-{
-    return \in_array(
-        $op,
-        ['+', '-', '*', '/', '<', '>', '<=', '>=', '==', '/=', '&&', '||', '<>', ':'],
-        true,
     );
 }
 
@@ -2172,9 +2236,12 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
         );
     }
 
-    if (isset($state->constraintMethods[$op])
-        || (isClassMethodOperator($state, $op)
-            && !isPrimitiveInfixOperator($op))) {
+    // Inside an instance body a class method name means that instance's method,
+    // so the use is the application it stands for. Every other class method is
+    // left to the infix path below, which reads its meaning off the instance the
+    // operand types name -- whether that is an instance's own primop or a
+    // dictionary call is the instance's answer, not the operator's name.
+    if (isset($state->constraintMethods[$op])) {
         $left = $expr->left;
         $right = $expr->right;
         $surface = $expr;
@@ -2189,8 +2256,13 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
         return inferRewrittenInfix($state, $surface, $expr, $env);
     }
 
-    if (!isPrimitiveInfixOperator($op)
-        && !isClassMethodOperator($state, $op)
+    // An operator in scope whose declaration is a thin binding over a primop --
+    // the library's `&&`, `||`, and `:` -- keeps that primop as its meaning.
+    // Calling the wrapper would work only by inlining it back to the same
+    // primop, and the wrapper's body is the last thing the use should see:
+    // `&&` decides on its left operand only where the primop itself is lowered.
+    if (!isClassMethodOperator($state, $op)
+        && ! isset($state->intrinsicWrappers[$op])
         && (isset($env[$op]) || isset($state->env[$op]))) {
         $left = $expr->left;
         $right = $expr->right;
@@ -2208,22 +2280,23 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
 
     $leftType = inferExpr($state, $expr->left, $env);
     $rightType = inferExpr($state, $expr->right, $env);
-    $primop = instanceOperatorPrimop($state, $op, prune($state, $leftType), prune($state, $rightType));
-
-    if ($primop !== null) {
-        return applyOperatorPrimop($state, $expr, $primop, $leftType, $rightType);
-    }
-
-    $declaredPrimop = $state->intrinsicWrappers[$op] ?? null;
-
-    if ($declaredPrimop !== null && ! isset($state->localDeclNames[$op])) {
-        return applyOperatorPrimop($state, $expr, $declaredPrimop, $leftType, $rightType);
-    }
 
     $opScheme = $env[$op] ?? null;
 
     if ($opScheme === null && isset($state->env[$op])) {
         $opScheme = $state->env[$op];
+    }
+
+    if ($opScheme !== null) {
+        $primop = instanceOperatorPrimop($state, $op, prune($state, $leftType), prune($state, $rightType));
+        if ($primop !== null) {
+            return applyOperatorPrimop($state, $expr, $primop, $leftType, $rightType);
+        }
+
+        $declaredPrimop = $state->intrinsicWrappers[$op] ?? null;
+        if ($declaredPrimop !== null && ! isset($state->localDeclNames[$op])) {
+            return applyOperatorPrimop($state, $expr, $declaredPrimop, $leftType, $rightType);
+        }
     }
 
     if ($opScheme === null) {
@@ -2240,6 +2313,24 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
 
     $classOperator = isClassMethodOperator($state, $op) || isset($state->constraintMethods[$op]);
     $constraints = $instantiated['dicts'];
+
+    // The operator the module declares itself (`(+) x y = x + y`) carries no dictionary of
+    // its own, but its scheme is what pins the operands: `x` is an `Int` only once the local
+    // scheme's `Int -> Int -> Int` has met it. Now that it has, the library's instance for
+    // those operands is what the use means -- the reading {@see instanceOperatorPrimop}
+    // makes for a use site whose operand types were already settled, and the only one that
+    // keeps a locally declared operator from reaching lowering unresolved.
+    if ($classOperator && $constraints === []) {
+        $primop = instanceOperatorPrimop(
+            $state,
+            $op,
+            prune($state, $leftType),
+            prune($state, $rightType),
+        );
+        if ($primop !== null) {
+            return applyOperatorPrimop($state, $expr, $primop, $leftType, $rightType);
+        }
+    }
 
     if ($classOperator
         && $constraints !== []
@@ -2291,15 +2382,11 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
         return $result;
     }
 
-    if (
-        (isClassMethodOperator($state, $op) || isset($state->constraintMethods[$op]))
-        && (typeIsIntegerLike($state, $leftType)
-            || typeIsIntegerLike($state, $rightType)
-            || arithmeticNeedsEvidence($state, $op, $leftType, $rightType)
-            || semigroupNeedsEvidence($state, $op, $leftType, $rightType)
-            || orderingNeedsEvidence($state, $op, $leftType, $rightType)
-            || instanceHeadOperand($state, $op, $leftType, $rightType)
-            || equalityNeedsEvidence($state, $op, $leftType, $rightType, $constraints))
+    if ($classOperator
+        && (instanceHeadOperand($state, $op, $leftType, $rightType)
+            || ($constraints !== []
+                && ! operandTypeIsUnresolved($state, $leftType, $rightType)
+                && constraintsResolvable($state, $constraints)))
     ) {
         $left = $expr->left;
         $right = $expr->right;
@@ -2308,6 +2395,24 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
 
         return inferRewrittenInfix($state, $surface, $expr, $env);
     }
+
+    // A class method whose dictionary is not decided yet keeps its constraint on the node
+    // instead of losing it; {@see dictAwaitingResolution} names the two shapes of that.
+    // The signature, or a later unification, settles the instance before the body is, and
+    // {@see resolvePendingEvidenceInExpr} then builds the dictionary call the use stands
+    // for.
+    //
+    // The same holds when the operands are already concrete and no instance covers them
+    // (`(1, 2) == (1, 2)` while the library declares no `Eq (a, b)`): the constraint is
+    // what says so, and dropping it here is what once let the backend's own operator stand
+    // in for the instance the library was missing.
+    if ($classOperator && $constraints !== []) {
+        $expr->pendingConstraints = $instantiated['constraints'];
+        $expr->pendingDicts = $instantiated['dicts'];
+
+        return $result;
+    }
+
 
     return $result;
 }
@@ -2679,7 +2784,7 @@ function classDeclaringMethod(TypeCheckState $state, string $op): ?string
  */
 function applyOperatorPrimop(
     TypeCheckState $state,
-    Ast\AstNode &$expr,
+    Ast\AstNode $expr,
     string $primop,
     Type $leftType,
     Type $rightType,
@@ -2703,137 +2808,6 @@ function applyOperatorPrimop(
 }
 
 /**
- * Mark `x ^ n` at machine `Int` as the `intPow#` primop.
- *
- * The library `^` is `Num a, Integral b`: a call site carries two dictionaries
- * plus `Integral`'s superclasses and runs a square-and-multiply loop that knows
- * nothing the operands do not already say. At `Int` the operands say everything,
- * so the call is that loop without the dispatch. Marked once the operand types
- * are settled, because only then is a literal or an inferred binding known to be
- * an `Int`; every other instantiation -- `Integer`, `Double`, a user `Num` --
- * keeps the call, and so does a `^` the module declares itself (its scheme
- * carries no dictionaries, which is what tells the two apart).
- *
- * The mark is what {@see rewriteIntrinsicApplies} turns into an `IntrinsicCall`,
- * exactly as it does for an inlined wrapper.
- */
-function resolveMachineIntPow(TypeCheckState $state, Ast\AstNode $body): void
-{
-    $scheme = $state->env['^'] ?? null;
-    if ($scheme === null || $scheme->runtimeConstraintCount === 0) {
-        return;
-    }
-
-    walkAstValues($body, static function (Ast\AstNode $node) use ($state): void {
-        if (! $node instanceof Ast\Apply || $node->intrinsicWrapper !== null) {
-            return;
-        }
-
-        $parts = flattenApplyForIntrinsicWrapper($node);
-        $callee = $parts['function'];
-        $argCount = \count($parts['args']);
-        if (! $callee instanceof Ast\OperatorRef
-            || $callee->name !== '^'
-            || $argCount < 3) {
-            return;
-        }
-        foreach (\array_slice($parts['args'], 0, -2) as $evidence) {
-            if (! $evidence instanceof Ast\EvidenceRef) {
-                return;
-            }
-        }
-
-        $operands = \array_slice($parts['args'], -2);
-
-        if (! operandIsMachineInt($state, $operands[1])) {
-            return;
-        }
-
-        $intrinsic = powPrimopForOperand($state, $operands[0]);
-        if ($intrinsic === null) {
-            return;
-        }
-
-        $spine = $node->function;
-        if (! $spine instanceof Ast\Apply) {
-            return;
-        }
-
-        $spine->function = $callee;
-        $node->line = $operands[0]->line;
-        $node->col = $operands[0]->col;
-        $node->endCol = $operands[1]->endCol;
-        $node->intrinsicWrapper = $intrinsic;
-    });
-}
-
-/**
- * The exponentiation primop for a base operand of this type, if there is one.
- *
- * An operand's annotation has been through the type printer and back, so a
- * machine type arrives as the canonical constructor `TCon('Int64')` at least as
- * often as it does as a `TInt64` of its own.
- */
-function powPrimopForOperand(TypeCheckState $state, Ast\AstNode $operand): ?string
-{
-    $type = $operand->inferredType;
-    if (! $type instanceof Ast\TypeNode) {
-        return null;
-    }
-
-    $pruned = prune($state, inferredTypeAstToInternal($type));
-    $name = $pruned instanceof TCon ? $pruned->name : match ($pruned::class) {
-        TInt::class => 'Int',
-        TInt8::class => 'Int8',
-        TInt16::class => 'Int16',
-        TInt32::class => 'Int32',
-        TInt64::class => 'Int64',
-        TWord::class => 'Word',
-        TWord8::class => 'Word8',
-        TWord16::class => 'Word16',
-        TWord32::class => 'Word32',
-        TWord64::class => 'Word64',
-        TDouble::class => 'Double',
-        default => null,
-    };
-
-    return match ($name) {
-        'Int' => 'intPow#',
-        'Int8' => 'int8Pow#',
-        'Int16' => 'int16Pow#',
-        'Int32' => 'int32Pow#',
-        'Int64' => 'int64Pow#',
-        'Word' => 'intPow#',
-        'Word8' => 'word8Pow#',
-        'Word16' => 'word16Pow#',
-        'Word32' => 'word32Pow#',
-        'Word64' => 'word64Pow#',
-        'Double' => 'doublePow#',
-        default => null,
-    };
-}
-
-/**
- * Whether this operand's inferred type is the machine `Int`.
- *
- * An operand's annotation has been through the type printer and back, so machine
- * `Int` arrives as the canonical constructor `TCon('Int')` at least as often as
- * it does as `TInt` itself.
- */
-function operandIsMachineInt(TypeCheckState $state, Ast\AstNode $operand): bool
-{
-    $type = $operand->inferredType;
-    if (! $type instanceof Ast\TypeNode) {
-        return false;
-    }
-
-    $pruned = prune($state, inferredTypeAstToInternal($type));
-
-    return $pruned instanceof TInt
-        || ($pruned instanceof TCon && $pruned->name === 'Int');
-}
-
-/**
  * Whether this operator is one the instance under check provides and either
  * operand sits at that instance's head type. Such a use has to dispatch through
  * the instance's own dictionary (`(/=) x y = case x == y of …` at `Pair a`).
@@ -2854,6 +2828,52 @@ function instanceHeadOperand(TypeCheckState $state, string $op, Type $left, Type
 }
 
 /**
+ * Whether a constraint names an instance that a later unification could still
+ * make available.
+ *
+ * A class method applied at an operand whose instance is not decided yet has no
+ * dictionary to pass *yet*. Two shapes of that: the operand's type is headed by
+ * an open variable (`(pure (1 :: Int) <* pure ()) >>= f` types its left operand
+ * as `f Int` while `pure`'s own dictionary is still open), or the instance is in
+ * scope but its own context is (`mempty <> Sum n` is a `Semigroup (Sum a)` whose
+ * instance needs the `Semigroup a` a later unification supplies, and a derived
+ * `Ord (Pair a b)` needs the `Ord a`/`Eq a` its `Pair Int Int` use has). Keeping
+ * the constraint on the node lets {@see resolvePendingEvidenceInExpr} build the
+ * dictionary call once the body is settled. Dropping it leaves the use to
+ * lowering, which is only right for the operators the host performs on its own
+ * values; a `Pair` compared as a native `<` is not.
+ *
+ * An instance that simply is not in scope is *not* waited for: no later
+ * unification brings it in, and the operator's own lowering decides what the
+ * use means.
+ *
+ * @param list<Constraint> $constraints
+ */
+function dictAwaitingResolution(TypeCheckState $state, array $constraints): bool
+{
+    foreach ($constraints as $constraint) {
+        $resolved = constraintInstanceHead($state, $constraint);
+        if ($resolved === null || $resolved['ambient'] !== null) {
+            continue;
+        }
+
+        if (prune($state, $resolved['head']) instanceof TVar) {
+            return true;
+        }
+
+        foreach (instanceLeafConstraints($state, $constraint) ?? [] as $leaf) {
+            if (constraintHeadType($state, $leaf->args) instanceof TVar
+                && ambientEvidenceFor($state, $leaf) === null
+            ) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+/**
  * Whether either operand is still a type variable. Such an operand has no host
  * representation yet, so the native Binop path cannot be right for it.
  */
@@ -2867,183 +2887,6 @@ function operandTypeIsUnresolved(TypeCheckState $state, Type $left, Type $right)
     }
 
     return false;
-}
-
-/** True for Arbitrary-precision Integer / Integer# after pruning. */
-function typeIsIntegerLike(TypeCheckState $state, Type $type): bool
-{
-    $type = prune($state, $type);
-    if ($type instanceof TCon) {
-        return $type->name === 'Integer' || $type->name === 'Integer#';
-    }
-
-    return false;
-}
-
-/**
- * True for the types codegen represents as a machine integer (JVM `long`,
- * CLR `int64`, boxing aside): the host Binop comparison path unboxes exactly
- * these, and nothing else.
- */
-function typeIsMachineInt(Type $type): bool
-{
-    return $type instanceof TInt
-        || $type instanceof TChar
-        || $type instanceof TWord
-        || $type instanceof TWord8
-        || $type instanceof TWord16
-        || $type instanceof TWord32
-        || $type instanceof TWord64
-        || $type instanceof TInt8
-        || $type instanceof TInt16
-        || $type instanceof TInt32
-        || $type instanceof TInt64;
-}
-
-/**
- * Whether an ordering comparison has to dispatch through `Ord` evidence rather
- * than the host Binop fast path.
- *
- * Codegen lowers a leftover symbolic `<`/`<=`/`>`/`>=` Binop by unboxing both
- * operands as a machine integer, so that path is only correct for `Int`-shaped
- * types. Rewriting to the instance lowers to the type's own `compare` instead
- * (`orderingIsLt#(stringCompare#(a, b))` for `String`, `... doubleCompare# ...`
- * for `Double`), which every backend implements.
- *
- * Unresolved type variables stay on the fast path: they are usually about to be
- * unified with `Int`, and a genuinely polymorphic operand already carries an
- * `Ord` constraint, so it never reaches the infix path.
- */
-function orderingNeedsEvidence(TypeCheckState $state, string $op, Type $left, Type $right): bool
-{
-    if (!\in_array($op, ['<', '<=', '>', '>='], true)) {
-        return false;
-    }
-
-    $left = prune($state, $left);
-    $right = prune($state, $right);
-    if ($left instanceof TVar || $right instanceof TVar) {
-        return false;
-    }
-
-    if (!typeIsMachineInt($left) && !typeIsMachineInt($right)) {
-        return true;
-    }
-
-    return typeIsUnsigned64($left) || typeIsUnsigned64($right);
-}
-
-/**
- * Whether `==`/`/=` has to dispatch through its `Eq` evidence rather than the
- * host Binop fast path.
- *
- * A host comparison asks whether the two runtime representations are the same,
- * which is the same question as `Eq` only where the representation is the
- * value -- and that is the instance's question to answer, not the checker's:
- * with `data W = W Int` and `(==) (W a) (W b) = a < b`, the answer for
- * `W 1 == W 3` is `True`, while comparing representations answers `False`.
- * `Eq Int` is `intEq#` and `Eq String` is `stringEq#`, so a scalar reaches the
- * same machine comparison it did before -- through the instance that defines it.
- *
- * A type nobody wrote an instance for keeps the previous lowering rather than
- * becoming a new diagnostic here; a still-polymorphic operand never reaches
- * this point with a selectable instance.
- */
-function equalityNeedsEvidence(TypeCheckState $state, string $op, Type $left, Type $right, array $constraints): bool
-{
-    if ($op !== '==' && $op !== '/=') {
-        return false;
-    }
-
-    $left = prune($state, $left);
-    $right = prune($state, $right);
-
-    if ($left instanceof TVar || $right instanceof TVar) {
-        return false;
-    }
-
-    return $constraints !== [] && constraintsResolvable($state, $constraints);
-}
-
-/**
- * Whether `<>` has to dispatch through its `Semigroup` evidence.
- *
- * `String`, `ByteString` and `List` are resolved by the monomorphic table;
- * every other operand type reaches codegen as a symbolic `<>` Binop, which is
- * emitted as a direct reference to whichever `<>` implementation happens to be
- * in scope -- an instance method that no backend emits under that name, so the
- * call site fails at run time (`null is not callable`, `MissingMethod`) rather
- * than combining the operands. `Sum`, `Product`, `Min`, `Max` and
- * `Numeric.Natural` are all affected, so the instance has to be used.
- */
-function semigroupNeedsEvidence(TypeCheckState $state, string $op, Type $left, Type $right): bool
-{
-    if ($op !== '<>') {
-        return false;
-    }
-
-    $left = prune($state, $left);
-    $right = prune($state, $right);
-    if ($left instanceof TVar || $right instanceof TVar) {
-        return false;
-    }
-
-    return !typeIsMachineInt($left) || !typeIsMachineInt($right);
-}
-
-/** True for the unsigned types whose host representation can be negative. */
-function typeIsUnsigned64(Type $type): bool
-{
-    return $type instanceof TWord || $type instanceof TWord64;
-}
-
-/**
- * Whether `+`/`-`/`*` (and `Fractional`'s `/`) has to dispatch through its
- * evidence rather than the host Binop fast path.
- *
- * Codegen lowers a leftover symbolic arithmetic Binop by unboxing both
- * operands as a machine integer, so that path is only correct while both
- * operands are shaped like one — and `/` is not even that: a host `/` on two
- * machine integers is integer division on some backends and a `DivisionByZero`
- * on `0.0 / 0.0` where the instance's `doubleDiv#` is a float divide. The
- * instance is the authority for every concrete operand; the dictionary's
- * resolved method is what becomes the primop.
- */
-function arithmeticNeedsEvidence(TypeCheckState $state, string $op, Type $left, Type $right): bool
-{
-    if (!\in_array($op, ['+', '-', '*', '/'], true)) {
-        return false;
-    }
-
-    $left = prune($state, $left);
-    $right = prune($state, $right);
-    if ($left instanceof TVar || $right instanceof TVar) {
-        return false;
-    }
-
-    return true;
-}
-
-/**
- * Whether the machine-integer Binop path is valid for `$type`: following
- * newtype constructors (which are erased at run time) its representation is one
- * of the host integer types. `newtype Age = Age Int` therefore keeps the fast
- * path, while `newtype Natural = Natural Integer` does not -- its value is a
- * bignum, not an i64.
- */
-function hasMachineIntRepresentation(TypeCheckState $state, Type $type): bool
-{
-    if (typeIsMachineInt($type)) {
-        return true;
-    }
-
-    $chain = newtypeChain($state, $type);
-    $representation = prune($state, $chain['representation']);
-    if ($representation instanceof TVar) {
-        return false;
-    }
-
-    return typeIsMachineInt($representation);
 }
 
 function inferTuple(TypeCheckState $state, Ast\Tuple $expr, array $env): Type
@@ -3363,8 +3206,8 @@ function abstractAnnotatedLocalBinding(TypeCheckState $state, Ast\AstNode $value
         unify($state, $valueType, $bodyExpected, $value);
         $valueType = prune($state, $bodyExpected);
         if (pendingConstraintsFromExpr($inner) !== []) {
-            resolvePendingEvidenceInExpr($state, $inner);
-            tryResolveValueEvidence($state, $inner);
+            $inner = resolvePendingEvidenceInExpr($state, $inner);
+            $inner = tryResolveValueEvidence($state, $inner);
         }
     } finally {
         restoreAmbientConstraints($state, $saved);
@@ -3399,8 +3242,8 @@ function abstractLocalConstraints(TypeCheckState $state, Ast\AstNode $rhs, array
 
     $saved = installAmbientConstraints($state, $abstracted);
     try {
-        resolvePendingEvidenceInExpr($state, $rhs);
-        tryResolveValueEvidence($state, $rhs);
+        $rhs = resolvePendingEvidenceInExpr($state, $rhs);
+        $rhs = tryResolveValueEvidence($state, $rhs);
         $rhs = elaborateNumericLiterals($state, $rhs);
     } finally {
         restoreAmbientConstraints($state, $saved);

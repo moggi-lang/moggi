@@ -141,8 +141,11 @@ program
   function bump :: Int -> Int
     pat_var k
     case
-      infix >
-        variable k
+      apply
+        apply
+          evidence_method Ord.> evidence= nullary=0
+            instance Int
+          variable k
         integer 4
       alt
         pat_con True

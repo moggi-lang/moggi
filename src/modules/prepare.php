@@ -140,8 +140,6 @@ function prepareProject(array $paths, string $rootDir): PreparedProject
     $checked = [];
     $importContexts = [];
 
-    $sortedModules = orderPreludeClosureFirst($units, $sortedModules);
-
     foreach ($sortedModules as $moduleName) {
         if (!isset($units[$moduleName])) {
             continue;
@@ -477,47 +475,6 @@ function ensureModuleInterface(
 }
 
 /**
- * Move the closure of the prelude's implicit origins to the front of the
- * topological order.
- *
- * `error` and `undefined` are inlined into every module's environment without an
- * explicit import, so the module providing them must be published before any
- * import context is built — and it is not necessarily a dependency of the
- * modules that use it. The closure is prepended as a whole; no module in it
- * depends on one outside it, so the result stays topological.
- *
- * @param array<string, array<string, mixed>> $units
- * @param list<string> $sortedModules
- * @return list<string>
- */
-function orderPreludeClosureFirst(array $units, array $sortedModules): array
-{
-    $preludeOrigins = \array_values(\array_unique(\array_values(preludeBuiltinOrigins())));
-    if ($preludeOrigins === []) {
-        return $sortedModules;
-    }
-
-    $preludeClosure = importDependencyClosure($units, $preludeOrigins);
-    foreach ($preludeOrigins as $origin) {
-        if (isset($units[$origin])) {
-            $preludeClosure[$origin] = true;
-        }
-    }
-
-    $before = [];
-    $after = [];
-    foreach ($sortedModules as $moduleName) {
-        if (isset($preludeClosure[$moduleName])) {
-            $before[] = $moduleName;
-        } else {
-            $after[] = $moduleName;
-        }
-    }
-
-    return [...$before, ...$after];
-}
-
-/**
  * Fold a just-checked module's class scopes into the project-scope tables, so a
  * module checked later sees the scopes of the classes it may instantiate.
  *
@@ -654,13 +611,18 @@ function prepareProjectExtendingFocus(
         $knownModules,
         $header['language'] ?? [],
     );
-    $fixityByModule = [$focusModule => $localFixity];
+    $localFixityByModule = [$focusModule => $localFixity];
+    $fixityPending = [$focusModule => ['imports' => $imports]];
     foreach ($units as $name => $unit) {
         if (isset($unit['localFixity']) && \is_array($unit['localFixity'])) {
-            $fixityByModule[$name] = $unit['localFixity'];
+            $localFixityByModule[$name] = $unit['localFixity'];
+            $fixityPending[$name] = ['imports' => $unit['imports'] ?? []];
         }
     }
-    $importedFixity = importedFixityForImports($imports, $fixityByModule);
+    $importedFixity = importedFixityForImports(
+        $imports,
+        computeEffectiveFixityByModule($fixityPending, $localFixityByModule),
+    );
     $units[$focusModule] = [
         'path' => $focusPath,
         'source' => $source,

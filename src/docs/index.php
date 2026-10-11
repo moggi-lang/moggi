@@ -12,7 +12,6 @@ use function Moggi\CLI\resolveLibraryDirs;
 use function Moggi\Modules\isSyntheticCompilerModuleName;
 use function Moggi\Modules\outputRelativePath;
 use function Moggi\Paths\canonicalSeparators;
-use function Moggi\Syntax\Parser\standardFixity;
 
 /**
  * Version of the docs search-index schema.
@@ -498,7 +497,7 @@ function signatureTypeContinues(string $typePart): bool
  */
 function fixityForName(string $name, array $localFixity, array $effectiveFixity): ?string
 {
-    $info = $localFixity[$name] ?? $effectiveFixity[$name] ?? standardFixity($name);
+    $info = $localFixity[$name] ?? $effectiveFixity[$name] ?? null;
     if ($info === null) {
         return null;
     }

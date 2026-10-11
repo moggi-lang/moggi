@@ -3,11 +3,9 @@ title: "Language overview"
 ---
 # Language overview
 
-This is the reference for the surface language: what a `.mog` file may contain
-and what each form means. For a gentler introduction start at
-[tour.md](tour.md); for what the compiler does with the file, see
-[pipeline.md](pipeline.md). The fixtures under `tests/syntax` are the ground
-truth for every corner of the grammar.
+# Language overview
+
+This reference describes Moggi's syntax and language constructs, with examples of how to use them. For a gentler introduction, start with [tour.md](tour.md); for an explanation of how the compiler processes source code, see [pipeline.md](pipeline.md).
 
 ## Basics
 
@@ -38,11 +36,7 @@ sign x =
   else if x == 0 then 0 else 1
 ```
 
-`if` is syntax, not a function, and desugars to a `case` on the condition with
-`True`/`False` alternatives — the same shape the type checker and the backends
-already handle. `then` and `else` are keywords: they may sit on later lines as
-long as they are indented deeper than the enclosing declaration, and both
-branches are required.
+`if` is syntax, not a function, and desugars to a `case` on the condition with `True`/`False` alternatives — the same shape the type checker and the backends already handle. `then` and `else` are keywords: they may sit on later lines as long as they are indented deeper than the enclosing declaration, and both branches are required.
 
 ## Data and patterns
 
@@ -58,8 +52,7 @@ sign x = case x of
   _ -> 1
 ```
 
-Infix data constructors use operator names that start with `:` (not bare `:` /
-`::`, which stay reserved for list cons and type ascription):
+Infix data constructors use operator names that start with `:` (not bare `:` / `::`, which stay reserved for list cons and type ascription):
 
 ```moggi
 data NonEmpty a = a :| [a]
@@ -72,9 +65,7 @@ headNe xs = case xs of
 oneTwoThree = 1 :| [2, 3]
 ```
 
-Prefix form `(:|) a [a]` is also accepted. Fixity declarations apply to
-constructor operators the same way as to value operators. List cons `:` remains
-the built-in list operator (not a user data constructor).
+Prefix form `(:|) a [a]` is also accepted. Fixity declarations apply to constructor operators the same way as to value operators. List cons `:` remains the built-in list operator (not a user data constructor).
 
 Any function can be used as an infix operator by wrapping its name in
 backticks — `a \`f\` b` desugars to `f a b`. Backticked names bind with
@@ -175,13 +166,13 @@ double x = x + x           -- partial application / currying
 
 ## Type classes
 
+A **type class** defines a set of operations that types can implement. Instances provide implementations for specific types, allowing the same functions to work with different types.
+
 ```moggi
 class Eq a => Pretty a where
   pretty :: a -> String
   prettyList :: [a] -> String
-  prettyList = unwords . map pretty     -- default, overridable
-
-  {-# MINIMAL pretty #-}                -- what an instance must define
+  prettyList = unwords . map pretty
 
 instance Pretty Bool where
   pretty b = case b of
@@ -189,24 +180,18 @@ instance Pretty Bool where
     False -> "no"
 
 instance Pretty a => Pretty [a] where
-  pretty xs = "[" <> unwords (map pretty xs) <> "]"
+  pretty xs = "[" <> prettyList xs <> "]"
 ```
 
-* A class may have superclasses (`Eq a =>`), a method may have a default body,
-  and `{-# MINIMAL ... #-}` lists the alternatives that satisfy an instance (an
-  alternative is satisfied only when every method in it is written).
-* **One equation per method inside an instance** — match with `case` rather than
-  writing a second equation for the same method.
-* Instances are global: every module sees every instance without importing
-  anything, which is why a call can be resolved at a type only another module
-  knows.
-* An operator means what the instance its operand types name declares — `n + 1`
-  at `Int` is `Data.Num`'s `(+) a b = intAdd# a b`, with no dictionary. `Int`'s
-  and `Word`'s `Num` instances live in `Data.Num` with the class, so the
-  library's own low-level modules reach them; an operand type with no instance
-  the compile can see keeps the dictionary call.
-* A constraint is discharged by an instance or by another constraint in scope;
-  a call at a still-polymorphic type stays a dictionary call.
+- **Superclasses** express requirements. `Eq a =>` means that a type must also have an `Eq` instance to have a `Pretty` instance.
+- **Default methods** provide implementations that instances can inherit or override. Here, `prettyList` uses `pretty` to format a list of values.
+- **Instances** define how a type implements a class. The `Bool` instance formats booleans as `"yes"` or `"no"`, while the list instance formats lists using the element type's `Pretty` instance.
+- **Constraints** restrict which types a function accepts. For example, `Pretty a => a -> String` works for any type with a `Pretty` instance.
+- **Minimal definitions** can specify which methods an instance must implement. For example, `{-# MINIMAL pretty #-}` requires every instance to define `pretty`.
+
+Operators can also be class methods. Their names must be in scope, usually through an import or the `Prelude`. The applicable instance determines their behavior.
+
+Instances are available program-wide, regardless of which module defines them.
 
 ## Deriving
 
@@ -253,10 +238,9 @@ touches the world is an explicit import: `System.IO` (handles, files, `print`,
 
 ## Strictness
 
-Evaluation is strict. There is no `seq`, no `$!` and no `foldl'` (there is one
-`foldl`, and it is strict); there is no infinite structure to build on
-laziness, and `foldr` folds eagerly as it descends. Recursive code has to
-consume what it produces.
+Expressions are evaluated eagerly. Function arguments are evaluated before the function is called, and data structures are evaluated as they are constructed.
+
+Folds evaluate their input eagerly. Recursive functions should consume data as they process it rather than rely on deferred evaluation.
 
 ## Modules
 
@@ -363,10 +347,10 @@ add x y = x + y  -- trailing note
 
 ## Built-in types and primitives
 
-`Int` (64-bit), `Integer` (arbitrary precision), `Double`, `Word` and the
-fixed-width `Int8`…`Int64`/`Word8`…`Word64`, `Char`, `String`, `Bool`, `IO`,
-lists, tuples, ADTs, records, `newtype`s, lambdas, classes and instances. The
-primitives behind them (`intAdd#`, `word64`, `ioPure#`, …) live in
-`Moggi.Internal.Prim` and `Moggi.Internal.IO` and are imported only when writing
-the library. For the library itself see [stdlib.md](stdlib.md); for the exact
-`Prelude` export list, `lib/Prelude.mog`.
+Moggi provides the fundamental types Int (64-bit), Integer (arbitrary precision), Double, Word, fixed-width signed and unsigned integers (Int8–Int64, Word8–Word64), Char, String, Bool and IO.
+
+The language also supports lists, tuples, algebraic data types, records, newtypes, lambdas, type classes and instances.
+
+Low-level primitives are provided by Moggi.Internal.Prim and Moggi.Internal.IO. They are primarily intended for implementing the standard library.
+
+See stdlib.md for the standard library and lib/Prelude.mog for the exact exports of Prelude.

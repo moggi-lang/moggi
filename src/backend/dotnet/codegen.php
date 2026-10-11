@@ -1654,91 +1654,6 @@ function boxInt(EmitEnv $env): void
     $env->m->emit('call object Moggi.Rt.RT::BoxInt(int64)');
 }
 
-/**
- * `base ^ exponent` at machine `Int`: the runtime's unboxed square-and-multiply.
- *
- * The loop lives in the runtime so that every backend reaches the same
- * implementation, and so the intrinsic stays a plain call wherever it appears
- * in an expression.
- */
-function emitDotNetIntPow(EmitEnv $env, IR\Operand $base, IR\Operand $exponent, ?IR\SrcLoc $loc): void
-{
-    emitDotNetUnboxedIntPow($env, $base, $exponent, $loc, -1);
-    boxInt($env);
-}
-
-/**
- * The runtime's masked square-and-multiply, on unboxed operands.
- *
- * `-1` reduces not at all: the machine `Int`'s own multiply already wraps at 64
- * bits. A fixed-width type passes its own mask, and the signed ones are
- * sign-extended back by {@see emitSignExtend} at the call site.
- */
-function emitDotNetUnboxedIntPow(
-    EmitEnv $env,
-    IR\Operand $base,
-    IR\Operand $exponent,
-    ?IR\SrcLoc $loc,
-    int $mask,
-): void {
-    emitOperand($env, $base);
-    unboxInt($env);
-    emitOperand($env, $exponent);
-    unboxInt($env);
-    $env->m->emit('ldc.i8 ' . $mask);
-    emitDotNetPushSrcLoc($env, $loc);
-    $env->m->emit('call int64 Moggi.Rt.RT::IntPow(int64, int64, int64, object[])');
-}
-
-/**
- * One of the fixed-width `^` primops: the masked loop, then the sign extension
- * the signed widths need (the 64-bit ones are already the host width).
- */
-function emitDotNetPowFamily(EmitEnv $env, IR\Intrinsic $op): bool
-{
-    $name = $op->name;
-    $mask = powWidthMask($name);
-    if ($mask === null) {
-        return false;
-    }
-
-    emitDotNetUnboxedIntPow($env, $op->args[0], $op->args[1], $op->srcLoc, $mask);
-    if (\str_starts_with($name, 'int') && $mask !== -1) {
-        emitSignExtend($env, $name);
-    }
-    boxInt($env);
-
-    return true;
-}
-
-/**
- * The reduction mask of a fixed-width `^` primop, or null for any other name.
- *
- * `-1` (every bit) is the 64-bit widths, which reduce not at all.
- */
-function powWidthMask(string $name): ?int
-{
-    return match ($name) {
-        'int8Pow#', 'word8Pow#' => 0xff,
-        'int16Pow#', 'word16Pow#' => 0xffff,
-        'int32Pow#', 'word32Pow#' => 0xffffffff,
-        'int64Pow#', 'word64Pow#' => -1,
-        default => null,
-    };
-}
-
-/** `base ^ exponent` at `Double`: the runtime's unboxed loop on host doubles. */
-function emitDotNetDoublePow(EmitEnv $env, IR\Operand $base, IR\Operand $exponent, ?IR\SrcLoc $loc): void
-{
-    emitOperand($env, $base);
-    unboxDouble($env);
-    emitOperand($env, $exponent);
-    unboxInt($env);
-    emitDotNetPushSrcLoc($env, $loc);
-    $env->m->emit('call float64 Moggi.Rt.RT::DoublePow(float64, int64, object[])');
-    boxDouble($env);
-}
-
 /** Sign-extend-truncate an i64 on the stack to the width named by an intN_* op. */
 function emitSignExtend(EmitEnv $env, string $opName): void
 {
@@ -2181,14 +2096,6 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
         case 'intMul#':
         case 'intDiv#':
             emitIntBinopToStack($env, $op->name, $args[0], $args[1]);
-
-            return;
-        case 'intPow#':
-            emitDotNetIntPow($env, $args[0], $args[1], $op->srcLoc);
-
-            return;
-        case 'doublePow#':
-            emitDotNetDoublePow($env, $args[0], $args[1], $op->srcLoc);
 
             return;
         case 'doubleAdd#':
@@ -3022,9 +2929,6 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 "DotNet emit: intrinsic `{$op->name}` must be lowered to IO exception IR",
             );
         default:
-            if (emitDotNetPowFamily($env, $op)) {
-                return;
-            }
             throw new \RuntimeException("DotNet emit: unsupported intrinsic {$op->name}");
     }
 }

@@ -570,9 +570,7 @@ function rtClassIl(): string
         rtReportUncaughtIl(),
         rtThrowSomeExceptionIl(),
         rtThrowErrorCallIl(),
-        rtIntPowIl(),
         rtIntAbsIl(),
-        rtDoublePowIl(),
         rtNaturalFromIntegerIl(),
         rtNormalizeHostExceptionIl(),
         rtIoCatchIl(),
@@ -2895,65 +2893,6 @@ function rtThrowErrorCallIl(): string
 IL;
 }
 
-function rtIntPowIl(): string
-{
-    return <<<'IL'
-  .method public hidebysig static int64 IntPow(int64 b, int64 e, int64 mask, object[] throwSite) cil managed
-  {
-    .maxstack 4
-    .locals init (int64 r)
-
-    ldc.i4.1
-    conv.i8
-    stloc r
-    ldarg.1
-    ldc.i4.0
-    conv.i8
-    blt int_pow_negative
-  int_pow_loop:
-    ldarg.1
-    ldc.i4.0
-    conv.i8
-    beq int_pow_done
-    ldarg.1
-    ldc.i4.1
-    conv.i8
-    and
-    brfalse int_pow_skip_mul
-    ldloc r
-    ldarg.0
-    mul
-    ldarg.2
-    and
-    stloc r
-  int_pow_skip_mul:
-    ldarg.0
-    ldarg.0
-    mul
-    ldarg.2
-    and
-    starg.s 0
-    ldarg.1
-    ldc.i4.1
-    shr.un
-    starg.s 1
-    br int_pow_loop
-  int_pow_done:
-    ldloc r
-    ret
-  int_pow_negative:
-    ldstr "Negative exponent"
-    ldarg.3
-    call object Moggi.Rt.RT::ThrowErrorCall(string, object[])
-    pop
-    ldc.i4.0
-    conv.i8
-    ret
-  }
-
-IL;
-}
-
 /**
  * `Int` absolute value: `Math.Abs` throws on `minBound`, which base returns
  * unchanged (it is its own negation in two's complement).
@@ -2984,59 +2923,6 @@ IL;
  * `Double` exponentiation on unboxed floats, in the library body's own
  * multiplication order, so the value is the one the dictionaries produce.
  */
-function rtDoublePowIl(): string
-{
-    return <<<'IL'
-  .method public hidebysig static float64 DoublePow(float64 b, int64 e, object[] throwSite) cil managed
-  {
-    .maxstack 4
-    .locals init (float64 r)
-
-    ldc.r8 1.0
-    stloc r
-    ldarg.1
-    ldc.i4.0
-    conv.i8
-    blt double_pow_negative
-  double_pow_loop:
-    ldarg.1
-    ldc.i4.0
-    conv.i8
-    beq double_pow_done
-    ldarg.1
-    ldc.i4.1
-    conv.i8
-    and
-    brfalse double_pow_skip_mul
-    ldloc r
-    ldarg.0
-    mul
-    stloc r
-  double_pow_skip_mul:
-    ldarg.0
-    ldarg.0
-    mul
-    starg.s 0
-    ldarg.1
-    ldc.i4.1
-    shr.un
-    starg.s 1
-    br double_pow_loop
-  double_pow_done:
-    ldloc r
-    ret
-  double_pow_negative:
-    ldstr "Negative exponent"
-    ldarg.2
-    call object Moggi.Rt.RT::ThrowErrorCall(string, object[])
-    pop
-    ldc.r8 0.0
-    ret
-  }
-
-IL;
-}
-
 function rtNaturalFromIntegerIl(): string
 {
     return <<<'IL'

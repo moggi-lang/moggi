@@ -7,12 +7,14 @@ class MyEq a where
 
 -- Exported via type: another module may use instances derived through it.
 newtype RepA = RepA Int
+  deriving (Eq)
 
 instance MyEq RepA where
   (===) x y = x == y
 
 -- Private via type: only usable inside this module.
 newtype RepB = RepB Int
+  deriving (Eq)
 
 instance MyEq RepB where
   (===) x y = x == y

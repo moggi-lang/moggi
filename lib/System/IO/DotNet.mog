@@ -32,9 +32,11 @@ import System.IO.Base (IO, FilePath)
 import Moggi.Err
 import Moggi.IO.Exception
 import Data.Char (Char, chr)
+import Data.Eq
 import Data.Int
 import Data.Integer
 import Data.Maybe
+import Data.Semigroup
 import Data.String
 import Moggi.Internal.Prim
 import System.IO.Error (mkIOError)

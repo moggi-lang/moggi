@@ -26,6 +26,7 @@ use function Moggi\LSP\Protocol\pathToUri;
 use function Moggi\LSP\Protocol\uriToPath;
 use function Moggi\LSP\applyContentChanges;
 use function Moggi\Modules\bundledStdlibLibPath;
+use function Moggi\Modules\stdlibSourcesMissingFrom;
 use function Moggi\Modules\moduleFileClosureCached;
 use function Moggi\Modules\prepareProjectCached;
 use function Moggi\Modules\projectSourceClosure;
@@ -612,6 +613,10 @@ final class AnalysisService
             } catch (\Throwable) {
                 [$files, $projRoot] = moduleFileClosureCached($filename);
             }
+            // The library's instances belong to the check even when this file does not import
+            // the module that declares them -- `Ord Int` in `Data.Either`'s `Show` instance is
+            // the standing example -- so the check carries the library's modules.
+            $files = [...$files, ...stdlibSourcesMissingFrom($files, $stdlib)];
             $files = array_map(
                 static function (string $path) use ($overlayByReal): string {
                     $real = realpath($path) ?: $path;

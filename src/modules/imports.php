@@ -560,22 +560,6 @@ function buildImportContext(
         $planPhpImports,
     );
 
-    mergePreludeBuiltinEnv(
-        $env,
-        $externalFns,
-        $externalFnRuntimeArity,
-        $actionReturnFns,
-        $fnOriginModules,
-        $intrinsicWrappers,
-        $requireTargets,
-        $moduleOutputPaths,
-        $units,
-        $currentModule,
-        $currentOutputRelative,
-        $rootPrefix,
-        $planPhpImports,
-    );
-
     $requireLines = [];
     $functionUseLines = [];
     if ($planPhpImports) {
@@ -800,102 +784,6 @@ function addOriginRequire(
     $originOutputRelative = mogPathToOutputRelative($units[$originModule]['path'], $rootPrefix);
     $moduleOutputPaths[$originModule] = $originOutputRelative;
     $requireTargets[$originModule] = relativeRequirePath($currentOutputRelative, $originOutputRelative);
-}
-
-/** Prelude exports these without an explicit import in library modules. */
-/** @return array<string, string> */
-function preludeBuiltinOrigins(): array
-{
-    return [
-        'error' => 'Moggi.Err',
-        'undefined' => 'Moggi.Err',
-    ];
-}
-
-/**
- * @param array<string, Scheme> $env
- * @param array<string, string> $externalFns
- * @param array<string, int> $externalFnRuntimeArity
- * @param array<string, string> $fnOriginModules
- * @param array<string, string> $intrinsicWrappers
- * @param array<string, string> $requireTargets
- * @param array<string, string> $moduleOutputPaths
- * @param array<string, true> $actionReturnFns
- * @param array<string, array<string, mixed>> $units
- */
-function mergePreludeBuiltinEnv(
-    array &$env,
-    array &$externalFns,
-    array &$externalFnRuntimeArity,
-    array &$actionReturnFns,
-    array &$fnOriginModules,
-    array &$intrinsicWrappers,
-    array &$requireTargets,
-    array &$moduleOutputPaths,
-    array $units,
-    string $currentModule,
-    string $currentOutputRelative,
-    string $rootPrefix,
-    bool $planPhpImports = true,
-): void {
-    if (\in_array($currentModule, ['Prelude', 'Moggi.Err'], true)) {
-        return;
-    }
-
-    foreach (preludeBuiltinOrigins() as $symbol => $originModule) {
-        if (isset($env[$symbol]) || $currentModule === $originModule || !isset($units[$originModule])) {
-            continue;
-        }
-
-        $origin = $units[$originModule];
-        $exports = $origin['exports'] ?? collectExports(
-            $origin['program'],
-            $origin['localTypes'],
-            $units,
-            $originModule,
-        );
-
-        $scheme = $exports['env'][$symbol] ?? null;
-        if (!$scheme instanceof Scheme) {
-            continue;
-        }
-
-        $env[$symbol] = $scheme;
-        $namespace = $origin['namespace'];
-        $externalFns[$symbol] = resolvedSymbol($originModule, $symbol);
-        $externalFnRuntimeArity[$symbol] = externalFunctionRuntimeArity(
-            $units,
-            $originModule,
-            $symbol,
-            $scheme,
-        );
-        $fnOriginModules[$symbol] = $originModule;
-        if (isset(moduleActionReturnFnNames($units, $originModule)[$symbol])) {
-            $actionReturnFns[$symbol] = true;
-        }
-        if (isset($exports['intrinsicWrappers'][$symbol])) {
-            $intrinsicWrappers[$symbol] = $exports['intrinsicWrappers'][$symbol];
-        }
-
-        if (!$planPhpImports) {
-            continue;
-        }
-
-        $originInfo = $exports['origins'][$symbol] ?? [
-            'module' => $originModule,
-            'namespace' => $namespace,
-            'phpName' => $symbol,
-        ];
-        addOriginRequire(
-            $requireTargets,
-            $moduleOutputPaths,
-            $originInfo,
-            $currentModule,
-            $currentOutputRelative,
-            $units,
-            $rootPrefix,
-        );
-    }
 }
 
 /** @param list<string> $lines @return list<string> */
