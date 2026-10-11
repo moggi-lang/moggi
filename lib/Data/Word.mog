@@ -6,8 +6,8 @@
 -- zero and ends at all-ones: @'maxBound' :: Word8@ is 255, and arithmetic wraps
 -- around within the width rather than being an error.
 --
--- Each width carries the expected instances — equality and ordering, 'Show',
--- arithmetic and conversion, the enumeration, and the two bounds — and the
+-- Each width carries the expected instances - equality and ordering, 'Show',
+-- arithmetic and conversion, the enumeration, and the two bounds - and the
 -- ordering and 'Show' of a wide value are the unsigned ones, which is what a
 -- value above @'maxBound' :: 'Int'@ would get wrong if it were treated as
 -- signed.
@@ -15,7 +15,7 @@
 -- This module also holds the two operations that only make sense on a fixed
 -- width: 'byteSwap' reorders the bytes of a value, and 'bitReverse' reverses its
 -- bit order. Both come in one form per width. The bit-level operations for a
--- value — setting, testing and counting bits, shifts and rotates — are in
+-- value - setting, testing and counting bits, shifts and rotates - are in
 -- 'Data.Bits'.
 module Data.Word
   ( Word
@@ -23,6 +23,7 @@ module Data.Word
   , Word16
   , Word32
   , Word64
+  , byteSwap8
   , byteSwap16
   , byteSwap32
   , byteSwap64
@@ -48,10 +49,19 @@ import Moggi.Err
 import Moggi.Exception
 import Moggi.Internal.Prim
 
+-- | A 'Word' is an unsigned integral type, with the same size as 'Int'.
 type Word = Word#
+
+-- | 8-bit unsigned integer type
 type Word8 = Word8#
+
+-- | 16-bit unsigned integer type
 type Word16 = Word16#
+
+-- | 32-bit unsigned integer type
 type Word32 = Word32#
+
+-- | 64-bit unsigned integer type
 type Word64 = Word64#
 
 wordZero = wordFromInt# 0
@@ -67,28 +77,25 @@ word64Zero = word64FromInt# 0
 word64One = word64FromInt# 1
 word64Max = word64FromInt# (intNegate# 1)
 
--- | Reverse the two bytes of a 16-bit value: the low byte becomes the high
--- one. Reading a little-endian value written by a big-endian machine, and back,
--- is this operation.
+-- | Reverse order of bytes in 'Word16'.
 byteSwap16 w = byteSwap16# w
 
--- | Reverse the four bytes of a 32-bit value.
+-- | Reverse order of bytes in 'Word32'.
 byteSwap32 w = byteSwap32# w
 
--- | Reverse the eight bytes of a 64-bit value.
+-- | Reverse order of bytes in 'Word64'.
 byteSwap64 w = byteSwap64# w
 
--- | Reverse the bit order of an 8-bit value: bit 0 becomes bit 7, and so on.
--- This is what a bit-reversed walk of a table uses.
+-- | Reverse the order of the bits in a 'Word8'.
 bitReverse8 w = bitReverse8# w
 
--- | Reverse the bit order of a 16-bit value.
+-- | Reverse the order of the bits in a 'Word16'.
 bitReverse16 w = bitReverse16# w
 
--- | Reverse the bit order of a 32-bit value.
+-- | Reverse the order of the bits in a 'Word32'.
 bitReverse32 w = bitReverse32# w
 
--- | Reverse the bit order of a 64-bit value.
+-- | Reverse the order of the bits in a 'Word64'.
 bitReverse64 w = bitReverse64# w
 
 instance Eq Word where

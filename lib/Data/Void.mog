@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+-- | A logically uninhabited data type, used to indicate that a given term should not exist.
 module Data.Void
   ( Void
   , absurd
@@ -8,12 +9,24 @@ module Data.Void
 import Data.Functor
 import Moggi.Err
 
--- | Intentionally uninhabited at the API level. Moggi requires a constructor
--- form; clients must not construct Void values.
+-- | Uninhabited data type
 data Void = Void
 
+-- | Since 'Void' values logically don't exist, this witnesses the
+-- logical reasoning tool of \"ex falso quodlibet\".
+--
+-- >>> let x :: Either Void Int; x = Right 5
+-- >>> :{
+-- case x of
+--     Right r -> r
+--     Left l  -> absurd l
+-- :}
+-- 5
 absurd :: Void -> a
 absurd ignored = error "Data.Void.absurd"
 
+-- | If 'Void' is uninhabited then any 'Functor' that holds only
+-- values of type 'Void' is holding no values.
+-- It is implemented in terms of @map absurd@.
 vacuous :: Functor f => f Void -> f a
 vacuous x = map absurd x
