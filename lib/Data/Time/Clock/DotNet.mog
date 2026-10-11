@@ -8,6 +8,7 @@ module Data.Time.Clock.DotNet
 
 import Control.Applicative
 import Control.Monad
+import Data.Num
 import System.IO.Base (IO)
 import Moggi.Internal.Prim
 

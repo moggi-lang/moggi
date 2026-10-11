@@ -17,9 +17,12 @@ module Data.String.JVM
 
 import Data.Bool
 import Data.Char
+import Data.Eq
 import Data.Int
 import Data.List qualified as L
+import Data.Num
 import Data.Ord
+import Data.Semigroup
 import Moggi.Internal.Prim
 
 -- Ordinary JDK FFI only (no moggi.rt.StringOps).

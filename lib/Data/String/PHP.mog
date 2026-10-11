@@ -17,10 +17,13 @@ module Data.String.PHP
 
 import Data.Bool
 import Data.Char
+import Data.Eq
 import Data.Int
 import Data.List hiding (singleton, take, drop, isPrefixOf, isSuffixOf)
 import Data.List qualified as L
+import Data.Num
 import Data.Ord
+import Data.Semigroup
 import Moggi.Internal.Prim
 
 -- Scalar-aware String ops via PHP mbstring / IntlChar foreigns + Moggi.

@@ -1555,7 +1555,6 @@ function inferVariable(TypeCheckState $state, Ast\AstNode &$expr, array $env): T
     }
 
     $scheme = $env[$expr->name]
-        ?? classMethodOperatorScheme($state, $expr->name)
         ?? throw typeFail(
             $state,
             appendDidYouMean(
@@ -1626,7 +1625,6 @@ function inferOperatorRef(TypeCheckState $state, Ast\AstNode &$expr, array $env)
     }
 
     $scheme = $env[$expr->name]
-        ?? classMethodOperatorScheme($state, $expr->name)
         ?? throw typeFail(
             $state,
             appendDidYouMean(
@@ -2211,16 +2209,23 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
     $leftType = inferExpr($state, $expr->left, $env);
     $rightType = inferExpr($state, $expr->right, $env);
     $primop = instanceOperatorPrimop($state, $op, prune($state, $leftType), prune($state, $rightType));
+
     if ($primop !== null) {
         return applyOperatorPrimop($state, $expr, $primop, $leftType, $rightType);
     }
 
     $declaredPrimop = $state->intrinsicWrappers[$op] ?? null;
+
     if ($declaredPrimop !== null && ! isset($state->localDeclNames[$op])) {
         return applyOperatorPrimop($state, $expr, $declaredPrimop, $leftType, $rightType);
     }
 
-    $opScheme = $env[$op] ?? $state->env[$op] ?? classMethodOperatorScheme($state, $op);
+    $opScheme = $env[$op] ?? null;
+
+    if ($opScheme === null && isset($state->env[$op])) {
+        $opScheme = $state->env[$op];
+    }
+
     if ($opScheme === null) {
         if (isset($state->classMethodAmbiguities[$op])) {
             throw typeFail($state, "ambiguous class method `{$op}`", $expr);
@@ -2629,34 +2634,6 @@ function instanceOperatorPrimop(TypeCheckState $state, string $op, Type ...$oper
     }
 
     return null;
-}
-
-/**
- * The scheme a class-method operator carries even when the module never
- * imported the class that declares it.
- *
- * `n + 1` means `Num`'s `+` whether or not this module imports `Data.Num`: the
- * class declaration says so. The class still has to be part of the compile -- a
- * module that imports nothing at all has no `Num` to read -- so what this
- * replaces is the per-module import, not the class. The scheme is the very one
- * an importer sees, so nothing downstream can tell the two apart -- the
- * dictionary path types the use, and {@see instanceOperatorPrimop} turns it into
- * the primop when the operand types name an instance.
- */
-function classMethodOperatorScheme(TypeCheckState $state, string $op): ?Scheme
-{
-    if ($op === '' || ctype_alpha($op[0]) || $op[0] === '_') {
-        return null;
-    }
-
-    $class = classDeclaringMethod($state, $op);
-    if ($class === null) {
-        return null;
-    }
-
-    $scheme = $state->classes[$class]['methodSchemes'][$op] ?? null;
-
-    return $scheme instanceof Scheme ? $scheme : null;
 }
 
 /**
