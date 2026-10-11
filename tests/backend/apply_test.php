@@ -6,15 +6,6 @@ while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 
-// Moggi\__apply, the runtime partial-application hot path: the semantics of every shape the
-// backends can emit (the `['__partial', arity, callable, ...applied]` cell layout is an ABI shared
-// with the JVM/.NET `Partial` classes and the emitted call sites), plus a differential check against
-// the pre-optimization algorithm frozen at the bottom.
-//
-// Only shapes reachable from well-typed Moggi are asserted as semantics — the backends disagree on
-// over-application (PHP drops the surplus argument, JVM/.NET re-apply it) — but the differential
-// check does cover the surplus cases, so PHP's side of that divergence cannot change silently.
-
 require_once $root . '/src/backend/php/runtime.php';
 
 use function Moggi\__apply;
@@ -29,8 +20,6 @@ $assertSame = static function (mixed $expected, mixed $actual, string $message) 
             . ', got ' . var_export($actual, true) . ')';
     }
 };
-
-// Callees (global scope, so `'\name'` partial cells resolve them)
 
 function ap0(): string
 {
@@ -86,8 +75,6 @@ $cl1 = static fn (int $a): int => $a + 1;
 $cl2 = static fn (int $a, int $b): int => $a + $b;
 $cl3 = static fn (int $a, int $b, int $c): int => $a + $b + $c;
 
-// 1. Saturation: every arity, every number of already-applied arguments
-
 $saturate = [
     // [$partialCell, $incomingArgs, $expected]
     [['__partial', 0, '\ap0'], [], 'z'],
@@ -119,8 +106,6 @@ foreach ($saturate as $i => [$cell, $args, $expected]) {
     );
 }
 
-// Stepwise currying: applying one argument at a time must reach the same result
-// as a single multi-argument application.
 $expectedResult = [1 => 2, 2 => 3, 3 => 6, 4 => 10, 5 => 15];
 foreach ([1, 2, 3, 4, 5] as $arity) {
     $name = '\\ap' . $arity;
@@ -139,8 +124,6 @@ foreach ([1, 2, 3, 4, 5] as $arity) {
         "one-shot saturation at arity {$arity}",
     );
 }
-
-// 2. Unsaturated cells keep the exact documented layout
 
 $assertSame(
     ['__partial', 2, '\ap2', 1],
@@ -163,12 +146,9 @@ $assertSame(
     'an extended cell must stay a list (0-indexed)',
 );
 
-// The caller's cell must not be mutated — PHP arrays are values.
 $original = ['__partial', 3, '\ap3', 1];
 __apply($original, 2);
 $assertSame(['__partial', 3, '\ap3', 1], $original, 'extending must not mutate the caller cell');
-
-// 3. Bare callables (no cell): names, closures, first-class callables, objects
 
 $assertSame(42, __apply('\ap1', 41), 'string function name, exact arity');
 $assertSame(3, __apply('\ap2', 1, 2), 'string function name, two args');
@@ -184,8 +164,6 @@ $assertSame(42, __apply('\ap1'(...), 41), 'first-class callable, exact arity');
 $assertSame('__partial', (__apply('\ap2'(...), 1)[0] ?? null), 'first-class callable curried');
 $assertSame(3, __apply(__apply('\ap2'(...), 1), 2), 'first-class callable curried to result');
 
-// Callables that are neither a Closure nor a plain function-name string used to
-// crash with a TypeError from ReflectionFunction; they are normalised instead.
 $invokable = new class () {
     public function __invoke(int $a, int $b): int
     {
@@ -200,18 +178,9 @@ $assertSame(12, __apply('\ApStatic::mul', 3, 4), '`Class::method` string, exact 
 $assertSame('__partial', (__apply('\ApStatic::mul', 3)[0] ?? null), '`Class::method` string, under-applied');
 $assertSame(12, __apply(__apply('\ApStatic::mul', 3), 4), '`Class::method` string, curried');
 
-// 3b. Callable arrays, and why the parameter type is `callable|array`
-//
-// A partial cell is an array that is NOT callable, so the parameter has to admit
-// plain arrays (`array`) while still rejecting stray scalars and objects
-// (`callable`). Both members are load-bearing — and because that check runs at
-// the boundary, __apply needs no is_callable() of its own.
-
 $assertSame(3, __apply([new ApCallableArray(), 'add'], 1, 2), 'callable array is invoked directly');
 $assertSame(3, __apply(['ApCallableArray', 'statAdd'], 1, 2), 'static callable array is invoked directly');
 
-// A callable array is never turned into a partial cell: PHP resolves its own
-// arity and reports a short call itself.
 try {
     __apply([new ApCallableArray(), 'add'], 1);
     $assertSame('ArgumentCountError', 'no throw', 'under-applied callable array must not build a cell');
@@ -219,11 +188,9 @@ try {
     $assertSame('ArgumentCountError', 'ArgumentCountError', 'under-applied callable array raises');
 }
 
-// The union's `array` member is what admits a non-callable partial cell...
 $assertSame(false, is_callable(['__partial', 2, '\ap2', 1]), 'a partial cell is not callable');
 $assertSame(3, __apply(['__partial', 2, '\ap2', 1], 2), 'a non-callable array is still accepted');
 
-// ...and `callable` is what rejects everything else.
 foreach ([42, 1.5, null, true, new stdClass()] as $junk) {
     try {
         __apply($junk, 1);
@@ -233,8 +200,6 @@ foreach ([42, 1.5, null, true, new stdClass()] as $junk) {
     }
 }
 
-// 4. fix# — strict fixpoint, which routes through __apply internally
-
 $fact = fix(static fn (callable $rec): callable => static fn (int $n): int => $n <= 1 ? 1 : $n * $rec($n - 1));
 $assertSame(3628800, $fact(10), 'fix# factorial');
 
@@ -243,8 +208,6 @@ $sumTo = fix(
 );
 $assertSame(55, $sumTo(10, 0), 'fix# two-parameter recursion');
 $assertSame(5050, $sumTo(100, 0), 'fix# two-parameter recursion, deeper');
-
-// 5. Differential check against the pre-optimization algorithm (frozen)
 
 /** The algorithm this file replaced. Kept verbatim so behaviour cannot drift. */
 $reference = static function (callable|array $fn, mixed ...$args): mixed {

@@ -2,7 +2,7 @@ program
   function add :: Int -> Int -> Int
     pat_var x
     pat_var y
-    infix +
+    intrinsic intAdd#
       variable x
       variable y
   function sum3 :: Int

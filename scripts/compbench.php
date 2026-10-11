@@ -1,7 +1,6 @@
 #!/usr/bin/env php
 <?php declare(strict_types=1);
 
-// Focused compiler micro-benchmark (CPU-time, load/thermal-invariant).
 putenv('MOGGI_NO_CACHE=1');
 $_ENV['MOGGI_NO_CACHE'] = '1';
 
@@ -31,7 +30,6 @@ $cpu = static function (): float {
     return $r['ru_utime.tv_sec'] + $r['ru_utime.tv_usec'] / 1e6;
 };
 
-// Warm one run (autoload / opcache).
 $warm = prepareProjectCached($files, $root);
 compilePreparedProject($warm);
 clearPrepareProjectCaches();

@@ -12,7 +12,6 @@ working on the compiler and the library, not a user document. A user should read
 **Axiom:** Foreign types represent specific host types. Ordinary Moggi ADTs represent Moggi values. There is no generic opaque “host value” type. The user-facing account is [ffi.md](../ffi.md); what follows is the invariant the compiler enforces.
 
 - `foreign … type Path "java.nio.file.Path"` (etc.) — specific host type, nominal Moggi type.
-- The deleted fake opaques (`JObject` / `ClrObject` / `PhpRef`) do not come back, and not under a new name: a `foreign type … "java.lang.Object"` is the same escape hatch and is only correct when the API’s true type *is* arbitrary Object (almost never).
 - `PHPValue` — ordinary Moggi ADT for deliberate mixed → inspectable reification (Composer); not a handle; unknown class instances must not fake-reify into it.
 - `Encoding` — per-backend foreign type for the host JSON tree (not an inventable ADT).
 - `Handle` / `Resource` — closed portable allowlist with a defined ABI.
@@ -109,7 +108,7 @@ Neutral `data.*` modules declare types, typeclass instances, and public signatur
 |----------|-------|-----|
 | Numeric literals | `intFromInteger#`, `doubleFromInteger#`, `intToInteger#`, `integerFromDigits#` | Literal desugaring via `fromInteger`; a literal too large for the host `int` is lowered from its digits (`integerFromDigits#`) so no digits are lost |
 | List sugar | `listCons#` | `:` on `List#` |
-| Operator monomorphization | `intAdd#`, `intSub#`, `intMul#`, `intEq#`, `intNe#`, `stringAppend#`, `stringEq#`, `stringNe#`, `bytesAppend#`, `bytesEq#`, `bytesNe#`, `double*#`, `boolAnd#`, `boolOr#`, `boolNot#`, `boolEq#`, `boolNe#`, `listAppend#`, `listEq#`, `listNe#`, `maybeEq#`, `maybeNe#` | `resolveMonomorphicOperator()` |
+| Operator primops | `intAdd#`, `intSub#`, `intMul#`, `intEq#`, `intNe#`, `stringAppend#`, `stringEq#`, `stringNe#`, `bytesAppend#`, `bytesEq#`, `bytesNe#`, `double*#`, `boolAnd#`, `boolOr#`, `boolNot#`, `boolEq#`, `boolNe#`, `listAppend#`, `listEq#`, `listNe#`, `maybeEq#`, `maybeNe#` | The instance the operand types name declares the operator as exactly that primop (`instance Num Int where (+) a b = intAdd# a b`), read by `instanceOperatorPrimop()`. The declaration lives in the library — `Data.Num` carries `Num Int` and `Num Word` with the class, the fixed widths carry theirs in `Data.Int`/`Data.Word`/`Data.Double` — so `n - 1` at `Int` means `intSub#`; a use whose operands name no instance keeps the dictionary call |
 | Ord compiler glue | `ordering*#` | Default `(<=)`, `min`, `max` from `compare` |
 | IR coercions | `bytesFromString#`, `bytesToString#` | Distinct `String` / `ByteString` at zero runtime cost on PHP |
 | Platform entry point | `platformArgv#` | Unique exception: program arguments must be captured by the generated `main` stub (e.g. `Platform.setArgs`); no JDK/BCL FFI surface exposes process args directly. All other platform IO/FS uses ordinary FFI. |

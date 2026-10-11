@@ -2,9 +2,9 @@
 
 namespace Main;
 
-const __MOGGI_MAP = [[22 => ['Main.main', 'tests/semantics/modules/Main.mog', 11, 15], 27 => ['Main.qualifiedMain', 'tests/semantics/modules/Main.mog', 15, 19]], ['Main\\main' => ['Main.main', 'tests/semantics/modules/Main.mog', 11, 15], 'Main\\qualifiedMain' => ['Main.qualifiedMain', 'tests/semantics/modules/Main.mog', 15, 19]]];
+const __MOGGI_MAP = [[22 => ['Main.main', 'tests/semantics/modules/Main.mog', 14, 15], 27 => ['Main.qualifiedMain', 'tests/semantics/modules/Main.mog', 18, 19]], ['Main\\main' => ['Main.main', 'tests/semantics/modules/Main.mog', 14, 15], 'Main\\qualifiedMain' => ['Main.qualifiedMain', 'tests/semantics/modules/Main.mog', 18, 19]]];
 
-require_once __DIR__ . '/_runtime.php';
+require_once __DIR__ . '/../../../_runtime.php';
 
 use function Moggi\__apply;
 

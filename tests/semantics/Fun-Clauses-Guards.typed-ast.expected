@@ -13,7 +13,7 @@ program
         guards
           guarded
             guard
-              infix ==
+              intrinsic intEq#
                 variable x
                 integer 0
             string "one zero"

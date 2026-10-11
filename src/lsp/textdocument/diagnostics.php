@@ -93,7 +93,6 @@ function svcWorkspaceDiagnostic(AnalysisService $svc, array $params = []): array
         }
     }
 
-    // Open documents: authoritative current state.
     foreach ($svc->openUris() as $uri) {
         $analysis = $svc->ensureAnalyzed($uri);
         $items[] = workspaceReport(
@@ -104,8 +103,6 @@ function svcWorkspaceDiagnostic(AnalysisService $svc, array $params = []): array
         );
     }
 
-    // Indexed-but-closed modules. Reported when they have diagnostics, or when
-    // the client holds a result id for them and they no longer do.
     foreach ($svc->modules->modules as $module) {
         $uri = (string) ($module['uri'] ?? '');
         if ($uri === '' || $svc->isOpen($uri)) {
@@ -113,7 +110,6 @@ function svcWorkspaceDiagnostic(AnalysisService $svc, array $params = []): array
         }
         $known = isset($previousByUri[$uri]);
         if (!is_file(substr($uri, strlen('file://')))) {
-            // Gone from disk: retire the client's cached diagnostics for it.
             if ($known) {
                 $items[] = workspaceReport($uri, [], null, []);
             }

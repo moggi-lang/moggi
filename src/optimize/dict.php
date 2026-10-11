@@ -5,8 +5,6 @@ namespace Moggi\Optimize\Dict;
 use Moggi\IR;
 
 use function Moggi\Optimize\Support\preserveMatchArm;
-use function Moggi\Semantics\Types\evidenceIs;
-use function Moggi\Semantics\Types\sanitizeEvidenceNamePart;
 
 /**
  * Rewrite known dictionary method invocations to direct calls.
@@ -16,8 +14,6 @@ use function Moggi\Semantics\Types\sanitizeEvidenceNamePart;
  * - DictCall with Temp/Local that is a known Call to an evidence factory
  *   → Call(instanceMethod, factoryArgs ++ methodArgs)
  * - DictMethod with known nullary evidence → FnRef(instanceMethod)
- *
- * Kept: Monad List >>= → list_bind intrinsic (representation special case).
  *
  * @param array<string, IR\InstanceEvidence> $evidenceByName
  */
@@ -190,12 +186,6 @@ function specializeDictCall(
     $dest = $stmt->dest;
 
     if ($evidence instanceof IR\FnRef) {
-        if ($method === '>>=' && count($args) === 2) {
-            if (evidenceIs($evidence, 'Monad', 'List')) {
-                return new IR\Assign($dest, new IR\Intrinsic('list_bind', $args));
-            }
-        }
-
         $resolved = resolveMethodCallee($evidence->name, $method, $evidenceByName);
         if ($resolved !== null) {
             $ev = $evidenceByName[$evidence->name] ?? null;

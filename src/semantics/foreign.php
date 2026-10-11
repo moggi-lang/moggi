@@ -421,14 +421,6 @@ function validateForeignTypeCon(
 ): void {
     $name = $con->name;
 
-    if ($name === 'JObject' || $name === 'ClrObject' || $name === 'PhpRef') {
-        throw typeFail(
-            $state,
-            "opaque host type `{$name}` has been deleted; use a specific foreign type declaration instead",
-            $context,
-        );
-    }
-
     if (isset($state->data[$name]['foreign'])) {
         $foreignInfo = $state->data[$name]['foreign'];
         if ($foreignInfo['backend'] !== $backend) {

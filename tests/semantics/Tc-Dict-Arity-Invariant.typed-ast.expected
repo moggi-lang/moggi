@@ -31,7 +31,7 @@ program
           pat_var __ev_dict1
           lambda
             pat_var x
-            infix <>
+            intrinsic stringAppend#
               apply
                 evidence_method Show.show evidence=__ev_dict0 nullary=0
                 variable x
@@ -146,7 +146,7 @@ program
         integer 4
       alt
         pat_con True
-        infix +
+        intrinsic intAdd#
           variable k
           integer 1
       alt

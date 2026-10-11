@@ -200,6 +200,11 @@ instance Pretty a => Pretty [a] where
 * Instances are global: every module sees every instance without importing
   anything, which is why a call can be resolved at a type only another module
   knows.
+* An operator means what the instance its operand types name declares — `n + 1`
+  at `Int` is `Data.Num`'s `(+) a b = intAdd# a b`, with no dictionary. `Int`'s
+  and `Word`'s `Num` instances live in `Data.Num` with the class, so the
+  library's own low-level modules reach them; an operand type with no instance
+  the compile can see keeps the dictionary call.
 * A constraint is discharged by an instance or by another constraint in scope;
   a call at a still-polymorphic type stays a dictionary call.
 

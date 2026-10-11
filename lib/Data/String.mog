@@ -4,8 +4,7 @@
   jvm = Data.String.JVM
   dotnet = Data.String.DotNet
 #-}
--- |
--- The 'String' type and associated operations.
+-- | The 'String' type and associated operations.
 --
 -- A 'String' is a backend-native sequence of 'Char' (Unicode scalar values).
 -- The operations below count and index scalars, not bytes or UTF-16 code
@@ -42,14 +41,15 @@ import Data.Semigroup
 import Text.Show
 import Moggi.Internal.Prim
 
--- String is an opaque backend-native representation of a sequence of Char
+-- | String is an opaque backend-native representation of a sequence of Char
 -- (Unicode scalar values). The sequence model is semantic only: String does
 -- not expose list operations or guarantee scalar indexing complexity.
 -- Equality is scalar-sequence identity (no implicit normalization).
 type String = String#
 
-instance Semigroup String where
-  (<>) a b = stringAppend# a b
+-- The `Semigroup String` instance lives with the class, in `Data.Semigroup`:
+-- the library's low-level modules (which sit below this one) build their error
+-- messages with `<>` on `String`.
 
 -- | Construct a string from a single char.
 singleton :: Char -> String

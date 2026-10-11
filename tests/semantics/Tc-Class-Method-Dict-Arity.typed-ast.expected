@@ -12,7 +12,7 @@ program
           pat_var x
           apply
             constructor_ref Just
-            infix +
+            intrinsic intAdd#
               variable x
               integer 1
       apply
@@ -43,6 +43,6 @@ program
         pat_var x
         apply
           constructor_ref Just
-          infix +
+          intrinsic intAdd#
             variable x
             integer 1

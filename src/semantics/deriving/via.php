@@ -72,8 +72,6 @@ function deriveVia(
     $classInfo = $state->classes[$className];
     $classParam = $classInfo['params'][0]['name'] ?? 'a';
 
-    // The via type stands in for the instance head's first argument; the
-    // remaining class arguments (multi-parameter classes) are carried verbatim.
     $constraintArgs = $headArgs;
     $constraintArgs[0] = $viaType;
     $constraints = [

@@ -28,9 +28,6 @@ if ($argc !== 3 && $argc !== 4) {
 }
 
 [, $outputRoot, $pharPath] = $argv;
-// The entry module's path inside the archive, when the caller knows it; the
-// stub scans for it otherwise. The compiler always passes it, which keeps a
-// bundled `vendor/` from being read on every startup.
 $entryRelative = $argv[3] ?? '';
 
 if (!\is_dir($outputRoot)) {

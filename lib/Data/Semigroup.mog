@@ -28,6 +28,13 @@ instance Semigroup Ordering where
     EQ -> b
     GT -> GT
 
+-- `String`'s instance belongs with the class rather than in `Data.String`, as
+-- base's `[a]` instance belongs to `GHC.Internal.Base`: `Data.Int` and
+-- `Data.Word` build their error messages with `<>` on `String`, and they sit
+-- below `Data.String`. `String` itself does not expose list operations.
+instance Semigroup String where
+  (<>) a b = stringAppend# a b
+
 -- | Repeat a value @n@ times. @n@ must be positive.
 -- Uses int intrinsics only to avoid importing Data.Int (cycle via Integral/Tuple/Foldable).
 stimes :: Semigroup a => Int -> a -> a

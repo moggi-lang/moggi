@@ -225,22 +225,16 @@ program
       pat_var __n0
     pat_con Age
       pat_var __n1
-    apply
-      apply
-        evidence_method Eq.== evidence= nullary=0
-          instance Int
-        variable __n0
+    intrinsic intEq#
+      variable __n0
       variable __n1
   function __ev_Eq_Age_ne :: Age -> Age -> Bool
     pat_con Age
       pat_var __n0
     pat_con Age
       pat_var __n1
-    apply
-      apply
-        evidence_method Eq./= evidence= nullary=0
-          instance Int
-        variable __n0
+    intrinsic intNe#
+      variable __n0
       variable __n1
   function __ev_Show_Age_showsPrec :: Int -> Age -> String -> String
     pat_var __n0

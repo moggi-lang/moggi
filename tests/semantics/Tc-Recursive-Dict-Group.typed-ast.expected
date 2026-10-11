@@ -45,7 +45,7 @@ program
           pat_var __ev_dict1
           lambda
             pat_var x
-            infix <>
+            intrinsic stringAppend#
               apply
                 evidence_method Labelled.label evidence=__ev_dict1 nullary=0
                 variable x

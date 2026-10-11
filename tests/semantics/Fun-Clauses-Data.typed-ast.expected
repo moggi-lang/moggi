@@ -21,14 +21,14 @@ program
       alt
         pat_con Circle
           pat_var r
-        infix *
+        intrinsic intMul#
           variable r
           variable r
       alt
         pat_con Rectangle
           pat_var w
           pat_var h
-        infix *
+        intrinsic intMul#
           variable w
           variable h
   data User
@@ -73,7 +73,7 @@ program
         pat_con Add
           pat_var l
           pat_var r
-        infix +
+        intrinsic intAdd#
           apply
             variable eval
             variable l

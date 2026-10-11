@@ -16,6 +16,7 @@ module Data.Integer.PHP
   ) where
 
 import Data.Bool
+import Data.Num
 import Data.Ord
 import Moggi.Internal.Prim
 

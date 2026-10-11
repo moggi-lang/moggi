@@ -275,9 +275,8 @@ function mergeImportedEnv(Types\TypeCheckState $state, array $units, string $mod
                 continue;
             }
 
-            if (!isset($state->env[$name]) || isset($state->standaloneEnvNames[$name])) {
+            if (!isset($state->env[$name])) {
                 $state->env[$name] = $scheme;
-                unset($state->standaloneEnvNames[$name]);
             }
         }
 
@@ -868,6 +867,7 @@ function collectProjectInstances(array $units, ?array $onlyModules = null): arra
                     'class' => $item->class,
                     'head' => $item->head,
                     'constraints' => $item->constraints,
+                    'intrinsicMethods' => Types\instanceIntrinsicMethods($item),
                     'associatedEquations' => Types\associatedEquationsMapFromDecl($item),
                 ];
                 continue;

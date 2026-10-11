@@ -2,8 +2,6 @@
 
 namespace Moggi\Compiler;
 
-// The whole-project typed AST + compile cache blobs can exceed PHP's stock 128M
-// limit on larger closures; raise it (only if the current limit is lower).
 (static function (): void {
     $current = trim((string) ini_get('memory_limit'));
     if ($current === '-1') {
@@ -27,8 +25,6 @@ namespace Moggi\Compiler;
     }
 })();
 
-// `Int` is 64-bit on every backend and the PHP backend's arithmetic assumes a
-// native 64-bit int; a 32-bit PHP host cannot represent Moggi's `Int` at all.
 if (\PHP_INT_SIZE < 8) {
     \fwrite(\STDERR, 'moggi: the compiler requires 64-bit PHP (PHP_INT_SIZE=8); detected '
         . \PHP_INT_SIZE . "-byte int\n");
@@ -167,10 +163,6 @@ require __DIR__ . '/lsp/staleness.php';
 require __DIR__ . '/lsp/sync.php';
 require __DIR__ . '/lsp/lifecycle.php';
 require __DIR__ . '/lsp/server.php';
-
-// The registry client: constraints, the signed catalog, the descriptor a
-// package declares itself with, and what installs come of it. Loaded in
-// dependency order, like everything else here.
 require __DIR__ . '/registry/constraint.php';
 require __DIR__ . '/registry/provided.php';
 require __DIR__ . '/registry/names.php';

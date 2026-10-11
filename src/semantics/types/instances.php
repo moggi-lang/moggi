@@ -28,6 +28,7 @@ use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Syntax\Ast;
 use Moggi\Syntax\Ast\TypeNode;
 
+use function Moggi\Semantics\IntrinsicRegistry\isIoIntrinsic;
 use function Moggi\Semantics\TypeExpr\scheme;
 
 require_once __DIR__ . '/type_core.php';
@@ -932,6 +933,32 @@ function instanceHeadIndexKeyFromAst(Ast\AstNode $headAst): string
     return '*';
 }
 
+/**
+ * The methods of an instance that are exactly a primop applied to their own
+ * parameters (`(+) a b = intAdd# a b`).
+ *
+ * Such a method *is* the primop: a use site that resolves to this instance can
+ * be lowered to the primop directly instead of calling through the dictionary.
+ * The body shape is what decides and checking does not change it, so it is read
+ * off the parsed declaration — which also lets a module that merely imports the
+ * class see it, without the instance's own module being in the compilation.
+ *
+ * @return array<string, string> surface method name => IR primop id
+ */
+function instanceIntrinsicMethods(Ast\InstanceDecl $decl): array
+{
+    $wrappers = [];
+    foreach ($decl->methods as $method) {
+        $intrinsic = trivialIntrinsicWrapper($method);
+
+        if ($intrinsic !== null && !isIoIntrinsic($intrinsic)) {
+            $wrappers[$method->name] = $intrinsic;
+        }
+    }
+
+    return $wrappers;
+}
+
 function instanceHeadIndexKeyFromType(Type $head): string
 {
     if ($head instanceof TCon) {
@@ -1774,7 +1801,7 @@ function checkInstanceMethod(
     $state->constraintMethodAmbiguities = $savedConstraintMethodAmbiguities;
     unify($state, $bodyType, $bodyExpected, $fn);
     defaultAmbiguousNumericVars($state, $fn->body, quantifiedVars($state, $peeledType));
-    resolveDeferredNativeInfixes($state, $fn->body);
+    resolveDeferredInfixPrimops($state, $fn->body);
     resolvePendingEvidenceInExpr($state, $fn->body);
     tryResolveValueEvidence($state, $fn->body);
     $fn->body = elaborateNumericLiterals($state, $fn->body);
@@ -1786,9 +1813,10 @@ function checkInstanceMethod(
         zonkInferredTypesInPattern($state, $param);
     }
 
-    resolveMachineIntPow($state, $fn->body);
-    $fn->body = rewriteIntrinsicApplies($fn->body);
     $wrapper = trivialIntrinsicWrapper($fn);
+    resolveMachineIntPow($state, $fn->body);
+    resolveInstanceIntrinsicMethods($state, $fn->body);
+    $fn->body = rewriteIntrinsicApplies($fn->body);
     if ($wrapper !== null) {
         $fn->intrinsicWrapper = $wrapper;
     }
