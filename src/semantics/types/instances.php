@@ -1313,6 +1313,13 @@ function matchInstanceHeadVars(TypeCheckState $state, Ast\AstNode $pattern, Type
         return null;
     }
 
+    // `()` is its own type (`deriving instance Eq ()` in base), not a constructor
+    // application, so it needs its own case: a head written as the unit type names
+    // no variable and matches only the unit.
+    if ($pattern instanceof Ast\TypeUnit) {
+        return $target instanceof TUnit ? [] : null;
+    }
+
     if ($pattern instanceof Ast\TypeCon) {
         if ($target instanceof TCon) {
             return $target->name === $pattern->name ? [] : null;
@@ -1802,8 +1809,8 @@ function checkInstanceMethod(
     unify($state, $bodyType, $bodyExpected, $fn);
     defaultAmbiguousNumericVars($state, $fn->body, quantifiedVars($state, $peeledType));
     resolveDeferredInfixPrimops($state, $fn->body);
-    resolvePendingEvidenceInExpr($state, $fn->body);
-    tryResolveValueEvidence($state, $fn->body);
+    $fn->body = resolvePendingEvidenceInExpr($state, $fn->body);
+    $fn->body = tryResolveValueEvidence($state, $fn->body);
     $fn->body = elaborateNumericLiterals($state, $fn->body);
     $state->ambientConstraints = $savedAmbientConstraints;
     $state->ambientConstraintsByClass = $savedAmbientByClass;
@@ -1814,7 +1821,6 @@ function checkInstanceMethod(
     }
 
     $wrapper = trivialIntrinsicWrapper($fn);
-    resolveMachineIntPow($state, $fn->body);
     resolveInstanceIntrinsicMethods($state, $fn->body);
     $fn->body = rewriteIntrinsicApplies($fn->body);
     if ($wrapper !== null) {

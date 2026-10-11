@@ -36,6 +36,7 @@ import System.IO.Base (IO, FilePath)
 import Moggi.Err
 import Data.Integer (integerFromInt)
 import Data.Maybe
+import Data.Semigroup
 import Data.String
 
 foreign php type StatArray "array"

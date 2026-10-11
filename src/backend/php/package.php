@@ -190,7 +190,7 @@ PHPSTUB
 <?php declare(strict_types=1);
 
 if (\PHP_INT_SIZE < 8) {
-    \fwrite(\STDERR, 'moggi: this program requires 64-bit PHP (PHP_INT_SIZE=8); detected ' . \PHP_INT_SIZE . '-byte int' . \PHP_EOL);
+    \\fwrite(\STDERR, 'moggi: this program requires 64-bit PHP (PHP_INT_SIZE=8); detected ' . \PHP_INT_SIZE . '-byte int' . \PHP_EOL);
     exit(70);
 }
 

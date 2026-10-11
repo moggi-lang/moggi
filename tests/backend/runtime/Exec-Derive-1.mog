@@ -17,7 +17,10 @@ runDeriveEq = do
   putStrLn (show (Bar 1 2 == Bar 1 2))
   putStrLn (show (Bar 1 2 == Bar 1 3))
   putStrLn (show (Bar True 9 == Bar True 9))
-  putStrLn (show (Baz == Baz))
+  -- `Baz`'s type argument is otherwise open, and the derived `Eq (Foo a)`
+  -- dispatches on it: the constraint has no dictionary to pass without the
+  -- annotation.
+  putStrLn (show ((Baz :: Foo Int) == Baz))
   putStrLn (show (Bar 1 2 == Baz))
 
 -- ---- Exec-Derive-Newtype ----

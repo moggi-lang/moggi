@@ -175,21 +175,22 @@ function lowerInfix(Ast\Infix $expr, LowerCtx $ctx): Operand
         ], srcLocFromAst($expr, $ctx->moduleName, $ctx->functionName, $ctx->sourceFile));
     }
 
-    if (isIdentifierInfixFunction($expr->operator) || !isPrimitiveSymbolicBinop($expr->operator)) {
-        $args = [lowerExpr($expr->left, $ctx), lowerExpr($expr->right, $ctx)];
+    $args = [lowerExpr($expr->left, $ctx), lowerExpr($expr->right, $ctx)];
+    $infixLoc = srcLocFromAst($expr, $ctx->moduleName, $ctx->functionName, $ctx->sourceFile);
 
-        $infixLoc = srcLocFromAst($expr, $ctx->moduleName, $ctx->functionName, $ctx->sourceFile);
-
-        return lowerNamedApply($expr->operator, $args, $ctx, $infixLoc)
-            ?? lowerCall($expr->operator, $args, $ctx, $infixLoc);
+    $named = lowerNamedApply($expr->operator, $args, $ctx, $infixLoc);
+    if ($named !== null) {
+        return $named;
     }
 
-    $leftOp = lowerExpr($expr->left, $ctx);
-    $rightOp = lowerExpr($expr->right, $ctx);
-    $dest = freshTemp($ctx);
-    $ctx->items[] = new Binop($expr->operator, $leftOp, $rightOp, $dest);
+    if (isIdentifierInfixFunction($expr->operator)) {
+        return lowerCall($expr->operator, $args, $ctx, $infixLoc);
+    }
 
-    return new Temp($dest);
+    throw new \RuntimeException(\sprintf(
+        'operator `%s` reached IR lowering with no instance',
+        $expr->operator,
+    ));
 }
 
 /**
@@ -212,11 +213,6 @@ function lowerShortCircuitAndOr(Ast\Infix $expr, LowerCtx $ctx): Operand
 function isIdentifierInfixFunction(string $operator): bool
 {
     return preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $operator) === 1;
-}
-
-function isPrimitiveSymbolicBinop(string $operator): bool
-{
-    return \in_array($operator, ['+', '-', '*', '/', '<', '>', '<=', '>=', '==', '/=', '&&', '||'], true);
 }
 
 function lowerApplyFromExpr(Ast\Apply $expr, LowerCtx $ctx): Operand

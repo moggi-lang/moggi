@@ -1,5 +1,5 @@
--- `^` at machine `Int` is the square-and-multiply primop, and a negative
--- exponent is the `ErrorCall` base raises: at the `^` expression itself, with
--- the enclosing statement as the outer frame, the same on every backend.
+-- A negative exponent is the `ErrorCall` the library `^` raises itself:
+-- `Data.Real`'s square-and-multiply is the only `^` there is, so the frame names
+-- the library body and then the call site, the same on every backend.
 main :: IO ()
 main = putStrLn (show (2 ^ (-1)))

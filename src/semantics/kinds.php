@@ -61,6 +61,19 @@ final class KindInferCtx
     /** @var array<string, array{data: string, argKinds?: list<Kind>}> */
     public array $promoted = [];
 
+    /**
+     * The declared parameter kinds of every class in scope, by class name.
+     *
+     * A class is the authority on its own parameters' kinds: `class Functor f`
+     * with `map :: (a -> b) -> f a -> f b` says `f :: Type -> Type` by writing the
+     * application, and {@see inferClassParamKinds} reads it off the declaration.
+     * A constraint (`Functor f =>`) only *uses* that class, so it has to look the
+     * kinds up rather than guess them from the class's name.
+     *
+     * @var array<string, list<Kind>>
+     */
+    public array $classParams = [];
+
     public function __construct(public int $fresh = 0)
     {
     }
@@ -102,6 +115,7 @@ function kindInferCtxFromState(TypeCheckState $state): KindInferCtx
     $ctx->env = $state->kindEnv;
     $ctx->varKinds = $state->varKinds;
     $ctx->promoted = $state->promoted;
+    $ctx->classParams = stateClassParamKinds($state);
 
     return $ctx;
 }
@@ -127,8 +141,29 @@ function newKindInferCtx(TypeCheckState $state): KindInferCtx
     $ctx = new KindInferCtx();
     $ctx->env = $state->kindEnv;
     $ctx->promoted = $state->promoted;
+    $ctx->classParams = stateClassParamKinds($state);
 
     return $ctx;
+}
+
+/**
+ * Every registered class's declared parameter kinds, for a kind walk to consult.
+ *
+ * @return array<string, list<Kind>>
+ */
+function stateClassParamKinds(TypeCheckState $state): array
+{
+    $kinds = [];
+    foreach ($state->classes as $className => $classInfo) {
+        $params = [];
+        foreach ($classInfo['params'] as $param) {
+            $params[] = classParamKind($state, $param);
+        }
+
+        $kinds[$className] = $params;
+    }
+
+    return $kinds;
 }
 
 function kindToString(Kind $kind): string
@@ -281,6 +316,13 @@ function occursKind(KindInferCtx $ctx, string $var, Kind $kind): void
     }
 }
 
+/**
+ * Pin the kind of a type variable a constraint's argument names, from the
+ * class's own declaration: `Functor f =>` says `f :: Type -> Type` because
+ * `Data.Functor` declares `map :: (a -> b) -> f a -> f b`. A constraint naming a
+ * class nothing in scope declares leaves the variable alone -- there is no
+ * declaration to read, and the rest of the signature decides.
+ */
 function bindClassConstraintKinds(KindInferCtx $ctx, Ast\AstNode $constraint): void
 {
     if (!$constraint instanceof Ast\TypeApp || !$constraint->con instanceof Ast\TypeCon) {
@@ -289,7 +331,7 @@ function bindClassConstraintKinds(KindInferCtx $ctx, Ast\AstNode $constraint): v
 
     $className = $constraint->con->name;
     $args = $constraint->args;
-    $paramKinds = knownClassParamKinds($className, count($args));
+    $paramKinds = $ctx->classParams[$className] ?? [];
 
     foreach ($args as $index => $arg) {
         if (!$arg instanceof Ast\TypeVar || !isset($paramKinds[$index])) {
@@ -298,22 +340,6 @@ function bindClassConstraintKinds(KindInferCtx $ctx, Ast\AstNode $constraint): v
 
         $ctx->varKinds[$arg->name] = $paramKinds[$index];
     }
-}
-
-/** @return list<Kind> */
-function knownClassParamKinds(string $className, int $count): array
-{
-    $functorLike = ['Functor', 'Applicative', 'Monad', 'Foldable', 'Traversable', 'Alternative'];
-    if (\in_array($className, $functorLike, true)) {
-        return \array_fill(0, $count, new KArrow(new KType(), new KType()));
-    }
-
-    $typeLike = ['Eq', 'Ord', 'Num', 'Integral', 'Fractional', 'Bounded', 'Enum', 'Semigroup', 'Monoid', 'Show'];
-    if (\in_array($className, $typeLike, true)) {
-        return \array_fill(0, $count, new KType());
-    }
-
-    return [];
 }
 
 function inferKindAst(KindInferCtx $ctx, Ast\TypeNode $typeAst): Kind

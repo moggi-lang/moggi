@@ -331,17 +331,23 @@ program
       evidence_method Show.show evidence= nullary=0
         instance Tuple4 a1 a2 a3 a4
       tuple
-        infix ==
+        apply
+          apply
+            evidence_method Eq.== evidence= nullary=0
+              instance DefFoo a
+            apply
+              constructor_ref DefFoo
+              integer 42
           apply
             constructor_ref DefFoo
             integer 42
+        apply
           apply
-            constructor_ref DefFoo
-            integer 42
-        infix ==
-          apply
-            constructor_ref StockFoo
-            integer 42
+            evidence_method Eq.== evidence= nullary=0
+              instance StockFoo a
+            apply
+              constructor_ref StockFoo
+              integer 42
           apply
             constructor_ref StockFoo
             integer 42

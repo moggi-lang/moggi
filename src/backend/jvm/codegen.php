@@ -1552,100 +1552,6 @@ function boxInt(EmitEnv $env): void
     $env->c->invokestatic($env->cp->methodRef('java/lang/Long', 'valueOf', '(J)Ljava/lang/Long;'), 2, 1);
 }
 
-/**
- * `base ^ exponent` at machine `Int`: the runtime's unboxed square-and-multiply.
- *
- * The loop lives in the runtime rather than inline because an intrinsic is
- * emitted mid-expression, where the operand stack already holds other values --
- * a stack map frame there would have to describe exactly those. The call needs
- * none.
- */
-function emitIntPowToStack(EmitEnv $env, IR\Operand $base, IR\Operand $exponent, ?IR\SrcLoc $loc): void
-{
-    emitUnboxedIntPowToStack($env, $base, $exponent, $loc, -1);
-    boxInt($env);
-}
-
-/**
- * The runtime's masked square-and-multiply, on unboxed operands.
- *
- * `-1` reduces not at all: the machine `Int`'s own multiply already wraps at 64
- * bits. A fixed-width type passes its own mask, and the signed ones are
- * sign-extended back by {@see emitSignExtend} at the call site.
- */
-function emitUnboxedIntPowToStack(
-    EmitEnv $env,
-    IR\Operand $base,
-    IR\Operand $exponent,
-    ?IR\SrcLoc $loc,
-    int $mask,
-): void {
-    emitOperand($env, $base);
-    unboxInt($env);
-    emitOperand($env, $exponent);
-    unboxInt($env);
-    $env->c->ldc2_w($env->cp->long($mask));
-    emitJvmPushSrcLoc($env, $loc);
-    $env->c->invokestatic(
-        $env->cp->methodRef('moggi/rt/RT', 'intPow', '(JJJ[Ljava/lang/Object;)J'),
-        5,
-        true,
-    );
-}
-
-/**
- * One of the fixed-width `^` primops: the masked loop, then the sign extension
- * the signed widths need (the 64-bit ones are already the host width).
- */
-function emitPowFamilyToStack(EmitEnv $env, IR\Intrinsic $op): bool
-{
-    $name = $op->name;
-    $mask = powWidthMask($name);
-    if ($mask === null) {
-        return false;
-    }
-
-    emitUnboxedIntPowToStack($env, $op->args[0], $op->args[1], $op->srcLoc, $mask);
-    if (\str_starts_with($name, 'int') && $mask !== -1) {
-        emitSignExtend($env, $name);
-    }
-    boxInt($env);
-
-    return true;
-}
-
-/**
- * The reduction mask of a fixed-width `^` primop, or null for any other name.
- *
- * `-1` (every bit) is the 64-bit widths, which reduce not at all.
- */
-function powWidthMask(string $name): ?int
-{
-    return match ($name) {
-        'int8Pow#', 'word8Pow#' => 0xff,
-        'int16Pow#', 'word16Pow#' => 0xffff,
-        'int32Pow#', 'word32Pow#' => 0xffffffff,
-        'int64Pow#', 'word64Pow#' => -1,
-        default => null,
-    };
-}
-
-/** `base ^ exponent` at `Double`: the runtime's unboxed loop on host doubles. */
-function emitDoublePowToStack(EmitEnv $env, IR\Operand $base, IR\Operand $exponent, ?IR\SrcLoc $loc): void
-{
-    emitOperand($env, $base);
-    unboxDouble($env);
-    emitOperand($env, $exponent);
-    unboxInt($env);
-    emitJvmPushSrcLoc($env, $loc);
-    $env->c->invokestatic(
-        $env->cp->methodRef('moggi/rt/RT', 'doublePow', '(DJ[Ljava/lang/Object;)D'),
-        3,
-        true,
-    );
-    boxDouble($env);
-}
-
 /** Sign-extend-truncate an i64 on the stack to the width named by an intN_* op. */
 function emitSignExtend(EmitEnv $env, string $opName): void
 {
@@ -1797,12 +1703,6 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
         case 'intMul#':
         case 'intDiv#':
             emitIntBinopToStack($env, $op->name, $args[0], $args[1]);
-            return;
-        case 'intPow#':
-            emitIntPowToStack($env, $args[0], $args[1], $op->srcLoc);
-            return;
-        case 'doublePow#':
-            emitDoublePowToStack($env, $args[0], $args[1], $op->srcLoc);
             return;
         case 'doubleAdd#':
         case 'doubleSub#':
@@ -2624,9 +2524,6 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 "JVM emit: intrinsic `{$op->name}` must be lowered to IO exception IR",
             );
         default:
-            if (emitPowFamilyToStack($env, $op)) {
-                return;
-            }
             throw new \RuntimeException("JVM emit: unsupported intrinsic {$op->name}");
     }
 }

@@ -64,54 +64,6 @@ function emitSrcLocExpr(?SrcLoc $loc, array $ctx = []): string
         . (int) $loc->col . ')';
 }
 
-/**
- * The fixed-width `^` primops: helper name, the mask that reduces the width,
- * and the shift that sign-extends the result back (0 for the unsigned ones).
- * The result of the width's own `*` is a value modulo the width, sign-extended
- * when the type is signed.
- *
- * @return array<string, array{helper: string, mask: string, signShift: int}>
- */
-function powWidthTable(): array
-{
-    return [
-        'int8Pow#' => ['helper' => 'moggi_i8_pow', 'mask' => '0xff', 'signShift' => 56],
-        'int16Pow#' => ['helper' => 'moggi_i16_pow', 'mask' => '0xffff', 'signShift' => 48],
-        'int32Pow#' => ['helper' => 'moggi_i32_pow', 'mask' => '0xffffffff', 'signShift' => 32],
-        'int64Pow#' => ['helper' => 'moggi_i64_pow', 'mask' => '-1', 'signShift' => 0],
-        'word8Pow#' => ['helper' => 'moggi_w8_pow', 'mask' => '0xff', 'signShift' => 0],
-        'word16Pow#' => ['helper' => 'moggi_w16_pow', 'mask' => '0xffff', 'signShift' => 0],
-        'word32Pow#' => ['helper' => 'moggi_w32_pow', 'mask' => '0xffffffff', 'signShift' => 0],
-        'word64Pow#' => ['helper' => 'moggi_w64_pow', 'mask' => '-1', 'signShift' => 0],
-    ];
-}
-
-/**
- * One fixed-width `^` helper: the library's square-and-multiply, reduced modulo
- * the width at every step, sign-extended once at the end for the signed widths.
- *
- * The multiply is the width's own: a 32- or 64-bit product can pass
- * PHP_INT_MAX, so those go through the split multiply, while an 8- or 16-bit
- * one cannot.
- *
- * @param array{helper: string, mask: string, signShift: int} $width
- */
-function powWidthHelperSource(array $width): string
-{
-    $wide = $width['mask'] === '-1' || $width['mask'] === '0xffffffff';
-    $multiply = static fn (string $a, string $b): string => $wide
-        ? "(moggi_u64_mul({$a}, {$b}) & {$width['mask']})"
-        : "(({$a} * {$b}) & {$width['mask']})";
-
-    $result = $width['signShift'] === 0
-        ? '$r'
-        : "((\$r << {$width['signShift']}) >> {$width['signShift']})";
-
-    return 'function ' . $width['helper'] . '(int $b, int $e) { $r = 1; $b = $b & ' . $width['mask']
-        . '; while ($e !== 0) { if (($e & 1) !== 0) { $r = ' . $multiply('$r', '$b') . '; } $b = '
-        . $multiply('$b', '$b') . '; $e >>= 1; } return ' . $result . '; }';
-}
-
 /** @param array<int, string> $argExprs */
 /**
  * Wrap an overflowing PHP integer op: the raw host op stays inline when both
@@ -139,20 +91,8 @@ function intWrapExpr(string $helper, string $fallback, string $op, array $args, 
 function emitQualifiedCall(string $name, array $argExprs, ?SrcLoc $srcLoc = null, array $ctx = []): string
 {
     $argLeaves = $ctx['intrinsicArgLeaves'] ?? [];
-    $width = powWidthTable()[$name] ?? null;
-    $needsSite = $name === 'error#' || $name === 'exceptionThrow#' || $name === 'intPow#'
-        || $width !== null || $name === 'doublePow#';
+    $needsSite = $name === 'error#' || $name === 'exceptionThrow#';
     $locExpr = $needsSite ? emitSrcLocExpr($srcLoc, $ctx) : 'null';
-
-    if ($width !== null) {
-        return '((' . $argExprs[1] . ' < 0) ? \\Moggi\\throwErrorCall("Negative exponent", ' . $locExpr
-            . ') : ' . $width['helper'] . '(' . $argExprs[0] . ', ' . $argExprs[1] . '))';
-    }
-
-    if ($name === 'doublePow#') {
-        return '((' . $argExprs[1] . ' < 0) ? \\Moggi\\throwErrorCall("Negative exponent", ' . $locExpr
-            . ') : moggi_double_pow(' . $argExprs[0] . ', ' . $argExprs[1] . '))';
-    }
 
     return match ($name) {
         'stringEq#' => "({$argExprs[0]} === {$argExprs[1]})",
@@ -225,7 +165,6 @@ function emitQualifiedCall(string $name, array $argExprs, ?SrcLoc $srcLoc = null
         'intAdd#' => intWrapExpr('moggi_i64_add', 'moggi_u64_add', '+', $argExprs, $argLeaves),
         'intSub#' => intWrapExpr('moggi_i64_sub', 'moggi_u64_sub', '-', $argExprs, $argLeaves),
         'intMul#' => intWrapExpr('moggi_i64_mul', 'moggi_u64_mul', '*', $argExprs, $argLeaves),
-        'intPow#' => '((' . $argExprs[1] . ' < 0) ? \\Moggi\\throwErrorCall("Negative exponent", ' . $locExpr . ') : moggi_int_pow(' . $argExprs[0] . ', ' . $argExprs[1] . '))',
         'intDiv#' => '\\intdiv(' . $argExprs[0] . ', ' . $argExprs[1] . ')',
         'intNegate#' => "moggi_i64_negate({$argExprs[0]})",
         'intAbs#' => "moggi_i64_abs({$argExprs[0]})",
@@ -413,24 +352,10 @@ function phpHelpersForModule(array $used): string
 {
     $helpers = [];
 
-    if (isset($used['intPow#'])) {
-        $helpers[] = 'function moggi_int_pow(int $b, int $e): int { $r = 1; while ($e !== 0) { if (($e & 1) !== 0) { $r = moggi_i64_mul($r, $b); } $b = moggi_i64_mul($b, $b); $e >>= 1; } return $r; }';
-    }
-
-    if (isset($used['doublePow#'])) {
-        $helpers[] = 'function moggi_double_pow(float $b, int $e): float { $r = 1.0; while ($e !== 0) { if (($e & 1) !== 0) { $r = $r * $b; } $b = $b * $b; $e >>= 1; } return $r; }';
-    }
-
-    foreach (powWidthTable() as $name => $width) {
-        if (isset($used[$name])) {
-            $helpers[] = powWidthHelperSource($width);
-        }
-    }
-
     $any64 = static fn (string ...$names): bool =>
         \count(\array_filter($names, static fn ($n): bool => isset($used[$n]))) > 0;
 
-    if ($any64('intAdd#', 'intSub#', 'intMul#', 'intNegate#', 'intAbs#', 'intPow#', 'intFromInteger#', 'word64Add#', 'word64Sub#', 'word64Mul#', 'word64Quot#', 'word64Rem#', 'word64ToInteger#', 'word64FromInteger#', 'word64Show#', 'word64Compare#', 'wordCompare#', 'byteSwap64#', 'bitReverse64#', 'word32Mul#', 'int64Add#', 'int64Sub#', 'int64Mul#', 'int32Pow#', 'int64Pow#', 'word32Pow#', 'word64Pow#')) {
+    if ($any64('intAdd#', 'intSub#', 'intMul#', 'intNegate#', 'intAbs#', 'intFromInteger#', 'word64Add#', 'word64Sub#', 'word64Mul#', 'word64Quot#', 'word64Rem#', 'word64ToInteger#', 'word64FromInteger#', 'word64Show#', 'word64Compare#', 'wordCompare#', 'byteSwap64#', 'bitReverse64#', 'word32Mul#', 'int64Add#', 'int64Sub#', 'int64Mul#')) {
         $helpers[] = 'function moggi_u64_add(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao + $bo; $c = ($lo >> 32) & 0xffffffff; $hi = ($ah + $bh + $c) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }';
         $helpers[] = 'function moggi_u64_sub(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao - $bo; $bw = $lo < 0 ? 1 : 0; $hi = ($ah - $bh - $bw) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }';
         $helpers[] = 'function moggi_u64_mul(int $a, int $b): int { $a0 = $a & 0xffff; $a1 = ($a >> 16) & 0xffff; $a2 = ($a >> 32) & 0xffff; $a3 = ($a >> 48) & 0xffff; $b0 = $b & 0xffff; $b1 = ($b >> 16) & 0xffff; $b2 = ($b >> 32) & 0xffff; $b3 = ($b >> 48) & 0xffff; $low = $a0 * $b0; $cy = ($low >> 16) & 0xffff; $m1 = $a0 * $b1 + $a1 * $b0 + $cy; $cy = ($m1 >> 16) & 0xffffffff; $m2 = $a0 * $b2 + $a1 * $b1 + $a2 * $b0 + $cy; $cy = ($m2 >> 16) & 0xffffffff; $hi = $a0 * $b3 + $a1 * $b2 + $a2 * $b1 + $a3 * $b0 + $cy; return (($hi & 0xffff) << 48) | (($m2 & 0xffff) << 32) | (($m1 & 0xffff) << 16) | ($low & 0xffff); }';
@@ -446,7 +371,7 @@ function phpHelpersForModule(array $used): string
             }
         }
 
-        if (isset($used['intMul#']) || isset($used['intPow#'])) {
+        if (isset($used['intMul#'])) {
             $helpers[] = 'function moggi_i64_mul(int $a, int $b): int { $r = $a * $b; return \\is_int($r) ? $r : moggi_u64_mul($a, $b); }';
         }
     }

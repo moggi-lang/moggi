@@ -16,6 +16,7 @@ import Data.Functor
 import Data.Monoid
 import Data.Ord
 import Data.Semigroup
+import Moggi.Err
 import Text.Show
 
 -- | 'Proxy' is a type that holds no data, but has a phantom parameter of

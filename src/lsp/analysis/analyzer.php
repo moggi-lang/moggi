@@ -12,6 +12,8 @@ use function Moggi\Backend\setCompileBackend;
 use function Moggi\Docs\declarationTypeSignature;
 use function Moggi\LSP\Protocol\locToRange;
 use function Moggi\LSP\Protocol\uriToPath;
+use function Moggi\Modules\bundledStdlibLibPath;
+use function Moggi\Modules\stdlibSourcesMissingFrom;
 use function Moggi\Modules\moduleFileClosureCached;
 use function Moggi\Modules\prepareProjectCached;
 use function Moggi\Modules\setStdlibLibPath;
@@ -96,6 +98,10 @@ function analyze(string $uri, string $content, array $libDirs = []): AnalysisRes
 
         try {
             [$files, $root] = moduleFileClosureCached($filename);
+            // The library's instances belong to the check even when this file does not import
+            // the module that declares them -- `Ord Int` in `Data.Either`'s `Show` instance is
+            // the standing example -- so the check carries the library's modules.
+            $files = [...$files, ...stdlibSourcesMissingFrom($files, bundledStdlibLibPath())];
             $prepared = prepareProjectCached($files, $root, $parsedProgram->module ?? null);
             if ($parsedProgram->module !== null && isset($prepared->checked[$parsedProgram->module])) {
                 $checkedProgram = $prepared->checked[$parsedProgram->module];

@@ -34,7 +34,9 @@ import Data.ByteString qualified as B
 import Data.Char (ord, chr)
 import Data.Int
 import Data.List hiding (singleton, stripPrefix)
+import Data.Num
 import Data.Ord
+import Data.Semigroup
 import Data.String hiding (singleton, pack, unpack, length, take, drop, isPrefixOf, isSuffixOf)
 import Data.String qualified as S
 import Data.Time.Clock

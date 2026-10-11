@@ -41,6 +41,7 @@ import Data.Enum
 import Data.Eq
 import Moggi.Err
 import Data.Int
+import Data.Num
 import Data.Ord
 import Text.Show
 import Moggi.Internal.Prim
