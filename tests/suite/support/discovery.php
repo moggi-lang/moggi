@@ -224,9 +224,119 @@ function discoverTestCases(): array
     foreach (testTreeRoots() as $root) {
         collectCases($root, $root, $cases);
     }
+    assertTreeFilesAreClaimed($cases);
     \usort($cases, static fn (TestCase $a, TestCase $b): int => [$a->group, $a->name] <=> [$b->group, $b->name]);
 
     return $cache = $cases;
+}
+
+/**
+ * The inputs that are a script case's support rather than cases of their own: a file a `*_test.php`
+ * opens by path, or a module tree it compiles whole.
+ *
+ * A case and a support fixture look the same on disk — a `.mog` with no golden — so the difference is
+ * stated here rather than guessed from a name. A directory that holds cases of its own is never
+ * listed whole: `optimize/` names the one file a script reads from it.
+ *
+ * @return list<string> paths relative to `tests/`, a file or a directory
+ */
+function supportInputPaths(): array
+{
+    return [
+        'lsp',                              // the LSP scripts open these by path
+        'docs/fixture',                     // a module tree mogdoc indexes whole
+        'docs/generator/fixture-app',
+        'docs/generator/fixture-extra',
+        'optimize/noopt-entry-bootstrap.mog', // read by noopt_entry_bootstrap_test.php
+    ];
+}
+
+/** Whether `$path` is one of the inputs `supportInputPaths()` names — the file itself, or under it. */
+function isSupportInput(string $path): bool
+{
+    $prefix = testsRoot() . '/';
+    if (!\str_starts_with($path, $prefix)) {
+        return false;
+    }
+
+    $relative = \substr($path, \strlen($prefix));
+    foreach (supportInputPaths() as $support) {
+        if ($relative === $support || \str_starts_with($relative, $support . '/')) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * The tree's two dead ends, refused as the cases are discovered.
+ *
+ * A case exists because a golden claims it, so a fixture beside no golden is not a test that fails —
+ * it is a test that never ran, which is how a new case passes by not existing. The walk is the only
+ * place that knows both halves of that, and the same walk will not let a golden outlive its input.
+ *
+ * A fixture a script case opens by path is the one input that is claimed by no golden, and it says
+ * so in `supportInputPaths()`.
+ *
+ * @param list<TestCase> $cases
+ */
+function assertTreeFilesAreClaimed(array $cases): void
+{
+    $inputs = [];
+    $goldens = [];
+    foreach ($cases as $case) {
+        $inputs[$case->input] = true;
+        foreach ($case->goldens as $golden) {
+            $goldens[$golden['path']] = true;
+        }
+    }
+
+    walkCaseTree(static function (string $path) use ($inputs, $goldens): void {
+        if (\str_ends_with($path, '.expected')) {
+            if (!isset($goldens[$path])) {
+                throw new \RuntimeException('a golden nothing reads: ' . testRelativePath($path));
+            }
+
+            return;
+        }
+
+        if (inputExtension($path) === null || isset($inputs[$path]) || isSupportInput($path)) {
+            return;
+        }
+
+        throw new \RuntimeException(
+            'a fixture no golden runs: ' . testRelativePath($path)
+            . ' — add the golden beside it, or name it in supportInputPaths()',
+        );
+    });
+}
+
+/** Every file of the tree that could be a case; a project directory is one case, so it is not entered. */
+function walkCaseTree(callable $visit): void
+{
+    foreach (testTreeRoots() as $root) {
+        walkCaseDir($root, $visit);
+    }
+}
+
+function walkCaseDir(string $dir, callable $visit): void
+{
+    if (\is_file($dir . '/Main.mog') || $dir === MOGGI_PROJECT_ROOT . '/tests/suite') {
+        return;
+    }
+
+    foreach (\scandir($dir) ?: [] as $entry) {
+        if ($entry === '.' || $entry === '..') {
+            continue;
+        }
+        $path = $dir . '/' . $entry;
+        if (\is_dir($path)) {
+            walkCaseDir($path, $visit);
+            continue;
+        }
+        $visit($path);
+    }
 }
 
 /**

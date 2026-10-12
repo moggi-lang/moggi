@@ -27,6 +27,7 @@ use function Moggi\Backend\Meta\operandCallSrcLoc;
 use function Moggi\Backend\Php\Naming\buildPhpNameMap;
 use function Moggi\Backend\Php\Naming\mangleVar;
 use function Moggi\Backend\Php\Naming\phpFunctionName;
+use function Moggi\Backend\Php\Naming\phpSingleQuoted;
 use function Moggi\Backend\Php\Naming\phpTemp;
 use function Moggi\Backend\Php\Io\emitIoAssignAction;
 use function Moggi\Backend\Php\Io\emitIoCatch;
@@ -254,7 +255,7 @@ function emit(IR\Module $module, string $sourcePath, array $options = []): strin
 /** @param array<string, string> $phpNames */
 function emitEvidenceFunction(IR\InstanceEvidence $evidence, array $phpNames): string
 {
-    $name = $evidence->evidenceName;
+    $name = phpFunctionName($evidence->evidenceName, $phpNames);
     $ctxParams = $evidence->contextParams;
     $ctxList = join(', ', \array_map(
         static fn (string $p): string => '$' . mangleVar($p),
@@ -308,12 +309,14 @@ function emitDataDecl(IR\DataDecl $decl, array $phpNames): string
         $paramsCode = join(', ', $params);
         $argsCode = join(', ', \array_map(static fn (string $p): string => '$' . substr($p, 1), $params));
 
+        $tag = phpSingleQuoted($ctor->name);
+
         if ($argsCode === '') {
-            $out .= "function {$name}() {\n    return ['{$ctor->name}'];\n}\n\n";
+            $out .= "function {$name}() {\n    return [{$tag}];\n}\n\n";
             continue;
         }
 
-        $out .= "function {$name}({$paramsCode}) {\n    return ['{$ctor->name}', {$argsCode}];\n}\n\n";
+        $out .= "function {$name}({$paramsCode}) {\n    return [{$tag}, {$argsCode}];\n}\n\n";
     }
 
     return $out;

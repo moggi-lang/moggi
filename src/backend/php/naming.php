@@ -5,6 +5,7 @@ namespace Moggi\Backend\Php\Naming;
 use Moggi\IR\Module;
 
 use function Moggi\Optimize\Support\isLambdaName;
+use function Moggi\Syntax\isSafeName;
 
 /** @return array<string, true> */
 function phpKeywords(): array
@@ -139,7 +140,7 @@ function basePhpFunctionName(string $name): string
         return $operator;
     }
 
-    if (preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $name) === 1) {
+    if (isSafeName($name)) {
         return isPhpKeyword($name) || isPhpBuiltin($name) ? $name . '_' : $name;
     }
 
@@ -162,11 +163,23 @@ function mangleVar(string $name): string
         return '_';
     }
 
-    if (preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $name) === 1) {
+    if (isSafeName($name)) {
         return $name;
     }
 
     return '_v_' . bin2hex($name);
+}
+
+/**
+ * A PHP single-quoted string literal for `$value`.
+ *
+ * Only `\` and `'` are special between single quotes. A constructor tag is a
+ * Moggi name and a prime is part of that alphabet (`data Foo' = Foo' Int`), so
+ * an unescaped tag ends the literal early and the emitted file does not parse.
+ */
+function phpSingleQuoted(string $value): string
+{
+    return "'" . \addcslashes($value, "\\'") . "'";
 }
 
 /** PHP variable for an IR temp. Prefixed so it cannot clash with locals like `t3`. */

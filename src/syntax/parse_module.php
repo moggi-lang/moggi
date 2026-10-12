@@ -251,9 +251,6 @@ function parseParenthesizedOperator(ParserState $state): string
     return $name;
 }
 
-/**
- * @return ImportDecl
- */
 function parseImportDecl(ParserState $state): ImportDecl
 {
     expect($state, TokenKind::KwImport);
@@ -410,13 +407,6 @@ function parseImportItem(ParserState $state): Ast\ImportItem
     return new Ast\ImportItem($name, $asName, methods: $methods);
 }
 
-/**
- * @return list<string>
- */
-/**
- * A child name inside `C(…)`: a plain name, or a parenthesized operator as in
- * `List((:), Nil)`.
- */
 function parseImportChildName(ParserState $state): string
 {
     if (!isAt($state, TokenKind::LParen)) {

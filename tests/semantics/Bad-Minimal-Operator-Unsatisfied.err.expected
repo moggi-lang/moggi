@@ -1,0 +1,4 @@
+tests/semantics/Bad-Minimal-Operator-Unsatisfied.mog:14:10: type error: instance for `Same` implements none of the alternatives its MINIMAL pragma requires: ~= | /~
+
+  14 | instance Same W where
+     |          ^^^^

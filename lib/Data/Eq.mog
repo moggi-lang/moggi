@@ -26,3 +26,4 @@ class Eq a where
 
   (/=) x y = boolNot# (x == y)
   (==) x y = boolNot# (x /= y)
+  {-# MINIMAL (==) | (/=) #-}

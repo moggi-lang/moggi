@@ -50,6 +50,7 @@ class Eq a => Ord a where
   min x y = case x <= y of
     True -> x
     False -> y
+  {-# MINIMAL compare | (<=) #-}
 
 comparing :: Ord b => (a -> b) -> a -> a -> Ordering
 comparing f x y = compare (f x) (f y)
