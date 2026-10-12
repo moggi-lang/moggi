@@ -11,6 +11,7 @@ use Moggi\Syntax\Ast;
 
 use function Moggi\Backend\Jvm\Naming\isJavaKeyword;
 use function Moggi\Backend\Php\Naming\phpKeywords;
+use function Moggi\Paths\canonicalSeparators;
 use function Moggi\Syntax\Lexer\lex;
 use function Moggi\Syntax\Parser\parse;
 
@@ -514,7 +515,7 @@ foreach (stageRoots() as $stageRoot) {
         if ($sites === []) {
             continue;
         }
-        $relative = \substr($file, \strlen($root) + 1);
+        $relative = canonicalSeparators(\substr($file, \strlen($root) + 1));
         \ksort($sites);
         $found[$relative] = \array_keys($sites);
     }

@@ -12,7 +12,6 @@ use Moggi\Semantics\Types\TypeError;
 use function Moggi\Modules\libraryModuleScan;
 use function Moggi\Modules\projectSourceClosure;
 use function Moggi\Paths\canonicalPath;
-use function Moggi\Paths\canonicalSeparators;
 
 $assert = static function (bool $condition, string $message): void {
     if (!$condition) {
@@ -33,21 +32,17 @@ try {
     $write($dirs['a'], 'Alpha');
     $write($dirs['b'], 'Alpha');
 
-    // Two roots may both hold the name: an installed tree can carry two packages
-    // that each ship a module of the same name, and no index can decide between
-    // them. The scan keeps the first as the name's entry and records the rest.
     [$paths, $duplicates] = libraryModuleScan([$dirs['a'], $dirs['b']]);
     $assert(
-        ($paths['Alpha'] ?? null) === $dirs['a'] . '/Alpha.mog',
+        canonicalPath($paths['Alpha'] ?? '') === canonicalPath($dirs['a'] . '/Alpha.mog'),
         'the first root owns the name',
     );
     $assert(
-        ($duplicates['Alpha'] ?? []) === [$dirs['b'] . '/Alpha.mog'],
+        \array_map(static fn (string $path): string => canonicalPath($path), $duplicates['Alpha'] ?? [])
+            === [canonicalPath($dirs['b'] . '/Alpha.mog')],
         'the second root is recorded as the other file the name could mean',
     );
 
-    // A program that reaches the name is ambiguous: the compiler would have to pick
-    // one of the two files, and nothing can tell it which.
     $threw = false;
     try {
         projectSourceClosure([$dirs['a'] . '/Alpha.mog'], [$dirs['a'], $dirs['b']]);
@@ -57,18 +52,14 @@ try {
             \str_contains($error->getMessage(), 'module `Alpha` is offered by two roots'),
             'the refusal names the module and how many roots offer it, got: ' . $error->getMessage(),
         );
-        // The message spells both files the way every artifact path is spelled,
-        // so the expectation is canonicalised too rather than host-native.
         $assert(
-            \str_contains($error->getMessage(), canonicalSeparators($dirs['a'] . '/Alpha.mog'))
-            && \str_contains($error->getMessage(), canonicalSeparators($dirs['b'] . '/Alpha.mog')),
+            \str_contains($error->getMessage(), canonicalPath($dirs['a'] . '/Alpha.mog'))
+            && \str_contains($error->getMessage(), canonicalPath($dirs['b'] . '/Alpha.mog')),
             'the refusal names both files, got: ' . $error->getMessage(),
         );
     }
     $assert($threw, 'a program that reaches a doubly offered name must be refused');
 
-    // A name the program never imports stays unimported, which is what lets a tree
-    // carry the two packages at all.
     $write($dirs['a'], 'Other');
     [$files] = projectSourceClosure([$dirs['a'] . '/Other.mog'], [$dirs['a'], $dirs['b']]);
     $assert(
