@@ -89,6 +89,32 @@ final class TypeCheckState
     public array $classes = [];
 
     /**
+     * `class name => declared parameter kinds`, derived from {@see $classes}.
+     *
+     * A kind walk asks for the declared parameter kinds of a class named by a
+     * constraint, and a walk builds a context at every step of the way -- once
+     * per type argument of every signature the module mentions. Reading them off
+     * the classes each time made that a walk over the whole class table (every
+     * class the library declares) instead of a lookup, so it is computed once per
+     * class table and dropped whenever `$classes` changes.
+     *
+     * @var ?array<string, list<Kinds\Kind>>
+     */
+    public ?array $classParamKindsCache = null;
+
+    /**
+     * Operand types an infix rewrite hands to the call path, keyed by node id.
+     *
+     * `inferInfix`'s fall-through infers both operands before it can tell whether the infix is a
+     * call to an instance method, and the rewrite that follows goes through `inferApply`, which
+     * would infer both of them again. See {@see inferRewrittenInfixFromOperands}. Entries live only
+     * across that one call: the rewrite sets them and `inferApply` consumes them.
+     *
+     * @var array<int, Type>
+     */
+    public array $knownOperandTypes = [];
+
+    /**
      * Associated type families keyed by family name in the current scope.
      * Identity is conceptually (ClassId, familyName); ClassId ≈ class name
      * in-scope (import resolution uniquifies class names).

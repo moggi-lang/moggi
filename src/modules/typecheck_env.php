@@ -410,10 +410,11 @@ function classModuleScopes(array $units, array $projectClasses, ?array $onlyModu
 
             $owner = declaringDataTypeFor($units, $origin['module'], $name);
             if ($owner !== null) {
-                // A constructor is a value name too, but never a function a
-                // module has to name in codegen: the data type carries it, and
-                // that entry is what a re-checked body's patterns read.
                 $dataRefs[$owner] = $units[$origin['module']]['localTypes']['data'][$owner];
+                $fns[$name] = [
+                    'origin' => $origin,
+                    'scheme' => $scheme,
+                ];
                 $constructorArity[$name] = \count(
                     $dataRefs[$owner]['constructors'][$name]['fields'] ?? [],
                 );

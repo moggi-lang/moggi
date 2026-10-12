@@ -316,11 +316,6 @@ function registerTypeSynonym(TypeCheckState $state, Ast\TypeSynonymDecl $decl): 
     $kind = null;
     try {
         $body = astType($state, $decl->type);
-        // The synonym's kind is its body's, with one arrow per parameter: `IO`
-        // is `IO#` (the machine's `Type -> Type`), `FilePath` is `String`
-        // (`Type`). Nothing else records it, and the machine types are the ones
-        // that need it -- `instance Functor IO` asks for `IO`'s kind and must
-        // not be told `Type`.
         $kind = Kinds\kindOfType($state, $body);
         foreach (\array_reverse($decl->params) as $param) {
             $kind = new Kinds\KArrow($state->varKinds[$param], $kind);
@@ -409,6 +404,7 @@ function registerClass(TypeCheckState $state, Ast\ClassDecl $decl, string $modul
         'minimalGroups' => $decl->minimalGroups,
         'module' => $module,
     ];
+    $state->classParamKindsCache = null;
 
     $state->classes[$name]['methodSchemes'] = classMethodExportSchemes($state, $decl);
 }
