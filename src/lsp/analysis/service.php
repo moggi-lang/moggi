@@ -613,9 +613,7 @@ final class AnalysisService
             } catch (\Throwable) {
                 [$files, $projRoot] = moduleFileClosureCached($filename);
             }
-            // The library's instances belong to the check even when this file does not import
-            // the module that declares them -- `Ord Int` in `Data.Either`'s `Show` instance is
-            // the standing example -- so the check carries the library's modules.
+
             $files = [...$files, ...stdlibSourcesMissingFrom($files, $stdlib)];
             $files = array_map(
                 static function (string $path) use ($overlayByReal): string {
@@ -625,6 +623,7 @@ final class AnalysisService
                 },
                 $files,
             );
+
             if (!in_array($filename, $files, true)) {
                 $files[] = $filename;
             }

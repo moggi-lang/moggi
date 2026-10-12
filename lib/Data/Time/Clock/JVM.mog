@@ -1,4 +1,3 @@
-{-# LANGUAGE NoImplicitPrelude #-}
 module Data.Time.Clock.JVM
   ( currentTimeSeconds
   , getMonotonicNanos
@@ -6,6 +5,7 @@ module Data.Time.Clock.JVM
 
 import Control.Applicative
 import Control.Monad
+import Moggi.Internal.Base
 import System.IO.Base (IO)
 import Moggi.Internal.Prim
 

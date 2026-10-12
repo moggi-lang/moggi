@@ -12,6 +12,8 @@ module Text.Show
   , showCommaSpace
   ) where
 
+import Data.Bool
+import Moggi.Internal.Base
 import Moggi.Internal.Prim
 
 -- | The @shows@ functions return a function that prepends the
@@ -132,3 +134,8 @@ showParen b p s = case b of
 
 showCommaSpace :: ShowS
 showCommaSpace = showString ", "
+
+instance Show Bool where
+  show b = case b of
+    True -> "True"
+    False -> "False"

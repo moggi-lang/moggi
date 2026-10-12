@@ -6,7 +6,7 @@ program
   newtype WrappedPair a
     constructor WrappedPair
       field  :: Pair a
-  function __ev_Eq_Pair_eq :: __Dict_Eq -> Pair t6 -> Pair t6 -> Bool
+  function __ev_Eq_Pair_Op3d3d :: __Dict_Eq -> Pair t6 -> Pair t6 -> Bool
     pat_var __ev_Eq
     pat_con Pair
       pat_var a
@@ -25,7 +25,7 @@ program
           evidence_method Eq.== evidence=__ev_Eq nullary=0
           variable b
         variable d
-  function __ev_Eq_Pair_ne :: __Dict_Eq -> Pair t0 -> Pair t0 -> Bool
+  function __ev_Eq_Pair_Op2f3d :: __Dict_Eq -> Pair t0 -> Pair t0 -> Bool
     pat_var __ev_Eq
     pat_var x
     pat_var y
@@ -82,7 +82,7 @@ program
             evidence_ref Show Pair a
         variable ls
       variable s
-  function __ev_Eq_WrappedPair_eq :: __Dict_Eq -> WrappedPair t61 -> WrappedPair t61 -> Bool
+  function __ev_Eq_WrappedPair_Op3d3d :: __Dict_Eq -> WrappedPair t61 -> WrappedPair t61 -> Bool
     pat_var __ev_Eq
     pat_con WrappedPair
       pat_var __v0
@@ -93,7 +93,7 @@ program
         evidence_method Eq.== evidence=__ev_Eq nullary=0
         variable __v0
       variable __v1
-  function __ev_Eq_WrappedPair_ne :: __Dict_Eq -> WrappedPair t66 -> WrappedPair t66 -> Bool
+  function __ev_Eq_WrappedPair_Op2f3d :: __Dict_Eq -> WrappedPair t66 -> WrappedPair t66 -> Bool
     pat_var __ev_Eq
     pat_con WrappedPair
       pat_var __v0

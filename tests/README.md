@@ -33,6 +33,7 @@ tests/
 ├── lsp/         # the language server
 ├── cache/       # the compile cache
 ├── registry/    # packages, the canonical archive
+├── source/      # rules about the compiler's own source
 └── fuzz/        # the frontend fuzzer
 ```
 
@@ -75,6 +76,7 @@ Which **stage** owns a fixture is the directory it is in; which **golden kinds**
 | the compile cache | `tests/cache/` | a script |
 | the canonical archive, and what a package hash covers | `tests/registry/` | a script |
 | that random input cannot crash the frontend | `tests/fuzz/` | a script |
+| a rule about the compiler's own source (no `src/` stage names a library declaration) | `tests/source/` | a script, with the sites that are still allowed |
 | what a compiled function *returns* (a native throwable, an exported function no `main` reaches) | any group, beside the fixture | `Foo.exec.php`, and no `stdout`/`stderr` golden |
 | that an example program still works | `examples/` | `Main.stdout.expected` |
 

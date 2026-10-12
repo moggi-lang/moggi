@@ -18,6 +18,7 @@ module Moggi.Exception
   ) where
 
 import Moggi.Exception.Type
+import Moggi.Internal.Base
 import Moggi.Internal.Prim
 
 throw :: Exception e => e -> a

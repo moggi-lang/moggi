@@ -690,9 +690,18 @@ function assertKind(
     commitKindInferCtx($state, $ctx);
 }
 
+/**
+ * Record a type constructor's kind.
+ *
+ * The key is canonical ({@see canonicalTypeConName}): every lookup goes through
+ * `kindOfTypeCon`, which canonicalizes, and the machine's own types are declared
+ * under their MagicHash names (`IO#`, `List#`, `Int#`) while `IO`, `List` and
+ * `Int` are the names a module writes. Registering `IO#`'s kind under `IO#`
+ * would put it where nothing looks.
+ */
 function registerTypeKind(TypeCheckState $state, string $name, Kind $kind): void
 {
-    $state->kindEnv[$name] = $kind;
+    $state->kindEnv[canonicalTypeConName($name)] = $kind;
 }
 
 /**
@@ -773,26 +782,23 @@ function promotableImportedFieldKind(TypeCheckState $state, mixed $fieldType): ?
     return new KCon($fieldType->name);
 }
 
+/**
+ * The kind environment every module starts with: the types the language's own
+ * syntax writes, and nothing else.
+ *
+ * `(a, b)` and `[a]` are syntax, so `Tuple2` and `List` are names the parser
+ * writes rather than names a module declares; they are the machine's types
+ * (`Moggi.Internal.Prim`'s `Tuple*`/`List#`) and need no import to be written.
+ * Every other type constructor a module may name -- `Int`, `String`, `Bool`,
+ * `Ordering`, `IO` -- is a library declaration in the module that owns it
+ * (`Moggi.Internal.Base` for the machine types' readable names), and reaches a
+ * module only through an import: a signature that names one without importing it
+ * is a diagnostic ({@see isUndeclaredNominalTypeCon}), not a type the compiler
+ * quietly supplies.
+ */
 function bootstrapKindEnv(TypeCheckState $state): void
 {
-    $state->kindEnv = [
-        'Int' => new KType(),
-        'Char' => new KType(),
-        'Word' => new KType(),
-        'Word8' => new KType(),
-        'Word16' => new KType(),
-        'Word32' => new KType(),
-        'Word64' => new KType(),
-        'String' => new KType(),
-        'ByteString' => new KType(),
-        'Double' => new KType(),
-        'Integer' => new KType(),
-        'Bool' => new KType(),
-        'Ordering' => new KType(),
-        'List' => new KArrow(new KType(), new KType()),
-        'IO' => new KArrow(new KType(), new KType()),
-        'SomeException' => new KType(),
-    ];
+    registerTypeKind($state, 'List', dataKind(1));
 
     for ($arity = 2; $arity <= 64; ++$arity) {
         registerTypeKind($state, 'Tuple' . $arity, dataKind($arity));

@@ -7,6 +7,7 @@
 
 import Data.Eq
 import Data.Int
+import Data.List
 import Data.Num
 import Text.Show
 import System.IO

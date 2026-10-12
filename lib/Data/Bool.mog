@@ -9,9 +9,6 @@ module Data.Bool
   , bool
   ) where
 
-import Data.Eq
-import Data.Ord
-import Text.Show
 import Moggi.Internal.Prim
 
 -- | The type of truth values: 'False' and 'True'. A @case@ on a 'Bool' is
@@ -74,15 +71,3 @@ bool :: a -> a -> Bool -> a
 bool x y b = case b of
   True -> x
   False -> y
-
-instance Eq Bool where
-  (==) a b = boolEq# a b
-  (/=) a b = boolNe# a b
-
-instance Ord Bool where
-  compare a b = boolCompare# a b
-
-instance Show Bool where
-  show b = case b of
-    True -> "True"
-    False -> "False"

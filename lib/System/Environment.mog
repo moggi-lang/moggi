@@ -20,6 +20,8 @@ module System.Environment
 
 import Data.Maybe
 import Data.String
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
 
 -- | The arguments the program was started with, in order, without the program
 -- name (that is 'getProgName').

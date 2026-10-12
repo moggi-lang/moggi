@@ -29,6 +29,7 @@ function diagnosticRegistry(): array
         'parse/do-last-stmt' => 'a do block does not end with an expression',
         'parse/pragma' => 'a pragma is malformed or names an unknown extension',
         'parse/backend' => 'a module names backend implementations outside a BACKEND pragma',
+        'import/backend-impl' => 'an import names a backend implementation module instead of its facade',
         'type' => 'an expression does not typecheck',
         'unify' => 'two types could not be unified',
         'hole' => 'a typed hole was left in the program',

@@ -15,11 +15,9 @@ import Data.Num
 import Data.Integer
 import Data.Real
 import Moggi.Err
+import Moggi.Internal.Base
 import Text.Show
 import Moggi.Internal.Prim
-
--- IEEE binary64, the same on every backend.
-type Double = Double#
 
 instance Eq Double where
   (==) a b = doubleEq# a b

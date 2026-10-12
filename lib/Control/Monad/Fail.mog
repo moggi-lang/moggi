@@ -8,6 +8,9 @@ import Data.List
 import Data.Maybe
 import Moggi.Err
 import Moggi.IO.Exception (ioError, userError)
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+import System.IO.Base (IO)
 
 class Monad m => MonadFail m where
   fail :: String -> m a

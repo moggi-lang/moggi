@@ -1,9 +1,9 @@
-{-# LANGUAGE NoImplicitPrelude #-}
 module System.Exit.DotNet
   ( exitWithCode
   ) where
 
 import Data.Int
+import Moggi.Internal.Base
 import Moggi.Internal.Prim
 
 foreign dotnet function rawExit "System.Environment:Exit" :: Int32 -> IO ()

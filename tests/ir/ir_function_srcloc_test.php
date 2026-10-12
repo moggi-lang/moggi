@@ -29,10 +29,10 @@ $filename = 'InlineSrcLoc.mog';
 $source = <<<'MOGGI'
 module Main where
 
-boom :: Int
-boom = twice 1
+boom :: ()
+boom = twice ()
 
-twice :: Int -> Int
+twice :: () -> ()
 twice x = x
 MOGGI;
 
@@ -71,5 +71,5 @@ foreach (['boom', 'twice'] as $name) {
 // at the call on line 4 instead.
 $assert(
     $irFunctions['boom']->srcLoc->line === 4 && $irFunctions['boom']->srcLoc->col === 8,
-    'boom: IR location is not the `twice 1` call',
+    'boom: IR location is not the `twice ()` call',
 );

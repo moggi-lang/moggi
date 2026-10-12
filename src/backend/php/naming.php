@@ -119,27 +119,6 @@ function basePhpFunctionName(string $name): string
         return '__lambda_' . substr($name, strlen('λ'));
     }
 
-    $operator = match ($name) {
-        '+' => '__op_plus',
-        '-' => '__op_minus',
-        '*' => '__op_mul',
-        '/' => '__op_div',
-        '==' => '__op_eq',
-        '/=' => '__op_ne',
-        '<>' => '__op_concat',
-        '<' => '__op_lt',
-        '<=' => '__op_lte',
-        '>' => '__op_gt',
-        '>=' => '__op_gte',
-        '&&' => '__op_and',
-        '||' => '__op_or',
-        default => null,
-    };
-
-    if ($operator !== null) {
-        return $operator;
-    }
-
     if (isSafeName($name)) {
         return isPhpKeyword($name) || isPhpBuiltin($name) ? $name . '_' : $name;
     }

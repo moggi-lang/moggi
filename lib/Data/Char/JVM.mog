@@ -25,6 +25,7 @@ import Data.Eq
 import Data.Int
 import Data.Num
 import Data.Ord
+import Moggi.Internal.Base
 import Moggi.Internal.Prim
 
 foreign jvm function isControl "java.lang.Character:isISOControl" :: Char -> Bool

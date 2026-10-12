@@ -1,4 +1,3 @@
-{-# LANGUAGE NoImplicitPrelude #-}
 module Data.ByteString.PHP
   ( bsLength
   , bsTake
@@ -12,6 +11,8 @@ import Data.Int
 import Data.List hiding (singleton)
 import Data.Ord
 import Moggi.Err
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
 
 foreign php function rawStrlen "strlen" :: ByteString -> Int
 

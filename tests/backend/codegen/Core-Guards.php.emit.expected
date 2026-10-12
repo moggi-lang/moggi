@@ -5,9 +5,9 @@ namespace Core\Guards;
 const __MOGGI_MAP = [[18 => ['Core.Guards.positive', 'tests/backend/codegen/Core-Guards.mog', 9, 14], 31 => ['Core.Guards.firstSign', 'tests/backend/codegen/Core-Guards.mog', 15, 29], 62 => ['Core.Guards.classify', 'tests/backend/codegen/Core-Guards.mog', 23, 31], 63 => ['Core.Guards.classify', 'tests/backend/codegen/Core-Guards.mog', 23, 31]], ['Core\\Guards\\positive' => ['Core.Guards.positive', 'tests/backend/codegen/Core-Guards.mog', 9, 14], 'Core\\Guards\\twice' => ['Core.Guards.twice', 'tests/backend/codegen/Core-Guards.mog', 12, 11], 'Core\\Guards\\firstSign' => ['Core.Guards.firstSign', 'tests/backend/codegen/Core-Guards.mog', 14, 1], 'Core\\Guards\\classify' => ['Core.Guards.classify', 'tests/backend/codegen/Core-Guards.mog', 22, 3]]];
 
 require_once __DIR__ . '/../../../lib/Data/Bool.php';
-require_once __DIR__ . '/../../../lib/Data/Int.php';
+require_once __DIR__ . '/../../../lib/Data/Ord.php';
 
-use function Data\Int\__ev_Ord_Int;
+use function Data\Ord\__ev_Ord_Int;
 
 function moggi_u64_add(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao + $bo; $c = ($lo >> 32) & 0xffffffff; $hi = ($ah + $bh + $c) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }
 function moggi_u64_sub(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao - $bo; $bw = $lo < 0 ? 1 : 0; $hi = ($ah - $bh - $bw) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }

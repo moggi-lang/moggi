@@ -2,7 +2,7 @@
 
 namespace Main;
 
-const __MOGGI_MAP = [[22 => ['Main.main', 'tests/semantics/modules/Main.mog', 16, 15], 27 => ['Main.qualifiedMain', 'tests/semantics/modules/Main.mog', 20, 19]], ['Main\\main' => ['Main.main', 'tests/semantics/modules/Main.mog', 16, 15], 'Main\\qualifiedMain' => ['Main.qualifiedMain', 'tests/semantics/modules/Main.mog', 20, 19]]];
+const __MOGGI_MAP = [[22 => ['Main.main', 'tests/semantics/modules/Main.mog', 17, 15], 27 => ['Main.qualifiedMain', 'tests/semantics/modules/Main.mog', 21, 19]], ['Main\\main' => ['Main.main', 'tests/semantics/modules/Main.mog', 17, 15], 'Main\\qualifiedMain' => ['Main.qualifiedMain', 'tests/semantics/modules/Main.mog', 21, 19]]];
 
 require_once __DIR__ . '/../../../_runtime.php';
 

@@ -1,4 +1,3 @@
-{-# LANGUAGE NoImplicitPrelude #-}
 module Data.ByteString.DotNet
   ( bsLength
   , bsTake
@@ -14,6 +13,7 @@ import Data.List hiding (singleton, take, drop, length, isPrefixOf, isSuffixOf)
 import Data.Ord
 import Data.String hiding (singleton)
 import Moggi.Err
+import Moggi.Internal.Base
 import Moggi.Internal.Prim
 
 -- Represent bytes as Latin-1 code units in the String/Bytes# coercion layer.

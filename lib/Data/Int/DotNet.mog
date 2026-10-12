@@ -6,6 +6,7 @@ module Data.Int.DotNet
   , intMaxBound
   ) where
 
+import Moggi.Internal.Base
 import Moggi.Internal.Prim
 
 foreign dotnet function rawShowInt "System.Convert:ToString" :: Int -> String

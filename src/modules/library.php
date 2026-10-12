@@ -356,19 +356,53 @@ function stdlibMaxMtime(string $stdlibRoot): int
 }
 
 /**
- * The stdlib index merged with every extra root, standard library last so it
- * wins a name clash.
+ * The stdlib index merged with every extra root, and the names more than one of
+ * them offers.
+ *
+ * A name an extra root and the standard library both offer is not a fault in
+ * itself -- a program that never imports it is unaffected -- so the clash is
+ * recorded for the compilation to refuse where the name is reached, exactly as
+ * two `--lib` roots are ({@see libraryModuleScan}).
+ *
+ * The standard library is the first root, so a name it offers resolves to its
+ * file (`stdlibModuleIndex` keeps that behaviour for callers that only want the
+ * index) and an extra root's file of the same name is the recorded duplicate.
+ *
+ * @return array{0: array<string, string>, 1: array<string, list<string>>}
+ *   the module name => source path table, then the name => other paths that offer
+ *   it table
+ */
+function stdlibModuleScan(string $stdlibRoot): array
+{
+    $paths = [];
+    $duplicates = [];
+    foreach ([$stdlibRoot, ...ConfiguredStdlib::extraPaths()] as $root) {
+        foreach (LibraryModuleIndex::index($root) as $moduleName => $path) {
+            $existing = $paths[$moduleName] ?? null;
+            if ($existing === null) {
+                $paths[$moduleName] = $path;
+                continue;
+            }
+
+            if (canonicalPath($existing) !== canonicalPath($path)) {
+                $duplicates[$moduleName][] = $path;
+            }
+        }
+    }
+
+    return [$paths, $duplicates];
+}
+
+/**
+ * The stdlib index merged with every extra root.
  *
  * @return array<string, string>
  */
 function stdlibModuleIndex(string $stdlibRoot): array
 {
-    $index = [];
-    foreach (ConfiguredStdlib::extraPaths() as $extra) {
-        $index = [...$index, ...LibraryModuleIndex::index($extra)];
-    }
+    [$paths] = stdlibModuleScan($stdlibRoot);
 
-    return [...$index, ...LibraryModuleIndex::index($stdlibRoot)];
+    return $paths;
 }
 
 /**

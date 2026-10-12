@@ -2,7 +2,7 @@ program
   data DefFoo a
     constructor DefFoo
       field  :: a
-  function __ev_Eq_DefFoo_eq :: __Dict_Eq -> DefFoo t0 -> DefFoo t0 -> Bool
+  function __ev_Eq_DefFoo_Op3d3d :: __Dict_Eq -> DefFoo t0 -> DefFoo t0 -> Bool
     pat_var __ev_Eq
     pat_var __l
     pat_var __r
@@ -24,7 +24,7 @@ program
           alt
             pat_wild _
             constructor_ref False
-  function __ev_Eq_DefFoo_ne :: __Dict_Eq -> DefFoo t0 -> DefFoo t0 -> Bool
+  function __ev_Eq_DefFoo_Op2f3d :: __Dict_Eq -> DefFoo t0 -> DefFoo t0 -> Bool
     pat_var __ev_Eq
     pat_var __l
     pat_var __r
@@ -111,7 +111,7 @@ program
   data StockFoo a
     constructor StockFoo
       field  :: a
-  function __ev_Eq_StockFoo_eq :: __Dict_Eq -> StockFoo t53 -> StockFoo t53 -> Bool
+  function __ev_Eq_StockFoo_Op3d3d :: __Dict_Eq -> StockFoo t53 -> StockFoo t53 -> Bool
     pat_var __ev_Eq
     pat_var __l
     pat_var __r
@@ -133,7 +133,7 @@ program
           alt
             pat_wild _
             constructor_ref False
-  function __ev_Eq_StockFoo_ne :: __Dict_Eq -> StockFoo t53 -> StockFoo t53 -> Bool
+  function __ev_Eq_StockFoo_Op2f3d :: __Dict_Eq -> StockFoo t53 -> StockFoo t53 -> Bool
     pat_var __ev_Eq
     pat_var __l
     pat_var __r
@@ -220,7 +220,7 @@ program
   newtype Age
     constructor Age
       field  :: Int
-  function __ev_Eq_Age_eq :: Age -> Age -> Bool
+  function __ev_Eq_Age_Op3d3d :: Age -> Age -> Bool
     pat_con Age
       pat_var __n0
     pat_con Age
@@ -228,7 +228,7 @@ program
     intrinsic intEq#
       variable __n0
       variable __n1
-  function __ev_Eq_Age_ne :: Age -> Age -> Bool
+  function __ev_Eq_Age_Op2f3d :: Age -> Age -> Bool
     pat_con Age
       pat_var __n0
     pat_con Age
@@ -271,7 +271,7 @@ program
   newtype ViaInt
     constructor ViaInt
       field  :: Int
-  function __ev_Eq_ViaInt_eq :: __Dict_Eq -> ViaInt -> ViaInt -> Bool
+  function __ev_Eq_ViaInt_Op3d3d :: __Dict_Eq -> ViaInt -> ViaInt -> Bool
     pat_var __ev_Eq
     pat_con ViaInt
       pat_var __v0
@@ -282,7 +282,7 @@ program
         evidence_method Eq.== evidence=__ev_Eq nullary=0
         variable __v0
       variable __v1
-  function __ev_Eq_ViaInt_ne :: __Dict_Eq -> ViaInt -> ViaInt -> Bool
+  function __ev_Eq_ViaInt_Op2f3d :: __Dict_Eq -> ViaInt -> ViaInt -> Bool
     pat_var __ev_Eq
     pat_con ViaInt
       pat_var __v0

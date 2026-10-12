@@ -1,4 +1,3 @@
-{-# LANGUAGE NoImplicitPrelude #-}
 module Data.Time.Clock.DotNet
   ( currentTimeSeconds
   , getMonotonicNanos
@@ -9,6 +8,7 @@ module Data.Time.Clock.DotNet
 import Control.Applicative
 import Control.Monad
 import Data.Num
+import Moggi.Internal.Base
 import System.IO.Base (IO)
 import Moggi.Internal.Prim
 

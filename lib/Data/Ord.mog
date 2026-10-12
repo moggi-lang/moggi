@@ -8,8 +8,10 @@ module Data.Ord
   , clamp
   ) where
 
+import Data.Bool
 import Data.Eq
 import Data.Functor
+import Moggi.Internal.Base
 import Text.Show
 import Moggi.Internal.Prim
 
@@ -100,3 +102,15 @@ instance Ord Ordering where
 
 instance Show Ordering where
   show o = orderingShow o
+
+instance Ord Bool where
+  compare a b = boolCompare# a b
+
+instance Ord Int where
+  compare a b = intCompare# a b
+
+-- | 'String''s instance lives with the class for the same reason: 'String' is
+-- the machine's (`Moggi.Internal.Base`), and this module sits below every module
+-- that compares one.
+instance Ord String where
+  compare a b = stringCompare# a b

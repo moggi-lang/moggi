@@ -7,7 +7,7 @@ const __MOGGI_MAP = [[35 => ['Tc.Stdlib.mapLookupDemo', 'tests/backend/codegen/T
 require_once __DIR__ . '/../../../lib/Control/Applicative.php';
 require_once __DIR__ . '/../../../lib/Data/Bool.php';
 require_once __DIR__ . '/../../../lib/Data/Char/PHP.php';
-require_once __DIR__ . '/../../../lib/Data/Int.php';
+require_once __DIR__ . '/../../../lib/Data/Eq.php';
 require_once __DIR__ . '/../../../lib/Data/List.php';
 require_once __DIR__ . '/../../../lib/Data/Map.php';
 require_once __DIR__ . '/../../../lib/Data/Maybe.php';
@@ -17,13 +17,13 @@ require_once __DIR__ . '/../../../lib/Data/Tuple.php';
 
 use function Control\Applicative\__ev_Alternative_Maybe;
 use function Data\Char\PHP\isDigit;
-use function Data\Int\__ev_Eq_Int;
-use function Data\Int\__ev_Ord_Int;
+use function Data\Eq\__ev_Eq_Int;
 use function Data\List\__ev_Alternative_List;
 use function Data\Map\empty_;
 use function Data\Map\insert;
 use function Data\Map\lookup;
 use function Data\Map\size;
+use function Data\Ord\__ev_Ord_Int;
 use function Data\Ord\clamp;
 use function Data\Set\fromList as setFromList;
 use function Data\Set\member;

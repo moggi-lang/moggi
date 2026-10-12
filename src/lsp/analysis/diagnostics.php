@@ -216,7 +216,7 @@ function unusedImportDiagnostics(
             'message' => "Import of `{$modulePath}` is not used",
             'source' => 'moggi',
             'code' => 'unused-import',
-            'tags' => [1], // DiagnosticTag.Unnecessary
+            'tags' => [1],
             'codeDescription' => ['href' => diagnosticCodeHref('unused-import')],
             'data' => ['module' => $modulePath, 'alias' => $alias],
         ];

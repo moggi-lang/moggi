@@ -18,6 +18,7 @@ module Data.Integer.PHP
 import Data.Bool
 import Data.Num
 import Data.Ord
+import Moggi.Internal.Base
 import Moggi.Internal.Prim
 
 -- Integer# is a decimal string for BCMath; PHP 8 bc* require string operands.

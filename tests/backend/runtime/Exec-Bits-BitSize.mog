@@ -2,6 +2,8 @@
 import Data.Bits
 import Data.Real
 import Data.Num
+import Data.Integer
+import Data.Int
 import Text.Show
 import System.IO
 

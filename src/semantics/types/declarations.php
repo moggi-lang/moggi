@@ -19,67 +19,45 @@ require_once __DIR__ . '/type_core.php';
 require_once __DIR__ . '/constraints.php';
 require_once __DIR__ . '/infer.php';
 
-function standalonePrimitiveTypeSynonyms(): array
-{
-    $rhs = static fn (string $prim): array => synonymEntry(new Ast\TypeCon($prim));
-
-    return [
-        'Int' => $rhs('Int#'),
-        'Char' => $rhs('Char#'),
-        'Word' => $rhs('Word#'),
-        'Word8' => $rhs('Word8#'),
-        'Word16' => $rhs('Word16#'),
-        'Word32' => $rhs('Word32#'),
-        'Word64' => $rhs('Word64#'),
-        'Int8' => $rhs('Int8#'),
-        'Int16' => $rhs('Int16#'),
-        'Int32' => $rhs('Int32#'),
-        'Int64' => $rhs('Int64#'),
-        'String' => $rhs('String#'),
-        'ByteString' => $rhs('Bytes#'),
-        'Double' => $rhs('Double#'),
-        'Integer' => $rhs('Integer#'),
-        'Natural' => $rhs('Natural#'),
-    ];
+/**
+ * A type synonym's declaration, with its kind.
+ *
+ * The kind travels with the entry because a module that imports the synonym
+ * cannot recompute it: `type IO = IO#` expands to the machine type `IO`, whose
+ * kind is the kernel's, and the importer of `System.IO.Base` (which names only
+ * the synonym) has no `IO#` of its own to ask.
+ *
+ * @param list<string> $params
+ * @return array{params: list<string>, rhs: Ast\TypeNode, body: ?Type, kind: ?Kinds\Kind}
+ */
+function synonymEntry(
+    Ast\TypeNode $rhs,
+    array $params = [],
+    ?Type $body = null,
+    ?Kinds\Kind $kind = null,
+): array {
+    return ['params' => $params, 'rhs' => $rhs, 'body' => $body, 'kind' => $kind];
 }
 
-/** @param list<string> $params @return array{params: list<string>, rhs: Ast\TypeNode} */
-function synonymEntry(Ast\TypeNode $rhs, array $params = [], ?Type $body = null): array
+/**
+ * Put an imported type synonym's kind in the kind environment.
+ *
+ * {@see registerTypeSynonym} records the kind where the synonym is declared;
+ * this is how it reaches a module that only imports the name.
+ *
+ * @param array<string, mixed> $info a `typeSynonyms` entry
+ * @return bool true when this call was what put the kind there
+ */
+function installTypeSynonymKind(TypeCheckState $state, string $name, array $info): bool
 {
-    return ['params' => $params, 'rhs' => $rhs, 'body' => $body];
-}
-
-function applyPrimitiveTypeSynonymBootstrap(TypeCheckState $state, array $definedTypeSynonyms): void
-{
-    foreach (standalonePrimitiveTypeSynonyms() as $name => $type) {
-        if (isset($state->typeSynonyms[$name]) || isset($definedTypeSynonyms[$name])) {
-            continue;
-        }
-
-        $state->typeSynonyms[$name] = $type;
-    }
-}
-
-function applyPrimitiveDataBootstrap(TypeCheckState $state): void
-{
-    if (!isset($state->data['Bool'])) {
-        $state->data['Bool'] = [
-            'params' => [],
-            'paramKinds' => [],
-            'result' => new TCon('Bool'),
-            'constructors' => [
-                'False' => ['name' => 'False', 'fields' => [], 'fieldTypes' => []],
-                'True' => ['name' => 'True', 'fields' => [], 'fieldTypes' => []],
-            ],
-        ];
+    $kind = $info['kind'] ?? null;
+    if (!$kind instanceof Kinds\Kind || isset($state->kindEnv[Kinds\canonicalTypeConName($name)])) {
+        return false;
     }
 
-    $state->env['True'] ??= scheme(new TCon('Bool'), []);
-    $state->env['False'] ??= scheme(new TCon('Bool'), []);
+    Kinds\registerTypeKind($state, $name, $kind);
 
-    foreach (['False', 'True'] as $ctorName) {
-        $state->promoted[$ctorName] ??= ['data' => 'Bool'];
-    }
+    return true;
 }
 
 /**
@@ -335,12 +313,25 @@ function registerTypeSynonym(TypeCheckState $state, Ast\TypeSynonymDecl $decl): 
         $state->varKinds[$param] = new Kinds\KType();
     }
     $body = null;
+    $kind = null;
     try {
         $body = astType($state, $decl->type);
+        // The synonym's kind is its body's, with one arrow per parameter: `IO`
+        // is `IO#` (the machine's `Type -> Type`), `FilePath` is `String`
+        // (`Type`). Nothing else records it, and the machine types are the ones
+        // that need it -- `instance Functor IO` asks for `IO`'s kind and must
+        // not be told `Type`.
+        $kind = Kinds\kindOfType($state, $body);
+        foreach (\array_reverse($decl->params) as $param) {
+            $kind = new Kinds\KArrow($state->varKinds[$param], $kind);
+        }
     } finally {
         Kinds\restoreKindScope($state, $kindScope);
     }
-    $state->typeSynonyms[$name] = synonymEntry($decl->type, $decl->params, $body);
+
+    Kinds\registerTypeKind($state, $name, $kind);
+
+    $state->typeSynonyms[$name] = synonymEntry($decl->type, $decl->params, $body, $kind);
 }
 
 function registerClass(TypeCheckState $state, Ast\ClassDecl $decl, string $module = ''): void

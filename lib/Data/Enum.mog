@@ -9,6 +9,7 @@ import Data.Bool
 import Data.Bounded
 import Data.Ord
 import Moggi.Err
+import Moggi.Internal.Base
 import Moggi.Internal.Prim
 
 -- | Class 'Enum' defines operations on sequentially ordered types.

@@ -6,6 +6,7 @@ module Data.Int.JVM
   , intMaxBound
   ) where
 
+import Moggi.Internal.Base
 import Moggi.Internal.Prim
 
 foreign jvm function rawShowInt "java.lang.Long:toString" :: Int -> String

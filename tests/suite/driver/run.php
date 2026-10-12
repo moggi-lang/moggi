@@ -240,6 +240,59 @@ function runSuite(): int
 }
 
 /**
+ * Elaborate the standard library once, in this process, before the workers start.
+ *
+ * A compiler whose sources changed drops the whole cache, and the next compile elaborates every
+ * library module again -- seconds of work that every worker would otherwise do for itself, at the
+ * same time, on the run's first case each. One warm-up here turns `--jobs N` cold starts into warm
+ * ones; a serial selection is not warmed, because the case it is about to run pays for the library
+ * itself and a warm-up in front of it would only add to that.
+ *
+ * @param list<string> $backends
+ */
+function warmSharedCache(array $backends): void
+{
+    if (!\Moggi\Cache\cacheEnabled()) {
+        return;
+    }
+
+    $projectRoot = projectRootPath();
+
+    $dir = \Moggi\Cache\cacheScratchDir() . '/warmup-' . getmypid();
+    if (!\is_dir($dir) && !@mkdir($dir, 0777, true) && !\is_dir($dir)) {
+        return;
+    }
+
+    $source = $dir . '/Warmup.mog';
+    if (@\file_put_contents($source, "module Warmup where\n\nx = 1\n") === false) {
+        return;
+    }
+
+    suiteEcho("note: elaborating the standard library once (" . \implode(', ', $backends) . ") so the workers start warm\n");
+
+    foreach ($backends as $backend) {
+        try {
+            \Moggi\Backend\setCompileBackend($backend);
+            \Moggi\Compiler\compileFile($source, 'php');
+        } catch (\Throwable) {
+            // A backend that cannot emit here is warmed by nothing; its cases pay as they did.
+        }
+
+        // The published `lib/` tree is built once per run under a lock; building it here keeps that
+        // one-off cost out of whichever case happened to ask for it first.
+        try {
+            writeLibBackendOutputs($projectRoot, $backend);
+        } catch (\Throwable) {
+            // Nothing to publish: the case that needs it will report what went wrong.
+        }
+    }
+
+    @\unlink($source);
+    \Moggi\Modules\ProjectCache::clearPreparedProjects();
+    \Moggi\Modules\ProjectCache::releaseProjectCheckedModules();
+}
+
+/**
  * Run the selection: one loop over the backends, and one report path whether the cases run in this
  * process or in a `--jobs` pool, so the two modes cannot drift apart in what they report.
  *
@@ -266,6 +319,7 @@ function runSelection(array $cases, array $backends, array $pathFilters): int
             \fwrite(STDERR, 'note: --stop-on-failure with --jobs ' . $pool->jobCount()
                 . ": work already dispatched runs to completion\n");
         }
+        warmSharedCache($backends);
     }
 
     $lastBackend = null;

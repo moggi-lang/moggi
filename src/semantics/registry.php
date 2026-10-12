@@ -8,8 +8,6 @@ use Moggi\Syntax\Ast;
 
 use function Moggi\Semantics\Deriving\derivedProjectInstanceRecords;
 use function Moggi\Semantics\Foreign\foreignParamNames;
-use function Moggi\Semantics\Types\applyPrimitiveDataBootstrap;
-use function Moggi\Semantics\Types\applyPrimitiveTypeSynonymBootstrap;
 use function Moggi\Semantics\Types\associatedEquationsMapFromDecl;
 use function Moggi\Semantics\Types\indexAssociatedEquations;
 use function Moggi\Semantics\Types\instanceHeadIndexKeyFromAst;
@@ -21,6 +19,7 @@ use function Moggi\Semantics\Types\registerForeignType;
 use function Moggi\Semantics\Types\registerFunctionScheme;
 use function Moggi\Semantics\Types\registerInferredFunctionPlaceholder;
 use function Moggi\Semantics\Types\registerInferredSignatureScheme;
+use function Moggi\Semantics\Types\installTypeSynonymKind;
 use function Moggi\Semantics\Types\registerTypeSynonym;
 use function Moggi\Semantics\Types\syncAssociatedFamiliesFromClasses;
 use function Moggi\Semantics\Types\typeFail;
@@ -52,6 +51,7 @@ function applyImportContext(TypeCheckState $state, Ast\Program $program, array $
 
     foreach ($importContext['typeSynonyms'] ?? [] as $name => $type) {
         $state->typeSynonyms[$name] = $type;
+        installTypeSynonymKind($state, $name, $type);
     }
 
     foreach ($importContext['data'] ?? [] as $name => $info) {
@@ -69,6 +69,7 @@ function applyImportContext(TypeCheckState $state, Ast\Program $program, array $
     $state->qualifiedOrigins = $importContext['qualifiedOrigins'] ?? [];
     $state->qualifiedEnv = $importContext['qualifiedEnv'] ?? [];
     $state->intrinsicWrappers = $importContext['intrinsicWrappers'] ?? [];
+
     $state->ambiguousImports = $importContext['ambiguousNames'] ?? [];
     $state->classModuleScopes = $importContext['classScopes'] ?? [];
     $state->externalFns = $importContext['codegen']['externalFns'] ?? [];
@@ -114,33 +115,14 @@ function applyImportContext(TypeCheckState $state, Ast\Program $program, array $
     $state->checkedInstances = [];
     $state->programModuleBackend = $program->moduleBackend;
 
-    $definedTypeSynonyms = [];
     $declaredTypeNames = [];
     foreach ($program->items as $item) {
-        if ($item instanceof Ast\TypeSynonymDecl) {
-            $definedTypeSynonyms[$item->name] = true;
-            $declaredTypeNames[$item->name] = true;
-        }
-
-        if ($item instanceof Ast\DataDecl) {
+        if ($item instanceof Ast\TypeSynonymDecl || $item instanceof Ast\DataDecl) {
             $declaredTypeNames[$item->name] = true;
         }
     }
     $state->declaredTypeNames = $declaredTypeNames;
     syncAssociatedFamiliesFromClasses($state);
-
-    applyPrimitiveTypeSynonymBootstrap($state, $definedTypeSynonyms);
-
-    $definesBool = false;
-    foreach ($program->items as $item) {
-        if ($item instanceof Ast\DataDecl && $item->name === 'Bool') {
-            $definesBool = true;
-            break;
-        }
-    }
-    if (!$definesBool) {
-        applyPrimitiveDataBootstrap($state);
-    }
 }
 
 function registerTypeDeclarations(TypeCheckState $state, Ast\Program $program): void

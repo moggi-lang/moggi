@@ -1,4 +1,3 @@
-{-# LANGUAGE NoImplicitPrelude #-}
 module Data.Map
   ( Map
   , empty
@@ -42,9 +41,11 @@ import Data.List hiding (
   )
 import Data.Maybe
 import Data.Ord
+import Moggi.Internal.Base
 import Text.Show
 import Data.Traversable hiding (mapAccumL, mapAccumR)
 import Moggi.Err
+import Moggi.Internal.Prim
 
 data AssocEntry k v = AssocEntry k v
 

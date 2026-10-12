@@ -1,4 +1,3 @@
-{-# LANGUAGE NoImplicitPrelude #-}
 {-# BACKEND
   php = Data.ByteString.PHP
   jvm = Data.ByteString.JVM
@@ -68,6 +67,7 @@ import Data.Maybe
 import Data.Monoid
 import Data.Ord
 import Data.Semigroup
+import Moggi.Internal.Base
 import Text.Show
 import Data.Word
 import Moggi.Err

@@ -50,6 +50,8 @@ import Data.Functor
 import Data.Maybe
 import Data.Num
 import Data.Ord
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
 
 infixl 1 >>=, >>
 infixr 1 =<<

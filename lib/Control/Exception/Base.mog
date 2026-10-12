@@ -31,11 +31,13 @@ module Control.Exception.Base
 
 import Control.Applicative
 import Control.Monad
+import Data.Bool
 import Data.Either
 import Data.Maybe
 import Moggi.Err (error)
 import Moggi.Exception (throw)
 import Moggi.Exception.Type
+import Moggi.Internal.Base
 import Moggi.Internal.IO
 import Moggi.Internal.Prim
 import System.IO.Base (IO)

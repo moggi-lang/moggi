@@ -50,6 +50,7 @@ $keyFile = $work . '/key.nsec';
 $env = \getenv();
 $env['MOGGI_SCHNORR'] = $binary;
 $env['MOGGI_CACHE_DIR'] = $work . '/cache';
+seedCacheDir($env['MOGGI_CACHE_DIR']);
 $env['MOGGI_USER_CACHE'] = $work . '/user-cache';
 unset($env['MOGGI_REGISTRY_NPUB'], $env['MOGGI_ALLOW_STALE_REGISTRY'], $env['MOGGI_NSEC_FILE']);
 

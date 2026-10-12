@@ -9,13 +9,22 @@
 // the boundary -- class methods, a collapsing multi-parameter superclass, a
 // probed/restored local, recursive groups, records, and the runtime shapes --
 // with the walker on.
+//
+// The fixtures share one process: the walker runs on every elaboration, and the
+// first compile has already elaborated the standard library the rest reuse, so
+// nothing is checked twice while the whole library is still walked on a cold
+// elaboration. The cache stays off -- a cache hit answers without running the
+// checker at all, which would leave the walker nothing to walk.
 
 $root = __DIR__;
 while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
+
+\putenv('MOGGI_NO_CACHE=1');
+\putenv('MOGGI_ASSERT_PENDING_DICTS=1');
+
 require $root . '/src/compiler.php';
-require $root . '/tests/suite/support/process.php';
 
 $multiline = static fn (string $text): string => \trim(\str_replace("\n", "\n  ", $text));
 
@@ -36,19 +45,11 @@ $fixtures = [
 
 $failures = [];
 foreach ($fixtures as $fixture) {
-    $env = \getenv();
-    $env['MOGGI_NO_CACHE'] = '1';
-    $env['MOGGI_ASSERT_PENDING_DICTS'] = '1';
-
-    $result = runCompiledProcess(
-        [PHP_BINARY, $root . '/moggi.php', 'compile', $root . '/' . $fixture, '--typed-ast'],
-        120,
-        $env,
-        $root,
-    );
-
-    if (($result['exitCode'] ?? 0) !== 0) {
-        $failures[] = $fixture . ":\n  " . $multiline((string) ($result['stderr'] ?? ''));
+    try {
+        \Moggi\Compiler\compileFile($root . '/' . $fixture, 'typed-ast');
+    } catch (\Throwable $e) {
+        $report = \method_exists($e, 'display') ? $e->display() : $e->getMessage();
+        $failures[] = $fixture . ":\n  " . $multiline((string) $report);
     }
 }
 

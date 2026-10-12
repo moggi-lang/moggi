@@ -33,6 +33,8 @@ import Data.Monoid
 import Data.Num
 import Data.Ord
 import Data.Semigroup
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
 
 class Foldable t where
   {-# MINIMAL foldMap | foldr #-}

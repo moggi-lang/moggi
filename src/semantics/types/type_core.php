@@ -1143,6 +1143,38 @@ function canonicalPrimitiveType(Type $type): Type
     };
 }
 
+/**
+ * A whole type with every zero-argument primitive constructor written as the
+ * primitive it names, at any depth.
+ *
+ * {@see canonicalPrimitiveType} rewrites one node, which is enough where a
+ * single position is inspected. A comparison that has to see two spellings of
+ * the same type alike -- a facade's declared signature against its
+ * implementation's inferred one, where one side spells `Int` and the other
+ * already carries `TInt` -- needs the tree rewritten first.
+ */
+function canonicalizePrimitiveTypes(Type $type): Type
+{
+    return match ($type::class) {
+        TArrow::class => new TArrow(
+            canonicalizePrimitiveTypes($type->from),
+            canonicalizePrimitiveTypes($type->to),
+        ),
+        TCon::class => $type->args === []
+            ? canonicalPrimitiveType($type)
+            : new TCon($type->name, \array_map(canonicalizePrimitiveTypes(...), $type->args)),
+        TVarApp::class => new TVarApp(
+            $type->name,
+            \array_map(canonicalizePrimitiveTypes(...), $type->args),
+        ),
+        TPromoted::class => new TPromoted(
+            $type->name,
+            \array_map(canonicalizePrimitiveTypes(...), $type->args),
+        ),
+        default => $type,
+    };
+}
+
 function samePrimitiveType(Type $left, Type $right): bool
 {
     $normalize = static function (Type $type): ?string {

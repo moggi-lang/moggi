@@ -82,6 +82,7 @@ import Data.Foldable
 import Data.Functor
 import Data.Ord
 import Data.Semigroup
+import Moggi.Internal.Base
 import Text.Show
 import Data.Traversable
 import Moggi.Internal.Prim

@@ -80,8 +80,12 @@ $assert(
     'stdlib uses unregistered primops: ' . json_encode($unregistered),
 );
 
-// 4. The synthesized compiler modules export exactly the primops they own, each
-//    wrapping to itself (a primop is not translated to another spelling).
+// 4. A synthesized compiler module holds its own names: the primops it owns (each
+//    wrapping to itself, since a primop is not translated to another spelling),
+//    plus -- in Prim, the module the library reaches the machine through -- the
+//    machine's public surface: the primitive types and the primops the machine
+//    spells as operators (`:` for `listCons#`). Every other public name (`Int`,
+//    `Bool`, `List`, ...) is a library declaration, in the module that owns it.
 foreach ([IntrinsicRegistry\MODULE_PRIM, IntrinsicRegistry\MODULE_IO] as $moduleName) {
     $localTypes = Modules\syntheticLocalTypes($moduleName);
     $expected = [];
@@ -92,20 +96,60 @@ foreach ([IntrinsicRegistry\MODULE_PRIM, IntrinsicRegistry\MODULE_IO] as $module
     }
     $assert($expected !== [], "{$moduleName} should own at least one primop");
 
+    $surface = [];
+    if ($moduleName === IntrinsicRegistry\MODULE_PRIM) {
+        $typeTable = IntrinsicRegistry\primTypeTable();
+        foreach (array_keys($typeTable) as $primitive) {
+            $assert(
+                isset($localTypes['data'][$primitive]),
+                "Prim must declare its primitive type `{$primitive}`",
+            );
+        }
+        $assert(
+            array_keys($localTypes['data']) === array_keys($typeTable),
+            'Prim must declare the primitive types and nothing else: '
+                . json_encode(array_keys($localTypes['data'])),
+        );
+        $assert($localTypes['typeSynonyms'] === [], 'Prim spells no type synonyms');
+
+        foreach (IntrinsicRegistry\publicPrimopAliases() as $alias => $primop) {
+            $surface[] = $alias;
+            $assert(isset($schemes[$primop]), "the public name `{$alias}` must stand for a primop");
+            $assert(
+                ($localTypes['intrinsicWrappers'][$alias] ?? null) === $primop,
+                "the public name `{$alias}` must lower to `{$primop}`",
+            );
+        }
+        foreach (Modules\syntheticExports($moduleName, $localTypes)['env'] as $name => $_) {
+            $assert(
+                str_ends_with($name, '#') || isset(IntrinsicRegistry\publicPrimopAliases()[$name]),
+                "Prim exports `{$name}`, which is neither a primop nor a machine operator",
+            );
+        }
+    }
+
     $localNames = array_keys($localTypes['env']);
     sort($localNames);
     $expectedNames = array_keys($expected);
     sort($expectedNames);
-    $assert($localNames === $expectedNames, "{$moduleName} env must match its owned primops");
+    $beyondPrimops = array_values(array_diff($localNames, $expectedNames));
+    sort($surface);
+    $assert(
+        $beyondPrimops === $surface,
+        "{$moduleName} env holds names beyond its primops: " . json_encode($beyondPrimops),
+    );
 
     foreach ($localTypes['intrinsicWrappers'] as $name => $target) {
-        $assert($target === $name, "{$moduleName} wrapper {$name} must wrap itself");
+        if (isset($expected[$name])) {
+            $assert($target === $name, "{$moduleName} wrapper {$name} must wrap itself");
+        }
+        $assert(isset($schemes[$target]), "{$name} must wrap a registered primop, not `{$target}`");
     }
 
     $exports = Modules\syntheticExports($moduleName, $localTypes);
     $exportNames = array_keys($exports['env']);
     sort($exportNames);
-    $assert($exportNames === $expectedNames, "{$moduleName} exports must match its owned primops");
+    $assert($exportNames === $localNames, "{$moduleName} exports must match the names it holds");
 }
 
 echo "intrinsic registry tests passed\n";

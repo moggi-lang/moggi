@@ -22,6 +22,7 @@ module System.IO.JVM
   , print
   ) where
 
+import Moggi.Internal.Base
 import Text.Show
 import Data.Bool
 import Control.Applicative

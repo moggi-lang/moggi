@@ -1,0 +1,7 @@
+tests/semantics/Bad-Unimported-Type-Constructor.mog:4:8: type error: unknown type constructor `Int`
+
+Did you mean this?
+    List
+
+  4 | bad :: Int -> Int
+    |        ^^^

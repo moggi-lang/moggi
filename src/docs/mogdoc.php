@@ -115,6 +115,23 @@ function renderModulePage(string $moduleName, array $entities, array $linkTarget
         $heads[] = $entity;
     }
 
+    // An instance is declared with its class, and the type it is an instance for
+    // may live in another module: `instance Eq Bool` is `Data.Eq`'s to declare
+    // and `Data.Bool`'s to show. Every type head carries the instances whose head
+    // is that type, wherever they were declared.
+    foreach ($heads as $head) {
+        foreach ($index->all as $entity) {
+            if (($entity->declKind ?? '') !== 'instance'
+                || $entity->parentName !== $head->name
+                || $entity->module === $moduleName
+            ) {
+                continue;
+            }
+
+            $childrenByParent[$head->name][] = $entity;
+        }
+    }
+
     $currentSection = null;
     foreach ($heads as $entity) {
         if ($entity->section !== null && $entity->section !== $currentSection) {

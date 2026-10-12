@@ -1,10 +1,11 @@
-{-# LANGUAGE NoImplicitPrelude #-}
 module Data.Time.Clock.PHP
   ( currentTimeSeconds
   , getMonotonicNanos
   ) where
 
 import Data.Bool
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
 
 foreign php function rawTime "time" :: IO Int
 foreign php function rawHrtime "hrtime" :: Bool -> IO Int

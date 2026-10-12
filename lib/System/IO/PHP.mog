@@ -22,6 +22,7 @@ module System.IO.PHP
   , print
   ) where
 
+import Moggi.Internal.Base
 import Text.Show
 import Control.Exception (catch)
 import Moggi.IO.Exception
@@ -38,6 +39,7 @@ import Data.Integer (integerFromInt)
 import Data.Maybe
 import Data.Semigroup
 import Data.String
+import Moggi.Internal.Prim
 
 foreign php type StatArray "array"
 

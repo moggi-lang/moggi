@@ -66,6 +66,7 @@ import Data.Int
 import Data.Integer
 import Data.Maybe (Maybe)
 import Data.Ord
+import Moggi.Internal.Base
 import Text.Show
 import Text.Read
 import System.IO.Base (IO, FilePath)

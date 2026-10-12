@@ -383,7 +383,18 @@ function cachedModuleHeader(string $path): array
     return $header;
 }
 
-/** @return array{0: list<string>, 1: string} */
+/**
+ * The closure of one file: the standard library it compiles against, the workspace
+ * modules around it, and everything they import.
+ *
+ * A workspace module that shares its name with a library module is refused when the
+ * walk reaches that name ({@see refuseAmbiguousModule}) rather than replaced in the
+ * index: the name resolves to one file, and which one must follow from the name. The
+ * file being compiled is not reached by a name, though -- the caller named it -- so
+ * the entry keeps its own name whatever else offers it.
+ *
+ * @return array{0: list<string>, 1: string}
+ */
 function moduleFileClosure(string $path): array
 {
     $realPath = resolvePath($path);
@@ -392,17 +403,27 @@ function moduleFileClosure(string $path): array
     }
 
     $byModule = [...syntheticCompilerModuleIndex()];
+    $duplicates = [];
 
     $stdlibRoot = locateStdlibRoot($path);
     if ($stdlibRoot !== null) {
         warnIfStdlibAutoDiscovered($path, $stdlibRoot);
-        $byModule = [...$byModule, ...stdlibModuleIndex($stdlibRoot)];
+        [$stdlibPaths, $stdlibDuplicates] = stdlibModuleScan($stdlibRoot);
+        $byModule = [...$byModule, ...$stdlibPaths];
+        $duplicates = $stdlibDuplicates;
     }
 
     if (!isStandaloneWorkspaceTest($path)) {
         $localRoot = findBoundedModuleRoot($path);
         if ($localRoot !== null) {
-            $byModule = [...$byModule, ...moduleIndexFromPaths(findMogFilesUnder($localRoot))];
+            foreach (moduleIndexFromPaths(findMogFilesUnder($localRoot)) as $localName => $localPath) {
+                $existing = $byModule[$localName] ?? null;
+                if ($existing === null || canonicalPath($existing) === canonicalPath($localPath)) {
+                    $byModule[$localName] = $localPath;
+                    continue;
+                }
+                $duplicates[$localName][] = $localPath;
+            }
         }
     }
 
@@ -417,7 +438,13 @@ function moduleFileClosure(string $path): array
         );
     }
 
+    // The file the caller named is the module being compiled. A sibling of the same
+    // name (another program under the same root) is not an import of it, so the name
+    // has one meaning here and neither is a clash to refuse.
+    unset($duplicates[$startModule]);
     $byModule[$startModule] = $realPath;
+
+    $implOwners = backendImplOwners($byModule);
 
     $needed = [];
     $queue = [$startModule];
@@ -427,6 +454,14 @@ function moduleFileClosure(string $path): array
         $moduleName = $queue[$queueHead++];
         if (isset($needed[$moduleName])) {
             continue;
+        }
+
+        if (isset($duplicates[$moduleName])) {
+            refuseAmbiguousModule(
+                $moduleName,
+                [$byModule[$moduleName], ...$duplicates[$moduleName]],
+                importSiteAt($enqueuedBy[$moduleName] ?? null, $byModule[$moduleName]),
+            );
         }
 
         $modulePath = $byModule[$moduleName] ?? null;
@@ -473,6 +508,17 @@ function moduleFileClosure(string $path): array
             $header['language'] ?? [],
         ) as $import) {
             $importName = Ast\moduleName($import->path);
+            $owner = $implOwners[$importName] ?? null;
+            if ($owner !== null && !isset($implOwners[$moduleName])) {
+                throw backendImplImportError(
+                    $importName,
+                    $owner,
+                    $modulePath,
+                    $header['__source'] ?? '',
+                    $import,
+                );
+            }
+
             if (!isset($enqueuedBy[$importName]) && $importName !== $startModule) {
                 $enqueuedBy[$importName] = [
                     'module' => $moduleName,
@@ -649,40 +695,129 @@ function commonPathPrefix(array $paths): string
 }
 
 /**
- * The merged module index across library roots, refusing a module that two roots
- * both offer.
+ * The merged module index across library roots, keeping the names more than one
+ * root offers.
  *
- * A name offered by two different roots is ambiguous — the compiler cannot know
- * which the author meant — so the refusal is located and names the module and
- * both roots. Synthetic compiler modules (`Prim`, `IO`) live off disk, so a root
- * that ships a module under one of those names owns it.
+ * A name two roots both offer is not a fault in itself: an installed tree can
+ * carry two packages that each ship a module called `A`, and a program that never
+ * imports `A` is unaffected. Which file the name means is a question only a
+ * program reaches, so the clash is recorded here and refused there
+ * ({@see refuseAmbiguousModule}).
+ *
+ * The first root wins the index entry, which is what a name only one root offers
+ * needs; a name two roots offer is never resolved from this index alone. A root
+ * listed twice, or a root nested in another, offers the same file and so offers
+ * nothing twice.
  *
  * @param list<string> $libDirs
- * @return array<string, string> module name => source path
+ * @return array{0: array<string, string>, 1: array<string, list<string>>}
+ *   the module name => source path table, then the name => other paths that offer
+ *   it table in root order
  */
-function libraryModuleIndex(array $libDirs): array
+function libraryModuleScan(array $libDirs): array
 {
-    $index = [];
-    $owner = [];
+    $paths = [];
+    $duplicates = [];
     foreach ($libDirs as $dir) {
         foreach (moduleIndexFromPaths(findMogFilesUnder($dir)) as $moduleName => $path) {
-            $previous = $owner[$moduleName] ?? null;
-            if ($previous !== null && canonicalPath($previous) !== canonicalPath($dir)) {
-                $header = cachedModuleHeader($path);
-                throw new TypeError(
-                    "duplicate module `{$moduleName}` offered by two library roots ("
-                        . canonicalSeparators($previous) . ' and ' . canonicalSeparators($dir) . ')',
-                    $path,
-                    (string) ($header['__source'] ?? ''),
-                    ...moduleHeaderPoint($header),
-                );
+            $existing = $paths[$moduleName] ?? null;
+            if ($existing === null) {
+                $paths[$moduleName] = $path;
+                continue;
             }
-            $index[$moduleName] = $path;
-            $owner[$moduleName] = $dir;
+
+            if (canonicalPath($existing) !== canonicalPath($path)) {
+                $duplicates[$moduleName][] = $path;
+            }
         }
     }
 
-    return $index;
+    return [$paths, $duplicates];
+}
+
+/**
+ * Refuse a module name the program reaches that more than one root offers.
+ *
+ * The name has to mean one file, and no rule can pick the file for the author: a
+ * project module that stood in for a library module of its name would change what
+ * every import of that name means, silently, and so would the first of two roots
+ * in an installed tree. The list is every file the name could mean, so the one to
+ * rename is in the message, and the location is the import that reached the name
+ * -- or the module itself when the build compiles it and no import did.
+ *
+ * `Prelude` gets its own sentence: the implicit import resolves by name, so a
+ * project module of that name would decide what every module in the program gets
+ * by default.
+ *
+ * @param list<string> $candidates every file the name could resolve to
+ * @param array{path: string, source: string, line: int, col: int, endCol: int} $at
+ */
+function refuseAmbiguousModule(string $moduleName, array $candidates, array $at): never
+{
+    $roots = \array_map(static fn (string $path): string => canonicalSeparators($path), $candidates);
+    $last = \array_pop($roots);
+    $listed = $roots === [] ? $last : \implode(', ', $roots) . ' and ' . $last;
+    $count = \count($candidates) === 2 ? 'two roots' : 'several roots';
+
+    $hint = $moduleName === 'Prelude'
+        ? "\n\n`Prelude` is the standard library's module, and the implicit `import Prelude` has to find "
+            . "it there: a project's own prelude belongs under another name, imported explicitly with "
+            . '`NoImplicitPrelude`'
+        : '';
+
+    throw new TypeError(
+        "module `{$moduleName}` is offered by {$count} ({$listed})"
+            . "\n\na module name resolves to one file: rename one of them"
+            . $hint,
+        $at['path'],
+        $at['source'],
+        $at['line'],
+        $at['col'],
+        $at['endCol'],
+    );
+}
+
+/**
+ * The location of a module's own header, for a refusal that no import led to.
+ *
+ * @param array<string, mixed> $header
+ * @return array{path: string, source: string, line: int, col: int, endCol: int}
+ */
+function moduleHeaderAt(string $path, array $header): array
+{
+    [$line, $col, $endCol] = moduleHeaderPoint($header);
+
+    return [
+        'path' => $path,
+        'source' => (string) ($header['__source'] ?? ''),
+        'line' => $line,
+        'col' => $col,
+        'endCol' => $endCol,
+    ];
+}
+
+/**
+ * The import that reached a module, or the module's own header when it was an entry
+ * (the build compiles it, so no import led to it).
+ *
+ * @param ?array{module: string, path: string, line: int, col: int, endCol?: int} $origin
+ * @return array{path: string, source: string, line: int, col: int, endCol: int}
+ */
+function importSiteAt(?array $origin, string $fallbackPath): array
+{
+    if ($origin === null) {
+        return moduleHeaderAt($fallbackPath, cachedModuleHeader($fallbackPath));
+    }
+
+    $read = @file_get_contents($origin['path']);
+
+    return [
+        'path' => $origin['path'],
+        'source' => $read === false ? '' : $read,
+        'line' => (int) $origin['line'],
+        'col' => (int) $origin['col'],
+        'endCol' => (int) ($origin['endCol'] ?? $origin['col']),
+    ];
 }
 
 /**
@@ -701,9 +836,10 @@ function libraryModuleIndex(array $libDirs): array
  * nothing imports is not in a program's project, and adding it would report a duplicate for
  * a module that declares its own (`tests/lsp/UnusedInstanceHead.mog` does exactly that).
  *
- * A file already in `$files` keeps its place: a workspace module shadowing a library module
- * of the same name is the one the project carries, and a project may not hold two modules
- * of one name.
+ * A stdlib module the workspace also provides is refused ({@see refuseModuleShadowing}): the name
+ * resolves to one of the two, and which one is exactly what a checker must not have to guess.
+ * The same file reached from both sides (the workspace *is* the library root) is one module, not
+ * a collision.
  *
  * @param list<string> $files
  * @return list<string>
@@ -730,7 +866,7 @@ function stdlibSourcesMissingFrom(array $files, ?string $stdlibDir): array
         $header = cachedModuleHeader($file);
         $module = $header['module'] ?? null;
         if (\is_string($module)) {
-            $have[$module] = true;
+            $have[$module] = $file;
         }
     }
 
@@ -738,9 +874,23 @@ function stdlibSourcesMissingFrom(array $files, ?string $stdlibDir): array
     foreach ($closure as $file) {
         $header = cachedModuleHeader($file);
         $module = $header['module'] ?? null;
-        if (\is_string($module) && !isset($have[$module])) {
-            $missing[] = $file;
+        if (!\is_string($module)) {
+            continue;
         }
+
+        $provider = $have[$module] ?? null;
+        if ($provider !== null) {
+            if (canonicalPath($provider) !== canonicalPath($file)) {
+                refuseAmbiguousModule(
+                    $module,
+                    [$provider, $file],
+                    moduleHeaderAt($provider, cachedModuleHeader($provider)),
+                );
+            }
+            continue;
+        }
+
+        $missing[] = $file;
     }
 
     return $missing;
@@ -756,9 +906,11 @@ function stdlibSourcesMissingFrom(array $files, ?string $stdlibDir): array
  * sources needed to emit a self-contained bundle: the user's own modules plus
  * every reachable library module.
  *
- * A module offered by two different `--lib` roots is refused by name and roots
- * (`libraryModuleIndex`); the input directory's own modules win over a library of
- * the same name, which is how a project shadows a dependency.
+ * A name two roots offer is refused when the program reaches it, not because the
+ * roots both exist ({@see libraryModuleScan}, {@see refuseAmbiguousModule}), and a
+ * module the build itself compiles counts as reached: the program would carry two
+ * modules of one name, and which one an import meant would depend on the closure's
+ * insertion order.
  *
  * @param list<string> $inputFiles project `.mog` files (roots to keep)
  * @param list<string> $libDirs    additional module search roots
@@ -766,7 +918,8 @@ function stdlibSourcesMissingFrom(array $files, ?string $stdlibDir): array
  */
 function projectSourceClosure(array $inputFiles, array $libDirs): array
 {
-    $byModule = [...syntheticCompilerModuleIndex(), ...libraryModuleIndex($libDirs)];
+    [$libraryPaths, $duplicates] = libraryModuleScan($libDirs);
+    $byModule = [...syntheticCompilerModuleIndex(), ...$libraryPaths];
 
     $entryModules = [];
     foreach ($inputFiles as $path) {
@@ -790,6 +943,18 @@ function projectSourceClosure(array $inputFiles, array $libDirs): array
             );
         }
 
+        $libraryPath = $byModule[$moduleName] ?? null;
+        if ($libraryPath !== null
+            && !isSyntheticCompilerPath($libraryPath)
+            && canonicalPath($libraryPath) !== canonicalPath($real)
+        ) {
+            refuseAmbiguousModule(
+                $moduleName,
+                [$real, $libraryPath, ...($duplicates[$moduleName] ?? [])],
+                moduleHeaderAt($real, $header),
+            );
+        }
+
         $byModule[$moduleName] = $real;
         $entryModules[$moduleName] = true;
     }
@@ -800,7 +965,7 @@ function projectSourceClosure(array $inputFiles, array $libDirs): array
 
     $primaryPath = $byModule[array_key_first($entryModules)];
 
-    return closureFromModuleIndex($entryModules, $byModule, $primaryPath);
+    return closureFromModuleIndex($entryModules, $byModule, $primaryPath, $duplicates);
 }
 
 /**
@@ -811,12 +976,24 @@ function projectSourceClosure(array $inputFiles, array $libDirs): array
  * backend maps (and the reverse facade lookup), and reports unknown imports with
  * a source-located "did you mean" hint.
  *
+ * A name `$duplicates` records as offered by more than one root is refused as soon
+ * as the walk reaches it ({@see refuseAmbiguousModule}): a name no import reaches
+ * stays unimported, which is what lets an installed tree carry two packages with a
+ * module of one name.
+ *
  * @param array<string, bool>   $entryModules module name => true (roots, already in $byModule)
  * @param array<string, string> $byModule     module name => source path
+ * @param array<string, list<string>> $duplicates module name => the other paths offering it
  * @return array{0: list<string>, 1: string} [closureFiles, commonRoot]
  */
-function closureFromModuleIndex(array $entryModules, array $byModule, string $primaryPath): array
-{
+function closureFromModuleIndex(
+    array $entryModules,
+    array $byModule,
+    string $primaryPath,
+    array $duplicates = [],
+): array {
+    $implOwners = backendImplOwners($byModule);
+
     $needed = [];
     $queue = \array_keys($entryModules);
     $enqueuedBy = [];
@@ -826,6 +1003,14 @@ function closureFromModuleIndex(array $entryModules, array $byModule, string $pr
         $moduleName = $queue[$queueHead++];
         if (isset($needed[$moduleName])) {
             continue;
+        }
+
+        if (isset($duplicates[$moduleName])) {
+            refuseAmbiguousModule(
+                $moduleName,
+                [$byModule[$moduleName], ...$duplicates[$moduleName]],
+                importSiteAt($enqueuedBy[$moduleName] ?? null, $byModule[$moduleName]),
+            );
         }
 
         $modulePath = $byModule[$moduleName] ?? null;
@@ -869,6 +1054,17 @@ function closureFromModuleIndex(array $entryModules, array $byModule, string $pr
             $header['language'] ?? [],
         ) as $import) {
             $importName = Ast\moduleName($import->path);
+            $owner = $implOwners[$importName] ?? null;
+            if ($owner !== null && !isset($implOwners[$moduleName])) {
+                throw backendImplImportError(
+                    $importName,
+                    $owner,
+                    $modulePath,
+                    $header['__source'] ?? '',
+                    $import,
+                );
+            }
+
             if (!isset($enqueuedBy[$importName]) && !isset($entryModules[$importName])) {
                 $enqueuedBy[$importName] = [
                     'module' => $moduleName,

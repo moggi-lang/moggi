@@ -2,7 +2,7 @@
 
 namespace Main;
 
-const __MOGGI_MAP = [[13 => ['Main.unitVal', 'tests/backend/codegen/Core-Literals.mog', 1, 11], 17 => ['Main.pair', 'tests/backend/codegen/Core-Literals.mog', 3, 8]], ['Main\\unitVal' => ['Main.unitVal', 'tests/backend/codegen/Core-Literals.mog', 1, 11], 'Main\\pair' => ['Main.pair', 'tests/backend/codegen/Core-Literals.mog', 3, 8], 'Main\\items' => ['Main.items', 'tests/backend/codegen/Core-Literals.mog', 5, 9], 'Main\\__op_plus' => ['Main.+', 'tests/backend/codegen/Core-Literals.mog', 8, 9]]];
+const __MOGGI_MAP = [[13 => ['Main.unitVal', 'tests/backend/codegen/Core-Literals.mog', 1, 11], 17 => ['Main.pair', 'tests/backend/codegen/Core-Literals.mog', 3, 8]], ['Main\\unitVal' => ['Main.unitVal', 'tests/backend/codegen/Core-Literals.mog', 1, 11], 'Main\\pair' => ['Main.pair', 'tests/backend/codegen/Core-Literals.mog', 3, 8], 'Main\\items' => ['Main.items', 'tests/backend/codegen/Core-Literals.mog', 5, 9], 'Main\\__fn_2b' => ['Main.+', 'tests/backend/codegen/Core-Literals.mog', 8, 9]]];
 
 function moggi_u64_add(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao + $bo; $c = ($lo >> 32) & 0xffffffff; $hi = ($ah + $bh + $c) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }
 function moggi_u64_sub(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao - $bo; $bw = $lo < 0 ? 1 : 0; $hi = ($ah - $bh - $bw) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }
@@ -21,6 +21,6 @@ function items() {
     return [1, 2, 3];
 }
 
-function __op_plus($x, $y) {
+function __fn_2b($x, $y) {
     return (\is_int($__m64 = $x + $y) ? $__m64 : moggi_u64_add($x, $y));
 }

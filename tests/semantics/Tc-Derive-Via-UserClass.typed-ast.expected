@@ -2,13 +2,13 @@ program
   class MyEq a
     method === :: a -> a -> Bool
     method /== :: a -> a -> Bool
-  function __ev_MyEq_Int__3d_3d_3d :: Int -> Int -> Bool
+  function __ev_MyEq_Int_Op3d3d3d :: Int -> Int -> Bool
     pat_var x
     pat_var y
     intrinsic intEq#
       variable x
       variable y
-  function __ev_MyEq_Int__2f_3d_3d :: Int -> Int -> Bool
+  function __ev_MyEq_Int_Op2f3d3d :: Int -> Int -> Bool
     pat_var x
     pat_var y
     intrinsic intNe#
@@ -18,7 +18,7 @@ program
     constructor MyInt
       field  :: Int
     deriving (via (Int) MyEq)
-  function __ev_MyEq_MyInt__3d_3d_3d :: __Dict_MyEq -> MyInt -> MyInt -> Bool
+  function __ev_MyEq_MyInt_Op3d3d3d :: __Dict_MyEq -> MyInt -> MyInt -> Bool
     pat_var __ev_MyEq
     pat_con MyInt
       pat_var __v0
@@ -29,7 +29,7 @@ program
         evidence_method MyEq.=== evidence=__ev_MyEq nullary=0
         variable __v0
       variable __v1
-  function __ev_MyEq_MyInt__2f_3d_3d :: __Dict_MyEq -> MyInt -> MyInt -> Bool
+  function __ev_MyEq_MyInt_Op2f3d3d :: __Dict_MyEq -> MyInt -> MyInt -> Bool
     pat_var __ev_MyEq
     pat_con MyInt
       pat_var __v0

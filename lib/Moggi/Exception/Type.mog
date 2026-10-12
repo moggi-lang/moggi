@@ -17,6 +17,7 @@ module Moggi.Exception.Type
 import Data.Eq
 import Data.Maybe
 import Data.Ord
+import Moggi.Internal.Base
 import Text.Show
 import Moggi.Internal.Prim
 

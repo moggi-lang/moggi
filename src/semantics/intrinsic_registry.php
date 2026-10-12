@@ -365,6 +365,48 @@ function primTypeTable(): array
 }
 
 /**
+ * The public function names that stand for a primop.
+ *
+ * `(:)` is the list constructor as a function. Its pattern form (`x : xs`) is a
+ * primitive branch of the language; this is the name the same operation takes
+ * where a value is wanted. It is the machine's for the same reason the list
+ * type is: the name has to sit below every module that conses, and `Data.List`
+ * sits above `Control.Monad`, `Data.Foldable` and `Text.Show`.
+ *
+ * @return array<string, string> public name → primop id
+ */
+function publicPrimopAliases(): array
+{
+    static $table = null;
+
+    return $table ??= [':' => 'listCons#'];
+}
+
+/**
+ * The primop a public operator name stands for, or null when the name is not
+ * one: `(:)` is `listCons#`.
+ *
+ * A name that is an alias has no declaration of its own -- the machine is its
+ * only home -- so the call site means the primop wherever the name appears.
+ */
+function primopForPublicOperator(string $name): ?string
+{
+    return publicPrimopAliases()[$name] ?? null;
+}
+
+/**
+ * The fixities of the machine's public names.
+ *
+ * @return array<string, array{assoc: string, prec: int}>
+ */
+function publicFixities(): array
+{
+    static $table = null;
+
+    return $table ??= [':' => ['assoc' => 'infixr', 'prec' => 5]];
+}
+
+/**
  * Primitive type constructors owned by Moggi.Internal.IO.
  *
  * @return array<string, array{params: list<string>, kindArity: int}>

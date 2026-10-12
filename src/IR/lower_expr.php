@@ -5,6 +5,7 @@ namespace Moggi\IR;
 use Moggi\Semantics\TypeExpr;
 use Moggi\Syntax\Ast;
 
+use function Moggi\Semantics\IntrinsicRegistry\primopForPublicOperator;
 use function Moggi\Semantics\IntrinsicRegistry\schemeArity;
 use function Moggi\Semantics\IntrinsicRegistry\typeSchemes;
 use function Moggi\Semantics\IoBoundary\isIoType;
@@ -32,7 +33,14 @@ function lowerExpr(Ast\AstNode $expr, LowerCtx $ctx): Operand
         Ast\ConstructorRef::class => new FnRef(
             $ctx->constructorRenames[$expr->name] ?? $expr->name,
         ),
-        Ast\OperatorRef::class => new FnRef($expr->name),
+        Ast\OperatorRef::class => (static function () use ($expr, $ctx): Operand {
+            $primop = primopForPublicOperator($expr->name);
+            if ($primop !== null) {
+                return lowerIntrinsicValue($primop, [], $expr, $ctx);
+            }
+
+            return new FnRef($expr->name);
+        })(),
         Ast\Infix::class => lowerInfix($expr, $ctx),
         Ast\Apply::class => lowerApplyFromExpr($expr, $ctx),
         Ast\Tuple::class => lowerTuple($expr->elements, $ctx),

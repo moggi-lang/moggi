@@ -24,6 +24,7 @@ import Moggi.Err
 import Data.Int
 import Data.Num
 import Data.Ord
+import Moggi.Internal.Base
 import Moggi.Internal.Prim
 
 -- Requires PHP intl. All bodies are Moggi + foreign IntlChar / intval.

@@ -7,6 +7,7 @@ while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
 }
 
 require $root . '/src/compiler.php';
+require $root . '/tests/suite/support/workspace.php';
 
 use Moggi\Docs;
 
@@ -318,7 +319,7 @@ assertTrue(str_contains($ordHtml, 'comparing :: Ord b =&gt;'), 'Ord comparing sh
 assertTrue(!str_contains($ordHtml, '__Dict_'), 'Ord page hides compiler dict types');
 assertTrue(substr_count($ordHtml, '# Source</a>') >= 5, 'Ord operations and methods show source links');
 assertTrue(str_contains($ordHtml, 'id="v-Data.Ord.comparing"'), 'Ord comparing is indexed');
-assertTrue(str_contains($ordHtml, 'src/Data-Ord.mog.html#L55'), 'Ord comparing links to source line');
+assertTrue(str_contains($ordHtml, 'src/Data-Ord.mog.html#L57'), 'Ord comparing links to source line');
 
 $dictScheme = new \Moggi\Semantics\TypeExpr\Scheme(
     new \Moggi\Semantics\TypeExpr\TArrow(
@@ -811,10 +812,12 @@ assertEq('Indexed instance head doc.', $indexedInstance?->doc, 'buildIndex index
 $checkInstanceDocSource = <<<'MOG'
 module Docs.CheckInstanceDoc where
 
+data T = T
+
 class C a where
   m :: a -> a
 
-instance C Int where
+instance C T where
   -- | Preserved through typecheck.
   m x = x
 MOG;
@@ -855,6 +858,9 @@ $cacheFixtureDir = $cacheWorkDir . '/fixture';
 $cacheFixtureMog = $cacheFixtureDir . '/Docs/Fixture.mog';
 copy($fixture . '/Docs/Fixture.mog', $cacheFixtureMog);
 $prevCacheDir = getenv('MOGGI_CACHE_DIR') ?: '';
+// Indexing a fixture compiles the modules it reaches; the library arrives from the run's cache
+// rather than being elaborated again in this scratch cache (seeded before the switch).
+seedCacheDir($cacheWorkDir);
 putenv('MOGGI_CACHE_DIR=' . $cacheWorkDir);
 $cachePath = Docs\indexCachePath($cacheFixtureDir, []);
 Docs\loadOrBuildIndex($cacheFixtureDir, [], true);

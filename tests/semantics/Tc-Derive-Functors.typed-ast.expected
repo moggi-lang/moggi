@@ -465,7 +465,7 @@ program
           variable __ev_Functor
         variable __ev_Applicative_1
       variable t
-  function __ev_Eq_Box_eq :: __Dict_Eq -> Box t799 -> Box t799 -> Bool
+  function __ev_Eq_Box_Op3d3d :: __Dict_Eq -> Box t799 -> Box t799 -> Bool
     pat_var __ev_Eq
     pat_var __l
     pat_var __r
@@ -487,7 +487,7 @@ program
           alt
             pat_wild _
             constructor_ref False
-  function __ev_Eq_Box_ne :: __Dict_Eq -> Box t799 -> Box t799 -> Bool
+  function __ev_Eq_Box_Op2f3d :: __Dict_Eq -> Box t799 -> Box t799 -> Bool
     pat_var __ev_Eq
     pat_var __l
     pat_var __r
@@ -2514,7 +2514,7 @@ program
     constructor Nest
       field  :: Maybe Maybe a
     deriving (Eq, Show, Functor, Foldable)
-  function __ev_Eq_Nest_eq :: __Dict_Eq -> Nest t4396 -> Nest t4396 -> Bool
+  function __ev_Eq_Nest_Op3d3d :: __Dict_Eq -> Nest t4396 -> Nest t4396 -> Bool
     pat_var __ev_Eq
     pat_var __l
     pat_var __r
@@ -2534,7 +2534,7 @@ program
           alt
             pat_wild _
             constructor_ref False
-  function __ev_Eq_Nest_ne :: __Dict_Eq -> Nest t4396 -> Nest t4396 -> Bool
+  function __ev_Eq_Nest_Op2f3d :: __Dict_Eq -> Nest t4396 -> Nest t4396 -> Bool
     pat_var __ev_Eq
     pat_var __l
     pat_var __r
@@ -3039,7 +3039,7 @@ program
       field  :: a
       field  :: b
     deriving (Eq, Ord, Bounded)
-  function __ev_Eq_BPair_eq :: __Dict_Eq -> __Dict_Eq -> BPair t4988 t4989 -> BPair t4988 t4989 -> Bool
+  function __ev_Eq_BPair_Op3d3d :: __Dict_Eq -> __Dict_Eq -> BPair t4988 t4989 -> BPair t4988 t4989 -> Bool
     pat_var __ev_Eq
     pat_var __ev_Eq_1
     pat_var __l
@@ -3070,7 +3070,7 @@ program
           alt
             pat_wild _
             constructor_ref False
-  function __ev_Eq_BPair_ne :: __Dict_Eq -> __Dict_Eq -> BPair t4988 t4989 -> BPair t4988 t4989 -> Bool
+  function __ev_Eq_BPair_Op2f3d :: __Dict_Eq -> __Dict_Eq -> BPair t4988 t4989 -> BPair t4988 t4989 -> Bool
     pat_var __ev_Eq
     pat_var __ev_Eq_1
     pat_var __l

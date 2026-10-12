@@ -1,10 +1,10 @@
-{-# LANGUAGE NoImplicitPrelude #-}
 module System.Exit.PHP
   ( exitWithCode
   ) where
 
 import Control.Applicative
 import Control.Monad
+import Moggi.Internal.Base
 import System.IO.Base (IO)
 import Moggi.Err
 import Data.Int

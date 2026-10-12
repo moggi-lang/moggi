@@ -6,6 +6,7 @@ module Data.Int.PHP
   , intMaxBound
   ) where
 
+import Moggi.Internal.Base
 import Moggi.Internal.Prim
 
 foreign php function rawShowInt "strval" :: Int -> String

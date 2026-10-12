@@ -1,6 +1,6 @@
 module Bad.IO.Do.Without.System
 
-import Prelude ()
+import Prelude (IO)
 
 main :: IO ()
 main = do
