@@ -1,8 +1,8 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 -- |
--- Unsigned integers at several fixed widths: @'Word'@ is as wide as the host
--- word, and @Word8@/@Word16@/@Word32@/@Word64@ are 8, 16, 32 and 64 bits wide on
--- every backend. Nothing here has a sign, so the range of a width starts at
+-- Unsigned integers at several fixed widths: @'Word'@ is 64 bits wide, on every
+-- backend, and @Word8@/@Word16@/@Word32@/@Word64@ are 8, 16, 32 and 64 bits wide
+-- on every backend. Nothing here has a sign, so the range of a width starts at
 -- zero and ends at all-ones: @'maxBound' :: Word8@ is 255, and arithmetic wraps
 -- around within the width rather than being an error.
 --
@@ -46,22 +46,8 @@ import Text.Show
 import Data.Tuple
 import Moggi.Err
 import Moggi.Exception
+import Moggi.Internal.Base
 import Moggi.Internal.Prim
-
--- | A 'Word' is an unsigned integral type, with the same size as 'Int'.
-type Word = Word#
-
--- | 8-bit unsigned integer type
-type Word8 = Word8#
-
--- | 16-bit unsigned integer type
-type Word16 = Word16#
-
--- | 32-bit unsigned integer type
-type Word32 = Word32#
-
--- | 64-bit unsigned integer type
-type Word64 = Word64#
 
 wordZero = wordFromInt# 0
 wordOne = wordFromInt# 1
@@ -248,9 +234,6 @@ instance Enum Word64 where
     GT -> enumFromEnumError "Word64" n
     _ -> word64ToInt# n
 
--- `Num Word`, like `Num Int`, lives with the class in `Data.Num`: the library's
--- low-level modules do machine-int arithmetic below this one. The fixed-width
--- instances below stay here, as they do in base's `GHC.Internal.Word`.
 instance Num Word8 where
   (+) a b = word8Add# a b
   (-) a b = word8Sub# a b

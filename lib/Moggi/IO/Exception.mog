@@ -27,6 +27,7 @@ import Data.Eq
 import Data.Maybe
 import Data.Ord
 import Data.Semigroup
+import Moggi.Internal.Base
 import Text.Show
 import Data.String
 import Moggi.Exception.Type

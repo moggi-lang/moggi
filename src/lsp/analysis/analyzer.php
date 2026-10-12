@@ -98,9 +98,6 @@ function analyze(string $uri, string $content, array $libDirs = []): AnalysisRes
 
         try {
             [$files, $root] = moduleFileClosureCached($filename);
-            // The library's instances belong to the check even when this file does not import
-            // the module that declares them -- `Ord Int` in `Data.Either`'s `Show` instance is
-            // the standing example -- so the check carries the library's modules.
             $files = [...$files, ...stdlibSourcesMissingFrom($files, bundledStdlibLibPath())];
             $prepared = prepareProjectCached($files, $root, $parsedProgram->module ?? null);
             if ($parsedProgram->module !== null && isset($prepared->checked[$parsedProgram->module])) {
@@ -454,7 +451,7 @@ function findNodeChainAt($ast, int $line, int $col, array &$seen = []): array
         if (is_object($prop)) {
             $child = findNodeChainAt($prop, $line, $col, $seen);
             if ($child !== []) {
-                $bestChildChain = $child; // last match wins (same as findNodeAt)
+                $bestChildChain = $child;
             }
         } elseif (is_array($prop)) {
             foreach ($prop as $elem) {

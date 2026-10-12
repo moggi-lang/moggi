@@ -25,11 +25,18 @@ $assert = static function (bool $condition, string $message): void {
 $consumer = $root . '/tests/semantics/inferred-constrained-export/Consumer.mog';
 $work = createTempDir('moggi-cache-inferred-interface');
 try {
-    $dumpIr = static function (string $cacheDir) use ($consumer, $root): array {
+    // `$seed` puts the standard library into the directory and leaves every module of the fixture
+    // project out of it: the import boundary this test is about is still compiled cold. The third
+    // run takes an empty directory instead, so a library that lowers differently coming from entries
+    // than from source still shows up as a differing dump.
+    $dumpIr = static function (string $cacheDir, bool $seed = true) use ($consumer, $root): array {
         $env = \getenv();
         $env['MOGGI_CACHE_DIR'] = $cacheDir;
         // The module cache is what differs between the runs; keep everything else equal.
         unset($env['MOGGI_NO_CACHE']);
+        if ($seed) {
+            seedCacheDir($cacheDir);
+        }
 
         return runCompiledProcess([PHP_BINARY, $root . '/moggi.php', 'compile', $consumer, '--ir'], 60, $env, $root);
     };
@@ -37,7 +44,7 @@ try {
     $runs = [
         'first (cold)' => $dumpIr($work . '/cache-a'),
         'second (warm)' => $dumpIr($work . '/cache-a'),
-        'other cache dir (cold)' => $dumpIr($work . '/cache-b'),
+        'other cache dir (cold)' => $dumpIr($work . '/cache-b', false),
     ];
 
     foreach ($runs as $label => $result) {

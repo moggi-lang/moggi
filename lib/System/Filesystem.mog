@@ -49,7 +49,9 @@ module System.Filesystem
 import Data.ByteString (ByteString)
 import Data.Int
 import Data.Time.Clock
+import Moggi.Internal.Base
 import System.Filesystem.Path
+import Moggi.Internal.Prim
 
 readFile :: FilePath -> IO ByteString
 

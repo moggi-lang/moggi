@@ -25,6 +25,7 @@ import Data.Eq
 import Data.Int
 import Data.Num
 import Data.Ord
+import Moggi.Internal.Base
 import Moggi.Internal.Prim
 
 foreign dotnet function isControl "System.Char:IsControl" :: Char -> Bool

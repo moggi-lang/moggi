@@ -1,3 +1,4 @@
+{-# LANGUAGE NoImplicitPrelude #-}
 -- |
 -- The types the input/output operations pass around.
 --
@@ -17,6 +18,7 @@ module System.IO.Types
 import Data.Bool
 import Data.Eq
 import Data.Ord
+import Moggi.Internal.Base
 import Text.Show
 import Moggi.Internal.Prim
 

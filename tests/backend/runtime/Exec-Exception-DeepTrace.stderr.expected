@@ -1,5 +1,5 @@
 moggi: ErrorCall: deep
-  at Moggi.Err.error (lib/Moggi/Err.mog:7:13)
+  at Moggi.Err.error (lib/Moggi/Err.mog:8:13)
   at Main.descend (tests/backend/runtime/Exec-Exception-DeepTrace.mog:9:8)
   at Main.descend (tests/backend/runtime/Exec-Exception-DeepTrace.mog:10:8)
   at Main.descend (tests/backend/runtime/Exec-Exception-DeepTrace.mog:10:8)

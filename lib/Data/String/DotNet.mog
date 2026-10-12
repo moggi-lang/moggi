@@ -24,6 +24,7 @@ import Data.List qualified as L
 import Data.Num
 import Data.Ord
 import Data.Semigroup
+import Moggi.Internal.Base
 import Moggi.Internal.Prim
 
 -- Ordinary BCL FFI only (no Moggi.Rt.StringOps).

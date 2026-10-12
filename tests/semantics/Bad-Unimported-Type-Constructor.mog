@@ -1,0 +1,5 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- A type name the module never put in scope: `Int` is `Data.Int`'s declaration,
+-- and this module imports nothing, so the signature is a diagnostic.
+bad :: Int -> Int
+bad x = x

@@ -146,7 +146,8 @@ import Data.String qualified as S
 import Data.Tuple
 import Data.Word (Word8)
 import Moggi.Err
-import Moggi.Internal.Prim (bytesToString#, bytesFromString#, word8FromInt#, word8ToInt#)
+import Moggi.Internal.Base
+import Moggi.Internal.Prim ((:), bytesToString#, bytesFromString#, word8FromInt#, word8ToInt#)
 import System.Filesystem (readTextFile, writeTextFile, appendTextFile)
 import System.Filesystem.Path (FilePath)
 import System.IO qualified as IO

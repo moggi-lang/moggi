@@ -1,4 +1,3 @@
-{-# LANGUAGE NoImplicitPrelude #-}
 -- | A logically uninhabited data type, used to indicate that a given term should not exist.
 module Data.Void
   ( Void
@@ -8,6 +7,7 @@ module Data.Void
 
 import Data.Functor
 import Moggi.Err
+import Moggi.Internal.Base
 
 -- | Uninhabited data type
 data Void = Void

@@ -33,3 +33,4 @@ import Control.Exception.Base
 import Moggi.Exception
 import Moggi.Exception.Type
 import Moggi.IO.Exception
+import Moggi.Internal.Base

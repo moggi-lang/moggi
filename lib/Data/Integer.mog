@@ -64,10 +64,8 @@ import Data.Real
 import Text.Show
 import Moggi.Err
 import Moggi.Exception
+import Moggi.Internal.Base
 import Moggi.Internal.Prim
-
--- Arbitrary-precision integer.
-type Integer = Integer#
 
 integerAdd :: Integer -> Integer -> Integer
 integerSub :: Integer -> Integer -> Integer

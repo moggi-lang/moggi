@@ -44,12 +44,8 @@ import Data.Int
 import Data.Num
 import Data.Ord
 import Text.Show
+import Moggi.Internal.Base
 import Moggi.Internal.Prim
-
--- Char = Unicode scalar value (U+0000..U+10FFFF excluding surrogates).
--- Not a grapheme. Classification/case use the backend Unicode database.
--- Grapheme segmentation and normalization are separate APIs.
-type Char = Char#
 
 -- Zero-cost representation coercions (Char and Int are both backend ints).
 ord :: Char -> Int

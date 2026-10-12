@@ -1,0 +1,8 @@
+tests/semantics/bad-shadowed-prelude/lib/Prelude.mog:1:8: type error: module `Prelude` is offered by two roots (tests/semantics/bad-shadowed-prelude/lib/Prelude.mog and lib/Prelude.mog)
+
+a module name resolves to one file: rename one of them
+
+`Prelude` is the standard library's module, and the implicit `import Prelude` has to find it there: a project's own prelude belongs under another name, imported explicitly with `NoImplicitPrelude`
+
+  1 | module Prelude () where
+    |        ^^^^^^^

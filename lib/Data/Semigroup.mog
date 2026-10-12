@@ -14,6 +14,7 @@ import Data.Bounded
 import Data.Eq
 import Data.Functor
 import Data.Ord
+import Moggi.Internal.Base
 import Text.Show
 import Moggi.Internal.Prim
 

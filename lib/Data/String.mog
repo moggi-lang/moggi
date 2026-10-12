@@ -35,21 +35,13 @@ module Data.String
 import Data.Bool
 import Data.Char
 import Data.Eq
+import Data.Int
 import Data.Monoid
 import Data.Ord
 import Data.Semigroup
 import Text.Show
+import Moggi.Internal.Base
 import Moggi.Internal.Prim
-
--- | String is an opaque backend-native representation of a sequence of Char
--- (Unicode scalar values). The sequence model is semantic only: String does
--- not expose list operations or guarantee scalar indexing complexity.
--- Equality is scalar-sequence identity (no implicit normalization).
-type String = String#
-
--- The `Semigroup String` instance lives with the class, in `Data.Semigroup`:
--- the library's low-level modules (which sit below this one) build their error
--- messages with `<>` on `String`.
 
 -- | Construct a string from a single char.
 singleton :: Char -> String
@@ -162,13 +154,9 @@ showLitString cs = \s ->
         True -> showLitChar c (showString "\\&" (showLitString rest s))
         False -> showLitChar c (showLitString rest s)
 
-instance Eq String where
-  (==) a b = stringEq# a b
-  (/=) a b = stringNe# a b
-
-instance Ord String where
-  compare a b = stringCompare# a b
-
+-- `Eq String` and `Ord String` live with their classes -- in `Data.Eq` and
+-- `Data.Ord`: those modules are below every module that compares a `String`,
+-- and this one is not (its own machine modules do).
 instance Monoid String where
   mempty = ""
 

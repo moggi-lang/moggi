@@ -1,4 +1,3 @@
-{-# LANGUAGE NoImplicitPrelude #-}
 module System.Environment.JVM
   ( getArgs
   , getEnv
@@ -12,6 +11,7 @@ import Data.Bool
 import Data.Maybe
 import Data.String
 import Moggi.Err
+import Moggi.Internal.Base
 import System.IO.Base (IO)
 import Moggi.Internal.Prim
 

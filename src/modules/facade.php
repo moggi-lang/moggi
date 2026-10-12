@@ -16,6 +16,7 @@ use function Moggi\Semantics\Kinds\dataKind;
 use function Moggi\Semantics\Kinds\registerTypeKind;
 use function Moggi\Semantics\Types\registerData;
 use function Moggi\Semantics\Types\registerForeignType;
+use function Moggi\Semantics\Types\canonicalizePrimitiveTypes;
 use function Moggi\Semantics\Types\registerTypeSynonym;
 use function Moggi\Semantics\Types\typeToString;
 
@@ -51,7 +52,14 @@ function schemesAlphaEqual(Scheme $left, Scheme $right): bool
 {
     $mapping = [];
 
-    return typesAlphaEqual($left->type, $right->type, $mapping);
+    // The declared side spells the primitive types the way source does (`Int`,
+    // `String`); the inferred side carries the primitives themselves. Rewriting
+    // both first is what lets the two be compared at all.
+    return typesAlphaEqual(
+        canonicalizePrimitiveTypes($left->type),
+        canonicalizePrimitiveTypes($right->type),
+        $mapping,
+    );
 }
 
 function isFacadeProgram(Ast\Program $program): bool
@@ -247,6 +255,62 @@ function facadeModuleForImpl(array $units, string $implModuleName): ?string
     }
 
     return null;
+}
+
+/**
+ * The facade each backend implementation module belongs to, and the backend it
+ * implements.
+ *
+ * An implementation module is the `php`/`jvm`/`dotnet` half of its facade: the
+ * compiler merges it into the facade ({@see redirectFacadeOrigins}), so it is
+ * not a module a program may name. Only the `{-# BACKEND … #-}` pragma that
+ * selects it may mention it -- except from another implementation module, which
+ * reaches a sibling's own values the facade does not export
+ * (`System.Filesystem.DotNet` takes `Data.Time.Clock.DotNet`'s).
+ *
+ * @param array<string, string> $byModule module name => source path
+ * @return array<string, array{facade: string, backend: string}> impl module => owner
+ */
+function backendImplOwners(array $byModule): array
+{
+    $owners = [];
+    foreach ($byModule as $facadeName => $facadePath) {
+        if (isSyntheticCompilerPath($facadePath) || !\is_file($facadePath)) {
+            continue;
+        }
+
+        foreach (cachedModuleHeader($facadePath)['backendMap'] ?? [] as $backend => $impl) {
+            $owners[$impl] ??= ['facade' => $facadeName, 'backend' => $backend];
+        }
+    }
+
+    return $owners;
+}
+
+/**
+ * The diagnostic for an import that names a backend implementation module.
+ *
+ * @param array{facade: string, backend: string} $owner
+ */
+function backendImplImportError(
+    string $implName,
+    array $owner,
+    string $path,
+    string $source,
+    Ast\ImportDecl $import,
+): TypeError {
+    $error = new TypeError(
+        "module `{$implName}` is the `{$owner['backend']}` implementation of `{$owner['facade']}`: "
+            . "it is merged into that module, so import `{$owner['facade']}` instead",
+        $path,
+        $source,
+        $import->line,
+        $import->col,
+        $import->endCol,
+    );
+    $error->diagnosticCode = 'import/backend-impl';
+
+    return $error;
 }
 
 /**

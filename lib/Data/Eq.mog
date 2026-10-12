@@ -3,6 +3,8 @@ module Data.Eq
   ( Eq(..)
   ) where
 
+import Data.Bool
+import Moggi.Internal.Base
 import Moggi.Internal.Prim
 
 infix 4 ==, /=
@@ -27,3 +29,19 @@ class Eq a where
   (/=) x y = boolNot# (x == y)
   (==) x y = boolNot# (x /= y)
   {-# MINIMAL (==) | (/=) #-}
+
+instance Eq Bool where
+  (==) a b = boolEq# a b
+  (/=) a b = boolNe# a b
+
+-- | The machine scalars' instances live with the class: 'Int' and 'String'
+-- are the machine's (`Moggi.Internal.Base`), and the modules that compare them
+-- (`Data.Semigroup`'s `showsPrec` precedences, `Data.Maybe`, `Data.Tuple`) sit
+-- below `Data.Int` and `Data.String`.
+instance Eq Int where
+  (==) a b = intEq# a b
+  (/=) a b = intNe# a b
+
+instance Eq String where
+  (==) a b = stringEq# a b
+  (/=) a b = stringNe# a b

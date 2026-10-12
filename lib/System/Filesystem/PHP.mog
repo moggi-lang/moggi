@@ -27,6 +27,7 @@ module System.Filesystem.PHP
 import Control.Applicative hiding (empty)
 import Control.Exception (throwIO)
 import Control.Monad
+import Moggi.Internal.Base
 import System.IO.Base (IO)
 import Data.ByteString (ByteString)
 import Data.Bool
@@ -37,6 +38,7 @@ import Data.Time.Clock
 import Moggi.IO.Exception
 import Platform.PHP
 import System.Filesystem.Path
+import Moggi.Internal.Prim
 
 foreign php function readFileBytes "file_get_contents" :: String -> IO ByteString
 

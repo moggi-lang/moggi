@@ -134,7 +134,7 @@ function svcCompletion(AnalysisService $svc, string $uri, array $pos): array
                 $key = $decl->module . '::' . $decl->name;
                 $scoreBoost = isset($ranked[$key]) ? (int) (1000 - min(999, $ranked[$key] * 10)) : 50;
                 if ($nearCase && $decl->completionKind === 4) {
-                    $scoreBoost = max(0, $scoreBoost - 20); // constructors first near case/of
+                    $scoreBoost = max(0, $scoreBoost - 20);
                 }
                 $item = [
                     'label' => $decl->name,

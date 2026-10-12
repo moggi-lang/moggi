@@ -116,43 +116,26 @@ function instanceMethodIrName(string $className, Ast\TypeNode $head, string $met
 }
 
 /**
- * Identifier-safe suffix for a method name. Known operators get readable names;
- * any other operator is byte-encoded so distinct operators (`===` vs `/==`)
- * cannot both sanitize to the same underscores.
+ * Identifier-safe suffix for a method name.
+ *
+ * A class method is spelled either as a small identifier or as an operator
+ * (`parseClassMethodName`), so a spellable name is the suffix itself and every
+ * operator is byte-encoded behind an upper-case `Op` marker: `==` → `Op3d3d`.
+ *
+ * The marker is what keeps the two spellings apart. A small identifier never
+ * starts upper-case, so no method name can be spelled `Op<hex>`; whereas both
+ * shapes this replaced could be — the operator words gave `==` and a method
+ * named `eq` one symbol, and a per-character escape gives `==` and a method
+ * named `_3d_3d` one symbol, collapsing two methods of an instance onto a
+ * single definition.
  */
 function instanceMethodIrSuffix(string $methodName): string
 {
-    $known = match ($methodName) {
-        '==' => 'eq',
-        '/=' => 'ne',
-        '<>' => 'concat',
-        '<' => 'lt',
-        '<=' => 'lte',
-        '>' => 'gt',
-        '>=' => 'gte',
-        '&&' => 'and',
-        '||' => 'or',
-        '+' => 'plus',
-        '-' => 'minus',
-        '*' => 'mul',
-        '/' => 'div',
-        default => null,
-    };
-    if ($known !== null) {
-        return $known;
-    }
     if (isSafeName($methodName)) {
         return $methodName;
     }
 
-    $suffix = '';
-    foreach (str_split($methodName) as $char) {
-        $suffix .= preg_match('/[A-Za-z0-9]/', $char) === 1
-            ? $char
-            : '_' . dechex(ord($char));
-    }
-
-    return $suffix;
+    return 'Op' . bin2hex($methodName);
 }
 
 function canonicalTypeKey(Ast\TypeNode $type): string

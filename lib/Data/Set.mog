@@ -1,4 +1,3 @@
-{-# LANGUAGE NoImplicitPrelude #-}
 -- |
 -- A set of values, kept in a balanced tree ordered by the values themselves:
 -- membership and construction cost a logarithmic number of comparisons, and
@@ -41,6 +40,8 @@ import Data.Foldable hiding (null)
 import Data.List hiding (map, filter, null, singleton, union, insert, find)
 import Data.Ord
 import Moggi.Err
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
 
 data Set a = MkSet [a]
 

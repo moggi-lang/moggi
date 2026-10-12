@@ -5,9 +5,9 @@
   dotnet = Data.Int.DotNet
 #-}
 -- |
--- Signed integers available at several fixed widths: @'Int'@ is as wide as the
--- host word, and @Int8@/@Int16@/@Int32@/@Int64@ are 8, 16, 32 and 64 bits wide
--- on every backend. Each of the four is the same underlying machine integer
+-- Signed integers available at several fixed widths: @'Int'@ is 64 bits wide,
+-- on every backend, and @Int8@/@Int16@/@Int32@/@Int64@ are 8, 16, 32 and 64
+-- bits wide on every backend. Each of the four is the same underlying machine integer
 -- with a smaller stated range, so arithmetic that leaves that range keeps the
 -- low bits and is read back as a two's-complement value: a fixed width is where
 -- wrapping is the defined behaviour, not an error.
@@ -42,21 +42,12 @@ import Text.Show
 import Data.Tuple
 import Moggi.Err
 import Moggi.Exception
+import Moggi.Internal.Base
 import Moggi.Internal.Prim
 
-type Int = Int#
-type Int8 = Int8#
-type Int16 = Int16#
-type Int32 = Int32#
-type Int64 = Int64#
-
-instance Eq Int where
-  (==) a b = intEq# a b
-  (/=) a b = intNe# a b
-
-instance Ord Int where
-  compare a b = intCompare# a b
-
+-- `Eq Int` and `Ord Int` live with their classes -- in `Data.Eq` and
+-- `Data.Ord`: the library's own low modules compare and order an `Int` below
+-- this one. The widths below keep their own instances.
 instance Enum Int where
   succ n = case intEq# n intMaxBound of
     True -> enumSuccError "Int"

@@ -298,6 +298,18 @@ Qualified names: `Data.Maybe.Just`, `R.Left`, `L.map`, …
 binds names solely under `A`; they are not brought into unqualified scope.
 `import M as A` still brings names both unqualified and as `A.name`.
 
+A module name resolves to exactly one file. A name offered twice — two library
+roots that both ship `A`, or a project module that shares its name with a library
+module — is refused where the program reaches it, and the refusal names every file
+the name could mean: nothing in the name tells the compiler which one the author
+meant. Two installed packages may both hold the name; it becomes a fault when a
+program imports it.
+
+The implicit `import Prelude` is the standard library's, so a project module named
+`Prelude` is refused rather than allowed to redefine what every module gets by
+default. A prelude of your own is a module under another name, imported explicitly
+where it is wanted (see `NoImplicitPrelude` below).
+
 ### Pragmas
 
 Pragmas go above the module header (and above its doc comment, if it has one).

@@ -10,6 +10,7 @@ import Data.Either
 import Data.Monoid
 import Data.Semigroup
 import Data.Tuple
+import Data.Word (Word8)
 
 data Ack = Ack
   deriving Show

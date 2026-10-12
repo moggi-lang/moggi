@@ -11,6 +11,7 @@ use function Moggi\Cache\compileDir;
 use function Moggi\CLI\resolveLibraryDirs;
 use function Moggi\Modules\isSyntheticCompilerModuleName;
 use function Moggi\Modules\outputRelativePath;
+use function Moggi\Modules\syntheticLocalTypes;
 use function Moggi\Paths\canonicalSeparators;
 
 /**
@@ -248,7 +249,16 @@ function buildIndex(
 
             if ($item instanceof Ast\InstanceDecl) {
                 $parent = instanceParentTypeName($item->head);
-                if ($parent === null || !isExportedType($exportFilter, $parent)) {
+                // The instance belongs to this module's public surface when
+                // either end of it does: the class it is for (the class module
+                // owns the instance: `instance Eq Bool` is `Data.Eq`'s) or the
+                // type it is for (`instance Functor Maybe` in `Data.Maybe`). The
+                // page that shows it is the type's, wherever that is --
+                // {@see renderModulePage}.
+                if ($parent === null
+                    || (!isExportedType($exportFilter, $item->class)
+                        && !isExportedType($exportFilter, $parent))
+                ) {
                     continue;
                 }
                 $instName = instanceEntityName($item);
@@ -331,9 +341,8 @@ function buildIndex(
             }
         }
 
-        $unit = $prepared?->units[$moduleName] ?? null;
-        if (($unit['synthetic'] ?? false) === true) {
-            foreach (entitiesFromSyntheticUnit($moduleName, $unit) as $entity) {
+        if (isSyntheticCompilerModuleName($moduleName)) {
+            foreach (entitiesFromSyntheticUnit($moduleName, syntheticLocalTypes($moduleName)) as $entity) {
                 $entities[] = $entity;
                 rememberCanonical($canonical, $entity);
             }
@@ -991,30 +1000,75 @@ function copyDocEntity(DocEntity $entity, array $overrides = []): DocEntity
     );
 }
 
-/** @param array<string, mixed> $unit @return list<DocEntity> */
-function entitiesFromSyntheticUnit(string $moduleName, array $unit): array
+/**
+ * The entities of a machine module's compiler-owned kernel.
+ *
+ * @param array<string, mixed> $localTypes a `syntheticLocalTypes()` table
+ * @return list<DocEntity>
+ */
+function entitiesFromSyntheticUnit(string $moduleName, array $localTypes): array
 {
     $entities = [];
-    $localTypes = $unit['localTypes'] ?? [];
-
     $typeNames = array_keys($localTypes['data'] ?? []);
     sort($typeNames);
+
     foreach ($typeNames as $typeName) {
+        $info = $localTypes['data'][$typeName] ?? [];
+        $constructors = \is_array($info['constructors'] ?? null) ? $info['constructors'] : [];
         $entities[] = makeEntity(
             $moduleName,
             $typeName,
             'type',
-            'primitive type ' . $typeName,
+            $constructors === []
+                ? 'primitive type ' . $typeName
+                : 'data ' . $typeName . ' = ' . implode(' | ', array_keys($constructors)),
             null,
             null,
             null,
-            'primtype',
+            $constructors === [] ? 'primtype' : 'data',
         );
+
+        foreach (array_keys($constructors) as $constructor) {
+            $entities[] = makeEntity(
+                $moduleName,
+                $constructor,
+                'ctor',
+                $constructor . ' :: ' . $typeName,
+                null,
+                null,
+                $typeName,
+                'ctor',
+            );
+        }
+    }
+
+    foreach ($localTypes['typeSynonyms'] ?? [] as $name => $info) {
+        $rhs = $info['rhs'] ?? null;
+        $entities[] = makeEntity(
+            $moduleName,
+            $name,
+            'type',
+            'type ' . $name . ' = ' . ($rhs instanceof Ast\TypeNode ? surfaceTypeSignature($rhs) : '?'),
+            null,
+            null,
+            null,
+            'synonym',
+        );
+    }
+
+    $constructors = [];
+    foreach ($localTypes['data'] ?? [] as $info) {
+        foreach (array_keys(\is_array($info['constructors'] ?? null) ? $info['constructors'] : []) as $name) {
+            $constructors[$name] = true;
+        }
     }
 
     $valueNames = array_keys($localTypes['env'] ?? []);
     sort($valueNames);
     foreach ($valueNames as $name) {
+        if (isset($constructors[$name])) {
+            continue;
+        }
         $scheme = $localTypes['env'][$name] ?? null;
         if (!$scheme instanceof Scheme) {
             continue;

@@ -9,8 +9,9 @@ require $root . '/src/compiler.php';
 
 use Moggi\Semantics\Types\TypeError;
 
-use function Moggi\Modules\libraryModuleIndex;
+use function Moggi\Modules\libraryModuleScan;
 use function Moggi\Modules\projectSourceClosure;
+use function Moggi\Paths\canonicalPath;
 use function Moggi\Paths\canonicalSeparators;
 
 $assert = static function (bool $condition, string $message): void {
@@ -32,40 +33,62 @@ try {
     $write($dirs['a'], 'Alpha');
     $write($dirs['b'], 'Alpha');
 
+    // Two roots may both hold the name: an installed tree can carry two packages
+    // that each ship a module of the same name, and no index can decide between
+    // them. The scan keeps the first as the name's entry and records the rest.
+    [$paths, $duplicates] = libraryModuleScan([$dirs['a'], $dirs['b']]);
+    $assert(
+        ($paths['Alpha'] ?? null) === $dirs['a'] . '/Alpha.mog',
+        'the first root owns the name',
+    );
+    $assert(
+        ($duplicates['Alpha'] ?? []) === [$dirs['b'] . '/Alpha.mog'],
+        'the second root is recorded as the other file the name could mean',
+    );
+
+    // A program that reaches the name is ambiguous: the compiler would have to pick
+    // one of the two files, and nothing can tell it which.
     $threw = false;
     try {
-        libraryModuleIndex([$dirs['a'], $dirs['b']]);
+        projectSourceClosure([$dirs['a'] . '/Alpha.mog'], [$dirs['a'], $dirs['b']]);
     } catch (TypeError $error) {
         $threw = true;
         $assert(
-            \str_contains($error->getMessage(), 'duplicate module `Alpha`'),
-            'the refusal names the duplicated module, got: ' . $error->getMessage(),
+            \str_contains($error->getMessage(), 'module `Alpha` is offered by two roots'),
+            'the refusal names the module and how many roots offer it, got: ' . $error->getMessage(),
         );
-        // The message spells both roots the way every artifact path is spelled,
+        // The message spells both files the way every artifact path is spelled,
         // so the expectation is canonicalised too rather than host-native.
-        $roots = \array_map(canonicalSeparators(...), $dirs);
         $assert(
-            \str_contains($error->getMessage(), $roots['a']) && \str_contains($error->getMessage(), $roots['b']),
-            'the refusal names both roots, got: ' . $error->getMessage(),
+            \str_contains($error->getMessage(), canonicalSeparators($dirs['a'] . '/Alpha.mog'))
+            && \str_contains($error->getMessage(), canonicalSeparators($dirs['b'] . '/Alpha.mog')),
+            'the refusal names both files, got: ' . $error->getMessage(),
         );
     }
-    $assert($threw, 'two roots offering one module must be refused');
+    $assert($threw, 'a program that reaches a doubly offered name must be refused');
 
-    $threw = false;
-    try {
-        projectSourceClosure([], [$dirs['a'], $dirs['b']]);
-    } catch (TypeError $error) {
-        $threw = \str_contains($error->getMessage(), 'duplicate module `Alpha`');
-    }
-    $assert($threw, 'projectSourceClosure must refuse the clash');
+    // A name the program never imports stays unimported, which is what lets a tree
+    // carry the two packages at all.
+    $write($dirs['a'], 'Other');
+    [$files] = projectSourceClosure([$dirs['a'] . '/Other.mog'], [$dirs['a'], $dirs['b']]);
+    $assert(
+        \count($files) === 1 && canonicalPath($files[0]) === canonicalPath($dirs['a'] . '/Other.mog'),
+        'a name no import reaches is not resolved, so nothing clashes',
+    );
 
     \unlink($dirs['b'] . '/Alpha.mog');
     $write($dirs['b'], 'Beta');
-    $index = libraryModuleIndex([$dirs['a'], $dirs['b']]);
-    $assert(isset($index['Alpha'], $index['Beta']), 'distinct roots each contribute their modules');
+    [$paths, $duplicates] = libraryModuleScan([$dirs['a'], $dirs['b']]);
+    $assert(
+        isset($paths['Alpha'], $paths['Beta']) && $duplicates === [],
+        'distinct roots each contribute their own modules, with nothing duplicated',
+    );
 
-    $index = libraryModuleIndex([$dirs['a'], $dirs['a']]);
-    $assert(\count($index) === 1 && isset($index['Alpha']), 'a root repeated in the list is deduplicated, not refused');
+    [$paths, $duplicates] = libraryModuleScan([$dirs['a'], $dirs['a']]);
+    $assert(
+        \count($paths) === 2 && isset($paths['Alpha']) && $duplicates === [],
+        'a root repeated in the list offers the same file, which is one root and not a clash',
+    );
 
     echo "library root tests passed\n";
 } finally {

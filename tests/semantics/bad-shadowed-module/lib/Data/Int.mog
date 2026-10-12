@@ -1,0 +1,6 @@
+-- A project module standing in for the library's `Data.Int`: the name is the
+-- library's, so the build refuses the second file rather than choosing one.
+
+module Data.Int where
+
+double x = x

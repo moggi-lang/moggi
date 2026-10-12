@@ -41,6 +41,74 @@ function removeDirectory(string $path): void
     @rmdir($path);
 }
 
+/**
+ * A cache directory of the case's own that already knows the standard library.
+ *
+ * Every compile elaborates the whole standard library before it reaches the program, which is what
+ * the cache exists to avoid — but a case that wants a cache to itself (its own module, its own
+ * project) would pay that elaboration again from an empty directory, seconds each time. The
+ * library's entries (`compile/<backend>/lib/`) and the `stdlib-index` artifact the linker reads are
+ * hard-linked out of the run's cache, which the harness keeps warm, while everything derived from
+ * the *case's* sources stays absent: the program under test is still compiled from scratch, and the
+ * case still sees a cache that has never built it.
+ *
+ * Hard links are safe here because every cache write replaces its file atomically (temp + rename)
+ * instead of editing one in place, so a seeded directory cannot reach back into the run's cache.
+ */
+function seedCacheDir(string $dir): void
+{
+    if (!\class_exists(\Moggi\Cache\CacheSwitch::class) || !\Moggi\Cache\cacheEnabled()) {
+        return;
+    }
+
+    $source = \Moggi\Cache\cacheBaseDir();
+    if ($source === \rtrim($dir, '/')) {
+        return;
+    }
+
+    $fingerprint = $source . '/fingerprint';
+    if (\is_file($fingerprint)) {
+        @\mkdir($dir, 0700, true);
+        @\copy($fingerprint, $dir . '/fingerprint');
+    }
+
+    foreach (\glob($source . '/compile/*/lib', \GLOB_ONLYDIR) ?: [] as $entries) {
+        $backend = \basename(\dirname($entries));
+        hardlinkTree($entries, $dir . '/compile/' . $backend . '/lib');
+    }
+
+    foreach (\glob($source . '/compile/artifacts/stdlib-index*.blob') ?: [] as $blob) {
+        $target = $dir . '/compile/artifacts/' . \basename($blob);
+        @\mkdir(\dirname($target), 0700, true);
+        if (!@\link($blob, $target)) {
+            @\copy($blob, $target);
+        }
+    }
+}
+
+/** Link (or, when linking fails, copy) a whole tree under `$target`. */
+function hardlinkTree(string $source, string $target): void
+{
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($source, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::SELF_FIRST,
+    );
+
+    foreach ($iterator as $item) {
+        $relative = \substr($item->getPathname(), \strlen($source) + 1);
+        $destination = $target . '/' . $relative;
+        if ($item->isDir()) {
+            @\mkdir($destination, 0700, true);
+            continue;
+        }
+
+        @\mkdir(\dirname($destination), 0700, true);
+        if (!@\link($item->getPathname(), $destination)) {
+            @\copy($item->getPathname(), $destination);
+        }
+    }
+}
+
 /** A unique temporary directory; throws `TestFailure` when none can be created. */
 function createTempDir(string $prefix): string
 {

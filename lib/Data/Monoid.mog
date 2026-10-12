@@ -45,6 +45,7 @@ import Data.Maybe
 import Data.Num
 import Data.Ord
 import Data.Semigroup
+import Moggi.Internal.Base
 import Text.Show
 import Moggi.Internal.Prim
 

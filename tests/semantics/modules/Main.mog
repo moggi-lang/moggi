@@ -1,11 +1,12 @@
 -- Module-system fixture: `main` here is a normal function name, not `main :: IO ()`.
--- See tests/modules/README.md — exercises imports, qualified names, and user fixtures.
+-- Exercises imports, qualified names, `hiding`, and modules of the fixture's own
+-- `lib/`, which is where a project's modules live.
 
 module Main where
 
--- The fixture's own `Prelude` exports nothing on purpose, so `+` is imported
--- from the library: `instance Num Int` in `Data.Num`, whose `+` is the machine
--- adder.
+-- `hiding` on the standard library's `Prelude`: `+` still arrives through it
+-- (from `instance Num Int` in `Data.Num`, whose `+` is the machine adder), and
+-- the explicit import names the module the fixture leans on.
 import Prelude hiding (max)
 import Data.Int
 import Data.Num

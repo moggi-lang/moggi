@@ -2222,25 +2222,6 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
         return inferRewrittenInfix($state, $surface, $expr, $env);
     }
 
-    if ($op === ':'
-        && ! isset($state->localDeclNames[$op])
-        && ! isset($env[$op])
-        && ! isset($state->env[$op])
-    ) {
-        return applyOperatorPrimop(
-            $state,
-            $expr,
-            'listCons#',
-            inferExpr($state, $expr->left, $env),
-            inferExpr($state, $expr->right, $env),
-        );
-    }
-
-    // Inside an instance body a class method name means that instance's method,
-    // so the use is the application it stands for. Every other class method is
-    // left to the infix path below, which reads its meaning off the instance the
-    // operand types name -- whether that is an instance's own primop or a
-    // dictionary call is the instance's answer, not the operator's name.
     if (isset($state->constraintMethods[$op])) {
         $left = $expr->left;
         $right = $expr->right;
@@ -2256,11 +2237,6 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
         return inferRewrittenInfix($state, $surface, $expr, $env);
     }
 
-    // An operator in scope whose declaration is a thin binding over a primop --
-    // the library's `&&`, `||`, and `:` -- keeps that primop as its meaning.
-    // Calling the wrapper would work only by inlining it back to the same
-    // primop, and the wrapper's body is the last thing the use should see:
-    // `&&` decides on its left operand only where the primop itself is lowered.
     if (!isClassMethodOperator($state, $op)
         && ! isset($state->intrinsicWrappers[$op])
         && (isset($env[$op]) || isset($state->env[$op]))) {
@@ -2314,12 +2290,6 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
     $classOperator = isClassMethodOperator($state, $op) || isset($state->constraintMethods[$op]);
     $constraints = $instantiated['dicts'];
 
-    // The operator the module declares itself (`(+) x y = x + y`) carries no dictionary of
-    // its own, but its scheme is what pins the operands: `x` is an `Int` only once the local
-    // scheme's `Int -> Int -> Int` has met it. Now that it has, the library's instance for
-    // those operands is what the use means -- the reading {@see instanceOperatorPrimop}
-    // makes for a use site whose operand types were already settled, and the only one that
-    // keeps a locally declared operator from reaching lowering unresolved.
     if ($classOperator && $constraints === []) {
         $primop = instanceOperatorPrimop(
             $state,
@@ -2396,16 +2366,6 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
         return inferRewrittenInfix($state, $surface, $expr, $env);
     }
 
-    // A class method whose dictionary is not decided yet keeps its constraint on the node
-    // instead of losing it; {@see dictAwaitingResolution} names the two shapes of that.
-    // The signature, or a later unification, settles the instance before the body is, and
-    // {@see resolvePendingEvidenceInExpr} then builds the dictionary call the use stands
-    // for.
-    //
-    // The same holds when the operands are already concrete and no instance covers them
-    // (`(1, 2) == (1, 2)` while the library declares no `Eq (a, b)`): the constraint is
-    // what says so, and dropping it here is what once let the backend's own operator stand
-    // in for the instance the library was missing.
     if ($classOperator && $constraints !== []) {
         $expr->pendingConstraints = $instantiated['constraints'];
         $expr->pendingDicts = $instantiated['dicts'];
@@ -4816,14 +4776,6 @@ function resolveQualifiedType(TypeCheckState $state, string $module, string $nam
         return $info['result'];
     }
 
-    if ($name === 'Ordering') {
-        return new TCon('Ordering');
-    }
-
-    if ($name === 'Bool') {
-        return new TCon('Bool');
-    }
-
     rejectIfKindNameUsedAsType($state, $name, $at);
 
     return new TCon($name);
@@ -4929,14 +4881,6 @@ function resolveTypeCon(TypeCheckState $state, string $name, array $expanding, A
     $prim = resolveMagicHashTypeIfInScope($state, $name, $expanding, $at);
     if ($prim !== null) {
         return $prim;
-    }
-
-    if ($name === 'Ordering') {
-        return new TCon('Ordering');
-    }
-
-    if ($name === 'Bool') {
-        return new TCon('Bool');
     }
 
     rejectIfKindNameUsedAsType($state, $name, $at);
@@ -5049,10 +4993,20 @@ function applyTypeApp(TypeCheckState $state, Ast\TypeNode $con, array $argAsts, 
         return new TVarApp($resolvedHead->name, $args);
     }
 
-    $canonical = Kinds\canonicalTypeConName($baseName);
-    applyTypeAppKinds($state, $canonical, $args, $argAsts, $con, isVarHead: false);
+    if (! $resolvedHead instanceof TCon) {
+        throw typeFail(
+            $state,
+            "type `{$baseName}` does not take arguments",
+            $con,
+        );
+    }
 
-    return new TCon($canonical, $args);
+    // The head keeps the spelling the resolver answered with: a name that is a
+    // library declaration (`List`, `Maybe`) is that type, and re-spelling it from
+    // the source text would invent a constructor the resolver never saw.
+    applyTypeAppKinds($state, $resolvedHead->name, $args, $argAsts, $con, isVarHead: false);
+
+    return new TCon($resolvedHead->name, $args);
 }
 
 /**

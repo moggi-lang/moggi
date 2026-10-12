@@ -1,7 +1,7 @@
 program
   class MyEq a
     method === :: a -> a -> Bool
-  function __ev_MyEq_Int__3d_3d_3d :: Int -> Int -> Bool
+  function __ev_MyEq_Int_Op3d3d3d :: Int -> Int -> Bool
     pat_var x
     pat_var y
     intrinsic intEq#
@@ -10,7 +10,7 @@ program
   data Box
     constructor Box
       field  :: Int
-  function __ev_MyEq_Box__3d_3d_3d :: Box -> Box -> Bool
+  function __ev_MyEq_Box_Op3d3d3d :: Box -> Box -> Bool
     pat_con Box
       pat_var a
     pat_con Box

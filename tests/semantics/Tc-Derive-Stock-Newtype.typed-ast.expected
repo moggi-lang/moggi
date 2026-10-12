@@ -3,7 +3,7 @@ program
     constructor Age
       field  :: Int
     deriving (Eq, Ord, Show, newtype Num)
-  function __ev_Eq_Age_eq :: Age -> Age -> Bool
+  function __ev_Eq_Age_Op3d3d :: Age -> Age -> Bool
     pat_var __l
     pat_var __r
     case
@@ -22,7 +22,7 @@ program
           alt
             pat_wild _
             constructor_ref False
-  function __ev_Eq_Age_ne :: Age -> Age -> Bool
+  function __ev_Eq_Age_Op2f3d :: Age -> Age -> Bool
     pat_var __l
     pat_var __r
     case
@@ -74,7 +74,7 @@ program
               alt
                 pat_con GT
                 constructor_ref GT
-  function __ev_Ord_Age_lt :: Age -> Age -> Bool
+  function __ev_Ord_Age_Op3c :: Age -> Age -> Bool
     pat_var x
     pat_var y
     case
@@ -90,7 +90,7 @@ program
       alt
         pat_wild _
         constructor_ref False
-  function __ev_Ord_Age_lte :: Age -> Age -> Bool
+  function __ev_Ord_Age_Op3c3d :: Age -> Age -> Bool
     pat_var x
     pat_var y
     case
@@ -106,7 +106,7 @@ program
       alt
         pat_wild _
         constructor_ref True
-  function __ev_Ord_Age_gt :: Age -> Age -> Bool
+  function __ev_Ord_Age_Op3e :: Age -> Age -> Bool
     pat_var x
     pat_var y
     case
@@ -122,7 +122,7 @@ program
       alt
         pat_wild _
         constructor_ref False
-  function __ev_Ord_Age_gte :: Age -> Age -> Bool
+  function __ev_Ord_Age_Op3e3d :: Age -> Age -> Bool
     pat_var x
     pat_var y
     case
@@ -301,7 +301,7 @@ program
     constructor NotAge
       field  :: Int
     deriving (Eq, Show)
-  function __ev_Eq_NotAge_eq :: NotAge -> NotAge -> Bool
+  function __ev_Eq_NotAge_Op3d3d :: NotAge -> NotAge -> Bool
     pat_var __l
     pat_var __r
     case
@@ -320,7 +320,7 @@ program
           alt
             pat_wild _
             constructor_ref False
-  function __ev_Eq_NotAge_ne :: NotAge -> NotAge -> Bool
+  function __ev_Eq_NotAge_Op2f3d :: NotAge -> NotAge -> Bool
     pat_var __l
     pat_var __r
     case
@@ -443,7 +443,7 @@ program
     constructor Blue
     constructor Green
     deriving (Eq, Ord, Show, Enum, Bounded, Read)
-  function __ev_Eq_Color_eq :: Color -> Color -> Bool
+  function __ev_Eq_Color_Op3d3d :: Color -> Color -> Bool
     pat_var __l
     pat_var __r
     case
@@ -478,7 +478,7 @@ program
           alt
             pat_wild _
             constructor_ref False
-  function __ev_Eq_Color_ne :: Color -> Color -> Bool
+  function __ev_Eq_Color_Op2f3d :: Color -> Color -> Bool
     pat_var __l
     pat_var __r
     case
@@ -564,7 +564,7 @@ program
           alt
             pat_con Green
             constructor_ref EQ
-  function __ev_Ord_Color_lt :: Color -> Color -> Bool
+  function __ev_Ord_Color_Op3c :: Color -> Color -> Bool
     pat_var x
     pat_var y
     case
@@ -580,7 +580,7 @@ program
       alt
         pat_wild _
         constructor_ref False
-  function __ev_Ord_Color_lte :: Color -> Color -> Bool
+  function __ev_Ord_Color_Op3c3d :: Color -> Color -> Bool
     pat_var x
     pat_var y
     case
@@ -596,7 +596,7 @@ program
       alt
         pat_wild _
         constructor_ref True
-  function __ev_Ord_Color_gt :: Color -> Color -> Bool
+  function __ev_Ord_Color_Op3e :: Color -> Color -> Bool
     pat_var x
     pat_var y
     case
@@ -612,7 +612,7 @@ program
       alt
         pat_wild _
         constructor_ref False
-  function __ev_Ord_Color_gte :: Color -> Color -> Bool
+  function __ev_Ord_Color_Op3e3d :: Color -> Color -> Bool
     pat_var x
     pat_var y
     case
@@ -814,7 +814,7 @@ program
     constructor StockRed
     constructor StockBlue
     deriving (stock Eq)
-  function __ev_Eq_StockColor_eq :: StockColor -> StockColor -> Bool
+  function __ev_Eq_StockColor_Op3d3d :: StockColor -> StockColor -> Bool
     pat_var __l
     pat_var __r
     case
@@ -839,7 +839,7 @@ program
           alt
             pat_wild _
             constructor_ref False
-  function __ev_Eq_StockColor_ne :: StockColor -> StockColor -> Bool
+  function __ev_Eq_StockColor_Op2f3d :: StockColor -> StockColor -> Bool
     pat_var __l
     pat_var __r
     case

@@ -1,0 +1,111 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | The bottom of the library: the readable names of the machine's types.
+--
+-- 'Moggi.Internal.Prim' owns the MagicHash layer — @Int#@, @String#@, @List#@
+-- and the primops over them. This module gives those types the names a
+-- signature writes and a program reads: 'Int' (and its widths), 'Word' (and its
+-- widths), 'Integer', 'Double', 'Char', 'String' and 'List'.
+--
+-- They have to be declared here, and not in the module that owns each type's
+-- API, because the library's own bottoms and class modules name them while
+-- sitting *below* those modules:
+--
+-- * @Moggi.Err@'s @error :: String -> a@ and @Text.Read@'s @read :: String -> a@
+--   are the library's bottom (only 'Moggi.Internal.Prim' is below them), and
+--   @Data.String@ needs `Data.Char` and `Data.Int` and so sits above both.
+-- * @Data.Num@'s @fromInteger :: Integer -> a@ and its @Num Int@/@Num Word@
+--   instances sit below @Data.Integer@, @Data.Int@ and @Data.Word@, because
+--   @Data.Foldable@'s @length :: t a -> Int@ and @Control.Monad@'s @replicateM@
+--   are written at 'Int' and are below those modules.
+-- * @Data.Char@'s machine modules read a numeric value out of a @Char@ as a
+--   'Double' (`IntlChar:getNumericValue`), and they sit below @Data.Double@ —
+--   which imports @Data.Char@ — so they cannot import the name back.
+-- * @Text.Show@'s @showChar :: Char -> ShowS@ sits below @Data.Char@.
+-- * every module that writes @[a]@ names 'List', and those modules
+--   (@Text.Show@, @Data.Enum@, @Data.Monad@, @Data.Foldable@) sit below
+--   @Data.List@.
+--
+-- So the names live at the one place no library module is below, and the public
+-- modules re-export them: @Data.Int@ and @Data.Word@ keep their instances and
+-- operations, @Data.String@ and @Data.List@ their operations, and each of them
+-- exports the name from here. base does the same thing in the same place
+-- (`GHC.Internal.Base` declares `String`, `Char`, `Int`, `Word` and the list
+-- type, `GHC.Internal.Num` declares `Integer`).
+--
+-- Nothing else belongs here: no instance, no function, no class. A type's
+-- instances stay with the lower of the type's module and the class's module,
+-- exactly as the rest of the library spells out.
+module Moggi.Internal.Base
+  ( Int
+  , Int8
+  , Int16
+  , Int32
+  , Int64
+  , Word
+  , Word8
+  , Word16
+  , Word32
+  , Word64
+  , Integer
+  , Double
+  , Char
+  , String
+  , List
+  ) where
+
+import Moggi.Internal.Prim
+
+-- | A signed 64-bit integer, the same width on every backend: Java and C#
+-- take the host's 64-bit `long`, and PHP's own `int` is 64-bit too (a 64-bit
+-- PHP build is required — the compiler and every emitted entry module abort
+-- when `PHP_INT_SIZE < 8`). It wraps on overflow, so `maxBound + 1` is
+-- `minBound` everywhere.
+type Int = Int#
+
+-- | 8-bit signed integer type
+type Int8 = Int8#
+
+-- | 16-bit signed integer type
+type Int16 = Int16#
+
+-- | 32-bit signed integer type
+type Int32 = Int32#
+
+-- | 64-bit signed integer type
+type Int64 = Int64#
+
+-- | A 'Word' is an unsigned integral type, with the same size as 'Int'.
+type Word = Word#
+
+-- | 8-bit unsigned integer type
+type Word8 = Word8#
+
+-- | 16-bit unsigned integer type
+type Word16 = Word16#
+
+-- | 32-bit unsigned integer type
+type Word32 = Word32#
+
+-- | 64-bit unsigned integer type
+type Word64 = Word64#
+
+-- Arbitrary-precision integer. Its operations are @Data.Integer@'s.
+type Integer = Integer#
+
+-- | IEEE binary64, the same on every backend. Its operations and instances are
+-- @Data.Double@'s.
+type Double = Double#
+
+-- Char = Unicode scalar value (U+0000..U+10FFFF excluding surrogates).
+-- Not a grapheme. Classification/case use the backend Unicode database.
+-- Grapheme segmentation and normalization are separate APIs.
+type Char = Char#
+
+-- | String is an opaque backend-native representation of a sequence of Char
+-- (Unicode scalar values). The sequence model is semantic only: String does
+-- not expose list operations or guarantee scalar indexing complexity.
+-- Equality is scalar-sequence identity (no implicit normalization).
+type String = String#
+
+-- | The list type, whose syntax is `[a]`. Its operations are `Data.List`'s.
+type List = List#

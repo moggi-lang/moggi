@@ -19,6 +19,8 @@ import Data.Tuple
 import Data.Bool
 import Data.Function
 import Moggi.Err
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
 
 infixr 8 ^, ^^
 infixr 8 **

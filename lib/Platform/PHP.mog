@@ -1,4 +1,3 @@
-{-# LANGUAGE NoImplicitPrelude #-}
 -- | The PHP side of the FFI: 'PHPValue' reifies an untyped host value into an
 -- inspectable Moggi ADT (Composer interop), plus helpers for walking one.
 --
@@ -30,6 +29,7 @@ import Data.Maybe
 import Data.Num
 import Data.Semigroup
 import Data.String
+import Moggi.Internal.Base
 import System.IO.Types (Resource)
 import Moggi.Internal.Prim
 

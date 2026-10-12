@@ -32,6 +32,8 @@ module Control.Applicative
 import Data.Bool
 import Data.Functor
 import Data.Maybe
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
 
 infixl 4 <*>, <*, *>, <**>
 infixl 3 <|>

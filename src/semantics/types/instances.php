@@ -65,29 +65,53 @@ function defaultBodyScope(TypeCheckState $state, array $classInfo): array
  *
  * A default body is re-checked here, in the instance's module, so a type the
  * class module imported (`Endo`, `Dual`) is not in this module's type tables.
- * {@see installDefaultBodyTypes} installs them for the check. No such install is
- * needed when the class's own module is the one being checked -- the types are
- * already in scope there.
+ * {@see installDefaultBodyTypes} installs them for the check, along with the
+ * primop wrappers the class module's scope gave its operators and the values
+ * and data types the bodies name (`True` in the `Ord` defaults is one). No such
+ * install is needed when the class's own module is the one being checked -- the
+ * types, the values and the wrappers are already in scope there.
  *
  * @param array<string, mixed> $classInfo
- * @return array{types: array<string, int|null>, synonyms: array<string, mixed>}
+ * @return array{
+ *   types: array<string, int|null>,
+ *   synonyms: array<string, mixed>,
+ *   wrappers: array<string, string>,
+ *   env: array<string, Scheme>,
+ *   data: array<string, mixed>
+ * }
  */
 function defaultBodyVisibleTypes(TypeCheckState $state, array $classInfo): array
 {
+    $empty = ['types' => [], 'synonyms' => [], 'wrappers' => [], 'env' => [], 'data' => []];
+
     $module = $classInfo['module'] ?? '';
     if ($module === $state->currentModule) {
-        return ['types' => [], 'synonyms' => []];
+        return $empty;
     }
 
     $scope = $module === '' ? null : ($state->classModuleScopes[$module] ?? null);
     $visible = \is_array($scope) ? ($scope['visible'] ?? null) : null;
     if (! \is_array($visible)) {
-        return ['types' => [], 'synonyms' => []];
+        return $empty;
+    }
+
+    $wrappers = \is_array($scope['wrappers'] ?? null) ? $scope['wrappers'] : [];
+
+    $moduleEnv = \is_array($scope['env'] ?? null) ? $scope['env'] : [];
+    $env = [];
+    foreach (\array_keys(\is_array($scope['names'] ?? null) ? $scope['names'] : []) as $name) {
+        $scheme = $moduleEnv[$name] ?? null;
+        if ($scheme instanceof Scheme && ! $scheme->classMethod) {
+            $env[$name] = $scheme;
+        }
     }
 
     return [
         'types' => \is_array($visible['types'] ?? null) ? $visible['types'] : [],
         'synonyms' => \is_array($visible['synonyms'] ?? null) ? $visible['synonyms'] : [],
+        'wrappers' => $wrappers,
+        'env' => $env,
+        'data' => \is_array($scope['dataRefs'] ?? null) ? $scope['dataRefs'] : [],
     ];
 }
 
@@ -95,12 +119,51 @@ function defaultBodyVisibleTypes(TypeCheckState $state, array $classInfo): array
  * Make the class module's visible type constructors resolvable, and return what
  * has to be undone afterwards.
  *
- * @param array{types: array<string, int|null>, synonyms: array<string, mixed>} $visible
- * @return array{names: array<string, true>, kinds: list<string>, synonyms: list<string>}
+ * @param array{types: array<string, int|null>, synonyms: array<string, mixed>, env?: array<string, Scheme>, data?: array<string, mixed>} $visible
+ * @return array{names: array<string, true>, kinds: list<string>, synonyms: list<string>, synonymKinds: list<string>, wrappers: list<string>, env: list<string>, data: list<string>, promoted: list<string>}
  */
 function installDefaultBodyTypes(TypeCheckState $state, array $visible): array
 {
-    $added = ['names' => [], 'kinds' => [], 'synonyms' => []];
+    $added = ['names' => [], 'kinds' => [], 'synonyms' => [], 'wrappers' => [], 'env' => [], 'data' => [], 'promoted' => []];
+
+    foreach ($visible['env'] ?? [] as $name => $scheme) {
+        if (isset($state->env[$name])) {
+            continue;
+        }
+
+        $state->env[$name] = $scheme;
+        $added['env'][] = $name;
+    }
+
+    foreach ($visible['data'] ?? [] as $typeName => $info) {
+        if (isset($state->data[$typeName])) {
+            continue;
+        }
+
+        $state->data[$typeName] = $info;
+        $added['data'][] = $typeName;
+        if (! isset($state->kindEnv[Kinds\canonicalTypeConName($typeName)])) {
+            Kinds\registerTypeKind($state, $typeName, Kinds\kindFromDataInfo($info));
+            $added['kinds'][] = $typeName;
+        }
+
+        $promotedBefore = $state->promoted;
+        Kinds\installPromotedFromDataInfo($state, $typeName, $info);
+        foreach ($state->promoted as $ctorName => $_) {
+            if (! isset($promotedBefore[$ctorName])) {
+                $added['promoted'][] = $ctorName;
+            }
+        }
+    }
+
+    foreach ($visible['wrappers'] ?? [] as $name => $primop) {
+        if (isset($state->intrinsicWrappers[$name])) {
+            continue;
+        }
+
+        $state->intrinsicWrappers[$name] = $primop;
+        $added['wrappers'][] = $name;
+    }
 
     foreach ($visible['types'] as $name => $params) {
         if (isset($state->declaredTypeNames[$name])) {
@@ -109,8 +172,8 @@ function installDefaultBodyTypes(TypeCheckState $state, array $visible): array
 
         $state->declaredTypeNames[$name] = true;
         $added['names'][$name] = true;
-        if ($params !== null && ! isset($state->kindEnv[$name])) {
-            $state->kindEnv[$name] = Kinds\dataKind($params);
+        if ($params !== null && ! isset($state->kindEnv[Kinds\canonicalTypeConName($name)])) {
+            Kinds\registerTypeKind($state, $name, Kinds\dataKind($params));
             $added['kinds'][] = $name;
         }
     }
@@ -121,6 +184,9 @@ function installDefaultBodyTypes(TypeCheckState $state, array $visible): array
         }
 
         $state->typeSynonyms[$name] = $info;
+        if (installTypeSynonymKind($state, $name, $info)) {
+            $added['synonymKinds'][] = $name;
+        }
         $added['names'][$name] = true;
         $added['synonyms'][] = $name;
     }
@@ -128,15 +194,35 @@ function installDefaultBodyTypes(TypeCheckState $state, array $visible): array
     return $added;
 }
 
-/** @param array{names: array<string, true>, kinds: list<string>, synonyms: list<string>} $added */
+/** @param array{names: array<string, true>, kinds: list<string>, synonyms: list<string>, synonymKinds: list<string>, wrappers: list<string>, env: list<string>, data: list<string>, promoted: list<string>} $added */
 function removeDefaultBodyTypes(TypeCheckState $state, array $added): void
 {
     foreach ($added['kinds'] as $name) {
-        unset($state->kindEnv[$name]);
+        unset($state->kindEnv[Kinds\canonicalTypeConName($name)]);
     }
 
     foreach ($added['synonyms'] as $name) {
         unset($state->typeSynonyms[$name]);
+    }
+
+    foreach ($added['synonymKinds'] ?? [] as $name) {
+        unset($state->kindEnv[Kinds\canonicalTypeConName($name)]);
+    }
+
+    foreach ($added['wrappers'] ?? [] as $name) {
+        unset($state->intrinsicWrappers[$name]);
+    }
+
+    foreach ($added['env'] ?? [] as $name) {
+        unset($state->env[$name]);
+    }
+
+    foreach ($added['data'] ?? [] as $typeName) {
+        unset($state->data[$typeName]);
+    }
+
+    foreach ($added['promoted'] ?? [] as $ctorName) {
+        unset($state->promoted[$ctorName]);
     }
 
     foreach ($added['names'] as $name => $_) {
@@ -300,7 +386,7 @@ function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
         $scope = $defaulted ? defaultBodyScope($state, $classInfo) : [];
         $installedTypes = $defaulted
             ? installDefaultBodyTypes($state, defaultBodyVisibleTypes($state, $classInfo))
-            : ['names' => [], 'kinds' => [], 'synonyms' => []];
+            : ['names' => [], 'kinds' => [], 'synonyms' => [], 'wrappers' => [], 'env' => [], 'data' => [], 'promoted' => []];
         $methodEnv = $scope === [] ? $constraintEnv : [...$scope, ...$constraintEnv];
         try {
             $fn = checkInstanceMethod(
@@ -1313,9 +1399,6 @@ function matchInstanceHeadVars(TypeCheckState $state, Ast\AstNode $pattern, Type
         return null;
     }
 
-    // `()` is its own type (`deriving instance Eq ()` in base), not a constructor
-    // application, so it needs its own case: a head written as the unit type names
-    // no variable and matches only the unit.
     if ($pattern instanceof Ast\TypeUnit) {
         return $target instanceof TUnit ? [] : null;
     }

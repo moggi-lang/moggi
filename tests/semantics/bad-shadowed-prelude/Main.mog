@@ -1,0 +1,9 @@
+-- A project module named `Prelude` would decide what the implicit
+-- `import Prelude` means for every module of the program, and the standard
+-- library's `Prelude` would be unreachable under its own name. `lib/Prelude.mog`
+-- is the module that has to be renamed.
+
+module Main where
+
+main :: Int
+main = 1

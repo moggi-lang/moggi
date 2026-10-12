@@ -1,0 +1,10 @@
+-- `Data.Int` is the standard library's module: a project module of the same name
+-- would decide what every import of `Data.Int` means, so `lib/Data/Int.mog` is
+-- refused by name.
+
+module Main where
+
+import Data.Int
+
+main :: Int
+main = 1

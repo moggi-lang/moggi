@@ -1,4 +1,3 @@
-{-# LANGUAGE NoImplicitPrelude #-}
 -- | JVM filesystem via ordinary {@code java.io.File} / {@code java.nio.file}
 -- FFI. No {@code moggi.rt.Platform} FS helpers.
 module System.Filesystem.JVM
@@ -39,6 +38,7 @@ import Data.String hiding (pack, unpack, length, take, drop, isPrefixOf, isSuffi
 import Data.String qualified as S
 import Data.Time.Clock
 import Moggi.Err
+import Moggi.Internal.Base
 import System.IO.Base (IO)
 import Moggi.Internal.Prim (word8FromInt#, word8ToInt#)
 import System.Filesystem.Path

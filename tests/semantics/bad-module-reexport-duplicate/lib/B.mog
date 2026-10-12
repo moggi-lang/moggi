@@ -3,5 +3,7 @@ module Clash.B
   ( foo
   ) where
 
+import Data.Int
+
 foo :: Int
 foo = 2

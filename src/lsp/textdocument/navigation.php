@@ -207,7 +207,7 @@ function svcImplementation(AnalysisService $svc, string $uri, array $pos): mixed
     }
 
     $classes = [];
-    $onMethodSite = false; // cursor sits exactly on an indexed method sig/def
+    $onMethodSite = false;
     foreach ($svc->modules->classMethodDefs[$word] ?? [] as $def) {
         $r = $def['range'];
         $onStart = $r['start']['line'] === $pos['line'] && $r['start']['character'] <= ($pos['character'] ?? 0);

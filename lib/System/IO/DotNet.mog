@@ -22,6 +22,7 @@ module System.IO.DotNet
   , print
   ) where
 
+import Moggi.Internal.Base
 import Text.Show
 import Data.Bool
 import System.IO.Types

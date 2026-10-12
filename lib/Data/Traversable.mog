@@ -16,6 +16,7 @@ import Data.Functor
 import Data.Maybe
 import Data.Monoid
 import Data.Semigroup
+import Moggi.Internal.Base
 
 class (Functor t, Foldable t) => Traversable t where
   {-# MINIMAL traverse | sequenceA #-}

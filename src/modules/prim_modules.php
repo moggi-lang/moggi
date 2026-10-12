@@ -13,11 +13,20 @@ use function Moggi\Semantics\Kinds\canonicalTypeConName;
 use function Moggi\Semantics\TypeExpr\scheme;
 
 /**
- * Compiler-synthesized modules Moggi.Internal.Prim and Moggi.Internal.IO.
+ * The machine modules Moggi.Internal.Prim and Moggi.Internal.IO, and the kernel
+ * the compiler holds for each.
  *
- * These do not exist as .mog sources. They export MagicHash types and `#`-suffixed
- * primops. A primop's MagicHash name is also its IR/backend id, so
- * `intrinsicWrappers` maps each exported name to itself.
+ * Both modules describe the machine rather than the library, so neither is a
+ * library source file: the compiler builds each as a unit whose whole contents
+ * are the kernel (`syntheticLocalTypes`). That kernel is the MagicHash layer and
+ * nothing else -- the `#`-suffixed types and primops -- plus the one public name
+ * the library cannot declare below its users: the operator it spells a primop as
+ * (`(:)` for `listCons#`). Every other public name (`Int`, `Bool`, `List`, ...)
+ * is a library declaration in the module that owns it.
+ *
+ * A primop's MagicHash name is also its IR/backend id, so `intrinsicWrappers`
+ * maps each exported name to itself; a public alias maps to the primop it stands
+ * for.
  */
 
 const SYNTHETIC_PRIM_PATH = '<compiler:Moggi.Internal.Prim>';
@@ -27,23 +36,6 @@ function isSyntheticCompilerModuleName(string $moduleName): bool
 {
     return $moduleName === IntrinsicRegistry\MODULE_PRIM
         || $moduleName === IntrinsicRegistry\MODULE_IO;
-}
-
-/**
- * Does this module import the primop module?
- *
- * Primops are only visible through that import, and a class default body keeps
- * the scope it was written in when an instance re-checks it.
- */
-function moduleImportsPrim(Ast\Program $program): bool
-{
-    foreach ($program->imports as $import) {
-        if (Ast\moduleName($import->path) === IntrinsicRegistry\MODULE_PRIM) {
-            return true;
-        }
-    }
-
-    return false;
 }
 
 function isSyntheticCompilerPath(string $path): bool
@@ -97,9 +89,8 @@ function syntheticPrimitiveData(array $typeTable): array
  */
 function syntheticLocalTypes(string $moduleName): array
 {
-    $typeTable = $moduleName === IntrinsicRegistry\MODULE_IO
-        ? IntrinsicRegistry\ioTypeTable()
-        : IntrinsicRegistry\primTypeTable();
+    $isIo = $moduleName === IntrinsicRegistry\MODULE_IO;
+    $typeTable = $isIo ? IntrinsicRegistry\ioTypeTable() : IntrinsicRegistry\primTypeTable();
 
     $env = [];
     $wrappers = [];
@@ -111,15 +102,40 @@ function syntheticLocalTypes(string $moduleName): array
         $wrappers[$name] = $name;
     }
 
+    $data = syntheticPrimitiveData($typeTable);
+
+    if (! $isIo) {
+        foreach (IntrinsicRegistry\publicPrimopAliases() as $public => $primop) {
+            $env[$public] = IntrinsicRegistry\typeSchemes()[$primop];
+            $wrappers[$public] = $primop;
+        }
+    }
+
     return [
         'env' => $env,
-        'data' => syntheticPrimitiveData($typeTable),
+        'data' => $data,
         'typeSynonyms' => [],
         'intrinsicWrappers' => $wrappers,
     ];
 }
 
 /**
+ * The fixities of a machine module's own declarations.
+ *
+ * A machine module has no file to walk, so the parser reads its fixities from
+ * the declaration the unit carries rather than from an `infix` line, and a
+ * module that imports the machine module gets them from here.
+ *
+ * @return array<string, array<string, array{assoc: string, prec: int}>>
+ */
+function syntheticCompilerFixity(): array
+{
+    return [IntrinsicRegistry\MODULE_PRIM => IntrinsicRegistry\publicFixities()];
+}
+
+/**
+ * The kernel as the module's interface, for a machine module with no source.
+ *
  * @param array{
  *   env: array<string, Scheme>,
  *   data: array<string, mixed>,
@@ -143,11 +159,17 @@ function syntheticExports(string $moduleName, array $localTypes): array
 
     foreach ($localTypes['env'] as $name => $scheme) {
         $exports['env'][$name] = $scheme;
-        $exports['intrinsicWrappers'][$name] = $localTypes['intrinsicWrappers'][$name];
+        if (isset($localTypes['intrinsicWrappers'][$name])) {
+            $exports['intrinsicWrappers'][$name] = $localTypes['intrinsicWrappers'][$name];
+        }
     }
 
     foreach ($localTypes['data'] as $name => $info) {
         $exports['data'][$name] = $info;
+    }
+
+    foreach ($localTypes['typeSynonyms'] as $name => $info) {
+        $exports['typeSynonyms'][$name] = $info;
     }
 
     return $exports;
@@ -173,7 +195,8 @@ function syntheticProgram(string $moduleName, array $localTypes): Ast\Program
 }
 
 /**
- * Build a prepare-ready unit for a compiler-synthesized module.
+ * Build a prepare-ready unit for a machine module: the whole module is the
+ * compiler-owned kernel, and it has no source of its own.
  *
  * @return array<string, mixed>
  */
@@ -187,6 +210,7 @@ function buildSyntheticCompilerUnit(string $moduleName): array
     $localTypes = syntheticLocalTypes($moduleName);
     $program = syntheticProgram($moduleName, $localTypes);
     $exports = syntheticExports($moduleName, $localTypes);
+    $fixity = syntheticCompilerFixity()[$moduleName] ?? [];
 
     return [
         'path' => $path,
@@ -194,9 +218,9 @@ function buildSyntheticCompilerUnit(string $moduleName): array
         'tokens' => [],
         'imports' => [],
         'namespace' => moduleNameToNamespace($moduleName),
-        'fixity' => [],
+        'fixity' => $fixity,
         'importedFixity' => [],
-        'localFixity' => [],
+        'localFixity' => $fixity,
         'program' => $program,
         'parsed' => true,
         'localTypes' => $localTypes,
@@ -210,16 +234,18 @@ function buildSyntheticCompilerUnit(string $moduleName): array
 }
 
 /**
- * Ensure synthetic Prim/IO units exist whenever they appear in the closure
- * (or always, so imports resolve).
+ * Ensure a unit exists for the machine modules, which have no source of their
+ * own for the library to load.
  *
  * @param array<string, array<string, mixed>> $units
  */
 function injectSyntheticCompilerUnits(array &$units): void
 {
     foreach (syntheticCompilerModuleIndex() as $moduleName => $_path) {
-        if (!isset($units[$moduleName])) {
-            $units[$moduleName] = buildSyntheticCompilerUnit($moduleName);
+        if (isset($units[$moduleName])) {
+            continue;
         }
+
+        $units[$moduleName] = buildSyntheticCompilerUnit($moduleName);
     }
 }

@@ -145,15 +145,6 @@ function buildModuleLocalTypes(
         $state,
     );
 
-    $definedTypeSynonyms = [];
-    foreach ($unit['program']->items as $item) {
-        if ($item instanceof Ast\TypeSynonymDecl) {
-            $definedTypeSynonyms[$item->name] = true;
-        }
-    }
-
-    Types\applyPrimitiveTypeSynonymBootstrap($state, $definedTypeSynonyms);
-
     foreach ($unit['program']->items as $item) {
         if ($item instanceof Ast\DataDecl || $item instanceof Ast\TypeSynonymDecl) {
             $state->declaredTypeNames[$item->name] = true;
@@ -284,6 +275,7 @@ function mergeImportedEnv(Types\TypeCheckState $state, array $units, string $mod
             if (!isset($state->typeSynonyms[$name])) {
                 $state->typeSynonyms[$name] = $type;
             }
+            Types\installTypeSynonymKind($state, $name, $type);
         }
 
         foreach ($selected['data'] as $name => $info) {
@@ -321,6 +313,7 @@ function mergeExportedTypes(Types\TypeCheckState $state, array $unit, array $uni
             if (!isset($state->typeSynonyms[$name])) {
                 $state->typeSynonyms[$name] = $type;
             }
+            Types\installTypeSynonymKind($state, $name, $type);
         }
 
         return;
@@ -396,7 +389,12 @@ function classModuleScopes(array $units, array $projectClasses, ?array $onlyModu
             continue;
         }
 
-        $origins = classModuleValueOrigins($units, $module, $names);
+        $origins = classModuleConstructorOrigins(
+            $units,
+            $module,
+            classModuleValueOrigins($units, $module, $names),
+            $names,
+        );
         $fns = [];
         $dataRefs = [];
         $constructorArity = [];
@@ -412,11 +410,10 @@ function classModuleScopes(array $units, array $projectClasses, ?array $onlyModu
 
             $owner = declaringDataTypeFor($units, $origin['module'], $name);
             if ($owner !== null) {
+                // A constructor is a value name too, but never a function a
+                // module has to name in codegen: the data type carries it, and
+                // that entry is what a re-checked body's patterns read.
                 $dataRefs[$owner] = $units[$origin['module']]['localTypes']['data'][$owner];
-                $fns[$name] = [
-                    'origin' => $origin,
-                    'scheme' => $scheme,
-                ];
                 $constructorArity[$name] = \count(
                     $dataRefs[$owner]['constructors'][$name]['fields'] ?? [],
                 );
@@ -435,6 +432,10 @@ function classModuleScopes(array $units, array $projectClasses, ?array $onlyModu
             'fns' => $fns,
             'dataRefs' => $dataRefs,
             'visible' => classModuleVisibleTypes($units, $module),
+            'wrappers' => \is_array($units[$module]['localTypes']['intrinsicWrappers'] ?? null)
+                ? $units[$module]['localTypes']['intrinsicWrappers']
+                : [],
+            'names' => $names,
         ];
     }
 
@@ -559,21 +560,23 @@ function moduleFacadeExtraTypes(
  *
  * @return array<string, true>
  */
-function classScopeConstructorRefs(Ast\AstNode $expr): array
+function classScopeConstructorRefs(Ast\AstWalkable $expr): array
 {
     $names = [];
     if ($expr instanceof Ast\ConstructorRef) {
         $names[$expr->name] = true;
-    } elseif ($expr instanceof Ast\PatCon || $expr instanceof Ast\PatCons) {
+    } elseif ($expr instanceof Ast\PatCon) {
         $names[$expr->name] = true;
     } elseif ($expr instanceof Ast\OperatorRef && isConstructorName($expr->name)) {
         $names[$expr->name] = true;
     }
 
     foreach ($expr->childValues() as $child) {
-        if ($child instanceof Ast\AstNode) {
-            foreach (classScopeConstructorRefs($child) as $name => $_) {
-                $names[$name] = true;
+        foreach (\is_array($child) ? $child : [$child] as $value) {
+            if ($value instanceof Ast\AstWalkable) {
+                foreach (classScopeConstructorRefs($value) as $name => $_) {
+                    $names[$name] = true;
+                }
             }
         }
     }
@@ -595,6 +598,37 @@ function declaringDataTypeFor(array $units, string $moduleName, string $name): ?
     }
 
     return null;
+}
+
+/**
+ * Where a class module's own data constructors are declared.
+ *
+ * A default body may pattern match on a constructor of a type the class module
+ * declares (`LT`, `EQ`, `GT` for `Ord`), and the re-check needs the type along
+ * with the name -- {@see classModuleValueOrigins} covers functions only.
+ *
+ * @param array<string, array<string, mixed>> $units
+ * @param array<string, array{module: string, namespace: string, phpName: string}> $origins
+ * @param array<string, true> $names
+ * @return array<string, array{module: string, namespace: string, phpName: string}>
+ */
+function classModuleConstructorOrigins(array $units, string $moduleName, array $origins, array $names): array
+{
+    $namespace = $units[$moduleName]['namespace'] ?? moduleNameToNamespace($moduleName);
+
+    foreach ($units[$moduleName]['program']->items as $item) {
+        if (!$item instanceof Ast\DataDecl) {
+            continue;
+        }
+
+        foreach ($item->constructors as $constructor) {
+            if (isset($names[$constructor->name])) {
+                $origins[$constructor->name] ??= exportOrigin($moduleName, $namespace, $constructor->name);
+            }
+        }
+    }
+
+    return $origins;
 }
 
 /**
@@ -698,8 +732,9 @@ function moduleLocalValueNames(array $units, string $moduleName): array
  * class's module can see (`Endo`, `Dual` in `Data.Foldable`). A type the target
  * module declares itself is not one of them: merging `Bool` back into
  * `Data.Bool` makes `registerData` see a duplicate. `Bool` is excluded for every
- * module because the compiler bootstraps it already
- * (`applyPrimitiveDataBootstrap`), so it never needs transferring.
+ * module because it is the machine's -- `Moggi.Internal.Prim` declares it -- and
+ * a module reaches it by importing that module, which is the same import that
+ * puts a `case` on it in scope.
  *
  * @param array<string, array<string, mixed>> $units
  * @return array<string, true>

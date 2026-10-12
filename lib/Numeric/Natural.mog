@@ -1,4 +1,3 @@
-{-# LANGUAGE NoImplicitPrelude #-}
 -- | The arbitrary-precision @Natural@ number type: the non-negative integers.
 --
 -- A @Natural@ is a bignum that cannot be negative. It is a type of its own
@@ -23,6 +22,7 @@ import Data.Real
 import Data.Maybe
 import Data.Num
 import Data.Ord
+import Moggi.Internal.Base
 import Text.Show
 import Moggi.Err
 import Moggi.Exception

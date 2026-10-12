@@ -18,6 +18,7 @@ module Data.Integer.JVM
 import Data.Bool
 import Data.Int
 import Data.Ord
+import Moggi.Internal.Base
 import Moggi.Internal.Prim
 
 -- Integer# is java.math.BigInteger on the JVM.

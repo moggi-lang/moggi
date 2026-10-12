@@ -19,6 +19,7 @@ module Data.Time.Clock
 
 import Data.Eq
 import Data.Ord
+import Moggi.Internal.Base
 import Text.Show
 import Data.Bool
 import Data.Int

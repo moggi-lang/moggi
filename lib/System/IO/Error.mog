@@ -61,6 +61,7 @@ import Control.Monad
 import Data.Bool
 import Data.Either
 import Data.Maybe
+import Moggi.Internal.Base
 import Text.Show
 import Data.String
 import Moggi.IO.Exception

@@ -22,7 +22,6 @@ function svcDocumentColors(AnalysisService $svc, string $uri): array
         if (preg_match_all('/#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}|rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)/i', $line, $matches, PREG_OFFSET_CAPTURE)) {
             foreach ($matches[0] as $match) {
                 $colorStr = $match[0];
-                // preg offsets are bytes; LSP character offsets are UTF-16 units.
                 $start = codepointColToUtf16($line, $match[1] + 1);
                 $end = $start + utf16Length($colorStr);
                 $colors[] = [

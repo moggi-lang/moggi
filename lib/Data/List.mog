@@ -140,18 +140,17 @@ import Data.Semigroup
 import Text.Show
 import Data.Traversable
 import Data.Tuple
+import Moggi.Internal.Base
 import Moggi.Internal.Prim
 
-type List = List#
+-- The cons operator is the machine's (`Moggi.Internal.Prim` spells `listCons#`
+-- as `(:)`), because @x : xs@ is written below this module too; it is
+-- re-exported here.
 
-infixr 5 :
 infixr 5 ++
 infixl 9 !!
 infixl 9 !?
 infix 5 \\
-
-(:) :: a -> [a] -> [a]
-(:) a xs = listCons# a xs
 
 (++) :: [a] -> [a] -> [a]
 (++) xs ys = listAppend# xs ys
