@@ -249,18 +249,14 @@ function buildIndex(
 
             if ($item instanceof Ast\InstanceDecl) {
                 $parent = instanceParentTypeName($item->head);
-                // The instance belongs to this module's public surface when
-                // either end of it does: the class it is for (the class module
-                // owns the instance: `instance Eq Bool` is `Data.Eq`'s) or the
-                // type it is for (`instance Functor Maybe` in `Data.Maybe`). The
-                // page that shows it is the type's, wherever that is --
-                // {@see renderModulePage}.
+
                 if ($parent === null
                     || (!isExportedType($exportFilter, $item->class)
                         && !isExportedType($exportFilter, $parent))
                 ) {
                     continue;
                 }
+
                 $instName = instanceEntityName($item);
                 $instEntity = makeEntity(
                     $moduleName,

@@ -52,9 +52,6 @@ function schemesAlphaEqual(Scheme $left, Scheme $right): bool
 {
     $mapping = [];
 
-    // The declared side spells the primitive types the way source does (`Int`,
-    // `String`); the inferred side carries the primitives themselves. Rewriting
-    // both first is what lets the two be compared at all.
     return typesAlphaEqual(
         canonicalizePrimitiveTypes($left->type),
         canonicalizePrimitiveTypes($right->type),

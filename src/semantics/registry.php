@@ -63,6 +63,7 @@ function applyImportContext(TypeCheckState $state, Ast\Program $program, array $
     foreach ($importContext['classes'] ?? [] as $name => $info) {
         $state->classes[$name] = $info;
     }
+    $state->classParamKindsCache = null;
     syncAssociatedFamiliesFromClasses($state);
 
     $state->qualifiedModules = $importContext['qualifiedModules'] ?? [];

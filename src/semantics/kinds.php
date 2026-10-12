@@ -153,6 +153,10 @@ function newKindInferCtx(TypeCheckState $state): KindInferCtx
  */
 function stateClassParamKinds(TypeCheckState $state): array
 {
+    if ($state->classParamKindsCache !== null) {
+        return $state->classParamKindsCache;
+    }
+
     $kinds = [];
     foreach ($state->classes as $className => $classInfo) {
         $params = [];
@@ -163,7 +167,7 @@ function stateClassParamKinds(TypeCheckState $state): array
         $kinds[$className] = $params;
     }
 
-    return $kinds;
+    return $state->classParamKindsCache = $kinds;
 }
 
 function kindToString(Kind $kind): string

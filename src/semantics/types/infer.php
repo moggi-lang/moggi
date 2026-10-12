@@ -1730,7 +1730,7 @@ function inferEvidenceMethod(TypeCheckState $state, Ast\AstNode $expr): Type
 function inferApply(TypeCheckState $state, Ast\Apply $expr, array $env): Type
 {
     $fnType = prune($state, inferMethodByArgument($state, $expr, $env));
-    $argType = prune($state, inferExpr($state, $expr->argument, $env));
+    $argType = prune($state, takeKnownOperandType($state, $expr->argument) ?? inferExpr($state, $expr->argument, $env));
 
     if ($argType instanceof TCon && \str_starts_with($argType->name, '__Dict_')) {
         return $fnType;
@@ -1762,6 +1762,26 @@ function inferApply(TypeCheckState $state, Ast\Apply $expr, array $env): Type
     propagateCallMetadata($expr);
 
     return $result;
+}
+
+/**
+ * An operand type an infix rewrite already computed, taken out of the hand-off.
+ *
+ * See {@see inferRewrittenInfixFromOperands} for why the type is handed over at all. It is taken
+ * rather than read, so a handed-over type reaches the rewrite that asked for it and nothing else;
+ * an operand whose inference was not handed over is inferred here as before.
+ */
+function takeKnownOperandType(TypeCheckState $state, Ast\AstNode $operand): ?Type
+{
+    if ($state->knownOperandTypes === []) {
+        return null;
+    }
+
+    $id = \spl_object_id($operand);
+    $type = $state->knownOperandTypes[$id] ?? null;
+    unset($state->knownOperandTypes[$id]);
+
+    return $type;
 }
 
 /**
@@ -2321,11 +2341,7 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
             unset($state->constraintMethodAmbiguities[$op]);
 
             try {
-                $left = $expr->left;
-                $right = $expr->right;
-                $expr = infixApplicationNode($op, $left, $right, $expr->line, $expr->col, $expr->endCol);
-
-                return inferApplyAndElaborate($state, $expr, $env);
+                return inferRewrittenInfixFromOperands($state, $expr, $op, $leftType, $rightType, $env, false);
             } finally {
                 $state->constraintMethods = $savedMethods;
                 $state->constraintMethodAmbiguities = $savedAmbiguities;
@@ -2339,11 +2355,7 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
         && operandTypeIsUnresolved($state, $leftType, $rightType)
     ) {
         if (constraintsResolvable($state, $constraints)) {
-            $left = $expr->left;
-            $right = $expr->right;
-            $expr = infixApplicationNode($op, $left, $right, $expr->line, $expr->col, $expr->endCol);
-
-            return inferApplyAndElaborate($state, $expr, $env);
+            return inferRewrittenInfixFromOperands($state, $expr, $op, $leftType, $rightType, $env, false);
         }
 
         $expr->pendingConstraints = $instantiated['constraints'];
@@ -2358,12 +2370,7 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
                 && ! operandTypeIsUnresolved($state, $leftType, $rightType)
                 && constraintsResolvable($state, $constraints)))
     ) {
-        $left = $expr->left;
-        $right = $expr->right;
-        $surface = $expr;
-        $expr = infixApplicationNode($op, $left, $right, $expr->line, $expr->col, $expr->endCol);
-
-        return inferRewrittenInfix($state, $surface, $expr, $env);
+        return inferRewrittenInfixFromOperands($state, $expr, $op, $leftType, $rightType, $env, true);
     }
 
     if ($classOperator && $constraints !== []) {
@@ -2505,6 +2512,53 @@ function inferRewrittenInfix(TypeCheckState $state, Ast\AstNode $surface, Ast\Ap
     $surface->inferredType = $call->inferredType;
 
     return $type;
+}
+
+/**
+ * Rewrite an infix into the call it stands for, handing the call the operand types inference has.
+ *
+ * `inferInfix`'s fall-through infers both operands before it can decide whether the infix is a call
+ * to an instance method, and the rewrite then runs the ordinary call path, which infers both of
+ * them a second time. That second walk is the whole of the operand: in a right-nested chain --
+ * which is exactly what a `do` block desugars into -- it covers every remaining statement at every
+ * level, so typing a block of N statements cost a quadratic in N (a 1600-statement block took 158
+ * seconds, the same program written as an explicit chain about two). The two types are handed to
+ * `inferApply` instead; the call is built, parked and elaborated exactly as it was, and each
+ * operand is inferred once.
+ *
+ * `$mirrorSurface` picks what the rewrite ends in, matching the site that asked for it: the sites
+ * that replaced an infix with a call mirror the call's type onto the node the rewrite moved away
+ * from, and the two that elaborate in place do not.
+ */
+function inferRewrittenInfixFromOperands(
+    TypeCheckState $state,
+    Ast\AstNode &$expr,
+    string $op,
+    Type $leftType,
+    Type $rightType,
+    array $env,
+    bool $mirrorSurface,
+): Type {
+    $left = $expr->left;
+    $right = $expr->right;
+    $surface = $expr;
+    $line = $expr->line;
+    $col = $expr->col;
+    $endCol = $expr->endCol;
+    $expr = infixApplicationNode($op, $left, $right, $line, $col, $endCol);
+
+    $state->knownOperandTypes[\spl_object_id($left)] = $leftType;
+    $state->knownOperandTypes[\spl_object_id($right)] = $rightType;
+    try {
+        return $mirrorSurface
+            ? inferRewrittenInfix($state, $surface, $expr, $env)
+            : inferApplyAndElaborate($state, $expr, $env);
+    } finally {
+        unset(
+            $state->knownOperandTypes[\spl_object_id($left)],
+            $state->knownOperandTypes[\spl_object_id($right)],
+        );
+    }
 }
 
 /**
@@ -5001,9 +5055,6 @@ function applyTypeApp(TypeCheckState $state, Ast\TypeNode $con, array $argAsts, 
         );
     }
 
-    // The head keeps the spelling the resolver answered with: a name that is a
-    // library declaration (`List`, `Maybe`) is that type, and re-spelling it from
-    // the source text would invent a constructor the resolver never saw.
     applyTypeAppKinds($state, $resolvedHead->name, $args, $argAsts, $con, isVarHead: false);
 
     return new TCon($resolvedHead->name, $args);
