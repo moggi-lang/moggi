@@ -5,9 +5,24 @@ namespace Moggi\Semantics\Types;
 use Moggi\IR;
 use Moggi\Syntax\Ast;
 
+use function Moggi\Syntax\isSafeName;
+
 function evidenceFunctionName(string $className, Ast\TypeNode $head): string
 {
-    return '__ev_' . $className . '_' . evidenceHeadSuffix($head);
+    return '__ev_' . evidenceNamePart($className) . '_' . evidenceHeadSuffix($head);
+}
+
+/**
+ * One name spelled into an evidence symbol: itself when a target can spell it
+ * (`Eq`, `Shape`), otherwise a digest of it (`class Label' a where`).
+ *
+ * A digest rather than a mangled spelling, because a mangled one can land on a
+ * real name — collapsing `Label'` onto `Label_` — and two instantiations must
+ * not share one evidence function.
+ */
+function evidenceNamePart(string $name): string
+{
+    return isSafeName($name) ? $name : 'h_' . substr(hash('sha256', $name), 0, 16);
 }
 
 function evidenceHeadSuffix(Ast\TypeNode $head): string
@@ -27,10 +42,10 @@ function evidenceHeadSuffix(Ast\TypeNode $head): string
 
     if (isSimpleEvidenceHead($head)) {
         if ($head instanceof Ast\TypeApp && $head->con instanceof Ast\TypeCon) {
-            return sanitizeEvidenceNamePart($head->con->name);
+            return $head->con->name;
         }
 
-        return sanitizeEvidenceNamePart($head->name);
+        return $head->name;
     }
 
     return hashedEvidenceHeadSuffix($head);
@@ -43,16 +58,16 @@ function evidenceHeadSuffix(Ast\TypeNode $head): string
  */
 function evidenceHeadArgSuffix(Ast\TypeNode $arg): ?string
 {
-    if ($arg instanceof Ast\TypeVar) {
-        return sanitizeEvidenceNamePart($arg->name);
+    if ($arg instanceof Ast\TypeVar && isSafeName($arg->name)) {
+        return $arg->name;
     }
 
-    if ($arg instanceof Ast\TypeCon && isBareEvidenceName($arg->name)) {
-        return sanitizeEvidenceNamePart($arg->name);
+    if ($arg instanceof Ast\TypeCon && isSafeName($arg->name)) {
+        return $arg->name;
     }
 
-    if ($arg instanceof Ast\TypePromoted && isBareEvidenceName($arg->name)) {
-        return 'p_' . sanitizeEvidenceNamePart($arg->name);
+    if ($arg instanceof Ast\TypePromoted && isSafeName($arg->name)) {
+        return 'p_' . $arg->name;
     }
 
     return null;
@@ -63,14 +78,23 @@ function hashedEvidenceHeadSuffix(Ast\TypeNode $head): string
     return 'h_' . substr(hash('sha256', canonicalTypeKey($head)), 0, 16);
 }
 
+/**
+ * Whether the head spells itself in the symbol: a name `isSafeName` accepts
+ * (`Int`, `Maybe a`), or one applied to type variables.
+ *
+ * `data Foo'` is a legal name whose prime no target alphabet has, and every
+ * symbol that has to be built from a name the target cannot spell takes the
+ * hash instead — a mangled spelling would collapse `Foo'` onto a real `Foo_`,
+ * giving two instances one evidence function.
+ */
 function isSimpleEvidenceHead(Ast\TypeNode $head): bool
 {
-    if ($head instanceof Ast\TypeCon && isBareEvidenceName($head->name)) {
+    if ($head instanceof Ast\TypeCon && isSafeName($head->name)) {
         return true;
     }
 
     if ($head instanceof Ast\TypeApp && $head->con instanceof Ast\TypeCon) {
-        if (!isBareEvidenceName($head->con->name)) {
+        if (!isSafeName($head->con->name)) {
             return false;
         }
         foreach ($head->args as $arg) {
@@ -83,22 +107,6 @@ function isSimpleEvidenceHead(Ast\TypeNode $head): bool
     }
 
     return false;
-}
-
-/** True when `$name` can appear verbatim in an evidence symbol. */
-function isBareEvidenceName(string $name): bool
-{
-    return preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $name) === 1;
-}
-
-function sanitizeEvidenceNamePart(string $name): string
-{
-    $safe = preg_replace('/[^A-Za-z0-9_]/', '_', $name) ?? 'Type';
-    if (preg_match('/^[A-Za-z_]/', $safe) !== 1) {
-        $safe = '_' . $safe;
-    }
-
-    return $safe;
 }
 
 /** IR name for an instance method so multiple instances in one module do not collide. */
@@ -133,7 +141,7 @@ function instanceMethodIrSuffix(string $methodName): string
     if ($known !== null) {
         return $known;
     }
-    if (preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $methodName) === 1) {
+    if (isSafeName($methodName)) {
         return $methodName;
     }
 

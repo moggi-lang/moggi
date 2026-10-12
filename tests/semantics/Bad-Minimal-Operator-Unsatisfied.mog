@@ -1,0 +1,17 @@
+-- A MINIMAL pragma names an operator method the way the class body spells it,
+-- in parentheses: `(~=) | (/~)`. The rule is the one in `Bad-Minimal-Unsatisfied`:
+-- an instance has to write one of the alternatives, and this one writes neither.
+class Same a where
+  (~=), (/~) :: a -> a -> Bool
+
+  (~=) x y = (/~) x y
+  (/~) x y = (~=) x y
+
+  {-# MINIMAL (~=) | (/~) #-}
+
+data W = W
+
+instance Same W where
+
+main :: IO ()
+main = putStrLn (show (W ~= W))

@@ -1,0 +1,25 @@
+-- Data.Eq: the class names both methods in its MINIMAL pragma, in the spelling
+-- the class body uses for them, so an instance that writes `(==)` is complete
+-- and takes the default `(/=)`, and the other way round too. `Pair` writes
+-- `(==)` and `Rev` writes `(/=)`; each answers both operators.
+
+data Pair a = Pair a a
+
+instance Eq a => Eq (Pair a) where
+  (==) (Pair a b) (Pair c d) = a == c && b == d
+
+data Rev = Rev Int
+
+instance Eq Rev where
+  (/=) (Rev a) (Rev b) = a /= b
+
+main :: IO ()
+main = do
+  putStrLn (show (Pair 1 2 == Pair 1 2))
+  putStrLn (show (Pair 1 2 == Pair 1 3))
+  putStrLn (show (Pair 1 2 /= Pair 1 3))
+  putStrLn (show (Pair 1 2 /= Pair 1 2))
+  putStrLn (show (Rev 1 /= Rev 1))
+  putStrLn (show (Rev 1 /= Rev 2))
+  putStrLn (show (Rev 1 == Rev 1))
+  putStrLn (show (Rev 1 == Rev 2))

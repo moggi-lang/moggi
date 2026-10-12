@@ -103,3 +103,7 @@ A path that mirrors a module path is exempt: `tests/lib/Data/ByteString/` mirror
 |------|------|
 | `tests/suite/` | the harness itself |
 | `.moggi/test/` | scratch trees and the log of every failing case |
+| `tests/lsp/`, `tests/docs/fixture/`, … | source a script case opens by path, named in `supportInputPaths()` — not a case |
+
+The walk refuses a fixture that no golden claims, so a case cannot pass by never running; the input
+table above names the support files that legitimately have no golden.

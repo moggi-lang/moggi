@@ -114,6 +114,11 @@ is a fixture, `*_test.php` is a script. The name a case prints and is selected b
 the input extension (`backend/codegen/Alias`). Names are Kebab-Cased, directories included, and the
 examples keep their tree (`examples/twice`); `tests/README.md` lists which kind of test goes where.
 
+Which means the files have to agree: discovery refuses a fixture no golden claims and a golden no
+input claims, because either one is a case that never runs rather than a case that fails. A `.mog` a
+script case opens by path is the one input claimed by no golden, and it is named in
+`supportInputPaths()` in `tests/suite/support/discovery.php`.
+
 ## The kinds
 
 A golden is `<base>[.<backend>].<kind>.expected`, beside the input it belongs to (`Foo.mog`,

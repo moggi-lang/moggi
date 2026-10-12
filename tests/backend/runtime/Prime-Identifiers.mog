@@ -1,0 +1,52 @@
+import Data.Int
+import Data.Bool
+import Data.Eq
+import Text.Show
+import System.IO
+
+-- A prime is an identifier continuation character, so every place a name can be
+-- spelled has to carry one: a constructor, a record field, a function, a pattern
+-- variable, a class method (and the MINIMAL pragma naming it), an instance head
+-- and a type variable.
+--
+-- Backend drift risk: a name that reaches a constructor tag is emitted as a
+-- string literal, and one that names a symbol is mangled, so a target that
+-- quotes or spells it wrong shows up here as a parse error or a missing name.
+data Shape' = Dot' | Line' Int | Box' { side' :: Int, depth' :: Int }
+
+area' :: Shape' -> Int
+area' s = case s of
+  Dot' -> 0
+  Line' n -> n
+  Box' { side' = w, depth' = d } -> w * d
+
+double' :: Int -> Int
+double' n' = n' + n'
+
+class Label' a where
+  label' :: a -> String
+  {-# MINIMAL label' #-}
+
+instance Label' Shape' where
+  label' s = case s of
+    Dot' -> "dot"
+    Line' n -> "line " <> show n
+    Box' { side' = w } -> "box " <> show w
+
+instance Eq Shape' where
+  (==) x y = area' x == area' y
+
+pick' :: Eq a' => a' -> a' -> a'
+pick' x y = case x == y of
+  True -> x
+  False -> y
+
+main :: IO ()
+main = do
+  putStrLn (show (area' (Line' 7)))
+  putStrLn (show (area' (Box' { side' = 2, depth' = 3 })))
+  putStrLn (show (double' 21))
+  putStrLn (label' Dot')
+  putStrLn (show (Line' 1 == Box' { side' = 1, depth' = 1 }))
+  putStrLn (label' (pick' Dot' (Line' 5)))
+  putStrLn (show (sum (map area' (map Line' [1, 2, 3]))))

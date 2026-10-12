@@ -12,6 +12,7 @@ use function Moggi\Semantics\Types\bindingGroupSccs;
 use function Moggi\Semantics\Types\evidenceRefOperand;
 use function Moggi\Semantics\Types\peelBindingAnnotation;
 use function Moggi\Semantics\Types\prune;
+use function Moggi\Syntax\isIdentifier;
 
 function lowerExpr(Ast\AstNode $expr, LowerCtx $ctx): Operand
 {
@@ -183,7 +184,7 @@ function lowerInfix(Ast\Infix $expr, LowerCtx $ctx): Operand
         return $named;
     }
 
-    if (isIdentifierInfixFunction($expr->operator)) {
+    if (isIdentifier($expr->operator)) {
         return lowerCall($expr->operator, $args, $ctx, $infixLoc);
     }
 
@@ -208,11 +209,6 @@ function lowerShortCircuitAndOr(Ast\Infix $expr, LowerCtx $ctx): Operand
         new Ast\Alt(new Ast\PatCon('True', []), $isAnd ? $expr->right : new Ast\ConstructorRef('True')),
         new Ast\Alt(new Ast\PatCon('False', []), $isAnd ? new Ast\ConstructorRef('False') : $expr->right),
     ], $ctx, true);
-}
-
-function isIdentifierInfixFunction(string $operator): bool
-{
-    return preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $operator) === 1;
 }
 
 function lowerApplyFromExpr(Ast\Apply $expr, LowerCtx $ctx): Operand

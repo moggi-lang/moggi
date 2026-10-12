@@ -174,6 +174,8 @@ class Eq a => Pretty a where
   prettyList :: [a] -> String
   prettyList = unwords . map pretty
 
+  {-# MINIMAL pretty #-}                -- what an instance must define
+
 instance Pretty Bool where
   pretty b = case b of
     True -> "yes"
@@ -187,9 +189,10 @@ instance Pretty a => Pretty [a] where
 - **Default methods** provide implementations that instances can inherit or override. Here, `prettyList` uses `pretty` to format a list of values.
 - **Instances** define how a type implements a class. The `Bool` instance formats booleans as `"yes"` or `"no"`, while the list instance formats lists using the element type's `Pretty` instance.
 - **Constraints** restrict which types a function accepts. For example, `Pretty a => a -> String` works for any type with a `Pretty` instance.
-- **Minimal definitions** can specify which methods an instance must implement. For example, `{-# MINIMAL pretty #-}` requires every instance to define `pretty`.
+- **One equation per method.** A method is one definition: a class allows a single default per method, so a default that matches on its argument uses `case` rather than a second equation, and an instance's equations have to be written together — together they are one definition, matched in order. A method an instance leaves out is the class's default body.
+- **Minimal definitions** name what an instance must provide: `{-# MINIMAL pretty #-}` requires `pretty`, and an instance is complete when it satisfies one alternative of the pragma. Alternatives are separated by `|`, and an alternative is satisfied only when every method it lists is written — `{-# MINIMAL bimap | first, second #-}` means an instance either defines `bimap` or defines both `first` and `second`.
 
-Operators can also be class methods. Their names must be in scope, usually through an import or the `Prelude`. The applicable instance determines their behavior.
+Operators can also be class methods. Their names must be in scope, usually through an import or the `Prelude`, and what an operator means is what the instance for its operands' type declares: `n + 1` at `Int` is the `Num` instance `Data.Num` gives `Int`, and the same `+` at another type is that type's instance.
 
 Instances are available program-wide, regardless of which module defines them.
 
@@ -333,17 +336,19 @@ has the whole pattern; `lib/System/IO.mog` is a real example to copy.
 
 ## Comments
 
-Comments are stripped by the lexer — they never reach the AST.
+Comments do not change what a program does.
 
 ```moggi
--- line comment to end of line
+-- to the end of the line
 add x y = x + y  -- trailing note
 
-{- block comment -}
-{- nested {- comments -} are supported -}
+{- across lines -}
+{- and {- nesting -} is supported -}
 ```
 
-`--` does not start a comment when immediately followed by `-` or `>` (so `---` and `-->` remain valid operators).
+A `--` begins a comment unless the character right after it is `>`, so `-->` is an operator while `---` is a comment.
+
+Documentation comments are the one kind that is kept: `-- |` on the lines before a declaration (or `{-| … -}` in block form), `-- ^` after it, and `-- *` to head a section of an export list. They describe the declaration they are attached to and are what the documentation tool shows; anywhere else they are ordinary comments.
 
 ## Built-in types and primitives
 

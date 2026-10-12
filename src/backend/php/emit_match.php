@@ -5,6 +5,7 @@ namespace Moggi\Backend\Php\Codegen;
 use Moggi\IR;
 
 use function Moggi\Backend\Php\Naming\mangleVar;
+use function Moggi\Backend\Php\Naming\phpSingleQuoted;
 use function Moggi\Backend\Php\Naming\phpTemp;
 use function Moggi\IR\Visit\mapOperandChildren;
 
@@ -245,7 +246,7 @@ function emitPhpMatchKey(IR\Pattern $pattern, array $ctx, bool $boolMatch): stri
 
     return $boolMatch
         ? (($ctx['boolConstructors'][$tag] ?? false) ? 'true' : 'false')
-        : "'{$tag}'";
+        : phpSingleQuoted($tag);
 }
 
 /** @return array<string, string> */
@@ -900,7 +901,7 @@ function emitConPatternTest(IR\Pattern $pattern, string $scrutinee, array $ctx):
         return joinPatternTests($tests);
     }
 
-    $tests = ["(({$scrutinee})[0] ?? null) === '{$name}'"];
+    $tests = ["(({$scrutinee})[0] ?? null) === " . phpSingleQuoted($name)];
     foreach ($pattern->args as $i => $arg) {
         $tests[] = emitPatternTest($arg, "{$scrutinee}[" . ($i + 1) . ']', $ctx);
     }

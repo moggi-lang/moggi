@@ -6,6 +6,9 @@ use Moggi\Syntax\Ast;
 use Moggi\Syntax\Lexer\TokenKind;
 
 use function Moggi\Syntax\isConstructorOperator;
+use function Moggi\Syntax\Lexer\isIdCont;
+use function Moggi\Syntax\Lexer\isLetter;
+use function Moggi\Syntax\Lexer\isSymbol;
 
 /**
  * Top-level declaration, or null if the next tokens are an expression/statement.
@@ -972,6 +975,9 @@ function parseClassDecl(ParserState $state): Ast\ClassDecl
  * `{-# MINIMAL a, b | c #-}`: the alternatives (`|`) whose methods an instance
  * has to implement, each alternative a conjunction (`,`).
  *
+ * An operator method is named the way the class body spells it, in parentheses:
+ * `(==) | (/=)`.
+ *
  * @return list<list<string>>
  */
 function parseMinimalPragma(ParserState $state, Token $token): array
@@ -981,12 +987,7 @@ function parseMinimalPragma(ParserState $state, Token $token): array
         throw parseError($state, "unsupported pragma `{$body}`", $token, 'parse/pragma');
     }
 
-    $parts = [];
-    foreach (preg_split('/\s*([|,()])\s*/', trim($m[1]), -1, PREG_SPLIT_DELIM_CAPTURE) ?: [] as $part) {
-        if ($part !== '') {
-            $parts[] = $part;
-        }
-    }
+    $parts = minimalPragmaParts($state, trim($m[1]), $token);
 
     $pos = 0;
     $groups = minimalExpression($parts, $pos, $token, $state);
@@ -995,6 +996,85 @@ function parseMinimalPragma(ParserState $state, Token $token): array
     }
 
     return $groups;
+}
+
+/**
+ * The method names and the `(`, `)`, `,` and `|` a MINIMAL body is made of.
+ *
+ * A name is an identifier (`foldMap`) or a run of operator characters (`==`),
+ * and the run is read whole: `(<|>)` names `<|>`, while a separator stands on
+ * its own. The parentheses are grouping, so `(==)` is a group holding the one
+ * name `==` — which the class body spells the same way — and `(recip | (/))` is
+ * a group holding a name and a group.
+ *
+ * @return list<string>
+ */
+function minimalPragmaParts(ParserState $state, string $text, Token $token): array
+{
+    $parts = [];
+    $i = 0;
+    $len = \strlen($text);
+
+    while ($i < $len) {
+        $c = $text[$i];
+
+        if (\ctype_space($c)) {
+            ++$i;
+            continue;
+        }
+
+        if ($c === '(' || $c === ')' || $c === ',') {
+            $parts[] = $c;
+            ++$i;
+            continue;
+        }
+
+        if (isSymbol($c)) {
+            $start = $i;
+            while ($i < $len && isSymbol($text[$i])) {
+                ++$i;
+            }
+            $parts[] = \substr($text, $start, $i - $start);
+            continue;
+        }
+
+        if (isLetter($c) || $c === '_') {
+            $start = $i++;
+            while ($i < $len && isIdCont($text[$i])) {
+                ++$i;
+            }
+            $parts[] = \substr($text, $start, $i - $start);
+            continue;
+        }
+
+        throw parseError(
+            $state,
+            "MINIMAL pragma needs method names, found `{$c}`",
+            $token,
+            'parse/pragma',
+        );
+    }
+
+    return $parts;
+}
+
+/**
+ * Whether a MINIMAL leaf names an operator method — `==`, `/=`, `<|>`, `:`. The
+ * separator `|` is not one, and an identifier is checked before this.
+ */
+function isMinimalOperatorName(string $name): bool
+{
+    if ($name === '' || $name === '|') {
+        return false;
+    }
+
+    for ($i = 0, $len = \strlen($name); $i < $len; ++$i) {
+        if (!isSymbol($name[$i])) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 /**
@@ -1054,7 +1134,7 @@ function minimalTerm(array $parts, int &$pos, Token $token, ParserState $state):
         throw parseError($state, 'MINIMAL pragma needs at least one method name', $token, 'parse/pragma');
     }
 
-    if (preg_match('/^[A-Za-z_][A-Za-z0-9_\']*$/', $part) !== 1) {
+    if (preg_match('/^[A-Za-z_][A-Za-z0-9_\']*$/', $part) !== 1 && !isMinimalOperatorName($part)) {
         throw parseError($state, "MINIMAL pragma needs method names, found `{$part}`", $token, 'parse/pragma');
     }
 
