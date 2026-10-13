@@ -85,6 +85,22 @@ runIOHgetlineEof = do
   readFirst hr
   hClose hr
 
+-- ---- Exec-IO-Hgetline-Strip ----
+
+-- A line comes back without its line ending: that strip is 'hGetLine''s, not a
+-- compiler special case for a host function spelled `fgets`.
+runIOHgetlineStrip :: IO ()
+runIOHgetlineStrip = do
+  p <- scratchPath "moggi-exec-io-hgetline-strip.txt"
+  hw <- openFile p WriteMode
+  hPutStr hw "alpha\nbeta\n"
+  hClose hw
+  hr <- openFile p ReadMode
+  readFirst hr
+  readFirst hr
+  readFirst hr
+  hClose hr
+
 -- ---- Exec-IO-NeverBuilt ----
 
 runIONeverBuilt :: IO ()
@@ -215,6 +231,7 @@ main = do
   runIODeferredAction
   runIOGetContents
   runIOHgetlineEof
+  runIOHgetlineStrip
   runIONeverBuilt
   runIOOpenError
   runIOStress

@@ -16,7 +16,6 @@ enum IoWrap: string
 {
     case None = 'none';
     case Either = 'either';
-    case FgetsLine = 'fgets_line';
     case MaybeString = 'maybe_string';
 }
 

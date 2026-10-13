@@ -1,0 +1,9 @@
+import Moggi.Generics
+import Data.Maybe
+
+-- Newtype deriving reuses the underlying type's instance, so it needs a
+-- representation to delegate through. A class with an associated type is built
+-- the other way round -- `Generic`'s `Rep` is synthesized from the declaration --
+-- and that is what stock deriving is for. `Generic1` is refused by the same rule
+-- (`Rep1`).
+newtype Box a = Box (Maybe a) deriving newtype (Generic)

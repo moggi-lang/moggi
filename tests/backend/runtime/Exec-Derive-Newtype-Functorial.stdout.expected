@@ -1,0 +1,18 @@
+Wrap (Just 2)
+Wrap Nothing
+2
+3
+1
+5
+Just (Wrap (Just 60))
+Just (Wrap (Just 7))
+Just (Wrap (Just 16))
+Just (Wrap (Just 9))
+10
+[11]
+False
+Err (Right 2)
+2
+Just (Err (Right 30))
+Just (Err (Left "boom"))
+Just (Err (Right 5))

@@ -17,6 +17,13 @@ use function Moggi\Semantics\IntrinsicRegistry\isMagicHashName;
 use function Moggi\Semantics\IoBoundary\isIoType;
 use function Moggi\Semantics\IoBoundary\isIoTypeConName;
 use function Moggi\Semantics\IoBoundary\typeMentionsIo;
+use function Moggi\Semantics\Kernel\boundaryEitherTypeName;
+use function Moggi\Semantics\Kernel\boundaryHandleTypeName;
+use function Moggi\Semantics\Kernel\boundaryMaybeTypeName;
+use function Moggi\Semantics\Kernel\boundaryReifiedTypeName;
+use function Moggi\Semantics\Kernel\boundaryStringTypeName;
+use function Moggi\Semantics\Kernel\isBoundaryContainerType;
+use function Moggi\Semantics\Kernel\isBoundaryHandleType;
 use function Moggi\Semantics\Types\typeFail;
 
 function checkForeignImportItem(TypeCheckState $state, Ast\ForeignImportDecl $item): Ast\FunctionDecl
@@ -70,7 +77,7 @@ function checkForeignImportItem(TypeCheckState $state, Ast\ForeignImportDecl $it
         args: \array_map(static fn (string $param): Ast\Variable => new Ast\Variable($param), $params),
         classPath: $pathInfo['classPath'],
         member: $pathInfo['hostMember'],
-        ioWrap: foreignIoWrap($item->type, $item->path),
+        ioWrap: foreignIoWrap($item->type),
         phpValueBox: foreignPhpValueBox($item->type),
         handleBox: foreignHandleBox($item->type),
         handleUnboxArgs: foreignHandleUnboxArgIndices($item->type),
@@ -114,14 +121,14 @@ function validateInstanceForeignType(TypeCheckState $state, Ast\ForeignImportDec
 
     $receiver = $type->from;
     $receiverName = foreignTypeConName($receiver);
-    if ($receiverName === 'PHPValue') {
+    if ($receiverName === boundaryReifiedTypeName()) {
         throw typeFail(
             $state,
             'PHPValue cannot be an instance-method receiver; use a specific foreign type or Handle',
             $item,
         );
     }
-    if ($receiverName === 'Handle' || $receiverName === 'Resource') {
+    if ($receiverName !== null && isBoundaryHandleType($receiverName)) {
         return;
     }
     if ($receiverName !== null && isMagicHashName($receiverName)) {
@@ -240,7 +247,7 @@ function foreignHandleUnboxArgIndices(Ast\TypeNode $type): array
     $index = 0;
 
     while ($cursor instanceof Ast\TypeArrow) {
-        if (foreignTypeConName($cursor->from) === 'Handle') {
+        if (foreignTypeConName($cursor->from) === boundaryHandleTypeName()) {
             $indices[] = $index;
         }
 
@@ -292,25 +299,25 @@ function foreignTypeConName(Ast\TypeNode $type): ?string
 function foreignReturnsEitherString(Ast\TypeNode $type): bool
 {
     $inner = foreignIoInnerType($type);
-    if (foreignTypeConName($inner) !== 'Either') {
+    if (foreignTypeConName($inner) !== boundaryEitherTypeName()) {
         return false;
     }
 
     $left = $inner instanceof Ast\TypeApp ? ($inner->args[0] ?? null) : null;
 
-    return $left instanceof Ast\AstNode && foreignTypeConName($left) === 'String';
+    return $left instanceof Ast\AstNode && foreignTypeConName($left) === boundaryStringTypeName();
 }
 
 function foreignReturnsPhpValue(Ast\TypeNode $type): bool
 {
     $inner = foreignIoInnerType($type);
-    if (foreignTypeConName($inner) === 'Either') {
+    if (foreignTypeConName($inner) === boundaryEitherTypeName()) {
         $right = $inner instanceof Ast\TypeApp ? ($inner->args[1] ?? null) : null;
 
-        return $right instanceof Ast\AstNode && foreignTypeConName($right) === 'PHPValue';
+        return $right instanceof Ast\AstNode && foreignTypeConName($right) === boundaryReifiedTypeName();
     }
 
-    return foreignTypeConName($inner) === 'PHPValue';
+    return foreignTypeConName($inner) === boundaryReifiedTypeName();
 }
 
 function foreignReturnsIo(Ast\TypeNode $type): bool
@@ -323,8 +330,14 @@ function foreignReturnsIo(Ast\TypeNode $type): bool
     return $result instanceof Ast\TypeNode && isIoType($result);
 }
 
-/** Which IO wrapping the host call needs (see `IR\IoWrap`). */
-function foreignIoWrap(Ast\TypeNode $type, string $path = ''): IoWrap
+/**
+ * Which IO wrapping the host call needs (see `IR\IoWrap`).
+ *
+ * The answer is the signature's, never the host function's: `IO (Maybe String)`
+ * means the same thing wherever it is imported from, so nothing here may look at
+ * the path the declaration named.
+ */
+function foreignIoWrap(Ast\TypeNode $type): IoWrap
 {
     if (!foreignReturnsIo($type)) {
         return IoWrap::None;
@@ -335,32 +348,22 @@ function foreignIoWrap(Ast\TypeNode $type, string $path = ''): IoWrap
     }
 
     if (foreignReturnsMaybeString($type)) {
-        return foreignMaybeStringUsesFgetsLine($path)
-            ? IoWrap::FgetsLine
-            : IoWrap::MaybeString;
+        return IoWrap::MaybeString;
     }
 
     return IoWrap::None;
 }
 
-function foreignMaybeStringUsesFgetsLine(string $path): bool
-{
-    $info = parseForeignPath($path);
-    $member = strtolower((string) ($info['hostMember'] ?? $path));
-
-    return str_contains($member, 'fgets');
-}
-
 function foreignReturnsMaybeString(Ast\TypeNode $type): bool
 {
     $inner = foreignIoInnerType($type);
-    if (foreignTypeConName($inner) !== 'Maybe') {
+    if (foreignTypeConName($inner) !== boundaryMaybeTypeName()) {
         return false;
     }
 
     $arg = $inner instanceof Ast\TypeApp ? ($inner->args[0] ?? null) : null;
 
-    return $arg instanceof Ast\AstNode && foreignTypeConName($arg) === 'String';
+    return $arg instanceof Ast\AstNode && foreignTypeConName($arg) === boundaryStringTypeName();
 }
 
 function foreignPhpValueBox(Ast\TypeNode $type): bool
@@ -369,20 +372,20 @@ function foreignPhpValueBox(Ast\TypeNode $type): bool
         return foreignReturnsPhpValue($type);
     }
 
-    return foreignTypeConName($type) === 'PHPValue'
+    return foreignTypeConName($type) === boundaryReifiedTypeName()
         || foreignReturnsPhpValue($type);
 }
 
 function foreignReturnsHandle(Ast\TypeNode $type): bool
 {
     $inner = foreignIoInnerType($type);
-    if (foreignTypeConName($inner) === 'Either') {
+    if (foreignTypeConName($inner) === boundaryEitherTypeName()) {
         $right = $inner instanceof Ast\TypeApp ? ($inner->args[1] ?? null) : null;
 
-        return $right instanceof Ast\AstNode && foreignTypeConName($right) === 'Handle';
+        return $right instanceof Ast\AstNode && foreignTypeConName($right) === boundaryHandleTypeName();
     }
 
-    return foreignTypeConName($inner) === 'Handle';
+    return foreignTypeConName($inner) === boundaryHandleTypeName();
 }
 
 function foreignHandleBox(Ast\TypeNode $type): bool
@@ -396,7 +399,7 @@ function foreignHandleBox(Ast\TypeNode $type): bool
         $result = $result->to;
     }
 
-    return foreignTypeConName($result) === 'Handle';
+    return foreignTypeConName($result) === boundaryHandleTypeName();
 }
 
 function validateForeignTypeDecl(TypeCheckState $state, Ast\ForeignTypeDecl $decl): void
@@ -474,7 +477,7 @@ function validateForeignTypeCon(
         return;
     }
 
-    if ($name === 'PHPValue') {
+    if ($name === boundaryReifiedTypeName()) {
         if ($backend !== 'php') {
             throw typeFail(
                 $state,
@@ -485,11 +488,11 @@ function validateForeignTypeCon(
         return;
     }
 
-    if ($name === 'Handle' || $name === 'Resource') {
+    if (isBoundaryHandleType($name)) {
         return;
     }
 
-    if (in_array($name, ['Maybe', 'Either'], true)) {
+    if (isBoundaryContainerType($name)) {
         if ($argument) {
             throw typeFail(
                 $state,

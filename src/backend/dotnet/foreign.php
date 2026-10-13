@@ -8,6 +8,10 @@ use function Moggi\Backend\DotNet\Dependencies\dotNetTypeIsValueType;
 use function Moggi\Backend\DotNet\Naming\bclAssemblyFor;
 use function Moggi\Foreign\splitForeignPathMember;
 use function Moggi\Semantics\IoBoundary\isIoTypeConName;
+use function Moggi\Semantics\Kernel\boolTypeName;
+use function Moggi\Semantics\Kernel\boundaryEitherTypeName;
+use function Moggi\Semantics\Kernel\boundaryHandleTypeName;
+use function Moggi\Semantics\Kernel\boundaryMaybeTypeName;
 use function Moggi\Semantics\Types\primitiveTypeIdOf;
 
 function registerDotNetForeignType(string $moggiName, string $hostType): void
@@ -212,13 +216,13 @@ function clrTypeName(
 
     if ($type instanceof Ast\TypeApp && $type->con instanceof Ast\TypeCon) {
         $container = $type->con->name;
-        if ($container === 'Maybe') {
+        if ($container === boundaryMaybeTypeName()) {
             $inner = $type->args[0] ?? null;
             if ($inner instanceof Ast\AstNode) {
                 return clrTypeName($inner, $classPath, $member, $isReturn, $dispatch);
             }
         }
-        if ($container === 'Either') {
+        if ($container === boundaryEitherTypeName()) {
             $inner = $type->args[1] ?? $type->args[0] ?? null;
             if ($inner instanceof Ast\AstNode) {
                 return clrTypeName($inner, $classPath, $member, $isReturn, $dispatch);
@@ -242,8 +246,8 @@ function clrTypeName(
     }
 
     return match ($con) {
-        'Bool' => 'bool',
-        'Handle' => clrOpaqueObjectMapping($classPath, $isReturn, $dispatch),
+        boolTypeName() => 'bool',
+        boundaryHandleTypeName() => clrOpaqueObjectMapping($classPath, $isReturn, $dispatch),
         'List' => 'class Moggi.Rt.MList',
         default => clrForeignLeafToIl((string) $con),
     };

@@ -1,0 +1,56 @@
+import Control.Monad
+import Data.Either
+import Data.Foldable
+import Data.Functor
+import Data.Maybe
+import Data.Num
+import Data.Traversable
+import Text.Show
+import System.IO
+
+-- Generalized newtype deriving for the `* -> *` classes delegates every method
+-- to the dictionary of the type underneath. A method's own constraint is
+-- carried by that dictionary too, and one of its superclasses can be a
+-- superclass of the class being derived (`traverse` needs `Applicative f`,
+-- whose `Functor` is also `Traversable`'s), so the delegated call has to be
+-- handed every expanded method dictionary — not only the ones whose class the
+-- derived class does not already inherit.
+
+newtype Wrap a = Wrap (Maybe a)
+  deriving (Show)
+  deriving newtype (Functor, Foldable, Traversable)
+
+-- The instance underneath is constrained (`Functor (Either a)`), so the derived
+-- instance carries a context of its own.
+newtype Err e a = Err (Either e a)
+  deriving (Show)
+  deriving newtype (Functor, Foldable, Traversable)
+
+runWrap :: IO ()
+runWrap = do
+  putStrLn (show (map (\x -> x + 1) (Wrap (Just 1))))
+  putStrLn (show (map (\x -> x + 1) (Wrap Nothing)))
+  putStrLn (show (foldr (\x acc -> x + acc) 0 (Wrap (Just 2))))
+  putStrLn (show (foldl (\acc x -> acc + x) 0 (Wrap (Just 3))))
+  putStrLn (show (length (Wrap (Just 4))))
+  putStrLn (show (sum (Wrap (Just 5))))
+  putStrLn (show (traverse (\x -> Just (x * 10)) (Wrap (Just 6))))
+  putStrLn (show (sequenceA (Wrap (Just (Just 7)))))
+  putStrLn (show (mapM (\x -> Just (x * 2)) (Wrap (Just 8))))
+  putStrLn (show (sequence (Wrap (Just (Just 9)))))
+  putStrLn (show (maximum (Wrap (Just 10)) :: Int))
+  putStrLn (show (toList (Wrap (Just 11))))
+  putStrLn (show (null (Wrap (Just 12))))
+
+runErr :: IO ()
+runErr = do
+  putStrLn (show (map (\x -> x + 1) (Err (Right 1) :: Err String Int)))
+  putStrLn (show (foldr (\x acc -> x + acc) 0 (Err (Right 2) :: Err String Int)))
+  putStrLn (show (traverse (\x -> Just (x * 10)) (Err (Right 3) :: Err String Int)))
+  putStrLn (show (traverse (\x -> Just (x * 10)) (Err (Left "boom") :: Err String Int)))
+  putStrLn (show (mapM (\x -> Just (x + 1)) (Err (Right 4) :: Err String Int)))
+
+main :: IO ()
+main = do
+  runWrap
+  runErr

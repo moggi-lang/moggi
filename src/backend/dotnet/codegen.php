@@ -1833,7 +1833,7 @@ function emitForeign(EmitEnv $env, IR\ForeignCall $op): void
 function emitForeignIoWrap(EmitEnv $env, IR\IoWrap $wrap): void
 {
     match ($wrap) {
-        IR\IoWrap::MaybeString, IR\IoWrap::FgetsLine => emitForeignMaybeStringWrap($env),
+        IR\IoWrap::MaybeString => emitForeignMaybeStringWrap($env),
         IR\IoWrap::Either => throw new \RuntimeException(
             'DotNet foreign IoWrap::Either is not implemented; use Moggi try/catch',
         ),

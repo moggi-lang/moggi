@@ -43,6 +43,7 @@ function deriveGeneric(
                 $ref->endCol,
             ),
         ],
+        contributesMetadata: true,
     );
 }
 

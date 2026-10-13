@@ -20,6 +20,10 @@ use Moggi\Syntax\Ast;
 
 use function Moggi\Foreign\splitForeignPathMember;
 use function Moggi\Semantics\IoBoundary\isIoTypeConName;
+use function Moggi\Semantics\Kernel\boolTypeName;
+use function Moggi\Semantics\Kernel\boundaryEitherTypeName;
+use function Moggi\Semantics\Kernel\boundaryHandleTypeName;
+use function Moggi\Semantics\Kernel\boundaryMaybeTypeName;
 use function Moggi\Semantics\Types\primitiveTypeIdOf;
 
 function registerJvmForeignType(string $moggiName, string $hostType): void
@@ -217,7 +221,7 @@ function jvmTypeDescriptorFromMoggiType(
 
     if ($type instanceof Ast\TypeApp && $type->con instanceof Ast\TypeCon) {
         $container = $type->con->name;
-        if ($container === 'Maybe') {
+        if ($container === boundaryMaybeTypeName()) {
             $inner = $type->args[0] ?? null;
             if ($inner instanceof Ast\AstNode) {
                 return jvmTypeDescriptorFromMoggiType(
@@ -230,7 +234,7 @@ function jvmTypeDescriptorFromMoggiType(
                 );
             }
         }
-        if ($container === 'Either') {
+        if ($container === boundaryEitherTypeName()) {
             $inner = $type->args[1] ?? $type->args[0] ?? null;
             if ($inner instanceof Ast\AstNode) {
                 return jvmTypeDescriptorFromMoggiType(
@@ -278,8 +282,8 @@ function jvmTypeDescriptorFromMoggiType(
     }
 
     return match ($con) {
-        'Bool' => 'Z',
-        'Handle' => jvmOpaqueObjectDescriptor($classPath, $isReturn, $dispatch),
+        boolTypeName() => 'Z',
+        boundaryHandleTypeName() => jvmOpaqueObjectDescriptor($classPath, $isReturn, $dispatch),
         'List' => jvmListDescriptor($classPath, $member),
         default => jvmForeignTypeDescriptorOrFail($con),
     };

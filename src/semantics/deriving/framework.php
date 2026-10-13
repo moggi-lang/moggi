@@ -18,6 +18,7 @@ use function Moggi\Semantics\Types\typeFail;
 use function Moggi\Semantics\Types\typeToString;
 
 require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/class_facts.php';
 require_once __DIR__ . '/eq.php';
 require_once __DIR__ . '/ord.php';
 require_once __DIR__ . '/enum.php';
@@ -97,35 +98,79 @@ final class DerivedInstance
         public Ast\AstNode $sourceLocation,
         public string $strategy = 'Stock',
         public array $associatedEquations = [],
+        public bool $contributesMetadata = false,
     ) {
     }
 }
 
 /**
- * Stock deriving backends (structural ADT codegen).
+ * One class the compiler derives structurally, and the whole deriving contract that is particular
+ * to that class.
  *
- * @return array<string, callable(TypeCheckState, Ast\DataDecl, Ast\DerivingClassRef): DerivedInstance>
+ * The compiler knowing which classes it can derive is not a fact the library states, and it is not
+ * one GHC pushes into the library either: `stockSideConditions` in `GHC/Tc/Deriv/Utils.hs` switches
+ * on the class's identity and hands back the generator it has for it, and the identities themselves
+ * are written down once, in `GHC/Builtin/Names`. This is that one statement for Moggi. Keeping the
+ * policy *beside* the generator is the point: the context a project-instance stub carries, the
+ * representation instance `Generic` contributes and the generator to run are all read off the
+ * class's entry instead of being answered by three more `match`es on its name.
  */
-function stockDeriveBackends(): array
+final class StockDerive
 {
-    return [
-        'Eq' => deriveEq(...),
-        'Ord' => deriveOrd(...),
-        'Enum' => deriveEnum(...),
-        'Bounded' => deriveBounded(...),
-        'Show' => deriveShow(...),
-        'Read' => deriveRead(...),
-        'Functor' => deriveFunctor(...),
-        'Foldable' => deriveFoldable(...),
-        'Traversable' => deriveTraversable(...),
-        'Generic' => deriveGeneric(...),
+    /**
+     * @param callable(TypeCheckState, Ast\DataDecl, Ast\DerivingClassRef): DerivedInstance $derive
+     * @param 'params'|'functorial'|'none' $stubConstraints the context a before-any-typecheck
+     *        project-instance record carries: one constraint per data parameter, the functorial
+     *        context, or none
+     * @param bool $synthesizesRepresentation the generator emits the class's own associated type
+     *        family instance and the metadata instances behind it (`Generic`'s `Rep`, and the
+     *        `Datatype`/`Constructor`/`Selector` siblings the representation is read with)
+     */
+    public function __construct(
+        public $derive,
+        public string $stubConstraints = 'none',
+        public bool $synthesizesRepresentation = false,
+    ) {
+    }
+}
+
+/**
+ * The classes the compiler derives structurally, one entry each.
+ *
+ * @return array<string, StockDerive>
+ */
+function stockDeriveClasses(): array
+{
+    static $classes = null;
+
+    return $classes ??= [
+        'Eq' => new StockDerive(deriveEq(...), 'params'),
+        'Ord' => new StockDerive(deriveOrd(...), 'params'),
+        'Enum' => new StockDerive(deriveEnum(...)),
+        'Bounded' => new StockDerive(deriveBounded(...)),
+        'Show' => new StockDerive(deriveShow(...), 'params'),
+        'Read' => new StockDerive(deriveRead(...)),
+        'Functor' => new StockDerive(deriveFunctor(...), 'functorial'),
+        'Foldable' => new StockDerive(deriveFoldable(...), 'functorial'),
+        'Traversable' => new StockDerive(deriveTraversable(...), 'functorial'),
+        'Generic' => new StockDerive(deriveGeneric(...), synthesizesRepresentation: true),
     ];
+}
+
+/** The compiler's entry for a class, or null when it has no structural generator for it. */
+function stockDeriveFor(string $className): ?StockDerive
+{
+    return stockDeriveClasses()[$className] ?? null;
 }
 
 /**
  * True when the class can be obtained via stock, newtype, anyclass, or via deriving.
+ *
+ * The one question it asks about the class itself is newtype deriving's -- an
+ * associated type leaves nothing to delegate to -- and `$facts` answers it from
+ * whichever view of the class the caller has.
  */
-function hasDeriveBackend(string $className, ?string $strategy = null): bool
+function hasDeriveBackend(string $className, ?string $strategy, ClassDeriveFacts $facts): bool
 {
     if ($strategy === 'via') {
         return true;
@@ -135,12 +180,12 @@ function hasDeriveBackend(string $className, ?string $strategy = null): bool
         return true;
     }
 
-    if (isset(stockDeriveBackends()[$className])) {
+    if (stockDeriveFor($className) !== null) {
         return true;
     }
 
     if ($strategy === 'newtype') {
-        return !refusesNewtypeDeriving($className);
+        return !$facts->refusesNewtypeDeriving($className);
     }
 
     return true;
@@ -163,8 +208,8 @@ function resolveAndDerive(
         return deriveVia($state, $decl, $ref, $headArgs);
     }
 
-    $backends = stockDeriveBackends();
-    if (!isset($backends[$ref->name])) {
+    $stock = stockDeriveFor($ref->name);
+    if ($stock === null) {
         throw typeFail(
             $state,
             "no stock deriving backend for class `{$ref->name}`"
@@ -173,7 +218,7 @@ function resolveAndDerive(
         );
     }
 
-    return ($backends[$ref->name])($state, $decl, $ref);
+    return ($stock->derive)($state, $decl, $ref);
 }
 
 /**
@@ -184,9 +229,10 @@ function resolveDeriveStrategy(
     Ast\DataDecl $decl,
     Ast\DerivingClassRef $ref,
 ): string {
+    $facts = ClassDeriveFacts::fromState($state);
     $explicit = $ref->strategy;
     if ($explicit === 'stock') {
-        if (!isset(stockDeriveBackends()[$ref->name])) {
+        if (stockDeriveFor($ref->name) === null) {
             throw typeFail(
                 $state,
                 "no stock deriving backend for class `{$ref->name}`",
@@ -206,10 +252,10 @@ function resolveDeriveStrategy(
         return 'Via';
     }
 
-    if (isset(stockDeriveBackends()[$ref->name])) {
+    if (stockDeriveFor($ref->name) !== null) {
         return 'Stock';
     }
-    if ($decl->isNewtype && !refusesNewtypeDeriving($ref->name)) {
+    if ($decl->isNewtype && !$facts->refusesNewtypeDeriving($ref->name)) {
         return 'Newtype';
     }
 
@@ -246,7 +292,7 @@ function processDeriving(TypeCheckState $state, Ast\DataDecl $decl): array
                 $ref,
             );
         }
-        if (!hasDeriveBackend($ref->name, $ref->strategy)) {
+        if (!hasDeriveBackend($ref->name, $ref->strategy, ClassDeriveFacts::fromState($state))) {
             throw typeFail(
                 $state,
                 "no deriving backend for class `{$ref->name}`",
@@ -259,7 +305,7 @@ function processDeriving(TypeCheckState $state, Ast\DataDecl $decl): array
     foreach ($decl->derivingClasses as $ref) {
         $item = resolveAndDerive($state, $decl, $ref);
         $derived[] = $item;
-        if ($item->className === 'Generic') {
+        if ($item->contributesMetadata) {
             foreach (deriveGenericMetadataInstances($state, $decl, $ref) as $meta) {
                 $derived[] = $meta;
             }
@@ -668,9 +714,14 @@ function associatedEquationLhsEqual(array $left, array $right): bool
  * context reaches for, so publishing them for the declaring module lets that
  * obligation be solved wherever the type is used.
  *
+ * The phase that calls this has no type check behind it, so `$facts` is what
+ * stands in for the class table: the class's declaration says whether it refuses
+ * newtype deriving and whether its parameter takes one type argument, which is
+ * the same answer a checked class entry would give.
+ *
  * @return list<array{module: string, class: string, head: Ast\TypeNode, constraints: list<Ast\TypeNode>, associatedEquations: array<string, mixed>, fromDeriving: true}>
  */
-function derivedProjectInstanceRecords(Ast\DataDecl $decl, string $moduleName): array
+function derivedProjectInstanceRecords(Ast\DataDecl $decl, string $moduleName, ClassDeriveFacts $facts): array
 {
     if ($decl->derivingClasses === []) {
         return [];
@@ -679,11 +730,12 @@ function derivedProjectInstanceRecords(Ast\DataDecl $decl, string $moduleName): 
     $records = [];
     $derivesGeneric = false;
     foreach ($decl->derivingClasses as $ref) {
-        if (!hasDeriveBackend($ref->name, $ref->strategy)) {
+        if (!hasDeriveBackend($ref->name, $ref->strategy, $facts)) {
             continue;
         }
 
-        if ($ref->name === 'Generic') {
+        $stock = stockDeriveFor($ref->name);
+        if ($stock !== null && $stock->synthesizesRepresentation) {
             $derivesGeneric = true;
         }
 
@@ -705,18 +757,17 @@ function derivedProjectInstanceRecords(Ast\DataDecl $decl, string $moduleName): 
         $useNewtype = $strategy === 'newtype'
             || ($strategy === null
                 && $decl->isNewtype
-                && !isset(stockDeriveBackends()[$ref->name])
-                && !refusesNewtypeDeriving($ref->name));
-        $useFunctorialHead = isFunctorialClass($ref->name);
+                && $stock === null
+                && !$facts->refusesNewtypeDeriving($ref->name));
+        $useFunctorialHead = $facts->takesOneTypeArgument($ref->name);
         $head = $useFunctorialHead && $decl->params !== []
             ? functorialHeadAst($decl)
             : dataDeclHeadAst($decl);
 
-        $constraints = projectStubConstraints($decl, $ref->name, $useNewtype);
-        $associatedEquations = match ($ref->name) {
-            'Generic' => genericProjectAssociatedEquations($decl, $moduleName),
-            default => [],
-        };
+        $constraints = projectStubConstraints($decl, $ref->name, $useNewtype, $facts, $stock);
+        $associatedEquations = $stock !== null && $stock->synthesizesRepresentation
+            ? genericProjectAssociatedEquations($decl, $moduleName, $facts->associatedTypeNames($ref->name))
+            : [];
         $records[] = [
             'module' => $moduleName,
             'class' => $ref->name,
@@ -799,11 +850,16 @@ function genericMetadataProjectInstances(Ast\DataDecl $decl, string $moduleName)
  *
  * @return list<Ast\TypeNode>
  */
-function projectStubConstraints(Ast\DataDecl $decl, string $className, bool $useNewtype): array
-{
+function projectStubConstraints(
+    Ast\DataDecl $decl,
+    string $className,
+    bool $useNewtype,
+    ClassDeriveFacts $facts,
+    ?StockDerive $stock,
+): array {
     if ($useNewtype && $decl->isNewtype && $decl->constructors !== []) {
         $field = $decl->constructors[0]->fields[0]->type ?? null;
-        if ($field !== null && isFunctorialClass($className)) {
+        if ($field !== null && $facts->takesOneTypeArgument($className)) {
             if ($field instanceof Ast\TypeApp && $field->args !== []) {
                 $underArgs = array_slice($field->args, 0, -1);
                 $under = $underArgs === []
@@ -822,10 +878,14 @@ function projectStubConstraints(Ast\DataDecl $decl, string $className, bool $use
         return [];
     }
 
+    if ($stock === null) {
+        return [];
+    }
+
     $param = lastDataParamName($decl);
-    return match ($className) {
-        'Eq', 'Ord', 'Show' => paramClassConstraints($decl, $className),
-        'Functor', 'Foldable', 'Traversable' => $param === null
+    return match ($stock->stubConstraints) {
+        'params' => paramClassConstraints($decl, $className),
+        'functorial' => $param === null
             ? []
             : functorialContextConstraints($decl, $param, $className),
         default => [],
@@ -833,19 +893,27 @@ function projectStubConstraints(Ast\DataDecl $decl, string $className, bool $use
 }
 
 /**
- * Lightweight Rep equation for project-instance stubs (normalize / other modules).
+ * Lightweight representation equation for project-instance stubs (normalize / other modules).
  *
+ * The family names are the class's own associated types, read from its declaration: the class that
+ * declares `type Rep a :: Type -> Type` is the one whose stub equation is named `Rep`, so the name
+ * is the declaration's rather than the deriving framework's.
+ *
+ * @param list<string> $families the class's declared associated type names
  * @return array<string, array{lhsArgs: list<Ast\TypeNode>, rhs: Ast\TypeNode}>
  */
-function genericProjectAssociatedEquations(Ast\DataDecl $decl, string $moduleName): array
+function genericProjectAssociatedEquations(Ast\DataDecl $decl, string $moduleName, array $families): array
 {
     $state = newState('');
     $state->currentModule = $moduleName;
 
-    return [
-        'Rep' => [
+    $equations = [];
+    foreach ($families as $family) {
+        $equations[$family] = [
             'lhsArgs' => [dataDeclHeadAst($decl)],
             'rhs' => synthesizeRepType($state, $decl),
-        ],
-    ];
+        ];
+    }
+
+    return $equations;
 }

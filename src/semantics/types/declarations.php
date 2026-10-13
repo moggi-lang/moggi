@@ -182,12 +182,6 @@ function registerData(TypeCheckState $state, Ast\DataDecl $decl): void
             registerPromotedConstructor($state, $decl->name, $ctor, $fieldTypes);
         }
 
-        if ($decl->name === 'Solo'
-            && isset($state->data['Solo']['constructors']['MkSolo'])
-            && !isset($state->data['Solo']['constructors']['Solo'])
-        ) {
-            registerConstructorAlias($state, 'Solo', 'MkSolo', 'Solo');
-        }
     } finally {
         Kinds\restoreKindScope($state, $kindScope);
     }
