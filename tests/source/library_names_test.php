@@ -130,7 +130,7 @@ function stageRoots(): array
         'src/syntax/',
         'src/semantics/',
         'src/patterns/',
-        'src/IR/',
+        'src/ir/',
         'src/optimize/',
         'src/backend/',
         'src/modules/',

@@ -26,7 +26,7 @@ and produces, where it lives in the source, and which flag shows it to you.
         ▼
     typed AST  (every decision made)   ·  --typed-ast
         │
-        │  IR lowering                  src/IR/**
+        │  IR lowering                  src/ir/**
         ▼
     IR  (backend-neutral, explicit calls/matches/temps)
         │                              ·  --ir
@@ -59,7 +59,7 @@ and produces, where it lives in the source, and which flag shows it to you.
 | Type checking | AST → typed AST | `src/semantics/types/**` | `--typed-ast` |
 | Effect validation | typed AST → validated effects | `src/semantics/io_boundary.php` | — |
 | Strict IO lowering | typed AST → explicit sequencing nodes | `src/semantics/strict_io_normalize.php` | — |
-| IR lowering | typed AST → IR | `src/IR/**` | `--ir` |
+| IR lowering | typed AST → IR | `src/ir/**` | `--ir` |
 | Optimization | IR → IR | `src/optimize/**` | `--opt-ir` |
 | Whole-program pass | modules → optimized modules | `src/optimize/specialize.php` | — |
 | Code generation | IR → target code | `src/backend/<target>/codegen.php` | `:emit` in the REPL |
@@ -166,5 +166,5 @@ moggi compile hello.mog -o out --unpacked   # the generated program, one file pe
 The same stages are available interactively (`:ast`, `:typed-ast`, `:ir`,
 `:ir-opt`, `:emit` in `moggi repl`), and the compiler's own code is laid out to
 match the pipeline: `src/syntax/` (front end), `src/semantics/` (types, kinds,
-classes, intrinsics), `src/modules/` (project graph and imports), `src/IR/`,
-`src/optimize/`, `src/backend/` (targets), `src/CLI/` (argv only).
+classes, intrinsics), `src/modules/` (project graph and imports), `src/ir/`,
+`src/optimize/`, `src/backend/` (targets), `src/cli/` (argv only).
