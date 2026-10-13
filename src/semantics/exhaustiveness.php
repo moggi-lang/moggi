@@ -17,7 +17,7 @@ function caseExhaustivenessProven(TypeCheckState $state, Ast\CaseExpr $expr, Typ
     $mode = caseExhaustivenessMode($state, $expr, $scrutineeType);
 
     return match ($mode['kind']) {
-        'all' => true,
+        'covered' => true,
         'data' => dataCaseExhaustivenessProven($state, $expr, $mode['dataName']),
         'int' => intCaseExhaustivenessProven($expr),
         'list' => listCaseExhaustivenessProven($expr),
@@ -87,7 +87,7 @@ function checkCaseExhaustiveness(TypeCheckState $state, Ast\CaseExpr $expr, Type
     $mode = caseExhaustivenessMode($state, $expr, $scrutineeType);
 
     match ($mode['kind']) {
-        'all' => null,
+        'covered' => null,
         'data' => checkDataCaseExhaustiveness($state, $expr, $mode['dataName']),
         'int' => checkIntCaseExhaustiveness($state, $expr),
         'list' => checkListCaseExhaustiveness($state, $expr),
@@ -138,7 +138,10 @@ function checkDataCaseExhaustiveness(TypeCheckState $state, Ast\CaseExpr $expr, 
 }
 
 /**
- * @return array{kind: 'all'|'data'|'int'|'list'|'none', dataName?: string}
+ * The kind of coverage a `case` has. `covered` is an alternative that matches every value, so
+ * nothing is left to prove; the others name what the proof has to look at.
+ *
+ * @return array{kind: 'covered'|'data'|'int'|'list'|'none', dataName?: string}
  */
 function caseExhaustivenessMode(TypeCheckState $state, Ast\CaseExpr $expr, Type $scrutineeType): array
 {
@@ -146,7 +149,7 @@ function caseExhaustivenessMode(TypeCheckState $state, Ast\CaseExpr $expr, Type 
 
     foreach ($expr->alts as $alt) {
         if (patternCoversAll($alt->pattern)) {
-            return ['kind' => 'all'];
+            return ['kind' => 'covered'];
         }
     }
 

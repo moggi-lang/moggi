@@ -951,9 +951,9 @@ function filterCodegenImportsForIr(
 
     $functionUseLines = [];
     foreach ($externalFns as $local => $resolved) {
-        if (\in_array($local, ['True', 'False'], true)) {
-            continue;
-        }
+        // A constructor is not a function to import, and the rule that says so is structural — an
+        // upper-case head is reserved for constructors (`Moggi\Syntax\isConstructorName`). Naming
+        // the two `Bool` constructors here as well added nothing to it.
         if (isConstructorName($local)) {
             continue;
         }

@@ -1763,7 +1763,7 @@ function parsePrefixConstructorOpAlt(ParserState $state): Ast\ConstructorDecl
         $open->col,
         $open->col + max(0, strlen($name) - 1),
         fixityAssoc: $fixity['assoc'],
-        fixityPrec: $fixity['prec'],
+        fixityPrec: $fixity['precedence'],
     );
 }
 
@@ -1799,7 +1799,7 @@ function parseInfixConstructorAlt(ParserState $state): Ast\ConstructorDecl
         $opToken->col,
         $opToken->col + max(0, strlen($name) - 1),
         fixityAssoc: $fixity['assoc'],
-        fixityPrec: $fixity['prec'],
+        fixityPrec: $fixity['precedence'],
         declaredInfix: true,
     );
 }

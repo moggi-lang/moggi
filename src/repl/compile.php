@@ -29,7 +29,7 @@ function interactivePipelineRequest(State $state, array $ctx, bool $optimize): P
     return new PipelineRequest(
         purpose: CompilePurpose::Repl,
         filename: $state->interactivePath(),
-        typedProgram: $ctx['checked'],
+        typedProgram: $ctx['typedProgram'],
         optimize: $optimize,
         backend: $state->backend,
         importContext: $ctx['importContext'],
@@ -87,7 +87,7 @@ function emitOptionsForInteractive(State $state, array $ctx): array
 
     return [
         'namespace' => $unit['namespace'],
-        'moduleName' => $state->moduleName,
+        'artifactModuleName' => $state->moduleName,
         'imports' => $codegen,
         'outputRelative' => moduleNameToPath($state->moduleName)
             . backendById($state->backend)->extension(),

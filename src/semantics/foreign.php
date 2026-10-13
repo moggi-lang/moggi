@@ -36,7 +36,7 @@ function checkForeignImportItem(TypeCheckState $state, Ast\ForeignImportDecl $it
     if (isBackendImplemented($item->backend)) {
         $receiverIsHandle = false;
         if ($pathInfo['dispatch'] === 'instance' && $item->type instanceof Ast\TypeArrow) {
-            $receiverIsHandle = foreignHandleType($item->type->from);
+            $receiverIsHandle = foreignHandleType($state, $item->type->from);
         }
         $backendError = backendById($item->backend)->validateForeignImport(
             $item->kind,
@@ -69,7 +69,7 @@ function checkForeignImportItem(TypeCheckState $state, Ast\ForeignImportDecl $it
         $pathInfo['dispatch'],
         args: \array_map(static fn (string $param): Ast\Variable => new Ast\Variable($param), $params),
         classPath: $pathInfo['classPath'],
-        member: $pathInfo['member'],
+        member: $pathInfo['hostMember'],
         ioWrap: foreignIoWrap($item->type, $item->path),
         phpValueBox: foreignPhpValueBox($item->type),
         handleBox: foreignHandleBox($item->type),
@@ -173,7 +173,7 @@ function foreignIsMagicHashAlias(TypeCheckState $state, Ast\TypeNode $type): boo
         && isMagicHashName($rhsName);
 }
 
-function foreignHandleType(Ast\TypeNode $type): bool
+function foreignHandleType(TypeCheckState $state, Ast\TypeNode $type): bool
 {
     if ($type instanceof Ast\TypeVar) {
         return true;
@@ -187,9 +187,50 @@ function foreignHandleType(Ast\TypeNode $type): bool
         return false;
     }
 
-    $primitive = ['String', 'ByteString', 'Int', 'Int8', 'Int16', 'Int32', 'Int64', 'Integer', 'Double', 'Bool', 'Char', 'Word8', 'Word16', 'Word32', 'Word64', 'Ordering'];
+    return !foreignIsHostValueType($state, $type);
+}
 
-    return !\in_array($type->name, $primitive, true);
+/**
+ * Whether the host passes a value of this type directly, rather than through a boxing handle.
+ *
+ * The set is the library's, read from its declarations rather than spelled out here:
+ *
+ *   * a primitive is a library alias of a MagicHash type (`type Int = Int#` in
+ *     `Moggi.Internal.Base`), which {@see foreignIsMagicHashAlias} recognises;
+ *   * an enumeration — a library data type whose constructors all take fields none — is the host's
+ *     own datatype, which is what makes the truth values and the ordering comparable across the
+ *     boundary.
+ *
+ * Nothing else is passed directly: a type the library declares with payload, or one it does not
+ * declare at all, is handed over as a boxing handle.
+ */
+function foreignIsHostValueType(TypeCheckState $state, Ast\TypeNode $type): bool
+{
+    if (foreignIsMagicHashAlias($state, $type)) {
+        return true;
+    }
+
+    $name = foreignTypeConName($type);
+    if ($name === null) {
+        return false;
+    }
+
+    if (($state->data[$name]['primitive'] ?? false) === true) {
+        return true;
+    }
+
+    $constructors = $state->data[$name]['constructors'] ?? null;
+    if (!\is_array($constructors) || $constructors === []) {
+        return false;
+    }
+
+    foreach ($constructors as $constructor) {
+        if (($constructor['fields'] ?? []) !== []) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 function foreignHandleUnboxArgIndices(Ast\TypeNode $type): array
@@ -305,7 +346,7 @@ function foreignIoWrap(Ast\TypeNode $type, string $path = ''): IoWrap
 function foreignMaybeStringUsesFgetsLine(string $path): bool
 {
     $info = parseForeignPath($path);
-    $member = strtolower((string) ($info['member'] ?? $path));
+    $member = strtolower((string) ($info['hostMember'] ?? $path));
 
     return str_contains($member, 'fgets');
 }
@@ -448,12 +489,7 @@ function validateForeignTypeCon(
         return;
     }
 
-    $primitives = ['String', 'ByteString', 'Int', 'Int8', 'Int16', 'Int32', 'Int64', 'Integer', 'Double', 'Bool', 'Char', 'Word', 'Word8', 'Word16', 'Word32', 'Word64', 'Ordering', 'Unit', '()'];
-    if (in_array($name, $primitives, true)) {
-        return;
-    }
-
-    if (in_array($name, ['Maybe', 'Either', 'Tuple'], true)) {
+    if (in_array($name, ['Maybe', 'Either'], true)) {
         if ($argument) {
             throw typeFail(
                 $state,
@@ -461,6 +497,14 @@ function validateForeignTypeCon(
                 $context,
             );
         }
+        return;
+    }
+
+    // Everything else is structural: a primitive is the library's alias of a
+    // MagicHash type, and an enumeration is a data type whose constructors take no
+    // fields — both read from the declaration, which is what makes the host's own
+    // datatypes (the truth values, the ordering) and its kernel types legal.
+    if (foreignIsHostValueType($state, $con)) {
         return;
     }
 
@@ -475,11 +519,7 @@ function validateForeignTypeCon(
         return;
     }
 
-    if ($name === 'IO') {
-        return;
-    }
-
-    if ($name === 'IOMode') {
+    if (isIoTypeConName($name)) {
         return;
     }
 

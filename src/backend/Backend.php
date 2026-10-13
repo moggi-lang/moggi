@@ -84,7 +84,7 @@ interface Backend
      * needs one. Paths stay descriptor-free.
      *
      * @param 'function'|'const' $kind
-     * @param array{dispatch: string, classPath: ?string, member: ?string, path?: string} $pathInfo
+     * @param array{dispatch: string, classPath: ?string, hostMember: ?string, path?: string} $pathInfo
      * @param string $name the Moggi binding name of the foreign import
      */
     public function foreignNativeSig(
@@ -99,7 +99,7 @@ interface Backend
      * Return an error message, or null when the import is valid for this backend.
      *
      * @param 'function'|'const' $kind
-     * @param array{dispatch: string, classPath: ?string, member: ?string, path?: string} $pathInfo
+     * @param array{dispatch: string, classPath: ?string, hostMember: ?string, path?: string} $pathInfo
      */
     public function validateForeignImport(
         string $kind,

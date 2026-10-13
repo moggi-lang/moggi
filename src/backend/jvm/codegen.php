@@ -43,7 +43,7 @@ require_once __DIR__ . '/foreign.php';
  */
 function emitModule(IR\Module $module, string $sourcePath, array $options = []): array
 {
-    $moduleName = $options['moduleName'] ?? '';
+    $moduleName = $options['artifactModuleName'] ?? '';
     $internal = moduleInternalName($moduleName !== '' ? $moduleName : 'Main');
     $b = new ClassBuilder($internal);
     $displaySource = normalizeDisplayPath($module->sourceFile !== '' ? $module->sourceFile : $sourcePath);
@@ -134,7 +134,7 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
     $evidenceMaps = $options['globalEvidenceMaps'] ?? [];
     foreach ($module->instanceEvidence as $ev) {
         $evidenceMaps[$ev->evidenceName] = [
-            'module' => $moduleName !== '' ? $moduleName : ($options['moduleName'] ?? ''),
+            'module' => $moduleName !== '' ? $moduleName : ($options['artifactModuleName'] ?? ''),
             'methods' => $ev->methods,
         ];
     }
@@ -2627,13 +2627,13 @@ function emitForeign(EmitEnv $env, IR\ForeignCall $op): void
     }
 
     if ($resolved['dispatch'] === 'intrinsic') {
-        emitJvmForeignIntrinsic($env, $op, $resolved['member'], $desc);
+        emitJvmForeignIntrinsic($env, $op, $resolved['hostMember'], $desc);
 
         return;
     }
 
     if (($op->kind ?? 'function') === 'const') {
-        $env->c->getstatic($env->cp->fieldRef($resolved['class'], $resolved['member'], $desc));
+        $env->c->getstatic($env->cp->fieldRef($resolved['class'], $resolved['hostMember'], $desc));
         boxForeignReturn($env, $desc);
         emitForeignIoWrap($env, $op->ioWrap);
 
@@ -2674,18 +2674,18 @@ function emitForeign(EmitEnv $env, IR\ForeignCall $op): void
 
     match ($resolved['dispatch']) {
         'static', 'global' => $env->c->invokestatic(
-            $env->cp->methodRef($resolved['class'], $resolved['member'], $desc),
+            $env->cp->methodRef($resolved['class'], $resolved['hostMember'], $desc),
             $argc,
             $retSlots,
         ),
         'instance' => jvmIsInterface($resolved['class'])
             ? $env->c->invokeinterface(
-                $env->cp->ifaceMethodRef($resolved['class'], $resolved['member'], $desc),
+                $env->cp->ifaceMethodRef($resolved['class'], $resolved['hostMember'], $desc),
                 $argc,
                 $retSlots,
             )
             : $env->c->invokevirtual(
-                $env->cp->methodRef($resolved['class'], $resolved['member'], $desc),
+                $env->cp->methodRef($resolved['class'], $resolved['hostMember'], $desc),
                 $argc,
                 $retSlots,
             ),

@@ -215,7 +215,7 @@ function compilePreparedProject(PreparedProject $prepared, bool $optimize = true
             'imports' => $codegenImports,
             'outputRelative' => $outputRelative,
             'irUsage' => $irUsage,
-            'moduleName' => $moduleName,
+            'artifactModuleName' => $moduleName,
             'externalFns' => $codegenImports['externalFns'] ?? [],
             'externalFnRuntimeArity' => $importContext['externalFnRuntimeArity'] ?? [],
             'globalEvidenceMaps' => $globalEvidenceMaps,
@@ -262,17 +262,17 @@ function compileModuleFile(
 ): string|array {
     if ($mode === 'ast' || $mode === 'ir') {
         $context = moduleCompileContext($path, $routingProgram);
-        $purpose = entryPurpose($context['checked']->module);
+        $purpose = entryPurpose($context['typedProgram']->module);
         $artifacts = pipelineRun(new PipelineRequest(
             purpose: $purpose,
             filename: $path,
-            typedProgram: $context['checked'],
+            typedProgram: $context['typedProgram'],
             optimize: false,
             importContext: $context['importContext'],
         ), $mode === 'ast' ? PipelineStage::TypedAst : PipelineStage::Ir);
 
         return match ($mode) {
-            'ast' => dump($artifacts->typedAst ?? $context['checked']),
+            'ast' => dump($artifacts->typedAst ?? $context['typedProgram']),
             'ir' => dumpIr($artifacts->ir ?? throw new \RuntimeException('missing IR')),
         };
     }
@@ -296,11 +296,11 @@ function compileModuleFileOutputs(
     ?Ast\Program $routingProgram = null,
 ): array {
     $context = moduleCompileContext($path, $routingProgram);
-    $purpose = entryPurpose($context['checked']->module);
+    $purpose = entryPurpose($context['typedProgram']->module);
     $artifacts = pipelineRun(new PipelineRequest(
         purpose: $purpose,
         filename: $path,
-        typedProgram: $context['checked'],
+        typedProgram: $context['typedProgram'],
         optimize: $optimize,
         importContext: $context['importContext'],
     ), PipelineStage::IrOpt);
@@ -338,7 +338,7 @@ function compileModuleFileOutputs(
             'imports' => $codegenImports,
             'outputRelative' => $fromOutputRelative,
             'irUsage' => $irUsage,
-            'moduleName' => $context['checked']->module,
+            'artifactModuleName' => $context['typedProgram']->module,
             'externalFns' => $codegenImports['externalFns'] ?? [],
             'externalFnRuntimeArity' => $context['importContext']['externalFnRuntimeArity'] ?? [],
         ]),
@@ -376,7 +376,7 @@ function moduleCompileContext(string $path, ?Ast\Program $routingProgram = null)
 
     return [
         'unit' => $unit,
-        'checked' => $prepared->checked[$targetModule],
+        'typedProgram' => $prepared->checked[$targetModule],
         'importContext' => $prepared->importContexts[$targetModule],
         'outputRelative' => $outputRelative,
         'units' => $prepared->units,

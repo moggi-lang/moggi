@@ -20,6 +20,7 @@ use Moggi\Syntax\Ast;
 
 use function Moggi\Foreign\splitForeignPathMember;
 use function Moggi\Semantics\IoBoundary\isIoTypeConName;
+use function Moggi\Semantics\Types\primitiveTypeIdOf;
 
 function registerJvmForeignType(string $moggiName, string $hostType): void
 {
@@ -56,7 +57,7 @@ function jvmForeignHostInternal(string $hostType): string
     return dottedToInternal($dotted);
 }
 
-/** @return array{dispatch: 'static'|'instance'|'constructor'|'intrinsic', class: string, member: string} */
+/** @return array{dispatch: 'static'|'instance'|'constructor'|'intrinsic', class: string, hostMember: string} */
 function resolveJvmForeignPath(string $path): array
 {
     if (!str_contains($path, ':') && !str_contains($path, '.')) {
@@ -77,14 +78,14 @@ function resolveJvmForeignPath(string $path): array
         return [
             'dispatch' => $dispatch,
             'class' => dottedToInternal($classPath),
-            'member' => $member === '__con' ? '<init>' : $member,
+            'hostMember' => $member === '__con' ? '<init>' : $member,
         ];
     }
 
     return [
         'dispatch' => 'instance',
         'class' => dottedToInternal($classPath),
-        'member' => $member,
+        'hostMember' => $member,
     ];
 }
 
@@ -257,7 +258,12 @@ function jvmTypeDescriptorFromMoggiType(
         }
     }
 
-    if (!$isReturn && $classPath === 'java.nio.file.Files' && $member === 'writeString' && $con === 'String') {
+    if (
+        !$isReturn
+        && $classPath === 'java.nio.file.Files'
+        && $member === 'writeString'
+        && primitiveTypeIdOf((string) $con) === 'String#'
+    ) {
         return 'Ljava/lang/CharSequence;';
     }
 
@@ -266,20 +272,39 @@ function jvmTypeDescriptorFromMoggiType(
         return $argOverride;
     }
 
+    // The kernel's types in the JVM's own spelling, keyed by the kernel's ids rather than by the
+    // names a signature happens to write them with. `jvmKernelDescriptor` is the whole table.
+    $kernel = jvmKernelDescriptor(primitiveTypeIdOf((string) $con));
+    if ($kernel !== null) {
+        return $kernel;
+    }
+
     return match ($con) {
-        'Int' => 'J',
-        'Int8' => 'B',
-        'Int16' => 'S',
-        'Int32' => 'I',
-        'Int64' => 'J',
-        'Char' => 'I',
-        'Integer' => 'Ljava/math/BigInteger;',
         'Bool' => 'Z',
-        'Double' => 'D',
-        'String', 'ByteString' => 'Ljava/lang/String;',
         'Handle' => jvmOpaqueObjectDescriptor($classPath, $isReturn, $dispatch),
         'List' => jvmListDescriptor($classPath, $member),
         default => jvmForeignTypeDescriptorOrFail($con),
+    };
+}
+
+/**
+ * The JVM descriptor of a kernel type, or null when the JVM has no direct one for it.
+ *
+ * Keyed by the kernel's own ids, not by the names a signature writes them with: the
+ * kernel's vocabulary is the machine's, and a library name reaching this table would
+ * make the mapping a statement about `lib/` rather than about the JVM.
+ */
+function jvmKernelDescriptor(?string $kernelId): ?string
+{
+    return match ($kernelId) {
+        'Int#', 'Int64#' => 'J',
+        'Int8#' => 'B',
+        'Int16#' => 'S',
+        'Int32#', 'Char#' => 'I',
+        'Integer#' => 'Ljava/math/BigInteger;',
+        'Double#' => 'D',
+        'String#', 'Bytes#' => 'Ljava/lang/String;',
+        default => null,
     };
 }
 

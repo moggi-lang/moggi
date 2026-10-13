@@ -414,8 +414,7 @@ function ioCallNeedsRunBoxedResult(IoCall $call, LowerCtx $ctx): bool
         return false;
     }
 
-    $runtime = $call->runtime;
-    if (\is_string($runtime) && (str_starts_with($runtime, 'foreign:') || \in_array($runtime, ['stdout', 'stdout_line'], true))) {
+    if (\is_string($call->runtime) && str_starts_with($call->runtime, 'foreign:')) {
         return false;
     }
 

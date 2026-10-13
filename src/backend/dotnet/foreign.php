@@ -8,6 +8,7 @@ use function Moggi\Backend\DotNet\Dependencies\dotNetTypeIsValueType;
 use function Moggi\Backend\DotNet\Naming\bclAssemblyFor;
 use function Moggi\Foreign\splitForeignPathMember;
 use function Moggi\Semantics\IoBoundary\isIoTypeConName;
+use function Moggi\Semantics\Types\primitiveTypeIdOf;
 
 function registerDotNetForeignType(string $moggiName, string $hostType): void
 {
@@ -49,14 +50,14 @@ function resolveDotNetForeignPath(string $path): array
         return [
             'dispatch' => $dispatch,
             'class' => $classPath,
-            'member' => $member === '__con' ? '.ctor' : $member,
+            'hostMember' => $member === '__con' ? '.ctor' : $member,
         ];
     }
 
     return [
         'dispatch' => 'instance',
         'class' => $classPath,
-        'member' => $member,
+        'hostMember' => $member,
     ];
 }
 
@@ -235,20 +236,40 @@ function clrTypeName(
         return 'object';
     }
 
+    // The kernel's types in the CLR's own spelling, keyed by the kernel's ids rather than by the
+    // names a signature happens to write them with. `clrKernelTypeName` is the whole table.
+    $kernel = clrKernelTypeName(primitiveTypeIdOf((string) $con));
+    if ($kernel !== null) {
+        return $kernel;
+    }
+
     return match ($con) {
-        'Int' => 'int64',
-        'Int8' => 'int8',
-        'Int16' => 'int16',
-        'Int32' => 'int32',
-        'Int64' => 'int64',
-        'Char' => 'char',
-        'Integer' => 'valuetype [System.Runtime.Numerics]System.Numerics.BigInteger',
         'Bool' => 'bool',
-        'Double' => 'float64',
-        'String', 'ByteString' => 'string',
         'Handle' => clrOpaqueObjectMapping($classPath, $isReturn, $dispatch),
         'List' => 'class Moggi.Rt.MList',
         default => clrForeignLeafToIl((string) $con),
+    };
+}
+
+/**
+ * The CLR type of a kernel type, or null when the CLR has no direct one for it.
+ *
+ * Keyed by the kernel's own ids, not by the names a signature writes them with: the
+ * kernel's vocabulary is the machine's, and a library name reaching this table would
+ * make the mapping a statement about `lib/` rather than about the CLR.
+ */
+function clrKernelTypeName(?string $kernelId): ?string
+{
+    return match ($kernelId) {
+        'Int#', 'Int64#' => 'int64',
+        'Int8#' => 'int8',
+        'Int16#' => 'int16',
+        'Int32#' => 'int32',
+        'Char#' => 'char',
+        'Integer#' => 'valuetype [System.Runtime.Numerics]System.Numerics.BigInteger',
+        'Double#' => 'float64',
+        'String#', 'Bytes#' => 'string',
+        default => null,
     };
 }
 

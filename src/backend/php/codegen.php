@@ -85,20 +85,20 @@ function emit(IR\Module $module, string $sourcePath, array $options = []): strin
             $functionArity[$name] = $runtimeArity;
         }
     }
-    $moduleName = (string) ($options['moduleName'] ?? $module->moduleName ?? '');
+    $moduleName = (string) ($options['artifactModuleName'] ?? $module->moduleName ?? '');
     $artifact = (string) ($options['outputRelative'] ?? (preg_replace('/\.mog$/', '.php', basename($sourcePath)) ?? 'out.php'));
     $sourceMap = new SourceMapBuilder($moduleName, 'php', $artifact);
     $displaySource = normalizeDisplayPath($module->sourceFile !== '' ? $module->sourceFile : $sourcePath);
     $codegenCtx = [
         'moduleNamespace' => $namespace,
-        'moduleName' => $moduleName,
+        'artifactModuleName' => $moduleName,
         'moduleAsNames' => $importOptions['moduleAsNames'] ?? [],
         'constructorRenames' => $importOptions['constructorRenames'] ?? [],
         'externalFns' => $importOptions['externalFns'] ?? [],
         'functionArity' => $functionArity,
+        // Every constructor that lowers to the host boolean is read off the declarations that are in
+        // scope — the imports' data and the module's own — so nothing here has to name one.
         'boolConstructors' => [
-            'False' => false,
-            'True' => true,
             ...boolConstructorMapFromRegistry($importOptions['importedData'] ?? []),
             ...boolConstructorMap($module->data),
         ],
@@ -361,7 +361,7 @@ function emitFunction(IR\FunctionDecl $function, array $lambdaMeta, array $lambd
     }
 
     $paramsCode = join(', ', \array_map(static fn (string $p): string => '$' . mangleVar($p), $params));
-    $moduleName = (string) ($codegenCtx['moduleName'] ?? $codegenCtx['moduleNamespace'] ?? '');
+    $moduleName = (string) ($codegenCtx['artifactModuleName'] ?? $codegenCtx['moduleNamespace'] ?? '');
     if (str_contains($moduleName, '\\')) {
         $moduleName = str_replace('\\', '.', $moduleName);
     }
@@ -370,7 +370,7 @@ function emitFunction(IR\FunctionDecl $function, array $lambdaMeta, array $lambd
         'lambdaIndex' => $lambdaIndex,
         'phpNames' => $phpNames,
         'moduleNamespace' => $codegenCtx['moduleNamespace'] ?? null,
-        'moduleName' => $codegenCtx['moduleName'] ?? $moduleName,
+        'artifactModuleName' => $codegenCtx['artifactModuleName'] ?? $moduleName,
         'externalFns' => $codegenCtx['externalFns'] ?? [],
         'moduleAsNames' => $codegenCtx['moduleAsNames'] ?? [],
         'constructorRenames' => $codegenCtx['constructorRenames'] ?? [],
@@ -582,15 +582,11 @@ function emitIoCall(IR\Stmt $stmt, int $indent, array $ctx): string
             $args,
             $dest,
             $pad,
-            substr($runtime, strlen('foreign:')),
+            $foreign->ioWrap,
         );
     }
 
-    return match ($runtime) {
-        'stdout' => $pad . 'echo(' . $args[0] . ");\n",
-        'stdout_line' => $pad . 'echo(' . $args[0] . ' . "\\n"' . ");\n",
-        default => $pad . $assign . emitCallExpr($stmt->callee, $stmt->args, $ctx) . ";\n",
-    };
+    return $pad . $assign . emitCallExpr($stmt->callee, $stmt->args, $ctx) . ";\n";
 }
 
 function runtimeRequirePath(string $sourcePath, array $options = []): string

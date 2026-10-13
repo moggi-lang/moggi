@@ -162,7 +162,7 @@ function interactiveFingerprint(State $state, string $extra, bool $normalizeIo):
 function adoptInteractiveCtx(State $state, array $ctx): array
 {
     $state->prepared = $ctx['prepared'];
-    $state->typedInteractive = $ctx['checked'];
+    $state->typedInteractive = $ctx['typedProgram'];
     writeInteractiveSource($state, (string) $ctx['source']);
 
     return $ctx;
@@ -300,7 +300,7 @@ function prepareInteractive(State $state, string $extra = '', bool $normalizeIo 
     $state->typedInteractive = $checked;
     $ctx = [
         'prepared' => $prepared,
-        'checked' => $checked,
+        'typedProgram' => $checked,
         'importContext' => $importContext,
         'source' => $source,
     ];
@@ -672,7 +672,7 @@ function typeOfInput(State $state, string $source): string
         $name = fragmentDeclaredName($frag);
         if ($name !== null && bindingNameExists($state, $name)) {
             $ctx = prepareInteractive($state);
-            $line = bindingTypeLine($ctx['checked'], $name);
+            $line = bindingTypeLine($ctx['typedProgram'], $name);
             if ($line === null) {
                 throw new TypeError("could not infer type of `{$name}`", '<interactive>', $source);
             }
@@ -681,7 +681,7 @@ function typeOfInput(State $state, string $source): string
         }
 
         $ctx = prepareInteractive($state, $frag->source, normalizeIo: false);
-        $line = $name !== null ? bindingTypeLine($ctx['checked'], $name) : null;
+        $line = $name !== null ? bindingTypeLine($ctx['typedProgram'], $name) : null;
         prepareInteractive($state);
         if ($line === null) {
             throw new TypeError('could not infer type', '<interactive>', $source);
@@ -703,7 +703,7 @@ function typeOfInput(State $state, string $source): string
     $name = '__repl_ty';
     $extra = "{$name} = " . replFragmentBindingRhs($frag) . "\n";
     $ctx = prepareInteractive($state, $extra, normalizeIo: false);
-    $line = bindingTypeLine($ctx['checked'], $name);
+    $line = bindingTypeLine($ctx['typedProgram'], $name);
     prepareInteractive($state);
     if ($line === null) {
         throw new TypeError('could not infer type', '<interactive>', $source);
@@ -717,7 +717,7 @@ function typeOfInput(State $state, string $source): string
  */
 function schemeTypeLine(array $ctx, string $name): ?string
 {
-    $scheme = $ctx['checked']->exportedInferredSchemes[$name]
+    $scheme = $ctx['typedProgram']->exportedInferredSchemes[$name]
         ?? ($ctx['importContext']['env'][$name] ?? null);
     if (!$scheme instanceof Scheme) {
         return null;
@@ -761,8 +761,8 @@ function kindOfParsedType(State $state, string $typeSource): string
     $ctx = prepareInteractive($state);
     $typeAst = parseReplType($typeSource, '<interactive>');
     $stateTc = Types\newState($typeSource, '<interactive>');
-    Registry\applyImportContext($stateTc, $ctx['checked'], $ctx['importContext']);
-    Registry\registerTypeDeclarations($stateTc, $ctx['checked']);
+    Registry\applyImportContext($stateTc, $ctx['typedProgram'], $ctx['importContext']);
+    Registry\registerTypeDeclarations($stateTc, $ctx['typedProgram']);
     $kindCtx = Kinds\newKindInferCtx($stateTc);
     $kind = Kinds\inferKindAst($kindCtx, $typeAst);
 
@@ -777,7 +777,7 @@ function infoForName(State $state, string $name): string
     if ($schemeLine !== null) {
         $lines[] = $schemeLine;
     }
-    foreach ($ctx['checked']->items as $item) {
+    foreach ($ctx['typedProgram']->items as $item) {
         if ($item instanceof Ast\FunctionDecl && $item->name === $name) {
             $lines[] = 'binding in module ' . $state->moduleName;
             $lines[] = 'arity ' . count($item->params);
@@ -800,7 +800,7 @@ function browseBindings(State $state): string
 {
     $ctx = prepareInteractive($state);
     $names = [];
-    foreach ($ctx['checked']->items as $item) {
+    foreach ($ctx['typedProgram']->items as $item) {
         if ($item instanceof Ast\FunctionDecl && !$item->signatureOnly && !$item->instanceMethod) {
             if (isShadowedInteractiveName($item->name)) {
                 continue;
@@ -817,7 +817,7 @@ function browseBindings(State $state): string
     }
     $out = '';
     foreach (array_keys($names) as $name) {
-        $line = bindingTypeLine($ctx['checked'], $name);
+        $line = bindingTypeLine($ctx['typedProgram'], $name);
         $out .= ($line ?? $name) . "\n";
     }
 

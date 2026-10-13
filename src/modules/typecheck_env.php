@@ -901,7 +901,7 @@ function collectProjectInstances(array $units, ?array $onlyModules = null): arra
                 $instances[] = [
                     'module' => $moduleName,
                     'class' => $item->class,
-                    'head' => $item->head,
+                    'instanceHead' => $item->head,
                     'constraints' => $item->constraints,
                     'intrinsicMethods' => Types\instanceIntrinsicMethods($item),
                     'associatedEquations' => Types\associatedEquationsMapFromDecl($item),
@@ -943,10 +943,10 @@ function indexProjectInstances(array $projectInstances): array
     $seenDerivedHeads = [];
     foreach ($projectInstances as $instance) {
         $className = $instance['class'];
-        $headKey = Types\instanceHeadIndexKeyFromAst($instance['head']);
+        $headKey = Types\instanceHeadIndexKeyFromAst($instance['instanceHead']);
 
-        if (($instance['fromDeriving'] ?? false) === true && $instance['head'] instanceof Ast\AstNode) {
-            $headText = $className . "\0" . Ast\dumpTypeInline($instance['head']);
+        if (($instance['fromDeriving'] ?? false) === true && $instance['instanceHead'] instanceof Ast\AstNode) {
+            $headText = $className . "\0" . Ast\dumpTypeInline($instance['instanceHead']);
             if (isset($seenDerivedHeads[$headText])) {
                 continue;
             }

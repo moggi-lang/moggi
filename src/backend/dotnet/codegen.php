@@ -57,7 +57,7 @@ require_once __DIR__ . '/il_size.php';
  */
 function emitModule(IR\Module $module, string $sourcePath, array $options = []): array
 {
-    $moduleName = $options['moduleName'] ?? '';
+    $moduleName = $options['artifactModuleName'] ?? '';
     $owner = moduleTypeName($moduleName !== '' ? $moduleName : 'Main');
     $classBuilder = new ClassIlBuilder($owner);
     $displaySource = normalizeDisplayPath($module->sourceFile !== '' ? $module->sourceFile : $sourcePath);
@@ -140,7 +140,7 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
     $evidenceMaps = $options['globalEvidenceMaps'] ?? [];
     foreach ($module->instanceEvidence as $ev) {
         $evidenceMaps[$ev->evidenceName] = [
-            'module' => $moduleName !== '' ? $moduleName : ($options['moduleName'] ?? ''),
+            'module' => $moduleName !== '' ? $moduleName : ($options['artifactModuleName'] ?? ''),
             'methods' => $ev->methods,
         ];
     }
@@ -1781,10 +1781,10 @@ function emitForeign(EmitEnv $env, IR\ForeignCall $op): void
     $typeRef = qualifyType($resolved['class']);
 
     if (($op->kind ?? 'function') === 'const') {
-        if (isDotNetConstProperty($resolved['class'], $resolved['member'])) {
-            $env->m->emit("call {$desc} {$typeRef}::get_{$resolved['member']}()");
+        if (isDotNetConstProperty($resolved['class'], $resolved['hostMember'])) {
+            $env->m->emit("call {$desc} {$typeRef}::get_{$resolved['hostMember']}()");
         } else {
-            $env->m->emit("ldsfld {$desc} {$typeRef}::{$resolved['member']}");
+            $env->m->emit("ldsfld {$desc} {$typeRef}::{$resolved['hostMember']}");
         }
         boxForeignReturn($env, $desc);
         emitForeignIoWrap($env, $op->ioWrap);
@@ -1796,7 +1796,7 @@ function emitForeign(EmitEnv $env, IR\ForeignCall $op): void
     $args = $op->args;
 
     if ($resolved['dispatch'] === 'intrinsic') {
-        emitForeignIntrinsic($env, $resolved['member'], $typeRef, $sig, $args, $op->path);
+        emitForeignIntrinsic($env, $resolved['hostMember'], $typeRef, $sig, $args, $op->path);
 
         return;
     }
@@ -1837,10 +1837,10 @@ function emitForeign(EmitEnv $env, IR\ForeignCall $op): void
 
     $paramList = \implode(', ', $sig['params']);
     match ($resolved['dispatch']) {
-        'static', 'global' => $env->m->emit("call {$sig['ret']} {$typeRef}::{$resolved['member']}({$paramList})"),
+        'static', 'global' => $env->m->emit("call {$sig['ret']} {$typeRef}::{$resolved['hostMember']}({$paramList})"),
         'instance' => $valueTypeReceiver
-            ? $env->m->emit("call instance {$sig['ret']} {$typeRef}::{$resolved['member']}({$paramList})")
-            : $env->m->emit("callvirt instance {$sig['ret']} {$typeRef}::{$resolved['member']}({$paramList})"),
+            ? $env->m->emit("call instance {$sig['ret']} {$typeRef}::{$resolved['hostMember']}({$paramList})")
+            : $env->m->emit("callvirt instance {$sig['ret']} {$typeRef}::{$resolved['hostMember']}({$paramList})"),
         'constructor' => $env->m->emit("newobj instance void {$typeRef}::.ctor({$paramList})"),
         default => throw new \RuntimeException("DotNet foreign: unsupported dispatch {$resolved['dispatch']}"),
     };

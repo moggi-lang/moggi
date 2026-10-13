@@ -7,7 +7,6 @@ use Moggi\IR;
 use function Moggi\IR\Visit\mapGuards;
 use function Moggi\Optimize\CaseFold\isPlausibleConstructorName;
 use function Moggi\Optimize\Interproc\denseStmtItems;
-use function Moggi\Optimize\Interproc\specializationLookupNameSafe;
 use function Moggi\Optimize\Support\foldExpr;
 use function Moggi\Optimize\Support\mapStmtNestedBlocks;
 use function Moggi\Optimize\Support\operandEqual;
@@ -132,23 +131,13 @@ function foldOperand(IR\Operand $operand, array $known = []): IR\Operand
             \array_map($resolve, $operand->args),
             $operand->srcLoc,
         ),
-        IR\ExprCallValue::class => (static function () use ($operand, $resolve): IR\Operand {
-            $callee = $resolve($operand->callee);
-            $args = \array_map($resolve, $operand->args);
-            if (
-                count($args) === 1
-                && $callee instanceof IR\FnRef
-                && (
-                    $callee->name === 'id'
-                    || str_ends_with($callee->name, '::id')
-                    || specializationLookupNameSafe($callee->name) === 'id'
-                )
-            ) {
-                return $args[0];
-            }
-
-            return new IR\ExprCallValue($callee, $args, $operand->srcLoc);
-        })(),
+        // No `id` fold by spelling: recognising an identity function means reading the provider's
+        // declaration ({@see Moggi\Optimize\Partial\returnedIdentityArg}), not comparing its name.
+        IR\ExprCallValue::class => new IR\ExprCallValue(
+            $resolve($operand->callee),
+            \array_map($resolve, $operand->args),
+            $operand->srcLoc,
+        ),
         IR\Partial::class => new IR\Partial($operand->fn, $operand->arity, \array_map($resolve, $operand->args)),
         IR\ExprPartial::class => new IR\ExprPartial($operand->fn, $operand->arity, \array_map(operandToExpr(...), $operand->args)),
         IR\ListLit::class => new IR\ListLit(\array_map($resolve, $operand->elements)),

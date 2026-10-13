@@ -210,7 +210,7 @@ function foreignFromArray(array $foreign): IR\ForeignCall
         $foreign['dispatch'] ?? 'global',
         \array_map(operandFromArray(...), $foreign['args'] ?? []),
         $foreign['classPath'] ?? null,
-        $foreign['member'] ?? null,
+        $foreign['hostMember'] ?? null,
         $ioWrap,
         $foreign['phpValueBox'] ?? false,
         $foreign['handleBox'] ?? false,

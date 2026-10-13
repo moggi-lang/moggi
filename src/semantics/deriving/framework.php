@@ -541,7 +541,7 @@ function validateNoDuplicateDerivedInstance(
             continue;
         }
 
-        if (instanceHeadsMatch($state, $headType, $instance['head'])) {
+        if (instanceHeadsMatch($state, $headType, $instance['instanceHead'])) {
             throw typeFail(
                 $state,
                 'duplicate instance for `' . $decl->class . ' ' . typeToString($headType, friendlyTypeVarNames([$headType])) . '`',
@@ -556,7 +556,7 @@ function validateNoDuplicateDerivedInstance(
         }
 
         if ($instance['module'] === ($state->currentModule ?? '')) {
-            if (instanceHeadsMatch($state, $headType, $instance['head'])) {
+            if (instanceHeadsMatch($state, $headType, $instance['instanceHead'])) {
                 throw typeFail(
                     $state,
                     'duplicate instance for `' . $decl->class . ' ' . typeToString($headType, friendlyTypeVarNames([$headType])) . '`',
@@ -566,7 +566,7 @@ function validateNoDuplicateDerivedInstance(
             continue;
         }
 
-        if (instanceHeadsMatch($state, $headType, $instance['head'])) {
+        if (instanceHeadsMatch($state, $headType, $instance['instanceHead'])) {
             throw typeFail(
                 $state,
                 'duplicate instance for `' . $decl->class . ' ' . typeToString($headType, friendlyTypeVarNames([$headType])) . '`',
@@ -581,7 +581,7 @@ function commitProjectInstance(TypeCheckState $state, Ast\InstanceDecl $decl): v
     $module = $state->currentModule ?? '';
     foreach ($state->projectInstancesByClass[$decl->class] ?? [] as $existing) {
         if (($existing['module'] ?? '') === $module
-            && instanceHeadsMatch($state, astType($state, $decl->head), $existing['head'])
+            && instanceHeadsMatch($state, astType($state, $decl->head), $existing['instanceHead'])
         ) {
             installAssociatedEquationsFromDecl($state, $decl, $module);
 
@@ -592,7 +592,7 @@ function commitProjectInstance(TypeCheckState $state, Ast\InstanceDecl $decl): v
     $record = [
         'module' => $module,
         'class' => $decl->class,
-        'head' => $decl->head,
+        'instanceHead' => $decl->head,
         'constraints' => $decl->constraints,
         'associatedEquations' => associatedEquationsMapFromDecl($decl),
         'fromDeriving' => true,
@@ -691,7 +691,7 @@ function derivedProjectInstanceRecords(Ast\DataDecl $decl, string $moduleName): 
             $records[] = [
                 'module' => $moduleName,
                 'class' => $ref->name,
-                'head' => dataDeclHeadAst($decl),
+                'instanceHead' => dataDeclHeadAst($decl),
                 'constraints' => $ref->viaType !== null
                     ? [new Ast\TypeApp(new Ast\TypeCon($ref->name), [$ref->viaType])]
                     : [],
@@ -720,7 +720,7 @@ function derivedProjectInstanceRecords(Ast\DataDecl $decl, string $moduleName): 
         $records[] = [
             'module' => $moduleName,
             'class' => $ref->name,
-            'head' => $head,
+            'instanceHead' => $head,
             'constraints' => $constraints,
             'associatedEquations' => $associatedEquations,
             'fromDeriving' => true,
@@ -753,7 +753,7 @@ function genericMetadataProjectInstances(Ast\DataDecl $decl, string $moduleName)
     $records = [[
         'module' => $moduleName,
         'class' => 'Datatype',
-        'head' => metaDataType($state, $decl),
+        'instanceHead' => metaDataType($state, $decl),
         'constraints' => [],
         'associatedEquations' => [],
         'fromDeriving' => true,
@@ -768,7 +768,7 @@ function genericMetadataProjectInstances(Ast\DataDecl $decl, string $moduleName)
             $records[] = [
                 'module' => $moduleName,
                 'class' => 'Constructor',
-                'head' => metaConsType($ctor),
+                'instanceHead' => metaConsType($ctor),
                 'constraints' => [],
                 'associatedEquations' => [],
                 'fromDeriving' => true,
@@ -783,7 +783,7 @@ function genericMetadataProjectInstances(Ast\DataDecl $decl, string $moduleName)
             $records[] = [
                 'module' => $moduleName,
                 'class' => 'Selector',
-                'head' => metaSelType($field),
+                'instanceHead' => metaSelType($field),
                 'constraints' => [],
                 'associatedEquations' => [],
                 'fromDeriving' => true,

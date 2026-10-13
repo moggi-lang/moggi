@@ -137,12 +137,12 @@ function defaultEmitOptions(Program $ast, string $filename): array
             currentBackend()->extension(),
             \str_replace('\\', '/', $filename),
         ) ?? $filename,
-        'moduleName' => $ast->module ?? '',
+        'artifactModuleName' => $ast->module ?? '',
     ];
     $moduleName = $ast->module;
     if ($moduleName !== null) {
         $emitOptions['namespace'] = moduleNameToNamespace($moduleName);
-        $emitOptions['moduleName'] = $moduleName;
+        $emitOptions['artifactModuleName'] = $moduleName;
     }
 
     return $emitOptions;

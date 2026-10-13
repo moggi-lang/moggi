@@ -211,7 +211,7 @@ function parseModuleExportChildren(ParserState $state): array
         advance($state);
         expect($state, TokenKind::RParen);
 
-        return ['mode' => 'all', 'names' => []];
+        return ['mode' => 'every', 'names' => []];
     }
 
     $names = [parseModuleExportChildName($state)];
@@ -226,7 +226,7 @@ function parseModuleExportChildren(ParserState $state): array
 
     expect($state, TokenKind::RParen);
 
-    return ['mode' => 'some', 'names' => $names];
+    return ['mode' => 'listed', 'names' => $names];
 }
 
 function parseModuleExportChildName(ParserState $state): string
@@ -385,7 +385,7 @@ function parseImportItem(ParserState $state): Ast\ImportItem
         advance($state);
         if (isAt($state, TokenKind::Op, 0, '..')) {
             advance($state);
-            $methods = 'all';
+            $methods = 'every';
         } else {
             $methods = [];
             if (!isAt($state, TokenKind::RParen)) {

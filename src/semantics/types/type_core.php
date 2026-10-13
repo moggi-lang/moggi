@@ -2,6 +2,7 @@
 
 namespace Moggi\Semantics\Types;
 
+use Moggi\Semantics\IntrinsicRegistry;
 use Moggi\Semantics\Kinds;
 use Moggi\Semantics\TypeExpr\Scheme;
 use Moggi\Semantics\TypeExpr\TArrow;
@@ -1110,6 +1111,89 @@ function occurs(TypeCheckState $state, string $var, Type $type, ?Ast\AstNode $at
 }
 
 /**
+ * What the kernel's type constructors *are*: the machine representation of each
+ * MagicHash id, keyed by the ids the kernel declares
+ * ({@see IntrinsicRegistry\allPrimitiveTypeTable}).
+ *
+ * An id whose representation is a constructor the library declares (`Integer#`,
+ * `List#`, `IO#`, `Natural#`, `SomeException#`) names it through
+ * {@see primitiveTypeCon}, so the constructor's spelling comes from the one
+ * canonical-name table rather than being repeated here.
+ *
+ * @return Type|null null for a name that is not one of the kernel's constructors
+ */
+function primitiveTypeRepresentation(string $magicHashId): ?Type
+{
+    return match ($magicHashId) {
+        'String#' => new TStr(),
+        'Bytes#' => new TBytes(),
+        'Int#' => new TInt(),
+        'Char#' => new TChar(),
+        'Word#' => new TWord(),
+        'Word8#' => new TWord8(),
+        'Word16#' => new TWord16(),
+        'Word32#' => new TWord32(),
+        'Word64#' => new TWord64(),
+        'Int8#' => new TInt8(),
+        'Int16#' => new TInt16(),
+        'Int32#' => new TInt32(),
+        'Int64#' => new TInt64(),
+        'Double#' => new TDouble(),
+        'Integer#' => primitiveTypeCon('Integer#'),
+        'Natural#' => primitiveTypeCon('Natural#'),
+        'List#' => primitiveTypeCon('List#'),
+        'IO#' => primitiveTypeCon('IO#'),
+        'SomeException#' => primitiveTypeCon('SomeException#'),
+        default => null,
+    };
+}
+
+/** The type constructor an id canonically names: the library's spelling of it. */
+function primitiveTypeCon(string $magicHashId): TCon
+{
+    return new TCon(Kinds\canonicalTypeConName($magicHashId));
+}
+
+/**
+ * The representation *any* spelling of a kernel type names: the id the kernel
+ * declares (`Int#`) or the name the library gives it (`Int`, `ByteString`,
+ * `List`).
+ *
+ * The aliases are not a table of their own: each declared id is read back through
+ * {@see Kinds\canonicalTypeConName}, so what a program writes is only ever a
+ * *value* of the one mapping that says what an id is called. A name neither the
+ * kernel declares nor canonically names has no representation.
+ */
+function primitiveTypeRepresentationOf(string $name): ?Type
+{
+    $id = primitiveTypeIdOf($name);
+
+    return $id === null ? null : primitiveTypeRepresentation($id);
+}
+
+/**
+ * The kernel id a type name is: the id itself when it is written that way, or
+ * the one whose canonical name it is (`Int` → `Int#`, `ByteString` → `Bytes#`).
+ *
+ * The direction the canonical-name table does not answer by itself, built from
+ * the ids the kernel declares — so a caller that has only the spelling a
+ * signature wrote (a backend lowering a foreign type) reaches the declaration by
+ * id rather than by keeping a table of Moggi names.
+ */
+function primitiveTypeIdOf(string $name): ?string
+{
+    static $ids = null;
+    if ($ids === null) {
+        $ids = [];
+        foreach (\array_keys(IntrinsicRegistry\allPrimitiveTypeTable()) as $id) {
+            $ids[Kinds\canonicalTypeConName($id)] = $id;
+        }
+    }
+
+    return $ids[$name] ?? (IntrinsicRegistry\isMagicHashName($name) ? $name : null);
+}
+
+/**
  * The primitive type a zero-argument constructor names, or the type itself when
  * it is not one of the machine primitives.
  *
@@ -1124,23 +1208,7 @@ function canonicalPrimitiveType(Type $type): Type
         return $type;
     }
 
-    return match ($type->name) {
-        'Int' => new TInt(),
-        'Int8' => new TInt8(),
-        'Int16' => new TInt16(),
-        'Int32' => new TInt32(),
-        'Int64' => new TInt64(),
-        'Word' => new TWord(),
-        'Word8' => new TWord8(),
-        'Word16' => new TWord16(),
-        'Word32' => new TWord32(),
-        'Word64' => new TWord64(),
-        'Char' => new TChar(),
-        'String' => new TStr(),
-        'Double' => new TDouble(),
-        'ByteString' => new TBytes(),
-        default => $type,
-    };
+    return primitiveTypeRepresentationOf($type->name) ?? $type;
 }
 
 /**

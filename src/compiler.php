@@ -267,7 +267,7 @@ function dumpSourceStage(string $source, string $filename, string $stage): strin
         return dumpAst($program);
     }
 
-    $typed = moduleCompileContext($filename, $program)['checked'];
+    $typed = moduleCompileContext($filename, $program)['typedProgram'];
 
     return dumpAst($typed);
 }

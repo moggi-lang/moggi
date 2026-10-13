@@ -403,7 +403,7 @@ function publicFixities(): array
 {
     static $table = null;
 
-    return $table ??= [':' => ['assoc' => 'infixr', 'prec' => 5]];
+    return $table ??= [':' => ['assoc' => 'infixr', 'precedence' => 5]];
 }
 
 /**

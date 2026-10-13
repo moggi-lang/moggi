@@ -353,7 +353,7 @@ final class ImportItem extends AstNode
 {
     /**
      * @param array<int, string>|string|null $methods The class's method
-     *   sublist: a list of names, `'all'` for `C(..)`, and `null` for a plain
+     *   sublist: a list of names, `'every'` for `C(..)`, and `null` for a plain
      *   name (which brings a class's methods along, as importing a class does).
      */
     public function __construct(

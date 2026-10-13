@@ -87,7 +87,7 @@ final class JvmBackend implements Backend
             $pathInfo['dispatch'],
             $kind,
             $pathInfo['classPath'],
-            $pathInfo['member'],
+            $pathInfo['hostMember'],
         );
     }
 

@@ -7,7 +7,6 @@ use Moggi\Pipeline\CompilePurpose;
 use Moggi\Semantics\Kinds;
 use Moggi\Semantics\TypeExpr\Scheme;
 use Moggi\Semantics\TypeExpr\TArrow;
-use Moggi\Semantics\TypeExpr\TBytes;
 use Moggi\Semantics\TypeExpr\TChar;
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TDouble;
@@ -64,7 +63,7 @@ function isIoTypeCon(TypeCheckState $state, Type $type): bool
     $type = prune($state, $type);
 
     return $type instanceof TCon
-        && $type->name === 'IO'
+        && $type->name === Kinds\canonicalTypeConName('IO#')
         && count($type->args) === 1;
 }
 
@@ -434,7 +433,7 @@ function deferDeclaration(
         'methods' => $state->constraintMethods,
         'ambiguities' => $state->constraintMethodAmbiguities,
         'methodCandidates' => $state->constraintMethodCandidates,
-        'span' => $state->declSpan,
+        'declarationSpan' => $state->declSpan,
     ];
 }
 
@@ -550,7 +549,7 @@ function settleDeferredDeclaration(TypeCheckState $state, array $entry): void
     $state->constraintMethods = $entry['methods'];
     $state->constraintMethodAmbiguities = $entry['ambiguities'];
     $state->constraintMethodCandidates = $entry['methodCandidates'];
-    $state->declSpan = $entry['span'];
+    $state->declSpan = $entry['declarationSpan'];
     $state->ambientConstraints = [];
     $state->ambientConstraintsByClass = [];
 
@@ -2871,7 +2870,7 @@ function dictAwaitingResolution(TypeCheckState $state, array $constraints): bool
             continue;
         }
 
-        if (prune($state, $resolved['head']) instanceof TVar) {
+        if (prune($state, $resolved['instanceHead']) instanceof TVar) {
             return true;
         }
 
@@ -3689,7 +3688,9 @@ function inferCase(TypeCheckState $state, Ast\CaseExpr $expr, array $env): Type
  */
 function literalPatternHostPrimitive(Type $type): bool
 {
-    if ($type instanceof TInt
+    $type = canonicalPrimitiveType($type);
+
+    return $type instanceof TInt
         || $type instanceof TInt8
         || $type instanceof TInt16
         || $type instanceof TInt32
@@ -3698,16 +3699,8 @@ function literalPatternHostPrimitive(Type $type): bool
         || $type instanceof TWord8
         || $type instanceof TWord16
         || $type instanceof TWord32
-        || $type instanceof TWord64) {
-        return true;
-    }
-
-    return $type instanceof TCon && \in_array($type->name, [
-        'Int', 'Int8', 'Int16', 'Int32', 'Int64',
-        'Word', 'Word8', 'Word16', 'Word32', 'Word64',
-    ], true);
+        || $type instanceof TWord64;
 }
-
 /**
  * A numeric literal in a pattern is an overloaded literal, not an `Int` pattern:
  * `f 0 = "zero"` has to mean `Integral i => i -> String` and test `i`'s own zero,
@@ -4848,7 +4841,7 @@ function resolveMagicHashTypeIfInScope(
     array $expanding = [],
     Ast\AstNode|Ast\TypeNode|null $at = null,
 ): ?Type {
-    $resolved = magicHashInternalType($name);
+    $resolved = primitiveTypeRepresentation($name);
     if ($resolved === null) {
         return null;
     }
@@ -4863,32 +4856,6 @@ function resolveMagicHashTypeIfInScope(
     }
 
     return $resolved;
-}
-
-function magicHashInternalType(string $name): ?Type
-{
-    return match ($name) {
-        'String#' => new TStr(),
-        'Bytes#' => new TBytes(),
-        'Int#' => new TInt(),
-        'Integer#' => new TCon('Integer'),
-        'Natural#' => new TCon('Natural'),
-        'Char#' => new TChar(),
-        'Word#' => new TWord(),
-        'Word8#' => new TWord8(),
-        'Word16#' => new TWord16(),
-        'Word32#' => new TWord32(),
-        'Word64#' => new TWord64(),
-        'Int8#' => new TInt8(),
-        'Int16#' => new TInt16(),
-        'Int32#' => new TInt32(),
-        'Int64#' => new TInt64(),
-        'Double#' => new TDouble(),
-        'List#' => new TCon('List'),
-        'IO#' => new TCon('IO'),
-        'SomeException#' => new TCon('SomeException'),
-        default => null,
-    };
 }
 
 /** DataKinds: elaborate `'Red` into the internal promoted-type representation. */

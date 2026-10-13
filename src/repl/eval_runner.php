@@ -53,7 +53,7 @@ function runEntryPhp(State $state, string $entryName): string
 
     $ctx = [
         'prepared' => $state->prepared,
-        'checked' => $state->typedInteractive,
+        'typedProgram' => $state->typedInteractive,
         'importContext' => $state->prepared->importContexts[$state->moduleName] ?? [],
     ];
     $artifacts = emitInteractivePhp($state, $ctx, $ns, $depsDir);
@@ -115,7 +115,7 @@ function beginStdoutCapture(): array
 {
     ReplStdoutCaptureFilter::$buffer = '';
     if (!\defined('STDOUT') || !\is_resource(STDOUT)) {
-        return ['filter' => false];
+        return ['streamFilter' => false];
     }
 
     if (!\in_array('moggi_repl_stdout_capture', \stream_get_filters(), true)) {
@@ -124,7 +124,7 @@ function beginStdoutCapture(): array
 
     $filter = \stream_filter_append(STDOUT, 'moggi_repl_stdout_capture', STREAM_FILTER_WRITE);
 
-    return ['filter' => $filter];
+    return ['streamFilter' => $filter];
 }
 
 /**
@@ -132,9 +132,9 @@ function beginStdoutCapture(): array
  */
 function endStdoutCapture(array $capture): string
 {
-    if (\is_resource($capture['filter'])) {
-        \stream_filter_remove($capture['filter']);
-        $capture['filter'] = false;
+    if (\is_resource($capture['streamFilter'])) {
+        \stream_filter_remove($capture['streamFilter']);
+        $capture['streamFilter'] = false;
     }
     $out = ReplStdoutCaptureFilter::$buffer;
     ReplStdoutCaptureFilter::$buffer = '';
@@ -291,7 +291,7 @@ function emitInteractivePhp(
     $artifacts = pipelineRun(new PipelineRequest(
         purpose: CompilePurpose::Repl,
         filename: $state->interactivePath(),
-        typedProgram: $ctx['checked'],
+        typedProgram: $ctx['typedProgram'],
         optimize: $optimize,
         backend: 'php',
         importContext: $ctx['importContext'],
@@ -322,7 +322,7 @@ function emitInteractivePhp(
 
     $emitOptions = [
         'namespace' => $namespace,
-        'moduleName' => $state->moduleName,
+        'artifactModuleName' => $state->moduleName,
         'imports' => $imports,
         'outputRelative' => 'Interactive.php',
         'externalFns' => $imports['externalFns'] ?? [],
