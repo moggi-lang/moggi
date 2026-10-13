@@ -268,30 +268,19 @@ function literalValue(string $token): string
 function baseline(): array
 {
     return [
-        // `guardsExhaustive` reads `otherwise` to set the IR's exhaustive-match flag
-        'src/IR/lower_expr.php' => [
-            'otherwise',
-        ],
-        // the IO wrappers lowering knows by name
-        'src/IR/lower_io.php' => [
-            'for_', 'sequenceA_', 'traverse_', 'unless', 'void', 'when',
-        ],
-        // comparison and Bool primops → host IL (`bool` is the IL type name)
+        // comparison primops → host IL (`bool` is the IL type name; the Bool constructors are
+        // asked of the kernel key)
         'src/backend/dotnet/codegen.php' => [
-            '/=', '<', '<=', '==', '>', '>=', 'False', 'True', 'bool',
+            '/=', '<', '<=', '==', '>', '>=', 'bool',
         ],
         // marshalling: the boolean, the transparent containers and the opaque handle — the
         // kernel's own types are keyed by kernel id (`clrKernelTypeName`)
         'src/backend/dotnet/foreign.php' => [
             'Bool', 'Either', 'Handle', 'Maybe',
         ],
-        // `isBoolBackedData`: the bool representation is the type named `Bool`
-        'src/backend/ir_meta.php' => [
-            'Bool',
-        ],
-        // comparison and Bool primops → host JVM ops
+        // comparison primops → host JVM ops (the Bool constructors are asked of the kernel key)
         'src/backend/jvm/codegen.php' => [
-            '/=', '<', '<=', '==', '>', '>=', 'False', 'True',
+            '/=', '<', '<=', '==', '>', '>=',
         ],
         // marshalling: the boolean, the transparent containers and the opaque handle — the
         // kernel's own types are keyed by kernel id (`jvmKernelDescriptor`)
@@ -322,10 +311,6 @@ function baseline(): array
         'src/modules/typecheck_env.php' => [
             'Bool',
         ],
-        // Bool constructors among the optimizer's constants
-        'src/optimize/support.php' => [
-            'False', 'True',
-        ],
         // `:show` is a REPL verb — host vocabulary
         'src/repl/commands.php' => [
             'show',
@@ -354,11 +339,6 @@ function baseline(): array
         // types the boundary converts and the two host handles
         'src/semantics/foreign.php' => [
             'Either', 'Handle', 'Maybe', 'PHPValue', 'Resource', 'String',
-        ],
-        // the IO boundary's own names
-        // the IO instance's bind method
-        'src/semantics/io_boundary.php' => [
-            '>>=',
         ],
         // the `Solo` alias for `MkSolo` (the `IO` reservation tests the kernel id)
         'src/semantics/types/declarations.php' => [

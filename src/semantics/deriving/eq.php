@@ -5,6 +5,9 @@ namespace Moggi\Semantics\Deriving;
 use Moggi\Syntax\Ast;
 use Moggi\Semantics\Types\TypeCheckState;
 
+use function Moggi\Semantics\Kernel\boolFalseCtor;
+use function Moggi\Semantics\Kernel\boolTrueCtor;
+
 /**
  * Stock `deriving Eq`: synthesize `instance Eq … where (==) = …; (/=) = …`.
  *
@@ -58,7 +61,7 @@ function deriveEq(
 function synthesizeEqBody(Ast\DataDecl $decl, string $left, string $right): Ast\AstNode
 {
     if ($decl->constructors === []) {
-        return new Ast\ConstructorRef('True');
+        return new Ast\ConstructorRef(boolTrueCtor());
     }
 
     $alts = [];
@@ -86,7 +89,7 @@ function synthesizeEqBody(Ast\DataDecl $decl, string $left, string $right): Ast\
             new Ast\Variable($right),
             [
                 new Ast\Alt($rightPat, $fieldEq),
-                new Ast\Alt(new Ast\PatWild(), new Ast\ConstructorRef('False')),
+                new Ast\Alt(new Ast\PatWild(), new Ast\ConstructorRef(boolFalseCtor())),
             ],
         );
 
@@ -103,7 +106,7 @@ function synthesizeEqBody(Ast\DataDecl $decl, string $left, string $right): Ast\
 function synthesizeFieldEqualities(array $leftBinders, array $rightBinders): Ast\AstNode
 {
     if ($leftBinders === []) {
-        return new Ast\ConstructorRef('True');
+        return new Ast\ConstructorRef(boolTrueCtor());
     }
 
     $expr = null;
@@ -112,7 +115,7 @@ function synthesizeFieldEqualities(array $leftBinders, array $rightBinders): Ast
         $expr = $expr === null ? $cmp : new Ast\Infix('&&', $expr, $cmp);
     }
 
-    return $expr ?? new Ast\ConstructorRef('True');
+    return $expr ?? new Ast\ConstructorRef(boolTrueCtor());
 }
 
 function eqCall(Ast\AstNode $left, Ast\AstNode $right): Ast\AstNode
@@ -135,8 +138,8 @@ function synthesizeNeBody(Ast\DataDecl $decl, string $left, string $right): Ast\
     return new Ast\CaseExpr(
         synthesizeEqBody($decl, $left, $right),
         [
-            new Ast\Alt(new Ast\PatCon('True', []), new Ast\ConstructorRef('False')),
-            new Ast\Alt(new Ast\PatCon('False', []), new Ast\ConstructorRef('True')),
+            new Ast\Alt(new Ast\PatCon(boolTrueCtor(), []), new Ast\ConstructorRef(boolFalseCtor())),
+            new Ast\Alt(new Ast\PatCon(boolFalseCtor(), []), new Ast\ConstructorRef(boolTrueCtor())),
         ],
     );
 }

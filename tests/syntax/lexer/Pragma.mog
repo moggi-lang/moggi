@@ -1,4 +1,0 @@
-{-# LANGUAGE NoImplicitPrelude #-}
-
--- Pragmas are `{-# … #-}` and lex as a single trimmed token.
-x = 1

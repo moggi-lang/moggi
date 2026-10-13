@@ -419,17 +419,9 @@ function ioCallNeedsRunBoxedResult(IoCall $call, LowerCtx $ctx): bool
         return false;
     }
 
-    if (isset($ctx->ioActionReturnFns[$call->callee])) {
-        return true;
-    }
-
-    return \in_array($call->callee, boxedIoMonadHelperNames(), true);
-}
-
-/** @return list<string> */
-function boxedIoMonadHelperNames(): array
-{
-    return ['traverse_', 'for_', 'sequenceA_', 'when', 'unless', 'void'];
+    // A provider whose declared result is a monadic type variable returns an action value: the
+    // declaration says so, and this set is built from declarations (`ioActionReturnFnNames`).
+    return isset($ctx->ioActionReturnFns[$call->callee]);
 }
 
 function lowerIoCase(Ast\IoCase $expr, LowerCtx $ctx): bool
@@ -440,7 +432,7 @@ function lowerIoCase(Ast\IoCase $expr, LowerCtx $ctx): bool
 
     foreach ($expr->alts as $alt) {
         if ($alt->body instanceof Ast\GuardsExpr) {
-            $guardsAlwaysHold = $guardsAlwaysHold && guardsExhaustive($alt->body);
+            $guardsAlwaysHold = $guardsAlwaysHold && guardsExhaustive($alt->body, $ctx);
             $clauses = \array_map(
                 static fn (Ast\Guarded $guarded): array => [$guarded->guard, $guarded->body],
                 $alt->body->clauses,

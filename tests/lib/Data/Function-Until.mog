@@ -4,8 +4,7 @@ import Data.Maybe
 import Data.Eq
 import Text.Show
 
--- `until` is the strict loop base keeps in GHC.Base; `mapMaybe`/`catMaybes`
--- are re-exported from Data.List as base does.
+-- `until` is the strict loop; `mapMaybe`/`catMaybes` are re-exported from Data.List.
 
 keep :: Int -> Maybe Int
 keep n = case n > 2 of

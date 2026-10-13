@@ -5,6 +5,9 @@ namespace Moggi\Syntax\Parser;
 use Moggi\Syntax\Ast;
 use Moggi\Syntax\Lexer\TokenKind;
 
+use function Moggi\Semantics\Kernel\boolFalseCtor;
+use function Moggi\Semantics\Kernel\boolTrueCtor;
+
 /**
  * An integer literal, keeping the digits when they do not fit the host `int`:
  * `123456789012345678901234567890` must not become the clamped `int` before the
@@ -332,8 +335,8 @@ function parseIf(ParserState $state): Ast\AstNode
     $otherwise = parseExprWithWhere($state);
 
     $alts = [
-        new Ast\Alt(spanned(new Ast\PatCon('True', []), $start), $then),
-        new Ast\Alt(spanned(new Ast\PatCon('False', []), $else), $otherwise),
+        new Ast\Alt(spanned(new Ast\PatCon(boolTrueCtor(), []), $start), $then),
+        new Ast\Alt(spanned(new Ast\PatCon(boolFalseCtor(), []), $else), $otherwise),
     ];
 
     return spannedRange(new Ast\CaseExpr($cond, $alts), $start, $cond);

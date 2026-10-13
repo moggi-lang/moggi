@@ -9,6 +9,7 @@ use Moggi\Syntax\Ast;
 use function Moggi\Semantics\IntrinsicRegistry\ioPrimopRole;
 use function Moggi\Semantics\IntrinsicRegistry\isIoIntrinsic;
 use function Moggi\Semantics\IntrinsicRegistry\primopArity;
+use function Moggi\Semantics\Kernel\bindRole;
 use function Moggi\Semantics\Kinds\canonicalTypeConName;
 
 /**
@@ -740,10 +741,6 @@ function isUnsaturatedPartialIo(Ast\AstNode $expr): bool
 /** @return ?array{left: Ast\AstNode, right: Ast\AstNode} */
 function ioBindParts(Ast\AstNode $expr): ?array
 {
-    if ($expr instanceof Ast\Infix && $expr->operator === '>>=') {
-        return ['left' => $expr->left, 'right' => $expr->right];
-    }
-
     if (!$expr instanceof Ast\Apply) {
         return null;
     }
@@ -755,7 +752,7 @@ function ioBindParts(Ast\AstNode $expr): ?array
     }
 
     $method = $inner->function;
-    if (!isIoMonadMethod($method, '>>=')) {
+    if (!isIoMethodWithRole($method, bindRole())) {
         return null;
     }
 
@@ -763,12 +760,17 @@ function ioBindParts(Ast\AstNode $expr): ?array
 }
 
 /**
- * IO class methods are recognized by ordinary instance evidence whose head is
- * IO, not by ambient __io_* dictionaries.
+ * The `IO` instance's method that fulfils a language role (`>>=`, `pure`).
+ *
+ * Two facts have to line up. The projection is ordinary instance evidence whose head is `IO` — not an
+ * ambient `__io_*` dictionary — and the method is the one the language's role resolves to
+ * ({@see \Moggi\Semantics\Kernel}), which the checker recorded on the evidence when it built it. Nothing
+ * here reads the operator's spelling, so a local operator that shadows the monad's is a different
+ * declaration and is not taken for it.
  */
-function isIoMonadMethod(Ast\AstNode $expr, string $method): bool
+function isIoMethodWithRole(Ast\AstNode $expr, string $role): bool
 {
-    if (!$expr instanceof Ast\EvidenceMethod || $expr->method !== $method) {
+    if (!$expr instanceof Ast\EvidenceMethod || $expr->role !== $role) {
         return false;
     }
 

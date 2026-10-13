@@ -268,8 +268,6 @@ function warmSharedCache(array $backends): void
         return;
     }
 
-    suiteEcho("note: elaborating the standard library once (" . \implode(', ', $backends) . ") so the workers start warm\n");
-
     foreach ($backends as $backend) {
         try {
             \Moggi\Backend\setCompileBackend($backend);

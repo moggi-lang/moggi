@@ -234,6 +234,7 @@ function checkRaw(
         $program->moduleDoc,
         $program->fixityDocs,
         externalActionReturnFns: $importContext['externalActionReturnFns'] ?? [],
+        externalTrueBindings: $importContext['externalTrueBindings'] ?? [],
     );
 
 

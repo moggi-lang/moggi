@@ -5,10 +5,10 @@ namespace Moggi\Syntax\Parser;
 use Moggi\Syntax\Ast;
 use Moggi\Syntax\Lexer\TokenKind;
 
-use function Moggi\Syntax\isConstructorOperator;
 use function Moggi\Syntax\Lexer\isIdCont;
 use function Moggi\Syntax\Lexer\isLetter;
 use function Moggi\Syntax\Lexer\isSymbol;
+use function Moggi\Syntax\isConstructorOperator;
 
 /**
  * Top-level declaration, or null if the next tokens are an expression/statement.
@@ -953,6 +953,7 @@ function parseClassDecl(ParserState $state): Ast\ClassDecl
             );
         }
     }
+
 
     $headLine = $headLoc->line;
     $headCol = $headLoc->col;

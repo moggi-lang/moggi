@@ -8,6 +8,8 @@ use Moggi\Syntax\Ast;
 
 use function Moggi\LSP\Analysis\ensureAnalyzed;
 use function Moggi\LSP\Protocol\splitLines;
+use function Moggi\Semantics\Kernel\boolFalseCtor;
+use function Moggi\Semantics\Kernel\boolTypeName;
 
 function svcCodeActions(AnalysisService $svc, string $uri, array $range, array $context): array
 {
@@ -153,8 +155,8 @@ function holeFillStub(string $type, ?AnalysisService $svc = null, ?AnalysisResul
     if ($t === 'Double' || $t === 'Float') {
         return '0.0';
     }
-    if ($t === 'Bool') {
-        return 'False';
+    if ($t === boolTypeName()) {
+        return boolFalseCtor();
     }
     if ($t === 'Ordering') {
         return 'EQ';

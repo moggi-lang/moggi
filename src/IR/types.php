@@ -692,6 +692,8 @@ final class LowerState
         public array $functions = [],
         public array $usedLocals = [],
         public int $nextLocalSuffix = 0,
+        /** @var array<string, true> `<Module>::<name>` of module bindings whose body is `True` */
+        public array $trueBindings = [],
     ) {
     }
 }
@@ -720,6 +722,8 @@ final class LowerCtx
         public bool $hasIoAssignAction = false,
         public array $functionArity = [],
         public array $ioActionReturnFns = [],
+        /** @var array<string, true> `<Module>::<name>` of bindings whose body is the host boolean `true` */
+        public array $trueBindings = [],
         public bool $inActionBox = false,
         public string $moduleName = '',
         public string $sourceFile = '',

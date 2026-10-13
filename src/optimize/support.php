@@ -11,6 +11,7 @@ use function Moggi\IR\Visit\operandChildren;
 use function Moggi\IR\Visit\stmtDirectOperands;
 use function Moggi\IR\Visit\stmtNestedBlocks;
 use function Moggi\IR\Visit\walkBlock;
+use function Moggi\Semantics\Kernel\isBoolCtor;
 
 function operandEqual(IR\Operand $left, IR\Operand $right): bool
 {
@@ -367,13 +368,14 @@ function isLetrecName(string $name): bool
 }
 
 /**
- * A `Bool` constructor. `Bool` is wired into every backend, so its constructors
- * are spelled bare in IR (`True`/`False` become the host boolean) and must not
- * be qualified to `Data.Bool::True` the way a user data constructor is.
+ * A constructor of the host-boolean type. The library declares it
+ * (`Data.Bool`: `data Bool = False | True`), the backends lower it to the host boolean, so its
+ * constructors are bare in IR — never qualified to `Data.Bool::True` the way a user data
+ * constructor is — and their identity is asked of the kernel key rather than spelled here.
  */
 function isWiredInBoolCtor(string $name): bool
 {
-    return $name === 'True' || $name === 'False';
+    return isBoolCtor($name);
 }
 
 /**

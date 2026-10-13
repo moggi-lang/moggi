@@ -28,9 +28,8 @@
 -- So the names live at the one place no library module is below, and the public
 -- modules re-export them: @Data.Int@ and @Data.Word@ keep their instances and
 -- operations, @Data.String@ and @Data.List@ their operations, and each of them
--- exports the name from here. base does the same thing in the same place
--- (`GHC.Internal.Base` declares `String`, `Char`, `Int`, `Word` and the list
--- type, `GHC.Internal.Num` declares `Integer`).
+-- exports the name from here. This module declares `String`, `Char`, `Int`, `Word`, the list type
+-- and the `Integer` synonym over the kernel's own arbitrary-precision integer.
 --
 -- Nothing else belongs here: no instance, no function, no class. A type's
 -- instances stay with the lower of the type's module and the class's module,

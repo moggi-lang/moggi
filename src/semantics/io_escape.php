@@ -28,11 +28,17 @@ function analyze(Ast\Program $program): Ast\Program
     $backendImpl = isBackendImplModuleName($program->module ?? '');
 
     foreach ($program->items as $item) {
-        if (!$item instanceof Ast\FunctionDecl || !functionReturnsIo($item->type)) {
+        if (!$item instanceof Ast\FunctionDecl) {
             continue;
         }
 
         if ($item->signatureOnly) {
+            continue;
+        }
+
+        // A function whose result is a monadic type variable is classified too: at any
+        // instantiation — `IO` included — its value is an action, and the caller runs it.
+        if (!functionReturnsIo($item->type) && !returnsMonadicValue($item->type)) {
             continue;
         }
 
@@ -54,6 +60,15 @@ function annotateFunction(Ast\FunctionDecl $fn, bool $backendImpl = false): void
 
     if ($backendImpl || $fn->foreign || isForeignIoBody($body)) {
         $fn->ioBodyKind = IoBodyKind::StraightLine;
+        return;
+    }
+
+    if (returnsMonadicValue($fn->type)) {
+        // The declaration says the result is a monadic type variable: the body denotes an action
+        // rather than performing one, so a caller receives a boxed action and has to run it. This is
+        // the whole of what the library's `void`, `when`, `unless`, `for_`, `sequenceA_` and
+        // `traverse_` have in common, and it needs no name list to say so.
+        $fn->ioBodyKind = IoBodyKind::ActionReturn;
         return;
     }
 
@@ -206,6 +221,29 @@ function functionReturnsIoUnit(?Ast\AstNode $type): bool
     }
 
     return isIoType($result) && isIoUnitType($result);
+}
+
+/**
+ * The declared result is a *monadic* type variable applied to arguments (`f ()`, `m a`): at any
+ * instantiation — `IO` included — such a value is a description of an action, which callers receive
+ * boxed and run.
+ *
+ * A bare type variable (`b`, as `maybe` and `id` return) is deliberately not included: it is a plain
+ * value at whatever type the call site chose, and only the call site's position says whether it is an
+ * action to run or an action to hand on.
+ */
+function returnsMonadicValue(?Ast\AstNode $type): bool
+{
+    if ($type === null) {
+        return false;
+    }
+
+    $result = stripConstraints($type);
+    while ($result instanceof Ast\TypeArrow) {
+        $result = $result->to;
+    }
+
+    return $result instanceof Ast\TypeApp && $result->con instanceof Ast\TypeVar;
 }
 
 function functionHasIoParam(?Ast\AstNode $type): bool
