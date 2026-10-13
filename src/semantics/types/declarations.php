@@ -2,10 +2,12 @@
 
 namespace Moggi\Semantics\Types;
 
+use Moggi\Semantics\Kernel;
 use Moggi\Semantics\Kinds;
 use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TVar;
+use Moggi\Semantics\TypeExpr\TVarApp;
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Syntax\Ast;
 
@@ -404,12 +406,178 @@ function registerClass(TypeCheckState $state, Ast\ClassDecl $decl, string $modul
         'superclasses' => $decl->superclasses,
         'associatedTypes' => $associatedTypes,
         'minimalGroups' => $decl->minimalGroups,
+        'roles' => impliedRoles($methods, $decl->params),
         'module' => $module,
     ];
     $state->classParamKindsCache = null;
+    $state->roleMethodsCache = null;
 
     $state->classes[$name]['methodSchemes'] = classMethodExportSchemes($state, $decl);
 }
+
+/**
+ * Which of a class's methods imply which language role, read off the declared signatures.
+ *
+ * A role is the language's, not the library's: the method that *is* the bind is the one whose type says
+ * so — `m a -> (a -> m b) -> m b` — and that is the whole statement, so no declaration has to carry a
+ * marker, no stage spells an operator, and the library stays free to name its methods what it likes.
+ * The roles the language mandates are {@see \Moggi\Semantics\Kernel}'s keys.
+ *
+ * Only the shapes' shape is fixed here, and only for a single-parameter class: a role has to be
+ * unambiguous to be a role.
+ *
+ * @param array<string, array{type: Type}> $methods the class's registered methods
+ * @param list<Ast\ClassParam> $params the class's own parameters
+ * @return array<string, list<string>> role => the methods that imply it
+ */
+function impliedRoles(array $methods, array $params): array
+{
+    if (\count($params) !== 1) {
+        return [];
+    }
+
+    $roles = [];
+    foreach ($methods as $methodName => $info) {
+        $role = impliedRole($methodName, $info['type'], $params[0]->name);
+        if ($role !== null) {
+            $roles[$role][] = $methodName;
+        }
+    }
+
+    return $roles;
+}
+
+/**
+ * The role one method's signature implies, or null when it implies none.
+ *
+ * The bind takes the class's own type applied to a variable and a function from that variable into the
+ * same application: `m a -> (a -> m b) -> m b`. The unit takes a variable and produces the class's type
+ * applied to it: `a -> f a`. The literal conversion takes the kernel's integer and produces the class's
+ * own parameter: `Integer# -> a`.
+ */
+function impliedRole(string $method, Type $type, string $param): ?string
+{
+    if ($method === '' || !$type instanceof TArrow) {
+        return null;
+    }
+
+    $applied = static fn (?Type $t): ?string => $t instanceof TVarApp
+        && $t->name === $param
+        && \count($t->args) === 1
+        && $t->args[0] instanceof TVar
+        ? $t->args[0]->name
+        : null;
+
+    // `a -> f a`
+    if ($type->from instanceof TVar
+        && $applied($type->to) === $type->from->name
+    ) {
+        return Kernel\pureRole();
+    }
+
+    // `Integer# -> a`
+    if ($type->from instanceof TCon
+        && $type->from->name === Kinds\canonicalTypeConName('Integer#')
+        && $type->to instanceof TVar
+        && $type->to->name === $param
+    ) {
+        return Kernel\literalRole();
+    }
+
+    // `m a -> (a -> m b) -> m b`
+    $outer = $applied($type->from);
+    if ($outer === null || !$type->to instanceof TArrow || !$type->to->from instanceof TArrow) {
+        return null;
+    }
+    $continuation = $type->to->from;
+    if (!$continuation->from instanceof TVar || $continuation->from->name !== $outer) {
+        return null;
+    }
+    $inner = $applied($continuation->to);
+    if ($inner === null || $inner === $outer || $applied($type->to->to) !== $inner) {
+        return null;
+    }
+
+    return Kernel\bindRole();
+}
+
+/**
+ * The method this class's declaration implies a language role with, or null when the role is not its.
+ *
+ * @see \Moggi\Semantics\Kernel for the roles the language mandates
+ */
+function classMethodRole(TypeCheckState $state, string $class, string $method): ?string
+{
+    foreach ($state->classes[$class]['roles'] ?? [] as $role => $methods) {
+        if (\in_array($method, $methods, true)) {
+            return $role;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * The method a language role is fulfilled by, asked of the classes in scope.
+ *
+ * The reader asks for the role and never for a spelling; a role nothing implies is `null`.
+ */
+function classMethodWithRole(TypeCheckState $state, string $role): ?string
+{
+    return roleEntry($state, $role)['method'] ?? null;
+}
+
+/**
+ * The class whose declaration implies a language role, or null when no class in scope implies it.
+ *
+ * A literal's constraint is a class, not a method: the role that names the method a literal is converted
+ * with names the class that owns the conversion.
+ */
+function classWithRole(TypeCheckState $state, string $role): ?string
+{
+    return roleEntry($state, $role)['class'] ?? null;
+}
+
+/**
+ * The class and method a role is implied by in the classes in scope, or nothing when undeclared.
+ *
+ * The table is built once per class table ({@see TypeCheckState::$roleMethodsCache}, the shape
+ * {@see classParamKindsCache} already had). The classes are consulted in the table's own order, which is
+ * dependency order, so the library — the earliest dependency of everything — is what a role resolves to,
+ * and a declaration of the project's own cannot quietly take a language role over. A first implication
+ * decides, and every later one is ignored.
+ *
+ * @return array{class?: string, method?: string}
+ */
+function roleEntry(TypeCheckState $state, string $role): array
+{
+    if ($state->roleMethodsCache === null) {
+        $methods = [];
+        $classes = [];
+        foreach ($state->classes as $className => $info) {
+            foreach ($info['roles'] ?? [] as $id => $roleMethods) {
+                foreach ($roleMethods as $method) {
+                    if (! isset($classes[$id])) {
+                        $methods[$id] = $method;
+                        $classes[$id] = $className;
+                    }
+                }
+            }
+        }
+        $state->roleMethodsCache = ['methods' => $methods, 'classes' => $classes];
+    }
+
+    if (! isset($state->roleMethodsCache['classes'][$role])) {
+        return [];
+    }
+
+    return [
+        'class' => $state->roleMethodsCache['classes'][$role],
+        'method' => $state->roleMethodsCache['methods'][$role],
+    ];
+}
+
+
 
 /**
  * The polymorphic class-method schemes of a class and, transitively, of its

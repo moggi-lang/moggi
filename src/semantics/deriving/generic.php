@@ -5,6 +5,8 @@ namespace Moggi\Semantics\Deriving;
 use Moggi\Syntax\Ast;
 use Moggi\Semantics\Types\TypeCheckState;
 
+use function Moggi\Semantics\Kernel\boolFalseCtor;
+use function Moggi\Semantics\Kernel\boolTrueCtor;
 use function Moggi\Syntax\isConstructorOperator;
 
 /**
@@ -120,8 +122,8 @@ function metaDataType(TypeCheckState $state, Ast\DataDecl $decl): Ast\TypeNode
 {
     $module = $state->currentModule ?? 'Main';
     $isNewtype = $decl->isNewtype
-        ? new Ast\TypePromoted('True')
-        : new Ast\TypePromoted('False');
+        ? new Ast\TypePromoted(boolTrueCtor())
+        : new Ast\TypePromoted(boolFalseCtor());
 
     return typeApp('MetaData', [
         new Ast\TypeStringLit($decl->name),
@@ -135,8 +137,8 @@ function metaConsType(Ast\ConstructorDecl $ctor): Ast\TypeNode
 {
     $fixity = metaConsFixityType($ctor);
     $isRecord = constructorIsRecord($ctor)
-        ? new Ast\TypePromoted('True')
-        : new Ast\TypePromoted('False');
+        ? new Ast\TypePromoted(boolTrueCtor())
+        : new Ast\TypePromoted(boolFalseCtor());
 
     return typeApp('MetaCons', [
         new Ast\TypeStringLit($ctor->name),
@@ -467,9 +469,9 @@ function deriveDatatypeInstance(
 ): DerivedInstance {
     $meta = metaDataType($state, $decl);
     $ignored = new Ast\PatVar('_d');
-    $isNt = $decl->isNewtype ? 'True' : 'False';
-    $isAllNullary = datatypeIsAllNullary($decl) ? 'True' : 'False';
-    $isSum = count($decl->constructors) > 1 ? 'True' : 'False';
+    $isNt = $decl->isNewtype ? boolTrueCtor() : boolFalseCtor();
+    $isAllNullary = datatypeIsAllNullary($decl) ? boolTrueCtor() : boolFalseCtor();
+    $isSum = count($decl->constructors) > 1 ? boolTrueCtor() : boolFalseCtor();
 
     return new DerivedInstance(
         'Datatype',
@@ -535,7 +537,7 @@ function deriveConstructorInstance(
 ): DerivedInstance {
     $meta = metaConsType($ctor);
     $ignored = new Ast\PatVar('_c');
-    $isRec = constructorIsRecord($ctor) ? 'True' : 'False';
+    $isRec = constructorIsRecord($ctor) ? boolTrueCtor() : boolFalseCtor();
     $arity = count($ctor->fields);
 
     return new DerivedInstance(

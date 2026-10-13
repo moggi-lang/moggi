@@ -445,6 +445,7 @@ final class Program extends AstNode
      * @param list<array<string, mixed>> $instanceEvidence
      * @param array<string, int> $externalFnRuntimeArity
      * @param array<string, true> $externalActionReturnFns imported functions whose body is a boxed action
+     * @param array<string, true> $externalTrueBindings imported `<Module>::<name>` bindings whose body is the host boolean `true`
      * @param array<string, string> $backendMap
      * @param array<string, true> $language LANGUAGE pragma flags (e.g. NoImplicitPrelude)
      */
@@ -469,6 +470,9 @@ final class Program extends AstNode
 
         /** Imported names whose body is an action value; callers must run the box. */
         public array $externalActionReturnFns = [],
+
+        /** Imported `<Module>::<name>` bindings whose body is the host boolean `true` (e.g. `otherwise`). */
+        public array $externalTrueBindings = [],
         int $line = 0,
         int $col = 0,
         int $endCol = 0,
@@ -1233,6 +1237,9 @@ final class EvidenceMethod extends AstNode
     /**
      * @param list<AstNode> $contextEvidence leading dicts for constrained instances
      *        (e.g. `Bounded Int` when projecting `maxBound` from `Bounded (Min Int)`)
+     * @param ?string $role the role the method's own declaration implies
+     *        ({@see \Moggi\Semantics\Kernel}), recorded when this node was built. A reader that asks
+     *        what a resolved method is *for* reads this, never the spelling.
      */
     public function __construct(
         public string $class,
@@ -1244,6 +1251,7 @@ final class EvidenceMethod extends AstNode
         int $line = 0,
         int $col = 0,
         int $endCol = 0,
+        public ?string $role = null,
     ) {
         parent::__construct($line, $col, $endCol);
     }

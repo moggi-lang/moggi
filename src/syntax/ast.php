@@ -2,6 +2,8 @@
 
 namespace Moggi\Syntax\Ast;
 
+use function Moggi\Semantics\Kernel\boolFalseCtor;
+use function Moggi\Semantics\Kernel\boolTrueCtor;
 use function Moggi\Syntax\isConstructorOperator;
 
 require_once __DIR__ . '/ast_types.php';
@@ -81,15 +83,17 @@ function desugarListComp(AstNode $expr, array $qualifiers): AstNode
     }
 
     return new CaseExpr($qual->expr, [
-        new Alt(new PatCon('True', []), $inner),
-        new Alt(new PatCon('False', []), new ListLit([])),
+        new Alt(new PatCon(boolTrueCtor(), []), $inner),
+        new Alt(new PatCon(boolFalseCtor(), []), new ListLit([])),
     ]);
 }
 
 /**
  * @param list<AstNode> $stmts `do` statements, as parsed
+ * @param string $bind the method the block sequences with, read off the declaration that implies the
+ *   bind role ({@see \Moggi\Semantics\Kernel}) — the desugaring names no operator itself
  */
-function desugarDo(array $stmts): AstNode
+function desugarDo(array $stmts, string $bind): AstNode
 {
     if ($stmts === []) {
         throw new \InvalidArgumentException('empty do block');
@@ -99,17 +103,17 @@ function desugarDo(array $stmts): AstNode
     $rest = \array_slice($stmts, 1);
 
     return match ($first::class) {
-        DoBind::class => (function () use ($first, $rest): AstNode {
-            $inner = desugarDo($rest);
+        DoBind::class => (function () use ($first, $rest, $bind): AstNode {
+            $inner = desugarDo($rest, $bind);
             $pattern = $first->pattern;
             if ($pattern instanceof PatWild) {
                 $pattern = new PatVar('__doWild');
             }
 
-            return new Infix('>>=', $first->expr, new Lambda([lambdaParamFor($pattern)], $inner));
+            return new Infix($bind, $first->expr, new Lambda([lambdaParamFor($pattern)], $inner));
         })(),
-        DoLet::class => (function () use ($first, $rest): AstNode {
-            $inner = desugarDo($rest);
+        DoLet::class => (function () use ($first, $rest, $bind): AstNode {
+            $inner = desugarDo($rest, $bind);
 
             return new Let(
                 \array_map(
@@ -128,7 +132,7 @@ function desugarDo(array $stmts): AstNode
         })(),
         DoExprStmt::class => $rest === []
             ? $first->expr
-            : new Infix('>>=', $first->expr, new Lambda([new LambdaParam(new PatVar('__doUnit'))], desugarDo($rest))),
+            : new Infix($bind, $first->expr, new Lambda([new LambdaParam(new PatVar('__doUnit'))], desugarDo($rest, $bind))),
         default => throw new \InvalidArgumentException('invalid do statement'),
     };
 }

@@ -9,6 +9,7 @@ use Moggi\Semantics\TypeExpr\TVar;
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Syntax\Ast;
 
+use function Moggi\Semantics\Kernel\literalRole;
 use function Moggi\Semantics\Kinds\canonicalTypeConName;
 
 /**
@@ -18,18 +19,20 @@ use function Moggi\Semantics\Kinds\canonicalTypeConName;
  * through the ambient dictionary, the type's own instance, or defaulting -- once
  * the type is known.
  *
- * Without `Num` in scope there is no `fromInteger` to denote the value with, so
- * the literal is the host `Int` it already is; a module that spells an `Int`
- * without importing the class that defines the other number types still works.
+ * Without the class declaring the role in scope there is no method to denote the
+ * value with, so the literal is the host `Int` it already is; a module that
+ * spells an `Int` without importing the class that defines the other number
+ * types still works.
  */
 function inferIntegerLit(TypeCheckState $state, Ast\IntegerLit $expr): Type
 {
-    if (! isset($state->classes['Num'])) {
+    $literalClass = classWithRole($state, literalRole());
+    if ($literalClass === null) {
         return new TInt();
     }
 
     $type = freshType($state);
-    $expr->pendingConstraints = [new Ast\PendingConstraint('Num', [$type])];
+    $expr->pendingConstraints = [new Ast\PendingConstraint($literalClass, [$type])];
 
     return $type;
 }
@@ -81,7 +84,7 @@ function numericDefaultClasses(): array
  */
 function defaultAmbiguousNumericVars(TypeCheckState $state, Ast\AstNode $body, array $bound): void
 {
-    if (! isset($state->classes['Num'])) {
+    if (classWithRole($state, literalRole()) === null) {
         return;
     }
 
@@ -408,7 +411,11 @@ function elaborateNumericLiteral(TypeCheckState $state, Ast\IntegerLit $expr): A
         return $expr;
     }
 
-    if (! isset($state->classes['Num'])) {
+    // The method a literal is converted by is implied by the declaration's own signature, not the
+    // compiler's spelling ({@see \Moggi\Semantics\Kernel}): with no class implying the role in scope
+    // there is nothing to convert with, which is the un-converted literal it was.
+    $literalMethod = classMethodWithRole($state, literalRole());
+    if ($literalMethod === null) {
         return $expr;
     }
 
@@ -431,7 +438,7 @@ function elaborateNumericLiteral(TypeCheckState $state, Ast\IntegerLit $expr): A
     $integerValue->inferredType = $expr->inferredType;
 
     // The kernel's arbitrary-precision integer, by the id its declaration names (`Integer#`):
-    // a literal already at it needs no `fromInteger`, since the value is that type's own.
+    // a literal already at it needs no conversion, since the value is that type's own.
     if ($type instanceof TCon && $type->name === canonicalTypeConName('Integer#') && $type->args === []) {
         $expr->pendingConstraints = [];
 
@@ -448,7 +455,7 @@ function elaborateNumericLiteral(TypeCheckState $state, Ast\IntegerLit $expr): A
 
     $method = prependEvidenceToCall(
         $state,
-        new Ast\Variable('fromInteger', $expr->line, $expr->col, $expr->endCol),
+        new Ast\Variable($literalMethod, $expr->line, $expr->col, $expr->endCol),
         $evidence,
     );
     $expr->pendingConstraints = [];

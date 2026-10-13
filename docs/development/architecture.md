@@ -241,7 +241,7 @@ session, and the session knows neither.
 | `inspect.php` | `:ast` / `:ir` / `:emit` fragment dispatch and the stage dumps |
 | `commands.php` | The `:` command table, usage text, and diagnostics |
 | `eval_runner.php` | Running an interactive entry: in-process PHP include, or a packaged subprocess on JVM / .NET |
-| `input.php`, `shadow.php` | Readline/multi-line buffer helpers; GHCi-style rebinding of shadowed declarations |
+| `input.php`, `shadow.php` | Readline/multi-line buffer helpers; rebinding of shadowed declarations between REPL entries |
 
 Two invariants matter when touching this code:
 

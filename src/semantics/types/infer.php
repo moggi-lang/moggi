@@ -32,10 +32,10 @@ use Moggi\Syntax\Ast;
 
 use function Moggi\Errors\appendDidYouMean;
 use function Moggi\Modules\resolvedSymbol;
-use function Moggi\Pipeline\isEntryModule;
 use function Moggi\Patterns\Walk\patternDuplicateBinder;
 use function Moggi\Patterns\Walk\patternVariableNames;
 use function Moggi\Patterns\Walk\patternVariableNamesOrdered;
+use function Moggi\Pipeline\isEntryModule;
 use function Moggi\Semantics\Deriving\newtypeChain;
 use function Moggi\Semantics\Exhaustiveness\caseExhaustivenessProven;
 use function Moggi\Semantics\Exhaustiveness\checkCaseExhaustiveness;
@@ -47,6 +47,8 @@ use function Moggi\Semantics\IntrinsicRegistry\resolveIntrinsicName;
 use function Moggi\Semantics\IntrinsicRegistry\schemeArity;
 use function Moggi\Semantics\IntrinsicRegistry\shortCircuitPrimopId;
 use function Moggi\Semantics\IntrinsicRegistry\typeSchemes;
+use function Moggi\Semantics\Kernel\bindRole;
+use function Moggi\Semantics\Kernel\literalRole;
 use function Moggi\Semantics\TypeExpr\canonicalNatDigits;
 use function Moggi\Semantics\TypeExpr\scheme;
 use function Moggi\Semantics\TypeExpr\schemeFreeTypeVars;
@@ -1499,7 +1501,20 @@ function reportTypedHoles(TypeCheckState $state): void
 
 function inferDoExpr(TypeCheckState $state, Ast\DoExpr $expr, array $env): Type
 {
-    $desugared = desugarDo($expr->stmts);
+    // Which method `do` sequences with is implied by the method's own signature
+    // ({@see \Moggi\Semantics\Kernel}), so the desugaring asks for the role rather than spelling the
+    // operator: the block is written in terms of the method the class declared, whatever a local
+    // redefinition of an operator name does.
+    $bind = classMethodWithRole($state, bindRole());
+    if ($bind === null) {
+        throw typeFail(
+            $state,
+            '`do`-notation needs a class in scope with the monad\'s bind (`m a -> (a -> m b) -> m b`)',
+            $expr,
+        );
+    }
+
+    $desugared = desugarDo($expr->stmts, $bind);
     $type = inferExpr($state, $desugared, $env);
     $expr->desugared = $desugared;
 
@@ -3747,7 +3762,7 @@ function overloadedLiteralPatterns(TypeCheckState $state, Ast\Alt $alt, array $e
  */
 function literalPatternIsOverloaded(TypeCheckState $state, Type $type): bool
 {
-    return isset($state->classes['Num']) && !literalPatternHostPrimitive($type);
+    return classWithRole($state, literalRole()) !== null && !literalPatternHostPrimitive($type);
 }
 
 function overloadedLiteralPatternNode(TypeCheckState $state, Ast\AstNode $pattern, array &$tests, array &$env): Ast\AstNode

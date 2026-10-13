@@ -26,8 +26,8 @@ type ShowS = String -> String
 -- Derived instances of 'Show' have the following properties, which
 -- are compatible with derived instances of 'Text.Read.Read':
 --
--- * The result of 'show' is a syntactically correct Haskell
---   expression containing only constants, given the fixity
+-- * The result of 'show' is a syntactically correct Moggi expression
+--   containing only constants, given the fixity
 --   declarations in force at the point where the type is declared.
 --   It contains only the constructor names defined in the data type,
 --   parentheses, and spaces.  When labelled constructor fields are
@@ -81,10 +81,10 @@ class Show a where
   -- Derived instances of 'Text.Read.Read' and 'Show' satisfy the following:
   --
   -- * @(x,\"\")@ is an element of
-  --   @('GHC.Internal.Text.Read.readsPrec' d ('showsPrec' d x \"\"))@.
+  --   @('readsPrec' d ('showsPrec' d x \"\"))@.
   --
-  -- That is, 'GHC.Internal.Text.Read.readsPrec' parses the string produced by
-  -- 'showsPrec', and delivers the value that 'showsPrec' started with.
+  -- That is, 'readsPrec' parses the string produced by 'showsPrec', and delivers
+  -- the value that 'showsPrec' started with.
   showsPrec :: Int -> a -> ShowS
 
   -- | A specialised variant of 'showsPrec', using precedence context zero,

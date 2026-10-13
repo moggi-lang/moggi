@@ -1,0 +1,45 @@
+import Data.Bool
+import Data.Eq
+import Data.Ord
+import Text.Show
+import System.IO
+
+-- The two-valued type is *declared in the library* (`Data.Bool`: `data Bool = False | True`) and the
+-- backends lower that declaration to the host boolean. Everything the language does with it — `if`,
+-- `&&`/`||`, guards, `deriving`'s metadata — must go through that identity, and a user type that
+-- happens to have two nullary constructors is a different declaration with its own boxed
+-- representation and its own order. Both halves are checked here.
+
+data Answer = No | Yes deriving (Eq, Ord, Show)
+
+data Flip = Zig | Zag deriving (Eq, Show)
+
+flip :: Flip -> Flip
+flip Zig = Zag
+flip Zag = Zig
+
+label :: Answer -> String
+label No = "no"
+label Yes = "yes"
+
+truth :: Bool -> String
+truth False = "false"
+truth True = "true"
+
+main :: IO ()
+main = do
+  -- the host boolean, through each construct that has to recognise it
+  putStrLn (show (if True then 1 else 2))
+  putStrLn (truth (True && False))
+  putStrLn (truth (False || False))
+  putStrLn (truth (not False))
+  putStrLn (show (True == False))
+  putStrLn (show (False < True))
+  putStrLn (truth (if No == No then True else False))
+  -- a user two-constructor type: boxed, order-sensitive, and not the host boolean
+  putStrLn (show (No == Yes))
+  putStrLn (show (No < Yes))
+  putStrLn (label Yes)
+  putStrLn (show Zig)
+  putStrLn (show (flip Zig))
+  putStrLn (truth (Zig == Zag))

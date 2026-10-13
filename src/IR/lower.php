@@ -3,6 +3,7 @@
 namespace Moggi\IR;
 
 use function Moggi\Debug\normalizeDisplayPath;
+use function Moggi\Semantics\Exhaustiveness\trueBindingOrigins;
 use function Moggi\Semantics\IoBoundary\functionReturnsIo;
 
 require_once __DIR__ . '/types.php';
@@ -58,6 +59,9 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
     }
 
     $ioActionReturnFns = ioActionReturnFnNames($program->items) + $program->externalActionReturnFns;
+    // Bindings whose body is the host boolean `true` (`Data.Bool`'s `otherwise`): the guard
+    // desugaring reads their resolved origins instead of recognising a spelling.
+    $state->trueBindings = trueBindingOrigins($program->items, $moduleName) + $program->externalTrueBindings;
 
     foreach ($program->externalFnRuntimeArity as $name => $arity) {
         if (isset($localBindings[$name])) {
@@ -224,6 +228,7 @@ function lowerFunction(
     $ctx->functionArity = $functionArity;
     $ctx->externalFnNames = \array_keys($externalFns);
     $ctx->ioActionReturnFns = $ioActionReturnFns;
+    $ctx->trueBindings = $state->trueBindings;
     $ctx->moduleName = $moduleName;
     $ctx->sourceFile = $sourceFile;
     $ctx->functionName = $fn->name;

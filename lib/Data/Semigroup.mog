@@ -29,8 +29,8 @@ instance Semigroup Ordering where
     EQ -> b
     GT -> GT
 
--- `String`'s instance belongs with the class rather than in `Data.String`, as
--- base's `[a]` instance belongs to `GHC.Internal.Base`: `Data.Int` and
+-- `String`'s instance belongs with the class rather than in `Data.String`:
+-- `Data.Int` and
 -- `Data.Word` build their error messages with `<>` on `String`, and they sit
 -- below `Data.String`. `String` itself does not expose list operations.
 instance Semigroup String where

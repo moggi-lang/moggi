@@ -4,13 +4,14 @@ namespace Moggi\Semantics\StrictIoNormalize;
 
 use Moggi\Syntax\Ast;
 
+use function Moggi\Semantics\IntrinsicRegistry\ioPrimopRole;
 use function Moggi\Semantics\IoBoundary\functionReturnsIo;
 use function Moggi\Semantics\IoBoundary\hasLeadingArrow;
 use function Moggi\Semantics\IoBoundary\ioBindParts;
-use function Moggi\Semantics\IntrinsicRegistry\ioPrimopRole;
-use function Moggi\Semantics\IoBoundary\isIoMonadMethod;
+use function Moggi\Semantics\IoBoundary\isIoMethodWithRole;
 use function Moggi\Semantics\IoBoundary\isIoType;
 use function Moggi\Semantics\IoBoundary\stripConstraints;
+use function Moggi\Semantics\Kernel\pureRole;
 
 /**
  * Normalize typed IO expressions into explicit strict sequencing before IR.
@@ -383,7 +384,7 @@ function ioPureApply(Ast\AstNode $expr): ?Ast\AstNode
     }
 
     $method = $expr->function;
-    if (!isIoMonadMethod($method, 'pure')) {
+    if (!isIoMethodWithRole($method, pureRole())) {
         return null;
     }
 

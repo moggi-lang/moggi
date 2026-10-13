@@ -13,6 +13,7 @@ use function Moggi\Paths\relativeRequirePath;
 use function Moggi\Backend\compileBackend;
 use function Moggi\Errors\appendDidYouMean;
 use function Moggi\IR\Visit\collectIrCodegenUsage;
+use function Moggi\Semantics\Exhaustiveness\trueBindingOrigins;
 use function Moggi\Semantics\Kinds\dataKind;
 use function Moggi\Semantics\Kinds\registerTypeKind;
 use function Moggi\Semantics\TypeExpr\schemeRuntimeArity;
@@ -170,6 +171,51 @@ function moduleActionReturnFnNames(array $units, string $moduleName): array
     }
 
     return $cache[$key] = $names;
+}
+
+/**
+ * A module's bindings whose body is the host boolean `true`, keyed `<Module>::<name>` — the fact the
+ * guard desugaring reads instead of recognising `otherwise` by spelling. `ioBodyKind` has a sibling
+ * accessor above for the same reason: the fact is computed where the definition is visible.
+ *
+ * @param array<string, array<string, mixed>> $units
+ * @return array<string, true>
+ */
+function moduleTrueBindingOrigins(array $units, string $moduleName): array
+{
+    /** @var array<string, array<string, true>> $cache */
+    static $cache = [];
+
+    $unit = $units[$moduleName] ?? null;
+    $key = \is_array($unit)
+        ? $moduleName . "\0" . hash('xxh3', (string) ($unit['source'] ?? '') . "\0" . (string) ($unit['path'] ?? ''))
+        : $moduleName;
+    if (isset($cache[$key])) {
+        return $cache[$key];
+    }
+
+    $program = \is_array($unit) ? ($unit['checkedProgram'] ?? null) : null;
+
+    return $cache[$key] = $program instanceof Ast\Program
+        ? trueBindingOrigins($program->items, $moduleName)
+        : [];
+}
+
+/**
+ * Every unit's true bindings, qualified, so a reference resolved into any imported module can be
+ * recognised without knowing which module the reference came from.
+ *
+ * @param array<string, array<string, mixed>> $units
+ * @return array<string, true>
+ */
+function moduleTrueBindingOriginsAll(array $units): array
+{
+    $origins = [];
+    foreach (\array_keys($units) as $unitName) {
+        $origins += moduleTrueBindingOrigins($units, (string) $unitName);
+    }
+
+    return $origins;
 }
 
 /**
@@ -595,6 +641,7 @@ function buildImportContext(
         ],
         'externalFnRuntimeArity' => $externalFnRuntimeArity,
         'externalActionReturnFns' => $actionReturnFns,
+        'externalTrueBindings' => moduleTrueBindingOriginsAll($units),
         'intrinsicWrappers' => $intrinsicWrappers,
         'ambiguousNames' => $ambiguousNames,
     ];

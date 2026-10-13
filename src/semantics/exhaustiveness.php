@@ -9,8 +9,80 @@ use Moggi\Semantics\Types\TypeCheckState;
 use Moggi\Semantics\Types\TypeError;
 use Moggi\Syntax\Ast;
 
+use function Moggi\Semantics\Kernel\boolTrueCtor;
+use function Moggi\Semantics\Kernel\boolTypeName;
 use function Moggi\Semantics\Types\prune;
 use function Moggi\Semantics\Types\typeFail;
+
+/**
+ * Module-level bindings whose body is the host-boolean `true`, keyed `<Module>::<name>`.
+ *
+ * A guard is `otherwise` because the *library says so* — `Data.Bool` declares
+ * `otherwise :: Bool; otherwise = True` — not because the compiler recognises a spelling. Reading the
+ * declaration's own body is how the guard desugaring learns that a chain always succeeds: the fact is
+ * the binding's definition, not its word.
+ *
+ * @param list<Ast\AstNode> $items the module's own declarations
+ * @return array<string, true>
+ */
+function trueBindingOrigins(array $items, string $moduleName): array
+{
+    $trueCtor = null;
+    foreach ($items as $item) {
+        if (
+            $item instanceof Ast\DataDecl
+            && $item->name === boolTypeName()
+            && \count($item->constructors) === 2
+            && $item->constructors[0]->fields === []
+            && $item->constructors[1]->fields === []
+        ) {
+            // The declaration's own order says which of the two is true.
+            $trueCtor = $item->constructors[1]->name;
+        }
+    }
+
+    if ($trueCtor === null) {
+        return [];
+    }
+
+    $origins = [];
+    foreach ($items as $item) {
+        if (!$item instanceof Ast\FunctionDecl || $item->params !== []) {
+            continue;
+        }
+
+        if (isNullaryCtorReference($item->body, $trueCtor)) {
+            $origins[$moduleName . '::' . $item->name] = true;
+        }
+    }
+
+    return $origins;
+}
+
+function isNullaryCtorReference(Ast\AstNode $expr, string $ctorName): bool
+{
+    if ($expr instanceof Ast\ConstructorRef) {
+        return $expr->name === $ctorName;
+    }
+
+    return ($expr instanceof Ast\Variable || $expr instanceof Ast\QualifiedRef)
+        && $expr->name === $ctorName;
+}
+
+/**
+ * Whether a guard predicate is a reference *resolved to* one of those bindings. A reference with no
+ * resolved origin is a local binder (`let otherwise = False in …`), so it is never claimed exhaustive.
+ */
+function guardIsConstantTrue(?Ast\AstNode $guard, array $trueOrigins): bool
+{
+    if (!$guard instanceof Ast\Variable && !$guard instanceof Ast\QualifiedRef) {
+        return false;
+    }
+
+    $origin = $guard->resolvedOrigin ?? null;
+
+    return $origin !== null && isset($trueOrigins[$origin]);
+}
 
 function caseExhaustivenessProven(TypeCheckState $state, Ast\CaseExpr $expr, Type $scrutineeType): bool
 {

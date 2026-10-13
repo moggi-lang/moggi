@@ -2,14 +2,17 @@
 
 namespace Moggi\IR;
 
+use function Moggi\Semantics\Exhaustiveness\guardIsConstantTrue;
+use function Moggi\Semantics\Kernel\boolFalseCtor;
+use function Moggi\Semantics\Kernel\boolTrueCtor;
 use Moggi\Semantics\TypeExpr;
 use Moggi\Syntax\Ast;
 
 use function Moggi\Semantics\IntrinsicRegistry\isIoExceptionPrimop;
 use function Moggi\Semantics\IntrinsicRegistry\isShortCircuitPrimop;
 use function Moggi\Semantics\IntrinsicRegistry\primopForPublicOperator;
-use function Moggi\Semantics\IntrinsicRegistry\shortCircuitPrimop;
 use function Moggi\Semantics\IntrinsicRegistry\schemeArity;
+use function Moggi\Semantics\IntrinsicRegistry\shortCircuitPrimop;
 use function Moggi\Semantics\IntrinsicRegistry\typeSchemes;
 use function Moggi\Semantics\IoBoundary\isIoType;
 use function Moggi\Semantics\Types\bindingGroupSccs;
@@ -217,8 +220,8 @@ function lowerShortCircuitAndOr(Ast\Infix $expr, LowerCtx $ctx): Operand
     $isAnd = shortCircuitPrimop($expr->resolvedIntrinsic) === 'bool-and';
 
     return lowerCase($expr->left, [
-        new Ast\Alt(new Ast\PatCon('True', []), $isAnd ? $expr->right : new Ast\ConstructorRef('True')),
-        new Ast\Alt(new Ast\PatCon('False', []), $isAnd ? new Ast\ConstructorRef('False') : $expr->right),
+        new Ast\Alt(new Ast\PatCon(boolTrueCtor(), []), $isAnd ? $expr->right : new Ast\ConstructorRef(boolTrueCtor())),
+        new Ast\Alt(new Ast\PatCon(boolFalseCtor(), []), $isAnd ? new Ast\ConstructorRef(boolFalseCtor()) : $expr->right),
     ], $ctx, true);
 }
 
@@ -729,7 +732,7 @@ function lowerCase(Ast\AstNode $scrutinee, array $alts, LowerCtx $ctx, bool $exh
 
     foreach ($alts as $alt) {
         if ($alt->body instanceof Ast\GuardsExpr) {
-            $guardsAlwaysHold = $guardsAlwaysHold && guardsExhaustive($alt->body);
+            $guardsAlwaysHold = $guardsAlwaysHold && guardsExhaustive($alt->body, $ctx);
             $clauses = \array_map(
                 static fn (Ast\Guarded $guarded): array => [$guarded->guard, $guarded->body],
                 $alt->body->clauses,
@@ -781,7 +784,7 @@ function lowerGuards(Ast\GuardsExpr $expr, LowerCtx $ctx): Operand
         );
     }
 
-    $ctx->items[] = new MatchStmt(new ConstInt(0), $arms, $dest, guardsExhaustive($expr));
+    $ctx->items[] = new MatchStmt(new ConstInt(0), $arms, $dest, guardsExhaustive($expr, $ctx));
 
     return new Temp($dest);
 }
@@ -825,11 +828,15 @@ function lowerArmGuard(Ast\AstNode $guard, LowerCtx $armCtx, array $bindings): G
     return new Guard($prep, $cond);
 }
 
-function guardsExhaustive(Ast\GuardsExpr $expr): bool
+/**
+ * Whether a guard chain's last clause always succeeds, read from the *declaration* its predicate
+ * resolves to (`otherwise = True`) rather than from the spelling — see `trueBindingOrigins`.
+ */
+function guardsExhaustive(Ast\GuardsExpr $expr, LowerCtx $ctx): bool
 {
     $last = $expr->clauses[count($expr->clauses) - 1]->guard ?? null;
 
-    return $last instanceof Ast\Variable && $last->name === 'otherwise';
+    return guardIsConstantTrue($last, $ctx->trueBindings);
 }
 
 function lowerRecordCon(Ast\RecordCon $expr, LowerCtx $ctx): Operand

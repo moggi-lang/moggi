@@ -25,9 +25,8 @@ class Num a where
   fromInteger :: Integer -> a
 
 -- The machine integers' (`Int` and `Word`, both 64-bit) instances live with the
--- class, as they do in
--- base's `GHC.Internal.Num`: `Int` and `Word` are the widths the library's own
--- low-level code is written at -- `Data.Foldable`'s `length`, `Control.Monad`'s
+-- class: `Int` and `Word` are the widths the library's own low-level code is
+-- written at -- `Data.Foldable`'s `length`, `Control.Monad`'s
 -- `replicateM` -- and those modules sit below `Data.Int` and `Data.Word`, so the
 -- instance they need cannot be declared there. The fixed-width types' instances
 -- stay with `Data.Int`/`Data.Word`; `Integer`'s and `Natural`'s stay with theirs,

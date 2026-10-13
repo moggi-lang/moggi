@@ -103,6 +103,17 @@ final class TypeCheckState
     public ?array $classParamKindsCache = null;
 
     /**
+     * `role id => the method that fulfils it`, derived from {@see $classes}.
+     *
+     * The roles cost a walk over the class table to find, and a literal or a `do` block asks on every
+     * occurrence, so the answer is computed once and dropped whenever `$classes` changes (the same
+     * shape as {@see $classParamKindsCache}).
+     *
+     * @var ?array{methods: array<string, string>, classes: array<string, string>}
+     */
+    public ?array $roleMethodsCache = null;
+
+    /**
      * Operand types an infix rewrite hands to the call path, keyed by node id.
      *
      * `inferInfix`'s fall-through infers both operands before it can tell whether the infix is a

@@ -37,6 +37,7 @@ use function Moggi\Optimize\Support\buildLambdaMeta;
 use function Moggi\Optimize\Support\indexCapturedFunctions;
 use function Moggi\Optimize\Support\isCapturedFnName;
 use function Moggi\Optimize\Support\isLambdaName;
+use function Moggi\Semantics\Kernel\boolCtorValue;
 
 require_once __DIR__ . '/naming.php';
 require_once __DIR__ . '/foreign.php';
@@ -1589,8 +1590,8 @@ function emitOperand(EmitEnv $env, IR\Operand $op): void
         return;
     }
     if ($op instanceof IR\FnRef) {
-        if ($op->name === 'True' || $op->name === 'False') {
-            $env->m->emit($op->name === 'True' ? 'ldc.i4.1' : 'ldc.i4.0');
+        if (($boolValue = boolCtorValue($op->name)) !== null) {
+            $env->m->emit($boolValue ? 'ldc.i4.1' : 'ldc.i4.0');
             $env->m->emit('box bool');
 
             return;
@@ -3091,10 +3092,10 @@ function emitPatternTest(EmitEnv $env, IR\Pattern $pat, string $scrut, string $f
         return;
     }
     if ($pat instanceof IR\PatCon) {
-        if ($pat->name === 'True' || $pat->name === 'False') {
+        if (($boolValue = boolCtorValue($pat->name)) !== null) {
             $env->m->load($scrut);
             $env->m->emit('unbox.any bool');
-            if ($pat->name === 'True') {
+            if ($boolValue) {
                 $env->m->emit('brfalse ' . $fail);
             } else {
                 $env->m->emit('brtrue ' . $fail);

@@ -5,10 +5,11 @@ namespace Moggi\Backend\Meta;
 use Moggi\IR;
 
 use function Moggi\IR\Visit\boundLocalsInBlock;
-use function Moggi\Semantics\IntrinsicRegistry\reportsSourceLocation;
 use function Moggi\IR\Visit\collectLambdaRefsInBlock;
 use function Moggi\IR\Visit\walkOperand;
 use function Moggi\Optimize\Support\isCapturedFnName;
+use function Moggi\Semantics\IntrinsicRegistry\reportsSourceLocation;
+use function Moggi\Semantics\Kernel\boolTypeName;
 
 /**
  * Backend-neutral IR metadata shared by every code generator.
@@ -51,12 +52,14 @@ function registryDataToDecls(array $registryData): array
 }
 
 /**
- * `Bool`-backed data: exactly two nullary constructors. Code generators lower
- * such a declaration to the host boolean instead of a boxed constructor.
+ * Host-boolean data: the two-valued type the machine represents as the host boolean, declared with
+ * exactly two nullary constructors. Code generators lower such a declaration to the host boolean
+ * instead of a boxed constructor; which of its constructors is `true` is the declaration's own order
+ * (see `boolConstructorMap`).
  */
 function isBoolBackedData(IR\DataDecl $decl): bool
 {
-    if ($decl->name !== 'Bool' || \count($decl->constructors) !== 2) {
+    if ($decl->name !== boolTypeName() || \count($decl->constructors) !== 2) {
         return false;
     }
     foreach ($decl->constructors as $ctor) {

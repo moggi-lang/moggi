@@ -8,8 +8,7 @@
 --
 -- A 'String' is a backend-native sequence of 'Char' (Unicode scalar values).
 -- The operations below count and index scalars, not bytes or UTF-16 code
--- units. Where that differs from the list-of-'Char' 'String' of Haskell, the
--- scalar behaviour is the one documented here.
+-- units. The scalar behaviour is the one documented here.
 module Data.String
   ( String
   , singleton
@@ -94,8 +93,8 @@ lines :: String -> [String]
 -- | The words of a string: split on the space character, with runs of spaces
 -- contributing nothing.
 --
--- Only U+0020 SPACE separates words here; unlike Haskell's 'words', a tab or
--- other whitespace is an ordinary character.
+-- Only U+0020 SPACE separates words here; a tab or other whitespace is an
+-- ordinary character.
 words :: String -> [String]
 
 -- | Every string followed by a newline, concatenated.

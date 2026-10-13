@@ -134,8 +134,8 @@ No magic operators or builtins in the typechecker. Everything is defined in stdl
 
 - **`Double`** is the only floating type (no `Float`). Int-doubling fixtures live under `Twice` / `examples/twice`.
 - **`Data.ByteString`** — module casing matches the `ByteString` type (not `Data.Bytestring`).
-- **`Data.Word`** — `Word8`/`Word16`/`Word32`/`Word64` as `type WordN = WordN#` (no machine `Word`). Instances live in `Data.Word` like `GHC.Internal.Word`. Width via `wordNFromInt#` masks on PHP/JVM.
-- **Instance homes** — follow Haskell base / `ghc-internal` when the Moggi module graph allows (e.g. Word with its type; Foldable/Traversable for Maybe). Prefer type-module instances when a class-module move would create an import cycle (`Data.List` ↔ `Data.Foldable` ↔ `Control.Applicative`, etc.).
+- **`Data.Word`** — `Word8`/`Word16`/`Word32`/`Word64` as `type WordN = WordN#` (no machine `Word`). Instances live in `Data.Word` beside their type. Width via `wordNFromInt#` masks on PHP/JVM.
+- **Instance homes** — an instance lives with whichever of the type's module and the class's module is lower in the module graph (e.g. Word with its type; Foldable/Traversable for Maybe). Prefer type-module instances when a class-module move would create an import cycle (`Data.List` ↔ `Data.Foldable` ↔ `Control.Applicative`, etc.).
 
 ### Bottoms (`Moggi.Err`)
 
@@ -148,7 +148,7 @@ No magic operators or builtins in the typechecker. Everything is defined in stdl
 
 ### Literals
 
-- **Haskell-style:** integer literals polymorphic via `Num` / `fromInteger`; string literals `String`; character literals `'a' :: Char`.
+- **Literals:** integer literals polymorphic via `Num` / `fromInteger`; string literals `String`; character literals `'a' :: Char`.
 - **Fractional literals** — **deferred** (`Rational` / `Fractional` later); `1.0` as monomorphic `Double` when needed.
 - **Source encoding:** UTF-8; invalid UTF-8 is a lexer error.
 - **Character literals:** exactly one Unicode scalar value; not normalized (NFD multi-scalar forms are a lex error).
@@ -184,7 +184,7 @@ No magic operators or builtins in the typechecker. Everything is defined in stdl
 ### Type classes (first wave)
 
 - **`Semigroup`**, **`Eq`**, **`Ord`**, **`Num`**, **`Integral`**, **`Fractional`**, **`Functor`**, **`Foldable`** (dictionary passing for constrained calls; class param kinds inferred when omitted).
-- **`Semigroup`:** `(<>) :: a -> a -> a` (Haskell-aligned append operator).
+- **`Semigroup`:** `(<>) :: a -> a -> a` (the append operator).
 - **`Ord` superclass `Eq`.**
 - **Numeric tower:** `Num` → `Int` / `Integer` / `Double`; `Integral` → `Int` / `Integer`; `Fractional` → `Double`; `Floating` → `Double`. No `Real` / `RealFrac` / `RealFloat` / `Float`.
 - **Multi-constraint** from day one: `(Eq a, Ord a) => …` (several constraints share one parenthesized context).
@@ -216,7 +216,7 @@ class Ord a where
   compare :: a -> a -> Ordering
 ```
 
-**GHC-style defaults** for `(<)`, `(<=)`, `(>)`, `(>=)`, `min`, `max` derived from `compare` in the class definition (not user magic — stdlib class defaults).
+**Class defaults** for `(<)`, `(<=)`, `(>)`, `(>=)`, `min`, `max` derived from `compare` in the class definition (not user magic — stdlib class defaults).
 
 ### `class Num`
 
@@ -242,7 +242,7 @@ class Num a where
 
 ### Class syntax
 
-Haskell-shaped — not an open design question. Parser/TC/codegen must implement: `class` / `instance` / `where`, grouped method sigs `(==), (/=) :: …`, infix instance methods. Ord default methods derived from `compare` in the class declaration (GHC-style).
+Settled — not an open design question. Parser/TC/codegen must implement: `class` / `instance` / `where`, grouped method sigs `(==), (/=) :: …`, infix instance methods. Ord default methods derived from `compare` in the class declaration.
 
 ### Kind inference
 
@@ -260,7 +260,7 @@ Implementation: `src/semantics/kinds.php` (`inferKindAst`, `inferDataKind`, `inf
 
 - **`Integer`** — a separate type, arbitrary precision, in `Data.Integer` with one implementation per backend. Numeric literals desugar through `fromInteger :: Integer -> a`, so `1 + 2` at `Integer` never goes near a machine word. PHP represents it as a decimal string and computes with [bcmath](https://www.php.net/manual/en/book.bc.php) (`lib/Data/Integer/PHP.mog`); the JVM and .NET use their own big-integer types. `Int` is a *view* of it (`integerToInt`), not its representation.
 - **`Int`** — signed 64-bit machine integer (JVM `long`, .NET `long`, PHP host `int` on a 64-bit build), with `Bounded` matching those 64 bits. It **wraps** on overflow on every backend and there is no `Overflow` exception: PHP's arithmetic promotes to `float` past `PHP_INT_MAX`, so the codegen clamps back into the 64-bit range and the optimizer refuses a constant fold that would leave it. A 64-bit PHP host is mandatory: the compiler and every emitted program abort at startup when `PHP_INT_SIZE < 8`.
-- **Defaulting** — an ambiguous numeric literal defaults to `Int`, not `Integer`. That is a deliberate deviation (Haskell defaults to `Integer`) and is listed in [differences-to-haskell.md](../differences-to-haskell.md).
+- **Defaulting** — an ambiguous numeric literal defaults to `Int`, not `Integer`. That is a deliberate deviation, listed in [differences-to-haskell.md](../differences-to-haskell.md).
 
 ## Where each decision is pinned
 

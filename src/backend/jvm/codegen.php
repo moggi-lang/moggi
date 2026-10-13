@@ -32,6 +32,7 @@ use function Moggi\Optimize\Support\buildLambdaMeta;
 use function Moggi\Optimize\Support\indexCapturedFunctions;
 use function Moggi\Optimize\Support\isCapturedFnName;
 use function Moggi\Optimize\Support\isLambdaName;
+use function Moggi\Semantics\Kernel\boolCtorValue;
 
 require_once __DIR__ . '/classfile.php';
 require_once __DIR__ . '/naming.php';
@@ -1485,8 +1486,8 @@ function emitOperand(EmitEnv $env, IR\Operand $op): void
         return;
     }
     if ($op instanceof IR\FnRef) {
-        if ($op->name === 'True' || $op->name === 'False') {
-            $env->c->iconst($op->name === 'True' ? 1 : 0);
+        if (($boolValue = boolCtorValue($op->name)) !== null) {
+            $env->c->iconst($boolValue ? 1 : 0);
             $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
 
             return;
@@ -3106,11 +3107,11 @@ function emitPatternTest(EmitEnv $env, IR\Pattern $pat, int $scrutLocal, string 
         return;
     }
     if ($pat instanceof IR\PatCon) {
-        if ($pat->name === 'True' || $pat->name === 'False') {
+        if (($boolValue = boolCtorValue($pat->name)) !== null) {
             $env->c->aload($scrutLocal);
             $env->c->checkcast($env->cp->class_('java/lang/Boolean'));
             $env->c->invokevirtual($env->cp->methodRef('java/lang/Boolean', 'booleanValue', '()Z'), 0, true);
-            if ($pat->name === 'True') {
+            if ($boolValue) {
                 $env->c->ifeq($failLabel);
             } else {
                 $env->c->ifne($failLabel);
