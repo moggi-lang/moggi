@@ -1346,38 +1346,6 @@ function callArgsForLambda(EmitEnv $env, string $name, array $args): array
 
 function emitIntBinopToStack(EmitEnv $env, string $op, IR\Operand $left, IR\Operand $right): void
 {
-    if ($op === '==' || $op === '/=') {
-        emitOperand($env, $left);
-        emitOperand($env, $right);
-        $env->m->emit('call bool Moggi.Rt.RT::ValueEq(object, object)');
-        if ($op === '/=') {
-            invertBool($env);
-        }
-        $env->m->emit('box bool');
-
-        return;
-    }
-    if (\in_array($op, ['<', '<=', '>', '>='], true)) {
-        emitOperand($env, $left);
-        unboxInt($env);
-        emitOperand($env, $right);
-        unboxInt($env);
-        match ($op) {
-            '<' => $env->m->emit('clt'),
-            '>' => $env->m->emit('cgt'),
-            '<=' => (static function (EmitEnv $env): void {
-                $env->m->emit('cgt');
-                invertBool($env);
-            })($env),
-            '>=' => (static function (EmitEnv $env): void {
-                $env->m->emit('clt');
-                invertBool($env);
-            })($env),
-        };
-        $env->m->emit('box bool');
-
-        return;
-    }
     emitOperand($env, $left);
     unboxInt($env);
     emitOperand($env, $right);

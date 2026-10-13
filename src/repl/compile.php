@@ -7,11 +7,13 @@ use Moggi\Pipeline\CompilePurpose;
 use Moggi\Pipeline\PipelineArtifacts;
 use Moggi\Pipeline\PipelineRequest;
 use Moggi\Pipeline\PipelineStage;
+use Moggi\Syntax\Ast;
 use Moggi\Syntax\Ast\Program;
 
 use function Moggi\Backend\backendById;
 use function Moggi\Paths\moduleNameToPath;
 use function Moggi\Pipeline\run as pipelineRun;
+use function Moggi\Syntax\Parser\parse;
 
 /**
  * Compiling the interactive module: the session prepares a typed module
@@ -23,12 +25,24 @@ use function Moggi\Pipeline\run as pipelineRun;
  * instead of recompiling the library for every line.
  */
 
-/** The pipeline request for the interactive module's current typed context. */
-function interactivePipelineRequest(State $state, array $ctx, bool $optimize): PipelineRequest
-{
+/**
+ * The pipeline request for the interactive module's current typed context.
+ *
+ * `:ast` names the syntactic stage, and type checking annotates the tree it was
+ * handed in place — so that stage is served by the parse of the module, taken
+ * from the tokens and fixity `prepareInteractive` parsed it with, rather than by
+ * the typed tree under another name.
+ */
+function interactivePipelineRequest(
+    State $state,
+    array $ctx,
+    bool $optimize,
+    ?PipelineStage $stopAt = null,
+): PipelineRequest {
     return new PipelineRequest(
         purpose: CompilePurpose::Repl,
         filename: $state->interactivePath(),
+        program: $stopAt === PipelineStage::Ast ? interactiveParseTree($state, $ctx) : null,
         typedProgram: $ctx['typedProgram'],
         optimize: $optimize,
         backend: $state->backend,
@@ -37,11 +51,32 @@ function interactivePipelineRequest(State $state, array $ctx, bool $optimize): P
     );
 }
 
+/**
+ * The interactive module's own parse tree: the same tokens, imports and fixity
+ * the module was parsed with, parsed again — the unit's stored `program` has
+ * been typed through by the time a REPL command reads it.
+ *
+ * @param array{prepared: PreparedProject} $ctx
+ */
+function interactiveParseTree(State $state, array $ctx): Ast\Program
+{
+    $unit = $ctx['prepared']->units[$state->moduleName];
+
+    return parse(
+        $unit['tokens'],
+        $unit['source'],
+        $unit['path'],
+        $unit['importedFixity'],
+        $unit['localFixity'],
+        $unit['imports'],
+    );
+}
+
 /** Compile the prepared session module, stopping at `$stopAt`. */
 function compileInteractiveModule(State $state, PipelineStage $stopAt, bool $optimize): PipelineArtifacts
 {
     return pipelineRun(
-        interactivePipelineRequest($state, prepareInteractive($state), $optimize),
+        interactivePipelineRequest($state, prepareInteractive($state), $optimize, $stopAt),
         $stopAt,
     );
 }
@@ -73,7 +108,7 @@ function compileFromInteractiveCtx(
         );
     }
 
-    return pipelineRun(interactivePipelineRequest($state, $ctx, $optimize), $stopAt);
+    return pipelineRun(interactivePipelineRequest($state, $ctx, $optimize, $stopAt), $stopAt);
 }
 
 /**

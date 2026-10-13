@@ -44,12 +44,9 @@ function inspectInput(State $state, string $source, PipelineStage $stopAt, bool 
         throw $frag->error ?? new TypeError('parse error', '<interactive>', $source);
     }
 
-    $stage = match ($stopAt) {
-        PipelineStage::Ast, PipelineStage::TypedAst => 'ast',
-        PipelineStage::Ir => 'ir',
-        PipelineStage::IrOpt => 'ir-opt',
-        PipelineStage::Emit => $optimize ? 'emit-opt' : 'emit',
-    };
+    // A stage's name is the enum's own value, so the flag that stops there and the dump
+    // that shows it are spelled once (`PipelineStage::IrOpt` is `opt-ir`).
+    $stage = $stopAt->value;
 
     if ($frag->kind === ReplFragment::KIND_DECL) {
         $name = fragmentDeclaredName($frag);
@@ -208,10 +205,10 @@ function formatStage(string $backend, PipelineArtifacts $artifacts, string $whic
     $which = $which === 'emit-opt' ? 'emit' : $which;
 
     return match ($which) {
-        'ast' => focusAstDump($artifacts->typedAst ?? $artifacts->ast ?? throw new \RuntimeException('no AST'), $focusNames),
+        'ast' => focusAstDump($artifacts->ast ?? throw new \RuntimeException('no AST'), $focusNames),
         'typed-ast' => focusAstDump($artifacts->typedAst ?? throw new \RuntimeException('no typed AST'), $focusNames),
         'ir' => focusIrDump($artifacts->ir ?? throw new \RuntimeException('no IR'), $focusNames),
-        'ir-opt' => focusIrDump($artifacts->irOpt ?? throw new \RuntimeException('no optimized IR'), $focusNames),
+        'opt-ir' => focusIrDump($artifacts->irOpt ?? throw new \RuntimeException('no optimized IR'), $focusNames),
         'emit' => backendById($backend)->describeEmit(
             $artifacts->emit ?? throw new \RuntimeException('no emit'),
             $focusNames,

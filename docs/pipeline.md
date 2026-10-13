@@ -164,7 +164,7 @@ moggi compile hello.mog -o out --unpacked   # the generated program, one file pe
 ```
 
 The same stages are available interactively (`:ast`, `:typed-ast`, `:ir`,
-`:ir-opt`, `:emit` in `moggi repl`), and the compiler's own code is laid out to
+`:opt-ir`, `:emit` in `moggi repl`), and the compiler's own code is laid out to
 match the pipeline: `src/syntax/` (front end), `src/semantics/` (types, kinds,
 classes, intrinsics), `src/modules/` (project graph and imports), `src/ir/`,
 `src/optimize/`, `src/backend/` (targets), `src/cli/` (argv only).

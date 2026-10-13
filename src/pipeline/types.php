@@ -69,8 +69,30 @@ enum PipelineStage: string
     case Ast = 'ast';
     case TypedAst = 'typed-ast';
     case Ir = 'ir';
-    case IrOpt = 'ir-opt';
+    case IrOpt = 'opt-ir';
     case Emit = 'emit';
+}
+
+/**
+ * The output modes that print a stage, in pipeline order: the lexer's `tokens` and every stage
+ * before codegen, each named by its own value.
+ *
+ * The CLI's print-mode flags and the modes the compiler entry points accept are this same list,
+ * so `--opt-ir` and what it hands the pipeline cannot be spelled differently. Codegen is not an
+ * output mode: compiling without one already writes the artifact.
+ *
+ * @return list<string>
+ */
+function printModeNames(): array
+{
+    $names = ['tokens'];
+    foreach (PipelineStage::cases() as $stage) {
+        if ($stage !== PipelineStage::Emit) {
+            $names[] = $stage->value;
+        }
+    }
+
+    return $names;
 }
 
 /**

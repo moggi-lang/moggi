@@ -438,9 +438,6 @@ function moduleFileClosure(string $path): array
         );
     }
 
-    // The file the caller named is the module being compiled. A sibling of the same
-    // name (another program under the same root) is not an import of it, so the name
-    // has one meaning here and neither is a clash to refuse.
     unset($duplicates[$startModule]);
     $byModule[$startModule] = $realPath;
 

@@ -76,11 +76,12 @@ interactive module:
 | Command | Shows |
 |---|---|
 | `:ast [expr\|decl]` | the parsed tree |
+| `:typed-ast [expr\|decl]` | the tree after type checking |
 | `:ir [expr\|decl]` | backend-neutral IR |
-| `:ir-opt [expr\|decl]` | IR after optimization |
+| `:opt-ir [expr\|decl]` | IR after optimization |
 | `:emit [expr\|decl]` | the generated host code for the fragment |
 | `:emit-opt [expr\|decl]` | the same, optimized |
-| `:dump ast\|typed-ast\|ir\|ir-opt\|emit\|emit-opt` | that stage of the **whole** interactive module |
+| `:dump ast\|typed-ast\|ir\|opt-ir\|emit\|emit-opt` | that stage of the **whole** interactive module |
 
 For a file rather than a session, one flag each does the same and prints to
 stdout:

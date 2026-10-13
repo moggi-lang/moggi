@@ -236,8 +236,6 @@ function clrTypeName(
         return 'object';
     }
 
-    // The kernel's types in the CLR's own spelling, keyed by the kernel's ids rather than by the
-    // names a signature happens to write them with. `clrKernelTypeName` is the whole table.
     $kernel = clrKernelTypeName(primitiveTypeIdOf((string) $con));
     if ($kernel !== null) {
         return $kernel;

@@ -96,8 +96,6 @@ function emit(IR\Module $module, string $sourcePath, array $options = []): strin
         'constructorRenames' => $importOptions['constructorRenames'] ?? [],
         'externalFns' => $importOptions['externalFns'] ?? [],
         'functionArity' => $functionArity,
-        // Every constructor that lowers to the host boolean is read off the declarations that are in
-        // scope — the imports' data and the module's own — so nothing here has to name one.
         'boolConstructors' => [
             ...boolConstructorMapFromRegistry($importOptions['importedData'] ?? []),
             ...boolConstructorMap($module->data),
@@ -526,7 +524,7 @@ function emitStmt(IR\Stmt $stmt, int $indent, array $ctx): string
             . $pad . 'return ' . emitRetValue($stmt->value, $ctx) . ";\n",
         IR\Binop::class => frameMark($ctx, operandCallSrcLoc($stmt->left) ?? operandCallSrcLoc($stmt->right) ?? ($stmt->srcLoc ?? null))
             . $pad . phpTemp($stmt->dest) . ' = ' . emitOperand($stmt->left, $ctx)
-            . ' ' . phpBinop($stmt->op) . ' ' . emitOperand($stmt->right, $ctx) . ";\n",
+            . ' ' . $stmt->op . ' ' . emitOperand($stmt->right, $ctx) . ";\n",
         IR\Call::class => frameMark($ctx, $stmt->srcLoc) . emitCall($stmt->callee, $stmt->args, $stmt->dest, $indent, $ctx),
         IR\IoCall::class => frameMark($ctx, $stmt->srcLoc) . emitIoCall($stmt, $indent, $ctx),
         IR\IoRun::class => frameMark($ctx, $stmt->srcLoc) . emitIoRun($stmt, $indent, $ctx),

@@ -1,0 +1,15 @@
+program
+  function __repl_inspect
+    infix *
+      integer 2
+      integer 3
+program
+  function x
+    infix *
+      integer 2
+      integer 3
+program
+  function x :: Int
+    intrinsic intMul#
+      integer 2
+      integer 3

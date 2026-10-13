@@ -24,7 +24,6 @@ use function Moggi\Optimize\Specialize\specializeAcrossModules;
 use function Moggi\Optimize\Support\isCapturedFnName;
 use function Moggi\Optimize\TreeShake\treeShakeModules;
 use function Moggi\Pipeline\run as pipelineRun;
-use function Moggi\Syntax\Ast\dump;
 
 /**
  * Module compilation entry points: whole-project and single-file compiles,
@@ -260,7 +259,7 @@ function compileModuleFile(
     ?string $outputFile = null,
     ?Ast\Program $routingProgram = null,
 ): string|array {
-    if ($mode === 'ast' || $mode === 'ir') {
+    if ($mode === 'ir') {
         $context = moduleCompileContext($path, $routingProgram);
         $purpose = entryPurpose($context['typedProgram']->module);
         $artifacts = pipelineRun(new PipelineRequest(
@@ -269,12 +268,9 @@ function compileModuleFile(
             typedProgram: $context['typedProgram'],
             optimize: false,
             importContext: $context['importContext'],
-        ), $mode === 'ast' ? PipelineStage::TypedAst : PipelineStage::Ir);
+        ), PipelineStage::Ir);
 
-        return match ($mode) {
-            'ast' => dump($artifacts->typedAst ?? $context['typedProgram']),
-            'ir' => dumpIr($artifacts->ir ?? throw new \RuntimeException('missing IR')),
-        };
+        return dumpIr($artifacts->ir ?? throw new \RuntimeException('missing IR'));
     }
 
     $outputs = compileModuleFileOutputs($path, $optimize, $outputFile, $routingProgram);

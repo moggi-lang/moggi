@@ -36,8 +36,6 @@ function analyze(Ast\Program $program): Ast\Program
             continue;
         }
 
-        // A function whose result is a monadic type variable is classified too: at any
-        // instantiation — `IO` included — its value is an action, and the caller runs it.
         if (!functionReturnsIo($item->type) && !returnsMonadicValue($item->type)) {
             continue;
         }
@@ -64,10 +62,6 @@ function annotateFunction(Ast\FunctionDecl $fn, bool $backendImpl = false): void
     }
 
     if (returnsMonadicValue($fn->type)) {
-        // The declaration says the result is a monadic type variable: the body denotes an action
-        // rather than performing one, so a caller receives a boxed action and has to run it. This is
-        // the whole of what the library's `void`, `when`, `unless`, `for_`, `sequenceA_` and
-        // `traverse_` have in common, and it needs no name list to say so.
         $fn->ioBodyKind = IoBodyKind::ActionReturn;
         return;
     }

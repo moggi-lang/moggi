@@ -1,0 +1,4 @@
+tests/semantics/Bad-Derive-No-Method.mog:12:22: type error: class `Eq` has no method `==`
+
+  12 | data T = T deriving (Eq)
+     |                      ^^

@@ -36,7 +36,6 @@ function trueBindingOrigins(array $items, string $moduleName): array
             && $item->constructors[0]->fields === []
             && $item->constructors[1]->fields === []
         ) {
-            // The declaration's own order says which of the two is true.
             $trueCtor = $item->constructors[1]->name;
         }
     }

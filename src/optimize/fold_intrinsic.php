@@ -121,8 +121,6 @@ function foldOperand(IR\Operand $operand, array $known = []): IR\Operand
             $known,
             argsAlreadyResolved: true,
         ),
-        // An IR binop's `op` is the machine's own (`+`, `-`, `*`, or a primop id): a source `<>`
-        // never reaches here, because the front end resolves it to the instance's `stringAppend#`.
         IR\ExprBinop::class => operandFromExpr(foldExpr(new IR\ExprBinop(
             $operand->op,
             operandToExpr($resolve($operand->left)),
@@ -133,8 +131,6 @@ function foldOperand(IR\Operand $operand, array $known = []): IR\Operand
             \array_map($resolve, $operand->args),
             $operand->srcLoc,
         ),
-        // No `id` fold by spelling: recognising an identity function means reading the provider's
-        // declaration ({@see Moggi\Optimize\Partial\returnedIdentityArg}), not comparing its name.
         IR\ExprCallValue::class => new IR\ExprCallValue(
             $resolve($operand->callee),
             \array_map($resolve, $operand->args),
@@ -173,9 +169,6 @@ function foldIntrinsicNode(IR\Intrinsic $node, array $known = [], bool $argsAlre
             $node->args,
         );
 
-    // Which primops fold, and under which strategy, is the registry's statement; this is the code
-    // that computes each strategy's folded form, and a strategy declared there without one here
-    // fails loudly instead of silently not folding.
     $strategy = foldStrategy($name);
     $folded = $strategy === null
         ? null
@@ -195,7 +188,6 @@ function foldIntrinsicNode(IR\Intrinsic $node, array $known = [], bool $argsAlre
         };
 
     if ($folded !== null) {
-        // A fold that produced one of the list's own forms is already in its normal form.
         if ($folded instanceof IR\Intrinsic && !isListForm($folded->name)) {
             return foldIntrinsicNode($folded, $known, argsAlreadyResolved: true);
         }

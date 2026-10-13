@@ -225,23 +225,28 @@ use function Moggi\Modules\compileModuleFile;
 use function Moggi\Modules\compileModuleFileOutputs;
 use function Moggi\Modules\isModuleSourceProgram;
 use function Moggi\Modules\moduleCompileContext;
+use function Moggi\Pipeline\printModeNames;
 use function Moggi\Pipeline\run as pipelineRun;
 use function Moggi\Semantics\Effects\checkAndNormalize;
-use function Moggi\Pipeline\selectOutput;
-use function Moggi\Pipeline\stageFromOutputMode;
 use function Moggi\IR\Dump\dump as dumpIr;
 use function Moggi\Syntax\Ast\dump as dumpAst;
 use function Moggi\Syntax\Lexer\dump as dumpTokens;
 use function Moggi\Syntax\Lexer\lex;
 use function Moggi\Syntax\Parser\parse;
 
-/** @return 'php'|'emit'|'ir'|'opt-ir'|'tokens'|'ast'|'typed-ast' */
+/**
+ * The mode the compiler entry points accept: `php` and `emit` are the same run, the artifact, and
+ * {@see printModeNames()} is every dump a caller can ask for.
+ *
+ * @return 'php'|'emit'|'ir'|'opt-ir'|'tokens'|'ast'|'typed-ast'
+ */
 function normalizeOutputMode(string $mode): string
 {
-    return match ($mode) {
-        'php', 'emit', 'ir', 'opt-ir', 'tokens', 'ast', 'typed-ast' => $mode,
-        default => throw new \InvalidArgumentException("unknown output mode `{$mode}`"),
-    };
+    if ($mode === 'php' || $mode === 'emit' || \in_array($mode, printModeNames(), true)) {
+        return $mode;
+    }
+
+    throw new \InvalidArgumentException("unknown output mode `{$mode}`");
 }
 
 /** A mode that prints one pre-lowering stage of a source instead of compiling it. */
@@ -280,6 +285,12 @@ function applyCompileBackend(?string $backend): void
     }
 }
 
+/**
+ * Compile one source to one artifact, or print one pipeline stage of it.
+ *
+ * `tokens`, `ast` and `typed-ast` are answered from the source before the pipeline runs
+ * ({@see dumpSourceStage}), so the stages named here are the ones it reaches itself.
+ */
 function compile(string $source, string $filename, string $mode = 'php', bool $optimize = true, ?Program $program = null, ?string $backend = null): string|array
 {
     applyCompileBackend($backend);
@@ -292,12 +303,14 @@ function compile(string $source, string $filename, string $mode = 'php', bool $o
         $program = parse(lex($source, $filename), $source, $filename);
     }
 
-    $purpose = entryPurpose($program->module);
-
-    $stopAt = stageFromOutputMode($mode);
+    $stopAt = match ($mode) {
+        'ir' => PipelineStage::Ir,
+        'opt-ir' => PipelineStage::IrOpt,
+        'php', 'emit' => PipelineStage::Emit,
+    };
 
     $artifacts = pipelineRun(new PipelineRequest(
-        purpose: $purpose,
+        purpose: entryPurpose($program->module),
         source: $source,
         filename: $filename,
         program: $program,
@@ -305,7 +318,11 @@ function compile(string $source, string $filename, string $mode = 'php', bool $o
         backend: $backend,
     ), $stopAt);
 
-    return selectOutput($artifacts, $mode);
+    return match ($mode) {
+        'ir' => dumpIr($artifacts->ir ?? throw new \RuntimeException('missing IR')),
+        'opt-ir' => dumpIr($artifacts->irOpt ?? throw new \RuntimeException('missing optimized IR')),
+        'php', 'emit' => $artifacts->emit ?? throw new \RuntimeException('missing emit'),
+    };
 }
 
 /** @throws LexError|ParseError|TypeError|\RuntimeException @return string|array<string, string> */

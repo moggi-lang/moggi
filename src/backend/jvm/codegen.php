@@ -1295,50 +1295,6 @@ function emitJvmBuiltinCall(EmitEnv $env, string $name, array $args): bool
 
 function emitIntBinopToStack(EmitEnv $env, string $op, IR\Operand $left, IR\Operand $right): void
 {
-    if ($op === '==' || $op === '/=') {
-        emitOperand($env, $left);
-        emitOperand($env, $right);
-        $env->c->invokestatic($env->cp->methodRef('moggi/rt/RT', 'valueEq', '(Ljava/lang/Object;Ljava/lang/Object;)Z'), 2, true);
-        if ($op === '/=') {
-            $env->c->iconst(1);
-            $env->c->opcode(0x82, -1);
-        }
-        $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
-
-        return;
-    }
-    if (\in_array($op, ['<', '<=', '>', '>='], true)) {
-        if ($op === '>') {
-            emitOperand($env, $right);
-            unboxInt($env);
-            emitOperand($env, $left);
-            unboxInt($env);
-        } else {
-            emitOperand($env, $left);
-            unboxInt($env);
-            emitOperand($env, $right);
-            unboxInt($env);
-        }
-        $env->c->invokestatic($env->cp->methodRef('java/lang/Long', 'compare', '(JJ)I'), 4, true);
-        $cmp = $env->freshLocal('int');
-        $env->c->istore($cmp);
-        $env->c->iload($cmp);
-        if ($op === '<=') {
-            $env->c->iconst(1);
-            $env->c->isub();
-        }
-        $env->c->iconst(31);
-        $env->c->opcode(0x7a, -1);
-        $env->c->iconst(1);
-        $env->c->opcode(0x7e, -1);
-        if ($op === '>=') {
-            $env->c->iconst(1);
-            $env->c->opcode(0x82, -1);
-        }
-        $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
-
-        return;
-    }
     emitOperand($env, $left);
     unboxInt($env);
     emitOperand($env, $right);

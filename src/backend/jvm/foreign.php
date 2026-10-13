@@ -272,8 +272,6 @@ function jvmTypeDescriptorFromMoggiType(
         return $argOverride;
     }
 
-    // The kernel's types in the JVM's own spelling, keyed by the kernel's ids rather than by the
-    // names a signature happens to write them with. `jvmKernelDescriptor` is the whole table.
     $kernel = jvmKernelDescriptor(primitiveTypeIdOf((string) $con));
     if ($kernel !== null) {
         return $kernel;

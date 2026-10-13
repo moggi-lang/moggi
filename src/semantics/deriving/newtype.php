@@ -83,10 +83,7 @@ function assertNominalGndEligible(TypeCheckState $state, Ast\DerivingClassRef $r
     $classParam = $classInfo['params'][0]['name'] ?? 'a';
     $paramIsHigherKinded = ($classInfo['params'][0] ?? null) !== null
         && classParamKind($state, $classInfo['params'][0]) instanceof Kinds\KArrow;
-    foreach ($classInfo['methods'] as $methodName => $methodInfo) {
-        if ($ref->name === 'Ord' && in_array($methodName, ['<', '<=', '>', '>=', 'min', 'max'], true)) {
-            continue;
-        }
+    foreach ($classInfo['methods'] as $methodInfo) {
         if (internalTypeUsesParamAsConstructor($methodInfo['type'], $classParam, $paramIsHigherKinded)) {
             throw typeFail(
                 $state,

@@ -83,12 +83,13 @@ Commands (start with `:`):
   :type expr|decl, :t  show the type of an expression or binding
   :kind Type|expr, :k  show the kind of a type (or of an expression's type)
   :info Name, :i       show declaration information
-  :ast [expr|decl]     show AST (fragment or last)
+  :ast [expr|decl]     show the parsed tree (fragment or last)
+  :typed-ast [expr|decl] show the tree after type checking
   :ir [expr|decl]      show IR
-  :ir-opt [expr|decl]  show optimized IR
+  :opt-ir [expr|decl]  show optimized IR
   :emit [expr|decl]    show emitted code for a fragment binding
   :emit-opt [expr|decl] show optimized emit for a fragment
-  :dump ast|typed-ast|ir|ir-opt|emit|emit-opt
+  :dump ast|typed-ast|ir|opt-ir|emit|emit-opt
                        dump stage of the full interactive module
   :load file, :l       load a Moggi module
   :reload, :r          reload the current module
@@ -163,21 +164,25 @@ function handleCommand(State $state, string $line): array
             })(),
             'load', 'l' => $arg === '' ? "usage: :load file\n" : loadModuleFile($state, $arg),
             'reload', 'r' => reloadSession($state),
-            'ast', 'ir', 'ir-opt', 'emit', 'emit-opt' => handleStageCommand($state, $cmd, $arg),
             'dump' => (static function () use ($state, $arg): string {
-                $spec = pipelineStageSpec(strtolower($arg));
+                $stage = strtolower($arg);
+                $spec = pipelineStageSpec($stage);
                 if ($spec === null) {
                     return 'usage: :dump ' . implode('|', array_keys(pipelineStageTable())) . "\n";
                 }
-                [$stop, $formatKey, $optimize] = $spec;
+                [$stop, $optimize] = $spec;
 
                 return formatStage(
                     $state->backend,
                     compileInteractiveModule($state, $stop, $optimize),
-                    $formatKey,
+                    $stage,
                 );
             })(),
-            default => "unknown command `:{$cmd}` (try :help)\n",
+            // A command named after a stage is that stage's command ({@see pipelineStageTable});
+            // there is no second list of them to keep in step with the enum.
+            default => pipelineStageSpec($cmd) !== null
+                ? handleStageCommand($state, $cmd, $arg)
+                : "unknown command `:{$cmd}` (try :help)\n",
         };
     } catch (LexError|ParseError|TypeError $e) {
         $userSrc = $arg !== '' ? $arg : $line;
@@ -194,24 +199,30 @@ function handleCommand(State $state, string $line): array
 }
 
 /**
- * @return array<string, array{0: PipelineStage, 1: string, 2: bool}>
+ * The stage commands, keyed by the name the user types: each stage is named by its
+ * own value, so `:dump opt-ir` and `--opt-ir` are one stage under one name, and a
+ * rename cannot land in one of them only.
+ *
+ * `:dump` accepts every one of these; a command named after one of them is that
+ * stage's command. The single name a stage cannot carry is `emit-opt` — the emit
+ * stage with the optimizer on.
+ *
+ * @return array<string, array{0: PipelineStage, 1: bool}> stage, optimize
  */
 function pipelineStageTable(): array
 {
-    static $table = null;
+    $table = [];
+    foreach (PipelineStage::cases() as $stage) {
+        // `opt-ir` is the optimized IR: reaching the stage means running the optimizer.
+        $table[$stage->value] = [$stage, $stage === PipelineStage::IrOpt];
+    }
+    $table['emit-opt'] = [PipelineStage::Emit, true];
 
-    return $table ??= [
-        'ast' => [PipelineStage::TypedAst, 'ast', false],
-        'typed-ast' => [PipelineStage::TypedAst, 'typed-ast', false],
-        'ir' => [PipelineStage::Ir, 'ir', false],
-        'ir-opt' => [PipelineStage::IrOpt, 'ir-opt', true],
-        'emit' => [PipelineStage::Emit, 'emit', false],
-        'emit-opt' => [PipelineStage::Emit, 'emit', true],
-    ];
+    return $table;
 }
 
 /**
- * @return array{0: PipelineStage, 1: string, 2: bool}|null stop stage, format key, optimize
+ * @return array{0: PipelineStage, 1: bool}|null stage, optimize
  */
 function pipelineStageSpec(string $stage): ?array
 {
@@ -220,32 +231,27 @@ function pipelineStageSpec(string $stage): ?array
 
 function handleStageCommand(State $state, string $stage, string $arg): string
 {
-    $spec = pipelineStageSpec($stage);
-    if ($spec === null) {
-        return "unknown stage `{$stage}`\n";
-    }
-    [$stop, , $optimize] = $spec;
     if ($arg === '') {
         return formatLastOrModule($state, $stage);
     }
+
+    [$stop, $optimize] = pipelineStageSpec($stage)
+        ?? throw new \InvalidArgumentException("unknown stage `{$stage}`");
 
     return inspectInput($state, $arg, $stop, $optimize);
 }
 
 function formatLastOrModule(State $state, string $stage): string
 {
-    $spec = pipelineStageSpec($stage);
-    if ($spec === null) {
-        throw new \InvalidArgumentException("unknown stage `{$stage}`");
-    }
-    [$stop, $formatKey, $optimize] = $spec;
+    [$stop, $optimize] = pipelineStageSpec($stage)
+        ?? throw new \InvalidArgumentException("unknown stage `{$stage}`");
 
     if ($state->lastFragment !== null) {
         try {
             return formatStage(
                 $state->backend,
                 $state->lastFragment,
-                $formatKey,
+                $stage,
                 $state->lastFragmentFocus ?? [],
             );
         } catch (\Throwable) {
@@ -254,7 +260,7 @@ function formatLastOrModule(State $state, string $stage): string
     $artifacts = compileInteractiveModule($state, $stop, $optimize);
     $state->lastFragmentFocus = null;
 
-    return formatStage($state->backend, $artifacts, $formatKey);
+    return formatStage($state->backend, $artifacts, $stage);
 }
 
 /**

@@ -1501,10 +1501,6 @@ function reportTypedHoles(TypeCheckState $state): void
 
 function inferDoExpr(TypeCheckState $state, Ast\DoExpr $expr, array $env): Type
 {
-    // Which method `do` sequences with is implied by the method's own signature
-    // ({@see \Moggi\Semantics\Kernel}), so the desugaring asks for the role rather than spelling the
-    // operator: the block is written in terms of the method the class declared, whatever a local
-    // redefinition of an operator name does.
     $bind = classMethodWithRole($state, bindRole());
     if ($bind === null) {
         throw typeFail(

@@ -59,8 +59,6 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
     }
 
     $ioActionReturnFns = ioActionReturnFnNames($program->items) + $program->externalActionReturnFns;
-    // Bindings whose body is the host boolean `true` (`Data.Bool`'s `otherwise`): the guard
-    // desugaring reads their resolved origins instead of recognising a spelling.
     $state->trueBindings = trueBindingOrigins($program->items, $moduleName) + $program->externalTrueBindings;
 
     foreach ($program->externalFnRuntimeArity as $name => $arity) {

@@ -88,8 +88,6 @@ function registerData(TypeCheckState $state, Ast\DataDecl $decl): void
 {
     assertNotInstanceHeadMarkerName($state, $decl->name, $decl, 'data type');
 
-    // The kernel's type constructors are reserved by the id the machine names them with, not by the
-    // readable name `Moggi.Internal.Base` gives them: `IO` is reserved because `IO#` is the kernel's.
     if (isMagicHashName($decl->name)
         || $decl->name === Kinds\canonicalTypeConName('IO#')
     ) {
@@ -468,14 +466,12 @@ function impliedRole(string $method, Type $type, string $param): ?string
         ? $t->args[0]->name
         : null;
 
-    // `a -> f a`
     if ($type->from instanceof TVar
         && $applied($type->to) === $type->from->name
     ) {
         return Kernel\pureRole();
     }
 
-    // `Integer# -> a`
     if ($type->from instanceof TCon
         && $type->from->name === Kinds\canonicalTypeConName('Integer#')
         && $type->to instanceof TVar
@@ -484,7 +480,6 @@ function impliedRole(string $method, Type $type, string $param): ?string
         return Kernel\literalRole();
     }
 
-    // `m a -> (a -> m b) -> m b`
     $outer = $applied($type->from);
     if ($outer === null || !$type->to instanceof TArrow || !$type->to->from instanceof TArrow) {
         return null;
