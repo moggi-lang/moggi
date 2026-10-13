@@ -766,15 +766,35 @@ function tryResolveEvidenceExprs(
  */
 function ownerEvidenceIndexes(TypeCheckState $state, array $evidence, Ast\EvidenceRef $ev): array
 {
+    return ownerEvidenceRunIndexes(
+        $state,
+        $evidence,
+        $ev->class,
+        instanceConstraintArgsFromHeadAst($state, $ev->head),
+    );
+}
+
+/**
+ * The trailing run `$evidence` holds for the dictionary of `$class` at `$args`:
+ * that constraint closed under its superclasses, which the projected method
+ * reaches through the dictionary itself and so must not be handed again as an
+ * argument. Every entry of the run has to name the same class and head — by
+ * reference or by ambient parameter — or there is no run to recognise.
+ *
+ * @param list<AstNode> $evidence
+ * @param list<Type> $args
+ * @return array<int, true>
+ */
+function ownerEvidenceRunIndexes(TypeCheckState $state, array $evidence, string $class, array $args): array
+{
     $count = \count($evidence);
-    $ownArgs = instanceConstraintArgsFromHeadAst($state, $ev->head);
-    $ownClass = $state->classes[$ev->class] ?? null;
-    if ($count === 0 || $ownClass === null || \count($ownClass['params']) !== \count($ownArgs)) {
+    $ownClass = $state->classes[$class] ?? null;
+    if ($count === 0 || $ownClass === null || \count($ownClass['params']) !== \count($args)) {
         return [];
     }
 
     $expected = expandConstraintsWithSuperclasses($state, [
-        new Ast\PendingConstraint($ev->class, $ownArgs, $ev->evidence ?? '', false, $ev->head),
+        new Ast\PendingConstraint($class, $args),
     ]);
     $size = \count($expected);
     if ($size === 0 || $size > $count) {
@@ -783,12 +803,11 @@ function ownerEvidenceIndexes(TypeCheckState $state, array $evidence, Ast\Eviden
 
     $start = $count - $size;
     for ($i = 0; $i < $size; $i++) {
-        $entry = $evidence[$start + $i];
-        if (!($entry instanceof Ast\EvidenceRef) || $entry->class !== $expected[$i]->class) {
+        $entry = evidenceEntryConstraint($state, $evidence[$start + $i]);
+        if ($entry === null || $entry[0] !== $expected[$i]->class) {
             return [];
         }
-        $entryArgs = instanceConstraintArgsFromHeadAst($state, $entry->head);
-        if (instanceChainHeadKey($state, $entry->class, $entryArgs)
+        if (instanceChainHeadKey($state, $entry[0], $entry[1])
             !== instanceChainHeadKey($state, $expected[$i]->class, $expected[$i]->args)
         ) {
             return [];
@@ -801,6 +820,59 @@ function ownerEvidenceIndexes(TypeCheckState $state, array $evidence, Ast\Eviden
     }
 
     return $indexes;
+}
+
+/**
+ * The indexes of the group an ambient evidence parameter stands for, so a
+ * method projected from a forwarded dictionary is called with the same
+ * arguments as one projected from a concrete instance.
+ *
+ * @param list<AstNode> $evidence
+ * @return array<int, true>
+ */
+function ambientOwnerEvidenceIndexes(TypeCheckState $state, array $evidence, string $evidenceName): array
+{
+    $ambient = ambientConstraintNamed($state, $evidenceName);
+    if ($ambient === null) {
+        return [];
+    }
+
+    return ownerEvidenceRunIndexes($state, $evidence, $ambient->class, $ambient->args);
+}
+
+/** The ambient constraint an evidence parameter stands for, if it names one. */
+function ambientConstraintNamed(TypeCheckState $state, string $evidenceName): ?Ast\PendingConstraint
+{
+    foreach ($state->ambientConstraints as $ambient) {
+        if ($ambient->evidence === $evidenceName) {
+            return $ambient;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * The class and head arguments an evidence entry names, whether it is a concrete
+ * dictionary reference or an ambient evidence parameter; null when the entry is
+ * neither.
+ *
+ * @return ?array{0: string, 1: list<Type>}
+ */
+function evidenceEntryConstraint(TypeCheckState $state, AstNode $entry): ?array
+{
+    if ($entry instanceof Ast\EvidenceRef) {
+        return [$entry->class, instanceConstraintArgsFromHeadAst($state, $entry->head)];
+    }
+
+    if ($entry instanceof Ast\Variable) {
+        $ambient = ambientConstraintNamed($state, $entry->name);
+        if ($ambient !== null) {
+            return [$ambient->class, $ambient->args];
+        }
+    }
+
+    return null;
 }
 
 /**
@@ -891,27 +963,9 @@ function prependEvidenceToCall(TypeCheckState $state, Ast\AstNode $expr, array $
                     'implicit' => false,
                 ]);
 
-                foreach ($evidence as $other) {
-                    if ($other === $ev) {
-                        continue;
-                    }
-                    if (
-                        $other instanceof Ast\EvidenceRef
-                        && (
-                            $other->class === $className
-                            || isSuperclassNameOf($state, $other->class, $className)
-                        )
-                    ) {
-                        continue;
-                    }
-                    if (
-                        $other instanceof Ast\Variable
-                        && ($otherClass = classNameForAmbientEvidence($state, $other->name)) !== null
-                        && (
-                            $otherClass === $className
-                            || isSuperclassNameOf($state, $otherClass, $className)
-                        )
-                    ) {
+                $ownerIndexes = ambientOwnerEvidenceIndexes($state, $evidence, $ev->name);
+                foreach ($evidence as $i => $other) {
+                    if ($other === $ev || isset($ownerIndexes[$i])) {
                         continue;
                     }
                     $methodExpr = new Ast\Apply($methodExpr, $other);
@@ -1056,27 +1110,6 @@ function resolveProjectInstanceContextEvidence(
     }
 
     return $exprs;
-}
-
-/** True when `$maybeSuper` is a superclass (directly or transitively) of `$className`. */
-function isSuperclassNameOf(TypeCheckState $state, string $maybeSuper, string $className): bool
-{
-    $classInfo = $state->classes[$className] ?? null;
-    if ($classInfo === null) {
-        return false;
-    }
-
-    foreach ($classInfo['superclasses'] as $super) {
-        if (!$super instanceof Ast\TypeApp || !$super->con instanceof Ast\TypeCon) {
-            continue;
-        }
-        $superName = $super->con->name;
-        if ($superName === $maybeSuper || isSuperclassNameOf($state, $maybeSuper, $superName)) {
-            return true;
-        }
-    }
-
-    return false;
 }
 
 /**

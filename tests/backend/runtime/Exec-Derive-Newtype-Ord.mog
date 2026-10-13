@@ -1,0 +1,29 @@
+import Data.Eq
+import Data.Num
+import Data.Ord
+import Text.Show
+import System.IO
+
+-- `deriving newtype` derives *every* method of the class by delegating to the
+-- underlying instance through the wrapper. The relational operators, `min` and
+-- `max` are the ones worth pinning: each has a class default that reaches the
+-- same answer a step later (through `compare` or `<=`), so a derived instance
+-- that left them out would still look right from the outside -- and would
+-- dispatch through the wrong evidence if the underlying type's own `min`
+-- disagreed with its `<=`.
+
+newtype Age = Age Int
+  deriving (Show)
+  deriving newtype (Eq, Ord, Num)
+
+main :: IO ()
+main = do
+  putStrLn (show (Age 1 < Age 2))
+  putStrLn (show (Age 2 <= Age 2))
+  putStrLn (show (Age 3 > Age 2))
+  putStrLn (show (Age 3 >= Age 4))
+  putStrLn (show (Age 1 /= Age 2))
+  putStrLn (show (compare (Age 1) (Age 2)))
+  putStrLn (show (min (Age 5) (Age 2)))
+  putStrLn (show (max (Age 5) (Age 2)))
+  putStrLn (show (Age 2 + Age 3))

@@ -100,7 +100,6 @@ function emitForeignIoStatement(
 
     return match ($ioWrap) {
         IR\IoWrap::Either => emitForeignIoEither($call, $assignPrefix, $destVar, $pad, $phpValueBox, $handleBox),
-        IR\IoWrap::FgetsLine => emitForeignIoFgetsLine($call, $assignPrefix, $destVar, $pad),
         IR\IoWrap::MaybeString => emitForeignIoMaybeString($call, $assignPrefix, $destVar, $pad),
         IR\IoWrap::None => $pad . $assignPrefix . emitForeignIoResult($call, $phpValueBox, $handleBox) . ";\n",
     };
@@ -116,22 +115,6 @@ function emitForeignIoMaybeString(string $call, string $assignPrefix, ?string $d
     $out .= $pad . $assignPrefix . "match (true) {\n";
     $out .= $pad . "    \$__moggiLine === false => ['Nothing'],\n";
     $out .= $pad . "    default => ['Just', \$__moggiLine],\n";
-    $out .= $pad . "};\n";
-
-    return $out;
-}
-
-function emitForeignIoFgetsLine(string $call, string $assignPrefix, ?string $destVar, string $pad): string
-{
-    if ($destVar === null) {
-        throw new \RuntimeException('foreign IO Maybe String call requires destination temp');
-    }
-
-    $out = $pad . '$__moggiLine = ' . $call . ";\n";
-    $out .= $pad . $assignPrefix . "match (true) {\n";
-    $out .= $pad . "    \$__moggiLine === false => ['Nothing'],\n";
-    $out .= $pad . "    \$__moggiLine === '' => ['Nothing'],\n";
-    $out .= $pad . "    default => ['Just', rtrim(\$__moggiLine, \"\\n\")],\n";
     $out .= $pad . "};\n";
 
     return $out;

@@ -8,7 +8,9 @@ use Moggi\Syntax\Ast;
 
 use function Moggi\Errors\appendDidYouMean;
 use function Moggi\Semantics\Types\ambiguousImportMessage;
+use function Moggi\Syntax\exportedChildrenSpec;
 use function Moggi\Syntax\isConstructorName;
+use function Moggi\Syntax\surfaceConstructorAlias;
 
 function moduleNameToNamespace(string $moduleName): string
 {
@@ -824,22 +826,20 @@ function isBuiltinTupleExportName(string $name): bool
 }
 
 /**
- * `Solo a = MkSolo a` is a constructor alias: both names are exportable
- * constructors even when the AST only declares `MkSolo`.
+ * Both names of an aliased constructor are exportable even when the AST only
+ * declares one. What says so is the module's own export list --
+ * `Syntax\surfaceConstructorAlias` -- so `Data.Tuple`'s `Solo (Solo, MkSolo)`
+ * exports `Solo` as well as the `MkSolo` the declaration wrote.
  *
  * @param list<string> $constructors
+ * @param ?array{mode: string, names: list<string>} $children the export item's child list
  * @return list<string>
  */
-function withSurfaceConstructorAliases(string $typeName, array $constructors): array
+function withSurfaceConstructorAliases(string $typeName, array $constructors, ?array $children): array
 {
-    if ($typeName === 'Solo'
-        && \in_array('MkSolo', $constructors, true)
-        && !\in_array('Solo', $constructors, true)
-    ) {
-        $constructors[] = 'Solo';
-    }
-
-    return $constructors;
+    return surfaceConstructorAlias($typeName, $constructors, $children) === null
+        ? $constructors
+        : [...$constructors, $typeName];
 }
 
 /** @return list<string> */
@@ -849,6 +849,7 @@ function exportItemChildren(Ast\Program $program, array $available, array $item,
         $constructors = withSurfaceConstructorAliases(
             $item['name'],
             \array_keys($available['data'][$item['name']]['constructors']),
+            $item['children'] ?? null,
         );
     } else {
         $constructors = constructorsForExport($program, $item['name']);
@@ -892,7 +893,11 @@ function constructorsForExport(Ast\Program $program, string $typeName): ?array
 {
     foreach ($program->items as $item) {
         if ($item instanceof Ast\DataDecl && $item->name === $typeName) {
-            return withSurfaceConstructorAliases($typeName, allConstructors($item));
+            return withSurfaceConstructorAliases(
+                $typeName,
+                allConstructors($item),
+                exportedChildrenSpec($program->exports, $typeName),
+            );
         }
     }
 

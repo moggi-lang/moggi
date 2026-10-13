@@ -1,0 +1,4 @@
+tests/semantics/Bad-Derive-Newtype-Generic.mog:9:49: type error: cannot derive newtype `Generic`: the class has associated types, so there is no representation to reuse; use stock deriving
+
+   9 | newtype Box a = Box (Maybe a) deriving newtype (Generic)
+     |                                                 ^^^^^^^

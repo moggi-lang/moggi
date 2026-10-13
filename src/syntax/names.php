@@ -50,6 +50,57 @@ function isConstructorOperator(string $name): bool
 }
 
 /**
+ * The child list an export list gives a type, when it names one: a module that
+ * writes `Solo (Solo, MkSolo)` has one, `Solo(..)` does not.
+ *
+ * @param ?list<array{tag: string, name: string, path?: list<string>, children?: array{mode: string, names: list<string>}, section?: string}> $exports
+ * @return ?array{mode: string, names: list<string>}
+ */
+function exportedChildrenSpec(?array $exports, string $typeName): ?array
+{
+    foreach ($exports ?? [] as $export) {
+        if (($export['name'] ?? null) === $typeName && isset($export['children'])) {
+            return $export['children'];
+        }
+    }
+
+    return null;
+}
+
+/**
+ * The constructor a type's own name aliases, read off the library's export list.
+ *
+ * `lib/Data/Tuple.mog` writes `Solo (Solo, MkSolo)` for a type whose only
+ * declared constructor is `MkSolo`: the export list is the library saying that
+ * both names construct and match, and the compiler only reads it. A type with
+ * more than one declared constructor has to say which one it means, so the
+ * single-constructor case is the one that aliases.
+ *
+ * The rule is deliberately not a `Mk<Type>` naming convention: `MkMap`, `MkSet`,
+ * `MkDay`, `MkHandle` and `MkResource` all have that shape and none of them asks
+ * for an alias -- `System.IO.Types` wants `MkHandle` to stay the only way to
+ * build a handle.
+ *
+ * @param list<string> $constructors the declared constructor names
+ * @param ?array{mode: string, names: list<string>} $children the export item's child list
+ * @return ?string the declared constructor `$typeName` aliases, or null
+ */
+function surfaceConstructorAlias(string $typeName, array $constructors, ?array $children): ?string
+{
+    if (($children['mode'] ?? 'none') !== 'listed') {
+        return null;
+    }
+    if (!\in_array($typeName, $children['names'], true)) {
+        return null;
+    }
+    if (\in_array($typeName, $constructors, true)) {
+        return null;
+    }
+
+    return \count($constructors) === 1 ? $constructors[0] : null;
+}
+
+/**
  * Data constructor names: ConId (uppercase start) or constructor operators.
  */
 function isConstructorName(string $name): bool

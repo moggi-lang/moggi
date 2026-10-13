@@ -164,8 +164,25 @@ hGetChar h = do
 hFlush :: Handle -> IO ()
 hFlush h = rawFflush h
 
+-- | Read one line, without the newline 'rawFgets' keeps at its end.
+--
+-- Stripping it belongs to the operation that reads a line, not to the compiler:
+-- a `IO (Maybe String)` signature says nothing about line endings, so which host
+-- function produced the text cannot decide how the value is wrapped.
 hGetLine :: Handle -> IO (Maybe String)
-hGetLine h = rawFgets h
+hGetLine h = do
+  m <- rawFgets h
+  pure (stripLineEnding m)
+
+stripLineEnding :: Maybe String -> Maybe String
+stripLineEnding m = case m of
+  Nothing -> Nothing
+  Just s -> Just (stripTrailingNewlines s)
+
+stripTrailingNewlines :: String -> String
+stripTrailingNewlines s = case isSuffixOf "\n" s of
+  True -> stripTrailingNewlines (take (intSub# (length s) 1) s)
+  False -> s
 
 putStr :: String -> IO ()
 putStr s = hPutStr stdout s

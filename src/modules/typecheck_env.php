@@ -11,7 +11,10 @@ use Moggi\Syntax\Ast;
 use function Moggi\Backend\compileBackend;
 use function Moggi\Cache\moduleGet;
 use function Moggi\Cache\modulePut;
+use Moggi\Semantics\Deriving\ClassDeriveFacts;
+
 use function Moggi\Semantics\Deriving\derivedProjectInstanceRecords;
+use function Moggi\Semantics\Kernel\boolTypeName;
 use function Moggi\Semantics\Registry\foreignFunctionDecl;
 use function Moggi\Syntax\Ast\moduleName;
 use function Moggi\Syntax\isConstructorName;
@@ -731,11 +734,12 @@ function moduleLocalValueNames(array $units, string $moduleName): array
  *
  * The hand-over exists for the types a default body builds that only the
  * class's module can see (`Endo`, `Dual` in `Data.Foldable`). A type the target
- * module declares itself is not one of them: merging `Bool` back into
- * `Data.Bool` makes `registerData` see a duplicate. `Bool` is excluded for every
- * module because it is the machine's -- `Moggi.Internal.Prim` declares it -- and
- * a module reaches it by importing that module, which is the same import that
- * puts a `case` on it in scope.
+ * module declares itself is not one of them: merging the boolean back into
+ * `Data.Bool` makes `registerData` see a duplicate. The boolean is excluded for
+ * every module because it is the machine's -- `Moggi.Internal.Prim` declares it,
+ * and the kernel names it (`Kernel\boolTypeName`) -- and a module reaches it by
+ * importing that module, which is the same import that puts a `case` on it in
+ * scope.
  *
  * @param array<string, array<string, mixed>> $units
  * @return array<string, true>
@@ -747,7 +751,7 @@ function moduleLocalDataNames(array $units, string $moduleName): array
         return $cache[$moduleName];
     }
 
-    $names = ['Bool' => true];
+    $names = [boolTypeName() => true];
     $program = $units[$moduleName]['program'] ?? null;
     if (!$program instanceof Ast\Program) {
         return $cache[$moduleName] = $names;
@@ -882,9 +886,41 @@ function mergeClassScopeRefs(
 }
 
 /** @param array<string, array<string, mixed>> $units @param list<string>|null $onlyModules @return list<array{module: string, class: string, head: array<string, mixed>}> */
+/**
+ * Every class declaration the units parsed, for the strategy facts the instance
+ * stub phase needs.
+ *
+ * A class's own declaration is where its parameter's kind and its associated
+ * types are written, and that phase never runs a type check to answer either
+ * question another way. The scan is the whole project rather than
+ * `$onlyModules`: restricting it could only lose the declaration a stub is
+ * asking about.
+ *
+ * @param array<string, array<string, mixed>> $units
+ * @return list<Ast\ClassDecl>
+ */
+function projectClassDeclarations(array $units): array
+{
+    $declarations = [];
+    foreach ($units as $unit) {
+        $program = $unit['program'] ?? null;
+        if (!$program instanceof Ast\Program) {
+            continue;
+        }
+        foreach ($program->items as $item) {
+            if ($item instanceof Ast\ClassDecl) {
+                $declarations[] = $item;
+            }
+        }
+    }
+
+    return $declarations;
+}
+
 function collectProjectInstances(array $units, ?array $onlyModules = null): array
 {
     $instances = [];
+    $facts = ClassDeriveFacts::fromClassDeclarations(projectClassDeclarations($units));
     $allowed = $onlyModules !== null ? \array_fill_keys($onlyModules, true) : null;
 
     foreach ($units as $moduleName => $unit) {
@@ -910,7 +946,7 @@ function collectProjectInstances(array $units, ?array $onlyModules = null): arra
             }
 
             if ($item instanceof Ast\DataDecl && $item->derivingClasses !== []) {
-                foreach (derivedProjectInstanceRecords($item, $moduleName) as $record) {
+                foreach (derivedProjectInstanceRecords($item, $moduleName, $facts) as $record) {
                     $instances[] = $record;
                 }
             }

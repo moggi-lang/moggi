@@ -6,6 +6,8 @@ use Moggi\Semantics\Kinds;
 use Moggi\Semantics\Types\TypeCheckState;
 use Moggi\Syntax\Ast;
 
+use Moggi\Semantics\Deriving\ClassDeriveFacts;
+
 use function Moggi\Semantics\Deriving\derivedProjectInstanceRecords;
 use function Moggi\Semantics\Foreign\foreignParamNames;
 use function Moggi\Semantics\Types\associatedEquationsMapFromDecl;
@@ -14,6 +16,7 @@ use function Moggi\Semantics\Types\instanceHeadIndexKeyFromAst;
 use function Moggi\Semantics\Types\instanceIntrinsicMethods;
 use function Moggi\Semantics\Types\registerClass;
 use function Moggi\Semantics\Types\registerClassMethodExportSchemes;
+use function Moggi\Semantics\Types\registerConstructorAlias;
 use function Moggi\Semantics\Types\registerData;
 use function Moggi\Semantics\Types\registerForeignType;
 use function Moggi\Semantics\Types\registerFunctionScheme;
@@ -23,6 +26,8 @@ use function Moggi\Semantics\Types\installTypeSynonymKind;
 use function Moggi\Semantics\Types\registerTypeSynonym;
 use function Moggi\Semantics\Types\syncAssociatedFamiliesFromClasses;
 use function Moggi\Semantics\Types\typeFail;
+use function Moggi\Syntax\exportedChildrenSpec;
+use function Moggi\Syntax\surfaceConstructorAlias;
 
 /** Synthesize the `FunctionDecl` a foreign import registers its scheme through. */
 function foreignFunctionDecl(Ast\ForeignImportDecl $item): Ast\FunctionDecl
@@ -108,7 +113,7 @@ function applyImportContext(TypeCheckState $state, Ast\Program $program, array $
         $state->projectInstancesByClassHead = $instancesByClassHead;
         $equationSource = $importContext['projectInstances'] ?? [];
         if ($equationSource === []) {
-            $equationSource = projectInstancesFromProgram($program);
+            $equationSource = projectInstancesFromProgram($program, ClassDeriveFacts::fromState($state));
         }
         indexAssociatedEquations($state, $equationSource);
     }
@@ -131,6 +136,7 @@ function registerTypeDeclarations(TypeCheckState $state, Ast\Program $program): 
     foreach ($program->items as $item) {
         if ($item instanceof Ast\DataDecl) {
             registerData($state, $item);
+            registerSurfaceConstructorAlias($state, $item, $program->exports);
         }
 
         if ($item instanceof Ast\TypeSynonymDecl) {
@@ -147,6 +153,27 @@ function registerTypeDeclarations(TypeCheckState $state, Ast\Program $program): 
             }
             registerClassMethodExportSchemes($state, $item);
         }
+    }
+}
+
+/**
+ * Register the constructor alias a module's own export list declares, so the
+ * name the module gives the type constructs and matches wherever the declaration
+ * is in scope (`Data.Tuple`'s `Solo (Solo, MkSolo)` -- the rule is
+ * `Syntax\surfaceConstructorAlias`).
+ *
+ * @param ?list<array{tag: string, name: string, path?: list<string>, children?: array{mode: string, names: list<string>}, section?: string}> $exports
+ */
+function registerSurfaceConstructorAlias(TypeCheckState $state, Ast\DataDecl $decl, ?array $exports): void
+{
+    $constructors = \array_keys($state->data[$decl->name]['constructors'] ?? []);
+    $canonical = surfaceConstructorAlias(
+        $decl->name,
+        $constructors,
+        exportedChildrenSpec($exports, $decl->name),
+    );
+    if ($canonical !== null) {
+        registerConstructorAlias($state, $decl->name, $canonical, $decl->name);
     }
 }
 
@@ -199,7 +226,7 @@ function registerFunctionSchemesFromProgram(TypeCheckState $state, Ast\Program $
  *
  * @return list<array{module: string, class: string, head: Ast\TypeNode, constraints: list<Ast\TypeNode>, associatedEquations: array<string, array{lhsArgs: list<Ast\TypeNode>, rhs: Ast\TypeNode}>}>
  */
-function projectInstancesFromProgram(Ast\Program $program, string $moduleName = ''): array
+function projectInstancesFromProgram(Ast\Program $program, ClassDeriveFacts $facts, string $moduleName = ''): array
 {
     $instances = [];
     $mod = $moduleName !== '' ? $moduleName : ($program->module ?? '');
@@ -216,7 +243,7 @@ function projectInstancesFromProgram(Ast\Program $program, string $moduleName = 
         }
 
         if ($item instanceof Ast\DataDecl && $item->derivingClasses !== []) {
-            foreach (derivedProjectInstanceRecords($item, $mod) as $record) {
+            foreach (derivedProjectInstanceRecords($item, $mod, $facts) as $record) {
                 $instances[] = $record;
             }
         }

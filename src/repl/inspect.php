@@ -44,8 +44,6 @@ function inspectInput(State $state, string $source, PipelineStage $stopAt, bool 
         throw $frag->error ?? new TypeError('parse error', '<interactive>', $source);
     }
 
-    // A stage's name is the enum's own value, so the flag that stops there and the dump
-    // that shows it are spelled once (`PipelineStage::IrOpt` is `opt-ir`).
     $stage = $stopAt->value;
 
     if ($frag->kind === ReplFragment::KIND_DECL) {

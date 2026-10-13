@@ -178,8 +178,6 @@ function handleCommand(State $state, string $line): array
                     $stage,
                 );
             })(),
-            // A command named after a stage is that stage's command ({@see pipelineStageTable});
-            // there is no second list of them to keep in step with the enum.
             default => pipelineStageSpec($cmd) !== null
                 ? handleStageCommand($state, $cmd, $arg)
                 : "unknown command `:{$cmd}` (try :help)\n",
@@ -213,7 +211,6 @@ function pipelineStageTable(): array
 {
     $table = [];
     foreach (PipelineStage::cases() as $stage) {
-        // `opt-ir` is the optimized IR: reaching the stage means running the optimizer.
         $table[$stage->value] = [$stage, $stage === PipelineStage::IrOpt];
     }
     $table['emit-opt'] = [PipelineStage::Emit, true];
