@@ -4,6 +4,7 @@ namespace Moggi\IR;
 
 use Moggi\Syntax\Ast;
 
+use function Moggi\Semantics\IntrinsicRegistry\ioPrimopRole;
 use function Moggi\Semantics\IoBoundary\isIoUnitType;
 
 /** @param array<int, Ast\AstNode> $items @return array<string, true> */
@@ -314,32 +315,32 @@ function lowerIoAction(Ast\AstNode $expr, LowerCtx $ctx, ?int $dest): bool
     }
 
     if ($call instanceof Intrinsic) {
-        if ($call->name === 'exceptionThrowIo#') {
-            $ctx->items[] = new IoThrow(
-                $call->args[0] ?? new Unit(),
-                $dest,
-                $call->srcLoc,
-            );
+        // The exception actions become their own IR nodes; the registry says which id is which role.
+        switch (ioPrimopRole($call->name)) {
+            case 'io-throw':
+                $ctx->items[] = new IoThrow(
+                    $call->args[0] ?? new Unit(),
+                    $dest,
+                    $call->srcLoc,
+                );
 
-            return true;
-        }
-        if ($call->name === 'exceptionCatch#') {
-            $ctx->items[] = new IoCatch(
-                $call->args[0] ?? new Unit(),
-                $call->args[1] ?? new Unit(),
-                $dest,
-            );
+                return true;
+            case 'io-catch':
+                $ctx->items[] = new IoCatch(
+                    $call->args[0] ?? new Unit(),
+                    $call->args[1] ?? new Unit(),
+                    $dest,
+                );
 
-            return true;
-        }
-        if ($call->name === 'exceptionFinally#') {
-            $ctx->items[] = new IoFinally(
-                $call->args[0] ?? new Unit(),
-                $call->args[1] ?? new Unit(),
-                $dest,
-            );
+                return true;
+            case 'io-finally':
+                $ctx->items[] = new IoFinally(
+                    $call->args[0] ?? new Unit(),
+                    $call->args[1] ?? new Unit(),
+                    $dest,
+                );
 
-            return true;
+                return true;
         }
 
         $ctx->items[] = new IoCall(
@@ -491,11 +492,13 @@ function ioActionCall(Ast\AstNode $expr, LowerCtx $ctx): Intrinsic|IoCall|null
     }
 
     if ($expr instanceof Ast\IntrinsicCall) {
-        if ($expr->name === 'exceptionCatch#' || $expr->name === 'exceptionFinally#') {
+        // `catch` takes the action on the left; `finally` takes an action on each side.
+        $role = ioPrimopRole($expr->name);
+        if ($role === 'io-catch' || $role === 'io-finally') {
             $args = [];
             foreach ($expr->args as $i => $arg) {
                 $needsIoBox = $i === 0
-                    || ($expr->name === 'exceptionFinally#' && $i === 1);
+                    || ($role === 'io-finally' && $i === 1);
                 if ($needsIoBox) {
                     $args[] = lowerIoActionToBox(
                         $arg instanceof Ast\IoAction ? $arg : new Ast\IoAction($arg),

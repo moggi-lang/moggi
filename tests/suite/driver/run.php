@@ -285,11 +285,16 @@ function warmSharedCache(array $backends): void
         } catch (\Throwable) {
             // Nothing to publish: the case that needs it will report what went wrong.
         }
+
+        // One backend's elaborated closure is a few hundred megabytes and is keyed by backend, so
+        // the next backend can use none of it: holding all of them is what a three-backend warm-up
+        // would otherwise need room for at once. The workers read the disk cache this loop fills,
+        // not this process's memos, so releasing here costs the warm-up nothing.
+        \Moggi\Modules\ProjectCache::clearCheckedModules();
+        \Moggi\Modules\ProjectCache::clearPreparedProjects();
     }
 
     @\unlink($source);
-    \Moggi\Modules\ProjectCache::clearPreparedProjects();
-    \Moggi\Modules\ProjectCache::releaseProjectCheckedModules();
 }
 
 /**

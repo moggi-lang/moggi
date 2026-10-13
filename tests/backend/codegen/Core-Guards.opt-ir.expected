@@ -23,7 +23,7 @@ module
         arm m when t5
             ret "positive-double"
         let m__0 = n
-        arm m__0 when @True
+        arm m__0 when @otherwise
             ret "not-positive-double"
         arm _
             ret "other"

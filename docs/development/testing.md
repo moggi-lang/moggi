@@ -165,6 +165,13 @@ requested worker count the selection cannot fill says so instead of claiming a w
 launched. `--stop-on-failure` is never given an automatic pool, and with an explicit `--jobs` it
 warns that work already dispatched runs to completion.
 
+Before the workers start, a pooled run elaborates the standard library once per selected backend in
+this process, so the workers read a warm disk cache instead of each paying for the elaboration on its
+first case. One backend's elaborated closure is a few hundred megabytes and is keyed by backend, so
+the warm-up releases it before moving to the next one: the parent's peak is one backend's, not every
+backend's at once. A serial selection is not warmed — the case it is about to run pays for the library
+itself.
+
 ## Environment
 
 The suite reads exactly six variables, all optional:

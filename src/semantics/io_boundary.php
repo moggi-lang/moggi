@@ -6,7 +6,10 @@ use Moggi\IR\EntryPointKind;
 use Moggi\Semantics\Types\TypeError;
 use Moggi\Syntax\Ast;
 
-use function Moggi\Semantics\Types\isErrorCallExpr;
+use function Moggi\Semantics\IntrinsicRegistry\ioPrimopRole;
+use function Moggi\Semantics\IntrinsicRegistry\isIoIntrinsic;
+use function Moggi\Semantics\IntrinsicRegistry\primopArity;
+use function Moggi\Semantics\Kinds\canonicalTypeConName;
 
 /**
  * Validate IO surface constraints on a typed program.
@@ -30,15 +33,11 @@ function validateItem(Ast\AstNode $item, string $source, string $filename): void
 
 function validateTypeSynonym(Ast\TypeSynonymDecl $item, string $source, string $filename): void
 {
-    if ($item->name === 'IO'
-        && $item->type instanceof Ast\TypeCon
-        && $item->type->name === 'IO#') {
-        return;
-    }
-
-    if ($item->name === 'SomeException'
-        && $item->type instanceof Ast\TypeCon
-        && $item->type->name === 'SomeException#') {
+    // The library publishes a kernel type under a readable name with `type IO = IO#`: the
+    // synonym's name is the name `canonicalTypeConName` gives the id it names, which is the
+    // one place the id → name map lives, so no kernel alias needs its own exemption here.
+    if ($item->type instanceof Ast\TypeCon
+        && canonicalTypeConName($item->type->name) === $item->name) {
         return;
     }
 
@@ -172,9 +171,10 @@ function stripConstraints(Ast\TypeNode $type): Ast\TypeNode
     return $type;
 }
 
+/** The IO type constructor: the kernel id `IO#`, or the readable name the library publishes it under. */
 function isIoTypeConName(string $name): bool
 {
-    return $name === 'IO' || $name === 'IO#';
+    return $name === 'IO#' || $name === canonicalTypeConName('IO#');
 }
 
 function isIoType(Ast\TypeNode $type): bool
@@ -226,7 +226,7 @@ function validateStraightLineIoBody(Ast\AstNode $expr, string $source, string $f
         return;
     }
 
-    if ($expr instanceof Ast\IntrinsicCall && isIoExceptionIntrinsic($expr->name)) {
+    if ($expr instanceof Ast\IntrinsicCall && isIoIntrinsic($expr->name)) {
         validateIoIntrinsic($expr, $source, $filename);
         return;
     }
@@ -236,36 +236,40 @@ function validateStraightLineIoBody(Ast\AstNode $expr, string $source, string $f
         return;
     }
 
-    if (!exprIsIoCapable($expr)) {
+    if (!exprReturnsIo($expr)) {
         fail('IO function body must evaluate to an IO expression', $expr, $source, $filename);
     }
 
     validateIoActionArgs($expr, $source, $filename);
 }
 
-function isIoExceptionIntrinsic(string $name): bool
-{
-    return $name === 'ioBind#'
-        || $name === 'ioPure#'
-        || $name === 'exceptionThrowIo#'
-        || $name === 'exceptionCatch#'
-        || $name === 'exceptionFinally#';
-}
-
+/**
+ * The IO construct's arity is the one its scheme declares, so the check here cannot disagree with
+ * the signature the checker resolved; which construct it is comes from the registry's roles.
+ */
 function validateIoIntrinsic(Ast\IntrinsicCall $expr, string $source, string $filename): void
 {
-    if ($expr->name === 'ioPure#') {
-        if (count($expr->args) !== 1) {
-            fail('ioPure# expects one argument', $expr, $source, $filename);
-        }
+    $role = ioPrimopRole($expr->name);
+    $arity = primopArity($expr->name);
+    if ($role === null || $arity === null) {
+        fail('unknown IO intrinsic', $expr, $source, $filename);
+    }
+
+    if (count($expr->args) !== $arity) {
+        fail(
+            \sprintf('%s expects %d argument%s', $expr->name, $arity, $arity === 1 ? '' : 's'),
+            $expr,
+            $source,
+            $filename,
+        );
+    }
+
+    if ($role === 'io-pure' || $role === 'io-throw') {
         validatePureExpr($expr->args[0], $source, $filename);
         return;
     }
 
-    if ($expr->name === 'ioBind#') {
-        if (count($expr->args) !== 2) {
-            fail('ioBind# expects two arguments', $expr, $source, $filename);
-        }
+    if ($role === 'io-bind') {
         if (!exprReturnsIo($expr->args[0])) {
             fail('left side of IO bind must return IO', $expr->args[0], $source, $filename);
         }
@@ -274,18 +278,7 @@ function validateIoIntrinsic(Ast\IntrinsicCall $expr, string $source, string $fi
         return;
     }
 
-    if ($expr->name === 'exceptionThrowIo#') {
-        if (count($expr->args) !== 1) {
-            fail('exceptionThrowIo# expects one argument', $expr, $source, $filename);
-        }
-        validatePureExpr($expr->args[0], $source, $filename);
-        return;
-    }
-
-    if ($expr->name === 'exceptionCatch#') {
-        if (count($expr->args) !== 2) {
-            fail('exceptionCatch# expects two arguments', $expr, $source, $filename);
-        }
+    if ($role === 'io-catch') {
         if (!exprReturnsIo($expr->args[0])) {
             fail('exceptionCatch# action must return IO', $expr->args[0], $source, $filename);
         }
@@ -294,22 +287,15 @@ function validateIoIntrinsic(Ast\IntrinsicCall $expr, string $source, string $fi
         return;
     }
 
-    if ($expr->name === 'exceptionFinally#') {
-        if (count($expr->args) !== 2) {
-            fail('exceptionFinally# expects two arguments', $expr, $source, $filename);
-        }
-        if (!exprReturnsIo($expr->args[0])) {
-            fail('exceptionFinally# action must return IO', $expr->args[0], $source, $filename);
-        }
-        if (!exprReturnsIo($expr->args[1])) {
-            fail('exceptionFinally# cleanup must return IO', $expr->args[1], $source, $filename);
-        }
-        validateIoBuildExpr($expr->args[0], $source, $filename);
-        validateIoBuildExpr($expr->args[1], $source, $filename);
-        return;
+    // `io-finally`: the action and the cleanup it runs are both IO.
+    if (!exprReturnsIo($expr->args[0])) {
+        fail('exceptionFinally# action must return IO', $expr->args[0], $source, $filename);
     }
-
-    fail('unknown IO intrinsic', $expr, $source, $filename);
+    if (!exprReturnsIo($expr->args[1])) {
+        fail('exceptionFinally# cleanup must return IO', $expr->args[1], $source, $filename);
+    }
+    validateIoBuildExpr($expr->args[0], $source, $filename);
+    validateIoBuildExpr($expr->args[1], $source, $filename);
 }
 
 function validateIoBindContinuation(Ast\AstNode $expr, string $source, string $filename): void
@@ -349,7 +335,7 @@ function validateStraightLineDo(array $stmts, string $source, string $filename):
         }
 
         if ($stmt instanceof Ast\DoBind) {
-            if (!exprIsIoCapable($stmt->expr)) {
+            if (!exprReturnsIo($stmt->expr)) {
                 fail('do-bind expression must return IO', $stmt->expr, $source, $filename);
             }
             validateIoActionArgs($stmt->expr, $source, $filename);
@@ -387,11 +373,11 @@ function validateStraightLineDo(array $stmts, string $source, string $filename):
             fail('intermediate IO statements must return ()', $stmt->expr, $source, $filename);
         }
 
-        if (!$last && !exprIsIoCapable($stmt->expr)) {
+        if (!$last && !exprReturnsIo($stmt->expr)) {
             fail('intermediate IO statements must be IO expressions', $stmt->expr, $source, $filename);
         }
 
-        if ($last && !exprIsIoCapable($stmt->expr)) {
+        if ($last && !exprReturnsIo($stmt->expr)) {
             fail('IO blocks must end with an IO () action', $stmt->expr, $source, $filename);
         }
 
@@ -529,7 +515,7 @@ function validateIntrinsic(Ast\IntrinsicCall $expr, string $source, string $file
 
 function validateIoActionArgs(Ast\AstNode $expr, string $source, string $filename): void
 {
-    if ($expr instanceof Ast\IntrinsicCall && isIoExceptionIntrinsic($expr->name)) {
+    if ($expr instanceof Ast\IntrinsicCall && isIoIntrinsic($expr->name)) {
         validateIoIntrinsic($expr, $source, $filename);
 
         return;
@@ -568,20 +554,19 @@ function exprIsIoContinuation(Ast\AstNode $expr): bool
     return false;
 }
 
+/**
+ * Whether an expression can stand where IO is expected.
+ *
+ * This is the recorded type alone, so no stage asks for a name: `error` and `undefined` are
+ * ordinary declarations (`Moggi.Err` types them `String -> a` and `a`), and a call to one unifies
+ * with `IO a` like any other bottom. What the boundary needs — "this never returns" — is exactly
+ * what let the checker give it the IO type in the first place.
+ */
 function exprReturnsIo(Ast\AstNode $expr): bool
 {
     $type = $expr->inferredType;
 
     return $type !== null && isIoType($type);
-}
-
-function exprIsIoCapable(Ast\AstNode $expr): bool
-{
-    if (exprReturnsIo($expr)) {
-        return true;
-    }
-
-    return isErrorCallExpr($expr);
 }
 
 function validateIoBindExpr(Ast\AstNode $expr, string $source, string $filename): void
@@ -612,7 +597,7 @@ function doBindingHasIoType(Ast\DoBind $binding): bool
 
 function validateIoBuildExpr(Ast\AstNode $expr, string $source, string $filename): void
 {
-    if (exprIsIoCapable($expr)) {
+    if (exprReturnsIo($expr)) {
         $type = $expr->inferredType;
         if ($type !== null && isNestedIoType($type)) {
             fail('nested IO actions are not supported', $expr, $source, $filename);
@@ -728,7 +713,7 @@ function validateIoBuildCase(Ast\CaseExpr $expr, string $source, string $filenam
 
 function validateIntrinsicBuild(Ast\IntrinsicCall $expr, string $source, string $filename): void
 {
-    if (isIoExceptionIntrinsic($expr->name)) {
+    if (isIoIntrinsic($expr->name)) {
         validateIoIntrinsic($expr, $source, $filename);
         return;
     }
@@ -788,13 +773,13 @@ function isIoMonadMethod(Ast\AstNode $expr, string $method): bool
     }
 
     $head = $expr->evidenceInstance;
-    if ($head instanceof Ast\TypeCon && ($head->name === 'IO' || $head->name === 'IO#')) {
+    if ($head instanceof Ast\TypeCon && isIoTypeConName($head->name)) {
         return true;
     }
 
     return $head instanceof Ast\TypeApp
         && $head->con instanceof Ast\TypeCon
-        && ($head->con->name === 'IO' || $head->con->name === 'IO#');
+        && isIoTypeConName($head->con->name);
 }
 
 /** @return array{function: Ast\AstNode, args: list<Ast\AstNode>} */

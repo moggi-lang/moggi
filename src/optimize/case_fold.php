@@ -14,6 +14,9 @@ use function Moggi\Optimize\Interproc\denseStmtItems;
 use function Moggi\Optimize\Interproc\operandIsNonDuplicable;
 use function Moggi\Optimize\Interproc\replaceTempsInOperand;
 use function Moggi\Optimize\Interproc\substituteStmt;
+use function Moggi\Semantics\IntrinsicRegistry\isListConsForm;
+use function Moggi\Semantics\IntrinsicRegistry\isListSpineForm;
+use function Moggi\Semantics\IntrinsicRegistry\listFormShape;
 use function Moggi\Syntax\isConstructorName;
 
 /**
@@ -865,7 +868,7 @@ function tryFoldMatch(
         && !($scrut instanceof IR\ListLit)
         && !(
             $scrut instanceof IR\Intrinsic
-            && ($scrut->name === 'list_nil' || $scrut->name === 'listCons#')
+            && isListSpineForm($scrut->name)
         )
     ) {
         return null;
@@ -999,7 +1002,7 @@ function collectPatternLeaves(IR\Pattern $pattern, CtorTree|IR\Operand $value, a
 
     if ($pattern instanceof IR\PatNil) {
         return ($value instanceof IR\ListLit && $value->elements === [])
-            || ($value instanceof IR\Intrinsic && $value->name === 'list_nil' && $value->args === []);
+            || ($value instanceof IR\Intrinsic && listFormShape($value->name) === 'list-nil' && $value->args === []);
     }
 
     if ($pattern instanceof IR\PatCons) {
@@ -1010,7 +1013,7 @@ function collectPatternLeaves(IR\Pattern $pattern, CtorTree|IR\Operand $value, a
             return collectPatternLeaves($pattern->head, $head instanceof CtorTree ? $head : $head, $leaves)
                 && collectPatternLeaves($pattern->tail, $tail, $leaves);
         }
-        if ($value instanceof IR\Intrinsic && $value->name === 'listCons#' && count($value->args) === 2) {
+        if ($value instanceof IR\Intrinsic && isListConsForm($value->name) && count($value->args) === 2) {
             return collectPatternLeaves($pattern->head, $value->args[0], $leaves)
                 && collectPatternLeaves($pattern->tail, $value->args[1], $leaves);
         }
@@ -1108,7 +1111,7 @@ function matchPattern(
         if ($value instanceof IR\ListLit) {
             return $value->elements === [];
         }
-        if ($value instanceof IR\Intrinsic && $value->name === 'list_nil' && $value->args === []) {
+        if ($value instanceof IR\Intrinsic && listFormShape($value->name) === 'list-nil' && $value->args === []) {
             return true;
         }
 
@@ -1123,7 +1126,7 @@ function matchPattern(
             return matchPattern($pattern->head, $head, $bindings, $decisive)
                 && matchPattern($pattern->tail, $tail, $bindings, $decisive);
         }
-        if ($value instanceof IR\Intrinsic && $value->name === 'listCons#' && count($value->args) === 2) {
+        if ($value instanceof IR\Intrinsic && isListConsForm($value->name) && count($value->args) === 2) {
             return matchPattern($pattern->head, $value->args[0], $bindings, $decisive)
                 && matchPattern($pattern->tail, $value->args[1], $bindings, $decisive);
         }
@@ -1189,7 +1192,7 @@ function shapeIsKnown(CtorTree|IR\Operand $value): bool
     }
 
     return $value instanceof IR\Intrinsic
-        && \in_array($value->name, ['list_nil', 'listCons#'], true);
+        && isListSpineForm($value->name);
 }
 
 /**
@@ -1229,10 +1232,10 @@ function resolveMatchScrutinee(
     if ($resolved instanceof IR\ListLit) {
         return listLitToCtorSpine($resolved, $ctors, $aliases);
     }
-    if ($resolved instanceof IR\Intrinsic && $resolved->name === 'list_nil' && $resolved->args === []) {
+    if ($resolved instanceof IR\Intrinsic && listFormShape($resolved->name) === 'list-nil' && $resolved->args === []) {
         return new IR\ListLit([]);
     }
-    if ($resolved instanceof IR\Intrinsic && $resolved->name === 'listCons#' && count($resolved->args) === 2) {
+    if ($resolved instanceof IR\Intrinsic && isListConsForm($resolved->name) && count($resolved->args) === 2) {
         $asList = flattenResolvedListCons($resolved, $ctors, $aliases);
         if ($asList !== null) {
             return listLitToCtorSpine($asList, $ctors, $aliases);
@@ -1274,7 +1277,7 @@ function flattenResolvedListCons(
     $elems = [];
     $cur = $node;
     $guard = 0;
-    while ($cur instanceof IR\Intrinsic && $cur->name === 'listCons#' && count($cur->args) === 2) {
+    while ($cur instanceof IR\Intrinsic && isListConsForm($cur->name) && count($cur->args) === 2) {
         if (++$guard > 256) {
             return null;
         }
@@ -1291,7 +1294,7 @@ function flattenResolvedListCons(
                 ...$tail->elements,
             ]);
         }
-        if ($tail instanceof IR\Intrinsic && $tail->name === 'list_nil' && $tail->args === []) {
+        if ($tail instanceof IR\Intrinsic && listFormShape($tail->name) === 'list-nil' && $tail->args === []) {
             return new IR\ListLit(\array_map(
                 static fn (CtorTree|IR\Operand $e): IR\Operand => $e instanceof CtorTree
                     ? materializeOperand($e)
@@ -1299,7 +1302,7 @@ function flattenResolvedListCons(
                 $elems,
             ));
         }
-        if (!($tail instanceof IR\Intrinsic && $tail->name === 'listCons#')) {
+        if (!($tail instanceof IR\Intrinsic && isListConsForm($tail->name))) {
             return null;
         }
         $cur = $tail;
@@ -1664,10 +1667,10 @@ function resolveOperand(IR\Operand $operand, array $ctors, array $aliases, array
     }
 
     if ($operand instanceof IR\Intrinsic) {
-        if ($operand->name === 'list_nil' && $operand->args === []) {
+        if (listFormShape($operand->name) === 'list-nil' && $operand->args === []) {
             return new IR\ListLit([]);
         }
-        if ($operand->name === 'listCons#' && count($operand->args) === 2) {
+        if (isListConsForm($operand->name) && count($operand->args) === 2) {
             $head = resolveOperand($operand->args[0], $ctors, $aliases, $seen);
             $tail = resolveOperand($operand->args[1], $ctors, $aliases, $seen);
             if ($tail instanceof IR\ListLit) {

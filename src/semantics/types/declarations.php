@@ -86,8 +86,10 @@ function registerData(TypeCheckState $state, Ast\DataDecl $decl): void
 {
     assertNotInstanceHeadMarkerName($state, $decl->name, $decl, 'data type');
 
+    // The kernel's type constructors are reserved by the id the machine names them with, not by the
+    // readable name `Moggi.Internal.Base` gives them: `IO` is reserved because `IO#` is the kernel's.
     if (isMagicHashName($decl->name)
-        || $decl->name === 'IO'
+        || $decl->name === Kinds\canonicalTypeConName('IO#')
     ) {
         throw typeFail(
             $state,

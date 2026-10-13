@@ -2,12 +2,14 @@
 
 namespace Moggi\Semantics\Types;
 
-use Moggi\Syntax\Ast;
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TDouble;
 use Moggi\Semantics\TypeExpr\TInt;
 use Moggi\Semantics\TypeExpr\TVar;
 use Moggi\Semantics\TypeExpr\Type;
+use Moggi\Syntax\Ast;
+
+use function Moggi\Semantics\Kinds\canonicalTypeConName;
 
 /**
  * An integer literal denotes the value `fromInteger` returns for the integer it
@@ -428,7 +430,9 @@ function elaborateNumericLiteral(TypeCheckState $state, Ast\IntegerLit $expr): A
     $integerValue->intrinsicId = $expr->digits === null ? 'intToInteger#' : 'integerFromDigits#';
     $integerValue->inferredType = $expr->inferredType;
 
-    if ($type instanceof TCon && $type->name === 'Integer' && $type->args === []) {
+    // The kernel's arbitrary-precision integer, by the id its declaration names (`Integer#`):
+    // a literal already at it needs no `fromInteger`, since the value is that type's own.
+    if ($type instanceof TCon && $type->name === canonicalTypeConName('Integer#') && $type->args === []) {
         $expr->pendingConstraints = [];
 
         return $integerValue;

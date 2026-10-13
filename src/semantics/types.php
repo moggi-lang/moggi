@@ -287,29 +287,3 @@ function newState(string $source, string $filename = ''): TypeCheckState
 
     return $state;
 }
-
-function isErrorCallExpr(Ast\AstNode $expr): bool
-{
-    if ($expr instanceof Ast\IntrinsicCall && $expr->name === 'error#') {
-        return true;
-    }
-
-    if ($expr instanceof Ast\Variable || $expr instanceof Ast\QualifiedRef) {
-        return $expr->name === 'undefined';
-    }
-
-    if (!$expr instanceof Ast\Apply) {
-        return false;
-    }
-
-    $fn = $expr;
-    while ($fn instanceof Ast\Apply) {
-        $fn = $fn->function;
-    }
-
-    return match ($fn::class) {
-        Ast\Variable::class,
-        Ast\QualifiedRef::class => $fn->name === 'error' || $fn->name === 'undefined',
-        default => false,
-    };
-}
