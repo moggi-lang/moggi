@@ -12,13 +12,13 @@ The bootstrap compiler is implemented in PHP until a self-hosted version replace
 | File | Role |
 |------|------|
 | `moggi.php` | CLI entry shim (calls `Moggi\CLI\main`) |
-| `src/CLI/` | argv parsing, dispatch, and command orchestration |
+| `src/cli/` | argv parsing, dispatch, and command orchestration |
 | `test.php` | Golden-file test runner (project root) |
 | `src/compiler.php` | Compile API (`compile`, `compileFile`, …) |
 | `src/syntax/` | Lexer, parser, and AST |
 | `src/semantics/` | Type/kind/effect checking and intrinsic registry |
 | `src/modules/` | Module graph, path planning, imports, exports, and linking |
-| `src/IR/` | IR representation, lowering, visiting, and dumping |
+| `src/ir/` | IR representation, lowering, visiting, and dumping |
 | `src/optimize/` | IR optimization passes |
 | `src/backend/` | Target backends (PHP / JVM / .NET) and shared backend helpers |
 | `src/docs/` | mogdoc (HTML API docs) and moogle (API search) |
@@ -83,7 +83,7 @@ For the phase-by-phase compiler architecture and refactoring boundaries, see
 
 ## CLI layout
 
-`moggi.php` is a thin shim. Command handling lives under `src/CLI/`:
+`moggi.php` is a thin shim. Command handling lives under `src/cli/`:
 
 | Path | Role |
 |------|------|

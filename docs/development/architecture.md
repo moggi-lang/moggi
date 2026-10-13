@@ -138,7 +138,7 @@ IR lowering translates normalized effect nodes mechanically.
 
 ### IR Lowering
 
-`src/IR/ir.php` owns the IR representation and AST-to-IR lowering. The target
+`src/ir/ir.php` owns the IR representation and AST-to-IR lowering. The target
 boundary is:
 
 ```text
@@ -287,17 +287,17 @@ The user-facing command line is intentionally thin:
 
 ```text
 moggi.php
-  -> Moggi\CLI\main          (src/CLI/main.php)
+  -> Moggi\CLI\main          (src/cli/main.php)
        -> commands/compile|run|repl|cache|mogdoc|moogle
 ```
 
 | Layer | Location | Responsibility |
 |-------|----------|----------------|
 | Entry shim | `moggi.php` | `require compiler.php`; `exit(CLI\main($argv))` |
-| Dispatch | `src/CLI/main.php` | Subcommand table; typo detection |
-| Shared argv | `src/CLI/args.php`, `paths.php`, `usage.php` | Flags, library roots, help |
-| Commands | `src/CLI/commands/*.php` | Per-subcommand parse + orchestration |
+| Dispatch | `src/cli/main.php` | Subcommand table; typo detection |
+| Shared argv | `src/cli/args.php`, `paths.php`, `usage.php` | Flags, library roots, help |
+| Commands | `src/cli/commands/*.php` | Per-subcommand parse + orchestration |
 | Libraries | `pipeline/`, `modules/`, `docs/`, `repl/` | Compile, index, REPL — no argv |
 
-`findMogFiles` and `resolveLibraryDirs` live in `src/CLI/paths.php` and are reused by mogdoc (`src/docs/project.php`). For production doc hosting, run `moggi mogdoc -o` and serve static HTML; `moggi mogdoc serve` uses a dev-only PHP socket server in `src/docs/serve.php`.
+`findMogFiles` and `resolveLibraryDirs` live in `src/cli/paths.php` and are reused by mogdoc (`src/docs/project.php`). For production doc hosting, run `moggi mogdoc -o` and serve static HTML; `moggi mogdoc serve` uses a dev-only PHP socket server in `src/docs/serve.php`.
 
