@@ -63,8 +63,6 @@ function applyEvidenceMethodInfo(TypeCheckState $state, Ast\AstNode &$expr, arra
         $expr->line,
         $expr->col,
         $expr->endCol,
-        // What the method is *for*, read off the class declaration now that the class is resolved: a
-        // pass that meets this evidence later (the IO boundary) reads the role, never the spelling.
         classMethodRole($state, $info['class'], $info['method']),
     );
     $method->pendingConstraints = $expr->pendingConstraints;

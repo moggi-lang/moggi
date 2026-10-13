@@ -500,10 +500,6 @@ function validateForeignTypeCon(
         return;
     }
 
-    // Everything else is structural: a primitive is the library's alias of a
-    // MagicHash type, and an enumeration is a data type whose constructors take no
-    // fields — both read from the declaration, which is what makes the host's own
-    // datatypes (the truth values, the ordering) and its kernel types legal.
     if (foreignIsHostValueType($state, $con)) {
         return;
     }

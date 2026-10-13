@@ -1,6 +1,7 @@
 <?php declare(strict_types=1);
 
 use Moggi\Backend;
+use Moggi\Pipeline\PipelineStage;
 
 use function Moggi\Compiler\compileFileCapturingErrorsBoth;
 use function Moggi\Modules\bundledStdlibLibPath;
@@ -28,13 +29,14 @@ use function Moggi\Modules\projectSourceClosure;
  */
 function testTreeKinds(): array
 {
-    return [
-        'tokens' => ['pre' => true],
-        'ast' => ['pre' => true],
-        'typed-ast' => ['pre' => true],
-        'ir' => ['pre' => true],
-        'opt-ir' => ['pre' => true],
-        'emit' => ['pre' => false],
+    // A stage's kind is the stage's own name, and only codegen can change what a stage before it
+    // produces. `tokens` is the lexer's dump; `stdout`, `stderr` and `err` are not stages at all.
+    $stages = ['tokens' => ['pre' => true]];
+    foreach (PipelineStage::cases() as $stage) {
+        $stages[$stage->value] = ['pre' => $stage !== PipelineStage::Emit];
+    }
+
+    return $stages + [
         'stdout' => ['pre' => false],
         'stderr' => ['pre' => false],
         'err' => ['pre' => true],
@@ -44,7 +46,12 @@ function testTreeKinds(): array
 /** The kinds that snapshots produce, in stage order. */
 function snapshotKinds(): array
 {
-    return ['tokens', 'ast', 'typed-ast', 'ir', 'opt-ir', 'emit'];
+    $stages = array_map(
+        static fn (PipelineStage $stage): string => $stage->value,
+        PipelineStage::cases(),
+    );
+
+    return ['tokens', ...$stages];
 }
 
 /**

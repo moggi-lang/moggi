@@ -315,32 +315,28 @@ function lowerIoAction(Ast\AstNode $expr, LowerCtx $ctx, ?int $dest): bool
     }
 
     if ($call instanceof Intrinsic) {
-        // The exception actions become their own IR nodes; the registry says which id is which role.
-        switch (ioPrimopRole($call->name)) {
-            case 'io-throw':
-                $ctx->items[] = new IoThrow(
-                    $call->args[0] ?? new Unit(),
-                    $dest,
-                    $call->srcLoc,
-                );
+        $ioConstruct = match (ioPrimopRole($call->name)) {
+            'io-throw' => new IoThrow(
+                $call->args[0] ?? new Unit(),
+                $dest,
+                $call->srcLoc,
+            ),
+            'io-catch' => new IoCatch(
+                $call->args[0] ?? new Unit(),
+                $call->args[1] ?? new Unit(),
+                $dest,
+            ),
+            'io-finally' => new IoFinally(
+                $call->args[0] ?? new Unit(),
+                $call->args[1] ?? new Unit(),
+                $dest,
+            ),
+            default => null,
+        };
+        if ($ioConstruct !== null) {
+            $ctx->items[] = $ioConstruct;
 
-                return true;
-            case 'io-catch':
-                $ctx->items[] = new IoCatch(
-                    $call->args[0] ?? new Unit(),
-                    $call->args[1] ?? new Unit(),
-                    $dest,
-                );
-
-                return true;
-            case 'io-finally':
-                $ctx->items[] = new IoFinally(
-                    $call->args[0] ?? new Unit(),
-                    $call->args[1] ?? new Unit(),
-                    $dest,
-                );
-
-                return true;
+            return true;
         }
 
         $ctx->items[] = new IoCall(
@@ -419,8 +415,6 @@ function ioCallNeedsRunBoxedResult(IoCall $call, LowerCtx $ctx): bool
         return false;
     }
 
-    // A provider whose declared result is a monadic type variable returns an action value: the
-    // declaration says so, and this set is built from declarations (`ioActionReturnFnNames`).
     return isset($ctx->ioActionReturnFns[$call->callee]);
 }
 
@@ -484,7 +478,6 @@ function ioActionCall(Ast\AstNode $expr, LowerCtx $ctx): Intrinsic|IoCall|null
     }
 
     if ($expr instanceof Ast\IntrinsicCall) {
-        // `catch` takes the action on the left; `finally` takes an action on each side.
         $role = ioPrimopRole($expr->name);
         if ($role === 'io-catch' || $role === 'io-finally') {
             $args = [];

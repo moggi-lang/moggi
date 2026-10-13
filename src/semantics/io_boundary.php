@@ -34,9 +34,6 @@ function validateItem(Ast\AstNode $item, string $source, string $filename): void
 
 function validateTypeSynonym(Ast\TypeSynonymDecl $item, string $source, string $filename): void
 {
-    // The library publishes a kernel type under a readable name with `type IO = IO#`: the
-    // synonym's name is the name `canonicalTypeConName` gives the id it names, which is the
-    // one place the id → name map lives, so no kernel alias needs its own exemption here.
     if ($item->type instanceof Ast\TypeCon
         && canonicalTypeConName($item->type->name) === $item->name) {
         return;
@@ -288,7 +285,6 @@ function validateIoIntrinsic(Ast\IntrinsicCall $expr, string $source, string $fi
         return;
     }
 
-    // `io-finally`: the action and the cleanup it runs are both IO.
     if (!exprReturnsIo($expr->args[0])) {
         fail('exceptionFinally# action must return IO', $expr->args[0], $source, $filename);
     }

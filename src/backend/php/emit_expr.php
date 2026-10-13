@@ -110,7 +110,7 @@ function emitCall(string $callee, array $args, int $dest, int $indent, array $ct
 function emitRetValue(IR\Operand $value, array $ctx): string
 {
     return match ($value::class) {
-        IR\ExprBinop::class => emitOperand($value->left, $ctx) . ' ' . phpBinop($value->op) . ' ' . emitOperand($value->right, $ctx),
+        IR\ExprBinop::class => emitOperand($value->left, $ctx) . ' ' . $value->op . ' ' . emitOperand($value->right, $ctx),
         IR\ExprCall::class => emitCallExpr($value->callee, $value->args, $ctx),
         IR\ExprCallValue::class => emitApplyExpr($value->callee, $value->args, $ctx),
         IR\ExprPartial::class => emitPartialArray($value, $ctx),
@@ -198,15 +198,6 @@ function formatDoubleLiteral(float $value): string
     $text = rtrim(rtrim(\sprintf('%.17F', $value), '0'), '.');
 
     return str_contains($text, '.') ? $text : $text . '.0';
-}
-
-function phpBinop(string $op): string
-{
-    return match ($op) {
-        '<>' => '.',
-        '/=' => '!=',
-        default => $op,
-    };
 }
 
 function exportStringLiteral(string $value): string

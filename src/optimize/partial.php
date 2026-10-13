@@ -451,10 +451,6 @@ function fuseCallWithPartialCallee(IR\Stmt $call, array $args, array $index): ?I
         }
     }
 
-    // No fallback by name: an identity function is recognised by reading the provider's body
-    // ({@see returnedIdentityArg}), so a provider that is not in the index — cheap to compile, or
-    // simply not this module's — stays a call. Assuming the callee's *spelling* makes the optimizer
-    // know a library declaration.
     return null;
 }
 

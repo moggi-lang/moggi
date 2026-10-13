@@ -268,19 +268,14 @@ function literalValue(string $token): string
 function baseline(): array
 {
     return [
-        // comparison primops → host IL (`bool` is the IL type name; the Bool constructors are
-        // asked of the kernel key)
+        // the IL boolean type name — host vocabulary
         'src/backend/dotnet/codegen.php' => [
-            '/=', '<', '<=', '==', '>', '>=', 'bool',
+            'bool',
         ],
         // marshalling: the boolean, the transparent containers and the opaque handle — the
         // kernel's own types are keyed by kernel id (`clrKernelTypeName`)
         'src/backend/dotnet/foreign.php' => [
             'Bool', 'Either', 'Handle', 'Maybe',
-        ],
-        // comparison primops → host JVM ops (the Bool constructors are asked of the kernel key)
-        'src/backend/jvm/codegen.php' => [
-            '/=', '<', '<=', '==', '>', '>=',
         ],
         // marshalling: the boolean, the transparent containers and the opaque handle — the
         // kernel's own types are keyed by kernel id (`jvmKernelDescriptor`)
@@ -290,10 +285,6 @@ function baseline(): array
         // the BigInteger helper table (`subtract` is an arithmetic helper name) — host vocabulary
         'src/backend/jvm/runtime_abi.php' => [
             'subtract',
-        ],
-        // comparison and concat operators → PHP operators
-        'src/backend/php/emit_expr.php' => [
-            '/=', '<>',
         ],
         // the runtime's own exception class names — host vocabulary
         'src/backend/php/runtime.php' => [

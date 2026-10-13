@@ -411,9 +411,6 @@ function elaborateNumericLiteral(TypeCheckState $state, Ast\IntegerLit $expr): A
         return $expr;
     }
 
-    // The method a literal is converted by is implied by the declaration's own signature, not the
-    // compiler's spelling ({@see \Moggi\Semantics\Kernel}): with no class implying the role in scope
-    // there is nothing to convert with, which is the un-converted literal it was.
     $literalMethod = classMethodWithRole($state, literalRole());
     if ($literalMethod === null) {
         return $expr;
@@ -437,8 +434,6 @@ function elaborateNumericLiteral(TypeCheckState $state, Ast\IntegerLit $expr): A
     $integerValue->intrinsicId = $expr->digits === null ? 'intToInteger#' : 'integerFromDigits#';
     $integerValue->inferredType = $expr->inferredType;
 
-    // The kernel's arbitrary-precision integer, by the id its declaration names (`Integer#`):
-    // a literal already at it needs no conversion, since the value is that type's own.
     if ($type instanceof TCon && $type->name === canonicalTypeConName('Integer#') && $type->args === []) {
         $expr->pendingConstraints = [];
 

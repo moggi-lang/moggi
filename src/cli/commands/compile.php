@@ -20,6 +20,7 @@ use function Moggi\Compiler\findExecutable;
 use function Moggi\Compiler\findToolchainExecutable;
 use function Moggi\Modules\bundledStdlibLibPath;
 use function Moggi\Modules\cachedModuleHeader;
+use function Moggi\Pipeline\printModeNames;
 use function Moggi\Pipeline\setEntryModules;
 
 /**
@@ -858,7 +859,7 @@ function parseCompileArgs(array $argv): array
     }
 
     $mode = 'php';
-    foreach (['tokens', 'ast', 'typed-ast', 'ir', 'opt-ir'] as $flag) {
+    foreach (printModeNames() as $flag) {
         if ($options[$flag]) {
             $mode = $flag;
             break;
@@ -884,8 +885,8 @@ function parseCompileArgs(array $argv): array
  * print modes.
  *
  * The print modes (`--tokens`, `--ast`, `--typed-ast`, `--ir`, `--opt-ir`) are
- * mutually exclusive in intent; if more than one is given the first in the list
- * below wins, because a second would contradict the first.
+ * mutually exclusive in intent; if more than one is given the first
+ * {@see printModeNames()} names wins, because a second would contradict the first.
  */
 function compileUsage(): string
 {
@@ -917,12 +918,13 @@ function compileUsage(): string
 
 function compileSpec(): CommandSpec
 {
+    $printModes = array_map(
+        static fn (string $flag): array => ['name' => $flag],
+        printModeNames(),
+    );
+
     return new CommandSpec('compile', compileUsage(), [
-        ['name' => 'tokens'],
-        ['name' => 'ast'],
-        ['name' => 'typed-ast'],
-        ['name' => 'ir'],
-        ['name' => 'opt-ir'],
+        ...$printModes,
         ['name' => 'noOpt'],
         ['name' => 'native'],
         ['name' => 'unpacked'],
