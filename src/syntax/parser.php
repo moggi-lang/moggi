@@ -176,7 +176,7 @@ function parse(
                     'doc' => $doc,
                     'operators' => $decl['operators'],
                     'assoc' => $decl['assoc'],
-                    'prec' => (int) ($decl['precedence'] ?? 9),
+                    'precedence' => (int) ($decl['precedence'] ?? 9),
                 ];
             }
             continue;
@@ -301,7 +301,7 @@ function collectFixity(array $tokens, string $source = '', string $filename = ''
         $decl = parseFixityDecl($state);
         $precedence = $decl['precedence'] ?? 9;
         foreach ($decl['operators'] as $operator) {
-            $fixity[$operator] = ['assoc' => $decl['assoc'], 'prec' => $precedence];
+            $fixity[$operator] = ['assoc' => $decl['assoc'], 'precedence' => $precedence];
         }
 
         $pos = $state->pos - 1;
@@ -343,7 +343,7 @@ function mergeFunctionClauses(array $items, string $source = '', string $filenam
             } else {
                 $pending['clauses'][] = ['params' => $item->params, 'body' => $item->body];
             }
-            $pending['span'] ??= declarationSpan($item);
+            $pending['declarationSpan'] ??= declarationSpan($item);
             if ($pending['type'] === null && $item->type !== null) {
                 $pending['type'] = $item->type;
             }
@@ -367,7 +367,7 @@ function mergeFunctionClauses(array $items, string $source = '', string $filenam
             'name' => $item->name,
             'type' => $item->type,
             'doc' => $item->doc,
-            'span' => declarationSpan($item),
+            'declarationSpan' => declarationSpan($item),
             'clauses' => [['params' => $item->params, 'body' => $item->body]],
         ];
     }
@@ -428,7 +428,7 @@ function declarationSpan(Ast\AstNode $decl): ?array
  */
 function locateDeclaration(Ast\AstNode $decl, array $fn): void
 {
-    $span = $fn['span'] ?? null;
+    $span = $fn['declarationSpan'] ?? null;
     if ($span !== null) {
         $decl->setLocation($span[0], $span[1], $span[2]);
     }

@@ -56,7 +56,7 @@ function parsePatternInfix(ParserState $state, int $minPrec): Ast\AstNode
             break;
         }
 
-        ['prec' => $prec, 'assoc' => $assoc] = fixityFor($state, $op);
+        ['precedence' => $prec, 'assoc' => $assoc] = fixityFor($state, $op);
         if ($prec < $minPrec) {
             break;
         }

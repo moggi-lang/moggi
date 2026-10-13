@@ -31,11 +31,11 @@ function emitForeignExpressionRaw(IR\ForeignCall $foreign, array $argExprs): str
 
     $call = match ($info['dispatch']) {
         'global' => '\\' . $foreign->path . '(' . join(', ', $argExprs) . ')',
-        'static' => '\\' . phpClassFqn((string) $info['classPath']) . '::' . $info['member']
+        'static' => '\\' . phpClassFqn((string) $info['classPath']) . '::' . $info['hostMember']
             . '(' . join(', ', $argExprs) . ')',
         'constructor' => 'new \\' . phpClassFqn((string) $info['classPath'])
             . '(' . join(', ', $argExprs) . ')',
-        'instance' => emitInstanceCall($info['member'], $argExprs),
+        'instance' => emitInstanceCall($info['hostMember'], $argExprs),
         default => throw new \RuntimeException("unsupported foreign dispatch `{$info['dispatch']}`"),
     };
 
@@ -50,21 +50,21 @@ function emitForeignConst(IR\ForeignCall $foreign): string
     }
 
     if (($info['classPath'] ?? '') === 'PHP') {
-        $expr = (string) $info['member'];
+        $expr = (string) $info['hostMember'];
 
         return ($foreign->handleBox ?? false) === true ? emitHandleBox($expr) : $expr;
     }
 
-    return '\\' . phpClassFqn((string) $info['classPath']) . '::' . $info['member'];
+    return '\\' . phpClassFqn((string) $info['classPath']) . '::' . $info['hostMember'];
 }
 
-/** @return array{classPath: ?string, member: ?string, dispatch: string, path?: string} */
+/** @return array{classPath: ?string, hostMember: ?string, dispatch: string, path?: string} */
 function foreignPathInfo(IR\ForeignCall $foreign): array
 {
     if (isset($foreign->dispatch)) {
         return [
             'classPath' => $foreign->classPath ?? null,
-            'member' => $foreign->member ?? null,
+            'hostMember' => $foreign->member ?? null,
             'dispatch' => $foreign->dispatch,
         ];
     }
@@ -90,7 +90,7 @@ function emitForeignIoStatement(
     array $argExprs,
     ?int $dest,
     string $pad,
-    string $ioWrap,
+    IR\IoWrap $ioWrap,
 ): string {
     $call = emitForeignExpressionRaw($foreign, $argExprs);
     $destVar = $dest === null ? null : phpTemp($dest);
@@ -99,10 +99,10 @@ function emitForeignIoStatement(
     $handleBox = ($foreign->handleBox ?? false) === true;
 
     return match ($ioWrap) {
-        'either' => emitForeignIoEither($call, $assignPrefix, $destVar, $pad, $phpValueBox, $handleBox),
-        'fgets_line' => emitForeignIoFgetsLine($call, $assignPrefix, $destVar, $pad),
-        'maybe_string' => emitForeignIoMaybeString($call, $assignPrefix, $destVar, $pad),
-        default => $pad . $assignPrefix . emitForeignIoResult($call, $phpValueBox, $handleBox) . ";\n",
+        IR\IoWrap::Either => emitForeignIoEither($call, $assignPrefix, $destVar, $pad, $phpValueBox, $handleBox),
+        IR\IoWrap::FgetsLine => emitForeignIoFgetsLine($call, $assignPrefix, $destVar, $pad),
+        IR\IoWrap::MaybeString => emitForeignIoMaybeString($call, $assignPrefix, $destVar, $pad),
+        IR\IoWrap::None => $pad . $assignPrefix . emitForeignIoResult($call, $phpValueBox, $handleBox) . ";\n",
     };
 }
 

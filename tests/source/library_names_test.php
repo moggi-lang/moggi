@@ -9,7 +9,9 @@ require $root . '/src/compiler.php';
 
 use Moggi\Syntax\Ast;
 
+use function Moggi\Backend\DotNet\Il\ilIsInstructionMnemonic;
 use function Moggi\Backend\Jvm\Naming\isJavaKeyword;
+use function Moggi\Backend\Php\Naming\isPhpBuiltin;
 use function Moggi\Backend\Php\Naming\phpKeywords;
 use function Moggi\Paths\canonicalSeparators;
 use function Moggi\Syntax\Lexer\lex;
@@ -25,10 +27,9 @@ use function Moggi\Syntax\Parser\parse;
  * rename `Data.Map.member` in `lib/` and a compiler copy of the word keeps compiling.
  *
  * This test is the guard on that rule, and it is a ratchet rather than a clean bill: hundreds of such
- * names are still in `src/`, so the sites that exist today are listed in `baseline()` with the hack
- * each belongs to and the step that removes it. What it refuses is *change*: a name that is not
- * listed fails, and a listed name that is gone fails too, so the list can only shrink as the steps
- * land.
+ * names are still in `src/`, so the sites that exist today are listed in `baseline()`, each with the
+ * reason it is still there. What it refuses is *change*: a name that is not listed fails, and a
+ * listed name that is gone fails too, so the list can only shrink as the reasons are dealt with.
  *
  * Three contexts count, because those are the shapes a name map has:
  *
@@ -46,10 +47,17 @@ use function Moggi\Syntax\Parser\parse;
  *   * one-character names are the language's own punctuation: the lexer recognises the tokens it
  *     lexes, the parser the operators it parses, every backend writes its own path separators. This
  *     is the rule's one blind spot, and it has a name: `:` is the list cons, so the fallback that
- *     resolves `:` to `listCons#` (H4) is invisible here and P3 is what has to remove it.
- *   * a name that is a PHP or Java keyword is host vocabulary. The lists are the compiler's own
- *     (`phpKeywords`, `isJavaKeyword`), which the plan's boundary already names as the machine's
- *     business — so adding a keyword there widens this exemption by that one word.
+ *     resolves `:` to `listCons#` is invisible here.
+ *   * a name that is a PHP or Java keyword, a name PHP gives its own builtins, or an instruction of
+ *     the host instruction set, is host vocabulary. The lists are the compiler's own (`phpKeywords`,
+ *     `isPhpBuiltin`, `isJavaKeyword` and the DotNet backend's IL size model) — the machine's
+ *     business, not the library's — so adding a keyword, a builtin or an opcode there widens this
+ *     exemption by that one word.
+ *
+ * Both are real widenings, not tidying: `div`, `rem` and `not` are CIL opcodes *and* library
+ * declarations, and `abs` is a PHP builtin *and* a library function, so the host's side has to be
+ * spelled out somewhere, and a table that names the host's own machine is the boundary the plan
+ * calls compiler-side rather than a library name map.
  */
 
 /**
@@ -134,14 +142,24 @@ function stageRoots(): array
     ];
 }
 
-/** Whether a name is the host's vocabulary rather than the library's. */
+/**
+ * Whether a name is the host's vocabulary rather than the library's.
+ *
+ * The host's vocabulary is the host's: its keywords, the names it gives its own builtins, and its
+ * instruction set. Every answer comes from the compiler's own statements of them (`phpKeywords`,
+ * `isPhpBuiltin`, `isJavaKeyword`, and the DotNet backend's IL size model), so the exemption widens
+ * by exactly the word someone adds there — never by a name added here.
+ */
 function isHostVocabulary(string $name): bool
 {
     if (\strlen($name) === 1) {
         return true;
     }
 
-    return isset(phpKeywords()[\strtolower($name)]) || isJavaKeyword($name);
+    return isset(phpKeywords()[\strtolower($name)])
+        || isPhpBuiltin($name)
+        || isJavaKeyword($name)
+        || ilIsInstructionMnemonic($name);
 }
 
 /**
@@ -237,70 +255,56 @@ function literalValue(string $token): string
 }
 
 /**
- * The sites that exist today, and the hack each belongs to.
+ * The sites that exist today.
  *
- * Each entry names the hack it belongs to and the step that removes it (`H*` is the hack, `P*` the
- * step). The reason is one line because the list will be read on the way down, not up: an entry that
- * is gone from the source fails the test until it is deleted here too.
+ * Each entry carries one line saying why the compiler still names a library declaration there: most
+ * are coincidence — an internal key that happens to share a spelling with a library name — and the
+ * rest are the compiler tables that keep the library optional. One line, because the list will be
+ * read on the way down, not up: an entry that is gone from the source fails the test until it is
+ * deleted here too.
  *
  * @return array<string, list<string>>
  */
 function baseline(): array
 {
     return [
-        // the guard desugaring recognises `otherwise` — H5, P2
+        // the guard desugaring recognises `otherwise`
         'src/IR/lower_expr.php' => [
             'otherwise',
         ],
-        // the IO wrappers lowering knows by name — H2, P4.4
+        // the IO wrappers lowering knows by name
         'src/IR/lower_io.php' => [
             'for_', 'sequenceA_', 'traverse_', 'unless', 'void', 'when',
         ],
-        // comparison and Bool primops → host IL (`bool` is the IL type name) — H2/H7, P4.4/P5
+        // comparison and Bool primops → host IL (`bool` is the IL type name)
         'src/backend/dotnet/codegen.php' => [
             '/=', '<', '<=', '==', '>', '>=', 'False', 'True', 'bool',
         ],
-        // marshalling: library type → CLR type (`member` is a foreign-path kind) — H7, P5
+        // marshalling: the boolean, the transparent containers and the opaque handle — the
+        // kernel's own types are keyed by kernel id (`clrKernelTypeName`)
         'src/backend/dotnet/foreign.php' => [
-            'Bool', 'ByteString', 'Char', 'Double', 'Either', 'Handle', 'Int', 'Int16', 'Int32',
-            'Int64', 'Int8', 'Integer', 'Maybe', 'member',
+            'Bool', 'Either', 'Handle', 'Maybe',
         ],
-        // IL opcodes, not library functions — host vocabulary
-        'src/backend/dotnet/il_size.php' => [
-            'div', 'not', 'rem',
-        ],
-        // `isBoolBackedData`: the bool representation is the type named `Bool` — H7, P5
+        // `isBoolBackedData`: the bool representation is the type named `Bool`
         'src/backend/ir_meta.php' => [
             'Bool',
         ],
-        // comparison and Bool primops → host JVM ops — H2/H7, P4.4/P5
+        // comparison and Bool primops → host JVM ops
         'src/backend/jvm/codegen.php' => [
             '/=', '<', '<=', '==', '>', '>=', 'False', 'True',
         ],
-        // marshalling: library type → JVM type — H7, P5
+        // marshalling: the boolean, the transparent containers and the opaque handle — the
+        // kernel's own types are keyed by kernel id (`jvmKernelDescriptor`)
         'src/backend/jvm/foreign.php' => [
-            'Bool', 'ByteString', 'Char', 'Double', 'Either', 'Handle', 'Int', 'Int16', 'Int32',
-            'Int64', 'Int8', 'Integer', 'Maybe', 'String', 'member',
+            'Bool', 'Either', 'Handle', 'Maybe',
         ],
         // the BigInteger helper table (`subtract` is an arithmetic helper name) — host vocabulary
         'src/backend/jvm/runtime_abi.php' => [
             'subtract',
         ],
-        // Bool constructors → PHP booleans (`moduleName`/`stdout` are output keys) — H7, P5
-        'src/backend/php/codegen.php' => [
-            'False', 'True', 'moduleName', 'stdout',
-        ],
-        // comparison and concat operators → PHP operators — H2, P4.4
+        // comparison and concat operators → PHP operators
         'src/backend/php/emit_expr.php' => [
             '/=', '<>',
-        ],
-        // marshalling (`member` is a foreign-path kind, `either` an inspect key) — H7, P5
-        'src/backend/php/foreign.php' => [
-            'either', 'member',
-        ],
-        // `abs` is a PHP builtin, not the library's `abs` — host vocabulary
-        'src/backend/php/naming.php' => [
-            'abs',
         ],
         // the runtime's own exception class names — host vocabulary
         'src/backend/php/runtime.php' => [
@@ -310,65 +314,36 @@ function baseline(): array
         'src/cache/cache.php' => [
             'all',
         ],
-        // the `Solo` re-export rule; `all`/`some` are export-list modes — H6/H4, P4.2
+        // the `Solo` re-export rule
         'src/modules/exports.php' => [
-            'Solo', 'all', 'some',
+            'Solo',
         ],
-        // Bool constructor names while importing — H7, P5
-        'src/modules/imports.php' => [
-            'False', 'True',
-        ],
-        // `index` is the module-index cache key — host vocabulary
-        'src/modules/library.php' => [
-            'index',
-        ],
-        // `checked`/`moduleName` are internal keys (also Generic selector names) — host vocabulary
-        'src/modules/modules.php' => [
-            'checked', 'moduleName',
-        ],
-        // the Bool hand-over exclusion; `head` is a key — H4, P4.2
+        // the Bool hand-over exclusion
         'src/modules/typecheck_env.php' => [
-            'Bool', 'head',
+            'Bool',
         ],
-        // the foldable names `<>`/`id` — H2, P4.4
+        // the string concatenation operator
         'src/optimize/fold_intrinsic.php' => [
-            '<>', 'id',
+            '<>',
         ],
-        // `id x` collapses because the optimizer knows the library's `id` — H5, P2
-        'src/optimize/partial.php' => [
-            'id',
-        ],
-        // Bool constructors among the optimizer's constants — H7, P5
+        // Bool constructors among the optimizer's constants
         'src/optimize/support.php' => [
             'False', 'True',
-        ],
-        // `moduleName` is an artifact key — host vocabulary
-        'src/pipeline/pipeline.php' => [
-            'moduleName',
         ],
         // `:show` is a REPL verb — host vocabulary
         'src/repl/commands.php' => [
             'show',
         ],
-        // `moduleName` is an artifact key — host vocabulary
-        'src/repl/compile.php' => [
-            'moduleName',
-        ],
-        // output and state keys (`stdout`/`stderr`/`checked`/`moduleName`); `filter` is a stream key
-        // — host vocabulary
+        // `stdout`/`stderr` are output keys — host vocabulary
         'src/repl/eval_runner.php' => [
-            'checked', 'filter', 'moduleName', 'stderr', 'stdout',
+            'stderr', 'stdout',
         ],
-        // `checked` is a state key — host vocabulary
-        'src/repl/session.php' => [
-            'checked',
-        ],
-        // the stock-deriving class table (`head` is the instance head) — H6, P6
+        // the stock-deriving class table
         'src/semantics/deriving/framework.php' => [
             'Bounded', 'Enum', 'Eq', 'Foldable', 'Functor', 'Generic', 'Ord', 'Read', 'Rep', 'Show',
-            'Traversable', 'head',
+            'Traversable',
         ],
-        // the class lists and the Ord methods — H6, P6
+        // the class lists and the Ord methods
         'src/semantics/deriving/newtype.php' => [
             '<', '<=', '>', '>=', 'Foldable', 'Functor', 'Generic', 'Generic1', 'Ord',
             'Traversable', 'max', 'min',
@@ -377,79 +352,32 @@ function baseline(): array
         'src/semantics/evidence_names.php' => [
             'from', 'to',
         ],
-        // `all` is a coverage mode — host vocabulary
-        'src/semantics/exhaustiveness.php' => [
-            'all',
-        ],
-        // host marshalling tables — H7, P5
+        // host marshalling: the boxing decision reads the library's declarations — a primitive is
+        // its `type X = X#` alias, an enum its all-nullary `data` — so no primitive name is
+        // carried here and `IOMode` is one of those enumerations. What is left is the set of
+        // types the boundary converts and the two host handles
         'src/semantics/foreign.php' => [
-            'Bool', 'ByteString', 'Char', 'Double', 'Either', 'Handle', 'IO', 'IOMode', 'Int',
-            'Int16', 'Int32', 'Int64', 'Int8', 'Integer', 'Maybe', 'Ordering', 'PHPValue',
-            'Resource', 'String', 'Word16', 'Word32', 'Word64', 'Word8',
+            'Either', 'Handle', 'Maybe', 'PHPValue', 'Resource', 'String',
         ],
-        // the machine's own fixities (`:` is the one public operator Prim owns) —
-        // `prec` is a fixity-record key, host vocabulary like `src/syntax/fixity.php`
-        'src/semantics/intrinsic_registry.php' => [
-            'prec',
-        ],
-        // the IO boundary's own names — H2, P4.4
+        // the IO boundary's own names
         'src/semantics/io_boundary.php' => [
             '>>=', 'IO', 'SomeException',
         ],
-        // `head` is the instance-head key — host vocabulary
-        'src/semantics/registry.php' => [
-            'head',
-        ],
-        // divergence analysis recognises the library's `error`/`undefined` — H5, P2
+        // divergence analysis recognises the library's `error`/`undefined`
         'src/semantics/types.php' => [
             'error', 'undefined',
         ],
-        // `head` is the instance-head key — host vocabulary
-        'src/semantics/types/constraints.php' => [
-            'head',
-        ],
-        // the `IO` and `Solo` bootstraps — H4, blocked on P4.2
+        // the `IO` and `Solo` bootstraps
         'src/semantics/types/declarations.php' => [
             'IO', 'Solo',
         ],
-        // the primitive representation table, `otherwise`, and `group`/`index`/`span` keys
-        // — H1/H5, P4.2/P2
+        // `otherwise`, and the `group`/`index`/`span` recursion keys
         'src/semantics/types/infer.php' => [
-            'IO', 'Int', 'Int16', 'Int32', 'Int64', 'Int8', 'Word', 'Word16',
-            'Word32', 'Word64', 'Word8', 'group', 'index', 'otherwise', 'span',
+            'group', 'index', 'otherwise',
         ],
-        // `head` is the instance-head key — host vocabulary
-        'src/semantics/types/instances.php' => [
-            'head',
-        ],
-        // `fromInteger` at a constrained literal needs `Integer` — H5, P2
+        // `fromInteger` at a constrained literal needs `Integer`
         'src/semantics/types/literals.php' => [
             'Integer',
-        ],
-        // the primitive type → representation table — H1, P4.2
-        'src/semantics/types/type_core.php' => [
-            'ByteString', 'Char', 'Double', 'Int', 'Int16', 'Int32', 'Int64', 'Int8', 'String',
-            'Word', 'Word16', 'Word32', 'Word64', 'Word8',
-        ],
-        // `prec` is a fixity-record key (also a Generic selector) — host vocabulary
-        'src/syntax/fixity.php' => [
-            'prec',
-        ],
-        // `prec` is a fixity-record key — host vocabulary
-        'src/syntax/parse_expr.php' => [
-            'prec',
-        ],
-        // `prec` is a fixity-record key — host vocabulary
-        'src/syntax/parse_pattern.php' => [
-            'prec',
-        ],
-        // `prec`/`span` are declaration keys — host vocabulary
-        'src/syntax/parser.php' => [
-            'prec', 'span',
-        ],
-        // `member` is a foreign-path kind — host vocabulary
-        'src/foreign/path.php' => [
-            'member',
         ],
     ];
 }
@@ -467,7 +395,7 @@ foreach (['Bool', 'Int', 'map', 'filter', 'id', '<>'] as $name) {
 }
 
 // The detector itself: a name used as a key, compared, in a list, and none of the look-alikes (a bare
-// literal, a list that is not all names, a one-character name, a host keyword).
+// literal, a list that is not all names, a one-character name, a host keyword, a host instruction).
 $probe = <<<'PHP'
 <?php
 $a = $name === 'Bool';
@@ -479,6 +407,9 @@ $f = [':', 'Int'];
 $g = $word === 'class';
 $h = $method === '==';
 $i = $op === ':';
+$j = match ($op) { 'div' => 1, 'default' => 2 };
+$k = $word === 'not';
+$l = match ($fn) { 'abs' => 1, 'default' => 2 };
 PHP;
 $probed = namedSites($probe, $declarations);
 $expectedProbe = ['==', 'Bool', 'Int', 'filter', 'map'];

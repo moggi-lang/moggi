@@ -101,7 +101,7 @@ final class DotNetBackend implements Backend
             $pathInfo['dispatch'],
             $kind,
             $pathInfo['classPath'],
-            $pathInfo['member'],
+            $pathInfo['hostMember'],
             dotNetDeclaredSignature($name),
         );
     }
@@ -114,7 +114,7 @@ final class DotNetBackend implements Backend
         if ($pathInfo['dispatch'] === 'global') {
             return 'dotnet foreign path must be `Type:member` or `Type.member`; bare host names are not supported';
         }
-        $member = $pathInfo['member'] ?? '';
+        $member = $pathInfo['hostMember'] ?? '';
         if ($pathInfo['dispatch'] === 'intrinsic'
             && !\in_array($member, ['__cast', '__default', '__null'], true)) {
             return "dotnet foreign intrinsic `{$member}` is not supported";

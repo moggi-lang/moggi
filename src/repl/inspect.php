@@ -74,7 +74,7 @@ function inspectInput(State $state, string $source, PipelineStage $stopAt, bool 
     $evalName = '__repl_inspect';
     $extra = "{$evalName} = " . replFragmentBindingRhs($frag) . "\n";
     $ctx = prepareInteractive($state, $extra);
-    foreach ($ctx['checked']->items as $item) {
+    foreach ($ctx['typedProgram']->items as $item) {
         if ($item instanceof Ast\FunctionDecl && $item->name === $evalName) {
             $item->entryKind = EntryPointKind::ReplExpression;
         }

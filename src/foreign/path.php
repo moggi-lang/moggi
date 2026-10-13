@@ -51,7 +51,7 @@ function splitForeignPathMember(string $path): ?array
 }
 
 /**
- * @return array{classPath: ?string, member: ?string, dispatch: string, path: string}
+ * @return array{classPath: ?string, hostMember: ?string, dispatch: string, path: string}
  */
 function parseForeignPath(string $path): array
 {
@@ -59,12 +59,12 @@ function parseForeignPath(string $path): array
     $parts = splitForeignPathMember($path);
 
     if ($parts === null) {
-        return ['classPath' => null, 'member' => null, 'dispatch' => 'global', 'path' => $path];
+        return ['classPath' => null, 'hostMember' => null, 'dispatch' => 'global', 'path' => $path];
     }
 
     [$classPath, $member] = $parts;
 
-    return ['classPath' => $classPath, 'member' => $member, 'dispatch' => $dispatch, 'path' => $path];
+    return ['classPath' => $classPath, 'hostMember' => $member, 'dispatch' => $dispatch, 'path' => $path];
 }
 
 /** Map dotted class path to PHP FQN with backslashes. */

@@ -93,6 +93,6 @@ function fixityFor(ParserState $state, string $operator): array
     }
 
     return $operator === ':'
-        ? ['assoc' => 'infixr', 'prec' => 5]
-        : ['assoc' => 'infixl', 'prec' => 9];
+        ? ['assoc' => 'infixr', 'precedence' => 5]
+        : ['assoc' => 'infixl', 'precedence' => 9];
 }

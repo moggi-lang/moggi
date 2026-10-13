@@ -35,7 +35,7 @@ Non-goals: host subtyping, linearity, use-after-free, and the honesty of a lying
 |------|------------|
 | Foreign type | Declared `foreign` **and** for the backend of this import |
 | `Handle`, `Resource` | Closed portable allowlist, defined ABI |
-| Primitive / closed mapped type | A real mapping, never type-to-Object by default |
+| Primitive / closed mapped type | A real mapping, never type-to-Object by default — a primitive is its MagicHash alias (`type Int = Int#`) and an enumeration is its all-nullary `data`, both read from the declaration |
 | `Maybe` / `Either` / tuple / `[a]` | Payloads recursively legal, and a defined marshalling for the position |
 | `PHPValue` | Closed allowlist as mixed → PHPValue reification only, in a `foreign php` declaration; never preferred over a precise type |
 | User ADT / other inventable opaque | **Error** |

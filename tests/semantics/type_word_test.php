@@ -19,7 +19,7 @@ $assert(
     'machine Word must unify with itself',
 );
 $assert(
-    \Moggi\Semantics\Types\magicHashInternalType('Word#') instanceof \Moggi\Semantics\TypeExpr\TWord,
+    \Moggi\Semantics\Types\primitiveTypeRepresentation('Word#') instanceof \Moggi\Semantics\TypeExpr\TWord,
     'Word# must resolve to TWord',
 );
 $assert(\Moggi\Semantics\Kinds\canonicalTypeConName('Word#') === 'Word', 'Word# kind must canonicalize');

@@ -682,7 +682,7 @@ function parseInfix(ParserState $state, int $minPrec): Ast\AstNode
             && !isAt($state, TokenKind::Op, 0, '::')
             && !isAt($state, TokenKind::Op, 0, '..')) {
             $op = peek($state)->lexeme;
-            ['prec' => $prec, 'assoc' => $assoc] = fixityFor($state, $op);
+            ['precedence' => $prec, 'assoc' => $assoc] = fixityFor($state, $op);
 
             if ($prec < $minPrec) {
                 break;
@@ -710,7 +710,7 @@ function parseInfix(ParserState $state, int $minPrec): Ast\AstNode
             && isAt($state, TokenKind::VarId, 1)
             && isAt($state, TokenKind::Backtick, 2)) {
             $op = peekAt($state, 1)->lexeme;
-            ['prec' => $prec, 'assoc' => $assoc] = fixityFor($state, $op);
+            ['precedence' => $prec, 'assoc' => $assoc] = fixityFor($state, $op);
 
             if ($prec < $minPrec) {
                 break;

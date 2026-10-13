@@ -507,7 +507,7 @@ function fixityForName(string $name, array $localFixity, array $effectiveFixity)
         return null;
     }
 
-    return $info['assoc'] . ' ' . (string) $info['prec'];
+    return $info['assoc'] . ' ' . (string) $info['precedence'];
 }
 
 function valueDocSignature(
@@ -778,7 +778,7 @@ function moduleDocWithFixity(?string $moduleDoc, array $fixityDocs): ?string
 
     foreach ($fixityDocs as $entry) {
         $ops = implode(', ', $entry['operators']);
-        $header = $entry['assoc'] . ' ' . $entry['prec'] . ' ' . $ops;
+        $header = $entry['assoc'] . ' ' . $entry['precedence'] . ' ' . $ops;
         $doc = trim($entry['doc'] ?? '');
         $parts[] = $doc !== '' ? $doc . "\n\n" . $header : $header;
     }

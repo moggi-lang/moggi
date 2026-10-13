@@ -453,7 +453,7 @@ function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
 
     $state->checkedInstances[] = [
         'class' => $className,
-        'head' => $headType,
+        'instanceHead' => $headType,
         'module' => $state->currentModule ?? '',
     ];
 
@@ -807,7 +807,7 @@ function peerInstanceCoversSuperclass(
         : ($state->projectInstancesByClass[$superClass] ?? []);
 
     foreach ($candidates as $instance) {
-        if (!instanceHeadsMatch($state, $superHead, $instance['head'])) {
+        if (!instanceHeadsMatch($state, $superHead, $instance['instanceHead'])) {
             continue;
         }
 
@@ -943,12 +943,12 @@ function validateNoDuplicateInstance(TypeCheckState $state, Ast\InstanceDecl $de
         if ($instance['class'] !== $decl->class) {
             continue;
         }
-        if (instanceHeadIndexKeyFromType($instance['head']) !== $headKey) {
+        if (instanceHeadIndexKeyFromType($instance['instanceHead']) !== $headKey) {
             continue;
         }
 
         if (freshenStableTypeKey(prune($state, $headType))
-            === freshenStableTypeKey(prune($state, $instance['head']))) {
+            === freshenStableTypeKey(prune($state, $instance['instanceHead']))) {
             throw typeFail(
                 $state,
                 'duplicate instance for `' . $decl->class . ' ' . typeToString($headType, friendlyTypeVarNames([$headType])) . '`',
@@ -969,12 +969,12 @@ function validateNoDuplicateInstance(TypeCheckState $state, Ast\InstanceDecl $de
         if (($state->stockDeriving ?? false)
             && ($instance['fromDeriving'] ?? false) === true
             && freshenStableTypeKey(prune($state, $headType))
-                === freshenStableTypeKey(prune($state, astType($state, $instance['head'])))
+                === freshenStableTypeKey(prune($state, astType($state, $instance['instanceHead'])))
         ) {
             continue;
         }
 
-        if (instanceHeadsMatch($state, $headType, $instance['head'])) {
+        if (instanceHeadsMatch($state, $headType, $instance['instanceHead'])) {
             throw typeFail(
                 $state,
                 'duplicate instance for `' . $decl->class . ' ' . typeToString($headType, friendlyTypeVarNames([$headType])) . '`',
@@ -1077,10 +1077,10 @@ function instanceHeadIndexKeyFromType(Type $head): string
 
 function instanceMappingCacheKey(array $instance, Type $requiredHead): string
 {
-    $instanceHeadKey = $instance['head'] instanceof Type
-        ? instanceLookupKey($instance['class'], $instance['head'])
-        : ($instance['head'] instanceof Ast\AstNode
-            ? instanceHeadIndexKeyFromAst($instance['head'])
+    $instanceHeadKey = $instance['instanceHead'] instanceof Type
+        ? instanceLookupKey($instance['class'], $instance['instanceHead'])
+        : ($instance['instanceHead'] instanceof Ast\AstNode
+            ? instanceHeadIndexKeyFromAst($instance['instanceHead'])
             : '?');
 
     return ($instance['module'] ?? '') . "\0"
@@ -1118,7 +1118,7 @@ function projectInstanceCandidates(TypeCheckState $state, string $className, Typ
 function matchingProjectInstances(TypeCheckState $state, string $className, Type $requiredHead): \Generator
 {
     foreach (projectInstanceCandidates($state, $className, $requiredHead) as $instance) {
-        if (instanceHeadsMatch($state, $requiredHead, $instance['head'])) {
+        if (instanceHeadsMatch($state, $requiredHead, $instance['instanceHead'])) {
             yield $instance;
         }
     }
@@ -1275,7 +1275,7 @@ function instanceMappingForUse(TypeCheckState $state, array $instance, Type $req
     }
 
     $wantedHead = prune($state, $requiredHead);
-    $headVarMapping = matchInstanceHeadVars($state, $instance['head'], $wantedHead);
+    $headVarMapping = matchInstanceHeadVars($state, $instance['instanceHead'], $wantedHead);
     if ($headVarMapping === null) {
         $state->instanceMappingCache[$cacheKey] = null;
 
@@ -1283,7 +1283,7 @@ function instanceMappingForUse(TypeCheckState $state, array $instance, Type $req
     }
 
     try {
-        $mapping = instanceParamMapping($state, $classInfo['params'], $wantedHead, $instance['head']);
+        $mapping = instanceParamMapping($state, $classInfo['params'], $wantedHead, $instance['instanceHead']);
         $mapping['__headVars'] = $headVarMapping;
 
         return $mapping;
@@ -1292,15 +1292,15 @@ function instanceMappingForUse(TypeCheckState $state, array $instance, Type $req
 
     pushSubstFrame($state);
     try {
-        $instanceHeadType = freshenTypeVars($state, astType($state, $instance['head']));
+        $instanceHeadType = freshenTypeVars($state, astType($state, $instance['instanceHead']));
         unify($state, $requiredHead, $instanceHeadType, null);
 
-        $mapping = instanceParamMapping($state, $classInfo['params'], prune($state, $requiredHead), $instance['head']);
+        $mapping = instanceParamMapping($state, $classInfo['params'], prune($state, $requiredHead), $instance['instanceHead']);
         $mapping['__headVars'] = $headVarMapping;
 
         return $mapping;
     } catch (TypeError) {
-        $mapping = instanceParamMapping($state, $classInfo['params'], prune($state, $requiredHead), $instance['head']);
+        $mapping = instanceParamMapping($state, $classInfo['params'], prune($state, $requiredHead), $instance['instanceHead']);
         $mapping['__headVars'] = $headVarMapping;
 
         return $mapping;
@@ -1921,7 +1921,7 @@ function findProjectInstanceHeadAst(TypeCheckState $state, string $className, Ty
 {
     $match = findProjectInstanceRecord($state, $className, $requiredHead);
     if ($match !== null) {
-        $head = $match['instance']['head'] ?? null;
+        $head = $match['instance']['instanceHead'] ?? null;
         if ($head instanceof Ast\TypeNode) {
             return $head;
         }

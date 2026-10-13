@@ -377,7 +377,7 @@ function typeAstToInternalForNormalize(TypeCheckState $state, Ast\TypeNode $type
         Ast\TypeVar::class => new TVar($type->name),
         Ast\TypeUnit::class => new TUnit(),
         Ast\TypeCon::class => (static function () use ($state, $type, $expanding): Type {
-            $prim = magicHashInternalType($type->name);
+            $prim = primitiveTypeRepresentation($type->name);
             if ($prim !== null) {
                 return $prim;
             }
@@ -417,7 +417,7 @@ function typeAstToInternalForNormalize(TypeCheckState $state, Ast\TypeNode $type
             foreach ($type->args as $argAst) {
                 $args[] = typeAstToInternalForNormalize($state, $argAst, $expanding);
             }
-            $prim = magicHashInternalType($headName);
+            $prim = primitiveTypeRepresentation($headName);
             if ($prim !== null) {
                 return $prim;
             }

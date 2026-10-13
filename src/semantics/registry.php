@@ -84,7 +84,7 @@ function applyImportContext(TypeCheckState $state, Ast\Program $program, array $
         $instancesByClassHead = [];
         $addInstance = static function (array $instance) use (&$instancesByClass, &$instancesByClassHead): void {
             $instancesByClass[$instance['class']][] = $instance;
-            $headKey = instanceHeadIndexKeyFromAst($instance['head']);
+            $headKey = instanceHeadIndexKeyFromAst($instance['instanceHead']);
             $instancesByClassHead[$instance['class']][$headKey][] = $instance;
         };
         foreach ($importContext['projectInstances'] ?? [] as $instance) {
@@ -98,7 +98,7 @@ function applyImportContext(TypeCheckState $state, Ast\Program $program, array $
             $addInstance([
                 'module' => $currentModule,
                 'class' => $item->class,
-                'head' => $item->head,
+                'instanceHead' => $item->head,
                 'constraints' => $item->constraints,
                 'intrinsicMethods' => instanceIntrinsicMethods($item),
                 'associatedEquations' => associatedEquationsMapFromDecl($item),
@@ -208,7 +208,7 @@ function projectInstancesFromProgram(Ast\Program $program, string $moduleName = 
             $instances[] = [
                 'module' => $mod,
                 'class' => $item->class,
-                'head' => $item->head,
+                'instanceHead' => $item->head,
                 'constraints' => $item->constraints,
                 'associatedEquations' => associatedEquationsMapFromDecl($item),
             ];

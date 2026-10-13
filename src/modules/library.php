@@ -315,21 +315,21 @@ final class LibraryModuleIndex
 
         $cached = self::$indexes[$key] ?? null;
         if ($cached !== null && $cached['mtime'] === $mtime) {
-            return $cached['index'];
+            return $cached['moduleIndex'];
         }
 
         if (Cache\cacheEnabled()) {
             $diskKey = 'stdlib-index:' . Cache\hashContent($key . ':' . $mtime);
             $fromDisk = Cache\artifactGet($diskKey);
             if (\is_array($fromDisk)) {
-                self::$indexes[$key] = ['mtime' => $mtime, 'index' => $fromDisk];
+                self::$indexes[$key] = ['mtime' => $mtime, 'moduleIndex' => $fromDisk];
 
                 return $fromDisk;
             }
         }
 
         $index = moduleIndexFromPaths(findMogFilesUnder($root));
-        self::$indexes[$key] = ['mtime' => $mtime, 'index' => $index];
+        self::$indexes[$key] = ['mtime' => $mtime, 'moduleIndex' => $index];
 
         if (Cache\cacheEnabled()) {
             $diskKey = 'stdlib-index:' . Cache\hashContent($key . ':' . $mtime);

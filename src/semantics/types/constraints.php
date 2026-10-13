@@ -706,7 +706,7 @@ function constraintInstanceHead(TypeCheckState $state, Ast\PendingConstraint $co
     }
 
     return [
-        'head' => prune($state, $head),
+        'instanceHead' => prune($state, $head),
         'ambient' => ambientEvidenceFor($state, $constraint),
     ];
 }
@@ -736,7 +736,7 @@ function tryResolveEvidenceExprs(
             continue;
         }
 
-        $head = $resolved['head'];
+        $head = $resolved['instanceHead'];
         if ($head instanceof TVar) {
             return null;
         }
@@ -1329,7 +1329,7 @@ function constraintsResolvable(TypeCheckState $state, array $constraints): bool
             continue;
         }
 
-        $head = $resolved['head'];
+        $head = $resolved['instanceHead'];
         if ($head instanceof TVar) {
             return false;
         }

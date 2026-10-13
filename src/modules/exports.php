@@ -657,7 +657,7 @@ function exportAllLocalDeclarations(
                 $exports,
                 $available,
                 $program,
-                declarationExportItem('type', $item->name, $item, ['children' => ['mode' => 'all', 'names' => []]]),
+                declarationExportItem('type', $item->name, $item, ['children' => ['mode' => 'every', 'names' => []]]),
                 $moduleName,
                 $units,
             ),
@@ -772,7 +772,7 @@ function addExportedType(
             throw exportError("duplicate export `{$name}` in module `{$moduleName}`", $item, $unit);
         }
         $children = $item['children'] ?? ['mode' => 'none', 'names' => []];
-        if ($children['mode'] === 'some' && $children['names'] !== []) {
+        if ($children['mode'] === 'listed' && $children['names'] !== []) {
             throw exportError("built-in `{$name}` has no constructors to export", $item, $unit);
         }
         $exports['ambientTypes'][$name] = true;
@@ -794,7 +794,7 @@ function addExportedType(
         return;
     }
 
-    if (isset($item['children']) && $item['children']['mode'] === 'some') {
+    if (isset($item['children']) && $item['children']['mode'] === 'listed') {
         foreach ($item['children']['names'] as $methodName) {
             addExportedValue($exports, $available, $methodName, $moduleName, $item, $units);
         }
@@ -869,7 +869,7 @@ function exportItemChildNames(array $item, array $all): array
         return [];
     }
 
-    if ($children['mode'] === 'all') {
+    if ($children['mode'] === 'every') {
         return $all;
     }
 
@@ -1149,7 +1149,7 @@ function selectImportedNames(Ast\ImportDecl $import, array $exports): array
                     $selected,
                     $exports,
                     $classMethods,
-                    ($item->methods === null || $item->methods === 'all') ? $classMethods : $item->methods,
+                    ($item->methods === null || $item->methods === 'every') ? $classMethods : $item->methods,
                     "class `{$name}` has no method",
                 );
                 $matched = true;
@@ -1163,7 +1163,7 @@ function selectImportedNames(Ast\ImportDecl $import, array $exports): array
                     $selected,
                     $exports,
                     $constructors,
-                    $item->methods === 'all' ? $constructors : $item->methods,
+                    $item->methods === 'every' ? $constructors : $item->methods,
                     "`{$name}` has no constructor",
                 );
             }
