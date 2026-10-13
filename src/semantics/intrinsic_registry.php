@@ -299,13 +299,192 @@ function resolveIntrinsicName(string $name): ?string
     return isset(typeSchemes()[$name]) ? $name : null;
 }
 
+/**
+ * What a stage has to do differently for a primop, stated once beside the schemes.
+ *
+ * `typeSchemes()` owns a primop's type; the tables below own its behaviour, keyed by the kernel id
+ * (the MagicHash name, which is also the IR id). A pass reads the property it needs instead of naming
+ * the primop, so the same id cannot be given one meaning by the checker and another by the optimizer.
+ * Each table answers one stage's question and they are deliberately not the same shape: the IO roles
+ * answer the boundary and the normalizer, the short-circuit pair the two places that build the
+ * conditional, the list forms the list folds, the fold strategies the optimizer's dispatch.
+ */
+
+/**
+ * The IO primops by the construct each is: `pure`/`bind` are the sequencing constructs the
+ * normalizer rewrites, `throw`/`catch`/`finally` the exception actions that survive to lowering.
+ *
+ * The values are the machine's own (`io-pure`, `io-bind`, …), not the library's vocabulary: a
+ * stage asks about the construct, and the library's `pure` is a declaration the compiler must not
+ * be keyed on.
+ *
+ * @return array<string, string> id → `io-pure`|`io-bind`|`io-throw`|`io-catch`|`io-finally`
+ */
+function ioPrimopRoles(): array
+{
+    static $table = null;
+
+    return $table ??= [
+        'ioPure#' => 'io-pure',
+        'ioBind#' => 'io-bind',
+        'exceptionThrowIo#' => 'io-throw',
+        'exceptionCatch#' => 'io-catch',
+        'exceptionFinally#' => 'io-finally',
+    ];
+}
+
+/** The IO construct a primop is, or null when it is not an IO primop. */
+function ioPrimopRole(string $name): ?string
+{
+    return ioPrimopRoles()[$name] ?? null;
+}
+
 function isIoIntrinsic(string $name): bool
 {
-    return $name === 'ioPure#'
-        || $name === 'ioBind#'
-        || $name === 'exceptionThrowIo#'
-        || $name === 'exceptionCatch#'
-        || $name === 'exceptionFinally#';
+    return isset(ioPrimopRoles()[$name]);
+}
+
+/**
+ * An IO primop that raises or handles an exception: the ones whose lowering is the IO action
+ * itself, rather than a sequencing construct the normalizer rewrites away.
+ */
+function isIoExceptionPrimop(string $name): bool
+{
+    return match (ioPrimopRole($name)) {
+        'io-throw', 'io-catch', 'io-finally' => true,
+        default => false,
+    };
+}
+
+/**
+ * Primops that short-circuit: the right operand is evaluated only when the left one does not decide
+ * the result.
+ *
+ * @return array<string, string> id → `bool-and`|`bool-or`
+ */
+function shortCircuitPrimops(): array
+{
+    static $table = null;
+
+    return $table ??= ['boolAnd#' => 'bool-and', 'boolOr#' => 'bool-or'];
+}
+
+/**
+ * Which side short-circuits: `bool-and` for the conjunction, `bool-or` for the disjunction, null
+ * otherwise.
+ */
+function shortCircuitPrimop(string $name): ?string
+{
+    return shortCircuitPrimops()[$name] ?? null;
+}
+
+function isShortCircuitPrimop(string $name): bool
+{
+    return isset(shortCircuitPrimops()[$name]);
+}
+
+/**
+ * The primop a piece of syntax means when it builds the short-circuit operator itself, rather than
+ * resolving one from source: the id is the machine's choice, so it is read here rather than written
+ * at the construction site.
+ *
+ * @param string $op `bool-and`|`bool-or`
+ */
+function shortCircuitPrimopId(string $op): string
+{
+    $id = \array_search($op, shortCircuitPrimops(), true);
+    if (!\is_string($id)) {
+        throw new \RuntimeException("no primop for the `{$op}` short-circuit operator");
+    }
+
+    return $id;
+}
+
+/**
+ * The list's own forms: the cons cell, the primops that build or take a spine apart, and
+ * `list_nil`, the empty-list marker the lowerer plants (it is not a primop, but it is a spine
+ * value, so a pass asking "is this operand a list" has to see it).
+ *
+ * @return array<string, string> id → `list-cons`|`list-nil`|`list-head`|`list-tail`|`list-append`
+ */
+function listFormShapes(): array
+{
+    static $table = null;
+
+    return $table ??= [
+        'listCons#' => 'list-cons',
+        'list_nil' => 'list-nil',
+        'listHead#' => 'list-head',
+        'listTail#' => 'list-tail',
+        'listAppend#' => 'list-append',
+    ];
+}
+
+/** Which of the list's own forms a name is (`cons`, `nil`, `head`, `tail`, `append`), or null. */
+function listFormShape(string $name): ?string
+{
+    return listFormShapes()[$name] ?? null;
+}
+
+/** Any of the list's own forms — a pass asking whether an operand is a list. */
+function isListForm(string $name): bool
+{
+    return isset(listFormShapes()[$name]);
+}
+
+/** The spine itself: a cons cell or the empty list. */
+function isListSpineForm(string $name): bool
+{
+    return listFormShape($name) === 'list-cons' || listFormShape($name) === 'list-nil';
+}
+
+/** The cons cell itself. */
+function isListConsForm(string $name): bool
+{
+    return listFormShape($name) === 'list-cons';
+}
+
+/**
+ * The primops the optimizer folds at compile time, and the strategy that folds each.
+ *
+ * A strategy names what the primop means (`int-add` folds to the sum of its literals), which is a
+ * fact about the primop and belongs here; the optimizer keeps the code that computes the folded
+ * form, and refuses to run at all for a strategy it has no implementation for.
+ *
+ * @return array<string, string> id → strategy
+ */
+function foldStrategies(): array
+{
+    static $table = null;
+
+    return $table ??= [
+        'intAdd#' => 'int-add',
+        'intSub#' => 'int-sub',
+        'intMul#' => 'int-mul',
+        'stringAppend#' => 'string-append',
+        'bytesAppend#' => 'bytes-append',
+        'listAppend#' => 'list-append',
+        'listCons#' => 'list-cons',
+        'listHead#' => 'list-head',
+        'listTail#' => 'list-tail',
+    ];
+}
+
+/** The compile-time fold strategy for a primop, or null when it does not fold. */
+function foldStrategy(string $name): ?string
+{
+    return foldStrategies()[$name] ?? null;
+}
+
+/**
+ * The number of arguments a primop takes, read off its declared scheme: the arity is stated once,
+ * in the type, so a boundary check cannot disagree with the signature the checker uses.
+ */
+function primopArity(string $name): ?int
+{
+    $scheme = typeSchemes()[$name] ?? null;
+
+    return $scheme === null ? null : schemeArity($scheme);
 }
 
 /** Owning compiler module for a primop (`Moggi.Internal.Prim` or `Moggi.Internal.IO`). */
@@ -328,6 +507,29 @@ function isMagicHashName(string $name): bool
 function capturesCallSite(string $name): bool
 {
     return $name === 'error#' || $name === 'exceptionThrow#';
+}
+
+/**
+ * Intrinsics that are stack frames: the statement which reaches one is the frame a
+ * host exception must report.
+ *
+ * The two that capture their call site are frames by construction
+ * ({@see capturesCallSite}); the raw division and remainder primops are frames
+ * because they fault: they are unchecked by design and trap on a zero divisor, so a
+ * program reaching one directly still has to name the statement that faulted.
+ *
+ * A property of the operation, stated here beside `capturesCallSite` and
+ * `isIoIntrinsic` rather than in a backend's metadata, because the Java, CLR and PHP
+ * emitters all ask the same question about the same id.
+ */
+function reportsSourceLocation(string $name): bool
+{
+    return capturesCallSite($name)
+        || $name === 'exceptionThrowIo#'
+        || $name === 'intDiv#'
+        || $name === 'word64Quot#'
+        || $name === 'word64Rem#'
+        || $name === 'doubleDiv#';
 }
 
 /**

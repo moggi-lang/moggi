@@ -12,6 +12,7 @@ use function Moggi\IR\Visit\mapOperandChildren;
 use function Moggi\IR\Visit\stmtDirectOperands;
 use function Moggi\IR\Visit\stmtNestedBlocks;
 use function Moggi\IR\Visit\walkBlock;
+use function Moggi\Semantics\IntrinsicRegistry\isListConsForm;
 use function Moggi\IR\Visit\walkOperand;
 use function Moggi\IR\Visit\walkStmt;
 use function Moggi\Modules\parseResolvedSymbol;
@@ -1640,7 +1641,7 @@ function foldListIntrinsicExpr(string $name, array $args): ?IR\Operand
 {
     if ($name === 'listHead#' && count($args) === 1) {
         $xs = $args[0];
-        if ($xs instanceof IR\Intrinsic && $xs->name === 'listCons#' && count($xs->args) === 2) {
+        if ($xs instanceof IR\Intrinsic && isListConsForm($xs->name) && count($xs->args) === 2) {
             return $xs->args[0];
         }
         if ($xs instanceof IR\ListLit && $xs->elements !== []) {
@@ -1649,7 +1650,7 @@ function foldListIntrinsicExpr(string $name, array $args): ?IR\Operand
     }
     if ($name === 'listTail#' && count($args) === 1) {
         $xs = $args[0];
-        if ($xs instanceof IR\Intrinsic && $xs->name === 'listCons#' && count($xs->args) === 2) {
+        if ($xs instanceof IR\Intrinsic && isListConsForm($xs->name) && count($xs->args) === 2) {
             return $xs->args[1];
         }
         if ($xs instanceof IR\ListLit && $xs->elements !== []) {

@@ -5,6 +5,8 @@ namespace Moggi\Optimize\FoldIntrinsic;
 use Moggi\IR;
 
 use function Moggi\IR\Visit\mapGuards;
+use function Moggi\Semantics\IntrinsicRegistry\foldStrategy;
+use function Moggi\Semantics\IntrinsicRegistry\isListForm;
 use function Moggi\Optimize\CaseFold\isPlausibleConstructorName;
 use function Moggi\Optimize\Interproc\denseStmtItems;
 use function Moggi\Optimize\Support\foldExpr;
@@ -119,13 +121,13 @@ function foldOperand(IR\Operand $operand, array $known = []): IR\Operand
             $known,
             argsAlreadyResolved: true,
         ),
-        IR\ExprBinop::class => $operand->op === '<>'
-            ? foldOperand(new IR\Intrinsic('stringAppend#', [$resolve($operand->left), $resolve($operand->right)]), $known)
-            : operandFromExpr(foldExpr(new IR\ExprBinop(
-                $operand->op,
-                operandToExpr($resolve($operand->left)),
-                operandToExpr($resolve($operand->right)),
-            ))),
+        // An IR binop's `op` is the machine's own (`+`, `-`, `*`, or a primop id): a source `<>`
+        // never reaches here, because the front end resolves it to the instance's `stringAppend#`.
+        IR\ExprBinop::class => operandFromExpr(foldExpr(new IR\ExprBinop(
+            $operand->op,
+            operandToExpr($resolve($operand->left)),
+            operandToExpr($resolve($operand->right)),
+        ))),
         IR\ExprCall::class => new IR\ExprCall(
             $operand->callee,
             \array_map($resolve, $operand->args),
@@ -169,24 +171,32 @@ function foldIntrinsicNode(IR\Intrinsic $node, array $known = [], bool $argsAlre
         : \array_map(
             static fn (IR\Operand $a): IR\Operand => foldOperandResolving($a, $known),
             $node->args,
-        );        $folded = match ($name) {
-        'intAdd#' => foldIntAdd($args),
-        'intSub#' => foldIntBinop('-', $args),
-        'intMul#' => foldIntMul($args),
-        'stringAppend#' => foldStringAppend($args),
-        'bytesAppend#' => foldStringAppend($args),
-        'listAppend#' => foldListAppend($args),
-        'listCons#' => foldListConsSpine($args),
-        'listHead#' => foldListHead($args),
-        'listTail#' => foldListTail($args),
-        default => null,
-    };
+        );
+
+    // Which primops fold, and under which strategy, is the registry's statement; this is the code
+    // that computes each strategy's folded form, and a strategy declared there without one here
+    // fails loudly instead of silently not folding.
+    $strategy = foldStrategy($name);
+    $folded = $strategy === null
+        ? null
+        : match ($strategy) {
+            'int-add' => foldIntAdd($args),
+            'int-sub' => foldIntBinop('-', $args),
+            'int-mul' => foldIntMul($args),
+            'string-append' => foldStringAppend($args),
+            'bytes-append' => foldStringAppend($args),
+            'list-append' => foldListAppend($args),
+            'list-cons' => foldListConsSpine($args),
+            'list-head' => foldListHead($args),
+            'list-tail' => foldListTail($args),
+            default => throw new \RuntimeException(
+                "primop `{$name}` declares fold strategy `{$strategy}` with no implementation",
+            ),
+        };
 
     if ($folded !== null) {
-        if (
-            $folded instanceof IR\Intrinsic
-            && !\in_array($folded->name, ['listCons#', 'listAppend#', 'list_nil', 'listHead#', 'listTail#'], true)
-        ) {
+        // A fold that produced one of the list's own forms is already in its normal form.
+        if ($folded instanceof IR\Intrinsic && !isListForm($folded->name)) {
             return foldIntrinsicNode($folded, $known, argsAlreadyResolved: true);
         }
 

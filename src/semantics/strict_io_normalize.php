@@ -7,6 +7,7 @@ use Moggi\Syntax\Ast;
 use function Moggi\Semantics\IoBoundary\functionReturnsIo;
 use function Moggi\Semantics\IoBoundary\hasLeadingArrow;
 use function Moggi\Semantics\IoBoundary\ioBindParts;
+use function Moggi\Semantics\IntrinsicRegistry\ioPrimopRole;
 use function Moggi\Semantics\IoBoundary\isIoMonadMethod;
 use function Moggi\Semantics\IoBoundary\isIoType;
 use function Moggi\Semantics\IoBoundary\stripConstraints;
@@ -114,7 +115,7 @@ function normalizeIoBody(Ast\AstNode $expr, int &$counter): Ast\AstNode
         return ioBindToSequence($bind['left'], $bind['right'], $counter);
     }
 
-    if ($expr instanceof Ast\IntrinsicCall && $expr->name === 'ioBind#' && count($expr->args) === 2) {
+    if ($expr instanceof Ast\IntrinsicCall && ioPrimopRole($expr->name) === 'io-bind' && count($expr->args) === 2) {
         return ioBindToSequence($expr->args[0], $expr->args[1], $counter);
     }
 
@@ -123,7 +124,7 @@ function normalizeIoBody(Ast\AstNode $expr, int &$counter): Ast\AstNode
         return new Ast\IoPure(normalizePureExpr($pure, $counter), $expr->line, $expr->col, $expr->endCol);
     }
 
-    if ($expr instanceof Ast\IntrinsicCall && $expr->name === 'ioPure#' && count($expr->args) === 1) {
+    if ($expr instanceof Ast\IntrinsicCall && ioPrimopRole($expr->name) === 'io-pure' && count($expr->args) === 1) {
         return new Ast\IoPure(normalizePureExpr($expr->args[0], $counter), $expr->line, $expr->col, $expr->endCol);
     }
 

@@ -5,7 +5,10 @@ namespace Moggi\IR;
 use Moggi\Semantics\TypeExpr;
 use Moggi\Syntax\Ast;
 
+use function Moggi\Semantics\IntrinsicRegistry\isIoExceptionPrimop;
+use function Moggi\Semantics\IntrinsicRegistry\isShortCircuitPrimop;
 use function Moggi\Semantics\IntrinsicRegistry\primopForPublicOperator;
+use function Moggi\Semantics\IntrinsicRegistry\shortCircuitPrimop;
 use function Moggi\Semantics\IntrinsicRegistry\schemeArity;
 use function Moggi\Semantics\IntrinsicRegistry\typeSchemes;
 use function Moggi\Semantics\IoBoundary\isIoType;
@@ -65,7 +68,7 @@ function lowerExpr(Ast\AstNode $expr, LowerCtx $ctx): Operand
         Ast\EvidenceRef::class => lowerEvidenceRef($expr, $ctx),
         Ast\EvidenceMethod::class => lowerEvidenceMethod($expr, $ctx),
         Ast\IntrinsicCall::class => (static function () use ($expr, $ctx): Operand {
-            if (\in_array($expr->name, ['exceptionThrowIo#', 'exceptionCatch#', 'exceptionFinally#'], true)) {
+            if (isIoExceptionPrimop($expr->name)) {
                 return lowerIoActionToBox(new Ast\IoAction($expr), $ctx);
             }
 
@@ -173,7 +176,7 @@ function lowerEvidenceRefValue(string $class, Ast\TypeNode $head, array $context
 
 function lowerInfix(Ast\Infix $expr, LowerCtx $ctx): Operand
 {
-    if ($expr->resolvedIntrinsic === 'boolAnd#' || $expr->resolvedIntrinsic === 'boolOr#') {
+    if (isShortCircuitPrimop($expr->resolvedIntrinsic)) {
         return lowerShortCircuitAndOr($expr, $ctx);
     }
 
@@ -211,7 +214,7 @@ function lowerInfix(Ast\Infix $expr, LowerCtx $ctx): Operand
  */
 function lowerShortCircuitAndOr(Ast\Infix $expr, LowerCtx $ctx): Operand
 {
-    $isAnd = $expr->resolvedIntrinsic === 'boolAnd#';
+    $isAnd = shortCircuitPrimop($expr->resolvedIntrinsic) === 'bool-and';
 
     return lowerCase($expr->left, [
         new Ast\Alt(new Ast\PatCon('True', []), $isAnd ? $expr->right : new Ast\ConstructorRef('True')),
@@ -768,7 +771,7 @@ function lowerGuards(Ast\GuardsExpr $expr, LowerCtx $ctx): Operand
     $arms = [];
 
     foreach ($expr->clauses as $clause) {
-        $guard = lowerGuardExpr($clause->guard, $ctx);
+        $guard = lowerExpr($clause->guard, $ctx);
         $armCtx = newArmCtx($ctx, $clause->body);
         $value = lowerExpr($clause->body, $armCtx);
         $arms[] = new MatchArm(
@@ -815,7 +818,7 @@ function newArmCtx(LowerCtx $ctx, Ast\AstNode $body): LowerCtx
  */
 function lowerArmGuard(Ast\AstNode $guard, LowerCtx $armCtx, array $bindings): Guard
 {
-    $cond = lowerGuardExpr($guard, $armCtx);
+    $cond = lowerExpr($guard, $armCtx);
     $prep = new Block([...$bindings, ...$armCtx->items]);
     $armCtx->items = [];
 
@@ -827,15 +830,6 @@ function guardsExhaustive(Ast\GuardsExpr $expr): bool
     $last = $expr->clauses[count($expr->clauses) - 1]->guard ?? null;
 
     return $last instanceof Ast\Variable && $last->name === 'otherwise';
-}
-
-function lowerGuardExpr(Ast\AstNode $guard, LowerCtx $ctx): Operand
-{
-    if ($guard instanceof Ast\Variable && $guard->name === 'otherwise') {
-        $guard = new Ast\ConstructorRef('True');
-    }
-
-    return lowerExpr($guard, $ctx);
 }
 
 function lowerRecordCon(Ast\RecordCon $expr, LowerCtx $ctx): Operand

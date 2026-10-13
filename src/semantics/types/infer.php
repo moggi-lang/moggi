@@ -40,9 +40,12 @@ use function Moggi\Semantics\Deriving\newtypeChain;
 use function Moggi\Semantics\Exhaustiveness\caseExhaustivenessProven;
 use function Moggi\Semantics\Exhaustiveness\checkCaseExhaustiveness;
 use function Moggi\Semantics\IntrinsicRegistry\capturesCallSite;
+use function Moggi\Semantics\IntrinsicRegistry\isMagicHashName;
+use function Moggi\Semantics\IntrinsicRegistry\isShortCircuitPrimop;
 use function Moggi\Semantics\IntrinsicRegistry\primitiveTypeOwnerModule;
 use function Moggi\Semantics\IntrinsicRegistry\resolveIntrinsicName;
 use function Moggi\Semantics\IntrinsicRegistry\schemeArity;
+use function Moggi\Semantics\IntrinsicRegistry\shortCircuitPrimopId;
 use function Moggi\Semantics\IntrinsicRegistry\typeSchemes;
 use function Moggi\Semantics\TypeExpr\canonicalNatDigits;
 use function Moggi\Semantics\TypeExpr\scheme;
@@ -428,7 +431,7 @@ function deferDeclaration(
         'owns' => $ownsOpenVars,
         'restricted' => $restricted,
         'declared' => $hadDeclaredSignature,
-        'group' => $group,
+        'bindingGroup' => $group,
         'subst' => $state->subst,
         'methods' => $state->constraintMethods,
         'ambiguities' => $state->constraintMethodAmbiguities,
@@ -560,7 +563,7 @@ function settleDeferredDeclaration(TypeCheckState $state, array $entry): void
             $entry['type'],
             $entry['restricted'],
             $entry['declared'],
-            $entry['group'],
+            $entry['bindingGroup'],
         );
         recordRestrictedSolutions($state);
         $wrapper = trivialIntrinsicWrapper($fn);
@@ -1000,7 +1003,7 @@ function signatureTypeAst(Type $type, array $known, array $subst = []): Ast\Type
 /** Names the checker owns, which no signature would ever quantify over. */
 function isInternalTypeConName(string $name): bool
 {
-    return \str_starts_with($name, '__Dict_') || \str_ends_with($name, '#');
+    return \str_starts_with($name, '__Dict_') || isMagicHashName($name);
 }
 
 /**
@@ -1193,7 +1196,7 @@ function rewriteIntrinsicApplies(Ast\AstNode $expr): Ast\AstNode
             $expr->right = rewriteIntrinsicApplies($expr->right);
 
             $primop = $expr->resolvedIntrinsic;
-            if ($primop === null || $primop === 'boolAnd#' || $primop === 'boolOr#') {
+            if ($primop === null || isShortCircuitPrimop($primop)) {
                 return $expr;
             }
 
@@ -3826,7 +3829,7 @@ function literalPatternCondition(array $tests): Ast\AstNode
     $condition = $tests[0];
     foreach (\array_slice($tests, 1) as $test) {
         $condition = new Ast\Infix('&&', $condition, $test, $test->line, $test->col, $test->endCol);
-        $condition->compilerIntrinsic = 'boolAnd#';
+        $condition->compilerIntrinsic = shortCircuitPrimopId('bool-and');
     }
 
     return $condition;
@@ -3836,7 +3839,7 @@ function inferGuards(TypeCheckState $state, Ast\GuardsExpr $expr, array $env): T
 {
     $result = null;
     foreach ($expr->clauses as $clause) {
-        $guardType = inferGuardExpr($state, $clause->guard, $env);
+        $guardType = inferExpr($state, $clause->guard, $env);
         unify($state, $guardType, new TCon('Bool'), $clause->guard);
         $bodyType = inferExpr($state, $clause->body, $env);
         if ($result === null) {
@@ -3847,15 +3850,6 @@ function inferGuards(TypeCheckState $state, Ast\GuardsExpr $expr, array $env): T
     }
 
     return $result ?? new TUnit();
-}
-
-function inferGuardExpr(TypeCheckState $state, Ast\AstNode &$guard, array $env): Type
-{
-    if ($guard instanceof Ast\Variable && $guard->name === 'otherwise') {
-        return new TCon('Bool');
-    }
-
-    return inferExpr($state, $guard, $env);
 }
 
 function describeUnresolvedConstraints(TypeCheckState $state, array $constraints): string
@@ -4353,7 +4347,7 @@ function inferFieldAccess(TypeCheckState $state, Ast\AstNode &$expr, array $env)
                 ),
                 $expr,
             );
-        annotateFieldAccess($state, $expr, $objectType->name, $fieldInfo['index']);
+        annotateFieldAccess($state, $expr, $objectType->name, $fieldInfo['fieldIndex']);
 
         return instantiateFieldTypeForObject($state, $objectType, $fieldInfo['type']);
     }
@@ -4376,7 +4370,7 @@ function inferFieldAccess(TypeCheckState $state, Ast\AstNode &$expr, array $env)
             $candidate = $candidates[0];
             $freshDataType = freshDataTypeFromName($state, $candidate['dataName']);
             unify($state, $objectType, $freshDataType, $expr->object);
-            annotateFieldAccess($state, $expr, $candidate['dataName'], $candidate['index']);
+            annotateFieldAccess($state, $expr, $candidate['dataName'], $candidate['fieldIndex']);
 
             return instantiateFieldTypeForObject($state, $freshDataType, $candidate['type']);
         }
@@ -4599,7 +4593,7 @@ function fieldCandidates(TypeCheckState $state, string $fieldName): array
                 if ($name === $fieldName) {
                     $candidates[] = [
                         'dataName' => $dataName,
-                        'index' => $index,
+                        'fieldIndex' => $index,
                         'type' => $ctor['fieldTypes'][$index],
                     ];
                 }
@@ -4644,7 +4638,7 @@ function lookupFieldOnType(TypeCheckState $state, string $dataName, string $fiel
     foreach ($data['constructors'] as $ctor) {
         foreach ($ctor['fields'] as $index => $name) {
             if ($name === $fieldName) {
-                return ['index' => $index, 'type' => $ctor['fieldTypes'][$index]];
+                return ['fieldIndex' => $index, 'type' => $ctor['fieldTypes'][$index]];
             }
         }
     }

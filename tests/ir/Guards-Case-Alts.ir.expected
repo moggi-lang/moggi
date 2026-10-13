@@ -12,7 +12,7 @@ module
         arm m when t3
             t1 = "positive-double"
         let m__0 = n
-        arm m__0 when @True
+        arm m__0 when @otherwise
             t1 = "not-positive-double"
         arm _
             t1 = "unused"

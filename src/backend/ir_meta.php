@@ -5,6 +5,7 @@ namespace Moggi\Backend\Meta;
 use Moggi\IR;
 
 use function Moggi\IR\Visit\boundLocalsInBlock;
+use function Moggi\Semantics\IntrinsicRegistry\reportsSourceLocation;
 use function Moggi\IR\Visit\collectLambdaRefsInBlock;
 use function Moggi\IR\Visit\walkOperand;
 use function Moggi\Optimize\Support\isCapturedFnName;
@@ -253,7 +254,7 @@ function operandCallSrcLoc(?IR\Operand $operand): ?IR\SrcLoc
         if (
             $op instanceof IR\Intrinsic
             && $op->srcLoc !== null
-            && \in_array($op->name, ['error#', 'exceptionThrow#', 'exceptionThrowIo#', 'intDiv#', 'word64Quot#', 'word64Rem#', 'doubleDiv#'], true)
+            && reportsSourceLocation($op->name)
         ) {
             $found = $op->srcLoc;
 

@@ -268,7 +268,7 @@ function literalValue(string $token): string
 function baseline(): array
 {
     return [
-        // the guard desugaring recognises `otherwise`
+        // `guardsExhaustive` reads `otherwise` to set the IR's exhaustive-match flag
         'src/IR/lower_expr.php' => [
             'otherwise',
         ],
@@ -322,10 +322,6 @@ function baseline(): array
         'src/modules/typecheck_env.php' => [
             'Bool',
         ],
-        // the string concatenation operator
-        'src/optimize/fold_intrinsic.php' => [
-            '<>',
-        ],
         // Bool constructors among the optimizer's constants
         'src/optimize/support.php' => [
             'False', 'True',
@@ -360,24 +356,13 @@ function baseline(): array
             'Either', 'Handle', 'Maybe', 'PHPValue', 'Resource', 'String',
         ],
         // the IO boundary's own names
+        // the IO instance's bind method
         'src/semantics/io_boundary.php' => [
-            '>>=', 'IO', 'SomeException',
+            '>>=',
         ],
-        // divergence analysis recognises the library's `error`/`undefined`
-        'src/semantics/types.php' => [
-            'error', 'undefined',
-        ],
-        // the `IO` and `Solo` bootstraps
+        // the `Solo` alias for `MkSolo` (the `IO` reservation tests the kernel id)
         'src/semantics/types/declarations.php' => [
-            'IO', 'Solo',
-        ],
-        // `otherwise`, and the `group`/`index`/`span` recursion keys
-        'src/semantics/types/infer.php' => [
-            'group', 'index', 'otherwise',
-        ],
-        // `fromInteger` at a constrained literal needs `Integer`
-        'src/semantics/types/literals.php' => [
-            'Integer',
+            'Solo',
         ],
     ];
 }
