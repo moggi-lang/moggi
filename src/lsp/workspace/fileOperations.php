@@ -246,6 +246,23 @@ function uriToModuleGuess(string $uri, ?string $workspaceRoot = null): ?string
             }
         }
     }
+
+    $dir = str_contains($path, '/') ? substr($path, 0, (int) strrpos($path, '/')) : '';
+    while ($dir !== '') {
+        if (\Moggi\Modules\isLibraryRoot($dir)) {
+            $rel = $stripExtension(substr($path, strlen($dir) + 1));
+            $parts = array_values(array_filter(explode('/', $rel), static fn ($p) => $p !== ''));
+            if ($parts !== [] && preg_match('/^[A-Z]/', $parts[0])) {
+                return implode('.', $parts);
+            }
+            break;
+        }
+        $parent = substr($dir, 0, (int) strrpos($dir, '/'));
+        if ($parent === $dir || ($workspaceRoot !== null && $dir === rtrim(str_replace('\\', '/', $workspaceRoot), '/'))) {
+            break;
+        }
+        $dir = $parent === '' ? '' : $parent;
+    }
     if ($workspaceRoot !== null) {
         $root = rtrim(str_replace('\\', '/', $workspaceRoot), '/');
         if (str_starts_with($path, $root . '/')) {

@@ -2,7 +2,9 @@
 
 namespace Moggi\CLI;
 
+use function Moggi\CLI\Commands\runAddCommand;
 use function Moggi\CLI\Commands\runBadCommand;
+use function Moggi\CLI\Commands\runBindCommand;
 use function Moggi\CLI\Commands\runBuildCommand;
 use function Moggi\CLI\Commands\runCheckCommand;
 use function Moggi\CLI\Commands\runCompileCommand;
@@ -17,6 +19,7 @@ use function Moggi\CLI\Commands\runCache;
 use function Moggi\CLI\Commands\runMogdoc;
 use function Moggi\CLI\Commands\runPackCommand;
 use function Moggi\CLI\Commands\runPublishCommand;
+use function Moggi\CLI\Commands\runSignCommand;
 use function Moggi\CLI\Commands\runMoogle;
 use function Moggi\CLI\Commands\runRepl;
 use function Moggi\CLI\Commands\runRun;
@@ -62,11 +65,14 @@ function commands(): array
         'takeover' => runTakeoverCommand(...),
         'why' => runWhyCommand(...),
         'install' => runInstallCommand(...),
+        'add' => runAddCommand(...),
+        'bind' => runBindCommand(...),
         'build' => runBuildCommand(...),
         'check' => runCheckCommand(...),
         'verify' => runVerifyCommand(...),
         'pack' => runPackCommand(...),
         'publish' => runPublishCommand(...),
+        'sign' => runSignCommand(...),
         'cache' => runCache(...),
         'mogdoc' => runMogdoc(...),
         'moogle' => runMoogle(...),

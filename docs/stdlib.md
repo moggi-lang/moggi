@@ -11,6 +11,13 @@ whenever a signature is not obvious, they are covered by the same `LICENSE`. It
 is one package, `base` — `lib/base.moggi` is its descriptor, and a release
 publishes it at `registry.moggi-lang.org/#/pkg/base`.
 
+`lib/` holds `.mog` sources and nothing else. The .NET host metadata the
+stdlib's own `foreign dotnet` declarations need (`dotnet/*.json` sidecars:
+which assembly defines a type, whether it is a value type) lives mirrored in
+`lib-meta/` — `lib-meta/Data/Char/dotnet/dependencies.json` describes
+`libraries/base/src/Data/Char/DotNet.mog` — shipped beside `lib/` and attributed back to the
+tree it mirrors, so a sidecar never applies to another tree's imports.
+
 ```moggi
 import Data.Map as M
 import System.Filesystem (removeFile)

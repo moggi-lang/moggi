@@ -39,6 +39,7 @@ function parseTestArgs(array $argv): array
         'backendsExplicit' => false,
         'paths' => [],
         'groups' => [],
+        'excludeGroups' => [],
         'list' => false,
         'json' => false,
         'log' => null,
@@ -105,6 +106,23 @@ function parseTestArgs(array $argv): array
                 $one = \trim($one, " \t/");
                 if ($one !== '') {
                     $args['groups'][] = $one;
+                }
+            }
+            continue;
+        }
+        if ($arg === '--exclude-group' || \str_starts_with($arg, '--exclude-group=')) {
+            $value = \str_starts_with($arg, '--exclude-group=') ? \substr($arg, 16) : $takeValue($arg);
+            if (!\str_starts_with($arg, '--exclude-group=')) {
+                ++$i;
+            }
+            if ($value === null || $value === '') {
+                $args['errors'][] = '--exclude-group requires a group name';
+                continue;
+            }
+            foreach (\explode(',', $value) as $one) {
+                $one = \trim($one, " \t/");
+                if ($one !== '') {
+                    $args['excludeGroups'][] = $one;
                 }
             }
             continue;
@@ -195,6 +213,8 @@ Modes
 Selection
   --group <name>             group or a subject path below one, repeatable
                              (e.g. semantics, syntax/parser, backend/runtime)
+  --exclude-group <name>     drop a group from the run, repeatable
+                             (e.g. --exclude-group base)
   <path|name>...             test path (file or directory subtree) or logical test name
 
 Failure handling

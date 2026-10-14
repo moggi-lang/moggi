@@ -16,6 +16,7 @@ use Moggi\Semantics\Deriving\ClassDeriveFacts;
 use function Moggi\Semantics\Deriving\derivedProjectInstanceRecords;
 use function Moggi\Semantics\Kernel\boolTypeName;
 use function Moggi\Semantics\Registry\foreignFunctionDecl;
+use function Moggi\Semantics\Registry\registerSurfaceConstructorAlias;
 use function Moggi\Syntax\Ast\moduleName;
 use function Moggi\Syntax\isConstructorName;
 
@@ -163,6 +164,7 @@ function buildModuleLocalTypes(
     foreach ($unit['program']->items as $item) {
         if ($item instanceof Ast\DataDecl) {
             Types\registerData($state, $item);
+            registerSurfaceConstructorAlias($state, $item, $unit['program']->exports);
         }
 
         if ($item instanceof Ast\ForeignTypeDecl) {

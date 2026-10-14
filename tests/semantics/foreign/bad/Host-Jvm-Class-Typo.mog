@@ -1,0 +1,3 @@
+-- Fail: `javap` cannot find the class, so the declaration names something the host does not
+-- have. Step 4 makes this a verdict instead of a shrug; until then the compile accepts it.
+foreign jvm function whatever "com.example.NoSuchClass:whatever" :: String -> String

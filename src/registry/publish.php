@@ -7,7 +7,7 @@ namespace Moggi\Registry;
  *
  * There is no login. Every write is authenticated by a BIP-340 signature from the
  * author's npub, over a canonical string that binds the method, the path, a
- * timestamp, a nonce and the exact body bytes (`registry-spec.md` §7). The nonce
+ * timestamp, a nonce and the exact body bytes. The nonce
  * makes each signature single-use; the timestamp bounds how long it is worth
  * trying. The worker and the browser front end build the same bytes, so a
  * difference shows up as a signature that fails to verify rather than as a write
@@ -267,32 +267,4 @@ function registryError(string $body): string
     return \trim($body) === '' ? 'no response body' : \trim($body);
 }
 
-/**
- * The author whose npub signs the release.
- *
- * `--as` names one; without it a single-author descriptor is unambiguous, and
- * several authors without a choice is an error rather than a guess — signing as
- * the wrong identity is not a mistake that should be quiet.
- *
- * @param list<string> $authors
- */
-function selectAuthor(array $authors, ?string $as): string
-{
-    if ($as !== null) {
-        if (!\in_array($as, $authors, true)) {
-            throw new \RuntimeException("`{$as}` is not an npub in this package's [author] blocks");
-        }
 
-        return $as;
-    }
-    if (\count($authors) === 1) {
-        return $authors[0];
-    }
-    if ($authors === []) {
-        throw new \RuntimeException('the descriptor names no author to sign as');
-    }
-
-    throw new \RuntimeException(
-        'this package has several authors — choose one with --as NPUB: ' . \implode(', ', $authors),
-    );
-}

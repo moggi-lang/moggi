@@ -4,16 +4,16 @@ namespace Tc\Stdlib;
 
 const __MOGGI_MAP = [[35 => ['Tc.Stdlib.mapLookupDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 14, 3], 39 => ['Tc.Stdlib.mapSizeDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 17, 15], 43 => ['Tc.Stdlib.setMemberDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 20, 17], 47 => ['Tc.Stdlib.setUnionDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 24, 3], 51 => ['Tc.Stdlib.clampDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 27, 13], 55 => ['Tc.Stdlib.charDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 30, 12], 59 => ['Tc.Stdlib.altMaybeDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 33, 16], 60 => ['Tc.Stdlib.altMaybeDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 33, 16], 61 => ['Tc.Stdlib.altMaybeDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 33, 16], 66 => ['Tc.Stdlib.altListDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 36, 15], 71 => ['Tc.Stdlib.pairDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 39, 12]], ['Tc\\Stdlib\\mapLookupDemo' => ['Tc.Stdlib.mapLookupDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 14, 3], 'Tc\\Stdlib\\mapSizeDemo' => ['Tc.Stdlib.mapSizeDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 17, 15], 'Tc\\Stdlib\\setMemberDemo' => ['Tc.Stdlib.setMemberDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 20, 17], 'Tc\\Stdlib\\setUnionDemo' => ['Tc.Stdlib.setUnionDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 24, 3], 'Tc\\Stdlib\\clampDemo' => ['Tc.Stdlib.clampDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 27, 13], 'Tc\\Stdlib\\charDemo' => ['Tc.Stdlib.charDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 30, 12], 'Tc\\Stdlib\\altMaybeDemo' => ['Tc.Stdlib.altMaybeDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 33, 16], 'Tc\\Stdlib\\altListDemo' => ['Tc.Stdlib.altListDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 36, 15], 'Tc\\Stdlib\\pairDemo' => ['Tc.Stdlib.pairDemo', 'tests/backend/codegen/Tc-Stdlib.mog', 39, 12]]];
 
-require_once __DIR__ . '/../../../lib/Control/Applicative.php';
-require_once __DIR__ . '/../../../lib/Data/Bool.php';
-require_once __DIR__ . '/../../../lib/Data/Char/PHP.php';
-require_once __DIR__ . '/../../../lib/Data/Eq.php';
-require_once __DIR__ . '/../../../lib/Data/List.php';
-require_once __DIR__ . '/../../../lib/Data/Map.php';
-require_once __DIR__ . '/../../../lib/Data/Maybe.php';
-require_once __DIR__ . '/../../../lib/Data/Ord.php';
-require_once __DIR__ . '/../../../lib/Data/Set.php';
-require_once __DIR__ . '/../../../lib/Data/Tuple.php';
+require_once __DIR__ . '/../../../libraries/base/src/Control/Applicative.php';
+require_once __DIR__ . '/../../../libraries/base/src/Data/Bool.php';
+require_once __DIR__ . '/../../../libraries/base/src/Data/Char/PHP.php';
+require_once __DIR__ . '/../../../libraries/base/src/Data/Eq.php';
+require_once __DIR__ . '/../../../libraries/base/src/Data/List.php';
+require_once __DIR__ . '/../../../libraries/base/src/Data/Map.php';
+require_once __DIR__ . '/../../../libraries/base/src/Data/Maybe.php';
+require_once __DIR__ . '/../../../libraries/base/src/Data/Ord.php';
+require_once __DIR__ . '/../../../libraries/base/src/Data/Set.php';
+require_once __DIR__ . '/../../../libraries/base/src/Data/Tuple.php';
 
 use function Control\Applicative\__ev_Alternative_Maybe;
 use function Data\Char\PHP\isDigit;

@@ -1,0 +1,10 @@
+{
+  "format": 1,
+  "assemblies": {
+    "System.Runtime.Numerics": {
+      "types": {
+        "System.Numerics.BigInteger": { "valueType": true }
+      }
+    }
+  }
+}

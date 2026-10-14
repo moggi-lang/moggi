@@ -1,0 +1,4 @@
+tests/semantics/foreign/bad/Host-Jvm-Member-Typo.mog:3:22: type error: jvm class `java.lang.String` has no member `toUpperCaseX`
+
+  3 | foreign jvm function upperX "java.lang.String.toUpperCaseX" :: String -> String
+    |                      ^^^^^^

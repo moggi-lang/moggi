@@ -311,6 +311,26 @@ function runtimeCacheDir(): string
     return cacheBaseDir() . '/runtime';
 }
 
+/**
+ * Every generated binding tree in this cache: one `bind-*` directory per
+ * backend (the `bindCacheKey` layout, `runtime/<backend>/bind-<slug>/`). This
+ * is the `bindings` cache area — `cache clear bindings` drops exactly these,
+ * while `cache clear runtime` takes them with the host trees. It lives here,
+ * not in `registry/bind`, so `cacheAreas()` needs no bind file loaded.
+ *
+ * @return list<string>
+ */
+function bindCacheRoots(): array
+{
+    $roots = [];
+    foreach (\glob(\rtrim(runtimeCacheDir(), '/') . '/*/bind-*/', \GLOB_ONLYDIR) ?: [] as $dir) {
+        $roots[] = $dir;
+    }
+    \sort($roots);
+
+    return $roots;
+}
+
 /** The test harness's scratch trees: `exec/`, `logs/`, the stdlib build. */
 function cacheScratchDir(): string
 {
@@ -524,6 +544,7 @@ function cacheAreas(): array
         'catalog' => [catalogDir()],
         'packages' => [packagesDir()],
         'runtime' => [runtimeCacheDir()],
+        'bindings' => bindCacheRoots(),
         'test' => [cacheScratchDir()],
     ];
 }

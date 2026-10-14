@@ -1,0 +1,4 @@
+tests/semantics/foreign/bad/Host-Instance-As-Static.mog:3:22: type error: php method `DateTime::format` is not static; use `DateTime.format` and pass the receiver first
+
+  3 | foreign php function formatStatic "DateTime:format" :: String -> String
+    |                      ^^^^^^^^^^^^

@@ -18,13 +18,6 @@ use function Moggi\LSP\Workspace\handleConfigurationReply;
 use function Moggi\LSP\Workspace\handleDidChangeConfiguration;
 use function Moggi\LSP\Workspace\handleDidChangeWatchedFiles;
 
-// ---------------------------------------------------------------------------
-// Request-scoped context for cooperative cancellation / progress. Handlers run
-// synchronously in this loop; the loop installs the current request before
-// dispatch and clears it afterwards. Library/analysis drivers read this state
-// (see beginSync / syncYield) to checkpoint between work units.
-// ---------------------------------------------------------------------------
-
 /** The cancellation registry of the request currently being served. */
 function currentCancellations(): ?CancellationRegistry
 {

@@ -1,0 +1,3 @@
+-- Fail: `String.length()` is `()I`, and a Moggi `Int` is the platform word (`J`), so this
+-- declaration names a method the JVM does not have. The host's width is `Int32`.
+foreign jvm function rawLength "java.lang.String.length" :: String -> Int

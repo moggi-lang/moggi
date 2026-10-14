@@ -110,8 +110,9 @@ Neutral `data.*` modules declare types, typeclass instances, and public signatur
 | List sugar | `listCons#` | `:` on `List#` |
 | Operator primops | `intAdd#`, `intSub#`, `intMul#`, `intEq#`, `intNe#`, `stringAppend#`, `stringEq#`, `stringNe#`, `bytesAppend#`, `bytesEq#`, `bytesNe#`, `double*#`, `boolAnd#`, `boolOr#`, `boolNot#`, `boolEq#`, `boolNe#`, `listAppend#`, `listEq#`, `listNe#`, `maybeEq#`, `maybeNe#` | The instance the operand types name declares the operator as exactly that primop (`instance Num Int where (+) a b = intAdd# a b`), read by `instanceOperatorPrimop()`. The declaration lives in the library — `Data.Num` carries `Num Int` and `Num Word` with the class, the fixed widths carry theirs in `Data.Int`/`Data.Word`/`Data.Double` — so `n - 1` at `Int` means `intSub#`; a use whose operands name no instance keeps the dictionary call |
 | Ord compiler glue | `ordering*#` | Default `(<=)`, `min`, `max` from `compare` |
+| Shared host state | `platformStdin#` | Standard input on the JVM is one shared buffered reader: the reader cache lives in the backend-generated `Platform` class, which is codegen-owned state no `foreign` declaration may name (the runtime is only for codegen, never an FFI surface). A fresh reader per use would buffer ahead and starve the next read, so `stdin` reaches the cache through this primop, like `getArgs` reaches `platformArgv#`. |
 | IR coercions | `bytesFromString#`, `bytesToString#` | Distinct `String` / `ByteString` at zero runtime cost on PHP |
-| Platform entry point | `platformArgv#` | Unique exception: program arguments must be captured by the generated `main` stub (e.g. `Platform.setArgs`); no JDK/BCL FFI surface exposes process args directly. All other platform IO/FS uses ordinary FFI. |
+| Platform entry point | `platformArgv#` | Program arguments must be captured by the generated `main` stub (e.g. `Platform.setArgs`); no JDK/BCL FFI surface exposes process args directly. |
 
 Library functions (`length`, `list_map`, `showInt`, …) use **foreign import** in backend modules, not intrinsics.
 
@@ -144,7 +145,7 @@ No magic operators or builtins in the typechecker. Everything is defined in stdl
 
 ### Recursion (`Data.Function`)
 
-- **`fix :: (a -> a) -> a`** — primop `fix#`. Moggi is strict, so the least fixed point cannot be written as an ordinary recursive `let` (`fix f = f (fix f)` forces its argument forever). Each backend lowers `fix#` to a memoising self-reference that is only forced when `f` actually recurses, which is what makes `fix (\rec n -> …) 5` terminate. `lib/Data/Function.mog` re-exports it as `fix = fix#`.
+- **`fix :: (a -> a) -> a`** — primop `fix#`. Moggi is strict, so the least fixed point cannot be written as an ordinary recursive `let` (`fix f = f (fix f)` forces its argument forever). Each backend lowers `fix#` to a memoising self-reference that is only forced when `f` actually recurses, which is what makes `fix (\rec n -> …) 5` terminate. `libraries/base/src/Data/Function.mog` re-exports it as `fix = fix#`.
 
 ### Literals
 
@@ -258,7 +259,7 @@ Implementation: `src/semantics/kinds.php` (`inferKindAst`, `inferDataKind`, `inf
 
 ### `Integer` vs `Int`
 
-- **`Integer`** — a separate type, arbitrary precision, in `Data.Integer` with one implementation per backend. Numeric literals desugar through `fromInteger :: Integer -> a`, so `1 + 2` at `Integer` never goes near a machine word. PHP represents it as a decimal string and computes with [bcmath](https://www.php.net/manual/en/book.bc.php) (`lib/Data/Integer/PHP.mog`); the JVM and .NET use their own big-integer types. `Int` is a *view* of it (`integerToInt`), not its representation.
+- **`Integer`** — a separate type, arbitrary precision, in `Data.Integer` with one implementation per backend. Numeric literals desugar through `fromInteger :: Integer -> a`, so `1 + 2` at `Integer` never goes near a machine word. PHP represents it as a decimal string and computes with [bcmath](https://www.php.net/manual/en/book.bc.php) (`libraries/base/src/Data/Integer/PHP.mog`); the JVM and .NET use their own big-integer types. `Int` is a *view* of it (`integerToInt`), not its representation.
 - **`Int`** — signed 64-bit machine integer (JVM `long`, .NET `long`, PHP host `int` on a 64-bit build), with `Bounded` matching those 64 bits. It **wraps** on overflow on every backend and there is no `Overflow` exception: PHP's arithmetic promotes to `float` past `PHP_INT_MAX`, so the codegen clamps back into the 64-bit range and the optimizer refuses a constant fold that would leave it. A 64-bit PHP host is mandatory: the compiler and every emitted program abort at startup when `PHP_INT_SIZE < 8`.
 - **Defaulting** — an ambiguous numeric literal defaults to `Int`, not `Integer`. That is a deliberate deviation, listed in [differences-to-haskell.md](../differences-to-haskell.md).
 

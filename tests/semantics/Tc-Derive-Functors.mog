@@ -29,7 +29,7 @@ data Compose f a = Compose (f a) deriving (Functor)
 
 -- Nested last-slot applications must compose as `map (map f)` and
 -- `foldr (\x acc -> foldr f acc x)`. Checked here; exercised at runtime in
--- tests/lib/Data/Foldable.mog, whose output is byte-identical to base's.
+-- libraries/base/tests/Data/Foldable.mog, whose output is byte-identical to base's.
 data Nest a = Nest (Maybe (Maybe a)) deriving (Eq, Show, Functor, Foldable)
 
 data BPair a b = BPair a b deriving (Eq, Ord, Bounded)

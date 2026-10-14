@@ -211,7 +211,7 @@ function variantPlan(array $config, string $target, array $requested): array
 function stageBaseInstallation(string $repo, string $base, string $target): void
 {
     removeTree($base);
-    foreach (['bin', 'docs', 'examples', 'lib'] as $dir) {
+    foreach (['bin', 'docs', 'examples', 'libraries'] as $dir) {
         if (!\mkdir($base . '/' . $dir, 0777, true) && !\is_dir($base . '/' . $dir)) {
             throw new \RuntimeException("cannot create {$base}/{$dir}");
         }
@@ -219,7 +219,7 @@ function stageBaseInstallation(string $repo, string $base, string $target): void
 
     buildCompilerPhar($repo, $base . '/bin/moggi.phar');
 
-    copyTree($repo . '/lib', $base . '/lib');
+    copyTree($repo . '/libraries', $base . '/libraries');
     copyTree($repo . '/docs', $base . '/docs');
     copyTree(
         $repo . '/examples',

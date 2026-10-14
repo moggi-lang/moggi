@@ -1,0 +1,326 @@
+-- Every data type the json tests exercise, with its `ToJSON`/`FromJSON`
+-- instances, in one module.
+--
+-- The declarations live together because deriving is a property of the type and
+-- cannot be split from it: an instance is written where its type is. The test
+-- modules import these names and contain only the checks. Keeping the deriving in
+-- a single module is also what keeps the compiler's generated generic evidence
+-- unambiguous — see the note in `README.md`.
+
+module Types
+  ( Person(..)
+  , PairP(..)
+  , WithList(..)
+  , NestP(..)
+  , Color(..)
+  , Box(..)
+  , Result(..)
+  , ShapeS(..)
+  , Wrapper(..)
+  , Name(..)
+  , User(..)
+  , Item(..)
+  , Opt(..)
+  , ShapeT(..)
+  , Address(..)
+  , Customer(..)
+  , Leaf(..)
+  , Nest3(..)
+  , Nest2(..)
+  , Nest1(..)
+  , Tree(..)
+  , Config(..)
+  , Age(..)
+  , BoxR(..)
+  , Ev(..)
+  , Unit(..)
+  , Ids(..)
+  , ColorObj(..)
+  , Badge(..)
+    -- The generic-`Options` helpers, which have to sit beside the types they
+    -- encode: a `Generic` constraint on a type from another module is not
+    -- visible to `genericToEncoding` (see README).
+  , encShape
+  , rtShape
+  , encWrapper
+  , rtWrapper
+  , encName
+  , decConfig
+  ) where
+
+import Data.String (pack, unpack)
+import Data.ByteString (ByteString)
+import Data.ByteString.Char8 qualified as C
+import Data.Map (Map, lookup)
+import Data.JSON
+import Moggi.Generics
+
+data Person = Person { name :: String, age :: Int }
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+data PairP = PairP Int Int
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+data WithList = WithList [Int] Int
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+data NestP = NestP PairP Int
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+data Color = Red | Green | Blue
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+data Box = Box Int
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+data Result = Ok | Error String
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+data ShapeS = CircleS { radius :: Int } | Square { side :: Int } | PointS
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+data Wrapper = Wrapper { value :: Int }
+  deriving (Generic, Eq)
+
+data Name = Name { unName :: String }
+  deriving (Generic, Eq)
+
+-- A hand-written pair of instances, to exercise `toJSON`/`toEncoding` and
+-- `parseJSON`/`parseEncoding` directly rather than through the default methods.
+data User = User { userAge :: Int, userName :: String }
+  deriving (Generic, Eq)
+
+instance ToJSON User where
+  toJSON u = encodeUser u
+  toEncoding u = encodeUserEnc u
+
+instance FromJSON User where
+  parseJSON v = parseUserValue v
+  parseEncoding enc = parseUserEnc enc
+
+encodeUser :: User -> Value
+encodeUser u = case u of
+  User a n -> jsonObject [("user_name", toJSON n), ("user_age", toJSON a)]
+
+encodeUserEnc :: User -> Encoding
+encodeUserEnc u = case u of
+  User a n -> encObject ["user_name", "user_age"] [toEncoding n, toEncoding a]
+
+parseUserValue :: Value -> Either String User
+parseUserValue v = case v of
+  Object m -> parseUserObj m
+  _ -> Left "expected object"
+
+parseUserObj :: Map String Value -> Either String User
+parseUserObj m = case lookup "user_name" m of
+  Nothing -> Left "missing user_name"
+  Just nv -> parseUserName nv m
+
+parseUserName :: Value -> Map String Value -> Either String User
+parseUserName nv m = case parseJSON nv of
+  Left err -> Left err
+  Right n -> parseUserAge n m
+
+parseUserAge :: String -> Map String Value -> Either String User
+parseUserAge n m = case lookup "user_age" m of
+  Nothing -> Left "missing user_age"
+  Just av -> parseUserAgeVal n av
+
+parseUserAgeVal :: String -> Value -> Either String User
+parseUserAgeVal n av = case parseJSON av of
+  Left err -> Left err
+  Right a -> Right (User a n)
+
+parseUserEnc :: Encoding -> Either String User
+parseUserEnc enc = case lookupField enc "user_name" of
+  Nothing -> Left "missing user_name"
+  Just nv -> parseUserNameEnc nv enc
+
+parseUserNameEnc :: Encoding -> Encoding -> Either String User
+parseUserNameEnc nv enc = case parseEncoding nv of
+  Left err -> Left err
+  Right n -> parseUserAgeEnc n enc
+
+parseUserAgeEnc :: String -> Encoding -> Either String User
+parseUserAgeEnc n enc = case lookupField enc "user_age" of
+  Nothing -> Left "missing user_age"
+  Just av -> parseUserAgeValEnc n av
+
+parseUserAgeValEnc :: String -> Encoding -> Either String User
+parseUserAgeValEnc n av = case parseEncoding av of
+  Left err -> Left err
+  Right a -> Right (User a n)
+
+-- `Options`-driven instances: their options are values, so they live beside the
+-- instances that read them.
+data Item = Item { _name :: String, _note :: Maybe String }
+  deriving (Generic, Eq)
+
+stripUnderscore :: String -> String
+stripUnderscore s = case unpack s of
+  '_' : rest -> pack rest
+  _ -> s
+
+optsRename :: Options
+optsRename = fieldLabelModifier stripUnderscore defaultOptions
+
+instance ToJSON Item where
+  toJSON = genericToJSON optsRename
+  toEncoding = genericToEncoding optsRename
+
+instance FromJSON Item where
+  parseJSON = genericParseJSON optsRename
+  parseEncoding = genericParseEncoding optsRename
+
+data Opt = Opt { label :: String, extra :: Maybe Int }
+  deriving (Generic, Eq)
+
+optsOmit :: Options
+optsOmit = omitNothingFields True defaultOptions
+
+instance ToJSON Opt where
+  toJSON = genericToJSON optsOmit
+  toEncoding = genericToEncoding optsOmit
+
+instance FromJSON Opt where
+  parseJSON = genericParseJSON optsOmit
+  parseEncoding = genericParseEncoding optsOmit
+
+data ShapeT = CircleT { tRadius :: Int } | RectT { tWidth :: Int, tHeight :: Int }
+  deriving (Generic, Eq)
+
+tagPrefix :: String -> String
+tagPrefix s = "T_" <> s
+
+tagOpts :: Options
+tagOpts = constructorTagModifier tagPrefix defaultOptions
+
+instance ToJSON ShapeT where
+  toJSON = genericToJSON tagOpts
+  toEncoding = genericToEncoding tagOpts
+
+instance FromJSON ShapeT where
+  parseJSON = genericParseJSON tagOpts
+  parseEncoding = genericParseEncoding tagOpts
+
+data Address = Address { street :: String, city :: String }
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+data Customer = Customer { cName :: String, cAge :: Int, cAddress :: Address, cTags :: [String] }
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+data Leaf = Leaf { n :: Int, lbl :: String }
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+data Nest3 = Nest3 { leaf :: Leaf, xs :: [Int] }
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+data Nest2 = Nest2 { mid :: Nest3, tag :: String }
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+data Nest1 = Nest1 { outer :: Nest2, count :: Int }
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+data Tree = LeafT | NodeT { tVal :: Int, tLeft :: Tree, tRight :: Tree }
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+data Config = Config { port :: Int, host :: Maybe String }
+  deriving (Generic, Eq)
+
+newtype Age = Age Int
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+data BoxR = BoxR { val :: Int }
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+data Ev = Mark Int Int | Flag
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+data Unit = Unit
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+newtype Ids = Ids [Int]
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+data ColorObj = CRed | CGreen
+  deriving (Generic, Eq)
+
+tagObjOpts :: Options
+tagObjOpts = allNullaryToStringTag False defaultOptions
+
+instance ToJSON ColorObj where
+  toJSON = genericToJSON tagObjOpts
+  toEncoding = genericToEncoding tagObjOpts
+
+instance FromJSON ColorObj where
+  parseJSON = genericParseJSON tagObjOpts
+  parseEncoding = genericParseEncoding tagObjOpts
+
+newtype Badge = Badge { badgeColor :: Color }
+  deriving (Generic, Eq)
+  deriving anyclass (ToJSON, FromJSON)
+
+-- Generic encoders that take runtime `Options`. They are here rather than in the
+-- test modules because `genericToEncoding opts x` needs `Generic x` in scope, and
+-- a `Generic` instance derived in another module is not visible for that use.
+
+encShape :: Options -> ShapeS -> String
+encShape opts s = bsToStr (encodeEncoding (genericToEncoding opts s))
+
+rtShape :: Options -> ShapeS -> IO String
+rtShape opts s = do
+  mr <- decodeEncoding (C.pack (encShape opts s))
+  pure (case mr of
+    Left _ -> "bad"
+    Right e -> case genericParseEncoding opts e of
+      Left _ -> "bad"
+      Right s2 -> case s2 == s of
+        True -> "ok"
+        False -> "bad")
+
+encName :: Options -> Name -> String
+encName opts n = bsToStr (encodeEncoding (genericToEncoding opts n))
+
+encWrapper :: Options -> Wrapper -> String
+encWrapper opts w = bsToStr (encodeEncoding (genericToEncoding opts w))
+
+rtWrapper :: Options -> Wrapper -> IO String
+rtWrapper opts w = do
+  mr <- decodeEncoding (C.pack (encWrapper opts w))
+  pure (case mr of
+    Left _ -> "bad"
+    Right e -> case genericParseEncoding opts e of
+      Left _ -> "bad"
+      Right w2 -> case w2 == w of
+        True -> "ok"
+        False -> "bad")
+
+decConfig :: Options -> String -> IO (Either String Config)
+decConfig opts json = do
+  mr <- decodeEncoding (C.pack json)
+  pure (case mr of
+    Left err -> Left err
+    Right e -> genericParseEncoding opts e)
+
+bsToStr :: ByteString -> String
+bsToStr b = pack (C.unpack b)

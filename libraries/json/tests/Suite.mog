@@ -1,0 +1,45 @@
+-- The json package's test entry point.
+--
+-- Each module under `tests/` owns one concern and exports a single `…Suite ::
+-- IO ()`; this file only calls them in order. A case failing stops the run with
+-- `FAIL: …` and a non-zero exit, so a clean run is `exit 0` and the line
+-- `all json checks passed`.
+--
+-- The module is named `Suite`, not `Main`: the descriptor's `[test-suite]`
+-- declares `main = Suite`, and a package may carry more than one executable, so
+-- an entry point cannot be identified by being called `Main`.
+
+module Suite (main) where
+
+import Primitives (primitivesSuite)
+import Edges (edgesSuite)
+import Records (recordsSuite)
+import Products (productsSuite)
+import Sums (sumsSuite)
+import SumEncodings (sumEncodingsSuite, tagSingleSuite, unarySuite)
+import Custom (customSuite)
+import FieldOptions (optionsSuite)
+import Nesting (nestingSuite, deepNestingSuite, recursiveSuite)
+import Maps (mapsSuite)
+import AllowFields (allowFieldsSuite)
+import Generics (genericsSuite)
+
+main :: IO ()
+main = do
+  primitivesSuite
+  edgesSuite
+  recordsSuite
+  productsSuite
+  sumsSuite
+  sumEncodingsSuite
+  tagSingleSuite
+  unarySuite
+  customSuite
+  optionsSuite
+  nestingSuite
+  deepNestingSuite
+  recursiveSuite
+  mapsSuite
+  allowFieldsSuite
+  genericsSuite
+  putStrLn "all json checks passed"

@@ -22,7 +22,7 @@ while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
 require $root . '/src/compiler.php';
 require __DIR__ . '/fuzz.php';
 
-setStdlibLibPath($root . '/lib');
+setStdlibLibPath($root . '/libraries/base/src');
 
 $args = \array_slice($argv, 1);
 if (\count($args) === 1 && \is_file($args[0])) {

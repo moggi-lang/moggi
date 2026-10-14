@@ -23,8 +23,7 @@ configuration file, and no per-project settings beyond the compile cache.
 | `MOGGI_MICRO_SFX` | unset | The micro PHP runtime a `--native` build on the `php` backend appends the PHAR to. |
 | `MOGGI_CACHE_DIR` | `./.moggi` | Root of the per-project cache: compile entries, fetched metadata, unpacked packages, `moggi mogdoc serve` output. |
 | `MOGGI_NO_CACHE` | unset (cache on) | Disable the compile cache. |
-| `MOGGI_MAX_RESPONSE_BYTES` | `268435456` (256 MiB) | Cap on any single fetched body — registry metadata, a blob, or a `source` archive. |
-| `MOGGI_ALLOW_LOCAL_SOURCES` | unset | Allow a release's `source` to reproduce from a local path or `file://` URL when the registry does not serve its blob; without it, only `https` URLs are fetched. |
+| `MOGGI_MAX_FETCH_BYTES` | `268435456` (256 MiB) | Cap on any single registry fetch — one metadata shard, blob or `source` archive — however it is read: the registry, a mirror directory, or a reader a caller supplies. |
 | `MOGGI_REGISTRY` | the canonical registry | The registry a *read* command uses when `--registry` is not given. |
 | `MOGGI_REGISTRY_WRITE` | the registry's write origin | The registry a *write* command — `publish`, `bad`, `unmaintained`, `takeover` — uses when `--registry` is not given; falls back to `MOGGI_REGISTRY`. |
 | `MOGGI_REGISTRY_NPUB` | unset (trust on first use) | Pin the registry's signing key. |
@@ -50,18 +49,6 @@ where the compiler looks when this is unset, so setting it is only needed in a
 checkout, for an installation whose runtime lives somewhere else, or for the
 `--native` test smoke. Without a runtime, `--native` on `php` fails with an error
 naming this variable; it is never a silent fallback to the PHAR.
-
-### `MOGGI_ALLOW_LOCAL_SOURCES`
-
-A release's `source` (§4.3 of the registry spec) is the bytes of a package from
-another origin when the registry does not serve its blob. The release that names
-it is attacker-controlled in the case that matters — a registry answering `404`
-for `blobs/<digest>` can name any `source` — so the client fetches only ordinary
-`https` URLs: git remote helpers (`ext::sh -c …`), `file://`, and bare paths are
-refused. Set this variable to a truthy value (`1`, `true`, `yes`, `on`) to allow
-local paths and `file://` URLs as well, which is what reproducing a package from
-a checkout needs. A local `source` that does not pack to the blob digest reports
-the expected digest but withholds the one it produced.
 
 ### `MOGGI_REGISTRY`, `MOGGI_REGISTRY_WRITE` and `MOGGI_REGISTRY_NPUB`
 

@@ -1,0 +1,3 @@
+-- Fail: the host has no function of that name. Before the host was asked, this declaration
+-- compiled and the typo surfaced as `Error: Call to undefined function strlenn()` at the call.
+foreign php function rawLen "strlenn" :: String -> Int

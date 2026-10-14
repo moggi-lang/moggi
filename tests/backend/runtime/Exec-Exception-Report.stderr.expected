@@ -1,3 +1,3 @@
 moggi: ErrorCall: boom
-  at Moggi.Err.error (lib/Moggi/Err.mog:8:13)
+  at Moggi.Err.error (libraries/base/src/Moggi/Err.mog:8:13)
   at Main.main (tests/backend/runtime/Exec-Exception-Report.mog:5:8)

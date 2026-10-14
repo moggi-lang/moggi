@@ -38,10 +38,100 @@ function resolvePath(string $path): string
 /** The file that marks a package root, named after the package: `base.moggi`. */
 const LIBRARY_ROOT_MARKER = 'base.moggi';
 
-/** Whether `$dir` is the root of the `base` package — a Moggi library root. */
+/**
+ * The package descriptor marking `$dir` as a library root, either layout.
+ *
+ * A library root holds the `.mog` sources: either flat with the descriptor
+ * beside them (the shape user libraries keep), or the
+ * packaged layout where sources live under `src/` (`libraries/base/src`,
+ * described by `libraries/base/*.moggi`). Null when neither holds.
+ */
+function libraryRootMarker(string $dir): ?string
+{
+    $dir = \rtrim($dir, '/');
+    if (\is_file($dir . '/' . LIBRARY_ROOT_MARKER)) {
+        return $dir . '/' . LIBRARY_ROOT_MARKER;
+    }
+    if (\basename($dir) === 'src') {
+        $candidates = \glob(\dirname($dir) . '/*.moggi') ?: [];
+        if ($candidates !== []) {
+            \sort($candidates, \SORT_STRING);
+
+            return $candidates[0];
+        }
+    }
+
+    return null;
+}
+
+/** Whether `$dir` is a Moggi library root — the `base` package or any user library. */
 function isLibraryRoot(string $dir): bool
 {
-    return \is_file(\rtrim($dir, '/') . '/' . LIBRARY_ROOT_MARKER);
+    return libraryRootMarker($dir) !== null;
+}
+
+/**
+ * The library package holding `$path`, as a project-relative dir: the nearest
+ * enclosing library root, unwrapped — a packaged `src/` root answers its
+ * package dir (`libraries/base` for anything under `libraries/base/src`), a
+ * flat root answers itself. Null when `$path` is not inside a library package.
+ *
+ * The single-file require rewriting uses this to read the package-collapsed
+ * form: a fixture in `libraries/base` requiring `src/Data/Bool.php` means
+ * `libraries/base/src/Data/Bool.php`, which the checkout-relative require
+ * prefixes alone cannot see.
+ */
+function enclosingLibraryPackageDir(string $path, string $projectRoot): ?string
+{
+    $root = \rtrim(\Moggi\Paths\canonicalSeparators(resolvePath($projectRoot)), '/');
+    $dir = \Moggi\Paths\canonicalSeparators(resolvePath(\dirname($path)));
+    while (true) {
+        if ($dir === $root || !\str_starts_with($dir . '/', $root . '/')) {
+            return null;
+        }
+        if (\basename($dir) === 'src' && libraryRootMarker($dir) !== null) {
+            $relative = \substr(\dirname($dir), \strlen($root) + 1);
+
+            return $relative !== '' ? $relative : null;
+        }
+        if (isLibraryRoot($dir)) {
+            $relative = \substr($dir, \strlen($root) + 1);
+
+            return $relative !== '' ? $relative : null;
+        }
+        $parent = \dirname($dir);
+        if ($parent === $dir) {
+            return null;
+        }
+        $dir = $parent;
+    }
+}
+
+/**
+ * The project root output paths are relativized against for a standard-library
+ * source root: the workspace holding the library, not the `src/` dir itself.
+ *
+ * Flat layout (`<workspace>/lib`, descriptor beside the sources) keeps the old
+ * answer, `dirname`. Packaged layout (`<workspace>/libraries/<package>/src`,
+ * descriptor beside `src/`) answers `<workspace>`, so requires come out as
+ * `libraries/<package>/src/...` — the same project-relative shape
+ * whole-project builds emit and the test harness prebuilds against. A packaged
+ * root outside a `libraries/` tree answers its package dir; an unmarked root
+ * falls back to `dirname`, the pre-migration behaviour.
+ */
+function workspaceRootForStdlibRoot(string $stdlibRoot): string
+{
+    $root = \rtrim(resolvePath($stdlibRoot), '/\\');
+    if (\basename($root) === 'src' && libraryRootMarker($root) !== null) {
+        $package = \dirname($root);
+        if (\basename(\dirname($package)) === 'libraries') {
+            return \dirname(\dirname($package));
+        }
+
+        return $package;
+    }
+
+    return \dirname($root);
 }
 
 /**
@@ -49,8 +139,8 @@ function isLibraryRoot(string $dir): bool
  * roots searched alongside it.
  *
  * The primary is "the" standard library, the root `base.moggi` marks. Extras are
- * dependency trees that ship separately from it — the `json` package in this
- * checkout — and the standard library wins a name clash, because extras are
+ * dependency trees that ship separately from it — the `json` package beside it
+ * in `libraries/` — and the standard library wins a name clash, because extras are
  * merged into its index rather than replacing it.
  */
 final class ConfiguredStdlib
@@ -108,7 +198,7 @@ function setStdlibLibPath(?string $path): void
  *
  * The compiler gets extra roots from `--lib`; this is the one place a *bundled*
  * extra is registered, so the compiler's own harness can reach a package that
- * ships separately from `lib/` (`json`, in this checkout).
+ * ships separately from the base sources (`json`, beside it in `libraries/`).
  */
 function addLibraryRoot(string $path): void
 {
@@ -146,10 +236,11 @@ function configuredLibraryRoots(): array
  *
  * The backend scanners (JVM `jvm/` jars, .NET `dotnet/` metadata, PHP `php/`
  * helpers) used to look only under the standard library. A package installed
- * beside it — the `json` package in this checkout, a dependency tree `moggi
+ * beside it — the `json` package in `libraries/`, a dependency tree `moggi
  * build` resolved into the cache — vendors its dependencies in its own root, so
  * a scan of just the primary would silently drop them. Falls back to the
- * bundled `lib/` for the compiler's own runs, which configure no root at all.
+ * bundled `libraries/base/src` for the compiler's own runs, which configure
+ * no root at all.
  *
  * @return list<string>
  */
@@ -167,9 +258,10 @@ function libraryScanRoots(): array
 }
 
 /**
- * Standard library shipped next to the compiler: `<root>/lib` where `<root>` is
- * an explicit `$MOGGI_ROOT`, the installation an archive lives in
- * (`<installation>/bin/moggi.phar` → `<installation>/lib`), or the checkout.
+ * Standard library shipped next to the compiler: `<root>/libraries/base/src`
+ * where `<root>` is an explicit `$MOGGI_ROOT`, the installation an archive
+ * lives in (`<installation>/bin/moggi.phar` → `<installation>/libraries/...`),
+ * or the checkout.
  */
 function bundledStdlibLibPath(): ?string
 {
@@ -183,13 +275,16 @@ function bundledStdlibLibPath(): ?string
     $candidates = [];
     $envRoot = getenv('MOGGI_ROOT');
     if (\is_string($envRoot) && $envRoot !== '') {
-        $candidates[] = rtrim($envRoot, '/\\') . DIRECTORY_SEPARATOR . 'lib';
+        $candidates[] = rtrim($envRoot, '/\\') . DIRECTORY_SEPARATOR . 'libraries'
+            . DIRECTORY_SEPARATOR . 'base' . DIRECTORY_SEPARATOR . 'src';
     }
     $installRoot = \Moggi\Install\installationRoot();
     if ($installRoot !== null) {
-        $candidates[] = $installRoot . DIRECTORY_SEPARATOR . 'lib';
+        $candidates[] = $installRoot . DIRECTORY_SEPARATOR . 'libraries'
+            . DIRECTORY_SEPARATOR . 'base' . DIRECTORY_SEPARATOR . 'src';
     }
-    $candidates[] = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'lib';
+    $candidates[] = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'libraries'
+        . DIRECTORY_SEPARATOR . 'base' . DIRECTORY_SEPARATOR . 'src';
 
     foreach ($candidates as $candidate) {
         $real = resolvePath($candidate);
@@ -201,6 +296,31 @@ function bundledStdlibLibPath(): ?string
     }
 
     return null;
+}
+
+/**
+ * The configured library root containing `$file`, or null for project files.
+ *
+ * A package is a root: the standard library, an installed dependency, a `--lib` tree. A file
+ * under none of them is the project's own, which owns every root it assembled. Longest match wins
+ * so nested roots resolve to the inner package. Slashes are normalized but the filesystem is not
+ * consulted, so this works for paths as the checker spells them.
+ */
+function declaringLibraryRoot(string $file): ?string
+{
+    $file = \str_replace('\\', '/', $file);
+    $best = null;
+    foreach (configuredLibraryRoots() as $root) {
+        $root = \rtrim(\str_replace('\\', '/', (string) $root), '/');
+        if ($root === '' || ($file !== $root && !\str_starts_with($file, $root . '/'))) {
+            continue;
+        }
+        if ($best === null || \strlen($root) > \strlen($best)) {
+            $best = $root;
+        }
+    }
+
+    return $best;
 }
 
 function locateStdlibRoot(string $fromPath): ?string
@@ -217,8 +337,9 @@ function locateStdlibRoot(string $fromPath): ?string
 
     $dir = dirname(resolvePath($fromPath));
     while ($dir !== false) {
-        if (isLibraryRoot($dir . DIRECTORY_SEPARATOR . 'lib')) {
-            return $dir . DIRECTORY_SEPARATOR . 'lib';
+        $packaged = $dir . DIRECTORY_SEPARATOR . 'libraries' . DIRECTORY_SEPARATOR . 'base' . DIRECTORY_SEPARATOR . 'src';
+        if (isLibraryRoot($packaged)) {
+            return $packaged;
         }
 
         $parent = dirname($dir);
@@ -408,7 +529,7 @@ function stdlibModuleIndex(string $stdlibRoot): array
 /**
  * Compiled library PHP tree pinned with `--lib-php` (typically a prebuilt stdlib
  * output such as `build/lib`). Used only for single-file compiles so generated
- * `require`s can point at that tree instead of source `lib/*.php` paths.
+ * `require`s can point at that tree instead of source-tree `*.php` paths.
  */
 final class ConfiguredStdlibPhp
 {

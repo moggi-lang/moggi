@@ -1,0 +1,10 @@
+{
+  "format": 1,
+  "assemblies": {
+    "System.Runtime": {
+      "types": {
+        "System.DateTime": { "valueType": true }
+      }
+    }
+  }
+}

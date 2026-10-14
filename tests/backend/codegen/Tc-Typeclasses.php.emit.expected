@@ -8,11 +8,11 @@ require_once __DIR__ . '/../../../_runtime.php';
 
 use function Moggi\__apply;
 
-require_once __DIR__ . '/../../../lib/Control/Applicative.php';
-require_once __DIR__ . '/../../../lib/Control/Monad.php';
-require_once __DIR__ . '/../../../lib/Data/Either.php';
-require_once __DIR__ . '/../../../lib/Data/List.php';
-require_once __DIR__ . '/../../../lib/Data/Maybe.php';
+require_once __DIR__ . '/../../../libraries/base/src/Control/Applicative.php';
+require_once __DIR__ . '/../../../libraries/base/src/Control/Monad.php';
+require_once __DIR__ . '/../../../libraries/base/src/Data/Either.php';
+require_once __DIR__ . '/../../../libraries/base/src/Data/List.php';
+require_once __DIR__ . '/../../../libraries/base/src/Data/Maybe.php';
 
 use function Control\Applicative\__ev_Applicative_Maybe;
 use function Control\Monad\__ev_Monad_Maybe;

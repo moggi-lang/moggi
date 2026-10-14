@@ -251,7 +251,7 @@ $classDecl = $classProgram->items[0];
 assertEq('Between methods.', $classDecl->methods[1]->doc ?? null, 'class method doc from parser');
 
 \Moggi\Cache\setCacheEnabled(false);
-$libProject = Docs\loadDocProject($root . '/lib');
+$libProject = Docs\loadDocProject($root . '/libraries/base/src');
 \Moggi\Cache\setCacheEnabled(true);
 $libIndex = Docs\buildIndex($libProject['modules'], $libProject['prepared']->checked, $libProject['prepared']);
 assertTrue(isset($libIndex->byModule['Moggi.Internal.Prim']), 'Moggi.Internal.Prim is indexed');
@@ -1019,7 +1019,7 @@ file_put_contents(
 );
 file_put_contents($scopeDir . '/tests/Suite.mog', "module Suite\n  ( check\n  ) where\n\ncheck :: Int\ncheck = 1\n");
 
-$scopeIndex = Docs\loadOrBuildIndex($scopeDir, [$root . '/lib'], true);
+$scopeIndex = Docs\loadOrBuildIndex($scopeDir, [$root . '/libraries/base/src'], true);
 assertTrue(isset($scopeIndex->byModule['Scope']), 'the documented root is indexed');
 assertTrue(!isset($scopeIndex->byModule['Data.Maybe']), 'a dependency module is not indexed');
 assertTrue(!isset($scopeIndex->byModule['Suite']), 'a test-suite module is not indexed');

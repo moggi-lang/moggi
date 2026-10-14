@@ -271,6 +271,7 @@ function typeSchemes(): array
             ['a', 'b'],
         ),
         'platformArgv#' => scheme(new TCon('IO', [new TCon('List', [$str])]), []),
+        'platformStdin#' => scheme(new TCon('Handle', []), []),
     ];
 }
 

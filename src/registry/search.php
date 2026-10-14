@@ -3,7 +3,7 @@
 namespace Moggi\Registry;
 
 /**
- * The cross-package search index — `registry-spec.md` §3.7.
+ * The cross-package search index.
  *
  * A search must not make a client gather every docs tree a registry might hold,
  * so the names a shard's packages document are collected once, at publish, into

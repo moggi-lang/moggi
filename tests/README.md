@@ -8,8 +8,11 @@ restates it.
 runtest                       # php backend, whole suite
 runtest --backend all         # php → jvm → dotnet, one aggregate verdict
 runtest --group syntax/parser # one group, or a subject path below one
+runtest --group base          # only the standard library's own tests
+runtest --exclude-group base  # everything but them
 runtest examples/twice        # one case, by logical name or by path
 runtest --list                # discover everything, run nothing
+php test-all.php --backend all # compiler suite + base + json, one stage after the other
 ```
 
 ## Layout
@@ -27,7 +30,6 @@ tests/
 ├── ir/          # lowering
 ├── optimize/    # optimizer
 ├── backend/     # codegen and runtime, per backend
-├── lib/         # the standard library, path-mirrored
 ├── repl/        # REPL transcripts
 ├── docs/        # mogdoc / moogle
 ├── lsp/         # the language server
@@ -38,7 +40,10 @@ tests/
 ```
 
 `examples/` sits beside `tests/` and is one group of its own. `tests/suite/` is the harness: the walk
-skips it, so nothing in it is ever a case.
+skips it, so nothing in it is ever a case. The libraries carry their own tests outside `tests/`:
+`libraries/base/tests/` is discovered like everything else as group `base` (run it alone with
+`--group base`, or skip it with `--exclude-group base`), and `libraries/json/tests/` is the json
+package's `Suite` test-suite, run by `test-all.php` rather than the walk.
 
 ## How a case is found
 
@@ -69,7 +74,7 @@ Which **stage** owns a fixture is the directory it is in; which **golden kinds**
 | generated source | `tests/backend/codegen/` | `Foo.php.emit.expected` |
 | runtime behaviour | `tests/backend/runtime/` | `Foo.stdout.expected`, `Foo.stderr.expected` |
 | that a host exception normalises | `tests/backend/runtime/` | `Foo.<backend>.stderr.expected` when backends differ |
-| the standard library | `tests/lib/` (mirror the path in `lib/`) | any |
+| the standard library | `libraries/base/tests/` (mirror the path in `libraries/base/src/`) | any |
 | a REPL session | `tests/repl/` | `Foo.script` + `Foo.stdout.expected` |
 | mogdoc / moogle | `tests/docs/` | a script |
 | the language server | `tests/lsp/` | a script |
@@ -96,8 +101,9 @@ runs:
 | REPL transcript (`.script`) | `lower-kebab` | `dump-emit` |
 | script | `snake_case_test.php` | `noopt_entry_bootstrap_test.php` |
 
-A path that mirrors a module path is exempt: `tests/lib/Data/ByteString/` mirrors
-`lib/Data/ByteString/`, and a project's own `lib/` is a source tree inside the fixture, not a name.
+A path that mirrors a module path is exempt: `libraries/base/tests/Data/ByteString/` mirrors
+`libraries/base/src/Data/ByteString/`, and a project's own `lib/` is a source tree inside the
+fixture, not a name.
 
 ## Not tests
 

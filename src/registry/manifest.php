@@ -5,7 +5,7 @@ namespace Moggi\Registry;
 /**
  * What a release signature covers, and whether it verifies.
  *
- * `registry-spec.md` §5.1: the signed message is the sha256 of a canonical
+ * The signed message is the sha256 of a canonical
  * manifest — provenance, artifact and version, keys sorted, no insignificant
  * whitespace, UTF-8. Every implementation has to build those bytes identically
  * or nothing verifies, so the client builds them in one place: here. The
@@ -54,7 +54,7 @@ function canonicalJson(mixed $value): string
     return '{' . \implode(',', $pairs) . '}';
 }
 
-/** The digest that identifies a source, by kind (§3.3): a commit, or a sha256. */
+/** The digest that identifies a source, by kind: a commit, or a sha256. */
 function sourceDigest(mixed $source): ?string
 {
     if ($source instanceof \stdClass) {
@@ -284,7 +284,7 @@ function verifySignatureOnce(string $messageHex, string $signatureHex, string $n
 
 /**
  * One release, against the *catalog's* allowed users — never a key the package
- * file nominates for itself, or a release could appoint its own signer (§5.2).
+ * file nominates for itself, or a release could appoint its own signer.
  *
  * @param array<string, mixed> $release
  * @param list<string> $authors
@@ -309,4 +309,214 @@ function verifyRelease(string $name, string $version, array $release, array $aut
     $verdict = verifySignature(releaseMessage($name, $version, $release), $sig, $signer);
 
     return ['ok' => $verdict['ok'], 'note' => $verdict['note'], 'signer' => $signer];
+}
+
+/**
+ * The author whose npub signs the release.
+ *
+ * `--as` names one; without it a single-author descriptor is unambiguous, and
+ * several authors without a choice is an error rather than a guess — signing as
+ * the wrong identity is not a mistake that should be quiet.
+ *
+ * @param list<string> $authors
+ */
+function selectAuthor(array $authors, ?string $as): string
+{
+    if ($as !== null) {
+        if (!\in_array($as, $authors, true)) {
+            throw new \RuntimeException("`{$as}` is not an npub in this package's [author] blocks");
+        }
+
+        return $as;
+    }
+    if (\count($authors) === 1) {
+        return $authors[0];
+    }
+    if ($authors === []) {
+        throw new \RuntimeException('the descriptor names no author to sign as');
+    }
+
+    throw new \RuntimeException(
+        'this package has several authors — choose one with --as NPUB: ' . \implode(', ', $authors),
+    );
+}
+
+/**
+ * The `source` member of a release record: where the code came from.
+ *
+ * `--url` plus `--commit` names a repository and a commit — the one form a
+ * client can reproduce from when the registry does not serve the blob. Without
+ * them the release records the directory it was packed from, which is
+ * provenance rather than a fetch recipe: a path on this machine is nothing
+ * another machine can read, so no client reproduces from it. Only `--url` plus
+ * `--commit` records an origin another machine can follow — and the record
+ * still says where the release was made either way.
+ */
+function releaseSource(?string $url, ?string $commit, string $directory, string $contentDigest): array
+{
+    if (($url === null) !== ($commit === null)) {
+        throw new \RuntimeException('--url and --commit go together — a git source names both');
+    }
+    if ($url !== null) {
+        return ['kind' => 'git', 'url' => $url, 'commit' => $commit];
+    }
+
+    return ['kind' => 'dir', 'path' => \basename((string) \realpath($directory)), 'sha256' => $contentDigest];
+}
+
+/**
+ * The unsigned release record: provenance, artifact, version, declaration.
+ *
+ * The same shape `publish` signs inline, `pack --record` prints, and `publish
+ * --signed` expects to read back — built here so the three cannot drift apart.
+ * `descriptor` is the verbatim descriptor bytes (its digest is what the
+ * signature covers), and the `docs` digest is present only when the docs were
+ * rendered, so a record made with `--no-docs` says nothing about them.
+ *
+ * @param array<string, mixed> $source
+ * @param array<string, mixed> $thirdParty
+ */
+function buildReleaseRecord(
+    string $name,
+    string $version,
+    array $source,
+    string $blob,
+    array $thirdParty,
+    string $descriptor,
+    ?string $docsDigest,
+): array {
+    $release = [
+        'name' => $name,
+        'version' => $version,
+        'source' => $source,
+        'blob' => $blob,
+        'third_party' => $thirdParty,
+        'descriptor' => $descriptor,
+    ];
+    if ($docsDigest !== null && $docsDigest !== '') {
+        $release['docs'] = $docsDigest;
+    }
+
+    return $release;
+}
+
+/**
+ * Sign an unsigned release record with an author's nsec.
+ *
+ * The signature covers the canonical manifest (`releaseMessage`), and the
+ * record is verified straight back against the declared author before it is
+ * returned — the same check `verifyRelease` will run at the other end — so a
+ * key that is not the author's fails here, next to the key, rather than at the
+ * registry after a round trip. An already-signed record is refused rather than
+ * re-signed: a second signature would silently replace the first.
+ *
+ * @param array<string, mixed> $release
+ * @return array<string, mixed>
+ */
+function signRelease(string $name, string $version, array $release, string $author, string $nsec): array
+{
+    if (isset($release['signature'])) {
+        throw new \RuntimeException('this record is already signed — signing again would silently replace the signature');
+    }
+
+    $signed = $release;
+    $signed['signature'] = ['npub' => $author, 'sig' => signMessage(releaseMessage($name, $version, $release), $nsec)];
+
+    $verdict = verifySignature(releaseMessage($name, $version, $signed), (string) $signed['signature']['sig'], $author);
+    if (!$verdict['ok']) {
+        throw new \RuntimeException("the key does not match author {$author}: {$verdict['note']}");
+    }
+
+    return $signed;
+}
+
+/**
+ * Write a release record to disk as canonical JSON.
+ *
+ * @param array<string, mixed> $release
+ */
+function writeReleaseRecord(string $path, array $release): void
+{
+    if (@\file_put_contents($path, canonicalJson($release) . "\n") === false) {
+        throw new \RuntimeException("cannot write {$path}");
+    }
+}
+
+/**
+ * Read a release record back: JSON, an object, naming a name and a version.
+ *
+ * The signature itself is not checked here — that is `verifyRelease`, against
+ * the package's allowed list, which a file on disk cannot nominate for itself.
+ *
+ * @return array<string, mixed>
+ */
+function readReleaseRecord(string $path): array
+{
+    $bytes = @\file_get_contents($path);
+    if ($bytes === false) {
+        throw new \RuntimeException("cannot read {$path}");
+    }
+    $record = \json_decode($bytes, true);
+    if (!\is_array($record) || (\array_is_list($record) && $record !== [])) {
+        throw new \RuntimeException("{$path} is not a release record — it does not decode to a JSON object");
+    }
+    if (!\is_string($record['name'] ?? null) || !\is_string($record['version'] ?? null)) {
+        throw new \RuntimeException("{$path} is not a release record — it names no name and version");
+    }
+
+    return $record;
+}
+
+/**
+ * Check a pre-signed record against the tree it claims to release.
+ *
+ * `publish --signed` trusts the file for the signature but nothing else: the
+ * blob, the verbatim descriptor and the docs digest are recomputed from the
+ * directory and must match byte for byte, or the record describes some other
+ * tree. The signature is verified against the descriptor's authors — never a
+ * key the record nominates for itself. Returns the signer, who then
+ * authenticates the upload's requests.
+ *
+ * @param array<string, mixed> $record
+ * @param list<string> $authors
+ */
+function checkSignedRelease(
+    array $record,
+    string $name,
+    string $version,
+    string $blob,
+    string $descriptor,
+    ?string $docsDigest,
+    array $authors,
+): string {
+    if (($record['name'] ?? null) !== $name || ($record['version'] ?? null) !== $version) {
+        throw new \RuntimeException(
+            'the record releases ' . (string) ($record['name'] ?? '?') . ' ' . (string) ($record['version'] ?? '?')
+            . ", but this directory packs {$name} {$version} — it signs some other release",
+        );
+    }
+    if (($record['blob'] ?? null) !== $blob) {
+        throw new \RuntimeException('the record names a different blob — the tree changed since it was recorded; re-record');
+    }
+    if (($record['descriptor'] ?? null) !== $descriptor) {
+        throw new \RuntimeException('the record carries a different descriptor — the descriptor changed since it was recorded; re-record');
+    }
+    $recordDocs = $record['docs'] ?? null;
+    if ($recordDocs !== $docsDigest) {
+        throw new \RuntimeException(
+            $recordDocs === null
+                ? 'the record names no docs, but this directory renders some — re-record without --no-docs, or pack with it'
+                : 'the record names different docs — the documentation changed since it was recorded; re-record',
+        );
+    }
+    if (!isset($record['signature'])) {
+        throw new \RuntimeException('the record has no signature — sign it with `moggi sign` first');
+    }
+
+    $verdict = verifyRelease($name, $version, $record, $authors);
+    if (!$verdict['ok'] || $verdict['signer'] === null) {
+        throw new \RuntimeException('the record\'s signature does not verify: ' . $verdict['note']);
+    }
+
+    return $verdict['signer'];
 }

@@ -4,7 +4,7 @@
 -- methods that class declares. A class called `Eq` that declares no equality has nothing for
 -- `deriving (Eq)` to write, which is a compile error here — not an instance carrying a method the
 -- class never declared. The library's own `deriving` clauses (e.g.
--- `lib/Data/List/NonEmpty.mog`) take the same path, so renaming a method in `lib/` fails the
+-- `libraries/base/src/Data/List/NonEmpty.mog`) take the same path, so renaming a method in `lib/` fails the
 -- library's compile rather than producing a wrong instance.
 class Eq a where
   quux :: a -> a -> a

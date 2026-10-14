@@ -318,10 +318,6 @@ function runSelection(array $cases, array $backends, array $pathFilters): int
         suiteEcho(renderWorkerBanner(1, (int) $testArgs['jobsRequested']));
     } else {
         suiteEcho(renderWorkerBanner($pool->jobCount(), (int) $testArgs['jobsRequested']));
-        if ($testArgs['stopOnFailure']) {
-            \fwrite(STDERR, 'note: --stop-on-failure with --jobs ' . $pool->jobCount()
-                . ": work already dispatched runs to completion\n");
-        }
         warmSharedCache($backends);
     }
 

@@ -26,7 +26,7 @@ $assert(
     'the host-report path must have loaded the runtime',
 );
 
-$state = \Moggi\Repl\createSession('php', [$root . '/lib']);
+$state = \Moggi\Repl\createSession('php', [$root . '/libraries/base/src']);
 
 $assert(
     \Moggi\Repl\evaluateExpression($state, '1 + 1') === '2',

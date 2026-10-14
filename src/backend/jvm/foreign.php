@@ -99,37 +99,17 @@ function dottedToInternal(string $dotted): string
 }
 
 /**
- * JDK / Moggi interface types that require InterfaceMethodref + invokeinterface.
+ * Moggi interface types that require InterfaceMethodref + invokeinterface.
  * (checkcast to an interface is fine; invokevirtual is not.)
  *
- * Prefer declaring {@code foreign jvm type Foo "interface java.util.List"} for
- * interfaces; the scan below honors every such declaration. An entry here is
- * therefore only needed for paths the stdlib reaches without one —
- * `java.util.List`/`Map`, whose Moggi types are builtins with nothing to attach
- * the prefix to, plus Iterable/Path/Closeable, which were bound before the
- * prefix existed — and for a handful of well-known JDK interfaces kept for
- * convenience when hand-writing user `foreign` imports.
+ * The answer comes from declarations, not from a hardcoded list: every
+ * {@code foreign jvm type Foo "interface …"} registers, and the generated
+ * binder emits the prefix for every interface `javap` reports. An interface
+ * reached with no such declaration is a missing declaration, not a missing
+ * table entry.
  */
 function jvmIsInterface(string $internalName): bool
 {
-    static $ifaces = [
-        'java/util/List' => true,
-        'java/util/Map' => true,
-        'java/util/Map$Entry' => true,
-        'java/lang/Iterable' => true,
-        'java/lang/Comparable' => true,
-        'java/lang/CharSequence' => true,
-        'java/nio/file/Path' => true,
-        'java/nio/file/DirectoryStream' => true,
-        'java/util/concurrent/ConcurrentMap' => true,
-        'moggi/rt/Fn' => true,
-        'java/io/Closeable' => true,
-    ];
-
-    if (isset($ifaces[$internalName])) {
-        return true;
-    }
-
     foreach ($GLOBALS['moggi_jvm_foreign_types'] ?? [] as $hostType) {
         [$dotted, $isIface] = jvmParseForeignHostType((string) $hostType);
         if ($isIface && dottedToInternal($dotted) === $internalName) {

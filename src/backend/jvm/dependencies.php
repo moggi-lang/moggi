@@ -18,7 +18,7 @@ use function Moggi\Modules\libraryScanRoots;
 
 /**
  * Merge third-party .class entries from stdlib vendor jvm dirs (any
- * lib/.../jvm/*.jar plus sibling *.java) when emitted bytecode references
+ * `<library-root>/.../jvm/*.jar` plus sibling *.java) when emitted bytecode references
  * packages from those jars. Demand-driven by ordinary FFI — no domain path
  * hardcodes.
  *

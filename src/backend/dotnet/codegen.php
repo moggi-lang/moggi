@@ -1931,7 +1931,17 @@ function emitForeignIntrinsic(
     throw new \RuntimeException("DotNet foreign: unknown intrinsic {$member}");
 }
 
-/** Push a default argument for BCL optional trailing parameters (initobj / ldnull). */
+/**
+ * Push a default argument for optional trailing parameters (zero / null).
+ *
+ * An omitted tail is filled with the type's zero, not the C# default value:
+ * the sidecar carries the parameter list and the tail length, never the
+ * defaults, so `f(x)` with an omitted `int` tail calls `f(x, 0)`. The shape
+ * matches what a passed argument leaves on the stack (see
+ * {@see unboxForeignArg}): a native int32 for every 32-bit-or-narrower
+ * integer, `char` and `bool`, a native int64/float64 for those, a null
+ * reference for `string`, and a zeroed value for a `valuetype`.
+ */
 function emitDefaultForeignArg(EmitEnv $env, string $kind): void
 {
     if (\str_starts_with($kind, 'valuetype ')) {
@@ -1942,13 +1952,33 @@ function emitDefaultForeignArg(EmitEnv $env, string $kind): void
 
         return;
     }
-    if ($kind === 'object' || \str_starts_with($kind, 'class ')) {
+    if ($kind === 'object' || $kind === 'string' || \str_starts_with($kind, 'class ')) {
         $env->m->emit('ldnull');
 
         return;
     }
-    if (\str_ends_with($kind, '[]')) {
+    if (\str_ends_with($kind, '[]') || \str_ends_with($kind, '[...]')) {
         $env->m->emit('ldnull');
+
+        return;
+    }
+    if (\in_array($kind, ['int8', 'int16', 'int32', 'uint8', 'uint16', 'uint32', 'char', 'bool'], true)) {
+        $env->m->emit('ldc.i4.0');
+
+        return;
+    }
+    if (\in_array($kind, ['int64', 'uint64'], true)) {
+        $env->m->emit('ldc.i8 0');
+
+        return;
+    }
+    if ($kind === 'float32') {
+        $env->m->emit('ldc.r4 0');
+
+        return;
+    }
+    if ($kind === 'float64') {
+        $env->m->emit('ldc.r8 0.0');
 
         return;
     }

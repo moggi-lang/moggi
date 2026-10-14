@@ -575,6 +575,21 @@ function moduleFileClosure(string $path): array
         throw new \RuntimeException('cannot determine project root for module closure');
     }
 
+    // A closure fully inside one packaged library (`libraries/base/tests` plus
+    // `libraries/base/src`) shares that package as its common prefix, but the
+    // prebuilt library outputs and the require rewriting agree on
+    // workspace-relative paths — so lift the root to the workspace. Closures
+    // outside the workspace keep their common prefix.
+    if ($stdlibRoot !== null) {
+        $workspace = workspaceRootForStdlibRoot($stdlibRoot);
+        $flatRoot = \str_replace('\\', '/', $root);
+        $flatWorkspace = \rtrim(\str_replace('\\', '/', $workspace), '/');
+        if ($flatWorkspace !== '' && $flatRoot !== $flatWorkspace
+            && \str_starts_with($flatRoot, $flatWorkspace . '/')) {
+            $root = $workspace;
+        }
+    }
+
     return [$files, $root];
 }
 
@@ -611,7 +626,7 @@ function findBoundedModuleRoot(string $filePath): ?string
     }
 
     $stdlibRoot = locateStdlibRoot($filePath);
-    $workspaceRoot = $stdlibRoot !== null ? realpath(dirname($stdlibRoot)) : null;
+    $workspaceRoot = $stdlibRoot !== null ? realpath(workspaceRootForStdlibRoot($stdlibRoot)) : null;
     $searchDirOnly = $workspaceRoot === null || $workspaceRoot === false;
     $knownModules = $stdlibRoot === null
         ? syntheticCompilerModuleIndex()

@@ -1,0 +1,4 @@
+tests/semantics/foreign/bad/Host-Jvm-Arity.mog:5:22: type error: jvm member `java.lang.StringBuilder.append` has no signature matching `()Ljava/lang/StringBuilder;`; the host's overloads take between 1 and 3 arguments
+
+  5 | foreign jvm function appendNothing "java.lang.StringBuilder.append" :: StringBuilder -> StringBuilder
+    |                      ^^^^^^^^^^^^^

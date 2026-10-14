@@ -1,0 +1,4 @@
+tests/semantics/foreign/bad/Host-Class-Typo.mog:3:22: type error: php has no class or interface `Data\Time\Clock\Nope`
+
+  3 | foreign php function newClock "Data\\Time\\Clock\\Nope:__con" :: String -> String
+    |                      ^^^^^^^^

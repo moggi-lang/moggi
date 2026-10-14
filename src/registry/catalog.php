@@ -5,7 +5,7 @@ namespace Moggi\Registry;
 use function Moggi\Cache\cacheEnabled;
 
 /**
- * Loading a registry's catalog — the read half of `registry-spec.md`.
+ * Loading a registry's catalog — the read half of the registry protocol.
  *
  * A resolver needs which versions exist, what each requires, and who may sign a
  * release, and all three are in the catalog: nothing here asks for a package
@@ -24,21 +24,24 @@ use function Moggi\Cache\cacheEnabled;
  */
 
 /**
- * The most bytes one registry response may carry.
+ * The most bytes one fetched registry file may carry.
  *
- * Configurable with `MOGGI_MAX_RESPONSE_BYTES`, and *enforced* rather than
- * advisory: the reader stops at the cap while it streams, so a hostile registry
- * cannot make the client buffer a body without bound. The default is generous
- * for a package archive and still well inside the memory ceiling `compiler.php`
- * sets.
+ * One *fetch*, not one response: the cap holds for a shard read from a mirror
+ * directory, a blob, a `source` archive, and a reader a test supplies, because
+ * what is being limited is a single registry artifact rather than the transport
+ * it arrived on. Configurable with `MOGGI_MAX_FETCH_BYTES`, and *enforced* rather
+ * than advisory: the reader stops at the cap while it streams, so a hostile
+ * registry cannot make the client buffer a body without bound. The default is
+ * generous for a package archive and still well inside the memory ceiling
+ * `compiler.php` sets.
  */
-function maxResponseBytes(): int
+function maxFetchBytes(): int
 {
-    $override = \getenv('MOGGI_MAX_RESPONSE_BYTES');
+    $override = \getenv('MOGGI_MAX_FETCH_BYTES');
     if (\is_string($override) && $override !== '') {
         if (\preg_match('/^[0-9]+$/', $override) !== 1 || (int) $override < 1) {
             throw new \RuntimeException(
-                'MOGGI_MAX_RESPONSE_BYTES must be a positive number of bytes, not ' . \var_export($override, true),
+                'MOGGI_MAX_FETCH_BYTES must be a positive number of bytes, not ' . \var_export($override, true),
             );
         }
 
@@ -55,13 +58,13 @@ function maxResponseBytes(): int
  * larger than a caller expected is a case to explain, not to die on midway
  * through building a string.
  */
-function assertResponseWithinCap(int $bytes, string $what): void
+function assertFetchWithinCap(int $bytes, string $what): void
 {
-    $cap = maxResponseBytes();
+    $cap = maxFetchBytes();
     if ($bytes > $cap) {
         throw new \RuntimeException(
-            "{$what} is {$bytes} bytes, over the {$cap}-byte response cap — "
-            . 'raise MOGGI_MAX_RESPONSE_BYTES if a package this large is expected',
+            "{$what} is {$bytes} bytes, over the {$cap}-byte fetch cap — "
+            . 'raise MOGGI_MAX_FETCH_BYTES if a package this large is expected',
         );
     }
 }
@@ -86,19 +89,19 @@ function fetchBytes(string $base, string $path, bool $decode = true): ?string
         return null;
     }
     $bytes = (string) \file_get_contents($location);
-    assertResponseWithinCap(\strlen($bytes), $path);
+    assertFetchWithinCap(\strlen($bytes), $path);
     if (!$decode) {
         return $bytes;
     }
     $decoded = decodeTransport($bytes);
-    assertResponseWithinCap(\strlen($decoded), $path);
+    assertFetchWithinCap(\strlen($decoded), $path);
 
     return $decoded;
 }
 
 /**
  * Read one registry file through whichever reader is in play, holding its bytes
- * to the response cap.
+ * to the fetch cap.
  *
  * `fetchBytes` caps as it streams; a caller-supplied reader hands back a string
  * that is already materialized (a test hook today), so this is where *its* size
@@ -110,7 +113,7 @@ function fetchRegistryBytes(string $base, string $path, ?callable $fetch): ?stri
 {
     $bytes = $fetch !== null ? $fetch($base, $path) : fetchBytes($base, $path);
     if ($bytes !== null) {
-        assertResponseWithinCap(\strlen($bytes), $path);
+        assertFetchWithinCap(\strlen($bytes), $path);
     }
 
     return $bytes;
@@ -137,7 +140,7 @@ function fetchHttpBytes(string $location, string $what, bool $decode = true): ?s
         return null;
     }
 
-    $cap = maxResponseBytes();
+    $cap = maxFetchBytes();
     $status = 0;
     $declared = null;
     foreach ($http_response_header ?? [] as $header) {
@@ -154,7 +157,7 @@ function fetchHttpBytes(string $location, string $what, bool $decode = true): ?s
     }
     if ($declared !== null && $declared > $cap) {
         \fclose($handle);
-        assertResponseWithinCap($declared, $what);
+        assertFetchWithinCap($declared, $what);
     }
 
     $bytes = \stream_get_contents($handle, $cap + 1);
@@ -162,12 +165,12 @@ function fetchHttpBytes(string $location, string $what, bool $decode = true): ?s
     if (!\is_string($bytes)) {
         return null;
     }
-    assertResponseWithinCap(\strlen($bytes), $what);
+    assertFetchWithinCap(\strlen($bytes), $what);
     if (!$decode) {
         return $bytes;
     }
     $decoded = decodeTransport($bytes);
-    assertResponseWithinCap(\strlen($decoded), $what);
+    assertFetchWithinCap(\strlen($decoded), $what);
 
     return $decoded;
 }
@@ -281,7 +284,7 @@ final class Catalog
 
     /**
      * Where blobs are read from, when the root names an origin other than the
-     * registry itself (§3.1). The origin is a location, never a trust input: the
+     * registry itself. The origin is a location, never a trust input: the
      * blob is still checked against the release's digest.
      */
     public function blobsBase(): ?string

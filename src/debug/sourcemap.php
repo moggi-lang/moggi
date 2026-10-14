@@ -476,20 +476,26 @@ function symbolId(string $module, string $function): string
     return $module . '.' . $function;
 }
 
-/** Project-relative display path — never an absolute developer filesystem path as identity. */
+/**
+ * Project-relative display path — never an absolute developer filesystem path as identity.
+ *
+ * The checkout source-tree segments stay a fixed vocabulary here — the flat `lib/`
+ * layout and the packaged `libraries/<package>/src` layout, plus the test/example
+ * trees — matching the PHP runtime's displaySourcePath and the JVM runtime normalizer.
+ */
 function normalizeDisplayPath(string $file): string
 {
     if ($file === '' || $file === '<interactive>') {
         return $file;
     }
     $file = str_replace('\\', '/', $file);
-    foreach (['/lib/', '/tests/', '/examples/'] as $marker) {
+    foreach (['/lib/', '/libraries/', '/tests/', '/examples/'] as $marker) {
         $pos = strpos($file, $marker);
         if ($pos !== false) {
             return substr($file, $pos + 1);
         }
     }
-    foreach (['lib/', 'tests/', 'examples/'] as $marker) {
+    foreach (['lib/', 'libraries/', 'tests/', 'examples/'] as $marker) {
         if (str_starts_with($file, $marker)) {
             return $file;
         }

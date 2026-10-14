@@ -1,0 +1,129 @@
+{
+  "format": 1,
+  "assemblies": {
+    "System.Text.Json": {
+      "types": {
+        "System.Text.Json.Nodes.JsonNode": {},
+        "System.Text.Json.Nodes.JsonValue": {},
+        "System.Text.Json.Nodes.JsonArray": {},
+        "System.Text.Json.Nodes.JsonObject": {},
+        "System.Text.Json.JsonDocument": {},
+        "System.Text.Json.JsonElement": { "valueType": true },
+        "System.Text.Json.JsonProperty": { "valueType": true },
+        "System.Text.Json.JsonElement/ObjectEnumerator": { "valueType": true },
+        "System.Text.Json.JsonValueKind": { "valueType": true },
+        "System.Text.Json.JsonSerializerOptions": {}
+      },
+      "signatures": {
+        "jsonNodeParse": {
+          "optionalTail": 2,
+          "params": [
+            "string",
+            "valuetype [System.Runtime]System.Nullable`1<valuetype [System.Text.Json]System.Text.Json.Nodes.JsonNodeOptions>",
+            "valuetype [System.Text.Json]System.Text.Json.JsonDocumentOptions"
+          ]
+        },
+        "jsonNodeParseIO": {
+          "optionalTail": 2,
+          "params": [
+            "string",
+            "valuetype [System.Runtime]System.Nullable`1<valuetype [System.Text.Json]System.Text.Json.Nodes.JsonNodeOptions>",
+            "valuetype [System.Text.Json]System.Text.Json.JsonDocumentOptions"
+          ]
+        },
+        "docParse": {
+          "optionalTail": 1,
+          "params": [
+            "string",
+            "valuetype [System.Text.Json]System.Text.Json.JsonDocumentOptions"
+          ]
+        },
+        "docParseIO": {
+          "optionalTail": 1,
+          "params": [
+            "string",
+            "valuetype [System.Text.Json]System.Text.Json.JsonDocumentOptions"
+          ]
+        },
+        "toJsonPlainRaw": {
+          "optionalTail": 1,
+          "params": [
+            "class [System.Text.Json]System.Text.Json.JsonSerializerOptions"
+          ]
+        },
+        "mkBoolVal": {
+          "optionalTail": 1,
+          "params": [
+            "bool",
+            "valuetype [System.Runtime]System.Nullable`1<valuetype [System.Text.Json]System.Text.Json.Nodes.JsonNodeOptions>"
+          ]
+        },
+        "mkStringVal": {
+          "optionalTail": 1,
+          "params": [
+            "string",
+            "valuetype [System.Runtime]System.Nullable`1<valuetype [System.Text.Json]System.Text.Json.Nodes.JsonNodeOptions>"
+          ]
+        },
+        "mkIntVal": {
+          "optionalTail": 1,
+          "params": [
+            "int64",
+            "valuetype [System.Runtime]System.Nullable`1<valuetype [System.Text.Json]System.Text.Json.Nodes.JsonNodeOptions>"
+          ]
+        },
+        "mkDoubleVal": {
+          "optionalTail": 1,
+          "params": [
+            "float64",
+            "valuetype [System.Runtime]System.Nullable`1<valuetype [System.Text.Json]System.Text.Json.Nodes.JsonNodeOptions>"
+          ]
+        },
+        "newArray": {
+          "optionalTail": 1,
+          "params": [
+            "valuetype [System.Runtime]System.Nullable`1<valuetype [System.Text.Json]System.Text.Json.Nodes.JsonNodeOptions>"
+          ]
+        },
+        "newObject": {
+          "optionalTail": 1,
+          "params": [
+            "valuetype [System.Runtime]System.Nullable`1<valuetype [System.Text.Json]System.Text.Json.Nodes.JsonNodeOptions>"
+          ]
+        },
+        "propGetValue": {
+          "optionalTail": 1,
+          "params": [
+            "object",
+            "object[]"
+          ]
+        },
+        "parseInt64": {
+          "optionalTail": 0,
+          "params": [
+            "string",
+            {
+              "emit": "class [System.Runtime]System.IFormatProvider",
+              "from": "class [System.Runtime]System.Globalization.CultureInfo"
+            }
+          ]
+        },
+        "parseDouble": {
+          "optionalTail": 0,
+          "params": [
+            "string",
+            {
+              "emit": "class [System.Runtime]System.IFormatProvider",
+              "from": "class [System.Runtime]System.Globalization.CultureInfo"
+            }
+          ]
+        }
+      }
+    },
+    "System.Text.Encodings.Web": {
+      "types": {
+        "System.Text.Encodings.Web.JavaScriptEncoder": {}
+      }
+    }
+  }
+}

@@ -31,13 +31,13 @@ $assertSame = static function (string $expected, string $actual, string $message
 };
 
 $assertSame(
-    'proj/lib/Data/Ord.mog',
-    outputRelativePath('/proj/lib/Data/Ord.mog', '/'),
+    'proj/libraries/base/src/Data/Ord.mog',
+    outputRelativePath('/proj/libraries/base/src/Data/Ord.mog', '/'),
     'the root of the filesystem leaves everything below it',
 );
 $assertSame(
-    'lib/Data/Ord.mog',
-    outputRelativePath('/proj/lib/Data/Ord.mog', '/proj/'),
+    'libraries/base/src/Data/Ord.mog',
+    outputRelativePath('/proj/libraries/base/src/Data/Ord.mog', '/proj/'),
     'a path under the root is what is left once the root is removed',
 );
 $assertSame(
@@ -51,8 +51,8 @@ $assertSame(
     'a path on another drive keeps its own structure, with the drive dropped',
 );
 $assertSame(
-    'a/moggi/moggi/lib/Data/Ord.mog',
-    outputRelativePath('D:/a/moggi/moggi/lib/Data/Ord.mog', 'C://'),
+    'a/moggi/moggi/libraries/base/src/Data/Ord.mog',
+    outputRelativePath('D:/a/moggi/moggi/libraries/base/src/Data/Ord.mog', 'C://'),
     'a root the path cannot be joined to leaves the path intact, drive dropped',
 );
 $assertSame(
@@ -61,8 +61,8 @@ $assertSame(
     'a drive root as the prefix — the shape a closure with no common root produces — keeps every component',
 );
 $assertSame(
-    'a/moggi/moggi/lib/Data/Ord.mog',
-    outputRelativePath('C:/a/moggi/moggi/lib/Data/Ord.mog', 'C:\\'),
+    'a/moggi/moggi/libraries/base/src/Data/Ord.mog',
+    outputRelativePath('C:/a/moggi/moggi/libraries/base/src/Data/Ord.mog', 'C:\\'),
     'a path on the prefixed drive keeps its structure below the drive, losing no characters',
 );
 

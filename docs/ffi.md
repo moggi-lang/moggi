@@ -5,8 +5,10 @@ title: "Calling the host platform"
 
 Moggi compiles to PHP, the JVM or .NET. A `foreign` declaration is how a Moggi
 program reaches that host's own functions, methods and classes: you name the
-host member and give it a Moggi type. There is no binding generator and no
-wrapper layer — the compiler emits the call.
+host member and give it a Moggi type. There is no wrapper layer — the
+compiler emits the call directly. The declarations themselves can be written
+by hand or read off the host by a binding generator (§12); either way what
+reaches the compiler is the same `foreign` declaration.
 
 PHP is the one host that needs something the compiler cannot supply, because
 its `mixed` has no type to write down. That support is a library module:
@@ -127,10 +129,12 @@ Not legal: a type variable, a type of your own, and an `IO` argument.
 Main.mog:3:22: type error: type `Colour` is not legal in a foreign signature; use a specific foreign type, a primitive, or PHPValue for reification
 ```
 
-Signatures are **not verified against the host**. The compiler trusts the path
-and the types; a wrong member or a wrong arity is a runtime
-`NoSuchMethodError`/`MissingMethodException`/`HostException`, not a compile
-error. Two consequences worth internalising:
+A declaration is **checked against the host it names**, where the host can be
+asked at compile time (§11): a member the host does not have, a member of the
+wrong kind, and an argument count the host cannot accept are compile errors
+today. What the compiler can still not promise is that the host *behaves* as the
+signature says — nothing at compile time can, and a `NULL` the host returns is
+still a `NULL`. Two consequences worth internalising:
 
 * Match the host's width. Moggi's `Int` is 64-bit, Java's `int` is not, so a
   method returning `int` is `Int32` and needs `fromIntegral` to become `Int`:
@@ -141,6 +145,10 @@ error. Two consequences worth internalising:
   answer :: Int
   answer = fromIntegral (parseInt "42") + 1
   ```
+
+  This one is no longer left to the reader: `java.lang.Integer:parseInt`
+  carrying `Int` where the host declares `(Ljava/lang/String;)I` is a compile
+  error naming both descriptors (§11).
 
 * An argument must be something the host can receive: a primitive, `String`, a
   foreign type, or a `Handle`. Containers are for results.
@@ -406,5 +414,121 @@ compiles for its backend, so its fixture is backend-qualified
   allowed in a signature.
 * **No host subtyping.** Two foreign types never unify, and a call through an
   interface needs that interface declared (JVM).
-* **No verification of a lying signature** — the host's own failure is what you
-  get.
+* **A declaration is checked against the host, not against the host's
+  behaviour.** The compiler can ask whether `java.util.Iterator.next` exists and
+  what descriptor it really has (§11); it cannot ask what the method does with
+  the value, whether the result is `null`, or whether a framework changes under
+  the same name. A host failure at run time is still the host's own failure.
+
+## 11. The declaration is checked against the host
+
+A `foreign` declaration is a claim about another language's API, and the
+compiler checks it wherever the host can be asked at compile time. The check is
+about the claim, never about behaviour: it can say the member exists with the
+descriptor this import will emit, and it can say it does not.
+
+| Backend | How the host is asked | What is checked |
+|---|---|---|
+| `php` | the compiler's own process (`function_exists`, reflection) | the function/class/method/constant exists, a `Class:member` path names a *static* method, `Class.__con` an instantiable class, and the declared arity can be satisfied |
+| `jvm` | `javap -s -p` on the class the path names, from the JDK the build compiles with | the member exists on that class, is public, and has exactly the descriptor the emitter will use — so a wrong name, a wrong argument count and a wrong type are all compile errors. A class `javap` cannot find is a verdict too (``jvm class `X` was not found on the compile classpath``), and a missing `javap` refuses every `foreign jvm` declaration with an error naming it |
+| `dotnet` | a reflection inspector built from shipped C# source over the compile's reference set (vendored assemblies plus the target framework) | the emitted signature matches a member the CLR declares — a missing class, member, or signature is a compile error naming the host. The sidecar cross-check still applies first; assembly scopes are ignored in the comparison because the runtime resolves across forwarding. No `dotnet` refuses the declaration; a broken inspector warns and leaves it unverified |
+
+The name in the diagnostic is always the *host's*, and the descriptor it prints
+is the one codegen would put on the wire:
+
+```moggi
+foreign jvm function rawLength "java.lang.String.length" :: String -> Int
+```
+
+```
+Main.mog:1:22: type error: jvm member `java.lang.String.length` has no signature matching `()J`; the host declares `()I`
+```
+
+Verification never invents a failure, but "cannot answer" has two shapes with
+two answers:
+
+* **A missing tool is an error.** Verifying a `foreign jvm` declaration needs
+`javap`, and a machine without one cannot keep the promise the check makes —
+so the declaration is refused with an error naming `javap`, not waved through.
+The `javap` must be the build's own: the JDK behind `JAVA_HOME` (or
+`GRAALVM_HOME`/`JDK_HOME`) answers first, and a `javap` from `PATH` is used
+only with a warning naming the binary, once per compile.
+* **A broken tool is a warning.** A `javap` that exits without saying the class
+is missing, or prints no class at all, is a tool failure rather than a verdict:
+it warns on stderr and the declaration is left alone. That path is for broken
+tools, never for missing ones.
+
+The check still declines to guess where the host genuinely cannot be asked:
+
+* **Vendor `.java` sources.** Carried jars are on `javap`'s classpath already,
+so "not found" among them is a verdict; vendor `.java` sources are compiled by
+the backend and never appear on the classpath, so a class `javap` cannot find
+while they are carried is accepted with a warning saying it was not verified.
+(On `php`, a carried Composer tree still stands the whole check down — the
+vendor lookup replaces that next.)
+* **A `foreign … type` declaration on `php`.** Its path is a label that never
+reaches the emitted code — `libraries/base/src/Platform/PHP.mog` names one `"mixed"`,
+`libraries/base/src/System/IO/PHP.mog` one `"array"` — so there is nothing to compare.
+* **A dynamic host.** `__call`/`__callStatic` make any method name legal at run
+time, so a name the class does not list is not reported.
+
+None of that is a switch, and there is none: those cases are the check declining
+to guess, not a bypass. A declaration the check rejects is one whose emitted call
+would fail at run time on that host, so a build that ran with verification
+disabled would mean something different from what it says — and the whole value of
+the check is that it is the compiler's own word.
+
+This is also what keeps the check honest: verification is a service to the
+declaration, never a hazard of its own. A verifier that breaks trying warns on
+stderr and lets the compile continue; a verifier that cannot run because its
+tool is missing refuses the declaration instead.
+
+## 12. Generated bindings
+
+Hand-written declarations are reviewed annotations: the compiler checks the
+member exists, but the *types* are the author's word. A generated binding
+removes the author's memory from the loop — the declarations are read off the
+host's own type information instead:
+
+```
+moggi bind php:acme/hello --tree ./acme-hello --out src/
+moggi bind jvm:com.acme:hello --tree ./acme-hello --out src/
+moggi bind dotnet:Acme.Hello --tree ./acme-hello --out src/
+```
+
+The coordinate spelling follows `moggi add`, and the module it becomes is
+prefixed by ecosystem, so three backends' bindings for "the same" library
+never share a namespace:
+
+| Coordinate | Module | Needs |
+|---|---|---|
+| `php:vendor/package` | `Composer.Vendor.Package` | in-process reflection over the resolved `vendor/` tree |
+| `jvm:group:artifact[:version]` | `Maven.…` | the bundled JDK's `javap` over jars under a `jvm/` directory |
+| `dotnet:Id[:version]` | `Nuget.…` | a .NET SDK for the CLR inspector, over assemblies under a `dotnet/` directory |
+
+A .NET bind also writes the versioned `dotnet/dependencies.json` sidecar
+beside the module — the optional tails and assembly scopes a declaration
+cannot spell. Bindings are backend-specific by construction; portable code
+needs a hand-written facade over one binding per backend.
+
+What the host cannot express is omitted and reported, never guessed: each
+bind ends with a coverage line (`N bound, M omitted`), and `--json` carries
+every skipped symbol with its reason. A missing tool is an error naming it,
+never a stand-down, and output is byte-deterministic for an unchanged host,
+so a regenerated module only diffs when the host API did.
+
+`moggi build --bind` generates from the descriptor instead of the command
+line: every `[ffi] bindings` entry for the build's backend is bound from the
+resolved host tree into the cache (reused while the tree is unchanged, bumpless
+without `--bind`), and the generated root rides as a library root. A binding
+is then an ordinary package: `moggi bind` → review the diff → `moggi pack` →
+`moggi publish` → `moggi install`, and downstream builds compile the shipped
+`.mog` (and sidecar) without running a host tool at all.
+
+Signing can happen on another machine than the upload. `pack --record`
+prints the signed release record instead of writing the archive,
+`moggi sign` signs a record file, `publish --signed` uploads either one's
+output after checking it against the packed tree byte for byte, and
+`publish --dry-run` prints the payload and the requests it would travel in
+without sending them. The record, the signature and the checks are one shared
+path, so the three verbs cannot drift apart.

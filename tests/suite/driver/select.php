@@ -38,6 +38,9 @@ function selectCases(array $cases, array $pathFilters, array $groupFilters, stri
         if ($groupFilters !== [] && !matchesAnyGroupFilter($case->name, $groupFilters)) {
             continue;
         }
+        if (($testArgs['excludeGroups'] ?? []) !== [] && matchesAnyGroupFilter($case->name, $testArgs['excludeGroups'])) {
+            continue;
+        }
         if ($pathFilters !== [] && !matchesAnyPathFilter($case, $pathFilters)) {
             continue;
         }

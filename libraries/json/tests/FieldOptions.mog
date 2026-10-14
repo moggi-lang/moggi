@@ -1,0 +1,41 @@
+-- `Options`: renaming fields, omitting absent optional fields, and rewriting
+-- constructor tags. The instances that read the options live in `Types.mog`.
+
+module FieldOptions (optionsSuite) where
+
+import Data.ByteString.Char8 qualified as C
+import Data.JSON
+import Types (Item(..), Opt(..), ShapeT(..))
+import Support
+
+showItem :: Either String Item -> String
+showItem e = case e of
+  Right i -> case i == (Item "x" Nothing) of
+    True -> "ok"
+    False -> "bad"
+  Left _ -> "bad"
+
+showOpt :: Either String Opt -> String
+showOpt e = case e of
+  Right o -> case o == (Opt "a" Nothing) of
+    True -> "ok"
+    False -> "bad"
+  Left _ -> "bad"
+
+showShapeT :: Either String ShapeT -> String
+showShapeT e = case e of
+  Right s -> case s == (CircleT 5) of
+    True -> "ok"
+    False -> "bad"
+  Left _ -> "bad"
+
+optionsSuite :: IO ()
+optionsSuite = do
+  expect "rename encode just" (bsToStr (encode (Item "x" (Just "hi")))) "{\"name\":\"x\",\"note\":\"hi\"}"
+  expect "rename encode nothing" (bsToStr (encode (Item "x" Nothing))) "{\"name\":\"x\",\"note\":null}"
+  expectOk "rename decode" (runDecode showItem (C.pack "{\"name\":\"x\",\"note\":null}"))
+  expect "omit encode nothing" (bsToStr (encode (Opt "a" Nothing))) "{\"label\":\"a\"}"
+  expect "omit encode just" (bsToStr (encode (Opt "a" (Just 1)))) "{\"label\":\"a\",\"extra\":1}"
+  expectOk "omit decode" (runDecode showOpt (C.pack "{\"label\":\"a\"}"))
+  expect "tag modifier encode" (bsToStr (encode (CircleT 5))) "{\"tag\":\"T_CircleT\",\"tRadius\":5}"
+  expectOk "tag modifier decode" (runDecode showShapeT (C.pack "{\"tRadius\":5,\"tag\":\"T_CircleT\"}"))

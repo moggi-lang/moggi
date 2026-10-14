@@ -72,7 +72,7 @@ MOG;
 $file = $tmp . '/Records.mog';
 $assert(file_put_contents($file, $source) !== false, 'write Records.mog');
 
-$svc = new AnalysisService([$root . '/lib']);
+$svc = new AnalysisService([$root . '/libraries/base/src']);
 $svc->setWorkspaceRoot($tmp);
 $uri = pathToUri($file);
 $svc->openDocument($uri, $source, 1);

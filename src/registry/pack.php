@@ -28,8 +28,8 @@ namespace Moggi\Registry;
  * user and group names, `644` for a file and `777` for a link, ustar with pax
  * records for names and targets that do not fit. Uncompressed on purpose —
  * zlib's output is not guaranteed identical across versions, so compressing
- * would move the digest to the machine's zlib. Compression is transport
- * (`registry-spec.md` §4.2).
+ * would move the digest to the machine's zlib. Compression is transport,
+ * not content.
  *
  * Modes are fixed because they do not travel: Windows derives a file's `x` bits
  * from its extension, so `bin/tool` is executable there and `script.bat` is not.
@@ -227,7 +227,7 @@ function entriesDigest(array $entries): string
 }
 
 /**
- * One §3.6 record: `type NUL size NUL hash NUL path NUL extra NUL LF`.
+ * One archive record: `type NUL size NUL hash NUL path NUL extra NUL LF`.
  *
  * One place, so a record read back out of an archive and one read off a
  * directory cannot be spelled two different ways.
@@ -339,7 +339,7 @@ function archiveRecordBytes(string $archive): string
 /**
  * The content digest of an archive's tree, `sha256:<hex>` — the value a release's
  * `docs` field names. The server computes the same thing from the same archive
- * when the docs are uploaded (§7), so this is the check that says the digest being
+ * when the docs are uploaded, so this is the check that says the digest being
  * signed is the digest of the bytes being sent.
  */
 function archiveTreeDigest(string $archive): string

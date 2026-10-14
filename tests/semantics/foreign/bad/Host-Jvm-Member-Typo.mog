@@ -1,0 +1,3 @@
+-- Fail: `java.lang.String` has no such member. `javap -s` is what says so, and the descriptor the
+-- emitter would put on the wire is the question it is asked.
+foreign jvm function upperX "java.lang.String.toUpperCaseX" :: String -> String

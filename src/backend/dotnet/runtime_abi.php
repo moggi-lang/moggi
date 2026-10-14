@@ -2138,6 +2138,13 @@ function rtExceptionAttachWrapperIl(): string
 IL;
 }
 
+/**
+ * Target-side twin of the compile-time display-path normalizers: the baked
+ * `displayPath` strings pass through this at report time, so its segment
+ * vocabulary must stay in sync with `Debug\normalizeDisplayPath` (flat `lib/`
+ * and packaged `libraries/` layouts, plus the test/example trees) — a path
+ * the two normalize differently prints twice, once per spelling.
+ */
 function rtDisplaySourcePathIl(): string
 {
     return <<<'IL'
@@ -2188,6 +2195,20 @@ function rtDisplaySourcePathIl(): string
     stloc pos
     ldloc pos
     ldc.i4.0
+    blt TryLibraries
+    ldloc norm
+    ldloc pos
+    ldc.i4.1
+    add
+    callvirt instance string [System.Runtime]System.String::Substring(int32)
+    ret
+    TryLibraries:
+    ldloc norm
+    ldstr "/libraries/"
+    callvirt instance int32 [System.Runtime]System.String::IndexOf(string)
+    stloc pos
+    ldloc pos
+    ldc.i4.0
     blt TryRelLib
     ldloc norm
     ldloc pos
@@ -2198,6 +2219,10 @@ function rtDisplaySourcePathIl(): string
     TryRelLib:
     ldloc norm
     ldstr "lib/"
+    callvirt instance bool [System.Runtime]System.String::StartsWith(string)
+    brtrue RelOk
+    ldloc norm
+    ldstr "libraries/"
     callvirt instance bool [System.Runtime]System.String::StartsWith(string)
     brtrue RelOk
     ldloc norm

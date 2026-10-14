@@ -1,0 +1,3 @@
+-- Fail: `DateTime::format` is an instance method, so `Class:MEMBER` names a static call the host
+-- does not have. `Class.MEMBER` with the receiver first is the spelling that asks for `format`.
+foreign php function formatStatic "DateTime:format" :: String -> String

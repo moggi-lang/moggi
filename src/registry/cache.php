@@ -58,10 +58,37 @@ function userCacheDir(): string
     return (\is_string($home) && $home !== '' ? \rtrim($home, '/') : '.') . '/.cache/moggi';
 }
 
-/** Where one archive lives: `downloads/<sha256>`, content-addressed. */
+/**
+ * The hex a digest must carry to become a path, or null when it must not.
+ *
+ * Digests arrive from signed catalogs and locks — trusted for *bytes*, not
+ * for *paths* — so the `sha256:<hex>` shape is checked here, where a digest
+ * first turns into a filename, rather than at each use.
+ */
+function safeDigestKey(string $digest): ?string
+{
+    if (!\str_starts_with($digest, 'sha256:')) {
+        return null;
+    }
+    $key = \substr($digest, \strlen('sha256:'));
+
+    return \preg_match('/^[0-9a-f]{64}$/', $key) === 1 ? $key : null;
+}
+
+/**
+ * Where one archive lives: `downloads/<sha256>`, content-addressed.
+ *
+ * Refuses a malformed digest instead of concatenating it: the digest is part
+ * path, and `sha256:../../../tmp/x` would otherwise climb out of `downloads/`.
+ */
 function downloadPath(string $digest): string
 {
-    return userCacheDir() . '/downloads/' . \str_replace('sha256:', '', $digest);
+    $key = safeDigestKey($digest);
+    if ($key === null) {
+        throw new \RuntimeException("its digest is not sha256:<hex>: `{$digest}`");
+    }
+
+    return userCacheDir() . '/downloads/' . $key;
 }
 
 /** Where one release is unpacked: `packages/<name>/<digest>`, digest stripped of its prefix. */

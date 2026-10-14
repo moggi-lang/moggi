@@ -7,22 +7,30 @@ One entry point: `test.php`, wrapped by the dev shell as `runtest`. There is no 
 tree decides what runs, and `tests/suite/` decides how. Where a test *goes* is
 [tests/README.md](../README.md); this file is the contract of running them.
 
+`test-all.php` runs everything in the repo, one stage after the other: the compiler suite without
+the base group, the base group on its own, and the json package's `Suite` once per backend. It
+takes the same `--backend` and forwards anything else to the `test.php` stages.
+
 ## Run
 
 ```bash
 runtest                        # php backend (default), whole suite
 runtest --backend all          # php → jvm → dotnet, one aggregate verdict
 runtest --group syntax/parser  # one subject, or any group: --group semantics
+runtest --group base           # only the standard library's own tests (in libraries/base/tests)
+runtest --exclude-group base   # everything but them
 runtest examples/twice         # one case, by logical name or by path
 runtest --list                 # discover everything, run nothing
 runtest --native --backend jvm # also build and run the native-executable smoke
 MOGGI_MICRO_SFX=/path/micro.sfx runtest --native   # …on php, which needs the runtime named
+php test-all.php --backend all # compiler suite + base + json, one stage after the other
 ```
 
 | Flag | Meaning |
 |------|---------|
 | `--backend php\|jvm\|dotnet` | Repeatable; `all` runs php, then jvm, then dotnet, with one aggregate verdict. Default `php`. |
-| `--group <name>` | Group or a subject path below one, repeatable (`semantics`, `syntax/parser`, `backend/runtime`). |
+| `--group <name>` | Group or a subject path below one, repeatable (`semantics`, `syntax/parser`, `backend/runtime`, `base`). |
+| `--exclude-group <name>` | Drop a group from the run, repeatable (e.g. `--exclude-group base`). |
 | `<path\|name>...` | A path (file or directory subtree) or a logical case name. Repeatable, and freely mixed with `--group`. |
 | `--list` | Discover the selection, print the case names grouped as the report groups them, run nothing. |
 | `--json` | One machine-readable document instead of the report (`--list --json` prints the same names plus group/backends). |
@@ -81,8 +89,8 @@ list somewhere:
   backend (`foreign import backend \`dotnet\` does not match compile backend \`php\``).
 
 For a project, each golden is named after the module it describes, and the one for the backend being
-compiled wins: `lib/Platform.jvm.err.expected` is compared on jvm even when the shared
-`lib/Platform.err.expected` is there for php.
+compiled wins: `Platform.jvm.err.expected` is compared on jvm even when the shared
+`Platform.err.expected` is there for php.
 
 A case that is not about the selected backend is still selected and reported as **not applicable**
 with its reason (`case is about jvm, dotnet`) — never silently dropped, and never called a skip: a
@@ -162,8 +170,7 @@ selection keeps to this process, where launching a worker costs more than the ca
 The terminal decides only whether the progress block can be drawn, never how the cases run, so a
 redirected or piped run is pooled by the same rule. The first line says which was chosen, and a
 requested worker count the selection cannot fill says so instead of claiming a worker nobody
-launched. `--stop-on-failure` is never given an automatic pool, and with an explicit `--jobs` it
-warns that work already dispatched runs to completion.
+launched. `--stop-on-failure` is never given an automatic pool.
 
 Before the workers start, a pooled run elaborates the standard library once per selected backend in
 this process, so the workers read a warm disk cache instead of each paying for the elaboration on its

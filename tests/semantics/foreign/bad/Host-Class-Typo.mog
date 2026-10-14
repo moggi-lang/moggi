@@ -1,0 +1,3 @@
+-- Fail: the host has no such class, so the value this declaration promises could only fail at run
+-- time (`Error: Class "Data\Time\Clock\Nope" not found`).
+foreign php function newClock "Data\\Time\\Clock\\Nope:__con" :: String -> String

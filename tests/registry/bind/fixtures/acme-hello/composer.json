@@ -1,0 +1,12 @@
+{
+  "name": "acme/hello",
+  "description": "Fixture third-party tree for `moggi bind` Phase 1: one class, one function.",
+  "autoload": {
+    "psr-4": {
+      "Acme\\Hello\\": "src/"
+    },
+    "files": [
+      "src/functions.php"
+    ]
+  }
+}

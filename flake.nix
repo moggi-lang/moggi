@@ -79,6 +79,10 @@
               ROOT="$(${moggiRootScript})"
               exec ${php85}/bin/php "$ROOT/test.php" "$@"
             '')
+            (writeShellScriptBin "runalltest" ''
+              ROOT="$(${moggiRootScript})"
+              exec ${php85}/bin/php "$ROOT/test-all.php" "$@"
+            '')
           ];
 
           shellHook = ''

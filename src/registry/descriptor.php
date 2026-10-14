@@ -26,6 +26,10 @@ const DESCRIPTOR_SUFFIX = '.moggi';
  *
  * `[dependencies]` is an empty list because every key in it is a package name —
  * the resolver is what knows those, not the descriptor reader.
+ *
+ * `[ffi]` marks a binding package: `bindings` lists the `backend:coordinate`
+ * items it binds. Enforcement (`moggi check` on `foreign` in a package without
+ * `[ffi]`) is a later phase; the schema entry is the deliberate format change.
  */
 const DESCRIPTOR_SCHEMA = [
     'package' => ['name', 'version', 'license', 'license-file', 'copyright', 'description', 'backends', 'homepage', 'repository', 'keywords', 'maintainer'],
@@ -35,6 +39,7 @@ const DESCRIPTOR_SCHEMA = [
     'php' => ['version', 'composer', 'git', 'files'],
     'jvm' => ['version', 'git', 'files'],
     'dotnet' => ['version', 'git', 'files'],
+    'ffi' => ['bindings'],
 ];
 
 /**
@@ -583,6 +588,7 @@ function readDescriptor(string $path): array
             'files' => optionalString($ini, 'dotnet', 'files'),
         ],
         'lib' => ['sourceDirs' => splitList((string) ($ini['lib']['source-dirs'] ?? ''))],
+        'ffi' => ['bindings' => splitList((string) ($ini['ffi']['bindings'] ?? ''))],
         'executables' => readRepeatableSection($ini, 'executable'),
         'testSuites' => readRepeatableSection($ini, 'test-suite'),
         'docs' => ['targetDir' => optionalString($ini, 'docs', 'target-dir')],

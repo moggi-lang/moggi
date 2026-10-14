@@ -22,6 +22,8 @@ use Moggi\Registry\FetchLog;
 
 use function Moggi\Registry\assertPackageName;
 use function Moggi\Registry\descriptorProblems;
+use function Moggi\Registry\downloadPath;
+use function Moggi\Registry\hostToolCsproj;
 use function Moggi\Registry\installDir;
 use function Moggi\Registry\isPackageName;
 use function Moggi\Registry\lockDisagreements;
@@ -146,14 +148,19 @@ try {
     $assert((\glob($work . '/atomic.txt.tmp.*') ?: []) === [], 'an atomic write must leave no staging file');
 
     // --- a registry response is capped, not buffered without bound -----------
-    $assert(\Moggi\Registry\maxResponseBytes() > 0, 'the response cap must be a positive number of bytes');
-    \putenv('MOGGI_MAX_RESPONSE_BYTES=4096');
-    $assert(\Moggi\Registry\maxResponseBytes() === 4096, 'the cap must honour MOGGI_MAX_RESPONSE_BYTES');
-    \Moggi\Registry\assertResponseWithinCap(4096, 'a body at the cap');
+    $assert(\Moggi\Registry\maxFetchBytes() > 0, 'the fetch cap must be a positive number of bytes');
+    \putenv('MOGGI_MAX_FETCH_BYTES=4096');
+    $assert(\Moggi\Registry\maxFetchBytes() === 4096, 'the cap must honour MOGGI_MAX_FETCH_BYTES');
+    \Moggi\Registry\assertFetchWithinCap(4096, 'a body at the cap');
     $refuses(
-        static fn () => \Moggi\Registry\assertResponseWithinCap(4097, 'catalog/js.json'),
-        'response cap',
+        static fn () => \Moggi\Registry\assertFetchWithinCap(4097, 'catalog/js.json'),
+        'fetch cap',
         'a body one byte over the cap must be refused',
+    );
+    $refuses(
+        static fn () => \Moggi\Registry\assertFetchWithinCap(4097, 'catalog/js.json'),
+        'MOGGI_MAX_FETCH_BYTES',
+        'the refusal names the variable that raises the cap',
     );
 
     // The same `fetchBytes` a mirror or a checkout is read with is capped too, so
@@ -164,7 +171,7 @@ try {
     \file_put_contents($mirror . '/small.json', 'ok');
     $refuses(
         static fn () => \Moggi\Registry\fetchBytes($mirror, 'big.json'),
-        'response cap',
+        'fetch cap',
         'an oversized registry file must be refused',
     );
     $assert(\Moggi\Registry\fetchBytes($mirror, 'small.json') === 'ok', 'a file inside the cap must read');
@@ -174,17 +181,17 @@ try {
     $fatReader = static fn (string $base, string $path): string => \str_repeat('x', 9000);
     $refuses(
         static fn () => \Moggi\Registry\fetchRegistryBytes('base', 'blobs/' . $hex, $fatReader),
-        'response cap',
+        'fetch cap',
         'a reader returning an oversized body must be refused',
     );
 
-    \putenv('MOGGI_MAX_RESPONSE_BYTES=not-a-number');
+    \putenv('MOGGI_MAX_FETCH_BYTES=not-a-number');
     $refuses(
-        static fn () => \Moggi\Registry\maxResponseBytes(),
-        'MOGGI_MAX_RESPONSE_BYTES',
+        static fn () => \Moggi\Registry\maxFetchBytes(),
+        'MOGGI_MAX_FETCH_BYTES',
         'a malformed cap must be refused',
     );
-    \putenv('MOGGI_MAX_RESPONSE_BYTES');
+    \putenv('MOGGI_MAX_FETCH_BYTES');
 
     // --- the catalog validates a name before it becomes a path ---------------
     $empty = new Catalog('base', ['shards' => []], ['ok' => true, 'note' => ''], null, new FetchLog(), false);
@@ -444,6 +451,24 @@ try {
     $assert(
         \Moggi\Registry\releaseMessage('json', '1.0.0', $release) !== \Moggi\Registry\releaseMessage('json', '1.0.0', $otherRelease),
         'the third_party map must be covered by the release signature',
+    );
+
+    // --- hostile inputs are refused where they become output (step 2) -------
+    // F5: the generated `.csproj` escapes quotes as well as `<`, `>` and `&`,
+    // so a coordinate cannot break out of the attribute; coordinates are also
+    // validated before a tool sees them (`host_tool_manifest_test.php`).
+    $injected = hostToolCsproj(['evil" Foo="bar:1.0'], 'app');
+    $assert(
+        \str_contains($injected, 'Include="evil&quot; Foo=&quot;bar"'),
+        'a quote in a coordinate must be escaped: ' . $injected,
+    );
+
+    // F6: `downloadPath()` validates the digest like `installDir` does, and a
+    // malformed digest is refused instead of concatenated into the path.
+    $refuses(
+        static fn () => downloadPath('sha256:../../../tmp/x'),
+        'sha256:<hex>',
+        'a hostile digest must not reach the path',
     );
 
     // Two releases pinning different bytes for one path is refused, not resolved.

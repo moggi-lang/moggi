@@ -61,7 +61,7 @@ function projectRootFromPath(string $path): string
 {
     $stdlib = configuredStdlibLibPath() ?? locateStdlibRoot($path);
     if ($stdlib !== null) {
-        return dirname($stdlib);
+        return workspaceRootForStdlibRoot($stdlib);
     }
 
     $real = realpath($path);

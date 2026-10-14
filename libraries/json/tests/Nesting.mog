@@ -1,0 +1,26 @@
+-- Nesting and recursion: a record inside a record, several levels deep, and a
+-- type that refers to itself.
+
+module Nesting (nestingSuite, deepNestingSuite, recursiveSuite) where
+
+import Data.JSON
+import Types (Address(..), Customer(..), Leaf(..), Nest3(..), Nest2(..), Nest1(..), Tree(..))
+import Support
+
+nestingSuite :: IO ()
+nestingSuite = do
+  let ada = Customer "Ada" 36 (Address "Main St" "London") ("genius" : "pioneer" : [])
+  expect "nested encode" (bsToStr (encode ada)) "{\"cName\":\"Ada\",\"cAge\":36,\"cAddress\":{\"street\":\"Main St\",\"city\":\"London\"},\"cTags\":[\"genius\",\"pioneer\"]}"
+  rtOk "nested" ada
+
+deepNestingSuite :: IO ()
+deepNestingSuite = do
+  let sample = Nest1 (Nest2 (Nest3 (Leaf 7 "deep") (1 : 2 : 3 : [])) "mid") 4
+  expect "deep nesting encode" (bsToStr (encode sample)) "{\"outer\":{\"mid\":{\"leaf\":{\"n\":7,\"lbl\":\"deep\"},\"xs\":[1,2,3]},\"tag\":\"mid\"},\"count\":4}"
+  rtOk "deep nesting" sample
+
+recursiveSuite :: IO ()
+recursiveSuite = do
+  rtOk "recursive leaf" LeafT
+  rtOk "recursive node" (NodeT 1 (NodeT 2 LeafT LeafT) (NodeT 3 LeafT LeafT))
+  expect "recursive encode" (bsToStr (encode LeafT)) "{\"tag\":\"LeafT\"}"

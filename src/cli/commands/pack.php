@@ -6,6 +6,7 @@ use function Moggi\Backend\setCompileBackend;
 use function Moggi\Docs\generateMogdoc;
 use function Moggi\Docs\loadOrBuildIndex;
 use function Moggi\Registry\archiveDigest;
+use function Moggi\Registry\buildReleaseRecord;
 use function Moggi\Registry\directoryDigest;
 use function Moggi\Registry\directoryEntries;
 use function Moggi\Registry\entriesDigest;
@@ -14,6 +15,11 @@ use function Moggi\Registry\moggiIgnorePatterns;
 use function Moggi\Registry\packEntries;
 use function Moggi\Registry\prettyJson;
 use function Moggi\Registry\readDescriptor;
+use function Moggi\Registry\readNsecKey;
+use function Moggi\Registry\releaseSource;
+use function Moggi\Registry\selectAuthor;
+use function Moggi\Registry\signRelease;
+use function Moggi\Registry\thirdPartyForDescriptor;
 
 /**
  * Render the package's API documentation into `[docs] target-dir`.
@@ -81,8 +87,9 @@ function packDocsRoots(string $directory, array $descriptor): array
  * implementation of that rule, and `--list` prints the records the content digest
  * is taken over, so a digest can be argued with rather than believed.
  *
- * Two digests, two questions: the **content** digest identifies the directory
- * (what a `dir` source names), and the **archive** digest is the blob (`install`
+ * Two digests, two questions: the **content** digest identifies the directory (what
+ * a `dir` source names — provenance, since only a `git` source is an origin a
+ * client reproduces from), and the **archive** digest is the blob (`install`
  * checks it after downloading). Nothing is compressed — zlib's output is not
  * identical across versions, and compression is transport anyway.
  *
@@ -98,6 +105,8 @@ function packUsage(): string
     return <<<HELP
     usage:
       moggi pack [<dir>] [-o FILE] [--list] [--json]
+      moggi pack [<dir>] --record [--as NPUB] [--nsec-file FILE]
+        [--url URL --commit SHA] [--no-docs]
 
     Pack a directory into the canonical archive, and print both digests: the
     content digest of the tree (what a `dir` source names) and the digest of the
@@ -115,6 +124,14 @@ function packUsage(): string
                            write nothing
       --no-docs            do not render [docs] target-dir (see below)
       --json               machine-readable output
+      --record             print the signed release record instead of writing
+                           the archive: the same record `publish` would sign and
+                           upload. Needs the author's key (--nsec-file, else
+                           MOGGI_NSEC_FILE, else a no-echo prompt on a terminal)
+      --as NPUB            which [author] signs (required when there is more than one)
+      --nsec-file FILE     the signing key, mode 0600
+      --url URL            record a `git` source instead of the default `dir`
+      --commit SHA         the commit that URL names (with --url)
 
     A package that declares [docs] target-dir has its API documentation rendered
     there while it is packed, and the digest of that tree is reported as `docs`.
@@ -136,6 +153,11 @@ function runPackCommand(array $argv): int
         ['name' => 'list'],
         ['name' => 'json'],
         ['name' => 'noDocs'],
+        ['name' => 'record'],
+        ['name' => 'as', 'value' => true],
+        ['name' => 'nsec-file', 'value' => true],
+        ['name' => 'url', 'value' => true],
+        ['name' => 'commit', 'value' => true],
     ]);
 
     if (wantsHelp($argv)) {
@@ -169,6 +191,10 @@ function runPackCommand(array $argv): int
         $ignore = moggiIgnorePatterns($directory);
         $entries = directoryEntries($directory, $exclude, $ignore);
         $content = entriesDigest($entries);
+
+        if ($options['record'] && $options['list']) {
+            throw new \RuntimeException('cannot combine --record with --list — one prints the release, the other the content records');
+        }
 
         if ($options['list']) {
             if ($options['json']) {
@@ -205,6 +231,23 @@ function runPackCommand(array $argv): int
         $digest = archiveDigest($archive);
 
         $docs = $docsTarget === null || $options['noDocs'] ? null : packDocs($directory, $descriptor);
+
+        if ($options['record']) {
+            $author = selectAuthor($descriptor['authors'], $options['as']);
+            $nsec = readNsecKey($options['nsec-file']);
+            $record = buildReleaseRecord(
+                $descriptor['name'],
+                $descriptor['version'],
+                releaseSource($options['url'], $options['commit'], $directory, $content),
+                $digest,
+                thirdPartyForDescriptor($descriptor),
+                (string) \file_get_contents($descriptorPath),
+                $docs === null ? null : $docs['digest'],
+            );
+            echo prettyJson(signRelease($descriptor['name'], $descriptor['version'], $record, $author, $nsec)) . "\n";
+
+            return 0;
+        }
 
         if (@\file_put_contents($output, $archive) === false) {
             throw new \RuntimeException("cannot write {$output}");

@@ -1,0 +1,28 @@
+-- Sums: a newtype-like single-field constructor unwraps, an all-nullary sum is a
+-- string, and a mixed sum is a tagged object.
+
+module Sums (sumsSuite) where
+
+import Data.ByteString.Char8 qualified as C
+import Data.JSON
+import Types (Color(..), Box(..), Result(..))
+import Support
+
+rejectResult :: Either String Result -> String
+rejectResult e = case e of
+  Left _ -> "ok"
+  Right _ -> "bad"
+
+sumsSuite :: IO ()
+sumsSuite = do
+  expect "box encode" (bsToStr (encode (Box 3))) "3"
+  rtOk "box" (Box 3)
+  expect "nullary red" (bsToStr (encode Red)) "\"Red\""
+  expect "nullary green" (bsToStr (encode Green)) "\"Green\""
+  expect "nullary blue" (bsToStr (encode Blue)) "\"Blue\""
+  rtOk "nullary green" Green
+  expect "mixed ok encode" (bsToStr (encode Ok)) "{\"tag\":\"Ok\"}"
+  expect "mixed error encode" (bsToStr (encode (Error "x"))) "{\"tag\":\"Error\",\"contents\":\"x\"}"
+  rtOk "mixed ok" Ok
+  rtOk "mixed error" (Error "x")
+  expectOk "mixed string rejected" (runDecode rejectResult (C.pack "\"Ok\""))

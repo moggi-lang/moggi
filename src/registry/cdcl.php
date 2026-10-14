@@ -4,7 +4,7 @@ namespace Moggi\Registry;
 
 /**
  * A conflict-driven clause-learning (CDCL) solver — the fallback a resolution
- * takes when the greedy newest-first walk cannot finish (`resolver-sketch.md`).
+ * takes when the greedy newest-first walk cannot finish.
  *
  * Dependency resolution is encoded as a small SAT problem. Every (name, version)
  * pair is a proposition; `at most one version of a package` is a pairwise clause;

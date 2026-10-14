@@ -1,0 +1,27 @@
+-- Records: a unary record encodes as an object, a field may not be missing, and
+-- a value of the wrong shape is refused.
+
+module Records (recordsSuite) where
+
+import Data.ByteString.Char8 qualified as C
+import Data.JSON
+import Types (Person(..))
+import Support
+
+showPerson :: Either String Person -> String
+showPerson e = case e of
+  Right (Person n a) -> n
+  Left _ -> "bad"
+
+rejectPerson :: Either String Person -> String
+rejectPerson e = case e of
+  Left _ -> "ok"
+  Right _ -> "bad"
+
+recordsSuite :: IO ()
+recordsSuite = do
+  expect "record encode" (bsToStr (encode (Person "ada" 36))) "{\"name\":\"ada\",\"age\":36}"
+  rtOk "record" (Person "ada" 36)
+  expectVal "record decode" (runDecode showPerson (C.pack "{\"name\":\"Sasa\",\"age\":44}")) "Sasa"
+  expectOk "record missing field rejected" (runDecode rejectPerson (C.pack "{\"name\":\"ada\"}"))
+  expectOk "record wrong shape rejected" (runDecode rejectPerson (C.pack "null"))

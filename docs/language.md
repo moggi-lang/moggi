@@ -344,7 +344,7 @@ line for a single entry, and repeated if you prefer:
 Each entry is `<backend> = <Module>`, and a backend the pragma does not name cannot
 be built: the facade's signatures are portable, so callers stay written once, and
 compiling for a missing backend is an error naming both sides. [ffi.md §9](ffi.md#9-a-module-that-must-work-on-every-backend)
-has the whole pattern; `lib/System/IO.mog` is a real example to copy.
+has the whole pattern; `libraries/base/src/System/IO.mog` is a real example to copy.
 
 ## Comments
 

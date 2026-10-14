@@ -1,0 +1,33 @@
+-- `allowOmittedFields`: whether a record decode may omit an absent optional field.
+-- The generic decoder lives in `Types.mog` for the same reason the encoders do.
+
+module AllowFields (allowFieldsSuite) where
+
+import Data.JSON
+import Types (Config(..), decConfig)
+import Support
+
+allowOpts :: Options
+allowOpts = allowOmittedFields True defaultOptions
+
+noAllowOpts :: Options
+noAllowOpts = allowOmittedFields False defaultOptions
+
+showConfig :: Either String Config -> String
+showConfig e = case e of
+  Left _ -> "bad"
+  Right c -> case c == (Config 8080 Nothing) of
+    True -> "ok"
+    False -> "bad"
+
+showNoAllow :: Either String Config -> String
+showNoAllow e = case e of
+  Left _ -> "ok"
+  Right _ -> "bad"
+
+allowFieldsSuite :: IO ()
+allowFieldsSuite = do
+  r1 <- decConfig allowOpts "{\"port\":8080}"
+  expect "allow omitted fields" (showConfig r1) "ok"
+  r2 <- decConfig noAllowOpts "{\"port\":8080}"
+  expect "reject omitted fields" (showNoAllow r2) "ok"

@@ -17,6 +17,7 @@ usage:
     moggi run <source.mog|input-dir> [options]
     moggi repl [options]
     moggi install [<dir|<name>.moggi>] [--registry URL|DIR] [--frozen] [--dry-run]
+    moggi add     <name|backend:coordinate> [--root DIR] [--version V] [--print] [--json]
     moggi update  [<dir|<name>.moggi>] [--registry URL|DIR] [--dry-run]
     moggi outdated [<dir|<name>.moggi>] [--registry URL|DIR] [--json]
     moggi why     [<name>] [--registry URL|DIR] [--json]
@@ -26,6 +27,7 @@ usage:
     moggi unmaintained <name> [--note TEXT | --clear] [--registry URL] [--as NPUB]
     moggi takeover request <name> --reason TEXT [--repo URL] [--registry URL] [--as NPUB]
     moggi takeover approve|reject <name> [--note TEXT] [--registry URL] [--as NPUB]
+    moggi bind    <backend>:<coordinate> --tree DIR [--out DIR] [--print] [--json]
     moggi build   [<dir|<name>.moggi>] [--exe NAME] [--backend B] [-o PATH]
     moggi check   [<dir|<name>.moggi>] [--json]
     moggi verify  [<dir|<name>.moggi>] [--registry URL|DIR] [--json]
@@ -49,6 +51,14 @@ commands:
     repl         interactive REPL
     install      make the lock true: verify it against the catalog, then fetch,
                  verify and unpack every package it names
+    add          declare one dependency in the descriptor and make it real: a
+                 bare `name` is a package of ours ([dependencies], resolved,
+                 locked and fetched the way `install` does it), and a `backend:`
+                 prefix is a third-party host package — php `[php] composer`,
+                 jvm `[jvm.maven]`, dotnet `[dotnet.nuget]` — resolved through
+                 the same cache tree `moggi build` uses, so a `vendor/package`,
+                 `group:artifact:version` or id is fetched once, not per build
+                 (--print shows the edit and stops)
     update       re-resolve to the newest versions the descriptor allows and
                  rewrite the lock, reporting what moved
     outdated     report what a lock could move to, without writing it: what each
@@ -68,6 +78,12 @@ commands:
     takeover     ask to take over an abandoned package (Hackage-style: a public
                  request, a waiting period, then an admin's recorded decision), or
                  — as an admin — approve or reject such a request
+    bind         read a third-party host tree and write the typed Moggi
+                 bindings for it (`php:acme/hello` becomes `Composer.Acme.Hello`,
+                 `jvm:com.acme:hello` becomes `Maven.Com.Acme.Hello`,
+                 `dotnet:Acme.Hello` becomes `Nuget.Acme.Hello` plus its
+                 versioned sidecar); --print shows the module and stops,
+                 --json the inspected descriptor. Bindings are backend-specific
     build        read the descriptor, add the installed dependencies as library
                  roots and delegate to `compile`
     check        look the package over for common mistakes, without touching the
@@ -83,7 +99,6 @@ commands:
                  print its digest (what becomes blobs/<sha256>)
     publish      pack, sign with an author's npub, and upload a release to a
                  registry — the archive, the docs, then the signed record
-                 (no login: every request is signed with the author's key)
     cache        what the on-disk cache holds, and how to get the space back
                  (info | clear [compiler|catalog|packages|runtime|test|downloads|all])
     version      print compiler and stdlib versions, the compiler source
@@ -117,10 +132,10 @@ options:
                     document and the requests the resolution cost
     --no-cache      bypass the on-disk compile cache for this run
     --lib PATH      extra module search root (app / third-party library).
-                    Repeatable. The compiler stdlib (`lib/` next to moggi) is
+                    Repeatable. The compiler stdlib (`libraries/` next to moggi) is
                     used automatically; --lib is only needed for additional roots.
     --lib-php PATH  precompiled stdlib PHP tree (e.g. from an earlier
-                    `moggi compile lib -o out/lib`) for single-file compiles
+                    `moggi compile libraries/base -o out/lib`) for single-file compiles
     --script PATH   repl: run commands from a file (non-interactive; for tests)
     -h, --help      show this help
 
