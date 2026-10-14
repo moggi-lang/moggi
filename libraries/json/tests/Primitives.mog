@@ -1,0 +1,41 @@
+-- Primitive values: the bytes `encode` writes and the round-trip through
+-- `eitherDecode`.
+
+module Primitives (primitivesSuite) where
+
+import Data.ByteString.Char8 qualified as C
+import Data.JSON
+import Support
+
+primitivesSuite :: IO ()
+primitivesSuite = do
+  expect "encode true" (bsToStr (encode (True :: Bool))) "true"
+  expect "encode false" (bsToStr (encode (False :: Bool))) "false"
+  expect "encode int" (bsToStr (encode (42 :: Int))) "42"
+  expect "encode string" (bsToStr (encode ("hi" :: String))) "\"hi\""
+  expect "encode list" (bsToStr (encode ([1, 2, 3] :: [Int]))) "[1,2,3]"
+  expect "encode nothing" (bsToStr (encode (Nothing :: Maybe Int))) "null"
+  expect "encode just" (bsToStr (encode (Just (7 :: Int)))) "7"
+  expect "encode object" (bsToStr (encode (jsonObject [("a", Null), ("b", toJSON (1 :: Int))]))) "{\"a\":null,\"b\":1}"
+  expect "encode empty list" (bsToStr (encode ([] :: [Int]))) "[]"
+  expect "encode empty object" (bsToStr (encode (jsonObject ([] :: [(String, Value)])))) "{}"
+  -- Byte-level non-ASCII output is exercised through the `\u00e9` escape case
+  -- under `edges`; `bsToStr` re-encodes through Char8 and would double-encode it.
+
+  expectVal "bigint round-trips" (runDecode showBig (C.pack "9223372036854775808")) "9223372036854775808"
+  rtOk "bool" (True :: Bool)
+  rtOk "list" ([1, 2] :: [Int])
+  rtOk "maybe nothing" (Nothing :: Maybe Int)
+  rtOk "maybe just" (Just (7 :: Int))
+  rtOk "string" "hello"
+  rtOk "empty string" ""
+  rtOk "quote in string" "a\"b"
+  rtOk "empty list" ([] :: [Int])
+  rtOk "list of three" (1 : 2 : 3 : [] :: [Int])
+  rtOk "either left" (Left 1 :: Either Int String)
+  rtOk "either right" (Right "world" :: Either Int String)
+
+showBig :: Either String Integer -> String
+showBig e = case e of
+  Right n -> bsToStr (encode n)
+  Left _ -> "bad-big"

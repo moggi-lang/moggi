@@ -25,8 +25,8 @@ const INSTALL_ROOT_CONSTANT = 'MOGGI_INSTALL_ROOT';
  * The installation this process is running from, or null in a source checkout.
  *
  * The stub's constant is authoritative — it is the directory the executable was
- * started from, so a compiler copied elsewhere finds the `lib/` and `runtime/`
- * beside *it*, never beside wherever it was built. The `Phar::running` fallback
+ * started from, so a compiler copied elsewhere finds the `libraries/` and
+ * `runtime/` beside *it*, never beside wherever it was built. The `Phar::running` fallback
  * covers an archive run without the stub, which nothing in this tree produces,
  * but which costs one line to keep working.
  */

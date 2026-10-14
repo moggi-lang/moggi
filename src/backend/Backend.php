@@ -106,8 +106,52 @@ interface Backend
         array $pathInfo,
         bool $instanceReceiverIsHandle,
     ): ?string;
+
+    /**
+     * Verify a foreign import against the host, when the host can be asked at compile time.
+     *
+     * A `foreign import` is an axiom — the compiler emits what it is told to emit — so a mistyped
+     * host name, a wrong member kind or a wrong arity would otherwise surface as a runtime failure
+     * (`HostException`, `NoSuchMethodError`, `MissingMethodException`). Return an error message when
+     * the host was consulted and disagrees with the declaration, and null when the declaration
+     * matches or when the host simply has no answer (a class that may come from a tree this scan
+     * cannot see).
+     *
+     * A missing tool is the opposite case: a tool the verification needs in order to keep the
+     * promise it makes is an error, not a stand-down — throw {@see VerificationUnavailable} and
+     * the compile refuses the declaration with a positioned diagnostic. A verifier that *breaks*
+     * trying (a crash inside the check, a tool failing in a way no verdict covers) still warns on
+     * stderr and lets the compile continue; that path is for broken tools, not missing ones.
+     *
+     * The check is against `$nativeSig` — the signature this import is about to emit — so what the
+     * host is asked about is exactly what codegen will call.
+     *
+     * @param 'function'|'const'|'type' $kind
+     * @param array{dispatch: string, classPath: ?string, hostMember: ?string, path?: string} $pathInfo
+     * @param ?string $nativeSig the descriptor or signature the emitter will use (null if the
+     *                           backend does not carry one)
+     */
+    public function verifyForeignImport(
+        string $kind,
+        array $pathInfo,
+        TypeNode $type,
+        ?string $nativeSig,
+        string $name,
+    ): ?string;
 }
 
+
+/**
+ * The verifier cannot keep its promise: the tool it needs is not installed.
+ *
+ * This is not a diagnostic — it carries no position — and it must not be
+ * swallowed into a stderr warning the way a *broken* verifier is. It propagates
+ * to the foreign-import check, which turns it into a positioned type error
+ * naming the missing tool.
+ */
+final class VerificationUnavailable extends \RuntimeException
+{
+}
 
 /** @return list<string> */
 function knownBackendIds(): array

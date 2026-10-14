@@ -1,0 +1,5 @@
+-- Fail: `StringBuilder.append` has no no-argument form, so the descriptor this declaration infers
+-- is not one the host declares; the diagnostic lists the ones it does.
+foreign jvm type StringBuilder "java.lang.StringBuilder"
+
+foreign jvm function appendNothing "java.lang.StringBuilder.append" :: StringBuilder -> StringBuilder

@@ -1,0 +1,4 @@
+tests/semantics/foreign/bad/Host-Jvm-Class-Typo.mog:3:22: type error: jvm class `com.example.NoSuchClass` was not found on the compile classpath
+
+  3 | foreign jvm function whatever "com.example.NoSuchClass:whatever" :: String -> String
+    |                      ^^^^^^^^

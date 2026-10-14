@@ -1,0 +1,4 @@
+tests/semantics/foreign/bad/Host-Function-Typo.mog:3:22: type error: php has no function `strlenn`
+
+  3 | foreign php function rawLen "strlenn" :: String -> Int
+    |                      ^^^^^^

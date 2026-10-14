@@ -14,7 +14,7 @@ use function Moggi\Registry\shortNpub;
  * one as an admin.
  *
  * A takeover is not a silent ownership change: it is a public request, a waiting
- * period, and an admin's recorded decision (`registry-governance-plan.md` §3).
+ * period, and an admin's recorded decision.
  * The record is written into the registry at `requests/takeover/<name>.json`, and
  * the registry's git history is the audit log, so the whole process is visible.
  * The client's part is to file the request — signed with the requester's npub —

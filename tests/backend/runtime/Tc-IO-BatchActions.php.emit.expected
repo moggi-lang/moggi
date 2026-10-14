@@ -4,10 +4,10 @@ namespace Tc\IO\BatchActions;
 
 const __MOGGI_MAP = [[20 => ['Tc.IO.BatchActions.sequenceLocal', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 7, 20], 27 => ['Tc.IO.BatchActions.sequenceLocal', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 9, 8], 28 => ['Tc.IO.BatchActions.sequenceLocal', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 10, 3], 34 => ['Tc.IO.BatchActions.main', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 14, 3], 36 => ['Tc.IO.BatchActions.main', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 15, 15], 40 => ['Tc.IO.BatchActions.main', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 15, 29], 43 => ['Tc.IO.BatchActions.main', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 16, 3], 44 => ['Tc.IO.BatchActions.main', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 17, 3], 45 => ['Tc.IO.BatchActions.main', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 18, 3], 46 => ['Tc.IO.BatchActions.main', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 18, 3]], ['Tc\\IO\\BatchActions\\sequenceLocal' => ['Tc.IO.BatchActions.sequenceLocal', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 6, 1], 'Tc\\IO\\BatchActions\\main' => ['Tc.IO.BatchActions.main', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 13, 8]]];
 
-require_once __DIR__ . '/../../../lib/Data/Foldable.php';
-require_once __DIR__ . '/../../../lib/Data/List.php';
-require_once __DIR__ . '/../../../lib/System/IO/Base.php';
-require_once __DIR__ . '/../../../lib/System/IO/PHP.php';
+require_once __DIR__ . '/../../../libraries/base/src/Data/Foldable.php';
+require_once __DIR__ . '/../../../libraries/base/src/Data/List.php';
+require_once __DIR__ . '/../../../libraries/base/src/System/IO/Base.php';
+require_once __DIR__ . '/../../../libraries/base/src/System/IO/PHP.php';
 
 use function Data\Foldable\traverse_;
 use function Data\List\__ev_Foldable_List;

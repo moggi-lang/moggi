@@ -7,7 +7,8 @@ use Moggi\IR\Module;
 use Moggi\Syntax\Ast\TypeNode;
 
 use function Moggi\Backend\DotNet\Codegen\emitModule;
-use function Moggi\Backend\DotNet\Dependencies\dotNetDeclaredSignature;
+use function Moggi\Backend\DotNet\Dependencies\dotNetSignatureEntry;
+use function Moggi\Backend\DotNet\Verify\verifyDotNetForeignImport;
 use function Moggi\Backend\DotNet\Foreign\clrSigFromMoggiType;
 use function Moggi\Backend\DotNet\Naming\artifactPath;
 use function Moggi\Backend\DotNet\Naming\symbolName;
@@ -52,11 +53,19 @@ final class DotNetBackend implements Backend
         return [];
     }
 
-    /** The .NET emit is a function of the IR alone (CLR metadata is read during
-     * type checking, not during emit). */
+    /**
+     * The content hash of every `dotnet/*.json` sidecar the compile sees —
+     * or `''` when there is none, keeping the old key for sidecar-free builds.
+     *
+     * A sidecar changes emit without changing any declaration (the optional
+     * tail it pads, the assembly scope it names), and the source closure only
+     * hashes `.mog` files, so without this a regenerated binding reuses the
+     * previous build's IL. The JVM and PHP backends need nothing here: their
+     * binders emit declarations alone, which the closure already content-keys.
+     */
     public function emitCacheDiscriminator(): string
     {
-        return '';
+        return Dependencies\dotNetSidecarDiscriminator();
     }
 
     /**
@@ -96,13 +105,18 @@ final class DotNetBackend implements Backend
         array $pathInfo,
         string $name,
     ): ?string {
+        $sidecar = ($kind === 'function' && ($pathInfo['dispatch'] ?? '') !== 'intrinsic')
+            ? dotNetSignatureEntry($name, $pathInfo['declaringRoot'] ?? null)
+            : null;
+
         return clrSigFromMoggiType(
             $type,
             $pathInfo['dispatch'],
             $kind,
             $pathInfo['classPath'],
             $pathInfo['hostMember'],
-            dotNetDeclaredSignature($name),
+            $sidecar,
+            $name,
         );
     }
 
@@ -121,5 +135,22 @@ final class DotNetBackend implements Backend
         }
 
         return null;
+    }
+
+    /**
+     * The CLR verdict: the emitted signature is compared against reflection over the compile's
+     * reference set (vendored assemblies plus the target framework), so a member that does not
+     * exist — or a shape the host does not declare — is a compile error naming the host, the way
+     * `javap` answers for the JVM backend. A missing `dotnet` refuses the declaration; a tool
+     * that breaks trying warns and leaves it unverified.
+     */
+    public function verifyForeignImport(
+        string $kind,
+        array $pathInfo,
+        TypeNode $type,
+        ?string $nativeSig,
+        string $name,
+    ): ?string {
+        return verifyDotNetForeignImport($kind, $pathInfo, $type, $nativeSig, $name);
     }
 }

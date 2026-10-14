@@ -76,8 +76,9 @@ function runtimeMemberName(string $ilName): string
  * a TypeRef scoped to the wrong AssemblyRef fails to resolve at runtime.
  *
  * Types whose assembly is not a well-known BCL facade get their AssemblyRef
- * from library-owned .NET metadata (`lib/<module>/dotnet/*.json`), which
- * declares CLR type → assembly. No assembly knowledge lives in the compiler.
+ * from library-owned .NET metadata (`<module-dir>/dotnet/*.json`, mirrored
+ * under `meta/` for the stdlib package), which declares CLR type → assembly.
+ * No assembly knowledge lives in the compiler.
  */
 function bclAssemblyFor(string $fullTypeName): string
 {

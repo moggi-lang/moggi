@@ -50,7 +50,7 @@ $assert(IntrinsicRegistry\ownerModule('fix#') === IntrinsicRegistry\MODULE_PRIM,
 // 3. Every `#` name used in the stdlib is registered, so registry and lib cannot drift apart.
 $unregistered = [];
 $iterator = new \RecursiveIteratorIterator(
-    new \RecursiveDirectoryIterator($root . '/lib', \FilesystemIterator::SKIP_DOTS),
+    new \RecursiveDirectoryIterator($root . '/libraries/base/src', \FilesystemIterator::SKIP_DOTS),
 );
 foreach ($iterator as $file) {
     if (!$file->isFile() || $file->getExtension() !== 'mog') {

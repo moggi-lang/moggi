@@ -658,19 +658,27 @@ function lookupGeneratedFunction(string $name): ?array
 
 
 
+/**
+ * Project-relative display path — never an absolute developer filesystem path as identity.
+ *
+ * This runs in built artifacts, where no project root is known, so the checkout
+ * source-tree segments stay a fixed vocabulary: the flat `lib/` layout and the
+ * packaged `libraries/<package>/src` layout, plus the test/example trees. Keep in
+ * sync with the debugger's normalizeDisplayPath and the JVM runtime normalizer.
+ */
 function displaySourcePath(string $file): string
 {
     if ($file === '' || $file === '<interactive>') {
         return $file;
     }
     $file = str_replace('\\', '/', $file);
-    foreach (['/lib/', '/tests/', '/examples/'] as $marker) {
+    foreach (['/lib/', '/libraries/', '/tests/', '/examples/'] as $marker) {
         $pos = strpos($file, $marker);
         if ($pos !== false) {
             return substr($file, $pos + 1);
         }
     }
-    foreach (['lib/', 'tests/', 'examples/'] as $marker) {
+    foreach (['lib/', 'libraries/', 'tests/', 'examples/'] as $marker) {
         if (str_starts_with($file, $marker)) {
             return $file;
         }

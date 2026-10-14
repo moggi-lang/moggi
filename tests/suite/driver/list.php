@@ -20,6 +20,9 @@ function renderTestList(array $cases, array $backends, array $pathFilters, array
         if ($groupFilters !== [] && !matchesAnyGroupFilter($case->name, $groupFilters)) {
             continue;
         }
+        if (($testArgs['excludeGroups'] ?? []) !== [] && matchesAnyGroupFilter($case->name, $testArgs['excludeGroups'])) {
+            continue;
+        }
         if ($pathFilters !== [] && !matchesAnyPathFilter($case, $pathFilters)) {
             continue;
         }

@@ -16,6 +16,8 @@ use function Moggi\Registry\prettyJson;
 use function Moggi\Registry\providedDependencyProblems;
 use function Moggi\Registry\readDescriptor;
 use function Moggi\Registry\readLock;
+use Moggi\Syntax\Lexer\TokenKind;
+use function Moggi\Syntax\Lexer\lex;
 
 /**
  * `moggi check` — everything that can be wrong with a package, before a build
@@ -49,10 +51,12 @@ function checkUsage(): string
 
     Check the package for common mistakes, without touching the network: the
     descriptor against the format it is written in, the source-dirs and modules [lib],
-    [executable], [test-suite] and [docs] promise, and the dependencies against
-    the lock. Errors exit 1.
+    [executable], [test-suite] and [docs] promise, hand-written `foreign`
+    against the `[ffi] bindings` the package declares, and the dependencies
+    against the lock. Errors exit 1.
 
     options:
+      --strict-ffi         fail on `[ffi]` findings instead of warning
       --json               machine-readable findings
       -o, --output FILE    lock file to check against (default: moggi.lock)
       -h, --help           show this help
@@ -64,6 +68,7 @@ function runCheckCommand(array $argv): int
 {
     $spec = new CommandSpec('check', checkUsage(), [
         ['name' => 'json'],
+        ['name' => 'strict-ffi'],
     ]);
 
     if (wantsHelp($argv)) {
@@ -87,7 +92,7 @@ function runCheckCommand(array $argv): int
     }
 
     try {
-        $report = checkPackage($options['path'], $options['output']);
+        $report = checkPackage($options['path'], $options['output'], (bool) $options['strict-ffi']);
     } catch (\RuntimeException $error) {
         \fwrite(STDERR, 'error: ' . $error->getMessage() . "\n");
 
@@ -115,7 +120,7 @@ function runCheckCommand(array $argv): int
  *
  * @return array<string, mixed>
  */
-function checkPackage(string $path, ?string $output = null): array
+function checkPackage(string $path, ?string $output = null, bool $strictFfi = false): array
 {
     $descriptorPath = findDescriptor($path);
     $root = \dirname(\realpath($descriptorPath) ?: $descriptorPath);
@@ -136,6 +141,14 @@ function checkPackage(string $path, ?string $output = null): array
 
         $sources = checkSources($root, $descriptor);
         $findings = [...$findings, ...$sources['findings']];
+        $ffiFindings = checkFfiBindings($root, $descriptor, $sources['ffi']);
+        if ($strictFfi) {
+            foreach ($ffiFindings as &$ffiFinding) {
+                $ffiFinding['level'] = 'error';
+            }
+            unset($ffiFinding);
+        }
+        $findings = [...$findings, ...$ffiFindings];
         $notes = $sources['notes'];
 
         foreach (providedDependencyProblems($descriptor['dependencies']) as $problem) {
@@ -183,13 +196,14 @@ function checkPackage(string $path, ?string $output = null): array
  * module than the descriptor names is reported by both names.
  *
  * @param array<string, mixed> $descriptor
- * @return array{findings: list<array{level: string, message: string}>, notes: array<string, string>}
+ * @return array{findings: list<array{level: string, message: string}>, notes: array<string, string>, ffi: array<string, array{module: string, backendMap: array<string, string>, hasForeign: bool}>}
  */
 function checkSources(string $root, array $descriptor): array
 {
     $findings = [];
     $modules = [];
     $scanned = [];
+    $ffi = [];
 
     $owners = [];
     if ($descriptor['lib']['sourceDirs'] !== []) {
@@ -242,6 +256,11 @@ function checkSources(string $root, array $descriptor): array
                     continue;
                 }
                 $modules[$name] = $file;
+                $ffi[$file] = [
+                    'module' => $name,
+                    'backendMap' => $header['backendMap'] ?? [],
+                    'hasForeign' => headerHasForeignDecl($header),
+                ];
             }
         }
     }
@@ -299,7 +318,110 @@ function checkSources(string $root, array $descriptor): array
         $notes['docs'] = $targetDir;
     }
 
-    return ['findings' => $findings, 'notes' => $notes];
+    return ['findings' => $findings, 'notes' => $notes, 'ffi' => $ffi];
+}
+
+/**
+ * Whether a scanned module contains a real `foreign` declaration.
+ *
+ * The header already carries the file's source, so this is one cheap token scan
+ * per file that even mentions the word — a comment or a name containing
+ * `foreign` is not a declaration, and only the lexer knows the difference.
+ *
+ * @param array<string, mixed> $header
+ */
+function headerHasForeignDecl(array $header): bool
+{
+    $source = (string) ($header['__source'] ?? '');
+    if (!\str_contains($source, 'foreign')) {
+        return false;
+    }
+    foreach (lex($source) as $token) {
+        if ($token->kind === TokenKind::KwForeign) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Hand-written `foreign` against the `[ffi] bindings` the descriptor declares.
+ *
+ * A generated binding is the sanctioned route to the host: the binder knows the
+ * artifact it read, while a hand-written axiom only trusts it. So a `foreign`
+ * declaration in a package with no `[ffi] bindings` warns, naming the `add
+ * --bind` that would make it generated. Once a package declares bindings, the
+ * warnings move to the shape of the declaration itself: an entry that is not
+ * `backend:coordinate` (which `build --bind` refuses), a declared backend with
+ * nothing bound for it, a `{-# BACKEND #-}` facade pointing at a module this
+ * package does not have, and bindings for several backends with no facade
+ * between them.
+ *
+ * All warnings: a package `check` passes may still bind nothing, but nothing it
+ * binds is silently uncovered.
+ *
+ * @param array<string, mixed> $descriptor
+ * @param array<string, array{module: string, backendMap: array<string, string>, hasForeign: bool}> $scanned
+ * @return list<array{level: string, message: string}>
+ */
+function checkFfiBindings(string $root, array $descriptor, array $scanned): array
+{
+    $findings = [];
+    $bindings = (array) ($descriptor['ffi']['bindings'] ?? []);
+    $boundBackends = [];
+    foreach ($bindings as $entry) {
+        $entry = (string) $entry;
+        $colon = \strpos($entry, ':');
+        $prefix = $colon === false ? '' : \substr($entry, 0, $colon);
+        $rest = $colon === false ? '' : \substr($entry, $colon + 1);
+        if ($colon === false || $rest === '' || !\in_array($prefix, implementedBackendIds(), true)) {
+            $findings[] = ['level' => 'warning', 'message' => "`[ffi] bindings` entry `{$entry}` is not `backend:coordinate` (" . \implode(', ', implementedBackendIds()) . ') — `build --bind` will refuse it'];
+
+            continue;
+        }
+        $boundBackends[$prefix] = true;
+    }
+
+    if ($bindings === []) {
+        foreach ($scanned as $file => $info) {
+            if ($info['hasForeign']) {
+                $findings[] = ['level' => 'warning', 'message' => checkRelative($root, $file) . ': hand-written `foreign` with no `[ffi] bindings` declared — `moggi add <backend>:<coordinate> --bind` makes it a generated binding'];
+            }
+        }
+
+        return $findings;
+    }
+
+    if ($descriptor['backends'] !== implementedBackendIds()) {
+        foreach ($descriptor['backends'] as $backend) {
+            if (!isset($boundBackends[$backend])) {
+                $findings[] = ['level' => 'warning', 'message' => "backend `{$backend}` is in [package] backends but nothing in `[ffi] bindings` binds for it (bound: " . \implode(', ', \array_keys($boundBackends)) . ')'];
+            }
+        }
+    }
+
+    $known = [];
+    foreach ($scanned as $info) {
+        $known[$info['module']] = true;
+    }
+    $hasFacade = false;
+    foreach ($scanned as $file => $info) {
+        if ($info['backendMap'] === []) {
+            continue;
+        }
+        $hasFacade = true;
+        foreach ($info['backendMap'] as $backend => $impl) {
+            if (!isset($known[(string) $impl])) {
+                $findings[] = ['level' => 'warning', 'message' => 'module `' . $info['module'] . '` maps backend `' . $backend . '` to `' . $impl . '`, which is no module in this package'];
+            }
+        }
+    }
+    if (\count($boundBackends) > 1 && !$hasFacade) {
+        $findings[] = ['level' => 'warning', 'message' => '`[ffi] bindings` cover ' . \implode(' and ', \array_keys($boundBackends)) . ' with no `{-# BACKEND #-}` facade between them — `moggi add <backend>:<coordinate> --bind --facade` writes the skeleton'];
+    }
+
+    return $findings;
 }
 
 /**

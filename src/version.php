@@ -4,7 +4,7 @@ namespace Moggi\Compiler;
 
 use function Moggi\Cache\projectRoot;
 use function Moggi\Modules\bundledStdlibLibPath;
-use const Moggi\Modules\LIBRARY_ROOT_MARKER;
+use function Moggi\Modules\libraryRootMarker;
 
 /**
  * Version strings for the compiler and its bundled standard library.
@@ -93,15 +93,17 @@ function distributionVariant(): ?string
  * Standard-library version: the `[package] version` of its own manifest.
  *
  * The manifest is the library's descriptor, so its version is the single place
- * that number lives — a `lib/VERSION` beside it would be one fact in two files,
+ * that number lives — a `VERSION` beside it would be one fact in two files,
  * free to drift. The root honors `MOGGI_ROOT`, so this reports the stdlib
  * actually in use rather than the one shipped next to the compiler.
  */
 function stdlibVersion(): ?string
 {
-    return readManifestVersion(
-        (bundledStdlibLibPath() ?? projectRoot() . '/lib') . '/' . LIBRARY_ROOT_MARKER,
+    $marker = libraryRootMarker(
+        bundledStdlibLibPath() ?? projectRoot() . '/libraries/base/src',
     );
+
+    return $marker === null ? null : readManifestVersion($marker);
 }
 
 /**

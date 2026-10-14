@@ -1,0 +1,63 @@
+-- The shared harness for the json package's test modules.
+--
+-- Every case asserts; the first failure is named and stops the run. There is no
+-- counter to get wrong and no shared state to thread, and a module's whole test
+-- is one `run… :: IO ()` the aggregator `Suite.mog` calls.
+
+module Support
+  ( assertTrue
+  , expect
+  , expectVal
+  , expectOk
+  , runDecode
+  , bsToStr
+  , roundTrips
+  , rtOk
+  ) where
+
+import System.Exit (die)
+import Data.String (pack)
+import Data.ByteString (ByteString)
+import Data.ByteString.Char8 qualified as C
+import Data.JSON (FromJSON, ToJSON, eitherDecode, encode)
+
+-- Pass is silent, fail names the case and stops.
+assertTrue :: String -> Bool -> IO ()
+assertTrue name ok = case ok of
+  True -> pure ()
+  False -> die ("FAIL: " <> name)
+
+expect :: String -> String -> String -> IO ()
+expect name got want =
+  assertTrue (name <> " — got " <> got <> ", want " <> want) (got == want)
+
+expectVal :: String -> IO String -> String -> IO ()
+expectVal name act want = do
+  got <- act
+  expect name got want
+
+-- An action that must answer exactly `ok` (the reject helpers all do).
+expectOk :: String -> IO String -> IO ()
+expectOk name act = expectVal name act "ok"
+
+runDecode :: FromJSON a => (Either String a -> String) -> ByteString -> IO String
+runDecode showFn bs = do
+  mr <- eitherDecode bs
+  pure (showFn mr)
+
+-- `bsToStr` re-encodes through Char8, so byte-level non-ASCII is exercised
+-- through a `\u00e9` escape rather than by rendering the raw bytes here.
+bsToStr :: ByteString -> String
+bsToStr b = pack (C.unpack b)
+
+roundTrips :: (ToJSON a, FromJSON a, Eq a) => a -> IO Bool
+roundTrips x = do
+  r <- eitherDecode (encode x)
+  pure (case r of
+    Left _ -> False
+    Right y -> y == x)
+
+rtOk :: (ToJSON a, FromJSON a, Eq a) => String -> a -> IO ()
+rtOk name x = do
+  ok <- roundTrips x
+  assertTrue (name <> " (round-trip)") ok

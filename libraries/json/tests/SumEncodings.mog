@@ -1,0 +1,63 @@
+-- One sum type under each `SumEncoding`, plus the single-constructor and
+-- unary-record `Options` switches. The generic encoders they use live in
+-- `Types.mog`, beside the types, because a `Generic` constraint on another
+-- module's type is not visible here.
+
+module SumEncodings (sumEncodingsSuite, tagSingleSuite, unarySuite) where
+
+import Data.JSON
+import Types (ShapeS(..), Wrapper(..), Name(..), encShape, rtShape, encWrapper, rtWrapper, encName)
+import Support
+
+taggedOpts :: Options
+taggedOpts = defaultOptions
+
+twoElemOpts :: Options
+twoElemOpts = sumEncoding TwoElemArray defaultOptions
+
+singleFieldOpts :: Options
+singleFieldOpts = sumEncoding ObjectWithSingleField defaultOptions
+
+customTagOpts :: Options
+customTagOpts = sumEncoding (TaggedObject "type" "data") defaultOptions
+
+untaggedOpts :: Options
+untaggedOpts = sumEncoding UntaggedValue defaultOptions
+
+sumEncodingsSuite :: IO ()
+sumEncodingsSuite = do
+  expect "tagged circle" (encShape taggedOpts (CircleS 5)) "{\"tag\":\"CircleS\",\"radius\":5}"
+  expect "tagged square" (encShape taggedOpts (Square 3)) "{\"tag\":\"Square\",\"side\":3}"
+  expect "tagged point" (encShape taggedOpts PointS) "{\"tag\":\"PointS\"}"
+  expectOk "tagged round-trip" (rtShape taggedOpts (CircleS 5))
+  expectOk "tagged point round-trip" (rtShape taggedOpts PointS)
+  expect "two-elem circle" (encShape twoElemOpts (CircleS 5)) "[\"CircleS\",{\"radius\":5}]"
+  expect "two-elem point" (encShape twoElemOpts PointS) "[\"PointS\",[]]"
+  expectOk "two-elem round-trip" (rtShape twoElemOpts (CircleS 5))
+  expectOk "two-elem point round-trip" (rtShape twoElemOpts PointS)
+  expect "single-field circle" (encShape singleFieldOpts (CircleS 5)) "{\"CircleS\":{\"radius\":5}}"
+  expectOk "single-field round-trip" (rtShape singleFieldOpts (CircleS 5))
+  expect "custom tag circle" (encShape customTagOpts (CircleS 5)) "{\"type\":\"CircleS\",\"radius\":5}"
+  expectOk "custom tag round-trip" (rtShape customTagOpts (CircleS 5))
+  expect "untagged circle" (encShape untaggedOpts (CircleS 5)) "{\"radius\":5}"
+  expect "untagged point" (encShape untaggedOpts PointS) "[]"
+  expectOk "untagged round-trip" (rtShape untaggedOpts (CircleS 5))
+  expectOk "untagged point round-trip" (rtShape untaggedOpts PointS)
+
+tagSingleOpts :: Options
+tagSingleOpts = tagSingleConstructors True defaultOptions
+
+tagSingleSuite :: IO ()
+tagSingleSuite = do
+  expect "single ctor untagged" (encWrapper defaultOptions (Wrapper 42)) "{\"value\":42}"
+  expect "single ctor tagged" (encWrapper tagSingleOpts (Wrapper 42)) "{\"tag\":\"Wrapper\",\"value\":42}"
+  expectOk "single ctor untagged round-trip" (rtWrapper defaultOptions (Wrapper 42))
+  expectOk "single ctor tagged round-trip" (rtWrapper tagSingleOpts (Wrapper 42))
+
+unwrapOpts :: Options
+unwrapOpts = unwrapUnaryRecords True defaultOptions
+
+unarySuite :: IO ()
+unarySuite = do
+  expect "unary wrapped" (encName defaultOptions (Name "alice")) "{\"unName\":\"alice\"}"
+  expect "unary unwrapped" (encName unwrapOpts (Name "alice")) "\"alice\""

@@ -24,7 +24,7 @@ if ($testArgs['help']) {
     exit(0);
 }
 
-\Moggi\Modules\setStdlibLibPath(MOGGI_PROJECT_ROOT . '/lib');
+\Moggi\Modules\setStdlibLibPath(MOGGI_PROJECT_ROOT . '/libraries/base/src');
 // Only the bundled standard library: packages (`json`) ship from their own repo, and a checkout
 // of one joins the library roots through `--lib` or `addLibraryRoot()`.
 

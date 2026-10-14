@@ -1,0 +1,98 @@
+-- Decoding edges: characters, nested Maybes, number shapes, escapes, duplicate
+-- keys, whitespace, and the inputs that must be rejected.
+
+module Edges (edgesSuite) where
+
+import Data.ByteString.Char8 qualified as C
+import Data.Map (Map, lookup)
+import Data.JSON
+import Support
+
+showNestedMaybe :: Either String (Maybe (Maybe Int)) -> String
+showNestedMaybe e = case e of
+  Right Nothing -> "ok"
+  _ -> "bad"
+
+showCharLit :: Either String Char -> String
+showCharLit e = case e of
+  Right 'x' -> "ok"
+  _ -> "bad"
+
+rejectCharLit :: Either String Char -> String
+rejectCharLit e = case e of
+  Left _ -> "ok"
+  Right _ -> "bad"
+
+showZero :: Either String Int -> String
+showZero e = case e of
+  Right 0 -> "ok"
+  _ -> "bad"
+
+showNeg :: Either String Int -> String
+showNeg e = case e of
+  Right n -> case n == (0 - 7) of
+    True -> "ok"
+    False -> "bad"
+  Left _ -> "bad"
+
+showSci :: Either String Double -> String
+showSci e = case e of
+  Right _ -> "ok"
+  Left _ -> "bad"
+
+rejectInt :: Either String Int -> String
+rejectInt e = case e of
+  Left _ -> "ok"
+  Right _ -> "bad"
+
+rejectStr :: Either String String -> String
+rejectStr e = case e of
+  Left _ -> "ok"
+  Right _ -> "bad"
+
+rejectValue :: Either String Value -> String
+rejectValue e = case e of
+  Left _ -> "ok"
+  Right _ -> "bad"
+
+showEscape :: Either String String -> String
+showEscape e = case e of
+  Right s -> case s == "é" of
+    True -> "ok"
+    False -> "bad"
+  Left _ -> "bad"
+
+showDup :: Either String Value -> String
+showDup e = case e of
+  Right (Object m) -> case lookup "k" m of
+    Just (Number (NumInteger n)) -> eqDup n
+    _ -> "bad"
+  _ -> "bad"
+
+eqDup :: Integer -> String
+eqDup n = case bsToStr (encode n) of
+  "2" -> "ok"
+  _ -> "bad"
+
+showWs :: Either String Value -> String
+showWs e = case e of
+  Right Null -> "ok"
+  _ -> "bad"
+
+edgesSuite :: IO ()
+edgesSuite = do
+  expect "nested maybe null" (bsToStr (encode (Nothing :: Maybe (Maybe Int)))) "null"
+  expect "nested maybe just" (bsToStr (encode (Just (Nothing :: Maybe Int)))) "null"
+  expectOk "nested maybe decode" (runDecode showNestedMaybe (C.pack "null"))
+  expectOk "char single" (runDecode showCharLit (C.pack "\"x\""))
+  expectOk "char multi rejected" (runDecode rejectCharLit (C.pack "\"xy\""))
+  expectOk "char empty rejected" (runDecode rejectCharLit (C.pack "\"\""))
+  expectOk "zero" (runDecode showZero (C.pack "0"))
+  expectOk "negative" (runDecode showNeg (C.pack "-7"))
+  expectOk "scientific" (runDecode showSci (C.pack "1.5e2"))
+  expectOk "trailing junk rejected" (runDecode rejectInt (C.pack "1 2"))
+  expectOk "tab in string rejected" (runDecode rejectStr (C.pack "\"\t\""))
+  expectOk "unicode escape" (runDecode showEscape (C.pack "\"\\u00e9\""))
+  expectOk "duplicate keys last wins" (runDecode showDup (C.pack "{\"k\":1,\"k\":2}"))
+  expectOk "empty document rejected" (runDecode rejectValue (C.pack ""))
+  expectOk "whitespace null" (runDecode showWs (C.pack "  null  "))

@@ -55,7 +55,7 @@ function runExecTest(string $path, string $projectRoot): array
     $compiled = $execDir . '/' . $name . '.' . getmypid() . '.' . uniqid('', true) . '.php';
 
     try {
-        $phpSource = rewriteLibRequires($php['output'], $libPhpDir, $compiled);
+        $phpSource = rewriteLibRequires($php['output'], $libPhpDir, $compiled, $path, $projectRoot);
 
         if (\file_put_contents($compiled, $phpSource) === false) {
             return ['passed' => false, 'message' => "cannot write compiled output for {$name}"];
@@ -604,7 +604,7 @@ function testLibraryRoots(string $projectRoot): array
 {
     $roots = \Moggi\Modules\configuredLibraryRoots();
 
-    return $roots === [] ? [$projectRoot . '/lib'] : $roots;
+    return $roots === [] ? [$projectRoot . '/libraries/base/src'] : $roots;
 }
 
 /**
@@ -663,7 +663,7 @@ function writeLibPhpOutputs(string $projectRoot): string
 
 /**
  * Project-relative prefixes of the library roots as they appear in emitted
- * `require`s: `lib`, `json/src`. Longest first, so a nested root wins.
+ * `require`s: `libraries/base/src`, `libraries/json/src`. Longest first, so a nested root wins.
  *
  * @return list<string>
  */
@@ -671,9 +671,10 @@ function libraryRequirePrefixes(): array
 {
     $primary = \Moggi\Modules\configuredStdlibLibPath() ?? \Moggi\Modules\bundledStdlibLibPath();
     if ($primary === null) {
-        return ['lib'];
+        return ['libraries/base/src'];
     }
-    $projectRoot = rtrim(\Moggi\Paths\canonicalSeparators(dirname($primary)), '/') . '/';
+    $workspace = \Moggi\Modules\workspaceRootForStdlibRoot($primary);
+    $projectRoot = rtrim(\Moggi\Paths\canonicalSeparators($workspace), '/') . '/';
     $roots = \Moggi\Modules\configuredLibraryRoots() ?: [$primary];
 
     $prefixes = [];
@@ -692,20 +693,46 @@ function libraryRequirePrefixes(): array
     return $prefixes;
 }
 
-/** Point a compiled fixture at the published library build instead of the source tree. */
-function rewriteLibRequires(string $php, string $libPhpDir, string $compiledFile): string
+/**
+ * Point a compiled fixture at the published library build instead of the source tree.
+ *
+ * Requires naming a library output by its project-relative path (`../../libraries/base/src/...`)
+ * re-anchor into the lib build directly. A fixture inside a library package requires its
+ * siblings by the package-collapsed form (`../src/...`), which carries no package name —
+ * so with the fixture path known, that form maps through the fixture's own package
+ * (`libraries/base`), and only when the target exists in the lib build.
+ */
+function rewriteLibRequires(string $php, string $libPhpDir, string $compiledFile, ?string $fixturePath = null, ?string $projectRoot = null): string
 {
     $libDir = rtrim(\Moggi\Paths\canonicalSeparators($libPhpDir), '/');
     $prefixes = libraryRequirePrefixes();
-    if ($prefixes !== []) {
-        $alternation = \implode('|', array_map(
-            static fn (string $prefix): string => \preg_quote($prefix, '#'),
-            $prefixes,
-        ));
+    $collapsed = null;
+    if ($fixturePath !== null && $projectRoot !== null) {
+        $package = \Moggi\Modules\enclosingLibraryPackageDir($fixturePath, $projectRoot);
+        if ($package !== null) {
+            $collapsed = $package . '/src';
+        }
+    }
+    if ($prefixes !== [] || $collapsed !== null) {
         $php = preg_replace_callback(
-            "#require_once __DIR__ \. '/(?:\.\./)+(?<lib>(?:{$alternation})/[^']+)'#",
-            static fn (array $matches): string => 'require_once '
-                . \Moggi\Paths\requirePathExpression($compiledFile, $libDir . '/' . $matches['lib']),
+            "#require_once __DIR__ \. '/(?:\.\./)+(?<lib>[^']+)'#",
+            static function (array $matches) use ($compiledFile, $libDir, $prefixes, $collapsed): string {
+                $lib = $matches['lib'];
+                foreach ($prefixes as $prefix) {
+                    if ($lib === $prefix || \str_starts_with($lib, $prefix . '/')) {
+                        return 'require_once '
+                            . \Moggi\Paths\requirePathExpression($compiledFile, $libDir . '/' . $lib);
+                    }
+                }
+                if ($collapsed !== null && \str_starts_with($lib, 'src/')) {
+                    $target = $libDir . '/' . $collapsed . \substr($lib, 3);
+                    if (\is_file($target)) {
+                        return 'require_once ' . \Moggi\Paths\requirePathExpression($compiledFile, $target);
+                    }
+                }
+
+                return $matches[0];
+            },
             $php,
         ) ?? $php;
     }

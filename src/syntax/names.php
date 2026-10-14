@@ -70,7 +70,7 @@ function exportedChildrenSpec(?array $exports, string $typeName): ?array
 /**
  * The constructor a type's own name aliases, read off the library's export list.
  *
- * `lib/Data/Tuple.mog` writes `Solo (Solo, MkSolo)` for a type whose only
+ * `libraries/base/src/Data/Tuple.mog` writes `Solo (Solo, MkSolo)` for a type whose only
  * declared constructor is `MkSolo`: the export list is the library saying that
  * both names construct and match, and the compiler only reads it. A type with
  * more than one declared constructor has to say which one it means, so the

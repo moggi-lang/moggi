@@ -6,6 +6,7 @@ use Moggi\Syntax\Ast;
 
 use function Moggi\Backend\DotNet\Dependencies\dotNetTypeIsValueType;
 use function Moggi\Backend\DotNet\Naming\bclAssemblyFor;
+use function Moggi\Backend\DotNet\Verify\dotNetConstNeedsGetterCall;
 use function Moggi\Foreign\splitForeignPathMember;
 use function Moggi\Semantics\IoBoundary\isIoTypeConName;
 use function Moggi\Semantics\Kernel\boolTypeName;
@@ -72,8 +73,14 @@ function resolveDotNetForeignPath(string $path): array
  *   method: "(int64,string)object" or "()void"
  *   field:  "string" / "object"
  *
+ * A sidecar never overrides the declaration silently: where one applies, the declared parameter
+ * list must match the entry's shared prefix typewise, and anything beyond it must sit inside the
+ * entry's optional tail. The emitter then calls the sidecar's full list, padding what the
+ * declaration does not pass.
+ *
  * @param 'static'|'instance'|'constructor'|'intrinsic' $dispatch
  * @param 'function'|'const' $kind
+ * @param ?array{params: list<string>, declared: list<string>, optionalTail: int, flat: bool} $sidecar
  */
 function clrSigFromMoggiType(
     Ast\TypeNode $type,
@@ -81,7 +88,8 @@ function clrSigFromMoggiType(
     string $kind,
     ?string $classPath,
     ?string $member = null,
-    ?array $explicitParams = null,
+    ?array $sidecar = null,
+    string $name = '',
 ): string {
     if ($kind === 'const') {
         return clrFieldTypeName(clrForeignIoInnerType($type), $classPath, $member);
@@ -111,8 +119,8 @@ function clrSigFromMoggiType(
         $params[] = clrTypeName($arg, $classPath, $member, false, $dispatch);
     }
 
-    if ($explicitParams !== null) {
-        $params = $explicitParams;
+    if ($sidecar !== null) {
+        $params = applyDotNetSidecarParams($name, $classPath, $member, $params, $sidecar);
     }
 
     if ($dispatch === 'constructor') {
@@ -124,6 +132,76 @@ function clrSigFromMoggiType(
         : clrTypeName($result, $classPath, $member, true, $dispatch);
 
     return '(' . \implode(',', $params) . ')' . $ret;
+}
+
+/**
+ * Where the declaration and the sidecar disagree, and how the compile answers.
+ *
+ * The sidecar *describes* the host member; the declaration is what the program passes. The two
+ * meet positionally: the declaration's inferred parameter list must equal the entry's `declared`
+ * list over the shared prefix (they differ only where the entry blesses an interface with
+ * `from`), and every sidecar parameter past the declaration must sit inside `optionalTail`.
+ * Anything else is a compile error naming both sides — the sidecar cannot invent arguments, drop
+ * them, or retype them. A flat entry names no optional tail, so any extra beyond the declaration
+ * is refused with a pointer at the object form.
+ *
+ * @param list<string> $declaredParams IL types inferred from the Moggi declaration
+ * @param array{params: list<string>, declared: list<string>, optionalTail: int, flat: bool} $sidecar
+ * @return list<string> the emit parameter list (the sidecar's full `params`)
+ */
+function applyDotNetSidecarParams(
+    string $name,
+    ?string $classPath,
+    ?string $member,
+    array $declaredParams,
+    array $sidecar,
+): array {
+    $path = ($classPath ?? '') . ':' . ($member ?? '');
+    $error = dotNetSidecarMismatch($name, $path, $declaredParams, $sidecar);
+    if ($error !== null) {
+        throw new \RuntimeException($error);
+    }
+
+    return $sidecar['params'];
+}
+
+/**
+ * @param list<string> $declaredParams
+ * @param array{params: list<string>, declared: list<string>, optionalTail: int, flat: bool} $sidecar
+ */
+function dotNetSidecarMismatch(
+    string $name,
+    string $path,
+    array $declaredParams,
+    array $sidecar,
+): ?string {
+    $nDeclared = \count($declaredParams);
+    $nSidecar = \count($sidecar['params']);
+    if ($nDeclared > $nSidecar) {
+        return "foreign dotnet `{$name}` ({$path}) declares {$nDeclared} parameter(s)"
+            . " but its sidecar entry lists {$nSidecar} — the sidecar cannot drop declared arguments";
+    }
+    $nExtra = $nSidecar - $nDeclared;
+    if ($nExtra > $sidecar['optionalTail']) {
+        if ($sidecar['flat']) {
+            return "foreign dotnet `{$name}` ({$path}) passes {$nDeclared} argument(s)"
+                . " but its sidecar entry lists {$nSidecar}: a flat entry cannot bless extras,"
+                . ' spell it as {"params": [...], "optionalTail": N}';
+        }
+
+        return "foreign dotnet `{$name}` ({$path}) passes {$nDeclared} argument(s)"
+            . " but its sidecar entry lists {$nSidecar} with optionalTail {$sidecar['optionalTail']}"
+            . ' — the entry cannot invent required arguments';
+    }
+    foreach ($declaredParams as $i => $inferred) {
+        $blessed = $sidecar['declared'][$i] ?? null;
+        if ($blessed !== $inferred) {
+            return "foreign dotnet `{$name}` ({$path}) declares parameter {$i} as `{$inferred}`"
+                . " but its sidecar entry says `{$blessed}` — the sidecar cannot retype the declaration";
+        }
+    }
+
+    return null;
 }
 
 /**
@@ -190,7 +268,11 @@ function clrFieldTypeName(Ast\TypeNode $type, ?string $classPath, ?string $membe
 /**
  * True BCL "static readonly value" surfaces are often auto-properties, not
  * fields (e.g. `Console.Out` is a `get_Out()` getter). `const`-kind foreign
- * imports listed here are emitted as a getter `call` instead of `ldsfld`.
+ * imports for a property are emitted as a getter `call` instead of `ldsfld`.
+ *
+ * The named three are answered without touching the host; anything else asks
+ * the inspector, which already read the type for verification. An unanswerable
+ * host keeps the field load — the pre-inspector behavior, not a new guess.
  */
 function isDotNetConstProperty(?string $classPath, ?string $member): bool
 {
@@ -200,7 +282,11 @@ function isDotNetConstProperty(?string $classPath, ?string $member): bool
         'System.Console:In' => true,
     ];
 
-    return isset($known[($classPath ?? '') . ':' . ($member ?? '')]);
+    if (isset($known[($classPath ?? '') . ':' . ($member ?? '')])) {
+        return true;
+    }
+
+    return dotNetConstNeedsGetterCall($classPath, $member);
 }
 
 function clrTypeName(
@@ -359,7 +445,7 @@ function qualifyTypeForOpaque(string $dotted): string
 
 /**
  * True when a registered foreign hostType is a valuetype, or the CLR type is
- * declared one in library metadata (`lib/<module>/dotnet/*.json`).
+ * declared one in library metadata.
  */
 function dotNetHostIsValueType(string $classPath): bool
 {

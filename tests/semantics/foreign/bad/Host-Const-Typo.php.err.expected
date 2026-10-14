@@ -1,0 +1,4 @@
+tests/semantics/foreign/bad/Host-Const-Typo.mog:2:19: type error: php has no global constant `FILE_APPENDX`
+
+  2 | foreign php const appendFlag "PHP:FILE_APPENDX" :: Int
+    |                   ^^^^^^^^^^

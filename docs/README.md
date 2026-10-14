@@ -26,6 +26,7 @@ Reference, in the order the questions usually come up:
 |------|----------|
 | [language.md](language.md) | **complete syntax** — every construct, pragma and rule, when the tour is not enough |
 | [ffi.md](ffi.md) | calling PHP, the JVM or .NET: `foreign` declarations, host paths, signature rules, result conversions, `HostException`, and PHP as the one special case |
+| [host-packages.md](host-packages.md) | using Composer, Maven and NuGet libraries from Moggi: `moggi add`, descriptor tables, `moggi build`, and a logger plus an HTTP client per backend |
 | [deriving.md](deriving.md) | every deriving strategy (stock, newtype, anyclass, via) and what each one generates |
 | [diagnostics.md](diagnostics.md) | the error catalogue — every compile error with what it means — plus uncaught-exception reports, source maps and per-backend trace precision |
 | [pipeline.md](pipeline.md) | what the compiler does with your file, lexer → parser → typed AST → IR → opt IR → whole-program pass → artifact |

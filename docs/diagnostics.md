@@ -126,7 +126,7 @@ honest. `runtest syntax semantics` runs them.
 
 ```text
 moggi: ErrorCall: mapped
-  at Control.Exception.Base.throwIO (lib/Control/Exception/Base.mog:43:13)
+  at Control.Exception.Base.throwIO (libraries/base/src/Control/Exception/Base.mog:43:13)
   at Main.boom (tests/backend/runtime/Exec-Exception-Trace.mog:5:8)
   at Main.indirect (tests/backend/runtime/Exec-Exception-Trace.mog:8:12)
   at Main.main (tests/backend/runtime/Exec-Exception-Trace.mog:13:3)

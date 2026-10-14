@@ -1,4 +1,4 @@
-tests/semantics/bad-shadowed-module/lib/Data/Int.mog:4:8: type error: module `Data.Int` is offered by two roots (tests/semantics/bad-shadowed-module/lib/Data/Int.mog and lib/Data/Int.mog)
+tests/semantics/bad-shadowed-module/lib/Data/Int.mog:4:8: type error: module `Data.Int` is offered by two roots (tests/semantics/bad-shadowed-module/lib/Data/Int.mog and libraries/base/src/Data/Int.mog)
 
 a module name resolves to one file: rename one of them
 

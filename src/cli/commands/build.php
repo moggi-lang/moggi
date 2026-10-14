@@ -59,6 +59,10 @@ function buildUsage(): string
     options:
       --exe NAME           build [executable.NAME] instead of [executable]
       --backend B          override the descriptor's backend
+      --bind               generate the [ffi] bindings for this backend from
+                           the resolved host tree, reusing the cached tree when
+                           the tree is unchanged, and add the generated root as
+                           a library root
       --allow-bad          build even though a linked package is marked bad
       -o, --output PATH    artifact to produce (passed to compile; with
                            --unpacked, an output directory)
@@ -76,6 +80,7 @@ function runBuildCommand(array $argv): int
         ['name' => 'unpacked'],
         ['name' => 'noCache'],
         ['name' => 'allowBad'],
+        ['name' => 'bind'],
         ['name' => 'exe', 'value' => true],
         ['name' => 'backend', 'value' => true],
     ]);
@@ -236,6 +241,31 @@ function runBuildCommand(array $argv): int
             }
         }
 
+        $bindRoots = [];
+        $declaredBindings = \Moggi\Registry\Bind\ffiBindingsForBackend($descriptor, $backend);
+        if ($options['bind']) {
+            if ($declaredBindings === []) {
+                \fwrite(STDERR, "bindings   nothing declared for {$backend} in [ffi]\n");
+            } elseif ($tools['dir'] === null) {
+                throw new \RuntimeException(
+                    'build --bind needs the resolved host tree, but no host coordinates'
+                    . " resolve for {$backend} — declare them under [{$backend}] so the host tool can fetch them",
+                );
+            } else {
+                $bound = \Moggi\Registry\Bind\bindDeclaredForBuild($backend, (string) $tools['dir'], $descriptor);
+                $bindRoots = $bound['roots'];
+                foreach ($bound['lines'] as $line) {
+                    \fwrite(STDERR, 'bindings   ' . $line . "\n");
+                }
+            }
+        } elseif ($declaredBindings !== []) {
+            \fwrite(
+                STDERR,
+                'bindings   ' . \count($declaredBindings) . ' [ffi] binding(s) declared for '
+                . "{$backend} — pass --bind to generate them\n",
+            );
+        }
+
         $localRoots = \array_map(
             static fn (string $directory): string => \rtrim($root, '/') . '/' . \trim($directory, '/'),
             \array_merge(\array_slice($executable['sourceDirs'], 1), $descriptor['lib']['sourceDirs']),
@@ -243,7 +273,7 @@ function runBuildCommand(array $argv): int
         $toolRoots = $tools['dir'] !== null && $tools['artifacts'] !== []
             ? [(string) $tools['dir']]
             : [];
-        $libraryRoots = \array_merge($localRoots, $roots, $toolRoots);
+        $libraryRoots = \array_merge($localRoots, $roots, $toolRoots, $bindRoots);
 
         $compileArgv = ['moggi', 'compile', $entry];
         foreach ($libraryRoots as $libraryRoot) {

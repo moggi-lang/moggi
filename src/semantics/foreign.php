@@ -4,6 +4,7 @@ namespace Moggi\Semantics\Foreign;
 
 use Moggi\Backend;
 use Moggi\IR\IoWrap;
+use Moggi\Modules;
 use Moggi\Semantics\Types\TypeCheckState;
 use Moggi\Syntax\Ast;
 
@@ -67,6 +68,23 @@ function checkForeignImportItem(TypeCheckState $state, Ast\ForeignImportDecl $it
         );
     }
 
+    $pathInfo['declaringRoot'] = Modules\declaringLibraryRoot($state->filename);
+
+    try {
+        $nativeSig = backendById($item->backend)->foreignNativeSig($item->type, $item->kind, $pathInfo, $item->name);
+    } catch (\Throwable $e) {
+        throw typeFail($state, $e->getMessage(), $item);
+    }
+
+    try {
+        $hostError = foreignHostMismatch($item, $pathInfo, $nativeSig);
+    } catch (Backend\VerificationUnavailable $e) {
+        throw typeFail($state, $e->getMessage(), $item);
+    }
+    if ($hostError !== null) {
+        throw typeFail($state, $hostError, $item);
+    }
+
     $params = foreignParamNames($item->type);
     $body = new Ast\ForeignCall(
         $item->backend,
@@ -81,7 +99,7 @@ function checkForeignImportItem(TypeCheckState $state, Ast\ForeignImportDecl $it
         phpValueBox: foreignPhpValueBox($item->type),
         handleBox: foreignHandleBox($item->type),
         handleUnboxArgs: foreignHandleUnboxArgIndices($item->type),
-        nativeSig: backendById($item->backend)->foreignNativeSig($item->type, $item->kind, $pathInfo, $item->name),
+        nativeSig: $nativeSig,
     );
 
     return new Ast\FunctionDecl(
@@ -95,6 +113,42 @@ function checkForeignImportItem(TypeCheckState $state, Ast\ForeignImportDecl $it
         false,
         true
     );
+}
+
+/**
+ * Ask the backend whether the host agrees with a declaration.
+ *
+ * A `foreign import` is an axiom — the compiler emits the call it is told to emit, so a host name
+ * the host does not have, or a signature it does not match, waits for run time to fail. This is the
+ * check the compiler *can* make, and the backend owns it because only the backend knows its host:
+ * PHP reflects its own process, the JVM runs `javap`, and a backend with nothing to ask returns
+ * null. There is deliberately no switch that turns it off: a check is either the check, or a
+ * promise the build does not mean.
+ *
+ * A check that *breaks* still must not break the compile — it warns on stderr and the declaration
+ * is treated as unverified — but a missing tool ({@see Backend\VerificationUnavailable}) is not
+ * a broken check and is re-thrown for the caller to refuse the declaration with.
+ *
+ * @param array{dispatch: string, classPath: ?string, hostMember: ?string, path?: string} $pathInfo
+ * @param ?string $nativeSig the signature the emitter will use
+ */
+function foreignHostMismatch(Ast\ForeignImportDecl $item, array $pathInfo, ?string $nativeSig): ?string
+{
+    try {
+        return backendById($item->backend)->verifyForeignImport(
+            $item->kind,
+            $pathInfo,
+            $item->type,
+            $nativeSig,
+            $item->name,
+        );
+    } catch (Backend\VerificationUnavailable $e) {
+        throw $e;
+    } catch (\Throwable $e) {
+        \fwrite(STDERR, "warning: foreign verification of `{$item->name}` failed: {$e->getMessage()}\n");
+
+        return null;
+    }
 }
 
 function validateForeignImportType(TypeCheckState $state, Ast\ForeignImportDecl $item): void

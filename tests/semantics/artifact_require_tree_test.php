@@ -36,9 +36,9 @@ $assert = static function (bool $condition, string $message) use (&$checks): voi
 };
 
 $appSource = 'C:/Users/runneradmin/AppData/Local/Temp/moggi-entry-module-6192/src/App.mog';
-$libSource = 'C:/a/moggi/moggi/lib/System/IO/PHP.mog';
+$libSource = 'C:/a/moggi/moggi/libraries/base/src/System/IO/PHP.mog';
 $appSourceRelative = 'Users/runneradmin/AppData/Local/Temp/moggi-entry-module-6192/src/App.mog';
-$libSourceRelative = 'a/moggi/moggi/lib/System/IO/PHP.mog';
+$libSourceRelative = 'a/moggi/moggi/libraries/base/src/System/IO/PHP.mog';
 $appRelative = \preg_replace('/\.mog$/', '.php', $appSourceRelative) ?? $appSourceRelative;
 $libRelative = \preg_replace('/\.mog$/', '.php', $libSourceRelative) ?? $libSourceRelative;
 

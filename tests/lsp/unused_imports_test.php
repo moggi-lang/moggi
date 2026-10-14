@@ -93,7 +93,7 @@ foreach (['Data/Foldable.mog', 'Data/List.mog', 'Data/Either.mog'] as $stdlibMod
 $svcRoot = new AnalysisService();
 $svcRoot->setWorkspaceRoot($root);
 $svcRoot->warm();
-$names = $unusedImports($svcRoot, $root . '/lib/Numeric/Natural.mog');
-$assert($names === [], 'lib/Numeric/Natural.mog reports no unused imports: ' . json_encode($names));
+$names = $unusedImports($svcRoot, $root . '/libraries/base/src/Numeric/Natural.mog');
+$assert($names === [], 'libraries/base/src/Numeric/Natural.mog reports no unused imports: ' . json_encode($names));
 
 echo "lsp unused-import tests passed\n";

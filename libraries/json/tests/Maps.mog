@@ -1,0 +1,21 @@
+-- `Map String a`: a JSON object of keys to values.
+
+module Maps (mapsSuite) where
+
+import Data.ByteString.Char8 qualified as C
+import Data.Map (Map, fromList, size)
+import Data.JSON
+import Support
+
+showMapSize :: Either String (Map String Int) -> String
+showMapSize e = case e of
+  Left _ -> "bad"
+  Right m -> case size m of
+    1 -> "ok"
+    _ -> "bad"
+
+mapsSuite :: IO ()
+mapsSuite = do
+  expect "map encode" (bsToStr (encode (fromList (("a", 1) : ("b", 2) : []) :: Map String Int))) "{\"a\":1,\"b\":2}"
+  expectOk "map decode" (runDecode showMapSize (C.pack "{\"x\":0}"))
+  expectOk "map round-trip" (runDecode showMapSize (encode (fromList (("x", 0) : []) :: Map String Int)))

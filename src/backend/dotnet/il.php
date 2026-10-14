@@ -148,8 +148,11 @@ function preambleAssemblyNames(): array
  * from `[Assembly]Type` qualifiers in the emitted IL, which libs write in their
  * own foreign declarations.
  *
- * A public key token is not needed: framework-dependent apps bind by simple
- * name against the shared framework and the app's deps.
+ * No version and no public key token: framework-dependent apps bind by simple
+ * name against the shared framework and the app's deps. These names are by
+ * construction the ones the preamble does not cover — vendored third-party
+ * assemblies staged beside the app — whose versions the compiler must not
+ * invent (stamping the framework's `8:0:0:0` refuses the real dll at load).
  *
  * @param list<string> $assemblies
  */
@@ -160,7 +163,7 @@ function assemblyExternsFor(array $assemblies): string
         if (\preg_match('/^[A-Za-z_][A-Za-z0-9_.]*$/', $name) !== 1) {
             continue;
         }
-        $out .= ".assembly extern {$name}\n{\n  .ver 8:0:0:0\n}\n";
+        $out .= ".assembly extern {$name}\n{\n}\n";
     }
 
     return $out === '' ? '' : $out . "\n";

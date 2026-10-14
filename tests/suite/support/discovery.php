@@ -126,10 +126,21 @@ function testsRoot(): string
     return MOGGI_PROJECT_ROOT . '/tests';
 }
 
-/** The trees a case can live in: the tests themselves, and the example programs. */
+/**
+ * The trees a case can live in: the tests themselves, the example programs,
+ * and the base library's own tests — which run separately (`--group base`)
+ * but are discovered like everything else, so the suite stays the one place
+ * that knows what a case is.
+ */
 function testTreeRoots(): array
 {
-    return [testsRoot(), MOGGI_PROJECT_ROOT . '/examples'];
+    $roots = [testsRoot(), MOGGI_PROJECT_ROOT . '/examples'];
+    $baseTests = MOGGI_PROJECT_ROOT . '/libraries/base/tests';
+    if (\is_dir($baseTests)) {
+        $roots[] = $baseTests;
+    }
+
+    return $roots;
 }
 
 function projectRootPath(): string
@@ -176,10 +187,21 @@ function groupOf(string $path, string $root): string
     return $slash === false ? $name : \substr($name, 0, $slash);
 }
 
-/** `examples` for the example programs, empty for the test tree itself. */
+/**
+ * The tree's own label: `examples` for the example programs, `base` for the
+ * standard library's tests, empty for the test tree itself (whose group is
+ * its first path segment).
+ */
 function treeLabel(string $root): string
 {
-    return $root === MOGGI_PROJECT_ROOT . '/examples' ? 'examples' : '';
+    if ($root === MOGGI_PROJECT_ROOT . '/examples') {
+        return 'examples';
+    }
+    if ($root === MOGGI_PROJECT_ROOT . '/libraries/base/tests') {
+        return 'base';
+    }
+
+    return '';
 }
 
 function relativeCaseName(string $path, string $root): string
@@ -248,6 +270,7 @@ function supportInputPaths(): array
         'docs/generator/fixture-app',
         'docs/generator/fixture-extra',
         'optimize/noopt-entry-bootstrap.mog', // read by noopt_entry_bootstrap_test.php
+        'registry/bind',                    // goldens and fixtures the bind *_test.php scripts open by path
     ];
 }
 
@@ -294,7 +317,7 @@ function assertTreeFilesAreClaimed(array $cases): void
 
     walkCaseTree(static function (string $path) use ($inputs, $goldens): void {
         if (\str_ends_with($path, '.expected')) {
-            if (!isset($goldens[$path])) {
+            if (!isset($goldens[$path]) && !isSupportInput($path)) {
                 throw new \RuntimeException('a golden nothing reads: ' . testRelativePath($path));
             }
 
@@ -348,7 +371,7 @@ function walkCaseDir(string $dir, callable $visit): void
  *   a `.script` (a REPL transcript)    lower-kebab        dump-emit
  *   a script case                      snake_case_test    noopt_entry_bootstrap_test.php
  *
- * A path that mirrors a module path is exempt (`tests/lib/Data/ByteString/`, a project's `lib/`), as is
+ * A path that mirrors a module path is exempt (`libraries/base/tests/Data/ByteString/`, a project's `lib/`), as is
  * `examples/`: those are paths inside a source tree, not names.
  */
 function caseNamingProblem(TestCase $case, string $root): ?string

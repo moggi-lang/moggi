@@ -7,6 +7,7 @@ use Moggi\IR\Module;
 use Moggi\Syntax\Ast\TypeNode;
 
 use function Moggi\Backend\Inspect\describePhpEmit;
+use function Moggi\Backend\Php\Verify\verifyForeignImportAgainstHost;
 use function Moggi\Backend\Php\Codegen\emit as emitPhp;
 use function Moggi\Backend\Php\Dependencies\composerIsBundled;
 use function Moggi\Backend\Php\Naming\basePhpFunctionName;
@@ -86,5 +87,20 @@ final class PhpBackend implements Backend
         }
 
         return null;
+    }
+
+    /**
+     * PHP is the one backend whose host is the compiler's own process, so the declaration can be
+     * checked against the functions, methods, constructors and constants that would run it. See
+     * {@see \Moggi\Backend\Php\Verify\verifyForeignImportAgainstHost} for what is and is not asked.
+     */
+    public function verifyForeignImport(
+        string $kind,
+        array $pathInfo,
+        TypeNode $type,
+        ?string $nativeSig,
+        string $name,
+    ): ?string {
+        return verifyForeignImportAgainstHost($kind, $pathInfo, $type, $name);
     }
 }

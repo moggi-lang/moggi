@@ -342,7 +342,7 @@ code — on every backend — and exits non-zero:
 
 ```text
 moggi: ErrorCall: mapped
-  at Control.Exception.Base.throwIO (lib/Control/Exception/Base.mog:42:13)
+  at Control.Exception.Base.throwIO (libraries/base/src/Control/Exception/Base.mog:42:13)
   at Main.boom (Main.mog:5:8)
   at Main.main (Main.mog:13:3)
 ```

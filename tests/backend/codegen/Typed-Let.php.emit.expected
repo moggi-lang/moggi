@@ -4,7 +4,7 @@ namespace Main;
 
 const __MOGGI_MAP = [[23 => ['Main.useMaybe', 'tests/backend/codegen/Typed-Let.mog', 8, 21]], ['Main\\useInt' => ['Main.useInt', 'tests/backend/codegen/Typed-Let.mog', 1, 1], 'Main\\useDouble' => ['Main.useDouble', 'tests/backend/codegen/Typed-Let.mog', 4, 1], 'Main\\useMaybe' => ['Main.useMaybe', 'tests/backend/codegen/Typed-Let.mog', 7, 1], 'Main\\fromMaybe' => ['Main.fromMaybe', 'tests/backend/codegen/Typed-Let.mog', 11, 17], 'Main\\useFromMaybe' => ['Main.useFromMaybe', 'tests/backend/codegen/Typed-Let.mog', 15, 1], 'Main\\nested' => ['Main.nested', 'tests/backend/codegen/Typed-Let.mog', 18, 1], 'Main\\useString' => ['Main.useString', 'tests/backend/codegen/Typed-Let.mog', 21, 1], 'Main\\ascribedCall' => ['Main.ascribedCall', 'tests/backend/codegen/Typed-Let.mog', 25, 19]]];
 
-require_once __DIR__ . '/../../../lib/Data/Maybe.php';
+require_once __DIR__ . '/../../../libraries/base/src/Data/Maybe.php';
 
 function moggi_u64_add(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao + $bo; $c = ($lo >> 32) & 0xffffffff; $hi = ($ah + $bh + $c) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }
 function moggi_u64_sub(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao - $bo; $bw = $lo < 0 ? 1 : 0; $hi = ($ah - $bh - $bw) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }

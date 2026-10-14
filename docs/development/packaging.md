@@ -156,6 +156,51 @@ them — `[php] composer = vendor/package:^1.0`, then a table per backend: `[jvm
 Moggi has no dependency solver of its own: `moggi build` writes the manifest the tool reads
 (`composer.json`, `pom.xml`, `build.csproj`) and runs the tool.
 
+`moggi add` is that declaration made from the command line: `moggi add
+jvm:com.google.code.gson:gson:2.11.0` writes `group:artifact = version` into `[jvm.maven]`,
+`php:monolog/monolog:^3.0` appends an entry to the `[php] composer` list, and
+`dotnet:Newtonsoft.Json:13.0.3` writes `[dotnet.nuget]` — the spellings the descriptor already
+uses, so what it writes is what `hostToolCoordinates()` reads back. The edit is line-based:
+comments, key order and the `[package]` block survive it, a coordinate already declared with the
+same requirement leaves the file byte-identical, and the same package at another version is a
+refusal rather than a rewrite (nothing bumps a pinned dependency behind the user's back). The
+candidate text goes through `descriptorProblems()` before it is saved, so the one command that
+writes a descriptor cannot write one the parser would refuse.
+
+Resolution happens **before** the write, the way `sky add` runs `go get` before it touches its
+manifest: the whole coordinate set goes through `resolveHostTools()` and a tool that is missing,
+or an artifact that does not exist, leaves the descriptor exactly as it was — a failed `add` is a
+no-op, not a project that no longer builds. A successful one has the artifacts in
+`<cache>/runtime/<backend>/<key>/` before `moggi build` asks for them. `--print` shows the lines it
+would write and stops, having fetched and written nothing.
+
+`moggi add <name>` is the verb's other half, and the descriptor's other table: a bare name is a
+package of ours, so it is written to `[dependencies]` and resolved by the registry we already have
+— `loadVerifiedCatalog()`, `writeResolution()` and `installLockedPackages()`, the same three calls
+`moggi install` and `moggi update` make, so `add` cannot drift from either. The spelling decides
+the table and nothing guesses: `monolog/monolog` is not a package name, so it is refused with
+`php:monolog/monolog` as the fix rather than recorded against a table the reader has to infer, and
+`moggi:` is the explicit spelling of the bare case. With no `--version`, the newest release's major
+line is what gets recorded (`0.4` for `0.4.1`) — an answer only the registry has, which is why
+`--print` wants `--version`: it promises to fetch nothing, and asking a registry is fetching.
+
+Here the descriptor is written **first** and the fetch second — the mirror image of the host half,
+and for the same reason: a row of `[dependencies]` is what the resolver reads, so a name the
+registry does not list is refused before anything is written, while the fetch that follows is
+`moggi install`'s work with `moggi install`'s own retry. A failed fetch therefore leaves a correct
+descriptor and lock behind, not a half-made project.
+
+A coordinate belongs to exactly one backend, so `add` writes one ecosystem's table per
+invocation, and a package whose `[package] backends` does not name that backend is refused rather
+than quietly recorded against it. Bridging three ecosystems is not something this command can do
+for you: the three libraries are three different packages, so the portable half is a hand-written
+facade (`{-# BACKEND php = … jvm = … dotnet = … #-}`) over three bound ones.
+
+A coordinate is validated before a tool ever sees it: `hostToolCoordinateProblem()` checks the
+shape per ecosystem (`vendor/package[:constraint]`, `group:artifact:version`, `id[:version]`) and
+refuses manifest-breaking characters in names, so a hostile or hand-broken coordinate from a
+local *or* a linked dependency descriptor fails with its own diagnostic and no tool runs.
+
 One tree per coordinate set, under `<cache>/runtime/<backend>/<key>/`, where the key is the
 sorted coordinate set and the manifest is committed beside the artifacts it produced. A
 `.complete` marker records the tool and its version, so upgrading Composer re-resolves instead of
@@ -176,13 +221,33 @@ step, so a package with no `[php]`, `[jvm]` or `[dotnet]` section never runs a t
 Because the PHP emit depends on whether a Composer tree is being carried, the backend's
 `emitCacheDiscriminator()` folds that into the emit cache key: emitted output is cached per
 project, and an input the key cannot see is how a cached module gets reused for a build that
-would have emitted something else.
+would have emitted something else. The .NET discriminator does the same for `dotnet/*.json`
+sidecars, generated or hand-written: a sidecar changes emit without changing any declaration,
+and the source closure only hashes `.mog` files.
+
+`moggi build --bind` turns `[ffi] bindings` into one more library root: each entry for the
+build's backend is bound from the resolved host tree into `runtime/<backend>/bind-*/`, recorded
+by a `.bind-complete` marker keyed on the tree's artifact state and the generator version, and
+reused while the tree is unchanged — so a rebuild never re-runs a host tool it does not need.
+`cache clear bindings` drops exactly those trees. A published binding package needs none of
+this downstream: its `.mog` (and sidecar) are ordinary sources that compile without host tools.
 
 The part a tool cannot supply is the CLR detail a `foreign dotnet` declaration leaves out: which
 assembly defines a type, whether it is a value type, and the real parameter list of a method whose
 C# signature has optional parameters. Those are declared by the package as `dotnet/*.json` under a
 library root, generically discovered like the other dependency directories — the same shape that
-lets the standard library describe `System.Numerics.BigInteger`.
+lets the standard library describe `System.Numerics.BigInteger`. The file carries a versioned
+schema (`"format": 1`; newer refuses the compile), per-assembly provenance, and object-form
+signature entries naming their optional tail. Step 7 froze that schema: the file is closed like a
+descriptor, so an unknown key is a compile error, and the format version is folded into the
+host-tool cache key — a cached resolution never outlives the format that produced it. The
+round-trip property pins the freeze: a sidecar generated from the inspector's own answer must
+verify the declaration written against that host (`tests/backend/dotnet_sidecar_roundtrip_test.php`).
+A sidecar *describes* the declaration it shares a
+tree with — the declared parameters must match the entry's shared prefix, extras must sit inside
+the optional tail, and an entry never applies to another tree's binding — and an import the
+inspector cannot answer warns once per binding that it is unverified, rather than compiling
+silently.
 
 ## Descriptor metadata
 

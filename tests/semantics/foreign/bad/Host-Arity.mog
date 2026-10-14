@@ -1,0 +1,3 @@
+-- Fail: `strlen` takes one argument and the signature declares two. The host rejects the emitted
+-- call with `ArgumentCountError`; the mismatch is a compile error instead.
+foreign php function rawLen "strlen" :: String -> Int -> Int

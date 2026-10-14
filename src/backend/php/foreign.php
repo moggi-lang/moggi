@@ -114,6 +114,7 @@ function emitForeignIoMaybeString(string $call, string $assignPrefix, ?string $d
     $out = $pad . '$__moggiLine = ' . $call . ";\n";
     $out .= $pad . $assignPrefix . "match (true) {\n";
     $out .= $pad . "    \$__moggiLine === false => ['Nothing'],\n";
+    $out .= $pad . "    \$__moggiLine === null => ['Nothing'],\n";
     $out .= $pad . "    default => ['Just', \$__moggiLine],\n";
     $out .= $pad . "};\n";
 

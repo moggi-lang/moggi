@@ -1,4 +1,4 @@
-tests/semantics/bad-shadowed-prelude/lib/Prelude.mog:1:8: type error: module `Prelude` is offered by two roots (tests/semantics/bad-shadowed-prelude/lib/Prelude.mog and lib/Prelude.mog)
+tests/semantics/bad-shadowed-prelude/lib/Prelude.mog:1:8: type error: module `Prelude` is offered by two roots (tests/semantics/bad-shadowed-prelude/lib/Prelude.mog and libraries/base/src/Prelude.mog)
 
 a module name resolves to one file: rename one of them
 

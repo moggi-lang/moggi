@@ -15,7 +15,7 @@ require $root . '/tests/suite/support/workspace.php';
 require $root . '/tests/suite/support/assert.php';
 require $root . '/tests/suite/support/fuzz.php';
 
-\Moggi\Modules\setStdlibLibPath($root . '/lib');
+\Moggi\Modules\setStdlibLibPath($root . '/libraries/base/src');
 
 $failures = [];
 $notes = [];

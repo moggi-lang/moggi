@@ -1,0 +1,26 @@
+-- Positional products: a multi-field constructor without field labels is an
+-- array, a list field stays a leaf, and products nest.
+
+module Products (productsSuite) where
+
+import Data.ByteString.Char8 qualified as C
+import Data.JSON
+import Types (PairP(..), WithList(..), NestP(..))
+import Support
+
+showPairP :: Either String PairP -> String
+showPairP e = case e of
+  Right (PairP 3 4) -> "ok"
+  _ -> "bad"
+
+productsSuite :: IO ()
+productsSuite = do
+  expect "positional encode" (bsToStr (encode (PairP 3 4))) "[3,4]"
+  expectOk "positional decode" (runDecode showPairP (C.pack "[3,4]"))
+  rtOk "positional" (PairP 3 4)
+  expect "list leaf non-empty" (bsToStr (encode (WithList [1, 2] 3))) "[[1,2],3]"
+  expect "list leaf empty" (bsToStr (encode (WithList [] 0))) "[[],0]"
+  rtOk "list leaf" (WithList [1, 2] 3)
+  rtOk "list leaf empty" (WithList [] 0)
+  expect "nested product encode" (bsToStr (encode (NestP (PairP 1 2) 3))) "[[1,2],3]"
+  rtOk "nested product" (NestP (PairP 1 2) 3)

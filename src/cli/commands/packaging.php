@@ -30,7 +30,7 @@ use function Moggi\Registry\writeLock;
  * The registry the compiler defaults to.
  *
  * Canonical only by being the default and by sitting on our domain: any host
- * speaking `registry-spec.md` works, and `MOGGI_REGISTRY` selects another.
+ * speaking the registry protocol works, and `MOGGI_REGISTRY` selects another.
  */
 const DEFAULT_REGISTRY = 'https://registry.moggi-lang.org';
 
@@ -66,8 +66,7 @@ function writeRegistryDefault(): string
 }
 
 /**
- * Load a catalog for a command, refusing a root signature that does not verify
- * (§4).
+ * Load a catalog for a command, refusing a root signature that does not verify.
  *
  * A signature that cannot be checked is not a signature that passed: a missing
  * `schnorr` binary refuses the catalog exactly as a bad signature does. It used

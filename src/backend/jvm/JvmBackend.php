@@ -7,6 +7,7 @@ use Moggi\IR\Module;
 use Moggi\Syntax\Ast\TypeNode;
 
 use function Moggi\Backend\Inspect\describeJvmEmit;
+use function Moggi\Backend\Jvm\Verify\verifyForeignImportAgainstHost;
 use function Moggi\Backend\Jvm\Codegen\emitModule;
 use function Moggi\Backend\Jvm\Foreign\jvmDescriptorFromMoggiType;
 use function Moggi\Backend\Jvm\Naming\artifactPath;
@@ -101,5 +102,21 @@ final class JvmBackend implements Backend
         }
 
         return null;
+    }
+
+    /**
+     * Ask the host class itself, through `javap`, whether the member and the descriptor this import
+     * is about to emit exist on it. See
+     * {@see \Moggi\Backend\Jvm\Verify\verifyForeignImportAgainstHost} for when the question is
+     * skipped instead of answered.
+     */
+    public function verifyForeignImport(
+        string $kind,
+        array $pathInfo,
+        TypeNode $type,
+        ?string $nativeSig,
+        string $name,
+    ): ?string {
+        return verifyForeignImportAgainstHost($kind, $pathInfo, $type, $nativeSig, $name);
     }
 }

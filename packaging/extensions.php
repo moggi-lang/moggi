@@ -28,7 +28,7 @@ require_once __DIR__ . '/../src/registry/extensions.php';
 const EXTENSION_MANIFEST = 'extensions.json';
 
 /** The directories a distribution bundles as installable packages. */
-const DISTRIBUTION_PACKAGE_DIRS = ['lib'];
+const DISTRIBUTION_PACKAGE_DIRS = ['libraries'];
 
 /**
  * The requirement sections of every package descriptor a distribution bundles.

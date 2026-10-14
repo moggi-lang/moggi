@@ -1,0 +1,21 @@
+-- Custom instances: `toJSON`/`toEncoding` and `parseJSON`/`parseEncoding` written
+-- by hand rather than derived, exercised both ways. The instance itself is in
+-- `Types.mog`, beside the type it belongs to.
+
+module Custom (customSuite) where
+
+import Data.JSON
+import Types (User(..))
+import Support
+
+showUser :: Either String User -> String
+showUser e = case e of
+  Right u -> case u == (User 36 "ada") of
+    True -> "ok"
+    False -> "bad"
+  Left _ -> "bad"
+
+customSuite :: IO ()
+customSuite = do
+  expect "custom encode" (bsToStr (encode (User 36 "ada"))) "{\"user_name\":\"ada\",\"user_age\":36}"
+  expectOk "custom decode" (runDecode showUser (encode (User 36 "ada")))

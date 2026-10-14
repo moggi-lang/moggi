@@ -1,0 +1,53 @@
+-- Generic compatibility: the shapes the old backend suite pinned — newtype
+-- unwrapping, a unary record staying an object, positional sum contents, an
+-- empty-array nullary, all-nullary tag overrides, and a nested all-nullary field.
+
+module Generics (genericsSuite) where
+
+import Data.ByteString.Char8 qualified as C
+import Data.JSON
+import Types (Age(..), BoxR(..), Ev(..), Unit(..), Ids(..), ColorObj(..), Badge(..), Color(..))
+import Support
+
+rejectEv :: Either String Ev -> String
+rejectEv e = case e of
+  Left _ -> "ok"
+  Right _ -> "bad"
+
+rejectBoxR :: Either String BoxR -> String
+rejectBoxR e = case e of
+  Left _ -> "ok"
+  Right _ -> "bad"
+
+rejectUnit :: Either String Unit -> String
+rejectUnit e = case e of
+  Left _ -> "ok"
+  Right _ -> "bad"
+
+rejectColorObj :: Either String ColorObj -> String
+rejectColorObj e = case e of
+  Left _ -> "ok"
+  Right _ -> "bad"
+
+genericsSuite :: IO ()
+genericsSuite = do
+  expect "newtype unwrap" (bsToStr (encode (Age 36))) "36"
+  rtOk "newtype" (Age 36)
+  expect "newtype list" (bsToStr (encode (Ids [7, 8]))) "[7,8]"
+  rtOk "newtype list" (Ids [7, 8])
+  expect "unary record" (bsToStr (encode (BoxR 3))) "{\"val\":3}"
+  rtOk "unary record" (BoxR 3)
+  expectOk "unary record bare rejected" (runDecode rejectBoxR (C.pack "3"))
+  expect "positional sum" (bsToStr (encode (Mark 1 2))) "{\"tag\":\"Mark\",\"contents\":[1,2]}"
+  rtOk "positional sum" (Mark 1 2)
+  rtOk "nullary in mixed sum" Flag
+  expectOk "sum missing tag rejected" (runDecode rejectEv (C.pack "{}"))
+  expectOk "sum missing contents rejected" (runDecode rejectEv (C.pack "{\"tag\":\"Mark\"}"))
+  expect "unit encode" (bsToStr (encode Unit)) "[]"
+  rtOk "unit" Unit
+  expectOk "unit object rejected" (runDecode rejectUnit (C.pack "{}"))
+  expect "all-nullary object tag" (bsToStr (encode CGreen)) "{\"tag\":\"CGreen\"}"
+  rtOk "all-nullary object tag" CGreen
+  expectOk "all-nullary string rejected" (runDecode rejectColorObj (C.pack "\"CGreen\""))
+  expect "nested nullary field" (bsToStr (encode (Badge Green))) "{\"badgeColor\":\"Green\"}"
+  rtOk "nested nullary field" (Badge Green)

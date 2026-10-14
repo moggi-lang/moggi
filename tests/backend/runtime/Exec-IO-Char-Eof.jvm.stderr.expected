@@ -1,4 +1,4 @@
 moggi: ErrorCall: hGetChar: end of input
-  at Moggi.Err.error (lib/Moggi/Err.mog:8:13)
-  at System.IO.JVM.hGetChar (lib/System/IO/JVM.mog:191:6)
+  at Moggi.Err.error (libraries/base/src/Moggi/Err.mog:8:13)
+  at System.IO.JVM.hGetChar (libraries/base/src/System/IO/JVM.mog:194:6)
   at Main.main (tests/backend/runtime/Exec-IO-Char-Eof.mog:8:8)

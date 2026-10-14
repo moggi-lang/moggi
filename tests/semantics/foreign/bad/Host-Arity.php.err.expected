@@ -1,0 +1,4 @@
+tests/semantics/foreign/bad/Host-Arity.mog:3:22: type error: php function `strlen` takes at most 1 argument, but this foreign import declares 2 arguments
+
+  3 | foreign php function rawLen "strlen" :: String -> Int -> Int
+    |                      ^^^^^^

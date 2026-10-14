@@ -4,7 +4,7 @@ namespace Tc\IO\ForeignEscaped;
 
 const __MOGGI_MAP = [[12 => ['Tc.IO.ForeignEscaped.isFileP', 'tests/backend/runtime/Tc-IO-ForeignEscaped.mog', 7, 13], 13 => ['Tc.IO.ForeignEscaped.isFileP', 'tests/backend/runtime/Tc-IO-ForeignEscaped.mog', 7, 13], 20 => ['Tc.IO.ForeignEscaped.main', 'tests/backend/runtime/Tc-IO-ForeignEscaped.mog', 11, 15], 21 => ['Tc.IO.ForeignEscaped.main', 'tests/backend/runtime/Tc-IO-ForeignEscaped.mog', 11, 15], 22 => ['Tc.IO.ForeignEscaped.main', 'tests/backend/runtime/Tc-IO-ForeignEscaped.mog', 13, 3]], ['Tc\\IO\\ForeignEscaped\\isFileP' => ['Tc.IO.ForeignEscaped.isFileP', 'tests/backend/runtime/Tc-IO-ForeignEscaped.mog', 7, 13], 'Tc\\IO\\ForeignEscaped\\main' => ['Tc.IO.ForeignEscaped.main', 'tests/backend/runtime/Tc-IO-ForeignEscaped.mog', 10, 8]]];
 
-require_once __DIR__ . '/../../../lib/System/Filesystem/PHP.php';
+require_once __DIR__ . '/../../../libraries/base/src/System/Filesystem/PHP.php';
 
 use function System\Filesystem\PHP\isFile;
 

@@ -34,6 +34,8 @@ function cacheUsage(): string
       catalog      fetched registry metadata
       packages     unpacked packages
       runtime      artifacts a host tool (maven, composer, nuget) fetched
+      bindings     generated `bind` / `build --bind` trees (they also live
+                   under runtime, so clearing `runtime` clears them too)
       test         the test harness's scratch trees
       downloads    the user-level download cache (MOGGI_USER_CACHE), shared by
                    every project on the machine

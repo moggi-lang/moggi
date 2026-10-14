@@ -1096,7 +1096,7 @@ function addRtLogicalExceptionMethods(ClassBuilder $b): void
             $c->invokevirtual($cp->methodRef('java/lang/String', 'replace', '(CC)Ljava/lang/String;'), 2, true);
             $c->astore(1);
 
-            foreach (['/lib/', '/tests/'] as $i => $marker) {
+            foreach (['/lib/', '/libraries/', '/tests/'] as $i => $marker) {
                 $found = 'found_' . $i;
                 $next = 'next_' . $i;
                 $c->aload(1);
@@ -1116,7 +1116,7 @@ function addRtLogicalExceptionMethods(ClassBuilder $b): void
                 $c->noteFrame(['java/lang/String', 'java/lang/String', 'int']);
             }
 
-            foreach (['lib/', 'tests/'] as $i => $marker) {
+            foreach (['lib/', 'libraries/', 'tests/'] as $i => $marker) {
                 $ok = 'rel_ok_' . $i;
                 $next = 'rel_next_' . $i;
                 $c->aload(1);

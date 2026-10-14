@@ -3,7 +3,7 @@
 namespace Moggi\Registry;
 
 /**
- * Dependency resolution, from the catalog alone — `resolver-sketch.md`.
+ * Dependency resolution, from the catalog alone.
  *
  * The input is the root descriptor's `[dependencies]` and the catalog; the output
  * is one version per package, or an error that names *why* every version in play

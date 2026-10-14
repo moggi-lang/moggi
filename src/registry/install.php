@@ -28,14 +28,21 @@ use function Moggi\Compiler\runProcess;
  * Where the bytes come from is not part of the contract: the registry's blob and
  * the release's own `source` are equal origins, checked the same way. When the
  * registry does not serve the blob, the `source` is reproduced instead — a clone
- * at the declared commit, a directory, or an upstream archive — and packed with
- * the same rule `moggi publish` used, so the `blob` digest is the check either
- * way and the origin never changes what the bytes are.
+ * at the declared commit, or an upstream archive — and packed with the same rule
+ * `moggi publish` used, so the `blob` digest is the check either way and the
+ * origin never changes what the bytes are.
  *
  * The *transport* is not equal, though: the release that names a `source` is
- * attacker-controlled here, so a `source` URL is fetched over `https` only — no
- * git remote helpers, no `file://`, no bare paths — unless the operator opts into
- * local paths with `MOGGI_ALLOW_LOCAL_SOURCES`. See `sourceUrlProblem`.
+ * attacker-controlled here, so a `source` URL is fetched over `https` only, and
+ * there is nothing to set that widens it — no git remote helper (an `ext::` URL
+ * runs a shell command), no `file://`, no bare path, no drive letter. See
+ * `sourceUrlProblem`.
+ *
+ * A `dir` source is not a transport at all, and is refused as a matter of
+ * principle: it names the directory a release was published from — `publish`
+ * records its basename — so reproducing from it is a local read wearing a
+ * published record's clothes, and it can only ever succeed on the machine that
+ * published the package.
  */
 
 /**
@@ -170,6 +177,9 @@ function fetchBlob(string $base, string $name, string $version, array $release, 
     if (!\is_string($digest) || !\str_starts_with($digest, 'sha256:')) {
         return ['path' => null, 'held' => false, 'problem' => "{$name} {$version} names no blob digest", 'origin' => ''];
     }
+    if (safeDigestKey($digest) === null) {
+        return ['path' => null, 'held' => false, 'problem' => "{$name} {$version}: its digest is not sha256:<hex>", 'origin' => ''];
+    }
 
     $path = downloadPath($digest);
     if (\is_file($path) && 'sha256:' . \hash_file('sha256', $path) === $digest) {
@@ -187,7 +197,7 @@ function fetchBlob(string $base, string $name, string $version, array $release, 
             return ['path' => null, 'held' => false, 'problem' => "{$name} {$version}: the archive is gzip-encoded and cannot be decoded", 'origin' => ''];
         }
         $bytes = $inflated;
-        assertResponseWithinCap(\strlen($bytes), $blobPath);
+        assertFetchWithinCap(\strlen($bytes), $blobPath);
     }
     $fromSource = null;
     if ($bytes === null) {
@@ -200,11 +210,12 @@ function fetchBlob(string $base, string $name, string $version, array $release, 
     }
     $actual = sha256Digest((string) $bytes);
     if ($actual !== $digest) {
-        $detail = originIsLocalSource($fromSource)
-            ? "the archive does not match its blob digest {$digest} (reproduced from a local `source`; the produced digest is withheld)"
-            : "the archive does not match its blob digest ({$actual} != {$digest})";
-
-        return ['path' => null, 'held' => false, 'problem' => "{$name} {$version}: {$detail}", 'origin' => ''];
+        return [
+            'path' => null,
+            'held' => false,
+            'problem' => "{$name} {$version}: the archive does not match its blob digest ({$actual} != {$digest})",
+            'origin' => '',
+        ];
     }
 
     $staging = $path . '.part-' . \getmypid() . '-' . \bin2hex(\random_bytes(4));
@@ -219,11 +230,11 @@ function fetchBlob(string $base, string $name, string $version, array $release, 
 
 /**
  * A release's bytes from its own `source`, when the registry does not serve its
- * blob — a clone at the declared commit, a directory, or an upstream archive.
+ * blob — a clone at the declared commit, or an upstream archive.
  *
  * Whatever the kind, the result is packed with the same rule `moggi publish`
- * used, so it is checked against the same `blob` digest as a downloaded blob
- * (§3.3): the digest is the contract, the origin is not.
+ * used, so it is checked against the same `blob` digest as a downloaded blob:
+ * the digest is the contract, the origin is not.
  *
  * @param array<string, mixed> $release
  * @return array{bytes: ?string, problem: ?string, origin: string}
@@ -239,7 +250,13 @@ function fetchBlobFromSource(array $release, ?callable $fetch): array
     }
 
     return match ($source['kind']) {
-        'dir' => sourceBlobFromDir($source),
+        'dir' => [
+            'bytes' => null,
+            'problem' => 'the registry does not serve its blob, and a `dir` source names the directory'
+                . ' the release was published from, which no other machine has — a release published'
+                . ' that way is not reproducible; publish with `--url`/`--commit`',
+            'origin' => '',
+        ],
         'git' => sourceBlobFromGit($source),
         'archive' => sourceBlobFromArchive($source, $fetch),
         default => [
@@ -248,28 +265,6 @@ function fetchBlobFromSource(array $release, ?callable $fetch): array
             'origin' => '',
         ],
     };
-}
-
-/**
- * @param array<string, mixed> $source
- * @return array{bytes: ?string, problem: ?string, origin: string}
- */
-function sourceBlobFromDir(array $source): array
-{
-    if (!localSourcesAllowed()) {
-        return [
-            'bytes' => null,
-            'problem' => 'the registry does not serve its blob, and a `dir` source is a local path — set MOGGI_ALLOW_LOCAL_SOURCES=1 to allow it',
-            'origin' => '',
-        ];
-    }
-
-    $path = \is_string($source['path'] ?? null) ? $source['path'] : '';
-    if ($path === '' || !\is_dir($path)) {
-        return ['bytes' => null, 'problem' => "the registry does not serve its blob, and its `dir` source `{$path}` is not a directory here", 'origin' => ''];
-    }
-
-    return ['bytes' => packDirectory($path), 'problem' => null, 'origin' => 'source:dir'];
 }
 
 /**
@@ -311,7 +306,7 @@ function sourceBlobFromGit(array $source): array
             return ['bytes' => null, 'problem' => "cannot check out commit {$commit} of its `git` source: " . sourceProcessError($checkout), 'origin' => ''];
         }
 
-        return ['bytes' => packDirectory($work), 'problem' => null, 'origin' => sourceUrlIsLocal($url) ? 'source:git-local' : 'source:git'];
+        return ['bytes' => packDirectory($work), 'problem' => null, 'origin' => 'source:git'];
     } finally {
         removeTree($work);
     }
@@ -354,7 +349,7 @@ function sourceBlobFromArchive(array $source, ?callable $fetch): array
             return ['bytes' => null, 'problem' => "its `archive` source cannot be unpacked: {$problem}", 'origin' => ''];
         }
 
-        return ['bytes' => packDirectory($work), 'problem' => null, 'origin' => sourceUrlIsLocal($url) ? 'source:archive-local' : 'source:archive'];
+        return ['bytes' => packDirectory($work), 'problem' => null, 'origin' => 'source:archive'];
     } finally {
         removeTree($work);
     }
@@ -368,21 +363,23 @@ function sourceBlobFromArchive(array $source, ?callable $fetch): array
  * can name any `source` it likes, and `fetchBlobFromSource` would then obey it.
  * So the transport is narrowed to what reproducing a package actually needs —
  * ordinary `https` — which rejects git remote helpers (`ext::sh -c …` runs a
- * shell command), local repository reads (`file://`, a bare path) and every
- * other scheme. A local path is used only when the operator opts in with
- * `MOGGI_ALLOW_LOCAL_SOURCES=1`, which is what publishing from a checkout needs.
+ * shell command), local repository reads (`file://`, a bare path, a drive letter)
+ * and every other scheme.
+ *
+ * There is no opt-out, and that is the point: the value of the rule is that a
+ * package's bytes come from a place any machine can reach, so a signed record can
+ * never talk a client into reading the disk it happens to be running on. A local
+ * package is a *local* dependency, declared as one, and needs no registry release
+ * to smuggle its path.
  */
 function sourceUrlProblem(string $kind, string $url): ?string
 {
     if (\str_starts_with($url, 'https://')) {
         return null;
     }
-    if (localSourcesAllowed() && sourceUrlIsLocal($url)) {
-        return null;
-    }
 
     return "its `{$kind}` source url `{$url}` is not allowed — only `https` URLs are fetched"
-        . (sourceUrlIsLocal($url) ? '; set MOGGI_ALLOW_LOCAL_SOURCES=1 to allow local paths' : '');
+        . (sourceUrlIsLocal($url) ? '; a local path is the publisher\'s, not a source another machine can read' : '');
 }
 
 /** A `source` URL that names something on this machine: a `file://` URL or a path. */
@@ -396,20 +393,6 @@ function sourceUrlIsLocal(string $url): bool
     }
 
     return \preg_match('#^[A-Za-z][A-Za-z0-9+.-]*:#', $url) !== 1;
-}
-
-/** Whether `MOGGI_ALLOW_LOCAL_SOURCES` opts this run into local `source` paths. */
-function localSourcesAllowed(): bool
-{
-    $value = \getenv('MOGGI_ALLOW_LOCAL_SOURCES');
-
-    return \is_string($value) && \in_array(\strtolower(\trim($value)), ['1', 'true', 'yes', 'on'], true);
-}
-
-/** Whether a reproduced `source` was a local one, whose digest is not reported. */
-function originIsLocalSource(?string $origin): bool
-{
-    return $origin === 'source:dir' || ($origin !== null && \str_ends_with($origin, '-local'));
 }
 
 /**
@@ -426,7 +409,7 @@ function fetchRawSourceBytes(string $url, ?callable $fetch): ?string
     $file = \basename($url);
     $bytes = $fetch !== null ? $fetch($directory, $file) : fetchBytes($directory, $file, false);
     if (\is_string($bytes)) {
-        assertResponseWithinCap(\strlen($bytes), $file);
+        assertFetchWithinCap(\strlen($bytes), $file);
     }
 
     return \is_string($bytes) ? $bytes : null;

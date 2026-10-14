@@ -1,0 +1,27 @@
+{
+  "format": 1,
+  "assemblies": {
+    "Acme.Hello": {
+      "types": {
+        "Acme.Hello.Greeter": {
+          "valueType": false
+        },
+        "Acme.Hello.Greeting": {
+          "valueType": true
+        }
+      },
+      "signatures": {
+        "greeterGreetWithOptional": {
+          "params": [
+            "string",
+            "int32"
+          ],
+          "optionalTail": 1
+        }
+      },
+      "version": "1.0.0",
+      "digest": "sha256:<digest>",
+      "generated-by": "moggi bind <version>"
+    }
+  }
+}

@@ -4,8 +4,8 @@ namespace Core\Guards;
 
 const __MOGGI_MAP = [[19 => ['Core.Guards.positive', 'tests/backend/codegen/Core-Guards.mog', 9, 14], 32 => ['Core.Guards.firstSign', 'tests/backend/codegen/Core-Guards.mog', 15, 29], 63 => ['Core.Guards.classify', 'tests/backend/codegen/Core-Guards.mog', 23, 31], 64 => ['Core.Guards.classify', 'tests/backend/codegen/Core-Guards.mog', 23, 31]], ['Core\\Guards\\positive' => ['Core.Guards.positive', 'tests/backend/codegen/Core-Guards.mog', 9, 14], 'Core\\Guards\\twice' => ['Core.Guards.twice', 'tests/backend/codegen/Core-Guards.mog', 12, 11], 'Core\\Guards\\firstSign' => ['Core.Guards.firstSign', 'tests/backend/codegen/Core-Guards.mog', 14, 1], 'Core\\Guards\\classify' => ['Core.Guards.classify', 'tests/backend/codegen/Core-Guards.mog', 22, 3]]];
 
-require_once __DIR__ . '/../../../lib/Data/Bool.php';
-require_once __DIR__ . '/../../../lib/Data/Ord.php';
+require_once __DIR__ . '/../../../libraries/base/src/Data/Bool.php';
+require_once __DIR__ . '/../../../libraries/base/src/Data/Ord.php';
 
 use function Data\Bool\otherwise;
 use function Data\Ord\__ev_Ord_Int;

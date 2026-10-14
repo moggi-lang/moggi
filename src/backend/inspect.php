@@ -230,14 +230,30 @@ function formatIlDump(array $ilFiles, array $focusNames = []): string
 /** `javap` from the configured JDK, else from `PATH`. */
 function findJavapBinary(): ?string
 {
+    return findJavapBinaryWithSource()['binary'];
+}
+
+/**
+ * `javap` and where it came from, so a diagnostic can say which binary answered.
+ *
+ * The build compiles against the JDK behind `JAVA_HOME` (or its aliases), so a
+ * `javap` from anywhere else is not the build's toolchain — verification still
+ * uses it, but says so.
+ *
+ * @return array{binary: ?string, source: ?string} the env var, `'PATH'`, or null
+ */
+function findJavapBinaryWithSource(): array
+{
     foreach (['JAVA_HOME', 'GRAALVM_HOME', 'JDK_HOME'] as $env) {
         $candidate = findToolchainExecutable($env, 'javap');
         if ($candidate !== null) {
-            return $candidate;
+            return ['binary' => $candidate, 'source' => $env];
         }
     }
 
-    return findExecutable('javap');
+    $path = findExecutable('javap');
+
+    return ['binary' => $path, 'source' => $path === null ? null : 'PATH'];
 }
 
 /**

@@ -1,0 +1,4 @@
+tests/semantics/foreign/bad/Host-Jvm-Descriptor.mog:3:22: type error: jvm member `java.lang.String.length` has no signature matching `()J`; the host declares `()I`
+
+  3 | foreign jvm function rawLength "java.lang.String.length" :: String -> Int
+    |                      ^^^^^^^^^

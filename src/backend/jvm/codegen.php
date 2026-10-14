@@ -2385,6 +2385,13 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 true,
             );
             return;
+        case 'platformStdin#':
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/Platform', 'stdin', '()Ljava/lang/Object;'),
+                0,
+                true,
+            );
+            return;
         case 'stringEq#':
         case 'bytesEq#':
             emitOperand($env, $args[0]);

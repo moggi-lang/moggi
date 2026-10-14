@@ -40,6 +40,18 @@ const HOST_TOOL_MANIFESTS = ['php' => 'composer.json', 'jvm' => 'pom.xml', 'dotn
 /** The target framework the .NET backend emits for (see `backend/dotnet/package.php`). */
 const HOST_TOOL_DOTNET_TFM = 'net8.0';
 
+/**
+ * The resolver's own format version (audit F17).
+ *
+ * It goes into the cache key and the `.complete` marker beside the tool, its
+ * version and the coordinates, so changing how resolutions are produced — the
+ * manifest writers, the artifact layout, the resolved-versions recording —
+ * re-resolves instead of serving a tree the new logic did not make. Bump this
+ * with any such change, never for a coordinate or tool change (those already
+ * key the tree).
+ */
+const HOST_TOOL_RESOLVER_VERSION = 1;
+
 /** The backend's host tool, or null when its dependencies are not tool-driven. */
 function hostToolFor(string $backend): ?string
 {
@@ -48,6 +60,11 @@ function hostToolFor(string $backend): ?string
 
 /**
  * The coordinates one descriptor declares for one backend.
+ *
+ * Every coordinate is validated before it is returned, so a hostile or
+ * hand-broken coordinate from a local *or* a linked (dependency) descriptor is
+ * refused with its own diagnostic before any tool sees it. The escaping in the
+ * manifest writers is then belt-and-braces, not the defence.
  *
  * @param array<string, mixed> $descriptor
  * @return list<string>
@@ -59,7 +76,142 @@ function hostToolCoordinates(array $descriptor, string $backend): array
         return [];
     }
 
-    return \array_values((array) ($descriptor[$backend][$key] ?? []));
+    $coordinates = \array_values((array) ($descriptor[$backend][$key] ?? []));
+    foreach ($coordinates as $coordinate) {
+        $problem = hostToolCoordinateProblem($backend, (string) $coordinate);
+        if ($problem !== null) {
+            throw new \RuntimeException($problem);
+        }
+    }
+
+    return $coordinates;
+}
+
+/**
+ * Why a host-tool coordinate must not reach a tool, or null when it may.
+ *
+ * Coordinates originate from descriptors — including a dependency's, which is
+ * untrusted input — and end up in a manifest a tool executes against, so the
+ * shape is checked twice: structurally per ecosystem, and for the characters
+ * that break out of a manifest context anywhere (`"`, `<`, `>`, `&`) or smuggle
+ * flags and paths (`\`, whitespace, control characters, a leading `-`).
+ */
+function hostToolCoordinateProblem(string $backend, string $coordinate): ?string
+{
+    if ($coordinate === '') {
+        return "[{$backend}] names no coordinate";
+    }
+    if (\preg_match('/[\x00-\x1F\x7F]/', $coordinate) === 1) {
+        return "[{$backend}] `{$coordinate}` must not hold control characters";
+    }
+    if (\str_starts_with($coordinate, '-')) {
+        return "[{$backend}] `{$coordinate}` must not start with `-`";
+    }
+
+    return match ($backend) {
+        'php' => composerCoordinateProblem($coordinate),
+        'jvm' => mavenCoordinateProblem($coordinate),
+        'dotnet' => nugetCoordinateProblem($coordinate),
+        default => "no host tool for backend `{$backend}`",
+    };
+}
+
+/**
+ * Why a coordinate *name* must not reach a manifest, or null when it may.
+ *
+ * Names land in XML attributes and text nodes, so whitespace, quotes, angle
+ * brackets, ampersands, backslashes and a leading dash are refused here.
+ * Version constraints are *not* names: a Composer constraint may hold `>` and
+ * spaces (`>=7.0 <8.0`), and it travels through `json_encode` or an escaped
+ * node, so only the control-character rule above applies to it.
+ */
+function hostNameProblem(string $backend, string $coordinate, string $name): ?string
+{
+    if ($name === '') {
+        return "[{$backend}] `{$coordinate}` names no package";
+    }
+    if (\preg_match('/\s/', $name) === 1) {
+        return "[{$backend}] `{$coordinate}` must not hold whitespace";
+    }
+    foreach (['"', '<', '>', '&', '\\'] as $char) {
+        if (\str_contains($name, $char)) {
+            return "[{$backend}] `{$coordinate}` must not hold `{$char}`";
+        }
+    }
+    if (\str_starts_with($name, '-')) {
+        return "[{$backend}] `{$coordinate}` must not start with `-`";
+    }
+
+    return null;
+}
+
+/** `vendor/package[:constraint]`, with Composer's own name class. */
+function composerCoordinateProblem(string $coordinate): ?string
+{
+    $parts = \explode(':', $coordinate);
+    if (\count($parts) > 2) {
+        return "[php] `{$coordinate}` is not `vendor/package[:constraint]`";
+    }
+    $slash = \explode('/', $parts[0]);
+    if (\count($slash) !== 2) {
+        return "[php] `{$coordinate}` is not `vendor/package[:constraint]`";
+    }
+    $part = '/^[a-z0-9]([._-]?[a-z0-9]+)*$/';
+    if (\preg_match($part, $slash[0]) !== 1 || \preg_match($part, $slash[1]) !== 1) {
+        $problem = hostNameProblem('php', $coordinate, $parts[0]);
+        if ($problem !== null) {
+            return $problem;
+        }
+
+        return "[php] `{$coordinate}` is not `vendor/package[:constraint]`:"
+            . ' names are lowercase alphanumeric with `.`, `-` and `_`';
+    }
+    if (isset($parts[1]) && \trim($parts[1]) === '') {
+        return "[php] `{$coordinate}` names an empty version constraint";
+    }
+
+    return null;
+}
+
+/** `group:artifact:version`, three non-empty parts. */
+function mavenCoordinateProblem(string $coordinate): ?string
+{
+    $parts = \explode(':', $coordinate);
+    if (\count($parts) !== 3) {
+        return "[jvm] `{$coordinate}` is not `group:artifact:version`";
+    }
+    foreach ([$parts[0], $parts[1]] as $name) {
+        $problem = hostNameProblem('jvm', $coordinate, $name);
+        if ($problem !== null) {
+            return $problem;
+        }
+    }
+    if ($parts[2] === '') {
+        return "[jvm] `{$coordinate}` is not `group:artifact:version`";
+    }
+
+    return null;
+}
+
+/** `id[:version]`, a NuGet id with an optional version. */
+function nugetCoordinateProblem(string $coordinate): ?string
+{
+    $parts = \explode(':', $coordinate);
+    if (\count($parts) > 2) {
+        return "[dotnet] `{$coordinate}` is not `id[:version]`";
+    }
+    $problem = hostNameProblem('dotnet', $coordinate, $parts[0]);
+    if ($problem !== null) {
+        return $problem;
+    }
+    if (\preg_match('/^[A-Za-z0-9_.-]+$/', $parts[0]) !== 1) {
+        return "[dotnet] `{$coordinate}` is not `id[:version]`";
+    }
+    if (isset($parts[1]) && $parts[1] === '') {
+        return "[dotnet] `{$coordinate}` names an empty version";
+    }
+
+    return null;
 }
 
 /**
@@ -146,10 +298,330 @@ function thirdPartyForDescriptor(array $descriptor): array
     return $map;
 }
 
-/** The content address of a coordinate set: the backend and the coordinates, sorted. */
+/** The content address of a coordinate set: the backend, its schema and resolver versions, and the coordinates, sorted. */
 function hostToolKey(string $backend, array $coordinates): string
 {
-    return \hash('sha256', $backend . "\n" . \implode("\n", $coordinates) . "\n");
+    return \hash('sha256', $backend . "\n" . hostToolSchemaVersion($backend) . "\n" . HOST_TOOL_RESOLVER_VERSION . "\n" . \implode("\n", $coordinates) . "\n");
+}
+
+/**
+ * Whether a `.complete` marker answers for this resolution.
+ *
+ * Tool, tool version and coordinates must match exactly, and the marker must
+ * carry this resolver version — a marker from an older resolver (no `resolver`
+ * member at all) never matches, which is what re-resolves after a format
+ * change instead of serving a tree the current logic did not make.
+ *
+ * @param array<string, mixed> $recorded the decoded marker
+ * @param list<string> $coordinates
+ */
+function hostMarkerMatches(array $recorded, string $tool, string $version, array $coordinates): bool
+{
+    return ($recorded['tool'] ?? null) === $tool
+        && ($recorded['version'] ?? null) === $version
+        && ($recorded['coordinates'] ?? null) === \array_values($coordinates)
+        && ($recorded['resolver'] ?? null) === HOST_TOOL_RESOLVER_VERSION;
+}
+
+/**
+ * Whether the lock's recorded host state answers for this build.
+ *
+ * Same rule as the cache marker, against the lock instead: a recorded state
+ * whose tool, tool version, coordinates or resolver version differ forces a
+ * fresh resolution. The *resolved* versions are not compared — they are the
+ * previous answer, recorded for review, not a precondition.
+ *
+ * @param array<string, mixed>|null $recorded the lock's `host` entry for the backend
+ * @param list<string> $coordinates
+ */
+function hostStateMatches(mixed $recorded, ?string $tool, ?string $version, array $coordinates): bool
+{
+    if (!\is_array($recorded)) {
+        return false;
+    }
+
+    return ($recorded['tool'] ?? null) === $tool
+        && ($recorded['version'] ?? null) === $version
+        && ($recorded['coordinates'] ?? null) === \array_values($coordinates)
+        && ($recorded['resolver'] ?? null) === HOST_TOOL_RESOLVER_VERSION;
+}
+
+/**
+ * The lock's `host` entry for one backend after a resolution.
+ *
+ * Tool, tool version, coordinates and resolver version (the re-resolution
+ * preconditions) plus the *resolved* versions the tools reported — the part a
+ * reviewer can see. Null when there is nothing to record: no tool, no
+ * coordinates, or no tree.
+ *
+ * @param list<string> $coordinates
+ * @return array<string, mixed>|null
+ */
+function hostStateEntry(string $backend, ?string $tool, ?string $version, array $coordinates, ?string $dir): ?array
+{
+    if ($tool === null || $version === null || $coordinates === [] || $dir === null) {
+        return null;
+    }
+    $resolved = hostResolvedVersions($backend, $dir, $coordinates);
+    \ksort($resolved, \SORT_STRING);
+
+    return [
+        'tool' => $tool,
+        'version' => $version,
+        'coordinates' => \array_values($coordinates),
+        'resolved' => $resolved,
+        'resolver' => HOST_TOOL_RESOLVER_VERSION,
+    ];
+}
+
+/**
+ * The versions the tools actually resolved, per backend, from the tree itself.
+ *
+ * Best-effort reads of the tools' own records — Composer's lockfile, the jars
+ * Maven copied, NuGet's assets file — so the lock shows what the coordinates
+ * meant on the machine that resolved them. Anything unreadable is omitted
+ * rather than guessed: a missing record is a gap in reviewability, not a
+ * version.
+ *
+ * @param list<string> $coordinates the requested coordinates (to name JVM artifacts by)
+ * @return array<string, string> name => resolved version
+ */
+function hostResolvedVersions(string $backend, string $dir, array $coordinates): array
+{
+    return match ($backend) {
+        'php' => composerLockedVersions($dir),
+        'jvm' => mavenResolvedVersions($dir, $coordinates),
+        'dotnet' => nugetResolvedVersions($dir),
+        default => [],
+    };
+}
+
+/** `name => version` from the `composer.lock` a resolution wrote, if it did. */
+function composerLockedVersions(string $dir): array
+{
+    $path = \rtrim($dir, '/') . '/composer.lock';
+    if (!\is_file($path)) {
+        return [];
+    }
+    $data = \json_decode((string) \file_get_contents($path), true);
+    if (!\is_array($data)) {
+        return [];
+    }
+    $versions = [];
+    foreach ([...((array) ($data['packages'] ?? [])), ...((array) ($data['packages-dev'] ?? []))] as $package) {
+        $name = (string) ($package['name'] ?? '');
+        $version = (string) ($package['version'] ?? '');
+        if ($name !== '' && $version !== '') {
+            $versions[$name] = $version;
+        }
+    }
+    \ksort($versions, \SORT_STRING);
+
+    return $versions;
+}
+
+/**
+ * `artifact => version` from the jars Maven copied, matched by artifact id.
+ *
+ * A jar is `<artifact>-<version>.jar`, but artifact ids hold dashes, so the
+ * split is by the requested coordinates, not by parsing: the longest
+ * `<artifact>-*.jar` match wins. An artifact with no jar in the tree is
+ * omitted — the tree, not the request, is what is recorded.
+ *
+ * @param list<string> $coordinates `group:artifact:version` requests
+ * @return array<string, string>
+ */
+function mavenResolvedVersions(string $dir, array $coordinates): array
+{
+    $jars = \glob(\rtrim($dir, '/') . '/jvm/*.jar') ?: [];
+    if ($jars === []) {
+        return [];
+    }
+    $basenames = \array_map('basename', $jars);
+    \sort($basenames, \SORT_STRING);
+    $artifacts = [];
+    foreach ($coordinates as $coordinate) {
+        $parts = \explode(':', (string) $coordinate);
+        if (\count($parts) !== 3 || $parts[1] === '') {
+            continue;
+        }
+        $artifacts[] = $parts[1];
+    }
+    $versions = [];
+    foreach ($artifacts as $artifact) {
+        foreach ($basenames as $basename) {
+            if (\str_starts_with($basename, $artifact . '-') && \str_ends_with($basename, '.jar')) {
+                $versions[$artifact] = \substr($basename, \strlen($artifact) + 1, -4);
+            }
+        }
+    }
+    \ksort($versions, \SORT_STRING);
+
+    return $versions;
+}
+
+/** `id => version` from NuGet's own assets file, if the restore wrote one. */
+function nugetResolvedVersions(string $dir): array
+{
+    $path = \rtrim($dir, '/') . '/obj/project.assets.json';
+    if (!\is_file($path)) {
+        return [];
+    }
+    $data = \json_decode((string) \file_get_contents($path), true);
+    if (!\is_array($data)) {
+        return [];
+    }
+    $targets = (array) ($data['targets'] ?? []);
+    \ksort($targets, \SORT_STRING);
+    $versions = [];
+    foreach ($targets as $packages) {
+        foreach ((array) $packages as $key => $_) {
+            $parts = \explode('/', (string) $key, 2);
+            if (\count($parts) === 2 && $parts[0] !== '' && $parts[1] !== '' && !isset($versions[$parts[0]])) {
+                $versions[$parts[0]] = $parts[1];
+            }
+        }
+    }
+    \ksort($versions, \SORT_STRING);
+
+    return $versions;
+}
+
+/**
+ * Why a coordinate must not travel in a release build, or null when it is pinned.
+ *
+ * A release pins its publisher's tree in the signed `third_party` map, but a
+ * consumer resolves afresh — and a floating constraint means afresh can mean
+ * something else on every machine. `pack` and `publish` refuse them, naming
+ * the coordinate, so what is published is what every consumer resolves.
+ */
+function hostFloatingProblem(string $backend, string $coordinate): ?string
+{
+    $parts = \explode(':', $coordinate, 2);
+    $constraint = \trim($parts[1] ?? '');
+    if ($constraint === '') {
+        return "[{$backend}] `{$coordinate}` names no version — pin an exact version: release builds refuse floating host coordinates";
+    }
+    $pinned = match ($backend) {
+        'php' => \preg_match('/^v?\d+(\.\d+){1,3}$/', $constraint) === 1,
+        'jvm' => \preg_match('/[\[\](),*\s]/', $constraint) !== 1 && \preg_match('/-SNAPSHOT$/i', $constraint) !== 1,
+        'dotnet' => \preg_match('/[*\[\](),\s]/', $constraint) !== 1,
+        default => true,
+    };
+    if ($pinned) {
+        return null;
+    }
+
+    return "[{$backend}] `{$coordinate}` is floating — pin an exact version: release builds refuse floating host coordinates";
+}
+
+/**
+ * Every floating coordinate the package itself declares, across backends.
+ *
+ * Only the local descriptor is asked: a dependency's coordinates are the
+ * transitive policy's business, not the release's.
+ *
+ * @param array<string, mixed> $descriptor a descriptor read by `readDescriptor`
+ * @return list<string>
+ */
+function hostFloatingProblems(array $descriptor): array
+{
+    $problems = [];
+    foreach (\array_keys(HOST_TOOLS) as $backend) {
+        foreach (hostToolCoordinates($descriptor, $backend) as $coordinate) {
+            $problem = hostFloatingProblem($backend, (string) $coordinate);
+            if ($problem !== null) {
+                $problems[] = $problem;
+            }
+        }
+    }
+
+    return $problems;
+}
+
+/**
+ * The linked packages contributing host coordinates for one backend.
+ *
+ * A dependency's coordinates are resolved into the consumer's build today —
+ * silently choosing the tools a build runs. Policy (ii) keeps that while
+ * making it reviewable: without `--allow-transitive-tools` it is a refusal
+ * naming the packages, with it the admission is recorded in the lock.
+ *
+ * @param array<string, array<string, mixed>> $linkedByName package name => `hostToolDescriptor`
+ * @return array<string, list<string>> package name => its coordinates (non-empty only)
+ */
+function transitiveHostToolPackages(array $linkedByName, string $backend): array
+{
+    $packages = [];
+    foreach ($linkedByName as $name => $descriptor) {
+        if (!\in_array($backend, (array) ($descriptor['backends'] ?? []), true)) {
+            continue;
+        }
+        $coordinates = hostToolCoordinates($descriptor, $backend);
+        if ($coordinates !== []) {
+            $packages[(string) $name] = \array_values(\array_map('strval', $coordinates));
+        }
+    }
+    \ksort($packages, \SORT_STRING);
+
+    return $packages;
+}
+
+/**
+ * The refusal when a build would run tools a dependency chose.
+ *
+ * @param array<string, list<string>> $packages `transitiveHostToolPackages`
+ */
+function transitiveToolsRefusal(array $packages, string $backend): string
+{
+    $lines = [];
+    foreach ($packages as $name => $coordinates) {
+        $lines[] = '  ' . $name . ': ' . \implode(', ', $coordinates);
+    }
+
+    return 'this build would resolve host coordinates its dependencies declare for [' . $backend . ']'
+        . ' — a dependency choosing the tools your build runs:' . "\n" . \implode("\n", $lines)
+        . "\npass --allow-transitive-tools to admit them (recorded in moggi.lock)";
+}
+
+/**
+ * The publish-time note for a package that makes its consumers run tools.
+ *
+ * A package with host coordinates is not just code: every consumer build
+ * resolves them and runs the tool. Loud at publish time, so the publisher
+ * signs that consequence knowingly.
+ *
+ * @param array<string, mixed> $descriptor a descriptor read by `readDescriptor`
+ */
+function hostConsumerNote(array $descriptor): ?string
+{
+    $tools = [];
+    foreach (HOST_TOOLS as $backend => $tool) {
+        if (hostToolCoordinates($descriptor, $backend) !== []) {
+            $tools[] = $tool;
+        }
+    }
+    if ($tools === []) {
+        return null;
+    }
+
+    return 'this package declares host coordinates — installing it makes every consumer build resolve and run '
+        . \implode(', ', $tools) . ' at build time';
+}
+
+/**
+ * Schema versions that invalidate a cached resolution when they move (audit F17): a resolution
+ * must not outlive the format that produced it, in either direction.
+ *
+ * The version is owned by the backend that owns the schema; compiler.php loads the backends
+ * before this file, so the constant is defined wherever this runs.
+ */
+function hostToolSchemaVersion(string $backend): int
+{
+    return match ($backend) {
+        'dotnet' => \Moggi\Backend\DotNet\Dependencies\DOTNET_SIDECAR_FORMAT,
+        default => 0,
+    };
 }
 
 /** Where a coordinate set's artifacts live. */
@@ -194,6 +666,12 @@ function hostToolManifest(string $backend, array $coordinates, string $project):
     }
     $coordinates = \array_values(\array_unique($coordinates));
     \sort($coordinates, \SORT_STRING);
+    foreach ($coordinates as $coordinate) {
+        $problem = hostToolCoordinateProblem($backend, $coordinate);
+        if ($problem !== null) {
+            throw new \RuntimeException($problem);
+        }
+    }
 
     $contents = match ($backend) {
         'php' => hostToolComposerJson($coordinates, $project),
@@ -251,9 +729,9 @@ function hostToolPom(array $coordinates, string $project): string
             throw new \RuntimeException("[jvm] `{$coordinate}` is not `groupId:artifactId:version`");
         }
         $dependencies .= "    <dependency>\n"
-            . '      <groupId>' . \htmlspecialchars(\trim($parts[0]), \ENT_XML1) . "</groupId>\n"
-            . '      <artifactId>' . \htmlspecialchars(\trim($parts[1]), \ENT_XML1) . "</artifactId>\n"
-            . '      <version>' . \htmlspecialchars(\trim($parts[2]), \ENT_XML1) . "</version>\n"
+            . '      <groupId>' . \htmlspecialchars(\trim($parts[0]), \ENT_QUOTES | \ENT_XML1) . "</groupId>\n"
+            . '      <artifactId>' . \htmlspecialchars(\trim($parts[1]), \ENT_QUOTES | \ENT_XML1) . "</artifactId>\n"
+            . '      <version>' . \htmlspecialchars(\trim($parts[2]), \ENT_QUOTES | \ENT_XML1) . "</version>\n"
             . "    </dependency>\n";
     }
 
@@ -281,8 +759,8 @@ function hostToolCsproj(array $coordinates, string $project): string
     $references = '';
     foreach ($coordinates as $coordinate) {
         [$package, $constraint] = hostToolSplitCoordinate($coordinate, 'nuget');
-        $references .= '    <PackageReference Include="' . \htmlspecialchars($package, \ENT_XML1)
-            . '" Version="' . \htmlspecialchars($constraint, \ENT_XML1) . "\" />\n";
+        $references .= '    <PackageReference Include="' . \htmlspecialchars($package, \ENT_QUOTES | \ENT_XML1)
+            . '" Version="' . \htmlspecialchars($constraint, \ENT_QUOTES | \ENT_XML1) . "\" />\n";
     }
     $tfm = HOST_TOOL_DOTNET_TFM;
 

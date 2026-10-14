@@ -1,0 +1,2 @@
+-- Fail: a `PHP:` path names a host constant, and the host defines no such name.
+foreign php const appendFlag "PHP:FILE_APPENDX" :: Int

@@ -24,6 +24,7 @@ edited; `moggi run examples/twice` and change a line.
 |------|----------|
 | [language.md](language.md) | complete syntax — every construct, pragma and rule |
 | [ffi.md](ffi.md) | calling PHP, the JVM or .NET |
+| [host-packages.md](host-packages.md) | using Composer, Maven and NuGet libraries from Moggi |
 | [deriving.md](deriving.md) | every deriving strategy |
 | [diagnostics.md](diagnostics.md) | the error catalogue, uncaught-exception reports, source maps |
 | [pipeline.md](pipeline.md) | what the compiler does with your file, stage by stage |
