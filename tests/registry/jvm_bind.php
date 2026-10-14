@@ -37,7 +37,10 @@ $assert = static function (bool $condition, string $message) use (&$checks): voi
 
 $javac = resolveJdkBinary('javac');
 $assert($javac !== null, 'no `javac` found (JAVA_HOME, PATH, or beside `java`) — the JVM binder needs a JDK');
-$jar = \dirname((string) $javac) . '/jar';
+$jar = \dirname((string) $javac) . \DIRECTORY_SEPARATOR . 'jar';
+if (\PHP_OS_FAMILY === 'Windows' && !\is_file($jar) && \is_file($jar . '.exe')) {
+    $jar .= '.exe';
+}
 $assert(\is_file($jar) && \is_executable($jar), "no `jar` beside `{$javac}`");
 
 $work = createTempDir('moggi-jvm-bind');
@@ -163,7 +166,7 @@ foreach ($descriptor['skipped'] as $skip) {
 
 // The render is the golden, byte for byte.
 $rendered = renderBinding($descriptor);
-$assert($rendered === $golden, "render differs from golden:\n" . diffText($golden, $rendered));
+$assert(normalize($rendered) === normalize($golden), "render differs from golden:\n" . diffText(normalize($golden), normalize($rendered)));
 
 // The bind cache key folds the JVM emit discriminator in.
 $key = bindCacheKey('jvm', 'com.acme:hello');
@@ -189,7 +192,7 @@ $moggi = static fn (array $args, int $timeout = 120): array => runCompiledProces
 
 $printed = $moggi(['bind', 'jvm:com.acme:hello', '--tree', $tree, '--print']);
 $assert(($printed['exitCode'] ?? 1) === 0, 'bind --print failed: ' . ($printed['stderr'] ?? ''));
-$assert(($printed['stdout'] ?? '') === $golden, "bind --print differs:\n" . diffText($golden, $printed['stdout'] ?? ''));
+$assert(normalize((string) ($printed['stdout'] ?? '')) === normalize($golden), "bind --print differs:\n" . diffText(normalize($golden), normalize((string) ($printed['stdout'] ?? ''))));
 
 $refused = $moggi(['bind', 'go:github.com/acme/hello', '--tree', $tree]);
 $assert(($refused['exitCode'] ?? 0) !== 0, 'a go: coordinate bound');

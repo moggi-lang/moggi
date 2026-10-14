@@ -7,6 +7,11 @@ use Moggi\Registry\FetchLog;
 use function Moggi\Cache\atomicWrite;
 use function Moggi\Registry\badPackageProblem;
 use function Moggi\Registry\badPackagesAmong;
+use function Moggi\Registry\bundledConstraintFor;
+use function Moggi\Registry\bundledPackages;
+use function Moggi\Registry\demandsCloseLocally;
+use function Moggi\Registry\providedPackages;
+use function Moggi\Registry\satisfies;
 use function Moggi\Registry\collectHostToolCoordinates;
 use function Moggi\Registry\descriptorAdditionProblems;
 use function Moggi\Registry\descriptorProblems;
@@ -233,6 +238,13 @@ function addDependency(string $root, string $argument, ?string $version, bool $p
 function addRegistryDependency(array $descriptor, string $descriptorPath, string $text, array $edit, bool $print, bool $useCache, string $registry): array
 {
     $name = (string) $edit['package'];
+    $bundled = bundledPackages();
+    $bundledSpec = $bundled[$name] ?? null;
+    if ($bundledSpec !== null
+        && (($edit['deferred'] ?? false) === true || satisfies((string) $bundledSpec['version'], (string) ($edit['value'] ?? '')))
+    ) {
+        $edit = withAddConstraint($edit, bundledConstraintFor((string) $bundledSpec['version']));
+    }
     if (($edit['deferred'] ?? false) === true && $print) {
         throw new \RuntimeException(
             "--print will not ask a registry which version to record — say `--version CONSTRAINT`, or run without --print",
@@ -240,11 +252,14 @@ function addRegistryDependency(array $descriptor, string $descriptorPath, string
     }
 
     $log = new FetchLog();
-    $catalog = $print ? null : loadVerifiedCatalog($registry, $useCache, $log);
+    $prospective = \array_merge((array) ($descriptor['dependencies'] ?? []), [$name => (string) ($edit['value'] ?? '')]);
+    $local = demandsCloseLocally($prospective, $bundled, providedPackages());
+    $catalog = ($print || $local) ? null : loadVerifiedCatalog($registry, $useCache, $log);
 
     if ($catalog !== null) {
         $entry = $catalog->entry($name);
-        if ($entry === null) {
+        $servedLocally = $bundledSpec !== null && satisfies((string) $bundledSpec['version'], (string) ($edit['value'] ?? ''));
+        if ($entry === null && !$servedLocally) {
             throw new \RuntimeException("the registry at {$registry} lists no package `{$name}`");
         }
         if (($edit['deferred'] ?? false) === true) {
@@ -283,7 +298,7 @@ function addRegistryDependency(array $descriptor, string $descriptorPath, string
     $resolution = writeResolution($updated, $descriptorPath, $registry, $catalog, null, false, false);
     $lock = $resolution['document'];
 
-    $entries = $catalog->entries(lockedPackageNames($lock));
+    $entries = $catalog?->entries(lockedPackageNames($lock)) ?? [];
     foreach (badPackagesAmong($entries) as $bad => $marker) {
         \fwrite(STDERR, 'warning: ' . badPackageProblem((string) $bad, $marker) . "\n");
     }
@@ -291,12 +306,12 @@ function addRegistryDependency(array $descriptor, string $descriptorPath, string
         \fwrite(STDERR, 'warning: ' . unmaintainedPackageNote((string) $unmaintained, $marker) . "\n");
     }
 
-    $installed = installLockedPackages($registry, $lock, $entries, $useCache, null, $log, $catalog->blobsBase());
+    $installed = installLockedPackages($registry, $lock, $entries, $useCache, null, $log, $catalog?->blobsBase());
 
     return [
         'written' => $changed,
         'registry' => $registry,
-        'registryNpub' => shortNpub((string) ($catalog->npub() ?? '—')),
+        'registryNpub' => shortNpub((string) ($catalog?->npub() ?? '—')),
         'resolved' => (string) ($resolution['chosen'][$name] ?? ''),
         'lock' => $resolution['lockFile'],
         'dependencies' => \array_keys((array) ($lock['packages'] ?? [])),

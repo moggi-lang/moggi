@@ -236,8 +236,13 @@ try {
     $assert(\str_contains($printed['stdout'], 'nothing written (--print)'), 'the printed edit says nothing was written');
     $assert((string) \file_get_contents($barePath) === $bareText, 'the printed edit wrote nothing');
 
-    $deferred = $run('add', '--print', '--root', $bare, 'json');
-    $assert($deferred['exitCode'] === 1, 'a printed add with no version fails');
+    $bundledPrint = $run('add', '--print', '--root', $bare, 'json');
+    $assert($bundledPrint['exitCode'] === 0, 'a printed add of a bundled package fills the line from the shipped copy: ' . $bundledPrint['stderr']);
+    $assert(\str_contains($bundledPrint['stdout'], '+ json = '), 'the printed edit shows the filled line: ' . $bundledPrint['stdout']);
+    $assert((string) \file_get_contents($barePath) === $bareText, 'the printed bundled edit wrote nothing');
+
+    $deferred = $run('add', '--print', '--root', $bare, 'unshipped');
+    $assert($deferred['exitCode'] === 1, 'a printed add with no version fails when nothing local can answer it');
     $assert(\str_contains($deferred['stderr'], 'will not ask a registry'), 'the refusal says why: ' . $deferred['stderr']);
 
     $hostPrinted = $run('add', '--print', '--root', $project, 'jvm:org.slf4j:slf4j-api:2.0.16');
@@ -438,8 +443,11 @@ try {
         \file_put_contents($dir . '/index.json.sig', $schnorr(['sign', \hash('sha256', $index)], $nsec) . "\n");
     };
 
+    // `json` travels with the compiler, so a bare `add json` answers from the
+    // shipped copy and never reaches this registry: the newest-release path is
+    // exercised through `widgets`, which nothing bundles.
     $writeRegistry($registry, (string) $npub, (string) $nsec, [
-        'json' => $entry((string) $npub, ['0.3.0' => ['deps' => []], '0.4.1' => ['deps' => []]]),
+        'widgets' => $entry((string) $npub, ['0.3.0' => ['deps' => []], '0.4.1' => ['deps' => []]]),
     ]);
 
     $env = \getenv();
@@ -462,19 +470,19 @@ try {
     $assert(!\str_contains((string) \file_get_contents($registryProject . '/app.moggi'), 'dependencies'), 'an unlisted package writes nothing');
 
     // The newest release decides the constraint, and the lock is written by the resolver.
-    $added = $cli('add', '--registry', $registry, '--no-cache', 'json');
+    $added = $cli('add', '--registry', $registry, '--no-cache', 'widgets');
     $descriptorText = (string) \file_get_contents($registryProject . '/app.moggi');
     $assert(
-        \str_contains($descriptorText, "[dependencies]\njson = 0.4\n"),
+        \str_contains($descriptorText, "[dependencies]\nwidgets = 0.4\n"),
         'the newest release (0.4.1) becomes the constraint 0.4, got: ' . \json_encode($descriptorText),
     );
     $lock = \json_decode((string) @\file_get_contents($registryProject . '/moggi.lock'), true);
-    $assert(($lock['packages']['json']['version'] ?? null) === '0.4.1', 'the lock pins the release the constraint chose: ' . \json_encode($lock['packages'] ?? null));
+    $assert(($lock['packages']['widgets']['version'] ?? null) === '0.4.1', 'the lock pins the release the constraint chose: ' . \json_encode($lock['packages'] ?? null));
     $assert($added['exitCode'] === 1, 'a registry that serves no blob fails the command (the fetch is `install`\'s): ' . $added['stdout']);
     $assert(\str_contains($added['stdout'], 'refused'), 'the failed package is reported: ' . $added['stdout']);
 
     // Adding the same dependency again is a no-op on the descriptor, and re-resolves.
-    $againCli = $cli('add', '--registry', $registry, '--no-cache', 'json', '--version', '0.4');
+    $againCli = $cli('add', '--registry', $registry, '--no-cache', 'widgets', '--version', '0.4');
     $assert(\str_contains($againCli['stdout'], 'already declared'), 'an already-declared dependency is reported as such: ' . $againCli['stdout']);
     $assert((string) \file_get_contents($registryProject . '/app.moggi') === $descriptorText, 're-adding writes nothing');
 

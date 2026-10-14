@@ -3,11 +3,19 @@
 /** Resolve `java` / `javac` from JAVA_HOME, PATH, or a sibling of `java`. */
 function resolveJdkBinary(string $name): ?string
 {
+    // On Windows the binaries are `name.exe`; the PATH lookup below already
+    // knows that, but the JAVA_HOME and sibling spellings do not.
+    $names = [$name];
+    if (\PHP_OS_FAMILY === 'Windows' && !\str_ends_with(\strtolower($name), '.exe')) {
+        $names[] = $name . '.exe';
+    }
     $javaHome = getenv('JAVA_HOME');
     if (\is_string($javaHome) && $javaHome !== '') {
-        $candidate = rtrim($javaHome, '/\\') . '/bin/' . $name;
-        if (\is_file($candidate) && is_executable($candidate)) {
-            return $candidate;
+        foreach ($names as $candidate_name) {
+            $candidate = rtrim($javaHome, '/\\') . '/bin/' . $candidate_name;
+            if (\is_file($candidate) && is_executable($candidate)) {
+                return $candidate;
+            }
         }
     }
 
@@ -19,9 +27,11 @@ function resolveJdkBinary(string $name): ?string
     if ($name === 'javac') {
         $java = resolveJdkBinary('java');
         if ($java !== null) {
-            $sibling = dirname($java) . '/javac';
-            if (\is_file($sibling) && is_executable($sibling)) {
-                return $sibling;
+            foreach ($names as $candidate_name) {
+                $sibling = dirname($java) . '/' . $candidate_name;
+                if (\is_file($sibling) && is_executable($sibling)) {
+                    return $sibling;
+                }
             }
         }
     }

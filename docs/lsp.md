@@ -331,7 +331,7 @@ and document-sync requests.
 Capability ↔ dispatch **drift is checked, not hoped away**:
 `capabilities.php`'s `capabilityDispatchMismatches()` reports a handler without a
 capability and a capability without a handler, and the check runs in the test
-suite (`tests/lsp/capability_drift_test.php`).
+suite (`tests/lsp/capability_drift.php`).
 
 ## Run vs debug
 

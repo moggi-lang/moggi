@@ -430,9 +430,7 @@ final class LambdaParam extends AstNode
     }
 }
 
-// ---------------------------------------------------------------------------
-// Top-level / declarations
-// ---------------------------------------------------------------------------
+// --- Top-level / declarations -------------------------------------------------
 
 final class Program extends AstNode
 {
@@ -832,9 +830,7 @@ final class SignatureOnly extends AstNode
     }
 }
 
-// ---------------------------------------------------------------------------
-// Expressions
-// ---------------------------------------------------------------------------
+// --- Expressions --------------------------------------------------------------
 
 final class IntegerLit extends AstNode
 {
@@ -1433,9 +1429,7 @@ final class FieldAccess extends AstNode
     }
 }
 
-// ---------------------------------------------------------------------------
-// Patterns
-// ---------------------------------------------------------------------------
+// --- Patterns -----------------------------------------------------------------
 
 final class PatWild extends AstNode
 {
@@ -1551,9 +1545,7 @@ final class PatRecord extends AstNode
     }
 }
 
-// ---------------------------------------------------------------------------
-// Surface type AST (distinct from internal `Moggi\Semantics\TypeExpr\Type`)
-// ---------------------------------------------------------------------------
+// --- Surface type AST (distinct from `Moggi\Semantics\TypeExpr\Type`) ---------
 
 final class TypeVar extends AstNode implements TypeNode
 {
@@ -1687,9 +1679,7 @@ final class TypeQualified extends AstNode implements TypeNode
     }
 }
 
-// ---------------------------------------------------------------------------
-// Kind AST
-// ---------------------------------------------------------------------------
+// --- Kind AST -----------------------------------------------------------------
 
 final class KindType extends AstNode implements KindNode
 {

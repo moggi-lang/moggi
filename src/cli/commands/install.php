@@ -8,7 +8,11 @@ use function Moggi\Registry\badPackageProblem;
 use function Moggi\Registry\badPackagesAmong;
 use function Moggi\Registry\badPackagesRefusal;
 use function Moggi\Registry\findDescriptor;
+use function Moggi\Registry\bundledPackages;
+use function Moggi\Registry\demandsCloseLocally;
 use function Moggi\Registry\installLockedPackages;
+use function Moggi\Registry\lockIsLocal;
+use function Moggi\Registry\providedPackages;
 use function Moggi\Registry\lockDisagreements;
 use function Moggi\Registry\lockPath;
 use function Moggi\Registry\lockRegistryProblem;
@@ -93,11 +97,19 @@ function runInstallCommand(array $argv): int
         }
 
         $log = new FetchLog();
-        $catalog = loadVerifiedCatalog($options['registry'], !$options['noCache'], $log);
+        $bundled = bundledPackages();
 
         $lockFile = lockPath($descriptorPath, $options['output']);
         $lock = readLock($lockFile);
         $resolved = false;
+
+        $needsCatalog = true;
+        if ($lock === null) {
+            $needsCatalog = !demandsCloseLocally((array) ($descriptor['dependencies'] ?? []), $bundled, providedPackages());
+        } else {
+            $needsCatalog = !lockIsLocal($lock);
+        }
+        $catalog = $needsCatalog ? loadVerifiedCatalog($options['registry'], !$options['noCache'], $log) : null;
 
         if ($lock === null) {
             if ($options['frozen']) {
@@ -108,7 +120,7 @@ function runInstallCommand(array $argv): int
             $resolved = true;
         }
 
-        $entries = $catalog->entries(lockedPackageNames($lock));
+        $entries = $catalog?->entries(lockedPackageNames($lock)) ?? [];
         if (!$resolved) {
             $problems = lockDisagreements($lock, $entries);
             if ($problems !== []) {
@@ -119,7 +131,7 @@ function runInstallCommand(array $argv): int
             }
         }
 
-        $registryProblem = lockRegistryProblem($lock, $catalog->npub());
+        $registryProblem = lockRegistryProblem($lock, $catalog?->npub());
         if ($registryProblem !== null) {
             throw new \RuntimeException($registryProblem . ' — run `moggi update` against the registry you mean');
         }
@@ -148,7 +160,7 @@ function runInstallCommand(array $argv): int
             return 0;
         }
 
-        $result = installLockedPackages($options['registry'], $lock, $entries, !$options['noCache'], null, $log, $catalog->blobsBase());
+        $result = installLockedPackages($options['registry'], $lock, $entries, !$options['noCache'], null, $log, $catalog?->blobsBase());
 
         $extensionProblems = phpExtensionProblems(phpExtensionDescriptors($descriptor, $lock))['problems'];
 

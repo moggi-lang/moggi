@@ -54,7 +54,7 @@ There is no registry and no marker file. The walk looks at what a directory and 
 | `<dir>/Main.mog` | one **project** case — the directory is the program, and the walk does not descend into it |
 | `Foo.mog` / `Foo.ir.php` / `Foo.script` with a golden beside it | one **fixture** case |
 | `Foo.mog` / `Foo.ir.php` with only a `Foo.exec.php` and no `stdout`/`stderr` golden | one fixture case, php-only: the harness asserts in code |
-| `*_test.php` | one **script** case, run in its own process |
+| `foo_bar.php` (not `.ir.php`, not a support input) | one **script** case, run in its own process |
 
 Which **stage** owns a fixture is the directory it is in; which **golden kinds** it has is up to you.
 `tests/suite/kinds.php` says what each kind compares and which of them can differ per backend.
@@ -99,7 +99,10 @@ runs:
 | case directory | `lower-kebab` | `semantics/constrained-import` |
 | fixture (`.mog`, `.ir.php`) | `Title-Kebab` | `Exec-Exception-Report` |
 | REPL transcript (`.script`) | `lower-kebab` | `dump-emit` |
-| script | `snake_case_test.php` | `noopt_entry_bootstrap_test.php` |
+| script | `snake_case.php` | `noopt_entry_bootstrap.php` |
+
+A `.php` file is a case or it is support — helpers a script case opens by path live under
+`tests/suite/` or a directory `supportInputPaths()` names, never beside the cases.
 
 A path that mirrors a module path is exempt: `libraries/base/tests/Data/ByteString/` mirrors
 `libraries/base/src/Data/ByteString/`, and a project's own `lib/` is a source tree inside the

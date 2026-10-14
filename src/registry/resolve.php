@@ -27,9 +27,14 @@ namespace Moggi\Registry;
  * @param array<string, string> $provided name => version, the packages the compiler carries
  * @return array{ok: bool, chosen: array<string, string>, error: ?string}
  */
-function resolveDependencies(array $dependencies, Catalog $catalog, string $root = 'root', array $provided = []): array
+function resolveDependencies(array $dependencies, ?Catalog $catalog, string $root = 'root', array $provided = [], array $bundled = []): array
 {
-    return resolveWith(static fn (string $name): ?array => $catalog->entry($name), $dependencies, $root, $provided);
+    return resolveWith(
+        bundledEntry(static fn (string $name): ?array => $catalog?->entry($name), $bundled),
+        $dependencies,
+        $root,
+        $provided,
+    );
 }
 
 /**

@@ -65,6 +65,9 @@ function lockDocument(array $lock): array
     $packages = [];
     foreach ($lock['packages'] as $name => $entry) {
         $packages[$name] = ['version' => $entry['version'], 'digest' => $entry['digest']];
+        if (($entry['bundled'] ?? false) === true) {
+            $packages[$name]['bundled'] = true;
+        }
     }
     \ksort($packages);
 

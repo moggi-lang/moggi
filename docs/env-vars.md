@@ -177,7 +177,7 @@ default.
 | `MOGGI_CACHE_DIR` | pinned to `<repo>/.moggi` | Where the compile cache lives. Pinned *only* when it is unset, so a test run never writes into your working directory's cache and an explicit choice wins. |
 | `MOGGI_NO_CACHE` | unset (cache on) | Inherited: bypasses the cache for the compiler the cases invoke. |
 | `MOGGI_FUZZ_DIR` | `<cache>/fuzz-failures` | Where the frontend fuzzer keeps generated inputs and minimised reproducers. |
-| `MOGGI_TEST_STANDALONE_TIMEOUT` | `300` | Watchdog seconds for one `*_test.php` case before it is killed and reported as `timeout`. |
+| `MOGGI_TEST_STANDALONE_TIMEOUT` | `300` | Watchdog seconds for one script case before it is killed and reported as `timeout`. |
 | `MOGGI_TEST_CPU_COUNT` | probed | Pin the machine's CPU count instead of probing it, for a run that asserts a worker count. |
 | `MOGGI_TEST_FORCE_TTY` | unset | `1` makes stderr count as a terminal, so the live progress block is on without a pty. |
 | `MOGGI_TEST_COLUMNS` | `COLUMNS`, the terminal, 80 | Progress-block width. |

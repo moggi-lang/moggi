@@ -7,6 +7,7 @@ use Moggi\Registry\FetchLog;
 use function Moggi\Registry\badPackageProblem;
 use function Moggi\Registry\badPackagesAmong;
 use function Moggi\Registry\badPackagesRefusal;
+use function Moggi\Registry\checkBundledInstalled;
 use function Moggi\Registry\collectHostToolCoordinates;
 use function Moggi\Registry\declaredBackends;
 use function Moggi\Registry\fetchVerifiedRelease;
@@ -16,6 +17,7 @@ use function Moggi\Registry\hostToolDescriptor;
 use function Moggi\Registry\isInstalled;
 use function Moggi\Registry\libraryRoots;
 use function Moggi\Registry\lockDisagreements;
+use function Moggi\Registry\lockIsLocal;
 use function Moggi\Registry\lockPath;
 use function Moggi\Registry\lockRegistryProblem;
 use function Moggi\Registry\lockedInstallDir;
@@ -126,19 +128,21 @@ function runBuildCommand(array $argv): int
         }
 
         $log = new FetchLog();
-        $catalog = loadVerifiedCatalog($options['registry'], !$options['noCache'], $log);
 
         $lockFile = lockPath($descriptorPath, null);
         $lock = readLock($lockFile);
         if ($lock === null) {
             throw new \RuntimeException("no lock at {$lockFile} — run `moggi install` first");
         }
-        $registryProblem = lockRegistryProblem($lock, $catalog->npub());
+        $catalog = lockIsLocal($lock)
+            ? null
+            : loadVerifiedCatalog($options['registry'], !$options['noCache'], $log);
+        $registryProblem = lockRegistryProblem($lock, $catalog?->npub());
         if ($registryProblem !== null) {
             throw new \RuntimeException($registryProblem . ' — run `moggi update` against the registry you mean');
         }
 
-        $entries = $catalog->entries(lockedPackageNames($lock));
+        $entries = $catalog?->entries(lockedPackageNames($lock)) ?? [];
         $problems = lockDisagreements($lock, $entries);
         if ($problems !== []) {
             throw new \RuntimeException(
@@ -188,6 +192,13 @@ function runBuildCommand(array $argv): int
             if (!isInstalled($name, $locked['digest'] ?? null)) {
                 throw new \RuntimeException("{$name} is not installed — run `moggi install`");
             }
+            if (($locked['bundled'] ?? false) === true) {
+                $bundledProblem = checkBundledInstalled($name, (string) ($locked['version'] ?? ''));
+                if ($bundledProblem !== null) {
+                    throw new \RuntimeException($bundledProblem);
+                }
+                $signedThirdParty[] = [];
+            } else {
             $verified = fetchVerifiedRelease(
                 $options['registry'],
                 $name,
@@ -202,6 +213,7 @@ function runBuildCommand(array $argv): int
                 throw new \RuntimeException("{$name}: {$verified['detail']}");
             }
             $signedThirdParty[] = (array) (($verified['release']['third_party'] ?? []));
+            }
             $install = lockedInstallDir($name, $locked['digest'] ?? null);
             $descriptorFile = \rtrim($install, '/') . '/' . $name . '.moggi';
             if (\is_file($descriptorFile)) {

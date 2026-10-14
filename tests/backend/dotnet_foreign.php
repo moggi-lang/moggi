@@ -135,10 +135,13 @@ try {
         PHP);
     $out = [];
     $code = 0;
+    // `2>/dev/null` is POSIX; cmd.exe wants `2>nul` — and says so loudly
+    // ("The system cannot find the path specified.") when it gets the former.
+    $null = \PHP_OS_FAMILY === 'Windows' ? 'nul' : '/dev/null';
     \exec(
         \escapeshellarg(PHP_BINARY) . ' ' . \escapeshellarg($probeScript)
         . ' ' . \escapeshellarg($root) . ' ' . \escapeshellarg($probeC)
-        . ' ' . \escapeshellarg($sidecarRoot) . ' 2>/dev/null',
+        . ' ' . \escapeshellarg($sidecarRoot) . ' 2>' . $null,
         $out,
         $code,
     );

@@ -6,7 +6,10 @@ use Moggi\Registry\FetchLog;
 
 use function Moggi\Registry\badPackageProblem;
 use function Moggi\Registry\badPackagesAmong;
+use function Moggi\Registry\bundledPackages;
+use function Moggi\Registry\demandsCloseLocally;
 use function Moggi\Registry\findDescriptor;
+use function Moggi\Registry\providedPackages;
 use function Moggi\Registry\lockPath;
 use function Moggi\Registry\readDescriptor;
 use function Moggi\Registry\readLock;
@@ -73,13 +76,18 @@ function runUpdateCommand(array $argv): int
         $descriptor = readDescriptor($descriptorPath);
 
         $log = new FetchLog();
-        $catalog = loadVerifiedCatalog($options['registry'], !$options['noCache'], $log);
+        $local = demandsCloseLocally(
+            (array) ($descriptor['dependencies'] ?? []),
+            bundledPackages(),
+            providedPackages(),
+        );
+        $catalog = $local ? null : loadVerifiedCatalog($options['registry'], !$options['noCache'], $log);
 
         $lockFile = lockPath($descriptorPath, $options['output']);
         $before = readLock($lockFile);
         $resolution = writeResolution($descriptor, $descriptorPath, $options['registry'], $catalog, $options['output'], (bool) $options['dryRun'], (bool) $options['allowBad']);
 
-        $entries = $catalog->entries(\array_map('strval', \array_keys($resolution['chosen'])));
+        $entries = $catalog?->entries(\array_map('strval', \array_keys($resolution['chosen']))) ?? [];
         foreach (badPackagesAmong($entries) as $name => $marker) {
             \fwrite(STDERR, 'warning: ' . badPackageProblem($name, $marker) . "\n");
         }
@@ -96,7 +104,7 @@ function runUpdateCommand(array $argv): int
         }
 
         \printf("%s %s — %d dependenc%s\n", $descriptor['name'], $descriptor['version'], \count($resolution['chosen']), \count($resolution['chosen']) === 1 ? 'y' : 'ies');
-        \printf("registry   %s\n", shortNpub((string) ($catalog->npub() ?? '—')));
+        \printf("registry   %s\n", shortNpub((string) ($catalog?->npub() ?? '—')));
         \printf("requests   %s\n", $log->describe());
 
         if ($changes === []) {

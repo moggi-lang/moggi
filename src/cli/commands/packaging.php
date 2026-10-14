@@ -7,9 +7,12 @@ use Moggi\Registry\FetchLog;
 
 use function Moggi\Registry\badPackagesAmong;
 use function Moggi\Registry\badPackagesRefusal;
+use function Moggi\Registry\bundledArchiveDigest;
+use function Moggi\Registry\bundledPackages;
 use function Moggi\Registry\loadCatalog;
 use function Moggi\Registry\lockDocument;
 use function Moggi\Registry\lockPath;
+use function Moggi\Registry\pinBundledDemands;
 use function Moggi\Registry\prettyJson;
 use function Moggi\Registry\providedPackages;
 use function Moggi\Registry\registryIdentityProblem;
@@ -114,10 +117,12 @@ function loadVerifiedCatalog(string $registry, bool $useCache, FetchLog $log): C
  * @param array<string, mixed> $descriptor
  * @return array{document: array<string, mixed>, chosen: array<string, string>, lockFile: string}
  */
-function writeResolution(array $descriptor, string $descriptorPath, string $registry, Catalog $catalog, ?string $output, bool $dryRun = false, bool $allowBad = false): array
+function writeResolution(array $descriptor, string $descriptorPath, string $registry, ?Catalog $catalog, ?string $output, bool $dryRun = false, bool $allowBad = false): array
 {
     $provided = providedPackages();
-    $resolution = resolveDependencies($descriptor['dependencies'], $catalog, $descriptor['name'], $provided);
+    $bundled = bundledPackages();
+    [$demands] = pinBundledDemands((array) ($descriptor['dependencies'] ?? []), $bundled);
+    $resolution = resolveDependencies($demands, $catalog, $descriptor['name'], $provided, $bundled);
     if (!$resolution['ok']) {
         throw new \RuntimeException((string) $resolution['error']);
     }
@@ -130,8 +135,17 @@ function writeResolution(array $descriptor, string $descriptorPath, string $regi
         if (isset($provided[$name])) {
             continue;
         }
-        $entry = (array) $catalog->entry($name);
         $chosen[$name] = $version;
+        $spec = $bundled[$name] ?? null;
+        if ($spec !== null && $spec['version'] === $version) {
+            $packages[$name] = [
+                'version' => $version,
+                'digest' => bundledArchiveDigest($spec['dir']),
+                'bundled' => true,
+            ];
+            continue;
+        }
+        $entry = (array) $catalog?->entry($name);
         $packages[$name] = [
             'version' => $version,
             'digest' => $entry['digest'] ?? null,
@@ -152,8 +166,8 @@ function writeResolution(array $descriptor, string $descriptorPath, string $regi
         'root' => ['name' => $descriptor['name'], 'version' => $descriptor['version']],
         'registry' => [
             'base' => $registry,
-            'npub' => $catalog->npub(),
-            'verified' => $catalog->signature()['ok'],
+            'npub' => $catalog?->npub(),
+            'verified' => $catalog?->signature()['ok'] ?? false,
         ],
         'packages' => $packages,
         'php' => $descriptor['php'],
