@@ -70,7 +70,7 @@ jobs:
         run: php packaging/assemble.php --target ${{ matrix.target }} --glibc-floor --native-smoke --archives --out dist-out
 
       - name: Upload the archives
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: ${{ matrix.target }}
           if-no-files-found: error
@@ -167,7 +167,7 @@ jobs:
         run: php packaging/assemble.php --target ${{ matrix.target }} --archives --out dist-out
 
       - name: Upload the archives
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: ${{ matrix.target }}
           if-no-files-found: error
@@ -216,7 +216,7 @@ jobs:
           fi
           echo "releasing ${version}"
 
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@v8.0.2
         with:
           path: dist-out
           merge-multiple: true
