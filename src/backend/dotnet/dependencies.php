@@ -188,13 +188,17 @@ function dotNetSidecarDiscriminator(bool $includeGenerated = true): string
  */
 function isGeneratedBindPath(string $path): bool
 {
-    $runtime = \rtrim(\Moggi\Cache\runtimeCacheDir(), '/\\');
-    $prefix = $runtime . \DIRECTORY_SEPARATOR;
-    if (!\str_starts_with($path, $prefix)) {
+    // Textual match, but separator-blind: the cache dir mixes `\` (from the
+    // OS temp layout) and `/` (from the key builder) on Windows, and a bind
+    // root the predicate misses pollutes the sidecar fingerprint.
+    $flat = static fn (string $p): string => \str_replace('\\', '/', $p);
+    $prefix = \rtrim($flat(\Moggi\Cache\runtimeCacheDir()), '/') . '/';
+    $slashPath = $flat($path);
+    if (!\str_starts_with($slashPath, $prefix)) {
         return false;
     }
-    $rest = (string) \substr($path, \strlen($prefix));
-    $slash = \strpos($rest, \DIRECTORY_SEPARATOR);
+    $rest = (string) \substr($slashPath, \strlen($prefix));
+    $slash = \strpos($rest, '/');
     if ($slash === false) {
         return false;
     }

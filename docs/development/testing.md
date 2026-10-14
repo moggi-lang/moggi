@@ -118,9 +118,12 @@ found differently: `native-image` on `PATH` or in `JAVA_HOME`, `dotnet` on `PATH
 ## Discovery and naming
 
 A case is identified by its files — `<dir>/Main.mog` is a project, `Foo.mog` with a golden beside it
-is a fixture, `*_test.php` is a script. The name a case prints and is selected by is its path without
+is a fixture, `foo_bar.php` is a script. The name a case prints and is selected by is its path without
 the input extension (`backend/codegen/Alias`). Names are Kebab-Cased, directories included, and the
 examples keep their tree (`examples/twice`); `tests/README.md` lists which kind of test goes where.
+
+A `.php` file is a case or it is support — there is no third kind. Helpers a script case opens by
+path live under `tests/suite/` or a directory `supportInputPaths()` names, never beside the cases.
 
 Which means the files have to agree: discovery refuses a fixture no golden claims and a golden no
 input claims, because either one is a case that never runs rather than a case that fails. A `.mog` a

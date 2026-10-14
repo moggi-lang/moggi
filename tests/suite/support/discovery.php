@@ -5,7 +5,10 @@
  *
  *   `Foo.mog` / `Foo.ir.php` / `Foo.script` + goldens beside it   one case per input
  *   `<dir>/Main.mog`                                              one project case (not descended into)
- *   `*_test.php`                                                  one script case, in its own process
+ *   `foo_bar.php` (not `.ir.php`, not a support input)            one script case, in its own process
+ *
+ * A `.php` file is a case or it is support: helpers the scripts open by path live under
+ * `tests/suite/` or a directory `supportInputPaths()` names, never beside the cases.
  *
  * The goldens decide the case's backends: unqualified ones claim every backend, qualified ones only
  * their own.
@@ -130,7 +133,9 @@ function testsRoot(): string
  * The trees a case can live in: the tests themselves, the example programs,
  * and the base library's own tests — which run separately (`--group base`)
  * but are discovered like everything else, so the suite stays the one place
- * that knows what a case is.
+ * that knows what a case is. The json package's tests are not discovered:
+ * they run per backend through `test-all.php`, which resolves the package's
+ * host dependencies the way `moggi build` does.
  */
 function testTreeRoots(): array
 {
@@ -162,8 +167,7 @@ function inputExtension(string $path): ?string
 
 /**
  * The name a case is printed and selected by: its path under the tree it lives in, without the input
- * extension and without the `_test` of a script. Example programs keep their tree in the name
- * (`examples/twice`).
+ * extension. Example programs keep their tree in the name (`examples/twice`).
  */
 function logicalTestName(string $path, string $root): string
 {
@@ -208,7 +212,7 @@ function relativeCaseName(string $path, string $root): string
 {
     $relative = \str_starts_with($path, $root . '/') ? \substr($path, \strlen($root) + 1) : $path;
 
-    return \preg_replace('/_test$/', '', \preg_replace('/\.(ir\.php|mog|script|php)$/', '', $relative) ?? $relative) ?? $relative;
+    return \preg_replace('/\.(ir\.php|mog|script|php)$/', '', $relative) ?? $relative;
 }
 
 /** Every golden beside `$base`, in name order. */
@@ -253,7 +257,7 @@ function discoverTestCases(): array
 }
 
 /**
- * The inputs that are a script case's support rather than cases of their own: a file a `*_test.php`
+ * The inputs that are a script case's support rather than cases of their own: a file a script case
  * opens by path, or a module tree it compiles whole.
  *
  * A case and a support fixture look the same on disk — a `.mog` with no golden — so the difference is
@@ -265,12 +269,19 @@ function discoverTestCases(): array
 function supportInputPaths(): array
 {
     return [
-        'lsp',                              // the LSP scripts open these by path
+        'lsp/Basic.mog',                    // the LSP scripts open these by path
+        'lsp/Completion.mog',
+        'lsp/Diagnostics.mog',
+        'lsp/UnusedCtorPattern.mog',
+        'lsp/UnusedInstanceHead.mog',
+        'lsp/UnusedReExport.mog',
+        'lsp/UnusedTruly.mog',
+        'lsp/UnusedTypeOnly.mog',
         'docs/fixture',                     // a module tree mogdoc indexes whole
         'docs/generator/fixture-app',
         'docs/generator/fixture-extra',
-        'optimize/noopt-entry-bootstrap.mog', // read by noopt_entry_bootstrap_test.php
-        'registry/bind',                    // goldens and fixtures the bind *_test.php scripts open by path
+        'optimize/noopt-entry-bootstrap.mog', // read by noopt_entry_bootstrap.php
+        'registry/bind',                    // goldens and fixtures the bind scripts open by path
     ];
 }
 
@@ -369,7 +380,7 @@ function walkCaseDir(string $dir, callable $visit): void
  *   directories that are a case      lower-kebab        semantics/constrained-import
  *   a `.mog`/`.ir.php` that is a case  Title-Kebab       Exec-Exception-Report
  *   a `.script` (a REPL transcript)    lower-kebab        dump-emit
- *   a script case                      snake_case_test    noopt_entry_bootstrap_test.php
+ *   a script case                      snake_case         noopt_entry_bootstrap.php
  *
  * A path that mirrors a module path is exempt (`libraries/base/tests/Data/ByteString/`, a project's `lib/`), as is
  * `examples/`: those are paths inside a source tree, not names.
@@ -381,9 +392,9 @@ function caseNamingProblem(TestCase $case, string $root): ?string
     }
 
     if ($case->scriptCase) {
-        return \preg_match('/^[a-z0-9]+(_[a-z0-9]+)*_test\.php$/', \basename($case->input)) === 1
+        return \preg_match('/^[a-z0-9]+(_[a-z0-9]+)*\.php$/', \basename($case->input)) === 1
             ? null
-            : "script case must be snake_case_test.php: " . testRelativePath($case->input);
+            : "script case must be snake_case.php: " . testRelativePath($case->input);
     }
 
     if ($case->project) {
@@ -442,7 +453,7 @@ function collectCases(string $dir, string $root, array &$cases): void
             collectCases($path, $root, $cases);
             continue;
         }
-        if (\str_ends_with($entry, '_test.php')) {
+        if (\str_ends_with($entry, '.php') && !\str_ends_with($entry, '.ir.php') && !isSupportInput($path)) {
             pushCase($cases, scriptCase($path, $root), $root);
             continue;
         }

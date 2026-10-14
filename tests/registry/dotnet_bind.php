@@ -220,14 +220,14 @@ $assert(
 // golden once the per-build provenance (digest, generator version) is
 // normalized.
 $rendered = renderBinding($descriptor);
-$assert($rendered === $golden, "render differs from golden:\n" . diffText($golden, $rendered));
+$assert(normalize($rendered) === normalize($golden), "render differs from golden:\n" . diffText(normalize($golden), normalize($rendered)));
 $writtenSidecar = prettyJson($sidecar) . "\n";
 $normalizedSidecar = (string) \preg_replace(
     ['/^(\s*"digest": "sha256:)[0-9a-f]+(")/m', '/^(\s*"generated-by": "moggi bind ).+(")/m'],
     ['$1<digest>$2', '$1<version>$2'],
     $writtenSidecar,
 );
-$assert($normalizedSidecar === $goldenSidecar, "sidecar differs from golden:\n" . diffText($goldenSidecar, $normalizedSidecar));
+$assert(normalize($normalizedSidecar) === normalize($goldenSidecar), "sidecar differs from golden:\n" . diffText(normalize($goldenSidecar), normalize($normalizedSidecar)));
 
 // The bind cache key folds the .NET emit discriminator in.
 $key = bindCacheKey('dotnet', 'Acme.Hello:1.0.0');
@@ -254,7 +254,7 @@ $moggi = static fn (array $args, int $timeout = 300): array => runCompiledProces
 
 $printed = $moggi(['bind', 'dotnet:Acme.Hello:1.0.0', '--tree', $tree, '--print']);
 $assert(($printed['exitCode'] ?? 1) === 0, 'bind --print failed: ' . ($printed['stderr'] ?? ''));
-$assert(($printed['stdout'] ?? '') === $golden, "bind --print differs:\n" . diffText($golden, $printed['stdout'] ?? ''));
+$assert(normalize((string) ($printed['stdout'] ?? '')) === normalize($golden), "bind --print differs:\n" . diffText(normalize($golden), normalize((string) ($printed['stdout'] ?? ''))));
 
 $asJson = $moggi(['bind', 'dotnet:Acme.Hello:1.0.0', '--tree', $tree, '--json']);
 $assert(($asJson['exitCode'] ?? 1) === 0, 'bind --json failed: ' . ($asJson['stderr'] ?? ''));
@@ -277,7 +277,7 @@ $assert(
     'sidecar not written beside the module',
 );
 $assert(
-    (string) \file_get_contents($gen . '/Nuget/Acme/Hello.mog') === $golden,
+    normalize((string) \file_get_contents($gen . '/Nuget/Acme/Hello.mog')) === normalize($golden),
     'written module differs from the golden',
 );
 

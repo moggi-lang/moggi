@@ -66,6 +66,9 @@ function lockDisagreements(array $lock, array $packages): array
             $problems[] = "the lock names a package that is not a name: {$nameProblem}";
             continue;
         }
+        if (($entry['bundled'] ?? false) === true) {
+            continue;
+        }
         $known = $packages[$name] ?? null;
         if ($known === null) {
             $problems[] = "{$name} is no longer in the catalog";
@@ -591,6 +594,28 @@ function installLockedPackages(string $base, array $lock, array $packages, bool 
         $entry = $packages[$name] ?? [];
         $result = ['name' => $name, 'version' => $version, 'status' => 'installed', 'detail' => '', 'roots' => []];
 
+        if (($locked['bundled'] ?? false) === true) {
+            $bundled = bundledPackages()[$name] ?? null;
+            if ($bundled === null) {
+                $result['status'] = 'refused';
+                $result['detail'] = "the compiler no longer ships `{$name}` — run `moggi update` against the registry";
+                $results[] = $result;
+                $ok = false;
+                continue;
+            }
+            $local = installBundledPackage($name, $version, $locked['digest'] ?? null, $bundled);
+            if (!$local['ok']) {
+                $result['status'] = 'refused';
+                $result['detail'] = $local['detail'];
+                $results[] = $result;
+                $ok = false;
+                continue;
+            }
+            $result['detail'] = $local['detail'];
+            $result['roots'] = $local['roots'];
+            $results[] = $result;
+            continue;
+        }
         $verified = fetchVerifiedRelease($base, $name, $version, $locked['digest'] ?? null, $entry, $useCache, $fetch, $log);
         if (!$verified['ok']) {
             $result['status'] = 'refused';

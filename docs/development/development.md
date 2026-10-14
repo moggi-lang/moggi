@@ -40,6 +40,11 @@ If you use [direnv](https://direnv.net/), the dev shell loads automatically when
 direnv allow
 ```
 
+Direnv loads the same shell via `nix/shell.nix`, evaluated in place against the
+pinned nixpkgs in `flake.lock` — editing compiler sources never copies a fresh
+source tree into the store. The package list itself lives in
+`nix/devshell.nix`, shared with `flake.nix`.
+
 ## Building
 
 Compile a single file:

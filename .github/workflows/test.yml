@@ -105,5 +105,30 @@ jobs:
         with:
           arch: x64
 
+      # The json package's Suite resolves jackson-core from Maven Central on
+      # the jvm backend, so the suite needs `mvn` next to the JDK — pinned to
+      # the same Maven the nix dev shell carries.
+      - name: Set up Maven (Linux, macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          MAVEN_VERSION=3.9.12
+          curl -fsSL -o /tmp/maven.tar.gz "https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz"
+          mkdir -p "$HOME/maven"
+          tar -xzf /tmp/maven.tar.gz -C "$HOME/maven" --strip-components=1
+          echo "$HOME/maven/bin" >> "$GITHUB_PATH"
+
+      - name: Set up Maven (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $mavenVersion = '3.9.12'
+          Invoke-WebRequest -Uri "https://archive.apache.org/dist/maven/maven-3/${mavenVersion}/binaries/apache-maven-${mavenVersion}-bin.zip" -OutFile "$env:TEMP\maven.zip"
+          Expand-Archive -Path "$env:TEMP\maven.zip" -DestinationPath "$env:USERPROFILE\maven" -Force
+          "$env:USERPROFILE\maven\apache-maven-${mavenVersion}\bin" >> $env:GITHUB_PATH
+
+      # `test-all` is the compiler suite plus every bundled library suite:
+      # compiler, base, then the json package's Suite once per backend (which
+      # is what fetches json's host dependencies above).
       - name: Run the suite
-        run: php test.php --backend all --native
+        run: php test-all.php --backend all --native

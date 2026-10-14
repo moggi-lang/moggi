@@ -242,7 +242,7 @@ signature entries naming their optional tail. Step 7 froze that schema: the file
 descriptor, so an unknown key is a compile error, and the format version is folded into the
 host-tool cache key — a cached resolution never outlives the format that produced it. The
 round-trip property pins the freeze: a sidecar generated from the inspector's own answer must
-verify the declaration written against that host (`tests/backend/dotnet_sidecar_roundtrip_test.php`).
+verify the declaration written against that host (`tests/backend/dotnet_sidecar_roundtrip.php`).
 A sidecar *describes* the declaration it shares a
 tree with — the declared parameters must match the entry's shared prefix, extras must sit inside
 the optional tail, and an entry never applies to another tree's binding — and an import the

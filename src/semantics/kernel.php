@@ -73,7 +73,7 @@ function literalRole(): string
     return 'literal';
 }
 
-// --- The types the foreign boundary converts ---------------------------------
+// --- The types the foreign boundary converts ----------------------------------
 
 /** The type an open connection the host owns is written with in a foreign signature. */
 function boundaryHandleTypeName(): string

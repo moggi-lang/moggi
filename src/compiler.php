@@ -169,6 +169,7 @@ require __DIR__ . '/lsp/lifecycle.php';
 require __DIR__ . '/lsp/server.php';
 require __DIR__ . '/registry/constraint.php';
 require __DIR__ . '/registry/provided.php';
+require __DIR__ . '/registry/bundled.php';
 require __DIR__ . '/registry/names.php';
 require __DIR__ . '/registry/schnorr.php';
 require __DIR__ . '/registry/manifest.php';

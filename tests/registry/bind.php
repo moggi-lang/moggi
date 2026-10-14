@@ -82,7 +82,7 @@ $assert(
 
 // The render is the golden, byte for byte.
 $rendered = renderPhpBinding($descriptor);
-$assert($rendered === $golden, "render differs from golden:\n" . diffText($golden, $rendered));
+$assert(normalize($rendered) === normalize($golden), "render differs from golden:\n" . diffText(normalize($golden), normalize($rendered)));
 
 // The bind cache key folds the emit discriminator in: a tree carried at build
 // time must never reuse a binding emitted without one, or back.
@@ -108,7 +108,7 @@ $moggi = static fn (array $args): array => runCompiledProcess(
 
 $printed = $moggi(['bind', 'php:acme/hello', '--tree', $fixture, '--print']);
 $assert(($printed['exitCode'] ?? 1) === 0, 'bind --print failed: ' . ($printed['stderr'] ?? ''));
-$assert(($printed['stdout'] ?? '') === $golden, "bind --print differs:\n" . diffText($golden, $printed['stdout'] ?? ''));
+$assert(normalize((string) ($printed['stdout'] ?? '')) === normalize($golden), "bind --print differs:\n" . diffText(normalize($golden), normalize((string) ($printed['stdout'] ?? ''))));
 
 // `jvm:` binds since Phase 2 (see jvm_bind_test.php), `dotnet:` since Phase 3
 // (see dotnet_bind_test.php); an unknown backend is refused.

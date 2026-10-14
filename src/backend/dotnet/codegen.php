@@ -177,9 +177,7 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
     return $types;
 }
 
-// ---------------------------------------------------------------------------
-// IL text builders (symbolic locals/labels; no verifier stack-map pass).
-// ---------------------------------------------------------------------------
+// --- IL text builders (symbolic locals/labels; no verifier stack-map pass). ---
 
 final class ClassIlBuilder
 {
@@ -483,9 +481,7 @@ final class IoThunkRegistry
     }
 }
 
-// ---------------------------------------------------------------------------
-// Function / evidence / entry emission
-// ---------------------------------------------------------------------------
+// --- Function / evidence / entry emission -------------------------------------
 
 /**
  * @param array<string, int> $functionArity
@@ -764,8 +760,6 @@ function buildFnWrapperClass(string $typeName, string $targetOwner, string $targ
 
 IL;
 }
-
-// ---------------------------------------------------------------------------
 
 function emitBlock(EmitEnv $env, IR\Block $block): void
 {
@@ -1342,8 +1336,6 @@ function callArgsForLambda(EmitEnv $env, string $name, array $args): array
     return $args;
 }
 
-// ---------------------------------------------------------------------------
-
 function emitIntBinopToStack(EmitEnv $env, string $op, IR\Operand $left, IR\Operand $right): void
 {
     emitOperand($env, $left);
@@ -1459,9 +1451,7 @@ function emitOrderingTagNe(EmitEnv $env, IR\Operand $ord, string $tag): void
     $env->m->emit('box bool');
 }
 
-// ---------------------------------------------------------------------------
-// Operands
-// ---------------------------------------------------------------------------
+// --- Operands -----------------------------------------------------------------
 
 function emitOperand(EmitEnv $env, IR\Operand $op): void
 {
@@ -1709,8 +1699,6 @@ function emitRuntimeApply(EmitEnv $env, array $args): void
     pushObjectArray($env, $args);
     $env->m->emit('call object Moggi.Rt.RT::Apply(object, object[])');
 }
-
-// ---------------------------------------------------------------------------
 
 function qualifyType(string $dotted): string
 {
@@ -2038,10 +2026,7 @@ function boxForeignReturn(EmitEnv $env, string $retOrFieldDesc): void
         })($env, $retOrFieldDesc),
     };
 }
-
-// ---------------------------------------------------------------------------
-// Intrinsics (full allowlist for platform_* and scalar ops)
-// ---------------------------------------------------------------------------
+// --- Intrinsics (full allowlist for platform_* and scalar ops) ----------------
 
 function emitDotNetBitReverse(EmitEnv $env, IR\Operand $arg, int $bits, int $finalMask): void
 {
@@ -2932,9 +2917,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
     }
 }
 
-// ---------------------------------------------------------------------------
-// Match / patterns
-// ---------------------------------------------------------------------------
+// --- Match / patterns ---------------------------------------------------------
 
 function emitMatchReturn(EmitEnv $env, IR\MatchReturn $stmt): void
 {
@@ -3187,9 +3170,7 @@ function emitPatternTest(EmitEnv $env, IR\Pattern $pat, string $scrut, string $f
     throw new \RuntimeException('DotNet emit: unsupported pattern ' . $pat::class);
 }
 
-// ---------------------------------------------------------------------------
-// Data declarations
-// ---------------------------------------------------------------------------
+// --- Data declarations --------------------------------------------------------
 
 function emitDataConstructors(ClassIlBuilder $b, IR\DataDecl $decl): void
 {

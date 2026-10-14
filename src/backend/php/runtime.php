@@ -192,9 +192,9 @@ function phpMapEntries(array $entries): array
     return $out;
 }
 
-// ---------------------------------------------------------------------------
-// Exception runtime (SomeException# = ['__se', stableTag, payload, display])
-// ---------------------------------------------------------------------------
+/* ---------------------------------------------------------------------------
+   Exception runtime (SomeException# = ['__se', stableTag, payload, display])
+   --------------------------------------------------------------------------- */
 
 /** Stable exception type tags (must match Control.Exception / Moggi.IO.Exception). */
 const EX_TAG_ERROR_CALL = 'ErrorCall';

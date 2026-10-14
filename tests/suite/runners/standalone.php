@@ -15,7 +15,7 @@ function standaloneTimeoutSeconds(): int
 }
 
 /**
- * Standalone tests: an independent PHP program beside the code it tests, named `*_test.php`, run in
+ * Standalone tests: an independent PHP program beside the code it tests, named `snake_case.php`, run in
  * its own process so a `die()` or fatal cannot take the suite down. Exit 0 is success.
  *
  * @return array{passed: bool, message: string}
