@@ -20,6 +20,7 @@ use function Moggi\Compiler\findExecutable;
 use function Moggi\Compiler\findToolchainExecutable;
 use function Moggi\Modules\bundledStdlibLibPath;
 use function Moggi\Modules\cachedModuleHeader;
+use function Moggi\Paths\globPaths;
 use function Moggi\Pipeline\printModeNames;
 use function Moggi\Pipeline\setEntryModules;
 
@@ -561,7 +562,7 @@ function movePackagedArtifacts(string $staging, string $destBase, string $backen
         $plan[] = ['moggi-app.dll', $archiveDest];
         $plan[] = ['moggi-app.runtimeconfig.json', $sideBase . '.runtimeconfig.json'];
         $plan[] = ['moggi-app.deps.json', $sideBase . '.deps.json'];
-        foreach (\glob($staging . DIRECTORY_SEPARATOR . '*.dll') ?: [] as $dll) {
+        foreach (globPaths($staging . '/*.dll') as $dll) {
             $name = \basename($dll);
             if ($name !== 'moggi-app.dll') {
                 $plan[] = [$name, \dirname($archiveDest) . '/' . $name];

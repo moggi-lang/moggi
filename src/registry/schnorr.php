@@ -2,6 +2,8 @@
 
 namespace Moggi\Registry;
 
+use function Moggi\Install\installationRoot;
+
 /**
  * The `schnorr` CLI — the one BIP-340 implementation the client uses, resolved
  * beside the moggi executable and never from `PATH`.
@@ -59,7 +61,7 @@ function schnorrCandidatePaths(): array
         $candidates[] = \rtrim($root, '/\\') . $separator . 'bin' . $separator . $name;
     }
 
-    $installRoot = \Moggi\Install\installationRoot();
+    $installRoot = installationRoot();
     if ($installRoot !== null) {
         $candidates[] = $installRoot . $separator . 'bin' . $separator . $name;
     }

@@ -3,6 +3,7 @@
 namespace Moggi\Backend\Php\Dependencies;
 
 use function Moggi\Modules\libraryScanRoots;
+use function Moggi\Paths\globPaths;
 
 /**
  * Library-owned PHP dependency directories, and the one external kind: a
@@ -452,7 +453,7 @@ function phpCompanionFilesForModule(string $sourcePath): array
     if ($dir === null) {
         return [];
     }
-    $files = \glob($dir . \DIRECTORY_SEPARATOR . '*.php') ?: [];
+    $files = globPaths($dir . '/*.php');
     \sort($files);
 
     return $files;

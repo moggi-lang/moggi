@@ -2,6 +2,7 @@
 
 namespace Moggi\Registry;
 
+use function Moggi\Cache\atomicWrite;
 use function Moggi\Cache\cacheEnabled;
 
 /**
@@ -468,7 +469,7 @@ function rememberedRegistryNpub(string $base): ?string
 /** Record a registry's key the first time it is seen. */
 function rememberRegistryNpub(string $base, string $npub): void
 {
-    \Moggi\Cache\atomicWrite(registryIdentityPath($base), $npub . "\n");
+    atomicWrite(registryIdentityPath($base), $npub . "\n");
 }
 
 /** The variable that turns the root freshness and rollback checks off for a development registry. */
@@ -507,7 +508,7 @@ function rememberRootVersion(string $base, int $version): void
     if ($remembered !== null && $remembered >= $version) {
         return;
     }
-    \Moggi\Cache\atomicWrite(registryRootVersionPath($base), $version . "\n");
+    atomicWrite(registryRootVersionPath($base), $version . "\n");
 }
 
 /** An RFC 3339 timestamp as unix seconds, or null when the text is not one. */

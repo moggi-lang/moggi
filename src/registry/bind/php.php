@@ -2,12 +2,15 @@
 
 namespace Moggi\Registry\Bind;
 
+use Moggi\Backend\Jvm\JvmBackend;
+use Moggi\Backend\Php\PhpBackend;
 use ReflectionClass;
 use ReflectionFunction;
 use ReflectionFunctionAbstract;
 use ReflectionNamedType;
 use ReflectionType;
 
+use function Moggi\Backend\DotNet\Dependencies\dotNetSidecarDiscriminator;
 use function Moggi\Backend\Php\Dependencies\phpDeclaredSymbols;
 use function Moggi\Cache\runtimeCacheDir;
 
@@ -16,9 +19,9 @@ use function Moggi\Cache\runtimeCacheDir;
  * what it can become as Moggi declarations.
  *
  * The tree is required into this process (reflection needs the code loaded), so
- * Phase 1 only binds trees the user already trusts — the same trust `moggi run`
- * places in `--lib` sources. Binding an untrusted tree in an isolated inspector
- * process is a later phase; the JSON below is already the boundary it would
+ * only bind trees the user already trusts — the same trust `moggi run`
+ * places in `--lib` sources. Binding an untrusted tree would want an isolated
+ * inspector process; the JSON below is already the boundary it would
  * speak across.
  *
  * Everything out of this file is deterministic: files are scanned in sorted
@@ -27,7 +30,7 @@ use function Moggi\Cache\runtimeCacheDir;
  * review can tell a deliberate omission from a missed one.
  */
 
-/** Scalar host types Phase 1 maps, and the Moggi type each becomes. */
+/** Scalar host types the binder maps, and the Moggi type each becomes. */
 const PHP_BIND_SCALARS = [
     'string' => 'String',
     'int' => 'Int',
@@ -87,6 +90,99 @@ function phpNamespacePrefix(string $vendor, string $package): string
 }
 
 /**
+ * Where the bound package's own `composer.json` may live: its installed dir
+ * (either case) and the tree root when that file names the coordinate.
+ *
+ * @return list<string>
+ */
+function phpPackageComposerFiles(string $root, string $vendor, string $package): array
+{
+    $files = [];
+    foreach (["{$vendor}/{$package}", \strtolower("{$vendor}/{$package}")] as $packageDir) {
+        $candidate = $root . '/vendor/' . $packageDir . '/composer.json';
+        if (\is_file($candidate)) {
+            $files[] = $candidate;
+        }
+    }
+    $files[] = $root . '/composer.json';
+
+    return \array_values(\array_unique($files));
+}
+
+/**
+ * The namespace prefixes a bound package's symbols live under.
+ *
+ * The legacy guess is `Vendor\Package`, but real packages often differ
+ * (`monolog/monolog` lives under `Monolog\`), so the package's own
+ * `composer.json` PSR-4 mapping wins when it names the coordinate: every
+ * listed prefix is accepted, the guess stays as fallback. A tree with no
+ * readable mapping binds exactly as before.
+ *
+ * @return list<string>
+ */
+function phpNamespacePrefixes(string $root, string $vendor, string $package): array
+{
+    $prefixes = [phpNamespacePrefix($vendor, $package)];
+    foreach (phpPackageComposerFiles($root, $vendor, $package) as $composerFile) {
+        $raw = @\file_get_contents($composerFile);
+        if (!\is_string($raw) || $raw === '') {
+            continue;
+        }
+        try {
+            $composer = \json_decode($raw, true, 512, \JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            continue;
+        }
+        if (!\is_array($composer)) {
+            continue;
+        }
+        // The tree root may be the consuming project rather than the package;
+        // only a file naming the coordinate speaks for its namespaces.
+        if (isset($composer['name'])
+            && \strtolower((string) $composer['name']) !== \strtolower($vendor . '/' . $package)
+        ) {
+            continue;
+        }
+        $autoload = $composer['autoload'] ?? null;
+        if (!\is_array($autoload)) {
+            continue;
+        }
+        $psr4 = $autoload['psr-4'] ?? null;
+        if (!\is_array($psr4)) {
+            continue;
+        }
+        foreach ($psr4 as $namespace => $dirs) {
+            $namespace = \trim((string) $namespace, '\\');
+            if ($namespace !== '' && !\in_array($namespace, $prefixes, true)) {
+                $prefixes[] = $namespace;
+            }
+        }
+    }
+
+    return $prefixes;
+}
+
+/** Whether a discovered symbol lives under one of the accepted prefixes. */
+function phpInsidePrefixes(string $symbol, array $prefixes, bool $caseInsensitive = false): bool
+{
+    foreach ($prefixes as $candidate) {
+        if ($caseInsensitive) {
+            if (\strtolower($symbol) === \strtolower($candidate)
+                || \str_starts_with(\strtolower($symbol), \strtolower($candidate) . '\\')
+            ) {
+                return true;
+            }
+            continue;
+        }
+        if ($symbol === $candidate || \str_starts_with($symbol, $candidate . '\\')) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
  * Where the generated binding is cached: under the runtime tree beside the
  * fetched host trees, with the backend's own emit discriminator folded in, so
  * a build carrying a host tree never reuses a binding emitted without one
@@ -100,9 +196,9 @@ function phpNamespacePrefix(string $vendor, string $package): string
 function bindCacheKey(string $backend, string $coordinate): string
 {
     $discriminator = match ($backend) {
-        'jvm' => (new \Moggi\Backend\Jvm\JvmBackend())->emitCacheDiscriminator(),
-        'dotnet' => \Moggi\Backend\DotNet\Dependencies\dotNetSidecarDiscriminator(false),
-        default => (new \Moggi\Backend\Php\PhpBackend())->emitCacheDiscriminator(),
+        'jvm' => (new JvmBackend())->emitCacheDiscriminator(),
+        'dotnet' => dotNetSidecarDiscriminator(false),
+        default => (new PhpBackend())->emitCacheDiscriminator(),
     };
     $slug = \strtolower((string) \preg_replace('/[^a-z0-9]+/i', '-', $coordinate));
     $slug = \trim($slug, '-');
@@ -125,7 +221,8 @@ function inspectPhpTree(string $treeRoot, string $vendor, string $package): arra
     if (!\is_dir($root)) {
         throw new \RuntimeException("cannot bind `{$treeRoot}` — no such directory");
     }
-    $prefix = phpNamespacePrefix($vendor, $package);
+    $prefixes = phpNamespacePrefixes($root, $vendor, $package);
+    $outsideReason = 'outside namespace' . (\count($prefixes) > 1 ? 's ' . \implode(', ', $prefixes) : ' ' . $prefixes[0]);
 
     $scanRoots = [$root];
     foreach (["{$vendor}/{$package}", \strtolower("{$vendor}/{$package}")] as $packageDir) {
@@ -144,11 +241,20 @@ function inspectPhpTree(string $treeRoot, string $vendor, string $package): arra
             if (!$file->isFile() || \strtolower($file->getExtension()) !== 'php') {
                 continue;
             }
+            $relative = \str_replace('\\', '/', (string) \substr($file->getPathname(), \strlen($scanRoot) + 1));
+            $relative = \ltrim($relative, '/');
             if ($scanRoot === $root) {
-                $relative = \str_replace('\\', '/', (string) \substr($file->getPathname(), \strlen($root) + 1));
                 if ($relative === 'vendor' || \str_starts_with($relative, 'vendor/')) {
                     continue;
                 }
+            }
+            // Test helpers, examples and docs are not the shipped API: they
+            // routinely extend PHPUnit or other dev-only parents that are not
+            // installed in a resolved tree, and requiring them would abort
+            // the bind instead of binding the library.
+            $segments = \explode('/', \strtolower($relative));
+            if (\array_intersect($segments, ['test', 'tests', 'examples', 'example', 'doc', 'docs']) !== []) {
+                continue;
             }
             $files[] = $file->getPathname();
         }
@@ -160,8 +266,26 @@ function inspectPhpTree(string $treeRoot, string $vendor, string $package): arra
     foreach ($files as $file) {
         $wanted[\realpath($file) ?: $file] = true;
     }
+    // A resolved Composer tree ships its autoloader; requiring it first lets
+    // the package's files resolve each other's interfaces and traits no
+    // matter what order the sorted scan requires them in. Only classes
+    // defined in the scanned files are kept (the `$wanted` check below), so
+    // other vendor packages the autoloader can see never leak into the
+    // binding. A bare package directory with no autoloader binds as before.
+    $autoload = $root . '/vendor/autoload.php';
+    if (\is_file($autoload)) {
+        require_once $autoload;
+    }
+    $loadErrors = [];
     foreach ($files as $file) {
-        require_once $file;
+        try {
+            require_once $file;
+        } catch (\Throwable $error) {
+            // A file whose parents are missing (or that runs code at the top
+            // level) must not abort the whole bind: its classes simply never
+            // declare, and the skip is recorded below like any other.
+            $loadErrors[$file] = $error->getMessage();
+        }
     }
     $newClasses = [];
     foreach (\get_declared_classes() as $class) {
@@ -204,9 +328,18 @@ function inspectPhpTree(string $treeRoot, string $vendor, string $package): arra
         return true;
     };
 
+    foreach ($loadErrors as $file => $message) {
+        $relative = \str_replace('\\', '/', (string) $file);
+        $rootSlash = \str_replace('\\', '/', $root) . '/';
+        if (\str_starts_with($relative, $rootSlash)) {
+            $relative = \substr($relative, \strlen($rootSlash));
+        }
+        $firstLine = \strtok($message, "\r\n");
+        $skip('file ' . $relative, 'not loaded: ' . ($firstLine === false ? $message : $firstLine));
+    }
     foreach ($newClasses as $class) {
-        if (!\str_starts_with($class, $prefix . '\\') && $class !== $prefix) {
-            $skip($class, 'outside namespace ' . $prefix);
+        if (!phpInsidePrefixes($class, $prefixes)) {
+            $skip($class, $outsideReason);
 
             continue;
         }
@@ -243,8 +376,8 @@ function inspectPhpTree(string $treeRoot, string $vendor, string $package): arra
     }
 
     foreach ($newFunctions as $function) {
-        if (!\str_starts_with(\strtolower($function), \strtolower($prefix) . '\\')) {
-            $skip($function, 'outside namespace ' . $prefix);
+        if (!phpInsidePrefixes($function, $prefixes, true)) {
+            $skip($function, $outsideReason);
 
             continue;
         }
@@ -392,8 +525,8 @@ function inspectPhpClassConst(
 /**
  * The Moggi signature for a host callable: every parameter in, `IO` out, and
  * `Either String` around the result — a host call can always throw, and PHP
- * reflection cannot prove otherwise, so the boundary tax (R4) is uniform rather
- * than guessed per callable. Null when the callable needs more than Phase 1 maps.
+ * reflection cannot prove otherwise, so the boundary tax is uniform rather
+ * than guessed per callable. Null when the callable needs more than the scalar maps.
  */
 function phpCallableSignature(ReflectionFunctionAbstract $callable): ?string
 {

@@ -9,6 +9,7 @@ use function Moggi\LSP\Analysis\content;
 use function Moggi\LSP\Analysis\has;
 use function Moggi\LSP\Protocol\splitLines;
 use function Moggi\LSP\Protocol\uriToPath;
+use function Moggi\Modules\isLibraryRoot;
 
 function svcWillDeleteFiles(AnalysisService $svc, array $files): array
 {
@@ -249,7 +250,7 @@ function uriToModuleGuess(string $uri, ?string $workspaceRoot = null): ?string
 
     $dir = str_contains($path, '/') ? substr($path, 0, (int) strrpos($path, '/')) : '';
     while ($dir !== '') {
-        if (\Moggi\Modules\isLibraryRoot($dir)) {
+        if (isLibraryRoot($dir)) {
             $rel = $stripExtension(substr($path, strlen($dir) + 1));
             $parts = array_values(array_filter(explode('/', $rel), static fn ($p) => $p !== ''));
             if ($parts !== [] && preg_match('/^[A-Z]/', $parts[0])) {

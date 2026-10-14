@@ -5,6 +5,9 @@ namespace Moggi\Modules;
 use Moggi\Cache;
 use Moggi\Semantics\Types\TypeError;
 
+use function Moggi\Install\installationRoot;
+use function Moggi\Paths\canonicalSeparators;
+
 /** Whether `$path` names a stream (`phar://…`) rather than a real filesystem path. */
 function isStreamPath(string $path): bool
 {
@@ -83,8 +86,8 @@ function isLibraryRoot(string $dir): bool
  */
 function enclosingLibraryPackageDir(string $path, string $projectRoot): ?string
 {
-    $root = \rtrim(\Moggi\Paths\canonicalSeparators(resolvePath($projectRoot)), '/');
-    $dir = \Moggi\Paths\canonicalSeparators(resolvePath(\dirname($path)));
+    $root = \rtrim(canonicalSeparators(resolvePath($projectRoot)), '/');
+    $dir = canonicalSeparators(resolvePath(\dirname($path)));
     while (true) {
         if ($dir === $root || !\str_starts_with($dir . '/', $root . '/')) {
             return null;
@@ -278,7 +281,7 @@ function bundledStdlibLibPath(): ?string
         $candidates[] = rtrim($envRoot, '/\\') . DIRECTORY_SEPARATOR . 'libraries'
             . DIRECTORY_SEPARATOR . 'base' . DIRECTORY_SEPARATOR . 'src';
     }
-    $installRoot = \Moggi\Install\installationRoot();
+    $installRoot = installationRoot();
     if ($installRoot !== null) {
         $candidates[] = $installRoot . DIRECTORY_SEPARATOR . 'libraries'
             . DIRECTORY_SEPARATOR . 'base' . DIRECTORY_SEPARATOR . 'src';

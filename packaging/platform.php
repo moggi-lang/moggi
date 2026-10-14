@@ -4,6 +4,8 @@ namespace Moggi\Dist;
 
 require_once __DIR__ . '/../src/executables.php';
 
+use function Moggi\Compiler\findExecutable;
+
 /**
  * Platform facts about the native binaries a distribution ships.
  *
@@ -22,7 +24,7 @@ function glibcFloor(array $config): string
 
 function requiredGlibc(string $binary): ?string
 {
-    $objdump = \Moggi\Compiler\findExecutable('objdump');
+    $objdump = findExecutable('objdump');
     if ($objdump === null || !\is_file($binary)) {
         return null;
     }

@@ -27,9 +27,9 @@ use function Moggi\Compiler\runProcess;
  * descriptor records a `skipped` entry (with a reason) for every member the
  * writer cannot emit.
  *
- * Layering follows the plan's Layer 1 only — raw, host-truthful,
- * receiver-first declarations with no conversion and no opinion. There is no
- * Layer 2 yet, deliberately: the backend cannot codegen `IO (Either …)`
+ * The declarations are raw and host-truthful — receiver-first, with no
+ * conversion and no opinion. There is deliberately no Either-wrapped
+ * variant: the backend cannot codegen `IO (Either …)`
  * (`use Moggi try/catch` instead), so an Either-wrapped declaration would not
  * compile. The CLR declares no throws, so there is not even the JVM's IO
  * signal: every binding is pure, and promoting an effectful call to `IO`
@@ -44,7 +44,7 @@ use function Moggi\Compiler\runProcess;
  * the verifier checks it against the inspector.
  */
 
-/** CLR type spellings Phase 3 maps, and the Moggi type each becomes. */
+/** CLR type spellings the binder maps, and the Moggi type each becomes. */
 const DOTNET_BIND_PRIMITIVES = [
     'void' => '()',
     'bool' => 'Bool',
@@ -587,8 +587,8 @@ function inspectDotNetProperty(
 }
 
 /**
- * A CLR type spelling as a Moggi type word, or null when Phase 3 cannot spell
- * it. Primitives and `string` map directly; any other class becomes the
+ * A CLR type spelling as a Moggi type word, or null when the binder cannot
+ * spell it. Primitives and `string` map directly; any other class becomes the
  * nominal type the inspector already declared. Unsigned integers and `float32`
  * have no exact Moggi counterpart; arrays, pointers, byrefs, generic
  * definitions and type variables are not representable — all honest

@@ -5,6 +5,7 @@ namespace Moggi\Registry\Bind;
 use function Moggi\Cache\hashContent;
 use function Moggi\Compiler\compilerVersion;
 use function Moggi\Paths\moduleNameToPath;
+use function Moggi\Registry\prettyJson;
 
 /**
  * The `moggi build --bind` half of the binder: declared `[ffi] bindings`
@@ -227,7 +228,7 @@ function bindForBuild(string $backend, string $coordinate, string $treeDir, ?str
         'skipped' => \count($descriptor['skipped']),
     ];
     $marker = $wanted + $counts + ['files' => $files];
-    if (@\file_put_contents($markerPath, \Moggi\Registry\prettyJson($marker) . "\n") === false) {
+    if (@\file_put_contents($markerPath, prettyJson($marker) . "\n") === false) {
         throw new \RuntimeException("cannot bind into `{$markerPath}` — the file cannot be written");
     }
 

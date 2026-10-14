@@ -2,6 +2,8 @@
 
 namespace Moggi\Backend\Php;
 
+use function Moggi\Install\installationRoot;
+
 /**
  * Native PHP executables.
  *
@@ -83,7 +85,7 @@ function microSfxInstallationRoots(): array
     if (\is_string($envRoot) && $envRoot !== '') {
         $roots[] = \rtrim($envRoot, '/\\');
     }
-    $installRoot = \Moggi\Install\installationRoot();
+    $installRoot = installationRoot();
     if ($installRoot !== null) {
         $roots[] = $installRoot;
     }

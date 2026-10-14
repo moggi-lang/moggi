@@ -98,6 +98,25 @@ function findToolchainExecutable(string $rootEnv, string $name, string $subdir =
 }
 
 /**
+ * A command `CreateProcess` can start: batch files (`.cmd`, `.bat`) are not
+ * executables to it, so they run through `cmd /d /c` instead. `mvn` on
+ * Windows is `mvn.cmd` — without this every Maven resolution fails to start.
+ *
+ * @param list<string> $command
+ * @return list<string>
+ */
+function wrapWindowsBatchCommand(array $command): array
+{
+    if ($command === [] || \preg_match('/\.(cmd|bat)$/i', (string) $command[0]) !== 1) {
+        return $command;
+    }
+    $comSpec = \getenv('ComSpec');
+    $cmd = \is_string($comSpec) && $comSpec !== '' ? $comSpec : 'cmd.exe';
+
+    return [$cmd, '/d', '/c', (string) $command[0], ...\array_slice($command, 1)];
+}
+
+/**
  * Run a command and return its exit code with everything it printed.
  *
  * Both pipes are read while the process runs, never one to EOF before the
@@ -122,7 +141,7 @@ function runProcess(
     ?int $timeoutSeconds = null,
 ): array {
     if (\PHP_OS_FAMILY === 'Windows') {
-        return runProcessThroughFiles($command, $cwd, $env, $echo, $timeoutSeconds);
+        return runProcessThroughFiles(wrapWindowsBatchCommand($command), $cwd, $env, $echo, $timeoutSeconds);
     }
 
     $descriptors = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];

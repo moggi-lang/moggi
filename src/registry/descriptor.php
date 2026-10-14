@@ -2,6 +2,9 @@
 
 namespace Moggi\Registry;
 
+use function Moggi\Backend\implementedBackendIds;
+use function Moggi\Paths\globPaths;
+
 /**
  * Reading `<name>.moggi` — the file a package declares itself with.
  *
@@ -90,7 +93,7 @@ function findDescriptor(string $path): string
     }
 
     $found = \array_values(\array_filter(
-        \glob(\rtrim($path, '/') . '/*' . $suffix) ?: [],
+        globPaths(\rtrim($path, '/') . '/*' . $suffix),
         'is_file',
     ));
     if ($found === []) {
@@ -316,7 +319,7 @@ function extensionEntryProblem(string $entry): ?string
     if ($text === '') {
         return 'an empty entry names no extension';
     }
-    $parsed = \Moggi\Registry\parsePhpExtensionEntry($text);
+    $parsed = parsePhpExtensionEntry($text);
     if ($parsed['name'] === '' || \preg_match('/^[A-Za-z][A-Za-z0-9_]*$/', $parsed['name']) !== 1) {
         return "`{$parsed['name']}` is not an extension name (letters, digits and `_`, starting with a letter)";
     }
@@ -637,10 +640,10 @@ function descriptorBackends(array $ini, string $path): array
     $package = \is_array($ini['package'] ?? null) ? $ini['package'] : [];
     $raw = \trim((string) ($package['backends'] ?? ''));
     if ($raw === '') {
-        return \Moggi\Backend\implementedBackendIds();
+        return implementedBackendIds();
     }
 
-    $known = \Moggi\Backend\implementedBackendIds();
+    $known = implementedBackendIds();
     $backends = [];
     foreach (splitList($raw) as $backend) {
         if ($path !== '' && !\in_array($backend, $known, true)) {

@@ -2,6 +2,10 @@
 
 namespace Moggi\Registry;
 
+use function Moggi\Cache\ensureDir;
+use function Moggi\Install\installationRoot;
+use function Moggi\Paths\globPaths;
+
 /**
  * Packages that travel with the compiler, beyond the standard library.
  *
@@ -48,7 +52,7 @@ function bundledLibrariesDir(): ?string
     if (\is_string($envRoot) && $envRoot !== '') {
         $candidates[] = \rtrim($envRoot, '/\\');
     }
-    $installRoot = \Moggi\Install\installationRoot();
+    $installRoot = installationRoot();
     if ($installRoot !== null) {
         $candidates[] = $installRoot;
     }
@@ -91,7 +95,10 @@ function bundledPackages(): array
     }
 
     $packages = [];
-    foreach ((array) (\glob($libraries . '/*/*.moggi') ?: []) as $manifest) {
+    // Forward slashes throughout: `glob()` reads `\` as an escape (see
+    // `globPaths`), and PHP opens `/`-spelled paths on every host — so a
+    // Windows scan compares equal to the `/`-joined dirs callers build.
+    foreach (globPaths($libraries . '/*/*.moggi') as $manifest) {
         try {
             $descriptor = readDescriptor((string) $manifest);
         } catch (\RuntimeException) {
@@ -104,8 +111,8 @@ function bundledPackages(): array
         }
         $packages[$name] = [
             'version' => $version,
-            'dir' => \dirname((string) $manifest),
-            'manifest' => (string) $manifest,
+            'dir' => \str_replace('\\', '/', \dirname((string) $manifest)),
+            'manifest' => \str_replace('\\', '/', (string) $manifest),
         ];
     }
     \ksort($packages, \SORT_STRING);
@@ -358,7 +365,7 @@ function installBundledPackage(string $name, string $version, mixed $lockedDiges
 /** Ensure the directory holding a content-cache path exists. */
 function ensureDownloadDir(string $path): bool
 {
-    return \Moggi\Cache\ensureDir(\dirname($path));
+    return ensureDir(\dirname($path));
 }
 
 /**

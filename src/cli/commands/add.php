@@ -5,6 +5,9 @@ namespace Moggi\CLI\Commands;
 use Moggi\Registry\FetchLog;
 
 use function Moggi\Cache\atomicWrite;
+use function Moggi\Registry\Bind\bindForBuild;
+use function Moggi\Registry\Bind\bindModuleName;
+use function Moggi\Registry\Bind\facadeModuleName;
 use function Moggi\Registry\badPackageProblem;
 use function Moggi\Registry\badPackagesAmong;
 use function Moggi\Registry\bundledConstraintFor;
@@ -379,9 +382,9 @@ function addHostCoordinate(array $descriptor, string $descriptorPath, string $te
         : ['text' => $candidate['text'], 'status' => 'present', 'line' => null];
     $ffiChanged = $ffi['text'] !== $candidate['text'];
 
-    $boundModule = $bind ? \Moggi\Registry\Bind\bindModuleName($ecosystem, (string) $edit['package']) : null;
+    $boundModule = $bind ? bindModuleName($ecosystem, (string) $edit['package']) : null;
     $facadeModule = ($bind && $facade && $boundModule !== null)
-        ? \Moggi\Registry\Bind\facadeModuleName($boundModule)
+        ? facadeModuleName($boundModule)
         : null;
 
     if ($print) {
@@ -425,7 +428,7 @@ function addHostCoordinate(array $descriptor, string $descriptorPath, string $te
     $binding = null;
     $facadePath = null;
     if ($bind) {
-        $bound = \Moggi\Registry\Bind\bindForBuild($ecosystem, (string) $edit['package'], (string) $tools['dir'], $facadeModule);
+        $bound = bindForBuild($ecosystem, (string) $edit['package'], (string) $tools['dir'], $facadeModule);
         $binding = [
             'module' => $boundModule,
             'root' => $bound['root'],
