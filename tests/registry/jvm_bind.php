@@ -251,8 +251,11 @@ $walk = new \RecursiveIteratorIterator(
     new \RecursiveDirectoryIterator($work . '/uout', \FilesystemIterator::SKIP_DOTS),
 );
 foreach ($walk as $file) {
-    if ($file->isFile() && \str_ends_with($file->getPathname(), 'Filesystem/JVM.class')) {
-        $fsClass = $file->getPathname();
+    // The pathname carries `\` on Windows; compare `/`-spelled, the way the
+    // dotnet bind test already does with `DIRECTORY_SEPARATOR`.
+    $spelling = \str_replace('\\', '/', $file->getPathname());
+    if ($file->isFile() && \str_ends_with($spelling, 'Filesystem/JVM.class')) {
+        $fsClass = $spelling;
 
         break;
     }
@@ -260,7 +263,8 @@ foreach ($walk as $file) {
 $assert($fsClass !== null, 'no Filesystem/JVM.class in unpacked output');
 $javap = resolveJdkBinary('javap');
 $assert($javap !== null, 'no `javap` found');
-$relative = (string) \substr((string) $fsClass, \strlen($work . '/uout/'));
+$uout = \str_replace('\\', '/', $work . '/uout/');
+$relative = (string) \substr((string) $fsClass, \strlen($uout));
 $dotted = \str_replace('/', '.', (string) \substr($relative, 0, -6));
 $disassembled = runCompiledProcess(
     [$javap, '-c', '-p', '-classpath', $work . '/uout', $dotted],

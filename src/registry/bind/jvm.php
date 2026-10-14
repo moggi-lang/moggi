@@ -21,16 +21,25 @@ use function Moggi\Compiler\runProcess;
  * order, classes are inspected in sorted order, and the descriptor records a
  * `skipped` entry (with a reason) for every member the writer cannot emit.
  *
- * Layering follows the plan's Layer 1 only — raw, host-truthful,
- * receiver-first declarations with no conversion and no opinion. There is no
- * Layer 2 yet, deliberately: the JVM backend cannot codegen `IO (Either …)`
+ * The declarations are raw and host-truthful — receiver-first, with no
+ * conversion and no opinion. There is deliberately no Either-wrapped
+ * variant: the JVM backend cannot codegen `IO (Either …)`
  * (`use Moggi try/catch` instead), so an Either-wrapped declaration would not
  * compile. A throwing method surfaces as `IO`, a pure one as a pure function,
  * and unchecked exceptions propagate to the caller exactly as the
  * hand-written stdlib bindings behave today.
  */
 
-/** Host field descriptors Phase 2 maps, and the Moggi type each becomes. */
+/**
+ * Host field descriptors the binder maps, and the Moggi type each becomes.
+ *
+ * Java `char` (`C`) is deliberately absent: Moggi `Char` is a 32-bit codepoint
+ * and the JVM backend lowers it to `int`, so a generated `Char` signature
+ * rebuilds to `(I)I` while the host declares `(I)C` — the verifier refuses it
+ * and the emitter could not call it. Char-involving members are skipped with
+ * an honest reason instead (see `jvmDescriptorSpelling`). The .NET binder
+ * keeps its `char` mapping: that backend converts both ways.
+ */
 const JVM_BIND_PRIMITIVES = [
     'Z' => 'Bool',
     'B' => 'Int8',
@@ -38,7 +47,6 @@ const JVM_BIND_PRIMITIVES = [
     'I' => 'Int32',
     'J' => 'Int',
     'D' => 'Double',
-    'C' => 'Char',
     'Ljava/lang/String;' => 'String',
 ];
 
@@ -387,10 +395,11 @@ function inspectJvmField(
 }
 
 /**
- * A host field descriptor as a Moggi type word, or null when Phase 2 cannot
+ * A host field descriptor as a Moggi type word, or null when the binder cannot
  * spell it. Primitives and `String` map directly; any other class becomes the
- * nominal type the inspector already declared; arrays, type variables and
- * `float` (no Moggi `Float`) are honest omissions.
+ * nominal type the inspector already declared; arrays, type variables, `float`
+ * (no Moggi `Float`) and `char` (the backend lowers `Char` to `int`, so the
+ * rebuilt descriptor would never match the host) are honest omissions.
  *
  * @param array<string, array{moggi: string, interface: bool}> $bound internal name => info
  */
@@ -414,6 +423,9 @@ function jvmDescriptorMoggiType(string $field, array $bound): ?string
 /** What `jvmDescriptorMoggiType` refused, for the `skipped` record. */
 function jvmDescriptorSpelling(string $field): string
 {
+    if ($field === 'C') {
+        return 'char (Moggi Char lowers to int on the JVM; a UTF-16 unit is not a codepoint)';
+    }
     if ($field === 'F') {
         return 'float (no Moggi Float)';
     }

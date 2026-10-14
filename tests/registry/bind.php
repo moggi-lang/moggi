@@ -131,7 +131,7 @@ $assert(
 // writes beside it under the module/file law, named without the ecosystem.
 $faced = $moggi(['bind', 'php:acme/hello', '--tree', $fixture, '--print', '--facade']);
 $assert(($faced['exitCode'] ?? 1) === 0, 'bind --print --facade failed: ' . ($faced['stderr'] ?? ''));
-$assert(\str_starts_with(($faced['stdout'] ?? ''), $golden), 'facade print does not start with the binding');
+$assert(\str_starts_with(normalize(($faced['stdout'] ?? '')), normalize($golden)), 'facade print does not start with the binding');
 $assert(\str_contains(($faced['stdout'] ?? ''), 'module Acme.Hello'), 'facade skeleton missing: ' . ($faced['stdout'] ?? ''));
 $assert(\str_contains(($faced['stdout'] ?? ''), 'php = Composer.Acme.Hello'), 'facade pragma names the wrong module');
 

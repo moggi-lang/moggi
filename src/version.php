@@ -3,6 +3,7 @@
 namespace Moggi\Compiler;
 
 use function Moggi\Cache\projectRoot;
+use function Moggi\Install\installationRoot;
 use function Moggi\Modules\bundledStdlibLibPath;
 use function Moggi\Modules\libraryRootMarker;
 
@@ -32,7 +33,7 @@ function compilerVersion(): ?string
  */
 function compilerChannel(?string $version): string
 {
-    if (\Moggi\Install\installationRoot() === null) {
+    if (installationRoot() === null) {
         return 'source';
     }
 
@@ -63,7 +64,7 @@ function compilerCommit(?string $version): ?string
  */
 function distributionVariant(): ?string
 {
-    $root = \Moggi\Install\installationRoot();
+    $root = installationRoot();
     if ($root === null) {
         return null;
     }

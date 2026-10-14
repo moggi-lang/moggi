@@ -25,6 +25,20 @@ function canonicalSeparators(string $path): string
     return DIRECTORY_SEPARATOR === '/' ? $path : \str_replace(DIRECTORY_SEPARATOR, '/', $path);
 }
 
+/**
+ * `glob()` with `/` separators: backslash is an escape character in glob
+ * patterns, so a pattern built with `DIRECTORY_SEPARATOR` silently matches
+ * nothing on Windows (`C:\dir\*.dll` reads `\*` as an escaped star). Every
+ * glob in the compiler goes through here; PHP opens forward-slash paths on
+ * every host, so the returned paths keep the pattern's spelling.
+ *
+ * @return list<string>
+ */
+function globPaths(string $pattern, int $flags = 0): array
+{
+    return \glob(\str_replace('\\', '/', $pattern), $flags) ?: [];
+}
+
 /** Whether a canonical path is anchored (a POSIX `/` or a Windows drive). */
 function isAbsolutePath(string $path): bool
 {

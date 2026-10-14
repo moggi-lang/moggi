@@ -3,11 +3,13 @@
 namespace Moggi\Backend\DotNet;
 
 use function Moggi\Backend\DotNet\Dependencies\dotNetVendoredAssemblies;
+use function Moggi\Backend\DotNet\Verify\findFrameworkDir;
 use function Moggi\Compiler\executableName;
 use function Moggi\Compiler\findExecutable;
 use function Moggi\Compiler\findToolchainExecutable;
 use function Moggi\Compiler\runProcess;
 use function Moggi\Debug\sourceMapFrames;
+use function Moggi\Paths\globPaths;
 
 require_once __DIR__ . '/../../executables.php';
 
@@ -324,6 +326,7 @@ function packageDotNetOutput(string $outputRoot, array $options = []): void
     $extraAssemblies = dotNetOutputReferencedAssemblies($outputRoot);
 
     stageDotNetVendoredAssemblies($outputRoot, $assemblyName);
+    assertDotNetAssembliesResolvable($outputRoot, $extraAssemblies, $dotnet);
 
     $headerPath = $outputRoot . DIRECTORY_SEPARATOR . '_header.il';
     $header = Il\assemblyExternPreamble()
@@ -425,7 +428,7 @@ function assembleDotNetWithIlasm(
 function stagedDotNetAssemblyNames(string $outputRoot, string $assemblyName): array
 {
     $names = [];
-    foreach (\glob($outputRoot . DIRECTORY_SEPARATOR . '*.dll') ?: [] as $dll) {
+    foreach (globPaths($outputRoot . '/*.dll') as $dll) {
         $name = \basename($dll);
         if ($name !== $assemblyName . '.dll') {
             $names[] = $name;
@@ -453,6 +456,44 @@ function stageDotNetVendoredAssemblies(string $outputRoot, string $assemblyName)
         if (!\is_file($target) && \copy($dll, $target) === false) {
             throw new \RuntimeException("cannot copy {$dll} into {$outputRoot}");
         }
+    }
+}
+
+/**
+ * Every assembly the IL references beyond the preamble resolves one of two
+ * ways: staged beside the app (vendored third-party assemblies) or from the
+ * shared framework (framework assemblies like `System.Text.Json` that the
+ * preamble does not list). A name with neither is a broken vendor tree, and
+ * the assembler would only report an unresolved extern — name it here
+ * instead, before the header is even written.
+ *
+ * @param list<string> $assemblies `dotNetOutputReferencedAssemblies`
+ */
+function assertDotNetAssembliesResolvable(string $outputRoot, array $assemblies, ?string $dotnet): void
+{
+    if ($assemblies === []) {
+        return;
+    }
+    $frameworkDir = $dotnet === null ? null : findFrameworkDir($dotnet);
+    $missing = [];
+    foreach ($assemblies as $name) {
+        if (\is_file($outputRoot . DIRECTORY_SEPARATOR . $name . '.dll')) {
+            continue;
+        }
+        if ($frameworkDir !== null && \is_file($frameworkDir . DIRECTORY_SEPARATOR . $name . '.dll')) {
+            continue;
+        }
+        $missing[] = $name;
+    }
+    if ($missing !== []) {
+        throw new \RuntimeException(
+            'the compiled IL references ' . \implode(', ', $missing)
+            . ' but no such DLL was staged beside the app'
+            . ($frameworkDir === null ? ' and no .NET SDK is visible to check the shared framework'
+                : ' and it is not in the shared framework')
+            . ' — vendor the assembly under a library `dotnet/` directory'
+            . ($frameworkDir === null ? ' or put `dotnet` on PATH' : ''),
+        );
     }
 }
 

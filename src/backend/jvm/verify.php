@@ -9,6 +9,7 @@ use function Moggi\Backend\Inspect\findJavapBinary;
 use function Moggi\Backend\Inspect\findJavapBinaryWithSource;
 use function Moggi\Backend\Jvm\Dependencies\discoverVendorJvmDirs;
 use function Moggi\Compiler\runProcess;
+use function Moggi\Paths\globPaths;
 
 /**
  * Verify a `foreign jvm` declaration against the host class it names.
@@ -432,7 +433,7 @@ function verificationClasspath(): string
 
     $jars = [];
     foreach (discoverVendorJvmDirs() as $dir) {
-        foreach (\glob($dir . \DIRECTORY_SEPARATOR . '*.jar') ?: [] as $jar) {
+        foreach (globPaths($dir . '/*.jar') as $jar) {
             $jars[$jar] = true;
         }
     }
@@ -455,7 +456,7 @@ function carriedVendorJavaPresent(): bool
 
     $present = false;
     foreach (discoverVendorJvmDirs() as $dir) {
-        if ((\glob($dir . \DIRECTORY_SEPARATOR . '*.java') ?: []) !== []) {
+        if (globPaths($dir . '/*.java') !== []) {
             $present = true;
             break;
         }

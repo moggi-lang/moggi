@@ -3,6 +3,7 @@
 namespace Moggi\Registry\Bind;
 
 use function Moggi\Paths\moduleNameToPath;
+use function Moggi\Registry\prettyJson;
 
 /**
  * The writer half of `moggi bind`: a JSON descriptor from the inspector becomes
@@ -10,7 +11,7 @@ use function Moggi\Paths\moduleNameToPath;
  *
  * One module per library, in the established facade shape (`System.Filesystem.PHP`
  * is the model): `foreign` declarations first, then the boundary-checked public
- * face. Phase 1 collapses the two layers onto the declarations themselves — the
+ * face. The two layers collapse onto the declarations themselves — the
  * public name IS the `IO (Either String …)` / `IO (Maybe …)` declaration, so there is no raw twin
  * to reach past — and leaves hand-written overlays to ordinary
  * `[lib]` sources. The render is byte-deterministic for a descriptor: sorted
@@ -142,7 +143,7 @@ function renderPhpBinding(array $descriptor): string
 
 /**
  * A JVM binding module as text: raw, host-truthful, receiver-first
- * declarations — the plan's Layer 1 with no Layer 2, because the backend
+ * declarations — with no Either-wrapped variant, because the backend
  * cannot codegen an Either-wrapped foreign call.
  *
  * @param array{module: string, coordinate: string, types: list<array<string, mixed>>, functions: list<array<string, mixed>>, consts: list<array<string, mixed>>, skipped: list<array{symbol: string, reason: string}>} $descriptor
@@ -224,7 +225,7 @@ function renderJvmBinding(array $descriptor): string
 
 /**
  * A .NET binding module as text: raw, host-truthful, receiver-first
- * declarations — the plan's Layer 1 with no Layer 2, because the backend
+ * declarations — with no Either-wrapped variant, because the backend
  * cannot codegen an Either-wrapped foreign call, and the CLR declares no
  * throws, so every binding is pure. A method with optional parameters
  * declares the required prefix; the `dotnet/dependencies.json` sidecar
@@ -361,7 +362,7 @@ function writeDotNetBinding(string $outDir, array $descriptor): string
     if (!\is_dir($dir) && !@\mkdir($dir, 0777, true) && !\is_dir($dir)) {
         throw new \RuntimeException("cannot bind into `{$outDir}` — the directory cannot be created");
     }
-    if (@\file_put_contents($sidecarPath, \Moggi\Registry\prettyJson((array) $descriptor['sidecar']) . "\n") === false) {
+    if (@\file_put_contents($sidecarPath, prettyJson((array) $descriptor['sidecar']) . "\n") === false) {
         throw new \RuntimeException("cannot bind into `{$sidecarPath}` — the file cannot be written");
     }
 

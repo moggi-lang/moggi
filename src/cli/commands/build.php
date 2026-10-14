@@ -5,6 +5,8 @@ namespace Moggi\CLI\Commands;
 use Moggi\Registry\FetchLog;
 
 use function Moggi\Registry\badPackageProblem;
+use function Moggi\Registry\Bind\bindDeclaredForBuild;
+use function Moggi\Registry\Bind\ffiBindingsForBackend;
 use function Moggi\Registry\badPackagesAmong;
 use function Moggi\Registry\badPackagesRefusal;
 use function Moggi\Registry\checkBundledInstalled;
@@ -254,7 +256,7 @@ function runBuildCommand(array $argv): int
         }
 
         $bindRoots = [];
-        $declaredBindings = \Moggi\Registry\Bind\ffiBindingsForBackend($descriptor, $backend);
+        $declaredBindings = ffiBindingsForBackend($descriptor, $backend);
         if ($options['bind']) {
             if ($declaredBindings === []) {
                 \fwrite(STDERR, "bindings   nothing declared for {$backend} in [ffi]\n");
@@ -264,7 +266,7 @@ function runBuildCommand(array $argv): int
                     . " resolve for {$backend} — declare them under [{$backend}] so the host tool can fetch them",
                 );
             } else {
-                $bound = \Moggi\Registry\Bind\bindDeclaredForBuild($backend, (string) $tools['dir'], $descriptor);
+                $bound = bindDeclaredForBuild($backend, (string) $tools['dir'], $descriptor);
                 $bindRoots = $bound['roots'];
                 foreach ($bound['lines'] as $line) {
                     \fwrite(STDERR, 'bindings   ' . $line . "\n");

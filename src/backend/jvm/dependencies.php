@@ -3,6 +3,7 @@
 namespace Moggi\Backend\Jvm\Dependencies;
 
 use function Moggi\Modules\libraryScanRoots;
+use function Moggi\Paths\globPaths;
 
 /**
  * Library-owned JVM dependency directories: `jvm/` next to a module's
@@ -28,7 +29,7 @@ use function Moggi\Modules\libraryScanRoots;
 function mergeDemandClasspathJars(array &$classes, array &$resources): void
 {
     foreach (discoverVendorJvmDirs() as $jarDir) {
-        $jars = glob($jarDir . DIRECTORY_SEPARATOR . '*.jar') ?: [];
+        $jars = globPaths($jarDir . '/*.jar');
         if ($jars === []) {
             continue;
         }
@@ -121,7 +122,7 @@ function vendorPackageNeedles(array $jars, string $jarDir): array
             $zip->close();
         }
     }
-    foreach (glob($jarDir . DIRECTORY_SEPARATOR . '*.java') ?: [] as $javaFile) {
+    foreach (globPaths($jarDir . '/*.java') as $javaFile) {
         $src = (string) file_get_contents($javaFile);
         if (preg_match('/^\s*package\s+([\w.]+)\s*;/m', $src, $m) === 1) {
             $needles[str_replace('.', '/', $m[1]) . '/'] = true;
@@ -167,7 +168,7 @@ function bytecodeReferencesAnyNeedle(array $classes, array $needles): bool
  */
 function compileAndMergeVendorJava(string $jarDir, array $jars, array &$classes): void
 {
-    $javaFiles = glob($jarDir . DIRECTORY_SEPARATOR . '*.java') ?: [];
+    $javaFiles = globPaths($jarDir . '/*.java');
     if ($javaFiles === []) {
         return;
     }

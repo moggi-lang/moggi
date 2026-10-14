@@ -9,6 +9,7 @@ require_once __DIR__ . '/smoke.php';
 require_once __DIR__ . '/../src/paths.php';
 require_once __DIR__ . '/../src/backend/php/native.php';
 
+use function Moggi\Backend\Php\combineMicroPhar;
 use function Moggi\Compiler\targetExecutableName;
 use function Moggi\Paths\isAbsolutePath;
 
@@ -254,7 +255,7 @@ function buildNativeCompiler(string $pharPath, string $target): string
     $marker = \json_decode((string) @\file_get_contents($dir . '/.prepared'), true);
     $out = \dirname($pharPath) . '/' . targetExecutableName('moggi', $target);
 
-    \Moggi\Backend\Php\combineMicroPhar(
+    combineMicroPhar(
         $dir . '/' . (string) ($marker['binary'] ?? 'micro.sfx'),
         $pharPath,
         $out,

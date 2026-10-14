@@ -5,6 +5,10 @@ namespace Moggi\Dist;
 require_once __DIR__ . '/../src/registry/descriptor.php';
 require_once __DIR__ . '/../src/registry/extensions.php';
 
+use function Moggi\Registry\normalizeExtensionName;
+use function Moggi\Registry\parsePhpExtensionEntry;
+use function Moggi\Registry\requirementSections;
+
 /**
  * The PHP extension contract of a distribution.
  *
@@ -52,7 +56,7 @@ function distributionPackageRequirements(): array
                 throw new \RuntimeException("cannot read the package descriptor {$file}");
             }
             $name = \trim((string) ($ini['package']['name'] ?? ''));
-            $packages[$name === '' ? \basename($file, '.moggi') : $name] = \Moggi\Registry\requirementSections($ini);
+            $packages[$name === '' ? \basename($file, '.moggi') : $name] = requirementSections($ini);
         }
     }
     \ksort($packages, \SORT_STRING);
@@ -105,9 +109,9 @@ function distributionPhpExtensions(): array
     $names = [];
     foreach (distributionPackageRequirements() as $sections) {
         foreach ($sections['php.extensions'] ?? [] as $entry) {
-            $name = \Moggi\Registry\parsePhpExtensionEntry((string) $entry)['name'];
+            $name = parsePhpExtensionEntry((string) $entry)['name'];
             if ($name !== '') {
-                $names[\Moggi\Registry\normalizeExtensionName($name)] = $name;
+                $names[normalizeExtensionName($name)] = $name;
             }
         }
     }
@@ -142,11 +146,11 @@ function missingPhpExtensions(array $required, array $loaded): array
 {
     $present = [];
     foreach ($loaded as $name) {
-        $present[\Moggi\Registry\normalizeExtensionName((string) $name)] = true;
+        $present[normalizeExtensionName((string) $name)] = true;
     }
     $missing = [];
     foreach ($required as $name) {
-        if (!isset($present[\Moggi\Registry\normalizeExtensionName((string) $name)])) {
+        if (!isset($present[normalizeExtensionName((string) $name)])) {
             $missing[] = (string) $name;
         }
     }
@@ -187,7 +191,7 @@ function assertRuntimeExtensionsDeclared(array $config): void
 {
     $declared = [];
     foreach ((array) ($config['runtimes']['php']['extensions'] ?? []) as $name) {
-        $declared[\Moggi\Registry\normalizeExtensionName((string) $name)] = (string) $name;
+        $declared[normalizeExtensionName((string) $name)] = (string) $name;
     }
     $declaredList = extensionNamesSorted($declared);
     $derived = distributionPhpExtensions();
@@ -211,7 +215,7 @@ function assertRuntimeExtensionsDeclared(array $config): void
 function extensionSetsEqual(array $a, array $b): bool
 {
     $fold = static function (array $names): array {
-        $set = \array_map(\Moggi\Registry\normalizeExtensionName(...), $names);
+        $set = \array_map(normalizeExtensionName(...), $names);
         \sort($set, \SORT_STRING);
 
         return $set;

@@ -2,6 +2,8 @@
 
 namespace Moggi\CLI;
 
+use function Moggi\Modules\bundledStdlibLibPath;
+
 /**
  * The tree the docs tools index when the caller names none: the standard
  * library this compiler was installed with. In a checkout that is
@@ -11,5 +13,5 @@ namespace Moggi\CLI;
  */
 function defaultDocsInput(): string
 {
-    return \Moggi\Modules\bundledStdlibLibPath() ?? 'libraries/base/src';
+    return bundledStdlibLibPath() ?? 'libraries/base/src';
 }

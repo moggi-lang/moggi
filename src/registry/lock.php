@@ -2,6 +2,8 @@
 
 namespace Moggi\Registry;
 
+use function Moggi\Cache\atomicWrite;
+
 /**
  * `moggi.lock` — the resolved graph, pinned.
  *
@@ -127,7 +129,7 @@ function renderLock(array $document): string
  */
 function writeLock(string $path, array $document): void
 {
-    if (!\Moggi\Cache\atomicWrite($path, renderLock($document))) {
+    if (!atomicWrite($path, renderLock($document))) {
         throw new \RuntimeException("cannot write {$path}");
     }
 }

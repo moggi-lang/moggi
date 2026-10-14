@@ -2,9 +2,13 @@
 
 namespace Moggi\Registry;
 
+use const Moggi\Backend\DotNet\Dependencies\DOTNET_SIDECAR_FORMAT;
+
+use function Moggi\Backend\implementedBackendIds;
 use function Moggi\Cache\runtimeCacheDir;
 use function Moggi\Compiler\findExecutable;
 use function Moggi\Compiler\runProcess;
+use function Moggi\Paths\globPaths;
 
 /**
  * Host-tool dependencies: `[php] composer`, `[jvm] maven`, `[dotnet] nuget`.
@@ -229,7 +233,7 @@ function hostToolDescriptor(string $iniBytes): array
 {
     $ini = @\parse_ini_string($iniBytes, true, \INI_SCANNER_RAW);
     if (!\is_array($ini)) {
-        return ['backends' => \Moggi\Backend\implementedBackendIds(), 'php' => [], 'jvm' => [], 'dotnet' => []];
+        return ['backends' => implementedBackendIds(), 'php' => [], 'jvm' => [], 'dotnet' => []];
     }
 
     return [
@@ -433,7 +437,7 @@ function composerLockedVersions(string $dir): array
  */
 function mavenResolvedVersions(string $dir, array $coordinates): array
 {
-    $jars = \glob(\rtrim($dir, '/') . '/jvm/*.jar') ?: [];
+    $jars = globPaths(\rtrim($dir, '/') . '/jvm/*.jar');
     if ($jars === []) {
         return [];
     }
@@ -619,7 +623,7 @@ function hostConsumerNote(array $descriptor): ?string
 function hostToolSchemaVersion(string $backend): int
 {
     return match ($backend) {
-        'dotnet' => \Moggi\Backend\DotNet\Dependencies\DOTNET_SIDECAR_FORMAT,
+        'dotnet' => DOTNET_SIDECAR_FORMAT,
         default => 0,
     };
 }
@@ -964,8 +968,8 @@ function hostToolArtifactPaths(string $backend, string $dir): array
 {
     return match ($backend) {
         'php' => \is_file($dir . '/vendor/autoload.php') ? [$dir . '/vendor/autoload.php'] : [],
-        'jvm' => \glob($dir . '/jvm/*.jar') ?: [],
-        'dotnet' => \glob($dir . '/dotnet/*.dll') ?: [],
+        'jvm' => globPaths($dir . '/jvm/*.jar'),
+        'dotnet' => globPaths($dir . '/dotnet/*.dll'),
         default => [],
     };
 }
@@ -1014,11 +1018,11 @@ function hostToolArtifactFiles(string $backend, string $dir): array
             $files[$relative] = $item->getPathname();
         }
     } elseif ($backend === 'jvm') {
-        foreach (\glob($root . '/jvm/*.jar') ?: [] as $jar) {
+        foreach (globPaths($root . '/jvm/*.jar') as $jar) {
             $files['jvm/' . \basename($jar)] = $jar;
         }
     } elseif ($backend === 'dotnet') {
-        foreach (\glob($root . '/dotnet/*.dll') ?: [] as $dll) {
+        foreach (globPaths($root . '/dotnet/*.dll') as $dll) {
             $files['dotnet/' . \basename($dll)] = $dll;
         }
     }

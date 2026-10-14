@@ -2,7 +2,13 @@
 
 namespace Moggi\Backend\DotNet\Dependencies;
 
+use function Moggi\Cache\fileFingerprint;
+use function Moggi\Cache\hashContent;
+use function Moggi\Cache\runtimeCacheDir;
+use function Moggi\Modules\declaringLibraryRoot;
 use function Moggi\Modules\libraryScanRoots;
+use function Moggi\Paths\globPaths;
+use function Moggi\Registry\safeDigestKey;
 
 /**
  * Library-owned .NET host metadata.
@@ -71,7 +77,7 @@ function dotNetSidecarTreeRoot(string $file): ?string
         return $match[1] . '/src';
     }
 
-    return \Moggi\Modules\declaringLibraryRoot($file);
+    return declaringLibraryRoot($file);
 }
 
 /**
@@ -144,7 +150,7 @@ function dotNetSidecarFiles(): array
 {
     $files = [];
     foreach (discoverDotNetLibDirs() as $dir) {
-        foreach (\glob($dir . DIRECTORY_SEPARATOR . '*.json') ?: [] as $file) {
+        foreach (globPaths($dir . '/*.json') as $file) {
             $files[] = $file;
         }
     }
@@ -172,13 +178,13 @@ function dotNetSidecarDiscriminator(bool $includeGenerated = true): string
         if (!$includeGenerated && isGeneratedBindPath($file)) {
             continue;
         }
-        $fingerprints[] = $file . ':' . \Moggi\Cache\fileFingerprint($file);
+        $fingerprints[] = $file . ':' . fileFingerprint($file);
     }
     if ($fingerprints === []) {
         return '';
     }
 
-    return \Moggi\Cache\hashContent(\implode("\n", $fingerprints));
+    return hashContent(\implode("\n", $fingerprints));
 }
 
 /**
@@ -188,11 +194,8 @@ function dotNetSidecarDiscriminator(bool $includeGenerated = true): string
  */
 function isGeneratedBindPath(string $path): bool
 {
-    // Textual match, but separator-blind: the cache dir mixes `\` (from the
-    // OS temp layout) and `/` (from the key builder) on Windows, and a bind
-    // root the predicate misses pollutes the sidecar fingerprint.
     $flat = static fn (string $p): string => \str_replace('\\', '/', $p);
-    $prefix = \rtrim($flat(\Moggi\Cache\runtimeCacheDir()), '/') . '/';
+    $prefix = \rtrim($flat(runtimeCacheDir()), '/') . '/';
     $slashPath = $flat($path);
     if (!\str_starts_with($slashPath, $prefix)) {
         return false;
@@ -221,7 +224,7 @@ function dotNetVendoredAssemblies(): array
 {
     $assemblies = [];
     foreach (discoverDotNetLibDirs() as $dir) {
-        foreach (\glob($dir . DIRECTORY_SEPARATOR . '*.dll') ?: [] as $dll) {
+        foreach (globPaths($dir . '/*.dll') as $dll) {
             $assemblies[\basename($dll)] = $dll;
         }
     }
@@ -280,7 +283,7 @@ function dotNetLibMetadata(): array
     $signatures = [];
 
     foreach (discoverDotNetLibDirs() as $dir) {
-        $files = \glob($dir . DIRECTORY_SEPARATOR . '*.json') ?: [];
+        $files = globPaths($dir . '/*.json');
         \sort($files);
         foreach ($files as $file) {
             $raw = \file_get_contents($file);
@@ -537,7 +540,7 @@ function warnOnceFlatDotNetSidecar(string $file): void
 function checkDotNetAssemblyDigest(string $assembly, array $spec, string $file): void
 {
     $digest = $spec['digest'] ?? null;
-    if (!\is_string($digest) || \Moggi\Registry\safeDigestKey($digest) === null) {
+    if (!\is_string($digest) || safeDigestKey($digest) === null) {
         return;
     }
     foreach (dotNetVendoredAssemblies() as $dll) {
