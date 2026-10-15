@@ -32,7 +32,7 @@ require_once __DIR__ . '/types/declarations.php';
 require_once __DIR__ . '/registry.php';
 require_once __DIR__ . '/deriving/framework.php';
 
-final class types extends \RuntimeException
+final class TypeError extends \RuntimeException
 {
     /** @var list<string>|null Structured missing patterns for non-exhaustive cases. */
     public ?array $missingPatterns = null;

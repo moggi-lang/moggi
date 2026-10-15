@@ -45,7 +45,7 @@ function findExecutable(string $name): ?string
         return \is_file($name) && \is_executable($name) ? $name : null;
     }
 
-    $suffixes = \PHP_OS_FAMILY === 'Windows' ? ['', '.exe', '.cmd', '.bat', '.com'] : [''];
+    $suffixes = \PHP_OS_FAMILY === 'Windows' ? ['.exe', '.cmd', '.bat', '.com', ''] : [''];
     $directories = \explode(\PATH_SEPARATOR, (string) \getenv('PATH'));
     foreach ($directories as $directory) {
         if ($directory === '') {

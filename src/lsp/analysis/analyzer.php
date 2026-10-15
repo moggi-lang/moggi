@@ -25,7 +25,7 @@ use function Moggi\Syntax\Parser\parse;
 
 use Moggi\Syntax\Parser\ParseError;
 
-class analyzer
+class AnalysisResult
 {
     /**
      * @param list<array{range: array{start: array{line:int,character:int}, end: array{line:int,character:int}}, severity: int, message: string, source: string, code?: string, data?: array<string, mixed>}> $diagnostics

@@ -12,7 +12,7 @@ use function Moggi\Modules\isModuleActiveForCompileBackend;
 use Moggi\Syntax\Ast;
 
 /** Resolved export list for documentation (local declarations only). */
-final class exports
+final class DocExportFilter
 {
     /**
      * @param array<string, true> $values

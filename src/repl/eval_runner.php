@@ -152,7 +152,7 @@ function endStdoutCapture(array $capture): string
 }
 
 /** @internal */
-final class eval_runner extends \php_user_filter
+final class ReplStdoutCaptureFilter extends \php_user_filter
 {
     public static string $buffer = '';
 

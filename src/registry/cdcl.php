@@ -27,7 +27,7 @@ namespace Moggi\Registry;
  * The caller adds clauses and then runs `solve()` once; there is no incremental
  * interface, because a resolution is a single question.
  */
-final class cdcl
+final class CdclSolver
 {
     /** @var list<list<int>> one literal list per clause; its index is the clause id */
     private array $clauses = [];

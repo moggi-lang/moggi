@@ -35,7 +35,7 @@ use function Moggi\Paths\globPaths;
  */
 
 /** Explicit `--no-cache`/`--cache` choice, overriding MOGGI_NO_CACHE. */
-final class cache
+final class CacheSwitch
 {
     private static ?bool $override = null;
 

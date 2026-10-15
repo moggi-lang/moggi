@@ -82,7 +82,7 @@ function phpFqnFromResolved(string $resolved): string
  * while a project is being prepared and invalidated per module as units are
  * re-checked; outside that window it stays off rather than risk a stale answer.
  */
-final class exports
+final class ExportsCache
 {
     /** @var ?array<string, array<string, mixed>> */
     private static ?array $entries = null;

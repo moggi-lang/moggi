@@ -145,7 +145,7 @@ function ingestWorkerLine(array &$stream, int $shard, string $line): void
  * The `--jobs N` pool: dispatch the shards, merge what they stream back, and hand out one result set
  * per backend, ordered as the selection is.
  */
-final class parallel
+final class ShardPool
 {
     /** @var array<string, array<int, CaseResult>>|null backend => position in the selection => result */
     private ?array $merged = null;

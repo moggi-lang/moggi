@@ -16,7 +16,7 @@ use Moggi\Cache;
  * not name or name one it does not accept. `$help` stays authored prose: help
  * text should read like writing, not like an option table.
  */
-final class command
+final class CommandSpec
 {
     /**
      * @param string $name the subcommand word, as `main()` spells it
