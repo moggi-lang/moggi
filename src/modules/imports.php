@@ -114,8 +114,12 @@ function moduleEvidenceOrigins(Ast\Program $program, string $moduleName, string 
  */
 function unitEvidenceMeta(array $unit, string $moduleName, string $namespace, string $cacheKey = ''): array
 {
-    $origins = [];
-    $arity = [];
+    $facts = $unit['facts']['evidence'] ?? null;
+    if (\is_array($facts) && isset($facts['origins'], $facts['arity'])) {
+        return $facts;
+    }
+
+    $metas = [];
     foreach (['program', 'checkedProgram'] as $slot) {
         $program = $unit[$slot] ?? null;
         if (! ($program instanceof Ast\Program)) {
@@ -123,7 +127,24 @@ function unitEvidenceMeta(array $unit, string $moduleName, string $namespace, st
         }
 
         $key = $cacheKey === '' ? '' : $cacheKey . "\0" . $slot;
-        $meta = moduleEvidenceMeta($program, $moduleName, $namespace, $key);
+        $metas[] = moduleEvidenceMeta($program, $moduleName, $namespace, $key);
+    }
+
+    return mergeEvidenceMetas($metas);
+}
+
+/**
+ * First-wins merge of evidence metas (the pre-check tree first, so
+ * hand-written instances keep their spellings over elaborated ones).
+ *
+ * @param list<array{origins: array<string, array{namespace: string, phpName: string, module: string}>, arity: array<string, int>}> $metas
+ * @return array{origins: array<string, array{namespace: string, phpName: string, module: string}>, arity: array<string, int>}
+ */
+function mergeEvidenceMetas(array $metas): array
+{
+    $origins = [];
+    $arity = [];
+    foreach ($metas as $meta) {
         foreach ($meta['origins'] as $evName => $origin) {
             if (isset($origins[$evName])) {
                 continue;
@@ -160,6 +181,10 @@ function moduleActionReturnFnNames(array $units, string $moduleName): array
     static $cache = [];
 
     $unit = $units[$moduleName] ?? null;
+    $facts = \is_array($unit) ? ($unit['facts']['actionReturn'] ?? null) : null;
+    if (\is_array($facts)) {
+        return $facts;
+    }
     $key = \is_array($unit)
         ? $moduleName . "\0" . \hash('xxh3', (string) ($unit['source'] ?? '') . "\0" . (string) ($unit['path'] ?? ''))
         : $moduleName;
@@ -168,16 +193,23 @@ function moduleActionReturnFnNames(array $units, string $moduleName): array
     }
 
     $program = \is_array($unit) ? ($unit['checkedProgram'] ?? null) : null;
+
+    return $cache[$key] = ($program instanceof Ast\Program)
+        ? actionReturnFnNamesFromProgram($program)
+        : [];
+}
+
+/** @return array<string, true> */
+function actionReturnFnNamesFromProgram(Ast\Program $program): array
+{
     $names = [];
-    if ($program instanceof Ast\Program) {
-        foreach ($program->items as $item) {
-            if ($item instanceof Ast\FunctionDecl && $item->ioBodyKind === IR\IoBodyKind::ActionReturn) {
-                $names[$item->name] = true;
-            }
+    foreach ($program->items as $item) {
+        if ($item instanceof Ast\FunctionDecl && $item->ioBodyKind === IR\IoBodyKind::ActionReturn) {
+            $names[$item->name] = true;
         }
     }
 
-    return $cache[$key] = $names;
+    return $names;
 }
 
 /**
@@ -199,6 +231,11 @@ function moduleTrueBindingOrigins(array $units, string $moduleName): array
         : $moduleName;
     if (isset($cache[$key])) {
         return $cache[$key];
+    }
+
+    $facts = \is_array($unit) ? ($unit['facts']['trueBindings'] ?? null) : null;
+    if (\is_array($facts)) {
+        return $facts;
     }
 
     $program = \is_array($unit) ? ($unit['checkedProgram'] ?? null) : null;
@@ -235,6 +272,10 @@ function moduleTrueBindingOriginsAll(array $units): array
 function moduleEvidenceArity(array $units, string $moduleName, string $evName): int
 {
     $unit = $units[$moduleName] ?? null;
+    $factsArity = \is_array($unit) ? ($unit['facts']['evidenceChecked']['arity'] ?? null) : null;
+    if (\is_array($factsArity) && \array_key_exists($evName, $factsArity)) {
+        return (int) $factsArity[$evName];
+    }
     $program = \is_array($unit)
         ? ($unit['checkedProgram'] ?? $unit['program'] ?? null)
         : null;
@@ -267,6 +308,11 @@ function moduleDeclaredFunctionArity(array $units, string $moduleName, string $n
         return null;
     }
 
+    $factsArity = $unit['facts']['fnArity'] ?? null;
+    if (\is_array($factsArity)) {
+        return $factsArity[$name] ?? null;
+    }
+
     $program = $unit['checkedProgram'] ?? null;
     if (! ($program instanceof Ast\Program)) {
         return null;
@@ -278,16 +324,61 @@ function moduleDeclaredFunctionArity(array $units, string $moduleName, string $n
         (string) ($unit['source'] ?? '') . "\0" . (string) ($unit['path'] ?? ''),
     );
     if (! isset($cache[$key])) {
-        $arities = [];
-        foreach ($program->items as $item) {
-            if ($item instanceof Ast\FunctionDecl && ! $item->signatureOnly) {
-                $arities[$item->name] = \count($item->params);
-            }
-        }
-        $cache[$key] = $arities;
+        $cache[$key] = declaredFunctionArityMapFromProgram($program);
     }
 
     return $cache[$key][$name] ?? null;
+}
+
+/** @return array<string, int> */
+function declaredFunctionArityMapFromProgram(Ast\Program $program): array
+{
+    $arities = [];
+    foreach ($program->items as $item) {
+        if ($item instanceof Ast\FunctionDecl && ! $item->signatureOnly) {
+            $arities[$item->name] = \count($item->params);
+        }
+    }
+
+    return $arities;
+}
+
+/**
+ * Elaboration facts a checked module publishes for importers, compact enough
+ * to load without the checked program itself: merged instance-evidence
+ * metadata (hand-written instances from the parsed tree plus derived ones,
+ * which exist only post-check), the checked-only evidence arities, and the
+ * elaborated function facts (`ioBodyKind`, guard bindings, runtime arities)
+ * that never reach the exported schemes. Computed with the same readers the
+ * live path uses, so the values are identical by construction.
+ *
+ * @param array<string, mixed> $unit
+ * @return array{
+ *   evidence: array{origins: array<string, array{namespace: string, phpName: string, module: string}>, arity: array<string, int>},
+ *   evidenceChecked: array{origins: array<string, array{namespace: string, phpName: string, module: string}>, arity: array<string, int>},
+ *   actionReturn: array<string, true>,
+ *   trueBindings: array<string, true>,
+ *   fnArity: array<string, int>
+ * }
+ */
+function preparedModuleFacts(array $unit, Ast\Program $checked, string $moduleName): array
+{
+    $namespace = (string) ($unit['namespace'] ?? '');
+    $metas = [];
+    $parsed = $unit['program'] ?? null;
+    if ($parsed instanceof Ast\Program) {
+        $metas[] = moduleEvidenceMeta($parsed, $moduleName, $namespace);
+    }
+    $checkedMeta = moduleEvidenceMeta($checked, $moduleName, $namespace);
+    $metas[] = $checkedMeta;
+
+    return [
+        'evidence' => mergeEvidenceMetas($metas),
+        'evidenceChecked' => $checkedMeta,
+        'actionReturn' => actionReturnFnNamesFromProgram($checked),
+        'trueBindings' => trueBindingOrigins($checked->items, $moduleName),
+        'fnArity' => declaredFunctionArityMapFromProgram($checked),
+    ];
 }
 
 /**

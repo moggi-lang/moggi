@@ -32,10 +32,8 @@ function recordPrograms(AnalysisService $svc, object $analysis): array
     if (($analysis->program ?? null) instanceof Ast\Program) {
         $programs[] = $analysis->program;
     }
-    foreach ($svc->project->checked ?? [] as $prog) {
-        if ($prog instanceof Ast\Program) {
-            $programs[] = $prog;
-        }
+    foreach ($svc->shapePrograms() as $prog) {
+        $programs[] = $prog;
     }
 
     return $programs;

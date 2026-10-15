@@ -237,10 +237,7 @@ function memberCompletionItems(AnalysisService $svc, object $analysis, int $line
         return $fields;
     }
     $items = [];
-    foreach ($svc->project->checked ?? [] as $prog) {
-        if (! $prog instanceof Ast\Program) {
-            continue;
-        }
+    foreach ($svc->shapePrograms() as $prog) {
         foreach ($prog->items as $item) {
             if ($item instanceof Ast\DataDecl && $item->name === $typeHead) {
                 foreach ($item->constructors as $ctor) {

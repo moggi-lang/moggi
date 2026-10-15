@@ -31,6 +31,7 @@ use function Moggi\Modules\moduleFileClosureCached;
 
 use Moggi\Modules\PreparedProject;
 
+use function Moggi\Modules\prepareFocusBase;
 use function Moggi\Modules\prepareProjectCached;
 use function Moggi\Modules\projectSourceClosure;
 use function Moggi\Modules\setStdlibLibPath;
@@ -689,7 +690,14 @@ final class AnalysisService
                     $openByPath[uriToPath($openUri)] = $openUri;
                 }
             }
-            foreach ($prepared->checked as $mName => $prog) {
+            $indexOrder = \array_keys($prepared->checked);
+            foreach ($prepared->units as $mName => $unit) {
+                if (! \is_array($unit) || \in_array($mName, $indexOrder, true)) {
+                    continue;
+                }
+                $indexOrder[] = $mName;
+            }
+            foreach ($indexOrder as $mName) {
                 $unit = $prepared->units[$mName] ?? null;
                 $mPath = \is_array($unit) ? (string) ($unit['path'] ?? '') : '';
                 if ($mPath === '') {
@@ -715,6 +723,13 @@ final class AnalysisService
                 } elseif ($isOpen) {
                     $mUri = $openByPath[$mReal] ?? $openByPath[$mPath] ?? $mUri;
                     $mSource = $this->vfs->content($mUri) ?? $mSource;
+                }
+                $prog = $prepared->checked[$mName] ?? null;
+                if (! ($prog instanceof Ast\Program) && \is_array($unit)) {
+                    $prog = $this->loadIndexedCheckedProgram($unit);
+                }
+                if (! ($prog instanceof Ast\Program)) {
+                    continue;
                 }
                 $this->indexModule($mUri, $mSource, $prog, $mName, $prog->externalFns ?? []);
             }
@@ -759,6 +774,56 @@ final class AnalysisService
             $content,
             $uri,
         );
+    }
+
+    /**
+     * Programs for shape-level lookups across the whole closure (constructor
+     * and record-field shapes, declaration headers): the checked tree where
+     * the prepare has one, else the parsed tree. Focus-path prepares check a
+     * single module, so dependencies usually contribute their parsed shape —
+     * identical for user-written declarations.
+     *
+     * @return list<Ast\Program>
+     */
+    public function shapePrograms(): array
+    {
+        $out = [];
+        if ($this->project === null) {
+            return $out;
+        }
+        foreach ($this->project->units as $unit) {
+            if (! \is_array($unit)) {
+                continue;
+            }
+            $prog = $unit['checkedProgram'] ?? $unit['program'] ?? null;
+            if ($prog instanceof Ast\Program) {
+                $out[] = $prog;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * A dependency's checked program for navigation indexing, loaded from
+     * the module cache on demand. Focus-path prepares skip checked loads,
+     * so this fills the gap for exactly the modules the index covers —
+     * without writing anything back into the shared base.
+     */
+    private function loadIndexedCheckedProgram(array $unit): ?Ast\Program
+    {
+        $rel = $unit['cacheRelPath'] ?? null;
+        $key = $unit['contentKey'] ?? null;
+        if (! \is_string($rel) || ! \is_string($key)) {
+            return null;
+        }
+        $cached = \Moggi\Cache\moduleGet($rel, 'checked', $key);
+        if (! \is_array($cached)) {
+            return null;
+        }
+        $program = $cached['program'] ?? null;
+
+        return $program instanceof Ast\Program ? $program : null;
     }
 
     private function indexResult(string $uri, AnalysisResult $result): void
@@ -854,7 +919,7 @@ final class AnalysisService
         if ($seed !== null && \is_file($seed)) {
             try {
                 [$files, $root] = moduleFileClosureCached($seed);
-                prepareProjectCached($files, $root, null);
+                prepareFocusBase($files, $root);
             } catch (\Throwable) {
             }
         }

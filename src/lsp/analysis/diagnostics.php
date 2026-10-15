@@ -178,7 +178,7 @@ function unusedImportDiagnostics(
                 continue;
             }
             $names = [];
-            foreach (['env', 'data', 'typeSynonyms'] as $table) {
+            foreach (['env', 'data', 'typeSynonyms', 'classes'] as $table) {
                 foreach (\array_keys($exports[$table] ?? []) as $exported) {
                     $names[$exported] = true;
                 }

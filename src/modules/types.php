@@ -48,8 +48,18 @@ final class PreparedProject
  */
 final class ProjectCache
 {
-    /** @var array<string, PreparedProject> */
+    /**
+     * @var array<string, PreparedProject>
+     *
+     * Insertion-ordered: a hit moves its entry to the back, and remembering
+     * past the cap drops the least recently used. A suite worker prepares
+     * hundreds of single-use focus projects, so the focus entries are never
+     * stored at all (see `prepareProjectCached`) and only the shared import
+     * closures accumulate here, bounded by the cap.
+     */
     private static array $preparedProjects = [];
+
+    private const PREPARED_PROJECT_MAX = 8;
 
     /** @var array<string, CheckedModule> */
     private static array $checkedModules = [];
@@ -64,12 +74,22 @@ final class ProjectCache
 
     public static function preparedProject(string $key): ?PreparedProject
     {
-        return self::$preparedProjects[$key] ?? null;
+        $project = self::$preparedProjects[$key] ?? null;
+        if ($project !== null) {
+            unset(self::$preparedProjects[$key]);
+            self::$preparedProjects[$key] = $project;
+        }
+
+        return $project;
     }
 
     public static function rememberPreparedProject(string $key, PreparedProject $project): void
     {
+        unset(self::$preparedProjects[$key]);
         self::$preparedProjects[$key] = $project;
+        while (\count(self::$preparedProjects) > self::PREPARED_PROJECT_MAX) {
+            \array_shift(self::$preparedProjects);
+        }
     }
 
     public static function checkedModule(string $key): ?CheckedModule

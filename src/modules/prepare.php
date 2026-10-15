@@ -26,8 +26,16 @@ use function Moggi\Syntax\Parser\parse;
  * a closure, producing a `PreparedProject` ready to be lowered and emitted.
  */
 
-/** @param list<string> $paths */
-function prepareProject(array $paths, string $rootDir): PreparedProject
+/**
+ * @param list<string> $paths
+ * @param bool $shallow when true, build the import closure without loading
+ *   checked programs: hydrated interfaces already carry final inferred
+ *   schemes plus the elaboration facts (`facts` blob) importers read off
+ *   checked programs, and the focus path that consumes a shallow base never
+ *   lowers its modules. Skips straight to a fresh check when an interface is
+ *   missing, so a cold cache still typechecks everything once.
+ */
+function prepareProject(array $paths, string $rootDir, bool $shallow = false): PreparedProject
 {
     $root = \realpath($rootDir);
     if ($root === false) {
@@ -214,7 +222,8 @@ function prepareProject(array $paths, string $rootDir): PreparedProject
         $cacheKey = checkedModuleCacheKey($path);
 
         $memoized = ProjectCache::checkedModule($cacheKey);
-        if ($memoized !== null) {
+        $interfacesReady = isset($units[$moduleName]['localTypes'], $units[$moduleName]['exports'], $units[$moduleName]['facts']);
+        if ($memoized !== null && !($shallow && $interfacesReady)) {
             syncExportedInferredSchemesFromTypeEnv(
                 $units,
                 $moduleName,
@@ -222,35 +231,23 @@ function prepareProject(array $paths, string $rootDir): PreparedProject
             );
             $checked[$moduleName] = $memoized->program;
             $units[$moduleName]['checkedProgram'] = $memoized->program;
-            ensureModuleInterface($units, $moduleName, $projectClasses, $projectInstanceIndex);
-            publishModuleExports($units, $moduleName);
-            addModuleClassScope($units, $moduleName, $projectClasses, $classScopes, $classScopeFns);
-            $outputRelative = mogPathToOutputRelative($path, $rootPrefix);
-            $importContext = buildImportContext(
-                $units[$moduleName]['program']->imports,
+            $importContexts[$moduleName] = buildPreparedModuleContext(
                 $units,
                 $moduleName,
-                $outputRelative,
+                $path,
                 $rootPrefix,
-            );
-            $importContext['classes'] = $projectClasses;
-            $importContext['classScopes'] = $classScopes;
-            $importContext = mergeClassScopeRefs(
-                $importContext,
+                $projectClasses,
+                $classScopes,
                 $classScopeFns,
-                moduleLocalValueNames($units, $moduleName),
-                moduleLocalDataNames($units, $moduleName),
+                $projectInstances,
+                $projectInstanceIndex,
             );
-            $importContext['projectInstances'] = $projectInstances;
-            $importContext['projectInstanceIndex'] = $projectInstanceIndex;
-            $importContext['currentModule'] = $moduleName;
-            $importContexts[$moduleName] = $importContext;
 
             continue;
         }
 
         $contentKey = $units[$moduleName]['contentKey'] ?? null;
-        if ($contentKey !== null) {
+        if ($contentKey !== null && !$shallow) {
             $cachedCheck = Cache\moduleGet(
                 $units[$moduleName]['cacheRelPath'],
                 'checked',
@@ -269,32 +266,40 @@ function prepareProject(array $paths, string $rootDir): PreparedProject
                 ProjectCache::rememberCheckedModule($cacheKey, $fromDisk, ! isStdlibSourcePath($path));
                 $checked[$moduleName] = $fromDisk->program;
                 $units[$moduleName]['checkedProgram'] = $fromDisk->program;
-                ensureModuleInterface($units, $moduleName, $projectClasses, $projectInstanceIndex);
-                publishModuleExports($units, $moduleName);
-                addModuleClassScope($units, $moduleName, $projectClasses, $classScopes, $classScopeFns);
-                $outputRelative = mogPathToOutputRelative($path, $rootPrefix);
-                $importContext = buildImportContext(
-                    $units[$moduleName]['program']->imports,
+                $importContexts[$moduleName] = buildPreparedModuleContext(
                     $units,
                     $moduleName,
-                    $outputRelative,
+                    $path,
                     $rootPrefix,
-                );
-                $importContext['classes'] = $projectClasses;
-                $importContext['classScopes'] = $classScopes;
-                $importContext = mergeClassScopeRefs(
-                    $importContext,
+                    $projectClasses,
+                    $classScopes,
                     $classScopeFns,
-                    moduleLocalValueNames($units, $moduleName),
-                    moduleLocalDataNames($units, $moduleName),
+                    $projectInstances,
+                    $projectInstanceIndex,
                 );
-                $importContext['projectInstances'] = $projectInstances;
-                $importContext['projectInstanceIndex'] = $projectInstanceIndex;
-                $importContext['currentModule'] = $moduleName;
-                $importContexts[$moduleName] = $importContext;
 
                 continue;
             }
+        }
+
+        if ($shallow && $interfacesReady) {
+            // A focus-path base never lowers its modules, and the hydrated
+            // interfaces already carry final inferred schemes, so skip the
+            // checked-program load. `ensure`/`publish` below are no-ops for
+            // hydrated modules.
+            $importContexts[$moduleName] = buildPreparedModuleContext(
+                $units,
+                $moduleName,
+                $path,
+                $rootPrefix,
+                $projectClasses,
+                $classScopes,
+                $classScopeFns,
+                $projectInstances,
+                $projectInstanceIndex,
+            );
+
+            continue;
         }
 
         $outputRelative = mogPathToOutputRelative($path, $rootPrefix);
@@ -335,18 +340,6 @@ function prepareProject(array $paths, string $rootDir): PreparedProject
             $interface,
         );
         $units[$moduleName]['localTypes'] = $interface;
-        if ($contentKey !== null) {
-            Cache\modulePut(
-                $units[$moduleName]['cacheRelPath'],
-                'localtypes',
-                $contentKey,
-                $interface,
-            );
-        }
-
-        publishModuleExports($units, $moduleName);
-        addModuleClassScope($units, $moduleName, $projectClasses, $classScopes, $classScopeFns);
-
         $exportedInferredSchemes = $checkedFull->exportedInferredSchemes;
         syncExportedInferredSchemesFromTypeEnv(
             $units,
@@ -356,12 +349,31 @@ function prepareProject(array $paths, string $rootDir): PreparedProject
         if ($contentKey !== null) {
             Cache\modulePut(
                 $units[$moduleName]['cacheRelPath'],
+                'localtypes',
+                $contentKey,
+                $units[$moduleName]['localTypes'],
+            );
+        }
+
+        publishModuleExports($units, $moduleName);
+        addModuleClassScope($units, $moduleName, $projectClasses, $classScopes, $classScopeFns);
+
+        $units[$moduleName]['facts'] = preparedModuleFacts($units[$moduleName], $checkedFull, $moduleName);
+        if ($contentKey !== null) {
+            Cache\modulePut(
+                $units[$moduleName]['cacheRelPath'],
                 'checked',
                 $contentKey,
                 [
                     'program' => $checkedFull,
                     'exportedInferredSchemes' => $exportedInferredSchemes,
                 ],
+            );
+            Cache\modulePut(
+                $units[$moduleName]['cacheRelPath'],
+                'facts',
+                $contentKey,
+                $units[$moduleName]['facts'],
             );
         }
         ProjectCache::rememberCheckedModule(
@@ -400,6 +412,55 @@ function prepareProject(array $paths, string $rootDir): PreparedProject
     disableCollectExportsCache();
 
     return new PreparedProject($rootPrefix, $units, $checked, $importContexts);
+}
+
+/**
+ * Build one module's import context from its (hydrated or just-checked)
+ * interface: publish exports, fold class scopes, and plan imports.
+ *
+ * @param array<string, array<string, mixed>> $units
+ * @param array<string, mixed> $projectClasses
+ * @param array<string, mixed> $classScopes
+ * @param array<string, mixed> $classScopeFns
+ * @param list<array<string, mixed>> $projectInstances
+ * @param array<string, mixed> $projectInstanceIndex
+ * @return array<string, mixed>
+ */
+function buildPreparedModuleContext(
+    array &$units,
+    string $moduleName,
+    string $path,
+    string $rootPrefix,
+    array $projectClasses,
+    array &$classScopes,
+    array &$classScopeFns,
+    array $projectInstances,
+    array $projectInstanceIndex,
+): array {
+    ensureModuleInterface($units, $moduleName, $projectClasses, $projectInstanceIndex);
+    publishModuleExports($units, $moduleName);
+    addModuleClassScope($units, $moduleName, $projectClasses, $classScopes, $classScopeFns);
+    $outputRelative = mogPathToOutputRelative($path, $rootPrefix);
+    $importContext = buildImportContext(
+        $units[$moduleName]['program']->imports,
+        $units,
+        $moduleName,
+        $outputRelative,
+        $rootPrefix,
+    );
+    $importContext['classes'] = $projectClasses;
+    $importContext['classScopes'] = $classScopes;
+    $importContext = mergeClassScopeRefs(
+        $importContext,
+        $classScopeFns,
+        moduleLocalValueNames($units, $moduleName),
+        moduleLocalDataNames($units, $moduleName),
+    );
+    $importContext['projectInstances'] = $projectInstances;
+    $importContext['projectInstanceIndex'] = $projectInstanceIndex;
+    $importContext['currentModule'] = $moduleName;
+
+    return $importContext;
 }
 
 /**
@@ -534,6 +595,36 @@ function isStdlibSourcePath(string $path): bool
     return $stdlib !== null && \str_starts_with(resolvePath($path), $stdlib . DIRECTORY_SEPARATOR);
 }
 
+/**
+ * Prepare an import closure as a base for single-focus compiles, without
+ * loading any checked program: the focus path typechecks exactly one module
+ * and never lowers the rest, while the hydrated interfaces already carry
+ * final inferred schemes (see the `localtypes` write order in
+ * `prepareProject`). Memoized under its own key space so a full prepare of
+ * the same paths can never observe the missing `checked` entries.
+ *
+ * @param list<string> $paths
+ */
+function prepareFocusBase(array $paths, string $rootDir): PreparedProject
+{
+    $parts = [];
+    foreach ($paths as $path) {
+        $parts[] = checkedModuleCacheKey($path);
+    }
+    \sort($parts);
+
+    $key = 'shallow|' . \implode('|', $parts) . '@' . compileBackend();
+    $memoized = ProjectCache::preparedProject($key);
+    if ($memoized !== null) {
+        return $memoized;
+    }
+
+    $prepared = prepareProject($paths, $rootDir, true);
+    ProjectCache::rememberPreparedProject($key, $prepared);
+
+    return $prepared;
+}
+
 /** @param list<string> $paths */
 function prepareProjectCached(array $paths, string $rootDir, ?string $onlyTypecheckModule = null): PreparedProject
 {
@@ -564,14 +655,13 @@ function prepareProjectCached(array $paths, string $rootDir, ?string $onlyTypech
             }
         }
         if (\count($focusPaths) === 1 && $basePaths !== []) {
-            $base = prepareProjectCached($basePaths, $rootDir, null);
+            $base = prepareFocusBase($basePaths, $rootDir);
             $prepared = prepareProjectExtendingFocus(
                 $base,
                 $focusPaths[0],
                 $onlyTypecheckModule,
                 $rootDir,
             );
-            ProjectCache::rememberPreparedProject($key, $prepared);
 
             return $prepared;
         }
@@ -722,24 +812,26 @@ function prepareProjectExtendingFocus(
         $interface,
     );
     $units[$focusModule]['localTypes'] = $interface;
-    $contentKey = $units[$focusModule]['contentKey'] ?? null;
-    if ($contentKey !== null) {
-        Cache\modulePut($units[$focusModule]['cacheRelPath'], 'localtypes', $contentKey, $interface);
-    }
-
-    publishModuleExports($units, $focusModule);
-
     syncExportedInferredSchemesFromTypeEnv(
         $units,
         $focusModule,
         $checkedFull->exportedInferredSchemes,
     );
+    $contentKey = $units[$focusModule]['contentKey'] ?? null;
+    if ($contentKey !== null) {
+        Cache\modulePut($units[$focusModule]['cacheRelPath'], 'localtypes', $contentKey, $units[$focusModule]['localTypes']);
+    }
+
+    publishModuleExports($units, $focusModule);
+
     $units[$focusModule]['checkedProgram'] = $checkedFull;
+    $units[$focusModule]['facts'] = preparedModuleFacts($units[$focusModule], $checkedFull, $focusModule);
     if ($contentKey !== null) {
         Cache\modulePut($units[$focusModule]['cacheRelPath'], 'checked', $contentKey, [
             'program' => $checkedFull,
             'exportedInferredSchemes' => $checkedFull->exportedInferredSchemes,
         ]);
+        Cache\modulePut($units[$focusModule]['cacheRelPath'], 'facts', $contentKey, $units[$focusModule]['facts']);
     }
     ProjectCache::rememberCheckedModule(
         checkedModuleCacheKey($focusPath),
@@ -909,6 +1001,13 @@ function hydrateModuleDiskArtifacts(array &$units, array $sortedModules): void
             $cached = Cache\moduleGet($relPath, 'exports', $contentKey);
             if (\is_array($cached)) {
                 $units[$moduleName]['exports'] = $cached;
+            }
+        }
+
+        if (! isset($units[$moduleName]['facts'])) {
+            $cached = Cache\moduleGet($relPath, 'facts', $contentKey);
+            if (\is_array($cached)) {
+                $units[$moduleName]['facts'] = $cached;
             }
         }
     }

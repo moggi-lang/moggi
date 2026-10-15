@@ -30,15 +30,7 @@ use Moggi\Syntax\Ast;
 
 function findCtorDecl(AnalysisService $svc, string $module, string $name): ?array
 {
-    $programs = [];
-    $analysisProgram = null;
-    if ($svc->project !== null) {
-        foreach ($svc->project->checked as $prog) {
-            if ($prog instanceof Ast\Program) {
-                $programs[] = $prog;
-            }
-        }
-    }
+    $programs = $svc->shapePrograms();
     foreach ($programs as $prog) {
         foreach ($prog->items as $item) {
             if (! ($item instanceof Ast\DataDecl)) {
@@ -64,10 +56,7 @@ function findCtorDecl(AnalysisService $svc, string $module, string $name): ?arra
  */
 function dataDeclSignatureIfAvailable(AnalysisService $svc, ?string $module, string $name): ?string
 {
-    foreach ($svc->project->checked as $prog) {
-        if (! ($prog instanceof Ast\Program)) {
-            continue;
-        }
+    foreach ($svc->shapePrograms() as $prog) {
         foreach ($prog->items as $item) {
             if (($item instanceof Ast\DataDecl || $item instanceof Ast\TypeSynonymDecl || $item instanceof Ast\ClassDecl)
                 && $item->name === $name) {
