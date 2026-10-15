@@ -33,7 +33,7 @@ $assert = static function (bool $condition, string $message) use (&$checks): voi
     }
 };
 
-$fixture = $root . '/tests/registry/bind/fixtures/acme-hello';
+$fixture = $root . '/tests/registry/bind/fixtures/acme-hello-php';
 $golden = (string) \file_get_contents($root . '/tests/registry/bind/Composer.Acme.Hello.mog.expected');
 
 // The `[ffi]` section declares a binding package; anything else in it is a

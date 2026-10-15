@@ -31,6 +31,35 @@ function artifactPath(string $moduleName): string
 }
 
 /**
+ * Relative path of the shared Fn-wrapper bundle (`Moggi/Fn/__wrappers__.il`).
+ *
+ * One file for every `Moggi.Fn.*` wrapper class in the program instead of one
+ * file per class (see {@see \Moggi\Backend\DotNet\DotNetBackend::foldProgramEmit}).
+ * No module can claim this path: module segments are `ConId`s, so a segment
+ * can never start with an underscore.
+ */
+function fnWrapperBundlePath(): string
+{
+    return join(DIRECTORY_SEPARATOR, ['Moggi', 'Fn', '__wrappers__.il']);
+}
+
+/**
+ * Whether an emit-map path is a per-function Fn wrapper (`Moggi/Fn/<tag>_<arity>.il`).
+ *
+ * The trailing `_<arity>` is what keeps a real module out: `Moggi/Fn/Foo.il`
+ * (module `Fn.Foo`) does not match, so it keeps its own file. A module named
+ * like a wrapper (`Fn.Foo_2`) would fold — harmless, its one class is still
+ * emitted exactly once — but no sane module is named that.
+ */
+function isFnWrapperArtifact(string $path): bool
+{
+    $flat = str_replace('\\', '/', $path);
+
+    return str_starts_with($flat, 'Moggi/Fn/')
+        && preg_match('/_[0-9]+\.il$/', $flat) === 1;
+}
+
+/**
  * Mangle a Moggi binding to a legal CLR member name.
  *
  * The CLR accepts almost any UTF-8 member name; exotic identifiers are

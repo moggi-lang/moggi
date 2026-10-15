@@ -240,17 +240,14 @@ function nugetPackageRoots(): array
 
 function nugetIlasmRuntimeId(): string
 {
-    $os = \PHP_OS_FAMILY;
     $arch = \php_uname('m');
     $isArm = \in_array($arch, ['aarch64', 'arm64'], true);
-    if ($os === 'Windows') {
-        return $isArm ? 'win-arm64' : 'win-x64';
-    }
-    if ($os === 'Darwin') {
-        return $isArm ? 'osx-arm64' : 'osx-x64';
-    }
 
-    return $isArm ? 'linux-arm64' : 'linux-x64';
+    return match (\PHP_OS_FAMILY) {
+        'Windows' => $isArm ? 'win-arm64' : 'win-x64',
+        'Darwin' => $isArm ? 'osx-arm64' : 'osx-x64',
+        default => $isArm ? 'linux-arm64' : 'linux-x64',
+    };
 }
 
 /**
