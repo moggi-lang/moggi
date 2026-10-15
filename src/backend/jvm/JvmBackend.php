@@ -67,6 +67,18 @@ final class JvmBackend implements Backend
         return $out;
     }
 
+    /**
+     * The JVM backend emits one classfile per class and no auxiliary files of
+     * its own, so there is nothing to consolidate.
+     *
+     * @param array<string, string> $emit
+     * @return array<string, string>
+     */
+    public function foldProgramEmit(array $emit): array
+    {
+        return $emit;
+    }
+
     public function describeEmit(string|array $emit, array $focusNames = []): string
     {
         return describeJvmEmit($emit, $focusNames);

@@ -63,6 +63,21 @@ interface Backend
     public function emitCacheDiscriminator(): string;
 
     /**
+     * Post-process a whole-program emit map (relative path => bytes) once every
+     * module's `emit()` output is merged.
+     *
+     * A backend whose per-module emit fans out into auxiliary files consolidates
+     * them here: entries are deduplicated by path before this runs, so the fold
+     * only has to gather, sort for determinism, and re-emit. Runs before the
+     * emit cache stores the map, so the folded shape is what builds cache-hit.
+     * The identity when a backend has nothing to consolidate.
+     *
+     * @param array<string, string> $emit
+     * @return array<string, string>
+     */
+    public function foldProgramEmit(array $emit): array;
+
+    /**
      * Human-readable dump of an `emit()` result for tooling (`:emit` /
      * `:dump emit`). Each backend owns the shape of its own artifacts, so
      * callers never have to sniff file extensions.

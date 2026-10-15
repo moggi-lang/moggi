@@ -48,6 +48,18 @@ final class PhpBackend implements Backend
         return emitPhp($ir, $sourcePath, $options);
     }
 
+    /**
+     * The PHP backend emits one file per module and no auxiliary files, so
+     * there is nothing to consolidate.
+     *
+     * @param array<string, string> $emit
+     * @return array<string, string>
+     */
+    public function foldProgramEmit(array $emit): array
+    {
+        return $emit;
+    }
+
     public function describeEmit(string|array $emit, array $focusNames = []): string
     {
         return describePhpEmit($emit, $focusNames);

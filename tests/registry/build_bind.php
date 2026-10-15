@@ -88,7 +88,7 @@ foreach (['go:github.com/acme/hello', 'phpacme/hello'] as $bad) {
 // The tree is a copy: staleness is proven by touching it, never the fixture.
 $tree = $work . '/tree';
 mkdir($tree, 0777, true);
-$fixtureRoot = $root . '/tests/registry/bind/fixtures/acme-hello';
+$fixtureRoot = $root . '/tests/registry/bind/fixtures/acme-hello-php';
 $scan = new \RecursiveIteratorIterator(
     new \RecursiveDirectoryIterator($fixtureRoot, \FilesystemIterator::SKIP_DOTS),
 );

@@ -236,6 +236,8 @@ function compilePreparedProject(PreparedProject $prepared, bool $optimize = true
         }
     }
 
+    $emitOutputs = currentBackend()->foldProgramEmit($emitOutputs);
+
     return [
         'emit' => $emitOutputs,
         'opt-ir' => $optIrOutputs,
@@ -328,16 +330,18 @@ function compileModuleFileOutputs(
 
     ProjectCache::clearPreparedProjects();
 
+    $emit = codegen($phpIr, $context['unit']['path'], [
+        'namespace' => $context['unit']['namespace'],
+        'imports' => $codegenImports,
+        'outputRelative' => $fromOutputRelative,
+        'irUsage' => $irUsage,
+        'artifactModuleName' => $context['typedProgram']->module,
+        'externalFns' => $codegenImports['externalFns'] ?? [],
+        'externalFnRuntimeArity' => $context['importContext']['externalFnRuntimeArity'] ?? [],
+    ]);
+
     return [
-        'emit' => codegen($phpIr, $context['unit']['path'], [
-            'namespace' => $context['unit']['namespace'],
-            'imports' => $codegenImports,
-            'outputRelative' => $fromOutputRelative,
-            'irUsage' => $irUsage,
-            'artifactModuleName' => $context['typedProgram']->module,
-            'externalFns' => $codegenImports['externalFns'] ?? [],
-            'externalFnRuntimeArity' => $context['importContext']['externalFnRuntimeArity'] ?? [],
-        ]),
+        'emit' => \is_array($emit) ? currentBackend()->foldProgramEmit($emit) : $emit,
         'opt-ir' => dumpIr($phpIr),
     ];
 }
