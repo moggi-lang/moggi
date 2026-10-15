@@ -305,7 +305,7 @@ function thirdPartyForDescriptor(array $descriptor): array
 /** The content address of a coordinate set: the backend, its schema and resolver versions, and the coordinates, sorted. */
 function hostToolKey(string $backend, array $coordinates): string
 {
-    return \hash('sha256', $backend . "\n" . hostToolSchemaVersion($backend) . "\n" . HOST_TOOL_RESOLVER_VERSION . "\n" . \implode("\n", $coordinates) . "\n");
+    return \hash('xxh3', $backend . "\n" . hostToolSchemaVersion($backend) . "\n" . HOST_TOOL_RESOLVER_VERSION . "\n" . \implode("\n", $coordinates) . "\n");
 }
 
 /**

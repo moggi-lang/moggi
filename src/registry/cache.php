@@ -31,7 +31,7 @@ function registryKey(string $base): string
     $slug = \preg_replace('/[^A-Za-z0-9]+/', '-', \trim($base, '/')) ?? '';
     $slug = \trim(\substr($slug, -48), '-');
 
-    return ($slug === '' ? 'registry' : $slug) . '-' . \substr(\hash('sha256', $base), 0, 8);
+    return ($slug === '' ? 'registry' : $slug) . '-' . \substr(\hash('xxh3', $base), 0, 8);
 }
 
 /** Per-project metadata cache: `<cache>/catalog/<base-key>/`. */

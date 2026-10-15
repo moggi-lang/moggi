@@ -126,14 +126,14 @@ final class VirtualFS
     {
         $c = $this->content($uri) ?? '';
 
-        return \hash('sha256', $c);
+        return \hash('xxh3', $c);
     }
 
     /**
      * Write overlay content for $uri into the session tree and return the
      * absolute path used for analysis. Skips rewrite when fingerprint matches.
      *
-     * @param array<string, string> $overlayFingerprints uri → sha256
+     * @param array<string, string> $overlayFingerprints uri → xxh3 of content
      */
     public function materializeOverlay(string $uri, string $projectRoot, array &$overlayFingerprints): string
     {
@@ -143,7 +143,7 @@ final class VirtualFS
         }
         $dest = $this->sessionRoot . DIRECTORY_SEPARATOR . 'files'
             . DIRECTORY_SEPARATOR . $this->overlayRelativePath($uri, $projectRoot);
-        $fp = \hash('sha256', $content);
+        $fp = \hash('xxh3', $content);
         if (($overlayFingerprints[$uri] ?? null) === $fp && \is_file($dest)) {
             return $dest;
         }

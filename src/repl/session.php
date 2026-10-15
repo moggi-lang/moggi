@@ -125,7 +125,7 @@ function replSeedFiles(State $state): array
  */
 function ensureBasePrepared(State $state): Modules\PreparedProject
 {
-    $fp = \hash('sha256', \implode('|', [
+    $fp = \hash('xxh3', \implode('|', [
         'backend=' . $state->backend,
         'libs=' . \implode(',', $state->libDirs),
         'loaded=' . \implode(',', $state->loadedPaths),
@@ -157,7 +157,7 @@ function ensureBasePrepared(State $state): Modules\PreparedProject
  */
 function interactiveFingerprint(State $state, string $extra, bool $normalizeIo): string
 {
-    return \hash('sha256', \implode("\x1f", [
+    return \hash('xxh3', \implode("\x1f", [
         'backend=' . $state->backend,
         'normalizeIo=' . ($normalizeIo ? '1' : '0'),
         'module=' . $state->moduleName,

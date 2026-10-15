@@ -52,14 +52,16 @@ final class ProjectCache
      * @var array<string, PreparedProject>
      *
      * Insertion-ordered: a hit moves its entry to the back, and remembering
-     * past the cap drops the least recently used. A suite worker prepares
-     * hundreds of single-use focus projects, so the focus entries are never
-     * stored at all (see `prepareProjectCached`) and only the shared import
-     * closures accumulate here, bounded by the cap.
+     * past the cap drops the least recently used. Only shallow focus bases
+     * are stored (see `prepareFocusBase`) — one per backend, so 3 covers a
+     * three-backend session. Full prepares embed the whole checked closure
+     * (hundreds of MB each) and are never stored: retaining them OOMed 1GB
+     * CI shard workers, and no caller repeats a full key in one process.
+     * Single-use focus extensions are never stored either.
      */
     private static array $preparedProjects = [];
 
-    private const PREPARED_PROJECT_MAX = 8;
+    private const PREPARED_PROJECT_MAX = 3;
 
     /** @var array<string, CheckedModule> */
     private static array $checkedModules = [];

@@ -669,10 +669,7 @@ function prepareProjectCached(array $paths, string $rootDir, ?string $onlyTypech
         return prepareProjectCached($paths, $rootDir, null);
     }
 
-    $prepared = prepareProject($paths, $rootDir);
-    ProjectCache::rememberPreparedProject($key, $prepared);
-
-    return $prepared;
+    return prepareProject($paths, $rootDir);
 }
 
 /**

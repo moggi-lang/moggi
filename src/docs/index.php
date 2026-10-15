@@ -1306,7 +1306,7 @@ function indexCachePath(string $inputPath, array $libDirs): string
 {
     $resolvedLibDirs = resolveLibraryDirs($libDirs);
     $key = \hash(
-        'sha256',
+        'xxh3',
         $inputPath . '|' . \implode(',', $resolvedLibDirs) . '|docs-v' . docIndexSchemaVersion(),
     );
 

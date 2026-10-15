@@ -223,7 +223,7 @@ function docSourceFingerprintMtime(array $files): string
         $parts[] = $real . '|' . ($mtime === false ? '' : (string) $mtime) . '|' . ($size === false ? '' : (string) $size);
     }
 
-    return \hash('sha256', \implode("\n", $parts));
+    return \hash('xxh3', \implode("\n", $parts));
 }
 
 /**
@@ -237,10 +237,10 @@ function docSourceFingerprint(array $files): string
     foreach ($paths as $path) {
         $real = \realpath($path) ?: $path;
         $content = @\file_get_contents($real);
-        $parts[] = $real . '|' . ($content === false ? '' : \hash('sha256', $content));
+        $parts[] = $real . '|' . ($content === false ? '' : \hash('xxh3', $content));
     }
 
-    return \hash('sha256', \implode("\n", $parts));
+    return \hash('xxh3', \implode("\n", $parts));
 }
 
 /**
