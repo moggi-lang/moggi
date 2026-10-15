@@ -334,7 +334,7 @@ function compileModuleFileOutputs(
     );
     $codegenImports['importedData'] = $context['importContext']['data'];
 
-    ProjectCache::clearPreparedProjects();
+    ProjectCache::releaseProjectCheckedModules();
 
     $emit = codegen($phpIr, $context['unit']['path'], [
         'namespace' => $context['unit']['namespace'],

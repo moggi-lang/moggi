@@ -5,8 +5,9 @@ require_once __DIR__ . '/../../../src/paths.php';
 /**
  * Drop what the compiler memoized for the case that just finished.
  *
- * Cases are separate projects that never recur, so their import closures and their own checked
- * modules are pure retention; the dependency closure stays memoized, because every case shares it.
+ * Cases are separate projects that never recur, so their own checked modules
+ * are pure retention; the shared dependency closures stay memoized under an
+ * LRU cap, because every case shares them.
  */
 function releaseCaseMemos(): void
 {
@@ -14,7 +15,6 @@ function releaseCaseMemos(): void
         return;
     }
 
-    \Moggi\Modules\ProjectCache::clearPreparedProjects();
     \Moggi\Modules\ProjectCache::releaseProjectCheckedModules();
 }
 
