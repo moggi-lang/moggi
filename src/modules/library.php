@@ -7,6 +7,7 @@ use Moggi\Semantics\Types\TypeError;
 
 use function Moggi\Install\installationRoot;
 use function Moggi\Paths\canonicalSeparators;
+use function Moggi\Paths\globPaths;
 
 /** Whether `$path` names a stream (`phar://…`) rather than a real filesystem path. */
 function isStreamPath(string $path): bool
@@ -56,7 +57,7 @@ function libraryRootMarker(string $dir): ?string
         return $dir . '/' . LIBRARY_ROOT_MARKER;
     }
     if (\basename($dir) === 'src') {
-        $candidates = \glob(\dirname($dir) . '/*.moggi') ?: [];
+        $candidates = globPaths(\dirname($dir) . '/*.moggi');
         if ($candidates !== []) {
             \sort($candidates, \SORT_STRING);
 

@@ -31,6 +31,7 @@ use function Moggi\Modules\moduleFileClosureCached;
 use function Moggi\Modules\prepareProjectCached;
 use function Moggi\Modules\projectSourceClosure;
 use function Moggi\Modules\setStdlibLibPath;
+use function Moggi\Paths\globPaths;
 use function Moggi\Syntax\Lexer\lex;
 use function Moggi\Syntax\Parser\parse;
 
@@ -809,7 +810,7 @@ final class AnalysisService
         $seed = $stdlib !== null ? $stdlib . '/Prelude.mog' : null;
         if ($seed === null || !is_file($seed)) {
             $seed = $stdlib !== null && is_dir($stdlib)
-                ? (glob($stdlib . '/*.mog')[0] ?? null)
+                ? (globPaths($stdlib . '/*.mog')[0] ?? null)
                 : null;
         }
         if ($seed !== null && is_file($seed)) {
@@ -839,7 +840,7 @@ final class AnalysisService
             return null;
         }
         if (is_dir($seed)) {
-            $first = glob(rtrim($seed, '/') . '/*.mog')[0] ?? null;
+            $first = globPaths(rtrim($seed, '/\\') . '/*.mog')[0] ?? null;
             if ($first === null) {
                 return null;
             }

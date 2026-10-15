@@ -93,7 +93,7 @@ function findDescriptor(string $path): string
     }
 
     $found = \array_values(\array_filter(
-        globPaths(\rtrim($path, '/') . '/*' . $suffix),
+        globPaths(\rtrim($path, '/\\') . '/*' . $suffix),
         'is_file',
     ));
     if ($found === []) {

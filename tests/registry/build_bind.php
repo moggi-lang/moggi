@@ -119,7 +119,8 @@ $assert(\count($bound['lines']) === 1 && \str_starts_with($bound['lines'][0], 'g
 $assert(\is_file($expectedRoot . '/Composer/Acme/Hello.mog'), 'no generated module under the root');
 $marker = \json_decode((string) \file_get_contents(bindCacheMarkerPath($expectedRoot)), true);
 $assert(\is_array($marker) && ($marker['coordinate'] ?? '') === 'acme/hello', 'marker: ' . \json_encode($marker));
-// `glob` answers in the OS separators; the key is built with `/` — compare flat.
+// `globPaths` answers `/`-spelled paths on every host; the key is built with
+// `/` — compare flat.
 $flatRoots = \array_map(static fn (string $root): string => \str_replace('\\', '/', $root), bindCacheRoots());
 $assert(\in_array(\str_replace('\\', '/', $expectedRoot . '/'), $flatRoots, true), 'bindCacheRoots misses the tree');
 

@@ -437,7 +437,7 @@ function composerLockedVersions(string $dir): array
  */
 function mavenResolvedVersions(string $dir, array $coordinates): array
 {
-    $jars = globPaths(\rtrim($dir, '/') . '/jvm/*.jar');
+    $jars = globPaths(\rtrim($dir, '/\\') . '/jvm/*.jar');
     if ($jars === []) {
         return [];
     }
