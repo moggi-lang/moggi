@@ -144,7 +144,7 @@ function ensureBasePrepared(State $state): Modules\PreparedProject
     }
 
     [$files, $root] = Modules\projectSourceClosure($seed, $state->libDirs);
-    $state->basePrepared = Modules\prepareProjectCached($files, $root);
+    $state->basePrepared = Modules\prepareFocusBase($files, $root);
     $state->basePreparedFp = $fp;
 
     return $state->basePrepared;
