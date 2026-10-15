@@ -1,6 +1,6 @@
 <?php declare(strict_types=1);
 
-final class assert extends \RuntimeException
+final class TestFailure extends \RuntimeException
 {
 }
 

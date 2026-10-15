@@ -161,7 +161,7 @@ function batchVerifier(): ?BatchVerifier
  * channel broken and returns null, and the caller falls back to the single-shot
  * path rather than guessing.
  */
-final class manifest
+final class BatchVerifier
 {
     /** @var resource|null */
     private $process = null;

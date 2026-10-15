@@ -272,7 +272,7 @@ function resolveThrowSite(array $site): array
     ];
 }
 
-final class runtime extends \RuntimeException
+final class MoggiException extends \RuntimeException
 {
     /**
      * @param array{0: '__se', 1: string, 2: mixed} $someException

@@ -14,7 +14,7 @@
  * their own.
  */
 
-final class discovery
+final class TestCase
 {
     /**
      * @param list<array{base: string, kind: string, backend: ?string, path: string}> $goldens

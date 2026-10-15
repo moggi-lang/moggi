@@ -16,7 +16,7 @@ use function Moggi\Syntax\Lexer\lex;
 use Moggi\Syntax\Lexer\TokenKind;
 use Moggi\Syntax\Parser\Token;
 
-final class moduleIndex
+final class ModuleIndex
 {
     /** @var array<string, array{path: string, uri: string, module: string, decls: list<DeclInfo>, externalFns: array<string, string>}> */
     public array $modules = [];

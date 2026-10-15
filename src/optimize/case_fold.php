@@ -23,7 +23,7 @@ use function Moggi\Syntax\isConstructorName;
  * Known constructor tree used for case-of-known-constructor and field folding.
  * Leaves are ordinary operands (locals, temps, constants, …).
  */
-final class case_fold
+final class CtorTree
 {
     /** @param list<CtorTree|IR\Operand> $args */
     public function __construct(

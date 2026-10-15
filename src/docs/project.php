@@ -21,7 +21,7 @@ use function Moggi\Paths\globPaths;
 
 use Moggi\Syntax\Ast\Program;
 
-final class project
+final class ParsedModule
 {
     public function __construct(
         public readonly string $name,

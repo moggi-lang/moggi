@@ -3,7 +3,7 @@
 namespace Moggi\Backend\DotNet\Il;
 
 /** Append-only buffer for ILASM (ECMA-335) source fragments. */
-final class il
+final class IlText
 {
     private string $buf = '';
 

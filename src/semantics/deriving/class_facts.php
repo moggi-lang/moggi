@@ -28,7 +28,7 @@ use Moggi\Syntax\Ast;
  * it reads the declarations instead, and the two views agree because a parameter
  * applied to one type argument is higher-kinded by construction.
  */
-final class class_facts
+final class ClassDeriveFacts
 {
     /**
      * @param callable(string): ?array<string, mixed> $entry the class's registry-shaped facts, or null

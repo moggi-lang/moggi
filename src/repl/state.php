@@ -11,7 +11,7 @@ use Moggi\Pipeline\PipelineArtifacts;
 use Moggi\Syntax\Ast\Program;
 
 /** Mutable interactive session state for the Moggi REPL. */
-final class state
+final class State
 {
     /**
      * @param list<string> $libDirs

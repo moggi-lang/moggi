@@ -335,7 +335,7 @@ function constraintsWithPositionalEvidence(array $constraints): array
  * site's dictionary arguments are both projected from. Because they come from
  * one solve, the two sides cannot disagree on arity.
  */
-final class constraints
+final class SolvedGroup
 {
     /**
      * @param list<Ast\PendingConstraint> $user

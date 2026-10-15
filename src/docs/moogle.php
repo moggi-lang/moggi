@@ -2,7 +2,7 @@
 
 namespace Moggi\Docs;
 
-final class moogle
+final class SearchHit
 {
     public function __construct(
         public readonly DocEntity $entity,

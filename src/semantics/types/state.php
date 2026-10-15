@@ -7,7 +7,7 @@ use Moggi\Semantics\TypeExpr\Scheme;
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Syntax\Ast;
 
-final class state
+final class TypeCheckState
 {
     /**
      * Span of the top-level declaration currently being checked.

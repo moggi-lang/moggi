@@ -10,7 +10,7 @@ use Moggi\IR;
  * (`toJson()`) to bake their frame tables.
  * siteId values allocated here must match throwSite() constants emitted into the artifact.
  */
-final class sourcemap
+final class SourceMapBuilder
 {
     /** @var list<array{sourceId: string, displayPath: string}> */
     private array $sources = [];

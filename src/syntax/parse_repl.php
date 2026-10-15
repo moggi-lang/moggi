@@ -12,7 +12,7 @@ use Moggi\Syntax\Lexer\TokenKind;
  * Result of parsing a single REPL input unit (one top-level decl, statement
  * sequence, or expression).
  */
-final class parse_repl
+final class ReplFragment
 {
     public const KIND_DECL = 'decl';
 
