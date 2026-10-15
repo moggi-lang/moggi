@@ -2,6 +2,8 @@
 
 namespace Moggi\LSP\Analysis;
 
+require_once __DIR__ . '/../../paths.php';
+
 use Moggi\Docs\DocIndex;
 use Moggi\LSP\Index\DeclInfo;
 use Moggi\LSP\Index\ModuleIndex;

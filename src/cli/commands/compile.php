@@ -275,8 +275,6 @@ function compileIntoRoot(
 
             return $empty(1);
         }
-
-        echo "{$relative} -> {$outputPath}\n";
     }
 
     if (!bundleComposerVendor($outputRoot, $backend)) {

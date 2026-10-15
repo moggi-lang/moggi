@@ -2,6 +2,8 @@
 
 namespace Moggi\LSP\TextDocument;
 
+require_once __DIR__ . '/../../paths.php';
+
 use Moggi\LSP\Analysis\AnalysisService;
 use Moggi\Syntax\Ast;
 

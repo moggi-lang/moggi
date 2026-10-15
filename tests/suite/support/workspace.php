@@ -1,5 +1,7 @@
 <?php declare(strict_types=1);
 
+require_once __DIR__ . '/../../../src/paths.php';
+
 /**
  * Drop what the compiler memoized for the case that just finished.
  *
