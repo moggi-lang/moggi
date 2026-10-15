@@ -2,6 +2,8 @@
 
 namespace Moggi\Cache;
 
+require_once __DIR__ . '/../paths.php';
+
 use function Moggi\Backend\compileBackend;
 use function Moggi\Paths\globPaths;
 

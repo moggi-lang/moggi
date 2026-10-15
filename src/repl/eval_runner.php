@@ -2,6 +2,8 @@
 
 namespace Moggi\Repl\EvalRunner;
 
+require_once __DIR__ . '/../paths.php';
+
 use Moggi\Modules;
 use Moggi\Pipeline\CompilePurpose;
 use Moggi\Pipeline\PipelineArtifacts;

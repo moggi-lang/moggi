@@ -2,6 +2,8 @@
 
 namespace Moggi\Docs;
 
+require_once __DIR__ . '/../paths.php';
+
 use Moggi\Modules\PreparedProject;
 use Moggi\Syntax\Ast\Program;
 

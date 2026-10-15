@@ -2,6 +2,8 @@
 
 namespace Moggi\Modules;
 
+require_once __DIR__ . '/../paths.php';
+
 use Moggi\Cache;
 use Moggi\Semantics\Types\TypeError;
 
