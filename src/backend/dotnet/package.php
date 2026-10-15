@@ -222,6 +222,18 @@ function nugetPackageRoots(): array
     if (\is_string($dotnetRoot) && $dotnetRoot !== '') {
         $add(\rtrim($dotnetRoot, '/\\') . DIRECTORY_SEPARATOR . 'packages');
     }
+    if (\PHP_OS_FAMILY === 'Windows') {
+        $profile = \getenv('USERPROFILE');
+        if (\is_string($profile) && $profile !== '') {
+            $add($profile . DIRECTORY_SEPARATOR . '.nuget' . DIRECTORY_SEPARATOR . 'packages');
+        } else {
+            $drive = \getenv('HOMEDRIVE');
+            $homePath = \getenv('HOMEPATH');
+            if (\is_string($drive) && \is_string($homePath) && $homePath !== '') {
+                $add($drive . $homePath . DIRECTORY_SEPARATOR . '.nuget' . DIRECTORY_SEPARATOR . 'packages');
+            }
+        }
+    }
 
     return $roots;
 }
@@ -372,6 +384,9 @@ XML;
         throw new \RuntimeException('dotnet SDK not found (install dotnet-sdk_8 or set PATH)');
     }
     buildDotNetIlProject($dotnet, $outputRoot, $assemblyName, $ilprojBody);
+    if ($isExe) {
+        writeDotNetDepsJson($outputRoot, $assemblyName);
+    }
 }
 
 /**
