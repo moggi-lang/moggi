@@ -8,7 +8,7 @@
 // with no facade). All warnings — a package `check` passes may bind nothing.
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/tests/suite/support/process.php';
@@ -17,7 +17,7 @@ require $root . '/tests/suite/support/workspace.php';
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
     ++$checks;
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
@@ -58,7 +58,7 @@ try {
     $ran = $check($uncovered);
     $assert(($ran['exitCode'] ?? 1) === 0, 'uncovered foreign must warn, not fail');
     $assert(\str_contains($ran['stdout'], 'src/Probe.mog: hand-written `foreign`'), 'uncovered foreign not flagged: ' . $ran['stdout']);
-    $assert(!\str_contains($ran['stdout'], 'Clean.mog'), 'comment/name lookalikes flagged as foreign: ' . $ran['stdout']);
+    $assert(! \str_contains($ran['stdout'], 'Clean.mog'), 'comment/name lookalikes flagged as foreign: ' . $ran['stdout']);
 
     // A declared binding silences the foreign it covers.
     $bound = $work . '/bound';
@@ -67,7 +67,7 @@ try {
     $foreignModule($bound, 'Probe');
     $ran = $check($bound);
     $assert(($ran['exitCode'] ?? 1) === 0, 'a bound package failed check: ' . $ran['stdout'] . $ran['stderr']);
-    $assert(!\str_contains($ran['stdout'], 'hand-written `foreign`'), 'covered foreign still flagged: ' . $ran['stdout']);
+    $assert(! \str_contains($ran['stdout'], 'hand-written `foreign`'), 'covered foreign still flagged: ' . $ran['stdout']);
 
     // Malformed entries and narrowed backends with nothing bound warn.
     $shape = $work . '/shape';
@@ -77,7 +77,7 @@ try {
     $ran = $check($shape);
     $assert(\str_contains($ran['stdout'], 'entry `bogus` is not `backend:coordinate`'), 'malformed entry not flagged: ' . $ran['stdout']);
     $assert(\str_contains($ran['stdout'], 'backend `jvm` is in [package] backends'), 'backend asymmetry not flagged: ' . $ran['stdout']);
-    $assert(!\str_contains($ran['stdout'], 'hand-written `foreign`'), 'declared bindings re-flagged the foreign: ' . $ran['stdout']);
+    $assert(! \str_contains($ran['stdout'], 'hand-written `foreign`'), 'declared bindings re-flagged the foreign: ' . $ran['stdout']);
 
     // A facade with its implementation present is clean; a missing one warns.
     $facade = $work . '/facade';

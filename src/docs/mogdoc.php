@@ -4,32 +4,32 @@ namespace Moggi\Docs;
 
 function generateMogdoc(DocIndex $index, string $outputDir, string $siteTitle = ''): void
 {
-    if (!\is_dir($outputDir) && !mkdir($outputDir, 0777, true) && !\is_dir($outputDir)) {
+    if (! \is_dir($outputDir) && ! \mkdir($outputDir, 0777, true) && ! \is_dir($outputDir)) {
         throw new \RuntimeException("cannot create output directory {$outputDir}");
     }
 
     writeSourcePages($index, $outputDir, $siteTitle);
 
-    $searchJson = json_encode(searchIndexToJson($index), JSON_UNESCAPED_UNICODE);
+    $searchJson = \json_encode(searchIndexToJson($index), JSON_UNESCAPED_UNICODE);
     if ($searchJson === false) {
         throw new \RuntimeException('cannot encode search index');
     }
-    if (file_put_contents($outputDir . '/search-index.json', $searchJson) === false) {
+    if (\file_put_contents($outputDir . '/search-index.json', $searchJson) === false) {
         throw new \RuntimeException('cannot write search-index.json');
     }
 
     $moogleJs = emitMoogleJs();
-    if (file_put_contents($outputDir . '/moogle.js', $moogleJs) === false) {
+    if (\file_put_contents($outputDir . '/moogle.js', $moogleJs) === false) {
         throw new \RuntimeException('cannot write moogle.js');
     }
 
     $linkTargets = buildLinkTargets($index);
-    $moduleNames = array_keys($index->byModule);
-    sort($moduleNames);
+    $moduleNames = \array_keys($index->byModule);
+    \sort($moduleNames);
 
     $indexBody = '<h1 class="page-title">Moggi Index</h1>';
-    $indexBody .= '<p class="meta">' . count($index->byModule) . ' modules, '
-        . count($index->search) . ' searchable entries</p>';
+    $indexBody .= '<p class="meta">' . \count($index->byModule) . ' modules, '
+        . \count($index->search) . ' searchable entries</p>';
     $indexBody .= '<ul class="module-list">';
     foreach ($moduleNames as $moduleName) {
         $file = modulePageName($moduleName);
@@ -54,7 +54,7 @@ function generateMogdoc(DocIndex $index, string $outputDir, string $siteTitle = 
         );
         ++$written;
         if ($written % 25 === 0) {
-            \fwrite(STDERR, "mogdoc: wrote {$written}/" . count($index->byModule) . " pages\n");
+            \fwrite(STDERR, "mogdoc: wrote {$written}/" . \count($index->byModule) . " pages\n");
         }
     }
 }
@@ -65,14 +65,14 @@ function buildLinkTargets(DocIndex $index): array
     $targets = [];
     $bareCounts = [];
     foreach ($index->all as $entity) {
-        if ($entity->kind === 'module' || !entityHrefMatchesModule($entity)) {
+        if ($entity->kind === 'module' || ! entityHrefMatchesModule($entity)) {
             continue;
         }
         $bareCounts[$entity->name] = ($bareCounts[$entity->name] ?? 0) + 1;
     }
 
     foreach ($index->all as $entity) {
-        if ($entity->kind === 'module' || !entityHrefMatchesModule($entity)) {
+        if ($entity->kind === 'module' || ! entityHrefMatchesModule($entity)) {
             continue;
         }
         $qualified = $entity->module . '.' . $entity->name;
@@ -104,11 +104,13 @@ function renderModulePage(string $moduleName, array $entities, array $linkTarget
                 $html .= renderDocMarkup($entity->doc, $linkTargets);
             }
             $html .= renderBackendNav($moduleName, $index);
+
             continue;
         }
 
         if ($entity->parentName !== null) {
             $childrenByParent[$entity->parentName][] = $entity;
+
             continue;
         }
 
@@ -154,7 +156,7 @@ function renderDeclGroup(DocEntity $head, array $children, array $linkTargets): 
     $kindLabel = declKindLabel($head);
     $signatureHead = usesSignatureHead($head);
     $isClass = ($head->declKind ?? '') === 'class';
-    $isDataHead = in_array($head->declKind ?? '', ['data', 'newtype'], true);
+    $isDataHead = \in_array($head->declKind ?? '', ['data', 'newtype'], true);
     $html = '<div class="decl" id="' . escapeHtml($id) . '">';
     if ($signatureHead && $head->signature !== null) {
         $html .= '<div class="decl-head decl-signature-head"><pre class="signature">'
@@ -169,7 +171,7 @@ function renderDeclGroup(DocEntity $head, array $children, array $linkTargets): 
         $html .= renderSourceLink($head) . '</div>';
     }
     $html .= '<div class="decl-body">';
-    if ($head->signature !== null && !$signatureHead) {
+    if ($head->signature !== null && ! $signatureHead) {
         $html .= '<pre class="signature">' . escapeHtml($head->signature) . '</pre>';
     }
     if ($head->doc !== null && $head->doc !== '') {
@@ -200,7 +202,7 @@ function renderDeclGroup(DocEntity $head, array $children, array $linkTargets): 
         if ($sectionTitle === 'Details' && $methods === $children) {
             $sectionTitle = null;
         }
-        if ($sectionTitle !== null && !$isDataHead) {
+        if ($sectionTitle !== null && ! $isDataHead) {
             $html .= '<h4 class="subsection">' . escapeHtml($sectionTitle) . '</h4>';
         }
         $html .= renderSubDeclList($methods, $linkTargets, $isClass);
@@ -212,7 +214,7 @@ function renderDeclGroup(DocEntity $head, array $children, array $linkTargets): 
             $aliasLinks[] = '<a href="' . escapeHtml(modulePageName($aliasModule)) . '">'
                 . escapeHtml($aliasModule) . '</a>';
         }
-        $html .= '<p class="aliases">Also exported from: ' . implode(', ', $aliasLinks) . '</p>';
+        $html .= '<p class="aliases">Also exported from: ' . \implode(', ', $aliasLinks) . '</p>';
     }
     $html .= '</div></div>';
 
@@ -264,7 +266,7 @@ function renderSubDeclList(array $children, array $linkTargets, bool $hideLabels
         $childId = anchorId($child->module, $child->name);
         $subLabel = declKindLabel($child);
         $html .= '<li id="' . escapeHtml($childId) . '">';
-        if (!$hideLabels && $subLabel !== 'method') {
+        if (! $hideLabels && $subLabel !== 'method') {
             $html .= '<span class="sub-label">' . escapeHtml($subLabel) . '</span>';
         }
         if ($child->signature !== null) {
@@ -336,7 +338,7 @@ function defaultSectionLabel(DocEntity $entity): ?string
 
 function sourcePageName(string $relativePath): string
 {
-    return 'src/' . str_replace(['/', '\\', ' '], '-', $relativePath) . '.html';
+    return 'src/' . \str_replace(['/', '\\', ' '], '-', $relativePath) . '.html';
 }
 
 function sourcePageHref(string $relativePath, int $line): string
@@ -358,25 +360,25 @@ function writeSourcePages(DocIndex $index, string $outputDir, string $siteTitle 
     }
 
     $srcDir = $outputDir . '/src';
-    if (!\is_dir($srcDir) && !mkdir($srcDir, 0777, true) && !\is_dir($srcDir)) {
+    if (! \is_dir($srcDir) && ! \mkdir($srcDir, 0777, true) && ! \is_dir($srcDir)) {
         throw new \RuntimeException("cannot create source directory {$srcDir}");
     }
 
-    foreach (array_keys($paths) as $relativePath) {
+    foreach (\array_keys($paths) as $relativePath) {
         $absolute = $index->rootPrefix !== ''
-            ? rtrim($index->rootPrefix, '/\\') . '/' . $relativePath
+            ? \rtrim($index->rootPrefix, '/\\') . '/' . $relativePath
             : $relativePath;
-        if (!\is_file($absolute)) {
+        if (! \is_file($absolute)) {
             continue;
         }
-        $source = file_get_contents($absolute);
-        if (!\is_string($source)) {
+        $source = \file_get_contents($absolute);
+        if (! \is_string($source)) {
             continue;
         }
         $page = sourcePageName($relativePath);
         writeHtmlFile(
             $outputDir . '/' . $page,
-            basename($relativePath) . ' · source',
+            \basename($relativePath) . ' · source',
             renderSourcePage($relativePath, $source),
             false,
             false,
@@ -391,7 +393,7 @@ function renderSourcePage(string $relativePath, string $source): string
     $html = '<h1 class="page-title">' . escapeHtml($relativePath) . '</h1>';
     $html .= '<pre class="source-listing">';
     $lineNo = 1;
-    foreach (preg_split('/\r\n|\n|\r/', $source) ?: [] as $line) {
+    foreach (\preg_split('/\r\n|\n|\r/', $source) ?: [] as $line) {
         $id = 'L' . $lineNo;
         $html .= '<span class="src-line" id="' . $id . '">'
             . '<span class="line-no">' . $lineNo . '</span>'
@@ -432,7 +434,7 @@ function renderBackendNav(string $moduleName, DocIndex $index): string
 
     $labels = [];
     foreach (backendDisplayOrder() as $backend) {
-        if (!isset($facadeMap[$backend])) {
+        if (! isset($facadeMap[$backend])) {
             continue;
         }
         $labels[] = escapeHtml(backendLabel($backend));
@@ -442,7 +444,7 @@ function renderBackendNav(string $moduleName, DocIndex $index): string
         return '';
     }
 
-    return '<div class="backends"><strong>Backends:</strong> ' . implode(' · ', $labels) . '</div>';
+    return '<div class="backends"><strong>Backends:</strong> ' . \implode(' · ', $labels) . '</div>';
 }
 
 function renderMogdocSearchBox(string $initialQuery, bool $autofocus = false): string
@@ -474,7 +476,7 @@ function writeHtmlFile(string $path, string $title, string $body, bool $withSear
     $script = $withSearch ? mogdocSearchScript() : '';
     $html = docsPageShell($title, $search . $body, '', $script, $homeLink, $siteTitle);
 
-    if (file_put_contents($path, $html) === false) {
+    if (\file_put_contents($path, $html) === false) {
         throw new \RuntimeException("cannot write {$path}");
     }
 }

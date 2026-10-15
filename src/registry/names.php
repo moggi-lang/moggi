@@ -37,7 +37,7 @@ function isPackageName(string $name): bool
  */
 function assertPackageName(string $name, string $where): void
 {
-    if (!isPackageName($name)) {
+    if (! isPackageName($name)) {
         throw new \RuntimeException(
             "{$where}: `{$name}` is not a package name — "
             . 'a name is lowercase, starts and ends with a letter or digit, and may contain . _ - only in between',

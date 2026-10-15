@@ -289,7 +289,7 @@ function docsPageShell(
     string $siteTitle = '',
 ): string {
     $css = docsStylesheet();
-    $year = date('Y');
+    $year = \date('Y');
     $titleEsc = escapeHtml($title);
     $siteEsc = escapeHtml($siteTitle === '' ? 'Moggi API Documentation' : $siteTitle);
     $home = $homeLink

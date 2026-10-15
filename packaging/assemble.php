@@ -96,24 +96,31 @@ function parseAssembleArgv(array $argv): array
         switch ($name) {
             case '--target':
                 $options['target'] = $value ?? (string) ($argv[++$i] ?? '');
+
                 break;
             case '--out':
                 $options['out'] = $value ?? (string) ($argv[++$i] ?? '');
+
                 break;
             case '--variants':
                 $options['variants'] = variantNames($value ?? (string) ($argv[++$i] ?? ''));
+
                 break;
             case '--archives':
                 $options['archives'] = true;
+
                 break;
             case '--force-runtimes':
                 $options['forceRuntimes'] = true;
+
                 break;
             case '--glibc-floor':
                 $options['glibcFloor'] = true;
+
                 break;
             case '--native-smoke':
                 $options['nativeSmoke'] = true;
+
                 break;
             case '--help':
             case '-h':
@@ -175,7 +182,7 @@ function variantPlan(array $config, string $target, array $requested): array
 {
     $plan = [];
     foreach ($config['variants'] as $variant => $spec) {
-        if ($requested !== [] && !\in_array($variant, $requested, true)) {
+        if ($requested !== [] && ! \in_array($variant, $requested, true)) {
             continue;
         }
         $runtimes = [];
@@ -200,7 +207,7 @@ function variantPlan(array $config, string $target, array $requested): array
     if ($requested !== []) {
         $known = \array_column($plan, 'variant');
         foreach ($requested as $variant) {
-            if (!\in_array($variant, $known, true)) {
+            if (! \in_array($variant, $known, true)) {
                 throw new \RuntimeException("unknown variant {$variant}");
             }
         }
@@ -213,7 +220,7 @@ function stageBaseInstallation(string $repo, string $base, string $target): void
 {
     removeTree($base);
     foreach (['bin', 'docs', 'examples', 'libraries'] as $dir) {
-        if (!\mkdir($base . '/' . $dir, 0777, true) && !\is_dir($base . '/' . $dir)) {
+        if (! \mkdir($base . '/' . $dir, 0777, true) && ! \is_dir($base . '/' . $dir)) {
             throw new \RuntimeException("cannot create {$base}/{$dir}");
         }
     }
@@ -225,10 +232,10 @@ function stageBaseInstallation(string $repo, string $base, string $target): void
     copyTree(
         $repo . '/examples',
         $base . '/examples',
-        static fn (string $relative): bool => !\str_ends_with($relative, EXAMPLES_EXCLUDED_SUFFIX),
+        static fn (string $relative): bool => ! \str_ends_with($relative, EXAMPLES_EXCLUDED_SUFFIX),
     );
 
-    if (!\copy($repo . '/LICENSE', $base . '/LICENSE')) {
+    if (! \copy($repo . '/LICENSE', $base . '/LICENSE')) {
         throw new \RuntimeException('cannot copy LICENSE');
     }
 
@@ -268,7 +275,7 @@ function buildNativeCompiler(string $pharPath, string $target): string
 function stageSchnorr(string $repo, string $binDir, string $target): void
 {
     $name = targetExecutableName('schnorr', $target);
-    if (!\copy(buildSchnorr($repo, \str_starts_with($target, 'windows-')), $binDir . '/' . $name)) {
+    if (! \copy(buildSchnorr($repo, \str_starts_with($target, 'windows-')), $binDir . '/' . $name)) {
         throw new \RuntimeException("cannot write {$binDir}/{$name}");
     }
     @\chmod($binDir . '/' . $name, 0755);
@@ -283,12 +290,12 @@ function assertBundledLicenses(string $stage, array $runtimes, array $config, st
 {
     foreach ($runtimes as $runtime) {
         $file = $config['runtimes'][$runtime]['license']['file'] ?? null;
-        if (\is_string($file) && $file !== '' && !\is_file($stage . '/runtime/' . $runtime . '/' . $file)) {
+        if (\is_string($file) && $file !== '' && ! \is_file($stage . '/runtime/' . $runtime . '/' . $file)) {
             throw new \RuntimeException("the bundled {$runtime} carries no {$file}");
         }
 
         if (($config['runtimes'][$runtime]['license']['dump'] ?? false) === true
-            && !\is_dir($stage . '/runtime/' . $runtime . '/license')) {
+            && ! \is_dir($stage . '/runtime/' . $runtime . '/license')) {
             throw new \RuntimeException(
                 "the bundled {$runtime} carries no licence dump for the libraries it links",
             );
@@ -296,7 +303,7 @@ function assertBundledLicenses(string $stage, array $runtimes, array $config, st
     }
 
     foreach (schnorrDependencies($repo) as $name => $dep) {
-        if (!\is_file(schnorrDependencyDir($repo, $name) . '/' . $dep['license']['file'])) {
+        if (! \is_file(schnorrDependencyDir($repo, $name) . '/' . $dep['license']['file'])) {
             throw new \RuntimeException("{$name} carries no {$dep['license']['file']}");
         }
     }
@@ -476,7 +483,7 @@ function assembleMain(array $argv): int
     $config = loadRuntimeConfig();
     $repo = \dirname(__DIR__);
     $target = $options['target'] ?? hostTarget($config);
-    if (!isset($config['targets'][$target])) {
+    if (! isset($config['targets'][$target])) {
         throw new \RuntimeException("unknown target {$target}");
     }
     if ($options['out'] === '' || $options['out'] === '/') {
@@ -528,10 +535,12 @@ function assembleMain(array $argv): int
             }
             if ((bool) ($config['runtimes'][$runtime]['static'] ?? false)) {
                 \fwrite(STDOUT, "  {$runtime} is statically linked, so it asks for no glibc\n");
+
                 continue;
             }
-            if (!isNativeBinary($dir . '/' . $binary)) {
+            if (! isNativeBinary($dir . '/' . $binary)) {
                 \fwrite(STDOUT, "  {$runtime} is not a native binary: the floor does not apply\n");
+
                 continue;
             }
             assertGlibcFloor($dir . '/' . $binary, $floor, "the bundled {$runtime}");
@@ -552,6 +561,7 @@ function assembleMain(array $argv): int
 
         if ($entry['reason'] !== null) {
             $report[] = \sprintf('%-14s not produced  %s', $variant, $entry['reason']);
+
             continue;
         }
 
@@ -564,7 +574,7 @@ function assembleMain(array $argv): int
                 static fn (string $relative, string $name): bool => $name !== '.prepared',
             );
         }
-        if (!\in_array('php', $entry['runtimes'], true)) {
+        if (! \in_array('php', $entry['runtimes'], true)) {
             @\unlink($stage . '/bin/moggi.phar');
         }
         \file_put_contents(
@@ -630,7 +640,7 @@ function reexecForPharWrites(array $argv): void
 
     $command = [\PHP_BINARY, '-d', 'phar.readonly=0', '-d', 'phar.require_hash=0', __FILE__, ...\array_slice($argv, 1)];
     $process = \proc_open($command, [0 => \STDIN, 1 => \STDOUT, 2 => \STDERR], $pipes);
-    if (!\is_resource($process)) {
+    if (! \is_resource($process)) {
         throw new \RuntimeException('cannot re-execute the assembler with PHAR writes allowed');
     }
 

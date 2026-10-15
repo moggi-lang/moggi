@@ -34,12 +34,12 @@ use function Moggi\Compiler\targetExecutableName;
 function smokeTest(string $stage, string $target, array $runtimes, string $work, bool $nativeSmoke = false): array
 {
     $compiler = $stage . '/bin/' . targetExecutableName('moggi', $target);
-    if (!\is_file($compiler)) {
+    if (! \is_file($compiler)) {
         throw new \RuntimeException("no compiler at {$compiler}");
     }
 
     removeTree($work);
-    if (!\mkdir($work, 0777, true) && !\is_dir($work)) {
+    if (! \mkdir($work, 0777, true) && ! \is_dir($work)) {
         throw new \RuntimeException("cannot create {$work}");
     }
 
@@ -47,14 +47,14 @@ function smokeTest(string $stage, string $target, array $runtimes, string $work,
 
     $checked = [];
     [$code, $stdout, $stderr] = runProcess([$compiler, 'version'], $work, $env);
-    if ($code !== 0 || !\str_contains($stdout, 'compiler:')) {
+    if ($code !== 0 || ! \str_contains($stdout, 'compiler:')) {
         throw new \RuntimeException("`moggi version` failed ({$code}): " . \trim($stdout . ' ' . $stderr));
     }
     $checked[] = 'version';
 
     $schnorr = $stage . '/bin/' . targetExecutableName('schnorr', $target);
     [$code, $stdout, $stderr] = runProcess([$schnorr, 'generate'], $work, $env);
-    if ($code !== 0 || !\str_starts_with(\trim($stdout), 'nsec1')) {
+    if ($code !== 0 || ! \str_starts_with(\trim($stdout), 'nsec1')) {
         throw new \RuntimeException(
             "the bundled schnorr CLI failed ({$code})\n" . \substr(\trim($stdout . "\n" . $stderr), -2000),
         );
@@ -64,7 +64,7 @@ function smokeTest(string $stage, string $target, array $runtimes, string $work,
     if (\in_array('composer', $runtimes, true)) {
         $composer = $stage . '/runtime/composer/bin/' . (\str_starts_with($target, 'windows-') ? 'composer.bat' : 'composer');
         [$code, $stdout, $stderr] = runProcess([$composer, '--version'], $work, $env);
-        if ($code !== 0 || !\str_contains($stdout, 'Composer version')) {
+        if ($code !== 0 || ! \str_contains($stdout, 'Composer version')) {
             throw new \RuntimeException(
                 "the bundled composer failed ({$code})\n" . \substr(\trim($stdout . "\n" . $stderr), -2000),
             );
@@ -79,7 +79,7 @@ function smokeTest(string $stage, string $target, array $runtimes, string $work,
         }
         $mvn = $stage . '/runtime/maven/bin/' . (\str_starts_with($target, 'windows-') ? 'mvn.cmd' : 'mvn');
         [$code, $stdout, $stderr] = runProcess([$mvn, '-version'], $work, $mavenEnv);
-        if ($code !== 0 || !\str_contains($stdout, 'Apache Maven')) {
+        if ($code !== 0 || ! \str_contains($stdout, 'Apache Maven')) {
             throw new \RuntimeException(
                 "the bundled maven failed ({$code})\n" . \substr(\trim($stdout . "\n" . $stderr), -2000),
             );
@@ -89,7 +89,7 @@ function smokeTest(string $stage, string $target, array $runtimes, string $work,
 
     $example = $stage . '/examples/factorial';
     foreach (['php', 'jvm', 'dotnet'] as $backend) {
-        if ($backend !== 'php' && !\in_array($backend, $runtimes, true)) {
+        if ($backend !== 'php' && ! \in_array($backend, $runtimes, true)) {
             continue;
         }
         $args = [$compiler, 'run', $example];
@@ -98,7 +98,7 @@ function smokeTest(string $stage, string $target, array $runtimes, string $work,
             $args[] = $backend;
         }
         [$code, $stdout, $stderr] = runProcess($args, $work, $env);
-        if ($code !== 0 || !\str_contains($stdout, '3628800')) {
+        if ($code !== 0 || ! \str_contains($stdout, '3628800')) {
             throw new \RuntimeException(
                 "running examples/factorial on {$backend} failed ({$code})\n"
                 . \substr(\trim($stdout . "\n" . $stderr), -2000),
@@ -109,14 +109,14 @@ function smokeTest(string $stage, string $target, array $runtimes, string $work,
 
     $artifact = $work . '/factorial.phar';
     [$code, $stdout, $stderr] = runProcess([$compiler, 'compile', $example, '-o', $artifact], $work, $env);
-    if ($code !== 0 || !\is_file($artifact)) {
+    if ($code !== 0 || ! \is_file($artifact)) {
         throw new \RuntimeException(
             "packaging a PHAR failed ({$code})\n" . \substr(\trim($stdout . "\n" . $stderr), -2000),
         );
     }
 
     [$code, $stdout, $stderr] = runProcess([\PHP_BINARY, $artifact], $work, $env);
-    if ($code !== 0 || !\str_contains($stdout, '3628800')) {
+    if ($code !== 0 || ! \str_contains($stdout, '3628800')) {
         throw new \RuntimeException(
             "running the packaged PHAR failed ({$code})\n" . \substr(\trim($stdout . "\n" . $stderr), -2000),
         );
@@ -131,14 +131,14 @@ function smokeTest(string $stage, string $target, array $runtimes, string $work,
             $env,
         );
         $binary = $work . '/' . executableName('factorial-native');
-        if ($code !== 0 || !\is_file($binary)) {
+        if ($code !== 0 || ! \is_file($binary)) {
             throw new \RuntimeException(
                 "building a native executable failed ({$code})\n" . \substr(\trim($stdout . "\n" . $stderr), -2000),
             );
         }
 
         [$code, $stdout, $stderr] = runProcess([$binary], $work, $env);
-        if ($code !== 0 || !\str_contains($stdout, '3628800')) {
+        if ($code !== 0 || ! \str_contains($stdout, '3628800')) {
             throw new \RuntimeException(
                 "running the native executable failed ({$code})\n" . \substr(\trim($stdout . "\n" . $stderr), -2000),
             );
@@ -148,7 +148,7 @@ function smokeTest(string $stage, string $target, array $runtimes, string $work,
 
     if ($nativeSmoke) {
         foreach (['jvm' => 'graalvm', 'dotnet' => 'dotnet'] as $backend => $runtime) {
-            if (!\in_array($runtime, $runtimes, true)) {
+            if (! \in_array($runtime, $runtimes, true)) {
                 continue;
             }
             $blocker = nativeSmokeBlocker($target, $backend);
@@ -165,7 +165,7 @@ function smokeTest(string $stage, string $target, array $runtimes, string $work,
                 $env,
             );
             $binary = $work . '/' . executableName('factorial-' . $backend . '-native');
-            if ($code !== 0 || !\is_file($binary)) {
+            if ($code !== 0 || ! \is_file($binary)) {
                 throw new \RuntimeException(
                     "building a native {$backend} executable failed ({$code})\n"
                     . \substr(\trim($stdout . "\n" . $stderr), -2000),
@@ -176,7 +176,7 @@ function smokeTest(string $stage, string $target, array $runtimes, string $work,
                 ? ['DOTNET_SYSTEM_GLOBALIZATION_INVARIANT' => '1'] + $env
                 : $env;
             [$code, $stdout, $stderr] = runProcess([$binary], $work, $runEnv);
-            if ($code !== 0 || !\str_contains($stdout, '3628800')) {
+            if ($code !== 0 || ! \str_contains($stdout, '3628800')) {
                 throw new \RuntimeException(
                     "running the native {$backend} executable failed ({$code})\n"
                     . \substr(\trim($stdout . "\n" . $stderr), -2000),
@@ -229,7 +229,7 @@ function nativeSmokeBlocker(string $target, string $backend): ?string
     if ($linker === null) {
         return 'no native linker';
     }
-    if ($backend === 'jvm' && \str_starts_with($target, 'linux-') && !linkerResolvesZlib($linker)) {
+    if ($backend === 'jvm' && \str_starts_with($target, 'linux-') && ! linkerResolvesZlib($linker)) {
         return 'no zlib development files';
     }
 
@@ -240,7 +240,7 @@ function nativeSmokeBlocker(string $target, string $backend): ?string
 function linkerResolvesZlib(string $linker): bool
 {
     $dir = \sys_get_temp_dir() . '/moggi-zlib-probe-' . \getmypid();
-    if (!\mkdir($dir, 0777, true) && !\is_dir($dir)) {
+    if (! \mkdir($dir, 0777, true) && ! \is_dir($dir)) {
         return false;
     }
 

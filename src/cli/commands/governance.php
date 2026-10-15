@@ -24,7 +24,7 @@ use function Moggi\Registry\selectAuthor;
 function governanceSigner(?string $as): string
 {
     if ($as !== null) {
-        if (!isNpub($as)) {
+        if (! isNpub($as)) {
             throw new \RuntimeException("`--as {$as}` is not an npub (63 characters, `npub1` then bech32)");
         }
 
@@ -50,7 +50,7 @@ function governanceSigner(?string $as): string
  */
 function confirmGovernanceAction(string $summary): void
 {
-    if (!\function_exists('posix_isatty') || !\posix_isatty(\STDIN)) {
+    if (! \function_exists('posix_isatty') || ! \posix_isatty(\STDIN)) {
         return;
     }
 

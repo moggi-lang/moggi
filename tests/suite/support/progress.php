@@ -70,7 +70,7 @@ function progressRowKey(?string $backend, string $group): string
  */
 function progressPlan(array $totalByGroup, ?string $backend = null): void
 {
-    if (!progressEnabled() || $totalByGroup === []) {
+    if (! progressEnabled() || $totalByGroup === []) {
         return;
     }
 
@@ -112,13 +112,13 @@ function progressRow(string $label, ?string $backend, int $total, ?float $starte
 function progressStart(string $group, int $total, ?string $backend = null): string
 {
     $key = progressRowKey($backend, $group);
-    if (!progressEnabled()) {
+    if (! progressEnabled()) {
         return $key;
     }
 
     $state = &progressState();
 
-    if (!isset($state['rows'][$key])) {
+    if (! isset($state['rows'][$key])) {
         $state['rows'][$key] = progressRow($group, $backend, $total, \microtime(true));
         $state['order'][] = $key;
     } else {
@@ -151,7 +151,7 @@ function progressAdvance(bool $failed): void
 {
     $state = &progressState();
     $label = $state['active'];
-    if ($label === null || !isset($state['rows'][$label])) {
+    if ($label === null || ! isset($state['rows'][$label])) {
         return;
     }
 
@@ -165,7 +165,7 @@ function progressAdvance(bool $failed): void
         $row['endedAt'] = \microtime(true);
     }
 
-    if (!progressFlushFinishedSections()) {
+    if (! progressFlushFinishedSections()) {
         progressRender();
     }
 }
@@ -198,7 +198,7 @@ function progressNextSection(array $state): array
  */
 function progressFlushFinishedSections(): bool
 {
-    if (!progressEnabled()) {
+    if (! progressEnabled()) {
         return false;
     }
 
@@ -251,7 +251,7 @@ function progressReported(): bool
  */
 function progressFlushAll(): void
 {
-    if (!progressEnabled()) {
+    if (! progressEnabled()) {
         return;
     }
 
@@ -287,7 +287,7 @@ function progressFlushAll(): void
  */
 function progressFreeze(): void
 {
-    if (!progressEnabled()) {
+    if (! progressEnabled()) {
         return;
     }
 

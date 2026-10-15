@@ -62,6 +62,7 @@ function packDocsRoots(string $directory, array $descriptor): array
     if ($dirs === []) {
         foreach ($descriptor['executables'] as $executable) {
             $dirs = $executable['sourceDirs'];
+
             break;
         }
     }

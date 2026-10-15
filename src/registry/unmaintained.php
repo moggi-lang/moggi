@@ -28,7 +28,7 @@ namespace Moggi\Registry;
  */
 function unmaintainedMarker(array $entry): ?array
 {
-    if (!\array_key_exists('unmaintained', $entry) || $entry['unmaintained'] === null || $entry['unmaintained'] === false) {
+    if (! \array_key_exists('unmaintained', $entry) || $entry['unmaintained'] === null || $entry['unmaintained'] === false) {
         return null;
     }
     $marker = $entry['unmaintained'];

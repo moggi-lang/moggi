@@ -4,19 +4,22 @@ namespace Moggi\LSP\TextDocument;
 
 use Moggi\LSP\Analysis\AnalysisResult;
 use Moggi\LSP\Analysis\AnalysisService;
-use Moggi\Syntax\Ast;
-use Moggi\Syntax\Lexer\TokenKind;
 
-use function Moggi\LSP\Analysis\ensureAnalyzed;
-use function Moggi\LSP\Analysis\version;
 use function Moggi\LSP\Protocol\codepointColToUtf16;
 use function Moggi\LSP\Protocol\splitLines;
+
 use function Moggi\LSP\Protocol\utf16Length;
+
+use Moggi\Syntax\Ast;
+
 use function Moggi\Syntax\Lexer\lex;
+
+use Moggi\Syntax\Lexer\TokenKind;
 
 function &semanticTokenCache(): array
 {
     static $cache = [];
+
     return $cache;
 }
 
@@ -30,6 +33,7 @@ function svcSemanticTokens(AnalysisService $svc, string $uri): ?array
     $version = $svc->vfs->version($uri) ?? 0;
     $cache = &semanticTokenCache();
     $cache[$uri] = ['version' => $version, 'data' => $data];
+
     return ['data' => $data, 'resultId' => (string) $version];
 }
 
@@ -54,11 +58,13 @@ function svcSemanticTokensFullDelta(AnalysisService $svc, string $uri, array $pa
     $cache[$uri] = ['version' => $version, 'data' => $data];
     if ($prev !== null && $prevId !== '' && (string) $prev['version'] === $prevId) {
         $edits = semanticTokenDeltaEdits($prev['data'], $data);
+
         return [
             'resultId' => (string) $version,
             'edits' => $edits,
         ];
     }
+
     return ['resultId' => (string) $version, 'data' => $data];
 }
 
@@ -105,7 +111,7 @@ function dataToTokens(array $data): array
     $line = 0;
     $char = 0;
     $pos = 0;
-    while ($pos + 4 < count($data)) {
+    while ($pos + 4 < \count($data)) {
         $deltaLine = $data[$pos];
         $deltaChar = $data[$pos + 1];
         $length = $data[$pos + 2];
@@ -127,6 +133,7 @@ function dataToTokens(array $data): array
         ];
         $pos += 5;
     }
+
     return $tokens;
 }
 
@@ -213,9 +220,10 @@ function semanticTokenDeltaEdits(array $old, array $new): array
     if ($old === $new) {
         return [];
     }
+
     return [[
         'start' => 0,
-        'deleteCount' => count($old),
+        'deleteCount' => \count($old),
         'data' => $new,
     ]];
 }
@@ -257,7 +265,7 @@ function buildAstSemanticTokens(AnalysisResult $analysis): array
 
     $walk = null;
     $walk = static function ($node) use (&$walk, $emitAt): void {
-        if (!is_object($node)) {
+        if (! \is_object($node)) {
             return;
         }
         if ($node instanceof Ast\FunctionDecl && ($node->line ?? 0) > 0) {
@@ -273,7 +281,7 @@ function buildAstSemanticTokens(AnalysisResult $analysis): array
             $emitAt($node->line, $node->col, $node->name, 21);
         } elseif ($node instanceof Ast\QualifiedRef && ($node->line ?? 0) > 0) {
             $emitAt($node->line, $node->col, $node->module, 0); // namespace
-            $emitAt($node->line, $node->col + strlen($node->module) + 1, $node->name, 12);
+            $emitAt($node->line, $node->col + \strlen($node->module) + 1, $node->name, 12);
         } elseif ($node instanceof Ast\DataDecl && ($node->line ?? 0) > 0) {
             $emitAt($node->line, $node->col, $node->name, 5, 0b11); // struct
         } elseif ($node instanceof Ast\TypeSynonymDecl && ($node->line ?? 0) > 0) {
@@ -285,12 +293,12 @@ function buildAstSemanticTokens(AnalysisResult $analysis): array
         } elseif ($node instanceof Ast\ExprHole && ($node->line ?? 0) > 0) {
             $emitAt($node->line, $node->col, '_', 22); // decorator
         }
-        foreach (get_object_vars($node) as $prop) {
-            if (is_object($prop)) {
+        foreach (\get_object_vars($node) as $prop) {
+            if (\is_object($prop)) {
                 $walk($prop);
-            } elseif (is_array($prop)) {
+            } elseif (\is_array($prop)) {
                 foreach ($prop as $el) {
-                    if (is_object($el)) {
+                    if (\is_object($el)) {
                         $walk($el);
                     }
                 }
@@ -301,7 +309,7 @@ function buildAstSemanticTokens(AnalysisResult $analysis): array
         $walk($analysis->program);
     }
 
-    usort($raw, static function (array $a, array $b): int {
+    \usort($raw, static function (array $a, array $b): int {
         return $a[0] <=> $b[0] ?: $a[1] <=> $b[1];
     });
 
@@ -330,6 +338,7 @@ function buildAstSemanticTokens(AnalysisResult $analysis): array
         $prevLine = $line;
         $prevChar = $start;
     }
+
     return $data;
 }
 

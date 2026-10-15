@@ -2,17 +2,20 @@
 
 namespace Moggi\Backend\Php\Codegen;
 
-use Moggi\IR;
-
 use function Moggi\Backend\Php\Naming\mangleVar;
+
 use function Moggi\Backend\Php\Naming\phpSingleQuoted;
 use function Moggi\Backend\Php\Naming\phpTemp;
+
+use Moggi\IR;
+
 use function Moggi\IR\Visit\mapOperandChildren;
 
 function emitMatchStmt(IR\Stmt $stmt, int $indent, array $ctx, bool $isReturn): string
 {
     $depth = (int) ($GLOBALS['__moggi_php_match_nest'] ?? 0);
     $GLOBALS['__moggi_php_match_nest'] = $depth + 1;
+
     try {
         $body = canUsePhpMatch($stmt, $ctx)
             ? emitPhpMatch($stmt, $indent, $ctx, $isReturn)
@@ -35,18 +38,18 @@ function emitMatchStmt(IR\Stmt $stmt, int $indent, array $ctx, bool $isReturn): 
 function emitWithSavedFieldBinders(string $body, int $indent, int $depth): string
 {
     $used = [];
-    if (preg_match_all('/\$__f(\d+)(?!\d)/', $body, $m) > 0) {
+    if (\preg_match_all('/\$__f(\d+)(?!\d)/', $body, $m) > 0) {
         foreach ($m[1] as $digits) {
             $used[(int) $digits] = true;
         }
         $used = \array_keys($used);
-        sort($used);
+        \sort($used);
     }
     if ($used === []) {
         return $body;
     }
 
-    $pad = str_repeat('    ', $indent);
+    $pad = \str_repeat('    ', $indent);
     $tag = (string) $depth;
     $out = '';
     foreach ($used as $i) {
@@ -74,7 +77,7 @@ function emitWithSavedFieldBinders(string $body, int $indent, int $depth): strin
 function canUsePhpMatch(IR\Stmt $stmt, array $ctx = []): bool
 {
     $mode = null;
-    $lastIndex = count($stmt->arms) - 1;
+    $lastIndex = \count($stmt->arms) - 1;
     foreach ($stmt->arms as $i => $arm) {
         $pattern = $arm->pattern;
         if (isCatchAllPattern($pattern)) {
@@ -102,7 +105,7 @@ function canUsePhpMatch(IR\Stmt $stmt, array $ctx = []): bool
             return false;
         }
 
-        if (!patternIsShallowForPhpMatch($pattern)) {
+        if (! patternIsShallowForPhpMatch($pattern)) {
             return false;
         }
 
@@ -111,12 +114,12 @@ function canUsePhpMatch(IR\Stmt $stmt, array $ctx = []): bool
             return false;
         }
 
-        if (count($items) !== 1) {
+        if (\count($items) !== 1) {
             return false;
         }
 
         $last = $items[0];
-        if (!($last instanceof IR\Ret)) {
+        if (! ($last instanceof IR\Ret)) {
             return false;
         }
     }
@@ -133,7 +136,7 @@ function patternIsShallowForPhpMatch(IR\Pattern $pattern): bool
 
     if ($pattern instanceof IR\PatCon) {
         foreach ($pattern->args as $arg) {
-            if (!($arg instanceof IR\PatWild || $arg instanceof IR\PatVar)) {
+            if (! ($arg instanceof IR\PatWild || $arg instanceof IR\PatVar)) {
                 return false;
             }
         }
@@ -153,12 +156,12 @@ function isBoolConstructorMatch(IR\Stmt $stmt, array $ctx): bool
             continue;
         }
 
-        if (!($arm->pattern instanceof IR\PatCon) || $arm->pattern->args !== []) {
+        if (! ($arm->pattern instanceof IR\PatCon) || $arm->pattern->args !== []) {
             return false;
         }
 
         $name = patternConstructorName($arm->pattern, $ctx);
-        if (!\array_key_exists($name, $ctx['boolConstructors'] ?? [])) {
+        if (! \array_key_exists($name, $ctx['boolConstructors'] ?? [])) {
             return false;
         }
 
@@ -184,7 +187,7 @@ function phpMatchMode(IR\Stmt $stmt): string
 
 function emitPhpMatch(IR\Stmt $stmt, int $indent, array $ctx, bool $isReturn): string
 {
-    $pad = str_repeat('    ', $indent);
+    $pad = \str_repeat('    ', $indent);
     $scrutinee = emitOperand($stmt->scrutinee, $ctx);
     $mode = phpMatchMode($stmt);
     $boolMatch = isBoolConstructorMatch($stmt, $ctx);
@@ -213,7 +216,7 @@ function emitPhpMatch(IR\Stmt $stmt, int $indent, array $ctx, bool $isReturn): s
         }
     }
 
-    if (!$exhaustive) {
+    if (! $exhaustive) {
         $out .= $pad . "    default => throw new \\RuntimeException('non-exhaustive match'),\n";
     }
 
@@ -225,7 +228,7 @@ function emitPhpMatch(IR\Stmt $stmt, int $indent, array $ctx, bool $isReturn): s
 /** @param int|string $value */
 function emitPatLitPhp(int|string $value): string
 {
-    return \is_string($value) ? json_encode($value, JSON_UNESCAPED_UNICODE) : (string) $value;
+    return \is_string($value) ? \json_encode($value, JSON_UNESCAPED_UNICODE) : (string) $value;
 }
 
 function emitPhpMatchKey(IR\Pattern $pattern, array $ctx, bool $boolMatch): string
@@ -274,16 +277,16 @@ function emitMatchArmExpression(IR\MatchArm $arm, array $ctx, int $indent): stri
         return 'null';
     }
 
-    $last = $items[count($items) - 1];
-    if (!($last instanceof IR\Ret)) {
+    $last = $items[\count($items) - 1];
+    if (! ($last instanceof IR\Ret)) {
         throw new \RuntimeException('match arm body must end with ret');
     }
 
-    if (count($items) === 1) {
+    if (\count($items) === 1) {
         return emitRetValue($last->value, $ctx);
     }
 
-    $innerPad = str_repeat('    ', $indent + 2);
+    $innerPad = \str_repeat('    ', $indent + 2);
     $inner = '';
     foreach (\array_slice($items, 0, -1) as $item) {
         $inner .= emitStmt($item, $indent + 2, $ctx);
@@ -291,9 +294,9 @@ function emitMatchArmExpression(IR\MatchArm $arm, array $ctx, int $indent): stri
     $inner .= $innerPad . 'return ' . emitRetValue($last->value, $ctx) . ";\n";
 
     $uses = matchArmClosureUses($arm->body, $ctx);
-    $useClause = $uses === [] ? '' : ' use (' . join(', ', $uses) . ')';
+    $useClause = $uses === [] ? '' : ' use (' . \implode(', ', $uses) . ')';
 
-    return '(function ()' . $useClause . " {\n{$inner}" . str_repeat('    ', $indent + 1) . '})()';
+    return '(function ()' . $useClause . " {\n{$inner}" . \str_repeat('    ', $indent + 1) . '})()';
 }
 
 /** @param array<string, mixed> $ctx Codegen context map @return list<string> */
@@ -315,8 +318,8 @@ function matchArmClosureUses(IR\Block $block, array $ctx): array
     $captured = [];
     if ($patternLocals !== [] && isset($ctx['matchScrutineeOperand'])) {
         $scrut = $ctx['matchScrutineeOperand'];
-        if (\is_string($scrut) && str_starts_with($scrut, '$')) {
-            $captured[substr($scrut, 1)] = $scrut;
+        if (\is_string($scrut) && \str_starts_with($scrut, '$')) {
+            $captured[\substr($scrut, 1)] = $scrut;
         }
     }
     $params = $ctx['functionParams'] ?? [];
@@ -350,7 +353,7 @@ function matchArmClosureUses(IR\Block $block, array $ctx): array
         }
     }
 
-    return array_values($captured);
+    return \array_values($captured);
 }
 
 function stmtDefinedTemp(IR\Stmt $stmt): ?int
@@ -398,14 +401,14 @@ function matchStmtReferencedLocals(IR\MatchStmt $stmt): array
                 }
             }
             foreach ($guardLocals as $name) {
-                if (!isset($bound[$name])) {
+                if (! isset($bound[$name])) {
                     $locals[] = $name;
                 }
             }
         }
         foreach ($arm->body->items as $item) {
             foreach (stmtReferencedLocals($item) as $name) {
-                if (!isset($bound[$name])) {
+                if (! isset($bound[$name])) {
                     $locals[] = $name;
                 }
             }
@@ -512,13 +515,13 @@ function operandReferencedTemps(IR\Operand $operand): array
 
 function emitIfMatch(IR\Stmt $stmt, int $indent, array $ctx): string
 {
-    $pad = str_repeat('    ', $indent);
+    $pad = \str_repeat('    ', $indent);
     $scrutinee = emitOperand($stmt->scrutinee, $ctx);
     $arms = $stmt->arms;
     $out = '';
     $exhaustive = ($stmt->exhaustive)
-        || (isCatchAllPattern($arms[count($arms) - 1]->pattern)
-            && ($arms[count($arms) - 1]->guards) === []);
+        || (isCatchAllPattern($arms[\count($arms) - 1]->pattern)
+            && ($arms[\count($arms) - 1]->guards) === []);
 
     foreach ($arms as $arm) {
         if ($arm->guards !== []) {
@@ -527,7 +530,7 @@ function emitIfMatch(IR\Stmt $stmt, int $indent, array $ctx): string
     }
 
     foreach ($arms as $i => $arm) {
-        $isLast = $i === count($arms) - 1;
+        $isLast = $i === \count($arms) - 1;
         $catchAll = isCatchAllPattern($arm->pattern) && ($arm->guards) === [];
 
         if ($i === 0) {
@@ -550,7 +553,7 @@ function emitIfMatch(IR\Stmt $stmt, int $indent, array $ctx): string
         $out .= $pad . "}\n";
     }
 
-    if (!$exhaustive) {
+    if (! $exhaustive) {
         $out .= $pad . "else {\n";
         $out .= $pad . "    throw new \\RuntimeException('non-exhaustive match');\n";
         $out .= $pad . "}\n";
@@ -570,7 +573,7 @@ function emitIfMatch(IR\Stmt $stmt, int $indent, array $ctx): string
  */
 function emitGuardedIfMatch(IR\Stmt $stmt, int $indent, array $ctx, string $scrutinee, bool $exhaustive): string
 {
-    $pad = str_repeat('    ', $indent);
+    $pad = \str_repeat('    ', $indent);
     $out = $pad . "do {\n";
 
     foreach ($stmt->arms as $arm) {
@@ -641,10 +644,10 @@ function nextPhpBinderFreshenId(): int
 function collectPatternBinderNames(IR\Pattern $pattern, array &$map, int $id, int &$n): void
 {
     if ($pattern instanceof IR\PatVar) {
-        if (!str_starts_with($pattern->name, '__f')) {
+        if (! \str_starts_with($pattern->name, '__f')) {
             return;
         }
-        if (!isset($map[$pattern->name])) {
+        if (! isset($map[$pattern->name])) {
             $map[$pattern->name] = $pattern->name . '__m' . $id . '_' . $n;
             ++$n;
         }
@@ -723,6 +726,7 @@ function renameLocalsInItemsShallow(array $items, array $map): array
                 $item->dest,
                 $item->exhaustive,
             );
+
             continue;
         }
         if ($item instanceof IR\MatchReturn) {
@@ -735,6 +739,7 @@ function renameLocalsInItemsShallow(array $items, array $map): array
                 $arms,
                 $item->exhaustive,
             );
+
             continue;
         }
         $out[] = renameLocalsInStmtDeep($item, $map);
@@ -757,7 +762,7 @@ function renameNestedMatchArmPreservingBinders(IR\MatchArm $arm, array $map): IR
     }
     $innerMap = [];
     foreach ($map as $old => $fresh) {
-        if (!isset($bound[$old])) {
+        if (! isset($bound[$old])) {
             $innerMap[$old] = $fresh;
         }
     }
@@ -838,14 +843,14 @@ function joinPatternTests(array $tests): string
         return 'true';
     }
 
-    return \count($tests) === 1 ? $tests[0] : '(' . \join(' && ', $tests) . ')';
+    return \count($tests) === 1 ? $tests[0] : '(' . \implode(' && ', $tests) . ')';
 }
 
 function isCatchAllPattern(IR\Pattern $pattern): bool
 {
     return match ($pattern::class) {
         IR\PatWild::class, IR\PatVar::class => true,
-        IR\PatTuple::class => array_reduce(
+        IR\PatTuple::class => \array_reduce(
             $pattern->elements,
             static fn (bool $carry, IR\Pattern $element): bool => $carry && isCatchAllPattern($element),
             true,
@@ -885,7 +890,7 @@ function emitPatternTest(IR\Pattern $pattern, string $scrutinee, array $ctx): st
             emitPatternTest($pattern->head, $scrutinee . '[0]', $ctx),
             emitPatternTest($pattern->tail, '\array_slice(' . $scrutinee . ', 1)', $ctx),
         ]),
-        default => throw new \RuntimeException("unsupported pattern `" . $pattern::class . "` in codegen"),
+        default => throw new \RuntimeException('unsupported pattern `' . $pattern::class . '` in codegen'),
     };
 }
 
@@ -927,7 +932,7 @@ function emitPatternBindings(IR\Pattern $pattern, string $scrutinee, int $indent
         IR\PatTuple::class => emitTuplePatternBindings($pattern, $scrutinee, $indent, $ctx),
         IR\PatNil::class => '',
         IR\PatCons::class => emitListConsPatternBindings($pattern, $scrutinee, $indent, $ctx),
-        default => throw new \RuntimeException("unsupported pattern `" . $pattern::class . "` in codegen"),
+        default => throw new \RuntimeException('unsupported pattern `' . $pattern::class . '` in codegen'),
     };
 }
 
@@ -944,7 +949,7 @@ function emitConPatternBindings(IR\Pattern $pattern, string $scrutinee, int $ind
         return '';
     }
 
-    $pad = str_repeat('    ', $indent);
+    $pad = \str_repeat('    ', $indent);
     $snap = nextPhpScrutineeSnapshot();
     $out = $pad . "{$snap} = {$scrutinee};\n";
     foreach ($pattern->args as $i => $arg) {
@@ -961,7 +966,7 @@ function emitTuplePatternBindings(IR\Pattern $pattern, string $scrutinee, int $i
         return '';
     }
 
-    $pad = str_repeat('    ', $indent);
+    $pad = \str_repeat('    ', $indent);
     $snap = nextPhpScrutineeSnapshot();
     $out = $pad . "{$snap} = {$scrutinee};\n";
     foreach ($pattern->elements as $i => $element) {
@@ -974,7 +979,7 @@ function emitTuplePatternBindings(IR\Pattern $pattern, string $scrutinee, int $i
 
 function emitListConsPatternBindings(IR\Pattern $pattern, string $scrutinee, int $indent, array $ctx = []): string
 {
-    $pad = str_repeat('    ', $indent);
+    $pad = \str_repeat('    ', $indent);
     $snap = nextPhpScrutineeSnapshot();
     $out = $pad . "{$snap} = {$scrutinee};\n";
     $head = "{$snap}[0]";
@@ -995,7 +1000,7 @@ function nextPhpScrutineeSnapshot(): string
 
 function emitPatternBinding(IR\Pattern $pattern, string $source, int $indent, array $ctx = []): string
 {
-    $pad = str_repeat('    ', $indent);
+    $pad = \str_repeat('    ', $indent);
 
     return match ($pattern::class) {
         IR\PatWild::class, IR\PatLit::class, IR\PatChar::class => '',
@@ -1004,6 +1009,6 @@ function emitPatternBinding(IR\Pattern $pattern, string $source, int $indent, ar
         IR\PatTuple::class => emitTuplePatternBindings($pattern, $source, $indent, $ctx),
         IR\PatNil::class => '',
         IR\PatCons::class => emitListConsPatternBindings($pattern, $source, $indent, $ctx),
-        default => throw new \RuntimeException("unsupported pattern `" . $pattern::class . "` in codegen"),
+        default => throw new \RuntimeException('unsupported pattern `' . $pattern::class . '` in codegen'),
     };
 }

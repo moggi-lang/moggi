@@ -2,9 +2,8 @@
 
 namespace Moggi\Backend\DotNet\Foreign;
 
-use Moggi\Syntax\Ast;
-
 use function Moggi\Backend\DotNet\Dependencies\dotNetTypeIsValueType;
+
 use function Moggi\Backend\DotNet\Naming\bclAssemblyFor;
 use function Moggi\Backend\DotNet\Verify\dotNetConstNeedsGetterCall;
 use function Moggi\Foreign\splitForeignPathMember;
@@ -14,6 +13,8 @@ use function Moggi\Semantics\Kernel\boundaryEitherTypeName;
 use function Moggi\Semantics\Kernel\boundaryHandleTypeName;
 use function Moggi\Semantics\Kernel\boundaryMaybeTypeName;
 use function Moggi\Semantics\Types\primitiveTypeIdOf;
+
+use Moggi\Syntax\Ast;
 
 function registerDotNetForeignType(string $moggiName, string $hostType): void
 {
@@ -37,7 +38,7 @@ function lookupDotNetForeignType(string $name): ?string
  */
 function resolveDotNetForeignPath(string $path): array
 {
-    if (!str_contains($path, ':') && !str_contains($path, '.')) {
+    if (! \str_contains($path, ':') && ! \str_contains($path, '.')) {
         throw new \RuntimeException(
             "dotnet foreign path `{$path}` must be Type:member or Type.member; bare host names are not supported",
         );
@@ -45,7 +46,7 @@ function resolveDotNetForeignPath(string $path): array
 
     [$classPath, $member] = splitForeignPathMember($path);
 
-    if (str_contains($path, ':')) {
+    if (\str_contains($path, ':')) {
         $dispatch = match ($member) {
             '__con' => 'constructor',
             '__cast', '__default', '__null' => 'intrinsic',
@@ -111,7 +112,7 @@ function clrSigFromMoggiType(
         if ($argTypes === []) {
             throw new \RuntimeException('dotnet instance foreign requires a receiver argument');
         }
-        array_shift($argTypes);
+        \array_shift($argTypes);
     }
 
     $params = [];
@@ -318,11 +319,11 @@ function clrTypeName(
 
     $con = clrForeignTypeConName($type);
 
-    if ($classPath === 'System.Object' && $member === 'ReferenceEquals' && !$isReturn) {
+    if ($classPath === 'System.Object' && $member === 'ReferenceEquals' && ! $isReturn) {
         return 'object';
     }
 
-    if ($classPath === 'System.Convert' && $member === 'ToString' && !$isReturn) {
+    if ($classPath === 'System.Convert' && $member === 'ToString' && ! $isReturn) {
         return 'object';
     }
 
@@ -423,7 +424,6 @@ function clrHostTypeToIl(string $host): string
     return $kind . qualifyTypeForOpaque($host);
 }
 
-
 /** Opaque host refs: instance returns use the declaring type for fluent APIs. */
 function clrOpaqueObjectMapping(?string $classPath, bool $isReturn, string $dispatch): string
 {
@@ -456,7 +456,7 @@ function dotNetHostIsValueType(string $classPath): bool
 
     foreach ($GLOBALS['moggi_dotnet_foreign_types'] ?? [] as $host) {
         $host = \trim((string) $host);
-        if (!\str_starts_with($host, 'valuetype ')) {
+        if (! \str_starts_with($host, 'valuetype ')) {
             continue;
         }
         $rest = \trim(\substr($host, \strlen('valuetype ')));

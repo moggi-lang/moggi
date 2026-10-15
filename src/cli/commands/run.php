@@ -66,7 +66,7 @@ function runRun(array $argv): int
         return 1;
     }
 
-    if (!\is_dir($input) && !\is_file($input)) {
+    if (! \is_dir($input) && ! \is_file($input)) {
         \fwrite(STDERR, "error: not a file or directory: {$input}\n");
 
         return 1;
@@ -75,21 +75,21 @@ function runRun(array $argv): int
     $backend = parseBackendValue($options['backend']);
     $native = (bool) $options['native'];
     $keepOutput = $options['output'] !== null;
-    $outputDir = $options['output'] ?? (sys_get_temp_dir() . '/moggi-run-' . getmypid());
+    $outputDir = $options['output'] ?? (\sys_get_temp_dir() . '/moggi-run-' . \getmypid());
 
     $built = compileIntoRoot(
         $input,
         $outputDir,
-        !$options['noOpt'],
+        ! $options['noOpt'],
         $backend,
-        !$options['noStrip'],
+        ! $options['noStrip'],
         $options['lib'],
         $native,
-        $backend === 'php' && !$native,
+        $backend === 'php' && ! $native,
     );
 
     if ($built['exitCode'] !== 0 || $built['outputRoot'] === null) {
-        if (!$keepOutput) {
+        if (! $keepOutput) {
             removeOutputTree($outputDir);
         }
 
@@ -104,7 +104,7 @@ function runRun(array $argv): int
         $native,
     );
 
-    if (!$keepOutput) {
+    if (! $keepOutput) {
         removeOutputTree($built['outputRoot']);
     }
 

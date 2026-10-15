@@ -7,16 +7,18 @@
 // straight to a manifest writer still parses back to itself.
 
 $root = __DIR__;
-while (!is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
 require $root . '/tests/suite/support/workspace.php';
 
+use function Moggi\Registry\downloadPath;
+
+use function Moggi\Registry\fetchBlob;
+
 use Moggi\Registry\FetchLog;
 
-use function Moggi\Registry\downloadPath;
-use function Moggi\Registry\fetchBlob;
 use function Moggi\Registry\hostToolCoordinateProblem;
 use function Moggi\Registry\hostToolCsproj;
 use function Moggi\Registry\hostToolManifest;
@@ -27,21 +29,23 @@ use function Moggi\Registry\safeDigestKey;
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
     ++$checks;
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
 $refuses = static function (callable $call, string $needle, string $message) use (&$checks): void {
     ++$checks;
+
     try {
         $call();
     } catch (\RuntimeException $error) {
-        if (!\str_contains($error->getMessage(), $needle)) {
+        if (! \str_contains($error->getMessage(), $needle)) {
             throw new \RuntimeException("{$message}: refused with an unexpected message: {$error->getMessage()}");
         }
 
         return;
     }
+
     throw new \RuntimeException("{$message}: was not refused");
 };
 
@@ -148,6 +152,7 @@ try {
 
         $savedPath = (string) \getenv('PATH');
         \putenv('PATH=' . $binDir . ':' . $savedPath);
+
         try {
             $refuses(
                 static fn () => resolveHostTools('jvm', ['or g:art:1.0'], 'app'),
@@ -157,7 +162,7 @@ try {
         } finally {
             \putenv('PATH=' . $savedPath);
         }
-        $assert(!\file_exists($sentinel), 'the tool must not have run for a malformed coordinate');
+        $assert(! \file_exists($sentinel), 'the tool must not have run for a malformed coordinate');
     }
 
     // --- digests are validated where they become paths -----------------------

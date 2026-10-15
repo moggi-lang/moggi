@@ -2,9 +2,10 @@
 
 namespace Moggi\Registry\Bind;
 
+use const Moggi\Backend\DotNet\Dependencies\DOTNET_SIDECAR_FORMAT;
+
 use function Moggi\Backend\DotNet\dotnetCliEnv;
 use function Moggi\Backend\DotNet\resolveDotnetExecutable;
-use const Moggi\Backend\DotNet\Dependencies\DOTNET_SIDECAR_FORMAT;
 use function Moggi\Backend\DotNet\Verify\ensureInspectorBinary;
 use function Moggi\Compiler\compilerVersion;
 use function Moggi\Compiler\runProcess;
@@ -65,7 +66,7 @@ const DOTNET_BIND_PRIMITIVES = [
  */
 function parseDotNetCoordinate(string $coordinate): array
 {
-    $parts = explode(':', $coordinate);
+    $parts = \explode(':', $coordinate);
     if (\count($parts) < 1 || \count($parts) > 2 || $parts[0] === '') {
         throw new \RuntimeException(
             "cannot bind `{$coordinate}` — a NuGet coordinate is `Id[:version]`",
@@ -89,7 +90,7 @@ function parseDotNetCoordinate(string $coordinate): array
 function dotNetBindModuleName(string $id): string
 {
     $segments = ['Nuget'];
-    foreach (explode('.', $id) as $part) {
+    foreach (\explode('.', $id) as $part) {
         $segments[] = bindSegmentToModule($part);
     }
 
@@ -106,7 +107,7 @@ function dotNetBindModuleName(string $id): string
 function inspectDotNetTree(string $treeRoot, string $id, ?string $version): array
 {
     $root = \rtrim($treeRoot, '/');
-    if (!\is_dir($root)) {
+    if (! \is_dir($root)) {
         throw new \RuntimeException("cannot bind `{$treeRoot}` — no such directory");
     }
 
@@ -127,7 +128,7 @@ function inspectDotNetTree(string $treeRoot, string $id, ?string $version): arra
     );
     /** @var \SplFileInfo $file */
     foreach ($scan as $file) {
-        if (!$file->isFile() || \strtolower($file->getExtension()) !== 'dll') {
+        if (! $file->isFile() || \strtolower($file->getExtension()) !== 'dll') {
             continue;
         }
         if (\basename($file->getPath()) !== 'dotnet') {
@@ -200,13 +201,13 @@ function inspectDotNetTree(string $treeRoot, string $id, ?string $version): arra
             continue;
         }
         $short = dotNetShortName($name);
-        if (!$claim($short)) {
+        if (! $claim($short)) {
             $skip($name, "name collision on `{$short}`");
 
             continue;
         }
         $table = runDotNetInspector($dotnet, $inspector, ['--refs', ...$dlls, '--type', $name]);
-        if (!($table['found'] ?? false)) {
+        if (! ($table['found'] ?? false)) {
             $skip($name, 'the inspector could not read it');
 
             continue;
@@ -247,7 +248,7 @@ function inspectDotNetTree(string $treeRoot, string $id, ?string $version): arra
     $dedupedSkips = [];
     foreach ($skipped as $skip) {
         $key = $skip['symbol'] . "\0" . $skip['reason'];
-        if (!isset($seenSkips[$key])) {
+        if (! isset($seenSkips[$key])) {
             $seenSkips[$key] = true;
             $dedupedSkips[] = $skip;
         }
@@ -302,8 +303,7 @@ function inspectDotNetMembers(
             $methods[] = ['name' => (string) $methodName] + (array) $overload;
         }
     }
-    \usort($methods, static fn (array $a, array $b): int =>
-        [$a['name'], \implode(',', (array) $a['params']), (int) $a['static']]
+    \usort($methods, static fn (array $a, array $b): int => [$a['name'], \implode(',', (array) $a['params']), (int) $a['static']]
         <=> [$b['name'], \implode(',', (array) $b['params']), (int) $b['static']]);
 
     foreach ($methods as $method) {
@@ -311,8 +311,7 @@ function inspectDotNetMembers(
     }
 
     $ctors = (array) ($table['ctors'] ?? []);
-    \usort($ctors, static fn (array $a, array $b): int =>
-        \implode(',', (array) $a['params']) <=> \implode(',', (array) $b['params']));
+    \usort($ctors, static fn (array $a, array $b): int => \implode(',', (array) $a['params']) <=> \implode(',', (array) $b['params']));
     foreach ($ctors as $ctor) {
         inspectDotNetCtor($name, $short, $info, (array) $ctor, $bound, $skip, $claim, $functions);
     }
@@ -352,7 +351,7 @@ function inspectDotNetMethod(
 
         return;
     }
-    if (!($method['public'] ?? false)) {
+    if (! ($method['public'] ?? false)) {
         $skip($label, 'not public');
 
         return;
@@ -391,7 +390,7 @@ function inspectDotNetMethod(
     }
 
     $moggi = \lcfirst($short) . \ucfirst((string) $method['name']);
-    if (!$claim($moggi)) {
+    if (! $claim($moggi)) {
         $skip($label, "name collision on `{$moggi}` (an overload has no single Moggi spelling)");
 
         return;
@@ -450,7 +449,7 @@ function inspectDotNetCtor(
     array &$functions,
 ): void {
     $label = $dotted . '.__con';
-    if (!($ctor['public'] ?? false)) {
+    if (! ($ctor['public'] ?? false)) {
         $skip($label, 'not public');
 
         return;
@@ -477,7 +476,7 @@ function inspectDotNetCtor(
         $paramWords[] = $word;
     }
     $moggi = 'new' . $short;
-    if (!$claim($moggi)) {
+    if (! $claim($moggi)) {
         $skip($label, "name collision on `{$moggi}` (a constructor overload has no single Moggi spelling)");
 
         return;
@@ -510,7 +509,7 @@ function inspectDotNetField(
     array &$consts,
 ): void {
     $label = $dotted . ':' . $fieldName;
-    if (!($field['public'] ?? false) || !($field['static'] ?? false)) {
+    if (! ($field['public'] ?? false) || ! ($field['static'] ?? false)) {
         $skip($label, 'only public static fields bind');
 
         return;
@@ -520,7 +519,7 @@ function inspectDotNetField(
 
         return;
     }
-    if (!($field['initOnly'] ?? false)) {
+    if (! ($field['initOnly'] ?? false)) {
         $skip($label, 'a mutable static has no const spelling');
 
         return;
@@ -532,7 +531,7 @@ function inspectDotNetField(
         return;
     }
     $moggi = \lcfirst($short) . \ucfirst(\strtolower($fieldName));
-    if (!$claim($moggi)) {
+    if (! $claim($moggi)) {
         $skip($label, "name collision on `{$moggi}`");
 
         return;
@@ -562,7 +561,7 @@ function inspectDotNetProperty(
     array &$consts,
 ): void {
     $label = $dotted . ':' . $propName;
-    if (!($prop['public'] ?? false) || !($prop['static'] ?? false) || !($prop['hasGetter'] ?? false)) {
+    if (! ($prop['public'] ?? false) || ! ($prop['static'] ?? false) || ! ($prop['hasGetter'] ?? false)) {
         $skip($label, 'only public static readable properties bind');
 
         return;
@@ -574,7 +573,7 @@ function inspectDotNetProperty(
         return;
     }
     $moggi = \lcfirst($short) . \ucfirst(\strtolower($propName));
-    if (!$claim($moggi)) {
+    if (! $claim($moggi)) {
         $skip($label, "name collision on `{$moggi}`");
 
         return;
@@ -784,7 +783,7 @@ function runDotNetInspector(string $dotnet, string $inspector, array $args): arr
         );
     }
     $decoded = \json_decode((string) ($captured['stdout'] ?? ''), true);
-    if (!\is_array($decoded)) {
+    if (! \is_array($decoded)) {
         throw new \RuntimeException('the CLR inspector printed no JSON document');
     }
     if (isset($decoded['error'])) {

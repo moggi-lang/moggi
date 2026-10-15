@@ -10,11 +10,11 @@ use function Moggi\Registry\directoryEntries;
 use function Moggi\Registry\entriesDigest;
 use function Moggi\Registry\findDescriptor;
 use function Moggi\Registry\httpSend;
+use function Moggi\Registry\moggiIgnorePatterns;
 use function Moggi\Registry\packDirectory;
 use function Moggi\Registry\packEntries;
 use function Moggi\Registry\prettyJson;
 use function Moggi\Registry\readDescriptor;
-use function Moggi\Registry\moggiIgnorePatterns;
 use function Moggi\Registry\readNsecKey;
 use function Moggi\Registry\readReleaseRecord;
 use function Moggi\Registry\registryError;
@@ -168,7 +168,7 @@ function publishRelease(array $options): int
     $archive = packEntries($entries);
     $blob = archiveDigest($archive);
 
-    if (!$options['dryRun'] && !$options['yes'] && \function_exists('posix_isatty') && \posix_isatty(\STDIN)) {
+    if (! $options['dryRun'] && ! $options['yes'] && \function_exists('posix_isatty') && \posix_isatty(\STDIN)) {
         \printf("%s %s — %d entr%s, %d bytes\n", $name, $version, \count($entries), \count($entries) === 1 ? 'y' : 'ies', \strlen($archive));
         foreach ($entries as $entry) {
             \printf("  %s\n", $entry['path']);

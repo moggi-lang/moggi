@@ -2,11 +2,13 @@
 
 namespace Moggi\Repl;
 
-use Moggi\Syntax\Ast;
-use Moggi\Syntax\Parser\ReplFragment;
-
 use function Moggi\Patterns\Walk\patternVariableNames;
+
+use Moggi\Syntax\Ast;
+
 use function Moggi\Syntax\Parser\parseReplFragment;
+
+use Moggi\Syntax\Parser\ReplFragment;
 
 /**
  * Rename interactive OccName `$from` to `$to` in a single declaration source:
@@ -54,8 +56,8 @@ function renameLeadingBinder(string $source, string $from, string $to): string
         return $source;
     }
 
-    return preg_replace(
-        '/^(\s*)' . preg_quote($from, '/') . '\b/',
+    return \preg_replace(
+        '/^(\s*)' . \preg_quote($from, '/') . '\b/',
         '${1}' . $to,
         $source,
         1,
@@ -67,13 +69,13 @@ function renameLeadingBinder(string $source, string $from, string $to): string
  */
 function leadingBinderSpan(string $source, string $from): ?array
 {
-    if (preg_match('/^(\s*)' . preg_quote($from, '/') . '\b/', $source, $m) !== 1) {
+    if (\preg_match('/^(\s*)' . \preg_quote($from, '/') . '\b/', $source, $m) !== 1) {
         return null;
     }
 
-    $col = strlen($m[1]) + 1;
+    $col = \strlen($m[1]) + 1;
 
-    return ['line' => 1, 'col' => $col, 'endCol' => $col + strlen($from)];
+    return ['line' => 1, 'col' => $col, 'endCol' => $col + \strlen($from)];
 }
 
 /**
@@ -84,11 +86,11 @@ function collectFreeRenameSpans(Ast\AstNode $expr, string $from, array $bound, a
 {
     match ($expr::class) {
         Ast\Variable::class => (static function () use ($expr, $from, $bound, &$out, $to): void {
-            if ($expr->name === $from && !isset($bound[$from]) && $expr->line > 0 && $expr->col > 0) {
+            if ($expr->name === $from && ! isset($bound[$from]) && $expr->line > 0 && $expr->col > 0) {
                 $out[] = [
                     'line' => $expr->line,
                     'col' => $expr->col,
-                    'endCol' => $expr->endCol > $expr->col ? $expr->endCol : $expr->col + strlen($from),
+                    'endCol' => $expr->endCol > $expr->col ? $expr->endCol : $expr->col + \strlen($from),
                     'text' => $to,
                 ];
             }
@@ -199,7 +201,7 @@ function applySourceReplacements(string $source, array $replacements): string
         return $source;
     }
 
-    usort(
+    \usort(
         $replacements,
         static function (array $a, array $b): int {
             if ($a['line'] !== $b['line']) {
@@ -213,10 +215,10 @@ function applySourceReplacements(string $source, array $replacements): string
     foreach ($replacements as $rep) {
         $start = sourceOffset($source, $rep['line'], $rep['col']);
         $end = sourceOffset($source, $rep['line'], $rep['endCol']);
-        if ($start < 0 || $end < $start || $end > strlen($source)) {
+        if ($start < 0 || $end < $start || $end > \strlen($source)) {
             continue;
         }
-        $source = substr($source, 0, $start) . $rep['text'] . substr($source, $end);
+        $source = \substr($source, 0, $start) . $rep['text'] . \substr($source, $end);
     }
 
     return $source;
@@ -224,20 +226,20 @@ function applySourceReplacements(string $source, array $replacements): string
 
 function sourceOffset(string $source, int $line, int $col): int
 {
-    $lines = explode("\n", $source);
-    if ($line < 1 || $line > count($lines)) {
+    $lines = \explode("\n", $source);
+    if ($line < 1 || $line > \count($lines)) {
         return -1;
     }
 
     $offset = 0;
     for ($i = 0; $i < $line - 1; $i++) {
-        $offset += strlen($lines[$i]) + 1;
+        $offset += \strlen($lines[$i]) + 1;
     }
 
-    return $offset + max(0, $col - 1);
+    return $offset + \max(0, $col - 1);
 }
 
 function isShadowedInteractiveName(string $name): bool
 {
-    return preg_match('/__s\d+$/', $name) === 1;
+    return \preg_match('/__s\d+$/', $name) === 1;
 }

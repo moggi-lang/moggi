@@ -2,6 +2,8 @@
 
 namespace Moggi\Semantics\Types;
 
+use function Moggi\Semantics\TypeExpr\canonicalNatDigits;
+
 use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TNatLit;
@@ -10,9 +12,8 @@ use Moggi\Semantics\TypeExpr\TStringLit;
 use Moggi\Semantics\TypeExpr\TUnit;
 use Moggi\Semantics\TypeExpr\TVar;
 use Moggi\Semantics\TypeExpr\Type;
-use Moggi\Syntax\Ast;
 
-use function Moggi\Semantics\TypeExpr\canonicalNatDigits;
+use Moggi\Syntax\Ast;
 
 /**
  * Shared type normalization: prune (var/kind subst), expand synonyms, and
@@ -58,7 +59,7 @@ function normalizeType(
         return $changed ? new TPromoted($type->name, $args) : $type;
     }
 
-    if (!$type instanceof TCon) {
+    if (! $type instanceof TCon) {
         return $type;
     }
 
@@ -82,7 +83,7 @@ function normalizeType(
         }
     }
 
-    if (!isset($state->typeSynonyms[$type->name])) {
+    if (! isset($state->typeSynonyms[$type->name])) {
         return $type;
     }
 
@@ -158,7 +159,7 @@ function reduceAssociatedFamily(TypeCheckState $state, TCon $type): ?Type
 
     if ($remaining !== []) {
         $reduced = prune($state, $reduced);
-        if (!$reduced instanceof TCon) {
+        if (! $reduced instanceof TCon) {
             throw typeFail(
                 $state,
                 "associated type `{$type->name}` reduced to a non-constructor type that cannot take arguments",
@@ -196,6 +197,7 @@ function matchAssociatedEquationArgs(TypeCheckState $state, array $lhsArgs, arra
                 if (typeToString(prune($state, $mapping[$name])) !== typeToString(prune($state, $bound))) {
                     return null;
                 }
+
                 continue;
             }
             $mapping[$name] = $bound;
@@ -234,7 +236,7 @@ function matchAssociatedTypePattern(TypeCheckState $state, Ast\TypeNode $pattern
             return null;
         }
         [$headName, $argPatterns] = $flat;
-        if (!$target instanceof TCon || $target->name !== $headName) {
+        if (! $target instanceof TCon || $target->name !== $headName) {
             return null;
         }
         if (\count($argPatterns) !== \count($target->args)) {
@@ -267,21 +269,21 @@ function flattenTypeAppPattern(Ast\TypeNode $pattern): ?array
         return [$pattern->name, []];
     }
 
-    if (!$pattern instanceof Ast\TypeApp) {
+    if (! $pattern instanceof Ast\TypeApp) {
         return null;
     }
 
     $args = [];
     $type = $pattern;
     while ($type instanceof Ast\TypeApp) {
-        for ($i = count($type->args) - 1; $i >= 0; $i--) {
+        for ($i = \count($type->args) - 1; $i >= 0; $i--) {
             $args[] = $type->args[$i];
         }
         $type = $type->con;
     }
 
     if ($type instanceof Ast\TypeCon) {
-        return [$type->name, array_reverse($args)];
+        return [$type->name, \array_reverse($args)];
     }
 
     return null;
@@ -305,7 +307,7 @@ function appendTypeArgs(TypeCheckState $state, Type $head, array $extra, string 
         return $head;
     }
     $head = prune($state, $head);
-    if (!$head instanceof TCon) {
+    if (! $head instanceof TCon) {
         throw typeFail(
             $state,
             "type synonym `{$name}` expanded to a non-constructor type that cannot take arguments",
@@ -353,7 +355,7 @@ function expandSynonymInNormalizedType(
 
     if ($remaining !== []) {
         $head = prune($state, $head);
-        if (!$head instanceof TCon) {
+        if (! $head instanceof TCon) {
             throw typeFail(
                 $state,
                 "type synonym `{$name}` expanded to a non-constructor type that cannot take arguments",

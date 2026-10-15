@@ -16,23 +16,25 @@
  */
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
 
 use Moggi\LSP\Analysis\AnalysisService;
+
+use function Moggi\LSP\Analysis\resultIdFor;
+
 use Moggi\LSP\CancellationRegistry;
+
+use function Moggi\LSP\capabilityDispatchMismatches;
+use function Moggi\LSP\lspMethodHandlers;
+use function Moggi\LSP\progressPercent;
+use function Moggi\LSP\Protocol\pathToUri;
+
 use Moggi\LSP\RequestCancelledException;
 
-use function Moggi\LSP\progressPercent;
-use function Moggi\LSP\workDoneParamsToken;
-use function Moggi\LSP\Analysis\resultIdFor;
 use function Moggi\LSP\serverCapabilities;
-use function Moggi\LSP\lspMethodHandlers;
-use function Moggi\LSP\capabilityDispatchMismatches;
-use function Moggi\LSP\Analysis\unusedImportDiagnostics;
-use function Moggi\LSP\Protocol\pathToUri;
 use function Moggi\LSP\TextDocument\svcCompletion;
 use function Moggi\LSP\TextDocument\svcDefinition;
 use function Moggi\LSP\TextDocument\svcDiagnostic;
@@ -41,9 +43,10 @@ use function Moggi\LSP\TextDocument\svcRename;
 use function Moggi\LSP\TextDocument\svcSignatureHelp;
 use function Moggi\LSP\TextDocument\svcTypeDefinition;
 use function Moggi\LSP\TextDocument\svcWorkspaceDiagnostic;
+use function Moggi\LSP\workDoneParamsToken;
 
 $assert = static function (bool $condition, string $message): void {
-    if (!$condition) {
+    if (! $condition) {
         throw new RuntimeException($message);
     }
 };
@@ -51,7 +54,7 @@ $assert = static function (bool $condition, string $message): void {
 $fixturesDir = $root . '/tests/lsp';
 $basicPath = $fixturesDir . '/Basic.mog';
 $basicUri = pathToUri($basicPath);
-$src = (string) file_get_contents($basicPath);
+$src = (string) \file_get_contents($basicPath);
 
 $svc = new AnalysisService();
 $svc->setWorkspaceRoot($fixturesDir);
@@ -62,13 +65,13 @@ $svc->warm();
  * 0-based {line, character} of the first occurrence of a substring.
  */
 $find = static function (string $needle) use ($src): array {
-    $next = strpos($src, $needle);
+    $next = \strpos($src, $needle);
     if ($next === false) {
         throw new RuntimeException("fixture does not contain: {$needle}");
     }
-    $before = substr($src, 0, $next);
-    $line = substr_count($before, "\n");
-    $lineStart = strrpos($before, "\n");
+    $before = \substr($src, 0, $next);
+    $line = \substr_count($before, "\n");
+    $lineStart = \strrpos($before, "\n");
 
     return ['line' => $line, 'character' => $next - ($lineStart === false ? -1 : $lineStart) - 1];
 };
@@ -78,12 +81,13 @@ $find = static function (string $needle) use ($src): array {
 $reg = new CancellationRegistry();
 $reg->cancel(7);
 $assert($reg->isCancelled(7), 'registry flags cancelled id');
-$assert(!$reg->isCancelled(8), 'registry keeps other ids pending');
+$assert(! $reg->isCancelled(8), 'registry keeps other ids pending');
 $reg->cancelAll();
-$assert(!$reg->isCancelled(7), 'cancelAll clears every id');
+$assert(! $reg->isCancelled(7), 'cancelAll clears every id');
 $reg->cancel('req-1');
 
 $cancelled = false;
+
 try {
     \Moggi\LSP\checkCancelled($reg, 'req-1');
 } catch (RequestCancelledException) {
@@ -106,42 +110,42 @@ $assert(progressPercent(3, 0) === null, 'progressPercent rejects zero total');
 
 $def = svcDefinition($svc, $basicUri, $find('useTarget = targetValue'));
 $assert(
-    is_array($def) && isset($def['uri'], $def['range']['start']['line']),
-    'definition single target is a Location: ' . json_encode($def)
+    \is_array($def) && isset($def['uri'], $def['range']['start']['line']),
+    'definition single target is a Location: ' . \json_encode($def)
 );
 
 $p = $find('justValue = Just 42');
 $td = svcTypeDefinition($svc, $basicUri, $p);
 $assert(
-    is_array($td) && isset($td['uri'], $td['range']),
-    'typeDefinition single target is a Location: ' . json_encode($td)
+    \is_array($td) && isset($td['uri'], $td['range']),
+    'typeDefinition single target is a Location: ' . \json_encode($td)
 );
 
 // 1. Hover completeness: operator application shows result type
 
 $p = $find('anotherInt = anInt + 10');
-$hv = svcHover($svc, $basicUri, ['line' => $p['line'], 'character' => $p['character'] + strlen('anotherInt = anInt +')]);
+$hv = svcHover($svc, $basicUri, ['line' => $p['line'], 'character' => $p['character'] + \strlen('anotherInt = anInt +')]);
 $assert($hv !== null, 'operator-position hover returns a result');
 $hvText = (string) ($hv['contents']['value'] ?? '');
-$assert(str_contains($hvText, 'Int'), 'operator application hover carries Int type: ' . $hvText);
+$assert(\str_contains($hvText, 'Int'), 'operator application hover carries Int type: ' . $hvText);
 
 // 2. Signature help: nested call, activeParameter counts
 
 $p = $find('composed = compose double bump 20');
 // at `bump` argument (3rd arg of compose): activeParameter 2
-$sig = svcSignatureHelp($svc, $basicUri, ['line' => $p['line'], 'character' => $p['character'] + strlen('composed = compose double ')]);
+$sig = svcSignatureHelp($svc, $basicUri, ['line' => $p['line'], 'character' => $p['character'] + \strlen('composed = compose double ')]);
 $assert($sig !== null && isset($sig['signatures'][0]['label']), 'nested signature help resolves');
 $assert(($sig['activeSignature'] ?? 0) === 0, 'single signature selected');
-$assert(str_contains((string) $sig['signatures'][0]['label'], 'compose'), 'outer function signature shown');
-$assert((int) ($sig['activeParameter'] ?? -1) === 2, 'activeParameter counts into nested arg position: ' . json_encode($sig['activeParameter'] ?? null));
+$assert(\str_contains((string) $sig['signatures'][0]['label'], 'compose'), 'outer function signature shown');
+$assert((int) ($sig['activeParameter'] ?? -1) === 2, 'activeParameter counts into nested arg position: ' . \json_encode($sig['activeParameter'] ?? null));
 
 // 3. Completion quality
 
 $completion = svcCompletion($svc, $basicUri, ['line' => 2, 'character' => 8]);
-$labels = array_column($completion['items'], 'label');
+$labels = \array_column($completion['items'], 'label');
 $assert(
-    in_array('Data.Maybe', $labels, true) || in_array('Data.List', $labels, true),
-    'import context completes module names: ' . json_encode(array_slice($labels, 0, 8))
+    \in_array('Data.Maybe', $labels, true) || \in_array('Data.List', $labels, true),
+    'import context completes module names: ' . \json_encode(\array_slice($labels, 0, 8))
 );
 
 // Member completion on a typed record receiver.
@@ -155,23 +159,23 @@ alice = Person { name = "A", age = 1 }
 who = alice . _
 MOG;
 $memberPath = $fixturesDir . '/lsp10_members.mog';
-file_put_contents($memberPath, $memberSrc);
+\file_put_contents($memberPath, $memberSrc);
 $memberUri = pathToUri($memberPath);
 $svc->openDocument($memberUri, $memberSrc, 1);
 
 $memberItems = \Moggi\LSP\TextDocument\memberCompletionItems($svc, $svc->ensureAnalyzed($memberUri), 7, 15, '_');
 $assert($memberItems !== null, 'member completion resolves a typed record receiver');
-$memberLabels = array_column($memberItems, 'label');
+$memberLabels = \array_column($memberItems, 'label');
 $assert(
-    in_array('name', $memberLabels, true) && in_array('age', $memberLabels, true),
-    'member completion lists record fields: ' . json_encode($memberLabels)
+    \in_array('name', $memberLabels, true) && \in_array('age', $memberLabels, true),
+    'member completion lists record fields: ' . \json_encode($memberLabels)
 );
 $assert((int) ($memberItems[0]['kind'] ?? 0) === 5, 'field items use CompletionItemKind.Field(5)');
 
 // Still resolves with a type error in the file (mid-edit state, no stamped types).
 $memberItems2 = \Moggi\LSP\TextDocument\memberCompletionItems($svc, $svc->ensureAnalyzed($memberUri), 7, 14, '');
 $assert(
-    $memberItems2 !== null && in_array('name', array_column($memberItems2, 'label'), true),
+    $memberItems2 !== null && \in_array('name', \array_column($memberItems2, 'label'), true),
     'member completion works despite a type error in the file'
 );
 
@@ -181,6 +185,7 @@ $hasModern = false;
 foreach ($completion2['items'] as $item) {
     if (isset($item['commitCharacters']) || isset($item['labelDetails'])) {
         $hasModern = true;
+
         break;
     }
 }
@@ -190,8 +195,8 @@ $assert($hasModern, 'completion items carry modern 3.18 fields (commitCharacters
 
 $p = $find('bump x = x + 1');
 $renamed = svcRename($svc, $basicUri, $p, 'bumpX');
-$assert(is_array($renamed) && isset($renamed['documentChanges']), 'rename returns documentChanges');
-$assert(!isset($renamed['changes']), 'rename never emits legacy changes');
+$assert(\is_array($renamed) && isset($renamed['documentChanges']), 'rename returns documentChanges');
+$assert(! isset($renamed['changes']), 'rename never emits legacy changes');
 $firstChange = $renamed['documentChanges'][0] ?? null;
 $assert(($firstChange['textDocument']['uri'] ?? '') === $basicUri, 'documentChanges entry names the doc');
 $assert(isset($firstChange['textDocument']['version']), 'documentChanges entry carries the doc version');
@@ -200,7 +205,7 @@ $assert(isset($firstChange['textDocument']['version']), 'documentChanges entry c
 
 $unusedSrc = "module UnusedImp where\n\nimport Data.List\n\nok = 1\n";
 $unusedPath = $fixturesDir . '/lsp10_unused.mog';
-file_put_contents($unusedPath, $unusedSrc);
+\file_put_contents($unusedPath, $unusedSrc);
 $unusedUri = pathToUri($unusedPath);
 $svc->openDocument($unusedUri, $unusedSrc, 1);
 $unusedAnalysis = $svc->ensureAnalyzed($unusedUri);
@@ -210,10 +215,10 @@ foreach ($unusedAnalysis->diagnostics as $d) {
         $unusedTags[] = $d;
     }
 }
-$assert(count($unusedTags) === 1, 'unused import produces exactly one diagnostic: ' . json_encode($unusedAnalysis->diagnostics));
-$assert(in_array(1, $unusedTags[0]['tags'] ?? [], true), 'unused-import carries Unnecessary tag (1)');
+$assert(\count($unusedTags) === 1, 'unused import produces exactly one diagnostic: ' . \json_encode($unusedAnalysis->diagnostics));
+$assert(\in_array(1, $unusedTags[0]['tags'] ?? [], true), 'unused-import carries Unnecessary tag (1)');
 $assert(
-    str_contains((string) ($unusedTags[0]['codeDescription']['href'] ?? ''), 'moggi-lang'),
+    \str_contains((string) ($unusedTags[0]['codeDescription']['href'] ?? ''), 'moggi-lang'),
     'unused-import has codeDescription href'
 );
 $assert(($unusedTags[0]['severity'] ?? 0) === 2, 'unused-import is a warning');
@@ -221,7 +226,7 @@ $assert(($unusedTags[0]['severity'] ?? 0) === 2, 'unused-import is a warning');
 // codeDescription on type errors too.
 $badSrc = "module BadMath where\n\nwrong = \"a\" + 1\n";
 $badPath = $fixturesDir . '/lsp10_bad.mog';
-file_put_contents($badPath, $badSrc);
+\file_put_contents($badPath, $badSrc);
 $badUri = pathToUri($badPath);
 $svc->openDocument($badUri, $badSrc, 1);
 $badAnalysis = $svc->ensureAnalyzed($badUri);
@@ -229,6 +234,7 @@ $badHasHref = false;
 foreach ($badAnalysis->diagnostics as $d) {
     if (isset($d['codeDescription']['href'])) {
         $badHasHref = true;
+
         break;
     }
 }
@@ -238,7 +244,7 @@ $assert($badHasHref, 'type-error diagnostics carry codeDescription');
 
 $report = svcDiagnostic($svc, $badUri);
 $assert(($report['kind'] ?? '') === 'full', 'pull report is full');
-$assert(is_string($report['resultId'] ?? null) && $report['resultId'] !== '', 'pull report has resultId');
+$assert(\is_string($report['resultId'] ?? null) && $report['resultId'] !== '', 'pull report has resultId');
 $again = svcDiagnostic($svc, $badUri, ['previousResultId' => $report['resultId']]);
 $assert(($again['kind'] ?? '') === 'unchanged', 'same resultId → unchanged response');
 $assert(($again['resultId'] ?? '') === $report['resultId'], 'unchanged response echoes resultId');
@@ -258,7 +264,7 @@ $ws = svcWorkspaceDiagnostic($svc);
 $entry = $wsEntry($ws, $badUri);
 $assert($entry !== null, 'workspace report includes open doc');
 $assert(($entry['kind'] ?? '') === 'full', 'workspace report is full');
-$assert(array_key_exists('version', $entry), 'workspace entry carries version');
+$assert(\array_key_exists('version', $entry), 'workspace entry carries version');
 $assert(($entry['version'] ?? null) === 1, 'workspace entry carries the doc version');
 
 // A first pull has no client result ids, so nothing may claim to be unchanged.
@@ -274,7 +280,7 @@ $assert($same !== null, 'unchanged docs are still reported, not elided');
 $assert(($same['kind'] ?? '') === 'unchanged', 'matching resultId → unchanged report');
 $assert(($same['resultId'] ?? '') === $entry['resultId'], 'unchanged report echoes resultId');
 $assert(($same['version'] ?? null) === 1, 'unchanged report echoes version');
-$assert(!isset($same['items']), 'unchanged report carries no items');
+$assert(! isset($same['items']), 'unchanged report carries no items');
 
 // A document that became clean must be reported `full` with no items — that is
 // the only signal that retires the diagnostics the client cached earlier.
@@ -293,14 +299,14 @@ $assert(($fixed['resultId'] ?? '') !== $entry['resultId'], 'cleaned doc gets a n
 
 // 8b. Workspace pull: retired result ids for closed modules
 
-$wsDir = sys_get_temp_dir() . '/moggi-wsdiag-' . getmypid();
-@mkdir($wsDir);
-file_put_contents($wsDir . '/Closed.mog', "module Closed where\n\nimport Data.Enum\n\nvalue :: Int\nvalue = 1\n");
-file_put_contents($wsDir . '/Entry.mog', "module Entry where\n\nimport Closed\n\nmain :: Int\nmain = value\n");
+$wsDir = \sys_get_temp_dir() . '/moggi-wsdiag-' . \getmypid();
+@\mkdir($wsDir);
+\file_put_contents($wsDir . '/Closed.mog', "module Closed where\n\nimport Data.Enum\n\nvalue :: Int\nvalue = 1\n");
+\file_put_contents($wsDir . '/Entry.mog', "module Entry where\n\nimport Closed\n\nmain :: Int\nmain = value\n");
 $wsSvc = new AnalysisService();
 $wsSvc->setWorkspaceRoot($wsDir);
 $wsEntryUri = pathToUri($wsDir . '/Entry.mog');
-$wsSvc->openDocument($wsEntryUri, (string) file_get_contents($wsDir . '/Entry.mog'), 1);
+$wsSvc->openDocument($wsEntryUri, (string) \file_get_contents($wsDir . '/Entry.mog'), 1);
 $wsSvc->warm();
 $wsSvc->ensureAnalyzed($wsEntryUri);
 $closedUri = pathToUri($wsDir . '/Closed.mog');
@@ -308,9 +314,9 @@ $closed = $wsEntry(svcWorkspaceDiagnostic($wsSvc), $closedUri);
 if ($closed !== null) {
     $assert(($closed['kind'] ?? '') === 'full', 'closed module with diagnostics → full');
     $assert(($closed['items'] ?? []) !== [], 'closed module reports its diagnostics');
-    $assert(array_key_exists('version', $closed) && $closed['version'] === null, 'closed module reports null version');
+    $assert(\array_key_exists('version', $closed) && $closed['version'] === null, 'closed module reports null version');
     // Deleting the file must retire the client's cached report, not omit it.
-    unlink($wsDir . '/Closed.mog');
+    \unlink($wsDir . '/Closed.mog');
     $retired = $wsEntry(svcWorkspaceDiagnostic($wsSvc, [
         'previousResultIds' => [['uri' => $closedUri, 'value' => $closed['resultId']]],
     ]), $closedUri);
@@ -321,8 +327,8 @@ if ($closed !== null) {
     // an id the client holds for a URI we no longer know about.
     $assert(true, 'closed module not indexed');
 }
-@unlink($wsDir . '/Entry.mog');
-@rmdir($wsDir);
+@\unlink($wsDir . '/Entry.mog');
+@\rmdir($wsDir);
 
 // Capability: clients that see workspaceDiagnostics:true poll workspace/diagnostic
 // on a timer, so it stays false while the handler remains served (push handles
@@ -331,14 +337,14 @@ $caps = serverCapabilities();
 $assert(($caps['diagnosticProvider']['workspaceDiagnostics'] ?? null) === false, 'workspaceDiagnostics is not advertised');
 $assert(($caps['diagnosticProvider']['interFileDependencies'] ?? null) === true, 'diagnosticProvider still advertises inter-file dependencies');
 $assert(isset(lspMethodHandlers()['workspace/diagnostic']), 'workspace/diagnostic handler is still served');
-$assert(capabilityDispatchMismatches() === [], 'no capability/dispatch drift: ' . json_encode(capabilityDispatchMismatches()));
+$assert(capabilityDispatchMismatches() === [], 'no capability/dispatch drift: ' . \json_encode(capabilityDispatchMismatches()));
 
 // resultIdFor determinism / sensitivity.
 $assert(resultIdFor('u', []) === resultIdFor('u', []), 'resultId stable for equal input');
 $assert(resultIdFor('u', []) !== resultIdFor('u', [['x']]), 'resultId changes with items');
 
 foreach ([$memberPath, $unusedPath, $badPath] as $f) {
-    @unlink($f);
+    @\unlink($f);
 }
 
 echo "lsp 318 features tests passed\n";

@@ -2,13 +2,15 @@
 
 namespace Moggi\CLI\Commands;
 
+use function Moggi\Registry\badPackagesAmong;
+use function Moggi\Registry\badPackagesRefusal;
+
+use function Moggi\Registry\bundledArchiveDigest;
+use function Moggi\Registry\bundledPackages;
+
 use Moggi\Registry\Catalog;
 use Moggi\Registry\FetchLog;
 
-use function Moggi\Registry\badPackagesAmong;
-use function Moggi\Registry\badPackagesRefusal;
-use function Moggi\Registry\bundledArchiveDigest;
-use function Moggi\Registry\bundledPackages;
 use function Moggi\Registry\loadCatalog;
 use function Moggi\Registry\lockDocument;
 use function Moggi\Registry\lockPath;
@@ -83,7 +85,7 @@ function loadVerifiedCatalog(string $registry, bool $useCache, FetchLog $log): C
     $catalog = loadCatalog($registry, null, $log, $useCache);
     $signature = $catalog->signature();
 
-    if (!$signature['ok']) {
+    if (! $signature['ok']) {
         throw new \RuntimeException("refusing to use {$registry}: {$signature['note']}");
     }
 
@@ -123,7 +125,7 @@ function writeResolution(array $descriptor, string $descriptorPath, string $regi
     $bundled = bundledPackages();
     [$demands] = pinBundledDemands((array) ($descriptor['dependencies'] ?? []), $bundled);
     $resolution = resolveDependencies($demands, $catalog, $descriptor['name'], $provided, $bundled);
-    if (!$resolution['ok']) {
+    if (! $resolution['ok']) {
         throw new \RuntimeException((string) $resolution['error']);
     }
 
@@ -143,6 +145,7 @@ function writeResolution(array $descriptor, string $descriptorPath, string $regi
                 'digest' => bundledArchiveDigest($spec['dir']),
                 'bundled' => true,
             ];
+
             continue;
         }
         $entry = (array) $catalog?->entry($name);
@@ -154,7 +157,7 @@ function writeResolution(array $descriptor, string $descriptorPath, string $regi
     }
 
     $bad = badPackagesAmong($entries);
-    if ($bad !== [] && !$allowBad) {
+    if ($bad !== [] && ! $allowBad) {
         throw new \RuntimeException(badPackagesRefusal(
             $bad,
             'this lock would name',
@@ -174,7 +177,7 @@ function writeResolution(array $descriptor, string $descriptorPath, string $regi
     ]);
 
     $lockFile = lockPath($descriptorPath, $output);
-    if (!$dryRun) {
+    if (! $dryRun) {
         writeLock($lockFile, $document);
     }
 

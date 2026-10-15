@@ -102,13 +102,14 @@ function specializeDictCallsBlockWithEnv(
     foreach ($block->items as $item) {
         if ($item instanceof IR\MatchStmt || $item instanceof IR\MatchReturn) {
             $out[] = specializeDictCallsMatch($item, $evidenceByName, $tempEvidence, $localEvidence, $localFns);
+
             continue;
         }
 
         $item = specializeDictCallsStmt($item, $evidenceByName, $tempEvidence, $localEvidence, $localFns);
 
         if ($item instanceof IR\Call
-            && (isset($evidenceByName[$item->callee]) || str_starts_with($item->callee, '__ev_'))) {
+            && (isset($evidenceByName[$item->callee]) || \str_starts_with($item->callee, '__ev_'))) {
             $tempEvidence[$item->dest] = [
                 'name' => $item->callee,
                 'args' => $item->args,
@@ -148,12 +149,12 @@ function resolveEvidenceBinding(
     array $localEvidence,
 ): ?array {
     if ($value instanceof IR\FnRef
-        && (isset($evidenceByName[$value->name]) || str_starts_with($value->name, '__ev_'))) {
+        && (isset($evidenceByName[$value->name]) || \str_starts_with($value->name, '__ev_'))) {
         return ['name' => $value->name, 'args' => []];
     }
 
     if ($value instanceof IR\ExprCall
-        && (isset($evidenceByName[$value->callee]) || str_starts_with($value->callee, '__ev_'))) {
+        && (isset($evidenceByName[$value->callee]) || \str_starts_with($value->callee, '__ev_'))) {
         return ['name' => $value->callee, 'args' => $value->args];
     }
 
@@ -219,7 +220,7 @@ function specializeDictCall(
         return $stmt;
     }
 
-    if ($localFns !== [] && !isset($localFns[$resolved])) {
+    if ($localFns !== [] && ! isset($localFns[$resolved])) {
         return $stmt;
     }
 

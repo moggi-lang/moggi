@@ -2,10 +2,11 @@
 
 namespace Moggi\Semantics\Types;
 
-use Moggi\Syntax\Ast;
-
 use function Moggi\Patterns\Walk\patternBoundNames;
+
 use function Moggi\Patterns\Walk\patternVariableNames;
+
+use Moggi\Syntax\Ast;
 
 /**
  * Strongly connected components of a let/where binding group.
@@ -18,7 +19,7 @@ use function Moggi\Patterns\Walk\patternVariableNames;
  */
 function bindingGroupSccs(array $bindings): array
 {
-    $n = count($bindings);
+    $n = \count($bindings);
     if ($n === 0) {
         return [];
     }
@@ -44,7 +45,7 @@ function bindingGroupSccs(array $bindings): array
 
     $components = [];
     foreach (tarjanScc($deps) as $indices) {
-        $recursive = count($indices) > 1
+        $recursive = \count($indices) > 1
             || ($indices !== [] && isset($deps[$indices[0]][$indices[0]]));
         $components[] = [
             'indices' => $indices,
@@ -82,7 +83,7 @@ function topLevelBindingSccs(array $items): array
             continue;
         }
 
-        $dense = count($declarations);
+        $dense = \count($declarations);
         $declarations[$dense] = $item;
         $itemOf[$dense] = $itemIndex;
         $binderIndex[$item->name][] = $dense;
@@ -112,10 +113,10 @@ function topLevelBindingSccs(array $items): array
 
     $components = [];
     foreach (tarjanScc($deps) as $indices) {
-        $recursive = count($indices) > 1
+        $recursive = \count($indices) > 1
             || ($indices !== [] && isset($deps[$indices[0]][$indices[0]]));
         $components[] = [
-            'indices' => array_map(static fn (int $dense): int => $itemOf[$dense], $indices),
+            'indices' => \array_map(static fn (int $dense): int => $itemOf[$dense], $indices),
             'recursive' => $recursive,
         ];
     }
@@ -129,7 +130,7 @@ function topLevelBindingSccs(array $items): array
  */
 function tarjanScc(array $deps): array
 {
-    $n = count($deps);
+    $n = \count($deps);
     $index = 0;
     /** @var array<int, int> $indices */
     $indices = [];
@@ -159,27 +160,27 @@ function tarjanScc(array $deps): array
         $onStack[$v] = true;
 
         foreach ($deps[$v] as $w) {
-            if (!isset($indices[$w])) {
+            if (! isset($indices[$w])) {
                 $strongconnect($w);
-                $lowlink[$v] = min($lowlink[$v], $lowlink[$w]);
+                $lowlink[$v] = \min($lowlink[$v], $lowlink[$w]);
             } elseif (isset($onStack[$w])) {
-                $lowlink[$v] = min($lowlink[$v], $indices[$w]);
+                $lowlink[$v] = \min($lowlink[$v], $indices[$w]);
             }
         }
 
         if ($lowlink[$v] === $indices[$v]) {
             $component = [];
             do {
-                $w = array_pop($stack);
+                $w = \array_pop($stack);
                 unset($onStack[$w]);
                 $component[] = $w;
             } while ($w !== $v);
-            $sccs[] = array_reverse($component);
+            $sccs[] = \array_reverse($component);
         }
     };
 
     for ($v = 0; $v < $n; ++$v) {
-        if (!isset($indices[$v])) {
+        if (! isset($indices[$v])) {
             $strongconnect($v);
         }
     }
@@ -195,7 +196,7 @@ function tarjanScc(array $deps): array
  */
 function letExprFreeVars(Ast\AstNode $expr, array $bound = []): array
 {
-    return array_keys(letExprFreeVarsSet($expr, $bound));
+    return \array_keys(letExprFreeVarsSet($expr, $bound));
 }
 
 /**
@@ -239,11 +240,11 @@ function letExprFreeVarsSet(Ast\AstNode $expr, array $bound): array
         Ast\Tuple::class,
         Ast\ListLit::class => letExprFreeVarsInList($expr->elements, $bound),
         Ast\RecordCon::class => letExprFreeVarsInList(
-            array_map(static fn (Ast\RecordField $f): Ast\AstNode => $f->expr, $expr->fields),
+            \array_map(static fn (Ast\RecordField $f): Ast\AstNode => $f->expr, $expr->fields),
             $bound,
         ),
         Ast\RecordUpdate::class => letExprFreeVarsInList(
-            [$expr->object, ...array_map(static fn (Ast\RecordField $f): Ast\AstNode => $f->expr, $expr->fields)],
+            [$expr->object, ...\array_map(static fn (Ast\RecordField $f): Ast\AstNode => $f->expr, $expr->fields)],
             $bound,
         ),
         Ast\FieldAccess::class => letExprFreeVarsSet($expr->object, $bound),

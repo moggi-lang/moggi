@@ -2,10 +2,11 @@
 
 namespace Moggi\IR;
 
-use Moggi\Syntax\Ast;
-
 use function Moggi\Semantics\IntrinsicRegistry\ioPrimopRole;
+
 use function Moggi\Semantics\IoBoundary\isIoUnitType;
+
+use Moggi\Syntax\Ast;
 
 /** @param array<int, Ast\AstNode> $items @return array<string, true> */
 function ioActionReturnFnNames(array $items): array
@@ -61,7 +62,7 @@ function lowerIoSequence(array $stmts, LowerCtx $ctx): bool
         return false;
     }
 
-    $lastIndex = count($stmts) - 1;
+    $lastIndex = \count($stmts) - 1;
     for ($i = 0; $i <= $lastIndex; ++$i) {
         $stmt = $stmts[$i];
         $last = $i === $lastIndex;
@@ -119,7 +120,7 @@ function lowerIoSequence(array $stmts, LowerCtx $ctx): bool
                     Ast\IoSequence::class => $last ? lowerIoSequence($stmt->expr->stmts, $ctx) : false,
                     Ast\IoCase::class => $last ? lowerIoCase($stmt->expr, $ctx) : false,
                     default => (function () use ($stmt, $last, $ctx): bool {
-                        $result = lowerIoReturnOrAction($stmt->expr, $ctx, asStatement: !$last);
+                        $result = lowerIoReturnOrAction($stmt->expr, $ctx, asStatement: ! $last);
                         if ($result === null) {
                             return false;
                         }
@@ -133,7 +134,7 @@ function lowerIoSequence(array $stmts, LowerCtx $ctx): bool
             })(),
             default => false,
         };
-        if (!$ok) {
+        if (! $ok) {
             return false;
         }
     }
@@ -221,8 +222,9 @@ function lowerIoReturnOrAction(Ast\AstNode $expr, LowerCtx $ctx, bool $asStateme
     }
 
     $dest = ($asStatement || ioActionExprReturnsUnit($expr)) ? null : freshTemp($ctx);
-    if (!lowerIoAction($expr, $ctx, $dest)) {
+    if (! lowerIoAction($expr, $ctx, $dest)) {
         $inner = $expr instanceof Ast\IoAction ? $expr->expr : $expr;
+
         try {
             $value = lowerExpr($inner, $ctx);
         } catch (\Throwable) {
@@ -270,9 +272,9 @@ function lowerIoActionToBox(Ast\AstNode $expr, LowerCtx $ctx): Operand
 
     $items = $subCtx->items;
     if ($items !== []) {
-        $last = $items[count($items) - 1];
+        $last = $items[\count($items) - 1];
         if ($last instanceof Ret) {
-            array_pop($items);
+            \array_pop($items);
             $result = $last->value;
         }
     }
@@ -383,7 +385,7 @@ function lowerIoAction(Ast\AstNode $expr, LowerCtx $ctx, ?int $dest): bool
 function lowerIoNullaryCall(string $name, LowerCtx $ctx, ?int $dest, ?SrcLoc $srcLoc): bool
 {
     $call = new IoCall($name, [], null, srcLoc: $srcLoc);
-    if (!ioCallNeedsRunBoxedResult($call, $ctx)) {
+    if (! ioCallNeedsRunBoxedResult($call, $ctx)) {
         $call->dest = $dest;
         $ctx->items[] = $call;
 
@@ -411,7 +413,7 @@ function ioCallNeedsRunBoxedResult(IoCall $call, LowerCtx $ctx): bool
         return false;
     }
 
-    if (\is_string($call->runtime) && str_starts_with($call->runtime, 'foreign:')) {
+    if (\is_string($call->runtime) && \str_starts_with($call->runtime, 'foreign:')) {
         return false;
     }
 
@@ -450,7 +452,7 @@ function lowerIoCase(Ast\IoCase $expr, LowerCtx $ctx): bool
                 $guards = [lowerArmGuard($guard, $armCtx, $isVarPattern ? $bindings : [])];
                 $armCtx->items = $isVarPattern ? [] : $bindings;
             }
-            if (!lowerIoFunctionBody($body, $armCtx)) {
+            if (! lowerIoFunctionBody($body, $armCtx)) {
                 return false;
             }
             $arms[] = new MatchArm(
@@ -489,6 +491,7 @@ function ioActionCall(Ast\AstNode $expr, LowerCtx $ctx): Intrinsic|IoCall|null
                         $arg instanceof Ast\IoAction ? $arg : new Ast\IoAction($arg),
                         $ctx,
                     );
+
                     continue;
                 }
                 $args[] = lowerExpr($arg, $ctx);
@@ -555,6 +558,7 @@ function ioActionCall(Ast\AstNode $expr, LowerCtx $ctx): Intrinsic|IoCall|null
                 $arg instanceof Ast\IoAction ? $arg : new Ast\IoAction($arg),
                 $ctx,
             );
+
             continue;
         }
 
@@ -595,8 +599,8 @@ function resolveIoActionCalleeName(Ast\AstNode $fnExpr, LowerCtx $ctx): ?string
 
 function resolveLetBoundFnName(string $name, LowerCtx $ctx): ?string
 {
-    foreach (array_reverse($ctx->items) as $item) {
-        if (!$item instanceof Let || $item->name !== $name) {
+    foreach (\array_reverse($ctx->items) as $item) {
+        if (! $item instanceof Let || $item->name !== $name) {
             continue;
         }
 
@@ -630,7 +634,7 @@ function flattenApply(Ast\AstNode $expr): array
 {
     $args = [];
     while ($expr instanceof Ast\Apply) {
-        array_unshift($args, $expr->argument);
+        \array_unshift($args, $expr->argument);
         $expr = $expr->function;
     }
 

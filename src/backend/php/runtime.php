@@ -35,8 +35,8 @@ function __apply(callable|array $fn, mixed ...$args): mixed
         }
 
         $arity = $fn[1];
-        $applied = count($fn) - 3;
-        $incoming = count($args);
+        $applied = \count($fn) - 3;
+        $incoming = \count($args);
 
         if ($applied + $incoming >= $arity) {
             $need = $arity - $applied;
@@ -98,13 +98,13 @@ function __apply(callable|array $fn, mixed ...$args): mixed
     }
 
     $callable = $fn;
-    if (!($callable instanceof \Closure) && !(\is_string($callable) && !str_contains($callable, '::'))) {
+    if (! ($callable instanceof \Closure) && ! (\is_string($callable) && ! \str_contains($callable, '::'))) {
         $callable = \Closure::fromCallable($callable);
     }
 
     $ref = new \ReflectionFunction($callable);
     $arity = $ref->getNumberOfParameters();
-    if (count($args) < $arity) {
+    if (\count($args) < $arity) {
         return ['__partial', $arity, $callable, ...$args];
     }
 
@@ -133,7 +133,7 @@ function fix(callable|array $f): mixed
     $done = false;
     $self = null;
     $self = static function () use ($f, &$value, &$done, &$self): mixed {
-        if (!$done) {
+        if (! $done) {
             $done = true;
             $value = __apply($f, $self);
         }
@@ -272,7 +272,7 @@ function resolveThrowSite(array $site): array
     ];
 }
 
-final class MoggiException extends \RuntimeException
+final class runtime extends \RuntimeException
 {
     /**
      * @param array{0: '__se', 1: string, 2: mixed} $someException
@@ -377,7 +377,7 @@ function rethrowNormalized(\Throwable $e): never
 function formatExceptionReport(\Throwable $e): string
 {
     try {
-        if (!($e instanceof MoggiException)) {
+        if (! ($e instanceof MoggiException)) {
             $wrapped = new MoggiException(normalizeHostException($e), $e, null);
 
             return formatExceptionReport($wrapped);
@@ -388,7 +388,7 @@ function formatExceptionReport(\Throwable $e): string
         $out = 'moggi: ' . formatExceptionHeader($tag, $e->someException[2] ?? null, $msg) . "\n";
 
         $cause = $e->getPrevious();
-        $hasHostSection = $cause !== null && !($cause instanceof MoggiException);
+        $hasHostSection = $cause !== null && ! ($cause instanceof MoggiException);
 
         $shown = [];
         $frames = [];
@@ -400,7 +400,7 @@ function formatExceptionReport(\Throwable $e): string
             $shown[$throwKey] = true;
         }
 
-        foreach (moggCallerFrames($e, !$hasHostSection) as $frame) {
+        foreach (moggCallerFrames($e, ! $hasHostSection) as $frame) {
             $key = frameKey($frame);
             if ($throwKey !== null && $key === $throwKey) {
                 continue;
@@ -436,7 +436,7 @@ function formatMoggFrames(array $frames): string
     foreach (\array_slice($frames, 0, MOGGI_TRACE_FRAME_LIMIT) as $frame) {
         $out .= formatStackFrame($frame['symbolId'], $frame['displayPath'], $frame['line'], $frame['col']);
     }
-    $elided = count($frames) - MOGGI_TRACE_FRAME_LIMIT;
+    $elided = \count($frames) - MOGGI_TRACE_FRAME_LIMIT;
     if ($elided > 0) {
         $out .= "  ... {$elided} more\n";
     }
@@ -495,7 +495,7 @@ function moggCallerFrames(MoggiException $e, bool $includeUnmapped = true): arra
 {
     try {
         $cause = $e->getPrevious();
-        $frames = ($e->throwSite === null && $cause !== null && !($cause instanceof MoggiException))
+        $frames = ($e->throwSite === null && $cause !== null && ! ($cause instanceof MoggiException))
             ? javaStyleFrames($cause->getFile(), $cause->getLine(), $cause->getTrace())
             : javaStyleFrames($e->getFile(), $e->getLine(), $e->getTrace());
 
@@ -516,9 +516,10 @@ function moggCallerFrames(MoggiException $e, bool $includeUnmapped = true): arra
                 $out[] = $resolved;
                 $prevKey = $key;
                 $prevName = $frame['name'];
+
                 continue;
             }
-            if (!$includeUnmapped || $frame['name'] === '' || $frame['line'] <= 0) {
+            if (! $includeUnmapped || $frame['name'] === '' || $frame['line'] <= 0) {
                 continue;
             }
             $out[] = [
@@ -555,8 +556,8 @@ function hostCauseFrames(\Throwable $cause, array $shown): string
                 continue;
             }
             if ($index >= MOGGI_TRACE_FRAME_LIMIT) {
-                $elided = count($cause->getTrace()) - $index;
-                $out .= '  ... ' . max(1, $elided) . " more\n";
+                $elided = \count($cause->getTrace()) - $index;
+                $out .= '  ... ' . \max(1, $elided) . " more\n";
 
                 break;
             }
@@ -590,10 +591,10 @@ function javaStyleFrames(string $throwFile, int $throwLine, array $trace): array
         'line' => $throwLine,
     ]];
 
-    $count = count($trace);
+    $count = \count($trace);
     for ($i = 0; $i + 1 < $count; ++$i) {
         $name = (string) ($trace[$i + 1]['function'] ?? '');
-        if ($name === '' || str_starts_with($name, '{')) {
+        if ($name === '' || \str_starts_with($name, '{')) {
             continue;
         }
         $frames[] = [
@@ -608,9 +609,9 @@ function javaStyleFrames(string $throwFile, int $throwLine, array $trace): array
 
 function isMoggiRuntimeFile(string $file): bool
 {
-    $file = str_replace('\\', '/', $file);
+    $file = \str_replace('\\', '/', $file);
 
-    return $file === str_replace('\\', '/', __FILE__) || str_ends_with($file, '/_runtime.php');
+    return $file === \str_replace('\\', '/', __FILE__) || \str_ends_with($file, '/_runtime.php');
 }
 
 /**
@@ -656,8 +657,6 @@ function lookupGeneratedFunction(string $name): ?array
     ];
 }
 
-
-
 /**
  * Project-relative display path — never an absolute developer filesystem path as identity.
  *
@@ -671,25 +670,25 @@ function displaySourcePath(string $file): string
     if ($file === '' || $file === '<interactive>') {
         return $file;
     }
-    $file = str_replace('\\', '/', $file);
+    $file = \str_replace('\\', '/', $file);
     foreach (['/lib/', '/libraries/', '/tests/', '/examples/'] as $marker) {
-        $pos = strpos($file, $marker);
+        $pos = \strpos($file, $marker);
         if ($pos !== false) {
-            return substr($file, $pos + 1);
+            return \substr($file, $pos + 1);
         }
     }
     foreach (['lib/', 'libraries/', 'tests/', 'examples/'] as $marker) {
-        if (str_starts_with($file, $marker)) {
+        if (\str_starts_with($file, $marker)) {
             return $file;
         }
     }
 
-    return basename($file);
+    return \basename($file);
 }
 
 function reportUncaught(\Throwable $e): never
 {
-    fwrite(STDERR, formatExceptionReport($e));
+    \fwrite(STDERR, formatExceptionReport($e));
     exit(1);
 }
 

@@ -43,10 +43,10 @@ function fixityFromImport(array $fixity, ImportDecl $import): array
     }
 
     if ($import->hiding !== []) {
-        $hidden = array_flip($import->hiding);
+        $hidden = \array_flip($import->hiding);
         $visible = [];
         foreach ($fixity as $operator => $info) {
-            if (!isset($hidden[$operator])) {
+            if (! isset($hidden[$operator])) {
                 $visible[$operator] = $info;
             }
         }

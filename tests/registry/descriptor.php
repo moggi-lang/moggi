@@ -11,7 +11,7 @@
 // not the old "unsupported descriptor format" one.
 
 $root = __DIR__;
-while (!is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
@@ -22,7 +22,7 @@ use function Moggi\Registry\readDescriptor;
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
     ++$checks;
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
@@ -31,10 +31,10 @@ $work = \sys_get_temp_dir() . '/moggi-descriptor-' . \bin2hex(\random_bytes(6));
 \mkdir($work, 0777, true);
 
 $remove = static function (string $path) use (&$remove): void {
-    if (!\file_exists($path) && !\is_link($path)) {
+    if (! \file_exists($path) && ! \is_link($path)) {
         return;
     }
-    if (\is_dir($path) && !\is_link($path)) {
+    if (\is_dir($path) && ! \is_link($path)) {
         foreach (\scandir($path) ?: [] as $name) {
             if ($name !== '.' && $name !== '..') {
                 $remove($path . '/' . $name);
@@ -71,8 +71,9 @@ try {
     // --- `format` is gone, and refused as an undeclared key -------------------
     $formatted = $write('formatted', "format = 1\n");
     $assert(\str_contains($problems($formatted), 'does not take `format`'), '`format` is refused as an undeclared key');
-    $assert(!\str_contains($problems($formatted), 'unsupported descriptor format'), 'the removed format check no longer speaks');
+    $assert(! \str_contains($problems($formatted), 'unsupported descriptor format'), 'the removed format check no longer speaks');
     $threw = false;
+
     try {
         readDescriptor($formatted);
     } catch (\RuntimeException) {

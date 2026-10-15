@@ -2,15 +2,17 @@
 
 namespace Moggi\Pipeline;
 
-use Moggi\Syntax\Ast\Program;
-
 use function Moggi\Backend\codegen;
+
 use function Moggi\Backend\currentBackend;
 use function Moggi\Backend\setCompileBackend;
 use function Moggi\IR\lower;
 use function Moggi\Modules\moduleNameToNamespace;
 use function Moggi\Optimize\optimize;
 use function Moggi\Semantics\Effects\checkAndNormalize;
+
+use Moggi\Syntax\Ast\Program;
+
 use function Moggi\Syntax\Lexer\lex;
 use function Moggi\Syntax\Parser\parse;
 
@@ -95,7 +97,7 @@ function run(PipelineRequest $request, PipelineStage $stopAt = PipelineStage::Em
 function defaultEmitOptions(Program $ast, string $filename): array
 {
     $emitOptions = [
-        'outputRelative' => preg_replace(
+        'outputRelative' => \preg_replace(
             '/\.mog$/',
             currentBackend()->extension(),
             \str_replace('\\', '/', $filename),

@@ -8,7 +8,7 @@
 // verdicts themselves, in one process, with no toolchain in the loop.
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
@@ -16,7 +16,7 @@ require $root . '/src/compiler.php';
 use Moggi\Syntax\Ast;
 
 $assert = static function (bool $condition, string $message): void {
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
@@ -72,14 +72,14 @@ $same(
     $table['methods']['copyOf'][0]['descriptor'],
     'a generic method reads as its erasure',
 );
-$assert(!$table['methods']['secret'][0]['public'], 'a private method is recorded as not public');
+$assert(! $table['methods']['secret'][0]['public'], 'a private method is recorded as not public');
 $same('I', $table['fields']['MAX_VALUE']['descriptor'], 'a constant printed with its value is still read');
 $same(
     'Ljava/util/Comparator;',
     $table['fields']['CASE_INSENSITIVE_ORDER']['descriptor'],
     'a generic field reads as its erasure',
 );
-$assert(!isset($table['fields']['{}']), 'a static initializer is not a field');
+$assert(! isset($table['fields']['{}']), 'a static initializer is not a field');
 
 $same(
     'List',
@@ -100,7 +100,7 @@ $assert(
     'javap reports a class it cannot find',
 );
 $assert(
-    !\Moggi\Backend\Jvm\Verify\javapCouldNotReadClass("public final class java.lang.String {\n}\n"),
+    ! \Moggi\Backend\Jvm\Verify\javapCouldNotReadClass("public final class java.lang.String {\n}\n"),
     'a class javap printed is readable',
 );
 
@@ -122,11 +122,9 @@ $arity2 = new Ast\TypeArrow($string, new Ast\TypeArrow($int, $int));
 $instantiate = new Ast\TypeArrow($string, new Ast\TypeArrow($string, $dateTime));
 $formatOn = new Ast\TypeArrow($dateTime, new Ast\TypeArrow($string, $string));
 
-$php = static fn (string $kind, array $pathInfo, ?Ast\TypeNode $type = null): ?string
-    => \Moggi\Backend\Php\Verify\verifyForeignImportAgainstHost($kind, $pathInfo, $type, 'probe');
+$php = static fn (string $kind, array $pathInfo, ?Ast\TypeNode $type = null): ?string => \Moggi\Backend\Php\Verify\verifyForeignImportAgainstHost($kind, $pathInfo, $type, 'probe');
 
-$global = static fn (string $path, ?Ast\TypeNode $type = null): array
-    => ['dispatch' => 'global', 'classPath' => null, 'hostMember' => null, 'path' => $path];
+$global = static fn (string $path, ?Ast\TypeNode $type = null): array => ['dispatch' => 'global', 'classPath' => null, 'hostMember' => null, 'path' => $path];
 
 $same(
     'php has no function `strlenn`',
@@ -216,8 +214,8 @@ foreach (['1', 'php', 'all', 'jvm'] as $value) {
         "MOGGI_NO_FFI_VERIFY={$value} no longer changes the verdict",
     );
     $assert(
-        !\str_contains($skipped['stderr'], 'FFI_VERIFY'),
-        "and nothing claims a check was skipped: " . $skipped['stderr'],
+        ! \str_contains($skipped['stderr'], 'FFI_VERIFY'),
+        'and nothing claims a check was skipped: ' . $skipped['stderr'],
     );
 }
 
@@ -334,6 +332,7 @@ if (\PHP_OS_FAMILY !== 'Windows') {
         \putenv($var);
     }
     \putenv('PATH=' . $fakeBin . '/empty');
+
     try {
         try {
             \Moggi\Backend\Jvm\Verify\javapClassTable('java.lang.String');

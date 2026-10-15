@@ -2,8 +2,13 @@
 
 namespace Moggi\Semantics\Types;
 
+use function Moggi\Errors\appendDidYouMean;
+
 use Moggi\Semantics\Kinds;
 use Moggi\Semantics\TypeExpr\Scheme;
+
+use function Moggi\Semantics\TypeExpr\scheme;
+
 use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TNatLit;
@@ -12,11 +17,9 @@ use Moggi\Semantics\TypeExpr\TStringLit;
 use Moggi\Semantics\TypeExpr\TUnit;
 use Moggi\Semantics\TypeExpr\TVar;
 use Moggi\Semantics\TypeExpr\Type;
+
 use Moggi\Syntax\Ast;
 use Moggi\Syntax\Ast\AstNode;
-
-use function Moggi\Errors\appendDidYouMean;
-use function Moggi\Semantics\TypeExpr\scheme;
 
 require_once __DIR__ . '/type_core.php';
 
@@ -51,7 +54,7 @@ function applyEvidenceMethodInfo(TypeCheckState $state, Ast\AstNode &$expr, arra
 {
     $methodType = $info['type'] ?? ($state->classes[$info['class']]['methods'][$info['method']]['type'] ?? null);
     $methodNullary = $methodType !== null
-        && !(prune($state, $methodType) instanceof TArrow);
+        && ! (prune($state, $methodType) instanceof TArrow);
 
     $method = new Ast\EvidenceMethod(
         $info['class'],
@@ -90,12 +93,12 @@ function parseConstraints(TypeCheckState $state, array $constraints, ?AstNode $a
 {
     $parsed = [];
     foreach ($constraints as $i => $constraint) {
-        if (!$constraint instanceof Ast\TypeApp || !$constraint->con instanceof Ast\TypeCon) {
+        if (! $constraint instanceof Ast\TypeApp || ! $constraint->con instanceof Ast\TypeCon) {
             throw typeFail($state, 'constraint must be a class application', $at);
         }
 
         $className = $constraint->con->name;
-        if (!isset($state->classes[$className])) {
+        if (! isset($state->classes[$className])) {
             throw typeFail(
                 $state,
                 appendDidYouMean(
@@ -124,6 +127,7 @@ function parseConstraints(TypeCheckState $state, array $constraints, ?AstNode $a
         foreach ($savedVarKinds as $name => $kind) {
             if ($kind === null) {
                 unset($state->varKinds[$name]);
+
                 continue;
             }
 
@@ -150,8 +154,8 @@ function assertConstraintArity(
     Ast\TypeApp $constraint,
     ?AstNode $at = null,
 ): void {
-    $expected = count($classInfo['params']);
-    $actual = count($constraint->args);
+    $expected = \count($classInfo['params']);
+    $actual = \count($constraint->args);
     if ($actual < $expected) {
         throw typeFail($state, "class `{$className}` applied to too few arguments", $at ?? $constraint);
     }
@@ -279,7 +283,7 @@ function expandConstraintsWithSuperclasses(TypeCheckState $state, array $constra
             }
 
             foreach ($classInfo['superclasses'] as $super) {
-                if (!$super instanceof Ast\TypeApp || !$super->con instanceof Ast\TypeCon) {
+                if (! $super instanceof Ast\TypeApp || ! $super->con instanceof Ast\TypeCon) {
                     continue;
                 }
 
@@ -294,7 +298,7 @@ function expandConstraintsWithSuperclasses(TypeCheckState $state, array $constra
     }
 
     $result = constraintsWithPositionalEvidence($expanded);
-    if (getenv('MOGGI_ASSERT_EXPAND_CLOSED') !== false && ! constraintsSuperclassClosed($state, $result)) {
+    if (\getenv('MOGGI_ASSERT_EXPAND_CLOSED') !== false && ! constraintsSuperclassClosed($state, $result)) {
         throw new \RuntimeException('dictionary expansion did not close its constraint list');
     }
 
@@ -331,7 +335,7 @@ function constraintsWithPositionalEvidence(array $constraints): array
  * site's dictionary arguments are both projected from. Because they come from
  * one solve, the two sides cannot disagree on arity.
  */
-final class SolvedGroup
+final class constraints
 {
     /**
      * @param list<Ast\PendingConstraint> $user
@@ -378,7 +382,7 @@ function dictsForPending(TypeCheckState $state, array $pending, array $dicts): a
 /** @param list<Type> $args */
 function constraintArgsKey(array $args): string
 {
-    return join(',', \array_map(constraintArgKey(...), $args));
+    return \implode(',', \array_map(constraintArgKey(...), $args));
 }
 
 function constraintArgKey(Type $arg): string
@@ -412,7 +416,7 @@ function constraintFromSuperclassAst(TypeCheckState $state, Ast\TypeApp $super, 
         ?? throw typeFail($state, "unknown class `{$className}` in superclass constraint");
 
     $substituted = substituteInstanceTypeAst($super, $mapping);
-    if (!$substituted instanceof Ast\TypeApp) {
+    if (! $substituted instanceof Ast\TypeApp) {
         throw typeFail($state, "class `{$className}` superclass did not stay an application");
     }
 
@@ -437,7 +441,7 @@ function applyConstraintVarKinds(TypeCheckState $state, array $constraints): voi
 
         foreach ($classInfo['params'] as $i => $param) {
             $arg = $constraint->args[$i] ?? null;
-            if (!$arg instanceof TVar) {
+            if (! $arg instanceof TVar) {
                 continue;
             }
 
@@ -479,13 +483,14 @@ function buildConstraintEnv(TypeCheckState $state, array $constraints): array
                 $classInfo['params'],
                 $mapping,
             )['type']);
-            if (!$mappedType instanceof TArrow) {
+            if (! $mappedType instanceof TArrow) {
                 continue;
             }
 
             $owner = $className . "\0" . $constraint->evidence;
             if (isset($owners[$methodName]) && $owners[$methodName] !== $owner) {
                 unset($env[$methodName]);
+
                 continue;
             }
 
@@ -514,12 +519,13 @@ function resolveConstraintEvidence(TypeCheckState $state, array $constraints, ?A
         $ambient = ambientEvidenceFor($state, $constraint);
         if ($ambient !== null) {
             $exprs[] = new Ast\Variable($ambient);
+
             continue;
         }
 
         $instanceHead = instanceHeadFromConstraintArgs($state, $classInfo['params'], $constraint->args, $at);
 
-        if (!findProjectInstance($state, $className, $instanceHead)) {
+        if (! findProjectInstance($state, $className, $instanceHead)) {
             throw typeFail(
                 $state,
                 'missing instance for `' . $className . ' ' . typeToString($instanceHead) . '`',
@@ -569,7 +575,7 @@ function evidenceRefFor(TypeCheckState $state, string $className, Type $instance
  */
 function tryResolveEvidenceStrict(TypeCheckState $state, array $constraints, ?AstNode $at = null): ?array
 {
-    if (!constraintsResolvable($state, $constraints)) {
+    if (! constraintsResolvable($state, $constraints)) {
         return null;
     }
 
@@ -593,14 +599,15 @@ function ambientEvidenceFor(TypeCheckState $state, Ast\PendingConstraint $constr
             continue;
         }
 
-        if (count($ambient->args) !== count($constraint->args)) {
+        if (\count($ambient->args) !== \count($constraint->args)) {
             continue;
         }
 
         $match = true;
         foreach ($ambient->args as $i => $ambientArg) {
-            if (!typesMatchForAmbient($state, $ambientArg, $constraint->args[$i])) {
+            if (! typesMatchForAmbient($state, $ambientArg, $constraint->args[$i])) {
                 $match = false;
+
                 break;
             }
         }
@@ -639,11 +646,11 @@ function typesMatchForAmbient(TypeCheckState $state, Type $left, Type $right): b
         if (! $left instanceof TCon || ! $right instanceof TCon) {
             return false;
         }
-        if ($left->name !== $right->name || count($left->args) !== count($right->args)) {
+        if ($left->name !== $right->name || \count($left->args) !== \count($right->args)) {
             return false;
         }
         foreach ($left->args as $i => $arg) {
-            if (!typesMatchForAmbient($state, $arg, $right->args[$i])) {
+            if (! typesMatchForAmbient($state, $arg, $right->args[$i])) {
                 return false;
             }
         }
@@ -655,11 +662,11 @@ function typesMatchForAmbient(TypeCheckState $state, Type $left, Type $right): b
         if (! $left instanceof TPromoted || ! $right instanceof TPromoted) {
             return false;
         }
-        if ($left->name !== $right->name || count($left->args) !== count($right->args)) {
+        if ($left->name !== $right->name || \count($left->args) !== \count($right->args)) {
             return false;
         }
         foreach ($left->args as $i => $arg) {
-            if (!typesMatchForAmbient($state, $arg, $right->args[$i])) {
+            if (! typesMatchForAmbient($state, $arg, $right->args[$i])) {
                 return false;
             }
         }
@@ -734,6 +741,7 @@ function tryResolveEvidenceExprs(
 
         if ($resolved['ambient'] !== null) {
             $exprs[] = new Ast\Variable($resolved['ambient']);
+
             continue;
         }
 
@@ -742,7 +750,7 @@ function tryResolveEvidenceExprs(
             return null;
         }
 
-        if (!findProjectInstance($state, $constraint->class, $head)) {
+        if (! findProjectInstance($state, $constraint->class, $head)) {
             return null;
         }
 
@@ -992,7 +1000,7 @@ function prependEvidenceToCall(TypeCheckState $state, Ast\AstNode $expr, array $
         return $fn;
     }
 
-    if (!$expr instanceof Ast\Apply) {
+    if (! $expr instanceof Ast\Apply) {
         throw new \InvalidArgumentException('prependEvidenceToCall expects a call or reference, got ' . $expr::class);
     }
 
@@ -1021,7 +1029,7 @@ function classNameForAmbientEvidence(TypeCheckState $state, string $evidenceName
         }
     }
 
-    if (!\str_starts_with($evidenceName, '__ev_')) {
+    if (! \str_starts_with($evidenceName, '__ev_')) {
         return null;
     }
 
@@ -1059,7 +1067,7 @@ function resolveProjectInstanceContextEvidence(
     $headVars = $match['mapping']['__headVars'] ?? [];
     $raw = [];
     foreach ($match['instance']['constraints'] ?? [] as $constraintAst) {
-        if (!$constraintAst instanceof Ast\TypeApp || !$constraintAst->con instanceof Ast\TypeCon) {
+        if (! $constraintAst instanceof Ast\TypeApp || ! $constraintAst->con instanceof Ast\TypeCon) {
             return [];
         }
 
@@ -1082,6 +1090,7 @@ function resolveProjectInstanceContextEvidence(
             $ambient = ambientEvidenceFor($state, $constraint);
             if ($ambient !== null) {
                 $exprs[] = new Ast\Variable($ambient);
+
                 continue;
             }
 
@@ -1097,7 +1106,7 @@ function resolveProjectInstanceContextEvidence(
                 );
             }
 
-            if (!findProjectInstance($state, $constraint->class, $ctxHead)) {
+            if (! findProjectInstance($state, $constraint->class, $ctxHead)) {
                 return [];
             }
 
@@ -1120,7 +1129,7 @@ function prependEvidenceAtRoot(TypeCheckState $state, Ast\AstNode $expr, array $
     if ($expr instanceof Ast\Apply) {
         $evidence = \array_values(\array_filter(
             $evidence,
-            static fn (Ast\AstNode $ev): bool => !\in_array(evidenceNodeKey($ev), appliedEvidenceKeys($expr), true),
+            static fn (Ast\AstNode $ev): bool => ! \in_array(evidenceNodeKey($ev), appliedEvidenceKeys($expr), true),
         ));
         if ($evidence === []) {
             return $expr;
@@ -1311,7 +1320,7 @@ function walkAstValues(Ast\AstNode $expr, callable $visit): void
  */
 function assertPendingDictsConsistentInExpr(TypeCheckState $state, Ast\AstNode $expr): void
 {
-    if (getenv('MOGGI_ASSERT_PENDING_DICTS') === false) {
+    if (\getenv('MOGGI_ASSERT_PENDING_DICTS') === false) {
         return;
     }
 
@@ -1375,11 +1384,11 @@ function constraintsResolvable(TypeCheckState $state, array $constraints): bool
             }
         }
 
-        if (!findProjectInstance($state, $constraint->class, $head)) {
+        if (! findProjectInstance($state, $constraint->class, $head)) {
             return false;
         }
 
-        if (!findUniqueProjectInstance($state, $constraint->class, $head)) {
+        if (! findUniqueProjectInstance($state, $constraint->class, $head)) {
             return false;
         }
     }

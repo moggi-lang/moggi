@@ -2,19 +2,20 @@
 <?php declare(strict_types=1);
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
 
-use Moggi\Semantics\Types\TypeError;
-
 use function Moggi\Modules\libraryModuleScan;
+
 use function Moggi\Modules\projectSourceClosure;
 use function Moggi\Paths\canonicalPath;
 
+use Moggi\Semantics\Types\TypeError;
+
 $assert = static function (bool $condition, string $message): void {
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
@@ -44,6 +45,7 @@ try {
     );
 
     $threw = false;
+
     try {
         projectSourceClosure([$dirs['a'] . '/Alpha.mog'], [$dirs['a'], $dirs['b']]);
     } catch (TypeError $error) {

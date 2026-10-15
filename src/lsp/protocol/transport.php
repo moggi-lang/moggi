@@ -4,22 +4,22 @@ namespace Moggi\LSP\Protocol;
 
 function pathToUri(string $path): string
 {
-    $real = realpath($path);
+    $real = \realpath($path);
     if ($real !== false) {
         $path = $real;
     }
-    $path = str_replace('\\', '/', $path);
-    if (!str_starts_with($path, '/')) {
+    $path = \str_replace('\\', '/', $path);
+    if (! \str_starts_with($path, '/')) {
         $path = '/' . $path;
     }
 
-    $parts = explode('/', $path);
+    $parts = \explode('/', $path);
     $encoded = [];
     foreach ($parts as $i => $part) {
-        $encoded[] = $part === '' && $i === 0 ? '' : rawurlencode($part);
+        $encoded[] = $part === '' && $i === 0 ? '' : \rawurlencode($part);
     }
 
-    return 'file://' . implode('/', $encoded);
+    return 'file://' . \implode('/', $encoded);
 }
 
 /**
@@ -32,13 +32,13 @@ function pathToUri(string $path): string
  */
 function uriToPath(string $uri): string
 {
-    $uri = trim($uri);
-    if (!str_starts_with($uri, 'file://')) {
+    $uri = \trim($uri);
+    if (! \str_starts_with($uri, 'file://')) {
         return $uri;
     }
-    $path = rawurldecode(substr($uri, strlen('file://')));
-    if (preg_match('#^/[A-Za-z]:([\\/]|$)#', $path) === 1) {
-        $path = substr($path, 1);
+    $path = \rawurldecode(\substr($uri, \strlen('file://')));
+    if (\preg_match('#^/[A-Za-z]:([\\/]|$)#', $path) === 1) {
+        $path = \substr($path, 1);
     }
 
     return $path;
@@ -49,7 +49,7 @@ function uriToPath(string $uri): string
  */
 function isMoguri(string $uri): bool
 {
-    return str_ends_with(strtolower($uri), '.mog');
+    return \str_ends_with(\strtolower($uri), '.mog');
 }
 
 /**
@@ -71,7 +71,7 @@ function readMessage($stream = null, ?bool &$malformed = null): array|null|false
     $contentLength = null;
     $sawHeaderLine = false;
     while (true) {
-        $line = fgets($stream);
+        $line = \fgets($stream);
         if ($line === false) {
             return $sawHeaderLine ? false : null;
         }
@@ -79,30 +79,32 @@ function readMessage($stream = null, ?bool &$malformed = null): array|null|false
             break;
         }
         $sawHeaderLine = true;
-        if (preg_match('/^Content-Length:\s*(\d+)/i', $line, $m)) {
+        if (\preg_match('/^Content-Length:\s*(\d+)/i', $line, $m)) {
             $contentLength = (int) $m[1];
         }
     }
 
     if ($contentLength === null || $contentLength <= 0) {
         $malformed = true;
+
         return false;
     }
 
     $body = '';
     $remaining = $contentLength;
     while ($remaining > 0) {
-        $chunk = fread($stream, $remaining);
+        $chunk = \fread($stream, $remaining);
         if ($chunk === false || $chunk === '') {
             return null;
         }
         $body .= $chunk;
-        $remaining -= strlen($chunk);
+        $remaining -= \strlen($chunk);
     }
 
-    $decoded = json_decode($body, true);
-    if (!\is_array($decoded)) {
+    $decoded = \json_decode($body, true);
+    if (! \is_array($decoded)) {
         $malformed = true;
+
         return false;
     }
 
@@ -128,19 +130,21 @@ function readMessageOrTimeout($stream = null, ?float $timeoutSec = null, ?bool &
     if ($timeoutSec === null || $timeoutSec < 0) {
         return readMessage($stream, $malformed);
     }
-    $sec = (int) floor($timeoutSec);
-    $usec = (int) max(0, ($timeoutSec - $sec) * 1_000_000);
+    $sec = (int) \floor($timeoutSec);
+    $usec = (int) \max(0, ($timeoutSec - $sec) * 1_000_000);
     $read = [$stream];
     $write = null;
     $except = null;
+
     try {
-        $n = @stream_select($read, $write, $except, $sec, $usec);
+        $n = @\stream_select($read, $write, $except, $sec, $usec);
     } catch (\Throwable) {
         return false;
     }
     if ($n === false || $n === 0 || $read === []) {
         return false;
     }
+
     return readMessage($stream, $malformed);
 }
 
@@ -153,16 +157,16 @@ function readMessageOrTimeout($stream = null, ?float $timeoutSec = null, ?bool &
 function writeMessage(array $message, $stream = null): void
 {
     $stream ??= \STDOUT;
-    $body = json_encode(
+    $body = \json_encode(
         $message,
         JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE,
     );
     if ($body === false) {
         $body = '{}';
     }
-    fwrite($stream, "Content-Length: " . strlen($body) . "\r\n");
-    fwrite($stream, "Content-Type: application/vscode-jsonrpc; charset=utf-8\r\n");
-    fwrite($stream, "\r\n");
-    fwrite($stream, $body);
-    fflush($stream);
+    \fwrite($stream, 'Content-Length: ' . \strlen($body) . "\r\n");
+    \fwrite($stream, "Content-Type: application/vscode-jsonrpc; charset=utf-8\r\n");
+    \fwrite($stream, "\r\n");
+    \fwrite($stream, $body);
+    \fflush($stream);
 }

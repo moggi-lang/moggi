@@ -59,7 +59,7 @@ function parseModuleHeader(array $tokens, string $source = '', string $filename 
         } else {
             $importDoc = consumeLeadingDoc($state);
         }
-        if (!isAt($state, TokenKind::KwImport)) {
+        if (! isAt($state, TokenKind::KwImport)) {
             break;
         }
         $import = parseImportDecl($state);
@@ -140,7 +140,7 @@ function parse(
             } else {
                 $importDoc = consumeLeadingDoc($state);
             }
-            if (!isAt($state, TokenKind::KwImport)) {
+            if (! isAt($state, TokenKind::KwImport)) {
                 break;
             }
             $import = parseImportDecl($state);
@@ -157,7 +157,7 @@ function parse(
     $fixityDocs = [];
     $state->backendMap = $backendMap;
 
-    while (!isAt($state, TokenKind::Eof)) {
+    while (! isAt($state, TokenKind::Eof)) {
         if (isAt($state, TokenKind::KwImport)) {
             throw lateImportError($state, $items);
         }
@@ -179,6 +179,7 @@ function parse(
                     'precedence' => (int) ($decl['precedence'] ?? 9),
                 ];
             }
+
             continue;
         }
 
@@ -227,11 +228,12 @@ function parseHeaderPragmas(ParserState $state): array
     $backendMap = [];
     while (isAt($state, TokenKind::Pragma)) {
         $token = advance($state);
-        $body = trim($token->lexeme);
-        if (preg_match('/^BACKEND\b(.*)$/is', $body, $m) === 1) {
+        $body = \trim($token->lexeme);
+        if (\preg_match('/^BACKEND\b(.*)$/is', $body, $m) === 1) {
             foreach (parseBackendPragma($state, $token, $m[1]) as $backend => $module) {
                 $backendMap[$backend] = $module;
             }
+
             continue;
         }
         foreach (languageExtensionsFromPragma($state, $token) as $ext) {
@@ -247,23 +249,23 @@ function parseHeaderPragmas(ParserState $state): array
  */
 function languageExtensionsFromPragma(ParserState $state, Token $token): array
 {
-    $body = trim($token->lexeme);
+    $body = \trim($token->lexeme);
     if ($body === '') {
         throw parseError($state, 'empty pragma', $token, 'parse/pragma');
     }
 
-    if (!preg_match('/^LANGUAGE\b(.*)$/is', $body, $m)) {
+    if (! \preg_match('/^LANGUAGE\b(.*)$/is', $body, $m)) {
         throw parseError($state, "unsupported pragma `{$body}`", $token, 'parse/pragma');
     }
 
-    $rest = trim($m[1]);
+    $rest = \trim($m[1]);
     if ($rest === '') {
         throw parseError($state, 'LANGUAGE pragma needs at least one extension', $token, 'parse/pragma');
     }
 
     $extensions = [];
-    foreach (preg_split('/\s*,\s*/', $rest) ?: [] as $raw) {
-        $name = trim($raw);
+    foreach (\preg_split('/\s*,\s*/', $rest) ?: [] as $raw) {
+        $name = \trim($raw);
         if ($name === '') {
             continue;
         }
@@ -287,7 +289,7 @@ function languageExtensionsFromPragma(ParserState $state, Token $token): array
 function collectFixity(array $tokens, string $source = '', string $filename = ''): array
 {
     $fixity = [];
-    $count = count($tokens);
+    $count = \count($tokens);
 
     for ($pos = 0; $pos < $count; ++$pos) {
         $kind = $tokens[$pos]->kind;
@@ -325,20 +327,21 @@ function mergeFunctionClauses(array $items, string $source = '', string $filenam
     $context = ['source' => $source, 'filename' => $filename];
 
     foreach ($items as $item) {
-        if (!($item instanceof Ast\FunctionDecl)) {
+        if (! ($item instanceof Ast\FunctionDecl)) {
             if ($pending !== null) {
                 $merged[] = finalizeFunctionDecl($pending, $context);
                 $pending = null;
             }
             $merged[] = $item;
+
             continue;
         }
 
         if ($pending !== null && $pending['name'] === $item->name) {
-            $pendingIsSigOnly = count($pending['clauses']) === 1
+            $pendingIsSigOnly = \count($pending['clauses']) === 1
                 && $pending['clauses'][0]['body'] instanceof Ast\SignatureOnly;
             $incomingIsSigOnly = $item->signatureOnly || $item->body instanceof Ast\SignatureOnly;
-            if ($pendingIsSigOnly && !$incomingIsSigOnly) {
+            if ($pendingIsSigOnly && ! $incomingIsSigOnly) {
                 $pending['clauses'] = [['params' => $item->params, 'body' => $item->body]];
             } else {
                 $pending['clauses'][] = ['params' => $item->params, 'body' => $item->body];
@@ -348,14 +351,15 @@ function mergeFunctionClauses(array $items, string $source = '', string $filenam
                 $pending['type'] = $item->type;
             }
             if ($item->doc !== null) {
-                if ($pendingIsSigOnly && !$incomingIsSigOnly) {
+                if ($pendingIsSigOnly && ! $incomingIsSigOnly) {
                     $pending['doc'] = mergeDoc($pending['doc'] ?? null, $item->doc);
                 } elseif (($pending['doc'] ?? null) === null) {
                     $pending['doc'] = $item->doc;
-                } elseif (!$incomingIsSigOnly) {
+                } elseif (! $incomingIsSigOnly) {
                     $pending['doc'] = mergeDoc($pending['doc'], $item->doc);
                 }
             }
+
             continue;
         }
 
@@ -385,7 +389,7 @@ function mergeFunctionClauses(array $items, string $source = '', string $filenam
  */
 function finalizeFunctionDecl(array $fn, array $context): Ast\FunctionDecl
 {
-    if (count($fn['clauses']) === 1) {
+    if (\count($fn['clauses']) === 1) {
         $body = $fn['clauses'][0]['body'];
         if ($body instanceof Ast\SignatureOnly) {
             $type = $fn['type'] ?? throw parseError(
@@ -441,10 +445,10 @@ function locateDeclaration(Ast\AstNode $decl, array $fn): void
 function desugarMultiClauseFunction(array $fn, array $context): Ast\FunctionDecl
 {
     $clauses = $fn['clauses'];
-    $paramCount = count($clauses[0]['params']);
+    $paramCount = \count($clauses[0]['params']);
 
     foreach ($clauses as $clause) {
-        if (count($clause['params']) !== $paramCount) {
+        if (\count($clause['params']) !== $paramCount) {
             $at = $clause['params'][0] ?? null;
             if ($at instanceof Ast\AstNode) {
                 throw parseError(
@@ -486,6 +490,7 @@ function functionParamSlotNames(array $patterns): array
     foreach ($patterns as $i => $pattern) {
         if ($pattern instanceof Ast\PatVar) {
             $names[] = $pattern->name;
+
             continue;
         }
 

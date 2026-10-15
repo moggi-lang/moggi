@@ -21,7 +21,7 @@
 // records is the registry's answer — wants `--version`.
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
@@ -43,7 +43,7 @@ use function Moggi\Registry\withAddConstraint;
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
     ++$checks;
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
@@ -278,7 +278,7 @@ try {
     $nugetShaped = $run('add', '--print', '--version', '13.0.3', '--root', $project, 'newtonsoft.json');
     $assert($nugetShaped['exitCode'] === 0, 'a NuGet-shaped bare id prints: ' . $nugetShaped['stderr']);
     $assert(\str_contains($nugetShaped['stdout'], 'registry newtonsoft.json = 13.0.3'), 'a bare id resolves as a package of ours: ' . $nugetShaped['stdout']);
-    $assert(!\str_contains($nugetShaped['stdout'], 'dotnet.nuget'), 'and it is not written as a NuGet coordinate: ' . $nugetShaped['stdout']);
+    $assert(! \str_contains($nugetShaped['stdout'], 'dotnet.nuget'), 'and it is not written as a NuGet coordinate: ' . $nugetShaped['stdout']);
 
     $nugetId = $run('add', '--print', '--root', $bare, 'Newtonsoft.Json');
     $assert($nugetId['exitCode'] === 1, 'a bare NuGet id fails the command rather than being guessed');
@@ -344,6 +344,7 @@ try {
     $assert(bindModuleName('jvm', 'com.acme:hello') === 'Maven.Com.Acme.Hello', 'the jvm module name');
     $assert(bindModuleName('dotnet', 'Acme.Hello') === 'Nuget.Acme.Hello', 'the dotnet module name');
     $assert(facadeModuleName('Maven.Com.Acme.Hello') === 'Com.Acme.Hello', 'the facade drops the ecosystem prefix');
+
     try {
         bindModuleName('ruby', 'acme/hello');
         $assert(false, 'an unbindable backend is refused');
@@ -384,14 +385,14 @@ try {
     // the behaviour a failed fetch has to leave behind.
 
     $schnorrBinary = \getenv('MOGGI_SCHNORR');
-    if (!\is_string($schnorrBinary) || $schnorrBinary === '') {
+    if (! \is_string($schnorrBinary) || $schnorrBinary === '') {
         $schnorrBinary = $root . '/schnorr/schnorr';
     }
-    if (!\is_file($schnorrBinary) || !\is_executable($schnorrBinary)) {
+    if (! \is_file($schnorrBinary) || ! \is_executable($schnorrBinary)) {
         $schnorrBinary = $root . '/schnorr/build/schnorr';
     }
 
-    if (!\is_file($schnorrBinary) || !\is_executable($schnorrBinary)) {
+    if (! \is_file($schnorrBinary) || ! \is_executable($schnorrBinary)) {
         echo "add tests passed ({$checks} checks; registry half skipped — no schnorr CLI, set MOGGI_SCHNORR)\n";
 
         return;
@@ -467,7 +468,7 @@ try {
     $unlisted = $cli('add', '--registry', $registry, '--no-cache', 'nope');
     $assert($unlisted['exitCode'] === 1, 'an unlisted package fails the command: ' . $unlisted['stdout'] . $unlisted['stderr']);
     $assert(\str_contains($unlisted['stderr'], 'lists no package `nope`'), 'the refusal says which name: ' . $unlisted['stderr']);
-    $assert(!\str_contains((string) \file_get_contents($registryProject . '/app.moggi'), 'dependencies'), 'an unlisted package writes nothing');
+    $assert(! \str_contains((string) \file_get_contents($registryProject . '/app.moggi'), 'dependencies'), 'an unlisted package writes nothing');
 
     // The newest release decides the constraint, and the lock is written by the resolver.
     $added = $cli('add', '--registry', $registry, '--no-cache', 'widgets');

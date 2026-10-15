@@ -2,10 +2,10 @@
 
 namespace Moggi\Backend\Jvm;
 
-use function Moggi\Debug\sourceMapFrames;
-
 use function Moggi\Backend\Jvm\Dependencies\mergeDemandClasspathJars;
+
 use function Moggi\Backend\Jvm\Naming\moduleInternalName;
+use function Moggi\Debug\sourceMapFrames;
 
 /**
  * JVM build finalization: assemble the collected classfiles into a runnable JAR.
@@ -28,22 +28,23 @@ function packageJvmOutput(string $outputRoot, array $options = []): void
         new \RecursiveDirectoryIterator($outputRoot, \FilesystemIterator::SKIP_DOTS),
     );
     foreach ($iterator as $file) {
-        if (!$file->isFile()) {
+        if (! $file->isFile()) {
             continue;
         }
         $full = $file->getPathname();
-        $rel = substr($full, strlen(rtrim($outputRoot, DIRECTORY_SEPARATOR)) + 1);
+        $rel = \substr($full, \strlen(\rtrim($outputRoot, DIRECTORY_SEPARATOR)) + 1);
         $rel = \str_replace('\\', '/', $rel);
-        if (str_ends_with($rel, '.jar') || str_contains(basename($rel), '.tmp.')) {
+        if (\str_ends_with($rel, '.jar') || \str_contains(\basename($rel), '.tmp.')) {
             continue;
         }
         if ($file->getExtension() === 'class') {
-            $internal = preg_replace('/\.class$/', '', $rel) ?? $rel;
-            $classes[$internal] = file_get_contents($full);
+            $internal = \preg_replace('/\.class$/', '', $rel) ?? $rel;
+            $classes[$internal] = \file_get_contents($full);
+
             continue;
         }
-        if (str_ends_with($rel, '.moggi.map')) {
-            $raw = (string) file_get_contents($full);
+        if (\str_ends_with($rel, '.moggi.map')) {
+            $raw = (string) \file_get_contents($full);
             foreach (sourceMapFrames($raw) as $frame) {
                 $key = (string) ($frame['class'] ?? '')
                     . '#' . (string) ($frame['method'] ?? '')
@@ -68,15 +69,15 @@ function packageJvmOutput(string $outputRoot, array $options = []): void
 
     mergeDemandClasspathJars($classes, $resources);
 
-    if (!empty($options['unpacked'])) {
+    if (! empty($options['unpacked'])) {
         foreach ($classes as $internal => $bytes) {
-            if (!\is_string($bytes) || $bytes === '') {
+            if (! \is_string($bytes) || $bytes === '') {
                 continue;
             }
             $dst = $outputRoot . DIRECTORY_SEPARATOR
                 . \str_replace('/', DIRECTORY_SEPARATOR, $internal) . '.class';
             $dstDir = \dirname($dst);
-            if (!\is_dir($dstDir) && !mkdir($dstDir, 0777, true) && !\is_dir($dstDir)) {
+            if (! \is_dir($dstDir) && ! \mkdir($dstDir, 0777, true) && ! \is_dir($dstDir)) {
                 throw new \RuntimeException("cannot create {$dstDir}");
             }
             \file_put_contents($dst, $bytes);
@@ -99,14 +100,14 @@ function packageJvmOutput(string $outputRoot, array $options = []): void
  */
 function writeJar(string $jarPath, array $classes, ?string $mainClass = null, array $resources = []): void
 {
-    $dir = dirname($jarPath);
-    if ($dir !== '' && $dir !== '.' && !\is_dir($dir) && !@mkdir($dir, 0777, true) && !\is_dir($dir)) {
+    $dir = \dirname($jarPath);
+    if ($dir !== '' && $dir !== '.' && ! \is_dir($dir) && ! @\mkdir($dir, 0777, true) && ! \is_dir($dir)) {
         throw new \RuntimeException("cannot create jar directory {$dir}");
     }
 
-    $tmpPath = $jarPath . '.tmp.' . getmypid() . '.' . bin2hex(random_bytes(4));
+    $tmpPath = $jarPath . '.tmp.' . \getmypid() . '.' . \bin2hex(\random_bytes(4));
     if (\is_file($tmpPath)) {
-        @unlink($tmpPath);
+        @\unlink($tmpPath);
     }
 
     $zip = new \ZipArchive();
@@ -121,23 +122,23 @@ function writeJar(string $jarPath, array $classes, ?string $mainClass = null, ar
             $manifest .= "Main-Class: {$mainClass}\r\n";
         }
         $manifest .= "\r\n";
-        if (!$zip->addFromString('META-INF/MANIFEST.MF', $manifest)) {
+        if (! $zip->addFromString('META-INF/MANIFEST.MF', $manifest)) {
             throw new \RuntimeException("cannot write jar manifest into {$tmpPath}");
         }
 
         foreach ($classes as $internal => $bytes) {
-            if (!$zip->addFromString($internal . '.class', $bytes)) {
+            if (! $zip->addFromString($internal . '.class', $bytes)) {
                 throw new \RuntimeException("cannot add class {$internal} to {$tmpPath}");
             }
         }
         foreach ($resources as $entry => $bytes) {
-            $name = ltrim(\str_replace('\\', '/', $entry), '/');
-            if (!$zip->addFromString($name, $bytes)) {
+            $name = \ltrim(\str_replace('\\', '/', $entry), '/');
+            if (! $zip->addFromString($name, $bytes)) {
                 throw new \RuntimeException("cannot add resource {$name} to {$tmpPath}");
             }
         }
 
-        if (!$zip->close()) {
+        if (! $zip->close()) {
             throw new \RuntimeException("cannot finalize jar {$tmpPath}");
         }
     } catch (\Throwable $e) {
@@ -146,16 +147,19 @@ function writeJar(string $jarPath, array $classes, ?string $mainClass = null, ar
             @$zip->close();
         } catch (\Throwable) {
         }
-        @unlink($tmpPath);
+        @\unlink($tmpPath);
+
         throw $e;
     }
 
-    if (\is_file($jarPath) && !@unlink($jarPath)) {
-        @unlink($tmpPath);
+    if (\is_file($jarPath) && ! @\unlink($jarPath)) {
+        @\unlink($tmpPath);
+
         throw new \RuntimeException("cannot replace existing jar {$jarPath}");
     }
-    if (!@rename($tmpPath, $jarPath)) {
-        @unlink($tmpPath);
+    if (! @\rename($tmpPath, $jarPath)) {
+        @\unlink($tmpPath);
+
         throw new \RuntimeException("cannot move jar into place at {$jarPath}");
     }
 }

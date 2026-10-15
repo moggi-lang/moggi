@@ -31,19 +31,19 @@ require_once __DIR__ . '/../executables.php';
  */
 function selectArtifacts(string|array $emit, string $extension): array
 {
-    if (!\is_array($emit)) {
+    if (! \is_array($emit)) {
         return [];
     }
 
     $out = [];
     foreach ($emit as $rel => $bytes) {
-        if (!\is_string($rel) || !\is_string($bytes)) {
+        if (! \is_string($rel) || ! \is_string($bytes)) {
             continue;
         }
-        if (str_ends_with($rel, '.moggi.map')) {
+        if (\str_ends_with($rel, '.moggi.map')) {
             continue;
         }
-        if (str_ends_with($rel, $extension)) {
+        if (\str_ends_with($rel, $extension)) {
             $out[$rel] = $bytes;
         }
     }
@@ -60,12 +60,12 @@ function selectArtifacts(string|array $emit, string $extension): array
 function describeArtifactList(string|array $emit): string
 {
     if (\is_string($emit)) {
-        return $emit === '' ? '' : $emit . (str_ends_with($emit, "\n") ? '' : "\n");
+        return $emit === '' ? '' : $emit . (\str_ends_with($emit, "\n") ? '' : "\n");
     }
 
     $lines = [];
     foreach ($emit as $rel => $bytes) {
-        if (!\is_string($rel) || !\is_string($bytes) || str_ends_with($rel, '.moggi.map')) {
+        if (! \is_string($rel) || ! \is_string($bytes) || \str_ends_with($rel, '.moggi.map')) {
             continue;
         }
         $lines[] = $rel . ' (' . \strlen($bytes) . ' bytes)';
@@ -147,7 +147,7 @@ function formatJavapDump(array $classFiles, array $focusNames = []): string
     }
 
     $dir = \sys_get_temp_dir() . '/moggi-javap-' . \getmypid() . '-' . \bin2hex(\random_bytes(4));
-    if (!\mkdir($dir, 0777, true) && !\is_dir($dir)) {
+    if (! \mkdir($dir, 0777, true) && ! \is_dir($dir)) {
         throw new \RuntimeException("cannot create {$dir}");
     }
 
@@ -156,7 +156,7 @@ function formatJavapDump(array $classFiles, array $focusNames = []): string
         foreach ($classFiles as $rel => $bytes) {
             $path = $dir . '/' . $rel;
             $parent = \dirname($path);
-            if (!\is_dir($parent) && !\mkdir($parent, 0777, true) && !\is_dir($parent)) {
+            if (! \is_dir($parent) && ! \mkdir($parent, 0777, true) && ! \is_dir($parent)) {
                 throw new \RuntimeException("cannot create {$parent}");
             }
             if (\file_put_contents($path, $bytes) === false) {
@@ -283,6 +283,7 @@ function filterJavapMethods(string $javapOut, array $methodNames): string
             $out[] = $lines[$i];
             if (\str_contains($lines[$i], '{')) {
                 $i++;
+
                 break;
             }
             $i++;
@@ -297,6 +298,7 @@ function filterJavapMethods(string $javapOut, array $methodNames): string
                     $out[] = $lines[$i];
                     $i++;
                 }
+
                 break;
             }
 
@@ -319,6 +321,7 @@ function filterJavapMethods(string $javapOut, array $methodNames): string
                 foreach ($wanted as $method => $_) {
                     if (\preg_match('/\b' . \preg_quote($method, '/') . '\s*\(/', $sig) === 1) {
                         $match = true;
+
                         break;
                     }
                 }
@@ -328,6 +331,7 @@ function filterJavapMethods(string $javapOut, array $methodNames): string
                     }
                     $keptAny = true;
                 }
+
                 continue;
             }
 
@@ -335,7 +339,7 @@ function filterJavapMethods(string $javapOut, array $methodNames): string
         }
     }
 
-    if (!$keptAny) {
+    if (! $keptAny) {
         return $javapOut;
     }
 
@@ -386,6 +390,7 @@ function filterIlMethods(string $il, array $methodNames): string
             foreach ($wanted as $method => $_) {
                 if (\preg_match('/' . \preg_quote($method, '/') . '\s*\(/', $line) === 1) {
                     $match = true;
+
                     break;
                 }
             }
@@ -395,6 +400,7 @@ function filterIlMethods(string $il, array $methodNames): string
                 }
                 $keptAny = true;
             }
+
             continue;
         }
 
@@ -404,7 +410,7 @@ function filterIlMethods(string $il, array $methodNames): string
         $i++;
     }
 
-    if (!$keptAny) {
+    if (! $keptAny) {
         return $il;
     }
 
@@ -419,7 +425,7 @@ function filterIlMethods(string $il, array $methodNames): string
  */
 function displayPhpEmit(string $emit, array $focusNames): string
 {
-    if (!\str_starts_with(\ltrim($emit), '<?php')) {
+    if (! \str_starts_with(\ltrim($emit), '<?php')) {
         return $emit;
     }
     if ($focusNames === []) {
@@ -465,7 +471,7 @@ function presentPhpModule(string $emit): string
     $requires = 0;
     $uses = 0;
     foreach ($lines as $i => $line) {
-        if (!isPhpImportLine($line)) {
+        if (! isPhpImportLine($line)) {
             continue;
         }
         $first ??= $i;
@@ -482,6 +488,7 @@ function presentPhpModule(string $emit): string
     foreach ($lines as $i => $line) {
         if (\preg_match('/^\s*<\?php/', $line) === 1) {
             $afterPreamble = true;
+
             continue;
         }
         if ($afterPreamble) {
@@ -513,7 +520,7 @@ function isPhpImportLine(string $line): bool
 
 function extractPhpFunction(string $php, string $functionName): ?string
 {
-    if (!\preg_match(
+    if (! \preg_match(
         '/^function\s+' . \preg_quote($functionName, '/') . '\s*\(/m',
         $php,
         $m,
@@ -546,7 +553,7 @@ function extractPhpFunction(string $php, string $functionName): ?string
 /** Recursively delete a directory tree. */
 function removeTree(string $dir): void
 {
-    if (!\is_dir($dir)) {
+    if (! \is_dir($dir)) {
         return;
     }
     $items = \scandir($dir);

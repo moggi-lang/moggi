@@ -10,8 +10,8 @@
 
 const MOGGI_PROJECT_ROOT = __DIR__;
 
-if (getenv('MOGGI_CACHE_DIR') === false && getenv('MOGGI_NO_CACHE') === false) {
-    putenv('MOGGI_CACHE_DIR=' . MOGGI_PROJECT_ROOT . '/.moggi');
+if (\getenv('MOGGI_CACHE_DIR') === false && \getenv('MOGGI_NO_CACHE') === false) {
+    \putenv('MOGGI_CACHE_DIR=' . MOGGI_PROJECT_ROOT . '/.moggi');
 }
 
 require MOGGI_PROJECT_ROOT . '/src/compiler.php';

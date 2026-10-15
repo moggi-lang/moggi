@@ -2,7 +2,7 @@
 <?php declare(strict_types=1);
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 
@@ -47,9 +47,9 @@ foreach ($queries as &$case) {
 }
 unset($case);
 
-$tmpDir = sys_get_temp_dir() . '/moggi-moogle-parity-' . getmypid();
-if (!mkdir($tmpDir) && !is_dir($tmpDir)) {
-    fwrite(STDERR, "FAIL cannot create temp dir\n");
+$tmpDir = \sys_get_temp_dir() . '/moggi-moogle-parity-' . \getmypid();
+if (! \mkdir($tmpDir) && ! \is_dir($tmpDir)) {
+    \fwrite(STDERR, "FAIL cannot create temp dir\n");
     exit(1);
 }
 
@@ -57,32 +57,32 @@ $jsPath = $tmpDir . '/moogle.js';
 $rowsPath = $tmpDir . '/rows.json';
 $queriesPath = $tmpDir . '/queries.json';
 
-file_put_contents($jsPath, Docs\emitMoogleSearchJs());
-file_put_contents($rowsPath, json_encode($rows, JSON_UNESCAPED_UNICODE));
-file_put_contents($queriesPath, json_encode($queries, JSON_UNESCAPED_UNICODE));
+\file_put_contents($jsPath, Docs\emitMoogleSearchJs());
+\file_put_contents($rowsPath, \json_encode($rows, JSON_UNESCAPED_UNICODE));
+\file_put_contents($queriesPath, \json_encode($queries, JSON_UNESCAPED_UNICODE));
 
 $node = Compiler\findExecutable('node') ?? '';
 if ($node === '') {
-    fwrite(STDERR, "FAIL moogle parity: node is required\n");
-    array_map(static fn ($f) => @unlink($f), glob($tmpDir . '/*') ?: []);
-    @rmdir($tmpDir);
+    \fwrite(STDERR, "FAIL moogle parity: node is required\n");
+    \array_map(static fn ($f) => @\unlink($f), \glob($tmpDir . '/*') ?: []);
+    @\rmdir($tmpDir);
     exit(1);
 }
 
 $runner = __DIR__ . '/parity.js';
-$cmd = escapeshellarg($node) . ' '
-    . escapeshellarg($runner) . ' '
-    . escapeshellarg($jsPath) . ' '
-    . escapeshellarg($rowsPath) . ' '
-    . escapeshellarg($queriesPath);
+$cmd = \escapeshellarg($node) . ' '
+    . \escapeshellarg($runner) . ' '
+    . \escapeshellarg($jsPath) . ' '
+    . \escapeshellarg($rowsPath) . ' '
+    . \escapeshellarg($queriesPath);
 
-exec($cmd, $output, $exitCode);
+\exec($cmd, $output, $exitCode);
 foreach ($output as $line) {
-    fwrite(STDERR, $line . "\n");
+    \fwrite(STDERR, $line . "\n");
 }
 
-array_map(static fn ($f) => @unlink($f), glob($tmpDir . '/*') ?: []);
-@rmdir($tmpDir);
+\array_map(static fn ($f) => @\unlink($f), \glob($tmpDir . '/*') ?: []);
+@\rmdir($tmpDir);
 
 if ($exitCode !== 0) {
     exit(1);
@@ -91,9 +91,9 @@ if ($exitCode !== 0) {
 $stringMiss = Docs\searchInRows($rows, '[Char] -> Int', 5);
 foreach ($stringMiss as $hit) {
     if (($hit['entity']['name'] ?? '') === 'id'
-        && str_contains((string) ($hit['entity']['signature'] ?? ''), 'String')) {
+        && \str_contains((string) ($hit['entity']['signature'] ?? ''), 'String')) {
         ++$failures;
-        fwrite(STDERR, "FAIL String must not match [Char] for id\n");
+        \fwrite(STDERR, "FAIL String must not match [Char] for id\n");
     }
 }
 

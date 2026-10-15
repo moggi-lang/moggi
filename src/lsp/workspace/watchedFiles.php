@@ -4,7 +4,6 @@ namespace Moggi\LSP\Workspace;
 
 use Moggi\LSP\Analysis\AnalysisService;
 
-use function Moggi\LSP\Analysis\invalidatePath;
 use function Moggi\LSP\Protocol\uriToPath;
 
 function handleDidChangeWatchedFiles(AnalysisService $svc, array $params): array
@@ -17,5 +16,6 @@ function handleDidChangeWatchedFiles(AnalysisService $svc, array $params): array
             $invalidated[] = $u;
         }
     }
+
     return $invalidated;
 }

@@ -2,21 +2,23 @@
 
 namespace Moggi\LSP\TextDocument;
 
-use Moggi\LSP\Analysis\AnalysisService;
-use Moggi\Syntax\Ast;
-
 use function Moggi\Docs\dumpAstTypeForDocs;
 use function Moggi\Docs\dumpTypeForDocs;
+
 use function Moggi\Docs\friendlyAstTypeVarNames;
 use function Moggi\Docs\surfaceTypeSignature;
-use function Moggi\LSP\Analysis\ensureAnalyzed;
+
+use Moggi\LSP\Analysis\AnalysisService;
+
 use function Moggi\LSP\Index\declTokenMaps;
 use function Moggi\LSP\Index\tokenNameRange;
 use function Moggi\LSP\Protocol\nodeToLspRange;
 
+use Moggi\Syntax\Ast;
+
 function svcInlayHints(AnalysisService $svc, string $uri, array $range): array
 {
-    if (!$svc->inlaysEnabled) {
+    if (! $svc->inlaysEnabled) {
         return [];
     }
     $analysis = $svc->ensureAnalyzed($uri);
@@ -26,14 +28,14 @@ function svcInlayHints(AnalysisService $svc, string $uri, array $range): array
     $hints = [];
     $walk = null;
     $walk = static function ($node) use (&$walk, &$hints, $analysis): void {
-        if (!is_object($node)) {
+        if (! \is_object($node)) {
             return;
         }
         if ($node instanceof Ast\FunctionDecl) {
             if ($node->type !== null) {
                 $rename = friendlyAstTypeVarNames([$node->type]);
                 foreach ($node->params as $i => $param) {
-                    if (!($param instanceof Ast\PatVar)
+                    if (! ($param instanceof Ast\PatVar)
                         || $param->inferredType === null
                         || ($param->line ?? 0) <= 0
                     ) {
@@ -55,7 +57,7 @@ function svcInlayHints(AnalysisService $svc, string $uri, array $range): array
                 }
             }
             foreach ($node->params as $param) {
-                if (!$param instanceof Ast\PatVar) {
+                if (! $param instanceof Ast\PatVar) {
                     $walk($param);
                 }
             }
@@ -93,12 +95,12 @@ function svcInlayHints(AnalysisService $svc, string $uri, array $range): array
                 ];
             }
         }
-        foreach (get_object_vars($node) as $prop) {
-            if (is_object($prop)) {
+        foreach (\get_object_vars($node) as $prop) {
+            if (\is_object($prop)) {
                 $walk($prop);
-            } elseif (is_array($prop)) {
+            } elseif (\is_array($prop)) {
                 foreach ($prop as $el) {
-                    if (is_object($el)) {
+                    if (\is_object($el)) {
                         $walk($el);
                     }
                 }
@@ -111,10 +113,10 @@ function svcInlayHints(AnalysisService $svc, string $uri, array $range): array
             continue;
         }
         $ht = (string) (($diag['data']['holeType'] ?? '') ?: '');
-        if ($ht === '' && preg_match('/Found hole with type:\s*`([^`]+)`/', (string) ($diag['message'] ?? ''), $m)) {
+        if ($ht === '' && \preg_match('/Found hole with type:\s*`([^`]+)`/', (string) ($diag['message'] ?? ''), $m)) {
             $ht = $m[1];
         }
-        if ($ht === '' || !isset($diag['range']['end'])) {
+        if ($ht === '' || ! isset($diag['range']['end'])) {
             continue;
         }
         $hints[] = [
@@ -124,7 +126,8 @@ function svcInlayHints(AnalysisService $svc, string $uri, array $range): array
             'paddingLeft' => true,
         ];
     }
-    return array_slice($hints, 0, 100);
+
+    return \array_slice($hints, 0, 100);
 }
 
 /** @param list<array<string, mixed>> $diagnostics */
@@ -135,11 +138,11 @@ function holeTypeFromDiagnostics(array $diagnostics, array $pos): string
     $line = (int) ($pos['line'] ?? -1);
     $ch = (int) ($pos['character'] ?? -1);
     foreach ($diagnostics as $diag) {
-        if (($diag['code'] ?? '') !== 'hole' && !str_contains((string) ($diag['message'] ?? ''), 'hole')) {
+        if (($diag['code'] ?? '') !== 'hole' && ! \str_contains((string) ($diag['message'] ?? ''), 'hole')) {
             continue;
         }
         $r = $diag['range'] ?? null;
-        if (!\is_array($r)) {
+        if (! \is_array($r)) {
             continue;
         }
         $sl = (int) ($r['start']['line'] ?? -2);
@@ -156,13 +159,14 @@ function holeTypeFromDiagnostics(array $diagnostics, array $pos): string
             continue;
         }
         $ht = (string) (($diag['data']['holeType'] ?? '') ?: '');
-        if ($ht === '' && preg_match('/Found hole with type:\s*`([^`]+)`/', (string) ($diag['message'] ?? ''), $m)) {
+        if ($ht === '' && \preg_match('/Found hole with type:\s*`([^`]+)`/', (string) ($diag['message'] ?? ''), $m)) {
             $ht = $m[1];
         }
         if ($ht !== '') {
             return $ht;
         }
     }
+
     return '';
 }
 
@@ -183,7 +187,7 @@ function svcInlineValues(AnalysisService $svc, string $uri, array $range): array
         $endLine = (int) ($range['end']['line'] ?? $startLine);
         $maps = declTokenMaps($analysis->source, $uri);
         foreach ($analysis->program->items as $item) {
-            if (!($item instanceof Ast\FunctionDecl) || $item->signatureOnly) {
+            if (! ($item instanceof Ast\FunctionDecl) || $item->signatureOnly) {
                 continue;
             }
             $typeStr = null;
@@ -219,5 +223,6 @@ function svcInlineValues(AnalysisService $svc, string $uri, array $range): array
             }
         }
     }
+
     return $result;
 }

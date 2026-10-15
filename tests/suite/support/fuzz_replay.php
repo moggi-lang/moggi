@@ -15,7 +15,7 @@
 use function Moggi\Modules\setStdlibLibPath;
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 
@@ -33,7 +33,7 @@ if (\count($args) === 1 && \is_file($args[0])) {
     $index = (int) $args[1];
     $count = (int) ($args[2] ?? 600);
     $corpus = fuzzFrontendCorpus($seed, $count);
-    if (!isset($corpus[$index])) {
+    if (! isset($corpus[$index])) {
         \fwrite(\STDERR, "input #{$index} does not exist: seed {$seed} generates {$count} input(s)\n");
         exit(2);
     }
@@ -53,6 +53,7 @@ $path = \sys_get_temp_dir() . '/moggi-fuzz-replay-' . \getmypid() . '.mog';
 \file_put_contents($path, $source);
 
 $minimized = '';
+
 try {
     $outcome = fuzzFrontendOutcome($source, $path);
     if ($outcome['kind'] === 'crash') {

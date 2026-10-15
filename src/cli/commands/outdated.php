@@ -2,10 +2,12 @@
 
 namespace Moggi\CLI\Commands;
 
+use function Moggi\Registry\badPackageMarker;
+
 use Moggi\Registry\Catalog;
+
 use Moggi\Registry\FetchLog;
 
-use function Moggi\Registry\badPackageMarker;
 use function Moggi\Registry\findDescriptor;
 use function Moggi\Registry\lockPath;
 use function Moggi\Registry\lockRegistryProblem;
@@ -14,8 +16,8 @@ use function Moggi\Registry\providedPackages;
 use function Moggi\Registry\readDescriptor;
 use function Moggi\Registry\readLock;
 use function Moggi\Registry\resolveWithDetails;
-use function Moggi\Registry\shortNpub;
 use function Moggi\Registry\satisfies;
+use function Moggi\Registry\shortNpub;
 use function Moggi\Registry\unmaintainedMarker;
 
 /**
@@ -80,7 +82,7 @@ function runOutdatedCommand(array $argv): int
         $descriptor = readDescriptor($descriptorPath);
 
         $log = new FetchLog();
-        $catalog = loadVerifiedCatalog($options['registry'], !$options['noCache'], $log);
+        $catalog = loadVerifiedCatalog($options['registry'], ! $options['noCache'], $log);
 
         $lockFile = lockPath($descriptorPath, $options['output']);
         $lock = readLock($lockFile);
@@ -93,7 +95,7 @@ function runOutdatedCommand(array $argv): int
         }
 
         $resolution = resolveWithDetails($catalog->entry(...), $descriptor['dependencies'], 'root', providedPackages());
-        if (!$resolution['ok']) {
+        if (! $resolution['ok']) {
             throw new \RuntimeException((string) $resolution['error']);
         }
 
@@ -176,7 +178,7 @@ function publishedVersions(Catalog $catalog, string $name): array
 function bindingConstraint(array $reasons, string $version): ?string
 {
     foreach ($reasons as $reason) {
-        if (!satisfies($version, $reason['constraint'])) {
+        if (! satisfies($version, $reason['constraint'])) {
             return $reason['constraint'];
         }
     }
@@ -205,7 +207,7 @@ function reportOutdated(array $descriptor, array $lock, array $rows, FetchLog $l
         $rows,
         static fn (array $row): bool => $row['bad'] !== null
             || $row['unmaintained'] !== null
-            || !$row['available']
+            || ! $row['available']
             || ($row['wanted'] !== null && $row['wanted'] !== $row['current'])
             || ($row['latest'] !== null && $row['latest'] !== $row['current']),
     ));
@@ -243,7 +245,7 @@ function outdatedNote(array $row): string
     if ($row['unmaintained'] !== null) {
         $notes[] = 'MARKED UNMAINTAINED' . ($row['unmaintained']['note'] === null ? '' : ' — ' . $row['unmaintained']['note']);
     }
-    if (!$row['available']) {
+    if (! $row['available']) {
         $notes[] = "(`{$row['current']}` is no longer published)";
     }
     if ($row['constraint'] !== null) {

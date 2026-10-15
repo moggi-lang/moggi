@@ -52,7 +52,7 @@ function ffiBindingsForBackend(array $descriptor, string $backend): array
         $prefix = \substr($entry, 0, $colon);
         $rest = \substr($entry, $colon + 1);
         if ($prefix !== $backend) {
-            if (!\in_array($prefix, BINDABLE_BACKENDS, true)) {
+            if (! \in_array($prefix, BINDABLE_BACKENDS, true)) {
                 throw new \RuntimeException(
                     "cannot bind `{$entry}` — no binder owns backend `{$prefix}` (this compiler binds: "
                     . \implode(', ', BINDABLE_BACKENDS) . ')',
@@ -90,10 +90,10 @@ function bindTreeFingerprint(string $treeDir, string $backend): string
     );
     /** @var \SplFileInfo $file */
     foreach ($scan as $file) {
-        if (!$file->isFile()) {
+        if (! $file->isFile()) {
             continue;
         }
-        if (!isset($extensions[\strtolower($file->getExtension())])) {
+        if (! isset($extensions[\strtolower($file->getExtension())])) {
             continue;
         }
         $path = $file->getPathname();
@@ -133,12 +133,12 @@ function moduleBindRelativePath(string $root, string $path): string
  */
 function bindForBuild(string $backend, string $coordinate, string $treeDir, ?string $facadeModule = null): array
 {
-    if (!\in_array($backend, BINDABLE_BACKENDS, true)) {
+    if (! \in_array($backend, BINDABLE_BACKENDS, true)) {
         throw new \RuntimeException(
             "cannot bind `{$backend}:{$coordinate}` — only `php:`, `jvm:` and `dotnet:` coordinates bind",
         );
     }
-    if (!\is_dir($treeDir)) {
+    if (! \is_dir($treeDir)) {
         throw new \RuntimeException("cannot bind `{$treeDir}` — no such directory");
     }
 
@@ -167,7 +167,7 @@ function bindForBuild(string $backend, string $coordinate, string $treeDir, ?str
             }
 
             foreach ((array) ($marker['files'] ?? []) as $written) {
-                if (!\is_file($root . '/' . $written)) {
+                if (! \is_file($root . '/' . $written)) {
                     $same = false;
 
                     break;

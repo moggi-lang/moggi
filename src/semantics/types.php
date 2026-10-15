@@ -2,19 +2,22 @@
 
 namespace Moggi\Semantics\Types;
 
-use Moggi\Pipeline\CompilePurpose;
-use Moggi\Semantics\Kinds;
-use Moggi\Semantics\Registry;
-use Moggi\Syntax\Ast;
-
 use function Moggi\Errors\formatDiagnostic;
+
+use Moggi\Pipeline\CompilePurpose;
+
 use function Moggi\Semantics\Deriving\commitProjectInstance;
 use function Moggi\Semantics\Deriving\processDeriving;
+
 use function Moggi\Semantics\Deriving\processStandaloneDeriving;
 use function Moggi\Semantics\Deriving\restoreInstanceState;
 use function Moggi\Semantics\Deriving\snapshotInstanceState;
 use function Moggi\Semantics\Foreign\checkForeignImportItem;
 use function Moggi\Semantics\Foreign\validateForeignTypeDecl;
+
+use Moggi\Semantics\Kinds;
+use Moggi\Semantics\Registry;
+use Moggi\Syntax\Ast;
 
 require_once __DIR__ . '/type_expr.php';
 require_once __DIR__ . '/types/state.php';
@@ -29,7 +32,7 @@ require_once __DIR__ . '/types/declarations.php';
 require_once __DIR__ . '/registry.php';
 require_once __DIR__ . '/deriving/framework.php';
 
-final class TypeError extends \RuntimeException
+final class types extends \RuntimeException
 {
     /** @var list<string>|null Structured missing patterns for non-exhaustive cases. */
     public ?array $missingPatterns = null;
@@ -160,6 +163,7 @@ function checkRaw(
                 $inst = processStandaloneDeriving($state, $item);
                 $saved = snapshotInstanceState($state);
                 $state->stockDeriving = true;
+
                 try {
                     commitProjectInstance($state, $inst);
                     foreach (checkInstance($state, $inst) as $fn) {
@@ -167,6 +171,7 @@ function checkRaw(
                     }
                 } catch (\Throwable $e) {
                     restoreInstanceState($state, $saved);
+
                     throw $e;
                 } finally {
                     $state->stockDeriving = false;
@@ -208,9 +213,9 @@ function checkRaw(
     $freeFnNames = [];
     foreach ($items as $item) {
         if ($item instanceof Ast\FunctionDecl
-            && !$item->instanceMethod
-            && !$item->signatureOnly
-            && !$item->foreign
+            && ! $item->instanceMethod
+            && ! $item->signatureOnly
+            && ! $item->foreign
         ) {
             $freeFnNames[$item->name] = true;
         }
@@ -237,7 +242,6 @@ function checkRaw(
         externalTrueBindings: $importContext['externalTrueBindings'] ?? [],
     );
 
-
     return $checked;
 }
 
@@ -260,12 +264,12 @@ function exportedInferredSchemesFromEnv(TypeCheckState $state, Ast\Program $prog
 
     $schemes = [];
     foreach ($program->items as $item) {
-        if (!($item instanceof Ast\FunctionDecl)) {
+        if (! ($item instanceof Ast\FunctionDecl)) {
             continue;
         }
 
         $name = $item->name;
-        if ($exportedNames !== null && !isset($exportedNames[$name])) {
+        if ($exportedNames !== null && ! isset($exportedNames[$name])) {
             continue;
         }
         if (Ast\hasDeclaredSignature($item) || $item->signatureOnly) {

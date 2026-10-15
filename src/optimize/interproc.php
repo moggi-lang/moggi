@@ -12,7 +12,6 @@ use function Moggi\IR\Visit\mapOperandChildren;
 use function Moggi\IR\Visit\stmtDirectOperands;
 use function Moggi\IR\Visit\stmtNestedBlocks;
 use function Moggi\IR\Visit\walkBlock;
-use function Moggi\Semantics\IntrinsicRegistry\isListConsForm;
 use function Moggi\IR\Visit\walkOperand;
 use function Moggi\IR\Visit\walkStmt;
 use function Moggi\Modules\parseResolvedSymbol;
@@ -24,15 +23,17 @@ use function Moggi\Optimize\Support\isLambdaName;
 use function Moggi\Optimize\Support\isWiredInBoolCtor;
 use function Moggi\Optimize\Support\mapStmtNestedBlocks;
 use function Moggi\Optimize\Support\tempUsedInItems;
+use function Moggi\Semantics\IntrinsicRegistry\isListConsForm;
 
 /** @param array<int, mixed> $items @return list<IR\Stmt> */
 function denseStmtItems(array $items): array
 {
-    $dense = array_is_list($items);
+    $dense = \array_is_list($items);
     if ($dense) {
         foreach ($items as $item) {
-            if (!$item instanceof IR\Stmt) {
+            if (! $item instanceof IR\Stmt) {
                 $dense = false;
+
                 break;
             }
         }
@@ -59,7 +60,7 @@ function lastStmtItem(array $items): ?IR\Stmt
         return null;
     }
 
-    return $items[count($items) - 1];
+    return $items[\count($items) - 1];
 }
 
 /** @param list<IR\FunctionDecl> $functions @return array<string, IR\FunctionDecl> */
@@ -68,7 +69,7 @@ function indexFunctions(array $functions, string $moduleName = ''): array
     $index = [];
     foreach ($functions as $function) {
         $index[$function->name] = $function;
-        if ($moduleName !== '' && !str_contains($function->name, '::')) {
+        if ($moduleName !== '' && ! \str_contains($function->name, '::')) {
             $index[resolvedSymbol($moduleName, $function->name)] = $function;
         }
     }
@@ -93,7 +94,7 @@ function lookupIndexedFunction(array $index, string $callee): ?IR\FunctionDecl
     }
 
     $leaf = specializationLookupNameSafe($callee);
-    if ($leaf !== $callee && (str_starts_with($leaf, '__spec_') || str_starts_with($leaf, '__ev_'))) {
+    if ($leaf !== $callee && (\str_starts_with($leaf, '__spec_') || \str_starts_with($leaf, '__ev_'))) {
         if (isset($index[$leaf])) {
             return $index[$leaf];
         }
@@ -143,12 +144,13 @@ function inlineFunctions(array $functions, string $moduleName = ''): array
         foreach ($functions as $function) {
             if ($function->ioStraightLine) {
                 $next[] = $function;
+
                 continue;
             }
 
             $peBlocked = [];
             $nextTemp = null;
-            setActiveInlineProtectedNames(array_fill_keys(
+            setActiveInlineProtectedNames(\array_fill_keys(
                 [...$function->params, ...collectLocalsInBlock($function->body)],
                 true,
             ));
@@ -187,7 +189,7 @@ function inlineFunctions(array $functions, string $moduleName = ''): array
             }
         }
 
-        if (!$changed) {
+        if (! $changed) {
             return $next;
         }
 
@@ -239,11 +241,11 @@ function functionNamesInRecursiveSccs(array $index): array
         $onStack[$v] = true;
 
         foreach ($edges[$v] ?? [] as $w) {
-            if (!isset($indexOf[$w])) {
+            if (! isset($indexOf[$w])) {
                 $strongconnect($w);
-                $lowlink[$v] = min($lowlink[$v], $lowlink[$w]);
+                $lowlink[$v] = \min($lowlink[$v], $lowlink[$w]);
             } elseif (isset($onStack[$w])) {
-                $lowlink[$v] = min($lowlink[$v], $indexOf[$w]);
+                $lowlink[$v] = \min($lowlink[$v], $indexOf[$w]);
             }
         }
 
@@ -255,12 +257,13 @@ function functionNamesInRecursiveSccs(array $index): array
                 $component[] = $w;
             } while ($w !== $v);
 
-            $isRecursive = count($component) > 1;
-            if (!$isRecursive) {
+            $isRecursive = \count($component) > 1;
+            if (! $isRecursive) {
                 $only = $component[0];
                 foreach ($edges[$only] ?? [] as $callee) {
                     if ($callee === $only) {
                         $isRecursive = true;
+
                         break;
                     }
                 }
@@ -274,7 +277,7 @@ function functionNamesInRecursiveSccs(array $index): array
     };
 
     foreach (\array_keys($edges) as $name) {
-        if (!isset($indexOf[$name])) {
+        if (! isset($indexOf[$name])) {
             $strongconnect($name);
         }
     }
@@ -345,7 +348,7 @@ function inlineBlock(
     if ($nextTemp === null) {
         $nextTemp = $localMax;
     } else {
-        $nextTemp = max($nextTemp, $localMax);
+        $nextTemp = \max($nextTemp, $localMax);
     }
 
     return new IR\Block(inlineItems($block->items, $selfName, $index, $nextTemp, $recursive, $depth, $peBlocked));
@@ -396,6 +399,7 @@ function inlineItems(
                     foreach (denseStmtItems($inlined) as $inlinedItem) {
                         $out[] = $inlinedItem;
                     }
+
                     continue;
                 }
             }
@@ -423,7 +427,7 @@ function flattenNestedRetExprCalls(array $items, int &$nextTemp): array
 {
     $out = [];
     foreach (denseStmtItems($items) as $item) {
-        if (!($item instanceof IR\Ret) || !($item->value instanceof IR\ExprCall)) {
+        if (! ($item instanceof IR\Ret) || ! ($item->value instanceof IR\ExprCall)) {
             if ($item instanceof IR\MatchStmt || $item instanceof IR\MatchReturn) {
                 $out[] = match ($item::class) {
                     IR\MatchStmt::class => new IR\MatchStmt(
@@ -456,9 +460,11 @@ function flattenNestedRetExprCalls(array $items, int &$nextTemp): array
                         $item->exhaustive,
                     ),
                 };
+
                 continue;
             }
             $out[] = $item;
+
             continue;
         }
 
@@ -476,8 +482,9 @@ function flattenNestedRetExprCalls(array $items, int &$nextTemp): array
             }
         }
 
-        if (!$changed) {
+        if (! $changed) {
             $out[] = $item;
+
             continue;
         }
 
@@ -499,7 +506,7 @@ function inlineNestedRetCalls(array $items, string $selfName, array $index, int 
 {
     return \array_map(
         static function (IR\Stmt $item) use ($selfName, $index, &$nextTemp): IR\Stmt {
-            if (!($item instanceof IR\Ret)) {
+            if (! ($item instanceof IR\Ret)) {
                 return $item;
             }
 
@@ -558,7 +565,7 @@ function inlineRetCalls(array $items, string $selfName, array $index, int &$next
     $out = [];
 
     foreach (denseStmtItems($items) as $item) {
-        if (!($item instanceof IR\Ret) || !($item->value instanceof IR\ExprCall)) {
+        if (! ($item instanceof IR\Ret) || ! ($item->value instanceof IR\ExprCall)) {
             if ($item instanceof IR\Call) {
                 $args = [];
                 $prefix = [];
@@ -578,16 +585,19 @@ function inlineRetCalls(array $items, string $selfName, array $index, int &$next
                         $out[] = $stmt;
                     }
                     $out[] = new IR\Call($item->callee, $args, $item->dest, $item->srcLoc);
+
                     continue;
                 }
             }
             $out[] = $item;
+
             continue;
         }
 
         $callee = $item->value->callee;
-        if (!isset($index[$callee])) {
+        if (! isset($index[$callee])) {
             $out[] = $item;
+
             continue;
         }
 
@@ -596,6 +606,7 @@ function inlineRetCalls(array $items, string $selfName, array $index, int &$next
         $inlined = tryInlineCall($target, $fakeCall, $selfName, $index, $nextTemp);
         if ($inlined === null) {
             $out[] = $item;
+
             continue;
         }
 
@@ -604,11 +615,12 @@ function inlineRetCalls(array $items, string $selfName, array $index, int &$next
             foreach (denseStmtItems($converted) as $convertedItem) {
                 $out[] = $convertedItem;
             }
+
             continue;
         }
 
         $inlined = denseStmtItems($inlined);
-        if (count($inlined) === 1 && $inlined[0] instanceof IR\MatchStmt) {
+        if (\count($inlined) === 1 && $inlined[0] instanceof IR\MatchStmt) {
             $ms = $inlined[0];
             $arms = [];
             foreach ($ms->arms as $arm) {
@@ -619,6 +631,7 @@ function inlineRetCalls(array $items, string $selfName, array $index, int &$next
                 );
             }
             $out[] = new IR\MatchReturn($ms->scrutinee, $arms, $ms->exhaustive);
+
             continue;
         }
 
@@ -759,7 +772,7 @@ function tryInlineCall(IR\FunctionDecl $target, IR\Stmt $call, string $selfName,
         return null;
     }
 
-    if ($target->name === $selfName || !isInlineCandidate($target)) {
+    if ($target->name === $selfName || ! isInlineCandidate($target)) {
         return null;
     }
 
@@ -771,7 +784,7 @@ function tryInlineCall(IR\FunctionDecl $target, IR\Stmt $call, string $selfName,
         return null;
     }
 
-    if (count($call->args) !== count($target->params)) {
+    if (\count($call->args) !== \count($target->params)) {
         return null;
     }
 
@@ -803,13 +816,13 @@ function tryInlineCall(IR\FunctionDecl $target, IR\Stmt $call, string $selfName,
 
     $body = denseStmtItems($target->body->items);
     $last = lastStmtItem($body);
-    if ($last === null || !($last instanceof IR\Ret)) {
+    if ($last === null || ! ($last instanceof IR\Ret)) {
         return null;
     }
 
     $remap = buildTempRemap($body, $nextTemp);
     if ($remap !== []) {
-        $nextTemp = max($remap) + 1;
+        $nextTemp = \max($remap) + 1;
     }
     $body = denseStmtItems(remapTempsInItems($target->body->items, $remap));
     $srcModule = calleeModuleName($call->callee);
@@ -817,7 +830,7 @@ function tryInlineCall(IR\FunctionDecl $target, IR\Stmt $call, string $selfName,
         $body = qualifyBareCalleesInItems($body, $srcModule, $index);
     }
     $last = lastStmtItem($body);
-    if ($last === null || !($last instanceof IR\Ret)) {
+    if ($last === null || ! ($last instanceof IR\Ret)) {
         return null;
     }
 
@@ -855,12 +868,14 @@ function materializeInlineArgs(array $args, int $nextTemp): array
             $dest = $nextTemp++;
             $prefix[] = new IR\Assign($dest, $arg);
             $out[] = new IR\Temp($dest);
+
             continue;
         }
         if ($arg instanceof IR\FnRef && operandIsNonDuplicable($arg)) {
             $dest = $nextTemp++;
             $prefix[] = new IR\Assign($dest, $arg);
             $out[] = new IR\Temp($dest);
+
             continue;
         }
         $out[] = $arg;
@@ -877,17 +892,17 @@ function tryInlineMatchWrapper(IR\FunctionDecl $target, IR\Stmt $call, int &$nex
 {
     $items = denseStmtItems($target->body->items);
     $match = $items[0];
-    if (!($match instanceof IR\MatchReturn)) {
+    if (! ($match instanceof IR\MatchReturn)) {
         return null;
     }
 
     $remap = buildTempRemap(matchReturnTempItems($match), $nextTemp);
     if ($remap !== []) {
-        $nextTemp = max($remap) + 1;
+        $nextTemp = \max($remap) + 1;
     }
 
     $match = remapTempsInStmt($match, $remap);
-    if (!($match instanceof IR\MatchReturn)) {
+    if (! ($match instanceof IR\MatchReturn)) {
         return null;
     }
 
@@ -952,9 +967,9 @@ function assignMatchArmToDest(array $items, int $dest): array
         return $items;
     }
 
-    $last = $items[count($items) - 1];
+    $last = $items[\count($items) - 1];
     if ($last instanceof IR\Ret) {
-        array_pop($items);
+        \array_pop($items);
         foreach (inlineExprAsItems($last->value, $dest) as $stmt) {
             $items[] = $stmt;
         }
@@ -980,7 +995,7 @@ function assignMatchArmToDest(array $items, int $dest): array
 /** @param array<string, IR\FunctionDecl> $index */
 function isCapturedLambdaArg(IR\Operand $arg, array $index): bool
 {
-    if (!($arg instanceof IR\FnRef) || !isLambdaName($arg->name)) {
+    if (! ($arg instanceof IR\FnRef) || ! isLambdaName($arg->name)) {
         return false;
     }
 
@@ -990,7 +1005,7 @@ function isCapturedLambdaArg(IR\Operand $arg, array $index): bool
     }
 
     foreach (collectLocalsInBlock($lambda->body) as $local) {
-        if (!\in_array($local, $lambda->params, true)) {
+        if (! \in_array($local, $lambda->params, true)) {
             return true;
         }
     }
@@ -1007,7 +1022,7 @@ function bodyReferencesCapturedLambdas(IR\FunctionDecl $function, array $index):
             continue;
         }
         foreach (collectLocalsInBlock($lambda->body) as $local) {
-            if (!\in_array($local, $lambda->params, true)) {
+            if (! \in_array($local, $lambda->params, true)) {
                 return true;
             }
         }
@@ -1033,7 +1048,7 @@ function alignInlineCallDest(array $inlined, int $callDest): array
         return $inlined;
     }
 
-    if (!isset($last->dest) || $last->dest === $callDest) {
+    if (! isset($last->dest) || $last->dest === $callDest) {
         return $inlined;
     }
 
@@ -1048,23 +1063,23 @@ function matchArmAssignsToRets(array $items, int $dest): array
         return $items;
     }
 
-    $last = $items[count($items) - 1];
+    $last = $items[\count($items) - 1];
     if ($last instanceof IR\Assign && $last->dest === $dest) {
-        array_pop($items);
+        \array_pop($items);
         $items[] = new IR\Ret($last->value);
 
         return denseStmtItems($items);
     }
 
     if ($last instanceof IR\Call && $last->dest === $dest) {
-        array_pop($items);
+        \array_pop($items);
         $items[] = new IR\Ret(new IR\ExprCall($last->callee, $last->args));
 
         return denseStmtItems($items);
     }
 
     if ($last instanceof IR\CallValue && $last->dest === $dest) {
-        array_pop($items);
+        \array_pop($items);
         $items[] = new IR\Ret(new IR\ExprCallValue($last->callee, $last->args));
 
         return denseStmtItems($items);
@@ -1150,31 +1165,31 @@ function inlineExprAsItems(IR\Operand $expr, int $dest): array
  */
 function tryReduceMatchWrapperToExpr(IR\FunctionDecl $target, array $args): ?IR\Operand
 {
-    if (!isMatchWrapperCandidate($target) || count($args) !== count($target->params)) {
+    if (! isMatchWrapperCandidate($target) || \count($args) !== \count($target->params)) {
         return null;
     }
 
     $items = denseStmtItems($target->body->items);
     $match = $items[0];
-    if (!($match instanceof IR\MatchReturn) || count($match->arms) === 0) {
+    if (! ($match instanceof IR\MatchReturn) || \count($match->arms) === 0) {
         return null;
     }
 
     $bound = [];
     $scrutinee = substituteOperand($match->scrutinee, $target->params, $args, $bound);
-    if (!($scrutinee instanceof IR\ExprCall) || $scrutinee->args === []) {
+    if (! ($scrutinee instanceof IR\ExprCall) || $scrutinee->args === []) {
         return null;
     }
-    if ($scrutinee->callee === '' || str_starts_with($scrutinee->callee, '__')) {
+    if ($scrutinee->callee === '' || \str_starts_with($scrutinee->callee, '__')) {
         return null;
     }
 
     foreach ($match->arms as $arm) {
         $pat = $arm->pattern;
-        if (!($pat instanceof IR\PatCon) || $pat->name !== $scrutinee->callee) {
+        if (! ($pat instanceof IR\PatCon) || $pat->name !== $scrutinee->callee) {
             continue;
         }
-        if (count($pat->args) !== count($scrutinee->args)) {
+        if (\count($pat->args) !== \count($scrutinee->args)) {
             continue;
         }
 
@@ -1183,7 +1198,7 @@ function tryReduceMatchWrapperToExpr(IR\FunctionDecl $target, array $args): ?IR\
         $patParams = [];
         $patArgs = [];
         foreach ($pat->args as $i => $subPat) {
-            if (!($subPat instanceof IR\PatVar)) {
+            if (! ($subPat instanceof IR\PatVar)) {
                 return null;
             }
             $patParams[] = $subPat->name;
@@ -1221,14 +1236,14 @@ function reduceMatchArmBodyToExpr(
         return null;
     }
 
-    $last = $armItems[count($armItems) - 1];
-    if (!($last instanceof IR\Ret)) {
+    $last = $armItems[\count($armItems) - 1];
+    if (! ($last instanceof IR\Ret)) {
         return null;
     }
 
     foreach ($envParams as $i => $param) {
         $arg = $envArgs[$i] ?? null;
-        if ($arg === null || !operandIsNonDuplicable($arg)) {
+        if ($arg === null || ! operandIsNonDuplicable($arg)) {
             continue;
         }
         if (countLocalUsesInItems($armItems, $param) > 1) {
@@ -1250,6 +1265,7 @@ function reduceMatchArmBodyToExpr(
             $envParams[] = $stmt->name;
             $envArgs[] = $val;
             $armBound[$stmt->name] = true;
+
             continue;
         }
         if ($stmt instanceof IR\Assign) {
@@ -1258,6 +1274,7 @@ function reduceMatchArmBodyToExpr(
                 $sticky[$stmt->dest] = true;
             }
             $tempEnv[$stmt->dest] = $val;
+
             continue;
         }
         if ($stmt instanceof IR\Call) {
@@ -1272,6 +1289,7 @@ function reduceMatchArmBodyToExpr(
                 $sticky[$stmt->dest] = true;
             }
             $tempEnv[$stmt->dest] = $val;
+
             continue;
         }
         if ($stmt instanceof IR\CallValue) {
@@ -1286,6 +1304,7 @@ function reduceMatchArmBodyToExpr(
                 $sticky[$stmt->dest] = true;
             }
             $tempEnv[$stmt->dest] = $val;
+
             continue;
         }
         if ($stmt instanceof IR\DictCall) {
@@ -1303,6 +1322,7 @@ function reduceMatchArmBodyToExpr(
                 $sticky[$stmt->dest] = true;
             }
             $tempEnv[$stmt->dest] = $val;
+
             continue;
         }
         if ($stmt instanceof IR\Binop) {
@@ -1315,6 +1335,7 @@ function reduceMatchArmBodyToExpr(
                 $sticky[$stmt->dest] = true;
             }
             $tempEnv[$stmt->dest] = $val;
+
             continue;
         }
 
@@ -1335,7 +1356,7 @@ function reduceMatchArmBodyToExpr(
         }
     }
     foreach ($tempEnv as $id => $value) {
-        if (!operandIsNonDuplicable($value) || isset($sticky[$id])) {
+        if (! operandIsNonDuplicable($value) || isset($sticky[$id])) {
             continue;
         }
         $uses = countTempUsesInOperand($retOp, $id);
@@ -1395,14 +1416,14 @@ function nullaryFnNameIsNonDuplicableSeed(string $name): bool
     if (nullaryCtorCaf($name) !== null) {
         return false;
     }
-    if (str_starts_with($leaf, '__ev_')) {
+    if (\str_starts_with($leaf, '__ev_')) {
         return false;
     }
     $arity = activeFnArity($name);
     if ($arity === null) {
         $fn = lookupIndexedFunction(activePeFusionIndex(), $name);
         if ($fn !== null) {
-            $arity = count($fn->params);
+            $arity = \count($fn->params);
         }
     }
     if ($arity === null) {
@@ -1426,7 +1447,7 @@ function clearActiveFnArity(): void
 function activeFnArity(string $name): ?int
 {
     $map = $GLOBALS['__moggi_active_fn_arity'] ?? null;
-    if (!\is_array($map)) {
+    if (! \is_array($map)) {
         return null;
     }
     if (isset($map[$name]) && \is_int($map[$name])) {
@@ -1460,7 +1481,7 @@ function substitutingWouldDuplicateNonDuplicable(array $params, array $args, IR\
 {
     foreach ($params as $i => $param) {
         $arg = $args[$i] ?? null;
-        if ($arg === null || !operandIsNonDuplicable($arg)) {
+        if ($arg === null || ! operandIsNonDuplicable($arg)) {
             continue;
         }
         if (countLocalUsesInOperand($body, $param) > 1) {
@@ -1639,18 +1660,18 @@ function replaceTempsInOperand(IR\Operand $operand, array $tempEnv, array $stick
  */
 function foldListIntrinsicExpr(string $name, array $args): ?IR\Operand
 {
-    if ($name === 'listHead#' && count($args) === 1) {
+    if ($name === 'listHead#' && \count($args) === 1) {
         $xs = $args[0];
-        if ($xs instanceof IR\Intrinsic && isListConsForm($xs->name) && count($xs->args) === 2) {
+        if ($xs instanceof IR\Intrinsic && isListConsForm($xs->name) && \count($xs->args) === 2) {
             return $xs->args[0];
         }
         if ($xs instanceof IR\ListLit && $xs->elements !== []) {
             return $xs->elements[0];
         }
     }
-    if ($name === 'listTail#' && count($args) === 1) {
+    if ($name === 'listTail#' && \count($args) === 1) {
         $xs = $args[0];
-        if ($xs instanceof IR\Intrinsic && isListConsForm($xs->name) && count($xs->args) === 2) {
+        if ($xs instanceof IR\Intrinsic && isListConsForm($xs->name) && \count($xs->args) === 2) {
             return $xs->args[1];
         }
         if ($xs instanceof IR\ListLit && $xs->elements !== []) {
@@ -1709,7 +1730,7 @@ function bodyReferencesForeignFunctions(array $items, array $index): bool
         ) {
             $args = $op instanceof IR\ListLit ? $op->elements
                 : ($op instanceof IR\ExprCallValue
-                    ? array_merge([$op->callee], $op->args)
+                    ? \array_merge([$op->callee], $op->args)
                     : $op->args);
             if ($op instanceof IR\ExprCallValue && $visitOp($op->callee)) {
                 return true;
@@ -1858,16 +1879,16 @@ function isInlineCandidate(IR\FunctionDecl $function): bool
     }
 
     $items = $function->body->items;
-    if ($items === [] || count($items) > 4) {
+    if ($items === [] || \count($items) > 4) {
         return false;
     }
 
-    $last = $items[count($items) - 1];
-    if (!($last instanceof IR\Ret)) {
+    $last = $items[\count($items) - 1];
+    if (! ($last instanceof IR\Ret)) {
         return false;
     }
 
-    if ($last->value instanceof IR\FnRef && !isWiredInBoolCtor($last->value->name)) {
+    if ($last->value instanceof IR\FnRef && ! isWiredInBoolCtor($last->value->name)) {
         return false;
     }
 
@@ -1895,12 +1916,12 @@ function isMatchWrapperCandidate(IR\FunctionDecl $function): bool
     }
 
     $items = denseStmtItems($function->body->items);
-    if (count($items) !== 1 || !($items[0] instanceof IR\MatchReturn)) {
+    if (\count($items) !== 1 || ! ($items[0] instanceof IR\MatchReturn)) {
         return false;
     }
 
     $match = $items[0];
-    if (count($match->arms) > 4) {
+    if (\count($match->arms) > 4) {
         return false;
     }
 
@@ -1910,7 +1931,7 @@ function isMatchWrapperCandidate(IR\FunctionDecl $function): bool
 
     foreach ($match->arms as $arm) {
         $armItems = denseStmtItems($arm->body->items);
-        if (count($armItems) > 24) {
+        if (\count($armItems) > 24) {
             return false;
         }
         foreach ($armItems as $item) {
@@ -2143,7 +2164,7 @@ function maxTempInItems(array $items): int
     $max = -1;
     foreach ($items as $item) {
         foreach (collectTempIdsInStmt($item) as $id) {
-            $max = max($max, $id);
+            $max = \max($max, $id);
         }
     }
 
@@ -2155,7 +2176,7 @@ function buildTempRemap(array $items, int $nextFree): array
 {
     $remap = [];
     foreach (collectTempIdsInItems($items) as $id) {
-        if (!isset($remap[$id])) {
+        if (! isset($remap[$id])) {
             $remap[$id] = $nextFree++;
         }
     }
@@ -2413,7 +2434,7 @@ function substituteLocal(IR\Local $local, array $params, array $args, array $bou
 
     foreach ($params as $i => $param) {
         if ($param === $local->name) {
-            if (!\array_key_exists($i, $args)) {
+            if (! \array_key_exists($i, $args)) {
                 throw new \RuntimeException(
                     'substituteLocal: no argument for parameter `' . $param . '` (arity mismatch)',
                 );
@@ -2484,7 +2505,7 @@ function fuseItems(array $items, array $index): array
 {
     $out = [];
 
-    for ($i = 0; $i < count($items); ++$i) {
+    for ($i = 0; $i < \count($items); ++$i) {
         $item = $items[$i];
         $next = $items[$i + 1] ?? null;
 
@@ -2494,6 +2515,7 @@ function fuseItems(array $items, array $index): array
                 if ($fused !== null) {
                     $out[] = $fused;
                     ++$i;
+
                     continue;
                 }
             }
@@ -2503,6 +2525,7 @@ function fuseItems(array $items, array $index): array
                 if ($fused !== null) {
                     $out[] = $fused;
                     ++$i;
+
                     continue;
                 }
             }
@@ -2519,7 +2542,7 @@ function fuseItems(array $items, array $index): array
  */
 function tryFuseLambdaCall(IR\Stmt $call, IR\CallValue $callValue, array $index): ?IR\Stmt
 {
-    if (!($callValue->callee instanceof IR\Temp) || $callValue->callee->id !== $call->dest) {
+    if (! ($callValue->callee instanceof IR\Temp) || $callValue->callee->id !== $call->dest) {
         return null;
     }
 
@@ -2534,13 +2557,13 @@ function tryFuseLambdaCall(IR\Stmt $call, IR\CallValue $callValue, array $index)
     }
 
     $lambda = $index[$lambdaName] ?? null;
-    if ($lambda === null || !isSimpleLambda($lambda)) {
+    if ($lambda === null || ! isSimpleLambda($lambda)) {
         return null;
     }
 
     $body = $lambda->body->items;
-    $ret = $body[count($body) - 1];
-    if (!($ret instanceof IR\Ret) || !($ret->value instanceof IR\ExprBinop)) {
+    $ret = $body[\count($body) - 1];
+    if (! ($ret instanceof IR\Ret) || ! ($ret->value instanceof IR\ExprBinop)) {
         return null;
     }
 
@@ -2559,7 +2582,7 @@ function tryFuseLambdaCall(IR\Stmt $call, IR\CallValue $callValue, array $index)
 function tryFuseLambdaRet(IR\Stmt $call, IR\Ret $ret, array $index): ?array
 {
     $value = $ret->value;
-    if (!($value->callee instanceof IR\Temp) || $value->callee->id !== $call->dest) {
+    if (! ($value->callee instanceof IR\Temp) || $value->callee->id !== $call->dest) {
         return null;
     }
 
@@ -2576,12 +2599,12 @@ function tryFuseLambdaRet(IR\Stmt $call, IR\Ret $ret, array $index): ?array
 function returnedLambdaName(IR\FunctionDecl $provider): ?string
 {
     $items = $provider->body->items;
-    if (count($items) !== 1 || !($items[0] instanceof IR\Ret)) {
+    if (\count($items) !== 1 || ! ($items[0] instanceof IR\Ret)) {
         return null;
     }
 
     $value = $items[0]->value;
-    if (!($value instanceof IR\FnRef) || !isLambdaName($value->name)) {
+    if (! ($value instanceof IR\FnRef) || ! isLambdaName($value->name)) {
         return null;
     }
 
@@ -2591,13 +2614,13 @@ function returnedLambdaName(IR\FunctionDecl $provider): ?string
 /** @param IR\FunctionDecl $lambda */
 function isSimpleLambda(IR\FunctionDecl $lambda): bool
 {
-    if (!isLambdaName($lambda->name) || count($lambda->params) !== 1) {
+    if (! isLambdaName($lambda->name) || \count($lambda->params) !== 1) {
         return false;
     }
 
     $items = $lambda->body->items;
 
-    return count($items) === 1 && $items[0] instanceof IR\Ret;
+    return \count($items) === 1 && $items[0] instanceof IR\Ret;
 }
 
 /**
@@ -2651,10 +2674,10 @@ function appendConsumerToArm(array $armItems, int $dest, array $consumer): array
         return [new IR\Ret(new IR\ExprCall($consumer['callee'], $args))];
     }
 
-    $last = $armItems[count($armItems) - 1];
+    $last = $armItems[\count($armItems) - 1];
 
     if ($last instanceof IR\MatchReturn) {
-        array_pop($armItems);
+        \array_pop($armItems);
         $arms = [];
         foreach ($last->arms as $arm) {
             $arms[] = new IR\MatchArm(
@@ -2671,16 +2694,16 @@ function appendConsumerToArm(array $armItems, int $dest, array $consumer): array
     $value = null;
     if ($last instanceof IR\Assign && $last->dest === $dest) {
         $value = $last->value;
-        array_pop($armItems);
+        \array_pop($armItems);
     } elseif ($last instanceof IR\Ret) {
         $value = $last->value;
-        array_pop($armItems);
+        \array_pop($armItems);
     } elseif ($last instanceof IR\Call && $last->dest === $dest) {
         $value = new IR\ExprCall($last->callee, $last->args);
-        array_pop($armItems);
+        \array_pop($armItems);
     } elseif ($last instanceof IR\CallValue && $last->dest === $dest) {
         $value = new IR\ExprCallValue($last->callee, $last->args);
-        array_pop($armItems);
+        \array_pop($armItems);
     }
 
     if ($value === null) {
@@ -2705,16 +2728,16 @@ function appendMatchReturnToArm(array $armItems, int $dest, IR\MatchReturn $cons
     $armItems = denseStmtItems($armItems);
     $value = null;
     if ($armItems !== []) {
-        $last = $armItems[count($armItems) - 1];
+        $last = $armItems[\count($armItems) - 1];
         if ($last instanceof IR\Assign && $last->dest === $dest) {
             $value = $last->value;
-            array_pop($armItems);
+            \array_pop($armItems);
         } elseif ($last instanceof IR\Call && $last->dest === $dest) {
             $value = new IR\ExprCall($last->callee, $last->args);
-            array_pop($armItems);
+            \array_pop($armItems);
         } elseif ($last instanceof IR\Ret) {
             $value = $last->value;
-            array_pop($armItems);
+            \array_pop($armItems);
         }
     }
 
@@ -2736,7 +2759,7 @@ function callResultIsImmediatelyMatched(int $dest, array $rest): bool
     $next = $rest[0];
     if ($next instanceof IR\MatchStmt || $next instanceof IR\MatchReturn) {
         if ($next->scrutinee instanceof IR\Temp && $next->scrutinee->id === $dest) {
-            return !tempUsedInItems(\array_slice($rest, 1), $dest);
+            return ! tempUsedInItems(\array_slice($rest, 1), $dest);
         }
     }
 
@@ -2819,17 +2842,17 @@ function isPeFusionInlineCandidate(IR\FunctionDecl $function): bool
     }
 
     $leaf = specializationLookupNameSafe($function->name);
-    if (!str_starts_with($leaf, '__spec_')) {
+    if (! \str_starts_with($leaf, '__spec_')) {
         return false;
     }
 
     $items = denseStmtItems($function->body->items);
-    if ($items === [] || count($items) > 12) {
+    if ($items === [] || \count($items) > 12) {
         return false;
     }
 
     $last = lastStmtItem($items);
-    if (!($last instanceof IR\Ret || $last instanceof IR\MatchReturn)) {
+    if (! ($last instanceof IR\Ret || $last instanceof IR\MatchReturn)) {
         return false;
     }
 
@@ -2848,11 +2871,11 @@ function isPeFusionInlineCandidate(IR\FunctionDecl $function): bool
                 return false;
             }
             if ($item instanceof IR\MatchStmt || $item instanceof IR\MatchReturn) {
-                if (count($item->arms) > 4) {
+                if (\count($item->arms) > 4) {
                     return false;
                 }
                 foreach ($item->arms as $arm) {
-                    if (!$visit($arm->body->items)) {
+                    if (! $visit($arm->body->items)) {
                         return false;
                     }
                 }
@@ -2957,13 +2980,13 @@ function qualifyBareCalleesInStmt(IR\Stmt $stmt, string $module, array $index = 
 /** @param array<string, IR\FunctionDecl> $index */
 function qualifyBareName(string $name, string $module, array $index = []): string
 {
-    if ($name === '' || str_contains($name, '::') || str_contains($name, '\\')) {
+    if ($name === '' || \str_contains($name, '::') || \str_contains($name, '\\')) {
         return $name;
     }
     if (isPlausibleConstructorName($name)) {
         return $name;
     }
-    if ($index !== [] && !isset($index[$name])) {
+    if ($index !== [] && ! isset($index[$name])) {
         return $name;
     }
 
@@ -2979,14 +3002,14 @@ function specializationLookupNameSafe(string $callee): string
 
 function tryInlinePeFusionBody(IR\FunctionDecl $target, IR\Stmt $call, int &$nextTemp): ?array
 {
-    if (!($call instanceof IR\Call)) {
+    if (! ($call instanceof IR\Call)) {
         return null;
     }
 
     $body = denseStmtItems($target->body->items);
     $remap = buildTempRemap($body, $nextTemp);
     if ($remap !== []) {
-        $nextTemp = max($remap) + 1;
+        $nextTemp = \max($remap) + 1;
     }
     $body = denseStmtItems(remapTempsInItems($body, $remap));
 
@@ -2997,13 +3020,14 @@ function tryInlinePeFusionBody(IR\FunctionDecl $target, IR\Stmt $call, int &$nex
 
     $bound = [];
     $out = $prefix;
-    $lastIdx = count($body) - 1;
+    $lastIdx = \count($body) - 1;
     foreach ($body as $i => $item) {
         if ($i === $lastIdx && $item instanceof IR\Ret) {
             $value = substituteExpr($item->value, $target->params, $args, $bound);
             foreach (inlineExprAsItems($value, $call->dest) as $stmt) {
                 $out[] = $stmt;
             }
+
             continue;
         }
         if ($i === $lastIdx && $item instanceof IR\MatchReturn) {
@@ -3021,9 +3045,9 @@ function tryInlinePeFusionBody(IR\FunctionDecl $target, IR\Stmt $call, int &$nex
                         $armBound[$armItem->name] = true;
                     }
                 }
-                $armLast = $armItems !== [] ? $armItems[count($armItems) - 1] : null;
+                $armLast = $armItems !== [] ? $armItems[\count($armItems) - 1] : null;
                 if ($armLast instanceof IR\Ret) {
-                    array_pop($armItems);
+                    \array_pop($armItems);
                     foreach (inlineExprAsItems($armLast->value, $call->dest) as $stmt) {
                         $armItems[] = $stmt;
                     }
@@ -3037,6 +3061,7 @@ function tryInlinePeFusionBody(IR\FunctionDecl $target, IR\Stmt $call, int &$nex
                 );
             }
             $out[] = new IR\MatchStmt($scrutinee, $arms, $call->dest, $item->exhaustive);
+
             continue;
         }
 

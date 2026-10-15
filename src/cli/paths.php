@@ -2,18 +2,19 @@
 
 namespace Moggi\CLI;
 
-use Moggi\Syntax\Lexer\LexError;
-use Moggi\Syntax\Parser\ParseError;
-use Moggi\Semantics\Types\TypeError;
-
 use function Moggi\Modules\bundledStdlibLibPath;
 use function Moggi\Modules\cachedModuleHeader;
 use function Moggi\Modules\configuredLibraryRoots;
+
 use function Moggi\Modules\findBoundedModuleRoot;
 use function Moggi\Modules\headerIsModuleSource;
 use function Moggi\Modules\isStandaloneWorkspaceTest;
 use function Moggi\Modules\moduleFileClosureCached;
 use function Moggi\Modules\projectSourceClosure;
+
+use Moggi\Semantics\Types\TypeError;
+use Moggi\Syntax\Lexer\LexError;
+use Moggi\Syntax\Parser\ParseError;
 
 /**
  * @return array{0: string, 1: list<string>}
@@ -21,8 +22,8 @@ use function Moggi\Modules\projectSourceClosure;
  */
 function findMogFiles(string $inputDir): array
 {
-    $root = realpath($inputDir);
-    if ($root === false || !\is_dir($root)) {
+    $root = \realpath($inputDir);
+    if ($root === false || ! \is_dir($root)) {
         throw new \InvalidArgumentException("not a directory: {$inputDir}");
     }
 
@@ -37,7 +38,7 @@ function findMogFiles(string $inputDir): array
         }
     }
 
-    sort($files);
+    \sort($files);
 
     return [$root, $files];
 }
@@ -72,25 +73,25 @@ function resolveCompileInputs(string $inputPath, array $extraLibDirs = []): arra
         return findMogFiles($inputPath);
     }
 
-    if (!\is_file($inputPath)) {
+    if (! \is_file($inputPath)) {
         \fwrite(STDERR, "error: not a file or directory: {$inputPath}\n");
         exit(1);
     }
 
-    $real = realpath($inputPath);
+    $real = \realpath($inputPath);
     if ($real === false) {
         \fwrite(STDERR, "error: cannot resolve {$inputPath}\n");
         exit(1);
     }
 
     $header = cachedModuleHeader($real);
-    if (!headerIsModuleSource($header)) {
-        return [dirname($real), [$real]];
+    if (! headerIsModuleSource($header)) {
+        return [\dirname($real), [$real]];
     }
 
     if ($extraLibDirs !== []) {
         $searchRoots = resolveLibraryDirs($extraLibDirs);
-        if (!isStandaloneWorkspaceTest($real)) {
+        if (! isStandaloneWorkspaceTest($real)) {
             $localRoot = findBoundedModuleRoot($real);
             if ($localRoot !== null) {
                 $searchRoots[] = $localRoot;
@@ -125,19 +126,20 @@ function resolveLibraryDirs(array $extraLibDirs): array
     }
 
     foreach (configuredLibraryRoots() as $root) {
-        if (!isset($seen[$root])) {
+        if (! isset($seen[$root])) {
             $dirs[] = $root;
             $seen[$root] = true;
         }
     }
 
     foreach ($extraLibDirs as $dir) {
-        $real = realpath($dir);
+        $real = \realpath($dir);
         if ($real === false) {
             $dirs[] = $dir;
+
             continue;
         }
-        if (!isset($seen[$real])) {
+        if (! isset($seen[$real])) {
             $dirs[] = $real;
             $seen[$real] = true;
         }

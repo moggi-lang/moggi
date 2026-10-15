@@ -4,10 +4,12 @@ namespace Moggi\Syntax\Parser;
 
 use Moggi\Syntax\Ast;
 use Moggi\Syntax\Ast\ImportDecl;
-use Moggi\Syntax\Lexer\TokenKind;
 
 use function Moggi\Syntax\Ast\moduleName;
+
 use function Moggi\Syntax\isConstructorOperator;
+
+use Moggi\Syntax\Lexer\TokenKind;
 
 /**
  * @return array{assoc: string, precedence: ?int, operators: array<int, string>}
@@ -94,7 +96,7 @@ function parseModuleExportList(ParserState $state): array
     $currentSection = null;
     $afterComma = false;
 
-    while (!isAt($state, TokenKind::RParen)) {
+    while (! isAt($state, TokenKind::RParen)) {
         while (isAt($state, TokenKind::DocSection)) {
             $currentSection = advance($state)->lexeme;
         }
@@ -104,9 +106,10 @@ function parseModuleExportList(ParserState $state): array
         if (isAt($state, TokenKind::Comma)) {
             advance($state);
             $afterComma = true;
+
             continue;
         }
-        if ($exports !== [] && !$afterComma) {
+        if ($exports !== [] && ! $afterComma) {
             throw parseError($state, 'expected `,` between export items', peek($state));
         }
         $afterComma = false;
@@ -302,7 +305,7 @@ function parseImportDecl(ParserState $state): ImportDecl
         $line = $pathStartToken->line;
         $col = $pathStartToken->col;
         $endToken = $lastPathToken ?? $pathStartToken;
-        $endCol = $endToken->col + max(0, strlen($endToken->lexeme) - 1);
+        $endCol = $endToken->col + \max(0, \strlen($endToken->lexeme) - 1);
     }
 
     return new ImportDecl(
@@ -362,7 +365,7 @@ function parseImportItems(ParserState $state): array
     expect($state, TokenKind::LParen);
     $items = [];
 
-    if (!isAt($state, TokenKind::RParen)) {
+    if (! isAt($state, TokenKind::RParen)) {
         $items[] = parseImportItem($state);
         while (isAt($state, TokenKind::Comma)) {
             advance($state);
@@ -388,7 +391,7 @@ function parseImportItem(ParserState $state): Ast\ImportItem
             $methods = 'every';
         } else {
             $methods = [];
-            if (!isAt($state, TokenKind::RParen)) {
+            if (! isAt($state, TokenKind::RParen)) {
                 $methods[] = parseImportChildName($state);
                 while (isAt($state, TokenKind::Comma)) {
                     advance($state);
@@ -409,7 +412,7 @@ function parseImportItem(ParserState $state): Ast\ImportItem
 
 function parseImportChildName(ParserState $state): string
 {
-    if (!isAt($state, TokenKind::LParen)) {
+    if (! isAt($state, TokenKind::LParen)) {
         return expectImportName($state);
     }
 

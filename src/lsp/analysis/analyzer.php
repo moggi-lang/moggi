@@ -2,25 +2,30 @@
 
 namespace Moggi\LSP\Analysis;
 
-use Moggi\Semantics\Types\TypeError;
-use Moggi\Syntax\Ast;
-use Moggi\Syntax\Lexer\LexError;
-use Moggi\Syntax\Lexer\TokenKind;
-use Moggi\Syntax\Parser\ParseError;
-
 use function Moggi\Backend\setCompileBackend;
 use function Moggi\Docs\declarationTypeSignature;
 use function Moggi\LSP\Protocol\locToRange;
 use function Moggi\LSP\Protocol\uriToPath;
 use function Moggi\Modules\bundledStdlibLibPath;
-use function Moggi\Modules\stdlibSourcesMissingFrom;
+
 use function Moggi\Modules\moduleFileClosureCached;
 use function Moggi\Modules\prepareProjectCached;
 use function Moggi\Modules\setStdlibLibPath;
+use function Moggi\Modules\stdlibSourcesMissingFrom;
+
+use Moggi\Semantics\Types\TypeError;
+use Moggi\Syntax\Ast;
+
 use function Moggi\Syntax\Lexer\lex;
+
+use Moggi\Syntax\Lexer\LexError;
+use Moggi\Syntax\Lexer\TokenKind;
+
 use function Moggi\Syntax\Parser\parse;
 
-class AnalysisResult
+use Moggi\Syntax\Parser\ParseError;
+
+class analyzer
 {
     /**
      * @param list<array{range: array{start: array{line:int,character:int}, end: array{line:int,character:int}}, severity: int, message: string, source: string, code?: string, data?: array<string, mixed>}> $diagnostics
@@ -53,12 +58,12 @@ function analyze(string $uri, string $content, array $libDirs = []): AnalysisRes
 {
     $path = uriToPath($uri);
     $filename = $path;
-    if ($path === '' || str_contains($path, '://')) {
+    if ($path === '' || \str_contains($path, '://')) {
         $tmpTokens = lex($content, $uri);
         $tmpProg = parse($tmpTokens, $content, $uri);
         $moduleName = $tmpProg->module ?? 'Main';
-        $tmpDir = sys_get_temp_dir() . '/moggi-lsp/' . md5($uri);
-        if (!is_dir($tmpDir) && !mkdir($tmpDir, 0777, true) && !is_dir($tmpDir)) {
+        $tmpDir = \sys_get_temp_dir() . '/moggi-lsp/' . \md5($uri);
+        if (! \is_dir($tmpDir) && ! \mkdir($tmpDir, 0777, true) && ! \is_dir($tmpDir)) {
             throw new \RuntimeException('Cannot create temporary directory for LSP analysis');
         }
         $filename = $tmpDir . '/' . $moduleName . '.mog';
@@ -85,6 +90,7 @@ function analyze(string $uri, string $content, array $libDirs = []): AnalysisRes
             $parsedProgram = parse($tokens, $source, $filename);
         } catch (LexError|ParseError $e) {
             $diagnostics[] = errorToDiagnostic($e, $uri, $source);
+
             return new AnalysisResult(
                 $diagnostics,
                 [],
@@ -126,7 +132,7 @@ function analyze(string $uri, string $content, array $libDirs = []): AnalysisRes
 
         $imports = [];
         foreach ($parsedProgram->imports as $imp) {
-            $imports[implode('.', $imp->path)] = $imp->asName ?? null;
+            $imports[\implode('.', $imp->path)] = $imp->asName ?? null;
         }
 
         return new AnalysisResult(
@@ -149,19 +155,19 @@ function analyze(string $uri, string $content, array $libDirs = []): AnalysisRes
  */
 function withOverlayFile(string $path, string $content, callable $fn): mixed
 {
-    $dir = dirname($path);
-    if (!is_dir($dir) && !mkdir($dir, 0777, true) && !is_dir($dir)) {
+    $dir = \dirname($path);
+    if (! \is_dir($dir) && ! \mkdir($dir, 0777, true) && ! \is_dir($dir)) {
         throw new \RuntimeException("Cannot create directory for LSP overlay: $dir");
     }
 
-    $existed = is_file($path);
-    $previous = $existed ? file_get_contents($path) : null;
+    $existed = \is_file($path);
+    $previous = $existed ? \file_get_contents($path) : null;
     if ($previous === false) {
         $previous = null;
         $existed = false;
     }
 
-    if (file_put_contents($path, $content) === false) {
+    if (\file_put_contents($path, $content) === false) {
         throw new \RuntimeException("Cannot write LSP overlay: $path");
     }
 
@@ -169,9 +175,9 @@ function withOverlayFile(string $path, string $content, callable $fn): mixed
         return $fn($path);
     } finally {
         if ($existed && $previous !== null) {
-            file_put_contents($path, $previous);
-        } elseif (!$existed && is_file($path)) {
-            @unlink($path);
+            \file_put_contents($path, $previous);
+        } elseif (! $existed && \is_file($path)) {
+            @\unlink($path);
         }
     }
 }
@@ -183,6 +189,7 @@ function withOverlayFile(string $path, string $content, callable $fn): mixed
 function locateTopLevelDecls(Ast\Program $program, string $source, string $uri, ?Ast\Program $checked): array
 {
     $result = [];
+
     try {
         $tokens = lex($source, $uri);
     } catch (LexError) {
@@ -190,7 +197,7 @@ function locateTopLevelDecls(Ast\Program $program, string $source, string $uri, 
     }
 
     $i = 0;
-    $count = count($tokens);
+    $count = \count($tokens);
     while ($i < $count) {
         $tok = $tokens[$i];
         $kind = $tok->kind;
@@ -204,12 +211,13 @@ function locateTopLevelDecls(Ast\Program $program, string $source, string $uri, 
                     'name' => $name,
                     'line' => $tok->line,
                     'col' => $tok->col,
-                    'endCol' => $tok->col + max(1, mb_strlen($tok->lexeme)) - 1,
+                    'endCol' => $tok->col + \max(1, \mb_strlen($tok->lexeme)) - 1,
                     'kind' => 12,
                     'completionKind' => 3,
                     'type' => 'function',
                 ];
                 $i += 2;
+
                 continue;
             }
             if ($next !== null && (
@@ -219,18 +227,19 @@ function locateTopLevelDecls(Ast\Program $program, string $source, string $uri, 
                 || $next->kind === TokenKind::Backslash
                 || ($next->kind === TokenKind::Op && $next->lexeme === '=')
             )) {
-                if (!isset($result[$name])) {
+                if (! isset($result[$name])) {
                     $result[$name] = [
                         'name' => $name,
                         'line' => $tok->line,
                         'col' => $tok->col,
-                        'endCol' => $tok->col + max(1, mb_strlen($tok->lexeme)) - 1,
+                        'endCol' => $tok->col + \max(1, \mb_strlen($tok->lexeme)) - 1,
                         'kind' => 12,
                         'completionKind' => 3,
                         'type' => 'function',
                     ];
                 }
                 $i++;
+
                 continue;
             }
         }
@@ -243,12 +252,13 @@ function locateTopLevelDecls(Ast\Program $program, string $source, string $uri, 
                     'name' => $name,
                     'line' => $next->line,
                     'col' => $next->col,
-                    'endCol' => $next->col + max(1, mb_strlen($next->lexeme)) - 1,
+                    'endCol' => $next->col + \max(1, \mb_strlen($next->lexeme)) - 1,
                     'kind' => 23,
                     'completionKind' => 22,
                     'type' => $kind === TokenKind::KwNewtype ? 'newtype' : 'data',
                 ];
                 $i += 2;
+
                 continue;
             }
         }
@@ -263,12 +273,13 @@ function locateTopLevelDecls(Ast\Program $program, string $source, string $uri, 
                         'name' => $name,
                         'line' => $next->line,
                         'col' => $next->col,
-                        'endCol' => $next->col + max(1, mb_strlen($next->lexeme)) - 1,
+                        'endCol' => $next->col + \max(1, \mb_strlen($next->lexeme)) - 1,
                         'kind' => 5,
                         'completionKind' => 25,
                         'type' => 'type',
                     ];
                     $i += 3;
+
                     continue;
                 }
             }
@@ -282,12 +293,13 @@ function locateTopLevelDecls(Ast\Program $program, string $source, string $uri, 
                     'name' => $name,
                     'line' => $next->line,
                     'col' => $next->col,
-                    'endCol' => $next->col + max(1, mb_strlen($next->lexeme)) - 1,
+                    'endCol' => $next->col + \max(1, \mb_strlen($next->lexeme)) - 1,
                     'kind' => 11,
                     'completionKind' => 7,
                     'type' => 'class',
                 ];
                 $i += 2;
+
                 continue;
             }
         }
@@ -307,7 +319,7 @@ function locateTopLevelDecls(Ast\Program $program, string $source, string $uri, 
                             'name' => $name,
                             'line' => $follow->line,
                             'col' => $follow->col,
-                            'endCol' => $follow->col + max(1, mb_strlen($follow->lexeme)) - 1,
+                            'endCol' => $follow->col + \max(1, \mb_strlen($follow->lexeme)) - 1,
                             'kind' => 12,
                             'completionKind' => 3,
                             'type' => 'function',
@@ -323,7 +335,7 @@ function locateTopLevelDecls(Ast\Program $program, string $source, string $uri, 
                             'name' => $name,
                             'line' => $follow->line,
                             'col' => $follow->col,
-                            'endCol' => $follow->col + max(1, mb_strlen($follow->lexeme)) - 1,
+                            'endCol' => $follow->col + \max(1, \mb_strlen($follow->lexeme)) - 1,
                             'kind' => 12,
                             'completionKind' => 3,
                             'type' => 'function',
@@ -332,10 +344,12 @@ function locateTopLevelDecls(Ast\Program $program, string $source, string $uri, 
                 } elseif ($follow->kind === TokenKind::KwData || $follow->kind === TokenKind::KwNewtype
                     || $follow->kind === TokenKind::KwType || $follow->kind === TokenKind::KwClass) {
                     $i = $j;
+
                     continue;
                 }
             }
             $i++;
+
             continue;
         }
 
@@ -346,7 +360,7 @@ function locateTopLevelDecls(Ast\Program $program, string $source, string $uri, 
     foreach ($prog->items as $item) {
         if ($item instanceof Ast\FunctionDecl) {
             $name = $item->name;
-            if (!isset($result[$name])) {
+            if (! isset($result[$name])) {
                 continue;
             }
             $typeStr = declarationTypeSignature($item);
@@ -358,7 +372,7 @@ function locateTopLevelDecls(Ast\Program $program, string $source, string $uri, 
             }
         } elseif ($item instanceof Ast\DataDecl || $item instanceof Ast\TypeSynonymDecl || $item instanceof Ast\ClassDecl) {
             $name = $item->name;
-            if (!isset($result[$name])) {
+            if (! isset($result[$name])) {
                 continue;
             }
             if ($item->doc !== null && $item->doc !== '') {
@@ -387,11 +401,12 @@ function buildDocumentSymbols(array $declarations, string $uri, ?string $source 
         ];
         if (($info['type'] ?? '') !== '' && ($info['type'] ?? '') !== 'function') {
             $entry['detail'] = $info['type'];
-        } elseif (isset($info['type']) && str_contains((string) $info['type'], '->')) {
+        } elseif (isset($info['type']) && \str_contains((string) $info['type'], '->')) {
             $entry['detail'] = $info['type'];
         }
         $symbols[] = $entry;
     }
+
     return $symbols;
 }
 /**
@@ -406,7 +421,8 @@ function buildDocumentSymbols(array $declarations, string $uri, ?string $source 
 function findNodeAt($ast, int $line, int $col, array &$seen = []): ?object
 {
     $chain = findNodeChainAt($ast, $line, $col, $seen);
-    return $chain === [] ? null : $chain[array_key_last($chain)];
+
+    return $chain === [] ? null : $chain[\array_key_last($chain)];
 }
 /**
  * Covering AST chain from outermost positioned node to innermost (inclusive).
@@ -416,21 +432,21 @@ function findNodeAt($ast, int $line, int $col, array &$seen = []): ?object
  */
 function findNodeChainAt($ast, int $line, int $col, array &$seen = []): array
 {
-    if (!is_object($ast)) {
+    if (! \is_object($ast)) {
         return [];
     }
 
-    $oid = spl_object_id($ast);
+    $oid = \spl_object_id($ast);
     if (isset($seen[$oid])) {
         return [];
     }
     $seen[$oid] = true;
 
-    $hasPosition = property_exists($ast, 'line') && (($ast->line ?? 0) !== 0);
+    $hasPosition = \property_exists($ast, 'line') && (($ast->line ?? 0) !== 0);
     $startLine = $hasPosition ? (int) $ast->line : 0;
     $startCol = $hasPosition ? (int) ($ast->col ?? 1) : 1;
     $endCol = $hasPosition ? (int) ($ast->endCol ?? $startCol) : $startCol;
-    $endLine = property_exists($ast, 'endLine') ? (int) ($ast->endLine ?? $startLine) : $startLine;
+    $endLine = \property_exists($ast, 'endLine') ? (int) ($ast->endLine ?? $startLine) : $startLine;
 
     $covers = true;
     if ($hasPosition) {
@@ -444,18 +460,18 @@ function findNodeChainAt($ast, int $line, int $col, array &$seen = []): array
     }
 
     $bestChildChain = [];
-    foreach (get_object_vars($ast) as $key => $prop) {
+    foreach (\get_object_vars($ast) as $key => $prop) {
         if ($key === 'inferredType' || $prop instanceof Ast\TypeNode) {
             continue;
         }
-        if (is_object($prop)) {
+        if (\is_object($prop)) {
             $child = findNodeChainAt($prop, $line, $col, $seen);
             if ($child !== []) {
                 $bestChildChain = $child;
             }
-        } elseif (is_array($prop)) {
+        } elseif (\is_array($prop)) {
             foreach ($prop as $elem) {
-                if (is_object($elem) && !$elem instanceof Ast\TypeNode) {
+                if (\is_object($elem) && ! $elem instanceof Ast\TypeNode) {
                     $child = findNodeChainAt($elem, $line, $col, $seen);
                     if ($child !== []) {
                         $bestChildChain = $child;
@@ -465,11 +481,12 @@ function findNodeChainAt($ast, int $line, int $col, array &$seen = []): array
         }
     }
 
-    if (!$hasPosition) {
+    if (! $hasPosition) {
         return $bestChildChain;
     }
     if ($covers || $bestChildChain !== []) {
         return [$ast, ...$bestChildChain];
     }
+
     return [];
 }

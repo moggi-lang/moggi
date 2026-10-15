@@ -10,7 +10,7 @@
 // looked and how to fix it.
 
 $root = __DIR__;
-while (!is_file($root . '/src/registry/schnorr.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/registry/schnorr.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
@@ -22,7 +22,7 @@ use function Moggi\Registry\schnorrMissingNote;
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
     ++$checks;
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
@@ -39,17 +39,17 @@ $assert(
     "the checkout's build output must be a candidate: " . \implode(', ', $candidates),
 );
 $assert(
-    !\in_array($checkout . $separator . 'schnorr' . $separator . 'build' . $separator . $name, $candidates, true),
+    ! \in_array($checkout . $separator . 'schnorr' . $separator . 'build' . $separator . $name, $candidates, true),
     'the build directory never holds the binary and must not be a candidate',
 );
 
 $work = \sys_get_temp_dir() . '/moggi-schnorr-' . \bin2hex(\random_bytes(6));
 \mkdir($work . '/bin', 0777, true);
 $remove = static function (string $path) use (&$remove): void {
-    if (!\file_exists($path) && !\is_link($path)) {
+    if (! \file_exists($path) && ! \is_link($path)) {
         return;
     }
-    if (\is_dir($path) && !\is_link($path)) {
+    if (\is_dir($path) && ! \is_link($path)) {
         foreach (\scandir($path) ?: [] as $entry) {
             if ($entry !== '.' && $entry !== '..') {
                 $remove($path . '/' . $entry);

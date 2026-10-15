@@ -4,38 +4,49 @@ namespace Moggi\LSP\Analysis;
 
 require_once __DIR__ . '/../../paths.php';
 
-use Moggi\Docs\DocIndex;
-use Moggi\LSP\Index\DeclInfo;
-use Moggi\LSP\Index\ModuleIndex;
-use Moggi\LSP\Index\OccurrenceIndex;
-use Moggi\Modules\PreparedProject;
-use Moggi\Semantics\Types\TypeError;
-use Moggi\Syntax\Ast;
-use Moggi\Syntax\Lexer\LexError;
-use Moggi\Syntax\Parser\ParseError;
-
 use function Moggi\Backend\setCompileBackend;
+
+use Moggi\Docs\DocIndex;
+
 use function Moggi\Docs\dumpTypeForDocs;
 use function Moggi\Docs\loadOrBuildIndex;
+use function Moggi\LSP\applyContentChanges;
 use function Moggi\LSP\Index\buildDeclsFromProgram;
 use function Moggi\LSP\Index\buildOccurrenceIndex;
-use function Moggi\LSP\Index\clearUri;
+
+use Moggi\LSP\Index\DeclInfo;
+
 use function Moggi\LSP\Index\indexTypeRelations;
+
 use function Moggi\LSP\Index\merge;
-use function Moggi\LSP\Index\put;
+
+use Moggi\LSP\Index\ModuleIndex;
+use Moggi\LSP\Index\OccurrenceIndex;
+
 use function Moggi\LSP\Protocol\nodeToLspRange;
 use function Moggi\LSP\Protocol\pathToUri;
 use function Moggi\LSP\Protocol\uriToPath;
-use function Moggi\LSP\applyContentChanges;
 use function Moggi\Modules\bundledStdlibLibPath;
-use function Moggi\Modules\stdlibSourcesMissingFrom;
 use function Moggi\Modules\moduleFileClosureCached;
+
+use Moggi\Modules\PreparedProject;
+
 use function Moggi\Modules\prepareProjectCached;
 use function Moggi\Modules\projectSourceClosure;
 use function Moggi\Modules\setStdlibLibPath;
+use function Moggi\Modules\stdlibSourcesMissingFrom;
 use function Moggi\Paths\globPaths;
+
+use Moggi\Semantics\Types\TypeError;
+use Moggi\Syntax\Ast;
+
 use function Moggi\Syntax\Lexer\lex;
+
+use Moggi\Syntax\Lexer\LexError;
+
 use function Moggi\Syntax\Parser\parse;
+
+use Moggi\Syntax\Parser\ParseError;
 
 final class VirtualFS
 {
@@ -46,8 +57,8 @@ final class VirtualFS
 
     public function __construct(?string $sessionRoot = null)
     {
-        $this->sessionRoot = $sessionRoot ?? (sys_get_temp_dir() . '/moggi-lsp-vfs/' . bin2hex(random_bytes(8)));
-        if (!is_dir($this->sessionRoot) && !mkdir($this->sessionRoot, 0777, true) && !is_dir($this->sessionRoot)) {
+        $this->sessionRoot = $sessionRoot ?? (\sys_get_temp_dir() . '/moggi-lsp-vfs/' . \bin2hex(\random_bytes(8)));
+        if (! \is_dir($this->sessionRoot) && ! \mkdir($this->sessionRoot, 0777, true) && ! \is_dir($this->sessionRoot)) {
             throw new \RuntimeException('Cannot create LSP VFS root');
         }
     }
@@ -68,8 +79,9 @@ final class VirtualFS
 
     public function update(string $uri, string $content, int $version): void
     {
-        if (!isset($this->docs[$uri])) {
+        if (! isset($this->docs[$uri])) {
             $this->open($uri, $content, $version);
+
             return;
         }
         $this->docs[$uri]['content'] = $content;
@@ -112,7 +124,8 @@ final class VirtualFS
     public function fingerprint(string $uri): string
     {
         $c = $this->content($uri) ?? '';
-        return hash('sha256', $c);
+
+        return \hash('sha256', $c);
     }
 
     /**
@@ -129,16 +142,17 @@ final class VirtualFS
         }
         $dest = $this->sessionRoot . DIRECTORY_SEPARATOR . 'files'
             . DIRECTORY_SEPARATOR . $this->overlayRelativePath($uri, $projectRoot);
-        $fp = hash('sha256', $content);
-        if (($overlayFingerprints[$uri] ?? null) === $fp && is_file($dest)) {
+        $fp = \hash('sha256', $content);
+        if (($overlayFingerprints[$uri] ?? null) === $fp && \is_file($dest)) {
             return $dest;
         }
-        $dir = dirname($dest);
-        if (!is_dir($dir) && !mkdir($dir, 0777, true) && !is_dir($dir)) {
+        $dir = \dirname($dest);
+        if (! \is_dir($dir) && ! \mkdir($dir, 0777, true) && ! \is_dir($dir)) {
             throw new \RuntimeException("Cannot create VFS path $dir");
         }
-        file_put_contents($dest, $content);
+        \file_put_contents($dest, $content);
         $overlayFingerprints[$uri] = $fp;
+
         return $dest;
     }
 
@@ -150,13 +164,13 @@ final class VirtualFS
      */
     private function overlayRelativePath(string $uri, string $projectRoot): string
     {
-        $real = ltrim(str_replace('\\', '/', uriToPath($uri)), '/');
-        $root = ltrim(rtrim(str_replace('\\', '/', $projectRoot), '/'), '/');
-        $rel = ($root !== '' && str_starts_with($real, $root . '/'))
-            ? substr($real, strlen($root) + 1)
+        $real = \ltrim(\str_replace('\\', '/', uriToPath($uri)), '/');
+        $root = \ltrim(\rtrim(\str_replace('\\', '/', $projectRoot), '/'), '/');
+        $rel = ($root !== '' && \str_starts_with($real, $root . '/'))
+            ? \substr($real, \strlen($root) + 1)
             : $real;
 
-        return preg_replace('#^([A-Za-z]):#', '$1_', $rel) ?? $rel;
+        return \preg_replace('#^([A-Za-z]):#', '$1_', $rel) ?? $rel;
     }
 
     public function cleanup(): void
@@ -166,10 +180,10 @@ final class VirtualFS
 
     private function rmTree(string $dir): void
     {
-        if (!is_dir($dir)) {
+        if (! \is_dir($dir)) {
             return;
         }
-        $items = scandir($dir);
+        $items = \scandir($dir);
         if ($items === false) {
             return;
         }
@@ -178,13 +192,13 @@ final class VirtualFS
                 continue;
             }
             $path = $dir . '/' . $item;
-            if (is_dir($path)) {
+            if (\is_dir($path)) {
                 $this->rmTree($path);
             } else {
-                @unlink($path);
+                @\unlink($path);
             }
         }
-        @rmdir($dir);
+        @\rmdir($dir);
     }
 }
 
@@ -199,14 +213,21 @@ final class AnalysisService
     public const DEBOUNCE_SEC = 0.2;
 
     public VirtualFS $vfs;
+
     public ModuleIndex $modules;
+
     public OccurrenceIndex $occurrences;
+
     /** @var list<string> */
     public array $libDirs;
+
     public ?string $workspaceRoot = null;
+
     public ?PreparedProject $project = null;
+
     /** @var array<string, AnalysisResult> */
     public array $results = [];
+
     /** @var array<string, true> */
     private array $dirty = [];
 
@@ -223,11 +244,14 @@ final class AnalysisService
     private array $dynamicRegistrations = [];
 
     public ?DocIndex $docIndex = null;
+
     public bool $warmed = false;
 
     /** Client capabilities / config */
     public bool $inlaysEnabled = false;
+
     public string $backend = 'php';
+
     /** Raw initialize-request client capabilities (linkSupport etc.). */
     public array $clientCapabilities = [];
 
@@ -250,7 +274,7 @@ final class AnalysisService
     /** @return list<string> URIs of all currently open documents. */
     public function openUris(): array
     {
-        return array_keys($this->vfs->all());
+        return \array_keys($this->vfs->all());
     }
 
     public function isOpen(string $uri): bool
@@ -271,7 +295,7 @@ final class AnalysisService
         $this->dirty[$uri] = true;
         if ($this->workspaceRoot === null) {
             $path = uriToPath($uri);
-            $this->workspaceRoot = dirname($path);
+            $this->workspaceRoot = \dirname($path);
         }
         $this->scheduleAnalyze($uri, 0.05);
     }
@@ -311,7 +335,7 @@ final class AnalysisService
         }
         foreach ($this->vfs->all() as $openUri => $_) {
             $openPath = uriToPath($openUri);
-            if ($openPath === $path || str_starts_with(dirname($openPath), dirname($path))) {
+            if ($openPath === $path || \str_starts_with(\dirname($openPath), \dirname($path))) {
                 $this->dirty[$openUri] = true;
                 $this->scheduleAnalyze($openUri, 0.05);
             }
@@ -323,7 +347,7 @@ final class AnalysisService
         $delay = $delaySec ?? self::DEBOUNCE_SEC;
         $this->pendingAnalyze[$uri] = [
             'version' => $this->vfs->version($uri),
-            'dueAt' => microtime(true) + $delay,
+            'dueAt' => \microtime(true) + $delay,
         ];
     }
 
@@ -333,7 +357,7 @@ final class AnalysisService
         if ($this->pendingAnalyze === []) {
             return null;
         }
-        $now = microtime(true);
+        $now = \microtime(true);
         $min = null;
         foreach ($this->pendingAnalyze as $p) {
             $wait = $p['dueAt'] - $now;
@@ -341,6 +365,7 @@ final class AnalysisService
                 $min = $wait;
             }
         }
+
         return $min;
     }
 
@@ -353,12 +378,13 @@ final class AnalysisService
         if ($force) {
             return true;
         }
-        $now = microtime(true);
+        $now = \microtime(true);
         foreach ($this->pendingAnalyze as $p) {
             if ($p['dueAt'] <= $now) {
                 return true;
             }
         }
+
         return false;
     }
 
@@ -369,15 +395,16 @@ final class AnalysisService
      */
     public function flushDueAnalyzes(bool $force = false): array
     {
-        $now = microtime(true);
+        $now = \microtime(true);
         $out = [];
         foreach ($this->pendingAnalyze as $uri => $pending) {
-            if (!$force && $pending['dueAt'] > $now) {
+            if (! $force && $pending['dueAt'] > $now) {
                 continue;
             }
             $ver = $this->vfs->version($uri);
             if ($ver !== $pending['version']) {
                 unset($this->pendingAnalyze[$uri]);
+
                 continue;
             }
             unset($this->pendingAnalyze[$uri]);
@@ -386,6 +413,7 @@ final class AnalysisService
                 $out[$uri] = $r;
             }
         }
+
         return $out;
     }
 
@@ -401,9 +429,11 @@ final class AnalysisService
             return [];
         }
         $filename = uriToPath($uri);
+
         try {
             $tokens = lex($content, $filename);
             parse($tokens, $content, $filename);
+
             return [];
         } catch (LexError|ParseError $e) {
             return [errorToDiagnostic($e, $uri, $content)];
@@ -438,6 +468,7 @@ final class AnalysisService
         if ($parseDiags !== []) {
             return $parseDiags;
         }
+
         return $kept;
     }
 
@@ -446,7 +477,7 @@ final class AnalysisService
         unset($this->dirty[$uri], $this->pendingAnalyze[$uri]);
         $this->results[$uri] = $result;
         $this->completedVersions[$uri] = $this->vfs->version($uri);
-        if (!$this->vfs->has($uri)) {
+        if (! $this->vfs->has($uri)) {
             $this->vfs->open($uri, $result->source, 1);
         }
         $this->indexResult($uri, $result);
@@ -454,10 +485,11 @@ final class AnalysisService
 
     public function ensureAnalyzed(string $uri): ?AnalysisResult
     {
-        if (isset($this->dirty[$uri]) || !isset($this->results[$uri]) || isset($this->pendingAnalyze[$uri])) {
+        if (isset($this->dirty[$uri]) || ! isset($this->results[$uri]) || isset($this->pendingAnalyze[$uri])) {
             unset($this->pendingAnalyze[$uri]);
             $this->analyzeUri($uri, $this->vfs->version($uri));
         }
+
         return $this->results[$uri] ?? null;
     }
 
@@ -480,10 +512,10 @@ final class AnalysisService
         $content = $this->vfs->content($uri);
         if ($content === null) {
             $path = uriToPath($uri);
-            if (!is_file($path)) {
+            if (! \is_file($path)) {
                 return null;
             }
-            $content = (string) file_get_contents($path);
+            $content = (string) \file_get_contents($path);
         }
 
         foreach ($this->libDirs as $dir) {
@@ -495,21 +527,21 @@ final class AnalysisService
         setCompileBackend($this->backend);
 
         $path = uriToPath($uri);
-        if (str_contains($uri, '://') && !str_starts_with($uri, 'file:')) {
-            $tmp = $this->vfs->sessionRoot() . '/untitled/' . md5($uri) . '.mog';
-            $dir = dirname($tmp);
-            if (!is_dir($dir)) {
-                mkdir($dir, 0777, true);
+        if (\str_contains($uri, '://') && ! \str_starts_with($uri, 'file:')) {
+            $tmp = $this->vfs->sessionRoot() . '/untitled/' . \md5($uri) . '.mog';
+            $dir = \dirname($tmp);
+            if (! \is_dir($dir)) {
+                \mkdir($dir, 0777, true);
             }
-            file_put_contents($tmp, $content);
+            \file_put_contents($tmp, $content);
             $path = $tmp;
         }
 
-        $root = $this->workspaceRoot ?? dirname($path);
+        $root = $this->workspaceRoot ?? \dirname($path);
 
         try {
-            $disk = (is_file($path) && str_starts_with($uri, 'file:'))
-                ? (string) file_get_contents($path)
+            $disk = (\is_file($path) && \str_starts_with($uri, 'file:'))
+                ? (string) \file_get_contents($path)
                 : null;
             if ($disk !== null && $disk === $content) {
                 $filename = $path;
@@ -518,6 +550,7 @@ final class AnalysisService
             }
             if ($expectedVersion !== null && $this->vfs->version($uri) !== $expectedVersion) {
                 $this->dirty[$uri] = true;
+
                 return $this->results[$uri] ?? null;
             }
             $result = $this->analyzeFile($uri, $content, $filename, $root);
@@ -542,12 +575,14 @@ final class AnalysisService
         if ($expectedVersion !== null && $this->vfs->version($uri) !== $expectedVersion) {
             $this->dirty[$uri] = true;
             $this->scheduleAnalyze($uri);
+
             return $this->results[$uri] ?? null;
         }
 
         $this->results[$uri] = $result;
         $this->completedVersions[$uri] = $ver;
         $this->indexResult($uri, $result);
+
         return $result;
     }
 
@@ -563,6 +598,7 @@ final class AnalysisService
             $parsed = parse($tokens, $content, $filename);
         } catch (LexError|ParseError $e) {
             $diagnostics[] = errorToDiagnostic($e, $uri, $content);
+
             return new AnalysisResult(
                 $diagnostics,
                 [],
@@ -578,7 +614,7 @@ final class AnalysisService
 
         try {
             $libs = [];
-            if ($this->workspaceRoot !== null && is_dir($this->workspaceRoot)) {
+            if ($this->workspaceRoot !== null && \is_dir($this->workspaceRoot)) {
                 $libs[] = $this->workspaceRoot;
             }
             $stdlib = bundledStdlibLibPath();
@@ -588,7 +624,7 @@ final class AnalysisService
             foreach ($this->libDirs as $userLib) {
                 $libs[] = $userLib;
             }
-            $libs = array_values(array_unique($libs));
+            $libs = \array_values(\array_unique($libs));
 
             /** @var array<string, string> realpath => overlayOrDiskPath */
             $overlayByReal = [];
@@ -598,8 +634,8 @@ final class AnalysisService
                 if ($otherContent === null) {
                     continue;
                 }
-                $real = realpath($otherPath) ?: $otherPath;
-                $disk = is_file($otherPath) ? (string) file_get_contents($otherPath) : null;
+                $real = \realpath($otherPath) ?: $otherPath;
+                $disk = \is_file($otherPath) ? (string) \file_get_contents($otherPath) : null;
                 if ($disk !== null && $disk === $otherContent) {
                     $overlayByReal[$real] = $otherPath;
                 } else {
@@ -618,16 +654,16 @@ final class AnalysisService
             }
 
             $files = [...$files, ...stdlibSourcesMissingFrom($files, $stdlib)];
-            $files = array_map(
+            $files = \array_map(
                 static function (string $path) use ($overlayByReal): string {
-                    $real = realpath($path) ?: $path;
+                    $real = \realpath($path) ?: $path;
 
                     return $overlayByReal[$real] ?? $path;
                 },
                 $files,
             );
 
-            if (!in_array($filename, $files, true)) {
+            if (! \in_array($filename, $files, true)) {
                 $files[] = $filename;
             }
 
@@ -636,17 +672,17 @@ final class AnalysisService
             $mod = $parsed->module ?? 'Main';
             $importNames = [];
             foreach ($parsed->imports as $imp) {
-                $importNames[implode('.', $imp->path)] = true;
+                $importNames[\implode('.', $imp->path)] = true;
             }
             if (isset($prepared->checked[$mod])) {
                 $checked = $prepared->checked[$mod];
             }
-            $stdlibRoot = $stdlib !== null ? realpath($stdlib) : false;
-            $wsRoot = $this->workspaceRoot !== null ? realpath($this->workspaceRoot) : false;
+            $stdlibRoot = $stdlib !== null ? \realpath($stdlib) : false;
+            $wsRoot = $this->workspaceRoot !== null ? \realpath($this->workspaceRoot) : false;
             /** @var array<string, string> path => uri */
             $openByPath = [];
             foreach ($this->vfs->all() as $openUri => $_) {
-                $p = realpath(uriToPath($openUri));
+                $p = \realpath(uriToPath($openUri));
                 if ($p !== false) {
                     $openByPath[$p] = $openUri;
                 } else {
@@ -659,18 +695,18 @@ final class AnalysisService
                 if ($mPath === '') {
                     continue;
                 }
-                $mReal = realpath($mPath) ?: $mPath;
+                $mReal = \realpath($mPath) ?: $mPath;
                 $mUri = pathToUri($mPath);
                 $mSource = \is_array($unit) ? (string) ($unit['source'] ?? '') : '';
-                if ($mSource === '' && is_file($mPath)) {
-                    $mSource = (string) file_get_contents($mPath);
+                if ($mSource === '' && \is_file($mPath)) {
+                    $mSource = (string) \file_get_contents($mPath);
                 }
                 $isCurrent = $mName === $mod;
                 $isOpen = isset($openByPath[$mReal]) || isset($openByPath[$mPath]);
-                $inWorkspace = $wsRoot !== false && str_starts_with($mReal, $wsRoot . DIRECTORY_SEPARATOR);
-                $inStdlib = $stdlibRoot !== false && str_starts_with($mReal, $stdlibRoot . DIRECTORY_SEPARATOR);
+                $inWorkspace = $wsRoot !== false && \str_starts_with($mReal, $wsRoot . DIRECTORY_SEPARATOR);
+                $inStdlib = $stdlibRoot !== false && \str_starts_with($mReal, $stdlibRoot . DIRECTORY_SEPARATOR);
                 $isDirectImport = isset($importNames[$mName]);
-                if (!$isCurrent && !$isOpen && !$isDirectImport && ($inStdlib || !$inWorkspace)) {
+                if (! $isCurrent && ! $isOpen && ! $isDirectImport && ($inStdlib || ! $inWorkspace)) {
                     continue;
                 }
                 if ($isCurrent) {
@@ -683,7 +719,7 @@ final class AnalysisService
                 $this->indexModule($mUri, $mSource, $prog, $mName, $prog->externalFns ?? []);
             }
         } catch (TypeError|LexError|ParseError $e) {
-            if (!$e instanceof TypeError || $e->filename === '' || $e->filename === $filename) {
+            if (! $e instanceof TypeError || $e->filename === '' || $e->filename === $filename) {
                 $diagnostics[] = enrichDiagnostic(errorToDiagnostic($e, $uri, $content), $e);
             }
         } catch (\Throwable $e) {
@@ -701,7 +737,7 @@ final class AnalysisService
         $symbols = buildDocumentSymbols($declarations, $uri, $content);
         $imports = [];
         foreach ($parsed->imports as $imp) {
-            $imports[implode('.', $imp->path)] = $imp->asName ?? null;
+            $imports[\implode('.', $imp->path)] = $imp->asName ?? null;
         }
 
         if ($checked !== null) {
@@ -753,7 +789,7 @@ final class AnalysisService
     {
         $walk = null;
         $walk = static function ($node) use (&$walk, &$diagnostics, $source, $uri): void {
-            if (!is_object($node) || $node instanceof Ast\TypeNode) {
+            if (! \is_object($node) || $node instanceof Ast\TypeNode) {
                 return;
             }
             if ($node instanceof Ast\ExprHole && ($node->line ?? 0) > 0) {
@@ -777,15 +813,15 @@ final class AnalysisService
                     ]] : [],
                 ];
             }
-            foreach (get_object_vars($node) as $key => $prop) {
+            foreach (\get_object_vars($node) as $key => $prop) {
                 if ($key === 'inferredType') {
                     continue;
                 }
-                if (is_object($prop)) {
+                if (\is_object($prop)) {
                     $walk($prop);
-                } elseif (is_array($prop)) {
+                } elseif (\is_array($prop)) {
                     foreach ($prop as $el) {
-                        if (is_object($el)) {
+                        if (\is_object($el)) {
                             $walk($el);
                         }
                     }
@@ -810,12 +846,12 @@ final class AnalysisService
             }
         }
         $seed = $stdlib !== null ? $stdlib . '/Prelude.mog' : null;
-        if ($seed === null || !is_file($seed)) {
-            $seed = $stdlib !== null && is_dir($stdlib)
+        if ($seed === null || ! \is_file($seed)) {
+            $seed = $stdlib !== null && \is_dir($stdlib)
                 ? (globPaths($stdlib . '/*.mog')[0] ?? null)
                 : null;
         }
-        if ($seed !== null && is_file($seed)) {
+        if ($seed !== null && \is_file($seed)) {
             try {
                 [$files, $root] = moduleFileClosureCached($seed);
                 prepareProjectCached($files, $root, null);
@@ -835,37 +871,39 @@ final class AnalysisService
         if ($stdlib !== null) {
             $libs[] = $stdlib;
         }
-        $seed = $stdlib !== null && is_file($stdlib . '/Prelude.mog')
+        $seed = $stdlib !== null && \is_file($stdlib . '/Prelude.mog')
             ? $stdlib . '/Prelude.mog'
             : ($this->workspaceRoot !== null ? $this->workspaceRoot : null);
-        if ($seed === null || (!is_file($seed) && !is_dir((string) $seed))) {
+        if ($seed === null || (! \is_file($seed) && ! \is_dir((string) $seed))) {
             return null;
         }
-        if (is_dir($seed)) {
-            $first = globPaths(rtrim($seed, '/\\') . '/*.mog')[0] ?? null;
+        if (\is_dir($seed)) {
+            $first = globPaths(\rtrim($seed, '/\\') . '/*.mog')[0] ?? null;
             if ($first === null) {
                 return null;
             }
             $seed = $first;
         }
+
         try {
-            $this->docIndex = loadOrBuildIndex($seed, array_values(array_unique($libs)));
+            $this->docIndex = loadOrBuildIndex($seed, \array_values(\array_unique($libs)));
         } catch (\Throwable) {
             $this->docIndex = null;
         }
+
         return $this->docIndex;
     }
 
     /** @return list<DeclInfo> */
     public function workspaceSymbols(string $query): array
     {
-        $q = strtolower($query);
+        $q = \strtolower($query);
         $out = [];
         $seen = [];
         foreach ($this->modules->modules as $mod) {
             foreach ($mod['decls'] as $decl) {
-                if ($q === '' || str_contains(strtolower($decl->name), $q)
-                    || str_contains(strtolower($decl->module), $q)) {
+                if ($q === '' || \str_contains(\strtolower($decl->name), $q)
+                    || \str_contains(\strtolower($decl->module), $q)) {
                     $key = ($decl->resolved ?? $decl->module . '::' . $decl->name);
                     if (isset($seen[$key])) {
                         continue;
@@ -875,6 +913,7 @@ final class AnalysisService
                 }
             }
         }
+
         return $out;
     }
 
@@ -906,5 +945,6 @@ function getAnalysisService(?array $libDirs = null): AnalysisService
     if ($libDirs !== null || $svc === null) {
         $svc = new AnalysisService($libDirs ?? []);
     }
+
     return $svc;
 }

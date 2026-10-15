@@ -4,9 +4,9 @@ namespace Moggi\Optimize\Partial;
 
 use Moggi\Backend\Php\Emit\emitApplyExpr;
 use Moggi\IR;
-use Moggi\Syntax\Ast;
 
 use function Moggi\IR\Visit\mapOperandChildren;
+
 use function Moggi\IR\Visit\stmtDirectOperands;
 use function Moggi\IR\Visit\stmtNestedBlocks;
 use function Moggi\Optimize\GlobalPass\rewriteStmtOperands;
@@ -18,6 +18,8 @@ use function Moggi\Optimize\Support\isCapturedFnName;
 use function Moggi\Optimize\Support\isLambdaName;
 use function Moggi\Optimize\Support\mapStmtNestedBlocks;
 use function Moggi\Optimize\Support\operandToExpr;
+
+use Moggi\Syntax\Ast;
 
 /** @param list<IR\FunctionDecl> $functions */
 function bindLambdaCaptures(array $functions): array
@@ -108,7 +110,7 @@ function captureArgsForCall(string $name, array $args, array $meta): array
 {
     $info = $meta[$name] ?? null;
     $captures = $info['captures'] ?? [];
-    if ($captures === [] || count($args) !== count($info['params']) || callArgsLeadWithCaptures($args, $captures)) {
+    if ($captures === [] || \count($args) !== \count($info['params']) || callArgsLeadWithCaptures($args, $captures)) {
         return $args;
     }
 
@@ -127,13 +129,13 @@ function captureArgsForCall(string $name, array $args, array $meta): array
  */
 function callArgsLeadWithCaptures(array $args, array $captures): bool
 {
-    if (count($args) < count($captures)) {
+    if (\count($args) < \count($captures)) {
         return false;
     }
 
     foreach ($captures as $i => $capture) {
         $arg = $args[$i] ?? null;
-        if (!($arg instanceof IR\Local) || $arg->name !== $capture) {
+        if (! ($arg instanceof IR\Local) || $arg->name !== $capture) {
             return false;
         }
     }
@@ -155,13 +157,13 @@ function bindCapturedPartial(IR\Partial|IR\ExprPartial $partial, array $meta): I
     );
     $info = $meta[$partial->fn] ?? null;
     $captures = $info['captures'] ?? [];
-    if ($captures === [] || $partial->arity !== count($info['params']) || callArgsLeadWithCaptures($args, $captures)) {
+    if ($captures === [] || $partial->arity !== \count($info['params']) || callArgsLeadWithCaptures($args, $captures)) {
         return $partial instanceof IR\Partial
             ? new IR\Partial($partial->fn, $partial->arity, $args)
             : new IR\ExprPartial($partial->fn, $partial->arity, $args);
     }
 
-    $arity = $partial->arity + count($captures);
+    $arity = $partial->arity + \count($captures);
     $args = [
         ...\array_map(static fn (string $capture): IR\Operand => new IR\Local($capture), $captures),
         ...$args,
@@ -184,7 +186,7 @@ function bindLambdaCapturesOperand(IR\Operand $operand, array $meta): IR\Operand
                 static fn (string $name): IR\Operand => new IR\Local($name),
                 $info['captures'],
             );
-            $arity = count($info['captures']) + count($info['params']);
+            $arity = \count($info['captures']) + \count($info['params']);
 
             return new IR\Partial($operand->name, $arity, $captureArgs);
         }
@@ -248,7 +250,7 @@ function foldPartialApplyItems(array $items, array $index): array
 {
     $out = [];
 
-    for ($i = 0; $i < count($items); ++$i) {
+    for ($i = 0; $i < \count($items); ++$i) {
         $item = $items[$i];
         $next = $items[$i + 1] ?? null;
 
@@ -256,6 +258,7 @@ function foldPartialApplyItems(array $items, array $index): array
             $folded = tryFoldCallValuePartial($item);
             if ($folded !== null) {
                 $out[] = $folded;
+
                 continue;
             }
         }
@@ -265,6 +268,7 @@ function foldPartialApplyItems(array $items, array $index): array
             if ($fusedAssign !== null) {
                 $out[] = $fusedAssign;
                 ++$i;
+
                 continue;
             }
         }
@@ -274,6 +278,7 @@ function foldPartialApplyItems(array $items, array $index): array
             if ($fused !== null) {
                 $out[] = $fused;
                 ++$i;
+
                 continue;
             }
 
@@ -282,6 +287,7 @@ function foldPartialApplyItems(array $items, array $index): array
                 if ($fusedRet !== null) {
                     $out[] = $fusedRet;
                     ++$i;
+
                     continue;
                 }
             }
@@ -292,6 +298,7 @@ function foldPartialApplyItems(array $items, array $index): array
             if ($fusedLet !== null) {
                 $out[] = $fusedLet;
                 ++$i;
+
                 continue;
             }
         }
@@ -325,7 +332,7 @@ function tryFoldCallValuePartial(IR\CallValue $callValue): ?IR\Stmt
  */
 function tryFuseAssignPartialCallValue(IR\Assign $assign, IR\CallValue $callValue): ?IR\Stmt
 {
-    if (!($callValue->callee instanceof IR\Temp) || $callValue->callee->id !== $assign->dest) {
+    if (! ($callValue->callee instanceof IR\Temp) || $callValue->callee->id !== $assign->dest) {
         return null;
     }
 
@@ -353,8 +360,8 @@ function tryFuseLetPartialRet(IR\Let $let, IR\Ret $ret): ?IR\Stmt
     }
 
     $retValue = $ret->value;
-    if (!($retValue instanceof IR\ExprCallValue)
-        || !($retValue->callee instanceof IR\Local)
+    if (! ($retValue instanceof IR\ExprCallValue)
+        || ! ($retValue->callee instanceof IR\Local)
         || $retValue->callee->name !== $let->name) {
         return null;
     }
@@ -386,7 +393,7 @@ function tryFusePartialCall(IR\Stmt $call, IR\Stmt $next, array $index): ?IR\Stm
  */
 function tryFusePartialCallValue(IR\Stmt $call, IR\CallValue $callValue, array $index): ?IR\Stmt
 {
-    if (!($callValue->callee instanceof IR\Temp) || $callValue->callee->id !== $call->dest) {
+    if (! ($callValue->callee instanceof IR\Temp) || $callValue->callee->id !== $call->dest) {
         return null;
     }
 
@@ -411,8 +418,8 @@ function tryFusePartialCallValue(IR\Stmt $call, IR\CallValue $callValue, array $
 function tryFusePartialRet(IR\Stmt $call, IR\Ret $ret, array $index): ?IR\Stmt
 {
     $value = $ret->value;
-    if (!($value instanceof IR\ExprCallValue)
-        || !($value->callee instanceof IR\Temp)
+    if (! ($value instanceof IR\ExprCallValue)
+        || ! ($value->callee instanceof IR\Temp)
         || $value->callee->id !== $call->dest) {
         return null;
     }
@@ -458,14 +465,14 @@ function fuseCallWithPartialCallee(IR\Stmt $call, array $args, array $index): ?I
 function returnedPartialExpr(IR\FunctionDecl $provider, array $providerArgs): ?IR\Operand
 {
     $items = $provider->body->items;
-    if (count($items) !== 1 || !($items[0] instanceof IR\Ret)) {
+    if (\count($items) !== 1 || ! ($items[0] instanceof IR\Ret)) {
         return null;
     }
 
     $value = $items[0]->value;
     if ($value instanceof IR\Partial) {
         $value = operandToExpr($value);
-    } elseif (!($value instanceof IR\ExprPartial)) {
+    } elseif (! ($value instanceof IR\ExprPartial)) {
         return null;
     }
 
@@ -493,7 +500,7 @@ function returnedPartialExpr(IR\FunctionDecl $provider, array $providerArgs): ?I
  */
 function substituteProviderParams(IR\ExprPartial $expr, IR\FunctionDecl $provider, array $providerArgs): ?IR\Operand
 {
-    if (count($provider->params) !== count($providerArgs)) {
+    if (\count($provider->params) !== \count($providerArgs)) {
         return null;
     }
 
@@ -525,17 +532,17 @@ function substituteProviderParams(IR\ExprPartial $expr, IR\FunctionDecl $provide
  */
 function returnedIdentityArg(IR\FunctionDecl $provider, array $providerArgs): ?IR\Operand
 {
-    if (count($provider->params) !== 1 || count($providerArgs) !== 1) {
+    if (\count($provider->params) !== 1 || \count($providerArgs) !== 1) {
         return null;
     }
 
     $items = $provider->body->items;
-    if (count($items) !== 1 || !($items[0] instanceof IR\Ret)) {
+    if (\count($items) !== 1 || ! ($items[0] instanceof IR\Ret)) {
         return null;
     }
 
     $value = $items[0]->value;
-    if (!($value instanceof IR\Local) || $value->name !== $provider->params[0]) {
+    if (! ($value instanceof IR\Local) || $value->name !== $provider->params[0]) {
         return null;
     }
 
@@ -547,11 +554,11 @@ function saturatePartialExpr(IR\Operand $expr, array $args): ?IR\Operand
 {
     if ($expr instanceof IR\ExprPartial) {
         $all = [...$expr->args, ...$args];
-        if (count($all) === $expr->arity) {
+        if (\count($all) === $expr->arity) {
             return new IR\ExprCall($expr->fn, $all);
         }
 
-        if (count($all) < $expr->arity) {
+        if (\count($all) < $expr->arity) {
             return new IR\ExprPartial($expr->fn, $expr->arity, $all);
         }
 
@@ -646,7 +653,7 @@ function foldPartialApplyExpr(IR\Operand $expr, array $index): IR\Operand
 function fuseDictAdapterApply(IR\ExprCallValue $apply, array $index): ?IR\Operand
 {
     $adapter = $apply->callee;
-    if (!($adapter instanceof IR\ExprCallValue) || !($adapter->callee instanceof IR\FnRef)) {
+    if (! ($adapter instanceof IR\ExprCallValue) || ! ($adapter->callee instanceof IR\FnRef)) {
         return null;
     }
 
@@ -743,7 +750,7 @@ function knownFunctionArity(array $functions, string $moduleName): array
         if (isCapturedFnName($function->name)) {
             continue;
         }
-        $count = count($function->params);
+        $count = \count($function->params);
         $arity[$function->name] = $count;
         if ($moduleName !== '') {
             $arity[$moduleName . '::' . $function->name] ??= $count;
@@ -775,7 +782,7 @@ function declaredParamArities(IR\FunctionDecl $function): array
         $type = $type->to;
     }
 
-    if ($paramTypes === [] || count($paramTypes) !== count($function->params)) {
+    if ($paramTypes === [] || \count($paramTypes) !== \count($function->params)) {
         return [];
     }
 
@@ -825,12 +832,12 @@ function normalizeApplyStmt(IR\Stmt $stmt, array $arity, array $paramArities): I
 
     if ($stmt instanceof IR\CallValue && $stmt->callee instanceof IR\FnRef) {
         $declared = $arity[$stmt->callee->name] ?? null;
-        if ($declared !== null && count($stmt->args) <= $declared) {
+        if ($declared !== null && \count($stmt->args) <= $declared) {
             $args = \array_map($rewriteOp, $stmt->args);
 
             return new IR\Assign(
                 $stmt->dest,
-                count($args) === $declared
+                \count($args) === $declared
                     ? new IR\ExprCall($stmt->callee->name, $args)
                     : new IR\Partial($stmt->callee->name, $declared, $args),
             );
@@ -865,10 +872,10 @@ function normalizeApplyOperandMapper(array $arity, array $paramArities): callabl
         if ($operand instanceof IR\ExprCallValue && $operand->callee instanceof IR\FnRef) {
             $declared = $arity[$operand->callee->name] ?? null;
             if ($declared !== null) {
-                if (count($operand->args) === $declared) {
+                if (\count($operand->args) === $declared) {
                     return new IR\ExprCall($operand->callee->name, $operand->args);
                 }
-                if (count($operand->args) < $declared) {
+                if (\count($operand->args) < $declared) {
                     return new IR\ExprPartial($operand->callee->name, $declared, $operand->args);
                 }
             }
@@ -887,18 +894,18 @@ function normalizeApplyOperandMapper(array $arity, array $paramArities): callabl
  */
 function flattenApplyChain(IR\Operand $operand, array $paramArities): IR\Operand
 {
-    if (!($operand instanceof IR\ExprCallValue) || !($operand->callee instanceof IR\ExprCallValue)) {
+    if (! ($operand instanceof IR\ExprCallValue) || ! ($operand->callee instanceof IR\ExprCallValue)) {
         return $operand;
     }
 
     $inner = $operand->callee;
     $base = $inner->callee;
-    if (!($base instanceof IR\Local)) {
+    if (! ($base instanceof IR\Local)) {
         return $operand;
     }
 
     $declared = $paramArities[$base->name] ?? null;
-    if ($declared === null || count($inner->args) + count($operand->args) > $declared) {
+    if ($declared === null || \count($inner->args) + \count($operand->args) > $declared) {
         return $operand;
     }
 
@@ -922,7 +929,7 @@ function flattenApplyChain(IR\Operand $operand, array $paramArities): IR\Operand
 function specializePartialReturnFunction(IR\FunctionDecl $function, array $captures = []): IR\FunctionDecl
 {
     $items = $function->body->items;
-    if (count($items) !== 1 || !($items[0] instanceof IR\Ret)) {
+    if (\count($items) !== 1 || ! ($items[0] instanceof IR\Ret)) {
         return $function;
     }
 
@@ -931,24 +938,24 @@ function specializePartialReturnFunction(IR\FunctionDecl $function, array $captu
         return $function;
     }
 
-    $missing = $partial->arity - count($partial->args);
+    $missing = $partial->arity - \count($partial->args);
     if ($missing <= 0) {
         return $function;
     }
 
     $existing = $function->params;
-    if (count($captures) + count($existing) >= $missing) {
+    if (\count($captures) + \count($existing) >= $missing) {
         return $function;
     }
 
     $newParams = [...$existing];
-    while (count($newParams) < $missing) {
+    while (\count($newParams) < $missing) {
         $newParams[] = freshPartialParamName($newParams);
     }
 
     $callArgs = [
         ...$partial->args,
-        ...\array_map(static fn (string $param): IR\Operand => new IR\Local($param), \array_slice($newParams, count($existing))),
+        ...\array_map(static fn (string $param): IR\Operand => new IR\Local($param), \array_slice($newParams, \count($existing))),
     ];
 
     return new IR\FunctionDecl(
@@ -1034,7 +1041,7 @@ function stmtNeedsRuntimeApply(IR\Stmt $stmt, array $lambdaIndex): bool
         }
     }
 
-    return array_any(
+    return \array_any(
         stmtNestedBlocks($stmt),
         static fn (IR\Block $nested): bool => blockNeedsRuntimeApply($nested, $lambdaIndex),
     );
@@ -1045,25 +1052,25 @@ function exprNeedsRuntimeApply(IR\Operand $expr, array $lambdaIndex): bool
 {
     return match ($expr::class) {
         IR\ExprCallValue::class => calleeNeedsRuntimeApply($expr->callee, $lambdaIndex)
-            || array_any(
+            || \array_any(
                 $expr->args,
                 static fn (IR\Operand $arg): bool => operandExprNeedsRuntimeApply($arg, $lambdaIndex),
             ),
         IR\ExprBinop::class => exprNeedsRuntimeApply($expr->left, $lambdaIndex)
             || exprNeedsRuntimeApply($expr->right, $lambdaIndex),
-        IR\ExprCall::class => array_any(
+        IR\ExprCall::class => \array_any(
             $expr->args,
             static fn (IR\Operand $arg): bool => operandExprNeedsRuntimeApply($arg, $lambdaIndex),
         ),
-        IR\Intrinsic::class => array_any(
+        IR\Intrinsic::class => \array_any(
             $expr->args,
             static fn (IR\Operand $arg): bool => operandExprNeedsRuntimeApply($arg, $lambdaIndex),
         ),
-        IR\ListLit::class => array_any(
+        IR\ListLit::class => \array_any(
             $expr->elements,
             static fn (IR\Operand $arg): bool => operandExprNeedsRuntimeApply($arg, $lambdaIndex),
         ),
-        IR\ExprPartial::class => array_any(
+        IR\ExprPartial::class => \array_any(
             $expr->args,
             static fn (IR\Operand $arg): bool => operandExprNeedsRuntimeApply($arg, $lambdaIndex),
         ),
@@ -1097,7 +1104,7 @@ function calleeNeedsRuntimeApply(IR\Operand $callee, array $lambdaIndex): bool
 {
     return match ($callee::class) {
         IR\Partial::class, IR\ExprPartial::class => false,
-        IR\FnRef::class => !(isLambdaName($callee->name)
+        IR\FnRef::class => ! (isLambdaName($callee->name)
             && isset($lambdaIndex[$callee->name])
             && isSimpleLambda($lambdaIndex[$callee->name])),
         IR\Local::class, IR\Temp::class => true,
@@ -1119,7 +1126,7 @@ function resolveCallValueCalleeExpr(IR\Operand $callee, array $index): ?IR\Opera
         return operandToExpr($callee);
     }
 
-    if (!($callee instanceof IR\ExprCall) || count($callee->args) !== 1) {
+    if (! ($callee instanceof IR\ExprCall) || \count($callee->args) !== 1) {
         return null;
     }
 

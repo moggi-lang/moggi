@@ -25,7 +25,7 @@ function glibcFloor(array $config): string
 function requiredGlibc(string $binary): ?string
 {
     $objdump = findExecutable('objdump');
-    if ($objdump === null || !\is_file($binary)) {
+    if ($objdump === null || ! \is_file($binary)) {
         return null;
     }
 
@@ -57,7 +57,7 @@ function requiredGlibc(string $binary): ?string
  */
 function isNativeBinary(string $path): bool
 {
-    if (!\is_file($path)) {
+    if (! \is_file($path)) {
         return false;
     }
     $magic = (string) @\file_get_contents($path, false, null, 0, 4);
@@ -112,18 +112,19 @@ function copyNonBaselineLibraries(string $binary, string $libDir): void
         }
         [$resolved, $relative] = resolveLibraryReference($path, $referrer);
         $path = $resolved;
-        if (!\is_file($path)) {
-            if ($darwin && !$relative) {
+        if (! \is_file($path)) {
+            if ($darwin && ! $relative) {
                 throw new \RuntimeException(
                     "cannot make the bundled PHP portable: {$name} is needed by {$referrer} and is not a file",
                 );
             }
+
             continue;
         }
-        if (!\is_dir($libDir) && !\mkdir($libDir, 0777, true) && !\is_dir($libDir)) {
+        if (! \is_dir($libDir) && ! \mkdir($libDir, 0777, true) && ! \is_dir($libDir)) {
             throw new \RuntimeException("cannot create {$libDir}");
         }
-        if (!\copy($path, $libDir . '/' . $name)) {
+        if (! \copy($path, $libDir . '/' . $name)) {
             throw new \RuntimeException("cannot copy {$path}");
         }
         $real = \realpath($path);
@@ -159,7 +160,7 @@ function relinkDarwinLibraries(string $binary, string $libDir, array $copied): v
         $copy = $libDir . '/' . $name;
         foreach (darwinLinkedLibraries($copy) as $dependency) {
             $base = \basename($dependency);
-            if (!isset($copied[$base]) || $dependency === '@loader_path/' . $base) {
+            if (! isset($copied[$base]) || $dependency === '@loader_path/' . $base) {
                 continue;
             }
             runProcess([$tool, '-change', $dependency, '@loader_path/' . $base, $copy]);

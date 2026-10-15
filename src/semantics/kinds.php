@@ -8,12 +8,14 @@ use Moggi\Semantics\TypeExpr\TPromoted;
 use Moggi\Semantics\TypeExpr\TStringLit;
 use Moggi\Semantics\TypeExpr\TVar;
 use Moggi\Semantics\TypeExpr\Type;
-use Moggi\Semantics\Types\TypeCheckState;
-use Moggi\Semantics\Types\TypeError;
-use Moggi\Syntax\Ast;
 
 use function Moggi\Semantics\Types\prune;
+
+use Moggi\Semantics\Types\TypeCheckState;
+
 use function Moggi\Semantics\Types\typeFail;
+
+use Moggi\Syntax\Ast;
 
 /** Internal kind representation (distinct from surface `Ast\KindNode`). */
 interface Kind
@@ -186,7 +188,7 @@ function kindToString(Kind $kind): string
 function parenthesizeArrowKind(Kind $kind): string
 {
     $kind = pruneKind(new KindInferCtx(), $kind);
-    if (!$kind instanceof KArrow) {
+    if (! $kind instanceof KArrow) {
         return kindToString($kind);
     }
 
@@ -196,7 +198,7 @@ function parenthesizeArrowKind(Kind $kind): string
 function peelKind(Kind $kind, int $applied): Kind
 {
     for ($i = 0; $i < $applied; ++$i) {
-        if (!$kind instanceof KArrow) {
+        if (! $kind instanceof KArrow) {
             throw new \InvalidArgumentException('kind applied too many times');
         }
         $kind = $kind->to;
@@ -329,7 +331,7 @@ function occursKind(KindInferCtx $ctx, string $var, Kind $kind): void
  */
 function bindClassConstraintKinds(KindInferCtx $ctx, Ast\AstNode $constraint): void
 {
-    if (!$constraint instanceof Ast\TypeApp || !$constraint->con instanceof Ast\TypeCon) {
+    if (! $constraint instanceof Ast\TypeApp || ! $constraint->con instanceof Ast\TypeCon) {
         return;
     }
 
@@ -338,7 +340,7 @@ function bindClassConstraintKinds(KindInferCtx $ctx, Ast\AstNode $constraint): v
     $paramKinds = $ctx->classParams[$className] ?? [];
 
     foreach ($args as $index => $arg) {
-        if (!$arg instanceof Ast\TypeVar || !isset($paramKinds[$index])) {
+        if (! $arg instanceof Ast\TypeVar || ! isset($paramKinds[$index])) {
             continue;
         }
 
@@ -500,7 +502,7 @@ function inferClassParamKinds(TypeCheckState $state, Ast\ClassDecl $decl): array
 
     foreach ($decl->associatedTypes as $assoc) {
         foreach ($assoc->params as $paramName) {
-            if (!isset($ctx->varKinds[$paramName])) {
+            if (! isset($ctx->varKinds[$paramName])) {
                 $ctx->varKinds[$paramName] = freshKindVar($ctx);
             }
         }
@@ -568,7 +570,7 @@ function kindOfAppliedPromoted(TypeCheckState $state, TPromoted $type): Kind
     $ctx = kindInferCtxFromState($state);
     foreach ($type->args as $arg) {
         $kind = pruneKind($ctx, $kind);
-        if (!$kind instanceof KArrow) {
+        if (! $kind instanceof KArrow) {
             return $kind;
         }
         $kind = $kind->to;
@@ -611,7 +613,7 @@ function peelParamKinds(Kind $kind, int $count): array
 {
     $result = [];
     for ($i = 0; $i < $count; ++$i) {
-        if (!$kind instanceof KArrow) {
+        if (! $kind instanceof KArrow) {
             throw new \InvalidArgumentException('kind applied too many times');
         }
         $result[] = $kind->from;
@@ -625,7 +627,7 @@ function peelParamKinds(Kind $kind, int $count): array
 function kindOfAppliedTypeCon(TypeCheckState $state, TCon $type, array $varKinds): Kind
 {
     $name = $type->name;
-    $applied = count($type->args);
+    $applied = \count($type->args);
     $ctx = kindInferCtxFromState($state);
     if (isset($varKinds[$name])) {
         return peelKind(pruneKind($ctx, $varKinds[$name]), $applied);
@@ -681,6 +683,7 @@ function assertKind(
 ): void {
     $ctx = kindInferCtxFromState($state);
     $actual = kindOfType($state, $head, $varKinds);
+
     try {
         unifyKind($ctx, $actual, $expectedKind);
     } catch (\InvalidArgumentException $e) {
@@ -718,8 +721,8 @@ function kindFromDataInfo(array $info): Kind
 {
     $params = $info['params'] ?? [];
     $paramKinds = $info['paramKinds'] ?? null;
-    if (!\is_array($paramKinds) || $paramKinds === []) {
-        return dataKind(count($params));
+    if (! \is_array($paramKinds) || $paramKinds === []) {
+        return dataKind(\count($params));
     }
 
     $kind = new KType();
@@ -760,11 +763,12 @@ function installPromotedFromDataInfo(TypeCheckState $state, string $dataName, ar
             $argKind = promotableImportedFieldKind($state, $fieldType);
             if ($argKind === null) {
                 $ok = false;
+
                 break;
             }
             $argKinds[] = $argKind;
         }
-        if (!$ok) {
+        if (! $ok) {
             continue;
         }
 
@@ -779,7 +783,7 @@ function installPromotedFromDataInfo(TypeCheckState $state, string $dataName, ar
 /** @param mixed $fieldType */
 function promotableImportedFieldKind(TypeCheckState $state, mixed $fieldType): ?Kind
 {
-    if (!$fieldType instanceof TCon || $fieldType->args !== []) {
+    if (! $fieldType instanceof TCon || $fieldType->args !== []) {
         return null;
     }
 
@@ -827,4 +831,3 @@ function classParamNames(array $params): array
         $params,
     );
 }
-

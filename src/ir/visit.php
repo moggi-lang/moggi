@@ -79,7 +79,7 @@ function mapOperandChildren(IR\Operand $operand, callable $mapChild): IR\Operand
         IR\ExprCallValue::class => (function () use ($operand, $mapChild): IR\Operand {
             $callee = $mapChild($operand->callee);
             [$args, $changed] = mapChildList($operand->args, $mapChild);
-            if (!$changed && $callee === $operand->callee) {
+            if (! $changed && $callee === $operand->callee) {
                 return $operand;
             }
 
@@ -114,7 +114,7 @@ function mapOperandChildren(IR\Operand $operand, callable $mapChild): IR\Operand
         })(),
         IR\ForeignCall::class => (function () use ($operand, $mapChild): IR\Operand {
             [$args, $changed] = mapChildList($operand->args, $mapChild);
-            if (!$changed) {
+            if (! $changed) {
                 return $operand;
             }
 
@@ -315,7 +315,7 @@ function moduleUsesMoggiRuntime(IR\Module $module): bool
 {
     $found = false;
     $noteForeignPath = static function (mixed $path) use (&$found): void {
-        if (\is_string($path) && str_starts_with($path, 'Moggi\\')) {
+        if (\is_string($path) && \str_starts_with($path, 'Moggi\\')) {
             $found = true;
         }
     };
@@ -395,7 +395,7 @@ function collectLocalsInBlock(IR\Block $block): array
         },
     );
 
-    return array_values(array_unique($locals));
+    return \array_values(\array_unique($locals));
 }
 
 /**
@@ -416,7 +416,7 @@ function collectLambdaRefsInBlock(IR\Block $block, callable $isLambda): array
         },
     );
 
-    return array_values(array_unique($refs));
+    return \array_values(\array_unique($refs));
 }
 
 /**
@@ -443,8 +443,8 @@ function analyzeBlockForCodegen(IR\Block $block, callable $isLambda): array
     );
 
     return [
-        'locals' => array_values(array_unique($locals)),
-        'lambdaRefs' => array_values(array_unique($lambdaRefs)),
+        'locals' => \array_values(\array_unique($locals)),
+        'lambdaRefs' => \array_values(\array_unique($lambdaRefs)),
     ];
 }
 
@@ -536,7 +536,7 @@ function freeLocalsInBlock(IR\Block $block, array $bound): array
     $free = [];
     freeLocalsInItems($block->items, $bound, $free);
 
-    return array_keys($free);
+    return \array_keys($free);
 }
 
 /**
@@ -547,7 +547,7 @@ function freeLocalsInBlock(IR\Block $block, array $bound): array
 function freeLocalsInItems(array $items, array $bound, array &$free): void
 {
     foreach ($items as $item) {
-        if (!($item instanceof IR\Stmt)) {
+        if (! ($item instanceof IR\Stmt)) {
             continue;
         }
         if ($item instanceof IR\MatchStmt || $item instanceof IR\MatchReturn || $item instanceof IR\IoMatch) {
@@ -563,11 +563,13 @@ function freeLocalsInItems(array $items, array $bound, array &$free): void
                 }
                 freeLocalsInItems($arm->body->items, $armBound, $free);
             }
+
             continue;
         }
         if ($item instanceof IR\Let) {
             freeLocalsInOperand($item->value, $bound, $free);
             $bound[$item->name] = true;
+
             continue;
         }
         foreach (stmtDirectOperands($item) as $operand) {
@@ -583,7 +585,7 @@ function freeLocalsInItems(array $items, array $bound, array &$free): void
 function freeLocalsInOperand(IR\Operand $operand, array $bound, array &$free): void
 {
     if ($operand instanceof IR\Local) {
-        if (!isset($bound[$operand->name])) {
+        if (! isset($bound[$operand->name])) {
             $free[$operand->name] = true;
         }
 

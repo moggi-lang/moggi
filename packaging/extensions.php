@@ -52,7 +52,7 @@ function distributionPackageRequirements(): array
     foreach (DISTRIBUTION_PACKAGE_DIRS as $relative) {
         foreach (packageDescriptorFiles($repo . '/' . $relative) as $file) {
             $ini = @\parse_ini_string((string) \file_get_contents($file), true, \INI_SCANNER_RAW);
-            if (!\is_array($ini)) {
+            if (! \is_array($ini)) {
                 throw new \RuntimeException("cannot read the package descriptor {$file}");
             }
             $name = \trim((string) ($ini['package']['name'] ?? ''));
@@ -71,7 +71,7 @@ function distributionPackageRequirements(): array
  */
 function packageDescriptorFiles(string $dir): array
 {
-    if (!\is_dir($dir)) {
+    if (! \is_dir($dir)) {
         return [];
     }
     $files = [];
@@ -150,7 +150,7 @@ function missingPhpExtensions(array $required, array $loaded): array
     }
     $missing = [];
     foreach ($required as $name) {
-        if (!isset($present[normalizeExtensionName((string) $name)])) {
+        if (! isset($present[normalizeExtensionName((string) $name)])) {
             $missing[] = (string) $name;
         }
     }

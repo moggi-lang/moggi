@@ -137,7 +137,7 @@ function bundledEntry(callable $entry, array $bundled): callable
     }
 
     return static function (string $name) use ($entry, $bundled): ?array {
-        if (!isset($bundled[$name])) {
+        if (! isset($bundled[$name])) {
             return $entry($name);
         }
         $version = $bundled[$name]['version'];
@@ -158,6 +158,7 @@ function bundledManifestDeps(string $manifest): array
     if ($manifest === '') {
         return [];
     }
+
     try {
         $descriptor = readDescriptor($manifest);
     } catch (\RuntimeException) {
@@ -229,14 +230,16 @@ function demandsCloseLocally(array $demands, array $bundled, array $provided): b
         }
         $seen[$key] = true;
         if (isset($provided[$name])) {
-            if (!satisfies($provided[$name], $constraint)) {
+            if (! satisfies($provided[$name], $constraint)) {
                 return false;
             }
+
             continue;
         }
-        if (!isset($bundled[$name]) || !satisfies($bundled[$name]['version'], $constraint)) {
+        if (! isset($bundled[$name]) || ! satisfies($bundled[$name]['version'], $constraint)) {
             return false;
         }
+
         try {
             $manifest = readDescriptor($bundled[$name]['manifest'] ?? '');
         } catch (\RuntimeException) {
@@ -307,9 +310,10 @@ function installBundledPackage(string $name, string $version, mixed $lockedDiges
 {
     $dir = $spec['dir'] ?? '';
     $manifest = $spec['manifest'] ?? '';
-    if (!\is_string($dir) || $dir === '' || !\is_dir($dir)) {
+    if (! \is_string($dir) || $dir === '' || ! \is_dir($dir)) {
         return ['ok' => false, 'detail' => "the compiler no longer ships `{$name}` — run `moggi update` against the registry", 'roots' => []];
     }
+
     try {
         $descriptor = readDescriptor((string) $manifest);
     } catch (\RuntimeException $error) {
@@ -323,9 +327,10 @@ function installBundledPackage(string $name, string $version, mixed $lockedDiges
             'roots' => [],
         ];
     }
-    if (!\is_string($lockedDigest) || $lockedDigest === '') {
+    if (! \is_string($lockedDigest) || $lockedDigest === '') {
         return ['ok' => false, 'detail' => "`{$name}` names no digest in the lock — re-resolve and rewrite it", 'roots' => []];
     }
+
     try {
         $archive = packDirectory($dir);
     } catch (\RuntimeException $error) {
@@ -341,8 +346,8 @@ function installBundledPackage(string $name, string $version, mixed $lockedDiges
     }
 
     $path = downloadPath($lockedDigest);
-    if (!(\is_file($path) && 'sha256:' . \hash_file('sha256', $path) === $lockedDigest)) {
-        if (!ensureDownloadDir($path) || @\file_put_contents($path, $archive) === false) {
+    if (! (\is_file($path) && 'sha256:' . \hash_file('sha256', $path) === $lockedDigest)) {
+        if (! ensureDownloadDir($path) || @\file_put_contents($path, $archive) === false) {
             return ['ok' => false, 'detail' => "cannot write {$path}", 'roots' => []];
         }
     }
@@ -382,6 +387,7 @@ function checkBundledInstalled(string $name, string $version): ?string
     if ($spec === null) {
         return "the compiler no longer ships `{$name}` — run `moggi update` against the registry";
     }
+
     try {
         $descriptor = readDescriptor($spec['manifest']);
     } catch (\RuntimeException $error) {

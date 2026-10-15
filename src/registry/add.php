@@ -570,6 +570,7 @@ function descriptorWithFfiBinding(string $text, string $entry): array
     for ($index = $at + 1; $index < $end; ++$index) {
         if (\preg_match($pattern, (string) $lines[$index]) === 1) {
             $found = $index;
+
             break;
         }
     }
@@ -653,12 +654,13 @@ function descriptorAdditionProblems(string $text, string $descriptorPath): array
 {
     $name = \basename($descriptorPath);
     $directory = \sys_get_temp_dir() . '/moggi-add-' . \bin2hex(\random_bytes(8));
-    if (!@\mkdir($directory, 0700, true)) {
+    if (! @\mkdir($directory, 0700, true)) {
         return ["cannot check the edited descriptor: {$directory} could not be created"];
     }
 
     $candidate = $directory . '/' . $name;
     $written = @\file_put_contents($candidate, $text);
+
     try {
         if ($written === false) {
             return ["cannot check the edited descriptor: {$candidate} could not be written"];

@@ -293,18 +293,19 @@ function lspMethodHandlers(): array
  */
 function capabilityDispatchMismatches(): array
 {
-    $methods = array_keys(lspMethodHandlers());
+    $methods = \array_keys(lspMethodHandlers());
     $findings = [];
 
     foreach ($methods as $m) {
-        if (!isset(FEATURE_CAPABILITIES[$m]) && !in_array($m, UNADVERTISED_METHODS, true)) {
+        if (! isset(FEATURE_CAPABILITIES[$m]) && ! \in_array($m, UNADVERTISED_METHODS, true)) {
             $findings[] = "handler without advertised capability: $m";
         }
     }
     foreach (FEATURE_CAPABILITIES as $m => $cap) {
-        if (!in_array($m, $methods, true)) {
+        if (! \in_array($m, $methods, true)) {
             $findings[] = "advertised capability '$cap' without handler: $m";
         }
     }
+
     return $findings;
 }

@@ -52,7 +52,7 @@ namespace Moggi\Registry;
 function moggiIgnorePatterns(string $directory): array
 {
     $path = \rtrim($directory, '/') . '/.moggiignore';
-    if (!\is_file($path)) {
+    if (! \is_file($path)) {
         return [];
     }
     $patterns = [];
@@ -86,6 +86,7 @@ function isIgnoredPath(string $path, array $patterns): bool
                 || \fnmatch($pattern, $path, \FNM_PATHNAME)) {
                 return true;
             }
+
             continue;
         }
         if (\fnmatch($pattern, \basename($path), \FNM_PATHNAME) || \fnmatch($pattern, $path, \FNM_PATHNAME)) {
@@ -292,6 +293,7 @@ function archiveRecordBytes(string $archive): string
                     $pending[$match[2]] = $match[3];
                 }
             }
+
             continue;
         }
         if ($type === 'L') {
@@ -318,6 +320,7 @@ function archiveRecordBytes(string $archive): string
         }
         if ($type === '2') {
             $entries[] = ['type' => 'link', 'size' => 0, 'hash' => \hash('sha256', $linkTarget), 'path' => $name, 'extra' => $linkTarget];
+
             continue;
         }
         if ($type !== '0' && $type !== '' && $type !== "\0") {
@@ -382,6 +385,7 @@ function linkTargetProblem(string $path, string $target): ?string
                 return 'a link target must stay inside the package';
             }
             \array_pop($parts);
+
             continue;
         }
         $parts[] = $part;
@@ -406,23 +410,23 @@ function linkTargetProblem(string $path, string $target): ?string
 function assertPortablePath(string $path): void
 {
     if (\str_contains($path, "\0") || \str_contains($path, "\n") || \str_contains($path, "\r")) {
-        throw new \RuntimeException("a path may not contain NUL, LF or CR: " . \var_export($path, true));
+        throw new \RuntimeException('a path may not contain NUL, LF or CR: ' . \var_export($path, true));
     }
-    if (!\mb_check_encoding($path, 'UTF-8')) {
-        throw new \RuntimeException("a path must be valid UTF-8: " . \var_export($path, true));
+    if (! \mb_check_encoding($path, 'UTF-8')) {
+        throw new \RuntimeException('a path must be valid UTF-8: ' . \var_export($path, true));
     }
     if (\preg_match('/[\x80-\xff]/', $path) !== 1) {
         return;
     }
-    if (!\class_exists(\Normalizer::class)) {
+    if (! \class_exists(\Normalizer::class)) {
         throw new \RuntimeException(
             'a non-ASCII path needs the intl extension to check that it is NFC-normalized: '
             . \var_export($path, true) . ' — without it the same tree could hash differently elsewhere',
         );
     }
-    if (!\Normalizer::isNormalized($path, \Normalizer::FORM_C)) {
+    if (! \Normalizer::isNormalized($path, \Normalizer::FORM_C)) {
         throw new \RuntimeException(
-            "a path must be NFC-normalized: " . \var_export($path, true) . ' — rename it, or the same tree hashes differently elsewhere',
+            'a path must be NFC-normalized: ' . \var_export($path, true) . ' — rename it, or the same tree hashes differently elsewhere',
         );
     }
 }
@@ -583,6 +587,7 @@ function extractArchive(string $archive, string $destination): ?string
                     $pending[$match[2]] = $match[3];
                 }
             }
+
             continue;
         }
         if ($type === 'L') {
@@ -610,13 +615,14 @@ function extractArchive(string $archive, string $destination): ?string
 
         $target = \rtrim($destination, '/') . '/' . $name;
         if ($type === '5') {
-            if (!\is_dir($target) && !@\mkdir($target, 0o777, true) && !\is_dir($target)) {
+            if (! \is_dir($target) && ! @\mkdir($target, 0o777, true) && ! \is_dir($target)) {
                 return "cannot create directory {$target}";
             }
+
             continue;
         }
-        if (!\is_dir(\dirname($target)) && !@\mkdir(\dirname($target), 0o777, true) && !\is_dir(\dirname($target))) {
-            return "cannot create directory " . \dirname($target);
+        if (! \is_dir(\dirname($target)) && ! @\mkdir(\dirname($target), 0o777, true) && ! \is_dir(\dirname($target))) {
+            return 'cannot create directory ' . \dirname($target);
         }
         if ($type === '2') {
             $problem = linkTargetProblem($name, $linkTarget);
@@ -624,9 +630,10 @@ function extractArchive(string $archive, string $destination): ?string
                 return "the archive has an unsafe link ({$name} -> {$linkTarget}): {$problem}";
             }
             @\unlink($target);
-            if (!@\symlink($linkTarget, $target)) {
+            if (! @\symlink($linkTarget, $target)) {
                 return "cannot create link {$target}";
             }
+
             continue;
         }
         if ($type !== '0' && $type !== '' && $type !== "\0") {

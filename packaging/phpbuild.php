@@ -158,7 +158,7 @@ function buildMicroWithSpc(string $runtime, string $target, array $config, strin
     $toolDir = prepareRuntime($tool, $target, $config);
     $toolEntry = loadRuntimeLock()[$tool . '/' . $target] ?? [];
     $spc = $toolDir . '/' . (string) ($toolEntry['binary'] ?? 'spc');
-    if (!\is_file($spc)) {
+    if (! \is_file($spc)) {
         throw new \RuntimeException("the {$tool} build tool is missing at {$spc}");
     }
 
@@ -169,7 +169,7 @@ function buildMicroWithSpc(string $runtime, string $target, array $config, strin
     $sapi = (string) ($recipe['sapi'] ?? 'micro');
 
     $work = distCacheRoot() . '/build/' . $target . '/' . $runtime;
-    if (!\is_dir($work) && !\mkdir($work, 0777, true) && !\is_dir($work)) {
+    if (! \is_dir($work) && ! \mkdir($work, 0777, true) && ! \is_dir($work)) {
         throw new \RuntimeException("cannot create {$work}");
     }
 
@@ -186,10 +186,10 @@ function buildMicroWithSpc(string $runtime, string $target, array $config, strin
     runOrFail([$spc, 'craft', '--no-motd', '--no-interaction', $craft], $work, true, null, $env);
 
     $micro = $work . '/buildroot/bin/micro.sfx';
-    if (!\is_file($micro)) {
+    if (! \is_file($micro)) {
         throw new \RuntimeException("spc built no micro.sfx (expected {$micro})");
     }
-    if (!\copy($micro, $dir . '/micro.sfx')) {
+    if (! \copy($micro, $dir . '/micro.sfx')) {
         throw new \RuntimeException("cannot copy the built micro runtime into {$dir}");
     }
     @\chmod($dir . '/micro.sfx', 0755);
@@ -209,7 +209,7 @@ function buildMicroWithSpc(string $runtime, string $target, array $config, strin
         null,
         $env,
     );
-    if (!\is_dir($dir . '/license')) {
+    if (! \is_dir($dir . '/license')) {
         throw new \RuntimeException('spc dumped no licences for the micro runtime');
     }
 
@@ -280,7 +280,7 @@ function microBuildEnvironment(string $work, string $target): array
  */
 function microToolchainEnv(string $target): array
 {
-    if (!\str_starts_with($target, 'linux-')) {
+    if (! \str_starts_with($target, 'linux-')) {
         return [];
     }
 
@@ -452,7 +452,7 @@ function buildPhpFromSource(string $runtime, string $target, array $config, stri
     $source = $work . '/src';
 
     removeTree($source);
-    if (!\mkdir($source, 0777, true) && !\is_dir($source)) {
+    if (! \mkdir($source, 0777, true) && ! \is_dir($source)) {
         throw new \RuntimeException("cannot create {$source}");
     }
     extractArchive($archive, (string) $entry['format'], $source, (int) $entry['stripComponents']);
@@ -466,7 +466,7 @@ function buildPhpFromSource(string $runtime, string $target, array $config, stri
     assertCToolchain($target, "building the bundled {$runtime} from source");
     assertChildCwd($tree);
 
-    $jobs = (string) max(1, cpuCount());
+    $jobs = (string) \max(1, cpuCount());
     $make = findExecutable('make') ?? 'make';
     $extensions = distributionPhpExtensions();
     runOrFail([$tree . '/configure', '--prefix=' . $work . '/install', ...extensionBuildFlags($extensions, $config)], $tree);
@@ -477,14 +477,14 @@ function buildPhpFromSource(string $runtime, string $target, array $config, stri
     }
 
     $binary = $tree . '/sapi/cli/php';
-    if (!\is_file($binary)) {
+    if (! \is_file($binary)) {
         throw new \RuntimeException("the source build produced no CLI binary at {$binary}");
     }
-    if (!\is_dir($dir . '/bin') && !\mkdir($dir . '/bin', 0777, true) && !\is_dir($dir . '/bin')) {
+    if (! \is_dir($dir . '/bin') && ! \mkdir($dir . '/bin', 0777, true) && ! \is_dir($dir . '/bin')) {
         throw new \RuntimeException("cannot create {$dir}/bin");
     }
-    if (!\copy($binary, $dir . '/bin/php')) {
-        throw new \RuntimeException("cannot copy the built PHP binary");
+    if (! \copy($binary, $dir . '/bin/php')) {
+        throw new \RuntimeException('cannot copy the built PHP binary');
     }
     @\chmod($dir . '/bin/php', 0755);
     stripBinary($dir . '/bin/php');
@@ -530,7 +530,7 @@ function assertCToolchain(string $target, string $what): void
     if (\array_filter($compilers, static fn (string $c): bool => findExecutable($c) !== null) === []) {
         $missing[] = \implode(', ', $compilers);
     }
-    if (!\str_starts_with($target, 'windows-')
+    if (! \str_starts_with($target, 'windows-')
         && findExecutable('make') === null
         && findExecutable('gmake') === null) {
         $missing[] = 'make';

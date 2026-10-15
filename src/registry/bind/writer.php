@@ -326,7 +326,7 @@ function writeBinding(string $outDir, array $descriptor): string
 {
     $path = \rtrim($outDir, '/') . '/' . moduleNameToPath((string) $descriptor['module']) . '.mog';
     $dir = \dirname($path);
-    if (!\is_dir($dir) && !@\mkdir($dir, 0777, true) && !\is_dir($dir)) {
+    if (! \is_dir($dir) && ! @\mkdir($dir, 0777, true) && ! \is_dir($dir)) {
         throw new \RuntimeException("cannot bind into `{$outDir}` — the directory cannot be created");
     }
     if (@\file_put_contents($path, renderBinding($descriptor)) === false) {
@@ -359,7 +359,7 @@ function writeDotNetBinding(string $outDir, array $descriptor): string
     $path = writeBinding($outDir, $descriptor + ['backend' => 'dotnet']);
     $sidecarPath = dotNetBindingSidecarPath($outDir, (string) $descriptor['module']);
     $dir = \dirname($sidecarPath);
-    if (!\is_dir($dir) && !@\mkdir($dir, 0777, true) && !\is_dir($dir)) {
+    if (! \is_dir($dir) && ! @\mkdir($dir, 0777, true) && ! \is_dir($dir)) {
         throw new \RuntimeException("cannot bind into `{$outDir}` — the directory cannot be created");
     }
     if (@\file_put_contents($sidecarPath, prettyJson((array) $descriptor['sidecar']) . "\n") === false) {
@@ -535,7 +535,7 @@ function writeFacade(string $outDir, array $descriptor, string $facadeModule): s
 {
     $path = \rtrim($outDir, '/') . '/' . moduleNameToPath($facadeModule) . '.mog';
     $dir = \dirname($path);
-    if (!\is_dir($dir) && !@\mkdir($dir, 0777, true) && !\is_dir($dir)) {
+    if (! \is_dir($dir) && ! @\mkdir($dir, 0777, true) && ! \is_dir($dir)) {
         throw new \RuntimeException("cannot face into `{$outDir}` — the directory cannot be created");
     }
     if (@\file_put_contents($path, renderFacade($descriptor, $facadeModule)) === false) {

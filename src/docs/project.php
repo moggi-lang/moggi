@@ -4,21 +4,24 @@ namespace Moggi\Docs;
 
 require_once __DIR__ . '/../paths.php';
 
-use Moggi\Modules\PreparedProject;
-use Moggi\Syntax\Ast\Program;
-
 use function Moggi\Backend\setCompileBackend;
 use function Moggi\CLI\findMogFiles;
+
 use function Moggi\CLI\resolveLibraryDirs;
 use function Moggi\Modules\isLibraryRoot;
 use function Moggi\Modules\moduleFileClosureCached;
+
+use Moggi\Modules\PreparedProject;
+
 use function Moggi\Modules\prepareProjectCached;
 use function Moggi\Modules\projectSourceClosure;
 use function Moggi\Modules\setStdlibLibPath;
 use function Moggi\Paths\canonicalSeparators;
 use function Moggi\Paths\globPaths;
 
-final class ParsedModule
+use Moggi\Syntax\Ast\Program;
+
+final class project
 {
     public function __construct(
         public readonly string $name,
@@ -64,7 +67,7 @@ function loadDocProject(string $inputPath, array $extraLibDirs = [], ?array $doc
 function docRootFor(string $inputPath): string
 {
     $dir = \is_dir($inputPath) ? $inputPath : \dirname($inputPath);
-    $real = realpath($dir);
+    $real = \realpath($dir);
     if ($real === false) {
         return '';
     }
@@ -83,8 +86,8 @@ function docRootFor(string $inputPath): string
 function docSiteTitle(string $inputPath): string
 {
     $dir = \is_dir($inputPath) ? $inputPath : \dirname($inputPath);
-    foreach (globPaths(rtrim($dir, '/\\') . '/*.moggi') as $descriptor) {
-        $ini = parse_ini_string((string) file_get_contents($descriptor), true, \INI_SCANNER_RAW);
+    foreach (globPaths(\rtrim($dir, '/\\') . '/*.moggi') as $descriptor) {
+        $ini = \parse_ini_string((string) \file_get_contents($descriptor), true, \INI_SCANNER_RAW);
         if ($ini === false) {
             continue;
         }
@@ -118,14 +121,14 @@ function parsedModulesFromPrepared(PreparedProject $prepared, string $docRoot = 
     $modules = [];
     foreach ($prepared->units as $moduleName => $unit) {
         $program = $unit['program'] ?? null;
-        if (!$program instanceof Program || $program->module === null) {
+        if (! $program instanceof Program || $program->module === null) {
             continue;
         }
         if (($unit['synthetic'] ?? false) === true) {
-            if (!$stdlib) {
+            if (! $stdlib) {
                 continue;
             }
-        } elseif (!sourceUnderRoot((string) ($unit['path'] ?? ''), $docRoot)) {
+        } elseif (! sourceUnderRoot((string) ($unit['path'] ?? ''), $docRoot)) {
             continue;
         }
 
@@ -137,7 +140,7 @@ function parsedModulesFromPrepared(PreparedProject $prepared, string $docRoot = 
         );
     }
 
-    ksort($modules);
+    \ksort($modules);
 
     return $modules;
 }
@@ -180,6 +183,7 @@ function resolveDocFileClosure(string $inputPath, array $extraLibDirs = []): arr
         foreach ($libDirs as $dir) {
             if (isLibraryRoot($dir)) {
                 setStdlibLibPath($dir);
+
                 break;
             }
         }
@@ -189,8 +193,8 @@ function resolveDocFileClosure(string $inputPath, array $extraLibDirs = []): arr
         return [$root, $files];
     }
 
-    if (!\is_dir($inputPath)) {
-        $real = realpath($inputPath);
+    if (! \is_dir($inputPath)) {
+        $real = \realpath($inputPath);
         if ($real !== false) {
             try {
                 [$files, $root] = moduleFileClosureCached($real);
@@ -210,16 +214,16 @@ function resolveDocFileClosure(string $inputPath, array $extraLibDirs = []): arr
 function docSourceFingerprintMtime(array $files): string
 {
     $paths = $files;
-    sort($paths);
+    \sort($paths);
     $parts = [];
     foreach ($paths as $path) {
-        $real = realpath($path) ?: $path;
-        $mtime = @filemtime($real);
-        $size = @filesize($real);
+        $real = \realpath($path) ?: $path;
+        $mtime = @\filemtime($real);
+        $size = @\filesize($real);
         $parts[] = $real . '|' . ($mtime === false ? '' : (string) $mtime) . '|' . ($size === false ? '' : (string) $size);
     }
 
-    return hash('sha256', implode("\n", $parts));
+    return \hash('sha256', \implode("\n", $parts));
 }
 
 /**
@@ -228,15 +232,15 @@ function docSourceFingerprintMtime(array $files): string
 function docSourceFingerprint(array $files): string
 {
     $paths = $files;
-    sort($paths);
+    \sort($paths);
     $parts = [];
     foreach ($paths as $path) {
-        $real = realpath($path) ?: $path;
-        $content = @file_get_contents($real);
-        $parts[] = $real . '|' . ($content === false ? '' : hash('sha256', $content));
+        $real = \realpath($path) ?: $path;
+        $content = @\file_get_contents($real);
+        $parts[] = $real . '|' . ($content === false ? '' : \hash('sha256', $content));
     }
 
-    return hash('sha256', implode("\n", $parts));
+    return \hash('sha256', \implode("\n", $parts));
 }
 
 /**
@@ -251,13 +255,13 @@ function docSourceFingerprint(array $files): string
 function descriptorTestSourceDirs(string $root): array
 {
     $dirs = [];
-    foreach (globPaths(rtrim($root, '/\\') . '/*.moggi') as $descriptor) {
-        $ini = parse_ini_string((string) file_get_contents($descriptor), true, \INI_SCANNER_RAW);
+    foreach (globPaths(\rtrim($root, '/\\') . '/*.moggi') as $descriptor) {
+        $ini = \parse_ini_string((string) \file_get_contents($descriptor), true, \INI_SCANNER_RAW);
         if ($ini === false) {
             continue;
         }
         $value = $ini['test-suite']['source-dirs'] ?? null;
-        if (!\is_string($value)) {
+        if (! \is_string($value)) {
             continue;
         }
         foreach (\preg_split('/[\s,]+/', $value) ?: [] as $entry) {
@@ -268,7 +272,7 @@ function descriptorTestSourceDirs(string $root): array
         }
     }
 
-    return array_values(array_unique($dirs));
+    return \array_values(\array_unique($dirs));
 }
 
 /**
@@ -291,15 +295,15 @@ function withoutTestSuiteSources(string $root, array $files): array
 
     $prefixes = [];
     foreach ($dirs as $dir) {
-        $prefixes[] = canonicalSeparators(rtrim($root, '/\\')) . '/' . trim(canonicalSeparators($dir), '/\\') . '/';
+        $prefixes[] = canonicalSeparators(\rtrim($root, '/\\')) . '/' . \trim(canonicalSeparators($dir), '/\\') . '/';
     }
 
-    return array_values(array_filter(
+    return \array_values(\array_filter(
         $files,
         static function (string $file) use ($prefixes): bool {
             $canonical = canonicalSeparators($file);
             foreach ($prefixes as $prefix) {
-                if (str_starts_with($canonical, $prefix)) {
+                if (\str_starts_with($canonical, $prefix)) {
                     return false;
                 }
             }
@@ -320,14 +324,14 @@ function resolveDocInputs(string $inputPath): array
         return [$root, withoutTestSuiteSources($root, $files)];
     }
 
-    if (!\is_file($inputPath)) {
+    if (! \is_file($inputPath)) {
         throw new \InvalidArgumentException("not a file or directory: {$inputPath}");
     }
 
-    $real = realpath($inputPath);
+    $real = \realpath($inputPath);
     if ($real === false) {
         throw new \InvalidArgumentException("cannot resolve {$inputPath}");
     }
 
-    return [dirname($real), [$real]];
+    return [\dirname($real), [$real]];
 }

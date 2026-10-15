@@ -4,9 +4,6 @@ namespace Moggi\LSP\TextDocument;
 
 use Moggi\LSP\Analysis\AnalysisService;
 
-use function Moggi\LSP\Analysis\ensureAnalyzed;
-use function Moggi\LSP\Index\findByResolved;
-use function Moggi\LSP\Index\findInUri;
 use function Moggi\LSP\Protocol\compilerPosToLsp;
 use function Moggi\LSP\Protocol\locToRange;
 use function Moggi\LSP\Protocol\lspPosToCompiler;
@@ -14,7 +11,7 @@ use function Moggi\LSP\Protocol\splitLines;
 
 function svcRename(AnalysisService $svc, string $uri, array $pos, string $newName): ?array
 {
-    if ($newName === '' || !preg_match('/^[A-Za-z_][A-Za-z0-9_\']*$/', $newName)) {
+    if ($newName === '' || ! \preg_match('/^[A-Za-z_][A-Za-z0-9_\']*$/', $newName)) {
         return null;
     }
     $target = resolveNavTarget($svc, $uri, $pos);
@@ -61,6 +58,7 @@ function svcRename(AnalysisService $svc, string $uri, array $pos, string $newNam
         }
         $changes[$u] = $uniq;
     }
+
     return documentChangesWorkspaceEdit($svc, $changes);
 }
 
@@ -80,9 +78,10 @@ function documentChangesWorkspaceEdit(AnalysisService $svc, array $changes): arr
                 'uri' => $docUri,
                 'version' => $svc->vfs->has($docUri) ? $svc->vfs->version($docUri) : 0,
             ],
-            'edits' => array_values($edits),
+            'edits' => \array_values($edits),
         ];
     }
+
     return ['documentChanges' => $docEdits];
 }
 
@@ -109,13 +108,13 @@ function svcPrepareRename(AnalysisService $svc, string $uri, array $pos): ?array
     }
     $lines = splitLines($analysis->source);
     $text = $lines[$comp['line'] - 1] ?? '';
-    $idx = max(0, $comp['col'] - 1);
+    $idx = \max(0, $comp['col'] - 1);
     $left = $idx;
-    while ($left > 0 && preg_match('/[A-Za-z0-9_\']/', $text[$left - 1] ?? '')) {
+    while ($left > 0 && \preg_match('/[A-Za-z0-9_\']/', $text[$left - 1] ?? '')) {
         $left--;
     }
     $right = $idx;
-    while ($right < strlen($text) && preg_match('/[A-Za-z0-9_\']/', $text[$right] ?? '')) {
+    while ($right < \strlen($text) && \preg_match('/[A-Za-z0-9_\']/', $text[$right] ?? '')) {
         $right++;
     }
 

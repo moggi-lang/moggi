@@ -16,8 +16,9 @@ use function Moggi\Registry\prettyJson;
 use function Moggi\Registry\providedDependencyProblems;
 use function Moggi\Registry\readDescriptor;
 use function Moggi\Registry\readLock;
-use Moggi\Syntax\Lexer\TokenKind;
 use function Moggi\Syntax\Lexer\lex;
+
+use Moggi\Syntax\Lexer\TokenKind;
 
 /**
  * `moggi check` — everything that can be wrong with a package, before a build
@@ -228,11 +229,13 @@ function checkSources(string $root, array $descriptor): array
             $relative = \str_replace('\\', '/', $directory);
             if (\str_starts_with($relative, '/') || \preg_match('#(^|/)\.\.(/|$)#', $relative) === 1) {
                 $findings[] = ['level' => 'error', 'message' => "[{$label}] source-dirs `{$directory}` is outside the package"];
+
                 continue;
             }
             $full = $root . '/' . \rtrim($directory, '/');
-            if (!\is_dir($full)) {
+            if (! \is_dir($full)) {
                 $findings[] = ['level' => 'error', 'message' => "[{$label}] source-dirs `{$directory}` is not a directory"];
+
                 continue;
             }
             $scanned[\rtrim($relative, '/')] = true;
@@ -240,12 +243,12 @@ function checkSources(string $root, array $descriptor): array
             foreach (findMogFilesUnder($full) as $file) {
                 $header = cachedModuleHeader($file);
                 $name = $header['module'] ?? null;
-                if (!\is_string($name) || $name === '') {
+                if (! \is_string($name) || $name === '') {
                     continue;
                 }
                 if (($header['implicitMain'] ?? false) === true && $owner['main'] !== $name) {
                     $findings[] = ['level' => 'warning', 'message' => checkRelative($root, $file) . ': no module header, so the compiler reads it as `module Main` — name it if anything should import it'];
-                } else if (($header['implicitMain'] ?? false) !== true) {
+                } elseif (($header['implicitMain'] ?? false) !== true) {
                     $warning = moduleFilenameWarning($file, $name);
                     if ($warning !== null) {
                         $findings[] = ['level' => 'warning', 'message' => $warning];
@@ -253,6 +256,7 @@ function checkSources(string $root, array $descriptor): array
                 }
                 if (isset($modules[$name]) && $modules[$name] !== $file) {
                     $findings[] = ['level' => 'error', 'message' => "module `{$name}` is defined twice: " . checkRelative($root, $modules[$name]) . ' and ' . checkRelative($root, $file)];
+
                     continue;
                 }
                 $modules[$name] = $file;
@@ -282,7 +286,7 @@ function checkSources(string $root, array $descriptor): array
             if (isset($modules[$owner['main']])) {
                 $findings[] = ['level' => 'warning', 'message' => "[{$label}] main module `{$owner['main']}` is not under this block's source-dirs (" . \implode(', ', $owner['dirs']) . ')'];
             } else {
-                $findings[] = ['level' => 'error', 'message' => "[{$label}] main module `{$owner['main']}` has no file `" . \str_replace('.', '/', $owner['main']) . ".mog` under " . (\implode(', ', $owner['dirs']) ?: 'any source-dir')];
+                $findings[] = ['level' => 'error', 'message' => "[{$label}] main module `{$owner['main']}` has no file `" . \str_replace('.', '/', $owner['main']) . '.mog` under ' . (\implode(', ', $owner['dirs']) ?: 'any source-dir')];
             }
         } else {
             $declared = cachedModuleHeader($mainFile)['module'] ?? null;
@@ -295,15 +299,15 @@ function checkSources(string $root, array $descriptor): array
         if ($backend === null || $backend === '') {
             continue;
         }
-        if (!\in_array($backend, implementedBackendIds(), true)) {
+        if (! \in_array($backend, implementedBackendIds(), true)) {
             $findings[] = ['level' => 'error', 'message' => "[{$label}] backend `{$backend}` is not one this compiler builds (" . \implode(', ', implementedBackendIds()) . ')'];
-        } elseif (!\str_starts_with($label, 'test-suite') && !\in_array($backend, $descriptor['backends'], true)) {
+        } elseif (! \str_starts_with($label, 'test-suite') && ! \in_array($backend, $descriptor['backends'], true)) {
             $findings[] = ['level' => 'warning', 'message' => "[{$label}] backend `{$backend}` is not in [package] backends (" . \implode(', ', $descriptor['backends']) . ')'];
         }
     }
 
     $targetDir = $descriptor['docs']['targetDir'];
-    if ($targetDir !== null && !\is_dir($root . '/' . \rtrim($targetDir, '/'))) {
+    if ($targetDir !== null && ! \is_dir($root . '/' . \rtrim($targetDir, '/'))) {
         $findings[] = ['level' => 'warning', 'message' => "[docs] target-dir `{$targetDir}` does not exist yet"];
     }
 
@@ -333,7 +337,7 @@ function checkSources(string $root, array $descriptor): array
 function headerHasForeignDecl(array $header): bool
 {
     $source = (string) ($header['__source'] ?? '');
-    if (!\str_contains($source, 'foreign')) {
+    if (! \str_contains($source, 'foreign')) {
         return false;
     }
     foreach (lex($source) as $token) {
@@ -375,7 +379,7 @@ function checkFfiBindings(string $root, array $descriptor, array $scanned): arra
         $colon = \strpos($entry, ':');
         $prefix = $colon === false ? '' : \substr($entry, 0, $colon);
         $rest = $colon === false ? '' : \substr($entry, $colon + 1);
-        if ($colon === false || $rest === '' || !\in_array($prefix, implementedBackendIds(), true)) {
+        if ($colon === false || $rest === '' || ! \in_array($prefix, implementedBackendIds(), true)) {
             $findings[] = ['level' => 'warning', 'message' => "`[ffi] bindings` entry `{$entry}` is not `backend:coordinate` (" . \implode(', ', implementedBackendIds()) . ') — `build --bind` will refuse it'];
 
             continue;
@@ -395,7 +399,7 @@ function checkFfiBindings(string $root, array $descriptor, array $scanned): arra
 
     if ($descriptor['backends'] !== implementedBackendIds()) {
         foreach ($descriptor['backends'] as $backend) {
-            if (!isset($boundBackends[$backend])) {
+            if (! isset($boundBackends[$backend])) {
                 $findings[] = ['level' => 'warning', 'message' => "backend `{$backend}` is in [package] backends but nothing in `[ffi] bindings` binds for it (bound: " . \implode(', ', \array_keys($boundBackends)) . ')'];
             }
         }
@@ -412,12 +416,12 @@ function checkFfiBindings(string $root, array $descriptor, array $scanned): arra
         }
         $hasFacade = true;
         foreach ($info['backendMap'] as $backend => $impl) {
-            if (!isset($known[(string) $impl])) {
+            if (! isset($known[(string) $impl])) {
                 $findings[] = ['level' => 'warning', 'message' => 'module `' . $info['module'] . '` maps backend `' . $backend . '` to `' . $impl . '`, which is no module in this package'];
             }
         }
     }
-    if (\count($boundBackends) > 1 && !$hasFacade) {
+    if (\count($boundBackends) > 1 && ! $hasFacade) {
         $findings[] = ['level' => 'warning', 'message' => '`[ffi] bindings` cover ' . \implode(' and ', \array_keys($boundBackends)) . ' with no `{-# BACKEND #-}` facade between them — `moggi add <backend>:<coordinate> --bind --facade` writes the skeleton'];
     }
 
@@ -441,7 +445,7 @@ function checkLock(string $descriptorPath, array $descriptor, ?string $output): 
     $findings = [];
     $lockFile = lockPath($descriptorPath, $output);
 
-    if (!\is_file($lockFile)) {
+    if (! \is_file($lockFile)) {
         if ($descriptor['dependencies'] !== []) {
             $findings[] = ['level' => 'warning', 'message' => "no lock yet ({$lockFile}) — run `moggi install`"];
         }
@@ -470,7 +474,7 @@ function checkLock(string $descriptorPath, array $descriptor, ?string $output): 
     }
 
     foreach (\array_keys($descriptor['dependencies']) as $name) {
-        if (!isset($locked[$name])) {
+        if (! isset($locked[$name])) {
             $findings[] = ['level' => 'error', 'message' => "[dependencies] `{$name}` is not in {$lockFile} — run `moggi install`"];
         }
     }
@@ -531,7 +535,7 @@ function checkPhpRequirements(array $descriptor, ?array $lock = null): array
         if ($parsed['path'] === null) {
             continue;
         }
-        if (!\file_exists($parsed['path']) && !\file_exists(\dirname((string) $descriptor['path']) . '/' . $parsed['path'])) {
+        if (! \file_exists($parsed['path']) && ! \file_exists(\dirname((string) $descriptor['path']) . '/' . $parsed['path'])) {
             $findings[] = ['level' => 'warning', 'message' => "[php.extensions] `{$entry}` is built against `{$parsed['path']}`, which is not there"];
         }
     }

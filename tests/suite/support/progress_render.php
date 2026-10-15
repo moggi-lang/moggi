@@ -109,6 +109,7 @@ function progressFoldedRow(array $rows): array
         }
         if ($row['endedAt'] === null) {
             $running = $running || $row['startedAt'] !== null;
+
             continue;
         }
         $ends[] = $row['endedAt'];

@@ -13,30 +13,30 @@ function base(): string
  */
 function normalize(array $paths, string $projectRoot): array
 {
-    $root = realpath($projectRoot);
+    $root = \realpath($projectRoot);
     if ($root === false) {
         throw new \InvalidArgumentException("cannot resolve project root `{$projectRoot}`");
     }
 
     $filters = [];
     foreach ($paths as $path) {
-        $resolved = realpath($path);
+        $resolved = \realpath($path);
         if ($resolved === false) {
-            $resolved = realpath($root . DIRECTORY_SEPARATOR . $path);
+            $resolved = \realpath($root . DIRECTORY_SEPARATOR . $path);
         }
         if ($resolved === false) {
             throw new \InvalidArgumentException("test path does not exist: {$path}");
         }
-        if ($resolved !== $root && !str_starts_with($resolved, $root . DIRECTORY_SEPARATOR)) {
+        if ($resolved !== $root && ! \str_starts_with($resolved, $root . DIRECTORY_SEPARATOR)) {
             throw new \InvalidArgumentException("test path is outside the project: {$path}");
         }
 
         $relative = $resolved === $root
             ? ''
-            : substr($resolved, strlen($root) + 1);
+            : \substr($resolved, \strlen($root) + 1);
         $filters[] = [
-            'path' => str_replace(DIRECTORY_SEPARATOR, '/', $relative),
-            'directory' => is_dir($resolved),
+            'path' => \str_replace(DIRECTORY_SEPARATOR, '/', $relative),
+            'directory' => \is_dir($resolved),
         ];
     }
 
@@ -54,7 +54,7 @@ function matches(string $path, array $filters, string $projectRoot): bool
         return true;
     }
 
-    $root = realpath($projectRoot);
+    $root = \realpath($projectRoot);
     if ($root === false) {
         return false;
     }
@@ -71,7 +71,7 @@ function matches(string $path, array $filters, string $projectRoot): bool
         if ($relative === $filter['path']) {
             return true;
         }
-        if ($filter['directory'] && str_starts_with($relative, rtrim($filter['path'], '/') . '/')) {
+        if ($filter['directory'] && \str_starts_with($relative, \rtrim($filter['path'], '/') . '/')) {
             return true;
         }
     }
@@ -86,17 +86,17 @@ function matches(string $path, array $filters, string $projectRoot): bool
  */
 function relativeUnderRoot(string $path, string $root): ?string
 {
-    $resolved = realpath($path);
+    $resolved = \realpath($path);
     $absolute = $resolved !== false
         ? $resolved
-        : (str_starts_with($path, DIRECTORY_SEPARATOR) ? $path : $root . DIRECTORY_SEPARATOR . $path);
+        : (\str_starts_with($path, DIRECTORY_SEPARATOR) ? $path : $root . DIRECTORY_SEPARATOR . $path);
 
     if ($absolute === $root) {
         return '';
     }
-    if (!str_starts_with($absolute, $root . DIRECTORY_SEPARATOR)) {
+    if (! \str_starts_with($absolute, $root . DIRECTORY_SEPARATOR)) {
         return null;
     }
 
-    return str_replace(DIRECTORY_SEPARATOR, '/', substr($absolute, strlen($root) + 1));
+    return \str_replace(DIRECTORY_SEPARATOR, '/', \substr($absolute, \strlen($root) + 1));
 }

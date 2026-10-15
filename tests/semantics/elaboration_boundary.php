@@ -2,7 +2,7 @@
 <?php declare(strict_types=1);
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
@@ -61,7 +61,7 @@ $functions = static function (string $file): array {
 
     $functions = [];
     foreach (\preg_split('/\n(?=function )/', $source) ?: [] as $part) {
-        if (!\preg_match('/^function ([A-Za-z_][A-Za-z0-9_]*)\(/', $part, $match)) {
+        if (! \preg_match('/^function ([A-Za-z_][A-Za-z0-9_]*)\(/', $part, $match)) {
             continue;
         }
 
@@ -100,6 +100,7 @@ $inserters = static function (array $functions) use ($insertion): array {
         foreach ($insertion as $primitive) {
             if (\str_contains($text, $primitive . '(')) {
                 $found[] = $name;
+
                 break;
             }
         }
@@ -133,14 +134,14 @@ $inferInfix = $inferFunctions['inferInfix'] ?? throw new \RuntimeException('infe
 
 foreach ([...$insertion, 'clearPendingConstraints', 'resolveConstraintEvidence', 'dictsForPending', 'solveConstraints', 'constraintsResolvable'] as $name) {
     $assert(
-        !\str_contains($inferApply, $name . '('),
+        ! \str_contains($inferApply, $name . '('),
         "inferApply must not call {$name}: inference generates obligations, it does not solve or elaborate them",
     );
 }
 
 foreach ([...$insertion, 'clearPendingConstraints', 'resolveConstraintEvidence', 'dictsForPending', 'solveConstraints'] as $name) {
     $assert(
-        !\str_contains($inferInfix, $name . '('),
+        ! \str_contains($inferInfix, $name . '('),
         "inferInfix must not call {$name}: it may pick an AST shape but not solve or insert evidence",
     );
 }
@@ -148,13 +149,13 @@ foreach ([...$insertion, 'clearPendingConstraints', 'resolveConstraintEvidence',
 // No inference-phase function may insert evidence: `elaborateApplyEvidence`
 // (reached through `inferApplyAndElaborate`) is the only way in.
 foreach ($inferFunctions as $name => $text) {
-    if (!\str_starts_with($name, 'infer')) {
+    if (! \str_starts_with($name, 'infer')) {
         continue;
     }
 
     foreach ($insertion as $primitive) {
         $assert(
-            !\str_contains($text, $primitive . '('),
+            ! \str_contains($text, $primitive . '('),
             "inference function {$name} must not insert evidence; elaborateApplyEvidence is the only one that does",
         );
     }

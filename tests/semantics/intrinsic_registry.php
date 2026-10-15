@@ -5,7 +5,7 @@
 // `word32Eq#`), and the registry, the synthesized Prim/IO modules and the stdlib all agree on it.
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
@@ -14,19 +14,19 @@ use Moggi\Modules;
 use Moggi\Semantics\IntrinsicRegistry;
 
 $assert = static function (bool $condition, string $message): void {
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
 
 $schemes = IntrinsicRegistry\typeSchemes();
-$assert(count($schemes) > 100, 'registry should hold a substantial primop table');
+$assert(\count($schemes) > 100, 'registry should hold a substantial primop table');
 
 // 1. Every key is a MagicHash name: `#` suffix, no snake_case, and resolving it
 //    returns the name itself (the id is the name).
-foreach (array_keys($schemes) as $name) {
-    $assert(str_ends_with($name, '#'), "primop {$name} must end with `#`");
-    $assert(!str_contains($name, '_'), "primop {$name} must not contain `_` (no snake_case ids)");
+foreach (\array_keys($schemes) as $name) {
+    $assert(\str_ends_with($name, '#'), "primop {$name} must end with `#`");
+    $assert(! \str_contains($name, '_'), "primop {$name} must not contain `_` (no snake_case ids)");
     $assert(
         IntrinsicRegistry\resolveIntrinsicName($name) === $name,
         "resolveIntrinsicName({$name}) must round-trip",
@@ -53,17 +53,17 @@ $iterator = new \RecursiveIteratorIterator(
     new \RecursiveDirectoryIterator($root . '/libraries/base/src', \FilesystemIterator::SKIP_DOTS),
 );
 foreach ($iterator as $file) {
-    if (!$file->isFile() || $file->getExtension() !== 'mog') {
+    if (! $file->isFile() || $file->getExtension() !== 'mog') {
         continue;
     }
-    $source = file_get_contents($file->getPathname());
+    $source = \file_get_contents($file->getPathname());
     if ($source === false) {
         continue;
     }
     // Strip line comments and string literals so we only see real identifiers.
-    $code = preg_replace('/(?:\{-.*?-\}|--[^\n]*)/s', ' ', $source) ?? $source;
-    $code = preg_replace('/"[^"\n]*"/', '""', $code) ?? $code;
-    preg_match_all('/\b([A-Za-z][A-Za-z0-9_]*#[A-Za-z0-9_#]*)/', $code, $matches);
+    $code = \preg_replace('/(?:\{-.*?-\}|--[^\n]*)/s', ' ', $source) ?? $source;
+    $code = \preg_replace('/"[^"\n]*"/', '""', $code) ?? $code;
+    \preg_match_all('/\b([A-Za-z][A-Za-z0-9_]*#[A-Za-z0-9_#]*)/', $code, $matches);
     foreach ($matches[1] as $used) {
         if (isset($schemes[$used])) {
             continue;
@@ -77,7 +77,7 @@ foreach ($iterator as $file) {
 }
 $assert(
     $unregistered === [],
-    'stdlib uses unregistered primops: ' . json_encode($unregistered),
+    'stdlib uses unregistered primops: ' . \json_encode($unregistered),
 );
 
 // 4. A synthesized compiler module holds its own names: the primops it owns (each
@@ -89,7 +89,7 @@ $assert(
 foreach ([IntrinsicRegistry\MODULE_PRIM, IntrinsicRegistry\MODULE_IO] as $moduleName) {
     $localTypes = Modules\syntheticLocalTypes($moduleName);
     $expected = [];
-    foreach (array_keys($schemes) as $name) {
+    foreach (\array_keys($schemes) as $name) {
         if (IntrinsicRegistry\ownerModule($name) === $moduleName) {
             $expected[$name] = true;
         }
@@ -99,16 +99,16 @@ foreach ([IntrinsicRegistry\MODULE_PRIM, IntrinsicRegistry\MODULE_IO] as $module
     $surface = [];
     if ($moduleName === IntrinsicRegistry\MODULE_PRIM) {
         $typeTable = IntrinsicRegistry\primTypeTable();
-        foreach (array_keys($typeTable) as $primitive) {
+        foreach (\array_keys($typeTable) as $primitive) {
             $assert(
                 isset($localTypes['data'][$primitive]),
                 "Prim must declare its primitive type `{$primitive}`",
             );
         }
         $assert(
-            array_keys($localTypes['data']) === array_keys($typeTable),
+            \array_keys($localTypes['data']) === \array_keys($typeTable),
             'Prim must declare the primitive types and nothing else: '
-                . json_encode(array_keys($localTypes['data'])),
+                . \json_encode(\array_keys($localTypes['data'])),
         );
         $assert($localTypes['typeSynonyms'] === [], 'Prim spells no type synonyms');
 
@@ -122,21 +122,21 @@ foreach ([IntrinsicRegistry\MODULE_PRIM, IntrinsicRegistry\MODULE_IO] as $module
         }
         foreach (Modules\syntheticExports($moduleName, $localTypes)['env'] as $name => $_) {
             $assert(
-                str_ends_with($name, '#') || isset(IntrinsicRegistry\publicPrimopAliases()[$name]),
+                \str_ends_with($name, '#') || isset(IntrinsicRegistry\publicPrimopAliases()[$name]),
                 "Prim exports `{$name}`, which is neither a primop nor a machine operator",
             );
         }
     }
 
-    $localNames = array_keys($localTypes['env']);
-    sort($localNames);
-    $expectedNames = array_keys($expected);
-    sort($expectedNames);
-    $beyondPrimops = array_values(array_diff($localNames, $expectedNames));
-    sort($surface);
+    $localNames = \array_keys($localTypes['env']);
+    \sort($localNames);
+    $expectedNames = \array_keys($expected);
+    \sort($expectedNames);
+    $beyondPrimops = \array_values(\array_diff($localNames, $expectedNames));
+    \sort($surface);
     $assert(
         $beyondPrimops === $surface,
-        "{$moduleName} env holds names beyond its primops: " . json_encode($beyondPrimops),
+        "{$moduleName} env holds names beyond its primops: " . \json_encode($beyondPrimops),
     );
 
     foreach ($localTypes['intrinsicWrappers'] as $name => $target) {
@@ -147,8 +147,8 @@ foreach ([IntrinsicRegistry\MODULE_PRIM, IntrinsicRegistry\MODULE_IO] as $module
     }
 
     $exports = Modules\syntheticExports($moduleName, $localTypes);
-    $exportNames = array_keys($exports['env']);
-    sort($exportNames);
+    $exportNames = \array_keys($exports['env']);
+    \sort($exportNames);
     $assert($exportNames === $localNames, "{$moduleName} exports must match the names it holds");
 }
 

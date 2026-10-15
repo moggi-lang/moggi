@@ -72,7 +72,7 @@ function assertUpstreamHost(string $runtime, string $url): void
 {
     $host = \parse_url($url, \PHP_URL_HOST);
     $allowed = UPSTREAM_HOSTS[$runtime] ?? [];
-    if (!\is_string($host) || !\in_array($host, $allowed, true)) {
+    if (! \is_string($host) || ! \in_array($host, $allowed, true)) {
         throw new \RuntimeException(
             "{$runtime}: {$url} is not on an allowed upstream host (" . \implode(', ', $allowed) . ')',
         );
@@ -118,7 +118,7 @@ function assertAssetMatchesTarget(string $runtime, string $url, string $target, 
     }
     $path = (string) \parse_url($url, \PHP_URL_PATH);
     $name = \basename($path);
-    if (!\str_contains(\str_contains($name, $token) ? $name : $path, $token)) {
+    if (! \str_contains(\str_contains($name, $token) ? $name : $path, $token)) {
         throw new \RuntimeException("{$runtime}: asset name does not name {$target} ({$token})");
     }
 }
@@ -190,10 +190,11 @@ function upstreamChecksum(string $runtime, string $url, array $asset, string $ta
     }
 
     foreach ([['sha256Url', 'sha256', 64], ['sha512Url', 'sha512', 128]] as [$sidecarKey, $field, $length]) {
-        if (!isset($asset[$sidecarKey])) {
+        if (! isset($asset[$sidecarKey])) {
             continue;
         }
         $sidecar = expandAssetTemplate((string) $asset[$sidecarKey], $runtime, $target, $config);
+
         try {
             $file = httpGet($sidecar);
             $text = (string) \file_get_contents($file);
@@ -212,7 +213,7 @@ function upstreamChecksum(string $runtime, string $url, array $asset, string $ta
         $suffix = $asset['format'] === 'zip' ? '.zip' : '.tar.gz';
         foreach ((array) ($meta['releases'] ?? []) as $release) {
             $sdk = $release['sdk'] ?? null;
-            if (!\is_array($sdk) || ($sdk['version'] ?? '') !== (string) $config['runtimes'][$runtime]['version']) {
+            if (! \is_array($sdk) || ($sdk['version'] ?? '') !== (string) $config['runtimes'][$runtime]['version']) {
                 continue;
             }
             foreach ((array) ($sdk['files'] ?? []) as $file) {
@@ -237,7 +238,7 @@ function upstreamChecksum(string $runtime, string $url, array $asset, string $ta
             }
         }
 
-        if (!empty($asset['build'])) {
+        if (! empty($asset['build'])) {
             throw new \RuntimeException("php: {$wanted} is not in php.net's metadata for {$config['runtimes'][$runtime]['version']}");
         }
 
@@ -254,9 +255,10 @@ function upstreamChecksum(string $runtime, string $url, array $asset, string $ta
         $assets = \json_decode(httpGetContent($api), true);
         foreach ((array) $assets as $entry) {
             $package = $entry['binary']['package'] ?? null;
-            if (!\is_array($package) || !isset($package['checksum'])) {
+            if (! \is_array($package) || ! isset($package['checksum'])) {
                 continue;
             }
+
             return [
                 'sha256' => \strtolower((string) $package['checksum']),
                 'source' => 'adoptium-api',
@@ -279,11 +281,11 @@ function resolveChecksum(string $runtime, string $url, array $asset, string $tar
     }
 
     $cacheDir = distCacheRoot() . '/downloads';
-    if (!\is_dir($cacheDir)) {
+    if (! \is_dir($cacheDir)) {
         \mkdir($cacheDir, 0777, true);
     }
     $cached = $cacheDir . '/' . $runtime . '-' . $target . '-' . \basename(\parse_url($url, \PHP_URL_PATH) ?: 'asset');
-    if (!\is_file($cached)) {
+    if (! \is_file($cached)) {
         \fwrite(STDOUT, "  downloading {$url} to hash it\n");
         httpGet($url, $cached);
     }
@@ -307,7 +309,7 @@ function selectTargets(array $config, array $requested): array
         return knownTargets($config);
     }
     foreach ($requested as $target) {
-        if (!isset($config['targets'][$target])) {
+        if (! isset($config['targets'][$target])) {
             throw new \RuntimeException("unknown target {$target}");
         }
     }
@@ -334,7 +336,7 @@ function main(array $argv): int
 
     $lockPath = distRoot() . '/runtimes.lock.json';
     $lock = ['generated' => \gmdate('c'), 'assets' => []];
-    if (!$options['check'] && \is_file($lockPath)) {
+    if (! $options['check'] && \is_file($lockPath)) {
         $existing = \json_decode((string) \file_get_contents($lockPath), true);
         if (\is_array($existing['assets'] ?? null)) {
             $knownRuntimes = lockedRuntimeNames($config);
@@ -351,7 +353,7 @@ function main(array $argv): int
     $report = [];
     $failed = false;
     $cacheDir = distCacheRoot();
-    if (!\is_dir($cacheDir)) {
+    if (! \is_dir($cacheDir)) {
         \mkdir($cacheDir, 0777, true);
     }
 
@@ -360,6 +362,7 @@ function main(array $argv): int
             $reason = unsupportedReason($runtime, $target, $config);
             if ($reason !== null) {
                 $report[] = \sprintf('%-16s %-8s unsupported  %s', $target, $runtime, $reason);
+
                 continue;
             }
 
@@ -369,6 +372,7 @@ function main(array $argv): int
                 $toolAsset = $tool !== '' ? runtimeAsset($tool, $target, $config) : null;
                 if ($toolAsset === null) {
                     $report[] = \sprintf('%-16s %-8s unsupported  build tool `%s` has no asset for this target', $target, $runtime, $tool);
+
                     continue;
                 }
 
@@ -393,6 +397,7 @@ function main(array $argv): int
             $asset = runtimeAsset($runtime, $target, $config);
             if ($asset === null) {
                 $report[] = \sprintf('%-16s %-8s unsupported  no configured asset', $target, $runtime);
+
                 continue;
             }
 
@@ -423,8 +428,8 @@ function main(array $argv): int
 
                 $versionSeen = $checksum['version'] ?? $entry['version'];
                 if ($runtime === 'jvm' && \is_string($versionSeen) && $versionSeen !== ''
-                    && !\str_starts_with($versionSeen, 'jdk-' . $entry['version'])
-                    && !\str_starts_with($versionSeen, 'jdk' . $entry['version'])) {
+                    && ! \str_starts_with($versionSeen, 'jdk-' . $entry['version'])
+                    && ! \str_starts_with($versionSeen, 'jdk' . $entry['version'])) {
                     throw new \RuntimeException("jvm: upstream serves {$versionSeen}, configuration pins {$entry['version']}");
                 }
 

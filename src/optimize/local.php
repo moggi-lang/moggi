@@ -3,9 +3,9 @@
 namespace Moggi\Optimize\Local;
 
 use Moggi\IR;
-use Moggi\Optimize\Support;
 
 use function Moggi\IR\Visit\mapGuards;
+
 use function Moggi\IR\Visit\mapOperandChildren;
 use function Moggi\IR\Visit\operandChildren;
 use function Moggi\IR\Visit\stmtDirectOperands;
@@ -14,6 +14,8 @@ use function Moggi\Optimize\GlobalPass\cleanupConstructorArm;
 use function Moggi\Optimize\GlobalPass\lambdaCaptureIndex;
 use function Moggi\Optimize\Interproc\denseStmtItems;
 use function Moggi\Optimize\Interproc\operandIsNonDuplicable;
+
+use Moggi\Optimize\Support;
 
 function optimizeBlock(IR\Block $block, ?int $matchDest = null): IR\Block
 {
@@ -28,26 +30,31 @@ function optimizeBlock(IR\Block $block, ?int $matchDest = null): IR\Block
         if ($item instanceof IR\Assign) {
             if ($matchDest !== null && $item->dest === $matchDest) {
                 if (Support\isPropagatableExpr($item->value)
-                    && !operandIsNonDuplicable($item->value)
+                    && ! operandIsNonDuplicable($item->value)
                 ) {
                     $items[] = new IR\Ret($item->value);
+
                     continue;
                 }
 
                 $items[] = $item;
+
                 continue;
             }
 
             if (Support\isPropagatableExpr($item->value)) {
                 if (operandIsNonDuplicable($item->value)) {
                     $items[] = $item;
+
                     continue;
                 }
                 $temps[$item->dest] = $item->value;
+
                 continue;
             }
 
             $items[] = $item;
+
             continue;
         }
 
@@ -58,23 +65,28 @@ function optimizeBlock(IR\Block $block, ?int $matchDest = null): IR\Block
                     && $item->value->name === $item->name
                 ) {
                     $items[] = $item;
+
                     continue;
                 }
                 if (operandIsNonDuplicable($item->value)) {
                     $items[] = $item;
+
                     continue;
                 }
                 $captureIndex ??= lambdaCaptureIndex($block->items);
                 if (($captureIndex[$item->name] ?? -1) > $itemIndex) {
                     $items[] = $item;
+
                     continue;
                 }
 
                 $locals[$item->name] = $item->value;
+
                 continue;
             }
 
             $items[] = $item;
+
             continue;
         }
 
@@ -86,6 +98,7 @@ function optimizeBlock(IR\Block $block, ?int $matchDest = null): IR\Block
                 $folded = Support\tryFoldBinopInt($item->op, $left->value, $right->value);
                 if ($folded !== null) {
                     $temps[$item->dest] = new IR\ConstInt($folded);
+
                     continue;
                 }
             }
@@ -94,17 +107,20 @@ function optimizeBlock(IR\Block $block, ?int $matchDest = null): IR\Block
             if ($identity !== null) {
                 if (Support\isPropagatableExpr($identity)) {
                     $temps[$item->dest] = $identity;
+
                     continue;
                 }
 
                 $items[] = new IR\Assign($item->dest, $identity);
                 $temps[$item->dest] = $identity;
+
                 continue;
             }
 
             $expr = Support\combineOperandsToExpr($item->op, $left, $right);
             if (Support\isPropagatableExpr($expr)) {
                 $temps[$item->dest] = $expr;
+
                 continue;
             }
 
@@ -120,6 +136,7 @@ function optimizeBlock(IR\Block $block, ?int $matchDest = null): IR\Block
         if ($item instanceof IR\Call || $item instanceof IR\CallValue) {
             unset($temps[$item->dest]);
             $items[] = $item;
+
             continue;
         }
 
@@ -136,6 +153,7 @@ function optimizeBlock(IR\Block $block, ?int $matchDest = null): IR\Block
                 $nestedMatchDest,
                 $item->exhaustive,
             );
+
             continue;
         }
 
@@ -149,6 +167,7 @@ function optimizeBlock(IR\Block $block, ?int $matchDest = null): IR\Block
                 ),
                 $item->exhaustive,
             );
+
             continue;
         }
 
@@ -201,21 +220,21 @@ function mapMatchArm(IR\MatchArm $arm, array $temps, array $locals, ?int $matchD
 /** @param list<IR\Stmt> $items @return list<IR\Stmt> */
 function foldMatchReturn(array $items): array
 {
-    if (count($items) !== 2) {
+    if (\count($items) !== 2) {
         return $items;
     }
 
     $match = $items[0];
     $ret = $items[1];
-    if (!$match instanceof IR\MatchStmt || !$ret instanceof IR\Ret) {
+    if (! $match instanceof IR\MatchStmt || ! $ret instanceof IR\Ret) {
         return $items;
     }
 
-    if (!$ret->value instanceof IR\Temp || $ret->value->id !== $match->dest) {
+    if (! $ret->value instanceof IR\Temp || $ret->value->id !== $match->dest) {
         return $items;
     }
 
-    if (!matchArmsAllReturn($match)) {
+    if (! matchArmsAllReturn($match)) {
         return $items;
     }
 
@@ -226,7 +245,7 @@ function matchArmsAllReturn(IR\MatchStmt $match): bool
 {
     foreach ($match->arms as $arm) {
         $body = $arm->body->items;
-        if ($body === [] || !($body[count($body) - 1] instanceof IR\Ret)) {
+        if ($body === [] || ! ($body[\count($body) - 1] instanceof IR\Ret)) {
             return false;
         }
     }
@@ -241,27 +260,27 @@ function foldArmMatchReturn(array $items, int $matchDest): array
         return $items;
     }
 
-    $last = $items[count($items) - 1];
+    $last = $items[\count($items) - 1];
     if ($last instanceof IR\Ret) {
         return $items;
     }
 
-    if (!$last instanceof IR\Assign || $last->dest !== $matchDest) {
+    if (! $last instanceof IR\Assign || $last->dest !== $matchDest) {
         return $items;
     }
 
-    if ($last->value instanceof IR\Temp && count($items) >= 2) {
-        $expr = Support\exprFromDefiningStmt($items[count($items) - 2], $last->value->id);
+    if ($last->value instanceof IR\Temp && \count($items) >= 2) {
+        $expr = Support\exprFromDefiningStmt($items[\count($items) - 2], $last->value->id);
         if ($expr !== null) {
-            array_pop($items);
-            array_pop($items);
+            \array_pop($items);
+            \array_pop($items);
             $items[] = new IR\Ret($expr);
 
             return $items;
         }
     }
 
-    array_pop($items);
+    \array_pop($items);
     $items[] = new IR\Ret($last->value);
 
     return $items;
@@ -403,6 +422,7 @@ function mapOperand(IR\Operand $operand, array $temps, array $locals): IR\Operan
                 break;
             }
             $operand = $resolved;
+
             continue;
         }
         if ($operand instanceof IR\Local && isset($locals[$operand->name])) {
@@ -415,8 +435,10 @@ function mapOperand(IR\Operand $operand, array $temps, array $locals): IR\Operan
                 break;
             }
             $operand = $resolved;
+
             continue;
         }
+
         break;
     }
 
@@ -449,8 +471,8 @@ function optimizeIoAssignAction(IR\Block $body, IR\Operand $result, array $temps
     $mappedResult = mapOperand($result, $bodyTemps, $bodyLocals);
     $optimized = optimizeBlock(new IR\Block([...$mappedItems, new IR\Ret($mappedResult)]));
     $items = $optimized->items;
-    $tail = array_pop($items);
-    if (!$tail instanceof IR\Ret) {
+    $tail = \array_pop($items);
+    if (! $tail instanceof IR\Ret) {
         throw new \RuntimeException('local optimize: io_assign_action lost result tail');
     }
 
@@ -460,13 +482,13 @@ function optimizeIoAssignAction(IR\Block $body, IR\Operand $result, array $temps
 /** @param list<IR\Stmt> $items @return list<IR\Stmt> */
 function foldTailReturn(array $items): array
 {
-    $count = count($items);
+    $count = \count($items);
     if ($count < 2) {
         return $items;
     }
 
     $last = $items[$count - 1];
-    if (!$last instanceof IR\Ret) {
+    if (! $last instanceof IR\Ret) {
         return $items;
     }
 
@@ -485,18 +507,18 @@ function foldTailReturn(array $items): array
     if ($retValue instanceof IR\Temp && $retValue->id === $dest) {
         $expr = $defExpr;
     } elseif (Support\tempFoldsIntoExpr($retValue, $dest)
-        && !Support\tempUsedInItems(\array_slice($items, 0, -2), $dest)) {
+        && ! Support\tempUsedInItems(\array_slice($items, 0, -2), $dest)) {
         $expr = Support\substituteTempInExpr($retValue, $dest, $defExpr);
     } else {
         return $items;
     }
 
-    if (!exprTempsDefinedBefore($expr, $items, $count - 2)) {
+    if (! exprTempsDefinedBefore($expr, $items, $count - 2)) {
         return $items;
     }
 
-    array_pop($items);
-    array_pop($items);
+    \array_pop($items);
+    \array_pop($items);
     $items[] = new IR\Ret($expr);
 
     return $items;
@@ -533,7 +555,7 @@ function exprTempsDefinedBefore(IR\Operand $expr, array $items, int $beforeIndex
 function foldSingleUseCallResults(array $items): array
 {
     $items = denseStmtItems($items);
-    $count = count($items);
+    $count = \count($items);
     if ($count < 2) {
         return $items;
     }
@@ -545,23 +567,26 @@ function foldSingleUseCallResults(array $items): array
         $value = $dest === null ? null : Support\exprFromDefiningStmt($stmt, $dest);
         if ($value === null || $i + 1 >= $count) {
             $out[] = $stmt;
+
             continue;
         }
 
         $operands = stmtDirectOperands($items[$i + 1]);
         if ($operands === []
-            || !$operands[0] instanceof IR\Temp
+            || ! $operands[0] instanceof IR\Temp
             || $operands[0]->id !== $dest
             || tempUsesInStmt($items[$i + 1], $dest) !== 1
             || tempUsesInItems(\array_slice($items, $i + 2), $dest) > 0
         ) {
             $out[] = $stmt;
+
             continue;
         }
 
         $reader = withFirstOperandReplaced($items[$i + 1], $dest, $value);
         if ($reader === null) {
             $out[] = $stmt;
+
             continue;
         }
 
@@ -578,10 +603,8 @@ function foldSingleUseCallResults(array $items): array
  */
 function withFirstOperandReplaced(IR\Stmt $stmt, int $dest, IR\Operand $value): ?IR\Stmt
 {
-    $isDest = static fn (IR\Operand $operand): bool
-        => $operand instanceof IR\Temp && $operand->id === $dest;
-    $firstArgIsDest = static fn (array $args): bool
-        => $args !== [] && $args[0] instanceof IR\Temp && $args[0]->id === $dest;
+    $isDest = static fn (IR\Operand $operand): bool => $operand instanceof IR\Temp && $operand->id === $dest;
+    $firstArgIsDest = static fn (array $args): bool => $args !== [] && $args[0] instanceof IR\Temp && $args[0]->id === $dest;
 
     return match ($stmt::class) {
         IR\Ret::class => $isDest($stmt->value) ? new IR\Ret($value) : null,
@@ -661,7 +684,7 @@ function exprOperandsDefined(IR\Operand $expr, array $defined): bool
 function operandsDefined(array $operands, array $defined): bool
 {
     foreach ($operands as $operand) {
-        if (!exprOperandsDefined($operand, $defined)) {
+        if (! exprOperandsDefined($operand, $defined)) {
             return false;
         }
     }

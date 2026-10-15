@@ -10,7 +10,7 @@ use Moggi\IR;
  * (`toJson()`) to bake their frame tables.
  * siteId values allocated here must match throwSite() constants emitted into the artifact.
  */
-final class SourceMapBuilder
+final class sourcemap
 {
     /** @var list<array{sourceId: string, displayPath: string}> */
     private array $sources = [];
@@ -52,6 +52,7 @@ final class SourceMapBuilder
 
     /** Zero-width marker delimiting a mapping site inside emitted code. */
     public const MARK_OPEN = "\0M";
+
     public const MARK_CLOSE = "\0";
 
     public function __construct(
@@ -100,7 +101,7 @@ final class SourceMapBuilder
         if ($loc === null || $loc->line <= 0) {
             return;
         }
-        $class = str_replace('/', '.', $class);
+        $class = \str_replace('/', '.', $class);
         $key = $class . '#' . $method . '#' . $loc->line;
         if (isset($this->frameSeen[$key])) {
             return;
@@ -134,7 +135,7 @@ final class SourceMapBuilder
         if ($loc === null || $loc->line <= 0 || $offset < 0) {
             return;
         }
-        $class = str_replace('/', '.', $class);
+        $class = \str_replace('/', '.', $class);
         $key = $class . '#' . $method . '#' . $offset;
         if (isset($this->frameSeen[$key])) {
             return;
@@ -230,17 +231,17 @@ final class SourceMapBuilder
         $offset = 0;
         $length = \strlen($text);
         while ($offset < $length) {
-            $nl = strpos($text, "\n", $offset);
+            $nl = \strpos($text, "\n", $offset);
             if ($nl === false) {
                 $nl = $length;
             }
-            $segment = substr($text, $offset, $nl - $offset);
+            $segment = \substr($text, $offset, $nl - $offset);
             $offset = $nl + 1;
 
-            if (str_contains($segment, self::MARK_OPEN)) {
+            if (\str_contains($segment, self::MARK_OPEN)) {
                 $ids = [];
-                $clean = preg_replace_callback(
-                    '/' . preg_quote(self::MARK_OPEN, '/') . '(\d+)' . preg_quote(self::MARK_CLOSE, '/') . '/',
+                $clean = \preg_replace_callback(
+                    '/' . \preg_quote(self::MARK_OPEN, '/') . '(\d+)' . \preg_quote(self::MARK_CLOSE, '/') . '/',
                     static function (array $m) use (&$ids): string {
                         $ids[] = (int) $m[1];
 
@@ -251,8 +252,9 @@ final class SourceMapBuilder
                 $segment = $clean ?? $segment;
                 foreach ($ids as $id) {
                     $sourceLine = $this->siteSourceLine($id);
-                    if (!isset($this->mappings[$line])) {
+                    if (! isset($this->mappings[$line])) {
                         $this->mappings[$line] = $id;
+
                         continue;
                     }
                     if ($sourceLine > 0 && $sourceLine !== $this->siteSourceLine($this->mappings[$line])) {
@@ -348,10 +350,10 @@ final class SourceMapBuilder
     private static function phpLiteral(mixed $value): string
     {
         if (\is_array($value)) {
-            $list = array_is_list($value);
+            $list = \array_is_list($value);
             $parts = [];
             foreach ($value as $key => $item) {
-                $parts[] = ($list ? '' : (\is_int($key) ? (string) $key : var_export($key, true)) . ' => ')
+                $parts[] = ($list ? '' : (\is_int($key) ? (string) $key : \var_export($key, true)) . ' => ')
                     . self::phpLiteral($item);
             }
 
@@ -361,7 +363,7 @@ final class SourceMapBuilder
             return "'" . \str_replace(['\\', "'"], ['\\\\', "\\'"], $value) . "'";
         }
 
-        return var_export($value, true);
+        return \var_export($value, true);
     }
 
     public function toJson(): string
@@ -378,7 +380,7 @@ final class SourceMapBuilder
             'mappings' => $this->mappingRows(),
             'frames' => $this->frames,
         ];
-        $json = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $json = \json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         if ($json === false) {
             throw new \RuntimeException('failed to encode .moggi.map');
         }
@@ -488,20 +490,20 @@ function normalizeDisplayPath(string $file): string
     if ($file === '' || $file === '<interactive>') {
         return $file;
     }
-    $file = str_replace('\\', '/', $file);
+    $file = \str_replace('\\', '/', $file);
     foreach (['/lib/', '/libraries/', '/tests/', '/examples/'] as $marker) {
-        $pos = strpos($file, $marker);
+        $pos = \strpos($file, $marker);
         if ($pos !== false) {
-            return substr($file, $pos + 1);
+            return \substr($file, $pos + 1);
         }
     }
     foreach (['lib/', 'libraries/', 'tests/', 'examples/'] as $marker) {
-        if (str_starts_with($file, $marker)) {
+        if (\str_starts_with($file, $marker)) {
             return $file;
         }
     }
-    if (str_starts_with($file, '/') || preg_match('#^[A-Za-z]:/#', $file) === 1) {
-        return basename($file);
+    if (\str_starts_with($file, '/') || \preg_match('#^[A-Za-z]:/#', $file) === 1) {
+        return \basename($file);
     }
 
     return $file;
@@ -515,9 +517,9 @@ function normalizeDisplayPath(string $file): string
  */
 function sourceMapFrames(string $json): array
 {
-    $data = json_decode($json, true);
+    $data = \json_decode($json, true);
     $frames = \is_array($data) ? ($data['frames'] ?? []) : [];
-    if (!\is_array($frames)) {
+    if (! \is_array($frames)) {
         return [];
     }
     $out = [];
@@ -532,8 +534,8 @@ function sourceMapFrames(string $json): array
 
 function mapPathForArtifact(string $artifactRelative): string
 {
-    $base = preg_replace('/\.(php|class|il)$/', '', str_replace('\\', '/', $artifactRelative))
-        ?? str_replace('\\', '/', $artifactRelative);
+    $base = \preg_replace('/\.(php|class|il)$/', '', \str_replace('\\', '/', $artifactRelative))
+        ?? \str_replace('\\', '/', $artifactRelative);
 
     return $base . '.moggi.map';
 }

@@ -2,11 +2,12 @@
 
 namespace Moggi\Backend\Php\Foreign;
 
-use Moggi\IR;
-
 use function Moggi\Backend\Php\Naming\phpTemp;
+
 use function Moggi\Foreign\parseForeignPath;
 use function Moggi\Foreign\phpClassFqn;
+
+use Moggi\IR;
 
 /** @param list<string> $argExprs */
 function emitForeignExpression(IR\ForeignCall $foreign, array $argExprs): string
@@ -30,11 +31,11 @@ function emitForeignExpressionRaw(IR\ForeignCall $foreign, array $argExprs): str
     $info = foreignPathInfo($foreign);
 
     $call = match ($info['dispatch']) {
-        'global' => '\\' . $foreign->path . '(' . join(', ', $argExprs) . ')',
+        'global' => '\\' . $foreign->path . '(' . \implode(', ', $argExprs) . ')',
         'static' => '\\' . phpClassFqn((string) $info['classPath']) . '::' . $info['hostMember']
-            . '(' . join(', ', $argExprs) . ')',
+            . '(' . \implode(', ', $argExprs) . ')',
         'constructor' => 'new \\' . phpClassFqn((string) $info['classPath'])
-            . '(' . join(', ', $argExprs) . ')',
+            . '(' . \implode(', ', $argExprs) . ')',
         'instance' => emitInstanceCall($info['hostMember'], $argExprs),
         default => throw new \RuntimeException("unsupported foreign dispatch `{$info['dispatch']}`"),
     };
@@ -79,9 +80,9 @@ function emitInstanceCall(string $member, array $argExprs): string
         throw new \RuntimeException('instance foreign call requires handle argument');
     }
 
-    $handle = array_shift($argExprs);
+    $handle = \array_shift($argExprs);
 
-    return $handle . '->' . $member . '(' . join(', ', $argExprs) . ')';
+    return $handle . '->' . $member . '(' . \implode(', ', $argExprs) . ')';
 }
 
 /** @param list<string> $argExprs */

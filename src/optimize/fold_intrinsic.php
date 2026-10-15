@@ -5,8 +5,6 @@ namespace Moggi\Optimize\FoldIntrinsic;
 use Moggi\IR;
 
 use function Moggi\IR\Visit\mapGuards;
-use function Moggi\Semantics\IntrinsicRegistry\foldStrategy;
-use function Moggi\Semantics\IntrinsicRegistry\isListForm;
 use function Moggi\Optimize\CaseFold\isPlausibleConstructorName;
 use function Moggi\Optimize\Interproc\denseStmtItems;
 use function Moggi\Optimize\Support\foldExpr;
@@ -14,6 +12,8 @@ use function Moggi\Optimize\Support\mapStmtNestedBlocks;
 use function Moggi\Optimize\Support\operandEqual;
 use function Moggi\Optimize\Support\operandToExpr;
 use function Moggi\Optimize\Support\tryFoldBinopInt;
+use function Moggi\Semantics\IntrinsicRegistry\foldStrategy;
+use function Moggi\Semantics\IntrinsicRegistry\isListForm;
 
 /**
  * Fold intrinsics in a statement list, resolving Temps to known pure list/ctor
@@ -188,7 +188,7 @@ function foldIntrinsicNode(IR\Intrinsic $node, array $known = [], bool $argsAlre
         };
 
     if ($folded !== null) {
-        if ($folded instanceof IR\Intrinsic && !isListForm($folded->name)) {
+        if ($folded instanceof IR\Intrinsic && ! isListForm($folded->name)) {
             return foldIntrinsicNode($folded, $known, argsAlreadyResolved: true);
         }
 
@@ -255,7 +255,7 @@ function foldIntMul(array $args): ?IR\Operand
 /** @param list<IR\Operand> $args */
 function foldIntBinop(string $op, array $args): ?IR\Operand
 {
-    if (!($args[0] instanceof IR\ConstInt) || !($args[1] instanceof IR\ConstInt)) {
+    if (! ($args[0] instanceof IR\ConstInt) || ! ($args[1] instanceof IR\ConstInt)) {
         return null;
     }
 
@@ -281,24 +281,25 @@ function foldStringAppend(array $args): ?IR\Operand
  */
 function foldListConsSpine(array $args): ?IR\Operand
 {
-    if (count($args) !== 2) {
+    if (\count($args) !== 2) {
         return null;
     }
     $flat = flattenKnownList(new IR\Intrinsic('listCons#', $args));
     if ($flat === null) {
         return null;
     }
+
     return new IR\ListLit($flat);
 }
 
 /** @param array<int, IR\Operand> $args */
 function foldListHead(array $args): ?IR\Operand
 {
-    if (count($args) !== 1) {
+    if (\count($args) !== 1) {
         return null;
     }
     $xs = $args[0];
-    if ($xs instanceof IR\Intrinsic && $xs->name === 'listCons#' && count($xs->args) === 2) {
+    if ($xs instanceof IR\Intrinsic && $xs->name === 'listCons#' && \count($xs->args) === 2) {
         return $xs->args[0];
     }
     if ($xs instanceof IR\ListLit && $xs->elements !== []) {
@@ -311,11 +312,11 @@ function foldListHead(array $args): ?IR\Operand
 /** @param array<int, IR\Operand> $args */
 function foldListTail(array $args): ?IR\Operand
 {
-    if (count($args) !== 1) {
+    if (\count($args) !== 1) {
         return null;
     }
     $xs = $args[0];
-    if ($xs instanceof IR\Intrinsic && $xs->name === 'listCons#' && count($xs->args) === 2) {
+    if ($xs instanceof IR\Intrinsic && $xs->name === 'listCons#' && \count($xs->args) === 2) {
         return $xs->args[1];
     }
     if ($xs instanceof IR\ListLit && $xs->elements !== []) {
@@ -332,7 +333,7 @@ function foldListTail(array $args): ?IR\Operand
  */
 function foldListAppend(array $args): ?IR\Operand
 {
-    if (count($args) !== 2) {
+    if (\count($args) !== 2) {
         return null;
     }
 
@@ -365,14 +366,14 @@ function isKnownListOperand(IR\Operand $operand): bool
 
 function isKnownCtorOperand(IR\Operand $operand): bool
 {
-    if (!($operand instanceof IR\ExprCall)) {
+    if (! ($operand instanceof IR\ExprCall)) {
         return false;
     }
     $leaf = $operand->callee;
-    if (str_contains($leaf, '::')) {
-        $leaf = substr($leaf, strrpos($leaf, '::') + 2);
+    if (\str_contains($leaf, '::')) {
+        $leaf = \substr($leaf, \strrpos($leaf, '::') + 2);
     }
-    if (preg_match('/^__tuple\d+$/', $leaf) === 1) {
+    if (\preg_match('/^__tuple\d+$/', $leaf) === 1) {
         return true;
     }
 
@@ -388,7 +389,7 @@ function flattenKnownList(IR\Operand $operand): ?array
     if ($operand instanceof IR\Intrinsic && $operand->name === 'list_nil' && $operand->args === []) {
         return [];
     }
-    if ($operand instanceof IR\Intrinsic && $operand->name === 'listCons#' && count($operand->args) === 2) {
+    if ($operand instanceof IR\Intrinsic && $operand->name === 'listCons#' && \count($operand->args) === 2) {
         $tail = flattenKnownList($operand->args[1]);
         if ($tail === null) {
             return null;
@@ -406,16 +407,17 @@ function rebuildKnownList(array $elems): IR\Operand
     $allSimple = true;
     foreach ($elems as $el) {
         if (
-            !($el instanceof IR\Local)
-            && !($el instanceof IR\Temp)
-            && !($el instanceof IR\ConstInt)
-            && !($el instanceof IR\ConstStr)
-            && !($el instanceof IR\ConstChar)
-            && !($el instanceof IR\ConstDouble)
-            && !($el instanceof IR\FnRef)
-            && !($el instanceof IR\ExprCall)
+            ! ($el instanceof IR\Local)
+            && ! ($el instanceof IR\Temp)
+            && ! ($el instanceof IR\ConstInt)
+            && ! ($el instanceof IR\ConstStr)
+            && ! ($el instanceof IR\ConstChar)
+            && ! ($el instanceof IR\ConstDouble)
+            && ! ($el instanceof IR\FnRef)
+            && ! ($el instanceof IR\ExprCall)
         ) {
             $allSimple = false;
+
             break;
         }
     }
@@ -424,7 +426,7 @@ function rebuildKnownList(array $elems): IR\Operand
     }
 
     $acc = new IR\ListLit([]);
-    for ($i = count($elems) - 1; $i >= 0; --$i) {
+    for ($i = \count($elems) - 1; $i >= 0; --$i) {
         $acc = new IR\Intrinsic('listCons#', [$elems[$i], $acc]);
     }
 

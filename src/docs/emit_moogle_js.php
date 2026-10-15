@@ -19,7 +19,7 @@ function emitMoogleSearchJs(): string
 function readClientAsset(string $filename): string
 {
     $path = __DIR__ . '/' . $filename;
-    $contents = file_get_contents($path);
+    $contents = \file_get_contents($path);
     if ($contents === false) {
         throw new \RuntimeException("cannot read docs client asset {$filename}");
     }

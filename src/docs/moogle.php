@@ -2,7 +2,7 @@
 
 namespace Moggi\Docs;
 
-final class SearchHit
+final class moogle
 {
     public function __construct(
         public readonly DocEntity $entity,
@@ -34,7 +34,7 @@ function search(DocIndex $index, string $query, int $limit = 20): array
     $result = [];
     foreach ($hits as $hit) {
         $key = searchRowKey($hit['entity']);
-        if (!isset($byKey[$key])) {
+        if (! isset($byKey[$key])) {
             continue;
         }
         $result[] = new SearchHit($byKey[$key], (float) $hit['score']);
@@ -45,15 +45,15 @@ function search(DocIndex $index, string $query, int $limit = 20): array
 
 function docSnippet(string $text, int $maxLen): string
 {
-    if (strlen($text) <= $maxLen) {
+    if (\strlen($text) <= $maxLen) {
         return $text;
     }
 
-    if (function_exists('mb_substr')) {
-        return mb_substr($text, 0, $maxLen);
+    if (\function_exists('mb_substr')) {
+        return \mb_substr($text, 0, $maxLen);
     }
 
-    return substr($text, 0, $maxLen);
+    return \substr($text, 0, $maxLen);
 }
 
 /**
@@ -77,7 +77,7 @@ function formatSearchResults(array $hits, bool $json): string
             ];
         }
 
-        return json_encode($rows, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . "\n";
+        return \json_encode($rows, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . "\n";
     }
 
     if ($hits === []) {
@@ -90,10 +90,10 @@ function formatSearchResults(array $hits, bool $json): string
         $sig = $e->signature ?? ($e->kind . ' ' . $e->name);
         $mods = $e->module;
         if ($e->aliases !== []) {
-            $mods .= ' (also ' . implode(', ', $e->aliases) . ')';
+            $mods .= ' (also ' . \implode(', ', $e->aliases) . ')';
         }
         $lines[] = $mods . '.' . $e->name . ' — ' . $sig;
     }
 
-    return implode("\n", $lines) . "\n";
+    return \implode("\n", $lines) . "\n";
 }

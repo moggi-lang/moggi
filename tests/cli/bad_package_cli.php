@@ -10,7 +10,7 @@
 // faked.
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/tests/suite/support/process.php';
@@ -19,19 +19,19 @@ require $root . '/tests/suite/support/workspace.php';
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
     ++$checks;
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
 
 $binary = \getenv('MOGGI_SCHNORR');
-if (!\is_string($binary) || $binary === '') {
+if (! \is_string($binary) || $binary === '') {
     $binary = $root . '/schnorr/schnorr';
 }
-if (!\is_file($binary) || !\is_executable($binary)) {
+if (! \is_file($binary) || ! \is_executable($binary)) {
     $binary = $root . '/schnorr/build/schnorr';
 }
-if (!\is_file($binary) || !\is_executable($binary)) {
+if (! \is_file($binary) || ! \is_executable($binary)) {
     echo "bad package CLI tests skipped (no schnorr CLI; set MOGGI_SCHNORR)\n";
     exit(0);
 }
@@ -42,7 +42,7 @@ $schnorr = static function (array $arguments, ?string $stdin = null) use ($binar
         [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
         $pipes,
     );
-    if (!\is_resource($process)) {
+    if (! \is_resource($process)) {
         throw new \RuntimeException("cannot run {$binary}");
     }
     if ($stdin !== null) {
@@ -163,7 +163,7 @@ try {
     $assert($allowed['exitCode'] === 0, '--allow-bad must let the install through: ' . $allowed['stderr']);
     $assert(\str_contains($allowed['stdout'], 'would install'), 'an allowed install proceeds: ' . $allowed['stdout']);
     $assert(\str_contains($allowed['stderr'], 'warning:'), 'an allowed install still warns: ' . $allowed['stderr']);
-    $assert(!\str_contains($allowed['stderr'], 'pass --allow-bad'), 'an allowed install is not refused: ' . $allowed['stderr']);
+    $assert(! \str_contains($allowed['stderr'], 'pass --allow-bad'), 'an allowed install is not refused: ' . $allowed['stderr']);
     $assert(\str_contains($allowed['stderr'], 'marked unmaintained'), 'an allowed install warns about an unmaintained package: ' . $allowed['stderr']);
 
     // `update` refuses to write a lock that names a marked package, and leaves no
@@ -171,7 +171,7 @@ try {
     $updateRefused = $cli(['update', '--registry', $registry, '--no-cache'], $project);
     $assert($updateRefused['exitCode'] === 1, 'update of a marked package must fail: ' . $updateRefused['stderr']);
     $assert(\str_contains($updateRefused['stderr'], 'marked bad'), 'the update refusal names the package as bad: ' . $updateRefused['stderr']);
-    $assert(!\is_file($project . '/moggi.lock'), 'a refused update must write no lock: ' . $updateRefused['stderr']);
+    $assert(! \is_file($project . '/moggi.lock'), 'a refused update must write no lock: ' . $updateRefused['stderr']);
 
     $lock = $cli(['update', '--allow-bad', '--registry', $registry, '--no-cache'], $project);
     $assert($lock['exitCode'] === 0 && \is_file($project . '/moggi.lock'), 'update --allow-bad must write a lock: ' . $lock['stderr']);
@@ -184,7 +184,7 @@ try {
 
     $buildAllowed = $cli(['build', '--allow-bad', '--registry', $registry, '--no-cache'], $project);
     $assert(\str_contains($buildAllowed['stderr'], 'warning:'), 'an allowed build warns about the marked package: ' . $buildAllowed['stderr']);
-    $assert(!\str_contains($buildAllowed['stderr'], 'links as bad'), 'an allowed build is not refused for linking it: ' . $buildAllowed['stderr']);
+    $assert(! \str_contains($buildAllowed['stderr'], 'links as bad'), 'an allowed build is not refused for linking it: ' . $buildAllowed['stderr']);
 
     // `show` prints the marker first; `search` flags the row.
     $show = $cli(['show', 'evil', '--registry', $registry, '--no-cache'], $project);
@@ -194,7 +194,7 @@ try {
 
     $search = $cli(['search', 'ordinary', '--registry', $registry, '--no-cache'], $project);
     $assert($search['exitCode'] === 0 && \str_contains($search['stdout'], 'ok'), 'search finds the unmarked package: ' . $search['stdout']);
-    $assert(!\str_contains($search['stdout'], 'BAD'), 'an unmarked search row is not flagged: ' . $search['stdout']);
+    $assert(! \str_contains($search['stdout'], 'BAD'), 'an unmarked search row is not flagged: ' . $search['stdout']);
 
     $searchBad = $cli(['search', 'pulled', '--registry', $registry, '--no-cache'], $project);
     $assert(\str_contains($searchBad['stdout'], 'evil') && \str_contains($searchBad['stdout'], 'BAD'), 'search flags the marked package: ' . $searchBad['stdout']);

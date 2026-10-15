@@ -6,27 +6,27 @@ use function Moggi\CLI\Commands\runAddCommand;
 use function Moggi\CLI\Commands\runBadCommand;
 use function Moggi\CLI\Commands\runBindCommand;
 use function Moggi\CLI\Commands\runBuildCommand;
+use function Moggi\CLI\Commands\runCache;
 use function Moggi\CLI\Commands\runCheckCommand;
 use function Moggi\CLI\Commands\runCompileCommand;
 use function Moggi\CLI\Commands\runInstallCommand;
-use function Moggi\CLI\Commands\runOutdatedCommand;
-use function Moggi\CLI\Commands\runSearchCommand;
-use function Moggi\CLI\Commands\runShowCommand;
-use function Moggi\CLI\Commands\runUnmaintainedCommand;
-use function Moggi\CLI\Commands\runTakeoverCommand;
 use function Moggi\CLI\Commands\runLsp;
-use function Moggi\CLI\Commands\runCache;
 use function Moggi\CLI\Commands\runMogdoc;
+use function Moggi\CLI\Commands\runMoogle;
+use function Moggi\CLI\Commands\runOutdatedCommand;
 use function Moggi\CLI\Commands\runPackCommand;
 use function Moggi\CLI\Commands\runPublishCommand;
-use function Moggi\CLI\Commands\runSignCommand;
-use function Moggi\CLI\Commands\runMoogle;
 use function Moggi\CLI\Commands\runRepl;
 use function Moggi\CLI\Commands\runRun;
+use function Moggi\CLI\Commands\runSearchCommand;
+use function Moggi\CLI\Commands\runShowCommand;
+use function Moggi\CLI\Commands\runSignCommand;
+use function Moggi\CLI\Commands\runTakeoverCommand;
+use function Moggi\CLI\Commands\runUnmaintainedCommand;
 use function Moggi\CLI\Commands\runUpdateCommand;
-use function Moggi\CLI\Commands\runWhyCommand;
 use function Moggi\CLI\Commands\runVerifyCommand;
 use function Moggi\CLI\Commands\runVersionCommand;
+use function Moggi\CLI\Commands\runWhyCommand;
 use function Moggi\Install\activateBundledRuntimes;
 
 function main(array $argv): int
@@ -37,6 +37,7 @@ function main(array $argv): int
 
     if ($cmd === null || $cmd === '-h' || $cmd === '--help') {
         printUsage();
+
         return $cmd === null ? 1 : 0;
     }
 

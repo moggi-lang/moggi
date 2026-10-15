@@ -9,7 +9,7 @@
 // reported as skipped rather than faked.
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/tests/suite/support/process.php';
@@ -18,19 +18,19 @@ require $root . '/tests/suite/support/workspace.php';
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
     ++$checks;
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
 
 $binary = \getenv('MOGGI_SCHNORR');
-if (!\is_string($binary) || $binary === '') {
+if (! \is_string($binary) || $binary === '') {
     $binary = $root . '/schnorr/schnorr';
 }
-if (!\is_file($binary) || !\is_executable($binary)) {
+if (! \is_file($binary) || ! \is_executable($binary)) {
     $binary = $root . '/schnorr/build/schnorr';
 }
-if (!\is_file($binary) || !\is_executable($binary)) {
+if (! \is_file($binary) || ! \is_executable($binary)) {
     echo "outdated/why tests skipped (no schnorr CLI; set MOGGI_SCHNORR)\n";
     exit(0);
 }
@@ -41,7 +41,7 @@ $schnorr = static function (array $arguments, ?string $stdin = null) use ($binar
         [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
         $pipes,
     );
-    if (!\is_resource($process)) {
+    if (! \is_resource($process)) {
         throw new \RuntimeException("cannot run {$binary}");
     }
     if ($stdin !== null) {

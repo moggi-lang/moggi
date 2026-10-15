@@ -6,13 +6,13 @@
 // an uncatchable `Cannot redeclare` fatal, not an error the REPL can report.
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
 
 $assert = static function (bool $condition, string $message): void {
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
@@ -20,7 +20,7 @@ $assert = static function (bool $condition, string $message): void {
 // A failing command such as `:load /missing.mog` renders through the runtime,
 // before anything has been evaluated.
 $report = \Moggi\Repl\formatReplThrowable(new \RuntimeException('boom'));
-$assert(str_contains($report, 'boom'), 'a host exception must render its message');
+$assert(\str_contains($report, 'boom'), 'a host exception must render its message');
 $assert(
     \function_exists('\\Moggi\\formatExceptionReport'),
     'the host-report path must have loaded the runtime',
@@ -40,9 +40,9 @@ $assert(
 // The dependency tree the REPL emits forwards to that single runtime instead of
 // shipping its own copy, and it is never packaged into an unused phar.
 $deps = \Moggi\Repl\EvalRunner\ensurePhpDeps($state);
-$shim = file_get_contents($deps . '/_runtime.php');
+$shim = \file_get_contents($deps . '/_runtime.php');
 $assert(\is_string($shim), 'the deps tree must provide _runtime.php');
-$assert(!str_contains($shim, 'function '), 'the deps runtime must just forward to the shared runtime');
+$assert(! \str_contains($shim, 'function '), 'the deps runtime must just forward to the shared runtime');
 $runtime = \Moggi\Backend\backendById('php')->runtimeFiles();
 $assert($runtime !== [], 'the PHP backend must have a runtime to share');
 $assert(\Moggi\Paths\isAbsolutePath($runtime[0]), 'the shared runtime path must be absolute');
@@ -50,10 +50,10 @@ $assert(
     \str_contains($shim, 'require_once ' . \var_export($runtime[0], true) . ';'),
     'the deps runtime must forward to the compiler runtime by absolute path: ' . $shim,
 );
-$assert(!is_file($deps . '/moggi-app.phar'), 'the REPL deps tree must not be packaged');
+$assert(! \is_file($deps . '/moggi-app.phar'), 'the REPL deps tree must not be packaged');
 
 // And the session scratch tree goes away with the session.
 \Moggi\Repl\destroySession($state);
-$assert(!is_dir($state->sessionDir), 'destroySession must remove the scratch tree');
+$assert(! \is_dir($state->sessionDir), 'destroySession must remove the scratch tree');
 
 echo "REPL host-error runtime sharing tests passed\n";

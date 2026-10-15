@@ -25,7 +25,7 @@ use Moggi\Syntax\Lexer\TokenKind;
 function desugarClauseDispatch(array $clauses, array $slots): Ast\CaseExpr
 {
     $clauses = \array_values($clauses);
-    $paramCount = count($clauses[0]['params']);
+    $paramCount = \count($clauses[0]['params']);
     $alts = [];
 
     foreach ($clauses as $clause) {
@@ -89,13 +89,14 @@ function desugarLetItems(array $items, array $context): array
             }
             $pendingSigs[$item['name']] = $item['type'];
             $sigSpans[$item['name']] = ['line' => $item['line'], 'col' => $item['col'], 'endCol' => $item['endCol']];
+
             continue;
         }
 
         if ($item['kind'] === 'fun') {
             if ($pendingFun !== null && $pendingFun['name'] === $item['name']) {
-                $pendingArity = count($pendingFun['clauses'][0]['params']);
-                $incomingArity = count($item['params']);
+                $pendingArity = \count($pendingFun['clauses'][0]['params']);
+                $incomingArity = \count($item['params']);
                 if ($pendingArity === 0 && $incomingArity === 0) {
                     throw new ParseError(
                         "duplicate binding `{$item['name']}` in the same group",
@@ -110,6 +111,7 @@ function desugarLetItems(array $items, array $context): array
                     'params' => $item['params'],
                     'body' => $item['body'],
                 ];
+
                 continue;
             }
             $flushFun();
@@ -125,6 +127,7 @@ function desugarLetItems(array $items, array $context): array
                 'col' => $item['col'],
                 'endCol' => $item['endCol'],
             ];
+
             continue;
         }
 
@@ -141,9 +144,10 @@ function desugarLetItems(array $items, array $context): array
     $flushFun();
 
     if ($pendingSigs !== []) {
-        $name = array_key_first($pendingSigs);
+        $name = \array_key_first($pendingSigs);
         $type = $pendingSigs[$name];
         $span = $sigSpans[$name] ?? ['line' => 1, 'col' => 1, 'endCol' => 1];
+
         throw new ParseError(
             "type signature for `{$name}` lacks an accompanying binding",
             $context['filename'],
@@ -193,7 +197,7 @@ function finalizeLocalFunctionBinding(array $fn, array $context): Ast\Binding
 function desugarLocalFunctionClauses(array $fn, array $context): Ast\AstNode
 {
     $clauses = $fn['clauses'];
-    if (count($clauses) === 1) {
+    if (\count($clauses) === 1) {
         $body = $clauses[0]['body'];
         if ($clauses[0]['params'] === []) {
             return $body;
@@ -208,9 +212,9 @@ function desugarLocalFunctionClauses(array $fn, array $context): Ast\AstNode
         }
     }
 
-    $paramCount = count($clauses[0]['params']);
+    $paramCount = \count($clauses[0]['params']);
     foreach ($clauses as $clause) {
-        if (count($clause['params']) !== $paramCount) {
+        if (\count($clause['params']) !== $paramCount) {
             $at = $clause['params'][0] ?? null;
             if ($at instanceof Ast\AstNode) {
                 throw parseError(
@@ -263,7 +267,7 @@ function desugarLocalFunctionClauses(array $fn, array $context): Ast\AstNode
 function localClauseParamsAreVars(array $params): bool
 {
     foreach ($params as $param) {
-        if (!$param instanceof Ast\PatVar && !$param instanceof Ast\PatWild) {
+        if (! $param instanceof Ast\PatVar && ! $param instanceof Ast\PatWild) {
             return false;
         }
     }

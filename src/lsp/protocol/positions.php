@@ -5,9 +5,10 @@ namespace Moggi\LSP\Protocol;
 function lspToCompiler(string $source, array $pos): array
 {
     $lines = splitLines($source);
-    $line0 = max(0, (int) ($pos['line'] ?? 0));
+    $line0 = \max(0, (int) ($pos['line'] ?? 0));
     $text = $lines[$line0] ?? '';
     $col = utf16ToCodepointCol($text, (int) ($pos['character'] ?? 0));
+
     return ['line' => $line0 + 1, 'col' => $col];
 }
 
@@ -18,7 +19,7 @@ function lspToCompiler(string $source, array $pos): array
  */
 function compilerToLsp(int $line, int $col): array
 {
-    return ['line' => max(0, $line - 1), 'character' => max(0, $col - 1)];
+    return ['line' => \max(0, $line - 1), 'character' => \max(0, $col - 1)];
 }
 
 /**
@@ -58,30 +59,31 @@ function locToRange(int $line, int $col, int $endCol, ?string $source = null): a
 function utf16Length(string $text): int
 {
     $units = 0;
-    $len = strlen($text);
+    $len = \strlen($text);
     $i = 0;
     while ($i < $len) {
-        $ord = ord($text[$i]);
+        $ord = \ord($text[$i]);
         if ($ord < 0x80) {
             $cp = $ord;
             $i += 1;
         } elseif (($ord & 0xE0) === 0xC0) {
-            $cp = (($ord & 0x1F) << 6) | (ord($text[$i + 1]) & 0x3F);
+            $cp = (($ord & 0x1F) << 6) | (\ord($text[$i + 1]) & 0x3F);
             $i += 2;
         } elseif (($ord & 0xF0) === 0xE0) {
             $cp = (($ord & 0x0F) << 12)
-                | ((ord($text[$i + 1]) & 0x3F) << 6)
-                | (ord($text[$i + 2]) & 0x3F);
+                | ((\ord($text[$i + 1]) & 0x3F) << 6)
+                | (\ord($text[$i + 2]) & 0x3F);
             $i += 3;
         } else {
             $cp = (($ord & 0x07) << 18)
-                | ((ord($text[$i + 1]) & 0x3F) << 12)
-                | ((ord($text[$i + 2]) & 0x3F) << 6)
-                | (ord($text[$i + 3]) & 0x3F);
+                | ((\ord($text[$i + 1]) & 0x3F) << 12)
+                | ((\ord($text[$i + 2]) & 0x3F) << 6)
+                | (\ord($text[$i + 3]) & 0x3F);
             $i += 4;
         }
         $units += ($cp > 0xFFFF) ? 2 : 1;
     }
+
     return $units;
 }
 
@@ -94,31 +96,32 @@ function codepointColToUtf16(string $lineText, int $col1): int
     $target = $col1 - 1;
     $cp = 0;
     $units = 0;
-    $len = strlen($lineText);
+    $len = \strlen($lineText);
     $i = 0;
     while ($i < $len && $cp < $target) {
-        $ord = ord($lineText[$i]);
+        $ord = \ord($lineText[$i]);
         if ($ord < 0x80) {
             $code = $ord;
             $i += 1;
         } elseif (($ord & 0xE0) === 0xC0) {
-            $code = (($ord & 0x1F) << 6) | (ord($lineText[$i + 1]) & 0x3F);
+            $code = (($ord & 0x1F) << 6) | (\ord($lineText[$i + 1]) & 0x3F);
             $i += 2;
         } elseif (($ord & 0xF0) === 0xE0) {
             $code = (($ord & 0x0F) << 12)
-                | ((ord($lineText[$i + 1]) & 0x3F) << 6)
-                | (ord($lineText[$i + 2]) & 0x3F);
+                | ((\ord($lineText[$i + 1]) & 0x3F) << 6)
+                | (\ord($lineText[$i + 2]) & 0x3F);
             $i += 3;
         } else {
             $code = (($ord & 0x07) << 18)
-                | ((ord($lineText[$i + 1]) & 0x3F) << 12)
-                | ((ord($lineText[$i + 2]) & 0x3F) << 6)
-                | (ord($lineText[$i + 3]) & 0x3F);
+                | ((\ord($lineText[$i + 1]) & 0x3F) << 12)
+                | ((\ord($lineText[$i + 2]) & 0x3F) << 6)
+                | (\ord($lineText[$i + 3]) & 0x3F);
             $i += 4;
         }
         $units += ($code > 0xFFFF) ? 2 : 1;
         $cp++;
     }
+
     return $units;
 }
 
@@ -130,26 +133,26 @@ function utf16ToCodepointCol(string $lineText, int $utf16Char0): int
     }
     $units = 0;
     $cp = 0;
-    $len = strlen($lineText);
+    $len = \strlen($lineText);
     $i = 0;
     while ($i < $len && $units < $utf16Char0) {
-        $ord = ord($lineText[$i]);
+        $ord = \ord($lineText[$i]);
         if ($ord < 0x80) {
             $code = $ord;
             $i += 1;
         } elseif (($ord & 0xE0) === 0xC0) {
-            $code = (($ord & 0x1F) << 6) | (ord($lineText[$i + 1]) & 0x3F);
+            $code = (($ord & 0x1F) << 6) | (\ord($lineText[$i + 1]) & 0x3F);
             $i += 2;
         } elseif (($ord & 0xF0) === 0xE0) {
             $code = (($ord & 0x0F) << 12)
-                | ((ord($lineText[$i + 1]) & 0x3F) << 6)
-                | (ord($lineText[$i + 2]) & 0x3F);
+                | ((\ord($lineText[$i + 1]) & 0x3F) << 6)
+                | (\ord($lineText[$i + 2]) & 0x3F);
             $i += 3;
         } else {
             $code = (($ord & 0x07) << 18)
-                | ((ord($lineText[$i + 1]) & 0x3F) << 12)
-                | ((ord($lineText[$i + 2]) & 0x3F) << 6)
-                | (ord($lineText[$i + 3]) & 0x3F);
+                | ((\ord($lineText[$i + 1]) & 0x3F) << 12)
+                | ((\ord($lineText[$i + 2]) & 0x3F) << 6)
+                | (\ord($lineText[$i + 3]) & 0x3F);
             $i += 4;
         }
         $add = ($code > 0xFFFF) ? 2 : 1;
@@ -159,6 +162,7 @@ function utf16ToCodepointCol(string $lineText, int $utf16Char0): int
         $units += $add;
         $cp++;
     }
+
     return $cp + 1;
 }
 
@@ -171,7 +175,7 @@ function splitLines(string $source): array
         return $cachedLines;
     }
     $cachedSource = $source;
-    $cachedLines = preg_split("/\r\n|\n|\r/", $source) ?: [];
+    $cachedLines = \preg_split("/\r\n|\n|\r/", $source) ?: [];
 
     return $cachedLines;
 }
@@ -183,9 +187,10 @@ function splitLines(string $source): array
 function lspPosToCompiler(string $source, array $pos): array
 {
     $lines = splitLines($source);
-    $line0 = max(0, (int) ($pos['line'] ?? 0));
+    $line0 = \max(0, (int) ($pos['line'] ?? 0));
     $text = $lines[$line0] ?? '';
     $col = utf16ToCodepointCol($text, (int) ($pos['character'] ?? 0));
+
     return ['line' => $line0 + 1, 'col' => $col];
 }
 
@@ -195,9 +200,10 @@ function lspPosToCompiler(string $source, array $pos): array
 function compilerPosToLsp(string $source, int $line, int $col): array
 {
     $lines = splitLines($source);
-    $text = $lines[max(0, $line - 1)] ?? '';
+    $text = $lines[\max(0, $line - 1)] ?? '';
+
     return [
-        'line' => max(0, $line - 1),
+        'line' => \max(0, $line - 1),
         'character' => codepointColToUtf16($text, $col),
     ];
 }
@@ -211,6 +217,7 @@ function nodeToLspRange(string $source, object $node): array
     $col = (int) ($node->col ?? 1);
     $endLine = (int) (($node->endLine ?? 0) ?: $line);
     $endCol = (int) ($node->endCol ?? $col);
+
     return [
         'start' => compilerPosToLsp($source, $line, $col),
         'end' => compilerPosToLsp($source, $endLine, $endCol + 1),
@@ -224,10 +231,10 @@ function utf16ByteOffset(string $line, int $utf16Char0): int
         return 0;
     }
     $units = 0;
-    $len = strlen($line);
+    $len = \strlen($line);
     $i = 0;
     while ($i < $len && $units < $utf16Char0) {
-        $ord = ord($line[$i]);
+        $ord = \ord($line[$i]);
         if ($ord < 0x80) {
             $code = $ord;
             $step = 1;
@@ -248,5 +255,6 @@ function utf16ByteOffset(string $line, int $utf16Char0): int
         $units += $add;
         $i += $step;
     }
+
     return $i;
 }

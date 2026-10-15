@@ -3,7 +3,6 @@
 namespace Moggi\Optimize\Effects;
 
 use Moggi\IR;
-use Moggi\Syntax\Ast;
 
 use function Moggi\Modules\resolvedSymbol;
 use function Moggi\Optimize\Interproc\indexFunctions;
@@ -133,7 +132,7 @@ function hostEffectFunctionNames(array $functions, string $moduleName = ''): arr
     foreach ($functions as $function) {
         if ($function->foreign || blockHasDirectForeign($function->body)) {
             $host[$function->name] = true;
-            if ($moduleName !== '' && !str_contains($function->name, '::')) {
+            if ($moduleName !== '' && ! \str_contains($function->name, '::')) {
                 $host[resolvedSymbol($moduleName, $function->name)] = true;
             }
         }
@@ -148,7 +147,7 @@ function hostEffectFunctionNames(array $functions, string $moduleName = ''): arr
             }
             if (blockCallsHostEffect($function->body, $host, $index)) {
                 $host[$function->name] = true;
-                if ($moduleName !== '' && !str_contains($function->name, '::')) {
+                if ($moduleName !== '' && ! \str_contains($function->name, '::')) {
                     $host[resolvedSymbol($moduleName, $function->name)] = true;
                 }
                 $changed = true;

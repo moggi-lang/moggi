@@ -2,21 +2,24 @@
 
 namespace Moggi\Modules;
 
+use function Moggi\Errors\appendDidYouMean;
+
 use Moggi\Semantics\TypeExpr\Scheme;
+
+use function Moggi\Semantics\Types\ambiguousImportMessage;
+
 use Moggi\Semantics\Types\TypeError;
 use Moggi\Syntax\Ast;
 
-use function Moggi\Errors\appendDidYouMean;
-use function Moggi\Semantics\Types\ambiguousImportMessage;
 use function Moggi\Syntax\exportedChildrenSpec;
 use function Moggi\Syntax\isConstructorName;
 use function Moggi\Syntax\surfaceConstructorAlias;
 
 function moduleNameToNamespace(string $moduleName): string
 {
-    $parts = explode('.', $moduleName);
+    $parts = \explode('.', $moduleName);
 
-    return join('\\', $parts);
+    return \implode('\\', $parts);
 }
 
 /** Backend-neutral cross-module symbol: `Data.String::unpack`. */
@@ -28,14 +31,14 @@ function resolvedSymbol(string $moduleName, string $name): string
 /** @return ?array{module: string, name: string} */
 function parseResolvedSymbol(string $resolved): ?array
 {
-    $pos = strpos($resolved, '::');
+    $pos = \strpos($resolved, '::');
     if ($pos === false) {
         return null;
     }
 
     return [
-        'module' => substr($resolved, 0, $pos),
-        'name' => substr($resolved, $pos + 2),
+        'module' => \substr($resolved, 0, $pos),
+        'name' => \substr($resolved, $pos + 2),
     ];
 }
 
@@ -48,17 +51,17 @@ function parseResolvedSymbol(string $resolved): ?array
  */
 function isQualifiedSymbol(string $name): bool
 {
-    if (str_contains($name, '::')) {
+    if (\str_contains($name, '::')) {
         return true;
     }
-    if (!str_contains($name, '\\')) {
+    if (! \str_contains($name, '\\')) {
         return false;
     }
 
-    $prefix = substr($name, 0, (int) strrpos($name, '\\'));
+    $prefix = \substr($name, 0, (int) \strrpos($name, '\\'));
 
     return $prefix !== ''
-        && preg_match('/^[A-Za-z_][A-Za-z0-9_]*(\\[A-Za-z_][A-Za-z0-9_]*)*$/', $prefix) === 1;
+        && \preg_match('/^[A-Za-z_][A-Za-z0-9_]*(\\[A-Za-z_][A-Za-z0-9_]*)*$/', $prefix) === 1;
 }
 
 /** PHP FQN for a resolved symbol (emit / `use function` only). */
@@ -79,7 +82,7 @@ function phpFqnFromResolved(string $resolved): string
  * while a project is being prepared and invalidated per module as units are
  * re-checked; outside that window it stays off rather than risk a stale answer.
  */
-final class ExportsCache
+final class exports
 {
     /** @var ?array<string, array<string, mixed>> */
     private static ?array $entries = null;
@@ -201,7 +204,7 @@ function exposeClassMethods(array &$available, array $localTypes, Ast\ClassDecl 
 {
     foreach ($decl->methods as $method) {
         $scheme = $localTypes['env'][$method->name] ?? null;
-        if ($scheme === null || !$scheme->classMethod) {
+        if ($scheme === null || ! $scheme->classMethod) {
             continue;
         }
 
@@ -314,7 +317,7 @@ function collectExportsUncached(Ast\Program $program, array $localTypes, array $
 
     $declared = $available['env'];
     foreach ($program->items as $item) {
-        if (!$item instanceof Ast\InstanceDecl) {
+        if (! $item instanceof Ast\InstanceDecl) {
             continue;
         }
 
@@ -343,10 +346,10 @@ function collectExportsUncached(Ast\Program $program, array $localTypes, array $
     }
 
     if ($program->implicitMain
-        && count($exportItems) === 1
+        && \count($exportItems) === 1
         && ($exportItems[0]['tag'] ?? '') === 'value'
         && ($exportItems[0]['name'] ?? null) === 'main'
-        && !isset($available['env']['main'])
+        && ! isset($available['env']['main'])
     ) {
         return $exports;
     }
@@ -355,12 +358,14 @@ function collectExportsUncached(Ast\Program $program, array $localTypes, array $
     foreach ($exportItems as $item) {
         if (($item['tag'] ?? '') === 'module') {
             addExportedModule($exports, $program, $item, $available, $units, $moduleName);
+
             continue;
         }
 
         try {
             if ($item['tag'] === 'value') {
                 addExportedValue($exports, $available, $item['name'], $moduleName, $item, $units);
+
                 continue;
             }
 
@@ -375,6 +380,7 @@ function collectExportsUncached(Ast\Program $program, array $localTypes, array $
 
             if ($item['tag'] === 'value') {
                 addExportedValue($exports, $available, $item['name'], $moduleName, $item, $units);
+
                 continue;
             }
 
@@ -417,7 +423,7 @@ function addExportedModule(
         }
 
         $matched = true;
-        if (!isset($units[$target])) {
+        if (! isset($units[$target])) {
             throw new TypeError("unknown module `{$target}`");
         }
 
@@ -432,9 +438,10 @@ function addExportedModule(
         mergeSelectedIntoExportsStrict($exports, $selected, $moduleName, $item, $units[$moduleName] ?? []);
     }
 
-    if (!$matched) {
+    if (! $matched) {
         $unit = $units[$moduleName] ?? [];
         $span = exportItemSpan($item);
+
         throw new TypeError(
             "module `{$moduleName}` cannot re-export module `{$target}`; it is not imported",
             $unit['path'] ?? '',
@@ -588,13 +595,13 @@ function mergeImportExportsIntoAvailable(array &$available, array $imports, arra
 {
     foreach ($imports as $import) {
         $targetName = Ast\moduleName($import->path);
-        if (!isset($units[$targetName])) {
+        if (! isset($units[$targetName])) {
             throw new TypeError("unknown module `{$targetName}`");
         }
 
         $target = $units[$targetName];
         $targetExports = collectExports($target['program'], $target['localTypes'], $units, $targetName);
-        if (!$import->qualifiedOnly) {
+        if (! $import->qualifiedOnly) {
             $selected = selectImportedNames($import, $targetExports);
             mergeIntoExports($available, $selected, $moduleName);
         }
@@ -700,7 +707,7 @@ function addExportedValue(
         );
     }
 
-    if (!isset($available['env'][$name])) {
+    if (! isset($available['env'][$name])) {
         throw exportError(
             appendDidYouMean(
                 "module `{$moduleName}` cannot export unknown value `{$name}`",
@@ -817,7 +824,7 @@ function addExportedType(
 
 function isBuiltinTupleExportName(string $name): bool
 {
-    if (!preg_match('/^Tuple([1-9][0-9]?)$/', $name, $m)) {
+    if (! \preg_match('/^Tuple([1-9][0-9]?)$/', $name, $m)) {
         return false;
     }
     $arity = (int) $m[1];
@@ -876,7 +883,7 @@ function exportItemChildNames(array $item, array $all): array
 
     $available = \array_fill_keys($all, true);
     foreach ($children['names'] as $name) {
-        if (!isset($available[$name])) {
+        if (! isset($available[$name])) {
             throw new TypeError(appendDidYouMean(
                 "`{$item['name']}` has no exported child `{$name}`",
                 $name,
@@ -921,7 +928,7 @@ function classMethodsFromUnits(array $units, string $className): ?array
 {
     foreach ($units as $unit) {
         $program = $unit['program'] ?? null;
-        if (!$program instanceof Ast\Program) {
+        if (! $program instanceof Ast\Program) {
             continue;
         }
 
@@ -1037,10 +1044,10 @@ function selectImportedChildren(array &$selected, array $exports, array $all, ar
 {
     $available = \array_fill_keys($all, true);
     foreach ($names as $name) {
-        if (!isset($available[$name])) {
+        if (! isset($available[$name])) {
             throw new TypeError(appendDidYouMean("{$missing} `{$name}`", $name, $all));
         }
-        if (!isset($exports['env'][$name])) {
+        if (! isset($exports['env'][$name])) {
             continue;
         }
         $selected['env'][$name] = $exports['env'][$name];
@@ -1068,7 +1075,7 @@ function selectImportedNames(Ast\ImportDecl $import, array $exports): array
 
     if ($import->kind === 'glob') {
         foreach ($exports['env'] as $name => $scheme) {
-            if (!isset($hiding[$name])) {
+            if (! isset($hiding[$name])) {
                 $selected['env'][$name] = $scheme;
                 if (isset($exports['origins'][$name])) {
                     $selected['origins'][$name] = $exports['origins'][$name];
@@ -1080,25 +1087,25 @@ function selectImportedNames(Ast\ImportDecl $import, array $exports): array
         }
 
         foreach ($exports['typeSynonyms'] as $name => $type) {
-            if (!isset($hiding[$name])) {
+            if (! isset($hiding[$name])) {
                 $selected['typeSynonyms'][$name] = $type;
             }
         }
 
         foreach ($exports['data'] as $name => $info) {
-            if (!isset($hiding[$name])) {
+            if (! isset($hiding[$name])) {
                 $selected['data'][$name] = $info;
             }
         }
 
         foreach ($exports['ambientTypes'] ?? [] as $name => $_) {
-            if (!isset($hiding[$name])) {
+            if (! isset($hiding[$name])) {
                 $selected['ambientTypes'][$name] = true;
             }
         }
 
         foreach ($exports['constructorRenames'] ?? [] as $alias => $canonical) {
-            if (!isset($hiding[$alias]) && isset($selected['env'][$alias])) {
+            if (! isset($hiding[$alias]) && isset($selected['env'][$alias])) {
                 $selected['constructorRenames'][$alias] = $canonical;
             }
         }
@@ -1173,7 +1180,7 @@ function selectImportedNames(Ast\ImportDecl $import, array $exports): array
                 );
             }
 
-            if (!$matched) {
+            if (! $matched) {
                 $moduleName = Ast\moduleName($import->path);
                 $exported = [
                     ...\array_keys($exports['env'] ?? []),
@@ -1182,10 +1189,11 @@ function selectImportedNames(Ast\ImportDecl $import, array $exports): array
                     ...\array_keys($exports['ambientTypes'] ?? []),
                     ...\array_keys($exports['classes'] ?? []),
                 ];
+
                 throw new TypeError(appendDidYouMean(
                     "module `{$moduleName}` does not export `{$name}`",
                     $name,
-                    array_values(array_unique($exported)),
+                    \array_values(\array_unique($exported)),
                 ));
             }
         }
@@ -1194,7 +1202,7 @@ function selectImportedNames(Ast\ImportDecl $import, array $exports): array
     }
 
     foreach ($exports['env'] as $name => $scheme) {
-        if (!isset($hiding[$name])) {
+        if (! isset($hiding[$name])) {
             $selected['env'][$name] = $scheme;
             if (isset($exports['origins'][$name])) {
                 $selected['origins'][$name] = $exports['origins'][$name];
@@ -1206,25 +1214,25 @@ function selectImportedNames(Ast\ImportDecl $import, array $exports): array
     }
 
     foreach ($exports['typeSynonyms'] as $name => $type) {
-        if (!isset($hiding[$name])) {
+        if (! isset($hiding[$name])) {
             $selected['typeSynonyms'][$name] = $type;
         }
     }
 
     foreach ($exports['data'] as $name => $info) {
-        if (!isset($hiding[$name])) {
+        if (! isset($hiding[$name])) {
             $selected['data'][$name] = $info;
         }
     }
 
     foreach ($exports['ambientTypes'] ?? [] as $name => $_) {
-        if (!isset($hiding[$name])) {
+        if (! isset($hiding[$name])) {
             $selected['ambientTypes'][$name] = true;
         }
     }
 
     foreach ($exports['constructorRenames'] ?? [] as $alias => $canonical) {
-        if (!isset($hiding[$alias]) && isset($selected['env'][$alias])) {
+        if (! isset($hiding[$alias]) && isset($selected['env'][$alias])) {
             $selected['constructorRenames'][$alias] = $canonical;
         }
     }

@@ -8,7 +8,7 @@
 // and asserts what `activateBundledRuntimes()` leaves behind.
 
 $root = __DIR__;
-while (!is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 
@@ -29,16 +29,16 @@ use function Moggi\Paths\canonicalSeparators;
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
     ++$checks;
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
 
 $remove = static function (string $path) use (&$remove): void {
-    if (!\file_exists($path) && !\is_link($path)) {
+    if (! \file_exists($path) && ! \is_link($path)) {
         return;
     }
-    if (\is_dir($path) && !\is_link($path)) {
+    if (\is_dir($path) && ! \is_link($path)) {
         foreach (\scandir($path) ?: [] as $name) {
             if ($name !== '.' && $name !== '..') {
                 $remove($path . '/' . $name);
@@ -101,7 +101,7 @@ try {
     if ($loaderName === null) {
         $loader = (string) \getenv('LD_LIBRARY_PATH') . (string) \getenv('DYLD_FALLBACK_LIBRARY_PATH');
         $assert(
-            !\str_contains($loader, $work . '/runtime/php/lib'),
+            ! \str_contains($loader, $work . '/runtime/php/lib'),
             'a platform without a loader variable must not add the bundled PHP library directory: ' . $loader,
         );
     } else {
@@ -111,7 +111,7 @@ try {
         );
     }
 
-    $assert(!\is_dir($work . '/runtime/php-native'), 'the micro runtime is a file, not a directory of commands');
+    $assert(! \is_dir($work . '/runtime/php-native'), 'the micro runtime is a file, not a directory of commands');
 
     // The platform decisions are pure, so all three are asserted here, not only
     // the one this machine runs. Windows has no loader variable and a flat PHP

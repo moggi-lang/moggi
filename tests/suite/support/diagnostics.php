@@ -14,9 +14,9 @@ function diagnosticShapeFailure(\Throwable $error): ?string
 {
     $code = diagnosticCode($error);
     if ($code === null) {
-        return 'not a compiler diagnostic: ' . get_class($error) . ': ' . $error->getMessage();
+        return 'not a compiler diagnostic: ' . \get_class($error) . ': ' . $error->getMessage();
     }
-    if (!array_key_exists($code, diagnosticRegistry())) {
+    if (! \array_key_exists($code, diagnosticRegistry())) {
         return "diagnostic code `{$code}` is not in the registry (src/errors.php) — add it there first";
     }
 

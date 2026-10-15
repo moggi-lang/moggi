@@ -2,7 +2,7 @@
 <?php declare(strict_types=1);
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
@@ -12,17 +12,17 @@ use Moggi\LSP\Analysis\AnalysisService;
 use function Moggi\LSP\Protocol\pathToUri;
 
 $assert = static function (bool $condition, string $message): void {
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
 
-$tmp = sys_get_temp_dir() . '/moggi-lsp-ws-' . bin2hex(random_bytes(4));
-$assert(mkdir($tmp), 'create temp dir');
+$tmp = \sys_get_temp_dir() . '/moggi-lsp-ws-' . \bin2hex(\random_bytes(4));
+$assert(\mkdir($tmp), 'create temp dir');
 $path = $tmp . '/Main.mog';
 $src1 = "module Main where\n\nf :: Int\nf = 1\n";
 $src2 = "module Main where\n\nf :: Int\nf = 2\n";
-$assert(file_put_contents($path, $src1) !== false, 'write Main.mog');
+$assert(\file_put_contents($path, $src1) !== false, 'write Main.mog');
 $uri = pathToUri($path);
 
 $svc = new AnalysisService();
@@ -42,9 +42,9 @@ $assert(($again->declarations['f']['type'] ?? '') !== '', 'f still declared afte
 $svc->saveDocument($uri);
 $svc->closeDocument($uri);
 $assert($svc->vfs->has($uri) === false, 'close removes document');
-$assert(!isset($svc->results[$uri]), 'close clears cached analysis');
+$assert(! isset($svc->results[$uri]), 'close clears cached analysis');
 
-@unlink($path);
-@rmdir($tmp);
+@\unlink($path);
+@\rmdir($tmp);
 
 echo "lsp workspace tests passed\n";

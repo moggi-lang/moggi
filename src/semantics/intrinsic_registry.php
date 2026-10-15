@@ -3,27 +3,28 @@
 namespace Moggi\Semantics\IntrinsicRegistry;
 
 use Moggi\Semantics\TypeExpr\Scheme;
+
+use function Moggi\Semantics\TypeExpr\scheme;
+
 use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TBytes;
 use Moggi\Semantics\TypeExpr\TChar;
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TDouble;
 use Moggi\Semantics\TypeExpr\TInt;
-use Moggi\Semantics\TypeExpr\TInt8;
 use Moggi\Semantics\TypeExpr\TInt16;
 use Moggi\Semantics\TypeExpr\TInt32;
 use Moggi\Semantics\TypeExpr\TInt64;
+use Moggi\Semantics\TypeExpr\TInt8;
 use Moggi\Semantics\TypeExpr\TStr;
-use Moggi\Semantics\TypeExpr\TUnit;
 use Moggi\Semantics\TypeExpr\TVar;
-use Moggi\Semantics\TypeExpr\TWord8;
+use Moggi\Semantics\TypeExpr\TWord;
 use Moggi\Semantics\TypeExpr\TWord16;
 use Moggi\Semantics\TypeExpr\TWord32;
 use Moggi\Semantics\TypeExpr\TWord64;
-use Moggi\Semantics\TypeExpr\TWord;
-use Moggi\Semantics\TypeExpr\Type;
+use Moggi\Semantics\TypeExpr\TWord8;
 
-use function Moggi\Semantics\TypeExpr\scheme;
+use Moggi\Semantics\TypeExpr\Type;
 
 require_once __DIR__ . '/type_expr.php';
 
@@ -394,7 +395,7 @@ function isShortCircuitPrimop(string $name): bool
 function shortCircuitPrimopId(string $op): string
 {
     $id = \array_search($op, shortCircuitPrimops(), true);
-    if (!\is_string($id)) {
+    if (! \is_string($id)) {
         throw new \RuntimeException("no primop for the `{$op}` short-circuit operator");
     }
 

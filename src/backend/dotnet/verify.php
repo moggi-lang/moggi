@@ -2,14 +2,17 @@
 
 namespace Moggi\Backend\DotNet\Verify;
 
-use Moggi\Backend\VerificationUnavailable;
-use Moggi\Syntax\Ast;
-
 use function Moggi\Backend\DotNet\Dependencies\dotNetVendoredAssemblies;
 use function Moggi\Backend\DotNet\dotnetCliEnv;
+
 use function Moggi\Backend\DotNet\dotnetWorkspaceRoot;
 use function Moggi\Backend\DotNet\resolveDotnetExecutable;
+
+use Moggi\Backend\VerificationUnavailable;
+
 use function Moggi\Compiler\runProcess;
+
+use Moggi\Syntax\Ast;
 
 /**
  * Verify a `foreign dotnet` declaration against the assemblies the compile references.
@@ -80,7 +83,7 @@ function verifyDotNetForeignImport(
 
         return null;
     }
-    if (!($table['found'] ?? false)) {
+    if (! ($table['found'] ?? false)) {
         return "dotnet class `{$classPath}` was not found in the compile's reference set";
     }
 
@@ -116,7 +119,7 @@ function ensureInspectorBinary(string $dotnet): ?string
     $csc = $sdkDir === null ? null : $sdkDir . DIRECTORY_SEPARATOR . 'Roslyn'
         . DIRECTORY_SEPARATOR . 'bincore' . DIRECTORY_SEPARATOR . 'csc.dll';
     $frameworkDir = $sdkDir === null ? null : findFrameworkDir($dotnet);
-    if ($csc === null || !\is_file($csc) || $frameworkDir === null) {
+    if ($csc === null || ! \is_file($csc) || $frameworkDir === null) {
         return $binary = null;
     }
 
@@ -126,7 +129,7 @@ function ensureInspectorBinary(string $dotnet): ?string
     $sourceHash = \is_file($source) ? (\sha1_file($source) ?: 'unknown') : 'missing';
     $outDir = dotnetWorkspaceRoot() . DIRECTORY_SEPARATOR . 'inspect'
         . DIRECTORY_SEPARATOR . $sdkVersion . '-' . $sourceHash;
-    if (!\is_dir($outDir) && !@\mkdir($outDir, 0777, true) && !\is_dir($outDir)) {
+    if (! \is_dir($outDir) && ! @\mkdir($outDir, 0777, true) && ! \is_dir($outDir)) {
         return $binary = null;
     }
     $dll = $outDir . DIRECTORY_SEPARATOR . 'inspect.dll';
@@ -139,7 +142,7 @@ function ensureInspectorBinary(string $dotnet): ?string
         return $binary = $dll;
     }
 
-    if (!\is_file($source)) {
+    if (! \is_file($source)) {
         return $binary = null;
     }
     $tmp = $outDir . DIRECTORY_SEPARATOR . 'inspect.build.dll';
@@ -153,12 +156,12 @@ function ensureInspectorBinary(string $dotnet): ?string
         $source,
     ];
     $captured = runProcess($command, null, dotnetCliEnv(), false, 300);
-    if (($captured['exitCode'] ?? -1) !== 0 || !\is_file($tmp)) {
+    if (($captured['exitCode'] ?? -1) !== 0 || ! \is_file($tmp)) {
         @\unlink($tmp);
 
         return $binary = null;
     }
-    if (!@\rename($tmp, $dll)) {
+    if (! @\rename($tmp, $dll)) {
         @\unlink($tmp);
 
         return $binary = null;
@@ -219,7 +222,7 @@ function findFrameworkDir(string $dotnet): ?string
             $best = ["{$m[1]}.{$m[2]}.{$m[3]}", $dir];
         }
     }
-    if ($best === null || !\is_dir($best[1])) {
+    if ($best === null || ! \is_dir($best[1])) {
         return null;
     }
 
@@ -252,7 +255,7 @@ function inspectDotNetType(string $dotnet, string $inspector, string $classPath)
         return $tables[$key] = null;
     }
     $table = \json_decode((string) ($captured['stdout'] ?? ''), true);
-    if (!\is_array($table)) {
+    if (! \is_array($table)) {
         return $tables[$key] = null;
     }
 
@@ -374,10 +377,10 @@ function verifyDotNetMethod(array $table, string $classPath, string $member, str
 
     $want = splitClrSignature($expected);
     foreach ($candidates as $candidate) {
-        if (!paramsMatchIgnoringScope($candidate['params'] ?? [], $want['params'])) {
+        if (! paramsMatchIgnoringScope($candidate['params'] ?? [], $want['params'])) {
             continue;
         }
-        if (!sameClrTypeIgnoringScope((string) ($candidate['ret'] ?? ''), $want['ret'])) {
+        if (! sameClrTypeIgnoringScope((string) ($candidate['ret'] ?? ''), $want['ret'])) {
             continue;
         }
 
@@ -395,7 +398,7 @@ function verifyDotNetConstructor(array $table, string $classPath, string $expect
 {
     $want = splitClrSignature($expected);
     foreach ($table['ctors'] ?? [] as $candidate) {
-        if (!paramsMatchIgnoringScope($candidate['params'] ?? [], $want['params'])) {
+        if (! paramsMatchIgnoringScope($candidate['params'] ?? [], $want['params'])) {
             continue;
         }
 
@@ -430,7 +433,7 @@ function dotNetConstNeedsGetterCall(?string $classPath, ?string $member): bool
             return false;
         }
         $table = inspectDotNetType($dotnet, $inspector, $classPath);
-        if ($table === null || !($table['found'] ?? false)) {
+        if ($table === null || ! ($table['found'] ?? false)) {
             return false;
         }
         $property = $table['properties'][$member] ?? null;
@@ -454,10 +457,10 @@ function verifyDotNetFieldOrProperty(array $table, string $classPath, string $me
     }
     $field = $table['fields'][$member] ?? null;
     if ($field !== null) {
-        if (!($field['public'] ?? false)) {
+        if (! ($field['public'] ?? false)) {
             return "dotnet field `{$classPath}:{$member}` is not public";
         }
-        if (!sameClrTypeIgnoringScope((string) ($field['type'] ?? ''), $expected)) {
+        if (! sameClrTypeIgnoringScope((string) ($field['type'] ?? ''), $expected)) {
             return "dotnet field `{$classPath}:{$member}` has type `{$field['type']}`,"
                 . " but this foreign import declares `{$expected}`";
         }
@@ -467,10 +470,10 @@ function verifyDotNetFieldOrProperty(array $table, string $classPath, string $me
 
     $property = $table['properties'][$member] ?? null;
     if ($property !== null) {
-        if (!($property['hasGetter'] ?? false) || !($property['public'] ?? false)) {
+        if (! ($property['hasGetter'] ?? false) || ! ($property['public'] ?? false)) {
             return "dotnet property `{$classPath}:{$member}` is not readable";
         }
-        if (!sameClrTypeIgnoringScope((string) ($property['type'] ?? ''), $expected)) {
+        if (! sameClrTypeIgnoringScope((string) ($property['type'] ?? ''), $expected)) {
             return "dotnet property `{$classPath}:{$member}` has type `{$property['type']}`,"
                 . " but this foreign import declares `{$expected}`";
         }
@@ -491,7 +494,7 @@ function paramsMatchIgnoringScope(array $a, array $b): bool
         return false;
     }
     foreach ($a as $i => $param) {
-        if (!sameClrTypeIgnoringScope($param, $b[$i])) {
+        if (! sameClrTypeIgnoringScope($param, $b[$i])) {
             return false;
         }
     }

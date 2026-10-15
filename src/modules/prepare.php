@@ -2,17 +2,20 @@
 
 namespace Moggi\Modules;
 
-use Moggi\Cache;
-use Moggi\Pipeline\CompilePurpose;
-use function Moggi\Pipeline\entryModules;
-use function Moggi\Pipeline\entryPurpose;
-use Moggi\Semantics\Types\TypeError;
-
 use function Moggi\Backend\compileBackend;
+
+use Moggi\Cache;
+
 use function Moggi\Paths\canonicalPath;
 use function Moggi\Paths\canonicalSeparators;
+
 use function Moggi\Paths\moduleNameToPath;
+use function Moggi\Pipeline\entryModules;
+use function Moggi\Pipeline\entryPurpose;
 use function Moggi\Semantics\Effects\checkAndNormalize;
+
+use Moggi\Semantics\Types\TypeError;
+
 use function Moggi\Syntax\Lexer\lex;
 use function Moggi\Syntax\Parser\importedFixityForImports;
 use function Moggi\Syntax\Parser\mergeFixity;
@@ -26,12 +29,12 @@ use function Moggi\Syntax\Parser\parse;
 /** @param list<string> $paths */
 function prepareProject(array $paths, string $rootDir): PreparedProject
 {
-    $root = realpath($rootDir);
+    $root = \realpath($rootDir);
     if ($root === false) {
         throw new \RuntimeException("cannot resolve project root {$rootDir}");
     }
 
-    $rootPrefix = rtrim(canonicalSeparators($root), '/') . '/';
+    $rootPrefix = \rtrim(canonicalSeparators($root), '/') . '/';
     $units = [];
     $fixityByModule = [];
     $pending = [];
@@ -39,8 +42,8 @@ function prepareProject(array $paths, string $rootDir): PreparedProject
     foreach ($paths as $path) {
         $header = cachedModuleHeader($path);
         $source = $header['__source'] ?? null;
-        if (!\is_string($source)) {
-            $source = file_get_contents($path);
+        if (! \is_string($source)) {
+            $source = \file_get_contents($path);
             if ($source === false) {
                 throw new \RuntimeException("cannot read {$path}");
             }
@@ -57,6 +60,7 @@ function prepareProject(array $paths, string $rootDir): PreparedProject
                 continue;
             }
             $span = $header['headerSpan'] ?? null;
+
             throw new TypeError(
                 "duplicate module `{$moduleName}` in project ("
                 . canonicalSeparators($pending[$moduleName]['path']) . ' and ' . canonicalSeparators($path) . ')',
@@ -95,7 +99,7 @@ function prepareProject(array $paths, string $rootDir): PreparedProject
 
     foreach ($pending as $moduleName => $info) {
         $importedFixity = importedFixityForImports($info['imports'], $effectiveFixityByModule);
-        if (!($info['implicitMain'] ?? false)) {
+        if (! ($info['implicitMain'] ?? false)) {
             $warning = moduleFilenameWarning($info['path'], $moduleName);
             if ($warning !== null) {
                 \fwrite(STDERR, "warning: {$warning}\n");
@@ -141,18 +145,18 @@ function prepareProject(array $paths, string $rootDir): PreparedProject
     $importContexts = [];
 
     foreach ($sortedModules as $moduleName) {
-        if (!isset($units[$moduleName])) {
+        if (! isset($units[$moduleName])) {
             continue;
         }
 
         if (($units[$moduleName]['synthetic'] ?? false) === true) {
-            if (!isset($units[$moduleName]['exports'])) {
+            if (! isset($units[$moduleName]['exports'])) {
                 $units[$moduleName]['exports'] = syntheticExports(
                     $moduleName,
                     $units[$moduleName]['localTypes'],
                 );
             }
-            if (!isModuleActiveForCompileBackend($units, $moduleName)) {
+            if (! isModuleActiveForCompileBackend($units, $moduleName)) {
                 continue;
             }
 
@@ -184,11 +188,13 @@ function prepareProject(array $paths, string $rootDir): PreparedProject
                 moduleLocalValueNames($units, $moduleName),
                 moduleLocalDataNames($units, $moduleName),
             );
+
             continue;
         }
 
-        if (!isModuleActiveForCompileBackend($units, $moduleName)) {
+        if (! isModuleActiveForCompileBackend($units, $moduleName)) {
             publishModuleExports($units, $moduleName);
+
             continue;
         }
 
@@ -200,6 +206,7 @@ function prepareProject(array $paths, string $rootDir): PreparedProject
             if (isset($units[$moduleName]['localTypes'])) {
                 addModuleClassScope($units, $moduleName, $projectClasses, $classScopes, $classScopeFns);
             }
+
             continue;
         }
 
@@ -238,6 +245,7 @@ function prepareProject(array $paths, string $rootDir): PreparedProject
             $importContext['projectInstanceIndex'] = $projectInstanceIndex;
             $importContext['currentModule'] = $moduleName;
             $importContexts[$moduleName] = $importContext;
+
             continue;
         }
 
@@ -258,7 +266,7 @@ function prepareProject(array $paths, string $rootDir): PreparedProject
                     $moduleName,
                     $fromDisk->exportedInferredSchemes,
                 );
-                ProjectCache::rememberCheckedModule($cacheKey, $fromDisk, !isStdlibSourcePath($path));
+                ProjectCache::rememberCheckedModule($cacheKey, $fromDisk, ! isStdlibSourcePath($path));
                 $checked[$moduleName] = $fromDisk->program;
                 $units[$moduleName]['checkedProgram'] = $fromDisk->program;
                 ensureModuleInterface($units, $moduleName, $projectClasses, $projectInstanceIndex);
@@ -284,6 +292,7 @@ function prepareProject(array $paths, string $rootDir): PreparedProject
                 $importContext['projectInstanceIndex'] = $projectInstanceIndex;
                 $importContext['currentModule'] = $moduleName;
                 $importContexts[$moduleName] = $importContext;
+
                 continue;
             }
         }
@@ -358,14 +367,14 @@ function prepareProject(array $paths, string $rootDir): PreparedProject
         ProjectCache::rememberCheckedModule(
             $cacheKey,
             new CheckedModule($checkedFull, $exportedInferredSchemes),
-            !isStdlibSourcePath($path),
+            ! isStdlibSourcePath($path),
         );
         $checked[$moduleName] = $checkedFull;
         $units[$moduleName]['checkedProgram'] = $checkedFull;
     }
 
     foreach ($sortedModules as $moduleName) {
-        if (isset($importContexts[$moduleName]) || !isset($units[$moduleName]['program'], $units[$moduleName]['localTypes'])) {
+        if (isset($importContexts[$moduleName]) || ! isset($units[$moduleName]['program'], $units[$moduleName]['localTypes'])) {
             continue;
         }
 
@@ -404,7 +413,7 @@ function publishModuleExports(array &$units, string $moduleName): void
         return;
     }
 
-    if (!isset($units[$moduleName]['localTypes'], $units[$moduleName]['program'])) {
+    if (! isset($units[$moduleName]['localTypes'], $units[$moduleName]['program'])) {
         return;
     }
 
@@ -417,6 +426,7 @@ function publishModuleExports(array &$units, string $moduleName): void
         );
         if (\is_array($cached)) {
             $units[$moduleName]['exports'] = $cached;
+
             return;
         }
     }
@@ -531,7 +541,7 @@ function prepareProjectCached(array $paths, string $rootDir, ?string $onlyTypech
     foreach ($paths as $path) {
         $parts[] = checkedModuleCacheKey($path);
     }
-    sort($parts);
+    \sort($parts);
 
     $key = \implode('|', $parts)
         . '@' . ($onlyTypecheckModule ?? '*')
@@ -553,7 +563,7 @@ function prepareProjectCached(array $paths, string $rootDir, ?string $onlyTypech
                 $basePaths[] = $path;
             }
         }
-        if (count($focusPaths) === 1 && $basePaths !== []) {
+        if (\count($focusPaths) === 1 && $basePaths !== []) {
             $base = prepareProjectCached($basePaths, $rootDir, null);
             $prepared = prepareProjectExtendingFocus(
                 $base,
@@ -588,8 +598,8 @@ function prepareProjectExtendingFocus(
 
     $header = cachedModuleHeader($focusPath);
     $source = $header['__source'] ?? null;
-    if (!\is_string($source)) {
-        $source = file_get_contents($focusPath);
+    if (! \is_string($source)) {
+        $source = \file_get_contents($focusPath);
         if ($source === false) {
             throw new \RuntimeException("cannot read {$focusPath}");
         }
@@ -643,6 +653,7 @@ function prepareProjectExtendingFocus(
     $sampleCtx = null;
     foreach ($base->importContexts as $ctx) {
         $sampleCtx = $ctx;
+
         break;
     }
     if ($sampleCtx === null) {
@@ -653,7 +664,7 @@ function prepareProjectExtendingFocus(
             }
         }
 
-        return prepareProject(array_values(array_unique($fallbackPaths)), $rootDir);
+        return prepareProject(\array_values(\array_unique($fallbackPaths)), $rootDir);
     }
 
     $projectInstances = $sampleCtx['projectInstances'] ?? [];
@@ -663,7 +674,7 @@ function prepareProjectExtendingFocus(
 
     $focusExtra = collectProjectInstances($units, [$focusModule]);
     if ($focusExtra !== []) {
-        $projectInstances = array_merge($projectInstances, $focusExtra);
+        $projectInstances = \array_merge($projectInstances, $focusExtra);
         $projectInstanceIndex = indexProjectInstances($projectInstances);
     }
 
@@ -733,7 +744,7 @@ function prepareProjectExtendingFocus(
     ProjectCache::rememberCheckedModule(
         checkedModuleCacheKey($focusPath),
         new CheckedModule($checkedFull, $checkedFull->exportedInferredSchemes),
-        !isStdlibSourcePath($focusPath),
+        ! isStdlibSourcePath($focusPath),
     );
 
     $checked = $base->checked;
@@ -751,9 +762,9 @@ function prepareProjectExtendingFocus(
  */
 function preparedProjectDiskKey(array $paths, string $rootDir): string
 {
-    $root = realpath($rootDir) ?: $rootDir;
+    $root = \realpath($rootDir) ?: $rootDir;
     $entryNames = \array_keys(entryModules());
-    sort($entryNames);
+    \sort($entryNames);
     $parts = [
         'root=' . $root,
         'backend=' . compileBackend(),
@@ -762,13 +773,13 @@ function preparedProjectDiskKey(array $paths, string $rootDir): string
 
     $fps = [];
     foreach ($paths as $path) {
-        $real = realpath($path) ?: $path;
-        $rel = str_starts_with($real, $root . DIRECTORY_SEPARATOR)
-            ? substr($real, strlen($root) + 1)
+        $real = \realpath($path) ?: $path;
+        $rel = \str_starts_with($real, $root . DIRECTORY_SEPARATOR)
+            ? \substr($real, \strlen($root) + 1)
             : $real;
         $fps[] = $rel . ':' . Cache\fileFingerprint($path);
     }
-    sort($fps);
+    \sort($fps);
 
     return Cache\hashContent(\implode("\n", [...$parts, ...$fps]));
 }
@@ -788,12 +799,13 @@ function computeModuleContentKeys(array $units, array $sortedModules): array
     $keys = [];
 
     foreach ($sortedModules as $moduleName) {
-        if (!isset($units[$moduleName])) {
+        if (! isset($units[$moduleName])) {
             continue;
         }
 
         if (($units[$moduleName]['synthetic'] ?? false) === true) {
             $keys[$moduleName] = Cache\hashContent('synthetic;' . $moduleName . ';b=' . $backend);
+
             continue;
         }
 
@@ -813,7 +825,7 @@ function computeModuleContentKeys(array $units, array $sortedModules): array
                 }
             }
         }
-        sort($depKeys);
+        \sort($depKeys);
 
         $keys[$moduleName] = Cache\hashContent(
             'b=' . $backend . ';m=' . $moduleName . ';s=' . $srcHash
@@ -834,24 +846,24 @@ function computeModuleContentKeys(array $units, array $sortedModules): array
  */
 function moduleCacheRelPath(string $path): string
 {
-    $real = realpath($path) ?: $path;
+    $real = \realpath($path) ?: $path;
 
-    $cwd = getcwd();
-    if ($cwd !== false && str_starts_with($real, $cwd . DIRECTORY_SEPARATOR)) {
-        return substr($real, strlen($cwd) + 1);
+    $cwd = \getcwd();
+    if ($cwd !== false && \str_starts_with($real, $cwd . DIRECTORY_SEPARATOR)) {
+        return \substr($real, \strlen($cwd) + 1);
     }
 
     if (isModuleUnderLibraryRoot($path)) {
         $libRoot = locateStdlibRoot($path);
-        $realLib = $libRoot !== null ? (realpath($libRoot) ?: $libRoot) : null;
-        if ($realLib !== null && str_starts_with($real, $realLib . DIRECTORY_SEPARATOR)) {
-            return 'lib' . DIRECTORY_SEPARATOR . substr($real, strlen($realLib) + 1);
+        $realLib = $libRoot !== null ? (\realpath($libRoot) ?: $libRoot) : null;
+        if ($realLib !== null && \str_starts_with($real, $realLib . DIRECTORY_SEPARATOR)) {
+            return 'lib' . DIRECTORY_SEPARATOR . \substr($real, \strlen($realLib) + 1);
         }
 
-        return 'lib' . DIRECTORY_SEPARATOR . basename($real);
+        return 'lib' . DIRECTORY_SEPARATOR . \basename($real);
     }
 
-    return Cache\hashContent($real) . DIRECTORY_SEPARATOR . basename($real);
+    return Cache\hashContent($real) . DIRECTORY_SEPARATOR . \basename($real);
 }
 
 /** @param array<string, array<string, mixed>> $units @param list<string> $sortedModules */
@@ -861,6 +873,7 @@ function assignModuleCacheKeys(array &$units, array $sortedModules): void
         $units[$moduleName]['contentKey'] = $contentKey;
         if (($units[$moduleName]['synthetic'] ?? false) === true) {
             $units[$moduleName]['cacheRelPath'] = 'synthetic' . DIRECTORY_SEPARATOR . moduleNameToPath($moduleName) . '.mog';
+
             continue;
         }
         $units[$moduleName]['cacheRelPath'] = moduleCacheRelPath($units[$moduleName]['path']);
@@ -870,7 +883,7 @@ function assignModuleCacheKeys(array &$units, array $sortedModules): void
 /** @param array<string, array<string, mixed>> $units @param list<string> $sortedModules */
 function hydrateModuleDiskArtifacts(array &$units, array $sortedModules): void
 {
-    if (!Cache\cacheEnabled()) {
+    if (! Cache\cacheEnabled()) {
         return;
     }
 
@@ -885,14 +898,14 @@ function hydrateModuleDiskArtifacts(array &$units, array $sortedModules): void
         }
 
         $relPath = $units[$moduleName]['cacheRelPath'];
-        if (!isset($units[$moduleName]['localTypes'])) {
+        if (! isset($units[$moduleName]['localTypes'])) {
             $cached = Cache\moduleGet($relPath, 'localtypes', $contentKey);
             if (\is_array($cached)) {
                 $units[$moduleName]['localTypes'] = $cached;
             }
         }
 
-        if (!isset($units[$moduleName]['exports'])) {
+        if (! isset($units[$moduleName]['exports'])) {
             $cached = Cache\moduleGet($relPath, 'exports', $contentKey);
             if (\is_array($cached)) {
                 $units[$moduleName]['exports'] = $cached;
@@ -912,13 +925,13 @@ function importDependencyClosure(array $units, array $roots): array
     $rootSet = \array_fill_keys($roots, true);
     $queue = $roots;
     while ($queue !== []) {
-        $moduleName = array_shift($queue);
-        if (!isset($units[$moduleName])) {
+        $moduleName = \array_shift($queue);
+        if (! isset($units[$moduleName])) {
             continue;
         }
 
         foreach (moduleDependencyNames($units, $moduleName) as $dep) {
-            if (isset($needed[$dep]) || isset($rootSet[$dep]) || !isset($units[$dep])) {
+            if (isset($needed[$dep]) || isset($rootSet[$dep]) || ! isset($units[$dep])) {
                 continue;
             }
 

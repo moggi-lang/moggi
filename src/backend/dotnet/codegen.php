@@ -2,11 +2,9 @@
 
 namespace Moggi\Backend\DotNet\Codegen;
 
-use Moggi\Debug\SourceMapBuilder;
-use Moggi\IR;
-
 use function Moggi\Backend\DotNet\Foreign\dotNetHostIsValueType;
 use function Moggi\Backend\DotNet\Foreign\isDotNetConstProperty;
+
 use function Moggi\Backend\DotNet\Foreign\resolveDotNetForeignPath;
 use function Moggi\Backend\DotNet\Il\ilCanonicalize;
 use function Moggi\Backend\DotNet\Il\ilInstructionSize;
@@ -23,9 +21,14 @@ use function Moggi\Backend\Meta\lambdaCaptureNamesInBlock;
 use function Moggi\Backend\Meta\newtypeConstructorMap;
 use function Moggi\Backend\Meta\newtypeConstructorMapFromRegistry;
 use function Moggi\Backend\Meta\operandCallSrcLoc;
-use function Moggi\Debug\SourceMapBuilder;
 use function Moggi\Debug\normalizeDisplayPath;
+
+use Moggi\Debug\SourceMapBuilder;
+
 use function Moggi\Debug\symbolId;
+
+use Moggi\IR;
+
 use function Moggi\IR\Visit\collectLocalsInBlock;
 use function Moggi\IR\Visit\collectLocalsInOperand;
 use function Moggi\IR\Visit\stmtNestedBlocks;
@@ -86,7 +89,7 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
         }
     }
     foreach (\array_keys($options['globalEvidenceMaps'] ?? []) as $evidenceName) {
-        if (!isset($functionArity[$evidenceName])) {
+        if (! isset($functionArity[$evidenceName])) {
             $functionArity[$evidenceName] = 0;
         }
     }
@@ -107,14 +110,14 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
     }
     if ($moduleName !== '') {
         foreach ($functionArity as $name => $arity) {
-            if (!\is_string($name) || str_contains($name, '::')) {
+            if (! \is_string($name) || \str_contains($name, '::')) {
                 continue;
             }
             $functionArity[resolvedSymbol($moduleName, $name)] = $arity;
         }
     }
     foreach ($options['globalFnArity'] ?? [] as $name => $arity) {
-        if (!isset($functionArity[$name])) {
+        if (! isset($functionArity[$name])) {
             $functionArity[$name] = $arity;
         }
     }
@@ -216,8 +219,11 @@ final class MethodIl
 {
     /** @var array<string, string> id => CIL type */
     private array $locals = [];
+
     private int $localCounter = 0;
+
     private int $labelCounter = 0;
+
     /** @var list<string> */
     private array $lines = [];
 
@@ -246,7 +252,7 @@ final class MethodIl
     public function emit(string $line): void
     {
         $trimmed = \trim($line);
-        if (!ilIsInstruction($trimmed)) {
+        if (! ilIsInstruction($trimmed)) {
             $this->lines[] = $line;
 
             return;
@@ -272,7 +278,7 @@ final class MethodIl
         }
         $this->pendingLoc = $loc;
         $line = $loc->line;
-        $col = max(1, $loc->col > 0 ? $loc->col : 1);
+        $col = \max(1, $loc->col > 0 ? $loc->col : 1);
         $file = normalizeDisplayPath($loc->file ?? '');
         if ($file === '') {
             $this->emit(".line {$line}");
@@ -343,7 +349,7 @@ final class MethodIl
             $out .= '  .locals init (' . \implode(', ', $decls) . ")\n";
         }
         foreach ($this->lines as $line) {
-            $out .= ($line !== '' && !\str_ends_with($line, ':') ? '  ' : '') . $line . "\n";
+            $out .= ($line !== '' && ! \str_ends_with($line, ':') ? '  ' : '') . $line . "\n";
         }
         $out .= "}\n\n";
 
@@ -355,8 +361,10 @@ final class EmitEnv
 {
     /** @var array<string, string> source name => IL local id, or `arg:N` */
     public array $locals = [];
+
     /** When set, IR\Ret inside match arms yields to this temp instead of returning. */
     public ?int $matchYieldDest = null;
+
     public ?string $matchJoinLabel = null;
 
     /**
@@ -407,7 +415,7 @@ final class EmitEnv
     public function localSlot(string $name, string $type = 'object'): string
     {
         $existing = $this->locals[$name] ?? null;
-        if ($existing !== null && !\str_starts_with($existing, 'arg:')) {
+        if ($existing !== null && ! \str_starts_with($existing, 'arg:')) {
             return $existing;
         }
         $slot = $this->freshLocal($type);
@@ -451,7 +459,9 @@ final class IoThunkRegistry
 {
     /** @var list<array{name: string, captures: list<string>, body: IR\Block, result: IR\Operand}> */
     private array $specs = [];
+
     private int $nextId = 0;
+
     private int $emitted = 0;
 
     /** @param list<string> $captures */
@@ -524,6 +534,7 @@ function emitFunction(
         $fn->params,
     );
     $m->emitLine($fn->srcLoc);
+
     try {
         emitBlock($env, $fn->body);
     } catch (\RuntimeException $e) {
@@ -970,7 +981,7 @@ function dotNetStmtTerminates(IR\Stmt $stmt): bool
             return false;
         }
         foreach ($arms as $arm) {
-            if (!dotNetBlockTerminates($arm->body)) {
+            if (! dotNetBlockTerminates($arm->body)) {
                 return false;
             }
         }
@@ -985,7 +996,7 @@ function dotNetBlockTerminates(IR\Block $block): bool
 {
     $items = $block->items;
 
-    return $items !== [] && dotNetStmtTerminates($items[array_key_last($items)]);
+    return $items !== [] && dotNetStmtTerminates($items[\array_key_last($items)]);
 }
 
 /**
@@ -1000,7 +1011,7 @@ function emitTailLoop(EmitEnv $env, IR\Loop $stmt): void
 
     $env->m->label($head);
     emitBlock($env, $stmt->body);
-    if (!dotNetBlockTerminates($stmt->body)) {
+    if (! dotNetBlockTerminates($stmt->body)) {
         $env->m->emit('br ' . $head);
     }
 
@@ -1062,7 +1073,7 @@ function resolveDictMethod(EmitEnv $env, IR\Operand $evidence, string $method): 
     }
 
     $methods = $entry['methods'] ?? null;
-    if (!\is_array($methods) || !isset($methods[$method])) {
+    if (! \is_array($methods) || ! isset($methods[$method])) {
         return null;
     }
 
@@ -1088,7 +1099,7 @@ function emitIoCall(EmitEnv $env, IR\IoCall $stmt): void
     $runtime = $stmt->runtime ?? null;
     if (\is_string($runtime) && \str_starts_with($runtime, 'foreign:')) {
         $foreign = $stmt->foreign;
-        if (!($foreign instanceof IR\ForeignCall)) {
+        if (! ($foreign instanceof IR\ForeignCall)) {
             throw new \RuntimeException('foreign IO call missing metadata');
         }
         $call = new IR\ForeignCall(
@@ -1159,12 +1170,12 @@ function emitIoAssignAction(EmitEnv $env, IR\IoAssignAction $stmt): void
 
     $captures = [];
     foreach ([...collectLocalsInBlock($stmt->body), ...collectLocalsInOperand($stmt->result)] as $name) {
-        if (!isset($assigned[$name])) {
+        if (! isset($assigned[$name])) {
             $captures[$name] = true;
         }
     }
     foreach (lambdaCaptureNamesInBlock($stmt->body, $env->lambdaMeta) as $capture) {
-        if (!isset($assigned[$capture])) {
+        if (! isset($assigned[$capture])) {
             $captures[$capture] = true;
         }
     }
@@ -1186,7 +1197,7 @@ function emitIoAssignAction(EmitEnv $env, IR\IoAssignAction $stmt): void
     });
     foreach (\array_keys($temps) as $tempId) {
         $key = 't' . $tempId;
-        if (!isset($assigned[$key])) {
+        if (! isset($assigned[$key])) {
             $captures[$key] = true;
         }
     }
@@ -1224,8 +1235,8 @@ function emitStaticCall(EmitEnv $env, string $name, array $args, ?string $ownerM
     $callArgs = callArgsForLambda($env, $name, $args);
     if (isCapturedFnName($name)) {
         $meta = $env->lambdaMeta[$name] ?? ['captures' => [], 'params' => []];
-        $fullArity = count($meta['captures']) + count($meta['params']);
-        if (count($callArgs) < $fullArity) {
+        $fullArity = \count($meta['captures']) + \count($meta['params']);
+        if (\count($callArgs) < $fullArity) {
             emitPartialValue($env, $name, $fullArity, $callArgs);
 
             return;
@@ -1251,7 +1262,7 @@ function resolveCallableTarget(EmitEnv $env, string $name, ?string $ownerModule 
         if ($parsed !== null) {
             $targetOwner = moduleTypeName($parsed['module']);
             $sym = symbolName($parsed['name']);
-        } elseif (!isset($env->localCallables[$name]) && isset($env->externalFns[$name])) {
+        } elseif (! isset($env->localCallables[$name]) && isset($env->externalFns[$name])) {
             $extParsed = parseResolvedSymbol($env->externalFns[$name]);
             if ($extParsed !== null) {
                 $targetOwner = moduleTypeName($extParsed['module']);
@@ -1571,7 +1582,7 @@ function emitOperand(EmitEnv $env, IR\Operand $op): void
         $arity = $env->functionArity[$op->name] ?? null;
         if ($arity === null) {
             $parsed = parseResolvedSymbol($op->name);
-            if ($parsed !== null && !isLambdaName($parsed['name'])) {
+            if ($parsed !== null && ! isLambdaName($parsed['name'])) {
                 $arity = $env->functionArity[$parsed['name']] ?? null;
             }
         }
@@ -1616,9 +1627,9 @@ function boxInt(EmitEnv $env): void
 /** Sign-extend-truncate an i64 on the stack to the width named by an intN_* op. */
 function emitSignExtend(EmitEnv $env, string $opName): void
 {
-    if (str_starts_with($opName, 'int8')) {
+    if (\str_starts_with($opName, 'int8')) {
         $env->m->emit('conv.i1');
-    } elseif (str_starts_with($opName, 'int16')) {
+    } elseif (\str_starts_with($opName, 'int16')) {
         $env->m->emit('conv.i2');
     } else {
         $env->m->emit('conv.i4');
@@ -1645,7 +1656,7 @@ function formatIlDouble(float $v): string
         return "({$hex})";
     }
     $s = \sprintf('%.17G', $v);
-    if (!\str_contains($s, '.') && !\str_contains($s, 'E') && !\str_contains($s, 'e')) {
+    if (! \str_contains($s, '.') && ! \str_contains($s, 'E') && ! \str_contains($s, 'e')) {
         $s .= '.0';
     }
 
@@ -1896,12 +1907,13 @@ function emitForeignIntrinsic(
 
             return;
         }
+
         throw new \RuntimeException("DotNet foreign `{$path}`: unsupported __cast target {$ret}");
     }
 
     if ($member === '__default') {
         $ret = $sig['ret'];
-        if (!\str_starts_with($ret, 'valuetype ')) {
+        if (! \str_starts_with($ret, 'valuetype ')) {
             throw new \RuntimeException("DotNet foreign `{$path}`: __default requires a valuetype result");
         }
         emitDefaultForeignArg($env, $ret);
@@ -2512,7 +2524,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
         case 'int64Add#':
         case 'int64Sub#':
         case 'int64Mul#':
-            emitIntBinopToStack($env, 'int' . substr($op->name, 5), $args[0], $args[1]);
+            emitIntBinopToStack($env, 'int' . \substr($op->name, 5), $args[0], $args[1]);
 
             return;
         case 'doubleToInt#':
@@ -2606,6 +2618,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 invertBool($env);
             }
             $env->m->emit('box bool');
+
             return;
         case 'word64Compare#':
             emitOperand($env, $args[0]);
@@ -2614,6 +2627,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             unboxInt($env);
             $env->m->emit('call int32 Moggi.Rt.Word64::Compare(int64, int64)');
             $env->m->emit('call class Moggi.Rt.Con Moggi.Rt.RT::OrderingFromInt(int32)');
+
             return;
         case 'word64Add#':
         case 'word64Sub#':
@@ -2634,28 +2648,33 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             };
             $env->m->emit('call int64 Moggi.Rt.Word64::' . $methodName . '(int64, int64)');
             boxInt($env);
+
             return;
         case 'word64ToInteger#':
             emitOperand($env, $args[0]);
             unboxInt($env);
             $env->m->emit('call valuetype [System.Runtime.Numerics]System.Numerics.BigInteger Moggi.Rt.Word64::ToBigInteger(int64)');
             $env->m->emit('box valuetype [System.Runtime.Numerics]System.Numerics.BigInteger');
+
             return;
         case 'word64FromInteger#':
             emitOperand($env, $args[0]);
             $env->m->emit('unbox.any valuetype [System.Runtime.Numerics]System.Numerics.BigInteger');
             $env->m->emit('call int64 Moggi.Rt.Word64::FromBigInteger(valuetype [System.Runtime.Numerics]System.Numerics.BigInteger)');
             boxInt($env);
+
             return;
         case 'word64Show#':
             emitOperand($env, $args[0]);
             unboxInt($env);
             $env->m->emit('call string Moggi.Rt.Word64::ToString(int64)');
+
             return;
 
         case 'wordFromInt#':
         case 'wordToInt#':
             emitOperand($env, $args[0]);
+
             return;
         case 'wordEq#':
         case 'wordNe#':
@@ -2666,6 +2685,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 invertBool($env);
             }
             $env->m->emit('box bool');
+
             return;
         case 'wordCompare#':
             emitOperand($env, $args[0]);
@@ -2674,6 +2694,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             unboxInt($env);
             $env->m->emit('call int32 Moggi.Rt.Word64::Compare(int64, int64)');
             $env->m->emit('call class Moggi.Rt.Con Moggi.Rt.RT::OrderingFromInt(int32)');
+
             return;
         case 'byteSwap16#':
             emitOperand($env, $args[0]);
@@ -2694,6 +2715,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->m->emit('ldc.i8 65535');
             $env->m->emit('and');
             boxInt($env);
+
             return;
         case 'byteSwap32#':
             emitOperand($env, $args[0]);
@@ -2730,24 +2752,30 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->m->emit('ldc.i8 4294967295');
             $env->m->emit('and');
             boxInt($env);
+
             return;
         case 'byteSwap64#':
             emitOperand($env, $args[0]);
             unboxInt($env);
             $env->m->emit('call int64 Moggi.Rt.Word64::ByteSwap(int64)');
             boxInt($env);
+
             return;
         case 'bitReverse8#':
             emitDotNetBitReverse($env, $args[0], 8, 255);
+
             return;
         case 'bitReverse16#':
             emitDotNetBitReverse($env, $args[0], 16, 65535);
+
             return;
         case 'bitReverse32#':
             emitDotNetBitReverse($env, $args[0], 32, 4294967295);
+
             return;
         case 'bitReverse64#':
             emitDotNetBitReverse($env, $args[0], 64, -1);
+
             return;
         case 'listCons#':
             emitOperand($env, $args[0]);
@@ -2859,6 +2887,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             return;
         case 'naturalToInteger#':
             emitOperand($env, $args[0]);
+
             return;
         case 'integerToNatural#':
             emitOperand($env, $args[0]);
@@ -2866,6 +2895,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             emitDotNetPushSrcLoc($env, $op->srcLoc);
             $env->m->emit('call valuetype [System.Runtime.Numerics]System.Numerics.BigInteger Moggi.Rt.RT::NaturalFromInteger(valuetype [System.Runtime.Numerics]System.Numerics.BigInteger, object[])');
             $env->m->emit('box valuetype [System.Runtime.Numerics]System.Numerics.BigInteger');
+
             return;
         case 'error#':
             emitOperand($env, $args[0]);
@@ -2972,7 +3002,7 @@ function emitMatchCommon(EmitEnv $env, IR\Operand $scrutinee, array $arms, ?int 
         }
         $endsWithRet = dotNetBlockTerminates($arm->body);
         emitBlock($env, $arm->body);
-        if (!$endsWithRet) {
+        if (! $endsWithRet) {
             $env->m->emit('br ' . $end);
         }
         $env->m->label($fail);
@@ -2983,14 +3013,14 @@ function emitMatchCommon(EmitEnv $env, IR\Operand $scrutinee, array $arms, ?int 
     $env->m->emit('throw');
 
     $env->matchJoinLabel = $prevJoin;
-    if (!$needsEndLabel) {
+    if (! $needsEndLabel) {
         return;
     }
     $env->m->label($end);
     if ($dest !== null) {
         return;
     }
-    if (!$returnNullOnNoDest) {
+    if (! $returnNullOnNoDest) {
         return;
     }
     $env->m->emit('ldnull');

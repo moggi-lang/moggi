@@ -4,9 +4,6 @@ namespace Moggi\LSP\Workspace;
 
 use Moggi\LSP\Analysis\AnalysisService;
 
-use function Moggi\LSP\Analysis\all;
-use function Moggi\LSP\Analysis\content;
-use function Moggi\LSP\Analysis\has;
 use function Moggi\LSP\Protocol\splitLines;
 use function Moggi\LSP\Protocol\uriToPath;
 use function Moggi\Modules\isLibraryRoot;
@@ -23,7 +20,7 @@ function svcWillDeleteFiles(AnalysisService $svc, array $files): array
         if ($mod === null) {
             continue;
         }
-        $wholePrefix = !str_ends_with(strtolower(uriToPath($uri)), '.mog');
+        $wholePrefix = ! \str_ends_with(\strtolower(uriToPath($uri)), '.mog');
         foreach ($svc->vfs->all() as $docUri => $doc) {
             if ($docUri === $uri) {
                 continue;
@@ -44,6 +41,7 @@ function svcWillDeleteFiles(AnalysisService $svc, array $files): array
             $changes[$docUri][0]['range'] = wholeDocumentRange($newSrc);
         }
     }
+
     return $changes;
 }
 
@@ -58,10 +56,11 @@ function svcWillDeleteFiles(AnalysisService $svc, array $files): array
  */
 function removeImportsOf(string $src, string $mod, bool $wholePrefix): string
 {
-    $q = preg_quote($mod, '/');
+    $q = \preg_quote($mod, '/');
     $prefix = $wholePrefix ? '(?:\.' . $q . ')?' : '';
     $pattern = '/^import(\s+qualified)?\s+' . $q . $prefix . '(\s+qualified)?(\s+as\s+[A-Za-z_][A-Za-z0-9_\']*)?(\s*\([^)]*\))?[^\n\r]*$(?:\r?\n)?/m';
-    $out = preg_replace($pattern, '', $src);
+    $out = \preg_replace($pattern, '', $src);
+
     return $out ?? $src;
 }
 
@@ -71,11 +70,12 @@ function removeImportsOf(string $src, string $mod, bool $wholePrefix): string
 function wholeDocumentRange(string $src): array
 {
     $lines = splitLines($src);
+
     return [
         'start' => ['line' => 0, 'character' => 0],
         'end' => [
-            'line' => max(0, count($lines) - 1),
-            'character' => strlen($lines[count($lines) - 1] ?? ''),
+            'line' => \max(0, \count($lines) - 1),
+            'character' => \strlen($lines[\count($lines) - 1] ?? ''),
         ],
     ];
 }
@@ -94,7 +94,7 @@ function svcWillRenameFiles(AnalysisService $svc, array $files): array
         if ($oldMod === null || $newMod === null || $oldMod === $newMod) {
             continue;
         }
-        $wholePrefix = !str_ends_with(strtolower(uriToPath($oldUri)), '.mog');
+        $wholePrefix = ! \str_ends_with(\strtolower(uriToPath($oldUri)), '.mog');
         foreach ($svc->vfs->all() as $uri => $doc) {
             $src = $doc['content'];
             $newSrc = rewriteImportModule($src, $oldMod, $newMod);
@@ -105,8 +105,8 @@ function svcWillRenameFiles(AnalysisService $svc, array $files): array
                     'range' => [
                         'start' => ['line' => 0, 'character' => 0],
                         'end' => [
-                            'line' => max(0, count($lines) - 1),
-                            'character' => strlen($lines[count($lines) - 1] ?? ''),
+                            'line' => \max(0, \count($lines) - 1),
+                            'character' => \strlen($lines[\count($lines) - 1] ?? ''),
                         ],
                     ],
                     'newText' => $newSrc,
@@ -114,9 +114,9 @@ function svcWillRenameFiles(AnalysisService $svc, array $files): array
             }
         }
         $content = $svc->vfs->content($newUri) ?? $svc->vfs->content($oldUri);
-        if ($content !== null && preg_match('/^module\s+' . preg_quote($oldMod, '/') . '\b/m', $content)) {
-            $newContent = preg_replace(
-                '/^module\s+' . preg_quote($oldMod, '/') . '\b/m',
+        if ($content !== null && \preg_match('/^module\s+' . \preg_quote($oldMod, '/') . '\b/m', $content)) {
+            $newContent = \preg_replace(
+                '/^module\s+' . \preg_quote($oldMod, '/') . '\b/m',
                 'module ' . $newMod,
                 $content,
             );
@@ -127,8 +127,8 @@ function svcWillRenameFiles(AnalysisService $svc, array $files): array
                     'range' => [
                         'start' => ['line' => 0, 'character' => 0],
                         'end' => [
-                            'line' => max(0, count($lines) - 1),
-                            'character' => strlen($lines[count($lines) - 1] ?? ''),
+                            'line' => \max(0, \count($lines) - 1),
+                            'character' => \strlen($lines[\count($lines) - 1] ?? ''),
                         ],
                     ],
                     'newText' => $newContent,
@@ -136,13 +136,14 @@ function svcWillRenameFiles(AnalysisService $svc, array $files): array
             }
         }
     }
+
     return $changes;
 }
 
 function rewriteImportModule(string $src, string $oldMod, string $newMod): string
 {
-    $q = preg_quote($oldMod, '/');
-    $out = preg_replace(
+    $q = \preg_quote($oldMod, '/');
+    $out = \preg_replace(
         '/\bimport(\s+qualified)?\s+' . $q . '\b/',
         'import$1 ' . $newMod,
         $src,
@@ -150,11 +151,12 @@ function rewriteImportModule(string $src, string $oldMod, string $newMod): strin
     if ($out === null) {
         return $src;
     }
-    $out2 = preg_replace(
+    $out2 = \preg_replace(
         '/\bimport\s+' . $q . '(\s+qualified)?(\s+as\s+[A-Za-z_][A-Za-z0-9_\']*)?/',
         'import ' . $newMod . '$1$2',
         $out,
     );
+
     return $out2 ?? $out;
 }
 
@@ -197,90 +199,94 @@ function rewriteImportModule(string $src, string $oldMod, string $newMod): strin
  */
 function rewriteQualifiedReferences(string $src, string $oldMod, string $newMod, bool $wholePrefix): string
 {
-    $q = preg_quote($oldMod, '/');
+    $q = \preg_quote($oldMod, '/');
     $pattern = $wholePrefix
         ? '/(?<![\\w\'.])\\b' . $q . '\\./'
         : '/(?<![\\w\'.])\\b' . $q . '\\.([A-Za-z_][A-Za-z0-9_\']*)(?![.\\w\'])/';
     $replacement = $wholePrefix ? $newMod . '.' : $newMod . '.$1';
 
-    $parts = preg_split(
+    $parts = \preg_split(
         '/("(?:[^"\\\\\n]|\\\\.)*"|--[^\n\r]*)/',
         $src,
         -1,
         PREG_SPLIT_DELIM_CAPTURE,
     );
     if ($parts === false || $parts === [$src]) {
-        return (string) preg_replace($pattern, $replacement, $src);
+        return (string) \preg_replace($pattern, $replacement, $src);
     }
     $out = '';
     foreach ($parts as $i => $part) {
         if ($i % 2 === 1) {
             $out .= $part;
+
             continue;
         }
-        $out .= (string) preg_replace($pattern, $replacement, $part);
+        $out .= (string) \preg_replace($pattern, $replacement, $part);
     }
+
     return $out;
 }
 
 function uriToModuleGuess(string $uri, ?string $workspaceRoot = null): ?string
 {
     $path = uriToPath($uri);
-    $path = str_replace('\\', '/', $path);
-    $isFile = str_ends_with(strtolower($path), '.mog');
-    if (!$isFile && str_ends_with($path, '/')) {
-        $path = rtrim($path, '/');
+    $path = \str_replace('\\', '/', $path);
+    $isFile = \str_ends_with(\strtolower($path), '.mog');
+    if (! $isFile && \str_ends_with($path, '/')) {
+        $path = \rtrim($path, '/');
     }
 
     $stripExtension = static function (string $rel) use ($isFile): string {
-        return $isFile ? (preg_replace('/\.mog$/i', '', $rel) ?? $rel) : $rel;
+        return $isFile ? (\preg_replace('/\.mog$/i', '', $rel) ?? $rel) : $rel;
     };
 
     foreach (['/lib/', '/tests/', '/examples/'] as $marker) {
-        $pos = strpos($path, $marker);
+        $pos = \strpos($path, $marker);
         if ($pos !== false) {
-            $rel = substr($path, $pos + strlen($marker));
+            $rel = \substr($path, $pos + \strlen($marker));
             $rel = $stripExtension($rel);
-            $parts = array_values(array_filter(explode('/', $rel), static fn ($p) => $p !== ''));
-            if ($parts !== [] && preg_match('/^[A-Z]/', $parts[0])) {
-                return implode('.', $parts);
+            $parts = \array_values(\array_filter(\explode('/', $rel), static fn ($p) => $p !== ''));
+            if ($parts !== [] && \preg_match('/^[A-Z]/', $parts[0])) {
+                return \implode('.', $parts);
             }
         }
     }
 
-    $dir = str_contains($path, '/') ? substr($path, 0, (int) strrpos($path, '/')) : '';
+    $dir = \str_contains($path, '/') ? \substr($path, 0, (int) \strrpos($path, '/')) : '';
     while ($dir !== '') {
         if (isLibraryRoot($dir)) {
-            $rel = $stripExtension(substr($path, strlen($dir) + 1));
-            $parts = array_values(array_filter(explode('/', $rel), static fn ($p) => $p !== ''));
-            if ($parts !== [] && preg_match('/^[A-Z]/', $parts[0])) {
-                return implode('.', $parts);
+            $rel = $stripExtension(\substr($path, \strlen($dir) + 1));
+            $parts = \array_values(\array_filter(\explode('/', $rel), static fn ($p) => $p !== ''));
+            if ($parts !== [] && \preg_match('/^[A-Z]/', $parts[0])) {
+                return \implode('.', $parts);
             }
+
             break;
         }
-        $parent = substr($dir, 0, (int) strrpos($dir, '/'));
-        if ($parent === $dir || ($workspaceRoot !== null && $dir === rtrim(str_replace('\\', '/', $workspaceRoot), '/'))) {
+        $parent = \substr($dir, 0, (int) \strrpos($dir, '/'));
+        if ($parent === $dir || ($workspaceRoot !== null && $dir === \rtrim(\str_replace('\\', '/', $workspaceRoot), '/'))) {
             break;
         }
         $dir = $parent === '' ? '' : $parent;
     }
     if ($workspaceRoot !== null) {
-        $root = rtrim(str_replace('\\', '/', $workspaceRoot), '/');
-        if (str_starts_with($path, $root . '/')) {
-            $rel = substr($path, strlen($root) + 1);
+        $root = \rtrim(\str_replace('\\', '/', $workspaceRoot), '/');
+        if (\str_starts_with($path, $root . '/')) {
+            $rel = \substr($path, \strlen($root) + 1);
             $rel = $stripExtension($rel);
-            $parts = array_values(array_filter(explode('/', $rel), static fn ($p) => $p !== ''));
-            if ($parts !== [] && preg_match('/^[A-Z]/', $parts[0] ?? '')) {
-                return implode('.', $parts);
+            $parts = \array_values(\array_filter(\explode('/', $rel), static fn ($p) => $p !== ''));
+            if ($parts !== [] && \preg_match('/^[A-Z]/', $parts[0] ?? '')) {
+                return \implode('.', $parts);
             }
         }
     }
-    if (!$isFile) {
+    if (! $isFile) {
         return null;
     }
-    $base = basename($path, '.mog');
-    if ($base !== '' && preg_match('/^[A-Z]/', $base)) {
+    $base = \basename($path, '.mog');
+    if ($base !== '' && \preg_match('/^[A-Z]/', $base)) {
         return $base;
     }
+
     return null;
 }

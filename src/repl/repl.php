@@ -2,10 +2,11 @@
 
 namespace Moggi\Repl;
 
-use Moggi\Syntax\Parser\ReplFragment;
-
 use function Moggi\Backend\setCompileBackend;
+
 use function Moggi\Syntax\Parser\parseReplFragment;
+
+use Moggi\Syntax\Parser\ReplFragment;
 
 /**
  * Run the interactive loop.
@@ -17,27 +18,28 @@ function runLoop(State $state, $input = null, bool $quiet = false): int
     setCompileBackend($state->backend);
     $in = $input ?? STDIN;
 
-    if (!$quiet) {
+    if (! $quiet) {
         \fwrite(STDOUT, "Moggi REPL ({$state->backend}). Type :help for commands, :quit to exit.\n");
     }
 
-    $echoPrompt = stream_isatty($in);
+    $echoPrompt = \stream_isatty($in);
 
     while (true) {
         $prompt = $state->buffer === '' ? '> ' : '| ';
         $line = readLineFrom($in, $prompt, $echoPrompt);
         if ($line === false) {
-            if (!$quiet) {
+            if (! $quiet) {
                 \fwrite(STDOUT, "\n");
             }
+
             break;
         }
 
-        if ($state->buffer === '' && trim($line) === '') {
+        if ($state->buffer === '' && \trim($line) === '') {
             continue;
         }
 
-        if ($state->buffer === '' && str_starts_with(ltrim($line), ':')) {
+        if ($state->buffer === '' && \str_starts_with(\ltrim($line), ':')) {
             $state->history[] = $line;
             addReadlineHistory($line);
             $result = handleCommand($state, $line);
@@ -47,6 +49,7 @@ function runLoop(State $state, $input = null, bool $quiet = false): int
             if ($result['quit'] ?? false) {
                 return 0;
             }
+
             continue;
         }
 
@@ -63,6 +66,7 @@ function runLoop(State $state, $input = null, bool $quiet = false): int
 
         if ($frag->kind === ReplFragment::KIND_ERROR) {
             \fwrite(STDOUT, $frag->error?->display() ?? "parse error\n");
+
             continue;
         }
 
@@ -77,15 +81,16 @@ function runLoop(State $state, $input = null, bool $quiet = false): int
  */
 function runScript(State $state, string $scriptPath): int
 {
-    $fh = fopen($scriptPath, 'r');
+    $fh = \fopen($scriptPath, 'r');
     if ($fh === false) {
         \fwrite(STDERR, "error: cannot read {$scriptPath}\n");
 
         return 1;
     }
+
     try {
         return runLoop($state, $fh, quiet: true);
     } finally {
-        fclose($fh);
+        \fclose($fh);
     }
 }

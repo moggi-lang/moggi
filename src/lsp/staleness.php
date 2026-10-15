@@ -33,7 +33,7 @@ function watchCompilerRevision(): void
         $running = compilerFingerprint();
     }
 
-    $now = microtime(true);
+    $now = \microtime(true);
     if ($now - $lastCheck < COMPILER_CHECK_INTERVAL_SECONDS) {
         return;
     }

@@ -7,7 +7,7 @@
 // never crash reporting.
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/backend/php/runtime.php';
@@ -17,7 +17,7 @@ use function Moggi\lookupGeneratedFrame;
 use function Moggi\lookupGeneratedFunction;
 
 $assert = static function (bool $condition, string $message): void {
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };

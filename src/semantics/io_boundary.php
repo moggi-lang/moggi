@@ -3,14 +3,16 @@
 namespace Moggi\Semantics\IoBoundary;
 
 use Moggi\IR\EntryPointKind;
-use Moggi\Semantics\Types\TypeError;
-use Moggi\Syntax\Ast;
 
 use function Moggi\Semantics\IntrinsicRegistry\ioPrimopRole;
 use function Moggi\Semantics\IntrinsicRegistry\isIoIntrinsic;
+
 use function Moggi\Semantics\IntrinsicRegistry\primopArity;
 use function Moggi\Semantics\Kernel\bindRole;
 use function Moggi\Semantics\Kinds\canonicalTypeConName;
+
+use Moggi\Semantics\Types\TypeError;
+use Moggi\Syntax\Ast;
 
 /**
  * Validate IO surface constraints on a typed program.
@@ -24,7 +26,7 @@ function validate(Ast\Program $program, string $source = '', string $filename = 
 
 function validateItem(Ast\AstNode $item, string $source, string $filename): void
 {
-    match (get_class($item)) {
+    match (\get_class($item)) {
         Ast\FunctionDecl::class => validateFunction($item, $source, $filename),
         Ast\DataDecl::class => validateData($item, $source, $filename),
         Ast\TypeSynonymDecl::class => validateTypeSynonym($item, $source, $filename),
@@ -67,6 +69,7 @@ function validateFunction(Ast\FunctionDecl $fn, string $source, string $filename
         }
 
         validateStraightLineIoBody($fn->body, $source, $filename);
+
         return;
     }
 
@@ -94,13 +97,13 @@ function validateFunctionTypeIoSurface(Ast\TypeNode $type, string $source, strin
 
     $result = stripConstraints($type);
     while ($result instanceof Ast\TypeArrow) {
-        if (!$returnsIo) {
+        if (! $returnsIo) {
             validateTypeNoIo($result->from, $result->from, $source, $filename);
         }
         $result = $result->to;
     }
 
-    if (!isIoType($result)) {
+    if (! isIoType($result)) {
         validateTypeNoIo($result, $result, $source, $filename);
     }
 }
@@ -124,7 +127,7 @@ function ioReturnKind(?Ast\TypeNode $type): string
         $result = $result->to;
     }
 
-    if (!isIoType($result)) {
+    if (! isIoType($result)) {
         return 'none';
     }
 
@@ -149,7 +152,7 @@ function hasLeadingArrow(?Ast\TypeNode $type): bool
  */
 function lambdaChainBody(Ast\AstNode $expr): ?Ast\AstNode
 {
-    if (!$expr instanceof Ast\Lambda) {
+    if (! $expr instanceof Ast\Lambda) {
         return null;
     }
 
@@ -166,6 +169,7 @@ function stripConstraints(Ast\TypeNode $type): Ast\TypeNode
     if ($type instanceof Ast\TypeConstrained) {
         return $type->body;
     }
+
     return $type;
 }
 
@@ -185,13 +189,13 @@ function isIoType(Ast\TypeNode $type): bool
 function isIoUnitType(Ast\TypeNode $type): bool
 {
     return isIoType($type)
-        && count($type->args) === 1
+        && \count($type->args) === 1
         && $type->args[0] instanceof Ast\TypeUnit;
 }
 
 function isNestedIoType(Ast\TypeNode $type): bool
 {
-    if (!isIoType($type)) {
+    if (! isIoType($type)) {
         return false;
     }
 
@@ -205,10 +209,10 @@ function typeMentionsIo(Ast\TypeNode $type): bool
     return ($type instanceof Ast\TypeCon && isIoTypeConName($type->name))
         || ($type instanceof Ast\TypeApp
             && (typeMentionsIo($type->con)
-                || array_any($type->args, static fn (Ast\TypeNode $arg): bool => typeMentionsIo($arg))))
+                || \array_any($type->args, static fn (Ast\TypeNode $arg): bool => typeMentionsIo($arg))))
         || ($type instanceof Ast\TypeArrow && (typeMentionsIo($type->from) || typeMentionsIo($type->to)))
         || ($type instanceof Ast\TypeConstrained
-            && (array_any($type->constraints, static fn (Ast\TypeNode $constraint): bool => typeMentionsIo($constraint))
+            && (\array_any($type->constraints, static fn (Ast\TypeNode $constraint): bool => typeMentionsIo($constraint))
                 || typeMentionsIo($type->body)));
 }
 
@@ -216,25 +220,29 @@ function validateStraightLineIoBody(Ast\AstNode $expr, string $source, string $f
 {
     if ($expr instanceof Ast\DoExpr) {
         validateStraightLineDo($expr->stmts, $source, $filename);
+
         return;
     }
 
     if ($expr instanceof Ast\CaseExpr) {
         validateStraightLineCase($expr, $source, $filename);
+
         return;
     }
 
     if ($expr instanceof Ast\IntrinsicCall && isIoIntrinsic($expr->name)) {
         validateIoIntrinsic($expr, $source, $filename);
+
         return;
     }
 
     if (ioBindParts($expr) !== null) {
         validateIoBindExpr($expr, $source, $filename);
+
         return;
     }
 
-    if (!exprReturnsIo($expr)) {
+    if (! exprReturnsIo($expr)) {
         fail('IO function body must evaluate to an IO expression', $expr, $source, $filename);
     }
 
@@ -253,7 +261,7 @@ function validateIoIntrinsic(Ast\IntrinsicCall $expr, string $source, string $fi
         fail('unknown IO intrinsic', $expr, $source, $filename);
     }
 
-    if (count($expr->args) !== $arity) {
+    if (\count($expr->args) !== $arity) {
         fail(
             \sprintf('%s expects %d argument%s', $expr->name, $arity, $arity === 1 ? '' : 's'),
             $expr,
@@ -264,31 +272,34 @@ function validateIoIntrinsic(Ast\IntrinsicCall $expr, string $source, string $fi
 
     if ($role === 'io-pure' || $role === 'io-throw') {
         validatePureExpr($expr->args[0], $source, $filename);
+
         return;
     }
 
     if ($role === 'io-bind') {
-        if (!exprReturnsIo($expr->args[0])) {
+        if (! exprReturnsIo($expr->args[0])) {
             fail('left side of IO bind must return IO', $expr->args[0], $source, $filename);
         }
         validateIoActionArgs($expr->args[0], $source, $filename);
         validateIoBindContinuation($expr->args[1], $source, $filename);
+
         return;
     }
 
     if ($role === 'io-catch') {
-        if (!exprReturnsIo($expr->args[0])) {
+        if (! exprReturnsIo($expr->args[0])) {
             fail('exceptionCatch# action must return IO', $expr->args[0], $source, $filename);
         }
         validateIoBuildExpr($expr->args[0], $source, $filename);
         validateIoBindContinuation($expr->args[1], $source, $filename);
+
         return;
     }
 
-    if (!exprReturnsIo($expr->args[0])) {
+    if (! exprReturnsIo($expr->args[0])) {
         fail('exceptionFinally# action must return IO', $expr->args[0], $source, $filename);
     }
-    if (!exprReturnsIo($expr->args[1])) {
+    if (! exprReturnsIo($expr->args[1])) {
         fail('exceptionFinally# cleanup must return IO', $expr->args[1], $source, $filename);
     }
     validateIoBuildExpr($expr->args[0], $source, $filename);
@@ -299,16 +310,19 @@ function validateIoBindContinuation(Ast\AstNode $expr, string $source, string $f
 {
     if ($expr instanceof Ast\Lambda) {
         validateStraightLineIoBody($expr->body, $source, $filename);
+
         return;
     }
 
     if (exprReturnsIo($expr)) {
         validateIoBuildExpr($expr, $source, $filename);
+
         return;
     }
 
     if (exprIsIoContinuation($expr)) {
         validateIoActionArgs($expr, $source, $filename);
+
         return;
     }
 
@@ -319,7 +333,7 @@ function validateIoBindContinuation(Ast\AstNode $expr, string $source, string $f
 function validateStraightLineDo(array $stmts, string $source, string $filename): void
 {
     foreach ($stmts as $i => $stmt) {
-        $last = $i === count($stmts) - 1;
+        $last = $i === \count($stmts) - 1;
         if ($stmt instanceof Ast\DoLet) {
             foreach ($stmt->bindings as $binding) {
                 if (doBindingHasIoType($binding)) {
@@ -328,33 +342,38 @@ function validateStraightLineDo(array $stmts, string $source, string $filename):
                     validatePureExpr($binding->expr, $source, $filename);
                 }
             }
+
             continue;
         }
 
         if ($stmt instanceof Ast\DoBind) {
-            if (!exprReturnsIo($stmt->expr)) {
+            if (! exprReturnsIo($stmt->expr)) {
                 fail('do-bind expression must return IO', $stmt->expr, $source, $filename);
             }
             validateIoActionArgs($stmt->expr, $source, $filename);
+
             continue;
         }
 
-        if (!$stmt instanceof Ast\DoExprStmt) {
+        if (! $stmt instanceof Ast\DoExprStmt) {
             fail('invalid IO statement', $stmt, $source, $filename);
         }
 
         if ($stmt->expr instanceof Ast\CaseExpr) {
             validateStraightLineCase($stmt->expr, $source, $filename);
+
             continue;
         }
 
         if ($stmt->expr instanceof Ast\DoExpr) {
             validateStraightLineIoBody($stmt->expr, $source, $filename);
+
             continue;
         }
 
         if (ioBindParts($stmt->expr) !== null) {
             validateIoBindExpr($stmt->expr, $source, $filename);
+
             continue;
         }
 
@@ -366,15 +385,15 @@ function validateStraightLineDo(array $stmts, string $source, string $filename):
         }
 
         $stmtType = $stmt->expr->inferredType;
-        if (!$last && !($stmtType !== null && isIoUnitType($stmtType))) {
+        if (! $last && ! ($stmtType !== null && isIoUnitType($stmtType))) {
             fail('intermediate IO statements must return ()', $stmt->expr, $source, $filename);
         }
 
-        if (!$last && !exprReturnsIo($stmt->expr)) {
+        if (! $last && ! exprReturnsIo($stmt->expr)) {
             fail('intermediate IO statements must be IO expressions', $stmt->expr, $source, $filename);
         }
 
-        if ($last && !exprReturnsIo($stmt->expr)) {
+        if ($last && ! exprReturnsIo($stmt->expr)) {
             fail('IO blocks must end with an IO () action', $stmt->expr, $source, $filename);
         }
 
@@ -448,6 +467,7 @@ function validatePureDo(Ast\DoExpr $expr, string $source, string $filename): voi
     foreach ($expr->stmts as $stmt) {
         if ($stmt instanceof Ast\DoBind) {
             validatePureExpr($stmt->expr, $source, $filename);
+
             continue;
         }
 
@@ -455,6 +475,7 @@ function validatePureDo(Ast\DoExpr $expr, string $source, string $filename): voi
             foreach ($stmt->bindings as $binding) {
                 validatePureExpr($binding->expr, $source, $filename);
             }
+
             continue;
         }
 
@@ -573,11 +594,11 @@ function validateIoBindExpr(Ast\AstNode $expr, string $source, string $filename)
         fail('IO bind expression must return IO', $expr, $source, $filename);
     }
 
-    if (!exprReturnsIo($expr)) {
+    if (! exprReturnsIo($expr)) {
         fail('IO bind expression must return IO', $expr, $source, $filename);
     }
 
-    if (!exprReturnsIo($parts['left'])) {
+    if (! exprReturnsIo($parts['left'])) {
         fail('left side of IO bind must return IO', $parts['left'], $source, $filename);
     }
 
@@ -684,6 +705,7 @@ function validateIoBuildDo(Ast\DoExpr $expr, string $source, string $filename): 
     foreach ($expr->stmts as $stmt) {
         if ($stmt instanceof Ast\DoBind) {
             validateIoBuildExpr($stmt->expr, $source, $filename);
+
             continue;
         }
 
@@ -691,6 +713,7 @@ function validateIoBuildDo(Ast\DoExpr $expr, string $source, string $filename): 
             foreach ($stmt->bindings as $binding) {
                 validateIoBuildExpr($binding->expr, $source, $filename);
             }
+
             continue;
         }
 
@@ -712,6 +735,7 @@ function validateIntrinsicBuild(Ast\IntrinsicCall $expr, string $source, string 
 {
     if (isIoIntrinsic($expr->name)) {
         validateIoIntrinsic($expr, $source, $filename);
+
         return;
     }
 
@@ -722,33 +746,33 @@ function validateIntrinsicBuild(Ast\IntrinsicCall $expr, string $source, string 
 
 function isUnsaturatedPartialIo(Ast\AstNode $expr): bool
 {
-    if (!$expr instanceof Ast\Apply) {
+    if (! $expr instanceof Ast\Apply) {
         return false;
     }
 
     $type = $expr->inferredType;
-    if (!$type instanceof Ast\TypeArrow) {
+    if (! $type instanceof Ast\TypeArrow) {
         return false;
     }
 
-    return !isIoType($type->to);
+    return ! isIoType($type->to);
 }
 
 /** @return ?array{left: Ast\AstNode, right: Ast\AstNode} */
 function ioBindParts(Ast\AstNode $expr): ?array
 {
-    if (!$expr instanceof Ast\Apply) {
+    if (! $expr instanceof Ast\Apply) {
         return null;
     }
 
     $right = $expr->argument;
     $inner = $expr->function;
-    if (!$inner instanceof Ast\Apply) {
+    if (! $inner instanceof Ast\Apply) {
         return null;
     }
 
     $method = $inner->function;
-    if (!isIoMethodWithRole($method, bindRole())) {
+    if (! isIoMethodWithRole($method, bindRole())) {
         return null;
     }
 
@@ -766,7 +790,7 @@ function ioBindParts(Ast\AstNode $expr): ?array
  */
 function isIoMethodWithRole(Ast\AstNode $expr, string $role): bool
 {
-    if (!$expr instanceof Ast\EvidenceMethod || $expr->role !== $role) {
+    if (! $expr instanceof Ast\EvidenceMethod || $expr->role !== $role) {
         return false;
     }
 
@@ -785,7 +809,7 @@ function flattenApply(Ast\AstNode $expr): array
 {
     $args = [];
     while ($expr instanceof Ast\Apply) {
-        array_unshift($args, $expr->argument);
+        \array_unshift($args, $expr->argument);
         $expr = $expr->function;
     }
 

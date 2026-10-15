@@ -2,7 +2,7 @@
 <?php declare(strict_types=1);
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 
@@ -22,29 +22,31 @@ while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
 
 require_once $root . '/src/compiler.php';
 
-use function Moggi\Backend\Php\buildPhpNativeExecutable;
 use function Moggi\Backend\Php\buildPharStub;
+use function Moggi\Backend\Php\buildPhpNativeExecutable;
 use function Moggi\Backend\Php\combineMicroPhar;
+
+use const Moggi\Backend\Php\MICRO_INI_MAGIC;
+use const Moggi\Backend\Php\MICRO_SFX_ENV;
+
 use function Moggi\Backend\Php\microIniObject;
 use function Moggi\Backend\Php\microSfxAt;
 use function Moggi\Backend\Php\packagePhar;
 use function Moggi\Backend\Php\resolveMicroSfx;
 use function Moggi\Paths\canonicalSeparators;
-use const Moggi\Backend\Php\MICRO_INI_MAGIC;
-use const Moggi\Backend\Php\MICRO_SFX_ENV;
 
 $failures = [];
 $checks = 0;
 $assertSame = static function (mixed $expected, mixed $actual, string $message) use (&$failures, &$checks): void {
     ++$checks;
     if ($expected !== $actual) {
-        $failures[] = $message . ' (expected ' . var_export($expected, true)
-            . ', got ' . var_export($actual, true) . ')';
+        $failures[] = $message . ' (expected ' . \var_export($expected, true)
+            . ', got ' . \var_export($actual, true) . ')';
     }
 };
 $assertTrue = static function (bool $condition, string $message) use (&$failures, &$checks): void {
     ++$checks;
-    if (!$condition) {
+    if (! $condition) {
         $failures[] = $message;
     }
 };
@@ -58,7 +60,7 @@ $assertSamePath = static function (string $expected, string $actual, string $mes
     $assertSame(canonicalSeparators($expected), canonicalSeparators($actual), $message);
 };
 
-$scratch = \sys_get_temp_dir() . '/moggi-native-' . getmypid() . '-' . bin2hex(random_bytes(4));
+$scratch = \sys_get_temp_dir() . '/moggi-native-' . \getmypid() . '-' . \bin2hex(\random_bytes(4));
 \mkdir($scratch, 0777, true);
 
 $previousSfx = \getenv(MICRO_SFX_ENV);
@@ -123,7 +125,7 @@ try {
             $assertTrue(\str_contains($e->getMessage(), $wanted), "the error must say `{$wanted}`: " . $e->getMessage());
         }
     }
-    $assertTrue(!\is_file($scratch . '/never'), 'a refused build must write nothing');
+    $assertTrue(! \is_file($scratch . '/never'), 'a refused build must write nothing');
 
     // 3. Resolving the runtime: a file, or a directory holding `micro.sfx`.
 
@@ -165,15 +167,15 @@ try {
     $emptyRoot = $scratch . '/empty';
     \mkdir($emptyRoot, 0777, true);
     $assertTrue(
-        !buildPhpNativeExecutable($emptyRoot, 'moggi-app.phar', 'moggi-app'),
+        ! buildPhpNativeExecutable($emptyRoot, 'moggi-app.phar', 'moggi-app'),
         'a missing package must fail instead of writing a half build',
     );
     \putenv(MICRO_SFX_ENV . '=');
     $assertTrue(
-        !buildPhpNativeExecutable($outputRoot, 'moggi-app.phar', 'moggi-app-2'),
+        ! buildPhpNativeExecutable($outputRoot, 'moggi-app.phar', 'moggi-app-2'),
         'a missing runtime must fail',
     );
-    $assertTrue(!\is_file($outputRoot . '/moggi-app-2'), 'a failed native build must write nothing');
+    $assertTrue(! \is_file($outputRoot . '/moggi-app-2'), 'a failed native build must write nothing');
 
     // 5. The stub marker. `packagePhar` runs for real (in a second process when
     //    this one may not write archives), so this is the shipped artifact's
@@ -184,7 +186,7 @@ try {
         'the stub template must close with the canonical token',
     );
     $assertTrue(
-        !\str_contains(buildPharStub(), '__halt_compiler'),
+        ! \str_contains(buildPharStub(), '__halt_compiler'),
         'the stub template must not spell the token in another case',
     );
 
@@ -201,7 +203,7 @@ try {
     $raw = (string) \file_get_contents($pharPath);
     $assertTrue(\str_contains($raw, '__HALT_COMPILER();'), 'the packaged stub must carry the canonical token');
     $assertTrue(
-        !\str_contains($raw, '__halt_compiler();'),
+        ! \str_contains($raw, '__halt_compiler();'),
         'the packaged stub must not carry a lowercase token: a micro runtime registers no such PHAR',
     );
     $assertTrue(\str_ends_with($raw, "\x47\x42\x4d\x42"), 'the packaged PHAR must end with its signature marker');
@@ -219,7 +221,7 @@ try {
                     continue;
                 }
                 $path = $dir . '/' . $entry;
-                if (\is_dir($path) && !\is_link($path)) {
+                if (\is_dir($path) && ! \is_link($path)) {
                     $remove($path);
                 } else {
                     @\unlink($path);

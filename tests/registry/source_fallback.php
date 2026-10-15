@@ -13,16 +13,18 @@
 // unpack, the re-pack and the digest comparison, not the socket.
 
 $root = __DIR__;
-while (!is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
 
-use Moggi\Registry\FetchLog;
-
 use function Moggi\Registry\archiveDigest;
+
 use function Moggi\Registry\fetchBlob;
 use function Moggi\Registry\fetchBlobFromSource;
+
+use Moggi\Registry\FetchLog;
+
 use function Moggi\Registry\packDirectory;
 use function Moggi\Registry\sha256Digest;
 use function Moggi\Registry\sourceUrlIsLocal;
@@ -31,7 +33,7 @@ use function Moggi\Registry\sourceUrlProblem;
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
     ++$checks;
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
@@ -43,10 +45,10 @@ $tree = $work . '/pkg';
 \file_put_contents($tree . '/sub/b.txt', "world\n");
 
 $remove = static function (string $path) use (&$remove): void {
-    if (!file_exists($path) && !is_link($path)) {
+    if (! \file_exists($path) && ! \is_link($path)) {
         return;
     }
-    if (is_dir($path) && !is_link($path)) {
+    if (\is_dir($path) && ! \is_link($path)) {
         foreach (\scandir($path) ?: [] as $name) {
             if ($name !== '.' && $name !== '..') {
                 $remove($path . '/' . $name);
@@ -86,7 +88,7 @@ try {
         $assert(sourceUrlIsLocal($local), "`{$local}` names this machine");
     }
     foreach (['https://example.invalid/r', 'ssh://h/r', 'http://h/r', 'ext::sh -c id'] as $remote) {
-        $assert(!sourceUrlIsLocal($remote), "`{$remote}` names another machine");
+        $assert(! sourceUrlIsLocal($remote), "`{$remote}` names another machine");
     }
 
     // No environment variable widens the transport: the opt-in that once allowed a
@@ -105,13 +107,12 @@ try {
     $fromDir = fetchBlobFromSource(['source' => ['kind' => 'dir', 'path' => $tree]], null);
     $assert($fromDir['problem'] !== null, 'a dir source is refused');
     $assert(\str_contains($fromDir['problem'], 'not reproducible'), 'the refusal says why: ' . $fromDir['problem']);
-    $assert(!\str_contains($fromDir['problem'], 'MOGGI_'), 'and names no variable that would make it work: ' . $fromDir['problem']);
+    $assert(! \str_contains($fromDir['problem'], 'MOGGI_'), 'and names no variable that would make it work: ' . $fromDir['problem']);
 
     // --- an upstream archive source is unpacked and re-packed ----------------
     $tarFile = $work . '/pkg.tar';
     \file_put_contents($tarFile, $archive);
-    $servingTar = static fn (string $base, string $path): ?string
-        => $path === 'pkg.tar' ? (string) \file_get_contents($tarFile) : null;
+    $servingTar = static fn (string $base, string $path): ?string => $path === 'pkg.tar' ? (string) \file_get_contents($tarFile) : null;
 
     $fromTar = fetchBlobFromSource([
         'source' => ['kind' => 'archive', 'url' => 'https://upstream.invalid/pkg.tar', 'sha256' => sha256Digest($archive)],
@@ -123,8 +124,7 @@ try {
     $gzFile = $work . '/pkg.tar.gz';
     $gzipped = \gzencode($archive);
     \file_put_contents($gzFile, $gzipped);
-    $servingGz = static fn (string $base, string $path): ?string
-        => $path === 'pkg.tar.gz' ? (string) \file_get_contents($gzFile) : null;
+    $servingGz = static fn (string $base, string $path): ?string => $path === 'pkg.tar.gz' ? (string) \file_get_contents($gzFile) : null;
 
     $fromGz = fetchBlobFromSource([
         'source' => ['kind' => 'archive', 'url' => 'https://upstream.invalid/pkg.tar.gz', 'sha256' => sha256Digest($gzipped)],

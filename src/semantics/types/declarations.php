@@ -2,20 +2,23 @@
 
 namespace Moggi\Semantics\Types;
 
+use function Moggi\Backend\compileBackend;
+use function Moggi\Backend\DotNet\Foreign\registerDotNetForeignType;
+use function Moggi\Backend\Jvm\Foreign\registerJvmForeignType;
+use function Moggi\Semantics\IntrinsicRegistry\isMagicHashName;
+
 use Moggi\Semantics\Kernel;
 use Moggi\Semantics\Kinds;
+
+use function Moggi\Semantics\TypeExpr\scheme;
+
 use Moggi\Semantics\TypeExpr\TArrow;
+
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TVar;
 use Moggi\Semantics\TypeExpr\TVarApp;
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Syntax\Ast;
-
-use function Moggi\Backend\DotNet\Foreign\registerDotNetForeignType;
-use function Moggi\Backend\Jvm\Foreign\registerJvmForeignType;
-use function Moggi\Backend\compileBackend;
-use function Moggi\Semantics\IntrinsicRegistry\isMagicHashName;
-use function Moggi\Semantics\TypeExpr\scheme;
 
 require_once __DIR__ . '/type_core.php';
 require_once __DIR__ . '/constraints.php';
@@ -53,7 +56,7 @@ function synonymEntry(
 function installTypeSynonymKind(TypeCheckState $state, string $name, array $info): bool
 {
     $kind = $info['kind'] ?? null;
-    if (!$kind instanceof Kinds\Kind || isset($state->kindEnv[Kinds\canonicalTypeConName($name)])) {
+    if (! $kind instanceof Kinds\Kind || isset($state->kindEnv[Kinds\canonicalTypeConName($name)])) {
         return false;
     }
 
@@ -136,12 +139,13 @@ function registerData(TypeCheckState $state, Ast\DataDecl $decl): void
     Kinds\registerTypeKind($state, $decl->name, $dataKind);
     $paramKinds = \array_combine(
         $params,
-        Kinds\peelParamKinds($dataKind, count($params)),
+        Kinds\peelParamKinds($dataKind, \count($params)),
     ) ?: [];
     $state->data[$decl->name]['paramKinds'] = $paramKinds;
 
     $kindScope = Kinds\pushKindScope($state);
     $state->varKinds = [...$state->varKinds, ...$paramKinds];
+
     try {
         foreach ($decl->constructors as $ctor) {
             if (constructorNameExists($state, $ctor->name)) {
@@ -172,7 +176,7 @@ function registerData(TypeCheckState $state, Ast\DataDecl $decl): void
             ];
 
             $ctorType = $result;
-            foreach (array_reverse($fieldTypes) as $fieldType) {
+            foreach (\array_reverse($fieldTypes) as $fieldType) {
                 $ctorType = new TArrow($fieldType, $ctorType);
             }
 
@@ -181,7 +185,6 @@ function registerData(TypeCheckState $state, Ast\DataDecl $decl): void
 
             registerPromotedConstructor($state, $decl->name, $ctor, $fieldTypes);
         }
-
     } finally {
         Kinds\restoreKindScope($state, $kindScope);
     }
@@ -244,11 +247,11 @@ function registerPromotedConstructor(
  */
 function promotableFieldKind(TypeCheckState $state, Ast\TypeNode $type): ?Kinds\Kind
 {
-    if (!$type instanceof Ast\TypeCon) {
+    if (! $type instanceof Ast\TypeCon) {
         return null;
     }
 
-    if (!isset($state->data[$type->name])) {
+    if (! isset($state->data[$type->name])) {
         return null;
     }
 
@@ -275,7 +278,7 @@ function validateConstructorFieldTypeVars(TypeCheckState $state, Ast\Constructor
     $bound = \array_fill_keys($params, true);
     foreach ($ctor->fields as $field) {
         foreach (typeAstVars($field->type) as $name => $_) {
-            if (!isset($bound[$name])) {
+            if (! isset($bound[$name])) {
                 throw typeFail($state, "unbound type variable `{$name}` in constructor field", $field->type);
             }
         }
@@ -310,6 +313,7 @@ function registerTypeSynonym(TypeCheckState $state, Ast\TypeSynonymDecl $decl): 
     }
     $body = null;
     $kind = null;
+
     try {
         $body = astType($state, $decl->type);
         $kind = Kinds\kindOfType($state, $body);
@@ -361,7 +365,7 @@ function registerClass(TypeCheckState $state, Ast\ClassDecl $decl, string $modul
         foreach ($decl->methods as $method) {
             $methodName = $method->name;
             if (isset($methods[$methodName])) {
-                throw typeFail($state, \sprintf("duplicate method `%s` in class `%s`", $methodName, $name), $decl);
+                throw typeFail($state, \sprintf('duplicate method `%s` in class `%s`', $methodName, $name), $decl);
             }
 
             [$constraintAsts, $bodyTypeAst] = splitTypeAst($method->type);
@@ -371,7 +375,7 @@ function registerClass(TypeCheckState $state, Ast\ClassDecl $decl, string $modul
             applyConstraintVarKinds($state, $methodUserConstraints);
             $methodType = astType($state, $bodyTypeAst);
             Kinds\assertKind($state, $methodType, new Kinds\KType(), $state->varKinds, $method->type);
-            foreach (array_reverse($methodUserConstraints) as $constraint) {
+            foreach (\array_reverse($methodUserConstraints) as $constraint) {
                 $methodType = new TArrow(new TCon('__Dict_' . $constraint->class), $methodType);
             }
 
@@ -449,7 +453,7 @@ function impliedRoles(array $methods, array $params): array
  */
 function impliedRole(string $method, Type $type, string $param): ?string
 {
-    if ($method === '' || !$type instanceof TArrow) {
+    if ($method === '' || ! $type instanceof TArrow) {
         return null;
     }
 
@@ -475,11 +479,11 @@ function impliedRole(string $method, Type $type, string $param): ?string
     }
 
     $outer = $applied($type->from);
-    if ($outer === null || !$type->to instanceof TArrow || !$type->to->from instanceof TArrow) {
+    if ($outer === null || ! $type->to instanceof TArrow || ! $type->to->from instanceof TArrow) {
         return null;
     }
     $continuation = $type->to->from;
-    if (!$continuation->from instanceof TVar || $continuation->from->name !== $outer) {
+    if (! $continuation->from instanceof TVar || $continuation->from->name !== $outer) {
         return null;
     }
     $inner = $applied($continuation->to);
@@ -566,8 +570,6 @@ function roleEntry(TypeCheckState $state, string $role): array
     ];
 }
 
-
-
 /**
  * The polymorphic class-method schemes of a class and, transitively, of its
  * superclasses: the methods an instance's body sees for its own class.
@@ -619,6 +621,7 @@ function registerClassAssociatedTypes(TypeCheckState $state, Ast\ClassDecl $decl
         }
         if (isset($state->associatedFamilies[$famName])) {
             $other = $state->associatedFamilies[$famName]['class'];
+
             throw typeFail(
                 $state,
                 "associated type `{$famName}` already declared in class `{$other}`",
@@ -630,7 +633,7 @@ function registerClassAssociatedTypes(TypeCheckState $state, Ast\ClassDecl $decl
         }
 
         foreach ($assoc->params as $paramName) {
-            if (!isset($paramKinds[$paramName])) {
+            if (! isset($paramKinds[$paramName])) {
                 $state->varKinds[$paramName] = new Kinds\KType();
             }
         }
@@ -674,7 +677,7 @@ function syncAssociatedFamiliesFromClasses(TypeCheckState $state): void
 {
     foreach ($state->classes as $className => $info) {
         foreach ($info['associatedTypes'] ?? [] as $famName => $entry) {
-            if (!isset($entry['class'])) {
+            if (! isset($entry['class'])) {
                 $entry['class'] = $className;
             }
             installAssociatedFamily($state, $famName, $entry);
@@ -753,7 +756,7 @@ function classMethodExportSchemes(TypeCheckState $state, Ast\ClassDecl $classDec
         ]);
         $methodType = peelDictArrows(
             $freshened['type'],
-            count($methodLocalConstraints),
+            \count($methodLocalConstraints),
         );
         $bound = schemeBoundVars($methodType, [], $freshened['constraints']);
         $methodDicts = expandConstraintsWithSuperclasses($state, $freshened['constraints']);
@@ -761,7 +764,7 @@ function classMethodExportSchemes(TypeCheckState $state, Ast\ClassDecl $classDec
             prune($state, $methodType),
             $bound,
             $freshened['constraints'],
-            count($methodDicts),
+            \count($methodDicts),
             $methodDicts,
         )->asClassMethod($className);
     }
@@ -778,6 +781,7 @@ function registerClassMethodExportSchemes(TypeCheckState $state, Ast\ClassDecl $
         if ($existing?->classMethod && $existing->class !== $scheme->class) {
             unset($state->env[$methodName]);
             $state->classMethodAmbiguities[$methodName] = true;
+
             continue;
         }
 
@@ -822,7 +826,7 @@ function registerInferredFunctionPlaceholder(TypeCheckState $state, Ast\ClassDec
     }
 
     $fnType = freshType($state);
-    foreach (array_reverse($fn->params) as $_) {
+    foreach (\array_reverse($fn->params) as $_) {
         $fnType = new TArrow(freshType($state), $fnType);
     }
 
@@ -853,6 +857,7 @@ function registerInferredSignatureScheme(TypeCheckState $state, Ast\FunctionDecl
     }
 
     $kindScope = Kinds\pushKindScope($state);
+
     try {
         [$constraintAsts, $bodyTypeAst] = splitTypeAst($signature);
         $userConstraints = parseConstraints($state, $constraintAsts, $fn);
@@ -867,7 +872,7 @@ function registerInferredSignatureScheme(TypeCheckState $state, Ast\FunctionDecl
         $userFnType,
         schemeBoundVars($userFnType, $state->env, $userConstraints),
         $userConstraints,
-        count($constraints),
+        \count($constraints),
         $constraints,
     );
 
@@ -887,7 +892,7 @@ function registerFunctionScheme(TypeCheckState $state, Ast\FunctionDecl $fn): vo
         );
     }
 
-    if (!Ast\hasDeclaredSignature($fn)) {
+    if (! Ast\hasDeclaredSignature($fn)) {
         throw typeFail($state, "exported function `{$fn->name}` needs a type signature", $fn);
     }
 
@@ -902,13 +907,13 @@ function registerFunctionScheme(TypeCheckState $state, Ast\FunctionDecl $fn): vo
     applyConstraintVarKinds($state, $constraints);
     $userFnType = astType($state, $bodyTypeAst);
     $fnType = $userFnType;
-    foreach (array_reverse($userConstraints) as $constraint) {
+    foreach (\array_reverse($userConstraints) as $constraint) {
         $fnType = new TArrow(new TCon('__Dict_' . $constraint->class), $fnType);
     }
     $expected = $fnType;
-    $paramCount = count($fn->params) + count($userConstraints);
+    $paramCount = \count($fn->params) + \count($userConstraints);
     for ($i = 0; $i < $paramCount; ++$i) {
-        if (!$expected instanceof TArrow) {
+        if (! $expected instanceof TArrow) {
             throw typeFail($state, "function `{$fn->name}` has too many parameters", $fn);
         }
         $expected = $expected->to;
@@ -918,7 +923,7 @@ function registerFunctionScheme(TypeCheckState $state, Ast\FunctionDecl $fn): vo
         $userFnType,
         schemeBoundVars($userFnType, $state->env, $userConstraints),
         $userConstraints,
-        count($constraints),
+        \count($constraints),
         $constraints,
     );
     $wrapper = trivialIntrinsicWrapper($fn);

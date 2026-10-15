@@ -11,9 +11,9 @@ namespace Moggi\Paths;
 /** A module name as a path on this host: `Foo.Bar` is `Foo` + DIRECTORY_SEPARATOR + `Bar`. */
 function moduleNameToPath(string $moduleName): string
 {
-    $parts = explode('.', $moduleName);
+    $parts = \explode('.', $moduleName);
 
-    return join(DIRECTORY_SEPARATOR, $parts);
+    return \implode(DIRECTORY_SEPARATOR, $parts);
 }
 
 /**
@@ -61,31 +61,32 @@ function globPaths(string $pattern, int $flags = 0): array
     foreach ($dirs as $d) {
         if (\strpbrk($file, '*?[') === false) {
             $candidate = $d === '.' ? $file : $d . '/' . $file;
-            if (@\file_exists($candidate) && (!$onlyDirs || @\is_dir($candidate))) {
+            if (@\file_exists($candidate) && (! $onlyDirs || @\is_dir($candidate))) {
                 $out[] = $candidate . ($mark && @\is_dir($candidate) ? '/' : '');
             }
+
             continue;
         }
-        if (!@\is_dir($d)) {
+        if (! @\is_dir($d)) {
             continue;
         }
         $entries = @\scandir($d);
-        if (!\is_array($entries)) {
+        if (! \is_array($entries)) {
             continue;
         }
         foreach ($entries as $entry) {
             if ($entry === '.' || $entry === '..') {
                 continue;
             }
-            if (!\str_starts_with($file, '.') && \str_starts_with($entry, '.')) {
+            if (! \str_starts_with($file, '.') && \str_starts_with($entry, '.')) {
                 continue;
             }
-            if (!\fnmatch($file, $entry, $matchFlags)) {
+            if (! \fnmatch($file, $entry, $matchFlags)) {
                 continue;
             }
             $candidate = $d === '.' ? $entry : $d . '/' . $entry;
             $isDir = @\is_dir($candidate);
-            if ($onlyDirs && !$isDir) {
+            if ($onlyDirs && ! $isDir) {
                 continue;
             }
             $out[] = $isDir && $mark ? $candidate . '/' : $candidate;
@@ -101,28 +102,28 @@ function globPaths(string $pattern, int $flags = 0): array
 /** Whether a canonical path is anchored (a POSIX `/` or a Windows drive). */
 function isAbsolutePath(string $path): bool
 {
-    return str_starts_with($path, '/') || \preg_match('#^[A-Za-z]:#', $path) === 1;
+    return \str_starts_with($path, '/') || \preg_match('#^[A-Za-z]:#', $path) === 1;
 }
 
 function relativeRequirePath(string $fromOutputRelative, string $toOutputRelative): string
 {
-    $fromDir = canonicalSeparators(dirname($fromOutputRelative));
+    $fromDir = canonicalSeparators(\dirname($fromOutputRelative));
     if ($fromDir === '.') {
         $fromParts = [];
     } else {
-        $fromParts = explode('/', $fromDir);
+        $fromParts = \explode('/', $fromDir);
     }
 
-    $toParts = explode('/', canonicalSeparators($toOutputRelative));
+    $toParts = \explode('/', canonicalSeparators($toOutputRelative));
 
     while ($fromParts !== [] && $toParts !== [] && $fromParts[0] === $toParts[0]) {
-        array_shift($fromParts);
-        array_shift($toParts);
+        \array_shift($fromParts);
+        \array_shift($toParts);
     }
 
-    $relParts = \array_merge(\array_fill(0, count($fromParts), '..'), $toParts);
+    $relParts = \array_merge(\array_fill(0, \count($fromParts), '..'), $toParts);
 
-    return '__DIR__ . \'/' . join('/', $relParts) . '\'';
+    return '__DIR__ . \'/' . \implode('/', $relParts) . '\'';
 }
 
 /**
@@ -137,17 +138,17 @@ function canonicalPath(string $path): string
     $tail = [];
     $candidate = $path;
     while (($resolved = \realpath($candidate)) === false) {
-        $parent = dirname($candidate);
+        $parent = \dirname($candidate);
         if ($parent === $candidate) {
             return $path;
         }
-        $tail[] = basename($candidate);
+        $tail[] = \basename($candidate);
         $candidate = $parent;
     }
 
     $resolved = canonicalSeparators($resolved);
 
-    return $tail === [] ? $resolved : rtrim($resolved, '/') . '/' . \implode('/', \array_reverse($tail));
+    return $tail === [] ? $resolved : \rtrim($resolved, '/') . '/' . \implode('/', \array_reverse($tail));
 }
 
 /**
@@ -156,25 +157,25 @@ function canonicalPath(string $path): string
  */
 function relativeFilePath(string $fromFile, string $toFile): string
 {
-    $fromDir = canonicalPath(dirname($fromFile));
+    $fromDir = canonicalPath(\dirname($fromFile));
     $toPath = canonicalPath($toFile);
 
-    $fromParts = $fromDir === '' ? [] : explode('/', $fromDir);
-    $toParts = explode('/', $toPath);
+    $fromParts = $fromDir === '' ? [] : \explode('/', $fromDir);
+    $toParts = \explode('/', $toPath);
     $sameRoot = ($fromParts[0] ?? null) !== null && ($fromParts[0] ?? null) === ($toParts[0] ?? null);
 
     while ($fromParts !== [] && $toParts !== [] && $fromParts[0] === $toParts[0]) {
-        array_shift($fromParts);
-        array_shift($toParts);
+        \array_shift($fromParts);
+        \array_shift($toParts);
     }
 
-    if (!$sameRoot && isAbsolutePath($fromDir) && isAbsolutePath($toPath)) {
+    if (! $sameRoot && isAbsolutePath($fromDir) && isAbsolutePath($toPath)) {
         return $toPath;
     }
 
-    $relParts = \array_merge(\array_fill(0, count($fromParts), '..'), $toParts);
+    $relParts = \array_merge(\array_fill(0, \count($fromParts), '..'), $toParts);
 
-    return join('/', $relParts);
+    return \implode('/', $relParts);
 }
 
 /** The expression a generated `require_once` uses to reach `$toFile` from `$fromFile`. */

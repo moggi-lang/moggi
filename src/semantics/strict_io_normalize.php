@@ -2,9 +2,8 @@
 
 namespace Moggi\Semantics\StrictIoNormalize;
 
-use Moggi\Syntax\Ast;
-
 use function Moggi\Semantics\IntrinsicRegistry\ioPrimopRole;
+
 use function Moggi\Semantics\IoBoundary\functionReturnsIo;
 use function Moggi\Semantics\IoBoundary\hasLeadingArrow;
 use function Moggi\Semantics\IoBoundary\ioBindParts;
@@ -12,6 +11,8 @@ use function Moggi\Semantics\IoBoundary\isIoMethodWithRole;
 use function Moggi\Semantics\IoBoundary\isIoType;
 use function Moggi\Semantics\IoBoundary\stripConstraints;
 use function Moggi\Semantics\Kernel\pureRole;
+
+use Moggi\Syntax\Ast;
 
 /**
  * Normalize typed IO expressions into explicit strict sequencing before IR.
@@ -58,8 +59,8 @@ function normalize(Ast\Program $program): Ast\Program
 function etaExpandIoBinding(Ast\FunctionDecl $item): void
 {
     if ($item->params !== []
-        || !hasLeadingArrow($item->type)
-        || !functionReturnsIo($item->type)
+        || ! hasLeadingArrow($item->type)
+        || ! functionReturnsIo($item->type)
     ) {
         return;
     }
@@ -116,7 +117,7 @@ function normalizeIoBody(Ast\AstNode $expr, int &$counter): Ast\AstNode
         return ioBindToSequence($bind['left'], $bind['right'], $counter);
     }
 
-    if ($expr instanceof Ast\IntrinsicCall && ioPrimopRole($expr->name) === 'io-bind' && count($expr->args) === 2) {
+    if ($expr instanceof Ast\IntrinsicCall && ioPrimopRole($expr->name) === 'io-bind' && \count($expr->args) === 2) {
         return ioBindToSequence($expr->args[0], $expr->args[1], $counter);
     }
 
@@ -125,7 +126,7 @@ function normalizeIoBody(Ast\AstNode $expr, int &$counter): Ast\AstNode
         return new Ast\IoPure(normalizePureExpr($pure, $counter), $expr->line, $expr->col, $expr->endCol);
     }
 
-    if ($expr instanceof Ast\IntrinsicCall && ioPrimopRole($expr->name) === 'io-pure' && count($expr->args) === 1) {
+    if ($expr instanceof Ast\IntrinsicCall && ioPrimopRole($expr->name) === 'io-pure' && \count($expr->args) === 1) {
         return new Ast\IoPure(normalizePureExpr($expr->args[0], $counter), $expr->line, $expr->col, $expr->endCol);
     }
 
@@ -197,6 +198,7 @@ function normalizeIoBindings(array $bindings, Ast\AstNode $bodyExpr, Ast\AstNode
                 $binding->pattern,
                 normalizeIoBody($binding->value, $counter),
             );
+
             continue;
         }
 
@@ -210,7 +212,7 @@ function normalizeIoBindings(array $bindings, Ast\AstNode $bodyExpr, Ast\AstNode
 
     $body = normalizeIoBody($bodyExpr, $counter);
     if ($body instanceof Ast\IoSequence) {
-        array_push($stmts, ...$body->stmts);
+        \array_push($stmts, ...$body->stmts);
     } else {
         $stmts[] = new Ast\IoExpr($body);
     }
@@ -220,7 +222,7 @@ function normalizeIoBindings(array $bindings, Ast\AstNode $bodyExpr, Ast\AstNode
 
 function ioBindToSequence(Ast\AstNode $first, Ast\AstNode $fn, int &$counter): Ast\AstNode
 {
-    if ($fn instanceof Ast\Lambda && count($fn->params) === 1) {
+    if ($fn instanceof Ast\Lambda && \count($fn->params) === 1) {
         $param = $fn->params[0];
         $pattern = $param instanceof Ast\LambdaParam ? $param->pattern : $param;
 
@@ -379,12 +381,12 @@ function normalizePureExpr(Ast\AstNode $expr, int &$counter): Ast\AstNode
 
 function ioPureApply(Ast\AstNode $expr): ?Ast\AstNode
 {
-    if (!$expr instanceof Ast\Apply) {
+    if (! $expr instanceof Ast\Apply) {
         return null;
     }
 
     $method = $expr->function;
-    if (!isIoMethodWithRole($method, pureRole())) {
+    if (! isIoMethodWithRole($method, pureRole())) {
         return null;
     }
 

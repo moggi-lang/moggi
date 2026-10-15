@@ -28,13 +28,13 @@ const SAFE_NAME_PATTERN = '[A-Za-z_][A-Za-z0-9_]*';
  */
 function isIdentifier(string $name): bool
 {
-    return preg_match('/^' . IDENTIFIER_PATTERN . '$/', $name) === 1;
+    return \preg_match('/^' . IDENTIFIER_PATTERN . '$/', $name) === 1;
 }
 
 /** Whether `$name` is an identifier a target language can spell unchanged. */
 function isSafeName(string $name): bool
 {
-    return preg_match('/^' . SAFE_NAME_PATTERN . '$/', $name) === 1;
+    return \preg_match('/^' . SAFE_NAME_PATTERN . '$/', $name) === 1;
 }
 
 /**
@@ -90,7 +90,7 @@ function surfaceConstructorAlias(string $typeName, array $constructors, ?array $
     if (($children['mode'] ?? 'none') !== 'listed') {
         return null;
     }
-    if (!\in_array($typeName, $children['names'], true)) {
+    if (! \in_array($typeName, $children['names'], true)) {
         return null;
     }
     if (\in_array($typeName, $constructors, true)) {

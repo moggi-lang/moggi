@@ -2,11 +2,9 @@
 
 namespace Moggi\LSP\TextDocument;
 
-use Moggi\LSP\Analysis\AnalysisService;
-use Moggi\Syntax\Ast;
-
 use function Moggi\Docs\classDeclHeader;
 use function Moggi\Docs\constructorTypeSignature;
+
 use function Moggi\Docs\dataDeclSignature;
 use function Moggi\Docs\docForEntityName;
 use function Moggi\Docs\dumpAstTypeForDocs;
@@ -15,19 +13,20 @@ use function Moggi\Docs\friendlyAstTypeVarNames;
 use function Moggi\Docs\nameTypeSignature;
 use function Moggi\Docs\schemeToString;
 use function Moggi\Docs\surfaceTypeSignature;
-use function Moggi\LSP\Analysis\analyzeDirty;
-use function Moggi\LSP\Analysis\ensureAnalyzed;
-use function Moggi\LSP\Analysis\ensureDocIndex;
+
+use Moggi\LSP\Analysis\AnalysisService;
+
 use function Moggi\LSP\Analysis\findNodeAt;
 use function Moggi\LSP\Analysis\findNodeChainAt;
 use function Moggi\LSP\Index\binderResolved;
-use function Moggi\LSP\Index\declForResolved;
 use function Moggi\LSP\Index\isBinderResolved;
 use function Moggi\LSP\Protocol\compilerPosToLsp;
 use function Moggi\LSP\Protocol\lspPosToCompiler;
 use function Moggi\LSP\Protocol\nodeToLspRange;
 use function Moggi\LSP\Protocol\splitLines;
 use function Moggi\Modules\resolvedSymbol;
+
+use Moggi\Syntax\Ast;
 
 function findCtorDecl(AnalysisService $svc, string $module, string $name): ?array
 {
@@ -42,7 +41,7 @@ function findCtorDecl(AnalysisService $svc, string $module, string $name): ?arra
     }
     foreach ($programs as $prog) {
         foreach ($prog->items as $item) {
-            if (!($item instanceof Ast\DataDecl)) {
+            if (! ($item instanceof Ast\DataDecl)) {
                 continue;
             }
             foreach ($item->constructors as $ctor) {
@@ -66,7 +65,7 @@ function findCtorDecl(AnalysisService $svc, string $module, string $name): ?arra
 function dataDeclSignatureIfAvailable(AnalysisService $svc, ?string $module, string $name): ?string
 {
     foreach ($svc->project->checked as $prog) {
-        if (!($prog instanceof Ast\Program)) {
+        if (! ($prog instanceof Ast\Program)) {
             continue;
         }
         foreach ($prog->items as $item) {
@@ -79,7 +78,7 @@ function dataDeclSignatureIfAvailable(AnalysisService $svc, ?string $module, str
                     $rhs = surfaceTypeSignature($item->type);
 
                     return $item->name
-                        . ($item->params !== [] ? ' ' . implode(' ', $item->params) : '')
+                        . ($item->params !== [] ? ' ' . \implode(' ', $item->params) : '')
                         . ' = ' . ($rhs ?? '_');
                 }
 
@@ -100,12 +99,12 @@ function functionParamTypeSlice(Ast\FunctionDecl $fn, int $index): ?Ast\TypeNode
     $type = $fn->type;
     while ($type instanceof Ast\TypeArrow
         && $type->from instanceof Ast\TypeCon
-        && str_starts_with($type->from->name, '__Dict_')) {
+        && \str_starts_with($type->from->name, '__Dict_')) {
         $type = $type->to;
     }
 
     for ($i = 0; $i < $index; $i++) {
-        if (!$type instanceof Ast\TypeArrow) {
+        if (! $type instanceof Ast\TypeArrow) {
             return null;
         }
         $type = $type->to;
@@ -133,7 +132,7 @@ function functionParamSignature(Ast\FunctionDecl $fn, string $name, Ast\TypeNode
 function selfBinderSignature(?Ast\FunctionDecl $fn, Ast\AstNode $binder): ?string
 {
     $name = $binder->name ?? null;
-    if (!\is_string($name) || $name === '') {
+    if (! \is_string($name) || $name === '') {
         return null;
     }
     if ($fn !== null && $binder instanceof Ast\PatVar) {
@@ -165,14 +164,14 @@ function astTreeContains(object $root, Ast\AstNode $needle): bool
     if ($root instanceof Ast\TypeNode) {
         return false;
     }
-    foreach (get_object_vars($root) as $prop) {
-        if (is_object($prop)) {
+    foreach (\get_object_vars($root) as $prop) {
+        if (\is_object($prop)) {
             if (astTreeContains($prop, $needle)) {
                 return true;
             }
-        } elseif (is_array($prop)) {
+        } elseif (\is_array($prop)) {
             foreach ($prop as $elem) {
-                if (is_object($elem) && astTreeContains($elem, $needle)) {
+                if (\is_object($elem) && astTreeContains($elem, $needle)) {
                     return true;
                 }
             }
@@ -212,7 +211,7 @@ function paramSignatureForUse(?Ast\FunctionDecl $fn, Ast\AstNode $use): ?string
 {
     $binderId = $use->binderId ?? null;
     $name = $use->name ?? null;
-    if (!\is_int($binderId) || !\is_string($name) || $name === '' || $fn === null) {
+    if (! \is_int($binderId) || ! \is_string($name) || $name === '' || $fn === null) {
         return null;
     }
     foreach ($fn->params as $i => $param) {
@@ -264,9 +263,9 @@ function svcHover(AnalysisService $svc, string $uri, array $pos): ?array
     if ($node === null && $word !== null && $word !== '') {
         $lines = splitLines($analysis->source);
         $text = $lines[$comp['line'] - 1] ?? '';
-        $idx = max(0, $comp['col'] - 1);
+        $idx = \max(0, $comp['col'] - 1);
         $left = $idx;
-        while ($left > 0 && preg_match('/[A-Za-z0-9_\']/', $text[$left - 1] ?? '')) {
+        while ($left > 0 && \preg_match('/[A-Za-z0-9_\']/', $text[$left - 1] ?? '')) {
             $left--;
         }
         if ($left < $idx) {
@@ -279,7 +278,7 @@ function svcHover(AnalysisService $svc, string $uri, array $pos): ?array
         : null;
 
     $fieldHover = recordFieldHover($svc, $analysis, $node, $word, $comp['line'], $comp['col'], $uri);
-    if ($fieldHover !== null || ($node !== null && !$node instanceof Ast\AstNode)) {
+    if ($fieldHover !== null || ($node !== null && ! $node instanceof Ast\AstNode)) {
         return $fieldHover;
     }
 
@@ -297,9 +296,10 @@ function svcHover(AnalysisService $svc, string $uri, array $pos): ?array
                 $push('_typed hole_ — expected type shown above');
                 $chain = findNodeChainAt($analysis->program, $comp['line'], $comp['col']);
                 $ctxNode = null;
-                foreach (array_reverse($chain) as $cand) {
+                foreach (\array_reverse($chain) as $cand) {
                     if ($cand !== $node && ($cand->line ?? 0) > 0) {
                         $ctxNode = $cand;
+
                         break;
                     }
                 }
@@ -310,7 +310,7 @@ function svcHover(AnalysisService $svc, string $uri, array $pos): ?array
                     $ctxColEnd = (int) $ctxRange['end']['character'];
                     $lines = splitLines($analysis->source);
                     if (isset($lines[$ctxLineIdx])) {
-                        $ctxText = substr($lines[$ctxLineIdx], $ctxColStart, $ctxColEnd - $ctxColStart);
+                        $ctxText = \substr($lines[$ctxLineIdx], $ctxColStart, $ctxColEnd - $ctxColStart);
                         if ($ctxText !== '' && $ctxText !== '_') {
                             $pushType($ctxText);
                         }
@@ -322,8 +322,9 @@ function svcHover(AnalysisService $svc, string $uri, array $pos): ?array
             if (($node->line ?? 0) > 0) {
                 $range = nodeToLspRange($analysis->source, $node);
             }
+
             return [
-                'contents' => ['kind' => 'markdown', 'value' => implode("\n\n", $parts)],
+                'contents' => ['kind' => 'markdown', 'value' => \implode("\n\n", $parts)],
                 ...(\is_array($range) ? ['range' => $range] : []),
             ];
         }
@@ -379,28 +380,28 @@ function svcHover(AnalysisService $svc, string $uri, array $pos): ?array
         }
         $kindLabel = 'function';
         if (($node->line ?? 0) > 0) {
-            $definedIn = [basename(str_replace('file:///', '', $uri)), $node->line];
+            $definedIn = [\basename(\str_replace('file:///', '', $uri)), $node->line];
         }
     } elseif ($node instanceof Ast\DataDecl) {
         $typeSig = dataDeclSignature($node);
         $kindLabel = $node->isNewtype ? 'newtype' : 'algebraic data type';
         if (($node->line ?? 0) > 0) {
-            $definedIn = [basename(str_replace('file:///', '', $uri)), $node->line];
+            $definedIn = [\basename(\str_replace('file:///', '', $uri)), $node->line];
         }
     } elseif ($node instanceof Ast\TypeSynonymDecl) {
         $rhs = surfaceTypeSignature($node->type);
         $typeSig = $node->name
-            . ($node->params !== [] ? ' ' . implode(' ', $node->params) : '')
+            . ($node->params !== [] ? ' ' . \implode(' ', $node->params) : '')
             . ' = ' . ($rhs ?? '_');
         $kindLabel = 'type synonym';
         if (($node->line ?? 0) > 0) {
-            $definedIn = [basename(str_replace('file:///', '', $uri)), $node->line];
+            $definedIn = [\basename(\str_replace('file:///', '', $uri)), $node->line];
         }
     } elseif ($node instanceof Ast\ClassDecl) {
         $typeSig = classDeclHeader($node);
         $kindLabel = 'type class';
         if (($node->line ?? 0) > 0) {
-            $definedIn = [basename(str_replace('file:///', '', $uri)), $node->line];
+            $definedIn = [\basename(\str_replace('file:///', '', $uri)), $node->line];
         }
     } elseif (($node instanceof Ast\ConstructorRef || $node instanceof Ast\ConstructorDecl) && $name !== null) {
         $ctorInfo = findCtorDecl($svc, $module, $name);
@@ -409,9 +410,9 @@ function svcHover(AnalysisService $svc, string $uri, array $pos): ?array
             $kindLabel = 'constructor';
             $ctorRange = $ctorInfo['child']->selectionRange ?? null;
             if ($ctorRange !== null) {
-                $definedIn = [basename(str_replace('file:///', '', $ctorInfo['child']->uri)), ((int) ($ctorRange['start']['line'] ?? 0)) + 1];
+                $definedIn = [\basename(\str_replace('file:///', '', $ctorInfo['child']->uri)), ((int) ($ctorRange['start']['line'] ?? 0)) + 1];
             } elseif (($ctorInfo['decl']->line ?? 0) > 0) {
-                $definedIn = [basename(str_replace('file:///', '', $uri)), $ctorInfo['decl']->line];
+                $definedIn = [\basename(\str_replace('file:///', '', $uri)), $ctorInfo['decl']->line];
             }
         }
     }
@@ -448,13 +449,13 @@ function svcHover(AnalysisService $svc, string $uri, array $pos): ?array
                             $argParts[] = dumpTypeForDocs($a);
                         }
                     }
-                    $arg = $argParts !== [] ? ' ' . implode(' ', $argParts) : '';
+                    $arg = $argParts !== [] ? ' ' . \implode(' ', $argParts) : '';
                 }
                 $cs[] = $c->class . $arg;
             }
         }
         if ($cs !== []) {
-            $push('**constraints:** `' . implode('`, `', array_unique($cs)) . '`');
+            $push('**constraints:** `' . \implode('`, `', \array_unique($cs)) . '`');
         }
     }
 
@@ -469,18 +470,18 @@ function svcHover(AnalysisService $svc, string $uri, array $pos): ?array
                 : null);
     }
     $mogdocDone = false;
-    if ($resolved !== null && !isBinderResolved($resolved)) {
+    if ($resolved !== null && ! isBinderResolved($resolved)) {
         $def = $svc->modules->declForResolved($resolved);
         if ($def !== null) {
             if ($typeSig === null && $def->type !== null
-                && !in_array($def->type, ['data', 'newtype', 'type', 'class', 'function'], true)) {
+                && ! \in_array($def->type, ['data', 'newtype', 'type', 'class', 'function'], true)) {
                 $pushType(($def->name !== '' ? $def->name . ' :: ' : '') . $def->type);
             }
             if ($def->doc) {
                 $push($def->doc);
                 $mogdocDone = true;
             }
-            $file = basename(str_replace('file:///', '', $def->uri ?? $uri));
+            $file = \basename(\str_replace('file:///', '', $def->uri ?? $uri));
             $line = (int) ($def->selectionRange['start']['line']
                 ?? $def->range['start']['line']
                 ?? 0) + 1;
@@ -491,17 +492,17 @@ function svcHover(AnalysisService $svc, string $uri, array $pos): ?array
     }
     if ($name !== null && isset($analysis->declarations[$name])) {
         $decl = $analysis->declarations[$name];
-        if ($typeSig === null && !empty($decl['type']) && $decl['type'] !== 'function') {
+        if ($typeSig === null && ! empty($decl['type']) && $decl['type'] !== 'function') {
             $pushType("{$name} :: {$decl['type']}");
         }
         if ($typeSig === null && ($decl['type'] ?? '') === 'function'
-            && $resolved !== null && !isBinderResolved($resolved)) {
+            && $resolved !== null && ! isBinderResolved($resolved)) {
             $def = $svc->modules->declForResolved($resolved);
             if ($def !== null && $def->type !== null && $def->type !== '') {
                 $pushType("{$name} :: {$def->type}");
             }
         }
-        if (!empty($decl['doc'])) {
+        if (! empty($decl['doc'])) {
             $push((string) $decl['doc']);
             $mogdocDone = true;
         }
@@ -513,23 +514,24 @@ function svcHover(AnalysisService $svc, string $uri, array $pos): ?array
     if ($definedIn !== null) {
         $hasDefinedIn = false;
         foreach ($parts as $p) {
-            if (str_starts_with($p, '**defined in:**')) {
+            if (\str_starts_with($p, '**defined in:**')) {
                 $hasDefinedIn = true;
+
                 break;
             }
         }
-        if (!$hasDefinedIn) {
+        if (! $hasDefinedIn) {
             $push("**defined in:** {$definedIn[0]}:{$definedIn[1]}");
         }
     }
-    if ($kindLabel === 'function' && ($lastTypeSig === null || !str_contains($lastTypeSig, '->'))) {
+    if ($kindLabel === 'function' && ($lastTypeSig === null || ! \str_contains($lastTypeSig, '->'))) {
         $kindLabel = null;
     }
     if ($kindLabel !== null) {
         $push("_{$kindLabel}_");
     }
 
-    if (!$mogdocDone && $name !== null && $svc->docIndex !== null) {
+    if (! $mogdocDone && $name !== null && $svc->docIndex !== null) {
         $doc = docForEntityName($svc->docIndex, $name, $seen);
         if ($doc !== null) {
             $push($doc);
@@ -540,7 +542,7 @@ function svcHover(AnalysisService $svc, string $uri, array $pos): ?array
         $mod = $module;
         $decl = findModuleDeclByName($svc, $mod, $word);
         if ($decl !== null) {
-            if (in_array($decl->type, ['data', 'newtype'], true)) {
+            if (\in_array($decl->type, ['data', 'newtype'], true)) {
                 $ctorData = findCtorDecl($svc, $mod, $word);
                 if ($ctorData !== null) {
                     $sig = constructorTypeSignature($ctorData['decl'], $ctorData['ctor']);
@@ -551,7 +553,7 @@ function svcHover(AnalysisService $svc, string $uri, array $pos): ?array
                 } else {
                     $pushType(dataDeclSignatureIfAvailable($svc, $mod, $word));
                 }
-            } elseif ($decl->type !== null && !in_array($decl->type, ['type', 'class'], true)) {
+            } elseif ($decl->type !== null && ! \in_array($decl->type, ['type', 'class'], true)) {
                 $pushType("{$decl->name} :: {$decl->type}");
             } else {
                 $pushType(dataDeclSignatureIfAvailable($svc, $mod, $word));
@@ -559,7 +561,7 @@ function svcHover(AnalysisService $svc, string $uri, array $pos): ?array
             if ($decl->doc) {
                 $push($decl->doc);
             }
-            $moduleFile = basename(str_replace('file:///', '', $decl->uri));
+            $moduleFile = \basename(\str_replace('file:///', '', $decl->uri));
             $push('**defined in:** ' . $moduleFile . ':'
                 . (((int) ($decl->selectionRange['start']['line'] ?? 0)) + 1));
         }
@@ -580,13 +582,15 @@ function svcHover(AnalysisService $svc, string $uri, array $pos): ?array
                 ],
             ];
         }
+
         return keywordHover($word);
     }
     if ($range === null && $node !== null && ($node->line ?? 0) > 0) {
         $range = nodeToLspRange($analysis->source, $node);
     }
+
     return [
-        'contents' => ['kind' => 'markdown', 'value' => implode("\n\n", $parts)],
+        'contents' => ['kind' => 'markdown', 'value' => \implode("\n\n", $parts)],
         ...(\is_array($range) ? ['range' => $range] : []),
     ];
 }
@@ -604,7 +608,7 @@ function svcHover(AnalysisService $svc, string $uri, array $pos): ?array
  */
 function recordFieldHover(AnalysisService $svc, object $analysis, ?object $node, ?string $word, int $line, int $col, string $uri): ?array
 {
-    if (!$analysis->program instanceof Ast\Program) {
+    if (! $analysis->program instanceof Ast\Program) {
         return null;
     }
     $program = $analysis->program;
@@ -635,6 +639,7 @@ function recordFieldHover(AnalysisService $svc, object $analysis, ?object $node,
         foreach ($ctor->fields as $candidate) {
             if ($candidate->name === $field) {
                 $fieldDecl = $candidate;
+
                 break 2;
             }
         }
@@ -650,12 +655,12 @@ function recordFieldHover(AnalysisService $svc, object $analysis, ?object $node,
     }
     $parts[] = 'field of `' . $record['decl']->name . '`';
     [$file, $declLine] = $record['program'] === $analysis->program && $fieldDecl->line > 0
-        ? [basename(str_replace('file:///', '', $uri)), $fieldDecl->line]
+        ? [\basename(\str_replace('file:///', '', $uri)), $fieldDecl->line]
         : recordDeclLocation($svc, $record, $uri);
     $parts[] = "**defined in:** {$file}:{$declLine}";
 
     return [
-        'contents' => ['kind' => 'markdown', 'value' => implode("\n\n", $parts)],
+        'contents' => ['kind' => 'markdown', 'value' => \implode("\n\n", $parts)],
         ...($range !== null ? ['range' => $range] : []),
     ];
 }
@@ -672,12 +677,12 @@ function recordDeclLocation(AnalysisService $svc, array $record, string $uri): a
     $info = findModuleDeclByName($svc, $record['module'], $record['decl']->name);
     if ($info !== null) {
         return [
-            basename(str_replace('file:///', '', $info->uri)),
+            \basename(\str_replace('file:///', '', $info->uri)),
             ((int) ($info->selectionRange['start']['line'] ?? 0)) + 1,
         ];
     }
 
-    return [basename(str_replace('file:///', '', $uri)), (int) $record['decl']->line];
+    return [\basename(\str_replace('file:///', '', $uri)), (int) $record['decl']->line];
 }
 
 function keywordHover(?string $word): ?array
@@ -695,31 +700,33 @@ function keywordHover(?string $word): ?array
             ];
         }
     }
+
     return null;
 }
 
 function wordAt(string $source, int $line, int $col): ?string
 {
-    $lines = preg_split("/\r\n|\n|\r/", $source) ?: [];
+    $lines = \preg_split("/\r\n|\n|\r/", $source) ?: [];
     $text = $lines[$line - 1] ?? '';
     if ($text === '') {
         return null;
     }
-    $idx = max(0, $col - 1);
-    if ($idx >= strlen($text)) {
-        $idx = strlen($text) - 1;
+    $idx = \max(0, $col - 1);
+    if ($idx >= \strlen($text)) {
+        $idx = \strlen($text) - 1;
     }
     if ($idx < 0) {
         return null;
     }
     $left = $idx;
-    while ($left > 0 && preg_match('/[A-Za-z0-9_\']/', $text[$left - 1])) {
+    while ($left > 0 && \preg_match('/[A-Za-z0-9_\']/', $text[$left - 1])) {
         $left--;
     }
     $right = $idx;
-    while ($right < strlen($text) && preg_match('/[A-Za-z0-9_\']/', $text[$right])) {
+    while ($right < \strlen($text) && \preg_match('/[A-Za-z0-9_\']/', $text[$right])) {
         $right++;
     }
-    $word = substr($text, $left, $right - $left);
+    $word = \substr($text, $left, $right - $left);
+
     return $word !== '' ? $word : null;
 }

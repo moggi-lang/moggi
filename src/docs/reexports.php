@@ -2,11 +2,11 @@
 
 namespace Moggi\Docs;
 
-use Moggi\Syntax\Ast;
-use Moggi\Syntax\Ast\Program;
-
 use function Moggi\Modules\classMethodsFromUnits;
 use function Moggi\Modules\exportItemChildNames;
+
+use Moggi\Syntax\Ast;
+use Moggi\Syntax\Ast\Program;
 
 function isLocallyDefinedValue(Program $program, string $name): bool
 {
@@ -63,7 +63,7 @@ function homeModuleForExportedType(string $name, Program $program, array $units)
 
     foreach ($units as $moduleName => $unit) {
         $unitProgram = $unit['program'] ?? null;
-        if (!$unitProgram instanceof Program) {
+        if (! $unitProgram instanceof Program) {
             continue;
         }
         if (isLocallyDefinedType($unitProgram, $name)) {
@@ -104,7 +104,7 @@ function homeModuleForExportedValue(
             continue;
         }
 
-        if (!\in_array($name, exportItemChildNames($item, $methods), true)) {
+        if (! \in_array($name, exportItemChildNames($item, $methods), true)) {
             continue;
         }
 
@@ -119,7 +119,7 @@ function homeModuleForExportedValue(
             continue;
         }
         $unitProgram = $unit['program'] ?? null;
-        if (!$unitProgram instanceof Program) {
+        if (! $unitProgram instanceof Program) {
             continue;
         }
         if (isLocallyDefinedValue($unitProgram, $name)) {

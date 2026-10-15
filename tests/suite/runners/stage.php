@@ -5,16 +5,18 @@
  * `kinds.php` picks the producer by the golden's kind.
  */
 
+use function Moggi\Backend\compileBackend;
+use function Moggi\Backend\Php\Codegen\emit;
+use function Moggi\Backend\setCompileBackend;
+
+use function Moggi\Compiler\compileFile;
+use function Moggi\IR\Dump\dump as dumpIr;
+use function Moggi\Optimize\optimize;
+
 use Moggi\Semantics\Types\TypeError;
 use Moggi\Syntax\Lexer\LexError;
 use Moggi\Syntax\Parser\ParseError;
 
-use function Moggi\Backend\Php\Codegen\emit;
-use function Moggi\Backend\compileBackend;
-use function Moggi\Backend\setCompileBackend;
-use function Moggi\Compiler\compileFile;
-use function Moggi\IR\Dump\dump as dumpIr;
-use function Moggi\Optimize\optimize;
 use function Moggi\Test\IrFixture\moduleFromArray;
 
 /** A compiler diagnostic as the goldens store it: what the stage printed, verbatim. */
@@ -24,7 +26,7 @@ function diagnosticText(\Throwable $e): string
         return $e->display();
     }
 
-    return get_class($e) . ': ' . $e->getMessage() . "\n";
+    return \get_class($e) . ': ' . $e->getMessage() . "\n";
 }
 
 /**
@@ -34,7 +36,7 @@ function diagnosticText(\Throwable $e): string
 function sourceStageDump(string $path, string $stage): string
 {
     $dump = compileFile($path, $stage);
-    if (!\is_string($dump)) {
+    if (! \is_string($dump)) {
         throw new TestFailure("{$stage} dump unexpectedly produced multiple artifacts");
     }
 
@@ -45,7 +47,7 @@ function sourceStageDump(string $path, string $stage): string
 function irLoweringDump(string $path): string
 {
     $actual = withCompileBackend('php', static fn () => compileFile($path, 'ir', false));
-    if (!\is_string($actual)) {
+    if (! \is_string($actual)) {
         throw new TestFailure('lowering dump unexpectedly produced multiple artifacts');
     }
 
@@ -66,14 +68,14 @@ function emitPhpArtifact(string $path): string
     $module = loadIrFixture($path);
     $sourcePath = testRelativePath($path);
     $actual = emit($module, $sourcePath, [
-        'outputRelative' => preg_replace('/\.ir\.php$/', '.php', $sourcePath) ?? $sourcePath,
+        'outputRelative' => \preg_replace('/\.ir\.php$/', '.php', $sourcePath) ?? $sourcePath,
     ]);
     if (\is_string($actual)) {
         return $actual;
     }
 
     foreach ($actual as $relative => $bytes) {
-        if (\is_string($relative) && \is_string($bytes) && str_ends_with($relative, '.php') && !str_ends_with($relative, '.moggi.map')) {
+        if (\is_string($relative) && \is_string($bytes) && \str_ends_with($relative, '.php') && ! \str_ends_with($relative, '.moggi.map')) {
             return $bytes;
         }
     }
@@ -88,7 +90,7 @@ function emitPhpArtifact(string $path): string
 function loadIrFixture(string $path): \Moggi\IR\Module
 {
     $fixture = require $path;
-    if (!\is_array($fixture)) {
+    if (! \is_array($fixture)) {
         throw new TestFailure("IR fixture {$path} must return an array");
     }
 
@@ -96,7 +98,7 @@ function loadIrFixture(string $path): \Moggi\IR\Module
         return moduleFromArray($fixture);
     }
 
-    if (!isset($fixture['module']) || !\is_array($fixture['module'])) {
+    if (! isset($fixture['module']) || ! \is_array($fixture['module'])) {
         throw new TestFailure("IR fixture {$path} must return an IR module or ['module' => ...]");
     }
 
@@ -108,6 +110,7 @@ function withCompileBackend(string $backend, callable $body): mixed
 {
     $previous = compileBackend();
     setCompileBackend($backend);
+
     try {
         return $body();
     } finally {

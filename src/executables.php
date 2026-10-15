@@ -76,7 +76,7 @@ function findExecutable(string $name): ?string
 function findToolchainExecutable(string $rootEnv, string $name, string $subdir = 'bin'): ?string
 {
     $root = \getenv($rootEnv);
-    if (!\is_string($root) || $root === '') {
+    if (! \is_string($root) || $root === '') {
         return null;
     }
     $directory = \rtrim($root, '/\\');
@@ -146,7 +146,7 @@ function runProcess(
 
     $descriptors = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
     $process = @\proc_open($command, $descriptors, $pipes, $cwd, $env);
-    if (!\is_resource($process)) {
+    if (! \is_resource($process)) {
         return ['exitCode' => -1, 'stdout' => '', 'stderr' => 'cannot start ' . \implode(' ', $command)];
     }
     \fclose($pipes[0]);
@@ -178,21 +178,23 @@ function runProcess(
     while (true) {
         $drain();
         $status = \proc_get_status($process);
-        if (!$status['running']) {
+        if (! $status['running']) {
             $exitCode = $status['exitcode'];
+
             break;
         }
         if ($deadline !== null && \microtime(true) > $deadline) {
             $timedOut = true;
             \proc_terminate($process);
             \usleep(100_000);
+
             break;
         }
         \usleep(2000);
     }
 
     $grace = \microtime(true) + 0.2;
-    while (!\feof($pipes[1]) || !\feof($pipes[2])) {
+    while (! \feof($pipes[1]) || ! \feof($pipes[2])) {
         $drain();
         if (\microtime(true) >= $grace) {
             break;
@@ -239,7 +241,7 @@ function runProcessThroughFiles(
 
     $pipes = [];
     $process = @\proc_open($command, $descriptors, $pipes, $cwd, $env);
-    if (!\is_resource($process)) {
+    if (! \is_resource($process)) {
         return ['exitCode' => -1, 'stdout' => '', 'stderr' => 'cannot start ' . \implode(' ', $command)];
     }
 
@@ -254,14 +256,16 @@ function runProcessThroughFiles(
             $shownErr = echoFileTail($stderrPath, $shownErr, STDERR);
         }
         $status = \proc_get_status($process);
-        if (!$status['running']) {
+        if (! $status['running']) {
             $exitCode = $status['exitcode'];
+
             break;
         }
         if ($deadline !== null && \microtime(true) > $deadline) {
             $timedOut = true;
             \proc_terminate($process);
             \usleep(100_000);
+
             break;
         }
         \usleep(2000);

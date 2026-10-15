@@ -19,20 +19,22 @@
 // `tests/optimize/Opt-Apply-Collapse.ir.php`.
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
 
 use Moggi\IR;
-use Moggi\Syntax\Ast;
 
 use function Moggi\IR\Visit\walkModule;
+
 use function Moggi\Optimize\Partial\foldPartialApply;
 use function Moggi\Optimize\Partial\normalizeKnownApplies;
 
+use Moggi\Syntax\Ast;
+
 $assert = static function (bool $condition, string $message): void {
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
@@ -41,15 +43,14 @@ $int = static fn (): Ast\TypeCon => new Ast\TypeCon('Int');
 
 /** Right-nested arrow chain, e.g. `t1 -> t2 -> rest`. */
 $funcType = static function (array $args, Ast\TypeNode $rest): Ast\TypeNode {
-    foreach (array_reverse($args) as $arg) {
+    foreach (\array_reverse($args) as $arg) {
         $rest = new Ast\TypeArrow($arg, $rest);
     }
 
     return $rest;
 };
 
-$decl = static fn (string $name, array $params, ?Ast\TypeNode $type, array $items): IR\FunctionDecl
-    => new IR\FunctionDecl($name, $params, $type, new IR\Block($items));
+$decl = static fn (string $name, array $params, ?Ast\TypeNode $type, array $items): IR\FunctionDecl => new IR\FunctionDecl($name, $params, $type, new IR\Block($items));
 
 /** @return array{stmts: list<class-string>, operands: list<IR\Operand>} */
 $shape = static function (IR\FunctionDecl $function): array {
@@ -69,7 +70,7 @@ $shape = static function (IR\FunctionDecl $function): array {
 };
 
 $countOf = static function (array $nodes, string $class): int {
-    return count(array_filter(
+    return \count(\array_filter(
         $nodes,
         static fn (mixed $node): bool => (\is_object($node) ? $node::class : $node) === $class,
     ));
@@ -102,7 +103,7 @@ $assert($countOf($s['operands'], IR\Partial::class) === 0, 'the fused partial mu
 $call = $findOf($s['operands'], IR\ExprCall::class);
 $assert($call instanceof IR\ExprCall, 'partial + application must fuse into an expr_call');
 $assert($call->callee === 'add2', 'fused expr_call must target the partial callee');
-$assert(count($call->args) === 2, 'fused expr_call must carry the partial args plus the new argument');
+$assert(\count($call->args) === 2, 'fused expr_call must carry the partial args plus the new argument');
 
 // 2. The same fusion must accept an `expr_partial` produced by an earlier
 //    fusion. Requiring `IR\Partial` here left the chain as `__partial` cells
@@ -117,7 +118,7 @@ $s = $shape($out);
 $assert($countOf($s['stmts'], IR\CallValue::class) === 0, 'expr_partial + application must not stay a call_value');
 $assert($countOf($s['operands'], IR\ExprPartial::class) === 0, 'the fused expr_partial must be gone');
 $call = $findOf($s['operands'], IR\ExprCall::class);
-$assert($call instanceof IR\ExprCall && count($call->args) === 2, 'expr_partial + application must fuse into one expr_call');
+$assert($call instanceof IR\ExprCall && \count($call->args) === 2, 'expr_partial + application must fuse into one expr_call');
 
 // 3. An exactly-saturating known apply becomes a direct call
 $fn = $decl('exact', [], null, [
@@ -171,7 +172,7 @@ $out = normalizeKnownApplies([$fn], 'Main')[0];
 $value = $out->body->items[0]->value;
 $assert($value instanceof IR\ExprCallValue, 'a typed curried call must stay an expr_call_value');
 $assert($value->callee instanceof IR\Local, 'the flattened apply must be the one on the parameter');
-$assert(count($value->args) === 2, 'the flattened apply must carry both arguments');
+$assert(\count($value->args) === 2, 'the flattened apply must carry both arguments');
 
 // Arity cap: the parameter takes one argument, so `f x y` cannot merge — it
 // would turn an exact application into an over-application.

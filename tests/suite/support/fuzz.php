@@ -10,14 +10,19 @@
  * `fuzz_replay.php` command that reruns it.
  */
 
-use Moggi\Semantics\Types\TypeError;
-use Moggi\Syntax\Lexer\LexError;
-use Moggi\Syntax\Parser\ParseError;
-
 use function Moggi\Semantics\Effects\checkAndNormalize;
+
+use Moggi\Semantics\Types\TypeError;
+
 use function Moggi\Syntax\Ast\dump as dumpAst;
+
 use function Moggi\Syntax\Lexer\lex;
+
+use Moggi\Syntax\Lexer\LexError;
+
 use function Moggi\Syntax\Parser\parse;
+
+use Moggi\Syntax\Parser\ParseError;
 
 /** Fragments fed to the generator. Anything the frontend has to survive, valid or not. */
 const FUZZ_FRAGMENTS = [
@@ -205,6 +210,7 @@ function fuzzShrink(string $source, callable $drop, callable $fails): string
             if ($fails($candidate)) {
                 $source = $candidate;
                 $changed = true;
+
                 break;
             }
         }
@@ -237,7 +243,7 @@ function fuzzFrontendSmoke(string $projectRoot, int $seed, int $count): array
     }
 
     $report = \json_decode(\trim((string) ($child['stdout'] ?? '')), true);
-    if (!\is_array($report)) {
+    if (! \is_array($report)) {
         return $failed(fuzzFailure(
             $workDir,
             $seed,
@@ -289,7 +295,7 @@ function fuzzFrontendSmoke(string $projectRoot, int $seed, int $count): array
 
     return [
         'passed' => true,
-        'message' => sprintf(
+        'message' => \sprintf(
             '%d inputs (seed %d): %d accepted, %d rejected as diagnostics',
             $count,
             $seed,
@@ -311,14 +317,14 @@ function fuzzFailure(string $workDir, int $seed, int $count, ?int $index, string
     $source = $minimized !== '' ? $minimized : fuzzInputSource($workDir, $index);
     $saved = fuzzSaveReproducer($seed, $index, $source);
 
-    $lines = [sprintf('seed %d, input %s', $seed, $index === null ? '(unidentified)' : '#' . $index)];
+    $lines = [\sprintf('seed %d, input %s', $seed, $index === null ? '(unidentified)' : '#' . $index)];
     $lines[] = $message;
     if ($source !== '') {
         $lines[] = 'input:';
         $lines[] = \rtrim($source);
     }
     if ($index !== null) {
-        $lines[] = sprintf('repro: php tests/suite/support/fuzz_replay.php %d %d %d', $seed, $index, $count);
+        $lines[] = \sprintf('repro: php tests/suite/support/fuzz_replay.php %d %d %d', $seed, $index, $count);
     }
     if ($saved !== null) {
         $lines[] = 'saved: ' . $saved;
@@ -362,7 +368,7 @@ function fuzzSaveReproducer(int $seed, ?int $index, string $source): ?string
     }
 
     $dir = fuzzReproducerDir();
-    if (!@\mkdir($dir, 0777, true) && !\is_dir($dir)) {
+    if (! @\mkdir($dir, 0777, true) && ! \is_dir($dir)) {
         return null;
     }
 

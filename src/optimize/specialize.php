@@ -4,20 +4,22 @@ namespace Moggi\Optimize\Specialize;
 
 use Moggi\IR;
 use Moggi\IR\Visit;
-use Moggi\Optimize\CaseFold\CtorTree;
 
-use function Moggi\IR\Dump\dump;
 use function Moggi\IR\Visit\irPatternBoundNames;
+
 use function Moggi\IR\Visit\mapGuards;
 use function Moggi\IR\Visit\mapOperandChildren;
-use function Moggi\Optimize\GlobalPass\rewriteStmtOperands;
 use function Moggi\Modules\parseResolvedSymbol;
 use function Moggi\Modules\resolvedSymbol;
 use function Moggi\Optimize\CaseFold\clearNullaryCtorCafs;
+
+use Moggi\Optimize\CaseFold\CtorTree;
+
 use function Moggi\Optimize\CaseFold\isPlausibleConstructorName;
 use function Moggi\Optimize\CaseFold\nullaryCtorCaf;
 use function Moggi\Optimize\CaseFold\setFieldAccessorCafs;
 use function Moggi\Optimize\CaseFold\setNullaryCtorCafs;
+use function Moggi\Optimize\GlobalPass\rewriteStmtOperands;
 use function Moggi\Optimize\Interproc\buildTempRemap;
 use function Moggi\Optimize\Interproc\clearActiveFnArity;
 use function Moggi\Optimize\Interproc\clearActivePeFusionIndex;
@@ -32,9 +34,9 @@ use function Moggi\Optimize\Interproc\setActiveFnArity;
 use function Moggi\Optimize\Interproc\setActiveForeignLeaves;
 use function Moggi\Optimize\Interproc\setActivePeFusionIndex;
 use function Moggi\Optimize\Interproc\substituteStmt;
+use function Moggi\Optimize\optimize;
 use function Moggi\Optimize\Support\isLambdaName;
 use function Moggi\Optimize\Support\isWiredInBoolCtor;
-use function Moggi\Optimize\optimize;
 
 /**
  * Whole-program call-site specialization for concrete evidence / constant args.
@@ -79,7 +81,7 @@ function specializeAcrossModules(array $modules, array $externalFnsByModule = []
         $world = activateSpecializeWorld($modules, $externalFnsByModule);
         $roundChanged = false;
         foreach ($modules as $moduleName => $module) {
-            if (!isSpecializationRootModule($module)) {
+            if (! isSpecializationRootModule($module)) {
                 continue;
             }
             $result = specializeOneRootModule(
@@ -99,13 +101,14 @@ function specializeAcrossModules(array $modules, array $externalFnsByModule = []
             }
         }
 
-        if (!$roundChanged) {
+        if (! $roundChanged) {
             break;
         }
     }
 
     setNullaryCtorCafs(collectNullaryCtorCafs($modules, $externalFnsByModule));
     setFieldAccessorCafs(collectFieldAccessorCafs($modules));
+
     try {
         hoistSpecializeEvidenceCafs($modules, $changedModules);
         optimizeSpecializationRoots($modules, $changedModules, 4);
@@ -120,7 +123,7 @@ function specializeAcrossModules(array $modules, array $externalFnsByModule = []
             $world = activateSpecializeWorld($modules, $externalFnsByModule);
             $roundChanged = false;
             foreach ($modules as $moduleName => $module) {
-                if (!isset($changedModules[$moduleName]) || !isSpecializationRootModule($module)) {
+                if (! isset($changedModules[$moduleName]) || ! isSpecializationRootModule($module)) {
                     continue;
                 }
                 $result = specializeOneRootModule(
@@ -141,7 +144,7 @@ function specializeAcrossModules(array $modules, array $externalFnsByModule = []
             }
             $extraGain = $specializations - $before;
             $extraBestGain = \max($extraBestGain, $extraGain);
-            if ($extraGain === 0 && !$roundChanged) {
+            if ($extraGain === 0 && ! $roundChanged) {
                 break;
             }
             optimizeSpecializationRoots($modules, $changedModules, 1);
@@ -151,7 +154,7 @@ function specializeAcrossModules(array $modules, array $externalFnsByModule = []
             }
         }
         foreach ($changedModules as $moduleName => $_) {
-            if (!isset($modules[$moduleName])) {
+            if (! isset($modules[$moduleName])) {
                 continue;
             }
             assertNoUnboundTempsAfterSpecialize($modules[$moduleName], (string) $moduleName);
@@ -194,7 +197,7 @@ function specializeFunctionSnapshots(array $modules, array $moduleNames): array
 {
     $snapshots = [];
     foreach ($moduleNames as $moduleName => $_) {
-        if (!isset($modules[$moduleName])) {
+        if (! isset($modules[$moduleName])) {
             continue;
         }
         foreach ($modules[$moduleName]->functions as $function) {
@@ -219,7 +222,7 @@ function specializeChangedFunctions(array $modules, array $moduleNames, array $s
 {
     $changed = [];
     foreach ($moduleNames as $moduleName => $_) {
-        if (!isset($modules[$moduleName])) {
+        if (! isset($modules[$moduleName])) {
             continue;
         }
         $seen = $snapshots[$moduleName] ?? [];
@@ -269,6 +272,7 @@ function activateSpecializeWorld(array $modules, array $externalFnsByModule): ar
             if (isset($globalIndex[$short]) && ($globalIndex[$short]['module'] ?? null) !== $moduleName) {
                 $ambiguousShortNames[$short] = true;
                 unset($globalIndex[$short]);
+
                 continue;
             }
             $globalIndex[$short] = $entry;
@@ -297,7 +301,7 @@ function activateSpecializeWorld(array $modules, array $externalFnsByModule): ar
     $fnArity = [];
     foreach ($modules as $moduleName => $module) {
         foreach ($module->functions as $function) {
-            $arity = count($function->params);
+            $arity = \count($function->params);
             $fnArity[$function->name] = $arity;
             $fnArity[resolvedSymbol((string) $moduleName, $function->name)] = $arity;
         }
@@ -341,6 +345,7 @@ function specializeOneRootModule(
     foreach ($module->functions as $function) {
         if ($onlyFunctions !== null && ! isset($onlyFunctions[$function->name])) {
             $newFunctions[] = $function;
+
             continue;
         }
 
@@ -351,6 +356,7 @@ function specializeOneRootModule(
                 $function = $function->withBody(new IR\Block($resolved['items']));
             }
             $newFunctions[] = $function;
+
             continue;
         }
 
@@ -384,10 +390,11 @@ function specializeOneRootModule(
     $pending = $added;
     $cloneNestBudget = 64;
     while ($pending !== []) {
-        $clone = array_shift($pending);
+        $clone = \array_shift($pending);
         if ($cloneNestBudget <= 0) {
             $newFunctions[] = $clone;
             $localNames[$clone->name] = true;
+
             continue;
         }
         --$cloneNestBudget;
@@ -422,7 +429,7 @@ function specializeOneRootModule(
         }
     }
 
-    if (!$moduleChanged) {
+    if (! $moduleChanged) {
         return ['changed' => false, 'module' => $module];
     }
 
@@ -458,24 +465,24 @@ function collectFieldAccessorCafs(array $modules): array
     $accessors = [];
     foreach ($modules as $moduleName => $module) {
         foreach ($module->functions as $function) {
-            if (count($function->params) !== 1 || $function->foreign) {
+            if (\count($function->params) !== 1 || $function->foreign) {
                 continue;
             }
             $items = denseStmtItems($function->body->items);
-            if (count($items) !== 1 || !($items[0] instanceof IR\Ret)) {
+            if (\count($items) !== 1 || ! ($items[0] instanceof IR\Ret)) {
                 continue;
             }
             $ret = $items[0]->value;
             if (
-                !($ret instanceof IR\ExprCall)
-                || !str_starts_with($ret->callee, '__field')
-                || count($ret->args) !== 1
-                || !($ret->args[0] instanceof IR\Local)
+                ! ($ret instanceof IR\ExprCall)
+                || ! \str_starts_with($ret->callee, '__field')
+                || \count($ret->args) !== 1
+                || ! ($ret->args[0] instanceof IR\Local)
                 || $ret->args[0]->name !== $function->params[0]
             ) {
                 continue;
             }
-            $idx = (int) substr($ret->callee, strlen('__field'));
+            $idx = (int) \substr($ret->callee, \strlen('__field'));
             $accessors[$function->name] = $idx;
             if ($moduleName !== '') {
                 $accessors[resolvedSymbol($moduleName, $function->name)] = $idx;
@@ -505,7 +512,7 @@ function collectNullaryCtorCafs(array $modules, array $externalFnsByModule = [])
                 continue;
             }
             $items = denseStmtItems($function->body->items);
-            if (count($items) !== 1 || !($items[0] instanceof IR\Ret)) {
+            if (\count($items) !== 1 || ! ($items[0] instanceof IR\Ret)) {
                 continue;
             }
             $tree = cafRetToCtorTree($items[0]->value, $moduleName, $externals);
@@ -539,21 +546,25 @@ function cafRetToCtorTree(IR\Operand $value, string $moduleName = '', array $ext
         foreach ($value->args as $arg) {
             if ($arg instanceof IR\FnRef && isPlausibleConstructorName($arg->name)) {
                 $args[] = new CtorTree($arg->name, []);
+
                 continue;
             }
             if ($arg instanceof IR\FnRef) {
                 $name = $arg->name;
-                if ($name !== '' && !str_contains($name, '::') && !str_contains($name, '\\')) {
+                if ($name !== '' && ! \str_contains($name, '::') && ! \str_contains($name, '\\')) {
                     if (isset($externals[$name])) {
                         $args[] = new IR\FnRef($externals[$name]);
+
                         continue;
                     }
                     if ($moduleName !== '') {
                         $args[] = new IR\FnRef(resolvedSymbol($moduleName, $name));
+
                         continue;
                     }
                 }
                 $args[] = $arg;
+
                 continue;
             }
             if ($arg instanceof IR\ExprCall && isPlausibleConstructorName($arg->callee)) {
@@ -562,6 +573,7 @@ function cafRetToCtorTree(IR\Operand $value, string $moduleName = '', array $ext
                     return null;
                 }
                 $args[] = $nested;
+
                 continue;
             }
             $args[] = $arg;
@@ -590,7 +602,7 @@ function optimizeSpecializationRoots(array &$modules, array $rootNames, int $pas
     $fnArity = [];
     foreach ($modules as $moduleName => $module) {
         foreach ($module->functions as $function) {
-            $arity = count($function->params);
+            $arity = \count($function->params);
             $fnArity[$function->name] = $arity;
             $fnArity[resolvedSymbol((string) $moduleName, $function->name)] = $arity;
         }
@@ -599,7 +611,7 @@ function optimizeSpecializationRoots(array &$modules, array $rootNames, int $pas
 
     try {
         foreach ($modules as $moduleName => $module) {
-            if (!isset($rootNames[$moduleName]) || !isSpecializationRootModule($module)) {
+            if (! isset($rootNames[$moduleName]) || ! isSpecializationRootModule($module)) {
                 continue;
             }
             for ($optPass = 0; $optPass < $passes; ++$optPass) {
@@ -687,7 +699,7 @@ function setPeFusionIndexFromModules(array $modules): void
         $mn = $module->moduleName !== '' ? $module->moduleName : (string) $moduleName;
         foreach ($module->functions as $fn) {
             if ($mn === ''
-                || !isPeFusionInlineCandidate($fn)
+                || ! isPeFusionInlineCandidate($fn)
                 || functionBodyHasHostOrForeign($fn->body->items)
             ) {
                 continue;
@@ -709,7 +721,7 @@ function restoreUnboundAfterOptimize(IR\Module $optimized, array $beforeByName):
     /** @var array<string, true> $restore */
     $restore = [];
     foreach ($optimized->functions as $fn) {
-        if (unboundTempsInFunction($fn) === [] || !isset($beforeByName[$fn->name])) {
+        if (unboundTempsInFunction($fn) === [] || ! isset($beforeByName[$fn->name])) {
             continue;
         }
         if (unboundTempsInFunction($beforeByName[$fn->name]) === []) {
@@ -725,7 +737,7 @@ function restoreUnboundAfterOptimize(IR\Module $optimized, array $beforeByName):
         if ($prev === null || isset($restore[$fn->name])) {
             continue;
         }
-        if (count($prev->params) !== count($fn->params) && unboundTempsInFunction($prev) === []) {
+        if (\count($prev->params) !== \count($fn->params) && unboundTempsInFunction($prev) === []) {
             $restore[$fn->name] = true;
         }
     }
@@ -747,22 +759,22 @@ function restoreUnboundAfterOptimize(IR\Module $optimized, array $beforeByName):
 
 function assertNoUnboundTempsAfterSpecialize(IR\Module $module, string $moduleName): void
 {
-    if (!moduleHasUnboundTemps($module)) {
+    if (! moduleHasUnboundTemps($module)) {
         return;
     }
     $bad = [];
     foreach ($module->functions as $fn) {
         $temps = unboundTempsInFunction($fn);
         if ($temps !== []) {
-            $bad[] = $fn->name . '[' . implode(',', $temps) . ']';
+            $bad[] = $fn->name . '[' . \implode(',', $temps) . ']';
         }
     }
+
     throw new \RuntimeException(
         'optimize after specialization produced unbound temps in '
-        . $moduleName . ': ' . implode(', ', $bad),
+        . $moduleName . ': ' . \implode(', ', $bad),
     );
 }
-
 
 function isSpecializationRootModule(IR\Module $module): bool
 {
@@ -796,6 +808,7 @@ function resolveConcreteDictCallsInItems(array $items, array $globalEvidence): a
             $out[] = $item instanceof IR\MatchStmt
                 ? new IR\MatchStmt($item->scrutinee, $arms, $item->dest, $item->exhaustive)
                 : new IR\MatchReturn($item->scrutinee, $arms, $item->exhaustive);
+
             continue;
         }
 
@@ -810,11 +823,12 @@ function resolveConcreteDictCallsInItems(array $items, array $globalEvidence): a
             if ($rewritten !== null) {
                 $changed = true;
                 $out[] = $rewritten;
+
                 continue;
             }
         }
 
-        if (!$item instanceof IR\MatchStmt && !$item instanceof IR\MatchReturn) {
+        if (! $item instanceof IR\MatchStmt && ! $item instanceof IR\MatchReturn) {
             $hit = false;
             $item = rewriteStmtOperands(
                 $item,
@@ -862,8 +876,8 @@ function rewriteConcreteDictMethodOperand(
         if (\is_string($methodIr) && $methodIr !== '') {
             $methodModule = (string) ($evInfo['module'] ?? '');
             if ($methodModule !== ''
-                && !str_contains($methodIr, '::')
-                && !str_contains($methodIr, '\\')) {
+                && ! \str_contains($methodIr, '::')
+                && ! \str_contains($methodIr, '\\')) {
                 $methodIr = resolvedSymbol($methodModule, $methodIr);
             }
             $hit = true;
@@ -920,8 +934,8 @@ function tryResolveConcreteDictCall(IR\DictCall $stmt, array $concreteTemps, arr
     if (
         $methodModule !== ''
         && $methodIr !== ''
-        && !str_contains($methodIr, '::')
-        && !str_contains($methodIr, '\\')
+        && ! \str_contains($methodIr, '::')
+        && ! \str_contains($methodIr, '\\')
     ) {
         $methodIr = resolvedSymbol($methodModule, $methodIr);
     }
@@ -978,6 +992,7 @@ function specializeItems(
             $out[] = $item instanceof IR\MatchStmt
                 ? new IR\MatchStmt($item->scrutinee, $arms, $item->dest, $item->exhaustive)
                 : new IR\MatchReturn($item->scrutinee, $arms, $item->exhaustive);
+
             continue;
         }
 
@@ -1003,6 +1018,7 @@ function specializeItems(
             if ($rewritten['changed']) {
                 $changed = true;
                 $out[] = new IR\Ret($rewritten['operand']);
+
                 continue;
             }
         }
@@ -1036,11 +1052,13 @@ function specializeItems(
             if ($spec !== null) {
                 $changed = true;
                 $out[] = new IR\Call($spec['name'], \array_slice($args, $spec['burned']), $item->dest, $item->srcLoc);
+
                 continue;
             }
             if ($rewrittenArgs['changed']) {
                 $changed = true;
                 $out[] = new IR\Call($item->callee, $rewrittenArgs['args'], $item->dest);
+
                 continue;
             }
         }
@@ -1061,6 +1079,7 @@ function specializeItems(
             if ($rewritten['changed']) {
                 $changed = true;
                 $out[] = new IR\Assign($item->dest, $rewritten['operand']);
+
                 continue;
             }
         }
@@ -1081,6 +1100,7 @@ function specializeItems(
             if ($rewritten['changed']) {
                 $changed = true;
                 $out[] = new IR\Let($item->name, $rewritten['operand']);
+
                 continue;
             }
         }
@@ -1339,12 +1359,12 @@ function resolveSpecializedCallee(
     int &$cacheHits,
 ): ?array {
     $lookup = specializationLookupName($callee);
-    if ($lookup === $selfName || isLambdaName($lookup) || str_starts_with($lookup, '__spec_')) {
+    if ($lookup === $selfName || isLambdaName($lookup) || \str_starts_with($lookup, '__spec_')) {
         return null;
     }
 
     $targetInfo = $globalIndex[$callee] ?? $globalIndex[$lookup] ?? null;
-    if ($targetInfo === null || !isset($targetInfo['function'])) {
+    if ($targetInfo === null || ! isset($targetInfo['function'])) {
         return null;
     }
 
@@ -1358,23 +1378,23 @@ function resolveSpecializedCallee(
     }
 
     $target = $targetInfo['function'];
-    if ($target->foreign || $target->ioEffect || !isSpecializeCandidate($target)) {
+    if ($target->foreign || $target->ioEffect || ! isSpecializeCandidate($target)) {
         return null;
     }
 
     $burned = countConcretePrefix($args);
-    if ($burned === 0 || $burned > count($target->params)) {
+    if ($burned === 0 || $burned > \count($target->params)) {
         return null;
     }
 
     $runtimeParams = \array_slice($target->params, $burned);
     foreach ($runtimeParams as $param) {
-        if (str_starts_with($param, '__ev_') || $param === 'opts' || str_starts_with($param, '__ev')) {
+        if (\str_starts_with($param, '__ev_') || $param === 'opts' || \str_starts_with($param, '__ev')) {
             return null;
         }
     }
 
-    if (!burnedArgsIncludeFnRef($args, $burned)) {
+    if (! burnedArgsIncludeFnRef($args, $burned)) {
         return null;
     }
 
@@ -1398,7 +1418,7 @@ function resolveSpecializedCallee(
         return ['name' => $cache[$key]['name'], 'burned' => $burned];
     }
 
-    $specName = '__spec_' . preg_replace('/[^A-Za-z0-9_]/', '_', $lookup) . '_' . substr(sha1($key), 0, 12);
+    $specName = '__spec_' . \preg_replace('/[^A-Za-z0-9_]/', '_', $lookup) . '_' . \substr(\sha1($key), 0, 12);
     $cache[$key] = [
         'module' => $moduleName,
         'sourceModule' => $targetInfo['module'],
@@ -1513,7 +1533,7 @@ function specializationLookupName(string $callee): string
 function isSpecializeCandidate(IR\FunctionDecl $function): bool
 {
     $items = denseStmtItems($function->body->items);
-    if ($items === [] || count($items) > 12) {
+    if ($items === [] || \count($items) > 12) {
         return false;
     }
 
@@ -1536,7 +1556,7 @@ function estimateStmtSize(IR\Stmt $stmt): int
     if ($stmt instanceof IR\MatchStmt || $stmt instanceof IR\MatchReturn) {
         $n = 1;
         foreach ($stmt->arms as $arm) {
-            $n += count(denseStmtItems($arm->body->items));
+            $n += \count(denseStmtItems($arm->body->items));
         }
 
         return $n;
@@ -1552,8 +1572,10 @@ function countConcretePrefix(array $args): int
     foreach ($args as $arg) {
         if (isConcreteSpecializeArg($arg)) {
             ++$n;
+
             continue;
         }
+
         break;
     }
 
@@ -1579,7 +1601,7 @@ function isConcreteSpecializeArg(IR\Operand $arg): bool
             return false;
         }
         foreach ($arg->args as $inner) {
-            if (!isConcreteSpecializeArg($inner)) {
+            if (! isConcreteSpecializeArg($inner)) {
                 return false;
             }
         }
@@ -1599,18 +1621,18 @@ function isConcreteSpecializeArg(IR\Operand $arg): bool
 
 function isEvidenceFactoryName(string $name): bool
 {
-    return str_starts_with(specializationLookupName($name), '__ev_');
+    return \str_starts_with(specializationLookupName($name), '__ev_');
 }
 
 function isSpecCloneName(string $name): bool
 {
-    return str_starts_with(specializationLookupName($name), '__spec_');
+    return \str_starts_with(specializationLookupName($name), '__spec_');
 }
 
 function isPlausibleConstFn(string $name): bool
 {
     $leaf = specializationLookupName($name);
-    if (str_starts_with($leaf, '__caf_')) {
+    if (\str_starts_with($leaf, '__caf_')) {
         return true;
     }
 
@@ -1627,19 +1649,21 @@ function qualifyBurnedFnRefsForDest(array $burned, string $destModule, array $de
 {
     $out = [];
     foreach ($burned as $arg) {
-        if (!($arg instanceof IR\FnRef)) {
+        if (! ($arg instanceof IR\FnRef)) {
             $out[] = $arg;
+
             continue;
         }
         $name = $arg->name;
         if (
             $name !== ''
-            && !str_contains($name, '::')
-            && !str_contains($name, '\\')
-            && !isWiredInBoolCtor($name)
+            && ! \str_contains($name, '::')
+            && ! \str_contains($name, '\\')
+            && ! isWiredInBoolCtor($name)
             && isset($destLocalNames[$name])
         ) {
             $out[] = new IR\FnRef(resolvedSymbol($destModule, $name));
+
             continue;
         }
         $out[] = $arg;
@@ -1658,7 +1682,7 @@ function specializationKey(string $sourceCallee, string $destModule, array $burn
         $parts[] = concreteArgKey($arg);
     }
 
-    return hash('sha256', json_encode($parts, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: implode("\0", $parts));
+    return \hash('sha256', \json_encode($parts, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: \implode("\0", $parts));
 }
 
 function concreteArgKey(IR\Operand $arg): string
@@ -1666,10 +1690,10 @@ function concreteArgKey(IR\Operand $arg): string
     return match ($arg::class) {
         IR\FnRef::class => 'f:' . $arg->name,
         IR\ConstInt::class => 'i:' . $arg->value,
-        IR\ConstStr::class => 's:' . strlen($arg->value) . ':' . $arg->value,
+        IR\ConstStr::class => 's:' . \strlen($arg->value) . ':' . $arg->value,
         IR\ConstChar::class => 'c:' . $arg->value,
         IR\ConstDouble::class => 'd:' . $arg->value,
-        IR\ExprCall::class => 'e:' . $arg->callee . '(' . implode(',', \array_map(concreteArgKey(...), $arg->args)) . ')',
+        IR\ExprCall::class => 'e:' . $arg->callee . '(' . \implode(',', \array_map(concreteArgKey(...), $arg->args)) . ')',
         default => throw new \RuntimeException(
             'concreteArgKey: non-concrete operand ' . $arg::class
             . ' (refuse specialization rather than collide on "?")',
@@ -1721,7 +1745,7 @@ function burnedSpecializeArgMustBindOnce(IR\Operand $arg, array $bodyItems, stri
     if (operandIsNonDuplicable($arg)) {
         return true;
     }
-    if (!($arg instanceof IR\ExprCall) && !($arg instanceof IR\ForeignCall)) {
+    if (! ($arg instanceof IR\ExprCall) && ! ($arg instanceof IR\ForeignCall)) {
         return false;
     }
     if (operandHasFreeTemps($arg)) {
@@ -1746,10 +1770,10 @@ function burnedSpecializeArgMustBindOnce(IR\Operand $arg, array $bodyItems, stri
 function isTransparentEvidenceFactoryCall(IR\ExprCall $call): bool
 {
     $leaf = specializationLookupName($call->callee);
-    if (!str_starts_with($leaf, '__ev_')) {
+    if (! \str_starts_with($leaf, '__ev_')) {
         return false;
     }
-    if (preg_match('/^__ev_.+_h_[0-9a-f]+_[A-Za-z]/', $leaf) === 1) {
+    if (\preg_match('/^__ev_.+_h_[0-9a-f]+_[A-Za-z]/', $leaf) === 1) {
         return false;
     }
 
@@ -1759,7 +1783,7 @@ function isTransparentEvidenceFactoryCall(IR\ExprCall $call): bool
 /** @param list<IR\Operand> $burnedArgs */
 function cloneSpecializedFunction(IR\FunctionDecl $target, string $specName, array $burnedArgs): IR\FunctionDecl
 {
-    $burned = count($burnedArgs);
+    $burned = \count($burnedArgs);
     $params = \array_slice($target->params, $burned);
     $substParams = $target->params;
 
@@ -1768,7 +1792,7 @@ function cloneSpecializedFunction(IR\FunctionDecl $target, string $specName, arr
     $remap = buildTempRemap($bodyItems, $nextTemp);
     $bodyItems = remapTempsInItems($bodyItems, $remap);
     if ($remap !== []) {
-        $nextTemp = max($remap) + 1;
+        $nextTemp = \max($remap) + 1;
     }
 
     $prefix = [];
@@ -1783,6 +1807,7 @@ function cloneSpecializedFunction(IR\FunctionDecl $target, string $specName, arr
             } else {
                 $substArgs[] = $arg;
             }
+
             continue;
         }
         $substArgs[] = new IR\Local($param);
@@ -1849,13 +1874,13 @@ function qualifySourceModuleCallees(
         $destLocalNames,
         $sourceExternalFns,
     ): string {
-        if ($name === '' || str_contains($name, '::') || str_contains($name, '\\')) {
+        if ($name === '' || \str_contains($name, '::') || \str_contains($name, '\\')) {
             return $name;
         }
         if (isWiredInBoolCtor($name)) {
             return $name;
         }
-        if (isset($destLocalNames[$name]) && !isLambdaName($name)) {
+        if (isset($destLocalNames[$name]) && ! isLambdaName($name)) {
             return $name;
         }
         if (isset($sourceFnNames[$name])) {
@@ -1972,7 +1997,7 @@ function unboundEvidenceLocals(IR\FunctionDecl $function, array $allowedParams):
     collectFreeLocalsInItems($function->body->items, $allowed, $free);
     $out = [];
     foreach (\array_keys($free) as $name) {
-        if (str_starts_with($name, '__ev_') || $name === 'opts') {
+        if (\str_starts_with($name, '__ev_') || $name === 'opts') {
             $out[] = $name;
         }
     }
@@ -1993,7 +2018,7 @@ function unboundTempsInFunction(IR\FunctionDecl $function): array
     collectTempDefsUsesInItems($function->body->items, $defined, $used);
     $out = [];
     foreach (\array_keys($used) as $id) {
-        if (!isset($defined[$id])) {
+        if (! isset($defined[$id])) {
             $out[] = $id;
         }
     }
@@ -2086,12 +2111,14 @@ function collectFreeLocalsInItems(array $items, array $bound, array &$free): voi
                 }
                 collectFreeLocalsInItems($arm->body->items, $armBound, $free);
             }
+
             continue;
         }
 
         if ($item instanceof IR\Let) {
             collectFreeLocalsInOperand($item->value, $bound, $free);
             $bound[$item->name] = true;
+
             continue;
         }
 
@@ -2128,7 +2155,7 @@ function collectFreeLocalsInItems(array $items, array $bound, array &$free): voi
 function collectFreeLocalsInOperand(IR\Operand $operand, array $bound, array &$free): void
 {
     if ($operand instanceof IR\Local) {
-        if (!isset($bound[$operand->name])) {
+        if (! isset($bound[$operand->name])) {
             $free[$operand->name] = true;
         }
 
@@ -2153,7 +2180,7 @@ function collectFreeLocalsInOperand(IR\Operand $operand, array $bound, array &$f
 function hoistSpecializeEvidenceCafs(array &$modules, array $rootNames): void
 {
     foreach ($modules as $moduleName => $module) {
-        if (!isset($rootNames[$moduleName]) || !isSpecializationRootModule($module)) {
+        if (! isset($rootNames[$moduleName]) || ! isSpecializationRootModule($module)) {
             continue;
         }
         $existing = [];
@@ -2163,8 +2190,9 @@ function hoistSpecializeEvidenceCafs(array &$modules, array $rootNames): void
         $newFunctions = [];
         $addedCafs = [];
         foreach ($module->functions as $fn) {
-            if (!str_starts_with($fn->name, '__spec_')) {
+            if (! \str_starts_with($fn->name, '__spec_')) {
                 $newFunctions[] = $fn;
+
                 continue;
             }
             $hoisted = hoistEvidenceCafsInFunction($fn, $existing);
@@ -2209,6 +2237,7 @@ function hoistEvidenceCafsInFunction(IR\FunctionDecl $function, array &$existing
             $existingNames[$cafName] = true;
             $out[] = new IR\Call($cafName, [], $item->dest, $item->srcLoc);
             $changed = true;
+
             continue;
         }
         if ($item instanceof IR\Assign && operandIsParamPure($item->value, $paramSet)
@@ -2223,12 +2252,13 @@ function hoistEvidenceCafsInFunction(IR\FunctionDecl $function, array &$existing
             $existingNames[$cafName] = true;
             $out[] = new IR\Assign($item->dest, new IR\ExprCall($cafName, []));
             $changed = true;
+
             continue;
         }
         $out[] = $item;
     }
 
-    if (!$changed) {
+    if (! $changed) {
         return ['function' => $function, 'cafs' => []];
     }
 
@@ -2249,7 +2279,7 @@ function operandIsParamPure(IR\Operand $operand, array $paramSet): bool
         }
     }
 
-    return !operandHasForeignOrIo($operand);
+    return ! operandHasForeignOrIo($operand);
 }
 
 function operandHasForeignOrIo(IR\Operand $operand): bool
@@ -2258,7 +2288,7 @@ function operandHasForeignOrIo(IR\Operand $operand): bool
         return true;
     }
     if ($operand instanceof IR\ExprCall) {
-        if ($operand->callee === 'perform' || str_starts_with($operand->callee, 'perform#')) {
+        if ($operand->callee === 'perform' || \str_starts_with($operand->callee, 'perform#')) {
             return true;
         }
     }
@@ -2284,7 +2314,7 @@ function isHoistableEvidenceOperand(IR\Operand $operand): bool
 
 function isHoistableEvidenceCall(IR\Call $call): bool
 {
-    if (!isEvidenceFactoryName($call->callee) && !isPlausibleConstFn($call->callee)) {
+    if (! isEvidenceFactoryName($call->callee) && ! isPlausibleConstFn($call->callee)) {
         return false;
     }
 
@@ -2294,7 +2324,7 @@ function isHoistableEvidenceCall(IR\Call $call): bool
 /** @param array<string, true> $existingNames */
 function uniqueCafName(IR\Operand $operand, array $existingNames): string
 {
-    $base = '__caf_' . substr(hash('sha256', concreteArgKey($operand)), 0, 12);
+    $base = '__caf_' . \substr(\hash('sha256', concreteArgKey($operand)), 0, 12);
     $name = $base;
     $i = 0;
     while (isset($existingNames[$name])) {

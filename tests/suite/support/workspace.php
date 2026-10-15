@@ -10,7 +10,7 @@ require_once __DIR__ . '/../../../src/paths.php';
  */
 function releaseCaseMemos(): void
 {
-    if (!\class_exists(\Moggi\Modules\ProjectCache::class)) {
+    if (! \class_exists(\Moggi\Modules\ProjectCache::class)) {
         return;
     }
 
@@ -20,7 +20,7 @@ function releaseCaseMemos(): void
 
 function removeDirectory(string $path): void
 {
-    if (!\is_dir($path)) {
+    if (! \is_dir($path)) {
         return;
     }
 
@@ -31,16 +31,17 @@ function removeDirectory(string $path): void
 
     foreach ($iterator as $item) {
         if ($item->isLink() || $item->isFile()) {
-            @unlink($item->getPathname());
+            @\unlink($item->getPathname());
+
             continue;
         }
 
         if ($item->isDir()) {
-            @rmdir($item->getPathname());
+            @\rmdir($item->getPathname());
         }
     }
 
-    @rmdir($path);
+    @\rmdir($path);
 }
 
 /**
@@ -59,7 +60,7 @@ function removeDirectory(string $path): void
  */
 function seedCacheDir(string $dir): void
 {
-    if (!\class_exists(\Moggi\Cache\CacheSwitch::class) || !\Moggi\Cache\cacheEnabled()) {
+    if (! \class_exists(\Moggi\Cache\CacheSwitch::class) || ! \Moggi\Cache\cacheEnabled()) {
         return;
     }
 
@@ -82,7 +83,7 @@ function seedCacheDir(string $dir): void
     foreach (\Moggi\Paths\globPaths($source . '/compile/artifacts/stdlib-index*.blob') as $blob) {
         $target = $dir . '/compile/artifacts/' . \basename($blob);
         @\mkdir(\dirname($target), 0700, true);
-        if (!@\link($blob, $target)) {
+        if (! @\link($blob, $target)) {
             @\copy($blob, $target);
         }
     }
@@ -101,11 +102,12 @@ function hardlinkTree(string $source, string $target): void
         $destination = $target . '/' . $relative;
         if ($item->isDir()) {
             @\mkdir($destination, 0700, true);
+
             continue;
         }
 
         @\mkdir(\dirname($destination), 0700, true);
-        if (!@\link($item->getPathname(), $destination)) {
+        if (! @\link($item->getPathname(), $destination)) {
             @\copy($item->getPathname(), $destination);
         }
     }
@@ -121,10 +123,10 @@ function hardlinkTree(string $source, string $target): void
  */
 function createTempDir(string $prefix): string
 {
-    $base = \rtrim(\str_replace('\\', '/', (string) sys_get_temp_dir()), '/');
+    $base = \rtrim(\str_replace('\\', '/', (string) \sys_get_temp_dir()), '/');
     for ($attempt = 0; $attempt < 10; ++$attempt) {
-        $dir = $base . '/' . $prefix . '-' . getmypid() . '-' . bin2hex(random_bytes(8));
-        if (@mkdir($dir, 0700)) {
+        $dir = $base . '/' . $prefix . '-' . \getmypid() . '-' . \bin2hex(\random_bytes(8));
+        if (@\mkdir($dir, 0700)) {
             return $dir;
         }
     }

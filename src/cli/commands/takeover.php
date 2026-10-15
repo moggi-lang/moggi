@@ -70,7 +70,7 @@ function runTakeoverCommand(array $argv): int
     ], verb: true, write: true);
 
     $verb = $argv[2] ?? '';
-    if (!\in_array($verb, ['request', 'approve', 'reject'], true)) {
+    if (! \in_array($verb, ['request', 'approve', 'reject'], true)) {
         if (wantsHelp($argv)) {
             echo commandHelp($spec);
 
@@ -94,7 +94,7 @@ function runTakeoverCommand(array $argv): int
     }
 
     $name = \trim((string) $options['path']);
-    if ($name === '' || $name === '.' || !isPackageName($name)) {
+    if ($name === '' || $name === '.' || ! isPackageName($name)) {
         \fwrite(\STDERR, "error: `moggi takeover {$verb}` needs one package name\n\n" . takeoverUsage() . "\n");
 
         return 1;
@@ -128,7 +128,7 @@ function takeoverRequest(string $name, array $options): int
     $nsec = readNsecKey($options['nsec-file']);
     $base = \rtrim((string) $options['registry'], '/');
 
-    if (!$options['yes']) {
+    if (! $options['yes']) {
         confirmGovernanceAction(
             "file a public takeover request for `{$name}` at {$base} as " . shortNpub($signer) . '?'
             . "\n  reason: {$reason}" . ($repo === '' ? '' : "\n  repo: {$repo}"),
@@ -195,7 +195,7 @@ function takeoverDecision(string $verb, string $name, array $options): int
     $base = \rtrim((string) $options['registry'], '/');
     $route = '/admin/takeover-requests/' . $name;
 
-    if (!$options['yes']) {
+    if (! $options['yes']) {
         confirmGovernanceAction(
             ($approve
                 ? "approve the takeover of `{$name}` — the package is handed to the requester"
@@ -231,7 +231,7 @@ function takeoverDecision(string $verb, string $name, array $options): int
     }
 
     \printf("%s — takeover %s\n", $name, $approve ? 'approved: the package is handed over' : 'request rejected');
-    if (!$approve && $note !== '') {
+    if (! $approve && $note !== '') {
         \printf("note       %s\n", $note);
     }
     \printf("registry   %s\n", $base);

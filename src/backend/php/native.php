@@ -130,10 +130,10 @@ function microIniObject(array $directives): string
  */
 function combineMicroPhar(string $sfxPath, string $payloadPath, string $outPath, array $directives = []): void
 {
-    if (!\is_file($sfxPath)) {
+    if (! \is_file($sfxPath)) {
         throw new \RuntimeException("missing micro runtime {$sfxPath}");
     }
-    if (!\is_file($payloadPath)) {
+    if (! \is_file($payloadPath)) {
         throw new \RuntimeException("missing program {$payloadPath}");
     }
 
@@ -196,7 +196,7 @@ function buildPhpNativeExecutable(string $outputRoot, string $pharName, string $
     }
 
     $pharPath = $outputRoot . \DIRECTORY_SEPARATOR . $pharName;
-    if (!\is_file($pharPath)) {
+    if (! \is_file($pharPath)) {
         \fwrite(STDERR, "error: missing {$pharPath}\n");
 
         return false;

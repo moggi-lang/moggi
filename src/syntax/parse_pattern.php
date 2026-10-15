@@ -3,9 +3,10 @@
 namespace Moggi\Syntax\Parser;
 
 use Moggi\Syntax\Ast;
-use Moggi\Syntax\Lexer\TokenKind;
 
 use function Moggi\Syntax\isConstructorOperator;
+
+use Moggi\Syntax\Lexer\TokenKind;
 
 /**
  * @return list<Ast\PatField>
@@ -15,7 +16,7 @@ function parseRecordPatFields(ParserState $state): array
     expect($state, TokenKind::LBrace);
     $fields = [];
 
-    while (!isAt($state, TokenKind::RBrace)) {
+    while (! isAt($state, TokenKind::RBrace)) {
         $label = expect($state, TokenKind::VarId);
         expectOp($state, '=');
         $pattern = parsePattern($state);
@@ -52,7 +53,7 @@ function parsePatternInfix(ParserState $state, int $minPrec): Ast\AstNode
         $op = peek($state)->lexeme;
         $isListCons = $op === ':';
         $isCtorOp = isConstructorOperator($op);
-        if (!$isListCons && !$isCtorOp) {
+        if (! $isListCons && ! $isCtorOp) {
             break;
         }
 
@@ -85,7 +86,7 @@ function parsePatternApplication(ParserState $state): Ast\AstNode
 
     $startLine = $pattern->line;
 
-    while (startsPattern($state) && !isAt($state, TokenKind::Op, 0, '->')) {
+    while (startsPattern($state) && ! isAt($state, TokenKind::Op, 0, '->')) {
         if ($state->inCaseAltPattern && caseAltBoundary($state, $startLine)) {
             throw incompleteCaseAltError(
                 $state,
@@ -175,7 +176,7 @@ function parseListPattern(ParserState $state): Ast\AstNode
 
     $first = parsePattern($state);
 
-    if (!isAt($state, TokenKind::Comma)) {
+    if (! isAt($state, TokenKind::Comma)) {
         expect($state, TokenKind::RBracket);
 
         return spanned(new Ast\PatCons($first, new Ast\PatNil()), $start);
@@ -190,7 +191,7 @@ function parseListPattern(ParserState $state): Ast\AstNode
     expect($state, TokenKind::RBracket);
 
     $pattern = new Ast\PatNil();
-    foreach (array_reverse($elements) as $element) {
+    foreach (\array_reverse($elements) as $element) {
         $pattern = new Ast\PatCons($element, $pattern);
     }
 

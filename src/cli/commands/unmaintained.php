@@ -73,7 +73,7 @@ function runUnmaintainedCommand(array $argv): int
     }
 
     $name = \trim((string) $options['path']);
-    if ($name === '' || $name === '.' || !isPackageName($name)) {
+    if ($name === '' || $name === '.' || ! isPackageName($name)) {
         \fwrite(\STDERR, "error: `moggi unmaintained` needs one package name\n\n" . unmaintainedUsage() . "\n");
 
         return 1;
@@ -104,7 +104,7 @@ function unmaintainedPackage(string $name, array $options): int
     $base = \rtrim((string) $options['registry'], '/');
     $route = '/unmaintained';
 
-    if (!$options['yes']) {
+    if (! $options['yes']) {
         confirmGovernanceAction($clear
             ? "clear the unmaintained marker on `{$name}` at {$base} as " . shortNpub($signer) . '?'
             : "mark `{$name}` unmaintained at {$base} as " . shortNpub($signer) . '?'
@@ -134,7 +134,7 @@ function unmaintainedPackage(string $name, array $options): int
     }
 
     \printf("%s — %s\n", $name, $clear ? 'unmaintained marker cleared' : 'marked unmaintained');
-    if (!$clear && $note !== '') {
+    if (! $clear && $note !== '') {
         \printf("note       %s\n", $note);
     }
     \printf("registry   %s\n", $base);

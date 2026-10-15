@@ -63,7 +63,7 @@ function eraseNewtypesInPattern(Pattern $pattern, array $newtypes): Pattern
             static fn (Pattern $arg): Pattern => eraseNewtypesInPattern($arg, $newtypes),
             $pattern->args,
         );
-        if (isset($newtypes[$pattern->name]) && count($args) === 1) {
+        if (isset($newtypes[$pattern->name]) && \count($args) === 1) {
             return $args[0];
         }
 

@@ -1,14 +1,14 @@
 #!/usr/bin/env php
 <?php declare(strict_types=1);
 
-putenv('MOGGI_NO_CACHE=1');
+\putenv('MOGGI_NO_CACHE=1');
 $_ENV['MOGGI_NO_CACHE'] = '1';
 
 require __DIR__ . '/../src/compiler.php';
 
-use function Moggi\Modules\prepareProjectCached;
-use function Moggi\Modules\compilePreparedProject;
 use function Moggi\Modules\clearPrepareProjectCaches;
+use function Moggi\Modules\compilePreparedProject;
+use function Moggi\Modules\prepareProjectCached;
 
 \Moggi\Cache\setCacheEnabled(false);
 \Moggi\Backend\setCompileBackend('php');
@@ -21,12 +21,13 @@ foreach ($it as $f) {
         $files[] = $f->getPathname();
     }
 }
-sort($files);
+\sort($files);
 
 $iters = (int) ($argv[1] ?? 8);
 
 $cpu = static function (): float {
-    $r = getrusage();
+    $r = \getrusage();
+
     return $r['ru_utime.tv_sec'] + $r['ru_utime.tv_usec'] / 1e6;
 };
 
@@ -52,11 +53,12 @@ for ($i = 0; $i < $iters; ++$i) {
 }
 
 $fmt = static function (array $t): string {
-    sort($t);
-    return \sprintf('min=%.1f median=%.1f mean=%.1f', $t[0], $t[intdiv(count($t), 2)], array_sum($t) / count($t));
+    \sort($t);
+
+    return \sprintf('min=%.1f median=%.1f mean=%.1f', $t[0], $t[\intdiv(\count($t), 2)], \array_sum($t) / \count($t));
 };
 \printf("compile lib x%d (no-cache, CPU-time):\n", $iters);
 \printf("  total:    %s ms\n", $fmt($times));
 \printf("  prepare:  %s ms (parse + typecheck)\n", $fmt($prepTimes));
 \printf("  optcodegn:%s ms (lower + optimize + codegen)\n", $fmt($restTimes));
-\printf("  peakMem:  %.1f MB\n", memory_get_peak_usage(true) / 1048576);
+\printf("  peakMem:  %.1f MB\n", \memory_get_peak_usage(true) / 1048576);

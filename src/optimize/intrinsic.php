@@ -12,7 +12,7 @@ function eliminateIntrinsicWrappers(IR\Module $module): IR\Module
     $wrappers = [];
     foreach ($module->functions as $function) {
         $spec = intrinsicWrapperSpec($function);
-        if ($spec !== null && !isset($referenced[$function->name])) {
+        if ($spec !== null && ! isset($referenced[$function->name])) {
             $wrappers[$function->name] = $spec;
         }
     }
@@ -28,9 +28,9 @@ function eliminateIntrinsicWrappers(IR\Module $module): IR\Module
         }
     }
 
-    $wrappers = array_filter(
+    $wrappers = \array_filter(
         $wrappers,
-        static fn (array $spec, string $name): bool => !isset($evidenceMethods[$name]),
+        static fn (array $spec, string $name): bool => ! isset($evidenceMethods[$name]),
         ARRAY_FILTER_USE_BOTH,
     );
 
@@ -61,7 +61,7 @@ function eliminateIntrinsicWrappers(IR\Module $module): IR\Module
  */
 function intrinsicWrapperSpec(IR\FunctionDecl $function): ?array
 {
-    if (!($function->instanceMethod)) {
+    if (! ($function->instanceMethod)) {
         return null;
     }
 
@@ -70,30 +70,30 @@ function intrinsicWrapperSpec(IR\FunctionDecl $function): ?array
     }
 
     $items = $function->body->items;
-    if (count($items) !== 1 || !($items[0] instanceof IR\Ret)) {
+    if (\count($items) !== 1 || ! ($items[0] instanceof IR\Ret)) {
         return null;
     }
 
     $value = $items[0]->value;
-    if (!($value instanceof IR\Intrinsic)) {
+    if (! ($value instanceof IR\Intrinsic)) {
         return null;
     }
 
     $params = $function->params;
-    if (count($value->args) !== count($params)) {
+    if (\count($value->args) !== \count($params)) {
         return null;
     }
 
     foreach ($params as $i => $param) {
         $arg = $value->args[$i];
-        if (!$arg instanceof IR\Local || $arg->name !== $param) {
+        if (! $arg instanceof IR\Local || $arg->name !== $param) {
             return null;
         }
     }
 
     return [
         'intrinsic' => $value->name,
-        'arity' => count($params),
+        'arity' => \count($params),
         'srcLoc' => $value->srcLoc,
     ];
 }
@@ -133,7 +133,7 @@ function rewriteIntrinsicWrapperStmt(IR\Stmt $stmt, array $wrappers): IR\Stmt
 function rewriteIntrinsicWrapperCall(IR\Stmt $stmt, array $wrappers): IR\Stmt
 {
     $spec = $wrappers[$stmt->callee] ?? null;
-    if ($spec !== null && count($stmt->args) === $spec['arity']) {
+    if ($spec !== null && \count($stmt->args) === $spec['arity']) {
         return new IR\Assign(
             $stmt->dest,
             intrinsicOperand($spec['intrinsic'], $stmt->args, $spec['srcLoc']),
@@ -185,7 +185,7 @@ function rewriteIntrinsicWrapperOperand(IR\Operand $operand, array $wrappers): I
 {
     if ($operand instanceof IR\ExprCall && isset($wrappers[$operand->callee])) {
         $spec = $wrappers[$operand->callee];
-        if (count($operand->args) === $spec['arity']) {
+        if (\count($operand->args) === $spec['arity']) {
             return intrinsicOperand($spec['intrinsic'], $operand->args, $spec['srcLoc']);
         }
     }
@@ -293,7 +293,7 @@ function collectReferencedFunctionsOperand(IR\Operand $operand, array &$refs): v
 /** @param array<string, true> $refs */
 function addReferencedFunction(string $name, array &$refs): void
 {
-    if (!str_contains($name, '\\')) {
+    if (! \str_contains($name, '\\')) {
         $refs[$name] = true;
     }
 }

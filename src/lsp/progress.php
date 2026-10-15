@@ -27,6 +27,7 @@ function parseProgressToken(mixed $value): int|string|null
     if (\is_string($value) && $value !== '') {
         return $value;
     }
+
     return null;
 }
 
@@ -48,7 +49,8 @@ function progressPercent(int $done, int $total): ?int
     if ($done >= $total) {
         return 100;
     }
-    return (int) floor(($done / $total) * 100);
+
+    return (int) \floor(($done / $total) * 100);
 }
 
 /**
@@ -108,7 +110,7 @@ final class CancellationRegistry
  */
 function beginRequestProgress(bool $clientSupportsProgress, int|string|null $token, string $title): int|string|null
 {
-    if (!$clientSupportsProgress || $token === null) {
+    if (! $clientSupportsProgress || $token === null) {
         return null;
     }
     writeMessage([
@@ -121,6 +123,7 @@ function beginRequestProgress(bool $clientSupportsProgress, int|string|null $tok
         'token' => $token,
         'value' => ['kind' => 'begin', 'title' => $title, 'percentage' => 0],
     ]);
+
     return $token;
 }
 
@@ -132,7 +135,7 @@ function reportRequestProgress(int|string|null $token, string $message, ?int $pe
     }
     $value = ['kind' => 'report', 'message' => $message];
     if ($percentage !== null) {
-        $value['percentage'] = max(0, min(100, $percentage));
+        $value['percentage'] = \max(0, \min(100, $percentage));
     }
     sendNotification('$/progress', ['token' => $token, 'value' => $value]);
 }

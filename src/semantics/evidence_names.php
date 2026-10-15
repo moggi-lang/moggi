@@ -22,7 +22,7 @@ function evidenceFunctionName(string $className, Ast\TypeNode $head): string
  */
 function evidenceNamePart(string $name): string
 {
-    return isSafeName($name) ? $name : 'h_' . substr(hash('sha256', $name), 0, 16);
+    return isSafeName($name) ? $name : 'h_' . \substr(\hash('sha256', $name), 0, 16);
 }
 
 function evidenceHeadSuffix(Ast\TypeNode $head): string
@@ -37,7 +37,7 @@ function evidenceHeadSuffix(Ast\TypeNode $head): string
             $parts[] = $part;
         }
 
-        return join('_', $parts);
+        return \implode('_', $parts);
     }
 
     if (isSimpleEvidenceHead($head)) {
@@ -75,7 +75,7 @@ function evidenceHeadArgSuffix(Ast\TypeNode $arg): ?string
 
 function hashedEvidenceHeadSuffix(Ast\TypeNode $head): string
 {
-    return 'h_' . substr(hash('sha256', canonicalTypeKey($head)), 0, 16);
+    return 'h_' . \substr(\hash('sha256', canonicalTypeKey($head)), 0, 16);
 }
 
 /**
@@ -94,11 +94,11 @@ function isSimpleEvidenceHead(Ast\TypeNode $head): bool
     }
 
     if ($head instanceof Ast\TypeApp && $head->con instanceof Ast\TypeCon) {
-        if (!isSafeName($head->con->name)) {
+        if (! isSafeName($head->con->name)) {
             return false;
         }
         foreach ($head->args as $arg) {
-            if (!$arg instanceof Ast\TypeVar) {
+            if (! $arg instanceof Ast\TypeVar) {
                 return false;
             }
         }
@@ -135,7 +135,7 @@ function instanceMethodIrSuffix(string $methodName): string
         return $methodName;
     }
 
-    return 'Op' . bin2hex($methodName);
+    return 'Op' . \bin2hex($methodName);
 }
 
 function canonicalTypeKey(Ast\TypeNode $type): string
@@ -174,8 +174,8 @@ function canonicalTypeKey(Ast\TypeNode $type): string
         };
     };
 
-    return json_encode($normalize($type), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
-        ?: serialize($type);
+    return \json_encode($normalize($type), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+        ?: \serialize($type);
 }
 
 function typeAstToArray(Ast\TypeNode $type): array

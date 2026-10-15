@@ -26,10 +26,11 @@ function handleDidChangeConfiguration(AnalysisService $svc, array $params): void
  */
 function handleConfigurationReply(AnalysisService $svc, int|string|null $id, mixed $result): bool
 {
-    if (!is_string($id) || !str_starts_with($id, 'moggi-config-')) {
+    if (! \is_string($id) || ! \str_starts_with($id, 'moggi-config-')) {
         return false;
     }
-    $settings = (is_array($result) && isset($result[0]) && is_array($result[0])) ? $result[0] : [];
+    $settings = (\is_array($result) && isset($result[0]) && \is_array($result[0])) ? $result[0] : [];
     applyMoggiSettings($svc, $settings);
+
     return true;
 }

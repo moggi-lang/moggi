@@ -8,7 +8,7 @@
 // registry's `bad` reaches the client through the ordinary catalog read.
 
 $root = __DIR__;
-while (!is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
@@ -23,7 +23,7 @@ use function Moggi\Registry\sha256Digest;
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
     ++$checks;
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
@@ -73,10 +73,10 @@ $work = \sys_get_temp_dir() . '/moggi-bad-' . \bin2hex(\random_bytes(6));
 \putenv('MOGGI_USER_CACHE=' . $work . '/user-cache');
 
 $remove = static function (string $path) use (&$remove): void {
-    if (!\file_exists($path) && !\is_link($path)) {
+    if (! \file_exists($path) && ! \is_link($path)) {
         return;
     }
-    if (\is_dir($path) && !\is_link($path)) {
+    if (\is_dir($path) && ! \is_link($path)) {
         foreach (\scandir($path) ?: [] as $name) {
             if ($name !== '.' && $name !== '..') {
                 $remove($path . '/' . $name);
@@ -143,6 +143,7 @@ try {
         'shards' => ['js' => 'sha256:' . \str_repeat('0', 64)],
     ], \JSON_PRETTY_PRINT) . "\n");
     $refused = false;
+
     try {
         loadCatalog($work . '/broken', null, null, false)->packages();
     } catch (\RuntimeException $error) {

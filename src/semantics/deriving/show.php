@@ -2,8 +2,8 @@
 
 namespace Moggi\Semantics\Deriving;
 
-use Moggi\Syntax\Ast;
 use Moggi\Semantics\Types\TypeCheckState;
+use Moggi\Syntax\Ast;
 
 /**
  * Stock `deriving Show`
@@ -59,13 +59,13 @@ function synthesizeShowBody(Ast\DataDecl $decl, string $x, string $d, string $s)
 
     $alts = [];
     foreach ($decl->constructors as $ctor) {
-        $pats = freshPatVars('__f', count($ctor->fields));
+        $pats = freshPatVars('__f', \count($ctor->fields));
         $alts[] = new Ast\Alt(
             new Ast\PatCon($ctor->name, $pats),
             synthesizeShowConstructor(
                 $ctor,
                 patVarNames($pats),
-                array_map(static fn (Ast\CtorField $f): string => $f->name, $ctor->fields),
+                \array_map(static fn (Ast\CtorField $f): string => $f->name, $ctor->fields),
                 $d,
                 $s,
             ),
@@ -126,7 +126,7 @@ function showConstructorName(Ast\ConstructorDecl $ctor): string
  */
 function isSymbolicName(string $name): bool
 {
-    return $name !== '' && !ctype_alpha($name[0]);
+    return $name !== '' && ! \ctype_alpha($name[0]);
 }
 
 function showParenIfTighter(int $prec, Ast\AstNode $rendered, string $d, string $s): Ast\AstNode
@@ -142,8 +142,8 @@ function showParenIfTighter(int $prec, Ast\AstNode $rendered, string $d, string 
 /** `showString "C " . showsPrec 11 a0 . showChar ' ' . showsPrec 11 a1` */
 function showPrefixConstructor(string $ctorName, array $fieldNames, int $argPrec): Ast\AstNode
 {
-    $body = showPrecField($fieldNames[count($fieldNames) - 1], $argPrec, new Ast\Variable('__r'));
-    for ($i = count($fieldNames) - 2; $i >= 0; --$i) {
+    $body = showPrecField($fieldNames[\count($fieldNames) - 1], $argPrec, new Ast\Variable('__r'));
+    for ($i = \count($fieldNames) - 2; $i >= 0; --$i) {
         $body = showPrecField(
             $fieldNames[$i],
             $argPrec,
@@ -176,7 +176,7 @@ function showRecordConstructor(string $ctorName, array $fieldNames, array $field
 {
     $body = applyVar('showString', new Ast\StringLit('}'), new Ast\Variable('__r'));
 
-    for ($i = count($fieldNames) - 1; $i >= 0; --$i) {
+    for ($i = \count($fieldNames) - 1; $i >= 0; --$i) {
         $body = showPrecField($fieldNames[$i], 0, $body);
         $body = applyVar('showString', new Ast\StringLit($fieldLabels[$i] . ' = '), $body);
         if ($i > 0) {

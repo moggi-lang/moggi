@@ -6,7 +6,7 @@
  */
 function standaloneTimeoutSeconds(): int
 {
-    $override = getenv('MOGGI_TEST_STANDALONE_TIMEOUT');
+    $override = \getenv('MOGGI_TEST_STANDALONE_TIMEOUT');
     if (\is_string($override) && \ctype_digit($override) && (int) $override > 0) {
         return (int) $override;
     }
@@ -22,7 +22,7 @@ function standaloneTimeoutSeconds(): int
  */
 function runStandaloneTest(string $path): array
 {
-    if (!\is_file($path)) {
+    if (! \is_file($path)) {
         return ['passed' => false, 'message' => "missing standalone test {$path}"];
     }
 

@@ -5,12 +5,12 @@ namespace Moggi\Foreign;
 /** @return 'global'|'constructor'|'static'|'instance'|'intrinsic' */
 function foreignPathDispatch(string $path): string
 {
-    if (!str_contains($path, ':') && !str_contains($path, '.')) {
+    if (! \str_contains($path, ':') && ! \str_contains($path, '.')) {
         return 'global';
     }
 
-    if (str_contains($path, ':')) {
-        $member = substr($path, strrpos($path, ':') + 1);
+    if (\str_contains($path, ':')) {
+        $member = \substr($path, \strrpos($path, ':') + 1);
 
         return match ($member) {
             '__con' => 'constructor',
@@ -32,22 +32,22 @@ function foreignPathDispatch(string $path): string
  */
 function splitForeignPathMember(string $path): ?array
 {
-    $colon = strrpos($path, ':');
+    $colon = \strrpos($path, ':');
     if ($colon !== false) {
         $end = $colon;
         while ($end > 0 && $path[$end - 1] === ':') {
             $end--;
         }
 
-        return [substr($path, 0, $end), substr($path, $colon + 1)];
+        return [\substr($path, 0, $end), \substr($path, $colon + 1)];
     }
 
-    $dot = strrpos($path, '.');
+    $dot = \strrpos($path, '.');
     if ($dot === false) {
         return null;
     }
 
-    return [substr($path, 0, $dot), substr($path, $dot + 1)];
+    return [\substr($path, 0, $dot), \substr($path, $dot + 1)];
 }
 
 /**

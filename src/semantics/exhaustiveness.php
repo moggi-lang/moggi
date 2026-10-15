@@ -2,17 +2,21 @@
 
 namespace Moggi\Semantics\Exhaustiveness;
 
+use function Moggi\Semantics\Kernel\boolTypeName;
+
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TInt;
 use Moggi\Semantics\TypeExpr\Type;
-use Moggi\Semantics\Types\TypeCheckState;
-use Moggi\Semantics\Types\TypeError;
-use Moggi\Syntax\Ast;
 
-use function Moggi\Semantics\Kernel\boolTrueCtor;
-use function Moggi\Semantics\Kernel\boolTypeName;
 use function Moggi\Semantics\Types\prune;
+
+use Moggi\Semantics\Types\TypeCheckState;
+
+use Moggi\Semantics\Types\TypeError;
+
 use function Moggi\Semantics\Types\typeFail;
+
+use Moggi\Syntax\Ast;
 
 /**
  * Module-level bindings whose body is the host-boolean `true`, keyed `<Module>::<name>`.
@@ -46,7 +50,7 @@ function trueBindingOrigins(array $items, string $moduleName): array
 
     $origins = [];
     foreach ($items as $item) {
-        if (!$item instanceof Ast\FunctionDecl || $item->params !== []) {
+        if (! $item instanceof Ast\FunctionDecl || $item->params !== []) {
             continue;
         }
 
@@ -74,7 +78,7 @@ function isNullaryCtorReference(Ast\AstNode $expr, string $ctorName): bool
  */
 function guardIsConstantTrue(?Ast\AstNode $guard, array $trueOrigins): bool
 {
-    if (!$guard instanceof Ast\Variable && !$guard instanceof Ast\QualifiedRef) {
+    if (! $guard instanceof Ast\Variable && ! $guard instanceof Ast\QualifiedRef) {
         return false;
     }
 
@@ -295,11 +299,11 @@ function checkListCaseExhaustiveness(TypeCheckState $state, Ast\CaseExpr $expr):
     }
 
     $missing = [];
-    if (!$coversEmpty) {
+    if (! $coversEmpty) {
         $missing[] = '[]';
     }
 
-    if (!$coversNonempty) {
+    if (! $coversNonempty) {
         $missing[] = '(_ : _)';
     }
 
@@ -367,7 +371,7 @@ function checkIntCaseExhaustiveness(TypeCheckState $state, Ast\CaseExpr $expr): 
 /** @param array<int, string> $missing */
 function formatIntCaseMissingMessage(array $missing): string
 {
-    $literals = array_values(array_filter($missing, static fn (string $pattern): bool => $pattern !== '_'));
+    $literals = \array_values(\array_filter($missing, static fn (string $pattern): bool => $pattern !== '_'));
     $needsCatchAll = \in_array('_', $missing, true);
 
     if ($literals === [] && $needsCatchAll) {
@@ -384,11 +388,11 @@ function formatIntCaseMissingMessage(array $missing): string
 /** @param array<int, int> $literals */
 function missingIntegerPatterns(array $literals): array
 {
-    $literals = array_values(array_unique($literals));
-    sort($literals);
+    $literals = \array_values(\array_unique($literals));
+    \sort($literals);
 
     $missing = [];
-    for ($i = 0; $i < count($literals) - 1; ++$i) {
+    for ($i = 0; $i < \count($literals) - 1; ++$i) {
         for ($value = $literals[$i] + 1; $value < $literals[$i + 1]; ++$value) {
             $missing[] = (string) $value;
         }
@@ -401,7 +405,7 @@ function missingIntegerPatterns(array $literals): array
 
 function dataNameFromScrutinee(TypeCheckState $state, Type $scrutineeType): ?string
 {
-    if (!$scrutineeType instanceof TCon) {
+    if (! $scrutineeType instanceof TCon) {
         return null;
     }
 
@@ -411,7 +415,7 @@ function dataNameFromScrutinee(TypeCheckState $state, Type $scrutineeType): ?str
 function dataNameFromCasePatterns(TypeCheckState $state, Ast\CaseExpr $expr): ?string
 {
     foreach ($expr->alts as $alt) {
-        if (!$alt->pattern instanceof Ast\PatCon && !$alt->pattern instanceof Ast\PatRecord) {
+        if (! $alt->pattern instanceof Ast\PatCon && ! $alt->pattern instanceof Ast\PatRecord) {
             continue;
         }
 
@@ -453,5 +457,5 @@ function formatMissingConstructorPattern(array $ctor): string
         return $ctor['name'];
     }
 
-    return $ctor['name'] . ' ' . \implode(' ', \array_fill(0, count($ctor['fields']), '_'));
+    return $ctor['name'] . ' ' . \implode(' ', \array_fill(0, \count($ctor['fields']), '_'));
 }

@@ -2,9 +2,10 @@
 
 namespace Moggi\CLI\Commands;
 
+use function Moggi\Registry\badPackageMarker;
+
 use Moggi\Registry\FetchLog;
 
-use function Moggi\Registry\badPackageMarker;
 use function Moggi\Registry\prettyJson;
 use function Moggi\Registry\unmaintainedMarker;
 
@@ -64,7 +65,7 @@ function runSearchCommand(array $argv): int
 
     try {
         $log = new FetchLog();
-        $catalog = loadVerifiedCatalog($options['registry'], !$options['noCache'], $log);
+        $catalog = loadVerifiedCatalog($options['registry'], ! $options['noCache'], $log);
         $matches = searchCatalog($catalog->packages(), $term);
 
         if ($options['json']) {
@@ -103,7 +104,7 @@ function searchCatalog(array $packages, string $term): array
         $name = (string) $name;
         $entry = (array) $entry;
         $description = isset($entry['description']) ? (string) $entry['description'] : '';
-        if (!\str_contains(\strtolower($name), $needle) && !\str_contains(\strtolower($description), $needle)) {
+        if (! \str_contains(\strtolower($name), $needle) && ! \str_contains(\strtolower($description), $needle)) {
             continue;
         }
         $matches[$name] = [

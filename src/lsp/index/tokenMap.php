@@ -2,9 +2,9 @@
 
 namespace Moggi\LSP\Index;
 
-use Moggi\Syntax\Lexer\TokenKind;
-
 use function Moggi\Syntax\Lexer\lex;
+
+use Moggi\Syntax\Lexer\TokenKind;
 
 function declTokenMaps(string $source, string $filename): array
 {
@@ -18,7 +18,7 @@ function declTokenMaps(string $source, string $filename): array
     $defs = [];
     $ctors = [];
     $endLines = [];
-    $count = count($tokens);
+    $count = \count($tokens);
     $currentData = null;
     $currentName = null;
 
@@ -32,11 +32,12 @@ function declTokenMaps(string $source, string $filename): array
                     $ctors[$tok->lexeme] ??= $tok;
                 }
             }
+
             continue;
         }
 
         if ($currentName !== null) {
-            $endLines[$currentName] = max($endLines[$currentName] ?? 1, $tok->line - 1);
+            $endLines[$currentName] = \max($endLines[$currentName] ?? 1, $tok->line - 1);
             $currentName = null;
         }
         $currentData = null;
@@ -45,6 +46,7 @@ function declTokenMaps(string $source, string $filename): array
             $currentName = $tok->lexeme;
             $names[$tok->lexeme] ??= $tok;
             $defs[$tok->lexeme][] = $tok;
+
             continue;
         }
         if ($tok->kind === TokenKind::KwData || $tok->kind === TokenKind::KwNewtype
@@ -57,6 +59,7 @@ function declTokenMaps(string $source, string $filename): array
                 $defs[$next->lexeme][] = $next;
                 $i++;
             }
+
             continue;
         }
         if ($tok->kind === TokenKind::KwPub) {
@@ -71,17 +74,18 @@ function declTokenMaps(string $source, string $filename): array
                 $defs[$follow->lexeme][] = $follow;
                 $i = $j;
             }
+
             continue;
         }
     }
     if ($currentName !== null) {
-        $endLines[$currentName] = max($endLines[$currentName] ?? 1, substr_count($source, "\n") + 1);
+        $endLines[$currentName] = \max($endLines[$currentName] ?? 1, \substr_count($source, "\n") + 1);
     }
 
-    $lines = $source === '' ? [''] : explode("\n", $source);
+    $lines = $source === '' ? [''] : \explode("\n", $source);
     foreach ($endLines as $name => $end) {
         $start = $names[$name]->line ?? $end;
-        while ($end > $start && trim($lines[$end - 1] ?? '') === '') {
+        while ($end > $start && \trim($lines[$end - 1] ?? '') === '') {
             $end--;
         }
         $endLines[$name] = $end;
@@ -99,7 +103,7 @@ function tokenNameRange(object $tok): array
 {
     return [
         'start' => ['line' => $tok->line - 1, 'character' => $tok->col - 1],
-        'end' => ['line' => $tok->line - 1, 'character' => $tok->col - 1 + max(1, mb_strlen($tok->lexeme))],
+        'end' => ['line' => $tok->line - 1, 'character' => $tok->col - 1 + \max(1, \mb_strlen($tok->lexeme))],
     ];
 }
 
@@ -117,7 +121,7 @@ function fixDeclRangesByTokenScan(string $uri, string $source, array $decls): vo
     $names = $maps['names'];
     $ctors = $maps['ctors'];
     $endLines = $maps['endLines'];
-    $lines = $source === '' ? [''] : explode("\n", $source);
+    $lines = $source === '' ? [''] : \explode("\n", $source);
 
     foreach ($decls as $decl) {
         $nameTok = $names[$decl->name] ?? null;
@@ -134,7 +138,7 @@ function fixDeclRangesByTokenScan(string $uri, string $source, array $decls): vo
             'start' => $sel['start'],
             'end' => [
                 'line' => $endLine - 1,
-                'character' => mb_strlen($lines[$endLine - 1] ?? ''),
+                'character' => \mb_strlen($lines[$endLine - 1] ?? ''),
             ],
         ];
         if ($hasInvalidSel) {

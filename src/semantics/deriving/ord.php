@@ -2,8 +2,8 @@
 
 namespace Moggi\Semantics\Deriving;
 
-use Moggi\Syntax\Ast;
 use Moggi\Semantics\Types\TypeCheckState;
+use Moggi\Syntax\Ast;
 
 /**
  * Stock `deriving Ord`: emit `compare`; TC fills `< <= > >= min max`.
@@ -41,13 +41,13 @@ function synthesizeOrdCompare(Ast\DataDecl $decl, string $left, string $right): 
 
     $alts = [];
     foreach ($decl->constructors as $i => $ctor) {
-        $leftPats = freshPatVars('__a', count($ctor->fields));
+        $leftPats = freshPatVars('__a', \count($ctor->fields));
         $leftPat = new Ast\PatCon($ctor->name, $leftPats);
         $leftNames = patVarNames($leftPats);
 
         $rightAlts = [];
         foreach ($decl->constructors as $j => $other) {
-            $rightPats = freshPatVars('__b', count($other->fields));
+            $rightPats = freshPatVars('__b', \count($other->fields));
             $rightPat = new Ast\PatCon($other->name, $rightPats);
             if ($i < $j) {
                 $body = new Ast\ConstructorRef('LT');
@@ -79,7 +79,7 @@ function synthesizeFieldCompares(array $left, array $right): Ast\AstNode
     }
 
     $expr = new Ast\ConstructorRef('EQ');
-    for ($i = count($left) - 1; $i >= 0; --$i) {
+    for ($i = \count($left) - 1; $i >= 0; --$i) {
         $cmp = compareCall(new Ast\Variable($left[$i]), new Ast\Variable($right[$i]));
         $expr = new Ast\CaseExpr($cmp, [
             new Ast\Alt(new Ast\PatCon('EQ', []), $expr),

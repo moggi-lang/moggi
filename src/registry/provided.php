@@ -103,7 +103,7 @@ function providedRequirementFailure(array $reasons, array $provided): ?string
     foreach ($provided as $name => $version) {
         $unmet = \array_values(\array_filter(
             $reasons[$name] ?? [],
-            static fn (array $demand): bool => !satisfies($version, $demand['constraint']),
+            static fn (array $demand): bool => ! satisfies($version, $demand['constraint']),
         ));
         if ($unmet !== []) {
             return providedRequirementMessage($name, $version, $unmet);

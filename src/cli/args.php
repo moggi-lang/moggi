@@ -12,7 +12,7 @@ function parseBackendValue(?string $value): string
 
     try {
         assertBackend($backend);
-        if (!isBackendImplemented($backend)) {
+        if (! isBackendImplemented($backend)) {
             throw new \InvalidArgumentException(
                 "code generation for backend `{$backend}` is not implemented (available: "
                 . \implode(', ', implementedBackendIds()) . ')',

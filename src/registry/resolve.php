@@ -114,7 +114,7 @@ function greedySolve(callable $entry, array $demands): array
 
     while (true) {
         foreach ($chosen as $name => $version) {
-            if (!satisfiesAll($version, $demands[$name] ?? [])) {
+            if (! satisfiesAll($version, $demands[$name] ?? [])) {
                 return ['ok' => false, 'chosen' => $chosen, 'error' => conflictMessage($name, (array) $entry($name), $demands[$name] ?? []), 'reasons' => $demands];
             }
         }
@@ -198,7 +198,7 @@ function candidatesFor(array $versions, array $reasons): array
 function satisfiesAll(string $version, array $reasons): bool
 {
     foreach ($reasons as $reason) {
-        if (!satisfies($version, $reason['constraint'])) {
+        if (! satisfies($version, $reason['constraint'])) {
             return false;
         }
     }

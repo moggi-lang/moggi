@@ -2,27 +2,30 @@
 
 namespace Moggi\Repl;
 
-use Moggi\Pipeline\PipelineStage;
-use Moggi\Semantics\Types\TypeError;
-use Moggi\Syntax\Ast;
-use Moggi\Syntax\Lexer\LexError;
-use Moggi\Syntax\Parser\ParseError;
-use Moggi\Syntax\Parser\ReplFragment;
-
 use function Moggi\Backend\backendById;
 use function Moggi\Backend\knownBackendIds;
 use function Moggi\Backend\setCompileBackend;
-use function Moggi\Syntax\Parser\parseReplFragment;
 use function Moggi\formatExceptionReport;
+
+use Moggi\Pipeline\PipelineStage;
+use Moggi\Semantics\Types\TypeError;
+
+use Moggi\Syntax\Ast;
+use Moggi\Syntax\Lexer\LexError;
+use Moggi\Syntax\Parser\ParseError;
+
+use function Moggi\Syntax\Parser\parseReplFragment;
+
+use Moggi\Syntax\Parser\ReplFragment;
 
 function formatReplThrowable(\Throwable $e, string $userSource = ''): string
 {
     $msg = $e->getMessage();
-    if (str_starts_with(ltrim($msg), 'moggi:')) {
-        return remapReplExceptionReport(rtrim($msg, "\r\n") . "\n", $userSource);
+    if (\str_starts_with(\ltrim($msg), 'moggi:')) {
+        return remapReplExceptionReport(\rtrim($msg, "\r\n") . "\n", $userSource);
     }
 
-    if (!\function_exists('\\Moggi\\formatExceptionReport')) {
+    if (! \function_exists('\\Moggi\\formatExceptionReport')) {
         foreach (backendById('php')->runtimeFiles() as $runtime) {
             require_once $runtime;
         }
@@ -39,41 +42,42 @@ function formatReplThrowable(\Throwable $e, string $userSource = ''): string
  */
 function remapReplExceptionReport(string $report, string $userSource = ''): string
 {
-    $userSource = rtrim($userSource, "\r\n");
+    $userSource = \rtrim($userSource, "\r\n");
     $userLine = 1;
     $userCol = 1;
-    $lines = preg_split('/\R/', rtrim($report, "\r\n")) ?: [];
+    $lines = \preg_split('/\R/', \rtrim($report, "\r\n")) ?: [];
     $out = [];
     $sawInteractive = false;
     foreach ($lines as $line) {
-        if (preg_match('/^\s*at Main\.main\s*\(.*Main\.mog:/', $line) === 1) {
+        if (\preg_match('/^\s*at Main\.main\s*\(.*Main\.mog:/', $line) === 1) {
             continue;
         }
-        $isInteractive = preg_match(
+        $isInteractive = \preg_match(
             '/^\s*at Interactive\.(?:__repl_eval|it|__repl_ty|__repl_inspect)\b/',
             $line,
         ) === 1
-            || preg_match('/^\s*at .+\((?:.*\/)?Interactive\.mog:\d+/', $line) === 1;
+            || \preg_match('/^\s*at .+\((?:.*\/)?Interactive\.mog:\d+/', $line) === 1;
         if ($isInteractive) {
             if ($sawInteractive) {
                 continue;
             }
             $sawInteractive = true;
             $out[] = "  at <interactive>:{$userLine}:{$userCol}";
+
             continue;
         }
         $out[] = $line;
     }
-    if ($userSource !== '' && !$sawInteractive) {
+    if ($userSource !== '' && ! $sawInteractive) {
         $out[] = "  at <interactive>:{$userLine}:{$userCol}";
     }
 
-    return implode("\n", $out) . "\n";
+    return \implode("\n", $out) . "\n";
 }
 
 function helpText(): string
 {
-    $backends = implode('|', knownBackendIds());
+    $backends = \implode('|', knownBackendIds());
 
     return <<<TXT
 Commands (start with `:`):
@@ -109,15 +113,15 @@ TXT;
  */
 function handleCommand(State $state, string $line): array
 {
-    $raw = ltrim($line);
+    $raw = \ltrim($line);
     if ($raw === '' || $raw[0] !== ':') {
         return ['handled' => false];
     }
 
-    $body = substr($raw, 1);
-    $parts = preg_split('/\s+/', $body, 2) ?: [];
-    $cmd = strtolower($parts[0] ?? '');
-    $arg = isset($parts[1]) ? trim($parts[1]) : '';
+    $body = \substr($raw, 1);
+    $parts = \preg_split('/\s+/', $body, 2) ?: [];
+    $cmd = \strtolower($parts[0] ?? '');
+    $arg = isset($parts[1]) ? \trim($parts[1]) : '';
 
     try {
         $output = match ($cmd) {
@@ -125,8 +129,8 @@ function handleCommand(State $state, string $line): array
             'quit', 'q' => null,
             'backend' => (static function () use ($state, $arg): string {
                 $ids = knownBackendIds();
-                if (!\in_array($arg, $ids, true)) {
-                    return 'usage: :backend ' . implode('|', $ids) . "\n";
+                if (! \in_array($arg, $ids, true)) {
+                    return 'usage: :backend ' . \implode('|', $ids) . "\n";
                 }
                 $state->backend = $arg;
                 setCompileBackend($arg);
@@ -138,23 +142,23 @@ function handleCommand(State $state, string $line): array
             'kind', 'k' => $arg === '' ? "usage: :kind Type|expr\n" : (kindOfInput($state, $arg) . "\n"),
             'info', 'i' => $arg === '' ? "usage: :info Name\n" : infoForName($state, $arg),
             'browse' => browseBindings($state),
-            'history' => ($state->history === [] ? "(empty)\n" : implode("\n", $state->history) . "\n"),
+            'history' => ($state->history === [] ? "(empty)\n" : \implode("\n", $state->history) . "\n"),
             'clear' => (static function () use ($state): string {
                 clearSession($state);
 
                 return '';
             })(),
-            'show' => match (strtolower($arg)) {
+            'show' => match (\strtolower($arg)) {
                 'imports' => ($state->importLines === []
                     ? "(no explicit imports; Prelude is implicit)\n"
-                    : implode("\n", $state->importLines) . "\n"),
+                    : \implode("\n", $state->importLines) . "\n"),
                 default => "usage: :show imports\n",
             },
             'module' => (static function () use ($state, $arg): string {
                 if ($arg === '') {
                     return "module {$state->moduleName}\n";
                 }
-                if (!preg_match('/^[A-Z][A-Za-z0-9_.]*$/', $arg)) {
+                if (! \preg_match('/^[A-Z][A-Za-z0-9_.]*$/', $arg)) {
                     return "invalid module name `{$arg}`\n";
                 }
                 $state->moduleName = $arg;
@@ -165,10 +169,10 @@ function handleCommand(State $state, string $line): array
             'load', 'l' => $arg === '' ? "usage: :load file\n" : loadModuleFile($state, $arg),
             'reload', 'r' => reloadSession($state),
             'dump' => (static function () use ($state, $arg): string {
-                $stage = strtolower($arg);
+                $stage = \strtolower($arg);
                 $spec = pipelineStageSpec($stage);
                 if ($spec === null) {
-                    return 'usage: :dump ' . implode('|', array_keys(pipelineStageTable())) . "\n";
+                    return 'usage: :dump ' . \implode('|', \array_keys(pipelineStageTable())) . "\n";
                 }
                 [$stop, $optimize] = $spec;
 
@@ -184,6 +188,7 @@ function handleCommand(State $state, string $line): array
         };
     } catch (LexError|ParseError|TypeError $e) {
         $userSrc = $arg !== '' ? $arg : $line;
+
         return ['handled' => true, 'output' => displayReplError($e, $userSrc)];
     } catch (\Throwable $e) {
         return ['handled' => true, 'output' => formatReplThrowable($e)];
@@ -276,8 +281,8 @@ function handleFragment(State $state, string $source, ?ReplFragment $frag = null
     try {
         if ($frag->kind === ReplFragment::KIND_DECL) {
             if ($frag->node instanceof Ast\ImportDecl) {
-                $line = trim($source);
-                if (!\in_array($line, $state->importLines, true)) {
+                $line = \trim($source);
+                if (! \in_array($line, $state->importLines, true)) {
                     $state->importLines[] = $line;
                     prepareInteractive($state);
                 }
@@ -293,12 +298,12 @@ function handleFragment(State $state, string $source, ?ReplFragment $frag = null
         if ($frag->kind === ReplFragment::KIND_STMT) {
             $out = evaluateStatements($state, $frag->source, $frag->node);
 
-            return $out === '' ? '' : (str_ends_with($out, "\n") ? $out : $out . "\n");
+            return $out === '' ? '' : (\str_ends_with($out, "\n") ? $out : $out . "\n");
         }
 
         $out = evaluateExpression($state, $frag->source);
 
-        return $out === '' ? '' : (str_ends_with($out, "\n") ? $out : $out . "\n");
+        return $out === '' ? '' : (\str_ends_with($out, "\n") ? $out : $out . "\n");
     } catch (LexError|ParseError|TypeError $e) {
         return displayReplError($e, $frag->source);
     } catch (\Throwable $e) {

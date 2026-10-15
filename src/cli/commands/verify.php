@@ -2,11 +2,12 @@
 
 namespace Moggi\CLI\Commands;
 
+use function Moggi\Registry\badPackageMarker;
+use function Moggi\Registry\badPackageProblem;
+
 use Moggi\Registry\Catalog;
 use Moggi\Registry\FetchLog;
 
-use function Moggi\Registry\badPackageMarker;
-use function Moggi\Registry\badPackageProblem;
 use function Moggi\Registry\fetchVerifiedRelease;
 use function Moggi\Registry\findDescriptor;
 use function Moggi\Registry\lockPath;
@@ -87,12 +88,12 @@ function runVerifyCommand(array $argv): int
         }
 
         $log = new FetchLog();
-        $catalog = loadVerifiedCatalog($options['registry'], !$options['noCache'], $log);
+        $catalog = loadVerifiedCatalog($options['registry'], ! $options['noCache'], $log);
         $registryProblem = lockRegistryProblem($lock, $catalog->npub());
         if ($registryProblem !== null) {
             throw new \RuntimeException($registryProblem . ' — run `moggi update` against the registry you mean');
         }
-        $checks = verifyLockedReleases($options['registry'], $lock, $catalog, !$options['noCache'], $log);
+        $checks = verifyLockedReleases($options['registry'], $lock, $catalog, ! $options['noCache'], $log);
 
         $ok = true;
         foreach ($checks as $check) {
@@ -135,7 +136,7 @@ function verifyLockedReleases(string $registry, array $lock, Catalog $catalog, b
 
             continue;
         }
-        if (!isset($entry['versions'][$version])) {
+        if (! isset($entry['versions'][$version])) {
             $checks[] = ['name' => $name, 'version' => $version, 'ok' => false, 'detail' => 'not published any more', 'bad' => badPackageMarker((array) $entry), 'unmaintained' => unmaintainedMarker((array) $entry)];
 
             continue;

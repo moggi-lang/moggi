@@ -2,7 +2,7 @@
 <?php declare(strict_types=1);
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 
@@ -16,8 +16,8 @@ $checks = 0;
 $assertSame = static function (mixed $expected, mixed $actual, string $message) use (&$failures, &$checks): void {
     ++$checks;
     if ($expected !== $actual) {
-        $failures[] = $message . ' (expected ' . var_export($expected, true)
-            . ', got ' . var_export($actual, true) . ')';
+        $failures[] = $message . ' (expected ' . \var_export($expected, true)
+            . ', got ' . \var_export($actual, true) . ')';
     }
 };
 
@@ -47,7 +47,7 @@ function ap5(int $a, int $b, int $c, int $d, int $e): int
 }
 function apVar(int ...$xs): int
 {
-    return array_sum($xs);
+    return \array_sum($xs);
 }
 
 final class ApStatic
@@ -102,7 +102,7 @@ foreach ($saturate as $i => [$cell, $args, $expected]) {
     $assertSame(
         $expected,
         __apply($cell, ...$args),
-        "saturate case #{$i}: " . json_encode($cell) . ' applied ' . json_encode($args),
+        "saturate case #{$i}: " . \json_encode($cell) . ' applied ' . \json_encode($args),
     );
 }
 
@@ -120,7 +120,7 @@ foreach ([1, 2, 3, 4, 5] as $arity) {
     );
     $assertSame(
         $expectedResult[$arity],
-        __apply(['__partial', $arity, $name], ...range(1, $arity)),
+        __apply(['__partial', $arity, $name], ...\range(1, $arity)),
         "one-shot saturation at arity {$arity}",
     );
 }
@@ -141,8 +141,8 @@ $assertSame(
     'extending by several arguments must append in order',
 );
 $assertSame(
-    array_keys(['__partial', 3, '\ap3', 1, 2]),
-    array_keys(__apply(['__partial', 3, '\ap3', 1], 2)),
+    \array_keys(['__partial', 3, '\ap3', 1, 2]),
+    \array_keys(__apply(['__partial', 3, '\ap3', 1], 2)),
     'an extended cell must stay a list (0-indexed)',
 );
 
@@ -164,7 +164,7 @@ $assertSame(42, __apply('\ap1'(...), 41), 'first-class callable, exact arity');
 $assertSame('__partial', (__apply('\ap2'(...), 1)[0] ?? null), 'first-class callable curried');
 $assertSame(3, __apply(__apply('\ap2'(...), 1), 2), 'first-class callable curried to result');
 
-$invokable = new class () {
+$invokable = new class() {
     public function __invoke(int $a, int $b): int
     {
         return $a * $b;
@@ -188,15 +188,15 @@ try {
     $assertSame('ArgumentCountError', 'ArgumentCountError', 'under-applied callable array raises');
 }
 
-$assertSame(false, is_callable(['__partial', 2, '\ap2', 1]), 'a partial cell is not callable');
+$assertSame(false, \is_callable(['__partial', 2, '\ap2', 1]), 'a partial cell is not callable');
 $assertSame(3, __apply(['__partial', 2, '\ap2', 1], 2), 'a non-callable array is still accepted');
 
 foreach ([42, 1.5, null, true, new stdClass()] as $junk) {
     try {
         __apply($junk, 1);
-        $assertSame('TypeError', 'no throw', 'non-callable ' . get_debug_type($junk) . ' must be rejected');
+        $assertSame('TypeError', 'no throw', 'non-callable ' . \get_debug_type($junk) . ' must be rejected');
     } catch (TypeError) {
-        $assertSame('TypeError', 'TypeError', 'non-callable ' . get_debug_type($junk) . ' rejected');
+        $assertSame('TypeError', 'TypeError', 'non-callable ' . \get_debug_type($junk) . ' rejected');
     }
 }
 
@@ -214,8 +214,8 @@ $reference = static function (callable|array $fn, mixed ...$args): mixed {
     if (\is_array($fn) && ($fn[0] ?? null) === '__partial') {
         $arity = $fn[1];
         $name = $fn[2];
-        $applied = count($fn) - 3;
-        $incoming = count($args);
+        $applied = \count($fn) - 3;
+        $incoming = \count($args);
 
         if ($applied + $incoming >= $arity) {
             $needFromArgs = $arity - $applied;
@@ -230,10 +230,10 @@ $reference = static function (callable|array $fn, mixed ...$args): mixed {
         return ['__partial', $arity, $name, ...\array_slice($fn, 3), ...$args];
     }
 
-    if (is_callable($fn) && !\is_array($fn)) {
+    if (\is_callable($fn) && ! \is_array($fn)) {
         $ref = new \ReflectionFunction($fn);
         $arity = $ref->getNumberOfParameters();
-        if (count($args) < $arity) {
+        if (\count($args) < $arity) {
             return ['__partial', $arity, $fn, ...$args];
         }
 
@@ -247,7 +247,7 @@ $reference = static function (callable|array $fn, mixed ...$args): mixed {
 $canon = static function (mixed $value) use (&$canon): mixed {
     if (\is_array($value) && ($value[0] ?? null) === '__partial') {
         $out = ['__partial', $value[1]];
-        for ($i = 2, $n = count($value); $i < $n; ++$i) {
+        for ($i = 2, $n = \count($value); $i < $n; ++$i) {
             $out[] = $canon($value[$i]);
         }
 
@@ -300,6 +300,7 @@ foreach ($matrix as $i => [$cell, $args]) {
     } catch (\Throwable $e) {
         $expected = 'throw:' . $e::class;
     }
+
     try {
         $actual = $canon(__apply($cell, ...$args));
     } catch (\Throwable $e) {
@@ -308,7 +309,7 @@ foreach ($matrix as $i => [$cell, $args]) {
     $assertSame(
         $expected,
         $actual,
-        "differential case #{$i}: " . json_encode($canon($cell)) . ' applied ' . json_encode($args),
+        "differential case #{$i}: " . \json_encode($canon($cell)) . ' applied ' . \json_encode($args),
     );
 }
 
@@ -320,9 +321,9 @@ $assertSame('__partial', (__apply($cl2, 1)[0] ?? null), 'closure bare callable, 
 // Report
 
 if ($failures !== []) {
-    fwrite(STDERR, 'apply (__apply) test FAILED: ' . count($failures) . "\n");
+    \fwrite(STDERR, 'apply (__apply) test FAILED: ' . \count($failures) . "\n");
     foreach ($failures as $failure) {
-        fwrite(STDERR, "  - {$failure}\n");
+        \fwrite(STDERR, "  - {$failure}\n");
     }
     exit(1);
 }

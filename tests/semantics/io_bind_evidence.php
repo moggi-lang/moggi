@@ -2,17 +2,18 @@
 <?php declare(strict_types=1);
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
 
-use Moggi\Syntax\Ast;
-
 use function Moggi\Semantics\IoBoundary\ioBindParts;
+
 use function Moggi\Semantics\IoBoundary\isIoMethodWithRole;
 use function Moggi\Semantics\Kernel\bindRole;
 use function Moggi\Semantics\Kernel\pureRole;
+
+use Moggi\Syntax\Ast;
 
 /**
  * `do`'s bind is an ordinary class method, so the IO boundary has exactly one way to recognise it: the

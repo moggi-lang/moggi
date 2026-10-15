@@ -2,12 +2,43 @@
 
 namespace Moggi\Semantics\Types;
 
+use function Moggi\Errors\appendDidYouMean;
+
 use Moggi\IR\EntryPointKind;
+
+use function Moggi\Modules\resolvedSymbol;
+use function Moggi\Patterns\Walk\patternDuplicateBinder;
+use function Moggi\Patterns\Walk\patternVariableNames;
+use function Moggi\Patterns\Walk\patternVariableNamesOrdered;
+
 use Moggi\Pipeline\CompilePurpose;
+
+use function Moggi\Pipeline\isEntryModule;
+use function Moggi\Semantics\Exhaustiveness\caseExhaustivenessProven;
+use function Moggi\Semantics\Exhaustiveness\checkCaseExhaustiveness;
+use function Moggi\Semantics\IntrinsicRegistry\capturesCallSite;
+use function Moggi\Semantics\IntrinsicRegistry\isMagicHashName;
+use function Moggi\Semantics\IntrinsicRegistry\isShortCircuitPrimop;
+use function Moggi\Semantics\IntrinsicRegistry\primitiveTypeOwnerModule;
+use function Moggi\Semantics\IntrinsicRegistry\resolveIntrinsicName;
+use function Moggi\Semantics\IntrinsicRegistry\schemeArity;
+use function Moggi\Semantics\IntrinsicRegistry\shortCircuitPrimopId;
+use function Moggi\Semantics\IntrinsicRegistry\typeSchemes;
+use function Moggi\Semantics\Kernel\bindRole;
+use function Moggi\Semantics\Kernel\literalRole;
+
 use Moggi\Semantics\Kinds;
+
+use function Moggi\Semantics\TypeExpr\canonicalNatDigits;
+
 use Moggi\Semantics\TypeExpr\Scheme;
+
+use function Moggi\Semantics\TypeExpr\scheme;
+use function Moggi\Semantics\TypeExpr\schemeFreeTypeVars;
+
 use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TChar;
+
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TDouble;
 use Moggi\Semantics\TypeExpr\TInt;
@@ -30,28 +61,6 @@ use Moggi\Semantics\TypeExpr\TWord8;
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Syntax\Ast;
 
-use function Moggi\Errors\appendDidYouMean;
-use function Moggi\Modules\resolvedSymbol;
-use function Moggi\Patterns\Walk\patternDuplicateBinder;
-use function Moggi\Patterns\Walk\patternVariableNames;
-use function Moggi\Patterns\Walk\patternVariableNamesOrdered;
-use function Moggi\Pipeline\isEntryModule;
-use function Moggi\Semantics\Deriving\newtypeChain;
-use function Moggi\Semantics\Exhaustiveness\caseExhaustivenessProven;
-use function Moggi\Semantics\Exhaustiveness\checkCaseExhaustiveness;
-use function Moggi\Semantics\IntrinsicRegistry\capturesCallSite;
-use function Moggi\Semantics\IntrinsicRegistry\isMagicHashName;
-use function Moggi\Semantics\IntrinsicRegistry\isShortCircuitPrimop;
-use function Moggi\Semantics\IntrinsicRegistry\primitiveTypeOwnerModule;
-use function Moggi\Semantics\IntrinsicRegistry\resolveIntrinsicName;
-use function Moggi\Semantics\IntrinsicRegistry\schemeArity;
-use function Moggi\Semantics\IntrinsicRegistry\shortCircuitPrimopId;
-use function Moggi\Semantics\IntrinsicRegistry\typeSchemes;
-use function Moggi\Semantics\Kernel\bindRole;
-use function Moggi\Semantics\Kernel\literalRole;
-use function Moggi\Semantics\TypeExpr\canonicalNatDigits;
-use function Moggi\Semantics\TypeExpr\scheme;
-use function Moggi\Semantics\TypeExpr\schemeFreeTypeVars;
 use function Moggi\Syntax\Ast\desugarDo;
 use function Moggi\Syntax\isConstructorName;
 use function Moggi\Syntax\isConstructorOperator;
@@ -69,7 +78,7 @@ function isIoTypeCon(TypeCheckState $state, Type $type): bool
 
     return $type instanceof TCon
         && $type->name === Kinds\canonicalTypeConName('IO#')
-        && count($type->args) === 1;
+        && \count($type->args) === 1;
 }
 
 function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\FunctionDecl
@@ -92,6 +101,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
 
     if ($hasSignature) {
         $kindScope = Kinds\pushKindScope($state);
+
         try {
             [$constraintAsts, $bodyTypeAst] = splitTypeAst($fn->inferredSignatureType ?? $fn->type);
             $userConstraints = parseConstraints($state, $constraintAsts, $fn);
@@ -105,7 +115,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
             $constraintEnv = buildConstraintEnv($state, $constraints);
             $fnType = astType($state, $bodyTypeAst);
             Kinds\assertKind($state, $fnType, new Kinds\KType(), $state->varKinds, $fn);
-            foreach (array_reverse($constraints) as $constraint) {
+            foreach (\array_reverse($constraints) as $constraint) {
                 $fnType = new TArrow(new TCon('__Dict_' . $constraint->class), $fnType);
             }
         } finally {
@@ -123,7 +133,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
 
         $expected = $fnType;
         foreach ($fn->params as $param) {
-            if (!$expected instanceof TArrow) {
+            if (! $expected instanceof TArrow) {
                 throw typeFail($state, "function `{$fn->name}` has too many parameters", $fn);
             }
             $paramTypes[] = $expected->from;
@@ -133,7 +143,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
     } else {
         $bodyExpected = freshType($state);
         $fnType = $bodyExpected;
-        foreach (array_reverse($fn->params) as $_) {
+        foreach (\array_reverse($fn->params) as $_) {
             $fnType = new TArrow(freshType($state), $fnType);
         }
         $expected = $fnType;
@@ -149,8 +159,8 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
     }
 
     $bodyEnv = $constraintEnv === [] ? $env : [...$env, ...$constraintEnv];
-    $selfType = peelDictArrows($fnType, count($constraints));
-    $bodyEnv[$fn->name] = scheme($selfType, [], $userConstraints, count($constraints), $constraints);
+    $selfType = peelDictArrows($fnType, \count($constraints));
+    $bodyEnv[$fn->name] = scheme($selfType, [], $userConstraints, \count($constraints), $constraints);
 
     $savedConstraintMethods = $state->constraintMethods;
     $savedConstraintMethodAmbiguities = $state->constraintMethodAmbiguities;
@@ -184,7 +194,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
                 $userConstraints = $substituted['constraints'];
                 $methodType = peelDictArrows(
                     $substituted['type'],
-                    count($userConstraints),
+                    \count($userConstraints),
                 );
                 $info = [
                     'class' => $constraint->class,
@@ -212,11 +222,13 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
                         $state->constraintMethodCandidates[$methodName] = [$existing, $info];
                         unset($bodyEnv[$methodName]);
                     }
+
                     continue;
                 }
 
                 if (isset($state->constraintMethodAmbiguities[$methodName])) {
                     unset($bodyEnv[$methodName]);
+
                     continue;
                 }
 
@@ -250,7 +262,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
 
     $restricted = isRestrictedDeclaration($fn);
     $ownsOpenVars = $restricted
-        && quantifiedVars($state, peelDictArrows($fnType, count($constraints))) !== [];
+        && quantifiedVars($state, peelDictArrows($fnType, \count($constraints))) !== [];
     $openRestricted = openRestrictedVarsInExpr($state, $fn->body);
 
     if ($ownsOpenVars || $openRestricted !== []) {
@@ -311,7 +323,7 @@ function settleCheckedBody(
         $fn->body,
         $restricted
             ? []
-            : quantifiedVars($state, peelDictArrows($fnType, count($group->dicts))),
+            : quantifiedVars($state, peelDictArrows($fnType, \count($group->dicts))),
     );
 
     resolveDeferredInfixPrimops($state, $fn->body);
@@ -330,8 +342,8 @@ function settleCheckedBody(
         \array_flip(knownTypeConstructorNames($state)),
         $state->subst,
     );
-    $fn->typeInferred = !$hadDeclaredSignature;
-    $userFnType = peelDictArrows($fnType, count($group->dicts));
+    $fn->typeInferred = ! $hadDeclaredSignature;
+    $userFnType = peelDictArrows($fnType, \count($group->dicts));
     $prunedUserConstraints = refreshConstraintArgs($state, $group->user);
     $prunedDicts = refreshConstraintArgs($state, $group->dicts);
     $state->env[$fn->name] = $restricted
@@ -340,7 +352,7 @@ function settleCheckedBody(
             $userFnType,
             schemeBoundVars($userFnType, $state->env, $prunedUserConstraints),
             $prunedUserConstraints,
-            count($prunedDicts),
+            \count($prunedDicts),
             $prunedDicts,
         );
 
@@ -403,7 +415,7 @@ function deferDeclaration(
 
     $fnType = prune($state, $fnType);
     if (! $hadDeclaredSignature) {
-        $userFnType = peelDictArrows($fnType, count($group->dicts));
+        $userFnType = peelDictArrows($fnType, \count($group->dicts));
         if ($restricted) {
             $state->env[$fn->name] = scheme($userFnType, [], []);
         } else {
@@ -411,7 +423,7 @@ function deferDeclaration(
                 $userFnType,
                 schemeBoundVars($userFnType, $state->env, $group->user),
                 $group->user,
-                count($group->dicts),
+                \count($group->dicts),
                 $group->dicts,
             );
         }
@@ -537,7 +549,7 @@ function settleDeferredDeclaration(TypeCheckState $state, array $entry): void
         ...\array_keys($entry['vars']),
         ...\array_keys($entry['openVars']),
     ]);
-    for ($round = 0; $round <= count($waiting); ++$round) {
+    for ($round = 0; $round <= \count($waiting); ++$round) {
         foreach ($waiting as $var) {
             $var = (string) $var;
             if (isset($state->subst[$var])) {
@@ -811,7 +823,7 @@ function discoverFunctionConstraints(TypeCheckState $state, Ast\FunctionDecl $fn
         foreach ($fn->params as $param) {
             $probeParams[] = Ast\copyNode($param);
         }
-        foreach (array_reverse($probeParams) as $_) {
+        foreach (\array_reverse($probeParams) as $_) {
             $fnType = new TArrow(freshType($state), $fnType);
         }
 
@@ -832,7 +844,7 @@ function discoverFunctionConstraints(TypeCheckState $state, Ast\FunctionDecl $fn
         $found = inferredFunctionConstraints($state, $body, $fnType);
         $constraints = \array_values(\array_filter(
             $found,
-            static fn (Ast\PendingConstraint $constraint): bool => !constraintOverRestrictedVar($state, $constraint),
+            static fn (Ast\PendingConstraint $constraint): bool => ! constraintOverRestrictedVar($state, $constraint),
         ));
 
         return [
@@ -885,10 +897,10 @@ function userParamsOf(Ast\FunctionDecl $fn): array
     while ($params !== []
         && $params[0] instanceof Ast\PatVar
         && \str_starts_with($params[0]->name, '__ev_')) {
-        array_shift($params);
+        \array_shift($params);
     }
 
-    return array_values($params);
+    return \array_values($params);
 }
 
 /**
@@ -1036,6 +1048,7 @@ function inferredFunctionConstraints(TypeCheckState $state, Ast\AstNode $body, T
             foreach (signatureVarsInType(prune($state, $arg), $known) as $name => $_) {
                 if (isset($ownVars[$name])) {
                     $abstract[] = $constraint;
+
                     continue 3;
                 }
             }
@@ -1074,7 +1087,7 @@ function signatureVarsInType(Type $type, array $known): array
         ];
     }
 
-    if (!$type instanceof TCon) {
+    if (! $type instanceof TCon) {
         return [];
     }
 
@@ -1128,7 +1141,7 @@ function rewriteIntrinsicApplies(Ast\AstNode $expr): Ast\AstNode
 
             $internal = resolveIntrinsicName($wrapper) ?? $wrapper;
             $scheme = typeSchemes()[$internal] ?? null;
-            if ($scheme === null || count($parts['args']) !== schemeArity($scheme)) {
+            if ($scheme === null || \count($parts['args']) !== schemeArity($scheme)) {
                 return $expr;
             }
 
@@ -1277,7 +1290,7 @@ function validateEntryPoint(
         return;
     }
 
-    if (!isEntryModule($moduleName)) {
+    if (! isEntryModule($moduleName)) {
         return;
     }
 
@@ -1292,14 +1305,14 @@ function validateEntryPoint(
         return;
     }
 
-    if (count($mainIndexes) > 1) {
+    if (\count($mainIndexes) > 1) {
         throw typeFail($state, 'duplicate entry point `main`', $items[$mainIndexes[1]]);
     }
 
     $index = $mainIndexes[0];
     $main = $items[$index];
 
-    if (!$main instanceof Ast\FunctionDecl) {
+    if (! $main instanceof Ast\FunctionDecl) {
         return;
     }
 
@@ -1310,7 +1323,7 @@ function validateEntryPoint(
     [$constraintAsts, $bodyTypeAst] = splitTypeAst($main->type);
     $resultType = astType($state, $bodyTypeAst);
 
-    if (!isIoTypeCon($state, $resultType)) {
+    if (! isIoTypeCon($state, $resultType)) {
         return;
     }
 
@@ -1318,8 +1331,8 @@ function validateEntryPoint(
         throw typeFail($state, 'entry point `main` may not have constraints', $main);
     }
 
-    $evidenceParams = count($main->constraints);
-    if (count($main->params) > $evidenceParams) {
+    $evidenceParams = \count($main->constraints);
+    if (\count($main->params) > $evidenceParams) {
         throw typeFail($state, 'entry point `main` must not take parameters', $main);
     }
 
@@ -1366,18 +1379,18 @@ function trivialIntrinsicWrapper(Ast\FunctionDecl $fn): ?string
     $params = [];
     foreach ($fn->params as $param) {
         $pattern = $param instanceof Ast\LambdaParam ? $param->pattern : $param;
-        if (!$pattern instanceof Ast\PatVar) {
+        if (! $pattern instanceof Ast\PatVar) {
             return null;
         }
         $params[] = $pattern->name;
     }
 
-    if (count($params) !== count($parts['args'])) {
+    if (\count($params) !== \count($parts['args'])) {
         return null;
     }
 
     foreach ($parts['args'] as $i => $arg) {
-        if (!$arg instanceof Ast\Variable || $arg->name !== $params[$i]) {
+        if (! $arg instanceof Ast\Variable || $arg->name !== $params[$i]) {
             return null;
         }
     }
@@ -1394,7 +1407,7 @@ function flattenApplyForIntrinsicWrapper(Ast\AstNode $expr): array
         $expr = $expr->function;
     }
     if ($args !== []) {
-        $args = array_reverse($args);
+        $args = \array_reverse($args);
     }
 
     return ['function' => $expr, 'args' => $args];
@@ -1438,7 +1451,7 @@ function inferExpr(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
         Ast\ForeignCall::class => inferForeignCall($state, $expr, $env),
         Ast\EvidenceRef::class => new TCon('__Dict_' . $expr->class),
         Ast\EvidenceMethod::class => inferEvidenceMethod($state, $expr),
-        default => throw typeFail($state, \sprintf("unsupported expression `%s`", $expr::class), $expr),
+        default => throw typeFail($state, \sprintf('unsupported expression `%s`', $expr::class), $expr),
     };
 
     annotateExprType($state, $expr, $type);
@@ -1479,9 +1492,9 @@ function reportTypedHoles(TypeCheckState $state): void
     );
     $err->diagnosticCode = 'hole';
     $err->holeType = $typeStr;
-    if (count($state->holes) > 1) {
+    if (\count($state->holes) > 1) {
         $related = [];
-        for ($i = 1, $n = count($state->holes); $i < $n; $i++) {
+        for ($i = 1, $n = \count($state->holes); $i < $n; $i++) {
             $h = $state->holes[$i];
             $ht = $h->inferredType !== null
                 ? typeToString(prune($state, inferredTypeAstToInternal($h->inferredType)), $rename)
@@ -1496,6 +1509,7 @@ function reportTypedHoles(TypeCheckState $state): void
         }
         $err->relatedLocations = $related;
     }
+
     throw $err;
 }
 
@@ -1534,7 +1548,7 @@ function inferTypeAsc(TypeCheckState $state, Ast\TypeAsc $expr, array $env): Typ
 
 function inferVariable(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
 {
-    if (!$expr instanceof Ast\Variable) {
+    if (! $expr instanceof Ast\Variable) {
         throw typeFail($state, 'expected variable', $expr);
     }
 
@@ -1558,7 +1572,7 @@ function inferVariable(TypeCheckState $state, Ast\AstNode &$expr, array $env): T
     }
 
     if (isset($state->classMethodAmbiguities[$expr->name])) {
-        throw typeFail($state, \sprintf("ambiguous class method `%s`", $expr->name), $expr);
+        throw typeFail($state, \sprintf('ambiguous class method `%s`', $expr->name), $expr);
     }
 
     if (isset($state->ambiguousImports[$expr->name])) {
@@ -1569,7 +1583,7 @@ function inferVariable(TypeCheckState $state, Ast\AstNode &$expr, array $env): T
         ?? throw typeFail(
             $state,
             appendDidYouMean(
-                \sprintf("undefined variable `%s`", $expr->name),
+                \sprintf('undefined variable `%s`', $expr->name),
                 $expr->name,
                 \array_keys($env),
             ),
@@ -1577,7 +1591,7 @@ function inferVariable(TypeCheckState $state, Ast\AstNode &$expr, array $env): T
         );
     if (isset($state->intrinsicWrappers[$expr->name])) {
         $expr->intrinsicWrapper = $state->intrinsicWrappers[$expr->name];
-    } else if (isset($env[$expr->name]) && resolveIntrinsicName($expr->name) !== null) {
+    } elseif (isset($env[$expr->name]) && resolveIntrinsicName($expr->name) !== null) {
         $expr->intrinsicWrapper = $expr->name;
     }
     if ($scheme->binderId !== null) {
@@ -1593,12 +1607,13 @@ function inferVariable(TypeCheckState $state, Ast\AstNode &$expr, array $env): T
         $expr->pendingConstraints = $instantiated['constraints'];
         $expr->pendingDicts = $instantiated['dicts'];
     }
+
     return $instantiated['type'];
 }
 
 function inferOperatorRef(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
 {
-    if (!$expr instanceof Ast\OperatorRef) {
+    if (! $expr instanceof Ast\OperatorRef) {
         throw typeFail($state, 'expected operator_ref', $expr);
     }
 
@@ -1679,17 +1694,17 @@ function operatorCandidateNames(array $env, TypeCheckState $state): array
 {
     $names = [];
     foreach ([...\array_keys($env), ...\array_keys($state->constraintMethods)] as $name) {
-        if ($name !== '' && !ctype_alpha($name[0]) && $name[0] !== '_') {
+        if ($name !== '' && ! \ctype_alpha($name[0]) && $name[0] !== '_') {
             $names[] = $name;
         }
     }
 
-    return array_values(array_unique($names));
+    return \array_values(\array_unique($names));
 }
 
 function inferEvidenceMethod(TypeCheckState $state, Ast\AstNode $expr): Type
 {
-    if (!$expr instanceof Ast\EvidenceMethod) {
+    if (! $expr instanceof Ast\EvidenceMethod) {
         throw typeFail($state, 'expected evidence_method', $expr);
     }
 
@@ -1722,7 +1737,7 @@ function inferEvidenceMethod(TypeCheckState $state, Ast\AstNode $expr): Type
     $userConstraints = $methodInfo['userConstraints'] ?? [];
     $instantiated = freshenTypeWithConstraints(
         $state,
-        peelDictArrows($methodInfo['type'], count($userConstraints)),
+        peelDictArrows($methodInfo['type'], \count($userConstraints)),
         $userConstraints,
     );
     if ($instantiated['constraints'] !== []) {
@@ -1759,7 +1774,7 @@ function inferApply(TypeCheckState $state, Ast\Apply $expr, array $env): Type
     }
 
     $fnType = normalizeType($state, $fnType, reduceFamilies: false);
-    if (!$fnType instanceof TArrow) {
+    if (! $fnType instanceof TArrow) {
         $result = freshType($state);
         unify($state, $fnType, new TArrow($argType, $result), $expr);
         parkApplyConstraints($state, $expr);
@@ -1874,10 +1889,10 @@ function inferApplyAndElaborate(TypeCheckState $state, Ast\Apply $expr, array $e
 function propagateCallMetadata(Ast\Apply $expr): void
 {
     $callee = rootCalleeExpr($expr);
-    if (property_exists($callee, 'intrinsicWrapper') && $callee->intrinsicWrapper !== null) {
+    if (\property_exists($callee, 'intrinsicWrapper') && $callee->intrinsicWrapper !== null) {
         $expr->intrinsicWrapper = $callee->intrinsicWrapper;
     }
-    if (property_exists($callee, 'intrinsicId') && $callee->intrinsicId !== null) {
+    if (\property_exists($callee, 'intrinsicId') && $callee->intrinsicId !== null) {
         $expr->intrinsicId = $callee->intrinsicId;
     }
 }
@@ -2140,7 +2155,7 @@ function tryResolveApplyEvidence(TypeCheckState $state, Ast\Apply $expr): void
  */
 function tryResolveValueEvidence(TypeCheckState $state, Ast\AstNode $expr): Ast\AstNode
 {
-    if (!$expr instanceof Ast\Variable && !$expr instanceof Ast\OperatorRef && !$expr instanceof Ast\QualifiedRef) {
+    if (! $expr instanceof Ast\Variable && ! $expr instanceof Ast\OperatorRef && ! $expr instanceof Ast\QualifiedRef) {
         return $expr;
     }
 
@@ -2223,7 +2238,7 @@ function infixApplicationNode(string $op, Ast\AstNode $left, Ast\AstNode $right,
 
 function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
 {
-    if (!$expr instanceof Ast\Infix) {
+    if (! $expr instanceof Ast\Infix) {
         throw new \InvalidArgumentException('inferInfix expects an infix expression');
     }
 
@@ -2270,7 +2285,7 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
         return inferRewrittenInfix($state, $surface, $expr, $env);
     }
 
-    if (!isClassMethodOperator($state, $op)
+    if (! isClassMethodOperator($state, $op)
         && ! isset($state->intrinsicWrappers[$op])
         && (isset($env[$op]) || isset($state->env[$op]))) {
         $left = $expr->left;
@@ -2364,7 +2379,7 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
 
     if ($classOperator
         && $constraints !== []
-        && !isset($state->constraintMethodAmbiguities[$op])
+        && ! isset($state->constraintMethodAmbiguities[$op])
         && operandTypeIsUnresolved($state, $leftType, $rightType)
     ) {
         if (constraintsResolvable($state, $constraints)) {
@@ -2393,7 +2408,6 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
         return $result;
     }
 
-
     return $result;
 }
 
@@ -2412,7 +2426,7 @@ function inferInfix(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
 function inferMethodByArgument(TypeCheckState $state, Ast\Apply $expr, array $env): Type
 {
     $name = $expr->function instanceof Ast\Variable ? $expr->function->name : null;
-    if ($name === null || !isset($state->constraintMethodCandidates[$name])) {
+    if ($name === null || ! isset($state->constraintMethodCandidates[$name])) {
         return inferExpr($state, $expr->function, $env);
     }
 
@@ -2496,7 +2510,7 @@ function constraintMethodForOperandTypes(TypeCheckState $state, string $method, 
 
     $match = null;
     foreach ($state->constraintMethodCandidates[$method] ?? [] as $candidate) {
-        if (!isset($keys[constraintArgKey(prune($state, $candidate['constraintHead']))])) {
+        if (! isset($keys[constraintArgKey(prune($state, $candidate['constraintHead']))])) {
             continue;
         }
         if ($match !== null) {
@@ -2562,6 +2576,7 @@ function inferRewrittenInfixFromOperands(
 
     $state->knownOperandTypes[\spl_object_id($left)] = $leftType;
     $state->knownOperandTypes[\spl_object_id($right)] = $rightType;
+
     try {
         return $mirrorSurface
             ? inferRewrittenInfix($state, $surface, $expr, $env)
@@ -2816,7 +2831,7 @@ function applyOperatorPrimop(
     Type $leftType,
     Type $rightType,
 ): Type {
-    if (!$expr instanceof Ast\Infix) {
+    if (! $expr instanceof Ast\Infix) {
         throw new \InvalidArgumentException('applyOperatorPrimop expects an infix expression');
     }
 
@@ -2846,7 +2861,7 @@ function applyOperatorPrimop(
 function instanceHeadOperand(TypeCheckState $state, string $op, Type $left, Type $right): bool
 {
     $head = $state->instanceHeadInScope;
-    if ($head === null || !isset($state->instanceOwnMethods[$op])) {
+    if ($head === null || ! isset($state->instanceOwnMethods[$op])) {
         return false;
     }
 
@@ -2918,7 +2933,7 @@ function operandTypeIsUnresolved(TypeCheckState $state, Type $left, Type $right)
 
 function inferTuple(TypeCheckState $state, Ast\Tuple $expr, array $env): Type
 {
-    if (count($expr->elements) === 0) {
+    if (\count($expr->elements) === 0) {
         return new TUnit();
     }
 
@@ -2928,17 +2943,17 @@ function inferTuple(TypeCheckState $state, Ast\Tuple $expr, array $env): Type
     }
     unset($element);
 
-    return new TCon('Tuple' . count($types), $types);
+    return new TCon('Tuple' . \count($types), $types);
 }
 
 function inferList(TypeCheckState $state, Ast\ListLit $expr, array $env): Type
 {
-    if (count($expr->elements) === 0) {
+    if (\count($expr->elements) === 0) {
         return new TCon('List', [freshType($state)]);
     }
 
     $elemType = inferExpr($state, $expr->elements[0], $env);
-    for ($i = 1, $n = count($expr->elements); $i < $n; ++$i) {
+    for ($i = 1, $n = \count($expr->elements); $i < $n; ++$i) {
         unify($state, inferExpr($state, $expr->elements[$i], $env), $elemType, $expr->elements[$i]);
     }
 
@@ -2954,7 +2969,7 @@ function inferLambda(TypeCheckState $state, Ast\Lambda $expr, array $env): Type
 
     foreach ($expr->params as $param) {
         $pattern = $param instanceof Ast\LambdaParam ? $param->pattern : $param;
-        if (!$pattern instanceof Ast\PatVar && !$pattern instanceof Ast\PatWild) {
+        if (! $pattern instanceof Ast\PatVar && ! $pattern instanceof Ast\PatWild) {
             throw typeFail($state, 'lambda parameters must be variables', $param);
         }
         $paramPatterns[] = $pattern;
@@ -2974,7 +2989,7 @@ function inferLambda(TypeCheckState $state, Ast\Lambda $expr, array $env): Type
     unify($state, inferExpr($state, $expr->body, $bodyEnv), $bodyExpected);
 
     $fnType = $bodyExpected;
-    foreach (array_reverse($paramTypes) as $paramType) {
+    foreach (\array_reverse($paramTypes) as $paramType) {
         $fnType = new TArrow($paramType, $fnType);
     }
 
@@ -3063,7 +3078,7 @@ function isRestrictedBindingGroup(array $group): bool
  */
 function assertDictArity(TypeCheckState $state, Scheme $scheme, array $abstracted, Ast\AstNode $at): void
 {
-    if (getenv('MOGGI_ASSERT_DICT_ARITY') === false) {
+    if (\getenv('MOGGI_ASSERT_DICT_ARITY') === false) {
         return;
     }
 
@@ -3201,7 +3216,7 @@ function functionParamTypeAsts(Ast\TypeNode $type): array
  */
 function abstractAnnotatedLocalBinding(TypeCheckState $state, Ast\AstNode $value, array $env): array
 {
-    if (!$value instanceof Ast\TypeAsc || !$value->type instanceof Ast\TypeConstrained) {
+    if (! $value instanceof Ast\TypeAsc || ! $value->type instanceof Ast\TypeConstrained) {
         throw new \InvalidArgumentException('abstractAnnotatedLocalBinding expects a constrained type annotation');
     }
 
@@ -3227,6 +3242,7 @@ function abstractAnnotatedLocalBinding(TypeCheckState $state, Ast\AstNode $value
     }
 
     $saved = installAmbientConstraints($state, $abstracted);
+
     try {
         $valueType = inferExpr($state, $inner, $env);
         $bodyExpected = astType($state, $bodyTypeAst);
@@ -3268,6 +3284,7 @@ function abstractLocalConstraints(TypeCheckState $state, Ast\AstNode $rhs, array
     [$params, $abstracted, $dictTypes] = allocateDictParams($state, $constraints);
 
     $saved = installAmbientConstraints($state, $abstracted);
+
     try {
         $rhs = resolvePendingEvidenceInExpr($state, $rhs);
         $rhs = tryResolveValueEvidence($state, $rhs);
@@ -3321,7 +3338,7 @@ function renameProbeTypeVars(Type $type, array $constraints): array
     $mapping = [];
     $bound = [];
     $index = 0;
-    foreach (array_keys($names) as $name) {
+    foreach (\array_keys($names) as $name) {
         $renamed = $prefix . $index++;
         $mapping[$name] = new TVar($renamed);
         $bound[] = $renamed;
@@ -3331,7 +3348,7 @@ function renameProbeTypeVars(Type $type, array $constraints): array
     foreach ($constraints as $constraint) {
         $renamedConstraints[] = new Ast\PendingConstraint(
             $constraint->class,
-            array_map(static fn (Type $arg): Type => substitute($arg, $mapping), $constraint->args),
+            \array_map(static fn (Type $arg): Type => substitute($arg, $mapping), $constraint->args),
         );
     }
 
@@ -3486,7 +3503,7 @@ function wrapDictLambda(TypeCheckState $state, Ast\AstNode $rhs, array $params, 
     $fnType = $rhs->inferredType !== null
         ? astType($state, $rhs->inferredType)
         : freshType($state);
-    foreach (array_reverse($dictTypes) as $dictType) {
+    foreach (\array_reverse($dictTypes) as $dictType) {
         $fnType = new TArrow($dictType, $fnType);
     }
     $lambda->inferredType = internalTypeToAst($fnType, $state->subst);
@@ -3513,6 +3530,7 @@ function inferRecursiveBindings(TypeCheckState $state, array $bindings, array $e
             $local[$name] = $scheme;
             $expected[$name] = $annotType;
             $annotated[$name] = true;
+
             continue;
         }
         foreach (patternVariableNames($binding->pattern) as $name) {
@@ -3538,6 +3556,7 @@ function inferRecursiveBindings(TypeCheckState $state, array $bindings, array $e
             $binding->value = $wrapped;
             $rhsConstraints[$bi] = $userConstraints;
             $bodyConstraints[$bi] = [];
+
             continue;
         }
 
@@ -3570,6 +3589,7 @@ function inferRecursiveBindings(TypeCheckState $state, array $bindings, array $e
 
         if ($binding->pattern instanceof Ast\PatVar) {
             unify($state, $valueType, $expected[$binding->pattern->name], $binding->pattern);
+
             continue;
         }
 
@@ -3652,6 +3672,7 @@ function inferRecursiveBindings(TypeCheckState $state, array $bindings, array $e
             if ($abstracted !== []) {
                 assertDictArity($state, $local[$name], $abstracted, $binding->value);
             }
+
             continue;
         }
 
@@ -3758,7 +3779,7 @@ function overloadedLiteralPatterns(TypeCheckState $state, Ast\Alt $alt, array $e
  */
 function literalPatternIsOverloaded(TypeCheckState $state, Type $type): bool
 {
-    return classWithRole($state, literalRole()) !== null && !literalPatternHostPrimitive($type);
+    return classWithRole($state, literalRole()) !== null && ! literalPatternHostPrimitive($type);
 }
 
 function overloadedLiteralPatternNode(TypeCheckState $state, Ast\AstNode $pattern, array &$tests, array &$env): Ast\AstNode
@@ -3769,7 +3790,7 @@ function overloadedLiteralPatternNode(TypeCheckState $state, Ast\AstNode $patter
             'literal pattern has no inferred type',
             $pattern,
         )));
-        if (!literalPatternIsOverloaded($state, $type)) {
+        if (! literalPatternIsOverloaded($state, $type)) {
             return $pattern;
         }
 
@@ -3885,15 +3906,16 @@ function describeUnresolvedConstraints(TypeCheckState $state, array $constraints
         return 'unresolved type class constraint';
     }
 
-    $list = array_values($rendered);
-    $noun = count($list) === 1 ? 'constraint' : 'constraints';
+    $list = \array_values($rendered);
+    $noun = \count($list) === 1 ? 'constraint' : 'constraints';
 
     return "unresolved type class {$noun}: `" . \implode('`, `', $list) . '`';
 }
 
 function assertNoPendingConstraintsInExpr(TypeCheckState $state, Ast\AstNode $expr, ?Ast\AstNode $at = null): void
 {
-    if ($expr->pendingConstraints !== []) {        throw typeFail($state, describeUnresolvedConstraints($state, $expr->pendingConstraints), $at ?? $expr);
+    if ($expr->pendingConstraints !== []) {
+        throw typeFail($state, describeUnresolvedConstraints($state, $expr->pendingConstraints), $at ?? $expr);
     }
 
     match ($expr::class) {
@@ -4066,7 +4088,7 @@ function bindPattern(TypeCheckState $state, Ast\AstNode $pattern, Type $expected
         Ast\PatTuple::class => bindTuplePattern($state, $pattern, $expected, $env, $generalize, $constraints),
         Ast\PatNil::class => bindNilPattern($state, $expected, $env),
         Ast\PatCons::class => bindConsPattern($state, $pattern, $expected, $env, $generalize, $constraints),
-        default => throw typeFail($state, "unsupported pattern " . $pattern::class),
+        default => throw typeFail($state, 'unsupported pattern ' . $pattern::class),
     };
 }
 
@@ -4092,7 +4114,7 @@ function generalizePatternBindings(TypeCheckState $state, Ast\AstNode $pattern, 
 {
     $monomorphicEnv = pruneEnvSchemes($state, $env);
     foreach (patternVariableNames($pattern) as $name) {
-        if (!isset($monomorphicEnv[$name])) {
+        if (! isset($monomorphicEnv[$name])) {
             continue;
         }
 
@@ -4132,7 +4154,7 @@ function bindConPattern(TypeCheckState $state, Ast\PatCon $pattern, Type $expect
     $result = $ctorType;
 
     foreach ($pattern->args as $arg) {
-        if (!$result instanceof TArrow) {
+        if (! $result instanceof TArrow) {
             throw typeFail($state, "constructor {$pattern->name} applied to too many arguments", $pattern);
         }
         [$argType, $env] = bindPattern($state, $arg, $result->from, $env, generalize: false, constraints: $constraints);
@@ -4192,7 +4214,7 @@ function bindTuplePattern(TypeCheckState $state, Ast\PatTuple $pattern, Type $ex
         $parts[] = $part;
     }
 
-    $tupleType = count($parts) === 0 ? new TUnit() : new TCon('Tuple' . count($parts), $parts);
+    $tupleType = \count($parts) === 0 ? new TUnit() : new TCon('Tuple' . \count($parts), $parts);
     unify($state, $expected, $tupleType);
     if ($generalize) {
         $env = generalizePatternBindings($state, $pattern, $env, $constraints);
@@ -4217,7 +4239,7 @@ function bindRecordPattern(TypeCheckState $state, Ast\PatRecord $pattern, Type $
     $result = $ctorType;
 
     foreach ($subpatterns as $subpattern) {
-        if (!$result instanceof TArrow) {
+        if (! $result instanceof TArrow) {
             throw typeFail($state, "constructor {$pattern->name} applied to too many arguments", $pattern);
         }
         [$_, $env] = bindPattern($state, $subpattern, $result->from, $env, generalize: false, constraints: $constraints);
@@ -4333,7 +4355,7 @@ function instantiateQualifiedScheme(TypeCheckState $state, Ast\QualifiedRef $exp
 
 function inferFieldAccess(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
 {
-    if (!$expr instanceof Ast\FieldAccess) {
+    if (! $expr instanceof Ast\FieldAccess) {
         throw typeFail($state, 'expected field_access', $expr);
     }
 
@@ -4377,7 +4399,7 @@ function inferFieldAccess(TypeCheckState $state, Ast\AstNode &$expr, array $env)
     }
 
     if ($objectType instanceof TVar) {
-        if (count($candidates) === 1) {
+        if (\count($candidates) === 1) {
             $candidate = $candidates[0];
             $freshDataType = freshDataTypeFromName($state, $candidate['dataName']);
             unify($state, $objectType, $freshDataType, $expr->object);
@@ -4419,7 +4441,7 @@ function inferRecordUpdate(TypeCheckState $state, Ast\RecordUpdate $expr, array 
         $objectType = resolveRecordUpdateReceiver($state, $expr, $objectType);
     }
 
-    if (!($objectType instanceof TCon) || !isset($state->data[$objectType->name])) {
+    if (! ($objectType instanceof TCon) || ! isset($state->data[$objectType->name])) {
         throw typeFail(
             $state,
             'record update requires a record value, found `'
@@ -4460,8 +4482,8 @@ function resolveRecordUpdateReceiver(TypeCheckState $state, Ast\RecordUpdate $ex
         $candidates = $candidates === null ? $here : \array_intersect_key($candidates, $here);
     }
 
-    $names = array_keys($candidates ?? []);
-    if (count($names) === 1) {
+    $names = \array_keys($candidates ?? []);
+    if (\count($names) === 1) {
         $fresh = freshDataTypeFromName($state, $names[0]);
         unify($state, $objectType, $fresh, $expr->object);
 
@@ -4483,7 +4505,7 @@ function resolveRecordUpdateReceiver(TypeCheckState $state, Ast\RecordUpdate $ex
 
     throw typeFail(
         $state,
-        "ambiguous record update: `{$first->name}` is a field of " . implode(' and ', $names)
+        "ambiguous record update: `{$first->name}` is a field of " . \implode(' and ', $names)
             . '; add a type signature',
         $expr,
     );
@@ -4516,8 +4538,9 @@ function recordUpdateConstructor(TypeCheckState $state, Ast\RecordUpdate $expr, 
 
         $holds = true;
         foreach ($expr->fields as $field) {
-            if (!isset($positions[$field->name])) {
+            if (! isset($positions[$field->name])) {
                 $holds = false;
+
                 break;
             }
         }
@@ -4530,7 +4553,7 @@ function recordUpdateConstructor(TypeCheckState $state, Ast\RecordUpdate $expr, 
     if ($carrying === []) {
         $known = recordFieldNames($state, $dataName);
         foreach ($expr->fields as $field) {
-            if (!\in_array($field->name, $known, true)) {
+            if (! \in_array($field->name, $known, true)) {
                 throw typeFail(
                     $state,
                     appendDidYouMean(
@@ -4546,18 +4569,18 @@ function recordUpdateConstructor(TypeCheckState $state, Ast\RecordUpdate $expr, 
         throw typeFail(
             $state,
             'no constructor of `' . $dataName . '` carries every field the update names: `'
-                . implode('`, `', \array_map(static fn (Ast\RecordField $f): string => $f->name, $expr->fields))
+                . \implode('`, `', \array_map(static fn (Ast\RecordField $f): string => $f->name, $expr->fields))
                 . '`',
             $expr,
         );
     }
 
-    $constructors = array_keys($data['constructors']);
-    if (count($carrying) > 1 || count($constructors) > 1) {
+    $constructors = \array_keys($data['constructors']);
+    if (\count($carrying) > 1 || \count($constructors) > 1) {
         throw typeFail(
             $state,
             "record update needs a `{$dataName}` with one constructor, but it has: `"
-                . implode('`, `', $constructors) . '`',
+                . \implode('`, `', $constructors) . '`',
             $expr,
         );
     }
@@ -4576,7 +4599,7 @@ function recordFieldNames(TypeCheckState $state, string $dataName): array
         }
     }
 
-    return array_values(array_unique($names));
+    return \array_values(\array_unique($names));
 }
 
 function allFieldNames(TypeCheckState $state): array
@@ -4592,7 +4615,7 @@ function allFieldNames(TypeCheckState $state): array
         }
     }
 
-    return array_values(array_unique($names));
+    return \array_values(\array_unique($names));
 }
 
 function fieldCandidates(TypeCheckState $state, string $fieldName): array
@@ -4618,7 +4641,7 @@ function fieldCandidates(TypeCheckState $state, string $fieldName): array
 function lookupConstructorMeta(TypeCheckState $state, string $ctorName): ?array
 {
     foreach ($state->data as $dataName => $data) {
-        if (!isset($data['constructors'][$ctorName])) {
+        if (! isset($data['constructors'][$ctorName])) {
             continue;
         }
 
@@ -4668,7 +4691,7 @@ function freshDataTypeFromName(TypeCheckState $state, string $dataName): Type
 function instantiateFieldTypeForObject(TypeCheckState $state, Type $objectType, Type $fieldType): Type
 {
     $objectType = prune($state, $objectType);
-    if (!$objectType instanceof TCon || !isset($state->data[$objectType->name])) {
+    if (! $objectType instanceof TCon || ! isset($state->data[$objectType->name])) {
         return $fieldType;
     }
 
@@ -4702,7 +4725,7 @@ function recordPatternFields(TypeCheckState $state, Ast\PatRecord $pattern, arra
     }
 
     foreach (\array_keys($byName) as $extra) {
-        if (!\in_array($extra, $meta['fields'], true)) {
+        if (! \in_array($extra, $meta['fields'], true)) {
             throw typeFail($state, "unknown field `{$extra}` in record pattern", $pattern);
         }
     }
@@ -4726,13 +4749,13 @@ function recordValueFields(TypeCheckState $state, Ast\RecordCon $expr, array $me
     }
 
     foreach ($meta['fields'] as $fieldName) {
-        if (!isset($byName[$fieldName])) {
+        if (! isset($byName[$fieldName])) {
             throw typeFail($state, "missing field `{$fieldName}` in record construction", $expr);
         }
     }
 
     foreach (\array_keys($byName) as $extra) {
-        if (!\in_array($extra, $meta['fields'], true)) {
+        if (! \in_array($extra, $meta['fields'], true)) {
             throw typeFail($state, "unknown field `{$extra}` in record construction", $expr);
         }
     }
@@ -4750,7 +4773,7 @@ function astTypeSignature(TypeCheckState $state, Ast\TypeNode $typeAst, array $e
     $signatureConstraints = parseConstraints($state, $constraintAsts, $at);
     applyConstraintVarKinds($state, $signatureConstraints);
     $result = astType($state, $bodyTypeAst, $expanding);
-    foreach (array_reverse($signatureConstraints) as $constraint) {
+    foreach (\array_reverse($signatureConstraints) as $constraint) {
         $result = new TArrow(new TCon('__Dict_' . $constraint->class), $result);
     }
 
@@ -4770,7 +4793,7 @@ function astType(TypeCheckState $state, Ast\TypeNode $type, array $expanding = [
         Ast\TypeArrow::class => astTypeArrow($state, $type, $expanding),
         Ast\TypeConstrained::class => astTypeSignature($state, $type, $expanding),
         Ast\TypeQualified::class => resolveQualifiedType($state, $type->module, $type->name, $expanding, $type),
-        default => throw typeFail($state, "unknown type " . $type::class),
+        default => throw typeFail($state, 'unknown type ' . $type::class),
     };
 }
 
@@ -4814,7 +4837,7 @@ function resolveQualifiedType(TypeCheckState $state, string $module, string $nam
             throw typeFail(
                 $state,
                 "type synonym `{$name}` is parametric and must be applied to "
-                    . count($syn['params']) . ' argument(s)',
+                    . \count($syn['params']) . ' argument(s)',
                 $at,
             );
         }
@@ -4851,8 +4874,9 @@ function resolveMagicHashTypeIfInScope(
         return null;
     }
 
-    if (!isset($state->data[$name]) && $expanding === []) {
+    if (! isset($state->data[$name]) && $expanding === []) {
         $owner = primitiveTypeOwnerModule($name) ?? 'Moggi.Internal.Prim';
+
         throw typeFail(
             $state,
             "unknown type constructor `{$name}` (import `{$owner}` to use compiler primitives)",
@@ -4866,7 +4890,7 @@ function resolveMagicHashTypeIfInScope(
 /** DataKinds: elaborate `'Red` into the internal promoted-type representation. */
 function resolvePromotedType(TypeCheckState $state, string $name, Ast\AstNode|Ast\TypeNode|null $at = null): Type
 {
-    if (!isset($state->promoted[$name])) {
+    if (! isset($state->promoted[$name])) {
         if (constructorNameExists($state, $name)) {
             throw typeFail(
                 $state,
@@ -4921,7 +4945,7 @@ function resolveTypeCon(TypeCheckState $state, string $name, array $expanding, A
             throw typeFail(
                 $state,
                 "type synonym `{$name}` is parametric and must be applied to "
-                    . count($syn['params']) . ' argument(s)',
+                    . \count($syn['params']) . ' argument(s)',
                 $at,
             );
         }
@@ -4941,7 +4965,7 @@ function resolveTypeCon(TypeCheckState $state, string $name, array $expanding, A
         );
     }
 
-    return ctype_lower($name[0]) ? new TVar($name) : new TCon($name);
+    return \ctype_lower($name[0]) ? new TVar($name) : new TCon($name);
 }
 
 function isUndeclaredNominalTypeCon(TypeCheckState $state, string $name): bool
@@ -4950,7 +4974,7 @@ function isUndeclaredNominalTypeCon(TypeCheckState $state, string $name): bool
         return false;
     }
 
-    return $name !== '' && ctype_upper($name[0]);
+    return $name !== '' && \ctype_upper($name[0]);
 }
 
 /**
@@ -5073,12 +5097,13 @@ function applyPromotedTypeAppKinds(
         $ctx = Kinds\kindInferCtxFromState($state);
         $headKind = Kinds\pruneKind($ctx, $headKind);
 
-        if (!$headKind instanceof Kinds\KArrow && !$headKind instanceof Kinds\KVar) {
+        if (! $headKind instanceof Kinds\KArrow && ! $headKind instanceof Kinds\KVar) {
             throw typeFail($state, "{$label} applied to too many arguments", $headAt);
         }
 
         $argExpected = Kinds\freshKindVar($ctx);
         $result = Kinds\freshKindVar($ctx);
+
         try {
             Kinds\unifyKind($ctx, $headKind, new Kinds\KArrow($argExpected, $result));
         } catch (\InvalidArgumentException $e) {
@@ -5100,7 +5125,7 @@ function flattenTypeAppAst(Ast\TypeNode $type): ?array
 {
     $args = [];
     while ($type instanceof Ast\TypeApp) {
-        for ($i = count($type->args) - 1; $i >= 0; $i--) {
+        for ($i = \count($type->args) - 1; $i >= 0; $i--) {
             $args[] = $type->args[$i];
         }
         $type = $type->con;
@@ -5112,7 +5137,7 @@ function flattenTypeAppAst(Ast\TypeNode $type): ?array
         || $type instanceof Ast\TypeQualified
         || $type instanceof Ast\TypePromoted
     ) {
-        return [$type, array_reverse($args)];
+        return [$type, \array_reverse($args)];
     }
 
     return null;
@@ -5137,8 +5162,8 @@ function expandSynonymApp(
 
     $syn = $state->typeSynonyms[$name];
     $params = $syn['params'];
-    $arity = count($params);
-    if (count($argAsts) < $arity) {
+    $arity = \count($params);
+    if (\count($argAsts) < $arity) {
         throw typeFail(
             $state,
             "type synonym `{$name}` applied to too few arguments (expected {$arity})",
@@ -5188,7 +5213,7 @@ function applyTypeHeadToArgAsts(
     Ast\AstNode|Ast\TypeNode $at,
 ): Type {
     $headType = prune($state, $headType);
-    if (!$headType instanceof TCon) {
+    if (! $headType instanceof TCon) {
         throw typeFail($state, 'type synonym expanded to a non-constructor type that cannot take arguments', $at);
     }
 
@@ -5198,7 +5223,7 @@ function applyTypeHeadToArgAsts(
     }
     $allArgs = [...$headType->args, ...$newArgs];
     $allAsts = [
-        ...\array_fill(0, count($headType->args), $at),
+        ...\array_fill(0, \count($headType->args), $at),
         ...$argAsts,
     ];
 
@@ -5223,7 +5248,7 @@ function applyTypeAppKinds(
     bool $isVarHead,
 ): void {
     if ($isVarHead) {
-        if (!isset($state->varKinds[$headName])) {
+        if (! isset($state->varKinds[$headName])) {
             $state->varKinds[$headName] = Kinds\freshStateKindVar($state);
         }
         $headKind = $state->varKinds[$headName];
@@ -5241,18 +5266,20 @@ function applyTypeAppKinds(
             throw typeFail($state, "type variable `{$headName}` is not a type constructor", $headAt);
         }
 
-        if (!$isVarHead && $headKind instanceof Kinds\KArrow) {
+        if (! $isVarHead && $headKind instanceof Kinds\KArrow) {
             checkTypeAppArgKind($state, $arg, $headKind->from, $argAsts[$i], $headAt);
             $headKind = $headKind->to;
+
             continue;
         }
 
-        if (!$headKind instanceof Kinds\KArrow && !$headKind instanceof Kinds\KVar) {
+        if (! $headKind instanceof Kinds\KArrow && ! $headKind instanceof Kinds\KVar) {
             throw typeFail($state, "{$label} applied to too many arguments", $headAt);
         }
 
         $argExpected = Kinds\freshKindVar($ctx);
         $result = Kinds\freshKindVar($ctx);
+
         try {
             Kinds\unifyKind($ctx, $headKind, new Kinds\KArrow($argExpected, $result));
         } catch (\InvalidArgumentException $e) {
@@ -5288,7 +5315,7 @@ function checkTypeAppArgKind(
     $expected = Kinds\pruneKind($ctx, $expected);
 
     if ($arg instanceof TVar) {
-        if (!isset($state->varKinds[$arg->name])) {
+        if (! isset($state->varKinds[$arg->name])) {
             $state->varKinds[$arg->name] = $expected;
 
             return;
@@ -5305,12 +5332,14 @@ function checkTypeAppArgKind(
     }
 
     $actual = Kinds\kindOfType($state, $arg, $state->varKinds);
+
     try {
         Kinds\unifyKind($ctx, $actual, $expected);
     } catch (\InvalidArgumentException $e) {
         $head = $headAt instanceof Ast\TypeCon || $headAt instanceof Ast\TypeVar
             ? $headAt->name
             : ($headAt instanceof Ast\TypeQualified ? $headAt->name : 'type');
+
         throw typeFail(
             $state,
             'kind mismatch applying `' . $head . '`: expected `'
@@ -5326,7 +5355,7 @@ function inferIntrinsic(TypeCheckState $state, Ast\IntrinsicCall $expr, array $e
 {
     $internal = resolveIntrinsicName($expr->name);
     if ($internal === null) {
-        throw typeFail($state, \sprintf("unknown intrinsic `%s`", $expr->name), $expr);
+        throw typeFail($state, \sprintf('unknown intrinsic `%s`', $expr->name), $expr);
     }
 
     $schemes = typeSchemes();

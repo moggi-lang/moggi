@@ -2,10 +2,11 @@
 
 namespace Moggi\Semantics\Deriving;
 
-use Moggi\Syntax\Ast;
 use Moggi\Semantics\Types\TypeCheckState;
 
 use function Moggi\Semantics\Types\typeFail;
+
+use Moggi\Syntax\Ast;
 
 /**
  * Stock `deriving Enum` for nullary-constructor enumerations.
@@ -78,7 +79,7 @@ function synthesizeToEnum(array $ctors, string $i): Ast\AstNode
 function synthesizeSucc(array $ctors, string $x): Ast\AstNode
 {
     $alts = [];
-    $n = count($ctors);
+    $n = \count($ctors);
     foreach ($ctors as $i => $ctor) {
         $body = $i + 1 < $n
             ? new Ast\ConstructorRef($ctors[$i + 1]->name)

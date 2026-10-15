@@ -2,32 +2,34 @@
 
 namespace Moggi\CLI\Commands;
 
-use Moggi\Registry\FetchLog;
-
 use function Moggi\Cache\atomicWrite;
+
+use function Moggi\Registry\badPackageProblem;
+use function Moggi\Registry\badPackagesAmong;
 use function Moggi\Registry\Bind\bindForBuild;
 use function Moggi\Registry\Bind\bindModuleName;
 use function Moggi\Registry\Bind\facadeModuleName;
-use function Moggi\Registry\badPackageProblem;
-use function Moggi\Registry\badPackagesAmong;
 use function Moggi\Registry\bundledConstraintFor;
 use function Moggi\Registry\bundledPackages;
-use function Moggi\Registry\demandsCloseLocally;
-use function Moggi\Registry\providedPackages;
-use function Moggi\Registry\satisfies;
 use function Moggi\Registry\collectHostToolCoordinates;
+use function Moggi\Registry\demandsCloseLocally;
 use function Moggi\Registry\descriptorAdditionProblems;
 use function Moggi\Registry\descriptorProblems;
 use function Moggi\Registry\descriptorWithCoordinate;
 use function Moggi\Registry\descriptorWithFfiBinding;
+
+use Moggi\Registry\FetchLog;
+
 use function Moggi\Registry\findDescriptor;
 use function Moggi\Registry\hostToolDescriptor;
 use function Moggi\Registry\installLockedPackages;
 use function Moggi\Registry\newestFirst;
 use function Moggi\Registry\parseAddCoordinate;
 use function Moggi\Registry\prettyJson;
+use function Moggi\Registry\providedPackages;
 use function Moggi\Registry\readDescriptor;
 use function Moggi\Registry\resolveHostTools;
+use function Moggi\Registry\satisfies;
 use function Moggi\Registry\shortNpub;
 use function Moggi\Registry\unmaintainedPackageNote;
 use function Moggi\Registry\unmaintainedPackagesAmong;
@@ -145,12 +147,12 @@ function runAddCommand(array $argv): int
         return 1;
     }
     if (\count($arguments) > 1) {
-        \fwrite(STDERR, "error: `add` takes one dependency, got: " . \implode(' ', $arguments) . "\n\n" . addUsage() . "\n");
+        \fwrite(STDERR, 'error: `add` takes one dependency, got: ' . \implode(' ', $arguments) . "\n\n" . addUsage() . "\n");
 
         return 1;
     }
 
-    if ($options['facade'] && !$options['bind']) {
+    if ($options['facade'] && ! $options['bind']) {
         \fwrite(STDERR, "error: `add --facade` needs `--bind` — the skeleton faces a binding\n\n" . addUsage() . "\n");
 
         return 1;
@@ -162,7 +164,7 @@ function runAddCommand(array $argv): int
             (string) $arguments[0],
             $options['version'] === null ? null : (string) $options['version'],
             $options['print'],
-            !$options['noCache'],
+            ! $options['noCache'],
             (string) $options['registry'],
             (bool) $options['bind'],
             (bool) $options['facade'],
@@ -250,7 +252,7 @@ function addRegistryDependency(array $descriptor, string $descriptorPath, string
     }
     if (($edit['deferred'] ?? false) === true && $print) {
         throw new \RuntimeException(
-            "--print will not ask a registry which version to record — say `--version CONSTRAINT`, or run without --print",
+            '--print will not ask a registry which version to record — say `--version CONSTRAINT`, or run without --print',
         );
     }
 
@@ -262,7 +264,7 @@ function addRegistryDependency(array $descriptor, string $descriptorPath, string
     if ($catalog !== null) {
         $entry = $catalog->entry($name);
         $servedLocally = $bundledSpec !== null && satisfies((string) $bundledSpec['version'], (string) ($edit['value'] ?? ''));
-        if ($entry === null && !$servedLocally) {
+        if ($entry === null && ! $servedLocally) {
             throw new \RuntimeException("the registry at {$registry} lists no package `{$name}`");
         }
         if (($edit['deferred'] ?? false) === true) {
@@ -292,7 +294,7 @@ function addRegistryDependency(array $descriptor, string $descriptorPath, string
         return $report;
     }
 
-    if ($changed && !atomicWrite($descriptorPath, $candidate['text'])) {
+    if ($changed && ! atomicWrite($descriptorPath, $candidate['text'])) {
         throw new \RuntimeException("cannot write {$descriptorPath}");
     }
 
@@ -361,10 +363,10 @@ function addHostCoordinate(array $descriptor, string $descriptorPath, string $te
 {
     $ecosystem = (string) $edit['ecosystem'];
 
-    if (!\in_array($ecosystem, $descriptor['backends'], true)) {
+    if (! \in_array($ecosystem, $descriptor['backends'], true)) {
         throw new \RuntimeException(
             "{$descriptor['name']} does not declare the `{$ecosystem}` backend ([package] backends = "
-            . \implode(', ', $descriptor['backends']) . ") — add it there first, or add for one of those",
+            . \implode(', ', $descriptor['backends']) . ') — add it there first, or add for one of those',
         );
     }
 
@@ -417,11 +419,11 @@ function addHostCoordinate(array $descriptor, string $descriptorPath, string $te
 
     $coordinates = collectHostToolCoordinates([hostToolDescriptor($candidate['text'])], $ecosystem);
     $tools = resolveHostTools($ecosystem, $coordinates, $descriptor['name'], $useCache);
-    if (!$tools['ok']) {
+    if (! $tools['ok']) {
         throw new \RuntimeException((string) $tools['detail']);
     }
 
-    if (($changed || $ffiChanged) && !atomicWrite($descriptorPath, $ffi['text'])) {
+    if (($changed || $ffiChanged) && ! atomicWrite($descriptorPath, $ffi['text'])) {
         throw new \RuntimeException("cannot write {$descriptorPath}");
     }
 
@@ -569,7 +571,7 @@ function reportAdd(array $report): void
     }
 
     $tools = $report['tools'];
-    if (!\is_array($tools)) {
+    if (! \is_array($tools)) {
         return;
     }
     $count = \count((array) $tools['coordinates']);
@@ -595,7 +597,7 @@ function reportBindingAddition(array $report): void
 {
     $ffi = $report['ffi'];
     if (\is_array($ffi)) {
-        \printf("%-10s %s", 'ffi', (string) ($ffi['entry'] ?? ''));
+        \printf('%-10s %s', 'ffi', (string) ($ffi['entry'] ?? ''));
         if (($ffi['status'] ?? '') === 'present') {
             echo " (already recorded)\n";
         } else {

@@ -18,7 +18,7 @@ function compileTestFile(string $path, string $mode = 'emit', bool $optimize = t
 /** @return array{passed: bool, message: string} */
 function runExecTest(string $path, string $projectRoot): array
 {
-    $name = basename($path, '.mog');
+    $name = \basename($path, '.mog');
     $base = fixtureBasePath($path);
     $backend = Backend\compileBackend();
     $stdoutExpected = runtimeExpectedPath($base, '.stdout.expected', $backend);
@@ -27,7 +27,7 @@ function runExecTest(string $path, string $projectRoot): array
         if (\is_file($stderrExpected)) {
             return runBackendReportFixture($path, $stderrExpected, $backend, $projectRoot);
         }
-        if (!\is_file($stdoutExpected)) {
+        if (! \is_file($stdoutExpected)) {
             return ['passed' => false, 'message' => "missing backend-neutral stdout expected file {$stdoutExpected}"];
         }
 
@@ -36,7 +36,7 @@ function runExecTest(string $path, string $projectRoot): array
     if (\is_file($stderrExpected)) {
         return runBackendReportFixture($path, $stderrExpected, 'php', $projectRoot);
     }
-    if (!\is_file($stdoutExpected)) {
+    if (! \is_file($stdoutExpected)) {
         return ['passed' => false, 'message' => "missing expected output file {$stdoutExpected}"];
     }
     if (\is_file(\dirname($path) . '/Main.mog')) {
@@ -51,8 +51,8 @@ function runExecTest(string $path, string $projectRoot): array
     $libPhpDir = writeLibPhpOutputs($projectRoot);
 
     $execDir = \Moggi\Cache\cacheScratchDir() . '/exec';
-    @mkdir($execDir, 0777, true);
-    $compiled = $execDir . '/' . $name . '.' . getmypid() . '.' . uniqid('', true) . '.php';
+    @\mkdir($execDir, 0777, true);
+    $compiled = $execDir . '/' . $name . '.' . \getmypid() . '.' . \uniqid('', true) . '.php';
 
     try {
         $phpSource = rewriteLibRequires($php['output'], $libPhpDir, $compiled, $path, $projectRoot);
@@ -87,14 +87,14 @@ function runExecTest(string $path, string $projectRoot): array
             return ['passed' => false, 'message' => "cannot execute compiled output for {$name}"];
         }
         if ($result['exitCode'] !== 0) {
-            return ['passed' => false, 'message' => childExitMessage("compiled output", $result)];
+            return ['passed' => false, 'message' => childExitMessage('compiled output', $result)];
         }
         assertSameOutput($name, $stdoutExpected, $result['stdout'], 'stdout');
     } catch (\Throwable $e) {
         return ['passed' => false, 'message' => "runtime failure: {$e->getMessage()}"];
     } finally {
         if (\is_file($compiled)) {
-            unlink($compiled);
+            \unlink($compiled);
         }
     }
 
@@ -111,14 +111,14 @@ function childExitMessage(string $what, array $result): string
 {
     $sections = [];
     foreach (['stdout', 'stderr'] as $stream) {
-        $text = trim((string) ($result[$stream] ?? ''));
+        $text = \trim((string) ($result[$stream] ?? ''));
         if ($text !== '') {
             $sections[] = "{$stream}:\n{$text}";
         }
     }
 
     return $what . ' exited ' . (int) ($result['exitCode'] ?? -1)
-        . ($sections === [] ? ' with no output' : ":\n" . implode("\n", $sections));
+        . ($sections === [] ? ' with no output' : ":\n" . \implode("\n", $sections));
 }
 
 /**
@@ -169,7 +169,7 @@ function runPackagedBackendApp(
 ): array {
     if ($backend === 'jvm') {
         $jar = $outDir . '/moggi-app.jar';
-        if (!\is_file($jar)) {
+        if (! \is_file($jar)) {
             return ['passed' => false, 'message' => "{$name}: missing {$jar}"];
         }
         $java = resolveJdkBinary('java') ?? 'java';
@@ -179,7 +179,7 @@ function runPackagedBackendApp(
 
     if ($backend === 'dotnet') {
         $dll = $outDir . '/moggi-app.dll';
-        if (!\is_file($dll)) {
+        if (! \is_file($dll)) {
             return ['passed' => false, 'message' => "{$name}: missing {$dll}"];
         }
         $dotnet = \Moggi\Backend\DotNet\resolveDotnetExecutable();
@@ -213,7 +213,7 @@ function runBackendStdoutFixture(
     string $projectRoot,
 ): array {
     $name = testRelativePath($inputPath);
-    $outDir = createTempDir('moggi-runtime-' . md5($inputPath . ':' . $backend));
+    $outDir = createTempDir('moggi-runtime-' . \md5($inputPath . ':' . $backend));
 
     try {
         $moggi = $projectRoot . '/moggi.php';
@@ -230,7 +230,7 @@ function runBackendStdoutFixture(
         if (($build['exitCode'] ?? 1) !== 0) {
             return [
                 'passed' => false,
-                'message' => "{$name}: build failed:\n" . trim(($build['stdout'] ?? '') . "\n" . ($build['stderr'] ?? '')),
+                'message' => "{$name}: build failed:\n" . \trim(($build['stdout'] ?? '') . "\n" . ($build['stderr'] ?? '')),
             ];
         }
 
@@ -249,7 +249,7 @@ function runBackendStdoutFixture(
             ];
         }
 
-        assertSameOutput(basename($inputPath, '.mog'), $stdoutExpected, $run['stdout'] ?? '', 'stdout');
+        assertSameOutput(\basename($inputPath, '.mog'), $stdoutExpected, $run['stdout'] ?? '', 'stdout');
     } catch (TestFailure $e) {
         return ['passed' => false, 'message' => $e->getMessage()];
     } finally {
@@ -321,16 +321,16 @@ function runNativeExampleSmoke(string $exampleDir, string $backend, string $proj
 {
     $name = testRelativePath($exampleDir) . ' (native)';
     $stdoutExpected = runtimeExpectedPath($exampleDir . '/Main', '.stdout.expected', $backend);
-    if (!\is_file($stdoutExpected)) {
+    if (! \is_file($stdoutExpected)) {
         return ['passed' => false, 'message' => "{$name}: missing {$stdoutExpected}"];
     }
 
     $label = nativeToolchainLabel($backend);
-    if ($label === null || !nativeToolchainAvailable($backend)) {
+    if ($label === null || ! nativeToolchainAvailable($backend)) {
         return ['passed' => true, 'message' => '', 'skip' => ($label ?? $backend) . ' not available'];
     }
 
-    $outDir = createTempDir('moggi-native-' . md5($exampleDir . ':' . $backend));
+    $outDir = createTempDir('moggi-native-' . \md5($exampleDir . ':' . $backend));
 
     try {
         $build = runCompiledProcess([
@@ -347,12 +347,12 @@ function runNativeExampleSmoke(string $exampleDir, string $backend, string $proj
             return [
                 'passed' => false,
                 'message' => "{$name}: {$label} build failed:\n"
-                    . trim(($build['stdout'] ?? '') . "\n" . ($build['stderr'] ?? '')),
+                    . \trim(($build['stdout'] ?? '') . "\n" . ($build['stderr'] ?? '')),
             ];
         }
 
         $binary = $outDir . '/' . \Moggi\Compiler\executableName('moggi-app');
-        if (!\is_file($binary)) {
+        if (! \is_file($binary)) {
             return ['passed' => false, 'message' => "{$name}: missing {$binary}"];
         }
 
@@ -367,7 +367,7 @@ function runNativeExampleSmoke(string $exampleDir, string $backend, string $proj
             ];
         }
 
-        assertSameOutput(basename($exampleDir), $stdoutExpected, $run['stdout'] ?? '', 'stdout');
+        assertSameOutput(\basename($exampleDir), $stdoutExpected, $run['stdout'] ?? '', 'stdout');
     } catch (TestFailure $e) {
         return ['passed' => false, 'message' => $e->getMessage()];
     } finally {
@@ -380,12 +380,12 @@ function runNativeExampleSmoke(string $exampleDir, string $backend, string $proj
 /** Prefer stderr Moggi report; fall back to stdout (.NET writes report to Console). */
 function moggiReportOutput(array $run): string
 {
-    $stderr = trim((string) ($run['stderr'] ?? ''));
+    $stderr = \trim((string) ($run['stderr'] ?? ''));
     if ($stderr !== '') {
         return $stderr . "\n";
     }
 
-    return rtrim((string) ($run['stdout'] ?? ''), "\n") . "\n";
+    return \rtrim((string) ($run['stdout'] ?? ''), "\n") . "\n";
 }
 
 function runBackendReportFixture(
@@ -395,7 +395,7 @@ function runBackendReportFixture(
     string $projectRoot,
 ): array {
     $name = testRelativePath($inputPath);
-    $outDir = createTempDir('moggi-runtime-' . md5($inputPath . ':report:' . $backend));
+    $outDir = createTempDir('moggi-runtime-' . \md5($inputPath . ':report:' . $backend));
 
     try {
         $moggi = $projectRoot . '/moggi.php';
@@ -412,7 +412,7 @@ function runBackendReportFixture(
         if (($build['exitCode'] ?? 1) !== 0) {
             return [
                 'passed' => false,
-                'message' => "{$name}: build failed:\n" . trim(($build['stdout'] ?? '') . "\n" . ($build['stderr'] ?? '')),
+                'message' => "{$name}: build failed:\n" . \trim(($build['stdout'] ?? '') . "\n" . ($build['stderr'] ?? '')),
             ];
         }
 
@@ -426,7 +426,7 @@ function runBackendReportFixture(
         if (($run['exitCode'] ?? 0) === 0) {
             return ['passed' => false, 'message' => "{$name}: expected nonzero exit for report fixture"];
         }
-        assertSameOutput(basename($inputPath, '.mog'), $stderrExpected, moggiReportOutput($run), 'stderr');
+        assertSameOutput(\basename($inputPath, '.mog'), $stderrExpected, moggiReportOutput($run), 'stderr');
     } catch (TestFailure $e) {
         return ['passed' => false, 'message' => $e->getMessage()];
     } finally {
@@ -447,22 +447,22 @@ function runBackendReportFixture(
  */
 function findBuiltPhpEntry(string $outDir): ?string
 {
-    $root = rtrim($outDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+    $root = \rtrim($outDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
     $iterator = new RecursiveIteratorIterator(
         new RecursiveDirectoryIterator($outDir, FilesystemIterator::SKIP_DOTS),
     );
     foreach ($iterator as $file) {
-        if (!$file->isFile() || $file->getExtension() !== 'php') {
+        if (! $file->isFile() || $file->getExtension() !== 'php') {
             continue;
         }
         $path = $file->getPathname();
-        $rel = \str_replace('\\', '/', substr($path, strlen($root)));
-        if (str_starts_with($rel, 'lib/') || str_starts_with($rel, 'runtime/')) {
+        $rel = \str_replace('\\', '/', \substr($path, \strlen($root)));
+        if (\str_starts_with($rel, 'lib/') || \str_starts_with($rel, 'runtime/')) {
             continue;
         }
 
-        $source = file_get_contents($path);
-        if ($source !== false && str_contains($source, '\\Moggi\\reportUncaught($__moggiUncaught)')) {
+        $source = \file_get_contents($path);
+        if ($source !== false && \str_contains($source, '\\Moggi\\reportUncaught($__moggiUncaught)')) {
             return $path;
         }
     }
@@ -479,7 +479,7 @@ function findBuiltPhpEntry(string $outDir): ?string
 function runReplScriptTest(string $scriptPath, string $expectedPath, string $backend, string $projectRoot): array
 {
     $name = testRelativePath($scriptPath);
-    if (!\is_file($scriptPath) || !\is_file($expectedPath)) {
+    if (! \is_file($scriptPath) || ! \is_file($expectedPath)) {
         return ['passed' => false, 'message' => "{$name}: missing script or expected stdout"];
     }
 
@@ -495,7 +495,7 @@ function runReplScriptTest(string $scriptPath, string $expectedPath, string $bac
     ];
     $result = runCompiledProcess($cmd, 120);
     $actual = $result['stdout'] ?? '';
-    $expected = file_get_contents($expectedPath);
+    $expected = \file_get_contents($expectedPath);
     if ($expected === false) {
         return ['passed' => false, 'message' => "{$name}: cannot read expected"];
     }
@@ -519,7 +519,7 @@ function runReplCase(string $scriptPath, string $projectRoot): array
     $backend = \Moggi\Backend\compileBackend();
     $expected = \preg_replace('/\.script$/', '.' . $backend . '.stdout.expected', $scriptPath)
         ?? ($scriptPath . '.stdout.expected');
-    if (!\is_file($expected)) {
+    if (! \is_file($expected)) {
         $expected = \preg_replace('/\.script$/', '.stdout.expected', $scriptPath)
             ?? ($scriptPath . '.stdout.expected');
     }
@@ -543,16 +543,16 @@ function writeLibBackendOutputs(string $projectRoot, string $backend): string
         return $written[$backend];
     }
 
-    $outDir = \Moggi\Cache\cacheScratchDir() . '/lib-' . $backend . '-' . substr(testLibSignature($projectRoot, $backend), 0, 12);
+    $outDir = \Moggi\Cache\cacheScratchDir() . '/lib-' . $backend . '-' . \substr(testLibSignature($projectRoot, $backend), 0, 12);
     $complete = $outDir . '/.complete';
     if (\is_file($complete)) {
         return $written[$backend] = $outDir;
     }
 
-    $lockPath = sys_get_temp_dir() . '/moggi-test-lib-' . substr(\Moggi\Cache\hashContent($outDir), 0, 16) . '.lock';
-    $lock = @fopen($lockPath, 'c');
+    $lockPath = \sys_get_temp_dir() . '/moggi-test-lib-' . \substr(\Moggi\Cache\hashContent($outDir), 0, 16) . '.lock';
+    $lock = @\fopen($lockPath, 'c');
     if ($lock !== false) {
-        flock($lock, LOCK_EX);
+        \flock($lock, LOCK_EX);
     }
 
     try {
@@ -560,36 +560,36 @@ function writeLibBackendOutputs(string $projectRoot, string $backend): string
             return $written[$backend] = $outDir;
         }
 
-        $staging = $outDir . '.tmp.' . getmypid() . '.' . bin2hex(random_bytes(4));
+        $staging = $outDir . '.tmp.' . \getmypid() . '.' . \bin2hex(\random_bytes(4));
         Backend\setCompileBackend($backend);
         $outputs = \Moggi\Modules\compileProject(testLibraryFiles($projectRoot), $projectRoot);
         foreach ($outputs as $relative => $source) {
             $target = $staging . '/' . $relative;
-            @mkdir(dirname($target), 0777, true);
+            @\mkdir(\dirname($target), 0777, true);
             \file_put_contents($target, $source);
         }
 
         if ($backend === 'php') {
             $runtimeDst = $staging . '/_runtime.php';
-            @mkdir(dirname($runtimeDst), 0777, true);
-            if (!@symlink($projectRoot . '/src/backend/php/runtime.php', $runtimeDst)) {
-                copy($projectRoot . '/src/backend/php/runtime.php', $runtimeDst);
+            @\mkdir(\dirname($runtimeDst), 0777, true);
+            if (! @\symlink($projectRoot . '/src/backend/php/runtime.php', $runtimeDst)) {
+                \copy($projectRoot . '/src/backend/php/runtime.php', $runtimeDst);
             }
         }
 
-        \file_put_contents($staging . '/.complete', "");
+        \file_put_contents($staging . '/.complete', '');
         if (\is_dir($outDir)) {
             removeDirectory($outDir);
         }
-        if (!@rename($staging, $outDir)) {
+        if (! @\rename($staging, $outDir)) {
             removeDirectory($staging);
         }
 
         return $written[$backend] = $outDir;
     } finally {
         if ($lock !== false) {
-            flock($lock, LOCK_UN);
-            fclose($lock);
+            \flock($lock, LOCK_UN);
+            \fclose($lock);
         }
     }
 }
@@ -653,7 +653,7 @@ function testLibSignature(string $projectRoot, string $backend): string
         $parts[] = 'runtime:' . \Moggi\Cache\fileFingerprint($projectRoot . '/src/backend/php/runtime.php');
     }
 
-    return hash('sha256', \implode("\n", $parts));
+    return \hash('sha256', \implode("\n", $parts));
 }
 
 function writeLibPhpOutputs(string $projectRoot): string
@@ -674,21 +674,21 @@ function libraryRequirePrefixes(): array
         return ['libraries/base/src'];
     }
     $workspace = \Moggi\Modules\workspaceRootForStdlibRoot($primary);
-    $projectRoot = rtrim(\Moggi\Paths\canonicalSeparators($workspace), '/') . '/';
+    $projectRoot = \rtrim(\Moggi\Paths\canonicalSeparators($workspace), '/') . '/';
     $roots = \Moggi\Modules\configuredLibraryRoots() ?: [$primary];
 
     $prefixes = [];
     foreach ($roots as $root) {
         $real = \Moggi\Paths\canonicalSeparators(\Moggi\Modules\resolvePath($root));
-        if (str_starts_with($real, $projectRoot)) {
-            $prefix = trim(substr($real, strlen($projectRoot)), '/');
+        if (\str_starts_with($real, $projectRoot)) {
+            $prefix = \trim(\substr($real, \strlen($projectRoot)), '/');
             if ($prefix !== '') {
                 $prefixes[] = $prefix;
             }
         }
     }
-    $prefixes = array_values(array_unique($prefixes));
-    usort($prefixes, static fn (string $a, string $b): int => \strlen($b) <=> \strlen($a));
+    $prefixes = \array_values(\array_unique($prefixes));
+    \usort($prefixes, static fn (string $a, string $b): int => \strlen($b) <=> \strlen($a));
 
     return $prefixes;
 }
@@ -704,7 +704,7 @@ function libraryRequirePrefixes(): array
  */
 function rewriteLibRequires(string $php, string $libPhpDir, string $compiledFile, ?string $fixturePath = null, ?string $projectRoot = null): string
 {
-    $libDir = rtrim(\Moggi\Paths\canonicalSeparators($libPhpDir), '/');
+    $libDir = \rtrim(\Moggi\Paths\canonicalSeparators($libPhpDir), '/');
     $prefixes = libraryRequirePrefixes();
     $collapsed = null;
     if ($fixturePath !== null && $projectRoot !== null) {
@@ -714,7 +714,7 @@ function rewriteLibRequires(string $php, string $libPhpDir, string $compiledFile
         }
     }
     if ($prefixes !== [] || $collapsed !== null) {
-        $php = preg_replace_callback(
+        $php = \preg_replace_callback(
             "#require_once __DIR__ \. '/(?:\.\./)+(?<lib>[^']+)'#",
             static function (array $matches) use ($compiledFile, $libDir, $prefixes, $collapsed): string {
                 $lib = $matches['lib'];
@@ -737,7 +737,7 @@ function rewriteLibRequires(string $php, string $libPhpDir, string $compiledFile
         ) ?? $php;
     }
 
-    return preg_replace_callback(
+    return \preg_replace_callback(
         "#require_once __DIR__ \. '/(?:\.\./)+_runtime\.php'#",
         static fn (): string => 'require_once '
             . \Moggi\Paths\requirePathExpression($compiledFile, $libDir . '/_runtime.php'),

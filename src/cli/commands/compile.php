@@ -3,26 +3,29 @@
 namespace Moggi\CLI\Commands;
 
 use Moggi\Backend;
-use Moggi\Cache;
-use Moggi\Modules;
-use Moggi\Semantics\Types\TypeError;
-use Moggi\Syntax\Lexer\LexError;
-use Moggi\Syntax\Parser\ParseError;
 
 use function Moggi\Backend\Php\Dependencies\composerVendorRoots;
 use function Moggi\CLI\parseBackendValue;
 use function Moggi\CLI\printUsage;
 use function Moggi\CLI\resolveCompileInputs;
+
 use function Moggi\CLI\resolveLibraryDirs;
 use function Moggi\Compiler\compileFile;
 use function Moggi\Compiler\executableName;
 use function Moggi\Compiler\findExecutable;
 use function Moggi\Compiler\findToolchainExecutable;
+
+use Moggi\Modules;
+
 use function Moggi\Modules\bundledStdlibLibPath;
 use function Moggi\Modules\cachedModuleHeader;
 use function Moggi\Paths\globPaths;
 use function Moggi\Pipeline\printModeNames;
 use function Moggi\Pipeline\setEntryModules;
+
+use Moggi\Semantics\Types\TypeError;
+use Moggi\Syntax\Lexer\LexError;
+use Moggi\Syntax\Parser\ParseError;
 
 /**
  * Pin the library roots this compile searches, so the backend dependency scanners
@@ -42,6 +45,7 @@ function registerLibraryRoots(array $libDirs): void
     foreach ($libDirs as $dir) {
         if (Modules\isLibraryRoot($dir)) {
             $primary = $dir;
+
             break;
         }
     }
@@ -95,7 +99,7 @@ function compileIntoRoot(
         'native' => $native,
     ];
 
-    if ($native && !backendSupportsNative($backend)) {
+    if ($native && ! backendSupportsNative($backend)) {
         \fwrite(STDERR, "error: --native is only supported with --backend php, jvm or dotnet\n");
 
         return $empty(1);
@@ -156,13 +160,13 @@ function compileIntoRoot(
         return $empty(1);
     }
 
-    if (!\is_dir($buildRoot) && !mkdir($buildRoot, 0777, true) && !\is_dir($buildRoot)) {
+    if (! \is_dir($buildRoot) && ! \mkdir($buildRoot, 0777, true) && ! \is_dir($buildRoot)) {
         \fwrite(STDERR, "error: cannot create output directory {$buildRoot}\n");
 
         return $empty(1);
     }
 
-    $outputRoot = realpath($buildRoot);
+    $outputRoot = \realpath($buildRoot);
     if ($outputRoot === false) {
         \fwrite(STDERR, "error: cannot resolve output directory {$buildRoot}\n");
 
@@ -171,18 +175,18 @@ function compileIntoRoot(
 
     $rootPrefix = $root . DIRECTORY_SEPARATOR;
 
-    if (!projectUsesModules($files)) {
-        $entryRelative = count($files) === 1
-            ? preg_replace('/\.mog$/', Backend\backendById($backend)->extension(), basename($files[0])) ?? basename($files[0])
+    if (! projectUsesModules($files)) {
+        $entryRelative = \count($files) === 1
+            ? \preg_replace('/\.mog$/', Backend\backendById($backend)->extension(), \basename($files[0])) ?? \basename($files[0])
             : null;
         foreach ($files as $sourcePath) {
-            if (!str_starts_with($sourcePath, $rootPrefix)) {
+            if (! \str_starts_with($sourcePath, $rootPrefix)) {
                 \fwrite(STDERR, "error: unexpected path outside input directory: {$sourcePath}\n");
 
                 return $empty(1);
             }
 
-            $relative = substr($sourcePath, strlen($rootPrefix));
+            $relative = \substr($sourcePath, \strlen($rootPrefix));
             $ext = Backend\backendById($backend)->extension();
 
             try {
@@ -200,12 +204,12 @@ function compileIntoRoot(
 
             $writes = \is_array($output)
                 ? $output
-                : [(preg_replace('/\.mog$/', $ext, $relative) ?? $relative) => $output];
+                : [(\preg_replace('/\.mog$/', $ext, $relative) ?? $relative) => $output];
             foreach ($writes as $writeRel => $bytes) {
                 $writeRel = \str_replace('\\', '/', (string) $writeRel);
                 $writePath = $outputRoot . DIRECTORY_SEPARATOR . \str_replace('/', DIRECTORY_SEPARATOR, $writeRel);
-                $writeParent = dirname($writePath);
-                if (!\is_dir($writeParent) && !mkdir($writeParent, 0777, true) && !\is_dir($writeParent)) {
+                $writeParent = \dirname($writePath);
+                if (! \is_dir($writeParent) && ! \mkdir($writeParent, 0777, true) && ! \is_dir($writeParent)) {
                     \fwrite(STDERR, "error: cannot create directory {$writeParent}\n");
 
                     return $empty(1);
@@ -219,10 +223,10 @@ function compileIntoRoot(
             }
         }
 
-        if (!bundleComposerVendor($outputRoot, $backend)) {
+        if (! bundleComposerVendor($outputRoot, $backend)) {
             return $empty(1);
         }
-        if (!bundleRuntime($outputRoot, $backend, [
+        if (! bundleRuntime($outputRoot, $backend, [
             'entryRelative' => $entryRelative,
             'jarName' => 'moggi-app.jar',
             'assemblyName' => 'moggi-app',
@@ -230,11 +234,11 @@ function compileIntoRoot(
         ])) {
             return $empty(1);
         }
-        if ($native && !buildNativeExecutable($outputRoot, $backend)) {
+        if ($native && ! buildNativeExecutable($outputRoot, $backend)) {
             return $empty(1);
         }
 
-        echo count($files) . " file(s) compiled\n";
+        echo \count($files) . " file(s) compiled\n";
 
         return [
             'exitCode' => 0,
@@ -263,8 +267,8 @@ function compileIntoRoot(
 
     foreach ($compiled as $relative => $output) {
         $outputPath = $outputRoot . DIRECTORY_SEPARATOR . \str_replace('/', DIRECTORY_SEPARATOR, $relative);
-        $outputParent = dirname($outputPath);
-        if (!\is_dir($outputParent) && !mkdir($outputParent, 0777, true) && !\is_dir($outputParent)) {
+        $outputParent = \dirname($outputPath);
+        if (! \is_dir($outputParent) && ! \mkdir($outputParent, 0777, true) && ! \is_dir($outputParent)) {
             \fwrite(STDERR, "error: cannot create directory {$outputParent}\n");
 
             return $empty(1);
@@ -277,10 +281,10 @@ function compileIntoRoot(
         }
     }
 
-    if (!bundleComposerVendor($outputRoot, $backend)) {
+    if (! bundleComposerVendor($outputRoot, $backend)) {
         return $empty(1);
     }
-    if (!bundleRuntime($outputRoot, $backend, [
+    if (! bundleRuntime($outputRoot, $backend, [
         'entryModule' => $entryModule,
         'entryRelative' => $entryRelative,
         'jarName' => 'moggi-app.jar',
@@ -289,11 +293,11 @@ function compileIntoRoot(
     ])) {
         return $empty(1);
     }
-    if ($native && !buildNativeExecutable($outputRoot, $backend)) {
+    if ($native && ! buildNativeExecutable($outputRoot, $backend)) {
         return $empty(1);
     }
 
-    echo count($compiled) . " file(s) compiled\n";
+    echo \count($compiled) . " file(s) compiled\n";
 
     return [
         'exitCode' => 0,
@@ -351,7 +355,7 @@ function runCompile(
         'native' => $native,
     ];
 
-    if ($native && !backendSupportsNative($backend)) {
+    if ($native && ! backendSupportsNative($backend)) {
         \fwrite(STDERR, "error: --native is only supported with --backend php, jvm or dotnet\n");
 
         return $empty(1);
@@ -382,7 +386,7 @@ function runCompile(
         return $empty(1);
     }
 
-    $staging = sys_get_temp_dir() . '/moggi-build-' . getmypid() . '-' . bin2hex(random_bytes(3));
+    $staging = \sys_get_temp_dir() . '/moggi-build-' . \getmypid() . '-' . \bin2hex(\random_bytes(3));
     $result = compileIntoRoot($inputPath, $staging, $optimize, $backend, $strip, $libDirs, $native, false);
     if ($result['exitCode'] !== 0 || $result['outputRoot'] === null) {
         removeOutputTree($staging);
@@ -393,7 +397,7 @@ function runCompile(
     $base = artifactBaseName($inputPath, $result['entryRelative']);
     $destBase = $outputPath !== null
         ? $outputPath
-        : getcwd() . DIRECTORY_SEPARATOR . $base . artifactExtension($backend);
+        : \getcwd() . DIRECTORY_SEPARATOR . $base . artifactExtension($backend);
 
     try {
         $moved = movePackagedArtifacts($staging, $destBase, $backend, $native);
@@ -412,7 +416,7 @@ function runCompile(
         }
     }
     foreach ($moved as $rel => $final) {
-        if (!\in_array($rel, $order, true)) {
+        if (! \in_array($rel, $order, true)) {
             echo artifactLabel($rel) . ": {$final}\n";
         }
     }
@@ -470,18 +474,18 @@ function artifactLabel(string $rel): string
 function artifactBaseName(string $inputPath, ?string $entryRelative): string
 {
     if (\is_file($inputPath)) {
-        $base = basename($inputPath);
+        $base = \basename($inputPath);
 
-        return preg_replace('/\.mog$/', '', $base) ?? $base;
+        return \preg_replace('/\.mog$/', '', $base) ?? $base;
     }
 
     if (\is_string($entryRelative) && $entryRelative !== '') {
-        $base = basename($entryRelative);
+        $base = \basename($entryRelative);
 
-        return preg_replace('/\.(php|class|il)$/', '', $base) ?? $base;
+        return \preg_replace('/\.(php|class|il)$/', '', $base) ?? $base;
     }
 
-    $base = basename(rtrim($inputPath, '/\\'));
+    $base = \basename(\rtrim($inputPath, '/\\'));
 
     return $base !== '' ? $base : 'moggi-app';
 }
@@ -541,7 +545,7 @@ function artifactExtension(string $backend): string
 function movePackagedArtifacts(string $staging, string $destBase, string $backend, bool $native): array
 {
     $binBase = $native && backendSupportsNative($backend)
-        ? preg_replace('/\.(jar|dll|phar|exe)$/', '', $destBase) ?? $destBase
+        ? \preg_replace('/\.(jar|dll|phar|exe)$/', '', $destBase) ?? $destBase
         : null;
 
     $archiveDest = $destBase;
@@ -549,7 +553,7 @@ function movePackagedArtifacts(string $staging, string $destBase, string $backen
         $archiveDest = $destBase . artifactExtension($backend);
     }
 
-    $sideBase = preg_replace('/\.dll$/', '', $archiveDest) ?? $archiveDest;
+    $sideBase = \preg_replace('/\.dll$/', '', $archiveDest) ?? $archiveDest;
 
     $plan = [];
     if ($backend === 'php') {
@@ -575,7 +579,7 @@ function movePackagedArtifacts(string $staging, string $destBase, string $backen
     $sources = [];
     $destinations = [];
     foreach ($plan as [$rel, $dest]) {
-        if (!\is_file($staging . DIRECTORY_SEPARATOR . $rel)) {
+        if (! \is_file($staging . DIRECTORY_SEPARATOR . $rel)) {
             continue;
         }
         if (isset($destinations[$dest])) {
@@ -588,15 +592,16 @@ function movePackagedArtifacts(string $staging, string $destBase, string $backen
     $temporaries = [];
     $staged = [];
     foreach ($sources as [$rel, $dest]) {
-        $dir = dirname($dest);
-        if (!\is_dir($dir) && !@mkdir($dir, 0777, true) && !\is_dir($dir)) {
+        $dir = \dirname($dest);
+        if (! \is_dir($dir) && ! @\mkdir($dir, 0777, true) && ! \is_dir($dir)) {
             throw new \RuntimeException("cannot create directory {$dir}");
         }
-        $temporary = $dest . '.moggi-tmp-' . getmypid() . '-' . bin2hex(random_bytes(4));
+        $temporary = $dest . '.moggi-tmp-' . \getmypid() . '-' . \bin2hex(\random_bytes(4));
         $src = $staging . DIRECTORY_SEPARATOR . $rel;
-        if (!@\rename($src, $temporary)) {
-            if (!\copy($src, $temporary)) {
+        if (! @\rename($src, $temporary)) {
+            if (! \copy($src, $temporary)) {
                 removeStagedArtifacts($temporaries);
+
                 throw new \RuntimeException("cannot write {$dest}");
             }
             @\unlink($src);
@@ -609,14 +614,15 @@ function movePackagedArtifacts(string $staging, string $destBase, string $backen
     $created = [];
     foreach ($staged as $index => [$rel, $temporary, $dest]) {
         $existed = \is_file($dest) || \is_link($dest);
-        if (!@\rename($temporary, $dest)) {
+        if (! @\rename($temporary, $dest)) {
             removeStagedArtifacts(\array_slice($temporaries, $index));
             foreach ($created as $destination) {
                 @\unlink($destination);
             }
+
             throw new \RuntimeException("cannot write {$dest}");
         }
-        if (!$existed) {
+        if (! $existed) {
             $created[] = $dest;
         }
         $moved[$rel] = $dest;
@@ -669,7 +675,7 @@ function bundleComposerVendor(string $outputRoot, string $backend): bool
 
     $source = \rtrim($roots[0], '/') . '/vendor';
     $target = \rtrim($outputRoot, '/') . '/vendor';
-    if (!copyTreeInto($source, $target)) {
+    if (! copyTreeInto($source, $target)) {
         \fwrite(STDERR, "error: cannot copy {$source} into {$target}\n");
 
         return false;
@@ -689,16 +695,17 @@ function copyTreeInto(string $source, string $target): bool
         $relative = \substr($item->getPathname(), \strlen($source) + 1);
         $destination = $target . DIRECTORY_SEPARATOR . $relative;
         if ($item->isDir()) {
-            if (!\is_dir($destination) && !\mkdir($destination, 0777, true) && !\is_dir($destination)) {
+            if (! \is_dir($destination) && ! \mkdir($destination, 0777, true) && ! \is_dir($destination)) {
                 return false;
             }
+
             continue;
         }
         $parent = \dirname($destination);
-        if (!\is_dir($parent) && !\mkdir($parent, 0777, true) && !\is_dir($parent)) {
+        if (! \is_dir($parent) && ! \mkdir($parent, 0777, true) && ! \is_dir($parent)) {
             return false;
         }
-        if (!\copy($item->getPathname(), $destination)) {
+        if (! \copy($item->getPathname(), $destination)) {
             return false;
         }
     }
@@ -769,7 +776,7 @@ function buildJvmNativeExecutable(string $outputRoot, string $jarName, string $b
     }
 
     $jarPath = $outputRoot . DIRECTORY_SEPARATOR . $jarName;
-    if (!\is_file($jarPath)) {
+    if (! \is_file($jarPath)) {
         \fwrite(STDERR, "error: missing {$jarPath}\n");
 
         return false;
@@ -782,15 +789,15 @@ function buildJvmNativeExecutable(string $outputRoot, string $jarName, string $b
         '--no-fallback',
         $binaryName,
     ]));
-    $cwd = getcwd();
-    if (chdir($outputRoot) === false) {
+    $cwd = \getcwd();
+    if (\chdir($outputRoot) === false) {
         \fwrite(STDERR, "error: cannot chdir to output directory {$outputRoot}\n");
 
         return false;
     }
-    passthru($cmd, $code);
+    \passthru($cmd, $code);
     if ($cwd !== false) {
-        chdir($cwd);
+        \chdir($cwd);
     }
 
     if ($code !== 0) {
@@ -861,6 +868,7 @@ function parseCompileArgs(array $argv): array
     foreach (printModeNames() as $flag) {
         if ($options[$flag]) {
             $mode = $flag;
+
             break;
         }
     }
@@ -869,9 +877,9 @@ function parseCompileArgs(array $argv): array
         'input' => $input,
         'output' => $output,
         'mode' => $mode,
-        'optimize' => !$options['noOpt'],
+        'optimize' => ! $options['noOpt'],
         'backend' => parseBackendValue($options['backend']),
-        'strip' => !$options['noStrip'],
+        'strip' => ! $options['noStrip'],
         'libDirs' => $options['lib'],
         'native' => (bool) $options['native'],
         'unpacked' => (bool) $options['unpacked'],
@@ -917,7 +925,7 @@ function compileUsage(): string
 
 function compileSpec(): CommandSpec
 {
-    $printModes = array_map(
+    $printModes = \array_map(
         static fn (string $flag): array => ['name' => $flag],
         printModeNames(),
     );
@@ -938,7 +946,7 @@ function compileSpec(): CommandSpec
 
 function removeOutputTree(string $dir): void
 {
-    if (!\is_dir($dir)) {
+    if (! \is_dir($dir)) {
         return;
     }
 
@@ -947,9 +955,9 @@ function removeOutputTree(string $dir): void
         \RecursiveIteratorIterator::CHILD_FIRST,
     );
     foreach ($iterator as $file) {
-        $file->isDir() ? @rmdir($file->getPathname()) : @unlink($file->getPathname());
+        $file->isDir() ? @\rmdir($file->getPathname()) : @\unlink($file->getPathname());
     }
-    @rmdir($dir);
+    @\rmdir($dir);
 }
 
 /**
@@ -963,11 +971,11 @@ function jarManifestHasMainClass(string $jarPath): bool
     }
     $manifest = $zip->getFromName('META-INF/MANIFEST.MF');
     $zip->close();
-    if (!\is_string($manifest) || $manifest === '') {
+    if (! \is_string($manifest) || $manifest === '') {
         return false;
     }
 
-    return preg_match('/^Main-Class:\s*\S+/mi', $manifest) === 1;
+    return \preg_match('/^Main-Class:\s*\S+/mi', $manifest) === 1;
 }
 
 function executeBuiltApp(
@@ -980,34 +988,34 @@ function executeBuiltApp(
     if ($backend === 'jvm') {
         if ($native) {
             $binary = $outputRoot . DIRECTORY_SEPARATOR . executableName('moggi-app');
-            if (!\is_file($binary)) {
+            if (! \is_file($binary)) {
                 \fwrite(STDERR, "error: missing {$binary}\n");
 
                 return 1;
             }
             $cmd = \array_merge([$binary], $appArgs);
             $cmdLine = \implode(' ', \array_map('escapeshellarg', $cmd));
-            passthru($cmdLine, $code);
+            \passthru($cmdLine, $code);
 
             return $code;
         }
         $jar = $outputRoot . DIRECTORY_SEPARATOR . 'moggi-app.jar';
-        if (!\is_file($jar)) {
+        if (! \is_file($jar)) {
             \fwrite(STDERR, "error: missing {$jar}\n");
 
             return 1;
         }
-        if (!jarManifestHasMainClass($jar)) {
+        if (! jarManifestHasMainClass($jar)) {
             \fwrite(STDERR, "error: no entry `main` found to run\n");
 
             return 1;
         }
-        $java = getenv('JAVA_HOME')
-            ? (rtrim((string) getenv('JAVA_HOME'), '/\\') . '/bin/java')
+        $java = \getenv('JAVA_HOME')
+            ? (\rtrim((string) \getenv('JAVA_HOME'), '/\\') . '/bin/java')
             : 'java';
         $cmd = \array_merge([$java, '-jar', $jar], $appArgs);
         $cmdLine = \implode(' ', \array_map('escapeshellarg', $cmd));
-        passthru($cmdLine, $code);
+        \passthru($cmdLine, $code);
 
         return $code;
     }
@@ -1015,19 +1023,19 @@ function executeBuiltApp(
     if ($backend === 'dotnet') {
         if ($native) {
             $binary = $outputRoot . DIRECTORY_SEPARATOR . executableName('moggi-app');
-            if (!\is_file($binary)) {
+            if (! \is_file($binary)) {
                 \fwrite(STDERR, "error: missing {$binary}\n");
 
                 return 1;
             }
             $cmd = \array_merge([$binary], $appArgs);
             $cmdLine = \implode(' ', \array_map('escapeshellarg', $cmd));
-            passthru($cmdLine, $code);
+            \passthru($cmdLine, $code);
 
             return $code;
         }
         $dll = $outputRoot . DIRECTORY_SEPARATOR . 'moggi-app.dll';
-        if (!\is_file($dll)) {
+        if (! \is_file($dll)) {
             \fwrite(STDERR, "error: missing {$dll}\n");
 
             return 1;
@@ -1040,7 +1048,7 @@ function executeBuiltApp(
         }
         $cmd = \array_merge([$dotnet, $dll], $appArgs);
         $cmdLine = \implode(' ', \array_map('escapeshellarg', $cmd));
-        passthru($cmdLine, $code);
+        \passthru($cmdLine, $code);
 
         return $code;
     }
@@ -1048,14 +1056,14 @@ function executeBuiltApp(
     if ($backend === 'php') {
         if ($native) {
             $binary = $outputRoot . DIRECTORY_SEPARATOR . executableName('moggi-app');
-            if (!\is_file($binary)) {
+            if (! \is_file($binary)) {
                 \fwrite(STDERR, "error: missing {$binary}\n");
 
                 return 1;
             }
             $cmd = \array_merge([$binary], $appArgs);
             $cmdLine = \implode(' ', \array_map('escapeshellarg', $cmd));
-            passthru($cmdLine, $code);
+            \passthru($cmdLine, $code);
 
             return $code;
         }
@@ -1065,7 +1073,7 @@ function executeBuiltApp(
             return 1;
         }
         $phpFile = $outputRoot . DIRECTORY_SEPARATOR . \str_replace('/', DIRECTORY_SEPARATOR, $entryRelative);
-        if (!\is_file($phpFile)) {
+        if (! \is_file($phpFile)) {
             \fwrite(STDERR, "error: missing entry file {$phpFile}\n");
 
             return 1;
@@ -1078,7 +1086,7 @@ function executeBuiltApp(
         }
         $cmd = \array_merge([$php, $phpFile], $appArgs);
         $cmdLine = \implode(' ', \array_map('escapeshellarg', $cmd));
-        passthru($cmdLine, $code);
+        \passthru($cmdLine, $code);
 
         return $code;
     }
@@ -1118,7 +1126,7 @@ function runCompileCommand(array $argv): int
     $options = parseCompileArgs($argv);
     $input = $options['input'];
 
-    if (!\is_file($input) && !\is_dir($input)) {
+    if (! \is_file($input) && ! \is_dir($input)) {
         \fwrite(STDERR, "error: not a file or directory: {$input}\n");
 
         return 1;
@@ -1184,16 +1192,16 @@ function compileSingleFile(string $input, array $options): int
     if (\is_array($output)) {
         $primary = [];
         foreach ($output as $rel => $bytes) {
-            if (!str_ends_with((string) $rel, '.moggi.map')) {
+            if (! \str_ends_with((string) $rel, '.moggi.map')) {
                 $primary[$rel] = $bytes;
             }
         }
-        if (count($primary) !== 1) {
+        if (\count($primary) !== 1) {
             \fwrite(STDERR, "error: output has multiple files; pass -o <output-dir>\n");
 
             return 1;
         }
-        $output = reset($primary);
+        $output = \reset($primary);
     }
 
     if ($options['output'] !== null) {

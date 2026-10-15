@@ -9,15 +9,17 @@
 // there is one requirement set and no role axis.
 
 $root = __DIR__;
-while (!is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
 
+use function Moggi\Registry\collectPhpExtensions;
+
+use function Moggi\Registry\descriptorProblems;
+
 use const Moggi\Registry\EXTENSION_MANIFEST;
 
-use function Moggi\Registry\collectPhpExtensions;
-use function Moggi\Registry\descriptorProblems;
 use function Moggi\Registry\installDir;
 use function Moggi\Registry\installedRequirements;
 use function Moggi\Registry\microRuntimeExtensions;
@@ -33,7 +35,7 @@ use function Moggi\Registry\unmetPhpExtensions;
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
     ++$checks;
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
@@ -43,10 +45,10 @@ $work = \sys_get_temp_dir() . '/moggi-extensions-' . \bin2hex(\random_bytes(6));
 \putenv('MOGGI_CACHE_DIR=' . $work . '/cache');
 
 $remove = static function (string $path) use (&$remove): void {
-    if (!\file_exists($path) && !\is_link($path)) {
+    if (! \file_exists($path) && ! \is_link($path)) {
         return;
     }
-    if (\is_dir($path) && !\is_link($path)) {
+    if (\is_dir($path) && ! \is_link($path)) {
         foreach (\scandir($path) ?: [] as $name) {
             if ($name !== '.' && $name !== '..') {
                 $remove($path . '/' . $name);
@@ -102,7 +104,7 @@ try {
     // --- an installed package's descriptor ----------------------------------
     $digest = 'sha256:' . \str_repeat('a', 64);
     $install = installDir('demo', $digest);
-    if (!\is_dir($install) && !\mkdir($install, 0777, true) && !\is_dir($install)) {
+    if (! \is_dir($install) && ! \mkdir($install, 0777, true) && ! \is_dir($install)) {
         throw new \RuntimeException("cannot create {$install}");
     }
     \file_put_contents($install . '/demo.moggi', "[package]\nname = demo\nversion = 1.0.0\n\n[php.extensions]\nredis = *\ngd = *\n");
@@ -146,8 +148,8 @@ try {
     $assert(\str_contains($withManifest['problems'][0], 'the PHP running this'), 'the first problem names the running PHP');
     $assert(\str_contains($withManifest['problems'][1], 'the runtime a --native build uses'), 'the second problem names the native runtime');
     $assert(\str_contains($withManifest['problems'][0], $absent) && \str_contains($withManifest['problems'][1], $absent), 'each problem names the extension that is missing');
-    $assert(!\str_contains(\implode("\n", $withManifest['problems']), '`' . $present . '`'), 'an extension both runtimes have is not reported');
-    $assert(!\str_contains(\implode("\n", $withManifest['problems']), 'micro.sfx'), 'no message names the runtime mechanism');
+    $assert(! \str_contains(\implode("\n", $withManifest['problems']), '`' . $present . '`'), 'an extension both runtimes have is not reported');
+    $assert(! \str_contains(\implode("\n", $withManifest['problems']), 'micro.sfx'), 'no message names the runtime mechanism');
 
     \unlink($sfxDir . '/' . EXTENSION_MANIFEST);
     $unknown = phpExtensionProblems(phpExtensionDescriptors($rootDescriptor, []));

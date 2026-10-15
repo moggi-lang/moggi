@@ -17,13 +17,13 @@ function renderTestList(array $cases, array $backends, array $pathFilters, array
 
     $entries = [];
     foreach ($cases as $case) {
-        if ($groupFilters !== [] && !matchesAnyGroupFilter($case->name, $groupFilters)) {
+        if ($groupFilters !== [] && ! matchesAnyGroupFilter($case->name, $groupFilters)) {
             continue;
         }
         if (($testArgs['excludeGroups'] ?? []) !== [] && matchesAnyGroupFilter($case->name, $testArgs['excludeGroups'])) {
             continue;
         }
-        if ($pathFilters !== [] && !matchesAnyPathFilter($case, $pathFilters)) {
+        if ($pathFilters !== [] && ! matchesAnyPathFilter($case, $pathFilters)) {
             continue;
         }
         $entries[] = [
@@ -114,7 +114,7 @@ function renderBackendMatrix(array $matrix): string
 {
     $out = "\nper backend\n";
     foreach ($matrix as $backend => $entry) {
-        $out .= \sprintf("  %-8s %4d run", $backend, $entry['run']);
+        $out .= \sprintf('  %-8s %4d run', $backend, $entry['run']);
         if ($entry['skipped'] > 0) {
             $out .= \sprintf('  %2d skipped', $entry['skipped']);
         }

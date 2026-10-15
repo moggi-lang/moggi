@@ -13,7 +13,7 @@
  */
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
@@ -24,7 +24,7 @@ use function Moggi\LSP\Protocol\readMessage;
 use function Moggi\LSP\Protocol\writeMessage;
 
 $assert = static function (bool $condition, string $message): void {
-    if (!$condition) {
+    if (! $condition) {
         throw new RuntimeException($message);
     }
 };
@@ -38,32 +38,32 @@ $svc->addDynamicRegistration('reg-1', 'textDocument/hover', $registration);
 $svc->addDynamicRegistration('reg-2', 'textDocument/documentSymbol', ['registerOptions' => []]);
 
 $all = $svc->getDynamicRegistrations();
-$assert(count($all) === 2, 'two registrations stored');
+$assert(\count($all) === 2, 'two registrations stored');
 $assert(($all['reg-1']['method'] ?? '') === 'textDocument/hover', 'reg-1 keeps its method');
 $assert(($all['reg-1']['registration'] ?? null) === $registration, 'reg-1 keeps full registration payload');
 
 $svc->removeDynamicRegistration('reg-1');
 $all = $svc->getDynamicRegistrations();
-$assert(count($all) === 1 && isset($all['reg-2']), 'reg-1 removed, reg-2 kept');
+$assert(\count($all) === 1 && isset($all['reg-2']), 'reg-1 removed, reg-2 kept');
 
 $svc->removeDynamicRegistration('reg-1'); // idempotent: unknown id must not throw
-$assert(count($svc->getDynamicRegistrations()) === 1, 'removing unknown id is a no-op');
+$assert(\count($svc->getDynamicRegistrations()) === 1, 'removing unknown id is a no-op');
 
 $svc->removeDynamicRegistration('reg-2');
 $assert($svc->getDynamicRegistrations() === [], 'all registrations removed');
 
 // Framing sanity: writeMessage → readMessage round-trips a JSON-RPC frame.
-$stream = fopen('php://memory', 'r+');
+$stream = \fopen('php://memory', 'r+');
 if ($stream === false) {
     throw new RuntimeException('Cannot create memory stream');
 }
 $frame = ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'client/registerCapability', 'params' => ['registrations' => []]];
 writeMessage($frame, $stream);
-rewind($stream);
+\rewind($stream);
 $malformed = false;
 $echoed = readMessage($stream, $malformed);
-fclose($stream);
-$assert(!$malformed, 'echoed frame is not malformed');
+\fclose($stream);
+$assert(! $malformed, 'echoed frame is not malformed');
 $assert($echoed === $frame, 'writeMessage/readMessage round-trips the frame');
 
 echo "lsp dynamic registration tests passed\n";

@@ -40,7 +40,7 @@ function artifactPath(string $moduleName): string
  */
 function fnWrapperBundlePath(): string
 {
-    return join(DIRECTORY_SEPARATOR, ['Moggi', 'Fn', '__wrappers__.il']);
+    return \implode(DIRECTORY_SEPARATOR, ['Moggi', 'Fn', '__wrappers__.il']);
 }
 
 /**
@@ -53,10 +53,10 @@ function fnWrapperBundlePath(): string
  */
 function isFnWrapperArtifact(string $path): bool
 {
-    $flat = str_replace('\\', '/', $path);
+    $flat = \str_replace('\\', '/', $path);
 
-    return str_starts_with($flat, 'Moggi/Fn/')
-        && preg_match('/_[0-9]+\.il$/', $flat) === 1;
+    return \str_starts_with($flat, 'Moggi/Fn/')
+        && \preg_match('/_[0-9]+\.il$/', $flat) === 1;
 }
 
 /**
@@ -75,11 +75,11 @@ function symbolName(string $name): string
     if ($name === '') {
         return "'_'";
     }
-    if (preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $name) === 1) {
+    if (\preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $name) === 1) {
         return "'{$name}'";
     }
 
-    return "'_m_" . bin2hex($name) . "'";
+    return "'_m_" . \bin2hex($name) . "'";
 }
 
 /**
@@ -90,8 +90,8 @@ function symbolName(string $name): string
  */
 function runtimeMemberName(string $ilName): string
 {
-    if (strlen($ilName) >= 2 && $ilName[0] === "'" && str_ends_with($ilName, "'")) {
-        return substr($ilName, 1, -1);
+    if (\strlen($ilName) >= 2 && $ilName[0] === "'" && \str_ends_with($ilName, "'")) {
+        return \substr($ilName, 1, -1);
     }
 
     return $ilName;

@@ -21,15 +21,15 @@ function readLineFrom($in, string $prompt, bool $echoPrompt = true): string|fals
         return false;
     }
 
-    return rtrim($line, "\r\n");
+    return \rtrim($line, "\r\n");
 }
 
 function addReadlineHistory(string $line): void
 {
-    if (!\function_exists('readline_add_history')) {
+    if (! \function_exists('readline_add_history')) {
         return;
     }
-    $line = rtrim($line, "\r\n");
+    $line = \rtrim($line, "\r\n");
     if ($line === '') {
         return;
     }

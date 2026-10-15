@@ -11,7 +11,6 @@ use function Moggi\Optimize\Interproc\countLocalUsesInItems;
 use function Moggi\Optimize\Interproc\operandIsNonDuplicable;
 use function Moggi\Optimize\Support\combineOperandsToExpr;
 use function Moggi\Optimize\Support\isCapturedFnName;
-use function Moggi\Optimize\Support\isLambdaName;
 use function Moggi\Optimize\Support\isPropagatableExpr;
 use function Moggi\Optimize\Support\isSimpleOperand;
 use function Moggi\Optimize\Support\mapStmtNestedBlocks;
@@ -39,6 +38,7 @@ function cseItems(array $items): array
             $dest = stmtDest($item);
             if ($dest !== null) {
                 $out[] = new IR\Assign($dest, new IR\Temp($seen[$key]));
+
                 continue;
             }
         }
@@ -67,7 +67,7 @@ function cseKey(IR\Stmt $stmt): ?string
         IR\Binop::class => 'binop:' . $stmt->op . ':' . operandKey($stmt->left) . ':' . operandKey($stmt->right),
         IR\Call::class => isHostEffectCallee($stmt->callee)
             ? null
-            : 'call:' . $stmt->callee . ':' . join(',', \array_map(operandKey(...), $stmt->args)),
+            : 'call:' . $stmt->callee . ':' . \implode(',', \array_map(operandKey(...), $stmt->args)),
         default => null,
     };
 }
@@ -92,6 +92,7 @@ function dceItems(array $items, ?int $matchDest = null): array
         foreach ($items as $item) {
             if (isDeadStmt($item, $used, $matchDest)) {
                 $changed = true;
+
                 continue;
             }
 
@@ -99,7 +100,7 @@ function dceItems(array $items, ?int $matchDest = null): array
         }
 
         $items = $out;
-        if (!$changed) {
+        if (! $changed) {
             break;
         }
     }
@@ -179,7 +180,7 @@ function markLambdaCaptureLocalsUsed(array $items, array &$used): void
 
     foreach ($items as $item) {
         foreach (lambdaNamesReferencedInStmt($item) as $lambdaName) {
-            if (!isset($propagateCopiesLambdaBodies[$lambdaName])) {
+            if (! isset($propagateCopiesLambdaBodies[$lambdaName])) {
                 continue;
             }
 
@@ -234,7 +235,7 @@ function lambdaCapturedLocals(string $lambdaName, array &$memo): array
         }
 
         foreach (lambdaCapturedLocals($referenced, $memo) as $localName => $_) {
-            if (!isset($owned[$localName])) {
+            if (! isset($owned[$localName])) {
                 $captures[$localName] = true;
             }
         }
@@ -275,13 +276,16 @@ function collectUsedStmt(IR\Stmt $stmt, array &$used): void
         case IR\Assign::class:
         case IR\Let::class:
             collectUsedExpr($stmt->value, $used);
+
             return;
         case IR\Binop::class:
             collectUsedExpr($stmt->left, $used);
             collectUsedExpr($stmt->right, $used);
+
             return;
         case IR\Call::class:
             collectUsedOperands($stmt->args, $used);
+
             return;
         case IR\IoCall::class:
             collectUsedOperands($stmt->args, $used);
@@ -289,31 +293,39 @@ function collectUsedStmt(IR\Stmt $stmt, array &$used): void
             if (\is_string($callee) && $callee !== '') {
                 $used['locals'][$callee] = true;
             }
+
             return;
         case IR\IoRun::class:
             collectUsedOperand($stmt->action, $used);
+
             return;
         case IR\IoThrow::class:
             collectUsedOperand($stmt->exception, $used);
+
             return;
         case IR\IoCatch::class:
             collectUsedOperand($stmt->action, $used);
             collectUsedOperand($stmt->handler, $used);
+
             return;
         case IR\IoFinally::class:
             collectUsedOperand($stmt->action, $used);
             collectUsedOperand($stmt->cleanup, $used);
+
             return;
         case IR\CallValue::class:
             collectUsedExpr($stmt->callee, $used);
             collectUsedOperands($stmt->args, $used);
+
             return;
         case IR\DictCall::class:
             collectUsedOperand($stmt->evidence, $used);
             collectUsedOperands($stmt->args, $used);
+
             return;
         case IR\TailRecall::class:
             collectUsedOperands($stmt->args, $used);
+
             return;
         case IR\MatchStmt::class:
         case IR\MatchReturn::class:
@@ -330,11 +342,13 @@ function collectUsedStmt(IR\Stmt $stmt, array &$used): void
                     }
                 }
             }
+
             return;
         case IR\Loop::class:
             foreach ($stmt->body->items as $loopItem) {
                 collectUsedStmt($loopItem, $used);
             }
+
             return;
         default:
             return;
@@ -367,33 +381,42 @@ function collectUsedExpr(IR\Operand $expr, array &$used): void
     switch ($expr::class) {
         case IR\Temp::class:
             $used['temps'][$expr->id] = true;
+
             return;
         case IR\Local::class:
             $used['locals'][$expr->name] = true;
+
             return;
         case IR\ExprBinop::class:
             collectUsedExpr($expr->left, $used);
             collectUsedExpr($expr->right, $used);
+
             return;
         case IR\ExprCall::class:
             collectUsedOperands($expr->args, $used);
+
             return;
         case IR\ExprCallValue::class:
             collectUsedExpr($expr->callee, $used);
             collectUsedOperands($expr->args, $used);
+
             return;
         case IR\Intrinsic::class:
             collectUsedOperands($expr->args, $used);
+
             return;
         case IR\ListLit::class:
             collectUsedOperands($expr->elements, $used);
+
             return;
         case IR\Partial::class:
         case IR\ExprPartial::class:
             collectUsedOperands($expr->args, $used);
+
             return;
         case IR\DictMethod::class:
             collectUsedOperand($expr->evidence, $used);
+
             return;
         default:
             return;
@@ -436,16 +459,16 @@ function isHostEffectCallee(string $name): bool
 function isDeadStmt(IR\Stmt $stmt, array $used, ?int $matchDest = null): bool
 {
     $unusedTemp = static function (int $dest) use ($used, $matchDest): bool {
-        return !isset($used['temps'][$dest])
-            && !($matchDest !== null && $dest === $matchDest);
+        return ! isset($used['temps'][$dest])
+            && ! ($matchDest !== null && $dest === $matchDest);
     };
 
     return match ($stmt::class) {
-        IR\Assign::class => $unusedTemp($stmt->dest) && !operandHasHostEffect($stmt->value),
+        IR\Assign::class => $unusedTemp($stmt->dest) && ! operandHasHostEffect($stmt->value),
         IR\Binop::class => $unusedTemp($stmt->dest),
-        IR\Call::class => $unusedTemp($stmt->dest) && !isHostEffectCallee($stmt->callee),
-        IR\CallValue::class => $unusedTemp($stmt->dest) && !operandHasHostEffect($stmt->callee),
-        IR\Let::class => !isset($used['locals'][$stmt->name]) && !operandHasHostEffect($stmt->value),
+        IR\Call::class => $unusedTemp($stmt->dest) && ! isHostEffectCallee($stmt->callee),
+        IR\CallValue::class => $unusedTemp($stmt->dest) && ! operandHasHostEffect($stmt->callee),
+        IR\Let::class => ! isset($used['locals'][$stmt->name]) && ! operandHasHostEffect($stmt->value),
         default => false,
     };
 }
@@ -483,7 +506,7 @@ function operandsHaveHostEffect(array $operands): bool
 function cleanupConstructorArm(IR\MatchArm $arm, IR\Operand $scrutinee): IR\MatchArm
 {
     $pattern = $arm->pattern;
-    if (!($pattern instanceof IR\PatCon)) {
+    if (! ($pattern instanceof IR\PatCon)) {
         return $arm;
     }
 
@@ -675,6 +698,7 @@ function cleanupFieldExtractLets(array $items, IR\Pattern $pattern, IR\Operand $
             $var = $fieldVars[$index] ?? null;
             if ($var !== null) {
                 $skipTemps[$item->dest] = $var;
+
                 continue;
             }
         }
@@ -708,27 +732,27 @@ function constructorFieldVars(IR\Pattern $pattern): array
 /** @param IR\Stmt $call @param IR\Operand $scrutinee */
 function isFieldExtractCall(IR\Call|IR\ExprCall $call, IR\Operand $scrutinee): bool
 {
-    return str_starts_with($call->callee, '__field')
-        && count($call->args) === 1
+    return \str_starts_with($call->callee, '__field')
+        && \count($call->args) === 1
         && operandEqual($call->args[0], $scrutinee);
 }
 
 function fieldExtractIndex(string $callee): int
 {
     $leaf = $callee;
-    if (str_contains($callee, '::')) {
-        $leaf = substr($callee, strrpos($callee, '::') + 2);
-    } elseif (str_contains($callee, '\\')) {
-        $leaf = substr($callee, strrpos($callee, '\\') + 1);
+    if (\str_contains($callee, '::')) {
+        $leaf = \substr($callee, \strrpos($callee, '::') + 2);
+    } elseif (\str_contains($callee, '\\')) {
+        $leaf = \substr($callee, \strrpos($callee, '\\') + 1);
     }
-    if (str_starts_with($leaf, '__tuple_field')) {
-        return (int) substr($leaf, strlen('__tuple_field'));
+    if (\str_starts_with($leaf, '__tuple_field')) {
+        return (int) \substr($leaf, \strlen('__tuple_field'));
     }
-    if (str_starts_with($leaf, '__field')) {
-        return (int) substr($leaf, strlen('__field'));
+    if (\str_starts_with($leaf, '__field')) {
+        return (int) \substr($leaf, \strlen('__field'));
     }
 
-    return (int) substr($callee, strlen('__field'));
+    return (int) \substr($callee, \strlen('__field'));
 }
 
 /**
@@ -914,10 +938,11 @@ function propagateCopiesBlock(IR\Block $block, array $temps = [], array $locals 
             if ($matchDest !== null && $item->dest === $matchDest) {
                 $items[] = $item;
                 if (isSimpleOperand($item->value)
-                    && !operandIsNonDuplicable($item->value)
+                    && ! operandIsNonDuplicable($item->value)
                 ) {
                     $temps[$item->dest] = $item->value;
                 }
+
                 continue;
             }
 
@@ -925,6 +950,7 @@ function propagateCopiesBlock(IR\Block $block, array $temps = [], array $locals 
                 $useCounts ??= tempUseCountsInItems($block->items);
                 if (($useCounts[$item->dest] ?? 0) > 1) {
                     $items[] = $item;
+
                     continue;
                 }
             }
@@ -934,6 +960,7 @@ function propagateCopiesBlock(IR\Block $block, array $temps = [], array $locals 
                 if ($item->value instanceof IR\Temp) {
                     $items[] = $item;
                 }
+
                 continue;
             }
 
@@ -943,10 +970,12 @@ function propagateCopiesBlock(IR\Block $block, array $temps = [], array $locals 
                 if ($item->value instanceof IR\Temp) {
                     $items[] = $item;
                 }
+
                 continue;
             }
 
             $items[] = $item;
+
             continue;
         }
 
@@ -954,6 +983,7 @@ function propagateCopiesBlock(IR\Block $block, array $temps = [], array $locals 
             $captureIndex ??= lambdaCaptureIndex($block->items);
             if (($captureIndex[$item->name] ?? -1) > $itemIndex) {
                 $items[] = $item;
+
                 continue;
             }
 
@@ -961,17 +991,20 @@ function propagateCopiesBlock(IR\Block $block, array $temps = [], array $locals 
                 $localUses = countLocalUsesInItems($block->items, $item->name);
                 if ($localUses > 1) {
                     $items[] = $item;
+
                     continue;
                 }
             }
 
             $locals[$item->name] = $item->value;
+
             continue;
         }
 
         if ($item instanceof IR\Binop) {
             if ($matchDest !== null && $item->dest === $matchDest) {
                 $items[] = $item;
+
                 continue;
             }
 
@@ -979,17 +1012,20 @@ function propagateCopiesBlock(IR\Block $block, array $temps = [], array $locals 
             if (isPropagatableExpr($expr)) {
                 if (isSimpleOperand($expr)) {
                     $temps[$item->dest] = $expr;
+
                     continue;
                 }
 
                 $useCounts ??= tempUseCountsInItems($block->items);
                 if (($useCounts[$item->dest] ?? 0) <= 1) {
                     $temps[$item->dest] = $expr;
+
                     continue;
                 }
 
                 unset($temps[$item->dest]);
                 $items[] = new IR\Assign($item->dest, $expr);
+
                 continue;
             }
 
@@ -1154,7 +1190,7 @@ function lambdaCaptureIndex(array $items): array
     $lastIndex = [];
     foreach ($items as $index => $item) {
         foreach (lambdaNamesReferencedInStmt($item) as $lambdaName) {
-            if (!isset($propagateCopiesLambdaBodies[$lambdaName])) {
+            if (! isset($propagateCopiesLambdaBodies[$lambdaName])) {
                 continue;
             }
 
@@ -1205,5 +1241,5 @@ function lambdaNamesReferencedInStmt(IR\Stmt $stmt): array
 
     IR\Visit\walkOperands(IR\Visit\stmtDirectOperands($stmt), $visit);
 
-    return array_values(array_unique($names));
+    return \array_values(\array_unique($names));
 }

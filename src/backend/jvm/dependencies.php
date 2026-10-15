@@ -34,7 +34,7 @@ function mergeDemandClasspathJars(array &$classes, array &$resources): void
             continue;
         }
         $needles = vendorPackageNeedles($jars, $jarDir);
-        if ($needles === [] || !bytecodeReferencesAnyNeedle($classes, $needles)) {
+        if ($needles === [] || ! bytecodeReferencesAnyNeedle($classes, $needles)) {
             continue;
         }
         foreach ($jars as $jarPath) {
@@ -63,15 +63,15 @@ function discoverVendorJvmDirs(): array
             new \RecursiveDirectoryIterator($lib, \FilesystemIterator::SKIP_DOTS),
         );
         foreach ($it as $file) {
-            if (!$file->isFile()) {
+            if (! $file->isFile()) {
                 continue;
             }
             $name = $file->getFilename();
-            if (!str_ends_with($name, '.jar') && !str_ends_with($name, '.java')) {
+            if (! \str_ends_with($name, '.jar') && ! \str_ends_with($name, '.java')) {
                 continue;
             }
             $dir = $file->getPath();
-            if (basename($dir) !== 'jvm') {
+            if (\basename($dir) !== 'jvm') {
                 continue;
             }
             $dirs[$dir] = true;
@@ -83,8 +83,6 @@ function discoverVendorJvmDirs(): array
 
     return $paths;
 }
-
-
 
 /**
  * Package / class path substrings that, if present in emitted bytecode, mean
@@ -101,20 +99,21 @@ function vendorPackageNeedles(array $jars, string $jarDir): array
         if ($zip->open($jarPath) !== true) {
             continue;
         }
+
         try {
             for ($i = 0; $i < $zip->numFiles; ++$i) {
-                $name = str_replace('\\', '/', (string) $zip->getNameIndex($i));
-                if ($name === '' || !str_ends_with($name, '.class') || str_contains($name, 'META-INF/')) {
+                $name = \str_replace('\\', '/', (string) $zip->getNameIndex($i));
+                if ($name === '' || ! \str_ends_with($name, '.class') || \str_contains($name, 'META-INF/')) {
                     continue;
                 }
-                $slash = strrpos($name, '/');
+                $slash = \strrpos($name, '/');
                 if ($slash === false) {
                     continue;
                 }
-                $parts = explode('/', substr($name, 0, $slash));
-                if (count($parts) >= 2) {
+                $parts = \explode('/', \substr($name, 0, $slash));
+                if (\count($parts) >= 2) {
                     $needles[$parts[0] . '/' . $parts[1] . '/'] = true;
-                } elseif (count($parts) === 1) {
+                } elseif (\count($parts) === 1) {
                     $needles[$parts[0] . '/'] = true;
                 }
             }
@@ -123,9 +122,9 @@ function vendorPackageNeedles(array $jars, string $jarDir): array
         }
     }
     foreach (globPaths($jarDir . '/*.java') as $javaFile) {
-        $src = (string) file_get_contents($javaFile);
-        if (preg_match('/^\s*package\s+([\w.]+)\s*;/m', $src, $m) === 1) {
-            $needles[str_replace('.', '/', $m[1]) . '/'] = true;
+        $src = (string) \file_get_contents($javaFile);
+        if (\preg_match('/^\s*package\s+([\w.]+)\s*;/m', $src, $m) === 1) {
+            $needles[\str_replace('.', '/', $m[1]) . '/'] = true;
         }
     }
 
@@ -141,16 +140,16 @@ function bytecodeReferencesAnyNeedle(array $classes, array $needles): bool
     foreach ($classes as $name => $bytes) {
         if (\is_string($name)) {
             foreach ($needles as $needle) {
-                if (str_starts_with($name, rtrim($needle, '/'))) {
+                if (\str_starts_with($name, \rtrim($needle, '/'))) {
                     return true;
                 }
             }
         }
-        if (!\is_string($bytes)) {
+        if (! \is_string($bytes)) {
             continue;
         }
         foreach ($needles as $needle) {
-            if (str_contains($bytes, $needle)) {
+            if (\str_contains($bytes, $needle)) {
                 return true;
             }
         }
@@ -172,17 +171,18 @@ function compileAndMergeVendorJava(string $jarDir, array $jars, array &$classes)
     if ($javaFiles === []) {
         return;
     }
-    sort($javaFiles);
-    $tmp = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'moggi-jvm-vendor-' . getmypid() . '-' . bin2hex(random_bytes(4));
-    if (!mkdir($tmp, 0777, true) && !\is_dir($tmp)) {
+    \sort($javaFiles);
+    $tmp = \sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'moggi-jvm-vendor-' . \getmypid() . '-' . \bin2hex(\random_bytes(4));
+    if (! \mkdir($tmp, 0777, true) && ! \is_dir($tmp)) {
         throw new \RuntimeException("cannot create vendor javac dir {$tmp}");
     }
+
     try {
-        $cp = implode(PATH_SEPARATOR, $jars);
-        $cmd = 'javac --release 21 -encoding UTF-8 -cp ' . escapeshellarg($cp)
-            . ' -d ' . escapeshellarg($tmp);
+        $cp = \implode(PATH_SEPARATOR, $jars);
+        $cmd = 'javac --release 21 -encoding UTF-8 -cp ' . \escapeshellarg($cp)
+            . ' -d ' . \escapeshellarg($tmp);
         foreach ($javaFiles as $javaFile) {
-            $cmd .= ' ' . escapeshellarg($javaFile);
+            $cmd .= ' ' . \escapeshellarg($javaFile);
         }
         $cmd .= ' 2>&1';
         $out = [];
@@ -199,13 +199,13 @@ function compileAndMergeVendorJava(string $jarDir, array $jars, array &$classes)
             new \RecursiveDirectoryIterator($tmp, \FilesystemIterator::SKIP_DOTS),
         );
         foreach ($it as $file) {
-            if (!$file->isFile() || !str_ends_with($file->getFilename(), '.class')) {
+            if (! $file->isFile() || ! \str_ends_with($file->getFilename(), '.class')) {
                 continue;
             }
             $full = $file->getPathname();
-            $rel = substr($full, strlen($tmp) + 1);
-            $rel = str_replace('\\', '/', (string) $rel);
-            $internal = substr($rel, 0, -strlen('.class'));
+            $rel = \substr($full, \strlen($tmp) + 1);
+            $rel = \str_replace('\\', '/', (string) $rel);
+            $internal = \substr($rel, 0, -\strlen('.class'));
             if ($internal === false || $internal === '') {
                 continue;
             }
@@ -229,9 +229,9 @@ function compileAndMergeVendorJava(string $jarDir, array $jars, array &$classes)
         );
         foreach ($it as $file) {
             $path = $file->getPathname();
-            $file->isDir() ? @rmdir($path) : @unlink($path);
+            $file->isDir() ? @\rmdir($path) : @\unlink($path);
         }
-        @rmdir($tmp);
+        @\rmdir($tmp);
     }
 }
 
@@ -241,19 +241,21 @@ function mergeJarClassEntries(string $jarPath, array &$classes, array &$resource
     if ($zip->open($jarPath) !== true) {
         throw new \RuntimeException("cannot open classpath jar {$jarPath}");
     }
+
     try {
         for ($i = 0; $i < $zip->numFiles; ++$i) {
-            $name = str_replace('\\', '/', (string) $zip->getNameIndex($i));
-            if ($name === '' || str_ends_with($name, '/')) {
+            $name = \str_replace('\\', '/', (string) $zip->getNameIndex($i));
+            if ($name === '' || \str_ends_with($name, '/')) {
                 continue;
             }
-            if (!str_ends_with($name, '.class')) {
-                if (str_starts_with($name, 'META-INF/services/')) {
+            if (! \str_ends_with($name, '.class')) {
+                if (\str_starts_with($name, 'META-INF/services/')) {
                     mergeVendorServiceFile($resources, $name, (string) $zip->getFromIndex($i));
                 }
+
                 continue;
             }
-            $internal = substr($name, 0, -strlen('.class'));
+            $internal = \substr($name, 0, -\strlen('.class'));
             if ($internal === false || $internal === '') {
                 continue;
             }

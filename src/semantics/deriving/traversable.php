@@ -2,10 +2,11 @@
 
 namespace Moggi\Semantics\Deriving;
 
-use Moggi\Syntax\Ast;
 use Moggi\Semantics\Types\TypeCheckState;
 
 use function Moggi\Semantics\Types\typeFail;
+
+use Moggi\Syntax\Ast;
 
 /**
  * Stock `deriving Traversable`: `traverse` with Applicative (`pure` / `<*>`).
@@ -55,7 +56,7 @@ function synthesizeTraverse(
 
     $alts = [];
     foreach ($decl->constructors as $ctor) {
-        $pats = freshPatVars('__v', count($ctor->fields));
+        $pats = freshPatVars('__v', \count($ctor->fields));
         $names = patVarNames($pats);
         $body = synthesizeTraverseConstructor($ctor, $param, new Ast\Variable($f), $names);
         $alts[] = new Ast\Alt(new Ast\PatCon($ctor->name, $pats), $body);
@@ -94,6 +95,7 @@ function synthesizeTraverseField(
     Ast\AstNode $value,
 ): Ast\AstNode {
     $c = classifyFunctorField($type, $param);
+
     return match ($c['tag']) {
         'param' => new Ast\Apply($f, $value),
         'skip' => pureCall($value),
@@ -108,7 +110,7 @@ function traverseComposer(Ast\TypeNode $type, string $param, Ast\AstNode $f): As
         return $f;
     }
     if ($type instanceof Ast\TypeApp && $type->args !== []) {
-        $last = $type->args[count($type->args) - 1];
+        $last = $type->args[\count($type->args) - 1];
 
         return new Ast\Apply(new Ast\Variable('traverse'), traverseComposer($last, $param, $f));
     }

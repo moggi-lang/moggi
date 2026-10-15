@@ -41,7 +41,7 @@ function parsePhpExtensionEntry(string $entry): array
     $name = $text;
     $path = null;
     $beforeEquals = \strstr($name, '=', true);
-    if (\is_string($beforeEquals) && !\str_ends_with($beforeEquals, '>') && !\str_ends_with($beforeEquals, '<')) {
+    if (\is_string($beforeEquals) && ! \str_ends_with($beforeEquals, '>') && ! \str_ends_with($beforeEquals, '<')) {
         [$name, $path] = \explode('=', $name, 2);
         $path = \trim($path);
     }
@@ -90,7 +90,7 @@ function phpExtensionDescriptors(array $descriptor, array $lock): array
 function requirementSectionsFromDescriptor(array $descriptor): array
 {
     $sections = $descriptor['requirements'] ?? null;
-    if (!\is_array($sections)) {
+    if (! \is_array($sections)) {
         return [];
     }
     $out = [];
@@ -111,7 +111,7 @@ function requirementSectionsFromDescriptor(array $descriptor): array
 function installedRequirements(string $installDir, string $name): ?array
 {
     $file = \rtrim($installDir, '/\\') . '/' . $name . '.moggi';
-    if (!\is_file($file)) {
+    if (! \is_file($file)) {
         return null;
     }
     $ini = @\parse_ini_string((string) \file_get_contents($file), true, \INI_SCANNER_RAW);
@@ -142,10 +142,10 @@ function collectPhpExtensions(array $descriptors): array
                 'sources' => [],
                 'paths' => [],
             ];
-            if (!\in_array($label, $existing['sources'], true)) {
+            if (! \in_array($label, $existing['sources'], true)) {
                 $existing['sources'][] = $label;
             }
-            if ($entry['path'] !== null && !\in_array($entry['path'], $existing['paths'], true)) {
+            if ($entry['path'] !== null && ! \in_array($entry['path'], $existing['paths'], true)) {
                 $existing['paths'][] = $entry['path'];
             }
             $collected[$key] = $existing;
@@ -203,11 +203,11 @@ function unmetPhpExtensions(array $requirements, array $available): array
 function runtimeExtensionsAt(string $runtimeDir): ?array
 {
     $file = \rtrim($runtimeDir, '/\\') . '/' . EXTENSION_MANIFEST;
-    if (!\is_file($file)) {
+    if (! \is_file($file)) {
         return null;
     }
     $recorded = \json_decode((string) \file_get_contents($file), true);
-    if (!\is_array($recorded) || !\is_array($recorded['extensions'] ?? null)) {
+    if (! \is_array($recorded) || ! \is_array($recorded['extensions'] ?? null)) {
         return null;
     }
 

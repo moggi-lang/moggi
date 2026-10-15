@@ -26,8 +26,8 @@
 
 const MOGGI_PROJECT_ROOT = __DIR__;
 
-if (getenv('MOGGI_CACHE_DIR') === false && getenv('MOGGI_NO_CACHE') === false) {
-    putenv('MOGGI_CACHE_DIR=' . MOGGI_PROJECT_ROOT . '/.moggi');
+if (\getenv('MOGGI_CACHE_DIR') === false && \getenv('MOGGI_NO_CACHE') === false) {
+    \putenv('MOGGI_CACHE_DIR=' . MOGGI_PROJECT_ROOT . '/.moggi');
 }
 
 require MOGGI_PROJECT_ROOT . '/src/compiler.php';
@@ -47,6 +47,7 @@ function parseAllTestArgs(array $argv): array
         $arg = $argv[$i];
         if ($arg === '-h' || $arg === '--help') {
             $help = true;
+
             continue;
         }
         if ($arg === '--backend') {
@@ -60,20 +61,22 @@ function parseAllTestArgs(array $argv): array
                 $one = \trim($one);
                 if ($one === 'all') {
                     foreach (['php', 'jvm', 'dotnet'] as $backend) {
-                        if (!\in_array($backend, $backends, true)) {
+                        if (! \in_array($backend, $backends, true)) {
                             $backends[] = $backend;
                         }
                     }
+
                     continue;
                 }
-                if (!\in_array($one, ['php', 'jvm', 'dotnet'], true)) {
+                if (! \in_array($one, ['php', 'jvm', 'dotnet'], true)) {
                     \fwrite(STDERR, "error: unknown backend `{$one}` (expected php, jvm, dotnet or all)\n");
                     exit(2);
                 }
-                if (!\in_array($one, $backends, true)) {
+                if (! \in_array($one, $backends, true)) {
                     $backends[] = $one;
                 }
             }
+
             continue;
         }
         $forward[] = $arg;
@@ -110,7 +113,7 @@ function runStage(string $title, array $argv): int
     echo "=== {$title}\n";
 
     $process = \proc_open(\implode(' ', \array_map('escapeshellarg', $argv)), [STDIN, STDOUT, STDERR], $pipes);
-    if (!\is_resource($process)) {
+    if (! \is_resource($process)) {
         \fwrite(STDERR, "error: cannot start {$title}\n");
 
         return 1;
@@ -129,7 +132,7 @@ function jsonToolRoot(string $backend): ?string
     }
 
     $resolved = resolveHostTools($backend, $coordinates, 'json', true);
-    if (!($resolved['ok'] ?? false)) {
+    if (! ($resolved['ok'] ?? false)) {
         \fwrite(STDERR, 'error: cannot resolve json host dependencies for ' . $backend . ': '
             . ($resolved['detail'] ?? 'unknown error') . "\n");
         exit(1);

@@ -39,17 +39,17 @@ namespace Moggi\Registry;
 function searchEntries(string $package, string $version, string $tree): array
 {
     $path = \rtrim($tree, '/') . '/search-index.json';
-    if (!\is_file($path)) {
+    if (! \is_file($path)) {
         return [];
     }
     $index = \json_decode((string) \file_get_contents($path), true);
-    if (!\is_array($index) || !\is_array($index['search'] ?? null)) {
+    if (! \is_array($index) || ! \is_array($index['search'] ?? null)) {
         return [];
     }
 
     $entries = [];
     foreach ($index['search'] as $entry) {
-        if (!\is_array($entry)) {
+        if (! \is_array($entry)) {
             continue;
         }
         $piece = new \stdClass();

@@ -10,7 +10,7 @@ namespace Moggi\Docs;
  */
 function searchInRows(array $entities, string $query, int $limit = 20): array
 {
-    $query = trim($query);
+    $query = \trim($query);
     if ($query === '') {
         return [];
     }
@@ -21,8 +21,8 @@ function searchInRows(array $entities, string $query, int $limit = 20): array
         return searchByFilters($entities, $filters, $limit);
     }
 
-    if (str_contains($query, '::')) {
-        [$namePart, $typePart] = array_map('trim', explode('::', $query, 2));
+    if (\str_contains($query, '::')) {
+        [$namePart, $typePart] = \array_map('trim', \explode('::', $query, 2));
 
         return applySearchFilters(
             searchByNameAndType($entities, $namePart, $typePart, $limit),
@@ -51,16 +51,17 @@ function parseSearchFilters(string $query): array
 
     foreach ($patterns as $pattern => $filter) {
         if ($filter !== null) {
-            if (preg_match($pattern, $query) === 1) {
+            if (\preg_match($pattern, $query) === 1) {
                 $filters = [...$filters, ...$filter];
-                $query = trim(preg_replace($pattern, '', $query) ?? $query);
+                $query = \trim(\preg_replace($pattern, '', $query) ?? $query);
             }
+
             continue;
         }
 
-        if (preg_match($pattern, $query, $m) === 1) {
+        if (\preg_match($pattern, $query, $m) === 1) {
             $filters['module'] = $m[1];
-            $query = trim(preg_replace($pattern, '', $query) ?? $query);
+            $query = \trim(\preg_replace($pattern, '', $query) ?? $query);
         }
     }
 
@@ -70,7 +71,7 @@ function parseSearchFilters(string $query): array
 function entityMatchesKindFilter(array $entity, string $kind): bool
 {
     if ($kind === 'value') {
-        return in_array($entity['kind'] ?? '', ['value', 'foreign', 'primop'], true);
+        return \in_array($entity['kind'] ?? '', ['value', 'foreign', 'primop'], true);
     }
 
     return ($entity['kind'] ?? '') === $kind;
@@ -85,16 +86,16 @@ function searchByFilters(array $entities, array $filters, int $limit): array
 {
     $hits = [];
     foreach ($entities as $entity) {
-        if (isset($filters['kind']) && !entityMatchesKindFilter($entity, $filters['kind'])) {
+        if (isset($filters['kind']) && ! entityMatchesKindFilter($entity, $filters['kind'])) {
             continue;
         }
-        if (isset($filters['module']) && !str_starts_with($entity['module'] ?? '', $filters['module'])) {
+        if (isset($filters['module']) && ! \str_starts_with($entity['module'] ?? '', $filters['module'])) {
             continue;
         }
         $hits[] = ['entity' => $entity, 'score' => 50.0];
     }
 
-    usort($hits, static function (array $a, array $b): int {
+    \usort($hits, static function (array $a, array $b): int {
         $mod = ($a['entity']['module'] ?? '') <=> ($b['entity']['module'] ?? '');
         if ($mod !== 0) {
             return $mod;
@@ -103,7 +104,7 @@ function searchByFilters(array $entities, array $filters, int $limit): array
         return ($a['entity']['name'] ?? '') <=> ($b['entity']['name'] ?? '');
     });
 
-    return array_slice($hits, 0, $limit);
+    return \array_slice($hits, 0, $limit);
 }
 
 /**
@@ -120,10 +121,10 @@ function applySearchFilters(array $hits, array $filters): array
     $filtered = [];
     foreach ($hits as $hit) {
         $entity = $hit['entity'];
-        if (isset($filters['kind']) && !entityMatchesKindFilter($entity, $filters['kind'])) {
+        if (isset($filters['kind']) && ! entityMatchesKindFilter($entity, $filters['kind'])) {
             continue;
         }
-        if (isset($filters['module']) && !str_starts_with($entity['module'] ?? '', $filters['module'])) {
+        if (isset($filters['module']) && ! \str_starts_with($entity['module'] ?? '', $filters['module'])) {
             continue;
         }
         $filtered[] = $hit;
@@ -134,22 +135,22 @@ function applySearchFilters(array $hits, array $filters): array
 
 function looksLikeTypeQuery(string $query): bool
 {
-    return str_contains($query, '->')
-        || str_contains($query, '=>')
-        || preg_match('/\b[a-z][a-zA-Z0-9_\']*\s*(->|=>)/', $query) === 1;
+    return \str_contains($query, '->')
+        || \str_contains($query, '=>')
+        || \preg_match('/\b[a-z][a-zA-Z0-9_\']*\s*(->|=>)/', $query) === 1;
 }
 
 /** @return list<string> */
 function searchNameVariants(string $query): array
 {
     $variants = [$query];
-    if (str_starts_with($query, '(') && str_ends_with($query, ')')) {
-        $variants[] = substr($query, 1, -1);
-    } elseif ($query !== '' && !str_contains($query, ' ')) {
+    if (\str_starts_with($query, '(') && \str_ends_with($query, ')')) {
+        $variants[] = \substr($query, 1, -1);
+    } elseif ($query !== '' && ! \str_contains($query, ' ')) {
         $variants[] = '(' . $query . ')';
     }
 
-    return array_values(array_unique($variants));
+    return \array_values(\array_unique($variants));
 }
 
 /**
@@ -168,18 +169,18 @@ function searchByName(array $entities, string $query, int $limit): array
 
         $score = 0.0;
         foreach ($variants as $variant) {
-            $score = max($score, nameScore($entity['name'] ?? '', $variant, strtolower($variant)));
+            $score = \max($score, nameScore($entity['name'] ?? '', $variant, \strtolower($variant)));
         }
         $module = $entity['module'] ?? '';
-        if ($module === $query || str_ends_with($module, '.' . $query)) {
-            $score = max($score, 90.0);
+        if ($module === $query || \str_ends_with($module, '.' . $query)) {
+            $score = \max($score, 90.0);
         }
         if ($score > 0) {
             $hits[] = ['entity' => $entity, 'score' => $score];
         }
     }
 
-    usort($hits, static function (array $a, array $b): int {
+    \usort($hits, static function (array $a, array $b): int {
         $scoreCmp = ($b['score'] <=> $a['score']);
         if ($scoreCmp !== 0) {
             return $scoreCmp;
@@ -188,7 +189,7 @@ function searchByName(array $entities, string $query, int $limit): array
         return ($a['entity']['name'] ?? '') <=> ($b['entity']['name'] ?? '');
     });
 
-    return array_slice($hits, 0, $limit);
+    return \array_slice($hits, 0, $limit);
 }
 
 function nameScore(string $name, string $query, string $qLower): float
@@ -196,16 +197,16 @@ function nameScore(string $name, string $query, string $qLower): float
     if ($name === $query) {
         return 100.0;
     }
-    if (strtolower($name) === $qLower) {
+    if (\strtolower($name) === $qLower) {
         return 95.0;
     }
-    if (str_starts_with($name, $query)) {
+    if (\str_starts_with($name, $query)) {
         return 80.0;
     }
-    if (str_starts_with(strtolower($name), $qLower)) {
+    if (\str_starts_with(\strtolower($name), $qLower)) {
         return 75.0;
     }
-    if (str_contains(strtolower($name), $qLower)) {
+    if (\str_contains(\strtolower($name), $qLower)) {
         return 50.0;
     }
 
@@ -220,16 +221,16 @@ function searchByNameAndType(array $entities, string $namePart, string $typePart
 {
     $hits = searchByType($entities, $typePart, $limit * 3);
     if ($namePart === '') {
-        return array_slice($hits, 0, $limit);
+        return \array_slice($hits, 0, $limit);
     }
 
     $filtered = [];
     foreach ($hits as $hit) {
         $name = $hit['entity']['name'] ?? '';
-        if (str_contains($name, $namePart)) {
+        if (\str_contains($name, $namePart)) {
             $filtered[] = [
                 'entity' => $hit['entity'],
-                'score' => $hit['score'] + nameScore($name, $namePart, strtolower($namePart)),
+                'score' => $hit['score'] + nameScore($name, $namePart, \strtolower($namePart)),
             ];
         }
     }
@@ -238,9 +239,9 @@ function searchByNameAndType(array $entities, string $namePart, string $typePart
         return searchByName($entities, $namePart, $limit);
     }
 
-    usort($filtered, static fn (array $a, array $b): int => ($b['score'] <=> $a['score']));
+    \usort($filtered, static fn (array $a, array $b): int => ($b['score'] <=> $a['score']));
 
-    return array_slice($filtered, 0, $limit);
+    return \array_slice($filtered, 0, $limit);
 }
 
 /**
@@ -267,7 +268,7 @@ function searchByType(array $entities, string $typeQuery, int $limit): array
         }
     }
 
-    usort($hits, static function (array $a, array $b): int {
+    \usort($hits, static function (array $a, array $b): int {
         $scoreCmp = ($b['score'] <=> $a['score']);
         if ($scoreCmp !== 0) {
             return $scoreCmp;
@@ -276,35 +277,35 @@ function searchByType(array $entities, string $typeQuery, int $limit): array
         return ($a['entity']['name'] ?? '') <=> ($b['entity']['name'] ?? '');
     });
 
-    return array_slice($hits, 0, $limit);
+    return \array_slice($hits, 0, $limit);
 }
 
 function extractTypeBody(string $signature): ?string
 {
-    $pos = strpos($signature, ' :: ');
+    $pos = \strpos($signature, ' :: ');
     if ($pos === false) {
         return $signature;
     }
 
-    return trim(substr($signature, $pos + 4));
+    return \trim(\substr($signature, $pos + 4));
 }
 
 /** @return list<string> */
 function splitTypeParts(string $type): array
 {
-    $type = preg_replace('/\s+/', ' ', trim($type)) ?? $type;
-    if (str_contains($type, '=>')) {
-        $parts = explode('=>', $type, 2);
-        $type = trim($parts[1]);
+    $type = \preg_replace('/\s+/', ' ', \trim($type)) ?? $type;
+    if (\str_contains($type, '=>')) {
+        $parts = \explode('=>', $type, 2);
+        $type = \trim($parts[1]);
     }
-    if (!str_contains($type, '->')) {
+    if (! \str_contains($type, '->')) {
         return [normalizeListSugar($type)];
     }
 
     $parts = [];
     $depth = 0;
     $buf = '';
-    $len = strlen($type);
+    $len = \strlen($type);
     for ($i = 0; $i < $len; ++$i) {
         $ch = $type[$i];
         if ($ch === '(') {
@@ -313,18 +314,19 @@ function splitTypeParts(string $type): array
             --$depth;
         }
         if ($ch === '-' && $i + 1 < $len && $type[$i + 1] === '>' && $depth === 0) {
-            $parts[] = trim($buf);
+            $parts[] = \trim($buf);
             $buf = '';
             ++$i;
+
             continue;
         }
         $buf .= $ch;
     }
-    if (trim($buf) !== '') {
-        $parts[] = normalizeListSugar(trim($buf));
+    if (\trim($buf) !== '') {
+        $parts[] = normalizeListSugar(\trim($buf));
     }
 
-    return array_map(normalizeListSugar(...), $parts);
+    return \array_map(normalizeListSugar(...), $parts);
 }
 
 /**
@@ -337,7 +339,7 @@ function typeMatchScore(array $queryParts, array $sigParts): float
         return 0.0;
     }
 
-    if (count($queryParts) === count($sigParts) && count($queryParts) <= 4) {
+    if (\count($queryParts) === \count($sigParts) && \count($queryParts) <= 4) {
         $best = 0.0;
         foreach (permute($queryParts) as $perm) {
             $mapping = [];
@@ -345,7 +347,7 @@ function typeMatchScore(array $queryParts, array $sigParts): float
             foreach ($perm as $i => $qPart) {
                 $score += typePartScore($qPart, $sigParts[$i], $mapping);
             }
-            $best = max($best, $score / count($queryParts));
+            $best = \max($best, $score / \count($queryParts));
         }
 
         return $best;
@@ -354,19 +356,19 @@ function typeMatchScore(array $queryParts, array $sigParts): float
     $mapping = [];
     $score = 0.0;
 
-    if (count($queryParts) === 1 && count($sigParts) === 1) {
+    if (\count($queryParts) === 1 && \count($sigParts) === 1) {
         return typePartScore($queryParts[0], $sigParts[0], $mapping);
     }
 
-    if (count($queryParts) !== count($sigParts)) {
-        if (count($queryParts) < count($sigParts)) {
-            $offset = count($sigParts) - count($queryParts);
-            $sigTail = array_slice($sigParts, $offset);
+    if (\count($queryParts) !== \count($sigParts)) {
+        if (\count($queryParts) < \count($sigParts)) {
+            $offset = \count($sigParts) - \count($queryParts);
+            $sigTail = \array_slice($sigParts, $offset);
             foreach ($queryParts as $i => $qPart) {
                 $score += typePartScore($qPart, $sigTail[$i], $mapping);
             }
 
-            return $score / count($queryParts);
+            return $score / \count($queryParts);
         }
 
         return 0.0;
@@ -376,20 +378,20 @@ function typeMatchScore(array $queryParts, array $sigParts): float
         $score += typePartScore($qPart, $sigParts[$i], $mapping);
     }
 
-    return $score / count($queryParts);
+    return $score / \count($queryParts);
 }
 
 /** @param list<mixed> $items @return list<list<mixed>> */
 function permute(array $items): array
 {
-    if (count($items) <= 1) {
+    if (\count($items) <= 1) {
         return [$items];
     }
 
     $result = [];
     foreach ($items as $i => $item) {
         $rest = $items;
-        array_splice($rest, $i, 1);
+        \array_splice($rest, $i, 1);
         foreach (permute($rest) as $perm) {
             $result[] = [$item, ...$perm];
         }
@@ -401,15 +403,15 @@ function permute(array $items): array
 /** @param array<string, string> $mapping */
 function typePartScore(string $query, string $sig, array &$mapping): float
 {
-    $query = trim($query);
-    $sig = trim($sig);
+    $query = \trim($query);
+    $sig = \trim($sig);
 
     if ($query === $sig) {
         return 100.0;
     }
 
-    if (preg_match('/^[a-z][a-z0-9]*$/', $query) === 1) {
-        if (!isset($mapping[$query])) {
+    if (\preg_match('/^[a-z][a-z0-9]*$/', $query) === 1) {
+        if (! isset($mapping[$query])) {
             $mapping[$query] = $sig;
 
             return 80.0;
@@ -418,11 +420,11 @@ function typePartScore(string $query, string $sig, array &$mapping): float
         return $mapping[$query] === $sig ? 80.0 : 0.0;
     }
 
-    if (preg_match('/^[a-z][a-z0-9]*$/', $sig) === 1) {
+    if (\preg_match('/^[a-z][a-z0-9]*$/', $sig) === 1) {
         return 60.0;
     }
 
-    if (strcasecmp($query, $sig) === 0) {
+    if (\strcasecmp($query, $sig) === 0) {
         return 70.0;
     }
 
@@ -435,17 +437,17 @@ function typePartScore(string $query, string $sig, array &$mapping): float
 
 function normalizeListSugar(string $type): string
 {
-    $type = trim($type);
+    $type = \trim($type);
     if ($type === 'String') {
         return 'String';
     }
-    if (preg_match('/^\[([^\]]+)\]$/', $type, $m) === 1) {
+    if (\preg_match('/^\[([^\]]+)\]$/', $type, $m) === 1) {
         return 'List ' . $m[1];
     }
     if ($type === '()') {
         return '()';
     }
-    if (preg_match('/^\(([^(),]+),\s*([^(),]+)\)$/', $type, $m) === 1) {
+    if (\preg_match('/^\(([^(),]+),\s*([^(),]+)\)$/', $type, $m) === 1) {
         return 'Tuple2 ' . $m[1] . ' ' . $m[2];
     }
 

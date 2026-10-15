@@ -8,7 +8,7 @@
 // range, which is a consequence of comparison and not a separate rule.
 
 $root = __DIR__;
-while (!is_file($root . '/src/registry/constraint.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/registry/constraint.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/registry/constraint.php';
@@ -20,7 +20,7 @@ use function Moggi\Registry\satisfies;
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
     ++$checks;
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
@@ -52,7 +52,7 @@ $order('1.0.0+build.1', '1.0.0+build.2', 0);
 $order('1.0.0-alpha+001', '1.0.0-alpha', 0);
 
 // --- a range does not pull in a pre-release it does not name ----------------
-$assert(!satisfies('0.3.0-rc.1', '0.3'), 'a caret floor does not match its pre-release');
+$assert(! satisfies('0.3.0-rc.1', '0.3'), 'a caret floor does not match its pre-release');
 $assert(satisfies('0.3.0-rc.1', '>=0.3.0-rc.1'), 'a range that names the pre-release matches it');
 $assert(satisfies('0.3.0', '0.3'), 'the release still matches the caret floor');
 // Ordering only, no gating: `0.4.0-beta < 0.4.0`, so it orders inside `<0.4.0`.

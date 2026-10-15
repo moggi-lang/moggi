@@ -2,20 +2,19 @@
 
 namespace Moggi\LSP\TextDocument;
 
-use Moggi\LSP\Analysis\AnalysisService;
-use Moggi\Syntax\Ast;
-
 use function Moggi\Docs\search;
-use function Moggi\LSP\Analysis\ensureAnalyzed;
+
+use Moggi\LSP\Analysis\AnalysisService;
+
 use function Moggi\LSP\Analysis\findNodeChainAt;
-use function Moggi\LSP\Analysis\workspaceSymbols;
-use function Moggi\LSP\Index\declForResolved;
 use function Moggi\LSP\Index\declTokenMaps;
 use function Moggi\LSP\Protocol\lspPosToCompiler;
 use function Moggi\LSP\Protocol\nodeToLspRange;
 use function Moggi\LSP\Protocol\pathToUri;
 use function Moggi\LSP\Protocol\splitLines;
 use function Moggi\Modules\resolvedSymbol;
+
+use Moggi\Syntax\Ast;
 
 function svcDocumentSymbols(AnalysisService $svc, string $uri): array
 {
@@ -58,13 +57,14 @@ function svcDocumentSymbols(AnalysisService $svc, string $uri): array
             }
             $out[] = $sym;
         }
+
         return $out;
     }
-    if (!empty($analysis->symbols)) {
+    if (! empty($analysis->symbols)) {
         $out = [];
         foreach ($analysis->symbols as $sym) {
             $range = $sym['location']['range'] ?? null;
-            if (!$range) {
+            if (! $range) {
                 continue;
             }
             $out[] = [
@@ -75,8 +75,10 @@ function svcDocumentSymbols(AnalysisService $svc, string $uri): array
                 'detail' => $sym['detail'] ?? null,
             ];
         }
+
         return $out;
     }
+
     return [];
 }
 
@@ -105,24 +107,26 @@ function svcFoldingRanges(AnalysisService $svc, string $uri): array
             $seenLines[$line] = true;
             $ranges[] = [
                 'startLine' => $line - 1,
-                'endLine' => max($line - 1, $endLine - 1),
+                'endLine' => \max($line - 1, $endLine - 1),
                 'kind' => 'region',
             ];
         }
     }
     $lines = splitLines($analysis->source);
-    $lineCount = count($lines);
+    $lineCount = \count($lines);
     foreach ($lines as $i => $line) {
-        if (preg_match('/^\s*--\s*region\b/', $line)) {
+        if (\preg_match('/^\s*--\s*region\b/', $line)) {
             $start = $i;
             for ($j = $i + 1; $j < $lineCount; $j++) {
-                if (preg_match('/^\s*--\s*endregion\b/', $lines[$j])) {
+                if (\preg_match('/^\s*--\s*endregion\b/', $lines[$j])) {
                     $ranges[] = ['startLine' => $start, 'endLine' => $j, 'kind' => 'region'];
+
                     break;
                 }
             }
         }
     }
+
     return $ranges;
 }
 
@@ -138,6 +142,7 @@ function svcSelectionRange(AnalysisService $svc, string $uri, array $positions):
         $chain = findNodeChainAt($analysis->program, $comp['line'], $comp['col']);
         if ($chain === []) {
             $out[] = ['range' => ['start' => $pos, 'end' => $pos]];
+
             continue;
         }
         $nested = null;
@@ -153,6 +158,7 @@ function svcSelectionRange(AnalysisService $svc, string $uri, array $positions):
         }
         $out[] = $nested ?? ['range' => ['start' => $pos, 'end' => $pos]];
     }
+
     return $out;
 }
 
@@ -178,10 +184,10 @@ function svcWorkspaceSymbol(AnalysisService $svc, string $query): array
                 $range = $decl?->selectionRange;
                 if ($uri === null && ($e->sourcePath ?? '') !== '') {
                     $uri = pathToUri((string) $e->sourcePath);
-                    $line = max(0, ((int) ($e->sourceLine ?? 1)) - 1);
+                    $line = \max(0, ((int) ($e->sourceLine ?? 1)) - 1);
                     $range = [
                         'start' => ['line' => $line, 'character' => 0],
-                        'end' => ['line' => $line, 'character' => max(1, strlen($e->name))],
+                        'end' => ['line' => $line, 'character' => \max(1, \strlen($e->name))],
                     ];
                 }
                 if ($uri === null || $range === null) {
@@ -220,6 +226,7 @@ function svcWorkspaceSymbol(AnalysisService $svc, string $query): array
             ],
         ];
     }
+
     return $out;
 }
 
@@ -230,7 +237,7 @@ function declKindLabel(array $decl): string
         'newtype' => 'newtype',
         'type' => 'type synonym',
         'class' => 'type class',
-        default => (isset($decl['type']) && str_contains((string) $decl['type'], '->'))
+        default => (isset($decl['type']) && \str_contains((string) $decl['type'], '->'))
             ? 'function'
             : (($decl['type'] ?? '') === 'function' ? 'function' : ''),
     };

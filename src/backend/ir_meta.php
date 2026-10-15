@@ -42,7 +42,7 @@ function registryDataToDecls(array $registryData): array
     $decls = [];
     foreach ($registryData as $name => $info) {
         $ctors = [];
-        foreach (array_values($info['constructors'] ?? []) as $ctor) {
+        foreach (\array_values($info['constructors'] ?? []) as $ctor) {
             $ctors[] = new IR\DataConstructor($ctor['name'], $ctor['fields']);
         }
         $decls[] = new IR\DataDecl($name, [], $ctors, (bool) ($info['newtype'] ?? false));
@@ -76,7 +76,7 @@ function newtypeConstructorMap(array $dataDecls): array
 {
     $map = [];
     foreach ($dataDecls as $decl) {
-        if (!$decl->isNewtype) {
+        if (! $decl->isNewtype) {
             continue;
         }
         foreach ($decl->constructors as $ctor) {
@@ -110,7 +110,7 @@ function boolConstructorMap(array $dataDecls): array
 {
     $map = [];
     foreach ($dataDecls as $decl) {
-        if (!isBoolBackedData($decl)) {
+        if (! isBoolBackedData($decl)) {
             continue;
         }
         $ctors = $decl->constructors;

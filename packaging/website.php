@@ -129,7 +129,7 @@ function replaceOnce(string $html, string $pattern, callable|string $replacement
         -1,
         $count,
     );
-    if (!\is_string($result) || $count !== 1) {
+    if (! \is_string($result) || $count !== 1) {
         throw new \RuntimeException("the page did not match exactly once: {$pattern}");
     }
 
@@ -191,7 +191,7 @@ function main(array $argv): int
 
         return 2;
     }
-    if (!\is_file($options['file'])) {
+    if (! \is_file($options['file'])) {
         throw new \RuntimeException("no such page: {$options['file']}");
     }
 

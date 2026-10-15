@@ -2,16 +2,16 @@
 
 namespace Moggi\LSP\TextDocument;
 
-use Moggi\LSP\Analysis\AnalysisService;
-use Moggi\Syntax\Ast;
-
 use function Moggi\Docs\surfaceTypeSignature;
-use function Moggi\LSP\checkCancelledPoint;
-use function Moggi\LSP\Analysis\ensureAnalyzed;
+
+use Moggi\LSP\Analysis\AnalysisService;
+
 use function Moggi\LSP\Analysis\findNodeChainAt;
-use function Moggi\LSP\Index\declForResolved;
+use function Moggi\LSP\checkCancelledPoint;
 use function Moggi\LSP\Protocol\lspPosToCompiler;
 use function Moggi\LSP\Protocol\splitLines;
+
+use Moggi\Syntax\Ast;
 
 function svcSignatureHelp(AnalysisService $svc, string $uri, array $pos): ?array
 {
@@ -40,7 +40,6 @@ function svcSignatureHelp(AnalysisService $svc, string $uri, array $pos): ?array
         }
     }
 
-
     foreach ($applications as $app) {
         $fnNode = $app['fn'];
         $name = functionNameOf($fnNode);
@@ -51,11 +50,12 @@ function svcSignatureHelp(AnalysisService $svc, string $uri, array $pos): ?array
         if ($sig === null) {
             continue;
         }
-        $paramCount = count($sig['parameters'] ?? []);
-        $active = $paramCount > 0 ? min($app['argc'], $paramCount - 1) : 0;
+        $paramCount = \count($sig['parameters'] ?? []);
+        $active = $paramCount > 0 ? \min($app['argc'], $paramCount - 1) : 0;
         if ($paramCount === 0) {
             $active = 0;
         }
+
         return [
             'signatures' => [$sig],
             'activeSignature' => 0,
@@ -78,6 +78,7 @@ function functionNameOf(?Ast\AstNode $node): ?string
     if ($node instanceof Ast\Infix) {
         return $node->operator;
     }
+
     return null;
 }
 
@@ -114,6 +115,7 @@ function signatureForFunction(AnalysisService $svc, object $analysis, string $na
                     }
                 }
                 $doc = $item->doc;
+
                 break;
             }
         }
@@ -126,11 +128,11 @@ function signatureForFunction(AnalysisService $svc, object $analysis, string $na
             $label = "{$name} :: {$sig}";
         }
         $doc ??= $decl['doc'] ?? null;
-        if (\is_string($sig) && str_contains($sig, '->')) {
-            $parts = preg_split('/\s*->\s*/', $sig) ?: [];
-            array_pop($parts);
+        if (\is_string($sig) && \str_contains($sig, '->')) {
+            $parts = \preg_split('/\s*->\s*/', $sig) ?: [];
+            \array_pop($parts);
             foreach ($parts as $p) {
-                $params[] = ['label' => trim($p)];
+                $params[] = ['label' => \trim($p)];
             }
         }
     }
@@ -158,6 +160,7 @@ function signatureForFunction(AnalysisService $svc, object $analysis, string $na
     if ($doc) {
         $sigObj['documentation'] = ['kind' => 'markdown', 'value' => $doc];
     }
+
     return $sigObj;
 }
 
@@ -169,18 +172,19 @@ function signatureForFunction(AnalysisService $svc, object $analysis, string $na
  */
 function paramsFromSurfaceSignature(string $type): array
 {
-    if (!str_contains($type, '->')) {
+    if (! \str_contains($type, '->')) {
         return [];
     }
-    $parts = preg_split('/\s*->\s*/', $type) ?: [];
-    array_pop($parts);
+    $parts = \preg_split('/\s*->\s*/', $type) ?: [];
+    \array_pop($parts);
     $out = [];
     foreach ($parts as $p) {
-        $p = trim($p);
+        $p = \trim($p);
         if ($p !== '') {
             $out[] = ['label' => $p];
         }
     }
+
     return $out;
 }
 
@@ -194,8 +198,8 @@ function signatureHelpHeuristic(AnalysisService $svc, object $analysis, array $c
     checkCancelledPoint();
     $lines = splitLines($analysis->source);
     $text = $lines[$comp['line'] - 1] ?? '';
-    $prefix = substr($text, 0, max(0, $comp['col'] - 1));
-    if (!preg_match('/([A-Za-z_][A-Za-z0-9_\']*)\s*(?:\(|\s)?$/', $prefix, $m)) {
+    $prefix = \substr($text, 0, \max(0, $comp['col'] - 1));
+    if (! \preg_match('/([A-Za-z_][A-Za-z0-9_\']*)\s*(?:\(|\s)?$/', $prefix, $m)) {
         return null;
     }
     $name = $m[1];
@@ -204,16 +208,17 @@ function signatureHelpHeuristic(AnalysisService $svc, object $analysis, array $c
         return null;
     }
     $after = '';
-    if (preg_match('/' . preg_quote($name, '/') . '\s*(.*)$/', $prefix, $mm)) {
+    if (\preg_match('/' . \preg_quote($name, '/') . '\s*(.*)$/', $prefix, $mm)) {
         $after = $mm[1];
     }
-    $active = max(0, preg_match_all('/\s+/', trim($after)) ?: 0);
-    $paramCount = count($sig['parameters'] ?? []);
+    $active = \max(0, \preg_match_all('/\s+/', \trim($after)) ?: 0);
+    $paramCount = \count($sig['parameters'] ?? []);
     if ($paramCount > 0) {
-        $active = min($active, $paramCount - 1);
+        $active = \min($active, $paramCount - 1);
     } else {
         $active = 0;
     }
+
     return [
         'signatures' => [$sig],
         'activeSignature' => 0,
@@ -229,8 +234,9 @@ function patternParamName(object $p): ?string
     if ($p instanceof Ast\Variable) {
         return $p->name;
     }
-    if (property_exists($p, 'name') && \is_string($p->name ?? null)) {
+    if (\property_exists($p, 'name') && \is_string($p->name ?? null)) {
         return $p->name;
     }
+
     return null;
 }
