@@ -139,7 +139,7 @@ function hashCompilerSources(): string
         'int:' . PHP_INT_SIZE,
     );
 
-    return \substr(\hash('sha256', \implode("\n", $parts)), 0, 32);
+    return \hash('xxh128', \implode("\n", $parts));
 }
 
 function hashContent(string $data): string
@@ -230,7 +230,7 @@ function ensureCache(): void
  */
 function cacheLockPath(): string
 {
-    return \rtrim(\sys_get_temp_dir(), '/') . '/moggi-cache-' . \substr(\hash('sha256', cacheBaseDir()), 0, 16) . '.lock';
+    return \rtrim(\sys_get_temp_dir(), '/') . '/moggi-cache-' . \substr(\hash('xxh3', cacheBaseDir()), 0, 16) . '.lock';
 }
 
 /**
@@ -467,7 +467,7 @@ function artifactFileName(string $key): string
 {
     $safe = \preg_replace('/[^A-Za-z0-9._-]/', '_', $key) ?? $key;
 
-    return $safe === $key ? $key : $safe . '-' . \substr(\hash('sha256', $key), 0, 12);
+    return $safe === $key ? $key : $safe . '-' . \substr(\hash('xxh3', $key), 0, 12);
 }
 
 /** Whole-project artifact cache (e.g. `moggi compile` outputs). */

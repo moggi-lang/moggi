@@ -14,14 +14,14 @@ use Moggi\Syntax\Parser\ParseError;
 
 /**
  * Stable resultId for a diagnostics snapshot (LSP 3.18 pull model): a short
- * SHA-256 of the canonical JSON of the items. Equal diagnostics in equal
+ * non-cryptographic hash of the canonical JSON of the items. Equal diagnostics in equal
  * documents produce equal ids, enabling `{kind: 'unchanged'}` responses.
  */
 function resultIdFor(string $uri, array $items): string
 {
     $canonical = \json_encode([$uri, $items], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
 
-    return \substr(\hash('sha256', $canonical), 0, 16);
+    return \substr(\hash('xxh3', $canonical), 0, 16);
 }
 
 function errorToDiagnostic(\Throwable $e, string $uri, string $source): array

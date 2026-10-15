@@ -653,7 +653,7 @@ function testLibSignature(string $projectRoot, string $backend): string
         $parts[] = 'runtime:' . \Moggi\Cache\fileFingerprint($projectRoot . '/src/backend/php/runtime.php');
     }
 
-    return \hash('sha256', \implode("\n", $parts));
+    return \hash('xxh3', \implode("\n", $parts));
 }
 
 function writeLibPhpOutputs(string $projectRoot): string

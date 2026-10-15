@@ -1682,7 +1682,7 @@ function specializationKey(string $sourceCallee, string $destModule, array $burn
         $parts[] = concreteArgKey($arg);
     }
 
-    return \hash('sha256', \json_encode($parts, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: \implode("\0", $parts));
+    return \hash('xxh3', \json_encode($parts, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: \implode("\0", $parts));
 }
 
 function concreteArgKey(IR\Operand $arg): string

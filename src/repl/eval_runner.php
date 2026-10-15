@@ -284,7 +284,7 @@ function phpDepsFingerprint(State $state): string
         'libs=' . \implode(',', $state->libDirs),
     ];
 
-    return \hash('sha256', \implode('|', $parts));
+    return \hash('xxh3', \implode('|', $parts));
 }
 
 /**
