@@ -2,7 +2,7 @@
 <?php declare(strict_types=1);
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 
@@ -11,22 +11,25 @@ while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
 
 require_once $root . '/src/compiler.php';
 
-use Moggi\Syntax\Lexer\TokenKind;
-use Moggi\Syntax\Parser\ParseError;
-use Moggi\Syntax\Parser\Token;
-
 use function Moggi\Syntax\Lexer\lex;
+
+use Moggi\Syntax\Lexer\TokenKind;
+
 use function Moggi\Syntax\Parser\describeToken;
+
 use function Moggi\Syntax\Parser\describeTokenKind;
 use function Moggi\Syntax\Parser\parse;
+
+use Moggi\Syntax\Parser\ParseError;
+use Moggi\Syntax\Parser\Token;
 
 $failures = [];
 $checks = 0;
 $assertSame = static function (mixed $expected, mixed $actual, string $message) use (&$failures, &$checks): void {
     ++$checks;
     if ($expected !== $actual) {
-        $failures[] = $message . ' (expected ' . var_export($expected, true)
-            . ', got ' . var_export($actual, true) . ')';
+        $failures[] = $message . ' (expected ' . \var_export($expected, true)
+            . ', got ' . \var_export($actual, true) . ')';
     }
 };
 
@@ -38,6 +41,7 @@ foreach (TokenKind::cases() as $kind) {
     } catch (UnhandledMatchError $e) {
         $failures[] = "TokenKind::{$kind->name} has no describeTokenKind() arm";
         ++$checks;
+
         continue;
     }
     ++$checks;
@@ -89,9 +93,9 @@ $assertSame("expected expression, found keyword 'qualified'", $message, 'qualifi
 // Report
 
 if ($failures !== []) {
-    fwrite(STDERR, 'token-kind description test FAILED: ' . count($failures) . " of {$checks} checks\n");
+    \fwrite(STDERR, 'token-kind description test FAILED: ' . \count($failures) . " of {$checks} checks\n");
     foreach ($failures as $failure) {
-        fwrite(STDERR, "  - {$failure}\n");
+        \fwrite(STDERR, "  - {$failure}\n");
     }
     exit(1);
 }

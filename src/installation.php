@@ -146,7 +146,7 @@ function prependPath(array $directories): void
 function prependLoaderPath(string $directory): void
 {
     $name = loaderVariable();
-    if ($name === null || !\is_dir($directory)) {
+    if ($name === null || ! \is_dir($directory)) {
         return;
     }
 

@@ -2,10 +2,11 @@
 
 namespace Moggi\Syntax\Parser;
 
-use Moggi\Syntax\Ast;
-use Moggi\Syntax\Lexer\TokenKind;
-
 use function Moggi\Errors\appendDidYouMean;
+
+use Moggi\Syntax\Ast;
+
+use Moggi\Syntax\Lexer\TokenKind;
 
 /**
  * Parse the body of a `{-# BACKEND … #-}` pragma into backend => implementation module.
@@ -25,13 +26,13 @@ use function Moggi\Errors\appendDidYouMean;
 function parseBackendPragma(ParserState $state, Token $token, string $rest): array
 {
     $map = [];
-    foreach (preg_split('/[\n,]+/', $rest) ?: [] as $rawEntry) {
-        $entry = trim($rawEntry);
+    foreach (\preg_split('/[\n,]+/', $rest) ?: [] as $rawEntry) {
+        $entry = \trim($rawEntry);
         if ($entry === '') {
             continue;
         }
 
-        if (preg_match('/^([A-Za-z][A-Za-z0-9]*)\s*=\s*(\S+)$/', $entry, $m) !== 1) {
+        if (\preg_match('/^([A-Za-z][A-Za-z0-9]*)\s*=\s*(\S+)$/', $entry, $m) !== 1) {
             throw parseError(
                 $state,
                 "malformed BACKEND entry `{$entry}`; expected `<backend> = <Module>`",
@@ -41,8 +42,8 @@ function parseBackendPragma(ParserState $state, Token $token, string $rest): arr
         }
 
         $backend = $m[1];
-        $module = trim($m[2]);
-        if (!isModuleName($module)) {
+        $module = \trim($m[2]);
+        if (! isModuleName($module)) {
             throw parseError(
                 $state,
                 "`{$module}` is not a module name; expected dot-separated constructors, as in `Data.Char.PHP`",
@@ -76,8 +77,8 @@ function parseBackendPragma(ParserState $state, Token $token, string $rest): arr
 
 function isModuleName(string $name): bool
 {
-    foreach (explode('.', $name) as $segment) {
-        if (preg_match("/^[A-Z][A-Za-z0-9_']*$/", $segment) !== 1) {
+    foreach (\explode('.', $name) as $segment) {
+        if (\preg_match("/^[A-Z][A-Za-z0-9_']*$/", $segment) !== 1) {
             return false;
         }
     }
@@ -104,7 +105,7 @@ function parseForeignDecl(ParserState $state): Ast\AstNode
             $hostType,
             $nameToken->line,
             $nameToken->col,
-            $nameToken->col + max(0, strlen($name) - 1),
+            $nameToken->col + \max(0, \strlen($name) - 1),
         );
     }
 
@@ -127,7 +128,7 @@ function parseForeignDecl(ParserState $state): Ast\AstNode
                 $type,
                 $nameToken->line,
                 $nameToken->col,
-                $nameToken->col + max(0, strlen($name) - 1),
+                $nameToken->col + \max(0, \strlen($name) - 1),
             );
         }
 

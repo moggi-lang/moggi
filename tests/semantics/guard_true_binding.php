@@ -2,15 +2,16 @@
 <?php declare(strict_types=1);
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
 
-use Moggi\Syntax\Ast;
-
 use function Moggi\Semantics\Exhaustiveness\guardIsConstantTrue;
+
 use function Moggi\Semantics\Exhaustiveness\trueBindingOrigins;
+
+use Moggi\Syntax\Ast;
 
 /**
  * A guard chain is exhaustive when its last predicate resolves to a binding whose *body* is the host
@@ -30,8 +31,7 @@ $boolData = static fn (): Ast\DataDecl => new Ast\DataDecl('Bool', [], [
     new Ast\ConstructorDecl('True', []),
 ]);
 
-$binding = static fn (string $name, Ast\AstNode $body): Ast\FunctionDecl
-    => new Ast\FunctionDecl($name, null, [], $body);
+$binding = static fn (string $name, Ast\AstNode $body): Ast\FunctionDecl => new Ast\FunctionDecl($name, null, [], $body);
 
 // The declaration says which of the two constructors is true: the second one, by its own order.
 $origins = trueBindingOrigins([

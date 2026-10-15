@@ -27,7 +27,7 @@ namespace Moggi\Registry;
  * The caller adds clauses and then runs `solve()` once; there is no incremental
  * interface, because a resolution is a single question.
  */
-final class CdclSolver
+final class cdcl
 {
     /** @var list<list<int>> one literal list per clause; its index is the clause id */
     private array $clauses = [];
@@ -57,7 +57,9 @@ final class CdclSolver
     private array $units = [];
 
     private int $numVars = 0;
+
     private int $qhead = 0;
+
     private bool $unsatisfiable = false;
 
     public function newVar(): int
@@ -147,6 +149,7 @@ final class CdclSolver
                     $id = $this->addClause($learned);
                     $this->enqueue($learned[0], $id < 0 ? null : $id);
                 }
+
                 continue;
             }
 
@@ -168,7 +171,7 @@ final class CdclSolver
     {
         $value = $this->value[\abs($literal)] ?? null;
 
-        return $value === null ? null : ($literal > 0 ? $value : !$value);
+        return $value === null ? null : ($literal > 0 ? $value : ! $value);
     }
 
     /**
@@ -196,6 +199,7 @@ final class CdclSolver
 
                 if ($this->value($clause[0]) === true) {
                     $index++;
+
                     continue;
                 }
 
@@ -203,6 +207,7 @@ final class CdclSolver
                 for ($k = 2, $n = \count($clause); $k < $n; $k++) {
                     if ($this->value($clause[$k]) !== false) {
                         $replacement = $k;
+
                         break;
                     }
                 }
@@ -214,6 +219,7 @@ final class CdclSolver
                     $this->watch[$this->literalKey($newWatch)][] = $id;
                     $watching[$index] = $watching[\count($watching) - 1];
                     \array_pop($watching);
+
                     continue;
                 }
 
@@ -267,7 +273,7 @@ final class CdclSolver
                 }
             }
 
-            while ($index >= 0 && !isset($seen[\abs($this->trail[$index])])) {
+            while ($index >= 0 && ! isset($seen[\abs($this->trail[$index])])) {
                 $index--;
             }
             if ($index < 0) {
@@ -314,7 +320,7 @@ final class CdclSolver
     private function decide(): ?int
     {
         for ($var = 1; $var <= $this->numVars; $var++) {
-            if (!isset($this->value[$var])) {
+            if (! isset($this->value[$var])) {
                 return ($this->phase[$var] ?? false) ? -$var : $var;
             }
         }
@@ -365,12 +371,12 @@ function cdclResolve(callable $entry, array $dependencies): ?array
         }
         $record = $entry($name);
         $records[$name] = $record;
-        if (!\is_array($record)) {
+        if (! \is_array($record)) {
             continue;
         }
         foreach ((array) ($record['versions'] ?? []) as $data) {
             foreach ((array) (((array) $data)['deps'] ?? []) as $dependency => $_constraint) {
-                if (!\array_key_exists((string) $dependency, $records)) {
+                if (! \array_key_exists((string) $dependency, $records)) {
                     $queue[] = (string) $dependency;
                 }
             }
@@ -411,7 +417,7 @@ function cdclResolve(callable $entry, array $dependencies): ?array
         }
     }
 
-    if ($solver->isUnsatisfiable() || !$solver->solve()) {
+    if ($solver->isUnsatisfiable() || ! $solver->solve()) {
         return null;
     }
 
@@ -428,7 +434,7 @@ function cdclResolve(callable $entry, array $dependencies): ?array
     $stack = \array_keys($dependencies);
     while ($stack !== []) {
         $name = (string) \array_pop($stack);
-        if (isset($chosen[$name]) || !isset($selected[$name])) {
+        if (isset($chosen[$name]) || ! isset($selected[$name])) {
             continue;
         }
         $chosen[$name] = $selected[$name];

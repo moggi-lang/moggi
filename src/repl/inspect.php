@@ -3,22 +3,28 @@
 namespace Moggi\Repl;
 
 use Moggi\Backend\Backend;
-use Moggi\IR\EntryPointKind;
-use Moggi\IR\Module;
-use Moggi\Pipeline\PipelineArtifacts;
-use Moggi\Pipeline\PipelineStage;
-use Moggi\Semantics\Types\TypeError;
-use Moggi\Syntax\Ast;
-use Moggi\Syntax\Lexer\LexError;
-use Moggi\Syntax\Parser\ParseError;
-use Moggi\Syntax\Parser\ReplFragment;
 
 use function Moggi\Backend\backendById;
 use function Moggi\Errors\formatDiagnostic;
 use function Moggi\IR\Dump\dump as dumpIr;
 use function Moggi\IR\entryFromFunctions;
+
+use Moggi\IR\EntryPointKind;
+use Moggi\IR\Module;
+use Moggi\Pipeline\PipelineArtifacts;
+use Moggi\Pipeline\PipelineStage;
+use Moggi\Semantics\Types\TypeError;
+
+use Moggi\Syntax\Ast;
+
 use function Moggi\Syntax\Ast\dump as dumpAst;
+
+use Moggi\Syntax\Lexer\LexError;
+use Moggi\Syntax\Parser\ParseError;
+
 use function Moggi\Syntax\Parser\parseReplFragment;
+
+use Moggi\Syntax\Parser\ReplFragment;
 
 /**
  * REPL inspection: the `:ast` / `:ir` / `:emit` fragment dispatch, compiler
@@ -88,8 +94,8 @@ function inspectInput(State $state, string $source, PipelineStage $stopAt, bool 
  */
 function displayReplError(\Throwable $e, string $userSource): string
 {
-    if (!($e instanceof TypeError || $e instanceof ParseError || $e instanceof LexError)) {
-        return method_exists($e, 'display') ? $e->display() : ($e->getMessage() . "\n");
+    if (! ($e instanceof TypeError || $e instanceof ParseError || $e instanceof LexError)) {
+        return \method_exists($e, 'display') ? $e->display() : ($e->getMessage() . "\n");
     }
 
     $kind = match (true) {
@@ -119,41 +125,41 @@ function mapErrorSpanToUserSource(
     int $endCol,
     string $userSource,
 ): array {
-    $userSource = rtrim($userSource, "\r\n");
+    $userSource = \rtrim($userSource, "\r\n");
     if ($userSource === '') {
         return [1, 1, 1];
     }
 
     if ($line <= 0 || $fullSource === '') {
-        return [1, 1, max(1, strlen($userSource))];
+        return [1, 1, \max(1, \strlen($userSource))];
     }
 
-    $lines = preg_split('/\R/', $fullSource) ?: [''];
+    $lines = \preg_split('/\R/', $fullSource) ?: [''];
     $text = $lines[$line - 1] ?? '';
     $endCol = $endCol > 0 ? $endCol : $col;
 
     foreach (['it', '__repl_eval', '__repl_ty', '__repl_inspect'] as $wrap) {
-        if (preg_match(
-            '/^' . preg_quote($wrap, '/') . '(?:\s*::[^=]*)?\s*=\s*\(/',
+        if (\preg_match(
+            '/^' . \preg_quote($wrap, '/') . '(?:\s*::[^=]*)?\s*=\s*\(/',
             $text,
         ) !== 1) {
             continue;
         }
-        $open = strpos($text, '(');
+        $open = \strpos($text, '(');
         if ($open === false) {
             continue;
         }
-        $innerCol = max(1, $col - $open);
-        $innerEnd = max($innerCol, $endCol - $open);
+        $innerCol = \max(1, $col - $open);
+        $innerEnd = \max($innerCol, $endCol - $open);
 
         return spanWithinUserSource($userSource, $innerCol, $innerEnd);
     }
 
-    if (trim($text) === trim($userSource)) {
-        return spanWithinUserSource($userSource, max(1, $col), max(1, $endCol));
+    if (\trim($text) === \trim($userSource)) {
+        return spanWithinUserSource($userSource, \max(1, $col), \max(1, $endCol));
     }
 
-    return [1, 1, max(1, strlen((preg_split('/\R/', $userSource) ?: [''])[0]))];
+    return [1, 1, \max(1, \strlen((\preg_split('/\R/', $userSource) ?: [''])[0]))];
 }
 
 /**
@@ -161,25 +167,25 @@ function mapErrorSpanToUserSource(
  */
 function spanWithinUserSource(string $userSource, int $col, int $endCol): array
 {
-    $userLines = preg_split('/\R/', $userSource) ?: [''];
-    if (count($userLines) === 1) {
-        $len = max(1, strlen($userLines[0]));
+    $userLines = \preg_split('/\R/', $userSource) ?: [''];
+    if (\count($userLines) === 1) {
+        $len = \max(1, \strlen($userLines[0]));
 
-        return [1, min(max(1, $col), $len), min(max(1, $endCol), $len)];
+        return [1, \min(\max(1, $col), $len), \min(\max(1, $endCol), $len)];
     }
 
-    $offset = max(0, $col - 1);
-    $endOffset = max($offset, $endCol - 1);
+    $offset = \max(0, $col - 1);
+    $endOffset = \max($offset, $endCol - 1);
     $line = 1;
     foreach ($userLines as $ul) {
-        $lineLen = strlen($ul);
+        $lineLen = \strlen($ul);
         if ($offset <= $lineLen) {
-            $localEnd = min($lineLen, $endOffset - ($col - 1 - $offset));
+            $localEnd = \min($lineLen, $endOffset - ($col - 1 - $offset));
 
             return [
                 $line,
-                max(1, $offset + 1),
-                max(1, $localEnd + 1),
+                \max(1, $offset + 1),
+                \max(1, $localEnd + 1),
             ];
         }
         $offset -= $lineLen + 1;
@@ -187,9 +193,9 @@ function spanWithinUserSource(string $userSource, int $col, int $endCol): array
         $line++;
     }
 
-    $last = $userLines[count($userLines) - 1];
+    $last = $userLines[\count($userLines) - 1];
 
-    return [count($userLines), 1, max(1, strlen($last))];
+    return [\count($userLines), 1, \max(1, \strlen($last))];
 }
 
 /**
@@ -221,7 +227,7 @@ function focusAstDump(Ast\Program $program, array $focusNames): string
     if ($focusNames === []) {
         return dumpAst($program);
     }
-    $wanted = array_fill_keys($focusNames, true);
+    $wanted = \array_fill_keys($focusNames, true);
     $items = [];
     foreach ($program->items as $item) {
         $name = match (true) {
@@ -259,7 +265,7 @@ function focusIrDump(Module $ir, array $focusNames): string
     if ($focusNames === []) {
         return dumpIr($ir);
     }
-    $wanted = array_fill_keys($focusNames, true);
+    $wanted = \array_fill_keys($focusNames, true);
     $fns = [];
     foreach ($ir->functions as $fn) {
         if (isset($wanted[$fn->name])) {

@@ -13,17 +13,17 @@ use function Moggi\Paths\canonicalSeparators;
 function resolveStaticDocPath(string $docRoot, string $requestPath): ?string
 {
     $staticPath = $requestPath === '/' ? '/index.html' : $requestPath;
-    if ($staticPath === '/' || str_starts_with($staticPath, '/?')) {
+    if ($staticPath === '/' || \str_starts_with($staticPath, '/?')) {
         return null;
     }
-    if (!str_contains(basename($staticPath), '.')) {
+    if (! \str_contains(\basename($staticPath), '.')) {
         return null;
     }
     $root = canonicalPath($docRoot);
     $file = $root . $staticPath;
-    $resolved = realpath($file);
+    $resolved = \realpath($file);
     if ($resolved !== false && \is_file($resolved) && pathIsUnderDocRoot($resolved, $root)) {
-        return rtrim(canonicalSeparators($docRoot), '/') . $staticPath;
+        return \rtrim(canonicalSeparators($docRoot), '/') . $staticPath;
     }
 
     return '';
@@ -38,24 +38,24 @@ function resolveStaticDocPath(string $docRoot, string $requestPath): ?string
 function serveDocs(DocIndex $index, int $port, ?string $docDir = null, string $siteTitle = ''): int
 {
     $addr = "127.0.0.1:{$port}";
-    $socket = @stream_socket_server("tcp://{$addr}", $errno, $errstr);
+    $socket = @\stream_socket_server("tcp://{$addr}", $errno, $errstr);
     if ($socket === false) {
         \fwrite(STDERR, "error: cannot listen on {$addr}: {$errstr}\n");
 
         return 1;
     }
 
-    $docRoot = $docDir !== null ? realpath($docDir) : null;
+    $docRoot = $docDir !== null ? \realpath($docDir) : null;
     \fwrite(STDOUT, "docs serving on http://{$addr}/\n");
     \fwrite(STDOUT, "docs: dev server only — for production, deploy static HTML from mogdoc -o\n");
     if ($docRoot !== false && $docRoot !== null) {
         \fwrite(STDOUT, "docs: static pages from {$docRoot}\n");
     }
 
-    while (($conn = @stream_socket_accept($socket, -1)) !== false) {
+    while (($conn = @\stream_socket_accept($socket, -1)) !== false) {
         $req = '';
-        while (!str_contains($req, "\r\n\r\n")) {
-            $chunk = fread($conn, 8192);
+        while (! \str_contains($req, "\r\n\r\n")) {
+            $chunk = \fread($conn, 8192);
             if ($chunk === false || $chunk === '') {
                 break;
             }
@@ -63,13 +63,13 @@ function serveDocs(DocIndex $index, int $port, ?string $docDir = null, string $s
         }
 
         $path = '/';
-        if (preg_match('/GET ([^\s?]+)/', $req, $pathMatch) === 1) {
-            $path = urldecode($pathMatch[1]);
+        if (\preg_match('/GET ([^\s?]+)/', $req, $pathMatch) === 1) {
+            $path = \urldecode($pathMatch[1]);
         }
 
         $q = '';
-        if (preg_match('/GET [^\s?]+\?([^ \r]*)/', $req, $qm) === 1) {
-            parse_str($qm[1], $params);
+        if (\preg_match('/GET [^\s?]+\?([^ \r]*)/', $req, $qm) === 1) {
+            \parse_str($qm[1], $params);
             $q = (string) ($params['q'] ?? '');
         }
 
@@ -78,22 +78,24 @@ function serveDocs(DocIndex $index, int $port, ?string $docDir = null, string $s
             if ($resolved === '') {
                 $notFound = "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain; charset=utf-8\r\n"
                     . "Content-Length: 9\r\n\r\nNot Found";
-                fwrite($conn, $notFound);
-                fclose($conn);
+                \fwrite($conn, $notFound);
+                \fclose($conn);
+
                 continue;
             }
             if ($resolved !== null) {
-                $body = (string) file_get_contents($resolved);
+                $body = (string) \file_get_contents($resolved);
                 $ctype = match (true) {
-                    str_ends_with($resolved, '.json') => 'application/json',
-                    str_ends_with($resolved, '.css') => 'text/css',
-                    str_ends_with($resolved, '.js') => 'application/javascript',
+                    \str_ends_with($resolved, '.json') => 'application/json',
+                    \str_ends_with($resolved, '.css') => 'text/css',
+                    \str_ends_with($resolved, '.js') => 'application/javascript',
                     default => 'text/html',
                 };
                 $response = "HTTP/1.1 200 OK\r\nContent-Type: {$ctype}; charset=utf-8\r\n"
-                    . 'Content-Length: ' . strlen($body) . "\r\n\r\n" . $body;
-                fwrite($conn, $response);
-                fclose($conn);
+                    . 'Content-Length: ' . \strlen($body) . "\r\n\r\n" . $body;
+                \fwrite($conn, $response);
+                \fclose($conn);
+
                 continue;
             }
         }
@@ -101,12 +103,12 @@ function serveDocs(DocIndex $index, int $port, ?string $docDir = null, string $s
         $hits = search($index, $q, 30);
         $body = renderSearchPage($index, $q, $hits, $docRoot !== false ? $docRoot : null, $siteTitle);
         $response = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n"
-            . 'Content-Length: ' . strlen($body) . "\r\n\r\n" . $body;
-        fwrite($conn, $response);
-        fclose($conn);
+            . 'Content-Length: ' . \strlen($body) . "\r\n\r\n" . $body;
+        \fwrite($conn, $response);
+        \fclose($conn);
     }
 
-    fclose($socket);
+    \fclose($socket);
 
     return 0;
 }
@@ -117,7 +119,7 @@ function renderSearchPage(DocIndex $index, string $query, array $hits, ?string $
     $qEsc = escapeHtml($query);
     $action = $docRoot !== null ? '/index.html' : '/';
     $form = '<h1 class="page-title">Moggi Index</h1>';
-    $form .= '<p class="meta">' . count($index->byModule) . ' modules, ' . count($index->search) . ' entries</p>';
+    $form .= '<p class="meta">' . \count($index->byModule) . ' modules, ' . \count($index->search) . ' entries</p>';
     $form .= '<div class="docs-search"><form method="get" action="' . escapeHtml($action) . '">';
     $form .= '<input name="q" type="search" value="' . $qEsc
         . '" size="60" autofocus> <button type="submit">Search</button></form></div>';
@@ -127,8 +129,8 @@ function renderSearchPage(DocIndex $index, string $query, array $hits, ?string $
         $e = $hit->entity;
         $sig = escapeHtml($e->signature ?? $e->kind . ' ' . $e->name);
         $href = $e->href;
-        if ($docRoot !== null && !str_starts_with($href, 'http')) {
-            $href = '/' . ltrim($href, '/');
+        if ($docRoot !== null && ! \str_starts_with($href, 'http')) {
+            $href = '/' . \ltrim($href, '/');
         }
         $results .= '<li><a href="' . escapeHtml($href) . '"><code>'
             . escapeHtml($e->module . '.' . $e->name) . '</code></a><br>'
@@ -150,8 +152,8 @@ function renderSearchPage(DocIndex $index, string $query, array $hits, ?string $
 
 function pathIsUnderDocRoot(string $path, string $root): bool
 {
-    $path = rtrim(canonicalSeparators($path), '/');
-    $root = rtrim(canonicalSeparators($root), '/');
+    $path = \rtrim(canonicalSeparators($path), '/');
+    $root = \rtrim(canonicalSeparators($root), '/');
 
-    return $path === $root || str_starts_with($path, $root . '/');
+    return $path === $root || \str_starts_with($path, $root . '/');
 }

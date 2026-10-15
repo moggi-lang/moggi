@@ -3,16 +3,18 @@
 namespace Moggi\Backend\Jvm;
 
 use Moggi\Backend\Backend;
-use Moggi\IR\Module;
-use Moggi\Syntax\Ast\TypeNode;
 
 use function Moggi\Backend\Inspect\describeJvmEmit;
-use function Moggi\Backend\Jvm\Verify\verifyForeignImportAgainstHost;
 use function Moggi\Backend\Jvm\Codegen\emitModule;
+
 use function Moggi\Backend\Jvm\Foreign\jvmDescriptorFromMoggiType;
 use function Moggi\Backend\Jvm\Naming\artifactPath;
 use function Moggi\Backend\Jvm\Naming\symbolName;
+use function Moggi\Backend\Jvm\Verify\verifyForeignImportAgainstHost;
 use function Moggi\Debug\mapPathForArtifact;
+
+use Moggi\IR\Module;
+use Moggi\Syntax\Ast\TypeNode;
 
 require_once __DIR__ . '/runtime_abi.php';
 require_once __DIR__ . '/package.php';
@@ -59,6 +61,7 @@ final class JvmBackend implements Backend
             if ($key === '__moggi.map__') {
                 $artifact = (string) ($options['outputRelative'] ?? 'Module.class');
                 $out[mapPathForArtifact($artifact)] = $bytes;
+
                 continue;
             }
             $out[$key . '.class'] = $bytes;

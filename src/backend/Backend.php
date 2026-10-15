@@ -155,7 +155,6 @@ interface Backend
     ): ?string;
 }
 
-
 /**
  * The verifier cannot keep its promise: the tool it needs is not installed.
  *
@@ -187,7 +186,7 @@ function isBackendImplemented(string $backend): bool
 function setCompileBackend(string $backend): void
 {
     assertBackend($backend);
-    if (!isBackendImplemented($backend)) {
+    if (! isBackendImplemented($backend)) {
         throw new \InvalidArgumentException(
             "code generation for backend `{$backend}` is not implemented",
         );
@@ -201,7 +200,7 @@ function assertBackend(string $backend, array $allowed = []): void
     if ($allowed === []) {
         $allowed = knownBackendIds();
     }
-    if (!\in_array($backend, $allowed, true)) {
+    if (! \in_array($backend, $allowed, true)) {
         throw new \InvalidArgumentException("unknown compile backend `{$backend}`");
     }
 }
@@ -224,7 +223,7 @@ function backendRegistry(): array
 function backendById(string $id): Backend
 {
     $registry = backendRegistry();
-    if (!isset($registry[$id])) {
+    if (! isset($registry[$id])) {
         throw new \InvalidArgumentException("unknown or unimplemented compile backend `{$id}`");
     }
 

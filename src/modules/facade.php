@@ -2,26 +2,32 @@
 
 namespace Moggi\Modules;
 
-use Moggi\Semantics\TypeExpr\Scheme;
-use Moggi\Semantics\TypeExpr\TArrow;
-use Moggi\Semantics\TypeExpr\TCon;
-use Moggi\Semantics\TypeExpr\TVar;
-use Moggi\Semantics\TypeExpr\Type;
-use Moggi\Semantics\Types\TypeCheckState;
-use Moggi\Semantics\Types\TypeError;
-use Moggi\Syntax\Ast;
-
 use function Moggi\Backend\compileBackend;
-use function Moggi\Semantics\Kinds\dataKind;
-use function Moggi\Semantics\Kinds\registerTypeKind;
-use function Moggi\Semantics\Types\registerData;
-use function Moggi\Semantics\Types\registerForeignType;
-use function Moggi\Semantics\Types\canonicalizePrimitiveTypes;
-use function Moggi\Semantics\Types\registerTypeSynonym;
-use function Moggi\Semantics\Types\typeToString;
 
 use const Moggi\Semantics\IntrinsicRegistry\MODULE_IO;
 use const Moggi\Semantics\IntrinsicRegistry\MODULE_PRIM;
+
+use function Moggi\Semantics\Kinds\dataKind;
+use function Moggi\Semantics\Kinds\registerTypeKind;
+
+use Moggi\Semantics\TypeExpr\Scheme;
+use Moggi\Semantics\TypeExpr\TArrow;
+use Moggi\Semantics\TypeExpr\TCon;
+
+use Moggi\Semantics\TypeExpr\TVar;
+use Moggi\Semantics\TypeExpr\Type;
+
+use function Moggi\Semantics\Types\canonicalizePrimitiveTypes;
+use function Moggi\Semantics\Types\registerData;
+use function Moggi\Semantics\Types\registerForeignType;
+use function Moggi\Semantics\Types\registerTypeSynonym;
+
+use Moggi\Semantics\Types\TypeCheckState;
+use Moggi\Semantics\Types\TypeError;
+
+use function Moggi\Semantics\Types\typeToString;
+
+use Moggi\Syntax\Ast;
 
 /** @param array<string, string> $mapping */
 function typesAlphaEqual(Type $left, Type $right, array &$mapping = []): bool
@@ -37,8 +43,8 @@ function typesAlphaEqual(Type $left, Type $right, array &$mapping = []): bool
             default => (($mapping[$left->name] = $right->name) || true),
         },
         TCon::class => $left->name === $right->name
-            && count($left->args) === count($right->args)
-            && array_all(
+            && \count($left->args) === \count($right->args)
+            && \array_all(
                 $left->args,
                 static fn (Type $arg, int $i): bool => typesAlphaEqual($arg, $right->args[$i], $mapping),
             ),
@@ -129,7 +135,7 @@ function facadeMissingBackendError(string $moduleName, array $backendMap, array 
 
 function facadeImplModuleName(Ast\Program $program): ?string
 {
-    if (!isFacadeProgram($program)) {
+    if (! isFacadeProgram($program)) {
         return null;
     }
 
@@ -139,12 +145,12 @@ function facadeImplModuleName(Ast\Program $program): ?string
 /** @param array<string, array<string, mixed>> $units */
 function redirectFacadeOrigins(array &$available, Ast\Program $program, array $units, string $moduleName): void
 {
-    if (!isFacadeProgram($program)) {
+    if (! isFacadeProgram($program)) {
         return;
     }
 
     $implName = facadeImplModuleNameFor($moduleName, $units);
-    if ($implName === null || !isset($units[$implName])) {
+    if ($implName === null || ! isset($units[$implName])) {
         throw new TypeError('unknown facade implementation module `' . ($implName ?? '') . '`');
     }
 
@@ -163,13 +169,13 @@ function redirectFacadeOrigins(array &$available, Ast\Program $program, array $u
     }
 
     foreach ($implExports['data'] ?? [] as $name => $info) {
-        if (!isset($available['data'][$name])) {
+        if (! isset($available['data'][$name])) {
             $available['data'][$name] = $info;
         }
     }
 
     foreach ($program->items as $item) {
-        if (!$item instanceof Ast\FunctionDecl || !$item->signatureOnly) {
+        if (! $item instanceof Ast\FunctionDecl || ! $item->signatureOnly) {
             continue;
         }
 
@@ -196,7 +202,7 @@ function validateFacadeExport(
     string $filename,
     string $source,
 ): void {
-    if (!isset($implExports['env'][$name])) {
+    if (! isset($implExports['env'][$name])) {
         throw new TypeError(
             "facade export `{$name}` is missing from implementation module `{$implName}`",
             $filename,
@@ -206,7 +212,7 @@ function validateFacadeExport(
 
     $implType = $implExports['env'][$name];
     $facadeType = $facadeScheme;
-    if (!schemesAlphaEqual($facadeType, $implType)) {
+    if (! schemesAlphaEqual($facadeType, $implType)) {
         throw new TypeError(
             "facade export `{$name}` type `"
             . typeToString($facadeType->type)
@@ -233,7 +239,7 @@ function facadeModuleForImpl(array $units, string $implModuleName): ?string
     foreach ($units as $moduleName => $unit) {
         $program = $unit['program'] ?? null;
         if ($program instanceof Ast\Program) {
-            if (!isFacadeProgram($program)) {
+            if (! isFacadeProgram($program)) {
                 continue;
             }
             $backendMap = $program->backendMap;
@@ -272,7 +278,7 @@ function backendImplOwners(array $byModule): array
 {
     $owners = [];
     foreach ($byModule as $facadeName => $facadePath) {
-        if (isSyntheticCompilerPath($facadePath) || !\is_file($facadePath)) {
+        if (isSyntheticCompilerPath($facadePath) || ! \is_file($facadePath)) {
             continue;
         }
 
@@ -320,7 +326,7 @@ function backendImplImportError(
 function mergeFacadeTypesForImpl(TypeCheckState $state, array $units, string $implModuleName): void
 {
     $facadeName = facadeModuleForImpl($units, $implModuleName);
-    if ($facadeName === null || !isset($units[$facadeName]['program'])) {
+    if ($facadeName === null || ! isset($units[$facadeName]['program'])) {
         return;
     }
 
@@ -329,16 +335,16 @@ function mergeFacadeTypesForImpl(TypeCheckState $state, array $units, string $im
         MODULE_IO,
     ] as $primModule) {
         $primLocal = $units[$primModule]['localTypes'] ?? null;
-        if (!\is_array($primLocal)) {
+        if (! \is_array($primLocal)) {
             continue;
         }
         foreach ($primLocal['data'] ?? [] as $name => $info) {
-            if (!isset($state->data[$name])) {
+            if (! isset($state->data[$name])) {
                 $state->data[$name] = $info;
                 registerTypeKind(
                     $state,
                     $name,
-                    dataKind(count($info['params'])),
+                    dataKind(\count($info['params'])),
                 );
             }
         }
@@ -347,11 +353,13 @@ function mergeFacadeTypesForImpl(TypeCheckState $state, array $units, string $im
     foreach ($units[$facadeName]['program']->items as $item) {
         if ($item instanceof Ast\DataDecl) {
             registerData($state, $item);
+
             continue;
         }
 
         if ($item instanceof Ast\ForeignTypeDecl) {
             registerForeignType($state, $item);
+
             continue;
         }
 

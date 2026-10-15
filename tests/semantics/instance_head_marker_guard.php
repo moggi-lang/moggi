@@ -8,7 +8,7 @@
 // reject it, so the marker cannot be shadowed by an AST built programmatically.
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
@@ -17,7 +17,7 @@ use Moggi\Semantics\Types\TypeError;
 use Moggi\Syntax\Ast;
 
 $assert = static function (bool $condition, string $message): void {
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };

@@ -29,7 +29,7 @@ function phpKeywords(): array
 
 function isPhpKeyword(string $name): bool
 {
-    return isset(phpKeywords()[strtolower($name)]);
+    return isset(phpKeywords()[\strtolower($name)]);
 }
 
 function isPhpBuiltin(string $name): bool
@@ -39,7 +39,7 @@ function isPhpBuiltin(string $name): bool
         'assert' => true,
     ];
 
-    return isset($builtins[strtolower($name)]);
+    return isset($builtins[\strtolower($name)]);
 }
 
 /**
@@ -84,7 +84,7 @@ function buildPhpNameMap(Module $module): array
     $map = [];
     foreach ([$bindings, $constructors] as $group) {
         $sorted = \array_keys($group);
-        sort($sorted, SORT_STRING);
+        \sort($sorted, SORT_STRING);
         foreach ($sorted as $name) {
             if (isset($map[$name])) {
                 continue;
@@ -103,12 +103,12 @@ function allocatePhpFunctionName(string $name, array &$used): string
     $candidate = $base;
     $suffix = 2;
 
-    while (isset($used[strtolower($candidate)])) {
-        $candidate = str_ends_with($base, '_') ? $base . $suffix : $base . '_' . $suffix;
+    while (isset($used[\strtolower($candidate)])) {
+        $candidate = \str_ends_with($base, '_') ? $base . $suffix : $base . '_' . $suffix;
         ++$suffix;
     }
 
-    $used[strtolower($candidate)] = true;
+    $used[\strtolower($candidate)] = true;
 
     return $candidate;
 }
@@ -116,20 +116,20 @@ function allocatePhpFunctionName(string $name, array &$used): string
 function basePhpFunctionName(string $name): string
 {
     if (isLambdaName($name)) {
-        return '__lambda_' . substr($name, strlen('λ'));
+        return '__lambda_' . \substr($name, \strlen('λ'));
     }
 
     if (isSafeName($name)) {
         return isPhpKeyword($name) || isPhpBuiltin($name) ? $name . '_' : $name;
     }
 
-    return '__fn_' . bin2hex($name);
+    return '__fn_' . \bin2hex($name);
 }
 
 /** @param array<string, string> $phpNames */
 function phpFunctionName(string $name, array $phpNames): string
 {
-    if (!isset($phpNames[$name])) {
+    if (! isset($phpNames[$name])) {
         throw new \RuntimeException("missing php name mapping for `{$name}`");
     }
 
@@ -146,7 +146,7 @@ function mangleVar(string $name): string
         return $name;
     }
 
-    return '_v_' . bin2hex($name);
+    return '_v_' . \bin2hex($name);
 }
 
 /**

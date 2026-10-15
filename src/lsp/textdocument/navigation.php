@@ -3,24 +3,27 @@
 namespace Moggi\LSP\TextDocument;
 
 use Moggi\LSP\Analysis\AnalysisService;
-use Moggi\LSP\Index\DeclInfo;
-use Moggi\Syntax\Ast;
 
-use function Moggi\LSP\checkCancelledPoint;
-use function Moggi\LSP\Analysis\ensureAnalyzed;
 use function Moggi\LSP\Analysis\findNodeAt;
 use function Moggi\LSP\Analysis\findNodeChainAt;
+
+use function Moggi\LSP\checkCancelledPoint;
 use function Moggi\LSP\Index\binderResolved;
+
+use Moggi\LSP\Index\DeclInfo;
+
 use function Moggi\LSP\Index\isBinderResolved;
 use function Moggi\LSP\Protocol\codepointColToUtf16;
-use function Moggi\LSP\Protocol\locToRange;
 use function Moggi\LSP\Protocol\compilerPosToLsp;
+use function Moggi\LSP\Protocol\locToRange;
 use function Moggi\LSP\Protocol\lspPosToCompiler;
 use function Moggi\LSP\Protocol\nodeToLspRange;
 use function Moggi\LSP\Protocol\splitLines;
 use function Moggi\LSP\Protocol\utf16Length;
 use function Moggi\Modules\parseResolvedSymbol;
 use function Moggi\Modules\resolvedSymbol;
+
+use Moggi\Syntax\Ast;
 
 function svcDefinition(AnalysisService $svc, string $uri, array $pos): mixed
 {
@@ -30,7 +33,7 @@ function svcDefinition(AnalysisService $svc, string $uri, array $pos): mixed
     }
     $result = navigationResult($svc, $targets, 'definition');
 
-    return count($targets) === 1 ? $result[0] : $result;
+    return \count($targets) === 1 ? $result[0] : $result;
 }
 
 /**
@@ -62,6 +65,7 @@ function navigationResult(AnalysisService $svc, array $targets, string $method):
             $locs[] = ['uri' => $t['uri'], 'range' => $t['range']];
         }
     }
+
     return $linkSupport ? $links : $locs;
 }
 
@@ -81,15 +85,16 @@ function originRangeAt(AnalysisService $svc, string $uri, array $pos): ?array
     }
     $lines = splitLines($analysis->source);
     $text = $lines[$comp['line'] - 1] ?? '';
-    $idx = max(0, $comp['col'] - 1);
+    $idx = \max(0, $comp['col'] - 1);
     $left = $idx;
-    while ($left > 0 && preg_match('/[A-Za-z0-9_\']/', $text[$left - 1] ?? '')) {
+    while ($left > 0 && \preg_match('/[A-Za-z0-9_\']/', $text[$left - 1] ?? '')) {
         $left--;
     }
     $right = $idx;
-    while ($right < strlen($text) && preg_match('/[A-Za-z0-9_\']/', $text[$right] ?? '')) {
+    while ($right < \strlen($text) && \preg_match('/[A-Za-z0-9_\']/', $text[$right] ?? '')) {
         $right++;
     }
+
     return [
         'start' => compilerPosToLsp($analysis->source, $comp['line'], $left + 1),
         'end' => compilerPosToLsp($analysis->source, $comp['line'], $right + 1),
@@ -112,18 +117,20 @@ function resolveNavTargets(AnalysisService $svc, string $uri, array $pos): array
     $target['originRange'] = originRangeAt($svc, $uri, $pos);
     $out = [$target];
     $resolved = $target['resolved'] ?? null;
-    if (\is_string($resolved) && str_contains($resolved, '::')) {
-        $mod = explode('::', $resolved, 2)[0];
+    if (\is_string($resolved) && \str_contains($resolved, '::')) {
+        $mod = \explode('::', $resolved, 2)[0];
         $analysis = $svc->ensureAnalyzed($uri);
         if ($analysis !== null) {
             foreach ($svc->occurrences->findInUri($uri, $mod) as $occ) {
                 if ($occ->kind === 'import') {
                     $out[] = ['uri' => $occ->uri, 'range' => $occ->range];
+
                     break;
                 }
             }
         }
     }
+
     return $out;
 }
 
@@ -151,8 +158,8 @@ function svcTypeDefinition(AnalysisService $svc, string $uri, array $pos): mixed
     $word = wordAt($analysis->source, $comp['line'], $comp['col']);
     if ($typeName === null && $word !== null && isset($analysis->declarations[$word]['type'])) {
         $surface = (string) $analysis->declarations[$word]['type'];
-        if (!in_array($surface, ['function', 'data', 'newtype', 'type', 'class'], true)
-            && preg_match("/[A-Z][A-Za-z0-9_']*/", $surface, $m)) {
+        if (! \in_array($surface, ['function', 'data', 'newtype', 'type', 'class'], true)
+            && \preg_match("/[A-Z][A-Za-z0-9_']*/", $surface, $m)) {
             $typeName = $m[0];
         }
     }
@@ -163,7 +170,7 @@ function svcTypeDefinition(AnalysisService $svc, string $uri, array $pos): mixed
     $module = $analysis->program instanceof Ast\Program ? ($analysis->program->module ?? 'Main') : 'Main';
     foreach ($svc->modules->defsByResolved as $res => $decl) {
         $parts = parseResolvedSymbol($res);
-        if ($parts !== null && $parts['name'] === $typeName && in_array($decl->type, ['data', 'newtype', 'type', 'class'], true)) {
+        if ($parts !== null && $parts['name'] === $typeName && \in_array($decl->type, ['data', 'newtype', 'type', 'class'], true)) {
             return navigationResult($svc, [[
                 'uri' => $decl->uri,
                 'range' => $decl->range,
@@ -183,7 +190,7 @@ function svcTypeDefinition(AnalysisService $svc, string $uri, array $pos): mixed
     }
     if (isset($analysis->declarations[$typeName])) {
         $d = $analysis->declarations[$typeName];
-        if (in_array($d['type'] ?? '', ['data', 'newtype', 'type', 'class'], true)) {
+        if (\in_array($d['type'] ?? '', ['data', 'newtype', 'type', 'class'], true)) {
             return navigationResult($svc, [[
                 'uri' => $uri,
                 'range' => locToRange($d['line'], $d['col'], $d['endCol'], $analysis->source),
@@ -191,6 +198,7 @@ function svcTypeDefinition(AnalysisService $svc, string $uri, array $pos): mixed
             ]], 'typeDefinition')[0];
         }
     }
+
     return null;
 }
 
@@ -217,18 +225,18 @@ function svcImplementation(AnalysisService $svc, string $uri, array $pos): mixed
             $onMethodSite = true;
         }
     }
-    if (!$onMethodSite
+    if (! $onMethodSite
         && (isset($svc->modules->classSupers[$word]) || isset($svc->modules->classInstances[$word]))) {
         $classes[] = $word;
     }
-    if (!$onMethodSite) {
+    if (! $onMethodSite) {
         $node = findNodeAt($analysis->program, $comp['line'], $comp['col']);
         if ($node instanceof Ast\EvidenceMethod) {
             $classes = [$node->class];
             $onMethodSite = true;
         } elseif ($node instanceof Ast\Variable) {
             foreach ($analysis->program->items as $item) {
-                if (!($item instanceof Ast\FunctionDecl) || !astTreeContains($item, $node)) {
+                if (! ($item instanceof Ast\FunctionDecl) || ! astTreeContains($item, $node)) {
                     continue;
                 }
                 $em = findEvidenceMethodForNode($item, $node);
@@ -236,15 +244,16 @@ function svcImplementation(AnalysisService $svc, string $uri, array $pos): mixed
                     $classes = [$em->class];
                     $onMethodSite = true;
                 }
+
                 break;
             }
         }
     }
-    if (!$onMethodSite) {
+    if (! $onMethodSite) {
         $target = resolveNavTarget($svc, $uri, $pos);
-        $resolved = is_array($target) ? ($target['resolved'] ?? null) : null;
-        if (is_string($resolved) && str_contains($resolved, '::')) {
-            $segments = explode('::', $resolved);
+        $resolved = \is_array($target) ? ($target['resolved'] ?? null) : null;
+        if (\is_string($resolved) && \str_contains($resolved, '::')) {
+            $segments = \explode('::', $resolved);
             foreach ($segments as $seg) {
                 if ($seg !== ''
                     && (isset($svc->modules->classSupers[$seg]) || isset($svc->modules->classInstances[$seg]))) {
@@ -257,13 +266,13 @@ function svcImplementation(AnalysisService $svc, string $uri, array $pos): mixed
     $locs = [];
     $seen = [];
     $addLoc = static function (string $locUri, array $range) use (&$locs, &$seen): void {
-        $key = $locUri . '|' . json_encode($range);
-        if (!isset($seen[$key])) {
+        $key = $locUri . '|' . \json_encode($range);
+        if (! isset($seen[$key])) {
             $seen[$key] = true;
             $locs[] = ['uri' => $locUri, 'range' => $range];
         }
     };
-    if ($classes !== [] && !$onMethodSite) {
+    if ($classes !== [] && ! $onMethodSite) {
         foreach ($classes as $cls) {
             foreach ($svc->modules->classInstances[$cls] ?? [] as $inst) {
                 $addLoc($inst['uri'], $inst['range']);
@@ -274,7 +283,7 @@ function svcImplementation(AnalysisService $svc, string $uri, array $pos): mixed
         if ($def['sig'] ?? false) {
             continue;
         }
-        if ($classes !== [] && !in_array($def['class'], $classes, true)) {
+        if ($classes !== [] && ! \in_array($def['class'], $classes, true)) {
             continue;
         }
         $addLoc($def['uri'], $def['range']);
@@ -296,15 +305,15 @@ function findEvidenceMethodForNode(object $root, Ast\AstNode $needle): ?Ast\Evid
     if ($root instanceof Ast\TypeNode) {
         return null;
     }
-    foreach (get_object_vars($root) as $prop) {
-        if (is_object($prop)) {
+    foreach (\get_object_vars($root) as $prop) {
+        if (\is_object($prop)) {
             $hit = findEvidenceMethodForNode($prop, $needle);
             if ($hit !== null) {
                 return $hit;
             }
-        } elseif (is_array($prop)) {
+        } elseif (\is_array($prop)) {
             foreach ($prop as $el) {
-                if (is_object($el)) {
+                if (\is_object($el)) {
                     $hit = findEvidenceMethodForNode($el, $needle);
                     if ($hit !== null) {
                         return $hit;
@@ -313,6 +322,7 @@ function findEvidenceMethodForNode(object $root, Ast\AstNode $needle): ?Ast\Evid
             }
         }
     }
+
     return null;
 }
 
@@ -332,20 +342,22 @@ function svcReferences(AnalysisService $svc, string $uri, array $pos, bool $incl
         }
         $out = [];
         foreach ($svc->occurrences->findInUri($uri, $word) as $occ) {
-            if (!$includeDecl && $occ->kind === 'def') {
+            if (! $includeDecl && $occ->kind === 'def') {
                 continue;
             }
             $out[] = ['uri' => $occ->uri, 'range' => $occ->range];
         }
+
         return $out;
     }
     $out = [];
     foreach ($svc->occurrences->findByResolved($target['resolved']) as $occ) {
-        if (!$includeDecl && $occ->kind === 'def') {
+        if (! $includeDecl && $occ->kind === 'def') {
             continue;
         }
         $out[] = ['uri' => $occ->uri, 'range' => $occ->range];
     }
+
     return $out;
 }
 
@@ -359,6 +371,7 @@ function svcDocumentHighlight(AnalysisService $svc, string $uri, array $pos): ar
         }
         $out[] = ['range' => $ref['range'], 'kind' => 1];
     }
+
     return $out;
 }
 
@@ -370,7 +383,7 @@ function svcDeclaration(AnalysisService $svc, string $uri, array $pos): mixed
     }
     $result = navigationResult($svc, $targets, 'declaration');
 
-    return count($targets) === 1 ? $result[0] : $result;
+    return \count($targets) === 1 ? $result[0] : $result;
 }
 
 /**
@@ -392,6 +405,7 @@ function findModuleDeclByName(AnalysisService $svc, ?string $module, string $nam
                 }
             }
         }
+
         return null;
     };
     if ($module !== null && isset($svc->modules->modules[$module])) {
@@ -406,6 +420,7 @@ function findModuleDeclByName(AnalysisService $svc, ?string $module, string $nam
             return $hit;
         }
     }
+
     return null;
 }
 
@@ -422,10 +437,10 @@ function findTypeDeclForName(AnalysisService $svc, ?string $module, string $name
 {
     $search = static function (array $entry) use ($name): ?DeclInfo {
         foreach ($entry['decls'] as $decl) {
-            if (!($decl instanceof DeclInfo)) {
+            if (! ($decl instanceof DeclInfo)) {
                 continue;
             }
-            if (in_array($decl->type, ['data', 'newtype', 'type', 'class'], true) && $decl->name === $name) {
+            if (\in_array($decl->type, ['data', 'newtype', 'type', 'class'], true) && $decl->name === $name) {
                 return $decl;
             }
             if ($decl->type === 'data' || $decl->type === 'newtype') {
@@ -436,6 +451,7 @@ function findTypeDeclForName(AnalysisService $svc, ?string $module, string $name
                 }
             }
         }
+
         return null;
     };
     if ($module !== null && isset($svc->modules->modules[$module])) {
@@ -450,6 +466,7 @@ function findTypeDeclForName(AnalysisService $svc, ?string $module, string $name
             return $hit;
         }
     }
+
     return null;
 }
 
@@ -493,6 +510,7 @@ function resolveNavTarget(AnalysisService $svc, string $uri, array $pos): ?array
         $name = $node->name;
         if ($node->binderId !== null) {
             $resolved = binderResolved($module, $node->binderId);
+
             return [
                 'uri' => $uri,
                 'range' => nodeToLspRange($analysis->source, $node),
@@ -511,9 +529,10 @@ function resolveNavTarget(AnalysisService $svc, string $uri, array $pos): ?array
     }
     if ($name === null && $node !== null) {
         $chain = findNodeChainAt($analysis->program, $comp['line'], $comp['col']);
-        foreach (array_reverse($chain) as $cand) {
+        foreach (\array_reverse($chain) as $cand) {
             if ($cand instanceof Ast\FunctionDecl) {
                 $name = $cand->name;
+
                 break;
             }
         }
@@ -528,7 +547,7 @@ function resolveNavTarget(AnalysisService $svc, string $uri, array $pos): ?array
             $resolved = resolvedSymbol($analysis->program->module ?? 'Main', $name);
         }
     }
-    if ($resolved !== null && !isBinderResolved($resolved)) {
+    if ($resolved !== null && ! isBinderResolved($resolved)) {
         $decl = $svc->modules->declForResolved($resolved);
         if ($decl !== null) {
             return [
@@ -551,6 +570,7 @@ function resolveNavTarget(AnalysisService $svc, string $uri, array $pos): ?array
     }
     if (isset($analysis->declarations[$name])) {
         $d = $analysis->declarations[$name];
+
         return [
             'uri' => $uri,
             'range' => locToRange($d['line'], $d['col'], $d['endCol'], $analysis->source),
@@ -568,6 +588,7 @@ function resolveNavTarget(AnalysisService $svc, string $uri, array $pos): ?array
             'name' => $name,
         ];
     }
+
     return null;
 }
 
@@ -595,6 +616,7 @@ function svcLinkedEditing(AnalysisService $svc, string $uri, array $pos): ?array
     if ($ranges === [] && isset($target['range'])) {
         $ranges[] = $target['range'];
     }
+
     return $ranges === [] ? null : ['ranges' => $ranges];
 }
 
@@ -608,7 +630,7 @@ function svcDocumentLinks(AnalysisService $svc, string $uri): array
     $source = $analysis->source;
     $lines = splitLines($source);
     foreach ($lines as $i => $line) {
-        if (preg_match_all('/https?:\/\/[^\s)]+/', $line, $matches, PREG_OFFSET_CAPTURE)) {
+        if (\preg_match_all('/https?:\/\/[^\s)]+/', $line, $matches, PREG_OFFSET_CAPTURE)) {
             foreach ($matches[0] as $match) {
                 $url = $match[0];
                 $start = codepointColToUtf16($line, $match[1] + 1);
@@ -623,6 +645,7 @@ function svcDocumentLinks(AnalysisService $svc, string $uri): array
             }
         }
     }
+
     return $links;
 }
 

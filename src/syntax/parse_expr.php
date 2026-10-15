@@ -2,11 +2,11 @@
 
 namespace Moggi\Syntax\Parser;
 
-use Moggi\Syntax\Ast;
-use Moggi\Syntax\Lexer\TokenKind;
-
 use function Moggi\Semantics\Kernel\boolFalseCtor;
 use function Moggi\Semantics\Kernel\boolTrueCtor;
+
+use Moggi\Syntax\Ast;
+use Moggi\Syntax\Lexer\TokenKind;
 
 /**
  * An integer literal, keeping the digits when they do not fit the host `int`:
@@ -30,7 +30,7 @@ function guardClauseBoundary(ParserState $state, int $continueLine): bool
 
 function startsUnaryOperand(ParserState $state, int $pos): bool
 {
-    if ($pos >= count($state->tokens)) {
+    if ($pos >= \count($state->tokens)) {
         return false;
     }
 
@@ -61,7 +61,7 @@ function parseRecordConFields(ParserState $state): array
     expect($state, TokenKind::LBrace);
     $fields = [];
 
-    while (!isAt($state, TokenKind::RBrace)) {
+    while (! isAt($state, TokenKind::RBrace)) {
         $label = expect($state, TokenKind::VarId);
         expectOp($state, '=');
         $expr = parseExprWithWhere($state);
@@ -81,7 +81,7 @@ function parseExprWithWhere(ParserState $state): Ast\AstNode
 {
     $expr = parseInfix($state, 0);
 
-    if (!isAt($state, TokenKind::KwWhere)) {
+    if (! isAt($state, TokenKind::KwWhere)) {
         return $expr;
     }
 
@@ -110,8 +110,8 @@ function requireDeeperThanDecl(ParserState $state, string $keyword): void
 
     throw parseError(
         $state,
-        sprintf(
-            "`%s` must be indented deeper than the enclosing declaration: "
+        \sprintf(
+            '`%s` must be indented deeper than the enclosing declaration: '
             . 'dedenting it to the declaration\'s own column (%d) ends the declaration '
             . 'instead of continuing it',
             $keyword,
@@ -139,7 +139,7 @@ function parseBindings(ParserState $state): array
             return looksLikeLetItem($s) && peek($s)->col >= $blockCol;
         });
 
-        if (!looksLikeLetItem($state)) {
+        if (! looksLikeLetItem($state)) {
             break;
         }
 
@@ -172,7 +172,7 @@ function parseLetItem(ParserState $state): array
             'type' => $type,
             'line' => $nameTok->line,
             'col' => $nameTok->col,
-            'endCol' => $type->endCol !== 0 ? $type->endCol : $nameTok->col + strlen($nameTok->lexeme),
+            'endCol' => $type->endCol !== 0 ? $type->endCol : $nameTok->col + \strlen($nameTok->lexeme),
         ];
     }
 
@@ -180,8 +180,8 @@ function parseLetItem(ParserState $state): array
         $nameTok = expect($state, TokenKind::VarId);
         $params = [];
         while (startsPattern($state)
-            && !isAt($state, TokenKind::Op, 0, '=')
-            && !isAt($state, TokenKind::Pipe)
+            && ! isAt($state, TokenKind::Op, 0, '=')
+            && ! isAt($state, TokenKind::Pipe)
         ) {
             $params[] = parsePatternAtom($state);
         }
@@ -194,7 +194,7 @@ function parseLetItem(ParserState $state): array
             'body' => $body,
             'line' => $nameTok->line,
             'col' => $nameTok->col,
-            'endCol' => $body->endCol !== 0 ? $body->endCol : $nameTok->col + strlen($nameTok->lexeme),
+            'endCol' => $body->endCol !== 0 ? $body->endCol : $nameTok->col + \strlen($nameTok->lexeme),
         ];
     }
 
@@ -226,16 +226,17 @@ function looksLikeLocalSignature(ParserState $state): bool
 
 function looksLikeFunEquation(ParserState $state): bool
 {
-    if (!isAt($state, TokenKind::VarId)) {
+    if (! isAt($state, TokenKind::VarId)) {
         return false;
     }
 
     $saved = $state->pos;
+
     try {
         advance($state);
         while (startsPattern($state)
-            && !isAt($state, TokenKind::Op, 0, '=')
-            && !isAt($state, TokenKind::Pipe)
+            && ! isAt($state, TokenKind::Op, 0, '=')
+            && ! isAt($state, TokenKind::Pipe)
         ) {
             parsePatternAtom($state);
         }
@@ -255,13 +256,15 @@ function looksLikePatternBinding(ParserState $state): bool
         return false;
     }
 
-    if (!startsPattern($state)) {
+    if (! startsPattern($state)) {
         return false;
     }
 
     $saved = $state->pos;
+
     try {
         parsePattern($state);
+
         return isAt($state, TokenKind::Op, 0, '=');
     } catch (ParseError) {
         return false;
@@ -350,7 +353,7 @@ function parseIf(ParserState $state): Ast\AstNode
  */
 function expectIfKeyword(ParserState $state, TokenKind $kind, string $name): Token
 {
-    if (!isAt($state, $kind)) {
+    if (! isAt($state, $kind)) {
         throw unexpected($state, "keyword `{$name}`");
     }
 
@@ -384,15 +387,15 @@ function parseCase(ParserState $state): Ast\AstNode
 
         skipDocCommentsBefore($state, static function (ParserState $s) use ($altCol, $afterSemi): bool {
             return startsPattern($s)
-                && !startsTopLevelDecl($s)
+                && ! startsTopLevelDecl($s)
                 && ($afterSemi || peek($s)->col === $altCol);
         });
 
-        if (!startsPattern($state) || startsTopLevelDecl($state)) {
+        if (! startsPattern($state) || startsTopLevelDecl($state)) {
             break;
         }
 
-        if (!$afterSemi && peek($state)->col !== $altCol) {
+        if (! $afterSemi && peek($state)->col !== $altCol) {
             break;
         }
         $afterSemi = false;
@@ -425,10 +428,10 @@ function parseDo(ParserState $state): Ast\AstNode
         }
 
         skipDocCommentsBefore($state, static function (ParserState $s): bool {
-            return startsDoStmt($s) && !isFollowingTopLevelDecl($s);
+            return startsDoStmt($s) && ! isFollowingTopLevelDecl($s);
         });
 
-        if (!startsDoStmt($state) || isFollowingTopLevelDecl($state)) {
+        if (! startsDoStmt($state) || isFollowingTopLevelDecl($state)) {
             break;
         }
 
@@ -443,7 +446,7 @@ function parseDo(ParserState $state): Ast\AstNode
     $state->inDoBlock = $prevInDo;
     $state->doBlockCol = $prevDoCol;
 
-    $last = $stmts[count($stmts) - 1];
+    $last = $stmts[\count($stmts) - 1];
     if ($last instanceof Ast\DoBind || $last instanceof Ast\DoLet) {
         throw parseError(
             $state,
@@ -509,6 +512,7 @@ function withDoExprStartLine(ParserState $state, callable $body): mixed
 {
     $prev = $state->doExprStartLine;
     $state->doExprStartLine = peek($state)->line;
+
     try {
         return $body();
     } finally {
@@ -534,7 +538,7 @@ function parseDoBindings(ParserState $state): array
             return looksLikeLetItem($s) && peek($s)->col >= $blockCol;
         });
 
-        if (!looksLikeLetItem($state) || isFollowingTopLevelDecl($state)) {
+        if (! looksLikeLetItem($state) || isFollowingTopLevelDecl($state)) {
             break;
         }
 
@@ -577,7 +581,7 @@ function parseDoLetItem(ParserState $state): array
  */
 function reachedDoExprBoundary(ParserState $state): bool
 {
-    if (!$state->inDoBlock || $state->doExprStartLine === null) {
+    if (! $state->inDoBlock || $state->doExprStartLine === null) {
         return false;
     }
 
@@ -612,7 +616,7 @@ function parseAlt(ParserState $state): Ast\Alt
     skipDocComments($state);
 
     if (peek($state)->line === $arrowLine
-        && !isExprStart($state)
+        && ! isExprStart($state)
         && caseAltBoundary($state, $arrowLine)) {
         throw incompleteCaseAltError($state, 'incomplete expression in case alternative');
     }
@@ -646,13 +650,14 @@ function caseAltBoundary(ParserState $state, int $continueLine): bool
 
 function startsCaseAlt(ParserState $state): bool
 {
-    if (!startsPattern($state)) {
+    if (! startsPattern($state)) {
         return false;
     }
 
     $saved = $state->pos;
     $savedInAltPattern = $state->inCaseAltPattern;
     $state->inCaseAltPattern = true;
+
     try {
         parsePattern($state);
 
@@ -660,7 +665,7 @@ function startsCaseAlt(ParserState $state): bool
             return true;
         }
 
-        return isAt($state, TokenKind::Pipe) && !insideBrackets($state);
+        return isAt($state, TokenKind::Pipe) && ! insideBrackets($state);
     } catch (ParseError) {
         return false;
     } finally {
@@ -680,10 +685,10 @@ function parseInfix(ParserState $state, int $minPrec): Ast\AstNode
 
     while (true) {
         if (isAt($state, TokenKind::Op)
-            && !isAt($state, TokenKind::Op, 0, '=')
-            && !isAt($state, TokenKind::Op, 0, '->')
-            && !isAt($state, TokenKind::Op, 0, '::')
-            && !isAt($state, TokenKind::Op, 0, '..')) {
+            && ! isAt($state, TokenKind::Op, 0, '=')
+            && ! isAt($state, TokenKind::Op, 0, '->')
+            && ! isAt($state, TokenKind::Op, 0, '::')
+            && ! isAt($state, TokenKind::Op, 0, '..')) {
             $op = peek($state)->lexeme;
             ['precedence' => $prec, 'assoc' => $assoc] = fixityFor($state, $op);
 
@@ -706,6 +711,7 @@ function parseInfix(ParserState $state, int $minPrec): Ast\AstNode
             $nextMin = $assoc === 'infixr' ? $prec : $prec + 1;
             $right = parseInfix($state, $nextMin);
             $left = spannedRange(new Ast\Infix($op, $left, $right), $left, $right);
+
             continue;
         }
 
@@ -731,6 +737,7 @@ function parseInfix(ParserState $state, int $minPrec): Ast\AstNode
             $nextMin = $assoc === 'infixr' ? $prec : $prec + 1;
             $right = parseInfix($state, $nextMin);
             $left = spannedRange(new Ast\Infix($op, $left, $right), $left, $right);
+
             continue;
         }
 
@@ -781,7 +788,7 @@ function parseApplication(ParserState $state): Ast\AstNode
                 break 2;
             }
 
-            if (!$state->parsingGuardExpr
+            if (! $state->parsingGuardExpr
                 && tokenStartsLine($state)
                 && (startsTopLevelDecl($state) || isFollowingTopLevelDecl($state) || looksLikeParenOperatorMethodDecl($state) || looksLikeParenOperatorTypedDecl($state))) {
                 break 2;
@@ -821,11 +828,13 @@ function parseProjection(ParserState $state): Ast\AstNode
                     throw unexpected($state, 'record field');
                 }
                 $expr = spannedRange(new Ast\QualifiedRef($module, $name), $expr, $expr);
+
                 continue;
             }
 
             $field = expect($state, TokenKind::VarId);
             $expr = spannedRange(new Ast\FieldAccess($expr, $field->lexeme), $expr, $field);
+
             continue;
         }
 
@@ -836,6 +845,7 @@ function parseProjection(ParserState $state): Ast\AstNode
                 throw parseError($state, 'a record update needs at least one field', $brace, 'parse/record-update');
             }
             $expr = spannedRange(new Ast\RecordUpdate($expr, $fields), $brace, $brace);
+
             continue;
         }
 
@@ -861,7 +871,7 @@ function isTightProjectionDot(ParserState $state, Token $dot, Token $field): boo
     }
 
     return $prev->line === $dot->line
-        && $prev->col + strlen($prev->lexeme) === $dot->col
+        && $prev->col + \strlen($prev->lexeme) === $dot->col
         && $field->line === $dot->line
         && $dot->col + 1 === $field->col;
 }
@@ -896,7 +906,7 @@ function isExprStart(ParserState $state): bool
 
 function isArgumentStart(ParserState $state): bool
 {
-    if (!$state->parsingGuardExpr
+    if (! $state->parsingGuardExpr
         && tokenStartsLine($state)
         && (isFollowingTopLevelDecl($state) || looksLikeParenOperatorMethodDecl($state) || looksLikeParenOperatorTypedDecl($state))) {
         return false;
@@ -1084,10 +1094,10 @@ function operatorTokensAt(ParserState $state, int $at): ?array
 function isSectionOperator(string $lexeme, bool $leading): bool
 {
     if ($lexeme === '-') {
-        return !$leading;
+        return ! $leading;
     }
 
-    return !\in_array($lexeme, ['::', '->', '=', '..'], true);
+    return ! \in_array($lexeme, ['::', '->', '=', '..'], true);
 }
 
 /**
@@ -1188,7 +1198,7 @@ function parseParen(ParserState $state): Ast\AstNode
         }
         expect($state, TokenKind::RParen);
 
-        return spannedRange(new Ast\Tuple($elements), $start, $elements[count($elements) - 1]);
+        return spannedRange(new Ast\Tuple($elements), $start, $elements[\count($elements) - 1]);
     }
 
     expect($state, TokenKind::RParen);
@@ -1255,7 +1265,7 @@ function parseList(ParserState $state): Ast\AstNode
 
         expect($state, TokenKind::RBracket);
 
-        return spannedRange(new Ast\ListLit($elements), $start, $elements[count($elements) - 1]);
+        return spannedRange(new Ast\ListLit($elements), $start, $elements[\count($elements) - 1]);
     }
 
     expect($state, TokenKind::RBracket);
@@ -1270,7 +1280,7 @@ function parseListComp(Ast\AstNode $expr, ParserState $state): Ast\AstNode
 {
     $qualifiers = [];
 
-    while (!isAt($state, TokenKind::RBracket)) {
+    while (! isAt($state, TokenKind::RBracket)) {
         if (startsPattern($state) && isAt($state, TokenKind::Op, 1, '<-')) {
             $pattern = parsePattern($state);
             advance($state);
@@ -1281,6 +1291,7 @@ function parseListComp(Ast\AstNode $expr, ParserState $state): Ast\AstNode
 
         if (isAt($state, TokenKind::Comma)) {
             advance($state);
+
             continue;
         }
 

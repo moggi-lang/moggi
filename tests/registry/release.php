@@ -11,7 +11,7 @@
 // rather than faked.
 
 $root = __DIR__;
-while (!is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
@@ -30,17 +30,19 @@ use function Moggi\Registry\writeReleaseRecord;
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
     ++$checks;
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
 $throws = static function (callable $run, string $message) use (&$checks): void {
     ++$checks;
+
     try {
         $run();
     } catch (\RuntimeException) {
         return;
     }
+
     throw new \RuntimeException($message);
 };
 
@@ -51,8 +53,8 @@ $source = ['kind' => 'git', 'url' => 'https://example.test/x.git', 'commit' => \
 
 // --- the record's shape ------------------------------------------------------
 $record = buildReleaseRecord('x', '1.0.0', $source, $blob, [], $descriptor, null);
-$assert(!isset($record['signature']), 'a built record is unsigned');
-$assert(!isset($record['docs']), 'no docs digest means no docs member');
+$assert(! isset($record['signature']), 'a built record is unsigned');
+$assert(! isset($record['docs']), 'no docs digest means no docs member');
 $assert($record['descriptor'] === $descriptor, 'the descriptor travels verbatim');
 $assert(
     buildReleaseRecord('x', '1.0.0', $source, $blob, [], $descriptor, $digest('c'))['docs'] === $digest('c'),
@@ -107,10 +109,10 @@ $throws(static fn () => readReleaseRecord($tmp . '/missing.json'), 'an unreadabl
 
 // --- sign and verify with a throwaway key, if the CLI is here -------------------
 $binary = \getenv('MOGGI_SCHNORR');
-if (!\is_string($binary) || $binary === '') {
+if (! \is_string($binary) || $binary === '') {
     $binary = $root . '/schnorr/schnorr';
 }
-if (!\is_file($binary) || !\is_executable($binary)) {
+if (! \is_file($binary) || ! \is_executable($binary)) {
     echo "  (skipped the signing checks: no schnorr CLI at {$binary})\n";
 } else {
     \putenv('MOGGI_SCHNORR=' . $binary);
@@ -120,7 +122,7 @@ if (!\is_file($binary) || !\is_executable($binary)) {
             [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
             $pipes,
         );
-        if (!\is_resource($process)) {
+        if (! \is_resource($process)) {
             throw new \RuntimeException("cannot run {$binary}");
         }
         if ($stdin !== null) {
@@ -153,7 +155,7 @@ if (!\is_file($binary) || !\is_executable($binary)) {
 
     $tampered = $signed;
     $tampered['blob'] = $digest('0');
-    $assert(!verifyRelease('x', '1.0.0', $tampered, [$npub])['ok'], 'tampering the blob breaks the signature');
+    $assert(! verifyRelease('x', '1.0.0', $tampered, [$npub])['ok'], 'tampering the blob breaks the signature');
 
     // --- what `publish --signed` checks --------------------------------------
     $docsDigest = $digest('c');

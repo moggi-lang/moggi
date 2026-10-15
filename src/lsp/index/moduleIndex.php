@@ -2,18 +2,21 @@
 
 namespace Moggi\LSP\Index;
 
-use Moggi\Syntax\Ast;
-use Moggi\Syntax\Lexer\TokenKind;
-use Moggi\Syntax\Parser\Token;
-
 use function Moggi\Docs\schemeToString;
 use function Moggi\Docs\surfaceTypeSignature;
 use function Moggi\LSP\Protocol\compilerPosToLsp;
+
 use function Moggi\LSP\Protocol\nodeToLspRange;
 use function Moggi\Modules\resolvedSymbol;
+
+use Moggi\Syntax\Ast;
+
 use function Moggi\Syntax\Lexer\lex;
 
-final class ModuleIndex
+use Moggi\Syntax\Lexer\TokenKind;
+use Moggi\Syntax\Parser\Token;
+
+final class moduleIndex
 {
     /** @var array<string, array{path: string, uri: string, module: string, decls: list<DeclInfo>, externalFns: array<string, string>}> */
     public array $modules = [];
@@ -81,7 +84,7 @@ function buildDeclsFromProgram(string $uri, string $source, Ast\Program $program
                 'end' => compilerPosToLsp(
                     $source,
                     $item->line ?: 1,
-                    ($item->col ?: 1) + max(1, strlen($item->name)),
+                    ($item->col ?: 1) + \max(1, \strlen($item->name)),
                 ),
             ];
             $type = $item->type !== null ? surfaceTypeSignature($item->type) : null;
@@ -178,6 +181,7 @@ function buildDeclsFromProgram(string $uri, string $source, Ast\Program $program
         }
     }
     fixDeclRangesByTokenScan($uri, $source, $decls);
+
     return $decls;
 }
 /**
@@ -187,7 +191,7 @@ function buildDeclsFromProgram(string $uri, string $source, Ast\Program $program
 function indexTypeRelations(ModuleIndex $modules, string $uri, string $source, Ast\Program $program): void
 {
     foreach ($modules->classInstances as $cls => $list) {
-        $modules->classInstances[$cls] = array_values(array_filter(
+        $modules->classInstances[$cls] = \array_values(\array_filter(
             $list,
             static fn (array $e): bool => ($e['uri'] ?? '') !== $uri,
         ));
@@ -196,7 +200,7 @@ function indexTypeRelations(ModuleIndex $modules, string $uri, string $source, A
         }
     }
     foreach ($modules->classMethodDefs as $method => $list) {
-        $modules->classMethodDefs[$method] = array_values(array_filter(
+        $modules->classMethodDefs[$method] = \array_values(\array_filter(
             $list,
             static fn (array $e): bool => ($e['uri'] ?? '') !== $uri,
         ));
@@ -261,7 +265,7 @@ function scanClassMethodDefs(string $uri, string $source): array
     }
 
     $defs = [];
-    $count = count($tokens);
+    $count = \count($tokens);
     $block = null;
     $owner = null;
     $isNameTok = static fn (Token $t): bool => $t->kind === TokenKind::VarId || $t->kind === TokenKind::ConId;
@@ -277,20 +281,24 @@ function scanClassMethodDefs(string $uri, string $source): array
                     $block = null;
                     $owner = null;
                     $i = $j - 1;
+
                     continue 2;
                 }
                 if ($h->kind === TokenKind::KwWhere) {
                     $i = $j;
+
                     break;
                 }
                 if ($isNameTok($h)) {
                     $owner ??= $h->lexeme;
+
                     continue;
                 }
                 if ($h->kind === TokenKind::Op && ($h->lexeme === '=>' || $h->lexeme === '.')) {
                     $owner = null;
                 }
             }
+
             continue;
         }
         if ($block !== null && $owner !== null && $tok->col > 1 && $isNameTok($tok)) {
@@ -309,6 +317,7 @@ function scanClassMethodDefs(string $uri, string $source): array
             $owner = null;
         }
     }
+
     return $defs;
 }
 
@@ -321,7 +330,9 @@ function typeHeadName(object $t): ?string
         if (Ast\isInstanceHeadMarker($t)) {
             return $t->args === [] ? null : typeHeadName($t->args[0]);
         }
+
         return typeHeadName($t->con);
     }
+
     return null;
 }

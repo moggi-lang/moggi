@@ -3,11 +3,13 @@
 namespace Moggi\Optimize\IoSpecialize;
 
 use Moggi\IR;
-use Moggi\Syntax\Ast;
 
 use function Moggi\IR\Visit\walkBlock;
+
 use function Moggi\Optimize\GlobalPass\usedInOperand;
 use function Moggi\Semantics\IoBoundary\functionReturnsIo as ioBoundaryFunctionReturnsIo;
+
+use Moggi\Syntax\Ast;
 
 function foldIoActionBoxes(IR\Module $module): IR\Module
 {
@@ -48,7 +50,7 @@ function foldIoActionBoxesInItems(array $items): array
     $out = [];
     foreach ($items as $item) {
         if ($item instanceof IR\IoAssignAction) {
-            if (!isset($referenced[$item->dest])) {
+            if (! isset($referenced[$item->dest])) {
                 continue;
             }
         }
@@ -56,7 +58,8 @@ function foldIoActionBoxesInItems(array $items): array
         if ($item instanceof IR\IoRun) {
             $inlined = inlineIoRun($item, $assignByTemp);
             if ($inlined !== null) {
-                array_push($out, ...$inlined);
+                \array_push($out, ...$inlined);
+
                 continue;
             }
         }
@@ -80,18 +83,18 @@ function foldIoActionBoxesInItems(array $items): array
 function inlineIoRun(IR\IoRun $stmt, array $assignByTemp): ?array
 {
     $action = $stmt->action;
-    if (!$action instanceof IR\Temp) {
+    if (! $action instanceof IR\Temp) {
         return null;
     }
 
     $assign = $assignByTemp[$action->id] ?? null;
-    if ($assign === null || !$assign->result instanceof IR\Temp) {
+    if ($assign === null || ! $assign->result instanceof IR\Temp) {
         return null;
     }
 
     $body = $assign->body->items;
-    $last = $body === [] ? null : $body[count($body) - 1];
-    if (!$last instanceof IR\Assign || $last->dest !== $assign->result->id) {
+    $last = $body === [] ? null : $body[\count($body) - 1];
+    if (! $last instanceof IR\Assign || $last->dest !== $assign->result->id) {
         return null;
     }
 

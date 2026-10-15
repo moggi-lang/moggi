@@ -9,7 +9,7 @@ function suggestNames(string $unknown, array $candidates, int $limit = 4): array
         return [];
     }
 
-    $unknownLower = strtolower($unknown);
+    $unknownLower = \strtolower($unknown);
     $scored = [];
 
     foreach ($candidates as $candidate) {
@@ -17,32 +17,34 @@ function suggestNames(string $unknown, array $candidates, int $limit = 4): array
             continue;
         }
 
-        $candidateLower = strtolower($candidate);
+        $candidateLower = \strtolower($candidate);
         if ($candidateLower === $unknownLower) {
             $scored[] = ['name' => $candidate, 'score' => 0];
+
             continue;
         }
 
-        $maxDistance = max(2, (int) floor(strlen($unknown) / 3));
-        $distance = levenshtein($unknownLower, $candidateLower);
+        $maxDistance = \max(2, (int) \floor(\strlen($unknown) / 3));
+        $distance = \levenshtein($unknownLower, $candidateLower);
         if ($distance > $maxDistance) {
-            if (str_starts_with($candidateLower, $unknownLower) || str_starts_with($unknownLower, $candidateLower)) {
+            if (\str_starts_with($candidateLower, $unknownLower) || \str_starts_with($unknownLower, $candidateLower)) {
                 $scored[] = ['name' => $candidate, 'score' => $maxDistance + 1];
             }
+
             continue;
         }
 
         $scored[] = ['name' => $candidate, 'score' => $distance];
     }
 
-    usort($scored, static fn (array $a, array $b): int => $a['score'] <=> $b['score'] ?: strcmp($a['name'], $b['name']));
+    \usort($scored, static fn (array $a, array $b): int => $a['score'] <=> $b['score'] ?: \strcmp($a['name'], $b['name']));
 
     $names = [];
     foreach ($scored as $row) {
-        if (!\in_array($row['name'], $names, true)) {
+        if (! \in_array($row['name'], $names, true)) {
             $names[] = $row['name'];
         }
-        if (count($names) >= $limit) {
+        if (\count($names) >= $limit) {
             break;
         }
     }
@@ -58,7 +60,7 @@ function formatDidYouMean(string $unknown, array $suggestions): string
     }
 
     $lines = \array_map(static fn (string $name): string => "    {$name}", $suggestions);
-    $hint = count($suggestions) === 1 ? 'Did you mean this?' : 'Did you mean one of these?';
+    $hint = \count($suggestions) === 1 ? 'Did you mean this?' : 'Did you mean one of these?';
 
     return "\n\n{$hint}\n" . \implode("\n", $lines);
 }
@@ -66,13 +68,13 @@ function formatDidYouMean(string $unknown, array $suggestions): string
 /** @param list<string> $alternatives */
 function formatKnownAlternatives(string $message, array $alternatives): string
 {
-    $alternatives = array_values(array_unique($alternatives));
+    $alternatives = \array_values(\array_unique($alternatives));
     if ($alternatives === []) {
         return $message;
     }
 
     $lines = \array_map(static fn (string $name): string => "    {$name}", $alternatives);
-    $hint = count($alternatives) === 1 ? 'Did you mean this?' : 'Did you mean one of these?';
+    $hint = \count($alternatives) === 1 ? 'Did you mean this?' : 'Did you mean one of these?';
 
     return "{$message}\n\n{$hint}\n" . \implode("\n", $lines);
 }

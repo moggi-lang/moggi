@@ -8,7 +8,7 @@
 // is written to a temp directory and named through `MOGGI_SCHNORR`.
 
 $root = __DIR__;
-while (!is_file($root . '/src/registry/names.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/registry/names.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 // The whole compiler, not just the registry files: a descriptor names backends,
@@ -17,12 +17,15 @@ while (!is_file($root . '/src/registry/names.php') && \dirname($root) !== $root)
 require $root . '/src/compiler.php';
 require $root . '/tests/suite/support/workspace.php';
 
-use Moggi\Registry\Catalog;
-use Moggi\Registry\FetchLog;
-
 use function Moggi\Registry\assertPackageName;
+
+use Moggi\Registry\Catalog;
+
 use function Moggi\Registry\descriptorProblems;
 use function Moggi\Registry\downloadPath;
+
+use Moggi\Registry\FetchLog;
+
 use function Moggi\Registry\hostToolCsproj;
 use function Moggi\Registry\installDir;
 use function Moggi\Registry\isPackageName;
@@ -37,21 +40,23 @@ use function Moggi\Registry\writeMessageHex;
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
     ++$checks;
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
 $refuses = static function (callable $call, string $needle, string $message) use (&$checks): void {
     ++$checks;
+
     try {
         $call();
     } catch (\RuntimeException $error) {
-        if (!\str_contains($error->getMessage(), $needle)) {
+        if (! \str_contains($error->getMessage(), $needle)) {
             throw new \RuntimeException("{$message}: refused with an unexpected message: {$error->getMessage()}");
         }
 
         return;
     }
+
     throw new \RuntimeException("{$message}: was not refused");
 };
 /** @param list<string> $problems */
@@ -84,7 +89,7 @@ try {
         $assert(isPackageName($good), "`{$good}` must be a package name");
     }
     foreach (['', '.', '..', 'A', 'Json', '-a', 'a-', '_a', 'a_', 'a/', '/a', 'a b', 'a/b', "a\u{00e9}", '.a', 'a.', 'a\\b'] as $bad) {
-        $assert(!isPackageName($bad), \var_export($bad, true) . ' must not be a package name');
+        $assert(! isPackageName($bad), \var_export($bad, true) . ' must not be a package name');
     }
     $refuses(static fn () => assertPackageName('../../etc', 'test'), 'not a package name', 'a climbing name');
 
@@ -139,7 +144,7 @@ try {
     $firstLock = \Moggi\Registry\renderLock(\Moggi\Registry\lockDocument($lockInput));
     $secondLock = \Moggi\Registry\renderLock(\Moggi\Registry\lockDocument($lockInput));
     $assert($firstLock === $secondLock, 'two locks with the same content must be byte-identical');
-    $assert(!\str_contains($firstLock, 'generated'), 'the lock must not carry a timestamp: ' . $firstLock);
+    $assert(! \str_contains($firstLock, 'generated'), 'the lock must not carry a timestamp: ' . $firstLock);
 
     // --- a written file is whole or absent ----------------------------------
     $atomicPath = $work . '/atomic.txt';
@@ -252,7 +257,7 @@ try {
         \putenv('PATH=' . $pathDir);
         $found = schnorrBinary();
         $assert(
-            $found === null || !\str_starts_with((string) $found, $pathDir),
+            $found === null || ! \str_starts_with((string) $found, $pathDir),
             'a `schnorr` on PATH must not be used: ' . \var_export($found, true),
         );
         \putenv('PATH=' . $savedPath);
@@ -302,12 +307,12 @@ try {
     $paths = \array_map(static fn (array $entry): string => $entry['path'], \Moggi\Registry\directoryEntries($ignored, [], $patterns));
     $assert(\in_array('keep.mog', $paths, true), 'an unignored file must be packed');
     $assert(\in_array('src/keep.mog', $paths, true), 'an unignored nested file must be packed');
-    $assert(!\in_array('drop.tmp', $paths, true), 'a `*.tmp` file must be ignored');
-    $assert(!\in_array('build/out.o', $paths, true), 'a directory pattern must ignore its contents');
-    $assert(!\in_array('src/generated', $paths, true), 'a path pattern must ignore that path');
-    $assert(!\in_array('.moggiignore', $paths, true), '`.moggiignore` itself must not be packed');
+    $assert(! \in_array('drop.tmp', $paths, true), 'a `*.tmp` file must be ignored');
+    $assert(! \in_array('build/out.o', $paths, true), 'a directory pattern must ignore its contents');
+    $assert(! \in_array('src/generated', $paths, true), 'a path pattern must ignore that path');
+    $assert(! \in_array('.moggiignore', $paths, true), '`.moggiignore` itself must not be packed');
     $assert(\Moggi\Registry\isIgnoredPath('a/b.tmp', ['*.tmp']), 'a bare glob matches a basename at any depth');
-    $assert(!\Moggi\Registry\isIgnoredPath('a/b.mog', ['*.tmp']), 'a non-matching path is kept');
+    $assert(! \Moggi\Registry\isIgnoredPath('a/b.mog', ['*.tmp']), 'a non-matching path is kept');
     $assert(\Moggi\Registry\isIgnoredPath('build/x/y', ['build/']), 'a directory pattern matches its descendants');
 
     // --- install is atomic, and a leftover is replaced, not merged -----------
@@ -345,7 +350,7 @@ try {
     \mkdir($leftover, 0777, true);
     \file_put_contents($leftover . '/stale.mog', 'stale');
     $assert(\Moggi\Registry\unpackArchive($archive, $leftover) === null, 'a leftover destination must be replaced');
-    $assert(!\file_exists($leftover . '/stale.mog'), 'a leftover file must not survive the install');
+    $assert(! \file_exists($leftover . '/stale.mog'), 'a leftover file must not survive the install');
     $assert(\is_file($leftover . '/.unpacked'), 'the replacement must be marked complete');
 
     // No staging directory is left behind after a successful rename.
@@ -402,8 +407,8 @@ try {
     \file_put_contents($toolDir . '/dotnet/Thing.dll', 'dll-bytes');
 
     $phpMap = \Moggi\Registry\thirdPartyMap('php', $toolDir);
-    $assert(!isset($phpMap['vendor/autoload.php']), 'the generated autoloader must not be pinned');
-    $assert(!isset($phpMap['vendor/composer/autoload_real.php']), 'the generated autoloader must not be pinned');
+    $assert(! isset($phpMap['vendor/autoload.php']), 'the generated autoloader must not be pinned');
+    $assert(! isset($phpMap['vendor/composer/autoload_real.php']), 'the generated autoloader must not be pinned');
     $assert(
         isset($phpMap['vendor/acme/thing/src/Thing.php']),
         'an installed package file must be pinned: ' . \var_export(\array_keys($phpMap), true),

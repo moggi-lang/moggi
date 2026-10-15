@@ -2,21 +2,12 @@
 
 namespace Moggi\Repl;
 
-use Moggi\Cache;
-use Moggi\Modules;
-use Moggi\Pipeline\CompilePurpose;
-use Moggi\Semantics\Kinds;
-use Moggi\Semantics\Registry;
-use Moggi\Semantics\TypeExpr\Scheme;
-use Moggi\Semantics\Types;
-use Moggi\Semantics\Types\TypeError;
-use Moggi\Syntax\Ast;
-use Moggi\Syntax\Lexer\LexError;
-use Moggi\Syntax\Parser\ParseError;
-use Moggi\Syntax\Parser\ReplFragment;
-
 use function Moggi\Backend\backendById;
 use function Moggi\Backend\setCompileBackend;
+
+use Moggi\Cache;
+use Moggi\Modules;
+
 use function Moggi\Modules\buildImportContext;
 use function Moggi\Modules\computeEffectiveFixityByModule;
 use function Moggi\Modules\indexProjectInstances;
@@ -24,14 +15,33 @@ use function Moggi\Modules\injectPreludeImport;
 use function Moggi\Modules\moduleFacadeExtraTypes;
 use function Moggi\Modules\moduleNameToNamespace;
 use function Moggi\Paths\moduleNameToPath;
+
+use Moggi\Pipeline\CompilePurpose;
+
 use function Moggi\Semantics\Effects\checkAndNormalize;
+
+use Moggi\Semantics\Kinds;
+use Moggi\Semantics\Registry;
+use Moggi\Semantics\TypeExpr\Scheme;
+use Moggi\Semantics\Types;
+use Moggi\Semantics\Types\TypeError;
+use Moggi\Syntax\Ast;
+
 use function Moggi\Syntax\Lexer\lex;
+
+use Moggi\Syntax\Lexer\LexError;
+
 use function Moggi\Syntax\Parser\importedFixityForImports;
 use function Moggi\Syntax\Parser\mergeFixity;
 use function Moggi\Syntax\Parser\parse;
+
+use Moggi\Syntax\Parser\ParseError;
+
 use function Moggi\Syntax\Parser\parseModuleHeader;
 use function Moggi\Syntax\Parser\parseReplFragment;
 use function Moggi\Syntax\Parser\parseReplType;
+
+use Moggi\Syntax\Parser\ReplFragment;
 
 /** stdout marker line before a Show-encoded IO expression result */
 const REPL_VAL_MARK = '__moggi_repl_val__';
@@ -53,11 +63,11 @@ function interactiveSource(State $state, string $extra = ''): string
         $lines[] = '';
     }
     if ($extra !== '') {
-        $lines[] = rtrim($extra);
+        $lines[] = \rtrim($extra);
         $lines[] = '';
     }
 
-    return implode("\n", $lines);
+    return \implode("\n", $lines);
 }
 
 function writeInteractive(State $state, string $extra = ''): string
@@ -69,11 +79,11 @@ function writeInteractive(State $state, string $extra = ''): string
 function writeInteractiveSource(State $state, string $source): string
 {
     $path = $state->interactivePath();
-    $dir = dirname($path);
-    if (!is_dir($dir)) {
-        mkdir($dir, 0777, true);
+    $dir = \dirname($path);
+    if (! \is_dir($dir)) {
+        \mkdir($dir, 0777, true);
     }
-    if (file_put_contents($path, $source) === false) {
+    if (\file_put_contents($path, $source) === false) {
         throw new \RuntimeException("cannot write {$path}");
     }
 
@@ -89,15 +99,16 @@ function replSeedFiles(State $state): array
 {
     $seed = [];
     foreach ($state->libDirs as $libDir) {
-        $prelude = rtrim($libDir, '/\\') . '/Prelude.mog';
-        if (is_file($prelude)) {
+        $prelude = \rtrim($libDir, '/\\') . '/Prelude.mog';
+        if (\is_file($prelude)) {
             $seed[] = $prelude;
+
             break;
         }
     }
     if ($seed === []) {
         $bundled = Modules\bundledStdlibLibPath();
-        if ($bundled !== null && is_file($bundled . '/Prelude.mog')) {
+        if ($bundled !== null && \is_file($bundled . '/Prelude.mog')) {
             $seed[] = $bundled . '/Prelude.mog';
         }
     }
@@ -114,10 +125,10 @@ function replSeedFiles(State $state): array
  */
 function ensureBasePrepared(State $state): Modules\PreparedProject
 {
-    $fp = hash('sha256', implode('|', [
+    $fp = \hash('sha256', \implode('|', [
         'backend=' . $state->backend,
-        'libs=' . implode(',', $state->libDirs),
-        'loaded=' . implode(',', $state->loadedPaths),
+        'libs=' . \implode(',', $state->libDirs),
+        'loaded=' . \implode(',', $state->loadedPaths),
     ]));
     if ($state->basePreparedFp === $fp && $state->basePrepared instanceof Modules\PreparedProject) {
         return $state->basePrepared;
@@ -146,14 +157,14 @@ function ensureBasePrepared(State $state): Modules\PreparedProject
  */
 function interactiveFingerprint(State $state, string $extra, bool $normalizeIo): string
 {
-    return hash('sha256', implode("\x1f", [
+    return \hash('sha256', \implode("\x1f", [
         'backend=' . $state->backend,
         'normalizeIo=' . ($normalizeIo ? '1' : '0'),
         'module=' . $state->moduleName,
-        'libs=' . implode("\x1e", $state->libDirs),
-        'loaded=' . implode("\x1e", $state->loadedPaths),
-        'imports=' . implode("\x1e", $state->importLines),
-        'decls=' . implode("\x1e", $state->declSources),
+        'libs=' . \implode("\x1e", $state->libDirs),
+        'loaded=' . \implode("\x1e", $state->loadedPaths),
+        'imports=' . \implode("\x1e", $state->importLines),
+        'decls=' . \implode("\x1e", $state->declSources),
         'extra=' . $extra,
     ]));
 }
@@ -172,7 +183,7 @@ function adoptInteractiveCtx(State $state, array $ctx): array
 function rememberInteractiveCtx(State $state, string $fingerprint, array $ctx): void
 {
     $cache = [$fingerprint => $ctx] + $state->interactiveCache;
-    if (count($cache) > 2) {
+    if (\count($cache) > 2) {
         $cache = \array_slice($cache, 0, 2, true);
     }
     $state->interactiveCache = $cache;
@@ -205,7 +216,7 @@ function prepareInteractive(State $state, string $extra = '', bool $normalizeIo 
 
     $tokens = lex($source, $path);
     $header = parseModuleHeader($tokens, $source, $path);
-    $available = array_fill_keys(array_keys($base->units), true);
+    $available = \array_fill_keys(\array_keys($base->units), true);
     $imports = injectPreludeImport(
         $header['imports'],
         $path,
@@ -243,6 +254,7 @@ function prepareInteractive(State $state, string $extra = '', bool $normalizeIo 
     $sampleCtx = [];
     foreach ($base->importContexts as $ctx) {
         $sampleCtx = $ctx;
+
         break;
     }
     $projectClasses = $sampleCtx['classes'] ?? [];
@@ -311,9 +323,9 @@ function prepareInteractive(State $state, string $extra = '', bool $normalizeIo 
 
 function dropItBindings(State $state): void
 {
-    $state->declSources = array_values(array_filter(
+    $state->declSources = \array_values(\array_filter(
         $state->declSources,
-        static fn (string $d): bool => !preg_match('/^it\b/', ltrim($d)),
+        static fn (string $d): bool => ! \preg_match('/^it\b/', \ltrim($d)),
     ));
 }
 
@@ -325,10 +337,12 @@ function commitDeclaration(State $state, string $declSource): string
     }
 
     $state->declSources[] = $declSource;
+
     try {
         prepareInteractive($state);
     } catch (\Throwable $e) {
-        array_pop($state->declSources);
+        \array_pop($state->declSources);
+
         throw $e;
     }
 
@@ -362,7 +376,7 @@ function bindingNameExists(State $state, string $name): bool
 /** Leading identifier of a declaration source line, if any. */
 function leadingBindingName(string $source): ?string
 {
-    if (preg_match('/^([A-Za-z_][A-Za-z0-9_\']*)\b/', ltrim($source), $m) === 1) {
+    if (\preg_match('/^([A-Za-z_][A-Za-z0-9_\']*)\b/', \ltrim($source), $m) === 1) {
         return $m[1];
     }
 
@@ -376,7 +390,7 @@ function leadingBindingName(string $source): ?string
  */
 function declSourceName(string $source): ?string
 {
-    if (preg_match('/^\s*(?:data|newtype|type|class)\s+([A-Z][A-Za-z0-9_\']*)/', $source, $m) === 1) {
+    if (\preg_match('/^\s*(?:data|newtype|type|class)\s+([A-Z][A-Za-z0-9_\']*)/', $source, $m) === 1) {
         return $m[1];
     }
 
@@ -412,20 +426,22 @@ function evaluateExpression(State $state, string $exprSource): string
         $out = runEvalEntry($state, $evalName);
         $state->declSources[] = 'it = (' . $exprSource . ')';
 
-        return rtrim($out);
+        return \rtrim($out);
     } catch (TypeError $pureErr) {
         $ioUnitExtra = "{$evalName} :: IO ()\n{$evalName} = ({$exprSource})\n";
+
         try {
             prepareInteractive($state, $ioUnitExtra);
             $out = runEvalEntry($state, $evalName);
 
-            return rtrim($out);
+            return \rtrim($out);
         } catch (TypeError) {
             $ioValExtra = "{$evalName} :: IO ()\n"
                 . "{$evalName} = do\n"
                 . "  __moggi_it <- ({$exprSource})\n"
                 . '  putStrLn "' . REPL_VAL_MARK . "\"\n"
                 . "  putStrLn (show __moggi_it)\n";
+
             try {
                 prepareInteractive($state, $ioValExtra);
                 $raw = runEvalEntry($state, $evalName);
@@ -437,13 +453,13 @@ function evaluateExpression(State $state, string $exprSource): string
 
                 $display = $split['display'];
                 if ($split['val'] !== null) {
-                    if ($display !== '' && !str_ends_with($display, "\n")) {
+                    if ($display !== '' && ! \str_ends_with($display, "\n")) {
                         $display .= "\n";
                     }
                     $display .= $split['val'] . "\n";
                 }
 
-                return rtrim($display);
+                return \rtrim($display);
             } catch (TypeError) {
                 throw $pureErr;
             }
@@ -459,7 +475,7 @@ function evaluateExpression(State $state, string $exprSource): string
  */
 function evaluateStatements(State $state, string $source, ?Ast\AstNode $node): string
 {
-    if (!$node instanceof Ast\DoExpr) {
+    if (! $node instanceof Ast\DoExpr) {
         throw new TypeError('expected statement block', '<interactive>', $source);
     }
 
@@ -494,7 +510,7 @@ function evaluateStatements(State $state, string $source, ?Ast\AstNode $node): s
     $split = splitReplProtocol($raw);
     commitShownBindings($state, $split['binds']);
 
-    return rtrim($split['display']);
+    return \rtrim($split['display']);
 }
 
 /**
@@ -514,7 +530,7 @@ function collectReplStmtBindNames(array $stmts): array
         }
     }
 
-    return array_values(array_unique($names));
+    return \array_values(\array_unique($names));
 }
 
 /**
@@ -529,13 +545,13 @@ function appendPatVarNames(Ast\AstNode $pattern, array &$names): void
 
 function indentReplBlock(string $source): string
 {
-    $lines = preg_split('/\R/', rtrim($source)) ?: [''];
+    $lines = \preg_split('/\R/', \rtrim($source)) ?: [''];
     $out = [];
     foreach ($lines as $line) {
         $out[] = '  ' . $line;
     }
 
-    return implode("\n", $out);
+    return \implode("\n", $out);
 }
 
 /** Wrap a fragment as a binding RHS (`do …` for stmts, `(…)` for exprs). */
@@ -553,34 +569,36 @@ function replFragmentBindingRhs(ReplFragment $frag): string
  */
 function splitReplProtocol(string $raw): array
 {
-    $lines = preg_split('/\R/', $raw) ?: [];
-    if ($lines !== [] && $lines[count($lines) - 1] === '' && str_ends_with($raw, "\n")) {
-        array_pop($lines);
+    $lines = \preg_split('/\R/', $raw) ?: [];
+    if ($lines !== [] && $lines[\count($lines) - 1] === '' && \str_ends_with($raw, "\n")) {
+        \array_pop($lines);
     }
 
     $display = [];
     $binds = [];
     $val = null;
-    $n = count($lines);
+    $n = \count($lines);
     for ($i = 0; $i < $n; ++$i) {
         $line = $lines[$i];
         if ($line === REPL_VAL_MARK) {
             $val = $lines[$i + 1] ?? '';
             ++$i;
+
             continue;
         }
-        if (str_starts_with($line, REPL_BIND_PREFIX)) {
-            $name = substr($line, strlen(REPL_BIND_PREFIX));
+        if (\str_starts_with($line, REPL_BIND_PREFIX)) {
+            $name = \substr($line, \strlen(REPL_BIND_PREFIX));
             if ($name !== '') {
                 $binds[$name] = $lines[$i + 1] ?? '';
             }
             ++$i;
+
             continue;
         }
         $display[] = $line;
     }
 
-    $displayStr = $display === [] ? '' : (implode("\n", $display) . "\n");
+    $displayStr = $display === [] ? '' : (\implode("\n", $display) . "\n");
 
     return ['display' => $displayStr, 'val' => $val, 'binds' => $binds];
 }
@@ -604,9 +622,10 @@ function commitShownBindings(State $state, array $binds): void
     foreach ($binds as $name => $shown) {
         if (bindingNameExists($state, $name)) {
             while ($added > 0) {
-                array_pop($state->declSources);
+                \array_pop($state->declSources);
                 --$added;
             }
+
             throw new TypeError(
                 "duplicate binding `{$name}`",
                 '<interactive>',
@@ -621,10 +640,11 @@ function commitShownBindings(State $state, array $binds): void
         prepareInteractive($state);
     } catch (\Throwable $e) {
         while ($added > 0) {
-            array_pop($state->declSources);
+            \array_pop($state->declSources);
             --$added;
         }
         prepareInteractive($state);
+
         throw $e;
     }
 }
@@ -690,9 +710,9 @@ function typeOfInput(State $state, string $source): string
         return $line;
     }
 
-    $trimmed = trim($frag->source);
+    $trimmed = \trim($frag->source);
     if ($frag->kind !== ReplFragment::KIND_STMT
-        && preg_match('/^([A-Za-z_][A-Za-z0-9_\']*)$/', $trimmed, $m) === 1) {
+        && \preg_match('/^([A-Za-z_][A-Za-z0-9_\']*)$/', $trimmed, $m) === 1) {
         $ctx = prepareInteractive($state);
         $schemeLine = schemeTypeLine($ctx, $m[1]);
         if ($schemeLine !== null) {
@@ -709,7 +729,7 @@ function typeOfInput(State $state, string $source): string
         throw new TypeError('could not infer type', '<interactive>', $source);
     }
 
-    return preg_replace('/^__repl_ty :: /', '', $line) ?? $line;
+    return \preg_replace('/^__repl_ty :: /', '', $line) ?? $line;
 }
 
 /**
@@ -719,7 +739,7 @@ function schemeTypeLine(array $ctx, string $name): ?string
 {
     $scheme = $ctx['typedProgram']->exportedInferredSchemes[$name]
         ?? ($ctx['importContext']['env'][$name] ?? null);
-    if (!$scheme instanceof Scheme) {
+    if (! $scheme instanceof Scheme) {
         return null;
     }
 
@@ -741,7 +761,7 @@ function kindOfInput(State $state, string $source): string
 
     $typeLine = typeOfInput($state, $source);
     $typeOnly = $typeLine;
-    if (preg_match('/^.*? :: (.+)$/s', $typeLine, $m) === 1) {
+    if (\preg_match('/^.*? :: (.+)$/s', $typeLine, $m) === 1) {
         $typeOnly = $m[1];
     }
 
@@ -749,7 +769,7 @@ function kindOfInput(State $state, string $source): string
         return kindOfParsedType($state, $typeOnly);
     } catch (LexError|ParseError $e) {
         throw new TypeError(
-            'not a type; use :type for expressions (`' . trim($source) . '` has type `' . $typeLine . '`)',
+            'not a type; use :type for expressions (`' . \trim($source) . '` has type `' . $typeLine . '`)',
             '<interactive>',
             $source,
         );
@@ -780,7 +800,7 @@ function infoForName(State $state, string $name): string
     foreach ($ctx['typedProgram']->items as $item) {
         if ($item instanceof Ast\FunctionDecl && $item->name === $name) {
             $lines[] = 'binding in module ' . $state->moduleName;
-            $lines[] = 'arity ' . count($item->params);
+            $lines[] = 'arity ' . \count($item->params);
         }
         if ($item instanceof Ast\DataDecl && $item->name === $name) {
             $lines[] = 'data ' . $item->name;
@@ -793,7 +813,7 @@ function infoForName(State $state, string $name): string
         return "name `{$name}` not found in the interactive environment\n";
     }
 
-    return implode("\n", $lines) . "\n";
+    return \implode("\n", $lines) . "\n";
 }
 
 function browseBindings(State $state): string
@@ -801,7 +821,7 @@ function browseBindings(State $state): string
     $ctx = prepareInteractive($state);
     $names = [];
     foreach ($ctx['typedProgram']->items as $item) {
-        if ($item instanceof Ast\FunctionDecl && !$item->signatureOnly && !$item->instanceMethod) {
+        if ($item instanceof Ast\FunctionDecl && ! $item->signatureOnly && ! $item->instanceMethod) {
             if (isShadowedInteractiveName($item->name)) {
                 continue;
             }
@@ -811,12 +831,12 @@ function browseBindings(State $state): string
             $names[$item->name] = true;
         }
     }
-    ksort($names);
+    \ksort($names);
     if ($names === []) {
         return "(no bindings in {$state->moduleName})\n";
     }
     $out = '';
-    foreach (array_keys($names) as $name) {
+    foreach (\array_keys($names) as $name) {
         $line = bindingTypeLine($ctx['typedProgram'], $name);
         $out .= ($line ?? $name) . "\n";
     }
@@ -849,7 +869,7 @@ function clearSession(State $state): void
 /** Remove the session scratch tree (generated modules, dependencies, live trees). */
 function destroySession(State $state): void
 {
-    if ($state->sessionDir !== '' && is_dir($state->sessionDir)) {
+    if ($state->sessionDir !== '' && \is_dir($state->sessionDir)) {
         Cache\removeTree($state->sessionDir);
     }
 }
@@ -859,8 +879,8 @@ function destroySession(State $state): void
  */
 function createSession(string $backend, array $libDirs): State
 {
-    $dir = sys_get_temp_dir() . '/moggi-repl-' . getmypid() . '-' . bin2hex(random_bytes(4));
-    if (!mkdir($dir, 0777, true) && !is_dir($dir)) {
+    $dir = \sys_get_temp_dir() . '/moggi-repl-' . \getmypid() . '-' . \bin2hex(\random_bytes(4));
+    if (! \mkdir($dir, 0777, true) && ! \is_dir($dir)) {
         throw new \RuntimeException("cannot create session dir {$dir}");
     }
     $state = new State(
@@ -876,11 +896,11 @@ function createSession(string $backend, array $libDirs): State
 
 function loadModuleFile(State $state, string $path): string
 {
-    $real = realpath($path);
-    if ($real === false || !is_file($real)) {
+    $real = \realpath($path);
+    if ($real === false || ! \is_file($real)) {
         throw new \RuntimeException("cannot load `{$path}`");
     }
-    if (!str_ends_with($real, '.mog')) {
+    if (! \str_ends_with($real, '.mog')) {
         throw new \RuntimeException('`:load` expects a .mog file');
     }
 
@@ -897,7 +917,7 @@ function loadModuleFile(State $state, string $path): string
     $primaryBefore = $state->loadedPrimary;
     $importsBefore = $state->importLines;
 
-    if (!\in_array($real, $state->loadedPaths, true)) {
+    if (! \in_array($real, $state->loadedPaths, true)) {
         $state->loadedPaths[] = $real;
     }
     $state->loadedPrimary = $real;
@@ -907,7 +927,7 @@ function loadModuleFile(State $state, string $path): string
     $state->basePreparedFp = null;
     $state->forgetInteractiveCache();
     $importLine = "import {$mod}";
-    if (!\in_array($importLine, $state->importLines, true)) {
+    if (! \in_array($importLine, $state->importLines, true)) {
         $state->importLines[] = $importLine;
     }
 
@@ -918,6 +938,7 @@ function loadModuleFile(State $state, string $path): string
         $state->loadedPrimary = $primaryBefore;
         $state->importLines = $importsBefore;
         prepareInteractive($state);
+
         throw $e;
     }
 

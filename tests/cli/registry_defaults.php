@@ -8,20 +8,22 @@
 // correctness question, not a convenience.
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
 
 use Moggi\CLI\Commands\CommandSpec;
-use function Moggi\CLI\Commands\parseArgs;
+
 use const Moggi\CLI\Commands\DEFAULT_REGISTRY;
 use const Moggi\CLI\Commands\DEFAULT_REGISTRY_WRITE;
+
+use function Moggi\CLI\Commands\parseArgs;
 
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
     ++$checks;
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
@@ -35,6 +37,7 @@ $before = [
     'write' => \getenv('MOGGI_REGISTRY_WRITE'),
     'read' => \getenv('MOGGI_REGISTRY'),
 ];
+
 try {
     $assert(DEFAULT_REGISTRY_WRITE !== DEFAULT_REGISTRY, 'the two origins must not be one host');
 

@@ -29,7 +29,7 @@ namespace Moggi\Registry;
  */
 function canonicalJson(mixed $value): string
 {
-    if (!\is_array($value) && !$value instanceof \stdClass) {
+    if (! \is_array($value) && ! $value instanceof \stdClass) {
         return \json_encode($value, \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE | \JSON_THROW_ON_ERROR);
     }
 
@@ -41,7 +41,7 @@ function canonicalJson(mixed $value): string
         $members[$key] = canonicalJson($member);
     }
 
-    if (!$value instanceof \stdClass && \array_is_list($value)) {
+    if (! $value instanceof \stdClass && \array_is_list($value)) {
         return '[' . \implode(',', $members) . ']';
     }
 
@@ -60,7 +60,7 @@ function sourceDigest(mixed $source): ?string
     if ($source instanceof \stdClass) {
         $source = (array) $source;
     }
-    if (!\is_array($source)) {
+    if (! \is_array($source)) {
         return null;
     }
     $kind = $source['kind'] ?? null;
@@ -161,7 +161,7 @@ function batchVerifier(): ?BatchVerifier
  * channel broken and returns null, and the caller falls back to the single-shot
  * path rather than guessing.
  */
-final class BatchVerifier
+final class manifest
 {
     /** @var resource|null */
     private $process = null;
@@ -181,18 +181,18 @@ final class BatchVerifier
         if ($this->broken) {
             return null;
         }
-        if ($this->process === null && !$this->start()) {
+        if ($this->process === null && ! $this->start()) {
             $this->broken = true;
 
             return null;
         }
 
         $request = $npub . ' ' . \trim($signatureHex) . ' ' . $messageHex . "\n";
-        if (@\fwrite($this->pipes[0], $request) === false || !@\fflush($this->pipes[0])) {
+        if (@\fwrite($this->pipes[0], $request) === false || ! @\fflush($this->pipes[0])) {
             return $this->fail();
         }
         $line = @\fgets($this->pipes[1]);
-        if (!\is_string($line)) {
+        if (! \is_string($line)) {
             return $this->fail();
         }
 
@@ -214,7 +214,7 @@ final class BatchVerifier
             [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
             $pipes,
         );
-        if (!\is_resource($process)) {
+        if (! \is_resource($process)) {
             return false;
         }
         $this->process = $process;
@@ -260,7 +260,7 @@ function verifySignatureOnce(string $messageHex, string $signatureHex, string $n
         [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
         $pipes,
     );
-    if (!\is_resource($process)) {
+    if (! \is_resource($process)) {
         return ['ok' => false, 'note' => "cannot run {$binary}"];
     }
     \fclose($pipes[0]);
@@ -299,10 +299,10 @@ function verifyRelease(string $name, string $version, array $release, array $aut
     $signer = \is_array($signature) ? ($signature['npub'] ?? null) : null;
     $sig = \is_array($signature) ? ($signature['sig'] ?? null) : null;
 
-    if (!\is_string($signer) || !\is_string($sig)) {
+    if (! \is_string($signer) || ! \is_string($sig)) {
         return ['ok' => false, 'note' => 'the release has no signature', 'signer' => null];
     }
-    if (!\in_array($signer, $authors, true)) {
+    if (! \in_array($signer, $authors, true)) {
         return ['ok' => false, 'note' => 'the signer is not on the package\'s allowed list', 'signer' => $signer];
     }
 
@@ -323,7 +323,7 @@ function verifyRelease(string $name, string $version, array $release, array $aut
 function selectAuthor(array $authors, ?string $as): string
 {
     if ($as !== null) {
-        if (!\in_array($as, $authors, true)) {
+        if (! \in_array($as, $authors, true)) {
             throw new \RuntimeException("`{$as}` is not an npub in this package's [author] blocks");
         }
 
@@ -423,7 +423,7 @@ function signRelease(string $name, string $version, array $release, string $auth
     $signed['signature'] = ['npub' => $author, 'sig' => signMessage(releaseMessage($name, $version, $release), $nsec)];
 
     $verdict = verifySignature(releaseMessage($name, $version, $signed), (string) $signed['signature']['sig'], $author);
-    if (!$verdict['ok']) {
+    if (! $verdict['ok']) {
         throw new \RuntimeException("the key does not match author {$author}: {$verdict['note']}");
     }
 
@@ -457,10 +457,10 @@ function readReleaseRecord(string $path): array
         throw new \RuntimeException("cannot read {$path}");
     }
     $record = \json_decode($bytes, true);
-    if (!\is_array($record) || (\array_is_list($record) && $record !== [])) {
+    if (! \is_array($record) || (\array_is_list($record) && $record !== [])) {
         throw new \RuntimeException("{$path} is not a release record — it does not decode to a JSON object");
     }
-    if (!\is_string($record['name'] ?? null) || !\is_string($record['version'] ?? null)) {
+    if (! \is_string($record['name'] ?? null) || ! \is_string($record['version'] ?? null)) {
         throw new \RuntimeException("{$path} is not a release record — it names no name and version");
     }
 
@@ -509,12 +509,12 @@ function checkSignedRelease(
                 : 'the record names different docs — the documentation changed since it was recorded; re-record',
         );
     }
-    if (!isset($record['signature'])) {
+    if (! isset($record['signature'])) {
         throw new \RuntimeException('the record has no signature — sign it with `moggi sign` first');
     }
 
     $verdict = verifyRelease($name, $version, $record, $authors);
-    if (!$verdict['ok'] || $verdict['signer'] === null) {
+    if (! $verdict['ok'] || $verdict['signer'] === null) {
         throw new \RuntimeException('the record\'s signature does not verify: ' . $verdict['note']);
     }
 

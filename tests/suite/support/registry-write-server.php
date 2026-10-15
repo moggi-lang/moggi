@@ -106,7 +106,7 @@ function startFakeRegistry(string $routerPath, string $logPath, array $env = [])
         null,
         $env,
     );
-    if (!\is_resource($process)) {
+    if (! \is_resource($process)) {
         throw new \RuntimeException('cannot start the fake registry');
     }
 
@@ -153,7 +153,7 @@ function stopFakeRegistry(array $server): void
  */
 function fakeRegistryRequests(string $logPath): array
 {
-    if (!\is_file($logPath)) {
+    if (! \is_file($logPath)) {
         return [];
     }
     $requests = [];

@@ -3,10 +3,12 @@
 namespace Moggi\Semantics\Deriving;
 
 use Moggi\Semantics\Kinds;
-use Moggi\Semantics\Types\TypeCheckState;
-use Moggi\Syntax\Ast;
 
 use function Moggi\Semantics\Kinds\classParamKind;
+
+use Moggi\Semantics\Types\TypeCheckState;
+
+use Moggi\Syntax\Ast;
 
 /**
  * The class facts a deriving-strategy decision needs, from whichever view of the
@@ -26,7 +28,7 @@ use function Moggi\Semantics\Kinds\classParamKind;
  * it reads the declarations instead, and the two views agree because a parameter
  * applied to one type argument is higher-kinded by construction.
  */
-final class ClassDeriveFacts
+final class class_facts
 {
     /**
      * @param callable(string): ?array<string, mixed> $entry the class's registry-shaped facts, or null

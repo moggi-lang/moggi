@@ -18,7 +18,7 @@
 // resolution and preflight checks above it run everywhere.
 
 $root = __DIR__;
-while (!is_file($root . '/packaging/assemble.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/packaging/assemble.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/tests/suite/support/process.php';
@@ -29,7 +29,7 @@ require_once $root . '/packaging/assemble.php';
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
     ++$checks;
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
@@ -58,7 +58,7 @@ $assert(
     'the micro runtime and its build tool must be pinned runtimes',
 );
 $assert(
-    !\in_array('php-native', $locked, true) && \in_array('spc', $locked, true),
+    ! \in_array('php-native', $locked, true) && \in_array('spc', $locked, true),
     'a derived runtime has no lock entry; its build tool does',
 );
 // The lock records what each target truly fetches, so a key naming a runtime or
@@ -71,7 +71,7 @@ $strayKeys = \array_values(\array_filter(
     static function (string $key) use ($locked, $knownTargets): bool {
         [$runtime, $target] = \explode('/', $key, 2) + ['', ''];
 
-        return !\in_array($runtime, $locked, true) || !\in_array($target, $knownTargets, true);
+        return ! \in_array($runtime, $locked, true) || ! \in_array($target, $knownTargets, true);
     },
 ));
 $assert(
@@ -90,7 +90,7 @@ $assert(
     'php-native is only as available as spc, which has no Windows ARM64 build',
 );
 $assert(
-    !\in_array('windows-aarch64', \Moggi\Dist\knownTargets($runtimeConfig), true),
+    ! \in_array('windows-aarch64', \Moggi\Dist\knownTargets($runtimeConfig), true),
     'Windows ARM64 is not a target: the compiler itself cannot be built there',
 );
 $assert(
@@ -103,6 +103,7 @@ $noToolchain = $work . '/no-toolchain';
 \mkdir($noToolchain, 0777, true);
 $realPath = \getenv('PATH');
 \putenv('PATH=' . $noToolchain);
+
 try {
     \Moggi\Dist\assertCToolchain('linux-x86_64', 'building the bundled php from source');
     $assert(false, 'a build without a C toolchain must fail before it starts');
@@ -116,7 +117,7 @@ try {
 }
 
 $host = \Moggi\Dist\hostTarget($runtimeConfig);
-if (!\Moggi\Dist\runtimeIsPrepared('php-native', $host, $runtimeConfig)) {
+if (! \Moggi\Dist\runtimeIsPrepared('php-native', $host, $runtimeConfig)) {
     \fwrite(
         STDOUT,
         "distribution: skipped the assembly — php-native for {$host} is not prepared,"
@@ -153,17 +154,17 @@ try {
         'bin/moggi must be the native compiler, not a script',
     );
     $assert(
-        !\is_file($stage . '/bin/moggi.phar'),
+        ! \is_file($stage . '/bin/moggi.phar'),
         'a variant that bundles no PHP must not ship the compiler archive',
     );
     $assert(\is_file($stage . '/bin/schnorr' . $exe), 'bin/schnorr' . $exe . ' must ship beside the compiler');
     $assert(\is_executable($stage . '/bin/schnorr' . $exe), 'the bundled schnorr must be executable');
 
     foreach (['src', 'tests', 'scripts', 'dist', 'launcher', 'editors', '.git', '.moggi'] as $leak) {
-        $assert(!\file_exists($stage . '/' . $leak), "a distribution must not contain {$leak}");
+        $assert(! \file_exists($stage . '/' . $leak), "a distribution must not contain {$leak}");
     }
     foreach (['moggi.php', 'test.php', 'flake.nix', 'composer.json', 'VERSION', '.envrc'] as $file) {
-        $assert(!\file_exists($stage . '/' . $file), "a distribution must not contain {$file}");
+        $assert(! \file_exists($stage . '/' . $file), "a distribution must not contain {$file}");
     }
     /** Every file under a tree that matches a predicate. */
     $find = static function (string $dir, callable $matches) use (&$find): array {
@@ -285,7 +286,7 @@ try {
                 continue;
             }
             $linked = \substr($link, 0, (int) \strcspn($link, '#'));
-            if (!\file_exists(\dirname($page) . '/' . $linked)) {
+            if (! \file_exists(\dirname($page) . '/' . $linked)) {
                 $dangling[] = \substr($page, \strlen($stage) + 1) . ' -> ' . $link;
             }
         }
@@ -298,8 +299,8 @@ try {
     $readme = (string) \file_get_contents($stage . '/README.md');
     $assert(\str_contains($readme, 'moggi-minimal'), 'the README must describe the variant it is in');
     $assert(\str_contains($readme, 'bin/moggi'), 'the README must show how to run it');
-    $assert(!\str_contains($readme, 'bin/moggi.phar'), 'a README for a PHP-less variant must not name an archive');
-    $assert(!\str_contains($readme, 'nix develop'), 'the README must not send users to a development shell');
+    $assert(! \str_contains($readme, 'bin/moggi.phar'), 'a README for a PHP-less variant must not name an archive');
+    $assert(! \str_contains($readme, 'nix develop'), 'the README must not send users to a development shell');
     $assert(\str_contains($readme, 'No runtime is bundled'), 'the minimal README must say that nothing is bundled');
 
     $assert(\is_file($stage . '/LICENSE'), 'the licence must be shipped');
@@ -309,7 +310,7 @@ try {
     // Nothing bundled in the minimal variant, and no empty `runtime/` pretending
     // otherwise. The schnorr CLI still links two libraries statically, so its
     // notices ship in every variant, this one included.
-    $assert(!\file_exists($stage . '/runtime'), 'moggi-minimal must bundle no runtime');
+    $assert(! \file_exists($stage . '/runtime'), 'moggi-minimal must bundle no runtime');
     $assert(\is_file($stage . '/THIRD-PARTY-NOTICES.md'), 'the licences of what schnorr links must ship');
     $notices = (string) \file_get_contents($stage . '/THIRD-PARTY-NOTICES.md');
     foreach (['libsecp256k1-0.8.0', 'libbech32-1.1p1', 'Permission is hereby granted'] as $required) {
@@ -349,7 +350,7 @@ try {
     $extract = runCompiledProcess($extractArgs, 300);
     $assert($extract['exitCode'] === 0, 'the archive must extract: ' . $extract['stderr']);
     $assert(\is_file($clean . '/moggi-minimal/bin/moggi' . $exe), 'the archive must unpack to one directory');
-    $assert(!\file_exists($clean . '/moggi-minimal/src'), 'the extracted archive must not carry sources');
+    $assert(! \file_exists($clean . '/moggi-minimal/src'), 'the extracted archive must not carry sources');
 
     $unpacked = runCompiledProcess([$clean . '/moggi-minimal/bin/moggi' . $exe, 'run', $clean . '/moggi-minimal/examples/twice'], 300, null, $clean);
     $assert($unpacked['exitCode'] === 0, 'the unpacked installation must run: ' . $unpacked['stdout'] . $unpacked['stderr']);

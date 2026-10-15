@@ -5,7 +5,7 @@
 // function's debug line, so a signature position would point a runtime frame at the type annotation.
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
@@ -13,14 +13,16 @@ require $root . '/src/compiler.php';
 use Moggi\Pipeline\CompilePurpose;
 use Moggi\Pipeline\PipelineRequest;
 use Moggi\Pipeline\PipelineStage;
-use Moggi\Syntax\Ast;
 
 use function Moggi\Pipeline\run as pipelineRun;
+
+use Moggi\Syntax\Ast;
+
 use function Moggi\Syntax\Lexer\lex;
 use function Moggi\Syntax\Parser\parse;
 
 $assert = static function (bool $condition, string $message): void {
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };

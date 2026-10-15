@@ -1,6 +1,6 @@
 <?php declare(strict_types=1);
 
-final class TestFailure extends \RuntimeException
+final class assert extends \RuntimeException
 {
 }
 
@@ -8,12 +8,12 @@ function normalize(string $text): string
 {
     $text = \str_replace("\r\n", "\n", $text);
 
-    return rtrim($text, "\n") . "\n";
+    return \rtrim($text, "\n") . "\n";
 }
 
 function readExpected(string $path): string
 {
-    $contents = file_get_contents($path);
+    $contents = \file_get_contents($path);
     if ($contents === false) {
         throw new TestFailure("missing expected file {$path}");
     }
@@ -23,7 +23,7 @@ function readExpected(string $path): string
 
 function assertSameOutput(string $name, string $expectedPath, string $actual, string $label): void
 {
-    if (!\is_file($expectedPath)) {
+    if (! \is_file($expectedPath)) {
         throw new TestFailure("{$label}: missing expected file {$expectedPath}");
     }
 
@@ -38,10 +38,10 @@ function assertSameOutput(string $name, string $expectedPath, string $actual, st
 
 function diffText(string $expected, string $actual): string
 {
-    $expectedLines = explode("\n", rtrim($expected, "\n"));
-    $actualLines = explode("\n", rtrim($actual, "\n"));
+    $expectedLines = \explode("\n", \rtrim($expected, "\n"));
+    $actualLines = \explode("\n", \rtrim($actual, "\n"));
     $out = '';
-    $max = max(count($expectedLines), count($actualLines));
+    $max = \max(\count($expectedLines), \count($actualLines));
 
     for ($i = 0; $i < $max; ++$i) {
         $e = $expectedLines[$i] ?? null;
@@ -64,10 +64,10 @@ function diffText(string $expected, string $actual): string
 
 function testRelativePath(string $path): string
 {
-    $root = realpath(MOGGI_PROJECT_ROOT);
-    $real = realpath($path);
-    if ($root !== false && $real !== false && str_starts_with($real, $root . DIRECTORY_SEPARATOR)) {
-        return \str_replace(DIRECTORY_SEPARATOR, '/', substr($real, strlen($root) + 1));
+    $root = \realpath(MOGGI_PROJECT_ROOT);
+    $real = \realpath($path);
+    if ($root !== false && $real !== false && \str_starts_with($real, $root . DIRECTORY_SEPARATOR)) {
+        return \str_replace(DIRECTORY_SEPARATOR, '/', \substr($real, \strlen($root) + 1));
     }
 
     return \str_replace(DIRECTORY_SEPARATOR, '/', $path);
@@ -75,5 +75,5 @@ function testRelativePath(string $path): string
 
 function fixtureBasePath(string $path): string
 {
-    return substr($path, 0, -strlen('.mog'));
+    return \substr($path, 0, -\strlen('.mog'));
 }

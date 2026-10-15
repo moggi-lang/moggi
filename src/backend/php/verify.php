@@ -2,15 +2,15 @@
 
 namespace Moggi\Backend\Php\Verify;
 
-use Moggi\Syntax\Ast;
-use ReflectionClass;
-use ReflectionFunction;
-use ReflectionFunctionAbstract;
-
 use function Moggi\Backend\Php\Dependencies\composerVendorMaps;
 use function Moggi\Backend\Php\Dependencies\composerVendorRoots;
 use function Moggi\Backend\Php\Dependencies\vendorPsrClassFile;
 use function Moggi\Foreign\phpClassFqn;
+
+use Moggi\Syntax\Ast;
+use ReflectionClass;
+use ReflectionFunction;
+use ReflectionFunctionAbstract;
 
 /**
  * Verify a `foreign php` declaration against the PHP the compiler is running on.
@@ -160,7 +160,7 @@ function verifyForeignGlobalFunction(string $function, ?Ast\TypeNode $type): ?st
         return null;
     }
 
-    if (!\function_exists($function)) {
+    if (! \function_exists($function)) {
         return vendorProvidesFunction($function) ? null : "php has no function `{$function}`";
     }
 
@@ -182,12 +182,12 @@ function verifyForeignStaticMethod(
         return null;
     }
 
-    if (!$class->hasMethod($member)) {
+    if (! $class->hasMethod($member)) {
         return $class->hasMethod('__callStatic') ? null : "php class `{$className}` has no method `{$member}`";
     }
 
     $method = $class->getMethod($member);
-    if (!$method->isStatic()) {
+    if (! $method->isStatic()) {
         return "php method `{$className}::{$member}` is not static; use `{$className}.{$member}`"
             . ' and pass the receiver first';
     }
@@ -210,7 +210,7 @@ function verifyForeignInstanceMethod(
         return null;
     }
 
-    if (!$class->hasMethod($member)) {
+    if (! $class->hasMethod($member)) {
         return $class->hasMethod('__call') ? null : "php class `{$className}` has no method `{$member}`";
     }
 
@@ -224,11 +224,11 @@ function verifyForeignInstanceMethod(
 
 function verifyForeignConstructor(ReflectionClass $class, string $className, ?Ast\TypeNode $type): ?string
 {
-    if (!$class->isInstantiable()) {
+    if (! $class->isInstantiable()) {
         return "php class `{$className}` cannot be instantiated";
     }
 
-    if (!$class->hasMethod('__construct')) {
+    if (! $class->hasMethod('__construct')) {
         return null;
     }
 
@@ -270,7 +270,7 @@ function foreignArityProblem(
             . ', but this foreign import declares ' . argumentCount($declared);
     }
 
-    if (!$callable->isVariadic() && $declared > $total) {
+    if (! $callable->isVariadic() && $declared > $total) {
         return "{$subject} `{$label}` takes at most " . argumentCount($total)
             . ', but this foreign import declares ' . argumentCount($declared);
     }

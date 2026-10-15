@@ -76,11 +76,13 @@ function runBackendCases(array $cases, string $backend, bool $multiBackend = fal
             if ($onCase !== null) {
                 $onCase($result);
             }
+
             continue;
         }
 
         $started = \microtime(true);
         $GLOBALS['moggi_running_case'] = $case->name;
+
         try {
             $outcome = runTestCase($case, $backend, projectRootPath());
         } catch (\Throwable $e) {
@@ -101,7 +103,7 @@ function runBackendCases(array $cases, string $backend, bool $multiBackend = fal
 
         if (\is_string($skipOutcome) && $skipOutcome !== '') {
             $status = 'skip';
-        } elseif (!$passed) {
+        } elseif (! $passed) {
             $status = ($outcome['timeout'] ?? false) === true ? 'timeout' : 'fail';
         }
 
@@ -124,7 +126,7 @@ function runBackendCases(array $cases, string $backend, bool $multiBackend = fal
         $set->add($result);
         $groupBuffer[] = $result;
         progressAdvance($result->isFailure());
-        if (!progressReported()) {
+        if (! progressReported()) {
             suiteEcho(renderCaseLine($result, $multiBackend ? $backend : null));
         }
         if ($onCase !== null) {
@@ -133,6 +135,7 @@ function runBackendCases(array $cases, string $backend, bool $multiBackend = fal
 
         if ($testArgs['stopOnFailure'] && $result->isFailure()) {
             $stopped = true;
+
             break;
         }
     }
@@ -166,7 +169,7 @@ function resolveAutoJobs(int $selectedTotal): void
     }
 
     $workers = 1;
-    if (!$testArgs['stopOnFailure']) {
+    if (! $testArgs['stopOnFailure']) {
         $workers = \max(1, \min(detectedCpuCount(), $selectedTotal));
         $affordable = workerLimitForMemory(WORKER_MEMORY_BUDGET_BYTES);
         if ($affordable !== null) {
@@ -252,14 +255,14 @@ function runSuite(): int
  */
 function warmSharedCache(array $backends): void
 {
-    if (!\Moggi\Cache\cacheEnabled()) {
+    if (! \Moggi\Cache\cacheEnabled()) {
         return;
     }
 
     $projectRoot = projectRootPath();
 
-    $dir = \Moggi\Cache\cacheScratchDir() . '/warmup-' . getmypid();
-    if (!\is_dir($dir) && !@mkdir($dir, 0777, true) && !\is_dir($dir)) {
+    $dir = \Moggi\Cache\cacheScratchDir() . '/warmup-' . \getmypid();
+    if (! \is_dir($dir) && ! @\mkdir($dir, 0777, true) && ! \is_dir($dir)) {
         return;
     }
 
@@ -341,11 +344,11 @@ function runSelection(array $cases, array $backends, array $pathFilters): int
             continue;
         }
 
-        $streamedBackends = $pool !== null && !progressReported();
+        $streamedBackends = $pool !== null && ! progressReported();
         if ($multi) {
             $banner = backendBanner($backend);
             $report .= $banner;
-            if (!$streamedBackends) {
+            if (! $streamedBackends) {
                 suiteEcho($banner);
             }
         }
@@ -369,7 +372,7 @@ function runSelection(array $cases, array $backends, array $pathFilters): int
             $report .= renderGroups($set);
         }
 
-        if (!progressReported()) {
+        if (! progressReported()) {
             suiteEcho(renderGroupRows($set));
         }
 
@@ -452,7 +455,7 @@ function finishRun(string $report, array $jsonBackends, array $backends, bool $f
                 'failed' => $failed,
                 'durationMs' => \round((\microtime(true) - $runStarted) * 1000.0, 1),
             ];
-        if ($testArgs['log'] !== null && !\str_ends_with((string) $testArgs['log'], '.json')) {
+        if ($testArgs['log'] !== null && ! \str_ends_with((string) $testArgs['log'], '.json')) {
             @\file_put_contents((string) $testArgs['log'], $report);
         }
         echo \json_encode($document, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";

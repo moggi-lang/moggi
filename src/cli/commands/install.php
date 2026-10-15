@@ -2,23 +2,25 @@
 
 namespace Moggi\CLI\Commands;
 
-use Moggi\Registry\FetchLog;
-
 use function Moggi\Registry\badPackageProblem;
+
 use function Moggi\Registry\badPackagesAmong;
 use function Moggi\Registry\badPackagesRefusal;
-use function Moggi\Registry\findDescriptor;
 use function Moggi\Registry\bundledPackages;
 use function Moggi\Registry\demandsCloseLocally;
+
+use Moggi\Registry\FetchLog;
+
+use function Moggi\Registry\findDescriptor;
 use function Moggi\Registry\installLockedPackages;
-use function Moggi\Registry\lockIsLocal;
-use function Moggi\Registry\providedPackages;
 use function Moggi\Registry\lockDisagreements;
+use function Moggi\Registry\lockIsLocal;
 use function Moggi\Registry\lockPath;
 use function Moggi\Registry\lockRegistryProblem;
 use function Moggi\Registry\phpExtensionDescriptors;
 use function Moggi\Registry\phpExtensionProblems;
 use function Moggi\Registry\providedDependencyProblems;
+use function Moggi\Registry\providedPackages;
 use function Moggi\Registry\readDescriptor;
 use function Moggi\Registry\readLock;
 use function Moggi\Registry\shortNpub;
@@ -105,11 +107,11 @@ function runInstallCommand(array $argv): int
 
         $needsCatalog = true;
         if ($lock === null) {
-            $needsCatalog = !demandsCloseLocally((array) ($descriptor['dependencies'] ?? []), $bundled, providedPackages());
+            $needsCatalog = ! demandsCloseLocally((array) ($descriptor['dependencies'] ?? []), $bundled, providedPackages());
         } else {
-            $needsCatalog = !lockIsLocal($lock);
+            $needsCatalog = ! lockIsLocal($lock);
         }
-        $catalog = $needsCatalog ? loadVerifiedCatalog($options['registry'], !$options['noCache'], $log) : null;
+        $catalog = $needsCatalog ? loadVerifiedCatalog($options['registry'], ! $options['noCache'], $log) : null;
 
         if ($lock === null) {
             if ($options['frozen']) {
@@ -121,7 +123,7 @@ function runInstallCommand(array $argv): int
         }
 
         $entries = $catalog?->entries(lockedPackageNames($lock)) ?? [];
-        if (!$resolved) {
+        if (! $resolved) {
             $problems = lockDisagreements($lock, $entries);
             if ($problems !== []) {
                 throw new \RuntimeException(
@@ -137,7 +139,7 @@ function runInstallCommand(array $argv): int
         }
 
         $bad = badPackagesAmong($entries);
-        if ($bad !== [] && !$options['allowBad']) {
+        if ($bad !== [] && ! $options['allowBad']) {
             throw new \RuntimeException(badPackagesRefusal(
                 $bad,
                 'in this lock',
@@ -160,7 +162,7 @@ function runInstallCommand(array $argv): int
             return 0;
         }
 
-        $result = installLockedPackages($options['registry'], $lock, $entries, !$options['noCache'], null, $log, $catalog?->blobsBase());
+        $result = installLockedPackages($options['registry'], $lock, $entries, ! $options['noCache'], null, $log, $catalog?->blobsBase());
 
         $extensionProblems = phpExtensionProblems(phpExtensionDescriptors($descriptor, $lock))['problems'];
 

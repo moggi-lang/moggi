@@ -22,7 +22,7 @@ function buildFrames(array $rows): string
 
     $table = [];
     foreach ($rows as $row) {
-        if (!\is_array($row)) {
+        if (! \is_array($row)) {
             continue;
         }
         $key = (string) ($row['key'] ?? '');
@@ -30,7 +30,7 @@ function buildFrames(array $rows): string
         if ($key === '' || $text === '') {
             continue;
         }
-        if (!isset($table[$key])) {
+        if (! isset($table[$key])) {
             $table[$key] = $text;
         }
     }
@@ -43,7 +43,7 @@ function buildFrames(array $rows): string
     }
 
     $chunkSize = 500;
-    $chunks = $entries === [] ? [[]] : array_chunk($entries, $chunkSize);
+    $chunks = $entries === [] ? [[]] : \array_chunk($entries, $chunkSize);
 
     $b->addMethod('<clinit>', '()V', 0x0008, 1, [], static function (CodeBuilder $c, ConstantPool $cp) use ($chunks): void {
         $c->new_($cp->class_('java/util/HashMap'));

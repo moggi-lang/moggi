@@ -64,7 +64,7 @@ function distributionEnvironment(array $overrides): array
     $names = \array_map('strtoupper', \array_keys($overrides));
     $environment = [];
     foreach (\getenv() ?: [] as $name => $value) {
-        if (!\in_array(\strtoupper((string) $name), $names, true)) {
+        if (! \in_array(\strtoupper((string) $name), $names, true)) {
             $environment[$name] = $value;
         }
     }

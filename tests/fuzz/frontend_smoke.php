@@ -6,7 +6,7 @@
 // "600 copies of the same shape".
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
@@ -24,6 +24,7 @@ foreach ([0x5eed, 0xc0ffee] as $seed) {
     $outcome = fuzzFrontendSmoke($root, $seed, 600);
     if ($outcome['passed'] !== true) {
         $failures[] = $outcome['message'];
+
         continue;
     }
     $notes[] = $outcome['message'];

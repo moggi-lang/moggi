@@ -2,14 +2,15 @@
 
 namespace Moggi\LSP\Analysis;
 
-use Moggi\Modules\PreparedProject;
-use Moggi\Syntax\Ast;
-use Moggi\Semantics\Types\TypeError;
-use Moggi\Syntax\Lexer\LexError;
-use Moggi\Syntax\Parser\ParseError;
-
 use function Moggi\LSP\Protocol\compilerToLsp;
 use function Moggi\LSP\Protocol\pathToUri;
+
+use Moggi\Modules\PreparedProject;
+use Moggi\Semantics\Types\TypeError;
+use Moggi\Syntax\Ast;
+
+use Moggi\Syntax\Lexer\LexError;
+use Moggi\Syntax\Parser\ParseError;
 
 /**
  * Stable resultId for a diagnostics snapshot (LSP 3.18 pull model): a short
@@ -18,9 +19,9 @@ use function Moggi\LSP\Protocol\pathToUri;
  */
 function resultIdFor(string $uri, array $items): string
 {
-    $canonical = json_encode([$uri, $items], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+    $canonical = \json_encode([$uri, $items], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
 
-    return substr(hash('sha256', $canonical), 0, 16);
+    return \substr(\hash('sha256', $canonical), 0, 16);
 }
 
 function errorToDiagnostic(\Throwable $e, string $uri, string $source): array
@@ -46,13 +47,13 @@ function errorToDiagnostic(\Throwable $e, string $uri, string $source): array
                 $data = ['missingPatterns' => $e->missingPatterns];
             }
             if ($e->holeType !== null && $e->holeType !== '') {
-                $data = array_merge(\is_array($data) ? $data : [], ['holeType' => $e->holeType]);
+                $data = \array_merge(\is_array($data) ? $data : [], ['holeType' => $e->holeType]);
                 $code = 'hole';
-            } elseif (preg_match('/Found hole with type:\s*`([^`]+)`/', $message, $hm)) {
-                $data = array_merge(\is_array($data) ? $data : [], ['holeType' => $hm[1]]);
+            } elseif (\preg_match('/Found hole with type:\s*`([^`]+)`/', $message, $hm)) {
+                $data = \array_merge(\is_array($data) ? $data : [], ['holeType' => $hm[1]]);
                 $code = 'hole';
             }
-            if (str_contains($message, 'non-exhaustive')) {
+            if (\str_contains($message, 'non-exhaustive')) {
                 $code = 'non-exhaustive';
             }
         } elseif ($e instanceof ParseError) {
@@ -79,6 +80,7 @@ function errorToDiagnostic(\Throwable $e, string $uri, string $source): array
     if ($data !== null) {
         $diag['data'] = $data;
     }
+
     return $diag;
 }
 
@@ -147,7 +149,7 @@ function unusedImportDiagnostics(
     $declNamesByModule = [];
     if ($prepared !== null) {
         foreach ($prepared->checked as $mName => $prog) {
-            if (!$prog instanceof Ast\Program) {
+            if (! $prog instanceof Ast\Program) {
                 continue;
             }
             $names = [];
@@ -168,11 +170,11 @@ function unusedImportDiagnostics(
             $declNamesByModule[$mName] = $names;
         }
         foreach ($prepared->units as $mName => $unit) {
-            if (!\is_array($unit) || ($declNamesByModule[$mName] ?? []) !== []) {
+            if (! \is_array($unit) || ($declNamesByModule[$mName] ?? []) !== []) {
                 continue;
             }
             $exports = $unit['exports'] ?? null;
-            if (!\is_array($exports)) {
+            if (! \is_array($exports)) {
                 continue;
             }
             $names = [];
@@ -191,15 +193,16 @@ function unusedImportDiagnostics(
         if ($imp->implicit) {
             continue;
         }
-        $modulePath = implode('.', $imp->path);
-        $alias = $imp->asName ?? ($imp->path[count($imp->path) - 1] ?? $modulePath);
+        $modulePath = \implode('.', $imp->path);
+        $alias = $imp->asName ?? ($imp->path[\count($imp->path) - 1] ?? $modulePath);
         $used = isset($usedQualifiers[$alias])
             || isset($usedQualifiers[$modulePath])
             || isset($usedResolvedModules[$modulePath]);
-        if (!$used && isset($declNamesByModule[$modulePath])) {
+        if (! $used && isset($declNamesByModule[$modulePath])) {
             foreach ($bareNames as $n => $_) {
                 if (isset($declNamesByModule[$modulePath][$n])) {
                     $used = true;
+
                     break;
                 }
             }
@@ -287,7 +290,7 @@ function collectBareNames(Ast\AstWalkable $root, array &$names): void
 function walkChildren(Ast\AstWalkable $root, callable $visit): void
 {
     foreach ($root->childValues() as $child) {
-        foreach (is_array($child) ? $child : [$child] as $value) {
+        foreach (\is_array($child) ? $child : [$child] as $value) {
             if ($value instanceof Ast\AstWalkable) {
                 $visit($value);
             }
@@ -312,7 +315,7 @@ function enrichDiagnostic(array $diag, \Throwable $e): array
         if ($e->holeType !== null && $e->holeType !== '') {
             $diag['code'] = 'hole';
             $diag['severity'] = 2;
-            $diag['data'] = array_merge(
+            $diag['data'] = \array_merge(
                 \is_array($diag['data'] ?? null) ? $diag['data'] : [],
                 ['holeType' => $e->holeType],
             );
@@ -323,16 +326,16 @@ function enrichDiagnostic(array $diag, \Throwable $e): array
                 ],
                 'message' => "expected type: {$e->holeType}",
             ]];
-        } elseif (preg_match('/Found hole with type:\s*`([^`]+)`/', $e->getMessage(), $hm)) {
+        } elseif (\preg_match('/Found hole with type:\s*`([^`]+)`/', $e->getMessage(), $hm)) {
             $diag['code'] = 'hole';
             $diag['severity'] = 2;
-            $diag['data'] = array_merge(
+            $diag['data'] = \array_merge(
                 \is_array($diag['data'] ?? null) ? $diag['data'] : [],
                 ['holeType' => $hm[1]],
             );
         }
         if ($e->missingPatterns !== null && $e->missingPatterns !== []) {
-            $diag['data'] = array_merge(
+            $diag['data'] = \array_merge(
                 \is_array($diag['data'] ?? null) ? $diag['data'] : [],
                 ['missingPatterns' => $e->missingPatterns],
             );
@@ -353,7 +356,7 @@ function enrichDiagnostic(array $diag, \Throwable $e): array
                 $diag['relatedInformation'] = $related;
             }
         }
-        if (str_contains($e->getMessage(), 'non-exhaustive')) {
+        if (\str_contains($e->getMessage(), 'non-exhaustive')) {
             $diag['code'] = 'non-exhaustive';
         }
         if ($e->relatedLocations !== null && $e->relatedLocations !== []) {
@@ -380,7 +383,7 @@ function enrichDiagnostic(array $diag, \Throwable $e): array
             $diag['relatedInformation'] = $related;
         }
         if (($diag['code'] ?? '') !== 'hole'
-            && (str_contains($e->getMessage(), 'could not unify') || str_contains($e->getMessage(), 'unify'))
+            && (\str_contains($e->getMessage(), 'could not unify') || \str_contains($e->getMessage(), 'unify'))
         ) {
             $diag['code'] = $diag['code'] ?? 'unify';
             if (($diag['relatedInformation'] ?? []) === [] && $e->filename !== '') {
@@ -394,6 +397,7 @@ function enrichDiagnostic(array $diag, \Throwable $e): array
             }
         }
     }
+
     return $diag;
 }
 

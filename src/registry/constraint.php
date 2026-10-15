@@ -81,10 +81,10 @@ function versionParts(string $version): array
 function comparePrereleaseIdentifiers(array $a, array $b): int
 {
     for ($i = 0, $n = \max(\count($a), \count($b)); $i < $n; $i++) {
-        if (!isset($a[$i])) {
+        if (! isset($a[$i])) {
             return -1;
         }
-        if (!isset($b[$i])) {
+        if (! isset($b[$i])) {
             return 1;
         }
         $difference = comparePrereleaseIdentifier($a[$i], $b[$i]);
@@ -154,7 +154,7 @@ function satisfies(string $version, string $constraint): bool
             '<' => $order < 0,
             default => $order >= 0 && compareVersions($version, (string) (((int) \explode('.', $bound)[0]) + 1)) < 0,
         };
-        if (!$satisfied) {
+        if (! $satisfied) {
             return false;
         }
     }

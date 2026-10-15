@@ -3,14 +3,16 @@
 namespace Moggi\Backend\Php;
 
 use Moggi\Backend\Backend;
-use Moggi\IR\Module;
-use Moggi\Syntax\Ast\TypeNode;
 
 use function Moggi\Backend\Inspect\describePhpEmit;
-use function Moggi\Backend\Php\Verify\verifyForeignImportAgainstHost;
 use function Moggi\Backend\Php\Codegen\emit as emitPhp;
+
 use function Moggi\Backend\Php\Dependencies\composerIsBundled;
 use function Moggi\Backend\Php\Naming\basePhpFunctionName;
+use function Moggi\Backend\Php\Verify\verifyForeignImportAgainstHost;
+
+use Moggi\IR\Module;
+use Moggi\Syntax\Ast\TypeNode;
 
 final class PhpBackend implements Backend
 {
@@ -94,7 +96,7 @@ final class PhpBackend implements Backend
         array $pathInfo,
         bool $instanceReceiverIsHandle,
     ): ?string {
-        if ($pathInfo['dispatch'] === 'instance' && !$instanceReceiverIsHandle) {
+        if ($pathInfo['dispatch'] === 'instance' && ! $instanceReceiverIsHandle) {
             return 'instance foreign import requires handle as first argument';
         }
 

@@ -2,16 +2,18 @@
 
 namespace Moggi\CLI\Commands;
 
-use Moggi\Registry\FetchLog;
-
 use function Moggi\Registry\badPackageProblem;
-use function Moggi\Registry\Bind\bindDeclaredForBuild;
-use function Moggi\Registry\Bind\ffiBindingsForBackend;
+
 use function Moggi\Registry\badPackagesAmong;
 use function Moggi\Registry\badPackagesRefusal;
+use function Moggi\Registry\Bind\bindDeclaredForBuild;
+use function Moggi\Registry\Bind\ffiBindingsForBackend;
 use function Moggi\Registry\checkBundledInstalled;
 use function Moggi\Registry\collectHostToolCoordinates;
 use function Moggi\Registry\declaredBackends;
+
+use Moggi\Registry\FetchLog;
+
 use function Moggi\Registry\fetchVerifiedRelease;
 use function Moggi\Registry\findDescriptor;
 use function Moggi\Registry\hostToolCoordinates;
@@ -19,10 +21,10 @@ use function Moggi\Registry\hostToolDescriptor;
 use function Moggi\Registry\isInstalled;
 use function Moggi\Registry\libraryRoots;
 use function Moggi\Registry\lockDisagreements;
+use function Moggi\Registry\lockedInstallDir;
 use function Moggi\Registry\lockIsLocal;
 use function Moggi\Registry\lockPath;
 use function Moggi\Registry\lockRegistryProblem;
-use function Moggi\Registry\lockedInstallDir;
 use function Moggi\Registry\mergeThirdParty;
 use function Moggi\Registry\phpExtensionDescriptors;
 use function Moggi\Registry\phpExtensionProblems;
@@ -138,7 +140,7 @@ function runBuildCommand(array $argv): int
         }
         $catalog = lockIsLocal($lock)
             ? null
-            : loadVerifiedCatalog($options['registry'], !$options['noCache'], $log);
+            : loadVerifiedCatalog($options['registry'], ! $options['noCache'], $log);
         $registryProblem = lockRegistryProblem($lock, $catalog?->npub());
         if ($registryProblem !== null) {
             throw new \RuntimeException($registryProblem . ' — run `moggi update` against the registry you mean');
@@ -154,7 +156,7 @@ function runBuildCommand(array $argv): int
         }
 
         $bad = badPackagesAmong($entries);
-        if ($bad !== [] && !$options['allowBad']) {
+        if ($bad !== [] && ! $options['allowBad']) {
             throw new \RuntimeException(badPackagesRefusal(
                 $bad,
                 'this build links',
@@ -191,7 +193,7 @@ function runBuildCommand(array $argv): int
         foreach (($lock['packages'] ?? []) as $name => $locked) {
             $name = (string) $name;
             $locked = (array) $locked;
-            if (!isInstalled($name, $locked['digest'] ?? null)) {
+            if (! isInstalled($name, $locked['digest'] ?? null)) {
                 throw new \RuntimeException("{$name} is not installed — run `moggi install`");
             }
             if (($locked['bundled'] ?? false) === true) {
@@ -201,20 +203,20 @@ function runBuildCommand(array $argv): int
                 }
                 $signedThirdParty[] = [];
             } else {
-            $verified = fetchVerifiedRelease(
-                $options['registry'],
-                $name,
-                (string) ($locked['version'] ?? ''),
-                $locked['digest'] ?? null,
-                (array) ($entries[$name] ?? []),
-                !$options['noCache'],
-                null,
-                $log,
-            );
-            if (!$verified['ok']) {
-                throw new \RuntimeException("{$name}: {$verified['detail']}");
-            }
-            $signedThirdParty[] = (array) (($verified['release']['third_party'] ?? []));
+                $verified = fetchVerifiedRelease(
+                    $options['registry'],
+                    $name,
+                    (string) ($locked['version'] ?? ''),
+                    $locked['digest'] ?? null,
+                    (array) ($entries[$name] ?? []),
+                    ! $options['noCache'],
+                    null,
+                    $log,
+                );
+                if (! $verified['ok']) {
+                    throw new \RuntimeException("{$name}: {$verified['detail']}");
+                }
+                $signedThirdParty[] = (array) (($verified['release']['third_party'] ?? []));
             }
             $install = lockedInstallDir($name, $locked['digest'] ?? null);
             $descriptorFile = \rtrim($install, '/') . '/' . $name . '.moggi';
@@ -229,8 +231,8 @@ function runBuildCommand(array $argv): int
         }
 
         $coordinates = collectHostToolCoordinates([$descriptor, ...$linked], $backend);
-        $tools = resolveHostTools($backend, $coordinates, $descriptor['name'], !$options['noCache']);
-        if (!$tools['ok']) {
+        $tools = resolveHostTools($backend, $coordinates, $descriptor['name'], ! $options['noCache']);
+        if (! $tools['ok']) {
             throw new \RuntimeException((string) $tools['detail']);
         }
 
@@ -349,7 +351,7 @@ function selectExecutable(array $descriptor, ?string $name): ?array
     $executables = $descriptor['executables'] ?? [];
     $key = $name ?? '';
     $executable = $executables[$key] ?? null;
-    if (!\is_array($executable) || $executable['main'] === '' || $executable['sourceDirs'] === []) {
+    if (! \is_array($executable) || $executable['main'] === '' || $executable['sourceDirs'] === []) {
         return null;
     }
 
@@ -374,4 +376,3 @@ function findEntryFile(array $executable, string $root): ?string
 
     return null;
 }
-

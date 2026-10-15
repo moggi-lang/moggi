@@ -16,7 +16,7 @@ use Moggi\Cache;
  * not name or name one it does not accept. `$help` stays authored prose: help
  * text should read like writing, not like an option table.
  */
-final class CommandSpec
+final class command
 {
     /**
      * @param string $name the subcommand word, as `main()` spells it
@@ -107,6 +107,7 @@ function parseArgs(array $argv, CommandSpec $spec, int $start = 2): array
         $argument = $argv[$i];
         if ($spec->passthrough && $argument === '--') {
             $options['rest'] = \array_slice($argv, $i + 1);
+
             break;
         }
         $flag = \str_starts_with($argument, '-');
@@ -132,10 +133,12 @@ function parseArgs(array $argv, CommandSpec $spec, int $start = 2): array
             } else {
                 $options[$short] = $value;
             }
+
             continue;
         }
         if ($flag && \in_array($short, $booleans, true)) {
             $options[$short] = true;
+
             continue;
         }
         if ($flag) {
@@ -195,7 +198,7 @@ function commandHelp(CommandSpec $spec): string
 function requireDirectories(array $dirs, string $flag): void
 {
     foreach ($dirs as $dir) {
-        if (!\is_dir($dir)) {
+        if (! \is_dir($dir)) {
             throw new \InvalidArgumentException("{$flag} requires a directory" . ($dir !== '' ? ": {$dir}" : ''));
         }
     }

@@ -2,8 +2,9 @@
 
 namespace Moggi\Dist;
 
-use const Moggi\Install\INSTALL_ROOT_CONSTANT;
 use function Moggi\Compiler\runProcess;
+
+use const Moggi\Install\INSTALL_ROOT_CONSTANT;
 
 require_once __DIR__ . '/../src/executables.php';
 require_once __DIR__ . '/../src/installation.php';
@@ -128,14 +129,14 @@ function parseBuildPharArgv(array $argv): array
 
 function buildCompilerPhar(string $sourceRoot, string $outPath): void
 {
-    if (!\is_dir($sourceRoot . '/src')) {
+    if (! \is_dir($sourceRoot . '/src')) {
         throw new \RuntimeException("not a Moggi source root: {$sourceRoot}");
     }
 
     $version = compilerBuildVersion($sourceRoot);
 
     $outDir = \dirname($outPath);
-    if (!\is_dir($outDir) && !\mkdir($outDir, 0777, true) && !\is_dir($outDir)) {
+    if (! \is_dir($outDir) && ! \mkdir($outDir, 0777, true) && ! \is_dir($outDir)) {
         throw new \RuntimeException("cannot create {$outDir}");
     }
 
@@ -153,16 +154,17 @@ function buildCompilerPhar(string $sourceRoot, string $outPath): void
         if (\is_file($absolute)) {
             $phar->addFile($absolute, $include);
             ++$count;
+
             continue;
         }
-        if (!\is_dir($absolute)) {
+        if (! \is_dir($absolute)) {
             continue;
         }
         $iterator = new \RecursiveIteratorIterator(
             new \RecursiveDirectoryIterator($absolute, \FilesystemIterator::SKIP_DOTS),
         );
         foreach ($iterator as $file) {
-            if (!$file->isFile()) {
+            if (! $file->isFile()) {
                 continue;
             }
             $relative = \substr($file->getPathname(), \strlen($sourceRoot) + 1);
@@ -183,7 +185,7 @@ function buildCompilerPhar(string $sourceRoot, string $outPath): void
     $phar->stopBuffering();
     unset($phar);
 
-    if (!\rename($tmp, $outPath)) {
+    if (! \rename($tmp, $outPath)) {
         throw new \RuntimeException("cannot move the built archive to {$outPath}");
     }
     @\chmod($outPath, 0755);
@@ -205,7 +207,7 @@ function main(array $argv): int
         ];
         $descriptors = [0 => \STDIN, 1 => \STDOUT, 2 => \STDERR];
         $process = \proc_open($command, $descriptors, $pipes);
-        if (!\is_resource($process)) {
+        if (! \is_resource($process)) {
             throw new \RuntimeException('cannot re-execute the PHAR builder');
         }
 

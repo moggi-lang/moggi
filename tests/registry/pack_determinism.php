@@ -8,7 +8,7 @@
 // one value that every platform has to agree with.
 
 $root = __DIR__;
-while (!is_file($root . '/src/registry/pack.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/registry/pack.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/registry/pack.php';
@@ -17,7 +17,7 @@ require $root . '/tests/suite/support/workspace.php';
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
     ++$checks;
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
@@ -42,7 +42,7 @@ $tree = $work . '/json';
 
 /** The fixture, with `$mode` on `src/Json.mog` and the files created in the order given. */
 $lay = static function (string $directory, int $mode, bool $reverse = false) use ($jsonMoggi, $jsonMog): void {
-    if (!\is_dir($directory)) {
+    if (! \is_dir($directory)) {
         \mkdir($directory . '/src', 0777, true);
     }
     $writes = [
@@ -135,7 +135,7 @@ try {
     \mkdir($escape, 0777, true);
     $refusal = \Moggi\Registry\extractArchive($hostile, $escape);
     $assert($refusal !== null && \str_contains($refusal, 'unsafe path'), 'a `../` entry must be refused: ' . \var_export($refusal, true));
-    $assert(!\file_exists($work . '/escape.mog'), 'a `../` entry must not be written');
+    $assert(! \file_exists($work . '/escape.mog'), 'a `../` entry must not be written');
 
     // A link is the other way out of the destination, and the blob is hostile input: a target that
     // climbs above the root, or names an absolute path, must be refused on the way in as well as on
@@ -147,7 +147,7 @@ try {
             $verdict !== null && \str_contains($verdict, 'unsafe link'),
             "a link to {$target} must be refused: " . \var_export($verdict, true),
         );
-        $assert(!\file_exists($escape . '/link.mog'), "a link to {$target} must not be created");
+        $assert(! \file_exists($escape . '/link.mog'), "a link to {$target} must not be created");
     }
 
     // And the same rule when packing, so we never write an archive we would not unpack.
@@ -156,10 +156,11 @@ try {
     \file_put_contents($unsafeTree . '/json.moggi', $jsonMoggi);
     foreach (['../../outside.mog', '/etc/passwd', 'src\\Json.mog'] as $target) {
         @\unlink($unsafeTree . '/link.mog');
-        if (!@\symlink($target, $unsafeTree . '/link.mog')) {
+        if (! @\symlink($target, $unsafeTree . '/link.mog')) {
             continue;
         }
         $refused = false;
+
         try {
             \Moggi\Registry\directoryEntries($unsafeTree);
         } catch (\RuntimeException) {
@@ -172,6 +173,7 @@ try {
     @\unlink($unsafeTree . '/link.mog');
     @\symlink('src/Json.mog', $unsafeTree . '/link.mog');
     $accepted = true;
+
     try {
         \Moggi\Registry\directoryEntries($unsafeTree);
     } catch (\RuntimeException) {
@@ -182,6 +184,7 @@ try {
     // A path a record could not survive: it would make the format ambiguous.
     foreach (["a\nb.mog", "a\rb.mog"] as $impossible) {
         $refused = false;
+
         try {
             \Moggi\Registry\assertPortablePath($impossible);
         } catch (\RuntimeException) {
@@ -195,6 +198,7 @@ try {
     if (\class_exists(\Normalizer::class)) {
         $decomposed = "cafe\u{0301}.mog";
         $refused = false;
+
         try {
             \Moggi\Registry\assertPortablePath($decomposed);
         } catch (\RuntimeException) {
@@ -203,6 +207,7 @@ try {
         $assert($refused, 'a decomposed path must be refused, not silently hashed differently');
 
         $accepted = true;
+
         try {
             \Moggi\Registry\assertPortablePath('Docs/' . "\u{00DC}" . 'nicode.mog');
         } catch (\RuntimeException) {

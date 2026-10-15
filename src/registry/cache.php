@@ -67,7 +67,7 @@ function userCacheDir(): string
  */
 function safeDigestKey(string $digest): ?string
 {
-    if (!\str_starts_with($digest, 'sha256:')) {
+    if (! \str_starts_with($digest, 'sha256:')) {
         return null;
     }
     $key = \substr($digest, \strlen('sha256:'));
@@ -110,7 +110,7 @@ function installDir(string $name, string $digest): string
  */
 function cachedBytes(string $path, ?string $expectedDigest = null): ?string
 {
-    if (!\is_file($path)) {
+    if (! \is_file($path)) {
         return null;
     }
     $bytes = (string) \file_get_contents($path);

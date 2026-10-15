@@ -2,15 +2,17 @@
 
 namespace Moggi\CLI\Commands;
 
-use Moggi\Registry\FetchLog;
-
 use function Moggi\Registry\badPackageProblem;
+
 use function Moggi\Registry\badPackagesAmong;
 use function Moggi\Registry\bundledPackages;
 use function Moggi\Registry\demandsCloseLocally;
+
+use Moggi\Registry\FetchLog;
+
 use function Moggi\Registry\findDescriptor;
-use function Moggi\Registry\providedPackages;
 use function Moggi\Registry\lockPath;
+use function Moggi\Registry\providedPackages;
 use function Moggi\Registry\readDescriptor;
 use function Moggi\Registry\readLock;
 use function Moggi\Registry\shortNpub;
@@ -81,7 +83,7 @@ function runUpdateCommand(array $argv): int
             bundledPackages(),
             providedPackages(),
         );
-        $catalog = $local ? null : loadVerifiedCatalog($options['registry'], !$options['noCache'], $log);
+        $catalog = $local ? null : loadVerifiedCatalog($options['registry'], ! $options['noCache'], $log);
 
         $lockFile = lockPath($descriptorPath, $options['output']);
         $before = readLock($lockFile);
@@ -142,14 +144,14 @@ function lockChanges(?array $before, array $after): array
 
     $changes = [];
     foreach ($after as $name => $version) {
-        if (!isset($was[$name])) {
+        if (! isset($was[$name])) {
             $changes[] = ['name' => $name, 'detail' => "added {$version}"];
         } elseif ($was[$name] !== $version) {
             $changes[] = ['name' => $name, 'detail' => "{$was[$name]} -> {$version}"];
         }
     }
     foreach ($was as $name => $version) {
-        if (!isset($after[$name])) {
+        if (! isset($after[$name])) {
             $changes[] = ['name' => $name, 'detail' => "removed (was {$version})"];
         }
     }

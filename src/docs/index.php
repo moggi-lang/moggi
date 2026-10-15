@@ -2,17 +2,20 @@
 
 namespace Moggi\Docs;
 
-use Moggi\Modules\PreparedProject;
-use Moggi\Semantics\TypeExpr\Scheme;
-use Moggi\Syntax\Ast;
-
 use function Moggi\Cache\atomicWrite;
 use function Moggi\Cache\compileDir;
 use function Moggi\CLI\resolveLibraryDirs;
+
 use function Moggi\Modules\isSyntheticCompilerModuleName;
 use function Moggi\Modules\outputRelativePath;
+
+use Moggi\Modules\PreparedProject;
+
 use function Moggi\Modules\syntheticLocalTypes;
 use function Moggi\Paths\canonicalSeparators;
+
+use Moggi\Semantics\TypeExpr\Scheme;
+use Moggi\Syntax\Ast;
 
 /**
  * Version of the docs search-index schema.
@@ -114,7 +117,7 @@ function buildIndex(
 
         foreach ($program->items as $item) {
             if ($item instanceof Ast\FunctionDecl) {
-                if (!isExportedValue($exportFilter, $program, $item->name)) {
+                if (! isExportedValue($exportFilter, $program, $item->name)) {
                     continue;
                 }
                 $entity = makeEntity(
@@ -132,11 +135,12 @@ function buildIndex(
                 );
                 $entities[] = $entity;
                 rememberCanonical($canonical, $entity);
+
                 continue;
             }
 
             if ($item instanceof Ast\DataDecl) {
-                if (!isExportedType($exportFilter, $item->name)) {
+                if (! isExportedType($exportFilter, $item->name)) {
                     continue;
                 }
                 $declKind = $item->isNewtype ? 'newtype' : 'data';
@@ -155,7 +159,7 @@ function buildIndex(
                 $entities[] = $entity;
                 rememberCanonical($canonical, $entity);
                 foreach ($item->constructors as $ctor) {
-                    if (!isExportedCtor(
+                    if (! isExportedCtor(
                         $exportFilter,
                         $program,
                         $item->name,
@@ -179,15 +183,16 @@ function buildIndex(
                     $entities[] = $ctorEntity;
                     rememberCanonical($canonical, $ctorEntity);
                 }
+
                 continue;
             }
 
             if ($item instanceof Ast\TypeSynonymDecl) {
-                if (!isExportedType($exportFilter, $item->name)) {
+                if (! isExportedType($exportFilter, $item->name)) {
                     continue;
                 }
                 $sig = 'type ' . $item->name
-                    . (count($item->params) > 0 ? ' ' . implode(' ', $item->params) : '')
+                    . (\count($item->params) > 0 ? ' ' . \implode(' ', $item->params) : '')
                     . ' = ' . surfaceTypeSignature($item->type);
                 $entity = makeEntity(
                     $moduleName,
@@ -203,11 +208,12 @@ function buildIndex(
                 );
                 $entities[] = $entity;
                 rememberCanonical($canonical, $entity);
+
                 continue;
             }
 
             if ($item instanceof Ast\ClassDecl) {
-                if (!isExportedType($exportFilter, $item->name)) {
+                if (! isExportedType($exportFilter, $item->name)) {
                     continue;
                 }
                 $entity = makeEntity(
@@ -225,7 +231,7 @@ function buildIndex(
                 $entities[] = $entity;
                 rememberCanonical($canonical, $entity);
                 foreach ($item->methods as $method) {
-                    if (!isExportedValue($exportFilter, $program, $method->name)) {
+                    if (! isExportedValue($exportFilter, $program, $method->name)) {
                         continue;
                     }
                     $methodEntity = makeEntity(
@@ -244,6 +250,7 @@ function buildIndex(
                     $entities[] = $methodEntity;
                     rememberCanonical($canonical, $methodEntity);
                 }
+
                 continue;
             }
 
@@ -251,8 +258,8 @@ function buildIndex(
                 $parent = instanceParentTypeName($item->head);
 
                 if ($parent === null
-                    || (!isExportedType($exportFilter, $item->class)
-                        && !isExportedType($exportFilter, $parent))
+                    || (! isExportedType($exportFilter, $item->class)
+                        && ! isExportedType($exportFilter, $parent))
                 ) {
                     continue;
                 }
@@ -271,11 +278,12 @@ function buildIndex(
                     $moduleSourcePath,
                 );
                 $entities[] = $instEntity;
+
                 continue;
             }
 
             if ($item instanceof Ast\ForeignTypeDecl) {
-                if (!isExportedValue($exportFilter, $program, $item->name)) {
+                if (! isExportedValue($exportFilter, $program, $item->name)) {
                     continue;
                 }
                 $entity = makeEntity(
@@ -292,11 +300,12 @@ function buildIndex(
                 );
                 $entities[] = $entity;
                 rememberCanonical($canonical, $entity);
+
                 continue;
             }
 
             if ($item instanceof Ast\ForeignTypeDecl) {
-                if (!isExportedValue($exportFilter, $program, $item->name)) {
+                if (! isExportedValue($exportFilter, $program, $item->name)) {
                     continue;
                 }
                 $entity = makeEntity(
@@ -313,11 +322,12 @@ function buildIndex(
                 );
                 $entities[] = $entity;
                 rememberCanonical($canonical, $entity);
+
                 continue;
             }
 
             if ($item instanceof Ast\ForeignImportDecl) {
-                if (!isExportedValue($exportFilter, $program, $item->name)) {
+                if (! isExportedValue($exportFilter, $program, $item->name)) {
                     continue;
                 }
                 $entity = makeEntity(
@@ -345,8 +355,8 @@ function buildIndex(
         }
 
         $isSynthetic = isSyntheticCompilerModuleName($moduleName);
-        $hasIndexedBody = count($entities) > 1 || $program->fixityDocs !== [];
-        if (!$isSynthetic && !$hasIndexedBody && ($program->exports === null || $program->exports === [])) {
+        $hasIndexedBody = \count($entities) > 1 || $program->fixityDocs !== [];
+        if (! $isSynthetic && ! $hasIndexedBody && ($program->exports === null || $program->exports === [])) {
             continue;
         }
 
@@ -362,7 +372,7 @@ function buildIndex(
         addReexportModuleEntries($byModule, $canonical, $modules, $prepared, $all, $checkedPrograms);
     }
 
-    ksort($byModule);
+    \ksort($byModule);
 
     $search = searchEntitiesFromCanonical($canonical);
     foreach ($byModule as $entities) {
@@ -372,7 +382,7 @@ function buildIndex(
             }
         }
     }
-    usort($search, static fn (DocEntity $a, DocEntity $b): int => $a->module <=> $b->module ?: $a->name <=> $b->name);
+    \usort($search, static fn (DocEntity $a, DocEntity $b): int => $a->module <=> $b->module ?: $a->name <=> $b->name);
 
     [$facadeBackends, $implFacades] = facadeBackendMaps($modules);
 
@@ -394,7 +404,7 @@ function sourceUnderRoot(string $path, string $rootPrefix): bool
 {
     return $rootPrefix === ''
         || $path === ''
-        || str_starts_with(canonicalSeparators($path), canonicalSeparators($rootPrefix));
+        || \str_starts_with(canonicalSeparators($path), canonicalSeparators($rootPrefix));
 }
 
 /**
@@ -426,11 +436,11 @@ function declarationSourceLine(string $source, string $name, int $fallback = 0):
 
     $pattern = docSourceNamePattern($name);
     $lineNo = 1;
-    foreach (preg_split('/\r\n|\n|\r/', $source) ?: [] as $line) {
-        if (preg_match('/^\s*' . $pattern . '\s*::/', $line) === 1
-            || preg_match('/^\s*' . $pattern . '\s*,/', $line) === 1
-            || preg_match('/,\s*' . $pattern . '\s*::/', $line) === 1
-            || preg_match('/,\s*' . $pattern . '\s*,/', $line) === 1) {
+    foreach (\preg_split('/\r\n|\n|\r/', $source) ?: [] as $line) {
+        if (\preg_match('/^\s*' . $pattern . '\s*::/', $line) === 1
+            || \preg_match('/^\s*' . $pattern . '\s*,/', $line) === 1
+            || \preg_match('/,\s*' . $pattern . '\s*::/', $line) === 1
+            || \preg_match('/,\s*' . $pattern . '\s*,/', $line) === 1) {
             return $lineNo;
         }
         ++$lineNo;
@@ -441,34 +451,34 @@ function declarationSourceLine(string $source, string $name, int $fallback = 0):
 
 function docSourceNamePattern(string $name): string
 {
-    if (preg_match('/^\w+$/', $name) === 1) {
-        return preg_quote($name, '/');
+    if (\preg_match('/^\w+$/', $name) === 1) {
+        return \preg_quote($name, '/');
     }
 
-    return '\(' . preg_quote($name, '/') . '\)';
+    return '\(' . \preg_quote($name, '/') . '\)';
 }
 
 function signatureFromSource(string $source, string $name): ?string
 {
     $pattern = docSourceNamePattern($name);
-    $lines = preg_split('/\r\n|\n|\r/', $source) ?: [];
-    $lineCount = count($lines);
+    $lines = \preg_split('/\r\n|\n|\r/', $source) ?: [];
+    $lineCount = \count($lines);
     for ($i = 0; $i < $lineCount; ++$i) {
         $line = $lines[$i];
         $matched = null;
-        if (preg_match('/^\s*' . $pattern . '\s*::\s*(.*)$/', $line, $match) === 1) {
+        if (\preg_match('/^\s*' . $pattern . '\s*::\s*(.*)$/', $line, $match) === 1) {
             $matched = $match[1];
-        } elseif (preg_match('/,\s*' . $pattern . '\s*::\s*(.*)$/', $line, $match) === 1) {
+        } elseif (\preg_match('/,\s*' . $pattern . '\s*::\s*(.*)$/', $line, $match) === 1) {
             $matched = $match[1];
         }
         if ($matched === null) {
             continue;
         }
 
-        $typePart = rtrim($matched);
+        $typePart = \rtrim($matched);
         while ($i + 1 < $lineCount && signatureTypeContinues($typePart)) {
             ++$i;
-            $typePart .= ' ' . trim($lines[$i]);
+            $typePart .= ' ' . \trim($lines[$i]);
         }
 
         return $name . ' :: ' . $typePart;
@@ -481,7 +491,7 @@ function signatureTypeContinues(string $typePart): bool
 {
     $paren = 0;
     $bracket = 0;
-    foreach (str_split($typePart) as $ch) {
+    foreach (\str_split($typePart) as $ch) {
         if ($ch === '(') {
             ++$paren;
         } elseif ($ch === ')') {
@@ -493,7 +503,7 @@ function signatureTypeContinues(string $typePart): bool
         }
     }
 
-    return $paren > 0 || $bracket > 0 || str_ends_with(rtrim($typePart), '=>');
+    return $paren > 0 || $bracket > 0 || \str_ends_with(\rtrim($typePart), '=>');
 }
 
 /**
@@ -532,6 +542,7 @@ function valueDocSignature(
             if ($item instanceof Ast\FunctionDecl && $item->name === $name && $item->type !== null) {
                 $surface = surfaceTypeSignature($item->type);
                 $base = $surface !== null ? $name . ' :: ' . $surface : null;
+
                 break;
             }
         }
@@ -567,7 +578,7 @@ function attachReexportAliases(
 ): void {
     $units = $prepared->units;
     foreach ($modules as $moduleName => $_parsed) {
-        if (!isset($units[$moduleName])) {
+        if (! isset($units[$moduleName])) {
             continue;
         }
 
@@ -596,12 +607,12 @@ function attachReexportAliases(
             }
 
             $key = canonicalKey($home);
-            if (!isset($canonical[$key])) {
+            if (! isset($canonical[$key])) {
                 continue;
             }
 
             $entity = $canonical[$key];
-            $aliases = array_values(array_unique([...$entity->aliases, $moduleName]));
+            $aliases = \array_values(\array_unique([...$entity->aliases, $moduleName]));
             $canonical[$key] = copyDocEntity($entity, ['aliases' => $aliases]);
         }
 
@@ -619,12 +630,12 @@ function attachReexportAliases(
                 }
 
                 $key = canonicalKey($home);
-                if (!isset($canonical[$key])) {
+                if (! isset($canonical[$key])) {
                     continue;
                 }
 
                 $entity = $canonical[$key];
-                $aliases = array_values(array_unique([...$entity->aliases, $moduleName]));
+                $aliases = \array_values(\array_unique([...$entity->aliases, $moduleName]));
                 $canonical[$key] = copyDocEntity($entity, ['aliases' => $aliases]);
             }
         }
@@ -649,7 +660,7 @@ function addReexportModuleEntries(
 ): void {
     $units = $prepared->units;
     foreach ($modules as $moduleName => $_parsed) {
-        if (!isset($units[$moduleName], $byModule[$moduleName])) {
+        if (! isset($units[$moduleName], $byModule[$moduleName])) {
             continue;
         }
 
@@ -746,7 +757,7 @@ function addReexportModuleEntries(
         }
 
         $merged = [...$byModule[$moduleName], ...$extra];
-        usort($merged, static fn (DocEntity $a, DocEntity $b): int => $a->name <=> $b->name);
+        \usort($merged, static fn (DocEntity $a, DocEntity $b): int => $a->name <=> $b->name);
         $byModule[$moduleName] = $merged;
         foreach ($extra as $entity) {
             $all[] = $entity;
@@ -760,8 +771,8 @@ function addReexportModuleEntries(
  */
 function searchEntitiesFromCanonical(array $canonical): array
 {
-    $entities = array_values($canonical);
-    usort($entities, static fn (DocEntity $a, DocEntity $b): int => $a->module <=> $b->module ?: $a->name <=> $b->name);
+    $entities = \array_values($canonical);
+    \usort($entities, static fn (DocEntity $a, DocEntity $b): int => $a->module <=> $b->module ?: $a->name <=> $b->name);
 
     return $entities;
 }
@@ -777,9 +788,9 @@ function moduleDocWithFixity(?string $moduleDoc, array $fixityDocs): ?string
     }
 
     foreach ($fixityDocs as $entry) {
-        $ops = implode(', ', $entry['operators']);
+        $ops = \implode(', ', $entry['operators']);
         $header = $entry['assoc'] . ' ' . $entry['precedence'] . ' ' . $ops;
-        $doc = trim($entry['doc'] ?? '');
+        $doc = \trim($entry['doc'] ?? '');
         $parts[] = $doc !== '' ? $doc . "\n\n" . $header : $header;
     }
 
@@ -787,7 +798,7 @@ function moduleDocWithFixity(?string $moduleDoc, array $fixityDocs): ?string
         return null;
     }
 
-    return implode("\n\n", $parts);
+    return \implode("\n\n", $parts);
 }
 
 /**
@@ -854,7 +865,7 @@ function reexportedClassNames(Ast\Program $program): array
             continue;
         }
         $name = $item['name'];
-        if (!isset($local[$name])) {
+        if (! isset($local[$name])) {
             $names[] = $name;
         }
     }
@@ -892,12 +903,12 @@ function attachClassReexportAliases(array &$canonical, Ast\Program $program, str
 {
     foreach (reexportedClassHomes($program, $canonical, $facadeModule) as $home) {
         $key = canonicalKey($home);
-        if (!isset($canonical[$key])) {
+        if (! isset($canonical[$key])) {
             continue;
         }
 
         $entity = $canonical[$key];
-        $aliases = array_values(array_unique([...$entity->aliases, $facadeModule]));
+        $aliases = \array_values(\array_unique([...$entity->aliases, $facadeModule]));
         $canonical[$key] = copyDocEntity($entity, ['aliases' => $aliases]);
     }
 }
@@ -958,7 +969,7 @@ function reexportEntityBundle(
     ?string $section,
 ): array {
     $bundle = [copyForReexport($home, $facadeModule, $section)];
-    if (!in_array($home->kind, ['type', 'class'], true)) {
+    if (! \in_array($home->kind, ['type', 'class'], true)) {
         return $bundle;
     }
 
@@ -974,7 +985,7 @@ function reexportEntityBundle(
 
 function entityHrefMatchesModule(DocEntity $entity): bool
 {
-    return str_starts_with($entity->href, modulePageName($entity->module));
+    return \str_starts_with($entity->href, modulePageName($entity->module));
 }
 
 function copyDocEntity(DocEntity $entity, array $overrides = []): DocEntity
@@ -983,16 +994,16 @@ function copyDocEntity(DocEntity $entity, array $overrides = []): DocEntity
         $overrides['module'] ?? $entity->module,
         $overrides['name'] ?? $entity->name,
         $overrides['kind'] ?? $entity->kind,
-        array_key_exists('signature', $overrides) ? $overrides['signature'] : $entity->signature,
-        array_key_exists('doc', $overrides) ? $overrides['doc'] : $entity->doc,
-        array_key_exists('section', $overrides) ? $overrides['section'] : $entity->section,
+        \array_key_exists('signature', $overrides) ? $overrides['signature'] : $entity->signature,
+        \array_key_exists('doc', $overrides) ? $overrides['doc'] : $entity->doc,
+        \array_key_exists('section', $overrides) ? $overrides['section'] : $entity->section,
         $overrides['href'] ?? $entity->href,
         $overrides['aliases'] ?? $entity->aliases,
-        array_key_exists('parentName', $overrides) ? $overrides['parentName'] : $entity->parentName,
-        array_key_exists('declKind', $overrides) ? $overrides['declKind'] : $entity->declKind,
-        array_key_exists('sourceLine', $overrides) ? $overrides['sourceLine'] : $entity->sourceLine,
-        array_key_exists('sourcePath', $overrides) ? $overrides['sourcePath'] : $entity->sourcePath,
-        array_key_exists('fixity', $overrides) ? $overrides['fixity'] : $entity->fixity,
+        \array_key_exists('parentName', $overrides) ? $overrides['parentName'] : $entity->parentName,
+        \array_key_exists('declKind', $overrides) ? $overrides['declKind'] : $entity->declKind,
+        \array_key_exists('sourceLine', $overrides) ? $overrides['sourceLine'] : $entity->sourceLine,
+        \array_key_exists('sourcePath', $overrides) ? $overrides['sourcePath'] : $entity->sourcePath,
+        \array_key_exists('fixity', $overrides) ? $overrides['fixity'] : $entity->fixity,
     );
 }
 
@@ -1005,8 +1016,8 @@ function copyDocEntity(DocEntity $entity, array $overrides = []): DocEntity
 function entitiesFromSyntheticUnit(string $moduleName, array $localTypes): array
 {
     $entities = [];
-    $typeNames = array_keys($localTypes['data'] ?? []);
-    sort($typeNames);
+    $typeNames = \array_keys($localTypes['data'] ?? []);
+    \sort($typeNames);
 
     foreach ($typeNames as $typeName) {
         $info = $localTypes['data'][$typeName] ?? [];
@@ -1017,14 +1028,14 @@ function entitiesFromSyntheticUnit(string $moduleName, array $localTypes): array
             'type',
             $constructors === []
                 ? 'primitive type ' . $typeName
-                : 'data ' . $typeName . ' = ' . implode(' | ', array_keys($constructors)),
+                : 'data ' . $typeName . ' = ' . \implode(' | ', \array_keys($constructors)),
             null,
             null,
             null,
             $constructors === [] ? 'primtype' : 'data',
         );
 
-        foreach (array_keys($constructors) as $constructor) {
+        foreach (\array_keys($constructors) as $constructor) {
             $entities[] = makeEntity(
                 $moduleName,
                 $constructor,
@@ -1054,19 +1065,19 @@ function entitiesFromSyntheticUnit(string $moduleName, array $localTypes): array
 
     $constructors = [];
     foreach ($localTypes['data'] ?? [] as $info) {
-        foreach (array_keys(\is_array($info['constructors'] ?? null) ? $info['constructors'] : []) as $name) {
+        foreach (\array_keys(\is_array($info['constructors'] ?? null) ? $info['constructors'] : []) as $name) {
             $constructors[$name] = true;
         }
     }
 
-    $valueNames = array_keys($localTypes['env'] ?? []);
-    sort($valueNames);
+    $valueNames = \array_keys($localTypes['env'] ?? []);
+    \sort($valueNames);
     foreach ($valueNames as $name) {
         if (isset($constructors[$name])) {
             continue;
         }
         $scheme = $localTypes['env'][$name] ?? null;
-        if (!$scheme instanceof Scheme) {
+        if (! $scheme instanceof Scheme) {
             continue;
         }
         $entities[] = makeEntity(
@@ -1095,7 +1106,7 @@ function entityHref(
 
 function modulePageName(string $moduleName): string
 {
-    return str_replace('.', '-', $moduleName) . '.html';
+    return \str_replace('.', '-', $moduleName) . '.html';
 }
 
 /** @return array<string, mixed> */
@@ -1135,9 +1146,9 @@ function searchIndexToJson(DocIndex $index): array
 /** @param list<array<string, mixed>> $search */
 function searchIndexRevision(array $search): string
 {
-    $payload = json_encode($search, JSON_UNESCAPED_UNICODE);
+    $payload = \json_encode($search, JSON_UNESCAPED_UNICODE);
 
-    return hash('crc32b', $payload !== false ? $payload : '');
+    return \hash('crc32b', $payload !== false ? $payload : '');
 }
 
 /**
@@ -1234,7 +1245,7 @@ function normalizeFacadeBackends(array $raw): array
 {
     $out = [];
     foreach ($raw as $facade => $map) {
-        if (!\is_string($facade) || !\is_array($map)) {
+        if (! \is_string($facade) || ! \is_array($map)) {
             continue;
         }
         $backends = [];
@@ -1256,7 +1267,7 @@ function normalizeImplFacades(array $raw): array
 {
     $out = [];
     foreach ($raw as $impl => $info) {
-        if (!\is_string($impl) || !\is_array($info)) {
+        if (! \is_string($impl) || ! \is_array($info)) {
             continue;
         }
         $facade = $info['facade'] ?? null;
@@ -1281,7 +1292,7 @@ function entityFromRow(array $row): DocEntity
         isset($row['section']) ? (string) $row['section'] : null,
         (string) $row['href'],
         isset($row['aliases']) && \is_array($row['aliases'])
-            ? array_values(array_map('strval', $row['aliases']))
+            ? \array_values(\array_map('strval', $row['aliases']))
             : [],
         isset($row['parentName']) ? (string) $row['parentName'] : null,
         isset($row['declKind']) ? (string) $row['declKind'] : null,
@@ -1294,12 +1305,12 @@ function entityFromRow(array $row): DocEntity
 function indexCachePath(string $inputPath, array $libDirs): string
 {
     $resolvedLibDirs = resolveLibraryDirs($libDirs);
-    $key = hash(
+    $key = \hash(
         'sha256',
-        $inputPath . '|' . implode(',', $resolvedLibDirs) . '|docs-v' . docIndexSchemaVersion(),
+        $inputPath . '|' . \implode(',', $resolvedLibDirs) . '|docs-v' . docIndexSchemaVersion(),
     );
 
-    return compileDir() . '/docs-index/' . substr($key, 0, 16) . '.json';
+    return compileDir() . '/docs-index/' . \substr($key, 0, 16) . '.json';
 }
 
 function loadOrBuildIndex(
@@ -1312,10 +1323,10 @@ function loadOrBuildIndex(
     $files = $docClosure[1];
     $mtimeFingerprint = docSourceFingerprintMtime($files);
     $cachePath = indexCachePath($inputPath, $libDirs);
-    if (!$rebuild && \is_file($cachePath)) {
-        $raw = file_get_contents($cachePath);
+    if (! $rebuild && \is_file($cachePath)) {
+        $raw = \file_get_contents($cachePath);
         if (\is_string($raw)) {
-            $data = json_decode($raw, true);
+            $data = \json_decode($raw, true);
             if (\is_array($data) && ($data['version'] ?? 0) === docIndexSchemaVersion()) {
                 $cachedSource = (string) ($data['sourceFingerprint'] ?? '');
                 if (($data['mtimeFingerprint'] ?? '') === $mtimeFingerprint
@@ -1340,11 +1351,11 @@ function loadOrBuildIndex(
     $project = loadDocProject($inputPath, $libDirs, $docClosure);
     $prepared = $project['prepared'];
     $modules = $project['modules'];
-    \fwrite(STDERR, 'mogdoc: loaded ' . count($modules) . " module(s)\n");
-    \fwrite(STDERR, 'mogdoc: type-checked ' . count($prepared->checked) . " module(s)\n");
+    \fwrite(STDERR, 'mogdoc: loaded ' . \count($modules) . " module(s)\n");
+    \fwrite(STDERR, 'mogdoc: type-checked ' . \count($prepared->checked) . " module(s)\n");
     $index = buildIndex($modules, $prepared->checked, $prepared);
-    \fwrite(STDERR, 'mogdoc: indexed ' . count($index->search) . " searchable entries\n");
-    $payload = json_encode(
+    \fwrite(STDERR, 'mogdoc: indexed ' . \count($index->search) . " searchable entries\n");
+    $payload = \json_encode(
         [
             ...indexToJson($index),
             'mtimeFingerprint' => $mtimeFingerprint,

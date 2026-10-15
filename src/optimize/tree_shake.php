@@ -24,13 +24,14 @@ function treeShakeModules(array $modulesByName): array
     foreach ($modulesByName as $name => $module) {
         if ($module->entry !== null) {
             $entryModule = $name;
+
             break;
         }
     }
 
     $total = 0;
     foreach ($modulesByName as $module) {
-        $total += count($module->functions);
+        $total += \count($module->functions);
     }
 
     if ($entryModule === null) {
@@ -71,15 +72,15 @@ function treeShakeModules(array $modulesByName): array
     $reachable = $rootKeys;
     $queue = \array_keys($rootKeys);
     $head = 0;
-    while ($head < count($queue)) {
+    while ($head < \count($queue)) {
         $key = $queue[$head++];
-        [$moduleName, $short] = explode('::', $key, 2);
+        [$moduleName, $short] = \explode('::', $key, 2);
 
         $ev = $evidenceByShort[$short] ?? null;
         if ($ev !== null) {
             foreach ($ev['methods'] as $methodShort) {
                 $methodKey = $ev['module'] . '::' . $methodShort;
-                if (!isset($reachable[$methodKey]) && isset($functionsByKey[$methodKey])) {
+                if (! isset($reachable[$methodKey]) && isset($functionsByKey[$methodKey])) {
                     $reachable[$methodKey] = true;
                     $queue[] = $methodKey;
                 }
@@ -96,24 +97,26 @@ function treeShakeModules(array $modulesByName): array
             $parsed = parseResolvedSymbol($callee);
             if ($parsed !== null) {
                 $calleeKey = $parsed['module'] . '::' . $parsed['name'];
-                if (!isset($reachable[$calleeKey])) {
+                if (! isset($reachable[$calleeKey])) {
                     $reachable[$calleeKey] = true;
                     $queue[] = $calleeKey;
                 }
+
                 continue;
             }
 
             $localKey = $moduleName . '::' . $callee;
             if (isset($functionsByKey[$localKey])) {
-                if (!isset($reachable[$localKey])) {
+                if (! isset($reachable[$localKey])) {
                     $reachable[$localKey] = true;
                     $queue[] = $localKey;
                 }
+
                 continue;
             }
 
             foreach ($keysByShort[$callee] ?? [] as $calleeKey) {
-                if (!isset($reachable[$calleeKey])) {
+                if (! isset($reachable[$calleeKey])) {
                     $reachable[$calleeKey] = true;
                     $queue[] = $calleeKey;
                 }
@@ -121,7 +124,7 @@ function treeShakeModules(array $modulesByName): array
 
             if (isset($evidenceByShort[$callee])) {
                 $evKey = $evidenceByShort[$callee]['module'] . '::' . $callee;
-                if (!isset($reachable[$evKey])) {
+                if (! isset($reachable[$evKey])) {
                     $reachable[$evKey] = true;
                     $queue[] = $evKey;
                 }
@@ -143,7 +146,7 @@ function treeShakeModules(array $modulesByName): array
             }
         }
         $module->functions = $filtered;
-        $module->instanceEvidence = array_values(array_filter(
+        $module->instanceEvidence = \array_values(\array_filter(
             $module->instanceEvidence,
             static function ($ev) use ($reachable, $name): bool {
                 $evKey = $name . '::' . shortName($ev->evidenceName);
@@ -164,13 +167,13 @@ function shortName(string $name): string
         return $parsed['name'];
     }
 
-    if (!isQualifiedSymbol($name)) {
+    if (! isQualifiedSymbol($name)) {
         return $name;
     }
 
-    $pos = strrpos($name, '\\');
+    $pos = \strrpos($name, '\\');
 
-    return $pos === false ? $name : substr($name, $pos + 1);
+    return $pos === false ? $name : \substr($name, $pos + 1);
 }
 
 /** @return list<string> */
@@ -180,4 +183,3 @@ function functionCalleeNames(FunctionDecl $fn): array
 
     return \array_keys($usage['callees']);
 }
-

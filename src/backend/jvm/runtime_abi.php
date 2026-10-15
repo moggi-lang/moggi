@@ -28,13 +28,13 @@ namespace Moggi\Backend\Jvm;
  *   moggi.rt.MList(head,t)  = Cons  (tail is MList|null)
  *
  * Dictionary (typeclass evidence)
- *   Class moggi.rt.Dict { Object[] methods; }  
+ *   Class moggi.rt.Dict { Object[] methods; }
  *   Resolved evidence is a static method returning Dict; arity is the instance
  *   context count (`Num a => Monoid (Sum a)` → one dict parameter). Constrained
  *   evidence closes context into method Partials.
  *
  * IO
- *   Class moggi.rt.IO { Object action; }   
+ *   Class moggi.rt.IO { Object action; }
  *   RT.ioRun(IO) executes; Main entry runs IO mains via ioRun.
  *   RT.ioCatch / ioFinally / throwSomeException back IoCatch/IoFinally/IoThrow.
  *
@@ -123,11 +123,11 @@ function buildFnInterface(): string
     $obj = $cp->class_('java/lang/Object');
     $mn = $cp->utf8('invoke');
     $md = $cp->utf8('([Ljava/lang/Object;)Ljava/lang/Object;');
-    $method = pack('n', 0x0401) . pack('n', $mn) . pack('n', $md) . pack('n', 0);
+    $method = \pack('n', 0x0401) . \pack('n', $mn) . \pack('n', $md) . \pack('n', 0);
 
-    return pack('N', 0xCAFEBABE) . pack('n', 0) . pack('n', 65) . $cp->write()
-        . pack('n', 0x0601) . pack('n', $thisC) . pack('n', $obj)
-        . pack('n', 0) . pack('n', 0) . pack('n', 1) . $method . pack('n', 0);
+    return \pack('N', 0xCAFEBABE) . \pack('n', 0) . \pack('n', 65) . $cp->write()
+        . \pack('n', 0x0601) . \pack('n', $thisC) . \pack('n', $obj)
+        . \pack('n', 0) . \pack('n', 0) . \pack('n', 1) . $method . \pack('n', 0);
 }
 
 function buildPartialClass(): string
@@ -758,7 +758,7 @@ function addRtFrameAppenders(ClassBuilder $b): void
             $c->aload(7);
             $c->invokevirtual($cp->methodRef('java/lang/StackTraceElement', 'getClassName', '()Ljava/lang/String;'), 0, true);
             rtAppendTop($c, $cp);
-            rtAppendChar($c, $cp, 35); 
+            rtAppendChar($c, $cp, 35);
             $c->aload(7);
             $c->invokevirtual($cp->methodRef('java/lang/StackTraceElement', 'getMethodName', '()Ljava/lang/String;'), 0, true);
             rtAppendTop($c, $cp);
@@ -896,7 +896,7 @@ function addRtFrameAppenders(ClassBuilder $b): void
             $c->aload(6);
             $c->invokevirtual($cp->methodRef('java/lang/StackTraceElement', 'getClassName', '()Ljava/lang/String;'), 0, true);
             rtAppendTop($c, $cp);
-            rtAppendChar($c, $cp, 46); 
+            rtAppendChar($c, $cp, 46);
             $c->aload(6);
             $c->invokevirtual($cp->methodRef('java/lang/StackTraceElement', 'getMethodName', '()Ljava/lang/String;'), 0, true);
             rtAppendTop($c, $cp);
@@ -911,17 +911,17 @@ function addRtFrameAppenders(ClassBuilder $b): void
             $c->aload(6);
             $c->invokevirtual($cp->methodRef('java/lang/StackTraceElement', 'getFileName', '()Ljava/lang/String;'), 0, true);
             rtAppendTop($c, $cp);
-            rtAppendChar($c, $cp, 58); 
+            rtAppendChar($c, $cp, 58);
             $c->aload(6);
             $c->invokevirtual($cp->methodRef('java/lang/StackTraceElement', 'getLineNumber', '()I'), 0, true);
             rtAppendInt($c, $cp);
-            rtAppendChar($c, $cp, 41); 
+            rtAppendChar($c, $cp, 41);
             $c->pop_();
 
             $c->label('no_location');
             $c->noteFrame($hostLocals, ['java/lang/StringBuilder']);
             $c->aload(0);
-            rtAppendChar($c, $cp, 10); 
+            rtAppendChar($c, $cp, 10);
             $c->pop_();
             $c->pop_();
             $c->iinc(4, 1);
@@ -1014,7 +1014,7 @@ function addRtLogicalExceptionMethods(ClassBuilder $b): void
             $c->invokespecial($cp->methodRef('java/lang/StringBuilder', '<init>', '()V'), 0, false);
             $c->aload(0);
             $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(Ljava/lang/String;)Ljava/lang/StringBuilder;'), 1, true);
-            $c->bipush(46); 
+            $c->bipush(46);
             $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(C)Ljava/lang/StringBuilder;'), 1, true);
             $c->aload(1);
             $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(Ljava/lang/String;)Ljava/lang/StringBuilder;'), 1, true);
@@ -1109,7 +1109,7 @@ function addRtLogicalExceptionMethods(ClassBuilder $b): void
                 $c->aload(1);
                 $c->iload(2);
                 $c->iconst(1);
-                $c->opcode(0x60, -1); 
+                $c->opcode(0x60, -1);
                 $c->invokevirtual($cp->methodRef('java/lang/String', 'substring', '(I)Ljava/lang/String;'), 1, true);
                 $c->areturn();
                 $c->label($next);
@@ -1207,7 +1207,7 @@ function addRtLogicalExceptionMethods(ClassBuilder $b): void
             $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(Ljava/lang/String;)Ljava/lang/StringBuilder;'), 1, true);
             $c->aload(3);
             $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(Ljava/lang/String;)Ljava/lang/StringBuilder;'), 1, true);
-            $c->bipush(58); 
+            $c->bipush(58);
             $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(C)Ljava/lang/StringBuilder;'), 1, true);
             $c->iload(4);
             $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(I)Ljava/lang/StringBuilder;'), 1, true);
@@ -1219,7 +1219,7 @@ function addRtLogicalExceptionMethods(ClassBuilder $b): void
             $c->checkcast($cp->class_('java/lang/Integer'));
             $c->invokevirtual($cp->methodRef('java/lang/Integer', 'intValue', '()I'), 0, true);
             $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(I)Ljava/lang/StringBuilder;'), 1, true);
-            $c->bipush(41); 
+            $c->bipush(41);
             $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(C)Ljava/lang/StringBuilder;'), 1, true);
             $c->bipush(10);
             $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(C)Ljava/lang/StringBuilder;'), 1, true);
@@ -1273,8 +1273,8 @@ function addRtLogicalExceptionMethods(ClassBuilder $b): void
                 1,
                 true,
             );
-            $c->aconst_null(); 
-            $c->aload(0); 
+            $c->aconst_null();
+            $c->aload(0);
             $c->invokespecial($meInit, 3, false);
             $c->invokestatic(
                 $cp->methodRef('moggi/rt/RT', 'formatExceptionReport', '(Ljava/lang/Throwable;)Ljava/lang/String;'),
@@ -1771,9 +1771,9 @@ function buildRTClass(): string
             $c->label('append_loop');
             $c->noteFrame(['moggi/rt/MList', 'moggi/rt/MList']);
             $c->aconst_null();
-            $c->astore(2); 
+            $c->astore(2);
             $c->aload(0);
-            $c->astore(3); 
+            $c->astore(3);
 
             $c->label('append_scan');
             $c->noteFrame(['moggi/rt/MList', 'moggi/rt/MList', 'moggi/rt/MList', 'moggi/rt/MList']);
@@ -2187,7 +2187,7 @@ function buildRTClass(): string
             $c->invokevirtual($cp->methodRef('java/lang/Object', 'equals', '(Ljava/lang/Object;)Z'), 1, true);
             $c->ifeq('tags_differ');
             $c->iconst(0);
-            $c->istore(4); 
+            $c->istore(4);
             $c->goto_('same_tag');
 
             $c->label('tags_differ');
@@ -2217,7 +2217,7 @@ function buildRTClass(): string
             $c->label('same_tag');
             $c->noteFrame(['java/lang/Object', 'java/lang/Object', 'moggi/rt/Con', 'moggi/rt/Con', 'int']);
             $c->iconst(0);
-            $c->istore(5); 
+            $c->istore(5);
             $c->label('field_loop');
             $c->noteFrame(['java/lang/Object', 'java/lang/Object', 'moggi/rt/Con', 'moggi/rt/Con', 'int', 'int']);
             $c->iload(5);
@@ -2831,8 +2831,8 @@ function buildRTClass(): string
             $c->new_($cp->class_('moggi/rt/MoggiException'));
             $c->dup();
             $c->aload(3);
-            $c->aload(1); 
-            $c->aconst_null(); 
+            $c->aload(1);
+            $c->aconst_null();
             $c->invokespecial($meInit, 3, false);
             $c->athrow();
 
@@ -2863,7 +2863,7 @@ function buildRTClass(): string
             $c->invokestatic($cp->methodRef('moggi/rt/RT', 'con', '(Ljava/lang/String;[Ljava/lang/Object;)Lmoggi/rt/Con;'), 2, true);
             $c->astore(4);
             $c->ldc($cp->string_('HostException'));
-            $c->aconst_null();  
+            $c->aconst_null();
             $c->aload(4);
             $c->invokestatic(
                 $cp->methodRef('moggi/rt/RT', 'exceptionWrap', '(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Object;)[Ljava/lang/Object;'),
@@ -2874,13 +2874,12 @@ function buildRTClass(): string
             $c->new_($cp->class_('moggi/rt/MoggiException'));
             $c->dup();
             $c->aload(3);
-            $c->aload(1); 
-            $c->aconst_null(); 
+            $c->aload(1);
+            $c->aconst_null();
             $c->invokespecial($meInit, 3, false);
             $c->athrow();
         }
     );
-
 
     $b->addMethod(
         'throwErrorCall',
@@ -2899,7 +2898,7 @@ function buildRTClass(): string
             $c->invokestatic($cp->methodRef('moggi/rt/RT', 'con', '(Ljava/lang/String;[Ljava/lang/Object;)Lmoggi/rt/Con;'), 2, true);
             $c->astore(2);
             $c->ldc($cp->string_('ErrorCall'));
-            $c->aconst_null();  
+            $c->aconst_null();
             $c->aload(2);
             $c->invokestatic(
                 $cp->methodRef('moggi/rt/RT', 'exceptionWrap', '(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Object;)[Ljava/lang/Object;'),
@@ -2910,8 +2909,8 @@ function buildRTClass(): string
             $c->new_($cp->class_('moggi/rt/MoggiException'));
             $c->dup();
             $c->aload(2);
-            $c->aload(1); 
-            $c->aconst_null(); 
+            $c->aload(1);
+            $c->aconst_null();
             $c->invokespecial(
                 $cp->methodRef(
                     'moggi/rt/MoggiException',
@@ -3000,7 +2999,7 @@ function buildRTClass(): string
             $c->invokestatic($cp->methodRef('moggi/rt/RT', 'con', '(Ljava/lang/String;[Ljava/lang/Object;)Lmoggi/rt/Con;'), 2, true);
             $c->astore(3);
             $c->ldc($cp->string_('HostException'));
-            $c->aconst_null();  
+            $c->aconst_null();
             $c->aload(3);
             $c->invokestatic(
                 $cp->methodRef('moggi/rt/RT', 'exceptionWrap', '(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Object;)[Ljava/lang/Object;'),
@@ -3071,8 +3070,8 @@ function buildRTClass(): string
                 1,
                 true,
             );
-            $c->aconst_null(); 
-            $c->aload(2); 
+            $c->aconst_null();
+            $c->aload(2);
             $c->invokespecial($meInit, 3, false);
             $c->astore(3);
             $c->aload(3);
@@ -3291,7 +3290,7 @@ function buildRTClass(): string
             $c->invokeinterface($cp->ifaceMethodRef('java/util/stream/Stream', 'iterator', '()Ljava/util/Iterator;'), 0, true);
             $c->astore(1);
             $c->aconst_null();
-            $c->astore(2); 
+            $c->astore(2);
 
             $c->label('loop');
             $c->noteFrame(['java/util/stream/Stream', 'java/util/Iterator', 'moggi/rt/MList']);
@@ -3342,9 +3341,9 @@ function buildRTClass(): string
 function buildPlatformClass(): string
 {
     $b = new ClassBuilder('moggi/rt/Platform');
-    $b->addField('argv', '[Ljava/lang/String;', 0x000a); 
+    $b->addField('argv', '[Ljava/lang/String;', 0x000a);
 
-    $b->addField('stdin', 'Ljava/io/BufferedReader;', 0x000a); 
+    $b->addField('stdin', 'Ljava/io/BufferedReader;', 0x000a);
 
     $b->addMethod(
         'stdin',
@@ -3466,10 +3465,8 @@ function buildPlatformClass(): string
         }
     );
 
-
     return $b->toBytes();
 }
-
 
 /** Unsigned 64-bit helpers; bit patterns stored as signed Java long. */
 function buildWord64Class(): string
@@ -3704,12 +3701,18 @@ function buildWord64Class(): string
             $c->areturn();
         }
     );
-    $b->addMethod('fromBigInteger', '(Ljava/math/BigInteger;)J', 0x0009, 1, ['java/math/BigInteger'],
+    $b->addMethod(
+        'fromBigInteger',
+        '(Ljava/math/BigInteger;)J',
+        0x0009,
+        1,
+        ['java/math/BigInteger'],
         static function (CodeBuilder $c, ConstantPool $cp): void {
             $c->aload(0);
             $c->invokevirtual($cp->methodRef('java/math/BigInteger', 'longValue', '()J'), 0, 2);
             $c->lreturn();
-        });
+        }
+    );
 
     return $b->toBytes();
 }

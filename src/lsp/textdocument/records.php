@@ -2,11 +2,13 @@
 
 namespace Moggi\LSP\TextDocument;
 
-use Moggi\LSP\Analysis\AnalysisService;
-use Moggi\Syntax\Ast;
-
 use function Moggi\Docs\surfaceTypeSignature;
+
+use Moggi\LSP\Analysis\AnalysisService;
+
 use function Moggi\LSP\Analysis\findNodeChainAt;
+
+use Moggi\Syntax\Ast;
 
 /**
  * Record knowledge shared by completion and hover: which `data` declaration a
@@ -50,7 +52,7 @@ function recordDeclFor(AnalysisService $svc, object $analysis, string $name): ?a
 {
     foreach (recordPrograms($svc, $analysis) as $prog) {
         foreach ($prog->items as $item) {
-            if (!$item instanceof Ast\DataDecl) {
+            if (! $item instanceof Ast\DataDecl) {
                 continue;
             }
             $ctor = recordCtorOf($item, $name);
@@ -155,7 +157,7 @@ function recordFieldsFromText(string $source, string $name): array
             continue;
         }
         foreach (splitTopLevel($body, ',') as $part) {
-            if (!preg_match('/^[\s]*([A-Za-z_][A-Za-z0-9_\']*)[\s]*::[\s]*(.+)$/s', $part, $m)) {
+            if (! \preg_match('/^[\s]*([A-Za-z_][A-Za-z0-9_\']*)[\s]*::[\s]*(.+)$/s', $part, $m)) {
                 continue;
             }
             $label = $m[1];
@@ -185,26 +187,30 @@ function braceBlocks(string $source): array
         $c = $source[$i];
         if ($c === '"' || $c === "'") {
             $i = skipQuoted($source, $i, $c) - 1;
+
             continue;
         }
         if ($c === '-' && ($source[$i + 1] ?? '') === '-') {
-            $nl = strpos($source, "\n", $i);
+            $nl = \strpos($source, "\n", $i);
             $i = ($nl === false ? $len : $nl) - 1;
+
             continue;
         }
         if ($c === '{' && ($source[$i + 1] ?? '') === '-') {
             $i = skipBlockComment($source, $i) - 1;
+
             continue;
         }
         if ($c === '{') {
             $open[] = $i;
+
             continue;
         }
         if ($c === '}' && $open !== []) {
-            $at = (int) array_pop($open);
+            $at = (int) \array_pop($open);
             $head = recordHeadBefore($source, $at);
             if ($head !== null) {
-                $blocks[] = [$head, substr($source, $at + 1, $i - $at - 1)];
+                $blocks[] = [$head, \substr($source, $at + 1, $i - $at - 1)];
             }
         }
     }
@@ -223,12 +229,12 @@ function binderTypeHeadFromText(string $source, string $binder, int $limit): ?st
 {
     $params = null;
     $head = null;
-    foreach (explode("\n", substr($source, 0, $limit)) as $line) {
-        if (!preg_match('/^[ \t]*([A-Za-z_][A-Za-z0-9_\']*)((?:\s+(?:[A-Za-z_][A-Za-z0-9_\']*|_|\([^()]*\)|\[[^\]]*\]))*)\s*=/', $line, $m)) {
+    foreach (\explode("\n", \substr($source, 0, $limit)) as $line) {
+        if (! \preg_match('/^[ \t]*([A-Za-z_][A-Za-z0-9_\']*)((?:\s+(?:[A-Za-z_][A-Za-z0-9_\']*|_|\([^()]*\)|\[[^\]]*\]))*)\s*=/', $line, $m)) {
             continue;
         }
-        $candidates = $m[2] === '' ? [] : (preg_split('/\s+/', trim($m[2])) ?: []);
-        if (!in_array($binder, $candidates, true) || reservedBindingHead($m[1])) {
+        $candidates = $m[2] === '' ? [] : (\preg_split('/\s+/', \trim($m[2])) ?: []);
+        if (! \in_array($binder, $candidates, true) || reservedBindingHead($m[1])) {
             continue;
         }
         $head = $m[1];
@@ -241,20 +247,20 @@ function binderTypeHeadFromText(string $source, string $binder, int $limit): ?st
     if ($signature === null) {
         return null;
     }
-    $domains = splitTopLevel(preg_replace('/^.*?=>/', '', $signature) ?? $signature, '->');
-    $position = array_search($binder, $params, true);
+    $domains = splitTopLevel(\preg_replace('/^.*?=>/', '', $signature) ?? $signature, '->');
+    $position = \array_search($binder, $params, true);
     $domain = $domains[\is_int($position) ? $position : 0] ?? null;
     if ($domain === null) {
         return null;
     }
 
-    return preg_match('/^\s*([A-Z][A-Za-z0-9_.]*)/', $domain, $m) ? $m[1] : null;
+    return \preg_match('/^\s*([A-Z][A-Za-z0-9_.]*)/', $domain, $m) ? $m[1] : null;
 }
 
 /** A keyword that looks like a binding (`let p = …`) but names no function. */
 function reservedBindingHead(string $name): bool
 {
-    return in_array($name, ['let', 'where', 'do', 'in', 'case', 'of', 'if', 'then', 'else', 'module', 'import', 'data', 'newtype', 'type', 'class', 'instance', 'foreign'], true);
+    return \in_array($name, ['let', 'where', 'do', 'in', 'case', 'of', 'if', 'then', 'else', 'module', 'import', 'data', 'newtype', 'type', 'class', 'instance', 'foreign'], true);
 }
 
 /** The written type of a binding, from its `name :: Type` line. */
@@ -263,8 +269,8 @@ function signatureOf(string $source, ?string $name): ?string
     if ($name === null || $name === '') {
         return null;
     }
-    if (preg_match('/^[ \t]*' . preg_quote($name, '/') . '[ \t]*::[ \t]*(.+)$/m', $source, $m)) {
-        return trim($m[1]);
+    if (\preg_match('/^[ \t]*' . \preg_quote($name, '/') . '[ \t]*::[ \t]*(.+)$/m', $source, $m)) {
+        return \trim($m[1]);
     }
 
     return null;
@@ -274,8 +280,8 @@ function signatureOf(string $source, ?string $name): ?string
 function enclosingTopLevelHead(string $source, int $limit): ?string
 {
     $head = null;
-    foreach (explode("\n", substr($source, 0, $limit)) as $line) {
-        if (preg_match('/^([A-Za-z_][A-Za-z0-9_\']*)\b/', $line, $m)) {
+    foreach (\explode("\n", \substr($source, 0, $limit)) as $line) {
+        if (\preg_match('/^([A-Za-z_][A-Za-z0-9_\']*)\b/', $line, $m)) {
             $head = $m[1];
         }
     }
@@ -299,18 +305,20 @@ function splitTopLevel(string $text, string $separator): array
         $c = $text[$i];
         if ($c === '"' || $c === "'") {
             $end = skipQuoted($text, $i, $c);
-            $current .= substr($text, $i, $end - $i);
+            $current .= \substr($text, $i, $end - $i);
             $i = $end - 1;
+
             continue;
         }
-        if (str_contains('{([', $c)) {
+        if (\str_contains('{([', $c)) {
             $depth++;
-        } elseif (str_contains('})]', $c)) {
+        } elseif (\str_contains('})]', $c)) {
             $depth--;
-        } elseif ($depth === 0 && substr($text, $i, \strlen($separator)) === $separator) {
+        } elseif ($depth === 0 && \substr($text, $i, \strlen($separator)) === $separator) {
             $parts[] = $current;
             $current = '';
             $i += \strlen($separator) - 1;
+
             continue;
         }
         $current .= $c;
@@ -323,7 +331,7 @@ function splitTopLevel(string $text, string $separator): array
 /** Whitespace runs in a written type collapse to single spaces. */
 function collapseSpace(string $text): string
 {
-    return trim((string) preg_replace('/\s+/', ' ', $text));
+    return \trim((string) \preg_replace('/\s+/', ' ', $text));
 }
 
 /**
@@ -336,7 +344,7 @@ function collapseSpace(string $text): string
  */
 function recordFieldOwner(Ast\Program $program, int $line, int $col): ?string
 {
-    $chain = array_reverse(findNodeChainAt($program, $line, $col));
+    $chain = \array_reverse(findNodeChainAt($program, $line, $col));
     foreach ($chain as $node) {
         if ($node instanceof Ast\RecordCon || $node instanceof Ast\PatRecord) {
             return $node->name;
@@ -377,7 +385,7 @@ function recordTypeHeadOf(Ast\Program $program, Ast\AstNode $expr): ?string
 function binderTypeHead(Ast\Program $program, string $name): ?string
 {
     foreach ($program->items as $item) {
-        if (!$item instanceof Ast\FunctionDecl || $item->name !== $name) {
+        if (! $item instanceof Ast\FunctionDecl || $item->name !== $name) {
             continue;
         }
         if ($item->type instanceof Ast\TypeNode) {

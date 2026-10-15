@@ -2,10 +2,11 @@
 
 namespace Moggi\Semantics\Deriving;
 
-use Moggi\Syntax\Ast;
 use Moggi\Semantics\Types\TypeCheckState;
 
 use function Moggi\Semantics\Types\typeFail;
+
+use Moggi\Syntax\Ast;
 
 /**
  * Stock `deriving Functor` over the last type parameter.
@@ -55,6 +56,7 @@ function validateFunctorialStructure(
             $c = classifyFunctorField($field->type, $param);
             if (($c['tag'] ?? '') === 'bad') {
                 $reason = $c['reason'] ?? 'unsupported';
+
                 throw typeFail(
                     $state,
                     "cannot derive {$className}: field type `"
@@ -99,7 +101,7 @@ function collectFunctorHeadConstraints(
     string $className,
     array &$needed,
 ): void {
-    if (!typeMentionsParam($type, $param)) {
+    if (! typeMentionsParam($type, $param)) {
         return;
     }
     if ($type instanceof Ast\TypeVar) {
@@ -109,9 +111,9 @@ function collectFunctorHeadConstraints(
         $head = $type->con;
         $args = $type->args;
         if ($args !== []) {
-            $last = $args[count($args) - 1];
+            $last = $args[\count($args) - 1];
             collectFunctorHeadConstraints($last, $param, $className, $needed);
-            for ($i = 0; $i < count($args) - 1; ++$i) {
+            for ($i = 0; $i < \count($args) - 1; ++$i) {
                 if (typeMentionsParam($args[$i], $param)) {
                 }
             }
@@ -138,7 +140,7 @@ function synthesizeFunctorMap(
 
     $alts = [];
     foreach ($decl->constructors as $ctor) {
-        $pats = freshPatVars('__v', count($ctor->fields));
+        $pats = freshPatVars('__v', \count($ctor->fields));
         $names = patVarNames($pats);
         $mapped = [];
         foreach ($ctor->fields as $i => $field) {
@@ -158,6 +160,7 @@ function synthesizeFunctorFieldMap(
     Ast\AstNode $value,
 ): Ast\AstNode {
     $c = classifyFunctorField($type, $param);
+
     return match ($c['tag']) {
         'param' => new Ast\Apply($f, $value),
         'skip' => $value,
@@ -175,7 +178,7 @@ function functorMapComposer(Ast\TypeNode $type, string $param, Ast\AstNode $f): 
         return $f;
     }
     if ($type instanceof Ast\TypeApp && $type->args !== []) {
-        $last = $type->args[count($type->args) - 1];
+        $last = $type->args[\count($type->args) - 1];
 
         return new Ast\Apply(new Ast\Variable('map'), functorMapComposer($last, $param, $f));
     }

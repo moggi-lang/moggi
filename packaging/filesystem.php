@@ -46,6 +46,7 @@ function httpGet(string $url, ?string $destination = null, bool $followRedirects
 
     if ($ok !== true || $status >= 400 || $status === 0) {
         @\unlink($target);
+
         throw new \RuntimeException("GET {$url} failed: " . ($error !== '' ? $error : "HTTP {$status}"));
     }
 
@@ -76,7 +77,7 @@ function runProcess(
 
 function extractArchive(string $archive, string $format, string $destination, int $stripComponents): void
 {
-    if (!\is_dir($destination) && !\mkdir($destination, 0777, true) && !\is_dir($destination)) {
+    if (! \is_dir($destination) && ! \mkdir($destination, 0777, true) && ! \is_dir($destination)) {
         throw new \RuntimeException("cannot create {$destination}");
     }
 
@@ -85,7 +86,7 @@ function extractArchive(string $archive, string $format, string $destination, in
         if (\is_dir($staging)) {
             removeTree($staging);
         }
-        if (!\mkdir($staging, 0777, true) && !\is_dir($staging)) {
+        if (! \mkdir($staging, 0777, true) && ! \is_dir($staging)) {
             throw new \RuntimeException("cannot create {$staging}");
         }
         [$code] = runProcess(['unzip', '-q', '-o', $archive, '-d', $staging]);
@@ -139,12 +140,12 @@ function moveTree(string $from, string $to): void
         }
         $source = $from . '/' . $entry;
         $target = $to . '/' . $entry;
-        if (!@\rename($source, $target)) {
+        if (! @\rename($source, $target)) {
             if (\is_dir($source)) {
                 moveTree($source, $target);
                 @\rmdir($source);
             } else {
-                if (!\copy($source, $target)) {
+                if (! \copy($source, $target)) {
                     throw new \RuntimeException("cannot move {$source} to {$target}");
                 }
                 @\unlink($source);
@@ -155,7 +156,7 @@ function moveTree(string $from, string $to): void
 
 function removeTree(string $path): void
 {
-    if (!\is_dir($path)) {
+    if (! \is_dir($path)) {
         if (\is_file($path)) {
             @\unlink($path);
         }
@@ -175,7 +176,7 @@ function removeTree(string $path): void
 /** @param ?callable(string, string): bool $keep */
 function copyTree(string $from, string $to, ?callable $keep = null): void
 {
-    if (!\is_dir($to) && !\mkdir($to, 0777, true) && !\is_dir($to)) {
+    if (! \is_dir($to) && ! \mkdir($to, 0777, true) && ! \is_dir($to)) {
         throw new \RuntimeException("cannot create {$to}");
     }
     $items = new \RecursiveIteratorIterator(
@@ -184,25 +185,27 @@ function copyTree(string $from, string $to, ?callable $keep = null): void
     );
     foreach ($items as $item) {
         $relative = \substr(\str_replace('\\', '/', $item->getPathname()), \strlen($from) + 1);
-        if ($keep !== null && !$keep($relative, $item->getFilename())) {
+        if ($keep !== null && ! $keep($relative, $item->getFilename())) {
             continue;
         }
         $target = $to . '/' . $relative;
         if ($item->isDir()) {
-            if (!\is_dir($target)) {
+            if (! \is_dir($target)) {
                 \mkdir($target, 0777, true);
             }
+
             continue;
         }
         $parent = \dirname($target);
-        if (!\is_dir($parent)) {
+        if (! \is_dir($parent)) {
             \mkdir($parent, 0777, true);
         }
         if ($item->isLink()) {
             @\symlink((string) \readlink($item->getPathname()), $target);
+
             continue;
         }
-        if (!\copy($item->getPathname(), $target)) {
+        if (! \copy($item->getPathname(), $target)) {
             throw new \RuntimeException("cannot copy {$item->getPathname()}");
         }
         @\chmod($target, $item->getPerms() & 0777);
@@ -220,7 +223,7 @@ function copyTree(string $from, string $to, ?callable $keep = null): void
 function flattenDarwinBundleHome(string $dir, string $binary): void
 {
     $home = $dir . '/Contents/Home';
-    if (\is_file($dir . '/' . $binary) || !\is_file($home . '/' . $binary)) {
+    if (\is_file($dir . '/' . $binary) || ! \is_file($home . '/' . $binary)) {
         return;
     }
 
@@ -228,7 +231,7 @@ function flattenDarwinBundleHome(string $dir, string $binary): void
         if ($name === '.' || $name === '..') {
             continue;
         }
-        if (!\rename($home . '/' . $name, $dir . '/' . $name)) {
+        if (! \rename($home . '/' . $name, $dir . '/' . $name)) {
             throw new \RuntimeException("cannot move {$home}/{$name} into {$dir}");
         }
     }
@@ -287,10 +290,10 @@ function assertProgramRunnable(string $program, ?string $cwd): void
     if ($resolved === null) {
         throw new \RuntimeException("cannot start {$program}: not found on PATH{$where}");
     }
-    if (!\is_file($resolved)) {
+    if (! \is_file($resolved)) {
         throw new \RuntimeException("cannot start {$program}: no such file {$resolved}{$where}");
     }
-    if (\PHP_OS_FAMILY !== 'Windows' && !\is_executable($resolved)) {
+    if (\PHP_OS_FAMILY !== 'Windows' && ! \is_executable($resolved)) {
         throw new \RuntimeException("cannot start {$program}: {$resolved} is not executable");
     }
 }

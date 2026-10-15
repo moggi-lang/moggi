@@ -28,7 +28,7 @@ const SCHNORR_MANIFEST = 'schnorr/deps.json';
 function schnorrDependencies(string $repo): array
 {
     $manifest = \json_decode((string) @\file_get_contents($repo . '/' . SCHNORR_MANIFEST), true);
-    if (!\is_array($manifest) || $manifest === []) {
+    if (! \is_array($manifest) || $manifest === []) {
         throw new \RuntimeException('cannot read ' . SCHNORR_MANIFEST);
     }
 
@@ -87,7 +87,7 @@ function buildSchnorr(string $repo, bool $windows = false): string
 {
     $prebuilt = \getenv('MOGGI_DIST_SCHNORR');
     if (\is_string($prebuilt) && $prebuilt !== '') {
-        if (!\is_file($prebuilt)) {
+        if (! \is_file($prebuilt)) {
             throw new \RuntimeException("MOGGI_DIST_SCHNORR names {$prebuilt}, which is not a file");
         }
         ensureSchnorrSources($repo);

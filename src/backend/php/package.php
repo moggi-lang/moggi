@@ -36,7 +36,7 @@ function packagePhpOutput(string $outputRoot, array $options, array $runtimeFile
 {
     copyRuntimeToOutputDir($runtimeFiles, $outputRoot);
 
-    if (!empty($options['unpacked'])) {
+    if (! empty($options['unpacked'])) {
         return;
     }
 
@@ -49,16 +49,15 @@ function copyRuntimeToOutputDir(array $runtimeFiles, string $outputRoot): void
 {
     foreach ($runtimeFiles as $src) {
         $dst = $outputRoot . '/' . runtimeOutputPath($src);
-        $dstDir = dirname($dst);
-        if (!\is_dir($dstDir) && !mkdir($dstDir, 0777, true) && !\is_dir($dstDir)) {
+        $dstDir = \dirname($dst);
+        if (! \is_dir($dstDir) && ! \mkdir($dstDir, 0777, true) && ! \is_dir($dstDir)) {
             throw new \RuntimeException("cannot create runtime directory {$dstDir}");
         }
-        if (!copy($src, $dst)) {
+        if (! \copy($src, $dst)) {
             throw new \RuntimeException("cannot copy runtime to {$dst}");
         }
     }
 }
-
 
 /**
  * Deployed name of one runtime source, relative to the output root.
@@ -69,11 +68,11 @@ function copyRuntimeToOutputDir(array $runtimeFiles, string $outputRoot): void
  */
 function runtimeOutputPath(string $source): string
 {
-    if (realpath($source) === realpath(__DIR__ . '/runtime.php')) {
+    if (\realpath($source) === \realpath(__DIR__ . '/runtime.php')) {
         return RUNTIME_OUTPUT_PATH;
     }
 
-    return basename($source);
+    return \basename($source);
 }
 
 /**
@@ -114,7 +113,7 @@ function packagePhar(string $outputRoot, string $pharPath, array $options): void
  */
 function pharBuilderCommand(): ?array
 {
-    if (!(bool) \ini_get('phar.readonly')) {
+    if (! (bool) \ini_get('phar.readonly')) {
         return null;
     }
 

@@ -2,11 +2,12 @@
 
 namespace Moggi\LSP\Index;
 
-use Moggi\Syntax\Ast;
-
 use function Moggi\LSP\Protocol\nodeToLspRange;
+
 use function Moggi\Modules\parseResolvedSymbol;
 use function Moggi\Modules\resolvedSymbol;
+
+use Moggi\Syntax\Ast;
 
 final class SymbolOccurrence
 {
@@ -121,6 +122,7 @@ final class OccurrenceIndex
                 $out[] = $edge;
             }
         }
+
         return $out;
     }
 
@@ -133,6 +135,7 @@ final class OccurrenceIndex
                 $out[] = $edge;
             }
         }
+
         return $out;
     }
 
@@ -140,7 +143,7 @@ final class OccurrenceIndex
     {
         unset($this->byUriName[$uri]);
         foreach ($this->byResolved as $key => $list) {
-            $this->byResolved[$key] = array_values(array_filter(
+            $this->byResolved[$key] = \array_values(\array_filter(
                 $list,
                 static fn (SymbolOccurrence $o): bool => $o->uri !== $uri,
             ));
@@ -148,7 +151,7 @@ final class OccurrenceIndex
                 unset($this->byResolved[$key]);
             }
         }
-        $this->callEdges = array_values(array_filter(
+        $this->callEdges = \array_values(\array_filter(
             $this->callEdges,
             static fn (CallEdge $e): bool => $e->uri !== $uri,
         ));
@@ -165,7 +168,7 @@ function buildOccurrenceIndex(
     array $externalFns,
 ): OccurrenceIndex {
     $index = new OccurrenceIndex();
-    if (!$program instanceof Ast\Program) {
+    if (! $program instanceof Ast\Program) {
         return $index;
     }
 
@@ -191,10 +194,11 @@ function buildOccurrenceIndex(
         if ($tok === null) {
             return $item;
         }
+
         return (object) [
             'line' => $tok->line,
             'col' => $tok->col,
-            'endCol' => $tok->col + max(1, mb_strlen($tok->lexeme)) - 1,
+            'endCol' => $tok->col + \max(1, \mb_strlen($tok->lexeme)) - 1,
             'endLine' => $tok->line,
         ];
     };
@@ -209,7 +213,7 @@ function buildOccurrenceIndex(
                 $uri,
                 [
                     'start' => ['line' => $tok->line - 1, 'character' => $tok->col - 1],
-                    'end' => ['line' => $tok->line - 1, 'character' => $tok->col - 1 + max(1, mb_strlen($tok->lexeme))],
+                    'end' => ['line' => $tok->line - 1, 'character' => $tok->col - 1 + \max(1, \mb_strlen($tok->lexeme))],
                 ],
                 $kind,
                 $name,
@@ -228,7 +232,7 @@ function buildOccurrenceIndex(
                     $cf = $fakeDeclPos($ctor->name, (object) [
                         'line' => $ctor->line,
                         'col' => $ctor->col,
-                        'endCol' => $ctor->endCol ?: ($ctor->col + max(1, strlen($ctor->name)) - 1),
+                        'endCol' => $ctor->endCol ?: ($ctor->col + \max(1, \strlen($ctor->name)) - 1),
                         'endLine' => $ctor->endLine ?: $ctor->line,
                     ], $maps['ctors']);
                     $addDef($ctor->name, $cf, 'def');
@@ -250,13 +254,13 @@ function buildOccurrenceIndex(
         $moduleName,
         $externalFns,
     ): void {
-        if (!is_object($node) || $node instanceof Ast\TypeNode) {
+        if (! \is_object($node) || $node instanceof Ast\TypeNode) {
             return;
         }
 
         $prevEnclosing = $enclosing;
         $prevName = $enclosingName;
-        if ($node instanceof Ast\FunctionDecl && !$node->signatureOnly) {
+        if ($node instanceof Ast\FunctionDecl && ! $node->signatureOnly) {
             $enclosing = resolvedSymbol($moduleName, $node->name);
             $enclosingName = $node->name;
         }
@@ -329,20 +333,21 @@ function buildOccurrenceIndex(
         if ($node instanceof Ast\TypeNode) {
             $enclosing = $prevEnclosing;
             $enclosingName = $prevName;
+
             return;
         }
-        foreach (get_object_vars($node) as $key => $prop) {
+        foreach (\get_object_vars($node) as $key => $prop) {
             if ($key === 'inferredType') {
                 continue;
             }
-            if (is_object($prop)) {
+            if (\is_object($prop)) {
                 if ($prop instanceof Ast\TypeNode) {
                     continue;
                 }
                 $walk($prop);
-            } elseif (is_array($prop)) {
+            } elseif (\is_array($prop)) {
                 foreach ($prop as $el) {
-                    if (is_object($el) && !$el instanceof Ast\TypeNode) {
+                    if (\is_object($el) && ! $el instanceof Ast\TypeNode) {
                         $walk($el);
                     }
                 }
@@ -371,10 +376,12 @@ function extractCallHead(object $fn, string $moduleName, array $externalFns): ?a
         $resolved = $fn->binderId !== null
             ? binderResolved($moduleName, $fn->binderId)
             : ($fn->resolvedOrigin ?? ($externalFns[$name] ?? resolvedSymbol($moduleName, $name)));
+
         return ['name' => $name, 'resolved' => $resolved];
     }
     if ($fn instanceof Ast\OperatorRef) {
         $name = $fn->name;
+
         return [
             'name' => $name,
             'resolved' => $fn->resolvedOrigin ?? ($externalFns[$name] ?? resolvedSymbol($moduleName, $name)),
@@ -382,6 +389,7 @@ function extractCallHead(object $fn, string $moduleName, array $externalFns): ?a
     }
     if ($fn instanceof Ast\ConstructorRef) {
         $name = $fn->name;
+
         return [
             'name' => $name,
             'resolved' => $fn->resolvedOrigin ?? ($externalFns[$name] ?? resolvedSymbol($moduleName, $name)),
@@ -390,6 +398,7 @@ function extractCallHead(object $fn, string $moduleName, array $externalFns): ?a
     if ($fn instanceof Ast\QualifiedRef) {
         return ['name' => $fn->name, 'resolved' => $fn->backendResolved];
     }
+
     return null;
 }
 function resolveSymbolParts(?string $resolved): ?array
@@ -397,6 +406,7 @@ function resolveSymbolParts(?string $resolved): ?array
     if ($resolved === null || $resolved === '') {
         return null;
     }
+
     return parseResolvedSymbol($resolved);
 }
 
@@ -408,5 +418,5 @@ function binderResolved(string $module, int $binderId): string
 
 function isBinderResolved(?string $resolved): bool
 {
-    return $resolved !== null && str_starts_with($resolved, 'binder:');
+    return $resolved !== null && \str_starts_with($resolved, 'binder:');
 }

@@ -2,9 +2,10 @@
 
 namespace Moggi\Optimize\Support;
 
+use function Moggi\Backend\Meta\lambdaMetaFromCaptures;
+
 use Moggi\IR;
 
-use function Moggi\Backend\Meta\lambdaMetaFromCaptures;
 use function Moggi\IR\Visit\freeLocalsInBlock;
 use function Moggi\IR\Visit\mapOperandChildren;
 use function Moggi\IR\Visit\operandChildren;
@@ -28,19 +29,19 @@ function operandEqual(IR\Operand $left, IR\Operand $right): bool
             && operandEqual($left->left, $right->left)
             && operandEqual($left->right, $right->right),
         IR\ExprCall::class => $left->callee === $right->callee
-            && count($left->args) === count($right->args)
-            && array_all(
+            && \count($left->args) === \count($right->args)
+            && \array_all(
                 $left->args,
                 static fn (IR\Operand $arg, int $i): bool => operandEqual($arg, $right->args[$i]),
             ),
         IR\Intrinsic::class => $left->name === $right->name
-            && count($left->args) === count($right->args)
-            && array_all(
+            && \count($left->args) === \count($right->args)
+            && \array_all(
                 $left->args,
                 static fn (IR\Operand $arg, int $i): bool => operandEqual($arg, $right->args[$i]),
             ),
-        IR\ListLit::class => count($left->elements) === count($right->elements)
-            && array_all(
+        IR\ListLit::class => \count($left->elements) === \count($right->elements)
+            && \array_all(
                 $left->elements,
                 static fn (IR\Operand $arg, int $i): bool => operandEqual($arg, $right->elements[$i]),
             ),
@@ -56,16 +57,16 @@ function operandKey(IR\Operand $operand): string
         IR\Temp::class => 't' . $operand->id,
         IR\FnRef::class => 'f' . $operand->name,
         IR\Unit::class => 'unit',
-        IR\ListLit::class => 'list:' . join(',', \array_map(operandKey(...), $operand->elements)),
+        IR\ListLit::class => 'list:' . \implode(',', \array_map(operandKey(...), $operand->elements)),
         IR\ExprBinop::class => 'binop:' . $operand->op . ':' . operandKey($operand->left) . ':' . operandKey($operand->right),
-        IR\ExprCall::class => 'call:' . $operand->callee . '(' . join(',', \array_map(operandKey(...), $operand->args)) . ')',
-        IR\ExprCallValue::class => 'callv:' . operandKey($operand->callee) . '(' . join(',', \array_map(operandKey(...), $operand->args)) . ')',
-        IR\Intrinsic::class => 'intr:' . $operand->name . '(' . join(',', \array_map(operandKey(...), $operand->args)) . ')',
-        IR\Partial::class => 'part:' . $operand->fn . '/' . $operand->arity . '(' . join(',', \array_map(operandKey(...), $operand->args)) . ')',
-        IR\ExprPartial::class => 'epart:' . $operand->fn . '/' . $operand->arity . '(' . join(',', \array_map(operandKey(...), $operand->args)) . ')',
+        IR\ExprCall::class => 'call:' . $operand->callee . '(' . \implode(',', \array_map(operandKey(...), $operand->args)) . ')',
+        IR\ExprCallValue::class => 'callv:' . operandKey($operand->callee) . '(' . \implode(',', \array_map(operandKey(...), $operand->args)) . ')',
+        IR\Intrinsic::class => 'intr:' . $operand->name . '(' . \implode(',', \array_map(operandKey(...), $operand->args)) . ')',
+        IR\Partial::class => 'part:' . $operand->fn . '/' . $operand->arity . '(' . \implode(',', \array_map(operandKey(...), $operand->args)) . ')',
+        IR\ExprPartial::class => 'epart:' . $operand->fn . '/' . $operand->arity . '(' . \implode(',', \array_map(operandKey(...), $operand->args)) . ')',
         IR\DictMethod::class => 'dictm:' . operandKey($operand->evidence) . '.' . $operand->method,
         IR\ForeignCall::class => 'foreign:' . $operand->backend . ':' . $operand->kind . ':' . $operand->path
-            . '(' . join(',', \array_map(operandKey(...), $operand->args)) . ')',
+            . '(' . \implode(',', \array_map(operandKey(...), $operand->args)) . ')',
         default => $operand::class,
     };
 }
@@ -104,12 +105,12 @@ function isPropagatableExpr(IR\Operand $expr): bool
     return match ($expr::class) {
         IR\ConstInt::class, IR\ConstDouble::class, IR\ConstStr::class, IR\ConstChar::class, IR\Local::class, IR\Temp::class, IR\FnRef::class, IR\Partial::class => true,
         IR\ExprBinop::class => isPropagatableExpr($expr->left) && isPropagatableExpr($expr->right),
-        IR\Intrinsic::class => array_reduce(
+        IR\Intrinsic::class => \array_reduce(
             $expr->args,
             static fn (bool $ok, IR\Operand $arg): bool => $ok && isPropagatableExpr($arg),
             true,
         ),
-        IR\ListLit::class => array_reduce(
+        IR\ListLit::class => \array_reduce(
             $expr->elements,
             static fn (bool $ok, IR\Operand $arg): bool => $ok && isPropagatableExpr($arg),
             true,
@@ -165,7 +166,7 @@ function foldExpr(IR\Operand $expr): IR\Operand
         default => $expr,
     };
 
-    if (!$expr instanceof IR\ExprBinop) {
+    if (! $expr instanceof IR\ExprBinop) {
         return $expr;
     }
 
@@ -358,13 +359,13 @@ function substituteTempInExpr(IR\Operand $expr, int $id, IR\Operand $replacement
 
 function isLambdaName(string $name): bool
 {
-    return str_starts_with($name, 'λ');
+    return \str_starts_with($name, 'λ');
 }
 
 /** The top-level function a recursive local `let`/`where` group is lifted to. */
 function isLetrecName(string $name): bool
 {
-    return str_starts_with($name, '__letrec');
+    return \str_starts_with($name, '__letrec');
 }
 
 /**

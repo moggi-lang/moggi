@@ -5,11 +5,10 @@ namespace Moggi\Backend\Jvm\Codegen;
 use Moggi\Backend\Jvm\Classfile\ClassBuilder;
 use Moggi\Backend\Jvm\Classfile\CodeBuilder;
 use Moggi\Backend\Jvm\Classfile\ConstantPool;
-use Moggi\Debug\SourceMapBuilder;
-use Moggi\IR;
 
 use function Moggi\Backend\Jvm\Foreign\jvmIsInterface;
 use function Moggi\Backend\Jvm\Foreign\resolveJvmForeignPath;
+
 use function Moggi\Backend\Jvm\Naming\moduleInternalName;
 use function Moggi\Backend\Jvm\Naming\symbolName;
 use function Moggi\Backend\Meta\constructorArityMap;
@@ -18,9 +17,14 @@ use function Moggi\Backend\Meta\isBoolBackedData;
 use function Moggi\Backend\Meta\lambdaCaptureNamesInBlock;
 use function Moggi\Backend\Meta\newtypeConstructorMap;
 use function Moggi\Backend\Meta\newtypeConstructorMapFromRegistry;
-use function Moggi\Debug\SourceMapBuilder;
 use function Moggi\Debug\normalizeDisplayPath;
+
+use Moggi\Debug\SourceMapBuilder;
+
 use function Moggi\Debug\symbolId;
+
+use Moggi\IR;
+
 use function Moggi\IR\Visit\collectLocalsInBlock;
 use function Moggi\IR\Visit\collectLocalsInOperand;
 use function Moggi\IR\Visit\stmtNestedBlocks;
@@ -62,8 +66,8 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
     $localBindings = [];
     foreach ($module->functions as $fn) {
         $localBindings[$fn->name] = true;
-        $functionArity[$fn->name] = count($fn->params)
-            + count($lambdaMeta[$fn->name]['captures'] ?? []);
+        $functionArity[$fn->name] = \count($fn->params)
+            + \count($lambdaMeta[$fn->name]['captures'] ?? []);
     }
     foreach (constructorArityMap($module->data) as $name => $arity) {
         $localBindings[$name] = true;
@@ -75,7 +79,7 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
         }
     }
     foreach (\array_keys($options['globalEvidenceMaps'] ?? []) as $evidenceName) {
-        if (!isset($functionArity[$evidenceName])) {
+        if (! isset($functionArity[$evidenceName])) {
             $functionArity[$evidenceName] = 0;
         }
     }
@@ -92,23 +96,23 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
         }
     }
     foreach ($options['globalFnArity'] ?? [] as $name => $arity) {
-        if (!isset($functionArity[$name])) {
+        if (! isset($functionArity[$name])) {
             $functionArity[$name] = $arity;
         }
     }
     foreach ($module->instanceEvidence as $ev) {
-        $functionArity[$ev->evidenceName] = count($ev->contextParams);
+        $functionArity[$ev->evidenceName] = \count($ev->contextParams);
     }
     if ($moduleName !== '') {
         foreach ($functionArity as $name => $arity) {
-            if (!\is_string($name) || str_contains($name, '::')) {
+            if (! \is_string($name) || \str_contains($name, '::')) {
                 continue;
             }
             $functionArity[resolvedSymbol($moduleName, $name)] = $arity;
         }
     }
     foreach ($options['globalFnArity'] ?? [] as $name => $arity) {
-        if (!isset($functionArity[$name])) {
+        if (! isset($functionArity[$name])) {
             $functionArity[$name] = $arity;
         }
     }
@@ -204,9 +208,9 @@ function emitFunction(
             ...$params,
         ];
     }
-    $arity = count($params);
-    $desc = '(' . str_repeat('Ljava/lang/Object;', $arity) . ')Ljava/lang/Object;';
-    $maxLocals = max($arity + 32, 16);
+    $arity = \count($params);
+    $desc = '(' . \str_repeat('Ljava/lang/Object;', $arity) . ')Ljava/lang/Object;';
+    $maxLocals = \max($arity + 32, 16);
     $paramV = \array_fill(0, $arity, 'java/lang/Object');
 
     $b->addMethod(
@@ -221,11 +225,12 @@ function emitFunction(
             foreach ($params as $i => $p) {
                 $env->locals[$p] = $i;
             }
-            $env->tailRecSlots = array_map(
+            $env->tailRecSlots = \array_map(
                 static fn (string $p): int => $env->locals[$p],
                 $fn->params,
             );
             noteJvmLoc($env, $fn->srcLoc);
+
             try {
                 emitBlock($env, $fn->body);
             } catch (\RuntimeException $e) {
@@ -248,7 +253,7 @@ function emitEvidence(
     array $localCallables = [],
 ): void {
     $name = symbolName($ev->evidenceName);
-    $ctxArity = count($ev->contextParams);
+    $ctxArity = \count($ev->contextParams);
     $pairs = [];
     foreach ($ev->methods as $surface => $irName) {
         $arity = $functionArity[$irName] ?? null;
@@ -263,10 +268,10 @@ function emitEvidence(
             'arity' => $arity,
         ];
     }
-    $desc = '(' . str_repeat('Ljava/lang/Object;', $ctxArity) . ')Ljava/lang/Object;';
+    $desc = '(' . \str_repeat('Ljava/lang/Object;', $ctxArity) . ')Ljava/lang/Object;';
     $paramV = \array_fill(0, $ctxArity, 'java/lang/Object');
     $methodsLocal = $ctxArity;
-    $maxLocals = max($ctxArity + 2, 4);
+    $maxLocals = \max($ctxArity + 2, 4);
     $b->addMethod(
         $name,
         $desc,
@@ -274,7 +279,7 @@ function emitEvidence(
         $maxLocals,
         $paramV,
         static function (CodeBuilder $c, ConstantPool $cp) use ($pairs, $wrapperRegistry, $ctxArity, $methodsLocal): void {
-            $n = count($pairs) * 2;
+            $n = \count($pairs) * 2;
             $c->iconst($n);
             $c->anewarray($cp->class_('java/lang/Object'));
             foreach ($pairs as $i => $entry) {
@@ -393,12 +398,17 @@ final class EmitEnv
 {
     /** @var array<string, int> */
     public array $locals = [];
+
     /** @var array<int, string> */
     public array $localTypes = [];
+
     public int $nextLocal;
+
     private int $labelId = 0;
+
     /** When set, IR\Ret inside match arms yields to this temp instead of returning. */
     public ?int $matchYieldDest = null;
+
     public ?string $matchJoinLabel = null;
 
     /** Generated method name of the function currently being emitted. */
@@ -487,12 +497,13 @@ final class EmitEnv
             if ($t === 'long' || $t === 'double') {
                 $locals[] = $t;
                 ++$i;
+
                 continue;
             }
             $locals[] = $t;
         }
-        while ($locals !== [] && $locals[array_key_last($locals)] === 'top') {
-            array_pop($locals);
+        while ($locals !== [] && $locals[\array_key_last($locals)] === 'top') {
+            \array_pop($locals);
         }
 
         return $locals;
@@ -520,7 +531,7 @@ final class JvmFnWrapperRegistry
     /** @return list<array{internal: string, targetOwner: string, targetSym: string, arity: int}> */
     public function specs(): array
     {
-        return array_values($this->specs);
+        return \array_values($this->specs);
     }
 }
 
@@ -528,7 +539,9 @@ final class JvmIoThunkRegistry
 {
     /** @var list<array{name: string, captures: list<string>, body: IR\Block, result: IR\Operand}> */
     private array $specs = [];
+
     private int $nextId = 0;
+
     private int $emitted = 0;
 
     /** @param list<string> $captures */
@@ -554,7 +567,7 @@ final class JvmIoThunkRegistry
 
     public function markEmitted(): void
     {
-        $this->emitted = count($this->specs);
+        $this->emitted = \count($this->specs);
     }
 }
 
@@ -581,9 +594,9 @@ function emitPendingIoThunkMethods(
         $ioThunkRegistry->markEmitted();
         foreach ($pending as $spec) {
             $params = $spec['captures'];
-            $arity = count($params);
-            $desc = '(' . str_repeat('Ljava/lang/Object;', $arity) . ')Ljava/lang/Object;';
-            $maxLocals = max($arity + 32, 16);
+            $arity = \count($params);
+            $desc = '(' . \str_repeat('Ljava/lang/Object;', $arity) . ')Ljava/lang/Object;';
+            $maxLocals = \max($arity + 32, 16);
             $paramV = \array_fill(0, $arity, 'java/lang/Object');
             $name = $spec['name'];
             $body = $spec['body'];
@@ -623,7 +636,7 @@ function emitPendingIoThunkMethods(
 
 function jvmFnWrapperInternalName(string $targetOwner, string $targetSym, int $arity): string
 {
-    $sym = preg_replace('/[^A-Za-z0-9_$]/', '_', $targetSym) ?? $targetSym;
+    $sym = \preg_replace('/[^A-Za-z0-9_$]/', '_', $targetSym) ?? $targetSym;
 
     return $targetOwner . '$fn$' . $sym . '$' . $arity;
 }
@@ -648,7 +661,7 @@ function buildJvmFnWrapperClass(string $internal, string $targetOwner, string $t
         'invoke',
         '([Ljava/lang/Object;)Ljava/lang/Object;',
         0x0001,
-        max($arity + 2, 2),
+        \max($arity + 2, 2),
         [$internal, '[Ljava/lang/Object;'],
         static function (CodeBuilder $c, ConstantPool $cp) use ($targetOwner, $targetSym, $arity): void {
             for ($i = 0; $i < $arity; ++$i) {
@@ -656,7 +669,7 @@ function buildJvmFnWrapperClass(string $internal, string $targetOwner, string $t
                 $c->iconst($i);
                 $c->aaload();
             }
-            $desc = '(' . str_repeat('Ljava/lang/Object;', $arity) . ')Ljava/lang/Object;';
+            $desc = '(' . \str_repeat('Ljava/lang/Object;', $arity) . ')Ljava/lang/Object;';
             $c->invokestatic($cp->methodRef($targetOwner, $targetSym, $desc), $arity, true);
             $c->areturn();
         }
@@ -900,7 +913,7 @@ function jvmStmtTerminates(IR\Stmt $stmt): bool
             return false;
         }
         foreach ($arms as $arm) {
-            if (!jvmBlockTerminates($arm->body)) {
+            if (! jvmBlockTerminates($arm->body)) {
                 return false;
             }
         }
@@ -915,7 +928,7 @@ function jvmBlockTerminates(IR\Block $block): bool
 {
     $items = $block->items;
 
-    return $items !== [] && jvmStmtTerminates($items[array_key_last($items)]);
+    return $items !== [] && jvmStmtTerminates($items[\array_key_last($items)]);
 }
 
 /**
@@ -932,7 +945,7 @@ function emitTailLoop(EmitEnv $env, IR\Loop $stmt): void
     $env->c->noteFrame($env->frameLocals());
 
     emitBlock($env, $stmt->body);
-    if (!jvmBlockTerminates($stmt->body)) {
+    if (! jvmBlockTerminates($stmt->body)) {
         $env->c->goto_($head);
     }
 
@@ -952,7 +965,7 @@ function emitTailRecall(EmitEnv $env, IR\TailRecall $stmt): void
 {
     $head = $env->tailLoopHead;
     $slots = $env->tailRecSlots;
-    if ($head === null || count($stmt->args) !== count($slots)) {
+    if ($head === null || \count($stmt->args) !== \count($slots)) {
         throw new \RuntimeException('JVM emit: tail_recall outside a tail loop');
     }
 
@@ -994,7 +1007,7 @@ function jvmResolveDictMethod(EmitEnv $env, IR\Operand $evidence, string $method
     }
 
     $methods = $entry['methods'] ?? null;
-    if (!\is_array($methods) || !isset($methods[$method])) {
+    if (! \is_array($methods) || ! isset($methods[$method])) {
         return null;
     }
 
@@ -1018,9 +1031,9 @@ function emitIoCall(EmitEnv $env, IR\IoCall $stmt): void
     }
 
     $runtime = $stmt->runtime ?? null;
-    if (\is_string($runtime) && str_starts_with($runtime, 'foreign:')) {
+    if (\is_string($runtime) && \str_starts_with($runtime, 'foreign:')) {
         $foreign = $stmt->foreign;
-        if (!($foreign instanceof IR\ForeignCall)) {
+        if (! ($foreign instanceof IR\ForeignCall)) {
             throw new \RuntimeException('foreign IO call missing metadata');
         }
         $call = new IR\ForeignCall(
@@ -1092,12 +1105,12 @@ function emitIoAssignAction(EmitEnv $env, IR\IoAssignAction $stmt): void
 
     $captures = [];
     foreach ([...collectLocalsInBlock($stmt->body), ...collectLocalsInOperand($stmt->result)] as $name) {
-        if (!isset($assigned[$name])) {
+        if (! isset($assigned[$name])) {
             $captures[$name] = true;
         }
     }
     foreach (lambdaCaptureNamesInBlock($stmt->body, $env->lambdaMeta) as $capture) {
-        if (!isset($assigned[$capture])) {
+        if (! isset($assigned[$capture])) {
             $captures[$capture] = true;
         }
     }
@@ -1119,7 +1132,7 @@ function emitIoAssignAction(EmitEnv $env, IR\IoAssignAction $stmt): void
     });
     foreach (\array_keys($temps) as $tempId) {
         $key = 't' . $tempId;
-        if (!isset($assigned[$key])) {
+        if (! isset($assigned[$key])) {
             $captures[$key] = true;
         }
     }
@@ -1133,8 +1146,8 @@ function emitIoAssignAction(EmitEnv $env, IR\IoAssignAction $stmt): void
     } else {
         $env->c->new_($env->cp->class_('moggi/rt/Partial'));
         $env->c->dup();
-        $env->c->iconst(count($captures));
-        emitTopLevelFnValue($env, $spec['name'], count($captures));
+        $env->c->iconst(\count($captures));
+        emitTopLevelFnValue($env, $spec['name'], \count($captures));
         $captureArgs = \array_map(
             static fn (string $capture): IR\Operand => new IR\Local($capture),
             $captures,
@@ -1168,8 +1181,8 @@ function emitStaticCall(EmitEnv $env, string $name, array $args, ?string $ownerM
     $callArgs = jvmCallArgs($env, $name, $args);
     if (isCapturedFnName($name)) {
         $meta = $env->lambdaMeta[$name] ?? ['captures' => [], 'params' => []];
-        $fullArity = count($meta['captures']) + count($meta['params']);
-        if (count($callArgs) < $fullArity) {
+        $fullArity = \count($meta['captures']) + \count($meta['params']);
+        if (\count($callArgs) < $fullArity) {
             emitPartialValue($env, $name, $fullArity, $callArgs);
 
             return;
@@ -1185,8 +1198,8 @@ function emitStaticCall(EmitEnv $env, string $name, array $args, ?string $ownerM
     foreach ($argSlots as $slot) {
         $env->c->aload($slot);
     }
-    $arity = count($callArgs);
-    $desc = '(' . str_repeat('Ljava/lang/Object;', $arity) . ')Ljava/lang/Object;';
+    $arity = \count($callArgs);
+    $desc = '(' . \str_repeat('Ljava/lang/Object;', $arity) . ')Ljava/lang/Object;';
     $target = jvmResolveCallableTarget($env->owner, $env->externalFns, $name, $ownerModule, $env->localCallables);
     $env->c->invokestatic($env->cp->methodRef($target['owner'], $target['sym'], $desc), $arity, true);
 }
@@ -1212,7 +1225,7 @@ function jvmResolveCallableTarget(
         if ($parsed !== null) {
             $targetOwner = moduleInternalName($parsed['module']);
             $sym = symbolName($parsed['name']);
-        } elseif (!isset($localCallables[$name]) && isset($externalFns[$name])) {
+        } elseif (! isset($localCallables[$name]) && isset($externalFns[$name])) {
             $extParsed = parseResolvedSymbol($externalFns[$name]);
             if ($extParsed !== null) {
                 $targetOwner = moduleInternalName($extParsed['module']);
@@ -1266,27 +1279,31 @@ function emitPartialValue(EmitEnv $env, string $fn, int $arity, array $args): vo
 /** @param list<IR\Operand> $args */
 function emitJvmBuiltinCall(EmitEnv $env, string $name, array $args): bool
 {
-    if (str_starts_with($name, '__tuple_field')) {
+    if (\str_starts_with($name, '__tuple_field')) {
         emitOperand($env, $args[0]);
         $env->c->checkcast($env->cp->class_('[Ljava/lang/Object;'));
-        $env->c->iconst((int) substr($name, strlen('__tuple_field')));
+        $env->c->iconst((int) \substr($name, \strlen('__tuple_field')));
         $env->c->aaload();
+
         return true;
     }
-    if (str_starts_with($name, '__tuple')) {
+    if (\str_starts_with($name, '__tuple')) {
         if ($args === []) {
             $env->c->aconst_null();
+
             return true;
         }
         pushObjectArray($env, $args);
+
         return true;
     }
-    if (str_starts_with($name, '__field')) {
+    if (\str_starts_with($name, '__field')) {
         emitOperand($env, $args[0]);
         $env->c->checkcast($env->cp->class_('moggi/rt/Con'));
         $env->c->getfield($env->cp->fieldRef('moggi/rt/Con', 'fields', '[Ljava/lang/Object;'));
-        $env->c->iconst((int) substr($name, strlen('__field')));
+        $env->c->iconst((int) \substr($name, \strlen('__field')));
         $env->c->aaload();
+
         return true;
     }
 
@@ -1456,7 +1473,7 @@ function emitOperand(EmitEnv $env, IR\Operand $op): void
                     static fn (string $capture): IR\Operand => new IR\Local($capture),
                     $captures,
                 );
-                $fullArity = count($captures) + count($meta['params'] ?? []);
+                $fullArity = \count($captures) + \count($meta['params'] ?? []);
                 emitPartialValue($env, $op->name, $fullArity, $captureArgs);
 
                 return;
@@ -1465,7 +1482,7 @@ function emitOperand(EmitEnv $env, IR\Operand $op): void
         $arity = $env->functionArity[$op->name] ?? null;
         if ($arity === null) {
             $parsed = parseResolvedSymbol($op->name);
-            if ($parsed !== null && !isLambdaName($parsed['name'])) {
+            if ($parsed !== null && ! isLambdaName($parsed['name'])) {
                 $arity = $env->functionArity[$parsed['name']] ?? null;
             }
         }
@@ -1512,14 +1529,14 @@ function boxInt(EmitEnv $env): void
 /** Sign-extend-truncate an i64 on the stack to the width named by an intN_* op. */
 function emitSignExtend(EmitEnv $env, string $opName): void
 {
-    if (str_starts_with($opName, 'int8')) {
+    if (\str_starts_with($opName, 'int8')) {
         $env->c->l2i();
         $env->c->i2b();
         $env->c->i2l();
 
         return;
     }
-    if (str_starts_with($opName, 'int16')) {
+    if (\str_starts_with($opName, 'int16')) {
         $env->c->l2i();
         $env->c->i2s();
         $env->c->i2l();
@@ -1553,11 +1570,11 @@ function formatJvmDouble(float $value): string
         return 'NaN';
     }
     if (\is_infinite($value)) {
-        return $value < 0 ? "-Infinity" : "Infinity";
+        return $value < 0 ? '-Infinity' : 'Infinity';
     }
 
     $text = \sprintf('%.17G', $value);
-    if (!\str_contains($text, '.') && !\str_contains($text, 'E') && !\str_contains($text, 'e')) {
+    if (! \str_contains($text, '.') && ! \str_contains($text, 'E') && ! \str_contains($text, 'e')) {
         $text .= '.0';
     }
 
@@ -1660,18 +1677,21 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
         case 'intMul#':
         case 'intDiv#':
             emitIntBinopToStack($env, $op->name, $args[0], $args[1]);
+
             return;
         case 'doubleAdd#':
         case 'doubleSub#':
         case 'doubleMul#':
         case 'doubleDiv#':
             emitDoubleBinopToStack($env, $op->name, $args[0], $args[1]);
+
             return;
         case 'doubleNegate#':
             emitOperand($env, $args[0]);
             unboxDouble($env);
             $env->c->dneg();
             boxDouble($env);
+
             return;
         case 'doubleEq#':
             emitDoubleCmpFlag($env, $args[0], $args[1]);
@@ -1679,10 +1699,12 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->c->swap();
             $env->c->isub();
             $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
+
             return;
         case 'doubleNe#':
             emitDoubleCmpFlag($env, $args[0], $args[1]);
             $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
+
             return;
         case 'doubleCompare#':
             emitOperand($env, $args[0]);
@@ -1691,54 +1713,68 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             unboxDouble($env);
             $env->c->opcode(0x98, -3);
             emitCompareIntToOrdering($env);
+
             return;
         case 'doubleAbs#':
             emitOperand($env, $args[0]);
             unboxDouble($env);
             $env->c->invokestatic($env->cp->methodRef('java/lang/Math', 'abs', '(D)D'), 2, 2);
             boxDouble($env);
+
             return;
         case 'doubleSignum#':
             emitOperand($env, $args[0]);
             unboxDouble($env);
             $env->c->invokestatic($env->cp->methodRef('java/lang/Math', 'signum', '(D)D'), 2, 2);
             boxDouble($env);
+
             return;
         case 'doubleExp#':
             emitDoubleUnaryMath($env, 'exp', $args[0]);
+
             return;
         case 'doubleLog#':
             emitDoubleUnaryMath($env, 'log', $args[0]);
+
             return;
         case 'doubleSqrt#':
             emitDoubleUnaryMath($env, 'sqrt', $args[0]);
+
             return;
         case 'doubleSin#':
             emitDoubleUnaryMath($env, 'sin', $args[0]);
+
             return;
         case 'doubleCos#':
             emitDoubleUnaryMath($env, 'cos', $args[0]);
+
             return;
         case 'doubleAsin#':
             emitDoubleUnaryMath($env, 'asin', $args[0]);
+
             return;
         case 'doubleAcos#':
             emitDoubleUnaryMath($env, 'acos', $args[0]);
+
             return;
         case 'doubleAtan#':
             emitDoubleUnaryMath($env, 'atan', $args[0]);
+
             return;
         case 'doubleSinh#':
             emitDoubleUnaryMath($env, 'sinh', $args[0]);
+
             return;
         case 'doubleCosh#':
             emitDoubleUnaryMath($env, 'cosh', $args[0]);
+
             return;
         case 'intNegate#':
             emitOperand($env, $args[0]);
             unboxInt($env);
             $env->c->lneg();
             boxInt($env);
+
             return;
         case 'intAnd#':
         case 'intOr#':
@@ -1753,24 +1789,26 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             if ($op->name === 'intAnd#') {
                 $env->c->land();
             } elseif ($op->name === 'intOr#') {
-                $env->c->opcode(0x81, -2); 
+                $env->c->opcode(0x81, -2);
             } elseif ($op->name === 'intXor#') {
-                $env->c->opcode(0x83, -2); 
+                $env->c->opcode(0x83, -2);
             } else {
-                $env->c->l2i(); 
+                $env->c->l2i();
                 $env->c->opcode(
                     ['intShiftL#' => 0x79, 'intShiftRA#' => 0x7b, 'intShiftRL#' => 0x7d][$op->name],
                     -1
                 );
             }
             boxInt($env);
+
             return;
         case 'intNot#':
             emitOperand($env, $args[0]);
             unboxInt($env);
             $env->c->ldc2_w($env->cp->long(-1));
-            $env->c->opcode(0x83, -2); 
+            $env->c->opcode(0x83, -2);
             boxInt($env);
+
             return;
         case 'intPopCnt#':
         case 'intClz#':
@@ -1788,10 +1826,12 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             );
             $env->c->i2l();
             boxInt($env);
+
             return;
         case 'wordFromInt#':
         case 'wordToInt#':
             emitOperand($env, $args[0]);
+
             return;
         case 'intEq#':
         case 'charEq#':
@@ -1808,6 +1848,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             emitOperand($env, $args[1]);
             $env->c->invokevirtual($env->cp->methodRef('java/lang/Object', 'equals', '(Ljava/lang/Object;)Z'), 1, true);
             $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
+
             return;
         case 'intNe#':
         case 'charNe#':
@@ -1824,8 +1865,9 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             emitOperand($env, $args[1]);
             $env->c->invokevirtual($env->cp->methodRef('java/lang/Object', 'equals', '(Ljava/lang/Object;)Z'), 1, true);
             $env->c->iconst(1);
-            $env->c->opcode(0x82, -1); 
+            $env->c->opcode(0x82, -1);
             $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
+
             return;
         case 'intCompare#':
         case 'charCompare#':
@@ -1847,6 +1889,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->c->lload($left);
             $env->c->lload($right);
             emitIntCompareToOrdering($env);
+
             return;
         case 'boolCompare#':
             emitOperand($env, $args[0]);
@@ -1857,6 +1900,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->c->invokevirtual($env->cp->methodRef('java/lang/Boolean', 'booleanValue', '()Z'), 0, true);
             $env->c->invokestatic($env->cp->methodRef('java/lang/Integer', 'compare', '(II)I'), 2, true);
             emitCompareIntToOrdering($env);
+
             return;
         case 'boolAnd#':
             emitOperand($env, $args[0]);
@@ -1865,8 +1909,9 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             emitOperand($env, $args[1]);
             $env->c->checkcast($env->cp->class_('java/lang/Boolean'));
             $env->c->invokevirtual($env->cp->methodRef('java/lang/Boolean', 'booleanValue', '()Z'), 0, true);
-            $env->c->opcode(0x7e, -1); 
+            $env->c->opcode(0x7e, -1);
             $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
+
             return;
         case 'boolOr#':
             emitOperand($env, $args[0]);
@@ -1875,16 +1920,18 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             emitOperand($env, $args[1]);
             $env->c->checkcast($env->cp->class_('java/lang/Boolean'));
             $env->c->invokevirtual($env->cp->methodRef('java/lang/Boolean', 'booleanValue', '()Z'), 0, true);
-            $env->c->opcode(0x80, -1); 
+            $env->c->opcode(0x80, -1);
             $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
+
             return;
         case 'boolNot#':
             emitOperand($env, $args[0]);
             $env->c->checkcast($env->cp->class_('java/lang/Boolean'));
             $env->c->invokevirtual($env->cp->methodRef('java/lang/Boolean', 'booleanValue', '()Z'), 0, true);
             $env->c->iconst(1);
-            $env->c->opcode(0x82, -1); 
+            $env->c->opcode(0x82, -1);
             $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
+
             return;
         case 'stringCompare#':
         case 'bytesCompare#':
@@ -1894,6 +1941,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->c->checkcast($env->cp->class_('java/lang/String'));
             $env->c->invokevirtual($env->cp->methodRef('java/lang/String', 'compareTo', '(Ljava/lang/String;)I'), 1, true);
             emitCompareIntToOrdering($env);
+
             return;
         case 'stringNe#':
             emitOperand($env, $args[0]);
@@ -1902,18 +1950,23 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->c->iconst(1);
             $env->c->opcode(0x82, -1);
             $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
+
             return;
         case 'orderingIsLt#':
             emitOrderingTagEq($env, $args[0], 'LT');
+
             return;
         case 'orderingIsGt#':
             emitOrderingTagEq($env, $args[0], 'GT');
+
             return;
         case 'orderingIsLte#':
             emitOrderingTagNe($env, $args[0], 'GT');
+
             return;
         case 'orderingIsGte#':
             emitOrderingTagNe($env, $args[0], 'LT');
+
             return;
         case 'orderingEq#':
             emitOperand($env, $args[0]);
@@ -1924,6 +1977,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->c->getfield($env->cp->fieldRef('moggi/rt/Con', 'tag', 'Ljava/lang/String;'));
             $env->c->invokevirtual($env->cp->methodRef('java/lang/Object', 'equals', '(Ljava/lang/Object;)Z'), 1, true);
             $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
+
             return;
         case 'orderingNe#':
             emitOperand($env, $args[0]);
@@ -1934,8 +1988,9 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->c->getfield($env->cp->fieldRef('moggi/rt/Con', 'tag', 'Ljava/lang/String;'));
             $env->c->invokevirtual($env->cp->methodRef('java/lang/Object', 'equals', '(Ljava/lang/Object;)Z'), 1, true);
             $env->c->iconst(1);
-            $env->c->opcode(0x82, -1); 
+            $env->c->opcode(0x82, -1);
             $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
+
             return;
         case 'orderingCompare#':
             emitOperand($env, $args[0]);
@@ -1946,12 +2001,14 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->c->invokestatic($env->cp->methodRef('moggi/rt/RT', 'orderingToInt', '(Lmoggi/rt/Con;)I'), 1, true);
             $env->c->invokestatic($env->cp->methodRef('java/lang/Integer', 'compare', '(II)I'), 2, true);
             emitCompareIntToOrdering($env);
+
             return;
         case 'intAbs#':
             emitOperand($env, $args[0]);
             unboxInt($env);
             $env->c->invokestatic($env->cp->methodRef('java/lang/Math', 'abs', '(J)J'), 2, 2);
             boxInt($env);
+
             return;
         case 'intSignum#':
             emitOperand($env, $args[0]);
@@ -1959,6 +2016,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->c->invokestatic($env->cp->methodRef('java/lang/Long', 'signum', '(J)I'), 2, true);
             $env->c->i2l();
             boxInt($env);
+
             return;
         case 'intFromInteger#':
             emitOperand($env, $args[0]);
@@ -1969,6 +2027,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 2,
             );
             boxInt($env);
+
             return;
         case 'intToInteger#':
             emitOperand($env, $args[0]);
@@ -1978,6 +2037,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 2,
                 true,
             );
+
             return;
         case 'integerFromDigits#':
             $env->c->new_($env->cp->class_('java/math/BigInteger'));
@@ -1989,6 +2049,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 1,
                 false,
             );
+
             return;
         case 'doubleFromInteger#':
             emitOperand($env, $args[0]);
@@ -1999,6 +2060,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 2,
             );
             boxDouble($env);
+
             return;
         case 'ioPure#':
         case 'ioBind#':
@@ -2020,6 +2082,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
         case 'bytesFromString#':
         case 'bytesToString#':
             emitOperand($env, $args[0]);
+
             return;
         case 'word64Eq#':
         case 'word64Ne#':
@@ -2034,6 +2097,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 true,
             );
             $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
+
             return;
         case 'wordCompare#':
         case 'word64Compare#':
@@ -2051,6 +2115,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 1,
                 true,
             );
+
             return;
         case 'word64Add#':
         case 'word64Sub#':
@@ -2075,6 +2140,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 2,
             );
             boxInt($env);
+
             return;
         case 'word64ToInteger#':
             emitOperand($env, $args[0]);
@@ -2084,6 +2150,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 2,
                 true,
             );
+
             return;
         case 'word64FromInteger#':
             emitOperand($env, $args[0]);
@@ -2094,6 +2161,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 2,
             );
             boxInt($env);
+
             return;
         case 'word64Show#':
             emitOperand($env, $args[0]);
@@ -2103,6 +2171,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 2,
                 true,
             );
+
             return;
 
         case 'word8FromInt#':
@@ -2111,6 +2180,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->c->ldc2_w($env->cp->long(0xff));
             $env->c->land();
             boxInt($env);
+
             return;
         case 'word8Add#':
         case 'word8Sub#':
@@ -2127,6 +2197,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->c->ldc2_w($env->cp->long(0xff));
             $env->c->land();
             boxInt($env);
+
             return;
         case 'word16FromInt#':
             emitOperand($env, $args[0]);
@@ -2134,6 +2205,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->c->ldc2_w($env->cp->long(0xffff));
             $env->c->land();
             boxInt($env);
+
             return;
         case 'word16Add#':
         case 'word16Sub#':
@@ -2150,6 +2222,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->c->ldc2_w($env->cp->long(0xffff));
             $env->c->land();
             boxInt($env);
+
             return;
         case 'word32FromInt#':
             emitOperand($env, $args[0]);
@@ -2157,6 +2230,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->c->ldc2_w($env->cp->long(0xffffffff));
             $env->c->land();
             boxInt($env);
+
             return;
         case 'word32Add#':
         case 'word32Sub#':
@@ -2173,6 +2247,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->c->ldc2_w($env->cp->long(0xffffffff));
             $env->c->land();
             boxInt($env);
+
             return;
         case 'int8FromInt#':
         case 'int16FromInt#':
@@ -2181,6 +2256,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             unboxInt($env);
             emitSignExtend($env, $op->name);
             boxInt($env);
+
             return;
         case 'int8Add#':
         case 'int8Sub#':
@@ -2203,17 +2279,20 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             };
             emitSignExtend($env, $op->name);
             boxInt($env);
+
             return;
         case 'int64Add#':
         case 'int64Sub#':
         case 'int64Mul#':
-            emitIntBinopToStack($env, 'int' . substr($op->name, 5), $args[0], $args[1]);
+            emitIntBinopToStack($env, 'int' . \substr($op->name, 5), $args[0], $args[1]);
+
             return;
         case 'doubleToInt#':
             emitOperand($env, $args[0]);
             unboxDouble($env);
             $env->c->d2l();
             boxInt($env);
+
             return;
         case 'byteSwap16#':
             emitOperand($env, $args[0]);
@@ -2221,11 +2300,12 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->c->l2i();
             $env->c->invokestatic($env->cp->methodRef('java/lang/Integer', 'reverseBytes', '(I)I'), 1, true);
             $env->c->iconst(16);
-            $env->c->opcode(0x7c, -1); 
+            $env->c->opcode(0x7c, -1);
             $env->c->i2l();
             $env->c->ldc2_w($env->cp->long(0xffff));
             $env->c->land();
             boxInt($env);
+
             return;
         case 'byteSwap32#':
             emitOperand($env, $args[0]);
@@ -2234,24 +2314,30 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->c->invokestatic($env->cp->methodRef('java/lang/Integer', 'reverseBytes', '(I)I'), 1, true);
             $env->c->i2l();
             boxInt($env);
+
             return;
         case 'byteSwap64#':
             emitOperand($env, $args[0]);
             unboxInt($env);
             $env->c->invokestatic($env->cp->methodRef('java/lang/Long', 'reverseBytes', '(J)J'), 2, 2);
             boxInt($env);
+
             return;
         case 'bitReverse8#':
             emitJvmBitReverse($env, $args[0], 8, 255);
+
             return;
         case 'bitReverse16#':
             emitJvmBitReverse($env, $args[0], 16, 65535);
+
             return;
         case 'bitReverse32#':
             emitJvmBitReverse($env, $args[0], 32, 4294967295);
+
             return;
         case 'bitReverse64#':
             emitJvmBitReverse($env, $args[0], 64, -1);
+
             return;
         case 'listCons#':
             emitOperand($env, $args[0]);
@@ -2261,16 +2347,19 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 2,
                 true,
             );
+
             return;
         case 'listHead#':
             emitOperand($env, $args[0]);
             $env->c->checkcast($env->cp->class_('moggi/rt/MList'));
             $env->c->getfield($env->cp->fieldRef('moggi/rt/MList', 'head', 'Ljava/lang/Object;'));
+
             return;
         case 'listTail#':
             emitOperand($env, $args[0]);
             $env->c->checkcast($env->cp->class_('moggi/rt/MList'));
             $env->c->getfield($env->cp->fieldRef('moggi/rt/MList', 'tail', 'Lmoggi/rt/MList;'));
+
             return;
         case 'listAppend#':
             emitOperand($env, $args[0]);
@@ -2282,6 +2371,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 2,
                 true,
             );
+
             return;
         case 'listEq#':
             emitOperand($env, $args[0]);
@@ -2291,6 +2381,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 2,
                 true,
             );
+
             return;
         case 'listNe#':
             emitOperand($env, $args[0]);
@@ -2303,8 +2394,9 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->c->checkcast($env->cp->class_('java/lang/Boolean'));
             $env->c->invokevirtual($env->cp->methodRef('java/lang/Boolean', 'booleanValue', '()Z'), 0, true);
             $env->c->iconst(1);
-            $env->c->opcode(0x82, -1); 
+            $env->c->opcode(0x82, -1);
             $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
+
             return;
         case 'listCompare#':
             emitOperand($env, $args[0]);
@@ -2314,6 +2406,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 2,
                 true,
             );
+
             return;
         case 'maybeEq#':
             emitOperand($env, $args[0]);
@@ -2323,6 +2416,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 2,
                 true,
             );
+
             return;
         case 'maybeNe#':
             emitOperand($env, $args[0]);
@@ -2335,8 +2429,9 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->c->checkcast($env->cp->class_('java/lang/Boolean'));
             $env->c->invokevirtual($env->cp->methodRef('java/lang/Boolean', 'booleanValue', '()Z'), 0, true);
             $env->c->iconst(1);
-            $env->c->opcode(0x82, -1); 
+            $env->c->opcode(0x82, -1);
             $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
+
             return;
         case 'maybeCompare#':
             emitOperand($env, $args[0]);
@@ -2346,6 +2441,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 2,
                 true,
             );
+
             return;
         case 'stringAppend#':
         case 'bytesAppend#':
@@ -2358,6 +2454,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 1,
                 true,
             );
+
             return;
         case 'stringCons#':
             emitOperand($env, $args[0]);
@@ -2376,6 +2473,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 1,
                 true,
             );
+
             return;
 
         case 'platformArgv#':
@@ -2384,6 +2482,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 0,
                 true,
             );
+
             return;
         case 'platformStdin#':
             $env->c->invokestatic(
@@ -2391,6 +2490,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 0,
                 true,
             );
+
             return;
         case 'stringEq#':
         case 'bytesEq#':
@@ -2398,6 +2498,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             emitOperand($env, $args[1]);
             $env->c->invokevirtual($env->cp->methodRef('java/lang/Object', 'equals', '(Ljava/lang/Object;)Z'), 1, true);
             $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
+
             return;
         case 'bytesNe#':
             emitOperand($env, $args[0]);
@@ -2406,9 +2507,11 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->c->iconst(1);
             $env->c->opcode(0x82, -1);
             $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
+
             return;
         case 'naturalToInteger#':
             emitOperand($env, $args[0]);
+
             return;
         case 'integerToNatural#':
             emitOperand($env, $args[0]);
@@ -2423,6 +2526,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 2,
                 false,
             );
+
             return;
         case 'error#':
             emitOperand($env, $args[0]);
@@ -2433,6 +2537,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 2,
                 true,
             );
+
             return;
         case 'exceptionWrap#':
             emitOperand($env, $args[0]);
@@ -2445,6 +2550,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 3,
                 true,
             );
+
             return;
         case 'exceptionUnwrap#':
             emitOperand($env, $args[0]);
@@ -2455,6 +2561,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 2,
                 true,
             );
+
             return;
         case 'exceptionThrow#':
             emitOperand($env, $args[0]);
@@ -2464,6 +2571,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 2,
                 true,
             );
+
             return;
         case 'exceptionDisplay#':
             emitOperand($env, $args[0]);
@@ -2472,6 +2580,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 1,
                 true,
             );
+
             return;
         case 'fix#':
             emitOperand($env, $args[0]);
@@ -2480,6 +2589,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
                 1,
                 true,
             );
+
             return;
         case 'exceptionThrowIo#':
         case 'exceptionCatch#':
@@ -2495,7 +2605,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
 function emitListLit(EmitEnv $env, IR\ListLit $op): void
 {
     $env->c->aconst_null();
-    foreach (array_reverse($op->elements) as $item) {
+    foreach (\array_reverse($op->elements) as $item) {
         emitOperand($env, $item);
         $env->c->swap();
         $env->c->invokestatic(
@@ -2509,7 +2619,7 @@ function emitListLit(EmitEnv $env, IR\ListLit $op): void
 /** @param list<IR\Operand> $args */
 function pushObjectArray(EmitEnv $env, array $args): void
 {
-    $env->c->iconst(count($args));
+    $env->c->iconst(\count($args));
     $env->c->anewarray($env->cp->class_('java/lang/Object'));
     foreach ($args as $i => $arg) {
         $env->c->dup();
@@ -2539,7 +2649,7 @@ function emitJvmForeignIntrinsic(EmitEnv $env, IR\ForeignCall $op, string $membe
     if ($member !== '__cast') {
         throw new \RuntimeException("JVM foreign `{$op->path}`: unknown intrinsic `{$member}`");
     }
-    if (count($op->args) !== 1) {
+    if (\count($op->args) !== 1) {
         throw new \RuntimeException("JVM foreign `{$op->path}`: __cast needs one argument");
     }
 
@@ -2547,12 +2657,12 @@ function emitJvmForeignIntrinsic(EmitEnv $env, IR\ForeignCall $op, string $membe
 
     $ret = jvmReturnDescriptor($desc);
     if ($ret !== 'Ljava/lang/Object;') {
-        if (!str_starts_with($ret, 'L')) {
+        if (! \str_starts_with($ret, 'L')) {
             throw new \RuntimeException(
                 "JVM foreign `{$op->path}`: __cast target `{$ret}` is not a reference type",
             );
         }
-        $env->c->checkcast($env->cp->class_(substr($ret, 1, -1)));
+        $env->c->checkcast($env->cp->class_(\substr($ret, 1, -1)));
     }
 
     emitForeignIoWrap($env, $op->ioWrap);
@@ -2560,7 +2670,7 @@ function emitJvmForeignIntrinsic(EmitEnv $env, IR\ForeignCall $op, string $membe
 
 function emitRuntimeApply(EmitEnv $env, array $args): void
 {
-    if (count($args) === 1) {
+    if (\count($args) === 1) {
         emitOperand($env, $args[0]);
         $env->c->invokestatic(
             $env->cp->methodRef('moggi/rt/RT', 'apply1', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;'),
@@ -2621,9 +2731,9 @@ function emitForeign(EmitEnv $env, IR\ForeignCall $op): void
     }
 
     $paramArgs = \array_slice($args, $argOffset);
-    if (count($paramArgs) !== count($argKinds)) {
+    if (\count($paramArgs) !== \count($argKinds)) {
         throw new \RuntimeException(
-            "JVM foreign `{$op->path}`: arg count " . count($paramArgs)
+            "JVM foreign `{$op->path}`: arg count " . \count($paramArgs)
             . ' does not match descriptor ' . $desc,
         );
     }
@@ -2666,7 +2776,7 @@ function emitForeign(EmitEnv $env, IR\ForeignCall $op): void
     if ($resolved['dispatch'] === 'constructor') {
         emitForeignIoWrap($env, $op->ioWrap);
 
-        return; 
+        return;
     }
 
     if ($retSlots === 0) {
@@ -2761,16 +2871,16 @@ function countJvmArgSlots(array $kinds): int
 function parseJvmParamKinds(string $desc): array
 {
     if ($desc[0] !== '(') {
-        return []; 
+        return [];
     }
     $i = 1;
     $kinds = [];
-    $n = strlen($desc);
+    $n = \strlen($desc);
     while ($i < $n && $desc[$i] !== ')') {
         $start = $i;
         $c = $desc[$i];
         if ($c === 'L') {
-            $semi = strpos($desc, ';', $i);
+            $semi = \strpos($desc, ';', $i);
             if ($semi === false) {
                 throw new \RuntimeException("bad JVM descriptor: {$desc}");
             }
@@ -2781,7 +2891,7 @@ function parseJvmParamKinds(string $desc): array
                 $i++;
             }
             if ($i < $n && $desc[$i] === 'L') {
-                $semi = strpos($desc, ';', $i);
+                $semi = \strpos($desc, ';', $i);
                 $i = $semi === false ? $n : $semi + 1;
             } else {
                 $i++;
@@ -2789,7 +2899,7 @@ function parseJvmParamKinds(string $desc): array
         } else {
             $i++;
         }
-        $kinds[] = substr($desc, $start, $i - $start);
+        $kinds[] = \substr($desc, $start, $i - $start);
     }
 
     return $kinds;
@@ -2797,12 +2907,12 @@ function parseJvmParamKinds(string $desc): array
 
 function jvmReturnDescriptor(string $methodDesc): string
 {
-    $pos = strrpos($methodDesc, ')');
+    $pos = \strrpos($methodDesc, ')');
     if ($pos === false) {
         return $methodDesc;
     }
 
-    return substr($methodDesc, $pos + 1);
+    return \substr($methodDesc, $pos + 1);
 }
 
 function jvmReturnStackSlots(string $methodDesc): int
@@ -2847,8 +2957,8 @@ function unboxForeignArg(EmitEnv $env, string $kind): void
             $env->c->invokevirtual($env->cp->methodRef('java/lang/Float', 'floatValue', '()F'), 0, true);
         })(),
         default => (static function () use ($env, $kind): void {
-            if (str_starts_with($kind, 'L') && str_ends_with($kind, ';')) {
-                $internal = substr($kind, 1, -1);
+            if (\str_starts_with($kind, 'L') && \str_ends_with($kind, ';')) {
+                $internal = \substr($kind, 1, -1);
                 if ($internal !== 'java/lang/Object') {
                     $env->c->checkcast($env->cp->class_($internal));
                 }
@@ -2859,7 +2969,7 @@ function unboxForeignArg(EmitEnv $env, string $kind): void
 
 function boxForeignReturn(EmitEnv $env, string $retOrFieldDesc): void
 {
-    $ret = str_starts_with($retOrFieldDesc, '(')
+    $ret = \str_starts_with($retOrFieldDesc, '(')
         ? jvmReturnDescriptor($retOrFieldDesc)
         : $retOrFieldDesc;
 
@@ -2885,7 +2995,7 @@ function boxForeignReturn(EmitEnv $env, string $retOrFieldDesc): void
         ),
         'J' => boxInt($env),
         'V' => $env->c->aconst_null(),
-        default => null, 
+        default => null,
     };
 }
 
@@ -2950,7 +3060,7 @@ function emitMatchCommon(EmitEnv $env, IR\Operand $scrutinee, array $arms, ?int 
         }
         $endsWithRet = jvmBlockTerminates($arm->body);
         emitBlock($env, $arm->body);
-        if (!$endsWithRet) {
+        if (! $endsWithRet) {
             $needsEndLabel = true;
             $env->c->goto_($end);
         }
@@ -2966,7 +3076,7 @@ function emitMatchCommon(EmitEnv $env, IR\Operand $scrutinee, array $arms, ?int 
     $env->c->invokespecial($env->cp->methodRef('java/lang/RuntimeException', '<init>', '(Ljava/lang/String;)V'), 1, false);
     $env->c->athrow();
     $env->matchJoinLabel = $prevJoin;
-    if (!$needsEndLabel) {
+    if (! $needsEndLabel) {
         $env->c->noteFrame($env->frameLocals());
 
         return;
@@ -2979,7 +3089,7 @@ function emitMatchCommon(EmitEnv $env, IR\Operand $scrutinee, array $arms, ?int 
     if ($dest !== null) {
         return;
     }
-    if (!$returnNullOnNoDest) {
+    if (! $returnNullOnNoDest) {
         return;
     }
     $env->c->aconst_null();
@@ -3246,13 +3356,13 @@ function emitDataConstructors(ClassBuilder $b, IR\DataDecl $decl): void
 
     foreach ($decl->constructors as $ctor) {
         $name = symbolName($ctor->name);
-        $arity = count($ctor->fields);
-        $desc = '(' . str_repeat('Ljava/lang/Object;', $arity) . ')Ljava/lang/Object;';
+        $arity = \count($ctor->fields);
+        $desc = '(' . \str_repeat('Ljava/lang/Object;', $arity) . ')Ljava/lang/Object;';
         $b->addMethod(
             $name,
             $desc,
             0x0009,
-            max($arity + 2, 4),
+            \max($arity + 2, 4),
             \array_fill(0, $arity, 'java/lang/Object'),
             static function (CodeBuilder $c, ConstantPool $cp) use ($ctor, $arity): void {
                 $c->ldc($cp->string_($ctor->name));
@@ -3360,7 +3470,7 @@ function jvmStmtRefsUnboundLocal(IR\Stmt $stmt, array $bound): bool
 function jvmOperandRefsUnboundLocal(IR\Operand $op, array $bound): bool
 {
     if ($op instanceof IR\Local) {
-        return !isset($bound[$op->name]);
+        return ! isset($bound[$op->name]);
     }
     if ($op instanceof IR\Intrinsic || $op instanceof IR\ExprCall || $op instanceof IR\ForeignCall || $op instanceof IR\ListLit) {
         foreach ($op->args ?? [] as $arg) {

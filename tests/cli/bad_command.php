@@ -9,7 +9,7 @@
 // run and the checks are reported as skipped rather than faked.
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/tests/suite/support/process.php';
@@ -19,19 +19,19 @@ require $root . '/tests/suite/support/registry-write-server.php';
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
     ++$checks;
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
 
 $binary = \getenv('MOGGI_SCHNORR');
-if (!\is_string($binary) || $binary === '') {
+if (! \is_string($binary) || $binary === '') {
     $binary = $root . '/schnorr/schnorr';
 }
-if (!\is_file($binary) || !\is_executable($binary)) {
+if (! \is_file($binary) || ! \is_executable($binary)) {
     $binary = $root . '/schnorr/build/schnorr';
 }
-if (!\is_file($binary) || !\is_executable($binary)) {
+if (! \is_file($binary) || ! \is_executable($binary)) {
     echo "bad command tests skipped (no schnorr CLI; set MOGGI_SCHNORR)\n";
     exit(0);
 }
@@ -59,6 +59,7 @@ $router = $work . '/router.php';
 $log = $work . '/requests.log';
 
 $server = null;
+
 try {
     $server = startFakeRegistry($router, $log, $env);
     $base = 'http://127.0.0.1:' . $server['port'];

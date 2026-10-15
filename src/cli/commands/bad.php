@@ -83,7 +83,7 @@ function runBadCommand(array $argv): int
     }
 
     $name = \trim((string) $options['path']);
-    if ($name === '' || $name === '.' || !isPackageName($name)) {
+    if ($name === '' || $name === '.' || ! isPackageName($name)) {
         \fwrite(\STDERR, "error: `moggi bad` needs one package name\n\n" . badUsage() . "\n");
 
         return 1;
@@ -108,7 +108,7 @@ function badPackage(string $name, array $options): int
     if ($lift && $reason !== '') {
         throw new \RuntimeException('--lift and --reason contradict each other — lift the marker, or set one with a reason');
     }
-    if (!$lift && $reason === '') {
+    if (! $lift && $reason === '') {
         throw new \RuntimeException(
             'marking a package bad needs --reason TEXT (what a user reads); pass --lift to remove the marker instead',
         );
@@ -119,7 +119,7 @@ function badPackage(string $name, array $options): int
     $base = \rtrim((string) $options['registry'], '/');
     $route = $options['admin'] ? '/admin/bad' : '/bad';
 
-    if (!$options['yes']) {
+    if (! $options['yes']) {
         confirmGovernanceAction($lift
             ? "lift the bad marker on `{$name}` at {$base} as " . shortNpub($signer) . '?'
             : "mark `{$name}` bad at {$base} as " . shortNpub($signer)
@@ -148,7 +148,7 @@ function badPackage(string $name, array $options): int
     }
 
     \printf("%s — %s\n", $name, $lift ? 'bad marker lifted' : 'marked bad');
-    if (!$lift) {
+    if (! $lift) {
         \printf("reason     %s\n", $reason);
     }
     \printf("registry   %s\n", $base);

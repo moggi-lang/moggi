@@ -4,10 +4,8 @@ namespace Moggi\LSP\TextDocument;
 
 use Moggi\LSP\Analysis\AnalysisService;
 
-use function Moggi\LSP\checkCancelledPoint;
-use function Moggi\LSP\Analysis\ensureAnalyzed;
 use function Moggi\LSP\Analysis\resultIdFor;
-use function Moggi\LSP\Protocol\pathToUri;
+use function Moggi\LSP\checkCancelledPoint;
 
 /**
  * Document pull diagnostics (spec `textDocument/diagnostic`).
@@ -109,10 +107,11 @@ function svcWorkspaceDiagnostic(AnalysisService $svc, array $params = []): array
             continue;
         }
         $known = isset($previousByUri[$uri]);
-        if (!is_file(substr($uri, strlen('file://')))) {
+        if (! \is_file(\substr($uri, \strlen('file://')))) {
             if ($known) {
                 $items[] = workspaceReport($uri, [], null, []);
             }
+
             continue;
         }
         $analysis = $svc->ensureAnalyzed($uri);
@@ -120,7 +119,7 @@ function svcWorkspaceDiagnostic(AnalysisService $svc, array $params = []): array
             continue;
         }
         $diags = $analysis->diagnostics ?? [];
-        if ($diags === [] && !$known) {
+        if ($diags === [] && ! $known) {
             continue;
         }
         $items[] = workspaceReport($uri, $diags, null, $previousByUri);

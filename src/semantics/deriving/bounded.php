@@ -2,10 +2,11 @@
 
 namespace Moggi\Semantics\Deriving;
 
-use Moggi\Syntax\Ast;
 use Moggi\Semantics\Types\TypeCheckState;
 
 use function Moggi\Semantics\Types\typeFail;
+
+use Moggi\Syntax\Ast;
 
 /**
  * Stock `deriving Bounded`.
@@ -30,13 +31,14 @@ function deriveBounded(
     foreach ($decl->constructors as $ctor) {
         if ($ctor->fields !== []) {
             $allNullary = false;
+
             break;
         }
     }
 
     if ($allNullary) {
         $first = $decl->constructors[0]->name;
-        $last = $decl->constructors[count($decl->constructors) - 1]->name;
+        $last = $decl->constructors[\count($decl->constructors) - 1]->name;
 
         return new DerivedInstance(
             'Bounded',
@@ -51,7 +53,7 @@ function deriveBounded(
         );
     }
 
-    if (count($decl->constructors) !== 1) {
+    if (\count($decl->constructors) !== 1) {
         throw typeFail(
             $state,
             'cannot derive Bounded: multiple constructors with fields are not supported',

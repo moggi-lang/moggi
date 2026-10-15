@@ -2,9 +2,9 @@
 
 namespace Moggi\Syntax\Lexer;
 
-use Moggi\Syntax\Parser\Token;
-
 use function Moggi\Errors\formatDiagnostic;
+
+use Moggi\Syntax\Parser\Token;
 
 final class LexError extends \RuntimeException
 {
@@ -55,8 +55,10 @@ enum TokenKind: string
     case Float = 'float';
     case StringLit = 'string';
     case CharLit = 'char';
+
     /** `'Red` — a promoted data constructor used as a type (DataKinds). Lexeme excludes the leading tick. */
     case PromotedCon = 'promoted_con';
+
     case VarId = 'varid';
     case ConId = 'conid';
     case KwData = 'kw_data';
@@ -97,16 +99,22 @@ enum TokenKind: string
     case Semicolon = 'semicolon';
     case Pipe = 'pipe';
     case Op = 'op';
+
     /** Body of `{-# … #-}` (trimmed, without delimiters). */
     case Pragma = 'pragma';
+
     /** Doc comment `-- |` (may include continuation lines). */
     case DocComment = 'doc_comment';
+
     /** Export-list section heading `-- *`. */
     case DocSection = 'doc_section';
+
     /** End-of-line `-- ^` documentation. */
     case DocTrailing = 'doc_trailing';
+
     /** Block documentation `{-| … -}` or `{-^ … -}`. */
     case DocBlock = 'doc_block';
+
     case Eof = 'eof';
 }
 
@@ -146,16 +154,16 @@ function isIdCont(string $c): bool
  */
 function charLabel(string $source, int $i): string
 {
-    if (preg_match('/^./us', substr($source, $i, 4), $m) === 1) {
-        return json_encode($m[0], JSON_UNESCAPED_UNICODE);
+    if (\preg_match('/^./us', \substr($source, $i, 4), $m) === 1) {
+        return \json_encode($m[0], JSON_UNESCAPED_UNICODE);
     }
 
-    return \sprintf('"\\x%02X"', ord($source[$i]));
+    return \sprintf('"\\x%02X"', \ord($source[$i]));
 }
 
 function isSymbol(string $c): bool
 {
-    return str_contains('!#$%&*+./<=>?@\\^|-~:', $c);
+    return \str_contains('!#$%&*+./<=>?@\\^|-~:', $c);
 }
 
 /** @return array{kind: TokenKind, lexeme: string} */
@@ -204,7 +212,7 @@ function lexError(string $message, string $source, string $filename, int $line, 
  */
 function isUnicodeScalar(int $cp): bool
 {
-    return $cp >= 0 && $cp <= 0x10FFFF && !($cp >= 0xD800 && $cp <= 0xDFFF);
+    return $cp >= 0 && $cp <= 0x10FFFF && ! ($cp >= 0xD800 && $cp <= 0xDFFF);
 }
 
 /**
@@ -218,7 +226,7 @@ function isUnicodeScalar(int $cp): bool
  */
 function utf8DecodeScalar(string $source, int &$i, int $len): int
 {
-    $byte = ord($source[$i]);
+    $byte = \ord($source[$i]);
 
     if ($byte < 0x80) {
         ++$i;
@@ -244,7 +252,7 @@ function utf8DecodeScalar(string $source, int &$i, int $len): int
     }
 
     for ($k = 1; $k <= $extra; ++$k) {
-        $cont = ord($source[$i + $k]);
+        $cont = \ord($source[$i + $k]);
         if (($cont & 0xC0) !== 0x80) {
             throw new \RuntimeException('invalid UTF-8 continuation byte');
         }
@@ -280,14 +288,14 @@ function lexNumericEscape(
     if ($kind === 'x') {
         $digits = '';
         for ($k = 0; $k < 2; ++$k) {
-            if ($i >= $len || !ctype_xdigit($source[$i])) {
+            if ($i >= $len || ! \ctype_xdigit($source[$i])) {
                 throw lexError('invalid \\x escape: expected exactly 2 hex digits', $source, $filename, $line, $startCol, $col);
             }
             $digits .= $source[$i];
             ++$i;
             ++$col;
         }
-        $cp = (int) hexdec($digits);
+        $cp = (int) \hexdec($digits);
     } else {
         if ($i >= $len || $source[$i] !== '{') {
             throw lexError('invalid \\u escape: expected { after \\u', $source, $filename, $line, $startCol, $col);
@@ -297,7 +305,7 @@ function lexNumericEscape(
 
         $digits = '';
         while ($i < $len && $source[$i] !== '}') {
-            if (!ctype_xdigit($source[$i])) {
+            if (! \ctype_xdigit($source[$i])) {
                 throw lexError('invalid \\u escape: expected hex digits inside { }', $source, $filename, $line, $startCol, $col);
             }
             $digits .= $source[$i];
@@ -316,10 +324,10 @@ function lexNumericEscape(
         ++$i;
         ++$col;
 
-        $cp = strlen($digits) > 6 ? 0x110000 : (int) hexdec($digits);
+        $cp = \strlen($digits) > 6 ? 0x110000 : (int) \hexdec($digits);
     }
 
-    if (!isUnicodeScalar($cp)) {
+    if (! isUnicodeScalar($cp)) {
         throw lexError(
             \sprintf('invalid Unicode scalar value in numeric escape (U+%X is out of range or a surrogate)', $cp),
             $source,
@@ -359,6 +367,7 @@ function lexPragma(
             ++$i;
             ++$line;
             $col = 1;
+
             continue;
         }
 
@@ -367,7 +376,7 @@ function lexPragma(
             && $source[$i + 1] === '-'
             && $source[$i + 2] === '}'
         ) {
-            $body = trim(str_replace("\r\n", "\n", substr($source, $bodyStart, $i - $bodyStart)));
+            $body = \trim(\str_replace("\r\n", "\n", \substr($source, $bodyStart, $i - $bodyStart)));
             $i += 3;
             $col += 3;
 
@@ -404,7 +413,7 @@ function lexDocCommentLine(
         ++$i;
         ++$col;
     }
-    $text = trim($text);
+    $text = \trim($text);
 
     if ($kind === TokenKind::DocComment || $kind === TokenKind::DocTrailing) {
         while ($i < $len && $source[$i] === "\n") {
@@ -415,16 +424,16 @@ function lexDocCommentLine(
             if ($nextStart >= $len || $source[$nextStart] === "\n") {
                 break;
             }
-            $lineEnd = strpos($source, "\n", $nextStart);
+            $lineEnd = \strpos($source, "\n", $nextStart);
             $lineText = $lineEnd === false
-                ? substr($source, $nextStart)
-                : substr($source, $nextStart, $lineEnd - $nextStart);
-            $lineText = rtrim($lineText, "\r");
+                ? \substr($source, $nextStart)
+                : \substr($source, $nextStart, $lineEnd - $nextStart);
+            $lineText = \rtrim($lineText, "\r");
 
             $pattern = $kind === TokenKind::DocTrailing
                 ? '/^[ \t]*-- \^[ \t]*(.*)$/'
                 : '/^[ \t]*--(?!-|\|)(?: (.*))?$/';
-            if (!preg_match($pattern, $lineText, $m)) {
+            if (! \preg_match($pattern, $lineText, $m)) {
                 break;
             }
 
@@ -462,6 +471,7 @@ function lexDocCommentBlock(
             $i += 2;
             $col += 2;
             $closed = true;
+
             break;
         }
         if ($source[$i] === "\n") {
@@ -469,6 +479,7 @@ function lexDocCommentBlock(
             ++$i;
             ++$line;
             $col = 1;
+
             continue;
         }
         $text .= $source[$i];
@@ -476,11 +487,11 @@ function lexDocCommentBlock(
         ++$col;
     }
 
-    if (!$closed) {
+    if (! $closed) {
         throw lexError('unterminated documentation block', $source, $filename, $startLine, $startCol);
     }
 
-    return new Token(TokenKind::DocBlock, trim(str_replace("\r\n", "\n", $text)), $startLine, $startCol);
+    return new Token(TokenKind::DocBlock, \trim(\str_replace("\r\n", "\n", $text)), $startLine, $startCol);
 }
 
 /**
@@ -509,6 +520,7 @@ function skipBlockComment(
             ++$i;
             ++$line;
             $col = 1;
+
             continue;
         }
 
@@ -516,6 +528,7 @@ function skipBlockComment(
             $i += 2;
             $col += 2;
             ++$depth;
+
             continue;
         }
 
@@ -523,6 +536,7 @@ function skipBlockComment(
             $i += 2;
             $col += 2;
             --$depth;
+
             continue;
         }
 
@@ -538,12 +552,12 @@ function skipBlockComment(
 /** @return list<Token> */
 function lex(string $source, string $filename = ''): array
 {
-    if (!mb_check_encoding($source, 'UTF-8')) {
+    if (! \mb_check_encoding($source, 'UTF-8')) {
         throw lexError('invalid UTF-8 in source', $source, $filename, 1, 1);
     }
 
     $tokens = [];
-    $len = strlen($source);
+    $len = \strlen($source);
     $i = 0;
     $line = 1;
     $col = 1;
@@ -554,6 +568,7 @@ function lex(string $source, string $filename = ''): array
         if ($c === ' ' || $c === "\t" || $c === "\r") {
             ++$i;
             ++$col;
+
             continue;
         }
 
@@ -561,6 +576,7 @@ function lex(string $source, string $filename = ''): array
             ++$i;
             ++$line;
             $col = 1;
+
             continue;
         }
 
@@ -580,6 +596,7 @@ function lex(string $source, string $filename = ''): array
                         $startCol,
                         TokenKind::DocComment,
                     );
+
                     continue;
                 }
                 if ($i + 3 < $len && $source[$i + 2] === ' ' && $source[$i + 3] === '*') {
@@ -593,6 +610,7 @@ function lex(string $source, string $filename = ''): array
                         $startCol,
                         TokenKind::DocSection,
                     );
+
                     continue;
                 }
                 if ($i + 3 < $len && $source[$i + 2] === ' ' && $source[$i + 3] === '^') {
@@ -606,11 +624,13 @@ function lex(string $source, string $filename = ''): array
                         $startCol,
                         TokenKind::DocTrailing,
                     );
+
                     continue;
                 }
                 while ($i < $len && $source[$i] !== "\n") {
                     ++$i;
                 }
+
                 continue;
             }
         }
@@ -618,15 +638,18 @@ function lex(string $source, string $filename = ''): array
         if ($c === '{' && $i + 1 < $len && $source[$i + 1] === '-') {
             if ($i + 2 < $len && $source[$i + 2] === '#') {
                 $tokens[] = lexPragma($source, $len, $i, $line, $col, $filename);
+
                 continue;
             }
 
             if ($i + 2 < $len && ($source[$i + 2] === '|' || $source[$i + 2] === '^')) {
                 $tokens[] = lexDocCommentBlock($source, $len, $i, $line, $col, $line, $col, $filename);
+
                 continue;
             }
 
             skipBlockComment($source, $len, $i, $line, $col, $line, $col, $filename);
+
             continue;
         }
 
@@ -665,7 +688,8 @@ function lex(string $source, string $filename = ''): array
                 }
             }
             $kind = $isFloat ? TokenKind::Float : TokenKind::Integer;
-            $tokens[] = new Token($kind, substr($source, $start, $i - $start), $startLine, $startCol);
+            $tokens[] = new Token($kind, \substr($source, $start, $i - $start), $startLine, $startCol);
+
             continue;
         }
 
@@ -679,7 +703,8 @@ function lex(string $source, string $filename = ''): array
 
                     if ($next === 'x' || $next === 'u') {
                         $cp = lexNumericEscape($source, $i, $col, $len, $line, $filename);
-                        $value .= mb_chr($cp, 'UTF-8');
+                        $value .= \mb_chr($cp, 'UTF-8');
+
                         continue;
                     }
 
@@ -693,12 +718,13 @@ function lex(string $source, string $filename = ''): array
                     };
                     $i += 2;
                     $col += 2;
+
                     continue;
                 }
 
                 $start = $i;
                 utf8DecodeScalar($source, $i, $len);
-                $value .= substr($source, $start, $i - $start);
+                $value .= \substr($source, $start, $i - $start);
                 ++$col;
             }
 
@@ -709,11 +735,12 @@ function lex(string $source, string $filename = ''): array
             ++$i;
             ++$col;
             $tokens[] = new Token(TokenKind::StringLit, $value, $startLine, $startCol);
+
             continue;
         }
 
         if ($c === '\'') {
-            if ($i + 1 < $len && isLarge($source[$i + 1]) && !($i + 2 < $len && $source[$i + 2] === '\'')) {
+            if ($i + 1 < $len && isLarge($source[$i + 1]) && ! ($i + 2 < $len && $source[$i + 2] === '\'')) {
                 ++$i;
                 ++$col;
                 $start = $i;
@@ -721,8 +748,9 @@ function lex(string $source, string $filename = ''): array
                     ++$i;
                     ++$col;
                 }
-                $lexeme = substr($source, $start, $i - $start);
+                $lexeme = \substr($source, $start, $i - $start);
                 $tokens[] = new Token(TokenKind::PromotedCon, $lexeme, $startLine, $startCol);
+
                 continue;
             }
 
@@ -736,6 +764,7 @@ function lex(string $source, string $filename = ''): array
 
                     if ($next === 'x' || $next === 'u') {
                         $scalars[] = lexNumericEscape($source, $i, $col, $len, $line, $filename);
+
                         continue;
                     }
 
@@ -762,6 +791,7 @@ function lex(string $source, string $filename = ''): array
                     $scalars[] = $cp;
                     $i += 2;
                     $col += 2;
+
                     continue;
                 }
 
@@ -776,11 +806,11 @@ function lex(string $source, string $filename = ''): array
             ++$i;
             ++$col;
 
-            if (count($scalars) === 0) {
+            if (\count($scalars) === 0) {
                 throw lexError('empty character literal', $source, $filename, $startLine, $startCol, $col);
             }
 
-            if (count($scalars) > 1) {
+            if (\count($scalars) > 1) {
                 throw lexError(
                     'character literal must contain exactly one Unicode scalar value',
                     $source,
@@ -792,6 +822,7 @@ function lex(string $source, string $filename = ''): array
             }
 
             $tokens[] = new Token(TokenKind::CharLit, (string) $scalars[0], $startLine, $startCol);
+
             continue;
         }
 
@@ -807,8 +838,9 @@ function lex(string $source, string $filename = ''): array
                 ++$i;
                 ++$col;
             }
-            $lexeme = substr($source, $start, $i - $start);
+            $lexeme = \substr($source, $start, $i - $start);
             $tokens[] = new Token(TokenKind::ConId, $lexeme, $startLine, $startCol);
+
             continue;
         }
 
@@ -824,9 +856,10 @@ function lex(string $source, string $filename = ''): array
                 ++$i;
                 ++$col;
             }
-            $lexeme = substr($source, $start, $i - $start);
+            $lexeme = \substr($source, $start, $i - $start);
             ['kind' => $kind, 'lexeme' => $kwLexeme] = keyword($lexeme);
             $tokens[] = new Token($kind, $kwLexeme, $startLine, $startCol);
+
             continue;
         }
 
@@ -834,6 +867,7 @@ function lex(string $source, string $filename = ''): array
             $tokens[] = new Token(TokenKind::LParen, '(', $startLine, $startCol);
             ++$i;
             ++$col;
+
             continue;
         }
 
@@ -841,6 +875,7 @@ function lex(string $source, string $filename = ''): array
             $tokens[] = new Token(TokenKind::RParen, ')', $startLine, $startCol);
             ++$i;
             ++$col;
+
             continue;
         }
 
@@ -848,6 +883,7 @@ function lex(string $source, string $filename = ''): array
             $tokens[] = new Token(TokenKind::LBracket, '[', $startLine, $startCol);
             ++$i;
             ++$col;
+
             continue;
         }
 
@@ -855,6 +891,7 @@ function lex(string $source, string $filename = ''): array
             $tokens[] = new Token(TokenKind::RBracket, ']', $startLine, $startCol);
             ++$i;
             ++$col;
+
             continue;
         }
 
@@ -862,6 +899,7 @@ function lex(string $source, string $filename = ''): array
             $tokens[] = new Token(TokenKind::LBrace, '{', $startLine, $startCol);
             ++$i;
             ++$col;
+
             continue;
         }
 
@@ -869,6 +907,7 @@ function lex(string $source, string $filename = ''): array
             $tokens[] = new Token(TokenKind::RBrace, '}', $startLine, $startCol);
             ++$i;
             ++$col;
+
             continue;
         }
 
@@ -876,6 +915,7 @@ function lex(string $source, string $filename = ''): array
             $tokens[] = new Token(TokenKind::Comma, ',', $startLine, $startCol);
             ++$i;
             ++$col;
+
             continue;
         }
 
@@ -883,6 +923,7 @@ function lex(string $source, string $filename = ''): array
             $tokens[] = new Token(TokenKind::Semicolon, ';', $startLine, $startCol);
             ++$i;
             ++$col;
+
             continue;
         }
 
@@ -891,12 +932,14 @@ function lex(string $source, string $filename = ''): array
                 $tokens[] = new Token(TokenKind::Op, '||', $startLine, $startCol);
                 $i += 2;
                 $col += 2;
+
                 continue;
             }
 
             $tokens[] = new Token(TokenKind::Pipe, '|', $startLine, $startCol);
             ++$i;
             ++$col;
+
             continue;
         }
 
@@ -904,13 +947,15 @@ function lex(string $source, string $filename = ''): array
             $tokens[] = new Token(TokenKind::Backtick, '`', $startLine, $startCol);
             ++$i;
             ++$col;
+
             continue;
         }
 
-        if ($c === '\\' && !($i + 1 < $len && isSymbol($source[$i + 1]))) {
+        if ($c === '\\' && ! ($i + 1 < $len && isSymbol($source[$i + 1]))) {
             $tokens[] = new Token(TokenKind::Backslash, '\\', $startLine, $startCol);
             ++$i;
             ++$col;
+
             continue;
         }
 
@@ -922,7 +967,8 @@ function lex(string $source, string $filename = ''): array
                 ++$i;
                 ++$col;
             }
-            $tokens[] = new Token(TokenKind::Op, substr($source, $start, $i - $start), $startLine, $startCol);
+            $tokens[] = new Token(TokenKind::Op, \substr($source, $start, $i - $start), $startLine, $startCol);
+
             continue;
         }
 
@@ -955,7 +1001,7 @@ function dump(array $tokens): string
         $lines[] = \sprintf(
             '%s %s @ %d:%d',
             $token->kind->value,
-            json_encode($token->lexeme, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            \json_encode($token->lexeme, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
             $token->line,
             $token->col,
         );

@@ -3254,7 +3254,6 @@ IL,
     ]);
 }
 
-
 function platformSetArgsIl(): string
 {
     return <<<'IL'
@@ -3268,7 +3267,6 @@ function platformSetArgsIl(): string
 
 IL;
 }
-
 
 function platformArgvIl(): string
 {

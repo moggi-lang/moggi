@@ -2,17 +2,22 @@
 
 namespace Moggi\Repl;
 
+use function Moggi\Backend\backendById;
+
 use Moggi\Modules\PreparedProject;
+
+use function Moggi\Paths\moduleNameToPath;
+
 use Moggi\Pipeline\CompilePurpose;
 use Moggi\Pipeline\PipelineArtifacts;
 use Moggi\Pipeline\PipelineRequest;
 use Moggi\Pipeline\PipelineStage;
+
+use function Moggi\Pipeline\run as pipelineRun;
+
 use Moggi\Syntax\Ast;
 use Moggi\Syntax\Ast\Program;
 
-use function Moggi\Backend\backendById;
-use function Moggi\Paths\moduleNameToPath;
-use function Moggi\Pipeline\run as pipelineRun;
 use function Moggi\Syntax\Parser\parse;
 
 /**

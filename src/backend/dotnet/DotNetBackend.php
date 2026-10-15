@@ -3,20 +3,22 @@
 namespace Moggi\Backend\DotNet;
 
 use Moggi\Backend\Backend;
-use Moggi\IR\Module;
-use Moggi\Syntax\Ast\TypeNode;
 
 use function Moggi\Backend\DotNet\Codegen\emitModule;
 use function Moggi\Backend\DotNet\Dependencies\dotNetSignatureEntry;
-use function Moggi\Backend\DotNet\Verify\verifyDotNetForeignImport;
+
 use function Moggi\Backend\DotNet\Foreign\clrSigFromMoggiType;
 use function Moggi\Backend\DotNet\Naming\artifactPath;
 use function Moggi\Backend\DotNet\Naming\fnWrapperBundlePath;
 use function Moggi\Backend\DotNet\Naming\isFnWrapperArtifact;
 use function Moggi\Backend\DotNet\Naming\symbolName;
 use function Moggi\Backend\DotNet\Naming\typeArtifactPath;
+use function Moggi\Backend\DotNet\Verify\verifyDotNetForeignImport;
 use function Moggi\Backend\Inspect\describeDotNetEmit;
 use function Moggi\Debug\mapPathForArtifact;
+
+use Moggi\IR\Module;
+use Moggi\Syntax\Ast\TypeNode;
 
 require_once __DIR__ . '/dependencies.php';
 require_once __DIR__ . '/naming.php';
@@ -82,6 +84,7 @@ final class DotNetBackend implements Backend
             if ($typeName === '__moggi.map__') {
                 $artifact = (string) ($options['outputRelative'] ?? 'Module.il');
                 $out[mapPathForArtifact($artifact)] = $il;
+
                 continue;
             }
             $out[typeArtifactPath($typeName)] = $il;
@@ -167,7 +170,7 @@ final class DotNetBackend implements Backend
         }
         $member = $pathInfo['hostMember'] ?? '';
         if ($pathInfo['dispatch'] === 'intrinsic'
-            && !\in_array($member, ['__cast', '__default', '__null'], true)) {
+            && ! \in_array($member, ['__cast', '__default', '__null'], true)) {
             return "dotnet foreign intrinsic `{$member}` is not supported";
         }
 

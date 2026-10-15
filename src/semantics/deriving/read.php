@@ -2,8 +2,8 @@
 
 namespace Moggi\Semantics\Deriving;
 
-use Moggi\Syntax\Ast;
 use Moggi\Semantics\Types\TypeCheckState;
+use Moggi\Syntax\Ast;
 
 /**
  * Stock `deriving Read` for nullary enumerations: `read "Ctor" = Ctor`.

@@ -35,13 +35,13 @@ function selectCases(array $cases, array $pathFilters, array $groupFilters, stri
 
     $selected = [];
     foreach ($cases as $case) {
-        if ($groupFilters !== [] && !matchesAnyGroupFilter($case->name, $groupFilters)) {
+        if ($groupFilters !== [] && ! matchesAnyGroupFilter($case->name, $groupFilters)) {
             continue;
         }
         if (($testArgs['excludeGroups'] ?? []) !== [] && matchesAnyGroupFilter($case->name, $testArgs['excludeGroups'])) {
             continue;
         }
-        if ($pathFilters !== [] && !matchesAnyPathFilter($case, $pathFilters)) {
+        if ($pathFilters !== [] && ! matchesAnyPathFilter($case, $pathFilters)) {
             continue;
         }
         // A case about another backend is selected anyway, so it is reported `n/a` rather than
@@ -136,6 +136,7 @@ function resolveTestSelectors(array $selectors, array $cases): array
             foreach (normalizeTestPaths([$selector]) as $filter) {
                 $filters[] = $filter;
             }
+
             continue;
         } catch (\InvalidArgumentException) {
             // Not a path on disk; it may name a test instead.
@@ -146,10 +147,11 @@ function resolveTestSelectors(array $selectors, array $cases): array
         foreach (\array_keys($names) as $name) {
             if ($name === $trimmed || \str_starts_with($name, $trimmed . '/')) {
                 $known = true;
+
                 break;
             }
         }
-        if (!$known) {
+        if (! $known) {
             throw new \InvalidArgumentException(
                 "no test path or name matches `{$selector}` (try `--list`)",
             );

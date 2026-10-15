@@ -1,6 +1,4 @@
-<?php
-
-declare(strict_types=1);
+<?php declare(strict_types=1);
 
 namespace Moggi\CLI;
 
@@ -158,7 +156,7 @@ examples:
 
 HELP;
 
-    \fwrite(STDERR, preg_replace('/^    /m', '', trim($help, "\n")) . "\n");
+    \fwrite(STDERR, \preg_replace('/^    /m', '', \trim($help, "\n")) . "\n");
 }
 
 /** @return list<string> */
@@ -173,7 +171,7 @@ function rejectUnknownSubcommand(string $command): never
     $best = null;
     $bestDistance = PHP_INT_MAX;
     foreach (knownSubcommands() as $known) {
-        $distance = levenshtein($command, $known);
+        $distance = \levenshtein($command, $known);
         if ($distance < $bestDistance) {
             $bestDistance = $distance;
             $best = $known;

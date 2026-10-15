@@ -14,7 +14,7 @@
  * their own.
  */
 
-final class TestCase
+final class discovery
 {
     /**
      * @param list<array{base: string, kind: string, backend: ?string, path: string}> $goldens
@@ -229,7 +229,7 @@ function goldensBeside(string $base): array
             $backend = $parts[0];
             $kind = $parts[1];
         }
-        if (!isset($kinds[$kind])) {
+        if (! isset($kinds[$kind])) {
             throw new \RuntimeException("unknown golden kind `{$kind}`: {$path}");
         }
         $goldens[] = ['base' => $base, 'kind' => $kind, 'backend' => $backend, 'path' => $path];
@@ -289,7 +289,7 @@ function supportInputPaths(): array
 function isSupportInput(string $path): bool
 {
     $prefix = testsRoot() . '/';
-    if (!\str_starts_with($path, $prefix)) {
+    if (! \str_starts_with($path, $prefix)) {
         return false;
     }
 
@@ -328,7 +328,7 @@ function assertTreeFilesAreClaimed(array $cases): void
 
     walkCaseTree(static function (string $path) use ($inputs, $goldens): void {
         if (\str_ends_with($path, '.expected')) {
-            if (!isset($goldens[$path]) && !isSupportInput($path)) {
+            if (! isset($goldens[$path]) && ! isSupportInput($path)) {
                 throw new \RuntimeException('a golden nothing reads: ' . testRelativePath($path));
             }
 
@@ -367,6 +367,7 @@ function walkCaseDir(string $dir, callable $visit): void
         $path = $dir . '/' . $entry;
         if (\is_dir($path)) {
             walkCaseDir($path, $visit);
+
             continue;
         }
         $visit($path);
@@ -394,7 +395,7 @@ function caseNamingProblem(TestCase $case, string $root): ?string
     if ($case->scriptCase) {
         return \preg_match('/^[a-z0-9]+(_[a-z0-9]+)*\.php$/', \basename($case->input)) === 1
             ? null
-            : "script case must be snake_case.php: " . testRelativePath($case->input);
+            : 'script case must be snake_case.php: ' . testRelativePath($case->input);
     }
 
     if ($case->project) {
@@ -451,10 +452,12 @@ function collectCases(string $dir, string $root, array &$cases): void
         $path = $dir . '/' . $entry;
         if (\is_dir($path)) {
             collectCases($path, $root, $cases);
+
             continue;
         }
-        if (\str_ends_with($entry, '.php') && !\str_ends_with($entry, '.ir.php') && !isSupportInput($path)) {
+        if (\str_ends_with($entry, '.php') && ! \str_ends_with($entry, '.ir.php') && ! isSupportInput($path)) {
             pushCase($cases, scriptCase($path, $root), $root);
+
             continue;
         }
         pushCase($cases, fixtureCase($path, $root), $root);
@@ -469,7 +472,7 @@ function fixtureCase(string $path, string $root): ?TestCase
     }
     $base = \substr($path, 0, -\strlen($ext));
     $goldens = goldensBeside($base);
-    if ($goldens === [] && !\is_file($base . '.exec.php')) {
+    if ($goldens === [] && ! \is_file($base . '.exec.php')) {
         return null;
     }
 

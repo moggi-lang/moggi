@@ -4,11 +4,6 @@ namespace Moggi\LSP;
 
 use Moggi\LSP\Analysis\AnalysisService;
 
-use function Moggi\LSP\Analysis\changeDocument;
-use function Moggi\LSP\Analysis\closeDocument;
-use function Moggi\LSP\Analysis\openDocument;
-use function Moggi\LSP\Analysis\quickDiagnostics;
-use function Moggi\LSP\Analysis\saveDocument;
 use function Moggi\LSP\Protocol\sendNotification;
 use function Moggi\LSP\Protocol\splitLines;
 use function Moggi\LSP\Protocol\utf16ByteOffset;
@@ -18,8 +13,8 @@ function applyFullContentChanges(string $previous, array $changes): string
     if ($changes === []) {
         return $previous;
     }
-    $last = $changes[array_key_last($changes)];
-    if (!\is_array($last) || !array_key_exists('text', $last)) {
+    $last = $changes[\array_key_last($changes)];
+    if (! \is_array($last) || ! \array_key_exists('text', $last)) {
         return $previous;
     }
 
@@ -33,18 +28,19 @@ function applyFullContentChanges(string $previous, array $changes): string
  */
 function applyContentChanges(string $content, array $changes): string
 {
-    $crlf = substr_count($content, "\r\n");
-    $lf = substr_count($content, "\n") - $crlf;
-    $cr = substr_count($content, "\r") - $crlf;
+    $crlf = \substr_count($content, "\r\n");
+    $lf = \substr_count($content, "\n") - $crlf;
+    $cr = \substr_count($content, "\r") - $crlf;
     $eol = ($crlf >= $lf && $crlf >= $cr) ? "\r\n" : ($cr > $lf ? "\r" : "\n");
 
     foreach ($changes as $change) {
-        if (!\is_array($change) || !array_key_exists('text', $change)) {
+        if (! \is_array($change) || ! \array_key_exists('text', $change)) {
             continue;
         }
         $text = (string) $change['text'];
-        if (!isset($change['range']) || !\is_array($change['range'])) {
+        if (! isset($change['range']) || ! \is_array($change['range'])) {
             $content = $text;
+
             continue;
         }
         $start = $change['range']['start'] ?? ['line' => 0, 'character' => 0];
@@ -54,22 +50,23 @@ function applyContentChanges(string $content, array $changes): string
         $eLine = (int) ($end['line'] ?? 0);
         $sChar = (int) ($start['character'] ?? 0);
         $eChar = (int) ($end['character'] ?? 0);
-        while (count($lines) <= max($sLine, $eLine)) {
+        while (\count($lines) <= \max($sLine, $eLine)) {
             $lines[] = '';
         }
-        $before = substr($lines[$sLine] ?? '', 0, utf16ByteOffset($lines[$sLine] ?? '', $sChar));
-        $after = substr($lines[$eLine] ?? '', utf16ByteOffset($lines[$eLine] ?? '', $eChar));
+        $before = \substr($lines[$sLine] ?? '', 0, utf16ByteOffset($lines[$sLine] ?? '', $sChar));
+        $after = \substr($lines[$eLine] ?? '', utf16ByteOffset($lines[$eLine] ?? '', $eChar));
         $insertLines = splitLines($text);
-        if (count($insertLines) === 1) {
+        if (\count($insertLines) === 1) {
             $newMid = [$before . $insertLines[0] . $after];
         } else {
             $insertLines[0] = $before . $insertLines[0];
-            $insertLines[count($insertLines) - 1] .= $after;
+            $insertLines[\count($insertLines) - 1] .= $after;
             $newMid = $insertLines;
         }
-        array_splice($lines, $sLine, $eLine - $sLine + 1, $newMid);
-        $content = implode($eol, $lines);
+        \array_splice($lines, $sLine, $eLine - $sLine + 1, $newMid);
+        $content = \implode($eol, $lines);
     }
+
     return $content;
 }
 
@@ -97,6 +94,7 @@ function handleDidOpen(AnalysisService $svc, array $params, ?callable $driver = 
             'diagnostics' => $svc->quickDiagnostics($uri),
         ]);
     }
+
     return ['uri' => $uri, 'version' => $version];
 }
 
@@ -119,6 +117,7 @@ function handleDidChange(AnalysisService $svc, array $params, ?callable $driver 
             'diagnostics' => $svc->quickDiagnostics($uri),
         ]);
     }
+
     return ['uri' => $uri, 'version' => $version];
 }
 

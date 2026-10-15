@@ -6,7 +6,7 @@
 // `main()` call, and the program has to run.
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 \define('MOGGI_PROJECT_ROOT', $root);
@@ -25,13 +25,14 @@ $source = (string) $compiled['output'];
 // The bootstrap calls into the runtime, so the module that carries it has to
 // require the runtime even when none of its own code does.
 foreach (['reportUncaught', 'main();', '_runtime.php'] as $marker) {
-    if (!\str_contains($source, $marker)) {
+    if (! \str_contains($source, $marker)) {
         \fwrite(\STDERR, "unoptimized output is missing the entry bootstrap `{$marker}`\n");
         exit(1);
     }
 }
 
 $dir = createTempDir('moggi-noopt');
+
 try {
     $entry = $dir . '/Main.php';
     // The unspecialized stdlib requires are relative paths into the source tree; point them at the

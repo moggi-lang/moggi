@@ -7,7 +7,7 @@
 // and that is where the two passes can disagree.
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
@@ -16,7 +16,7 @@ require $root . '/tests/suite/support/workspace.php';
 require $root . '/tests/suite/support/assert.php';
 
 $assert = static function (bool $condition, string $message): void {
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };

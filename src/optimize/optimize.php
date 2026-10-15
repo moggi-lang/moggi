@@ -3,11 +3,14 @@
 namespace Moggi\Optimize;
 
 use Moggi\IR\Block;
-use Moggi\IR\FunctionDecl;
-use Moggi\IR\Module;
-use Moggi\IR\Stmt;
 
 use function Moggi\IR\entryFromFunctions;
+
+use Moggi\IR\FunctionDecl;
+use Moggi\IR\Module;
+
+use Moggi\IR\Stmt;
+
 use function Moggi\Optimize\CaseFold\foldKnownConstructorsBlock;
 use function Moggi\Optimize\CaseFold\foldKnownMatchesInItems;
 use function Moggi\Optimize\Dict\indexEvidenceByName;
@@ -115,10 +118,10 @@ function shouldRunSecondPartialFold(array $functions): bool
 {
     $stmtCount = 0;
     foreach ($functions as $function) {
-        $stmtCount += count($function->body->items);
+        $stmtCount += \count($function->body->items);
     }
 
-    return count($functions) > 2 || $stmtCount > 24;
+    return \count($functions) > 2 || $stmtCount > 24;
 }
 
 function optimizeFunctionEarly(FunctionDecl $function): FunctionDecl

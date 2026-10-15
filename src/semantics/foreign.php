@@ -3,17 +3,18 @@
 namespace Moggi\Semantics\Foreign;
 
 use Moggi\Backend;
-use Moggi\IR\IoWrap;
-use Moggi\Modules;
-use Moggi\Semantics\Types\TypeCheckState;
-use Moggi\Syntax\Ast;
 
 use function Moggi\Backend\backendById;
 use function Moggi\Backend\compileBackend;
 use function Moggi\Backend\implementedBackendIds;
 use function Moggi\Backend\isBackendImplemented;
+
 use function Moggi\Errors\formatKnownAlternatives;
 use function Moggi\Foreign\parseForeignPath;
+
+use Moggi\IR\IoWrap;
+use Moggi\Modules;
+
 use function Moggi\Semantics\IntrinsicRegistry\isMagicHashName;
 use function Moggi\Semantics\IoBoundary\isIoType;
 use function Moggi\Semantics\IoBoundary\isIoTypeConName;
@@ -25,7 +26,12 @@ use function Moggi\Semantics\Kernel\boundaryReifiedTypeName;
 use function Moggi\Semantics\Kernel\boundaryStringTypeName;
 use function Moggi\Semantics\Kernel\isBoundaryContainerType;
 use function Moggi\Semantics\Kernel\isBoundaryHandleType;
+
+use Moggi\Semantics\Types\TypeCheckState;
+
 use function Moggi\Semantics\Types\typeFail;
+
+use Moggi\Syntax\Ast;
 
 function checkForeignImportItem(TypeCheckState $state, Ast\ForeignImportDecl $item): Ast\FunctionDecl
 {
@@ -169,7 +175,7 @@ function validateForeignImportType(TypeCheckState $state, Ast\ForeignImportDecl 
 function validateInstanceForeignType(TypeCheckState $state, Ast\ForeignImportDecl $item): void
 {
     $type = $item->type;
-    if (!$type instanceof Ast\TypeArrow) {
+    if (! $type instanceof Ast\TypeArrow) {
         throw typeFail($state, 'instance foreign import requires a receiver as first argument', $item);
     }
 
@@ -219,7 +225,7 @@ function validateInstanceForeignType(TypeCheckState $state, Ast\ForeignImportDec
 function foreignIsMagicHashAlias(TypeCheckState $state, Ast\TypeNode $type): bool
 {
     $name = foreignTypeConName($type);
-    if ($name === null || !isset($state->typeSynonyms[$name])) {
+    if ($name === null || ! isset($state->typeSynonyms[$name])) {
         return false;
     }
 
@@ -244,11 +250,11 @@ function foreignHandleType(TypeCheckState $state, Ast\TypeNode $type): bool
         return false;
     }
 
-    if (!$type instanceof Ast\TypeCon) {
+    if (! $type instanceof Ast\TypeCon) {
         return false;
     }
 
-    return !foreignIsHostValueType($state, $type);
+    return ! foreignIsHostValueType($state, $type);
 }
 
 /**
@@ -281,7 +287,7 @@ function foreignIsHostValueType(TypeCheckState $state, Ast\TypeNode $type): bool
     }
 
     $constructors = $state->data[$name]['constructors'] ?? null;
-    if (!\is_array($constructors) || $constructors === []) {
+    if (! \is_array($constructors) || $constructors === []) {
         return false;
     }
 
@@ -393,7 +399,7 @@ function foreignReturnsIo(Ast\TypeNode $type): bool
  */
 function foreignIoWrap(Ast\TypeNode $type): IoWrap
 {
-    if (!foreignReturnsIo($type)) {
+    if (! foreignReturnsIo($type)) {
         return IoWrap::None;
     }
 
@@ -458,7 +464,7 @@ function foreignHandleBox(Ast\TypeNode $type): bool
 
 function validateForeignTypeDecl(TypeCheckState $state, Ast\ForeignTypeDecl $decl): void
 {
-    if (!isBackendImplemented($decl->backend)) {
+    if (! isBackendImplemented($decl->backend)) {
         throw typeFail(
             $state,
             formatKnownAlternatives(
@@ -469,7 +475,7 @@ function validateForeignTypeDecl(TypeCheckState $state, Ast\ForeignTypeDecl $dec
         );
     }
 
-    if (trim($decl->hostType) === '') {
+    if (\trim($decl->hostType) === '') {
         throw typeFail($state, 'foreign type host string must be non-empty', $decl);
     }
 }
@@ -492,6 +498,7 @@ function validateForeignSignatureTypes(
 
     if ($type instanceof Ast\TypeCon) {
         validateForeignTypeCon($state, $type, $backend, $context, $argument);
+
         return;
     }
 
@@ -500,12 +507,14 @@ function validateForeignSignatureTypes(
         foreach ($type->args ?? [] as $arg) {
             validateForeignSignatureTypes($state, $arg, $backend, $context, $argument);
         }
+
         return;
     }
 
     if ($type instanceof Ast\TypeArrow) {
         validateForeignSignatureTypes($state, $type->from, $backend, $context, true);
         validateForeignSignatureTypes($state, $type->to, $backend, $context, false);
+
         return;
     }
 }
@@ -528,6 +537,7 @@ function validateForeignTypeCon(
                 $context,
             );
         }
+
         return;
     }
 
@@ -539,6 +549,7 @@ function validateForeignTypeCon(
                 $context,
             );
         }
+
         return;
     }
 
@@ -554,6 +565,7 @@ function validateForeignTypeCon(
                 $context,
             );
         }
+
         return;
     }
 
@@ -569,6 +581,7 @@ function validateForeignTypeCon(
                 $context,
             );
         }
+
         return;
     }
 

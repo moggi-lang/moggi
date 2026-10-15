@@ -2,28 +2,33 @@
 
 namespace Moggi\Modules;
 
-use Moggi\Cache;
-use Moggi\IR\EntryPointKind;
-use Moggi\IR\Module;
-use Moggi\Pipeline\CompilePurpose;
-use Moggi\Pipeline\PipelineRequest;
-use function Moggi\Pipeline\entryPurpose;
-use Moggi\Pipeline\PipelineStage;
-use Moggi\Semantics\Types\TypeError;
-use Moggi\Syntax\Ast;
-use Moggi\Syntax\Parser\ParseError;
-
 use function Moggi\Backend\codegen;
 use function Moggi\Backend\compileBackend;
 use function Moggi\Backend\currentBackend;
+
+use Moggi\Cache;
+
 use function Moggi\IR\Dump\dump as dumpIr;
-use function Moggi\IR\Visit\freeLocalsInBlock;
+
+use Moggi\IR\EntryPointKind;
+use Moggi\IR\Module;
+
 use function Moggi\IR\Visit\collectIrCodegenUsage;
-use function Moggi\Modules\resolvedSymbol;
+use function Moggi\IR\Visit\freeLocalsInBlock;
+
 use function Moggi\Optimize\Specialize\specializeAcrossModules;
 use function Moggi\Optimize\Support\isCapturedFnName;
 use function Moggi\Optimize\TreeShake\treeShakeModules;
+use function Moggi\Pipeline\entryPurpose;
+
+use Moggi\Pipeline\PipelineRequest;
+use Moggi\Pipeline\PipelineStage;
+
 use function Moggi\Pipeline\run as pipelineRun;
+
+use Moggi\Semantics\Types\TypeError;
+use Moggi\Syntax\Ast;
+use Moggi\Syntax\Parser\ParseError;
 
 /**
  * Module compilation entry points: whole-project and single-file compiles,
@@ -93,7 +98,7 @@ function compilePreparedProject(PreparedProject $prepared, bool $optimize = true
         if (($unit['synthetic'] ?? false) === true) {
             continue;
         }
-        if (!isset($prepared->checked[$moduleName], $prepared->importContexts[$moduleName])) {
+        if (! isset($prepared->checked[$moduleName], $prepared->importContexts[$moduleName])) {
             continue;
         }
 
@@ -108,6 +113,7 @@ function compilePreparedProject(PreparedProject $prepared, bool $optimize = true
             $cachedIr = Cache\moduleGet($unit['cacheRelPath'], 'ir', $irCacheKey);
             if ($cachedIr instanceof Module) {
                 $optByModule[$moduleName] = $cachedIr;
+
                 continue;
             }
         }
@@ -156,18 +162,18 @@ function compilePreparedProject(PreparedProject $prepared, bool $optimize = true
     foreach ($optByModule as $moduleName => $optimizedIr) {
         $lambdaMeta = [];
         foreach ($optimizedIr->functions as $fn) {
-            if (!isCapturedFnName($fn->name)) {
+            if (! isCapturedFnName($fn->name)) {
                 continue;
             }
             $lambdaMeta[$fn->name] = [
-                'captures' => freeLocalsInBlock($fn->body, array_fill_keys($fn->params, true)),
+                'captures' => freeLocalsInBlock($fn->body, \array_fill_keys($fn->params, true)),
                 'params' => $fn->params,
             ];
         }
         foreach ($optimizedIr->functions as $fn) {
-            $arity = count($fn->params);
+            $arity = \count($fn->params);
             if (isCapturedFnName($fn->name)) {
-                $arity += count($lambdaMeta[$fn->name]['captures'] ?? []);
+                $arity += \count($lambdaMeta[$fn->name]['captures'] ?? []);
             }
             $globalFnArity[resolvedSymbol((string) $moduleName, $fn->name)] = $arity;
         }
@@ -178,25 +184,25 @@ function compilePreparedProject(PreparedProject $prepared, bool $optimize = true
     $ext = currentBackend()->extension();
     $allModuleOutputPaths = [];
     foreach ($relativeByModule as $mn => $rel) {
-        $allModuleOutputPaths[$mn] = preg_replace('/\.mog$/', $ext, $rel) ?? $rel;
+        $allModuleOutputPaths[$mn] = \preg_replace('/\.mog$/', $ext, $rel) ?? $rel;
     }
     $entryModule = null;
     $entryRelative = null;
     foreach ($optByModule as $moduleName => $optimizedIr) {
         $unit = $prepared->units[$moduleName];
         $relative = $relativeByModule[$moduleName];
-        $outputRelative = preg_replace('/\.mog$/', $ext, $relative) ?? $relative;
+        $outputRelative = \preg_replace('/\.mog$/', $ext, $relative) ?? $relative;
         $importContext = $prepared->importContexts[$moduleName];
         $irUsage = collectIrCodegenUsage($optimizedIr);
 
-        $optIrOutputs[preg_replace('/\.mog$/', '.opt-ir', $relative) ?? $relative] = dumpIr($optimizedIr);
+        $optIrOutputs[\preg_replace('/\.mog$/', '.opt-ir', $relative) ?? $relative] = dumpIr($optimizedIr);
 
-        if ($optimizedIr->entry === null && !moduleDeclaresCode($optimizedIr)) {
+        if ($optimizedIr->entry === null && ! moduleDeclaresCode($optimizedIr)) {
             continue;
         }
 
         $codegenForFilter = $importContext['codegen'];
-        $codegenForFilter['moduleOutputPaths'] = array_merge(
+        $codegenForFilter['moduleOutputPaths'] = \array_merge(
             $allModuleOutputPaths,
             $codegenForFilter['moduleOutputPaths'] ?? [],
         );
@@ -223,7 +229,7 @@ function compilePreparedProject(PreparedProject $prepared, bool $optimize = true
 
         if ($optimizedIr->entry !== null && $optimizedIr->entry->kind === EntryPointKind::Main) {
             $entryModule = $moduleName;
-            $entryRelative = preg_replace('/\.mog$/', $ext, $relative) ?? $relative;
+            $entryRelative = \preg_replace('/\.mog$/', $ext, $relative) ?? $relative;
         }
 
         if (\is_array($emitted)) {
@@ -231,7 +237,7 @@ function compilePreparedProject(PreparedProject $prepared, bool $optimize = true
                 $emitOutputs[$path] = $bytes;
             }
         } else {
-            $emitRelative = preg_replace('/\.mog$/', $ext, $relative) ?? $relative;
+            $emitRelative = \preg_replace('/\.mog$/', $ext, $relative) ?? $relative;
             $emitOutputs[$emitRelative] = $emitted;
         }
     }

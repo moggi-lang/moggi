@@ -9,7 +9,7 @@
 // a catalog it is never fetched from.
 
 $root = __DIR__;
-while (!is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
@@ -23,7 +23,7 @@ use function Moggi\Registry\resolveWith;
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
     ++$checks;
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
@@ -31,7 +31,7 @@ $assert = static function (bool $condition, string $message) use (&$checks): voi
 /** Build an `entry()` from `name => [version => deps]`; an unknown name is null. */
 $entryFor = static function (array $packages): callable {
     return static function (string $name) use ($packages): ?array {
-        if (!isset($packages[$name])) {
+        if (! isset($packages[$name])) {
             return null;
         }
         $versions = [];
@@ -76,13 +76,13 @@ $assert($result['chosen']['base'] === $provided['base'], 'the chosen base is the
 
 // --- a transitive requirement the bundled version cannot meet ---------------
 $tooOld = resolveWith($entryFor(['app' => ['1.0.0' => ['base' => '>=9.0.0']]]), ['app' => '>=1'], 'root', $provided);
-$assert(!$tooOld['ok'], 'a transitive floor the compiler misses fails the resolution');
+$assert(! $tooOld['ok'], 'a transitive floor the compiler misses fails the resolution');
 $assert(\str_contains((string) $tooOld['error'], 'travels with the compiler'), 'the failure is the toolchain refusal: ' . $tooOld['error']);
 $assert(\str_contains((string) $tooOld['error'], 'app -> base requires >=9.0.0'), 'the failure names the chain that asked: ' . $tooOld['error']);
 
 // --- a root requirement the bundled version cannot meet ---------------------
 $rootTooOld = resolveWith($entryFor([]), ['base' => '>=9.0.0'], 'myapp', $provided);
-$assert(!$rootTooOld['ok'], 'a root floor the compiler misses fails the resolution');
+$assert(! $rootTooOld['ok'], 'a root floor the compiler misses fails the resolution');
 $assert(\str_contains((string) $rootTooOld['error'], 'myapp -> base requires >=9.0.0'), 'the failure names the root chain: ' . $rootTooOld['error']);
 
 echo "provided package tests passed ({$checks} checks)\n";

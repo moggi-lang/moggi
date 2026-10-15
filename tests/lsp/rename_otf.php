@@ -7,7 +7,7 @@
  */
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
@@ -20,13 +20,13 @@ use function Moggi\LSP\Workspace\svcWillDeleteFiles;
 use function Moggi\LSP\Workspace\svcWillRenameFiles;
 
 $assert = static function (bool $condition, string $message): void {
-    if (!$condition) {
+    if (! $condition) {
         throw new RuntimeException($message);
     }
 };
 
-$tmp = sys_get_temp_dir() . '/moggi-lsp-rename-' . bin2hex(random_bytes(4));
-$assert(mkdir($tmp), 'create temp dir');
+$tmp = \sys_get_temp_dir() . '/moggi-lsp-rename-' . \bin2hex(\random_bytes(4));
+$assert(\mkdir($tmp), 'create temp dir');
 
 // willRenameFiles: single file rename rewrites importers + module decl
 
@@ -48,20 +48,20 @@ $changes = svcWillRenameFiles($svc, [
 $importerEdits = $changes[$importerUri] ?? [];
 $assert($importerEdits !== [], 'file rename edits the importer document');
 $importerNew = $importerEdits[0]['newText'] ?? '';
-$assert(str_contains($importerNew, 'import Newe'), 'plain import rewritten');
-$assert(str_contains($importerNew, 'import Newe as O'), 'as-import rewritten');
-$assert(str_contains($importerNew, 'import Newe qualified as OQ'), 'import-qualified-as rewritten');
-$assert(str_contains($importerNew, 'usesMarker = Newe.marker'), 'qualified usage rewritten: ' . json_encode($importerNew));
-$assert(str_contains($importerNew, 'Olde.Sub.thing'), 'submodule reference NOT rewritten for file rename: ' . json_encode($importerNew));
-$assert(str_contains($importerNew, '"Olde.marker stays a string"'), 'string literals untouched');
-$assert(str_contains($importerNew, '-- Olde.marker stays a comment'), 'line comments untouched');
-$assert(!preg_match('/^import .*\bOlde\b/m', $importerNew), 'no import line references the old module');
+$assert(\str_contains($importerNew, 'import Newe'), 'plain import rewritten');
+$assert(\str_contains($importerNew, 'import Newe as O'), 'as-import rewritten');
+$assert(\str_contains($importerNew, 'import Newe qualified as OQ'), 'import-qualified-as rewritten');
+$assert(\str_contains($importerNew, 'usesMarker = Newe.marker'), 'qualified usage rewritten: ' . \json_encode($importerNew));
+$assert(\str_contains($importerNew, 'Olde.Sub.thing'), 'submodule reference NOT rewritten for file rename: ' . \json_encode($importerNew));
+$assert(\str_contains($importerNew, '"Olde.marker stays a string"'), 'string literals untouched');
+$assert(\str_contains($importerNew, '-- Olde.marker stays a comment'), 'line comments untouched');
+$assert(! \preg_match('/^import .*\bOlde\b/m', $importerNew), 'no import line references the old module');
 
 // The renamed document itself gets its `module` declaration rewritten.
 $moduleEdits = $changes[pathToUri($newPath)] ?? $changes[pathToUri($oldPath)] ?? [];
 $assert($moduleEdits !== [], 'module declaration is rewritten in the renamed file');
 $moduleNew = $moduleEdits[0]['newText'] ?? '';
-$assert(str_contains($moduleNew, 'module Newe where'), 'module decl renamed: ' . json_encode($moduleNew));
+$assert(\str_contains($moduleNew, 'module Newe where'), 'module decl renamed: ' . \json_encode($moduleNew));
 
 // willRenameFiles: DIRECTORY rename rewrites the dotted module prefix
 // (3.18 fileOperations.willRename — VS Code sends folder renames too)
@@ -83,18 +83,18 @@ $dirChanges = svcWillRenameFiles($dirSvc, [
 ]);
 
 $betaEdits = $dirChanges[$bUri] ?? [];
-$assert($betaEdits !== [], 'directory rename rewrites sibling module: ' . json_encode(array_keys($dirChanges)));
+$assert($betaEdits !== [], 'directory rename rewrites sibling module: ' . \json_encode(\array_keys($dirChanges)));
 $betaNew = $betaEdits[0]['newText'] ?? '';
-$assert(str_contains($betaNew, 'module Modern.Beta where'), 'directory rename rewrites module prefix');
-$assert(str_contains($betaNew, 'import Modern.Alpha'), 'directory rename rewrites sibling import');
-$assert(!str_contains($betaNew, 'Ancient'), 'no stale prefix remains in sibling (incl. qualified uses)');
+$assert(\str_contains($betaNew, 'module Modern.Beta where'), 'directory rename rewrites module prefix');
+$assert(\str_contains($betaNew, 'import Modern.Alpha'), 'directory rename rewrites sibling import');
+$assert(! \str_contains($betaNew, 'Ancient'), 'no stale prefix remains in sibling (incl. qualified uses)');
 
 $userEdits = $dirChanges[$userUri] ?? [];
 $assert($userEdits !== [], 'directory rename rewrites external importers');
 $userNew = $userEdits[0]['newText'] ?? '';
-$assert(str_contains($userNew, 'import Modern.Alpha (av)'), 'partial-import list preserved: ' . json_encode($userNew));
-$assert(str_contains($userNew, 'import Modern.Beta'), 'external import of renamed dir rewritten');
-$assert(!str_contains($userNew, 'Ancient'), 'no stale prefix remains in external importer');
+$assert(\str_contains($userNew, 'import Modern.Alpha (av)'), 'partial-import list preserved: ' . \json_encode($userNew));
+$assert(\str_contains($userNew, 'import Modern.Beta'), 'external import of renamed dir rewritten');
+$assert(! \str_contains($userNew, 'Ancient'), 'no stale prefix remains in external importer');
 
 // willRenameFiles: no-op cases return no edits
 
@@ -128,9 +128,9 @@ $delChanges = svcWillDeleteFiles($delSvc, [
 $user2Edits = $delChanges[$user2Uri] ?? [];
 $assert($user2Edits !== [], 'file delete rewrites documents importing it');
 $user2New = $user2Edits[0]['newText'] ?? '';
-$assert(!str_contains($user2New, 'import Goner'), 'both Goner imports removed: ' . json_encode($user2New));
-$assert(str_contains($user2New, 'import Data.Maybe'), 'unrelated imports preserved');
-$assert(str_contains($user2New, 'module User2 where'), 'module decl preserved');
+$assert(! \str_contains($user2New, 'import Goner'), 'both Goner imports removed: ' . \json_encode($user2New));
+$assert(\str_contains($user2New, 'import Data.Maybe'), 'unrelated imports preserved');
+$assert(\str_contains($user2New, 'module User2 where'), 'module decl preserved');
 
 // Deleting an unrelated file yields no edits.
 $unrelated = svcWillDeleteFiles($delSvc, [
@@ -152,8 +152,8 @@ $dirDelChanges = svcWillDeleteFiles($dirDelSvc, [
 $user3Edits = $dirDelChanges[$user3Uri] ?? [];
 $assert($user3Edits !== [], 'directory delete rewrites importers');
 $user3New = $user3Edits[0]['newText'] ?? '';
-$assert(!str_contains($user3New, 'import Archive.A2'), 'dotted-prefix import removed on dir delete');
-$assert(str_contains($user3New, 'import Data.List'), 'unrelated imports preserved on dir delete');
+$assert(! \str_contains($user3New, 'import Archive.A2'), 'dotted-prefix import removed on dir delete');
+$assert(\str_contains($user3New, 'import Data.List'), 'unrelated imports preserved on dir delete');
 
 // onTypeFormatting: trigger variants
 
@@ -168,17 +168,17 @@ $anywhere = ['line' => 3, 'character' => 4];
 // Advertised trigger characters produce a whole-document TextEdit.
 foreach (['{', '}', ';'] as $trigger) {
     $edits = svcOnTypeFormatting($fmtSvc, $messyUri, $anywhere, $trigger, ['tabSize' => 4, 'insertSpaces' => true]);
-    $assert(is_array($edits), "trigger '{$trigger}' returns an array");
+    $assert(\is_array($edits), "trigger '{$trigger}' returns an array");
     $assert($edits !== [], "trigger '{$trigger}' formats the document");
     if ($edits !== []) {
-        $assert(str_contains($edits[0]['newText'], 'g = 1'), "trigger '{$trigger}' edit fixes spacing: " . json_encode($edits[0]['newText']));
+        $assert(\str_contains($edits[0]['newText'], 'g = 1'), "trigger '{$trigger}' edit fixes spacing: " . \json_encode($edits[0]['newText']));
     }
 }
 
 // Unadvertised trigger characters must be rejected (empty result, no reformat).
 foreach (['=', "\n", '(', 'x'] as $unadvertised) {
     $edits = svcOnTypeFormatting($fmtSvc, $messyUri, $anywhere, $unadvertised, ['tabSize' => 4]);
-    $assert($edits === [], "unadvertised trigger '{$unadvertised}' yields no edits: " . json_encode($edits));
+    $assert($edits === [], "unadvertised trigger '{$unadvertised}' yields no edits: " . \json_encode($edits));
 }
 
 // Already-formatted document → no edits (server must not loop reformatting).
@@ -191,11 +191,11 @@ $assert(svcOnTypeFormatting($fmtSvc, $tidyUri, ['line' => 3, 'character' => 0], 
 // Unknown document → no edits, no crash.
 $assert(svcOnTypeFormatting($fmtSvc, pathToUri($tmp . '/Missing.mog'), $anywhere, '{', []) === [], 'unknown document yields no edits');
 
-@unlink($oldPath);
-@unlink($messyPath ?? $tmp . '/Messy.mog');
-@unlink($tidyUri ? $tmp . '/Tidy.mog' : '');
-@unlink($tmp . '/Importer.mog');
-@unlink($tmp . '/Uses.mog');
-@rmdir($tmp);
+@\unlink($oldPath);
+@\unlink($messyPath ?? $tmp . '/Messy.mog');
+@\unlink($tidyUri ? $tmp . '/Tidy.mog' : '');
+@\unlink($tmp . '/Importer.mog');
+@\unlink($tmp . '/Uses.mog');
+@\rmdir($tmp);
 
 echo "lsp rename + on-type formatting tests passed\n";

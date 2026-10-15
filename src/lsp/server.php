@@ -2,13 +2,11 @@
 
 namespace Moggi\LSP;
 
+use function Moggi\Backend\setCompileBackend;
+
 use Moggi\LSP\Analysis\AnalysisService;
 
-use function Moggi\Backend\setCompileBackend;
-use function Moggi\LSP\Analysis\flushDueAnalyzes;
 use function Moggi\LSP\Analysis\getAnalysisService;
-use function Moggi\LSP\Analysis\hasDueAnalyzes;
-use function Moggi\LSP\Analysis\secondsUntilNextPending;
 use function Moggi\LSP\Protocol\readMessageOrTimeout;
 use function Moggi\LSP\Protocol\sendError;
 use function Moggi\LSP\Protocol\sendNotification;
@@ -63,8 +61,8 @@ function currentProgressToken(): int|string|null
  */
 function configureStdioErrors(): void
 {
-    error_reporting(E_ALL);
-    ini_set('display_errors', 'stderr');
+    \error_reporting(E_ALL);
+    \ini_set('display_errors', 'stderr');
 }
 
 function runServer(array $libDirs = []): int
@@ -100,6 +98,7 @@ function runServer(array $libDirs = []): int
                 publishFlushedDiagnostics($svc, $workDoneProgress);
                 watchCompilerRevision();
             }
+
             continue;
         }
         if ($msg === null) {
@@ -113,6 +112,7 @@ function runServer(array $libDirs = []): int
 
         if ($method === null) {
             handleConfigurationReply($svc, $id, $result);
+
             continue;
         }
 
@@ -125,34 +125,40 @@ function runServer(array $libDirs = []): int
                 if ($id !== null) {
                     sendError($id, -32600, 'Invalid Request: server is already initialized');
                 }
+
                 continue;
             }
             $initialized = true;
             $workDoneProgress = handleInitialize($svc, $params, $id);
+
             continue;
         }
 
         if ($method === 'shutdown') {
-            if (!$initialized) {
+            if (! $initialized) {
                 if ($id !== null) {
                     sendError($id, -32002, 'Server not initialized');
                 }
+
                 continue;
             }
             if ($shutdownReceived) {
                 if ($id !== null) {
                     sendError($id, -32600, 'Invalid Request: server is already shut down');
                 }
+
                 continue;
             }
             $shutdownReceived = handleShutdown($svc, $id);
+
             continue;
         }
 
-        if (!$initialized) {
+        if (! $initialized) {
             if ($id !== null && $method !== 'initialized') {
                 sendError($id, -32002, 'Server not initialized');
             }
+
             continue;
         }
 
@@ -160,6 +166,7 @@ function runServer(array $libDirs = []): int
             if ($id !== null) {
                 sendError($id, -32600, 'Invalid Request: server is shut down');
             }
+
             continue;
         }
 
@@ -170,18 +177,20 @@ function runServer(array $libDirs = []): int
             } elseif (\is_int($cancelId) || \is_string($cancelId)) {
                 $cancellations->cancel($cancelId);
             }
+
             continue;
         }
 
         if ($method === '$/setTrace') {
             $trace = (string) ($params['value'] ?? 'off');
+
             continue;
         }
 
         if ($trace === 'verbose' || $trace === 'messages') {
             $logTrace = ['message' => "Received request '{$method}'"];
             if ($trace === 'verbose') {
-                $logTrace['verbose'] = json_encode($params);
+                $logTrace['verbose'] = \json_encode($params);
             }
             sendNotification('$/logTrace', $logTrace);
         }
@@ -189,62 +198,74 @@ function runServer(array $libDirs = []): int
         switch ($method) {
             case 'client/registerCapability':
                 handleRegisterCapability($svc, $params, $id);
+
                 continue 2;
 
             case 'client/unregisterCapability':
                 handleUnregisterCapability($svc, $params, $id);
+
                 continue 2;
 
             case 'initialized':
                 handleInitialized($svc);
                 publishFlushedDiagnostics($svc, $workDoneProgress);
+
                 continue 2;
 
             case 'workspace/didChangeWorkspaceFolders':
                 publishFlushedDiagnostics($svc, $workDoneProgress);
+
                 continue 2;
 
             case 'workspace/didChangeConfiguration':
                 handleDidChangeConfiguration($svc, $params);
+
                 continue 2;
 
             case 'workspace/didChangeWatchedFiles':
                 handleDidChangeWatchedFiles($svc, $params);
                 publishFlushedDiagnostics($svc, $workDoneProgress);
+
                 continue 2;
 
             case 'textDocument/didOpen':
                 handleDidOpen($svc, $params);
                 publishFlushedDiagnostics($svc, $workDoneProgress);
+
                 continue 2;
 
             case 'textDocument/didChange':
                 handleDidChange($svc, $params);
                 publishFlushedDiagnostics($svc, $workDoneProgress);
+
                 continue 2;
 
             case 'textDocument/didSave':
                 handleDidSave($svc, $params);
                 publishFlushedDiagnostics($svc, $workDoneProgress);
+
                 continue 2;
 
             case 'textDocument/didClose':
                 handleDidClose($svc, $params);
+
                 continue 2;
 
             default:
                 break;
         }
 
-        if (str_starts_with($method, '$/') && !isset($handlers[$method])) {
+        if (\str_starts_with($method, '$/') && ! isset($handlers[$method])) {
             if ($id !== null) {
                 sendError($id, -32601, "Method not found: $method");
             }
+
             continue;
         }
 
         if (isset($handlers[$method])) {
             runHandler($svc, $handlers[$method], $params, $id, $cancellations, $workDoneProgress);
+
             continue;
         }
 
@@ -276,6 +297,7 @@ function runHandler(
         } catch (\Throwable) {
         }
         publishFlushedDiagnostics($svc, $clientSupportsProgress);
+
         return;
     }
 
@@ -288,6 +310,7 @@ function runHandler(
         $cancellations->clear($id);
         endRequestProgress($token, true);
         sendError($id, -32800, 'Request cancelled');
+
         return;
     }
     setRequestContext($id, $cancellations, $token);

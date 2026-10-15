@@ -3,19 +3,23 @@
 namespace Moggi\Semantics\Deriving;
 
 use Moggi\Semantics\TypeExpr\Type;
-use Moggi\Semantics\Types\TypeCheckState;
-use Moggi\Syntax\Ast;
 
 use function Moggi\Semantics\Types\associatedEquationsMapFromDecl;
 use function Moggi\Semantics\Types\astType;
+
 use function Moggi\Semantics\Types\checkInstance;
 use function Moggi\Semantics\Types\evidenceFunctionName;
 use function Moggi\Semantics\Types\friendlyTypeVarNames;
 use function Moggi\Semantics\Types\instanceHeadIndexKeyFromAst;
 use function Moggi\Semantics\Types\instanceHeadsMatch;
 use function Moggi\Semantics\Types\newState;
+
+use Moggi\Semantics\Types\TypeCheckState;
+
 use function Moggi\Semantics\Types\typeFail;
 use function Moggi\Semantics\Types\typeToString;
+
+use Moggi\Syntax\Ast;
 
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/class_facts.php';
@@ -43,7 +47,7 @@ function deriveAnyClass(
     Ast\DataDecl $decl,
     Ast\DerivingClassRef $ref,
 ): DerivedInstance {
-    if (!isset($state->classes[$ref->name])) {
+    if (! isset($state->classes[$ref->name])) {
         throw typeFail(
             $state,
             "anyclass deriving: unknown class `{$ref->name}`",
@@ -185,7 +189,7 @@ function hasDeriveBackend(string $className, ?string $strategy, ClassDeriveFacts
     }
 
     if ($strategy === 'newtype') {
-        return !$facts->refusesNewtypeDeriving($className);
+        return ! $facts->refusesNewtypeDeriving($className);
     }
 
     return true;
@@ -255,7 +259,7 @@ function resolveDeriveStrategy(
     if (stockDeriveFor($ref->name) !== null) {
         return 'Stock';
     }
-    if ($decl->isNewtype && !$facts->refusesNewtypeDeriving($ref->name)) {
+    if ($decl->isNewtype && ! $facts->refusesNewtypeDeriving($ref->name)) {
         return 'Newtype';
     }
 
@@ -285,14 +289,14 @@ function processDeriving(TypeCheckState $state, Ast\DataDecl $decl): array
         }
         $seenInClause[$ref->name] = true;
 
-        if (!isset($state->classes[$ref->name])) {
+        if (! isset($state->classes[$ref->name])) {
             throw typeFail(
                 $state,
                 "unknown class `{$ref->name}` in deriving clause",
                 $ref,
             );
         }
-        if (!hasDeriveBackend($ref->name, $ref->strategy, ClassDeriveFacts::fromState($state))) {
+        if (! hasDeriveBackend($ref->name, $ref->strategy, ClassDeriveFacts::fromState($state))) {
             throw typeFail(
                 $state,
                 "no deriving backend for class `{$ref->name}`",
@@ -321,6 +325,7 @@ function processDeriving(TypeCheckState $state, Ast\DataDecl $decl): array
     $saved = snapshotInstanceState($state);
 
     $state->stockDeriving = true;
+
     try {
         $functions = [];
         foreach ($derived as $item) {
@@ -338,6 +343,7 @@ function processDeriving(TypeCheckState $state, Ast\DataDecl $decl): array
         return $functions;
     } catch (\Throwable $e) {
         restoreInstanceState($state, $saved);
+
         throw $e;
     } finally {
         $state->stockDeriving = false;
@@ -357,17 +363,17 @@ function processStandaloneDeriving(
     TypeCheckState $state,
     Ast\StandaloneDerivingDecl $decl,
 ): Ast\InstanceDecl {
-    if (!isset($state->classes[$decl->className])) {
+    if (! isset($state->classes[$decl->className])) {
         throw typeFail($state, "unknown class `{$decl->className}`", $decl);
     }
 
     $targetAst = standaloneDerivingTarget($decl->head);
     $targetName = extractTypeConstructorName($targetAst);
-    if ($targetName === null || !isset($state->data[$targetName])) {
+    if ($targetName === null || ! isset($state->data[$targetName])) {
         throw typeFail(
             $state,
-            "standalone deriving: target type `" . Ast\dumpTypeInline($targetAst) .
-            "` is not a known data/newtype",
+            'standalone deriving: target type `' . Ast\dumpTypeInline($targetAst) .
+            '` is not a known data/newtype',
             $decl,
         );
     }
@@ -399,7 +405,7 @@ function processStandaloneDeriving(
     } elseif ($derived->strategy === 'Newtype' && $constraints === []) {
         $constraints = mergeDerivedConstraints(
             $constraints,
-            array_values(array_filter(
+            \array_values(\array_filter(
                 $derived->constraints,
                 static fn (Ast\TypeNode $c): bool => typeNodeMentionsVar($c),
             )),
@@ -425,7 +431,7 @@ function typeNodeMentionsVar(Ast\TypeNode $type): bool
     return match ($type::class) {
         Ast\TypeVar::class => true,
         Ast\TypeApp::class => typeNodeMentionsVar($type->con)
-            || array_any($type->args, static fn (Ast\TypeNode $arg): bool => typeNodeMentionsVar($arg)),
+            || \array_any($type->args, static fn (Ast\TypeNode $arg): bool => typeNodeMentionsVar($arg)),
         Ast\TypeArrow::class => typeNodeMentionsVar($type->from) || typeNodeMentionsVar($type->to),
         default => false,
     };
@@ -609,6 +615,7 @@ function validateNoDuplicateDerivedInstance(
                     $decl,
                 );
             }
+
             continue;
         }
 
@@ -730,7 +737,7 @@ function derivedProjectInstanceRecords(Ast\DataDecl $decl, string $moduleName, C
     $records = [];
     $derivesGeneric = false;
     foreach ($decl->derivingClasses as $ref) {
-        if (!hasDeriveBackend($ref->name, $ref->strategy, $facts)) {
+        if (! hasDeriveBackend($ref->name, $ref->strategy, $facts)) {
             continue;
         }
 
@@ -750,6 +757,7 @@ function derivedProjectInstanceRecords(Ast\DataDecl $decl, string $moduleName, C
                 'associatedEquations' => [],
                 'fromDeriving' => true,
             ];
+
             continue;
         }
 
@@ -758,7 +766,7 @@ function derivedProjectInstanceRecords(Ast\DataDecl $decl, string $moduleName, C
             || ($strategy === null
                 && $decl->isNewtype
                 && $stock === null
-                && !$facts->refusesNewtypeDeriving($ref->name));
+                && ! $facts->refusesNewtypeDeriving($ref->name));
         $useFunctorialHead = $facts->takesOneTypeArgument($ref->name);
         $head = $useFunctorialHead && $decl->params !== []
             ? functorialHeadAst($decl)
@@ -814,7 +822,7 @@ function genericMetadataProjectInstances(Ast\DataDecl $decl, string $moduleName)
     $seenSels = [];
     foreach ($decl->constructors as $ctor) {
         $consKey = $ctor->name . "\0" . (constructorIsRecord($ctor) ? '1' : '0');
-        if (!isset($seenCons[$consKey])) {
+        if (! isset($seenCons[$consKey])) {
             $seenCons[$consKey] = true;
             $records[] = [
                 'module' => $moduleName,
@@ -861,7 +869,7 @@ function projectStubConstraints(
         $field = $decl->constructors[0]->fields[0]->type ?? null;
         if ($field !== null && $facts->takesOneTypeArgument($className)) {
             if ($field instanceof Ast\TypeApp && $field->args !== []) {
-                $underArgs = array_slice($field->args, 0, -1);
+                $underArgs = \array_slice($field->args, 0, -1);
                 $under = $underArgs === []
                     ? $field->con
                     : new Ast\TypeApp($field->con, $underArgs);
@@ -883,6 +891,7 @@ function projectStubConstraints(
     }
 
     $param = lastDataParamName($decl);
+
     return match ($stock->stubConstraints) {
         'params' => paramClassConstraints($decl, $className),
         'functorial' => $param === null

@@ -12,7 +12,7 @@
 // `--help` surface assert below — everything the flag feeds on is run here.
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
@@ -20,14 +20,16 @@ require $root . '/tests/suite/support/process.php';
 require $root . '/tests/suite/support/workspace.php';
 require $root . '/tests/suite/support/assert.php';
 
+use function Moggi\Backend\DotNet\Dependencies\dotNetSidecarDiscriminator;
+
+use function Moggi\Backend\DotNet\Dependencies\isGeneratedBindPath;
+
 use Moggi\Backend\DotNet\DotNetBackend;
 
-use function Moggi\Backend\DotNet\Dependencies\dotNetSidecarDiscriminator;
-use function Moggi\Backend\DotNet\Dependencies\isGeneratedBindPath;
+use function Moggi\Cache\bindCacheRoots;
 use function Moggi\Cache\runtimeCacheDir;
 use function Moggi\Registry\Bind\bindCacheKey;
 use function Moggi\Registry\Bind\bindCacheMarkerPath;
-use function Moggi\Cache\bindCacheRoots;
 use function Moggi\Registry\Bind\bindDeclaredForBuild;
 use function Moggi\Registry\Bind\bindForBuild;
 use function Moggi\Registry\Bind\ffiBindingsForBackend;
@@ -37,7 +39,7 @@ use function Moggi\Registry\readDescriptor;
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
     ++$checks;
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
@@ -87,7 +89,7 @@ foreach (['go:github.com/acme/hello', 'phpacme/hello'] as $bad) {
 
 // The tree is a copy: staleness is proven by touching it, never the fixture.
 $tree = $work . '/tree';
-mkdir($tree, 0777, true);
+\mkdir($tree, 0777, true);
 $fixtureRoot = $root . '/tests/registry/bind/fixtures/acme-hello-php';
 $scan = new \RecursiveIteratorIterator(
     new \RecursiveDirectoryIterator($fixtureRoot, \FilesystemIterator::SKIP_DOTS),
@@ -96,14 +98,14 @@ foreach ($scan as $file) {
     /** @var \SplFileInfo $file */
     $target = $tree . \substr($file->getPathname(), \strlen($fixtureRoot));
     if ($file->isDir()) {
-        if (!\is_dir($target)) {
+        if (! \is_dir($target)) {
             \mkdir($target, 0777, true);
         }
 
         continue;
     }
     $parent = \dirname($target);
-    if (!\is_dir($parent)) {
+    if (! \is_dir($parent)) {
         \mkdir($parent, 0777, true);
     }
     \copy($file->getPathname(), $target);
@@ -188,14 +190,14 @@ $assert($after !== '' && $after !== $before, 'the sidecar fold did not move the 
 // the predicate recognizes the layout textually.
 $assert(isGeneratedBindPath(runtimeCacheDir() . '/dotnet/bind-acme-1-plain/dotnet/dependencies.json'), 'bind layout not recognized');
 $assert(isGeneratedBindPath($expectedRoot . '/Composer/Acme/Hello.mog'), 'generated module not recognized');
-$assert(!isGeneratedBindPath($root . '/lib-meta/Data/Integer/dotnet/dependencies.json'), 'stdlib sidecar misread as generated');
-$assert(!isGeneratedBindPath('/tmp/acme-hello-dotnet/dotnet/Acme.Hello.dll'), 'host tree misread as generated');
+$assert(! isGeneratedBindPath($root . '/lib-meta/Data/Integer/dotnet/dependencies.json'), 'stdlib sidecar misread as generated');
+$assert(! isGeneratedBindPath('/tmp/acme-hello-dotnet/dotnet/Acme.Hello.dll'), 'host tree misread as generated');
 $assert(dotNetSidecarDiscriminator(false) === dotNetSidecarDiscriminator(false), 'host-only discriminator is not deterministic');
 
 // `cache clear bindings` drops exactly the generated trees.
 $cleared = $moggi(['cache', 'clear', 'bindings']);
 $assert(($cleared['exitCode'] ?? 1) === 0, 'cache clear bindings failed: ' . ($cleared['stderr'] ?? ''));
-$assert(!\is_dir($expectedRoot), 'cache clear bindings left the tree');
+$assert(! \is_dir($expectedRoot), 'cache clear bindings left the tree');
 $assert(\str_contains((string) ($cleared['stdout'] ?? ''), 'bindings'), 'clear says: ' . ($cleared['stdout'] ?? ''));
 
 // The `build` surface names the flag (the flag-to-roots glue needs a signed

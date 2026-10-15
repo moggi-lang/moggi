@@ -3,14 +3,18 @@
 namespace Moggi\Modules;
 
 use Moggi\Semantics\IntrinsicRegistry;
-use Moggi\Semantics\TypeExpr\Scheme;
-use Moggi\Semantics\TypeExpr\TCon;
-use Moggi\Semantics\TypeExpr\TVar;
-use Moggi\Semantics\TypeExpr\Type;
-use Moggi\Syntax\Ast;
 
 use function Moggi\Semantics\Kinds\canonicalTypeConName;
+
+use Moggi\Semantics\TypeExpr\Scheme;
+
 use function Moggi\Semantics\TypeExpr\scheme;
+
+use Moggi\Semantics\TypeExpr\TCon;
+use Moggi\Semantics\TypeExpr\TVar;
+
+use Moggi\Semantics\TypeExpr\Type;
+use Moggi\Syntax\Ast;
 
 /**
  * The machine modules Moggi.Internal.Prim and Moggi.Internal.IO, and the kernel

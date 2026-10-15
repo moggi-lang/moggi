@@ -3,12 +3,14 @@
 namespace Moggi\Syntax\Parser;
 
 use Moggi\Syntax\Ast;
-use Moggi\Syntax\Lexer\TokenKind;
+
+use function Moggi\Syntax\isConstructorOperator;
 
 use function Moggi\Syntax\Lexer\isIdCont;
 use function Moggi\Syntax\Lexer\isLetter;
 use function Moggi\Syntax\Lexer\isSymbol;
-use function Moggi\Syntax\isConstructorOperator;
+
+use Moggi\Syntax\Lexer\TokenKind;
 
 /**
  * Top-level declaration, or null if the next tokens are an expression/statement.
@@ -131,7 +133,7 @@ function parseInferredPrefixFunction(ParserState $state): Ast\FunctionDecl
 {
     $name = expect($state, TokenKind::VarId)->lexeme;
     $params = [];
-    while (startsPattern($state) && !isAt($state, TokenKind::Op, 0, '=') && !isAt($state, TokenKind::Pipe)) {
+    while (startsPattern($state) && ! isAt($state, TokenKind::Op, 0, '=') && ! isAt($state, TokenKind::Pipe)) {
         $params[] = parsePatternAtom($state);
     }
     $body = parseFunctionBody($state);
@@ -161,7 +163,7 @@ function parseParenOperatorFunctionDecl(ParserState $state): Ast\FunctionDecl
     $name = expect($state, TokenKind::Op)->lexeme;
     expect($state, TokenKind::RParen);
     $params = [];
-    while (startsPattern($state) && !isAt($state, TokenKind::Op, 0, '=') && !isAt($state, TokenKind::Pipe)) {
+    while (startsPattern($state) && ! isAt($state, TokenKind::Op, 0, '=') && ! isAt($state, TokenKind::Pipe)) {
         $params[] = parsePatternAtom($state);
     }
     $body = parseFunctionBody($state);
@@ -243,9 +245,9 @@ function finishTypedFunction(ParserState $state, string $name, Ast\TypeNode $typ
     }
 
     if (
-        !looksLikeInfixFunctionDecl($state)
-        && !looksLikeBacktickFunctionDecl($state)
-        && !looksLikeParenOperatorMethodDecl($state)
+        ! looksLikeInfixFunctionDecl($state)
+        && ! looksLikeBacktickFunctionDecl($state)
+        && ! looksLikeParenOperatorMethodDecl($state)
     ) {
         return new Ast\FunctionDecl($name, $type, [], new Ast\SignatureOnly(), true);
     }
@@ -260,8 +262,8 @@ function looksLikeFunctionDecl(ParserState $state): bool
     try {
         $startLine = peek($state)->line;
         while (startsPattern($state)
-            && !isAt($state, TokenKind::Op, 0, '=')
-            && !isAt($state, TokenKind::Pipe)) {
+            && ! isAt($state, TokenKind::Op, 0, '=')
+            && ! isAt($state, TokenKind::Pipe)) {
             parsePatternAtom($state);
         }
 
@@ -269,11 +271,11 @@ function looksLikeFunctionDecl(ParserState $state): bool
             return peek($state)->line === $startLine;
         }
 
-        if (!isAt($state, TokenKind::Pipe)) {
+        if (! isAt($state, TokenKind::Pipe)) {
             return false;
         }
 
-        return peek($state)->line > $startLine || !insideBrackets($state);
+        return peek($state)->line > $startLine || ! insideBrackets($state);
     } catch (ParseError) {
         return false;
     } finally {
@@ -347,8 +349,8 @@ function looksLikeInfixFunctionDecl(ParserState $state): bool
 {
     return isAt($state, TokenKind::VarId)
         && isAt($state, TokenKind::Op, 1)
-        && !isAt($state, TokenKind::Op, 1, '=')
-        && !isAt($state, TokenKind::Op, 1, '::')
+        && ! isAt($state, TokenKind::Op, 1, '=')
+        && ! isAt($state, TokenKind::Op, 1, '::')
         && isAt($state, TokenKind::VarId, 2)
         && isAt($state, TokenKind::Op, 3, '=');
 }
@@ -375,7 +377,7 @@ function parseTypedParenOperatorFunctionDecl(ParserState $state, string $name, A
     }
     expect($state, TokenKind::RParen);
     $params = [];
-    while (startsPattern($state) && !isAt($state, TokenKind::Op, 0, '=') && !isAt($state, TokenKind::Pipe)) {
+    while (startsPattern($state) && ! isAt($state, TokenKind::Op, 0, '=') && ! isAt($state, TokenKind::Pipe)) {
         $params[] = parsePatternAtom($state);
     }
     $body = parseFunctionBody($state);
@@ -428,7 +430,7 @@ function parsePrefixFunctionDecl(ParserState $state, string $name, Ast\TypeNode 
     }
 
     $params = [];
-    while (startsPattern($state) && !isAt($state, TokenKind::Op, 0, '=') && !isAt($state, TokenKind::Pipe)) {
+    while (startsPattern($state) && ! isAt($state, TokenKind::Op, 0, '=') && ! isAt($state, TokenKind::Pipe)) {
         $params[] = parsePatternAtom($state);
     }
     $body = parseFunctionBody($state);
@@ -462,7 +464,7 @@ function parseDataDecl(ParserState $state): Ast\DataDecl
         $constructors,
         $nameToken->line,
         $nameToken->col,
-        $nameToken->col + max(0, strlen($name) - 1),
+        $nameToken->col + \max(0, \strlen($name) - 1),
         derivingClasses: $derivingClasses,
     );
 }
@@ -494,7 +496,7 @@ function parseInfixDataHead(ParserState $state): array
     expect($state, TokenKind::LParen);
     $left = parseDataParamAtom($state);
     $opToken = expect($state, TokenKind::Op);
-    if (!isConstructorOperator($opToken->lexeme)) {
+    if (! isConstructorOperator($opToken->lexeme)) {
         throw parseError($state, 'expected a type operator (name starting with `:`)');
     }
     $right = parseDataParamAtom($state);
@@ -510,7 +512,7 @@ function parseDataParams(ParserState $state): array
 {
     $params = [];
     while (isAt($state, TokenKind::VarId) || isAt($state, TokenKind::LParen)) {
-        if (isAt($state, TokenKind::LParen) && !looksLikeKindAnnotatedDataParam($state)) {
+        if (isAt($state, TokenKind::LParen) && ! looksLikeKindAnnotatedDataParam($state)) {
             break;
         }
         $params[] = isAt($state, TokenKind::LParen)
@@ -554,7 +556,7 @@ function parseNewtypeDecl(ParserState $state): Ast\DataDecl
         throw parseError($state, 'a newtype must have exactly one constructor');
     }
 
-    if (count($ctor->fields) !== 1) {
+    if (\count($ctor->fields) !== 1) {
         throw parseError($state, 'a newtype constructor must have exactly one field');
     }
 
@@ -566,7 +568,7 @@ function parseNewtypeDecl(ParserState $state): Ast\DataDecl
         [$ctor],
         $nameToken->line,
         $nameToken->col,
-        $nameToken->col + max(0, strlen($name) - 1),
+        $nameToken->col + \max(0, \strlen($name) - 1),
         isNewtype: true,
         derivingClasses: $derivingClasses,
     );
@@ -584,7 +586,7 @@ function parseNewtypeDecl(ParserState $state): Ast\DataDecl
 function parseDerivingClause(ParserState $state): array
 {
     $all = [];
-    while (isAt($state, TokenKind::KwDeriving) && !looksLikeStandaloneDeriving($state)) {
+    while (isAt($state, TokenKind::KwDeriving) && ! looksLikeStandaloneDeriving($state)) {
         foreach (parseOneDerivingClause($state) as $ref) {
             $all[] = $ref;
         }
@@ -609,7 +611,7 @@ function parseOneDerivingClause(ParserState $state): array
         if (isAt($state, TokenKind::LParen)) {
             advance($state);
             $classes = [];
-            if (!isAt($state, TokenKind::RParen)) {
+            if (! isAt($state, TokenKind::RParen)) {
                 $ref = parseDerivingClassRef($state, $strategy);
                 $ref->viaType = $viaType;
                 $classes[] = $ref;
@@ -634,7 +636,7 @@ function parseOneDerivingClause(ParserState $state): array
     if (isAt($state, TokenKind::LParen)) {
         advance($state);
         $classes = [];
-        if (!isAt($state, TokenKind::RParen)) {
+        if (! isAt($state, TokenKind::RParen)) {
             $classes[] = parseDerivingClassRef($state, $strategy);
             while (isAt($state, TokenKind::Comma)) {
                 advance($state);
@@ -734,7 +736,7 @@ function looksLikeStandaloneDeriving(ParserState $state): bool
         advance($state);
         if (isAt($state, TokenKind::LParen)) {
             $depth = 0;
-            while (!isAt($state, TokenKind::Eof)) {
+            while (! isAt($state, TokenKind::Eof)) {
                 if (isAt($state, TokenKind::LParen)) {
                     ++$depth;
                 } elseif (isAt($state, TokenKind::RParen)) {
@@ -785,7 +787,7 @@ function parseStandaloneDeriving(ParserState $state): Ast\StandaloneDerivingDecl
             constraints: $constraints,
             line: $startToken->line,
             col: $startToken->col,
-            endCol: $startToken->col + max(0, strlen($startToken->lexeme) - 1),
+            endCol: $startToken->col + \max(0, \strlen($startToken->lexeme) - 1),
         );
     }
 
@@ -802,7 +804,7 @@ function parseStandaloneDeriving(ParserState $state): Ast\StandaloneDerivingDecl
         constraints: $constraints,
         line: $startToken->line,
         col: $startToken->col,
-        endCol: $startToken->col + max(0, strlen($startToken->lexeme) - 1),
+        endCol: $startToken->col + \max(0, \strlen($startToken->lexeme) - 1),
     );
 }
 
@@ -814,7 +816,7 @@ function parseDerivingClassRef(ParserState $state, ?string $strategy = null): As
         $token->lexeme,
         $token->line,
         $token->col,
-        $token->col + max(0, strlen($token->lexeme) - 1),
+        $token->col + \max(0, \strlen($token->lexeme) - 1),
         strategy: $strategy,
     );
 }
@@ -887,24 +889,27 @@ function parseClassDecl(ParserState $state): Ast\ClassDecl
     $associatedTypes = [];
     $defaults = [];
     $minimalGroups = [];
-    while (!isAt($state, TokenKind::Eof) && !isFollowingClassBodyBoundary($state)) {
+    while (! isAt($state, TokenKind::Eof) && ! isFollowingClassBodyBoundary($state)) {
         if (peek($state)->col <= $bodyCol) {
             break;
         }
 
         if (isAt($state, TokenKind::Pragma)) {
             $minimalGroups = parseMinimalPragma($state, advance($state));
+
             continue;
         }
 
         $standaloneTrailing = consumeIndentedTrailingDoc($state, $bodyCol);
         if ($standaloneTrailing !== null) {
             attachTrailingDocToPreviousMethod($methods, $standaloneTrailing);
+
             continue;
         }
 
         if (isAt($state, TokenKind::KwType)) {
             $associatedTypes[] = parseAssociatedTypeDecl($state);
+
             continue;
         }
 
@@ -917,6 +922,7 @@ function parseClassDecl(ParserState $state): Ast\ClassDecl
             if ($standaloneTrailing !== null) {
                 attachTrailingDocToPreviousMethod($methods, $standaloneTrailing);
             }
+
             continue;
         }
 
@@ -954,10 +960,9 @@ function parseClassDecl(ParserState $state): Ast\ClassDecl
         }
     }
 
-
     $headLine = $headLoc->line;
     $headCol = $headLoc->col;
-    $headEndCol = $headCol + max(0, strlen($name) - 1);
+    $headEndCol = $headCol + \max(0, \strlen($name) - 1);
 
     return new Ast\ClassDecl(
         $name,
@@ -983,12 +988,12 @@ function parseClassDecl(ParserState $state): Ast\ClassDecl
  */
 function parseMinimalPragma(ParserState $state, Token $token): array
 {
-    $body = trim($token->lexeme);
-    if (! preg_match('/^MINIMAL\b(.*)$/is', $body, $m)) {
+    $body = \trim($token->lexeme);
+    if (! \preg_match('/^MINIMAL\b(.*)$/is', $body, $m)) {
         throw parseError($state, "unsupported pragma `{$body}`", $token, 'parse/pragma');
     }
 
-    $parts = minimalPragmaParts($state, trim($m[1]), $token);
+    $parts = minimalPragmaParts($state, \trim($m[1]), $token);
 
     $pos = 0;
     $groups = minimalExpression($parts, $pos, $token, $state);
@@ -1021,12 +1026,14 @@ function minimalPragmaParts(ParserState $state, string $text, Token $token): arr
 
         if (\ctype_space($c)) {
             ++$i;
+
             continue;
         }
 
         if ($c === '(' || $c === ')' || $c === ',') {
             $parts[] = $c;
             ++$i;
+
             continue;
         }
 
@@ -1036,6 +1043,7 @@ function minimalPragmaParts(ParserState $state, string $text, Token $token): arr
                 ++$i;
             }
             $parts[] = \substr($text, $start, $i - $start);
+
             continue;
         }
 
@@ -1045,6 +1053,7 @@ function minimalPragmaParts(ParserState $state, string $text, Token $token): arr
                 ++$i;
             }
             $parts[] = \substr($text, $start, $i - $start);
+
             continue;
         }
 
@@ -1070,7 +1079,7 @@ function isMinimalOperatorName(string $name): bool
     }
 
     for ($i = 0, $len = \strlen($name); $i < $len; ++$i) {
-        if (!isSymbol($name[$i])) {
+        if (! isSymbol($name[$i])) {
             return false;
         }
     }
@@ -1135,7 +1144,7 @@ function minimalTerm(array $parts, int &$pos, Token $token, ParserState $state):
         throw parseError($state, 'MINIMAL pragma needs at least one method name', $token, 'parse/pragma');
     }
 
-    if (preg_match('/^[A-Za-z_][A-Za-z0-9_\']*$/', $part) !== 1 && !isMinimalOperatorName($part)) {
+    if (\preg_match('/^[A-Za-z_][A-Za-z0-9_\']*$/', $part) !== 1 && ! isMinimalOperatorName($part)) {
         throw parseError($state, "MINIMAL pragma needs method names, found `{$part}`", $token, 'parse/pragma');
     }
 
@@ -1157,7 +1166,7 @@ function classHeadFromType(Ast\TypeNode $type, ParserState $state): array
 /** @return array{0: string, 1: list<Ast\ClassParam>} */
 function classHeadFromTypeApp(Ast\TypeApp $type, ParserState $state): array
 {
-    if (!$type->con instanceof Ast\TypeCon) {
+    if (! $type->con instanceof Ast\TypeCon) {
         throw unexpected($state, 'class head');
     }
 
@@ -1220,7 +1229,7 @@ function tryParseClassMethodDefault(ParserState $state, int $bodyCol): ?Ast\Func
     }
 
     if (isAt($state, TokenKind::VarId)
-        && !isAt($state, TokenKind::Op, 1, '::')
+        && ! isAt($state, TokenKind::Op, 1, '::')
         && looksLikeFunctionDecl($state)) {
         return parseInstanceMethod($state);
     }
@@ -1320,7 +1329,7 @@ function parseInstanceDecl(ParserState $state): Ast\AstNode
         $constraints,
         $classToken->line,
         $classToken->col,
-        $classToken->col + max(0, strlen($className) - 1),
+        $classToken->col + \max(0, \strlen($className) - 1),
         associatedEquations: $associatedEquations,
     );
 }
@@ -1335,18 +1344,18 @@ function instanceClassAndHeadFromType(Ast\TypeNode $type, ParserState $state): a
     $args = [];
     $cur = $type;
     while ($cur instanceof Ast\TypeApp) {
-        $args = [...array_reverse($cur->args), ...$args];
+        $args = [...\array_reverse($cur->args), ...$args];
         $cur = $cur->con;
     }
 
-    if (!$cur instanceof Ast\TypeCon) {
+    if (! $cur instanceof Ast\TypeCon) {
         throw unexpected($state, 'class name');
     }
 
     $className = $cur->name;
     $line = $cur->line;
     $col = $cur->col;
-    $endCol = $cur->endCol !== 0 ? $cur->endCol : $col + max(0, strlen($className) - 1);
+    $endCol = $cur->endCol !== 0 ? $cur->endCol : $col + \max(0, \strlen($className) - 1);
 
     if ($args === []) {
         return [$className, new Ast\TypeUnit($line, $col, $endCol), $line, $col, $endCol];
@@ -1371,7 +1380,7 @@ function isFollowingClassBodyBoundary(ParserState $state): bool
 
     if (peek($state)->col <= classBodyColumn($state)
         && isAt($state, TokenKind::VarId)
-        && !isAt($state, TokenKind::Op, 1, '::')
+        && ! isAt($state, TokenKind::Op, 1, '::')
         && looksLikeFunctionDecl($state)) {
         return true;
     }
@@ -1412,7 +1421,7 @@ function classBodyColumn(ParserState $state): int
 /** True when a doc comment immediately precedes a top-level declaration at or left of `bodyCol`. */
 function isDocBeforeTopLevelDecl(ParserState $state, int $bodyCol): bool
 {
-    if (!isDocTokenKind(peek($state)->kind)) {
+    if (! isDocTokenKind(peek($state)->kind)) {
         return false;
     }
 
@@ -1484,7 +1493,7 @@ function parseAssociatedTypeDecl(ParserState $state): Ast\AssociatedTypeDecl
         $resultKind,
         $nameToken->line,
         $nameToken->col,
-        $nameToken->col + max(0, strlen($name) - 1),
+        $nameToken->col + \max(0, \strlen($name) - 1),
     );
 }
 
@@ -1510,7 +1519,7 @@ function parseAssociatedTypeEquation(ParserState $state): Ast\AssociatedTypeEqua
         $rhs,
         $nameToken->line,
         $nameToken->col,
-        $nameToken->col + max(0, strlen($name) - 1),
+        $nameToken->col + \max(0, \strlen($name) - 1),
     );
 }
 
@@ -1522,7 +1531,7 @@ function parseAssociatedTypeEquation(ParserState $state): Ast\AssociatedTypeEqua
  */
 function parseInstanceBodyOrEmpty(ParserState $state): array
 {
-    if (!isAt($state, TokenKind::KwWhere)) {
+    if (! isAt($state, TokenKind::KwWhere)) {
         return [[], []];
     }
 
@@ -1542,7 +1551,7 @@ function parseInstanceBody(ParserState $state, int $bodyCol = 0): array
 
     $methods = [];
     $associatedEquations = [];
-    while (!isAt($state, TokenKind::Eof) && !isFollowingInstanceBoundary($state)) {
+    while (! isAt($state, TokenKind::Eof) && ! isFollowingInstanceBoundary($state)) {
         if (peek($state)->col <= $bodyCol) {
             break;
         }
@@ -1550,11 +1559,13 @@ function parseInstanceBody(ParserState $state, int $bodyCol = 0): array
         $standaloneTrailing = consumeIndentedTrailingDoc($state, $bodyCol);
         if ($standaloneTrailing !== null) {
             attachTrailingDocToPreviousMethod($methods, $standaloneTrailing);
+
             continue;
         }
 
         if (isAt($state, TokenKind::KwType)) {
             $associatedEquations[] = parseAssociatedTypeEquation($state);
+
             continue;
         }
 
@@ -1657,7 +1668,7 @@ function parseInstanceMethod(ParserState $state): Ast\FunctionDecl
         $name = expect($state, TokenKind::Op)->lexeme;
         expect($state, TokenKind::RParen);
         $params = [];
-        while (startsPattern($state) && !isAt($state, TokenKind::Op, 0, '=')) {
+        while (startsPattern($state) && ! isAt($state, TokenKind::Op, 0, '=')) {
             $params[] = parsePatternAtom($state);
         }
         expectOp($state, '=');
@@ -1676,7 +1687,7 @@ function parseInstanceMethod(ParserState $state): Ast\FunctionDecl
 
     $nameToken = expect($state, TokenKind::VarId);
     $params = [];
-    while (startsPattern($state) && !isAt($state, TokenKind::Op, 0, '=') && !isAt($state, TokenKind::Pipe)) {
+    while (startsPattern($state) && ! isAt($state, TokenKind::Op, 0, '=') && ! isAt($state, TokenKind::Pipe)) {
         $params[] = parsePatternAtom($state);
     }
     $body = parseFunctionBody($state);
@@ -1688,7 +1699,7 @@ function parseInstanceMethod(ParserState $state): Ast\FunctionDecl
         $body,
         line: $nameToken->line,
         col: $nameToken->col,
-        endCol: $nameToken->col + max(0, strlen($nameToken->lexeme) - 1),
+        endCol: $nameToken->col + \max(0, \strlen($nameToken->lexeme) - 1),
     );
 }
 
@@ -1716,7 +1727,7 @@ function parsePrefixConstructorIdAlt(ParserState $state): Ast\ConstructorDecl
     $nameToken = expect($state, TokenKind::ConId);
     $name = $nameToken->lexeme;
 
-    $endCol = $nameToken->col + max(0, strlen($name) - 1);
+    $endCol = $nameToken->col + \max(0, \strlen($name) - 1);
     if (isAt($state, TokenKind::LBrace)) {
         return new Ast\ConstructorDecl(
             $name,
@@ -1746,7 +1757,7 @@ function parsePrefixConstructorOpAlt(ParserState $state): Ast\ConstructorDecl
     $open = expect($state, TokenKind::LParen);
     $opToken = expect($state, TokenKind::Op);
     $name = $opToken->lexeme;
-    if (!isConstructorOperator($name)) {
+    if (! isConstructorOperator($name)) {
         throw unexpected($state, 'constructor operator starting with `:`');
     }
     expect($state, TokenKind::RParen);
@@ -1762,7 +1773,7 @@ function parsePrefixConstructorOpAlt(ParserState $state): Ast\ConstructorDecl
         parseConstructorFields($state, $open->line),
         $open->line,
         $open->col,
-        $open->col + max(0, strlen($name) - 1),
+        $open->col + \max(0, \strlen($name) - 1),
         fixityAssoc: $fixity['assoc'],
         fixityPrec: $fixity['precedence'],
     );
@@ -1776,13 +1787,13 @@ function parsePrefixConstructorOpAlt(ParserState $state): Ast\ConstructorDecl
 function parseInfixConstructorAlt(ParserState $state): Ast\ConstructorDecl
 {
     $left = parseTypeAtom($state);
-    if (!isAt($state, TokenKind::Op)) {
+    if (! isAt($state, TokenKind::Op)) {
         throw unexpected($state, 'constructor');
     }
 
     $opToken = peek($state);
     $name = $opToken->lexeme;
-    if (!isConstructorOperator($name)) {
+    if (! isConstructorOperator($name)) {
         throw unexpected($state, 'constructor operator starting with `:`');
     }
     advance($state);
@@ -1798,7 +1809,7 @@ function parseInfixConstructorAlt(ParserState $state): Ast\ConstructorDecl
         ],
         $opToken->line,
         $opToken->col,
-        $opToken->col + max(0, strlen($name) - 1),
+        $opToken->col + \max(0, \strlen($name) - 1),
         fixityAssoc: $fixity['assoc'],
         fixityPrec: $fixity['precedence'],
         declaredInfix: true,
@@ -1848,7 +1859,7 @@ function parseRecordFieldDecls(ParserState $state): array
     expect($state, TokenKind::LBrace);
     $fields = [];
 
-    while (!isAt($state, TokenKind::RBrace)) {
+    while (! isAt($state, TokenKind::RBrace)) {
         $label = expect($state, TokenKind::VarId);
         expectOp($state, '::');
         $type = parseTypeNoConstraint($state);
@@ -1874,7 +1885,7 @@ function looksLikeParenOperatorTypedDecl(ParserState $state): bool
 
 function looksLikeParenOperatorMethodDecl(ParserState $state): bool
 {
-    if (!isAt($state, TokenKind::LParen) || !isAt($state, TokenKind::Op, 1)) {
+    if (! isAt($state, TokenKind::LParen) || ! isAt($state, TokenKind::Op, 1)) {
         return false;
     }
 
@@ -1885,7 +1896,7 @@ function looksLikeParenOperatorMethodDecl(ParserState $state): bool
         advance($state);
         expect($state, TokenKind::RParen);
 
-        while (startsPattern($state) && !isAt($state, TokenKind::Op, 0, '=')) {
+        while (startsPattern($state) && ! isAt($state, TokenKind::Op, 0, '=')) {
             parsePatternAtom($state);
         }
 
@@ -1899,7 +1910,7 @@ function looksLikeParenOperatorMethodDecl(ParserState $state): bool
 
 function startsTopLevelDecl(ParserState $state): bool
 {
-    if (!isAt($state, TokenKind::VarId)) {
+    if (! isAt($state, TokenKind::VarId)) {
         return false;
     }
 

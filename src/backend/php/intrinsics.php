@@ -2,13 +2,15 @@
 
 namespace Moggi\Backend\Php\Intrinsics;
 
-use Moggi\Debug\SourceMapBuilder;
-use Moggi\IR;
-use Moggi\IR\SrcLoc;
-
 use function Moggi\Backend\Php\Naming\phpFunctionName;
 use function Moggi\Debug\normalizeDisplayPath;
+
+use Moggi\Debug\SourceMapBuilder;
+
 use function Moggi\Debug\symbolId;
+
+use Moggi\IR;
+use Moggi\IR\SrcLoc;
 
 /**
  * @param array<int, string> $argExprs
@@ -48,8 +50,8 @@ function emitSrcLocExpr(?SrcLoc $loc, array $ctx = []): string
 
         return '\\Moggi\\throwSite('
             . (int) $site['siteId'] . ', '
-            . var_export($site['symbolId'], true) . ', '
-            . var_export($site['displayPath'], true) . ', '
+            . \var_export($site['symbolId'], true) . ', '
+            . \var_export($site['displayPath'], true) . ', '
             . (int) $site['line'] . ', '
             . (int) $site['col'] . ')';
     }
@@ -58,8 +60,8 @@ function emitSrcLocExpr(?SrcLoc $loc, array $ctx = []): string
     $symbolId = symbolId($loc->module, $loc->function);
 
     return '\\Moggi\\throwSite(0, '
-        . var_export($symbolId, true) . ', '
-        . var_export($display, true) . ', '
+        . \var_export($symbolId, true) . ', '
+        . \var_export($display, true) . ', '
         . (int) $loc->line . ', '
         . (int) $loc->col . ')';
 }
@@ -339,12 +341,12 @@ function maybeCompareExpr(string $left, string $right): string
     $leftTag = "(($left)[0] ?? null)";
     $rightTag = "(($right)[0] ?? null)";
 
-    return "match (true) {"
+    return 'match (true) {'
         . " ({$leftTag} === 'Nothing' && {$rightTag} === 'Nothing') => ['EQ'],"
         . " ({$leftTag} === 'Nothing') => ['LT'],"
         . " ({$rightTag} === 'Nothing') => ['GT'],"
         . " default => match (({$left}[1] ?? null) <=> ({$right}[1] ?? null)) { -1 => ['LT'], 0 => ['EQ'], 1 => ['GT'] }"
-        . " }";
+        . ' }';
 }
 
 /** PHP helpers emitted once per module when those intrinsics are used. */
@@ -352,8 +354,7 @@ function phpHelpersForModule(array $used): string
 {
     $helpers = [];
 
-    $any64 = static fn (string ...$names): bool =>
-        \count(\array_filter($names, static fn ($n): bool => isset($used[$n]))) > 0;
+    $any64 = static fn (string ...$names): bool => \count(\array_filter($names, static fn ($n): bool => isset($used[$n]))) > 0;
 
     if ($any64('intAdd#', 'intSub#', 'intMul#', 'intNegate#', 'intAbs#', 'intFromInteger#', 'word64Add#', 'word64Sub#', 'word64Mul#', 'word64Quot#', 'word64Rem#', 'word64ToInteger#', 'word64FromInteger#', 'word64Show#', 'word64Compare#', 'wordCompare#', 'byteSwap64#', 'bitReverse64#', 'word32Mul#', 'int64Add#', 'int64Sub#', 'int64Mul#')) {
         $helpers[] = 'function moggi_u64_add(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao + $bo; $c = ($lo >> 32) & 0xffffffff; $hi = ($ah + $bh + $c) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }';
@@ -387,8 +388,7 @@ function phpHelpersForModule(array $used): string
         $helpers[] = 'function moggi_u64_rem(int $a, int $b): int { if ($b === 0) { \\Moggi\\throwErrorCall("divide by zero"); } return moggi_wrap_decimal(bcmod(moggi_u64_to_str($a), moggi_u64_to_str($b))); }';
     }
 
-    $anySwap = static fn (string ...$names): bool =>
-        \count(\array_filter($names, static fn ($n): bool => isset($used[$n]))) > 0;
+    $anySwap = static fn (string ...$names): bool => \count(\array_filter($names, static fn ($n): bool => isset($used[$n]))) > 0;
 
     if ($anySwap('byteSwap16#', 'byteSwap32#', 'byteSwap64#', 'bitReverse8#', 'bitReverse16#', 'bitReverse32#', 'bitReverse64#')) {
         $helpers[] = 'function moggi_byte_swap_16(int $x): int { $x = $x & 0xffff; return (($x & 0xff) << 8) | (($x >> 8) & 0xff); }';
@@ -401,7 +401,7 @@ function phpHelpersForModule(array $used): string
         $helpers[] = 'function moggi_bit_reverse_64(int $a): int { $lo = $a & 0xffffffff; $hi = ($a >> 32) & 0xffffffff; $rlo = moggi_bit_reverse_n($lo, 32, 0xffffffff); $rhi = moggi_bit_reverse_n($hi, 32, 0xffffffff); return ($rlo << 32) | $rhi; }';
     }
 
-    return (\count($helpers) > 0 ? implode("\n", $helpers) . "\n" : '');
+    return \count($helpers) > 0 ? \implode("\n", $helpers) . "\n" : '';
 }
 
 /** @param array<string, true> $used @return array<string, string> */

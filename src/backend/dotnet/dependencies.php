@@ -116,7 +116,7 @@ function discoverDotNetLibDirs(): array
             new \RecursiveDirectoryIterator($lib, \FilesystemIterator::SKIP_DOTS),
         );
         foreach ($iterator as $file) {
-            if (!$file->isFile()) {
+            if (! $file->isFile()) {
                 continue;
             }
             $extension = $file->getExtension();
@@ -124,7 +124,7 @@ function discoverDotNetLibDirs(): array
                 continue;
             }
             $dir = $file->getPath();
-            if (basename($dir) !== 'dotnet') {
+            if (\basename($dir) !== 'dotnet') {
                 continue;
             }
             $dirs[$dir] = true;
@@ -175,7 +175,7 @@ function dotNetSidecarDiscriminator(bool $includeGenerated = true): string
 {
     $fingerprints = [];
     foreach (dotNetSidecarFiles() as $file) {
-        if (!$includeGenerated && isGeneratedBindPath($file)) {
+        if (! $includeGenerated && isGeneratedBindPath($file)) {
             continue;
         }
         $fingerprints[] = $file . ':' . fileFingerprint($file);
@@ -197,7 +197,7 @@ function isGeneratedBindPath(string $path): bool
     $flat = static fn (string $p): string => \str_replace('\\', '/', $p);
     $prefix = \rtrim($flat(runtimeCacheDir()), '/') . '/';
     $slashPath = $flat($path);
-    if (!\str_starts_with($slashPath, $prefix)) {
+    if (! \str_starts_with($slashPath, $prefix)) {
         return false;
     }
     $rest = (string) \substr($slashPath, \strlen($prefix));
@@ -291,11 +291,11 @@ function dotNetLibMetadata(): array
                 throw new \RuntimeException("cannot read .NET library metadata `{$file}`");
             }
             $data = \json_decode($raw, true);
-            if (!\is_array($data)) {
+            if (! \is_array($data)) {
                 throw new \RuntimeException("invalid .NET library metadata `{$file}`");
             }
             $format = $data['format'] ?? 0;
-            if (!\is_int($format) || $format > DOTNET_SIDECAR_FORMAT) {
+            if (! \is_int($format) || $format > DOTNET_SIDECAR_FORMAT) {
                 throw new \RuntimeException(
                     ".NET library metadata `{$file}` uses format {$format}, newer than this compiler's "
                     . DOTNET_SIDECAR_FORMAT . ' — update moggi',
@@ -306,13 +306,13 @@ function dotNetLibMetadata(): array
 
             $root = dotNetSidecarTreeRoot($file);
             $assemblies = $data['assemblies'] ?? [];
-            if (!\is_array($assemblies)) {
+            if (! \is_array($assemblies)) {
                 throw new \RuntimeException(
                     ".NET library metadata `{$file}` holds a non-object `assemblies` map",
                 );
             }
             foreach ($assemblies as $assembly => $spec) {
-                if (!\is_string($assembly) || !\is_array($spec) || ($spec !== [] && \array_is_list($spec))) {
+                if (! \is_string($assembly) || ! \is_array($spec) || ($spec !== [] && \array_is_list($spec))) {
                     throw new \RuntimeException(
                         ".NET library metadata `{$file}` holds a malformed assembly entry",
                     );
@@ -324,7 +324,7 @@ function dotNetLibMetadata(): array
                     $file,
                 );
                 foreach (['version', 'digest', 'generated-by'] as $provenance) {
-                    if (isset($spec[$provenance]) && !\is_string($spec[$provenance])) {
+                    if (isset($spec[$provenance]) && ! \is_string($spec[$provenance])) {
                         throw new \RuntimeException(
                             ".NET library metadata `{$file}` holds a non-string `{$provenance}`"
                             . " for assembly `{$assembly}`",
@@ -333,14 +333,14 @@ function dotNetLibMetadata(): array
                 }
                 checkDotNetAssemblyDigest($assembly, $spec, $file);
                 $typesMap = $spec['types'] ?? [];
-                if (!\is_array($typesMap)) {
+                if (! \is_array($typesMap)) {
                     throw new \RuntimeException(
                         ".NET library metadata `{$file}` holds a non-object `types` map"
                         . " for assembly `{$assembly}`",
                     );
                 }
                 foreach ($typesMap as $clrType => $typeSpec) {
-                    if (!\is_string($clrType) || !\is_array($typeSpec)
+                    if (! \is_string($clrType) || ! \is_array($typeSpec)
                         || ($typeSpec !== [] && \array_is_list($typeSpec))) {
                         throw new \RuntimeException(
                             ".NET library metadata `{$file}` holds a malformed `types` entry"
@@ -348,7 +348,7 @@ function dotNetLibMetadata(): array
                         );
                     }
                     assertClosedDotNetSidecarKeys($typeSpec, ['valueType'], "type `{$clrType}`", $file);
-                    if (isset($typeSpec['valueType']) && !\is_bool($typeSpec['valueType'])) {
+                    if (isset($typeSpec['valueType']) && ! \is_bool($typeSpec['valueType'])) {
                         throw new \RuntimeException(
                             ".NET library metadata `{$file}` holds a non-boolean `valueType`"
                             . " for type `{$clrType}`",
@@ -368,10 +368,11 @@ function dotNetLibMetadata(): array
                                 ".NET type `{$clrType}` declared with conflicting valueType ({$file})",
                             );
                         }
-                        if ($root !== null && !\in_array($root, $prior['roots'], true)) {
+                        if ($root !== null && ! \in_array($root, $prior['roots'], true)) {
                             $prior['roots'][] = $root;
                             $types[$clrType] = $prior;
                         }
+
                         continue;
                     }
                     $types[$clrType] = [
@@ -381,14 +382,14 @@ function dotNetLibMetadata(): array
                     ];
                 }
                 $signaturesMap = $spec['signatures'] ?? [];
-                if (!\is_array($signaturesMap)) {
+                if (! \is_array($signaturesMap)) {
                     throw new \RuntimeException(
                         ".NET library metadata `{$file}` holds a non-object `signatures` map"
                         . " for assembly `{$assembly}`",
                     );
                 }
                 foreach ($signaturesMap as $name => $entry) {
-                    if (!\is_string($name)) {
+                    if (! \is_string($name)) {
                         throw new \RuntimeException(
                             ".NET library metadata `{$file}` holds a malformed `signatures` entry"
                             . " for assembly `{$assembly}`",
@@ -408,10 +409,11 @@ function dotNetLibMetadata(): array
                                 . " ({$file})",
                             );
                         }
-                        if ($root !== null && !\in_array($root, $prior['roots'], true)) {
+                        if ($root !== null && ! \in_array($root, $prior['roots'], true)) {
                             $prior['roots'][] = $root;
                             $signatures[$name] = $prior;
                         }
+
                         continue;
                     }
                     $parsed['roots'] = $root === null ? [] : [$root];
@@ -441,7 +443,7 @@ function parseDotNetSignatureEntry(string $name, mixed $entry, string $file): ?a
         warnOnceFlatDotNetSidecar($file);
         $params = [];
         foreach ($entry as $param) {
-            if (!\is_string($param)) {
+            if (! \is_string($param)) {
                 throw new \RuntimeException(
                     ".NET foreign signature `{$name}` in `{$file}` holds a non-string parameter",
                 );
@@ -451,14 +453,14 @@ function parseDotNetSignatureEntry(string $name, mixed $entry, string $file): ?a
 
         return ['params' => $params, 'declared' => $params, 'optionalTail' => 0, 'flat' => true];
     }
-    if (!\is_array($entry) || !isset($entry['params']) || !\is_array($entry['params'])) {
+    if (! \is_array($entry) || ! isset($entry['params']) || ! \is_array($entry['params'])) {
         throw new \RuntimeException(
             ".NET foreign signature `{$name}` in `{$file}` is neither a parameter list"
             . ' nor {"params": [...], "optionalTail": N}',
         );
     }
     assertClosedDotNetSidecarKeys($entry, ['params', 'optionalTail'], "signature `{$name}`", $file);
-    if (!\array_is_list($entry['params'])) {
+    if (! \array_is_list($entry['params'])) {
         throw new \RuntimeException(
             ".NET foreign signature `{$name}` in `{$file}` holds a non-list `params`",
         );
@@ -469,9 +471,10 @@ function parseDotNetSignatureEntry(string $name, mixed $entry, string $file): ?a
         if (\is_string($param)) {
             $params[] = $param;
             $declared[] = $param;
+
             continue;
         }
-        if (!\is_array($param) || !isset($param['emit']) || !\is_string($param['emit'])) {
+        if (! \is_array($param) || ! isset($param['emit']) || ! \is_string($param['emit'])) {
             throw new \RuntimeException(
                 ".NET foreign signature `{$name}` in `{$file}` holds a parameter that is neither"
                 . ' an IL type nor {"emit": ..., "from": ...}',
@@ -480,7 +483,7 @@ function parseDotNetSignatureEntry(string $name, mixed $entry, string $file): ?a
         assertClosedDotNetSidecarKeys($param, ['emit', 'from'], "signature `{$name}` parameter", $file);
         $params[] = $param['emit'];
         $from = $param['from'] ?? $param['emit'];
-        if (!\is_string($from)) {
+        if (! \is_string($from)) {
             throw new \RuntimeException(
                 ".NET foreign signature `{$name}` in `{$file}` holds a non-string `from` type",
             );
@@ -488,7 +491,7 @@ function parseDotNetSignatureEntry(string $name, mixed $entry, string $file): ?a
         $declared[] = $from;
     }
     $optionalTail = $entry['optionalTail'] ?? 0;
-    if (!\is_int($optionalTail) || $optionalTail < 0 || $optionalTail > \count($params)) {
+    if (! \is_int($optionalTail) || $optionalTail < 0 || $optionalTail > \count($params)) {
         throw new \RuntimeException(
             ".NET foreign signature `{$name}` in `{$file}` names an `optionalTail` outside its parameters",
         );
@@ -506,8 +509,9 @@ function parseDotNetSignatureEntry(string $name, mixed $entry, string $file): ?a
 function assertClosedDotNetSidecarKeys(array $map, array $allowed, string $where, string $file): void
 {
     foreach ($map as $key => $_) {
-        if (!\is_string($key) || !\in_array($key, $allowed, true)) {
+        if (! \is_string($key) || ! \in_array($key, $allowed, true)) {
             $shown = \is_string($key) ? $key : '#' . (string) $key;
+
             throw new \RuntimeException(
                 ".NET library metadata `{$file}` holds an unknown key `{$shown}` in {$where}"
                 . ' (frozen schema, format ' . DOTNET_SIDECAR_FORMAT . ')',
@@ -540,7 +544,7 @@ function warnOnceFlatDotNetSidecar(string $file): void
 function checkDotNetAssemblyDigest(string $assembly, array $spec, string $file): void
 {
     $digest = $spec['digest'] ?? null;
-    if (!\is_string($digest) || safeDigestKey($digest) === null) {
+    if (! \is_string($digest) || safeDigestKey($digest) === null) {
         return;
     }
     foreach (dotNetVendoredAssemblies() as $dll) {
@@ -608,7 +612,7 @@ function dotNetSignatureEntry(string $name, ?string $importerRoot = null): ?arra
     if ($entry === null) {
         return null;
     }
-    if ($importerRoot !== null && $entry['roots'] !== [] && !\in_array($importerRoot, $entry['roots'], true)) {
+    if ($importerRoot !== null && $entry['roots'] !== [] && ! \in_array($importerRoot, $entry['roots'], true)) {
         return null;
     }
 

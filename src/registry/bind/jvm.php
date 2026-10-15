@@ -58,7 +58,7 @@ const JVM_BIND_PRIMITIVES = [
  */
 function parseJvmCoordinate(string $coordinate): array
 {
-    $parts = explode(':', $coordinate);
+    $parts = \explode(':', $coordinate);
     if (\count($parts) < 2 || \count($parts) > 3 || $parts[0] === '' || $parts[1] === '') {
         throw new \RuntimeException(
             "cannot bind `{$coordinate}` — a Maven coordinate is `group:artifact[:version]`",
@@ -81,10 +81,10 @@ function parseJvmCoordinate(string $coordinate): array
 function jvmBindModuleName(string $group, string $artifact): string
 {
     $segments = ['Maven'];
-    foreach (explode('.', $group) as $part) {
+    foreach (\explode('.', $group) as $part) {
         $segments[] = bindSegmentToModule($part);
     }
-    foreach (explode('.', $artifact) as $part) {
+    foreach (\explode('.', $artifact) as $part) {
         $segments[] = bindSegmentToModule($part);
     }
 
@@ -107,7 +107,7 @@ function jvmClassPrefix(string $group): string
 function inspectJvmTree(string $treeRoot, string $group, string $artifact): array
 {
     $root = \rtrim($treeRoot, '/');
-    if (!\is_dir($root)) {
+    if (! \is_dir($root)) {
         throw new \RuntimeException("cannot bind `{$treeRoot}` — no such directory");
     }
 
@@ -117,7 +117,7 @@ function inspectJvmTree(string $treeRoot, string $group, string $artifact): arra
     );
     /** @var \SplFileInfo $file */
     foreach ($scan as $file) {
-        if (!$file->isFile() || !\str_ends_with($file->getFilename(), '.jar')) {
+        if (! $file->isFile() || ! \str_ends_with($file->getFilename(), '.jar')) {
             continue;
         }
         if (\basename($file->getPath()) !== 'jvm') {
@@ -144,7 +144,7 @@ function inspectJvmTree(string $treeRoot, string $group, string $artifact): arra
     $classes = [];
     foreach ($jars as $jar) {
         foreach (jvmJarClasses($jar) as $internal) {
-            if (!\str_starts_with($internal, $prefix)) {
+            if (! \str_starts_with($internal, $prefix)) {
                 continue;
             }
             if (\str_contains($internal, '$')) {
@@ -196,7 +196,7 @@ function inspectJvmTree(string $treeRoot, string $group, string $artifact): arra
     $bound = [];
     foreach ($classes as $internal) {
         $short = (string) \substr($internal, (int) \strrpos($internal, '/') + 1);
-        if (!$claim($short)) {
+        if (! $claim($short)) {
             $skip(\str_replace('/', '.', $internal), "name collision on `{$short}`");
 
             continue;
@@ -263,7 +263,7 @@ function inspectJvmMethod(
     array &$functions,
 ): void {
     $label = $dotted . '.' . $method['name'];
-    if (!$method['public']) {
+    if (! $method['public']) {
         $skip($label, 'not public');
 
         return;
@@ -328,7 +328,7 @@ function inspectJvmMethod(
         $paramWords[] = $word;
     }
 
-    if (!$claim($moggi)) {
+    if (! $claim($moggi)) {
         $skip($label, "name collision on `{$moggi}` (an overload has no Moggi spelling)");
 
         return;
@@ -370,7 +370,7 @@ function inspectJvmField(
     array &$consts,
 ): void {
     $label = $dotted . '.' . $field['name'];
-    if (!$field['public'] || !$field['static'] || !$field['final']) {
+    if (! $field['public'] || ! $field['static'] || ! $field['final']) {
         $skip($label, 'only public static final fields bind');
 
         return;
@@ -382,7 +382,7 @@ function inspectJvmField(
         return;
     }
     $moggi = \lcfirst($info['moggi']) . \ucfirst(\strtolower($field['name']));
-    if (!$claim($moggi)) {
+    if (! $claim($moggi)) {
         $skip($label, "name collision on `{$moggi}`");
 
         return;
@@ -504,7 +504,7 @@ function jvmMoggiWordDescriptor(string $word, array $bound): ?string
  */
 function parseJvmMethodDescriptor(string $descriptor): ?array
 {
-    if (!\str_starts_with($descriptor, '(')) {
+    if (! \str_starts_with($descriptor, '(')) {
         return null;
     }
     $params = [];
@@ -634,7 +634,7 @@ function jvmAddMember(array &$table, string $declaration, string $descriptor): v
         $throws = [];
         $body = (string) \preg_replace('/\s*;\s*$/', '', $declaration);
         if (\preg_match('/\bthrows\b\s+(.+)$/', $body, $throwMatch) === 1) {
-            foreach (explode(',', $throwMatch[1]) as $thrown) {
+            foreach (\explode(',', $throwMatch[1]) as $thrown) {
                 $thrown = \trim($thrown);
                 if ($thrown !== '') {
                     $throws[] = $thrown;
@@ -672,11 +672,12 @@ function jvmJarClasses(string $jar): array
     if ($zip->open($jar) !== true) {
         throw new \RuntimeException("cannot bind `{$jar}` — the jar cannot be read");
     }
+
     try {
         $classes = [];
         for ($i = 0; $i < $zip->numFiles; ++$i) {
             $name = \str_replace('\\', '/', (string) $zip->getNameIndex($i));
-            if ($name === '' || !\str_ends_with($name, '.class') || \str_starts_with($name, 'META-INF/')) {
+            if ($name === '' || ! \str_ends_with($name, '.class') || \str_starts_with($name, 'META-INF/')) {
                 continue;
             }
             $classes[] = \substr($name, 0, -6);

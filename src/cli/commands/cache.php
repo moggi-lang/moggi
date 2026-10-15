@@ -54,7 +54,7 @@ function runCache(array $argv): int
     }
 
     $sub = $argv[2] ?? 'info';
-    if (!\in_array($sub, ['info', 'clear'], true)) {
+    if (! \in_array($sub, ['info', 'clear'], true)) {
         \fwrite(STDERR, "error: unknown cache command `{$sub}` (expected: info | clear)\n\n" . cacheUsage() . "\n");
 
         return 1;
@@ -132,6 +132,3 @@ function clearDownloads(): int
 {
     return removeTree(downloadsDir());
 }
-
-
-

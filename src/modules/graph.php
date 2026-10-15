@@ -2,19 +2,24 @@
 
 namespace Moggi\Modules;
 
-use Moggi\Semantics\Types\TypeError;
-use Moggi\Syntax\Ast;
-use Moggi\Syntax\Lexer\LexError;
-use Moggi\Syntax\Parser\ParseError;
-
 use function Moggi\Backend\compileBackend;
 use function Moggi\Errors\appendDidYouMean;
 use function Moggi\Paths\canonicalPath;
 use function Moggi\Paths\canonicalSeparators;
+
+use Moggi\Semantics\Types\TypeError;
+use Moggi\Syntax\Ast;
+
 use function Moggi\Syntax\Ast\moduleName;
 use function Moggi\Syntax\Lexer\lex;
+
+use Moggi\Syntax\Lexer\LexError;
+
 use function Moggi\Syntax\Parser\importedFixityForImports;
 use function Moggi\Syntax\Parser\mergeFixity;
+
+use Moggi\Syntax\Parser\ParseError;
+
 use function Moggi\Syntax\Parser\parseModuleHeader;
 
 /**
@@ -30,7 +35,7 @@ use function Moggi\Syntax\Parser\parseModuleHeader;
 function findMogFilesUnder(string $rootDir): array
 {
     $root = resolvePath($rootDir);
-    if (!\is_dir($root)) {
+    if (! \is_dir($root)) {
         return [];
     }
 
@@ -42,7 +47,7 @@ function findMogFilesUnder(string $rootDir): array
     $filtered = new \RecursiveCallbackFilterIterator(
         $directories,
         static function (\SplFileInfo $current): bool {
-            if (!$current->isDir()) {
+            if (! $current->isDir()) {
                 return true;
             }
 
@@ -55,11 +60,12 @@ function findMogFilesUnder(string $rootDir): array
                 return false;
             }
 
-            return !\in_array($name, ['var', 'dist', 'build', 'node_modules', 'vendor'], true);
+            return ! \in_array($name, ['var', 'dist', 'build', 'node_modules', 'vendor'], true);
         },
     );
 
     $files = [];
+
     try {
         foreach (new \RecursiveIteratorIterator($filtered) as $file) {
             if ($file->isFile() && $file->getExtension() === 'mog') {
@@ -69,7 +75,7 @@ function findMogFilesUnder(string $rootDir): array
     } catch (\UnexpectedValueException) {
     }
 
-    sort($files);
+    \sort($files);
 
     return $files;
 }
@@ -98,7 +104,7 @@ function headerIsModuleSource(array $header): bool
 function moduleProjectImportsResolve(string $rootDir, array $mogPaths, array $known = []): bool
 {
     $root = resolvePath($rootDir);
-    if (!\is_dir($root)) {
+    if (! \is_dir($root)) {
         return false;
     }
 
@@ -123,7 +129,7 @@ function moduleProjectImportsResolve(string $rootDir, array $mogPaths, array $kn
     foreach ($programs as $header) {
         foreach ($header['imports'] as $import) {
             $importName = Ast\moduleName($import->path);
-            if (!isset($modules[$importName]) && !isset($known[$importName])) {
+            if (! isset($modules[$importName]) && ! isset($known[$importName])) {
                 return false;
             }
         }
@@ -156,16 +162,16 @@ function moduleIndexFromPaths(array $paths): array
 function isStandaloneWorkspaceTest(string $filePath): bool
 {
     $file = resolvePath($filePath);
-    if (!\is_file($file)) {
+    if (! \is_file($file)) {
         return false;
     }
 
     $file = \str_replace('\\', '/', $file);
-    if (!str_contains($file, '/tests/')) {
+    if (! \str_contains($file, '/tests/')) {
         return false;
     }
 
-    if (str_contains($file, '/tests/modules/')) {
+    if (\str_contains($file, '/tests/modules/')) {
         return false;
     }
 
@@ -199,7 +205,7 @@ function injectPreludeImport(
         }
     }
 
-    if (!empty($language['NoImplicitPrelude'])) {
+    if (! empty($language['NoImplicitPrelude'])) {
         return $imports;
     }
 
@@ -207,7 +213,7 @@ function injectPreludeImport(
         return $imports;
     }
 
-    if ($availableModules !== null && !isset($availableModules['Prelude'])) {
+    if ($availableModules !== null && ! isset($availableModules['Prelude'])) {
         return $imports;
     }
 
@@ -221,7 +227,7 @@ function injectPreludeImport(
 function moduleNameForPath(string $path): ?string
 {
     $real = resolvePath($path);
-    if (!\is_file($real)) {
+    if (! \is_file($real)) {
         return null;
     }
 
@@ -261,7 +267,7 @@ function preludeDependencyClosure(string $fromPath): array
     $closure = ['Prelude' => true];
     $queue = ['Prelude'];
     while ($queue !== []) {
-        $moduleName = array_shift($queue);
+        $moduleName = \array_shift($queue);
         $modulePath = $index[$moduleName] ?? null;
         if ($modulePath === null) {
             continue;
@@ -279,7 +285,7 @@ function preludeDependencyClosure(string $fromPath): array
         }
 
         foreach ($dependencies as $dependency) {
-            if (!isset($closure[$dependency])) {
+            if (! isset($closure[$dependency])) {
                 $closure[$dependency] = true;
                 $queue[] = $dependency;
             }
@@ -344,16 +350,16 @@ function computeEffectiveFixityByModule(array $pending, array $localFixityByModu
 function sourceIdentityKey(string $path): string
 {
     $real = resolvePath($path);
-    $overlay = str_contains($real, '/moggi-lsp-vfs/')
-        || str_contains($real, DIRECTORY_SEPARATOR . 'moggi-lsp-vfs' . DIRECTORY_SEPARATOR);
+    $overlay = \str_contains($real, '/moggi-lsp-vfs/')
+        || \str_contains($real, DIRECTORY_SEPARATOR . 'moggi-lsp-vfs' . DIRECTORY_SEPARATOR);
     if ($overlay) {
-        $hash = @hash_file('xxh3', $real);
+        $hash = @\hash_file('xxh3', $real);
 
         return $real . ':h:' . ($hash !== false ? $hash : '0');
     }
-    clearstatcache(true, $real);
+    \clearstatcache(true, $real);
 
-    return $real . ':' . (filemtime($real) ?: 0) . ':' . (filesize($real) ?: 0);
+    return $real . ':' . (\filemtime($real) ?: 0) . ':' . (\filesize($real) ?: 0);
 }
 
 /** @return array<string, mixed> */
@@ -362,7 +368,7 @@ function cachedModuleHeader(string $path): array
     static $headers = [];
 
     $realPath = resolvePath($path);
-    if (!\is_file($realPath)) {
+    if (! \is_file($realPath)) {
         throw new TypeError("cannot resolve `{$path}`");
     }
 
@@ -371,7 +377,7 @@ function cachedModuleHeader(string $path): array
         return $headers[$key];
     }
 
-    $source = file_get_contents($realPath);
+    $source = \file_get_contents($realPath);
     if ($source === false) {
         throw new \RuntimeException("cannot read {$realPath}");
     }
@@ -398,7 +404,7 @@ function cachedModuleHeader(string $path): array
 function moduleFileClosure(string $path): array
 {
     $realPath = resolvePath($path);
-    if (!\is_file($realPath)) {
+    if (! \is_file($realPath)) {
         throw new TypeError("cannot resolve `{$path}`");
     }
 
@@ -413,13 +419,14 @@ function moduleFileClosure(string $path): array
         $duplicates = $stdlibDuplicates;
     }
 
-    if (!isStandaloneWorkspaceTest($path)) {
+    if (! isStandaloneWorkspaceTest($path)) {
         $localRoot = findBoundedModuleRoot($path);
         if ($localRoot !== null) {
             foreach (moduleIndexFromPaths(findMogFilesUnder($localRoot)) as $localName => $localPath) {
                 $existing = $byModule[$localName] ?? null;
                 if ($existing === null || canonicalPath($existing) === canonicalPath($localPath)) {
                     $byModule[$localName] = $localPath;
+
                     continue;
                 }
                 $duplicates[$localName][] = $localPath;
@@ -430,7 +437,8 @@ function moduleFileClosure(string $path): array
     $start = cachedModuleHeader($realPath);
     $startModule = $start['module'] ?? null;
     if ($startModule === null) {
-        $source = file_get_contents($realPath);
+        $source = \file_get_contents($realPath);
+
         throw new TypeError(
             "missing `module` declaration in {$realPath}",
             $realPath,
@@ -447,7 +455,7 @@ function moduleFileClosure(string $path): array
     $queue = [$startModule];
     $enqueuedBy = [];
     $queueHead = 0;
-    while ($queueHead < count($queue)) {
+    while ($queueHead < \count($queue)) {
         $moduleName = $queue[$queueHead++];
         if (isset($needed[$moduleName])) {
             continue;
@@ -468,7 +476,7 @@ function moduleFileClosure(string $path): array
 
             $originSource = '';
             if ($origin !== null) {
-                $read = file_get_contents($origin['path']);
+                $read = \file_get_contents($origin['path']);
                 $originSource = $read === false ? '' : $read;
             }
 
@@ -506,7 +514,7 @@ function moduleFileClosure(string $path): array
         ) as $import) {
             $importName = Ast\moduleName($import->path);
             $owner = $implOwners[$importName] ?? null;
-            if ($owner !== null && !isset($implOwners[$moduleName])) {
+            if ($owner !== null && ! isset($implOwners[$moduleName])) {
                 throw backendImplImportError(
                     $importName,
                     $owner,
@@ -516,7 +524,7 @@ function moduleFileClosure(string $path): array
                 );
             }
 
-            if (!isset($enqueuedBy[$importName]) && $importName !== $startModule) {
+            if (! isset($enqueuedBy[$importName]) && $importName !== $startModule) {
                 $enqueuedBy[$importName] = [
                     'module' => $moduleName,
                     'path' => $modulePath,
@@ -525,13 +533,13 @@ function moduleFileClosure(string $path): array
                     'endCol' => $import->endCol,
                 ];
             }
-            if (!isset($needed[$importName])) {
+            if (! isset($needed[$importName])) {
                 $queue[] = $importName;
             }
         }
 
         $implName = resolveImplModuleName($header['backendMap'] ?? []);
-        if ($implName !== null && !isset($needed[$implName])) {
+        if ($implName !== null && ! isset($needed[$implName])) {
             $queue[] = $implName;
         }
 
@@ -554,11 +562,12 @@ function moduleFileClosure(string $path): array
             foreach ($facadeBackendMap as $impl) {
                 if ($impl === $moduleName) {
                     $matches = true;
+
                     break;
                 }
             }
 
-            if ($matches && !isset($needed[$facadeName])) {
+            if ($matches && ! isset($needed[$facadeName])) {
                 $queue[] = $facadeName;
             }
         }
@@ -566,7 +575,7 @@ function moduleFileClosure(string $path): array
 
     $files = [];
     foreach ($needed as $modulePath) {
-        if (!isSyntheticCompilerPath($modulePath)) {
+        if (! isSyntheticCompilerPath($modulePath)) {
             $files[] = $modulePath;
         }
     }
@@ -594,7 +603,7 @@ function moduleFileClosureCached(string $path): array
     static $closures = [];
 
     $realPath = resolvePath($path);
-    if (!\is_file($realPath)) {
+    if (! \is_file($realPath)) {
         return moduleFileClosure($path);
     }
 
@@ -602,7 +611,7 @@ function moduleFileClosureCached(string $path): array
     $stdlibMtime = $stdlibRoot !== null ? stdlibMaxMtime($stdlibRoot) : 0;
     $backend = compileBackend();
 
-    $key = $realPath . ':' . (filemtime($realPath) ?: 0) . ':' . $stdlibMtime . ':' . $backend;
+    $key = $realPath . ':' . (\filemtime($realPath) ?: 0) . ':' . $stdlibMtime . ':' . $backend;
     if (isset($closures[$key])) {
         return $closures[$key];
     }
@@ -615,45 +624,46 @@ function moduleFileClosureCached(string $path): array
 
 function findBoundedModuleRoot(string $filePath): ?string
 {
-    $file = realpath($filePath);
+    $file = \realpath($filePath);
     if ($file === false) {
         return null;
     }
 
     $stdlibRoot = locateStdlibRoot($filePath);
-    $workspaceRoot = $stdlibRoot !== null ? realpath(workspaceRootForStdlibRoot($stdlibRoot)) : null;
+    $workspaceRoot = $stdlibRoot !== null ? \realpath(workspaceRootForStdlibRoot($stdlibRoot)) : null;
     $searchDirOnly = $workspaceRoot === null || $workspaceRoot === false;
     $knownModules = $stdlibRoot === null
         ? syntheticCompilerModuleIndex()
         : [...syntheticCompilerModuleIndex(), ...stdlibModuleIndex($stdlibRoot)];
 
-    $dir = dirname($file);
+    $dir = \dirname($file);
     while ($dir !== false) {
-        $realDir = realpath($dir);
+        $realDir = \realpath($dir);
         if (
             $workspaceRoot !== false
             && $workspaceRoot !== null
             && $realDir !== false
             && $realDir !== $workspaceRoot
-            && !str_starts_with($realDir, $workspaceRoot . DIRECTORY_SEPARATOR)
+            && ! \str_starts_with($realDir, $workspaceRoot . DIRECTORY_SEPARATOR)
         ) {
             break;
         }
 
-        if (basename($dir) === 'tests' && \is_dir($dir . DIRECTORY_SEPARATOR . 'errors')) {
-            $parent = dirname($dir);
+        if (\basename($dir) === 'tests' && \is_dir($dir . DIRECTORY_SEPARATOR . 'errors')) {
+            $parent = \dirname($dir);
             if ($parent === $dir) {
                 break;
             }
 
             $dir = $parent;
+
             continue;
         }
 
         $mogs = findMogFilesUnder($dir);
-        $paths = array_values(array_filter(\array_map(static fn (string $p): ?string => realpath($p), $mogs)));
+        $paths = \array_values(\array_filter(\array_map(static fn (string $p): ?string => \realpath($p), $mogs)));
         if ($paths !== [] && \in_array($file, $paths, true) && moduleProjectImportsResolve($dir, $mogs, $knownModules)) {
-            if (!\is_dir($dir . DIRECTORY_SEPARATOR . 'tests' . DIRECTORY_SEPARATOR . 'errors')) {
+            if (! \is_dir($dir . DIRECTORY_SEPARATOR . 'tests' . DIRECTORY_SEPARATOR . 'errors')) {
                 return $dir;
             }
         }
@@ -662,7 +672,7 @@ function findBoundedModuleRoot(string $filePath): ?string
             break;
         }
 
-        $parent = dirname($dir);
+        $parent = \dirname($dir);
         if ($parent === $dir) {
             break;
         }
@@ -680,25 +690,26 @@ function commonPathPrefix(array $paths): string
         return '';
     }
 
-    $dirs = \array_map(static fn (string $path): string => dirname($path), $paths);
+    $dirs = \array_map(static fn (string $path): string => \dirname($path), $paths);
     $prefix = $dirs[0];
     foreach ($dirs as $dir) {
         while (
             $prefix !== ''
             && $prefix !== DIRECTORY_SEPARATOR
-            && !str_starts_with($dir, $prefix . DIRECTORY_SEPARATOR)
+            && ! \str_starts_with($dir, $prefix . DIRECTORY_SEPARATOR)
             && $dir !== $prefix
         ) {
-            $parent = dirname($prefix);
+            $parent = \dirname($prefix);
             if ($parent === $prefix) {
                 $prefix = DIRECTORY_SEPARATOR;
+
                 break;
             }
             $prefix = $parent;
         }
     }
 
-    return $prefix === '.' ? dirname($paths[0]) : $prefix;
+    return $prefix === '.' ? \dirname($paths[0]) : $prefix;
 }
 
 /**
@@ -730,6 +741,7 @@ function libraryModuleScan(array $libDirs): array
             $existing = $paths[$moduleName] ?? null;
             if ($existing === null) {
                 $paths[$moduleName] = $path;
+
                 continue;
             }
 
@@ -816,7 +828,7 @@ function importSiteAt(?array $origin, string $fallbackPath): array
         return moduleHeaderAt($fallbackPath, cachedModuleHeader($fallbackPath));
     }
 
-    $read = @file_get_contents($origin['path']);
+    $read = @\file_get_contents($origin['path']);
 
     return [
         'path' => $origin['path'],
@@ -857,8 +869,8 @@ function stdlibSourcesMissingFrom(array $files, ?string $stdlibDir): array
         return [];
     }
 
-    $seed = rtrim($stdlibDir, '/') . '/Prelude.mog';
-    if (!\is_file($seed)) {
+    $seed = \rtrim($stdlibDir, '/') . '/Prelude.mog';
+    if (! \is_file($seed)) {
         return [];
     }
 
@@ -881,7 +893,7 @@ function stdlibSourcesMissingFrom(array $files, ?string $stdlibDir): array
     foreach ($closure as $file) {
         $header = cachedModuleHeader($file);
         $module = $header['module'] ?? null;
-        if (!\is_string($module)) {
+        if (! \is_string($module)) {
             continue;
         }
 
@@ -894,6 +906,7 @@ function stdlibSourcesMissingFrom(array $files, ?string $stdlibDir): array
                     moduleHeaderAt($provider, cachedModuleHeader($provider)),
                 );
             }
+
             continue;
         }
 
@@ -930,7 +943,7 @@ function projectSourceClosure(array $inputFiles, array $libDirs): array
 
     $entryModules = [];
     foreach ($inputFiles as $path) {
-        $real = realpath($path) ?: $path;
+        $real = \realpath($path) ?: $path;
         $header = cachedModuleHeader($real);
         $moduleName = $header['module'] ?? null;
         if ($moduleName === null) {
@@ -941,6 +954,7 @@ function projectSourceClosure(array $inputFiles, array $libDirs): array
             if (canonicalPath($byModule[$moduleName]) === canonicalPath($real)) {
                 continue;
             }
+
             throw new TypeError(
                 "duplicate module `{$moduleName}` in project ("
                 . canonicalSeparators($byModule[$moduleName]) . ' and ' . canonicalSeparators($real) . ')',
@@ -952,7 +966,7 @@ function projectSourceClosure(array $inputFiles, array $libDirs): array
 
         $libraryPath = $byModule[$moduleName] ?? null;
         if ($libraryPath !== null
-            && !isSyntheticCompilerPath($libraryPath)
+            && ! isSyntheticCompilerPath($libraryPath)
             && canonicalPath($libraryPath) !== canonicalPath($real)
         ) {
             refuseAmbiguousModule(
@@ -970,7 +984,7 @@ function projectSourceClosure(array $inputFiles, array $libDirs): array
         throw new \RuntimeException('no modules found in build input');
     }
 
-    $primaryPath = $byModule[array_key_first($entryModules)];
+    $primaryPath = $byModule[\array_key_first($entryModules)];
 
     return closureFromModuleIndex($entryModules, $byModule, $primaryPath, $duplicates);
 }
@@ -1006,7 +1020,7 @@ function closureFromModuleIndex(
     $enqueuedBy = [];
     $queueHead = 0;
 
-    while ($queueHead < count($queue)) {
+    while ($queueHead < \count($queue)) {
         $moduleName = $queue[$queueHead++];
         if (isset($needed[$moduleName])) {
             continue;
@@ -1023,11 +1037,11 @@ function closureFromModuleIndex(
         $modulePath = $byModule[$moduleName] ?? null;
         if ($modulePath === null) {
             $origin = $enqueuedBy[$moduleName] ?? null;
-            $requiredBy = $origin['module'] ?? array_key_first($entryModules);
+            $requiredBy = $origin['module'] ?? \array_key_first($entryModules);
 
             $originSource = '';
             if ($origin !== null) {
-                $read = file_get_contents($origin['path']);
+                $read = \file_get_contents($origin['path']);
                 $originSource = $read === false ? '' : $read;
             }
 
@@ -1062,7 +1076,7 @@ function closureFromModuleIndex(
         ) as $import) {
             $importName = Ast\moduleName($import->path);
             $owner = $implOwners[$importName] ?? null;
-            if ($owner !== null && !isset($implOwners[$moduleName])) {
+            if ($owner !== null && ! isset($implOwners[$moduleName])) {
                 throw backendImplImportError(
                     $importName,
                     $owner,
@@ -1072,7 +1086,7 @@ function closureFromModuleIndex(
                 );
             }
 
-            if (!isset($enqueuedBy[$importName]) && !isset($entryModules[$importName])) {
+            if (! isset($enqueuedBy[$importName]) && ! isset($entryModules[$importName])) {
                 $enqueuedBy[$importName] = [
                     'module' => $moduleName,
                     'path' => $modulePath,
@@ -1081,13 +1095,13 @@ function closureFromModuleIndex(
                     'endCol' => $import->endCol,
                 ];
             }
-            if (!isset($needed[$importName])) {
+            if (! isset($needed[$importName])) {
                 $queue[] = $importName;
             }
         }
 
         $implName = resolveImplModuleName($header['backendMap'] ?? []);
-        if ($implName !== null && !isset($needed[$implName])) {
+        if ($implName !== null && ! isset($needed[$implName])) {
             $queue[] = $implName;
         }
 
@@ -1106,7 +1120,7 @@ function closureFromModuleIndex(
                 continue;
             }
 
-            if (\in_array($moduleName, $facadeBackendMap, true) && !isset($needed[$facadeName])) {
+            if (\in_array($moduleName, $facadeBackendMap, true) && ! isset($needed[$facadeName])) {
                 $queue[] = $facadeName;
             }
         }
@@ -1114,7 +1128,7 @@ function closureFromModuleIndex(
 
     $files = [];
     foreach ($needed as $modulePath) {
-        if (!isSyntheticCompilerPath($modulePath)) {
+        if (! isSyntheticCompilerPath($modulePath)) {
             $files[] = $modulePath;
         }
     }
@@ -1158,7 +1172,7 @@ function throwCyclicModuleImports(array $units, array $pending, array $sortedSet
     foreach ($pending as $moduleName) {
         $unsatisfied = [];
         foreach (moduleDependencyNames($units, $moduleName) as $importName) {
-            if (!isset($sortedSet[$importName]) && isset($pendingSet[$importName])) {
+            if (! isset($sortedSet[$importName]) && isset($pendingSet[$importName])) {
                 $unsatisfied[] = $importName;
             }
         }
@@ -1173,12 +1187,13 @@ function throwCyclicModuleImports(array $units, array $pending, array $sortedSet
 
     $chain = [];
     foreach ($cycle as $index => $moduleName) {
-        $next = $cycle[($index + 1) % count($cycle)];
+        $next = $cycle[($index + 1) % \count($cycle)];
         $chain[] = "`{$moduleName}` imports `{$next}`";
     }
 
     $start = $cycle[0];
     $next = $cycle[1] ?? $start;
+
     throw new TypeError(
         'cyclic module imports: ' . \implode(' -> ', $chain),
         $units[$start]['path'] ?? '',
@@ -1233,7 +1248,7 @@ function findModuleImportCycle(array $deps): ?array
 
     $visit = function (string $node) use (&$visit, &$deps, &$visiting, &$visited, &$stack): ?array {
         if (isset($visiting[$node])) {
-            $start = array_search($node, $stack, true);
+            $start = \array_search($node, $stack, true);
             if ($start === false) {
                 return [$node];
             }
@@ -1254,7 +1269,7 @@ function findModuleImportCycle(array $deps): ?array
             }
         }
 
-        array_pop($stack);
+        \array_pop($stack);
         unset($visiting[$node]);
         $visited[$node] = true;
 
@@ -1288,7 +1303,7 @@ function sortModulesByDependencies(array $units): array
 
             $ready = true;
             foreach ($imports as $importName) {
-                if (!isset($units[$importName])) {
+                if (! isset($units[$importName])) {
                     throw new TypeError(
                         appendDidYouMean(
                             "unknown module `{$importName}` imported by `{$moduleName}`",
@@ -1301,13 +1316,14 @@ function sortModulesByDependencies(array $units): array
                     );
                 }
 
-                if (!isset($sortedSet[$importName])) {
+                if (! isset($sortedSet[$importName])) {
                     $ready = false;
+
                     break;
                 }
             }
 
-            if (!$ready) {
+            if (! $ready) {
                 continue;
             }
 
@@ -1317,8 +1333,8 @@ function sortModulesByDependencies(array $units): array
             $progress = true;
         }
 
-        if (!$progress) {
-            throwCyclicModuleImports($units, array_values($pending), $sortedSet);
+        if (! $progress) {
+            throwCyclicModuleImports($units, \array_values($pending), $sortedSet);
         }
     }
 

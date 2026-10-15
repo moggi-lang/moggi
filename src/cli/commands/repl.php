@@ -61,6 +61,7 @@ function runRepl(array $argv): int
     $backend = parseBackendValue($options['backend']);
     Backend\setCompileBackend($backend);
     $state = createSession($backend, resolveLibraryDirs($options['lib']));
+
     try {
         if ($options['script'] !== null) {
             return runScript($state, $options['script']);

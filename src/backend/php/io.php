@@ -2,16 +2,18 @@
 
 namespace Moggi\Backend\Php\Io;
 
-use Moggi\IR;
-
 use function Moggi\Backend\Meta\lambdaCaptureNamesInBlock;
+
 use function Moggi\Backend\Php\Codegen\emitBlock;
 use function Moggi\Backend\Php\Codegen\emitOperand;
 use function Moggi\Backend\Php\Codegen\emitRetValue;
-use function Moggi\IR\Visit\collectLocalsInBlock;
 use function Moggi\Backend\Php\Intrinsics\emitSrcLocExpr;
 use function Moggi\Backend\Php\Naming\mangleVar;
 use function Moggi\Backend\Php\Naming\phpTemp;
+
+use Moggi\IR;
+
+use function Moggi\IR\Visit\collectLocalsInBlock;
 
 function emitIoRunExpr(string $actionExpr): string
 {
@@ -26,7 +28,7 @@ function emitIoRunResultExpr(string $resultExpr): string
 
 function emitIoAssignAction(IR\Stmt $stmt, int $indent, array $ctx): string
 {
-    $pad = str_repeat('    ', $indent);
+    $pad = \str_repeat('    ', $indent);
     $dest = phpTemp($stmt->dest);
     $body = $stmt->body;
     $result = $stmt->result;
@@ -62,14 +64,14 @@ function emitIoAssignAction(IR\Stmt $stmt, int $indent, array $ctx): string
 
     $captured = [];
     foreach ([...collectLocalsInBlock($body), ...IR\Visit\collectLocalsInOperand($result)] as $name) {
-        if (!isset($assignedLocals[$name])) {
+        if (! isset($assignedLocals[$name])) {
             $captured[$name] = '$' . mangleVar($name);
         }
     }
 
     $lambdaMeta = $ctx['lambdaMeta'] ?? [];
     foreach (lambdaCaptureNamesInBlock($body, $lambdaMeta) as $capture) {
-        if (!isset($assignedLocals[$capture])) {
+        if (! isset($assignedLocals[$capture])) {
             $captured[$capture] = '$' . mangleVar($capture);
         }
     }
@@ -91,14 +93,14 @@ function emitIoAssignAction(IR\Stmt $stmt, int $indent, array $ctx): string
         }
     });
     foreach (\array_keys($temps) as $tempId) {
-        if (!isset($assignedTemps[$tempId])) {
+        if (! isset($assignedTemps[$tempId])) {
             $captured['__t' . $tempId] = phpTemp($tempId);
         }
     }
 
     $useList = $captured === []
         ? ''
-        : ' use (' . join(', ', array_values($captured)) . ')';
+        : ' use (' . \implode(', ', \array_values($captured)) . ')';
 
     $inner = emitBlock($body, $indent + 1, $ctx);
     $value = emitRetValue($result, $ctx);
@@ -112,7 +114,7 @@ function emitIoAssignAction(IR\Stmt $stmt, int $indent, array $ctx): string
 
 function emitIoRun(IR\Stmt $stmt, int $indent, array $ctx): string
 {
-    $pad = str_repeat('    ', $indent);
+    $pad = \str_repeat('    ', $indent);
     $action = emitOperand($stmt->action, $ctx);
     $run = emitIoRunResultExpr($action);
     $dest = $stmt->dest;
@@ -126,7 +128,7 @@ function emitIoRun(IR\Stmt $stmt, int $indent, array $ctx): string
 
 function emitIoThrow(IR\Stmt $stmt, int $indent, array $ctx): string
 {
-    $pad = str_repeat('    ', $indent);
+    $pad = \str_repeat('    ', $indent);
     $ex = emitOperand($stmt->exception, $ctx);
     $loc = emitSrcLocExpr($stmt->srcLoc, $ctx);
     $out = $pad . '\\Moggi\\throwSomeException(' . $ex . ', ' . $loc . ");\n";
@@ -139,7 +141,7 @@ function emitIoThrow(IR\Stmt $stmt, int $indent, array $ctx): string
 
 function emitIoCatch(IR\Stmt $stmt, int $indent, array $ctx): string
 {
-    $pad = str_repeat('    ', $indent);
+    $pad = \str_repeat('    ', $indent);
     $innerPad = $pad . '    ';
     $action = emitOperand($stmt->action, $ctx);
     $handler = emitOperand($stmt->handler, $ctx);
@@ -154,12 +156,12 @@ function emitIoCatch(IR\Stmt $stmt, int $indent, array $ctx): string
     }
     $out .= $pad . "} catch (\\Throwable \$__moggiEx) {\n";
     $out .= $innerPad . "if (\$__moggiEx instanceof \\Moggi\\MoggiException) {\n";
-    $out .= $innerPad . "    \$__moggiSe = \\Moggi\\exceptionAttachWrapper("
+    $out .= $innerPad . '    $__moggiSe = \\Moggi\\exceptionAttachWrapper('
         . "\$__moggiEx->someException, \$__moggiEx);\n";
     $out .= $innerPad . "} else {\n";
-    $out .= $innerPad . "    \$__moggiWrapped = new \\Moggi\\MoggiException("
+    $out .= $innerPad . '    $__moggiWrapped = new \\Moggi\\MoggiException('
         . "\\Moggi\\normalizeHostException(\$__moggiEx), \$__moggiEx, null);\n";
-    $out .= $innerPad . "    \$__moggiSe = \\Moggi\\exceptionAttachWrapper("
+    $out .= $innerPad . '    $__moggiSe = \\Moggi\\exceptionAttachWrapper('
         . "\$__moggiWrapped->someException, \$__moggiWrapped);\n";
     $out .= $innerPad . "}\n";
     $out .= $innerPad . '$__moggiHandlerIo = \\Moggi\\__apply(' . $handler . ', $__moggiSe);' . "\n";
@@ -176,7 +178,7 @@ function emitIoCatch(IR\Stmt $stmt, int $indent, array $ctx): string
 
 function emitIoFinally(IR\Stmt $stmt, int $indent, array $ctx): string
 {
-    $pad = str_repeat('    ', $indent);
+    $pad = \str_repeat('    ', $indent);
     $innerPad = $pad . '    ';
     $action = emitOperand($stmt->action, $ctx);
     $cleanup = emitOperand($stmt->cleanup, $ctx);
@@ -187,7 +189,7 @@ function emitIoFinally(IR\Stmt $stmt, int $indent, array $ctx): string
     $out = $pad . "\$__moggiFinallyEx = null;\n";
     $out .= $pad . "\$__moggiFinallyResult = null;\n";
     $out .= $pad . "try {\n";
-    $out .= $innerPad . "\$__moggiFinallyResult = " . $run . ";\n";
+    $out .= $innerPad . '$__moggiFinallyResult = ' . $run . ";\n";
     $out .= $pad . "} catch (\\Throwable \$__moggiEx) {\n";
     $out .= $innerPad . "\$__moggiFinallyEx = \$__moggiEx;\n";
     $out .= $pad . "}\n";

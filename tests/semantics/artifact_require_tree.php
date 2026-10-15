@@ -16,7 +16,7 @@
 // are executed against it.
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
@@ -30,7 +30,7 @@ use function Moggi\Paths\relativeRequirePath;
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
     ++$checks;
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
@@ -43,6 +43,7 @@ $appRelative = \preg_replace('/\.mog$/', '.php', $appSourceRelative) ?? $appSour
 $libRelative = \preg_replace('/\.mog$/', '.php', $libSourceRelative) ?? $libSourceRelative;
 
 $work = createTempDir('moggi-artifact-require');
+
 try {
     // The prefix as `realpath()` returns it with the compiler's separator
     // appended: the raw shape that used to lose characters to a prefix the path
@@ -123,7 +124,7 @@ try {
         foreach ($matches[1] as $relative) {
             ++$required;
             $target = \dirname($file) . '/' . $relative;
-            if (\realpath($target) === false || !\is_file((string) \realpath($target))) {
+            if (\realpath($target) === false || ! \is_file((string) \realpath($target))) {
                 $unresolved[] = \substr($file, \strlen($work)) . ' requires ' . $relative;
             }
         }

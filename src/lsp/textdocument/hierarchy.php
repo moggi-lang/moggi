@@ -4,11 +4,6 @@ namespace Moggi\LSP\TextDocument;
 
 use Moggi\LSP\Analysis\AnalysisService;
 
-use function Moggi\LSP\Analysis\ensureAnalyzed;
-use function Moggi\LSP\Index\declForResolved;
-use function Moggi\LSP\Index\findByResolved;
-use function Moggi\LSP\Index\incomingCalls;
-use function Moggi\LSP\Index\outgoingCalls;
 use function Moggi\LSP\Protocol\lspPosToCompiler;
 use function Moggi\Modules\parseResolvedSymbol;
 
@@ -22,9 +17,10 @@ function svcCallHierarchyPrepare(AnalysisService $svc, string $uri, array $pos):
     $hasEdge = $svc->occurrences->incomingCalls($resolved) !== []
         || $svc->occurrences->outgoingCalls($resolved) !== []
         || $svc->occurrences->findByResolved($resolved) !== [];
-    if (!$hasEdge) {
+    if (! $hasEdge) {
         return [];
     }
+
     return [[
         'name' => $target['name'],
         'kind' => 12,
@@ -81,6 +77,7 @@ function svcCallHierarchyIncoming(AnalysisService $svc, array $item): array
             ];
         }
     }
+
     return $out;
 }
 
@@ -111,6 +108,7 @@ function svcCallHierarchyOutgoing(AnalysisService $svc, array $item): array
             'fromRanges' => [$edge->range],
         ];
     }
+
     return $out;
 }
 
@@ -131,10 +129,11 @@ function svcTypeHierarchyPrepare(AnalysisService $svc, string $uri, array $pos):
             continue;
         }
         $isClass = ($decl->type === 'class') || isset($svc->modules->classSupers[$word]);
-        $isData = in_array($decl->type, ['data', 'newtype', 'type'], true);
-        if (!$isClass && !$isData) {
+        $isData = \in_array($decl->type, ['data', 'newtype', 'type'], true);
+        if (! $isClass && ! $isData) {
             continue;
         }
+
         return [[
             'name' => $decl->name,
             'kind' => $decl->kind,
@@ -144,6 +143,7 @@ function svcTypeHierarchyPrepare(AnalysisService $svc, string $uri, array $pos):
             'data' => ['resolved' => $res, 'name' => $word, 'kind' => $isClass ? 'class' : 'data'],
         ]];
     }
+
     return [];
 }
 
@@ -160,6 +160,7 @@ function svcTypeHierarchySupertypes(AnalysisService $svc, array $item): array
             $out[] = $itemOut;
         }
     }
+
     return $out;
 }
 
@@ -181,7 +182,7 @@ function svcTypeHierarchySubtypes(AnalysisService $svc, array $item): array
         ];
     }
     foreach ($svc->modules->classSupers as $cls => $supers) {
-        if (!in_array($name, $supers, true)) {
+        if (! \in_array($name, $supers, true)) {
             continue;
         }
         $itemOut = typeHierarchyItemForName($svc, $cls);
@@ -189,6 +190,7 @@ function svcTypeHierarchySubtypes(AnalysisService $svc, array $item): array
             $out[] = $itemOut;
         }
     }
+
     return $out;
 }
 
@@ -207,5 +209,6 @@ function typeHierarchyItemForName(AnalysisService $svc, string $name): ?array
             ];
         }
     }
+
     return null;
 }

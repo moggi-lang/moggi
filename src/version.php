@@ -71,7 +71,7 @@ function distributionVariant(): ?string
 
     $has = static fn (string $runtime): bool => \is_dir($root . '/runtime/' . $runtime);
 
-    if (!$has('php') && !$has('dotnet') && !$has('jvm') && !$has('graalvm')) {
+    if (! $has('php') && ! $has('dotnet') && ! $has('jvm') && ! $has('graalvm')) {
         return 'moggi-minimal';
     }
     if ($has('dotnet') && $has('jvm') && $has('graalvm')) {
@@ -116,11 +116,11 @@ function stdlibVersion(): ?string
  */
 function readManifestVersion(string $path): ?string
 {
-    if (!\is_file($path)) {
+    if (! \is_file($path)) {
         return null;
     }
-    $raw = @file_get_contents($path);
-    if (!\is_string($raw)) {
+    $raw = @\file_get_contents($path);
+    if (! \is_string($raw)) {
         return null;
     }
 
@@ -132,6 +132,7 @@ function readManifestVersion(string $path): ?string
         }
         if (\preg_match('/^\[([^\]]+)\]$/', $text, $match) === 1) {
             $table = \trim($match[1]);
+
             continue;
         }
         if ($table === 'package' && \preg_match('/^version\s*=\s*(.+)$/', $text, $match) === 1) {
@@ -150,11 +151,11 @@ function readManifestVersion(string $path): ?string
  */
 function readVersionFile(string $path): ?string
 {
-    if (!\is_file($path)) {
+    if (! \is_file($path)) {
         return null;
     }
-    $raw = @file_get_contents($path);
-    if (!\is_string($raw)) {
+    $raw = @\file_get_contents($path);
+    if (! \is_string($raw)) {
         return null;
     }
     $lines = \preg_split('/\R/', $raw, 2);

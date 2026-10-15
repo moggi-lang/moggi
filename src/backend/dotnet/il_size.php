@@ -24,13 +24,13 @@ function ilIsInstruction(string $trimmed): bool
     if ($trimmed === '' || $trimmed[0] === '{' || $trimmed[0] === '}') {
         return false;
     }
-    if (str_ends_with($trimmed, ':')) {
+    if (\str_ends_with($trimmed, ':')) {
         return false;
     }
-    if ($trimmed[0] === '.' || str_starts_with($trimmed, '//')) {
+    if ($trimmed[0] === '.' || \str_starts_with($trimmed, '//')) {
         return false;
     }
-    if (str_starts_with($trimmed, 'catch ') || str_starts_with($trimmed, 'filter ')) {
+    if (\str_starts_with($trimmed, 'catch ') || \str_starts_with($trimmed, 'filter ')) {
         return false;
     }
 
@@ -45,22 +45,22 @@ function ilIsInstruction(string $trimmed): bool
  */
 function ilCanonicalize(string $line): string
 {
-    $trimmed = ltrim($line);
-    $indent = substr($line, 0, strlen($line) - strlen($trimmed));
+    $trimmed = \ltrim($line);
+    $indent = \substr($line, 0, \strlen($line) - \strlen($trimmed));
 
-    if (preg_match('/^ldc\.i4\s+(-?\d+)$/', $trimmed, $m) === 1) {
+    if (\preg_match('/^ldc\.i4\s+(-?\d+)$/', $trimmed, $m) === 1) {
         return $indent . ilIntConstForm((int) $m[1]);
     }
 
-    if (preg_match('/^(ldloca|ldarga|ldloc|stloc)\s+(V\d+|arg:\d+)$/', $trimmed, $m) === 1) {
+    if (\preg_match('/^(ldloca|ldarga|ldloc|stloc)\s+(V\d+|arg:\d+)$/', $trimmed, $m) === 1) {
         return $indent . ilLocalForm($m[1], ilSlotIndex($m[2]));
     }
 
-    if (preg_match('/^(ldarga|ldarg|starg)\s+(arg:|)(\d+)$/', $trimmed, $m) === 1) {
+    if (\preg_match('/^(ldarga|ldarg|starg)\s+(arg:|)(\d+)$/', $trimmed, $m) === 1) {
         return $indent . ilLocalForm($m[1], (int) $m[3]);
     }
 
-    if (preg_match('/^(br|brtrue|brfalse|beq|bge|bgt|ble|blt|bne\.un|bge\.un|bgt\.un|ble\.un|blt\.un|leave)\.s(\s+.*)$/', $trimmed, $m) === 1) {
+    if (\preg_match('/^(br|brtrue|brfalse|beq|bge|bgt|ble|blt|bne\.un|bge\.un|bgt\.un|ble\.un|blt\.un|leave)\.s(\s+.*)$/', $trimmed, $m) === 1) {
         return $indent . $m[1] . $m[2];
     }
 
@@ -70,7 +70,7 @@ function ilCanonicalize(string $line): string
 /** Local id (`V12`) or argument slot (`arg:3`) to its operand index. */
 function ilSlotIndex(string $slot): int
 {
-    return str_starts_with($slot, 'arg:') ? (int) substr($slot, 4) : (int) substr($slot, 1);
+    return \str_starts_with($slot, 'arg:') ? (int) \substr($slot, 4) : (int) \substr($slot, 1);
 }
 
 function ilIntConstForm(int $n): string
@@ -103,12 +103,12 @@ function ilLocalForm(string $op, int $idx): string
 /** Byte size of one canonicalized instruction line. */
 function ilInstructionSize(string $trimmed): int
 {
-    $space = strpos($trimmed, ' ');
-    $op = strtolower($space === false ? $trimmed : substr($trimmed, 0, $space));
-    $arg = $space === false ? '' : trim(substr($trimmed, $space + 1));
+    $space = \strpos($trimmed, ' ');
+    $op = \strtolower($space === false ? $trimmed : \substr($trimmed, 0, $space));
+    $arg = $space === false ? '' : \trim(\substr($trimmed, $space + 1));
 
     if ($op === 'switch') {
-        $n = $arg === '' ? 0 : count(explode(',', $arg));
+        $n = $arg === '' ? 0 : \count(\explode(',', $arg));
 
         return 4 + 4 * $n;
     }
@@ -156,7 +156,7 @@ function ilInstructionSize(string $trimmed): int
  */
 function ilIsInstructionMnemonic(string $op): bool
 {
-    $op = strtolower($op);
+    $op = \strtolower($op);
 
     return isset(IL_ONE_BYTE[$op])
         || isset(IL_TWO_BYTE[$op])

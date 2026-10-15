@@ -90,7 +90,7 @@ function lockDocument(array $lock): array
         \ksort($dependencies, \SORT_STRING);
         $document['dependencies'] = $dependencies;
     }
-    if (!empty($lock['transitiveTools'])) {
+    if (! empty($lock['transitiveTools'])) {
         $admitted = [];
         foreach ((array) $lock['transitiveTools'] as $backend => $names) {
             $names = \array_values(\array_unique(\array_map('strval', (array) $names)));
@@ -104,7 +104,7 @@ function lockDocument(array $lock): array
             $document['transitiveTools'] = $admitted;
         }
     }
-    if (!empty($lock['host'])) {
+    if (! empty($lock['host'])) {
         $host = (array) $lock['host'];
         \ksort($host, \SORT_STRING);
         $document['host'] = $host;
@@ -129,7 +129,7 @@ function renderLock(array $document): string
  */
 function writeLock(string $path, array $document): void
 {
-    if (!atomicWrite($path, renderLock($document))) {
+    if (! atomicWrite($path, renderLock($document))) {
         throw new \RuntimeException("cannot write {$path}");
     }
 }
@@ -144,7 +144,7 @@ function writeLock(string $path, array $document): void
  */
 function readLock(string $path): ?array
 {
-    if (!\is_file($path)) {
+    if (! \is_file($path)) {
         return null;
     }
 
@@ -153,7 +153,7 @@ function readLock(string $path): ?array
     } catch (\JsonException $error) {
         throw new \RuntimeException("{$path} is not valid JSON: {$error->getMessage()}");
     }
-    if (!\is_array($lock) || ($lock['format'] ?? null) !== 1) {
+    if (! \is_array($lock) || ($lock['format'] ?? null) !== 1) {
         throw new \RuntimeException("{$path} is not a lock this compiler reads (expected format 1)");
     }
 
@@ -170,7 +170,7 @@ function readLock(string $path): ?array
 function assertLockMatchesDescriptor(?array $lock, string $descriptorPath, string $descriptorBytes): void
 {
     $digest = \is_array($lock) ? ($lock['descriptor'] ?? null) : null;
-    if (!\is_string($digest) || $digest === '') {
+    if (! \is_string($digest) || $digest === '') {
         return;
     }
     if ($digest !== sha256Digest($descriptorBytes)) {
@@ -225,8 +225,8 @@ function refreshLockExtras(string $lockFile, array $lock, string $backend, ?arra
         $next['transitiveTools'] = $transitive;
     }
 
-    if (($next['host'] ?? null) == ($lock['host'] ?? null)
-        && ($next['transitiveTools'] ?? null) == ($lock['transitiveTools'] ?? null)) {
+    if (($next['host'] ?? null) === ($lock['host'] ?? null)
+        && ($next['transitiveTools'] ?? null) === ($lock['transitiveTools'] ?? null)) {
         return false;
     }
     writeLock($lockFile, lockDocument($next + [
@@ -252,7 +252,7 @@ function refreshLockExtras(string $lockFile, array $lock, string $backend, ?arra
 function lockRegistryProblem(array $lock, ?string $npub): ?string
 {
     $recorded = $lock['registry']['npub'] ?? null;
-    if (!\is_string($recorded) || $recorded === '' || $npub === null) {
+    if (! \is_string($recorded) || $recorded === '' || $npub === null) {
         return null;
     }
 

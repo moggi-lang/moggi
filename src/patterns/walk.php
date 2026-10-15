@@ -185,4 +185,3 @@ function patternBoundNamesInRecordFields(array $fields): array
 
     return $bound;
 }
-

@@ -88,7 +88,7 @@ function findDescriptor(string $path): string
     if (\is_file($path)) {
         return $path;
     }
-    if (!\is_dir($path)) {
+    if (! \is_dir($path)) {
         throw new \RuntimeException("no such directory: {$path}");
     }
 
@@ -157,7 +157,7 @@ function descriptorProblems(string $path): array
         $problems[] = "{$path}: `backends =` is empty, which reads as every backend — drop the key if that is what is meant";
     }
     foreach (['homepage', 'repository'] as $key) {
-        if (!isset($package[$key])) {
+        if (! isset($package[$key])) {
             continue;
         }
         $problem = metadataUrlProblem($key, \trim((string) $package[$key]));
@@ -170,6 +170,7 @@ function descriptorProblems(string $path): array
             $problems[] = "{$path}: `{$key} =` is empty, which says nothing — drop the key if that is what is meant";
         }
     }
+
     try {
         $backends = descriptorBackends($ini, $path);
         if (\count($backends) !== \count(\array_unique($backends))) {
@@ -181,11 +182,11 @@ function descriptorProblems(string $path): array
 
     $authors = [];
     foreach ($ini as $section => $values) {
-        if (!\is_array($values) || !\preg_match('/^author(\.(.+))?$/', (string) $section)) {
+        if (! \is_array($values) || ! \preg_match('/^author(\.(.+))?$/', (string) $section)) {
             continue;
         }
         $automation = \trim((string) ($values['automation'] ?? ''));
-        if ($automation !== '' && !\in_array(\strtolower($automation), ['true', 'false'], true)) {
+        if ($automation !== '' && ! \in_array(\strtolower($automation), ['true', 'false'], true)) {
             $problems[] = "{$path}: [{$section}] `automation = {$automation}` is not `true` or `false`";
         }
         $npub = \trim((string) ($values['npub'] ?? ''));
@@ -193,9 +194,10 @@ function descriptorProblems(string $path): array
             if (\strtolower($automation) === 'true') {
                 $problems[] = "{$path}: [{$section}] `automation = true` names no npub, so it labels no key";
             }
+
             continue;
         }
-        if (!isNpub($npub)) {
+        if (! isNpub($npub)) {
             $problems[] = "{$path}: [{$section}] `npub = {$npub}` is not an npub (63 characters, `npub1` then bech32)";
         }
         $authors[] = $npub;
@@ -372,7 +374,7 @@ function descriptorFormatProblems(string $path): array
                 $problems[] = "{$where}: section [{$section}] is declared twice";
             }
             $seenSections[$section] = true;
-            if (!descriptorSectionKnown($section)) {
+            if (! descriptorSectionKnown($section)) {
                 $problems[] = "{$where}: unknown section [{$section}]";
             }
 
@@ -398,7 +400,7 @@ function descriptorFormatProblems(string $path): array
         }
         $seenKeys[$section][$key] = true;
 
-        if (!descriptorSectionAllows($section, $key)) {
+        if (! descriptorSectionAllows($section, $key)) {
             $problems[] = "{$where}: " . descriptorUnknownKey($section, $key);
         }
     }
@@ -522,7 +524,7 @@ function readDescriptor(string $path): array
     $credits = [];
     $authorEmails = [];
     foreach ($ini as $section => $values) {
-        if (!\is_array($values) || !\preg_match('/^author(\.(.+))?$/', (string) $section)) {
+        if (! \is_array($values) || ! \preg_match('/^author(\.(.+))?$/', (string) $section)) {
             continue;
         }
 
@@ -610,7 +612,7 @@ function readDescriptor(string $path): array
 function optionalString(array $ini, string $section, string $key): ?string
 {
     $values = \is_array($ini[$section] ?? null) ? $ini[$section] : [];
-    if (!isset($values[$key])) {
+    if (! isset($values[$key])) {
         return null;
     }
     $value = \trim((string) $values[$key]);
@@ -646,7 +648,7 @@ function descriptorBackends(array $ini, string $path): array
     $known = implementedBackendIds();
     $backends = [];
     foreach (splitList($raw) as $backend) {
-        if ($path !== '' && !\in_array($backend, $known, true)) {
+        if ($path !== '' && ! \in_array($backend, $known, true)) {
             throw new \RuntimeException(
                 "{$path}: [package] backends names an unknown backend `{$backend}` (this compiler builds: "
                 . \implode(', ', $known) . ')',
@@ -674,7 +676,7 @@ function descriptorBackends(array $ini, string $path): array
 function declaredBackends(string $iniBytes): array
 {
     $ini = @\parse_ini_string($iniBytes, true, \INI_SCANNER_RAW);
-    if (!\is_array($ini)) {
+    if (! \is_array($ini)) {
         throw new \RuntimeException('a descriptor could not be read as INI, so the backends it declares are unknown');
     }
 
@@ -693,7 +695,7 @@ function readRepeatableSection(array $ini, string $name): array
 {
     $blocks = [];
     foreach ($ini as $section => $values) {
-        if (!\is_array($values) || !\preg_match('/^' . \preg_quote($name, '/') . '(\.(.+))?$/', (string) $section, $match)) {
+        if (! \is_array($values) || ! \preg_match('/^' . \preg_quote($name, '/') . '(\.(.+))?$/', (string) $section, $match)) {
             continue;
         }
         $blocks[$match[2] ?? ''] = [

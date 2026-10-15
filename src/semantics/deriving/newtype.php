@@ -2,17 +2,20 @@
 
 namespace Moggi\Semantics\Deriving;
 
+use Moggi\Semantics\Kinds;
+
+use function Moggi\Semantics\Kinds\classParamKind;
+
 use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TVar;
-use Moggi\Semantics\Kinds;
 use Moggi\Semantics\TypeExpr\TVarApp;
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Semantics\Types\TypeCheckState;
-use Moggi\Syntax\Ast;
 
-use function Moggi\Semantics\Kinds\classParamKind;
 use function Moggi\Semantics\Types\typeFail;
+
+use Moggi\Syntax\Ast;
 
 /**
  * Generalized newtype deriving: reuse the underlying type's instance by
@@ -46,14 +49,14 @@ function deriveViaNewtype(
     Ast\DataDecl $decl,
     Ast\DerivingClassRef $ref,
 ): DerivedInstance {
-    if (!$decl->isNewtype) {
+    if (! $decl->isNewtype) {
         throw typeFail(
             $state,
             "cannot derive newtype `{$ref->name}`: not a newtype declaration",
             $ref,
         );
     }
-    if (!isset($state->classes[$ref->name])) {
+    if (! isset($state->classes[$ref->name])) {
         throw typeFail(
             $state,
             "unknown class `{$ref->name}` in deriving clause",
@@ -97,6 +100,7 @@ function deriveViaNewtype(
                     $ref,
                 );
             }
+
             continue;
         }
         $methods[] = synthesizeDelegateMethod($methodName, $plan, $rep['ctor'], $ref);
@@ -132,15 +136,15 @@ function functorialUnderlying(
     }
 
     $field = newtypeRepresentation($decl)['field'];
-    if (!$field instanceof Ast\TypeApp) {
+    if (! $field instanceof Ast\TypeApp) {
         throw typeFail(
             $state,
             "cannot derive newtype `{$ref->name}`: representation must be an application `f {$param}`",
             $ref,
         );
     }
-    $lastArg = $field->args[count($field->args) - 1] ?? null;
-    if (!$lastArg instanceof Ast\TypeVar || $lastArg->name !== $param) {
+    $lastArg = $field->args[\count($field->args) - 1] ?? null;
+    if (! $lastArg instanceof Ast\TypeVar || $lastArg->name !== $param) {
         throw typeFail(
             $state,
             "cannot derive newtype `{$ref->name}`: representation must end in type parameter `{$param}`",
@@ -148,7 +152,7 @@ function functorialUnderlying(
         );
     }
 
-    $underArgs = array_slice($field->args, 0, -1);
+    $underArgs = \array_slice($field->args, 0, -1);
 
     return $underArgs === []
         ? $field->con
@@ -259,7 +263,7 @@ function delegateArgMode(Type $type, string $param): ?string
     }
     if ($type instanceof TVarApp
         && $type->name === $param
-        && !delegateMentionsParam($type->args, $param)
+        && ! delegateMentionsParam($type->args, $param)
     ) {
         return 'unwrap';
     }
@@ -270,7 +274,7 @@ function delegateArgMode(Type $type, string $param): ?string
 /** @return ?'wrap'|'wrapUnder'|'plain' */
 function delegateResultMode(Type $type, string $param): ?string
 {
-    if (!delegateMentionsParam($type, $param)) {
+    if (! delegateMentionsParam($type, $param)) {
         return 'plain';
     }
     if ($type instanceof TVar && $type->name === $param) {
@@ -278,7 +282,7 @@ function delegateResultMode(Type $type, string $param): ?string
     }
     if ($type instanceof TVarApp
         && $type->name === $param
-        && !delegateMentionsParam($type->args, $param)
+        && ! delegateMentionsParam($type->args, $param)
     ) {
         return 'wrap';
     }
@@ -286,11 +290,11 @@ function delegateResultMode(Type $type, string $param): ?string
     if ($type instanceof TVarApp) {
         $wrapped = 0;
         foreach ($type->args as $arg) {
-            if (!delegateMentionsParam($arg, $param)) {
+            if (! delegateMentionsParam($arg, $param)) {
                 continue;
             }
             ++$wrapped;
-            if (!($arg instanceof TVarApp && $arg->name === $param)
+            if (! ($arg instanceof TVarApp && $arg->name === $param)
                 || delegateMentionsParam($arg->args, $param)
             ) {
                 return null;
@@ -386,7 +390,7 @@ function peelFunTypeInternal(Type $type): array
     while (
         $type instanceof TArrow
         && $type->from instanceof TCon
-        && str_starts_with($type->from->name, '__Dict_')
+        && \str_starts_with($type->from->name, '__Dict_')
     ) {
         $type = $type->to;
     }
@@ -398,7 +402,7 @@ function peelFunTypeInternal(Type $type): array
         while (
             $type instanceof TArrow
             && $type->from instanceof TCon
-            && str_starts_with($type->from->name, '__Dict_')
+            && \str_starts_with($type->from->name, '__Dict_')
         ) {
             $type = $type->to;
         }

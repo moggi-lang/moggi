@@ -86,12 +86,12 @@ function fetchBytes(string $base, string $path, bool $decode = true): ?string
         return fetchHttpBytes($location, $path, $decode);
     }
 
-    if (!\is_file($location)) {
+    if (! \is_file($location)) {
         return null;
     }
     $bytes = (string) \file_get_contents($location);
     assertFetchWithinCap(\strlen($bytes), $path);
-    if (!$decode) {
+    if (! $decode) {
         return $bytes;
     }
     $decoded = decodeTransport($bytes);
@@ -163,11 +163,11 @@ function fetchHttpBytes(string $location, string $what, bool $decode = true): ?s
 
     $bytes = \stream_get_contents($handle, $cap + 1);
     \fclose($handle);
-    if (!\is_string($bytes)) {
+    if (! \is_string($bytes)) {
         return null;
     }
     assertFetchWithinCap(\strlen($bytes), $what);
-    if (!$decode) {
+    if (! $decode) {
         return $bytes;
     }
     $decoded = decodeTransport($bytes);
@@ -192,7 +192,7 @@ function sha256Digest(string $bytes): string
  */
 function decodeTransport(string $bytes): string
 {
-    if (!\str_starts_with($bytes, "\x1f\x8b")) {
+    if (! \str_starts_with($bytes, "\x1f\x8b")) {
         return $bytes;
     }
     $inflated = @\gzdecode($bytes);
@@ -367,7 +367,7 @@ final class Catalog
         $this->loaded[$prefix] = true;
 
         $digest = $this->root['shards'][$prefix] ?? null;
-        if (!\is_string($digest)) {
+        if (! \is_string($digest)) {
             return;
         }
 
@@ -394,6 +394,7 @@ final class Catalog
         if ($metadataDir !== null) {
             storeBytes($path, $bytes);
         }
+
         try {
             $decoded = \json_decode($bytes, true, 512, \JSON_THROW_ON_ERROR);
         } catch (\JsonException $error) {
@@ -402,12 +403,12 @@ final class Catalog
             return;
         }
         foreach ((\is_array($decoded) ? ($decoded['packages'] ?? []) : []) as $name => $entry) {
-            if (!isPackageName((string) $name)) {
+            if (! isPackageName((string) $name)) {
                 $this->failures[$prefix] = "catalog/{$prefix}.json names an invalid package `{$name}`";
 
                 return;
             }
-            if (!\is_array($entry)) {
+            if (! \is_array($entry)) {
                 $this->failures[$prefix] = "catalog/{$prefix}.json describes `{$name}` as something that is not an object";
 
                 return;
@@ -458,7 +459,7 @@ function registryIdentityPath(string $base): string
 function rememberedRegistryNpub(string $base): ?string
 {
     $path = registryIdentityPath($base);
-    if (!\is_file($path)) {
+    if (! \is_file($path)) {
         return null;
     }
     $npub = \trim((string) \file_get_contents($path));
@@ -493,7 +494,7 @@ function registryRootVersionPath(string $base): string
 function rememberedRootVersion(string $base): ?int
 {
     $path = registryRootVersionPath($base);
-    if (!\is_file($path)) {
+    if (! \is_file($path)) {
         return null;
     }
     $text = \trim((string) \file_get_contents($path));
@@ -547,7 +548,7 @@ function registryTimestamp(string $text): ?int
 function rootIntegrityProblem(string $base, array $root, int $now): string
 {
     $expires = $root['expires'] ?? null;
-    if (!\is_string($expires) || \trim($expires) === '') {
+    if (! \is_string($expires) || \trim($expires) === '') {
         return "the registry at {$base} declares no root expiry (`expires`), so a frozen root cannot be detected";
     }
     $at = registryTimestamp($expires);
@@ -556,7 +557,7 @@ function rootIntegrityProblem(string $base, array $root, int $now): string
     }
 
     $version = $root['version'] ?? null;
-    if (!\is_int($version) && !(\is_string($version) && \preg_match('/^[0-9]+$/', $version) === 1)) {
+    if (! \is_int($version) && ! (\is_string($version) && \preg_match('/^[0-9]+$/', $version) === 1)) {
         return "the registry at {$base} declares no root version (`version`), so a replayed root cannot be detected";
     }
     $version = (int) $version;
@@ -601,7 +602,7 @@ function rootIntegrityProblem(string $base, array $root, int $now): string
 function registryIdentityProblem(string $base, string $npub, ?string $pin): string
 {
     if ($pin !== null && $pin !== '') {
-        if (!isNpub($pin)) {
+        if (! isNpub($pin)) {
             return "the pinned registry key `{$pin}` is not an npub";
         }
 
@@ -650,6 +651,7 @@ function loadCatalog(string $base, ?callable $fetch = null, ?FetchLog $log = nul
     if ($rootBytes === null) {
         throw new \RuntimeException("no registry at {$base}: index.json is missing");
     }
+
     try {
         $root = \json_decode($rootBytes, true, 512, \JSON_THROW_ON_ERROR);
     } catch (\JsonException $error) {
@@ -666,7 +668,7 @@ function loadCatalog(string $base, ?callable $fetch = null, ?FetchLog $log = nul
             && ($cached = cachedBytes($signaturePath)) !== null
         ) {
             $signature = verifyRootSignature($rootBytes, $cached, $npub);
-            if ($signature['ok'] || !\str_contains($signature['note'], 'does not verify')) {
+            if ($signature['ok'] || ! \str_contains($signature['note'], 'does not verify')) {
                 $signatureBytes = $cached;
                 $log->skipped('index.json.sig');
             }

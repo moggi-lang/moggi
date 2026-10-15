@@ -9,7 +9,7 @@
 // runtime that does not carry a declared name.
 
 $root = __DIR__;
-while (!is_file($root . '/packaging/runtimes.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/packaging/runtimes.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/packaging/runtimes.php';
@@ -23,7 +23,7 @@ use function Moggi\Dist\missingPhpExtensions;
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
     ++$checks;
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
@@ -40,6 +40,7 @@ $assert(true, 'the pinned extension list must match the derived set');
 
 $drifted = $config;
 $drifted['runtimes']['php']['extensions'] = ['bcmath', 'mbstring'];
+
 try {
     assertRuntimeExtensionsDeclared($drifted);
     $assert(false, 'a pinned list that has drifted must be refused');

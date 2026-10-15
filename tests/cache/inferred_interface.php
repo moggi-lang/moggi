@@ -8,7 +8,7 @@
 // interface shows up as a differing dictionary argument at the consumer's call site.
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
@@ -17,13 +17,14 @@ require $root . '/tests/suite/support/workspace.php';
 require $root . '/tests/suite/support/assert.php';
 
 $assert = static function (bool $condition, string $message): void {
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
 
 $consumer = $root . '/tests/semantics/inferred-constrained-export/Consumer.mog';
 $work = createTempDir('moggi-cache-inferred-interface');
+
 try {
     // `$seed` puts the standard library into the directory and leaves every module of the fixture
     // project out of it: the import boundary this test is about is still compiled cold. The third

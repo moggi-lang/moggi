@@ -67,7 +67,7 @@ function loadRuntimeConfig(): array
         throw new \RuntimeException("cannot read {$path}");
     }
     $config = \json_decode($raw, true, 512, \JSON_THROW_ON_ERROR);
-    if (!\is_array($config)) {
+    if (! \is_array($config)) {
         throw new \RuntimeException("{$path} is not a JSON object");
     }
 
@@ -78,9 +78,9 @@ function loadRuntimeConfig(): array
 function loadRuntimeLock(): array
 {
     $path = distRoot() . '/runtimes.lock.json';
-    if (!\is_file($path)) {
+    if (! \is_file($path)) {
         throw new \RuntimeException(
-            'missing ' . $path . "; run `php packaging/pin.php` to resolve runtime URLs and hashes",
+            'missing ' . $path . '; run `php packaging/pin.php` to resolve runtime URLs and hashes',
         );
     }
     $raw = \file_get_contents($path);
@@ -120,7 +120,7 @@ function expandAssetTemplate(string $template, string $runtime, string $target, 
     return \preg_replace_callback(
         '/\{([A-Za-z]+)\}/',
         static function (array $m) use ($values, $runtime, $target): string {
-            if (!\array_key_exists($m[1], $values)) {
+            if (! \array_key_exists($m[1], $values)) {
                 throw new \RuntimeException("unknown placeholder {{$m[1]}} in the {$runtime} asset for {$target}");
             }
 
@@ -162,7 +162,7 @@ function runtimeAsset(string $runtime, string $target, array $config): ?array
     }
 
     $asset = $spec[$target] ?? null;
-    if (!\is_array($asset) || !isset($asset['url'])) {
+    if (! \is_array($asset) || ! isset($asset['url'])) {
         $platform = (string) $targetCoords['phpPlatform'];
         $candidate = $platform !== 'unavailable' ? ($spec[$platform] ?? null) : null;
         $asset = \is_array($candidate) && isset($candidate['url']) ? $candidate : null;
@@ -172,7 +172,7 @@ function runtimeAsset(string $runtime, string $target, array $config): ?array
             ? ($spec['assetZip'] ?? $spec['asset'] ?? null)
             : ($spec['asset'] ?? null);
     }
-    if (!\is_array($asset) || !isset($asset['url'])) {
+    if (! \is_array($asset) || ! isset($asset['url'])) {
         return null;
     }
 

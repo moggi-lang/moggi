@@ -179,13 +179,13 @@ abstract class AstNode implements AstWalkable
      */
     public function childValues(): array
     {
-        return array_values(get_object_vars($this));
+        return \array_values(\get_object_vars($this));
     }
 
     /** Module part of a resolved `Module::name` symbol, or null. */
     protected function moduleOfSymbol(?string $symbol): ?string
     {
-        return $symbol !== null && str_contains($symbol, '::') ? explode('::', $symbol, 2)[0] : null;
+        return $symbol !== null && \str_contains($symbol, '::') ? \explode('::', $symbol, 2)[0] : null;
     }
 }
 
@@ -491,7 +491,7 @@ final class Program extends AstNode
             }
             $names = [$export['name'] ?? null, ...($export['children']['names'] ?? [])];
             foreach ($names as $name) {
-                if (is_string($name)) {
+                if (\is_string($name)) {
                     $refs[] = ['name' => $name, 'qualifier' => null];
                 }
             }
@@ -505,8 +505,8 @@ final class Program extends AstNode
         $modules = [];
         foreach ($this->exports ?? [] as $export) {
             $path = $export['path'] ?? null;
-            if (($export['tag'] ?? '') === 'module' && is_array($path)) {
-                $modules[] = implode('.', $path);
+            if (($export['tag'] ?? '') === 'module' && \is_array($path)) {
+                $modules[] = \implode('.', $path);
             }
         }
 
@@ -700,7 +700,7 @@ final class FunctionDecl extends AstNode
  */
 function hasDeclaredSignature(FunctionDecl $fn): bool
 {
-    return $fn->type !== null && !$fn->typeInferred;
+    return $fn->type !== null && ! $fn->typeInferred;
 }
 
 final class ClassDecl extends AstNode
@@ -1187,6 +1187,7 @@ final class IntrinsicCall extends AstNode
 final class QualifiedRef extends AstNode
 {
     public ?string $backendResolved = null;
+
     public ?string $intrinsicWrapper = null;
 
     public function __construct(
@@ -1513,6 +1514,7 @@ final class PatCon extends AstNode
     {
         $node = clone $this;
         $node->args[] = $arg;
+
         return $node;
     }
 }

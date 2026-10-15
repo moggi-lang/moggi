@@ -32,7 +32,7 @@ namespace Moggi\Registry;
  */
 function badPackageMarker(array $entry): ?array
 {
-    if (!\array_key_exists('bad', $entry) || $entry['bad'] === null || $entry['bad'] === false) {
+    if (! \array_key_exists('bad', $entry) || $entry['bad'] === null || $entry['bad'] === false) {
         return null;
     }
     $marker = $entry['bad'];
@@ -54,7 +54,7 @@ function badPackageMarker(array $entry): ?array
 /** A field that is present and non-empty, or null. */
 function optionalText(mixed $value): ?string
 {
-    if (!\is_string($value)) {
+    if (! \is_string($value)) {
         return null;
     }
     $text = \trim($value);

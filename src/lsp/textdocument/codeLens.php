@@ -3,12 +3,12 @@
 namespace Moggi\LSP\TextDocument;
 
 use Moggi\LSP\Analysis\AnalysisService;
-use Moggi\Syntax\Ast;
 
-use function Moggi\LSP\Analysis\ensureAnalyzed;
-use function Moggi\LSP\Index\findByResolved;
 use function Moggi\LSP\Protocol\locToRange;
+
 use function Moggi\Modules\resolvedSymbol;
+
+use Moggi\Syntax\Ast;
 
 function svcCodeLens(AnalysisService $svc, string $uri): array
 {
@@ -28,7 +28,7 @@ function svcCodeLens(AnalysisService $svc, string $uri): array
                 'range' => $occ->range,
             ];
         }
-        $count = count($locations);
+        $count = \count($locations);
         $lenses[] = [
             'range' => locToRange($decl['line'], $decl['col'], $decl['endCol'], $analysis->source),
             'command' => [
@@ -42,5 +42,6 @@ function svcCodeLens(AnalysisService $svc, string $uri): array
             ],
         ];
     }
+
     return $lenses;
 }

@@ -2,8 +2,13 @@
 
 namespace Moggi\Semantics\Types;
 
+use function Moggi\Semantics\IntrinsicRegistry\isIoIntrinsic;
+
 use Moggi\Semantics\Kinds;
 use Moggi\Semantics\TypeExpr\Scheme;
+
+use function Moggi\Semantics\TypeExpr\scheme;
+
 use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TChar;
 use Moggi\Semantics\TypeExpr\TCon;
@@ -18,18 +23,15 @@ use Moggi\Semantics\TypeExpr\TStr;
 use Moggi\Semantics\TypeExpr\TStringLit;
 use Moggi\Semantics\TypeExpr\TUnit;
 use Moggi\Semantics\TypeExpr\TVar;
-use Moggi\Semantics\TypeExpr\TVarApp;
 use Moggi\Semantics\TypeExpr\TWord;
 use Moggi\Semantics\TypeExpr\TWord16;
 use Moggi\Semantics\TypeExpr\TWord32;
 use Moggi\Semantics\TypeExpr\TWord64;
 use Moggi\Semantics\TypeExpr\TWord8;
 use Moggi\Semantics\TypeExpr\Type;
+
 use Moggi\Syntax\Ast;
 use Moggi\Syntax\Ast\TypeNode;
-
-use function Moggi\Semantics\IntrinsicRegistry\isIoIntrinsic;
-use function Moggi\Semantics\TypeExpr\scheme;
 
 require_once __DIR__ . '/type_core.php';
 require_once __DIR__ . '/constraints.php';
@@ -273,13 +275,13 @@ function instanceMethodSchemes(TypeCheckState $state, Ast\InstanceDecl $decl): a
             substitute($methodInfo['type'], $mapping),
             $substitutedConstraints,
         );
-        $peeled = peelDictArrows($freshened['type'], count($freshened['constraints']));
+        $peeled = peelDictArrows($freshened['type'], \count($freshened['constraints']));
         $methodDicts = expandConstraintsWithSuperclasses($state, $freshened['constraints']);
         $schemes[$method->name] = scheme(
             prune($state, $peeled),
             [],
             $freshened['constraints'],
-            count($methodDicts),
+            \count($methodDicts),
             $methodDicts,
         );
         $provided[$method->name] = true;
@@ -370,7 +372,7 @@ function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
         [$etaParams, $etaBody] = etaExpandInstanceMethod(
             $method->params,
             $method->body,
-            peelDictArrows($freshened['type'], count($freshened['constraints'])),
+            peelDictArrows($freshened['type'], \count($freshened['constraints'])),
         );
         $fn = new Ast\FunctionDecl(
             $method->name,
@@ -388,6 +390,7 @@ function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
             ? installDefaultBodyTypes($state, defaultBodyVisibleTypes($state, $classInfo))
             : ['names' => [], 'kinds' => [], 'synonyms' => [], 'wrappers' => [], 'env' => [], 'data' => [], 'promoted' => []];
         $methodEnv = $scope === [] ? $constraintEnv : [...$scope, ...$constraintEnv];
+
         try {
             $fn = checkInstanceMethod(
                 $state,
@@ -404,7 +407,7 @@ function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
         }
         $state->instanceMethodNames[$fn->name] = true;
         $existing = $state->env[$fn->name] ?? null;
-        if (!($existing?->classMethod)) {
+        if (! ($existing?->classMethod)) {
             $state->env[$fn->name] = $registration['schemes'][$method->name];
         }
         $functions[] = $fn;
@@ -416,7 +419,7 @@ function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
     }
 
     foreach ($classInfo['methods'] as $methodName => $_) {
-        if (!isset($providedMethods[$methodName])) {
+        if (! isset($providedMethods[$methodName])) {
             throw typeFail(
                 $state,
                 "instance for `{$className}` missing method `{$methodName}`",
@@ -432,11 +435,13 @@ function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
         foreach ($group as $methodName) {
             if (! isset($declaredMethodNames[$methodName])) {
                 $complete = false;
+
                 break;
             }
         }
         if ($complete) {
             $satisfied = true;
+
             break;
         }
     }
@@ -458,7 +463,7 @@ function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
     ];
 
     $headAst = internalTypeToAst($headType, []);
-    $evidenceIndex = count($state->instanceEvidence);
+    $evidenceIndex = \count($state->instanceEvidence);
     $methodMap = [];
     foreach ($functions as $fn) {
         if ($fn->instanceMethod) {
@@ -509,7 +514,7 @@ function uniquifyCollidingInstanceMethods(TypeCheckState $state, array $freeFnNa
     $renamesByEvidence = [];
     foreach ($bySurface as $surfaceName => $entries) {
         $collidesWithFree = isset($freeFnNames[$surfaceName]);
-        if (count($entries) <= 1 && !$collidesWithFree) {
+        if (\count($entries) <= 1 && ! $collidesWithFree) {
             continue;
         }
 
@@ -517,7 +522,7 @@ function uniquifyCollidingInstanceMethods(TypeCheckState $state, array $freeFnNa
             $evidence = $state->instanceEvidence[$entry['evidenceIndex']];
             $headAst = $evidence['headAst'] ?? null;
             $className = $evidence['className'] ?? null;
-            if (!$headAst instanceof Ast\TypeNode || !\is_string($className)) {
+            if (! $headAst instanceof Ast\TypeNode || ! \is_string($className)) {
                 throw new \RuntimeException('instance evidence missing headAst/className for uniquify');
             }
 
@@ -531,7 +536,7 @@ function uniquifyCollidingInstanceMethods(TypeCheckState $state, array $freeFnNa
 
     foreach ($state->instanceMethodsPendingUniq as $entry) {
         $surfaceToIr = $renamesByEvidence[$entry['evidenceIndex']] ?? [];
-        if ($surfaceToIr === [] || !isset($surfaceToIr[$entry['surfaceName']])) {
+        if ($surfaceToIr === [] || ! isset($surfaceToIr[$entry['surfaceName']])) {
             continue;
         }
 
@@ -555,7 +560,7 @@ function renameInstanceMethodRefs(Ast\AstNode $expr, array $surfaceToIr, array $
 {
     return match ($expr::class) {
         Ast\Variable::class => (function () use ($expr, $surfaceToIr, $bound): Ast\AstNode {
-            if (isset($surfaceToIr[$expr->name]) && !isset($bound[$expr->name])) {
+            if (isset($surfaceToIr[$expr->name]) && ! isset($bound[$expr->name])) {
                 $expr->name = $surfaceToIr[$expr->name];
             }
 
@@ -699,7 +704,7 @@ function validateAssociatedTypeEquations(TypeCheckState $state, Ast\InstanceDecl
     $required = $classInfo['associatedTypes'] ?? [];
     $seen = [];
     foreach ($decl->associatedEquations as $eq) {
-        if (!isset($required[$eq->name])) {
+        if (! isset($required[$eq->name])) {
             throw typeFail(
                 $state,
                 "class `{$decl->class}` has no associated type `{$eq->name}`",
@@ -727,7 +732,7 @@ function validateAssociatedTypeEquations(TypeCheckState $state, Ast\InstanceDecl
     }
 
     foreach ($required as $famName => $_) {
-        if (!isset($seen[$famName])) {
+        if (! isset($seen[$famName])) {
             throw typeFail(
                 $state,
                 "instance for `{$decl->class}` missing associated type `{$famName}`",
@@ -745,7 +750,7 @@ function validateInstanceSuperclasses(TypeCheckState $state, Ast\InstanceDecl $d
     }
 
     foreach ($classInfo['superclasses'] as $super) {
-        if (!$super instanceof Ast\TypeApp || !$super->con instanceof Ast\TypeCon) {
+        if (! $super instanceof Ast\TypeApp || ! $super->con instanceof Ast\TypeCon) {
             throw typeFail($state, 'class superclass must be a type class application', $decl);
         }
 
@@ -754,9 +759,10 @@ function validateInstanceSuperclasses(TypeCheckState $state, Ast\InstanceDecl $d
             ?? throw typeFail($state, "unknown superclass `{$superClass}`", $decl);
 
         if ($superClassInfo['params'] === []) {
-            if (!findProjectInstance($state, $superClass, new TUnit())) {
+            if (! findProjectInstance($state, $superClass, new TUnit())) {
                 throw typeFail($state, "missing superclass instance: `{$superClass}`", $decl);
             }
+
             continue;
         }
 
@@ -765,6 +771,7 @@ function validateInstanceSuperclasses(TypeCheckState $state, Ast\InstanceDecl $d
             $arg = $super->args[$i] ?? throw typeFail($state, "class `{$superClass}` applied to too few arguments", $decl);
             if ($arg instanceof Ast\TypeVar && isset($mapping[$arg->name])) {
                 $superHead = $mapping[$arg->name];
+
                 break;
             }
         }
@@ -777,7 +784,7 @@ function validateInstanceSuperclasses(TypeCheckState $state, Ast\InstanceDecl $d
             continue;
         }
 
-        if (!findProjectInstance($state, $superClass, $superHead)) {
+        if (! findProjectInstance($state, $superClass, $superHead)) {
             throw typeFail(
                 $state,
                 "missing superclass instance: `{$superClass} " . typeToString($superHead, friendlyTypeVarNames([$superHead])) . '`',
@@ -807,7 +814,7 @@ function peerInstanceCoversSuperclass(
         : ($state->projectInstancesByClass[$superClass] ?? []);
 
     foreach ($candidates as $instance) {
-        if (!instanceHeadsMatch($state, $superHead, $instance['instanceHead'])) {
+        if (! instanceHeadsMatch($state, $superHead, $instance['instanceHead'])) {
             continue;
         }
 
@@ -838,10 +845,10 @@ function instanceConstraintsCoveredByDecl(TypeCheckState $state, array $needed, 
     }
 
     foreach ($needed as $need) {
-        if (!$need instanceof Ast\TypeApp || !$need->con instanceof Ast\TypeCon) {
+        if (! $need instanceof Ast\TypeApp || ! $need->con instanceof Ast\TypeCon) {
             return false;
         }
-        if (!isset($availableKeys[typeAstKey($need)])) {
+        if (! isset($availableKeys[typeAstKey($need)])) {
             return false;
         }
     }
@@ -889,8 +896,8 @@ function expandConstraintsWithImpliedSuperclasses(TypeCheckState $state, array $
     $queue = $constraints;
 
     while ($queue !== []) {
-        $constraint = array_pop($queue);
-        if (!$constraint instanceof Ast\TypeApp || !$constraint->con instanceof Ast\TypeCon) {
+        $constraint = \array_pop($queue);
+        if (! $constraint instanceof Ast\TypeApp || ! $constraint->con instanceof Ast\TypeCon) {
             continue;
         }
 
@@ -912,11 +919,11 @@ function expandConstraintsWithImpliedSuperclasses(TypeCheckState $state, array $
         }
 
         foreach ($classInfo['superclasses'] as $super) {
-            if (!$super instanceof Ast\TypeApp || !$super->con instanceof Ast\TypeCon) {
+            if (! $super instanceof Ast\TypeApp || ! $super->con instanceof Ast\TypeCon) {
                 continue;
             }
             $substituted = substituteTypeAstParams($super, $mapping);
-            if (!$substituted instanceof Ast\TypeApp) {
+            if (! $substituted instanceof Ast\TypeApp) {
                 continue;
             }
             $out[] = $substituted;
@@ -1037,7 +1044,7 @@ function instanceIntrinsicMethods(Ast\InstanceDecl $decl): array
     foreach ($decl->methods as $method) {
         $intrinsic = trivialIntrinsicWrapper($method);
 
-        if ($intrinsic !== null && !isIoIntrinsic($intrinsic)) {
+        if ($intrinsic !== null && ! isIoIntrinsic($intrinsic)) {
             $wrappers[$method->name] = $intrinsic;
         }
     }
@@ -1056,6 +1063,7 @@ function instanceHeadIndexKeyFromType(Type $head): string
     if ($head instanceof TPromoted) {
         return $head->name;
     }
+
     return match ($head::class) {
         TInt::class => 'Int',
         TStr::class => 'String',
@@ -1179,7 +1187,7 @@ function findProjectInstanceRecord(TypeCheckState $state, string $className, Typ
 
     foreach (matchingProjectInstances($state, $className, $requiredHead) as $instance) {
         $mapping = instanceMappingForUse($state, $instance, $requiredHead);
-        if ($mapping === null || !instanceContextSatisfied($state, $instance, $mapping, $visited)) {
+        if ($mapping === null || ! instanceContextSatisfied($state, $instance, $mapping, $visited)) {
             continue;
         }
 
@@ -1206,7 +1214,7 @@ function freshenStableTypeKey(Type $type): string
 function freshenStableTypeKeyRec(Type $type, array &$rename, int &$n): string
 {
     if ($type instanceof TVar) {
-        if (!isset($rename[$type->name])) {
+        if (! isset($rename[$type->name])) {
             $rename[$type->name] = 'v' . $n++;
         }
 
@@ -1222,7 +1230,7 @@ function freshenStableTypeKeyRec(Type $type, array &$rename, int &$n): string
             $args[] = freshenStableTypeKeyRec($arg, $rename, $n);
         }
 
-        return $type->name . '(' . join(',', $args) . ')';
+        return $type->name . '(' . \implode(',', $args) . ')';
     }
 
     if ($type instanceof TArrow) {
@@ -1243,7 +1251,7 @@ function freshenStableTypeKeyRec(Type $type, array &$rename, int &$n): string
             $args[] = freshenStableTypeKeyRec($arg, $rename, $n);
         }
 
-        return "'" . $type->name . '(' . join(',', $args) . ')';
+        return "'" . $type->name . '(' . \implode(',', $args) . ')';
     }
 
     return typeToString($type);
@@ -1291,6 +1299,7 @@ function instanceMappingForUse(TypeCheckState $state, array $instance, Type $req
     }
 
     pushSubstFrame($state);
+
     try {
         $instanceHeadType = freshenTypeVars($state, astType($state, $instance['instanceHead']));
         unify($state, $requiredHead, $instanceHeadType, null);
@@ -1330,7 +1339,7 @@ function instanceContextSatisfied(TypeCheckState $state, array $instance, array 
             continue;
         }
 
-        if (!findProjectInstance($state, $constraint->class, $ctxHead, $visited)) {
+        if (! findProjectInstance($state, $constraint->class, $ctxHead, $visited)) {
             return false;
         }
     }
@@ -1352,7 +1361,7 @@ function instanceContextRequirements(TypeCheckState $state, array $instance, arr
     $context = [];
 
     foreach ($instance['constraints'] ?? [] as $constraintAst) {
-        if (!$constraintAst instanceof Ast\TypeApp || !$constraintAst->con instanceof Ast\TypeCon) {
+        if (! $constraintAst instanceof Ast\TypeApp || ! $constraintAst->con instanceof Ast\TypeCon) {
             return null;
         }
 
@@ -1410,6 +1419,7 @@ function matchInstanceHeadVars(TypeCheckState $state, Ast\AstNode $pattern, Type
         if ($target instanceof TPromoted) {
             return $target->name === $pattern->name ? [] : null;
         }
+
         return [];
     }
 
@@ -1430,7 +1440,7 @@ function matchInstanceHeadVars(TypeCheckState $state, Ast\AstNode $pattern, Type
         }
 
         if ($target instanceof TPromoted) {
-            if ($target->name !== $headName || count($patternArgs) !== count($target->args)) {
+            if ($target->name !== $headName || \count($patternArgs) !== \count($target->args)) {
                 return null;
             }
             $mapping = [];
@@ -1447,10 +1457,10 @@ function matchInstanceHeadVars(TypeCheckState $state, Ast\AstNode $pattern, Type
             return $mapping;
         }
 
-        if (!$target instanceof TCon || $target->name !== $headName) {
+        if (! $target instanceof TCon || $target->name !== $headName) {
             return null;
         }
-        if (count($patternArgs) !== count($target->args)) {
+        if (\count($patternArgs) !== \count($target->args)) {
             return null;
         }
         $mapping = [];
@@ -1477,7 +1487,7 @@ function flattenInstanceHeadTypeApp(Ast\TypeNode $type): ?array
 {
     $args = [];
     while ($type instanceof Ast\TypeApp) {
-        for ($i = count($type->args) - 1; $i >= 0; $i--) {
+        for ($i = \count($type->args) - 1; $i >= 0; $i--) {
             $args[] = $type->args[$i];
         }
         $type = $type->con;
@@ -1488,7 +1498,7 @@ function flattenInstanceHeadTypeApp(Ast\TypeNode $type): ?array
         || $type instanceof Ast\TypeVar
         || $type instanceof Ast\TypePromoted
     ) {
-        return [$type, array_reverse($args)];
+        return [$type, \array_reverse($args)];
     }
 
     return null;
@@ -1501,6 +1511,7 @@ function instanceHeadsMatch(TypeCheckState $state, Type $requiredHead, Ast\AstNo
     }
 
     pushSubstFrame($state);
+
     try {
         $other = freshenTypeVars($state, astType($state, $instanceHeadAst));
         unify($state, $requiredHead, $other, null);
@@ -1521,22 +1532,22 @@ function instanceParamMapping(TypeCheckState $state, array $classParams, Type $h
 {
     $paramNames = Kinds\classParamNames($classParams);
 
-    if (count($classParams) === 0) {
+    if (\count($classParams) === 0) {
         return [];
     }
 
-    if (count($classParams) === 1) {
+    if (\count($classParams) === 1) {
         $expectedKind = Kinds\classParamKind($state, $classParams[0], $at);
         Kinds\assertKind($state, $headType, $expectedKind, [], $at);
 
         return [$paramNames[0] => $headType];
     }
 
-    if (!$headType instanceof TCon) {
+    if (! $headType instanceof TCon) {
         throw typeFail($state, 'instance head must be a type constructor', $at);
     }
 
-    if (count($headType->args) !== count($classParams)) {
+    if (\count($headType->args) !== \count($classParams)) {
         throw typeFail($state, 'instance head arity mismatch', $at);
     }
 
@@ -1562,7 +1573,7 @@ function instanceContextConstraints(TypeCheckState $state, Ast\InstanceDecl $dec
     $headVars = matchInstanceHeadVars($state, $decl->head, $headType) ?? [];
     $parsed = [];
     foreach ($decl->constraints as $i => $constraint) {
-        if (!$constraint instanceof Ast\TypeApp || !$constraint->con instanceof Ast\TypeCon) {
+        if (! $constraint instanceof Ast\TypeApp || ! $constraint->con instanceof Ast\TypeCon) {
             throw typeFail($state, 'instance constraint must be a type class application', $decl);
         }
 
@@ -1591,7 +1602,7 @@ function buildInstanceConstraintEnv(TypeCheckState $state, array $constraints, T
 {
     $env = [];
     foreach ($constraints as $constraint) {
-        if (!$constraint instanceof Ast\TypeApp || !$constraint->con instanceof Ast\TypeCon) {
+        if (! $constraint instanceof Ast\TypeApp || ! $constraint->con instanceof Ast\TypeCon) {
             throw typeFail($state, 'instance constraint must be a type class application');
         }
 
@@ -1620,7 +1631,7 @@ function buildInstanceConstraintEnv(TypeCheckState $state, array $constraints, T
                 $classInfo['params'],
                 $mapping,
             )['type']);
-            if (!$mappedType instanceof TArrow) {
+            if (! $mappedType instanceof TArrow) {
                 continue;
             }
 
@@ -1660,11 +1671,11 @@ function etaExpandInstanceMethod(array $params, Ast\AstNode $body, Type $userFac
         $cursor = $cursor->to;
     }
 
-    if (count($params) >= $arity) {
+    if (\count($params) >= $arity) {
         return [$params, $body];
     }
 
-    $i = count($params);
+    $i = \count($params);
     while ($i < $arity) {
         $name = '__eta' . $i;
         $params[] = new Ast\PatVar($name);
@@ -1736,10 +1747,10 @@ function checkInstanceMethod(
         ...$instanceConstraints,
         ...$methodUserConstraints,
     ]);
-    $peeledType = peelDictArrows($expectedType, count($methodUserConstraints));
+    $peeledType = peelDictArrows($expectedType, \count($methodUserConstraints));
 
     $fnType = $peeledType;
-    foreach (array_reverse($constraints) as $constraint) {
+    foreach (\array_reverse($constraints) as $constraint) {
         $fnType = new TArrow(new TCon('__Dict_' . $constraint->class), $fnType);
     }
 
@@ -1755,7 +1766,7 @@ function checkInstanceMethod(
     $expected = $fnType;
     $paramTypes = [];
     foreach ($fn->params as $param) {
-        if (!$expected instanceof TArrow) {
+        if (! $expected instanceof TArrow) {
             throw typeFail($state, "method `{$fn->name}` has too many parameters", $fn);
         }
         $paramTypes[] = $expected->from;
@@ -1772,7 +1783,7 @@ function checkInstanceMethod(
     $state->constraintMethods = [];
     $state->constraintMethodAmbiguities = [];
 
-    if (!$state->stockDeriving) {
+    if (! $state->stockDeriving) {
         foreach ($constraints as $constraint) {
             $classInfo = $state->classes[$constraint->class];
             $mapping = [];
@@ -1791,9 +1802,9 @@ function checkInstanceMethod(
                 $nestedUserConstraints = $substituted['constraints'];
                 $methodType = peelDictArrows(
                     $substituted['type'],
-                    count($nestedUserConstraints),
+                    \count($nestedUserConstraints),
                 );
-                if (!prune($state, $methodType) instanceof TArrow) {
+                if (! prune($state, $methodType) instanceof TArrow) {
                     continue;
                 }
                 $info = [
@@ -1820,11 +1831,13 @@ function checkInstanceMethod(
                             $env[$methodName] = $orig;
                         }
                     }
+
                     continue;
                 }
 
                 if (isset($state->constraintMethodAmbiguities[$methodName])) {
                     unset($env[$methodName]);
+
                     continue;
                 }
 
@@ -1835,7 +1848,7 @@ function checkInstanceMethod(
     }
 
     $methodConstraintEnv = buildConstraintEnv($state, $constraints);
-    if ($methodConstraintEnv !== [] && !$state->stockDeriving) {
+    if ($methodConstraintEnv !== [] && ! $state->stockDeriving) {
         $env = [...$env, ...$methodConstraintEnv];
     }
 
@@ -1852,7 +1865,7 @@ function checkInstanceMethod(
                 $env[$methodName] = $scheme;
                 $existing = $state->env[$methodName] ?? null;
                 if ($existing === null
-                    || !($existing->classMethod ?? false)
+                    || ! ($existing->classMethod ?? false)
                     || $existing->class === $scheme->class) {
                     $state->env[$methodName] = $scheme;
                 }
@@ -1875,12 +1888,12 @@ function checkInstanceMethod(
 
     if ($savedClassMethod !== null) {
         $env[$fn->name] = $savedClassMethod;
-    } elseif (!isset($env[$fn->name])) {
+    } elseif (! isset($env[$fn->name])) {
         $env[$fn->name] = scheme(
             $peeledType,
             [],
             [...$instanceConstraints, ...$methodUserConstraints],
-            count($constraints),
+            \count($constraints),
             $constraints,
         );
     }
@@ -1944,7 +1957,7 @@ function findProjectInstanceHeadAst(TypeCheckState $state, string $className, Ty
  */
 function constraintHeadType(TypeCheckState $state, array $args): Type
 {
-    if (count($args) === 1) {
+    if (\count($args) === 1) {
         return prune($state, $args[0]);
     }
 
@@ -1963,11 +1976,11 @@ function constraintHeadType(TypeCheckState $state, array $args): Type
  */
 function instanceHeadFromConstraintArgs(TypeCheckState $state, array $classParams, array $args, ?Ast\AstNode $at = null): Type
 {
-    if (count($classParams) === 1) {
+    if (\count($classParams) === 1) {
         return prune($state, $args[0] ?? throw typeFail($state, 'constraint missing class argument', $at));
     }
 
-    if (count($args) !== count($classParams)) {
+    if (\count($args) !== \count($classParams)) {
         throw typeFail($state, 'constraint class arity mismatch', $at);
     }
 

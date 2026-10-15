@@ -2,10 +2,11 @@
 
 namespace Moggi\Semantics\Deriving;
 
-use Moggi\Syntax\Ast;
 use Moggi\Semantics\Types\TypeCheckState;
 
 use function Moggi\Semantics\Types\typeFail;
+
+use Moggi\Syntax\Ast;
 
 /**
  * Stock `deriving Foldable` over the last type parameter (`foldr` only).
@@ -56,10 +57,10 @@ function synthesizeFoldableFoldr(
 
     $alts = [];
     foreach ($decl->constructors as $ctor) {
-        $pats = freshPatVars('__v', count($ctor->fields));
+        $pats = freshPatVars('__v', \count($ctor->fields));
         $names = patVarNames($pats);
         $acc = new Ast\Variable($z);
-        for ($i = count($ctor->fields) - 1; $i >= 0; --$i) {
+        for ($i = \count($ctor->fields) - 1; $i >= 0; --$i) {
             $acc = synthesizeFoldableField(
                 $ctor->fields[$i]->type,
                 $param,
@@ -82,11 +83,12 @@ function synthesizeFoldableField(
     Ast\AstNode $value,
 ): Ast\AstNode {
     $c = classifyFunctorField($type, $param);
+
     return match ($c['tag']) {
         'param' => new Ast\Apply(new Ast\Apply($f, $value), $z),
         'skip' => $z,
         'app' => foldableNestedFold(
-            $type->args[count($type->args) - 1],
+            $type->args[\count($type->args) - 1],
             $param,
             $f,
             $z,
@@ -137,7 +139,7 @@ function foldableFoldStep(Ast\TypeNode $type, string $param, Ast\AstNode $f): As
     return new Ast\Lambda(
         [new Ast\LambdaParam(new Ast\PatVar('__x')), new Ast\LambdaParam(new Ast\PatVar('__acc'))],
         foldableNestedFold(
-            $type->args[count($type->args) - 1],
+            $type->args[\count($type->args) - 1],
             $param,
             $f,
             new Ast\Variable('__acc'),

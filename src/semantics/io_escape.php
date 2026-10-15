@@ -3,19 +3,21 @@
 namespace Moggi\Semantics\IoEscape;
 
 use Moggi\IR\IoBodyKind;
-use Moggi\Syntax\Ast;
 
 use function Moggi\Semantics\IoBoundary\functionReturnsIo;
+
 use function Moggi\Semantics\IoBoundary\isIoType;
 use function Moggi\Semantics\IoBoundary\isIoUnitType;
 use function Moggi\Semantics\IoBoundary\stripConstraints;
 
+use Moggi\Syntax\Ast;
+
 /** True for Data.Foo.PHP / Data.Foo.JVM / Data.Foo.DotNet / … backend implementation modules. */
 function isBackendImplModuleName(string $moduleName): bool
 {
-    $lower = strtolower($moduleName);
+    $lower = \strtolower($moduleName);
     foreach (['.php', '.jvm', '.js', '.dotnet'] as $suffix) {
-        if (str_ends_with($lower, $suffix)) {
+        if (\str_ends_with($lower, $suffix)) {
             return true;
         }
     }
@@ -28,7 +30,7 @@ function analyze(Ast\Program $program): Ast\Program
     $backendImpl = isBackendImplModuleName($program->module ?? '');
 
     foreach ($program->items as $item) {
-        if (!$item instanceof Ast\FunctionDecl) {
+        if (! $item instanceof Ast\FunctionDecl) {
             continue;
         }
 
@@ -36,7 +38,7 @@ function analyze(Ast\Program $program): Ast\Program
             continue;
         }
 
-        if (!functionReturnsIo($item->type) && !returnsMonadicValue($item->type)) {
+        if (! functionReturnsIo($item->type) && ! returnsMonadicValue($item->type)) {
             continue;
         }
 
@@ -58,16 +60,19 @@ function annotateFunction(Ast\FunctionDecl $fn, bool $backendImpl = false): void
 
     if ($backendImpl || $fn->foreign || isForeignIoBody($body)) {
         $fn->ioBodyKind = IoBodyKind::StraightLine;
+
         return;
     }
 
     if (returnsMonadicValue($fn->type)) {
         $fn->ioBodyKind = IoBodyKind::ActionReturn;
+
         return;
     }
 
     if ($fn->instanceMethod) {
         $fn->ioBodyKind = IoBodyKind::ActionReturn;
+
         return;
     }
 
@@ -84,7 +89,7 @@ function annotateFunction(Ast\FunctionDecl $fn, bool $backendImpl = false): void
 function annotateIoSequence(array &$stmts, bool &$hasNonFoldAction): void
 {
     foreach ($stmts as $i => $stmt) {
-        if (!$stmt instanceof Ast\IoLetAction) {
+        if (! $stmt instanceof Ast\IoLetAction) {
             continue;
         }
 
@@ -92,6 +97,7 @@ function annotateIoSequence(array &$stmts, bool &$hasNonFoldAction): void
         if ($name === null) {
             $stmt->ioFoldHint = false;
             $hasNonFoldAction = true;
+
             continue;
         }
 
@@ -99,7 +105,7 @@ function annotateIoSequence(array &$stmts, bool &$hasNonFoldAction): void
         $foldHint = $uses['run'] === 1 && $uses['escape'] === 0;
         $stmt->ioFoldHint = $foldHint;
 
-        if (!$foldHint) {
+        if (! $foldHint) {
             $hasNonFoldAction = true;
         }
     }
@@ -119,17 +125,19 @@ function collectActionUses(string $name, array $stmts, int $start): array
     $run = 0;
     $escape = 0;
 
-    for ($i = $start, $n = count($stmts); $i < $n; ++$i) {
+    for ($i = $start, $n = \count($stmts); $i < $n; ++$i) {
         $stmt = $stmts[$i];
         if ($stmt instanceof Ast\IoBind) {
             if (exprIsVariableRef($stmt->expr, $name)) {
                 ++$run;
+
                 continue;
             }
 
             if (exprMentionsVariable($stmt->expr, $name)) {
                 ++$escape;
             }
+
             continue;
         }
 
@@ -137,6 +145,7 @@ function collectActionUses(string $name, array $stmts, int $start): array
             $expr = $stmt->expr;
             if (exprIsVariableRef($expr, $name)) {
                 ++$run;
+
                 continue;
             }
 
@@ -164,7 +173,7 @@ function exprMentionsVariable(Ast\AstNode $expr, string $name): bool
         return $expr->name === $name;
     }
 
-    foreach (get_object_vars($expr) as $key => $value) {
+    foreach (\get_object_vars($expr) as $key => $value) {
         if ($key === 'inferredType' || $key === 'pendingConstraints') {
             continue;
         }
@@ -196,11 +205,11 @@ function isForeignIoBody(Ast\AstNode $body): bool
 
 function isActionReturnBody(Ast\AstNode $body, ?Ast\AstNode $type): bool
 {
-    if (!$body instanceof Ast\IoAction) {
+    if (! $body instanceof Ast\IoAction) {
         return false;
     }
 
-    return !functionReturnsIoUnit($type);
+    return ! functionReturnsIoUnit($type);
 }
 
 function functionReturnsIoUnit(?Ast\AstNode $type): bool

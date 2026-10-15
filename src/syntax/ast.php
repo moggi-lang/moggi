@@ -78,7 +78,7 @@ function desugarListComp(AstNode $expr, array $qualifiers): AstNode
 
     $inner = desugarListComp($expr, $rest);
 
-    if (!$qual instanceof QualGuard) {
+    if (! $qual instanceof QualGuard) {
         throw new \InvalidArgumentException('list comprehension qualifier must be a guard');
     }
 
@@ -139,45 +139,45 @@ function desugarDo(array $stmts, string $bind): AstNode
 
 function moduleName(array $path): string
 {
-    return join('.', $path);
+    return \implode('.', $path);
 }
 
 function dump(AstNode $node, int $indent = 0): string
 {
-    $pad = str_repeat('  ', $indent);
+    $pad = \str_repeat('  ', $indent);
 
     return match ($node::class) {
         Program::class => $pad . "program\n"
             . ($node->moduleBackend !== null ? $pad . '  module_backend ' . $node->moduleBackend . "\n" : '')
             . ($node->backendMap !== []
-                ? $pad . "  backend_map\n" . join('', \array_map(
+                ? $pad . "  backend_map\n" . \implode('', \array_map(
                     static fn (string $backend, string $module): string => $pad . '    '
                         . $backend . ': ' . $module . "\n",
                     \array_keys($node->backendMap),
-                    array_values($node->backendMap),
+                    \array_values($node->backendMap),
                 ))
                 : '')
-            . join('', \array_map(
+            . \implode('', \array_map(
                 static fn (AstNode $item): string => dump($item, $indent + 1),
                 $node->items,
             )),
         ForeignTypeDecl::class => $pad . 'foreign_type ' . $node->backend . ' '
-            . $node->name . ' ' . json_encode($node->hostType) . "\n",
+            . $node->name . ' ' . \json_encode($node->hostType) . "\n",
         ForeignImportDecl::class => $pad . 'foreign_import ' . $node->backend . ' ' . $node->kind . ' '
-            . $node->name . ' ' . json_encode($node->path) . ' :: '
+            . $node->name . ' ' . \json_encode($node->path) . ' :: '
             . dumpTypeInline($node->type) . "\n",
         SignatureOnly::class => $pad . "signature_only\n",
         DataDecl::class => $pad . ($node->isNewtype ? 'newtype ' : 'data ') . $node->name
-            . (count($node->params) > 0 ? ' ' . join(' ', \array_map(
+            . (\count($node->params) > 0 ? ' ' . \implode(' ', \array_map(
                 static fn (DataParam $param): string => dumpDataParam($param),
                 $node->params,
             )) : '') . "\n"
-            . join('', \array_map(
+            . \implode('', \array_map(
                 static fn (ConstructorDecl $ctor): string => dump($ctor, $indent + 1),
                 $node->constructors,
             ))
             . ($node->derivingClasses !== []
-                ? $pad . '  deriving (' . join(', ', \array_map(
+                ? $pad . '  deriving (' . \implode(', ', \array_map(
                     static function (DerivingClassRef $c): string {
                         $prefix = match ($c->strategy) {
                             'stock' => 'stock ',
@@ -195,16 +195,16 @@ function dump(AstNode $node, int $indent = 0): string
                 )) . ")\n"
                 : ''),
         TypeSynonymDecl::class => $pad . 'type ' . $node->name
-            . (count($node->params) > 0 ? ' ' . join(' ', $node->params) : '')
+            . (\count($node->params) > 0 ? ' ' . \implode(' ', $node->params) : '')
             . ' = ' . dumpTypeInline($node->type) . "\n",
         ClassDecl::class => $pad . 'class ' . $node->name
-            . (count($node->params) > 0 ? ' ' . join(' ', \array_map(
+            . (\count($node->params) > 0 ? ' ' . \implode(' ', \array_map(
                 static fn (ClassParam $param): string => $param->name,
                 $node->params,
             )) : '') . "\n"
-            . join('', \array_map(
+            . \implode('', \array_map(
                 static function (AssociatedTypeDecl $assoc) use ($pad): string {
-                    $params = $assoc->params === [] ? '' : ' ' . join(' ', $assoc->params);
+                    $params = $assoc->params === [] ? '' : ' ' . \implode(' ', $assoc->params);
                     $kind = $assoc->resultKind !== null
                         ? ' :: ' . dumpKindInline($assoc->resultKind)
                         : '';
@@ -213,18 +213,18 @@ function dump(AstNode $node, int $indent = 0): string
                 },
                 $node->associatedTypes,
             ))
-            . join('', \array_map(
+            . \implode('', \array_map(
                 static fn (ClassMethodSig $method): string => $pad . '  method ' . $method->name
                     . ' :: ' . dumpTypeInline($method->type)
                     . ($method->body !== null ? ' = default' : '') . "\n",
                 $node->methods,
             )),
         InstanceDecl::class => $pad . 'instance ' . $node->class . ' ' . dumpTypeInline($node->head) . "\n"
-            . join('', \array_map(
+            . \implode('', \array_map(
                 static function (AssociatedTypeEquation $eq) use ($pad): string {
                     $args = $eq->lhsArgs === []
                         ? ''
-                        : ' ' . join(' ', \array_map(
+                        : ' ' . \implode(' ', \array_map(
                             static fn (TypeNode $arg): string => dumpTypeInline($arg),
                             $eq->lhsArgs,
                         ));
@@ -239,7 +239,7 @@ function dump(AstNode $node, int $indent = 0): string
             . ($node->viaType !== null ? ' via (' . dumpTypeInline($node->viaType) . ')' : '')
             . ' instance ' . $node->className . ' ' . dumpTypeInline($node->head) . "\n",
         ConstructorDecl::class => $pad . 'constructor ' . $node->name . "\n"
-            . join('', \array_map(
+            . \implode('', \array_map(
                 static function (CtorField $field) use ($pad): string {
                     return $pad . '  field ' . $field->name . ' :: '
                         . dumpTypeInline($field->type) . "\n";
@@ -250,7 +250,7 @@ function dump(AstNode $node, int $indent = 0): string
             . ($node->type !== null ? ' :: ' . dumpTypeInline($node->type) : '')
             . ($node->signatureOnly ? ' signature_only' : '')
             . "\n"
-            . ($node->signatureOnly ? '' : join('', \array_map(
+            . ($node->signatureOnly ? '' : \implode('', \array_map(
                 static fn (AstNode $param): string => dumpPattern($param, $indent + 1),
                 $node->params,
             )) . dump($node->body, $indent + 1)),
@@ -259,7 +259,7 @@ function dump(AstNode $node, int $indent = 0): string
         TypeAsc::class => $pad . 'type_asc ' . dumpTypeInline($node->type) . "\n"
             . dump($node->expr, $indent + 1),
         ExprHole::class => $pad . "hole\n",
-        StringLit::class => $pad . 'string ' . json_encode($node->value) . "\n",
+        StringLit::class => $pad . 'string ' . \json_encode($node->value) . "\n",
         CharLit::class => $pad . 'char ' . \sprintf("'\\u{%X}'", $node->value) . "\n",
         Variable::class => $pad . 'variable ' . $node->name . "\n",
         ConstructorRef::class => $pad . 'constructor_ref ' . $node->name . "\n",
@@ -278,44 +278,44 @@ function dump(AstNode $node, int $indent = 0): string
             . dump($node->left, $indent + 1)
             . dump($node->right, $indent + 1),
         Lambda::class => $pad . "lambda\n"
-            . join('', \array_map(
+            . \implode('', \array_map(
                 static fn (LambdaParam $param): string => dumpPattern($param->pattern, $indent + 1),
                 $node->params,
             ))
             . dump($node->body, $indent + 1),
         Let::class => $pad . "let\n"
-            . join('', \array_map(
+            . \implode('', \array_map(
                 static fn (Binding $b): string => dumpBinding($b, $indent + 1),
                 $node->bindings,
             ))
             . dump($node->body, $indent + 1),
         Where::class => $pad . "where\n"
             . dump($node->expr, $indent + 1)
-            . join('', \array_map(
+            . \implode('', \array_map(
                 static fn (Binding $b): string => dumpBinding($b, $indent + 1),
                 $node->bindings,
             )),
         CaseExpr::class => $pad . "case\n"
             . dump($node->scrutinee, $indent + 1)
-            . join('', \array_map(
+            . \implode('', \array_map(
                 static fn (Alt $a): string => dumpAlt($a, $indent + 1),
                 $node->alts,
             )),
         GuardsExpr::class => $pad . "guards\n"
-            . join('', \array_map(
+            . \implode('', \array_map(
                 static fn (Guarded $clause): string => dumpGuarded($clause, $indent + 1),
                 $node->clauses,
             )),
-        Tuple::class => $pad . "tuple\n" . join('', \array_map(
+        Tuple::class => $pad . "tuple\n" . \implode('', \array_map(
             static fn (AstNode $element): string => dump($element, $indent + 1),
             $node->elements,
         )),
-        ListLit::class => $pad . "list\n" . join('', \array_map(
+        ListLit::class => $pad . "list\n" . \implode('', \array_map(
             static fn (AstNode $element): string => dump($element, $indent + 1),
             $node->elements,
         )),
         RecordCon::class => $pad . 'record_con ' . $node->name . "\n"
-            . join('', \array_map(
+            . \implode('', \array_map(
                 static function (RecordField $field) use ($pad, $indent): string {
                     return $pad . '  ' . $field->name . " =\n"
                         . dump($field->expr, $indent + 2);
@@ -324,7 +324,7 @@ function dump(AstNode $node, int $indent = 0): string
             )),
         RecordUpdate::class => $pad . "record_update\n"
             . $pad . "  receiver\n" . dump($node->object, $indent + 2)
-            . join('', \array_map(
+            . \implode('', \array_map(
                 static function (RecordField $field) use ($pad, $indent): string {
                     return $pad . '  ' . $field->name . " =\n"
                         . dump($field->expr, $indent + 2);
@@ -334,14 +334,14 @@ function dump(AstNode $node, int $indent = 0): string
         FieldAccess::class => $pad . 'field_access .' . $node->field . "\n"
             . dump($node->object, $indent + 1),
         ForeignCall::class => $pad . 'foreign_call ' . $node->backend . ' ' . $node->kind . ' '
-            . json_encode($node->path) . ' dispatch=' . $node->dispatch
+            . \json_encode($node->path) . ' dispatch=' . $node->dispatch
             . ' io=' . $node->ioWrap->value . "\n"
-            . join('', \array_map(
+            . \implode('', \array_map(
                 static fn (AstNode $arg): string => dump($arg, $indent + 1),
                 $node->args,
             )),
         DoExpr::class => $pad . "do\n"
-            . join('', \array_map(
+            . \implode('', \array_map(
                 static fn (AstNode $stmt): string => dump($stmt, $indent + 1),
                 $node->stmts,
             )),
@@ -349,7 +349,7 @@ function dump(AstNode $node, int $indent = 0): string
             . dumpPattern($node->pattern, $indent + 1)
             . dump($node->expr, $indent + 1),
         DoLet::class => $pad . "do_let\n"
-            . join('', \array_map(
+            . \implode('', \array_map(
                 static fn (DoBind $b): string => dump($b, $indent + 1),
                 $node->bindings,
             )),
@@ -358,12 +358,12 @@ function dump(AstNode $node, int $indent = 0): string
         IoAction::class => $pad . "io_action\n"
             . dump($node->expr, $indent + 1),
         IoSequence::class => $pad . "io_sequence\n"
-            . join('', \array_map(
+            . \implode('', \array_map(
                 static fn (AstNode $stmt): string => dump($stmt, $indent + 1),
                 $node->stmts,
             )),
         IoLet::class => $pad . "io_let\n"
-            . join('', \array_map(
+            . \implode('', \array_map(
                 static fn (Binding $b): string => dumpBinding($b, $indent + 1),
                 $node->bindings,
             )),
@@ -379,22 +379,22 @@ function dump(AstNode $node, int $indent = 0): string
             . dump($node->expr, $indent + 1),
         IoCase::class => $pad . "io_case\n"
             . dump($node->scrutinee, $indent + 1)
-            . join('', \array_map(
+            . \implode('', \array_map(
                 static fn (Alt $a): string => dumpAlt($a, $indent + 1),
                 $node->alts,
             )),
         IntrinsicCall::class => $pad . 'intrinsic ' . $node->name . "\n"
-            . join('', \array_map(
+            . \implode('', \array_map(
                 static fn (AstNode $arg): string => dump($arg, $indent + 1),
                 $node->args,
             )),
-        default => throw new \InvalidArgumentException("unknown ast tag: " . $node::class),
+        default => throw new \InvalidArgumentException('unknown ast tag: ' . $node::class),
     };
 }
 
 function dumpApply(Apply $node, int $indent): string
 {
-    $pad = str_repeat('  ', $indent);
+    $pad = \str_repeat('  ', $indent);
     $binary = binaryConstructorOpApply($node);
     if ($binary !== null) {
         return $pad . 'infix_con ' . $binary['op'] . "\n"
@@ -410,17 +410,17 @@ function dumpApply(Apply $node, int $indent): string
 /** @return ?array{op: string, left: AstNode, right: AstNode} */
 function binaryConstructorOpApply(Apply $node): ?array
 {
-    if (!$node->function instanceof Apply) {
+    if (! $node->function instanceof Apply) {
         return null;
     }
 
     $inner = $node->function;
-    if (!$inner->function instanceof ConstructorRef) {
+    if (! $inner->function instanceof ConstructorRef) {
         return null;
     }
 
     $op = $inner->function->name;
-    if (!isConstructorOperator($op)) {
+    if (! isConstructorOperator($op)) {
         return null;
     }
 
@@ -433,15 +433,15 @@ function binaryConstructorOpApply(Apply $node): ?array
 
 function dumpPatCon(PatCon $node, int $indent): string
 {
-    $pad = str_repeat('  ', $indent);
-    if (isConstructorOperator($node->name) && count($node->args) === 2) {
+    $pad = \str_repeat('  ', $indent);
+    if (isConstructorOperator($node->name) && \count($node->args) === 2) {
         return $pad . 'pat_infix_con ' . $node->name . "\n"
             . dumpPattern($node->args[0], $indent + 1)
             . dumpPattern($node->args[1], $indent + 1);
     }
 
     return $pad . 'pat_con ' . $node->name . "\n"
-        . join('', \array_map(
+        . \implode('', \array_map(
             static fn (AstNode $arg): string => dumpPattern($arg, $indent + 1),
             $node->args,
         ));
@@ -449,7 +449,7 @@ function dumpPatCon(PatCon $node, int $indent): string
 
 function dumpBinding(Binding $binding, int $indent): string
 {
-    $pad = str_repeat('  ', $indent);
+    $pad = \str_repeat('  ', $indent);
 
     return $pad . "binding\n"
         . dumpPattern($binding->pattern, $indent + 1)
@@ -458,7 +458,7 @@ function dumpBinding(Binding $binding, int $indent): string
 
 function dumpAlt(Alt $alt, int $indent): string
 {
-    $pad = str_repeat('  ', $indent);
+    $pad = \str_repeat('  ', $indent);
 
     return $pad . "alt\n"
         . dumpPattern($alt->pattern, $indent + 1)
@@ -467,7 +467,7 @@ function dumpAlt(Alt $alt, int $indent): string
 
 function dumpGuarded(Guarded $clause, int $indent): string
 {
-    $pad = str_repeat('  ', $indent);
+    $pad = \str_repeat('  ', $indent);
 
     return $pad . "guarded\n"
         . $pad . "  guard\n"
@@ -477,31 +477,31 @@ function dumpGuarded(Guarded $clause, int $indent): string
 
 function dumpPattern(AstNode $node, int $indent): string
 {
-    $pad = str_repeat('  ', $indent);
+    $pad = \str_repeat('  ', $indent);
 
     return match ($node::class) {
         PatWild::class => $pad . "pat_wild _\n",
         PatVar::class => $pad . 'pat_var ' . $node->name . "\n",
-        PatLit::class => $pad . 'pat_lit ' . (\is_string($node->value) ? json_encode($node->value) : $node->value) . "\n",
+        PatLit::class => $pad . 'pat_lit ' . (\is_string($node->value) ? \json_encode($node->value) : $node->value) . "\n",
         PatChar::class => $pad . 'pat_char ' . \sprintf("'\\u{%X}'", $node->value) . "\n",
         PatNil::class => $pad . "pat_nil\n",
         PatCons::class => $pad . "pat_cons\n"
             . dumpPattern($node->head, $indent + 1)
             . dumpPattern($node->tail, $indent + 1),
         PatCon::class => dumpPatCon($node, $indent),
-        PatTuple::class => $pad . "pat_tuple\n" . join('', \array_map(
+        PatTuple::class => $pad . "pat_tuple\n" . \implode('', \array_map(
             static fn (AstNode $element): string => dumpPattern($element, $indent + 1),
             $node->elements,
         )),
         PatRecord::class => $pad . 'pat_record ' . $node->name . "\n"
-            . join('', \array_map(
+            . \implode('', \array_map(
                 static function (PatField $field) use ($pad, $indent): string {
                     return $pad . '  ' . $field->name . " =\n"
                         . dumpPattern($field->pattern, $indent + 2);
                 },
                 $node->fields,
             )),
-        default => throw new \InvalidArgumentException("unknown pattern tag: " . $node::class),
+        default => throw new \InvalidArgumentException('unknown pattern tag: ' . $node::class),
     };
 }
 
@@ -521,7 +521,7 @@ function dumpKindInline(KindNode $node): string
         KindType::class => 'Type',
         KindCon::class => $node->name,
         KindArrow::class => dumpKindInline($node->from) . ' -> ' . dumpKindInline($node->to),
-        default => throw new \InvalidArgumentException("unknown kind: " . $node::class),
+        default => throw new \InvalidArgumentException('unknown kind: ' . $node::class),
     };
 }
 
@@ -565,20 +565,20 @@ function dumpTypeInline(TypeNode $node): string
         TypeUnit::class => '()',
         TypeCon::class => $node->name,
         TypePromoted::class => "'" . $node->name,
-        TypeStringLit::class => json_encode($node->value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        TypeStringLit::class => \json_encode($node->value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         TypeNatLit::class => ($node->negative ? '-' : '') . $node->digits,
         TypeQualified::class => $node->module . '.' . $node->name,
         TypeApp::class => (static function () use ($node): string {
             if (
                 $node->con instanceof TypeCon
                 && $node->con->name === 'List'
-                && count($node->args) === 1
+                && \count($node->args) === 1
             ) {
                 return '[' . dumpTypeInline($node->args[0]) . ']';
             }
 
             if (isInstanceHeadMarker($node)) {
-                return join(' ', \array_map(
+                return \implode(' ', \array_map(
                     static fn (TypeNode $arg): string => dumpTypeInline($arg),
                     $node->args,
                 ));
@@ -587,21 +587,21 @@ function dumpTypeInline(TypeNode $node): string
             if (
                 $node->con instanceof TypeCon
                 && isConstructorOperator($node->con->name)
-                && count($node->args) === 2
+                && \count($node->args) === 2
             ) {
                 return dumpTypeInline($node->args[0]) . ' ' . $node->con->name . ' ' . dumpTypeInline($node->args[1]);
             }
 
-            return dumpTypeInline($node->con) . ' ' . join(' ', \array_map(
+            return dumpTypeInline($node->con) . ' ' . \implode(' ', \array_map(
                 static fn (TypeNode $arg): string => dumpTypeInline($arg),
                 $node->args,
             ));
         })(),
         TypeArrow::class => dumpTypeInline($node->from) . ' -> ' . dumpTypeInline($node->to),
-        TypeConstrained::class => join(', ', \array_map(
+        TypeConstrained::class => \implode(', ', \array_map(
             static fn (TypeNode $constraint): string => dumpTypeInline($constraint),
             $node->constraints,
         )) . ' => ' . dumpTypeInline($node->body),
-        default => throw new \InvalidArgumentException("unknown type: " . $node::class),
+        default => throw new \InvalidArgumentException('unknown type: ' . $node::class),
     };
 }

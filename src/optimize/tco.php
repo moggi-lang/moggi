@@ -28,7 +28,7 @@ function findTailRecPlan(string $name, array $params, array $items): ?array
         return null;
     }
 
-    $last = $items[count($items) - 1];
+    $last = $items[\count($items) - 1];
     if ($last instanceof IR\Ret) {
         $call = tailSelfCallFromRetValue($last->value, $name, $params, $items);
         if ($call !== null) {
@@ -36,7 +36,7 @@ function findTailRecPlan(string $name, array $params, array $items): ?array
         }
     }
 
-    if (count($items) === 2 && $items[1] instanceof IR\Ret && $items[0] instanceof IR\MatchStmt) {
+    if (\count($items) === 2 && $items[1] instanceof IR\Ret && $items[0] instanceof IR\MatchStmt) {
         return findMatchTailRecPlan($name, $params, $items[0], $items[1]);
     }
 
@@ -46,11 +46,11 @@ function findTailRecPlan(string $name, array $params, array $items): ?array
 /** @param list<IR\Stmt> $items @return list<IR\Stmt>|null */
 function tailSelfCallFromRetValue(IR\Operand $value, string $name, array $params, array $items): ?array
 {
-    if ($value instanceof IR\ExprCall && $value->callee === $name && count($value->args) === count($params)) {
+    if ($value instanceof IR\ExprCall && $value->callee === $name && \count($value->args) === \count($params)) {
         return $value->args;
     }
 
-    if (!($value instanceof IR\ExprCallValue) || !($value->callee instanceof IR\Temp)) {
+    if (! ($value instanceof IR\ExprCallValue) || ! ($value->callee instanceof IR\Temp)) {
         return null;
     }
 
@@ -65,12 +65,12 @@ function tailSelfCallFromRetValue(IR\Operand $value, string $name, array $params
 /** @param list<IR\Operand> $extraArgs @return list<IR\Stmt>|null */
 function tailSelfCallFromCall(IR\Stmt $call, string $name, array $params, array $extraArgs = []): ?array
 {
-    if (!($call instanceof IR\Call) || $call->callee !== $name) {
+    if (! ($call instanceof IR\Call) || $call->callee !== $name) {
         return null;
     }
 
     $args = [...$call->args, ...$extraArgs];
-    if (count($args) !== count($params)) {
+    if (\count($args) !== \count($params)) {
         return null;
     }
 
@@ -80,7 +80,7 @@ function tailSelfCallFromCall(IR\Stmt $call, string $name, array $params, array 
 /** @param list<IR\Stmt> $items @return array{kind: string, args?: list<IR\Operand>, match?: IR\MatchStmt}|null */
 function findCallDefiningTemp(array $items, int $tempId): ?IR\Stmt
 {
-    foreach (array_reverse($items) as $item) {
+    foreach (\array_reverse($items) as $item) {
         if (($item instanceof IR\Call || $item instanceof IR\CallValue) && $item->dest === $tempId) {
             return $item;
         }
@@ -96,14 +96,14 @@ function tailSelfCallInBlock(string $name, array $params, array $items, int $mat
         return null;
     }
 
-    $last = $items[count($items) - 1];
+    $last = $items[\count($items) - 1];
     if ($last instanceof IR\Ret) {
         return tailSelfCallFromRetValue($last->value, $name, $params, $items);
     }
 
     if ($last instanceof IR\Assign && $last->dest === $matchDest) {
         if ($last->value instanceof IR\Temp) {
-            $prev = $items[count($items) - 2] ?? null;
+            $prev = $items[\count($items) - 2] ?? null;
             if ($prev !== null && $prev instanceof IR\CallValue && $prev->dest === $last->value->id) {
                 return tailSelfCallFromCallValueStmt($prev, $name, $params, $items);
             }
@@ -130,7 +130,7 @@ function tailSelfCallInBlock(string $name, array $params, array $items, int $mat
 /** @param list<IR\Stmt> $items @return list<IR\Stmt>|null */
 function tailSelfCallFromCallValueStmt(IR\CallValue $callValue, string $name, array $params, array $items): ?array
 {
-    if (!($callValue instanceof IR\CallValue) || !($callValue->callee instanceof IR\Temp)) {
+    if (! ($callValue instanceof IR\CallValue) || ! ($callValue->callee instanceof IR\Temp)) {
         return null;
     }
 
@@ -145,7 +145,7 @@ function tailSelfCallFromCallValueStmt(IR\CallValue $callValue, string $name, ar
 /** @return array{kind: string, args?: list<IR\Operand>, match?: IR\MatchStmt}|null */
 function findMatchTailRecPlan(string $name, array $params, IR\MatchStmt $match, IR\Ret $ret): ?array
 {
-    if (!($ret->value instanceof IR\Temp) || $ret->value->id !== $match->dest) {
+    if (! ($ret->value instanceof IR\Temp) || $ret->value->id !== $match->dest) {
         return null;
     }
 
@@ -193,6 +193,7 @@ function convertTailRecMatch(string $name, array $params, IR\MatchStmt $match): 
                 ...stripRecursiveTail($items, $dest, $name),
                 new IR\TailRecall($call),
             ]));
+
             continue;
         }
 
@@ -212,13 +213,13 @@ function convertMatchArmToReturn(array $items, int $matchDest): array
         throw new \RuntimeException('empty match arm in tail recursion conversion');
     }
 
-    $last = $items[count($items) - 1];
+    $last = $items[\count($items) - 1];
     if ($last instanceof IR\Ret) {
         return $items;
     }
 
     if ($last instanceof IR\Assign && $last->dest === $matchDest) {
-        $items[count($items) - 1] = new IR\Ret($last->value);
+        $items[\count($items) - 1] = new IR\Ret($last->value);
 
         return $items;
     }
@@ -229,35 +230,37 @@ function convertMatchArmToReturn(array $items, int $matchDest): array
 /** @param list<IR\Stmt> $items @return list<IR\Stmt> */
 function stripRecursiveTail(array $items, int $matchDest, string $name): array
 {
-    $items = array_values($items);
+    $items = \array_values($items);
     if ($items === []) {
         return [];
     }
 
     $retValue = null;
-    if ($items[count($items) - 1] instanceof IR\Ret) {
-        $retValue = array_pop($items)->value;
+    if ($items[\count($items) - 1] instanceof IR\Ret) {
+        $retValue = \array_pop($items)->value;
     }
 
     if ($retValue !== null && $retValue instanceof IR\ExprCallValue && $retValue->callee instanceof IR\Temp) {
         $items = removeCallDefiningTemp($items, $retValue->callee->id);
-    } elseif ($retValue === null && $items !== [] && $items[count($items) - 1] instanceof IR\CallValue) {
-        $callValue = $items[count($items) - 1];
+    } elseif ($retValue === null && $items !== [] && $items[\count($items) - 1] instanceof IR\CallValue) {
+        $callValue = $items[\count($items) - 1];
         if ($callValue->callee instanceof IR\Temp && isSelfCallDefiningTemp($items, $callValue->callee->id, $name)) {
-            array_pop($items);
+            \array_pop($items);
             $items = removeCallDefiningTemp($items, $callValue->callee->id);
         }
     }
 
     while ($items !== []) {
-        $last = $items[count($items) - 1];
+        $last = $items[\count($items) - 1];
         if ($last instanceof IR\Assign && $last->dest === $matchDest) {
-            array_pop($items);
+            \array_pop($items);
+
             continue;
         }
 
         if ($last instanceof IR\Call && $last->callee === $name) {
-            array_pop($items);
+            \array_pop($items);
+
             continue;
         }
 
@@ -283,11 +286,11 @@ function isSelfCallDefiningTemp(array $items, int $tempId, string $name): bool
 /** @param list<IR\Stmt> $items @return list<IR\Stmt> */
 function removeCallDefiningTemp(array $items, int $tempId): array
 {
-    foreach (array_reverse(\array_keys($items)) as $i) {
+    foreach (\array_reverse(\array_keys($items)) as $i) {
         if ($items[$i] instanceof IR\Call && $items[$i]->dest === $tempId) {
             unset($items[$i]);
 
-            return array_values($items);
+            return \array_values($items);
         }
     }
 

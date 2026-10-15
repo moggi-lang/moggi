@@ -8,7 +8,7 @@
 // key, and the emit-cache discriminator in the bind cache key.
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
@@ -28,7 +28,7 @@ use function Moggi\Registry\descriptorProblems;
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
     ++$checks;
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
@@ -58,6 +58,7 @@ $assert(\str_contains($badFfi, '[ffi] does not take `bogus`'), "unexpected `[ffi
 // The inspector: coordinate shape, module naming, and the fixture's symbols.
 $parts = parsePhpCoordinate('acme/hello');
 $assert($parts === ['vendor' => 'acme', 'package' => 'hello'], 'coordinate misparsed');
+
 try {
     parsePhpCoordinate('hello');
     $assert(false, 'a bare name parsed as a Composer coordinate');

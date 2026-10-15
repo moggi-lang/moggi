@@ -2,9 +2,10 @@
 
 namespace Moggi\CLI\Commands;
 
+use function Moggi\Registry\badPackageMarker;
+
 use Moggi\Registry\FetchLog;
 
-use function Moggi\Registry\badPackageMarker;
 use function Moggi\Registry\isPackageName;
 use function Moggi\Registry\newestFirst;
 use function Moggi\Registry\prettyJson;
@@ -58,7 +59,7 @@ function runShowCommand(array $argv): int
     }
 
     $name = \trim((string) $options['path']);
-    if ($name === '' || $name === '.' || !isPackageName($name)) {
+    if ($name === '' || $name === '.' || ! isPackageName($name)) {
         \fwrite(STDERR, "error: `moggi show` needs one package name\n\n" . showUsage() . "\n");
 
         return 1;
@@ -66,7 +67,7 @@ function runShowCommand(array $argv): int
 
     try {
         $log = new FetchLog();
-        $catalog = loadVerifiedCatalog($options['registry'], !$options['noCache'], $log);
+        $catalog = loadVerifiedCatalog($options['registry'], ! $options['noCache'], $log);
         $entry = $catalog->entry($name);
         if ($entry === null) {
             throw new \RuntimeException("no package named `{$name}` at {$options['registry']}");

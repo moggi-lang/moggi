@@ -2,22 +2,28 @@
 
 namespace Moggi\Modules;
 
+use function Moggi\Backend\compileBackend;
+use function Moggi\Backend\Php\Naming\basePhpFunctionName;
+use function Moggi\Errors\appendDidYouMean;
+
 use Moggi\IR;
+
+use function Moggi\IR\Visit\collectIrCodegenUsage;
+
+use function Moggi\Paths\relativeRequirePath;
+use function Moggi\Semantics\Exhaustiveness\trueBindingOrigins;
+use function Moggi\Semantics\Kinds\dataKind;
+use function Moggi\Semantics\Kinds\registerTypeKind;
+
 use Moggi\Semantics\TypeExpr\Scheme;
+
+use function Moggi\Semantics\TypeExpr\schemeRuntimeArity;
+use function Moggi\Semantics\Types\evidenceFunctionName;
+
 use Moggi\Semantics\Types\TypeCheckState;
 use Moggi\Semantics\Types\TypeError;
 use Moggi\Syntax\Ast;
 
-use function Moggi\Backend\Php\Naming\basePhpFunctionName;
-use function Moggi\Paths\relativeRequirePath;
-use function Moggi\Backend\compileBackend;
-use function Moggi\Errors\appendDidYouMean;
-use function Moggi\IR\Visit\collectIrCodegenUsage;
-use function Moggi\Semantics\Exhaustiveness\trueBindingOrigins;
-use function Moggi\Semantics\Kinds\dataKind;
-use function Moggi\Semantics\Kinds\registerTypeKind;
-use function Moggi\Semantics\TypeExpr\schemeRuntimeArity;
-use function Moggi\Semantics\Types\evidenceFunctionName;
 use function Moggi\Syntax\Ast\moduleName;
 use function Moggi\Syntax\isConstructorName;
 
@@ -36,7 +42,7 @@ function moduleEvidenceMeta(
     static $cache = [];
     $key = $cacheKey !== ''
         ? $cacheKey
-        : ($moduleName . "\0" . $namespace . "\0" . spl_object_id($program));
+        : ($moduleName . "\0" . $namespace . "\0" . \spl_object_id($program));
     if (isset($cache[$key])) {
         return $cache[$key];
     }
@@ -46,18 +52,19 @@ function moduleEvidenceMeta(
     foreach ($program->instanceEvidence as $ev) {
         if (\is_array($ev)) {
             $name = $ev['evidenceName'] ?? null;
-            if (!\is_string($name)) {
+            if (! \is_string($name)) {
                 continue;
             }
-            $arity[$name] = count($ev['contextParams'] ?? []);
+            $arity[$name] = \count($ev['contextParams'] ?? []);
             $origins[$name] = [
                 'namespace' => $namespace,
                 'phpName' => $name,
                 'module' => $moduleName,
             ];
+
             continue;
         }
-        $arity[$ev->evidenceName] = count($ev->contextParams);
+        $arity[$ev->evidenceName] = \count($ev->contextParams);
         $origins[$ev->evidenceName] = [
             'namespace' => $namespace,
             'phpName' => $ev->evidenceName,
@@ -66,19 +73,19 @@ function moduleEvidenceMeta(
     }
 
     foreach ($program->items as $item) {
-        if (!$item instanceof Ast\InstanceDecl) {
+        if (! $item instanceof Ast\InstanceDecl) {
             continue;
         }
         $name = evidenceFunctionName($item->class, $item->head);
-        if (!isset($origins[$name])) {
+        if (! isset($origins[$name])) {
             $origins[$name] = [
                 'namespace' => $namespace,
                 'phpName' => $name,
                 'module' => $moduleName,
             ];
         }
-        if (!isset($arity[$name])) {
-            $arity[$name] = count($item->constraints);
+        if (! isset($arity[$name])) {
+            $arity[$name] = \count($item->constraints);
         }
     }
 
@@ -111,7 +118,7 @@ function unitEvidenceMeta(array $unit, string $moduleName, string $namespace, st
     $arity = [];
     foreach (['program', 'checkedProgram'] as $slot) {
         $program = $unit[$slot] ?? null;
-        if (!($program instanceof Ast\Program)) {
+        if (! ($program instanceof Ast\Program)) {
             continue;
         }
 
@@ -154,7 +161,7 @@ function moduleActionReturnFnNames(array $units, string $moduleName): array
 
     $unit = $units[$moduleName] ?? null;
     $key = \is_array($unit)
-        ? $moduleName . "\0" . hash('xxh3', (string) ($unit['source'] ?? '') . "\0" . (string) ($unit['path'] ?? ''))
+        ? $moduleName . "\0" . \hash('xxh3', (string) ($unit['source'] ?? '') . "\0" . (string) ($unit['path'] ?? ''))
         : $moduleName;
     if (isset($cache[$key])) {
         return $cache[$key];
@@ -188,7 +195,7 @@ function moduleTrueBindingOrigins(array $units, string $moduleName): array
 
     $unit = $units[$moduleName] ?? null;
     $key = \is_array($unit)
-        ? $moduleName . "\0" . hash('xxh3', (string) ($unit['source'] ?? '') . "\0" . (string) ($unit['path'] ?? ''))
+        ? $moduleName . "\0" . \hash('xxh3', (string) ($unit['source'] ?? '') . "\0" . (string) ($unit['path'] ?? ''))
         : $moduleName;
     if (isset($cache[$key])) {
         return $cache[$key];
@@ -231,11 +238,11 @@ function moduleEvidenceArity(array $units, string $moduleName, string $evName): 
     $program = \is_array($unit)
         ? ($unit['checkedProgram'] ?? $unit['program'] ?? null)
         : null;
-    if (!($program instanceof Ast\Program)) {
+    if (! ($program instanceof Ast\Program)) {
         return 0;
     }
     $namespace = (string) ($unit['namespace'] ?? '');
-    $cacheKey = $moduleName . "\0" . $namespace . "\0" . hash(
+    $cacheKey = $moduleName . "\0" . $namespace . "\0" . \hash(
         'xxh3',
         (string) ($unit['source'] ?? '') . "\0" . (string) ($unit['path'] ?? ''),
     );
@@ -256,24 +263,24 @@ function moduleEvidenceArity(array $units, string $moduleName, string $evName): 
 function moduleDeclaredFunctionArity(array $units, string $moduleName, string $name): ?int
 {
     $unit = $units[$moduleName] ?? null;
-    if (!\is_array($unit)) {
+    if (! \is_array($unit)) {
         return null;
     }
 
     $program = $unit['checkedProgram'] ?? null;
-    if (!($program instanceof Ast\Program)) {
+    if (! ($program instanceof Ast\Program)) {
         return null;
     }
 
     static $cache = [];
-    $key = $moduleName . "\0" . hash(
+    $key = $moduleName . "\0" . \hash(
         'xxh3',
         (string) ($unit['source'] ?? '') . "\0" . (string) ($unit['path'] ?? ''),
     );
-    if (!isset($cache[$key])) {
+    if (! isset($cache[$key])) {
         $arities = [];
         foreach ($program->items as $item) {
-            if ($item instanceof Ast\FunctionDecl && !$item->signatureOnly) {
+            if ($item instanceof Ast\FunctionDecl && ! $item->signatureOnly) {
                 $arities[$item->name] = \count($item->params);
             }
         }
@@ -361,7 +368,7 @@ function buildImportContext(
         $importCol = $import->col;
         $importEndCol = $import->endCol;
         $targetName = moduleName($import->path);
-        if (!isset($units[$targetName])) {
+        if (! isset($units[$targetName])) {
             throw new TypeError(
                 appendDidYouMean(
                     "unknown module `{$targetName}`",
@@ -378,6 +385,7 @@ function buildImportContext(
 
         $target = $units[$targetName];
         $namespace = $target['namespace'];
+
         try {
             $exports = $target['exports'] ?? collectExports(
                 $target['program'],
@@ -404,7 +412,7 @@ function buildImportContext(
         $qualifiedModules[$localPrefix] = $targetName;
 
         if ($targetName !== $currentModule) {
-            if (!(($target['synthetic'] ?? false) === true)) {
+            if (! (($target['synthetic'] ?? false) === true)) {
                 $targetOutputRelative = mogPathToOutputRelative($target['path'], $rootPrefix);
                 $moduleOutputPaths[$targetName] = $targetOutputRelative;
                 if ($planPhpImports) {
@@ -433,11 +441,11 @@ function buildImportContext(
         }
 
         foreach ($selected['env'] as $name => $scheme) {
-            $origin = (!$scheme->classMethod && isset($selected['origins'][$name]))
+            $origin = (! $scheme->classMethod && isset($selected['origins'][$name]))
                 ? $selected['origins'][$name]
                 : null;
 
-            if (!$scheme->classMethod) {
+            if (! $scheme->classMethod) {
                 $qualifiedEnv[$localPrefix][$name] = $scheme;
                 if ($origin !== null && $origin['module'] !== $targetName) {
                     $qualifiedOrigins[$localPrefix][$name] = $origin;
@@ -451,7 +459,7 @@ function buildImportContext(
             }
 
             if ($import->qualifiedOnly) {
-                if ($origin !== null && !isset($fnOriginModules[$name])) {
+                if ($origin !== null && ! isset($fnOriginModules[$name])) {
                     $externalFns[$name] = resolvedSymbol($origin['module'], $origin['phpName']);
                     $externalFnRuntimeArity[$name] = externalFunctionRuntimeArity(
                         $units,
@@ -464,6 +472,7 @@ function buildImportContext(
                         $actionReturnFns[$name] = true;
                     }
                 }
+
                 continue;
             }
 
@@ -473,8 +482,8 @@ function buildImportContext(
                 }
 
                 if ($env[$name]->classMethod !== $scheme->classMethod) {
-                } elseif (!isset($implicitNames[$name])
-                    && !($env[$name]->classMethod && $scheme->classMethod)
+                } elseif (! isset($implicitNames[$name])
+                    && ! ($env[$name]->classMethod && $scheme->classMethod)
                     && (($fnOriginModules[$name] ?? null) !== ($selected['origins'][$name]['module'] ?? null))) {
                     $ambiguousNames[$name] = [
                         'origins' => \array_values(\array_unique([
@@ -521,7 +530,7 @@ function buildImportContext(
             }
         }
 
-        if (!$import->qualifiedOnly) {
+        if (! $import->qualifiedOnly) {
             foreach ($selected['constructorRenames'] as $local => $canonical) {
                 $constructorRenames[$local] = $canonical;
             }
@@ -561,7 +570,7 @@ function buildImportContext(
             continue;
         }
 
-        $cacheKey = $unitName . "\0" . $unit['namespace'] . "\0" . hash(
+        $cacheKey = $unitName . "\0" . $unit['namespace'] . "\0" . \hash(
             'xxh3',
             (string) ($unit['source'] ?? '') . "\0" . (string) ($unit['path'] ?? ''),
         );
@@ -609,8 +618,8 @@ function buildImportContext(
     $requireLines = [];
     $functionUseLines = [];
     if ($planPhpImports) {
-        $requireLines = array_values(array_unique($requireTargets));
-        sort($requireLines, SORT_STRING);
+        $requireLines = \array_values(\array_unique($requireTargets));
+        \sort($requireLines, SORT_STRING);
 
         foreach ($externalFns as $local => $resolved) {
             $functionUseLines[] = functionUseLine($local, $resolved);
@@ -685,12 +694,12 @@ function mergeFacadeBackendEnv(
     ?TypeCheckState $state = null,
 ): void {
     $currentProgram = $units[$currentModule]['program'] ?? null;
-    if (!$currentProgram instanceof Ast\Program || !isFacadeProgram($currentProgram)) {
+    if (! $currentProgram instanceof Ast\Program || ! isFacadeProgram($currentProgram)) {
         return;
     }
 
     $implName = facadeImplModuleNameFor($currentModule, $units);
-    if ($implName === null || !isset($units[$implName])) {
+    if ($implName === null || ! isset($units[$implName])) {
         return;
     }
 
@@ -721,7 +730,7 @@ function mergeFacadeBackendEnv(
                 registerTypeKind(
                     $state,
                     $name,
-                    dataKind(count($info['params'] ?? [])),
+                    dataKind(\count($info['params'] ?? [])),
                 );
             }
         }
@@ -757,12 +766,12 @@ function mergeFacadeBackendExports(
     mergeFacadeBackendEnv($env, $intrinsicWrappers, $units, $currentModule);
 
     $currentProgram = $units[$currentModule]['program'] ?? null;
-    if (!$currentProgram instanceof Ast\Program || !isFacadeProgram($currentProgram)) {
+    if (! $currentProgram instanceof Ast\Program || ! isFacadeProgram($currentProgram)) {
         return;
     }
 
     $implName = facadeImplModuleNameFor($currentModule, $units);
-    if ($implName === null || !isset($units[$implName])) {
+    if ($implName === null || ! isset($units[$implName])) {
         return;
     }
 
@@ -824,7 +833,7 @@ function addOriginRequire(
     string $rootPrefix,
 ): void {
     $originModule = $origin['module'];
-    if ($originModule === $currentModule || !isset($units[$originModule])) {
+    if ($originModule === $currentModule || ! isset($units[$originModule])) {
         return;
     }
 
@@ -847,7 +856,7 @@ function dedupeUseLines(array $lines): array
         $out[] = $line;
     }
 
-    sort($out, SORT_STRING);
+    \sort($out, SORT_STRING);
 
     return $out;
 }
@@ -893,22 +902,22 @@ function filterCodegenImportsForIr(
 
     foreach (dictCallResolvedMethods($ir, $globalEvidenceMaps) as $methodName => $originModule) {
         $usedCallees[$methodName] = true;
-        if (!isset($codegen['externalFns'][$methodName])) {
+        if (! isset($codegen['externalFns'][$methodName])) {
             $codegen['externalFns'][$methodName] = resolvedSymbol($originModule, $methodName);
         }
-        if (!isset($codegen['fnOriginModules'][$methodName])) {
+        if (! isset($codegen['fnOriginModules'][$methodName])) {
             $codegen['fnOriginModules'][$methodName] = $originModule;
         }
     }
 
     foreach (evidenceSymbolOrigins($globalEvidenceMaps) as $symbol => $originModule) {
-        if (!isset($usedCallees[$symbol])) {
+        if (! isset($usedCallees[$symbol])) {
             continue;
         }
-        if (!isset($codegen['externalFns'][$symbol])) {
+        if (! isset($codegen['externalFns'][$symbol])) {
             $codegen['externalFns'][$symbol] = resolvedSymbol($originModule, $symbol);
         }
-        if (!isset($codegen['fnOriginModules'][$symbol])) {
+        if (! isset($codegen['fnOriginModules'][$symbol])) {
             $codegen['fnOriginModules'][$symbol] = $originModule;
         }
     }
@@ -923,7 +932,7 @@ function filterCodegenImportsForIr(
             continue;
         }
         $originModule = $globalFnOrigins[$symbol] ?? null;
-        if (!\is_string($originModule) || $originModule === '') {
+        if (! \is_string($originModule) || $originModule === '') {
             continue;
         }
         $codegen['externalFns'][$symbol] = resolvedSymbol($originModule, $symbol);
@@ -940,6 +949,7 @@ function filterCodegenImportsForIr(
             if ($originModule !== null) {
                 $usedModules[$originModule] = true;
             }
+
             continue;
         }
 
@@ -949,16 +959,17 @@ function filterCodegenImportsForIr(
             if (isset($codegen['externalFns'][$parsed['name']])) {
                 $usedExternal[$parsed['name']] = true;
             }
+
             continue;
         }
 
-        if (!str_contains($callee, '\\')) {
+        if (! \str_contains($callee, '\\')) {
             continue;
         }
 
-        $separator = strrpos($callee, '\\');
-        $namespace = substr($callee, 0, $separator);
-        $member = substr($callee, $separator + 1);
+        $separator = \strrpos($callee, '\\');
+        $namespace = \substr($callee, 0, $separator);
+        $member = \substr($callee, $separator + 1);
         $originModule = $codegen['namespaceModules'][$namespace] ?? null;
         if ($originModule !== null) {
             $usedModules[$originModule] = true;
@@ -973,7 +984,7 @@ function filterCodegenImportsForIr(
     $requireLines = [];
     $fromOutput = $fromOutputRelative ?? $codegen['currentOutputRelative'] ?? '';
     $absRoot = $absoluteRequireRoot !== null
-        ? rtrim(\str_replace('\\', '/', $absoluteRequireRoot), '/')
+        ? \rtrim(\str_replace('\\', '/', $absoluteRequireRoot), '/')
         : null;
     foreach (\array_keys($usedModules) as $moduleName) {
         $targetPath = $codegen['moduleOutputPaths'][$moduleName] ?? null;
@@ -988,8 +999,8 @@ function filterCodegenImportsForIr(
         }
     }
 
-    sort($requireLines, SORT_STRING);
-    $requireLines = array_values(array_unique($requireLines));
+    \sort($requireLines, SORT_STRING);
+    $requireLines = \array_values(\array_unique($requireLines));
 
     $localFnNames = [];
     foreach ($ir->functions as $fn) {
@@ -1015,19 +1026,20 @@ function filterCodegenImportsForIr(
         $parsed = parseResolvedSymbol($callee);
         if ($parsed !== null) {
             $usedNamespaces[moduleNameToNamespace($parsed['module'])] = true;
+
             continue;
         }
-        if (!str_contains($callee, '\\')) {
+        if (! \str_contains($callee, '\\')) {
             continue;
         }
 
-        $usedNamespaces[substr($callee, 0, strrpos($callee, '\\'))] = true;
+        $usedNamespaces[\substr($callee, 0, \strrpos($callee, '\\'))] = true;
     }
 
     foreach ($codegen['namespaceUseLines'] as $line) {
         foreach (\array_keys($usedNamespaces) as $namespace) {
             $asName = $codegen['moduleAsNames'][$namespace] ?? null;
-            if ($asName !== null && str_starts_with($line, "{$namespace} as {$asName}")) {
+            if ($asName !== null && \str_starts_with($line, "{$namespace} as {$asName}")) {
                 $namespaceUseLines[] = $line;
             }
         }
@@ -1124,16 +1136,16 @@ function evidenceSymbolOrigins(array $globalEvidenceMaps): array
 {
     $out = [];
     foreach ($globalEvidenceMaps as $evName => $info) {
-        if (!\is_string($evName) || $evName === '') {
+        if (! \is_string($evName) || $evName === '') {
             continue;
         }
         $module = $info['module'] ?? null;
-        if (!\is_string($module) || $module === '') {
+        if (! \is_string($module) || $module === '') {
             continue;
         }
         $out[$evName] = $module;
         $methods = $info['methods'] ?? [];
-        if (!\is_array($methods)) {
+        if (! \is_array($methods)) {
             continue;
         }
         foreach ($methods as $methodIr) {

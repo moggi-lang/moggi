@@ -2,16 +2,16 @@
 
 namespace Moggi\Semantics\Registry;
 
-use Moggi\Semantics\Kinds;
-use Moggi\Semantics\Types\TypeCheckState;
-use Moggi\Syntax\Ast;
-
 use Moggi\Semantics\Deriving\ClassDeriveFacts;
 
 use function Moggi\Semantics\Deriving\derivedProjectInstanceRecords;
 use function Moggi\Semantics\Foreign\foreignParamNames;
+
+use Moggi\Semantics\Kinds;
+
 use function Moggi\Semantics\Types\associatedEquationsMapFromDecl;
 use function Moggi\Semantics\Types\indexAssociatedEquations;
+use function Moggi\Semantics\Types\installTypeSynonymKind;
 use function Moggi\Semantics\Types\instanceHeadIndexKeyFromAst;
 use function Moggi\Semantics\Types\instanceIntrinsicMethods;
 use function Moggi\Semantics\Types\registerClass;
@@ -22,10 +22,15 @@ use function Moggi\Semantics\Types\registerForeignType;
 use function Moggi\Semantics\Types\registerFunctionScheme;
 use function Moggi\Semantics\Types\registerInferredFunctionPlaceholder;
 use function Moggi\Semantics\Types\registerInferredSignatureScheme;
-use function Moggi\Semantics\Types\installTypeSynonymKind;
 use function Moggi\Semantics\Types\registerTypeSynonym;
 use function Moggi\Semantics\Types\syncAssociatedFamiliesFromClasses;
+
+use Moggi\Semantics\Types\TypeCheckState;
+
 use function Moggi\Semantics\Types\typeFail;
+
+use Moggi\Syntax\Ast;
+
 use function Moggi\Syntax\exportedChildrenSpec;
 use function Moggi\Syntax\surfaceConstructorAlias;
 
@@ -97,7 +102,7 @@ function applyImportContext(TypeCheckState $state, Ast\Program $program, array $
         }
         $currentModule = $importContext['currentModule'] ?? '';
         foreach ($program->items as $item) {
-            if (!$item instanceof Ast\InstanceDecl) {
+            if (! $item instanceof Ast\InstanceDecl) {
                 continue;
             }
             $addInstance([
@@ -148,7 +153,7 @@ function registerTypeDeclarations(TypeCheckState $state, Ast\Program $program): 
         }
 
         if ($item instanceof Ast\ClassDecl) {
-            if (!isset($state->classes[$item->name])) {
+            if (! isset($state->classes[$item->name])) {
                 registerClass($state, $item, $state->currentModule ?? '');
             }
             registerClassMethodExportSchemes($state, $item);
@@ -191,19 +196,20 @@ function registerFunctionSchemesFromProgram(TypeCheckState $state, Ast\Program $
     foreach ($program->items as $item) {
         if ($item instanceof Ast\ForeignImportDecl) {
             if (isset($seenFunctions[$item->name])) {
-                throw typeFail($state, \sprintf("duplicate function `%s`", $item->name), $item);
+                throw typeFail($state, \sprintf('duplicate function `%s`', $item->name), $item);
             }
             $seenFunctions[$item->name] = true;
             registerFunctionScheme($state, foreignFunctionDecl($item));
+
             continue;
         }
 
-        if (!$item instanceof Ast\FunctionDecl) {
+        if (! $item instanceof Ast\FunctionDecl) {
             continue;
         }
 
         if (isset($seenFunctions[$item->name])) {
-            throw typeFail($state, \sprintf("duplicate function `%s`", $item->name), $item);
+            throw typeFail($state, \sprintf('duplicate function `%s`', $item->name), $item);
         }
         $seenFunctions[$item->name] = true;
 
@@ -211,7 +217,7 @@ function registerFunctionSchemesFromProgram(TypeCheckState $state, Ast\Program $
             registerFunctionScheme($state, $item);
         } elseif ($item->inferredSignatureType !== null) {
             registerInferredSignatureScheme($state, $item);
-        } elseif (!$item->signatureOnly) {
+        } elseif (! $item->signatureOnly) {
             $inferredFunctions[] = $item;
         }
     }
@@ -239,6 +245,7 @@ function projectInstancesFromProgram(Ast\Program $program, ClassDeriveFacts $fac
                 'constraints' => $item->constraints,
                 'associatedEquations' => associatedEquationsMapFromDecl($item),
             ];
+
             continue;
         }
 

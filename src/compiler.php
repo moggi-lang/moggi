@@ -3,7 +3,7 @@
 namespace Moggi\Compiler;
 
 (static function (): void {
-    $current = trim((string) ini_get('memory_limit'));
+    $current = \trim((string) \ini_get('memory_limit'));
     if ($current === '-1') {
         return;
     }
@@ -11,8 +11,9 @@ namespace Moggi\Compiler;
         if ($v === '') {
             return 0;
         }
-        $unit = strtolower($v[strlen($v) - 1]);
+        $unit = \strtolower($v[\strlen($v) - 1]);
         $n = (int) $v;
+
         return match ($unit) {
             'g' => $n * 1024 * 1024 * 1024,
             'm' => $n * 1024 * 1024,
@@ -21,7 +22,7 @@ namespace Moggi\Compiler;
         };
     })($current);
     if ($bytes > 0 && $bytes < 1024 * 1024 * 1024) {
-        ini_set('memory_limit', '1024M');
+        \ini_set('memory_limit', '1024M');
     }
 })();
 
@@ -224,28 +225,34 @@ require __DIR__ . '/cli/commands/lsp.php';
 require __DIR__ . '/cli/commands/version.php';
 require __DIR__ . '/cli/main.php';
 
-use Moggi\Pipeline\CompilePurpose;
-use function Moggi\Pipeline\entryPurpose;
-use Moggi\Pipeline\PipelineRequest;
-use Moggi\Pipeline\PipelineStage;
-use Moggi\Semantics\Types\TypeError;
-use Moggi\Syntax\Ast\Program;
-use Moggi\Syntax\Lexer\LexError;
-use Moggi\Syntax\Parser\ParseError;
-
 use function Moggi\Backend\setCompileBackend;
+use function Moggi\IR\Dump\dump as dumpIr;
 use function Moggi\Modules\compileModuleFile;
 use function Moggi\Modules\compileModuleFileOutputs;
 use function Moggi\Modules\isModuleSourceProgram;
 use function Moggi\Modules\moduleCompileContext;
+use function Moggi\Pipeline\entryPurpose;
+
+use Moggi\Pipeline\PipelineRequest;
+use Moggi\Pipeline\PipelineStage;
+
 use function Moggi\Pipeline\printModeNames;
 use function Moggi\Pipeline\run as pipelineRun;
-use function Moggi\Semantics\Effects\checkAndNormalize;
-use function Moggi\IR\Dump\dump as dumpIr;
+
+use Moggi\Semantics\Types\TypeError;
+
 use function Moggi\Syntax\Ast\dump as dumpAst;
+
+use Moggi\Syntax\Ast\Program;
+
 use function Moggi\Syntax\Lexer\dump as dumpTokens;
 use function Moggi\Syntax\Lexer\lex;
+
+use Moggi\Syntax\Lexer\LexError;
+
 use function Moggi\Syntax\Parser\parse;
+
+use Moggi\Syntax\Parser\ParseError;
 
 /**
  * The mode the compiler entry points accept: `php` and `emit` are the same run, the artifact, and
@@ -342,7 +349,7 @@ function compile(string $source, string $filename, string $mode = 'php', bool $o
 function compileFile(string $path, string $mode = 'php', bool $optimize = true, ?string $outputFile = null, ?string $backend = null): string|array
 {
     applyCompileBackend($backend);
-    $source = file_get_contents($path);
+    $source = \file_get_contents($path);
     if ($source === false) {
         throw new \RuntimeException("cannot read {$path}");
     }
@@ -369,8 +376,9 @@ function compileFileCapturingErrors(string $path, string $mode = 'php', bool $op
         if (\is_array($output)) {
             $php = '';
             foreach ($output as $rel => $bytes) {
-                if (\is_string($rel) && \is_string($bytes) && str_ends_with($rel, '.php') && !str_ends_with($rel, '.moggi.map')) {
+                if (\is_string($rel) && \is_string($bytes) && \str_ends_with($rel, '.php') && ! \str_ends_with($rel, '.moggi.map')) {
                     $php = $bytes;
+
                     break;
                 }
             }
@@ -378,9 +386,9 @@ function compileFileCapturingErrors(string $path, string $mode = 'php', bool $op
                 $output = $php;
             } else {
                 $output = \implode("\n", \array_map(
-                    static fn (string $rel, string $bytes): string => $rel . ' (' . strlen($bytes) . ' bytes)',
+                    static fn (string $rel, string $bytes): string => $rel . ' (' . \strlen($bytes) . ' bytes)',
                     \array_keys($output),
-                    array_values($output),
+                    \array_values($output),
                 )) . "\n";
             }
         }
@@ -405,7 +413,7 @@ function compileFileCapturingErrorsBoth(string $path, bool $optimize = true, ?st
 {
     try {
         applyCompileBackend($backend);
-        $source = file_get_contents($path);
+        $source = \file_get_contents($path);
         if ($source === false) {
             throw new \RuntimeException("cannot read {$path}");
         }

@@ -15,18 +15,18 @@
 // generator's policy, Phase 3, not this test's.
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
 require $root . '/tests/suite/support/workspace.php';
 
+use function Moggi\Backend\DotNet\resolveDotnetExecutable;
 use function Moggi\Backend\DotNet\Verify\ensureInspectorBinary;
 use function Moggi\Backend\DotNet\Verify\inspectDotNetType;
-use function Moggi\Backend\DotNet\resolveDotnetExecutable;
 
 $assert = static function (bool $condition, string $message): void {
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
@@ -39,6 +39,7 @@ $inspector = ensureInspectorBinary($dotnet);
 $assert($inspector !== null, 'the round-trip needs the inspector built');
 
 $work = createTempDir('moggi-dotnet-roundtrip');
+
 try {
     // --- generate: inspector answers in, sidecar out, nothing hand-tuned ----
     $intTable = inspectDotNetType($dotnet, $inspector, 'System.Int32');
@@ -56,6 +57,7 @@ try {
         if (\count($params) === 2 && $params[0] === 'string'
             && \str_contains($params[1], 'IFormatProvider')) {
             $parseParams = $params;
+
             break;
         }
     }
@@ -67,6 +69,7 @@ try {
         $params = $overload['params'] ?? [];
         if ($params === ['int32', 'int32']) {
             $maxParams = $params;
+
             break;
         }
     }

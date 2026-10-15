@@ -56,7 +56,7 @@ function runShardMode(array $cases, array $backends, array $pathFilters): int
     $failed = false;
 
     foreach ($backends as $backend) {
-        if (!isset($grouped[$backend])) {
+        if (! isset($grouped[$backend])) {
             continue;
         }
 
@@ -100,7 +100,7 @@ function workerEmitCase(string $backend, CaseResult $result): void
 function ingestWorkerLine(array &$stream, int $shard, string $line): void
 {
     $event = \json_decode($line, true);
-    if (!\is_array($event)) {
+    if (! \is_array($event)) {
         return;
     }
 
@@ -124,12 +124,12 @@ function ingestWorkerLine(array &$stream, int $shard, string $line): void
     $stream['merged'][$backend][$position] = $result;
 
     $multi = ($stream['multiBackend'] ?? false) === true;
-    if (!progressReported() && $result->status !== 'not-applicable') {
+    if (! progressReported() && $result->status !== 'not-applicable') {
         suiteEcho(renderCaseLine($result, $multi ? $backend : null));
     }
 
     // The parent is the only thing a pool run prints, so the block is fed from the stream here.
-    if (!($stream['announced'][$backend] ?? false)) {
+    if (! ($stream['announced'][$backend] ?? false)) {
         $stream['announced'][$backend] = true;
         progressPlan($stream['planByBackend'][$backend] ?? [], $multi ? $backend : null);
     }
@@ -145,7 +145,7 @@ function ingestWorkerLine(array &$stream, int $shard, string $line): void
  * The `--jobs N` pool: dispatch the shards, merge what they stream back, and hand out one result set
  * per backend, ordered as the selection is.
  */
-final class ShardPool
+final class parallel
 {
     /** @var array<string, array<int, CaseResult>>|null backend => position in the selection => result */
     private ?array $merged = null;
@@ -398,6 +398,7 @@ function shardWorkerCommand(int $shard, int $jobs): array
         $arg = (string) $argv[$i];
         if ($arg === '--jobs' || $arg === '-j' || $arg === '--shard' || $arg === '--log') {
             ++$i;
+
             continue;
         }
         if ($arg === '--json' || \str_starts_with($arg, '--log=')) {

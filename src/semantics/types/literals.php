@@ -2,15 +2,16 @@
 
 namespace Moggi\Semantics\Types;
 
+use function Moggi\Semantics\Kernel\literalRole;
+use function Moggi\Semantics\Kinds\canonicalTypeConName;
+
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TDouble;
 use Moggi\Semantics\TypeExpr\TInt;
 use Moggi\Semantics\TypeExpr\TVar;
+
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Syntax\Ast;
-
-use function Moggi\Semantics\Kernel\literalRole;
-use function Moggi\Semantics\Kinds\canonicalTypeConName;
 
 /**
  * An integer literal denotes the value `fromInteger` returns for the integer it
@@ -125,6 +126,7 @@ function defaultAmbiguousNumericVars(TypeCheckState $state, Ast\AstNode $body, a
         foreach (numericDefaultTypes() as $candidate) {
             if (constraintsHoldAtType($state, $defaultable, $name, $candidate)) {
                 unify($state, new TVar($name), $candidate);
+
                 break;
             }
         }
@@ -161,6 +163,7 @@ function defaultableConstraintsOnVar(TypeCheckState $state, array $constraints, 
                 $arg = prune($state, $arg);
                 if ($arg instanceof TVar && $arg->name === $varName) {
                     $whole = true;
+
                     continue;
                 }
                 if (isset(signatureVarsInType($arg, $known)[$varName])) {

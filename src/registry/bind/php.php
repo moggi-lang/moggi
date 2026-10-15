@@ -2,17 +2,22 @@
 
 namespace Moggi\Registry\Bind;
 
+use function Moggi\Backend\DotNet\Dependencies\dotNetSidecarDiscriminator;
+
 use Moggi\Backend\Jvm\JvmBackend;
+
+use function Moggi\Backend\Php\Dependencies\phpDeclaredSymbols;
+
 use Moggi\Backend\Php\PhpBackend;
+
+use function Moggi\Cache\runtimeCacheDir;
+
 use ReflectionClass;
 use ReflectionFunction;
+
 use ReflectionFunctionAbstract;
 use ReflectionNamedType;
 use ReflectionType;
-
-use function Moggi\Backend\DotNet\Dependencies\dotNetSidecarDiscriminator;
-use function Moggi\Backend\Php\Dependencies\phpDeclaredSymbols;
-use function Moggi\Cache\runtimeCacheDir;
 
 /**
  * The PHP side of `moggi bind`: read a Composer-style tree on disk and describe
@@ -46,7 +51,7 @@ const PHP_BIND_SCALARS = [
  */
 function parsePhpCoordinate(string $coordinate): array
 {
-    $parts = explode('/', $coordinate, 2);
+    $parts = \explode('/', $coordinate, 2);
     if (\count($parts) !== 2 || $parts[0] === '' || $parts[1] === '') {
         throw new \RuntimeException(
             "cannot bind `{$coordinate}` — a Composer coordinate is `vendor/package`",
@@ -71,7 +76,7 @@ function phpSegmentToModule(string $segment): string
 function phpBindModuleName(string $vendor, string $package): string
 {
     $segments = ['Composer', phpSegmentToModule($vendor)];
-    foreach (explode('/', $package) as $part) {
+    foreach (\explode('/', $package) as $part) {
         $segments[] = phpSegmentToModule($part);
     }
 
@@ -82,7 +87,7 @@ function phpBindModuleName(string $vendor, string $package): string
 function phpNamespacePrefix(string $vendor, string $package): string
 {
     $prefix = phpSegmentToModule($vendor);
-    foreach (explode('/', $package) as $part) {
+    foreach (\explode('/', $package) as $part) {
         $prefix .= '\\' . phpSegmentToModule($part);
     }
 
@@ -125,7 +130,7 @@ function phpNamespacePrefixes(string $root, string $vendor, string $package): ar
     $prefixes = [phpNamespacePrefix($vendor, $package)];
     foreach (phpPackageComposerFiles($root, $vendor, $package) as $composerFile) {
         $raw = @\file_get_contents($composerFile);
-        if (!\is_string($raw) || $raw === '') {
+        if (! \is_string($raw) || $raw === '') {
             continue;
         }
 
@@ -135,7 +140,7 @@ function phpNamespacePrefixes(string $root, string $vendor, string $package): ar
             continue;
         }
 
-        if (!\is_array($composer)) {
+        if (! \is_array($composer)) {
             continue;
         }
 
@@ -147,19 +152,19 @@ function phpNamespacePrefixes(string $root, string $vendor, string $package): ar
 
         $autoload = $composer['autoload'] ?? null;
 
-        if (!\is_array($autoload)) {
+        if (! \is_array($autoload)) {
             continue;
         }
 
         $psr4 = $autoload['psr-4'] ?? null;
 
-        if (!\is_array($psr4)) {
+        if (! \is_array($psr4)) {
             continue;
         }
 
         foreach ($psr4 as $namespace => $dirs) {
             $namespace = \trim((string) $namespace, '\\');
-            if ($namespace !== '' && !\in_array($namespace, $prefixes, true)) {
+            if ($namespace !== '' && ! \in_array($namespace, $prefixes, true)) {
                 $prefixes[] = $namespace;
             }
         }
@@ -178,6 +183,7 @@ function phpInsidePrefixes(string $symbol, array $prefixes, bool $caseInsensitiv
             ) {
                 return true;
             }
+
             continue;
         }
         if ($symbol === $candidate || \str_starts_with($symbol, $candidate . '\\')) {
@@ -224,7 +230,7 @@ function bindCacheKey(string $backend, string $coordinate): string
 function inspectPhpTree(string $treeRoot, string $vendor, string $package): array
 {
     $root = \rtrim($treeRoot, '/');
-    if (!\is_dir($root)) {
+    if (! \is_dir($root)) {
         throw new \RuntimeException("cannot bind `{$treeRoot}` — no such directory");
     }
     $prefixes = phpNamespacePrefixes($root, $vendor, $package);
@@ -244,7 +250,7 @@ function inspectPhpTree(string $treeRoot, string $vendor, string $package): arra
         );
         /** @var \SplFileInfo $file */
         foreach ($scan as $file) {
-            if (!$file->isFile() || \strtolower($file->getExtension()) !== 'php') {
+            if (! $file->isFile() || \strtolower($file->getExtension()) !== 'php') {
                 continue;
             }
 
@@ -339,7 +345,7 @@ function inspectPhpTree(string $treeRoot, string $vendor, string $package): arra
         $skip('file ' . $relative, 'not loaded: ' . ($firstLine === false ? $message : $firstLine));
     }
     foreach ($newClasses as $class) {
-        if (!phpInsidePrefixes($class, $prefixes)) {
+        if (! phpInsidePrefixes($class, $prefixes)) {
             $skip($class, $outsideReason);
 
             continue;
@@ -351,7 +357,7 @@ function inspectPhpTree(string $treeRoot, string $vendor, string $package): arra
             continue;
         }
         $short = $reflection->getShortName();
-        if (!$claim($short)) {
+        if (! $claim($short)) {
             $skip($class, "name collision on `{$short}`");
 
             continue;
@@ -377,7 +383,7 @@ function inspectPhpTree(string $treeRoot, string $vendor, string $package): arra
     }
 
     foreach ($newFunctions as $function) {
-        if (!phpInsidePrefixes($function, $prefixes, true)) {
+        if (! phpInsidePrefixes($function, $prefixes, true)) {
             $skip($function, $outsideReason);
 
             continue;
@@ -418,7 +424,7 @@ function inspectPhpMethod(
     array &$functions,
 ): void {
     $label = $class->getName() . '::' . $method->getName();
-    if (!$method->isPublic()) {
+    if (! $method->isPublic()) {
         $skip($label, 'not public');
 
         return;
@@ -428,13 +434,13 @@ function inspectPhpMethod(
 
         return;
     }
-    if (!$method->isStatic()) {
+    if (! $method->isStatic()) {
         $skip($label, 'instance methods need a handle-typed binding');
 
         return;
     }
     $moggi = \lcfirst($class->getShortName()) . \ucfirst($method->getName());
-    if (!$claim($moggi)) {
+    if (! $claim($moggi)) {
         $skip($label, "name collision on `{$moggi}`");
 
         return;
@@ -463,7 +469,7 @@ function inspectPhpFunction(
 ): void {
     $name = $display;
     $short = (string) \substr($name, (int) \strrpos($name, '\\') + 1);
-    if (!$claim($short)) {
+    if (! $claim($short)) {
         $skip($name, "name collision on `{$short}`");
 
         return;
@@ -493,7 +499,7 @@ function inspectPhpClassConst(
 ): void {
     $label = $class->getName() . '::' . $name;
     $reflection = $class->getReflectionConstant($name);
-    if ($reflection === false || !$reflection->isPublic()) {
+    if ($reflection === false || ! $reflection->isPublic()) {
         $skip($label, 'not public');
 
         return;
@@ -511,7 +517,7 @@ function inspectPhpClassConst(
         return;
     }
     $moggi = \lcfirst($class->getShortName()) . \ucfirst(\strtolower($name));
-    if (!$claim($moggi)) {
+    if (! $claim($moggi)) {
         $skip($label, "name collision on `{$moggi}`");
 
         return;
@@ -567,7 +573,7 @@ function phpMoggiIoTail(?ReflectionType $return): ?string
     if ($return === null) {
         return null;
     }
-    if ($return instanceof ReflectionNamedType && $return->getName() === 'void' && !$return->allowsNull()) {
+    if ($return instanceof ReflectionNamedType && $return->getName() === 'void' && ! $return->allowsNull()) {
         return 'IO ()';
     }
     $named = null;
@@ -579,7 +585,7 @@ function phpMoggiIoTail(?ReflectionType $return): ?string
         $named = phpNullableUnionMember($return);
         $nullable = $named !== null;
     }
-    if ($named === null || !$named->isBuiltin()) {
+    if ($named === null || ! $named->isBuiltin()) {
         return null;
     }
     $inner = PHP_BIND_SCALARS[$named->getName()] ?? null;
@@ -598,7 +604,7 @@ function phpNullableUnionMember(ReflectionUnionType $union): ?ReflectionNamedTyp
     }
     $named = null;
     foreach ($union->getTypes() as $member) {
-        if (!($member instanceof ReflectionNamedType)) {
+        if (! ($member instanceof ReflectionNamedType)) {
             return null;
         }
         if ($member->getName() === 'null') {
@@ -640,10 +646,10 @@ function phpSignatureReason(ReflectionFunctionAbstract $callable): string
 
 function phpScalarMoggiType(?ReflectionType $type): ?string
 {
-    if (!($type instanceof ReflectionNamedType) || $type->allowsNull()) {
+    if (! ($type instanceof ReflectionNamedType) || $type->allowsNull()) {
         return null;
     }
-    if (!$type->isBuiltin()) {
+    if (! $type->isBuiltin()) {
         return null;
     }
 

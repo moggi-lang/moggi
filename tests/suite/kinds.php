@@ -1,13 +1,15 @@
 <?php declare(strict_types=1);
 
 use Moggi\Backend;
-use Moggi\Pipeline\PipelineStage;
 
 use function Moggi\Compiler\compileFileCapturingErrorsBoth;
+
 use function Moggi\Modules\bundledStdlibLibPath;
-use function Moggi\Paths\canonicalSeparators;
 use function Moggi\Modules\compileProjectBoth;
 use function Moggi\Modules\projectSourceClosure;
+use function Moggi\Paths\canonicalSeparators;
+
+use Moggi\Pipeline\PipelineStage;
 
 /**
  * The kind table — the suite's whole configuration.
@@ -46,7 +48,7 @@ function testTreeKinds(): array
 /** The kinds that snapshots produce, in stage order. */
 function snapshotKinds(): array
 {
-    $stages = array_map(
+    $stages = \array_map(
         static fn (PipelineStage $stage): string => $stage->value,
         PipelineStage::cases(),
     );
@@ -81,7 +83,7 @@ function runTestCase(TestCase $case, string $backend, string $projectRoot): arra
         return ['passed' => false, 'message' => $e->getMessage()];
     }
 
-    if (($outcome['passed'] ?? false) !== true || !nativeSmokeRequested($case, $backend)) {
+    if (($outcome['passed'] ?? false) !== true || ! nativeSmokeRequested($case, $backend)) {
         return $outcome;
     }
 
@@ -96,7 +98,7 @@ function nativeSmokeRequested(TestCase $case, string $backend): bool
     global $testArgs;
 
     return ($testArgs['native'] ?? false) === true
-        && !$case->scriptCase
+        && ! $case->scriptCase
         && \dirname(testRelativePath($case->input)) === nativeSmokeFixture()
         && nativeToolchainLabel($backend) !== null;
 }
@@ -144,7 +146,7 @@ function runProgramVerdict(TestCase $case): array
 {
     if ($case->goldenBeside($case->base(), 'stdout', Backend\compileBackend()) === null
         && $case->goldenBeside($case->base(), 'stderr', Backend\compileBackend()) === null
-        && !\is_file($case->base() . '.exec.php')) {
+        && ! \is_file($case->base() . '.exec.php')) {
         return ['passed' => true, 'message' => ''];
     }
 
@@ -205,7 +207,7 @@ function entryArtifact(mixed $outputs, string $input, string $suffix): string
     if (\is_string($outputs)) {
         return $outputs;
     }
-    if (!\is_array($outputs)) {
+    if (! \is_array($outputs)) {
         throw new TestFailure("no artifact produced for {$input}");
     }
 
@@ -224,7 +226,7 @@ function entryArtifact(mixed $outputs, string $input, string $suffix): string
     }
     foreach ($outputs as $relative => $bytes) {
         if (\is_string($relative) && \is_string($bytes)
-            && !\str_starts_with($relative, 'lib/') && \str_ends_with($relative, $suffix)) {
+            && ! \str_starts_with($relative, 'lib/') && \str_ends_with($relative, $suffix)) {
             return $bytes;
         }
     }
@@ -297,14 +299,14 @@ function compareProjectSnapshots(TestCase $case, string $backend): void
         $key = \ltrim(\substr(canonicalSeparators($base), \strlen($root)), '/');
         if ($case->goldenBeside($base, 'opt-ir', $backend) !== null) {
             $artifact = $emitted['opt-ir'][$key . '.opt-ir'] ?? null;
-            if (!\is_string($artifact)) {
+            if (! \is_string($artifact)) {
                 throw new TestFailure("{$case->name}: no opt-ir output for {$key}");
             }
             assertSameOutput($case->name, $case->goldenBeside($base, 'opt-ir', $backend), $artifact, 'opt-ir');
         }
         if ($case->goldenBeside($base, 'emit', $backend) !== null) {
             $artifact = $emitted['emit'][$key . '.php'] ?? null;
-            if (!\is_string($artifact)) {
+            if (! \is_string($artifact)) {
                 throw new TestFailure("{$case->name}: no emit output for {$key}");
             }
             assertSameOutput($case->name, $case->goldenBeside($base, 'emit', $backend), $artifact, 'emit');

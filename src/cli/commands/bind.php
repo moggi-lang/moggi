@@ -14,8 +14,8 @@ use function Moggi\Registry\Bind\parsePhpCoordinate;
 use function Moggi\Registry\Bind\renderBinding;
 use function Moggi\Registry\Bind\renderFacade;
 use function Moggi\Registry\Bind\writeBinding;
-use function Moggi\Registry\Bind\writeFacade;
 use function Moggi\Registry\Bind\writeDotNetBinding;
+use function Moggi\Registry\Bind\writeFacade;
 use function Moggi\Registry\prettyJson;
 
 /**

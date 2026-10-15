@@ -2,7 +2,7 @@
 <?php declare(strict_types=1);
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 
@@ -18,16 +18,16 @@ function assertEq(mixed $expected, mixed $actual, string $label): void
     global $failures;
     if ($expected !== $actual) {
         ++$failures;
-        fwrite(STDERR, "FAIL {$label}\n  expected: " . var_export($expected, true) . "\n  actual:   " . var_export($actual, true) . "\n");
+        \fwrite(STDERR, "FAIL {$label}\n  expected: " . \var_export($expected, true) . "\n  actual:   " . \var_export($actual, true) . "\n");
     }
 }
 
 function assertTrue(bool $value, string $label): void
 {
-    if (!$value) {
+    if (! $value) {
         global $failures;
         ++$failures;
-        fwrite(STDERR, "FAIL {$label}\n");
+        \fwrite(STDERR, "FAIL {$label}\n");
     }
 }
 
@@ -102,8 +102,8 @@ assertEq(
 );
 
 $emph = Docs\renderDocMarkup('/emphasized/ text and __bold__ words');
-assertTrue(str_contains($emph, '<em>emphasized</em>'), 'emph markup');
-assertTrue(str_contains($emph, '<strong>bold</strong>'), 'bold markup');
+assertTrue(\str_contains($emph, '<em>emphasized</em>'), 'emph markup');
+assertTrue(\str_contains($emph, '<strong>bold</strong>'), 'bold markup');
 
 $parserSource = <<<'MOG'
 -- | Module from parser.
@@ -154,11 +154,11 @@ MOG;
 $program = parseModule($exportSource, 'ExportTest.mog');
 $parsed = ['Docs.ExportTest' => new Docs\ParsedModule('Docs.ExportTest', 'ExportTest.mog', $exportSource, $program)];
 $publicIndex = Docs\buildIndex($parsed);
-$names = array_map(static fn ($e) => $e->name, $publicIndex->all);
-assertTrue(in_array('publicFn', $names, true), 'export filter keeps publicFn');
-assertTrue(in_array('PubCtor', $names, true), 'export filter keeps exported ctor');
-assertTrue(!in_array('privateFn', $names, true), 'export filter hides privateFn');
-assertTrue(!in_array('HiddenCtor', $names, true), 'export filter hides hidden ctor');
+$names = \array_map(static fn ($e) => $e->name, $publicIndex->all);
+assertTrue(\in_array('publicFn', $names, true), 'export filter keeps publicFn');
+assertTrue(\in_array('PubCtor', $names, true), 'export filter keeps exported ctor');
+assertTrue(! \in_array('privateFn', $names, true), 'export filter hides privateFn');
+assertTrue(! \in_array('HiddenCtor', $names, true), 'export filter hides hidden ctor');
 
 $classHomeSource = <<<'MOG'
 module Docs.ClassHome where
@@ -196,24 +196,24 @@ assertEq('Docs.ClassHome', $homes[0]->module ?? null, 'class re-export resolves 
 $fixture = __DIR__ . '/../fixture';
 $index = Docs\loadOrBuildIndex($fixture, [], true);
 $typeHits = Docs\search($index, 'a -> a', 5);
-assertTrue(count($typeHits) > 0, 'type search finds id');
+assertTrue(\count($typeHits) > 0, 'type search finds id');
 assertEq('id', $typeHits[0]->entity->name, 'type search top hit is id');
 
 $listHit = Docs\search($index, '[a] -> [a]', 5);
-assertTrue(count($listHit) > 0, 'list sugar type search');
+assertTrue(\count($listHit) > 0, 'list sugar type search');
 
 $stringMiss = Docs\search($index, '[Char] -> Int', 5);
 foreach ($stringMiss as $hit) {
-    if ($hit->entity->name === 'id' && str_contains((string) $hit->entity->signature, 'String')) {
+    if ($hit->entity->name === 'id' && \str_contains((string) $hit->entity->signature, 'String')) {
         assertTrue(false, 'String must not match [Char]');
     }
 }
 
 assertTrue(Docs\isBackendImplModule('Data.ByteString.PHP'), 'backend suffix detection');
-assertTrue(!Docs\isBackendImplModule('Moggi.Internal.Prim'), 'internal is not backend impl suffix');
+assertTrue(! Docs\isBackendImplModule('Moggi.Internal.Prim'), 'internal is not backend impl suffix');
 
 $moduleHits = Docs\search($index, 'is:module', 10);
-assertTrue(count($moduleHits) > 0, 'is:module filter returns hits');
+assertTrue(\count($moduleHits) > 0, 'is:module filter returns hits');
 assertEq('module', $moduleHits[0]->entity->kind, 'is:module filter kind');
 
 $sectionSource = <<<'MOG'
@@ -255,12 +255,13 @@ $libProject = Docs\loadDocProject($root . '/libraries/base/src');
 \Moggi\Cache\setCacheEnabled(true);
 $libIndex = Docs\buildIndex($libProject['modules'], $libProject['prepared']->checked, $libProject['prepared']);
 assertTrue(isset($libIndex->byModule['Moggi.Internal.Prim']), 'Moggi.Internal.Prim is indexed');
-$primNames = array_map(static fn ($e) => $e->name, $libIndex->byModule['Moggi.Internal.Prim']);
-assertTrue(in_array('stringAppend#', $primNames, true), 'Prim exports stringAppend#');
+$primNames = \array_map(static fn ($e) => $e->name, $libIndex->byModule['Moggi.Internal.Prim']);
+assertTrue(\in_array('stringAppend#', $primNames, true), 'Prim exports stringAppend#');
 $fixEntity = null;
 foreach ($libIndex->byModule['Moggi.Internal.Prim'] as $entity) {
     if ($entity->name === 'fix#') {
         $fixEntity = $entity;
+
         break;
     }
 }
@@ -277,12 +278,12 @@ $maybeHtml = Docs\renderModulePage(
     [],
     $libIndex,
 );
-assertTrue(str_contains($maybeHtml, 'data Maybe'), 'Maybe shows data signature');
-assertTrue(str_contains($maybeHtml, 'Constructors'), 'Maybe shows Constructors subsection');
-assertTrue(str_contains($maybeHtml, 'Instances'), 'Maybe shows Instances subsection');
-assertTrue(str_contains($maybeHtml, 'Nothing'), 'Maybe lists Nothing ctor');
-assertTrue(str_contains($maybeHtml, 'Just'), 'Maybe lists Just ctor');
-assertTrue(str_contains($maybeHtml, 'instance Functor Maybe'), 'Maybe lists Functor instance');
+assertTrue(\str_contains($maybeHtml, 'data Maybe'), 'Maybe shows data signature');
+assertTrue(\str_contains($maybeHtml, 'Constructors'), 'Maybe shows Constructors subsection');
+assertTrue(\str_contains($maybeHtml, 'Instances'), 'Maybe shows Instances subsection');
+assertTrue(\str_contains($maybeHtml, 'Nothing'), 'Maybe lists Nothing ctor');
+assertTrue(\str_contains($maybeHtml, 'Just'), 'Maybe lists Just ctor');
+assertTrue(\str_contains($maybeHtml, 'instance Functor Maybe'), 'Maybe lists Functor instance');
 
 $boolHtml = Docs\renderModulePage(
     'Data.Bool',
@@ -290,13 +291,13 @@ $boolHtml = Docs\renderModulePage(
     [],
     $libIndex,
 );
-assertTrue(str_contains($boolHtml, 'data Bool'), 'Bool shows data head');
-assertTrue(str_contains($boolHtml, 'Constructors'), 'Bool shows Constructors subsection');
-assertTrue(str_contains($boolHtml, 'Instances'), 'Bool shows Instances subsection');
-assertTrue(str_contains($boolHtml, 'instance Eq Bool'), 'Bool lists Eq instance');
-assertTrue(str_contains($boolHtml, 'Operations'), 'Bool groups functions under Operations');
-assertTrue(str_contains($boolHtml, 'infixr 3'), 'Bool shows && fixity');
-assertTrue(str_contains($boolHtml, '# Source</a>'), 'Bool shows source links');
+assertTrue(\str_contains($boolHtml, 'data Bool'), 'Bool shows data head');
+assertTrue(\str_contains($boolHtml, 'Constructors'), 'Bool shows Constructors subsection');
+assertTrue(\str_contains($boolHtml, 'Instances'), 'Bool shows Instances subsection');
+assertTrue(\str_contains($boolHtml, 'instance Eq Bool'), 'Bool lists Eq instance');
+assertTrue(\str_contains($boolHtml, 'Operations'), 'Bool groups functions under Operations');
+assertTrue(\str_contains($boolHtml, 'infixr 3'), 'Bool shows && fixity');
+assertTrue(\str_contains($boolHtml, '# Source</a>'), 'Bool shows source links');
 
 $stringHtml = Docs\renderModulePage(
     'Data.String',
@@ -304,10 +305,10 @@ $stringHtml = Docs\renderModulePage(
     [],
     $libIndex,
 );
-assertTrue(substr_count($stringHtml, 'id="v-Data.String.lines"') === 1, 'lines appears once on Data.String');
-assertTrue(str_contains($stringHtml, 'lines :: String -&gt; [String]'), 'lines uses list syntax');
-assertTrue(!str_contains($stringHtml, 'operation lines'), 'no redundant operation label line');
-assertTrue(!str_contains($stringHtml, 'type synonym String'), 'no redundant type synonym label line');
+assertTrue(\substr_count($stringHtml, 'id="v-Data.String.lines"') === 1, 'lines appears once on Data.String');
+assertTrue(\str_contains($stringHtml, 'lines :: String -&gt; [String]'), 'lines uses list syntax');
+assertTrue(! \str_contains($stringHtml, 'operation lines'), 'no redundant operation label line');
+assertTrue(! \str_contains($stringHtml, 'type synonym String'), 'no redundant type synonym label line');
 
 $ordHtml = Docs\renderModulePage(
     'Data.Ord',
@@ -315,11 +316,11 @@ $ordHtml = Docs\renderModulePage(
     [],
     $libIndex,
 );
-assertTrue(str_contains($ordHtml, 'comparing :: Ord b =&gt;'), 'Ord comparing shows surface constraints');
-assertTrue(!str_contains($ordHtml, '__Dict_'), 'Ord page hides compiler dict types');
-assertTrue(substr_count($ordHtml, '# Source</a>') >= 5, 'Ord operations and methods show source links');
-assertTrue(str_contains($ordHtml, 'id="v-Data.Ord.comparing"'), 'Ord comparing is indexed');
-assertTrue(str_contains($ordHtml, 'src/Data-Ord.mog.html#L57'), 'Ord comparing links to source line');
+assertTrue(\str_contains($ordHtml, 'comparing :: Ord b =&gt;'), 'Ord comparing shows surface constraints');
+assertTrue(! \str_contains($ordHtml, '__Dict_'), 'Ord page hides compiler dict types');
+assertTrue(\substr_count($ordHtml, '# Source</a>') >= 5, 'Ord operations and methods show source links');
+assertTrue(\str_contains($ordHtml, 'id="v-Data.Ord.comparing"'), 'Ord comparing is indexed');
+assertTrue(\str_contains($ordHtml, 'src/Data-Ord.mog.html#L57'), 'Ord comparing links to source line');
 
 $dictScheme = new \Moggi\Semantics\TypeExpr\Scheme(
     new \Moggi\Semantics\TypeExpr\TArrow(
@@ -337,7 +338,7 @@ $dictScheme = new \Moggi\Semantics\TypeExpr\Scheme(
     2,
     [],
 );
-assertTrue(!str_contains(Docs\schemeToString($dictScheme), '__Dict_'), 'schemeToString hides dict arrows');
+assertTrue(! \str_contains(Docs\schemeToString($dictScheme), '__Dict_'), 'schemeToString hides dict arrows');
 
 $appSource = <<<'MOG'
 module Docs.ApplicativeFixture where
@@ -372,13 +373,13 @@ $appHtml = Docs\renderModulePage(
     [],
     $appIndex,
 );
-assertTrue(str_contains($appHtml, 'class Applicative f =&gt; Alternative f where'), 'class shows full header');
-assertTrue(str_contains($appHtml, 'empty :: f a'), 'class method signature under class');
-assertTrue(!str_contains($appHtml, 'methodempty'), 'no cramped method label');
-assertTrue(str_contains($appHtml, 'Operations'), 'top-level ops grouped under Operations');
-assertTrue(str_contains($appHtml, '*&gt; :: Applicative f'), 'top-level ops show signature');
+assertTrue(\str_contains($appHtml, 'class Applicative f =&gt; Alternative f where'), 'class shows full header');
+assertTrue(\str_contains($appHtml, 'empty :: f a'), 'class method signature under class');
+assertTrue(! \str_contains($appHtml, 'methodempty'), 'no cramped method label');
+assertTrue(\str_contains($appHtml, 'Operations'), 'top-level ops grouped under Operations');
+assertTrue(\str_contains($appHtml, '*&gt; :: Applicative f'), 'top-level ops show signature');
 assertTrue(isset($libIndex->byModule['Prelude']), 'Prelude module page is indexed');
-assertTrue(count($libIndex->byModule['Prelude']) > 10, 'Prelude lists re-exported symbols');
+assertTrue(\count($libIndex->byModule['Prelude']) > 10, 'Prelude lists re-exported symbols');
 assertTrue(isset($libIndex->byModule['Data.String']), 'facade modules stay indexed');
 
 $bsBackends = $libIndex->facadeBackends['Data.ByteString'] ?? [];
@@ -389,12 +390,12 @@ $bsHtml = Docs\renderModulePage(
     [],
     $libIndex,
 );
-assertTrue(str_contains($bsHtml, 'Backends:'), 'facade page shows backends');
-assertTrue(str_contains($bsHtml, 'PHP · JVM · .NET'), 'facade shows backend labels without links');
-assertTrue(!str_contains($bsHtml, 'Data-ByteString-PHP.html'), 'facade does not link backend impl pages');
-assertTrue(!isset($libIndex->byModule['Data.ByteString.PHP']), 'backend impl modules are not indexed');
-assertTrue(!isset($libIndex->byModule['Data.String.PHP']), 'backend impl modules are not indexed');
-assertTrue(!isset($libIndex->byModule['Platform.JVM']), 'backend impl modules are not indexed');
+assertTrue(\str_contains($bsHtml, 'Backends:'), 'facade page shows backends');
+assertTrue(\str_contains($bsHtml, 'PHP · JVM · .NET'), 'facade shows backend labels without links');
+assertTrue(! \str_contains($bsHtml, 'Data-ByteString-PHP.html'), 'facade does not link backend impl pages');
+assertTrue(! isset($libIndex->byModule['Data.ByteString.PHP']), 'backend impl modules are not indexed');
+assertTrue(! isset($libIndex->byModule['Data.String.PHP']), 'backend impl modules are not indexed');
+assertTrue(! isset($libIndex->byModule['Platform.JVM']), 'backend impl modules are not indexed');
 
 $semiHtml = Docs\renderModulePage(
     'Data.Semigroup',
@@ -402,17 +403,17 @@ $semiHtml = Docs\renderModulePage(
     [],
     $libIndex,
 );
-$maxPos = strpos($semiHtml, 'id="v-Data.Semigroup.Max"');
-$maxCtorPos = strpos($semiHtml, 'id="v-Data.Semigroup.Max.Max"');
-$getMaxPos = strpos($semiHtml, 'id="v-Data.Semigroup.getMax"');
+$maxPos = \strpos($semiHtml, 'id="v-Data.Semigroup.Max"');
+$maxCtorPos = \strpos($semiHtml, 'id="v-Data.Semigroup.Max.Max"');
+$getMaxPos = \strpos($semiHtml, 'id="v-Data.Semigroup.getMax"');
 assertTrue($maxPos !== false && $getMaxPos !== false, 'Semigroup Max/getMax anchors exist');
 assertTrue($maxCtorPos !== false, 'Semigroup Max constructor has distinct anchor');
-assertEq(1, substr_count($semiHtml, 'id="v-Data.Semigroup.Max"'), 'data Max anchor is unique');
-$instancesPos = strpos($semiHtml, 'Instances', $maxPos);
+assertEq(1, \substr_count($semiHtml, 'id="v-Data.Semigroup.Max"'), 'data Max anchor is unique');
+$instancesPos = \strpos($semiHtml, 'Instances', $maxPos);
 assertTrue($instancesPos !== false && $instancesPos < $getMaxPos, 'Max instances stay under Max data');
 assertTrue(
-    substr_count(
-        substr($semiHtml, $getMaxPos, $getMaxPos > 0 ? 600 : 0),
+    \substr_count(
+        \substr($semiHtml, $getMaxPos, $getMaxPos > 0 ? 600 : 0),
         'Instances',
     ) === 0,
     'getMax block does not include Max instances',
@@ -422,14 +423,14 @@ $emptyIndex = Docs\indexFromJson([
     'version' => Docs\docIndexSchemaVersion(),
     'modules' => [],
 ]);
-assertEq(0, count($emptyIndex->search), 'indexFromJson tolerates missing search key');
+assertEq(0, \count($emptyIndex->search), 'indexFromJson tolerates missing search key');
 
 assertTrue(
     Docs\pathIsUnderDocRoot('/tmp/docs/index.html', '/tmp/docs'),
     'pathIsUnderDocRoot accepts files under root',
 );
 assertTrue(
-    !Docs\pathIsUnderDocRoot('/etc/passwd', '/tmp/docs'),
+    ! Docs\pathIsUnderDocRoot('/etc/passwd', '/tmp/docs'),
     'pathIsUnderDocRoot rejects paths outside root',
 );
 
@@ -460,7 +461,7 @@ MOG, 'Two.mog'),
     ),
 ]);
 $collisionTargets = Docs\buildLinkTargets($collisionIndex);
-assertTrue(!isset($collisionTargets['x']), 'ambiguous bare link targets are omitted');
+assertTrue(! isset($collisionTargets['x']), 'ambiguous bare link targets are omitted');
 assertTrue(isset($collisionTargets['Docs.One.x']), 'qualified link target kept for Docs.One.x');
 assertTrue(isset($collisionTargets['Docs.Two.x']), 'qualified link target kept for Docs.Two.x');
 
@@ -468,12 +469,13 @@ $extraLibDir = __DIR__ . '/fixture-extra';
 $appDir = __DIR__ . '/fixture-app';
 $appProject = Docs\loadDocProject($appDir, [$extraLibDir]);
 assertTrue(isset($appProject['prepared']->units['Lib.Extra']), 'loadDocProject type-checks --lib modules');
-assertTrue(!isset($appProject['modules']['Lib.Extra']), 'a --lib module is not documented');
+assertTrue(! isset($appProject['modules']['Lib.Extra']), 'a --lib module is not documented');
 assertTrue(isset($appProject['modules']['Docs.App']), 'loadDocProject indexes app modules');
 
 foreach ($libIndex->byModule['Prelude'] as $entity) {
     if ($entity->name === 'map' && $entity->kind === 'value') {
-        assertTrue(str_starts_with($entity->href, 'Prelude.html#'), 'Prelude re-export href stays on facade page');
+        assertTrue(\str_starts_with($entity->href, 'Prelude.html#'), 'Prelude re-export href stays on facade page');
+
         break;
     }
 }
@@ -484,8 +486,8 @@ $preludeMaybeHtml = Docs\renderModulePage(
     Docs\buildLinkTargets($libIndex),
     $libIndex,
 );
-assertTrue(str_contains($preludeMaybeHtml, 'Constructors'), 'Prelude re-exported types include constructors');
-assertTrue(str_contains($preludeMaybeHtml, 'Just'), 'Prelude Maybe shows Just constructor');
+assertTrue(\str_contains($preludeMaybeHtml, 'Constructors'), 'Prelude re-exported types include constructors');
+assertTrue(\str_contains($preludeMaybeHtml, 'Just'), 'Prelude Maybe shows Just constructor');
 
 $instanceDocSource = <<<'MOG'
 module Docs.InstanceDoc where
@@ -547,20 +549,20 @@ assertEq(9, $program->line, 'Program line preserved after moduleDoc field');
 
 $ctorLink = Docs\resolveDocLink('Data.Semigroup#Max.Max', []);
 assertTrue(
-    $ctorLink !== null && str_contains($ctorLink, '#v-Data.Semigroup.Max.Max'),
+    $ctorLink !== null && \str_contains($ctorLink, '#v-Data.Semigroup.Max.Max'),
     'resolveDocLink uses ctor-qualified anchors',
 );
 
-$tmp = tempnam(sys_get_temp_dir(), 'moggi-fp-');
-file_put_contents($tmp, "module A where\n");
+$tmp = \tempnam(\sys_get_temp_dir(), 'moggi-fp-');
+\file_put_contents($tmp, "module A where\n");
 $fp1 = Docs\docSourceFingerprint([$tmp]);
-file_put_contents($tmp, "module A where\nx = 1\n");
+\file_put_contents($tmp, "module A where\nx = 1\n");
 $fp2 = Docs\docSourceFingerprint([$tmp]);
 assertTrue($fp1 !== $fp2, 'docSourceFingerprint tracks content changes');
-@unlink($tmp);
+@\unlink($tmp);
 
 try {
-    \Moggi\Syntax\Lexer\lex("{-| unterminated", 'Bad.mog');
+    \Moggi\Syntax\Lexer\lex('{-| unterminated', 'Bad.mog');
     assertTrue(false, 'unterminated block doc should error');
 } catch (\Moggi\Syntax\Lexer\LexError) {
     // expected
@@ -575,8 +577,8 @@ import Prelude
 x = 1
 MOG;
 $importDocProgram = parseModule($importDocSource, 'ImportDoc.mog');
-assertEq(1, count($importDocProgram->imports), 'doc before import stays in imports');
-assertEq(1, count($importDocProgram->items), 'doc before import is not a top-level item');
+assertEq(1, \count($importDocProgram->imports), 'doc before import stays in imports');
+assertEq(1, \count($importDocProgram->items), 'doc before import is not a top-level item');
 
 $ctorDocSource = <<<'MOG'
 module Docs.CtorDoc where
@@ -628,8 +630,8 @@ $fixityModuleHtml = Docs\renderModulePage(
     Docs\buildLinkTargets($fixityIndex),
     $fixityIndex,
 );
-assertTrue(str_contains($fixityModuleHtml, 'Left-associative addition.'), 'fixity doc appears on module page');
-assertTrue(str_contains($fixityModuleHtml, 'infixl 6 +'), 'fixity declaration appears on module page');
+assertTrue(\str_contains($fixityModuleHtml, 'Left-associative addition.'), 'fixity doc appears on module page');
+assertTrue(\str_contains($fixityModuleHtml, 'infixl 6 +'), 'fixity declaration appears on module page');
 
 $reexportHome = Docs\makeEntity(
     'Docs.ReexportDoc',
@@ -646,10 +648,11 @@ $aliasEntity = null;
 foreach ($libIndex->byModule['Data.Maybe'] ?? [] as $entity) {
     if ($entity->name === 'Maybe' && $entity->kind === 'type') {
         $aliasEntity = $entity;
+
         break;
     }
 }
-assertTrue(in_array('Prelude', $aliasEntity?->aliases ?? [], true), 'home module shows re-export alias');
+assertTrue(\in_array('Prelude', $aliasEntity?->aliases ?? [], true), 'home module shows re-export alias');
 
 $homonymOne = <<<'MOG'
 module Docs.HomonymOne where
@@ -676,11 +679,11 @@ $homonymModules = [
     ),
 ];
 $homonymIndex = Docs\buildIndex($homonymModules);
-$homonymNames = array_values(array_filter(
+$homonymNames = \array_values(\array_filter(
     $homonymIndex->search,
     static fn ($entity) => $entity->name === 'x' && $entity->kind === 'value',
 ));
-assertEq(2, count($homonymNames), 'search keeps homonymous values in different modules');
+assertEq(2, \count($homonymNames), 'search keeps homonymous values in different modules');
 
 $foreignFilterRows = [
     ['name' => 'prim', 'kind' => 'primop', 'module' => 'M.P', 'signature' => ''],
@@ -688,8 +691,8 @@ $foreignFilterRows = [
     ['name' => 'ext', 'kind' => 'foreign', 'module' => 'M.F', 'signature' => ''],
 ];
 $foreignHits = Docs\searchInRows($foreignFilterRows, 'is:value', 10);
-$foreignKinds = array_map(static fn ($hit) => $hit['entity']['kind'], $foreignHits);
-sort($foreignKinds);
+$foreignKinds = \array_map(static fn ($hit) => $hit['entity']['kind'], $foreignHits);
+\sort($foreignKinds);
 assertEq(['foreign', 'primop', 'value'], $foreignKinds, 'is:value includes foreign and primop');
 
 $ambiguousTargets = [
@@ -718,6 +721,7 @@ $synonymEntity = null;
 foreach ($synonymIndex->all as $entity) {
     if ($entity->name === 'MyInt') {
         $synonymEntity = $entity;
+
         break;
     }
 }
@@ -778,7 +782,7 @@ top :: Int
 top = 1
 MOG;
 $instanceBoundaryProgram = parseModule($instanceBoundarySource, 'InstanceBoundary.mog');
-assertEq(3, count($instanceBoundaryProgram->items), 'instance body stops before module-column doc');
+assertEq(3, \count($instanceBoundaryProgram->items), 'instance body stops before module-column doc');
 assertEq('Top-level after instance.', $instanceBoundaryProgram->items[2]->doc ?? null, 'doc after instance binds top-level decl');
 
 $instanceIndexSource = <<<'MOG'
@@ -804,6 +808,7 @@ $indexedInstance = null;
 foreach ($instanceIndex->all as $entity) {
     if ($entity->kind === 'instance') {
         $indexedInstance = $entity;
+
         break;
     }
 }
@@ -827,60 +832,61 @@ $checkedMethodDoc = null;
 foreach ($checkedInstanceDocProgram->items as $item) {
     if ($item instanceof \Moggi\Syntax\Ast\FunctionDecl && $item->name === 'm' && $item->instanceMethod) {
         $checkedMethodDoc = $item->doc;
+
         break;
     }
 }
 assertEq('Preserved through typecheck.', $checkedMethodDoc, 'checkInstance copies method docs');
 
 $mapNameHits = Docs\search($libIndex, 'map', 10);
-$mapNames = array_map(static fn ($hit) => $hit->entity->name, $mapNameHits);
-assertTrue(in_array('map', $mapNames, true), 'short name query finds map via name search');
+$mapNames = \array_map(static fn ($hit) => $hit->entity->name, $mapNameHits);
+assertTrue(\in_array('map', $mapNames, true), 'short name query finds map via name search');
 
 $idNameHits = Docs\search($index, 'id', 5);
-assertTrue(count($idNameHits) > 0 && $idNameHits[0]->entity->name === 'id', 'single-token name query is not misrouted to type search');
+assertTrue(\count($idNameHits) > 0 && $idNameHits[0]->entity->name === 'id', 'single-token name query is not misrouted to type search');
 
 $uniqueTargets = ['Docs.Only.foo' => 'Only.html'];
 assertEq('Docs.Only.foo', Docs\qualifiedNameFromIdent('foo', $uniqueTargets), 'unambiguous qualified link target resolves');
 
-$serveRoot = \Moggi\Paths\canonicalSeparators(sys_get_temp_dir()) . '/moggi-serve-' . getmypid();
-@mkdir($serveRoot, 0777, true);
-file_put_contents($serveRoot . '/index.html', '<html></html>');
+$serveRoot = \Moggi\Paths\canonicalSeparators(\sys_get_temp_dir()) . '/moggi-serve-' . \getmypid();
+@\mkdir($serveRoot, 0777, true);
+\file_put_contents($serveRoot . '/index.html', '<html></html>');
 assertEq($serveRoot . '/index.html', Docs\resolveStaticDocPath($serveRoot, '/'), 'serve resolves / to index.html');
 assertEq($serveRoot . '/index.html', Docs\resolveStaticDocPath($serveRoot, '/index.html'), 'serve resolves existing static file');
 assertEq('', Docs\resolveStaticDocPath($serveRoot, '/missing.css'), 'serve 404 for missing asset with extension');
 assertEq(null, Docs\resolveStaticDocPath($serveRoot, '/Docs-Fixture'), 'serve falls through for extensionless paths');
-@unlink($serveRoot . '/index.html');
-@rmdir($serveRoot);
+@\unlink($serveRoot . '/index.html');
+@\rmdir($serveRoot);
 
-$cacheWorkDir = sys_get_temp_dir() . '/moggi-doc-cache-' . getmypid();
+$cacheWorkDir = \sys_get_temp_dir() . '/moggi-doc-cache-' . \getmypid();
 $cacheFixtureDir = $cacheWorkDir . '/fixture';
-@mkdir($cacheFixtureDir . '/Docs', 0777, true);
+@\mkdir($cacheFixtureDir . '/Docs', 0777, true);
 $cacheFixtureMog = $cacheFixtureDir . '/Docs/Fixture.mog';
-copy($fixture . '/Docs/Fixture.mog', $cacheFixtureMog);
-$prevCacheDir = getenv('MOGGI_CACHE_DIR') ?: '';
+\copy($fixture . '/Docs/Fixture.mog', $cacheFixtureMog);
+$prevCacheDir = \getenv('MOGGI_CACHE_DIR') ?: '';
 // Indexing a fixture compiles the modules it reaches; the library arrives from the run's cache
 // rather than being elaborated again in this scratch cache (seeded before the switch).
 seedCacheDir($cacheWorkDir);
-putenv('MOGGI_CACHE_DIR=' . $cacheWorkDir);
+\putenv('MOGGI_CACHE_DIR=' . $cacheWorkDir);
 $cachePath = Docs\indexCachePath($cacheFixtureDir, []);
 Docs\loadOrBuildIndex($cacheFixtureDir, [], true);
-assertTrue(is_file($cachePath), 'doc index cache file created');
-$cacheMtimeBefore = filemtime($cachePath) ?: 0;
-$fixtureSource = (string) file_get_contents($cacheFixtureMog);
-usleep(1_100_000);
-touch($cacheFixtureMog);
+assertTrue(\is_file($cachePath), 'doc index cache file created');
+$cacheMtimeBefore = \filemtime($cachePath) ?: 0;
+$fixtureSource = (string) \file_get_contents($cacheFixtureMog);
+\usleep(1_100_000);
+\touch($cacheFixtureMog);
 Docs\loadOrBuildIndex($cacheFixtureDir, [], false);
-$cacheMtimeAfter = filemtime($cachePath) ?: 0;
+$cacheMtimeAfter = \filemtime($cachePath) ?: 0;
 assertEq($cacheMtimeBefore, $cacheMtimeAfter, 'doc cache survives mtime-only source change');
-file_put_contents($cacheFixtureMog, rtrim($fixtureSource) . "\n-- touch\n");
+\file_put_contents($cacheFixtureMog, \rtrim($fixtureSource) . "\n-- touch\n");
 Docs\loadOrBuildIndex($cacheFixtureDir, [], false);
-$cacheMtimeRebuild = filemtime($cachePath) ?: 0;
+$cacheMtimeRebuild = \filemtime($cachePath) ?: 0;
 assertTrue($cacheMtimeRebuild > $cacheMtimeAfter, 'doc cache rebuilds when source content changes');
 
 $corruptCachePath = Docs\indexCachePath($cacheFixtureDir, []);
-file_put_contents($corruptCachePath, '{"version":999,"broken":true}');
+\file_put_contents($corruptCachePath, '{"version":999,"broken":true}');
 Docs\loadOrBuildIndex($cacheFixtureDir, [], false);
-$rebuiltCache = json_decode((string) file_get_contents($corruptCachePath), true);
+$rebuiltCache = \json_decode((string) \file_get_contents($corruptCachePath), true);
 assertEq(Docs\docIndexSchemaVersion(), $rebuiltCache['version'] ?? 0, 'doc cache rebuilds when cache JSON is invalid');
 assertTrue(isset($rebuiltCache['modules']), 'rebuilt doc cache contains modules');
 
@@ -892,9 +898,9 @@ Docs\loadOrBuildIndex($cacheFixtureDir, [], false, $secondFingerprint);
 assertEq($sourceFingerprint, $secondFingerprint, 'source fingerprint stable across cache hits');
 
 $malformedCachePath = Docs\indexCachePath($cacheFixtureDir, []);
-file_put_contents($malformedCachePath, '{"version":1,"modules":{}}');
+\file_put_contents($malformedCachePath, '{"version":1,"modules":{}}');
 Docs\loadOrBuildIndex($cacheFixtureDir, [], false);
-$malformedCache = json_decode((string) file_get_contents($malformedCachePath), true);
+$malformedCache = \json_decode((string) \file_get_contents($malformedCachePath), true);
 assertTrue(isset($malformedCache['search']), 'doc cache rebuilds when same-version JSON is malformed');
 
 $eitherIndex = Docs\buildIndex(
@@ -907,17 +913,17 @@ foreach ($eitherIndex->byModule['Data.Either'] ?? [] as $entity) {
         // The signature `Data.Either` writes, with its own variables and its
         // arrow domain parenthesised.
         assertTrue(
-            str_contains((string) $entity->signature, '(a -> c) -> (b -> c) -> Either a b -> c'),
+            \str_contains((string) $entity->signature, '(a -> c) -> (b -> c) -> Either a b -> c'),
             'a written signature renders as written: ' . $entity->signature,
         );
     }
     if ($entity->name === 'isLeft') {
-        assertTrue(str_contains((string) $entity->signature, 'Either a b'), 'isLeft uses friendly type variables');
+        assertTrue(\str_contains((string) $entity->signature, 'Either a b'), 'isLeft uses friendly type variables');
     }
     // Instance methods have no written signature, so theirs is inferred — and an
     // inferred one must carry friendly letters, never compiler-internal names.
     assertTrue(
-        preg_match('/\bt\d+\b/', (string) $entity->signature) !== 1,
+        \preg_match('/\bt\d+\b/', (string) $entity->signature) !== 1,
         'signatures hide compiler t-vars: ' . $entity->name . ' :: ' . $entity->signature,
     );
 }
@@ -929,8 +935,8 @@ $preludeOps = Docs\buildIndex(
 );
 foreach ($preludeOps->byModule['Prelude'] ?? [] as $entity) {
     if ($entity->name === '!!') {
-        assertTrue(str_contains((string) $entity->signature, '[a] -> Int -> a'), '!! signature uses friendly list syntax');
-        assertTrue(!str_contains((string) $entity->signature, 'infixl'), 'fixity is not embedded in signature text');
+        assertTrue(\str_contains((string) $entity->signature, '[a] -> Int -> a'), '!! signature uses friendly list syntax');
+        assertTrue(! \str_contains((string) $entity->signature, 'infixl'), 'fixity is not embedded in signature text');
         assertEq('infixl 9', $entity->fixity, 'fixity stored separately');
     }
 }
@@ -943,6 +949,7 @@ beta = 2
 MOG;
 
 $exportCommaFailed = false;
+
 try {
     parseModule($exportCommaSource, 'BadExport.mog');
 } catch (\Moggi\Syntax\Parser\ParseError) {
@@ -974,7 +981,7 @@ assertEq('Documents the next import.', $interImportDocProgram->imports[1]->doc ?
 // stdlib arrives; the modules there are type-checked but are the dependency's
 // pages, not this release's, and a test suite is not API at all.
 assertTrue(Docs\sourceUnderRoot('/pkg/src/A.mog', '/pkg/'), 'a file under the root is documented');
-assertTrue(!Docs\sourceUnderRoot('/stdlib/lib/A.mog', '/pkg/'), 'a dependency file is not documented');
+assertTrue(! Docs\sourceUnderRoot('/stdlib/lib/A.mog', '/pkg/'), 'a dependency file is not documented');
 assertTrue(Docs\sourceUnderRoot('', '/pkg/'), 'a synthetic module with no path stays');
 
 // A module's path arrives from `realpath`, so it is spelled with the host's
@@ -991,7 +998,7 @@ assertTrue(
     'a native-separator path under a canonical root is documented',
 );
 assertTrue(
-    !Docs\sourceUnderRoot($nativeSource, 'C:/a/other/'),
+    ! Docs\sourceUnderRoot($nativeSource, 'C:/a/other/'),
     'a native-separator path outside the root is not documented',
 );
 assertEq(
@@ -1006,41 +1013,41 @@ assertEq(
 );
 assertEq(null, Docs\relativeSourcePath('', '/pkg/'), 'a module with no path has no source page');
 
-$scopeDir = sys_get_temp_dir() . '/moggi-mogdoc-scope-' . getmypid();
-@mkdir($scopeDir . '/src', 0777, true);
-@mkdir($scopeDir . '/tests', 0777, true);
-file_put_contents(
+$scopeDir = \sys_get_temp_dir() . '/moggi-mogdoc-scope-' . \getmypid();
+@\mkdir($scopeDir . '/src', 0777, true);
+@\mkdir($scopeDir . '/tests', 0777, true);
+\file_put_contents(
     $scopeDir . '/scope.moggi',
     "[package]\nname = scope\nversion = 0.1.0\n\n[lib]\nsource-dirs = src\n\n[test-suite]\nmain = Suite\nsource-dirs = tests\n",
 );
-file_put_contents(
+\file_put_contents(
     $scopeDir . '/src/Scope.mog',
     "module Scope\n  ( idMaybe\n  ) where\n\nimport Data.Maybe\n\nidMaybe :: Maybe a -> Maybe a\nidMaybe m = m\n",
 );
-file_put_contents($scopeDir . '/tests/Suite.mog', "module Suite\n  ( check\n  ) where\n\ncheck :: Int\ncheck = 1\n");
+\file_put_contents($scopeDir . '/tests/Suite.mog', "module Suite\n  ( check\n  ) where\n\ncheck :: Int\ncheck = 1\n");
 
 $scopeIndex = Docs\loadOrBuildIndex($scopeDir, [$root . '/libraries/base/src'], true);
 assertTrue(isset($scopeIndex->byModule['Scope']), 'the documented root is indexed');
-assertTrue(!isset($scopeIndex->byModule['Data.Maybe']), 'a dependency module is not indexed');
-assertTrue(!isset($scopeIndex->byModule['Suite']), 'a test-suite module is not indexed');
+assertTrue(! isset($scopeIndex->byModule['Data.Maybe']), 'a dependency module is not indexed');
+assertTrue(! isset($scopeIndex->byModule['Suite']), 'a test-suite module is not indexed');
 
-@unlink($scopeDir . '/src/Scope.mog');
-@unlink($scopeDir . '/tests/Suite.mog');
-@unlink($scopeDir . '/scope.moggi');
-@rmdir($scopeDir . '/src');
-@rmdir($scopeDir . '/tests');
-@rmdir($scopeDir);
+@\unlink($scopeDir . '/src/Scope.mog');
+@\unlink($scopeDir . '/tests/Suite.mog');
+@\unlink($scopeDir . '/scope.moggi');
+@\rmdir($scopeDir . '/src');
+@\rmdir($scopeDir . '/tests');
+@\rmdir($scopeDir);
 
 if ($prevCacheDir !== '') {
-    putenv('MOGGI_CACHE_DIR=' . $prevCacheDir);
+    \putenv('MOGGI_CACHE_DIR=' . $prevCacheDir);
 } else {
-    putenv('MOGGI_CACHE_DIR');
+    \putenv('MOGGI_CACHE_DIR');
 }
-@unlink($cachePath);
-@unlink($cacheFixtureMog);
-@rmdir($cacheFixtureDir . '/Docs');
-@rmdir($cacheFixtureDir);
-@rmdir($cacheWorkDir);
+@\unlink($cachePath);
+@\unlink($cacheFixtureMog);
+@\rmdir($cacheFixtureDir . '/Docs');
+@\rmdir($cacheFixtureDir);
+@\rmdir($cacheWorkDir);
 
 if ($failures === 0) {
     echo "docs unit: ok\n";

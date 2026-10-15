@@ -4,10 +4,6 @@ namespace Moggi\LSP;
 
 use Moggi\LSP\Analysis\AnalysisService;
 
-use function Moggi\LSP\Analysis\addDynamicRegistration;
-use function Moggi\LSP\Analysis\ensureDocIndex;
-use function Moggi\LSP\Analysis\removeDynamicRegistration;
-use function Moggi\LSP\Analysis\setWorkspaceRoot;
 use function Moggi\LSP\Analysis\shutdown;
 use function Moggi\LSP\Analysis\warm;
 use function Moggi\LSP\Protocol\sendNotification;
@@ -28,6 +24,7 @@ function handleInitialize(AnalysisService $svc, array $params, int|string|null $
         'capabilities' => serverCapabilities(),
         'serverInfo' => SERVER_INFO,
     ]);
+
     return $workDoneProgress;
 }
 
@@ -41,6 +38,7 @@ function handleInitialized(AnalysisService $svc): void
     pullConfiguration();
     sendNotification('moggi/status', ['state' => 'checking', 'message' => 'Warming stdlib…']);
     $svc->warm();
+
     try {
         $svc->ensureDocIndex();
     } catch (\Throwable) {
@@ -77,6 +75,7 @@ function handleShutdown(AnalysisService $svc, int|string|null $id): bool
     if ($id !== null) {
         sendResult($id, null);
     }
+
     return true;
 }
 

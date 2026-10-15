@@ -27,17 +27,17 @@ function buildFrames(array $frames): string
 {
     $rows = [];
     foreach ($frames as $frame) {
-        if (!\is_array($frame)) {
+        if (! \is_array($frame)) {
             continue;
         }
         $class = (string) ($frame['class'] ?? '');
         $method = (string) ($frame['method'] ?? '');
         $text = (string) ($frame['text'] ?? '');
-        if ($class === '' || $method === '' || $text === '' || !isset($frame['offset'])) {
+        if ($class === '' || $method === '' || $text === '' || ! isset($frame['offset'])) {
             continue;
         }
         $key = $class . '#' . $method . '#' . (int) $frame['offset'];
-        if (!isset($rows[$key])) {
+        if (! isset($rows[$key])) {
             $rows[$key] = $key . "\n" . $text;
         }
     }

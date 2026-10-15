@@ -143,7 +143,7 @@ final class TNatLit implements Type
 /** Strip leading zeros from a decimal digit string; `"0"` stays `"0"`. */
 function canonicalNatDigits(string $digits): string
 {
-    $trimmed = ltrim($digits, '0');
+    $trimmed = \ltrim($digits, '0');
 
     return $trimmed === '' ? '0' : $trimmed;
 }
@@ -229,7 +229,7 @@ function scheme(Type $type, array $bound, array $constraints = [], ?int $runtime
         $type,
         $bound,
         $constraints,
-        $runtimeConstraintCount ?? count($constraints),
+        $runtimeConstraintCount ?? \count($constraints),
         schemeFreeTypeVars($type, $bound, $constraints),
         false,
         null,

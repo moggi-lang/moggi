@@ -4,12 +4,14 @@ namespace Moggi\CLI\Commands;
 
 use Moggi\Backend;
 use Moggi\Cache;
-use Moggi\Docs;
-use Moggi\Syntax\Lexer\LexError;
-use Moggi\Syntax\Parser\ParseError;
 
 use function Moggi\CLI\defaultDocsInput;
 use function Moggi\CLI\printUsage;
+
+use Moggi\Docs;
+
+use Moggi\Syntax\Lexer\LexError;
+use Moggi\Syntax\Parser\ParseError;
 
 /**
  * `moggi moogle` — search the API by name or type.
@@ -58,7 +60,7 @@ function runMoogle(array $argv): int
     try {
         $options = parseArgs($argv, $spec);
         requireDirectories($options['lib'], '--lib');
-        if ($options['root'] !== null && !\is_dir($options['root']) && !\is_file($options['root'])) {
+        if ($options['root'] !== null && ! \is_dir($options['root']) && ! \is_file($options['root'])) {
             throw new \InvalidArgumentException('--root requires a file or directory');
         }
     } catch (\InvalidArgumentException $error) {
@@ -66,10 +68,10 @@ function runMoogle(array $argv): int
     }
 
     $query = $options['rest'] !== []
-        ? trim(implode(' ', $options['rest']))
-        : trim((string) ($options['positionals'][0] ?? ''));
-    if ($query === '' && !stream_isatty(STDIN)) {
-        $query = trim((string) stream_get_contents(STDIN));
+        ? \trim(\implode(' ', $options['rest']))
+        : \trim((string) ($options['positionals'][0] ?? ''));
+    if ($query === '' && ! \stream_isatty(STDIN)) {
+        $query = \trim((string) \stream_get_contents(STDIN));
     }
 
     try {

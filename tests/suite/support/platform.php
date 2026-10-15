@@ -17,7 +17,7 @@ function platformFirstNumber(string $output): ?int
 /** Output of a shell command, with the platform's own way of silencing stderr. */
 function platformShellOutput(string $command): string
 {
-    if (!\function_exists('shell_exec')) {
+    if (! \function_exists('shell_exec')) {
         return '';
     }
 
@@ -104,7 +104,7 @@ function linuxTopologyFromLscpu(string $output): array
     $cores = [];
     foreach (\preg_split('/\R/', $output) ?: [] as $line) {
         $fields = \explode(',', \trim($line));
-        if (\count($fields) < 3 || !\ctype_digit($fields[0])) {
+        if (\count($fields) < 3 || ! \ctype_digit($fields[0])) {
             continue;
         }
         ++$threads;
@@ -214,7 +214,7 @@ function cgroupCpuQuota(string $v2Max, string $v1Quota, string $v1Period): ?int
  */
 function cgroupCpuDirs(): array
 {
-    if (PHP_OS_FAMILY !== 'Linux' || !\is_dir('/sys/fs/cgroup')) {
+    if (PHP_OS_FAMILY !== 'Linux' || ! \is_dir('/sys/fs/cgroup')) {
         return [];
     }
 

@@ -7,7 +7,7 @@
 // CLI calls, including the extensionless `-o` that used to collide.
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require_once $root . '/src/compiler.php';
@@ -20,12 +20,12 @@ use function Moggi\Compiler\executableName;
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
     ++$checks;
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
 
-$scratch = \sys_get_temp_dir() . '/moggi-compile-out-' . getmypid() . '-' . bin2hex(random_bytes(4));
+$scratch = \sys_get_temp_dir() . '/moggi-compile-out-' . \getmypid() . '-' . \bin2hex(\random_bytes(4));
 \mkdir($scratch, 0777, true);
 
 $remove = static function (string $dir) use (&$remove): void {
@@ -34,7 +34,7 @@ $remove = static function (string $dir) use (&$remove): void {
             continue;
         }
         $path = $dir . '/' . $entry;
-        \is_dir($path) && !\is_link($path) ? $remove($path) : @\unlink($path);
+        \is_dir($path) && ! \is_link($path) ? $remove($path) : @\unlink($path);
     }
     @\rmdir($dir);
 };
@@ -126,6 +126,7 @@ try {
     // A vendored assembly whose name is the archive's chosen destination is a
     // same-run clash: refused before anything moves, so nothing is clobbered.
     $threw = false;
+
     try {
         movePackagedArtifacts(
             $stage(6, ['moggi-app.dll', 'moggi-app.runtimeconfig.json', 'moggi-app.deps.json', 'Clash.dll']),
@@ -137,23 +138,25 @@ try {
         $threw = \str_contains($e->getMessage(), 'written twice');
     }
     $assert($threw, 'a vendored assembly colliding with the archive destination must be refused');
-    $assert(!\is_file($scratch . '/Clash.dll'), 'a refused clash must write nothing');
+    $assert(! \is_file($scratch . '/Clash.dll'), 'a refused clash must write nothing');
 
     // A destination that cannot be written is a failure, not a skipped line.
     \file_put_contents($scratch . '/blocker', 'x');
     $writeThrew = false;
+
     try {
         movePackagedArtifacts($stage(7, ['moggi-app.phar']), $scratch . '/blocker/App', 'php', false);
     } catch (\RuntimeException $e) {
         $writeThrew = \str_contains($e->getMessage(), 'cannot create directory');
     }
     $assert($writeThrew, 'an unwritable destination must fail, not be skipped');
-    $assert(!\is_file($scratch . '/blocker/App'), 'a refused write must produce nothing');
+    $assert(! \is_file($scratch . '/blocker/App'), 'a refused write must produce nothing');
 
     \mkdir($scratch . '/Roll', 0777, true);
     \mkdir($scratch . '/Roll/' . executableName('Plain'), 0777, true);
     \file_put_contents($scratch . '/Roll/' . executableName('Plain') . '/keep', 'x');
     $rollbackThrew = false;
+
     try {
         movePackagedArtifacts(
             $stage(8, ['moggi-app.phar', executableName('moggi-app')]),
@@ -165,7 +168,7 @@ try {
         $rollbackThrew = \str_contains($e->getMessage(), 'cannot write');
     }
     $assert($rollbackThrew, 'a failed commit must fail the move');
-    $assert(!\is_file($scratch . '/Roll/Plain.phar'), 'a failed move must roll back the artifact it already committed');
+    $assert(! \is_file($scratch . '/Roll/Plain.phar'), 'a failed move must roll back the artifact it already committed');
     $assert(\glob($scratch . '/Roll/*.moggi-tmp-*') === [], 'a failed move must leave no staging file behind');
 
     // A pre-existing destination the run legitimately replaced is never deleted:
@@ -175,6 +178,7 @@ try {
     \file_put_contents($scratch . '/Keep/' . executableName('Plain') . '/keep', 'x');
     \file_put_contents($scratch . '/Keep/Plain.phar', 'old');
     $keepThrew = false;
+
     try {
         movePackagedArtifacts(
             $stage(9, ['moggi-app.phar', executableName('moggi-app')]),

@@ -10,7 +10,7 @@
 // for the run) — resolved from JAVA_HOME, then PATH, then beside `java`.
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
@@ -30,7 +30,7 @@ use function Moggi\Registry\Bind\renderBinding;
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
     ++$checks;
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
@@ -38,7 +38,7 @@ $assert = static function (bool $condition, string $message) use (&$checks): voi
 $javac = resolveJdkBinary('javac');
 $assert($javac !== null, 'no `javac` found (JAVA_HOME, PATH, or beside `java`) — the JVM binder needs a JDK');
 $jar = \dirname((string) $javac) . \DIRECTORY_SEPARATOR . 'jar';
-if (\PHP_OS_FAMILY === 'Windows' && !\is_file($jar) && \is_file($jar . '.exe')) {
+if (\PHP_OS_FAMILY === 'Windows' && ! \is_file($jar) && \is_file($jar . '.exe')) {
     $jar .= '.exe';
 }
 $assert(\is_file($jar) && \is_executable($jar), "no `jar` beside `{$javac}`");
@@ -70,7 +70,7 @@ foreach (['hello', 'com.acme:', ':hello', 'a:b:c:d'] as $bad) {
 $tree = $work . '/tree';
 $compileFixture = static function () use ($javac, $jar, $fixture, $tree, $assert): void {
     foreach (['classes', 'jvm'] as $dir) {
-        if (!\is_dir($tree . '/' . $dir) && !@\mkdir($tree . '/' . $dir, 0777, true)) {
+        if (! \is_dir($tree . '/' . $dir) && ! @\mkdir($tree . '/' . $dir, 0777, true)) {
             $assert(false, 'cannot create ' . $tree . '/' . $dir);
         }
     }
@@ -161,7 +161,7 @@ $assert(
 );
 // The round-trip self-check fired on nothing: no skip names a mismatch.
 foreach ($descriptor['skipped'] as $skip) {
-    $assert(!\str_contains($skip['reason'], 'round-trip'), 'round-trip mismatch: ' . \json_encode($skip));
+    $assert(! \str_contains($skip['reason'], 'round-trip'), 'round-trip mismatch: ' . \json_encode($skip));
 }
 
 // The render is the golden, byte for byte.

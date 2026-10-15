@@ -46,7 +46,7 @@ function signMessage(string $messageHex, string $nsec): string
         [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
         $pipes,
     );
-    if (!\is_resource($process)) {
+    if (! \is_resource($process)) {
         throw new \RuntimeException("cannot run {$binary}");
     }
 
@@ -79,7 +79,7 @@ function requestHost(string $url): string
     $port = \parse_url($url, \PHP_URL_PORT);
     $scheme = \parse_url($url, \PHP_URL_SCHEME);
     if (\is_int($port)
-        && !(($scheme === 'http' && $port === 80) || ($scheme === 'https' && $port === 443))) {
+        && ! (($scheme === 'http' && $port === 80) || ($scheme === 'https' && $port === 443))) {
         return $host . ':' . $port;
     }
 
@@ -117,7 +117,7 @@ function writeAuthHeaders(string $host, string $method, string $path, string $bo
     $signature = signMessage($message, $nsec);
 
     $verdict = verifySignature($message, $signature, $npub);
-    if (!$verdict['ok']) {
+    if (! $verdict['ok']) {
         throw new \RuntimeException("the key does not match author {$npub}: {$verdict['note']}");
     }
 
@@ -176,7 +176,7 @@ function readNsecKey(?string $file): string
 {
     $path = $file ?? ((\getenv('MOGGI_NSEC_FILE') ?: null) ?: null);
     if ($path === null) {
-        if (!\function_exists('posix_isatty') || !\posix_isatty(\STDIN)) {
+        if (! \function_exists('posix_isatty') || ! \posix_isatty(\STDIN)) {
             throw new \RuntimeException(
                 'no key: pass --nsec-file FILE (or set MOGGI_NSEC_FILE), or run on a terminal to be prompted',
             );
@@ -185,7 +185,7 @@ function readNsecKey(?string $file): string
         return promptNsec();
     }
 
-    if (!\is_file($path)) {
+    if (! \is_file($path)) {
         throw new \RuntimeException("no such key file: {$path}");
     }
     \clearstatcache(true, $path);
@@ -221,7 +221,7 @@ function promptNsec(): string
 
 function assertNsec(string $nsec, string $where): string
 {
-    if (!isNsec($nsec)) {
+    if (! isNsec($nsec)) {
         throw new \RuntimeException("{$where} does not hold an nsec (63 characters, `nsec1` then bech32)");
     }
 
@@ -266,5 +266,3 @@ function registryError(string $body): string
 
     return \trim($body) === '' ? 'no response body' : \trim($body);
 }
-
-

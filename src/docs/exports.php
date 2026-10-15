@@ -2,16 +2,17 @@
 
 namespace Moggi\Docs;
 
-use Moggi\Syntax\Ast;
-
 use function Moggi\Modules\classMethodsForExport;
+
 use function Moggi\Modules\collectExports;
 use function Moggi\Modules\constructorsForExport;
 use function Moggi\Modules\exportItemChildNames;
 use function Moggi\Modules\isModuleActiveForCompileBackend;
 
+use Moggi\Syntax\Ast;
+
 /** Resolved export list for documentation (local declarations only). */
-final class DocExportFilter
+final class exports
 {
     /**
      * @param array<string, true> $values
@@ -28,12 +29,12 @@ final class DocExportFilter
 /** Backend implementation modules (`Data.Foo.PHP`, `*.JVM`, `*.DotNet`, …). */
 function isBackendImplModule(string $moduleName): bool
 {
-    $lower = strtolower($moduleName);
+    $lower = \strtolower($moduleName);
 
-    return str_ends_with($lower, '.php')
-        || str_ends_with($lower, '.jvm')
-        || str_ends_with($lower, '.js')
-        || str_ends_with($lower, '.dotnet');
+    return \str_ends_with($lower, '.php')
+        || \str_ends_with($lower, '.jvm')
+        || \str_ends_with($lower, '.js')
+        || \str_ends_with($lower, '.dotnet');
 }
 
 /** @return list<string> */
@@ -44,9 +45,9 @@ function backendDisplayOrder(): array
 
 function backendLabel(string $backendId): string
 {
-    return match (strtolower($backendId)) {
+    return match (\strtolower($backendId)) {
         'dotnet' => '.NET',
-        default => strtoupper($backendId),
+        default => \strtoupper($backendId),
     };
 }
 
@@ -137,7 +138,7 @@ function isExportedCtor(
     if ($filter->exportAll) {
         return true;
     }
-    if (!isset($filter->types[$typeName])) {
+    if (! isset($filter->types[$typeName])) {
         return false;
     }
 
@@ -150,7 +151,7 @@ function isExportedCtor(
     }
     $selected = exportItemChildNames(
         ['name' => $typeName, 'children' => $filter->types[$typeName]],
-        array_values(array_unique($available)),
+        \array_values(\array_unique($available)),
     );
     foreach ($selected as $name) {
         if (($constructorRenames[$name] ?? $name) === $ctorName) {
@@ -174,10 +175,10 @@ function collectExportsForDocs(
     string $moduleName,
     array $checkedModules,
 ): ?array {
-    if (!isset($checkedModules[$moduleName])) {
+    if (! isset($checkedModules[$moduleName])) {
         return null;
     }
-    if (!isModuleActiveForCompileBackend($units, $moduleName)) {
+    if (! isModuleActiveForCompileBackend($units, $moduleName)) {
         return null;
     }
 

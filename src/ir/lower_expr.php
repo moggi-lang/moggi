@@ -3,22 +3,26 @@
 namespace Moggi\IR;
 
 use function Moggi\Semantics\Exhaustiveness\guardIsConstantTrue;
-use function Moggi\Semantics\Kernel\boolFalseCtor;
-use function Moggi\Semantics\Kernel\boolTrueCtor;
-use Moggi\Semantics\TypeExpr;
-use Moggi\Syntax\Ast;
-
 use function Moggi\Semantics\IntrinsicRegistry\isIoExceptionPrimop;
 use function Moggi\Semantics\IntrinsicRegistry\isShortCircuitPrimop;
 use function Moggi\Semantics\IntrinsicRegistry\primopForPublicOperator;
 use function Moggi\Semantics\IntrinsicRegistry\schemeArity;
+
 use function Moggi\Semantics\IntrinsicRegistry\shortCircuitPrimop;
 use function Moggi\Semantics\IntrinsicRegistry\typeSchemes;
 use function Moggi\Semantics\IoBoundary\isIoType;
+use function Moggi\Semantics\Kernel\boolFalseCtor;
+use function Moggi\Semantics\Kernel\boolTrueCtor;
+
+use Moggi\Semantics\TypeExpr;
+
 use function Moggi\Semantics\Types\bindingGroupSccs;
 use function Moggi\Semantics\Types\evidenceRefOperand;
 use function Moggi\Semantics\Types\peelBindingAnnotation;
 use function Moggi\Semantics\Types\prune;
+
+use Moggi\Syntax\Ast;
+
 use function Moggi\Syntax\isIdentifier;
 
 function lowerExpr(Ast\AstNode $expr, LowerCtx $ctx): Operand
@@ -34,7 +38,7 @@ function lowerExpr(Ast\AstNode $expr, LowerCtx $ctx): Operand
             }
 
             return $ctx->env[$expr->name]
-                ?? throw new \RuntimeException(\sprintf("undefined variable `%s` in IR lowering", $expr->name));
+                ?? throw new \RuntimeException(\sprintf('undefined variable `%s` in IR lowering', $expr->name));
         })(),
         Ast\ConstructorRef::class => new FnRef(
             $ctx->constructorRenames[$expr->name] ?? $expr->name,
@@ -231,7 +235,7 @@ function lowerApplyFromExpr(Ast\Apply $expr, LowerCtx $ctx): Operand
         $astArgs = [];
         $callee = $expr;
         while ($callee instanceof Ast\Apply) {
-            array_unshift($astArgs, $callee->argument);
+            \array_unshift($astArgs, $callee->argument);
             $callee = $callee->function;
         }
 
@@ -261,7 +265,7 @@ function lowerDictMethodPartial(Ast\Apply $expr, LowerCtx $ctx): ?Operand
         $callee = $callee->function;
     }
 
-    if (!($callee instanceof Ast\EvidenceMethod)) {
+    if (! ($callee instanceof Ast\EvidenceMethod)) {
         return null;
     }
 
@@ -295,7 +299,7 @@ function remainingArity(LowerCtx $ctx, ?Ast\TypeNode $type): int
             $type = $type->to;
         } elseif ($type instanceof TypeExpr\Type) {
             $type = prune($ctx->state, $type);
-            if (!($type instanceof TypeExpr\TArrow)) {
+            if (! ($type instanceof TypeExpr\TArrow)) {
                 return $remaining;
             }
             $type = $type->to;
@@ -321,7 +325,7 @@ function lowerIntrinsicValue(string $name, array $astArgs, Ast\AstNode $node, Lo
 {
     $scheme = typeSchemes()[$name] ?? null;
     $arity = $scheme === null ? 0 : schemeArity($scheme);
-    $missing = $arity - count($astArgs);
+    $missing = $arity - \count($astArgs);
 
     if ($missing <= 0) {
         $args = [];
@@ -367,11 +371,11 @@ function lowerNamedApply(string $name, array $args, LowerCtx $ctx, ?SrcLoc $srcL
         return null;
     }
 
-    if (count($args) === $arity) {
+    if (\count($args) === $arity) {
         return lowerCall($name, $args, $ctx, $srcLoc);
     }
 
-    if (count($args) < $arity) {
+    if (\count($args) < $arity) {
         return new Partial($name, $arity, $args);
     }
 
@@ -391,7 +395,7 @@ function lowerApply(Ast\AstNode $function, Ast\AstNode $argument, LowerCtx $ctx)
     $args = [lowerExpr($argument, $ctx)];
 
     while ($callee instanceof Ast\Apply) {
-        array_unshift($args, lowerExpr($callee->argument, $ctx));
+        \array_unshift($args, lowerExpr($callee->argument, $ctx));
         $callee = $callee->function;
     }
 
@@ -451,12 +455,14 @@ function applyToValue(Operand $value, array $args, LowerCtx $ctx, ?SrcLoc $srcLo
     foreach ($args as $arg) {
         if ($result instanceof Partial) {
             $nextArgs = [...$result->args, $arg];
-            if (count($nextArgs) === $result->arity) {
+            if (\count($nextArgs) === $result->arity) {
                 $result = lowerCall($result->fn, $nextArgs, $ctx, $srcLoc);
+
                 continue;
             }
 
             $result = new Partial($result->fn, $result->arity, $nextArgs);
+
             continue;
         }
 
@@ -465,29 +471,35 @@ function applyToValue(Operand $value, array $args, LowerCtx $ctx, ?SrcLoc $srcLo
             if ($arity !== null) {
                 if ($arity === 0) {
                     $result = applyToValue(lowerCall($result->name, [], $ctx, $srcLoc), [$arg], $ctx, $srcLoc);
+
                     continue;
                 }
 
                 if ($arity === 1) {
                     $result = lowerCall($result->name, [$arg], $ctx, $srcLoc);
+
                     continue;
                 }
 
                 $result = new Partial($result->name, $arity, [$arg]);
+
                 continue;
             }
 
             $result = lowerCallValue($result, [$arg], $ctx, $srcLoc);
+
             continue;
         }
 
         if ($result instanceof Local || $result instanceof Temp) {
             $result = lowerCallValue($result, [$arg], $ctx, $srcLoc);
+
             continue;
         }
 
         if ($result instanceof DictMethod) {
             $result = lowerDictMethodCallFromValue($result, [$arg], $ctx, $srcLoc);
+
             continue;
         }
 
@@ -524,7 +536,7 @@ function lowerCall(string $callee, array $args, LowerCtx $ctx, ?SrcLoc $srcLoc =
 {
     $callee = $ctx->constructorRenames[$callee] ?? $callee;
 
-    if (isset($ctx->newtypes[$callee]) && count($args) === 1) {
+    if (isset($ctx->newtypes[$callee]) && \count($args) === 1) {
         return $args[0];
     }
 
@@ -551,7 +563,7 @@ function lowerTuple(array $elements, LowerCtx $ctx): Operand
         $args[] = lowerIoValueExpr($element, $ctx);
     }
 
-    return lowerCall('__tuple' . count($elements), $args, $ctx);
+    return lowerCall('__tuple' . \count($elements), $args, $ctx);
 }
 
 function lowerIoValueExpr(Ast\AstNode $element, LowerCtx $ctx): Operand
@@ -601,7 +613,7 @@ function lowerNamedLambda(string $name, array $params, Ast\AstNode $body, LowerC
         $fnCtx->stmtSrcLoc = srcLocFromAst($body, $ctx->moduleName, $name, $ctx->sourceFile);
     }
 
-    foreach (freeVarsExpr($body, array_fill_keys($paramNames, true)) as $free) {
+    foreach (freeVarsExpr($body, \array_fill_keys($paramNames, true)) as $free) {
         if (isset($ctx->env[$free])) {
             $fnCtx->env[$free] = $ctx->env[$free];
         }
@@ -616,7 +628,7 @@ function lowerNamedLambda(string $name, array $params, Ast\AstNode $body, LowerC
         new Block($fnCtx->items),
         srcLoc: srcLocFromAst($body, $ctx->moduleName, $name, $ctx->sourceFile),
     );
-    $ctx->functionArity[$name] = count($paramNames);
+    $ctx->functionArity[$name] = \count($paramNames);
 
     return new FnRef($name);
 }
@@ -658,6 +670,7 @@ function lowerBindingGroups(array $bindings, LowerCtx $ctx): void
         }
         if ($component['recursive']) {
             lowerRecursiveBindings($group, $ctx);
+
             continue;
         }
         foreach ($group as $binding) {
@@ -683,7 +696,7 @@ function lowerRecursiveBindings(array $bindings, LowerCtx $ctx): void
     $planned = [];
 
     foreach ($bindings as $binding) {
-        if (!$binding->pattern instanceof Ast\PatVar) {
+        if (! $binding->pattern instanceof Ast\PatVar) {
             continue;
         }
         [$rhs] = peelBindingAnnotation($binding->value);
@@ -691,7 +704,7 @@ function lowerRecursiveBindings(array $bindings, LowerCtx $ctx): void
         $fnName = '__letrec' . $ctx->state->nextLambda++;
         if ($rhs instanceof Ast\Lambda) {
             $planned[$name] = ['kind' => 'lambda', 'fnName' => $fnName, 'rhs' => $rhs];
-            $ctx->functionArity[$fnName] = count($rhs->params);
+            $ctx->functionArity[$fnName] = \count($rhs->params);
         } else {
             $planned[$name] = ['kind' => 'nullary', 'fnName' => $fnName, 'rhs' => $rhs];
             $ctx->functionArity[$fnName] = 0;
@@ -834,7 +847,7 @@ function lowerArmGuard(Ast\AstNode $guard, LowerCtx $armCtx, array $bindings): G
  */
 function guardsExhaustive(Ast\GuardsExpr $expr, LowerCtx $ctx): bool
 {
-    $last = $expr->clauses[count($expr->clauses) - 1]->guard ?? null;
+    $last = $expr->clauses[\count($expr->clauses) - 1]->guard ?? null;
 
     return guardIsConstantTrue($last, $ctx->trueBindings);
 }
@@ -877,6 +890,7 @@ function lowerRecordUpdate(Ast\RecordUpdate $expr, LowerCtx $ctx): Operand
     foreach ($order as $position => $name) {
         if (isset($byName[$name])) {
             $args[] = lowerExpr($byName[$name], $ctx);
+
             continue;
         }
 

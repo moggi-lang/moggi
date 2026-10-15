@@ -2,7 +2,7 @@
 
 namespace Moggi\Backend\Jvm\Foreign;
 
-use Moggi\Syntax\Ast;
+use function Moggi\Foreign\splitForeignPathMember;
 
 /**
  * JVM foreign paths are opaque to the language. This resolver interprets them.
@@ -18,13 +18,14 @@ use Moggi\Syntax\Ast;
  * {@code interface:}) so invokeinterface is selected without a per-member table.
  */
 
-use function Moggi\Foreign\splitForeignPathMember;
 use function Moggi\Semantics\IoBoundary\isIoTypeConName;
 use function Moggi\Semantics\Kernel\boolTypeName;
 use function Moggi\Semantics\Kernel\boundaryEitherTypeName;
 use function Moggi\Semantics\Kernel\boundaryHandleTypeName;
 use function Moggi\Semantics\Kernel\boundaryMaybeTypeName;
 use function Moggi\Semantics\Types\primitiveTypeIdOf;
+
+use Moggi\Syntax\Ast;
 
 function registerJvmForeignType(string $moggiName, string $hostType): void
 {
@@ -43,12 +44,12 @@ function lookupJvmForeignType(string $name): ?string
  */
 function jvmParseForeignHostType(string $hostType): array
 {
-    $trimmed = trim($hostType);
-    if (str_starts_with($trimmed, 'interface:')) {
-        return [trim(substr($trimmed, strlen('interface:'))), true];
+    $trimmed = \trim($hostType);
+    if (\str_starts_with($trimmed, 'interface:')) {
+        return [\trim(\substr($trimmed, \strlen('interface:'))), true];
     }
-    if (str_starts_with($trimmed, 'interface ')) {
-        return [trim(substr($trimmed, strlen('interface '))), true];
+    if (\str_starts_with($trimmed, 'interface ')) {
+        return [\trim(\substr($trimmed, \strlen('interface '))), true];
     }
 
     return [$trimmed, false];
@@ -56,7 +57,7 @@ function jvmParseForeignHostType(string $hostType): array
 
 function jvmForeignHostInternal(string $hostType): string
 {
-    [$dotted, ] = jvmParseForeignHostType($hostType);
+    [$dotted] = jvmParseForeignHostType($hostType);
 
     return dottedToInternal($dotted);
 }
@@ -64,7 +65,7 @@ function jvmForeignHostInternal(string $hostType): string
 /** @return array{dispatch: 'static'|'instance'|'constructor'|'intrinsic', class: string, hostMember: string} */
 function resolveJvmForeignPath(string $path): array
 {
-    if (!str_contains($path, ':') && !str_contains($path, '.')) {
+    if (! \str_contains($path, ':') && ! \str_contains($path, '.')) {
         throw new \RuntimeException(
             "JVM foreign path `{$path}` must be Class:member or Class.member; bare host names are not supported",
         );
@@ -72,7 +73,7 @@ function resolveJvmForeignPath(string $path): array
 
     [$classPath, $member] = splitForeignPathMember($path);
 
-    if (str_contains($path, ':')) {
+    if (\str_contains($path, ':')) {
         $dispatch = match ($member) {
             '__con' => 'constructor',
             '__cast' => 'intrinsic',
@@ -150,7 +151,7 @@ function jvmDescriptorFromMoggiType(
         if ($argTypes === []) {
             throw new \RuntimeException('JVM instance foreign requires a receiver argument');
         }
-        array_shift($argTypes);
+        \array_shift($argTypes);
     }
 
     $params = '';
@@ -233,7 +234,7 @@ function jvmTypeDescriptorFromMoggiType(
 
     if ($classPath === 'java.util.Objects') {
         if ($member === 'isNull' || $member === 'nonNull') {
-            if (!$isReturn) {
+            if (! $isReturn) {
                 return 'Ljava/lang/Object;';
             }
         }
@@ -243,7 +244,7 @@ function jvmTypeDescriptorFromMoggiType(
     }
 
     if (
-        !$isReturn
+        ! $isReturn
         && $classPath === 'java.nio.file.Files'
         && $member === 'writeString'
         && primitiveTypeIdOf((string) $con) === 'String#'
@@ -408,7 +409,7 @@ function jvmArgDescriptorOverride(
     if (
         $classPath === 'java.io.Reader'
         && $member === 'transferTo'
-        && !$isReturn
+        && ! $isReturn
         && $dispatch === 'instance'
         && $argIndex === 0
     ) {
@@ -434,7 +435,7 @@ function jvmArgDescriptorOverride(
         ],
     ];
 
-    if (!isset($overridden[$ctorKey])) {
+    if (! isset($overridden[$ctorKey])) {
         return null;
     }
 

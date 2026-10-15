@@ -232,7 +232,7 @@ function nugetCoordinateProblem(string $coordinate): ?string
 function hostToolDescriptor(string $iniBytes): array
 {
     $ini = @\parse_ini_string($iniBytes, true, \INI_SCANNER_RAW);
-    if (!\is_array($ini)) {
+    if (! \is_array($ini)) {
         return ['backends' => implementedBackendIds(), 'php' => [], 'jvm' => [], 'dotnet' => []];
     }
 
@@ -259,7 +259,7 @@ function collectHostToolCoordinates(array $descriptors, string $backend): array
 {
     $coordinates = [];
     foreach ($descriptors as $descriptor) {
-        if (!\in_array($backend, (array) ($descriptor['backends'] ?? []), true)) {
+        if (! \in_array($backend, (array) ($descriptor['backends'] ?? []), true)) {
             continue;
         }
         foreach (hostToolCoordinates($descriptor, $backend) as $coordinate) {
@@ -293,7 +293,7 @@ function thirdPartyForDescriptor(array $descriptor): array
             continue;
         }
         $resolved = resolveHostTools($backend, hostToolCoordinates($descriptor, $backend), (string) ($descriptor['name'] ?? 'package'), true);
-        if (!$resolved['ok']) {
+        if (! $resolved['ok']) {
             throw new \RuntimeException("[{$backend}] {$resolved['detail']}");
         }
         $map[$backend] = (object) thirdPartyMap($backend, (string) $resolved['dir']);
@@ -340,7 +340,7 @@ function hostMarkerMatches(array $recorded, string $tool, string $version, array
  */
 function hostStateMatches(mixed $recorded, ?string $tool, ?string $version, array $coordinates): bool
 {
-    if (!\is_array($recorded)) {
+    if (! \is_array($recorded)) {
         return false;
     }
 
@@ -404,11 +404,11 @@ function hostResolvedVersions(string $backend, string $dir, array $coordinates):
 function composerLockedVersions(string $dir): array
 {
     $path = \rtrim($dir, '/') . '/composer.lock';
-    if (!\is_file($path)) {
+    if (! \is_file($path)) {
         return [];
     }
     $data = \json_decode((string) \file_get_contents($path), true);
-    if (!\is_array($data)) {
+    if (! \is_array($data)) {
         return [];
     }
     $versions = [];
@@ -468,11 +468,11 @@ function mavenResolvedVersions(string $dir, array $coordinates): array
 function nugetResolvedVersions(string $dir): array
 {
     $path = \rtrim($dir, '/') . '/obj/project.assets.json';
-    if (!\is_file($path)) {
+    if (! \is_file($path)) {
         return [];
     }
     $data = \json_decode((string) \file_get_contents($path), true);
-    if (!\is_array($data)) {
+    if (! \is_array($data)) {
         return [];
     }
     $targets = (array) ($data['targets'] ?? []);
@@ -481,7 +481,7 @@ function nugetResolvedVersions(string $dir): array
     foreach ($targets as $packages) {
         foreach ((array) $packages as $key => $_) {
             $parts = \explode('/', (string) $key, 2);
-            if (\count($parts) === 2 && $parts[0] !== '' && $parts[1] !== '' && !isset($versions[$parts[0]])) {
+            if (\count($parts) === 2 && $parts[0] !== '' && $parts[1] !== '' && ! isset($versions[$parts[0]])) {
                 $versions[$parts[0]] = $parts[1];
             }
         }
@@ -558,7 +558,7 @@ function transitiveHostToolPackages(array $linkedByName, string $backend): array
 {
     $packages = [];
     foreach ($linkedByName as $name => $descriptor) {
-        if (!\in_array($backend, (array) ($descriptor['backends'] ?? []), true)) {
+        if (! \in_array($backend, (array) ($descriptor['backends'] ?? []), true)) {
             continue;
         }
         $coordinates = hostToolCoordinates($descriptor, $backend);
@@ -847,6 +847,7 @@ function resolveHostTools(string $backend, array $coordinates, string $project, 
     if ($lock !== false) {
         @\flock($lock, \LOCK_EX);
     }
+
     try {
         return resolveHostToolsLocked($backend, $coordinates, $useCache, $dir, $marker, $manifest, $tool, $version, $empty);
     } finally {
@@ -889,7 +890,7 @@ function resolveHostToolsLocked(string $backend, array $coordinates, bool $useCa
     }
 
     removeTree($dir);
-    if (!\is_dir($dir) && !\mkdir($dir, 0777, true) && !\is_dir($dir)) {
+    if (! \is_dir($dir) && ! \mkdir($dir, 0777, true) && ! \is_dir($dir)) {
         return ['ok' => false, 'detail' => "cannot create {$dir}", 'tool' => $tool, 'version' => $version] + $empty;
     }
     if (\file_put_contents($dir . '/' . $manifest['file'], $manifest['contents']) === false) {
@@ -903,7 +904,7 @@ function resolveHostToolsLocked(string $backend, array $coordinates, bool $useCa
 
         return [
             'ok' => false,
-            'detail' => "{$tool} failed (" . $result['exitCode'] . ") for " . \implode(', ', $coordinates)
+            'detail' => "{$tool} failed (" . $result['exitCode'] . ') for ' . \implode(', ', $coordinates)
                 . "\n" . \substr($output, -2000),
             'dir' => $dir,
             'tool' => $tool,
@@ -1000,14 +1001,14 @@ function hostToolArtifactFiles(string $backend, string $dir): array
 
     if ($backend === 'php') {
         $vendor = $root . '/vendor';
-        if (!\is_dir($vendor)) {
+        if (! \is_dir($vendor)) {
             return [];
         }
         $items = new \RecursiveIteratorIterator(
             new \RecursiveDirectoryIterator($vendor, \FilesystemIterator::SKIP_DOTS),
         );
         foreach ($items as $item) {
-            if (!$item->isFile()) {
+            if (! $item->isFile()) {
                 continue;
             }
             $path = \str_replace('\\', '/', $item->getPathname());
@@ -1081,15 +1082,17 @@ function thirdPartyProblems(string $backend, string $dir, array $expected, bool 
 
     $problems = [];
     foreach (hostToolArtifactFiles($backend, $dir) as $relative => $path) {
-        if (!isset($expected[$relative])) {
+        if (! isset($expected[$relative])) {
             if ($strict) {
                 $problems[] = "the resolution produced {$relative}, which no signed release declares";
             }
+
             continue;
         }
         $digest = @\hash_file('sha256', $path);
         if ($digest === false) {
             $problems[] = "cannot read resolved artifact {$relative}";
+
             continue;
         }
         $actual = 'sha256:' . $digest;
@@ -1120,6 +1123,7 @@ function mergeThirdParty(iterable $maps): array
                 $digest = (string) $digest;
                 if (isset($merged[$backend][$relative]) && $merged[$backend][$relative] !== $digest) {
                     $problems[] = "two releases pin different bytes for [{$backend}] {$relative}";
+
                     continue;
                 }
                 $merged[$backend][$relative] = $digest;
@@ -1150,12 +1154,12 @@ function materializeHostToolArtifacts(string $backend, string $dir): void
         return;
     }
     $into = $dir . '/dotnet';
-    if (!\is_dir($into) && !\mkdir($into, 0777, true) && !\is_dir($into)) {
+    if (! \is_dir($into) && ! \mkdir($into, 0777, true) && ! \is_dir($into)) {
         throw new \RuntimeException("cannot create {$into}");
     }
     foreach ($references as $reference) {
         $target = $into . '/' . \basename($reference);
-        if (!\is_file($target) && \copy($reference, $target) === false) {
+        if (! \is_file($target) && \copy($reference, $target) === false) {
             throw new \RuntimeException("cannot copy {$reference} into {$into}");
         }
     }
@@ -1179,11 +1183,11 @@ function materializeHostToolArtifacts(string $backend, string $dir): void
 function dotnetReferences(string $dir): array
 {
     $assets = $dir . '/obj/project.assets.json';
-    if (!\is_file($assets)) {
+    if (! \is_file($assets)) {
         return [];
     }
     $data = \json_decode((string) \file_get_contents($assets), true);
-    if (!\is_array($data)) {
+    if (! \is_array($data)) {
         return [];
     }
 
@@ -1210,7 +1214,7 @@ function dotnetReferences(string $dir): array
                 ?? \strtolower(\ltrim(\str_replace('\\', '/', (string) $packageKey), '/'));
             foreach ((array) ($package['compile'] ?? []) as $relative => $_) {
                 $relative = (string) $relative;
-                if (!\str_ends_with($relative, '.dll')) {
+                if (! \str_ends_with($relative, '.dll')) {
                     continue;
                 }
                 $relative = \ltrim(\str_replace('\\', '/', $relative), '/');
@@ -1247,7 +1251,7 @@ function countTreeFiles(string $dir): int
 
 function removeTree(string $path): void
 {
-    if (!\is_dir($path)) {
+    if (! \is_dir($path)) {
         return;
     }
     $items = new \RecursiveIteratorIterator(

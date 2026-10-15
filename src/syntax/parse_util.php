@@ -2,9 +2,9 @@
 
 namespace Moggi\Syntax\Parser;
 
-use Moggi\Syntax\Lexer\TokenKind;
 use Moggi\Syntax\Ast;
 use Moggi\Syntax\Ast\AstNode;
+use Moggi\Syntax\Lexer\TokenKind;
 
 function isAt(ParserState $state, TokenKind $kind, int $offset = 0, ?string $lexeme = null): bool
 {
@@ -58,8 +58,9 @@ function expectOneOf(ParserState $state, TokenKind ...$kinds): Token
 
 function describeTokenKindList(array $kinds): string
 {
-    $names = array_map(fn (TokenKind $k): string => $k->value, $kinds);
-    return implode(' or ', $names);
+    $names = \array_map(fn (TokenKind $k): string => $k->value, $kinds);
+
+    return \implode(' or ', $names);
 }
 
 function expectOp(ParserState $state, string $lexeme): void
@@ -116,7 +117,7 @@ function describeToken(Token $token): string
 {
     return match ($token->kind) {
         TokenKind::Integer => 'integer ' . $token->lexeme,
-        TokenKind::StringLit => 'string ' . json_encode($token->lexeme),
+        TokenKind::StringLit => 'string ' . \json_encode($token->lexeme),
         TokenKind::CharLit => 'character ' . \sprintf("'\\u{%X}'", (int) $token->lexeme),
         TokenKind::VarId => "identifier '{$token->lexeme}'",
         TokenKind::ConId => "constructor '{$token->lexeme}'",
@@ -195,13 +196,13 @@ function errorLocation(ParserState $state, Token $token): array
         return [
             'line' => $token->line,
             'col' => $token->col,
-            'endCol' => $token->col + max(0, strlen($token->lexeme) - 1),
+            'endCol' => $token->col + \max(0, \strlen($token->lexeme) - 1),
         ];
     }
 
     if ($state->pos > 0) {
         $prev = $state->tokens[$state->pos - 1];
-        $endCol = $prev->col + strlen($prev->lexeme);
+        $endCol = $prev->col + \strlen($prev->lexeme);
 
         return ['line' => $prev->line, 'col' => $endCol, 'endCol' => $endCol];
     }
@@ -214,12 +215,12 @@ function parseError(ParserState $state, string $message, ?Token $at = null, stri
     if ($at === null) {
         $loc = errorLocation($state, peek($state));
     } else {
-        $firstLineEnd = strpos($at->lexeme, "\n");
-        $span = $firstLineEnd === false ? strlen($at->lexeme) : $firstLineEnd;
+        $firstLineEnd = \strpos($at->lexeme, "\n");
+        $span = $firstLineEnd === false ? \strlen($at->lexeme) : $firstLineEnd;
         $loc = [
             'line' => $at->line,
             'col' => $at->col,
-            'endCol' => $at->col + max(0, $span - 1),
+            'endCol' => $at->col + \max(0, $span - 1),
         ];
     }
 
@@ -244,7 +245,7 @@ function incompleteCaseAltError(ParserState $state, string $message): ParseError
 function describeUpcomingCaseAlt(ParserState $state): string
 {
     $pos = $state->pos;
-    $count = count($state->tokens);
+    $count = \count($state->tokens);
     $parts = [];
 
     while ($pos < $count) {
@@ -252,6 +253,7 @@ function describeUpcomingCaseAlt(ParserState $state): string
 
         if ($token->kind === TokenKind::Op && $token->lexeme === '->') {
             $parts[] = '->';
+
             break;
         }
 
@@ -263,6 +265,7 @@ function describeUpcomingCaseAlt(ParserState $state): string
             || $token->kind === TokenKind::Comma) {
             $parts[] = $token->lexeme;
             ++$pos;
+
             continue;
         }
 
@@ -349,7 +352,8 @@ function bracketDepthBefore(array $tokens): array
 
 function spanned(AstNode $node, Token $token): AstNode
 {
-    $node->setLocation($token->line, $token->col, $token->col + max(0, strlen($token->lexeme) - 1));
+    $node->setLocation($token->line, $token->col, $token->col + \max(0, \strlen($token->lexeme) - 1));
+
     return $node;
 }
 
@@ -439,15 +443,16 @@ function spannedRange(AstNode $node, AstNode|Token $from, AstNode|Token $to): As
     $fromLine = $from->line;
     $fromCol = $from->col;
     $fromEnd = $from instanceof Token
-        ? $from->col + max(0, strlen($from->lexeme) - 1)
+        ? $from->col + \max(0, \strlen($from->lexeme) - 1)
         : $from->endCol;
 
     $toLine = $to->line;
     $toEnd = $to instanceof Token
-        ? $to->col + max(0, strlen($to->lexeme) - 1)
+        ? $to->col + \max(0, \strlen($to->lexeme) - 1)
         : $to->endCol;
 
     $node->setLocation($fromLine, $fromCol, $toLine === $fromLine ? $toEnd : $fromEnd);
+
     return $node;
 }
 
@@ -503,13 +508,13 @@ function skipDocComments(ParserState $state): void
  */
 function skipDocCommentsBefore(ParserState $state, callable $starts): bool
 {
-    if (!isAtDocComment($state)) {
+    if (! isAtDocComment($state)) {
         return false;
     }
 
     $saved = $state->pos;
     skipDocComments($state);
-    if (!$starts($state)) {
+    if (! $starts($state)) {
         $state->pos = $saved;
 
         return false;
@@ -520,13 +525,14 @@ function skipDocCommentsBefore(ParserState $state, callable $starts): bool
 
 function skipModuleHeaderDocs(ParserState $state): void
 {
-    if (!docsPrecedeImport($state)) {
+    if (! docsPrecedeImport($state)) {
         return;
     }
 
     while (isDocTokenKind(peek($state)->kind) || isAt($state, TokenKind::DocSection)) {
         if (isAt($state, TokenKind::DocSection)) {
             advance($state);
+
             continue;
         }
         consumeLeadingDoc($state);
@@ -539,6 +545,7 @@ function docsPrecedeImport(ParserState $state): bool
     while (isDocTokenKind(peek($state)->kind) || isAt($state, TokenKind::DocSection)) {
         if (isAt($state, TokenKind::DocSection)) {
             advance($state);
+
             continue;
         }
         consumeLeadingDoc($state);
@@ -551,7 +558,7 @@ function docsPrecedeImport(ParserState $state): bool
 
 function consumeIndentedTrailingDoc(ParserState $state, int $bodyCol): ?string
 {
-    if (!isAt($state, TokenKind::DocTrailing)) {
+    if (! isAt($state, TokenKind::DocTrailing)) {
         return null;
     }
 
@@ -568,7 +575,7 @@ function attachTrailingDocToPreviousMethod(array &$methods, ?string $trailingDoc
         return;
     }
 
-    $last = array_pop($methods);
+    $last = \array_pop($methods);
     if ($last instanceof Ast\ClassMethodSig) {
         $methods[] = new Ast\ClassMethodSig($last->name, $last->type, mergeDoc($last->doc, $trailingDoc));
     } elseif ($last instanceof Ast\FunctionDecl) {
@@ -582,7 +589,7 @@ function attachTrailingDocToPreviousMethod(array &$methods, ?string $trailingDoc
 function consumeLeadingDoc(ParserState $state): ?string
 {
     $parts = [];
-    while (!isAt($state, TokenKind::Eof) && isDocTokenKind(peek($state)->kind)) {
+    while (! isAt($state, TokenKind::Eof) && isDocTokenKind(peek($state)->kind)) {
         $kind = peek($state)->kind;
         if ($kind === TokenKind::DocSection || $kind === TokenKind::DocTrailing) {
             break;
@@ -590,7 +597,7 @@ function consumeLeadingDoc(ParserState $state): ?string
         $parts[] = advance($state)->lexeme;
     }
 
-    return $parts === [] ? null : implode("\n", $parts);
+    return $parts === [] ? null : \implode("\n", $parts);
 }
 
 function consumeTrailingDoc(ParserState $state): ?string
@@ -600,7 +607,7 @@ function consumeTrailingDoc(ParserState $state): ?string
         $parts[] = advance($state)->lexeme;
     }
 
-    return $parts === [] ? null : implode("\n", $parts);
+    return $parts === [] ? null : \implode("\n", $parts);
 }
 
 function mergeDoc(?string $leading, ?string $trailing): ?string

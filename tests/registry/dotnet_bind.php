@@ -13,7 +13,7 @@
 // verifier does, and `dotnet build` assembles the program.
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
@@ -30,7 +30,6 @@ use function Moggi\Backend\DotNet\Verify\findFrameworkDir;
 use function Moggi\Cache\runtimeCacheDir;
 use function Moggi\Registry\Bind\bindCacheKey;
 use function Moggi\Registry\Bind\dotNetBindModuleName;
-use function Moggi\Registry\Bind\dotNetBindingSidecarPath;
 use function Moggi\Registry\Bind\inspectDotNetTree;
 use function Moggi\Registry\Bind\parseDotNetCoordinate;
 use function Moggi\Registry\Bind\renderBinding;
@@ -39,7 +38,7 @@ use function Moggi\Registry\prettyJson;
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
     ++$checks;
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
@@ -91,7 +90,7 @@ $buildEnv['DOTNET_ROOT'] = \dirname((string) $dotnet);
 $buildEnv['DOTNET_NOLOGO'] = '1';
 $buildEnv['DOTNET_CLI_TELEMETRY_OPTOUT'] = '1';
 $buildEnv['DOTNET_SKIP_FIRST_TIME_EXPERIENCE'] = '1';
-if (!\is_dir($tree . '/dotnet') && !@\mkdir($tree . '/dotnet', 0777, true)) {
+if (! \is_dir($tree . '/dotnet') && ! @\mkdir($tree . '/dotnet', 0777, true)) {
     $assert(false, 'cannot create ' . $tree . '/dotnet');
 }
 $sources = [];
@@ -186,7 +185,7 @@ foreach ([
     $assert(isset($skipReasons[$expected]), 'no skip for ' . \str_replace("\0", ': ', $expected));
 }
 foreach ($descriptor['skipped'] as $skip) {
-    $assert(!\str_contains($skip['reason'], 'round-trip'), 'round-trip mismatch: ' . \json_encode($skip));
+    $assert(! \str_contains($skip['reason'], 'round-trip'), 'round-trip mismatch: ' . \json_encode($skip));
 }
 $assert(\count($descriptor['skipped']) === 23, 'skipped: ' . \count($descriptor['skipped']));
 

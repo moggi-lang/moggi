@@ -6,14 +6,14 @@ function resolveJdkBinary(string $name): ?string
     // On Windows the binaries are `name.exe`; the PATH lookup below already
     // knows that, but the JAVA_HOME and sibling spellings do not.
     $names = [$name];
-    if (\PHP_OS_FAMILY === 'Windows' && !\str_ends_with(\strtolower($name), '.exe')) {
+    if (\PHP_OS_FAMILY === 'Windows' && ! \str_ends_with(\strtolower($name), '.exe')) {
         $names[] = $name . '.exe';
     }
-    $javaHome = getenv('JAVA_HOME');
+    $javaHome = \getenv('JAVA_HOME');
     if (\is_string($javaHome) && $javaHome !== '') {
         foreach ($names as $candidate_name) {
-            $candidate = rtrim($javaHome, '/\\') . '/bin/' . $candidate_name;
-            if (\is_file($candidate) && is_executable($candidate)) {
+            $candidate = \rtrim($javaHome, '/\\') . '/bin/' . $candidate_name;
+            if (\is_file($candidate) && \is_executable($candidate)) {
                 return $candidate;
             }
         }
@@ -28,8 +28,8 @@ function resolveJdkBinary(string $name): ?string
         $java = resolveJdkBinary('java');
         if ($java !== null) {
             foreach ($names as $candidate_name) {
-                $sibling = dirname($java) . '/' . $candidate_name;
-                if (\is_file($sibling) && is_executable($sibling)) {
+                $sibling = \dirname($java) . '/' . $candidate_name;
+                if (\is_file($sibling) && \is_executable($sibling)) {
                     return $sibling;
                 }
             }
@@ -53,8 +53,7 @@ function runCompiledProcess(
     ?array $env = null,
     ?string $cwd = null,
     ?string $stdin = null,
-): array
-{
+): array {
     if (\PHP_OS_FAMILY === 'Windows') {
         return runCompiledProcessThroughFiles($command, $timeoutSec, $env, $cwd, $stdin);
     }
@@ -64,8 +63,8 @@ function runCompiledProcess(
         1 => ['pipe', 'w'],
         2 => ['pipe', 'w'],
     ];
-    $process = proc_open($command, $descriptorSpec, $pipes, $cwd, $env);
-    if (!is_resource($process)) {
+    $process = \proc_open($command, $descriptorSpec, $pipes, $cwd, $env);
+    if (! \is_resource($process)) {
         return ['exitCode' => -1, 'stdout' => '', 'stderr' => 'cannot start process', 'timedOut' => false];
     }
 
@@ -73,44 +72,47 @@ function runCompiledProcess(
         @\fwrite($pipes[0], $stdin);
     }
     \fclose($pipes[0]);
-    stream_set_blocking($pipes[1], false);
-    stream_set_blocking($pipes[2], false);
+    \stream_set_blocking($pipes[1], false);
+    \stream_set_blocking($pipes[2], false);
 
     $stdout = '';
     $stderr = '';
     $open = [1 => $pipes[1], 2 => $pipes[2]];
-    $deadline = microtime(true) + $timeoutSec;
+    $deadline = \microtime(true) + $timeoutSec;
     $timedOut = false;
 
     while ($open !== []) {
-        $remaining = $deadline - microtime(true);
+        $remaining = $deadline - \microtime(true);
         if ($remaining <= 0) {
             $timedOut = true;
+
             break;
         }
 
-        $read = array_values($open);
+        $read = \array_values($open);
         $write = null;
         $except = null;
         $sec = (int) $remaining;
         $usec = (int) (($remaining - $sec) * 1_000_000);
-        $ready = @stream_select($read, $write, $except, $sec, $usec);
+        $ready = @\stream_select($read, $write, $except, $sec, $usec);
         if ($ready === false) {
             break;
         }
         if ($ready === 0) {
             $timedOut = true;
+
             break;
         }
 
         foreach ($open as $fd => $stream) {
-            if (!\in_array($stream, $read, true)) {
+            if (! \in_array($stream, $read, true)) {
                 continue;
             }
             $chunk = \fread($stream, 65536);
-            if ($chunk === false || ($chunk === '' && feof($stream))) {
+            if ($chunk === false || ($chunk === '' && \feof($stream))) {
                 \fclose($stream);
                 unset($open[$fd]);
+
                 continue;
             }
             if ($fd === 1) {
@@ -122,16 +124,16 @@ function runCompiledProcess(
     }
 
     if ($timedOut) {
-        proc_terminate($process, 9);
+        \proc_terminate($process, 9);
         foreach ($open as $stream) {
             \fclose($stream);
         }
-        proc_close($process);
+        \proc_close($process);
 
         return ['exitCode' => -1, 'stdout' => $stdout, 'stderr' => $stderr, 'timedOut' => true];
     }
 
-    $exitCode = proc_close($process);
+    $exitCode = \proc_close($process);
 
     return ['exitCode' => $exitCode, 'stdout' => $stdout, 'stderr' => $stderr, 'timedOut' => false];
 }
@@ -154,8 +156,8 @@ function runCompiledProcessThroughFiles(
 ): array {
     $files = createProcessFiles($stdin);
     $pipes = [];
-    $process = @proc_open($command, processFileDescriptors($files), $pipes, $cwd, $env);
-    if (!\is_resource($process)) {
+    $process = @\proc_open($command, processFileDescriptors($files), $pipes, $cwd, $env);
+    if (! \is_resource($process)) {
         removeProcessFiles($files);
 
         return ['exitCode' => -1, 'stdout' => '', 'stderr' => 'cannot start process', 'timedOut' => false];
@@ -176,14 +178,16 @@ function runCompiledProcessThroughFiles(
         $stderr .= $chunk;
 
         $status = \proc_get_status($process);
-        if (!$status['running']) {
+        if (! $status['running']) {
             $exitCode = $status['exitcode'];
+
             break;
         }
         if (\microtime(true) >= $deadline) {
             $timedOut = true;
             \proc_terminate($process, 9);
             \usleep(100_000);
+
             break;
         }
         \usleep(2000);
@@ -235,15 +239,16 @@ function runProcessesInParallel(array $jobs, ?callable $onChunk = null): array
     $results = [];
 
     foreach ($jobs as $index => $job) {
-        $process = @proc_open(
+        $process = @\proc_open(
             $job['command'],
             $descriptorSpec,
             $pipes,
             $job['cwd'] ?? null,
             $job['env'] ?? null,
         );
-        if (!\is_resource($process)) {
+        if (! \is_resource($process)) {
             $results[$index] = ['exitCode' => -1, 'stdout' => '', 'stderr' => 'cannot start process', 'timedOut' => false];
+
             continue;
         }
 
@@ -286,6 +291,7 @@ function runProcessesInParallel(array $jobs, ?callable $onChunk = null): array
                 if ($chunk === false || ($chunk === '' && \feof($stream))) {
                     \fclose($stream);
                     unset($running[$index]['pipes'][$fd]);
+
                     continue;
                 }
                 $running[$index][$fd === 1 ? 'stdout' : 'stderr'] .= $chunk;
@@ -306,6 +312,7 @@ function runProcessesInParallel(array $jobs, ?callable $onChunk = null): array
                     'timedOut' => $state['timedOut'],
                 ];
                 unset($running[$index]);
+
                 continue;
             }
 
@@ -321,7 +328,7 @@ function runProcessesInParallel(array $jobs, ?callable $onChunk = null): array
     }
 
     foreach ($jobs as $index => $job) {
-        if (!isset($results[$index])) {
+        if (! isset($results[$index])) {
             $results[$index] = [
                 'exitCode' => -1,
                 'stdout' => '',
@@ -353,16 +360,17 @@ function runProcessesInParallelThroughFiles(array $jobs, ?callable $onChunk): ar
     foreach ($jobs as $index => $job) {
         $files = createProcessFiles(null);
         $pipes = [];
-        $process = @proc_open(
+        $process = @\proc_open(
             $job['command'],
             processFileDescriptors($files),
             $pipes,
             $job['cwd'] ?? null,
             $job['env'] ?? null,
         );
-        if (!\is_resource($process)) {
+        if (! \is_resource($process)) {
             removeProcessFiles($files);
             $results[$index] = ['exitCode' => -1, 'stdout' => '', 'stderr' => 'cannot start process', 'timedOut' => false];
+
             continue;
         }
 
@@ -397,7 +405,7 @@ function runProcessesInParallelThroughFiles(array $jobs, ?callable $onChunk): ar
             }
 
             $status = \proc_get_status($state['process']);
-            if (!$status['running']) {
+            if (! $status['running']) {
                 $results[$index] = [
                     'exitCode' => $status['exitcode'],
                     'stdout' => $state['stdout'],
@@ -407,6 +415,7 @@ function runProcessesInParallelThroughFiles(array $jobs, ?callable $onChunk): ar
                 removeProcessFiles($state['files']);
                 \proc_close($state['process']);
                 unset($running[$index]);
+
                 continue;
             }
 
@@ -428,6 +437,7 @@ function runProcessesInParallelThroughFiles(array $jobs, ?callable $onChunk): ar
                 removeProcessFiles($state['files']);
                 \proc_close($state['process']);
                 unset($running[$index]);
+
                 continue;
             }
 
@@ -518,7 +528,7 @@ function readAppendedBytes(string $path, int $offset): array
  */
 function normalizeDiagnosticPaths(string $text, string $projectRoot): string
 {
-    $root = realpath($projectRoot);
+    $root = \realpath($projectRoot);
     if ($root === false) {
         return $text;
     }
@@ -531,6 +541,7 @@ function normalizeDiagnosticPaths(string $text, string $projectRoot): string
         '',
         $text,
     );
+
     return \preg_replace_callback(
         '#^([^\n]*?:[0-9]+:[0-9]+:)#m',
         static fn (array $m): string => \str_replace([DIRECTORY_SEPARATOR, '\\'], '/', $m[1]),

@@ -41,7 +41,7 @@ function safeLogName(string $name): string
 function writeCaseLog(string $name, string $message): ?string
 {
     $dir = reportLogDir();
-    if (!@\mkdir($dir, 0777, true) && !\is_dir($dir)) {
+    if (! @\mkdir($dir, 0777, true) && ! \is_dir($dir)) {
         return null;
     }
 
@@ -292,7 +292,7 @@ function installCaseDeathReporter(): void
         if ($case === null || $error === null) {
             return;
         }
-        if (!\in_array($error['type'], [E_ERROR, E_USER_ERROR, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+        if (! \in_array($error['type'], [E_ERROR, E_USER_ERROR, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
             return;
         }
 
@@ -306,7 +306,7 @@ function installCaseDeathReporter(): void
 /** How a backend's non-green counts read in the `--backend all` verdict line. */
 function backendVerdict(array $counts): string
 {
-    if (!countsFailed($counts)) {
+    if (! countsFailed($counts)) {
         return 'ok';
     }
 

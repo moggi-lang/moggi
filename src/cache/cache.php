@@ -35,7 +35,7 @@ use function Moggi\Paths\globPaths;
  */
 
 /** Explicit `--no-cache`/`--cache` choice, overriding MOGGI_NO_CACHE. */
-final class CacheSwitch
+final class cache
 {
     private static ?bool $override = null;
 
@@ -62,25 +62,25 @@ function cacheEnabled(): bool
         return $override;
     }
 
-    $env = getenv('MOGGI_NO_CACHE');
+    $env = \getenv('MOGGI_NO_CACHE');
 
-    return !($env !== false && $env !== '' && $env !== '0');
+    return ! ($env !== false && $env !== '' && $env !== '0');
 }
 
 function projectRoot(): string
 {
-    return dirname(__DIR__, 2);
+    return \dirname(__DIR__, 2);
 }
 
 /** Root of the local project cache (defaults to ./.moggi). */
 function cacheBaseDir(): string
 {
-    $override = getenv('MOGGI_CACHE_DIR');
+    $override = \getenv('MOGGI_CACHE_DIR');
     if ($override !== false && $override !== '') {
-        return rtrim($override, '/');
+        return \rtrim($override, '/');
     }
 
-    $cwd = getcwd();
+    $cwd = \getcwd();
 
     return ($cwd === false ? '.' : $cwd) . '/.moggi';
 }
@@ -123,28 +123,28 @@ function hashCompilerSources(): string
         }
     }
 
-    sort($files);
+    \sort($files);
     foreach ($files as $path) {
-        $contents = @file_get_contents($path);
+        $contents = @\file_get_contents($path);
         if ($contents === false) {
             continue;
         }
-        $rel = substr($path, strlen($root) + 1);
+        $rel = \substr($path, \strlen($root) + 1);
         $parts[] = $rel . ':' . hashContent($contents);
     }
 
-    array_unshift(
+    \array_unshift(
         $parts,
         'php:' . PHP_VERSION,
         'int:' . PHP_INT_SIZE,
     );
 
-    return substr(hash('sha256', \implode("\n", $parts)), 0, 32);
+    return \substr(\hash('sha256', \implode("\n", $parts)), 0, 32);
 }
 
 function hashContent(string $data): string
 {
-    return hash('xxh128', $data);
+    return \hash('xxh128', $data);
 }
 
 /** Content fingerprint of a source file (memoized by realpath+mtime+size). */
@@ -152,18 +152,18 @@ function fileFingerprint(string $path): string
 {
     static $memo = [];
 
-    $real = realpath($path);
+    $real = \realpath($path);
     if ($real === false) {
         return 'missing';
     }
 
-    $stat = @stat($real);
+    $stat = @\stat($real);
     $statKey = $real . ':' . ($stat['mtime'] ?? 0) . ':' . ($stat['size'] ?? 0);
     if (isset($memo[$statKey])) {
         return $memo[$statKey];
     }
 
-    $contents = @file_get_contents($real);
+    $contents = @\file_get_contents($real);
     $hash = $contents === false ? 'unreadable' : hashContent($contents);
     $memo[$statKey] = $hash;
 
@@ -194,30 +194,30 @@ function ensureCache(): void
 
     $done = true;
 
-    if (!cacheEnabled()) {
+    if (! cacheEnabled()) {
         return;
     }
 
     $base = cacheBaseDir();
     $fingerprint = compilerFingerprint();
-    if (@file_get_contents(fingerprintPath()) === $fingerprint) {
+    if (@\file_get_contents(fingerprintPath()) === $fingerprint) {
         return;
     }
 
-    $lock = @fopen(cacheLockPath(), 'c');
-    if ($lock === false || !flock($lock, LOCK_EX)) {
+    $lock = @\fopen(cacheLockPath(), 'c');
+    if ($lock === false || ! \flock($lock, LOCK_EX)) {
         resetCacheTree($base, $fingerprint);
 
         return;
     }
 
     try {
-        if (@file_get_contents(fingerprintPath()) !== $fingerprint) {
+        if (@\file_get_contents(fingerprintPath()) !== $fingerprint) {
             resetCacheTree($base, $fingerprint);
         }
     } finally {
-        flock($lock, LOCK_UN);
-        fclose($lock);
+        \flock($lock, LOCK_UN);
+        \fclose($lock);
     }
 }
 
@@ -230,7 +230,7 @@ function ensureCache(): void
  */
 function cacheLockPath(): string
 {
-    return rtrim(\sys_get_temp_dir(), '/') . '/moggi-cache-' . substr(hash('sha256', cacheBaseDir()), 0, 16) . '.lock';
+    return \rtrim(\sys_get_temp_dir(), '/') . '/moggi-cache-' . \substr(\hash('sha256', cacheBaseDir()), 0, 16) . '.lock';
 }
 
 /**
@@ -255,7 +255,7 @@ function resetCacheTree(string $base, string $fingerprint): void
 /** Remove everything under `$dir` except the named top-level entries. */
 function removeTreeExcept(string $dir, array $keep): void
 {
-    if (!\is_dir($dir)) {
+    if (! \is_dir($dir)) {
         removeTree($dir);
 
         return;
@@ -344,10 +344,10 @@ function cacheScratchDir(): string
 function mirrorPath(string $relPath): string
 {
     $relPath = \str_replace('\\', '/', $relPath);
-    $relPath = preg_replace('/\.mog$/', '', $relPath) ?? $relPath;
+    $relPath = \preg_replace('/\.mog$/', '', $relPath) ?? $relPath;
     $relPath = \str_replace('..', '__', $relPath);
 
-    return ltrim($relPath, '/');
+    return \ltrim($relPath, '/');
 }
 
 function ensureDir(string $dir): bool
@@ -356,24 +356,26 @@ function ensureDir(string $dir): bool
         return true;
     }
 
-    return @mkdir($dir, 0777, true) || \is_dir($dir);
+    return @\mkdir($dir, 0777, true) || \is_dir($dir);
 }
 
 /** Atomically write $data to $path (same-directory tmp file then rename). */
 function atomicWrite(string $path, string $data): bool
 {
-    if (!ensureDir(dirname($path))) {
+    if (! ensureDir(\dirname($path))) {
         return false;
     }
 
-    $tmp = $path . '.tmp.' . bin2hex(random_bytes(6));
+    $tmp = $path . '.tmp.' . \bin2hex(\random_bytes(6));
     if (@\file_put_contents($tmp, $data) === false) {
-        @unlink($tmp);
+        @\unlink($tmp);
+
         return false;
     }
 
-    if (!@rename($tmp, $path)) {
-        @unlink($tmp);
+    if (! @\rename($tmp, $path)) {
+        @\unlink($tmp);
+
         return false;
     }
 
@@ -383,12 +385,12 @@ function atomicWrite(string $path, string $data): bool
 function decodePayload(string $raw): mixed
 {
     try {
-        $value = @unserialize($raw);
+        $value = @\unserialize($raw);
     } catch (\Throwable) {
         return null;
     }
 
-    if (!\is_array($value)) {
+    if (! \is_array($value)) {
         return null;
     }
 
@@ -404,18 +406,18 @@ function decodePayload(string $raw): mixed
  */
 function moduleGet(string $relPath, string $kind, string $contentKey): mixed
 {
-    if (!cacheEnabled()) {
+    if (! cacheEnabled()) {
         return null;
     }
 
     ensureCache();
 
     $path = modulePath($relPath, $kind);
-    if (!\is_file($path)) {
+    if (! \is_file($path)) {
         return null;
     }
 
-    $raw = @file_get_contents($path);
+    $raw = @\file_get_contents($path);
     if ($raw === false) {
         return null;
     }
@@ -434,13 +436,13 @@ function moduleGet(string $relPath, string $kind, string $contentKey): mixed
 
 function modulePut(string $relPath, string $kind, string $contentKey, mixed $payload): void
 {
-    if (!cacheEnabled()) {
+    if (! cacheEnabled()) {
         return;
     }
 
     ensureCache();
 
-    $raw = serialize([
+    $raw = \serialize([
         'key' => $contentKey,
         'payload' => $payload,
     ]);
@@ -450,7 +452,7 @@ function modulePut(string $relPath, string $kind, string $contentKey, mixed $pay
 function modulePath(string $relPath, string $kind): string
 {
     $backend = compileBackend();
-    if (preg_match('/^[a-z0-9_-]+$/', $backend) !== 1) {
+    if (\preg_match('/^[a-z0-9_-]+$/', $backend) !== 1) {
         $backend = 'unknown';
     }
 
@@ -465,24 +467,24 @@ function artifactFileName(string $key): string
 {
     $safe = \preg_replace('/[^A-Za-z0-9._-]/', '_', $key) ?? $key;
 
-    return $safe === $key ? $key : $safe . '-' . \substr(hash('sha256', $key), 0, 12);
+    return $safe === $key ? $key : $safe . '-' . \substr(\hash('sha256', $key), 0, 12);
 }
 
 /** Whole-project artifact cache (e.g. `moggi compile` outputs). */
 function artifactGet(string $key): mixed
 {
-    if (!cacheEnabled()) {
+    if (! cacheEnabled()) {
         return null;
     }
 
     ensureCache();
 
     $path = compileDir() . '/artifacts/' . artifactFileName($key) . '.blob';
-    if (!\is_file($path)) {
+    if (! \is_file($path)) {
         return null;
     }
 
-    $raw = @file_get_contents($path);
+    $raw = @\file_get_contents($path);
     if ($raw === false) {
         return null;
     }
@@ -494,22 +496,23 @@ function artifactGet(string $key): mixed
 
 function artifactPut(string $key, mixed $payload): void
 {
-    if (!cacheEnabled()) {
+    if (! cacheEnabled()) {
         return;
     }
 
     ensureCache();
 
-    $raw = serialize(['payload' => $payload]);
+    $raw = \serialize(['payload' => $payload]);
     atomicWrite(compileDir() . '/artifacts/' . artifactFileName($key) . '.blob', $raw);
 }
 
 function removeTree(string $dir): int
 {
-    if (!\is_dir($dir)) {
-        if (\is_file($dir) && @unlink($dir)) {
+    if (! \is_dir($dir)) {
+        if (\is_file($dir) && @\unlink($dir)) {
             return 1;
         }
+
         return 0;
     }
 
@@ -520,12 +523,12 @@ function removeTree(string $dir): int
     );
     foreach ($it as $item) {
         if ($item->isDir()) {
-            @rmdir($item->getPathname());
-        } elseif (@unlink($item->getPathname())) {
+            @\rmdir($item->getPathname());
+        } elseif (@\unlink($item->getPathname())) {
             ++$count;
         }
     }
-    @rmdir($dir);
+    @\rmdir($dir);
 
     return $count;
 }
@@ -568,7 +571,7 @@ function clearArea(string $area): int
     }
 
     $areas = cacheAreas();
-    if (!isset($areas[$area])) {
+    if (! isset($areas[$area])) {
         throw new \InvalidArgumentException(
             "unknown cache area `{$area}` (expected: " . \implode(' | ', \array_keys($areas)) . ' | all)',
         );
@@ -590,7 +593,7 @@ function clearArea(string $area): int
 function clear(): int
 {
     $base = cacheBaseDir();
-    if (!\is_dir($base)) {
+    if (! \is_dir($base)) {
         return 0;
     }
 
@@ -624,7 +627,7 @@ function info(): array
     foreach (cacheAreas() as $name => $roots) {
         $size = ['entries' => 0, 'bytes' => 0];
         foreach ($roots as $root) {
-            if (!\is_dir($root)) {
+            if (! \is_dir($root)) {
                 continue;
             }
             $part = treeSize($root);

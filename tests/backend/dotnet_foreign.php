@@ -13,14 +13,14 @@
 // because that is what `Parse` returns; the old `Int` spelling would fail the verdict, correctly.
 
 $root = __DIR__;
-while (!\is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
 require $root . '/tests/suite/support/workspace.php';
 
 $assert = static function (bool $condition, string $message): void {
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
@@ -57,6 +57,7 @@ try {
         MOGGI);
 
     $errorA = null;
+
     try {
         \Moggi\Compiler\compileFile($probeA, 'php', true, null, 'dotnet');
     } catch (\Moggi\Semantics\Types\TypeError $e) {
@@ -82,6 +83,7 @@ try {
         MOGGI);
 
     $errorB = null;
+
     try {
         \Moggi\Compiler\compileFile($probeB, 'php', true, null, 'dotnet');
     } catch (\Moggi\Semantics\Types\TypeError $e) {

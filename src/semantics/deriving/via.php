@@ -2,18 +2,19 @@
 
 namespace Moggi\Semantics\Deriving;
 
-use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TVar;
 use Moggi\Semantics\TypeExpr\Type;
 
-use Moggi\Semantics\Types\TypeCheckState;
-use Moggi\Syntax\Ast;
-
 use function Moggi\Semantics\Types\astType;
 use function Moggi\Semantics\Types\substitute;
+
+use Moggi\Semantics\Types\TypeCheckState;
+
 use function Moggi\Semantics\Types\typeFail;
 use function Moggi\Semantics\Types\typeToString;
+
+use Moggi\Syntax\Ast;
 
 /**
  * Deriving via: delegate a class instance to another representationally equal
@@ -50,7 +51,7 @@ function deriveVia(
     if ($viaType === null) {
         throw typeFail($state, 'via deriving requires a via type', $ref);
     }
-    if (!isset($state->classes[$className])) {
+    if (! isset($state->classes[$className])) {
         throw typeFail($state, "unknown class `{$className}`", $ref);
     }
     $head = dataDeclHeadAst($decl);
@@ -63,7 +64,7 @@ function deriveVia(
     if (typeToString($target['representation']) !== typeToString($via['representation'])) {
         throw typeFail(
             $state,
-            "via type `" . typeToString($viaInternalType)
+            'via type `' . typeToString($viaInternalType)
                 . '` is not representationally compatible with target type',
             $ref,
         );
@@ -132,7 +133,7 @@ function newtypeChain(TypeCheckState $state, Type $type): array
  */
 function newtypeLayer(TypeCheckState $state, Type $type): ?array
 {
-    if (!$type instanceof TCon) {
+    if (! $type instanceof TCon) {
         return null;
     }
 
@@ -142,12 +143,12 @@ function newtypeLayer(TypeCheckState $state, Type $type): ?array
     }
 
     $constructors = $info['constructors'] ?? [];
-    if (count($constructors) !== 1) {
+    if (\count($constructors) !== 1) {
         return null;
     }
 
-    $ctor = $constructors[array_key_first($constructors)];
-    if (!is_array($ctor) || empty($ctor['fieldTypes'])) {
+    $ctor = $constructors[\array_key_first($constructors)];
+    if (! \is_array($ctor) || empty($ctor['fieldTypes'])) {
         return null;
     }
 
@@ -190,6 +191,7 @@ function synthesizeViaMethod(
         if (isClassParam($argType, $classParam)) {
             $pats[] = wrapPattern($targetCtors, new Ast\PatVar($binder));
             $args[] = wrapConstructors($viaCtors, new Ast\Variable($binder));
+
             continue;
         }
 
@@ -242,7 +244,7 @@ function coerceViaResult(array $viaCtors, array $targetCtors, Ast\AstNode $expr)
  */
 function wrapPattern(array $ctors, Ast\AstNode $inner): Ast\AstNode
 {
-    foreach (array_reverse($ctors) as $ctor) {
+    foreach (\array_reverse($ctors) as $ctor) {
         $inner = new Ast\PatCon($ctor, [$inner]);
     }
 
@@ -256,7 +258,7 @@ function wrapPattern(array $ctors, Ast\AstNode $inner): Ast\AstNode
  */
 function wrapConstructors(array $ctors, Ast\AstNode $expr): Ast\AstNode
 {
-    foreach (array_reverse($ctors) as $ctor) {
+    foreach (\array_reverse($ctors) as $ctor) {
         $expr = new Ast\Apply(new Ast\ConstructorRef($ctor), $expr);
     }
 
@@ -280,7 +282,7 @@ function assertNoNestedClassParam(
     string $methodName,
     Ast\DerivingClassRef $ref,
 ): void {
-    if (!internalTypeMentionsParam($type, $classParam)) {
+    if (! internalTypeMentionsParam($type, $classParam)) {
         return;
     }
 
@@ -291,4 +293,3 @@ function assertNoNestedClassParam(
         $ref,
     );
 }
-

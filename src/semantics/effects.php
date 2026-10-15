@@ -3,12 +3,14 @@
 namespace Moggi\Semantics\Effects;
 
 use Moggi\Pipeline\CompilePurpose;
-use Moggi\Syntax\Ast\Program;
 
 use function Moggi\Semantics\IoBoundary\validate;
+
 use function Moggi\Semantics\IoEscape\analyze;
 use function Moggi\Semantics\StrictIoNormalize\normalize;
 use function Moggi\Semantics\Types\checkRaw;
+
+use Moggi\Syntax\Ast\Program;
 
 /**
  * Semantic effect elaboration boundary.

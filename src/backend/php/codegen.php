@@ -3,6 +3,7 @@
 namespace Moggi\Backend\Php\Codegen;
 
 use const Moggi\Backend\Php\Dependencies\COMPOSER_AUTOLOAD;
+
 use function Moggi\Backend\Php\Dependencies\composerIsBundled;
 use function Moggi\Backend\Php\Dependencies\phpCompanionFilesForModule;
 use function Moggi\Backend\Php\Foreign\emitForeignIoStatement;
@@ -12,11 +13,9 @@ require __DIR__ . '/emit_expr.php';
 require __DIR__ . '/emit_match.php';
 require __DIR__ . '/dependencies.php';
 
-use Moggi\IR;
-use Moggi\Debug\SourceMapBuilder;
-
 use function Moggi\Backend\Meta\boolConstructorMap;
 use function Moggi\Backend\Meta\boolConstructorMapFromRegistry;
+
 use function Moggi\Backend\Meta\constructorArityMap;
 use function Moggi\Backend\Meta\constructorArityMapFromRegistry;
 use function Moggi\Backend\Meta\isBoolBackedData;
@@ -24,29 +23,34 @@ use function Moggi\Backend\Meta\lambdaMetaFromCaptures;
 use function Moggi\Backend\Meta\newtypeConstructorMap;
 use function Moggi\Backend\Meta\newtypeConstructorMapFromRegistry;
 use function Moggi\Backend\Meta\operandCallSrcLoc;
-use function Moggi\Backend\Php\Naming\buildPhpNameMap;
-use function Moggi\Backend\Php\Naming\mangleVar;
-use function Moggi\Backend\Php\Naming\phpFunctionName;
-use function Moggi\Backend\Php\Naming\phpSingleQuoted;
-use function Moggi\Backend\Php\Naming\phpTemp;
+use function Moggi\Backend\Php\Intrinsics\emitCall as emitIntrinsicCall;
+use function Moggi\Backend\Php\Intrinsics\localHelpersForUsed;
+use function Moggi\Backend\Php\Intrinsics\phpHelpersForModule;
 use function Moggi\Backend\Php\Io\emitIoAssignAction;
 use function Moggi\Backend\Php\Io\emitIoCatch;
 use function Moggi\Backend\Php\Io\emitIoFinally;
 use function Moggi\Backend\Php\Io\emitIoRun;
 use function Moggi\Backend\Php\Io\emitIoThrow;
-use function Moggi\Backend\Php\Intrinsics\emitCall as emitIntrinsicCall;
-use function Moggi\Backend\Php\Intrinsics\localHelpersForUsed;
-use function Moggi\Backend\Php\Intrinsics\phpHelpersForModule;
+use function Moggi\Backend\Php\Naming\buildPhpNameMap;
+use function Moggi\Backend\Php\Naming\mangleVar;
+use function Moggi\Backend\Php\Naming\phpFunctionName;
+use function Moggi\Backend\Php\Naming\phpSingleQuoted;
+use function Moggi\Backend\Php\Naming\phpTemp;
+
+use const Moggi\Backend\Php\RUNTIME_OUTPUT_PATH;
+
 use function Moggi\Debug\normalizeDisplayPath;
+
+use Moggi\Debug\SourceMapBuilder;
+use Moggi\IR;
+
 use function Moggi\IR\Visit\collectIrCodegenUsage;
-use function Moggi\IR\Visit\collectLocalsInBlock;
 use function Moggi\IR\Visit\collectLocalsInOperand;
 use function Moggi\IR\Visit\freeLocalsInBlock;
 use function Moggi\IR\Visit\moduleUsesMoggiRuntime;
-use function Moggi\Optimize\Support\isCapturedFnName;
 use function Moggi\Optimize\Partial\moduleUsesPartialApply;
 
-use const Moggi\Backend\Php\RUNTIME_OUTPUT_PATH;
+use function Moggi\Optimize\Support\isCapturedFnName;
 
 /** One line standing in for the module's source map until the map is known. */
 const MAP_PLACEHOLDER = '//@@moggi-source-map@@';
@@ -78,7 +82,7 @@ function emit(IR\Module $module, string $sourcePath, array $options = []): strin
         }
     }
     foreach ($module->instanceEvidence as $evidence) {
-        $functionArity[$evidence->evidenceName] = count($evidence->contextParams);
+        $functionArity[$evidence->evidenceName] = \count($evidence->contextParams);
     }
     foreach ($importOptions['externalFnRuntimeArity'] ?? [] as $name => $runtimeArity) {
         if (! isset($localBindings[$name])) {
@@ -86,7 +90,7 @@ function emit(IR\Module $module, string $sourcePath, array $options = []): strin
         }
     }
     $moduleName = (string) ($options['artifactModuleName'] ?? $module->moduleName ?? '');
-    $artifact = (string) ($options['outputRelative'] ?? (preg_replace('/\.mog$/', '.php', basename($sourcePath)) ?? 'out.php'));
+    $artifact = (string) ($options['outputRelative'] ?? (\preg_replace('/\.mog$/', '.php', \basename($sourcePath)) ?? 'out.php'));
     $sourceMap = new SourceMapBuilder($moduleName, 'php', $artifact);
     $displaySource = normalizeDisplayPath($module->sourceFile !== '' ? $module->sourceFile : $sourcePath);
     $codegenCtx = [
@@ -140,9 +144,9 @@ function emit(IR\Module $module, string $sourcePath, array $options = []): strin
     $hostCompanionArtifacts = [];
     $hostFiles = phpCompanionFilesForModule($sourcePath);
     if ($hostFiles !== []) {
-        $artifactDir = dirname(\str_replace('\\', '/', $artifact));
+        $artifactDir = \dirname(\str_replace('\\', '/', $artifact));
         foreach ($hostFiles as $hostFile) {
-            $base = basename($hostFile);
+            $base = \basename($hostFile);
             $hostCompanionRequires[] = "require_once __DIR__ . '/php/{$base}';";
             $rel = ($artifactDir === '.' ? 'php' : $artifactDir . '/php') . '/' . $base;
             $bytes = \file_get_contents($hostFile);
@@ -198,17 +202,17 @@ function emit(IR\Module $module, string $sourcePath, array $options = []): strin
         'localIntrinsicHelpers' => localHelpersForUsed($usedHelpers),
     ];
     if ($helperCode !== '') {
-        $lines[] = rtrim($helperCode, "\n");
+        $lines[] = \rtrim($helperCode, "\n");
         $lines[] = '';
     }
 
     foreach ($module->data as $decl) {
-        $lines[] = rtrim(emitDataDecl($decl, $phpNames), "\n");
+        $lines[] = \rtrim(emitDataDecl($decl, $phpNames), "\n");
         $lines[] = '';
     }
 
     foreach ($module->instanceEvidence as $evidence) {
-        $lines[] = rtrim(emitEvidenceFunction($evidence, $phpNames), "\n");
+        $lines[] = \rtrim(emitEvidenceFunction($evidence, $phpNames), "\n");
         $lines[] = '';
     }
 
@@ -222,24 +226,24 @@ function emit(IR\Module $module, string $sourcePath, array $options = []): strin
             $gen,
         );
 
-        $lines[] = rtrim(emitFunction($function, $lambdaMeta, $lambdaIndex, $phpNames, $codegenCtx), "\n");
+        $lines[] = \rtrim(emitFunction($function, $lambdaMeta, $lambdaIndex, $phpNames, $codegenCtx), "\n");
         $lines[] = '';
     }
 
     if ($sourceMap->carriesRuntimeMap()) {
-        array_splice($lines, $mapLineIndex, 0, [MAP_PLACEHOLDER, '']);
+        \array_splice($lines, $mapLineIndex, 0, [MAP_PLACEHOLDER, '']);
     }
-    $php = rtrim(\implode("\n", $lines), "\n") . "\n";
+    $php = \rtrim(\implode("\n", $lines), "\n") . "\n";
     $php = $sourceMap->resolveFrames($php);
 
     $const = $sourceMap->toRuntimeConst();
     if ($const !== null) {
-        $php = str_replace(MAP_PLACEHOLDER, $const, $php);
+        $php = \str_replace(MAP_PLACEHOLDER, $const, $php);
     } else {
-        $php = str_replace([MAP_PLACEHOLDER . "\n\n", MAP_PLACEHOLDER . "\n"], '', $php);
+        $php = \str_replace([MAP_PLACEHOLDER . "\n\n", MAP_PLACEHOLDER . "\n"], '', $php);
     }
 
-    $bootstrap = rtrim(emitEntryBootstrap($module, $phpNames), "\n");
+    $bootstrap = \rtrim(emitEntryBootstrap($module, $phpNames), "\n");
     if ($bootstrap !== '') {
         $php .= "\n" . $bootstrap . "\n";
     }
@@ -255,7 +259,7 @@ function emitEvidenceFunction(IR\InstanceEvidence $evidence, array $phpNames): s
 {
     $name = phpFunctionName($evidence->evidenceName, $phpNames);
     $ctxParams = $evidence->contextParams;
-    $ctxList = join(', ', \array_map(
+    $ctxList = \implode(', ', \array_map(
         static fn (string $p): string => '$' . mangleVar($p),
         $ctxParams,
     ));
@@ -263,15 +267,15 @@ function emitEvidenceFunction(IR\InstanceEvidence $evidence, array $phpNames): s
     foreach ($evidence->methods as $surfaceName => $irName) {
         $methodName = phpFunctionName($irName, $phpNames);
         if ($ctxParams === []) {
-            $entries[] = '        ' . json_encode($surfaceName, JSON_UNESCAPED_UNICODE)
+            $entries[] = '        ' . \json_encode($surfaceName, JSON_UNESCAPED_UNICODE)
                 . " => {$methodName}(...)";
         } else {
-            $entries[] = '        ' . json_encode($surfaceName, JSON_UNESCAPED_UNICODE)
+            $entries[] = '        ' . \json_encode($surfaceName, JSON_UNESCAPED_UNICODE)
                 . " => fn(...\$args) => {$methodName}({$ctxList}, ...\$args)";
         }
     }
 
-    return "function {$name}({$ctxList}): array {\n    return [\n" . join(",\n", $entries) . "\n    ];\n}\n\n";
+    return "function {$name}({$ctxList}): array {\n    return [\n" . \implode(",\n", $entries) . "\n    ];\n}\n\n";
 }
 
 /** @param array<string, string> $phpNames */
@@ -304,13 +308,14 @@ function emitDataDecl(IR\DataDecl $decl, array $phpNames): string
             $ctor->fields,
             \array_keys($ctor->fields),
         );
-        $paramsCode = join(', ', $params);
-        $argsCode = join(', ', \array_map(static fn (string $p): string => '$' . substr($p, 1), $params));
+        $paramsCode = \implode(', ', $params);
+        $argsCode = \implode(', ', \array_map(static fn (string $p): string => '$' . \substr($p, 1), $params));
 
         $tag = phpSingleQuoted($ctor->name);
 
         if ($argsCode === '') {
             $out .= "function {$name}() {\n    return [{$tag}];\n}\n\n";
+
             continue;
         }
 
@@ -328,10 +333,11 @@ function analyzeFunctionsForCodegen(array $functions): array
     foreach ($functions as $function) {
         if (isCapturedFnName($function->name)) {
             $lambdaIndex[$function->name] = $function;
+
             continue;
         }
 
-        $functionArity[$function->name] = count($function->params);
+        $functionArity[$function->name] = \count($function->params);
     }
 
     return [
@@ -340,7 +346,7 @@ function analyzeFunctionsForCodegen(array $functions): array
             $lambdaIndex,
             static fn (IR\FunctionDecl $fn): array => freeLocalsInBlock(
                 $fn->body,
-                array_fill_keys($fn->params, true),
+                \array_fill_keys($fn->params, true),
             ),
         ),
         'functionArity' => $functionArity,
@@ -358,10 +364,10 @@ function emitFunction(IR\FunctionDecl $function, array $lambdaMeta, array $lambd
         $params = [...$captures, ...$params];
     }
 
-    $paramsCode = join(', ', \array_map(static fn (string $p): string => '$' . mangleVar($p), $params));
+    $paramsCode = \implode(', ', \array_map(static fn (string $p): string => '$' . mangleVar($p), $params));
     $moduleName = (string) ($codegenCtx['artifactModuleName'] ?? $codegenCtx['moduleNamespace'] ?? '');
-    if (str_contains($moduleName, '\\')) {
-        $moduleName = str_replace('\\', '.', $moduleName);
+    if (\str_contains($moduleName, '\\')) {
+        $moduleName = \str_replace('\\', '.', $moduleName);
     }
     $body = emitBlock($function->body, 1, [
         'lambdaMeta' => $lambdaMeta,
@@ -388,7 +394,7 @@ function emitFunction(IR\FunctionDecl $function, array $lambdaMeta, array $lambd
 
 function emitTailRecall(IR\Stmt $stmt, int $indent, array $ctx): string
 {
-    $pad = str_repeat('    ', $indent);
+    $pad = \str_repeat('    ', $indent);
     $params = $ctx['tailRecParams'] ?? [];
     $args = $stmt->args;
     $argExprs = \array_map(static fn (IR\Operand $arg): string => emitOperand($arg, $ctx), $args);
@@ -416,9 +422,9 @@ function emitTailRecall(IR\Stmt $stmt, int $indent, array $ctx): string
 /** @param array<int, string> $params @param list<IR\Operand> $args @return ?array<int, int> */
 function tailRecallAssignOrder(array $params, array $args): ?array
 {
-    $n = count($params);
+    $n = \count($params);
     if ($n <= 1) {
-        return range(0, max(0, $n - 1));
+        return \range(0, \max(0, $n - 1));
     }
 
     $paramIndex = [];
@@ -429,7 +435,7 @@ function tailRecallAssignOrder(array $params, array $args): ?array
     $mustAssignFirst = \array_fill(0, $n, []);
     for ($i = 0; $i < $n; ++$i) {
         foreach (collectLocalsInOperand($args[$i]) as $local) {
-            if (!isset($paramIndex[$local])) {
+            if (! isset($paramIndex[$local])) {
                 continue;
             }
 
@@ -442,9 +448,9 @@ function tailRecallAssignOrder(array $params, array $args): ?array
 
     $inDegree = \array_fill(0, $n, 0);
     foreach ($mustAssignFirst as $j => $predecessors) {
-        $predecessors = array_values(array_unique($predecessors));
+        $predecessors = \array_values(\array_unique($predecessors));
         $mustAssignFirst[$j] = $predecessors;
-        $inDegree[$j] = count($predecessors);
+        $inDegree[$j] = \count($predecessors);
     }
 
     $queue = [];
@@ -456,10 +462,10 @@ function tailRecallAssignOrder(array $params, array $args): ?array
 
     $order = [];
     while ($queue !== []) {
-        $i = array_shift($queue);
+        $i = \array_shift($queue);
         $order[] = $i;
         for ($j = 0; $j < $n; ++$j) {
-            if (!\in_array($i, $mustAssignFirst[$j], true)) {
+            if (! \in_array($i, $mustAssignFirst[$j], true)) {
                 continue;
             }
 
@@ -470,7 +476,7 @@ function tailRecallAssignOrder(array $params, array $args): ?array
         }
     }
 
-    return count($order) === $n ? $order : null;
+    return \count($order) === $n ? $order : null;
 }
 
 function emitBlock(IR\Block $block, int $indent, array $ctx): string
@@ -492,7 +498,7 @@ function emitBlock(IR\Block $block, int $indent, array $ctx): string
 function frameMark(array $ctx, ?IR\SrcLoc $loc): string
 {
     $map = $ctx['sourceMap'] ?? null;
-    if (!$map instanceof SourceMapBuilder || $loc === null) {
+    if (! $map instanceof SourceMapBuilder || $loc === null) {
         return '';
     }
 
@@ -502,7 +508,7 @@ function frameMark(array $ctx, ?IR\SrcLoc $loc): string
 /** The first tail-call argument that is itself a call or a faulting intrinsic. */
 function tailRecallSrcLoc(IR\Stmt $stmt): ?IR\SrcLoc
 {
-    if (!($stmt instanceof IR\TailRecall)) {
+    if (! ($stmt instanceof IR\TailRecall)) {
         return null;
     }
     foreach ($stmt->args as $arg) {
@@ -517,7 +523,7 @@ function tailRecallSrcLoc(IR\Stmt $stmt): ?IR\SrcLoc
 
 function emitStmt(IR\Stmt $stmt, int $indent, array $ctx): string
 {
-    $pad = str_repeat('    ', $indent);
+    $pad = \str_repeat('    ', $indent);
 
     return match ($stmt::class) {
         IR\Ret::class => frameMark($ctx, operandCallSrcLoc($stmt->value) ?? ($stmt->srcLoc ?? null))
@@ -534,8 +540,8 @@ function emitStmt(IR\Stmt $stmt, int $indent, array $ctx): string
         IR\IoFinally::class => emitIoFinally($stmt, $indent, $ctx),
         IR\CallValue::class => frameMark($ctx, $stmt->srcLoc) . $pad . phpTemp($stmt->dest) . ' = ' . emitApplyExpr($stmt->callee, $stmt->args, $ctx) . ";\n",
         IR\DictCall::class => frameMark($ctx, $stmt->srcLoc) . $pad . phpTemp($stmt->dest) . ' = (' . emitOperand($stmt->evidence, $ctx)
-            . '[' . json_encode($stmt->method, JSON_UNESCAPED_UNICODE) . '])('
-            . join(', ', \array_map(static fn (IR\Operand $arg): string => emitOperand($arg, $ctx), $stmt->args))
+            . '[' . \json_encode($stmt->method, JSON_UNESCAPED_UNICODE) . '])('
+            . \implode(', ', \array_map(static fn (IR\Operand $arg): string => emitOperand($arg, $ctx), $stmt->args))
             . ");\n",
         IR\Assign::class => frameMark($ctx, operandCallSrcLoc($stmt->value) ?? ($stmt->srcLoc ?? null))
             . $pad . phpTemp($stmt->dest) . ' = ' . emitOperand($stmt->value, $ctx) . ";\n",
@@ -547,13 +553,13 @@ function emitStmt(IR\Stmt $stmt, int $indent, array $ctx): string
         IR\Loop::class => $pad . "while (true) {\n" . emitBlock($stmt->body, $indent + 1, $ctx) . $pad . "}\n",
         IR\TailRecall::class => frameMark($ctx, tailRecallSrcLoc($stmt) ?? ($stmt->srcLoc ?? null))
             . emitTailRecall($stmt, $indent, $ctx),
-        default => throw new \RuntimeException("unsupported ir stmt `" . $stmt::class . "` in codegen"),
+        default => throw new \RuntimeException('unsupported ir stmt `' . $stmt::class . '` in codegen'),
     };
 }
 
 function emitIoCall(IR\Stmt $stmt, int $indent, array $ctx): string
 {
-    $pad = str_repeat('    ', $indent);
+    $pad = \str_repeat('    ', $indent);
     $args = \array_map(static fn (IR\Operand $arg): string => emitOperand($arg, $ctx), $stmt->args);
     $dest = $stmt->dest;
     $assign = $dest === null ? '' : phpTemp($dest) . ' = ';
@@ -569,9 +575,9 @@ function emitIoCall(IR\Stmt $stmt, int $indent, array $ctx): string
         return $pad . $assign . $expr . ";\n";
     }
 
-    if (\is_string($runtime) && str_starts_with($runtime, 'foreign:')) {
+    if (\is_string($runtime) && \str_starts_with($runtime, 'foreign:')) {
         $foreign = $stmt->foreign;
-        if (!($foreign instanceof IR\ForeignCall)) {
+        if (! ($foreign instanceof IR\ForeignCall)) {
             throw new \RuntimeException('foreign IO call missing metadata');
         }
 
@@ -591,10 +597,10 @@ function runtimeRequirePath(string $sourcePath, array $options = []): string
 {
     $relative = $options['outputRelative'] ?? $sourcePath;
     $relative = \str_replace('\\', '/', $relative);
-    $dir = dirname($relative);
-    $depth = ($dir === '.' || $dir === '') ? 0 : substr_count($dir, '/') + 1;
+    $dir = \dirname($relative);
+    $depth = ($dir === '.' || $dir === '') ? 0 : \substr_count($dir, '/') + 1;
 
-    return "__DIR__ . '/" . str_repeat('../', $depth) . RUNTIME_OUTPUT_PATH . "'";
+    return "__DIR__ . '/" . \str_repeat('../', $depth) . RUNTIME_OUTPUT_PATH . "'";
 }
 
 /**
@@ -609,10 +615,10 @@ function composerAutoloadRequirePath(string $sourcePath, array $options = []): s
 {
     $relative = $options['outputRelative'] ?? $sourcePath;
     $relative = \str_replace('\\', '/', $relative);
-    $dir = dirname($relative);
-    $depth = ($dir === '.' || $dir === '') ? 0 : substr_count($dir, '/') + 1;
+    $dir = \dirname($relative);
+    $depth = ($dir === '.' || $dir === '') ? 0 : \substr_count($dir, '/') + 1;
 
-    return "__DIR__ . '/" . str_repeat('../', $depth) . COMPOSER_AUTOLOAD . "'";
+    return "__DIR__ . '/" . \str_repeat('../', $depth) . COMPOSER_AUTOLOAD . "'";
 }
 
 /** Whether the module carries the application entry an emitted bootstrap auto-runs. */
@@ -625,7 +631,7 @@ function moduleHasMainEntry(IR\Module $module): bool
 function emitEntryBootstrap(IR\Module $module, array $phpNames): string
 {
     $entry = $module->entry;
-    if (!moduleHasMainEntry($module)) {
+    if (! moduleHasMainEntry($module)) {
         return '';
     }
 

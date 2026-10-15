@@ -64,6 +64,7 @@ function lockDisagreements(array $lock, array $packages): array
         $nameProblem = packageNameProblem((string) $name);
         if ($nameProblem !== null) {
             $problems[] = "the lock names a package that is not a name: {$nameProblem}";
+
             continue;
         }
         if (($entry['bundled'] ?? false) === true) {
@@ -72,21 +73,25 @@ function lockDisagreements(array $lock, array $packages): array
         $known = $packages[$name] ?? null;
         if ($known === null) {
             $problems[] = "{$name} is no longer in the catalog";
+
             continue;
         }
         $version = (string) ($entry['version'] ?? '');
-        if (!isset($known['versions'][$version])) {
+        if (! isset($known['versions'][$version])) {
             $problems[] = "{$name} {$version} is not published any more";
+
             continue;
         }
         $digest = $entry['digest'] ?? null;
-        if (!\is_string($digest) || $digest === '') {
+        if (! \is_string($digest) || $digest === '') {
             $problems[] = "{$name} names no release digest in the lock — re-resolve and rewrite it";
+
             continue;
         }
         $published = $known['digest'] ?? null;
-        if (!\is_string($published) || $published === '') {
+        if (! \is_string($published) || $published === '') {
             $problems[] = "{$name} has no release digest in the catalog";
+
             continue;
         }
         if ($digest !== $published) {
@@ -155,12 +160,12 @@ function fetchVerifiedRelease(string $base, string $name, string $version, mixed
 
     $record = \json_decode((string) $file['bytes'], true, 512, \JSON_THROW_ON_ERROR);
     $release = $record['versions'][$version] ?? null;
-    if (!\is_array($release)) {
+    if (! \is_array($release)) {
         return ['ok' => false, 'detail' => "{$name} {$version} is not in its package file", 'release' => null, 'signer' => null];
     }
 
     $verdict = verifyRelease($name, $version, $release, (array) ($entry['authors'] ?? []));
-    if (!$verdict['ok']) {
+    if (! $verdict['ok']) {
         return ['ok' => false, 'detail' => 'signature: ' . $verdict['note'], 'release' => null, 'signer' => $verdict['signer']];
     }
 
@@ -177,7 +182,7 @@ function fetchBlob(string $base, string $name, string $version, array $release, 
 {
     $origin = $blobsBase ?? $base;
     $digest = $release['blob'] ?? null;
-    if (!\is_string($digest) || !\str_starts_with($digest, 'sha256:')) {
+    if (! \is_string($digest) || ! \str_starts_with($digest, 'sha256:')) {
         return ['path' => null, 'held' => false, 'problem' => "{$name} {$version} names no blob digest", 'origin' => ''];
     }
     if (safeDigestKey($digest) === null) {
@@ -222,7 +227,7 @@ function fetchBlob(string $base, string $name, string $version, array $release, 
     }
 
     $staging = $path . '.part-' . \getmypid() . '-' . \bin2hex(\random_bytes(4));
-    if (!ensureDir(\dirname($path)) || @\file_put_contents($staging, $bytes) === false || !@\rename($staging, $path)) {
+    if (! ensureDir(\dirname($path)) || @\file_put_contents($staging, $bytes) === false || ! @\rename($staging, $path)) {
         @\unlink($staging);
 
         return ['path' => null, 'held' => false, 'problem' => "cannot write {$path}", 'origin' => ''];
@@ -248,7 +253,7 @@ function fetchBlobFromSource(array $release, ?callable $fetch): array
     if ($source instanceof \stdClass) {
         $source = (array) $source;
     }
-    if (!\is_array($source) || !\is_string($source['kind'] ?? null)) {
+    if (! \is_array($source) || ! \is_string($source['kind'] ?? null)) {
         return ['bytes' => null, 'problem' => 'the registry does not serve its blob, and the release names no `source` to reproduce it from', 'origin' => ''];
     }
 
@@ -299,6 +304,7 @@ function sourceBlobFromGit(array $source): array
     }
 
     $work = sourceWorkDir();
+
     try {
         $clone = runProcess([$git, '-c', 'advice.detachedHead=false', 'clone', '--quiet', '--no-checkout', '--', $url, $work]);
         if ($clone['exitCode'] !== 0) {
@@ -343,8 +349,9 @@ function sourceBlobFromArchive(array $source, ?callable $fetch): array
     }
 
     $work = sourceWorkDir();
+
     try {
-        if (!ensureDir($work)) {
+        if (! ensureDir($work)) {
             return ['bytes' => null, 'problem' => "cannot create {$work}", 'origin' => ''];
         }
         $problem = extractArchive(decodeTransport($raw), $work);
@@ -471,12 +478,12 @@ function unpackArchive(string $archivePath, string $destination): ?string
     if (\is_dir($destination)) {
         removeTree($destination);
     }
-    if (!ensureDir(\dirname($destination))) {
+    if (! ensureDir(\dirname($destination))) {
         return 'cannot create ' . \dirname($destination);
     }
 
     $staging = $destination . '.unpack-' . \getmypid() . '-' . \bin2hex(\random_bytes(4));
-    if (!ensureDir($staging)) {
+    if (! ensureDir($staging)) {
         return "cannot create {$staging}";
     }
 
@@ -493,7 +500,7 @@ function unpackArchive(string $archivePath, string $destination): ?string
         return "cannot mark {$staging} unpacked";
     }
 
-    if (!@\rename($staging, $destination)) {
+    if (! @\rename($staging, $destination)) {
         removeTree($staging);
 
         return "cannot move the unpacked tree into {$destination}";
@@ -527,6 +534,7 @@ function containedPath(string $base, string $relative): ?string
                 return null;
             }
             \array_pop($parts);
+
             continue;
         }
         $parts[] = $part;
@@ -552,7 +560,7 @@ function containedPath(string $base, string $relative): ?string
 function libraryRoots(string $installDir, string $descriptorText): array
 {
     $ini = @\parse_ini_string($descriptorText, true, \INI_SCANNER_RAW);
-    if ($ini === false || !\is_array($ini['lib'] ?? null)) {
+    if ($ini === false || ! \is_array($ini['lib'] ?? null)) {
         return [];
     }
 
@@ -601,27 +609,31 @@ function installLockedPackages(string $base, array $lock, array $packages, bool 
                 $result['detail'] = "the compiler no longer ships `{$name}` — run `moggi update` against the registry";
                 $results[] = $result;
                 $ok = false;
+
                 continue;
             }
             $local = installBundledPackage($name, $version, $locked['digest'] ?? null, $bundled);
-            if (!$local['ok']) {
+            if (! $local['ok']) {
                 $result['status'] = 'refused';
                 $result['detail'] = $local['detail'];
                 $results[] = $result;
                 $ok = false;
+
                 continue;
             }
             $result['detail'] = $local['detail'];
             $result['roots'] = $local['roots'];
             $results[] = $result;
+
             continue;
         }
         $verified = fetchVerifiedRelease($base, $name, $version, $locked['digest'] ?? null, $entry, $useCache, $fetch, $log);
-        if (!$verified['ok']) {
+        if (! $verified['ok']) {
             $result['status'] = 'refused';
             $result['detail'] = $verified['detail'];
             $results[] = $result;
             $ok = false;
+
             continue;
         }
         $release = (array) $verified['release'];
@@ -632,6 +644,7 @@ function installLockedPackages(string $base, array $lock, array $packages, bool 
             $result['detail'] = $blob['problem'];
             $results[] = $result;
             $ok = false;
+
             continue;
         }
 
@@ -642,6 +655,7 @@ function installLockedPackages(string $base, array $lock, array $packages, bool 
             $result['detail'] = $problem;
             $results[] = $result;
             $ok = false;
+
             continue;
         }
 

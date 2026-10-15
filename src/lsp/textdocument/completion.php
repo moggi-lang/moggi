@@ -4,17 +4,17 @@ namespace Moggi\LSP\TextDocument;
 
 require_once __DIR__ . '/../../paths.php';
 
-use Moggi\LSP\Analysis\AnalysisService;
-use Moggi\Syntax\Ast;
-
 use function Moggi\Docs\search;
-use function Moggi\LSP\Analysis\ensureAnalyzed;
+
+use Moggi\LSP\Analysis\AnalysisService;
+
 use function Moggi\LSP\Analysis\findNodeChainAt;
-use function Moggi\LSP\Index\declForResolved;
 use function Moggi\LSP\Protocol\lspPosToCompiler;
 use function Moggi\LSP\Protocol\splitLines;
 use function Moggi\Modules\resolvedSymbol;
 use function Moggi\Paths\globPaths;
+
+use Moggi\Syntax\Ast;
 
 function svcCompletion(AnalysisService $svc, string $uri, array $pos): array
 {
@@ -26,14 +26,14 @@ function svcCompletion(AnalysisService $svc, string $uri, array $pos): array
         $comp = lspPosToCompiler($analysis->source, $pos);
         $lines = splitLines($analysis->source);
         $line = $lines[$comp['line'] - 1] ?? '';
-        $before = substr($line, 0, max(0, $comp['col'] - 1));
-        if (preg_match('/([A-Za-z_][A-Za-z0-9_\']*)$/', $before, $m)) {
+        $before = \substr($line, 0, \max(0, $comp['col'] - 1));
+        if (\preg_match('/([A-Za-z_][A-Za-z0-9_\']*)$/', $before, $m)) {
             $prefix = $m[1];
         }
-        $beforePrefix = rtrim(substr($before, 0, strlen($before) - strlen($prefix)));
+        $beforePrefix = \rtrim(\substr($before, 0, \strlen($before) - \strlen($prefix)));
         $module = $analysis->program instanceof Ast\Program ? ($analysis->program->module ?? 'Main') : 'Main';
 
-        if (preg_match('/\bimport\s+(?:qualified\s+)?(?:([A-Za-z_][A-Za-z0-9_.]*)\s+as\s+)?([A-Za-z0-9_.]*)$/', $beforePrefix . $prefix, $im)) {
+        if (\preg_match('/\bimport\s+(?:qualified\s+)?(?:([A-Za-z_][A-Za-z0-9_.]*)\s+as\s+)?([A-Za-z0-9_.]*)$/', $beforePrefix . $prefix, $im)) {
             $typed = $im[2] !== '' ? $im[2] : ($im[1] ?? '');
             $seenMods = [];
             foreach ($svc->modules->modules as $modName => $mod) {
@@ -44,12 +44,12 @@ function svcCompletion(AnalysisService $svc, string $uri, array $pos): array
                     'detail' => 'module',
                     'insertText' => $modName,
                     'sortText' => completionSortText($typed, $modName, 0),
-                    'documentation' => ['kind' => 'markdown', 'value' => "Module `{$modName}` — " . count($mod['decls']) . " declarations."],
+                    'documentation' => ['kind' => 'markdown', 'value' => "Module `{$modName}` — " . \count($mod['decls']) . ' declarations.'],
                 ];
             }
             foreach ($svc->libDirs as $dir) {
-                foreach (globPaths(rtrim($dir, '/\\') . '/*/*.mog') as $file) {
-                    $rel = basename(dirname($file)) . '/' . basename($file, '.mog');
+                foreach (globPaths(\rtrim($dir, '/\\') . '/*/*.mog') as $file) {
+                    $rel = \basename(\dirname($file)) . '/' . \basename($file, '.mog');
                     if (isset($seenMods[$rel])) {
                         continue;
                     }
@@ -67,7 +67,7 @@ function svcCompletion(AnalysisService $svc, string $uri, array $pos): array
             return ['isIncomplete' => false, 'items' => $items];
         }
 
-        if (str_ends_with(rtrim($beforePrefix), '.') || preg_match('/\.\s*[A-Za-z0-9_\']*$/', $before)) {
+        if (\str_ends_with(\rtrim($beforePrefix), '.') || \preg_match('/\.\s*[A-Za-z0-9_\']*$/', $before)) {
             $memberItems = memberCompletionItems($svc, $analysis, $comp['line'], $comp['col'], $prefix);
             if ($memberItems !== null) {
                 return ['isIncomplete' => false, 'items' => $memberItems];
@@ -79,14 +79,14 @@ function svcCompletion(AnalysisService $svc, string $uri, array $pos): array
             return ['isIncomplete' => false, 'items' => $recordItems];
         }
 
-        $window = implode("\n", array_slice($lines, max(0, $comp['line'] - 4), 5));
-        $nearCase = (bool) preg_match('/\b(case|of)\b/', $window);
+        $window = \implode("\n", \array_slice($lines, \max(0, $comp['line'] - 4), 5));
+        $nearCase = (bool) \preg_match('/\b(case|of)\b/', $window);
         foreach ($analysis->declarations as $name => $decl) {
             $docParts = [];
-            if (!empty($decl['type']) && !in_array($decl['type'], ['function', 'data', 'newtype', 'type', 'class'], true)) {
+            if (! empty($decl['type']) && ! \in_array($decl['type'], ['function', 'data', 'newtype', 'type', 'class'], true)) {
                 $docParts[] = "```moggi\n{$name} :: {$decl['type']}\n```";
             }
-            if (!empty($decl['doc'])) {
+            if (! empty($decl['doc'])) {
                 $docParts[] = $decl['doc'];
             }
             $item = [
@@ -98,7 +98,7 @@ function svcCompletion(AnalysisService $svc, string $uri, array $pos): array
                 'data' => ['uri' => $uri, 'name' => $name, 'module' => $module],
             ];
             if ($docParts !== []) {
-                $item['documentation'] = ['kind' => 'markdown', 'value' => implode("\n\n", $docParts)];
+                $item['documentation'] = ['kind' => 'markdown', 'value' => \implode("\n\n", $docParts)];
             }
             $items[] = $item;
         }
@@ -135,14 +135,14 @@ function svcCompletion(AnalysisService $svc, string $uri, array $pos): array
                     break;
                 }
                 $key = $decl->module . '::' . $decl->name;
-                $scoreBoost = isset($ranked[$key]) ? (int) (1000 - min(999, $ranked[$key] * 10)) : 50;
+                $scoreBoost = isset($ranked[$key]) ? (int) (1000 - \min(999, $ranked[$key] * 10)) : 50;
                 if ($nearCase && $decl->completionKind === 4) {
-                    $scoreBoost = max(0, $scoreBoost - 20);
+                    $scoreBoost = \max(0, $scoreBoost - 20);
                 }
                 $item = [
                     'label' => $decl->name,
                     'kind' => $decl->completionKind,
-                    'detail' => trim(($decl->type ?? '') . ' — ' . $decl->module),
+                    'detail' => \trim(($decl->type ?? '') . ' — ' . $decl->module),
                     'insertText' => $decl->name,
                     'sortText' => completionSortText($prefix, $decl->name, $scoreBoost),
                     'commitCharacters' => [' ', '(', '.'],
@@ -154,10 +154,10 @@ function svcCompletion(AnalysisService $svc, string $uri, array $pos): array
                     ],
                     'documentation' => [
                         'kind' => 'markdown',
-                        'value' => trim(($decl->doc ?? '') . "\n\nfrom `" . $decl->module . '`'),
+                        'value' => \trim(($decl->doc ?? '') . "\n\nfrom `" . $decl->module . '`'),
                     ],
                 ];
-                if (str_starts_with($decl->name, '<')) {
+                if (\str_starts_with($decl->name, '<')) {
                     $item['labelDetails'] = ['description' => $decl->module];
                 }
                 $edits = buildAutoImportEdits($analysis->source, $uri, $decl->module);
@@ -169,6 +169,7 @@ function svcCompletion(AnalysisService $svc, string $uri, array $pos): array
             }
         }
     }
+
     return ['isIncomplete' => false, 'items' => $items];
 }
 
@@ -192,22 +193,22 @@ function svcCompletion(AnalysisService $svc, string $uri, array $pos): array
  */
 function memberCompletionItems(AnalysisService $svc, object $analysis, int $line, int $cursorCol, string $prefix): ?array
 {
-    if (!$analysis->program instanceof Ast\Program) {
+    if (! $analysis->program instanceof Ast\Program) {
         return null;
     }
     $src = splitLines($analysis->source);
     $lineText = $src[$line - 1] ?? '';
-    $dotAt = $cursorCol - strlen($prefix) - strlen(rtrim(substr($lineText, 0, max(0, $cursorCol - strlen($prefix) - 1)), " \t")) - 1;
-    $scan = $cursorCol - strlen($prefix) - 1;
-    while ($scan >= 1 && (substr($lineText, $scan - 1, 1) === ' ' || substr($lineText, $scan - 1, 1) === "\t")) {
+    $dotAt = $cursorCol - \strlen($prefix) - \strlen(\rtrim(\substr($lineText, 0, \max(0, $cursorCol - \strlen($prefix) - 1)), " \t")) - 1;
+    $scan = $cursorCol - \strlen($prefix) - 1;
+    while ($scan >= 1 && (\substr($lineText, $scan - 1, 1) === ' ' || \substr($lineText, $scan - 1, 1) === "\t")) {
         $scan--;
     }
-    $dotAt = ($scan >= 1 && substr($lineText, $scan - 1, 1) === '.') ? $scan : 0;
+    $dotAt = ($scan >= 1 && \substr($lineText, $scan - 1, 1) === '.') ? $scan : 0;
     if ($dotAt < 1) {
         return null;
     }
-    $head = trim(substr($lineText, 0, $dotAt - 1));
-    if (preg_match('/([A-Za-z_][A-Za-z0-9_\']*)$/', $head, $m)) {
+    $head = \trim(\substr($lineText, 0, $dotAt - 1));
+    if (\preg_match('/([A-Za-z_][A-Za-z0-9_\']*)$/', $head, $m)) {
         $receiverName = $m[1];
     } else {
         return null;
@@ -221,6 +222,7 @@ function memberCompletionItems(AnalysisService $svc, object $analysis, int $line
             if ($recvType instanceof Ast\TypeNode) {
                 $typeHead = typeHeadName($recvType);
             }
+
             break;
         }
     }
@@ -236,7 +238,7 @@ function memberCompletionItems(AnalysisService $svc, object $analysis, int $line
     }
     $items = [];
     foreach ($svc->project->checked ?? [] as $prog) {
-        if (!$prog instanceof Ast\Program) {
+        if (! $prog instanceof Ast\Program) {
             continue;
         }
         foreach ($prog->items as $item) {
@@ -257,6 +259,7 @@ function memberCompletionItems(AnalysisService $svc, object $analysis, int $line
             }
         }
     }
+
     return $items !== [] ? $items : null;
 }
 
@@ -344,29 +347,33 @@ function openRecordBraceAt(string $source, int $line, int $col): ?int
         $c = $source[$i];
         if ($c === '"' || $c === "'") {
             $i = skipQuoted($source, $i, $c);
+
             continue;
         }
         if ($c === '-' && ($source[$i + 1] ?? '') === '-') {
-            $nl = strpos($source, "\n", $i);
+            $nl = \strpos($source, "\n", $i);
             $i = $nl === false ? $limit : $nl + 1;
+
             continue;
         }
         if ($c === '{' && ($source[$i + 1] ?? '') === '-') {
             $i = skipBlockComment($source, $i);
+
             continue;
         }
         if ($c === '{') {
             $open[] = $i;
             $i++;
+
             continue;
         }
         if ($c === '}' && $open !== []) {
-            array_pop($open);
+            \array_pop($open);
         }
         $i++;
     }
 
-    return $open === [] ? null : $open[array_key_last($open)];
+    return $open === [] ? null : $open[\array_key_last($open)];
 }
 
 /** Byte offset of a 1-based (line, col) compiler position. */
@@ -375,7 +382,7 @@ function offsetOf(string $source, int $line, int $col): int
     $offset = 0;
     $current = 1;
     while ($current < $line) {
-        $nl = strpos($source, "\n", $offset);
+        $nl = \strpos($source, "\n", $offset);
         if ($nl === false) {
             return \strlen($source);
         }
@@ -383,7 +390,7 @@ function offsetOf(string $source, int $line, int $col): int
         $current++;
     }
 
-    return min(\strlen($source), $offset + max(0, $col - 1));
+    return \min(\strlen($source), $offset + \max(0, $col - 1));
 }
 
 /** Offset just past a string/char literal opened at $at. */
@@ -394,6 +401,7 @@ function skipQuoted(string $source, int $at, string $quote): int
     while ($i < $len) {
         if ($source[$i] === '\\') {
             $i += 2;
+
             continue;
         }
         if ($source[$i] === $quote) {
@@ -412,10 +420,11 @@ function skipBlockComment(string $source, int $at): int
     $i = $at;
     $len = \strlen($source);
     while ($i < $len) {
-        $two = substr($source, $i, 2);
+        $two = \substr($source, $i, 2);
         if ($two === '{-') {
             $depth++;
             $i += 2;
+
             continue;
         }
         if ($two === '-}') {
@@ -424,6 +433,7 @@ function skipBlockComment(string $source, int $at): int
             if ($depth === 0) {
                 return $i;
             }
+
             continue;
         }
         $i++;
@@ -439,11 +449,11 @@ function skipBlockComment(string $source, int $at): int
  */
 function recordHeadBefore(string $source, int $open): ?string
 {
-    $before = rtrim(substr($source, 0, $open));
-    if ($before === '' || !preg_match('/([A-Za-z_][A-Za-z0-9_\']*)$/', $before, $m)) {
+    $before = \rtrim(\substr($source, 0, $open));
+    if ($before === '' || ! \preg_match('/([A-Za-z_][A-Za-z0-9_\']*)$/', $before, $m)) {
         return null;
     }
-    $prev = substr($before, 0, \strlen($before) - \strlen($m[1]));
+    $prev = \substr($before, 0, \strlen($before) - \strlen($m[1]));
     $prevChar = $prev === '' ? '' : $prev[\strlen($prev) - 1];
     if ($prevChar === ')' || $prevChar === ']' || $prevChar === '"') {
         return null;
@@ -460,8 +470,8 @@ function recordHeadBefore(string $source, int $open): ?string
  */
 function labelsWrittenIn(string $source, int $open, int $line, int $col): array
 {
-    $upto = substr($source, $open, max(0, offsetOf($source, $line, $col) - $open));
-    preg_match_all('/([A-Za-z_][A-Za-z0-9_\']*)\s*=/', $upto, $m);
+    $upto = \substr($source, $open, \max(0, offsetOf($source, $line, $col) - $open));
+    \preg_match_all('/([A-Za-z_][A-Za-z0-9_\']*)\s*=/', $upto, $m);
     $labels = [];
     foreach ($m[1] as $label) {
         $labels[$label] = true;
@@ -472,19 +482,19 @@ function labelsWrittenIn(string $source, int $open, int $line, int $col): array
 
 function completionSortText(string $prefix, string $name, int $tier): string
 {
-    $pl = strtolower($prefix);
-    $nl = strtolower($name);
+    $pl = \strtolower($prefix);
+    $nl = \strtolower($name);
     $rank = 4;
     if ($pl !== '' && $nl === $pl) {
         $rank = 0;
-    } elseif ($pl !== '' && str_starts_with($nl, $pl)) {
+    } elseif ($pl !== '' && \str_starts_with($nl, $pl)) {
         $rank = 1;
-    } elseif ($pl !== '' && str_contains($nl, $pl)) {
+    } elseif ($pl !== '' && \str_contains($nl, $pl)) {
         $rank = 2;
     } elseif ($pl !== '') {
         $pi = 0;
-        $plen = strlen($pl);
-        for ($i = 0, $n = strlen($nl); $i < $n && $pi < $plen; $i++) {
+        $plen = \strlen($pl);
+        for ($i = 0, $n = \strlen($nl); $i < $n && $pi < $plen; $i++) {
             if ($nl[$i] === $pl[$pi]) {
                 $pi++;
             }
@@ -493,7 +503,8 @@ function completionSortText(string $prefix, string $name, int $tier): string
             $rank = 3;
         }
     }
-    return sprintf('%02d-%03d-%s', $rank, min(999, $tier), $nl);
+
+    return \sprintf('%02d-%03d-%s', $rank, \min(999, $tier), $nl);
 }
 
 /**
@@ -544,17 +555,19 @@ function svcCompletionResolve(AnalysisService $svc, array $item): array
                 if ($e->signature !== '' && ($item['detail'] ?? '') === '') {
                     $item['detail'] = $e->signature;
                 }
-                if ($e->doc !== '' && !in_array($e->doc, $parts, true)) {
+                if ($e->doc !== '' && ! \in_array($e->doc, $parts, true)) {
                     $parts[] = $e->doc;
                 }
+
                 break;
             }
         } catch (\Throwable) {
         }
     }
     if ($parts !== []) {
-        $item['documentation'] = ['kind' => 'markdown', 'value' => implode("\n\n", $parts)];
+        $item['documentation'] = ['kind' => 'markdown', 'value' => \implode("\n\n", $parts)];
     }
+
     return $item;
 }
 
@@ -564,13 +577,13 @@ function buildAutoImportEdits(string $source, string $uri, string $module): arra
     if ($module === '' || $module === 'Main') {
         return [];
     }
-    if (preg_match('/^import\s+(qualified\s+)?' . preg_quote($module, '/') . '\b/m', $source)) {
+    if (\preg_match('/^import\s+(qualified\s+)?' . \preg_quote($module, '/') . '\b/m', $source)) {
         return [];
     }
     $lines = splitLines($source);
     $insertLine = 0;
     foreach ($lines as $i => $line) {
-        if (preg_match('/^module\b/', $line) || preg_match('/^import\b/', $line)) {
+        if (\preg_match('/^module\b/', $line) || \preg_match('/^import\b/', $line)) {
             $insertLine = $i + 1;
         }
     }
@@ -578,6 +591,7 @@ function buildAutoImportEdits(string $source, string $uri, string $module): arra
         'start' => ['line' => $insertLine, 'character' => 0],
         'end' => ['line' => $insertLine, 'character' => 0],
     ];
+
     return [['range' => $range, 'newText' => "import {$module}\n"]];
 }
 
@@ -674,7 +688,7 @@ function keywordCompletionItems(): array
             'label' => 'where',
             'kind' => $kw,
             'detail' => 'local bindings / module body',
-            'documentation' => "Introduce a block of local definitions or the body of a module/class/instance.",
+            'documentation' => 'Introduce a block of local definitions or the body of a module/class/instance.',
             'insertText' => 'where',
         ],
         [
@@ -689,7 +703,7 @@ function keywordCompletionItems(): array
             'label' => 'in',
             'kind' => $kw,
             'detail' => 'let … in',
-            'documentation' => "Closes a `let` binding group and introduces the result expression.",
+            'documentation' => 'Closes a `let` binding group and introduces the result expression.',
             'insertText' => 'in',
         ],
         [
@@ -704,7 +718,7 @@ function keywordCompletionItems(): array
             'label' => 'of',
             'kind' => $kw,
             'detail' => 'case … of',
-            'documentation' => "Introduces the alternatives of a `case` expression.",
+            'documentation' => 'Introduces the alternatives of a `case` expression.',
             'insertText' => 'of',
         ],
         [
@@ -719,14 +733,14 @@ function keywordCompletionItems(): array
             'label' => 'then',
             'kind' => $kw,
             'detail' => 'if … then … else',
-            'documentation' => "The true branch of an `if` expression.",
+            'documentation' => 'The true branch of an `if` expression.',
             'insertText' => 'then',
         ],
         [
             'label' => 'else',
             'kind' => $kw,
             'detail' => 'if … then … else',
-            'documentation' => "The false branch of an `if` expression.",
+            'documentation' => 'The false branch of an `if` expression.',
             'insertText' => 'else',
         ],
         [
@@ -749,14 +763,14 @@ function keywordCompletionItems(): array
             'label' => 'pub',
             'kind' => $kw,
             'detail' => 'export modifier',
-            'documentation' => "Mark a top-level declaration as exported from the module.",
+            'documentation' => 'Mark a top-level declaration as exported from the module.',
             'insertText' => 'pub',
         ],
         [
             'label' => 'abstract',
             'kind' => $kw,
             'detail' => 'abstract data',
-            'documentation' => "Hide constructors of a data type from importers.",
+            'documentation' => 'Hide constructors of a data type from importers.',
             'insertText' => 'abstract',
         ],
         [
@@ -779,7 +793,7 @@ function keywordCompletionItems(): array
             'label' => 'infixl',
             'kind' => $snip,
             'detail' => 'left-associative infix',
-            'documentation' => "Left-associative operator fixity (e.g. `+`, `*`).",
+            'documentation' => 'Left-associative operator fixity (e.g. `+`, `*`).',
             'insertText' => 'infixl ${1:6} ${2:op}',
             'insertTextFormat' => $fmt,
         ],
@@ -787,7 +801,7 @@ function keywordCompletionItems(): array
             'label' => 'infixr',
             'kind' => $snip,
             'detail' => 'right-associative infix',
-            'documentation' => "Right-associative operator fixity (e.g. `.`, `:`).",
+            'documentation' => 'Right-associative operator fixity (e.g. `.`, `:`).',
             'insertText' => 'infixr ${1:9} ${2:op}',
             'insertTextFormat' => $fmt,
         ],
@@ -795,7 +809,7 @@ function keywordCompletionItems(): array
             'label' => 'default',
             'kind' => $kw,
             'detail' => 'default types',
-            'documentation' => "Choose default types for ambiguous numeric / overloaded literals.",
+            'documentation' => 'Choose default types for ambiguous numeric / overloaded literals.',
             'insertText' => 'default',
         ],
         [
@@ -809,7 +823,7 @@ function keywordCompletionItems(): array
             'label' => 'hiding',
             'kind' => $kw,
             'detail' => 'import hiding',
-            'documentation' => "Import a module while excluding named entities.",
+            'documentation' => 'Import a module while excluding named entities.',
             'insertText' => 'hiding',
         ],
     ];

@@ -2,11 +2,12 @@
 
 namespace Moggi\Semantics\Deriving;
 
-use Moggi\Syntax\Ast;
-use Moggi\Semantics\Types\TypeCheckState;
-
 use function Moggi\Semantics\Kernel\boolFalseCtor;
 use function Moggi\Semantics\Kernel\boolTrueCtor;
+
+use Moggi\Semantics\Types\TypeCheckState;
+use Moggi\Syntax\Ast;
+
 use function Moggi\Syntax\isConstructorOperator;
 
 /**
@@ -51,6 +52,7 @@ function synthesizeRepType(TypeCheckState $state, Ast\DataDecl $decl): Ast\TypeN
 {
     $meta = metaDataType($state, $decl);
     $body = synthesizeRepSum($decl);
+
     return typeApp('D1', [$meta, $body]);
 }
 
@@ -101,8 +103,8 @@ function foldInfixType(string $op, array $parts): Ast\TypeNode
         return new Ast\TypeCon('U1');
     }
 
-    $acc = $parts[count($parts) - 1];
-    for ($i = count($parts) - 2; $i >= 0; --$i) {
+    $acc = $parts[\count($parts) - 1];
+    for ($i = \count($parts) - 2; $i >= 0; --$i) {
         $acc = new Ast\TypeApp(new Ast\TypeCon($op), [$parts[$i], $acc]);
     }
 
@@ -150,7 +152,7 @@ function metaConsType(Ast\ConstructorDecl $ctor): Ast\TypeNode
 
 function metaConsFixityType(Ast\ConstructorDecl $ctor): Ast\TypeNode
 {
-    if (!$ctor->declaredInfix) {
+    if (! $ctor->declaredInfix) {
         return new Ast\TypePromoted('PrefixI');
     }
 
@@ -231,7 +233,7 @@ function synthesizeFromBody(Ast\DataDecl $decl, string $scrutinee): Ast\AstNode
         );
     }
 
-    $n = count($decl->constructors);
+    $n = \count($decl->constructors);
     $alts = [];
     foreach ($decl->constructors as $i => $ctor) {
         $binders = [];
@@ -274,7 +276,7 @@ function synthesizeToBody(Ast\DataDecl $decl, string $scrutinee): Ast\AstNode
         );
     }
 
-    $n = count($decl->constructors);
+    $n = \count($decl->constructors);
     $alts = [];
     foreach ($decl->constructors as $i => $ctor) {
         $binders = [];
@@ -374,8 +376,8 @@ function foldInfixExpr(string $op, array $parts): Ast\AstNode
         return new Ast\ConstructorRef('U1');
     }
 
-    $acc = $parts[count($parts) - 1];
-    for ($i = count($parts) - 2; $i >= 0; --$i) {
+    $acc = $parts[\count($parts) - 1];
+    for ($i = \count($parts) - 2; $i >= 0; --$i) {
         $acc = new Ast\Infix($op, $parts[$i], $acc);
     }
 
@@ -389,8 +391,8 @@ function foldInfixPat(string $op, array $parts): Ast\AstNode
         return new Ast\PatCon('U1', []);
     }
 
-    $acc = $parts[count($parts) - 1];
-    for ($i = count($parts) - 2; $i >= 0; --$i) {
+    $acc = $parts[\count($parts) - 1];
+    for ($i = \count($parts) - 2; $i >= 0; --$i) {
         $acc = new Ast\PatCon($op, [$parts[$i], $acc]);
     }
 
@@ -421,7 +423,7 @@ function applyCon(string $name, array $args): Ast\AstNode
 /** @param list<Ast\AstNode> $args */
 function applyConstructor(string $name, array $args): Ast\AstNode
 {
-    if (isConstructorOperator($name) && count($args) === 2) {
+    if (isConstructorOperator($name) && \count($args) === 2) {
         return new Ast\Infix($name, $args[0], $args[1]);
     }
 
@@ -446,7 +448,7 @@ function deriveGenericMetadataInstances(
     $seenSels = [];
     foreach ($decl->constructors as $ctor) {
         $consKey = $ctor->name . "\0" . (constructorIsRecord($ctor) ? '1' : '0');
-        if (!isset($seenCons[$consKey])) {
+        if (! isset($seenCons[$consKey])) {
             $seenCons[$consKey] = true;
             $out[] = deriveConstructorInstance($ctor, $ref);
         }
@@ -472,7 +474,7 @@ function deriveDatatypeInstance(
     $ignored = new Ast\PatVar('_d');
     $isNt = $decl->isNewtype ? boolTrueCtor() : boolFalseCtor();
     $isAllNullary = datatypeIsAllNullary($decl) ? boolTrueCtor() : boolFalseCtor();
-    $isSum = count($decl->constructors) > 1 ? boolTrueCtor() : boolFalseCtor();
+    $isSum = \count($decl->constructors) > 1 ? boolTrueCtor() : boolFalseCtor();
 
     return new DerivedInstance(
         'Datatype',
@@ -539,7 +541,7 @@ function deriveConstructorInstance(
     $meta = metaConsType($ctor);
     $ignored = new Ast\PatVar('_c');
     $isRec = constructorIsRecord($ctor) ? boolTrueCtor() : boolFalseCtor();
-    $arity = count($ctor->fields);
+    $arity = \count($ctor->fields);
 
     return new DerivedInstance(
         'Constructor',

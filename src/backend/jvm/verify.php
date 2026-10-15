@@ -2,14 +2,17 @@
 
 namespace Moggi\Backend\Jvm\Verify;
 
-use Moggi\Backend\VerificationUnavailable;
-use Moggi\Syntax\Ast;
-
 use function Moggi\Backend\Inspect\findJavapBinary;
 use function Moggi\Backend\Inspect\findJavapBinaryWithSource;
+
 use function Moggi\Backend\Jvm\Dependencies\discoverVendorJvmDirs;
+
+use Moggi\Backend\VerificationUnavailable;
+
 use function Moggi\Compiler\runProcess;
 use function Moggi\Paths\globPaths;
+
+use Moggi\Syntax\Ast;
 
 /**
  * Verify a `foreign jvm` declaration against the host class it names.
@@ -64,7 +67,7 @@ function verifyForeignImportAgainstHost(
         return null;
     }
 
-    if (!$class['found']) {
+    if (! $class['found']) {
         if (carriedVendorJavaPresent()) {
             warnOnceUnverifiedVendorJava($name, $classPath);
 
@@ -219,6 +222,7 @@ function parseJavapTable(string $output): array
                 addJavapMember($methods, $fields, $declaration, $match[1]);
                 $declaration = null;
             }
+
             continue;
         }
 
@@ -226,6 +230,7 @@ function parseJavapTable(string $output): array
             $header = \substr($trimmed, 0, -1);
             $simple = javapHeaderSimpleName($header);
             $declaration = null;
+
             continue;
         }
 
@@ -294,7 +299,7 @@ function verifyForeignField(array $class, string $classPath, string $member, str
             : "jvm class `{$classPath}` has no field `{$member}`";
     }
 
-    if (!$field['public']) {
+    if (! $field['public']) {
         return "jvm field `{$classPath}.{$member}` is not public";
     }
 
@@ -408,12 +413,14 @@ function descriptorParameterCount(string $descriptor): int
         $char = $descriptor[$i];
         if ($char === '[') {
             ++$i;
+
             continue;
         }
         if ($char === 'L') {
             $semicolon = \strpos($descriptor, ';', $i);
             $i = $semicolon === false ? $length : $semicolon + 1;
             ++$count;
+
             continue;
         }
         ++$i;
@@ -458,6 +465,7 @@ function carriedVendorJavaPresent(): bool
     foreach (discoverVendorJvmDirs() as $dir) {
         if (globPaths($dir . '/*.java') !== []) {
             $present = true;
+
             break;
         }
     }

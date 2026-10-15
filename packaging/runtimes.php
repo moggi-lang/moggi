@@ -36,7 +36,7 @@ function runtimeVersionOutput(string $runtime, string $root, string $target, arr
 {
     $asset = runtimeAsset($runtime, $target, $config);
     $binary = $root . '/' . ($asset['binary'] ?? '');
-    if (!\is_file($binary)) {
+    if (! \is_file($binary)) {
         throw new \RuntimeException("{$runtime}: expected binary {$binary} after extraction");
     }
     if (\PHP_OS_FAMILY !== 'Windows') {
@@ -71,7 +71,7 @@ function installPlainAsset(string $runtime, string $archive, string $dir, array 
     if ($name === '') {
         throw new \RuntimeException("{$runtime}: the pinned asset names no file");
     }
-    if (!\copy($archive, $dir . '/' . $name)) {
+    if (! \copy($archive, $dir . '/' . $name)) {
         throw new \RuntimeException("cannot copy {$archive} to {$dir}/{$name}");
     }
     @\chmod($dir . '/' . $name, 0644);
@@ -94,7 +94,7 @@ function installPlainAsset(string $runtime, string $archive, string $dir, array 
 function writeComposerShim(string $dir): void
 {
     $bin = $dir . '/bin';
-    if (!\is_dir($bin) && !\mkdir($bin, 0777, true) && !\is_dir($bin)) {
+    if (! \is_dir($bin) && ! \mkdir($bin, 0777, true) && ! \is_dir($bin)) {
         throw new \RuntimeException("cannot create {$bin}");
     }
 
@@ -186,11 +186,11 @@ function runtimeIsPrepared(string $runtime, string $target, array $config): bool
 {
     $dir = preparedRuntimeDir($runtime, $target);
     $marker = $dir . '/.prepared';
-    if (!\is_file($marker)) {
+    if (! \is_file($marker)) {
         return false;
     }
     $recorded = \json_decode((string) \file_get_contents($marker), true);
-    if (!\is_array($recorded) || !\is_string($recorded['binary'] ?? null) || !\is_file($dir . '/' . $recorded['binary'])) {
+    if (! \is_array($recorded) || ! \is_string($recorded['binary'] ?? null) || ! \is_file($dir . '/' . $recorded['binary'])) {
         return false;
     }
 
@@ -199,7 +199,7 @@ function runtimeIsPrepared(string $runtime, string $target, array $config): bool
     }
 
     $entry = loadRuntimeLock()[$runtime . '/' . $target] ?? null;
-    if (!\is_array($entry)) {
+    if (! \is_array($entry)) {
         return false;
     }
 
@@ -213,16 +213,16 @@ function fetchRuntimeAsset(string $runtime, string $target, array $config): arra
     $entry = $lock[$key] ?? throw new \RuntimeException("no pinned asset for {$key}; run `php packaging/pin.php`");
 
     $downloads = distCacheRoot() . '/downloads';
-    if (!\is_dir($downloads) && !\mkdir($downloads, 0777, true) && !\is_dir($downloads)) {
+    if (! \is_dir($downloads) && ! \mkdir($downloads, 0777, true) && ! \is_dir($downloads)) {
         throw new \RuntimeException("cannot create {$downloads}");
     }
     $archive = $downloads . '/' . $runtime . '-' . $target . '-' . \basename((string) \parse_url($entry['url'], \PHP_URL_PATH));
 
-    if (!\is_file($archive)) {
+    if (! \is_file($archive)) {
         \fwrite(STDOUT, "  download {$entry['url']}\n");
         $partial = $archive . '.part';
         httpGet($entry['url'], $partial);
-        if (!\rename($partial, $archive)) {
+        if (! \rename($partial, $archive)) {
             throw new \RuntimeException("cannot move {$partial} to {$archive}");
         }
     }
@@ -247,7 +247,7 @@ function fetchRuntimeAsset(string $runtime, string $target, array $config): arra
 function prepareRuntime(string $runtime, string $target, array $config, bool $force = false): string
 {
     $dir = preparedRuntimeDir($runtime, $target);
-    if (!$force && runtimeIsPrepared($runtime, $target, $config)) {
+    if (! $force && runtimeIsPrepared($runtime, $target, $config)) {
         stageRuntimeLicense($runtime, $dir, $config, $target);
 
         return $dir;
@@ -259,7 +259,7 @@ function prepareRuntime(string $runtime, string $target, array $config, bool $fo
     }
 
     removeTree($dir);
-    if (!\mkdir($dir, 0777, true) && !\is_dir($dir)) {
+    if (! \mkdir($dir, 0777, true) && ! \is_dir($dir)) {
         throw new \RuntimeException("cannot create {$dir}");
     }
 
@@ -327,7 +327,7 @@ function prepareRuntime(string $runtime, string $target, array $config, bool $fo
  */
 function installRawAsset(string $archive, string $dir, string $binary): void
 {
-    if (!\copy($archive, $dir . '/' . $binary)) {
+    if (! \copy($archive, $dir . '/' . $binary)) {
         throw new \RuntimeException("cannot install {$archive} as {$dir}/{$binary}");
     }
     if (\PHP_OS_FAMILY !== 'Windows') {
@@ -347,7 +347,7 @@ function writePreparedMarker(string $dir, array $fields): void
 function stageRuntimeLicense(string $runtime, string $dir, array $config, string $target): void
 {
     $license = $config['runtimes'][$runtime]['license'] ?? null;
-    if (!\is_array($license)) {
+    if (! \is_array($license)) {
         return;
     }
 
@@ -357,20 +357,20 @@ function stageRuntimeLicense(string $runtime, string $dir, array $config, string
     }
 
     $configured = $license['url'] ?? null;
-    if (!\is_string($configured) || $configured === '') {
+    if (! \is_string($configured) || $configured === '') {
         throw new \RuntimeException("{$runtime} ships no {$file} and no licence URL is configured");
     }
     $url = expandAssetTemplate($configured, $runtime, $target, $config);
 
     $downloads = distCacheRoot() . '/downloads';
-    if (!\is_dir($downloads) && !\mkdir($downloads, 0777, true) && !\is_dir($downloads)) {
+    if (! \is_dir($downloads) && ! \mkdir($downloads, 0777, true) && ! \is_dir($downloads)) {
         throw new \RuntimeException("cannot create {$downloads}");
     }
     $cached = $downloads . '/license-' . $runtime . '-' . \basename((string) \parse_url($url, \PHP_URL_PATH));
-    if (!\is_file($cached)) {
+    if (! \is_file($cached)) {
         httpGet($url, $cached);
     }
-    if (!\copy($cached, $dir . '/' . $file)) {
+    if (! \copy($cached, $dir . '/' . $file)) {
         throw new \RuntimeException("cannot copy the {$runtime} licence into place");
     }
 }
@@ -391,7 +391,7 @@ function assertRuntimeVersion(string $runtime, string $output, array $config, st
         'maven' => \str_starts_with($head, 'Apache Maven ' . $expected),
         default => true,
     };
-    if (!$matches) {
+    if (! $matches) {
         throw new \RuntimeException(
             "{$runtime} for {$target} reports `{$head}`, expected {$expected}",
         );
@@ -411,7 +411,7 @@ function versionSeriesMatches(string $reported, string $series): bool
     if ($reported === $series) {
         return true;
     }
-    if (!\str_starts_with($reported, $series)) {
+    if (! \str_starts_with($reported, $series)) {
         return false;
     }
 

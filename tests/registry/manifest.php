@@ -9,7 +9,7 @@
 // the real `schnorr` CLI; without it they are skipped rather than faked.
 
 $root = __DIR__;
-while (!is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
@@ -20,7 +20,7 @@ use function Moggi\Registry\verifyRelease;
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
     ++$checks;
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
@@ -55,10 +55,10 @@ $assert(releaseMessage('x', '1.0.1', $full) !== releaseMessage('x', '1.0.0', $fu
 
 // --- sign and verify with a throwaway key, if the CLI is here ----------------
 $binary = \getenv('MOGGI_SCHNORR');
-if (!\is_string($binary) || $binary === '') {
+if (! \is_string($binary) || $binary === '') {
     $binary = $root . '/schnorr/schnorr';
 }
-if (!\is_file($binary) || !\is_executable($binary)) {
+if (! \is_file($binary) || ! \is_executable($binary)) {
     echo "  (skipped the signing checks: no schnorr CLI at {$binary})\n";
 } else {
     \putenv('MOGGI_SCHNORR=' . $binary);
@@ -68,7 +68,7 @@ if (!\is_file($binary) || !\is_executable($binary)) {
             [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
             $pipes,
         );
-        if (!\is_resource($process)) {
+        if (! \is_resource($process)) {
             throw new \RuntimeException("cannot run {$binary}");
         }
         if ($stdin !== null) {
@@ -97,14 +97,14 @@ if (!\is_file($binary) || !\is_executable($binary)) {
 
     $tampered = $signed;
     $tampered['docs'] = $digest('0');
-    $assert(!verifyRelease('x', '1.0.0', $tampered, [$npub])['ok'], 'tampering the docs digest breaks the signature');
+    $assert(! verifyRelease('x', '1.0.0', $tampered, [$npub])['ok'], 'tampering the docs digest breaks the signature');
 
     $tampered = $signed;
     $tampered['descriptor'] .= 'x';
-    $assert(!verifyRelease('x', '1.0.0', $tampered, [$npub])['ok'], 'tampering the descriptor breaks the signature');
+    $assert(! verifyRelease('x', '1.0.0', $tampered, [$npub])['ok'], 'tampering the descriptor breaks the signature');
 
     $assert(
-        !verifyRelease('x', '1.0.0', $signed, ['npub1' . \str_repeat('q', 58)])['ok'],
+        ! verifyRelease('x', '1.0.0', $signed, ['npub1' . \str_repeat('q', 58)])['ok'],
         'a signer not on the allowed list is refused',
     );
 }

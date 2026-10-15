@@ -26,12 +26,12 @@ function symbolName(string $name): string
     if ($name === '') {
         return '_';
     }
-    if (preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $name) === 1
-        && !isJavaKeyword($name)) {
+    if (\preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $name) === 1
+        && ! isJavaKeyword($name)) {
         return $name;
     }
 
-    return '_m_' . bin2hex($name);
+    return '_m_' . \bin2hex($name);
 }
 
 function isJavaKeyword(string $name): bool

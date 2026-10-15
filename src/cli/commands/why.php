@@ -2,11 +2,12 @@
 
 namespace Moggi\CLI\Commands;
 
+use function Moggi\Registry\badPackageMarker;
+use function Moggi\Registry\badPackageProblem;
+
 use Moggi\Registry\Catalog;
 use Moggi\Registry\FetchLog;
 
-use function Moggi\Registry\badPackageMarker;
-use function Moggi\Registry\badPackageProblem;
 use function Moggi\Registry\findDescriptor;
 use function Moggi\Registry\lockPath;
 use function Moggi\Registry\lockRegistryProblem;
@@ -14,8 +15,8 @@ use function Moggi\Registry\providedPackages;
 use function Moggi\Registry\readDescriptor;
 use function Moggi\Registry\readLock;
 use function Moggi\Registry\resolveWithDetails;
-use function Moggi\Registry\shortNpub;
 use function Moggi\Registry\satisfies;
+use function Moggi\Registry\shortNpub;
 use function Moggi\Registry\unmaintainedMarker;
 use function Moggi\Registry\unmaintainedPackageNote;
 
@@ -82,7 +83,7 @@ function runWhyCommand(array $argv): int
         $descriptor = readDescriptor($descriptorPath);
 
         $log = new FetchLog();
-        $catalog = loadVerifiedCatalog($options['registry'], !$options['noCache'], $log);
+        $catalog = loadVerifiedCatalog($options['registry'], ! $options['noCache'], $log);
 
         $lockFile = lockPath($descriptorPath, $options['output']);
         $lock = readLock($lockFile);
@@ -97,7 +98,7 @@ function runWhyCommand(array $argv): int
         $names = whyNames($lock, $only);
 
         $resolution = resolveWithDetails($catalog->entry(...), $descriptor['dependencies'], 'root', providedPackages());
-        if (!$resolution['ok']) {
+        if (! $resolution['ok']) {
             throw new \RuntimeException((string) $resolution['error']);
         }
 
@@ -138,7 +139,7 @@ function whyNames(array $lock, ?string $only): array
     if ($only === null) {
         return $locked;
     }
-    if (!\in_array($only, $locked, true)) {
+    if (! \in_array($only, $locked, true)) {
         throw new \RuntimeException(
             "`{$only}` is not in the lock" . ($locked === [] ? '' : ' (locked: ' . \implode(', ', $locked) . ')'),
         );
@@ -165,7 +166,7 @@ function whyEntry(string $name, array $lock, array $resolution, Catalog $catalog
     $heldBy = [];
     if ($latest !== null && $latest !== $version) {
         foreach ($reasons as $reason) {
-            if (!satisfies($latest, $reason['constraint'])) {
+            if (! satisfies($latest, $reason['constraint'])) {
                 $heldBy[] = $reason;
             }
         }

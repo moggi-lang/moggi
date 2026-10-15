@@ -4,13 +4,14 @@ namespace Moggi\CLI\Commands;
 
 use Moggi\Backend;
 use Moggi\Cache;
-use Moggi\Docs;
-use Moggi\Syntax\Lexer\LexError;
-use Moggi\Syntax\Parser\ParseError;
 
 use function Moggi\Cache\docsCacheDir;
 use function Moggi\CLI\defaultDocsInput;
 use function Moggi\CLI\printUsage;
+
+use Moggi\Docs;
+use Moggi\Syntax\Lexer\LexError;
+use Moggi\Syntax\Parser\ParseError;
 
 /**
  * `moggi mogdoc [serve]` — render API documentation, or serve it live.
@@ -64,7 +65,7 @@ function runMogdoc(array $argv): int
     try {
         $options = parseArgs($argv, $spec, $start);
         requireDirectories($options['lib'], '--lib');
-        if ($options['root'] !== null && !\is_dir($options['root']) && !\is_file($options['root'])) {
+        if ($options['root'] !== null && ! \is_dir($options['root']) && ! \is_file($options['root'])) {
             throw new \InvalidArgumentException('--root requires a file or directory');
         }
         $port = 8080;
@@ -102,21 +103,21 @@ function runMogdoc(array $argv): int
             if ($docDir === null) {
                 $docDir = docsCacheDir();
             }
-            $docDir = rtrim($docDir, '/');
+            $docDir = \rtrim($docDir, '/');
             $fingerprintPath = $docDir . '/.mogdoc-source-fingerprint';
             $needsGenerate = $options['rebuild']
-                || !\is_file($docDir . '/index.html')
-                || !\is_file($fingerprintPath)
-                || trim((string) file_get_contents($fingerprintPath)) !== $sourceFingerprint;
+                || ! \is_file($docDir . '/index.html')
+                || ! \is_file($fingerprintPath)
+                || \trim((string) \file_get_contents($fingerprintPath)) !== $sourceFingerprint;
             if ($needsGenerate) {
-                if (!\is_dir($docDir) && !mkdir($docDir, 0777, true) && !\is_dir($docDir)) {
+                if (! \is_dir($docDir) && ! \mkdir($docDir, 0777, true) && ! \is_dir($docDir)) {
                     \fwrite(STDERR, "error: cannot create {$docDir}\n");
 
                     return 1;
                 }
-                @unlink($fingerprintPath);
+                @\unlink($fingerprintPath);
                 Docs\generateMogdoc($index, $docDir, $siteTitle);
-                file_put_contents($fingerprintPath, $sourceFingerprint, LOCK_EX);
+                \file_put_contents($fingerprintPath, $sourceFingerprint, LOCK_EX);
                 if ($output === null) {
                     \fwrite(STDERR, "mogdoc: generated static site at {$docDir}\n");
                 }
@@ -133,7 +134,7 @@ function runMogdoc(array $argv): int
         }
 
         Docs\generateMogdoc($index, $output, $siteTitle);
-        echo 'mogdoc: wrote ' . count($index->byModule) . " module(s) to {$output}\n";
+        echo 'mogdoc: wrote ' . \count($index->byModule) . " module(s) to {$output}\n";
 
         return 0;
     } catch (LexError|ParseError $e) {

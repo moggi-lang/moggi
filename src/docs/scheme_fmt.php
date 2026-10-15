@@ -2,16 +2,17 @@
 
 namespace Moggi\Docs;
 
-use Moggi\Docs\DocIndex;
 use Moggi\Semantics\TypeExpr\Scheme;
 use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\Type;
+
+use function Moggi\Semantics\Types\friendlyTypeVarNames;
+
+use function Moggi\Semantics\Types\internalTypeToAst;
+
 use Moggi\Syntax\Ast;
 
-use function Moggi\Docs\search;
-use function Moggi\Semantics\Types\friendlyTypeVarNames;
-use function Moggi\Semantics\Types\internalTypeToAst;
 use function Moggi\Syntax\Ast\dumpTypeInline;
 use function Moggi\Syntax\isConstructorOperator;
 
@@ -66,8 +67,8 @@ function peelLeadingDictClasses(Type $type): array
     $classes = [];
     while ($type instanceof TArrow
         && $type->from instanceof TCon
-        && str_starts_with($type->from->name, '__Dict_')) {
-        $classes[] = substr($type->from->name, strlen('__Dict_'));
+        && \str_starts_with($type->from->name, '__Dict_')) {
+        $classes[] = \substr($type->from->name, \strlen('__Dict_'));
         $type = $type->to;
     }
 
@@ -82,7 +83,7 @@ function schemeToString(Scheme $scheme): string
 
     $parts = [];
     foreach ($scheme->constraints as $constraint) {
-        $argStr = join(' ', \array_map(
+        $argStr = \implode(' ', \array_map(
             static fn ($arg) => internalTypeForDocs($arg, $rename),
             $constraint->args,
         ));
@@ -91,7 +92,7 @@ function schemeToString(Scheme $scheme): string
 
     foreach ($dictClasses as $class) {
         $label = $class;
-        if (!\in_array($label, $parts, true)) {
+        if (! \in_array($label, $parts, true)) {
             $parts[] = $label;
         }
     }
@@ -100,7 +101,7 @@ function schemeToString(Scheme $scheme): string
         return $body;
     }
 
-    return implode(', ', $parts) . ' => ' . $body;
+    return \implode(', ', $parts) . ' => ' . $body;
 }
 
 /**
@@ -131,7 +132,7 @@ function surfaceTypeSignature(?Ast\TypeNode $type): ?string
     if ($dictClasses !== []) {
         $rename = friendlyAstTypeVarNames([$body]);
 
-        return implode(', ', $dictClasses) . ' => ' . dumpAstTypeForDocs($body, $rename);
+        return \implode(', ', $dictClasses) . ' => ' . dumpAstTypeForDocs($body, $rename);
     }
 
     $rename = friendlyAstTypeVarNames([$type]);
@@ -150,9 +151,9 @@ function friendlyAstTypeVarNames(array $types): array
 
     $collect = function (Ast\TypeNode $type) use (&$collect, &$userVars, &$freshOrder): void {
         if ($type instanceof Ast\TypeVar) {
-            if (preg_match('/^t\d+$/', $type->name) !== 1) {
+            if (\preg_match('/^t\d+$/', $type->name) !== 1) {
                 $userVars[$type->name] = true;
-            } elseif (!\in_array($type->name, $freshOrder, true)) {
+            } elseif (! \in_array($type->name, $freshOrder, true)) {
                 $freshOrder[] = $type->name;
             }
 
@@ -201,8 +202,8 @@ function friendlyAstTypeVarNames(array $types): array
 
 function astTypeVarLetter(int $index): string
 {
-    $letter = chr(97 + ($index % 26));
-    $suffix = intdiv($index, 26);
+    $letter = \chr(97 + ($index % 26));
+    $suffix = \intdiv($index, 26);
 
     return $suffix === 0 ? $letter : $letter . $suffix;
 }
@@ -217,20 +218,20 @@ function dumpAstTypeForDocs(Ast\TypeNode $node, array $rename = []): string
         Ast\TypeUnit::class => '()',
         Ast\TypeCon::class => $node->name,
         Ast\TypePromoted::class => "'" . $node->name,
-        Ast\TypeStringLit::class => json_encode($node->value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        Ast\TypeStringLit::class => \json_encode($node->value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         Ast\TypeNatLit::class => ($node->negative ? '-' : '') . $node->digits,
         Ast\TypeQualified::class => $node->module . '.' . $node->name,
         Ast\TypeApp::class => (static function () use ($node, $rename): string {
             if (
                 $node->con instanceof Ast\TypeCon
                 && $node->con->name === 'List'
-                && count($node->args) === 1
+                && \count($node->args) === 1
             ) {
                 return '[' . dumpAstTypeForDocs($node->args[0], $rename) . ']';
             }
 
             if (Ast\isInstanceHeadMarker($node)) {
-                return join(' ', \array_map(
+                return \implode(' ', \array_map(
                     static fn (Ast\TypeNode $arg): string => dumpAstTypeAtom($arg, $rename),
                     $node->args,
                 ));
@@ -239,20 +240,20 @@ function dumpAstTypeForDocs(Ast\TypeNode $node, array $rename = []): string
             if (
                 $node->con instanceof Ast\TypeCon
                 && isConstructorOperator($node->con->name)
-                && count($node->args) === 2
+                && \count($node->args) === 2
             ) {
                 return dumpAstTypeForDocs($node->args[0], $rename) . ' ' . $node->con->name . ' '
                     . dumpAstTypeForDocs($node->args[1], $rename);
             }
 
-            return dumpAstTypeForDocs($node->con, $rename) . ' ' . join(' ', \array_map(
+            return dumpAstTypeForDocs($node->con, $rename) . ' ' . \implode(' ', \array_map(
                 static fn (Ast\TypeNode $arg): string => dumpAstTypeAtom($arg, $rename),
                 $node->args,
             ));
         })(),
         Ast\TypeArrow::class => dumpAstTypeAtom($node->from, $rename) . ' -> '
             . dumpAstTypeForDocs($node->to, $rename),
-        Ast\TypeConstrained::class => join(', ', \array_map(
+        Ast\TypeConstrained::class => \implode(', ', \array_map(
             static fn (Ast\TypeNode $constraint): string => dumpAstTypeForDocs($constraint, $rename),
             $node->constraints,
         )) . ' => ' . dumpAstTypeForDocs($node->body, $rename),
@@ -284,8 +285,8 @@ function peelLeadingDictClassesFromAst(Ast\TypeNode $type): array
     $classes = [];
     while ($type instanceof Ast\TypeArrow
         && $type->from instanceof Ast\TypeCon
-        && str_starts_with($type->from->name, '__Dict_')) {
-        $classes[] = substr($type->from->name, strlen('__Dict_'));
+        && \str_starts_with($type->from->name, '__Dict_')) {
+        $classes[] = \substr($type->from->name, \strlen('__Dict_'));
         $type = $type->to;
     }
 
@@ -305,7 +306,7 @@ function astTypeUsesDictEncoding(?Ast\TypeNode $type): bool
 
 function dataTypeParamNames(Ast\DataDecl $decl): array
 {
-    return array_map(static fn (Ast\DataParam $param): string => $param->name, $decl->params);
+    return \array_map(static fn (Ast\DataParam $param): string => $param->name, $decl->params);
 }
 
 function dataTypeHeadSignature(Ast\DataDecl $decl): string
@@ -314,7 +315,7 @@ function dataTypeHeadSignature(Ast\DataDecl $decl): string
     $head = $kw . ' ' . $decl->name;
     $params = dataTypeParamNames($decl);
     if ($params !== []) {
-        $head .= ' ' . implode(' ', $params);
+        $head .= ' ' . \implode(' ', $params);
     }
 
     return $head;
@@ -327,7 +328,7 @@ function dataDeclSignature(Ast\DataDecl $decl): string
         $ctors[] = constructorLhs($decl, $ctor);
     }
 
-    return dataTypeHeadSignature($decl) . ' = ' . implode(' | ', $ctors);
+    return dataTypeHeadSignature($decl) . ' = ' . \implode(' | ', $ctors);
 }
 
 function instanceParentTypeName(Ast\TypeNode $head): ?string
@@ -358,7 +359,7 @@ function instanceDeclSignature(Ast\InstanceDecl $decl): string
 
     $body = $decl->class . ($head !== null && $head !== '' ? ' ' . $head : '');
     if ($constraints !== []) {
-        return 'instance ' . implode(', ', $constraints) . ' => ' . $body;
+        return 'instance ' . \implode(', ', $constraints) . ' => ' . $body;
     }
 
     return 'instance ' . $body;
@@ -386,7 +387,7 @@ function constructorLhs(Ast\DataDecl $decl, Ast\ConstructorDecl $ctor): string
         }
     }
 
-    return $ctor->name . ' ' . implode(' ', $parts);
+    return $ctor->name . ' ' . \implode(' ', $parts);
 }
 
 function constructorSignature(Ast\DataDecl $decl, Ast\ConstructorDecl $ctor): string
@@ -394,7 +395,7 @@ function constructorSignature(Ast\DataDecl $decl, Ast\ConstructorDecl $ctor): st
     $params = dataTypeParamNames($decl);
     $typeHead = $decl->name;
     if ($params !== []) {
-        $typeHead .= ' ' . implode(' ', $params);
+        $typeHead .= ' ' . \implode(' ', $params);
     }
 
     return constructorLhs($decl, $ctor) . ' :: ' . $typeHead;
@@ -411,12 +412,12 @@ function constructorSignature(Ast\DataDecl $decl, Ast\ConstructorDecl $ctor): st
 function docForEntityName(DocIndex $index, string $name, array $existing = []): ?string
 {
     $candidates = [$name];
-    $dot = strrpos($name, '.');
-    if ($dot !== false && $dot > 0 && $dot < strlen($name) - 1) {
-        $candidates[] = substr($name, $dot + 1);
+    $dot = \strrpos($name, '.');
+    if ($dot !== false && $dot > 0 && $dot < \strlen($name) - 1) {
+        $candidates[] = \substr($name, $dot + 1);
     } else {
-        $parts = explode('::', $name);
-        if (count($parts) === 2) {
+        $parts = \explode('::', $name);
+        if (\count($parts) === 2) {
             $candidates[] = $parts[1];
         }
     }
@@ -425,13 +426,14 @@ function docForEntityName(DocIndex $index, string $name, array $existing = []): 
         if ($candidate === '') {
             continue;
         }
+
         try {
             foreach (search($index, $candidate, 8) as $hit) {
                 $e = $hit->entity;
                 if ($e->name !== $candidate || $e->doc === null || $e->doc === '') {
                     continue;
                 }
-                if (in_array($e->doc, $existing, true)) {
+                if (\in_array($e->doc, $existing, true)) {
                     return null;
                 }
 
@@ -454,7 +456,7 @@ function constructorTypeSignature(Ast\DataDecl $decl, Ast\ConstructorDecl $ctor)
     $params = dataTypeParamNames($decl);
     $typeHead = $decl->name;
     if ($params !== []) {
-        $typeHead .= ' ' . implode(' ', $params);
+        $typeHead .= ' ' . \implode(' ', $params);
     }
     $args = [];
     foreach ($ctor->fields as $field) {
@@ -468,12 +470,12 @@ function constructorTypeSignature(Ast\DataDecl $decl, Ast\ConstructorDecl $ctor)
         return "{$ctor->name} :: {$typeHead}";
     }
 
-    return "{$ctor->name} :: " . implode(' -> ', $args) . " -> {$typeHead}";
+    return "{$ctor->name} :: " . \implode(' -> ', $args) . " -> {$typeHead}";
 }
 
 function classParamNames(Ast\ClassDecl $decl): array
 {
-    return array_map(static fn (Ast\ClassParam $param): string => $param->name, $decl->params);
+    return \array_map(static fn (Ast\ClassParam $param): string => $param->name, $decl->params);
 }
 
 function classDeclHeader(Ast\ClassDecl $decl): string
@@ -488,13 +490,13 @@ function classDeclHeader(Ast\ClassDecl $decl): string
             }
         }
         if ($supers !== []) {
-            $head .= implode(', ', $supers) . ' => ';
+            $head .= \implode(', ', $supers) . ' => ';
         }
     }
     $head .= $decl->name;
     $params = classParamNames($decl);
     if ($params !== []) {
-        $head .= ' ' . implode(' ', $params);
+        $head .= ' ' . \implode(' ', $params);
     }
 
     return $head . ' where';

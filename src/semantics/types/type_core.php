@@ -4,6 +4,9 @@ namespace Moggi\Semantics\Types;
 
 use Moggi\Semantics\IntrinsicRegistry;
 use Moggi\Semantics\Kinds;
+
+use function Moggi\Semantics\TypeExpr\canonicalNatDigits;
+
 use Moggi\Semantics\TypeExpr\Scheme;
 use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TBytes;
@@ -28,9 +31,8 @@ use Moggi\Semantics\TypeExpr\TWord32;
 use Moggi\Semantics\TypeExpr\TWord64;
 use Moggi\Semantics\TypeExpr\TWord8;
 use Moggi\Semantics\TypeExpr\Type;
-use Moggi\Syntax\Ast;
 
-use function Moggi\Semantics\TypeExpr\canonicalNatDigits;
+use Moggi\Syntax\Ast;
 
 require_once __DIR__ . '/../type_expr.php';
 require_once __DIR__ . '/state.php';
@@ -134,7 +136,7 @@ function pushSubstFrame(TypeCheckState $state): void
 
 function popSubstFrame(TypeCheckState $state): void
 {
-    $state->subst = array_pop($state->substStack) ?? [];
+    $state->subst = \array_pop($state->substStack) ?? [];
 }
 
 /** @param list<Ast\PendingConstraint> $constraints @return list<string> */
@@ -388,9 +390,9 @@ function freshenTypeWithConstraintsKeeping(TypeCheckState $state, Type $type, ar
 function peelDictArrows(Type $type, int $count): Type
 {
     for ($i = 0; $i < $count; ++$i) {
-        if (!$type instanceof TArrow
-            || !$type->from instanceof TCon
-            || !str_starts_with($type->from->name, '__Dict_')) {
+        if (! $type instanceof TArrow
+            || ! $type->from instanceof TCon
+            || ! \str_starts_with($type->from->name, '__Dict_')) {
             break;
         }
         $type = $type->to;
@@ -565,7 +567,7 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
         && $left->name === $right->name
         && isset($state->associatedFamilies[$left->name])
     ) {
-        if (count($left->args) !== count($right->args)) {
+        if (\count($left->args) !== \count($right->args)) {
             throw typeFail($state, 'type arity mismatch on `' . $left->name . '`', $at);
         }
         foreach ($left->args as $i => $arg) {
@@ -632,7 +634,7 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
             $left instanceof TPromoted
             && $right instanceof TPromoted
             && $left->name === $right->name
-            && count($left->args) === count($right->args)
+            && \count($left->args) === \count($right->args)
         ) {
             foreach ($left->args as $i => $arg) {
                 unify($state, $arg, $right->args[$i], $at);
@@ -670,7 +672,7 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
         return;
     }
 
-    if (!$left instanceof TCon || !$right instanceof TCon) {
+    if (! $left instanceof TCon || ! $right instanceof TCon) {
         if ($left instanceof TArrow && $right instanceof TArrow) {
             unify($state, $left->from, $right->from, $at);
             unify($state, $left->to, $right->to, $at);
@@ -682,7 +684,7 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
     }
 
     if ($left->name === $right->name) {
-        if (count($left->args) !== count($right->args)) {
+        if (\count($left->args) !== \count($right->args)) {
             throw typeFail($state, 'type arity mismatch on `' . $left->name . '`', $at);
         }
         foreach ($left->args as $i => $arg) {
@@ -705,7 +707,7 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
 function unifyVarApp(TypeCheckState $state, TVarApp $app, Type $other, ?Ast\AstNode $at): void
 {
     if ($other instanceof TVarApp) {
-        if (count($app->args) !== count($other->args)) {
+        if (\count($app->args) !== \count($other->args)) {
             throw typeFail($state, formatUnifyError($state, $app, $other), $at, 'unify');
         }
         unify($state, new TVar($app->name), new TVar($other->name), $at);
@@ -717,7 +719,7 @@ function unifyVarApp(TypeCheckState $state, TVarApp $app, Type $other, ?Ast\AstN
     }
 
     if ($other instanceof TCon) {
-        if (count($app->args) === count($other->args)) {
+        if (\count($app->args) === \count($other->args)) {
             unify($state, new TVar($app->name), new TCon($other->name), $at);
             foreach ($app->args as $i => $arg) {
                 unify($state, $arg, $other->args[$i], $at);
@@ -726,7 +728,7 @@ function unifyVarApp(TypeCheckState $state, TVarApp $app, Type $other, ?Ast\AstN
             return;
         }
 
-        if (count($app->args) < count($other->args)) {
+        if (\count($app->args) < \count($other->args)) {
             unifyHktPartialApp($state, $app, $other, $at);
 
             return;
@@ -746,8 +748,8 @@ function unifyHktPartialApp(
     TCon $concrete,
     ?Ast\AstNode $at,
 ): void {
-    $k = count($hktApp->args);
-    $m = count($concrete->args);
+    $k = \count($hktApp->args);
+    $m = \count($concrete->args);
     $partialArgs = \array_slice($concrete->args, 0, $m - $k);
     unify($state, new TVar($hktApp->name), new TCon($concrete->name, $partialArgs), $at);
     for ($i = 0; $i < $k; ++$i) {
@@ -757,7 +759,7 @@ function unifyHktPartialApp(
 
 function formatUnifyError(TypeCheckState $state, Type $left, Type $right): string
 {
-    if (isset($state->unifyMessage) && is_callable($state->unifyMessage)) {
+    if (isset($state->unifyMessage) && \is_callable($state->unifyMessage)) {
         return ($state->unifyMessage)($left, $right);
     }
 
@@ -779,9 +781,9 @@ function friendlyTypeVarNames(array $types): array
 
     $collect = function (Type $type) use (&$collect, &$userVars, &$freshOrder): void {
         if ($type instanceof TVar) {
-            if (preg_match('/^t\d+$/', $type->name) !== 1) {
+            if (\preg_match('/^t\d+$/', $type->name) !== 1) {
                 $userVars[$type->name] = true;
-            } elseif (!\in_array($type->name, $freshOrder, true)) {
+            } elseif (! \in_array($type->name, $freshOrder, true)) {
                 $freshOrder[] = $type->name;
             }
 
@@ -789,9 +791,9 @@ function friendlyTypeVarNames(array $types): array
         }
 
         if ($type instanceof TVarApp) {
-            if (preg_match('/^t\d+$/', $type->name) !== 1) {
+            if (\preg_match('/^t\d+$/', $type->name) !== 1) {
                 $userVars[$type->name] = true;
-            } elseif (!\in_array($type->name, $freshOrder, true)) {
+            } elseif (! \in_array($type->name, $freshOrder, true)) {
                 $freshOrder[] = $type->name;
             }
             foreach ($type->args as $arg) {
@@ -833,8 +835,8 @@ function friendlyTypeVarNames(array $types): array
 
 function typeVarLetter(int $index): string
 {
-    $letter = chr(97 + ($index % 26));
-    $suffix = intdiv($index, 26);
+    $letter = \chr(97 + ($index % 26));
+    $suffix = \intdiv($index, 26);
 
     return $suffix === 0 ? $letter : $letter . $suffix;
 }
@@ -846,7 +848,7 @@ function prune(TypeCheckState $state, Type $type): Type
     }
 
     if ($type instanceof TVar) {
-        if (!isset($state->subst[$type->name])) {
+        if (! isset($state->subst[$type->name])) {
             return $type;
         }
 
@@ -1007,7 +1009,7 @@ function zonkInferredTypesInExpr(TypeCheckState $state, Ast\AstNode $expr): void
  */
 function zonkInferredTypesInPattern(TypeCheckState $state, ?Ast\AstNode $pattern): void
 {
-    if ($pattern === null || !is_object($pattern) || $pattern instanceof Ast\TypeNode) {
+    if ($pattern === null || ! \is_object($pattern) || $pattern instanceof Ast\TypeNode) {
         return;
     }
     if ($pattern->inferredType !== null) {
@@ -1261,7 +1263,7 @@ function samePrimitiveType(Type $left, Type $right): bool
             TInt64::class => 'Int64',
             TBytes::class => 'ByteString',
             TDouble::class => 'Double',
-            TCon::class => count($type->args) === 0 ? $type->name : null,
+            TCon::class => \count($type->args) === 0 ? $type->name : null,
             default => null,
         };
     };
@@ -1271,7 +1273,6 @@ function samePrimitiveType(Type $left, Type $right): bool
 
     return $leftName !== null && $leftName === $rightName;
 }
-
 
 /**
  * A type in an operand position where only an arrow needs parentheses — an
@@ -1299,7 +1300,7 @@ function typeToStringArgument(Type $type, array $rename = []): string
         TInt::class, TStr::class, TChar::class, TWord::class, TWord8::class, TWord16::class,
         TWord32::class, TWord64::class, TInt8::class, TInt16::class, TInt32::class, TInt64::class,
         TBytes::class, TDouble::class, TUnit::class, TVar::class, TStringLit::class, TNatLit::class => true,
-        TCon::class => $type->name === 'List' ? count($type->args) === 1 : $type->args === [],
+        TCon::class => $type->name === 'List' ? \count($type->args) === 1 : $type->args === [],
         default => false,
     };
 
@@ -1327,28 +1328,28 @@ function typeToString(Type $type, array $rename = []): string
         TUnit::class => '()',
         TVar::class => $rename[$type->name] ?? $type->name,
         TVarApp::class => ($rename[$type->name] ?? $type->name)
-            . ' ' . join(' ', \array_map(
+            . ' ' . \implode(' ', \array_map(
                 static fn (Type $arg): string => typeToStringArgument($arg, $rename),
                 $type->args,
             )),
-        TPromoted::class => "'" . $type->name . (count($type->args) > 0
-            ? ' ' . join(' ', \array_map(static fn (Type $arg): string => typeToString($arg, $rename), $type->args))
+        TPromoted::class => "'" . $type->name . (\count($type->args) > 0
+            ? ' ' . \implode(' ', \array_map(static fn (Type $arg): string => typeToString($arg, $rename), $type->args))
             : ''),
-        TStringLit::class => json_encode($type->value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        TStringLit::class => \json_encode($type->value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         TNatLit::class => $type->digits,
         TCon::class => (static function () use ($type, $rename): string {
-            if ($type->name === 'List' && count($type->args) === 1) {
+            if ($type->name === 'List' && \count($type->args) === 1) {
                 return '[' . typeToString($type->args[0], $rename) . ']';
             }
-            if (preg_match('/^Tuple(\d+)$/', $type->name, $tuple) === 1 && count($type->args) === (int) $tuple[1]) {
-                return '(' . join(', ', \array_map(
+            if (\preg_match('/^Tuple(\d+)$/', $type->name, $tuple) === 1 && \count($type->args) === (int) $tuple[1]) {
+                return '(' . \implode(', ', \array_map(
                     static fn (Type $arg): string => typeToStringDomain($arg, $rename),
                     $type->args,
                 )) . ')';
             }
 
-            return $type->name . (count($type->args) > 0
-                ? ' ' . join(' ', \array_map(static fn (Type $arg): string => typeToString($arg, $rename), $type->args))
+            return $type->name . (\count($type->args) > 0
+                ? ' ' . \implode(' ', \array_map(static fn (Type $arg): string => typeToString($arg, $rename), $type->args))
                 : '');
         })(),
         TArrow::class => typeToStringDomain($type->from, $rename) . ' -> ' . typeToString($type->to, $rename),
@@ -1380,7 +1381,7 @@ function internalTypeToAst(Type $type, array $subst): Ast\TypeNode
         TDouble::class => new Ast\TypeCon('Double'),
         TUnit::class => new Ast\TypeUnit(),
         TVar::class => new Ast\TypeVar($type->name),
-        TPromoted::class => count($type->args) === 0
+        TPromoted::class => \count($type->args) === 0
             ? new Ast\TypePromoted($type->name)
             : new Ast\TypeApp(new Ast\TypePromoted($type->name), \array_map(
                 static fn (Type $arg): Ast\TypeNode => internalTypeToAst($arg, $subst),
@@ -1388,7 +1389,7 @@ function internalTypeToAst(Type $type, array $subst): Ast\TypeNode
             )),
         TStringLit::class => new Ast\TypeStringLit($type->value),
         TNatLit::class => new Ast\TypeNatLit($type->digits, false),
-        TCon::class => count($type->args) === 0
+        TCon::class => \count($type->args) === 0
             ? new Ast\TypeCon($type->name)
             : new Ast\TypeApp(new Ast\TypeCon($type->name), \array_map(
                 static fn (Type $arg): Ast\TypeNode => internalTypeToAst($arg, $subst),
@@ -1427,9 +1428,9 @@ function knownTypeConstructorNames(TypeCheckState $state): array
         ...\array_keys($state->associatedFamilies),
     ];
 
-    sort($names);
+    \sort($names);
 
-    return array_values(array_unique($names));
+    return \array_values(\array_unique($names));
 }
 
 function typeFail(TypeCheckState $state, string $message, Ast\AstNode|Ast\TypeNode|null $at = null, ?string $code = null): TypeError

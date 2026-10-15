@@ -95,7 +95,7 @@ function composerVendorMaps(string $root): array
     $files = readAutoloadMap($composer . '/autoload_files.php');
     if ($files !== null) {
         foreach ($files['strings'] as $literal) {
-            if (!\str_ends_with($literal, '.php') || \preg_match('/^[0-9a-f]{32}$/i', $literal) === 1) {
+            if (! \str_ends_with($literal, '.php') || \preg_match('/^[0-9a-f]{32}$/i', $literal) === 1) {
                 continue;
             }
             $path = resolveVendorLiteral($root, $literal);
@@ -136,7 +136,7 @@ function readAutoloadMap(string $file): ?array
         return null;
     }
     $tokens = @\token_get_all($src);
-    if (!\is_array($tokens)) {
+    if (! \is_array($tokens)) {
         return null;
     }
 
@@ -152,6 +152,7 @@ function readAutoloadMap(string $file): ?array
             } elseif (($token === ')' || $token === ']') && $depth > 0) {
                 --$depth;
             }
+
             continue;
         }
         if ($token[0] !== \T_CONSTANT_ENCAPSED_STRING || $depth !== 1) {
@@ -182,7 +183,7 @@ function readPsrMaps(string $file, string $root): array
         return [];
     }
     $tokens = @\token_get_all($src);
-    if (!\is_array($tokens)) {
+    if (! \is_array($tokens)) {
         return [];
     }
 
@@ -201,6 +202,7 @@ function readPsrMaps(string $file, string $root): array
                     $current = null;
                 }
             }
+
             continue;
         }
         if ($token[0] !== \T_CONSTANT_ENCAPSED_STRING) {
@@ -329,7 +331,7 @@ function phpDeclaredSymbols(string $file): array
         return ['function' => [], 'class' => []];
     }
     $tokens = @\token_get_all($src);
-    if (!\is_array($tokens)) {
+    if (! \is_array($tokens)) {
         return ['function' => [], 'class' => []];
     }
 
@@ -348,6 +350,7 @@ function phpDeclaredSymbols(string $file): array
             } elseif ($token === '}') {
                 \array_pop($stack);
             }
+
             continue;
         }
         [$id, $text] = $token;
@@ -356,14 +359,14 @@ function phpDeclaredSymbols(string $file): array
         } elseif ($id === \T_CLASS || $id === \T_INTERFACE || $id === \T_TRAIT || (\defined('T_ENUM') && $id === \T_ENUM)) {
             [$name, $next] = readPhpDeclaredName($tokens, $i);
             $i = $next;
-            if ($name !== null && !\in_array(true, $stack, true)) {
+            if ($name !== null && ! \in_array(true, $stack, true)) {
                 $classes[] = $namespace === '' ? $name : $namespace . '\\' . $name;
             }
             $pendingClass = true;
         } elseif ($id === \T_FUNCTION) {
             [$name, $next] = readPhpDeclaredName($tokens, $i, true);
             $i = $next;
-            if ($name !== null && !\in_array(true, $stack, true)) {
+            if ($name !== null && ! \in_array(true, $stack, true)) {
                 $functions[] = $namespace === '' ? $name : $namespace . '\\' . $name;
             }
         }
@@ -422,7 +425,6 @@ function readPhpDeclaredName(array $tokens, int $i, bool $allowRef = false): arr
 
     return [null, $count];
 }
-
 
 /**
  * The `php/` dependency directory owned by one backend module, if any.

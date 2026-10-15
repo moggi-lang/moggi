@@ -11,9 +11,9 @@ require_once __DIR__ . '/lower_pattern.php';
 require_once __DIR__ . '/lower_expr.php';
 require_once __DIR__ . '/lower_io.php';
 
-use Moggi\Syntax\Ast;
-
 use function Moggi\Patterns\Walk\patternBoundNames;
+
+use Moggi\Syntax\Ast;
 
 function lower(Ast\Program $program, array $importedData = [], string $sourceFile = ''): Module
 {
@@ -38,7 +38,8 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
             }
 
             $localBindings[$item->name] = true;
-            $functionArity[$item->name] = count($item->params);
+            $functionArity[$item->name] = \count($item->params);
+
             continue;
         }
 
@@ -46,7 +47,7 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
             foreach ($item->constructors as $ctor) {
                 $localBindings[$ctor->name] = true;
                 $knownFunctions[$ctor->name] = true;
-                $functionArity[$ctor->name] = count($ctor->fields);
+                $functionArity[$ctor->name] = \count($ctor->fields);
             }
         }
     }
@@ -54,7 +55,7 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
     foreach ($dataIndex as $ctorName => $fields) {
         $knownFunctions[$ctorName] = true;
         if (! isset($localBindings[$ctorName])) {
-            $functionArity[$ctorName] = count($fields);
+            $functionArity[$ctorName] = \count($fields);
         }
     }
 
@@ -71,13 +72,14 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
 
     foreach ($program->instanceEvidence as $ev) {
         if (\is_array($ev)) {
-            $functionArity[$ev['evidenceName']] = count($ev['contextParams'] ?? []);
+            $functionArity[$ev['evidenceName']] = \count($ev['contextParams'] ?? []);
         }
     }
 
     foreach ($program->items as $item) {
         if ($item instanceof Ast\DataDecl) {
             $data[] = lowerData($item);
+
             continue;
         }
 
@@ -100,7 +102,6 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
                 $constructorRenames,
             );
         }
-
     }
 
     $functions = [...$functions, ...$state->functions];
@@ -159,7 +160,7 @@ function buildDataIndex(Ast\Program $program, array $importedData = []): array
     }
 
     foreach ($program->items as $item) {
-        if (!$item instanceof Ast\DataDecl) {
+        if (! $item instanceof Ast\DataDecl) {
             continue;
         }
 
@@ -179,7 +180,7 @@ function buildNewtypeIndex(Ast\Program $program, array $importedData = []): arra
 {
     $index = [];
     foreach ($importedData as $info) {
-        if (!($info['newtype'] ?? false)) {
+        if (! ($info['newtype'] ?? false)) {
             continue;
         }
 
@@ -189,7 +190,7 @@ function buildNewtypeIndex(Ast\Program $program, array $importedData = []): arra
     }
 
     foreach ($program->items as $item) {
-        if (!$item instanceof Ast\DataDecl || !$item->isNewtype) {
+        if (! $item instanceof Ast\DataDecl || ! $item->isNewtype) {
             continue;
         }
 
@@ -271,12 +272,12 @@ function lowerFunction(
             $ctx->items[] = new Ret($operand);
             $ioBodyKind = IoBodyKind::ActionReturn;
         } else {
-            if (!lowerIoFunctionBody($fn->body, $ctx)) {
+            if (! lowerIoFunctionBody($fn->body, $ctx)) {
                 throw new \RuntimeException("failed to lower IO body for `{$fn->name}`");
             }
         }
 
-        $straightLineIo = !$ctx->hasIoRun && !$ctx->hasIoAssignAction;
+        $straightLineIo = ! $ctx->hasIoRun && ! $ctx->hasIoAssignAction;
     } else {
         $tail = lowerExpr($fn->body, $ctx);
         $ctx->items[] = new Ret($tail);
@@ -316,6 +317,7 @@ function functionParamSlots(array $patterns): array
     foreach ($patterns as $i => $pattern) {
         if ($pattern instanceof Ast\PatVar) {
             $names[] = $pattern->name;
+
             continue;
         }
 
@@ -435,7 +437,7 @@ function newCtx(
  */
 function freshLocalName(LowerCtx $ctx, string $occ): string
 {
-    if ($occ !== '' && !isset($ctx->state->usedLocals[$occ])) {
+    if ($occ !== '' && ! isset($ctx->state->usedLocals[$occ])) {
         $ctx->state->usedLocals[$occ] = true;
 
         return $occ;
@@ -470,7 +472,7 @@ function freeVarsExpr(Ast\AstNode $expr, array $bound): array
         Ast\ListLit::class => freeVarsInExprs($expr->elements, $bound),
         Ast\Lambda::class => freeVarsExpr($expr->body, [
             ...$bound,
-            ...array_fill_keys(patternParams($expr->params), true),
+            ...\array_fill_keys(patternParams($expr->params), true),
         ]),
         Ast\DoExpr::class => $expr->desugared !== null
             ? freeVarsExpr($expr->desugared, $bound)
@@ -507,7 +509,7 @@ function freeVarsInChildren(Ast\AstNode $expr, array $bound): array
         }
     }
 
-    return array_values(array_unique($free));
+    return \array_values(\array_unique($free));
 }
 
 /** @param list<Ast\RecordField> $fields @param array<string, true> $bound @return array<int, string> */
@@ -529,7 +531,7 @@ function freeVarsInExprs(array $exprs, array $bound): array
         $free = [...$free, ...freeVarsExpr($expr, $bound)];
     }
 
-    return array_values(array_unique($free));
+    return \array_values(\array_unique($free));
 }
 
 /** @param array<int, Ast\Binding> $bindings @param array<string, true> $bound @return array<int, string> */
@@ -556,7 +558,7 @@ function freeVarsInGuards(array $clauses, array $bound): array
         $free = [...$free, ...freeVarsExpr($clause->guard, $bound), ...freeVarsExpr($clause->body, $bound)];
     }
 
-    return array_values(array_unique($free));
+    return \array_values(\array_unique($free));
 }
 
 /** @param array<int, Ast\Alt> $alts @param array<string, true> $bound @return array<int, string> */
@@ -567,7 +569,7 @@ function freeVarsInCaseAlts(array $alts, array $bound): array
         $free = [...$free, ...freeVarsExpr($alt->body, [...$bound, ...patternBoundNames($alt->pattern)])];
     }
 
-    return array_values(array_unique($free));
+    return \array_values(\array_unique($free));
 }
 
 /** @param array<int, Ast\LambdaParam|Ast\AstNode> $patterns @return array<int, string> */
@@ -578,9 +580,10 @@ function patternParams(array $patterns): array
         $pattern = lambdaParamPattern($pattern);
         if ($pattern instanceof Ast\PatWild) {
             $params[] = '__wild' . $index;
+
             continue;
         }
-        if (!$pattern instanceof Ast\PatVar) {
+        if (! $pattern instanceof Ast\PatVar) {
             throw new \RuntimeException('lambda parameters must be variables for now');
         }
         $params[] = $pattern->name;

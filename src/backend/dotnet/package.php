@@ -91,10 +91,10 @@ function dotnetWorkspaceRoot(): string
             continue;
         }
         $seen[$candidate] = true;
-        if (!\is_dir($candidate) && !@\mkdir($candidate, 0777, true) && !\is_dir($candidate)) {
+        if (! \is_dir($candidate) && ! @\mkdir($candidate, 0777, true) && ! \is_dir($candidate)) {
             continue;
         }
-        if (!\is_writable($candidate)) {
+        if (! \is_writable($candidate)) {
             continue;
         }
 
@@ -122,7 +122,7 @@ function resolveIlasmExecutable(?string $dotnet = null): ?string
     $cached = true;
 
     $onPath = findExecutable('ilasm');
-    if ($onPath !== null && !isLegacyFrameworkIlasm($onPath)) {
+    if ($onPath !== null && ! isLegacyFrameworkIlasm($onPath)) {
         return $resolved = $onPath;
     }
 
@@ -175,7 +175,7 @@ function findIlasmInNuGetCaches(): ?string
             return $candidate;
         }
         $pkgDir = $root . DIRECTORY_SEPARATOR . $package;
-        if (!\is_dir($pkgDir)) {
+        if (! \is_dir($pkgDir)) {
             continue;
         }
         $versions = \scandir($pkgDir) ?: [];
@@ -203,7 +203,7 @@ function nugetPackageRoots(): array
     $seen = [];
     $add = static function (string $path) use (&$roots, &$seen): void {
         $real = \realpath($path) ?: $path;
-        if (isset($seen[$real]) || !\is_dir($real)) {
+        if (isset($seen[$real]) || ! \is_dir($real)) {
             return;
         }
         $seen[$real] = true;
@@ -267,8 +267,9 @@ function ensureIlasmPackageRestored(string $dotnet): void
     if ($lock === false) {
         throw new \RuntimeException("cannot open {$lockPath}");
     }
-    if (!\flock($lock, LOCK_EX)) {
+    if (! \flock($lock, LOCK_EX)) {
         \fclose($lock);
+
         throw new \RuntimeException("cannot lock {$lockPath}");
     }
 
@@ -277,7 +278,7 @@ function ensureIlasmPackageRestored(string $dotnet): void
             return;
         }
         $ws = $root . DIRECTORY_SEPARATOR . 'ilasm-bootstrap';
-        if (!\is_dir($ws) && !\mkdir($ws, 0777, true) && !\is_dir($ws)) {
+        if (! \is_dir($ws) && ! \mkdir($ws, 0777, true) && ! \is_dir($ws)) {
             throw new \RuntimeException("cannot create {$ws}");
         }
         $proj = $ws . DIRECTORY_SEPARATOR . 'IlasmBootstrap.ilproj';
@@ -322,7 +323,7 @@ function packageDotNetOutput(string $outputRoot, array $options = []): void
     $rtRel = 'rt' . DIRECTORY_SEPARATOR . 'Moggi.Rt.il';
     $rtPath = $outputRoot . DIRECTORY_SEPARATOR . $rtRel;
     $rtDir = \dirname($rtPath);
-    if (!\is_dir($rtDir) && !\mkdir($rtDir, 0777, true) && !\is_dir($rtDir)) {
+    if (! \is_dir($rtDir) && ! \mkdir($rtDir, 0777, true) && ! \is_dir($rtDir)) {
         throw new \RuntimeException("cannot create {$rtDir}");
     }
     \file_put_contents($rtPath, languageRuntime());
@@ -366,7 +367,7 @@ XML;
     $projPath = $outputRoot . DIRECTORY_SEPARATOR . $assemblyName . '.ilproj';
     \file_put_contents($projPath, $ilprojBody);
 
-    if (!empty($options['unpacked'])) {
+    if (! empty($options['unpacked'])) {
         return;
     }
 
@@ -417,7 +418,7 @@ function assembleDotNetWithIlasm(
         $bundlePath,
     ], $outputRoot);
     @\unlink($bundlePath);
-    if ($result['exitCode'] !== 0 || !\is_file($dllPath)) {
+    if ($result['exitCode'] !== 0 || ! \is_file($dllPath)) {
         throw new \RuntimeException(
             'ilasm failed'
             . ($result['stdout'] !== '' || $result['stderr'] !== ''
@@ -465,7 +466,7 @@ function stageDotNetVendoredAssemblies(string $outputRoot, string $assemblyName)
             continue;
         }
         $target = $outputRoot . DIRECTORY_SEPARATOR . $name;
-        if (!\is_file($target) && \copy($dll, $target) === false) {
+        if (! \is_file($target) && \copy($dll, $target) === false) {
             throw new \RuntimeException("cannot copy {$dll} into {$outputRoot}");
         }
     }
@@ -524,7 +525,7 @@ function collectDotNetFrames(string $outputRoot): array
         new \RecursiveDirectoryIterator($outputRoot, \FilesystemIterator::SKIP_DOTS),
     );
     foreach ($iterator as $file) {
-        if (!$file->isFile() || !str_ends_with($file->getFilename(), '.moggi.map')) {
+        if (! $file->isFile() || ! \str_ends_with($file->getFilename(), '.moggi.map')) {
             continue;
         }
         $raw = (string) \file_get_contents($file->getPathname());
@@ -552,14 +553,14 @@ function dotNetOutputReferencedAssemblies(string $outputRoot): array
         new \RecursiveDirectoryIterator($outputRoot, \FilesystemIterator::SKIP_DOTS),
     );
     foreach ($iterator as $file) {
-        if (!$file->isFile() || $file->getExtension() !== 'il') {
+        if (! $file->isFile() || $file->getExtension() !== 'il') {
             continue;
         }
         if ($file->getFilename() === '_header.il') {
             continue;
         }
         $chunk = \file_get_contents($file->getPathname(), false, null, 0, 512 * 1024);
-        if (!\is_string($chunk)) {
+        if (! \is_string($chunk)) {
             continue;
         }
         if (\preg_match_all('/\[([A-Za-z_][A-Za-z0-9_.]*)\]/', $chunk, $m) > 0) {
@@ -591,7 +592,7 @@ function bundleIlSources(string $outputRoot, array $ilFiles): string
     foreach ($ilFiles as $file) {
         $chunk = (string) \file_get_contents($file);
         $bundle .= $chunk;
-        if ($chunk === '' || !\str_ends_with($chunk, "\n")) {
+        if ($chunk === '' || ! \str_ends_with($chunk, "\n")) {
             $bundle .= "\n";
         }
     }
@@ -610,13 +611,14 @@ function collectIlSources(string $outputRoot): array
         new \RecursiveDirectoryIterator($outputRoot, \FilesystemIterator::SKIP_DOTS),
     );
     foreach ($iterator as $file) {
-        if (!$file->isFile() || $file->getExtension() !== 'il') {
+        if (! $file->isFile() || $file->getExtension() !== 'il') {
             continue;
         }
         $full = $file->getPathname();
         $base = $file->getFilename();
         if ($base === '_header.il') {
             $header = $full;
+
             continue;
         }
         $rest[] = $full;
@@ -703,14 +705,15 @@ function buildDotNetIlProject(
     if ($lock === false) {
         throw new \RuntimeException("cannot open {$lockPath}");
     }
-    if (!\flock($lock, LOCK_EX)) {
+    if (! \flock($lock, LOCK_EX)) {
         \fclose($lock);
+
         throw new \RuntimeException("cannot lock {$lockPath}");
     }
 
     try {
         $ws = $root . DIRECTORY_SEPARATOR . 'workspace';
-        if (!\is_dir($ws) && !\mkdir($ws, 0777, true) && !\is_dir($ws)) {
+        if (! \is_dir($ws) && ! \mkdir($ws, 0777, true) && ! \is_dir($ws)) {
             throw new \RuntimeException("cannot create {$ws}");
         }
 
@@ -722,7 +725,7 @@ function buildDotNetIlProject(
 
         $assets = $ws . DIRECTORY_SEPARATOR . 'obj' . DIRECTORY_SEPARATOR . 'project.assets.json';
         $env = dotnetCliEnv();
-        if (!\is_file($assets)) {
+        if (! \is_file($assets)) {
             runDotnetCli($dotnet, ['restore', $wsProj, '--nologo', '-v', 'q'], $ws, $env);
         }
 
@@ -737,11 +740,11 @@ function buildDotNetIlProject(
         ], $ws, $env);
 
         $built = $buildOut . DIRECTORY_SEPARATOR . $assemblyName . '.dll';
-        if (!\is_file($built)) {
+        if (! \is_file($built)) {
             throw new \RuntimeException("dotnet build produced no {$assemblyName}.dll");
         }
         $dest = $outputRoot . DIRECTORY_SEPARATOR . $assemblyName . '.dll';
-        if (!\rename($built, $dest) && !(\copy($built, $dest) && \unlink($built))) {
+        if (! \rename($built, $dest) && ! (\copy($built, $dest) && \unlink($built))) {
             throw new \RuntimeException("failed to copy DLL to {$dest}");
         }
         foreach ([$assemblyName . '.deps.json', $assemblyName . '.runtimeconfig.json'] as $side) {
@@ -777,6 +780,7 @@ function clearDotNetWorkspaceSources(string $ws): void
             } else {
                 \unlink($path);
             }
+
             continue;
         }
         if ($file->isDir()) {
@@ -804,17 +808,18 @@ function mirrorIlTree(string $from, string $to): void
         }
         $dest = $to . DIRECTORY_SEPARATOR . $rel;
         if ($file->isDir()) {
-            if (!\is_dir($dest) && !\mkdir($dest, 0777, true) && !\is_dir($dest)) {
+            if (! \is_dir($dest) && ! \mkdir($dest, 0777, true) && ! \is_dir($dest)) {
                 throw new \RuntimeException("cannot create {$dest}");
             }
+
             continue;
         }
         if (\str_ends_with($rel, '.il') || \str_ends_with($rel, '.ilproj')) {
             $dir = \dirname($dest);
-            if (!\is_dir($dir) && !\mkdir($dir, 0777, true) && !\is_dir($dir)) {
+            if (! \is_dir($dir) && ! \mkdir($dir, 0777, true) && ! \is_dir($dir)) {
                 throw new \RuntimeException("cannot create {$dir}");
             }
-            if (!\copy($path, $dest)) {
+            if (! \copy($path, $dest)) {
                 throw new \RuntimeException("cannot copy {$path} → {$dest}");
             }
         }
@@ -851,7 +856,7 @@ function buildDotNetNativeExecutable(
         return false;
     }
     $proj = $outputRoot . DIRECTORY_SEPARATOR . $assemblyName . '.ilproj';
-    if (!\is_file($proj)) {
+    if (! \is_file($proj)) {
         \fwrite(STDERR, "error: missing {$proj}\n");
 
         return false;
@@ -927,13 +932,13 @@ function isNativeAotProgram(string $name): bool
         }
     }
 
-    return \PHP_OS_FAMILY === 'Windows' ? \str_ends_with(\strtolower($name), '.exe') : !\str_contains($name, '.');
+    return \PHP_OS_FAMILY === 'Windows' ? \str_ends_with(\strtolower($name), '.exe') : ! \str_contains($name, '.');
 }
 
 /** What a publish directory holds, so a failure names the reason there is nothing to run. */
 function nativeAotDryReport(string $pubDir, string $binary): string
 {
-    if (!\is_dir($pubDir)) {
+    if (! \is_dir($pubDir)) {
         return "  the publish wrote no {$pubDir}\n";
     }
 

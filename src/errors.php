@@ -68,7 +68,7 @@ function diagnosticCode(\Throwable $error): ?string
  */
 function diagnosticSpan(\Throwable $error): ?array
 {
-    if (!($error instanceof LexError
+    if (! ($error instanceof LexError
         || $error instanceof ParseError
         || $error instanceof TypeError)) {
         return null;
@@ -96,22 +96,22 @@ function formatDiagnostic(
         $endCol = $col;
     }
 
-    $lines = preg_split('/\R/', $source) ?: [''];
-    $lineCount = count($lines);
+    $lines = \preg_split('/\R/', $source) ?: [''];
+    $lineCount = \count($lines);
 
     while ($line > 1 && ($lines[$line - 1] ?? '') === '') {
         --$line;
     }
 
     $text = $lines[$line - 1] ?? '';
-    $width = max(1, strlen((string) $lineCount));
-    $gutter = str_pad((string) $line, $width, ' ', STR_PAD_LEFT);
-    $caret = str_repeat(' ', max(0, $col - 1)) . str_repeat('^', max(1, $endCol - $col + 1));
+    $width = \max(1, \strlen((string) $lineCount));
+    $gutter = \str_pad((string) $line, $width, ' ', STR_PAD_LEFT);
+    $caret = \str_repeat(' ', \max(0, $col - 1)) . \str_repeat('^', \max(1, $endCol - $col + 1));
 
     $location = $filename !== '' ? "{$filename}:{$line}:{$col}" : "line {$line}, column {$col}";
     $output = "{$location}: {$kind}: {$message}\n\n";
     $output .= "  {$gutter} | {$text}\n";
-    $output .= '  ' . str_repeat(' ', $width) . " | {$caret}\n";
+    $output .= '  ' . \str_repeat(' ', $width) . " | {$caret}\n";
 
     return $output;
 }

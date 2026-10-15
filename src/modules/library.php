@@ -5,11 +5,13 @@ namespace Moggi\Modules;
 require_once __DIR__ . '/../paths.php';
 
 use Moggi\Cache;
-use Moggi\Semantics\Types\TypeError;
 
 use function Moggi\Install\installationRoot;
+
 use function Moggi\Paths\canonicalSeparators;
 use function Moggi\Paths\globPaths;
+
+use Moggi\Semantics\Types\TypeError;
 
 /** Whether `$path` names a stream (`phar://…`) rather than a real filesystem path. */
 function isStreamPath(string $path): bool
@@ -92,7 +94,7 @@ function enclosingLibraryPackageDir(string $path, string $projectRoot): ?string
     $root = \rtrim(canonicalSeparators(resolvePath($projectRoot)), '/');
     $dir = canonicalSeparators(resolvePath(\dirname($path)));
     while (true) {
-        if ($dir === $root || !\str_starts_with($dir . '/', $root . '/')) {
+        if ($dir === $root || ! \str_starts_with($dir . '/', $root . '/')) {
             return null;
         }
         if (\basename($dir) === 'src' && libraryRootMarker($dir) !== null) {
@@ -169,7 +171,7 @@ final class ConfiguredStdlib
 
     public static function addPath(string $path): void
     {
-        if (!\in_array($path, self::$extraPaths, true)) {
+        if (! \in_array($path, self::$extraPaths, true)) {
             self::$extraPaths[] = $path;
         }
     }
@@ -190,7 +192,7 @@ function setStdlibLibPath(?string $path): void
     }
 
     $real = resolvePath($path);
-    if (!isLibraryRoot($real)) {
+    if (! isLibraryRoot($real)) {
         throw new TypeError(
             "library path `{$path}` is missing `" . LIBRARY_ROOT_MARKER . '` (expected a Moggi library root)',
         );
@@ -209,7 +211,7 @@ function setStdlibLibPath(?string $path): void
 function addLibraryRoot(string $path): void
 {
     $real = resolvePath($path);
-    if (!\is_dir($real)) {
+    if (! \is_dir($real)) {
         throw new TypeError("invalid library path `{$path}`");
     }
 
@@ -279,9 +281,9 @@ function bundledStdlibLibPath(): ?string
     $cached = true;
 
     $candidates = [];
-    $envRoot = getenv('MOGGI_ROOT');
+    $envRoot = \getenv('MOGGI_ROOT');
     if (\is_string($envRoot) && $envRoot !== '') {
-        $candidates[] = rtrim($envRoot, '/\\') . DIRECTORY_SEPARATOR . 'libraries'
+        $candidates[] = \rtrim($envRoot, '/\\') . DIRECTORY_SEPARATOR . 'libraries'
             . DIRECTORY_SEPARATOR . 'base' . DIRECTORY_SEPARATOR . 'src';
     }
     $installRoot = installationRoot();
@@ -289,7 +291,7 @@ function bundledStdlibLibPath(): ?string
         $candidates[] = $installRoot . DIRECTORY_SEPARATOR . 'libraries'
             . DIRECTORY_SEPARATOR . 'base' . DIRECTORY_SEPARATOR . 'src';
     }
-    $candidates[] = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'libraries'
+    $candidates[] = \dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'libraries'
         . DIRECTORY_SEPARATOR . 'base' . DIRECTORY_SEPARATOR . 'src';
 
     foreach ($candidates as $candidate) {
@@ -318,7 +320,7 @@ function declaringLibraryRoot(string $file): ?string
     $best = null;
     foreach (configuredLibraryRoots() as $root) {
         $root = \rtrim(\str_replace('\\', '/', (string) $root), '/');
-        if ($root === '' || ($file !== $root && !\str_starts_with($file, $root . '/'))) {
+        if ($root === '' || ($file !== $root && ! \str_starts_with($file, $root . '/'))) {
             continue;
         }
         if ($best === null || \strlen($root) > \strlen($best)) {
@@ -341,14 +343,14 @@ function locateStdlibRoot(string $fromPath): ?string
         return $bundled;
     }
 
-    $dir = dirname(resolvePath($fromPath));
+    $dir = \dirname(resolvePath($fromPath));
     while ($dir !== false) {
         $packaged = $dir . DIRECTORY_SEPARATOR . 'libraries' . DIRECTORY_SEPARATOR . 'base' . DIRECTORY_SEPARATOR . 'src';
         if (isLibraryRoot($packaged)) {
             return $packaged;
         }
 
-        $parent = dirname($dir);
+        $parent = \dirname($dir);
         if ($parent === $dir) {
             break;
         }
@@ -376,7 +378,7 @@ function warnIfStdlibAutoDiscovered(string $fromPath, string $stdlibRoot): void
 
     \fwrite(
         STDERR,
-        "warning: stdlib auto-located at {$stdlibRoot} for " . (realpath($fromPath) ?: $fromPath)
+        "warning: stdlib auto-located at {$stdlibRoot} for " . (\realpath($fromPath) ?: $fromPath)
             . "; pass --lib PATH for an explicit standard-library dependency\n",
     );
 }
@@ -397,7 +399,7 @@ function isModuleUnderLibraryRoot(string $path): bool
     $realPath = resolvePath($path);
     $realRoot = resolvePath($libraryRoot);
 
-    return str_starts_with($realPath, $realRoot . DIRECTORY_SEPARATOR);
+    return \str_starts_with($realPath, $realRoot . DIRECTORY_SEPARATOR);
 }
 
 /**
@@ -426,7 +428,7 @@ final class LibraryModuleIndex
 
         $mtime = 0;
         foreach (findMogFilesUnder($root) as $path) {
-            $mtime = max($mtime, filemtime($path) ?: 0);
+            $mtime = \max($mtime, \filemtime($path) ?: 0);
         }
 
         self::$mtimes[$key] = $mtime;
@@ -476,7 +478,7 @@ function stdlibMaxMtime(string $stdlibRoot): int
 {
     $mtime = LibraryModuleIndex::maxMtime($stdlibRoot);
     foreach (ConfiguredStdlib::extraPaths() as $extra) {
-        $mtime = max($mtime, LibraryModuleIndex::maxMtime($extra));
+        $mtime = \max($mtime, LibraryModuleIndex::maxMtime($extra));
     }
 
     return $mtime;
@@ -508,6 +510,7 @@ function stdlibModuleScan(string $stdlibRoot): array
             $existing = $paths[$moduleName] ?? null;
             if ($existing === null) {
                 $paths[$moduleName] = $path;
+
                 continue;
             }
 
@@ -560,13 +563,13 @@ function setStdlibPhpPath(?string $path): void
         return;
     }
 
-    $real = realpath($path);
-    if ($real === false || !\is_dir($real)) {
+    $real = \realpath($path);
+    if ($real === false || ! \is_dir($real)) {
         throw new TypeError("invalid stdlib PHP path `{$path}`");
     }
 
     $marker = $real . DIRECTORY_SEPARATOR . 'Data' . DIRECTORY_SEPARATOR . 'Eq.php';
-    if (!\is_file($marker)) {
+    if (! \is_file($marker)) {
         throw new TypeError(
             "stdlib PHP path `{$path}` is missing `Data/Eq.php`; compile the stdlib first (e.g. `moggi compile lib -o out/lib`)",
         );
@@ -586,7 +589,7 @@ function detectStdlibPhpPath(?string $outputFile): ?string
         return null;
     }
 
-    $dir = dirname(realpath($outputFile) ?: $outputFile);
+    $dir = \dirname(\realpath($outputFile) ?: $outputFile);
     if (\is_file($dir . DIRECTORY_SEPARATOR . 'Data' . DIRECTORY_SEPARATOR . 'Eq.php')) {
         return $dir;
     }
@@ -617,11 +620,11 @@ function remapStdlibModuleOutputPaths(
 
     $out = $moduleOutputPaths;
     foreach ($moduleOutputPaths as $moduleName => $path) {
-        if (!isset($units[$moduleName])) {
+        if (! isset($units[$moduleName])) {
             continue;
         }
 
-        if (!isModuleUnderLibraryRoot($units[$moduleName]['path'])) {
+        if (! isModuleUnderLibraryRoot($units[$moduleName]['path'])) {
             continue;
         }
 

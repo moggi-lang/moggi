@@ -13,10 +13,10 @@ use function Moggi\Paths\canonicalSeparators;
 
 function moduleFilenameWarning(string $path, string $moduleName): ?string
 {
-    $fileBase = pathinfo(basename($path), PATHINFO_FILENAME);
-    $parts = explode('.', $moduleName);
-    $lastPart = $parts[count($parts) - 1];
-    $flatBase = join('-', $parts);
+    $fileBase = \pathinfo(\basename($path), PATHINFO_FILENAME);
+    $parts = \explode('.', $moduleName);
+    $lastPart = $parts[\count($parts) - 1];
+    $flatBase = \implode('-', $parts);
 
     if ($lastPart === $fileBase || $flatBase === $fileBase) {
         return null;
@@ -31,7 +31,7 @@ function mogPathToOutputRelative(string $mogPath, string $rootPrefix, ?string $e
     $relative = outputRelativePath($mogPath, $rootPrefix);
     $extension ??= currentBackend()->extension();
 
-    return preg_replace('/\.mog$/', $extension, $relative) ?? $relative;
+    return \preg_replace('/\.mog$/', $extension, $relative) ?? $relative;
 }
 
 /**
@@ -50,11 +50,11 @@ function outputRelativePath(string $mogPath, string $rootPrefix): string
 {
     $path = canonicalSeparators($mogPath);
     $prefix = canonicalSeparators($rootPrefix);
-    if ($prefix !== '' && str_starts_with($path, $prefix)) {
-        return substr($path, strlen($prefix));
+    if ($prefix !== '' && \str_starts_with($path, $prefix)) {
+        return \substr($path, \strlen($prefix));
     }
 
-    return ltrim(preg_replace('#^[A-Za-z]:#', '', $path) ?? $path, '/');
+    return \ltrim(\preg_replace('#^[A-Za-z]:#', '', $path) ?? $path, '/');
 }
 
 function projectRootFromPath(string $path): string
@@ -64,20 +64,20 @@ function projectRootFromPath(string $path): string
         return workspaceRootForStdlibRoot($stdlib);
     }
 
-    $real = realpath($path);
+    $real = \realpath($path);
     if ($real !== false) {
-        return dirname($real);
+        return \dirname($real);
     }
 
-    return dirname($path);
+    return \dirname($path);
 }
 
 function pathWithinProject(string $path, string $projectRoot): string
 {
-    $real = realpath($path);
-    $root = realpath($projectRoot);
-    if ($real !== false && $root !== false && str_starts_with($real, $root . DIRECTORY_SEPARATOR)) {
-        return canonicalSeparators(substr($real, strlen($root) + 1));
+    $real = \realpath($path);
+    $root = \realpath($projectRoot);
+    if ($real !== false && $root !== false && \str_starts_with($real, $root . DIRECTORY_SEPARATOR)) {
+        return canonicalSeparators(\substr($real, \strlen($root) + 1));
     }
 
     return canonicalSeparators($path);

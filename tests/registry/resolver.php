@@ -8,7 +8,7 @@
 // names the chains in play rather than a learned clause.
 
 $root = __DIR__;
-while (!is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
+while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
 require $root . '/src/compiler.php';
@@ -20,7 +20,7 @@ use function Moggi\Registry\satisfies;
 $checks = 0;
 $assert = static function (bool $condition, string $message) use (&$checks): void {
     ++$checks;
-    if (!$condition) {
+    if (! $condition) {
         throw new \RuntimeException($message);
     }
 };
@@ -29,7 +29,7 @@ $assert = static function (bool $condition, string $message) use (&$checks): voi
  * the way a catalog entry carries it. */
 $entryFor = static function (array $packages): callable {
     return static function (string $name) use ($packages): ?array {
-        if (!isset($packages[$name])) {
+        if (! isset($packages[$name])) {
             return null;
         }
         $versions = [];
@@ -72,14 +72,14 @@ $conflict = $entryFor([
     'c' => ['1.0.0' => [], '2.0.0' => []],
 ]);
 $result = resolveWith($conflict, ['a' => '>=1', 'b' => '>=1']);
-$assert(!$result['ok'], 'two disjoint constraints on c do not resolve');
+$assert(! $result['ok'], 'two disjoint constraints on c do not resolve');
 $assert(\str_contains($result['error'] ?? '', 'cannot satisfy `c`'), 'the error names the conflicted package: ' . ($result['error'] ?? ''));
 $assert(\str_contains($result['error'] ?? '', 'a -> c') && \str_contains($result['error'] ?? '', 'b -> c'), 'the error names both demanding chains: ' . ($result['error'] ?? ''));
 $assert(cdclResolve($conflict, ['a' => '>=1', 'b' => '>=1']) === null, 'the CDCL core agrees the request is unsatisfiable');
 
 // --- an unknown package is its own message -----------------------------------
 $result = resolveWith($entryFor(['a' => ['1.0.0' => []]]), ['nope' => '>=1']);
-$assert(!$result['ok'] && \str_contains($result['error'] ?? '', 'unknown package `nope`'), 'an unknown root package is named: ' . ($result['error'] ?? ''));
+$assert(! $result['ok'] && \str_contains($result['error'] ?? '', 'unknown package `nope`'), 'an unknown root package is named: ' . ($result['error'] ?? ''));
 
 // --- pre-release ordering reaches the resolver -------------------------------
 $result = resolveWith(
@@ -88,7 +88,7 @@ $result = resolveWith(
 );
 $assert($result['ok'] && $result['chosen'] === ['a' => '1.0.0'], 'a release outranks its pre-release: ' . \var_export($result['chosen'] ?? null, true));
 $assert(
-    !resolveWith($entryFor(['a' => ['1.0.0-alpha' => []]]), ['a' => '>=1.0.0'])['ok'],
+    ! resolveWith($entryFor(['a' => ['1.0.0-alpha' => []]]), ['a' => '>=1.0.0'])['ok'],
     'a floor the pre-release sits below excludes it',
 );
 
@@ -103,7 +103,7 @@ $assert($result['ok'] && $result['chosen'] === ['a' => '1.0.0'], 'a package depe
 // of the same names does. A greedy-only walk would fail the second half.
 $valid = static function (array $chosen, array $packages, array $rootDeps): bool {
     foreach ($rootDeps as $name => $constraint) {
-        if (!isset($chosen[$name]) || !satisfies($chosen[$name], $constraint)) {
+        if (! isset($chosen[$name]) || ! satisfies($chosen[$name], $constraint)) {
             return false;
         }
     }
@@ -115,11 +115,11 @@ $valid = static function (array $chosen, array $packages, array $rootDeps): bool
             continue;
         }
         $seen[$name] = true;
-        if (!isset($chosen[$name], $packages[$name][$chosen[$name]])) {
+        if (! isset($chosen[$name], $packages[$name][$chosen[$name]])) {
             return false;
         }
         foreach ((array) $packages[$name][$chosen[$name]] as $dependency => $constraint) {
-            if (!isset($chosen[$dependency]) || !satisfies($chosen[$dependency], (string) $constraint)) {
+            if (! isset($chosen[$dependency]) || ! satisfies($chosen[$dependency], (string) $constraint)) {
                 return false;
             }
             $stack[] = (string) $dependency;
@@ -179,7 +179,7 @@ for ($case = 0; $case < 200; $case++) {
     if ($result['ok']) {
         $assert($valid($result['chosen'], $packages, $rootDeps), "case {$case}: a returned choice must satisfy every constraint\n" . \json_encode([$packages, $rootDeps, $result['chosen']], \JSON_PRETTY_PRINT));
     } else {
-        $assert(!$oracle, "case {$case}: the resolver refused a request that has a solution");
+        $assert(! $oracle, "case {$case}: the resolver refused a request that has a solution");
     }
     $assert($result['ok'] === $oracle, "case {$case}: the resolver disagrees with the oracle");
 }

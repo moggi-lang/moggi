@@ -19,7 +19,7 @@ use function Moggi\Backend\setCompileBackend;
  * performs the same build writePhar() would do in-process.
  */
 
-require dirname(__DIR__, 3) . '/src/compiler.php';
+require \dirname(__DIR__, 3) . '/src/compiler.php';
 
 if ($argc !== 3 && $argc !== 4) {
     \fwrite(STDERR, "usage: php build_phar.php <output-root> <phar-path> [entry-relative]\n");
@@ -30,7 +30,7 @@ if ($argc !== 3 && $argc !== 4) {
 [, $outputRoot, $pharPath] = $argv;
 $entryRelative = $argv[3] ?? '';
 
-if (!\is_dir($outputRoot)) {
+if (! \is_dir($outputRoot)) {
     \fwrite(STDERR, "error: output directory does not exist: {$outputRoot}\n");
 
     exit(1);

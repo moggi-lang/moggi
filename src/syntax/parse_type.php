@@ -3,9 +3,10 @@
 namespace Moggi\Syntax\Parser;
 
 use Moggi\Syntax\Ast;
-use Moggi\Syntax\Lexer\TokenKind;
 
 use function Moggi\Syntax\isConstructorOperator;
+
+use Moggi\Syntax\Lexer\TokenKind;
 
 /**
  * @return Ast\KindNode
@@ -42,7 +43,7 @@ function parseKindAtom(ParserState $state): Ast\KindNode
     if (isAt($state, TokenKind::ConId)) {
         $token = advance($state);
 
-        return new Ast\KindCon($token->lexeme, $token->line, $token->col, $token->col + max(0, strlen($token->lexeme) - 1));
+        return new Ast\KindCon($token->lexeme, $token->line, $token->col, $token->col + \max(0, \strlen($token->lexeme) - 1));
     }
 
     throw unexpected($state, 'kind');
@@ -120,7 +121,7 @@ function parseTypeInfix(ParserState $state): Ast\TypeNode
         $app->setLocation(
             $opToken->line,
             $opToken->col,
-            $opToken->col + max(0, strlen($opToken->lexeme) - 1),
+            $opToken->col + \max(0, \strlen($opToken->lexeme) - 1),
         );
         $left = $app;
     }
@@ -144,7 +145,7 @@ function parseTypeAtom(ParserState $state): Ast\TypeNode
             && $head->con instanceof Ast\TypeCon
             && isConstructorOperator($head->con->name)
         );
-    if (!$canApply) {
+    if (! $canApply) {
         return $head;
     }
 
@@ -154,7 +155,7 @@ function parseTypeAtom(ParserState $state): Ast\TypeNode
         $args[] = parseTypeHead($state);
     }
 
-    if (count($args) === 0) {
+    if (\count($args) === 0) {
         return $head;
     }
 
@@ -178,8 +179,9 @@ function parseTypeAtom(ParserState $state): Ast\TypeNode
 function withTypeLocation(Ast\TypeNode $type, Token $token): Ast\TypeNode
 {
     if ($type instanceof Ast\AstNode) {
-        $type->setLocation($token->line, $token->col, $token->col + max(0, strlen($token->lexeme) - 1));
+        $type->setLocation($token->line, $token->col, $token->col + \max(0, \strlen($token->lexeme) - 1));
     }
+
     return $type;
 }
 
@@ -208,7 +210,7 @@ function parseTypeHead(ParserState $state): Ast\TypeNode
         $node->setLocation(
             $token->line,
             $token->col,
-            $token->col + strlen($token->lexeme) + 1,
+            $token->col + \strlen($token->lexeme) + 1,
         );
 
         return $node;
@@ -221,7 +223,7 @@ function parseTypeHead(ParserState $state): Ast\TypeNode
         $node->setLocation(
             $minus->line,
             $minus->col,
-            $int->col + max(0, strlen($int->lexeme) - 1),
+            $int->col + \max(0, \strlen($int->lexeme) - 1),
         );
 
         return $node;
@@ -233,7 +235,7 @@ function parseTypeHead(ParserState $state): Ast\TypeNode
         $node->setLocation(
             $token->line,
             $token->col,
-            $token->col + max(0, strlen($token->lexeme) - 1),
+            $token->col + \max(0, \strlen($token->lexeme) - 1),
         );
 
         return $node;
@@ -300,7 +302,7 @@ function parseTypeHead(ParserState $state): Ast\TypeNode
                 return new Ast\TypeConstrained($elements, parseType($state));
             }
 
-            return new Ast\TypeApp(new Ast\TypeCon('Tuple' . count($elements)), $elements);
+            return new Ast\TypeApp(new Ast\TypeCon('Tuple' . \count($elements)), $elements);
         }
 
         if (isAt($state, TokenKind::RParen)) {

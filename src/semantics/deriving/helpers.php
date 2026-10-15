@@ -7,9 +7,10 @@ use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TVar;
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Semantics\Types\TypeCheckState;
-use Moggi\Syntax\Ast;
 
 use function Moggi\Semantics\Types\typeFail;
+
+use Moggi\Syntax\Ast;
 
 /**
  * Shared AST helpers for stock / newtype deriving backends.
@@ -22,7 +23,7 @@ function lastDataParamName(Ast\DataDecl $decl): ?string
         return null;
     }
 
-    return $decl->params[count($decl->params) - 1]->name;
+    return $decl->params[\count($decl->params) - 1]->name;
 }
 
 /**
@@ -36,7 +37,7 @@ function functorialHeadAst(Ast\DataDecl $decl): Ast\TypeNode
     }
 
     $args = [];
-    $n = count($decl->params);
+    $n = \count($decl->params);
     for ($i = 0; $i < $n - 1; ++$i) {
         $args[] = new Ast\TypeVar($decl->params[$i]->name);
     }
@@ -70,10 +71,10 @@ function paramClassConstraints(
     foreach ($decl->constructors as $ctor) {
         foreach ($ctor->fields as $field) {
             foreach (typeNodeFreeVars($field->type) as $var => $_) {
-                if (!isset($paramNames[$var])) {
+                if (! isset($paramNames[$var])) {
                     continue;
                 }
-                if ($onlyParams !== null && !isset($onlyParams[$var])) {
+                if ($onlyParams !== null && ! isset($onlyParams[$var])) {
                     continue;
                 }
                 $needed[$var] = true;
@@ -83,7 +84,7 @@ function paramClassConstraints(
 
     $constraints = [];
     foreach ($decl->params as $param) {
-        if (!isset($needed[$param->name])) {
+        if (! isset($needed[$param->name])) {
             continue;
         }
         $constraints[] = new Ast\TypeApp(
@@ -304,7 +305,7 @@ function classifyFunctorField(Ast\TypeNode $type, string $param): array
         return ['tag' => 'param'];
     }
 
-    if (!typeMentionsParam($type, $param)) {
+    if (! typeMentionsParam($type, $param)) {
         return ['tag' => 'skip'];
     }
 
@@ -317,12 +318,12 @@ function classifyFunctorField(Ast\TypeNode $type, string $param): array
         if ($args === []) {
             return ['tag' => 'bad', 'reason' => 'unsupported'];
         }
-        for ($i = 0; $i < count($args) - 1; ++$i) {
+        for ($i = 0; $i < \count($args) - 1; ++$i) {
             if (typeMentionsParam($args[$i], $param)) {
                 return ['tag' => 'bad', 'reason' => 'type parameter in non-last argument'];
             }
         }
-        $last = classifyFunctorField($args[count($args) - 1], $param);
+        $last = classifyFunctorField($args[\count($args) - 1], $param);
         if ($last['tag'] === 'bad') {
             return $last;
         }
@@ -340,7 +341,7 @@ function classifyFunctorField(Ast\TypeNode $type, string $param): array
  */
 function newtypeRepresentation(Ast\DataDecl $decl): array
 {
-    if (!$decl->isNewtype) {
+    if (! $decl->isNewtype) {
         throw new \InvalidArgumentException('expected newtype');
     }
     $ctor = $decl->constructors[0];
@@ -394,4 +395,3 @@ function assertNullaryConstructors(
         }
     }
 }
-

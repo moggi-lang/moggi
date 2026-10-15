@@ -3,20 +3,25 @@
 namespace Moggi\Syntax\Parser;
 
 use Moggi\Syntax\Ast;
-use Moggi\Syntax\Lexer\TokenKind;
 
 use function Moggi\Syntax\Lexer\lex;
+
+use Moggi\Syntax\Lexer\TokenKind;
 
 /**
  * Result of parsing a single REPL input unit (one top-level decl, statement
  * sequence, or expression).
  */
-final class ReplFragment
+final class parse_repl
 {
     public const KIND_DECL = 'decl';
+
     public const KIND_STMT = 'stmt';
+
     public const KIND_EXPR = 'expr';
+
     public const KIND_INCOMPLETE = 'incomplete';
+
     public const KIND_ERROR = 'error';
 
     /**
@@ -43,14 +48,14 @@ function parseReplFragment(
     string $filename = '<interactive>',
     array $importedFixity = [],
 ): ReplFragment {
-    $trimmed = trim($source);
+    $trimmed = \trim($source);
     if ($trimmed === '') {
         return new ReplFragment(ReplFragment::KIND_INCOMPLETE, source: $source);
     }
 
-    if (preg_match('/^let\b/s', $trimmed) === 1) {
-        $afterLet = ltrim(substr($trimmed, 3));
-        if ($afterLet !== '' && !str_starts_with($afterLet, '{') && !looksLikeReplStatementSource($trimmed)) {
+    if (\preg_match('/^let\b/s', $trimmed) === 1) {
+        $afterLet = \ltrim(\substr($trimmed, 3));
+        if ($afterLet !== '' && ! \str_starts_with($afterLet, '{') && ! looksLikeReplStatementSource($trimmed)) {
             $trimmed = $afterLet;
         }
     }
@@ -72,7 +77,7 @@ function parseReplFragment(
 
         $decl = parseTopLevelDecl($declState);
         if ($decl !== null) {
-            if (!isAt($declState, TokenKind::Eof)) {
+            if (! isAt($declState, TokenKind::Eof)) {
                 throw unexpected($declState, 'end of input');
             }
 
@@ -86,7 +91,7 @@ function parseReplFragment(
 
         $exprState = new ParserState($tokens, 0, $fixity, $trimmed, $filename);
         $node = parseExprWithWhere($exprState);
-        if (!isAt($exprState, TokenKind::Eof)) {
+        if (! isAt($exprState, TokenKind::Eof)) {
             throw unexpected($exprState, 'end of input');
         }
 
@@ -102,7 +107,7 @@ function parseReplFragment(
 
 function looksLikeReplStatementSource(string $source): bool
 {
-    return str_contains($source, ';') || str_contains($source, '<-');
+    return \str_contains($source, ';') || \str_contains($source, '<-');
 }
 
 /**
@@ -121,7 +126,7 @@ function tryParseReplStatements(
     try {
         $state = new ParserState($tokens, 0, $fixity, $source, $filename);
         if (isAt($state, TokenKind::Eof) || isAt($state, TokenKind::KwDo)
-        ){
+        ) {
             return null;
         }
 
@@ -134,7 +139,7 @@ function tryParseReplStatements(
             if (isAt($state, TokenKind::Semicolon)) {
                 advance($state);
             }
-            if (!startsDoStmt($state) || isFollowingTopLevelDecl($state)) {
+            if (! startsDoStmt($state) || isFollowingTopLevelDecl($state)) {
                 break;
             }
             $stmts[] = parseDoStmt($state);
@@ -142,11 +147,11 @@ function tryParseReplStatements(
         $state->inDoBlock = $prevInDo;
         $state->doBlockCol = $prevDoCol;
 
-        if (!isAt($state, TokenKind::Eof)) {
+        if (! isAt($state, TokenKind::Eof)) {
             return null;
         }
 
-        if (count($stmts) === 1 && $stmts[0] instanceof Ast\DoExprStmt) {
+        if (\count($stmts) === 1 && $stmts[0] instanceof Ast\DoExprStmt) {
             return null;
         }
 
@@ -166,7 +171,7 @@ function tryParseReplStatements(
  */
 function replColonLiteralToAssignment(string $source): ?string
 {
-    if (!preg_match(
+    if (! \preg_match(
         '/^([A-Za-z_][A-Za-z0-9_\']*)\s*:\s*(.+)$/s',
         $source,
         $m,
@@ -174,12 +179,12 @@ function replColonLiteralToAssignment(string $source): ?string
         return null;
     }
 
-    $rhs = ltrim($m[2]);
-    if (str_starts_with($rhs, ':')) {
+    $rhs = \ltrim($m[2]);
+    if (\str_starts_with($rhs, ':')) {
         return null;
     }
 
-    if (!preg_match('/^(?:-?\d|\"|\'|True\b|False\b)/', $rhs)) {
+    if (! \preg_match('/^(?:-?\d|\"|\'|True\b|False\b)/', $rhs)) {
         return null;
     }
 
@@ -196,11 +201,11 @@ function parseReplType(
     string $filename = '<interactive>',
     array $importedFixity = [],
 ): Ast\TypeNode {
-    $trimmed = trim($source);
+    $trimmed = \trim($source);
     $tokens = lex($trimmed . "\n", $filename);
     $state = new ParserState($tokens, 0, $importedFixity, $trimmed, $filename);
     $type = parseType($state);
-    if (!isAt($state, TokenKind::Eof)) {
+    if (! isAt($state, TokenKind::Eof)) {
         throw unexpected($state, 'end of input');
     }
 
@@ -211,7 +216,7 @@ function isIncompleteParseError(ParseError $e): bool
 {
     $msg = $e->getMessage();
 
-    return str_contains($msg, 'incomplete')
-        || str_contains($msg, 'end of file')
-        || str_contains($msg, 'end of input');
+    return \str_contains($msg, 'incomplete')
+        || \str_contains($msg, 'end of file')
+        || \str_contains($msg, 'end of input');
 }

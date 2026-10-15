@@ -42,7 +42,7 @@ final class ConstantPool
         if (isset($this->utf8[$s])) {
             return $this->utf8[$s];
         }
-        $i = count($this->entries);
+        $i = \count($this->entries);
         $this->entries[] = ['tag' => 1, 'bytes' => $s];
         $this->utf8[$s] = $i;
 
@@ -55,7 +55,7 @@ final class ConstantPool
             return $this->classes[$internalName];
         }
         $name = $this->utf8($internalName);
-        $i = count($this->entries);
+        $i = \count($this->entries);
         $this->entries[] = ['tag' => 7, 'name' => $name];
         $this->classes[$internalName] = $i;
 
@@ -68,7 +68,7 @@ final class ConstantPool
             return $this->strings[$s];
         }
         $utf = $this->utf8($s);
-        $i = count($this->entries);
+        $i = \count($this->entries);
         $this->entries[] = ['tag' => 8, 'string' => $utf];
         $this->strings[$s] = $i;
 
@@ -81,7 +81,7 @@ final class ConstantPool
         if (isset($this->ints[$key])) {
             return $this->ints[$key];
         }
-        $i = count($this->entries);
+        $i = \count($this->entries);
         $this->entries[] = ['tag' => 3, 'bytes' => $v];
         $this->ints[$key] = $i;
 
@@ -95,7 +95,7 @@ final class ConstantPool
         if (isset($this->longs[$key])) {
             return $this->longs[$key];
         }
-        $i = count($this->entries);
+        $i = \count($this->entries);
         $this->entries[] = ['tag' => 5, 'bytes' => $v];
         $this->entries[] = ['tag' => 0, 'pad' => true];
         $this->longs[$key] = $i;
@@ -111,7 +111,7 @@ final class ConstantPool
         }
         $n = $this->utf8($name);
         $d = $this->utf8($descriptor);
-        $i = count($this->entries);
+        $i = \count($this->entries);
         $this->entries[] = ['tag' => 12, 'name' => $n, 'descriptor' => $d];
         $this->nameAndTypes[$key] = $i;
 
@@ -127,7 +127,7 @@ final class ConstantPool
         }
         $c = $this->class_($classInternal);
         $nt = $this->nameAndType($name, $descriptor);
-        $i = count($this->entries);
+        $i = \count($this->entries);
         $this->entries[] = ['tag' => $tag, 'class' => $c, 'nameAndType' => $nt];
         $this->refs[$key] = $i;
 
@@ -151,25 +151,25 @@ final class ConstantPool
 
     public function count(): int
     {
-        return count($this->entries);
+        return \count($this->entries);
     }
 
     public function write(): string
     {
         $out = u2($this->count());
-        for ($i = 1; $i < count($this->entries); ++$i) {
+        for ($i = 1; $i < \count($this->entries); ++$i) {
             $e = $this->entries[$i];
             if (($e['tag'] ?? null) === 0) {
                 continue;
             }
             $out .= match ($e['tag']) {
-                1 => chr(1) . utf8Info($e['bytes']),
-                3 => chr(3) . u4($e['bytes']),
-                5 => chr(5) . u8($e['bytes']),
-                7 => chr(7) . u2($e['name']),
-                8 => chr(8) . u2($e['string']),
-                9, 10, 11 => chr($e['tag']) . u2($e['class']) . u2($e['nameAndType']),
-                12 => chr(12) . u2($e['name']) . u2($e['descriptor']),
+                1 => \chr(1) . utf8Info($e['bytes']),
+                3 => \chr(3) . u4($e['bytes']),
+                5 => \chr(5) . u8($e['bytes']),
+                7 => \chr(7) . u2($e['name']),
+                8 => \chr(8) . u2($e['string']),
+                9, 10, 11 => \chr($e['tag']) . u2($e['class']) . u2($e['nameAndType']),
+                12 => \chr(12) . u2($e['name']) . u2($e['descriptor']),
                 default => throw new \RuntimeException('unsupported cp tag ' . $e['tag']),
             };
         }
@@ -201,7 +201,9 @@ final class CodeBuilder
     private array $lineNumbers = [];
 
     private int $maxStack = 0;
+
     private int $curStack = 0;
+
     private int $maxLocals;
 
     public function __construct(int $maxLocals)
@@ -211,7 +213,7 @@ final class CodeBuilder
 
     public function offset(): int
     {
-        return strlen($this->code);
+        return \strlen($this->code);
     }
 
     public function label(string $name): void
@@ -273,13 +275,13 @@ final class CodeBuilder
 
     public function opcode(int $op, int $stackDelta = 0): void
     {
-        $this->raw(chr($op), $stackDelta);
+        $this->raw(\chr($op), $stackDelta);
     }
 
     public function bipush(int $v): void
     {
         $this->opcode(0x10, 1);
-        $this->code .= chr($v & 0xff);
+        $this->code .= \chr($v & 0xff);
     }
 
     public function sipush(int $v): void
@@ -292,7 +294,7 @@ final class CodeBuilder
     {
         if ($index <= 255) {
             $this->opcode(0x12, 1);
-            $this->code .= chr($index);
+            $this->code .= \chr($index);
         } else {
             $this->opcode(0x13, 1);
             $this->code .= u2($index);
@@ -325,11 +327,11 @@ final class CodeBuilder
             $this->opcode(0x1a + $i, 1);
         } elseif ($i <= 255) {
             $this->opcode(0x15, 1);
-            $this->code .= chr($i);
+            $this->code .= \chr($i);
         } else {
             $this->emitWideLoadStore(0x15, $i, 1);
         }
-        $this->maxLocals = max($this->maxLocals, $i + 1);
+        $this->maxLocals = \max($this->maxLocals, $i + 1);
     }
 
     public function dload(int $i): void
@@ -338,11 +340,11 @@ final class CodeBuilder
             $this->opcode(0x26 + $i, 2);
         } elseif ($i <= 255) {
             $this->opcode(0x18, 2);
-            $this->code .= chr($i);
+            $this->code .= \chr($i);
         } else {
             $this->emitWideLoadStore(0x18, $i, 2);
         }
-        $this->maxLocals = max($this->maxLocals, $i + 2);
+        $this->maxLocals = \max($this->maxLocals, $i + 2);
     }
 
     public function dstore(int $i): void
@@ -351,11 +353,11 @@ final class CodeBuilder
             $this->opcode(0x47 + $i, -2);
         } elseif ($i <= 255) {
             $this->opcode(0x39, -2);
-            $this->code .= chr($i);
+            $this->code .= \chr($i);
         } else {
             $this->emitWideLoadStore(0x39, $i, -2);
         }
-        $this->maxLocals = max($this->maxLocals, $i + 2);
+        $this->maxLocals = \max($this->maxLocals, $i + 2);
     }
 
     public function dreturn(): void
@@ -369,11 +371,11 @@ final class CodeBuilder
             $this->opcode(0x2a + $i, 1);
         } elseif ($i <= 255) {
             $this->opcode(0x19, 1);
-            $this->code .= chr($i);
+            $this->code .= \chr($i);
         } else {
             $this->emitWideLoadStore(0x19, $i, 1);
         }
-        $this->maxLocals = max($this->maxLocals, $i + 1);
+        $this->maxLocals = \max($this->maxLocals, $i + 1);
     }
 
     public function istore(int $i): void
@@ -382,23 +384,23 @@ final class CodeBuilder
             $this->opcode(0x3b + $i, -1);
         } elseif ($i <= 255) {
             $this->opcode(0x36, -1);
-            $this->code .= chr($i);
+            $this->code .= \chr($i);
         } else {
             $this->emitWideLoadStore(0x36, $i, -1);
         }
-        $this->maxLocals = max($this->maxLocals, $i + 1);
+        $this->maxLocals = \max($this->maxLocals, $i + 1);
     }
 
     public function iinc(int $i, int $delta): void
     {
         if ($i <= 255 && $delta >= -128 && $delta <= 127) {
             $this->opcode(0x84, 0);
-            $this->code .= chr($i) . chr($delta & 0xff);
+            $this->code .= \chr($i) . \chr($delta & 0xff);
         } else {
             $this->opcode(0xc4, 0);
-            $this->code .= chr(0x84) . pack('n', $i) . pack('n', $delta & 0xffff);
+            $this->code .= \chr(0x84) . \pack('n', $i) . \pack('n', $delta & 0xffff);
         }
-        $this->maxLocals = max($this->maxLocals, $i + 1);
+        $this->maxLocals = \max($this->maxLocals, $i + 1);
     }
 
     public function astore(int $i): void
@@ -407,11 +409,11 @@ final class CodeBuilder
             $this->opcode(0x4b + $i, -1);
         } elseif ($i <= 255) {
             $this->opcode(0x3a, -1);
-            $this->code .= chr($i);
+            $this->code .= \chr($i);
         } else {
             $this->emitWideLoadStore(0x3a, $i, -1);
         }
-        $this->maxLocals = max($this->maxLocals, $i + 1);
+        $this->maxLocals = \max($this->maxLocals, $i + 1);
     }
 
     private function emitWideLoadStore(int $opcode, int $i, int $stackDelta): void
@@ -420,7 +422,7 @@ final class CodeBuilder
             throw new \RuntimeException("JVM local index {$i} exceeds wide limit");
         }
         $this->opcode(0xc4, $stackDelta);
-        $this->code .= chr($opcode) . pack('n', $i);
+        $this->code .= \chr($opcode) . \pack('n', $i);
     }
 
     public function dup(): void
@@ -488,8 +490,8 @@ final class CodeBuilder
         $retSlots = \is_int($returnsValue) ? $returnsValue : ($returnsValue ? 1 : 0);
         $this->opcode(0xb9, -($argSlots + 1) + $retSlots);
         $this->code .= u2($methodRef);
-        $this->code .= chr($argSlots + 1);
-        $this->code .= chr(0);
+        $this->code .= \chr($argSlots + 1);
+        $this->code .= \chr(0);
     }
 
     public function new_(int $classIndex): void
@@ -519,7 +521,7 @@ final class CodeBuilder
     public function newarray(int $atype): void
     {
         $this->opcode(0xbc, 0);
-        $this->code .= chr($atype);
+        $this->code .= \chr($atype);
     }
 
     public function arraylength(): void
@@ -764,11 +766,11 @@ final class CodeBuilder
             $this->opcode(0x1e + $i, 2);
         } elseif ($i <= 255) {
             $this->opcode(0x16, 2);
-            $this->code .= chr($i);
+            $this->code .= \chr($i);
         } else {
             $this->emitWideLoadStore(0x16, $i, 2);
         }
-        $this->maxLocals = max($this->maxLocals, $i + 2);
+        $this->maxLocals = \max($this->maxLocals, $i + 2);
     }
 
     public function lstore(int $i): void
@@ -777,11 +779,11 @@ final class CodeBuilder
             $this->opcode(0x3f + $i, -2);
         } elseif ($i <= 255) {
             $this->opcode(0x37, -2);
-            $this->code .= chr($i);
+            $this->code .= \chr($i);
         } else {
             $this->emitWideLoadStore(0x37, $i, -2);
         }
-        $this->maxLocals = max($this->maxLocals, $i + 2);
+        $this->maxLocals = \max($this->maxLocals, $i + 2);
     }
 
     public function lconst(int $v): void
@@ -830,7 +832,7 @@ final class CodeBuilder
     public function resolve(): void
     {
         foreach ($this->fixups as $f) {
-            if (!isset($this->labels[$f['label']])) {
+            if (! isset($this->labels[$f['label']])) {
                 throw new \RuntimeException("undefined label {$f['label']}");
             }
             $target = $this->labels[$f['label']];
@@ -839,13 +841,13 @@ final class CodeBuilder
             if ($delta < -32768 || $delta > 32767) {
                 throw new \RuntimeException('branch offset out of range');
             }
-            $this->code[$at + 1] = chr(($delta >> 8) & 0xff);
-            $this->code[$at + 2] = chr($delta & 0xff);
+            $this->code[$at + 1] = \chr(($delta >> 8) & 0xff);
+            $this->code[$at + 2] = \chr($delta & 0xff);
         }
 
         foreach ($this->pendingExceptions as $ex) {
             foreach (['start', 'end', 'handler'] as $key) {
-                if (!isset($this->labels[$ex[$key]])) {
+                if (! isset($this->labels[$ex[$key]])) {
                     throw new \RuntimeException("undefined exception label {$ex[$key]}");
                 }
             }
@@ -883,9 +885,9 @@ final class CodeBuilder
 
         $body = u2($this->maxStack)
             . u2($this->maxLocals)
-            . u4(strlen($code))
+            . u4(\strlen($code))
             . $code
-            . u2(count($this->exceptions));
+            . u2(\count($this->exceptions));
         foreach ($this->exceptions as $ex) {
             $body .= u2($ex['start']) . u2($ex['end']) . u2($ex['handler']) . u2($ex['type']);
         }
@@ -903,12 +905,12 @@ function buildLineNumberTable(array $entries): string
     if ($entries === []) {
         return '';
     }
-    usort($entries, static fn ($a, $b) => $a['pc'] <=> $b['pc']);
+    \usort($entries, static fn ($a, $b) => $a['pc'] <=> $b['pc']);
     $deduped = [];
     foreach ($entries as $entry) {
         $deduped[$entry['pc']] = $entry;
     }
-    $table = u2(count($deduped));
+    $table = u2(\count($deduped));
     foreach ($deduped as $entry) {
         $table .= u2($entry['pc']) . u2($entry['line'] & 0xffff);
     }
@@ -928,7 +930,7 @@ function buildStackMapTable(ConstantPool $cp, array $frames, array $initialLocal
         return '';
     }
 
-    usort($frames, static fn ($a, $b) => $a['offset'] <=> $b['offset']);
+    \usort($frames, static fn ($a, $b) => $a['offset'] <=> $b['offset']);
     $deduped = [];
     foreach ($frames as $frame) {
         $deduped[$frame['offset']] = $frame;
@@ -940,12 +942,12 @@ function buildStackMapTable(ConstantPool $cp, array $frames, array $initialLocal
         $off = $frame['offset'];
         $offsetDelta = $prevOffset < 0 ? $off : ($off - $prevOffset - 1);
         $prevOffset = $off;
-        $entries .= chr(255) . u2($offsetDelta);
-        $entries .= u2(count($frame['locals']));
+        $entries .= \chr(255) . u2($offsetDelta);
+        $entries .= u2(\count($frame['locals']));
         foreach ($frame['locals'] as $t) {
             $entries .= verificationType($cp, $t);
         }
-        $entries .= u2(count($frame['stack']));
+        $entries .= u2(\count($frame['stack']));
         foreach ($frame['stack'] as $t) {
             $entries .= verificationType($cp, $t);
         }
@@ -963,27 +965,31 @@ function buildStackMapTable(ConstantPool $cp, array $frames, array $initialLocal
 function verificationType(ConstantPool $cp, string|int $t): string
 {
     if (\is_int($t)) {
-        return chr(7) . u2($t);
+        return \chr(7) . u2($t);
     }
 
     return match ($t) {
-        'top' => chr(0),
-        'int' => chr(1),
-        'float' => chr(2),
-        'double' => chr(3),
-        'long' => chr(4),
-        'null' => chr(5),
-        'uninit_this' => chr(6),
-        default => chr(7) . u2($cp->class_($t)),
+        'top' => \chr(0),
+        'int' => \chr(1),
+        'float' => \chr(2),
+        'double' => \chr(3),
+        'long' => \chr(4),
+        'null' => \chr(5),
+        'uninit_this' => \chr(6),
+        default => \chr(7) . u2($cp->class_($t)),
     };
 }
 
 final class ClassBuilder
 {
     public ConstantPool $cp;
+
     private string $thisInternal;
+
     private string $superInternal;
+
     private int $access;
+
     private ?string $sourceFile = null;
 
     /** @var list<string> */
@@ -1012,7 +1018,7 @@ final class ClassBuilder
     public function setSourceFile(string $displayPath): void
     {
         $this->sourceFile = $displayPath;
-        $this->cp->utf8(basename(\str_replace('\\', '/', $displayPath)));
+        $this->cp->utf8(\basename(\str_replace('\\', '/', $displayPath)));
     }
 
     public function implement(string $ifaceInternal): void
@@ -1065,19 +1071,19 @@ final class ClassBuilder
             . u2($this->access)
             . u2($thisClass)
             . u2($superClass)
-            . u2(count($this->interfaces))
+            . u2(\count($this->interfaces))
             . $ifaces
-            . u2(count($this->fields));
+            . u2(\count($this->fields));
         foreach ($this->fields as $f) {
             $out .= $f;
         }
-        $out .= u2(count($this->methods));
+        $out .= u2(\count($this->methods));
         foreach ($this->methods as $m) {
             $out .= $m;
         }
         if ($this->sourceFile !== null && $this->sourceFile !== '') {
             $nameIdx = $this->cp->utf8('SourceFile');
-            $fileIdx = $this->cp->utf8(basename(\str_replace('\\', '/', $this->sourceFile)));
+            $fileIdx = $this->cp->utf8(\basename(\str_replace('\\', '/', $this->sourceFile)));
             $out .= u2(1) . u2($nameIdx) . u4(2) . u2($fileIdx);
         } else {
             $out .= u2(0);
@@ -1089,23 +1095,23 @@ final class ClassBuilder
 
 function u2(int $v): string
 {
-    return pack('n', $v & 0xffff);
+    return \pack('n', $v & 0xffff);
 }
 
 function u4(int $v): string
 {
-    return pack('N', $v & 0xffffffff);
+    return \pack('N', $v & 0xffffffff);
 }
 
 function u8(int $v): string
 {
-    return pack('NN', ($v >> 32) & 0xffffffff, $v & 0xffffffff);
+    return \pack('NN', ($v >> 32) & 0xffffffff, $v & 0xffffffff);
 }
 
 function utf8Info(string $s): string
 {
     $encoded = encodeModifiedUtf8($s);
-    $len = strlen($encoded);
+    $len = \strlen($encoded);
     if ($len > 0xffff) {
         throw new \RuntimeException('CONSTANT_Utf8 entry too large');
     }
@@ -1116,9 +1122,9 @@ function utf8Info(string $s): string
 function encodeModifiedUtf8(string $s): string
 {
     $out = '';
-    $len = strlen($s);
+    $len = \strlen($s);
     for ($i = 0; $i < $len;) {
-        $b0 = ord($s[$i]);
+        $b0 = \ord($s[$i]);
         if (($b0 & 0x80) === 0) {
             ++$i;
             if ($b0 === 0) {
@@ -1126,6 +1132,7 @@ function encodeModifiedUtf8(string $s): string
             } else {
                 $out .= $s[$i - 1];
             }
+
             continue;
         }
 
@@ -1133,12 +1140,13 @@ function encodeModifiedUtf8(string $s): string
             if ($i + 1 >= $len) {
                 throw new \RuntimeException('invalid UTF-8 in CONSTANT_Utf8');
             }
-            $b1 = ord($s[$i + 1]);
+            $b1 = \ord($s[$i + 1]);
             if (($b1 & 0xC0) !== 0x80) {
                 throw new \RuntimeException('invalid UTF-8 in CONSTANT_Utf8');
             }
             $out .= $s[$i] . $s[$i + 1];
             $i += 2;
+
             continue;
         }
 
@@ -1146,13 +1154,14 @@ function encodeModifiedUtf8(string $s): string
             if ($i + 2 >= $len) {
                 throw new \RuntimeException('invalid UTF-8 in CONSTANT_Utf8');
             }
-            $b1 = ord($s[$i + 1]);
-            $b2 = ord($s[$i + 2]);
+            $b1 = \ord($s[$i + 1]);
+            $b2 = \ord($s[$i + 2]);
             if ((($b1 | $b2) & 0xC0) !== 0x80) {
                 throw new \RuntimeException('invalid UTF-8 in CONSTANT_Utf8');
             }
             $out .= $s[$i] . $s[$i + 1] . $s[$i + 2];
             $i += 3;
+
             continue;
         }
 
@@ -1160,9 +1169,9 @@ function encodeModifiedUtf8(string $s): string
             if ($i + 3 >= $len) {
                 throw new \RuntimeException('invalid UTF-8 in CONSTANT_Utf8');
             }
-            $b1 = ord($s[$i + 1]);
-            $b2 = ord($s[$i + 2]);
-            $b3 = ord($s[$i + 3]);
+            $b1 = \ord($s[$i + 1]);
+            $b2 = \ord($s[$i + 2]);
+            $b3 = \ord($s[$i + 3]);
             if ((($b1 | $b2 | $b3) & 0xC0) !== 0x80) {
                 throw new \RuntimeException('invalid UTF-8 in CONSTANT_Utf8');
             }
@@ -1178,13 +1187,14 @@ function encodeModifiedUtf8(string $s): string
             $codePoint -= 0x10000;
             $high = 0xD800 | (($codePoint >> 10) & 0x3FF);
             $low = 0xDC00 | ($codePoint & 0x3FF);
-            $out .= chr(0xE0 | (($high >> 12) & 0x0F))
-                . chr(0x80 | (($high >> 6) & 0x3F))
-                . chr(0x80 | ($high & 0x3F))
-                . chr(0xE0 | (($low >> 12) & 0x0F))
-                . chr(0x80 | (($low >> 6) & 0x3F))
-                . chr(0x80 | ($low & 0x3F));
+            $out .= \chr(0xE0 | (($high >> 12) & 0x0F))
+                . \chr(0x80 | (($high >> 6) & 0x3F))
+                . \chr(0x80 | ($high & 0x3F))
+                . \chr(0xE0 | (($low >> 12) & 0x0F))
+                . \chr(0x80 | (($low >> 6) & 0x3F))
+                . \chr(0x80 | ($low & 0x3F));
             $i += 4;
+
             continue;
         }
 
@@ -1196,5 +1206,5 @@ function encodeModifiedUtf8(string $s): string
 
 function attribute(ConstantPool $cp, string $name, string $info): string
 {
-    return u2($cp->utf8($name)) . u4(strlen($info)) . $info;
+    return u2($cp->utf8($name)) . u4(\strlen($info)) . $info;
 }
