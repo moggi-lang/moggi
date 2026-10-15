@@ -95,9 +95,7 @@ function bundledPackages(): array
     }
 
     $packages = [];
-    // Forward slashes throughout: `glob()` reads `\` as an escape (see
-    // `globPaths`), and PHP opens `/`-spelled paths on every host — so a
-    // Windows scan compares equal to the `/`-joined dirs callers build.
+
     foreach (globPaths($libraries . '/*/*.moggi') as $manifest) {
         try {
             $descriptor = readDescriptor((string) $manifest);

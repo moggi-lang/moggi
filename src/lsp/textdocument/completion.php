@@ -12,6 +12,7 @@ use function Moggi\LSP\Index\declForResolved;
 use function Moggi\LSP\Protocol\lspPosToCompiler;
 use function Moggi\LSP\Protocol\splitLines;
 use function Moggi\Modules\resolvedSymbol;
+use function Moggi\Paths\globPaths;
 
 function svcCompletion(AnalysisService $svc, string $uri, array $pos): array
 {
@@ -45,7 +46,7 @@ function svcCompletion(AnalysisService $svc, string $uri, array $pos): array
                 ];
             }
             foreach ($svc->libDirs as $dir) {
-                foreach (glob(rtrim($dir, '/') . '/*/*.mog') ?: [] as $file) {
+                foreach (globPaths(rtrim($dir, '/\\') . '/*/*.mog') as $file) {
                     $rel = basename(dirname($file)) . '/' . basename($file, '.mog');
                     if (isset($seenMods[$rel])) {
                         continue;

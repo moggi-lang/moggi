@@ -128,29 +128,35 @@ function phpNamespacePrefixes(string $root, string $vendor, string $package): ar
         if (!\is_string($raw) || $raw === '') {
             continue;
         }
+
         try {
             $composer = \json_decode($raw, true, 512, \JSON_THROW_ON_ERROR);
         } catch (\JsonException) {
             continue;
         }
+
         if (!\is_array($composer)) {
             continue;
         }
-        // The tree root may be the consuming project rather than the package;
-        // only a file naming the coordinate speaks for its namespaces.
+
         if (isset($composer['name'])
             && \strtolower((string) $composer['name']) !== \strtolower($vendor . '/' . $package)
         ) {
             continue;
         }
+
         $autoload = $composer['autoload'] ?? null;
+
         if (!\is_array($autoload)) {
             continue;
         }
+
         $psr4 = $autoload['psr-4'] ?? null;
+
         if (!\is_array($psr4)) {
             continue;
         }
+
         foreach ($psr4 as $namespace => $dirs) {
             $namespace = \trim((string) $namespace, '\\');
             if ($namespace !== '' && !\in_array($namespace, $prefixes, true)) {
@@ -241,21 +247,22 @@ function inspectPhpTree(string $treeRoot, string $vendor, string $package): arra
             if (!$file->isFile() || \strtolower($file->getExtension()) !== 'php') {
                 continue;
             }
+
             $relative = \str_replace('\\', '/', (string) \substr($file->getPathname(), \strlen($scanRoot) + 1));
             $relative = \ltrim($relative, '/');
+
             if ($scanRoot === $root) {
                 if ($relative === 'vendor' || \str_starts_with($relative, 'vendor/')) {
                     continue;
                 }
             }
-            // Test helpers, examples and docs are not the shipped API: they
-            // routinely extend PHPUnit or other dev-only parents that are not
-            // installed in a resolved tree, and requiring them would abort
-            // the bind instead of binding the library.
+
             $segments = \explode('/', \strtolower($relative));
+
             if (\array_intersect($segments, ['test', 'tests', 'examples', 'example', 'doc', 'docs']) !== []) {
                 continue;
             }
+
             $files[] = $file->getPathname();
         }
     }
@@ -266,24 +273,18 @@ function inspectPhpTree(string $treeRoot, string $vendor, string $package): arra
     foreach ($files as $file) {
         $wanted[\realpath($file) ?: $file] = true;
     }
-    // A resolved Composer tree ships its autoloader; requiring it first lets
-    // the package's files resolve each other's interfaces and traits no
-    // matter what order the sorted scan requires them in. Only classes
-    // defined in the scanned files are kept (the `$wanted` check below), so
-    // other vendor packages the autoloader can see never leak into the
-    // binding. A bare package directory with no autoloader binds as before.
+
     $autoload = $root . '/vendor/autoload.php';
+
     if (\is_file($autoload)) {
         require_once $autoload;
     }
+
     $loadErrors = [];
     foreach ($files as $file) {
         try {
             require_once $file;
         } catch (\Throwable $error) {
-            // A file whose parents are missing (or that runs code at the top
-            // level) must not abort the whole bind: its classes simply never
-            // declare, and the skip is recorded below like any other.
             $loadErrors[$file] = $error->getMessage();
         }
     }

@@ -14,6 +14,7 @@ use function Moggi\Modules\prepareProjectCached;
 use function Moggi\Modules\projectSourceClosure;
 use function Moggi\Modules\setStdlibLibPath;
 use function Moggi\Paths\canonicalSeparators;
+use function Moggi\Paths\globPaths;
 
 final class ParsedModule
 {
@@ -80,7 +81,7 @@ function docRootFor(string $inputPath): string
 function docSiteTitle(string $inputPath): string
 {
     $dir = \is_dir($inputPath) ? $inputPath : \dirname($inputPath);
-    foreach (glob(rtrim($dir, '/\\') . '/*.moggi') ?: [] as $descriptor) {
+    foreach (globPaths(rtrim($dir, '/\\') . '/*.moggi') as $descriptor) {
         $ini = parse_ini_string((string) file_get_contents($descriptor), true, \INI_SCANNER_RAW);
         if ($ini === false) {
             continue;
@@ -248,7 +249,7 @@ function docSourceFingerprint(array $files): string
 function descriptorTestSourceDirs(string $root): array
 {
     $dirs = [];
-    foreach (glob(rtrim($root, '/\\') . '/*.moggi') ?: [] as $descriptor) {
+    foreach (globPaths(rtrim($root, '/\\') . '/*.moggi') as $descriptor) {
         $ini = parse_ini_string((string) file_get_contents($descriptor), true, \INI_SCANNER_RAW);
         if ($ini === false) {
             continue;

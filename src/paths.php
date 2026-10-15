@@ -26,17 +26,119 @@ function canonicalSeparators(string $path): string
 }
 
 /**
- * `glob()` with `/` separators: backslash is an escape character in glob
- * patterns, so a pattern built with `DIRECTORY_SEPARATOR` silently matches
- * nothing on Windows (`C:\dir\*.dll` reads `\*` as an escaped star). Every
- * glob in the compiler goes through here; PHP opens forward-slash paths on
- * every host, so the returned paths keep the pattern's spelling.
+ * Directory expansion without `glob()`: backslash is an escape character in
+ * glob patterns, so a pattern built with `DIRECTORY_SEPARATOR` silently
+ * matches nothing on Windows (`C:\dir\*.dll` reads `\*` as an escaped
+ * star), and separator spelling, duplicate slashes and trailing slashes all
+ * behave slightly differently per host. Every scan in the compiler goes
+ * through here instead, so matching means the same everywhere: `\` is
+ * re-spelled to `/` up front and never acts as an escape, duplicate slashes
+ * collapse, a trailing slash only marks directories, and `*` never matches
+ * dotfiles — on any host. PHP opens forward-slash paths on every host, so
+ * the returned paths are `/`-spelled on every host too.
+ *
+ * Only `GLOB_ONLYDIR`, `GLOB_MARK` and `GLOB_NOSORT` are honored; no caller
+ * passes anything else. `**` matches one level, exactly as it does in
+ * `glob()`.
  *
  * @return list<string>
  */
 function globPaths(string $pattern, int $flags = 0): array
 {
-    return \glob(\str_replace('\\', '/', $pattern), $flags) ?: [];
+    $path = \str_replace('\\', '/', $pattern);
+    $root = '';
+    $rest = $path;
+    if (\str_starts_with($rest, '//')) {
+        $root = '//';
+        $rest = (string) \substr($rest, 2);
+    } elseif (\preg_match('#^[A-Za-z]:(?=/|$)#', $rest) === 1) {
+        $root = (string) \substr($rest, 0, 2);
+        $rest = (string) \substr($rest, 2);
+    }
+    $absolute = \str_starts_with($rest, '/');
+    $rest = (string) \preg_replace('#/+#', '/', $rest);
+    $dirMark = $rest !== '' && \str_ends_with($rest, '/');
+    $segments = \array_values(\array_filter(
+        \explode('/', $rest),
+        static fn (string $segment): bool => $segment !== '' && $segment !== '.',
+    ));
+    if ($root === '//') {
+        $segments[0] = '//' . ($segments[0] ?? '');
+        $root = '';
+    }
+    if ($segments === []) {
+        $seed = $root !== '' ? $root : ($absolute ? '/' : '');
+
+        return $seed !== '' && @\file_exists($seed) ? [$seed] : [];
+    }
+
+    $join = static fn (string $base, string $segment): string => $base === ''
+        ? $segment
+        : ($base === '/' ? '/' . \ltrim($segment, '/') : $base . '/' . $segment);
+    $fs = static fn (string $base): string => $base === '' ? '.' : $base;
+    $matchFlags = \FNM_NOESCAPE | (\DIRECTORY_SEPARATOR === '\\' ? \FNM_CASEFOLD : 0);
+
+    $current = $root !== '' ? [$root] : ($absolute ? ['/'] : ['']);
+    $total = \count($segments);
+    foreach ($segments as $index => $segment) {
+        $last = $index === $total - 1;
+        $next = [];
+        if (\strpbrk($segment, '*?[') === false) {
+            foreach ($current as $base) {
+                $candidate = $join($base, $segment);
+                if ($last ? @\file_exists($candidate) : @\is_dir($candidate)) {
+                    $next[] = $candidate;
+                }
+            }
+        } else {
+            foreach ($current as $base) {
+                if (!@\is_dir($fs($base))) {
+                    continue;
+                }
+                $entries = @\scandir($fs($base));
+                if (!\is_array($entries)) {
+                    continue;
+                }
+                $skipDotfiles = !\str_starts_with($segment, '.');
+                foreach ($entries as $entry) {
+                    if ($entry === '.' || $entry === '..') {
+                        continue;
+                    }
+                    if ($skipDotfiles && \str_starts_with($entry, '.')) {
+                        continue;
+                    }
+                    if (!\fnmatch($segment, $entry, $matchFlags)) {
+                        continue;
+                    }
+                    $candidate = $join($base, $entry);
+                    if (!$last && !@\is_dir($candidate)) {
+                        continue;
+                    }
+                    $next[] = $candidate;
+                }
+            }
+        }
+        $current = \array_values(\array_unique($next));
+        if ($current === []) {
+            return [];
+        }
+    }
+
+    $onlyDirs = ($flags & \GLOB_ONLYDIR) !== 0 || $dirMark;
+    $mark = ($flags & \GLOB_MARK) !== 0 || $dirMark;
+    $results = [];
+    foreach ($current as $candidate) {
+        $isDir = @\is_dir($candidate);
+        if ($onlyDirs && !$isDir) {
+            continue;
+        }
+        $results[] = $isDir && $mark ? $candidate . '/' : $candidate;
+    }
+    if (($flags & \GLOB_NOSORT) === 0) {
+        \sort($results, \SORT_STRING);
+    }
+
+    return $results;
 }
 
 /** Whether a canonical path is anchored (a POSIX `/` or a Windows drive). */

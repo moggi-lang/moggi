@@ -3,6 +3,7 @@
 namespace Moggi\Cache;
 
 use function Moggi\Backend\compileBackend;
+use function Moggi\Paths\globPaths;
 
 /**
  * One cache root (`./.moggi`, override with MOGGI_CACHE_DIR) holding every kind of
@@ -323,7 +324,7 @@ function runtimeCacheDir(): string
 function bindCacheRoots(): array
 {
     $roots = [];
-    foreach (\glob(\rtrim(runtimeCacheDir(), '/') . '/*/bind-*/', \GLOB_ONLYDIR) ?: [] as $dir) {
+    foreach (globPaths(\rtrim(runtimeCacheDir(), '/\\') . '/*/bind-*/', \GLOB_ONLYDIR) as $dir) {
         $roots[] = $dir;
     }
     \sort($roots);

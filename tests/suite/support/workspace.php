@@ -72,12 +72,12 @@ function seedCacheDir(string $dir): void
         @\copy($fingerprint, $dir . '/fingerprint');
     }
 
-    foreach (\glob($source . '/compile/*/lib', \GLOB_ONLYDIR) ?: [] as $entries) {
+    foreach (\Moggi\Paths\globPaths($source . '/compile/*/lib', \GLOB_ONLYDIR) as $entries) {
         $backend = \basename(\dirname($entries));
         hardlinkTree($entries, $dir . '/compile/' . $backend . '/lib');
     }
 
-    foreach (\glob($source . '/compile/artifacts/stdlib-index*.blob') ?: [] as $blob) {
+    foreach (\Moggi\Paths\globPaths($source . '/compile/artifacts/stdlib-index*.blob') as $blob) {
         $target = $dir . '/compile/artifacts/' . \basename($blob);
         @\mkdir(\dirname($target), 0700, true);
         if (!@\link($blob, $target)) {
@@ -109,11 +109,19 @@ function hardlinkTree(string $source, string $target): void
     }
 }
 
-/** A unique temporary directory; throws `TestFailure` when none can be created. */
+/**
+ * A unique temporary directory; throws `TestFailure` when none can be created.
+ *
+ * Always `/`-spelled, even where `sys_get_temp_dir()` answers with `\`
+ * (Windows): every scan in the compiler returns `/`-spelled paths, so a test
+ * that joins onto this root with `/` compares equal to what a scan found.
+ * PHP opens `/`-spelled paths on every host.
+ */
 function createTempDir(string $prefix): string
 {
+    $base = \rtrim(\str_replace('\\', '/', (string) sys_get_temp_dir()), '/');
     for ($attempt = 0; $attempt < 10; ++$attempt) {
-        $dir = sys_get_temp_dir() . '/' . $prefix . '-' . getmypid() . '-' . bin2hex(random_bytes(8));
+        $dir = $base . '/' . $prefix . '-' . getmypid() . '-' . bin2hex(random_bytes(8));
         if (@mkdir($dir, 0700)) {
             return $dir;
         }

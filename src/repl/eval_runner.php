@@ -19,6 +19,7 @@ use function Moggi\Backend\Inspect\removeTree;
 use function Moggi\Backend\DotNet\resolveDotnetExecutable;
 use function Moggi\Backend\setCompileBackend;
 use function Moggi\Modules\filterCodegenImportsForIr;
+use function Moggi\Paths\globPaths;
 use function Moggi\Pipeline\run as pipelineRun;
 
 /**
@@ -418,7 +419,7 @@ function packageAndCapture(string $backend, string $outDir, string $entryModule,
             }
         }
         if ($phpFile === null) {
-            $found = glob($outDir . '/**/Main.php') ?: [];
+            $found = globPaths($outDir . '/**/Main.php');
             $phpFile = $found[0] ?? null;
         }
         if ($phpFile === null || !is_file($phpFile)) {
