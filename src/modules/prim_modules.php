@@ -17,10 +17,10 @@ use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Syntax\Ast;
 
 /**
- * The machine modules Moggi.Internal.Prim and Moggi.Internal.IO, and the kernel
- * the compiler holds for each.
+ * The machine modules Moggi.Internal.Prim, Moggi.Internal.IO and
+ * Moggi.Internal.ST, and the kernel the compiler holds for each.
  *
- * Both modules describe the machine rather than the library, so neither is a
+ * All three modules describe the machine rather than the library, so none is a
  * library source file: the compiler builds each as a unit whose whole contents
  * are the kernel (`syntheticLocalTypes`). That kernel is the MagicHash layer and
  * nothing else -- the `#`-suffixed types and primops -- plus the one public name
@@ -35,16 +35,20 @@ use Moggi\Syntax\Ast;
 
 const SYNTHETIC_PRIM_PATH = '<compiler:Moggi.Internal.Prim>';
 const SYNTHETIC_IO_PATH = '<compiler:Moggi.Internal.IO>';
+const SYNTHETIC_ST_PATH = '<compiler:Moggi.Internal.ST>';
 
 function isSyntheticCompilerModuleName(string $moduleName): bool
 {
     return $moduleName === IntrinsicRegistry\MODULE_PRIM
-        || $moduleName === IntrinsicRegistry\MODULE_IO;
+        || $moduleName === IntrinsicRegistry\MODULE_IO
+        || $moduleName === IntrinsicRegistry\MODULE_ST;
 }
 
 function isSyntheticCompilerPath(string $path): bool
 {
-    return $path === SYNTHETIC_PRIM_PATH || $path === SYNTHETIC_IO_PATH;
+    return $path === SYNTHETIC_PRIM_PATH
+        || $path === SYNTHETIC_IO_PATH
+        || $path === SYNTHETIC_ST_PATH;
 }
 
 /** @return array<string, string> module name → sentinel path */
@@ -53,6 +57,7 @@ function syntheticCompilerModuleIndex(): array
     return [
         IntrinsicRegistry\MODULE_PRIM => SYNTHETIC_PRIM_PATH,
         IntrinsicRegistry\MODULE_IO => SYNTHETIC_IO_PATH,
+        IntrinsicRegistry\MODULE_ST => SYNTHETIC_ST_PATH,
     ];
 }
 
@@ -94,7 +99,10 @@ function syntheticPrimitiveData(array $typeTable): array
 function syntheticLocalTypes(string $moduleName): array
 {
     $isIo = $moduleName === IntrinsicRegistry\MODULE_IO;
-    $typeTable = $isIo ? IntrinsicRegistry\ioTypeTable() : IntrinsicRegistry\primTypeTable();
+    $isSt = $moduleName === IntrinsicRegistry\MODULE_ST;
+    $typeTable = $isIo
+        ? IntrinsicRegistry\ioTypeTable()
+        : ($isSt ? IntrinsicRegistry\stTypeTable() : IntrinsicRegistry\primTypeTable());
 
     $env = [];
     $wrappers = [];
@@ -108,7 +116,7 @@ function syntheticLocalTypes(string $moduleName): array
 
     $data = syntheticPrimitiveData($typeTable);
 
-    if (! $isIo) {
+    if (! $isIo && ! $isSt) {
         foreach (IntrinsicRegistry\publicPrimopAliases() as $public => $primop) {
             $env[$public] = IntrinsicRegistry\typeSchemes()[$primop];
             $wrappers[$public] = $primop;

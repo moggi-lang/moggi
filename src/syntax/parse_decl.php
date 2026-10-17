@@ -261,14 +261,16 @@ function looksLikeFunctionDecl(ParserState $state): bool
 
     try {
         $startLine = peek($state)->line;
-        while (startsPattern($state)
+
+        while (peek($state)->line === $startLine
+            && startsPattern($state)
             && ! isAt($state, TokenKind::Op, 0, '=')
             && ! isAt($state, TokenKind::Pipe)) {
             parsePatternAtom($state);
         }
 
         if (isAt($state, TokenKind::Op, 0, '=')) {
-            return peek($state)->line === $startLine;
+            return true;
         }
 
         if (! isAt($state, TokenKind::Pipe)) {
@@ -1230,7 +1232,9 @@ function tryParseClassMethodDefault(ParserState $state, int $bodyCol): ?Ast\Func
 
     if (isAt($state, TokenKind::VarId)
         && ! isAt($state, TokenKind::Op, 1, '::')
-        && looksLikeFunctionDecl($state)) {
+        && (looksLikeFunctionDecl($state)
+            || looksLikeInfixFunctionDecl($state)
+            || looksLikeBacktickFunctionDecl($state))) {
         return parseInstanceMethod($state);
     }
 
@@ -1663,6 +1667,14 @@ function isFollowingTopLevelDecl(ParserState $state): bool
  */
 function parseInstanceMethod(ParserState $state): Ast\FunctionDecl
 {
+    if (looksLikeInfixFunctionDecl($state)) {
+        return parseInferredInfixFunction($state);
+    }
+
+    if (looksLikeBacktickFunctionDecl($state)) {
+        return parseInferredBacktickFunction($state);
+    }
+
     if (isAt($state, TokenKind::LParen) && isAt($state, TokenKind::Op, 1)) {
         $open = expect($state, TokenKind::LParen);
         $name = expect($state, TokenKind::Op)->lexeme;
@@ -1852,6 +1864,10 @@ function constructorTypeArgContinues(ParserState $state, int $nameLine): bool
 }
 
 /**
+ * Record fields with documentation (`-- |` before a field documents it, `-- ^`
+ * after a field's comma documents that field), mirroring how constructor
+ * alternatives and class/instance methods attach docs.
+ *
  * @return list<Ast\CtorField>
  */
 function parseRecordFieldDecls(ParserState $state): array
@@ -1860,10 +1876,29 @@ function parseRecordFieldDecls(ParserState $state): array
     $fields = [];
 
     while (! isAt($state, TokenKind::RBrace)) {
+        $leadingDoc = consumeLeadingDoc($state);
+
+        if (isAt($state, TokenKind::DocTrailing)) {
+            $trailingDoc = consumeTrailingDoc($state);
+            if ($trailingDoc !== null && $fields !== []) {
+                $previous = \count($fields) - 1;
+                $fields[$previous]->doc = mergeDoc($fields[$previous]->doc, $trailingDoc);
+            }
+            $leadingDoc = mergeDoc($leadingDoc, consumeLeadingDoc($state));
+        }
+
+        if (isAt($state, TokenKind::RBrace)) {
+            break;
+        }
+
         $label = expect($state, TokenKind::VarId);
         expectOp($state, '::');
         $type = parseTypeNoConstraint($state);
-        $fields[] = new Ast\CtorField($label->lexeme, $type, $label->line, $label->col, $label->col + \strlen($label->lexeme));
+        $field = new Ast\CtorField($label->lexeme, $type, $label->line, $label->col, $label->col + \strlen($label->lexeme));
+        if ($leadingDoc !== null) {
+            $field->doc = mergeDoc($leadingDoc, $field->doc);
+        }
+        $fields[] = $field;
 
         if (isAt($state, TokenKind::Comma)) {
             advance($state);

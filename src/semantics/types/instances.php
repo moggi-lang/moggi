@@ -3,6 +3,7 @@
 namespace Moggi\Semantics\Types;
 
 use function Moggi\Semantics\IntrinsicRegistry\isIoIntrinsic;
+use function Moggi\Semantics\IntrinsicRegistry\isStIntrinsic;
 
 use Moggi\Semantics\Kinds;
 use Moggi\Semantics\TypeExpr\Scheme;
@@ -238,6 +239,22 @@ function instanceMethodSchemes(TypeCheckState $state, Ast\InstanceDecl $decl): a
     $classInfo = $state->classes[$className] ?? null;
     if ($classInfo === null) {
         throw typeFail($state, "unknown class `{$className}`", $decl);
+    }
+
+    foreach ($decl->constraints as $constraint) {
+        if (!$constraint instanceof Ast\TypeApp || !$constraint->con instanceof Ast\TypeCon) {
+            continue;
+        }
+        $contextInfo = $state->classes[$constraint->con->name] ?? null;
+        if ($contextInfo === null) {
+            continue;
+        }
+        foreach ($contextInfo['params'] as $j => $param) {
+            $argAst = $constraint->args[$j] ?? null;
+            if ($argAst instanceof Ast\TypeVar) {
+                $state->varKinds[$argAst->name] = Kinds\classParamKind($state, $param);
+            }
+        }
     }
 
     $headType = freshenTypeVars($state, astType($state, $decl->head));
@@ -1044,7 +1061,7 @@ function instanceIntrinsicMethods(Ast\InstanceDecl $decl): array
     foreach ($decl->methods as $method) {
         $intrinsic = trivialIntrinsicWrapper($method);
 
-        if ($intrinsic !== null && ! isIoIntrinsic($intrinsic)) {
+        if ($intrinsic !== null && ! isIoIntrinsic($intrinsic) && ! isStIntrinsic($intrinsic)) {
             $wrappers[$method->name] = $intrinsic;
         }
     }

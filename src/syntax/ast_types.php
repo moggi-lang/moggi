@@ -226,6 +226,7 @@ final class CtorField extends AstValue
         public int $line = 0,
         public int $col = 0,
         public int $endCol = 0,
+        public ?string $doc = null,
     ) {
     }
 
@@ -1249,6 +1250,7 @@ final class EvidenceMethod extends AstNode
         int $col = 0,
         int $endCol = 0,
         public ?string $role = null,
+        public ?int $methodArity = null,
     ) {
         parent::__construct($line, $col, $endCol);
     }

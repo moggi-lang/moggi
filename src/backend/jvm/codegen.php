@@ -2067,6 +2067,76 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             throw new \RuntimeException(
                 "intrinsic `{$op->name}` must be erased by strict IO normalization before JVM emit",
             );
+        case 'stPure#':
+            emitOperand($env, $args[0]);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'stPure', '(Ljava/lang/Object;)Lmoggi/rt/ST;'),
+                1,
+                true,
+            );
+
+            return;
+        case 'stBind#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/ST'));
+            emitOperand($env, $args[1]);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'stBind', '(Lmoggi/rt/ST;Ljava/lang/Object;)Lmoggi/rt/ST;'),
+                2,
+                true,
+            );
+
+            return;
+        case 'runST#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/ST'));
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'stRun', '(Lmoggi/rt/ST;)Ljava/lang/Object;'),
+                1,
+                true,
+            );
+
+            return;
+        case 'stToIO#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/ST'));
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'stToIO', '(Lmoggi/rt/ST;)Lmoggi/rt/IO;'),
+                1,
+                true,
+            );
+
+            return;
+        case 'newSTRef#':
+            emitOperand($env, $args[0]);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'stNewRef', '(Ljava/lang/Object;)Lmoggi/rt/ST;'),
+                1,
+                true,
+            );
+
+            return;
+        case 'readSTRef#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/STRef'));
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'stReadRef', '(Lmoggi/rt/STRef;)Lmoggi/rt/ST;'),
+                1,
+                true,
+            );
+
+            return;
+        case 'writeSTRef#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/STRef'));
+            emitOperand($env, $args[1]);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'stWriteRef', '(Lmoggi/rt/STRef;Ljava/lang/Object;)Lmoggi/rt/ST;'),
+                2,
+                true,
+            );
+
+            return;
         case 'charToInt#':
         case 'intToChar#':
         case 'word8ToInt#':

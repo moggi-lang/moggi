@@ -431,7 +431,7 @@ function lexDocCommentLine(
             $lineText = \rtrim($lineText, "\r");
 
             $pattern = $kind === TokenKind::DocTrailing
-                ? '/^[ \t]*-- \^[ \t]*(.*)$/'
+                ? '/^[ \t]*--(?: \^)?(?!-|\|)(?: (.*))?$/'
                 : '/^[ \t]*--(?!-|\|)(?: (.*))?$/';
             if (! \preg_match($pattern, $lineText, $m)) {
                 break;

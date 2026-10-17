@@ -147,6 +147,85 @@ function fix(callable|array $f): mixed
 }
 
 /**
+ * A mutable cell living in one state thread: the `STRef` an ST action
+ * allocates and touches. An object (not an array) because PHP arrays are
+ * copy-on-write values while objects are references — a cell must be
+ * shared by every description that names it.
+ */
+final class StRef
+{
+    public function __construct(public mixed $v)
+    {
+    }
+}
+
+/**
+ * ST actions are re-executable descriptions: `['__st', thunk]`, the same
+ * shape as IO's `['__io', thunk]` under a distinct tag so the two media
+ * never mix. Building a description is pure; running it (`stRun`) performs
+ * the allocation and cell effects in bind order. Sharing a description
+ * shares no state — each run allocates anew — which is why the optimizer
+ * may share and drop descriptions like any other pure value.
+ *
+ * @return array{string, \Closure}
+ */
+function stPure(mixed $x): array
+{
+    return ['__st', static function () use ($x): mixed {
+        return $x;
+    }];
+}
+
+/** @param array{string, \Closure}|mixed $m @param callable|array $k @return array{string, \Closure} */
+function stBind(mixed $m, callable|array $k): array
+{
+    return ['__st', static function () use ($m, $k): mixed {
+        return stRun(__apply($k, stRun($m)));
+    }];
+}
+
+function stRun(mixed $m): mixed
+{
+    return \is_array($m) && ($m[0] ?? null) === '__st' ? ($m[1])() : $m;
+}
+
+/** An `ST RealWorld` description run as `IO`: the same thunk under IO's tag. */
+function stToIO(mixed $m): array
+{
+    $thunk = \is_array($m) && ($m[0] ?? null) === '__st' ? $m[1] : static function () use ($m): mixed {
+        return $m;
+    };
+
+    return ['__io', $thunk];
+}
+
+/** @return array{string, \Closure} */
+function stNewRef(mixed $x): array
+{
+    return ['__st', static function () use ($x): mixed {
+        return new StRef($x);
+    }];
+}
+
+/** @return array{string, \Closure} */
+function stReadRef(StRef $r): array
+{
+    return ['__st', static function () use ($r): mixed {
+        return $r->v;
+    }];
+}
+
+/** @return array{string, \Closure} */
+function stWriteRef(StRef $r, mixed $x): array
+{
+    return ['__st', static function () use ($r, $x): mixed {
+        $r->v = $x;
+
+        return null;
+    }];
+}
+
+/**
  * Box a native PHP value as a Moggi Platform.PHP.PHPValue tagged ADT.
  * List arrays become PhpArray; string-keyed arrays / stdClass become PhpObject.
  *

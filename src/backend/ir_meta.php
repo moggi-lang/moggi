@@ -152,6 +152,13 @@ function boolConstructorMapFromRegistry(array $registryData): array
  * local a nested lambda reaches there is that body's own, and passing it would
  * put an undefined name in the caller's scope.
  *
+ * The returned capture lists are sorted: direct captures miss the locals hidden
+ * inside nested lifted-function references (those only become visible as
+ * operands once captures are bound), so first-seen order depends on *when* in
+ * the pipeline the set is computed. Use sites freeze captures early, definition
+ * sites are read late; without a canonical order the two disagree and calls
+ * pass arguments to the wrong parameters.
+ *
  * @see boundLocalsInBlock
  *
  * @param array<string, IR\FunctionDecl> $byName
@@ -197,6 +204,11 @@ function lambdaMetaFromCaptures(array $byName, callable $capturesOf): array
         }
         unset($info);
     }
+
+    foreach ($meta as &$info) {
+        \sort($info['captures']);
+    }
+    unset($info);
 
     return $meta;
 }

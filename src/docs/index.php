@@ -26,7 +26,7 @@ use Moggi\Syntax\Ast;
  */
 function docIndexSchemaVersion(): int
 {
-    return 2;
+    return 3;
 }
 
 final class DocEntity
@@ -83,11 +83,14 @@ function buildIndex(
     array $modules,
     array $checkedPrograms = [],
     ?PreparedProject $prepared = null,
+    ?string $sourceRoot = null,
 ): DocIndex {
     $byModule = [];
     $all = [];
     $canonical = [];
-    $rootPrefix = $prepared?->rootPrefix ?? '';
+    $rootPrefix = ($sourceRoot !== null && $sourceRoot !== '')
+        ? \rtrim(\str_replace('\\', '/', $sourceRoot), '/') . '/'
+        : ($prepared?->rootPrefix ?? '');
 
     foreach ($modules as $moduleName => $parsed) {
         if (isBackendImplModule($moduleName)) {
@@ -1353,7 +1356,7 @@ function loadOrBuildIndex(
     $modules = $project['modules'];
     \fwrite(STDERR, 'mogdoc: loaded ' . \count($modules) . " module(s)\n");
     \fwrite(STDERR, 'mogdoc: type-checked ' . \count($prepared->checked) . " module(s)\n");
-    $index = buildIndex($modules, $prepared->checked, $prepared);
+    $index = buildIndex($modules, $prepared->checked, $prepared, docRootFor($inputPath));
     \fwrite(STDERR, 'mogdoc: indexed ' . \count($index->search) . " searchable entries\n");
     $payload = \json_encode(
         [

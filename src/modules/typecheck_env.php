@@ -840,19 +840,21 @@ function classModuleVisibleTypes(array $units, string $moduleName): array
  *
  * @param array<string, array<string, mixed>> $units
  * @param array<string, array<string, mixed>> $classScopes
- * @return array{externalFns: array<string, string>, arity: array<string, int>, dataRefs: array<string, array<string, mixed>>}
+ * @return array{externalFns: array<string, string>, arity: array<string, int>, dataRefs: array<string, array<string, mixed>>, origins: array<string, string>}
  */
 function classScopeFunctionRefs(array $units, array $classScopes): array
 {
     $externalFns = [];
     $arity = [];
     $dataRefs = [];
+    $origins = [];
     foreach ($classScopes as $scope) {
         foreach ($scope['fns'] ?? [] as $name => $fn) {
             $origin = $fn['origin'];
             $externalFns[$name] = resolvedSymbol($origin['module'], $origin['phpName']);
             $arity[$name] = $scope['constructorArity'][$name]
                 ?? externalFunctionRuntimeArity($units, $origin['module'], $name, $fn['scheme']);
+            $origins[$name] = $origin['module'];
         }
 
         foreach ($scope['dataRefs'] ?? [] as $typeName => $info) {
@@ -860,15 +862,16 @@ function classScopeFunctionRefs(array $units, array $classScopes): array
         }
     }
 
-    return ['externalFns' => $externalFns, 'arity' => $arity, 'dataRefs' => $dataRefs];
+    return ['externalFns' => $externalFns, 'arity' => $arity, 'dataRefs' => $dataRefs, 'origins' => $origins];
 }
 
 /**
  * Fold class-scope symbol and data references into a module's codegen imports.
  *
  * @param array<string, mixed> $importContext
- * @param array{externalFns: array<string, string>, arity: array<string, int>, dataRefs: array<string, array<string, mixed>>} $refs
+ * @param array{externalFns: array<string, string>, arity: array<string, int>, dataRefs: array<string, array<string, mixed>>, origins?: array<string, string>} $refs
  * @param array<string, true> $localNames names the module binds itself
+ * @param array<string, array<string, mixed>> $units project units, for origin output paths
  * @return array<string, mixed>
  */
 function mergeClassScopeRefs(
@@ -876,6 +879,9 @@ function mergeClassScopeRefs(
     array $refs,
     array $localNames = [],
     array $seenData = [],
+    array $units = [],
+    string $moduleName = '',
+    string $rootPrefix = '',
 ): array {
     foreach ($refs['externalFns'] as $name => $symbol) {
         if (isset($localNames[$name])) {
@@ -883,6 +889,19 @@ function mergeClassScopeRefs(
         }
         $importContext['codegen']['externalFns'][$name] ??= $symbol;
         $importContext['externalFnRuntimeArity'][$name] ??= $refs['arity'][$name] ?? 0;
+        $originModule = $refs['origins'][$name] ?? null;
+        if (! \is_string($originModule) || $originModule === '' || $originModule === $moduleName) {
+            continue;
+        }
+        $importContext['codegen']['fnOriginModules'][$name] ??= $originModule;
+        if (! isset($importContext['codegen']['moduleOutputPaths'][$originModule])
+            && isset($units[$originModule]['path'])
+        ) {
+            $importContext['codegen']['moduleOutputPaths'][$originModule] = mogPathToOutputRelative(
+                $units[$originModule]['path'],
+                $rootPrefix,
+            );
+        }
     }
 
     foreach ($refs['dataRefs'] ?? [] as $typeName => $info) {

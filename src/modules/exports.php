@@ -362,6 +362,7 @@ function collectExportsUncached(Ast\Program $program, array $localTypes, array $
             continue;
         }
 
+        $exportsBeforeItem = $exports;
         try {
             if ($item['tag'] === 'value') {
                 addExportedValue($exports, $available, $item['name'], $moduleName, $item, $units);
@@ -375,6 +376,7 @@ function collectExportsUncached(Ast\Program $program, array $localTypes, array $
                 throw $e;
             }
 
+            $exports = $exportsBeforeItem;
             mergeImportExportsIntoAvailable($available, $program->imports, $units, $moduleName);
             $importsMerged = true;
 

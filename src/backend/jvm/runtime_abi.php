@@ -95,6 +95,12 @@ function languageRuntime(): array
         'moggi/rt/MList' => buildMListClass(),
         'moggi/rt/Con' => buildConClass(),
         'moggi/rt/IO' => buildIOClass(),
+        'moggi/rt/ST' => buildSTClass(),
+        'moggi/rt/STRef' => buildSTRefClass(),
+        'moggi/rt/StBindFn' => buildStBindFnClass(),
+        'moggi/rt/NewRefFn' => buildNewRefFnClass(),
+        'moggi/rt/ReadRefFn' => buildReadRefFnClass(),
+        'moggi/rt/WriteRefFn' => buildWriteRefFnClass(),
         'moggi/rt/Dict' => buildDictClass(),
         'moggi/rt/MoggiException' => buildMoggiExceptionClass(),
         'moggi/rt/RT' => buildRTClass(),
@@ -273,6 +279,247 @@ function buildIOClass(): string
             $c->aload(1);
             $c->putfield($cp->fieldRef('moggi/rt/IO', 'action', 'Ljava/lang/Object;'));
             $c->return_();
+        }
+    );
+
+    return $b->toBytes();
+}
+
+/**
+ * An ST action: the same thunk-wrapper shape as `moggi/rt/IO` under a
+ * distinct class, so the two media never mix. Building one is pure; each
+ * run (`RT.stRun`) performs allocation and cell effects in bind order.
+ */
+function buildSTClass(): string
+{
+    $b = new ClassBuilder('moggi/rt/ST');
+    $b->addField('action', 'Ljava/lang/Object;', 0x0011);
+
+    $b->addMethod(
+        '<init>',
+        '(Ljava/lang/Object;)V',
+        0x0001,
+        2,
+        ['moggi/rt/ST', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->invokespecial($cp->methodRef('java/lang/Object', '<init>', '()V'), 0, false);
+            $c->aload(0);
+            $c->aload(1);
+            $c->putfield($cp->fieldRef('moggi/rt/ST', 'action', 'Ljava/lang/Object;'));
+            $c->return_();
+        }
+    );
+
+    return $b->toBytes();
+}
+
+/** A mutable cell in one state thread. The field is deliberately mutable. */
+function buildSTRefClass(): string
+{
+    $b = new ClassBuilder('moggi/rt/STRef');
+    $b->addField('v', 'Ljava/lang/Object;', 0x0001);
+
+    $b->addMethod(
+        '<init>',
+        '(Ljava/lang/Object;)V',
+        0x0001,
+        2,
+        ['moggi/rt/STRef', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->invokespecial($cp->methodRef('java/lang/Object', '<init>', '()V'), 0, false);
+            $c->aload(0);
+            $c->aload(1);
+            $c->putfield($cp->fieldRef('moggi/rt/STRef', 'v', 'Ljava/lang/Object;'));
+            $c->return_();
+        }
+    );
+
+    return $b->toBytes();
+}
+
+/** Thunk for `stBind#`: run `m`, feed the value through `k`, run the result. */
+function buildStBindFnClass(): string
+{
+    $b = new ClassBuilder('moggi/rt/StBindFn');
+    $b->implement('moggi/rt/Fn');
+    $b->addField('m', 'Lmoggi/rt/ST;', 0x0011);
+    $b->addField('k', 'Ljava/lang/Object;', 0x0011);
+
+    $b->addMethod(
+        '<init>',
+        '(Lmoggi/rt/ST;Ljava/lang/Object;)V',
+        0x0001,
+        3,
+        ['moggi/rt/StBindFn', 'moggi/rt/ST', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->invokespecial($cp->methodRef('java/lang/Object', '<init>', '()V'), 0, false);
+            $c->aload(0);
+            $c->aload(1);
+            $c->putfield($cp->fieldRef('moggi/rt/StBindFn', 'm', 'Lmoggi/rt/ST;'));
+            $c->aload(0);
+            $c->aload(2);
+            $c->putfield($cp->fieldRef('moggi/rt/StBindFn', 'k', 'Ljava/lang/Object;'));
+            $c->return_();
+        }
+    );
+
+    $b->addMethod(
+        'invoke',
+        '([Ljava/lang/Object;)Ljava/lang/Object;',
+        0x0001,
+        3,
+        ['moggi/rt/StBindFn', '[Ljava/lang/Object;'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/StBindFn', 'm', 'Lmoggi/rt/ST;'));
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'stRun', '(Lmoggi/rt/ST;)Ljava/lang/Object;'), 1, true);
+            $c->astore(2);
+            $c->iconst(1);
+            $c->anewarray($cp->class_('java/lang/Object'));
+            $c->dup();
+            $c->iconst(0);
+            $c->aload(2);
+            $c->aastore();
+            $c->astore(2);
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/StBindFn', 'k', 'Ljava/lang/Object;'));
+            $c->aload(2);
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'apply', '(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;'), 2, true);
+            $c->checkcast($cp->class_('moggi/rt/ST'));
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'stRun', '(Lmoggi/rt/ST;)Ljava/lang/Object;'), 1, true);
+            $c->areturn();
+        }
+    );
+
+    return $b->toBytes();
+}
+
+/** Thunk for `newSTRef#`: allocate the cell when run. */
+function buildNewRefFnClass(): string
+{
+    $b = new ClassBuilder('moggi/rt/NewRefFn');
+    $b->implement('moggi/rt/Fn');
+    $b->addField('x', 'Ljava/lang/Object;', 0x0011);
+
+    $b->addMethod(
+        '<init>',
+        '(Ljava/lang/Object;)V',
+        0x0001,
+        2,
+        ['moggi/rt/NewRefFn', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->invokespecial($cp->methodRef('java/lang/Object', '<init>', '()V'), 0, false);
+            $c->aload(0);
+            $c->aload(1);
+            $c->putfield($cp->fieldRef('moggi/rt/NewRefFn', 'x', 'Ljava/lang/Object;'));
+            $c->return_();
+        }
+    );
+
+    $b->addMethod(
+        'invoke',
+        '([Ljava/lang/Object;)Ljava/lang/Object;',
+        0x0001,
+        2,
+        ['moggi/rt/NewRefFn', '[Ljava/lang/Object;'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->new_($cp->class_('moggi/rt/STRef'));
+            $c->dup();
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/NewRefFn', 'x', 'Ljava/lang/Object;'));
+            $c->invokespecial($cp->methodRef('moggi/rt/STRef', '<init>', '(Ljava/lang/Object;)V'), 1, false);
+            $c->areturn();
+        }
+    );
+
+    return $b->toBytes();
+}
+
+/** Thunk for `readSTRef#`: read the cell when run. */
+function buildReadRefFnClass(): string
+{
+    $b = new ClassBuilder('moggi/rt/ReadRefFn');
+    $b->implement('moggi/rt/Fn');
+    $b->addField('r', 'Lmoggi/rt/STRef;', 0x0011);
+
+    $b->addMethod(
+        '<init>',
+        '(Lmoggi/rt/STRef;)V',
+        0x0001,
+        2,
+        ['moggi/rt/ReadRefFn', 'moggi/rt/STRef'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->invokespecial($cp->methodRef('java/lang/Object', '<init>', '()V'), 0, false);
+            $c->aload(0);
+            $c->aload(1);
+            $c->putfield($cp->fieldRef('moggi/rt/ReadRefFn', 'r', 'Lmoggi/rt/STRef;'));
+            $c->return_();
+        }
+    );
+
+    $b->addMethod(
+        'invoke',
+        '([Ljava/lang/Object;)Ljava/lang/Object;',
+        0x0001,
+        2,
+        ['moggi/rt/ReadRefFn', '[Ljava/lang/Object;'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ReadRefFn', 'r', 'Lmoggi/rt/STRef;'));
+            $c->getfield($cp->fieldRef('moggi/rt/STRef', 'v', 'Ljava/lang/Object;'));
+            $c->areturn();
+        }
+    );
+
+    return $b->toBytes();
+}
+
+/** Thunk for `writeSTRef#`: replace the cell value when run, answering null (Unit). */
+function buildWriteRefFnClass(): string
+{
+    $b = new ClassBuilder('moggi/rt/WriteRefFn');
+    $b->implement('moggi/rt/Fn');
+    $b->addField('r', 'Lmoggi/rt/STRef;', 0x0011);
+    $b->addField('x', 'Ljava/lang/Object;', 0x0011);
+
+    $b->addMethod(
+        '<init>',
+        '(Lmoggi/rt/STRef;Ljava/lang/Object;)V',
+        0x0001,
+        3,
+        ['moggi/rt/WriteRefFn', 'moggi/rt/STRef', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->invokespecial($cp->methodRef('java/lang/Object', '<init>', '()V'), 0, false);
+            $c->aload(0);
+            $c->aload(1);
+            $c->putfield($cp->fieldRef('moggi/rt/WriteRefFn', 'r', 'Lmoggi/rt/STRef;'));
+            $c->aload(0);
+            $c->aload(2);
+            $c->putfield($cp->fieldRef('moggi/rt/WriteRefFn', 'x', 'Ljava/lang/Object;'));
+            $c->return_();
+        }
+    );
+
+    $b->addMethod(
+        'invoke',
+        '([Ljava/lang/Object;)Ljava/lang/Object;',
+        0x0001,
+        2,
+        ['moggi/rt/WriteRefFn', '[Ljava/lang/Object;'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/WriteRefFn', 'r', 'Lmoggi/rt/STRef;'));
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/WriteRefFn', 'x', 'Ljava/lang/Object;'));
+            $c->putfield($cp->fieldRef('moggi/rt/STRef', 'v', 'Ljava/lang/Object;'));
+            $c->aconst_null();
+            $c->areturn();
         }
     );
 
@@ -3212,6 +3459,149 @@ function buildRTClass(): string
             $c->dup();
             $c->aload(1);
             $c->invokespecial($cp->methodRef('moggi/rt/IO', '<init>', '(Ljava/lang/Object;)V'), 1, false);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'stPure',
+        '(Ljava/lang/Object;)Lmoggi/rt/ST;',
+        0x0009,
+        3,
+        ['java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->invokestatic(
+                $cp->methodRef('moggi/rt/RT', 'constFn', '(Ljava/lang/Object;)Lmoggi/rt/Fn;'),
+                1,
+                true,
+            );
+            $c->astore(1);
+            $c->new_($cp->class_('moggi/rt/ST'));
+            $c->dup();
+            $c->aload(1);
+            $c->invokespecial($cp->methodRef('moggi/rt/ST', '<init>', '(Ljava/lang/Object;)V'), 1, false);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'stBind',
+        '(Lmoggi/rt/ST;Ljava/lang/Object;)Lmoggi/rt/ST;',
+        0x0009,
+        3,
+        ['moggi/rt/ST', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->new_($cp->class_('moggi/rt/StBindFn'));
+            $c->dup();
+            $c->aload(0);
+            $c->aload(1);
+            $c->invokespecial($cp->methodRef('moggi/rt/StBindFn', '<init>', '(Lmoggi/rt/ST;Ljava/lang/Object;)V'), 2, false);
+            $c->astore(2);
+            $c->new_($cp->class_('moggi/rt/ST'));
+            $c->dup();
+            $c->aload(2);
+            $c->invokespecial($cp->methodRef('moggi/rt/ST', '<init>', '(Ljava/lang/Object;)V'), 1, false);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'stRun',
+        '(Lmoggi/rt/ST;)Ljava/lang/Object;',
+        0x0009,
+        1,
+        ['moggi/rt/ST'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->ifnull('done');
+            $c->noteFrame(['moggi/rt/ST']);
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ST', 'action', 'Ljava/lang/Object;'));
+            $c->iconst(0);
+            $c->anewarray($cp->class_('java/lang/Object'));
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'apply', '(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;'), 2, true);
+            $c->areturn();
+            $c->label('done');
+            $c->noteFrame(['moggi/rt/ST']);
+            $c->aconst_null();
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'stToIO',
+        '(Lmoggi/rt/ST;)Lmoggi/rt/IO;',
+        0x0009,
+        3,
+        ['moggi/rt/ST'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->new_($cp->class_('moggi/rt/IO'));
+            $c->dup();
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ST', 'action', 'Ljava/lang/Object;'));
+            $c->invokespecial($cp->methodRef('moggi/rt/IO', '<init>', '(Ljava/lang/Object;)V'), 1, false);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'stNewRef',
+        '(Ljava/lang/Object;)Lmoggi/rt/ST;',
+        0x0009,
+        3,
+        ['java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->new_($cp->class_('moggi/rt/NewRefFn'));
+            $c->dup();
+            $c->aload(0);
+            $c->invokespecial($cp->methodRef('moggi/rt/NewRefFn', '<init>', '(Ljava/lang/Object;)V'), 1, false);
+            $c->astore(1);
+            $c->new_($cp->class_('moggi/rt/ST'));
+            $c->dup();
+            $c->aload(1);
+            $c->invokespecial($cp->methodRef('moggi/rt/ST', '<init>', '(Ljava/lang/Object;)V'), 1, false);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'stReadRef',
+        '(Lmoggi/rt/STRef;)Lmoggi/rt/ST;',
+        0x0009,
+        3,
+        ['moggi/rt/STRef'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->new_($cp->class_('moggi/rt/ReadRefFn'));
+            $c->dup();
+            $c->aload(0);
+            $c->invokespecial($cp->methodRef('moggi/rt/ReadRefFn', '<init>', '(Lmoggi/rt/STRef;)V'), 1, false);
+            $c->astore(1);
+            $c->new_($cp->class_('moggi/rt/ST'));
+            $c->dup();
+            $c->aload(1);
+            $c->invokespecial($cp->methodRef('moggi/rt/ST', '<init>', '(Ljava/lang/Object;)V'), 1, false);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'stWriteRef',
+        '(Lmoggi/rt/STRef;Ljava/lang/Object;)Lmoggi/rt/ST;',
+        0x0009,
+        3,
+        ['moggi/rt/STRef', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->new_($cp->class_('moggi/rt/WriteRefFn'));
+            $c->dup();
+            $c->aload(0);
+            $c->aload(1);
+            $c->invokespecial($cp->methodRef('moggi/rt/WriteRefFn', '<init>', '(Lmoggi/rt/STRef;Ljava/lang/Object;)V'), 2, false);
+            $c->astore(2);
+            $c->new_($cp->class_('moggi/rt/ST'));
+            $c->dup();
+            $c->aload(2);
+            $c->invokespecial($cp->methodRef('moggi/rt/ST', '<init>', '(Ljava/lang/Object;)V'), 1, false);
             $c->areturn();
         }
     );

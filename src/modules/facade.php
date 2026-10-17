@@ -6,6 +6,7 @@ use function Moggi\Backend\compileBackend;
 
 use const Moggi\Semantics\IntrinsicRegistry\MODULE_IO;
 use const Moggi\Semantics\IntrinsicRegistry\MODULE_PRIM;
+use const Moggi\Semantics\IntrinsicRegistry\MODULE_ST;
 
 use function Moggi\Semantics\Kinds\dataKind;
 use function Moggi\Semantics\Kinds\registerTypeKind;
@@ -333,6 +334,7 @@ function mergeFacadeTypesForImpl(TypeCheckState $state, array $units, string $im
     foreach ([
         MODULE_PRIM,
         MODULE_IO,
+        MODULE_ST,
     ] as $primModule) {
         $primLocal = $units[$primModule]['localTypes'] ?? null;
         if (! \is_array($primLocal)) {

@@ -1145,6 +1145,9 @@ function primitiveTypeRepresentation(string $magicHashId): ?Type
         'Natural#' => primitiveTypeCon('Natural#'),
         'List#' => primitiveTypeCon('List#'),
         'IO#' => primitiveTypeCon('IO#'),
+        'ST#' => primitiveTypeCon('ST#'),
+        'STRef#' => primitiveTypeCon('STRef#'),
+        'RealWorld#' => primitiveTypeCon('RealWorld#'),
         'SomeException#' => primitiveTypeCon('SomeException#'),
         default => null,
     };
@@ -1358,13 +1361,67 @@ function typeToString(Type $type, array $rename = []): string
 
 /** @param array<string, Type> $subst */
 
+/**
+ * Process-wide hash-cons table for elaborated type-syntax nodes.
+ *
+ * Every inferred type in every checked module flows through
+ * `internalTypeToAst()`, which used to mint a fresh object per node — tens of
+ * thousands of value-identical `Int`s, `a`s and `Maybe a`s per module, each
+ * kept alive by the checked program and each serialized into the disk cache.
+ * One 18MB `Data.Tuple` blob held 60k duplicate instances of 7k shapes, and
+ * holding the whole standard-library closure blew the 1G limit (see the
+ * `warmSharedCache` OOM). Interning collapses equal shapes onto one instance:
+ * the table costs one entry per distinct shape while the duplicates vanish
+ * from memory and from the cache.
+ *
+ * This is sound because elaborated nodes are never mutated: all post-check
+ * writes (`inferredType`, `pendingConstraints`, `doc`) land on expression and
+ * declaration nodes, never on the type-syntax nodes themselves, and every node
+ * minted here carries the default zero location. Callers that need a distinct
+ * identity must clone after the call.
+ *
+ * @var array<string, Ast\TypeNode>
+ */
+function &internedTypeNodeTable(): array
+{
+    static $table = [];
+
+    return $table;
+}
+
+function internedTypeNode(Ast\TypeNode $node): Ast\TypeNode
+{
+    $table = &internedTypeNodeTable();
+    $key = match ($node::class) {
+        Ast\TypeVar::class => 'V:' . $node->name,
+        Ast\TypeCon::class => 'C:' . $node->name,
+        Ast\TypePromoted::class => 'P:' . $node->name,
+        Ast\TypeUnit::class => 'U',
+        Ast\TypeStringLit::class => 'S:' . $node->value,
+        Ast\TypeNatLit::class => 'N:' . $node->digits . ':' . ($node->negative ? '1' : '0'),
+        Ast\TypeQualified::class => 'Q:' . $node->module . '::' . $node->name,
+        Ast\TypeApp::class => 'A:' . \spl_object_id($node->con) . ':'
+            . \implode(',', \array_map(\spl_object_id(...), $node->args)),
+        Ast\TypeArrow::class => 'F:' . \spl_object_id($node->from) . ':' . \spl_object_id($node->to),
+        Ast\TypeConstrained::class => 'K:'
+            . \implode(',', \array_map(\spl_object_id(...), $node->constraints)) . ':'
+            . \spl_object_id($node->body),
+        default => null,
+    };
+    if ($key === null) {
+        return $node;
+    }
+
+    return $table[$key] ??= $node;
+}
+
 function internalTypeToAst(Type $type, array $subst): Ast\TypeNode
 {
     $pruneState = new TypeCheckState('');
     $pruneState->subst = $subst;
     $type = prune($pruneState, $type);
 
-    return match ($type::class) {
+    $node = match ($type::class) {
         TInt::class => new Ast\TypeCon('Int'),
         TStr::class => new Ast\TypeCon('String'),
         TChar::class => new Ast\TypeCon('Char'),
@@ -1405,6 +1462,8 @@ function internalTypeToAst(Type $type, array $subst): Ast\TypeNode
         ),
         default => throw new \InvalidArgumentException('unknown type: ' . $type::class),
     };
+
+    return internedTypeNode($node);
 }
 
 /**

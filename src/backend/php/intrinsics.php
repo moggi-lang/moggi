@@ -276,6 +276,13 @@ function emitQualifiedCall(string $name, array $argExprs, ?SrcLoc $srcLoc = null
         'ioPure#', 'ioBind#' => throw new \InvalidArgumentException(
             "intrinsic `{$name}` must be erased by strict IO normalization",
         ),
+        'stPure#' => '\\Moggi\\stPure(' . $argExprs[0] . ')',
+        'stBind#' => '\\Moggi\\stBind(' . $argExprs[0] . ', ' . $argExprs[1] . ')',
+        'runST#' => '\\Moggi\\stRun(' . $argExprs[0] . ')',
+        'stToIO#' => '\\Moggi\\stToIO(' . $argExprs[0] . ')',
+        'newSTRef#' => '\\Moggi\\stNewRef(' . $argExprs[0] . ')',
+        'readSTRef#' => '\\Moggi\\stReadRef(' . $argExprs[0] . ')',
+        'writeSTRef#' => '\\Moggi\\stWriteRef(' . $argExprs[0] . ', ' . $argExprs[1] . ')',
         'platformArgv#' => '(function () { global $argv; $a = $argv ?? $GLOBALS[\'argv\'] ?? []; return \\array_values(\\array_slice($a, 1)); })()',
         default => throw new \InvalidArgumentException("unknown intrinsic `{$name}`"),
     };

@@ -2464,6 +2464,48 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             throw new \RuntimeException(
                 "intrinsic `{$op->name}` must be erased by strict IO normalization before DotNet emit",
             );
+        case 'stPure#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('call class Moggi.Rt.ST Moggi.Rt.RT::StPure(object)');
+
+            return;
+        case 'stBind#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.ST');
+            emitOperand($env, $args[1]);
+            $env->m->emit('call class Moggi.Rt.ST Moggi.Rt.RT::StBind(class Moggi.Rt.ST, object)');
+
+            return;
+        case 'runST#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.ST');
+            $env->m->emit('call object Moggi.Rt.RT::StRun(class Moggi.Rt.ST)');
+
+            return;
+        case 'stToIO#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.ST');
+            $env->m->emit('call class Moggi.Rt.IO Moggi.Rt.RT::StToIO(class Moggi.Rt.ST)');
+
+            return;
+        case 'newSTRef#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('call class Moggi.Rt.ST Moggi.Rt.RT::StNewRef(object)');
+
+            return;
+        case 'readSTRef#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.STRef');
+            $env->m->emit('call class Moggi.Rt.ST Moggi.Rt.RT::StReadRef(class Moggi.Rt.STRef)');
+
+            return;
+        case 'writeSTRef#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.STRef');
+            emitOperand($env, $args[1]);
+            $env->m->emit('call class Moggi.Rt.ST Moggi.Rt.RT::StWriteRef(class Moggi.Rt.STRef, object)');
+
+            return;
         case 'charToInt#':
         case 'intToChar#':
         case 'word8ToInt#':
