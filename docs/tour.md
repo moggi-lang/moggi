@@ -89,7 +89,7 @@ Imports are explicit and there is no autoloading:
 import System.IO                        -- everything the module exports
 import Data.Maybe (Maybe, Just, Nothing)
 import Data.List as L                   -- also visible as L.map, L.filter, …
-import Data.Map qualified as M          -- only as M.lookup, not unqualified
+import Data.Char qualified as C          -- only as C.isDigit, not unqualified
 ```
 
 Two modules are allowed to export the same name. Nothing is ambiguous until you
@@ -119,7 +119,7 @@ scope. Import them where you use them:
 | `throwIO`, `catch`, `bracket`, `SomeException` | `Control.Exception` |
 | directories, file metadata, `removeFile`, `copyFile` | `System.Filesystem` |
 | path manipulation (`takeFileName`, `(</>)`, `normalise`) | `System.Filesystem.Path` |
-| `Data.Map`, `Data.JSON`, `Data.ByteString`, `Data.Time.Clock`, … | their own module |
+| `Data.Map`/`Data.Set` (containers package), `Data.JSON`, `Data.ByteString`, `Data.Time.Clock`, … | their own module |
 
 ## Values and functions
 

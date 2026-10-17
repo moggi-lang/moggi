@@ -19,12 +19,12 @@ which assembly defines a type, whether it is a value type) lives mirrored in
 tree it mirrors, so a sidecar never applies to another tree's imports.
 
 ```moggi
-import Data.Map as M
+import Data.Map as M            -- from the containers package (see below)
 import System.Filesystem (removeFile)
 ```
 
 Module names follow the names you would expect from the language Moggi borrows
-its shape from (`Data.List`, `Data.Maybe`, `Data.Map`, `System.IO`,
+its shape from (`Data.List`, `Data.Maybe`, `System.IO`,
 `Control.Monad`, …), and so do the names each module exports. Two namespaces are
 worth knowing about:
 
@@ -55,8 +55,8 @@ Haskell `base`'s API (porting rules and the few deliberate differences are in
 |---|---|
 | `Prelude` | implicitly imported everywhere; the re-export list |
 | `Control.*` | `Applicative`, `Monad`, `Monad.Fail`, `Exception` (+ `Exception.Base`) |
-| `Data.*` | `Bits`, `Bifunctor`, `Bool`, `Bounded`, `ByteString` (+ `Char8`), `Char`, `Either`, `Enum`, `Eq`, `Foldable`, `Function`, `Functor`, `Int`, `List` (+ `NonEmpty`), `Map`, `Maybe`, `Monoid`, `Ord`, `Proxy`, `Semigroup`, `Set`, `String`, `Traversable`, `Tuple`, `Void`, `Word` |
-| `Data.Time.*` | `Clock` |
+| `Data.*` | `Bits`, `Bifunctor`, `Bool`, `Bounded`, `ByteString` (+ `Char8`), `Char`, `Either`, `Enum`, `Eq`, `Foldable`, `Function`, `Functor`, `Int`, `List` (+ `NonEmpty`), `Maybe`, `Monoid`, `Ord`, `Proxy`, `Semigroup`, `String`, `Traversable`, `Tuple`, `Void`, `Word` |
+| `Data.Time.*` | in the bundled `time` package, not `base` (see below) |
 | `Numeric.*` | `Natural` |
 | `System.*` | `Environment`, `Exit`, `Filesystem` (+ `Filesystem.Path`), `IO` (+ `IO.Base`, `IO.Error`, `IO.Types`) |
 | `Text.*` | `Show`, `Read` |
