@@ -253,7 +253,7 @@ assertEq('Between methods.', $classDecl->methods[1]->doc ?? null, 'class method 
 \Moggi\Cache\setCacheEnabled(false);
 $libProject = Docs\loadDocProject($root . '/libraries/base/src');
 \Moggi\Cache\setCacheEnabled(true);
-$libIndex = Docs\buildIndex($libProject['modules'], $libProject['prepared']->checked, $libProject['prepared']);
+$libIndex = Docs\buildIndex($libProject['modules'], $libProject['prepared']->checked, $libProject['prepared'], Docs\docRootFor($root . '/libraries/base/src'));
 assertTrue(isset($libIndex->byModule['Moggi.Internal.Prim']), 'Moggi.Internal.Prim is indexed');
 $primNames = \array_map(static fn ($e) => $e->name, $libIndex->byModule['Moggi.Internal.Prim']);
 assertTrue(\in_array('stringAppend#', $primNames, true), 'Prim exports stringAppend#');
@@ -320,7 +320,7 @@ assertTrue(\str_contains($ordHtml, 'comparing :: Ord b =&gt;'), 'Ord comparing s
 assertTrue(! \str_contains($ordHtml, '__Dict_'), 'Ord page hides compiler dict types');
 assertTrue(\substr_count($ordHtml, '# Source</a>') >= 5, 'Ord operations and methods show source links');
 assertTrue(\str_contains($ordHtml, 'id="v-Data.Ord.comparing"'), 'Ord comparing is indexed');
-assertTrue(\str_contains($ordHtml, 'src/Data-Ord.mog.html#L57'), 'Ord comparing links to source line');
+assertTrue(\str_contains($ordHtml, 'src/Data-Ord.mog.html#L61'), 'Ord comparing links to source line');
 
 $dictScheme = new \Moggi\Semantics\TypeExpr\Scheme(
     new \Moggi\Semantics\TypeExpr\TArrow(

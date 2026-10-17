@@ -1,12 +1,14 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+-- | Enumerations: the 'Enum' class ('succ', 'pred', 'toEnum', 'fromEnum' and
+-- the 'enumFrom' family, which is what @[x ..]@ desugars to) and 'enumerate'.
 module Data.Enum
-  ( Enum(succ, pred, toEnum, fromEnum)
-  , enumFromTo
-  , enumFromThenTo
+  ( Enum(succ, pred, toEnum, fromEnum, enumFrom, enumFromThen, enumFromTo, enumFromThenTo)
+  , enumerate
   ) where
 
 import Data.Bool
 import Data.Bounded
+import Data.Eq
 import Data.Ord
 import Moggi.Err
 import Moggi.Internal.Base
@@ -39,81 +41,51 @@ class Enum a where
   -- value that is too large to fit in an 'Int'.
   fromEnum :: a -> Int
 
--- The rest of the class — @enumFrom@, @enumFromThen@ @enumFromTo@ and
--- @enumFromThenTo@ — are the range methods, and are module-level functions here.
--- They are spelled out rather than defaulted so that the recursion below never
--- carries an `Enum` dictionary: an `Int` range is the only recursion any instance
--- needs.
+  -- | Used in the translation of @[x ..]@: the infinite list from @x@.
+  -- The default maps 'toEnum' over the 'Int' range, so only 'Int' itself
+  -- (and types that cannot go through 'fromEnum', like 'Integer') override it.
+  enumFrom :: a -> [a]
+  enumFrom x = enumMapToEnum toEnum (enumFrom (fromEnum x))
 
--- | Build a list from an element and a tail. Named so the recursive helpers
--- below read as enumeration rather than as cons.
-enumConsE :: a -> [a] -> [a]
-enumConsE x xs = x : xs
+  -- | Used in the translation of @[x, y ..]@: @x@, @y@, then stepping by
+  -- their distance.
+  enumFromThen :: a -> a -> [a]
+  enumFromThen x y = enumMapToEnum toEnum (enumFromThen (fromEnum x) (fromEnum y))
 
-enumLteInt :: Int -> Int -> Bool
-enumLteInt a b = orderingIsLte# (intCompare# a b)
+  -- | Used in the translation of @[lo .. hi]@ with @[lo .. hi] = enumFromTo lo
+  -- hi@.
+  --
+  -- >>> enumFromTo 6 10 :: [Int]
+  -- [6,7,8,9,10]
+  -- >>> enumFromTo 42 1 :: [Integer]
+  -- []
+  enumFromTo :: a -> a -> [a]
+  enumFromTo lo hi = enumMapToEnum toEnum (enumFromTo (fromEnum lo) (fromEnum hi))
 
-enumGteInt :: Int -> Int -> Bool
-enumGteInt a b = orderingIsGte# (intCompare# a b)
+  -- | Used in the translation of @[lo, nxt .. hi]@ with
+  -- @[lo, nxt .. hi] = enumFromThenTo lo nxt hi@.
+  --
+  -- >>> enumFromThenTo 4 2 (-6) :: [Integer]
+  -- [4,2,0,-2,-4,-6]
+  -- >>> enumFromThenTo 6 8 2 :: [Int]
+  -- []
+  enumFromThenTo :: a -> a -> a -> [a]
+  enumFromThenTo lo nxt hi =
+    enumMapToEnum toEnum (enumFromThenTo (fromEnum lo) (fromEnum nxt) (fromEnum hi))
 
-enumAddInt :: Int -> Int -> Int
-enumAddInt a b = intAdd# a b
-
-enumSubInt :: Int -> Int -> Int
-enumSubInt a b = intSub# a b
-
--- Unconstrained Int recursion, kept separate from the constrained `toEnum`
--- mapping so the recursive helpers never carry an `Enum` dictionary.
-enumIntRange :: Int -> Int -> [Int]
-enumIntRange i j = case enumLteInt i j of
-  True -> enumConsE i (enumIntRange (enumAddInt i 1) j)
-  False -> []
-
-enumDirOk :: Bool -> Int -> Int -> Bool
-enumDirOk asc i j = case asc of
-  True -> enumLteInt i j
-  False -> enumGteInt i j
-
-enumIntStep :: Int -> Int -> Int -> Bool -> [Int]
-enumIntStep i step j asc = case enumDirOk asc i j of
-  True -> enumConsE i (enumIntStep (enumAddInt i step) step j asc)
-  False -> []
-
+-- | Map a function over a list. Local (rather than 'map') so the class
+-- defaults above never carry a `Functor` dictionary.
 enumMapToEnum :: (a -> b) -> [a] -> [b]
 enumMapToEnum f xs = case xs of
   [] -> []
-  x : rest -> enumConsE (f x) (enumMapToEnum f rest)
+  x : rest -> (f x) : (enumMapToEnum f rest)
 
--- | The distance from one element to the next, as the range syntax measures it.
-enumStep :: Enum a => a -> a -> Int
-enumStep lo nxt = enumSubInt (fromEnum nxt) (fromEnum lo)
-
--- | Used in the translation of @[lo .. hi]@ with @[lo .. hi] = enumFromTo lo
--- hi@.
+-- | Every value of a bounded enumeration, from 'minBound' to 'maxBound'.
 --
--- >>> enumFromTo 6 10 :: [Int]
--- [6,7,8,9,10]
--- >>> enumFromTo 42 1 :: [Integer]
--- []
-enumFromTo :: Enum a => a -> a -> [a]
-enumFromTo lo hi = enumMapToEnum toEnum (enumIntRange (fromEnum lo) (fromEnum hi))
-
--- | Used in the translation of @[lo, nxt .. hi]@ with
--- @[lo, nxt .. hi] = enumFromThenTo lo nxt hi@.
---
--- >>> enumFromThenTo 4 2 (-6) :: [Integer]
--- [4,2,0,-2,-4,-6]
--- >>> enumFromThenTo 6 8 2 :: [Int]
--- []
-enumFromThenTo :: Enum a => a -> a -> a -> [a]
-enumFromThenTo lo nxt hi =
-  enumMapToEnum
-    toEnum
-    (enumIntStep
-      (fromEnum lo)
-      (enumStep lo nxt)
-      (fromEnum hi)
-      (enumGteInt (enumStep lo nxt) 1))
+-- >>> enumerate :: [Bool]
+-- [False,True]
+enumerate :: (Enum a, Bounded a) => [a]
+enumerate = enumFromTo minBound maxBound
 
 instance Bounded Bool where
   minBound = False
@@ -156,3 +128,28 @@ instance Enum Ordering where
     LT -> 0
     EQ -> 1
     GT -> 2
+
+-- | The enumeration runs backwards: 'succ' steps the wrapped value down and
+-- 'fromEnum' mirrors the codes, so @enumerate :: [Down Bool]@ is
+-- @[Down True, Down False]@.
+--
+-- The mirror is bitwise complement on the 'Int' codes, written with primops
+-- (rather than 'Num' methods) so this module stays below 'Data.Num':
+-- @complement i = -i - 1@ swaps 'minBound' and 'maxBound' exactly.
+instance (Enum a, Bounded a, Eq a) => Enum (Down a) where
+  succ (Down x) = Down (pred x)
+  pred (Down x) = Down (succ x)
+  fromEnum (Down x) = complementInt (fromEnum x)
+  toEnum n = Down (toEnum (complementInt n))
+  enumFrom (Down x) = case x == minBound of
+    True -> [Down x]
+    False -> wrapDown (enumFromThen x (pred x))
+  enumFromThen (Down x) (Down y) = wrapDown (enumFromThen x y)
+
+complementInt :: Int -> Int
+complementInt n = intSub# (intNegate# n) 1
+
+wrapDown :: [a] -> [Down a]
+wrapDown xs = case xs of
+  [] -> []
+  y : rest -> Down y : wrapDown rest

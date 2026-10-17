@@ -124,22 +124,22 @@ append a b = bytesAppend# a b
 
 head :: ByteString -> Word8
 head b = case uncons b of
-  Just (w, ignored) -> w
+  Just (w, _) -> w
   Nothing -> error "Data.ByteString.head: empty"
 
 tail :: ByteString -> ByteString
 tail b = case uncons b of
-  Just (ignored, rest) -> rest
+  Just (_, rest) -> rest
   Nothing -> error "Data.ByteString.tail: empty"
 
 last :: ByteString -> Word8
 last b = case unsnoc b of
-  Just (ignored, w) -> w
+  Just (_, w) -> w
   Nothing -> error "Data.ByteString.last: empty"
 
 init :: ByteString -> ByteString
 init b = case unsnoc b of
-  Just (rest, ignored) -> rest
+  Just (rest, _) -> rest
   Nothing -> error "Data.ByteString.init: empty"
 
 uncons :: ByteString -> Maybe (Word8, ByteString)

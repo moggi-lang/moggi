@@ -1,0 +1,22 @@
+-- Infix and backtick method implementations in instance bodies (and class
+-- defaults) behave like their top-level counterparts.
+class Combine a where
+  combine :: a -> a -> a
+  x `combine` y = x
+
+data Pair = Pair { first :: Int, second :: Int }
+  deriving (Show)
+
+instance Combine Pair where
+  x `combine` y = Pair { first = x.first + y.first, second = x.second + y.second }
+
+instance Eq Pair where
+  x == y = x.first == y.first && x.second == y.second
+
+main :: IO ()
+main = do
+  let p = Pair { first = 1, second = 2 }
+      q = Pair { first = 3, second = 4 }
+  putStrLn (show (p `combine` q))
+  putStrLn (show (p == q))
+  putStrLn (show (p /= q))

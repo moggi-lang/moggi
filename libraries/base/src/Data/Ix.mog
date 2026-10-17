@@ -1,0 +1,322 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Array indices: 'Ix' maps a contiguous subrange of a type onto the
+-- integers @0@ through its size, which is what array indexing is written in
+-- terms of. The laws an instance must satisfy, for bounds @(l, u)@:
+--
+-- @
+-- 'inRange' (l, u) i == 'elem' i ('range' (l, u))
+-- 'range' (l, u) '!!' 'index' (l, u) i == i, when 'inRange' (l, u) i
+-- 'rangeSize' (l, u) == 'length' ('range' (l, u))
+-- @
+--
+-- The scalar instances ('Char', 'Int' and the fixed widths, 'Word' and its
+-- widths, 'Integer', 'Natural', 'Bool', 'Ordering') enumerate with 'Enum';
+-- the unit, 'Solo', 'Proxy' and tuple instances are written out, exactly as
+-- the derived ones would be.
+module Data.Ix
+  ( Ix(range, index, unsafeIndex, inRange, rangeSize, unsafeRangeSize)
+  ) where
+
+import Data.Bool
+import Data.Char (Char)
+import Data.Enum (Enum(enumFromTo, fromEnum))
+import Data.Eq
+import Data.Foldable (concatMap)
+import Data.Int (Int, Int8, Int16, Int32, Int64)
+import Data.Integer (Integer)
+import Data.Num
+import Data.Ord
+import Data.Proxy (Proxy(Proxy))
+import Data.Semigroup
+import Data.Tuple
+import Data.Void (Void, absurd)
+import Data.Word (Word, Word8, Word16, Word32, Word64)
+import Moggi.Err
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+import Numeric.Natural (Natural)
+
+-- | Map a contiguous subrange of values onto integers, for array indexing.
+-- The pair @(l, u)@ is the lower and upper bound of the subrange.
+class Ord a => Ix a where
+  {-# MINIMAL range, (index | unsafeIndex), inRange #-}
+
+  -- | The values of the subrange, in order.
+  range :: (a, a) -> [a]
+
+  -- | The position of a value in the subrange; an error outside it.
+  index :: (a, a) -> a -> Int
+  index b i = case inRange b i of
+    True -> unsafeIndex b i
+    False -> error "Data.Ix.index: index out of range"
+
+  -- | Like 'index', but unchecked: only for values in range.
+  unsafeIndex :: (a, a) -> a -> Int
+  unsafeIndex b i = index b i
+
+  -- | Whether the value lies in the subrange.
+  inRange :: (a, a) -> a -> Bool
+
+  -- | The number of values in the subrange.
+  rangeSize :: (a, a) -> Int
+  rangeSize b = case b of
+    (_, h) -> case inRange b h of
+      True -> unsafeIndex b h + 1
+      -- Only here to catch an empty range: @(l, h)@ can have @l <= h@ and
+      -- still be empty (for example @((1, 2), (2, 1))@ on pairs).
+      False -> 0
+
+  -- | Like 'rangeSize', without checking that the upper bound is in range.
+  unsafeRangeSize :: (a, a) -> Int
+  unsafeRangeSize b = case b of
+    (_, h) -> unsafeIndex b h + 1
+
+-- 'index' with the type in the error, as in base: 'Ix' has no 'Show'
+-- superclass, so each scalar instance names its own type.
+ixIndex :: String -> ((a, a) -> a -> Bool) -> ((a, a) -> a -> Int) -> (a, a) -> a -> Int
+ixIndex ty inR unsafeIx b i = case inR b i of
+  True -> unsafeIx b i
+  False -> error ("Data.Ix.index{" <> ty <> "}: index out of range")
+
+-- Enumerated scalars: the range comes from 'Enum', the offset from the
+-- 'fromEnum' codes. Shared by every scalar instance below.
+ixRangeEnum :: Enum a => (a, a) -> [a]
+ixRangeEnum (m, n) = enumFromTo m n
+
+ixUnsafeEnum :: Enum a => (a, a) -> a -> Int
+ixUnsafeEnum (m, _) i = fromEnum i - fromEnum m
+
+instance Ix Char where
+  range = ixRangeEnum
+  unsafeIndex = ixUnsafeEnum
+  inRange (m, n) i = m <= i && i <= n
+  index = ixIndex "Char" inRange unsafeIndex
+
+instance Ix Int where
+  range = ixRangeEnum
+  unsafeIndex = ixUnsafeEnum
+  inRange (m, n) i = m <= i && i <= n
+  index = ixIndex "Int" inRange unsafeIndex
+
+instance Ix Int8 where
+  range = ixRangeEnum
+  unsafeIndex = ixUnsafeEnum
+  inRange (m, n) i = m <= i && i <= n
+  index = ixIndex "Int8" inRange unsafeIndex
+
+instance Ix Int16 where
+  range = ixRangeEnum
+  unsafeIndex = ixUnsafeEnum
+  inRange (m, n) i = m <= i && i <= n
+  index = ixIndex "Int16" inRange unsafeIndex
+
+instance Ix Int32 where
+  range = ixRangeEnum
+  unsafeIndex = ixUnsafeEnum
+  inRange (m, n) i = m <= i && i <= n
+  index = ixIndex "Int32" inRange unsafeIndex
+
+instance Ix Int64 where
+  range = ixRangeEnum
+  unsafeIndex = ixUnsafeEnum
+  inRange (m, n) i = m <= i && i <= n
+  index = ixIndex "Int64" inRange unsafeIndex
+
+instance Ix Word where
+  range = ixRangeEnum
+  unsafeIndex = ixUnsafeEnum
+  inRange (m, n) i = m <= i && i <= n
+  index = ixIndex "Word" inRange unsafeIndex
+
+instance Ix Word8 where
+  range = ixRangeEnum
+  unsafeIndex = ixUnsafeEnum
+  inRange (m, n) i = m <= i && i <= n
+  index = ixIndex "Word8" inRange unsafeIndex
+
+instance Ix Word16 where
+  range = ixRangeEnum
+  unsafeIndex = ixUnsafeEnum
+  inRange (m, n) i = m <= i && i <= n
+  index = ixIndex "Word16" inRange unsafeIndex
+
+instance Ix Word32 where
+  range = ixRangeEnum
+  unsafeIndex = ixUnsafeEnum
+  inRange (m, n) i = m <= i && i <= n
+  index = ixIndex "Word32" inRange unsafeIndex
+
+instance Ix Word64 where
+  range = ixRangeEnum
+  unsafeIndex = ixUnsafeEnum
+  inRange (m, n) i = m <= i && i <= n
+  index = ixIndex "Word64" inRange unsafeIndex
+
+instance Ix Integer where
+  range = ixRangeEnum
+  unsafeIndex = ixUnsafeEnum
+  inRange (m, n) i = m <= i && i <= n
+  index = ixIndex "Integer" inRange unsafeIndex
+
+instance Ix Natural where
+  range = ixRangeEnum
+  unsafeIndex = ixUnsafeEnum
+  inRange (m, n) i = m <= i && i <= n
+  index = ixIndex "Natural" inRange unsafeIndex
+
+-- As derived: the codes run 0 to n-1 left to right.
+instance Ix Bool where
+  range = ixRangeEnum
+  unsafeIndex = ixUnsafeEnum
+  inRange (l, u) i = fromEnum i >= fromEnum l && fromEnum i <= fromEnum u
+  index = ixIndex "Bool" inRange unsafeIndex
+
+-- As derived.
+instance Ix Ordering where
+  range = ixRangeEnum
+  unsafeIndex = ixUnsafeEnum
+  inRange (l, u) i = fromEnum i >= fromEnum l && fromEnum i <= fromEnum u
+  index = ixIndex "Ordering" inRange unsafeIndex
+
+instance Ix Void where
+  range _ = []
+  index _ i = absurd i
+  inRange _ i = absurd i
+  rangeSize _ = 0
+
+instance Ix () where
+  range _ = [()]
+  unsafeIndex _ _ = 0
+  inRange _ _ = True
+  index b i = unsafeIndex b i
+
+instance Ix a => Ix (Solo a) where
+  range (MkSolo l, MkSolo u) = wrapSolo (range (l, u))
+  unsafeIndex (MkSolo l, MkSolo u) (MkSolo i) = unsafeIndex (l, u) i
+  inRange (MkSolo l, MkSolo u) (MkSolo i) = inRange (l, u) i
+
+wrapSolo :: [a] -> [Solo a]
+wrapSolo xs = case xs of
+  [] -> []
+  y : ys -> MkSolo y : wrapSolo ys
+
+instance Ix (Proxy s) where
+  range _ = [Proxy]
+  unsafeIndex _ _ = 0
+  inRange _ _ = True
+  index _ _ = 0
+  rangeSize _ = 1
+  unsafeRangeSize _ = 1
+
+-- Tuples, as derived: row-major order, the last component varying fastest.
+instance (Ix a1, Ix a2) => Ix (Tuple2 a1 a2) where
+  range ((l1, l2), (u1, u2)) =
+    [(i1, i2) | i1 <- range (l1, u1), i2 <- range (l2, u2)]
+  unsafeIndex ((l1, l2), (u1, u2)) (i1, i2) =
+    unsafeIndex (l1, u1) i1 * unsafeRangeSize (l2, u2) + unsafeIndex (l2, u2) i2
+  inRange ((l1, l2), (u1, u2)) (i1, i2) =
+    inRange (l1, u1) i1 && inRange (l2, u2) i2
+
+instance (Ix a1, Ix a2, Ix a3) => Ix (Tuple3 a1 a2 a3) where
+  range ((l1, l2, l3), (u1, u2, u3)) =
+    [(i1, i2, i3) | i1 <- range (l1, u1), i2 <- range (l2, u2), i3 <- range (l3, u3)]
+  unsafeIndex ((l1, l2, l3), (u1, u2, u3)) (i1, i2, i3) =
+    unsafeIndex (l3, u3) i3 + unsafeRangeSize (l3, u3) * (unsafeIndex (l2, u2) i2 + unsafeRangeSize (l2, u2) * unsafeIndex (l1, u1) i1)
+  inRange ((l1, l2, l3), (u1, u2, u3)) (i1, i2, i3) =
+    inRange (l1, u1) i1 && inRange (l2, u2) i2 && inRange (l3, u3) i3
+
+instance (Ix a1, Ix a2, Ix a3, Ix a4) => Ix (Tuple4 a1 a2 a3 a4) where
+  range ((l1, l2, l3, l4), (u1, u2, u3, u4)) =
+    [(i1, i2, i3, i4) | i1 <- range (l1, u1), i2 <- range (l2, u2), i3 <- range (l3, u3), i4 <- range (l4, u4)]
+  unsafeIndex ((l1, l2, l3, l4), (u1, u2, u3, u4)) (i1, i2, i3, i4) =
+    unsafeIndex (l4, u4) i4 + unsafeRangeSize (l4, u4) * (unsafeIndex (l3, u3) i3 + unsafeRangeSize (l3, u3) * (unsafeIndex (l2, u2) i2 + unsafeRangeSize (l2, u2) * unsafeIndex (l1, u1) i1))
+  inRange ((l1, l2, l3, l4), (u1, u2, u3, u4)) (i1, i2, i3, i4) =
+    inRange (l1, u1) i1 && inRange (l2, u2) i2 && inRange (l3, u3) i3 && inRange (l4, u4) i4
+
+instance (Ix a1, Ix a2, Ix a3, Ix a4, Ix a5) => Ix (Tuple5 a1 a2 a3 a4 a5) where
+  range ((l1, l2, l3, l4, l5), (u1, u2, u3, u4, u5)) =
+    [(i1, i2, i3, i4, i5) | i1 <- range (l1, u1), i2 <- range (l2, u2), i3 <- range (l3, u3), i4 <- range (l4, u4), i5 <- range (l5, u5)]
+  unsafeIndex ((l1, l2, l3, l4, l5), (u1, u2, u3, u4, u5)) (i1, i2, i3, i4, i5) =
+    unsafeIndex (l5, u5) i5 + unsafeRangeSize (l5, u5) * (unsafeIndex (l4, u4) i4 + unsafeRangeSize (l4, u4) * (unsafeIndex (l3, u3) i3 + unsafeRangeSize (l3, u3) * (unsafeIndex (l2, u2) i2 + unsafeRangeSize (l2, u2) * unsafeIndex (l1, u1) i1)))
+  inRange ((l1, l2, l3, l4, l5), (u1, u2, u3, u4, u5)) (i1, i2, i3, i4, i5) =
+    inRange (l1, u1) i1 && inRange (l2, u2) i2 && inRange (l3, u3) i3 && inRange (l4, u4) i4 && inRange (l5, u5) i5
+
+instance (Ix a1, Ix a2, Ix a3, Ix a4, Ix a5, Ix a6) => Ix (Tuple6 a1 a2 a3 a4 a5 a6) where
+  range ((l1, l2, l3, l4, l5, l6), (u1, u2, u3, u4, u5, u6)) =
+    [(i1, i2, i3, i4, i5, i6) | i1 <- range (l1, u1), i2 <- range (l2, u2), i3 <- range (l3, u3), i4 <- range (l4, u4), i5 <- range (l5, u5), i6 <- range (l6, u6)]
+  unsafeIndex ((l1, l2, l3, l4, l5, l6), (u1, u2, u3, u4, u5, u6)) (i1, i2, i3, i4, i5, i6) =
+    unsafeIndex (l6, u6) i6 + unsafeRangeSize (l6, u6) * (unsafeIndex (l5, u5) i5 + unsafeRangeSize (l5, u5) * (unsafeIndex (l4, u4) i4 + unsafeRangeSize (l4, u4) * (unsafeIndex (l3, u3) i3 + unsafeRangeSize (l3, u3) * (unsafeIndex (l2, u2) i2 + unsafeRangeSize (l2, u2) * unsafeIndex (l1, u1) i1))))
+  inRange ((l1, l2, l3, l4, l5, l6), (u1, u2, u3, u4, u5, u6)) (i1, i2, i3, i4, i5, i6) =
+    inRange (l1, u1) i1 && inRange (l2, u2) i2 && inRange (l3, u3) i3 && inRange (l4, u4) i4 && inRange (l5, u5) i5 && inRange (l6, u6) i6
+
+instance (Ix a1, Ix a2, Ix a3, Ix a4, Ix a5, Ix a6, Ix a7) => Ix (Tuple7 a1 a2 a3 a4 a5 a6 a7) where
+  range ((l1, l2, l3, l4, l5, l6, l7), (u1, u2, u3, u4, u5, u6, u7)) =
+    [(i1, i2, i3, i4, i5, i6, i7) | i1 <- range (l1, u1), i2 <- range (l2, u2), i3 <- range (l3, u3), i4 <- range (l4, u4), i5 <- range (l5, u5), i6 <- range (l6, u6), i7 <- range (l7, u7)]
+  unsafeIndex ((l1, l2, l3, l4, l5, l6, l7), (u1, u2, u3, u4, u5, u6, u7)) (i1, i2, i3, i4, i5, i6, i7) =
+    unsafeIndex (l7, u7) i7 + unsafeRangeSize (l7, u7) * (unsafeIndex (l6, u6) i6 + unsafeRangeSize (l6, u6) * (unsafeIndex (l5, u5) i5 + unsafeRangeSize (l5, u5) * (unsafeIndex (l4, u4) i4 + unsafeRangeSize (l4, u4) * (unsafeIndex (l3, u3) i3 + unsafeRangeSize (l3, u3) * (unsafeIndex (l2, u2) i2 + unsafeRangeSize (l2, u2) * unsafeIndex (l1, u1) i1)))))
+  inRange ((l1, l2, l3, l4, l5, l6, l7), (u1, u2, u3, u4, u5, u6, u7)) (i1, i2, i3, i4, i5, i6, i7) =
+    inRange (l1, u1) i1 && inRange (l2, u2) i2 && inRange (l3, u3) i3 && inRange (l4, u4) i4 && inRange (l5, u5) i5 && inRange (l6, u6) i6 && inRange (l7, u7) i7
+
+instance (Ix a1, Ix a2, Ix a3, Ix a4, Ix a5, Ix a6, Ix a7, Ix a8) => Ix (Tuple8 a1 a2 a3 a4 a5 a6 a7 a8) where
+  range ((l1, l2, l3, l4, l5, l6, l7, l8), (u1, u2, u3, u4, u5, u6, u7, u8)) =
+    [(i1, i2, i3, i4, i5, i6, i7, i8) | i1 <- range (l1, u1), i2 <- range (l2, u2), i3 <- range (l3, u3), i4 <- range (l4, u4), i5 <- range (l5, u5), i6 <- range (l6, u6), i7 <- range (l7, u7), i8 <- range (l8, u8)]
+  unsafeIndex ((l1, l2, l3, l4, l5, l6, l7, l8), (u1, u2, u3, u4, u5, u6, u7, u8)) (i1, i2, i3, i4, i5, i6, i7, i8) =
+    unsafeIndex (l8, u8) i8 + unsafeRangeSize (l8, u8) * (unsafeIndex (l7, u7) i7 + unsafeRangeSize (l7, u7) * (unsafeIndex (l6, u6) i6 + unsafeRangeSize (l6, u6) * (unsafeIndex (l5, u5) i5 + unsafeRangeSize (l5, u5) * (unsafeIndex (l4, u4) i4 + unsafeRangeSize (l4, u4) * (unsafeIndex (l3, u3) i3 + unsafeRangeSize (l3, u3) * (unsafeIndex (l2, u2) i2 + unsafeRangeSize (l2, u2) * unsafeIndex (l1, u1) i1))))))
+  inRange ((l1, l2, l3, l4, l5, l6, l7, l8), (u1, u2, u3, u4, u5, u6, u7, u8)) (i1, i2, i3, i4, i5, i6, i7, i8) =
+    inRange (l1, u1) i1 && inRange (l2, u2) i2 && inRange (l3, u3) i3 && inRange (l4, u4) i4 && inRange (l5, u5) i5 && inRange (l6, u6) i6 && inRange (l7, u7) i7 && inRange (l8, u8) i8
+
+instance (Ix a1, Ix a2, Ix a3, Ix a4, Ix a5, Ix a6, Ix a7, Ix a8, Ix a9) => Ix (Tuple9 a1 a2 a3 a4 a5 a6 a7 a8 a9) where
+  range ((l1, l2, l3, l4, l5, l6, l7, l8, l9), (u1, u2, u3, u4, u5, u6, u7, u8, u9)) =
+    [(i1, i2, i3, i4, i5, i6, i7, i8, i9) | i1 <- range (l1, u1), i2 <- range (l2, u2), i3 <- range (l3, u3), i4 <- range (l4, u4), i5 <- range (l5, u5), i6 <- range (l6, u6), i7 <- range (l7, u7), i8 <- range (l8, u8), i9 <- range (l9, u9)]
+  unsafeIndex ((l1, l2, l3, l4, l5, l6, l7, l8, l9), (u1, u2, u3, u4, u5, u6, u7, u8, u9)) (i1, i2, i3, i4, i5, i6, i7, i8, i9) =
+    unsafeIndex (l9, u9) i9 + unsafeRangeSize (l9, u9) * (unsafeIndex (l8, u8) i8 + unsafeRangeSize (l8, u8) * (unsafeIndex (l7, u7) i7 + unsafeRangeSize (l7, u7) * (unsafeIndex (l6, u6) i6 + unsafeRangeSize (l6, u6) * (unsafeIndex (l5, u5) i5 + unsafeRangeSize (l5, u5) * (unsafeIndex (l4, u4) i4 + unsafeRangeSize (l4, u4) * (unsafeIndex (l3, u3) i3 + unsafeRangeSize (l3, u3) * (unsafeIndex (l2, u2) i2 + unsafeRangeSize (l2, u2) * unsafeIndex (l1, u1) i1)))))))
+  inRange ((l1, l2, l3, l4, l5, l6, l7, l8, l9), (u1, u2, u3, u4, u5, u6, u7, u8, u9)) (i1, i2, i3, i4, i5, i6, i7, i8, i9) =
+    inRange (l1, u1) i1 && inRange (l2, u2) i2 && inRange (l3, u3) i3 && inRange (l4, u4) i4 && inRange (l5, u5) i5 && inRange (l6, u6) i6 && inRange (l7, u7) i7 && inRange (l8, u8) i8 && inRange (l9, u9) i9
+
+instance (Ix a1, Ix a2, Ix a3, Ix a4, Ix a5, Ix a6, Ix a7, Ix a8, Ix a9, Ix a10) => Ix (Tuple10 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10) where
+  range ((l1, l2, l3, l4, l5, l6, l7, l8, l9, l10), (u1, u2, u3, u4, u5, u6, u7, u8, u9, u10)) =
+    [(i1, i2, i3, i4, i5, i6, i7, i8, i9, i10) | i1 <- range (l1, u1), i2 <- range (l2, u2), i3 <- range (l3, u3), i4 <- range (l4, u4), i5 <- range (l5, u5), i6 <- range (l6, u6), i7 <- range (l7, u7), i8 <- range (l8, u8), i9 <- range (l9, u9), i10 <- range (l10, u10)]
+  unsafeIndex ((l1, l2, l3, l4, l5, l6, l7, l8, l9, l10), (u1, u2, u3, u4, u5, u6, u7, u8, u9, u10)) (i1, i2, i3, i4, i5, i6, i7, i8, i9, i10) =
+    unsafeIndex (l10, u10) i10 + unsafeRangeSize (l10, u10) * (unsafeIndex (l9, u9) i9 + unsafeRangeSize (l9, u9) * (unsafeIndex (l8, u8) i8 + unsafeRangeSize (l8, u8) * (unsafeIndex (l7, u7) i7 + unsafeRangeSize (l7, u7) * (unsafeIndex (l6, u6) i6 + unsafeRangeSize (l6, u6) * (unsafeIndex (l5, u5) i5 + unsafeRangeSize (l5, u5) * (unsafeIndex (l4, u4) i4 + unsafeRangeSize (l4, u4) * (unsafeIndex (l3, u3) i3 + unsafeRangeSize (l3, u3) * (unsafeIndex (l2, u2) i2 + unsafeRangeSize (l2, u2) * unsafeIndex (l1, u1) i1))))))))
+  inRange ((l1, l2, l3, l4, l5, l6, l7, l8, l9, l10), (u1, u2, u3, u4, u5, u6, u7, u8, u9, u10)) (i1, i2, i3, i4, i5, i6, i7, i8, i9, i10) =
+    inRange (l1, u1) i1 && inRange (l2, u2) i2 && inRange (l3, u3) i3 && inRange (l4, u4) i4 && inRange (l5, u5) i5 && inRange (l6, u6) i6 && inRange (l7, u7) i7 && inRange (l8, u8) i8 && inRange (l9, u9) i9 && inRange (l10, u10) i10
+
+instance (Ix a1, Ix a2, Ix a3, Ix a4, Ix a5, Ix a6, Ix a7, Ix a8, Ix a9, Ix a10, Ix a11) => Ix (Tuple11 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11) where
+  range ((l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11), (u1, u2, u3, u4, u5, u6, u7, u8, u9, u10, u11)) =
+    [(i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11) | i1 <- range (l1, u1), i2 <- range (l2, u2), i3 <- range (l3, u3), i4 <- range (l4, u4), i5 <- range (l5, u5), i6 <- range (l6, u6), i7 <- range (l7, u7), i8 <- range (l8, u8), i9 <- range (l9, u9), i10 <- range (l10, u10), i11 <- range (l11, u11)]
+  unsafeIndex ((l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11), (u1, u2, u3, u4, u5, u6, u7, u8, u9, u10, u11)) (i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11) =
+    unsafeIndex (l11, u11) i11 + unsafeRangeSize (l11, u11) * (unsafeIndex (l10, u10) i10 + unsafeRangeSize (l10, u10) * (unsafeIndex (l9, u9) i9 + unsafeRangeSize (l9, u9) * (unsafeIndex (l8, u8) i8 + unsafeRangeSize (l8, u8) * (unsafeIndex (l7, u7) i7 + unsafeRangeSize (l7, u7) * (unsafeIndex (l6, u6) i6 + unsafeRangeSize (l6, u6) * (unsafeIndex (l5, u5) i5 + unsafeRangeSize (l5, u5) * (unsafeIndex (l4, u4) i4 + unsafeRangeSize (l4, u4) * (unsafeIndex (l3, u3) i3 + unsafeRangeSize (l3, u3) * (unsafeIndex (l2, u2) i2 + unsafeRangeSize (l2, u2) * unsafeIndex (l1, u1) i1)))))))))
+  inRange ((l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11), (u1, u2, u3, u4, u5, u6, u7, u8, u9, u10, u11)) (i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11) =
+    inRange (l1, u1) i1 && inRange (l2, u2) i2 && inRange (l3, u3) i3 && inRange (l4, u4) i4 && inRange (l5, u5) i5 && inRange (l6, u6) i6 && inRange (l7, u7) i7 && inRange (l8, u8) i8 && inRange (l9, u9) i9 && inRange (l10, u10) i10 && inRange (l11, u11) i11
+
+instance (Ix a1, Ix a2, Ix a3, Ix a4, Ix a5, Ix a6, Ix a7, Ix a8, Ix a9, Ix a10, Ix a11, Ix a12) => Ix (Tuple12 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12) where
+  range ((l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11, l12), (u1, u2, u3, u4, u5, u6, u7, u8, u9, u10, u11, u12)) =
+    [(i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11, i12) | i1 <- range (l1, u1), i2 <- range (l2, u2), i3 <- range (l3, u3), i4 <- range (l4, u4), i5 <- range (l5, u5), i6 <- range (l6, u6), i7 <- range (l7, u7), i8 <- range (l8, u8), i9 <- range (l9, u9), i10 <- range (l10, u10), i11 <- range (l11, u11), i12 <- range (l12, u12)]
+  unsafeIndex ((l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11, l12), (u1, u2, u3, u4, u5, u6, u7, u8, u9, u10, u11, u12)) (i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11, i12) =
+    unsafeIndex (l12, u12) i12 + unsafeRangeSize (l12, u12) * (unsafeIndex (l11, u11) i11 + unsafeRangeSize (l11, u11) * (unsafeIndex (l10, u10) i10 + unsafeRangeSize (l10, u10) * (unsafeIndex (l9, u9) i9 + unsafeRangeSize (l9, u9) * (unsafeIndex (l8, u8) i8 + unsafeRangeSize (l8, u8) * (unsafeIndex (l7, u7) i7 + unsafeRangeSize (l7, u7) * (unsafeIndex (l6, u6) i6 + unsafeRangeSize (l6, u6) * (unsafeIndex (l5, u5) i5 + unsafeRangeSize (l5, u5) * (unsafeIndex (l4, u4) i4 + unsafeRangeSize (l4, u4) * (unsafeIndex (l3, u3) i3 + unsafeRangeSize (l3, u3) * (unsafeIndex (l2, u2) i2 + unsafeRangeSize (l2, u2) * unsafeIndex (l1, u1) i1))))))))))
+  inRange ((l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11, l12), (u1, u2, u3, u4, u5, u6, u7, u8, u9, u10, u11, u12)) (i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11, i12) =
+    inRange (l1, u1) i1 && inRange (l2, u2) i2 && inRange (l3, u3) i3 && inRange (l4, u4) i4 && inRange (l5, u5) i5 && inRange (l6, u6) i6 && inRange (l7, u7) i7 && inRange (l8, u8) i8 && inRange (l9, u9) i9 && inRange (l10, u10) i10 && inRange (l11, u11) i11 && inRange (l12, u12) i12
+
+instance (Ix a1, Ix a2, Ix a3, Ix a4, Ix a5, Ix a6, Ix a7, Ix a8, Ix a9, Ix a10, Ix a11, Ix a12, Ix a13) => Ix (Tuple13 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13) where
+  range ((l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11, l12, l13), (u1, u2, u3, u4, u5, u6, u7, u8, u9, u10, u11, u12, u13)) =
+    [(i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11, i12, i13) | i1 <- range (l1, u1), i2 <- range (l2, u2), i3 <- range (l3, u3), i4 <- range (l4, u4), i5 <- range (l5, u5), i6 <- range (l6, u6), i7 <- range (l7, u7), i8 <- range (l8, u8), i9 <- range (l9, u9), i10 <- range (l10, u10), i11 <- range (l11, u11), i12 <- range (l12, u12), i13 <- range (l13, u13)]
+  unsafeIndex ((l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11, l12, l13), (u1, u2, u3, u4, u5, u6, u7, u8, u9, u10, u11, u12, u13)) (i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11, i12, i13) =
+    unsafeIndex (l13, u13) i13 + unsafeRangeSize (l13, u13) * (unsafeIndex (l12, u12) i12 + unsafeRangeSize (l12, u12) * (unsafeIndex (l11, u11) i11 + unsafeRangeSize (l11, u11) * (unsafeIndex (l10, u10) i10 + unsafeRangeSize (l10, u10) * (unsafeIndex (l9, u9) i9 + unsafeRangeSize (l9, u9) * (unsafeIndex (l8, u8) i8 + unsafeRangeSize (l8, u8) * (unsafeIndex (l7, u7) i7 + unsafeRangeSize (l7, u7) * (unsafeIndex (l6, u6) i6 + unsafeRangeSize (l6, u6) * (unsafeIndex (l5, u5) i5 + unsafeRangeSize (l5, u5) * (unsafeIndex (l4, u4) i4 + unsafeRangeSize (l4, u4) * (unsafeIndex (l3, u3) i3 + unsafeRangeSize (l3, u3) * (unsafeIndex (l2, u2) i2 + unsafeRangeSize (l2, u2) * unsafeIndex (l1, u1) i1)))))))))))
+  inRange ((l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11, l12, l13), (u1, u2, u3, u4, u5, u6, u7, u8, u9, u10, u11, u12, u13)) (i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11, i12, i13) =
+    inRange (l1, u1) i1 && inRange (l2, u2) i2 && inRange (l3, u3) i3 && inRange (l4, u4) i4 && inRange (l5, u5) i5 && inRange (l6, u6) i6 && inRange (l7, u7) i7 && inRange (l8, u8) i8 && inRange (l9, u9) i9 && inRange (l10, u10) i10 && inRange (l11, u11) i11 && inRange (l12, u12) i12 && inRange (l13, u13) i13
+
+instance (Ix a1, Ix a2, Ix a3, Ix a4, Ix a5, Ix a6, Ix a7, Ix a8, Ix a9, Ix a10, Ix a11, Ix a12, Ix a13, Ix a14) => Ix (Tuple14 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14) where
+  range ((l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14), (u1, u2, u3, u4, u5, u6, u7, u8, u9, u10, u11, u12, u13, u14)) =
+    [(i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11, i12, i13, i14) | i1 <- range (l1, u1), i2 <- range (l2, u2), i3 <- range (l3, u3), i4 <- range (l4, u4), i5 <- range (l5, u5), i6 <- range (l6, u6), i7 <- range (l7, u7), i8 <- range (l8, u8), i9 <- range (l9, u9), i10 <- range (l10, u10), i11 <- range (l11, u11), i12 <- range (l12, u12), i13 <- range (l13, u13), i14 <- range (l14, u14)]
+  unsafeIndex ((l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14), (u1, u2, u3, u4, u5, u6, u7, u8, u9, u10, u11, u12, u13, u14)) (i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11, i12, i13, i14) =
+    unsafeIndex (l14, u14) i14 + unsafeRangeSize (l14, u14) * (unsafeIndex (l13, u13) i13 + unsafeRangeSize (l13, u13) * (unsafeIndex (l12, u12) i12 + unsafeRangeSize (l12, u12) * (unsafeIndex (l11, u11) i11 + unsafeRangeSize (l11, u11) * (unsafeIndex (l10, u10) i10 + unsafeRangeSize (l10, u10) * (unsafeIndex (l9, u9) i9 + unsafeRangeSize (l9, u9) * (unsafeIndex (l8, u8) i8 + unsafeRangeSize (l8, u8) * (unsafeIndex (l7, u7) i7 + unsafeRangeSize (l7, u7) * (unsafeIndex (l6, u6) i6 + unsafeRangeSize (l6, u6) * (unsafeIndex (l5, u5) i5 + unsafeRangeSize (l5, u5) * (unsafeIndex (l4, u4) i4 + unsafeRangeSize (l4, u4) * (unsafeIndex (l3, u3) i3 + unsafeRangeSize (l3, u3) * (unsafeIndex (l2, u2) i2 + unsafeRangeSize (l2, u2) * unsafeIndex (l1, u1) i1))))))))))))
+  inRange ((l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14), (u1, u2, u3, u4, u5, u6, u7, u8, u9, u10, u11, u12, u13, u14)) (i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11, i12, i13, i14) =
+    inRange (l1, u1) i1 && inRange (l2, u2) i2 && inRange (l3, u3) i3 && inRange (l4, u4) i4 && inRange (l5, u5) i5 && inRange (l6, u6) i6 && inRange (l7, u7) i7 && inRange (l8, u8) i8 && inRange (l9, u9) i9 && inRange (l10, u10) i10 && inRange (l11, u11) i11 && inRange (l12, u12) i12 && inRange (l13, u13) i13 && inRange (l14, u14) i14
+
+instance (Ix a1, Ix a2, Ix a3, Ix a4, Ix a5, Ix a6, Ix a7, Ix a8, Ix a9, Ix a10, Ix a11, Ix a12, Ix a13, Ix a14, Ix a15) => Ix (Tuple15 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15) where
+  range ((l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14, l15), (u1, u2, u3, u4, u5, u6, u7, u8, u9, u10, u11, u12, u13, u14, u15)) =
+    [(i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11, i12, i13, i14, i15) | i1 <- range (l1, u1), i2 <- range (l2, u2), i3 <- range (l3, u3), i4 <- range (l4, u4), i5 <- range (l5, u5), i6 <- range (l6, u6), i7 <- range (l7, u7), i8 <- range (l8, u8), i9 <- range (l9, u9), i10 <- range (l10, u10), i11 <- range (l11, u11), i12 <- range (l12, u12), i13 <- range (l13, u13), i14 <- range (l14, u14), i15 <- range (l15, u15)]
+  unsafeIndex ((l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14, l15), (u1, u2, u3, u4, u5, u6, u7, u8, u9, u10, u11, u12, u13, u14, u15)) (i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11, i12, i13, i14, i15) =
+    unsafeIndex (l15, u15) i15 + unsafeRangeSize (l15, u15) * (unsafeIndex (l14, u14) i14 + unsafeRangeSize (l14, u14) * (unsafeIndex (l13, u13) i13 + unsafeRangeSize (l13, u13) * (unsafeIndex (l12, u12) i12 + unsafeRangeSize (l12, u12) * (unsafeIndex (l11, u11) i11 + unsafeRangeSize (l11, u11) * (unsafeIndex (l10, u10) i10 + unsafeRangeSize (l10, u10) * (unsafeIndex (l9, u9) i9 + unsafeRangeSize (l9, u9) * (unsafeIndex (l8, u8) i8 + unsafeRangeSize (l8, u8) * (unsafeIndex (l7, u7) i7 + unsafeRangeSize (l7, u7) * (unsafeIndex (l6, u6) i6 + unsafeRangeSize (l6, u6) * (unsafeIndex (l5, u5) i5 + unsafeRangeSize (l5, u5) * (unsafeIndex (l4, u4) i4 + unsafeRangeSize (l4, u4) * (unsafeIndex (l3, u3) i3 + unsafeRangeSize (l3, u3) * (unsafeIndex (l2, u2) i2 + unsafeRangeSize (l2, u2) * unsafeIndex (l1, u1) i1)))))))))))))
+  inRange ((l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14, l15), (u1, u2, u3, u4, u5, u6, u7, u8, u9, u10, u11, u12, u13, u14, u15)) (i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11, i12, i13, i14, i15) =
+    inRange (l1, u1) i1 && inRange (l2, u2) i2 && inRange (l3, u3) i3 && inRange (l4, u4) i4 && inRange (l5, u5) i5 && inRange (l6, u6) i6 && inRange (l7, u7) i7 && inRange (l8, u8) i8 && inRange (l9, u9) i9 && inRange (l10, u10) i10 && inRange (l11, u11) i11 && inRange (l12, u12) i12 && inRange (l13, u13) i13 && inRange (l14, u14) i14 && inRange (l15, u15) i15

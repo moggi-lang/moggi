@@ -1,0 +1,45 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | The constant functor: @Const a b@ holds an @a@ and ignores the @b@.
+-- Useful with 'Traversable' machinery to recover folds ('getConst' after a
+-- traversal collects what the applicative action produced).
+module Data.Functor.Const
+  ( Const(Const)
+  , getConst
+  ) where
+
+import Control.Applicative
+import Data.Bifunctor
+import Data.Bool
+import Data.Eq
+import Data.Foldable
+import Data.Functor
+import Data.Monoid
+import Data.Ord
+import Data.Semigroup
+import Moggi.Internal.Base
+import Text.Show
+import Data.Traversable
+import Moggi.Internal.Prim
+
+-- | The constant type: the second parameter is phantom. 'map' ignores its
+-- function, 'foldr' ignores the structure and keeps the seed.
+newtype Const a b = Const a
+  deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
+
+getConst :: Const a b -> a
+getConst m = case m of
+  Const x -> x
+
+instance Bifunctor Const where
+  bimap f _ m = case m of
+    Const x -> Const (f x)
+  first f m = case m of
+    Const x -> Const (f x)
+  second _ m = case m of
+    Const x -> Const x
+
+instance Semigroup a => Semigroup (Const a b) where
+  (<>) x y = Const (getConst x <> getConst y)
+
+instance Monoid a => Monoid (Const a b) where
+  mempty = Const mempty

@@ -193,9 +193,9 @@ instance (Eq a, Eq b) => Eq (Either a b) where
   (==) x y = case x of
     Left a -> case y of
       Left b -> a == b
-      Right ignored -> False
+      Right _ -> False
     Right a -> case y of
-      Left ignored -> False
+      Left _ -> False
       Right b -> a == b
   (/=) x y = case x == y of
     True -> False

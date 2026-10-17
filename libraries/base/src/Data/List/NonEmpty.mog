@@ -63,7 +63,6 @@ module Data.List.NonEmpty
   , toList
   , nonEmpty
   , xor
-  , sconcat
   ) where
 
 import Control.Applicative
@@ -88,10 +87,9 @@ import Data.Tuple
 import Data.List qualified as DL
 import Moggi.Internal.Prim
 
-data NonEmpty a = a :| [a]
-  deriving (Eq, Ord, Show)
-
-infixr 5 :|
+-- 'NonEmpty(..)' and its ':|' fixity live in 'Data.Semigroup' (the 'sconcat'
+-- method names the type, so the class module owns it) and are re-exported
+-- here with the instances and combinators.
 infixr 5 <|
 infixl 9 !!
 
@@ -108,7 +106,7 @@ listAppend xs ys = listAppend# xs ys
 listLength :: [a] -> Int
 listLength xs = case xs of
   [] -> 0
-  ignored : rest -> 1 + listLength rest
+  _ : rest -> 1 + listLength rest
 
 foldableToList :: Foldable t => t a -> [a]
 foldableToList t = foldr (\x xs -> x : xs) [] t
@@ -228,7 +226,7 @@ sortWith f xs = sortBy (comparing f) xs
 
 length :: NonEmpty a -> Int
 length ne = case ne of
-  ignored :| xs -> 1 + listLength xs
+  _ :| xs -> 1 + listLength xs
 
 compareLength :: NonEmpty a -> Int -> Ordering
 compareLength xs n = case n < 1 of
@@ -238,7 +236,7 @@ compareLength xs n = case n < 1 of
 compareLengthList :: [a] -> Int -> Ordering
 compareLengthList xs n = case xs of
   [] -> compareLengthEmpty n
-  ignored : rest -> compareLengthCons rest n
+  _ : rest -> compareLengthCons rest n
 
 compareLengthEmpty :: Int -> Ordering
 compareLengthEmpty n = case n > 0 of
@@ -511,20 +509,8 @@ instance Applicative NonEmpty where
 instance Monad NonEmpty where
   (>>=) xs f = bindNe xs f
 
--- | @'sconcat'@ folds a non-empty structure with @('<>)'@, associating to the
--- right as @base@'s does.
---
--- `base` keeps this in `Data.Semigroup`; that module cannot import this one
--- (it would cycle — `NonEmpty` has a `Semigroup` instance), so it lives here,
--- beside `NonEmpty`.
-sconcat :: Semigroup a => NonEmpty a -> a
-sconcat ne = case ne of
-  a :| xs -> sconcatList a xs
-
-sconcatList :: Semigroup a => a -> [a] -> a
-sconcatList acc xs = case xs of
-  [] -> acc
-  b : rest -> acc <> sconcatList b rest
+-- 'sconcat' is a 'Semigroup' method (see 'Data.Semigroup'); its default folds
+-- with '(<>)', associating to the right as @base@'s does.
 
 
 

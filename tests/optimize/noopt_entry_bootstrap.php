@@ -13,6 +13,17 @@ while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
 require $root . '/src/compiler.php';
 require $root . '/tests/suite/support/bootstrap.php';
 
+// Own process, so no harness configured the library roots: set them like
+// test.php does, or the library-tree build below resolves a root-less closure
+// and fails on the first cross-package import.
+\Moggi\Modules\setStdlibLibPath($root . '/libraries/base/src');
+foreach (['containers', 'time'] as $bundled) {
+    $extra = $root . '/libraries/' . $bundled . '/src';
+    if (\is_dir($extra)) {
+        \Moggi\Modules\addLibraryRoot($extra);
+    }
+}
+
 $fixture = __DIR__ . '/noopt-entry-bootstrap.mog';
 
 $compiled = \Moggi\Compiler\compileFileCapturingErrors($fixture, 'php', false, 'php');

@@ -1,0 +1,4 @@
+tests/semantics/Bad-ST-Escape.mog:6:1: type error: ST values are forbidden outside an ST-returning function
+
+  6 | bad :: STRef s Int
+    | ^^^

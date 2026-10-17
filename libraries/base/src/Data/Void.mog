@@ -5,12 +5,19 @@ module Data.Void
   , vacuous
   ) where
 
+import Data.Bool
+import Data.Eq
 import Data.Functor
+import Data.Ord
 import Moggi.Err
 import Moggi.Internal.Base
+import Text.Show
 
--- | Uninhabited data type
-data Void = Void
+-- | Uninhabited data type: it has no constructors, so (modulo non-termination)
+-- no value of this type exists. There are no `Enum`/`Bounded` instances: both
+-- would have to produce a `Void` (`toEnum`, `minBound`), which is impossible.
+data Void
+  deriving (Eq, Ord, Show)
 
 -- | Since 'Void' values logically don't exist, this witnesses the
 -- logical reasoning tool of \"ex falso quodlibet\".
@@ -23,7 +30,7 @@ data Void = Void
 -- :}
 -- 5
 absurd :: Void -> a
-absurd ignored = error "Data.Void.absurd"
+absurd _ = error "Data.Void.absurd"
 
 -- | If 'Void' is uninhabited then any 'Functor' that holds only
 -- values of type 'Void' is holding no values.

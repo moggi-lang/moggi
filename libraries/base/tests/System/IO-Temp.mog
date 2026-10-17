@@ -1,0 +1,47 @@
+-- System.IO.openTempFile/openBinaryTempFile: create in a scratch directory,
+-- write and read back, check the template prefix, fail cleanly on a missing
+-- directory, and remove the files afterwards.
+
+import System.IO.Error (tryIOError)
+import Data.List (isInfixOf)
+import Data.String (unpack)
+import Data.Tuple (fst, snd)
+import System.Environment (lookupEnv)
+import System.Filesystem (removeFile)
+import System.IO
+
+scratchDir :: IO FilePath
+scratchDir = do
+  tmp <- lookupEnv "TMPDIR"
+  win <- lookupEnv "TEMP"
+  pure (case tmp of
+    Just d -> d
+    Nothing -> case win of
+      Just d -> d
+      Nothing -> "/tmp")
+
+main :: IO ()
+main = do
+  dir <- scratchDir
+  t1 <- openTempFile dir "moggi-temp-test"
+  let path = fst t1
+  let h = snd t1
+  hPutStr h "hello-temp"
+  hClose h
+  s <- readFile path
+  putStrLn (show (s == "hello-temp"))
+  putStrLn (show (isInfixOf (unpack "moggi-temp-test") (unpack path)))
+  t2 <- openBinaryTempFile dir "moggi-bin-test"
+  let bpath = fst t2
+  let bh = snd t2
+  hPutStr bh "binary-temp"
+  hClose bh
+  bs <- readFile bpath
+  putStrLn (show (bs == "binary-temp"))
+  putStrLn (show (isInfixOf (unpack "moggi-bin-test") (unpack bpath)))
+  removeFile path
+  removeFile bpath
+  r <- tryIOError (openTempFile "/no-such-dir-moggi-test" "t")
+  putStrLn (case r of
+    Left _ -> "bad-dir: True"
+    Right _ -> "bad-dir: False")

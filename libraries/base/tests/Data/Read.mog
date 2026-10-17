@@ -1,0 +1,9 @@
+-- Text.Read: the 'Read' instances for types whose modules sit below
+-- 'Data.String'. 'Bool' reads what 'Show' writes (@"True"@ and @"False"@).
+
+import Text.Read
+
+main :: IO ()
+main = do
+  putStrLn (show (read "True" :: Bool))
+  putStrLn (show (read "False" :: Bool))

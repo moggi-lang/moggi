@@ -4,6 +4,9 @@ module Data.Char.JVM
   , isSpace
   , isLower
   , isUpper
+  , isLowerCase
+  , isUpperCase
+  , generalCategoryCode
   , isAlpha
   , isLetter
   , isAlphaNum
@@ -13,6 +16,7 @@ module Data.Char.JVM
   , isPunctuation
   , isSymbol
   , isSeparator
+  , isMark
   , toUpper
   , toLower
   , toTitle
@@ -32,9 +36,17 @@ foreign jvm function isControl "java.lang.Character:isISOControl" :: Char -> Boo
 
 foreign jvm function isSpace "java.lang.Character:isWhitespace" :: Char -> Bool
 
-foreign jvm function isLower "java.lang.Character:isLowerCase" :: Char -> Bool
+-- Lower/upper follow the general category (like base's 'isLower'/'isUpper');
+-- the Unicode Lowercase/Uppercase properties are 'isLowerCase'/'isUpperCase'.
+-- Codes are the shared category-code table (the 'GeneralCategory' 'Enum'
+-- order): 1 is lowercase, 0 and 2 are uppercase/titlecase.
+isLower c = intEq (generalCategoryCode c) 1
 
-foreign jvm function isUpper "java.lang.Character:isUpperCase" :: Char -> Bool
+isUpper c = intEq (generalCategoryCode c) 0 || intEq (generalCategoryCode c) 2
+
+foreign jvm function isLowerCase "java.lang.Character:isLowerCase" :: Char -> Bool
+
+foreign jvm function isUpperCase "java.lang.Character:isUpperCase" :: Char -> Bool
 
 foreign jvm function isAlpha "java.lang.Character:isLetter" :: Char -> Bool
 
@@ -55,6 +67,81 @@ foreign jvm function rawGetNumericValue "java.lang.Character:getNumericValue" ::
 getType c = int32ToInt# (rawGetType c)
 
 getNumericValue c = int32ToInt# (rawGetNumericValue c)
+
+-- java.lang.Character category bytes: letters 1-5, marks 6-8, numbers 9-11,
+-- separators 12-14, control 15, format 16, private-use 18, surrogate 19,
+-- punctuation 20-24/29-30, symbols 25-28; 0 (unassigned) is code 29.
+-- Codes are the shared category-code table (the 'GeneralCategory' 'Enum' order).
+generalCategoryCode :: Char -> Int
+generalCategoryCode c = catFromType (getType c)
+
+catFromType t = case intEq t 1 of
+  True -> 0
+  False -> case intEq t 2 of
+    True -> 1
+    False -> case intEq t 3 of
+      True -> 2
+      False -> case intEq t 4 of
+        True -> 3
+        False -> case intEq t 5 of
+          True -> 4
+          False -> catMarkOrNumber t
+
+catMarkOrNumber t = case intEq t 6 of
+  True -> 5
+  False -> case intEq t 7 of
+    True -> 7
+    False -> case intEq t 8 of
+      True -> 6
+      False -> case intEq t 9 of
+        True -> 8
+        False -> case intEq t 10 of
+          True -> 9
+          False -> case intEq t 11 of
+            True -> 10
+            False -> catPunctOrSymbol t
+
+catPunctOrSymbol t = case intEq t 23 of
+  True -> 11
+  False -> case intEq t 20 of
+    True -> 12
+    False -> case intEq t 21 of
+      True -> 13
+      False -> case intEq t 22 of
+        True -> 14
+        False -> case intEq t 29 of
+          True -> 15
+          False -> case intEq t 30 of
+            True -> 16
+            False -> case intEq t 24 of
+              True -> 17
+              False -> catSymbolOrSep t
+
+catSymbolOrSep t = case intEq t 25 of
+  True -> 18
+  False -> case intEq t 26 of
+    True -> 19
+    False -> case intEq t 27 of
+      True -> 20
+      False -> case intEq t 28 of
+        True -> 21
+        False -> case intEq t 12 of
+          True -> 22
+          False -> case intEq t 13 of
+            True -> 23
+            False -> case intEq t 14 of
+              True -> 24
+              False -> catOther t
+
+catOther t = case intEq t 15 of
+  True -> 25
+  False -> case intEq t 16 of
+    True -> 26
+    False -> case intEq t 18 of
+      True -> 28
+      False -> case intEq t 19 of
+        True -> 27
+        False -> 29
 
 isLetter = isAlpha
 
@@ -83,6 +170,12 @@ isSymbol c =
 isSeparator c =
   let t = getType c
   in intEq t 12 || intEq t 13 || intEq t 14
+
+-- java.lang.Character category bytes: NON_SPACING_MARK = 6,
+-- ENCLOSING_MARK = 7, COMBINING_SPACING_MARK = 8.
+isMark c =
+  let t = getType c
+  in intEq t 6 || intEq t 7 || intEq t 8
 
 isPunctuation c =
   let t = getType c

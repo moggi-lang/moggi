@@ -42,8 +42,9 @@ tests/
 `examples/` sits beside `tests/` and is one group of its own. `tests/suite/` is the harness: the walk
 skips it, so nothing in it is ever a case. The libraries carry their own tests outside `tests/`:
 `libraries/base/tests/` is discovered like everything else as group `base` (run it alone with
-`--group base`, or skip it with `--exclude-group base`), and `libraries/json/tests/` is the json
-package's `Suite` test-suite, run by `test-all.php` rather than the walk.
+`--group base`, or skip it with `--exclude-group base`), and `libraries/json/tests/`,
+`libraries/containers/tests/` and `libraries/time/tests/` are those packages' `Suite`
+test-suites, run by `test-all.php` rather than the walk.
 
 ## How a case is found
 

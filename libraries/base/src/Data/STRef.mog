@@ -1,0 +1,53 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Mutable cells for state threads: an 'STRef' holds one value that an
+-- 'ST' action can replace.
+--
+-- A cell belongs to exactly one thread: it is allocated by 'newSTRef'
+-- inside that thread, and the compiler keeps it there — cells cannot hide
+-- in data fields or pure signatures, and 'runST' rejects any thread whose
+-- cell would leave it. Reading and writing sequence in bind order with the
+-- allocations around them.
+module Data.STRef
+  ( STRef
+  , newSTRef
+  , readSTRef
+  , writeSTRef
+  , modifySTRef
+  , modifySTRef'
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Control.Monad.ST (ST)
+import Data.Functor
+import Moggi.Internal.Base
+import Moggi.Internal.ST
+
+-- | A mutable cell in thread @s@ holding a value of type @a@.
+type STRef s a = STRef# s a
+
+-- | Allocate a cell holding the value.
+newSTRef :: a -> ST s (STRef s a)
+newSTRef x = newSTRef# x
+
+-- | Read the cell's current value.
+readSTRef :: STRef s a -> ST s a
+readSTRef r = readSTRef# r
+
+-- | Replace the cell's value.
+writeSTRef :: STRef s a -> a -> ST s ()
+writeSTRef r x = writeSTRef# r x
+
+-- | Apply a function to the cell's value. Evaluation is strict throughout
+-- Moggi, so this sequences the read, the application and the write with no
+-- thunk pile-up; 'modifySTRef'' is the same function under its stricter
+-- name.
+modifySTRef :: STRef s a -> (a -> a) -> ST s ()
+modifySTRef r f = do
+  x <- readSTRef r
+  writeSTRef r (f x)
+
+-- | Strict 'modifySTRef'. Identical to 'modifySTRef' because Moggi evaluates
+-- strictly; kept so code written against both spellings compiles.
+modifySTRef' :: STRef s a -> (a -> a) -> ST s ()
+modifySTRef' r f = modifySTRef r f

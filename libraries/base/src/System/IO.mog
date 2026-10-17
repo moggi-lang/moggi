@@ -15,10 +15,10 @@
 -- before returning.
 --
 -- This is the plain stream surface, deliberately: buffering, text encodings,
--- seeking, binary mode and the temporary-file operations are not defined here,
--- and neither is the ability to read or write a file as bytes without a
--- character encoding. A program that needs one of those is better served by
--- 'Data.ByteString.Char8', which owns the byte-level file operations.
+-- seeking and binary mode are not defined here, and neither is the ability to
+-- read or write a file as bytes without a character encoding. A program that
+-- needs one of those is better served by 'Data.ByteString.Char8', which owns
+-- the byte-level file operations.
 module System.IO
   ( IO
   , FilePath
@@ -55,6 +55,8 @@ module System.IO
   , readLn
   , print
   , withFile
+  , openTempFile
+  , openBinaryTempFile
   ) where
 
 import Control.Applicative hiding (empty)
@@ -163,3 +165,13 @@ appendFile p s = do
 withFile :: FilePath -> IOMode -> (Handle -> IO r) -> IO r
 withFile p mode use =
   bracket (openFile p mode) hClose use
+
+-- | Create an empty file in a directory and open it for writing, answering
+-- with its path and an open handle. The file's name starts with the template
+-- and ends with random characters, so callers that create many of them do not
+-- collide; remove it with 'System.Filesystem.removeFile' when done.
+openTempFile :: FilePath -> String -> IO (FilePath, Handle)
+
+-- | Moggi has no text/binary mode split, so this is 'openTempFile'.
+openBinaryTempFile :: FilePath -> String -> IO (FilePath, Handle)
+openBinaryTempFile dir template = openTempFile dir template

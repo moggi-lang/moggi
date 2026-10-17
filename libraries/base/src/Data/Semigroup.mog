@@ -1,33 +1,141 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+-- | A type @a@ is a 'Semigroup' if it provides an associative function ('<>')
+-- that lets you combine any two values of type @a@ into one, where being
+-- associative means @(a <> b) <> c == a <> (b <> c)@.
+--
+-- A 'Semigroup' is a 'Monoid' without the neutral element, so this module
+-- also hosts the 'Monoid' class itself: the class has to sit beside
+-- 'Semigroup' rather than in @Data.Monoid@, because the repeat combinators
+-- ('stimesMonoid', 'stimesIdempotentMonoid', 'mtimesDefault') need 'mempty'
+-- while @Data.Monoid@ imports this module for the superclass — the other
+-- direction would be an import cycle. The wrapper types ('Dual', 'Endo',
+-- 'All', 'Any', 'Sum', 'Product', 'First', 'Last', 'Min', 'Max',
+-- 'WrappedMonoid', 'Arg') live here for the same reason @base@ keeps them
+-- next to the class; @Data.Monoid@ re-exports them.
+--
+-- 'NonEmpty' itself lives here rather than in @Data.List.NonEmpty@: the
+-- 'sconcat' method names it, and importing the module that implements the
+-- class would be an import cycle. @Data.List.NonEmpty@ re-exports the type
+-- next to its instances and combinators.
+-- 'stimesMonoid'/'stimesIdempotentMonoid'/'mtimesDefault' would need
+-- 'Integral' here — @Data.Real@ sits above 'Data.Tuple', which sits above
+-- this module, so they are defined here over the 'Monoid' in scope.
 module Data.Semigroup
-  ( Semigroup((<>))
-  , stimes
+  ( Semigroup((<>), sconcat, stimes)
+  , NonEmpty(..)
+  , stimesMonoid
+  , stimesIdempotent
+  , stimesIdempotentMonoid
+  , mtimesDefault
   , Min(Min)
   , getMin
   , Max(Max)
   , getMax
+  , WrappedMonoid(WrapMonoid)
+  , unwrapMonoid
+  , Dual(Dual)
+  , getDual
+  , Endo(Endo)
+  , appEndo
+  , All(All)
+  , getAll
+  , Any(Any)
+  , getAny
+  , Sum(Sum)
+  , getSum
+  , Product(Product)
+  , getProduct
+  , diff
+  , cycle1
+  , Arg(Arg)
+  , ArgMin
+  , ArgMax
+  , Monoid(mempty, mconcat)
   ) where
 
 import Moggi.Err
 import Data.Bool
 import Data.Bounded
+import Data.Enum
 import Data.Eq
+import Data.Function
 import Data.Functor
+import Data.Num
 import Data.Ord
+import Data.Real
 import Moggi.Internal.Base
 import Text.Show
 import Moggi.Internal.Prim
 
 infixr 6 <>
 
+-- | A non-empty list: a head element followed by a (possibly empty) tail.
+data NonEmpty a = a :| [a]
+  deriving (Eq, Ord, Show)
+
+infixr 5 :|
+
 class Semigroup a where
   (<>) :: a -> a -> a
+  (<>) a b = sconcat (a :| [b])
+
+  -- | Reduce a non-empty list with '(<>)', associating to the right.
+  -- The default is enough unless a faster shape exists; an instance may
+  -- define this instead of '(<>)'.
+  sconcat :: NonEmpty a -> a
+  sconcat ne = case ne of
+    a :| xs -> let
+        go b cs = case cs of
+          [] -> b
+          c : rest -> b <> go c rest
+      in go a xs
+
+  -- | Repeat a value @n@ times. @n@ must be positive: @0@ and negative
+  -- multipliers are an error, matching @base@ (use 'mtimesDefault' when @0@
+  -- must give 'mempty').
+  stimes :: Integral b => b -> a -> a
+  stimes y0 x0 = case y0 <= 0 of
+    True -> errorWithoutStackTrace "stimes: positive multiplier expected"
+    False -> stimesPos x0 y0
+
+  {-# MINIMAL (<>) | sconcat #-}
+
+-- Binary splitting behind the 'stimes' default: @y@ is positive here.
+stimesPos :: (Semigroup a, Integral b) => a -> b -> a
+stimesPos x y = case (y `rem` 2) == 0 of
+  True -> stimesPos (x <> x) (y `quot` 2)
+  False -> case y == 1 of
+    True -> x
+    False -> stimesPosG (x <> x) (y `quot` 2) x
+
+stimesPosG :: (Semigroup a, Integral b) => a -> b -> a -> a
+stimesPosG x y z = case (y `rem` 2) == 0 of
+  True -> stimesPosG (x <> x) (y `quot` 2) z
+  False -> case y == 1 of
+    True -> x <> z
+    False -> stimesPosG (x <> x) (y `quot` 2) (x <> z)
+
+class Semigroup a => Monoid a where
+  {-# MINIMAL mempty | mconcat #-}
+
+  mempty :: a
+  mempty = mconcat []
+
+  -- Spelled out rather than folded with 'foldr' so this module stays below
+  -- 'Data.Foldable': the fold lives above the monoids, not beneath them.
+  mconcat :: [a] -> a
+  mconcat xs = case xs of
+    [] -> mempty
+    x : rest -> x <> mconcat rest
 
 instance Semigroup Ordering where
   (<>) a b = case a of
     LT -> LT
     EQ -> b
     GT -> GT
+
+instance Monoid Ordering where
+  mempty = EQ
 
 -- `String`'s instance belongs with the class rather than in `Data.String`:
 -- `Data.Int` and
@@ -36,24 +144,76 @@ instance Semigroup Ordering where
 instance Semigroup String where
   (<>) a b = stringAppend# a b
 
--- | Repeat a value @n@ times. @n@ must be positive.
--- Uses int intrinsics only to avoid importing Data.Int (cycle via Integral/Tuple/Foldable).
-stimes :: Semigroup a => Int -> a -> a
-stimes n x = case intCompare# n 0 of
-  GT -> stimesGo n x
-  _ -> error "stimes: positive multiplier expected"
+-- | This is a valid definition of 'stimes' for an idempotent 'Semigroup':
+-- combining @x@ with itself changes nothing, so any positive multiplier
+-- gives @x@ back without the binary-splitting work.
+stimesIdempotent :: Integral b => b -> a -> a
+stimesIdempotent n x = case n <= 0 of
+  True -> errorWithoutStackTrace "stimesIdempotent: positive multiplier expected"
+  False -> x
 
-stimesGo :: Semigroup a => Int -> a -> a
-stimesGo n x = case intCompare# n 1 of
-  EQ -> x
-  _ ->
-    let q = intDiv# n 2
-        r = intSub# n (intMul# q 2)
-        half = stimesGo q x
-        doubled = half <> half
-    in case intCompare# r 0 of
-      EQ -> doubled
-      _ -> doubled <> x
+-- | This is a valid definition of 'stimes' for a 'Monoid': @0@ gives
+-- 'mempty', anything positive repeats with '(<>)'.
+stimesMonoid :: (Integral b, Monoid a) => b -> a -> a
+stimesMonoid n x0 = case compare n 0 of
+  LT -> errorWithoutStackTrace "stimesMonoid: negative multiplier"
+  EQ -> mempty
+  GT -> stimesPos x0 n
+
+-- | This is a valid definition of 'stimes' for an idempotent 'Monoid':
+-- @0@ gives 'mempty', anything positive gives @x@.
+stimesIdempotentMonoid :: (Integral b, Monoid a) => b -> a -> a
+stimesIdempotentMonoid n x = case compare n 0 of
+  LT -> errorWithoutStackTrace "stimesIdempotentMonoid: negative multiplier"
+  EQ -> mempty
+  GT -> x
+
+-- | Repeat a value @n@ times.
+--
+-- > mtimesDefault n a = a <> a <> ... <> a  -- using <> (n-1) times
+--
+-- In many cases, @'stimes' 0 a@ for a `Monoid` will produce `mempty`.
+-- However, there are situations when it cannot do so. In particular,
+-- the following situation is fairly common:
+--
+-- @
+-- data T a = ...
+--
+-- class Constraint1 a
+-- class Constraint1 a => Constraint2 a
+-- @
+--
+-- @
+-- instance Constraint1 a => 'Semigroup' (T a)
+-- instance Constraint2 a => 'Monoid' (T a)
+-- @
+--
+-- Since @Constraint1@ is insufficient to implement 'mempty',
+-- 'stimes' for @T a@ cannot do so.
+--
+-- When working with such a type, or when working polymorphically with
+-- 'Semigroup' instances, @mtimesDefault@ should be used when the
+-- multiplier might be zero. It is implemented using 'stimes' when
+-- the multiplier is nonzero and 'mempty' when it is zero.
+--
+-- ==== __Examples__
+--
+-- >>> mtimesDefault 0 "bark"
+-- ""
+--
+-- >>> mtimesDefault 3 "meow"
+-- "meowmeowmeow"
+mtimesDefault :: (Integral b, Monoid a) => b -> a -> a
+mtimesDefault n x = case n == 0 of
+  True -> mempty
+  False -> stimes n x
+
+-- | A generalization of 'cycle' to an arbitrary 'Semigroup'.
+-- Like an open 'enumFrom' it only terminates for no value at all under
+-- strict evaluation: forcing the result loops, so use it (if at all) behind
+-- a bound that never forces the whole spine.
+cycle1 :: Semigroup m => m -> m
+cycle1 xs = xs <> cycle1 xs
 
 -- Min / Max wrapper types
 
@@ -67,6 +227,10 @@ instance Ord a => Semigroup (Min a) where
   (<>) a b = case getMin a <= getMin b of
     True -> a
     False -> b
+  stimes = stimesIdempotent
+
+instance (Ord a, Bounded a) => Monoid (Min a) where
+  mempty = maxBound
 
 instance Functor Min where
   map f m = Min (f (getMin m))
@@ -96,6 +260,10 @@ instance Ord a => Semigroup (Max a) where
   (<>) a b = case getMax a >= getMax b of
     True -> a
     False -> b
+  stimes = stimesIdempotent
+
+instance (Ord a, Bounded a) => Monoid (Max a) where
+  mempty = minBound
 
 instance Functor Max where
   map f m = Max (f (getMax m))
@@ -114,3 +282,266 @@ instance Show a => Show (Max a) where
 instance Bounded a => Bounded (Max a) where
   minBound = Max minBound
   maxBound = Max maxBound
+
+-- | An argument paired with the value it was computed from: place it inside
+-- 'Min'/'Max' to compute an arg-minimum or arg-maximum. Comparisons (and
+-- 'Eq') see only the argument; 'map' sees only the value.
+--
+-- >>> minimum [Arg (length name) name | name <- ["lea", "pixie"]]
+-- Arg 3 "lea"
+data Arg a b = Arg a b
+  deriving (Eq, Ord, Show)
+
+-- | The arg-minimum of @a@s paired with @b@s: 'Min' of an 'Arg'.
+type ArgMin a b = Min (Arg a b)
+
+-- | The arg-maximum of @a@s paired with @b@s: 'Max' of an 'Arg'.
+type ArgMax a b = Max (Arg a b)
+
+instance Functor (Arg a) where
+  map f m = case m of
+    Arg x a -> Arg x (f a)
+
+-- The 'Bifunctor' instance lives in Data.Bifunctor: this module cannot import
+-- it (Bifunctor -> Either -> Foldable -> Monoid -> Semigroup).
+
+-- NOTE: @base@'s unconditional 'First'/'Last' ('Semigroup' keeps the first
+-- value, no 'Maybe' involved) cannot live here while @Data.Monoid@ keeps its
+-- 'Maybe' 'First'/'Last': instance heads key on the bare type name through
+-- validation, selection and evidence naming, so two same-named types cannot
+-- both carry instances of one class. Tracked as part of T70.
+
+-- Dual / Endo / All / Any / Sum / Product / WrappedMonoid
+
+-- | A monoid on @a@ whose combination runs the other way round.
+data Dual a = Dual a
+  deriving (Eq, Ord, Bounded)
+
+getDual :: Dual a -> a
+getDual d = case d of
+  Dual x -> x
+
+instance Semigroup a => Semigroup (Dual a) where
+  (<>) a b = Dual (getDual b <> getDual a)
+  stimes n d = case d of
+    Dual a -> Dual (stimes n a)
+
+instance Monoid a => Monoid (Dual a) where
+  mempty = Dual mempty
+
+-- | 'Down' combines the way the wrapped type does; only the 'Ord' is
+-- reversed, so these live here (where 'Semigroup' and 'Monoid' are defined)
+-- rather than in 'Data.Ord', which sits below this module.
+instance Semigroup a => Semigroup (Down a) where
+  (<>) a b = Down (getDown b <> getDown a)
+
+instance Monoid a => Monoid (Down a) where
+  mempty = Down mempty
+
+instance Functor Dual where
+  map f d = Dual (f (getDual d))
+
+instance Show a => Show (Dual a) where
+  showsPrec d x = showParen (d > 10)
+    (\r -> showString "Dual {getDual = " (showsPrec 0 (getDual x) (showString "}" r)))
+
+-- | Endofunctions @a -> a@, composed with '(<>)' the way @(.)@ composes them.
+data Endo a = Endo (a -> a)
+
+appEndo :: Endo a -> a -> a
+appEndo e x = case e of
+  Endo f -> f x
+
+instance Semigroup (Endo a) where
+  (<>) e1 e2 = Endo ((.) (appEndo e1) (appEndo e2))
+
+instance Monoid (Endo a) where
+  mempty = Endo id
+
+-- | This lets you use a difference list of a 'Semigroup' as a 'Monoid'.
+--
+-- ==== __Examples__
+--
+-- >>> let hello = diff "Hello, "
+--
+-- >>> appEndo hello "World!"
+-- "Hello, World!"
+diff :: Semigroup m => m -> Endo m
+diff x = Endo (\e -> x <> e)
+
+-- All / Any
+
+eqBool :: Bool -> Bool -> Bool
+eqBool a b = a == b
+
+neBool :: Bool -> Bool -> Bool
+neBool a b = a /= b
+
+cmpBool :: Bool -> Bool -> Ordering
+cmpBool a b = compare a b
+
+-- | Conjunction of 'Bool's.
+data All = All Bool
+
+getAll :: All -> Bool
+getAll x = case x of
+  All b -> b
+
+instance Semigroup All where
+  (<>) a b = All (getAll a && getAll b)
+
+instance Monoid All where
+  mempty = All True
+
+instance Eq All where
+  (==) a b = eqBool (getAll a) (getAll b)
+  (/=) a b = neBool (getAll a) (getAll b)
+
+instance Ord All where
+  compare a b = cmpBool (getAll a) (getAll b)
+
+instance Show All where
+  showsPrec d a = showParen (d > 10)
+    (\r -> showString "All {getAll = " (showsPrec 0 (getAll a) (showString "}" r)))
+
+instance Bounded All where
+  minBound = All False
+  maxBound = All True
+
+-- | Disjunction of 'Bool's.
+data Any = Any Bool
+
+getAny :: Any -> Bool
+getAny x = case x of
+  Any b -> b
+
+instance Semigroup Any where
+  (<>) a b = Any (getAny a || getAny b)
+
+instance Monoid Any where
+  mempty = Any False
+
+instance Eq Any where
+  (==) a b = eqBool (getAny a) (getAny b)
+  (/=) a b = neBool (getAny a) (getAny b)
+
+instance Ord Any where
+  compare a b = cmpBool (getAny a) (getAny b)
+
+instance Show Any where
+  showsPrec d a = showParen (d > 10)
+    (\r -> showString "Any {getAny = " (showsPrec 0 (getAny a) (showString "}" r)))
+
+instance Bounded Any where
+  minBound = Any False
+  maxBound = Any True
+
+-- Sum / Product
+
+-- | Addition of a 'Num'.
+data Sum a = Sum a
+
+getSum :: Sum a -> a
+getSum s = case s of
+  Sum x -> x
+
+instance Num a => Semigroup (Sum a) where
+  (<>) sa sb = Sum (getSum sa + getSum sb)
+
+instance Num a => Monoid (Sum a) where
+  mempty = Sum 0
+
+instance Functor Sum where
+  map f s = Sum (f (getSum s))
+
+instance Eq a => Eq (Sum a) where
+  (==) a b = getSum a == getSum b
+  (/=) a b = getSum a /= getSum b
+
+instance Ord a => Ord (Sum a) where
+  compare a b = compare (getSum a) (getSum b)
+
+instance Show a => Show (Sum a) where
+  showsPrec d s = showParen (d > 10)
+    (\r -> showString "Sum {getSum = " (showsPrec 0 (getSum s) (showString "}" r)))
+
+instance Bounded a => Bounded (Sum a) where
+  minBound = Sum minBound
+  maxBound = Sum maxBound
+
+instance Num a => Num (Sum a) where
+  (+) a b = Sum (getSum a + getSum b)
+  (-) a b = Sum (getSum a - getSum b)
+  (*) a b = Sum (getSum a * getSum b)
+  negate a = Sum (negate (getSum a))
+  abs a = Sum (abs (getSum a))
+  signum a = Sum (signum (getSum a))
+  fromInteger n = Sum (fromInteger n)
+
+-- | Multiplication of a 'Num'.
+data Product a = Product a
+
+getProduct :: Product a -> a
+getProduct p = case p of
+  Product x -> x
+
+instance Num a => Semigroup (Product a) where
+  (<>) pa pb = Product (getProduct pa * getProduct pb)
+
+instance Num a => Monoid (Product a) where
+  mempty = Product 1
+
+instance Functor Product where
+  map f p = Product (f (getProduct p))
+
+instance Eq a => Eq (Product a) where
+  (==) a b = getProduct a == getProduct b
+  (/=) a b = getProduct a /= getProduct b
+
+instance Ord a => Ord (Product a) where
+  compare a b = compare (getProduct a) (getProduct b)
+
+instance Show a => Show (Product a) where
+  showsPrec d p = showParen (d > 10)
+    (\r -> showString "Product {getProduct = " (showsPrec 0 (getProduct p) (showString "}" r)))
+
+instance Bounded a => Bounded (Product a) where
+  minBound = Product minBound
+  maxBound = Product maxBound
+
+instance Num a => Num (Product a) where
+  (+) a b = Product (getProduct a + getProduct b)
+  (-) a b = Product (getProduct a - getProduct b)
+  (*) a b = Product (getProduct a * getProduct b)
+  negate a = Product (negate (getProduct a))
+  abs a = Product (abs (getProduct a))
+  signum a = Product (signum (getProduct a))
+  fromInteger n = Product (fromInteger n)
+
+-- WrappedMonoid
+
+-- | Any 'Monoid' as a 'Semigroup' (a formality now that 'Semigroup' is a
+-- superclass, kept for the same combinators existing code uses).
+newtype WrappedMonoid m = WrapMonoid m
+  deriving (Eq, Ord, Show, Bounded)
+
+unwrapMonoid :: WrappedMonoid m -> m
+unwrapMonoid m = case m of
+  WrapMonoid x -> x
+
+instance Monoid m => Semigroup (WrappedMonoid m) where
+  (<>) a b = case a of
+    WrapMonoid x -> case b of
+      WrapMonoid y -> WrapMonoid (x <> y)
+
+instance Monoid m => Monoid (WrappedMonoid m) where
+  mempty = WrapMonoid mempty
+
+instance Enum a => Enum (WrappedMonoid a) where
+  succ m = case m of
+    WrapMonoid a -> WrapMonoid (succ a)
+  pred m = case m of
+    WrapMonoid a -> WrapMonoid (pred a)
+  toEnum n = WrapMonoid (toEnum n)
+  fromEnum m = case m of
+    WrapMonoid a -> fromEnum a

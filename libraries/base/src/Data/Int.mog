@@ -57,6 +57,48 @@ instance Enum Int where
     _ -> intSub# n 1
   toEnum n = n
   fromEnum n = n
+  enumFrom x = intEnumFrom x
+  enumFromThen x y = intEnumFromThen x y
+  enumFromTo lo hi = intEnumFromTo lo hi
+  enumFromThenTo lo nxt hi = intEnumFromThenTo lo nxt hi
+
+-- Native `Int` ranges: the class defaults would round-trip through `fromEnum`
+-- and back, which is the identity here but still carries the dictionaries.
+intEnumFrom :: Int -> [Int]
+intEnumFrom x = x : intEnumFrom (x + 1)
+
+intEnumFromThen :: Int -> Int -> [Int]
+intEnumFromThen x y = x : intEnumFromThenStep y (y - x)
+
+intEnumFromThenStep :: Int -> Int -> [Int]
+intEnumFromThenStep cur step = cur : intEnumFromThenStep (cur + step) step
+
+intEnumFromTo :: Int -> Int -> [Int]
+intEnumFromTo lo hi = case lo <= hi of
+  True -> lo : intEnumFromTo (lo + 1) hi
+  False -> []
+
+intEnumFromThenTo :: Int -> Int -> Int -> [Int]
+intEnumFromThenTo lo nxt hi = case nxt == lo of
+  True -> intEnumReplicate (abs (hi - lo) + 1) lo
+  False -> case nxt > lo of
+    True -> intEnumUp lo (nxt - lo) hi
+    False -> intEnumDown lo (nxt - lo) hi
+
+intEnumUp :: Int -> Int -> Int -> [Int]
+intEnumUp cur step hi = case cur <= hi of
+  True -> cur : intEnumUp (cur + step) step hi
+  False -> []
+
+intEnumDown :: Int -> Int -> Int -> [Int]
+intEnumDown cur step hi = case cur >= hi of
+  True -> cur : intEnumDown (cur + step) step hi
+  False -> []
+
+intEnumReplicate :: Int -> a -> [a]
+intEnumReplicate n x = case n <= 0 of
+  True -> []
+  False -> x : intEnumReplicate (n - 1) x
 
 enumSuccError :: String -> a
 enumSuccError ty = error ("Enum.succ{" <> ty <> "}: tried to take `succ' of last tag in enumeration")

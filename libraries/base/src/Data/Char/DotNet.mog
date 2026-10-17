@@ -4,6 +4,9 @@ module Data.Char.DotNet
   , isSpace
   , isLower
   , isUpper
+  , isLowerCase
+  , isUpperCase
+  , generalCategoryCode
   , isAlpha
   , isLetter
   , isAlphaNum
@@ -13,6 +16,7 @@ module Data.Char.DotNet
   , isPunctuation
   , isSymbol
   , isSeparator
+  , isMark
   , toUpper
   , toLower
   , toTitle
@@ -32,9 +36,17 @@ foreign dotnet function isControl "System.Char:IsControl" :: Char -> Bool
 
 foreign dotnet function isSpace "System.Char:IsWhiteSpace" :: Char -> Bool
 
-foreign dotnet function isLower "System.Char:IsLower" :: Char -> Bool
+-- Lower/upper follow the general category (like base's 'isLower'/'isUpper');
+-- the Unicode Lowercase/Uppercase properties are 'isLowerCase'/'isUpperCase'.
+-- Codes are the shared category-code table (the 'GeneralCategory' 'Enum'
+-- order): 1 is lowercase, 0 and 2 are uppercase/titlecase.
+isLower c = intEq (generalCategoryCode c) 1
 
-foreign dotnet function isUpper "System.Char:IsUpper" :: Char -> Bool
+isUpper c = intEq (generalCategoryCode c) 0 || intEq (generalCategoryCode c) 2
+
+foreign dotnet function isLowerCase "System.Char:IsLower" :: Char -> Bool
+
+foreign dotnet function isUpperCase "System.Char:IsUpper" :: Char -> Bool
 
 foreign dotnet function isAlpha "System.Char:IsLetter" :: Char -> Bool
 
@@ -51,13 +63,16 @@ foreign dotnet function toTitle "System.Char:ToUpper" :: Char -> Char
 
 -- The category is a CLR enum, not an int: declaring `Int32` would put `(char)int32` on the
 -- call against a host that declares `(char)UnicodeCategory`, which the verifier refuses (and the
--- runtime would too). The enum rides as its own foreign type and `GetHashCode` — the underlying
--- 32-bit value — carries it back to `Int32`.
+-- runtime would too). The enum rides as its own foreign type and `Convert.ToInt32` — the
+-- underlying 32-bit value — carries it back to `Int32`.
 foreign dotnet type UnicodeCategory "System.Globalization.UnicodeCategory"
 
 foreign dotnet function rawGetType "System.Globalization.CharUnicodeInfo:GetUnicodeCategory" :: Char -> UnicodeCategory
 
-foreign dotnet function unicodeCategoryToInt "System.Globalization.UnicodeCategory.GetHashCode" :: UnicodeCategory -> Int32
+-- The category is a CLR enum: `Convert.ToInt32` unboxes it to its underlying
+-- int via IConvertible. (Calling the inherited `GetHashCode` on the unboxed
+-- value would be invalid dispatch and faults at run time.)
+foreign dotnet function unicodeCategoryToInt "System.Convert:ToInt32" :: UnicodeCategory -> Int32
 
 -- GetNumericValue returns a double (fractions like ½ are non-integral).
 foreign dotnet function rawGetNumericValue "System.Char:GetNumericValue" :: Char -> Double
@@ -65,6 +80,82 @@ foreign dotnet function rawGetNumericValue "System.Char:GetNumericValue" :: Char
 getType c = int32ToInt# (unicodeCategoryToInt (rawGetType c))
 
 getNumericValue c = doubleToInt# (rawGetNumericValue c)
+
+-- Category ints are System.Globalization.UnicodeCategory enum ordinals:
+-- 0 0 .. 4 4, marks 5-7, numbers 8-10, separators
+-- 11-13, control 14, format 15, surrogate 16, private-use 17, punctuation
+-- 18-24, symbols 25-28; ordinal 29 (OtherNotAssigned) maps to code 29.
+-- Codes are the shared category-code table (the 'GeneralCategory' 'Enum' order).
+generalCategoryCode :: Char -> Int
+generalCategoryCode c = catFromType (getType c)
+
+catFromType t = case intEq t 0 of
+  True -> 0
+  False -> case intEq t 1 of
+    True -> 1
+    False -> case intEq t 2 of
+      True -> 2
+      False -> case intEq t 3 of
+        True -> 3
+        False -> case intEq t 4 of
+          True -> 4
+          False -> catMarkOrNumber t
+
+catMarkOrNumber t = case intEq t 5 of
+  True -> 5
+  False -> case intEq t 6 of
+    True -> 6
+    False -> case intEq t 7 of
+      True -> 7
+      False -> case intEq t 8 of
+        True -> 8
+        False -> case intEq t 9 of
+          True -> 9
+          False -> case intEq t 10 of
+            True -> 10
+            False -> catPunctOrSymbol t
+
+catPunctOrSymbol t = case intEq t 18 of
+  True -> 11
+  False -> case intEq t 19 of
+    True -> 12
+    False -> case intEq t 20 of
+      True -> 13
+      False -> case intEq t 21 of
+        True -> 14
+        False -> case intEq t 22 of
+          True -> 15
+          False -> case intEq t 23 of
+            True -> 16
+            False -> case intEq t 24 of
+              True -> 17
+              False -> catSymbolOrSep t
+
+catSymbolOrSep t = case intEq t 25 of
+  True -> 18
+  False -> case intEq t 26 of
+    True -> 19
+    False -> case intEq t 27 of
+      True -> 20
+      False -> case intEq t 28 of
+        True -> 21
+        False -> case intEq t 11 of
+          True -> 22
+          False -> case intEq t 12 of
+            True -> 23
+            False -> case intEq t 13 of
+              True -> 24
+              False -> catOther t
+
+catOther t = case intEq t 14 of
+  True -> 25
+  False -> case intEq t 15 of
+    True -> 26
+    False -> case intEq t 16 of
+      True -> 27
+      False -> case intEq t 17 of
+        True -> 28
+        False -> 29
 
 isLetter = isAlpha
 
@@ -94,6 +185,12 @@ isSymbol c =
 isSeparator c =
   let t = getType c
   in intEq t 11 || intEq t 12 || intEq t 13
+
+-- Category ints are System.Globalization.UnicodeCategory enum ordinals:
+-- 5 = 5, 6 = 6, 7 = 7.
+isMark c =
+  let t = getType c
+  in intEq t 5 || intEq t 6 || intEq t 7
 
 isPunctuation c =
   let t = getType c

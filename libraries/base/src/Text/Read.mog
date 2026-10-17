@@ -3,6 +3,11 @@
 module Text.Read
   ( Read(..)
   ) where
+import Data.Bool
+import Data.Char
+import Data.Ord (Down(Down))
+import Data.String (drop, isPrefixOf)
+import Moggi.Err
 import Moggi.Internal.Base
 import Moggi.Internal.Prim
 
@@ -11,3 +16,59 @@ import Moggi.Internal.Prim
 -- underlying Read instance.
 class Read a where
   read :: String -> a
+
+-- | Reads what 'Show' writes: @"True"@ and @"False"@. Lives here (where
+-- 'Read' is defined) rather than in 'Data.Bool', which sits below
+-- 'Data.String'.
+instance Read Bool where
+  read s = case s of
+    "True" -> True
+    "False" -> False
+    _ -> error "Read Bool: expected \"True\" or \"False\""
+
+-- | Reads what 'Show' writes: @"Down 5"@. Lives here (where 'Read' is
+-- defined) rather than in 'Data.Ord', which sits below 'Data.String'.
+instance Read a => Read (Down a) where
+  read s = case isPrefixOf "Down " s of
+    True -> Down (read (drop 5 s))
+    False -> error "Read Down: expected \"Down <value>\""
+
+-- 'GeneralCategory' is declared in 'Data.Char', which sits below
+-- 'Data.String' and so cannot import this module for its own deriving
+-- clause; its 'Read' instance lives here instead, where both the class and
+-- the type are in scope. It matches what stock deriving would generate
+-- ('read "Ctor" = Ctor', error otherwise), written out because standalone
+-- deriving is not collected into the cross-module instance index.
+instance Read GeneralCategory where
+  read s = case s of
+    "UppercaseLetter" -> UppercaseLetter
+    "LowercaseLetter" -> LowercaseLetter
+    "TitlecaseLetter" -> TitlecaseLetter
+    "ModifierLetter" -> ModifierLetter
+    "OtherLetter" -> OtherLetter
+    "NonSpacingMark" -> NonSpacingMark
+    "SpacingCombiningMark" -> SpacingCombiningMark
+    "EnclosingMark" -> EnclosingMark
+    "DecimalNumber" -> DecimalNumber
+    "LetterNumber" -> LetterNumber
+    "OtherNumber" -> OtherNumber
+    "ConnectorPunctuation" -> ConnectorPunctuation
+    "DashPunctuation" -> DashPunctuation
+    "OpenPunctuation" -> OpenPunctuation
+    "ClosePunctuation" -> ClosePunctuation
+    "InitialQuote" -> InitialQuote
+    "FinalQuote" -> FinalQuote
+    "OtherPunctuation" -> OtherPunctuation
+    "MathSymbol" -> MathSymbol
+    "CurrencySymbol" -> CurrencySymbol
+    "ModifierSymbol" -> ModifierSymbol
+    "OtherSymbol" -> OtherSymbol
+    "Space" -> Space
+    "LineSeparator" -> LineSeparator
+    "ParagraphSeparator" -> ParagraphSeparator
+    "Control" -> Control
+    "Format" -> Format
+    "Surrogate" -> Surrogate
+    "PrivateUse" -> PrivateUse
+    "NotAssigned" -> NotAssigned
+    _ -> error "Read.read: no parse"

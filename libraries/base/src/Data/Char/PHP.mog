@@ -4,6 +4,9 @@ module Data.Char.PHP
   , isSpace
   , isLower
   , isUpper
+  , isLowerCase
+  , isUpperCase
+  , generalCategoryCode
   , isAlpha
   , isLetter
   , isAlphaNum
@@ -13,6 +16,7 @@ module Data.Char.PHP
   , isPunctuation
   , isSymbol
   , isSeparator
+  , isMark
   , toUpper
   , toLower
   , toTitle
@@ -34,9 +38,17 @@ foreign php function isControl "IntlChar:iscntrl" :: Char -> Bool
 
 foreign php function isSpace "IntlChar:isUWhiteSpace" :: Char -> Bool
 
-foreign php function isLower "IntlChar:islower" :: Char -> Bool
+-- Lower/upper follow the general category (like base's 'isLower'/'isUpper');
+-- the Unicode Lowercase/Uppercase properties are 'isLowerCase'/'isUpperCase'.
+-- Codes are the shared category-code table (the 'GeneralCategory' 'Enum'
+-- order): 1 is lowercase, 0 and 2 are uppercase/titlecase.
+isLower c = intEq (generalCategoryCode c) 1
 
-foreign php function isUpper "IntlChar:isupper" :: Char -> Bool
+isUpper c = intEq (generalCategoryCode c) 0 || intEq (generalCategoryCode c) 2
+
+foreign php function isLowerCase "IntlChar:isULowercase" :: Char -> Bool
+
+foreign php function isUpperCase "IntlChar:isUUppercase" :: Char -> Bool
 
 foreign php function isAlpha "IntlChar:isalpha" :: Char -> Bool
 
@@ -60,6 +72,16 @@ foreign php function getNumericValue "IntlChar:getNumericValue" :: Char -> Doubl
 
 foreign php function floatToInt "intval" :: Double -> Int
 
+foreign php const catUppercaseLetter "IntlChar:CHAR_CATEGORY_UPPERCASE_LETTER" :: Int
+
+foreign php const catLowercaseLetter "IntlChar:CHAR_CATEGORY_LOWERCASE_LETTER" :: Int
+
+foreign php const catTitlecaseLetter "IntlChar:CHAR_CATEGORY_TITLECASE_LETTER" :: Int
+
+foreign php const catModifierLetter "IntlChar:CHAR_CATEGORY_MODIFIER_LETTER" :: Int
+
+foreign php const catOtherLetter "IntlChar:CHAR_CATEGORY_OTHER_LETTER" :: Int
+
 foreign php const catDecimal "IntlChar:CHAR_CATEGORY_DECIMAL_DIGIT_NUMBER" :: Int
 
 foreign php const catLetterNumber "IntlChar:CHAR_CATEGORY_LETTER_NUMBER" :: Int
@@ -74,11 +96,109 @@ foreign php const catModifierSymbol "IntlChar:CHAR_CATEGORY_MODIFIER_SYMBOL" :: 
 
 foreign php const catOtherSymbol "IntlChar:CHAR_CATEGORY_OTHER_SYMBOL" :: Int
 
+foreign php const catConnectorPunct "IntlChar:CHAR_CATEGORY_CONNECTOR_PUNCTUATION" :: Int
+
+foreign php const catDashPunct "IntlChar:CHAR_CATEGORY_DASH_PUNCTUATION" :: Int
+
+foreign php const catOpenPunct "IntlChar:CHAR_CATEGORY_START_PUNCTUATION" :: Int
+
+foreign php const catClosePunct "IntlChar:CHAR_CATEGORY_END_PUNCTUATION" :: Int
+
+foreign php const catInitialQuote "IntlChar:CHAR_CATEGORY_INITIAL_PUNCTUATION" :: Int
+
+foreign php const catFinalQuote "IntlChar:CHAR_CATEGORY_FINAL_PUNCTUATION" :: Int
+
+foreign php const catOtherPunct "IntlChar:CHAR_CATEGORY_OTHER_PUNCTUATION" :: Int
+
 foreign php const catSpaceSep "IntlChar:CHAR_CATEGORY_SPACE_SEPARATOR" :: Int
 
 foreign php const catLineSep "IntlChar:CHAR_CATEGORY_LINE_SEPARATOR" :: Int
 
 foreign php const catParaSep "IntlChar:CHAR_CATEGORY_PARAGRAPH_SEPARATOR" :: Int
+
+foreign php const catControl "IntlChar:CHAR_CATEGORY_CONTROL_CHAR" :: Int
+
+foreign php const catFormat "IntlChar:CHAR_CATEGORY_FORMAT_CHAR" :: Int
+
+foreign php const catPrivateUse "IntlChar:CHAR_CATEGORY_PRIVATE_USE_CHAR" :: Int
+
+foreign php const catNonSpacingMark "IntlChar:CHAR_CATEGORY_NON_SPACING_MARK" :: Int
+
+foreign php const catEnclosingMark "IntlChar:CHAR_CATEGORY_ENCLOSING_MARK" :: Int
+
+foreign php const catCombiningMark "IntlChar:CHAR_CATEGORY_COMBINING_SPACING_MARK" :: Int
+
+-- IntlChar category codes mapped onto the shared category-code table (the
+-- 'GeneralCategory' 'Enum' order); anything the host does not know
+-- (including unassigned code points) is code 29.
+generalCategoryCode :: Char -> Int
+generalCategoryCode c = catFromType (getType c)
+
+catFromType t = case intEq t catUppercaseLetter of
+  True -> 0
+  False -> case intEq t catLowercaseLetter of
+    True -> 1
+    False -> case intEq t catTitlecaseLetter of
+      True -> 2
+      False -> case intEq t catModifierLetter of
+        True -> 3
+        False -> case intEq t catOtherLetter of
+          True -> 4
+          False -> catMarkOrNumber t
+
+catMarkOrNumber t = case intEq t catNonSpacingMark of
+  True -> 5
+  False -> case intEq t catEnclosingMark of
+    True -> 7
+    False -> case intEq t catCombiningMark of
+      True -> 6
+      False -> case intEq t catDecimal of
+        True -> 8
+        False -> case intEq t catLetterNumber of
+          True -> 9
+          False -> case intEq t catOtherNumber of
+            True -> 10
+            False -> catPunctOrSymbol t
+
+catPunctOrSymbol t = case intEq t catConnectorPunct of
+  True -> 11
+  False -> case intEq t catDashPunct of
+    True -> 12
+    False -> case intEq t catOpenPunct of
+      True -> 13
+      False -> case intEq t catClosePunct of
+        True -> 14
+        False -> case intEq t catInitialQuote of
+          True -> 15
+          False -> case intEq t catFinalQuote of
+            True -> 16
+            False -> case intEq t catOtherPunct of
+              True -> 17
+              False -> catSymbolOrSep t
+
+catSymbolOrSep t = case intEq t catMathSymbol of
+  True -> 18
+  False -> case intEq t catCurrencySymbol of
+    True -> 19
+    False -> case intEq t catModifierSymbol of
+      True -> 20
+      False -> case intEq t catOtherSymbol of
+        True -> 21
+        False -> case intEq t catSpaceSep of
+          True -> 22
+          False -> case intEq t catLineSep of
+            True -> 23
+            False -> case intEq t catParaSep of
+              True -> 24
+              False -> catOther t
+
+catOther t = case intEq t catControl of
+  True -> 25
+  False -> case intEq t catFormat of
+    True -> 26
+    False -> case intEq t catPrivateUse of
+      True -> 28
+      False -> 29
 
 isLetter = isAlpha
 
@@ -110,6 +230,10 @@ isSymbol c =
 isSeparator c =
   let t = getType c
   in intEq t catSpaceSep || intEq t catLineSep || intEq t catParaSep
+
+isMark c =
+  let t = getType c
+  in intEq t catNonSpacingMark || intEq t catEnclosingMark || intEq t catCombiningMark
 
 digitToIntUnicode c = case isDigit c of
   True -> floatToInt (getNumericValue c)

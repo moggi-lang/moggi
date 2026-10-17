@@ -31,15 +31,15 @@ POSSIBILITY OF SUCH DAMAGE.
 -----------------------------------------------------------------------------
 
 The Moggi standard library contains code derived from the Haskell
-libraries/base package. The original code has been modified and adapted
+base package. The original code has been modified and adapted
 for the Moggi programming language, including its intrinsic types,
 foreign-function interfaces, and backend integration.
 
-The original libraries/base licensing information is reproduced below.
+The original base licensing information is reproduced below.
 
 -----------------------------------------------------------------------------
 
-This library (libraries/base) is derived from code from several
+This library (base) is derived from code from several
 sources: 
 
   * Code from the GHC project which is largely (c) The University of

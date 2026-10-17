@@ -18,6 +18,7 @@ import Data.Eq
 import Moggi.Err
 import Data.Functor
 import Data.Ord
+import Data.Semigroup
 import Moggi.Internal.Base
 import Text.Show
 import Moggi.Internal.Prim
@@ -201,6 +202,13 @@ instance Eq (Maybe a) where
 
 instance Ord (Maybe a) where
   compare a b = maybeCompare# a b
+
+instance Semigroup a => Semigroup (Maybe a) where
+  (<>) x y = case x of
+    Nothing -> y
+    Just a -> case y of
+      Nothing -> x
+      Just b -> Just (a <> b)
 
 instance Show a => Show (Maybe a) where
   showsPrec d mx = case mx of

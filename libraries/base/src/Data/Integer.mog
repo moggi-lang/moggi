@@ -104,6 +104,48 @@ instance Enum Integer where
   pred n = integerSub n (integerFromInt 1)
   toEnum n = integerFromInt n
   fromEnum n = integerToInt n
+  enumFrom x = integerEnumFrom x
+  enumFromThen x y = integerEnumFromThen x y
+  enumFromTo lo hi = integerEnumFromTo lo hi
+  enumFromThenTo lo nxt hi = integerEnumFromThenTo lo nxt hi
+
+-- Native `Integer` ranges: going through `fromEnum` would truncate outside
+-- the `Int` bounds, so the recursion stays at `Integer`.
+integerEnumFrom :: Integer -> [Integer]
+integerEnumFrom x = x : integerEnumFrom (x + 1)
+
+integerEnumFromThen :: Integer -> Integer -> [Integer]
+integerEnumFromThen x y = x : integerEnumFromThenStep y (y - x)
+
+integerEnumFromThenStep :: Integer -> Integer -> [Integer]
+integerEnumFromThenStep cur step = cur : integerEnumFromThenStep (cur + step) step
+
+integerEnumFromTo :: Integer -> Integer -> [Integer]
+integerEnumFromTo lo hi = case lo <= hi of
+  True -> lo : integerEnumFromTo (lo + 1) hi
+  False -> []
+
+integerEnumFromThenTo :: Integer -> Integer -> Integer -> [Integer]
+integerEnumFromThenTo lo nxt hi = case nxt == lo of
+  True -> integerEnumReplicate (abs (hi - lo) + 1) lo
+  False -> case nxt > lo of
+    True -> integerEnumUp lo (nxt - lo) hi
+    False -> integerEnumDown lo (nxt - lo) hi
+
+integerEnumUp :: Integer -> Integer -> Integer -> [Integer]
+integerEnumUp cur step hi = case cur <= hi of
+  True -> cur : integerEnumUp (cur + step) step hi
+  False -> []
+
+integerEnumDown :: Integer -> Integer -> Integer -> [Integer]
+integerEnumDown cur step hi = case cur >= hi of
+  True -> cur : integerEnumDown (cur + step) step hi
+  False -> []
+
+integerEnumReplicate :: Integer -> a -> [a]
+integerEnumReplicate n x = case n <= 0 of
+  True -> []
+  False -> x : integerEnumReplicate (n - 1) x
 
 instance Integral Integer where
   quot a b = case integerEq b (integerFromInt 0) of

@@ -87,7 +87,7 @@ function eitherShort() {
 }
 
 function listDo($__ev_Functor, $__ev_Applicative_1, $__ev_Monad_2, $xs, $f) {
-    $__t18 = ($__ev_Monad_2[">>="])($xs, ['__partial', 4, '\\Tc\\Typeclasses\\__lambda_5', $f, $__ev_Monad_2, $__ev_Applicative_1]);
+    $__t18 = ($__ev_Monad_2[">>="])($xs, ['__partial', 4, '\\Tc\\Typeclasses\\__lambda_5', $__ev_Applicative_1, $__ev_Monad_2, $f]);
     return $__t18;
 }
 
@@ -173,7 +173,7 @@ function __lambda_6($__ev_Applicative_1, $y) {
     return $__t15;
 }
 
-function __lambda_5($f, $__ev_Monad_2, $__ev_Applicative_1, $x) {
+function __lambda_5($__ev_Applicative_1, $__ev_Monad_2, $f, $x) {
     $__t16 = __apply($f, $x);
     $__t17 = ($__ev_Monad_2[">>="])($__t16, ['__partial', 2, '\\Tc\\Typeclasses\\__lambda_6', $__ev_Applicative_1]);
     return $__t17;

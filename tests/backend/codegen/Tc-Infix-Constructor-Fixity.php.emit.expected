@@ -6,16 +6,16 @@ const __MOGGI_MAP = [[], ['Tc\\Infix\\Constructor\\Fixity\\nested' => ['Tc.Infix
 
 require_once __DIR__ . '/../../../libraries/base/src/Data/Bool.php';
 
-function __fn_3a7c($v0, $v1) {
-    return [':|', $v0, $v1];
+function __fn_3a3e($v0, $v1) {
+    return [':>', $v0, $v1];
 }
 
 function nested() {
-    return __fn_3a7c(1, [2, 3]);
+    return __fn_3a3e(1, [2, 3]);
 }
 
 function ok() {
-    if (((nested())[0] ?? null) === ':|') {
+    if (((nested())[0] ?? null) === ':>') {
         $__scrut_0 = nested();
         $x = $__scrut_0[1];
         $xs = $__scrut_0[2];

@@ -30,7 +30,7 @@ module
   function eitherShort()
       ret call monadBind(@__ev_Functor_Either, @__ev_Applicative_Either, @__ev_Monad_Either, call Left("err"), @λ4)
   function listDo(__ev_Functor, __ev_Applicative_1, __ev_Monad_2, xs, f)
-      t18 = dict_call __ev_Monad_2->>>=(xs, partial λ5(f, __ev_Monad_2, __ev_Applicative_1))
+      t18 = dict_call __ev_Monad_2->>>=(xs, partial λ5(__ev_Applicative_1, __ev_Monad_2, f))
       ret t18
   function doListDemo()
       ret call listDo(@__ev_Functor_List, @__ev_Applicative_List, @__ev_Monad_List, [1, 2], @λ7)

@@ -1,0 +1,9 @@
+module Parser.Record.Field.Docs
+
+-- | A version is a numeric branch plus arbitrary tags.
+data Version = Version
+  { versionBranch :: [Int],
+  -- ^ The numeric branch, one digit per level.
+    versionTags :: [String]
+  -- ^ Arbitrary tags attached to the version.
+  }

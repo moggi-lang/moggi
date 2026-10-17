@@ -1,4 +1,8 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+-- | Exact and fractional arithmetic: 'Integral' ('quot', 'rem', 'div', 'mod',
+-- 'toInteger'), 'Fractional' ('/', 'recip', 'fromRational'), 'Floating',
+-- and the helpers 'even', 'odd', '(^)', '(^^)', 'gcd' and 'lcm'.
+-- Instances stay with their type's module ('Double' in @Data.Double@).
 module Data.Real
   ( Integral(..)
   , Fractional(..)
@@ -15,7 +19,6 @@ module Data.Real
 import Data.Num
 import Data.Ord
 import Data.Enum
-import Data.Tuple
 import Data.Bool
 import Data.Function
 import Moggi.Err
@@ -89,6 +92,31 @@ class (Num a, Ord a, Enum a) => Integral a where
 
 fromIntegral :: (Integral a, Num b) => a -> b
 fromIntegral x = fromInteger (toInteger x)
+
+-- | Fractional arithmetic delegates to the wrapped value; only the 'Ord' is
+-- reversed. Lives here (where 'Fractional' and 'Floating' are defined)
+-- rather than in 'Data.Ord', which sits below this module.
+instance Fractional a => Fractional (Down a) where
+  (/) a b = Down (getDown a / getDown b)
+  recip a = Down (recip (getDown a))
+
+instance Floating a => Floating (Down a) where
+  pi = Down pi
+  exp a = Down (exp (getDown a))
+  log a = Down (log (getDown a))
+  sqrt a = Down (sqrt (getDown a))
+  log1p a = Down (log1p (getDown a))
+  expm1 a = Down (expm1 (getDown a))
+  sin a = Down (sin (getDown a))
+  cos a = Down (cos (getDown a))
+  asin a = Down (asin (getDown a))
+  acos a = Down (acos (getDown a))
+  atan a = Down (atan (getDown a))
+  sinh a = Down (sinh (getDown a))
+  cosh a = Down (cosh (getDown a))
+  asinh a = Down (asinh (getDown a))
+  acosh a = Down (acosh (getDown a))
+  atanh a = Down (atanh (getDown a))
 
 even :: Integral a => a -> Bool
 even n = n `rem` 2 == 0

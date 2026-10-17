@@ -19,7 +19,11 @@ module System.Exit
   ) where
 
 import Control.Monad
+import Data.Bool
+import Data.Eq
 import Data.Int
+import Data.Ord
+import Text.Show
 import Data.String
 import Moggi.Err
 import Moggi.Internal.Base
@@ -29,6 +33,7 @@ import System.IO
 -- becomes the process's exit status, so a program that wants a particular
 -- value uses @'ExitFailure' n@ and not 'exitFailure'.
 data ExitCode = ExitSuccess | ExitFailure Int
+  deriving (Eq, Ord, Show)
 
 exitWithCode :: Int -> IO a
 

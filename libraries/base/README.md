@@ -5,12 +5,11 @@ is part of the compiler's distribution: every program is compiled against it
 automatically, so you never build the library yourself — you `import` from it.
 
 ```moggi
-import Data.Map as M
+import Data.Maybe (fromMaybe)
 
 main = do
-  let counts = M.fromList [("a", 1), ("b", 2)]
-  putStrLn (show (M.size counts))
-  putStrLn (show (M.lookup "a" counts))
+  putStrLn (show (fromMaybe 0 (Just 3)))
+  putStrLn (show (fromMaybe 0 Nothing))
 ```
 
 These are the library's own sources, shipped inside every installation as `lib/`
@@ -22,10 +21,14 @@ signature is not obvious; nothing here is hidden behind a build step.
 - `Prelude.mog` is the re-export list — the names every module sees without an
   `import`. The public modules re-export from it, not the other way round.
 - `Data.*`, `Control.*`, `System.*`, `Text.*` and `Numeric.*` are the names a
-  program is meant to use: `Data.List`, `Data.Maybe`, `Data.Map`, `System.IO`,
-  `Control.Monad`, … — including the numeric types and classes (`Data.Int`,
+  program is meant to use: `Data.List`, `Data.Maybe`, `System.IO`  , `Control.Monad`, … — including the numeric types and classes (`Data.Int`,
   `Data.Integer`, `Data.Double`, `Data.Num`, `Data.Real`) and `Text.Show` /
-  `Text.Read`.
+  `Text.Read`. Sets, maps and friends live one level out, in the bundled
+  `containers` package (`libraries/containers`) — import them the same way,
+  with the package's sources as an extra `--lib` root. Dates and times live
+  one level out too, in the bundled `time` package (`libraries/time`:
+  `Data.Time.*`) — same arrangement; `base` itself only names `UTCTime` for
+  file modification times.
 - `Moggi.Internal.*` is reserved for the compiler/primitive boundary:
   `Moggi.Internal.Prim` and `Moggi.Internal.IO` are compiler-synthesized and are
   the only `Moggi.Internal` modules. Nothing else belongs there.

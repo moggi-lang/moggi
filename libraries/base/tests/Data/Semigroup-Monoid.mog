@@ -1,0 +1,21 @@
+-- Data.Semigroup/Data.Monoid: the 'Maybe' and 'Const' instances. 'Maybe'
+-- takes the first non-'Nothing' side and combines two 'Just's with the
+-- underlying '(<>)'; 'Const' combines what it holds and ignores the phantom
+-- side. 'mempty' is 'Nothing' and 'Const mempty' respectively.
+
+import Data.Functor.Const
+import Data.Maybe
+import Data.Monoid
+import Data.Semigroup
+
+main :: IO ()
+main = do
+  putStrLn (show (Just [1] <> Just [2] :: Maybe [Int]))
+  putStrLn (show (Just [1] <> Nothing :: Maybe [Int]))
+  putStrLn (show (Nothing <> Just [2] :: Maybe [Int]))
+  putStrLn (show (Nothing <> Nothing :: Maybe [Int]))
+  putStrLn (show (mempty :: Maybe [Int]))
+  putStrLn (show (mempty <> Just [7] :: Maybe [Int]))
+  putStrLn (show (getConst (Const [1] <> Const [2] :: Const [Int] Int)))
+  putStrLn (show (getConst (mempty :: Const [Int] Int)))
+  putStrLn (show (getConst (mempty <> Const [7] :: Const [Int] Int)))

@@ -403,7 +403,7 @@ program
     constructor Id
       field  :: a
     deriving (Functor)
-  function map :: t805 -> t806 -> Id t805 -> Id t806
+  function map :: t806 -> t807 -> Id t806 -> Id t807
     pat_var __f
     pat_var __x
     case
@@ -763,6 +763,86 @@ program
       alt
         pat_con Green
         constructor_ref Blue
+  function enumFrom :: Color -> [Color]
+    pat_var x
+    apply
+      apply
+        variable enumMapToEnum
+        evidence_method Enum.toEnum evidence= nullary=0
+          instance Color
+      apply
+        evidence_method Enum.enumFrom evidence= nullary=0
+          instance Int
+        apply
+          evidence_method Enum.fromEnum evidence= nullary=0
+            instance Color
+          variable x
+  function enumFromThen :: Color -> Color -> [Color]
+    pat_var x
+    pat_var y
+    apply
+      apply
+        variable enumMapToEnum
+        evidence_method Enum.toEnum evidence= nullary=0
+          instance Color
+      apply
+        apply
+          evidence_method Enum.enumFromThen evidence= nullary=0
+            instance Int
+          apply
+            evidence_method Enum.fromEnum evidence= nullary=0
+              instance Color
+            variable x
+        apply
+          evidence_method Enum.fromEnum evidence= nullary=0
+            instance Color
+          variable y
+  function enumFromTo :: Color -> Color -> [Color]
+    pat_var lo
+    pat_var hi
+    apply
+      apply
+        variable enumMapToEnum
+        evidence_method Enum.toEnum evidence= nullary=0
+          instance Color
+      apply
+        apply
+          evidence_method Enum.enumFromTo evidence= nullary=0
+            instance Int
+          apply
+            evidence_method Enum.fromEnum evidence= nullary=0
+              instance Color
+            variable lo
+        apply
+          evidence_method Enum.fromEnum evidence= nullary=0
+            instance Color
+          variable hi
+  function enumFromThenTo :: Color -> Color -> Color -> [Color]
+    pat_var lo
+    pat_var nxt
+    pat_var hi
+    apply
+      apply
+        variable enumMapToEnum
+        evidence_method Enum.toEnum evidence= nullary=0
+          instance Color
+      apply
+        apply
+          apply
+            evidence_method Enum.enumFromThenTo evidence= nullary=0
+              instance Int
+            apply
+              evidence_method Enum.fromEnum evidence= nullary=0
+                instance Color
+              variable lo
+          apply
+            evidence_method Enum.fromEnum evidence= nullary=0
+              instance Color
+            variable nxt
+        apply
+          evidence_method Enum.fromEnum evidence= nullary=0
+            instance Color
+          variable hi
   function minBound :: Color
     constructor_ref Red
   function maxBound :: Color

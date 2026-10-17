@@ -15,9 +15,9 @@
 -- compiling; new code does not need them. The same is true of the class
 -- 'MonadPlus' and its two methods, which say what 'Alternative' already says.
 module Control.Monad
-  ( Monad((>>=))
+  ( Monad((>>=), (>>))
   , MonadPlus(mzero, mplus)
-  , (>>)
+  , void
   , (=<<)
   , (>=>)
   , (<=<)
@@ -28,6 +28,10 @@ module Control.Monad
   , unless
   , liftM
   , liftM2
+  , liftM3
+  , liftM4
+  , liftM5
+  , mapAndUnzipM
   , ap
   , foldM
   , foldM_
@@ -38,6 +42,8 @@ module Control.Monad
   , replicateM_
   , msum
   , mfilter
+  , WrappedMonad(WrapMonad)
+  , unwrapMonad
   ) where
 
 -- mapM / sequence / forM live in Data.Traversable (traverse / sequenceA).
@@ -60,6 +66,12 @@ infixr 1 >=>, <=<
 class Applicative m => Monad m where
   (>>=) :: m a -> (a -> m b) -> m b
 
+  -- | Run both actions in order and drop the first value: @m >> k@ is the
+  -- effect of both, with @k@'s result. A method (rather than a top-level
+  -- function) so instances can override it; the default sequences '(>>=)'.
+  (>>) :: m a -> m b -> m b
+  (>>) m k = m >>= (\_ -> k)
+
 class (Alternative m, Monad m) => MonadPlus m where
   -- | The identity of 'mplus'. It should also satisfy the equations
   --
@@ -77,9 +89,6 @@ class (Alternative m, Monad m) => MonadPlus m where
   -- @mplus = (<|>)@
   mplus :: m a -> m a -> m a
   mplus = (<|>)
-
-(>>) :: Monad m => m a -> m b -> m b
-(>>) m k = m >>= (\ignored -> k)
 
 (=<<) :: Monad m => (a -> m b) -> m a -> m b
 (=<<) f m = m >>= f
@@ -160,6 +169,21 @@ liftM f ma = ma >>= (\a -> pure (f a))
 liftM2 :: Monad m => (a1 -> a2 -> r) -> m a1 -> m a2 -> m r
 liftM2 f ma mb = ma >>= (\a -> mb >>= (\b -> pure (f a b)))
 
+liftM3 :: Monad m => (a1 -> a2 -> a3 -> r) -> m a1 -> m a2 -> m a3 -> m r
+liftM3 f ma mb mc = ma >>= (\a -> mb >>= (\b -> mc >>= (\c -> pure (f a b c))))
+
+liftM4 :: Monad m => (a1 -> a2 -> a3 -> a4 -> r) -> m a1 -> m a2 -> m a3 -> m a4 -> m r
+liftM4 f ma mb mc md = ma >>= (\a -> mb >>= (\b -> mc >>= (\c -> md >>= (\d -> pure (f a b c d)))))
+
+liftM5 :: Monad m => (a1 -> a2 -> a3 -> a4 -> a5 -> r) -> m a1 -> m a2 -> m a3 -> m a4 -> m a5 -> m r
+liftM5 f ma mb mc md me = ma >>= (\a -> mb >>= (\b -> mc >>= (\c -> md >>= (\d -> me >>= (\e -> pure (f a b c d e))))))
+
+mapAndUnzipM :: Monad m => (a -> m (b, c)) -> [a] -> m ([b], [c])
+mapAndUnzipM _ [] = pure ([], [])
+mapAndUnzipM f (x : xs) = f x >>= (\yz -> case yz of
+  (y, z) -> mapAndUnzipM f xs >>= (\yzs -> case yzs of
+    (ys, zs) -> pure (y : ys, z : zs)))
+
 ap :: Monad m => m (a -> b) -> m a -> m b
 ap mf ma = mf >>= (\f -> ma >>= (\a -> pure (f a)))
 
@@ -168,4 +192,29 @@ instance Monad Maybe where
     Nothing -> Nothing
     Just x -> f x
 
+-- | Unwrapping, like the wrapped type: only the 'Ord' is reversed.
+instance Monad Down where
+  (>>=) (Down a) k = k a
+
 instance MonadPlus Maybe
+
+-- | A 'Monad' seen through its 'Applicative' interface only: 'pure' and
+-- '(<*>)' here are the 'Monad' ones, which lets 'Applicative' combinators
+-- reuse monadic behaviour (notably 'Alternative' via 'WrappedMonad' + 'Ap').
+newtype WrappedMonad m a = WrapMonad (m a)
+  deriving (Functor)
+
+unwrapMonad :: WrappedMonad m a -> m a
+unwrapMonad m = case m of
+  WrapMonad x -> x
+
+instance Applicative m => Applicative (WrappedMonad m) where
+  pure x = WrapMonad (pure x)
+  (<*>) mf mx = case mf of
+    WrapMonad f -> case mx of
+      WrapMonad x -> WrapMonad (f <*> x)
+
+instance Monad m => Monad (WrappedMonad m) where
+  (>>=) m f = case m of
+    WrapMonad x -> WrapMonad (x >>= (\a -> case f a of
+      WrapMonad y -> y))

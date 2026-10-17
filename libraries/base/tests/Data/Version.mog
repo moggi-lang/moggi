@@ -1,0 +1,18 @@
+-- Data.Version: `showVersion`, `Eq` (tag-order-insensitive), `Ord` (branch
+-- order), `read` (inverse of `showVersion`), and the derived `Show` form.
+import Data.Version (Version(..), showVersion, parseVersion, makeVersion)
+import Text.Read (read)
+
+main :: IO ()
+main = do
+  putStrLn (showVersion (makeVersion [1, 2, 3]))
+  putStrLn (showVersion (Version [2, 0] ["beta"]))
+  putStrLn (show (makeVersion [1, 2, 3]))
+  putStrLn (show (makeVersion [1, 2] == makeVersion [1, 2]))
+  putStrLn (show (Version [1] ["a", "b"] == Version [1] ["b", "a"]))
+  putStrLn (show (makeVersion [2, 1] > makeVersion [2, 0]))
+  putStrLn (show (compare (makeVersion [1]) (makeVersion [2])))
+  putStrLn (showVersion (read "1.2.3-tag1-tag2" :: Version))
+  putStrLn (show ((read "1.2.3-tag1-tag2" :: Version) == Version [1, 2, 3] ["tag2", "tag1"]))
+  putStrLn (showVersion (parseVersion "1.2.3-tag1-tag2"))
+  putStrLn (show (parseVersion "2.0" == makeVersion [2, 0]))

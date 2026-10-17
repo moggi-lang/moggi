@@ -5,6 +5,7 @@ module Data.Double
 
 import Data.Bool
 import Data.Char
+import Data.Enum
 import Data.Eq
 import Data.List
 import Data.Maybe
@@ -34,6 +35,12 @@ instance Num Double where
   abs a = doubleAbs# a
   signum a = doubleSignum# a
   fromInteger n = doubleFromInteger# n
+
+instance Enum Double where
+  succ x = x + 1.0
+  pred x = x - 1.0
+  toEnum n = doubleFromInteger# (intToInteger# n)
+  fromEnum x = doubleToInt# x
 
 instance Fractional Double where
   (/) a b = doubleDiv# a b
