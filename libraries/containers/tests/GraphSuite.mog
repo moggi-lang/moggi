@@ -1,0 +1,65 @@
+-- Data.Graph: bounds, construction, queries, transposition, topological
+-- sorting, connected components, strongly connected components and reachability.
+
+module GraphSuite (graphSuite) where
+
+import Data.Graph
+import Data.Tree (flatten)
+import Support (assertTrue, expect)
+
+dag :: Graph
+dag = buildG (1, 4) [(1, 2), (2, 3), (1, 3)]
+
+loop :: Graph
+loop = buildG (1, 3) [(1, 2), (2, 1), (2, 3)]
+
+split :: Graph
+split = buildG (1, 4) [(1, 2), (3, 4)]
+
+graphSuite :: IO ()
+graphSuite = do
+  expect "bounds" (show (bounds dag)) "(1,4)"
+  expect "vertices" (show (vertices dag)) "[1,2,3,4]"
+  expect "edges" (show (edges dag)) "[(1,2),(1,3),(2,3)]"
+  expect "outdegree" (show (outdegree dag 1)) "2"
+  expect "outdegree of isolate" (show (outdegree dag 4)) "0"
+  expect "indegree" (show (indegree dag 3)) "2"
+  expect "transposeG" (show (edges (transposeG dag))) "[(2,1),(3,1),(3,2)]"
+  expect "topSort" (show (topSort dag)) "[4,1,2,3]"
+  expect "scc of a DAG" (show (scc dag)) "[AcyclicSCC 4,AcyclicSCC 1,AcyclicSCC 2,AcyclicSCC 3]"
+  expect "scc finds the cycle" (show (scc loop)) "[CyclicSCC [1,2],AcyclicSCC 3]"
+  expect "self-loop is cyclic" (show (scc (buildG (1, 2) [(1, 1)]))) "[AcyclicSCC 2,CyclicSCC [1]]"
+  expect "components" (show (mapList flatten (components split))) "[[1,2],[3,4]]"
+  expect "path follows edges" (show (path dag 1 3)) "True"
+  expect "path rejects reverse" (show (path dag 3 1)) "False"
+  expect "path reaches self" (show (path dag 4 4)) "True"
+  expect "path rejects disconnected" (show (path dag 4 1)) "False"
+  assertTrue "topSort respects edges" (respectsEdges dag (topSort dag))
+
+mapList :: (a -> b) -> [a] -> [b]
+mapList _ [] = []
+mapList f (x : xs) = f x : mapList f xs
+
+respectsEdges :: Graph -> [Vertex] -> Bool
+respectsEdges g order = respectsAll (edges g) order
+
+respectsAll :: [Edge] -> [Vertex] -> Bool
+respectsAll [] _ = True
+respectsAll (e : rest) order = case e of
+  (from, to) -> case before from to order of
+    True -> respectsAll rest order
+    False -> False
+
+before :: Vertex -> Vertex -> [Vertex] -> Bool
+before _ _ [] = False
+before from to (v : vs) = case v == to of
+  True -> False
+  False -> case v == from of
+    True -> memberList to vs
+    False -> before from to vs
+
+memberList :: Vertex -> [Vertex] -> Bool
+memberList _ [] = False
+memberList v (w : ws) = case v == w of
+  True -> True
+  False -> memberList v ws

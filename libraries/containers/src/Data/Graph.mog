@@ -1,0 +1,273 @@
+-- |
+-- Directed graphs, in the spirit of Haskell's 'Data.Graph'.
+--
+-- The implementation is array-based ('Array Vertex [Vertex]'), as in the
+-- reference: a graph is a table from each vertex to its successors, and the
+-- bounds are part of the array, so isolated vertices survive. Successor
+-- lookup is an array indexing; traversals are index-range walks.
+--
+-- The exported API is the core a program reaches for most often: bounds,
+-- construction ('buildG'), queries ('vertices', 'edges', 'outdegree',
+-- 'indegree'), transposition ('transposeG'), topological sorting ('topSort'),
+-- connected components ('components') and strongly connected components
+-- ('scc'). The 'SCC' type is plain (no 'Foldable' \/ 'Traversable' \/
+-- 'Generic' machinery), 'path' is a DFS reachability check, and anything
+-- beyond this core is added when a program needs it, not before.
+--
+module Data.Graph
+  ( Vertex
+  , Edge
+  , Graph
+  , Bounds
+  , SCC(..)
+  , buildG
+  , bounds
+  , vertices
+  , edges
+  , outdegree
+  , indegree
+  , transposeG
+  , topSort
+  , components
+  , scc
+  , path
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Array (Array, accumArray, amap, assocs, bounds as arrayBounds, indices as arrayIndices, (!))
+import Data.Bool
+import Data.Eq
+import Data.Foldable hiding (null, length, toList)
+import Data.Functor
+import Data.Int
+import Data.Ix (inRange)
+import Data.List hiding (
+  map, filter, null, length, lookup, take, drop, splitAt, reverse,
+  sort, sortBy, sortOn, zip, zipWith, unzip, tails, inits, replicate,
+  iterate, cycle, chunksOf, scanl, scanr, intersperse, concatMap, maximum, minimum, sum,
+  singleton, union, find, insert
+  )
+import Data.Maybe
+import Data.Ord
+import Data.Set (Set)
+import Data.Set qualified as S
+import Data.Tree (Tree(Node))
+import Data.Tuple
+import Moggi.Err
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+import Text.Show
+
+-- | A vertex is an 'Int' label.
+type Vertex = Int
+
+-- | A directed edge from one vertex to another.
+type Edge = (Vertex, Vertex)
+
+-- | An inclusive vertex range: every vertex between the bounds exists, even
+-- one with no edges.
+type Bounds = (Vertex, Vertex)
+
+-- | A strongly connected component: either a single vertex with no self-loop
+-- or a maximal cycle of two or more vertices (a self-loop counts as a cycle).
+data SCC v = AcyclicSCC v | CyclicSCC [v]
+  deriving (Eq, Ord, Show)
+
+-- | A directed graph: an array from each vertex in the bounds to its
+-- (possibly empty) successor list. The bounds are part of the array, so
+-- every vertex inside them has a slot, isolated or not.
+data Graph = MkGraph (Array Vertex [Vertex])
+  deriving (Eq, Show)
+
+-- | Build a graph from bounds and edges. Vertices outside the bounds are
+-- dropped; every in-bounds vertex gets a slot, isolated or not. Successors
+-- keep edge order: accumulation conses, so each slot is reversed back.
+buildG :: Bounds -> [Edge] -> Graph
+buildG b es = case b of
+  (lo, hi) -> MkGraph (amap listReverse (accumArray (flip (:)) [] (lo, hi) (clipEdges lo hi es)))
+
+-- | Drop the edges with an endpoint outside the bounds: out-of-range
+-- indices would make the whole array an error instead of a graph.
+clipEdges :: Vertex -> Vertex -> [Edge] -> [Edge]
+clipEdges _ _ [] = []
+clipEdges lo hi (e : rest) = case e of
+  (from, to) -> case inRange (lo, hi) from of
+    True -> case inRange (lo, hi) to of
+      True -> e : clipEdges lo hi rest
+      False -> clipEdges lo hi rest
+    False -> clipEdges lo hi rest
+
+-- | The vertex bounds the graph was built with.
+bounds :: Graph -> Bounds
+bounds g = case g of
+  MkGraph arr -> arrayBounds arr
+
+-- | Every vertex from the lower bound to the upper bound, inclusive.
+vertices :: Graph -> [Vertex]
+vertices g = case g of
+  MkGraph arr -> arrayIndices arr
+
+-- | Every directed edge, grouped by source vertex.
+edges :: Graph -> [Edge]
+edges g = case g of
+  MkGraph arr -> concatPairs (assocs arr)
+
+concatPairs :: [(Vertex, [Vertex])] -> [Edge]
+concatPairs [] = []
+concatPairs ((v, ws) : rest) = tagEach v ws ++ concatPairs rest
+
+tagEach :: Vertex -> [Vertex] -> [Edge]
+tagEach _ [] = []
+tagEach v (w : ws) = (v, w) : tagEach v ws
+
+-- | The successors of a vertex (out-of-bounds vertices have none).
+successors :: Graph -> Vertex -> [Vertex]
+successors g v = case g of
+  MkGraph arr -> case inRange (arrayBounds arr) v of
+    True -> arr ! v
+    False -> []
+
+-- | The number of successors of a vertex.
+outdegree :: Graph -> Vertex -> Int
+outdegree g v = listLength (successors g v)
+
+-- | The number of predecessors of a vertex.
+indegree :: Graph -> Vertex -> Int
+indegree g v = listLength (predecessors g v)
+
+predecessors :: Graph -> Vertex -> [Vertex]
+predecessors g v = predecessorsGo v (edges g)
+
+predecessorsGo :: Vertex -> [Edge] -> [Vertex]
+predecessorsGo _ [] = []
+predecessorsGo v ((from, to) : rest) = case to == v of
+  True -> from : predecessorsGo v rest
+  False -> predecessorsGo v rest
+
+-- | The graph with every edge reversed; bounds are unchanged.
+transposeG :: Graph -> Graph
+transposeG g = case g of
+  MkGraph _ -> buildG (bounds g) (transposeEdges (edges g))
+
+transposeEdges :: [Edge] -> [Edge]
+transposeEdges [] = []
+transposeEdges ((from, to) : rest) = (to, from) : transposeEdges rest
+
+listLength :: [a] -> Int
+listLength [] = 0
+listLength (_ : xs) = 1 + listLength xs
+
+listReverse :: [a] -> [a]
+listReverse xs = listReverseGo xs []
+
+listReverseGo :: [a] -> [a] -> [a]
+listReverseGo [] acc = acc
+listReverseGo (x : xs) acc = listReverseGo xs (x : acc)
+
+-- | Reachability: 'True' when a directed path leads from the first vertex to
+-- the second (a vertex always reaches itself).
+path :: Graph -> Vertex -> Vertex -> Bool
+path g from to = case from == to of
+  True -> True
+  False -> reachableFrom g from to
+
+reachableFrom :: Graph -> Vertex -> Vertex -> Bool
+reachableFrom g from to = reachableGo (successors g from) (S.singleton from) to
+  where
+    reachableGo :: [Vertex] -> Set Vertex -> Vertex -> Bool
+    reachableGo [] _ _ = False
+    reachableGo (v : vs) seen want = case v == want of
+      True -> True
+      False -> case S.member v seen of
+        True -> reachableGo vs seen want
+        False -> reachableGo (successors g v ++ vs) (S.insert v seen) want
+
+-- Depth-first search producing a forest and the visited set it leaves behind.
+dfsTrees :: Graph -> [Vertex] -> Set Vertex -> ([Tree Vertex], Set Vertex)
+dfsTrees _ [] seen = ([], seen)
+dfsTrees g (v : vs) seen = case S.member v seen of
+  True -> dfsTrees g vs seen
+  False -> case dfsVisit g v (S.insert v seen) of
+    (t, seen2) -> case dfsTrees g vs seen2 of
+      (ts, seen3) -> (t : ts, seen3)
+
+dfsVisit :: Graph -> Vertex -> Set Vertex -> (Tree Vertex, Set Vertex)
+dfsVisit g v seen = case visitEach g (successors g v) seen of
+  (ts, seen2) -> (Node v ts, seen2)
+
+visitEach :: Graph -> [Vertex] -> Set Vertex -> ([Tree Vertex], Set Vertex)
+visitEach _ [] seen = ([], seen)
+visitEach g (v : vs) seen = case S.member v seen of
+  True -> visitEach g vs seen
+  False -> case dfsVisit g v (S.insert v seen) of
+    (t, seen2) -> case visitEach g vs seen2 of
+      (ts, seen3) -> (t : ts, seen3)
+
+flattenForest :: [Tree Vertex] -> [Vertex]
+flattenForest [] = []
+flattenForest (t : ts) = flattenTree t ++ flattenForest ts
+
+flattenTree :: Tree Vertex -> [Vertex]
+flattenTree t = case t of
+  Node v ts -> v : flattenForest ts
+
+-- | A topological ordering: every edge leads from an earlier vertex to a
+-- later one. Correct only for acyclic graphs; on a cyclic graph the result
+-- is still a deterministic vertex ordering, just not a topological one.
+topSort :: Graph -> [Vertex]
+topSort g = listReverse (postOrder g)
+
+postOrder :: Graph -> [Vertex]
+postOrder g = case dfsTrees g (vertices g) S.empty of
+  (forest, _) -> flattenForestPost forest
+
+flattenForestPost :: [Tree Vertex] -> [Vertex]
+flattenForestPost [] = []
+flattenForestPost (t : ts) = flattenTreePost t ++ flattenForestPost ts
+
+flattenTreePost :: Tree Vertex -> [Vertex]
+flattenTreePost t = case t of
+  Node v ts -> flattenForestPost ts ++ [v]
+
+-- | The connected components of the underlying undirected graph, as a
+-- forest in vertex order.
+components :: Graph -> [Tree Vertex]
+components g = case dfsTrees (underlying g) (vertices g) S.empty of
+  (forest, _) -> forest
+
+underlying :: Graph -> Graph
+underlying g = case g of
+  MkGraph _ -> case edges g of
+    es -> buildG (bounds g) (es ++ transposeEdges es)
+
+-- | The strongly connected components in reverse topological order (a
+-- component's successors come earlier in the list), via Kosaraju's
+-- algorithm: finish-time order on the graph, then DFS on the transpose.
+scc :: Graph -> [SCC Vertex]
+scc g = case transposeG g of
+  gt -> sccFromForest gt (dfsOnOrder gt (listReverse (postOrder g)))
+
+sccFromForest :: Graph -> [Tree Vertex] -> [SCC Vertex]
+sccFromForest _ [] = []
+sccFromForest gt (t : ts) = treeSCC gt t : sccFromForest gt ts
+
+treeSCC :: Graph -> Tree Vertex -> SCC Vertex
+treeSCC gt t = case t of
+  Node v [] -> case hasSelfLoop gt v of
+    True -> CyclicSCC [v]
+    False -> AcyclicSCC v
+  Node _ _ -> CyclicSCC (flattenTree t)
+
+hasSelfLoop :: Graph -> Vertex -> Bool
+hasSelfLoop g v = memberList v (successors g v)
+
+memberList :: Vertex -> [Vertex] -> Bool
+memberList _ [] = False
+memberList v (w : ws) = case v == w of
+  True -> True
+  False -> memberList v ws
+
+dfsOnOrder :: Graph -> [Vertex] -> [Tree Vertex]
+dfsOnOrder g order = case dfsTrees g order S.empty of
+  (forest, _) -> forest

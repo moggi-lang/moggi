@@ -1,0 +1,192 @@
+-- |
+-- A map with 'Int' keys, in the spirit of Haskell's 'Data.IntMap'.
+--
+-- This is a thin wrapper around 'Data.Map Int': keys are 'Int' so no 'Ord'
+-- constraint appears in the signatures, but the representation is the same
+-- sorted association list and every operation costs what the same operation
+-- costs on 'Data.Map'. The exported API is the subset a program reaches for
+-- most often; anything beyond it is added when a program needs it.
+--
+module Data.IntMap
+  ( IntMap
+  , empty
+  , singleton
+  , null
+  , size
+  , lookup
+  , findWithDefault
+  , member
+  , notMember
+  , insert
+  , insertWith
+  , delete
+  , adjust
+  , update
+  , alter
+  , union
+  , unionWith
+  , unions
+  , difference
+  , intersection
+  , map
+  , mapWithKey
+  , elems
+  , keys
+  , assocs
+  , toList
+  , fromList
+  , fromListWith
+  , filter
+  , filterWithKey
+  ) where
+
+import Control.Applicative
+import Data.Bool
+import Data.Eq
+import Data.Foldable hiding (null)
+import Data.Functor hiding (unzip)
+import Data.Int
+import Data.List hiding (map, filter, null, lookup, singleton, union, find, insert)
+import Data.Map (Map)
+import Data.Map qualified as M
+import Data.Maybe
+import Data.Ord
+import Data.Traversable hiding (mapAccumL, mapAccumR)
+import Moggi.Err
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+import Text.Show
+
+-- | A map from 'Int' keys to values.
+newtype IntMap v = MkIntMap (Map Int v)
+  deriving (Eq, Show)
+
+empty :: IntMap v
+empty = MkIntMap M.empty
+
+singleton :: Int -> v -> IntMap v
+singleton k v = MkIntMap (M.singleton k v)
+
+null :: IntMap v -> Bool
+null m = case m of
+  MkIntMap m2 -> M.null m2
+
+size :: IntMap v -> Int
+size m = case m of
+  MkIntMap m2 -> M.size m2
+
+lookup :: Int -> IntMap v -> Maybe v
+lookup k m = case m of
+  MkIntMap m2 -> M.lookup k m2
+
+findWithDefault :: v -> Int -> IntMap v -> v
+findWithDefault d k m = case m of
+  MkIntMap m2 -> M.findWithDefault d k m2
+
+member :: Int -> IntMap v -> Bool
+member k m = case m of
+  MkIntMap m2 -> M.member k m2
+
+notMember :: Int -> IntMap v -> Bool
+notMember k m = case m of
+  MkIntMap m2 -> M.notMember k m2
+
+insert :: Int -> v -> IntMap v -> IntMap v
+insert k v m = case m of
+  MkIntMap m2 -> MkIntMap (M.insert k v m2)
+
+insertWith :: (v -> v -> v) -> Int -> v -> IntMap v -> IntMap v
+insertWith f k v m = case m of
+  MkIntMap m2 -> MkIntMap (M.insertWith f k v m2)
+
+delete :: Int -> IntMap v -> IntMap v
+delete k m = case m of
+  MkIntMap m2 -> MkIntMap (M.delete k m2)
+
+adjust :: (v -> v) -> Int -> IntMap v -> IntMap v
+adjust f k m = case m of
+  MkIntMap m2 -> MkIntMap (M.adjust f k m2)
+
+update :: (v -> Maybe v) -> Int -> IntMap v -> IntMap v
+update f k m = case m of
+  MkIntMap m2 -> MkIntMap (M.update f k m2)
+
+alter :: (Maybe v -> Maybe v) -> Int -> IntMap v -> IntMap v
+alter f k m = case m of
+  MkIntMap m2 -> MkIntMap (M.alter f k m2)
+
+union :: IntMap v -> IntMap v -> IntMap v
+union a b = case a of
+  MkIntMap a2 -> case b of
+    MkIntMap b2 -> MkIntMap (M.union a2 b2)
+
+unionWith :: (v -> v -> v) -> IntMap v -> IntMap v -> IntMap v
+unionWith f a b = case a of
+  MkIntMap a2 -> case b of
+    MkIntMap b2 -> MkIntMap (M.unionWith f a2 b2)
+
+unions :: [IntMap v] -> IntMap v
+unions ms = MkIntMap (M.unions (unionsGo ms))
+  where
+    unionsGo :: [IntMap v] -> [Map Int v]
+    unionsGo [] = []
+    unionsGo (MkIntMap m2 : rest) = m2 : unionsGo rest
+
+difference :: IntMap v -> IntMap w -> IntMap v
+difference a b = case a of
+  MkIntMap a2 -> case b of
+    MkIntMap b2 -> MkIntMap (M.difference a2 b2)
+
+intersection :: IntMap v -> IntMap w -> IntMap v
+intersection a b = case a of
+  MkIntMap a2 -> case b of
+    MkIntMap b2 -> MkIntMap (M.intersection a2 b2)
+
+map :: (a -> b) -> IntMap a -> IntMap b
+map f m = case m of
+  MkIntMap m2 -> MkIntMap (M.map f m2)
+
+mapWithKey :: (Int -> a -> b) -> IntMap a -> IntMap b
+mapWithKey f m = case m of
+  MkIntMap m2 -> MkIntMap (M.mapWithKey f m2)
+
+elems :: IntMap v -> [v]
+elems m = case m of
+  MkIntMap m2 -> M.elems m2
+
+keys :: IntMap v -> [Int]
+keys m = case m of
+  MkIntMap m2 -> M.keys m2
+
+assocs :: IntMap v -> [(Int, v)]
+assocs m = toList m
+
+toList :: IntMap v -> [(Int, v)]
+toList m = case m of
+  MkIntMap m2 -> M.toList m2
+
+fromList :: [(Int, v)] -> IntMap v
+fromList xs = MkIntMap (M.fromList xs)
+
+fromListWith :: (v -> v -> v) -> [(Int, v)] -> IntMap v
+fromListWith f xs = MkIntMap (M.fromListWith f xs)
+
+filter :: (v -> Bool) -> IntMap v -> IntMap v
+filter p m = case m of
+  MkIntMap m2 -> MkIntMap (M.filter p m2)
+
+filterWithKey :: (Int -> v -> Bool) -> IntMap v -> IntMap v
+filterWithKey p m = case m of
+  MkIntMap m2 -> MkIntMap (M.filterWithKey p m2)
+
+instance Functor IntMap where
+  map f m = case m of
+    MkIntMap m2 -> MkIntMap (M.map f m2)
+
+instance Foldable IntMap where
+  foldr f z m = case m of
+    MkIntMap m2 -> foldr f z m2
+
+instance Traversable IntMap where
+  traverse f m = case m of
+    MkIntMap m2 -> map MkIntMap (traverse f m2)

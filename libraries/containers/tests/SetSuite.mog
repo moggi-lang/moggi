@@ -1,0 +1,34 @@
+-- Data.Set: construction, queries, the set algebra, and the Eq, Ord, Show,
+-- Semigroup, Monoid and Foldable instances.
+
+module SetSuite (setSuite) where
+
+import Data.Set qualified as S
+import Support (expect)
+
+setSuite :: IO ()
+setSuite = do
+  expect "fromList sorts and dedups" (show (S.toList (S.fromList [3, 1, 2, 1] :: S.Set Int))) "[1,2,3]"
+  expect "size counts distinct elements" (show (S.size (S.fromList [3, 1, 2, 1] :: S.Set Int))) "3"
+  expect "member hits" (show (S.member 2 (S.fromList [3, 1, 2] :: S.Set Int))) "True"
+  expect "member misses" (show (S.member 5 (S.fromList [3, 1, 2] :: S.Set Int))) "False"
+  expect "notMember misses" (show (S.notMember 5 (S.fromList [3, 1, 2] :: S.Set Int))) "True"
+  expect "insert keeps order" (show (S.toList (S.insert 0 (S.fromList [3, 1, 2] :: S.Set Int)))) "[0,1,2,3]"
+  expect "delete removes" (show (S.toList (S.delete 1 (S.fromList [3, 1, 2] :: S.Set Int)))) "[2,3]"
+  expect "singleton" (show (S.toList (S.singleton 7 :: S.Set Int))) "[7]"
+  expect "union" (show (S.toList (S.union (S.fromList [1, 2]) (S.fromList [2, 3]) :: S.Set Int))) "[1,2,3]"
+  expect "unions" (show (S.toList (S.unions [S.fromList [1], S.fromList [2, 3]] :: S.Set Int))) "[1,2,3]"
+  expect "intersection" (show (S.toList (S.intersection (S.fromList [1, 2]) (S.fromList [2, 3]) :: S.Set Int))) "[2]"
+  expect "difference" (show (S.toList (S.difference (S.fromList [1, 2]) (S.fromList [2, 3]) :: S.Set Int))) "[1]"
+  expect "isSubsetOf yes" (show (S.isSubsetOf (S.fromList [1, 2] :: S.Set Int) (S.fromList [1, 2, 3] :: S.Set Int))) "True"
+  expect "isSubsetOf no" (show (S.isSubsetOf (S.fromList [1, 4] :: S.Set Int) (S.fromList [1, 2, 3] :: S.Set Int))) "False"
+  expect "map" (show (S.toList (S.map (* 2) (S.fromList [3, 1, 2] :: S.Set Int)))) "[2,4,6]"
+  expect "filter" (show (S.toList (S.filter (\x -> x > 1) (S.fromList [3, 1, 2] :: S.Set Int)))) "[2,3]"
+  expect "null empty" (show (S.null (S.empty :: S.Set Int))) "True"
+  expect "Eq ignores order" (show ((S.fromList [1, 2] :: S.Set Int) == (S.fromList [2, 1] :: S.Set Int))) "True"
+  expect "Ord compares" (show (compare (S.fromList [1] :: S.Set Int) (S.fromList [1, 2] :: S.Set Int))) "LT"
+  expect "Show" (show (S.fromList [1, 2] :: S.Set Int)) "MkSet [1,2]"
+  expect "Semigroup" (show (S.toList ((S.fromList [1, 2] <> S.fromList [2, 3]) :: S.Set Int))) "[1,2,3]"
+  expect "Monoid mempty" (show (S.toList (mempty :: S.Set Int))) "[]"
+  expect "Monoid mconcat" (show (S.toList (mconcat [S.fromList [1], S.fromList [2]] :: S.Set Int))) "[1,2]"
+  expect "Foldable" (show (foldr (+) 0 (S.fromList [3, 1, 2] :: S.Set Int))) "6"

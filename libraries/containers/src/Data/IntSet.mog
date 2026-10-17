@@ -1,0 +1,128 @@
+-- |
+-- A set of 'Int' values, in the spirit of Haskell's 'Data.IntSet'.
+--
+-- This is a thin wrapper around 'Data.Set Int': elements are 'Int' so no
+-- 'Ord' constraint appears in the signatures, but the representation is the
+-- same sorted list and every operation costs what the same operation costs
+-- on 'Data.Set'. The exported API is the subset a program reaches for most
+-- often; anything beyond it is added when a program needs it.
+--
+module Data.IntSet
+  ( IntSet
+  , empty
+  , singleton
+  , insert
+  , delete
+  , member
+  , notMember
+  , null
+  , size
+  , union
+  , unions
+  , difference
+  , intersection
+  , isSubsetOf
+  , filter
+  , toList
+  , fromList
+  , map
+  ) where
+
+import Data.Bool
+import Data.Eq
+import Data.Foldable hiding (null)
+import Data.Int
+import Data.List hiding (map, filter, null, singleton, union, insert, find)
+import Data.Monoid (Monoid(mempty))
+import Data.Ord
+import Data.Semigroup (Semigroup((<>)))
+import Data.Set (Set)
+import Data.Set qualified as S
+import Moggi.Err
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+import Text.Show
+
+-- | A set of 'Int' values.
+newtype IntSet = MkIntSet (Set Int)
+  deriving (Eq, Ord, Show)
+
+empty :: IntSet
+empty = MkIntSet S.empty
+
+singleton :: Int -> IntSet
+singleton x = MkIntSet (S.singleton x)
+
+insert :: Int -> IntSet -> IntSet
+insert x s = case s of
+  MkIntSet s2 -> MkIntSet (S.insert x s2)
+
+delete :: Int -> IntSet -> IntSet
+delete x s = case s of
+  MkIntSet s2 -> MkIntSet (S.delete x s2)
+
+member :: Int -> IntSet -> Bool
+member x s = case s of
+  MkIntSet s2 -> S.member x s2
+
+notMember :: Int -> IntSet -> Bool
+notMember x s = case s of
+  MkIntSet s2 -> S.notMember x s2
+
+null :: IntSet -> Bool
+null s = case s of
+  MkIntSet s2 -> S.null s2
+
+size :: IntSet -> Int
+size s = case s of
+  MkIntSet s2 -> S.size s2
+
+union :: IntSet -> IntSet -> IntSet
+union a b = case a of
+  MkIntSet a2 -> case b of
+    MkIntSet b2 -> MkIntSet (S.union a2 b2)
+
+unions :: [IntSet] -> IntSet
+unions ss = MkIntSet (S.unions (unionsGo ss))
+  where
+    unionsGo :: [IntSet] -> [Set Int]
+    unionsGo [] = []
+    unionsGo (MkIntSet s2 : rest) = s2 : unionsGo rest
+
+difference :: IntSet -> IntSet -> IntSet
+difference a b = case a of
+  MkIntSet a2 -> case b of
+    MkIntSet b2 -> MkIntSet (S.difference a2 b2)
+
+intersection :: IntSet -> IntSet -> IntSet
+intersection a b = case a of
+  MkIntSet a2 -> case b of
+    MkIntSet b2 -> MkIntSet (S.intersection a2 b2)
+
+isSubsetOf :: IntSet -> IntSet -> Bool
+isSubsetOf a b = case a of
+  MkIntSet a2 -> case b of
+    MkIntSet b2 -> S.isSubsetOf a2 b2
+
+filter :: (Int -> Bool) -> IntSet -> IntSet
+filter p s = case s of
+  MkIntSet s2 -> MkIntSet (S.filter p s2)
+
+toList :: IntSet -> [Int]
+toList s = case s of
+  MkIntSet s2 -> S.toList s2
+
+fromList :: [Int] -> IntSet
+fromList xs = MkIntSet (S.fromList xs)
+
+map :: (Int -> Int) -> IntSet -> IntSet
+map f s = case s of
+  MkIntSet s2 -> MkIntSet (S.map f s2)
+
+-- No 'Foldable' instance: Moggi's 'Foldable' needs a 'Type -> Type', and
+-- 'IntSet' is monomorphic. Fold 'toList' instead.
+instance Semigroup IntSet where
+  (<>) a b = union a b
+
+instance Monoid IntSet where
+  mempty = empty

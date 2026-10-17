@@ -1,0 +1,310 @@
+-- |
+-- Multi-way trees and forests (rose trees), in the spirit of Haskell's
+-- 'Data.Tree'.
+--
+-- Deviations from the reference, all forced by the language, none by taste:
+--
+-- * Moggi is strict, so there are no infinite trees: 'unfoldTree' on a seed
+--   that never bottoms out diverges instead of producing a value.
+-- * No 'MonadFix' \/ 'MonadZip' instances (neither class exists in 'base'),
+--   and none of the 'Eq1' \/ 'Ord1' \/ 'Show1' \/ 'Read1' \/ 'NFData' \/
+--   'Generic' machinery.
+-- * 'levels' recurses instead of iterating ('iterate' does not exist), and
+--   the ASCII drawing shifts lines explicitly ('repeat' does not exist).
+-- * There is no 'Forest' synonym: a forest is '[Tree a]', because a type
+--   synonym cannot be declared in terms of a type declared after it.
+--
+module Data.Tree
+  ( Tree(..)
+  , PostOrder(..)
+  , unfoldTree
+  , unfoldForest
+  , unfoldTreeM
+  , unfoldForestM
+  , unfoldTreeM_BF
+  , unfoldForestM_BF
+  , foldTree
+  , flatten
+  , levels
+  , leaves
+  , edges
+  , pathsToRoot
+  , pathsFromRoot
+  , drawTree
+  , drawForest
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Bits ((.&.))
+import Data.Bool
+import Data.Eq
+import Data.Foldable hiding (null, length, toList)
+import Data.Functor
+import Data.List hiding (
+  map, filter, null, length, lookup, take, drop, splitAt, reverse,
+  sort, sortBy, sortOn, zip, zipWith, unzip, tails, inits, replicate,
+  iterate, cycle, chunksOf, scanl, scanr, intersperse, concatMap, maximum, minimum, sum,
+  singleton
+  )
+import Data.Maybe
+import Data.Ord
+import Data.Semigroup (NonEmpty((:|)))
+import Data.Sequence (Seq, empty, singleton, (<|), (><), fromList, toList, viewl, viewr, ViewL(..), ViewR(..))
+import Data.String (lines, unlines)
+import Data.Traversable hiding (mapAccumL, mapAccumR)
+import Data.Word (Word)
+import Moggi.Err
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+import Text.Show
+
+-- | Non-empty multi-way trees; also known as /rose trees/.
+data Tree a = Node
+  { rootLabel :: a
+  , subForest :: [Tree a]
+  }
+  deriving (Eq, Ord, Show)
+
+-- | Post-order traversal wrapper: folding a 'PostOrder' visits children
+-- before their parent.
+newtype PostOrder a = PostOrder { unPostOrder :: Tree a }
+  deriving (Eq, Ord, Show)
+
+instance Functor Tree where
+  map f t = case t of
+    Node x ts -> Node (f x) (mapList (map f) ts)
+
+mapList :: (a -> b) -> [a] -> [b]
+mapList _ [] = []
+mapList f (x : xs) = f x : mapList f xs
+
+instance Applicative Tree where
+  pure x = Node x []
+  f <*> t = case f of
+    Node g tfs -> case t of
+      Node x txs -> Node (g x) (mapList (map g) txs ++ mapList (applyTo t) tfs)
+
+applyTo :: Tree a -> Tree (a -> b) -> Tree b
+applyTo t gf = gf <*> t
+
+instance Monad Tree where
+  t >>= f = case t of
+    Node x ts -> case f x of
+      Node x2 ts2 -> Node x2 (ts2 ++ mapList (>>= f) ts)
+
+instance Traversable Tree where
+  traverse f t = traverseTree f t
+
+traverseTree :: Applicative f => (a -> f b) -> Tree a -> f (Tree b)
+traverseTree f t = case t of
+  Node x ts -> liftA2 Node (f x) (traverse (traverseTree f) ts)
+
+instance Foldable Tree where
+  foldr f z t = case t of
+    Node x ts -> f x (foldrForest f z ts)
+
+foldrForest :: (a -> b -> b) -> b -> [Tree a] -> b
+foldrForest _ z [] = z
+foldrForest f z (t : ts) = foldr f (foldrForest f z ts) t
+
+instance Functor PostOrder where
+  map f p = case p of
+    PostOrder t -> PostOrder (map f t)
+
+instance Foldable PostOrder where
+  foldr f z p = case p of
+    PostOrder t -> foldrPost f z t
+
+foldrPost :: (a -> b -> b) -> b -> Tree a -> b
+foldrPost f z t = case t of
+  Node x ts -> foldrPostForest f (f x z) ts
+
+foldrPostForest :: (a -> b -> b) -> b -> [Tree a] -> b
+foldrPostForest _ z [] = z
+foldrPostForest f z (t : ts) = foldrPost f (foldrPostForest f z ts) t
+
+-- | 2-dimensional ASCII drawing of a tree.
+drawTree :: Tree String -> String
+drawTree t = unlines (draw t)
+
+-- | 2-dimensional ASCII drawing of a forest.
+drawForest :: [Tree String] -> String
+drawForest ts = unlines (concatMapList draw ts)
+
+concatMapList :: (a -> [b]) -> [a] -> [b]
+concatMapList _ [] = []
+concatMapList f (x : xs) = f x ++ concatMapList f xs
+
+draw :: Tree String -> [String]
+draw t = case t of
+  Node x ts0 -> lines x ++ drawSubTrees ts0
+
+drawSubTrees :: [Tree String] -> [String]
+drawSubTrees [] = []
+drawSubTrees [t] =
+  "|" : shiftLines "`- " "   " (draw t)
+drawSubTrees (t : ts) =
+  "|" : shiftLines "+- " "|  " (draw t) ++ drawSubTrees ts
+
+shiftLines :: String -> String -> [String] -> [String]
+shiftLines _ _ [] = []
+shiftLines first other (x : xs) = (first <> x) : shiftOther other xs
+
+shiftOther :: String -> [String] -> [String]
+shiftOther _ [] = []
+shiftOther other (x : xs) = (other <> x) : shiftOther other xs
+
+-- | The elements of a tree in pre-order. @flatten == toList@.
+flatten :: Tree a -> [a]
+flatten t = toList t
+
+-- | The list of nodes at each level of the tree.
+levels :: Tree a -> [[a]]
+levels t = levelsGo [t]
+
+levelsGo :: [Tree a] -> [[a]]
+levelsGo [] = []
+levelsGo ts = mapList labelOf ts : levelsGo (concatMapList childrenOf ts)
+
+labelOf :: Tree a -> a
+labelOf t = case t of
+  Node x _ -> x
+
+childrenOf :: Tree a -> [Tree a]
+childrenOf t = case t of
+  Node _ ts -> ts
+
+-- | Fold a tree into a summary value: for each node, apply @f@ to the label
+-- and the results of folding each child. The catamorphism on trees.
+foldTree :: (a -> [b] -> b) -> Tree a -> b
+foldTree f t = case t of
+  Node x ts -> f x (mapList (foldTree f) ts)
+
+-- | Build a tree from a seed value.
+unfoldTree :: (b -> (a, [b])) -> b -> Tree a
+unfoldTree f b = case f b of
+  (a, bs) -> Node a (unfoldForest f bs)
+
+-- | Build a forest from a list of seed values.
+unfoldForest :: (b -> (a, [b])) -> [b] -> [Tree a]
+unfoldForest f bs = mapList (unfoldTree f) bs
+
+-- | Monadic tree builder, in depth-first order.
+unfoldTreeM :: Monad m => (b -> m (a, [b])) -> b -> m (Tree a)
+unfoldTreeM f b = do
+  pair <- f b
+  case pair of
+    (a, bs) -> do
+      ts <- unfoldForestM f bs
+      pure (Node a ts)
+
+-- | Monadic forest builder, in depth-first order.
+unfoldForestM :: Monad m => (b -> m (a, [b])) -> [b] -> m ([Tree a])
+unfoldForestM f bs = mapM (unfoldTreeM f) bs
+
+-- | Monadic tree builder, in breadth-first order (Okasaki's algorithm).
+unfoldTreeM_BF :: Monad m => (b -> m (a, [b])) -> b -> m (Tree a)
+unfoldTreeM_BF f b = do
+  xs <- unfoldForestQ f (singleton b)
+  case viewl xs of
+    x :< _ -> pure x
+    EmptyL -> error "unfoldTreeM_BF"
+
+-- | Monadic forest builder, in breadth-first order.
+unfoldForestM_BF :: Monad m => (b -> m (a, [b])) -> [b] -> m ([Tree a])
+unfoldForestM_BF f bs = do
+  xs <- unfoldForestQ f (fromList bs)
+  pure (toList xs)
+
+unfoldForestQ :: Monad m => (b -> m (a, [b])) -> Seq b -> m (Seq (Tree a))
+unfoldForestQ f qs = case viewl qs of
+  EmptyL -> pure empty
+  a :< rest -> do
+    pair <- f a
+    case pair of
+      (b, seeds) -> do
+        tQ <- unfoldForestQ f (appendSeeds rest seeds)
+        case splitOnto [] seeds tQ of
+          (tQ2, ts) -> pure ((Node b ts) <| tQ2)
+
+appendSeeds :: Seq b -> [b] -> Seq b
+appendSeeds qs [] = qs
+appendSeeds qs (s : rest) = appendSeeds (qs >< singleton s) rest
+
+splitOnto :: [a] -> [b] -> Seq a -> (Seq a, [a])
+splitOnto acc [] qs = (qs, acc)
+splitOnto acc (_ : bs) qs = case viewr qs of
+  rest :> x -> splitOnto (x : acc) bs rest
+  EmptyR -> error "splitOnto: queue shorter than seed list"
+
+-- | The leaves of the tree in left-to-right order. A leaf is a node with no
+-- children (so a childless root is its own leaf).
+leaves :: Tree a -> [a]
+leaves t = leavesGo t []
+
+leavesGo :: Tree a -> [a] -> [a]
+leavesGo t z = case t of
+  Node x [] -> x : z
+  Node _ ts -> leavesForestGo ts z
+
+leavesForestGo :: [Tree a] -> [a] -> [a]
+leavesForestGo [] z = z
+leavesForestGo (t : ts) z = leavesGo t (leavesForestGo ts z)
+
+-- | The edges of the tree as parent-child pairs in pre-order. A tree with
+-- @n@ nodes has @n - 1@ edges.
+edges :: Tree a -> [(a, a)]
+edges t = case t of
+  Node x0 ts0 -> edgesGo x0 ts0 []
+
+edgesGo :: a -> [Tree a] -> [(a, a)] -> [(a, a)]
+edgesGo _ [] z = z
+edgesGo p (t : ts) z = case t of
+  Node x kids -> (p, x) : edgesGo x kids (edgesGo p ts z)
+
+-- | Labels on the paths from each node to the root.
+pathsToRoot :: Tree a -> Tree (NonEmpty a)
+pathsToRoot t = pathsToRootGo [] t
+
+pathsToRootGo :: [a] -> Tree a -> Tree (NonEmpty a)
+pathsToRootGo ps t = case t of
+  Node x ts -> Node (x :| ps) (mapList (pathsToRootGo (x : ps)) ts)
+
+-- | Labels on the paths from the root to each node. Uses a banker's queue
+-- internally so the whole traversal stays linear.
+pathsFromRoot :: Tree a -> Tree (NonEmpty a)
+pathsFromRoot t = case t of
+  Node x0 ts0 -> Node (x0 :| []) (mapList (pathsFromRootGo (singletonBQ x0)) ts0)
+
+pathsFromRootGo :: BQ a -> Tree a -> Tree (NonEmpty a)
+pathsFromRootGo qs t = case t of
+  Node x ts -> case snocBQ qs x of
+    qs2 -> Node (toNonEmptyBQ qs2) (mapList (pathsFromRootGo qs2) ts)
+
+data BQ a = BQ a Word [a] [a]
+
+singletonBQ :: a -> BQ a
+singletonBQ x = BQ x 0 [] []
+
+snocBQ :: BQ a -> a -> BQ a
+snocBQ qs x = case qs of
+  BQ x0 n front rear -> case bqDoReverse n of
+    True -> BQ x0 (n + 1) (front ++ reverseList (x : rear)) []
+    False -> BQ x0 (n + 1) front (x : rear)
+
+bqDoReverse :: Word -> Bool
+bqDoReverse k = (k + 2) .&. (k + 1) == 0
+
+reverseList :: [a] -> [a]
+reverseList xs = reverseGo xs []
+
+reverseGo :: [a] -> [a] -> [a]
+reverseGo [] acc = acc
+reverseGo (x : xs) acc = reverseGo xs (x : acc)
+
+toNonEmptyBQ :: BQ a -> NonEmpty a
+toNonEmptyBQ qs = case qs of
+  BQ x _ front rear -> case x : front ++ reverseList rear of
+    [] -> error "toNonEmptyBQ: empty queue"
+    y : ys -> y :| ys

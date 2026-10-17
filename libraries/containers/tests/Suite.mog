@@ -1,0 +1,31 @@
+-- The containers package's test entry point.
+--
+-- Each module under `tests/` owns one concern and exports a single `…Suite ::
+-- IO ()`; this file only calls them in order. A case failing stops the run with
+-- `FAIL: …` and a non-zero exit, so a clean run is `exit 0` and the line
+-- `all containers checks passed`.
+--
+-- The module is named `Suite`, not `Main`: the descriptor's `[test-suite]`
+-- declares `main = Suite`, and a package may carry more than one executable, so
+-- an entry point cannot be identified by being called `Main`.
+
+module Suite (main) where
+
+import SetSuite (setSuite)
+import MapSuite (mapSuite)
+import SeqSuite (seqSuite)
+import TreeSuite (treeSuite)
+import IntMapSuite (intMapSuite)
+import IntSetSuite (intSetSuite)
+import GraphSuite (graphSuite)
+
+main :: IO ()
+main = do
+  setSuite
+  mapSuite
+  seqSuite
+  treeSuite
+  intMapSuite
+  intSetSuite
+  graphSuite
+  putStrLn "all containers checks passed"

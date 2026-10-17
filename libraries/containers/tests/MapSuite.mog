@@ -1,0 +1,52 @@
+-- Data.Map: construction, queries, updates, combination, traversals, and the
+-- Functor, Foldable, Traversable and Eq instances.
+
+module MapSuite (mapSuite) where
+
+import Data.Map qualified as M
+import Data.Traversable (Identity (MkIdentity), runIdentity)
+import Support (assertTrue, expect)
+
+counts :: M.Map String Int
+counts = M.fromList [("b", 2), ("a", 1), ("c", 3)]
+
+mapSuite :: IO ()
+mapSuite = do
+  expect "null empty" (show (M.null (M.empty :: M.Map String Int))) "True"
+  expect "null non-empty" (show (M.null counts)) "False"
+  expect "size" (show (M.size counts)) "3"
+  expect "singleton" (show (M.toList (M.singleton "a" 1 :: M.Map String Int))) "[(\"a\",1)]"
+  expect "toList sorts by key" (show (M.toList counts)) "[(\"a\",1),(\"b\",2),(\"c\",3)]"
+  expect "lookup hits" (show (M.lookup "b" counts)) "Just 2"
+  expect "lookup misses" (show (M.lookup "z" counts)) "Nothing"
+  expect "findWithDefault hits" (show (M.findWithDefault 0 "b" counts)) "2"
+  expect "findWithDefault misses" (show (M.findWithDefault 0 "z" counts)) "0"
+  expect "member hits" (show (M.member "a" counts)) "True"
+  expect "member misses" (show (M.member "z" counts)) "False"
+  expect "notMember misses" (show (M.notMember "z" counts)) "True"
+  expect "insert adds" (show (M.toList (M.insert "d" 4 counts))) "[(\"a\",1),(\"b\",2),(\"c\",3),(\"d\",4)]"
+  expect "insert keeps the new value" (show (M.toList (M.insert "b" 20 counts))) "[(\"a\",1),(\"b\",20),(\"c\",3)]"
+  expect "insertWith combines" (show (M.toList (M.insertWith (+) "b" 20 counts))) "[(\"a\",1),(\"b\",22),(\"c\",3)]"
+  expect "delete removes" (show (M.toList (M.delete "b" counts))) "[(\"a\",1),(\"c\",3)]"
+  expect "delete missing is identity" (show (M.toList (M.delete "z" counts))) "[(\"a\",1),(\"b\",2),(\"c\",3)]"
+  expect "adjust updates" (show (M.toList (M.adjust (* 10) "b" counts))) "[(\"a\",1),(\"b\",20),(\"c\",3)]"
+  expect "update removes on Nothing" (show (M.toList (M.update (\_ -> Nothing) "b" counts))) "[(\"a\",1),(\"c\",3)]"
+  expect "alter inserts on Nothing" (show (M.toList (M.alter (\_ -> Just 9) "z" counts))) "[(\"a\",1),(\"b\",2),(\"c\",3),(\"z\",9)]"
+  expect "union keeps the left value" (show (M.toList (M.union (M.fromList [("a", 1), ("b", 2)]) (M.fromList [("b", 20), ("c", 3)])))) "[(\"a\",1),(\"b\",2),(\"c\",3)]"
+  expect "unionWith combines" (show (M.toList (M.unionWith (+) (M.fromList [("a", 1), ("b", 2)]) (M.fromList [("b", 20), ("c", 3)])))) "[(\"a\",1),(\"b\",22),(\"c\",3)]"
+  expect "difference" (show (M.toList (M.difference counts (M.fromList [("b", 0)])))) "[(\"a\",1),(\"c\",3)]"
+  expect "intersection" (show (M.toList (M.intersection counts (M.fromList [("b", 0), ("z", 0)])))) "[(\"b\",2)]"
+  expect "map over values" (show (M.toList (M.map (* 2) counts))) "[(\"a\",2),(\"b\",4),(\"c\",6)]"
+  expect "mapWithKey sees keys" (show (M.toList (M.mapWithKey (\k v -> k <> show v) counts))) "[(\"a\",\"a1\"),(\"b\",\"b2\"),(\"c\",\"c3\")]"
+  expect "elems" (show (M.elems counts)) "[1,2,3]"
+  expect "keys" (show (M.keys counts)) "[\"a\",\"b\",\"c\"]"
+  expect "assocs is toList" (show (M.assocs counts)) "[(\"a\",1),(\"b\",2),(\"c\",3)]"
+  expect "fromList later dups win" (show (M.toList (M.fromList [("a", 1), ("a", 2)]))) "[(\"a\",2)]"
+  expect "fromListWith combines dups" (show (M.toList (M.fromListWith (+) [("a", 1), ("a", 2), ("b", 3)]))) "[(\"a\",3),(\"b\",3)]"
+  expect "filter keeps matches" (show (M.toList (M.filter (\v -> v > 1) counts))) "[(\"b\",2),(\"c\",3)]"
+  expect "filterWithKey sees keys" (show (M.toList (M.filterWithKey (\k _ -> k /= "b") counts))) "[(\"a\",1),(\"c\",3)]"
+  expect "Functor" (show (M.toList ((* 2) <$> counts))) "[(\"a\",2),(\"b\",4),(\"c\",6)]"
+  expect "Foldable" (show (foldr (+) 0 counts)) "6"
+  expect "Traversable" (show (M.toList (runIdentity (traverse (\v -> MkIdentity (v * 2)) counts)))) "[(\"a\",2),(\"b\",4),(\"c\",6)]"
+  assertTrue "Eq ignores construction order" (M.fromList [("a", 1), ("b", 2)] == M.fromList [("b", 2), ("a", 1)])
+  assertTrue "Eq distinguishes values" (M.fromList [("a", 1)] /= M.fromList [("a", 2)])

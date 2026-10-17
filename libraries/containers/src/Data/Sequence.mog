@@ -1,0 +1,532 @@
+-- |
+-- General-purpose finite sequences, in the spirit of Haskell's 'Data.Sequence'.
+--
+-- This module is a deliberate port of the classic 'Seq' API, not of the
+-- finger-tree implementation: a sequence is a plain list under the hood, so
+-- every operation costs what the same operation costs on lists. The exported
+-- API is the subset a program reaches for most often; finger-tree
+-- asymptotics and the 'Empty' \/ ':<|' \/ ':|>' pattern synonyms are not
+-- defined here. There are no pattern synonyms at all (Moggi does not have
+-- them yet): deconstruct with 'viewl' and 'viewr', whose 'ViewL' \/ 'ViewR'
+-- results use ordinary constructors.
+--
+module Data.Sequence
+  ( Seq
+  , empty
+  , singleton
+  , (<|)
+  , snoc
+  , (><)
+  , fromList
+  , toList
+  , replicate
+  , iterateN
+  , cycleN
+  , tails
+  , inits
+  , chunksOf
+  , viewl
+  , viewr
+  , ViewL(..)
+  , ViewR(..)
+  , lookup
+  , index
+  , adjust
+  , update
+  , deleteAt
+  , insertAt
+  , take
+  , drop
+  , splitAt
+  , length
+  , null
+  , reverse
+  , sort
+  , sortBy
+  , sortOn
+  , unstableSort
+  , unstableSortBy
+  , filter
+  , partition
+  , takeWhileL
+  , takeWhileR
+  , dropWhileL
+  , dropWhileR
+  , spanl
+  , breakl
+  , spanr
+  , breakr
+  , zip
+  , zipWith
+  , unzip
+  , mapWithIndex
+  , foldlWithIndex
+  , foldrWithIndex
+  , foldMapWithIndex
+  , traverseWithIndex
+  , scanl
+  , scanr
+  , intersperse
+  ) where
+
+import Control.Applicative
+import Data.Bool
+import Data.Eq
+import Data.Foldable hiding (null, length, toList)
+import Data.Functor
+import Data.List hiding (
+  map, filter, null, length, lookup, take, drop, splitAt, reverse,
+  sort, sortBy, sortOn, zip, zipWith, unzip, tails, inits, replicate,
+  iterate, cycle, chunksOf, scanl, scanr, intersperse
+  )
+import Data.Maybe
+import Data.Ord
+import Data.Traversable hiding (mapAccumL, mapAccumR)
+import Moggi.Err
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+import Text.Show
+
+infixr 5 <|, :<
+infixl 5 ><, :>
+
+data Seq a = MkSeq [a]
+  deriving (Eq, Ord, Show)
+
+-- Local list helpers. The unqualified list names ('take', 'length', …) are
+-- this module's 'Seq' operations, so list work goes through these.
+listLength :: [a] -> Int
+listLength [] = 0
+listLength (_ : xs) = 1 + listLength xs
+
+listTake :: Int -> [a] -> [a]
+listTake n xs = case n <= 0 of
+  True -> []
+  False -> case xs of
+    [] -> []
+    x : rest -> x : listTake (n - 1) rest
+
+listDrop :: Int -> [a] -> [a]
+listDrop n xs = case n <= 0 of
+  True -> xs
+  False -> case xs of
+    [] -> []
+    _ : rest -> listDrop (n - 1) rest
+
+listSplitAt :: Int -> [a] -> ([a], [a])
+listSplitAt n xs = (listTake n xs, listDrop n xs)
+
+listMap :: (a -> b) -> [a] -> [b]
+listMap _ [] = []
+listMap f (x : xs) = f x : listMap f xs
+
+listConcat :: [[a]] -> [a]
+listConcat [] = []
+listConcat (xs : rest) = xs ++ listConcat rest
+
+listReverse :: [a] -> [a]
+listReverse xs = listReverseGo xs []
+
+listReverseGo :: [a] -> [a] -> [a]
+listReverseGo [] acc = acc
+listReverseGo (x : xs) acc = listReverseGo xs (x : acc)
+
+listZip :: [a] -> [b] -> [(a, b)]
+listZip [] _ = []
+listZip _ [] = []
+listZip (x : xs) (y : ys) = (x, y) : listZip xs ys
+
+listZipWith :: (a -> b -> c) -> [a] -> [b] -> [c]
+listZipWith _ [] _ = []
+listZipWith _ _ [] = []
+listZipWith f (x : xs) (y : ys) = f x y : listZipWith f xs ys
+
+listUnzip :: [(a, b)] -> ([a], [b])
+listUnzip [] = ([], [])
+listUnzip ((x, y) : rest) = case listUnzip rest of
+  (xs, ys) -> (x : xs, y : ys)
+
+listFilter :: (a -> Bool) -> [a] -> [a]
+listFilter _ [] = []
+listFilter p (x : xs) = case p x of
+  True -> x : listFilter p xs
+  False -> listFilter p xs
+
+listPartition :: (a -> Bool) -> [a] -> ([a], [a])
+listPartition _ [] = ([], [])
+listPartition p (x : xs) = case listPartition p xs of
+  (ys, ns) -> case p x of
+    True -> (x : ys, ns)
+    False -> (ys, x : ns)
+
+listSpan :: (a -> Bool) -> [a] -> ([a], [a])
+listSpan _ [] = ([], [])
+listSpan p (x : xs) = case p x of
+  True -> case listSpan p xs of
+    (ys, zs) -> (x : ys, zs)
+  False -> ([], x : xs)
+
+listBreak :: (a -> Bool) -> [a] -> ([a], [a])
+listBreak p xs = listSpan (\x -> case p x of True -> False; False -> True) xs
+
+listReplicate :: Int -> a -> [a]
+listReplicate n x = case n <= 0 of
+  True -> []
+  False -> x : listReplicate (n - 1) x
+
+listIterateN :: Int -> (a -> a) -> a -> [a]
+listIterateN n f x = case n <= 0 of
+  True -> []
+  False -> x : listIterateN (n - 1) f (f x)
+
+-- No infinite lists in a strict language: repeat the spine a fixed number of
+-- times instead of cycling forever.
+cycleNList :: Int -> [a] -> [a]
+cycleNList n xs = case n <= 0 of
+  True -> []
+  False -> case xs of
+    [] -> []
+    _ -> xs ++ cycleNList (n - 1) xs
+
+listTails :: [a] -> [[a]]
+listTails [] = [[]]
+listTails (x : xs) = (x : xs) : listTails xs
+
+listInits :: [a] -> [[a]]
+listInits [] = [[]]
+listInits (x : xs) = [] : listMap (x :) (listInits xs)
+
+listScanl :: (b -> a -> b) -> b -> [a] -> [b]
+listScanl _ z [] = [z]
+listScanl f z (x : xs) = z : listScanl f (f z x) xs
+
+listScanr :: (a -> b -> b) -> b -> [a] -> [b]
+listScanr _ z [] = [z]
+listScanr f z (x : xs) = f x (listScanrHead f z xs) : listScanr f z xs
+
+listScanrHead :: (a -> b -> b) -> b -> [a] -> b
+listScanrHead _ z [] = z
+listScanrHead f z (x : xs) = f x (listScanrHead f z xs)
+
+listIntersperse :: a -> [a] -> [a]
+listIntersperse _ [] = []
+listIntersperse sep (x : xs) = x : listIntersperseGo sep xs
+
+listIntersperseGo :: a -> [a] -> [a]
+listIntersperseGo _ [] = []
+listIntersperseGo sep (x : xs) = sep : x : listIntersperseGo sep xs
+
+empty :: Seq a
+empty = MkSeq []
+
+singleton :: a -> Seq a
+singleton x = MkSeq [x]
+
+(<|) :: a -> Seq a -> Seq a
+x <| s = case s of
+  MkSeq xs -> MkSeq (x : xs)
+
+snoc :: Seq a -> a -> Seq a
+snoc s x = case s of
+  MkSeq xs -> MkSeq (xs ++ [x])
+
+(><) :: Seq a -> Seq a -> Seq a
+a >< b = case a of
+  MkSeq xs -> case b of
+    MkSeq ys -> MkSeq (xs ++ ys)
+
+fromList :: [a] -> Seq a
+fromList xs = MkSeq xs
+
+toList :: Seq a -> [a]
+toList s = case s of
+  MkSeq xs -> xs
+
+replicate :: Int -> a -> Seq a
+replicate n x = MkSeq (listReplicate n x)
+
+iterateN :: Int -> (a -> a) -> a -> Seq a
+iterateN n f x = MkSeq (listIterateN n f x)
+
+cycleN :: Int -> Seq a -> Seq a
+cycleN n s = case s of
+  MkSeq xs -> MkSeq (cycleNList n xs)
+
+tails :: Seq a -> Seq (Seq a)
+tails s = case s of
+  MkSeq xs -> MkSeq (listMap MkSeq (listTails xs))
+
+inits :: Seq a -> Seq (Seq a)
+inits s = case s of
+  MkSeq xs -> MkSeq (listMap MkSeq (listInits xs))
+
+chunksOf :: Int -> Seq a -> Seq (Seq a)
+chunksOf n s = case s of
+  MkSeq xs -> MkSeq (listMap MkSeq (chunksOfList n xs))
+
+chunksOfList :: Int -> [a] -> [[a]]
+chunksOfList n xs = case n <= 0 of
+  True -> error "chunksOf: non-positive chunk size"
+  False -> case xs of
+    [] -> []
+    _ -> listTake n xs : chunksOfList n (listDrop n xs)
+
+data ViewL a = EmptyL | (:<) a (Seq a)
+  deriving (Eq, Show)
+
+data ViewR a = EmptyR | (:>) (Seq a) a
+  deriving (Eq, Show)
+
+viewl :: Seq a -> ViewL a
+viewl s = case s of
+  MkSeq xs -> case xs of
+    [] -> EmptyL
+    x : rest -> x :< MkSeq rest
+
+viewr :: Seq a -> ViewR a
+viewr s = case s of
+  MkSeq xs -> case listReverse xs of
+    [] -> EmptyR
+    x : rest -> MkSeq (listReverse rest) :> x
+
+lookup :: Int -> Seq a -> Maybe a
+lookup i s = case s of
+  MkSeq xs -> lookupList i xs
+
+lookupList :: Int -> [a] -> Maybe a
+lookupList i xs = case i < 0 of
+  True -> Nothing
+  False -> case listDrop i xs of
+    [] -> Nothing
+    x : _ -> Just x
+
+index :: Seq a -> Int -> a
+index s i = case lookup i s of
+  Just x -> x
+  Nothing -> error "index: out of bounds"
+
+adjust :: (a -> a) -> Int -> Seq a -> Seq a
+adjust f i s = case s of
+  MkSeq xs -> case listSplitAt i xs of
+    (front, []) -> MkSeq front
+    (front, x : rest) -> MkSeq (front ++ f x : rest)
+
+update :: Int -> a -> Seq a -> Seq a
+update i x s = adjust (\_ -> x) i s
+
+deleteAt :: Int -> Seq a -> Seq a
+deleteAt i s = case s of
+  MkSeq xs -> case i < 0 of
+    True -> MkSeq xs
+    False -> case listSplitAt i xs of
+      (front, []) -> MkSeq front
+      (front, _ : rest) -> MkSeq (front ++ rest)
+
+insertAt :: Int -> a -> Seq a -> Seq a
+insertAt i x s = case s of
+  MkSeq xs -> case i <= 0 of
+    True -> MkSeq (x : xs)
+    False -> case listSplitAt i xs of
+      (front, rest) -> MkSeq (front ++ x : rest)
+
+take :: Int -> Seq a -> Seq a
+take n s = case s of
+  MkSeq xs -> MkSeq (listTake n xs)
+
+drop :: Int -> Seq a -> Seq a
+drop n s = case s of
+  MkSeq xs -> MkSeq (listDrop n xs)
+
+splitAt :: Int -> Seq a -> (Seq a, Seq a)
+splitAt n s = case s of
+  MkSeq xs -> case listSplitAt n xs of
+    (front, rest) -> (MkSeq front, MkSeq rest)
+
+length :: Seq a -> Int
+length s = case s of
+  MkSeq xs -> listLength xs
+
+null :: Seq a -> Bool
+null s = case s of
+  MkSeq xs -> case xs of
+    [] -> True
+    _ -> False
+
+reverse :: Seq a -> Seq a
+reverse s = case s of
+  MkSeq xs -> MkSeq (listReverse xs)
+
+sort :: Ord a => Seq a -> Seq a
+sort s = sortBy compare s
+
+sortBy :: (a -> a -> Ordering) -> Seq a -> Seq a
+sortBy cmp s = case s of
+  MkSeq xs -> MkSeq (mergeSort cmp xs)
+
+sortOn :: Ord b => (a -> b) -> Seq a -> Seq a
+sortOn f s = sortBy (\x y -> compare (f x) (f y)) s
+
+-- A stable merge sort on lists: the reference sorts through arrays, but the
+-- observable behavior (a stably sorted sequence) is the same.
+mergeSort :: (a -> a -> Ordering) -> [a] -> [a]
+mergeSort _ [] = []
+mergeSort _ [x] = [x]
+mergeSort cmp xs = case splitHalf xs of
+  (left, right) -> mergeLists cmp (mergeSort cmp left) (mergeSort cmp right)
+
+splitHalf :: [a] -> ([a], [a])
+splitHalf xs = listSplitAt (div (listLength xs) 2) xs
+
+mergeLists :: (a -> a -> Ordering) -> [a] -> [a] -> [a]
+mergeLists _ [] ys = ys
+mergeLists _ xs [] = xs
+mergeLists cmp (x : xs) (y : ys) = case cmp x y of
+  GT -> y : mergeLists cmp (x : xs) ys
+  _ -> x : mergeLists cmp xs (y : ys)
+
+unstableSort :: Ord a => Seq a -> Seq a
+unstableSort s = sort s
+
+unstableSortBy :: (a -> a -> Ordering) -> Seq a -> Seq a
+unstableSortBy cmp s = sortBy cmp s
+
+filter :: (a -> Bool) -> Seq a -> Seq a
+filter p s = case s of
+  MkSeq xs -> MkSeq (listFilter p xs)
+
+partition :: (a -> Bool) -> Seq a -> (Seq a, Seq a)
+partition p s = case s of
+  MkSeq xs -> case listPartition p xs of
+    (ys, ns) -> (MkSeq ys, MkSeq ns)
+
+takeWhileL :: (a -> Bool) -> Seq a -> Seq a
+takeWhileL p s = case spanl p s of
+  (front, _) -> front
+
+takeWhileR :: (a -> Bool) -> Seq a -> Seq a
+takeWhileR p s = case spanr p s of
+  (_, back) -> back
+
+dropWhileL :: (a -> Bool) -> Seq a -> Seq a
+dropWhileL p s = case spanl p s of
+  (_, rest) -> rest
+
+dropWhileR :: (a -> Bool) -> Seq a -> Seq a
+dropWhileR p s = case spanr p s of
+  (front, _) -> front
+
+spanl :: (a -> Bool) -> Seq a -> (Seq a, Seq a)
+spanl p s = case s of
+  MkSeq xs -> case listSpan p xs of
+    (front, rest) -> (MkSeq front, MkSeq rest)
+
+breakl :: (a -> Bool) -> Seq a -> (Seq a, Seq a)
+breakl p s = case s of
+  MkSeq xs -> case listBreak p xs of
+    (front, rest) -> (MkSeq front, MkSeq rest)
+
+spanr :: (a -> Bool) -> Seq a -> (Seq a, Seq a)
+spanr p s = case s of
+  MkSeq xs -> case listSpan p (listReverse xs) of
+    (backRev, frontRev) -> (MkSeq (listReverse frontRev), MkSeq (listReverse backRev))
+
+breakr :: (a -> Bool) -> Seq a -> (Seq a, Seq a)
+breakr p s = case s of
+  MkSeq xs -> case listBreak p (listReverse xs) of
+    (backRev, frontRev) -> (MkSeq (listReverse frontRev), MkSeq (listReverse backRev))
+
+zip :: Seq a -> Seq b -> Seq (a, b)
+zip a b = zipWith (\x y -> (x, y)) a b
+
+zipWith :: (a -> b -> c) -> Seq a -> Seq b -> Seq c
+zipWith f a b = case a of
+  MkSeq xs -> case b of
+    MkSeq ys -> MkSeq (listZipWith f xs ys)
+
+unzip :: Seq (a, b) -> (Seq a, Seq b)
+unzip s = case s of
+  MkSeq xs -> case listUnzip xs of
+    (lefts, rights) -> (MkSeq lefts, MkSeq rights)
+
+mapWithIndex :: (Int -> a -> b) -> Seq a -> Seq b
+mapWithIndex f s = case s of
+  MkSeq xs -> MkSeq (mapIndexGo f 0 xs)
+
+mapIndexGo :: (Int -> a -> b) -> Int -> [a] -> [b]
+mapIndexGo _ _ [] = []
+mapIndexGo f i (x : xs) = f i x : mapIndexGo f (i + 1) xs
+
+foldlWithIndex :: (b -> Int -> a -> b) -> b -> Seq a -> b
+foldlWithIndex f z s = case s of
+  MkSeq xs -> foldIndexGoL f z 0 xs
+
+foldIndexGoL :: (b -> Int -> a -> b) -> b -> Int -> [a] -> b
+foldIndexGoL _ z _ [] = z
+foldIndexGoL f z i (x : xs) = foldIndexGoL f (f z i x) (i + 1) xs
+
+foldrWithIndex :: (Int -> a -> b -> b) -> b -> Seq a -> b
+foldrWithIndex f z s = case s of
+  MkSeq xs -> foldr (\pair acc -> case pair of (i, x) -> f i x acc) z (listZip (listIterateN (listLength xs) (\n -> n + 1) 0) xs)
+
+foldMapWithIndex :: Monoid m => (Int -> a -> m) -> Seq a -> m
+foldMapWithIndex f s = foldrWithIndex (\i x acc -> f i x <> acc) mempty s
+
+traverseWithIndex :: Applicative f => (Int -> a -> f b) -> Seq a -> f (Seq b)
+traverseWithIndex f s = case s of
+  MkSeq xs -> map MkSeq (traverseIndexGo f 0 xs)
+
+traverseIndexGo :: Applicative f => (Int -> a -> f b) -> Int -> [a] -> f [b]
+traverseIndexGo _ _ [] = pure []
+traverseIndexGo f i (x : xs) = liftA2 (:) (f i x) (traverseIndexGo f (i + 1) xs)
+
+scanl :: (a -> b -> a) -> a -> Seq b -> Seq a
+scanl f z s = case s of
+  MkSeq xs -> MkSeq (listScanl f z xs)
+
+scanr :: (a -> b -> b) -> b -> Seq a -> Seq b
+scanr f z s = case s of
+  MkSeq xs -> MkSeq (listScanr f z xs)
+
+intersperse :: a -> Seq a -> Seq a
+intersperse sep s = case s of
+  MkSeq xs -> MkSeq (listIntersperse sep xs)
+
+instance Functor Seq where
+  map f s = case s of
+    MkSeq xs -> MkSeq (listMap f xs)
+
+instance Foldable Seq where
+  foldr f z s = case s of
+    MkSeq xs -> foldr f z xs
+
+instance Traversable Seq where
+  traverse f s = case s of
+    MkSeq xs -> map MkSeq (traverse f xs)
+
+instance Semigroup (Seq a) where
+  (<>) = (><)
+
+instance Monoid (Seq a) where
+  mempty = empty
+
+instance Applicative Seq where
+  pure x = singleton x
+  fs <*> xs = case fs of
+    MkSeq gs -> case xs of
+      MkSeq ys -> MkSeq (apList gs ys)
+
+apList :: [a -> b] -> [a] -> [b]
+apList [] _ = []
+apList (g : gs) xs = listMap g xs ++ apList gs xs
+
+instance Monad Seq where
+  s >>= f = case s of
+    MkSeq xs -> MkSeq (bindList xs f)
+
+bindList :: [a] -> (a -> Seq b) -> [b]
+bindList [] _ = []
+bindList (x : xs) f = toList (f x) ++ bindList xs f
+
+instance Alternative Seq where
+  empty = MkSeq []
+  (<|>) = (><)

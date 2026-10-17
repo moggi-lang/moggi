@@ -1,0 +1,42 @@
+-- Data.IntMap: Int-keyed maps — construction, queries, updates, combination,
+-- traversals, and the Functor, Foldable, Traversable and Eq instances.
+
+module IntMapSuite (intMapSuite) where
+
+import Data.IntMap qualified as M
+import Data.Traversable (Identity (MkIdentity), runIdentity)
+import Support (assertTrue, expect)
+
+counts :: M.IntMap Int
+counts = M.fromList [(2, 20), (1, 10), (3, 30)]
+
+intMapSuite :: IO ()
+intMapSuite = do
+  expect "null empty" (show (M.null (M.empty :: M.IntMap Int))) "True"
+  expect "null non-empty" (show (M.null counts)) "False"
+  expect "size" (show (M.size counts)) "3"
+  expect "singleton" (show (M.toList (M.singleton 1 10 :: M.IntMap Int))) "[(1,10)]"
+  expect "toList sorts by key" (show (M.toList counts)) "[(1,10),(2,20),(3,30)]"
+  expect "lookup hits" (show (M.lookup 2 counts)) "Just 20"
+  expect "lookup misses" (show (M.lookup 9 counts)) "Nothing"
+  expect "findWithDefault hits" (show (M.findWithDefault 0 2 counts)) "20"
+  expect "findWithDefault misses" (show (M.findWithDefault 0 9 counts)) "0"
+  expect "member hits" (show (M.member 1 counts)) "True"
+  expect "notMember misses" (show (M.notMember 9 counts)) "True"
+  expect "insert adds" (show (M.toList (M.insert 4 40 counts))) "[(1,10),(2,20),(3,30),(4,40)]"
+  expect "insert keeps the new value" (show (M.toList (M.insert 2 99 counts))) "[(1,10),(2,99),(3,30)]"
+  expect "insertWith combines" (show (M.toList (M.insertWith (+) 2 5 counts))) "[(1,10),(2,25),(3,30)]"
+  expect "delete removes" (show (M.toList (M.delete 2 counts))) "[(1,10),(3,30)]"
+  expect "adjust updates" (show (M.toList (M.adjust (* 2) 1 counts))) "[(1,20),(2,20),(3,30)]"
+  expect "union keeps the left map" (show (M.toList (M.union counts (M.singleton 2 99)))) "[(1,10),(2,20),(3,30)]"
+  expect "unionWith combines" (show (M.toList (M.unionWith (+) counts (M.singleton 2 1)))) "[(1,10),(2,21),(3,30)]"
+  expect "difference removes" (show (M.toList (M.difference counts (M.singleton 2 0)))) "[(1,10),(3,30)]"
+  expect "intersection keeps" (show (M.toList (M.intersection counts (M.fromList [(2, 0), (9, 9)])))) "[(2,20)]"
+  expect "map transforms" (show (M.toList (M.map (* 2) counts))) "[(1,20),(2,40),(3,60)]"
+  expect "elems" (show (M.elems counts)) "[10,20,30]"
+  expect "keys" (show (M.keys counts)) "[1,2,3]"
+  expect "Functor" (show (M.toList ((* 2) <$> counts))) "[(1,20),(2,40),(3,60)]"
+  expect "Foldable" (show (foldr (+) 0 counts)) "60"
+  expect "Traversable" (show (M.toList (runIdentity (traverse (\x -> MkIdentity (x + 1)) counts)))) "[(1,11),(2,21),(3,31)]"
+  assertTrue "Eq" (counts == M.fromList [(1, 10), (2, 20), (3, 30)])
+  expect "Show" (show (M.singleton 1 2 :: M.IntMap Int)) "MkIntMap (MkMap [AssocEntry 1 2])"
