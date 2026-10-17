@@ -1,0 +1,54 @@
+-- Data.Array.Unsafe: the generic 'unsafeFreeze'/'unsafeThaw' copy, so both
+-- sides stay usable afterwards — in 'ST' and in 'IO'.
+--
+-- The helpers pin each overloaded conversion to its concrete pair: the
+-- classes have no functional dependencies, so bare uses are ambiguous.
+
+module UnsafeSuite (unsafeSuite) where
+
+import Control.Monad.ST (ST, runST)
+import Data.Array.IArray (Array, IArray, elems)
+import Data.Array.IO (IOArray)
+import Data.Array.MArray (MArray, getElems, newListArray, readArray, writeArray)
+import Data.Array.ST (STArray)
+import Data.Array.Unsafe (unsafeFreeze, unsafeThaw)
+import Support (assertTrue, expect)
+
+bndsU :: (Int, Int)
+bndsU = (0, 2)
+
+freezeST :: STArray s Int Int -> ST s (Array Int Int)
+freezeST = unsafeFreeze
+
+thawSTU :: Array Int Int -> ST s (STArray s Int Int)
+thawSTU = unsafeThaw
+
+freezeIO :: IOArray Int Int -> IO (Array Int Int)
+freezeIO = unsafeFreeze
+
+thawIOU :: Array Int Int -> IO (IOArray Int Int)
+thawIOU = unsafeThaw
+
+newSTIntList :: (Int, Int) -> [Int] -> ST s (STArray s Int Int)
+newSTIntList = newListArray
+
+newIOIntList :: (Int, Int) -> [Int] -> IO (IOArray Int Int)
+newIOIntList = newListArray
+
+unsafeSuite :: IO ()
+unsafeSuite = do
+  let frozen = runST (do marr <- newSTIntList bndsU [1, 2, 3]; f <- freezeST marr; writeArray marr 0 99; pure f) :: Array Int Int
+  expect "ST unsafeFreeze copies" (show (elems frozen)) "[1,2,3]"
+  let vals = runST (do marr <- thawSTU frozen; writeArray marr 1 88; getElems marr) :: [Int]
+  expect "ST unsafeThaw copies" (show vals) "[1,88,3]"
+  expect "ST original untouched" (show (elems frozen)) "[1,2,3]"
+  marr <- newIOIntList bndsU [4, 5, 6]
+  frozenIO <- freezeIO marr
+  writeArray marr 0 77
+  expect "IO unsafeFreeze copies" (show (elems frozenIO)) "[4,5,6]"
+  marrT <- thawIOU frozenIO
+  writeArray marrT 2 66
+  expect "IO original untouched" (show (elems frozenIO)) "[4,5,6]"
+  v <- readArray marrT 2
+  expect "IO thawed is writable" (show v) "66"
+  assertTrue "frozen equals source" (frozen == (runST (do m <- newSTIntList bndsU [1, 2, 3]; freezeST m) :: Array Int Int))

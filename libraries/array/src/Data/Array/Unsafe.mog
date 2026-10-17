@@ -1,0 +1,34 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Unsafe conversions between mutable and immutable arrays, overloaded
+-- over any 'MArray'\/'IArray' pair.
+--
+-- 'unsafeFreeze' and 'unsafeThaw' are the copying 'freeze' and 'thaw' from
+-- "Data.Array.IArray" under their unsafe names: without rewrite rules the
+-- generic interface cannot dispatch to the O(1) casts, so the proof
+-- obligation is vacuous — but so is the performance gain. Code that needs
+-- the O(1) conversion should use the concrete casts instead:
+-- 'unsafeFreezeSTArray'\/'unsafeThawSTArray' (see "Data.Array.ST") or
+-- 'unsafeFreezeIOArray'\/'unsafeThawIOArray' (see "Data.Array.IO").
+--
+-- What is not here: Haskell's @castSTUArray@, @castIOUArray@ and
+-- @unsafeForeignPtrToStorableArray@. Moggi has no unboxed arrays and no
+-- @Foreign.Ptr@\/@Storable@ machinery for them to be built on.
+module Data.Array.Unsafe
+  ( unsafeFreeze
+  , unsafeThaw
+  ) where
+
+import Data.Array.IArray (IArray, freeze, thaw)
+import Data.Array.MArray (MArray)
+import Data.Ix (Ix)
+import Moggi.Internal.Base
+
+-- | Convert a mutable array to an immutable array by copying. Afterwards
+-- both arrays are usable: later writes never touch the frozen array.
+unsafeFreeze :: (Ix i, MArray a e m, IArray b e) => a i e -> m (b i e)
+unsafeFreeze = freeze
+
+-- | Convert an immutable array to a mutable array by copying. Afterwards
+-- both arrays are usable: writes never touch the immutable array.
+unsafeThaw :: (Ix i, IArray a e, MArray b e m) => a i e -> m (b i e)
+unsafeThaw = thaw

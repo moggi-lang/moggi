@@ -1,0 +1,279 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Overloaded immutable arrays: the 'IArray' class abstracts over 'Array'
+-- (see "Data.Array"), so one definition builds, reads, updates and folds
+-- immutable arrays of any instance type.
+--
+-- The class and its derived operations follow Haskell's @array@ package
+-- ('Data.Array.Base' minus the unboxed machinery). Two adaptations apply,
+-- because Moggi evaluates eagerly and has no unboxed values:
+--
+-- * There are no 'UArray' instances: Moggi has no unboxed values for them
+--   to be built on. 'Array' is currently the only instance.
+-- * 'foldlArray' is 'foldlArray'' and 'foldrArray'' is 'foldrArray': every
+--   fold is already strict. The lazy @(Array.!): recursive 'array'@ knot
+--   from the Haskell report diverges instead of tying.
+--
+-- 'freeze' and 'thaw' convert between mutable and immutable arrays over any
+-- 'MArray'\/'IArray' pair. They live here rather than in
+-- "Data.Array.MArray" because that module cannot import this one back.
+module Data.Array.IArray
+  ( module Data.Ix
+  , IArray(bounds, numElements, unsafeArray, unsafeAt, unsafeReplace, unsafeAccum, unsafeAccumArray)
+  , Array
+  , array
+  , listArray
+  , accumArray
+  , genArray
+  , (!)
+  , (!?)
+  , indices
+  , elems
+  , assocs
+  , (//)
+  , accum
+  , amap
+  , ixmap
+  , foldrArray
+  , foldlArray
+  , foldlArray'
+  , foldrArray'
+  , traverseArray_
+  , forArray_
+  , foldlArrayM'
+  , foldrArrayM'
+  , freeze
+  , thaw
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Control.Monad.ST (ST, runST)
+import Data.Array (Array)
+import Data.Array.MArray (MArray(getBounds, getNumElements, newArray_, unsafeRead, unsafeWrite))
+import Data.Array.ST (STArray)
+import Data.Bool
+import Data.Enum (Enum(enumFromTo))
+import Data.Foldable (concatMap, foldl, foldr, foldlM, foldrM, mapM_, sequence_)
+import Data.Functor
+import Data.Int (Int)
+import Data.Ix
+import Data.List (zip)
+import Data.Maybe (Maybe(Just, Nothing))
+import Data.Num
+import Data.Traversable (mapM)
+import Data.Tuple
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+import Moggi.Internal.ST
+
+infixl 9 !
+infixl 9 !?
+
+-- | Immutable arrays: @a@ is the array constructor (of kind
+-- @Type -> Type -> Type@: @Array@, partially applied), @i@ ranges over
+-- 'Ix' indices and @e@ is the element type.
+--
+-- Minimal definition: 'bounds', 'numElements', 'unsafeArray', 'unsafeAt'.
+-- The checked operations ('array', '!', '(//)' and friends) are derived
+-- once, and the 'unsafeReplace' family defaults to a copy through a fresh
+-- 'STArray', exactly like the @Array@ instance behaves.
+class IArray a e where
+  {-# MINIMAL bounds, numElements, unsafeArray, unsafeAt #-}
+
+  -- | The bounds the array was built with.
+  bounds :: Ix i => a i e -> (i, i)
+
+  -- | The number of slots in the backing store.
+  numElements :: Ix i => a i e -> Int
+
+  -- | Build an array from bounds and store-offset associations, without
+  -- checking: only for offsets 'safeIndex' produced.
+  unsafeArray :: Ix i => (i, i) -> [(Int, e)] -> a i e
+
+  -- | Read a slot by store offset, without checking: only for offsets
+  -- 'safeIndex' produced.
+  unsafeAt :: Ix i => a i e -> Int -> e
+
+  -- | Replace slots by store offset, without checking.
+  unsafeReplace :: Ix i => a i e -> [(Int, e)] -> a i e
+  unsafeReplace arr ies = runST (do marr <- replaceST arr ies; freezeFromST marr)
+
+  -- | Accumulate into slots by store offset, without checking.
+  unsafeAccum :: Ix i => (e -> x -> e) -> a i e -> [(Int, x)] -> a i e
+  unsafeAccum f arr ies = runST (do marr <- accumST f arr ies; freezeFromST marr)
+
+  -- | Build an array by accumulating offset associations over an initial
+  -- value, without checking.
+  unsafeAccumArray :: Ix i => (e -> x -> e) -> e -> (i, i) -> [(Int, x)] -> a i e
+  unsafeAccumArray f initial bnds ies =
+    let n = safeRangeSize bnds
+    in unsafeAccum f (unsafeArray bnds [(off, initial) | off <- [0 .. n - 1]]) ies
+
+-- | Copy an immutable array into a fresh 'STArray'. Pins 'thaw' to the
+-- 'STArray' instance for the 'ST'-based defaults above: unpinned, the
+-- mutable array type would be ambiguous.
+thawToST :: (IArray a e, Ix i) => a i e -> ST s (STArray s i e)
+thawToST = thaw
+
+-- | Freeze a fresh 'STArray' into any immutable array. Pins 'freeze' the
+-- same way.
+freezeFromST :: (Ix i, IArray a e) => STArray s i e -> ST s (a i e)
+freezeFromST = freeze
+
+-- | Copy an immutable array into a fresh 'STArray' and overwrite slots,
+-- for the 'unsafeReplace' default above.
+replaceST :: (IArray a e, Ix i) => a i e -> [(Int, e)] -> ST s (STArray s i e)
+replaceST arr ies = do
+  marr <- thawToST arr
+  mapM_ (\ie -> case ie of (off, e) -> unsafeWrite marr off e) ies
+  pure marr
+
+-- | Copy an immutable array into a fresh 'STArray' and accumulate into
+-- slots, for the 'unsafeAccum' default above.
+accumST :: (IArray a e, Ix i) => (e -> x -> e) -> a i e -> [(Int, x)] -> ST s (STArray s i e)
+accumST f arr ies = do
+  marr <- thawToST arr
+  mapM_ (\ie -> case ie of (off, x) -> do old <- unsafeRead marr off; unsafeWrite marr off (f old x)) ies
+  pure marr
+
+-- | Build an array from bounds and associations. Indices outside the bounds
+-- fail up front; duplicate indices keep the last value.
+array :: (IArray a e, Ix i) => (i, i) -> [(i, e)] -> a i e
+array bnds ies =
+  let n = safeRangeSize bnds
+  in unsafeArray bnds [case assoc of (i, e) -> (safeIndex bnds n i, e) | assoc <- ies]
+
+-- | Build an array from bounds and values in index order. A short list
+-- leaves holes; extra values are ignored. (Holes raise when read for
+-- 'Array'; see "Data.Array".)
+listArray :: (IArray a e, Ix i) => (i, i) -> [e] -> a i e
+listArray bnds es =
+  let n = safeRangeSize bnds
+  in unsafeArray bnds (zip [0 .. n - 1] es)
+
+-- | Build an array by accumulating associations over an initial value.
+accumArray :: (IArray a e, Ix i) => (e -> x -> e) -> e -> (i, i) -> [(i, x)] -> a i e
+accumArray f initial bnds ies =
+  let n = safeRangeSize bnds
+  in unsafeAccumArray f initial bnds [case assoc of (i, x) -> (safeIndex bnds n i, x) | assoc <- ies]
+
+-- | Build an array by running the generator once per index, in ascending
+-- index order.
+genArray :: (IArray a e, Ix i) => (i, i) -> (i -> e) -> a i e
+genArray bnds f = listArray bnds (map f (range bnds))
+
+-- | Read a slot. Checks the semantic range and the store size, then reads.
+(!) :: (IArray a e, Ix i) => a i e -> i -> e
+(!) arr i =
+  let bnds = bounds arr
+  in unsafeAt arr (safeIndex bnds (numElements arr) i)
+
+-- | Read a slot, total: 'Just' the value in range, 'Nothing' outside it.
+(!?) :: (IArray a e, Ix i) => a i e -> i -> Maybe e
+(!?) arr i = let bnds = bounds arr in case inRange bnds i of
+  True -> Just (unsafeAt arr (unsafeIndex bnds i))
+  False -> Nothing
+
+-- | The indices of the array in ascending order.
+indices :: (IArray a e, Ix i) => a i e -> [i]
+indices arr = range (bounds arr)
+
+-- | The values of the array in index order.
+elems :: (IArray a e, Ix i) => a i e -> [e]
+elems arr = [unsafeAt arr off | off <- [0 .. numElements arr - 1]]
+
+-- | The associations of the array in index order.
+assocs :: (IArray a e, Ix i) => a i e -> [(i, e)]
+assocs arr =
+  let bnds = bounds arr
+  in [(i, arr ! i) | i <- range bnds]
+
+-- | Update associations: @arr \/\/ ies@ copies @arr@ and replaces the
+-- listed slots, keeping the last value for duplicates.
+(//) :: (IArray a e, Ix i) => a i e -> [(i, e)] -> a i e
+arr // ies =
+  let bnds = bounds arr
+      n = numElements arr
+  in unsafeReplace arr [case assoc of (i, e) -> (safeIndex bnds n i, e) | assoc <- ies]
+
+-- | Accumulate associations into a copy.
+accum :: (IArray a e, Ix i) => (e -> x -> e) -> a i e -> [(i, x)] -> a i e
+accum f arr ies =
+  let bnds = bounds arr
+      n = numElements arr
+  in unsafeAccum f arr [case assoc of (i, x) -> (safeIndex bnds n i, x) | assoc <- ies]
+
+-- | Map the values, preserving bounds.
+amap :: (IArray a e1, IArray a e2, Ix i) => (e1 -> e2) -> a i e1 -> a i e2
+amap f arr =
+  let bnds = bounds arr
+      n = numElements arr
+  in unsafeArray bnds [(off, f (unsafeAt arr off)) | off <- [0 .. n - 1]]
+
+-- | Remap the indices: @ixmap bnds f arr@ builds an array over @bnds@
+-- whose slot @i@ holds @arr ! f i@.
+ixmap :: (IArray a e, Ix i, Ix j) => (i, i) -> (i -> j) -> a j e -> a i e
+ixmap bnds f arr = array bnds [(i, arr ! f i) | i <- range bnds]
+
+-- | Right fold over the slots in index order.
+foldrArray :: (IArray a e, Ix i) => (e -> r -> r) -> r -> a i e -> r
+foldrArray f z arr = foldr f z (elems arr)
+
+-- | Strict left fold over the slots in index order.
+foldlArray' :: (IArray a e, Ix i) => (r -> e -> r) -> r -> a i e -> r
+foldlArray' f z arr = foldl f z (elems arr)
+
+-- | Left fold over the slots in index order. Identical to 'foldlArray''
+-- because Moggi evaluates strictly.
+foldlArray :: (IArray a e, Ix i) => (r -> e -> r) -> r -> a i e -> r
+foldlArray = foldlArray'
+
+-- | Strict right fold over the slots in index order. Identical to
+-- 'foldrArray' because Moggi evaluates strictly.
+foldrArray' :: (IArray a e, Ix i) => (e -> r -> r) -> r -> a i e -> r
+foldrArray' = foldrArray
+
+-- | Run an action on every slot in index order, discarding the results.
+traverseArray_ :: (IArray a e, Ix i, Applicative f) => (e -> f r) -> a i e -> f ()
+traverseArray_ f arr = foldrArray (\x r -> f x *> r) (pure ()) arr
+
+-- | 'traverseArray_' with its arguments flipped.
+forArray_ :: (IArray a e, Ix i, Applicative f) => a i e -> (e -> f r) -> f ()
+forArray_ arr f = traverseArray_ f arr
+
+-- | Strict monadic left fold over the slots in index order.
+foldlArrayM' :: (IArray a e, Ix i, Monad m) => (r -> e -> m r) -> r -> a i e -> m r
+foldlArrayM' f z arr = foldlM f z (elems arr)
+
+-- | Monadic right fold over the slots in index order.
+foldrArrayM' :: (IArray a e, Ix i, Monad m) => (e -> r -> m r) -> r -> a i e -> m r
+foldrArrayM' f z arr = foldrM f z (elems arr)
+
+-- | Freeze by copying: read every slot and build the immutable array with
+-- 'listArray', so later writes never touch it.
+freeze :: (Ix i, MArray a e m, IArray b e) => a i e -> m (b i e)
+freeze marr = do
+  bnds <- getBounds marr
+  n <- getNumElements marr
+  es <- mapM (unsafeRead marr) [0 .. n - 1]
+  pure (listArray bnds es)
+
+-- | Thaw by copying: build a mutable array slot by slot with 'newArray_',
+-- so writes never touch the immutable array.
+thaw :: (Ix i, IArray a e, MArray b e m) => a i e -> m (b i e)
+thaw arr = do
+  let bnds = bounds arr
+  marr <- newArray_ bnds
+  let n = safeRangeSize bnds
+  sequence_ [unsafeWrite marr off (unsafeAt arr off) | off <- [0 .. n - 1]]
+  pure marr
+
+instance IArray Array e where
+  bounds arr = arrayBounds# arr
+  numElements arr = arraySize# arr
+  unsafeArray bnds ies = runST (do
+    let n = safeRangeSize bnds
+    marr <- newSTArray# bnds n
+    sequence_ [case ie of (off, e) -> writeSTArray# marr off e | ie <- ies]
+    unsafeFreezeSTArray# marr)
+  unsafeAt arr off = arrayRead# arr off

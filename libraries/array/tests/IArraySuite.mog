@@ -1,0 +1,65 @@
+-- Data.Array.IArray: the overloaded interface over 'Array' — construction,
+-- indexing, updates, folds, freeze/thaw and use through a generic
+-- constrained helper.
+
+module IArraySuite (iarraySuite) where
+
+import Control.Monad.ST (ST, runST)
+import Data.Array.IArray
+import Data.Array.MArray (MArray, newListArray, readArray, writeArray)
+import Data.Array.ST (STArray)
+import Data.Ix (Ix)
+import Data.Maybe (Maybe(Just, Nothing))
+import Support (assertTrue, expect)
+
+bndsI :: (Int, Int)
+bndsI = (0, 2)
+
+-- A generic consumer: only the 'IArray' interface is in play here.
+sumArray :: (IArray a Int, Ix i) => a i Int -> Int
+sumArray = foldlArray' (+) 0
+
+-- Thaw into an 'STArray': 'thaw' leaves the mutable constructor ambiguous.
+thawST :: Array Int Int -> ST s (STArray s Int Int)
+thawST = thaw
+
+newSTIntList :: (Int, Int) -> [Int] -> ST s (STArray s Int Int)
+newSTIntList = newListArray
+
+iarraySuite :: IO ()
+iarraySuite = do
+  let arr = array bndsI [(0, 1), (1, 2), (2, 3)] :: Array Int Int
+  expect "bounds" (show (bounds arr)) "(0,2)"
+  expect "indices" (show (indices arr)) "[0,1,2]"
+  expect "elems" (show (elems arr)) "[1,2,3]"
+  expect "assocs" (show (assocs arr)) "[(0,1),(1,2),(2,3)]"
+  expect "index" (show (arr ! 2)) "3"
+  expect "in range is Just" (show (arr !? 0)) "Just 1"
+  expect "out of range is Nothing" (show (arr !? 9)) "Nothing"
+  expect "negative is Nothing" (show (arr !? (-1))) "Nothing"
+  expect "listArray" (show (elems (listArray bndsI [4, 5, 6] :: Array Int Int))) "[4,5,6]"
+  expect "accumArray" (show (elems (accumArray (+) 0 bndsI [(0, 1), (0, 2), (2, 7)] :: Array Int Int))) "[3,0,7]"
+  expect "genArray" (show (elems (genArray bndsI (\i -> i * i) :: Array Int Int))) "[0,1,4]"
+  expect "update" (show (elems (arr // [(0, 9)]))) "[9,2,3]"
+  expect "accum" (show (elems (accum (+) arr [(1, 10), (1, 100)]))) "[1,112,3]"
+  expect "amap" (show (elems (amap (+ 1) arr))) "[2,3,4]"
+  expect "ixmap" (show (elems (ixmap bndsI (\i -> 2 - i) arr))) "[3,2,1]"
+  expect "generic sum" (show (sumArray arr)) "6"
+  expect "foldrArray" (show (foldrArray (-) 0 arr)) "2"
+  expect "foldlArray'" (show (foldlArray' (+) 0 arr)) "6"
+  expect "foldlArray" (show (foldlArray (+) 0 arr)) "6"
+  expect "foldrArray'" (show (foldrArray' (-) 0 arr)) "2"
+  expect "traverseArray_ collects" (show (traverseArray_ (\e -> case e > 0 of True -> Just (); False -> Nothing) arr :: Maybe ())) "Just ()"
+  expect "traverseArray_ short-circuits" (show (traverseArray_ (\e -> case e > 1 of True -> Just (); False -> Nothing) arr :: Maybe ())) "Nothing"
+  expect "forArray_ collects" (show (forArray_ arr (\e -> Just e) :: Maybe ())) "Just ()"
+  expect "foldlArrayM'" (show (foldlArrayM' (\acc e -> Just (acc + e)) 0 arr :: Maybe Int)) "Just 6"
+  expect "foldlArrayM' short-circuits" (show (foldlArrayM' (\acc e -> case e > 1 of True -> Just (acc + e); False -> Nothing) 0 arr :: Maybe Int)) "Nothing"
+  expect "foldrArrayM'" (show (foldrArrayM' (\e acc -> Just (e + acc)) 0 arr :: Maybe Int)) "Just 6"
+  let rt = runST (do marr <- thawST arr; freeze marr) :: Array Int Int
+  expect "thaw/freeze roundtrip" (show (elems rt)) "[1,2,3]"
+  let frozen = runST (do marr <- thawST arr; f <- freeze marr; writeArray marr 0 99; pure f) :: Array Int Int
+  expect "freeze copies" (show (elems frozen)) "[1,2,3]"
+  let back = runST (do marr <- newSTIntList bndsI [7, 8, 9]; x <- readArray marr 2; pure x) :: Int
+  expect "marray read in ST" (show back) "9"
+  assertTrue "STArray is an MArray" (runST (do marr <- newSTIntList bndsI [1, 2, 3]; writeArray marr 1 20; readArray marr 1) == 20)
+  assertTrue "two thaws are distinct arrays" (runST (do m1 <- thawST arr; m2 <- thawST arr; pure (m1 /= m2)))

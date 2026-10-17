@@ -1,0 +1,75 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Mutable boxed arrays in 'ST': an 'STArray' is a fixed-size table from
+-- an 'Ix' index range to values that a state thread allocates, reads and
+-- writes, then freezes into a pure 'Array' — usually through 'runSTArray',
+-- which keeps the mutable array from escaping.
+--
+-- The 'MArray' instance is the whole overloaded interface
+-- ("Data.Array.MArray"); the functions here are the 'ST'-specific pieces:
+-- the type itself, running a thread that answers an array, and the
+-- O(1) casts. Generic conversions that copy live in "Data.Array.IArray"
+-- ('freeze', 'thaw') and "Data.Array.Unsafe" ('unsafeFreeze',
+-- 'unsafeThaw').
+module Data.Array.ST
+  ( STArray
+  , runSTArray
+  , unsafeFreezeSTArray
+  , unsafeThawSTArray
+  , module Data.Array.MArray
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Control.Monad.ST (ST, runST)
+import Data.Array (Array)
+import Data.Array.MArray
+import Data.Eq
+import Data.Functor
+import Data.Int (Int)
+import Data.Ix (Ix, safeRangeSize)
+import Data.Tuple
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+import Moggi.Internal.ST
+
+-- | A mutable table from indices @i@ to values @e@ in thread @s@. The
+-- thread variable keeps one thread's arrays apart from another's; 'runST'
+-- refuses to answer a thread whose array would leave it. The primops speak
+-- this type directly, so there is no wrapping to do: this declaration
+-- names the type, its kind, and its confinement (mutable — 'STArray#'
+-- never appears in pure signatures or data fields).
+newtype STArray s i e = STArray (STArray# s i e)
+
+instance MArray (STArray s) e (ST s) where
+  getBounds marr = pure (boundsSTArray# marr)
+  getNumElements marr = pure (sizeSTArray# marr)
+  unsafeNewArray_ bnds = newSTArray# bnds (safeRangeSize bnds)
+  unsafeRead marr off = readSTArray# marr off
+  unsafeWrite marr off x = writeSTArray# marr off x
+
+-- | Run a thread that answers a mutable array, freezing it without copying:
+-- the array is fresh, so no one else can observe the cast.
+runSTArray :: ST s (STArray s i e) -> Array i e
+runSTArray st = runST (do
+  marr <- st
+  unsafeFreezeSTArray marr)
+
+-- | Freeze without copying, in O(1). Afterwards the mutable array must
+-- never be read or written again: it /is/ the frozen array now, so a later
+-- write would rewrite history. 'runSTArray' and the 'IArray' methods are
+-- the safe callers; anything else must prove the array is dead first.
+unsafeFreezeSTArray :: STArray s i e -> ST s (Array i e)
+unsafeFreezeSTArray marr = unsafeFreezeSTArray# marr
+
+-- | Thaw without copying, in O(1). Afterwards the immutable array must
+-- never be read again: it /is/ the mutable array now, so a later write
+-- would rewrite history.
+unsafeThawSTArray :: Array i e -> ST s (STArray s i e)
+unsafeThawSTArray arr = unsafeThawArray# arr
+
+-- | Pointer equality: two 'STArray's are equal exactly when they are the
+-- same mutable array, as in Haskell (which compares with
+-- @sameMutableArray#@). Equal contents in two separately allocated arrays
+-- are '/='.
+instance Eq (STArray s i e) where
+  (==) a b = sameSTArray# a b

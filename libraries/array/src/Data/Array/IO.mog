@@ -1,0 +1,73 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Mutable boxed arrays in 'IO': an 'IOArray' is a fixed-size table from
+-- an 'Ix' index range to values that 'IO' actions allocate, read and
+-- write. Unlike 'STArray' (see "Data.Array.ST") there is no thread to run
+-- and no escape check: the array lives as long as someone holds it, and
+-- freezing it copies (see 'freezeIOArray' below and 'freeze' in
+-- "Data.Array.IArray").
+--
+-- The 'MArray' instance is the whole overloaded interface
+-- ("Data.Array.MArray"); the functions here are the 'IO'-specific pieces:
+-- the type itself and the copies between mutable and immutable arrays.
+module Data.Array.IO
+  ( IOArray
+  , freezeIOArray
+  , thawIOArray
+  , unsafeFreezeIOArray
+  , unsafeThawIOArray
+  , module Data.Array.MArray
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Array (Array)
+import Data.Array.MArray
+import Data.Functor
+import Data.Int (Int)
+import Data.Ix (Ix, safeRangeSize)
+import Data.Tuple
+import Moggi.Internal.Base
+import Moggi.Internal.IO
+import System.IO (IO)
+
+-- | A mutable table from indices @i@ to values @e@ in 'IO'. The primops
+-- speak this type directly, so there is no wrapping to do: this
+-- declaration names the type, its kind, and its confinement (mutable
+-- 'IO' state — 'IOArray#' never appears in pure signatures or data
+-- fields).
+newtype IOArray i e = IOArray (IOArray# i e)
+
+instance MArray IOArray e IO where
+  getBounds marr = pure (boundsIOArray# marr)
+  getNumElements marr = pure (sizeIOArray# marr)
+  unsafeNewArray_ bnds = newIOArray# bnds (safeRangeSize bnds)
+  unsafeRead marr off = readIOArray# marr off
+  unsafeWrite marr off x = writeIOArray# marr off x
+
+-- | Freeze by copying: the mutable array stays usable afterwards, and
+-- later writes never touch the frozen array.
+freezeIOArray :: IOArray i e -> IO (Array i e)
+freezeIOArray marr = freezeIOArray# marr
+
+-- | Thaw by copying: the immutable array stays usable afterwards, and
+-- writes to the mutable array never touch it.
+thawIOArray :: Array i e -> IO (IOArray i e)
+thawIOArray arr = thawIOArray# arr
+
+-- | Freeze without copying, in O(1). Afterwards the mutable array must
+-- never be read or written again: it /is/ the frozen array now, so a
+-- later write would rewrite history.
+unsafeFreezeIOArray :: IOArray i e -> IO (Array i e)
+unsafeFreezeIOArray marr = unsafeFreezeIOArray# marr
+
+-- | Thaw without copying, in O(1). Afterwards the immutable array must
+-- never be read again: it /is/ the mutable array now, so a later write
+-- would rewrite history.
+unsafeThawIOArray :: Array i e -> IO (IOArray i e)
+unsafeThawIOArray arr = unsafeThawIOArray# arr
+
+-- No 'Eq' instance, though Haskell has one (pointer equality): Moggi's IO
+-- confinement forbids 'IOArray' in a pure signature ('IO values are
+-- forbidden outside an IO-returning function'), and '(==)' is pure. The
+-- underlying primop 'sameIOArray#' ('Moggi.Internal.Prim') is still
+-- available for identity checks inside 'IO'-returning functions.

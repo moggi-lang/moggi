@@ -1,0 +1,62 @@
+-- Data.Array.MArray: the overloaded mutable operations, exercised in 'ST'
+-- (pure, through 'runST') so every case is an equality on values.
+--
+-- The helpers below pin each overloaded construction to 'STArray': the
+-- 'MArray' class has no functional dependencies, so a bare
+-- @newArray bnds x@ leaves the array constructor ambiguous and only a
+-- signature (or a concrete consumer like 'runSTArray') can settle it.
+
+module MArraySuite (marraySuite) where
+
+import Control.Monad.ST (ST, runST)
+import Data.Array (Array, elems)
+import Data.Array.MArray
+import Data.Array.ST (STArray, runSTArray, unsafeFreezeSTArray)
+import Support (assertTrue, expect)
+
+bndsM :: (Int, Int)
+bndsM = (0, 2)
+
+newSTInt :: (Int, Int) -> Int -> ST s (STArray s Int Int)
+newSTInt = newArray
+
+newSTInt_ :: (Int, Int) -> ST s (STArray s Int Int)
+newSTInt_ = newArray_
+
+newSTIntList :: (Int, Int) -> [Int] -> ST s (STArray s Int Int)
+newSTIntList = newListArray
+
+newSTIntGen :: (Int, Int) -> (Int -> ST s Int) -> ST s (STArray s Int Int)
+newSTIntGen = newGenArray
+
+mapSTInt :: (Int -> Int) -> STArray s Int Int -> ST s (STArray s Int Int)
+mapSTInt = mapArray
+
+mapSTIntIndices :: (Int, Int) -> (Int -> Int) -> STArray s Int Int -> ST s (STArray s Int Int)
+mapSTIntIndices = mapIndices
+
+marraySuite :: IO ()
+marraySuite = do
+  expect "newArray fills" (show (runST (do marr <- newSTInt bndsM 0; getElems marr) :: [Int])) "[0,0,0]"
+  expect "write/read" (show (runST (do marr <- newSTInt bndsM 0; writeArray marr 1 20; readArray marr 1) :: Int)) "20"
+  expect "getBounds" (show (runST (do marr <- newSTInt bndsM 0; getBounds marr) :: (Int, Int))) "(0,2)"
+  expect "getNumElements" (show (runST (do marr <- newSTInt bndsM 0; getNumElements marr) :: Int)) "3"
+  expect "newArray_ then fill" (show (runST (do marr <- newSTInt_ bndsM; writeArray marr 0 5; writeArray marr 1 6; writeArray marr 2 7; getElems marr) :: [Int])) "[5,6,7]"
+  expect "newListArray" (show (runST (do marr <- newSTIntList bndsM [1, 2, 3]; getElems marr) :: [Int])) "[1,2,3]"
+  expect "newGenArray" (show (runST (do marr <- newSTIntGen bndsM (\i -> pure (i * 10)); getElems marr) :: [Int])) "[0,10,20]"
+  expect "modifyArray" (show (runST (do marr <- newSTIntList bndsM [1, 2, 3]; modifyArray marr 0 (+ 100); getElems marr) :: [Int])) "[101,2,3]"
+  expect "modifyArray'" (show (runST (do marr <- newSTIntList bndsM [1, 2, 3]; modifyArray' marr 2 (* 2); getElems marr) :: [Int])) "[1,2,6]"
+  expect "getAssocs" (show (runST (do marr <- newSTIntList bndsM [1, 2, 3]; getAssocs marr) :: [(Int, Int)])) "[(0,1),(1,2),(2,3)]"
+  expect "mapArray" (show (runST (do marr <- newSTIntList bndsM [1, 2, 3]; marr2 <- mapSTInt (* 10) marr; getElems marr2) :: [Int])) "[10,20,30]"
+  expect "mapIndices" (show (runST (do marr <- newSTIntList bndsM [1, 2, 3]; marr2 <- mapSTIntIndices bndsM (\i -> 2 - i) marr; getElems marr2) :: [Int])) "[3,2,1]"
+  expect "foldlMArray'" (show (runST (do marr <- newSTIntList bndsM [1, 2, 3]; foldlMArray' (+) 0 marr) :: Int)) "6"
+  expect "foldrMArray'" (show (runST (do marr <- newSTIntList bndsM [1, 2, 3]; foldrMArray' (-) 0 marr) :: Int)) "2"
+  expect "foldlMArrayM'" (show (runST (do marr <- newSTIntList bndsM [1, 2, 3]; foldlMArrayM' (\acc e -> pure (acc + e)) 0 marr) :: Int)) "6"
+  expect "foldrMArrayM'" (show (runST (do marr <- newSTIntList bndsM [1, 2, 3]; foldrMArrayM' (\e acc -> pure (e + acc)) 0 marr) :: Int)) "6"
+  expect "mapMArrayM_ keeps" (show (runST (do marr <- newSTIntList bndsM [1, 2, 3]; mapMArrayM_ (\e -> pure e) marr; getElems marr) :: [Int])) "[1,2,3]"
+  expect "forMArrayM_ keeps" (show (runST (do marr <- newSTIntList bndsM [1, 2, 3]; forMArrayM_ marr (\e -> pure e); getElems marr) :: [Int])) "[1,2,3]"
+  expect "runSTArray" (show (elems (runSTArray (newSTIntList bndsM [4, 5, 6]) :: Array Int Int))) "[4,5,6]"
+  expect "unsafeFreezeSTArray" (show (elems (runST (do marr <- newSTIntList bndsM [7, 8, 9]; unsafeFreezeSTArray marr) :: Array Int Int))) "[7,8,9]"
+  assertTrue "empty mutable array" (runST (do marr <- newSTInt (1, 0) 0; getNumElements marr) == 0)
+  assertTrue "STArray equals itself" (runST (do marr <- newSTIntList bndsM [1, 2, 3]; pure (marr == marr)))
+  assertTrue "distinct STArrays differ" (runST (do m1 <- newSTIntList bndsM [1, 2, 3]; m2 <- newSTIntList bndsM [1, 2, 3]; pure (m1 /= m2)))

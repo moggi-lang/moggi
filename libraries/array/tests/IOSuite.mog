@@ -1,0 +1,82 @@
+-- Data.Array.IO: mutable arrays in 'IO' — allocation, reads, writes, the
+-- copying freeze/thaw and the O(1) unsafe handoff.
+
+module IOSuite (ioSuite) where
+
+import Data.Array (Array, bounds, elems)
+import Data.Array.IO (IOArray, freezeIOArray, thawIOArray, unsafeFreezeIOArray, unsafeThawIOArray)
+import Data.Array.MArray
+import Moggi.Internal.Prim (sameIOArray#)
+import Support (assertTrue, expect)
+
+bndsIO :: (Int, Int)
+bndsIO = (0, 2)
+
+-- Pin each overloaded construction to 'IOArray': the 'MArray' class has no
+-- functional dependencies, so a bare @newArray bnds x@ is ambiguous.
+newIOInt :: (Int, Int) -> Int -> IO (IOArray Int Int)
+newIOInt = newArray
+
+newIOIntList :: (Int, Int) -> [Int] -> IO (IOArray Int Int)
+newIOIntList = newListArray
+
+newIOIntGen :: (Int, Int) -> (Int -> IO Int) -> IO (IOArray Int Int)
+newIOIntGen = newGenArray
+
+mapIOInt :: (Int -> Int) -> IOArray Int Int -> IO (IOArray Int Int)
+mapIOInt = mapArray
+
+-- Identity inside 'IO': there is no 'Eq (IOArray i e)' (confinement keeps
+-- 'IOArray' out of pure signatures), so the primop is used directly.
+sameIO :: IOArray Int Int -> IOArray Int Int -> IO Bool
+sameIO a b = pure (sameIOArray# a b)
+
+ioSuite :: IO ()
+ioSuite = do
+  marr <- newIOInt bndsIO 0
+  writeArray marr 0 1
+  writeArray marr 1 2
+  writeArray marr 2 3
+  x <- readArray marr 1
+  expect "readArray value" (show x) "2"
+  es <- getElems marr
+  expect "getElems values" (show es) "[1,2,3]"
+  ass <- getAssocs marr
+  expect "getAssocs" (show ass) "[(0,1),(1,2),(2,3)]"
+  b <- getBounds marr
+  expect "getBounds" (show b) "(0,2)"
+  n <- getNumElements marr
+  expect "getNumElements" (show n) "3"
+  modifyArray marr 0 (+ 10)
+  y <- readArray marr 0
+  expect "modifyArray" (show y) "11"
+  frozen <- freezeIOArray marr
+  writeArray marr 0 99
+  expect "freezeIOArray copies" (show (elems frozen)) "[11,2,3]"
+  z <- readArray marr 0
+  expect "mutable still usable after freeze" (show z) "99"
+  marr2 <- thawIOArray frozen
+  writeArray marr2 1 88
+  expect "thawIOArray copies" (show (elems frozen)) "[11,2,3]"
+  w <- readArray marr2 1
+  expect "thawed is writable" (show w) "88"
+  marr3 <- newIOIntList bndsIO [4, 5, 6]
+  frozen3 <- unsafeFreezeIOArray marr3
+  expect "unsafeFreezeIOArray hands off" (show (elems frozen3)) "[4,5,6]"
+  marr4 <- unsafeThawIOArray frozen3
+  v <- readArray marr4 2
+  expect "unsafeThawIOArray hands back" (show v) "6"
+  marr5 <- newIOIntGen bndsIO (\i -> pure (i + 1))
+  es5 <- getElems marr5
+  expect "newGenArray in IO" (show es5) "[1,2,3]"
+  marr6 <- mapIOInt (* 2) marr5
+  es6 <- getElems marr6
+  expect "mapArray in IO" (show es6) "[2,4,6]"
+  s <- foldlMArray' (+) 0 marr5
+  expect "foldlMArray' in IO" (show s) "6"
+  selfSame <- sameIO marr marr
+  assertTrue "IOArray identical to itself" selfSame
+  other <- newIOInt bndsIO 0
+  distinct <- sameIO marr other
+  assertTrue "distinct IOArrays differ" (distinct == False)
+  assertTrue "bounds survive freeze" (bounds frozen == bndsIO)

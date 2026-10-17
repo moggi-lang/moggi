@@ -1,0 +1,38 @@
+-- Data.Array: bounds, construction, indexing, updates, derived arrays and
+-- the Eq/Ord/Show instances.
+
+module ArraySuite (arraySuite) where
+
+import Data.Array
+import Support (assertTrue, expect)
+
+arraySuite :: IO ()
+arraySuite = do
+  let arr = array (0, 2) [(0, 10), (1, 20), (2, 30)] :: Array Int Int
+  expect "bounds" (show (bounds arr)) "(0,2)"
+  expect "indices" (show (indices arr)) "[0,1,2]"
+  expect "elems" (show (elems arr)) "[10,20,30]"
+  expect "assocs" (show (assocs arr)) "[(0,10),(1,20),(2,30)]"
+  expect "index" (show (arr ! 1)) "20"
+  expect "last wins on duplicates" (show (elems (array (0, 1) [(0, 1), (0, 2), (1, 3)] :: Array Int Int))) "[2,3]"
+  expect "listArray" (show (elems (listArray (1, 3) [7, 8, 9] :: Array Int Int))) "[7,8,9]"
+  expect "listArray keeps bounds" (show (bounds (listArray (1, 3) [7, 8, 9] :: Array Int Int))) "(1,3)"
+  expect "accumArray hist" (show (elems (accumArray (+) 0 (0, 2) [(0, 1), (1, 1), (0, 1), (2, 5)] :: Array Int Int))) "[2,1,5]"
+  expect "update" (show (elems (arr // [(1, 99), (2, 100)]))) "[10,99,100]"
+  expect "update keeps bounds" (show (bounds (arr // [(0, 1)]))) "(0,2)"
+  expect "accum" (show (elems (accum (+) arr [(0, 1), (2, 2)]))) "[11,20,32]"
+  expect "amap" (show (elems (amap (* 2) arr))) "[20,40,60]"
+  expect "amap keeps bounds" (show (bounds (amap (* 2) arr))) "(0,2)"
+  expect "ixmap reverses" (show (elems (ixmap (0, 2) (\i -> 2 - i) arr))) "[30,20,10]"
+  expect "tuple indices" (show (elems (array ((0, 0), (1, 1)) [((0, 0), 1), ((1, 0), 2), ((0, 1), 3), ((1, 1), 4)] :: Array (Int, Int) Int))) "[1,3,2,4]"
+  expect "tuple index is row-major" (show ((array ((0, 0), (1, 1)) [((0, 0), 1), ((1, 0), 2), ((0, 1), 3), ((1, 1), 4)] :: Array (Int, Int) Int) ! (1, 0))) "2"
+  expect "char indices" (show (elems (array ('a', 'c') [('a', 1), ('b', 2), ('c', 3)] :: Array Char Int))) "[1,2,3]"
+  expect "empty bounds" (show (bounds (array (1, 0) [] :: Array Int Int))) "(1,0)"
+  expect "empty elems" (show (elems (array (1, 0) [] :: Array Int Int))) "[]"
+  expect "empty indices" (show (indices (array (1, 0) [] :: Array Int Int))) "[]"
+  assertTrue "empty arrays equal whatever the bounds" ((array (1, 0) [] :: Array Int Int) == array (5, 3) [])
+  assertTrue "Eq" (arr == array (0, 2) [(0, 10), (1, 20), (2, 30)])
+  assertTrue "Eq is bounds-sensitive" (arr /= listArray (1, 3) [10, 20, 30])
+  assertTrue "Ord compares assocs" (array (0, 1) [(0, 1), (1, 2)] < array (0, 1) [(0, 1), (1, 3)])
+  expect "Show" (show arr) "array (0,2) [(0,10),(1,20),(2,30)]"
+  expect "Show empty" (show (array (1, 0) [] :: Array Int Int)) "array (1,0) []"

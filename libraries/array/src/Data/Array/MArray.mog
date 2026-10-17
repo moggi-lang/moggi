@@ -1,0 +1,221 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Overloaded mutable arrays: the 'MArray' class abstracts over 'STArray'
+-- (see "Data.Array.ST") and 'IOArray' (see "Data.Array.IO"), so one
+-- definition reads, writes, builds and folds arrays in either monad.
+--
+-- The class and its derived operations follow Haskell's @array@ package.
+-- Two strictness adaptations apply throughout, because Moggi evaluates
+-- eagerly and has no lazy bottom element:
+--
+-- * 'unsafeNewArray_' allocates slots that raise when read before they are
+--   written (like a missing association in "Data.Array"), and 'newArray_'
+--   is the same allocation under its safer name. There is no lazy
+--   @arrEleBottom@ initializer to share between them.
+-- * 'modifyArray'' is 'modifyArray': every write is already strict.
+--
+-- 'freeze' and 'thaw' convert between mutable and immutable arrays; they
+-- are defined in "Data.Array.IArray" (which already imports this module,
+-- so defining them here would be an import cycle) and work over any
+-- 'MArray'\/'IArray' pair.
+module Data.Array.MArray
+  ( module Data.Ix
+  , MArray(getBounds, getNumElements, newArray, newArray_, unsafeNewArray_, unsafeRead, unsafeWrite)
+  , newListArray
+  , newGenArray
+  , readArray
+  , writeArray
+  , modifyArray
+  , modifyArray'
+  , getElems
+  , getAssocs
+  , mapArray
+  , mapIndices
+  , foldlMArray'
+  , foldrMArray'
+  , mapMArrayM_
+  , forMArrayM_
+  , foldlMArrayM'
+  , foldrMArrayM'
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Bool
+import Data.Eq
+import Data.Foldable (concatMap, foldlM, foldrM, mapM_, sequence_)
+import Data.Function (($))
+import Data.Functor
+import Data.Int (Int)
+import Data.Ix
+import Data.Enum (Enum(enumFromTo))
+import Data.List (zip)
+import Data.Num
+import Data.Ord
+import Data.Traversable (mapM)
+import Data.Tuple
+import Moggi.Internal.Base
+
+-- | Mutable arrays in a monad: @a@ is the array constructor (of kind
+-- @Type -> Type -> Type@, partially applied in instances: @STArray s@,
+-- @IOArray@), @i@ ranges over 'Ix' indices and @e@ is the element type.
+--
+-- Minimal definition: 'getBounds', 'getNumElements', 'unsafeNewArray_',
+-- 'unsafeRead', 'unsafeWrite'. Unlike Haskell, 'unsafeNewArray_' has no
+-- default through a bottom element: Moggi would evaluate the initializer
+-- eagerly and raise during construction instead of on first read.
+class Monad m => MArray a e m where
+  {-# MINIMAL getBounds, getNumElements, unsafeNewArray_, unsafeRead, unsafeWrite #-}
+
+  -- | The bounds the array was built with.
+  getBounds :: Ix i => a i e -> m (i, i)
+
+  -- | The number of slots in the backing store.
+  getNumElements :: Ix i => a i e -> m Int
+
+  -- | Build an array with every slot holding the initial value.
+  newArray :: Ix i => (i, i) -> e -> m (a i e)
+  newArray bnds initial = do
+    marr <- unsafeNewArray_ bnds
+    let n = safeRangeSize bnds
+    sequence_ [unsafeWrite marr off initial | off <- [0 .. n - 1]]
+    pure marr
+
+  -- | Build an array whose slots raise when read before they are written.
+  newArray_ :: Ix i => (i, i) -> m (a i e)
+  newArray_ = unsafeNewArray_
+
+  -- | Like 'newArray_', without even the promise that reads are checked
+  -- first: the same erroring slots, since Moggi has no lazy thunks to
+  -- defer the failure into. Kept so generic code compiles unchanged.
+  unsafeNewArray_ :: Ix i => (i, i) -> m (a i e)
+
+  -- | Read a slot by store offset, without range checking: only for
+  -- offsets 'safeIndex' produced.
+  unsafeRead :: Ix i => a i e -> Int -> m e
+
+  -- | Write a slot by store offset, without range checking: only for
+  -- offsets 'safeIndex' produced.
+  unsafeWrite :: Ix i => a i e -> Int -> e -> m ()
+
+-- | Build an array from bounds and values in index order. A short list
+-- leaves erroring slots; extra values are ignored.
+--
+-- The fill is a comprehension rather than @map@/"zip" so the traversal
+-- stays list-monomorphic: 'Data.Functor.map' over a concrete list with a
+-- monadic function is left for the constraint solver to pin down, and it
+-- does not always pick @[]@ (the same shape with concrete 'ST' primops,
+-- as in "Data.Array", is fine, but the class methods here leave the
+-- monad variable in play). The comprehension desugars through the list
+-- 'concatMap', exactly like the fills in 'newArray' and 'mapArray'.
+newListArray :: (MArray a e m, Ix i) => (i, i) -> [e] -> m (a i e)
+newListArray bnds es = do
+  marr <- newArray_ bnds
+  let n = safeRangeSize bnds
+  sequence_ [case assoc of (off, x) -> unsafeWrite marr off x | assoc <- zip [0 .. n - 1] es]
+  pure marr
+
+-- | Build an array by running the generator once per index, in ascending
+-- index order.
+newGenArray :: (MArray a e m, Ix i) => (i, i) -> (i -> m e) -> m (a i e)
+newGenArray bnds f = do
+  marr <- unsafeNewArray_ bnds
+  genSlots marr f 0 (range bnds)
+  pure marr
+
+-- Run the generator down the index list, writing consecutive store
+genSlots :: (MArray a e m, Ix i) => a i e -> (i -> m e) -> Int -> [i] -> m ()
+genSlots _ _ _ [] = pure ()
+genSlots marr f off (i : is) = do
+  x <- f i
+  unsafeWrite marr off x
+  genSlots marr f (off + 1) is
+
+-- | Read a slot. Checks the semantic range ('Data.Ix.index' raises
+-- outside it) and the store size, then reads.
+readArray :: (MArray a e m, Ix i) => a i e -> i -> m e
+readArray marr i = do
+  bnds <- getBounds marr
+  n <- getNumElements marr
+  unsafeRead marr (safeIndex bnds n i)
+
+-- | Write a slot. Checks the semantic range and the store size, then
+-- writes.
+writeArray :: (MArray a e m, Ix i) => a i e -> i -> e -> m ()
+writeArray marr i x = do
+  bnds <- getBounds marr
+  n <- getNumElements marr
+  unsafeWrite marr (safeIndex bnds n i) x
+
+-- | Update a slot through a function.
+modifyArray :: (MArray a e m, Ix i) => a i e -> i -> (e -> e) -> m ()
+modifyArray marr i f = do
+  bnds <- getBounds marr
+  n <- getNumElements marr
+  let off = safeIndex bnds n i
+  x <- unsafeRead marr off
+  unsafeWrite marr off (f x)
+
+-- | Strict 'modifyArray'. Identical to 'modifyArray' because Moggi
+-- evaluates strictly.
+modifyArray' :: (MArray a e m, Ix i) => a i e -> i -> (e -> e) -> m ()
+modifyArray' = modifyArray
+
+-- | Every slot in index order.
+getElems :: (MArray a e m, Ix i) => a i e -> m [e]
+getElems marr = do
+  n <- getNumElements marr
+  mapM (unsafeRead marr) [0 .. n - 1]
+
+-- | Every association in index order.
+getAssocs :: (MArray a e m, Ix i) => a i e -> m [(i, e)]
+getAssocs marr = do
+  bnds <- getBounds marr
+  n <- getNumElements marr
+  mapM (\i -> do e <- unsafeRead marr (safeIndex bnds n i); pure (i, e)) (range bnds)
+
+-- | Build an array by mapping the values of another, preserving bounds.
+mapArray :: (MArray a e1 m, MArray a e2 m, Ix i) => (e1 -> e2) -> a i e1 -> m (a i e2)
+mapArray f marr = do
+  bnds <- getBounds marr
+  n <- getNumElements marr
+  marr2 <- newArray_ bnds
+  sequence_ [do e <- unsafeRead marr off; unsafeWrite marr2 off (f e) | off <- [0 .. n - 1]]
+  pure marr2
+
+-- | Build an array over new bounds by reading through an index mapping.
+mapIndices :: (MArray a e m, Ix i, Ix j) => (i, i) -> (i -> j) -> a j e -> m (a i e)
+mapIndices bnds f marr = do
+  marr2 <- newArray_ bnds
+  let n = safeRangeSize bnds
+  sequence_ [do e <- readArray marr (f i); unsafeWrite marr2 (safeIndex bnds n i) e | i <- range bnds]
+  pure marr2
+
+-- | Strict monadic left fold over the slots in index order.
+foldlMArrayM' :: (MArray a e m, Ix i) => (b -> e -> m b) -> b -> a i e -> m b
+foldlMArrayM' f z marr = do
+  n <- getNumElements marr
+  foldlM (\acc off -> do e <- unsafeRead marr off; f acc e) z [0 .. n - 1]
+
+-- | Monadic right fold over the slots in index order.
+foldrMArrayM' :: (MArray a e m, Ix i) => (e -> b -> m b) -> b -> a i e -> m b
+foldrMArrayM' f z marr = do
+  n <- getNumElements marr
+  foldrM (\off acc -> do e <- unsafeRead marr off; f e acc) z [0 .. n - 1]
+
+-- | Strict pure left fold over the slots in index order.
+foldlMArray' :: (MArray a e m, Ix i) => (b -> e -> b) -> b -> a i e -> m b
+foldlMArray' f z marr = foldlMArrayM' (\acc e -> pure (f acc e)) z marr
+
+-- | Pure right fold over the slots in index order.
+foldrMArray' :: (MArray a e m, Ix i) => (e -> b -> b) -> b -> a i e -> m b
+foldrMArray' f z marr = foldrMArrayM' (\e acc -> pure (f e acc)) z marr
+
+-- | Run an action on every slot in index order, discarding the results.
+mapMArrayM_ :: (MArray a e m, Ix i) => (e -> m b) -> a i e -> m ()
+mapMArrayM_ f marr = do
+  n <- getNumElements marr
+  mapM_ (\off -> unsafeRead marr off >>= f) [0 .. n - 1]
+
+-- | 'mapMArrayM_' with its arguments flipped.
+forMArrayM_ :: (MArray a e m, Ix i) => a i e -> (e -> m b) -> m ()
+forMArrayM_ marr f = mapMArrayM_ f marr

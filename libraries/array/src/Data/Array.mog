@@ -1,0 +1,189 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Immutable boxed arrays: an 'Array' is a fixed-size table from an 'Ix'
+-- index range to values, built all at once and read with '(!)'.
+--
+-- Arrays are strict in Moggi (expressions evaluate eagerly), which settles
+-- two of Haskell's lazy corners: an association list that misses an index
+-- leaves an /erroring/ slot — reading it raises @"(Array.!): undefined array
+-- element"@ — and a recursive @array@ (one whose values read the array being
+-- built) diverges instead of tying the knot. Everything else follows the
+-- Haskell 2010 report and GHC's @array@ package: out-of-range indices raise,
+-- duplicate associations keep the last value, and empty bounds @(l, u)@ with
+-- @l > u@ build a legal empty array.
+--
+-- Construction runs through 'ST' internally ('runSTArray' style), so
+-- building is still one allocation plus one freeze no matter how many
+-- associations there are.
+module Data.Array
+  ( module Data.Ix
+  , Array
+  , array
+  , listArray
+  , accumArray
+  , (!)
+  , (//)
+  , bounds
+  , indices
+  , elems
+  , assocs
+  , accum
+  , ixmap
+  , amap
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Control.Monad.ST (runST)
+import Data.Bool
+import Data.Enum (Enum(enumFromTo))
+import Data.Eq
+import Data.Foldable (concatMap, sequence_)
+import Data.Function (($), (.), const)
+import Data.Functor
+import Data.Int (Int)
+import Data.Ix
+import Data.List (zip)
+import Data.Num
+import Data.Ord
+import Data.Tuple
+import Moggi.Err (error)
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+import Moggi.Internal.ST
+import Text.Show (Show(showsPrec), showChar, showParen, showString, shows)
+
+infixl 9 !
+
+-- | An immutable table from indices @i@ to values @e@. The bounds the array
+-- was built with are part of the value ('bounds' recovers them); the
+-- backing store remembers them too, so indexing checks both the semantic
+-- range and the store size, as in GHC. The primops speak this type
+-- directly, so there is no wrapping to do: this declaration names the
+-- type, its kind, and its confinement (pure — 'Array#' never appears in
+-- 'ST' or 'IO' confinement checks).
+newtype Array i e = Array (Array# i e)
+
+-- | The bounds the array was built with.
+bounds :: Array i e -> (i, i)
+bounds arr = arrayBounds# arr
+
+-- | The number of slots in the backing store.
+numElements :: Array i e -> Int
+numElements arr = arraySize# arr
+
+-- | Build an array from bounds and associations. Indices outside the bounds
+-- make the whole array an error (like GHC, the check runs up front);
+-- duplicate indices keep the last value; missing indices error when read.
+array :: Ix i => (i, i) -> [(i, e)] -> Array i e
+array bnds ies = runST (do
+  let n = safeRangeSize bnds
+  marr <- newSTArray# bnds n
+  sequence_ (map (\assoc -> case assoc of (i, e) -> writeSTArray# marr (safeIndex bnds n i) e) ies)
+  unsafeFreezeSTArray# marr)
+
+-- | Build an array from bounds and values in index order. A short list
+-- leaves erroring holes; extra values are ignored.
+listArray :: Ix i => (i, i) -> [e] -> Array i e
+listArray bnds es =
+  let n = safeRangeSize bnds
+  in runST (do
+    marr <- newSTArray# bnds n
+    sequence_ (map (\assoc -> case assoc of (off, v) -> writeSTArray# marr off v) (zip [0 .. n - 1] es))
+    unsafeFreezeSTArray# marr)
+
+-- | Build an array by accumulating associations: every slot starts at the
+-- initial value, and each association combines into its slot with @f@,
+-- strictly in the accumulated value. Unlike 'array', the result never
+-- depends lazily on itself, so recursive associations diverge.
+accumArray :: Ix i => (e -> a -> e) -> e -> (i, i) -> [(i, a)] -> Array i e
+accumArray f initial bnds ies = runST (do
+  let n = safeRangeSize bnds
+  marr <- newSTArray# bnds n
+  sequence_ [writeSTArray# marr off initial | off <- [0 .. n - 1]]
+  sequence_ (map (\assoc -> case assoc of (i, x) -> accumOne marr (safeIndex bnds n i) x) ies)
+  unsafeFreezeSTArray# marr)
+  where
+    accumOne marr off x = do
+      old <- readSTArray# marr off
+      writeSTArray# marr off (f old x)
+
+-- | Read a slot. Checks the semantic range ('index' raises outside it) and
+-- the store size, then reads; an unfilled slot raises
+-- @"(Array.!): undefined array element"@.
+(!) :: Ix i => Array i e -> i -> e
+(!) arr i = arrayRead# arr (safeIndex (bounds arr) (numElements arr) i)
+
+-- | Update associations: @arr \/\/ ies@ copies @arr@ and replaces the listed
+-- slots, keeping the last value for duplicates.
+(//) :: Ix i => Array i e -> [(i, e)] -> Array i e
+arr // ies =
+  let bnds = bounds arr
+      n = safeRangeSize bnds
+  in runST (do
+    marr <- thawArray# arr
+    sequence_ (map (\assoc -> case assoc of (i, e) -> writeSTArray# marr (safeIndex bnds n i) e) ies)
+    unsafeFreezeSTArray# marr)
+
+-- | Accumulate associations into a copy, strictly in each updated slot.
+accum :: Ix i => (e -> a -> e) -> Array i e -> [(i, a)] -> Array i e
+accum f arr ies =
+  let bnds = bounds arr
+      n = safeRangeSize bnds
+  in runST (do
+    marr <- thawArray# arr
+    sequence_ (map (\assoc -> case assoc of (i, x) -> accumOne marr (safeIndex bnds n i) x) ies)
+    unsafeFreezeSTArray# marr)
+  where
+    accumOne marr off x = do
+      old <- readSTArray# marr off
+      writeSTArray# marr off (f old x)
+
+-- | The indices of the array in ascending order.
+indices :: Ix i => Array i e -> [i]
+indices arr = range (bounds arr)
+
+-- | The values of the array in index order.
+elems :: Array i e -> [e]
+elems arr = [arrayRead# arr off | off <- [0 .. numElements arr - 1]]
+
+-- | The associations of the array in index order.
+assocs :: Ix i => Array i e -> [(i, e)]
+assocs arr = [(i, arr ! i) | i <- indices arr]
+
+-- | Remap the indices: @ixmap bnds f arr@ builds an array over @bnds@
+-- whose slot @i@ holds @arr ! f i@.
+ixmap :: (Ix i, Ix j) => (i, i) -> (i -> j) -> Array j e -> Array i e
+ixmap bnds f arr = array bnds [(i, arr ! f i) | i <- range bnds]
+
+-- | Map the values, preserving bounds.
+amap :: Ix i => (a -> e) -> Array i a -> Array i e
+amap f arr =
+  let bnds = bounds arr
+      n = safeRangeSize bnds
+  in runST (do
+    marr <- newSTArray# bnds n
+    sequence_ [writeSTArray# marr off (f (arrayRead# arr off)) | off <- [0 .. n - 1]]
+    unsafeFreezeSTArray# marr)
+
+instance Ix i => Functor (Array i) where
+  map = amap
+
+-- | Equality first compares sizes (two empty arrays are equal whatever
+-- their bounds, as in GHC), then bounds, then slot by slot. 'Eq i' comes
+-- along with 'Ix i' through its 'Ord' superclass.
+instance (Ix i, Eq e) => Eq (Array i e) where
+  arr1 == arr2 = case numElements arr1 == 0 of
+    True -> numElements arr2 == 0
+    False -> bounds arr1 == bounds arr2 && elems arr1 == elems arr2
+
+-- | Ordering compares the association lists, as in GHC.
+instance (Ix i, Ord e) => Ord (Array i e) where
+  compare arr1 arr2 = compare (assocs arr1) (assocs arr2)
+
+-- | Shows as @array (l, u) [(i, e), ...]@, the same shape Haskell's
+-- 'showsIArray' writes. There is no 'Read' instance yet: Moggi's 'Read'
+-- class ('Text.Read') is a single-method @String -> a@ without instances
+-- for pairs and lists, so @read@ could not name the bounds or the
+-- associations. The instance belongs here once base grows those.
+instance (Ix i, Show i, Show e) => Show (Array i e) where
+  showsPrec p arr = showParen (p > 10) (showString "array " . showsPrec 11 (bounds arr) . showChar ' ' . showsPrec 11 (assocs arr))
