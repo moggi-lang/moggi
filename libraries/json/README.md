@@ -1,4 +1,4 @@
-# json
+# The `json` Package
 
 JSON parsing and encoding for Moggi.
 
