@@ -54,6 +54,7 @@ require __DIR__ . '/semantics/kinds.php';
 require_once __DIR__ . '/semantics/exhaustiveness.php';
 require __DIR__ . '/semantics/intrinsic_registry.php';
 require __DIR__ . '/semantics/io_boundary.php';
+require_once __DIR__ . '/semantics/st_boundary.php';
 require __DIR__ . '/semantics/strict_io_normalize.php';
 require __DIR__ . '/semantics/io_escape.php';
 require __DIR__ . '/foreign/path.php';

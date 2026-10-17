@@ -17,6 +17,7 @@ use Moggi\Semantics\TypeExpr\TInt32;
 use Moggi\Semantics\TypeExpr\TInt64;
 use Moggi\Semantics\TypeExpr\TInt8;
 use Moggi\Semantics\TypeExpr\TStr;
+use Moggi\Semantics\TypeExpr\TUnit;
 use Moggi\Semantics\TypeExpr\TVar;
 use Moggi\Semantics\TypeExpr\TWord;
 use Moggi\Semantics\TypeExpr\TWord16;
@@ -271,6 +272,49 @@ function typeSchemes(): array
             ),
             ['a', 'b'],
         ),
+        'stPure#' => scheme(
+            new TArrow($a, new TCon('ST', [new TVar('s'), $a])),
+            ['s', 'a'],
+        ),
+        'stBind#' => scheme(
+            new TArrow(
+                new TCon('ST', [new TVar('s'), $a]),
+                new TArrow(
+                    new TArrow(new TVar('a'), new TCon('ST', [new TVar('s'), new TVar('b')])),
+                    new TCon('ST', [new TVar('s'), new TVar('b')]),
+                ),
+            ),
+            ['s', 'a', 'b'],
+        ),
+        'runST#' => scheme(
+            new TArrow(new TCon('ST', [new TVar('s'), $a]), $a),
+            ['s', 'a'],
+        ),
+        'stToIO#' => scheme(
+            new TArrow(
+                new TCon('ST', [new TCon('RealWorld', []), $a]),
+                new TCon('IO', [$a]),
+            ),
+            ['a'],
+        ),
+        'newSTRef#' => scheme(
+            new TArrow($a, new TCon('ST', [new TVar('s'), new TCon('STRef', [new TVar('s'), $a])])),
+            ['s', 'a'],
+        ),
+        'readSTRef#' => scheme(
+            new TArrow(
+                new TCon('STRef', [new TVar('s'), $a]),
+                new TCon('ST', [new TVar('s'), $a]),
+            ),
+            ['s', 'a'],
+        ),
+        'writeSTRef#' => scheme(
+            new TArrow(
+                new TCon('STRef', [new TVar('s'), $a]),
+                new TArrow($a, new TCon('ST', [new TVar('s'), new TUnit()])),
+            ),
+            ['s', 'a'],
+        ),
         'platformArgv#' => scheme(new TCon('IO', [new TCon('List', [$str])]), []),
         'platformStdin#' => scheme(new TCon('Handle', []), []),
     ];
@@ -288,6 +332,7 @@ function isNullaryCon(Type $type, string $name): bool
 
 const MODULE_PRIM = 'Moggi.Internal.Prim';
 const MODULE_IO = 'Moggi.Internal.IO';
+const MODULE_ST = 'Moggi.Internal.ST';
 
 /**
  * Resolve an intrinsic name, or null when `$name` is not a registered primop.
@@ -356,6 +401,44 @@ function isIoExceptionPrimop(string $name): bool
         'io-throw', 'io-catch', 'io-finally' => true,
         default => false,
     };
+}
+
+/**
+ * The ST primops by the construct each is: `pure`/`bind` are the sequencing
+ * constructs the library's `Monad` instance is written in terms of, `run` is
+ * the escape-checked eliminator, and the `ref` triple allocates and touches
+ * a mutable cell. Unlike the IO roles these never reach a dedicated IR:
+ * an ST action is a re-executable description (a thunk wrapper on every
+ * backend), so building one is pure and the optimizer may share and drop
+ * descriptions exactly as it does any other value — each *use* still runs
+ * the description, which is what keeps allocation and read/write order.
+ *
+ * @return array<string, string> id → `st-pure`|`st-bind`|`st-run`|`st-to-io`|`st-newref`|`st-readref`|`st-writeref`
+ */
+function stPrimopRoles(): array
+{
+    static $table = null;
+
+    return $table ??= [
+        'stPure#' => 'st-pure',
+        'stBind#' => 'st-bind',
+        'runST#' => 'st-run',
+        'stToIO#' => 'st-to-io',
+        'newSTRef#' => 'st-newref',
+        'readSTRef#' => 'st-readref',
+        'writeSTRef#' => 'st-writeref',
+    ];
+}
+
+/** The ST construct a primop is, or null when it is not an ST primop. */
+function stPrimopRole(string $name): ?string
+{
+    return stPrimopRoles()[$name] ?? null;
+}
+
+function isStIntrinsic(string $name): bool
+{
+    return isset(stPrimopRoles()[$name]);
 }
 
 /**
@@ -489,10 +572,14 @@ function primopArity(string $name): ?int
     return $scheme === null ? null : schemeArity($scheme);
 }
 
-/** Owning compiler module for a primop (`Moggi.Internal.Prim` or `Moggi.Internal.IO`). */
+/** Owning compiler module for a primop (`Moggi.Internal.Prim`, `Moggi.Internal.IO` or `Moggi.Internal.ST`). */
 function ownerModule(string $name): string
 {
-    return isIoIntrinsic($name) ? MODULE_IO : MODULE_PRIM;
+    if (isIoIntrinsic($name)) {
+        return MODULE_IO;
+    }
+
+    return isStIntrinsic($name) ? MODULE_ST : MODULE_PRIM;
 }
 
 function isMagicHashName(string $name): bool
@@ -624,12 +711,33 @@ function ioTypeTable(): array
     ];
 }
 
+/**
+ * Primitive type constructors owned by Moggi.Internal.ST.
+ *
+ * `ST#` is the state thread itself, `STRef#` a mutable cell that lives in
+ * one, and `RealWorld#` the token that marks the thread `stToIO#` runs in
+ * `IO`. None of them has a surface `forall`: `runST#` is compiler-blessed
+ * and its escape check lives beside the ST boundary.
+ *
+ * @return array<string, array{params: list<string>, kindArity: int}>
+ */
+function stTypeTable(): array
+{
+    static $table = null;
+
+    return $table ??= [
+        'ST#' => ['params' => ['s', 'a'], 'kindArity' => 2],
+        'STRef#' => ['params' => ['s', 'a'], 'kindArity' => 2],
+        'RealWorld#' => ['params' => [], 'kindArity' => 0],
+    ];
+}
+
 /** @return array<string, array{params: list<string>, kindArity: int}> */
 function allPrimitiveTypeTable(): array
 {
     static $table = null;
 
-    return $table ??= primTypeTable() + ioTypeTable();
+    return $table ??= primTypeTable() + ioTypeTable() + stTypeTable();
 }
 
 function isKnownPrimitiveType(string $name): bool
@@ -641,6 +749,9 @@ function primitiveTypeOwnerModule(string $name): ?string
 {
     if (isset(ioTypeTable()[$name])) {
         return MODULE_IO;
+    }
+    if (isset(stTypeTable()[$name])) {
+        return MODULE_ST;
     }
     if (isset(primTypeTable()[$name])) {
         return MODULE_PRIM;

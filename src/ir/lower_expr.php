@@ -402,6 +402,12 @@ function lowerApply(Ast\AstNode $function, Ast\AstNode $argument, LowerCtx $ctx)
     $srcLoc = srcLocFromAst($callee, $ctx->moduleName, $ctx->functionName, $ctx->sourceFile);
 
     if ($callee instanceof Ast\EvidenceMethod) {
+        if ($callee->methodArity !== null && \count($args) > $callee->methodArity) {
+            $result = lowerDictMethodCall($callee, \array_slice($args, 0, $callee->methodArity), $ctx, $srcLoc);
+
+            return applyToValue($result, \array_slice($args, $callee->methodArity), $ctx, $srcLoc);
+        }
+
         return lowerDictMethodCall($callee, $args, $ctx, $srcLoc);
     }
 

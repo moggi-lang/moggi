@@ -622,6 +622,39 @@ function moduleFileClosureCached(string $path): array
     return $closure;
 }
 
+/**
+ * Whether two files under one directory declare the same module name.
+ *
+ * Such a directory cannot serve as a module root: the name would mean two
+ * files at once. Unparseable files and files without a module header name
+ * nothing, so they never collide.
+ *
+ * @param list<string> $mogPaths
+ */
+function dirOffersDuplicateModule(array $mogPaths): bool
+{
+    $seen = [];
+    foreach ($mogPaths as $path) {
+        try {
+            $header = cachedModuleHeader($path);
+        } catch (LexError|ParseError) {
+            continue;
+        }
+        $moduleName = $header['module'] ?? null;
+        if ($moduleName === null) {
+            continue;
+        }
+        $real = \realpath($path) ?: $path;
+        $known = $seen[$moduleName] ?? null;
+        if ($known !== null && canonicalPath($known) !== canonicalPath((string) $real)) {
+            return true;
+        }
+        $seen[$moduleName] ??= $real;
+    }
+
+    return false;
+}
+
 function findBoundedModuleRoot(string $filePath): ?string
 {
     $file = \realpath($filePath);
@@ -662,6 +695,9 @@ function findBoundedModuleRoot(string $filePath): ?string
 
         $mogs = findMogFilesUnder($dir);
         $paths = \array_values(\array_filter(\array_map(static fn (string $p): ?string => \realpath($p), $mogs)));
+        if ($paths !== [] && \in_array($file, $paths, true) && dirOffersDuplicateModule($mogs)) {
+            return null;
+        }
         if ($paths !== [] && \in_array($file, $paths, true) && moduleProjectImportsResolve($dir, $mogs, $knownModules)) {
             if (! \is_dir($dir . DIRECTORY_SEPARATOR . 'tests' . DIRECTORY_SEPARATOR . 'errors')) {
                 return $dir;

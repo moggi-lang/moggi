@@ -9,6 +9,7 @@ use function Moggi\Backend\setCompileBackend;
 use function Moggi\IR\lower;
 use function Moggi\Modules\moduleNameToNamespace;
 use function Moggi\Optimize\optimize;
+use function Moggi\Optimize\Partial\bindLambdaCaptures;
 use function Moggi\Semantics\Effects\checkAndNormalize;
 
 use Moggi\Syntax\Ast\Program;
@@ -74,7 +75,14 @@ function run(PipelineRequest $request, PipelineStage $stopAt = PipelineStage::Em
     if ($request->optimize) {
         $irOpt = optimize($ir);
     } else {
-        $irOpt = $ir;
+        $irOpt = new \Moggi\IR\Module(
+            bindLambdaCaptures($ir->functions),
+            $ir->data,
+            $ir->instanceEvidence,
+            $ir->entry,
+            $ir->moduleName,
+            $ir->sourceFile,
+        );
     }
     $artifacts->irOpt = $irOpt;
     $artifacts->entry = $irOpt->entry;

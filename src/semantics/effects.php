@@ -4,7 +4,8 @@ namespace Moggi\Semantics\Effects;
 
 use Moggi\Pipeline\CompilePurpose;
 
-use function Moggi\Semantics\IoBoundary\validate;
+use function Moggi\Semantics\IoBoundary\validate as validateIo;
+use function Moggi\Semantics\StBoundary\validate as validateSt;
 
 use function Moggi\Semantics\IoEscape\analyze;
 use function Moggi\Semantics\StrictIoNormalize\normalize;
@@ -16,8 +17,10 @@ use Moggi\Syntax\Ast\Program;
  * Semantic effect elaboration boundary.
  *
  * This is the single entry point from raw, parsed AST into the typed AST dialect
- * expected by IR lowering: type checking first, IO surface validation second,
- * strict IO normalization last.
+ * expected by IR lowering: type checking first, IO and ST surface validation
+ * second, strict IO normalization last. ST needs no normalization: an ST
+ * action is a re-executable description, so building one is pure and each use
+ * runs it, which is what keeps allocation and read/write order.
  *
  * @param array<string, mixed> $importContext
  * @return Program
@@ -37,7 +40,8 @@ function checkAndNormalize(
     ?array &$interface = null,
 ): Program {
     $typed = checkRaw($program, $source, $filename, $importContext, $purpose, $interface);
-    validate($typed, $source, $filename);
+    validateIo($typed, $source, $filename);
+    validateSt($typed, $source, $filename);
 
     return analyze(normalize($typed));
 }

@@ -1211,15 +1211,23 @@ function lambdaCaptureIndex(array $items): array
  * `call __letrecN(…)` carries its callee as a string, so it is read off the
  * statement and off `ExprCall` operands rather than the operand tree.
  *
+ * Nested blocks (match arms, loop bodies, `io` blocks) are descended into:
+ * a lambda referenced only inside a nested match still captures the
+ * enclosing block's locals, so a shallow scan would let DCE delete the
+ * `let`s that feed its captures (e.g. an outer case binder used only by a
+ * closure in an inner case arm).
+ *
  * @return array<int, string>
  */
 function lambdaNamesReferencedInStmt(IR\Stmt $stmt): array
 {
     $names = [];
 
-    if ($stmt instanceof IR\Call && isCapturedFnName($stmt->callee)) {
-        $names[] = $stmt->callee;
-    }
+    $visitStmt = static function (IR\Stmt $s) use (&$names): void {
+        if ($s instanceof IR\Call && isCapturedFnName($s->callee)) {
+            $names[] = $s->callee;
+        }
+    };
 
     $visit = static function (IR\Operand $operand) use (&$names): void {
         if ($operand instanceof IR\FnRef && isCapturedFnName($operand->name)) {
@@ -1239,7 +1247,7 @@ function lambdaNamesReferencedInStmt(IR\Stmt $stmt): array
         }
     };
 
-    IR\Visit\walkOperands(IR\Visit\stmtDirectOperands($stmt), $visit);
+    IR\Visit\walkStmt($stmt, $visitStmt, $visit);
 
     return \array_values(\array_unique($names));
 }

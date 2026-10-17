@@ -668,6 +668,9 @@ function canonicalTypeConName(string $name): string
         'Double#' => 'Double',
         'List#' => 'List',
         'IO#' => 'IO',
+        'ST#' => 'ST',
+        'STRef#' => 'STRef',
+        'RealWorld#' => 'RealWorld',
         'SomeException#' => 'SomeException',
         default => $name,
     };

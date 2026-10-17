@@ -87,6 +87,12 @@ function languageRuntime(): string
         mListClassIl(),
         conClassIl(),
         ioClassIl(),
+        stClassIl(),
+        stRefClassIl(),
+        stBindFnClassIl(),
+        stNewRefFnClassIl(),
+        stReadRefFnClassIl(),
+        stWriteRefFnClassIl(),
         dictClassIl(),
         moggiExceptionClassIl(),
         constFnClassIl(),
@@ -245,6 +251,220 @@ function ioClassIl(): string
     ldarg.0
     ldarg.1
     stfld object Moggi.Rt.IO::action
+    ret
+  }
+}
+
+IL;
+}
+
+/**
+ * An ST action: the same thunk-wrapper shape as `Moggi.Rt.IO` under a
+ * distinct class, so the two media never mix. Building one is pure; each
+ * run (`RT.StRun`) performs allocation and cell effects in bind order.
+ */
+function stClassIl(): string
+{
+    return <<<'IL'
+.class public auto ansi beforefieldinit Moggi.Rt.ST
+       extends [System.Runtime]System.Object
+{
+  .field public object action
+
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor(object action) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ldarg.0
+    ldarg.1
+    stfld object Moggi.Rt.ST::action
+    ret
+  }
+}
+
+IL;
+}
+
+/** A mutable cell in one state thread. The field is deliberately mutable. */
+function stRefClassIl(): string
+{
+    return <<<'IL'
+.class public auto ansi beforefieldinit Moggi.Rt.STRef
+       extends [System.Runtime]System.Object
+{
+  .field public object v
+
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor(object v) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ldarg.0
+    ldarg.1
+    stfld object Moggi.Rt.STRef::v
+    ret
+  }
+}
+
+IL;
+}
+
+/** Thunk for `stBind#`: run `m`, feed the value through `k`, run the result. */
+function stBindFnClassIl(): string
+{
+    return <<<'IL'
+.class public auto ansi beforefieldinit Moggi.Rt.StBindFn
+       extends [System.Runtime]System.Object
+       implements Moggi.Rt.Fn
+{
+  .field public class Moggi.Rt.ST m
+  .field public object k
+
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor(class Moggi.Rt.ST m, object k) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ldarg.0
+    ldarg.1
+    stfld class Moggi.Rt.ST Moggi.Rt.StBindFn::m
+    ldarg.0
+    ldarg.2
+    stfld object Moggi.Rt.StBindFn::k
+    ret
+  }
+
+  .method public hidebysig newslot virtual final
+          instance object Invoke(object[] args) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldfld object Moggi.Rt.StBindFn::k
+    ldarg.0
+    ldfld class Moggi.Rt.ST Moggi.Rt.StBindFn::m
+    call object Moggi.Rt.RT::StRun(class Moggi.Rt.ST)
+    call object Moggi.Rt.RT::Apply1(object, object)
+    castclass Moggi.Rt.ST
+    call object Moggi.Rt.RT::StRun(class Moggi.Rt.ST)
+    ret
+  }
+}
+
+IL;
+}
+
+/** Thunk for `newSTRef#`: allocate the cell when run. */
+function stNewRefFnClassIl(): string
+{
+    return <<<'IL'
+.class public auto ansi beforefieldinit Moggi.Rt.NewRefFn
+       extends [System.Runtime]System.Object
+       implements Moggi.Rt.Fn
+{
+  .field public object x
+
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor(object x) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ldarg.0
+    ldarg.1
+    stfld object Moggi.Rt.NewRefFn::x
+    ret
+  }
+
+  .method public hidebysig newslot virtual final
+          instance object Invoke(object[] args) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldfld object Moggi.Rt.NewRefFn::x
+    newobj instance void Moggi.Rt.STRef::.ctor(object)
+    ret
+  }
+}
+
+IL;
+}
+
+/** Thunk for `readSTRef#`: read the cell when run. */
+function stReadRefFnClassIl(): string
+{
+    return <<<'IL'
+.class public auto ansi beforefieldinit Moggi.Rt.ReadRefFn
+       extends [System.Runtime]System.Object
+       implements Moggi.Rt.Fn
+{
+  .field public class Moggi.Rt.STRef r
+
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor(class Moggi.Rt.STRef r) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ldarg.0
+    ldarg.1
+    stfld class Moggi.Rt.STRef Moggi.Rt.ReadRefFn::r
+    ret
+  }
+
+  .method public hidebysig newslot virtual final
+          instance object Invoke(object[] args) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldfld class Moggi.Rt.STRef Moggi.Rt.ReadRefFn::r
+    ldfld object Moggi.Rt.STRef::v
+    ret
+  }
+}
+
+IL;
+}
+
+/** Thunk for `writeSTRef#`: replace the cell value when run, answering null (Unit). */
+function stWriteRefFnClassIl(): string
+{
+    return <<<'IL'
+.class public auto ansi beforefieldinit Moggi.Rt.WriteRefFn
+       extends [System.Runtime]System.Object
+       implements Moggi.Rt.Fn
+{
+  .field public class Moggi.Rt.STRef r
+  .field public object x
+
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor(class Moggi.Rt.STRef r, object x) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ldarg.0
+    ldarg.1
+    stfld class Moggi.Rt.STRef Moggi.Rt.WriteRefFn::r
+    ldarg.0
+    ldarg.2
+    stfld object Moggi.Rt.WriteRefFn::x
+    ret
+  }
+
+  .method public hidebysig newslot virtual final
+          instance object Invoke(object[] args) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldfld class Moggi.Rt.STRef Moggi.Rt.WriteRefFn::r
+    ldarg.0
+    ldfld object Moggi.Rt.WriteRefFn::x
+    stfld object Moggi.Rt.STRef::v
+    ldnull
     ret
   }
 }
@@ -576,6 +796,13 @@ function rtClassIl(): string
         rtIoCatchIl(),
         rtIoFinallyIl(),
         rtIoPureIl(),
+        rtStPureIl(),
+        rtStBindIl(),
+        rtStRunIl(),
+        rtStToIOIl(),
+        rtStNewRefIl(),
+        rtStReadRefIl(),
+        rtStWriteRefIl(),
         rtConstFnIl(),
         rtFixIl(),
         rtConIl(),
@@ -3167,6 +3394,127 @@ function rtIoPureIl(): string
     ldarg.0
     call class Moggi.Rt.Fn Moggi.Rt.RT::ConstFn(object)
     newobj instance void Moggi.Rt.IO::.ctor(object)
+    ret
+  }
+
+IL;
+}
+
+/** Already-evaluated ST value: `stPure` wraps it so binds sequence over it. */
+function rtStPureIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static class Moggi.Rt.ST StPure(object v) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call class Moggi.Rt.Fn Moggi.Rt.RT::ConstFn(object)
+    newobj instance void Moggi.Rt.ST::.ctor(object)
+    ret
+  }
+
+IL;
+}
+
+/** Sequenced ST descriptions: run `m`, feed the value through `k`, run the result. */
+function rtStBindIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static class Moggi.Rt.ST StBind(class Moggi.Rt.ST m, object k) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldarg.1
+    newobj instance void Moggi.Rt.StBindFn::.ctor(class Moggi.Rt.ST, object)
+    newobj instance void Moggi.Rt.ST::.ctor(object)
+    ret
+  }
+
+IL;
+}
+
+/** Run an ST description now and answer its value. */
+function rtStRunIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static object StRun(class Moggi.Rt.ST st) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    brtrue Run
+    ldnull
+    ret
+    Run:
+    ldarg.0
+    ldfld object Moggi.Rt.ST::action
+    ldc.i4.0
+    newarr object
+    call object Moggi.Rt.RT::Apply(object, object[])
+    ret
+  }
+
+IL;
+}
+
+/** An `ST RealWorld` description run as `IO`: the same thunk under IO's class. */
+function rtStToIOIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static class Moggi.Rt.IO StToIO(class Moggi.Rt.ST st) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldfld object Moggi.Rt.ST::action
+    newobj instance void Moggi.Rt.IO::.ctor(object)
+    ret
+  }
+
+IL;
+}
+
+/** Cell allocation as an ST description (allocates when run). */
+function rtStNewRefIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static class Moggi.Rt.ST StNewRef(object v) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    newobj instance void Moggi.Rt.NewRefFn::.ctor(object)
+    newobj instance void Moggi.Rt.ST::.ctor(object)
+    ret
+  }
+
+IL;
+}
+
+/** Cell read as an ST description (reads when run). */
+function rtStReadRefIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static class Moggi.Rt.ST StReadRef(class Moggi.Rt.STRef r) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    newobj instance void Moggi.Rt.ReadRefFn::.ctor(class Moggi.Rt.STRef)
+    newobj instance void Moggi.Rt.ST::.ctor(object)
+    ret
+  }
+
+IL;
+}
+
+/** Cell write as an ST description (writes when run, answering Unit). */
+function rtStWriteRefIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static class Moggi.Rt.ST StWriteRef(class Moggi.Rt.STRef r, object v) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldarg.1
+    newobj instance void Moggi.Rt.WriteRefFn::.ctor(class Moggi.Rt.STRef, object)
+    newobj instance void Moggi.Rt.ST::.ctor(object)
     ret
   }
 

@@ -8,6 +8,7 @@ use Moggi\Cache;
 
 use function Moggi\Install\installationRoot;
 
+use function Moggi\Paths\canonicalPath;
 use function Moggi\Paths\canonicalSeparators;
 use function Moggi\Paths\globPaths;
 
@@ -236,7 +237,85 @@ function configuredLibraryRoots(): array
         $roots[] = $primary;
     }
 
-    return [...$roots, ...ConfiguredStdlib::extraPaths()];
+    return [...$roots, ...configuredExtraPaths()];
+}
+
+/**
+ * Extra library roots: the configured `--lib` / `addLibraryRoot()` ones, then
+ * the packages bundled with the standard distribution.
+ *
+ * `base` cannot stand alone — `System.Filesystem.getModified` answers
+ * `IO UTCTime`, so the `time` package beside it in `libraries/` is part of the
+ * standard distribution the same way `base` is, and every compilation that can
+ * see `base` can see `time` without an explicit `--lib`. Anything else under
+ * `libraries/` (`json`, `containers`) ships from its own repo and still joins
+ * through `--lib` or `addLibraryRoot()`.
+ *
+ * Already-listed roots are not repeated, so an explicit `--lib
+ * libraries/time/src` is the same root rather than a duplicate.
+ *
+ * @return list<string>
+ */
+function configuredExtraPaths(): array
+{
+    $extras = ConfiguredStdlib::extraPaths();
+    foreach (bundledExtraLibPaths() as $bundled) {
+        $seen = false;
+        foreach ($extras as $extra) {
+            if (canonicalPath($extra) === canonicalPath($bundled)) {
+                $seen = true;
+
+                break;
+            }
+        }
+        if (! $seen) {
+            $extras[] = $bundled;
+        }
+    }
+
+    return $extras;
+}
+
+/**
+ * Bundled packages that join every compilation alongside the standard
+ * library: `<root>/libraries/time/src`, where `<root>` is found the way the
+ * bundled stdlib is — `MOGGI_ROOT`, the installed distribution, then the
+ * checkout. Empty when the distribution ships no such package.
+ *
+ * @return list<string>
+ */
+function bundledExtraLibPaths(): array
+{
+    static $cached = false;
+    static $paths = [];
+    if ($cached) {
+        return $paths;
+    }
+    $cached = true;
+
+    $candidates = [];
+    $envRoot = \getenv('MOGGI_ROOT');
+    if (\is_string($envRoot) && $envRoot !== '') {
+        $candidates[] = \rtrim($envRoot, '/\\');
+    }
+    $installRoot = installationRoot();
+    if ($installRoot !== null) {
+        $candidates[] = $installRoot;
+    }
+    $candidates[] = \dirname(__DIR__, 2);
+
+    foreach ($candidates as $root) {
+        $time = \rtrim($root, '/\\') . DIRECTORY_SEPARATOR . 'libraries'
+            . DIRECTORY_SEPARATOR . 'time' . DIRECTORY_SEPARATOR . 'src';
+        $real = resolvePath($time);
+        if (isLibraryRoot($real)) {
+            $paths[] = $real;
+
+            return $paths;
+        }
+    }
+
+    return $paths;
 }
 
 /**
@@ -477,7 +556,7 @@ final class LibraryModuleIndex
 function stdlibMaxMtime(string $stdlibRoot): int
 {
     $mtime = LibraryModuleIndex::maxMtime($stdlibRoot);
-    foreach (ConfiguredStdlib::extraPaths() as $extra) {
+    foreach (configuredExtraPaths() as $extra) {
         $mtime = \max($mtime, LibraryModuleIndex::maxMtime($extra));
     }
 
@@ -505,7 +584,7 @@ function stdlibModuleScan(string $stdlibRoot): array
 {
     $paths = [];
     $duplicates = [];
-    foreach ([$stdlibRoot, ...ConfiguredStdlib::extraPaths()] as $root) {
+    foreach ([$stdlibRoot, ...configuredExtraPaths()] as $root) {
         foreach (LibraryModuleIndex::index($root) as $moduleName => $path) {
             $existing = $paths[$moduleName] ?? null;
             if ($existing === null) {

@@ -195,6 +195,9 @@ function prepareProject(array $paths, string $rootDir, bool $shallow = false): P
                 $classScopeFns,
                 moduleLocalValueNames($units, $moduleName),
                 moduleLocalDataNames($units, $moduleName),
+                $units,
+                $moduleName,
+                $rootPrefix,
             );
 
             continue;
@@ -317,6 +320,9 @@ function prepareProject(array $paths, string $rootDir, bool $shallow = false): P
             $classScopeFns,
             moduleLocalValueNames($units, $moduleName),
             moduleLocalDataNames($units, $moduleName),
+            $units,
+            $moduleName,
+            $rootPrefix,
         );
         $importContext['projectInstances'] = $projectInstances;
         $importContext['projectInstanceIndex'] = $projectInstanceIndex;
@@ -455,6 +461,9 @@ function buildPreparedModuleContext(
         $classScopeFns,
         moduleLocalValueNames($units, $moduleName),
         moduleLocalDataNames($units, $moduleName),
+        $units,
+        $moduleName,
+        $rootPrefix,
     );
     $importContext['projectInstances'] = $projectInstances;
     $importContext['projectInstanceIndex'] = $projectInstanceIndex;
@@ -787,6 +796,9 @@ function prepareProjectExtendingFocus(
         $classScopeFns,
         moduleLocalValueNames($units, $focusModule),
         moduleLocalDataNames($units, $focusModule),
+        $units,
+        $focusModule,
+        $rootPrefix,
     );
     $importContext['projectInstances'] = $projectInstances;
     $importContext['projectInstanceIndex'] = $projectInstanceIndex;

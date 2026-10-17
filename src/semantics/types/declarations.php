@@ -23,6 +23,7 @@ use Moggi\Syntax\Ast;
 require_once __DIR__ . '/type_core.php';
 require_once __DIR__ . '/constraints.php';
 require_once __DIR__ . '/infer.php';
+require_once __DIR__ . '/../st_boundary.php';
 
 /**
  * A type synonym's declaration, with its kind.
@@ -93,12 +94,17 @@ function registerData(TypeCheckState $state, Ast\DataDecl $decl): void
 
     if (isMagicHashName($decl->name)
         || $decl->name === Kinds\canonicalTypeConName('IO#')
+        || $decl->name === Kinds\canonicalTypeConName('ST#')
+        || $decl->name === Kinds\canonicalTypeConName('STRef#')
+        || $decl->name === Kinds\canonicalTypeConName('RealWorld#')
     ) {
-        throw typeFail(
-            $state,
-            "`{$decl->name}` is a compiler primitive and cannot be redefined",
-            $decl,
-        );
+        if (! \Moggi\Semantics\StBoundary\isTransparentPrimopWrapper($decl)) {
+            throw typeFail(
+                $state,
+                "`{$decl->name}` is a compiler primitive and cannot be redefined",
+                $decl,
+            );
+        }
     }
 
     foreach ($decl->constructors as $ctor) {

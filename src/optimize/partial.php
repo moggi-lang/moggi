@@ -98,9 +98,12 @@ function bindLambdaCapturesStmt(IR\Stmt $stmt, array $meta): IR\Stmt
  * free locals are missing from it: a recursive `let`/`where` group lowers to a
  * plain `__letrecN` call, and an immediately applied lambda is called by name.
  * A specialized call, an `IR\Partial`, and the adapter a constrained local
- * binding lowers to (`λ(dict, p) -> λ3(dict, p)`) already carry them, which is
- * why they are only prepended when the call carries exactly the declared
- * parameters and no capture of its own is among them.
+ * binding lowers to (`λ(dict, p) -> λ3(dict, p)`) already carry them. Such a
+ * call runs past the captures into the declared parameters, so it is only
+ * left alone when it carries more than the captures -- exactly the declared
+ * parameters can still need the prepend (the same evidence serving as the
+ * local binding's own dictionaries), where skipping it would bind the
+ * trailing arguments to the wrong parameters.
  *
  * @param list<IR\Operand> $args
  * @param array<string, array{captures: list<string>, params: list<string>}> $meta
@@ -110,7 +113,10 @@ function captureArgsForCall(string $name, array $args, array $meta): array
 {
     $info = $meta[$name] ?? null;
     $captures = $info['captures'] ?? [];
-    if ($captures === [] || \count($args) !== \count($info['params']) || callArgsLeadWithCaptures($args, $captures)) {
+    if ($captures === [] || \count($args) !== \count($info['params'])) {
+        return $args;
+    }
+    if (\count($info['params']) > \count($captures) && callArgsLeadWithCaptures($args, $captures)) {
         return $args;
     }
 
@@ -157,7 +163,12 @@ function bindCapturedPartial(IR\Partial|IR\ExprPartial $partial, array $meta): I
     );
     $info = $meta[$partial->fn] ?? null;
     $captures = $info['captures'] ?? [];
-    if ($captures === [] || $partial->arity !== \count($info['params']) || callArgsLeadWithCaptures($args, $captures)) {
+    if ($captures === [] || $partial->arity !== \count($info['params'])) {
+        return $partial instanceof IR\Partial
+            ? new IR\Partial($partial->fn, $partial->arity, $args)
+            : new IR\ExprPartial($partial->fn, $partial->arity, $args);
+    }
+    if (\count($info['params']) > \count($captures) && callArgsLeadWithCaptures($args, $captures)) {
         return $partial instanceof IR\Partial
             ? new IR\Partial($partial->fn, $partial->arity, $args)
             : new IR\ExprPartial($partial->fn, $partial->arity, $args);

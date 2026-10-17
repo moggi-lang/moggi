@@ -53,6 +53,8 @@ function instantiateContextArg(TypeCheckState $state, Ast\AstNode $arg, array $h
 function applyEvidenceMethodInfo(TypeCheckState $state, Ast\AstNode &$expr, array $info): void
 {
     $methodType = $info['type'] ?? ($state->classes[$info['class']]['methods'][$info['method']]['type'] ?? null);
+    $methodUserConstraints = $info['userConstraints']
+        ?? ($state->classes[$info['class']]['methods'][$info['method']]['userConstraints'] ?? []);
     $methodNullary = $methodType !== null
         && ! (prune($state, $methodType) instanceof TArrow);
 
@@ -67,10 +69,42 @@ function applyEvidenceMethodInfo(TypeCheckState $state, Ast\AstNode &$expr, arra
         $expr->col,
         $expr->endCol,
         classMethodRole($state, $info['class'], $info['method']),
+        methodValueArity($state, $methodType, $methodUserConstraints),
     );
     $method->pendingConstraints = $expr->pendingConstraints;
     $method->inferredType = $expr->inferredType;
     $expr = $method;
+}
+
+/**
+ * Counts method value arguments, excluding dictionary arrows but including
+ * user constraints expanded through superclasses. Uses the general method
+ * type, not its instantiation, so function-valued result variables don't
+ * inflate the arity. Must match the arguments carried by `DictCall` so
+ * lowering can distinguish method arguments from result applications.
+ *
+ * @param list<Ast\PendingConstraint> $userConstraints
+ */
+function methodValueArity(TypeCheckState $state, ?Type $methodType, array $userConstraints): ?int
+{
+    if ($methodType === null) {
+        return null;
+    }
+    $type = prune($state, $methodType);
+    while ($type instanceof TArrow
+        && $type->from instanceof TCon
+        && \str_starts_with($type->from->name, '__Dict_')) {
+        $type = prune($state, $type->to);
+    }
+    $arity = \count(expandConstraintsWithSuperclasses($state, $userConstraints));
+    while (true) {
+        $type = prune($state, $type);
+        if (! ($type instanceof TArrow)) {
+            return $arity;
+        }
+        $type = $type->to;
+        ++$arity;
+    }
 }
 
 /**

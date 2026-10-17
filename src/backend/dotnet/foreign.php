@@ -327,6 +327,10 @@ function clrTypeName(
         return 'object';
     }
 
+    if ($classPath === 'System.Convert' && $member === 'ToInt32' && ! $isReturn) {
+        return 'object';
+    }
+
     $kernel = clrKernelTypeName(primitiveTypeIdOf((string) $con));
     if ($kernel !== null) {
         return $kernel;
