@@ -1,0 +1,35 @@
+-- Data.Time.Calendar: Modified Julian Days, Gregorian conversion, arithmetic,
+-- leap years and the Show/Enum instances.
+
+module CalendarSuite (calendarSuite) where
+
+import Data.Time.Calendar
+import Support (assertTrue, expect)
+
+calendarSuite :: IO ()
+calendarSuite = do
+  expect "epoch is day 40587" (show (toModifiedJulianDay (fromGregorian 1970 1 1))) "40587"
+  expect "MJD zero is 1858-11-17" (show (toGregorian (ModifiedJulianDay 0))) "(1858,11,17)"
+  expect "Show pads" (show (fromGregorian 2024 2 29)) "2024-02-29"
+  expect "Show epoch day" (show (fromGregorian 1858 11 17)) "1858-11-17"
+  expect "leap day roundtrips" (show (toGregorian (fromGregorian 2024 2 29))) "(2024,2,29)"
+  expect "pre-epoch roundtrips" (show (toGregorian (fromGregorian 1492 10 12))) "(1492,10,12)"
+  expect "negative year roundtrips" (show (toGregorian (fromGregorian (-100) 3 1))) "(-100,3,1)"
+  expect "year zero roundtrips" (show (toGregorian (fromGregorian 0 1 1))) "(0,1,1)"
+  expect "month 13 rolls over" (show (fromGregorian 2023 13 1)) "2024-01-01"
+  expect "valid leap day" (show (fromGregorianValid 2024 2 29)) "Just 2024-02-29"
+  expect "invalid leap day" (show (fromGregorianValid 2023 2 29)) "Nothing"
+  expect "invalid month" (show (fromGregorianValid 2024 13 1)) "Nothing"
+  expect "diffDays" (show (diffDays (fromGregorian 1970 1 2) (fromGregorian 1970 1 1))) "1"
+  expect "diffDays negative" (show (diffDays (fromGregorian 1969 12 31) (fromGregorian 1970 1 1))) "-1"
+  expect "addDays" (show (addDays 30 (fromGregorian 2024 1 1))) "2024-01-31"
+  expect "addDays negative" (show (addDays (-1) (fromGregorian 1970 1 1))) "1969-12-31"
+  expect "leap 2000" (show (isLeapYear 2000)) "True"
+  expect "not leap 1900" (show (isLeapYear 1900)) "False"
+  expect "leap 2024" (show (isLeapYear 2024)) "True"
+  expect "not leap 2023" (show (isLeapYear 2023)) "False"
+  expect "Feb leap length" (show (gregorianMonthLength 2024 2)) "29"
+  expect "Feb plain length" (show (gregorianMonthLength 2023 2)) "28"
+  expect "succ over leap day" (show (succ (fromGregorian 2024 2 28))) "2024-02-29"
+  expect "fromEnum" (show ((toEnum 40587 :: Day))) "1970-01-01"
+  assertTrue "Eq" (fromGregorian 2024 1 1 == fromGregorian 2024 1 1)

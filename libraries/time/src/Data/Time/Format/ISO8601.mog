@@ -1,0 +1,170 @@
+-- |
+-- ISO 8601 parsing and formatting, in the spirit of Haskell's
+-- 'Data.Time.Format.ISO8601'.
+--
+-- The profile is the extended format with a @T@ separator:
+-- @YYYY-MM-DD@, @YYYY-MM-DDTHH:MM:SS@ with an optional trimmed fractional
+-- suffix, and a zone of @Z@ or @±HH:MM@ (the basic @±HHMM@ reads too).
+-- UTC times render with @Z@; zoned times render their offset. Ordinal dates
+-- (@YYYY-DDD@), week dates (@YYYYWwwD@) and the basic calendar format are
+-- not covered; neither are the general 'formatShow'\/'parseFormat'
+-- combinators.
+--
+module Data.Time.Format.ISO8601
+  ( formatDayISO
+  , parseDayISO
+  , formatLocalISO
+  , parseLocalISO
+  , formatZonedISO
+  , parseZonedISO
+  , formatUTCISO
+  , parseUTCISO
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Bool
+import Data.Char (isDigit)
+import Data.Eq
+import Data.Int
+import Data.Integer
+import Data.Maybe
+import Data.Num
+import Data.Ord
+import Data.Real
+import Data.String (pack, unpack)
+import Data.String qualified as S
+import Data.Time.Calendar (Day(..), fromGregorianValid, showGregorian, toGregorian)
+import Data.Time.Clock (UTCTime(..), utcTime, utctDay, utctDayTime, secondsToDiffTime)
+import Data.Time.Format (TimeLocale, defaultTimeLocale, formatTime, parseTime)
+import Data.Time.LocalTime
+  ( TimeOfDay(..)
+  , todHour
+  , todMin
+  , todSec
+  , TimeZone(..)
+  , timeZoneMinutes
+  , LocalTime(..)
+  , localDay
+  , localTimeOfDay
+  , ZonedTime(..)
+  , zonedTimeToLocalTime
+  , zonedTimeZone
+  , utc
+  , minutesToTimeZone
+  , zonedTimeToUTC
+  , utcToLocalTime
+  , utcToZonedTime
+  )
+import Data.Tuple
+import Moggi.Err
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+import Text.Show
+
+-- | @YYYY-MM-DD@.
+formatDayISO :: Day -> String
+formatDayISO d = case toGregorian d of
+  (y, m, dd) -> showGregorian y m dd
+
+-- | Strict @YYYY-MM-DD@ (exactly four year digits).
+parseDayISO :: String -> Maybe Day
+parseDayISO s = case parseTime defaultTimeLocale "%Y-%m-%d" s of
+  Nothing -> Nothing
+  Just zt -> Just (localDay (zonedTimeToLocalTime zt))
+
+-- | @YYYY-MM-DDTHH:MM:SS@ with a trimmed fraction when present.
+formatLocalISO :: LocalTime -> String
+formatLocalISO lt = formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%S%Q" utc lt
+
+-- | A local ISO time (no zone allowed).
+parseLocalISO :: String -> Maybe LocalTime
+parseLocalISO s = case parseTime defaultTimeLocale "%Y-%m-%dT%H:%M:%S%Q" s of
+  Nothing -> Nothing
+  Just zt -> case timeZoneMinutes (zonedTimeZone zt) == 0 of
+    True -> Just (zonedTimeToLocalTime zt)
+    False -> Nothing
+
+-- | A zoned ISO time with a @±HH:MM@ offset.
+formatZonedISO :: ZonedTime -> String
+formatZonedISO zt = formatLocalISO (zonedTimeToLocalTime zt) <> showOffsetColon (timeZoneMinutes (zonedTimeZone zt))
+
+showOffsetColon :: Int -> String
+showOffsetColon mins = sign <> pad2 h <> ":" <> pad2 m
+  where
+    sign :: String
+    sign = case mins < 0 of
+      True -> "-"
+      False -> "+"
+    total :: Int
+    total = case mins < 0 of
+      True -> negate mins
+      False -> mins
+    h :: Int
+    h = div total 60
+    m :: Int
+    m = mod total 60
+
+pad2 :: Int -> String
+pad2 n = case n < 10 of
+  True -> "0" <> show n
+  False -> show n
+
+-- | A zoned ISO time: @Z@ or an offset (@±HH:MM@ or @±HHMM@) is required.
+parseZonedISO :: String -> Maybe ZonedTime
+parseZonedISO s = case takeSuffix 1 s of
+  "Z" -> case parseLocalISO (dropSuffix 1 s) of
+    Nothing -> Nothing
+    Just lt -> Just (ZonedTime lt utc)
+  "z" -> case parseLocalISO (dropSuffix 1 s) of
+    Nothing -> Nothing
+    Just lt -> Just (ZonedTime lt utc)
+  _ -> case splitOffset s of
+    Nothing -> Nothing
+    Just (front, mins) -> case parseLocalISO front of
+      Nothing -> Nothing
+      Just lt -> Just (ZonedTime lt (minutesToTimeZone mins))
+
+takeSuffix :: Int -> String -> String
+takeSuffix n s = case S.length s <= n of
+  True -> s
+  False -> S.drop (S.length s - n) s
+
+dropSuffix :: Int -> String -> String
+dropSuffix n s = case S.length s <= n of
+  True -> ""
+  False -> S.take (S.length s - n) s
+
+-- Split a trailing @±HH:MM@ or @±HHMM@ offset off a string.
+splitOffset :: String -> Maybe (String, Int)
+splitOffset s = findOffset (S.length s - 1) s
+  where
+    findOffset :: Int -> String -> Maybe (String, Int)
+    findOffset i str = case i <= 0 of
+      True -> Nothing
+      False -> case charAt str i of
+        Nothing -> Nothing
+        Just c -> case c == "+" || c == "-" of
+          True -> parseOff (S.drop i str) (S.take i str) c
+          False -> findOffset (i - 1) str
+    parseOff :: String -> String -> String -> Maybe (String, Int)
+    parseOff off front sign = case parseTime defaultTimeLocale "%z" off of
+      Nothing -> Nothing
+      Just zt -> case sign of
+        "-" -> Just (front, negate (timeZoneMinutes (zonedTimeZone zt)))
+        _ -> Just (front, timeZoneMinutes (zonedTimeZone zt))
+
+charAt :: String -> Int -> Maybe String
+charAt s i = case S.length s <= i of
+  True -> Nothing
+  False -> Just (S.take 1 (S.drop i s))
+
+-- | A UTC ISO time with a @Z@ suffix.
+formatUTCISO :: UTCTime -> String
+formatUTCISO t = formatLocalISO (utcToLocalTime utc t) <> "Z"
+
+-- | A UTC ISO time: like 'parseZonedISO', converted to UTC.
+parseUTCISO :: String -> Maybe UTCTime
+parseUTCISO s = case parseZonedISO s of
+  Nothing -> Nothing
+  Just zt -> Just (zonedTimeToUTC zt)

@@ -1,0 +1,68 @@
+-- |
+-- POSIX time, in the spirit of Haskell's 'Data.Time.Clock.POSIX'.
+--
+-- 'POSIXTime' is seconds since the unix epoch as a 'NominalDiffTime', so
+-- 'utcTimeToPOSIXSeconds' and 'posixSecondsToUTCTime' convert without
+-- losing the picoseconds, and 'getPOSIXTime' reads the backend clock.
+-- Leap seconds are not represented (POSIX time ignores them, as does the
+-- conversion here).
+--
+module Data.Time.Clock.POSIX
+  ( POSIXTime
+  , posixSecondsToUTCTime
+  , utcTimeToPOSIXSeconds
+  , posixDayLength
+  , getPOSIXTime
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Bool
+import Data.Eq
+import Data.Int
+import Data.Integer
+import Data.Num
+import Data.Ord
+import Data.Real
+import Data.Time.Calendar (Day(..))
+import Data.Time.Clock
+  ( NominalDiffTime(..)
+  , UTCTime(..)
+  , utcTime
+  , diffUTCTime
+  , addUTCTime
+  , secondsToNominalDiffTime
+  , secondsToDiffTime
+  , currentTimeSeconds
+  )
+import Data.Tuple
+import Moggi.Err
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+import System.IO (IO)
+import Text.Show
+
+-- | Seconds since 1970-01-01 00:00:00 UTC, as a duration.
+type POSIXTime = NominalDiffTime
+
+-- | The epoch as UTC.
+posixEpoch :: UTCTime
+posixEpoch = utcTime (ModifiedJulianDay 40587) (secondsToDiffTime 0)
+
+-- | Build a UTC time from POSIX seconds.
+posixSecondsToUTCTime :: POSIXTime -> UTCTime
+posixSecondsToUTCTime t = addUTCTime t posixEpoch
+
+-- | Read a UTC time as POSIX seconds.
+utcTimeToPOSIXSeconds :: UTCTime -> POSIXTime
+utcTimeToPOSIXSeconds t = diffUTCTime t posixEpoch
+
+-- | Nominal seconds in a day.
+posixDayLength :: NominalDiffTime
+posixDayLength = secondsToNominalDiffTime 86400
+
+-- | The current POSIX time (whole-second precision, like 'getCurrentTime').
+getPOSIXTime :: IO POSIXTime
+getPOSIXTime = do
+  secs <- currentTimeSeconds
+  pure (secondsToNominalDiffTime (toInteger secs))

@@ -1,0 +1,57 @@
+-- Data.Time.Format: formatTime directives and parseTime roundtrips.
+
+module FormatSuite (formatSuite) where
+
+import Data.Time.Calendar
+import Data.Time.Clock
+import Data.Time.Format
+import Data.Time.LocalTime
+import Support (assertTrue, expect)
+
+leap :: LocalTime
+leap = LocalTime (fromGregorian 2024 2 29) (TimeOfDay 13 5 (secondsToDiffTime 7))
+
+plus5 :: TimeZone
+plus5 = minutesToTimeZone 330
+
+fmt :: String -> TimeZone -> LocalTime -> String
+fmt = formatTime defaultTimeLocale
+
+par :: String -> String -> String
+par f s = show (parseTime defaultTimeLocale f s)
+
+zoneMins :: String -> String -> String
+zoneMins f s = case parseTime defaultTimeLocale f s of
+  Just zt -> show (timeZoneMinutes (zonedTimeZone zt))
+  Nothing -> "Nothing"
+
+formatSuite :: IO ()
+formatSuite = do
+  expect "date and time" (fmt "%Y-%m-%d %H:%M:%S" utc leap) "2024-02-29 13:05:07"
+  expect "names" (fmt "%A %B %d" utc leap) "Thursday February 29"
+  expect "short names" (fmt "%a %b" utc leap) "Thu Feb"
+  expect "day of year" (fmt "%j" utc leap) "060"
+  expect "week U" (fmt "%U" utc leap) "08"
+  expect "week W" (fmt "%W" utc leap) "09"
+  expect "ISO week" (fmt "%G-W%V-%u" utc leap) "2024-W09-4"
+  expect "weekday numbers" (fmt "%w" utc leap) "4"
+  expect "century and year2" (fmt "%C %y" utc leap) "20 24"
+  expect "12-hour and meridiem" (fmt "%I %l %p %P" utc leap) "01  1 PM pm"
+  expect "compounds" (fmt "%D %F %R %T" utc leap) "02/29/24 2024-02-29 13:05 13:05:07"
+  expect "c format" (fmt "%c" utc leap) "Thu Feb 29 13:05:07 2024"
+  expect "offset" (fmt "%z" plus5 leap) "+0530"
+  expect "zone name falls back" (fmt "%Z" plus5 leap) "+0530"
+  expect "zone name" (fmt "%Z" utc leap) "UTC"
+  expect "unix seconds" (fmt "%s" utc (LocalTime (fromGregorian 1970 1 1) (TimeOfDay 0 0 (secondsToDiffTime 0)))) "0"
+  expect "fraction" (fmt "%S%Q" utc (LocalTime (fromGregorian 1970 1 1) (TimeOfDay 0 0 (picosecondsToDiffTime 500000000000)))) "00.5"
+  expect "parse date" (par "%Y-%m-%d" "2024-02-29") "Just 2024-02-29 00:00:00 UTC"
+  expect "parse rejects bad leap" (par "%Y-%m-%d" "2023-02-29") "Nothing"
+  expect "parse time defaults date" (par "%H:%M" "13:05") "Just 1970-01-01 13:05:00 UTC"
+  expect "parse 12-hour" (par "%I:%M %p" "01:05 PM") "Just 1970-01-01 13:05:00 UTC"
+  expect "parse midnight 12 AM" (par "%I %p" "12 AM") "Just 1970-01-01 00:00:00 UTC"
+  expect "parse offset zone" (zoneMins "%Y-%m-%dT%H:%M:%S%z" "2024-02-29T13:05:07+0530") "330"
+  expect "parse offset local" (par "%Y-%m-%dT%H:%M:%S%z" "2024-02-29T13:05:07+0530") "Just 2024-02-29 13:05:07 "
+  expect "parse names" (par "%d %B %Y" "29 February 2024") "Just 2024-02-29 00:00:00 UTC"
+  expect "parse two-digit year" (par "%D" "02/29/24") "Just 2024-02-29 00:00:00 UTC"
+  expect "parse unix" (par "%s" "90") "Just 1970-01-01 00:01:30 UTC"
+  expect "roundtrip" (zoneMins "%Y-%m-%dT%H:%M:%S%z" (fmt "%Y-%m-%dT%H:%M:%S%z" plus5 leap)) "330"

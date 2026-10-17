@@ -1,0 +1,29 @@
+-- Data.Time.Clock.POSIX and Data.Time.Clock.System: epoch conversions and
+-- the live clocks.
+
+module POSIXSuite (posixSuite) where
+
+import Data.Time.Calendar (toModifiedJulianDay)
+import Data.Time.Clock
+import Data.Time.Clock.POSIX
+import Data.Time.Clock.System
+import Support (assertTrue, expect)
+
+-- The two clocks are read separately, so they may straddle a second.
+clockSkew :: SystemTime -> POSIXTime -> Int
+clockSkew st p = abs (systemSeconds st - fromInteger (nominalDiffTimeToSeconds p))
+
+posixSuite :: IO ()
+posixSuite = do
+  expect "epoch is zero" (show (nominalDiffTimeToSeconds (utcTimeToPOSIXSeconds (posixSecondsToUTCTime (secondsToNominalDiffTime 0))))) "0"
+  expect "roundtrip" (show (nominalDiffTimeToSeconds (utcTimeToPOSIXSeconds (posixSecondsToUTCTime (secondsToNominalDiffTime 1234567890))))) "1234567890"
+  expect "pre-epoch" (show (posixSecondsToUTCTime (secondsToNominalDiffTime (-1)))) "1969-12-31 23:59:59 UTC"
+  expect "day length" (show (nominalDiffTimeToSeconds posixDayLength)) "86400"
+  expect "system from unix" (show (utcToSystemTime (utcTimeFromUnix 90))) "MkSystemTime 90 0"
+  expect "system roundtrip secs" (show (systemSeconds (utcToSystemTime (systemToUTCTime (MkSystemTime 90 500000000))))) "90"
+  expect "system roundtrip nanos" (show (systemNanoseconds (utcToSystemTime (systemToUTCTime (MkSystemTime 90 500000000))))) "500000000"
+  p <- getPOSIXTime
+  assertTrue "posix clock runs" (nominalDiffTimeToSeconds p > 0)
+  st <- getSystemTime
+  assertTrue "system nanos in range" (systemNanoseconds st >= 0 && systemNanoseconds st < 1000000000)
+  assertTrue "system agrees with posix" (clockSkew st p <= 1)

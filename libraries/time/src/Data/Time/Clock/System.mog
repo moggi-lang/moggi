@@ -1,0 +1,96 @@
+{-# BACKEND
+  php = Data.Time.Clock.System.PHP
+  jvm = Data.Time.Clock.System.JVM
+  dotnet = Data.Time.Clock.System.DotNet
+#-}
+-- |
+-- System wall-clock time, in the spirit of Haskell's 'Data.Time.Clock.System'.
+--
+-- 'SystemTime' is whole seconds plus nanoseconds since the unix epoch, as
+-- the host reports it: microsecond resolution on PHP (via @microtime@),
+-- nanosecond on the JVM (via @Instant@), millisecond on .NET (via
+-- @DateTimeOffset@). 'systemToUTCTime' keeps every picosecond the host gave
+-- (nanos become thousands of picos); 'utcToSystemTime' truncates toward the
+-- past.
+--
+module Data.Time.Clock.System
+  ( SystemTime(..)
+  , systemSeconds
+  , systemNanoseconds
+  , getSystemTime
+  , systemToUTCTime
+  , utcToSystemTime
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Bool
+import Data.Eq
+import Data.Int
+import Data.Integer
+import Data.Num
+import Data.Ord
+import Data.Real
+import Data.Time.Calendar (Day(..), toModifiedJulianDay)
+import Data.Time.Clock
+  ( UTCTime(..)
+  , utcTime
+  , utctDay
+  , utctDayTime
+  , diffTimeToPicoseconds
+  , picosecondsToDiffTime
+  )
+import Data.Tuple
+import Moggi.Err
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+import System.IO (IO)
+import Text.Show
+
+-- | Seconds and nanoseconds since the unix epoch. Well-formed values keep
+-- the nanoseconds in @[0, 10^9)@; the backend always produces them so.
+data SystemTime = MkSystemTime Int Int
+  deriving (Eq, Ord, Show)
+
+-- | Whole unix-epoch seconds of a 'SystemTime'.
+systemSeconds :: SystemTime -> Int
+systemSeconds t = case t of
+  MkSystemTime s _ -> s
+
+-- | The nanosecond fraction of a 'SystemTime'.
+systemNanoseconds :: SystemTime -> Int
+systemNanoseconds t = case t of
+  MkSystemTime _ ns -> ns
+
+-- The backend's reading as @(seconds, nanoseconds)@; the facade wraps it, so
+-- backends never name 'SystemTime' (which only the facade declares).
+systemParts :: IO (Int, Int)
+
+-- | The current wall-clock time.
+getSystemTime :: IO SystemTime
+getSystemTime = do
+  parts <- systemParts
+  case parts of
+    (s, ns) -> pure (MkSystemTime s ns)
+
+-- | View system time as UTC (exact: nanoseconds become picoseconds).
+systemToUTCTime :: SystemTime -> UTCTime
+systemToUTCTime t = utcTime (ModifiedJulianDay (40587 + fromInteger dayNum)) (picosecondsToDiffTime dayPicos)
+  where
+    totalPicos :: Integer
+    totalPicos = toInteger (systemSeconds t) * 1000000000000 + toInteger (systemNanoseconds t) * 1000
+    dayNum :: Integer
+    dayNum = div totalPicos 86400000000000000
+    dayPicos :: Integer
+    dayPicos = mod totalPicos 86400000000000000
+
+-- | View UTC as system time, truncating sub-nanosecond parts.
+utcToSystemTime :: UTCTime -> SystemTime
+utcToSystemTime t = MkSystemTime (fromInteger secs) (fromInteger nanos)
+  where
+    totalPicos :: Integer
+    totalPicos = toInteger (toModifiedJulianDay (utctDay t) - 40587) * 86400000000000000 + diffTimeToPicoseconds (utctDayTime t)
+    secs :: Integer
+    secs = div totalPicos 1000000000000
+    nanos :: Integer
+    nanos = div (mod totalPicos 1000000000000) 1000

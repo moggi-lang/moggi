@@ -1,0 +1,28 @@
+-- Data.Time.LocalTime: times of day, zones, conversions to and from UTC.
+
+module LocalTimeSuite (localTimeSuite) where
+
+import Data.Time.Calendar
+import Data.Time.Clock
+import Data.Time.LocalTime
+import Support (assertTrue, expect)
+
+leap :: LocalTime
+leap = LocalTime (fromGregorian 2024 2 29) (TimeOfDay 13 5 (secondsToDiffTime 7))
+
+localTimeSuite :: IO ()
+localTimeSuite = do
+  expect "Show TimeOfDay" (show (TimeOfDay 9 4 (secondsToDiffTime 2))) "09:04:02"
+  expect "Show fraction trims" (show (TimeOfDay 12 0 (picosecondsToDiffTime 500000000000))) "12:00:00.5"
+  expect "tod accessors" (show (todHour (localTimeOfDay leap))) "13"
+  expect "timeOfDayToTime" (show (nominalDiffTimeToSeconds (timeOfDayToTime (TimeOfDay 1 0 (secondsToDiffTime 0))))) "3600"
+  expect "timeToTimeOfDay" (show (timeToTimeOfDay (secondsToNominalDiffTime 3661))) "01:01:01"
+  expect "timeToTimeOfDay wraps" (show (timeToTimeOfDay (secondsToNominalDiffTime 90000))) "01:00:00"
+  expect "Show LocalTime" (show leap) "2024-02-29 13:05:07"
+  expect "utc zone" (show (timeZoneMinutes utc)) "0"
+  expect "hoursToTimeZone" (show (timeZoneMinutes (hoursToTimeZone 2))) "120"
+  expect "localTimeToUTC" (show (localTimeToUTC (minutesToTimeZone 60) (LocalTime (fromGregorian 1970 1 1) (TimeOfDay 1 0 (secondsToDiffTime 0))))) "1970-01-01 00:00:00 UTC"
+  expect "utcToLocalTime" (show (utcToLocalTime (minutesToTimeZone (-300)) (utcTimeFromUnix 0))) "1969-12-31 19:00:00"
+  expect "zoned roundtrip" (show (zonedTimeToUTC (utcToZonedTime (minutesToTimeZone 330) (utcTimeFromUnix 0)))) "1970-01-01 00:00:00 UTC"
+  expect "Show ZonedTime" (show (utcToZonedTime utc (utcTimeFromUnix 0))) "1970-01-01 00:00:00 UTC"
+  assertTrue "zone Eq" (minutesToTimeZone 60 == hoursToTimeZone 1)

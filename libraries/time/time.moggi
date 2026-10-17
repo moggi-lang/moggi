@@ -1,0 +1,22 @@
+[package]
+name = time
+version = 0.1.0
+license = BSD-3-Clause
+license-file = LICENSE
+copyright = 2026 Sascha-Oliver Prolić
+description = Dates and times: Data.Time.Calendar, Data.Time.Clock, Data.Time.LocalTime, Data.Time.Format
+
+[author]
+name = Sascha-Oliver Prolic
+email = saschaprolic@googlemail.com
+npub = npub1yywlmj053p4qp7z2qvqsrgcwz488mw0pr0t50xz3e5rx7s9uaelsjpdmfm
+
+[lib]
+source-dirs = src
+
+[test-suite]
+main = Suite
+source-dirs = tests
+
+[dependencies]
+base = >=0.2.0

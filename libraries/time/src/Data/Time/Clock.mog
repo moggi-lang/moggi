@@ -1,0 +1,291 @@
+{-# BACKEND
+  php = Data.Time.Clock.PHP
+  jvm = Data.Time.Clock.JVM
+  dotnet = Data.Time.Clock.DotNet
+#-}
+-- |
+-- UTC times and durations, in the spirit of Haskell's 'Data.Time.Clock'.
+--
+-- 'UTCTime' is a 'Day' plus a 'DiffTime' day fraction, and both durations
+-- ('DiffTime', 'NominalDiffTime') count picoseconds in an 'Integer', so
+-- arithmetic ('diffUTCTime', 'addUTCTime', the 'Num' instances) is exact.
+--
+-- Against the reference:
+--
+-- * 'Day' lives in 'Data.Time.Calendar' (import that module for it); the
+--   old epoch-day 'dayNumber'\/'diffTimeSeconds' accessors are gone, and
+--   'utcTimeFromUnix' now builds a Modified Julian Day.
+-- * 'DiffTime' is picoseconds, not whole seconds; 'Show UTCTime' prints
+--   @YYYY-MM-DD HH:MM:SS UTC@ rather than two counts.
+-- * Moggi has no 'Fixed'\/'Rational', so the pico conversions
+--   ('secondsToNominalDiffTime', 'nominalDiffTimeToSeconds',
+--   'picosecondsToNominalDiffTime', 'nominalDiffTimeToPicoseconds', and the
+--   'DiffTime' twins) are plain functions on 'Integer'.
+--
+module Data.Time.Clock
+  ( DiffTime(..)
+  , NominalDiffTime(..)
+  , UTCTime(..)
+  , utctDay
+  , utctDayTime
+  , utcTime
+  , utcTimeFromUnix
+  , diffUTCTime
+  , addUTCTime
+  , showDayFraction
+  , secondsToDiffTime
+  , diffTimeToSeconds
+  , picosecondsToDiffTime
+  , diffTimeToPicoseconds
+  , secondsToNominalDiffTime
+  , nominalDiffTimeToSeconds
+  , picosecondsToNominalDiffTime
+  , nominalDiffTimeToPicoseconds
+  , diffTimeToNominal
+  , nominalToDiffTime
+  , currentTimeSeconds
+  , getCurrentTime
+  , getMonotonicNanos
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Bool
+import Data.Enum
+import Data.Eq
+import Data.Int
+import Data.Integer
+import Data.Maybe
+import Data.Num
+import Data.Ord
+import Data.Real
+import Data.String (pack, unpack)
+import Data.String qualified as S
+import Data.Time.Calendar (Day(..), toModifiedJulianDay, toGregorian, showGregorian, addDays)
+import Data.Tuple
+import Moggi.Err
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+import System.IO (IO)
+import Text.Show
+
+-- | Twelve-hour-clock-free day fraction: picoseconds since midnight, in the
+-- range @[0, 86400 * 10^12)@ for a well-formed 'UTCTime'.
+newtype DiffTime = MkDiffTime Integer
+  deriving (Eq, Ord)
+
+-- | A duration in picoseconds. 'NominalDiffTime' and 'DiffTime' share a
+-- representation; the types keep absolute fractions and differences apart.
+newtype NominalDiffTime = MkNominalDiffTime Integer
+  deriving (Eq, Ord)
+
+-- Inside an instance body a class method name resolves to that instance, so
+-- the 'Num'\/'Fractional' instances below build on the exported 'Integer'
+-- operations rather than on class methods.
+unDiffTime :: DiffTime -> Integer
+unDiffTime t = case t of
+  MkDiffTime p -> p
+
+unNominal :: NominalDiffTime -> Integer
+unNominal d = case d of
+  MkNominalDiffTime p -> p
+
+picosPerSecond :: Integer
+picosPerSecond = 1000000000000
+
+picosPerDay :: Integer
+picosPerDay = 86400000000000000
+
+instance Num DiffTime where
+  (+) a b = MkDiffTime (integerAdd (unDiffTime a) (unDiffTime b))
+  (-) a b = MkDiffTime (integerSub (unDiffTime a) (unDiffTime b))
+  (*) a b = MkDiffTime (integerQuot (integerMul (unDiffTime a) (unDiffTime b)) picosPerSecond)
+  negate a = MkDiffTime (integerSub (integerFromInt 0) (unDiffTime a))
+  abs a = case integerCompare (unDiffTime a) (integerFromInt 0) of
+    LT -> negate a
+    _ -> a
+  signum a = MkDiffTime (integerMul (integerSignum (unDiffTime a)) picosPerSecond)
+  fromInteger n = MkDiffTime (integerMul n picosPerSecond)
+
+instance Fractional DiffTime where
+  (/) a b = MkDiffTime (integerQuot (integerMul (unDiffTime a) picosPerSecond) (unDiffTime b))
+  recip a = MkDiffTime (integerQuot (integerMul picosPerSecond picosPerSecond) (unDiffTime a))
+
+instance Num NominalDiffTime where
+  (+) a b = MkNominalDiffTime (integerAdd (unNominal a) (unNominal b))
+  (-) a b = MkNominalDiffTime (integerSub (unNominal a) (unNominal b))
+  (*) a b = MkNominalDiffTime (integerQuot (integerMul (unNominal a) (unNominal b)) picosPerSecond)
+  negate a = MkNominalDiffTime (integerSub (integerFromInt 0) (unNominal a))
+  abs a = case integerCompare (unNominal a) (integerFromInt 0) of
+    LT -> negate a
+    _ -> a
+  signum a = MkNominalDiffTime (integerMul (integerSignum (unNominal a)) picosPerSecond)
+  fromInteger n = MkNominalDiffTime (integerMul n picosPerSecond)
+
+instance Fractional NominalDiffTime where
+  (/) a b = MkNominalDiffTime (integerQuot (integerMul (unNominal a) picosPerSecond) (unNominal b))
+  recip a = MkNominalDiffTime (integerQuot (integerMul picosPerSecond picosPerSecond) (unNominal a))
+
+instance Show DiffTime where
+  show t = show (unDiffTime t)
+
+instance Show NominalDiffTime where
+  show d = show (unNominal d)
+
+-- | Whole seconds as a day fraction.
+secondsToDiffTime :: Integer -> DiffTime
+secondsToDiffTime s = MkDiffTime (integerMul s picosPerSecond)
+
+-- | The whole seconds in a day fraction (truncated toward zero).
+diffTimeToSeconds :: DiffTime -> Integer
+diffTimeToSeconds t = integerQuot (unDiffTime t) picosPerSecond
+
+-- | Picoseconds as a day fraction.
+picosecondsToDiffTime :: Integer -> DiffTime
+picosecondsToDiffTime p = MkDiffTime p
+
+-- | The picoseconds in a day fraction.
+diffTimeToPicoseconds :: DiffTime -> Integer
+diffTimeToPicoseconds t = unDiffTime t
+
+-- | Whole seconds as a duration.
+secondsToNominalDiffTime :: Integer -> NominalDiffTime
+secondsToNominalDiffTime s = MkNominalDiffTime (integerMul s picosPerSecond)
+
+-- | The whole seconds in a duration (truncated toward zero).
+nominalDiffTimeToSeconds :: NominalDiffTime -> Integer
+nominalDiffTimeToSeconds d = integerQuot (unNominal d) picosPerSecond
+
+-- | Picoseconds as a duration.
+picosecondsToNominalDiffTime :: Integer -> NominalDiffTime
+picosecondsToNominalDiffTime p = MkNominalDiffTime p
+
+-- | The picoseconds in a duration.
+nominalDiffTimeToPicoseconds :: NominalDiffTime -> Integer
+nominalDiffTimeToPicoseconds d = unNominal d
+
+-- | A day fraction as a duration (same picosecond count).
+diffTimeToNominal :: DiffTime -> NominalDiffTime
+diffTimeToNominal t = MkNominalDiffTime (unDiffTime t)
+
+-- | A duration as a day fraction (same picosecond count; may lie outside
+-- the day range, in which case only 'addUTCTime' normalizes it).
+nominalToDiffTime :: NominalDiffTime -> DiffTime
+nominalToDiffTime d = MkDiffTime (unNominal d)
+
+-- | A UTC time: a 'Day' plus the day fraction. Well-formed values keep the
+-- fraction in @[0, 86400 seconds)@; 'addUTCTime' normalizes, raw 'utcTime'
+-- does not check.
+data UTCTime = MkUTCTime { day :: Day, dayTime :: DiffTime }
+  deriving (Eq, Ord)
+
+-- | The day of a 'UTCTime'.
+utctDay :: UTCTime -> Day
+utctDay t = case t of
+  MkUTCTime { day = d, dayTime = _ } -> d
+
+-- | The day fraction of a 'UTCTime'.
+utctDayTime :: UTCTime -> DiffTime
+utctDayTime t = case t of
+  MkUTCTime { day = _, dayTime = dt } -> dt
+
+-- | Build a 'UTCTime' from a day and its fraction (unchecked).
+utcTime :: Day -> DiffTime -> UTCTime
+utcTime d dt = MkUTCTime { day = d, dayTime = dt }
+
+instance Show UTCTime where
+  show t = case toGregorian (utctDay t) of
+    (y, m, dd) -> showGregorian y m dd <> " " <> showDayFraction (utctDayTime t) <> " UTC"
+
+-- | Render a day fraction as @HH:MM:SS@ with a trimmed @.ffffffffffff@
+-- suffix when a sub-second part is present.
+showDayFraction :: DiffTime -> String
+showDayFraction t = pad2 h <> ":" <> pad2 mi <> ":" <> pad2 s <> frac
+  where
+    totalSeconds :: Integer
+    totalSeconds = diffTimeToSeconds t
+    h :: Int
+    h = fromInteger (div totalSeconds 3600)
+    mi :: Int
+    mi = fromInteger (mod (div totalSeconds 60) 60)
+    s :: Int
+    s = fromInteger (mod totalSeconds 60)
+    frac :: String
+    frac = case mod (unDiffTime t) picosPerSecond of
+      0 -> ""
+      p -> "." <> trimZeros (pad12 p)
+
+pad2 :: Int -> String
+pad2 n = case n < 10 of
+  True -> "0" <> show n
+  False -> show n
+
+pad12 :: Integer -> String
+pad12 p = padLeft 12 "0" (show p)
+
+padLeft :: Int -> String -> String -> String
+padLeft n c s = case S.length s < n of
+  True -> padLeft n c (c <> s)
+  False -> s
+
+trimZeros :: String -> String
+trimZeros s = case stripSuffixZero s of
+  "" -> "0"
+  t -> t
+
+stripSuffixZero :: String -> String
+stripSuffixZero s = case S.isSuffixOf "0" s of
+  True -> stripSuffixZero (dropLast s)
+  False -> s
+
+dropLast :: String -> String
+dropLast s = case S.length s <= 1 of
+  True -> ""
+  False -> S.take (S.length s - 1) s
+
+-- | The duration from the second time to the first (negative when the
+-- first is earlier).
+diffUTCTime :: UTCTime -> UTCTime -> NominalDiffTime
+diffUTCTime a b = MkNominalDiffTime (integerAdd dayPicos dtPicos)
+  where
+    dayPicos :: Integer
+    dayPicos = (toInteger (toModifiedJulianDay (utctDay a)) - toInteger (toModifiedJulianDay (utctDay b))) * 86400 * picosPerSecond
+    dtPicos :: Integer
+    dtPicos = integerSub (unDiffTime (utctDayTime a)) (unDiffTime (utctDayTime b))
+
+-- | Shift a time by a duration, normalizing the fraction back into its
+-- day range.
+addUTCTime :: NominalDiffTime -> UTCTime -> UTCTime
+addUTCTime d t = utcTime (addDays mjdShift (utctDay t)) (picosecondsToDiffTime fracPicos)
+  where
+    total :: Integer
+    total = toInteger (toModifiedJulianDay (utctDay t)) * picosPerDay + unDiffTime (utctDayTime t) + unNominal d
+    mjdShift :: Integer
+    mjdShift = div total picosPerDay - toInteger (toModifiedJulianDay (utctDay t))
+    fracPicos :: Integer
+    fracPicos = mod total picosPerDay
+
+-- | Build a 'UTCTime' from unix-epoch seconds (whole-second precision).
+utcTimeFromUnix :: Int -> UTCTime
+utcTimeFromUnix secs = utcTime (ModifiedJulianDay (40587 + fromInteger q)) (secondsToDiffTime r)
+  where
+    qr :: (Integer, Integer)
+    qr = divMod (toInteger secs) 86400
+    q :: Integer
+    q = fst qr
+    r :: Integer
+    r = snd qr
+
+-- Wall-clock seconds from the backend; the facade turns them into a 'UTCTime'.
+currentTimeSeconds :: IO Int
+
+-- | Monotonic clock in nanoseconds (arbitrary epoch). Prefer diffs over
+-- absolute values; suitable for microbenchmarks.
+getMonotonicNanos :: IO Int
+
+-- | The current UTC time (whole-second precision: the backends report
+-- seconds; 'System' gets sub-second times where the host allows).
+getCurrentTime :: IO UTCTime
+getCurrentTime = do
+  secs <- currentTimeSeconds
+  pure (utcTimeFromUnix secs)

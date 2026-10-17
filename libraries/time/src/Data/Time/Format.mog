@@ -1,0 +1,1044 @@
+-- |
+-- Formatting and parsing dates and times, in the spirit of Haskell's
+-- 'Data.Time.Format'.
+--
+-- 'formatTime' renders a 'LocalTime' in a 'TimeZone' through a @%@-directive
+-- string, and 'parseTime' reads one back. Both work off 'defaultTimeLocale'
+-- (or a locale of your own) for day\/month names and the compound formats.
+--
+-- Against the reference:
+--
+-- * No 'FormatTime'\/'ParseTime' classes: the two concrete functions take
+--   the zone and the local time (formatting) and return a 'ZonedTime'
+--   (parsing). Locales carry no eras, no timezone-name lists and no
+--   AM\/PM-indexed day periods beyond 'amPm'.
+-- * The directive set is the portable core below. Unknown directives are
+--   kept literally (rather than failing), and unimplemented locale
+--   modifiers ('%E', '%O') fall back to the plain directive.
+-- * Parsed fields default instead of failing: a missing date is 1970-01-01,
+--   a missing time is midnight, a missing zone is 'utc'. Two-digit years
+--   follow POSIX (69-99 map to 1969-1999, the rest to 2000-2068).
+--
+-- Supported directives:
+--
+-- * Years and centuries: @%Y@ @%y@ @%C@ @%G@ (ISO year) @%V@ (ISO week)
+-- * Months: @%m@ @%b@ @%B@ @%h@
+-- * Days: @%d@ @%e@ @%j@ (day of year) @%u@ (ISO weekday) @%w@ (Sunday-start
+--   weekday) @%a@ @%A@
+-- * Weeks: @%U@ (Sunday-start) @%W@ (Monday-start)
+-- * Times: @%H@ @%k@ @%I@ @%l@ @%M@ @%S@ @%q@ (fraction, no dot) @%Q@
+--   (fraction with dot) @%p@ @%P@ @%R@ @%T@ @%X@ @%r@
+-- * Zones: @%z@ (@+HHMM@) @%Z@ (name)
+-- * Compound: @%c@ @@%x@ @%D@ @%F@
+-- * Absolute: @%s@ (unix seconds)
+-- * Literals: @%%@ @%t@ (tab) @%n@ (newline); any other character matches
+--   itself (a space in the format skips all spaces in the input).
+--
+module Data.Time.Format
+  ( TimeLocale(..)
+  , locWdays
+  , locMonths
+  , locAmPm
+  , locDateTimeFmt
+  , locDateFmt
+  , locTimeFmt
+  , locTime12Fmt
+  , defaultTimeLocale
+  , formatTime
+  , parseTime
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Bool
+import Data.Char (Char, isDigit, isSpace, toLower, digitToInt, ord)
+import Data.Eq
+import Data.Int
+import Data.Integer
+import Data.List hiding (
+  map, filter, null, length, lookup, take, drop, splitAt, reverse,
+  sort, sortBy, sortOn, zip, zipWith, unzip, tails, inits, replicate,
+  iterate, cycle, chunksOf, scanl, scanr, intersperse, concatMap, maximum, minimum, sum,
+  singleton, union, find, insert
+  )
+import Data.Maybe
+import Data.Num
+import Data.Ord
+import Data.Real
+import Data.String (pack, unpack, singleton)
+import Data.String qualified as S
+import Data.Time.Calendar
+  ( Day(..)
+  , toModifiedJulianDay
+  , fromGregorian
+  , fromGregorianValid
+  , toGregorian
+  , addDays
+  , diffDays
+  , isLeapYear
+  , gregorianMonthLength
+  , showGregorian
+  , showYear
+  )
+import Data.Time.Clock
+  ( DiffTime(..)
+  , NominalDiffTime(..)
+  , UTCTime(..)
+  , utctDay
+  , utctDayTime
+  , utcTime
+  , utcTimeFromUnix
+  , secondsToNominalDiffTime
+  , nominalDiffTimeToPicoseconds
+  , picosecondsToDiffTime
+  , diffTimeToPicoseconds
+  , diffTimeToNominal
+  , nominalToDiffTime
+  , showDayFraction
+  )
+import Data.Time.LocalTime
+  ( TimeOfDay(..)
+  , todHour
+  , todMin
+  , todSec
+  , TimeZone(..)
+  , timeZoneMinutes
+  , timeZoneName
+  , LocalTime(..)
+  , localDay
+  , localTimeOfDay
+  , ZonedTime(..)
+  , utc
+  , minutesToTimeZone
+  , timeOfDayToTime
+  , timeToTimeOfDay
+  , localTimeToUTC
+  , utcToLocalTime
+  )
+import Data.Tuple
+import Moggi.Err
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+import Text.Show
+
+-- ---------------------------------------------------------------------------
+-- Locales
+-- ---------------------------------------------------------------------------
+
+-- | Locale names and compound formats. Day lists run Sunday-first; each pair
+-- is @(full, short)@.
+data TimeLocale = TimeLocale
+  { wDays :: [(String, String)]
+  , months :: [(String, String)]
+  , amPm :: (String, String)
+  , dateTimeFmt :: String
+  , dateFmt :: String
+  , timeFmt :: String
+  , time12Fmt :: String
+  }
+
+-- | Sunday-first @(full, short)@ day names.
+locWdays :: TimeLocale -> [(String, String)]
+locWdays loc = case loc of
+  TimeLocale { wDays = w, months = _, amPm = _, dateTimeFmt = _, dateFmt = _, timeFmt = _, time12Fmt = _ } -> w
+
+-- | @(full, short)@ month names.
+locMonths :: TimeLocale -> [(String, String)]
+locMonths loc = case loc of
+  TimeLocale { wDays = _, months = m, amPm = _, dateTimeFmt = _, dateFmt = _, timeFmt = _, time12Fmt = _ } -> m
+
+-- | @(AM, PM)@ names.
+locAmPm :: TimeLocale -> (String, String)
+locAmPm loc = case loc of
+  TimeLocale { wDays = _, months = _, amPm = p, dateTimeFmt = _, dateFmt = _, timeFmt = _, time12Fmt = _ } -> p
+
+-- | The @%c@ format.
+locDateTimeFmt :: TimeLocale -> String
+locDateTimeFmt loc = case loc of
+  TimeLocale { wDays = _, months = _, amPm = _, dateTimeFmt = f, dateFmt = _, timeFmt = _, time12Fmt = _ } -> f
+
+-- | The @%x@ format.
+locDateFmt :: TimeLocale -> String
+locDateFmt loc = case loc of
+  TimeLocale { wDays = _, months = _, amPm = _, dateTimeFmt = _, dateFmt = f, timeFmt = _, time12Fmt = _ } -> f
+
+-- | The @%X@ format.
+locTimeFmt :: TimeLocale -> String
+locTimeFmt loc = case loc of
+  TimeLocale { wDays = _, months = _, amPm = _, dateTimeFmt = _, dateFmt = _, timeFmt = f, time12Fmt = _ } -> f
+
+-- | The @%r@ 12-hour format.
+locTime12Fmt :: TimeLocale -> String
+locTime12Fmt loc = case loc of
+  TimeLocale { wDays = _, months = _, amPm = _, dateTimeFmt = _, dateFmt = _, timeFmt = _, time12Fmt = f } -> f
+
+-- | English names with POSIX compound formats.
+defaultTimeLocale :: TimeLocale
+defaultTimeLocale = TimeLocale
+  { wDays =
+    [ ("Sunday", "Sun"), ("Monday", "Mon"), ("Tuesday", "Tue")
+    , ("Wednesday", "Wed"), ("Thursday", "Thu"), ("Friday", "Fri")
+    , ("Saturday", "Sat")
+    ]
+  , months =
+    [ ("January", "Jan"), ("February", "Feb"), ("March", "Mar")
+    , ("April", "Apr"), ("May", "May"), ("June", "Jun")
+    , ("July", "Jul"), ("August", "Aug"), ("September", "Sep")
+    , ("October", "Oct"), ("November", "Nov"), ("December", "Dec")
+    ]
+  , amPm = ("AM", "PM")
+  , dateTimeFmt = "%a %b %e %T %Y"
+  , dateFmt = "%m/%d/%y"
+  , timeFmt = "%H:%M:%S"
+  , time12Fmt = "%I:%M:%S %p"
+  }
+
+-- ---------------------------------------------------------------------------
+-- Shared date arithmetic
+-- ---------------------------------------------------------------------------
+
+-- | Sunday-start weekday of a day: 0 is Sunday.
+weekdaySun0 :: Day -> Int
+weekdaySun0 d = fromInteger (mod (toInteger (toModifiedJulianDay d) + 3) 7)
+
+-- | ISO weekday: 1 is Monday, 7 is Sunday.
+isoWeekday :: Day -> Int
+isoWeekday d = fromInteger (mod (toInteger (toModifiedJulianDay d) + 2) 7) + 1
+
+-- | Day of year: 1 is January 1st.
+dayOfYear :: Day -> Int
+dayOfYear d = case toGregorian d of
+  (y, _, _) -> fromInteger (diffDays d (fromGregorian y 1 1)) + 1
+
+-- | The Monday of ISO week 1 of a year (from the Thursday rule: January
+-- 4th is always in week 1).
+isoWeek1Monday :: Integer -> Day
+isoWeek1Monday y = addDays (1 - toInteger (isoWeekday jan4)) jan4
+  where
+    jan4 :: Day
+    jan4 = fromGregorian y 1 4
+
+-- | The ISO week-numbering year and week of a day.
+isoYearWeek :: Day -> (Integer, Int)
+isoYearWeek d = case toGregorian d of
+  (y, _, _) -> case diffDays d (isoWeek1Monday y) of
+    dd -> case dd < 0 of
+      True -> isoYearWeekPrev y
+      False -> case div dd 7 + 1 of
+        w -> case w > toInteger (weeksInYear y) of
+          True -> (y + 1, 1)
+          False -> (y, fromInteger w)
+
+isoYearWeekPrev :: Integer -> (Integer, Int)
+isoYearWeekPrev y = (y - 1, weeksInYear (y - 1))
+
+-- | ISO weeks in a year: 53 when January 1st is a Thursday (or a Wednesday
+-- in a leap year), 52 otherwise.
+weeksInYear :: Integer -> Int
+weeksInYear y = case isoWeekday (fromGregorian y 1 1) of
+  4 -> 53
+  3 -> case isLeapYear y of
+    True -> 53
+    False -> 52
+  _ -> 52
+
+-- | Sunday-start week number (@%U@): days before the first Sunday are
+-- week 00.
+weekNumberSun :: Day -> Int
+weekNumberSun d = weekNumber (weekdaySun0 jan1) d
+  where
+    jan1 :: Day
+    jan1 = case toGregorian d of
+      (y, _, _) -> fromGregorian y 1 1
+
+-- | Monday-start week number (@%W@): days before the first Monday are
+-- week 00.
+weekNumberMon :: Day -> Int
+weekNumberMon d = weekNumber (mod (weekdaySun0 jan1 + 6) 7) d
+  where
+    jan1 :: Day
+    jan1 = case toGregorian d of
+      (y, _, _) -> fromGregorian y 1 1
+
+weekNumber :: Int -> Day -> Int
+weekNumber firstOffset d = weekNumberGo (1 + mod (7 - firstOffset) 7) d
+
+weekNumberGo :: Int -> Day -> Int
+weekNumberGo firstSunday d = case dayOfYear d < firstSunday of
+  True -> 0
+  False -> fromInteger (div (toInteger (dayOfYear d) - toInteger firstSunday) 7) + 1
+
+-- ---------------------------------------------------------------------------
+-- Formatting
+-- ---------------------------------------------------------------------------
+
+-- | Render a time: the format string, the zone it is shown in, and the
+-- local time to show.
+formatTime :: TimeLocale -> String -> TimeZone -> LocalTime -> String
+formatTime loc fmt tz lt = renderFmt loc (unpack fmt) tz lt
+
+renderFmt :: TimeLocale -> [Char] -> TimeZone -> LocalTime -> String
+renderFmt _ [] _ _ = ""
+renderFmt loc ('%' : '%' : rest) tz lt = "%" <> renderFmt loc rest tz lt
+renderFmt loc ('%' : c : rest) tz lt = renderDir loc c rest tz lt
+renderFmt loc ('%' : []) tz lt = renderDir loc '%' [] tz lt
+renderFmt loc (c : rest) tz lt = singleton c <> renderFmt loc rest tz lt
+
+renderDir :: TimeLocale -> Char -> [Char] -> TimeZone -> LocalTime -> String
+renderDir loc c rest tz lt = renderGo c
+  where
+    day :: Day
+    day = localDay lt
+    tod :: TimeOfDay
+    tod = localTimeOfDay lt
+    ymd :: (Integer, Int, Int)
+    ymd = toGregorian day
+    year :: Integer
+    year = fst3 ymd
+    mon :: Int
+    mon = snd3 ymd
+    dom :: Int
+    dom = thd3 ymd
+    hh :: Int
+    hh = todHour tod
+    mi :: Int
+    mi = todMin tod
+    secPicos :: Integer
+    secPicos = diffTimeToPicoseconds (todSec tod)
+    wholeSecs :: Int
+    wholeSecs = fromInteger (div secPicos 1000000000000)
+    fracPicos :: Integer
+    fracPicos = mod secPicos 1000000000000
+    wday :: Int
+    wday = weekdaySun0 day
+    yday :: Int
+    yday = dayOfYear day
+    isoYW :: (Integer, Int)
+    isoYW = isoYearWeek day
+    isoY :: Integer
+    isoY = fst2 isoYW
+    isoW :: Int
+    isoW = snd2 isoYW
+    mins :: Int
+    mins = timeZoneMinutes tz
+    next :: String
+    next = renderFmt loc rest tz lt
+    renderGo :: Char -> String
+    renderGo d = case d of
+      'Y' -> showYear year <> next
+      'y' -> padN 2 (show (mod year 100)) <> next
+      'C' -> padYear2 (div year 100) <> next
+      'G' -> showYear isoY <> next
+      'V' -> padN 2 (show isoW) <> next
+      'm' -> padN 2 (show mon) <> next
+      'd' -> padN 2 (show dom) <> next
+      'e' -> padSpace 2 (show dom) <> next
+      'j' -> padN 3 (show yday) <> next
+      'u' -> show (isoWeekday day) <> next
+      'w' -> show wday <> next
+      'a' -> snd2 (indexPair (locWdays loc) wday) <> next
+      'A' -> fst2 (indexPair (locWdays loc) wday) <> next
+      'b' -> snd2 (indexPair (locMonths loc) (mon - 1)) <> next
+      'B' -> fst2 (indexPair (locMonths loc) (mon - 1)) <> next
+      'h' -> snd2 (indexPair (locMonths loc) (mon - 1)) <> next
+      'U' -> padN 2 (show (weekNumberSun day)) <> next
+      'W' -> padN 2 (show (weekNumberMon day)) <> next
+      'H' -> padN 2 (show hh) <> next
+      'k' -> padSpace 2 (show hh) <> next
+      'I' -> padN 2 (show (hour12 hh)) <> next
+      'l' -> padSpace 2 (show (hour12 hh)) <> next
+      'M' -> padN 2 (show mi) <> next
+      'S' -> padN 2 (show wholeSecs) <> next
+      'q' -> showFracTrim fracPicos <> next
+      'Q' -> showFracDot fracPicos <> next
+      'p' -> ampm True <> next
+      'P' -> ampm False <> next
+      'z' -> showOffset mins <> next
+      'Z' -> showZone tz mins <> next
+      's' -> show (unixSeconds day tod) <> next
+      'c' -> renderFmt loc (unpack (locDateTimeFmt loc)) tz lt <> next
+      'x' -> renderFmt loc (unpack (locDateFmt loc)) tz lt <> next
+      'X' -> renderFmt loc (unpack (locTimeFmt loc)) tz lt <> next
+      'D' -> renderFmt loc (unpack "%m/%d/%y") tz lt <> next
+      'F' -> showGregorian year mon dom <> next
+      'R' -> renderFmt loc (unpack "%H:%M") tz lt <> next
+      'T' -> renderFmt loc (unpack "%H:%M:%S") tz lt <> next
+      'r' -> renderFmt loc (unpack (locTime12Fmt loc)) tz lt <> next
+      't' -> "\t" <> next
+      'n' -> "\n" <> next
+      'E' -> renderMod rest
+      'O' -> renderMod rest
+      _ -> "%" <> singleton d <> next
+    ampm :: Bool -> String
+    ampm upper = case hh < 12 of
+      True -> case upper of
+        True -> fst2 (locAmPm loc)
+        False -> toLowerStr (fst2 (locAmPm loc))
+      False -> case upper of
+        True -> snd2 (locAmPm loc)
+        False -> toLowerStr (snd2 (locAmPm loc))
+    renderMod :: [Char] -> String
+    renderMod [] = "%" <> next
+    renderMod (d2 : _) = renderGo d2
+
+fst3 :: (a, b, c) -> a
+fst3 t = case t of
+  (a, _, _) -> a
+
+snd3 :: (a, b, c) -> b
+snd3 t = case t of
+  (_, b, _) -> b
+
+thd3 :: (a, b, c) -> c
+thd3 t = case t of
+  (_, _, c) -> c
+
+fst2 :: (a, b) -> a
+fst2 p = case p of
+  (a, _) -> a
+
+snd2 :: (a, b) -> b
+snd2 p = case p of
+  (_, b) -> b
+
+hour12 :: Int -> Int
+hour12 h = case mod h 12 of
+  0 -> 12
+  n -> n
+
+-- Two-digit years and centuries of negative years use floored mod/div, so
+-- @%y@ of -1 is @99@ and @%C@ of -1 is @-1@; pad the latter by hand.
+-- @%y@ needs a non-negative remainder, hence the double mod.
+-- (Handled inline above: @mod year 100@ is already floored and
+-- non-negative for a positive divisor.)
+
+padYear2 :: Integer -> String
+padYear2 c = case c < 0 of
+  True -> "-" <> padN 2 (show (negate c))
+  False -> padN 2 (show c)
+
+padN :: Int -> String -> String
+padN n s = padLeft n "0" s
+
+padSpace :: Int -> String -> String
+padSpace n s = padLeft n " " s
+
+padLeft :: Int -> String -> String -> String
+padLeft n c s = case S.length s < n of
+  True -> padLeft n c (c <> s)
+  False -> s
+
+showFracTrim :: Integer -> String
+showFracTrim p = case p == 0 of
+  True -> ""
+  False -> trimZeros (padLeft 12 "0" (show p))
+
+showFracDot :: Integer -> String
+showFracDot p = case p == 0 of
+  True -> ""
+  False -> "." <> trimZeros (padLeft 12 "0" (show p))
+
+trimZeros :: String -> String
+trimZeros s = case stripSuffixZero s of
+  "" -> "0"
+  t -> t
+
+stripSuffixZero :: String -> String
+stripSuffixZero s = case S.isSuffixOf "0" s of
+  True -> stripSuffixZero (dropLast s)
+  False -> s
+
+dropLast :: String -> String
+dropLast s = case S.length s <= 1 of
+  True -> ""
+  False -> S.take (S.length s - 1) s
+
+indexPair :: [(String, String)] -> Int -> (String, String)
+indexPair [] _ = ("", "")
+indexPair (p : rest) n = case n <= 0 of
+  True -> p
+  False -> indexPair rest (n - 1)
+
+toLowerStr :: String -> String
+toLowerStr s = pack (toLowerChars (unpack s))
+
+toLowerChars :: [Char] -> [Char]
+toLowerChars [] = []
+toLowerChars (c : rest) = toLower c : toLowerChars rest
+
+-- | @+HHMM@ (or @-HHMM@) zone offset.
+showOffset :: Int -> String
+showOffset mins = sign <> padN 2 (show h) <> padN 2 (show m)
+  where
+    sign :: String
+    sign = case mins < 0 of
+      True -> "-"
+      False -> "+"
+    total :: Int
+    total = case mins < 0 of
+      True -> negate mins
+      False -> mins
+    h :: Int
+    h = div total 60
+    m :: Int
+    m = mod total 60
+
+-- | The zone name, falling back to the numeric offset when empty.
+showZone :: TimeZone -> Int -> String
+showZone tz mins = case timeZoneName tz of
+  "" -> showOffset mins
+  n -> n
+
+-- | Unix-epoch seconds of a local time taken at face value (zone ignored;
+-- use 'zonedTimeToUTC' first when the zone matters).
+unixSeconds :: Day -> TimeOfDay -> Integer
+unixSeconds day tod = toInteger (toModifiedJulianDay day - 40587) * 86400 + todSeconds tod
+
+todSeconds :: TimeOfDay -> Integer
+todSeconds tod = toInteger (todHour tod * 3600 + todMin tod * 60) + div (diffTimeToPicoseconds (todSec tod)) 1000000000000
+
+-- ---------------------------------------------------------------------------
+-- Parsing
+-- ---------------------------------------------------------------------------
+
+-- | Parse a time: the locale, the format string and the input, giving the
+-- 'ZonedTime' when the whole format matches (trailing input must be
+-- whitespace at most). Fields the format never sets default: 1970-01-01,
+-- midnight, 'utc'.
+parseTime :: TimeLocale -> String -> String -> Maybe ZonedTime
+parseTime loc fmt input = case parseFmt loc (unpack fmt) (unpack input) blankParsed of
+  Nothing -> Nothing
+  Just (fields, rest) -> case skipSpaces rest of
+    [] -> buildParsed fields
+    _ -> Nothing
+
+-- Accumulated fields; 'Nothing' slots fall back to the defaults at build.
+-- One line: positional constructor fields must sit on the constructor's line.
+-- In order: year, century, month, day of month, day of year, hour, 12-hour
+-- value, PM flag, minute, second picoseconds, zone minutes, unix seconds,
+-- week number (U/W), Monday-start flag, ISO week, ISO year, weekday
+-- (Sunday-start 0-6), ISO weekday (Monday-start 1-7).
+data Parsed = Parsed (Maybe Integer) (Maybe Integer) (Maybe Int) (Maybe Int) (Maybe Int) (Maybe Int) (Maybe Int) (Maybe Bool) (Maybe Int) (Maybe Integer) (Maybe Int) (Maybe Integer) (Maybe Int) (Maybe Bool) (Maybe Int) (Maybe Integer) (Maybe Int) (Maybe Int)
+
+blankParsed :: Parsed
+blankParsed = Parsed
+  Nothing Nothing Nothing Nothing Nothing Nothing Nothing
+  Nothing Nothing Nothing Nothing Nothing Nothing Nothing
+  Nothing Nothing Nothing Nothing
+
+parseFmt :: TimeLocale -> [Char] -> [Char] -> Parsed -> Maybe (Parsed, [Char])
+parseFmt _ [] input fields = Just (fields, input)
+parseFmt loc ('%' : '%' : rest) input fields = case input of
+  ('%' : rest2) -> parseFmt loc rest rest2 fields
+  _ -> Nothing
+parseFmt loc ('%' : c : rest) input fields = parseDir loc c rest input fields
+parseFmt loc ('%' : []) input fields = parseDir loc '%' [] input fields
+parseFmt loc (c : rest) input fields = case isSpace c of
+  True -> parseFmt loc rest (skipSpaces input) fields
+  False -> case input of
+    (d : rest2) -> case c == d of
+      True -> parseFmt loc rest rest2 fields
+      False -> Nothing
+    [] -> Nothing
+
+skipSpaces :: [Char] -> [Char]
+skipSpaces [] = []
+skipSpaces (c : rest) = case isSpace c of
+  True -> skipSpaces rest
+  False -> c : rest
+
+parseDir :: TimeLocale -> Char -> [Char] -> [Char] -> Parsed -> Maybe (Parsed, [Char])
+parseDir loc c rest input fields = parseGo c
+  where
+    next :: Parsed -> [Char] -> Maybe (Parsed, [Char])
+    next f inp = parseFmt loc rest inp f
+    parseGo :: Char -> Maybe (Parsed, [Char])
+    parseGo d = case d of
+      'Y' -> parseSigned 4 input >>= yearCont
+      'y' -> parseDigits 2 input >>= year2Cont
+      'C' -> parseSigned 2 input >>= centuryCont
+      'G' -> parseSigned 4 input >>= isoYearCont
+      'V' -> parseDigits 2 input >>= isoWeekCont
+      'm' -> parseDigits 2 input >>= monthCont
+      'd' -> parseDigits 2 input >>= domCont
+      'e' -> parseDigits12 input >>= domCont
+      'j' -> parseDigits 3 input >>= ydayCont
+      'u' -> parseDigits 1 input >>= isoWdayCont
+      'w' -> parseDigits 1 input >>= wdayCont
+      'a' -> parseWdayName loc input >>= wdayNameCont
+      'A' -> parseWdayName loc input >>= wdayNameCont
+      'b' -> parseMonthName loc input >>= monthNameCont
+      'B' -> parseMonthName loc input >>= monthNameCont
+      'h' -> parseMonthName loc input >>= monthNameCont
+      'U' -> parseDigits 2 input >>= weekCont False
+      'W' -> parseDigits 2 input >>= weekCont True
+      'H' -> parseDigits 2 input >>= hourCont
+      'k' -> parseDigits12 input >>= hourCont
+      'I' -> parseDigits 2 input >>= hour12Cont
+      'l' -> parseDigits12 input >>= hour12Cont
+      'M' -> parseDigits 2 input >>= minuteCont
+      'S' -> parseSecond input >>= secondCont
+      'q' -> parseOptFrac input >>= fracKeepCont
+      'Q' -> parseOptFracDot input >>= fracKeepCont
+      'p' -> parseAmPm loc input >>= ampmCont
+      'P' -> parseAmPm loc input >>= ampmCont
+      'z' -> parseOffset input >>= zoneCont
+      'Z' -> parseZoneName input >>= zoneNameCont
+      's' -> parseInteger input >>= unixCont
+      'c' -> parseFmt loc (unpack (locDateTimeFmt loc) ++ rest) input fields
+      'x' -> parseFmt loc (unpack (locDateFmt loc) ++ rest) input fields
+      'X' -> parseFmt loc (unpack (locTimeFmt loc) ++ rest) input fields
+      'D' -> parseFmt loc (unpack "%m/%d/%y" ++ rest) input fields
+      'F' -> parseFmt loc (unpack "%Y-%m-%d" ++ rest) input fields
+      'R' -> parseFmt loc (unpack "%H:%M" ++ rest) input fields
+      'T' -> parseFmt loc (unpack "%H:%M:%S" ++ rest) input fields
+      'r' -> parseFmt loc (unpack (locTime12Fmt loc) ++ rest) input fields
+      't' -> next fields (skipSpaces input)
+      'n' -> next fields (skipSpaces input)
+      'E' -> case rest of
+        (d2 : _) -> parseGo d2
+        [] -> Nothing
+      'O' -> case rest of
+        (d2 : _) -> parseGo d2
+        [] -> Nothing
+      _ -> Nothing
+    yearCont :: (Integer, [Char]) -> Maybe (Parsed, [Char])
+    yearCont (n, inp) = next (setYear fields n) inp
+    year2Cont :: (Integer, [Char]) -> Maybe (Parsed, [Char])
+    year2Cont (n, inp) = next (setYear fields (expandYear2 n)) inp
+    centuryCont :: (Integer, [Char]) -> Maybe (Parsed, [Char])
+    centuryCont (n, inp) = next (setCentury fields n) inp
+    isoYearCont :: (Integer, [Char]) -> Maybe (Parsed, [Char])
+    isoYearCont (n, inp) = next (setIsoYear fields n) inp
+    isoWeekCont :: (Integer, [Char]) -> Maybe (Parsed, [Char])
+    isoWeekCont (n, inp) = next (setIsoWeek fields (fromInteger n)) inp
+    monthCont :: (Integer, [Char]) -> Maybe (Parsed, [Char])
+    monthCont (n, inp) = next (setMonth fields (fromInteger n)) inp
+    domCont :: (Integer, [Char]) -> Maybe (Parsed, [Char])
+    domCont (n, inp) = next (setDom fields (fromInteger n)) inp
+    ydayCont :: (Integer, [Char]) -> Maybe (Parsed, [Char])
+    ydayCont (n, inp) = next (setYday fields (fromInteger n)) inp
+    isoWdayCont :: (Integer, [Char]) -> Maybe (Parsed, [Char])
+    isoWdayCont (n, inp) = next (setIsoWday fields (fromInteger n)) inp
+    wdayCont :: (Integer, [Char]) -> Maybe (Parsed, [Char])
+    wdayCont (n, inp) = next (setWday fields (fromInteger n)) inp
+    wdayNameCont :: (Int, [Char]) -> Maybe (Parsed, [Char])
+    wdayNameCont (n, inp) = next (setWday fields n) inp
+    monthNameCont :: (Int, [Char]) -> Maybe (Parsed, [Char])
+    monthNameCont (n, inp) = next (setMonth fields n) inp
+    weekCont :: Bool -> (Integer, [Char]) -> Maybe (Parsed, [Char])
+    weekCont mon (n, inp) = next (setWeek fields (fromInteger n) mon) inp
+    hourCont :: (Integer, [Char]) -> Maybe (Parsed, [Char])
+    hourCont (n, inp) = next (setHour fields (fromInteger n)) inp
+    hour12Cont :: (Integer, [Char]) -> Maybe (Parsed, [Char])
+    hour12Cont (n, inp) = next (setHour12 fields (fromInteger n)) inp
+    minuteCont :: (Integer, [Char]) -> Maybe (Parsed, [Char])
+    minuteCont (n, inp) = next (setMinute fields (fromInteger n)) inp
+    secondCont :: (Integer, [Char]) -> Maybe (Parsed, [Char])
+    secondCont (n, inp) = next (setSecond fields n) inp
+    fracKeepCont :: (Maybe Integer, [Char]) -> Maybe (Parsed, [Char])
+    fracKeepCont (mn, inp) = case mn of
+      Just n -> next (setSecond fields n) inp
+      Nothing -> next fields inp
+    ampmCont :: (Bool, [Char]) -> Maybe (Parsed, [Char])
+    ampmCont (pm, inp) = next (setPm fields pm) inp
+    zoneCont :: (Int, [Char]) -> Maybe (Parsed, [Char])
+    zoneCont (m, inp) = next (setZone fields m) inp
+    zoneNameCont :: ([Char], [Char]) -> Maybe (Parsed, [Char])
+    zoneNameCont (name, inp) = next (setZoneName fields name) inp
+    unixCont :: (Integer, [Char]) -> Maybe (Parsed, [Char])
+    unixCont (n, inp) = next (setUnix fields n) inp
+
+-- Two-digit years follow POSIX: 69-99 are 1969-1999, the rest 2000-2068.
+expandYear2 :: Integer -> Integer
+expandYear2 n = case n >= 69 of
+  True -> 1900 + n
+  False -> 2000 + n
+
+-- --- Field setters (positional 'Parsed' has no record syntax) ---
+
+setYear :: Parsed -> Integer -> Parsed
+setYear p n = case p of
+  Parsed _ c mo d j h h12 pm mi s z u w wm v iy wd iw -> Parsed (Just n) c mo d j h h12 pm mi s z u w wm v iy wd iw
+
+setCentury :: Parsed -> Integer -> Parsed
+setCentury p n = case p of
+  Parsed y _ mo d j h h12 pm mi s z u w wm v iy wd iw -> Parsed y (Just n) mo d j h h12 pm mi s z u w wm v iy wd iw
+
+setMonth :: Parsed -> Int -> Parsed
+setMonth p n = case p of
+  Parsed y c _ d j h h12 pm mi s z u w wm v iy wd iw -> Parsed y c (Just n) d j h h12 pm mi s z u w wm v iy wd iw
+
+setDom :: Parsed -> Int -> Parsed
+setDom p n = case p of
+  Parsed y c mo _ j h h12 pm mi s z u w wm v iy wd iw -> Parsed y c mo (Just n) j h h12 pm mi s z u w wm v iy wd iw
+
+setYday :: Parsed -> Int -> Parsed
+setYday p n = case p of
+  Parsed y c mo d _ h h12 pm mi s z u w wm v iy wd iw -> Parsed y c mo d (Just n) h h12 pm mi s z u w wm v iy wd iw
+
+setHour :: Parsed -> Int -> Parsed
+setHour p n = case p of
+  Parsed y c mo d j _ h12 pm mi s z u w wm v iy wd iw -> Parsed y c mo d j (Just n) h12 pm mi s z u w wm v iy wd iw
+
+setHour12 :: Parsed -> Int -> Parsed
+setHour12 p n = case p of
+  Parsed y c mo d j h _ pm mi s z u w wm v iy wd iw -> Parsed y c mo d j h (Just n) pm mi s z u w wm v iy wd iw
+
+setPm :: Parsed -> Bool -> Parsed
+setPm p b = case p of
+  Parsed y c mo d j h h12 _ mi s z u w wm v iy wd iw -> Parsed y c mo d j h h12 (Just b) mi s z u w wm v iy wd iw
+
+setMinute :: Parsed -> Int -> Parsed
+setMinute p n = case p of
+  Parsed y c mo d j h h12 pm _ s z u w wm v iy wd iw -> Parsed y c mo d j h h12 pm (Just n) s z u w wm v iy wd iw
+
+setSecond :: Parsed -> Integer -> Parsed
+setSecond p n = case p of
+  Parsed y c mo d j h h12 pm mi _ z u w wm v iy wd iw -> Parsed y c mo d j h h12 pm mi (Just n) z u w wm v iy wd iw
+
+setZone :: Parsed -> Int -> Parsed
+setZone p n = case p of
+  Parsed y c mo d j h h12 pm mi s _ u w wm v iy wd iw -> Parsed y c mo d j h h12 pm mi s (Just n) u w wm v iy wd iw
+
+setZoneName :: Parsed -> [Char] -> Parsed
+setZoneName p name = case pack name of
+  "UTC" -> setZone p 0
+  "UT" -> setZone p 0
+  "Z" -> setZone p 0
+  "GMT" -> setZone p 0
+  _ -> p
+
+setUnix :: Parsed -> Integer -> Parsed
+setUnix p n = case p of
+  Parsed y c mo d j h h12 pm mi s z _ w wm v iy wd iw -> Parsed y c mo d j h h12 pm mi s z (Just n) w wm v iy wd iw
+
+setWeek :: Parsed -> Int -> Bool -> Parsed
+setWeek p n mon = case p of
+  Parsed y c mo d j h h12 pm mi s z u _ _ v iy wd iw -> Parsed y c mo d j h h12 pm mi s z u (Just n) (Just mon) v iy wd iw
+
+setIsoWeek :: Parsed -> Int -> Parsed
+setIsoWeek p n = case p of
+  Parsed y c mo d j h h12 pm mi s z u w wm _ iy wd iw -> Parsed y c mo d j h h12 pm mi s z u w wm (Just n) iy wd iw
+
+setIsoYear :: Parsed -> Integer -> Parsed
+setIsoYear p n = case p of
+  Parsed y c mo d j h h12 pm mi s z u w wm v _ wd iw -> Parsed y c mo d j h h12 pm mi s z u w wm v (Just n) wd iw
+
+setWday :: Parsed -> Int -> Parsed
+setWday p n = case p of
+  Parsed y c mo d j h h12 pm mi s z u w wm v iy _ iw -> Parsed y c mo d j h h12 pm mi s z u w wm v iy (Just n) iw
+
+setIsoWday :: Parsed -> Int -> Parsed
+setIsoWday p n = case p of
+  Parsed y c mo d j h h12 pm mi s z u w wm v iy wd _ -> Parsed y c mo d j h h12 pm mi s z u w wm v iy wd (Just n)
+
+-- --- Digit and name readers ---
+
+-- Exactly @n@ decimal digits (no sign, no spaces).
+parseDigits :: Int -> [Char] -> Maybe (Integer, [Char])
+parseDigits n cs = case takeDigits n cs of
+  Nothing -> Nothing
+  Just (ds, rest) -> Just (digitsValue ds, rest)
+
+-- Optional sign, then one or more digits (for @%s@, whose width varies).
+parseInteger :: [Char] -> Maybe (Integer, [Char])
+parseInteger cs = case cs of
+  ('-' : rest) -> case takeFracDigits rest [] of
+    ([], _) -> Nothing
+    (ds, rest2) -> Just (negate (digitsValue ds), rest2)
+  ('+' : rest) -> case takeFracDigits rest [] of
+    ([], _) -> Nothing
+    (ds, rest2) -> Just (digitsValue ds, rest2)
+  _ -> case takeFracDigits cs [] of
+    ([], _) -> Nothing
+    (ds, rest2) -> Just (digitsValue ds, rest2)
+
+-- Optional sign, then exactly @n@ digits.
+parseSigned :: Int -> [Char] -> Maybe (Integer, [Char])
+parseSigned n cs = case cs of
+  ('-' : rest) -> case parseDigits n rest of
+    Nothing -> Nothing
+    Just (v, rest2) -> Just (negate v, rest2)
+  ('+' : rest) -> parseDigits n rest
+  _ -> parseDigits n cs
+
+takeDigits :: Int -> [Char] -> Maybe ([Char], [Char])
+takeDigits n cs = takeDigitsGo n cs []
+  where
+    takeDigitsGo :: Int -> [Char] -> [Char] -> Maybe ([Char], [Char])
+    takeDigitsGo 0 rest acc = Just (reverseList acc, rest)
+    takeDigitsGo _ [] _ = Nothing
+    takeDigitsGo k (c : rest) acc = case isDigit c of
+      True -> takeDigitsGo (k - 1) rest (c : acc)
+      False -> Nothing
+
+-- One or two digits after skipping spaces (for @%e@\/@%k@\/@%l@, whose
+-- rendering space-pads a single digit).
+parseDigits12 :: [Char] -> Maybe (Integer, [Char])
+parseDigits12 cs = case takeDigits 2 (skipSpaces cs) of
+  Just (ds, rest) -> Just (digitsValue ds, rest)
+  Nothing -> case takeDigits 1 (skipSpaces cs) of
+    Just (ds, rest) -> Just (digitsValue ds, rest)
+    Nothing -> Nothing
+
+reverseList :: [a] -> [a]
+reverseList xs = reverseGo xs []
+  where
+    reverseGo :: [a] -> [a] -> [a]
+    reverseGo [] acc = acc
+    reverseGo (x : rest) acc = reverseGo rest (x : acc)
+
+digitsValue :: [Char] -> Integer
+digitsValue ds = digitsGo ds 0
+  where
+    digitsGo :: [Char] -> Integer -> Integer
+    digitsGo [] acc = acc
+    digitsGo (c : rest) acc = digitsGo rest (acc * 10 + toInteger (digitToInt c))
+
+-- Seconds with an optional @.fraction@ suffix, in picoseconds.
+parseSecond :: [Char] -> Maybe (Integer, [Char])
+parseSecond cs = case parseDigits 2 cs of
+  Nothing -> Nothing
+  Just (s, rest) -> case rest of
+    ('.' : rest2) -> case parseFracDigits rest2 of
+      Nothing -> Just (s * 1000000000000, rest)
+      Just (p, rest3) -> Just (s * 1000000000000 + p, rest3)
+    _ -> Just (s * 1000000000000, rest)
+
+-- An optional bare fraction (for @%q@): 'Nothing' when no digits follow,
+-- so a preceding @%S@ keeps its seconds.
+parseOptFrac :: [Char] -> Maybe (Maybe Integer, [Char])
+parseOptFrac cs = case parseFracDigits cs of
+  Nothing -> Just (Nothing, cs)
+  Just (p, rest) -> Just (Just p, rest)
+
+-- An optional dotted fraction (for @%Q@): 'Nothing' without a dot, so a
+-- preceding @%S@ keeps its seconds.
+parseOptFracDot :: [Char] -> Maybe (Maybe Integer, [Char])
+parseOptFracDot cs = case cs of
+  ('.' : rest) -> case parseFracDigits rest of
+    Nothing -> Nothing
+    Just (p, rest2) -> Just (Just p, rest2)
+  _ -> Just (Nothing, cs)
+
+parseFracDigits :: [Char] -> Maybe (Integer, [Char])
+parseFracDigits cs = case takeFracDigits cs [] of
+  ([], _) -> Nothing
+  (ds, rest) -> Just (fracValue ds, rest)
+
+takeFracDigits :: [Char] -> [Char] -> ([Char], [Char])
+takeFracDigits [] acc = (reverseList acc, [])
+takeFracDigits (c : rest) acc = case isDigit c of
+  True -> takeFracDigits rest (c : acc)
+  False -> (reverseList acc, c : rest)
+
+-- Leading digits count most: @\"5\"@ is half a second.
+fracValue :: [Char] -> Integer
+fracValue ds = fracGo ds 100000000000
+  where
+    fracGo :: [Char] -> Integer -> Integer
+    fracGo [] _ = 0
+    fracGo (c : rest) place = toInteger (digitToInt c) * place + fracGo rest (div place 10)
+
+-- AM\/PM names from the locale (case-insensitive); True is PM.
+parseAmPm :: TimeLocale -> [Char] -> Maybe (Bool, [Char])
+parseAmPm loc cs = case matchName (fst2 (locAmPm loc)) cs of
+  Just rest -> Just (False, rest)
+  Nothing -> case matchName (snd2 (locAmPm loc)) cs of
+    Just rest -> Just (True, rest)
+    Nothing -> Nothing
+
+-- A weekday name from the locale; Sunday-start 0-6.
+parseWdayName :: TimeLocale -> [Char] -> Maybe (Int, [Char])
+parseWdayName loc cs = matchNames (locWdays loc) 0 cs
+
+-- A month name from the locale; 1-12.
+parseMonthName :: TimeLocale -> [Char] -> Maybe (Int, [Char])
+parseMonthName loc cs = case matchNames (locMonths loc) 1 cs of
+  Nothing -> Nothing
+  Just (n, rest) -> Just (n, rest)
+
+matchNames :: [(String, String)] -> Int -> [Char] -> Maybe (Int, [Char])
+matchNames [] _ _ = Nothing
+matchNames ((full, short) : rest) n cs = case matchName full cs of
+  Just rest2 -> Just (n, rest2)
+  Nothing -> case matchName short cs of
+    Just rest2 -> Just (n, rest2)
+    Nothing -> matchNames rest (n + 1) cs
+
+matchName :: String -> [Char] -> Maybe [Char]
+matchName name cs = matchChars (unpack name) cs
+  where
+    matchChars :: [Char] -> [Char] -> Maybe [Char]
+    matchChars [] rest = Just rest
+    matchChars (n : ns) (c : rest) = case toLower n == toLower c of
+      True -> matchChars ns rest
+      False -> Nothing
+    matchChars _ [] = Nothing
+
+-- A numeric zone offset: @+HHMM@, @+HH:MM@ or @+HH@, in minutes east.
+parseOffset :: [Char] -> Maybe (Int, [Char])
+parseOffset cs = case cs of
+  ('-' : rest) -> case parseOffsetDigits rest of
+    Nothing -> Nothing
+    Just (m, rest2) -> Just (negate m, rest2)
+  ('+' : rest) -> parseOffsetDigits rest
+  _ -> Nothing
+
+parseOffsetDigits :: [Char] -> Maybe (Int, [Char])
+parseOffsetDigits cs = case parseDigits 2 cs of
+  Nothing -> Nothing
+  Just (h, rest) -> case rest of
+    (':' : rest2) -> case parseDigits 2 rest2 of
+      Nothing -> Nothing
+      Just (m, rest3) -> Just (fromInteger h * 60 + fromInteger m, rest3)
+    _ -> case takeDigits 2 rest of
+      Just (ds, rest3) -> Just (fromInteger h * 60 + fromInteger (digitsValue ds), rest3)
+      Nothing -> Just (fromInteger h * 60, rest)
+
+-- A zone name: letters (and @\/@, @_@, @+@, @-@) taken literally.
+parseZoneName :: [Char] -> Maybe ([Char], [Char])
+parseZoneName cs = case takeZoneName cs [] of
+  ([], _) -> Nothing
+  (name, rest) -> Just (name, rest)
+
+takeZoneName :: [Char] -> [Char] -> ([Char], [Char])
+takeZoneName [] acc = (reverseList acc, [])
+takeZoneName (c : rest) acc = case isZoneChar c of
+  True -> takeZoneName rest (c : acc)
+  False -> (reverseList acc, c : rest)
+
+isZoneChar :: Char -> Bool
+isZoneChar c = isAlphaNum c || ord c == 47 || ord c == 95 || ord c == 43 || ord c == 45
+
+isAlphaNum :: Char -> Bool
+isAlphaNum c = isAlpha c || isDigit c
+
+isAlpha :: Char -> Bool
+isAlpha c = (ord c >= 65 && ord c <= 90) || (ord c >= 97 && ord c <= 122)
+
+-- --- Build the result ---
+
+buildParsed :: Parsed -> Maybe ZonedTime
+buildParsed f = case f of
+  Parsed y c mo d j h h12 pm mi s z u w wm v iy wd iw -> buildGo y c mo d j h h12 pm mi s z u w wm v iy wd iw
+  where
+    buildGo :: Maybe Integer -> Maybe Integer -> Maybe Int -> Maybe Int -> Maybe Int -> Maybe Int -> Maybe Int -> Maybe Bool -> Maybe Int -> Maybe Integer -> Maybe Int -> Maybe Integer -> Maybe Int -> Maybe Bool -> Maybe Int -> Maybe Integer -> Maybe Int -> Maybe Int -> Maybe ZonedTime
+    buildGo y c mo d j h h12 pm mi s z u w wm v iy wd iw = case u of
+      Just secs -> buildUnix secs z
+      Nothing -> case fullYear y c of
+        year -> case resolveDay year mo d j w wm v iy wd iw of
+          Nothing -> Nothing
+          Just day -> case resolveTod h h12 pm mi s of
+            Nothing -> Nothing
+            Just tod -> Just (ZonedTime (LocalTime day tod) (resolveZone z))
+
+fullYear :: Maybe Integer -> Maybe Integer -> Integer
+fullYear y c = case y of
+  Just n -> n
+  Nothing -> case c of
+    Just k -> k * 100
+    Nothing -> 1970
+
+resolveDay :: Integer -> Maybe Int -> Maybe Int -> Maybe Int -> Maybe Int -> Maybe Bool -> Maybe Int -> Maybe Integer -> Maybe Int -> Maybe Int -> Maybe Day
+resolveDay year mo d j w wm v iy wd iw = case iy of
+  Just iyv -> resolveIsoDay iyv v (pickWday wd iw)
+  Nothing -> case j of
+    Just n -> resolveYday year n
+    Nothing -> case w of
+      Just wn -> resolveWeekDay year wn wm (pickWday wd iw)
+      Nothing -> fromGregorianValid year (orDefault mo 1) (orDefault d 1)
+
+pickWday :: Maybe Int -> Maybe Int -> Maybe Int
+pickWday wd iw = case wd of
+  Just n -> Just n
+  Nothing -> case iw of
+    Just k -> Just (mod k 7)
+    Nothing -> Nothing
+
+resolveYday :: Integer -> Int -> Maybe Day
+resolveYday year n = case n >= 1 && n <= daysInYear year of
+  False -> Nothing
+  True -> Just (addDays (toInteger n - 1) (fromGregorian year 1 1))
+
+daysInYear :: Integer -> Int
+daysInYear y = case isLeapYear y of
+  True -> 366
+  False -> 365
+
+resolveWeekDay :: Integer -> Int -> Maybe Bool -> Maybe Int -> Maybe Day
+resolveWeekDay year wn wm wd = case wn >= 0 && wn <= 53 of
+  False -> Nothing
+  True -> Just (addDays (toInteger ((wn - 1) * 7 + firstOffset + wdayOff)) jan1)
+  where
+    jan1 :: Day
+    jan1 = fromGregorian year 1 1
+    firstOffset :: Int
+    firstOffset = case wm of
+      Just True -> mod (7 - mod (weekdaySun0 jan1 + 6) 7) 7
+      _ -> mod (7 - weekdaySun0 jan1) 7
+    wdayOff :: Int
+    wdayOff = case wm of
+      Just True -> case wd of
+        Just k -> mod (k + 6) 7
+        Nothing -> 0
+      _ -> orDefault wd 0
+
+resolveIsoDay :: Integer -> Maybe Int -> Maybe Int -> Maybe Day
+resolveIsoDay iyv v wd = case v of
+  Just n -> resolveIsoWeek iyv n (isoWdayNum wd)
+  Nothing -> resolveIsoWeek iyv 1 (isoWdayNum wd)
+
+isoWdayNum :: Maybe Int -> Int
+isoWdayNum wd = case wd of
+  Just 0 -> 7
+  Just k -> k
+  Nothing -> 1
+
+resolveIsoWeek :: Integer -> Int -> Int -> Maybe Day
+resolveIsoWeek iyv week wday = case week >= 1 && week <= weeksInYear iyv of
+  False -> Nothing
+  True -> Just (addDays (toInteger ((week - 1) * 7 + wday - 1)) (isoWeek1Monday iyv))
+
+resolveTod :: Maybe Int -> Maybe Int -> Maybe Bool -> Maybe Int -> Maybe Integer -> Maybe TimeOfDay
+resolveTod h h12 pm mi s = case h of
+  Just n -> resolveTodH n (orDefault mi 0) (orDefaultI s 0)
+  Nothing -> case h12 of
+    Just n -> resolveTodH (to24 n pm) (orDefault mi 0) (orDefaultI s 0)
+    Nothing -> resolveTodH 0 (orDefault mi 0) (orDefaultI s 0)
+
+resolveTodH :: Int -> Int -> Integer -> Maybe TimeOfDay
+resolveTodH hh mm ss = case hh >= 0 && hh < 24 && mm >= 0 && mm < 60 && ss >= 0 && ss < 60000000000000 of
+  False -> Nothing
+  True -> Just (TimeOfDay hh mm (picosecondsToDiffTime ss))
+
+to24 :: Int -> Maybe Bool -> Int
+to24 h pm = case pm of
+  Just True -> case mod h 12 of
+    0 -> 12
+    n -> n + 12
+  _ -> case mod h 12 of
+    0 -> 0
+    n -> n
+
+resolveZone :: Maybe Int -> TimeZone
+resolveZone z = case z of
+  Just m -> minutesToTimeZone m
+  Nothing -> utc
+
+buildUnix :: Integer -> Maybe Int -> Maybe ZonedTime
+buildUnix secs z = Just (ZonedTime (utcToLocalTime utc (utcTimeFromUnix2 secs)) (resolveZone z))
+  where
+    utcTimeFromUnix2 :: Integer -> UTCTime
+    utcTimeFromUnix2 n = utcTime (ModifiedJulianDay (40587 + fromInteger (div n 86400))) (picosecondsToDiffTime (mod n 86400 * 1000000000000))
+
+orDefault :: Maybe Int -> Int -> Int
+orDefault m d = case m of
+  Just n -> n
+  Nothing -> d
+
+orDefaultI :: Maybe Integer -> Integer -> Integer
+orDefaultI m d = case m of
+  Just n -> n
+  Nothing -> d

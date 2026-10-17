@@ -1,0 +1,33 @@
+module Data.Time.Clock.System.PHP
+  ( systemParts
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Bool
+import Data.Double
+import Data.Int
+import Data.Integer
+import Data.Num
+import Data.Real
+import Data.Time.Calendar (Day)
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+import System.IO.Base (IO)
+
+foreign php function rawMicrotime "microtime" :: Bool -> IO Double
+
+-- Microsecond resolution: the float carries about 16 significant digits,
+-- epoch seconds take 10, so microseconds survive and nanoseconds read zero.
+systemParts :: IO (Int, Int)
+systemParts = do
+  d <- rawMicrotime True
+  pure (splitSystem d)
+
+splitSystem :: Double -> (Int, Int)
+splitSystem d = (secs, nanos)
+  where
+    secs :: Int
+    secs = fromEnum d
+    nanos :: Int
+    nanos = fromEnum ((d - fromInteger (toInteger secs)) * 1000000000.0)

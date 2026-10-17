@@ -1,0 +1,251 @@
+-- |
+-- Civil times and time zones, in the spirit of Haskell's 'Data.Time.LocalTime'.
+--
+-- A 'LocalTime' is a 'Day' plus a 'TimeOfDay' with no zone attached; a
+-- 'ZonedTime' pairs one with a 'TimeZone'. Conversion to UTC
+-- ('localTimeToUTC', 'zonedTimeToUTC') subtracts the zone offset, and
+-- 'utcToLocalTime' adds it.
+--
+-- Against the reference: constructors are positional (Moggi record fields
+-- define no selectors, so the record spelling buys nothing) with manual
+-- accessor functions of the Haskell field names; 'TimeZone' has no
+-- 'TimeZoneSeries'\/'TimeZoneName' machinery and there is no
+-- 'getTimeZone'\/'getCurrentTimeZone' IO (the hosts report no portable zone
+-- database through the current bindings) — build zones with 'utc',
+-- 'minutesToTimeZone' and 'hoursToTimeZone'.
+--
+module Data.Time.LocalTime
+  ( TimeOfDay(..)
+  , todHour
+  , todMin
+  , todSec
+  , TimeZone(..)
+  , timeZoneMinutes
+  , timeZoneSummerOnly
+  , timeZoneName
+  , LocalTime(..)
+  , localDay
+  , localTimeOfDay
+  , ZonedTime(..)
+  , zonedTimeToLocalTime
+  , zonedTimeZone
+  , utc
+  , minutesToTimeZone
+  , hoursToTimeZone
+  , timeOfDayToTime
+  , timeToTimeOfDay
+  , localTimeToUTC
+  , utcToLocalTime
+  , zonedTimeToUTC
+  , utcToZonedTime
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Bool
+import Data.Eq
+import Data.Int
+import Data.Integer
+import Data.Maybe
+import Data.Num
+import Data.Ord
+import Data.Real
+import Data.String qualified as S
+import Data.Time.Calendar (Day(..))
+import Data.Time.Clock
+  ( DiffTime(..)
+  , NominalDiffTime(..)
+  , UTCTime(..)
+  , utctDay
+  , utctDayTime
+  , utcTime
+  , addUTCTime
+  , secondsToNominalDiffTime
+  , nominalDiffTimeToPicoseconds
+  , picosecondsToDiffTime
+  , diffTimeToPicoseconds
+  , diffTimeToNominal
+  , nominalToDiffTime
+  )
+import Data.Tuple
+import Moggi.Err
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+import Text.Show
+
+-- | A time of day: hour, minute and second fraction. Well-formed values keep
+-- the hour in @[0, 24)@, the minute in @[0, 60)@ and the seconds in
+-- @[0, 60)@ (60 for a leap second, which arithmetic does not model).
+data TimeOfDay = TimeOfDay Int Int DiffTime
+  deriving (Eq, Ord)
+
+-- | The hour of a 'TimeOfDay'.
+todHour :: TimeOfDay -> Int
+todHour t = case t of
+  TimeOfDay h _ _ -> h
+
+-- | The minute of a 'TimeOfDay'.
+todMin :: TimeOfDay -> Int
+todMin t = case t of
+  TimeOfDay _ mi _ -> mi
+
+-- | The second fraction of a 'TimeOfDay'.
+todSec :: TimeOfDay -> DiffTime
+todSec t = case t of
+  TimeOfDay _ _ s -> s
+
+instance Show TimeOfDay where
+  show t = pad2 (todHour t) <> ":" <> pad2 (todMin t) <> ":" <> showSecs (todSec t)
+
+pad2 :: Int -> String
+pad2 n = case n < 10 of
+  True -> "0" <> show n
+  False -> show n
+
+-- Seconds within the minute: whole seconds plus a trimmed fraction.
+showSecs :: DiffTime -> String
+showSecs s = pad2 whole <> frac
+  where
+    totalPicos :: Integer
+    totalPicos = diffTimeToPicoseconds s
+    whole :: Int
+    whole = fromInteger (div totalPicos 1000000000000)
+    frac :: String
+    frac = showFrac (mod totalPicos 1000000000000)
+
+showFrac :: Integer -> String
+showFrac p = case p == 0 of
+  True -> ""
+  False -> "." <> trimZeros (padLeft 12 "0" (show p))
+
+padLeft :: Int -> String -> String -> String
+padLeft n c s = case S.length s < n of
+  True -> padLeft n c (c <> s)
+  False -> s
+
+trimZeros :: String -> String
+trimZeros s = case stripSuffixZero s of
+  "" -> "0"
+  t -> t
+
+stripSuffixZero :: String -> String
+stripSuffixZero s = case S.isSuffixOf "0" s of
+  True -> stripSuffixZero (dropLast s)
+  False -> s
+
+dropLast :: String -> String
+dropLast s = case S.length s <= 1 of
+  True -> ""
+  False -> S.take (S.length s - 1) s
+
+-- | A time zone: minutes east of UTC, whether it is daylight-saving, and its
+-- name (which 'Show' prints).
+data TimeZone = TimeZone Int Bool String
+  deriving (Eq, Ord)
+
+-- | Minutes east of UTC (negative west).
+timeZoneMinutes :: TimeZone -> Int
+timeZoneMinutes tz = case tz of
+  TimeZone m _ _ -> m
+
+-- | Whether the zone is daylight-saving time.
+timeZoneSummerOnly :: TimeZone -> Bool
+timeZoneSummerOnly tz = case tz of
+  TimeZone _ s _ -> s
+
+-- | The zone name.
+timeZoneName :: TimeZone -> String
+timeZoneName tz = case tz of
+  TimeZone _ _ n -> n
+
+instance Show TimeZone where
+  show tz = timeZoneName tz
+
+-- | UTC: zero offset, not summer, named @"UTC"@.
+utc :: TimeZone
+utc = TimeZone 0 False "UTC"
+
+-- | A fixed-offset zone with an empty name.
+minutesToTimeZone :: Int -> TimeZone
+minutesToTimeZone m = TimeZone m False ""
+
+-- | A fixed whole-hour-offset zone with an empty name.
+hoursToTimeZone :: Int -> TimeZone
+hoursToTimeZone h = minutesToTimeZone (h * 60)
+
+-- | A civil date plus a time of day, with no zone attached.
+data LocalTime = LocalTime Day TimeOfDay
+  deriving (Eq, Ord)
+
+-- | The day of a 'LocalTime'.
+localDay :: LocalTime -> Day
+localDay t = case t of
+  LocalTime d _ -> d
+
+-- | The time of day of a 'LocalTime'.
+localTimeOfDay :: LocalTime -> TimeOfDay
+localTimeOfDay t = case t of
+  LocalTime _ tod -> tod
+
+instance Show LocalTime where
+  show t = show (localDay t) <> " " <> show (localTimeOfDay t)
+
+-- | A 'LocalTime' in a 'TimeZone'.
+data ZonedTime = ZonedTime LocalTime TimeZone
+  deriving (Eq, Ord)
+
+-- | The local time of a 'ZonedTime'.
+zonedTimeToLocalTime :: ZonedTime -> LocalTime
+zonedTimeToLocalTime t = case t of
+  ZonedTime lt _ -> lt
+
+-- | The zone of a 'ZonedTime'.
+zonedTimeZone :: ZonedTime -> TimeZone
+zonedTimeZone t = case t of
+  ZonedTime _ tz -> tz
+
+instance Show ZonedTime where
+  show t = show (zonedTimeToLocalTime t) <> " " <> show (zonedTimeZone t)
+
+-- | The day fraction of a 'TimeOfDay' as a duration.
+timeOfDayToTime :: TimeOfDay -> NominalDiffTime
+timeOfDayToTime tod = secondsToNominalDiffTime (toInteger (todHour tod * 3600 + todMin tod * 60)) + diffTimeToNominal (todSec tod)
+
+picosPerHour :: Integer
+picosPerHour = 3600000000000000
+
+picosPerMinute :: Integer
+picosPerMinute = 60000000000000
+
+-- | The 'TimeOfDay' of a day-fraction duration, wrapped into one day.
+timeToTimeOfDay :: NominalDiffTime -> TimeOfDay
+timeToTimeOfDay d = TimeOfDay h mi (picosecondsToDiffTime s)
+  where
+    total :: Integer
+    total = mod (nominalDiffTimeToPicoseconds d) 86400000000000000
+    h :: Int
+    h = fromInteger (div total picosPerHour)
+    mi :: Int
+    mi = fromInteger (mod (div total picosPerMinute) 60)
+    s :: Integer
+    s = mod total picosPerMinute
+
+-- | Interpret a 'LocalTime' in a zone as UTC.
+localTimeToUTC :: TimeZone -> LocalTime -> UTCTime
+localTimeToUTC tz lt = addUTCTime (negate (zoneOffset tz)) (utcTime (localDay lt) (nominalToDiffTime (timeOfDayToTime (localTimeOfDay lt))))
+
+-- | View a UTC time through a zone.
+utcToLocalTime :: TimeZone -> UTCTime -> LocalTime
+utcToLocalTime tz t = case addUTCTime (zoneOffset tz) t of
+  shifted -> LocalTime (utctDay shifted) (timeToTimeOfDay (diffTimeToNominal (utctDayTime shifted)))
+
+-- | The UTC time of a 'ZonedTime'.
+zonedTimeToUTC :: ZonedTime -> UTCTime
+zonedTimeToUTC t = localTimeToUTC (zonedTimeZone t) (zonedTimeToLocalTime t)
+
+-- | View a UTC time through a zone.
+utcToZonedTime :: TimeZone -> UTCTime -> ZonedTime
+utcToZonedTime tz t = ZonedTime (utcToLocalTime tz t) tz
+
+zoneOffset :: TimeZone -> NominalDiffTime
+zoneOffset tz = secondsToNominalDiffTime (toInteger (timeZoneMinutes tz * 60))

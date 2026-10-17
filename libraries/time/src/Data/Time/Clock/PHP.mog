@@ -1,0 +1,18 @@
+module Data.Time.Clock.PHP
+  ( currentTimeSeconds
+  , getMonotonicNanos
+  ) where
+
+import Data.Bool
+import Data.Time.Calendar (Day)
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+
+foreign php function rawTime "time" :: IO Int
+foreign php function rawHrtime "hrtime" :: Bool -> IO Int
+
+currentTimeSeconds :: IO Int
+currentTimeSeconds = rawTime
+
+getMonotonicNanos :: IO Int
+getMonotonicNanos = rawHrtime True

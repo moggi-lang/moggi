@@ -1,0 +1,28 @@
+-- Data.Time.Format.ISO8601: extended-format rendering and strict parsing.
+
+module ISO8601Suite (iso8601Suite) where
+
+import Data.Time.Calendar
+import Data.Time.Clock
+import Data.Time.Format.ISO8601
+import Data.Time.LocalTime
+import Support (expect)
+
+leap :: LocalTime
+leap = LocalTime (fromGregorian 2024 2 29) (TimeOfDay 13 5 (secondsToDiffTime 7))
+
+iso8601Suite :: IO ()
+iso8601Suite = do
+  expect "format day" (formatDayISO (fromGregorian 2024 2 29)) "2024-02-29"
+  expect "parse day" (show (parseDayISO "2024-02-29")) "Just 2024-02-29"
+  expect "reject bad day" (show (parseDayISO "2024-02-30")) "Nothing"
+  expect "format local" (formatLocalISO leap) "2024-02-29T13:05:07"
+  expect "parse local" (show (parseLocalISO "2024-02-29T13:05:07")) "Just 2024-02-29 13:05:07"
+  expect "reject zoned as local" (show (parseLocalISO "2024-02-29T13:05:07Z")) "Nothing"
+  expect "format zoned" (formatZonedISO (ZonedTime leap (minutesToTimeZone 330))) "2024-02-29T13:05:07+05:30"
+  expect "format zoned negative" (formatZonedISO (ZonedTime leap (minutesToTimeZone (-300)))) "2024-02-29T13:05:07-05:00"
+  expect "parse zoned Z" (show (parseZonedISO "2024-02-29T13:05:07Z")) "Just 2024-02-29 13:05:07 UTC"
+  expect "parse zoned offset" (show (parseZonedISO "2024-02-29T13:05:07+05:30")) "Just 2024-02-29 13:05:07 "
+  expect "parse zoned basic offset" (show (parseZonedISO "2024-02-29T13:05:07+0530")) "Just 2024-02-29 13:05:07 "
+  expect "format UTC" (formatUTCISO (utcTimeFromUnix 0)) "1970-01-01T00:00:00Z"
+  expect "parse UTC converts" (show (parseUTCISO "1970-01-01T01:00:00+01:00")) "Just 1970-01-01 00:00:00 UTC"

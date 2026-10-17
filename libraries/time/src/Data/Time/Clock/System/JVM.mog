@@ -1,0 +1,25 @@
+module Data.Time.Clock.System.JVM
+  ( systemParts
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Int
+import Data.Time.Calendar (Day)
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+import System.IO.Base (IO)
+
+foreign jvm type Instant "java.time.Instant"
+
+foreign jvm function instantNow "java.time.Instant:now" :: IO Instant
+foreign jvm function instantEpochSecond "java.time.Instant.getEpochSecond" :: Instant -> Int
+foreign jvm function instantNano "java.time.Instant.getNano" :: Instant -> Int32
+
+-- Nanosecond resolution from a single instant: both parts come from the
+-- same reading, so they can never straddle a second. 'getNano' returns a
+-- Java int, so the FFI type is 'Int32' widened with 'fromIntegral'.
+systemParts :: IO (Int, Int)
+systemParts = do
+  inst <- instantNow
+  pure (instantEpochSecond inst, fromIntegral (instantNano inst))

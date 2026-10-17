@@ -1,0 +1,77 @@
+-- |
+-- Dates and times: the common API in one import, in the spirit of Haskell's
+-- 'Data.Time'.
+--
+-- Import this module for the everyday core — 'Day' and Gregorian conversion,
+-- 'UTCTime' and durations, civil times and zones, formatting and the POSIX
+-- and system clocks — and reach for the specific modules ('Data.Time.Format'
+-- locales, 'Data.Time.Format.ISO8601', 'Data.Time.Clock.System' details)
+-- when one of them is all you need.
+--
+module Data.Time
+  ( Day(..)
+  , toModifiedJulianDay
+  , fromGregorian
+  , fromGregorianValid
+  , toGregorian
+  , addDays
+  , diffDays
+  , isLeapYear
+  , gregorianMonthLength
+  , DiffTime(..)
+  , NominalDiffTime(..)
+  , UTCTime(..)
+  , utctDay
+  , utctDayTime
+  , utcTime
+  , utcTimeFromUnix
+  , diffUTCTime
+  , addUTCTime
+  , secondsToNominalDiffTime
+  , nominalDiffTimeToSeconds
+  , getCurrentTime
+  , getMonotonicNanos
+  , TimeOfDay(..)
+  , todHour
+  , todMin
+  , todSec
+  , TimeZone(..)
+  , timeZoneMinutes
+  , timeZoneName
+  , LocalTime(..)
+  , localDay
+  , localTimeOfDay
+  , ZonedTime(..)
+  , zonedTimeToLocalTime
+  , zonedTimeZone
+  , utc
+  , minutesToTimeZone
+  , hoursToTimeZone
+  , timeOfDayToTime
+  , timeToTimeOfDay
+  , localTimeToUTC
+  , utcToLocalTime
+  , zonedTimeToUTC
+  , utcToZonedTime
+  , TimeLocale(..)
+  , defaultTimeLocale
+  , formatTime
+  , parseTime
+  , POSIXTime
+  , posixSecondsToUTCTime
+  , utcTimeToPOSIXSeconds
+  , getPOSIXTime
+  , SystemTime(..)
+  , systemSeconds
+  , systemNanoseconds
+  , getSystemTime
+  , systemToUTCTime
+  , utcToSystemTime
+  ) where
+
+import Data.Time.Calendar
+import Data.Time.Clock
+import Data.Time.LocalTime
+import Data.Time.Format
+import Data.Time.Clock.POSIX
+import Data.Time.Clock.System

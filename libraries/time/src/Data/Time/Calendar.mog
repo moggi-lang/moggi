@@ -1,0 +1,200 @@
+-- |
+-- Gregorian dates, in the spirit of Haskell's 'Data.Time.Calendar'.
+--
+-- A 'Day' counts whole days as a Modified Julian Day number (the number of
+-- days since 1858-11-17), so date arithmetic is integer arithmetic and the
+-- Gregorian conversion runs Howard Hinnant's civil algorithms: every division
+-- is floored except the two era computations, which truncate like the
+-- reference C++ (required for negative years). Proleptic dates before 1858
+-- (including year zero and negative years) convert exactly.
+--
+-- This is the core most programs need: conversion ('fromGregorian',
+-- 'toGregorian', 'fromGregorianValid'), arithmetic ('addDays', 'diffDays'),
+-- leap years and month lengths. The @time@ package's optional calendar
+-- variants (week dates, ordinal dates, quarters, months, Julian, Easter) are
+-- not defined here; they arrive when a program needs them.
+--
+module Data.Time.Calendar
+  ( Day(..)
+  , toModifiedJulianDay
+  , fromGregorian
+  , fromGregorianValid
+  , toGregorian
+  , addDays
+  , diffDays
+  , isLeapYear
+  , gregorianMonthLength
+  , showGregorian
+  , showYear
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Bool
+import Data.Enum
+import Data.Eq
+import Data.Int
+import Data.Integer
+import Data.Maybe
+import Data.Num
+import Data.Ord
+import Data.Real
+import Data.Tuple
+import Moggi.Err
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+import Text.Show
+
+-- | A whole day as a Modified Julian Day number: days since 1858-11-17, so
+-- 1858-11-17 is day 0 and 1970-01-01 is day 40587.
+newtype Day = ModifiedJulianDay Int
+  deriving (Eq, Ord)
+
+-- | The Modified Julian Day number of a 'Day'.
+toModifiedJulianDay :: Day -> Int
+toModifiedJulianDay d = case d of
+  ModifiedJulianDay mjd -> mjd
+
+instance Show Day where
+  show d = case toGregorian d of
+    (y, m, dd) -> showGregorian y m dd
+
+-- | Render a Gregorian date as @YYYY-MM-DD@ (years outside 0000-9999 take
+-- as many digits as they need, with a @-@ sign when negative). Shared by
+-- 'Clock' and 'Format' so every ISO date prints one way.
+showGregorian :: Integer -> Int -> Int -> String
+showGregorian y m dd = showYear y <> "-" <> pad2 m <> "-" <> pad2 dd
+
+pad2 :: Int -> String
+pad2 n = case n < 10 of
+  True -> "0" <> showInt n
+  False -> showInt n
+
+showYear :: Integer -> String
+showYear y = case y < 0 of
+  True -> "-" <> padYear (negate y)
+  False -> padYear y
+
+padYear :: Integer -> String
+padYear y = case y < 1000 of
+  True -> case y < 100 of
+    True -> case y < 10 of
+      True -> "000" <> showInteger y
+      False -> "00" <> showInteger y
+    False -> "0" <> showInteger y
+  False -> showInteger y
+
+showInt :: Int -> String
+showInt n = show n
+
+showInteger :: Integer -> String
+showInteger n = show n
+
+instance Enum Day where
+  succ d = addDays 1 d
+  pred d = addDays (negate 1) d
+  toEnum n = ModifiedJulianDay n
+  fromEnum d = toModifiedJulianDay d
+
+-- | Build a day from a Gregorian year, month and day-of-month. Out-of-range
+-- fields roll over through the conversion (month 13 is January next year);
+-- use 'fromGregorianValid' to reject them instead.
+fromGregorian :: Integer -> Int -> Int -> Day
+fromGregorian y m d = ModifiedJulianDay (civilToMjd y m d)
+
+-- | Build a day, rejecting out-of-range month and day-of-month fields.
+fromGregorianValid :: Integer -> Int -> Int -> Maybe Day
+fromGregorianValid y m d = case m >= 1 && m <= 12 of
+  False -> Nothing
+  True -> case d >= 1 && d <= gregorianMonthLength y m of
+    False -> Nothing
+    True -> Just (fromGregorian y m d)
+
+-- | Split a day into Gregorian year, month and day-of-month.
+toGregorian :: Day -> (Integer, Int, Int)
+toGregorian d = mjdToCivil (toModifiedJulianDay d)
+
+-- | Shift a day by a whole number of days.
+addDays :: Integer -> Day -> Day
+addDays n d = case d of
+  ModifiedJulianDay mjd -> ModifiedJulianDay (mjd + fromInteger n)
+
+-- | The whole days from the second day to the first.
+diffDays :: Day -> Day -> Integer
+diffDays a b = toInteger (toModifiedJulianDay a - toModifiedJulianDay b)
+
+-- | Gregorian leap years: divisible by 4, except centuries not divisible
+-- by 400.
+isLeapYear :: Integer -> Bool
+isLeapYear y = case mod y 4 == 0 of
+  False -> False
+  True -> case mod y 100 == 0 of
+    False -> True
+    True -> mod y 400 == 0
+
+-- | The days in a month of a Gregorian year. The month must be 1-12.
+gregorianMonthLength :: Integer -> Int -> Int
+gregorianMonthLength y m = case m of
+  2 -> case isLeapYear y of
+    True -> 29
+    False -> 28
+  4 -> 30
+  6 -> 30
+  9 -> 30
+  11 -> 30
+  _ -> 31
+
+-- Days from the civil date to the Modified Julian Day number (Hinnant's
+-- days_from_civil, shifted from the unix epoch by 40587 days).
+civilToMjd :: Integer -> Int -> Int -> Int
+civilToMjd y m d = fromInteger (era * 146097 + doe - 719468 + 40587)
+  where
+    y0 :: Integer
+    y0 = case m <= 2 of
+      True -> y - 1
+      False -> y
+    era :: Integer
+    era = case y0 >= 0 of
+      True -> div y0 400
+      False -> quot (y0 - 399) 400
+    yoe :: Integer
+    yoe = y0 - era * 400
+    mp :: Integer
+    mp = case m > 2 of
+      True -> toInteger m - 3
+      False -> toInteger m + 9
+    doy :: Integer
+    doy = div (153 * mp + 2) 5 + toInteger d - 1
+    doe :: Integer
+    doe = yoe * 365 + div yoe 4 - div yoe 100 + doy
+
+-- The civil date of a Modified Julian Day number (Hinnant's civil_from_days).
+mjdToCivil :: Int -> (Integer, Int, Int)
+mjdToCivil mjd = (year, month, day)
+  where
+    z :: Integer
+    z = toInteger mjd - 40587 + 719468
+    era :: Integer
+    era = case z >= 0 of
+      True -> div z 146097
+      False -> quot (z - 146096) 146097
+    doe :: Integer
+    doe = z - era * 146097
+    yoe :: Integer
+    yoe = div (doe - div doe 1460 + div doe 36524 - div doe 146096) 365
+    y :: Integer
+    y = yoe + era * 400
+    doy :: Integer
+    doy = doe - (365 * yoe + div yoe 4 - div yoe 100)
+    mp :: Integer
+    mp = div (5 * doy + 2) 153
+    day :: Int
+    day = fromInteger (doy - div (153 * mp + 2) 5 + 1)
+    month :: Int
+    month = case mp < 10 of
+      True -> fromInteger (mp + 3)
+      False -> fromInteger (mp - 9)
+    year :: Integer
+    year = case month <= 2 of
+      True -> y + 1
+      False -> y
