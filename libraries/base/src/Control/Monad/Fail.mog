@@ -16,10 +16,10 @@ class Monad m => MonadFail m where
   fail :: String -> m a
 
 instance MonadFail Maybe where
-  fail ignored = Nothing
+  fail _ = Nothing
 
 instance MonadFail List where
-  fail ignored = []
+  fail _ = []
 
 -- | A failed pattern match, or an explicit 'fail', in the 'IO' monad is an
 -- 'IOError' of type 'userErrorType': a program error rather than a native

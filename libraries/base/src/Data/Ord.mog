@@ -1,4 +1,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+-- | Ordered types: the 'Ord' class ('compare', the comparison operators,
+-- 'max', 'min'), the 'Ordering' type, the 'Down' newtype for reverse sorts,
+-- and the 'comparing' and 'clamp' combinators.
 module Data.Ord
   ( Ord(..)
   , Ordering(..)
@@ -9,6 +12,7 @@ module Data.Ord
   ) where
 
 import Data.Bool
+import Data.Bounded
 import Data.Eq
 import Data.Functor
 import Moggi.Internal.Base
@@ -75,13 +79,24 @@ instance Eq a => Eq (Down a) where
 
 instance Ord a => Ord (Down a) where
   compare a b = compare (getDown b) (getDown a)
+  (<) (Down x) (Down y) = y < x
+  (>) (Down x) (Down y) = y > x
+  (<=) (Down x) (Down y) = y <= x
+  (>=) (Down x) (Down y) = y >= x
+  min (Down x) (Down y) = Down (max x y)
+  max (Down x) (Down y) = Down (min x y)
+
+-- | The bounds are swapped: the smallest 'Down' wraps the largest value.
+instance Bounded a => Bounded (Down a) where
+  minBound = Down maxBound
+  maxBound = Down minBound
 
 instance Functor Down where
   map f d = Down (f (getDown d))
 
 instance Show a => Show (Down a) where
-  showsPrec d x = showParen (d > 10)
-    (\r -> showString "Down {getDown = " (showsPrec 0 (getDown x) (showString "}" r)))
+  showsPrec d (Down x) = showParen (d > 10)
+    (\r -> showString "Down " (showsPrec 11 x r))
 
 -- | Restrict a value to be within the given lower and upper bounds.
 clamp :: Ord a => (a, a) -> a -> a

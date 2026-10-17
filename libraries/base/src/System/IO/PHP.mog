@@ -20,6 +20,7 @@ module System.IO.PHP
   , putStr
   , putStrLn
   , print
+  , openTempFile
   ) where
 
 import Moggi.Internal.Base
@@ -76,6 +77,9 @@ foreign php function rawStreamGetContents "stream_get_contents" :: Handle -> IO 
 foreign php function rawFstat "fstat" :: Handle -> IO StatArray
 
 foreign php function rawFtruncate "ftruncate" :: Handle -> Integer -> IO Bool
+
+-- `tempnam` answers false outside a writable directory, which rides `Maybe`.
+foreign php function rawTempnam "tempnam" :: String -> String -> IO (Maybe String)
 
 foreign php function isArray "is_array" :: StatArray -> Bool
 
@@ -230,4 +234,35 @@ hSetFileSize h size = do
 
 print :: Show a => a -> IO ()
 print x = putStr (show x)
+
+-- `tempnam` creates the file itself, securely; opening it for writing only
+-- truncates what is already empty. `tempnam` falls back to the system temp
+-- directory (ignoring the template) instead of failing outside a writable
+-- directory, so the directory is checked first and the failure stays
+-- deterministic across backends.
+openTempFile :: FilePath -> String -> IO (FilePath, Handle)
+openTempFile dir template = do
+  case tempDirOK dir of
+    False -> ioError (mkIOError (tempDirError dir) "openTempFile" Nothing (Just dir))
+    True -> do
+      mpath <- rawTempnam dir template
+      case mpath of
+        Nothing -> ioError (mkIOError (tempDirError dir) "openTempFile" Nothing (Just dir))
+        Just path -> do
+          h <- openFile path WriteMode
+          pure (path, h)
+
+tempDirOK :: FilePath -> Bool
+tempDirOK dir = case rawPathExists dir of
+  False -> False
+  True -> case rawIsDir dir of
+    False -> False
+    True -> rawIsWritable dir
+
+tempDirError :: FilePath -> IOErrorType
+tempDirError dir = case rawPathExists dir of
+  False -> NoSuchThing
+  True -> case rawIsDir dir of
+    False -> InappropriateType
+    True -> PermissionDenied
 

@@ -29,13 +29,18 @@ module Data.String
   , words
   , unlines
   , unwords
+  , ReadS
+  , lexLitChar
+  , readLitChar
   ) where
 
 import Data.Bool
 import Data.Char
 import Data.Eq
 import Data.Int
+import Data.Maybe
 import Data.Monoid
+import Data.Num
 import Data.Ord
 import Data.Semigroup
 import Text.Show
@@ -152,6 +157,121 @@ showLitString cs = \s ->
       _ -> case needsEscapeGuard (ord c) rest of
         True -> showLitChar c (showString "\\&" (showLitString rest s))
         False -> showLitChar c (showLitString rest s)
+
+-- | A parse of @a@ from the front of a string: the value and the rest.
+-- ('lexLitChar' and 'readLitChar' below; 'base' keeps this in 'Text.Read',
+-- which sits below 'unpack' and so cannot define them.)
+type ReadS a = String -> [(a, String)]
+
+-- | Read one character literal body (no surrounding quotes): an escape
+-- starting with @\@ or a single plain character. No parse when the input
+-- is empty or the escape is unknown.
+readLitChar :: ReadS Char
+readLitChar s = case litCharOne (unpack s) of
+  Nothing -> []
+  Just (c, n) -> [(c, drop n s)]
+
+-- | The source text of one character literal body: what 'readLitChar' would
+-- consume, returned verbatim.
+lexLitChar :: ReadS String
+lexLitChar s = case litCharOne (unpack s) of
+  Nothing -> []
+  Just (_, n) -> [(take n s, drop n s)]
+
+-- One literal body: the character and how many scalars it takes.
+litCharOne :: [Char] -> Maybe (Char, Int)
+litCharOne cs = case cs of
+  [] -> Nothing
+  c : rest -> case ord c == 92 of
+    True -> litEscape rest
+    False -> Just (c, 1)
+
+litEscape :: [Char] -> Maybe (Char, Int)
+litEscape cs = case cs of
+  [] -> Nothing
+  c : rest -> case ord c of
+    97 -> Just (chr 7, 2)
+    98 -> Just (chr 8, 2)
+    102 -> Just (chr 12, 2)
+    110 -> Just (chr 10, 2)
+    114 -> Just (chr 13, 2)
+    116 -> Just (chr 9, 2)
+    118 -> Just (chr 11, 2)
+    92 -> Just (chr 92, 2)
+    39 -> Just (chr 39, 2)
+    34 -> Just (chr 34, 2)
+    38 -> Nothing
+    94 -> litControl rest
+    120 -> litBased 16 isHexDigit rest
+    111 -> litBased 8 isOctDigit rest
+    _ -> litNameOrDecimal cs
+
+-- @\^X@: codes 64-95 name control codes 0-31.
+litControl :: [Char] -> Maybe (Char, Int)
+litControl cs = case cs of
+  [] -> Nothing
+  d : _ -> case ord d >= 64 && ord d <= 95 of
+    True -> Just (chr (ord d - 64), 3)
+    False -> Nothing
+
+-- @\x../\o..@: at least one digit, and a scalar at the end.
+litBased :: Int -> (Char -> Bool) -> [Char] -> Maybe (Char, Int)
+litBased base isDig cs = case readDigits isDig base cs of
+  (v, n) -> case n == 0 of
+    True -> Nothing
+    False -> case validScalar v of
+      True -> Just (chr v, 2 + n)
+      False -> Nothing
+
+-- Plain decimal, or an ASCII control name (@NUL@..@US@, @DEL@, @SO@).
+litNameOrDecimal :: [Char] -> Maybe (Char, Int)
+litNameOrDecimal cs = case readDigits isDigit 10 cs of
+  (v, n) -> case n == 0 of
+    True -> tryLitNames litNames cs
+    False -> case validScalar v of
+      True -> Just (chr v, 1 + n)
+      False -> Nothing
+
+readDigits :: (Char -> Bool) -> Int -> [Char] -> (Int, Int)
+readDigits isDig base cs = readDigitsGo cs 0 0
+  where
+    readDigitsGo ds acc n = case ds of
+      [] -> (acc, n)
+      d : rest -> case isDig d of
+        True -> readDigitsGo rest (acc * base + digitToInt d) (n + 1)
+        False -> (acc, n)
+
+validScalar :: Int -> Bool
+validScalar v = v >= 0 && v <= 1114111 && (v < 55296 || v > 57343)
+
+tryLitNames :: [(String, Int)] -> [Char] -> Maybe (Char, Int)
+tryLitNames ns cs = case ns of
+  [] -> Nothing
+  (name, code) : rest -> case charsPrefix (unpack name) cs of
+    True -> Just (chr code, 1 + length name)
+    False -> tryLitNames rest cs
+
+charsPrefix :: [Char] -> [Char] -> Bool
+charsPrefix p s = case p of
+  [] -> True
+  x : xs -> case s of
+    [] -> False
+    y : ys -> case x == y of
+      True -> charsPrefix xs ys
+      False -> False
+
+litNames :: [(String, Int)]
+litNames =
+  [ ("NUL", 0), ("SOH", 1), ("STX", 2), ("ETX", 3)
+  , ("EOT", 4), ("ENQ", 5), ("ACK", 6), ("BEL", 7)
+  , ("BS", 8), ("HT", 9), ("LF", 10), ("VT", 11)
+  , ("FF", 12), ("CR", 13), ("SO", 14), ("SI", 15)
+  , ("DLE", 16), ("DC1", 17), ("DC2", 18), ("DC3", 19)
+  , ("DC4", 20), ("NAK", 21), ("SYN", 22), ("ETB", 23)
+  , ("CAN", 24), ("EM", 25), ("SUB", 26), ("ESC", 27)
+  , ("FS", 28), ("GS", 29), ("RS", 30), ("US", 31)
+  , ("DEL", 127)
+  ]
 
 -- `Eq String` and `Ord String` live with their classes -- in `Data.Eq` and
 -- `Data.Ord`: those modules are below every module that compares a `String`,

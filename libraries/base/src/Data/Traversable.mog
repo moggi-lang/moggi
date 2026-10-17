@@ -1,4 +1,8 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+-- | Visiting every element with an effect: the 'Traversable' class
+-- ('traverse', 'sequenceA', 'mapM', 'sequence'), the 'for'/'forM' and
+-- 'mapAccum' family built on it, and the 'Identity' functor they are
+-- expressed through.
 module Data.Traversable
   ( Traversable(..)
   , for
@@ -7,12 +11,20 @@ module Data.Traversable
   , mapAccumR
   , fmapDefault
   , foldMapDefault
+  , mapAccumM
+  , forAccumM
+  , Identity(..)
+  , runIdentity
   ) where
 
 import Control.Applicative
 import Control.Monad
+import Data.Bool
+import Data.Eq
 import Data.Foldable
 import Data.Functor
+import Data.Ord
+import Text.Show
 import Data.Maybe
 import Data.Monoid
 import Data.Semigroup
@@ -118,6 +130,7 @@ instance Applicative (StateR s) where
           (acc'', g) -> (acc'', g v))
 
 data Identity a = MkIdentity a
+  deriving (Eq, Ord, Show, Foldable, Traversable)
 
 runIdentity (MkIdentity x) = x
 
@@ -137,7 +150,47 @@ instance Applicative Identity where
     MkIdentity f -> case fb of
       MkIdentity x -> MkIdentity (f x)
 
+instance Monad Identity where
+  (>>=) mx f = case mx of
+    MkIdentity x -> f x
+
 instance Traversable Maybe where
   traverse f mx = case mx of
     Nothing -> pure Nothing
     Just x -> pure Just <*> (f x)
+
+instance Traversable (Arg a) where
+  traverse f m = case m of
+    Arg x a -> pure (Arg x) <*> f a
+
+-- | One element, like the wrapped value.
+instance Traversable Down where
+  traverse f (Down x) = map Down (f x)
+
+-- | Monadic state threading behind 'mapAccumM': the same idea as 'StateL',
+-- but each step is an action in `m`. Kept local (rather than a full `StateT`)
+-- so this module does not pull in the transformer stack.
+newtype AccumM s m a = AccumM (s -> m (s, a))
+
+instance Monad m => Functor (AccumM s m) where
+  map g st = case st of
+    AccumM step -> AccumM (\acc -> step acc >>= (\sb -> case sb of
+      (acc', v) -> pure (acc', g v)))
+
+instance Monad m => Applicative (AccumM s m) where
+  pure x = AccumM (\acc -> pure (acc, x))
+  (<*>) gf gv = case gf of
+    AccumM stepF -> case gv of
+      AccumM stepV -> AccumM (\acc -> stepF acc >>= (\fg -> case fg of
+        (acc', g) -> stepV acc' >>= (\vb -> case vb of
+          (acc'', v) -> pure (acc'', g v))))
+
+-- | Combine 'mapM' and 'mapAccumL': traverse while evaluating actions and
+-- threading an accumulator left to right, returning it with the new structure.
+mapAccumM :: (Monad m, Traversable t) => (s -> a -> m (s, b)) -> s -> t a -> m (s, t b)
+mapAccumM f s t = case traverse (\a -> AccumM (\acc -> f acc a)) t of
+  AccumM step -> step s
+
+-- | 'mapAccumM' with the arguments rearranged.
+forAccumM :: (Monad m, Traversable t) => s -> t a -> (s -> a -> m (s, b)) -> m (s, t b)
+forAccumM s t f = mapAccumM f s t

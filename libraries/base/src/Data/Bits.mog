@@ -268,6 +268,26 @@ instance FiniteBits Bool where
     True -> 0
     False -> 1
 
+-- | Bitwise operations delegate to the wrapped value; only the 'Ord' is
+-- reversed. Lives here (where 'Bits' is defined) rather than in 'Data.Ord',
+-- which sits below this module.
+instance Bits a => Bits (Down a) where
+  (.&.) a b = Down (getDown a .&. getDown b)
+  (.|.) a b = Down (getDown a .|. getDown b)
+  xor a b = Down (xor (getDown a) (getDown b))
+  complement a = Down (complement (getDown a))
+  shift a i = Down (shift (getDown a) i)
+  rotate a i = Down (rotate (getDown a) i)
+  zeroBits = Down zeroBits
+  bit i = Down (bit i)
+  testBit a i = testBit (getDown a) i
+  bitSizeMaybe a = bitSizeMaybe (getDown a)
+  isSigned a = isSigned (getDown a)
+  popCount a = popCount (getDown a)
+
+instance FiniteBits a => FiniteBits (Down a) where
+  finiteBitSize a = finiteBitSize (getDown a)
+
 instance Bits Integer where
   (.&.) a b = integerAndBits a b
   (.|.) a b = integerOrBits a b

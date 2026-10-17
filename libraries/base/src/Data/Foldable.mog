@@ -1,4 +1,8 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+-- | Collapsing structures: 'Foldable' exposes one strict fold (either
+-- 'foldr' or 'foldMap' satisfies the 'MINIMAL' pragma), and this module carries the
+-- combinators built on it ('fold', 'any', 'all', 'find', 'traverse_',
+-- 'for_', 'sequenceA_', 'mapM_', 'forM_', 'sequence_', 'asum').
 module Data.Foldable
   ( Foldable(..)
   , notElem
@@ -18,6 +22,7 @@ module Data.Foldable
   , forM_
   , sequence_
   , asum
+  , msum
   , foldrM
   , foldlM
   ) where
@@ -62,11 +67,11 @@ class Foldable t where
 
   -- | Whether the structure is empty.
   null :: t a -> Bool
-  null t = foldr (\ignoredX ignoredAcc -> False) True t
+  null t = foldr (\_ _ -> False) True t
 
   -- | Size of the structure, counted from the left.
   length :: t a -> Int
-  length t = foldl (\n ignored -> n + 1) 0 t
+  length t = foldl (\n _ -> n + 1) 0 t
 
   -- | Does the element occur in the structure?
   elem :: Eq a => a -> t a -> Bool
@@ -178,7 +183,7 @@ concatMap :: Foldable t => (a -> [b]) -> t a -> [b]
 concatMap f t = foldr (\x ys -> appendList (f x) ys) [] t
 
 traverse_ :: (Foldable t, Applicative f) => (a -> f b) -> t a -> f ()
-traverse_ f t = foldl (\acc x -> (\ignored b -> b) <$> acc <*> f x) (pure ()) t
+traverse_ f t = foldl (\acc x -> (\_ b -> b) <$> acc <*> f x) (pure ()) t
 
 for_ :: (Foldable t, Applicative f) => t a -> (a -> f b) -> f ()
 for_ xs f = traverse_ f xs
@@ -198,6 +203,12 @@ sequence_ xs = sequenceA_ xs
 asum :: (Foldable t, Alternative f) => t (f a) -> f a
 asum t = foldr (\x acc -> x <|> acc) empty t
 
+-- | The sum of a collection of actions, generalizing 'concat'.
+-- ('Control.Monad.msum' is the same function; it is re-exported here
+-- to match @base@, which provides it from both modules.)
+msum :: (Foldable t, MonadPlus m) => t (m a) -> m a
+msum t = foldr mplus mzero t
+
 foldrM :: (Foldable t, Monad m) => (a -> b -> m b) -> b -> t a -> m b
 foldrM f z t = (foldr (\x k -> (\z0 -> f x z0 >>= k)) pure t) z
 
@@ -208,3 +219,12 @@ instance Foldable Maybe where
   foldr f z mx = case mx of
     Nothing -> z
     Just x -> f x z
+
+instance Foldable (Arg a) where
+  foldr f z m = case m of
+    Arg _ a -> f a z
+
+-- | One element, like the wrapped value.
+instance Foldable Down where
+  foldMap f (Down x) = f x
+  foldr f z (Down x) = f x z

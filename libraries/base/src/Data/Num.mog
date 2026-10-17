@@ -1,10 +1,13 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+-- | Basic numeric operations: the 'Num' class ('+', '-', '*', 'negate',
+-- 'abs', 'signum', 'fromInteger') and 'subtract'.
 module Data.Num
   ( Num(..)
   , subtract
   ) where
 
 import Data.Bool
+import Data.Ord
 import Moggi.Internal.Base
 import Moggi.Internal.Prim
 
@@ -50,6 +53,17 @@ instance Num Word where
     True -> wordFromInt# 0
     _ -> wordFromInt# 1
   fromInteger n = wordFromInt# (intFromInteger# n)
+
+-- | Arithmetic delegates to the wrapped value; only the ordering is reversed,
+-- so this lives with the class rather than in 'Data.Ord' (which sits below).
+instance Num a => Num (Down a) where
+  (+) a b = Down (getDown a + getDown b)
+  (-) a b = Down (getDown a - getDown b)
+  (*) a b = Down (getDown a * getDown b)
+  negate a = Down (negate (getDown a))
+  abs a = Down (abs (getDown a))
+  signum a = Down (signum (getDown a))
+  fromInteger n = Down (fromInteger n)
 
 -- | the same as @'flip' ('-')@.
 --

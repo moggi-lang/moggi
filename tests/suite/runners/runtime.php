@@ -43,12 +43,16 @@ function runExecTest(string $path, string $projectRoot): array
         return runBackendStdoutFixture($path, $stdoutExpected, 'php', $projectRoot);
     }
 
+    // Build the shared library tree before compiling the case: both pull a
+    // full standard-library closure, and back-to-back cold elaborations blow
+    // the 1G limit. Library-first peaks once (the case then reuses its memos
+    // and disk cache), while case-first peaks twice, nested.
+    $libPhpDir = writeLibPhpOutputs($projectRoot);
+
     $php = compileTestFile($path, 'php');
     if ($php['exitCode'] !== 0) {
         return ['passed' => false, 'message' => "compile failed:\n{$php['output']}"];
     }
-
-    $libPhpDir = writeLibPhpOutputs($projectRoot);
 
     $execDir = \Moggi\Cache\cacheScratchDir() . '/exec';
     @\mkdir($execDir, 0777, true);
@@ -603,8 +607,39 @@ function writeLibBackendOutputs(string $projectRoot, string $backend): string
 function testLibraryRoots(string $projectRoot): array
 {
     $roots = \Moggi\Modules\configuredLibraryRoots();
+    if ($roots === []) {
+        $roots = [$projectRoot . '/libraries/base/src'];
+    }
 
-    return $roots === [] ? [$projectRoot . '/libraries/base/src'] : $roots;
+    // The standard distribution: base plus the bundled containers package, so
+    // fixtures can import Data.Set / Data.Map like any program built on it.
+    // This applies on top of configured roots too: the harness pins the
+    // stdlib root in-process, which would otherwise hide the default.
+    $containers = $projectRoot . '/libraries/containers/src';
+    if (\is_dir($containers)) {
+        $resolved = \array_map(
+            static fn (string $root): string => \Moggi\Modules\resolvePath($root),
+            $roots,
+        );
+        if (! \in_array(\Moggi\Modules\resolvePath($containers), $resolved, true)) {
+            $roots[] = $containers;
+        }
+    }
+
+    // The standard distribution: base plus the bundled time package, so
+    // fixtures can import Data.Time.* like any program built on it.
+    $time = $projectRoot . '/libraries/time/src';
+    if (\is_dir($time)) {
+        $resolved = \array_map(
+            static fn (string $root): string => \Moggi\Modules\resolvePath($root),
+            $roots,
+        );
+        if (! \in_array(\Moggi\Modules\resolvePath($time), $resolved, true)) {
+            $roots[] = $time;
+        }
+    }
+
+    return $roots;
 }
 
 /**

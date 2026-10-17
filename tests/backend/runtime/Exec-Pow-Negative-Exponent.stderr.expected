@@ -1,4 +1,4 @@
 moggi: ErrorCall: Negative exponent
   at Moggi.Err.errorWithoutStackTrace (libraries/base/src/Moggi/Err.mog:18:30)
-  at Data.Real.^ (libraries/base/src/Data/Real.mog:102:11)
+  at Data.Real.^ (libraries/base/src/Data/Real.mog:130:11)
   at Main.main (tests/backend/runtime/Exec-Pow-Negative-Exponent.mog:5:8)

@@ -20,6 +20,7 @@ module System.IO.DotNet
   , putStr
   , putStrLn
   , print
+  , openTempFile
   ) where
 
 import Moggi.Internal.Base
@@ -69,6 +70,10 @@ foreign dotnet function idisposableDispose "System.IDisposable.Dispose" :: Handl
 foreign dotnet function rawFileExists "System.IO.File:Exists" :: String -> Bool
 
 foreign dotnet function rawDirectoryExists "System.IO.Directory:Exists" :: String -> Bool
+
+foreign dotnet function rawGetRandomFileName "System.IO.Path:GetRandomFileName" :: IO String
+
+foreign dotnet function rawPathCombine "System.IO.Path:Combine" :: String -> String -> String
 
 stdin :: Handle
 stdin = rawStdin
@@ -174,3 +179,17 @@ print x = putStr (show x)
 putStr s = hPutStr stdout s
 
 putStrLn s = hPutStrLn stdout s
+
+-- Fresh names are cryptographic-strength random, so creating on open is
+-- collision-safe in practice (unlike `base`, no exclusive-create flag exists
+-- on this path). Opening for writing creates the file when the directory
+-- exists and fails through `openFile`'s errors when it does not.
+openTempFile :: FilePath -> String -> IO (FilePath, Handle)
+openTempFile dir template = do
+  name <- rawGetRandomFileName
+  let path = tempFilePath dir template name
+  h <- openFile path WriteMode
+  pure (path, h)
+
+tempFilePath :: FilePath -> String -> String -> FilePath
+tempFilePath dir template name = rawPathCombine dir (template <> name)

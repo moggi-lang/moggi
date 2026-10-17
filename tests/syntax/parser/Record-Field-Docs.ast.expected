@@ -1,0 +1,5 @@
+program
+  data Version
+    constructor Version
+      field versionBranch :: [Int]
+      field versionTags :: [String]

@@ -3,6 +3,7 @@ import Control.Monad
 import Data.Bool
 import Data.Foldable
 import Data.Int
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Maybe
 import Data.Monoid
 import Data.Ord
@@ -46,6 +47,74 @@ maxMemptyDemo = getMax (mempty :: Max Int) == minBound
 dualDemo :: Bool
 dualDemo = getDual (Dual (Sum (1 :: Int)) <> Dual (Sum 2)) == Sum 3
 
+-- 'stimes' is a class method: the multiplier is any 'Integral', and
+-- idempotent instances answer in O(1) instead of splitting.
+stimesDemo :: Bool
+stimesDemo = getSum (stimes (3 :: Int) (Sum (2 :: Int))) == 6
+
+stimesIntegralDemo :: Bool
+stimesIntegralDemo = getSum (stimes (3 :: Integer) (Sum (2 :: Int))) == 6
+
+stimesIdempotentDemo :: Bool
+stimesIdempotentDemo = getMin (stimes (1000000 :: Int) (Min (3 :: Int))) == 3
+
+mtimesDefaultDemo :: Bool
+mtimesDefaultDemo = getSum (mtimesDefault (0 :: Int) (Sum (5 :: Int))) == 0
+
+mtimesDefaultNonzeroDemo :: Bool
+mtimesDefaultNonzeroDemo = getSum (mtimesDefault (3 :: Int) (Sum (5 :: Int))) == 15
+
+-- 'sconcat' is a 'Semigroup' method: the default folds with '(<>)'.
+sconcatDemo :: Bool
+sconcatDemo = getSum (sconcat (Sum (1 :: Int) :| [Sum 2, Sum 3])) == 6
+
+sconcatUnitDemo :: Bool
+sconcatUnitDemo = getSum (sconcat (Sum (5 :: Int) :| [])) == 5
+
+-- An instance may define 'sconcat' instead of '(<>)'
+-- ({-# MINIMAL (<>) | sconcat #-}); '(<>)' then comes from its default.
+data PickFirst = PickFirst Int
+  deriving (Eq)
+
+instance Semigroup PickFirst where
+  sconcat ne = case ne of
+    x :| _ -> x
+
+sconcatFirstDemo :: Bool
+sconcatFirstDemo = sconcat (PickFirst 1 :| [PickFirst 2, PickFirst 3]) == PickFirst 1
+
+defaultPlusDemo :: Bool
+defaultPlusDemo = (PickFirst 1 <> PickFirst 2) == PickFirst 1
+
+diffDemo :: Bool
+diffDemo = appEndo (diff "Hello, " <> diff "World") "" == "Hello, World"
+
+argMinDemo :: Bool
+argMinDemo = getMin (Min (Arg 3 "lea") <> Min (Arg 5 "pixie")) == Arg 3 "lea"
+
+wrappedMonoidDemo :: Bool
+wrappedMonoidDemo = unwrapMonoid (WrapMonoid (Sum (4 :: Int)) <> mempty) == Sum 4
+
+-- 'liftA2', '(*>)' and '(<*)' are 'Applicative' methods, '(>>)' a 'Monad'
+-- method: they dispatch through the dictionary like any other method.
+liftA2Demo :: Bool
+liftA2Demo = liftA2 (+) (Just (1 :: Int)) (Just 2) == Just 3
+
+thenDemo :: Bool
+thenDemo = (Just (1 :: Int) *> Just 2) == Just 2
+
+firstDemo :: Bool
+firstDemo = (Just (1 :: Int) <* Just 2) == Just 1
+
+bindDiscardDemo :: Bool
+bindDiscardDemo = (Just (1 :: Int) >> Just 2) == Just 2
+
+voidDemo :: Bool
+voidDemo = void (Just (5 :: Int)) == Just ()
+
+altDemo :: Bool
+altDemo = getAlt (Alt (Just (1 :: Int)) <> Alt Nothing) == Just 1
+
 main :: IO ()
 main = do
   putStrLn (show sumFoldDemo)
@@ -57,3 +126,21 @@ main = do
   putStrLn (show minMemptyDemo)
   putStrLn (show maxMemptyDemo)
   putStrLn (show dualDemo)
+  putStrLn (show stimesDemo)
+  putStrLn (show stimesIntegralDemo)
+  putStrLn (show stimesIdempotentDemo)
+  putStrLn (show mtimesDefaultDemo)
+  putStrLn (show mtimesDefaultNonzeroDemo)
+  putStrLn (show sconcatDemo)
+  putStrLn (show sconcatUnitDemo)
+  putStrLn (show sconcatFirstDemo)
+  putStrLn (show defaultPlusDemo)
+  putStrLn (show diffDemo)
+  putStrLn (show argMinDemo)
+  putStrLn (show wrappedMonoidDemo)
+  putStrLn (show liftA2Demo)
+  putStrLn (show thenDemo)
+  putStrLn (show firstDemo)
+  putStrLn (show bindDiscardDemo)
+  putStrLn (show voidDemo)
+  putStrLn (show altDemo)

@@ -1,0 +1,20 @@
+-- Nested closures that capture locals inside a monadic continuation must see
+-- the right environment (regression test: the captures used to reach the
+-- function in a different order than its parameters named them, so `either`
+-- received a closure where the scrutinised value belonged).
+import Data.Either (Either(Left, Right), either)
+
+n :: (Int -> Int -> Maybe Int) -> [Either Int Int] -> Int -> Maybe Int
+n f es z0 = case es of
+  [] -> pure z0
+  e : rest -> n f rest z0 >>= (\r -> either (\x -> f x r) (\x -> f x r) e)
+
+h3 :: (Int -> Int -> Maybe Int) -> [Int] -> Int -> Maybe Int
+h3 f xs z0 = case xs of
+  [] -> pure z0
+  x : rest -> h3 f rest z0 >>= (\r -> either (\a -> f a r) (\b -> f b r) (Left x))
+
+main :: IO ()
+main = do
+  putStrLn (show (n (\x acc -> Just (x + acc)) [Left 1, Right 2] 10))
+  putStrLn (show (h3 (\x acc -> Just (x + acc)) [1, 2] 10))

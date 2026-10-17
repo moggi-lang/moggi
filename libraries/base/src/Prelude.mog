@@ -25,9 +25,7 @@ module Prelude
     -- Basic type classes
   , Eq((==), (/=))
   , Ord(compare, (<), (<=), (>), (>=), max, min)
-  , Enum(succ, pred, toEnum, fromEnum)
-  , enumFromTo
-  , enumFromThenTo
+  , Enum(succ, pred, toEnum, fromEnum, enumFrom, enumFromThen, enumFromTo, enumFromThenTo)
   , Bounded(minBound, maxBound)
     -- Numeric types and classes
   , Int
@@ -47,17 +45,14 @@ module Prelude
   , gcd
   , lcm
     -- Semigroups and monoids
-  , Semigroup((<>))
+  , Semigroup((<>), sconcat, stimes)
   , Monoid(mempty, mconcat)
     -- Monads, functors and their helpers
   , Functor(map)
   , (<$>)
   , (<$)
-  , Applicative(pure, (<*>))
-  , (*>)
-  , (<*)
-  , Monad((>>=))
-  , (>>)
+  , Applicative(pure, (<*>), liftA2, (*>), (<*))
+  , Monad((>>=), (>>))
   , MonadFail(fail)
   , mapM_
   , sequence_

@@ -24,11 +24,11 @@ infix 4 ==, /=
 -- whose return type is an instance of 'Eq', then @f x == f y@ = 'True'
 -- [__Negation__]: @x /= y@ = @not (x == y)@
 class Eq a where
+  {-# MINIMAL (==) | (/=) #-}
   (==), (/=) :: a -> a -> Bool
 
   (/=) x y = boolNot# (x == y)
   (==) x y = boolNot# (x /= y)
-  {-# MINIMAL (==) | (/=) #-}
 
 instance Eq Bool where
   (==) a b = boolEq# a b

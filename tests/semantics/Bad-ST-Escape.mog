@@ -1,0 +1,7 @@
+module Bad.ST.Escape
+
+import Control.Monad.ST (ST, runST)
+import Data.STRef (STRef, newSTRef)
+
+bad :: STRef s Int
+bad = runST (newSTRef 5)

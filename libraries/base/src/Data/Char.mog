@@ -19,21 +19,7 @@ module Data.Char
   , isDigit
   , isOctDigit
   , isHexDigit
-  , isNumber
-  , isPunctuation
-  , isSymbol
-  , isSeparator
-  , isAscii
-  , isLatin1
-  , isAsciiUpper
-  , isAsciiLower
-  , toUpper
-  , toLower
-  , toTitle
-  , digitToInt
-  , intToDigit
-  , showLitChar
-  ) where
+  , isNumber  , isPunctuation   , isSymbol   , isSeparator   , isMark   , isAscii   , isLatin1   , isAsciiUpper   , isAsciiLower   , GeneralCategory(..)   , generalCategory   , isLowerCase   , isUpperCase   , toUpper   , toLower   , toTitle   , digitToInt   , intToDigit   , showLitChar   ) where
 
 import Data.Bool
 import Data.Bounded
@@ -59,6 +45,43 @@ chr n = case isUnicodeScalar n of
   True -> coerceChar n
   False -> error "Data.Char.chr: not a Unicode scalar value"
 
+-- | The Unicode general category of a character: letter, mark, number,
+-- punctuation, symbol, separator, or other. The constructors are in the
+-- Unicode order, so the 'Enum' instance maps 'toEnum' onto the standard
+-- category numbers.
+data GeneralCategory
+  = UppercaseLetter
+  | LowercaseLetter
+  | TitlecaseLetter
+  | ModifierLetter
+  | OtherLetter
+  | NonSpacingMark
+  | SpacingCombiningMark
+  | EnclosingMark
+  | DecimalNumber
+  | LetterNumber
+  | OtherNumber
+  | ConnectorPunctuation
+  | DashPunctuation
+  | OpenPunctuation
+  | ClosePunctuation
+  | InitialQuote
+  | FinalQuote
+  | OtherPunctuation
+  | MathSymbol
+  | CurrencySymbol
+  | ModifierSymbol
+  | OtherSymbol
+  | Space
+  | LineSeparator
+  | ParagraphSeparator
+  | Control
+  | Format
+  | Surrogate
+  | PrivateUse
+  | NotAssigned
+  deriving (Eq, Ord, Enum, Bounded, Show)
+
 isControl :: Char -> Bool
 
 isSpace :: Char -> Bool
@@ -66,6 +89,25 @@ isSpace :: Char -> Bool
 isLower :: Char -> Bool
 
 isUpper :: Char -> Bool
+
+-- | Whether the character has the Unicode Lowercase property (letter-like
+-- characters such as @'ⓐ'@ count, unlike 'isLower', which only selects
+-- 'LowercaseLetter').
+isLowerCase :: Char -> Bool
+
+-- | Whether the character has the Unicode Uppercase property (letter-like
+-- characters such as @'Ⓐ'@ count, unlike 'isUpper', which only selects
+-- 'UppercaseLetter' and 'TitlecaseLetter').
+isUpperCase :: Char -> Bool
+
+-- | The general category of a character, from the host's Unicode tables.
+-- Backends implement 'generalCategoryCode' (the constructor's 'Enum' index);
+-- the mapping to constructors lives here so it is written once.
+generalCategory :: Char -> GeneralCategory
+generalCategory c = toEnum (generalCategoryCode c)
+
+-- | 'generalCategory' as an 'Enum' index (backend-defined; not exported).
+generalCategoryCode :: Char -> Int
 
 isAlpha :: Char -> Bool
 
@@ -84,6 +126,8 @@ isPunctuation :: Char -> Bool
 isSymbol :: Char -> Bool
 
 isSeparator :: Char -> Bool
+
+isMark :: Char -> Bool
 
 toUpper :: Char -> Char
 

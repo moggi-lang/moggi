@@ -1,3 +1,6 @@
+-- | Type proxies: 'Proxy' names a type where a value is needed (for example
+-- to select an instance), 'asProxyTypeOf' constrains one, and 'KProxy'
+-- names a kind the same way.
 module Data.Proxy
   ( Proxy(..)
   , asProxyTypeOf

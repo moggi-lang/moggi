@@ -1,0 +1,19 @@
+import Data.Int
+import Text.Show
+import System.IO
+
+-- A closure in an inner case arm that captures a binder of an outer case.
+-- The optimizer once deleted the outer binder (`stepF`): the scan for which
+-- lifted lambdas a statement refers to did not descend into nested matches,
+-- so the capture looked dead and the generated code read an undefined
+-- variable. Both binders must survive; the program prints 42.
+newtype Box a = Box a
+
+applyBox :: Box (Int -> Int) -> Box Int -> Box Int
+applyBox gf gv = case gf of
+  Box stepF -> case gv of
+    Box stepV -> Box ((\acc -> stepF (stepV + acc)) 0)
+
+main :: IO ()
+main = do
+  putStrLn (show (case applyBox (Box (\x -> x + 1)) (Box 41) of Box n -> n))

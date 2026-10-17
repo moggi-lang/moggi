@@ -441,7 +441,7 @@ linesChars cs = case cs of
         tl = snd pair
     in case tl of
       [] -> [packChars hd]
-      ignored : rest -> packChars hd : linesChars rest
+      _ : rest -> packChars hd : linesChars rest
 
 words :: ByteString -> [ByteString]
 words b = L.filter (\x -> not (null x)) (splitWith isSpace b)
@@ -532,7 +532,7 @@ count c b = listLength (elemIndices c b)
 listLength :: [a] -> Int
 listLength xs = case xs of
   [] -> 0
-  ignored : rest -> 1 + listLength rest
+  _ : rest -> 1 + listLength rest
 
 -- Zip / ordered
 

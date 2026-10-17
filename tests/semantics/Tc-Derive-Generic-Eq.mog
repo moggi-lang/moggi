@@ -17,9 +17,9 @@ newtype Age = Age Int deriving (Generic)
 
 data Empty deriving (Generic)
 
--- Infix data constructor (value-level :|); stock MetaCons uses
+-- Infix data constructor (value-level :||); stock MetaCons uses
 -- 'InfixI 'LeftAssociative (the default infixl 9).
-data (a :| b) = a :| b deriving (Generic)
+data (a :|| b) = a :|| b deriving (Generic)
 
 roundtrip :: Color -> Color
 roundtrip c = to (from c)
@@ -33,7 +33,7 @@ roundtripPerson p = to (from p)
 roundtripAge :: Age -> Age
 roundtripAge a = to (from a)
 
-roundtripPipe :: (Int :| Bool) -> (Int :| Bool)
+roundtripPipe :: (Int :|| Bool) -> (Int :|| Bool)
 roundtripPipe x = to (from x)
 
 same :: Bool

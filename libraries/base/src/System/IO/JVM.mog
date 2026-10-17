@@ -20,6 +20,7 @@ module System.IO.JVM
   , putStr
   , putStrLn
   , print
+  , openTempFile
   ) where
 
 import Moggi.Internal.Base
@@ -90,6 +91,10 @@ foreign jvm function rawFileExists "java.io.File.exists" :: RawFile -> Bool
 foreign jvm function rawFileCanRead "java.io.File.canRead" :: RawFile -> Bool
 
 foreign jvm function rawFileCanWrite "java.io.File.canWrite" :: RawFile -> Bool
+
+foreign jvm function rawCreateTempFile "java.io.File:createTempFile" :: String -> String -> RawFile -> IO RawFile
+
+foreign jvm function rawFileAbsolutePath "java.io.File.getAbsolutePath" :: RawFile -> String
 
 foreign jvm function readerTransferTo "java.io.Reader.transferTo" :: Handle -> Handle -> IO Int
 
@@ -232,3 +237,28 @@ hIsEOFFile h = do
   c <- brRead h
   brReset h
   pure (int32ToInt# c == -1)
+
+-- `createTempFile` needs a prefix of at least three characters; padding keeps
+-- short templates working while preserving the prefix callers match on. The
+-- file exists before it is opened, so opening for writing only truncates what
+-- is already empty.
+openTempFile :: FilePath -> String -> IO (FilePath, Handle)
+openTempFile dir template =
+  catch (openTempFileGen dir template) (tempOpenFailed dir)
+
+openTempFileGen :: FilePath -> String -> IO (FilePath, Handle)
+openTempFileGen dir template = do
+  f <- rawCreateTempFile (template <> "___") "" (newRawFile dir)
+  let path = rawFileAbsolutePath f
+  h <- openFile path WriteMode
+  pure (path, h)
+
+tempOpenFailed :: FilePath -> HostException -> IO (FilePath, Handle)
+tempOpenFailed dir _ = ioError (mkIOError (tempDirError dir) "openTempFile" Nothing (Just dir))
+
+tempDirError :: FilePath -> IOErrorType
+tempDirError dir = case rawFileExists (newRawFile dir) of
+  False -> NoSuchThing
+  True -> case rawFileIsDirectory (newRawFile dir) of
+    False -> InappropriateType
+    True -> PermissionDenied

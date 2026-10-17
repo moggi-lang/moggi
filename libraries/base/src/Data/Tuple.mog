@@ -76,12 +76,16 @@ module Data.Tuple
   ) where
 
 import Control.Applicative
+import Control.Monad
 import Data.Bool
+import Data.Bounded
+import Data.Enum
 import Data.Eq
 import Data.Foldable
 import Data.Functor
 import Data.Ord
 import Data.Semigroup
+import Moggi.Err
 import Moggi.Internal.Base
 import Text.Show
 import Data.Traversable
@@ -141,6 +145,16 @@ showOne x = show x
 -- Unit/Tuple0 have kind * and are not Functor. Eq and Ord are declared below, for
 -- the same arities.
 
+instance Applicative Solo where
+  pure x = MkSolo x
+  (<*>) f x = case f of
+    MkSolo g -> case x of
+      MkSolo y -> MkSolo (g y)
+
+instance Monad Solo where
+  (>>=) m f = case m of
+    MkSolo x -> f x
+
 instance Functor Solo where
   map f (MkSolo a) = MkSolo (f a)
 
@@ -153,7 +167,6 @@ instance Traversable Solo where
 instance Show a => Show (Solo a) where
   showsPrec d (MkSolo a) =
     showParen (d > 10) (\r -> showString "MkSolo " (showsPrec 11 a r))
-
 
 instance Functor (Tuple2 a1) where
   map f t = case t of
@@ -394,6 +407,21 @@ instance Eq () where
 instance Ord () where
   compare _ _ = EQ
 
+instance Show () where
+  show _ = "()"
+
+instance Bounded () where
+  minBound = ()
+  maxBound = ()
+
+instance Enum () where
+  succ _ = error "Data.Tuple.succ(()): bad argument"
+  pred _ = error "Data.Tuple.pred(()): bad argument"
+  toEnum n = case n of
+    0 -> ()
+    _ -> error "Data.Tuple.toEnum(()): bad argument"
+  fromEnum _ = 0
+
 instance Eq a => Eq (Solo a) where
   (==) a b = case a of
     MkSolo x -> case b of
@@ -413,6 +441,11 @@ instance (Ord a1, Ord a2) => Ord (Tuple2 a1 a2) where
   compare a b = case a of
     (x1, x2) -> case b of
       (y1, y2) -> compare x1 y1 <> compare x2 y2
+
+instance (Semigroup a1, Semigroup a2) => Semigroup (Tuple2 a1 a2) where
+  (<>) a b = case a of
+    (x1, x2) -> case b of
+      (y1, y2) -> (x1 <> y1, x2 <> y2)
 
 instance (Eq a1, Eq a2, Eq a3) => Eq (Tuple3 a1 a2 a3) where
   (==) a b = case a of

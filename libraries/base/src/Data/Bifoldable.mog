@@ -1,0 +1,285 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Folding structures with two element types: 'Bifoldable' is 'Foldable'
+-- with a left and a right side ('Either' and pairs are the canonical
+-- examples), and this module carries the combinators built on it
+-- ('bifold', 'biList', 'bilength', 'biany', 'biall', 'bitraverse_', ...).
+--
+-- Moggi is strict, so there are no primed (strict) variants: every fold
+-- below already evaluates its step results. For the same reason there are
+-- no infinite structures to hang on: every range below is finite.
+module Data.Bifoldable
+  ( Bifoldable(..)
+  , bifoldr1
+  , bifoldrM
+  , bifoldl1
+  , bifoldlM
+  , bitraverse_
+  , bifor_
+  , bimapM_
+  , biforM_
+  , bimsum
+  , bisequenceA_
+  , bisequence_
+  , biasum
+  , biList
+  , binull
+  , bilength
+  , bielem
+  , bimaximum
+  , biminimum
+  , bisum
+  , biproduct
+  , biconcat
+  , biconcatMap
+  , biand
+  , bior
+  , biany
+  , biall
+  , bimaximumBy
+  , biminimumBy
+  , binotElem
+  , bifind
+  ) where
+
+import Control.Applicative (Applicative(pure, (*>)), Alternative(empty, (<|>)))
+import Control.Monad (Monad, join)
+import Data.Bool
+import Data.Either (Either(Left, Right))
+import Data.Eq
+import Data.Foldable (concatMap, foldr, foldl)
+import Data.Function (flip, id)
+import Data.Functor (Functor(map))
+import Data.Functor.Const (Const(Const))
+import Data.Maybe (Maybe(Nothing, Just))
+import Data.Monoid (Monoid(mempty), First(First), getFirst, All(All), getAll, Any(Any), getAny, Sum(Sum), getSum, Product(Product), getProduct)
+import Data.Num
+import Data.Ord
+import Data.Semigroup
+import Data.Tuple
+import Moggi.Err
+import Moggi.Generics (K1(K1))
+import Moggi.Internal.Base
+import Moggi.Internal.Prim
+
+-- | Foldable structures with two element types. A minimal instance defines
+-- 'bifoldr' or 'bifoldMap'; the identities below must then hold:
+--
+-- @
+-- 'bifold' ≡ 'bifoldMap' 'id' 'id'
+-- 'bifoldMap' f g ≡ 'bifoldr' (\\x acc -> f x '<>' acc) (\\x acc -> g x '<>' acc) 'mempty'
+-- @
+--
+-- When the type is also a 'Bifunctor', folding after mapping must agree
+-- with mapping first:
+--
+-- @
+-- 'bifoldMap' f g ≡ 'bifold' . 'bimap' f g
+-- @
+class Bifoldable (p :: Type -> Type -> Type) where
+  {-# MINIMAL bifoldr | bifoldMap #-}
+
+  -- | Combine the elements of a structure using a monoid.
+  bifold :: Monoid m => p m m -> m
+  bifold = bifoldMap id id
+
+  -- | Map both sides into a monoid and combine the results.
+  bifoldMap :: Monoid m => (a -> m) -> (b -> m) -> p a b -> m
+  bifoldMap f g = bifoldr (\x acc -> f x <> acc) (\x acc -> g x <> acc) mempty
+
+  -- | Right-associative fold: the left elements come before the right ones.
+  bifoldr :: (a -> c -> c) -> (b -> c -> c) -> c -> p a b -> c
+  bifoldr f g z t = appEndo (bifoldMap (\x -> Endo (f x)) (\x -> Endo (g x)) t) z
+
+  -- | Left-associative fold: the left elements come before the right ones.
+  bifoldl :: (c -> a -> c) -> (c -> b -> c) -> c -> p a b -> c
+  bifoldl f g z t = appEndo (getDual (bifoldMap (\x -> Dual (Endo (flip f x))) (\x -> Dual (Endo (flip g x))) t)) z
+
+
+-- | A variant of 'bifoldr' with no base case; only for non-empty structures.
+bifoldr1 :: Bifoldable t => (a -> a -> a) -> t a a -> a
+bifoldr1 f xs = case biList xs of
+  [] -> error "Data.Bifoldable.bifoldr1: empty structure"
+  x : rest -> foldr f x rest
+
+-- | Right-associative monadic bifold. Goes through 'bifoldr' at the monadic
+-- result type: @join (map (f x))@ sequences each step's action after the rest.
+bifoldrM :: (Bifoldable t, Monad m) => (a -> c -> m c) -> (b -> c -> m c) -> c -> t a b -> m c
+bifoldrM f g z0 t = bifoldr (\x acc -> join (map (f x) acc)) (\y acc -> join (map (g y) acc)) (pure z0) t
+
+
+-- | A variant of 'bifoldl' with no base case; only for non-empty structures.
+bifoldl1 :: Bifoldable t => (a -> a -> a) -> t a a -> a
+bifoldl1 f xs = case biList xs of
+  [] -> error "Data.Bifoldable.bifoldl1: empty structure"
+  x : rest -> foldl f x rest
+
+-- | Left-associative monadic bifold. Goes through 'bifoldl' at the monadic
+-- result type, like 'bifoldrM'.
+bifoldlM :: (Bifoldable t, Monad m) => (a -> b -> m a) -> (a -> c -> m a) -> a -> t b c -> m a
+bifoldlM f g z0 t = bifoldl (\acc x -> join (map (flip f x) acc)) (\acc y -> join (map (flip g y) acc)) (pure z0) t
+
+-- | Map both sides to actions, evaluate left to right, and ignore the results.
+bitraverse_ :: (Bifoldable t, Applicative f) => (a -> f c) -> (b -> f d) -> t a b -> f ()
+bitraverse_ f g = bifoldr (\x acc -> f x *> acc) (\x acc -> g x *> acc) (pure ())
+
+-- | 'bitraverse_' with the structure first.
+bifor_ :: (Bifoldable t, Applicative f) => t a b -> (a -> f c) -> (b -> f d) -> f ()
+bifor_ t f g = bitraverse_ f g t
+
+-- | Alias for 'bitraverse_'.
+bimapM_ :: (Bifoldable t, Applicative f) => (a -> f c) -> (b -> f d) -> t a b -> f ()
+bimapM_ f g t = bitraverse_ f g t
+
+-- | Alias for 'bifor_'.
+biforM_ :: (Bifoldable t, Applicative f) => t a b -> (a -> f c) -> (b -> f d) -> f ()
+biforM_ t f g = bifor_ t f g
+
+-- | Alias for 'bisequence_'.
+bisequenceA_ :: (Bifoldable t, Applicative f) => t (f a) (f b) -> f ()
+bisequenceA_ t = bisequence_ t
+
+-- | Evaluate each action left to right and ignore the results.
+bisequence_ :: (Bifoldable t, Applicative f) => t (f a) (f b) -> f ()
+bisequence_ t = bifoldr (*>) (*>) (pure ()) t
+
+-- | The sum of a collection of actions, generalizing 'biconcat'.
+biasum :: (Bifoldable t, Alternative f) => t (f a) (f a) -> f a
+biasum t = bifoldr (<|>) (<|>) empty t
+
+-- | Alias for 'biasum'.
+bimsum :: (Bifoldable t, Alternative f) => t (f a) (f a) -> f a
+bimsum t = biasum t
+
+-- | The elements of a structure as a list, left side before right side.
+biList :: Bifoldable t => t a a -> [a]
+biList t = bifoldr (:) (:) [] t
+
+-- | Whether the structure is empty.
+binull :: Bifoldable t => t a b -> Bool
+binull t = bifoldr (\_ _ -> False) (\_ _ -> False) True t
+
+-- | The number of elements in the structure.
+bilength :: Bifoldable t => t a b -> Int
+bilength t = bifoldl (\c _ -> c + 1) (\c _ -> c + 1) 0 t
+
+-- | Whether the element occurs in the structure.
+bielem :: (Bifoldable t, Eq a) => a -> t a a -> Bool
+bielem x t = biany (\y -> x == y) (\y -> x == y) t
+
+-- | The largest element of a non-empty structure (rightmost wins ties,
+-- like 'bifoldr1' 'max').
+bimaximum :: (Bifoldable t, Ord a) => t a a -> a
+bimaximum t = case biList t of
+  [] -> error "Data.Bifoldable.bimaximum: empty structure"
+  x : xs -> bimaximumGo x xs
+
+bimaximumGo :: Ord a => a -> [a] -> a
+bimaximumGo acc ys = case ys of
+  [] -> acc
+  y : rest -> bimaximumGo (max acc y) rest
+
+-- | The least element of a non-empty structure (leftmost wins ties,
+-- like 'bifoldr1' 'min').
+biminimum :: (Bifoldable t, Ord a) => t a a -> a
+biminimum t = case biList t of
+  [] -> error "Data.Bifoldable.biminimum: empty structure"
+  x : xs -> biminimumGo x xs
+
+biminimumGo :: Ord a => a -> [a] -> a
+biminimumGo acc ys = case ys of
+  [] -> acc
+  y : rest -> biminimumGo (min acc y) rest
+
+-- | The sum of the elements of a structure.
+bisum :: (Bifoldable t, Num a) => t a a -> a
+bisum t = getSum (bifoldMap Sum Sum t)
+
+-- | The product of the elements of a structure.
+biproduct :: (Bifoldable t, Num a) => t a a -> a
+biproduct t = getProduct (bifoldMap Product Product t)
+
+-- | Reduce a structure of lists to their concatenation.
+biconcat :: Bifoldable t => t [a] [a] -> [a]
+biconcat t = bifold t
+
+-- | Map both sides to lists and concatenate the results in order.
+biconcatMap :: Bifoldable t => (a -> [c]) -> (b -> [c]) -> t a b -> [c]
+biconcatMap f g t = bifoldMap f g t
+
+-- | The conjunction of a structure of 'Bool's.
+biand :: Bifoldable t => t Bool Bool -> Bool
+biand t = getAll (bifoldMap All All t)
+
+-- | The disjunction of a structure of 'Bool's.
+bior :: Bifoldable t => t Bool Bool -> Bool
+bior t = getAny (bifoldMap Any Any t)
+
+-- | Whether any element satisfies its side's predicate.
+biany :: Bifoldable t => (a -> Bool) -> (b -> Bool) -> t a b -> Bool
+biany p q t = getAny (bifoldMap (\x -> Any (p x)) (\x -> Any (q x)) t)
+
+-- | Whether every element satisfies its side's predicate.
+biall :: Bifoldable t => (a -> Bool) -> (b -> Bool) -> t a b -> Bool
+biall p q t = getAll (bifoldMap (\x -> All (p x)) (\x -> All (q x)) t)
+
+-- | The largest element by the given comparison (rightmost wins ties).
+bimaximumBy :: Bifoldable t => (a -> a -> Ordering) -> t a a -> a
+bimaximumBy cmp t = bifoldr1 max' t
+  where
+    max' x y = case cmp x y of
+      GT -> x
+      _ -> y
+
+-- | The least element by the given comparison (leftmost wins ties).
+biminimumBy :: Bifoldable t => (a -> a -> Ordering) -> t a a -> a
+biminimumBy cmp t = bifoldr1 min' t
+  where
+    min' x y = case cmp x y of
+      GT -> y
+      _ -> x
+
+-- | The negation of 'bielem'.
+binotElem :: (Bifoldable t, Eq a) => a -> t a a -> Bool
+binotElem x t = not (bielem x t)
+
+-- | The leftmost element satisfying the predicate, if any.
+bifind :: Bifoldable t => (a -> Bool) -> t a a -> Maybe a
+bifind p t = getFirst (bifoldMap finder finder t)
+  where
+    finder x = First (case p x of
+      True -> Just x
+      False -> Nothing)
+
+-- Instances live at the bottom of the module, after all functions.
+
+instance Bifoldable Either where
+  bifoldMap f _ (Left a) = f a
+  bifoldMap _ g (Right b) = g b
+
+instance Bifoldable Tuple2 where
+  bifoldMap f g (a, b) = f a <> g b
+
+instance Bifoldable (Tuple3 x) where
+  bifoldMap f g (_, a, b) = f a <> g b
+
+instance Bifoldable (Tuple4 x y) where
+  bifoldMap f g (_, _, a, b) = f a <> g b
+
+instance Bifoldable (Tuple5 x y z) where
+  bifoldMap f g (_, _, _, a, b) = f a <> g b
+
+instance Bifoldable (Tuple6 x y z w) where
+  bifoldMap f g (_, _, _, _, a, b) = f a <> g b
+
+instance Bifoldable (Tuple7 x y z w v) where
+  bifoldMap f g (_, _, _, _, _, a, b) = f a <> g b
+
+instance Bifoldable Const where
+  bifoldMap f _ (Const a) = f a
+
+instance Bifoldable (K1 i) where
+  bifoldMap f _ (K1 c) = f c
+
+instance Bifoldable Arg where
+  bifoldMap f g m = case m of
+    Arg x a -> f x <> g a

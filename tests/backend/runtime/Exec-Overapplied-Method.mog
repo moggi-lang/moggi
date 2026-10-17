@@ -1,0 +1,10 @@
+-- A class method applied past its own arity applies the extra arguments to
+-- the call's result (regression test: the extras used to ride along into the
+-- dictionary call, where the backend silently dropped them, so the
+-- function-typed fold below printed a closure instead of 6).
+import Data.Foldable (foldl)
+
+main :: IO ()
+main = do
+  putStrLn (show (foldl (+) 0 [1, 2, 3]))
+  putStrLn (show (foldl (\k x z -> k (x + z)) id [1, 2, 3] 0))

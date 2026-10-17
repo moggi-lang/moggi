@@ -279,6 +279,15 @@ function warmSharedCache(array $backends): void
             // A backend that cannot emit here is warmed by nothing; its cases pay as they did.
         }
 
+        // The compile above holds the whole elaborated standard-library closure;
+        // release it before the `lib/` build assembles its own, so the two never
+        // sit in memory at once (each is a few hundred megabytes at 1G limits).
+        \Moggi\Modules\ProjectCache::clearCheckedModules();
+        \Moggi\Modules\ProjectCache::clearPreparedProjects();
+        if (\function_exists('gc_collect_cycles')) {
+            gc_collect_cycles();
+        }
+
         // The published `lib/` tree is built once per run under a lock; building it here keeps that
         // one-off cost out of whichever case happened to ask for it first.
         try {

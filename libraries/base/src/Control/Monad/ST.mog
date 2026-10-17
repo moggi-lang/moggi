@@ -1,0 +1,65 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | Strict state threads: a computation that touches mutable cells and
+-- answers a pure value.
+--
+-- An 'ST' action is a description of a sequence of allocations and cell
+-- reads/writes. Building one does nothing; running one performs the
+-- effects in bind order. 'runST' runs a thread and answers its value, and
+-- the compiler rejects any program that would let a cell escape that run:
+-- the thread variable must not appear in the result type, and 'ST' cells
+-- cannot hide in data fields, synonyms or pure signatures. Cells are
+-- provided by "Data.STRef".
+--
+-- The other direction is 'stToIO', which runs a 'RealWorld' thread as an
+-- 'IO' action. There is no embedding of 'IO' inside 'ST'.
+module Control.Monad.ST
+  ( ST
+  , RealWorld
+  , runST
+  , stToIO
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Functor
+import Moggi.Internal.Base
+import Moggi.Internal.ST
+import System.IO.Base (IO)
+
+-- | A state thread: a sequence of cell effects answering a value of type
+-- @a@ in thread @s@. The thread variable keeps the cells of one 'runST'
+-- apart from other threads; it never appears at runtime. A @newtype@
+-- (rather than a synonym) so the instances below can name the partially
+-- applied @(ST s)@; the constructor is the thread description itself.
+newtype ST s a = MkST (ST# s a)
+
+-- | The thread 'stToIO' runs in 'IO'. It is the one concrete thread: 'runST'
+-- refuses it, so an 'IO'-visible cell can never be claimed pure.
+type RealWorld = RealWorld#
+
+unST :: ST s a -> ST# s a
+unST m = case m of
+  MkST x -> x
+
+instance Functor (ST s) where
+  map f m = MkST (stBind# (unST m) (\x -> stPure# (f x)))
+
+instance Applicative (ST s) where
+  pure x = MkST (stPure# x)
+  (<*>) mf mx = MkST (stBind# (unST mf) (\f -> stBind# (unST mx) (\x -> stPure# (f x))))
+
+instance Monad (ST s) where
+  (>>=) m k = MkST (stBind# (unST m) (\x -> unST (k x)))
+
+-- | Run a state thread and answer its value. The argument must be
+-- thread-polymorphic in the sense the compiler checks: with argument type
+-- @ST s a@, @s@ must not occur free in @a@, so no cell of the thread can
+-- leave it. A pure binding whose type mentions 'ST' is rejected for the
+-- same reason.
+runST :: ST s a -> a
+runST m = runST# (unST m)
+
+-- | Run a 'RealWorld' thread as an 'IO' action. The description is shared:
+-- the same thunk runs under 'IO' sequencing instead of pure elimination.
+stToIO :: ST RealWorld a -> IO a
+stToIO m = stToIO# (unST m)

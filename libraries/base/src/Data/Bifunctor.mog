@@ -13,6 +13,7 @@ module Data.Bifunctor
   ) where
 
 import Data.Either
+import Data.Semigroup (Arg(Arg))
 import Data.Tuple
 import Moggi.Internal.Base
 
@@ -45,3 +46,11 @@ instance Bifunctor Tuple2 where
   bimap f g (x, y) = (f x, g y)
   first f (x, y) = (f x, y)
   second g (x, y) = (x, g y)
+
+instance Bifunctor Arg where
+  bimap f g m = case m of
+    Arg x a -> Arg (f x) (g a)
+  first f m = case m of
+    Arg x a -> Arg (f x) a
+  second g m = case m of
+    Arg x a -> Arg x (g a)

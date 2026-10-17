@@ -1,0 +1,36 @@
+module Main (main) where
+
+import Control.Monad.ST (ST, runST, stToIO)
+import Data.STRef
+import System.IO (putStrLn)
+import Text.Show (show)
+
+counter :: Int
+counter = runST (do
+  r <- newSTRef 0
+  modifySTRef r (\x -> x + 1)
+  modifySTRef r (\x -> x * 10)
+  readSTRef r)
+
+-- Two identical descriptions must allocate distinct cells.
+two :: (Int, Int)
+two = runST (do
+  r1 <- newSTRef 5
+  r2 <- newSTRef 5
+  writeSTRef r1 7
+  x <- readSTRef r1
+  y <- readSTRef r2
+  pure (x, y))
+
+ioBridge :: IO Int
+ioBridge = stToIO (do
+  r <- newSTRef 41
+  modifySTRef' r (\x -> x + 1)
+  readSTRef r)
+
+main :: IO ()
+main = do
+  putStrLn (show counter)
+  putStrLn (show two)
+  v <- ioBridge
+  putStrLn (show v)

@@ -5,7 +5,7 @@ import Data.Bool
 -- 'InfixI '<Associativity> (default infixl 9 ⇒ 'LeftAssociative).
 -- FixityI carries no precedence.
 
-data (a :| b) = a :| b deriving (Generic)
+data (a :|| b) = a :|| b deriving (Generic)
 
 infixr 5 :/
 
@@ -17,12 +17,12 @@ id x = x
 type SelInt = S1 (MetaSel Nothing 'NoSourceUnpackedness 'NoSourceStrictness 'DecidedLazy) (Rec0 Int)
 type SelBool = S1 (MetaSel Nothing 'NoSourceUnpackedness 'NoSourceStrictness 'DecidedLazy) (Rec0 Bool)
 type ProdIB = SelInt :*: SelBool
-type ConsLeft = C1 (MetaCons ":|" ('InfixI 'LeftAssociative) 'False) ProdIB
+type ConsLeft = C1 (MetaCons ":||" ('InfixI 'LeftAssociative) 'False) ProdIB
 type ConsRight = C1 (MetaCons ":/" ('InfixI 'RightAssociative) 'False) ProdIB
-type LeftPipeRep x = D1 (MetaData ":|" "Main" "moggi" 'False) ConsLeft x
+type LeftPipeRep x = D1 (MetaData ":||" "Main" "moggi" 'False) ConsLeft x
 type RightPipeRep x = D1 (MetaData ":/" "Main" "moggi" 'False) ConsRight x
 
-checkLeft :: Rep (Int :| Bool) x -> LeftPipeRep x
+checkLeft :: Rep (Int :|| Bool) x -> LeftPipeRep x
 checkLeft = id
 
 checkRight :: Rep (Int :/ Bool) x -> RightPipeRep x

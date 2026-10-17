@@ -5,9 +5,10 @@
 import System.IO
 import Data.Ord
 import Text.Show
+import Data.Time.Calendar (toModifiedJulianDay)
 import Data.Time.Clock
 
 main :: IO ()
 main = do
   t <- getCurrentTime
-  putStrLn (show (dayNumber (utctDay t) > 0))
+  putStrLn (show (toModifiedJulianDay (utctDay t) > 0))
