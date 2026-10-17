@@ -723,6 +723,88 @@ function typesMatchForAmbient(TypeCheckState $state, Type $left, Type $right): b
     return $left::class === $right::class;
 }
 
+/** Whether a constraint head still has a flexible variable: inference has not
+ * pinned it down yet, so evidence decided now could go stale. Rigid variables
+ * (signature skolems) are determined: they never unify away. */
+function constraintHeadHasFlexibleVar(TypeCheckState $state, Type $type): bool
+{
+    $type = prune($state, $type);
+    if ($type instanceof TVar) {
+        return ! isset($state->rigidVars[$type->name]);
+    }
+    if ($type instanceof TArrow) {
+        return constraintHeadHasFlexibleVar($state, $type->from)
+            || constraintHeadHasFlexibleVar($state, $type->to);
+    }
+    if ($type instanceof TCon || $type instanceof TVarApp || $type instanceof TPromoted) {
+        foreach ($type->args as $arg) {
+            if (constraintHeadHasFlexibleVar($state, $arg)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Verify an ambient-projected method reference against the type it is used
+ * at, rewriting it to a concrete instance on mismatch.
+ *
+ * A bare reference is freshened before its arguments are known, so the node
+ * bakes in the ambient dictionary while its type stays open: a use at any
+ * other type (`r < 0` with `r :: Int` under `Ord a => ...`) would silently
+ * keep the ambient dictionary. The recorded {@see Ast\EvidenceMethod::$classObligation}
+ * stays aligned with the method type through freshening, so once the
+ * use-site head is determined this checks it: same ambient dictionary is
+ * confirmed, a concrete instance head is rewritten to the instance flavor
+ * (the call convention -- method-level dictionaries plus values -- is the
+ * same for both), anything still flexible is left for a later pass.
+ */
+function verifyMethodClassObligation(TypeCheckState $state, Ast\EvidenceMethod $node, ?AstNode $at = null): void
+{
+    $obligation = $node->classObligation;
+    if ($obligation === null) {
+        return;
+    }
+    if ($node->evidence === '' || $node->evidenceInstance !== null) {
+        $node->classObligation = null;
+
+        return;
+    }
+    if (! isset($state->classes[$obligation->class])) {
+        return;
+    }
+    $args = [];
+    foreach ($obligation->args as $arg) {
+        $pruned = prune($state, $arg);
+        if (constraintHeadHasFlexibleVar($state, $pruned)) {
+            return;
+        }
+        $args[] = $pruned;
+    }
+    $resolved = tryResolveEvidenceExprs(
+        $state,
+        [new Ast\PendingConstraint($obligation->class, $args, '', false, null)],
+        $at ?? $node,
+    );
+    if ($resolved === null) {
+        return;
+    }
+    $evidence = $resolved[0];
+    if ($evidence instanceof Ast\Variable && $evidence->name === $node->evidence) {
+        $node->classObligation = null;
+
+        return;
+    }
+    if ($evidence instanceof Ast\EvidenceRef) {
+        $node->evidence = '';
+        $node->evidenceInstance = $evidence->head;
+        $node->contextEvidence = $evidence->context;
+        $node->classObligation = null;
+    }
+}
+
 /**
  * The resolved instance head of one constraint, and the ambient dictionary that
  * would satisfy it if the enclosing scope already has one.

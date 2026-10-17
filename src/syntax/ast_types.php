@@ -1251,6 +1251,7 @@ final class EvidenceMethod extends AstNode
         int $endCol = 0,
         public ?string $role = null,
         public ?int $methodArity = null,
+        public ?PendingConstraint $classObligation = null,
     ) {
         parent::__construct($line, $col, $endCol);
     }

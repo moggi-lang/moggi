@@ -2506,6 +2506,171 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             $env->m->emit('call class Moggi.Rt.ST Moggi.Rt.RT::StWriteRef(class Moggi.Rt.STRef, object)');
 
             return;
+        case 'arrayNew#':
+            emitOperand($env, $args[0]);
+            emitOperand($env, $args[1]);
+            $env->m->emit('call class Moggi.Rt.ArrArray Moggi.Rt.RT::ArrayNew(object, object)');
+
+            return;
+        case 'arraySize#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.ArrArray');
+            $env->m->emit('call object Moggi.Rt.RT::ArraySize(class Moggi.Rt.ArrArray)');
+
+            return;
+        case 'arrayBounds#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.ArrArray');
+            $env->m->emit('call object Moggi.Rt.RT::ArrayBounds(class Moggi.Rt.ArrArray)');
+
+            return;
+        case 'arrayRead#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.ArrArray');
+            emitOperand($env, $args[1]);
+            $env->m->emit('call object Moggi.Rt.RT::ArrayRead(class Moggi.Rt.ArrArray, object)');
+
+            return;
+        case 'newSTArray#':
+            emitOperand($env, $args[0]);
+            emitOperand($env, $args[1]);
+            $env->m->emit('call class Moggi.Rt.ST Moggi.Rt.RT::StNewArray(object, object)');
+
+            return;
+        case 'readSTArray#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.ArrSTArray');
+            emitOperand($env, $args[1]);
+            $env->m->emit('call class Moggi.Rt.ST Moggi.Rt.RT::StReadArray(class Moggi.Rt.ArrSTArray, object)');
+
+            return;
+        case 'writeSTArray#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.ArrSTArray');
+            emitOperand($env, $args[1]);
+            emitOperand($env, $args[2]);
+            $env->m->emit('call class Moggi.Rt.ST Moggi.Rt.RT::StWriteArray(class Moggi.Rt.ArrSTArray, object, object)');
+
+            return;
+        case 'sizeSTArray#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.ArrSTArray');
+            $env->m->emit('call object Moggi.Rt.RT::StSizeArray(class Moggi.Rt.ArrSTArray)');
+
+            return;
+        case 'boundsSTArray#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.ArrSTArray');
+            $env->m->emit('call object Moggi.Rt.RT::StBoundsArray(class Moggi.Rt.ArrSTArray)');
+
+            return;
+        case 'sameSTArray#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.ArrSTArray');
+            emitOperand($env, $args[1]);
+            $env->m->emit('castclass Moggi.Rt.ArrSTArray');
+            $env->m->emit('ceq');
+            $env->m->emit('box bool');
+
+            return;
+        case 'freezeSTArray#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.ArrSTArray');
+            $env->m->emit('ldc.i4.1');
+            $env->m->emit('call class Moggi.Rt.ST Moggi.Rt.RT::StFreezeArray(class Moggi.Rt.ArrSTArray, bool)');
+
+            return;
+        case 'thawArray#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.ArrArray');
+            $env->m->emit('ldc.i4.1');
+            $env->m->emit('call class Moggi.Rt.ST Moggi.Rt.RT::StThawArray(class Moggi.Rt.ArrArray, bool)');
+
+            return;
+        case 'unsafeFreezeSTArray#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.ArrSTArray');
+            $env->m->emit('ldc.i4.0');
+            $env->m->emit('call class Moggi.Rt.ST Moggi.Rt.RT::StFreezeArray(class Moggi.Rt.ArrSTArray, bool)');
+
+            return;
+        case 'unsafeThawArray#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.ArrArray');
+            $env->m->emit('ldc.i4.0');
+            $env->m->emit('call class Moggi.Rt.ST Moggi.Rt.RT::StThawArray(class Moggi.Rt.ArrArray, bool)');
+
+            return;
+        case 'newIOArray#':
+            emitOperand($env, $args[0]);
+            emitOperand($env, $args[1]);
+            $env->m->emit('call class Moggi.Rt.ArrIOArray Moggi.Rt.RT::IoNewArray(object, object)');
+
+            return;
+        case 'readIOArray#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.ArrIOArray');
+            emitOperand($env, $args[1]);
+            $env->m->emit('call object Moggi.Rt.RT::IoReadArray(class Moggi.Rt.ArrIOArray, object)');
+
+            return;
+        case 'writeIOArray#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.ArrIOArray');
+            emitOperand($env, $args[1]);
+            emitOperand($env, $args[2]);
+            $env->m->emit('call object Moggi.Rt.RT::IoWriteArray(class Moggi.Rt.ArrIOArray, object, object)');
+
+            return;
+        case 'sizeIOArray#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.ArrIOArray');
+            $env->m->emit('call object Moggi.Rt.RT::IoSizeArray(class Moggi.Rt.ArrIOArray)');
+
+            return;
+        case 'boundsIOArray#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.ArrIOArray');
+            $env->m->emit('call object Moggi.Rt.RT::IoBoundsArray(class Moggi.Rt.ArrIOArray)');
+
+            return;
+        case 'sameIOArray#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.ArrIOArray');
+            emitOperand($env, $args[1]);
+            $env->m->emit('castclass Moggi.Rt.ArrIOArray');
+            $env->m->emit('ceq');
+            $env->m->emit('box bool');
+
+            return;
+        case 'freezeIOArray#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.ArrIOArray');
+            $env->m->emit('ldc.i4.1');
+            $env->m->emit('call class Moggi.Rt.ArrArray Moggi.Rt.RT::IoFreezeArray(class Moggi.Rt.ArrIOArray, bool)');
+
+            return;
+        case 'thawIOArray#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.ArrArray');
+            $env->m->emit('ldc.i4.1');
+            $env->m->emit('call class Moggi.Rt.ArrIOArray Moggi.Rt.RT::IoThawArray(class Moggi.Rt.ArrArray, bool)');
+
+            return;
+        case 'unsafeFreezeIOArray#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.ArrIOArray');
+            $env->m->emit('ldc.i4.0');
+            $env->m->emit('call class Moggi.Rt.ArrArray Moggi.Rt.RT::IoFreezeArray(class Moggi.Rt.ArrIOArray, bool)');
+
+            return;
+        case 'unsafeThawIOArray#':
+            emitOperand($env, $args[0]);
+            $env->m->emit('castclass Moggi.Rt.ArrArray');
+            $env->m->emit('ldc.i4.0');
+            $env->m->emit('call class Moggi.Rt.ArrIOArray Moggi.Rt.RT::IoThawArray(class Moggi.Rt.ArrArray, bool)');
+
+            return;
         case 'charToInt#':
         case 'intToChar#':
         case 'word8ToInt#':

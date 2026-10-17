@@ -5,21 +5,16 @@ namespace Moggi\Semantics\Kernel;
 /**
  * What the language mandates, stated once.
  *
- * The library owns names: types, constructors, classes and their methods. The compiler owns the machine:
- * its stages, its IR, the hosts it emits. Between the two sit the few facts the language itself needs
- * *before* a library is in scope — the two-valued type the machine represents as the host boolean, what
- * a class method is *for*, and which of the library's types the foreign boundary converts — and this
- * file is the compiler's single statement of each: one key per fact, so no stage spells a library name
- * to ask which constructor is true, which method is the bind, which method converts a literal, or which
- * type crosses the boundary.
+ * The library owns names (types, constructors, classes and methods); the compiler owns stages, IR
+ * and target hosts. This file bridges them with facts needed before a library is in scope: the
+ * two-valued type represented as a host boolean, foreign-boundary types, and facts not otherwise
+ * declared. Each fact has one key, so compiler stages never hardcode library names.
  *
- * A fact no declaration states has to be a key here, and most of them are: a `foreign <backend> type`
- * names a *host* type the library does not declare, so it cannot describe a type that already has a
- * `data` declaration, and nothing in the library says a type is the boundary's. Where a declaration
- * does state the fact, this file reads it instead: a role is implied by the method's own signature —
- * the bind is the method `m a -> (a -> m b) -> m b`, the unit is `a -> f a` — so `Types\impliedRoles`
- * reads the role off each method it registers, the class table carries it, and a reader asks for the
- * role and is told the method the declaration already stated by its type.
+ * Undeclared facts must be keys here. A `foreign <backend> type` names a host type, not a type
+ * declared by the library, and cannot identify boundary types on its own. Where declarations
+ * suffice, this file reads them instead: `Types\impliedRoles` derives method roles from signatures
+ * (bind: `m a -> (a -> m b) -> m b`; unit: `a -> f a`), the class table carries those roles, and
+ * readers resolve them to the methods already specified by their types.
  */
 
 /** The declared type the boolean key is about. */

@@ -20,7 +20,10 @@ function dump(IR\IrNode $node, int $indent = 0): string
             . (\count($node->params) > 0 ? ' ' . \implode(' ', $node->params) : '') . "\n"
             . \implode('', \array_map(
                 static fn ($ctor): string => $pad . '  constructor ' . $ctor->name
-                    . (\count($ctor->fields) > 0 ? ' ' . \implode(' ', $ctor->fields) : '') . "\n",
+                    . (\count($fields = \array_values(\array_filter(
+                        $ctor->fields,
+                        static fn ($field): bool => $field !== '',
+                    ))) > 0 ? ' ' . \implode(' ', $fields) : '') . "\n",
                 $node->constructors,
             )),
         IR\FunctionDecl::class => $pad . 'function ' . $node->name

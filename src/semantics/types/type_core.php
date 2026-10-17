@@ -172,6 +172,35 @@ function freshType(TypeCheckState $state): Type
     return new TVar('t' . ($state->fresh++));
 }
 
+/**
+ * A fresh rigid (skolem) variable for one variable of a declared signature.
+ *
+ * The name carries the source spelling (`a$sk3`) so diagnostics can show what
+ * the programmer wrote, but the `$sk<N>` suffix — unspellable in Moggi source
+ * — keeps every skolem distinct from flexible variables and from the skolems
+ * of any other declaration or scope. A skolem unifies only with itself; see
+ * {@see unify} and {@see \Moggi\Semantics\Types\skolemizeSignatureVars}.
+ */
+function freshSkolem(TypeCheckState $state, string $base): TVar
+{
+    return new TVar($base . '$sk' . ($state->fresh++));
+}
+
+/**
+ * The source-level spelling of a type variable name: a skolem `a$sk3` shows
+ * as `a`, everything else shows unchanged. Display only — the full name
+ * stays the variable's identity everywhere it matters.
+ */
+function skolemTypeVarBase(string $name): string
+{
+    $base = \preg_replace('/\$sk\d+$/', '', $name);
+    if (! \is_string($base) || $base === '') {
+        return $name;
+    }
+
+    return $base;
+}
+
 /** @return array{type: Type, constraints: list<Ast\PendingConstraint>, dicts: list<Ast\PendingConstraint>} */
 
 function instantiateScheme(TypeCheckState $state, Scheme $scheme): array
@@ -342,6 +371,34 @@ function freshenTypeWithConstraints(TypeCheckState $state, Type $type, array $co
 }
 
 /**
+ * The same variable mapping applied to pending constraints alone: same
+ * classes, evidence names and flags, new argument types. Used to skolemize a
+ * signature's constraints in step with its type.
+ *
+ * @param list<Ast\PendingConstraint> $constraints
+ * @param array<string, Type> $mapping
+ * @return list<Ast\PendingConstraint>
+ */
+function substitutePendingConstraints(array $constraints, array $mapping): array
+{
+    $substituted = [];
+    foreach ($constraints as $constraint) {
+        $substituted[] = new Ast\PendingConstraint(
+            $constraint->class,
+            \array_map(
+                static fn (Type $arg): Type => substitute($arg, $mapping),
+                $constraint->args,
+            ),
+            $constraint->evidence,
+            $constraint->implicit,
+            $constraint->instanceHeadAst,
+        );
+    }
+
+    return $substituted;
+}
+
+/**
  * Like freshenTypeWithConstraints, but leave `$keep` variables unchanged so
  * instance-head vars stay aligned with ambient instance-context constraints.
  *
@@ -435,18 +492,14 @@ function applyArgsToHead(Type $head, array $args): Type
 }
 
 /**
- * Substitute a class method's declared type, and its method-local constraints,
- * with a class-parameter mapping.
+ * Substitute class parameters in a method type and its local constraints.
  *
- * The mapping sends each of the class's parameters to the type the constraint
- * was written at, and those types come from the enclosing scope. A mapped type
- * that reuses a name from the method type would therefore capture it: mapping
- * `Foldable t` to the argument `a` must not turn `t a -> Bool` into `a a ->
- * Bool`. Every variable of the method type other than the class parameters is
- * freshened first, so the mapping can only reach the parameters themselves.
+ * Freshen non-class variables first to prevent mapped types from capturing
+ * method-local variables (e.g. mapping `t` to `a` must not change `t a`
+ * into `a a`).
  *
- * @param list<Ast\PendingConstraint> $constraints method-local constraints, freshened with the type
- * @param list<array{name: string}> $params the class's parameters
+ * @param list<Ast\PendingConstraint> $constraints
+ * @param list<array{name: string}> $params
  * @param array<string, Type> $mapping
  * @return array{type: Type, constraints: list<Ast\PendingConstraint>}
  */
@@ -582,11 +635,23 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
             if ($left->name === $right->name) {
                 return;
             }
+            $leftRigid = isset($state->rigidVars[$left->name]);
+            $rightRigid = isset($state->rigidVars[$right->name]);
+            if ($leftRigid && $rightRigid) {
+                throw typeFail($state, formatUnifyError($state, $left, $right), $at, 'unify');
+            }
+            if ($leftRigid) {
+                unify($state, $right, $left, $at);
+
+                return;
+            }
             if (isset($state->restrictedVars[$left->name]) && ! isset($state->restrictedVars[$right->name])) {
                 unify($state, $right, $left, $at);
 
                 return;
             }
+        } elseif (isset($state->rigidVars[$left->name])) {
+            throw typeFail($state, formatUnifyError($state, $left, $right), $at, 'unify');
         }
         occurs($state, $left->name, $right, $at);
         $state->subst[$left->name] = $right;
@@ -782,7 +847,7 @@ function friendlyTypeVarNames(array $types): array
     $collect = function (Type $type) use (&$collect, &$userVars, &$freshOrder): void {
         if ($type instanceof TVar) {
             if (\preg_match('/^t\d+$/', $type->name) !== 1) {
-                $userVars[$type->name] = true;
+                $userVars[skolemTypeVarBase($type->name)] = true;
             } elseif (! \in_array($type->name, $freshOrder, true)) {
                 $freshOrder[] = $type->name;
             }
@@ -792,7 +857,7 @@ function friendlyTypeVarNames(array $types): array
 
         if ($type instanceof TVarApp) {
             if (\preg_match('/^t\d+$/', $type->name) !== 1) {
-                $userVars[$type->name] = true;
+                $userVars[skolemTypeVarBase($type->name)] = true;
             } elseif (! \in_array($type->name, $freshOrder, true)) {
                 $freshOrder[] = $type->name;
             }
@@ -1089,7 +1154,7 @@ function occurs(TypeCheckState $state, string $var, Type $type, ?Ast\AstNode $at
 
     if (($type instanceof TVar || $type instanceof TVarApp) && $type->name === $var) {
         $rename = friendlyTypeVarNames([$type]);
-        $shown = $rename[$var] ?? $var;
+        $shown = $rename[$var] ?? skolemTypeVarBase($var);
 
         throw typeFail($state, "infinite type: `{$shown}` occurs in itself", $at);
     }
@@ -1145,8 +1210,11 @@ function primitiveTypeRepresentation(string $magicHashId): ?Type
         'Natural#' => primitiveTypeCon('Natural#'),
         'List#' => primitiveTypeCon('List#'),
         'IO#' => primitiveTypeCon('IO#'),
+        'IOArray#' => primitiveTypeCon('IOArray#'),
         'ST#' => primitiveTypeCon('ST#'),
         'STRef#' => primitiveTypeCon('STRef#'),
+        'STArray#' => primitiveTypeCon('STArray#'),
+        'Array#' => primitiveTypeCon('Array#'),
         'RealWorld#' => primitiveTypeCon('RealWorld#'),
         'SomeException#' => primitiveTypeCon('SomeException#'),
         default => null,
@@ -1160,14 +1228,11 @@ function primitiveTypeCon(string $magicHashId): TCon
 }
 
 /**
- * The representation *any* spelling of a kernel type names: the id the kernel
- * declares (`Int#`) or the name the library gives it (`Int`, `ByteString`,
- * `List`).
+ * Resolve a kernel type's declared id (`Int#`) or canonical name (`Int`,
+ * `ByteString`, `List`) to its representation.
  *
- * The aliases are not a table of their own: each declared id is read back through
- * {@see Kinds\canonicalTypeConName}, so what a program writes is only ever a
- * *value* of the one mapping that says what an id is called. A name neither the
- * kernel declares nor canonically names has no representation.
+ * Names are derived via {@see Kinds\canonicalTypeConName}; unknown names
+ * have no representation.
  */
 function primitiveTypeRepresentationOf(string $name): ?Type
 {
@@ -1177,13 +1242,11 @@ function primitiveTypeRepresentationOf(string $name): ?Type
 }
 
 /**
- * The kernel id a type name is: the id itself when it is written that way, or
- * the one whose canonical name it is (`Int` → `Int#`, `ByteString` → `Bytes#`).
+ * Resolve a canonical type name (`Int`, `ByteString`) or kernel id (`Int#`)
+ * to its declared id.
  *
- * The direction the canonical-name table does not answer by itself, built from
- * the ids the kernel declares — so a caller that has only the spelling a
- * signature wrote (a backend lowering a foreign type) reaches the declaration by
- * id rather than by keeping a table of Moggi names.
+ * The reverse lookup is built from declared kernel ids, avoiding a separate
+ * table of Moggi names.
  */
 function primitiveTypeIdOf(string $name): ?string
 {
@@ -1329,8 +1392,8 @@ function typeToString(Type $type, array $rename = []): string
         TBytes::class => 'ByteString',
         TDouble::class => 'Double',
         TUnit::class => '()',
-        TVar::class => $rename[$type->name] ?? $type->name,
-        TVarApp::class => ($rename[$type->name] ?? $type->name)
+        TVar::class => $rename[$type->name] ?? skolemTypeVarBase($type->name),
+        TVarApp::class => ($rename[$type->name] ?? skolemTypeVarBase($type->name))
             . ' ' . \implode(' ', \array_map(
                 static fn (Type $arg): string => typeToStringArgument($arg, $rename),
                 $type->args,
@@ -1364,21 +1427,12 @@ function typeToString(Type $type, array $rename = []): string
 /**
  * Process-wide hash-cons table for elaborated type-syntax nodes.
  *
- * Every inferred type in every checked module flows through
- * `internalTypeToAst()`, which used to mint a fresh object per node — tens of
- * thousands of value-identical `Int`s, `a`s and `Maybe a`s per module, each
- * kept alive by the checked program and each serialized into the disk cache.
- * One 18MB `Data.Tuple` blob held 60k duplicate instances of 7k shapes, and
- * holding the whole standard-library closure blew the 1G limit (see the
- * `warmSharedCache` OOM). Interning collapses equal shapes onto one instance:
- * the table costs one entry per distinct shape while the duplicates vanish
- * from memory and from the cache.
+ * `internalTypeToAst()` previously created duplicate objects for identical
+ * types, inflating checked-program memory and disk caches. Interning shares
+ * one instance per distinct shape, reducing both.
  *
- * This is sound because elaborated nodes are never mutated: all post-check
- * writes (`inferredType`, `pendingConstraints`, `doc`) land on expression and
- * declaration nodes, never on the type-syntax nodes themselves, and every node
- * minted here carries the default zero location. Callers that need a distinct
- * identity must clone after the call.
+ * Safe because type-syntax nodes are immutable after elaboration and carry
+ * zero locations. Callers needing distinct identity must clone the result.
  *
  * @var array<string, Ast\TypeNode>
  */

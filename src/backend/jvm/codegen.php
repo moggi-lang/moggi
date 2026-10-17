@@ -2137,6 +2137,265 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             );
 
             return;
+        case 'arrayNew#':
+            emitOperand($env, $args[0]);
+            emitOperand($env, $args[1]);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'arrayNew', '(Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/ArrArray;'),
+                2,
+                true,
+            );
+
+            return;
+        case 'arraySize#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/ArrArray'));
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'arraySize', '(Lmoggi/rt/ArrArray;)Ljava/lang/Long;'),
+                1,
+                true,
+            );
+
+            return;
+        case 'arrayBounds#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/ArrArray'));
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'arrayBounds', '(Lmoggi/rt/ArrArray;)Ljava/lang/Object;'),
+                1,
+                true,
+            );
+
+            return;
+        case 'arrayRead#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/ArrArray'));
+            emitOperand($env, $args[1]);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'arrayRead', '(Lmoggi/rt/ArrArray;Ljava/lang/Object;)Ljava/lang/Object;'),
+                2,
+                true,
+            );
+
+            return;
+        case 'newSTArray#':
+            emitOperand($env, $args[0]);
+            emitOperand($env, $args[1]);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'stNewArray', '(Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/ST;'),
+                2,
+                true,
+            );
+
+            return;
+        case 'readSTArray#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/ArrSTArray'));
+            emitOperand($env, $args[1]);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'stReadArray', '(Lmoggi/rt/ArrSTArray;Ljava/lang/Object;)Lmoggi/rt/ST;'),
+                2,
+                true,
+            );
+
+            return;
+        case 'writeSTArray#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/ArrSTArray'));
+            emitOperand($env, $args[1]);
+            emitOperand($env, $args[2]);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'stWriteArray', '(Lmoggi/rt/ArrSTArray;Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/ST;'),
+                3,
+                true,
+            );
+
+            return;
+        case 'sizeSTArray#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/ArrSTArray'));
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'stSizeArray', '(Lmoggi/rt/ArrSTArray;)Ljava/lang/Long;'),
+                1,
+                true,
+            );
+
+            return;
+        case 'boundsSTArray#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/ArrSTArray'));
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'stBoundsArray', '(Lmoggi/rt/ArrSTArray;)Ljava/lang/Object;'),
+                1,
+                true,
+            );
+
+            return;
+        case 'sameSTArray#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/ArrSTArray'));
+            emitOperand($env, $args[1]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/ArrSTArray'));
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'sameRef', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Boolean;'),
+                2,
+                true,
+            );
+
+            return;
+        case 'freezeSTArray#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/ArrSTArray'));
+            $env->c->iconst(1);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'stFreezeArray', '(Lmoggi/rt/ArrSTArray;Z)Lmoggi/rt/ST;'),
+                2,
+                true,
+            );
+
+            return;
+        case 'thawArray#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/ArrArray'));
+            $env->c->iconst(1);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'stThawArray', '(Lmoggi/rt/ArrArray;Z)Lmoggi/rt/ST;'),
+                2,
+                true,
+            );
+
+            return;
+        case 'unsafeFreezeSTArray#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/ArrSTArray'));
+            $env->c->iconst(0);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'stFreezeArray', '(Lmoggi/rt/ArrSTArray;Z)Lmoggi/rt/ST;'),
+                2,
+                true,
+            );
+
+            return;
+        case 'unsafeThawArray#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/ArrArray'));
+            $env->c->iconst(0);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'stThawArray', '(Lmoggi/rt/ArrArray;Z)Lmoggi/rt/ST;'),
+                2,
+                true,
+            );
+
+            return;
+        case 'newIOArray#':
+            emitOperand($env, $args[0]);
+            emitOperand($env, $args[1]);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'ioNewArray', '(Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/ArrIOArray;'),
+                2,
+                true,
+            );
+
+            return;
+        case 'readIOArray#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/ArrIOArray'));
+            emitOperand($env, $args[1]);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'ioReadArray', '(Lmoggi/rt/ArrIOArray;Ljava/lang/Object;)Ljava/lang/Object;'),
+                2,
+                true,
+            );
+
+            return;
+        case 'writeIOArray#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/ArrIOArray'));
+            emitOperand($env, $args[1]);
+            emitOperand($env, $args[2]);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'ioWriteArray', '(Lmoggi/rt/ArrIOArray;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;'),
+                3,
+                true,
+            );
+
+            return;
+        case 'sizeIOArray#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/ArrIOArray'));
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'ioSizeArray', '(Lmoggi/rt/ArrIOArray;)Ljava/lang/Long;'),
+                1,
+                true,
+            );
+
+            return;
+        case 'boundsIOArray#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/ArrIOArray'));
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'ioBoundsArray', '(Lmoggi/rt/ArrIOArray;)Ljava/lang/Object;'),
+                1,
+                true,
+            );
+
+            return;
+        case 'sameIOArray#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/ArrIOArray'));
+            emitOperand($env, $args[1]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/ArrIOArray'));
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'sameRef', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Boolean;'),
+                2,
+                true,
+            );
+
+            return;
+        case 'freezeIOArray#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/ArrIOArray'));
+            $env->c->iconst(1);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'ioFreezeArray', '(Lmoggi/rt/ArrIOArray;Z)Lmoggi/rt/ArrArray;'),
+                2,
+                true,
+            );
+
+            return;
+        case 'thawIOArray#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/ArrArray'));
+            $env->c->iconst(1);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'ioThawArray', '(Lmoggi/rt/ArrArray;Z)Lmoggi/rt/ArrIOArray;'),
+                2,
+                true,
+            );
+
+            return;
+        case 'unsafeFreezeIOArray#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/ArrIOArray'));
+            $env->c->iconst(0);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'ioFreezeArray', '(Lmoggi/rt/ArrIOArray;Z)Lmoggi/rt/ArrArray;'),
+                2,
+                true,
+            );
+
+            return;
+        case 'unsafeThawIOArray#':
+            emitOperand($env, $args[0]);
+            $env->c->checkcast($env->cp->class_('moggi/rt/ArrArray'));
+            $env->c->iconst(0);
+            $env->c->invokestatic(
+                $env->cp->methodRef('moggi/rt/RT', 'ioThawArray', '(Lmoggi/rt/ArrArray;Z)Lmoggi/rt/ArrIOArray;'),
+                2,
+                true,
+            );
+
+            return;
         case 'charToInt#':
         case 'intToChar#':
         case 'word8ToInt#':

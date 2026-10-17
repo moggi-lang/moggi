@@ -94,8 +94,11 @@ function registerData(TypeCheckState $state, Ast\DataDecl $decl): void
 
     if (isMagicHashName($decl->name)
         || $decl->name === Kinds\canonicalTypeConName('IO#')
+        || $decl->name === Kinds\canonicalTypeConName('IOArray#')
         || $decl->name === Kinds\canonicalTypeConName('ST#')
         || $decl->name === Kinds\canonicalTypeConName('STRef#')
+        || $decl->name === Kinds\canonicalTypeConName('STArray#')
+        || $decl->name === Kinds\canonicalTypeConName('Array#')
         || $decl->name === Kinds\canonicalTypeConName('RealWorld#')
     ) {
         if (! \Moggi\Semantics\StBoundary\isTransparentPrimopWrapper($decl)) {
@@ -907,11 +910,21 @@ function registerFunctionScheme(TypeCheckState $state, Ast\FunctionDecl $fn): vo
     }
 
     $state->subst = [];
-    [$constraintAsts, $bodyTypeAst] = splitTypeAst($fn->type);
-    $userConstraints = parseConstraints($state, $constraintAsts, $fn);
-    $constraints = expandConstraintsWithSuperclasses($state, $userConstraints);
-    applyConstraintVarKinds($state, $constraints);
-    $userFnType = astType($state, $bodyTypeAst);
+    // Kind state is name-keyed, so solving one signature must not leak its
+    // variables' kinds into the next: a signature reusing a name (like `a`
+    // for a higher-kinded class parameter) would otherwise corrupt whatever a
+    // later signature instantiates under that name.
+    $kindScope = Kinds\pushKindScope($state);
+
+    try {
+        [$constraintAsts, $bodyTypeAst] = splitTypeAst($fn->type);
+        $userConstraints = parseConstraints($state, $constraintAsts, $fn);
+        $constraints = expandConstraintsWithSuperclasses($state, $userConstraints);
+        applyConstraintVarKinds($state, $constraints);
+        $userFnType = astType($state, $bodyTypeAst);
+    } finally {
+        Kinds\restoreKindScope($state, $kindScope);
+    }
     $fnType = $userFnType;
     foreach (\array_reverse($userConstraints) as $constraint) {
         $fnType = new TArrow(new TCon('__Dict_' . $constraint->class), $fnType);

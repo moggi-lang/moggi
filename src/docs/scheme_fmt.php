@@ -8,6 +8,7 @@ use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\Type;
 
 use function Moggi\Semantics\Types\friendlyTypeVarNames;
+use function Moggi\Semantics\Types\skolemTypeVarBase;
 
 use function Moggi\Semantics\Types\internalTypeToAst;
 
@@ -152,7 +153,7 @@ function friendlyAstTypeVarNames(array $types): array
     $collect = function (Ast\TypeNode $type) use (&$collect, &$userVars, &$freshOrder): void {
         if ($type instanceof Ast\TypeVar) {
             if (\preg_match('/^t\d+$/', $type->name) !== 1) {
-                $userVars[$type->name] = true;
+                $userVars[skolemTypeVarBase($type->name)] = true;
             } elseif (! \in_array($type->name, $freshOrder, true)) {
                 $freshOrder[] = $type->name;
             }
@@ -214,7 +215,7 @@ function astTypeVarLetter(int $index): string
 function dumpAstTypeForDocs(Ast\TypeNode $node, array $rename = []): string
 {
     return match ($node::class) {
-        Ast\TypeVar::class => $rename[$node->name] ?? $node->name,
+        Ast\TypeVar::class => $rename[$node->name] ?? skolemTypeVarBase($node->name),
         Ast\TypeUnit::class => '()',
         Ast\TypeCon::class => $node->name,
         Ast\TypePromoted::class => "'" . $node->name,

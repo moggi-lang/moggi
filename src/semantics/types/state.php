@@ -308,6 +308,37 @@ final class TypeCheckState
      */
     public array $restrictedVars = [];
 
+    /**
+     * Rigid (skolem) type variables: the fresh skolems a declared signature's
+     * variables become while the body they quantify is checked. A rigid
+     * variable unifies only with itself; it never takes a substitution, so a
+     * body cannot pin a signature variable to a concrete type or merge two
+     * of them. A flexible variable may still be bound *to* a rigid one (that
+     * is how parameters take their types). Installed per declaration around
+     * body checking and restored after; each skolem's name carries its
+     * source spelling for diagnostics (see `skolemTypeVarBase`).
+     *
+     * @var array<string, true>
+     */
+    public array $rigidVars = [];
+
+    /**
+     * Source spelling → skolem name for the signature variables a body is
+     * checked against. Type variables are global by spelling: a nested
+     * annotation writing the same name means the same variable, and evidence
+     * lookup matches it by pruned name. Renaming only the declaration's own
+     * signature would sever that sharing (a nested `Num a` would no longer
+     * meet the outer `Num a$sk`), so while the scope is installed every
+     * spelling parsed from annotations resolves to the one skolem — the
+     * sharing stays exactly as without skolems, only rigid. A nested
+     * declaration with its own signature overwrites the entries it binds
+     * (lexical shadowing) and restores them after. Installed per declaration
+     * around body checking and restored after, together with {@see $rigidVars}.
+     *
+     * @var array<string, string>
+     */
+    public array $skolemScope = [];
+
     /** @var array<string, Type> how a use site solved a restricted variable */
     public array $restrictedSolutions = [];
 

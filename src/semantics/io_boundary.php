@@ -78,11 +78,49 @@ function validateFunction(Ast\FunctionDecl $fn, string $source, string $filename
 
 function validateData(Ast\DataDecl $item, string $source, string $filename): void
 {
+    if (isTransparentPrimopWrapper($item)) {
+        return;
+    }
+
     foreach ($item->constructors as $ctor) {
         foreach ($ctor->fields as $field) {
             validateTypeNoIo($field->type, $field->type, $source, $filename);
         }
     }
+}
+
+/**
+ * A newtype that *is* its primop's public spelling (`newtype IOArray i e =
+ * MkIOArray (IOArray# i e)`): a single constructor with a single field whose
+ * head is the primop the declaration canonically names. Transparent rather
+ * than hiding — confinement applies at use sites through the name itself —
+ * so it is exempt. Anything else stays rejected: that would smuggle IO
+ * state behind an innocent name.
+ */
+function isTransparentPrimopWrapper(Ast\DataDecl $item): bool
+{
+    if (\count($item->constructors) !== 1) {
+        return false;
+    }
+
+    $fields = $item->constructors[0]->fields;
+    if (\count($fields) !== 1) {
+        return false;
+    }
+
+    $head = transparentWrapperHead($fields[0]->type);
+
+    return $head !== null && canonicalTypeConName($head) === $item->name;
+}
+
+/** The head constructor of a wrapper field type (`IOArray#` for `IOArray# i e`). */
+function transparentWrapperHead(Ast\TypeNode $type): ?string
+{
+    while ($type instanceof Ast\TypeApp && $type->con instanceof Ast\TypeNode) {
+        $type = $type->con;
+    }
+
+    return $type instanceof Ast\TypeCon ? $type->name : null;
 }
 
 function validateFunctionTypeIoSurface(Ast\TypeNode $type, string $source, string $filename): void
@@ -179,6 +217,17 @@ function isIoTypeConName(string $name): bool
     return $name === 'IO#' || $name === canonicalTypeConName('IO#');
 }
 
+/**
+ * The mutable IO array type constructor: the kernel id `IOArray#`, or the
+ * name the array library publishes it under. An `IOArray` value is IO state
+ * like an `IO` action itself: `ST` functions cannot take one, and neither
+ * `ST` nor pure results may mention it.
+ */
+function isIoArrayTypeConName(string $name): bool
+{
+    return $name === 'IOArray#' || $name === canonicalTypeConName('IOArray#');
+}
+
 function isIoType(Ast\TypeNode $type): bool
 {
     return $type instanceof Ast\TypeApp
@@ -206,7 +255,8 @@ function isNestedIoType(Ast\TypeNode $type): bool
 
 function typeMentionsIo(Ast\TypeNode $type): bool
 {
-    return ($type instanceof Ast\TypeCon && isIoTypeConName($type->name))
+    return ($type instanceof Ast\TypeCon
+            && (isIoTypeConName($type->name) || isIoArrayTypeConName($type->name)))
         || ($type instanceof Ast\TypeApp
             && (typeMentionsIo($type->con)
                 || \array_any($type->args, static fn (Ast\TypeNode $arg): bool => typeMentionsIo($arg))))
@@ -282,6 +332,14 @@ function validateIoIntrinsic(Ast\IntrinsicCall $expr, string $source, string $fi
         }
         validateIoActionArgs($expr->args[0], $source, $filename);
         validateIoBindContinuation($expr->args[1], $source, $filename);
+
+        return;
+    }
+
+    if ($role === 'io-action') {
+        foreach ($expr->args as $arg) {
+            validatePureExpr($arg, $source, $filename);
+        }
 
         return;
     }

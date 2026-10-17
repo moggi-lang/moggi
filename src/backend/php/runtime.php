@@ -226,6 +226,221 @@ function stWriteRef(StRef $r, mixed $x): array
 }
 
 /**
+ * Marker for an array slot that has never been written. A single shared
+ * instance initializes fresh arrays; reads detect it and raise an error
+ * rather than exposing the marker as a value.
+ */
+final class ArrHole
+{
+    private static ?ArrHole $hole = null;
+
+    public static function hole(): ArrHole
+    {
+        return self::$hole ??= new ArrHole();
+    }
+}
+
+/** An immutable boxed array: bounds, element count, and the slots. */
+final class ArrArray
+{
+    public function __construct(
+        public readonly array $bounds,
+        public readonly int $n,
+        public \SplFixedArray $elems,
+    ) {
+    }
+}
+
+/** A mutable boxed array living in one state thread. */
+final class ArrSTArray
+{
+    public function __construct(
+        public readonly array $bounds,
+        public readonly int $n,
+        public \SplFixedArray $elems,
+    ) {
+    }
+}
+
+/** A mutable boxed array living in `IO`. */
+final class ArrIOArray
+{
+    public function __construct(
+        public readonly array $bounds,
+        public readonly int $n,
+        public \SplFixedArray $elems,
+    ) {
+    }
+}
+
+function arrayError(string $message): never
+{
+    throwErrorCall($message);
+}
+
+/** @param array{string, mixed, mixed} $bounds */
+function arraySlots(array $bounds, int $n): \SplFixedArray
+{
+    if ($n < 0) {
+        arrayError('array: negative size ' . $n);
+    }
+
+    $elems = new \SplFixedArray($n);
+    $hole = ArrHole::hole();
+    for ($i = 0; $i < $n; ++$i) {
+        $elems[$i] = $hole;
+    }
+
+    return $elems;
+}
+
+/** @param array{string, mixed, mixed} $bounds */
+function arrayNew(array $bounds, int $n): ArrArray
+{
+    return new ArrArray($bounds, $n, arraySlots($bounds, $n));
+}
+
+function arraySize(ArrArray $a): int
+{
+    return $a->n;
+}
+
+/** @return array{string, mixed, mixed} */
+function arrayBounds(ArrArray $a): array
+{
+    return $a->bounds;
+}
+
+function arrayCheckOffset(int $n, int $off, string $op): void
+{
+    if ($off < 0 || $off >= $n) {
+        arrayError('array ' . $op . ': offset ' . $off . ' out of range for size ' . $n);
+    }
+}
+
+function arrayReadSlot(\SplFixedArray $elems, int $off, string $op): mixed
+{
+    $x = $elems[$off];
+    if ($x instanceof ArrHole) {
+        arrayError('array ' . $op . ': undefined element at offset ' . $off);
+    }
+
+    return $x;
+}
+
+function arrayRead(ArrArray $a, int $off): mixed
+{
+    arrayCheckOffset($a->n, $off, 'read');
+
+    return arrayReadSlot($a->elems, $off, 'read');
+}
+
+/** @param array{string, mixed, mixed} $bounds @return array{string, \Closure} */
+function stNewArray(array $bounds, int $n): array
+{
+    return ['__st', static function () use ($bounds, $n): mixed {
+        return new ArrSTArray($bounds, $n, arraySlots($bounds, $n));
+    }];
+}
+
+/** @return array{string, \Closure} */
+function stReadArray(ArrSTArray $a, int $off): array
+{
+    return ['__st', static function () use ($a, $off): mixed {
+        arrayCheckOffset($a->n, $off, 'read');
+
+        return arrayReadSlot($a->elems, $off, 'read');
+    }];
+}
+
+/** @return array{string, \Closure} */
+function stWriteArray(ArrSTArray $a, int $off, mixed $x): array
+{
+    return ['__st', static function () use ($a, $off, $x): mixed {
+        arrayCheckOffset($a->n, $off, 'write');
+        $a->elems[$off] = $x;
+
+        return null;
+    }];
+}
+
+function stSizeArray(ArrSTArray $a): int
+{
+    return $a->n;
+}
+
+/** @return array{string, mixed, mixed} */
+function stBoundsArray(ArrSTArray $a): array
+{
+    return $a->bounds;
+}
+
+/**
+ * @return array{string, \Closure}
+ *
+ * With `$copy` the slots are duplicated and the immutable array is
+ * independent; without it the slots are shared, so the caller must not touch
+ * the mutable array afterwards (that sharing is what makes `runSTArray`
+ * allocation-free).
+ */
+function stFreezeArray(ArrSTArray $a, bool $copy): array
+{
+    return ['__st', static function () use ($a, $copy): mixed {
+        return new ArrArray($a->bounds, $a->n, $copy ? clone $a->elems : $a->elems);
+    }];
+}
+
+/** @return array{string, \Closure} */
+function stThawArray(ArrArray $a, bool $copy): array
+{
+    return ['__st', static function () use ($a, $copy): mixed {
+        return new ArrSTArray($a->bounds, $a->n, $copy ? clone $a->elems : $a->elems);
+    }];
+}
+
+/** @param array{string, mixed, mixed} $bounds */
+function ioNewArray(array $bounds, int $n): ArrIOArray
+{
+    return new ArrIOArray($bounds, $n, arraySlots($bounds, $n));
+}
+
+function ioReadArray(ArrIOArray $a, int $off): mixed
+{
+    arrayCheckOffset($a->n, $off, 'read');
+
+    return arrayReadSlot($a->elems, $off, 'read');
+}
+
+function ioWriteArray(ArrIOArray $a, int $off, mixed $x): mixed
+{
+    arrayCheckOffset($a->n, $off, 'write');
+    $a->elems[$off] = $x;
+
+    return null;
+}
+
+function ioSizeArray(ArrIOArray $a): int
+{
+    return $a->n;
+}
+
+/** @return array{string, mixed, mixed} */
+function ioBoundsArray(ArrIOArray $a): array
+{
+    return $a->bounds;
+}
+
+function ioFreezeArray(ArrIOArray $a, bool $copy): ArrArray
+{
+    return new ArrArray($a->bounds, $a->n, $copy ? clone $a->elems : $a->elems);
+}
+
+function ioThawArray(ArrArray $a, bool $copy): ArrIOArray
+{
+    return new ArrIOArray($a->bounds, $a->n, $copy ? clone $a->elems : $a->elems);
+}
+
+/**
  * Box a native PHP value as a Moggi Platform.PHP.PHPValue tagged ADT.
  * List arrays become PhpArray; string-keyed arrays / stdClass become PhpObject.
  *

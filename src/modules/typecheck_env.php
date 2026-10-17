@@ -355,6 +355,33 @@ function mergeExportedTypes(Types\TypeCheckState $state, array $unit, array $uni
 }
 
 /**
+ * Default bodies still hold `do`-notation: inference desugars each `DoExpr`
+ * before walking free variables, but the class-scope scan runs earlier and
+ * holds none of the elaborator's evidence bindings, so bind-bound names (and
+ * bare statements) fall out of the variable set. Desugaring a private copy
+ * with the monad bind -- exactly as inference does -- recovers the variables
+ * elaboration will actually see.
+ *
+ * Only the bare variable names matter here (constructor versus not, local
+ * versus not), and the bind operator itself is never one, so the exact
+ * elaborated dictionary plumbing is irrelevant to the names found.
+ */
+function desugarDoForScope(Ast\AstWalkable $node): void
+{
+    if ($node instanceof Ast\DoExpr && $node->desugared === null && $node->stmts !== []) {
+        $node->desugared = Ast\desugarDo($node->stmts, '(>>=)');
+    }
+
+    foreach ($node->childValues() as $child) {
+        foreach (\is_array($child) ? $child : [$child] as $value) {
+            if ($value instanceof Ast\AstWalkable) {
+                desugarDoForScope($value);
+            }
+        }
+    }
+}
+
+/**
  * Scope of every module that declares a class with default method bodies.
  *
  * A default body is re-checked at each instance site, in the instance's module,
@@ -385,11 +412,13 @@ function classModuleScopes(array $units, array $projectClasses, ?array $onlyModu
                 continue;
             }
 
-            foreach (IR\freeVarsExpr($body, []) as $name) {
+            $scoped = Ast\copyNode($body);
+            desugarDoForScope($scoped);
+            foreach (IR\freeVarsExpr($scoped, []) as $name) {
                 $referenced[$module][$name] = true;
             }
 
-            foreach (classScopeConstructorRefs($body) as $name => $_) {
+            foreach (classScopeConstructorRefs($scoped) as $name => $_) {
                 $referenced[$module][$name] = true;
             }
         }
@@ -840,7 +869,7 @@ function classModuleVisibleTypes(array $units, string $moduleName): array
  *
  * @param array<string, array<string, mixed>> $units
  * @param array<string, array<string, mixed>> $classScopes
- * @return array{externalFns: array<string, string>, arity: array<string, int>, dataRefs: array<string, array<string, mixed>>, origins: array<string, string>}
+ * @return array{externalFns: array<string, string>, arity: array<string, int>, dataRefs: array<string, array<string, mixed>>, origins: array<string, string>, actionReturn: array<string, true>}
  */
 function classScopeFunctionRefs(array $units, array $classScopes): array
 {
@@ -848,6 +877,7 @@ function classScopeFunctionRefs(array $units, array $classScopes): array
     $arity = [];
     $dataRefs = [];
     $origins = [];
+    $actionReturn = [];
     foreach ($classScopes as $scope) {
         foreach ($scope['fns'] ?? [] as $name => $fn) {
             $origin = $fn['origin'];
@@ -855,6 +885,9 @@ function classScopeFunctionRefs(array $units, array $classScopes): array
             $arity[$name] = $scope['constructorArity'][$name]
                 ?? externalFunctionRuntimeArity($units, $origin['module'], $name, $fn['scheme']);
             $origins[$name] = $origin['module'];
+            if (isset(moduleActionReturnFnNames($units, $origin['module'])[$origin['phpName']])) {
+                $actionReturn[$name] = true;
+            }
         }
 
         foreach ($scope['dataRefs'] ?? [] as $typeName => $info) {
@@ -862,14 +895,14 @@ function classScopeFunctionRefs(array $units, array $classScopes): array
         }
     }
 
-    return ['externalFns' => $externalFns, 'arity' => $arity, 'dataRefs' => $dataRefs, 'origins' => $origins];
+    return ['externalFns' => $externalFns, 'arity' => $arity, 'dataRefs' => $dataRefs, 'origins' => $origins, 'actionReturn' => $actionReturn];
 }
 
 /**
  * Fold class-scope symbol and data references into a module's codegen imports.
  *
  * @param array<string, mixed> $importContext
- * @param array{externalFns: array<string, string>, arity: array<string, int>, dataRefs: array<string, array<string, mixed>>, origins?: array<string, string>} $refs
+ * @param array{externalFns: array<string, string>, arity: array<string, int>, dataRefs: array<string, array<string, mixed>>, origins?: array<string, string>, actionReturn?: array<string, true>} $refs
  * @param array<string, true> $localNames names the module binds itself
  * @param array<string, array<string, mixed>> $units project units, for origin output paths
  * @return array<string, mixed>
@@ -883,6 +916,13 @@ function mergeClassScopeRefs(
     string $moduleName = '',
     string $rootPrefix = '',
 ): array {
+    foreach ($refs['actionReturn'] ?? [] as $name => $_) {
+        if (isset($localNames[$name])) {
+            continue;
+        }
+        $importContext['externalActionReturnFns'][$name] = true;
+    }
+
     foreach ($refs['externalFns'] as $name => $symbol) {
         if (isset($localNames[$name])) {
             continue;

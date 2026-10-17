@@ -1831,6 +1831,7 @@ function checkInstanceMethod(
                     'type' => $methodType,
                     'userConstraints' => $nestedUserConstraints,
                     'constraintHead' => prune($state, $constraint->args[0]),
+                    'constraintArgs' => $constraint->args,
                     'implicit' => $constraint->implicit,
                     'instanceHeadAst' => $constraint->instanceHeadAst,
                 ];

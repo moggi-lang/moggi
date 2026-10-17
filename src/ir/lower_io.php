@@ -120,7 +120,7 @@ function lowerIoSequence(array $stmts, LowerCtx $ctx): bool
                     Ast\IoSequence::class => $last ? lowerIoSequence($stmt->expr->stmts, $ctx) : false,
                     Ast\IoCase::class => $last ? lowerIoCase($stmt->expr, $ctx) : false,
                     default => (function () use ($stmt, $last, $ctx): bool {
-                        $result = lowerIoReturnOrAction($stmt->expr, $ctx, asStatement: ! $last);
+                        $result = lowerIoReturnOrAction($stmt->expr, $ctx, asStatement: ! $last, isTail: $last);
                         if ($result === null) {
                             return false;
                         }
@@ -172,8 +172,15 @@ function ioActionExprReturnsUnit(Ast\AstNode $expr): bool
  *
  * When the callee is unknown the lowering cannot tell whether it came back with an action to run or
  * with its already executed result — which is what `IoRun` accepts.
+ *
+ * `$isTail` marks the value a deferred action box answers: only the tail
+ * may take the early-`Ret` shortcut. A non-tail statement in a boxed
+ * sequence (every instance-method body with a `do` block, which the escape
+ * analysis unconditionally boxes) must run and continue instead — returning
+ * early would answer the half-built action and strand the remaining
+ * statements as dead code, silently dropping their effects.
  */
-function lowerIoReturnOrAction(Ast\AstNode $expr, LowerCtx $ctx, bool $asStatement = false): ?Operand
+function lowerIoReturnOrAction(Ast\AstNode $expr, LowerCtx $ctx, bool $asStatement = false, bool $isTail = true): ?Operand
 {
     if ($expr instanceof Ast\IoPure) {
         if ($asStatement) {
@@ -196,7 +203,7 @@ function lowerIoReturnOrAction(Ast\AstNode $expr, LowerCtx $ctx, bool $asStateme
             $envRef = $ctx->env[$name] ?? null;
             if ($envRef instanceof FnRef) {
                 $dest = ($asStatement || ioActionExprReturnsUnit($expr)) ? null : freshTemp($ctx);
-                lowerIoNullaryCall($name, $ctx, $dest, ioStmtSrcLoc($expr, $ctx, $inner));
+                lowerIoNullaryCall($name, $ctx, $dest, ioStmtSrcLoc($expr, $ctx, $inner), $isTail);
 
                 return $dest === null ? new Unit() : new Temp($dest);
             }
@@ -222,7 +229,7 @@ function lowerIoReturnOrAction(Ast\AstNode $expr, LowerCtx $ctx, bool $asStateme
     }
 
     $dest = ($asStatement || ioActionExprReturnsUnit($expr)) ? null : freshTemp($ctx);
-    if (! lowerIoAction($expr, $ctx, $dest)) {
+    if (! lowerIoAction($expr, $ctx, $dest, $isTail)) {
         $inner = $expr instanceof Ast\IoAction ? $expr->expr : $expr;
 
         try {
@@ -286,19 +293,19 @@ function lowerIoActionToBox(Ast\AstNode $expr, LowerCtx $ctx): Operand
     return new Temp($dest);
 }
 
-function lowerIoAction(Ast\AstNode $expr, LowerCtx $ctx, ?int $dest): bool
+function lowerIoAction(Ast\AstNode $expr, LowerCtx $ctx, ?int $dest, bool $isTail = true): bool
 {
     if ($expr instanceof Ast\IoAction) {
         $inner = $expr->expr;
         if ($inner instanceof Ast\Variable) {
             $name = $inner->name;
             if (isset($ctx->ioActionStore[$name])) {
-                return lowerIoAction($ctx->ioActionStore[$name], $ctx, $dest);
+                return lowerIoAction($ctx->ioActionStore[$name], $ctx, $dest, $isTail);
             }
 
             $envRef = $ctx->env[$name] ?? null;
             if ($envRef instanceof FnRef) {
-                lowerIoNullaryCall($name, $ctx, $dest, ioStmtSrcLoc($inner, $ctx));
+                lowerIoNullaryCall($name, $ctx, $dest, ioStmtSrcLoc($inner, $ctx), $isTail);
 
                 return true;
             }
@@ -359,7 +366,7 @@ function lowerIoAction(Ast\AstNode $expr, LowerCtx $ctx, ?int $dest): bool
     if (ioCallNeedsRunBoxedResult($call, $ctx)) {
         $tmp = freshTemp($ctx);
         $call->dest = $tmp;
-        if ($ctx->inActionBox && $dest === null) {
+        if ($ctx->inActionBox && $dest === null && $isTail) {
             $ctx->items[] = new Ret(new Temp($tmp));
         } elseif ($dest === null) {
             $ctx->items[] = new IoRun(new Temp($tmp), null, ioStmtSrcLoc($expr, $ctx));
@@ -382,7 +389,7 @@ function lowerIoAction(Ast\AstNode $expr, LowerCtx $ctx, ?int $dest): bool
  * Returns true when the call was run into `$dest` and the caller should hand
  * back `$dest`; false for the plain call.
  */
-function lowerIoNullaryCall(string $name, LowerCtx $ctx, ?int $dest, ?SrcLoc $srcLoc): bool
+function lowerIoNullaryCall(string $name, LowerCtx $ctx, ?int $dest, ?SrcLoc $srcLoc, bool $isTail = true): bool
 {
     $call = new IoCall($name, [], null, srcLoc: $srcLoc);
     if (! ioCallNeedsRunBoxedResult($call, $ctx)) {
@@ -395,7 +402,7 @@ function lowerIoNullaryCall(string $name, LowerCtx $ctx, ?int $dest, ?SrcLoc $sr
     $tmp = freshTemp($ctx);
     $call->dest = $tmp;
     $ctx->items[] = $call;
-    if ($ctx->inActionBox && $dest === null) {
+    if ($ctx->inActionBox && $dest === null && $isTail) {
         $ctx->items[] = new Ret(new Temp($tmp));
 
         return true;
@@ -550,6 +557,18 @@ function ioActionCall(Ast\AstNode $expr, LowerCtx $ctx): Intrinsic|IoCall|null
     }
 
     $emitCallee = ioActionEmitCalleeName($parts['function'], $ctx) ?? $callee;
+
+    // An `IoCall` is only a saturated call: fewer arguments is a partial
+    // application and more arguments is an over-applied eta-reduced function
+    // (e.g. `f = meth`, whose IR takes the dictionaries and answers the
+    // remaining function). Both are values, not actions -- the pure
+    // lowering splits them correctly (`Partial` / call-then-apply), while a
+    // flat `IoCall` would invoke the callee with the wrong arity.
+    $knownArity = $ctx->functionArity[$callee]
+        ?? ($emitCallee !== $callee ? ($ctx->functionArity[$emitCallee] ?? null) : null);
+    if ($knownArity !== null && \count($parts['args']) !== $knownArity) {
+        return null;
+    }
 
     $args = [];
     foreach ($parts['args'] as $arg) {

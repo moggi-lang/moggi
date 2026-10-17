@@ -2060,18 +2060,7 @@ function substituteStmt(IR\Stmt $stmt, array $params, array $args, array $bound 
         IR\MatchStmt::class => new IR\MatchStmt(
             substituteOperand($stmt->scrutinee, $params, $args, $bound),
             \array_map(
-                static function (IR\MatchArm $arm) use ($params, $args, $bound): IR\MatchArm {
-                    $armBound = $bound;
-                    $items = [];
-                    foreach (denseStmtItems($arm->body->items) as $item) {
-                        $items[] = substituteStmt($item, $params, $args, $armBound);
-                        if ($item instanceof IR\Let) {
-                            $armBound[$item->name] = true;
-                        }
-                    }
-
-                    return new IR\MatchArm($arm->pattern, new IR\Block($items), substituteGuards($arm->guards, $params, $args, $armBound));
-                },
+                static fn (IR\MatchArm $arm): IR\MatchArm => substituteArm($arm, $params, $args, $bound),
                 $stmt->arms,
             ),
             $stmt->dest,
@@ -2080,18 +2069,7 @@ function substituteStmt(IR\Stmt $stmt, array $params, array $args, array $bound 
         IR\MatchReturn::class => new IR\MatchReturn(
             substituteOperand($stmt->scrutinee, $params, $args, $bound),
             \array_map(
-                static function (IR\MatchArm $arm) use ($params, $args, $bound): IR\MatchArm {
-                    $armBound = $bound;
-                    $items = [];
-                    foreach (denseStmtItems($arm->body->items) as $item) {
-                        $items[] = substituteStmt($item, $params, $args, $armBound);
-                        if ($item instanceof IR\Let) {
-                            $armBound[$item->name] = true;
-                        }
-                    }
-
-                    return new IR\MatchArm($arm->pattern, new IR\Block($items), substituteGuards($arm->guards, $params, $args, $armBound));
-                },
+                static fn (IR\MatchArm $arm): IR\MatchArm => substituteArm($arm, $params, $args, $bound),
                 $stmt->arms,
             ),
             $stmt->exhaustive,
@@ -2104,8 +2082,82 @@ function substituteStmt(IR\Stmt $stmt, array $params, array $args, array $bound 
             static fn (IR\Stmt $item): IR\Stmt => substituteStmt($item, $params, $args, $bound),
             denseStmtItems($stmt->body->items),
         ))),
+        IR\IoCall::class => new IR\IoCall(
+            $stmt->callee,
+            \array_map(
+                static fn (IR\Operand $arg): IR\Operand => substituteOperand($arg, $params, $args, $bound),
+                $stmt->args,
+            ),
+            $stmt->dest,
+            $stmt->intrinsic,
+            $stmt->runtime,
+            $stmt->foreign === null
+                ? null
+                : substituteOperand($stmt->foreign, $params, $args, $bound),
+            $stmt->srcLoc,
+        ),
+        IR\IoRun::class => new IR\IoRun(
+            substituteOperand($stmt->action, $params, $args, $bound),
+            $stmt->dest,
+            $stmt->srcLoc,
+        ),
+        IR\IoMatch::class => new IR\IoMatch(
+            substituteOperand($stmt->scrutinee, $params, $args, $bound),
+            \array_map(
+                static fn (IR\MatchArm $arm): IR\MatchArm => substituteArm($arm, $params, $args, $bound),
+                $stmt->arms,
+            ),
+            $stmt->dest,
+            $stmt->exhaustive,
+        ),
+        IR\IoAssignAction::class => new IR\IoAssignAction(
+            $stmt->dest,
+            new IR\Block(\array_map(
+                static fn (IR\Stmt $item): IR\Stmt => substituteStmt($item, $params, $args, $bound),
+                denseStmtItems($stmt->body->items),
+            )),
+            substituteOperand($stmt->result, $params, $args, $bound),
+            $stmt->srcLoc,
+        ),
+        IR\IoThrow::class => new IR\IoThrow(
+            substituteOperand($stmt->exception, $params, $args, $bound),
+            $stmt->dest,
+            $stmt->srcLoc,
+        ),
+        IR\IoCatch::class => new IR\IoCatch(
+            substituteOperand($stmt->action, $params, $args, $bound),
+            substituteOperand($stmt->handler, $params, $args, $bound),
+            $stmt->dest,
+        ),
+        IR\IoFinally::class => new IR\IoFinally(
+            substituteOperand($stmt->action, $params, $args, $bound),
+            substituteOperand($stmt->cleanup, $params, $args, $bound),
+            $stmt->dest,
+        ),
         default => $stmt,
     };
+}
+
+/**
+ * @param array<int, string> $params
+ * @param list<IR\Operand> $args
+ * @param array<string, true> $bound
+ */
+function substituteArm(IR\MatchArm $arm, array $params, array $args, array $bound = []): IR\MatchArm
+{
+    $armBound = $bound;
+    foreach (matchArmPatternBoundNames($arm->pattern) as $name) {
+        $armBound[$name] = true;
+    }
+    $items = [];
+    foreach (denseStmtItems($arm->body->items) as $item) {
+        $items[] = substituteStmt($item, $params, $args, $armBound);
+        if ($item instanceof IR\Let) {
+            $armBound[$item->name] = true;
+        }
+    }
+
+    return new IR\MatchArm($arm->pattern, new IR\Block($items), substituteGuards($arm->guards, $params, $args, $armBound));
 }
 
 /**
@@ -2313,8 +2365,69 @@ function remapTempsInStmt(IR\Stmt $stmt, array $remap): IR\Stmt
             $stmt->args,
         )),
         IR\Loop::class => new IR\Loop(new IR\Block(remapTempsInItems($stmt->body->items, $remap))),
+        IR\IoCall::class => new IR\IoCall(
+            $stmt->callee,
+            \array_map(static fn (IR\Operand $a): IR\Operand => remapTempsInOperand($a, $remap), $stmt->args),
+            remapNullableTempId($stmt->dest, $remap),
+            $stmt->intrinsic,
+            $stmt->runtime,
+            $stmt->foreign === null ? null : remapTempsInOperand($stmt->foreign, $remap),
+            $stmt->srcLoc,
+        ),
+        IR\IoRun::class => new IR\IoRun(
+            remapTempsInOperand($stmt->action, $remap),
+            remapNullableTempId($stmt->dest, $remap),
+            $stmt->srcLoc,
+        ),
+        IR\IoMatch::class => new IR\IoMatch(
+            remapTempsInOperand($stmt->scrutinee, $remap),
+            \array_map(static fn (IR\MatchArm $arm): IR\MatchArm => remapTempsInArm($arm, $remap), $stmt->arms),
+            remapNullableTempId($stmt->dest, $remap),
+            $stmt->exhaustive,
+        ),
+        IR\IoAssignAction::class => new IR\IoAssignAction(
+            remapTempId($stmt->dest, $remap),
+            new IR\Block(remapTempsInItems($stmt->body->items, $remap)),
+            remapTempsInOperand($stmt->result, $remap),
+            $stmt->srcLoc,
+        ),
+        IR\IoThrow::class => new IR\IoThrow(
+            remapTempsInOperand($stmt->exception, $remap),
+            remapNullableTempId($stmt->dest, $remap),
+            $stmt->srcLoc,
+        ),
+        IR\IoCatch::class => new IR\IoCatch(
+            remapTempsInOperand($stmt->action, $remap),
+            remapTempsInOperand($stmt->handler, $remap),
+            remapNullableTempId($stmt->dest, $remap),
+        ),
+        IR\IoFinally::class => new IR\IoFinally(
+            remapTempsInOperand($stmt->action, $remap),
+            remapTempsInOperand($stmt->cleanup, $remap),
+            remapNullableTempId($stmt->dest, $remap),
+        ),
         default => $stmt,
     };
+}
+
+/** @param array<int, int> $remap */
+function remapNullableTempId(?int $id, array $remap): ?int
+{
+    return $id === null ? null : remapTempId($id, $remap);
+}
+
+/** @param array<int, int> $remap */
+function remapTempsInArm(IR\MatchArm $arm, array $remap): IR\MatchArm
+{
+    return new IR\MatchArm(
+        $arm->pattern,
+        new IR\Block(remapTempsInItems($arm->body->items, $remap)),
+        mapGuards(
+            $arm->guards,
+            static fn (IR\Operand $cond): IR\Operand => remapTempsInOperand($cond, $remap),
+            static fn (IR\Stmt $item): IR\Stmt => remapTempsInStmt($item, $remap),
+        ),
+    );
 }
 
 /** @param array<int, int> $remap */
@@ -2359,6 +2472,7 @@ function remapTempsInOperand(IR\Operand $operand, array $remap): IR\Operand
             remapTempsInOperand($operand->evidence, $remap),
             $operand->method,
         ),
+        IR\IoAction::class => new IR\IoAction(remapTempsInOperand($operand->expr, $remap)),
         IR\ForeignCall::class => new IR\ForeignCall(
             $operand->backend,
             $operand->kind,

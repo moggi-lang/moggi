@@ -86,10 +86,6 @@ function validateFunction(Ast\FunctionDecl $fn, string $source, string $filename
         validateFunctionTypeStSurface($fn->type, $fn, $source, $filename);
     }
 
-    // Bodies need no ST confinement walk: an ST action is an inert
-    // description until `runST#`/`stToIO#` runs it, so an unrun one is
-    // harmless (unlike an IO action, which executes where it stands).
-    // What must be checked at every use site is the eliminator itself.
     walkRunStChecks($fn->body, $source, $filename);
 }
 
@@ -151,11 +147,6 @@ function validateFunctionTypeStSurface(Ast\TypeNode $type, Ast\FunctionDecl $fn,
         fail('ST-returning types cannot mention IO', at($return, $fn), $source, $filename);
     }
 
-    // Arguments may mention ST in any function: the eliminators (`runST`,
-    // `stToIO`) consume a thread to answer a pure/`IO` value, and dropping
-    // one is harmless. What must never happen is a thread *result* outside
-    // `ST`, so only the result is confined here; the body walk confines the
-    // values themselves.
     $cursor = stripConstraints($type);
     while ($cursor instanceof Ast\TypeArrow) {
         if ($returnsSt && typeMentionsIo($cursor->from)) {
@@ -213,6 +204,17 @@ function isStRefTypeConName(string $name): bool
     return $name === 'STRef#' || $name === canonicalTypeConName('STRef#');
 }
 
+/**
+ * The mutable array type constructor: the kernel id `STArray#`, or the name
+ * the array library publishes it under. An `STArray` value is confined like a
+ * cell: it may only appear inside `ST` (or behind the transparent `STArray`
+ * newtype itself), never in a pure result, a data field, or a synonym.
+ */
+function isStArrayTypeConName(string $name): bool
+{
+    return $name === 'STArray#' || $name === canonicalTypeConName('STArray#');
+}
+
 function isRealWorldTypeConName(string $name): bool
 {
     return $name === 'RealWorld#' || $name === canonicalTypeConName('RealWorld#');
@@ -241,6 +243,7 @@ function typeMentionsSt(Ast\TypeNode $type): bool
     if ($type instanceof Ast\TypeCon) {
         return isStTypeConName($type->name)
             || isStRefTypeConName($type->name)
+            || isStArrayTypeConName($type->name)
             || isRealWorldTypeConName($type->name);
     }
 

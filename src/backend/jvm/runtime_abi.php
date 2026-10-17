@@ -97,6 +97,15 @@ function languageRuntime(): array
         'moggi/rt/IO' => buildIOClass(),
         'moggi/rt/ST' => buildSTClass(),
         'moggi/rt/STRef' => buildSTRefClass(),
+        'moggi/rt/ArrHole' => buildArrHoleClass(),
+        'moggi/rt/ArrArray' => buildArrArrayClass(),
+        'moggi/rt/ArrSTArray' => buildArrSTArrayClass(),
+        'moggi/rt/ArrIOArray' => buildArrIOArrayClass(),
+        'moggi/rt/NewSTArrayFn' => buildNewSTArrayFnClass(),
+        'moggi/rt/ReadSTArrayFn' => buildReadSTArrayFnClass(),
+        'moggi/rt/WriteSTArrayFn' => buildWriteSTArrayFnClass(),
+        'moggi/rt/FreezeSTArrayFn' => buildFreezeSTArrayFnClass(),
+        'moggi/rt/ThawArrayFn' => buildThawArrayFnClass(),
         'moggi/rt/StBindFn' => buildStBindFnClass(),
         'moggi/rt/NewRefFn' => buildNewRefFnClass(),
         'moggi/rt/ReadRefFn' => buildReadRefFnClass(),
@@ -519,6 +528,320 @@ function buildWriteRefFnClass(): string
             $c->getfield($cp->fieldRef('moggi/rt/WriteRefFn', 'x', 'Ljava/lang/Object;'));
             $c->putfield($cp->fieldRef('moggi/rt/STRef', 'v', 'Ljava/lang/Object;'));
             $c->aconst_null();
+            $c->areturn();
+        }
+    );
+
+    return $b->toBytes();
+}
+
+/**
+ * Marker for an array slot no value was ever written to. Every fresh slot
+ * gets its own instance and the test is `instanceof`, so no singleton or
+ * static initializer is needed; a read that finds one raises instead of
+ * leaking the marker.
+ */
+function buildArrHoleClass(): string
+{
+    $b = new ClassBuilder('moggi/rt/ArrHole');
+    $b->addMethod(
+        '<init>',
+        '()V',
+        0x0001,
+        1,
+        ['moggi/rt/ArrHole'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->invokespecial($cp->methodRef('java/lang/Object', '<init>', '()V'), 0, false);
+            $c->return_();
+        }
+    );
+
+    return $b->toBytes();
+}
+
+/**
+ * One of the three array holders (immutable `ArrArray`, mutable `ArrSTArray`
+ * and `ArrIOArray` share the shape: opaque bounds, element count, slots).
+ * The holder reference is final; the slot contents are mutated in place for
+ * the mutable holders and copied on a copying freeze/thaw.
+ */
+function buildArrHolderClass(string $internal): string
+{
+    $b = new ClassBuilder($internal);
+    $b->addField('bounds', 'Ljava/lang/Object;', 0x0011);
+    $b->addField('n', 'I', 0x0011);
+    $b->addField('elems', '[Ljava/lang/Object;', 0x0011);
+
+    $b->addMethod(
+        '<init>',
+        '(Ljava/lang/Object;I[Ljava/lang/Object;)V',
+        0x0001,
+        4,
+        [$internal, 'java/lang/Object', 'int', '[Ljava/lang/Object;'],
+        static function (CodeBuilder $c, ConstantPool $cp) use ($internal): void {
+            $c->aload(0);
+            $c->invokespecial($cp->methodRef('java/lang/Object', '<init>', '()V'), 0, false);
+            $c->aload(0);
+            $c->aload(1);
+            $c->putfield($cp->fieldRef($internal, 'bounds', 'Ljava/lang/Object;'));
+            $c->aload(0);
+            $c->iload(2);
+            $c->putfield($cp->fieldRef($internal, 'n', 'I'));
+            $c->aload(0);
+            $c->aload(3);
+            $c->putfield($cp->fieldRef($internal, 'elems', '[Ljava/lang/Object;'));
+            $c->return_();
+        }
+    );
+
+    return $b->toBytes();
+}
+
+function buildArrArrayClass(): string
+{
+    return buildArrHolderClass('moggi/rt/ArrArray');
+}
+
+function buildArrSTArrayClass(): string
+{
+    return buildArrHolderClass('moggi/rt/ArrSTArray');
+}
+
+function buildArrIOArrayClass(): string
+{
+    return buildArrHolderClass('moggi/rt/ArrIOArray');
+}
+
+/** Thunk for `newSTArray#`: allocate the mutable array when run. */
+function buildNewSTArrayFnClass(): string
+{
+    $b = new ClassBuilder('moggi/rt/NewSTArrayFn');
+    $b->implement('moggi/rt/Fn');
+    $b->addField('bounds', 'Ljava/lang/Object;', 0x0011);
+    $b->addField('n', 'Ljava/lang/Object;', 0x0011);
+
+    $b->addMethod(
+        '<init>',
+        '(Ljava/lang/Object;Ljava/lang/Object;)V',
+        0x0001,
+        3,
+        ['moggi/rt/NewSTArrayFn', 'java/lang/Object', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->invokespecial($cp->methodRef('java/lang/Object', '<init>', '()V'), 0, false);
+            $c->aload(0);
+            $c->aload(1);
+            $c->putfield($cp->fieldRef('moggi/rt/NewSTArrayFn', 'bounds', 'Ljava/lang/Object;'));
+            $c->aload(0);
+            $c->aload(2);
+            $c->putfield($cp->fieldRef('moggi/rt/NewSTArrayFn', 'n', 'Ljava/lang/Object;'));
+            $c->return_();
+        }
+    );
+
+    $b->addMethod(
+        'invoke',
+        '([Ljava/lang/Object;)Ljava/lang/Object;',
+        0x0001,
+        2,
+        ['moggi/rt/NewSTArrayFn', '[Ljava/lang/Object;'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/NewSTArrayFn', 'bounds', 'Ljava/lang/Object;'));
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/NewSTArrayFn', 'n', 'Ljava/lang/Object;'));
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'stNewDirect', '(Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/ArrSTArray;'), 2, true);
+            $c->areturn();
+        }
+    );
+
+    return $b->toBytes();
+}
+
+/** Thunk for `readSTArray#`: read the slot when run. */
+function buildReadSTArrayFnClass(): string
+{
+    $b = new ClassBuilder('moggi/rt/ReadSTArrayFn');
+    $b->implement('moggi/rt/Fn');
+    $b->addField('arr', 'Lmoggi/rt/ArrSTArray;', 0x0011);
+    $b->addField('off', 'Ljava/lang/Object;', 0x0011);
+
+    $b->addMethod(
+        '<init>',
+        '(Lmoggi/rt/ArrSTArray;Ljava/lang/Object;)V',
+        0x0001,
+        3,
+        ['moggi/rt/ReadSTArrayFn', 'moggi/rt/ArrSTArray', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->invokespecial($cp->methodRef('java/lang/Object', '<init>', '()V'), 0, false);
+            $c->aload(0);
+            $c->aload(1);
+            $c->putfield($cp->fieldRef('moggi/rt/ReadSTArrayFn', 'arr', 'Lmoggi/rt/ArrSTArray;'));
+            $c->aload(0);
+            $c->aload(2);
+            $c->putfield($cp->fieldRef('moggi/rt/ReadSTArrayFn', 'off', 'Ljava/lang/Object;'));
+            $c->return_();
+        }
+    );
+
+    $b->addMethod(
+        'invoke',
+        '([Ljava/lang/Object;)Ljava/lang/Object;',
+        0x0001,
+        2,
+        ['moggi/rt/ReadSTArrayFn', '[Ljava/lang/Object;'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ReadSTArrayFn', 'arr', 'Lmoggi/rt/ArrSTArray;'));
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ReadSTArrayFn', 'off', 'Ljava/lang/Object;'));
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'stReadDirect', '(Lmoggi/rt/ArrSTArray;Ljava/lang/Object;)Ljava/lang/Object;'), 2, true);
+            $c->areturn();
+        }
+    );
+
+    return $b->toBytes();
+}
+
+/** Thunk for `writeSTArray#`: replace the slot when run, answering null (Unit). */
+function buildWriteSTArrayFnClass(): string
+{
+    $b = new ClassBuilder('moggi/rt/WriteSTArrayFn');
+    $b->implement('moggi/rt/Fn');
+    $b->addField('arr', 'Lmoggi/rt/ArrSTArray;', 0x0011);
+    $b->addField('off', 'Ljava/lang/Object;', 0x0011);
+    $b->addField('x', 'Ljava/lang/Object;', 0x0011);
+
+    $b->addMethod(
+        '<init>',
+        '(Lmoggi/rt/ArrSTArray;Ljava/lang/Object;Ljava/lang/Object;)V',
+        0x0001,
+        4,
+        ['moggi/rt/WriteSTArrayFn', 'moggi/rt/ArrSTArray', 'java/lang/Object', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->invokespecial($cp->methodRef('java/lang/Object', '<init>', '()V'), 0, false);
+            $c->aload(0);
+            $c->aload(1);
+            $c->putfield($cp->fieldRef('moggi/rt/WriteSTArrayFn', 'arr', 'Lmoggi/rt/ArrSTArray;'));
+            $c->aload(0);
+            $c->aload(2);
+            $c->putfield($cp->fieldRef('moggi/rt/WriteSTArrayFn', 'off', 'Ljava/lang/Object;'));
+            $c->aload(0);
+            $c->aload(3);
+            $c->putfield($cp->fieldRef('moggi/rt/WriteSTArrayFn', 'x', 'Ljava/lang/Object;'));
+            $c->return_();
+        }
+    );
+
+    $b->addMethod(
+        'invoke',
+        '([Ljava/lang/Object;)Ljava/lang/Object;',
+        0x0001,
+        2,
+        ['moggi/rt/WriteSTArrayFn', '[Ljava/lang/Object;'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/WriteSTArrayFn', 'arr', 'Lmoggi/rt/ArrSTArray;'));
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/WriteSTArrayFn', 'off', 'Ljava/lang/Object;'));
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/WriteSTArrayFn', 'x', 'Ljava/lang/Object;'));
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'stWriteDirect', '(Lmoggi/rt/ArrSTArray;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;'), 3, true);
+            $c->areturn();
+        }
+    );
+
+    return $b->toBytes();
+}
+
+/** Thunk for `freezeSTArray#`/`unsafeFreezeSTArray#`: snapshot (or share) the slots when run. */
+function buildFreezeSTArrayFnClass(): string
+{
+    $b = new ClassBuilder('moggi/rt/FreezeSTArrayFn');
+    $b->implement('moggi/rt/Fn');
+    $b->addField('arr', 'Lmoggi/rt/ArrSTArray;', 0x0011);
+    $b->addField('copy', 'Z', 0x0011);
+
+    $b->addMethod(
+        '<init>',
+        '(Lmoggi/rt/ArrSTArray;Z)V',
+        0x0001,
+        3,
+        ['moggi/rt/FreezeSTArrayFn', 'moggi/rt/ArrSTArray', 'int'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->invokespecial($cp->methodRef('java/lang/Object', '<init>', '()V'), 0, false);
+            $c->aload(0);
+            $c->aload(1);
+            $c->putfield($cp->fieldRef('moggi/rt/FreezeSTArrayFn', 'arr', 'Lmoggi/rt/ArrSTArray;'));
+            $c->aload(0);
+            $c->iload(2);
+            $c->putfield($cp->fieldRef('moggi/rt/FreezeSTArrayFn', 'copy', 'Z'));
+            $c->return_();
+        }
+    );
+
+    $b->addMethod(
+        'invoke',
+        '([Ljava/lang/Object;)Ljava/lang/Object;',
+        0x0001,
+        2,
+        ['moggi/rt/FreezeSTArrayFn', '[Ljava/lang/Object;'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/FreezeSTArrayFn', 'arr', 'Lmoggi/rt/ArrSTArray;'));
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/FreezeSTArrayFn', 'copy', 'Z'));
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'stFreezeDirect', '(Lmoggi/rt/ArrSTArray;Z)Lmoggi/rt/ArrArray;'), 2, true);
+            $c->areturn();
+        }
+    );
+
+    return $b->toBytes();
+}
+
+/** Thunk for `thawArray#`/`unsafeThawArray#`: copy (or share) the slots into a mutable array when run. */
+function buildThawArrayFnClass(): string
+{
+    $b = new ClassBuilder('moggi/rt/ThawArrayFn');
+    $b->implement('moggi/rt/Fn');
+    $b->addField('arr', 'Lmoggi/rt/ArrArray;', 0x0011);
+    $b->addField('copy', 'Z', 0x0011);
+
+    $b->addMethod(
+        '<init>',
+        '(Lmoggi/rt/ArrArray;Z)V',
+        0x0001,
+        3,
+        ['moggi/rt/ThawArrayFn', 'moggi/rt/ArrArray', 'int'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->invokespecial($cp->methodRef('java/lang/Object', '<init>', '()V'), 0, false);
+            $c->aload(0);
+            $c->aload(1);
+            $c->putfield($cp->fieldRef('moggi/rt/ThawArrayFn', 'arr', 'Lmoggi/rt/ArrArray;'));
+            $c->aload(0);
+            $c->iload(2);
+            $c->putfield($cp->fieldRef('moggi/rt/ThawArrayFn', 'copy', 'Z'));
+            $c->return_();
+        }
+    );
+
+    $b->addMethod(
+        'invoke',
+        '([Ljava/lang/Object;)Ljava/lang/Object;',
+        0x0001,
+        2,
+        ['moggi/rt/ThawArrayFn', '[Ljava/lang/Object;'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ThawArrayFn', 'arr', 'Lmoggi/rt/ArrArray;'));
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ThawArrayFn', 'copy', 'Z'));
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'stThawDirect', '(Lmoggi/rt/ArrArray;Z)Lmoggi/rt/ArrSTArray;'), 2, true);
             $c->areturn();
         }
     );
@@ -2498,6 +2821,58 @@ function buildRTClass(): string
             $c->label('not_con');
             $c->noteFrame(['java/lang/Object', 'java/lang/Object']);
             $c->aload(0);
+            $c->instanceof_($cp->class_('[Ljava/lang/Object;'));
+            $c->ifeq('vc_not_tuple');
+            $c->aload(1);
+            $c->instanceof_($cp->class_('[Ljava/lang/Object;'));
+            $c->ifeq('vc_not_tuple');
+            $c->aload(0);
+            $c->checkcast($cp->class_('[Ljava/lang/Object;'));
+            $c->astore(2);
+            $c->aload(1);
+            $c->checkcast($cp->class_('[Ljava/lang/Object;'));
+            $c->astore(3);
+            $c->iconst(0);
+            $c->istore(4);
+            $c->iconst(0);
+            $c->istore(5);
+            $c->label('vc_tup_loop');
+            $c->noteFrame(['java/lang/Object', 'java/lang/Object', '[Ljava/lang/Object;', '[Ljava/lang/Object;', 'int', 'int']);
+            $c->iload(5);
+            $c->aload(2);
+            $c->arraylength();
+            $c->if_icmpge('vc_tup_lendiff');
+            $c->iload(5);
+            $c->aload(3);
+            $c->arraylength();
+            $c->if_icmpge('vc_tup_lendiff');
+            $c->aload(2);
+            $c->iload(5);
+            $c->aaload();
+            $c->aload(3);
+            $c->iload(5);
+            $c->aaload();
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'valueCompare', '(Ljava/lang/Object;Ljava/lang/Object;)I'), 2, true);
+            $c->istore(4);
+            $c->iload(4);
+            $c->ifeq('vc_tup_next');
+            $c->iload(4);
+            $c->ireturn();
+            $c->label('vc_tup_next');
+            $c->noteFrame(['java/lang/Object', 'java/lang/Object', '[Ljava/lang/Object;', '[Ljava/lang/Object;', 'int', 'int']);
+            $c->iinc(5, 1);
+            $c->goto_('vc_tup_loop');
+            $c->label('vc_tup_lendiff');
+            $c->noteFrame(['java/lang/Object', 'java/lang/Object', '[Ljava/lang/Object;', '[Ljava/lang/Object;', 'int', 'int']);
+            $c->aload(2);
+            $c->arraylength();
+            $c->aload(3);
+            $c->arraylength();
+            $c->isub();
+            $c->ireturn();
+            $c->label('vc_not_tuple');
+            $c->noteFrame(['java/lang/Object', 'java/lang/Object']);
+            $c->aload(0);
             $c->instanceof_($cp->class_('java/lang/Comparable'));
             $c->ifeq('fallback');
             $c->aload(0);
@@ -3602,6 +3977,826 @@ function buildRTClass(): string
             $c->dup();
             $c->aload(2);
             $c->invokespecial($cp->methodRef('moggi/rt/ST', '<init>', '(Ljava/lang/Object;)V'), 1, false);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'arrCheckedSize',
+        '(Ljava/lang/Object;)I',
+        0x0009,
+        3,
+        ['java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->checkcast($cp->class_('java/lang/Long'));
+            $c->invokevirtual($cp->methodRef('java/lang/Long', 'longValue', '()J'), 0, 2);
+            $c->lstore(1);
+            $c->lload(1);
+            $c->lconst(0);
+            $c->lcmp();
+            $c->iflt('neg');
+            $c->lload(1);
+            $c->l2i();
+            $c->i2l();
+            $c->lload(1);
+            $c->lcmp();
+            $c->ifne('large');
+            $c->lload(1);
+            $c->l2i();
+            $c->ireturn();
+            $c->label('neg');
+            $c->noteFrame(['java/lang/Object', 'long']);
+            $c->lload(1);
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'arrayNegSize', '(J)V'), 2, false);
+            $c->iconst(0);
+            $c->ireturn();
+            $c->label('large');
+            $c->noteFrame(['java/lang/Object', 'long']);
+            $c->lload(1);
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'arrayTooLarge', '(J)V'), 2, false);
+            $c->iconst(0);
+            $c->ireturn();
+        }
+    );
+
+    $b->addMethod(
+        'arrOffset',
+        '(Ljava/lang/Object;)I',
+        0x0009,
+        3,
+        ['java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->checkcast($cp->class_('java/lang/Long'));
+            $c->invokevirtual($cp->methodRef('java/lang/Long', 'longValue', '()J'), 0, 2);
+            $c->l2i();
+            $c->ireturn();
+        }
+    );
+
+    $b->addMethod(
+        'arrAllocSlots',
+        '(I)[Ljava/lang/Object;',
+        0x0009,
+        3,
+        ['int'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->iload(0);
+            $c->iconst(0);
+            $c->if_icmpge('ok');
+            $c->iload(0);
+            $c->i2l();
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'arrayNegSize', '(J)V'), 2, false);
+            $c->aconst_null();
+            $c->areturn();
+            $c->label('ok');
+            $c->noteFrame(['int']);
+            $c->iload(0);
+            $c->anewarray($cp->class_('java/lang/Object'));
+            $c->astore(1);
+            $c->iconst(0);
+            $c->istore(2);
+            $c->label('loop');
+            $c->noteFrame(['int', '[Ljava/lang/Object;', 'int']);
+            $c->iload(2);
+            $c->iload(0);
+            $c->if_icmpge('done');
+            $c->aload(1);
+            $c->iload(2);
+            $c->new_($cp->class_('moggi/rt/ArrHole'));
+            $c->dup();
+            $c->invokespecial($cp->methodRef('moggi/rt/ArrHole', '<init>', '()V'), 0, false);
+            $c->aastore();
+            $c->iload(2);
+            $c->iconst(1);
+            $c->iadd();
+            $c->istore(2);
+            $c->goto_('loop');
+            $c->label('done');
+            $c->noteFrame(['int', '[Ljava/lang/Object;', 'int']);
+            $c->aload(1);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'arrRangeCheck',
+        '(IILjava/lang/String;)V',
+        0x0009,
+        3,
+        ['int', 'int', 'java/lang/String'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->iload(1);
+            $c->iconst(0);
+            $c->if_icmpge('nonneg');
+            $c->aload(2);
+            $c->iload(1);
+            $c->i2l();
+            $c->iload(0);
+            $c->i2l();
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'arrayRange', '(Ljava/lang/String;JJ)V'), 5, false);
+            $c->return_();
+            $c->label('nonneg');
+            $c->noteFrame(['int', 'int', 'java/lang/String']);
+            $c->iload(1);
+            $c->iload(0);
+            $c->if_icmplt('ok');
+            $c->aload(2);
+            $c->iload(1);
+            $c->i2l();
+            $c->iload(0);
+            $c->i2l();
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'arrayRange', '(Ljava/lang/String;JJ)V'), 5, false);
+            $c->return_();
+            $c->label('ok');
+            $c->noteFrame(['int', 'int', 'java/lang/String']);
+            $c->return_();
+        }
+    );
+
+    $b->addMethod(
+        'arrReadSlot',
+        '([Ljava/lang/Object;ILjava/lang/String;)Ljava/lang/Object;',
+        0x0009,
+        3,
+        ['[Ljava/lang/Object;', 'int', 'java/lang/String'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->iload(1);
+            $c->aaload();
+            $c->dup();
+            $c->instanceof_($cp->class_('moggi/rt/ArrHole'));
+            $c->ifeq('ok');
+            $c->pop_();
+            $c->aload(2);
+            $c->iload(1);
+            $c->i2l();
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'arrayHole', '(Ljava/lang/String;J)V'), 4, false);
+            $c->aconst_null();
+            $c->areturn();
+            $c->label('ok');
+            $c->noteFrame(['[Ljava/lang/Object;', 'int', 'java/lang/String'], ['java/lang/Object']);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'arrCopySlots',
+        '([Ljava/lang/Object;I)[Ljava/lang/Object;',
+        0x0009,
+        3,
+        ['[Ljava/lang/Object;', 'int'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->iload(1);
+            $c->anewarray($cp->class_('java/lang/Object'));
+            $c->astore(2);
+            $c->aload(0);
+            $c->iconst(0);
+            $c->aload(2);
+            $c->iconst(0);
+            $c->iload(1);
+            $c->invokestatic($cp->methodRef('java/lang/System', 'arraycopy', '(Ljava/lang/Object;ILjava/lang/Object;II)V'), 5, false);
+            $c->aload(2);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'arrayNegSize',
+        '(J)V',
+        0x0009,
+        2,
+        ['long'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->new_($cp->class_('java/lang/StringBuilder'));
+            $c->dup();
+            $c->invokespecial($cp->methodRef('java/lang/StringBuilder', '<init>', '()V'), 0, false);
+            $c->ldc($cp->string_('array: negative size '));
+            $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(Ljava/lang/String;)Ljava/lang/StringBuilder;'), 1, true);
+            $c->lload(0);
+            $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(J)Ljava/lang/StringBuilder;'), 2, true);
+            $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'toString', '()Ljava/lang/String;'), 0, true);
+            $c->aconst_null();
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'throwErrorCall', '(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Object;'), 2, true);
+            $c->pop_();
+            $c->return_();
+        }
+    );
+
+    $b->addMethod(
+        'arrayTooLarge',
+        '(J)V',
+        0x0009,
+        2,
+        ['long'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->new_($cp->class_('java/lang/StringBuilder'));
+            $c->dup();
+            $c->invokespecial($cp->methodRef('java/lang/StringBuilder', '<init>', '()V'), 0, false);
+            $c->ldc($cp->string_('array: size '));
+            $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(Ljava/lang/String;)Ljava/lang/StringBuilder;'), 1, true);
+            $c->lload(0);
+            $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(J)Ljava/lang/StringBuilder;'), 2, true);
+            $c->ldc($cp->string_(' exceeds the maximum array size'));
+            $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(Ljava/lang/String;)Ljava/lang/StringBuilder;'), 1, true);
+            $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'toString', '()Ljava/lang/String;'), 0, true);
+            $c->aconst_null();
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'throwErrorCall', '(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Object;'), 2, true);
+            $c->pop_();
+            $c->return_();
+        }
+    );
+
+    $b->addMethod(
+        'arrayRange',
+        '(Ljava/lang/String;JJ)V',
+        0x0009,
+        5,
+        ['java/lang/String', 'long', 'long'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->new_($cp->class_('java/lang/StringBuilder'));
+            $c->dup();
+            $c->invokespecial($cp->methodRef('java/lang/StringBuilder', '<init>', '()V'), 0, false);
+            $c->ldc($cp->string_('array '));
+            $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(Ljava/lang/String;)Ljava/lang/StringBuilder;'), 1, true);
+            $c->aload(0);
+            $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(Ljava/lang/String;)Ljava/lang/StringBuilder;'), 1, true);
+            $c->ldc($cp->string_(': offset '));
+            $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(Ljava/lang/String;)Ljava/lang/StringBuilder;'), 1, true);
+            $c->lload(1);
+            $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(J)Ljava/lang/StringBuilder;'), 2, true);
+            $c->ldc($cp->string_(' out of range for size '));
+            $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(Ljava/lang/String;)Ljava/lang/StringBuilder;'), 1, true);
+            $c->lload(3);
+            $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(J)Ljava/lang/StringBuilder;'), 2, true);
+            $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'toString', '()Ljava/lang/String;'), 0, true);
+            $c->aconst_null();
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'throwErrorCall', '(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Object;'), 2, true);
+            $c->pop_();
+            $c->return_();
+        }
+    );
+
+    $b->addMethod(
+        'arrayHole',
+        '(Ljava/lang/String;J)V',
+        0x0009,
+        3,
+        ['java/lang/String', 'long'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->new_($cp->class_('java/lang/StringBuilder'));
+            $c->dup();
+            $c->invokespecial($cp->methodRef('java/lang/StringBuilder', '<init>', '()V'), 0, false);
+            $c->ldc($cp->string_('array '));
+            $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(Ljava/lang/String;)Ljava/lang/StringBuilder;'), 1, true);
+            $c->aload(0);
+            $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(Ljava/lang/String;)Ljava/lang/StringBuilder;'), 1, true);
+            $c->ldc($cp->string_(': undefined element at offset '));
+            $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(Ljava/lang/String;)Ljava/lang/StringBuilder;'), 1, true);
+            $c->lload(1);
+            $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'append', '(J)Ljava/lang/StringBuilder;'), 2, true);
+            $c->invokevirtual($cp->methodRef('java/lang/StringBuilder', 'toString', '()Ljava/lang/String;'), 0, true);
+            $c->aconst_null();
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'throwErrorCall', '(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Object;'), 2, true);
+            $c->pop_();
+            $c->return_();
+        }
+    );
+
+    $b->addMethod(
+        'arrayNew',
+        '(Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/ArrArray;',
+        0x0009,
+        3,
+        ['java/lang/Object', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(1);
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'arrCheckedSize', '(Ljava/lang/Object;)I'), 1, true);
+            $c->istore(2);
+            $c->new_($cp->class_('moggi/rt/ArrArray'));
+            $c->dup();
+            $c->aload(0);
+            $c->iload(2);
+            $c->iload(2);
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'arrAllocSlots', '(I)[Ljava/lang/Object;'), 1, true);
+            $c->invokespecial($cp->methodRef('moggi/rt/ArrArray', '<init>', '(Ljava/lang/Object;I[Ljava/lang/Object;)V'), 3, false);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'arraySize',
+        '(Lmoggi/rt/ArrArray;)Ljava/lang/Long;',
+        0x0009,
+        1,
+        ['moggi/rt/ArrArray'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrArray', 'n', 'I'));
+            $c->i2l();
+            $c->invokestatic($cp->methodRef('java/lang/Long', 'valueOf', '(J)Ljava/lang/Long;'), 2, 1);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'arrayBounds',
+        '(Lmoggi/rt/ArrArray;)Ljava/lang/Object;',
+        0x0009,
+        1,
+        ['moggi/rt/ArrArray'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrArray', 'bounds', 'Ljava/lang/Object;'));
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'arrayRead',
+        '(Lmoggi/rt/ArrArray;Ljava/lang/Object;)Ljava/lang/Object;',
+        0x0009,
+        3,
+        ['moggi/rt/ArrArray', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrArray', 'n', 'I'));
+            $c->aload(1);
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'arrOffset', '(Ljava/lang/Object;)I'), 1, true);
+            $c->istore(2);
+            $c->iload(2);
+            $c->ldc($cp->string_('read'));
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'arrRangeCheck', '(IILjava/lang/String;)V'), 3, false);
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrArray', 'elems', '[Ljava/lang/Object;'));
+            $c->iload(2);
+            $c->ldc($cp->string_('read'));
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'arrReadSlot', '([Ljava/lang/Object;ILjava/lang/String;)Ljava/lang/Object;'), 3, true);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'stNewDirect',
+        '(Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/ArrSTArray;',
+        0x0009,
+        3,
+        ['java/lang/Object', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(1);
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'arrCheckedSize', '(Ljava/lang/Object;)I'), 1, true);
+            $c->istore(2);
+            $c->new_($cp->class_('moggi/rt/ArrSTArray'));
+            $c->dup();
+            $c->aload(0);
+            $c->iload(2);
+            $c->iload(2);
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'arrAllocSlots', '(I)[Ljava/lang/Object;'), 1, true);
+            $c->invokespecial($cp->methodRef('moggi/rt/ArrSTArray', '<init>', '(Ljava/lang/Object;I[Ljava/lang/Object;)V'), 3, false);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'stNewArray',
+        '(Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/ST;',
+        0x0009,
+        3,
+        ['java/lang/Object', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->new_($cp->class_('moggi/rt/NewSTArrayFn'));
+            $c->dup();
+            $c->aload(0);
+            $c->aload(1);
+            $c->invokespecial($cp->methodRef('moggi/rt/NewSTArrayFn', '<init>', '(Ljava/lang/Object;Ljava/lang/Object;)V'), 2, false);
+            $c->astore(2);
+            $c->new_($cp->class_('moggi/rt/ST'));
+            $c->dup();
+            $c->aload(2);
+            $c->invokespecial($cp->methodRef('moggi/rt/ST', '<init>', '(Ljava/lang/Object;)V'), 1, false);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'stReadDirect',
+        '(Lmoggi/rt/ArrSTArray;Ljava/lang/Object;)Ljava/lang/Object;',
+        0x0009,
+        3,
+        ['moggi/rt/ArrSTArray', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrSTArray', 'n', 'I'));
+            $c->aload(1);
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'arrOffset', '(Ljava/lang/Object;)I'), 1, true);
+            $c->istore(2);
+            $c->iload(2);
+            $c->ldc($cp->string_('read'));
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'arrRangeCheck', '(IILjava/lang/String;)V'), 3, false);
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrSTArray', 'elems', '[Ljava/lang/Object;'));
+            $c->iload(2);
+            $c->ldc($cp->string_('read'));
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'arrReadSlot', '([Ljava/lang/Object;ILjava/lang/String;)Ljava/lang/Object;'), 3, true);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'stReadArray',
+        '(Lmoggi/rt/ArrSTArray;Ljava/lang/Object;)Lmoggi/rt/ST;',
+        0x0009,
+        3,
+        ['moggi/rt/ArrSTArray', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->new_($cp->class_('moggi/rt/ReadSTArrayFn'));
+            $c->dup();
+            $c->aload(0);
+            $c->aload(1);
+            $c->invokespecial($cp->methodRef('moggi/rt/ReadSTArrayFn', '<init>', '(Lmoggi/rt/ArrSTArray;Ljava/lang/Object;)V'), 2, false);
+            $c->astore(2);
+            $c->new_($cp->class_('moggi/rt/ST'));
+            $c->dup();
+            $c->aload(2);
+            $c->invokespecial($cp->methodRef('moggi/rt/ST', '<init>', '(Ljava/lang/Object;)V'), 1, false);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'stWriteDirect',
+        '(Lmoggi/rt/ArrSTArray;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;',
+        0x0009,
+        4,
+        ['moggi/rt/ArrSTArray', 'java/lang/Object', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrSTArray', 'n', 'I'));
+            $c->aload(1);
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'arrOffset', '(Ljava/lang/Object;)I'), 1, true);
+            $c->istore(3);
+            $c->iload(3);
+            $c->ldc($cp->string_('write'));
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'arrRangeCheck', '(IILjava/lang/String;)V'), 3, false);
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrSTArray', 'elems', '[Ljava/lang/Object;'));
+            $c->iload(3);
+            $c->aload(2);
+            $c->aastore();
+            $c->aconst_null();
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'stWriteArray',
+        '(Lmoggi/rt/ArrSTArray;Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/ST;',
+        0x0009,
+        4,
+        ['moggi/rt/ArrSTArray', 'java/lang/Object', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->new_($cp->class_('moggi/rt/WriteSTArrayFn'));
+            $c->dup();
+            $c->aload(0);
+            $c->aload(1);
+            $c->aload(2);
+            $c->invokespecial($cp->methodRef('moggi/rt/WriteSTArrayFn', '<init>', '(Lmoggi/rt/ArrSTArray;Ljava/lang/Object;Ljava/lang/Object;)V'), 3, false);
+            $c->astore(3);
+            $c->new_($cp->class_('moggi/rt/ST'));
+            $c->dup();
+            $c->aload(3);
+            $c->invokespecial($cp->methodRef('moggi/rt/ST', '<init>', '(Ljava/lang/Object;)V'), 1, false);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'sameRef',
+        '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Boolean;',
+        0x0009,
+        2,
+        ['java/lang/Object', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->aload(1);
+            $c->if_acmpne('different');
+            $c->iconst(1);
+            $c->goto_('done');
+            $c->label('different');
+            $c->noteFrame(['java/lang/Object', 'java/lang/Object']);
+            $c->iconst(0);
+            $c->label('done');
+            $c->noteFrame(['java/lang/Object', 'java/lang/Object'], ['int']);
+            $c->invokestatic($cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'stSizeArray',
+        '(Lmoggi/rt/ArrSTArray;)Ljava/lang/Long;',
+        0x0009,
+        1,
+        ['moggi/rt/ArrSTArray'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrSTArray', 'n', 'I'));
+            $c->i2l();
+            $c->invokestatic($cp->methodRef('java/lang/Long', 'valueOf', '(J)Ljava/lang/Long;'), 2, 1);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'stBoundsArray',
+        '(Lmoggi/rt/ArrSTArray;)Ljava/lang/Object;',
+        0x0009,
+        1,
+        ['moggi/rt/ArrSTArray'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrSTArray', 'bounds', 'Ljava/lang/Object;'));
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'stFreezeDirect',
+        '(Lmoggi/rt/ArrSTArray;Z)Lmoggi/rt/ArrArray;',
+        0x0009,
+        3,
+        ['moggi/rt/ArrSTArray', 'int'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->iload(1);
+            $c->ifeq('share');
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrSTArray', 'elems', '[Ljava/lang/Object;'));
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrSTArray', 'n', 'I'));
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'arrCopySlots', '([Ljava/lang/Object;I)[Ljava/lang/Object;'), 2, true);
+            $c->astore(2);
+            $c->goto_('build');
+            $c->label('share');
+            $c->noteFrame(['moggi/rt/ArrSTArray', 'int']);
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrSTArray', 'elems', '[Ljava/lang/Object;'));
+            $c->astore(2);
+            $c->label('build');
+            $c->noteFrame(['moggi/rt/ArrSTArray', 'int', '[Ljava/lang/Object;']);
+            $c->new_($cp->class_('moggi/rt/ArrArray'));
+            $c->dup();
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrSTArray', 'bounds', 'Ljava/lang/Object;'));
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrSTArray', 'n', 'I'));
+            $c->aload(2);
+            $c->invokespecial($cp->methodRef('moggi/rt/ArrArray', '<init>', '(Ljava/lang/Object;I[Ljava/lang/Object;)V'), 3, false);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'stFreezeArray',
+        '(Lmoggi/rt/ArrSTArray;Z)Lmoggi/rt/ST;',
+        0x0009,
+        3,
+        ['moggi/rt/ArrSTArray', 'int'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->new_($cp->class_('moggi/rt/FreezeSTArrayFn'));
+            $c->dup();
+            $c->aload(0);
+            $c->iload(1);
+            $c->invokespecial($cp->methodRef('moggi/rt/FreezeSTArrayFn', '<init>', '(Lmoggi/rt/ArrSTArray;Z)V'), 2, false);
+            $c->astore(2);
+            $c->new_($cp->class_('moggi/rt/ST'));
+            $c->dup();
+            $c->aload(2);
+            $c->invokespecial($cp->methodRef('moggi/rt/ST', '<init>', '(Ljava/lang/Object;)V'), 1, false);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'stThawDirect',
+        '(Lmoggi/rt/ArrArray;Z)Lmoggi/rt/ArrSTArray;',
+        0x0009,
+        3,
+        ['moggi/rt/ArrArray', 'int'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->iload(1);
+            $c->ifeq('share');
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrArray', 'elems', '[Ljava/lang/Object;'));
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrArray', 'n', 'I'));
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'arrCopySlots', '([Ljava/lang/Object;I)[Ljava/lang/Object;'), 2, true);
+            $c->astore(2);
+            $c->goto_('build');
+            $c->label('share');
+            $c->noteFrame(['moggi/rt/ArrArray', 'int']);
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrArray', 'elems', '[Ljava/lang/Object;'));
+            $c->astore(2);
+            $c->label('build');
+            $c->noteFrame(['moggi/rt/ArrArray', 'int', '[Ljava/lang/Object;']);
+            $c->new_($cp->class_('moggi/rt/ArrSTArray'));
+            $c->dup();
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrArray', 'bounds', 'Ljava/lang/Object;'));
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrArray', 'n', 'I'));
+            $c->aload(2);
+            $c->invokespecial($cp->methodRef('moggi/rt/ArrSTArray', '<init>', '(Ljava/lang/Object;I[Ljava/lang/Object;)V'), 3, false);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'stThawArray',
+        '(Lmoggi/rt/ArrArray;Z)Lmoggi/rt/ST;',
+        0x0009,
+        3,
+        ['moggi/rt/ArrArray', 'int'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->new_($cp->class_('moggi/rt/ThawArrayFn'));
+            $c->dup();
+            $c->aload(0);
+            $c->iload(1);
+            $c->invokespecial($cp->methodRef('moggi/rt/ThawArrayFn', '<init>', '(Lmoggi/rt/ArrArray;Z)V'), 2, false);
+            $c->astore(2);
+            $c->new_($cp->class_('moggi/rt/ST'));
+            $c->dup();
+            $c->aload(2);
+            $c->invokespecial($cp->methodRef('moggi/rt/ST', '<init>', '(Ljava/lang/Object;)V'), 1, false);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'ioNewArray',
+        '(Ljava/lang/Object;Ljava/lang/Object;)Lmoggi/rt/ArrIOArray;',
+        0x0009,
+        3,
+        ['java/lang/Object', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(1);
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'arrCheckedSize', '(Ljava/lang/Object;)I'), 1, true);
+            $c->istore(2);
+            $c->new_($cp->class_('moggi/rt/ArrIOArray'));
+            $c->dup();
+            $c->aload(0);
+            $c->iload(2);
+            $c->iload(2);
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'arrAllocSlots', '(I)[Ljava/lang/Object;'), 1, true);
+            $c->invokespecial($cp->methodRef('moggi/rt/ArrIOArray', '<init>', '(Ljava/lang/Object;I[Ljava/lang/Object;)V'), 3, false);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'ioReadArray',
+        '(Lmoggi/rt/ArrIOArray;Ljava/lang/Object;)Ljava/lang/Object;',
+        0x0009,
+        3,
+        ['moggi/rt/ArrIOArray', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrIOArray', 'n', 'I'));
+            $c->aload(1);
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'arrOffset', '(Ljava/lang/Object;)I'), 1, true);
+            $c->istore(2);
+            $c->iload(2);
+            $c->ldc($cp->string_('read'));
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'arrRangeCheck', '(IILjava/lang/String;)V'), 3, false);
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrIOArray', 'elems', '[Ljava/lang/Object;'));
+            $c->iload(2);
+            $c->ldc($cp->string_('read'));
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'arrReadSlot', '([Ljava/lang/Object;ILjava/lang/String;)Ljava/lang/Object;'), 3, true);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'ioWriteArray',
+        '(Lmoggi/rt/ArrIOArray;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;',
+        0x0009,
+        4,
+        ['moggi/rt/ArrIOArray', 'java/lang/Object', 'java/lang/Object'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrIOArray', 'n', 'I'));
+            $c->aload(1);
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'arrOffset', '(Ljava/lang/Object;)I'), 1, true);
+            $c->istore(3);
+            $c->iload(3);
+            $c->ldc($cp->string_('write'));
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'arrRangeCheck', '(IILjava/lang/String;)V'), 3, false);
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrIOArray', 'elems', '[Ljava/lang/Object;'));
+            $c->iload(3);
+            $c->aload(2);
+            $c->aastore();
+            $c->aconst_null();
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'ioSizeArray',
+        '(Lmoggi/rt/ArrIOArray;)Ljava/lang/Long;',
+        0x0009,
+        1,
+        ['moggi/rt/ArrIOArray'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrIOArray', 'n', 'I'));
+            $c->i2l();
+            $c->invokestatic($cp->methodRef('java/lang/Long', 'valueOf', '(J)Ljava/lang/Long;'), 2, 1);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'ioBoundsArray',
+        '(Lmoggi/rt/ArrIOArray;)Ljava/lang/Object;',
+        0x0009,
+        1,
+        ['moggi/rt/ArrIOArray'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrIOArray', 'bounds', 'Ljava/lang/Object;'));
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'ioFreezeArray',
+        '(Lmoggi/rt/ArrIOArray;Z)Lmoggi/rt/ArrArray;',
+        0x0009,
+        3,
+        ['moggi/rt/ArrIOArray', 'int'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->iload(1);
+            $c->ifeq('share');
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrIOArray', 'elems', '[Ljava/lang/Object;'));
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrIOArray', 'n', 'I'));
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'arrCopySlots', '([Ljava/lang/Object;I)[Ljava/lang/Object;'), 2, true);
+            $c->astore(2);
+            $c->goto_('build');
+            $c->label('share');
+            $c->noteFrame(['moggi/rt/ArrIOArray', 'int']);
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrIOArray', 'elems', '[Ljava/lang/Object;'));
+            $c->astore(2);
+            $c->label('build');
+            $c->noteFrame(['moggi/rt/ArrIOArray', 'int', '[Ljava/lang/Object;']);
+            $c->new_($cp->class_('moggi/rt/ArrArray'));
+            $c->dup();
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrIOArray', 'bounds', 'Ljava/lang/Object;'));
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrIOArray', 'n', 'I'));
+            $c->aload(2);
+            $c->invokespecial($cp->methodRef('moggi/rt/ArrArray', '<init>', '(Ljava/lang/Object;I[Ljava/lang/Object;)V'), 3, false);
+            $c->areturn();
+        }
+    );
+
+    $b->addMethod(
+        'ioThawArray',
+        '(Lmoggi/rt/ArrArray;Z)Lmoggi/rt/ArrIOArray;',
+        0x0009,
+        3,
+        ['moggi/rt/ArrArray', 'int'],
+        static function (CodeBuilder $c, ConstantPool $cp): void {
+            $c->iload(1);
+            $c->ifeq('share');
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrArray', 'elems', '[Ljava/lang/Object;'));
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrArray', 'n', 'I'));
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'arrCopySlots', '([Ljava/lang/Object;I)[Ljava/lang/Object;'), 2, true);
+            $c->astore(2);
+            $c->goto_('build');
+            $c->label('share');
+            $c->noteFrame(['moggi/rt/ArrArray', 'int']);
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrArray', 'elems', '[Ljava/lang/Object;'));
+            $c->astore(2);
+            $c->label('build');
+            $c->noteFrame(['moggi/rt/ArrArray', 'int', '[Ljava/lang/Object;']);
+            $c->new_($cp->class_('moggi/rt/ArrIOArray'));
+            $c->dup();
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrArray', 'bounds', 'Ljava/lang/Object;'));
+            $c->aload(0);
+            $c->getfield($cp->fieldRef('moggi/rt/ArrArray', 'n', 'I'));
+            $c->aload(2);
+            $c->invokespecial($cp->methodRef('moggi/rt/ArrIOArray', '<init>', '(Ljava/lang/Object;I[Ljava/lang/Object;)V'), 3, false);
             $c->areturn();
         }
     );

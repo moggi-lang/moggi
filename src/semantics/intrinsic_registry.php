@@ -315,6 +315,195 @@ function typeSchemes(): array
             ),
             ['s', 'a'],
         ),
+        'arrayNew#' => scheme(
+            new TArrow(
+                new TCon('Tuple2', [new TVar('i'), new TVar('i')]),
+                new TArrow($int, new TCon('Array', [new TVar('i'), new TVar('e')])),
+            ),
+            ['i', 'e'],
+        ),
+        'arraySize#' => scheme(
+            new TArrow(new TCon('Array', [new TVar('i'), new TVar('e')]), $int),
+            ['i', 'e'],
+        ),
+        'arrayBounds#' => scheme(
+            new TArrow(
+                new TCon('Array', [new TVar('i'), new TVar('e')]),
+                new TCon('Tuple2', [new TVar('i'), new TVar('i')]),
+            ),
+            ['i', 'e'],
+        ),
+        'arrayRead#' => scheme(
+            new TArrow(
+                new TCon('Array', [new TVar('i'), new TVar('e')]),
+                new TArrow($int, new TVar('e')),
+            ),
+            ['i', 'e'],
+        ),
+        'newSTArray#' => scheme(
+            new TArrow(
+                new TCon('Tuple2', [new TVar('i'), new TVar('i')]),
+                new TArrow(
+                    $int,
+                    new TCon('ST', [new TVar('s'), new TCon('STArray', [new TVar('s'), new TVar('i'), new TVar('e')])]),
+                ),
+            ),
+            ['s', 'i', 'e'],
+        ),
+        'readSTArray#' => scheme(
+            new TArrow(
+                new TCon('STArray', [new TVar('s'), new TVar('i'), new TVar('e')]),
+                new TArrow(
+                    $int,
+                    new TCon('ST', [new TVar('s'), new TVar('e')]),
+                ),
+            ),
+            ['s', 'i', 'e'],
+        ),
+        'writeSTArray#' => scheme(
+            new TArrow(
+                new TCon('STArray', [new TVar('s'), new TVar('i'), new TVar('e')]),
+                new TArrow(
+                    $int,
+                    new TArrow(
+                        new TVar('e'),
+                        new TCon('ST', [new TVar('s'), new TUnit()]),
+                    ),
+                ),
+            ),
+            ['s', 'i', 'e'],
+        ),
+        'sizeSTArray#' => scheme(
+            new TArrow(new TCon('STArray', [new TVar('s'), new TVar('i'), new TVar('e')]), $int),
+            ['s', 'i', 'e'],
+        ),
+        'boundsSTArray#' => scheme(
+            new TArrow(
+                new TCon('STArray', [new TVar('s'), new TVar('i'), new TVar('e')]),
+                new TCon('Tuple2', [new TVar('i'), new TVar('i')]),
+            ),
+            ['s', 'i', 'e'],
+        ),
+        'sameSTArray#' => scheme(
+            new TArrow(
+                new TCon('STArray', [new TVar('s'), new TVar('i'), new TVar('e')]),
+                new TArrow(
+                    new TCon('STArray', [new TVar('s'), new TVar('i'), new TVar('e')]),
+                    $bool,
+                ),
+            ),
+            ['s', 'i', 'e'],
+        ),
+        'freezeSTArray#' => scheme(
+            new TArrow(
+                new TCon('STArray', [new TVar('s'), new TVar('i'), new TVar('e')]),
+                new TCon('ST', [new TVar('s'), new TCon('Array', [new TVar('i'), new TVar('e')])]),
+            ),
+            ['s', 'i', 'e'],
+        ),
+        'thawArray#' => scheme(
+            new TArrow(
+                new TCon('Array', [new TVar('i'), new TVar('e')]),
+                new TCon('ST', [new TVar('s'), new TCon('STArray', [new TVar('s'), new TVar('i'), new TVar('e')])]),
+            ),
+            ['s', 'i', 'e'],
+        ),
+        'unsafeFreezeSTArray#' => scheme(
+            new TArrow(
+                new TCon('STArray', [new TVar('s'), new TVar('i'), new TVar('e')]),
+                new TCon('ST', [new TVar('s'), new TCon('Array', [new TVar('i'), new TVar('e')])]),
+            ),
+            ['s', 'i', 'e'],
+        ),
+        'unsafeThawArray#' => scheme(
+            new TArrow(
+                new TCon('Array', [new TVar('i'), new TVar('e')]),
+                new TCon('ST', [new TVar('s'), new TCon('STArray', [new TVar('s'), new TVar('i'), new TVar('e')])]),
+            ),
+            ['s', 'i', 'e'],
+        ),
+        'newIOArray#' => scheme(
+            new TArrow(
+                new TCon('Tuple2', [new TVar('i'), new TVar('i')]),
+                new TArrow(
+                    $int,
+                    new TCon('IO', [new TCon('IOArray', [new TVar('i'), new TVar('e')])]),
+                ),
+            ),
+            ['i', 'e'],
+        ),
+        'readIOArray#' => scheme(
+            new TArrow(
+                new TCon('IOArray', [new TVar('i'), new TVar('e')]),
+                new TArrow(
+                    $int,
+                    new TCon('IO', [new TVar('e')]),
+                ),
+            ),
+            ['i', 'e'],
+        ),
+        'writeIOArray#' => scheme(
+            new TArrow(
+                new TCon('IOArray', [new TVar('i'), new TVar('e')]),
+                new TArrow(
+                    $int,
+                    new TArrow(
+                        new TVar('e'),
+                        new TCon('IO', [new TUnit()]),
+                    ),
+                ),
+            ),
+            ['i', 'e'],
+        ),
+        'sizeIOArray#' => scheme(
+            new TArrow(new TCon('IOArray', [new TVar('i'), new TVar('e')]), $int),
+            ['i', 'e'],
+        ),
+        'boundsIOArray#' => scheme(
+            new TArrow(
+                new TCon('IOArray', [new TVar('i'), new TVar('e')]),
+                new TCon('Tuple2', [new TVar('i'), new TVar('i')]),
+            ),
+            ['i', 'e'],
+        ),
+        'sameIOArray#' => scheme(
+            new TArrow(
+                new TCon('IOArray', [new TVar('i'), new TVar('e')]),
+                new TArrow(
+                    new TCon('IOArray', [new TVar('i'), new TVar('e')]),
+                    $bool,
+                ),
+            ),
+            ['i', 'e'],
+        ),
+        'freezeIOArray#' => scheme(
+            new TArrow(
+                new TCon('IOArray', [new TVar('i'), new TVar('e')]),
+                new TCon('IO', [new TCon('Array', [new TVar('i'), new TVar('e')])]),
+            ),
+            ['i', 'e'],
+        ),
+        'thawIOArray#' => scheme(
+            new TArrow(
+                new TCon('Array', [new TVar('i'), new TVar('e')]),
+                new TCon('IO', [new TCon('IOArray', [new TVar('i'), new TVar('e')])]),
+            ),
+            ['i', 'e'],
+        ),
+        'unsafeFreezeIOArray#' => scheme(
+            new TArrow(
+                new TCon('IOArray', [new TVar('i'), new TVar('e')]),
+                new TCon('IO', [new TCon('Array', [new TVar('i'), new TVar('e')])]),
+            ),
+            ['i', 'e'],
+        ),
+        'unsafeThawIOArray#' => scheme(
+            new TArrow(
+                new TCon('Array', [new TVar('i'), new TVar('e')]),
+                new TCon('IO', [new TCon('IOArray', [new TVar('i'), new TVar('e')])]),
+            ),
+            ['i', 'e'],
+        ),
         'platformArgv#' => scheme(new TCon('IO', [new TCon('List', [$str])]), []),
         'platformStdin#' => scheme(new TCon('Handle', []), []),
     ];
@@ -365,7 +554,7 @@ function resolveIntrinsicName(string $name): ?string
  * stage asks about the construct, and the library's `pure` is a declaration the compiler must not
  * be keyed on.
  *
- * @return array<string, string> id → `io-pure`|`io-bind`|`io-throw`|`io-catch`|`io-finally`
+ * @return array<string, string> id → `io-pure`|`io-bind`|`io-throw`|`io-catch`|`io-finally`|`io-action`
  */
 function ioPrimopRoles(): array
 {
@@ -377,6 +566,15 @@ function ioPrimopRoles(): array
         'exceptionThrowIo#' => 'io-throw',
         'exceptionCatch#' => 'io-catch',
         'exceptionFinally#' => 'io-finally',
+        'newIOArray#' => 'io-action',
+        'readIOArray#' => 'io-action',
+        'writeIOArray#' => 'io-action',
+        'sizeIOArray#' => 'io-action',
+        'boundsIOArray#' => 'io-action',
+        'freezeIOArray#' => 'io-action',
+        'thawIOArray#' => 'io-action',
+        'unsafeFreezeIOArray#' => 'io-action',
+        'unsafeThawIOArray#' => 'io-action',
     ];
 }
 
@@ -413,7 +611,7 @@ function isIoExceptionPrimop(string $name): bool
  * descriptions exactly as it does any other value — each *use* still runs
  * the description, which is what keeps allocation and read/write order.
  *
- * @return array<string, string> id → `st-pure`|`st-bind`|`st-run`|`st-to-io`|`st-newref`|`st-readref`|`st-writeref`
+ * @return array<string, string> id → `st-pure`|`st-bind`|`st-run`|`st-to-io`|`st-newref`|`st-readref`|`st-writeref`|`st-newarray`|`st-readarray`|`st-writearray`|`st-sizearray`|`st-boundsarray`|`st-freeze`|`st-thaw`
  */
 function stPrimopRoles(): array
 {
@@ -427,6 +625,15 @@ function stPrimopRoles(): array
         'newSTRef#' => 'st-newref',
         'readSTRef#' => 'st-readref',
         'writeSTRef#' => 'st-writeref',
+        'newSTArray#' => 'st-newarray',
+        'readSTArray#' => 'st-readarray',
+        'writeSTArray#' => 'st-writearray',
+        'sizeSTArray#' => 'st-sizearray',
+        'boundsSTArray#' => 'st-boundsarray',
+        'freezeSTArray#' => 'st-freeze',
+        'thawArray#' => 'st-thaw',
+        'unsafeFreezeSTArray#' => 'st-freeze',
+        'unsafeThawArray#' => 'st-thaw',
     ];
 }
 
@@ -651,6 +858,7 @@ function primTypeTable(): array
         'Bytes#' => ['params' => [], 'kindArity' => 0],
         'Double#' => ['params' => [], 'kindArity' => 0],
         'List#' => ['params' => ['a'], 'kindArity' => 1],
+        'Array#' => ['params' => ['i', 'e'], 'kindArity' => 2],
         'SomeException#' => ['params' => [], 'kindArity' => 0],
     ];
 }
@@ -708,6 +916,7 @@ function ioTypeTable(): array
 
     return $table ??= [
         'IO#' => ['params' => ['a'], 'kindArity' => 1],
+        'IOArray#' => ['params' => ['i', 'e'], 'kindArity' => 2],
     ];
 }
 
@@ -728,6 +937,7 @@ function stTypeTable(): array
     return $table ??= [
         'ST#' => ['params' => ['s', 'a'], 'kindArity' => 2],
         'STRef#' => ['params' => ['s', 'a'], 'kindArity' => 2],
+        'STArray#' => ['params' => ['s', 'i', 'e'], 'kindArity' => 3],
         'RealWorld#' => ['params' => [], 'kindArity' => 0],
     ];
 }

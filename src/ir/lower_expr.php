@@ -270,6 +270,21 @@ function lowerDictMethodPartial(Ast\Apply $expr, LowerCtx $ctx): ?Operand
     }
 
     $missing = remainingArity($ctx, $expr->inferredType);
+    if ($missing <= 0 && $callee->methodArity !== null) {
+        // Elaborator-inserted dictionary applications carry no inferredType,
+        // so the arrow spine above sees nothing waiting even when value
+        // arguments are missing (e.g. `f = meth` elaborates to the method
+        // applied to its dictionaries only). Fall back to the method's
+        // declared arity (dictionaries + values) minus the arguments already
+        // in the spine.
+        $applied = 0;
+        $spine = $expr;
+        while ($spine instanceof Ast\Apply) {
+            ++$applied;
+            $spine = $spine->function;
+        }
+        $missing = $callee->methodArity - $applied;
+    }
     if ($missing <= 0) {
         return null;
     }
@@ -391,12 +406,20 @@ function lowerNamedApply(string $name, array $args, LowerCtx $ctx, ?SrcLoc $srcL
 
 function lowerApply(Ast\AstNode $function, Ast\AstNode $argument, LowerCtx $ctx): Operand
 {
+    // Collect the argument nodes outside-in without emitting anything, then
+    // lower them left-to-right: argument effects must execute in source order
+    // (backends with eager effects observe emission order).
     $callee = $function;
-    $args = [lowerExpr($argument, $ctx)];
+    $argNodes = [$argument];
 
     while ($callee instanceof Ast\Apply) {
-        \array_unshift($args, lowerExpr($callee->argument, $ctx));
+        \array_unshift($argNodes, $callee->argument);
         $callee = $callee->function;
+    }
+
+    $args = [];
+    foreach ($argNodes as $argNode) {
+        $args[] = lowerExpr($argNode, $ctx);
     }
 
     $srcLoc = srcLocFromAst($callee, $ctx->moduleName, $ctx->functionName, $ctx->sourceFile);

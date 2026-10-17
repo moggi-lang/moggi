@@ -93,6 +93,15 @@ function languageRuntime(): string
         stNewRefFnClassIl(),
         stReadRefFnClassIl(),
         stWriteRefFnClassIl(),
+        arrHoleClassIl(),
+        arrArrayClassIl(),
+        arrSTArrayClassIl(),
+        arrIOArrayClassIl(),
+        newSTArrayFnClassIl(),
+        readSTArrayFnClassIl(),
+        writeSTArrayFnClassIl(),
+        freezeSTArrayFnClassIl(),
+        thawArrayFnClassIl(),
         dictClassIl(),
         moggiExceptionClassIl(),
         constFnClassIl(),
@@ -472,6 +481,294 @@ function stWriteRefFnClassIl(): string
 IL;
 }
 
+/**
+ * Marker for an array slot no value was ever written to. Fresh instances
+ * fill new arrays and the test is `isinst`, so no singleton is needed; a
+ * read that finds one raises instead of leaking the marker.
+ */
+function arrHoleClassIl(): string
+{
+    return <<<'IL'
+.class public auto ansi beforefieldinit Moggi.Rt.ArrHole
+       extends [System.Runtime]System.Object
+{
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor() cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ret
+  }
+}
+
+IL;
+}
+
+/**
+ * One of the three array holders (immutable `ArrArray`, mutable `ArrSTArray`
+ * and `ArrIOArray` share the shape: opaque bounds, element count, slots).
+ */
+function arrHolderClassIl(string $class): string
+{
+    return '.class public auto ansi beforefieldinit ' . $class . "\n"
+        . "       extends [System.Runtime]System.Object\n"
+        . "{\n"
+        . "  .field public object bounds\n"
+        . "  .field public int32 n\n"
+        . "  .field public object[] elems\n"
+        . "\n"
+        . "  .method public hidebysig specialname rtspecialname\n"
+        . "          instance void .ctor(object b, int32 n, object[] e) cil managed\n"
+        . "  {\n"
+        . "    .maxstack 8\n"
+        . "    ldarg.0\n"
+        . "    call instance void [System.Runtime]System.Object::.ctor()\n"
+        . "    ldarg.0\n"
+        . "    ldarg.1\n"
+        . '    stfld object ' . $class . "::bounds\n"
+        . "    ldarg.0\n"
+        . "    ldarg.2\n"
+        . '    stfld int32 ' . $class . "::n\n"
+        . "    ldarg.0\n"
+        . "    ldarg.3\n"
+        . '    stfld object[] ' . $class . "::elems\n"
+        . "    ret\n"
+        . "  }\n"
+        . "}\n\n";
+}
+
+function arrArrayClassIl(): string
+{
+    return arrHolderClassIl('Moggi.Rt.ArrArray');
+}
+
+function arrSTArrayClassIl(): string
+{
+    return arrHolderClassIl('Moggi.Rt.ArrSTArray');
+}
+
+function arrIOArrayClassIl(): string
+{
+    return arrHolderClassIl('Moggi.Rt.ArrIOArray');
+}
+
+/** Thunk for `newSTArray#`: allocate the mutable array when run. */
+function newSTArrayFnClassIl(): string
+{
+    return <<<'IL'
+.class public auto ansi beforefieldinit Moggi.Rt.NewSTArrayFn
+       extends [System.Runtime]System.Object
+       implements Moggi.Rt.Fn
+{
+  .field public object bounds
+  .field public object n
+
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor(object b, object n) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ldarg.0
+    ldarg.1
+    stfld object Moggi.Rt.NewSTArrayFn::bounds
+    ldarg.0
+    ldarg.2
+    stfld object Moggi.Rt.NewSTArrayFn::n
+    ret
+  }
+
+  .method public hidebysig newslot virtual final
+          instance object Invoke(object[] args) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldfld object Moggi.Rt.NewSTArrayFn::bounds
+    ldarg.0
+    ldfld object Moggi.Rt.NewSTArrayFn::n
+    call class Moggi.Rt.ArrSTArray Moggi.Rt.RT::StNewDirect(object, object)
+    ret
+  }
+}
+
+IL;
+}
+
+/** Thunk for `readSTArray#`: read the slot when run. */
+function readSTArrayFnClassIl(): string
+{
+    return <<<'IL'
+.class public auto ansi beforefieldinit Moggi.Rt.ReadSTArrayFn
+       extends [System.Runtime]System.Object
+       implements Moggi.Rt.Fn
+{
+  .field public class Moggi.Rt.ArrSTArray arr
+  .field public object idx
+
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor(class Moggi.Rt.ArrSTArray arr, object idx) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ldarg.0
+    ldarg.1
+    stfld class Moggi.Rt.ArrSTArray Moggi.Rt.ReadSTArrayFn::arr
+    ldarg.0
+    ldarg.2
+    stfld object Moggi.Rt.ReadSTArrayFn::idx
+    ret
+  }
+
+  .method public hidebysig newslot virtual final
+          instance object Invoke(object[] args) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldfld class Moggi.Rt.ArrSTArray Moggi.Rt.ReadSTArrayFn::arr
+    ldarg.0
+    ldfld object Moggi.Rt.ReadSTArrayFn::idx
+    call object Moggi.Rt.RT::StReadDirect(class Moggi.Rt.ArrSTArray, object)
+    ret
+  }
+}
+
+IL;
+}
+
+/** Thunk for `writeSTArray#`: replace the slot when run, answering null (Unit). */
+function writeSTArrayFnClassIl(): string
+{
+    return <<<'IL'
+.class public auto ansi beforefieldinit Moggi.Rt.WriteSTArrayFn
+       extends [System.Runtime]System.Object
+       implements Moggi.Rt.Fn
+{
+  .field public class Moggi.Rt.ArrSTArray arr
+  .field public object idx
+  .field public object x
+
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor(class Moggi.Rt.ArrSTArray arr, object idx, object x) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ldarg.0
+    ldarg.1
+    stfld class Moggi.Rt.ArrSTArray Moggi.Rt.WriteSTArrayFn::arr
+    ldarg.0
+    ldarg.2
+    stfld object Moggi.Rt.WriteSTArrayFn::idx
+    ldarg.0
+    ldarg.3
+    stfld object Moggi.Rt.WriteSTArrayFn::x
+    ret
+  }
+
+  .method public hidebysig newslot virtual final
+          instance object Invoke(object[] args) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldfld class Moggi.Rt.ArrSTArray Moggi.Rt.WriteSTArrayFn::arr
+    ldarg.0
+    ldfld object Moggi.Rt.WriteSTArrayFn::idx
+    ldarg.0
+    ldfld object Moggi.Rt.WriteSTArrayFn::x
+    call object Moggi.Rt.RT::StWriteDirect(class Moggi.Rt.ArrSTArray, object, object)
+    ret
+  }
+}
+
+IL;
+}
+
+/** Thunk for `freezeSTArray#`/`unsafeFreezeSTArray#`: snapshot (or share) the slots when run. */
+function freezeSTArrayFnClassIl(): string
+{
+    return <<<'IL'
+.class public auto ansi beforefieldinit Moggi.Rt.FreezeSTArrayFn
+       extends [System.Runtime]System.Object
+       implements Moggi.Rt.Fn
+{
+  .field public class Moggi.Rt.ArrSTArray arr
+  .field public bool copy
+
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor(class Moggi.Rt.ArrSTArray arr, bool copy) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ldarg.0
+    ldarg.1
+    stfld class Moggi.Rt.ArrSTArray Moggi.Rt.FreezeSTArrayFn::arr
+    ldarg.0
+    ldarg.2
+    stfld bool Moggi.Rt.FreezeSTArrayFn::copy
+    ret
+  }
+
+  .method public hidebysig newslot virtual final
+          instance object Invoke(object[] args) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldfld class Moggi.Rt.ArrSTArray Moggi.Rt.FreezeSTArrayFn::arr
+    ldarg.0
+    ldfld bool Moggi.Rt.FreezeSTArrayFn::copy
+    call class Moggi.Rt.ArrArray Moggi.Rt.RT::StFreezeDirect(class Moggi.Rt.ArrSTArray, bool)
+    ret
+  }
+}
+
+IL;
+}
+
+/** Thunk for `thawArray#`/`unsafeThawArray#`: copy (or share) the slots into a mutable array when run. */
+function thawArrayFnClassIl(): string
+{
+    return <<<'IL'
+.class public auto ansi beforefieldinit Moggi.Rt.ThawArrayFn
+       extends [System.Runtime]System.Object
+       implements Moggi.Rt.Fn
+{
+  .field public class Moggi.Rt.ArrArray arr
+  .field public bool copy
+
+  .method public hidebysig specialname rtspecialname
+          instance void .ctor(class Moggi.Rt.ArrArray arr, bool copy) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call instance void [System.Runtime]System.Object::.ctor()
+    ldarg.0
+    ldarg.1
+    stfld class Moggi.Rt.ArrArray Moggi.Rt.ThawArrayFn::arr
+    ldarg.0
+    ldarg.2
+    stfld bool Moggi.Rt.ThawArrayFn::copy
+    ret
+  }
+
+  .method public hidebysig newslot virtual final
+          instance object Invoke(object[] args) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldfld class Moggi.Rt.ArrArray Moggi.Rt.ThawArrayFn::arr
+    ldarg.0
+    ldfld bool Moggi.Rt.ThawArrayFn::copy
+    call class Moggi.Rt.ArrSTArray Moggi.Rt.RT::StThawDirect(class Moggi.Rt.ArrArray, bool)
+    ret
+  }
+}
+
+IL;
+}
+
 function moggiExceptionClassIl(): string
 {
     return <<<'IL'
@@ -803,6 +1100,39 @@ function rtClassIl(): string
         rtStNewRefIl(),
         rtStReadRefIl(),
         rtStWriteRefIl(),
+        rtArrCheckedSizeIl(),
+        rtArrOffsetIl(),
+        rtArrAllocSlotsIl(),
+        rtArrRangeCheckIl(),
+        rtArrReadSlotIl(),
+        rtArrCopySlotsIl(),
+        rtArrayNegSizeIl(),
+        rtArrayTooLargeIl(),
+        rtArrayRangeIl(),
+        rtArrayHoleIl(),
+        rtArrayNewIl(),
+        rtArraySizeIl(),
+        rtArrayBoundsIl(),
+        rtArrayReadIl(),
+        rtStNewDirectIl(),
+        rtStNewArrayIl(),
+        rtStReadDirectIl(),
+        rtStReadArrayIl(),
+        rtStWriteDirectIl(),
+        rtStWriteArrayIl(),
+        rtStSizeArrayIl(),
+        rtStBoundsArrayIl(),
+        rtStFreezeDirectIl(),
+        rtStFreezeArrayIl(),
+        rtStThawDirectIl(),
+        rtStThawArrayIl(),
+        rtIoNewArrayIl(),
+        rtIoReadArrayIl(),
+        rtIoWriteArrayIl(),
+        rtIoSizeArrayIl(),
+        rtIoBoundsArrayIl(),
+        rtIoFreezeArrayIl(),
+        rtIoThawArrayIl(),
         rtConstFnIl(),
         rtFixIl(),
         rtConIl(),
@@ -1664,7 +1994,7 @@ function rtValueCompareIl(): string
   .method public hidebysig static int32 ValueCompare(object a, object b) cil managed
   {
     .maxstack 8
-    .locals init (class Moggi.Rt.Con ca, class Moggi.Rt.Con cb, int32 i, int32 cmp)
+    .locals init (class Moggi.Rt.Con ca, class Moggi.Rt.Con cb, int32 i, int32 cmp, object[] ta, object[] tb)
 
     ldarg.0
     ldarg.1
@@ -1770,6 +2100,60 @@ function rtValueCompareIl(): string
     ret
 
     NotCon:
+    ldarg.0
+    isinst object[]
+    brfalse NotTuple
+    ldarg.1
+    isinst object[]
+    brfalse NotTuple
+    ldarg.0
+    castclass object[]
+    stloc ta
+    ldarg.1
+    castclass object[]
+    stloc tb
+    ldc.i4.0
+    stloc i
+    TupLoop:
+    ldloc i
+    ldloc ta
+    ldlen
+    conv.i4
+    bge TupLenDiff
+    ldloc i
+    ldloc tb
+    ldlen
+    conv.i4
+    bge TupLenDiff
+    ldloc ta
+    ldloc i
+    ldelem.ref
+    ldloc tb
+    ldloc i
+    ldelem.ref
+    call int32 Moggi.Rt.RT::ValueCompare(object, object)
+    stloc cmp
+    ldloc cmp
+    brfalse TupNext
+    ldloc cmp
+    ret
+    TupNext:
+    ldloc i
+    ldc.i4.1
+    add
+    stloc i
+    br TupLoop
+    TupLenDiff:
+    ldloc ta
+    ldlen
+    conv.i4
+    ldloc tb
+    ldlen
+    conv.i4
+    sub
+    ret
+
+    NotTuple:
     ldarg.0
     isinst [System.Runtime]System.IComparable
     brfalse Fallback
@@ -3522,6 +3906,798 @@ IL;
 }
 
 /** Fn that ignores args and returns a constant (for IoPure). */
+/** Unbox a size to int32, raising on negative or oversized values. */
+function rtArrCheckedSizeIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static int32 ArrCheckedSize(object nObj) cil managed
+  {
+    .maxstack 8
+    .locals init (int64 n)
+    ldarg.0
+    call int64 Moggi.Rt.RT::UnboxInt(object)
+    stloc.0
+    ldloc.0
+    ldc.i4.0
+    conv.i8
+    blt Neg
+    ldloc.0
+    conv.i4
+    conv.i8
+    ldloc.0
+    bne.un Large
+    ldloc.0
+    conv.i4
+    ret
+Neg:
+    ldloc.0
+    call void Moggi.Rt.RT::ArrayNegSize(int64)
+    ldc.i4.0
+    ret
+Large:
+    ldloc.0
+    call void Moggi.Rt.RT::ArrayTooLarge(int64)
+    ldc.i4.0
+    ret
+  }
+
+IL;
+}
+
+/** Unbox an offset to int32 (range-checked by the caller). */
+function rtArrOffsetIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static int32 ArrOffset(object offObj) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    call int64 Moggi.Rt.RT::UnboxInt(object)
+    conv.i4
+    ret
+  }
+
+IL;
+}
+
+/** Allocate hole-filled slots, raising on a negative size. */
+function rtArrAllocSlotsIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static object[] ArrAllocSlots(int32 n) cil managed
+  {
+    .maxstack 8
+    .locals init (object[] slots, int32 i)
+    ldarg.0
+    ldc.i4.0
+    bge Ok
+    ldarg.0
+    conv.i8
+    call void Moggi.Rt.RT::ArrayNegSize(int64)
+    ldnull
+    ret
+Ok:
+    ldarg.0
+    newarr object
+    stloc.0
+    ldc.i4.0
+    stloc.1
+Loop:
+    ldloc.1
+    ldarg.0
+    bge Done
+    ldloc.0
+    ldloc.1
+    newobj instance void Moggi.Rt.ArrHole::.ctor()
+    stelem.ref
+    ldloc.1
+    ldc.i4.1
+    add
+    stloc.1
+    br Loop
+Done:
+    ldloc.0
+    ret
+  }
+
+IL;
+}
+
+/** Raise unless 0 <= off < n. */
+function rtArrRangeCheckIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static void ArrRangeCheck(int32 n, int32 idx, string op) cil managed
+  {
+    .maxstack 8
+    ldarg.1
+    ldc.i4.0
+    blt Err
+    ldarg.1
+    ldarg.0
+    bge Err
+    ret
+Err:
+    ldarg.2
+    ldarg.1
+    conv.i8
+    ldarg.0
+    conv.i8
+    call void Moggi.Rt.RT::ArrayRange(string, int64, int64)
+    ret
+  }
+
+IL;
+}
+
+/** Read a slot, raising on a hole. */
+function rtArrReadSlotIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static object ArrReadSlot(object[] elems, int32 idx, string op) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldarg.1
+    ldelem.ref
+    dup
+    isinst Moggi.Rt.ArrHole
+    brfalse Ok
+    pop
+    ldarg.2
+    ldarg.1
+    conv.i8
+    call void Moggi.Rt.RT::ArrayHole(string, int64)
+    ldnull
+    ret
+Ok:
+    ret
+  }
+
+IL;
+}
+
+/** Duplicate slots. */
+function rtArrCopySlotsIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static object[] ArrCopySlots(object[] elems, int32 n) cil managed
+  {
+    .maxstack 8
+    .locals init (object[] copy)
+    ldarg.1
+    newarr object
+    stloc.0
+    ldarg.0
+    ldc.i4.0
+    ldloc.0
+    ldc.i4.0
+    ldarg.1
+    call void [System.Runtime]System.Array::Copy(class [System.Runtime]System.Array, int32, class [System.Runtime]System.Array, int32, int32)
+    ldloc.0
+    ret
+  }
+
+IL;
+}
+
+/** Throw a negative-size error. */
+function rtArrayNegSizeIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static void ArrayNegSize(int64 n) cil managed
+  {
+    .maxstack 8
+    ldstr "array: negative size "
+    ldarg.0
+    box int64
+    callvirt instance string [System.Runtime]System.Object::ToString()
+    call string [System.Runtime]System.String::Concat(string, string)
+    ldc.i4.0
+    newarr object
+    call object Moggi.Rt.RT::ThrowErrorCall(string, object[])
+    pop
+    ret
+  }
+
+IL;
+}
+
+/** Throw an oversized-size error. */
+function rtArrayTooLargeIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static void ArrayTooLarge(int64 n) cil managed
+  {
+    .maxstack 8
+    ldstr "array: size "
+    ldarg.0
+    box int64
+    callvirt instance string [System.Runtime]System.Object::ToString()
+    call string [System.Runtime]System.String::Concat(string, string)
+    ldstr " exceeds the maximum array size"
+    call string [System.Runtime]System.String::Concat(string, string)
+    ldc.i4.0
+    newarr object
+    call object Moggi.Rt.RT::ThrowErrorCall(string, object[])
+    pop
+    ret
+  }
+
+IL;
+}
+
+/** Throw an out-of-range error. */
+function rtArrayRangeIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static void ArrayRange(string op, int64 idx, int64 n) cil managed
+  {
+    .maxstack 8
+    ldstr "array "
+    ldarg.0
+    call string [System.Runtime]System.String::Concat(string, string)
+    ldstr ": offset "
+    call string [System.Runtime]System.String::Concat(string, string)
+    ldarg.1
+    box int64
+    callvirt instance string [System.Runtime]System.Object::ToString()
+    call string [System.Runtime]System.String::Concat(string, string)
+    ldstr " out of range for size "
+    call string [System.Runtime]System.String::Concat(string, string)
+    ldarg.2
+    box int64
+    callvirt instance string [System.Runtime]System.Object::ToString()
+    call string [System.Runtime]System.String::Concat(string, string)
+    ldc.i4.0
+    newarr object
+    call object Moggi.Rt.RT::ThrowErrorCall(string, object[])
+    pop
+    ret
+  }
+
+IL;
+}
+
+/** Throw an undefined-element error. */
+function rtArrayHoleIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static void ArrayHole(string op, int64 idx) cil managed
+  {
+    .maxstack 8
+    ldstr "array "
+    ldarg.0
+    call string [System.Runtime]System.String::Concat(string, string)
+    ldstr ": undefined element at offset "
+    call string [System.Runtime]System.String::Concat(string, string)
+    ldarg.1
+    box int64
+    callvirt instance string [System.Runtime]System.Object::ToString()
+    call string [System.Runtime]System.String::Concat(string, string)
+    ldc.i4.0
+    newarr object
+    call object Moggi.Rt.RT::ThrowErrorCall(string, object[])
+    pop
+    ret
+  }
+
+IL;
+}
+
+function rtArrayNewIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static class Moggi.Rt.ArrArray ArrayNew(object bounds, object n) cil managed
+  {
+    .maxstack 8
+    .locals init (int32 size)
+    ldarg.1
+    call int32 Moggi.Rt.RT::ArrCheckedSize(object)
+    stloc.0
+    ldarg.0
+    ldloc.0
+    ldloc.0
+    call object[] Moggi.Rt.RT::ArrAllocSlots(int32)
+    newobj instance void Moggi.Rt.ArrArray::.ctor(object, int32, object[])
+    ret
+  }
+
+IL;
+}
+
+function rtArraySizeIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static object ArraySize(class Moggi.Rt.ArrArray arr) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldfld int32 Moggi.Rt.ArrArray::n
+    conv.i8
+    call object Moggi.Rt.RT::BoxInt(int64)
+    ret
+  }
+
+IL;
+}
+
+function rtArrayBoundsIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static object ArrayBounds(class Moggi.Rt.ArrArray arr) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldfld object Moggi.Rt.ArrArray::bounds
+    ret
+  }
+
+IL;
+}
+
+function rtArrayReadIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static object ArrayRead(class Moggi.Rt.ArrArray arr, object idx) cil managed
+  {
+    .maxstack 8
+    .locals init (int32 n, int32 i)
+    ldarg.0
+    ldfld int32 Moggi.Rt.ArrArray::n
+    stloc.0
+    ldarg.1
+    call int32 Moggi.Rt.RT::ArrOffset(object)
+    stloc.1
+    ldloc.0
+    ldloc.1
+    ldstr "read"
+    call void Moggi.Rt.RT::ArrRangeCheck(int32, int32, string)
+    ldarg.0
+    ldfld object[] Moggi.Rt.ArrArray::elems
+    ldloc.1
+    ldstr "read"
+    call object Moggi.Rt.RT::ArrReadSlot(object[], int32, string)
+    ret
+  }
+
+IL;
+}
+
+function rtStNewDirectIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static class Moggi.Rt.ArrSTArray StNewDirect(object bounds, object n) cil managed
+  {
+    .maxstack 8
+    .locals init (int32 size)
+    ldarg.1
+    call int32 Moggi.Rt.RT::ArrCheckedSize(object)
+    stloc.0
+    ldarg.0
+    ldloc.0
+    ldloc.0
+    call object[] Moggi.Rt.RT::ArrAllocSlots(int32)
+    newobj instance void Moggi.Rt.ArrSTArray::.ctor(object, int32, object[])
+    ret
+  }
+
+IL;
+}
+
+/** Mutable allocation as an ST description (allocates when run). */
+function rtStNewArrayIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static class Moggi.Rt.ST StNewArray(object bounds, object n) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldarg.1
+    newobj instance void Moggi.Rt.NewSTArrayFn::.ctor(object, object)
+    newobj instance void Moggi.Rt.ST::.ctor(object)
+    ret
+  }
+
+IL;
+}
+
+function rtStReadDirectIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static object StReadDirect(class Moggi.Rt.ArrSTArray arr, object idx) cil managed
+  {
+    .maxstack 8
+    .locals init (int32 n, int32 i)
+    ldarg.0
+    ldfld int32 Moggi.Rt.ArrSTArray::n
+    stloc.0
+    ldarg.1
+    call int32 Moggi.Rt.RT::ArrOffset(object)
+    stloc.1
+    ldloc.0
+    ldloc.1
+    ldstr "read"
+    call void Moggi.Rt.RT::ArrRangeCheck(int32, int32, string)
+    ldarg.0
+    ldfld object[] Moggi.Rt.ArrSTArray::elems
+    ldloc.1
+    ldstr "read"
+    call object Moggi.Rt.RT::ArrReadSlot(object[], int32, string)
+    ret
+  }
+
+IL;
+}
+
+/** Mutable read as an ST description (reads when run). */
+function rtStReadArrayIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static class Moggi.Rt.ST StReadArray(class Moggi.Rt.ArrSTArray arr, object idx) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldarg.1
+    newobj instance void Moggi.Rt.ReadSTArrayFn::.ctor(class Moggi.Rt.ArrSTArray, object)
+    newobj instance void Moggi.Rt.ST::.ctor(object)
+    ret
+  }
+
+IL;
+}
+
+function rtStWriteDirectIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static object StWriteDirect(class Moggi.Rt.ArrSTArray arr, object idx, object x) cil managed
+  {
+    .maxstack 8
+    .locals init (int32 n, int32 i)
+    ldarg.0
+    ldfld int32 Moggi.Rt.ArrSTArray::n
+    stloc.0
+    ldarg.1
+    call int32 Moggi.Rt.RT::ArrOffset(object)
+    stloc.1
+    ldloc.0
+    ldloc.1
+    ldstr "write"
+    call void Moggi.Rt.RT::ArrRangeCheck(int32, int32, string)
+    ldarg.0
+    ldfld object[] Moggi.Rt.ArrSTArray::elems
+    ldloc.1
+    ldarg.2
+    stelem.ref
+    ldnull
+    ret
+  }
+
+IL;
+}
+
+/** Mutable write as an ST description (writes when run, answering null for Unit). */
+function rtStWriteArrayIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static class Moggi.Rt.ST StWriteArray(class Moggi.Rt.ArrSTArray arr, object idx, object x) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldarg.1
+    ldarg.2
+    newobj instance void Moggi.Rt.WriteSTArrayFn::.ctor(class Moggi.Rt.ArrSTArray, object, object)
+    newobj instance void Moggi.Rt.ST::.ctor(object)
+    ret
+  }
+
+IL;
+}
+
+function rtStSizeArrayIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static object StSizeArray(class Moggi.Rt.ArrSTArray arr) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldfld int32 Moggi.Rt.ArrSTArray::n
+    conv.i8
+    call object Moggi.Rt.RT::BoxInt(int64)
+    ret
+  }
+
+IL;
+}
+
+function rtStBoundsArrayIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static object StBoundsArray(class Moggi.Rt.ArrSTArray arr) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldfld object Moggi.Rt.ArrSTArray::bounds
+    ret
+  }
+
+IL;
+}
+
+function rtStFreezeDirectIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static class Moggi.Rt.ArrArray StFreezeDirect(class Moggi.Rt.ArrSTArray arr, bool copy) cil managed
+  {
+    .maxstack 8
+    .locals init (object[] slots)
+    ldarg.1
+    brfalse Share
+    ldarg.0
+    ldfld object[] Moggi.Rt.ArrSTArray::elems
+    ldarg.0
+    ldfld int32 Moggi.Rt.ArrSTArray::n
+    call object[] Moggi.Rt.RT::ArrCopySlots(object[], int32)
+    stloc.0
+    br Build
+Share:
+    ldarg.0
+    ldfld object[] Moggi.Rt.ArrSTArray::elems
+    stloc.0
+Build:
+    ldarg.0
+    ldfld object Moggi.Rt.ArrSTArray::bounds
+    ldarg.0
+    ldfld int32 Moggi.Rt.ArrSTArray::n
+    ldloc.0
+    newobj instance void Moggi.Rt.ArrArray::.ctor(object, int32, object[])
+    ret
+  }
+
+IL;
+}
+
+/** Copying or sharing freeze as an ST description. */
+function rtStFreezeArrayIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static class Moggi.Rt.ST StFreezeArray(class Moggi.Rt.ArrSTArray arr, bool copy) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldarg.1
+    newobj instance void Moggi.Rt.FreezeSTArrayFn::.ctor(class Moggi.Rt.ArrSTArray, bool)
+    newobj instance void Moggi.Rt.ST::.ctor(object)
+    ret
+  }
+
+IL;
+}
+
+function rtStThawDirectIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static class Moggi.Rt.ArrSTArray StThawDirect(class Moggi.Rt.ArrArray arr, bool copy) cil managed
+  {
+    .maxstack 8
+    .locals init (object[] slots)
+    ldarg.1
+    brfalse Share
+    ldarg.0
+    ldfld object[] Moggi.Rt.ArrArray::elems
+    ldarg.0
+    ldfld int32 Moggi.Rt.ArrArray::n
+    call object[] Moggi.Rt.RT::ArrCopySlots(object[], int32)
+    stloc.0
+    br Build
+Share:
+    ldarg.0
+    ldfld object[] Moggi.Rt.ArrArray::elems
+    stloc.0
+Build:
+    ldarg.0
+    ldfld object Moggi.Rt.ArrArray::bounds
+    ldarg.0
+    ldfld int32 Moggi.Rt.ArrArray::n
+    ldloc.0
+    newobj instance void Moggi.Rt.ArrSTArray::.ctor(object, int32, object[])
+    ret
+  }
+
+IL;
+}
+
+/** Copying or sharing thaw as an ST description. */
+function rtStThawArrayIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static class Moggi.Rt.ST StThawArray(class Moggi.Rt.ArrArray arr, bool copy) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldarg.1
+    newobj instance void Moggi.Rt.ThawArrayFn::.ctor(class Moggi.Rt.ArrArray, bool)
+    newobj instance void Moggi.Rt.ST::.ctor(object)
+    ret
+  }
+
+IL;
+}
+
+function rtIoNewArrayIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static class Moggi.Rt.ArrIOArray IoNewArray(object bounds, object n) cil managed
+  {
+    .maxstack 8
+    .locals init (int32 size)
+    ldarg.1
+    call int32 Moggi.Rt.RT::ArrCheckedSize(object)
+    stloc.0
+    ldarg.0
+    ldloc.0
+    ldloc.0
+    call object[] Moggi.Rt.RT::ArrAllocSlots(int32)
+    newobj instance void Moggi.Rt.ArrIOArray::.ctor(object, int32, object[])
+    ret
+  }
+
+IL;
+}
+
+function rtIoReadArrayIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static object IoReadArray(class Moggi.Rt.ArrIOArray arr, object idx) cil managed
+  {
+    .maxstack 8
+    .locals init (int32 n, int32 i)
+    ldarg.0
+    ldfld int32 Moggi.Rt.ArrIOArray::n
+    stloc.0
+    ldarg.1
+    call int32 Moggi.Rt.RT::ArrOffset(object)
+    stloc.1
+    ldloc.0
+    ldloc.1
+    ldstr "read"
+    call void Moggi.Rt.RT::ArrRangeCheck(int32, int32, string)
+    ldarg.0
+    ldfld object[] Moggi.Rt.ArrIOArray::elems
+    ldloc.1
+    ldstr "read"
+    call object Moggi.Rt.RT::ArrReadSlot(object[], int32, string)
+    ret
+  }
+
+IL;
+}
+
+function rtIoWriteArrayIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static object IoWriteArray(class Moggi.Rt.ArrIOArray arr, object idx, object x) cil managed
+  {
+    .maxstack 8
+    .locals init (int32 n, int32 i)
+    ldarg.0
+    ldfld int32 Moggi.Rt.ArrIOArray::n
+    stloc.0
+    ldarg.1
+    call int32 Moggi.Rt.RT::ArrOffset(object)
+    stloc.1
+    ldloc.0
+    ldloc.1
+    ldstr "write"
+    call void Moggi.Rt.RT::ArrRangeCheck(int32, int32, string)
+    ldarg.0
+    ldfld object[] Moggi.Rt.ArrIOArray::elems
+    ldloc.1
+    ldarg.2
+    stelem.ref
+    ldnull
+    ret
+  }
+
+IL;
+}
+
+function rtIoSizeArrayIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static object IoSizeArray(class Moggi.Rt.ArrIOArray arr) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldfld int32 Moggi.Rt.ArrIOArray::n
+    conv.i8
+    call object Moggi.Rt.RT::BoxInt(int64)
+    ret
+  }
+
+IL;
+}
+
+function rtIoBoundsArrayIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static object IoBoundsArray(class Moggi.Rt.ArrIOArray arr) cil managed
+  {
+    .maxstack 8
+    ldarg.0
+    ldfld object Moggi.Rt.ArrIOArray::bounds
+    ret
+  }
+
+IL;
+}
+
+function rtIoFreezeArrayIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static class Moggi.Rt.ArrArray IoFreezeArray(class Moggi.Rt.ArrIOArray arr, bool copy) cil managed
+  {
+    .maxstack 8
+    .locals init (object[] slots)
+    ldarg.1
+    brfalse Share
+    ldarg.0
+    ldfld object[] Moggi.Rt.ArrIOArray::elems
+    ldarg.0
+    ldfld int32 Moggi.Rt.ArrIOArray::n
+    call object[] Moggi.Rt.RT::ArrCopySlots(object[], int32)
+    stloc.0
+    br Build
+Share:
+    ldarg.0
+    ldfld object[] Moggi.Rt.ArrIOArray::elems
+    stloc.0
+Build:
+    ldarg.0
+    ldfld object Moggi.Rt.ArrIOArray::bounds
+    ldarg.0
+    ldfld int32 Moggi.Rt.ArrIOArray::n
+    ldloc.0
+    newobj instance void Moggi.Rt.ArrArray::.ctor(object, int32, object[])
+    ret
+  }
+
+IL;
+}
+
+function rtIoThawArrayIl(): string
+{
+    return <<<'IL'
+  .method public hidebysig static class Moggi.Rt.ArrIOArray IoThawArray(class Moggi.Rt.ArrArray arr, bool copy) cil managed
+  {
+    .maxstack 8
+    .locals init (object[] slots)
+    ldarg.1
+    brfalse Share
+    ldarg.0
+    ldfld object[] Moggi.Rt.ArrArray::elems
+    ldarg.0
+    ldfld int32 Moggi.Rt.ArrArray::n
+    call object[] Moggi.Rt.RT::ArrCopySlots(object[], int32)
+    stloc.0
+    br Build
+Share:
+    ldarg.0
+    ldfld object[] Moggi.Rt.ArrArray::elems
+    stloc.0
+Build:
+    ldarg.0
+    ldfld object Moggi.Rt.ArrArray::bounds
+    ldarg.0
+    ldfld int32 Moggi.Rt.ArrArray::n
+    ldloc.0
+    newobj instance void Moggi.Rt.ArrIOArray::.ctor(object, int32, object[])
+    ret
+  }
+
+IL;
+}
+
 function rtConstFnIl(): string
 {
     return <<<'IL'

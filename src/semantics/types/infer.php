@@ -98,6 +98,13 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
     $userConstraints = [];
     $constraintEnv = [];
     $group = new SolvedGroup([], []);
+    // The signature as written, and the fresh skolems body checking runs
+    // against. Only set when $hasSignature holds; see below.
+    $origFnType = null;
+    $origConstraints = [];
+    $origUserConstraints = [];
+    $skolemNames = [];
+    $skolemScopeAdd = [];
 
     if ($hasSignature) {
         $kindScope = Kinds\pushKindScope($state);
@@ -131,6 +138,33 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
             $fn->constraints = $constraints;
         }
 
+        // A declared signature quantifies its variables: skolemize them into
+        // fresh rigid variables before the body is checked, so the body can
+        // use them abstractly but can neither pin one to a concrete type nor
+        // merge two of them. Nested annotations spelling the same names
+        // resolve to the same skolems through `$skolemScope` (installed
+        // below), keeping cross-scope sharing exactly as without skolems.
+        // The originals are restored once the body checks (before
+        // deferral/settling), so nothing downstream ever sees a skolem —
+        // except diagnostics, which show the source spelling.
+        $origFnType = $fnType;
+        $origConstraints = $constraints;
+        $origUserConstraints = $userConstraints;
+        $skolemSubst = skolemizeSignatureVars($state, $fnType, $constraints);
+        if ($skolemSubst !== []) {
+            $fnType = substitute($fnType, $skolemSubst);
+            $constraints = substitutePendingConstraints($constraints, $skolemSubst);
+            $userConstraints = substitutePendingConstraints($userConstraints, $skolemSubst);
+            $constraintEnv = buildConstraintEnv($state, $constraints);
+            $skolemNames = \array_map(
+                static fn (TVar $skolem): string => $skolem->name,
+                \array_values($skolemSubst),
+            );
+            foreach ($skolemSubst as $source => $skolem) {
+                $skolemScopeAdd[$source] = $skolem->name;
+            }
+        }
+
         $expected = $fnType;
         foreach ($fn->params as $param) {
             if (! $expected instanceof TArrow) {
@@ -151,6 +185,22 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
             $paramTypes[] = $expected->from;
             $expected = $expected->to;
         }
+    }
+
+    // The skolems are rigid while the body is checked, and their source
+    // spellings resolve to them in every nested annotation (see
+    // `$skolemScope`): same-spelled variables stay shared across scopes,
+    // exactly as without skolems, only rigid. Both are restored at the two
+    // exits below; the substitution keeps any flexible-to-rigid aliases.
+    $savedRigidVars = $state->rigidVars;
+    $savedSkolemScope = $state->skolemScope;
+    // Kinds are keyed by variable name, so a signature that reuses a name
+    // (like `a` for a higher-kinded class parameter) would otherwise leak its
+    // kind into whatever the next function instantiates under that name.
+    $savedVarKinds = $state->varKinds;
+    if ($skolemNames !== []) {
+        $state->rigidVars = \array_fill_keys($skolemNames, true) + $savedRigidVars;
+        $state->skolemScope = $skolemScopeAdd + $savedSkolemScope;
     }
 
     assertParamListLinear($state, $fn->params);
@@ -203,6 +253,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
                     'type' => $methodType,
                     'userConstraints' => $userConstraints,
                     'constraintHead' => prune($state, $constraint->args[0]),
+                    'constraintArgs' => $constraint->args,
                     'implicit' => $constraint->implicit,
                     'instanceHeadAst' => $constraint->instanceHeadAst,
                     'declared' => isset($declaredConstraintKeys[$constraint->class . ':' . constraintArgsKey($constraint->args)]),
@@ -260,6 +311,14 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
     $state->constraintMethodCandidates = $savedConstraintMethodCandidates;
     unify($state, $bodyType, $bodyExpected, $fn->body);
 
+    if ($hasSignature) {
+        // The body checked against skolems; everything from here on —
+        // deferral, settling, export — sees the signature as written.
+        $fnType = $origFnType;
+        $constraints = $origConstraints;
+        $userConstraints = $origUserConstraints;
+    }
+
     $restricted = isRestrictedDeclaration($fn);
     $ownsOpenVars = $restricted
         && quantifiedVars($state, peelDictArrows($fnType, \count($constraints))) !== [];
@@ -275,15 +334,20 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
             $group,
             $ownsOpenVars,
             $openRestricted,
+            $skolemNames,
+            $state->skolemScope,
         );
         recordRestrictedSolutions($state);
         $state->ambientConstraints = $savedAmbientConstraints;
         $state->ambientConstraintsByClass = $savedAmbientByClass;
+        $state->rigidVars = $savedRigidVars;
+        $state->skolemScope = $savedSkolemScope;
+        $state->varKinds = $savedVarKinds;
 
         return $fn;
     }
 
-    $fnType = settleCheckedBody($state, $fn, $fnType, $restricted, $hadDeclaredSignature, $group);
+    $fnType = settleCheckedBody($state, $fn, $fnType, $restricted, $hadDeclaredSignature, $group, $skolemNames);
 
     $wrapper = trivialIntrinsicWrapper($fn);
     resolveInstanceIntrinsicMethods($state, $fn->body);
@@ -295,8 +359,48 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
     }
 
     recordRestrictedSolutions($state);
+    $state->rigidVars = $savedRigidVars;
+    $state->skolemScope = $savedSkolemScope;
+    $state->varKinds = $savedVarKinds;
 
     return $fn;
+}
+
+/**
+ * Fresh rigid variables for every variable a declared signature quantifies
+ * over: the free variables of its type plus those of its constraint
+ * arguments (the `__Dict_` arrows already carry the constraint arguments, so
+ * walking the type alone would nearly suffice; the constraints are walked too
+ * so nothing is missed).
+ *
+ * Each skolem's name carries the source spelling it replaces (`a$sk3`), so
+ * diagnostics still name the variable the programmer wrote while the checker
+ * treats every skolem as a distinct rigid variable.
+ *
+ * Only genuine type variables are skolemized (`TVar` names and `TVarApp`
+ * heads): the walk deliberately uses {@see typeVars} rather than
+ * {@see quantifiedVars}, because the latter also reports unknown type
+ * *constructor* names — and the synthetic `__Dict_*` arrows must stay
+ * constructors, never become variables.
+ *
+ * @param list<Ast\PendingConstraint> $constraints
+ * @return array<string, TVar> source variable name → fresh skolem
+ */
+function skolemizeSignatureVars(TypeCheckState $state, Type $fnType, array $constraints): array
+{
+    $quantified = typeVars($fnType);
+    foreach ($constraints as $constraint) {
+        foreach ($constraint->args as $arg) {
+            $quantified += typeVars($arg);
+        }
+    }
+
+    $mapping = [];
+    foreach (\array_keys($quantified) as $name) {
+        $mapping[$name] = freshSkolem($state, $name);
+    }
+
+    return $mapping;
 }
 
 /**
@@ -309,6 +413,9 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
  * variables.
  *
  * @param SolvedGroup $group the declaration's constraints, solved once
+ * @param list<string> $skolemNames skolems the body was checked against:
+ *   still bound by the signature, so never defaulted, even though the
+ *   restored signature no longer names them
  */
 function settleCheckedBody(
     TypeCheckState $state,
@@ -317,13 +424,15 @@ function settleCheckedBody(
     bool $restricted,
     bool $hadDeclaredSignature,
     SolvedGroup $group,
+    array $skolemNames = [],
 ): Type {
     defaultAmbiguousNumericVars(
         $state,
         $fn->body,
         $restricted
             ? []
-            : quantifiedVars($state, peelDictArrows($fnType, \count($group->dicts))),
+            : quantifiedVars($state, peelDictArrows($fnType, \count($group->dicts)))
+                + \array_fill_keys($skolemNames, true),
     );
 
     resolveDeferredInfixPrimops($state, $fn->body);
@@ -409,6 +518,8 @@ function deferDeclaration(
     SolvedGroup $group,
     bool $ownsOpenVars,
     array $openVars,
+    array $skolemNames = [],
+    array $skolemScope = [],
 ): void {
     reportTypedHoles($state);
     $state->holes = [];
@@ -445,6 +556,8 @@ function deferDeclaration(
         'owns' => $ownsOpenVars,
         'restricted' => $restricted,
         'declared' => $hadDeclaredSignature,
+        'skolemNames' => $skolemNames,
+        'skolemScope' => $skolemScope,
         'bindingGroup' => $group,
         'subst' => $state->subst,
         'methods' => $state->constraintMethods,
@@ -541,6 +654,8 @@ function settleDeferredDeclaration(TypeCheckState $state, array $entry): void
         $state->declSpan,
         $state->ambientConstraints,
         $state->ambientConstraintsByClass,
+        $state->rigidVars,
+        $state->skolemScope,
     ];
 
     $state->subst = $entry['subst'];
@@ -569,6 +684,13 @@ function settleDeferredDeclaration(TypeCheckState $state, array $entry): void
     $state->declSpan = $entry['declarationSpan'];
     $state->ambientConstraints = [];
     $state->ambientConstraintsByClass = [];
+    // The body was checked under this scope; settling re-resolves its
+    // evidence by name, so the same spellings must meet the same skolems.
+    $state->rigidVars = \array_fill_keys($entry['skolemNames'] ?? [], true) + $state->rigidVars;
+    $settleScope = $entry['skolemScope'] ?? [];
+    if ($settleScope !== []) {
+        $state->skolemScope = $settleScope + $state->skolemScope;
+    }
 
     try {
         $fnType = settleCheckedBody(
@@ -578,6 +700,7 @@ function settleDeferredDeclaration(TypeCheckState $state, array $entry): void
             $entry['restricted'],
             $entry['declared'],
             $entry['bindingGroup'],
+            $entry['skolemNames'] ?? [],
         );
         recordRestrictedSolutions($state);
         $wrapper = trivialIntrinsicWrapper($fn);
@@ -596,6 +719,8 @@ function settleDeferredDeclaration(TypeCheckState $state, array $entry): void
             $state->declSpan,
             $state->ambientConstraints,
             $state->ambientConstraintsByClass,
+            $state->rigidVars,
+            $state->skolemScope,
         ] = $saved;
     }
 }
@@ -1141,11 +1266,15 @@ function rewriteIntrinsicApplies(Ast\AstNode $expr): Ast\AstNode
 
             $internal = resolveIntrinsicName($wrapper) ?? $wrapper;
             $scheme = typeSchemes()[$internal] ?? null;
-            if ($scheme === null || \count($parts['args']) !== schemeArity($scheme)) {
+            $args = $parts['args'];
+            if ($callee instanceof Ast\EvidenceMethod) {
+                $args = stripLeadingEvidenceApplyArgs($args);
+            }
+            if ($scheme === null || \count($args) !== schemeArity($scheme)) {
                 return $expr;
             }
 
-            $call = new Ast\IntrinsicCall($internal, $parts['args'], $expr->line, $expr->col, $expr->endCol);
+            $call = new Ast\IntrinsicCall($internal, $args, $expr->line, $expr->col, $expr->endCol);
             $call->intrinsicId = $internal;
             $call->inferredType = $expr->inferredType;
             $call->pendingConstraints = $expr->pendingConstraints;
@@ -1413,6 +1542,39 @@ function flattenApplyForIntrinsicWrapper(Ast\AstNode $expr): array
     return ['function' => $expr, 'args' => $args];
 }
 
+/**
+ * Drop the leading evidence arguments of a flattened application spine.
+ *
+ * Elaboration prepends dictionaries for a method's own constraints ahead of
+ * the value arguments, so a method call can carry more leading arguments than
+ * the primop it stands for takes: `bounds arr` at `Array` elaborates with the
+ * `Ix` dictionaries (and their superclass context) applied ahead of `arr`.
+ * Counting those as value arguments misreads a partial evidence application
+ * as a saturated primop call, so the intrinsic rewrite must only see the
+ * trailing values. Evidence is pure dictionary plumbing, so dropping it from
+ * the rewritten call is semantics-preserving.
+ *
+ * @param list<Ast\AstNode> $args
+ * @return list<Ast\AstNode>
+ */
+function stripLeadingEvidenceApplyArgs(array $args): array
+{
+    $values = $args;
+    while ($values !== [] && isEvidenceApplyArg($values[0])) {
+        \array_shift($values);
+    }
+
+    return \array_values($values);
+}
+
+/** Whether a flattened call argument is compiler-inserted evidence. */
+function isEvidenceApplyArg(Ast\AstNode $arg): bool
+{
+    return $arg instanceof Ast\EvidenceRef
+        || $arg instanceof Ast\EvidenceMethod
+        || ($arg instanceof Ast\Variable && \str_starts_with($arg->name, '__ev_'));
+}
+
 function inferExpr(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
 {
     $type = match ($expr::class) {
@@ -1546,6 +1708,71 @@ function inferTypeAsc(TypeCheckState $state, Ast\TypeAsc $expr, array $env): Typ
     return prune($state, $annotType);
 }
 
+/**
+ * The class obligation behind an ambient-projected method reference, if it
+ * names one: the constraint the enclosing scope discharged through its own
+ * dictionary (`Ord a` for `<` under `Ord a => ...`).
+ *
+ * A bare reference is freshened before its arguments are known, which severs
+ * the link between the method's type and the ambient dictionary baked into
+ * the node -- a use at any other type (`r < 0` with `r :: Int`) would silently
+ * keep the ambient dictionary. The caller freshens this obligation together
+ * with the method type so the two stay aligned, records it on the node, and
+ * {@see verifyMethodClassObligation} checks it once the use-site type is
+ * known, rewriting the node to a concrete instance on mismatch.
+ */
+function methodClassObligation(array $info): ?Ast\PendingConstraint
+{
+    if (($info['evidence'] ?? '') === '') {
+        return null;
+    }
+    $args = $info['constraintArgs'] ?? null;
+    if ($args === null) {
+        $head = $info['constraintHead'] ?? null;
+        if ($head === null) {
+            return null;
+        }
+        $args = [$head];
+    }
+    if ($args === []) {
+        return null;
+    }
+
+    return new Ast\PendingConstraint(
+        $info['class'],
+        \array_values($args),
+        '',
+        false,
+        null,
+    );
+}
+
+/**
+ * Freshen an ambient-projected method reference, keeping its class obligation
+ * aligned with its type (see {@see methodClassObligation}). Returns the
+ * freshened type; the method-local obligations land in pendingConstraints as
+ * before, the class obligation on the node's classObligation field.
+ *
+ * @param array{class: string, method: string, type: Type, userConstraints?: list<Ast\PendingConstraint>} $info
+ */
+function freshenConstraintMethod(TypeCheckState $state, Ast\EvidenceMethod $expr, array $info): Type
+{
+    $obligation = methodClassObligation($info);
+    $constraints = $info['userConstraints'] ?? [];
+    if ($obligation !== null) {
+        $constraints[] = $obligation;
+    }
+    $instantiated = freshenTypeWithConstraints($state, $info['type'], $constraints);
+    if ($obligation !== null) {
+        $expr->classObligation = \array_pop($instantiated['constraints']);
+    }
+    if ($instantiated['constraints'] !== []) {
+        $expr->pendingConstraints = $instantiated['constraints'];
+    }
+
+    return $instantiated['type'];
+}
+
 function inferVariable(TypeCheckState $state, Ast\AstNode &$expr, array $env): Type
 {
     if (! $expr instanceof Ast\Variable) {
@@ -1559,16 +1786,8 @@ function inferVariable(TypeCheckState $state, Ast\AstNode &$expr, array $env): T
     if (isset($state->constraintMethods[$expr->name])) {
         $info = $state->constraintMethods[$expr->name];
         applyEvidenceMethodInfo($state, $expr, $info);
-        $instantiated = freshenTypeWithConstraints(
-            $state,
-            $info['type'],
-            $info['userConstraints'] ?? [],
-        );
-        if ($instantiated['constraints'] !== []) {
-            $expr->pendingConstraints = $instantiated['constraints'];
-        }
 
-        return $instantiated['type'];
+        return freshenConstraintMethod($state, $expr, $info);
     }
 
     if (isset($state->classMethodAmbiguities[$expr->name])) {
@@ -1630,16 +1849,8 @@ function inferOperatorRef(TypeCheckState $state, Ast\AstNode &$expr, array $env)
     if (isset($state->constraintMethods[$expr->name])) {
         $info = $state->constraintMethods[$expr->name];
         applyEvidenceMethodInfo($state, $expr, $info);
-        $instantiated = freshenTypeWithConstraints(
-            $state,
-            $info['type'],
-            $info['userConstraints'] ?? [],
-        );
-        if ($instantiated['constraints'] !== []) {
-            $expr->pendingConstraints = $instantiated['constraints'];
-        }
 
-        return $instantiated['type'];
+        return freshenConstraintMethod($state, $expr, $info);
     }
 
     if (isset($state->classMethodAmbiguities[$expr->name])) {
@@ -1711,16 +1922,8 @@ function inferEvidenceMethod(TypeCheckState $state, Ast\AstNode $expr): Type
     $info = $state->constraintMethods[$expr->method] ?? null;
     if ($info !== null && $expr->class === $info['class']) {
         applyEvidenceMethodInfo($state, $expr, $info);
-        $instantiated = freshenTypeWithConstraints(
-            $state,
-            $info['type'],
-            $info['userConstraints'] ?? [],
-        );
-        if ($instantiated['constraints'] !== []) {
-            $expr->pendingConstraints = $instantiated['constraints'];
-        }
 
-        return $instantiated['type'];
+        return freshenConstraintMethod($state, $expr, $info);
     }
 
     $classInfo = $state->classes[$expr->class] ?? throw typeFail(
@@ -1854,6 +2057,10 @@ function parkApplyConstraints(TypeCheckState $state, Ast\Apply $expr): void
  */
 function elaborateApplyEvidence(TypeCheckState $state, Ast\Apply $expr): void
 {
+    $root = rootCalleeExpr($expr);
+    if ($root instanceof Ast\EvidenceMethod) {
+        verifyMethodClassObligation($state, $root, $expr);
+    }
     [$pending, $dicts] = pendingConstraintsAndDicts($expr->function);
     if ($pending === []) {
         return;
@@ -2127,6 +2334,10 @@ function resolvePendingEvidenceInExpr(TypeCheckState $state, Ast\AstNode $expr):
 
 function tryResolveApplyEvidence(TypeCheckState $state, Ast\Apply $expr): void
 {
+    $root = rootCalleeExpr($expr);
+    if ($root instanceof Ast\EvidenceMethod) {
+        verifyMethodClassObligation($state, $root, $expr);
+    }
     [$pending, $dicts] = pendingConstraintsAndDicts($expr->function);
     if ($pending === []) {
         [$pending, $dicts] = [$expr->pendingConstraints, $expr->pendingDicts];
@@ -2155,6 +2366,11 @@ function tryResolveApplyEvidence(TypeCheckState $state, Ast\Apply $expr): void
  */
 function tryResolveValueEvidence(TypeCheckState $state, Ast\AstNode $expr): Ast\AstNode
 {
+    if ($expr instanceof Ast\EvidenceMethod) {
+        verifyMethodClassObligation($state, $expr, $expr);
+
+        return $expr;
+    }
     if (! $expr instanceof Ast\Variable && ! $expr instanceof Ast\OperatorRef && ! $expr instanceof Ast\QualifiedRef) {
         return $expr;
     }
@@ -2500,6 +2716,19 @@ function declaredMethodCandidate(TypeCheckState $state, string $method): ?array
  *
  * Two candidates can both match (`(Num a, Num a)`, or an operand that is itself
  * a variable): then the name stays ambiguous and the answer is `null`.
+ *
+ * When no head matches outright, skeleton matching tries instead: some classes
+ * wrap the head in method argument types (`Ix` takes `(a, a)`, `MArray` methods
+ * take `a i e`), so the operand never *is* the head. A candidate then matches
+ * when the operand types fit its method's value-argument types with the
+ * candidate's given-constraint variables held rigid — a variable of the
+ * candidate's own given constraint must meet itself, never a different
+ * variable, so the trial cannot equate two distinct rigid variables the way a
+ * plain unification could (there are no skolems to protect them). Method-scoped
+ * variables stay flexible: they are what the real inference freshens and
+ * unifies afterwards, and this trial records nothing into the substitution.
+ * Exactly one matching candidate selects the dictionary; zero or several
+ * leave the name ambiguous as before.
  */
 function constraintMethodForOperandTypes(TypeCheckState $state, string $method, Type ...$types): ?array
 {
@@ -2508,18 +2737,197 @@ function constraintMethodForOperandTypes(TypeCheckState $state, string $method, 
         $keys[constraintArgKey(prune($state, $type))] = true;
     }
 
-    $match = null;
+    $matches = [];
     foreach ($state->constraintMethodCandidates[$method] ?? [] as $candidate) {
-        if (! isset($keys[constraintArgKey(prune($state, $candidate['constraintHead']))])) {
-            continue;
+        if (isset($keys[constraintArgKey(prune($state, $candidate['constraintHead']))])) {
+            $matches[] = $candidate;
         }
-        if ($match !== null) {
-            return null;
-        }
-        $match = $candidate;
     }
 
-    return $match;
+    if (\count($matches) === 1) {
+        return $matches[0];
+    }
+
+    if ($matches !== [] || $types === []) {
+        return null;
+    }
+
+    $skeleton = null;
+    foreach ($state->constraintMethodCandidates[$method] ?? [] as $candidate) {
+        if (! methodCandidateSkeletonMatch($state, $candidate, $types)) {
+            continue;
+        }
+        if ($skeleton !== null) {
+            return null;
+        }
+        $skeleton = $candidate;
+    }
+
+    return $skeleton;
+}
+
+/**
+ * Whether the operand types pick this candidate by shape: each operand fits
+ * the corresponding value-argument type of the candidate's method type (which
+ * is already substituted with the candidate's given constraint), holding the
+ * given constraint's variables rigid.
+ *
+ * @param list<Type> $operandTypes
+ */
+function methodCandidateSkeletonMatch(TypeCheckState $state, array $candidate, array $operandTypes): bool
+{
+    $given = null;
+    $evidence = $candidate['evidence'] ?? null;
+    foreach ($state->ambientConstraints as $constraint) {
+        if ($constraint->evidence !== '' && $constraint->evidence === $evidence) {
+            $given = $constraint;
+
+            break;
+        }
+    }
+    if ($given === null) {
+        return false;
+    }
+
+    $rigid = [];
+    foreach ($given->args as $arg) {
+        collectSkeletonRigidVars($state, $arg, $rigid);
+    }
+
+    $methodType = prune($state, $candidate['type']);
+    $methodArgs = [];
+    while ($methodType instanceof TArrow) {
+        $methodArgs[] = prune($state, $methodType->from);
+        $methodType = prune($state, $methodType->to);
+    }
+    if (\count($methodArgs) < \count($operandTypes)) {
+        return false;
+    }
+
+    $bindings = [];
+    foreach ($operandTypes as $k => $operand) {
+        if (! skeletonTypesMatch($state, $methodArgs[$k], prune($state, $operand), $rigid, $bindings)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/** @param array<string, true> $rigid */
+function collectSkeletonRigidVars(TypeCheckState $state, Type $type, array &$rigid): void
+{
+    $type = prune($state, $type);
+    if ($type instanceof TVar) {
+        $rigid[$type->name] = true;
+
+        return;
+    }
+    if ($type instanceof TVarApp) {
+        $rigid[$type->name] = true;
+    }
+    if ($type instanceof TCon || $type instanceof TVarApp || $type instanceof TPromoted) {
+        foreach ($type->args as $arg) {
+            collectSkeletonRigidVars($state, $arg, $rigid);
+        }
+
+        return;
+    }
+    if ($type instanceof TArrow) {
+        collectSkeletonRigidVars($state, $type->from, $rigid);
+        collectSkeletonRigidVars($state, $type->to, $rigid);
+    }
+}
+
+/**
+ * Skeleton fit of a method argument type against an operand type.
+ *
+ * Rigid variables (the candidate's given constraint) meet only themselves;
+ * every other variable is a wildcard that binds consistently (compared by
+ * key). An unsettled (unbound flexible) operand variable is compatible with
+ * anything — it can only ever produce several matches, hence ambiguity, never
+ * a wrong unique pick. Constructors match by name and arity, recursively.
+ *
+ * @param array<string, true> $rigid
+ * @param array<string, string> $bindings flexible variable name → bound type key
+ */
+function skeletonTypesMatch(TypeCheckState $state, Type $pattern, Type $actual, array $rigid, array &$bindings): bool
+{
+    $pattern = prune($state, $pattern);
+    $actual = prune($state, $actual);
+
+    if ($pattern instanceof TVar || $pattern instanceof TVarApp) {
+        if (isset($rigid[$pattern->name])) {
+            return ($actual instanceof TVar || $actual instanceof TVarApp)
+                && $actual->name === $pattern->name
+                && ($pattern instanceof TVarApp
+                    ? skeletonArgsMatch($state, $pattern->args, $actual instanceof TVarApp ? $actual->args : null, $rigid, $bindings)
+                    : true);
+        }
+        $key = constraintArgKey($actual);
+        if (isset($bindings[$pattern->name])) {
+            return $bindings[$pattern->name] === $key;
+        }
+        $bindings[$pattern->name] = $key;
+        if ($pattern instanceof TVarApp && $actual instanceof TVarApp && $actual->name === $pattern->name) {
+            return skeletonArgsMatch($state, $pattern->args, $actual->args, $rigid, $bindings);
+        }
+
+        return true;
+    }
+
+    if ($actual instanceof TVar || $actual instanceof TVarApp) {
+        return ! isset($rigid[$actual->name]);
+    }
+
+    if ($pattern instanceof TCon && $actual instanceof TCon) {
+        return $pattern->name === $actual->name
+            && skeletonArgsMatch($state, $pattern->args, $actual->args, $rigid, $bindings);
+    }
+
+    if ($pattern instanceof TPromoted && $actual instanceof TPromoted) {
+        return $pattern->name === $actual->name
+            && skeletonArgsMatch($state, $pattern->args, $actual->args, $rigid, $bindings);
+    }
+
+    if ($pattern instanceof TArrow && $actual instanceof TArrow) {
+        return skeletonTypesMatch($state, $pattern->from, $actual->from, $rigid, $bindings)
+            && skeletonTypesMatch($state, $pattern->to, $actual->to, $rigid, $bindings);
+    }
+
+    if ($pattern instanceof TUnit || $actual instanceof TUnit) {
+        return $pattern instanceof TUnit && $actual instanceof TUnit;
+    }
+
+    if ($pattern instanceof TStringLit && $actual instanceof TStringLit) {
+        return $pattern->value === $actual->value;
+    }
+
+    if ($pattern instanceof TNatLit && $actual instanceof TNatLit) {
+        return $pattern->digits === $actual->digits;
+    }
+
+    return $pattern::class === $actual::class;
+}
+
+/**
+ * @param list<Type> $patternArgs
+ * @param list<Type>|null $actualArgs
+ * @param array<string, true> $rigid
+ * @param array<string, string> $bindings
+ */
+function skeletonArgsMatch(TypeCheckState $state, array $patternArgs, ?array $actualArgs, array $rigid, array &$bindings): bool
+{
+    if ($actualArgs === null || \count($patternArgs) !== \count($actualArgs)) {
+        return false;
+    }
+    foreach ($patternArgs as $k => $patternArg) {
+        if (! skeletonTypesMatch($state, $patternArg, $actualArgs[$k], $rigid, $bindings)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 /**
@@ -2699,7 +3107,12 @@ function resolveInstanceIntrinsicMethods(TypeCheckState $state, Ast\AstNode $bod
         }
 
         $scheme = typeSchemes()[$intrinsic] ?? null;
-        if ($scheme === null || \count($parts['args']) !== schemeArity($scheme)) {
+        if ($scheme === null) {
+            return;
+        }
+
+        $values = stripLeadingEvidenceApplyArgs($parts['args']);
+        if (\count($values) !== schemeArity($scheme)) {
             return;
         }
 
@@ -4780,10 +5193,25 @@ function astTypeSignature(TypeCheckState $state, Ast\TypeNode $typeAst, array $e
     return $result;
 }
 
+/**
+ * The variable a spelling means while a skolemized body is checked: the
+ * skolem an enclosing signature bound it to, or the spelling itself outside
+ * such a scope. Type variables are global by spelling, so a nested
+ * annotation writing the same name has always meant the same variable;
+ * resolving it to the enclosing skolem keeps that sharing (and the
+ * name-based evidence lookup built on it) exactly as without skolems, only
+ * rigid — while a nested signature of its own overwrites the entry and so
+ * scopes its variables apart. See `TypeCheckState::$skolemScope`.
+ */
+function skolemScopedVar(TypeCheckState $state, string $name): string
+{
+    return $state->skolemScope[$name] ?? $name;
+}
+
 function astType(TypeCheckState $state, Ast\TypeNode $type, array $expanding = []): Type
 {
     return match ($type::class) {
-        Ast\TypeVar::class => new TVar($type->name),
+        Ast\TypeVar::class => new TVar(skolemScopedVar($state, $type->name)),
         Ast\TypeUnit::class => new TUnit(),
         Ast\TypeCon::class => resolveTypeCon($state, $type->name, $expanding, $type),
         Ast\TypePromoted::class => resolvePromotedType($state, $type->name, $type),
@@ -4965,7 +5393,7 @@ function resolveTypeCon(TypeCheckState $state, string $name, array $expanding, A
         );
     }
 
-    return \ctype_lower($name[0]) ? new TVar($name) : new TCon($name);
+    return \ctype_lower($name[0]) ? new TVar(skolemScopedVar($state, $name)) : new TCon($name);
 }
 
 function isUndeclaredNominalTypeCon(TypeCheckState $state, string $name): bool
@@ -4991,9 +5419,10 @@ function applyTypeApp(TypeCheckState $state, Ast\TypeNode $con, array $argAsts, 
         foreach ($argAsts as $argAst) {
             $args[] = astType($state, $argAst, $expanding);
         }
-        applyTypeAppKinds($state, $con->name, $args, $argAsts, $con, isVarHead: true);
+        $head = skolemScopedVar($state, $con->name);
+        applyTypeAppKinds($state, $head, $args, $argAsts, $con, isVarHead: true);
 
-        return new TVarApp($con->name, $args);
+        return new TVarApp($head, $args);
     }
 
     if ($con instanceof Ast\TypeCon && $con->name === Ast\instanceHeadMarker()) {

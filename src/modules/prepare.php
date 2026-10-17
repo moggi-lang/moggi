@@ -286,10 +286,6 @@ function prepareProject(array $paths, string $rootDir, bool $shallow = false): P
         }
 
         if ($shallow && $interfacesReady) {
-            // A focus-path base never lowers its modules, and the hydrated
-            // interfaces already carry final inferred schemes, so skip the
-            // checked-program load. `ensure`/`publish` below are no-ops for
-            // hydrated modules.
             $importContexts[$moduleName] = buildPreparedModuleContext(
                 $units,
                 $moduleName,
@@ -561,7 +557,7 @@ function ensureModuleInterface(
  * @param array<string, array<string, mixed>> $units
  * @param array<string, mixed> $projectClasses
  * @param array<string, array<string, mixed>> $classScopes
- * @param array{externalFns: array<string, string>, arity: array<string, int>, dataRefs: array<string, array<string, mixed>>} $classScopeFns
+ * @param array{externalFns: array<string, string>, arity: array<string, int>, dataRefs: array<string, array<string, mixed>>, actionReturn?: array<string, true>} $classScopeFns
  */
 function addModuleClassScope(
     array $units,

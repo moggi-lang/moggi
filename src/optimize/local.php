@@ -17,7 +17,15 @@ use function Moggi\Optimize\Interproc\operandIsNonDuplicable;
 
 use Moggi\Optimize\Support;
 
-function optimizeBlock(IR\Block $block, ?int $matchDest = null): IR\Block
+/**
+ * @param int|null $armValueDest the match dest whose trailing assign is the
+ * arm's value: it is rewritten but never propagated away (that would drop
+ * the value) and never turned into a `Ret` (that would return out of the
+ * enclosing body wherever the match is not the tail). Only
+ * `foldMatchReturn` may turn it into an arm value, together with converting
+ * the whole match to a `MatchReturn`.
+ */
+function optimizeBlock(IR\Block $block, ?int $armValueDest = null): IR\Block
 {
     $temps = [];
     $locals = [];
@@ -28,15 +36,7 @@ function optimizeBlock(IR\Block $block, ?int $matchDest = null): IR\Block
         $item = mapStmt($item, $temps, $locals);
 
         if ($item instanceof IR\Assign) {
-            if ($matchDest !== null && $item->dest === $matchDest) {
-                if (Support\isPropagatableExpr($item->value)
-                    && ! operandIsNonDuplicable($item->value)
-                ) {
-                    $items[] = new IR\Ret($item->value);
-
-                    continue;
-                }
-
+            if ($armValueDest !== null && $item->dest === $armValueDest) {
                 $items[] = $item;
 
                 continue;
@@ -142,15 +142,14 @@ function optimizeBlock(IR\Block $block, ?int $matchDest = null): IR\Block
 
         if ($item instanceof IR\MatchStmt) {
             unset($temps[$item->dest]);
-            $nestedMatchDest = $item->dest;
             $scrutinee = mapOperand($item->scrutinee, $temps, $locals);
             $items[] = new IR\MatchStmt(
                 $scrutinee,
                 \array_map(
-                    static fn (IR\MatchArm $arm): IR\MatchArm => mapMatchArm($arm, $temps, $locals, $nestedMatchDest, $scrutinee),
+                    static fn (IR\MatchArm $arm): IR\MatchArm => mapMatchArm($arm, $temps, $locals, $scrutinee, $item->dest),
                     $item->arms,
                 ),
-                $nestedMatchDest,
+                $item->dest,
                 $item->exhaustive,
             );
 
@@ -162,7 +161,7 @@ function optimizeBlock(IR\Block $block, ?int $matchDest = null): IR\Block
             $items[] = new IR\MatchReturn(
                 $scrutinee,
                 \array_map(
-                    static fn (IR\MatchArm $arm): IR\MatchArm => mapMatchArm($arm, $temps, $locals, null, $scrutinee),
+                    static fn (IR\MatchArm $arm): IR\MatchArm => mapMatchArm($arm, $temps, $locals, $scrutinee),
                     $item->arms,
                 ),
                 $item->exhaustive,
@@ -175,15 +174,12 @@ function optimizeBlock(IR\Block $block, ?int $matchDest = null): IR\Block
     }
 
     $items = foldTailReturn($items);
-    if ($matchDest !== null) {
-        $items = foldArmMatchReturn($items, $matchDest);
-    }
 
     return new IR\Block($items);
 }
 
 /** @param array<int, IR\Operand> $temps @param array<string, IR\Operand> $locals */
-function mapMatchArm(IR\MatchArm $arm, array $temps, array $locals, ?int $matchDest, IR\Operand $scrutinee): IR\MatchArm
+function mapMatchArm(IR\MatchArm $arm, array $temps, array $locals, IR\Operand $scrutinee, ?int $armValueDest = null): IR\MatchArm
 {
     $armTemps = $temps;
     $armLocals = $locals;
@@ -192,8 +188,14 @@ function mapMatchArm(IR\MatchArm $arm, array $temps, array $locals, ?int $matchD
         $mappedItems[] = mapStmt($item, $armTemps, $armLocals);
     }
 
+    // Arms keep the lowering convention (a trailing assign to the match
+    // dest), never a `Ret`: only `foldMatchReturn` may turn the trailing
+    // assign into an arm value, and only when it converts the whole match
+    // to a `MatchReturn` with it. Folding eagerly would strand a `return`
+    // in the middle of the enclosing body wherever the match is not the
+    // tail -- every backend emits a bare `return` for it.
     $optimized = cleanupConstructorArm(
-        new IR\MatchArm($arm->pattern, optimizeBlock(new IR\Block($mappedItems), $matchDest), $arm->guards),
+        new IR\MatchArm($arm->pattern, optimizeBlock(new IR\Block($mappedItems), $armValueDest), $arm->guards),
         $scrutinee,
     );
 
@@ -234,11 +236,20 @@ function foldMatchReturn(array $items): array
         return $items;
     }
 
-    if (! matchArmsAllReturn($match)) {
+    $arms = \array_map(
+        static fn (IR\MatchArm $arm): IR\MatchArm => new IR\MatchArm(
+            $arm->pattern,
+            new IR\Block(foldArmMatchReturn($arm->body->items, $match->dest)),
+            $arm->guards,
+        ),
+        $match->arms,
+    );
+    $folded = new IR\MatchStmt($match->scrutinee, $arms, $match->dest, $match->exhaustive);
+    if (! matchArmsAllReturn($folded)) {
         return $items;
     }
 
-    return [new IR\MatchReturn($match->scrutinee, $match->arms, $match->exhaustive)];
+    return [new IR\MatchReturn($folded->scrutinee, $folded->arms, $folded->exhaustive)];
 }
 
 function matchArmsAllReturn(IR\MatchStmt $match): bool
@@ -271,7 +282,11 @@ function foldArmMatchReturn(array $items, int $matchDest): array
 
     if ($last->value instanceof IR\Temp && \count($items) >= 2) {
         $expr = Support\exprFromDefiningStmt($items[\count($items) - 2], $last->value->id);
-        if ($expr !== null) {
+        // Popping the defining statement is only sound when nothing else
+        // reads the temp: otherwise the earlier read is left dangling.
+        if ($expr !== null
+            && ! Support\tempUsedInItems(\array_slice($items, 0, -2), $last->value->id)
+        ) {
             \array_pop($items);
             \array_pop($items);
             $items[] = new IR\Ret($expr);
