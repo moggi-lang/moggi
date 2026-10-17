@@ -5,7 +5,7 @@ program
     constructor_ref Label
   function world :: Label "world"
     constructor_ref Label
-  function forgetLabel :: Label t2 -> String
+  function forgetLabel :: Label s -> String
     pat_con Label
     string "any"
   function useHello :: String

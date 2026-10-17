@@ -1,5 +1,5 @@
 module
   data Secret
-    constructor Secret 
+    constructor Secret
   function peek(_p0)
       ret call __field0(_p0)

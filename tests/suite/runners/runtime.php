@@ -611,6 +611,21 @@ function testLibraryRoots(string $projectRoot): array
         $roots = [$projectRoot . '/libraries/base/src'];
     }
 
+    // The standard distribution: base plus the bundled array package, so
+    // fixtures can import Data.Array like any program built on it.
+    // This applies on top of configured roots too: the harness pins the
+    // stdlib root in-process, which would otherwise hide the default.
+    $array = $projectRoot . '/libraries/array/src';
+    if (\is_dir($array)) {
+        $resolved = \array_map(
+            static fn (string $root): string => \Moggi\Modules\resolvePath($root),
+            $roots,
+        );
+        if (! \in_array(\Moggi\Modules\resolvePath($array), $resolved, true)) {
+            $roots[] = $array;
+        }
+    }
+
     // The standard distribution: base plus the bundled containers package, so
     // fixtures can import Data.Set / Data.Map like any program built on it.
     // This applies on top of configured roots too: the harness pins the

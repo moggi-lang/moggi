@@ -9,8 +9,12 @@
  *
  *   1. compiler   `test.php --exclude-group base`
  *   2. base       `test.php --group base`
- *   3. json       the `Suite` test-suite in `libraries/json/tests`, run with
- *                 `moggi run` once per backend
+ *   3. json       the `Suite` test-suite in `libraries/json/tests`,
+ *                 run with `moggi run` once per backend
+ *   4. containers the `Suite` test-suite in `libraries/containers/tests`,
+ *                 run with `moggi run` once per backend
+ *   5. time       the `Suite` test-suite in `libraries/time/tests`,
+ *                 run with `moggi run` once per backend
  *
  * Anything besides `--backend` is forwarded to the two `test.php` stages as
  * is (`--jobs`, `--stop-on-failure`, selectors, …); the json stage only takes
@@ -21,7 +25,11 @@
  * System.Text.Json on dotnet) the way `moggi build` does and adds the
  * resolved tree as a library root, so those backends need their host tool
  * (maven, dotnet) and the network to fetch them — exactly as building a
- * package that declares them would.
+ * package that declares them would. It also adds the bundled containers
+ * sources, which the json package depends on for `Data.Map`.
+ *
+ * The containers stage needs no host dependencies: the package is pure
+ * Moggi, so every backend runs the same command.
  */
 
 const MOGGI_PROJECT_ROOT = __DIR__;
@@ -50,14 +58,23 @@ function parseAllTestArgs(array $argv): array
 
             continue;
         }
+        $backendValue = null;
         if ($arg === '--backend') {
-            $value = $argv[$i + 1] ?? null;
-            if ($value === null || $value === '') {
+            $backendValue = $argv[$i + 1] ?? null;
+            if ($backendValue === null || $backendValue === '') {
                 \fwrite(STDERR, "error: --backend requires php, jvm, dotnet or all\n");
                 exit(2);
             }
             ++$i;
-            foreach (\explode(',', $value) as $one) {
+        } elseif (\str_starts_with($arg, '--backend=')) {
+            $backendValue = \substr($arg, \strlen('--backend='));
+            if ($backendValue === '') {
+                \fwrite(STDERR, "error: --backend requires php, jvm, dotnet or all\n");
+                exit(2);
+            }
+        }
+        if ($backendValue !== null) {
+            foreach (\explode(',', $backendValue) as $one) {
                 $one = \trim($one);
                 if ($one === 'all') {
                     foreach (['php', 'jvm', 'dotnet'] as $backend) {
@@ -96,8 +113,9 @@ function allTestUsage(): string
 usage: test-all [--backend php|jvm|dotnet|all] [test.php options...]
 
 Run everything, one stage after the other: the compiler suite without the
-base group, the base group on its own, and the json package's Suite once per
-backend. Options besides --backend are forwarded to the test.php stages.
+base group, the base group on its own, and the json, containers and time
+packages' Suites once per backend. Options besides --backend are forwarded to
+the test.php stages.
 
 Examples
   php test-all.php
@@ -111,13 +129,22 @@ TXT;
 function runStage(string $title, array $argv): int
 {
     echo "=== {$title}\n";
+    \flush();
 
-    $process = \proc_open(\implode(' ', \array_map('escapeshellarg', $argv)), [STDIN, STDOUT, STDERR], $pipes);
+    // One pipe with stderr merged into it, streamed live. Inheriting a
+    // redirected stdout lets concurrent workers overwrite each other's bytes
+    // through the shared file offset, which garbles the log and can hide the
+    // very diagnostic a failed stage printed.
+    $command = \implode(' ', \array_map('escapeshellarg', $argv)) . ' 2>&1';
+    $process = \proc_open($command, [0 => STDIN, 1 => ['pipe', 'w']], $pipes);
     if (! \is_resource($process)) {
         \fwrite(STDERR, "error: cannot start {$title}\n");
 
         return 1;
     }
+
+    \fpassthru($pipes[1]);
+    \fclose($pipes[1]);
 
     return (int) \proc_close($process);
 }
@@ -169,7 +196,9 @@ foreach ($backends as $backend) {
     $json = [$php, MOGGI_PROJECT_ROOT . '/moggi.php', 'run',
         'libraries/json/tests/Suite.mog',
         '--lib', 'libraries/json/src',
-        '--lib', 'libraries/json/tests'];
+        '--lib', 'libraries/json/tests',
+        '--lib', 'libraries/containers/src',
+        '--lib', 'libraries/time/src'];
     if ($toolRoot !== null) {
         $json[] = '--lib';
         $json[] = $toolRoot;
@@ -181,10 +210,37 @@ foreach ($backends as $backend) {
     }
 }
 
+// Stage 4: the containers package's Suite, once per backend.
+foreach ($backends as $backend) {
+    $containers = [$php, MOGGI_PROJECT_ROOT . '/moggi.php', 'run',
+        'libraries/containers/tests/Suite.mog',
+        '--lib', 'libraries/containers/src',
+        '--lib', 'libraries/containers/tests',
+        '--lib', 'libraries/array/src',
+        '--backend',
+        $backend];
+    if (runStage("containers ({$backend})", $containers) !== 0) {
+        $failed[] = "containers ({$backend})";
+    }
+}
+
+// Stage 5: the time package's Suite, once per backend.
+foreach ($backends as $backend) {
+    $time = [$php, MOGGI_PROJECT_ROOT . '/moggi.php', 'run',
+        'libraries/time/tests/Suite.mog',
+        '--lib', 'libraries/time/src',
+        '--lib', 'libraries/time/tests',
+        '--backend',
+        $backend];
+    if (runStage("time ({$backend})", $time) !== 0) {
+        $failed[] = "time ({$backend})";
+    }
+}
+
 if ($failed !== []) {
     echo "\nALL TESTS: failed (" . \implode(', ', $failed) . ")\n";
     exit(1);
 }
 
-echo "\nALL TESTS: passed (compiler, base, json on " . \implode(', ', $backends) . ")\n";
+echo "\nALL TESTS: passed (compiler, base, json, containers, time on " . \implode(', ', $backends) . ")\n";
 exit(0);

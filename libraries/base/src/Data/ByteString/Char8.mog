@@ -168,17 +168,17 @@ listMap f xs = case xs of
   [] -> []
   x : rest -> f x : listMap f rest
 
-listMaximum :: Ord a => [a] -> a
+listMaximum :: [Char] -> Char
 listMaximum xs = case xs of
   [] -> error "Data.ByteString.Char8.maximum: empty"
   x : rest -> foldCharsL max x rest
 
-listMinimum :: Ord a => [a] -> a
+listMinimum :: [Char] -> Char
 listMinimum xs = case xs of
   [] -> error "Data.ByteString.Char8.minimum: empty"
   x : rest -> foldCharsL min x rest
 
-listFoldl1 :: (a -> a -> a) -> [a] -> a
+listFoldl1 :: (Char -> Char -> Char) -> [Char] -> Char
 listFoldl1 f xs = case xs of
   [] -> error "Data.ByteString.Char8.foldl1: empty"
   x : rest -> foldCharsL f x rest

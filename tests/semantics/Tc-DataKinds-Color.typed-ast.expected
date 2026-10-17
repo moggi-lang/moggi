@@ -13,7 +13,7 @@ program
   function acceptOnlyBlue :: OnlyColor 'Blue -> String
     pat_con OnlyColor
     string "blue"
-  function forgetColor :: OnlyColor t2 -> String
+  function forgetColor :: OnlyColor c -> String
     pat_con OnlyColor
     string "any"
   function rb :: PairColor 'Red 'Blue

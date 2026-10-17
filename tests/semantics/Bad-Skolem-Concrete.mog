@@ -1,0 +1,4 @@
+-- The signature promises any `a` can be returned as an `Int`. The body just returns
+-- its argument, so checking it must not specialize `a` to `Int`.
+intOf :: a -> Int
+intOf x = x

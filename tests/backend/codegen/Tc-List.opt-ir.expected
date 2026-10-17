@@ -80,7 +80,8 @@ module
   function emptyGuard()
       ret call concatMap(@__ev_Foldable_List, @λ9, [1, 2, 3])
   function format(__ev_Show, xs)
-      t34 = dict_call __ev_Show->show(xs)
+      t35 = call __ev_Show_List(__ev_Show)
+      t34 = dict_call t35->show(xs)
       ret t34
   function shown()
       ret call format(@__ev_Show_Bool, [@True, @False])

@@ -1,0 +1,5 @@
+-- A polymorphic signature promises the body works for *every* instantiation of `a`
+-- and `b`. Returning the second argument conflates the two distinct variables, so the
+-- signature check must reject this instead of unifying `b` with `a`.
+badConst :: a -> b -> a
+badConst x y = y

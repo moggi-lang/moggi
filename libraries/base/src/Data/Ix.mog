@@ -15,6 +15,8 @@
 -- the derived ones would be.
 module Data.Ix
   ( Ix(range, index, unsafeIndex, inRange, rangeSize, unsafeRangeSize)
+  , safeRangeSize
+  , safeIndex
   ) where
 
 import Data.Bool
@@ -70,6 +72,24 @@ class Ord a => Ix a where
   unsafeRangeSize :: (a, a) -> Int
   unsafeRangeSize b = case b of
     (_, h) -> unsafeIndex b h + 1
+
+-- | A total range size: 'rangeSize' with empty and negative ranges mapped to
+-- an error instead of a bogus size. Array construction uses this so an
+-- ill-formed bounds pair fails loudly rather than allocating nonsense.
+safeRangeSize :: Ix a => (a, a) -> Int
+safeRangeSize bnds = case rangeSize bnds of
+  r -> case r < 0 of
+    True -> error "Data.Ix.safeRangeSize: negative range size"
+    False -> r
+
+-- | A doubly-checked offset: the 'index' of @i@ in @bnds@, checked again
+-- against @0 <= off < n@ so a mismatch between the semantic index and the
+-- backing store fails loudly rather than reading out of bounds.
+safeIndex :: Ix a => (a, a) -> Int -> a -> Int
+safeIndex bnds n i = case index bnds i of
+  off -> case off >= 0 && off < n of
+    True -> off
+    False -> error "Data.Ix.safeIndex: index out of range"
 
 -- 'index' with the type in the error, as in base: 'Ix' has no 'Show'
 -- superclass, so each scalar instance names its own type.

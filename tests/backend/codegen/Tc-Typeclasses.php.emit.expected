@@ -169,13 +169,13 @@ function __lambda_4($x) {
 }
 
 function __lambda_6($__ev_Applicative_1, $y) {
-    $__t15 = ($__ev_Applicative_1["pure"])($y);
-    return $__t15;
+    $__t16 = ($__ev_Applicative_1["pure"])($y);
+    return $__t16;
 }
 
 function __lambda_5($__ev_Applicative_1, $__ev_Monad_2, $f, $x) {
-    $__t16 = __apply($f, $x);
-    $__t17 = ($__ev_Monad_2[">>="])($__t16, ['__partial', 2, '\\Tc\\Typeclasses\\__lambda_6', $__ev_Applicative_1]);
+    $__t15 = __apply($f, $x);
+    $__t17 = ($__ev_Monad_2[">>="])($__t15, ['__partial', 2, '\\Tc\\Typeclasses\\__lambda_6', $__ev_Applicative_1]);
     return $__t17;
 }
 

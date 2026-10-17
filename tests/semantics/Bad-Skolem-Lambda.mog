@@ -1,0 +1,4 @@
+-- Applying the polymorphic argument to `()` specializes its domain to `()`, but the
+-- signature promises it accepts any `a`. The mismatch must be reported at the call.
+applyToUnit :: (a -> f b) -> f b
+applyToUnit g = g ()

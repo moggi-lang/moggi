@@ -1,0 +1,4 @@
+tests/semantics/Bad-Skolem-Lambda.mog:4:17: type error: could not unify `a` with `()`
+
+  4 | applyToUnit g = g ()
+    |                 ^^^

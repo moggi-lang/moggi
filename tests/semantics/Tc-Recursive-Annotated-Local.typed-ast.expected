@@ -50,7 +50,7 @@ program
                   intrinsic listCons#
                     variable k
                     variable acc
-  function probedDeclared :: __Dict_Eq -> __Dict_Ord -> __Dict_Num -> t58 -> [t58]
+  function probedDeclared :: __Dict_Eq -> __Dict_Ord -> __Dict_Num -> a -> [a]
     pat_var __ev_Eq
     pat_var __ev_Ord_1
     pat_var __ev_Num_2

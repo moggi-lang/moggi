@@ -19,7 +19,7 @@ program
   function samePadded :: FixedBytes 1 -> FixedBytes 1
     pat_var x
     variable x
-  function forgetSize :: FixedBytes t6 -> String
+  function forgetSize :: FixedBytes n -> String
     pat_con FixedBytes
     string "any"
   function useZero :: String

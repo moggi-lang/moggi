@@ -56,9 +56,9 @@ function charDemo() {
 }
 
 function altMaybeDemo() {
-    $__t14 = ["Just", 2];
-    $__t15 = ["Just", 1];
-    $__t16 = (__ev_Alternative_Maybe()["<|>"])($__t15, $__t14);
+    $__t14 = ["Just", 1];
+    $__t15 = ["Just", 2];
+    $__t16 = (__ev_Alternative_Maybe()["<|>"])($__t14, $__t15);
     return $__t16;
 }
 

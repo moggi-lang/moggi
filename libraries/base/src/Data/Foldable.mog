@@ -182,8 +182,12 @@ concat t = foldr appendList [] t
 concatMap :: Foldable t => (a -> [b]) -> t a -> [b]
 concatMap f t = foldr (\x ys -> appendList (f x) ys) [] t
 
+-- A left fold: effects run front-to-back, and the backend is strict, so the
+-- lazy @foldr (\x u -> f x *> u)@ spelling would run them back-to-front. The
+-- accumulator stays @f ()@ (@() <$@ discards each result), so @b@ is never
+-- unified with @()@ the way the previous @foldl@ spelling did.
 traverse_ :: (Foldable t, Applicative f) => (a -> f b) -> t a -> f ()
-traverse_ f t = foldl (\acc x -> (\_ b -> b) <$> acc <*> f x) (pure ()) t
+traverse_ f t = foldl (\u x -> u *> (() <$ f x)) (pure ()) t
 
 for_ :: (Foldable t, Applicative f) => t a -> (a -> f b) -> f ()
 for_ xs f = traverse_ f xs

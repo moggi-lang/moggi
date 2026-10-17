@@ -12,9 +12,9 @@ module
   function charDemo()
       ret call isDigit('\u{37}')
   function altMaybeDemo()
-      t14 = call Just(2)
-      t15 = call Just(1)
-      t16 = dict_call @__ev_Alternative_Maybe-><|>(t15, t14)
+      t14 = call Just(1)
+      t15 = call Just(2)
+      t16 = dict_call @__ev_Alternative_Maybe-><|>(t14, t15)
       ret t16
   function altListDemo()
       t17 = dict_call @__ev_Alternative_List-><|>([1], [2, 3])

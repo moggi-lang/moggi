@@ -9,4 +9,6 @@ import Moggi.Internal.Prim
 foreign dotnet function rawExit "System.Environment:Exit" :: Int32 -> IO ()
 
 exitWithCode :: Int -> IO a
-exitWithCode code = rawExit (int32FromInt# code)
+exitWithCode code = do
+  _ <- rawExit (int32FromInt# code)
+  pure (error "exit")

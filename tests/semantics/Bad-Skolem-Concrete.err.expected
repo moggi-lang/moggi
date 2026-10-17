@@ -1,0 +1,4 @@
+tests/semantics/Bad-Skolem-Concrete.mog:4:11: type error: could not unify `a` with `Int`
+
+  4 | intOf x = x
+    |           ^

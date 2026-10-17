@@ -37,7 +37,7 @@ program
     tuple
       variable y
       variable x
-  function first :: [t18] -> Maybe t18
+  function first :: [a] -> Maybe a
     pat_var _p0
     case
       variable _p0

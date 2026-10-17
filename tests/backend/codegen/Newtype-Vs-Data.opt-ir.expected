@@ -1,8 +1,8 @@
 module
   newtype Age
-    constructor Age 
+    constructor Age
   data Box
-    constructor Box 
+    constructor Box
   function unwrapAge(_p0)
       ret _p0
   function unwrapBox(_p0)

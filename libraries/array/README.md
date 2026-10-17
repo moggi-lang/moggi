@@ -2,8 +2,7 @@
 
 Mutable and immutable boxed arrays, with overloaded interfaces for both.
 
-* `Data.Array` — immutable boxed arrays (`Array`), as specified in the
-  Haskell 2010 Language Report.
+* `Data.Array` — immutable boxed arrays (`Array`)
 * `Data.Array.IArray` — the overloaded immutable interface (`IArray`).
 * `Data.Array.MArray` — the overloaded mutable interface (`MArray`).
 * `Data.Array.ST` — mutable boxed arrays in `ST` (`STArray`).
@@ -23,15 +22,3 @@ Unboxed arrays (`UArray`, `STUArray`, `IOUArray`), `Storable` arrays, and the
 values and no `Foreign.Ptr`/`Storable` machinery for them to be built on.
 The `.Safe`/`.Internals` module variants are not defined either: Moggi has
 no Safe Haskell, so the main modules are the whole interface.
-
-Two boxed pieces are missing deliberately, not by oversight:
-
-* `Eq (IOArray i e)`: Moggi's IO confinement forbids `IOArray` in a pure
-  signature, and `(==)` is pure. `STArray` does have pointer equality
-  (`sameSTArray#`, mirroring `sameMutableArray#`); for `IOArray`, compare
-  identities inside `IO` with `sameIOArray#` (`Moggi.Internal.Prim`).
-* `Read (Array i e)`: Moggi's `Read` class (`Text.Read`) is a
-  single-method `String -> a` without instances for pairs and lists, so
-  `read` could not name the bounds or the associations. `Show` writes the
-  same `array (l,u) [(i,e), ...]` shape as Haskell's `showsIArray`, ready
-  for the instance once base grows those.

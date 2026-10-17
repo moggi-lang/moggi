@@ -1,7 +1,7 @@
 module
   data Option a
     constructor None
-    constructor Some 
+    constructor Some
   function none()
       ret @None
   function some(x)

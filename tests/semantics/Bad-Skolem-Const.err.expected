@@ -1,0 +1,4 @@
+tests/semantics/Bad-Skolem-Const.mog:5:16: type error: could not unify `b` with `a`
+
+  5 | badConst x y = y
+    |                ^
