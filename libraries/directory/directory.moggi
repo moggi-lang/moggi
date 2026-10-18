@@ -1,0 +1,24 @@
+[package]
+name = directory
+version = 0.1.0
+license = BSD-3-Clause
+license-file = LICENSE
+copyright = 2026 Sascha-Oliver Prolić
+description = Platform-agnostic filesystem operations: System.Directory, the directory API on Posix.
+
+[author]
+name = Sascha-Oliver Prolic
+email = saschaprolic@googlemail.com
+npub = npub1yywlmj053p4qp7z2qvqsrgcwz488mw0pr0t50xz3e5rx7s9uaelsjpdmfm
+
+[lib]
+source-dirs = src
+
+[test-suite]
+main = Suite
+source-dirs = tests
+
+[dependencies]
+base = >=0.2.0
+filepath = >=0.1.0
+time = >=0.1.0

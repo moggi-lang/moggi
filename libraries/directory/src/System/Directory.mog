@@ -1,0 +1,438 @@
+{-# BACKEND
+  php = System.Directory.PHP
+  jvm = System.Directory.JVM
+  dotnet = System.Directory.DotNet
+#-}
+-- |
+-- System-independent directory manipulation: creating, listing, removing,
+-- renaming, and querying files and directories, permissions, timestamps,
+-- symbolic links, XDG directories, and executable search.
+--
+-- This is the 'directory' package's 'FilePath' API on Posix semantics —
+-- 'System.FilePath' does the pure path manipulation, and the per-host modules
+-- behind this facade answer what the machine says. A program imports this
+-- module and never chooses a backend for it.
+--
+-- Only the non-Windows behaviour is implemented: 'exeExtension' is @\"\"@,
+-- drives are runs of path separators, and the XDG defaults are the Unix ones.
+module System.Directory
+  ( -- * Actions on directories
+    createDirectory
+  , createDirectoryIfMissing
+  , removeDirectory
+  , removeDirectoryRecursive
+  , removePathForcibly
+  , renameDirectory
+  , listDirectory
+  , getDirectoryContents
+    -- ** Current working directory
+  , getCurrentDirectory
+  , setCurrentDirectory
+  , withCurrentDirectory
+    -- * Pre-defined directories
+  , getHomeDirectory
+  , XdgDirectory(..)
+  , getXdgDirectory
+  , XdgDirectoryList(..)
+  , getXdgDirectoryList
+  , getAppUserDataDirectory
+  , getUserDocumentsDirectory
+  , getTemporaryDirectory
+    -- * PATH
+  , getExecSearchPath
+    -- * Actions on files
+  , removeFile
+  , renameFile
+  , renamePath
+  , copyFile
+  , copyFileWithMetadata
+  , getFileSize
+  , canonicalizePath
+  , makeAbsolute
+  , makeRelativeToCurrentDirectory
+    -- * Existence tests
+  , doesPathExist
+  , doesFileExist
+  , doesDirectoryExist
+    -- * Executables and file search
+  , findExecutable
+  , findExecutables
+  , findExecutablesInDirectories
+  , findFile
+  , findFiles
+  , findFileWith
+  , findFilesWith
+  , exeExtension
+    -- * Symbolic links
+  , createFileLink
+  , createDirectoryLink
+  , removeDirectoryLink
+  , pathIsSymbolicLink
+  , getSymbolicLinkTarget
+    -- * Permissions
+  , Permissions(..)
+  , emptyPermissions
+  , readable
+  , writable
+  , executable
+  , searchable
+  , setOwnerReadable
+  , setOwnerWritable
+  , setOwnerExecutable
+  , setOwnerSearchable
+  , getPermissions
+  , setPermissions
+  , copyPermissions
+    -- * Timestamps
+  , getAccessTime
+  , getModificationTime
+  , setAccessTime
+  , setModificationTime
+  ) where
+
+import Control.Applicative
+import Control.Exception (bracket)
+import Control.Monad
+import Data.Bool
+import Data.Either
+import Data.Integer (Integer)
+import Data.List (map)
+import Data.Maybe
+import Data.Semigroup
+import Data.String (String, splitOn)
+import Data.Time.Clock (UTCTime)
+import Moggi.Internal.Base
+import Moggi.IO.Exception
+import System.Directory.Types
+import System.Environment (lookupEnv)
+import System.FilePath (isAbsolute, makeRelative, normalise, (</>))
+import System.IO.Base (IO, FilePath)
+import System.IO.Error (mkIOError, tryIOError)
+
+-- | @'createDirectory' dir@ creates a new directory @dir@. It fails when the
+-- directory already exists; 'createDirectoryIfMissing' with 'True' is the
+-- forgiving form.
+createDirectory :: FilePath -> IO ()
+createDirectory p = createDirectoryIfMissing False p
+
+-- | @'createDirectoryIfMissing' parents dir@ creates a new directory @dir@ if
+-- it does not exist. With 'True' all missing parents are created too.
+createDirectoryIfMissing :: Bool -> FilePath -> IO ()
+
+-- | @'removeDirectory' dir@ removes an existing, empty directory.
+removeDirectory :: FilePath -> IO ()
+
+-- | @'removeDirectoryRecursive' dir@ removes a directory together with its
+-- contents and subdirectories. Symbolic links are removed without affecting
+-- their targets.
+removeDirectoryRecursive :: FilePath -> IO ()
+
+-- | Removes a file or directory together with its contents. Unlike the other
+-- removal functions, read-only files are made removable first, and a missing
+-- path is silently ignored.
+removePathForcibly :: FilePath -> IO ()
+
+-- | @'renameDirectory' old new@ renames a directory, replacing @new@ when it
+-- already exists.
+renameDirectory :: FilePath -> FilePath -> IO ()
+
+-- | @'listDirectory' dir@ answers all entries of @dir@ without @.@ and @..@.
+listDirectory :: FilePath -> IO [FilePath]
+
+-- | Like 'listDirectory', but keeps the special entries @.@ and @..@.
+getDirectoryContents :: FilePath -> IO [FilePath]
+
+-- | The current working directory, as an absolute path.
+getCurrentDirectory :: IO FilePath
+
+-- | Changes the working directory.
+setCurrentDirectory :: FilePath -> IO ()
+
+-- | Runs an action in a directory, restoring the original afterwards, even
+-- when the action fails.
+withCurrentDirectory :: FilePath -> IO a -> IO a
+withCurrentDirectory dir action =
+  bracket getCurrentDirectory setCurrentDirectory (\_ -> do
+    setCurrentDirectory dir
+    action)
+
+-- | The current user's home directory: @$HOME@, else @%USERPROFILE%@.
+getHomeDirectory :: IO FilePath
+getHomeDirectory = do
+  home <- lookupEnv "HOME"
+  case home of
+    Just h -> pure h
+    Nothing -> do
+      profile <- lookupEnv "USERPROFILE"
+      case profile of
+        Just u -> pure u
+        Nothing -> ioError (mkIOError NoSuchThing "getHomeDirectory" Nothing Nothing)
+
+-- | The XDG base directory with @rel@ appended; an absolute @rel@ is answered
+-- as-is. A relative environment value is ignored, per the specification, and
+-- the default is used instead.
+getXdgDirectory :: XdgDirectory -> FilePath -> IO FilePath
+getXdgDirectory which rel = case isAbsolute rel of
+  True -> pure rel
+  False -> do
+    base <- xdgBase which
+    pure (base </> rel)
+
+xdgBase :: XdgDirectory -> IO FilePath
+xdgBase which = case which of
+  XdgData -> xdgSingle "XDG_DATA_HOME" ".local/share"
+  XdgConfig -> xdgSingle "XDG_CONFIG_HOME" ".config"
+  XdgCache -> xdgSingle "XDG_CACHE_HOME" ".cache"
+  XdgState -> xdgSingle "XDG_STATE_HOME" ".local/state"
+
+xdgSingle :: String -> FilePath -> IO FilePath
+xdgSingle var def = do
+  val <- lookupEnv var
+  case val of
+    Just v -> case isAbsolute v of
+      True -> pure v
+      False -> xdgDefault def
+    Nothing -> xdgDefault def
+
+xdgDefault :: FilePath -> IO FilePath
+xdgDefault def = do
+  home <- getHomeDirectory
+  pure (home </> def)
+
+-- | The XDG search paths, split on the search-path separator.
+getXdgDirectoryList :: XdgDirectoryList -> IO [FilePath]
+getXdgDirectoryList which = case which of
+  XdgDataDirs -> xdgList "XDG_DATA_DIRS" ["/usr/local/share", "/usr/share"]
+  XdgConfigDirs -> xdgList "XDG_CONFIG_DIRS" ["/etc/xdg"]
+
+xdgList :: String -> [FilePath] -> IO [FilePath]
+xdgList var defaults = do
+  val <- lookupEnv var
+  pure (case val of
+    Just "" -> defaults
+    Just v -> map blankToDot (splitOn searchSeparator v)
+    Nothing -> defaults)
+
+-- | @~\/.@\<app\>@: the traditional Unix per-application data directory.
+getAppUserDataDirectory :: FilePath -> IO FilePath
+getAppUserDataDirectory app = do
+  home <- getHomeDirectory
+  pure (home </> ("." <> app))
+
+-- | The current user's document directory: @$HOME@ on Unix.
+getUserDocumentsDirectory :: IO FilePath
+getUserDocumentsDirectory = do
+  home <- lookupEnv "HOME"
+  case home of
+    Just h -> pure h
+    Nothing -> ioError (mkIOError NoSuchThing "getUserDocumentsDirectory" Nothing Nothing)
+
+-- | The current directory for temporary files. The path is not checked to
+-- exist.
+getTemporaryDirectory :: IO FilePath
+
+-- | The @$PATH@ entries, or @[]@ when @PATH@ is unset.
+getExecSearchPath :: IO [FilePath]
+getExecSearchPath = do
+  val <- lookupEnv "PATH"
+  pure (case val of
+    Just v -> map blankToDot (splitOn searchSeparator v)
+    Nothing -> [])
+
+-- | The search-path separator as a string: `searchPathSeparator` is a `Char`
+-- and `splitOn` splits on strings. Kept as a literal beside its `Char`
+-- sibling in `System.FilePath`, which owns the separator definition.
+searchSeparator :: String
+searchSeparator = ":"
+
+-- | A blank search-path item means the current directory. `splitOn` keeps
+-- blanks as @""@; this names them, the way `splitSearchPath` does.
+blankToDot :: String -> FilePath
+blankToDot s = case s of
+  "" -> "."
+  _ -> s
+
+-- | Removes the directory entry of a file that is not itself a directory.
+removeFile :: FilePath -> IO ()
+
+-- | Renames a file, replacing the destination when it already exists. Neither
+-- path may refer to a directory.
+renameFile :: FilePath -> FilePath -> IO ()
+
+-- | Renames a file or directory, replacing the destination when it already
+-- exists. The destination must not point to an existing directory.
+renamePath :: FilePath -> FilePath -> IO ()
+
+-- | Copies a file with its permissions, replacing the destination when it
+-- already exists. Neither path may refer to a directory.
+copyFile :: FilePath -> FilePath -> IO ()
+
+-- | Copies a file with its permissions and timestamps, overwriting the
+-- destination. Symbolic links are followed: the copy is performed on the
+-- targets.
+copyFileWithMetadata :: FilePath -> FilePath -> IO ()
+copyFileWithMetadata src dst = do
+  copyFile src dst
+  perms <- getPermissions src
+  setPermissions dst perms
+  accessed <- getAccessTime src
+  modified <- getModificationTime src
+  setAccessTime dst accessed
+  setModificationTime dst modified
+
+-- | The size of a file, in bytes.
+getFileSize :: FilePath -> IO Integer
+
+-- | Makes a path absolute, resolves indirections on the longest existing
+-- prefix, and normalizes the rest. The input need not exist.
+canonicalizePath :: FilePath -> IO FilePath
+
+-- | Makes a path absolute against the current directory and normalizes it.
+-- An absolute path is only normalized and never fails.
+makeAbsolute :: FilePath -> IO FilePath
+makeAbsolute p = case isAbsolute p of
+  True -> pure (normalise p)
+  False -> do
+    cwd <- getCurrentDirectory
+    pure (normalise (cwd </> p))
+
+-- | A path relative to the current directory, like 'makeRelative'.
+makeRelativeToCurrentDirectory :: FilePath -> IO FilePath
+makeRelativeToCurrentDirectory p = do
+  cwd <- getCurrentDirectory
+  pure (makeRelative cwd p)
+
+-- | Whether the path points to an existing filesystem object. Missing search
+-- permission on a parent answers 'False'.
+doesPathExist :: FilePath -> IO Bool
+
+-- | Whether the path exists and is not a directory.
+doesFileExist :: FilePath -> IO Bool
+
+-- | Whether the path exists and is a directory or a symbolic link to one.
+doesDirectoryExist :: FilePath -> IO Bool
+
+-- | The full path of an executable @name@ in the system locations, if any.
+findExecutable :: String -> IO (Maybe FilePath)
+findExecutable name = do
+  found <- findExecutables name
+  pure (case found of
+    [] -> Nothing
+    x : _ -> Just x)
+
+-- | All occurrences of an executable @name@ in the system locations.
+findExecutables :: String -> IO [FilePath]
+findExecutables name = do
+  path <- getExecSearchPath
+  findExecutablesInDirectories path name
+
+-- | All occurrences of an executable @binary@ in the given directories.
+-- @exeExtension@ is appended to the query, so @\"\"@ searches the name as-is.
+findExecutablesInDirectories :: [FilePath] -> String -> IO [FilePath]
+findExecutablesInDirectories dirs binary = case exeExtension of
+  "" -> findFilesWith isExecutableFile dirs binary
+  ext -> concatMapM (findDirBinary binary ext) dirs
+
+findDirBinary :: String -> String -> FilePath -> IO [FilePath]
+findDirBinary binary ext dir =
+  findFilesWith isExecutableFile [dir] binary >>= (\plain ->
+    findFilesWith isExecutableFile [dir] (binary <> ext) >>= (\withExt ->
+      pure (plain <> withExt)))
+
+isExecutableFile :: FilePath -> IO Bool
+isExecutableFile p = do
+  exists <- doesFileExist p
+  case exists of
+    False -> pure False
+    True -> do
+      perms <- tryIOError (getPermissions p)
+      pure (case perms of
+        Left _ -> False
+        Right pm -> executable pm)
+
+-- | The first directory holding @name@, if any.
+findFile :: [FilePath] -> String -> IO (Maybe FilePath)
+findFile = findFileWith (\_ -> pure True)
+
+-- | All directories holding @name@.
+findFiles :: [FilePath] -> String -> IO [FilePath]
+findFiles = findFilesWith (\_ -> pure True)
+
+-- | The first @name@ satisfying the predicate, directories left to right.
+findFileWith :: (FilePath -> IO Bool) -> [FilePath] -> String -> IO (Maybe FilePath)
+findFileWith pred dirs name = do
+  found <- findFilesWith pred dirs name
+  pure (case found of
+    [] -> Nothing
+    x : _ -> Just x)
+
+-- | Every @name@ satisfying the predicate, directories left to right. An
+-- absolute @name@ is checked as-is, whatever the directories are.
+findFilesWith :: (FilePath -> IO Bool) -> [FilePath] -> String -> IO [FilePath]
+findFilesWith pred dirs name = case isAbsolute name of
+  True -> do
+    ok <- pred name
+    pure (case ok of
+      True -> [name]
+      False -> [])
+  False -> concatMapM (findDirFile pred name) dirs
+
+findDirFile :: (FilePath -> IO Bool) -> String -> FilePath -> IO [FilePath]
+findDirFile pred name dir = do
+  let p = dir </> name
+  ok <- pred p
+  pure (case ok of
+    True -> [p]
+    False -> [])
+
+concatMapM :: (a -> IO [b]) -> [a] -> IO [b]
+concatMapM _ [] = pure []
+concatMapM f (x : xs) = do
+  ys <- f x
+  rest <- concatMapM f xs
+  pure (ys <> rest)
+
+-- | The filename extension of executables: @\"\"@ on Posix. There is no
+-- Windows drive semantics anywhere in this package, so nothing is appended.
+exeExtension :: String
+
+-- | Creates a file symbolic link: @target@ may be relative and need not exist.
+createFileLink :: FilePath -> FilePath -> IO ()
+
+-- | Creates a directory symbolic link.
+createDirectoryLink :: FilePath -> FilePath -> IO ()
+
+-- | Removes a directory symbolic link.
+removeDirectoryLink :: FilePath -> IO ()
+
+-- | Whether an existing @path@ is a symbolic link. Throws when @path@ does
+-- not exist or is inaccessible.
+pathIsSymbolicLink :: FilePath -> IO Bool
+
+-- | The target of a symbolic link, which may be relative, missing, or invalid.
+getSymbolicLinkTarget :: FilePath -> IO FilePath
+
+-- | The permissions of a file or directory.
+getPermissions :: FilePath -> IO Permissions
+
+-- | Sets the permissions of a file or directory. On Posix systems this sets
+-- the owner permissions.
+setPermissions :: FilePath -> Permissions -> IO ()
+
+-- | Copies the permissions of one file to another.
+copyPermissions :: FilePath -> FilePath -> IO ()
+copyPermissions src dst = do
+  perms <- getPermissions src
+  setPermissions dst perms
+
+-- | When a file or directory was last accessed.
+getAccessTime :: FilePath -> IO UTCTime
+
+-- | When a file or directory was last modified.
+getModificationTime :: FilePath -> IO UTCTime
+
+-- | Changes the last-access time.
+setAccessTime :: FilePath -> UTCTime -> IO ()
+
+-- | Changes the last-modification time.
+setModificationTime :: FilePath -> UTCTime -> IO ()

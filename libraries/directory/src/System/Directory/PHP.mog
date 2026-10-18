@@ -1,0 +1,418 @@
+module System.Directory.PHP
+  ( createDirectoryIfMissing
+  , removeDirectory
+  , removeDirectoryRecursive
+  , removePathForcibly
+  , renameDirectory
+  , renameFile
+  , renamePath
+  , listDirectory
+  , getDirectoryContents
+  , getCurrentDirectory
+  , setCurrentDirectory
+  , getTemporaryDirectory
+  , removeFile
+  , copyFile
+  , getFileSize
+  , canonicalizePath
+  , doesPathExist
+  , doesFileExist
+  , doesDirectoryExist
+  , createFileLink
+  , createDirectoryLink
+  , removeDirectoryLink
+  , pathIsSymbolicLink
+  , getSymbolicLinkTarget
+  , getPermissions
+  , setPermissions
+  , getAccessTime
+  , getModificationTime
+  , setAccessTime
+  , setModificationTime
+  , exeExtension
+  ) where
+
+import Control.Applicative hiding (empty)
+import Control.Monad
+import Data.Bool
+import Data.Int
+import Data.Integer (Integer, integerFromInt, integerToInt)
+import Data.Semigroup
+import Data.String hiding (pack, unpack, length, take, drop, isPrefixOf, isSuffixOf)
+import Data.Time.Calendar (toModifiedJulianDay)
+import Data.Time.Clock (UTCTime, utcTimeFromUnix, utctDay, utctDayTime, diffTimeToSeconds)
+import Moggi.Internal.Base
+import Moggi.IO.Exception
+import System.Directory.Types
+import System.FilePath (takeDirectory, takeFileName, (</>))
+import System.IO.Base (IO, FilePath)
+import System.IO.Error (mkIOError)
+import Moggi.Internal.Prim
+
+foreign php function rawIsFile "is_file" :: String -> IO Bool
+
+foreign php function rawIsDir "is_dir" :: String -> IO Bool
+
+foreign php function rawFileExists "file_exists" :: String -> IO Bool
+
+foreign php function rawIsReadable "is_readable" :: String -> IO Bool
+
+foreign php function rawIsWritable "is_writable" :: String -> IO Bool
+
+foreign php function rawIsExecutable "is_executable" :: String -> IO Bool
+
+foreign php function rawIsLink "is_link" :: String -> IO Bool
+
+foreign php function rawFilemtime "filemtime" :: String -> IO Int
+
+foreign php function rawFileatime "fileatime" :: String -> IO Int
+
+foreign php function rawFilesize "filesize" :: String -> IO Int
+
+foreign php function rawFileperms "fileperms" :: String -> IO Int
+
+foreign php function rawCopy "copy" :: String -> String -> IO Bool
+
+foreign php function rawUnlink "unlink" :: String -> IO Bool
+
+foreign php function rawRename "rename" :: String -> String -> IO Bool
+
+foreign php function rawRealpath "realpath" :: String -> IO String
+
+foreign php function rawScandir "scandir" :: String -> IO [String]
+
+foreign php function rawMkdir "mkdir" :: String -> IO Bool
+
+foreign php function rawRmdir "rmdir" :: String -> IO Bool
+
+foreign php function rawGetcwd "getcwd" :: IO String
+
+foreign php function rawChdir "chdir" :: String -> IO Bool
+
+foreign php function rawDirname "dirname" :: String -> String
+
+foreign php function rawChmod "chmod" :: String -> Int -> IO Bool
+
+foreign php function rawSymlink "symlink" :: String -> String -> IO Bool
+
+foreign php function rawReadlink "readlink" :: String -> IO String
+
+foreign php function rawTouch "touch" :: String -> Int -> Int -> IO Bool
+
+foreign php function rawSysTempDir "sys_get_temp_dir" :: IO String
+
+doesPathExist :: FilePath -> IO Bool
+doesPathExist p = rawFileExists (p)
+
+doesFileExist :: FilePath -> IO Bool
+doesFileExist p = rawIsFile (p)
+
+doesDirectoryExist :: FilePath -> IO Bool
+doesDirectoryExist p = rawIsDir (p)
+
+removeFile :: FilePath -> IO ()
+removeFile p = do
+  _ <- rawUnlink (p)
+  pure ()
+
+copyFile :: FilePath -> FilePath -> IO ()
+copyFile src dst = do
+  _ <- rawCopy (src) (dst)
+  pure ()
+
+getFileSize :: FilePath -> IO Integer
+getFileSize p = do
+  n <- rawFilesize (p)
+  pure (integerFromInt n)
+
+-- | Creation with parents is the recursive walk; without, a single `mkdir`
+-- with the failure classified from the path, the way errno would classify it.
+createDirectoryIfMissing :: Bool -> FilePath -> IO ()
+createDirectoryIfMissing parents p = case parents of
+  True -> createTreePath (p)
+  False -> createSingle (p)
+
+createSingle :: FilePath -> IO ()
+createSingle p = do
+  exists <- rawFileExists p
+  case exists of
+    True -> ioError (mkIOError AlreadyExists "createDirectory" Nothing (Just (p)))
+    False -> do
+      ok <- rawMkdir p
+      case ok of
+        True -> pure ()
+        False -> createSingleFailed p
+
+createSingleFailed :: FilePath -> IO ()
+createSingleFailed p = do
+  let parent = takeDirectory p
+  parentExists <- rawFileExists parent
+  case parentExists of
+    False -> ioError (mkIOError NoSuchThing "createDirectory" Nothing (Just (p)))
+    True -> do
+      writable <- rawIsWritable parent
+      case writable of
+        False -> ioError (mkIOError PermissionDenied "createDirectory" Nothing (Just (p)))
+        True -> ioError (mkIOError OtherError "createDirectory" Nothing (Just (p)))
+
+createTreePath :: String -> IO ()
+createTreePath "" = pure ()
+createTreePath dirPath = do
+  exists <- rawIsDir dirPath
+  case exists of
+    True -> pure ()
+    False -> do
+      _ <- createTreePath (rawDirname dirPath)
+      _ <- rawMkdir dirPath
+      pure ()
+
+removeDirectory :: FilePath -> IO ()
+removeDirectory p = do
+  _ <- rawRmdir (p)
+  pure ()
+
+removeDirectoryRecursive :: FilePath -> IO ()
+removeDirectoryRecursive p = removeTreePath (p)
+
+removeTreePath :: String -> IO ()
+removeTreePath target = do
+  exists <- rawFileExists target
+  case exists of
+    False -> pure ()
+    True -> removeTreePresent target
+
+removeTreePresent :: String -> IO ()
+removeTreePresent target = do
+  link <- rawIsLink target
+  case link of
+    True -> removeTreeFile target
+    False -> do
+      isDir <- rawIsDir target
+      case isDir of
+        False -> removeTreeFile target
+        True -> removeTreeDir target
+
+removeTreeFile :: String -> IO ()
+removeTreeFile target = do
+  _ <- rawUnlink target
+  pure ()
+
+removeTreeDir :: String -> IO ()
+removeTreeDir target = do
+  entries <- rawScandir target
+  removeTreeEntries target (filterScandir entries)
+  _ <- rawRmdir target
+  pure ()
+
+removeTreeEntries :: String -> [String] -> IO ()
+removeTreeEntries _ [] = pure ()
+removeTreeEntries target (entry : rest) = do
+  _ <- removeTreePath (target <> "/" <> entry)
+  removeTreeEntries target rest
+
+-- | Missing paths are ignored; anything else is made owner-writable first, so
+-- read-only files do not stop the removal.
+removePathForcibly :: FilePath -> IO ()
+removePathForcibly p = do
+  exists <- rawFileExists p
+  case exists of
+    False -> pure ()
+    True -> forceRemovePresent p
+
+forceRemovePresent :: String -> IO ()
+forceRemovePresent target = do
+  link <- rawIsLink target
+  case link of
+    True -> forceRemoveFile target
+    False -> do
+      isDir <- rawIsDir target
+      case isDir of
+        False -> forceRemoveFile target
+        True -> forceRemoveDir target
+
+forceRemoveFile :: String -> IO ()
+forceRemoveFile target = do
+  _ <- rawChmod target 384
+  _ <- rawUnlink target
+  pure ()
+
+forceRemoveDir :: String -> IO ()
+forceRemoveDir target = do
+  _ <- rawChmod target 448
+  entries <- rawScandir target
+  forceRemoveEntries target (filterScandir entries)
+  _ <- rawRmdir target
+  pure ()
+
+forceRemoveEntries :: String -> [String] -> IO ()
+forceRemoveEntries _ [] = pure ()
+forceRemoveEntries target (entry : rest) = do
+  _ <- removePathForcibly (target <> "/" <> entry)
+  forceRemoveEntries target rest
+
+filterScandir :: [String] -> [String]
+filterScandir [] = []
+filterScandir ("." : rest) = filterScandir rest
+filterScandir (".." : rest) = filterScandir rest
+filterScandir (x : rest) = x : filterScandir rest
+
+listDirectory :: FilePath -> IO [FilePath]
+listDirectory p = do
+  names <- rawScandir (p)
+  pure (filterScandir names)
+
+getDirectoryContents :: FilePath -> IO [FilePath]
+getDirectoryContents p = do
+  names <- rawScandir (p)
+  pure ("." : ".." : filterScandir names)
+
+getCurrentDirectory :: IO FilePath
+getCurrentDirectory = do
+  cwd <- rawGetcwd
+  pure cwd
+
+setCurrentDirectory :: FilePath -> IO ()
+setCurrentDirectory p = do
+  _ <- rawChdir (p)
+  pure ()
+
+getTemporaryDirectory :: IO FilePath
+getTemporaryDirectory = do
+  tmp <- rawSysTempDir
+  pure tmp
+
+renameDirectory :: FilePath -> FilePath -> IO ()
+renameDirectory src dst = do
+  isDir <- rawIsDir src
+  case isDir of
+    True -> renameRaw src dst
+    False -> ioError (mkIOError InappropriateType "renameDirectory" Nothing (Just (src)))
+
+renameFile :: FilePath -> FilePath -> IO ()
+renameFile src dst = do
+  isDir <- rawIsDir src
+  case isDir of
+    True -> ioError (mkIOError InappropriateType "renameFile" Nothing (Just (src)))
+    False -> renameRaw src dst
+
+renamePath :: FilePath -> FilePath -> IO ()
+renamePath src dst = renameRaw src dst
+
+renameRaw :: FilePath -> FilePath -> IO ()
+renameRaw src dst = do
+  _ <- rawRename (src) (dst)
+  pure ()
+
+-- | The host resolves the longest existing prefix; the missing suffix is
+-- appended one component at a time, so nonexistent paths still canonicalize.
+canonicalizePath :: FilePath -> IO FilePath
+canonicalizePath p = do
+  exists <- rawFileExists p
+  case exists of
+    True -> rawRealpath (p)
+    False -> do
+      let parent = takeDirectory p
+      case parent == p of
+        True -> rawRealpath (p)
+        False -> do
+          base <- canonicalizePath parent
+          pure (base </> takeFileName p)
+
+createFileLink :: FilePath -> FilePath -> IO ()
+createFileLink target link = do
+  _ <- rawSymlink (target) (link)
+  pure ()
+
+createDirectoryLink :: FilePath -> FilePath -> IO ()
+createDirectoryLink target link = do
+  _ <- rawSymlink (target) (link)
+  pure ()
+
+removeDirectoryLink :: FilePath -> IO ()
+removeDirectoryLink p = do
+  _ <- rawRmdir (p)
+  pure ()
+
+pathIsSymbolicLink :: FilePath -> IO Bool
+pathIsSymbolicLink p = rawIsLink (p)
+
+getSymbolicLinkTarget :: FilePath -> IO FilePath
+getSymbolicLinkTarget p = do
+  target <- rawReadlink (p)
+  pure target
+
+getPermissions :: FilePath -> IO Permissions
+getPermissions p = do
+  r <- rawIsReadable (p)
+  w <- rawIsWritable (p)
+  x <- rawIsExecutable (p)
+  isDir <- rawIsDir (p)
+  pure (case isDir of
+    True -> Permissions
+      { permissionsReadable = r
+      , permissionsWritable = w
+      , permissionsExecutable = False
+      , permissionsSearchable = r && x
+      }
+    False -> Permissions
+      { permissionsReadable = r
+      , permissionsWritable = w
+      , permissionsExecutable = x
+      , permissionsSearchable = False
+      })
+
+-- | Owner bits only: readable is 0o400, writable 0o200, and executable 0o100;
+-- a searchable directory takes the execute bit.
+setPermissions :: FilePath -> Permissions -> IO ()
+setPermissions p perms = do
+  isDir <- rawIsDir p
+  let mode = permBit (readable perms) 256 + permBit (writable perms) 128 + execBit isDir perms
+  _ <- rawChmod (p) mode
+  pure ()
+
+permBit :: Bool -> Int -> Int
+permBit set bit = case set of
+  True -> bit
+  False -> 0
+
+execBit :: Bool -> Permissions -> Int
+execBit isDir perms = case isDir of
+  True -> case searchable perms of
+    True -> 64
+    False -> 0
+  False -> case executable perms of
+    True -> 64
+    False -> 0
+
+getAccessTime :: FilePath -> IO UTCTime
+getAccessTime p = do
+  secs <- rawFileatime (p)
+  pure (utcTimeFromUnix secs)
+
+getModificationTime :: FilePath -> IO UTCTime
+getModificationTime p = do
+  secs <- rawFilemtime (p)
+  pure (utcTimeFromUnix secs)
+
+-- | `touch` sets both clocks at once, so the untouched one is read first and
+-- written back unchanged.
+setAccessTime :: FilePath -> UTCTime -> IO ()
+setAccessTime p t = do
+  mtime <- rawFilemtime (p)
+  _ <- rawTouch (p) mtime (utcToUnix t)
+  pure ()
+
+setModificationTime :: FilePath -> UTCTime -> IO ()
+setModificationTime p t = do
+  atime <- rawFileatime (p)
+  _ <- rawTouch (p) (utcToUnix t) atime
+  pure ()
+
+utcToUnix :: UTCTime -> Int
+utcToUnix t = integerToInt (unixDays + daySecs)
+  where
+    unixDays = integerFromInt (toModifiedJulianDay (utctDay t) - 40587) * 86400
+    daySecs = diffTimeToSeconds (utctDayTime t)
+
+exeExtension :: String
+exeExtension = ""

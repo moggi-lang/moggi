@@ -1,0 +1,220 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+-- | The types the directory operations pass around.
+--
+-- 'Permissions' records whether certain operations are permissible on a file
+-- or directory, 'XdgDirectory' names the XDG base directories, and
+-- 'XdgDirectoryList' names their list forms. All three are backend-independent:
+-- the per-host modules answer them, and the 'System.Directory' facade reads
+-- them.
+module System.Directory.Types
+  ( Permissions(..)
+  , readable
+  , writable
+  , executable
+  , searchable
+  , emptyPermissions
+  , setOwnerReadable
+  , setOwnerWritable
+  , setOwnerExecutable
+  , setOwnerSearchable
+  , XdgDirectory(..)
+  , XdgDirectoryList(..)
+  ) where
+
+import Control.Applicative
+import Control.Monad
+import Data.Bool
+import Data.Eq
+import Data.Ord
+import Data.Semigroup
+import Moggi.Err
+import Moggi.Internal.Base
+import Text.Read
+import Text.Show
+import Data.String
+import Moggi.Internal.Prim
+
+-- | Permissions are used to record whether certain operations are permissible
+-- on a file or directory. 'getPermissions' and 'setPermissions' get and set
+-- these permissions, respectively. Permissions apply both to files and
+-- directories. For directories, the executable field will be 'False', and for
+-- files the searchable field will be 'False'.
+data Permissions = Permissions
+  { permissionsReadable :: Bool
+  , permissionsWritable :: Bool
+  , permissionsExecutable :: Bool
+  , permissionsSearchable :: Bool
+  }
+
+-- Field selectors. The declaration above names the fields, and these are what
+-- makes them readable as functions, exactly as a record declaration does.
+readable :: Permissions -> Bool
+readable p = case p of
+  Permissions r _ _ _ -> r
+
+writable :: Permissions -> Bool
+writable p = case p of
+  Permissions _ w _ _ -> w
+
+executable :: Permissions -> Bool
+executable p = case p of
+  Permissions _ _ x _ -> x
+
+searchable :: Permissions -> Bool
+searchable p = case p of
+  Permissions _ _ _ s -> s
+
+-- | A completely inaccessible file or directory.
+emptyPermissions :: Permissions
+emptyPermissions = Permissions
+  { permissionsReadable = False
+  , permissionsWritable = False
+  , permissionsExecutable = False
+  , permissionsSearchable = False
+  }
+
+setOwnerReadable :: Bool -> Permissions -> Permissions
+setOwnerReadable b p = Permissions
+  { permissionsReadable = b
+  , permissionsWritable = writable p
+  , permissionsExecutable = executable p
+  , permissionsSearchable = searchable p
+  }
+
+setOwnerWritable :: Bool -> Permissions -> Permissions
+setOwnerWritable b p = Permissions
+  { permissionsReadable = readable p
+  , permissionsWritable = b
+  , permissionsExecutable = executable p
+  , permissionsSearchable = searchable p
+  }
+
+setOwnerExecutable :: Bool -> Permissions -> Permissions
+setOwnerExecutable b p = Permissions
+  { permissionsReadable = readable p
+  , permissionsWritable = writable p
+  , permissionsExecutable = b
+  , permissionsSearchable = searchable p
+  }
+
+setOwnerSearchable :: Bool -> Permissions -> Permissions
+setOwnerSearchable b p = Permissions
+  { permissionsReadable = readable p
+  , permissionsWritable = writable p
+  , permissionsExecutable = executable p
+  , permissionsSearchable = b
+  }
+
+permissionsTag :: Permissions -> Int
+permissionsTag p = case readable p of
+  True -> case writable p of
+    True -> case executable p of
+      True -> case searchable p of
+        True -> 15
+        False -> 14
+      False -> case searchable p of
+        True -> 13
+        False -> 12
+    False -> case executable p of
+      True -> case searchable p of
+        True -> 11
+        False -> 10
+      False -> case searchable p of
+        True -> 9
+        False -> 8
+  False -> case writable p of
+    True -> case executable p of
+      True -> case searchable p of
+        True -> 7
+        False -> 6
+      False -> case searchable p of
+        True -> 5
+        False -> 4
+    False -> case executable p of
+      True -> case searchable p of
+        True -> 3
+        False -> 2
+      False -> case searchable p of
+        True -> 1
+        False -> 0
+
+instance Eq Permissions where
+  (==) a b = intEq# (permissionsTag a) (permissionsTag b)
+  (/=) a b = intNe# (permissionsTag a) (permissionsTag b)
+
+instance Ord Permissions where
+  compare a b = intCompare# (permissionsTag a) (permissionsTag b)
+
+instance Show Permissions where
+  show p = "Permissions {readable = " <> show (readable p)
+    <> ", writable = " <> show (writable p)
+    <> ", executable = " <> show (executable p)
+    <> ", searchable = " <> show (searchable p)
+    <> "}"
+
+-- | Special directories for storing user-specific application data,
+-- configuration, and cache files, as specified by the XDG Base Directory
+-- Specification. Only the non-Windows defaults are implemented.
+data XdgDirectory
+  = XdgData
+  | XdgConfig
+  | XdgCache
+  | XdgState
+
+xdgDirectoryTag :: XdgDirectory -> Int
+xdgDirectoryTag d = case d of
+  XdgData -> 0
+  XdgConfig -> 1
+  XdgCache -> 2
+  XdgState -> 3
+
+instance Eq XdgDirectory where
+  (==) a b = intEq# (xdgDirectoryTag a) (xdgDirectoryTag b)
+  (/=) a b = intNe# (xdgDirectoryTag a) (xdgDirectoryTag b)
+
+instance Ord XdgDirectory where
+  compare a b = intCompare# (xdgDirectoryTag a) (xdgDirectoryTag b)
+
+instance Show XdgDirectory where
+  show d = case d of
+    XdgData -> "XdgData"
+    XdgConfig -> "XdgConfig"
+    XdgCache -> "XdgCache"
+    XdgState -> "XdgState"
+
+instance Read XdgDirectory where
+  read s = case s of
+    "XdgData" -> XdgData
+    "XdgConfig" -> XdgConfig
+    "XdgCache" -> XdgCache
+    "XdgState" -> XdgState
+    _ -> error "System.Directory.Types.read: no parse"
+
+-- | Search paths for application data, as specified by the XDG Base Directory
+-- Specification. Only the non-Windows defaults are implemented.
+data XdgDirectoryList
+  = XdgDataDirs
+  | XdgConfigDirs
+
+xdgDirectoryListTag :: XdgDirectoryList -> Int
+xdgDirectoryListTag d = case d of
+  XdgDataDirs -> 0
+  XdgConfigDirs -> 1
+
+instance Eq XdgDirectoryList where
+  (==) a b = intEq# (xdgDirectoryListTag a) (xdgDirectoryListTag b)
+  (/=) a b = intNe# (xdgDirectoryListTag a) (xdgDirectoryListTag b)
+
+instance Ord XdgDirectoryList where
+  compare a b = intCompare# (xdgDirectoryListTag a) (xdgDirectoryListTag b)
+
+instance Show XdgDirectoryList where
+  show d = case d of
+    XdgDataDirs -> "XdgDataDirs"
+    XdgConfigDirs -> "XdgConfigDirs"
+
+instance Read XdgDirectoryList where
+  read s = case s of
+    "XdgDataDirs" -> XdgDataDirs
+    "XdgConfigDirs" -> XdgConfigDirs
+    _ -> error "System.Directory.Types.read: no parse"
