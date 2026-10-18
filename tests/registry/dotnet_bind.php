@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // Bindings Phase 3: `moggi bind dotnet:Acme.Hello` reads the fixture assembly

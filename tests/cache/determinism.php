@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // The module cache must be transparent: compiling the same source twice, or once through a warm

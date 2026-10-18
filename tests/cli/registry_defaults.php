@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // Reads and writes are two origins: the tree is static and is served from the

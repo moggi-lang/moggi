@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // A native stack frame can only name a source line if emit wrote the metadata: `LineNumberTable`

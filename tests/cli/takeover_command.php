@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // `moggi takeover` files a public takeover request over the signed write

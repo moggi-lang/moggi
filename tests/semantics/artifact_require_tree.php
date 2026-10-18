@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // A module's artifact path and the `require`s between artifacts are two

@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // Version order and constraint matching, with pre-release ordering pinned down.

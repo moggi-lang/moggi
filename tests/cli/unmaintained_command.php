@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // `moggi unmaintained` declares or clears a package-level marker over the signed

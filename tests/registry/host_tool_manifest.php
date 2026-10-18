@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // Step 2 (audit WS1): coordinates are validated before a tool sees them, and

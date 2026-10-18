@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // A use site's solved dictionaries are written beside its pending constraints

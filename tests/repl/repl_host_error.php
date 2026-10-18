@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 // Regression: rendering a host exception loads the compiler's runtime into the
 // REPL process, and the evaluated module tree must not load a second copy of it.

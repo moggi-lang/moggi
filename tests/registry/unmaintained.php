@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // The `unmaintained` marker is the package-level maintenance signal beside

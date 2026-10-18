@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // `moggi outdated` and `moggi why`, through the real CLI, against a real signed

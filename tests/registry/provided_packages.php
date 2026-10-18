@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // `base` is the standard library and travels with the compiler, so a descriptor

@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // The release manifest's scope: provenance, artifact, version, and now the

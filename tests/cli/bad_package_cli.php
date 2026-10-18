@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // A package the registry marks bad is refused through the real CLI, not only in

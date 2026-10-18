@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // A distribution's `bin/moggi` is the compiler itself, so the environment the

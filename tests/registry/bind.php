@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // Bindings Phase 1: `moggi bind php:acme/hello` reads the fixture tree and

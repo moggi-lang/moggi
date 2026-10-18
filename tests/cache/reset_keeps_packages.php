@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // A compiler change throws the compiler's half of the cache away and rebuilds. Installed packages,

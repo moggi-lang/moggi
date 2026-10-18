@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // `--no-opt` must still produce a runnable program: the optimizer is not what writes the entry

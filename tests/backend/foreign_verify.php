@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // A `foreign` declaration is checked against the host wherever the host can be asked: PHP reflects

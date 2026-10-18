@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // Capability ↔ dispatch drift test: the advertised initialize capabilities

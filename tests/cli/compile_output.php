@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // `moggi compile --native` writes two artifacts — the packaged archive and the

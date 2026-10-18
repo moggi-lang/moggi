@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // A multi-parameter instance head is carried by the synthetic type constructor

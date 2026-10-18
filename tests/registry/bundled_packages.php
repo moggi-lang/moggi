@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // Packages that travel with the compiler (`json` today, `containers` tomorrow)

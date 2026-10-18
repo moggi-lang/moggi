@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // `schnorr` is resolved from a fixed set of locations and never from `PATH`, so a

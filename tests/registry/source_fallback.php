@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // A registry that does not serve `blobs/<digest>` is not a dead end: a release's

@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // `check` holds hand-written `foreign` against the `[ffi] bindings` a package

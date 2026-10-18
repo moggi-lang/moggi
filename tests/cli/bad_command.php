@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // `moggi bad` marks or lifts a package-level marker over the signed write

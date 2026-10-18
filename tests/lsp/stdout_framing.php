@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // Regression: the server speaks JSON-RPC over stdout, so PHP's own diagnostics

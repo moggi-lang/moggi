@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // A package's identity is a digest, so packing one tree twice has to give the same bytes — on this

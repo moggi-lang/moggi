@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // `moggi add` — the descriptor half of Sky's one command, and the half that needs

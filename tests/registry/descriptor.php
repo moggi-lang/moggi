@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // The descriptor's metadata: the four `[package]` fields plan 3 adds, and the

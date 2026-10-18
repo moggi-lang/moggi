@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // A compiled module carries its own map as `__MOGGI_MAP`, keyed off the namespace of the

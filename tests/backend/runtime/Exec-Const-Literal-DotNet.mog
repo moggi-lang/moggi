@@ -1,14 +1,23 @@
 -- C# `const` and enum members are literal fields: they have no storage, so
 -- loading them with `ldsfld` throws MissingFieldException at runtime. The
 -- backend must inline the constant instead: an 8-byte integer, a 4-byte
--- integer, a double, and an enum member rebuilt with `Enum.ToObject` (sent
+-- integer, a double, a string, a null string (`ldnull`, read back through
+-- `IsNullOrEmpty`), and an enum member rebuilt with `Enum.ToObject` (sent
 -- through the `DateTime` constructor and read back through `Ticks`, which
 -- round-trips the value exactly).
+--
+-- Two arms have no runnable member anywhere in the shared framework (a full
+-- scan finds zero `const bool` fields, and Moggi maps no type to `float32`),
+-- so `bool` and `r4` are pinned by the `dotnet_const_literal` emitter test
+-- instead of here.
 import Data.Int (Int32)
 
 foreign dotnet const maxInt "System.Int64:MaxValue" :: Int
 foreign dotnet const maxInt32 "System.Int32:MaxValue" :: Int32
 foreign dotnet const pi "System.Math:PI" :: Double
+foreign dotnet const feature "System.Runtime.CompilerServices.RuntimeFeature:PortablePdb" :: String
+foreign dotnet const nullStr "Microsoft.VisualBasic.Constants:vbNullString" :: String
+foreign dotnet function isNullOrEmpty "System.String:IsNullOrEmpty" :: String -> Bool
 
 foreign dotnet type Kind "valuetype [System.Private.CoreLib]System.DateTimeKind"
 foreign dotnet const utc "System.DateTimeKind:Utc" :: Kind
@@ -21,4 +30,6 @@ main = do
   putStrLn (show maxInt)
   putStrLn (show maxInt32)
   putStrLn (show (pi > 3.0 && pi < 4.0))
+  putStrLn feature
+  putStrLn (show (isNullOrEmpty nullStr))
   putStrLn (show (dateTicks (newDateTime 0 utc)))

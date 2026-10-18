@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // A module's interface is now a product of its typecheck, published to the cache with it. That

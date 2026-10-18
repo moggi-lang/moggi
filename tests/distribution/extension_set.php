@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // The extension set a distribution's bundled PHP is built with is derived from

@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // The resolver, against an in-memory catalog so no registry is needed: the

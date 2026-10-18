@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // Adversarial checks for the registry client's trust boundaries. Each one is a

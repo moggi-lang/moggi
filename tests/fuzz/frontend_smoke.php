@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // Random input must never hang or crash the frontend: every generated input ends in output or a

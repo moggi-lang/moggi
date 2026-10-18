@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // The in-compiler dictionary assertions cannot run on every compile, so this

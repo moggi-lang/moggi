@@ -65,7 +65,6 @@ filePathSuite = do
   assertTrue "isAbsolute == not isRelative" (isAbsolute "/test" == not (isRelative "/test"))
   assertTrue "isValid makeValid always holds" (isValid (makeValid "file") && isValid (makeValid ""))
   assertTrue "pathSeparator isPathSeparator" (isPathSeparator pathSeparator)
-  assertTrue "getSearchPath splits PATH" (do
-    raw <- getEnv "PATH"
-    found <- getSearchPath
-    pure (found == splitSearchPath raw))
+  raw <- getEnv "PATH"
+  found <- getSearchPath
+  assertTrue "getSearchPath splits PATH" (found == splitSearchPath raw)

@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // Step-7 pin: the round-trip property — a sidecar generated from the host, and

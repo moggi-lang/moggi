@@ -1,4 +1,3 @@
-#!/usr/bin/env php
 <?php declare(strict_types=1);
 
 // Bindings Phase 2: `moggi bind jvm:com.acme:hello` reads the fixture jar and
