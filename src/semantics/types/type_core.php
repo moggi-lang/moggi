@@ -1427,13 +1427,6 @@ function typeToString(Type $type, array $rename = []): string
 /**
  * Process-wide hash-cons table for elaborated type-syntax nodes.
  *
- * `internalTypeToAst()` previously created duplicate objects for identical
- * types, inflating checked-program memory and disk caches. Interning shares
- * one instance per distinct shape, reducing both.
- *
- * Safe because type-syntax nodes are immutable after elaboration and carry
- * zero locations. Callers needing distinct identity must clone the result.
- *
  * @var array<string, Ast\TypeNode>
  */
 function &internedTypeNodeTable(): array
@@ -1441,6 +1434,15 @@ function &internedTypeNodeTable(): array
     static $table = [];
 
     return $table;
+}
+
+/**
+ * Drop all hash-consed nodes.
+ */
+function clearInternedTypeNodes(): void
+{
+    $table = &internedTypeNodeTable();
+    $table = [];
 }
 
 function internedTypeNode(Ast\TypeNode $node): Ast\TypeNode
@@ -1465,8 +1467,16 @@ function internedTypeNode(Ast\TypeNode $node): Ast\TypeNode
     if ($key === null) {
         return $node;
     }
+    if (! isset($table[$key])) {
+        static $insertsSinceCheck = 0;
+        $insertsSinceCheck++;
+        if ($insertsSinceCheck % 1024 === 0 && \count($table) >= 65536) {
+            $table = [];
+        }
+        $table[$key] = $node;
+    }
 
-    return $table[$key] ??= $node;
+    return $table[$key];
 }
 
 function internalTypeToAst(Type $type, array $subst): Ast\TypeNode

@@ -13,6 +13,7 @@ use function Moggi\Paths\moduleNameToPath;
 use function Moggi\Pipeline\entryModules;
 use function Moggi\Pipeline\entryPurpose;
 use function Moggi\Semantics\Effects\checkAndNormalize;
+use function Moggi\Semantics\Types\clearInternedTypeNodes;
 
 use Moggi\Semantics\Types\TypeError;
 
@@ -378,13 +379,16 @@ function prepareProject(array $paths, string $rootDir, bool $shallow = false): P
                 $units[$moduleName]['facts'],
             );
         }
-        ProjectCache::rememberCheckedModule(
-            $cacheKey,
-            new CheckedModule($checkedFull, $exportedInferredSchemes),
-            ! isStdlibSourcePath($path),
-        );
-        $checked[$moduleName] = $checkedFull;
-        $units[$moduleName]['checkedProgram'] = $checkedFull;
+
+        if (! $shallow) {
+            ProjectCache::rememberCheckedModule(
+                $cacheKey,
+                new CheckedModule($checkedFull, $exportedInferredSchemes),
+                ! isStdlibSourcePath($path),
+            );
+            $checked[$moduleName] = $checkedFull;
+            $units[$moduleName]['checkedProgram'] = $checkedFull;
+        }
     }
 
     foreach ($sortedModules as $moduleName) {
@@ -412,6 +416,7 @@ function prepareProject(array $paths, string $rootDir, bool $shallow = false): P
     }
 
     disableCollectExportsCache();
+    clearInternedTypeNodes();
 
     return new PreparedProject($rootPrefix, $units, $checked, $importContexts);
 }
@@ -847,6 +852,8 @@ function prepareProjectExtendingFocus(
     $checked = $base->checked;
     $checked[$focusModule] = $checkedFull;
     $importContexts = [$focusModule => $importContext];
+
+    clearInternedTypeNodes();
 
     return new PreparedProject($rootPrefix, $units, $checked, $importContexts);
 }
