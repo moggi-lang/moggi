@@ -1,0 +1,38 @@
+program
+  function describe :: String -> String
+    pat_var s
+    where
+      case
+        infix ==
+          variable s
+          string ""
+        alt
+          pat_con True
+          string "empty"
+        alt
+          pat_con False
+          variable inner
+      binding
+        pat_var inner
+        apply
+          variable helper
+          variable s
+      binding
+        pat_var helper
+        lambda
+          pat_var t
+          variable t
+  function attached :: String -> String
+    pat_var s
+    case
+      variable s
+      alt
+        pat_lit "a"
+        where
+          variable one
+          binding
+            pat_var one
+            string "A"
+      alt
+        pat_wild _
+        variable s

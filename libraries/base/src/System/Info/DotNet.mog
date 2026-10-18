@@ -1,0 +1,22 @@
+module System.Info.DotNet
+  ( os
+  ) where
+
+import Data.String (isPrefixOf)
+
+foreign dotnet function rawOsDescription "System.Runtime.InteropServices.RuntimeInformation:get_OSDescription" :: String
+
+-- | `RuntimeInformation.OSDescription` in GHC's `System.Info.os` spelling
+-- (`Microsoft Windows 10.0.…`, `Linux …`, `Darwin …`), matched on prefixes;
+-- anything unrecognized answers @"unknown"@ rather than guessing.
+os :: String
+os = normaliseOs rawOsDescription
+
+normaliseOs :: String -> String
+normaliseOs n
+  | isPrefixOf "Microsoft Windows" n = "mingw32"
+  | isPrefixOf "Darwin" n = "darwin"
+  | isPrefixOf "Linux" n = "linux"
+  | isPrefixOf "FreeBSD" n = "freebsd"
+  | isPrefixOf "SunOS" n = "solaris"
+  | otherwise = "unknown"

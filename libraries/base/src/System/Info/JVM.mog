@@ -1,0 +1,25 @@
+module System.Info.JVM
+  ( os
+  ) where
+
+import Data.String (isPrefixOf)
+
+foreign jvm function rawGetProperty "java.lang.System:getProperty" :: String -> String
+
+-- | `os.name` in GHC's `System.Info.os` spelling. The property carries
+-- versions and vendor spellings (`Windows 11`, `Mac OS X`, `macOS`), so this
+-- matches on prefixes; anything unrecognized answers @"unknown"@ rather than
+-- guessing.
+os :: String
+os = normaliseOs (rawGetProperty "os.name")
+
+normaliseOs :: String -> String
+normaliseOs n
+  | isPrefixOf "Windows" n = "mingw32"
+  | isPrefixOf "Darwin" n = "darwin"
+  | isPrefixOf "Mac OS X" n = "darwin"
+  | isPrefixOf "macOS" n = "darwin"
+  | isPrefixOf "Linux" n = "linux"
+  | isPrefixOf "FreeBSD" n = "freebsd"
+  | isPrefixOf "SunOS" n = "solaris"
+  | otherwise = "unknown"

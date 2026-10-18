@@ -1,3 +1,4 @@
+{-# LANGUAGE NoImplicitPrelude #-}
 module Data.ByteString.DotNet
   ( bsLength
   , bsTake

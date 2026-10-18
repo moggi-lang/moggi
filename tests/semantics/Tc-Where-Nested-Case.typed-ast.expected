@@ -1,0 +1,30 @@
+program
+  function describe :: String -> String
+    pat_var s
+    where
+      case
+        intrinsic stringEq#
+          variable s
+          string ""
+        alt
+          pat_con True
+          string "empty"
+        alt
+          pat_con False
+          case
+            intrinsic stringEq#
+              variable s
+              string "x"
+            alt
+              pat_con True
+              apply
+                variable helper
+                variable s
+            alt
+              pat_con False
+              variable s
+      binding
+        pat_var helper
+        lambda
+          pat_var t
+          variable t

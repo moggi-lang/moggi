@@ -1,0 +1,27 @@
+{-# BACKEND
+  php = System.Filesystem.Units.PHP
+  jvm = System.Filesystem.Units.JVM
+  dotnet = System.Filesystem.Units.DotNet
+#-}
+-- | The host string in code units: bytes on PHP, UTF-16 units on the JVM and
+-- .NET. Private to `System.Filesystem.Path`: path manipulation only ever looks at
+-- ASCII units (separators, drive letters, extension markers) and cuts at
+-- their boundaries, so everything else — valid text or not — passes through
+-- bit-exact on every backend without ever becoming a `Char`.
+--
+-- All three operations clamp: a non-positive count takes or drops nothing,
+-- and a count past the end takes or drops everything.
+module System.Filesystem.Units
+  ( unitsLength
+  , takeUnits
+  , dropUnits
+  ) where
+
+-- | The number of code units in the string.
+unitsLength :: String -> Int
+
+-- | The first @n@ code units of the string.
+takeUnits :: Int -> String -> String
+
+-- | The string without its first @n@ code units.
+dropUnits :: Int -> String -> String

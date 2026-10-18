@@ -1,0 +1,18 @@
+-- A `where` dedented to the case's alternatives belongs to the equation, not to
+-- the last alternative: a nested case must not swallow it.
+describe :: String -> String
+describe s = case s == "" of
+  True -> "empty"
+  False -> inner
+  where
+    inner = helper s
+    helper t = t
+
+-- A `where` indented deeper than the alternatives still attaches to the
+-- alternative itself.
+attached :: String -> String
+attached s = case s of
+  "a" -> one
+    where
+      one = "A"
+  _ -> s

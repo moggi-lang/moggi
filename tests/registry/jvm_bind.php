@@ -238,10 +238,11 @@ module Probe where
 
 import System.Filesystem (listDirectory)
 import System.IO (putStrLn)
+import System.IO.Base (packFilePath)
 
 main :: IO ()
 main = do
-  entries <- listDirectory "/tmp"
+  entries <- listDirectory (packFilePath "/tmp")
   putStrLn "listed"
 MOG . "\n");
 $unpacked = $moggi(['compile', $work . '/Probe.mog', '--backend', 'jvm', '-o', $work . '/uout', '--unpacked'], 300);

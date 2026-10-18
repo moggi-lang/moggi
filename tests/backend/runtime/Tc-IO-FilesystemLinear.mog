@@ -3,12 +3,13 @@ module Tc.IO.FilesystemLinear
 import System.IO
 import System.Filesystem hiding (readFile, writeFile, appendFile)
 import System.Filesystem.Path
+import System.IO.Base (packFilePath)
 
-bindPath :: String
-bindPath = "/tmp/moggi-tc-io-fs-linear-bind.txt"
+bindPath :: FilePath
+bindPath = packFilePath "/tmp/moggi-tc-io-fs-linear-bind.txt"
 
-letPath :: String
-letPath = "/tmp/moggi-tc-io-fs-linear-let.txt"
+letPath :: FilePath
+letPath = packFilePath "/tmp/moggi-tc-io-fs-linear-let.txt"
 
 main :: IO ()
 main = do

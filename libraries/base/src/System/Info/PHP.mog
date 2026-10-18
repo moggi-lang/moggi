@@ -1,0 +1,17 @@
+module System.Info.PHP
+  ( os
+  ) where
+
+foreign php const rawOsFamily "PHP:PHP_OS_FAMILY" :: String
+
+-- | `PHP_OS_FAMILY` in GHC's `System.Info.os` spelling. The family names are
+-- coarse (`BSD` covers every BSD), so the rarer members map to the common
+-- one; anything unrecognized answers @"unknown"@ rather than guessing.
+os :: String
+os = case rawOsFamily of
+  "Windows" -> "mingw32"
+  "Darwin" -> "darwin"
+  "Linux" -> "linux"
+  "BSD" -> "freebsd"
+  "Solaris" -> "solaris"
+  _ -> "unknown"

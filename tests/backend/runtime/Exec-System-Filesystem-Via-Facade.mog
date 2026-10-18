@@ -2,6 +2,7 @@ import System.Environment (lookupEnv)
 import System.Filesystem hiding (readFile, writeFile, appendFile)
 import System.Filesystem.Path
 import System.IO
+import System.IO.Base (packFilePath)
 
 main :: IO ()
 main = do
@@ -10,7 +11,7 @@ main = do
   content <- readTextFile path
   putStrLn content
 
-scratchPath :: String -> IO String
+scratchPath :: String -> IO FilePath
 scratchPath name = do
   tmp <- lookupEnv "TMPDIR"
   win <- lookupEnv "TEMP"
@@ -19,4 +20,4 @@ scratchPath name = do
         Nothing -> case win of
           Just d -> d
           Nothing -> "/tmp"
-  pure (dir <> "/" <> name)
+  pure (packFilePath (dir <> "/" <> name))

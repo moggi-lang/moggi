@@ -50,7 +50,7 @@ import Data.ByteString (ByteString)
 import Data.Int
 import Data.Time.Clock
 import Moggi.Internal.Base
-import System.Filesystem.Path
+import System.IO.Base (FilePath)
 import Moggi.Internal.Prim
 
 readFile :: FilePath -> IO ByteString

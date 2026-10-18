@@ -1,0 +1,12 @@
+-- A `where` after a nested case belongs to the equation, not to the inner
+-- case's last alternative: a name it binds stays visible in every branch.
+-- (The parser used to attach the `where` to the last inner alternative,
+-- which orphaned `helper` in the first one.)
+describe :: String -> String
+describe s = case s == "" of
+  True -> "empty"
+  False -> case s == "x" of
+    True -> helper s
+    False -> s
+  where
+    helper t = t

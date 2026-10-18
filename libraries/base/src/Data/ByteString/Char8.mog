@@ -149,7 +149,7 @@ import Moggi.Err
 import Moggi.Internal.Base
 import Moggi.Internal.Prim ((:), bytesToString#, bytesFromString#, word8FromInt#, word8ToInt#)
 import System.Filesystem (readTextFile, writeTextFile, appendTextFile)
-import System.Filesystem.Path (FilePath)
+import System.IO.Base (FilePath)
 import System.IO qualified as IO
 import System.IO (IO, Handle, stdin)
 

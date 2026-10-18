@@ -1,0 +1,30 @@
+{-# BACKEND
+  php = System.Info.PHP
+  jvm = System.Info.JVM
+  dotnet = System.Info.DotNet
+#-}
+-- | The operating system the program runs on — answered at run time.
+--
+-- A Moggi program compiles once per backend and the artifact runs anywhere
+-- that backend runs (a JVM jar built on Linux runs on Windows), so the
+-- operating system is never a compile-time fact. There is no @OS@ pragma and
+-- no CPP: portable code branches on 'os' (or 'isWindows') at run time, and
+-- both are plain values with one definition per backend behind this facade.
+module System.Info
+  ( os
+  , isWindows
+  ) where
+
+import Data.Eq
+
+-- | The operating system, in GHC's `System.Info.os` spelling: @"mingw32"@ on
+-- Windows, @"darwin"@ on macOS, @"linux"@ on Linux, @"freebsd"@ on FreeBSD,
+-- @"solaris"@ on Solaris, and @"unknown"@ anywhere else the hosts report a
+-- name from outside that table.
+os :: String
+
+-- | Whether the program runs on Windows. This is how portable code picks the
+-- Windows behaviour (drive letters, @\\@ separators, @.exe@ suffixes) at run
+-- time; matching on 'os' directly is the general form.
+isWindows :: Bool
+isWindows = os == "mingw32"

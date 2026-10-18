@@ -10,6 +10,7 @@ import Moggi.Internal.Prim
 import System.Filesystem (readTextFile)
 import System.Filesystem.Path
 import System.IO
+import System.IO.Base (packFilePath)
 import System.IO.Error
 
 -- ---- Exec-Exception-Arith ----
@@ -211,7 +212,7 @@ runExceptionHostException = do
 -- as the other, and every backend reports the same failure type.
 
 missing :: FilePath
-missing = "/definitely/not/here"
+missing = packFilePath "/definitely/not/here"
 
 tryHost_h2 :: IO a -> IO (Either HostException a)
 tryHost_h2 action = try action

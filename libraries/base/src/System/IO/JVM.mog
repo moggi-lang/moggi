@@ -113,8 +113,9 @@ stdout = rawStdout
 stderr :: Handle
 stderr = rawStderr
 
+-- Paths are host strings (`System.IO.Base`): they reach the JDK unchanged.
 openFile :: FilePath -> IOMode -> IO Handle
-openFile p mode = catch (openMode (p) mode) (openFileFailed p mode)
+openFile p mode = catch (openMode p mode) (openFileFailed p mode)
 
 openMode :: String -> IOMode -> IO Handle
 openMode pathStr mode = case mode of
@@ -123,14 +124,14 @@ openMode pathStr mode = case mode of
   AppendMode -> openAppendMode pathStr
   ReadWriteMode -> error "openFile: ReadWriteMode is not supported on JVM"
 
-openFileFailed :: FilePath -> IOMode -> HostException -> IO Handle
-openFileFailed p mode _ =
-  ioError (mkIOError (openErrorType p mode) "openFile" Nothing (Just (p)))
+openFileFailed :: String -> IOMode -> HostException -> IO Handle
+openFileFailed hp mode _ =
+  ioError (mkIOError (openErrorType hp mode) "openFile" Nothing (Just hp))
 
 -- | Java reports every failed open as `FileNotFoundException`, whichever way it
 -- failed, so the error type is read from the path.
-openErrorType :: FilePath -> IOMode -> IOErrorType
-openErrorType p mode = probePath (newRawFile (p)) mode
+openErrorType :: String -> IOMode -> IOErrorType
+openErrorType hp mode = probePath (newRawFile hp) mode
 
 probePath :: RawFile -> IOMode -> IOErrorType
 probePath f mode = case rawFileIsDirectory f of
@@ -254,11 +255,12 @@ openTempFileGen dir template = do
   pure (path, h)
 
 tempOpenFailed :: FilePath -> HostException -> IO (FilePath, Handle)
-tempOpenFailed dir _ = ioError (mkIOError (tempDirError dir) "openTempFile" Nothing (Just dir))
+tempOpenFailed dir _ =
+  ioError (mkIOError (tempDirError dir) "openTempFile" Nothing (Just dir))
 
-tempDirError :: FilePath -> IOErrorType
-tempDirError dir = case rawFileExists (newRawFile dir) of
+tempDirError :: String -> IOErrorType
+tempDirError hp = case rawFileExists (newRawFile hp) of
   False -> NoSuchThing
-  True -> case rawFileIsDirectory (newRawFile dir) of
+  True -> case rawFileIsDirectory (newRawFile hp) of
     False -> InappropriateType
     True -> PermissionDenied

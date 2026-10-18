@@ -61,25 +61,125 @@ module System.Filesystem.Path
   , makeValid
   ) where
 
+
 import Control.Applicative (pure)
 import Control.Monad
 import Data.Bool
 import Data.Char (Char, chr)
 import Data.Eq
-import Data.List
-import Data.Maybe
+import Data.List (filter, foldr, map)
+import Data.Maybe (Maybe(..))
 import Data.Semigroup
-import Data.String (String, pack, unpack)
+import Data.String (String, isPrefixOf, isSuffixOf, singleton, splitOn)
 import Data.Tuple (fst, snd)
 import Moggi.Internal.Base
 import System.Environment (getEnv)
-import System.IO.Base (IO, FilePath)
+import System.Filesystem.Units (dropUnits, takeUnits, unitsLength)
+import System.IO.Base (FilePath, IO)
 
 infixr 7 <.>, -<.>
 infixr 5 </>
 
+-- A `FilePath` is a host-native `String`, and every function below manipulates
+-- it by code unit (`System.Filesystem.Units`: bytes on PHP, UTF-16 units on the
+-- JVM and .NET). Only ASCII units are ever inspected — separators, drive
+-- letters, extension markers — and cuts happen at their boundaries, so
+-- everything else passes through bit-exact without ever becoming a `Char`.
+-- In particular no function fails or mangles a path whose bytes are not valid
+-- UTF-8; whether the host accepts it is decided at the host call.
+
+-- | Split from the left: the longest prefix whose units satisfy @p@, and the
+-- rest. The predicate sees one unit as a string.
+spanUnits :: (String -> Bool) -> String -> (String, String)
+spanUnits p s = go 0
+  where
+    len = unitsLength s
+    go i
+      | i >= len = (s, "")
+      | p (takeUnits 1 (dropUnits i s)) = go (i + 1)
+      | otherwise = (takeUnits i s, dropUnits i s)
+
+-- | Split from the left on the first unit satisfying @p@.
+breakUnits :: (String -> Bool) -> String -> (String, String)
+breakUnits p s = spanUnits (\u -> not (p u)) s
+
+-- | Split from the right: the longest suffix whose units satisfy @p@, and
+-- everything before it.
+spanEndUnits :: (String -> Bool) -> String -> (String, String)
+spanEndUnits p s = go (unitsLength s)
+  where
+    go i
+      | i <= 0 = ("", s)
+      | p (takeUnits 1 (dropUnits (i - 1) s)) = go (i - 1)
+      | otherwise = (takeUnits i s, dropUnits i s)
+
+-- | Split from the right on the last unit satisfying @p@.
+breakEndUnits :: (String -> Bool) -> String -> (String, String)
+breakEndUnits p s = spanEndUnits (\u -> not (p u)) s
+
+-- | Drop the longest prefix whose units satisfy @p@.
+dropWhileUnits :: (String -> Bool) -> String -> String
+dropWhileUnits p s = snd (spanUnits p s)
+
+-- | Drop the longest suffix whose units satisfy @p@.
+dropWhileEndUnits :: (String -> Bool) -> String -> String
+dropWhileEndUnits p s = fst (spanEndUnits p s)
+
+-- | Whether any unit satisfies @p@.
+anyUnit :: (String -> Bool) -> String -> Bool
+anyUnit p s = case breakUnits p s of
+  (_, rest) -> not (rest == "")
+
+-- | Whether every unit satisfies @p@.
+allUnits :: (String -> Bool) -> String -> Bool
+allUnits p s = case anyUnit (\u -> not (p u)) s of
+  True -> False
+  False -> True
+
+-- | Whether the string holds no units. Scalar counts are never used here: on
+-- bytes that are not valid UTF-8 they need not agree with the unit count.
+nullU :: String -> Bool
+nullU s = unitsLength s == 0
+
+-- | Drop a prefix, telling whether it was there. Exact for any prefix: the
+-- check is unit-wise and the cut is by unit count.
+stripPrefixUnits :: String -> String -> Maybe String
+stripPrefixUnits pre s = case isPrefixOf pre s of
+  True -> Just (dropUnits (unitsLength pre) s)
+  False -> Nothing
+
+-- | Drop a suffix, telling whether it was there.
+stripSuffixUnits :: String -> String -> Maybe String
+stripSuffixUnits suf s = case isSuffixOf suf s of
+  True -> Just (takeUnits (unitsLength s - unitsLength suf) s)
+  False -> Nothing
+
+-- | Map over units, left to right. The function sees one unit as a string;
+-- cuts stay at unit boundaries by construction.
+mapUnits :: (String -> String) -> String -> String
+mapUnits f s = case nullU s of
+  True -> ""
+  False -> f (takeUnits 1 s) <> mapUnits f (dropUnits 1 s)
+
+-- | The last unit, as a string. Only called on non-empty strings.
+lastU :: String -> String
+lastU s = takeUnits 1 (dropUnits (unitsLength s - 1) s)
+
+-- | Everything but the last unit.
+dropLastU :: String -> String
+dropLastU s = takeUnits (unitsLength s - 1) s
+
+
 ---------------------------------------------------------------------
 -- The basic functions
+
+-- | Whether a unit is the Posix separator.
+isSepU :: String -> Bool
+isSepU u = u == "/"
+
+-- | Whether a unit is the extension marker.
+isDotU :: String -> Bool
+isDotU u = u == "."
 
 -- | The character that separates directories.
 --
@@ -137,17 +237,11 @@ isExtSeparator c = c == extSeparator
 -- > splitSearchPath "File1:File2:File3"  == ["File1","File2","File3"]
 -- > splitSearchPath "File1::File2:File3" == ["File1",".","File2","File3"]
 splitSearchPath :: String -> [FilePath]
-splitSearchPath s = map packPath (splitSearchPathChars (unpack s))
-
-splitSearchPathChars :: [Char] -> [[Char]]
-splitSearchPathChars xs =
-  case break isSearchPathSeparator xs of
-    (pre, []) -> splitSearchPathPieceChars pre
-    (pre, rest) -> splitSearchPathPieceChars pre <> splitSearchPathChars (drop 1 rest)
-
-splitSearchPathPieceChars :: [Char] -> [[Char]]
-splitSearchPathPieceChars [] = [[extSeparator]]
-splitSearchPathPieceChars x = [x]
+splitSearchPath s = map blankToDot (splitOn ":" s)
+  where
+    blankToDot p = case p == "" of
+      True -> "."
+      False -> p
 
 -- | Get a list of 'FilePath's in the $PATH variable.
 getSearchPath :: IO [FilePath]
@@ -169,39 +263,30 @@ getSearchPath = do
 -- > splitExtension "file.txt/boris.ext" == ("file.txt/boris",".ext")
 -- > splitExtension "file/path.txt.bob.fred" == ("file/path.txt.bob",".fred")
 -- > splitExtension "file/path.txt/" == ("file/path.txt/","")
-splitExtension :: FilePath -> (String, String)
+splitExtension :: FilePath -> (FilePath, FilePath)
 splitExtension x =
-  let parts = splitExtensionChars (unpack x)
-  in (packPath (fst parts), packPath (snd parts))
-
-splitExtensionChars :: [Char] -> ([Char], [Char])
-splitExtensionChars x =
-  let fileParts = splitFileNameChars x
-      dir = fst fileParts
-      file = snd fileParts
-      broken = breakEndChars isExtSeparator file
-      nameDot = fst broken
-      ext = snd broken
-  in case nameDot of
-       [] -> (x, [])
-       _ -> (dir <> init nameDot, extSeparator : ext)
+  let parts = breakEndUnits isDotU x
+      nameDot = fst parts
+      ext = snd parts
+  in case nullU nameDot of
+    True -> (x, "")
+    False -> case anyUnit isSepU ext of
+      True -> (x, "")
+      False -> (dropLastU nameDot, "." <> ext)
 
 -- | Get the extension of a file, returns @""@ for no extension, @.ext@ otherwise.
 --
 -- > takeExtension "/directory/path.ext" == ".ext"
 -- > takeExtension x == snd (splitExtension x)
-takeExtension :: FilePath -> String
-takeExtension x = packPath (takeExtensionChars (unpack x))
-
-takeExtensionChars :: [Char] -> [Char]
-takeExtensionChars x = snd (splitExtensionChars x)
+takeExtension :: FilePath -> FilePath
+takeExtension x = snd (splitExtension x)
 
 -- | Remove the current extension and add another, equivalent to 'replaceExtension'.
 --
 -- > "/directory/path.txt" -<.> "ext" == "/directory/path.ext"
 -- > "/directory/path.txt" -<.> ".ext" == "/directory/path.ext"
 -- > "foo.o" -<.> "c" == "foo.c"
-(-<.>) :: FilePath -> String -> FilePath
+(-<.>) :: FilePath -> FilePath -> FilePath
 (-<.>) = replaceExtension
 
 -- | Set the extension of a file, overwriting one if already present, equivalent to '-<.>'.
@@ -213,14 +298,14 @@ takeExtensionChars x = snd (splitExtensionChars x)
 -- > replaceExtension "file" ".bob" == "file.bob"
 -- > replaceExtension "file.txt" "" == "file"
 -- > replaceExtension "file.fred.bob" "txt" == "file.fred.txt"
-replaceExtension :: FilePath -> String -> FilePath
+replaceExtension :: FilePath -> FilePath -> FilePath
 replaceExtension x y = dropExtension x <.> y
 
--- | Add an extension, even if there is already one there, equivalent to 'addExtension'.
+-- | Add an extension, even if there is already one there, equivalent to '<.>'.
 --
 -- > "/directory/path" <.> "ext" == "/directory/path.ext"
 -- > "/directory/path" <.> ".ext" == "/directory/path.ext"
-(<.>) :: FilePath -> String -> FilePath
+(<.>) :: FilePath -> FilePath -> FilePath
 (<.>) = addExtension
 
 -- | Remove last extension, and the "." preceding it.
@@ -228,7 +313,7 @@ replaceExtension x y = dropExtension x <.> y
 -- > dropExtension "/directory/path.ext" == "/directory/path"
 -- > dropExtension x == fst (splitExtension x)
 dropExtension :: FilePath -> FilePath
-dropExtension x = packPath (fst (splitExtensionChars (unpack x)))
+dropExtension x = fst (splitExtension x)
 
 -- | Add an extension, even if there is already one there, equivalent to '<.>'.
 --
@@ -238,17 +323,17 @@ dropExtension x = packPath (fst (splitExtensionChars (unpack x)))
 -- > addExtension "file" ".bib" == "file.bib"
 -- > addExtension "/" "x" == "/.x"
 -- > addExtension x "" == x
-addExtension :: FilePath -> String -> FilePath
-addExtension file ext = packPath (addExtensionChars (unpack file) (unpack ext))
-
-addExtensionChars :: [Char] -> [Char] -> [Char]
-addExtensionChars file ext =
-  case ext of
-    [] -> file
-    x : _ ->
-      let split = splitDriveChars file
-          res = if isExtSeparator x then snd split <> ext else snd split <> [extSeparator] <> ext
-      in combineAlwaysChars (fst split) res
+addExtension :: FilePath -> FilePath -> FilePath
+addExtension file ext = case nullU ext of
+  True -> file
+  False ->
+    let parts = splitDrive file
+        drv = fst parts
+        pth = snd parts
+        res = case takeUnits 1 ext == "." of
+          True -> pth <> ext
+          False -> pth <> "." <> ext
+    in joinDrive drv res
 
 -- | Does the given filename have an extension?
 --
@@ -256,7 +341,7 @@ addExtensionChars file ext =
 -- > hasExtension "/directory/path" == False
 -- > null (takeExtension x) == not (hasExtension x)
 hasExtension :: FilePath -> Bool
-hasExtension x = any isExtSeparator (unpack (takeFileName x))
+hasExtension x = anyUnit isDotU (takeFileName x)
 
 -- | Does the given filename have the specified extension?
 --
@@ -266,21 +351,14 @@ hasExtension x = any isExtSeparator (unpack (takeFileName x))
 -- > "ar.gz" `isExtensionOf` "bar/foo.tar.gz" == False
 -- > "png" `isExtensionOf` "/directory/file.png.jpg" == False
 -- > "csv/table.csv" `isExtensionOf` "/data/csv/table.csv" == False
-isExtensionOf :: String -> FilePath -> Bool
-isExtensionOf ext path = isExtensionOfChars (unpack ext) (unpack path)
-
-isExtensionOfChars :: [Char] -> [Char] -> Bool
-isExtensionOfChars ext path =
-  case ext of
-    '.' : _ -> isSuffixOf ext (takeExtensionsChars path)
-    _ -> isSuffixOf (extSeparator : ext) (takeExtensionsChars path)
+isExtensionOf :: FilePath -> FilePath -> Bool
+isExtensionOf ext path = case takeUnits 1 ext == "." of
+  True -> isSuffixOf ext (takeExtensions path)
+  False -> isSuffixOf ("." <> ext) (takeExtensions path)
 
 -- | Drop the given extension from a FilePath, and the "." preceding it.
 -- Returns `Nothing` if the FilePath does not have the given extension, or
 -- `Just` and the part before the extension if it does.
---
--- This function can be more predictable than 'dropExtensions', especially if the filename
--- might itself contain @.@ characters.
 --
 -- > stripExtension "hs.o" "foo.x.hs.o" == Just "foo.x"
 -- > stripExtension "hi.o" "foo.x.hs.o" == Nothing
@@ -289,32 +367,26 @@ isExtensionOfChars ext path =
 -- > stripExtension "baz"  "foo.bar"  == Nothing
 -- > stripExtension "bar"  "foobar"   == Nothing
 -- > stripExtension ""     x          == Just x
-stripExtension :: String -> FilePath -> Maybe FilePath
-stripExtension ext path =
-  case stripExtensionChars (unpack ext) (unpack path) of
-    Nothing -> Nothing
-    Just rest -> Just (packPath rest)
-
-stripExtensionChars :: [Char] -> [Char] -> Maybe [Char]
-stripExtensionChars ext path =
-  case ext of
-    [] -> Just path
-    x : _ -> stripSuffixChars (if isExtSeparator x then ext else extSeparator : ext) path
+stripExtension :: FilePath -> FilePath -> Maybe FilePath
+stripExtension ext path = case nullU ext of
+  True -> Just path
+  False ->
+    let dotExt = case takeUnits 1 ext == "." of
+          True -> ext
+          False -> "." <> ext
+    in stripSuffixUnits dotExt path
 
 -- | Split on all extensions.
 --
 -- > splitExtensions "/directory/path.ext" == ("/directory/path",".ext")
 -- > splitExtensions "file.tar.gz" == ("file",".tar.gz")
-splitExtensions :: FilePath -> (FilePath, String)
+splitExtensions :: FilePath -> (FilePath, FilePath)
 splitExtensions x =
-  let parts = splitExtensionsChars (unpack x)
-  in (packPath (fst parts), packPath (snd parts))
-
-splitExtensionsChars :: [Char] -> ([Char], [Char])
-splitExtensionsChars x =
-  let fileParts = splitFileNameChars x
-      broken = break isExtSeparator (snd fileParts)
-  in (fst fileParts <> fst broken, snd broken)
+  let fp = splitFileName_ x
+      a = fst fp
+      b = snd fp
+      br = breakUnits isDotU b
+  in (a <> fst br, snd br)
 
 -- | Drop all extensions.
 --
@@ -323,26 +395,23 @@ splitExtensionsChars x =
 -- > not $ hasExtension $ dropExtensions x
 -- > not $ any isExtSeparator $ takeFileName $ dropExtensions x
 dropExtensions :: FilePath -> FilePath
-dropExtensions x = packPath (fst (splitExtensionsChars (unpack x)))
+dropExtensions x = fst (splitExtensions x)
 
 -- | Get all extensions.
 --
 -- > takeExtensions "/directory/path.ext" == ".ext"
 -- > takeExtensions "file.tar.gz" == ".tar.gz"
-takeExtensions :: FilePath -> String
-takeExtensions x = packPath (takeExtensionsChars (unpack x))
-
-takeExtensionsChars :: [Char] -> [Char]
-takeExtensionsChars x = snd (splitExtensionsChars x)
+takeExtensions :: FilePath -> FilePath
+takeExtensions x = snd (splitExtensions x)
 
 -- | Replace all extensions of a file with a new extension. Note
 -- that 'replaceExtension' and 'addExtension' both work for adding
 -- multiple extensions, so only required when you need to drop
 -- all extensions first.
 --
--- > replaceExtensions "file.fred.bob" "txt" == "file.txt"
+-- > replaceExtensions "file.fred.bob" == "file.txt"
 -- > replaceExtensions "file.fred.bob" "tar.gz" == "file.tar.gz"
-replaceExtensions :: FilePath -> String -> FilePath
+replaceExtensions :: FilePath -> FilePath -> FilePath
 replaceExtensions x y = dropExtensions x <.> y
 
 
@@ -357,33 +426,25 @@ replaceExtensions x y = dropExtensions x <.> y
 -- > splitDrive "test/file" == ("","test/file")
 -- > splitDrive "file" == ("","file")
 splitDrive :: FilePath -> (FilePath, FilePath)
-splitDrive x =
-  let parts = splitDriveChars (unpack x)
-  in (packPath (fst parts), packPath (snd parts))
-
-splitDriveChars :: [Char] -> ([Char], [Char])
-splitDriveChars x = span isPathSeparator x
+splitDrive x = spanUnits isSepU x
 
 -- | Join a drive and the rest of the path.
 --
 -- > joinDrive "/" "foo" == "/foo"
 joinDrive :: FilePath -> FilePath -> FilePath
-joinDrive a b = packPath (joinDriveChars (unpack a) (unpack b))
-
-joinDriveChars :: [Char] -> [Char] -> [Char]
-joinDriveChars = combineAlwaysChars
+joinDrive a b = combineAlways a b
 
 -- | Get the drive from a filepath.
 --
 -- > takeDrive x == fst (splitDrive x)
 takeDrive :: FilePath -> FilePath
-takeDrive x = packPath (fst (splitDriveChars (unpack x)))
+takeDrive x = fst (splitDrive x)
 
 -- | Delete the drive, if it exists.
 --
 -- > dropDrive x == snd (splitDrive x)
 dropDrive :: FilePath -> FilePath
-dropDrive x = packPath (snd (splitDriveChars (unpack x)))
+dropDrive x = snd (splitDrive x)
 
 -- | Does a path have a drive.
 --
@@ -392,7 +453,7 @@ dropDrive x = packPath (snd (splitDriveChars (unpack x)))
 -- > hasDrive "foo" == False
 -- > hasDrive "" == False
 hasDrive :: FilePath -> Bool
-hasDrive x = not (nullPath (takeDrive x))
+hasDrive x = not (nullU (takeDrive x))
 
 -- | Is an element a drive
 --
@@ -400,7 +461,7 @@ hasDrive x = not (nullPath (takeDrive x))
 -- > isDrive "/foo" == False
 -- > isDrive "" == False
 isDrive :: FilePath -> Bool
-isDrive x = not (nullPath x) && nullPath (dropDrive x)
+isDrive x = not (nullU x) && nullU (dropDrive x)
 
 
 ---------------------------------------------------------------------
@@ -414,48 +475,39 @@ isDrive x = not (nullPath x) && nullPath (dropDrive x)
 -- > splitFileName "file/" == ("file/", "")
 -- > splitFileName "bob" == ("./", "bob")
 -- > splitFileName "/" == ("/","")
-splitFileName :: FilePath -> (String, String)
+splitFileName :: FilePath -> (FilePath, FilePath)
 splitFileName x =
-  let parts = splitFileNameWithDefaultChars (unpack x)
-  in (packPath (fst parts), packPath (snd parts))
+  let parts = splitFileName_ x
+  in case nullU (fst parts) of
+    True -> ("./", snd parts)
+    False -> parts
 
--- Version of splitFileName where, if the FilePath has no directory
--- component, the returned directory is "" rather than "./". This is used in
--- cases where we are going to combine the returned directory to make a valid
--- FilePath, and having a "./" appear would look strange and upset simple
--- equality properties. See e.g. replaceFileName.
-splitFileNameChars :: [Char] -> ([Char], [Char])
-splitFileNameChars x =
-  let split = splitDriveChars x
-      broken = breakEndChars isPathSeparator (snd split)
-  in (fst split <> fst broken, snd broken)
-
-splitFileNameWithDefaultChars :: [Char] -> ([Char], [Char])
-splitFileNameWithDefaultChars x =
-  let parts = splitFileNameChars x
-  in (if null (fst parts) then [extSeparator, pathSeparator] else fst parts, snd parts)
+-- | The split without the @"./"@ default for a bare filename; used where the
+-- directory is combined again right away.
+splitFileName_ :: FilePath -> (FilePath, FilePath)
+splitFileName_ x = breakEndUnits isSepU x
 
 -- | Set the filename.
 --
 -- > replaceFileName "/directory/other.txt" "file.ext" == "/directory/file.ext"
-replaceFileName :: FilePath -> String -> FilePath
-replaceFileName x y = packPath (combineChars (fst (splitFileNameChars (unpack x))) (unpack y))
+replaceFileName :: FilePath -> FilePath -> FilePath
+replaceFileName x y = combine (fst (splitFileName_ x)) y
 
 -- | Drop the filename. Unlike 'takeDirectory', this function will leave
 -- a trailing path separator on the directory.
 --
 -- > dropFileName "/directory/file.ext" == "/directory/"
 -- > dropFileName x == fst (splitFileName x)
+-- > isPrefixOf (takeDrive x) (dropFileName x)
 dropFileName :: FilePath -> FilePath
-dropFileName x = packPath (fst (splitFileNameWithDefaultChars (unpack x)))
+dropFileName x = fst (splitFileName x)
 
 -- | Get the file name.
 --
 -- > takeFileName "/directory/file.ext" == "file.ext"
 -- > takeFileName "test/" == ""
--- > takeFileName x == snd (splitFileName x)
 takeFileName :: FilePath -> FilePath
-takeFileName x = packPath (snd (splitFileNameWithDefaultChars (unpack x)))
+takeFileName x = snd (splitFileName x)
 
 -- | Get the base name, without an extension or path.
 --
@@ -464,9 +516,10 @@ takeFileName x = packPath (snd (splitFileNameWithDefaultChars (unpack x)))
 -- > takeBaseName "dave.ext" == "dave"
 -- > takeBaseName "" == ""
 -- > takeBaseName "test" == "test"
+-- > takeBaseName (addTrailingPathSeparator x) == ""
 -- > takeBaseName "file/file.tar.gz" == "file.tar"
-takeBaseName :: FilePath -> String
-takeBaseName x = packPath (dropExtensionChars (takeFileNameChars (unpack x)))
+takeBaseName :: FilePath -> FilePath
+takeBaseName x = dropExtension (takeFileName x)
 
 -- | Set the base name.
 --
@@ -474,118 +527,93 @@ takeBaseName x = packPath (dropExtensionChars (takeFileNameChars (unpack x)))
 -- > replaceBaseName "file/test.txt" "bob" == "file/bob.txt"
 -- > replaceBaseName "fred" "bill" == "bill"
 -- > replaceBaseName "/dave/fred/bob.gz.tar" "new" == "/dave/fred/new.tar"
-replaceBaseName :: FilePath -> String -> FilePath
-replaceBaseName pth nam = packPath (replaceBaseNameChars (unpack pth) (unpack nam))
-
-replaceBaseNameChars :: [Char] -> [Char] -> [Char]
-replaceBaseNameChars pth nam =
-  let parts = splitFileNameChars pth
-      ext = takeExtensionChars (snd parts)
-  in combineAlwaysChars (fst parts) (addExtensionChars nam ext)
+replaceBaseName :: FilePath -> FilePath -> FilePath
+replaceBaseName pth nam =
+  let parts = splitFileName_ pth
+  in combineAlways (fst parts) (nam <.> takeExtension (snd parts))
 
 -- | Is an item either a directory or the last character a path separator?
 --
 -- > hasTrailingPathSeparator "test" == False
 -- > hasTrailingPathSeparator "test/" == True
 hasTrailingPathSeparator :: FilePath -> Bool
-hasTrailingPathSeparator x = hasTrailingPathSeparatorChars (unpack x)
-
-hasTrailingPathSeparatorChars :: [Char] -> Bool
-hasTrailingPathSeparatorChars [] = False
-hasTrailingPathSeparatorChars x = isPathSeparator (last x)
+hasTrailingPathSeparator x = not (nullU x) && lastU x == "/"
 
 -- | Add a trailing file path separator if one is not already present.
 --
 -- > hasTrailingPathSeparator (addTrailingPathSeparator x)
+-- > hasTrailingPathSeparator x ==> addTrailingPathSeparator x == x
 -- > addTrailingPathSeparator "test/rest" == "test/rest/"
 addTrailingPathSeparator :: FilePath -> FilePath
-addTrailingPathSeparator x = packPath (addTrailingPathSeparatorChars (unpack x))
-
-addTrailingPathSeparatorChars :: [Char] -> [Char]
-addTrailingPathSeparatorChars x =
-  if hasTrailingPathSeparatorChars x then x else x <> [pathSeparator]
+addTrailingPathSeparator x = case hasTrailingPathSeparator x of
+  True -> x
+  False -> x <> "/"
 
 -- | Remove any trailing path separators
 --
 -- > dropTrailingPathSeparator "file/test/" == "file/test"
--- > dropTrailingPathSeparator "/" == "/"
--- > not (hasTrailingPathSeparator (dropTrailingPathSeparator x)) || isDrive x
+-- >           dropTrailingPathSeparator "/" == "/"
 dropTrailingPathSeparator :: FilePath -> FilePath
-dropTrailingPathSeparator x = packPath (dropTrailingPathSeparatorChars (unpack x))
-
-dropTrailingPathSeparatorChars :: [Char] -> [Char]
-dropTrailingPathSeparatorChars x =
-  if hasTrailingPathSeparatorChars x && not (isDriveChars x)
-  then let trimmed = dropWhileEnd isPathSeparator x
-       in if null trimmed then [last x] else trimmed
-  else x
+dropTrailingPathSeparator x = case hasTrailingPathSeparator x && not (isDrive x) of
+  True ->
+    let x' = dropWhileEndUnits isSepU x
+    in case nullU x' of
+      True -> lastU x
+      False -> x'
+  False -> x
 
 -- | Get the directory name, move up one level.
 --
--- > takeDirectory "/directory/other.ext" == "/directory"
--- > takeDirectory "foo" == "."
--- > takeDirectory "/" == "/"
--- > takeDirectory "/foo" == "/"
--- > takeDirectory "/foo/bar/baz" == "/foo/bar"
--- > takeDirectory "/foo/bar/baz/" == "/foo/bar/baz"
--- > takeDirectory "foo/bar/baz" == "foo/bar"
+-- >           takeDirectory "/directory/other.ext" == "/directory"
+-- >           takeDirectory "foo" == "."
+-- >           takeDirectory "/" == "/"
+-- >           takeDirectory "/foo" == "/"
+-- >           takeDirectory "/foo/bar/baz" == "/foo/bar"
+-- >           takeDirectory "/foo/bar/baz/" == "/foo/bar/baz"
+-- >           takeDirectory "foo/bar/baz" == "foo/bar"
 takeDirectory :: FilePath -> FilePath
-takeDirectory x = packPath (dropTrailingPathSeparatorChars (dropFileNameChars (unpack x)))
+takeDirectory x = dropTrailingPathSeparator (dropFileName x)
 
 -- | Set the directory, keeping the filename the same.
 --
 -- > replaceDirectory "root/file.ext" "/directory/" == "/directory/file.ext"
-replaceDirectory :: FilePath -> String -> FilePath
-replaceDirectory x dir = packPath (replaceDirectoryChars (unpack x) (unpack dir))
-
-replaceDirectoryChars :: [Char] -> [Char] -> [Char]
-replaceDirectoryChars x dir = combineAlwaysChars dir (takeFileNameChars x)
+replaceDirectory :: FilePath -> FilePath -> FilePath
+replaceDirectory x dir = combineAlways dir (takeFileName x)
 
 -- | An alias for '</>'.
 combine :: FilePath -> FilePath -> FilePath
-combine a b = packPath (combineChars (unpack a) (unpack b))
+combine a b = case hasLeadingPathSeparator b || hasDrive b of
+  True -> b
+  False -> combineAlways a b
+
+-- | Whether the first unit is a path separator.
+hasLeadingPathSeparator :: FilePath -> Bool
+hasLeadingPathSeparator x = not (nullU x) && isSepU (takeUnits 1 x)
+
+-- | Combine two paths, assuming rhs is NOT absolute.
+combineAlways :: FilePath -> FilePath -> FilePath
+combineAlways a b = case nullU a of
+  True -> b
+  False -> case nullU b of
+    True -> a
+    False -> case hasTrailingPathSeparator a of
+      True -> a <> b
+      False -> a <> "/" <> b
 
 -- | Combine two paths with a path separator.
--- If the second path starts with a path separator or a drive letter, then it returns the second.
--- The intention is that @readFile (dir '</>' file)@ will access the same file as
--- @setCurrentDirectory dir; readFile file@.
+--   If the second path starts with a path separator or a drive letter, then it returns the second.
 --
 -- > "/directory" </> "file.ext" == "/directory/file.ext"
 -- > "directory" </> "/file.ext" == "/file.ext"
---
--- Combined:
---
 -- > "/" </> "test" == "/test"
 -- > "home" </> "bob" == "home/bob"
+-- > "x:" </> "foo" == "x:/foo"
 --
 -- Not combined:
 --
 -- > "home" </> "/bob" == "/bob"
 (</>) :: FilePath -> FilePath -> FilePath
 (</>) = combine
-
-combineChars :: [Char] -> [Char] -> [Char]
-combineChars a b =
-  if hasLeadingPathSeparatorChars b || hasDriveChars b then b else combineAlwaysChars a b
-
--- Combine two paths, assuming rhs is NOT absolute.
-combineAlwaysChars :: [Char] -> [Char] -> [Char]
-combineAlwaysChars a b
-  | null a = b
-  | null b = a
-  | hasTrailingPathSeparatorChars a = a <> b
-  | otherwise = a <> [pathSeparator] <> b
-
-hasLeadingPathSeparatorChars :: [Char] -> Bool
-hasLeadingPathSeparatorChars x = case x of
-  [] -> False
-  hd : _ -> isPathSeparator hd
-
-hasDriveChars :: [Char] -> Bool
-hasDriveChars x = not (null (fst (splitDriveChars x)))
-
-isDriveChars :: [Char] -> Bool
-isDriveChars x = not (null x) && null (snd (splitDriveChars x))
 
 -- | Split a path by the directory separator.
 --
@@ -595,21 +623,22 @@ isDriveChars x = not (null x) && null (snd (splitDriveChars x))
 -- > splitPath "" == []
 -- > splitPath "/file/test" == ["/","file/","test"]
 splitPath :: FilePath -> [FilePath]
-splitPath x = map packPath (splitPathChars (unpack x))
+splitPath x =
+  let parts = splitDrive x
+      drive = fst parts
+      path = snd parts
+  in (case nullU drive of
+    True -> []
+    False -> [drive]) <> splitPathPieces path
 
-splitPathChars :: [Char] -> [[Char]]
-splitPathChars x =
-  let split = splitDriveChars x
-      drive = fst split
-      path = snd split
-  in (if null drive then [] else [drive]) <> splitPathPiecesChars path
-
-splitPathPiecesChars :: [Char] -> [[Char]]
-splitPathPiecesChars [] = []
-splitPathPiecesChars y =
-  let broken = break isPathSeparator y
-      separators = span isPathSeparator (snd broken)
-  in (fst broken <> fst separators) : splitPathPiecesChars (snd separators)
+-- | The pieces after the drive, each but the last keeping its separators.
+splitPathPieces :: FilePath -> [FilePath]
+splitPathPieces y = case nullU y of
+  True -> []
+  False ->
+    let br = breakUnits isSepU y
+        sp = spanUnits isSepU (snd br)
+    in (fst br <> fst sp) : splitPathPieces (snd sp)
 
 -- | Just as 'splitPath', but don't add the trailing slashes to each element.
 --
@@ -619,10 +648,7 @@ splitPathPiecesChars y =
 -- > splitDirectories "" == []
 -- > splitDirectories "/test///file" == ["/","test","file"]
 splitDirectories :: FilePath -> [FilePath]
-splitDirectories x = map packPath (splitDirectoriesChars (unpack x))
-
-splitDirectoriesChars :: [Char] -> [[Char]]
-splitDirectoriesChars x = map dropTrailingPathSeparatorChars (splitPathChars x)
+splitDirectories x = map dropTrailingPathSeparator (splitPath x)
 
 -- | Join path elements back together.
 --
@@ -631,19 +657,15 @@ splitDirectoriesChars x = map dropTrailingPathSeparatorChars (splitPathChars x)
 -- > joinPath [] == ""
 -- > joinPath ["test","file","path"] == "test/file/path"
 joinPath :: [FilePath] -> FilePath
-joinPath xs = packPath (joinPathChars (map unpack xs))
-
-joinPathChars :: [[Char]] -> [Char]
-joinPathChars xs = foldr combineChars [] xs
+joinPath xs = foldr combine "" xs
 
 
 ---------------------------------------------------------------------
 -- File name manipulators
 
 -- | Equality of two 'FilePath's.
--- If you call @System.Filesystem.canonicalizePath@
+-- If you call @System.Directory.canonicalizePath@
 -- first this has a much better chance of working.
--- Note that this doesn't follow symlinks or DOSNAM~1s.
 --
 -- Similar to 'normalise', this does not expand @".."@, because of symlinks.
 --
@@ -653,17 +675,9 @@ joinPathChars xs = foldr combineChars [] xs
 -- > not (equalFilePath "/a/../c" "/c")
 -- > not (equalFilePath "foo" "/foo")
 equalFilePath :: FilePath -> FilePath -> Bool
-equalFilePath a b = equalFilePathChars (unpack a) (unpack b)
+equalFilePath a b = dropTrailingPathSeparator (normalise a) == dropTrailingPathSeparator (normalise b)
 
-equalFilePathChars :: [Char] -> [Char] -> Bool
-equalFilePathChars a b = dropTrailingPathSeparatorChars (normaliseChars a) == dropTrailingPathSeparatorChars (normaliseChars b)
-
--- | Contract a filename, based on a relative path. Note that the resulting path
--- will never introduce @..@ paths, as the presence of symlinks means @../b@
--- may not reach @a/b@ if it starts from @a/c@.
---
--- The corresponding @makeAbsolute@ function can be found in
--- @System.Filesystem@.
+-- | Contract a filename, based on a relative path.
 --
 -- > makeRelative "/directory" "/directory/file.ext" == "file.ext"
 -- > makeRelative x x == "."
@@ -674,35 +688,36 @@ equalFilePathChars a b = dropTrailingPathSeparatorChars (normaliseChars a) == dr
 -- > makeRelative "/file/test" "/file/test/fred/" == "fred/"
 -- > makeRelative "some/path" "some/path/a/b/c" == "a/b/c"
 makeRelative :: FilePath -> FilePath -> FilePath
-makeRelative root path = packPath (makeRelativeChars (unpack root) (unpack path))
+makeRelative root path = case equalFilePath root path of
+  True -> "."
+  False -> case takeAbsPosix root /= takeAbsPosix path of
+    True -> path
+    False -> makeRelativeLoop (dropAbsPosix root) (dropAbsPosix path) path
 
-makeRelativeChars :: [Char] -> [Char] -> [Char]
-makeRelativeChars root path =
-  if equalFilePathChars root path
-  then [extSeparator]
-  else if takeAbsChars root /= takeAbsChars path
-       then path
-       else makeRelativeLoopChars (dropAbsChars root) (dropAbsChars path) path
+-- | The absolute prefix a relative computation strips: the drive on Posix.
+takeAbsPosix :: FilePath -> FilePath
+takeAbsPosix x = fst (splitDrive x)
 
-makeRelativeLoopChars :: [Char] -> [Char] -> [Char] -> [Char]
-makeRelativeLoopChars [] y original = dropWhile isPathSeparator y
-makeRelativeLoopChars x y original =
-  let xGroup = makeRelativeGroupChars x
-      yGroup = makeRelativeGroupChars y
-  in if equalFilePathChars (fst xGroup) (fst yGroup)
-     then makeRelativeLoopChars (snd xGroup) (snd yGroup) original
-     else original
+-- | The path with its absolute prefix dropped.
+dropAbsPosix :: FilePath -> FilePath
+dropAbsPosix x = snd (splitDrive x)
 
-makeRelativeGroupChars :: [Char] -> ([Char], [Char])
-makeRelativeGroupChars x =
-  let broken = break isPathSeparator (dropWhile isPathSeparator x)
-  in (dropWhile isPathSeparator (fst broken), dropWhile isPathSeparator (snd broken))
+-- | Strip one leading group at a time while the groups agree.
+makeRelativeLoop :: FilePath -> FilePath -> FilePath -> FilePath
+makeRelativeLoop x y original = case nullU x of
+  True -> dropWhileUnits isSepU y
+  False ->
+    let xg = makeRelativeGroup x
+        yg = makeRelativeGroup y
+    in case equalFilePath (fst xg) (fst yg) of
+      True -> makeRelativeLoop (snd xg) (snd yg) original
+      False -> original
 
-takeAbsChars :: [Char] -> [Char]
-takeAbsChars x = fst (splitDriveChars x)
-
-dropAbsChars :: [Char] -> [Char]
-dropAbsChars x = snd (splitDriveChars x)
+-- | The next group: text to the next separator, without any separators.
+makeRelativeGroup :: FilePath -> (FilePath, FilePath)
+makeRelativeGroup x =
+  let br = breakUnits isSepU (dropWhileUnits isSepU x)
+  in (dropWhileUnits isSepU (fst br), dropWhileUnits isSepU (snd br))
 
 -- | Normalise a file
 --
@@ -710,11 +725,10 @@ dropAbsChars x = snd (splitDriveChars x)
 --
 -- * @/@ -> 'pathSeparator'
 --
--- * @./@ -> @""
+-- * @./@ -> @""@
 --
 -- Does not remove @".."@, because of symlinks.
 --
--- > normalise "/file/\\test////" == "/file/\\test/"
 -- > normalise "/file/./test" == "/file/test"
 -- > normalise "/test/file/../bob/fred/" == "/test/file/../bob/fred/"
 -- > normalise "../bob/fred/" == "../bob/fred/"
@@ -728,50 +742,53 @@ dropAbsChars x = snd (splitDriveChars x)
 -- > normalise "bob/fred/." == "bob/fred/"
 -- > normalise "//home" == "/home"
 normalise :: FilePath -> FilePath
-normalise path = packPath (normaliseChars (unpack path))
+normalise filepath =
+  let parts = splitDrive filepath
+      drv = fst parts
+      pth = snd parts
+      result = normaliseJoinDrive (normaliseDrivePosix drv) (normaliseBody pth)
+  in case isDirPathU pth && not (hasTrailingPathSeparator result) && not (isRelativeDrivePosix drv) of
+    True -> result <> "/"
+    False -> result
 
-normaliseChars :: [Char] -> [Char]
-normaliseChars path =
-  let split = splitDriveChars path
-      drv = fst split
-      pth = snd split
-      result = normaliseJoinDriveChars (normaliseDriveChars drv) (normaliseBodyChars pth)
-      addSeparator = isDirPathChars pth && not (hasTrailingPathSeparatorChars result) && not (isRelativeDriveChars drv)
-  in if addSeparator then result <> [pathSeparator] else result
+-- | Join a normalised drive and body, answering @"."@ for two empty halves.
+normaliseJoinDrive :: FilePath -> FilePath -> FilePath
+normaliseJoinDrive d p = case nullU d && nullU p of
+  True -> "."
+  False -> joinDrive d p
 
-normaliseJoinDriveChars :: [Char] -> [Char] -> [Char]
-normaliseJoinDriveChars [] [] = [extSeparator]
-normaliseJoinDriveChars d p = combineAlwaysChars d p
+-- | A Posix drive is a run of separators and normalises to one.
+normaliseDrivePosix :: FilePath -> FilePath
+normaliseDrivePosix drv = case nullU drv of
+  True -> ""
+  False -> "/"
 
-normaliseDriveChars :: [Char] -> [Char]
-normaliseDriveChars [] = []
-normaliseDriveChars _ = [pathSeparator]
+-- | Only a Windows drive can be relative; on Posix this is always false.
+isRelativeDrivePosix :: FilePath -> Bool
+isRelativeDrivePosix _ = False
 
--- Only a Windows drive can be a relative drive; on Posix a drive is a run of
--- path separators and therefore always absolute.
-isRelativeDriveChars :: [Char] -> Bool
-isRelativeDriveChars _ = False
+-- | Whether the path names a directory: it ends in a separator, or in a dot
+-- after a separator.
+isDirPathU :: FilePath -> Bool
+isDirPathU xs = hasTrailingPathSeparator xs
+  || (not (nullU xs) && lastU xs == "." && hasTrailingPathSeparator (dropLastU xs))
 
-normaliseBodyChars :: [Char] -> [Char]
-normaliseBodyChars x = joinPathChars (normaliseDropDotsChars (normalisePropSepChars (splitDirectoriesChars x)))
+-- | The normalised body: directories split, separators propagated, dots
+-- dropped, rejoined.
+normaliseBody :: FilePath -> FilePath
+normaliseBody x = joinPath (filterDot (propSepFirst (splitDirectories x)))
 
-normalisePropSepChars :: [[Char]] -> [[Char]]
-normalisePropSepChars [] = []
-normalisePropSepChars (x : xs) = if all isPathSeparator x then [pathSeparator] : xs else x : xs
+-- | The first piece keeps one separator when it is all separators.
+propSepFirst :: [FilePath] -> [FilePath]
+propSepFirst xs = case xs of
+  [] -> []
+  x : rest -> case allUnits isSepU x of
+    True -> "/" : rest
+    False -> xs
 
-normaliseDropDotsChars :: [[Char]] -> [[Char]]
-normaliseDropDotsChars = filter isNotDotChars
-
-isNotDotChars :: [Char] -> Bool
-isNotDotChars x = x /= [extSeparator]
-
-isDirPathChars :: [Char] -> Bool
-isDirPathChars xs =
-  if hasTrailingPathSeparatorChars xs
-  then True
-  else case xs of
-    [] -> False
-    _ -> last xs == extSeparator && hasTrailingPathSeparatorChars (init xs)
+-- | Drop the @.@ pieces.
+filterDot :: [FilePath] -> [FilePath]
+filterDot xs = filter (\p -> not (p == ".")) xs
 
 -- | Is a FilePath valid, i.e. could you create a file like it? This function checks for invalid names,
 -- and invalid characters, but does not check if length limits are exceeded, as these are typically
@@ -781,11 +798,15 @@ isDirPathChars xs =
 -- > isValid "\0" == False
 -- > isValid "/random_ path:*" == True
 isValid :: FilePath -> Bool
-isValid x = isValidChars (unpack x)
+isValid x = case nullU x of
+  True -> False
+  False -> case anyUnit isNulU x of
+    True -> False
+    False -> True
 
-isValidChars :: [Char] -> Bool
-isValidChars [] = False
-isValidChars x = not (elem (chr 0) x)
+-- | Whether a unit is NUL.
+isNulU :: String -> Bool
+isNulU u = u == singleton (chr 0)
 
 -- | Take a FilePath and make it valid; does not change already valid FilePaths.
 --
@@ -794,14 +815,15 @@ isValidChars x = not (elem (chr 0) x)
 -- > makeValid "" == "_"
 -- > makeValid "file\0name" == "file_name"
 makeValid :: FilePath -> FilePath
-makeValid x = packPath (makeValidChars (unpack x))
+makeValid x = case nullU x of
+  True -> "_"
+  False -> mapUnits validUnit x
 
-makeValidChars :: [Char] -> [Char]
-makeValidChars [] = ['_']
-makeValidChars path = map replaceNulChar path
-
-replaceNulChar :: Char -> Char
-replaceNulChar c = if c == chr 0 then '_' else c
+-- | Map NUL to @"_"@, keep every other unit.
+validUnit :: String -> String
+validUnit u = case u == singleton (chr 0) of
+  True -> "_"
+  False -> u
 
 -- | Is a path relative, or is it fixed to the root?
 --
@@ -809,56 +831,10 @@ replaceNulChar c = if c == chr 0 then '_' else c
 -- > isRelative "/test" == False
 -- > isRelative "/" == False
 isRelative :: FilePath -> Bool
-isRelative x = isRelativeChars (unpack x)
-
-isRelativeChars :: [Char] -> Bool
-isRelativeChars x = null (takeAbsChars x) || isRelativeDriveChars (takeAbsChars x)
+isRelative x = nullU (takeDrive x)
 
 -- | @not . 'isRelative'@
 --
 -- > isAbsolute x == not (isRelative x)
 isAbsolute :: FilePath -> Bool
 isAbsolute x = not (isRelative x)
-
-
----------------------------------------------------------------------
--- Private helpers
-
--- The stripSuffix function drops the given suffix from a list. It returns
--- Nothing if the list did not end with the suffix given, or Just the list
--- before the suffix, if it does.
-stripSuffixChars :: [Char] -> [Char] -> Maybe [Char]
-stripSuffixChars xs ys =
-  case stripPrefix (reverse xs) (reverse ys) of
-    Nothing -> Nothing
-    Just rest -> Just (reverse rest)
-
-dropExtensionChars :: [Char] -> [Char]
-dropExtensionChars x = fst (splitExtensionChars x)
-
-takeFileNameChars :: [Char] -> [Char]
-takeFileNameChars x = snd (splitFileNameWithDefaultChars x)
-
-dropFileNameChars :: [Char] -> [Char]
-dropFileNameChars x = fst (splitFileNameWithDefaultChars x)
-
--- spanEnd p xs = (dropWhileEnd p xs, takeWhileEnd p xs)
-spanEndChars :: (Char -> Bool) -> [Char] -> ([Char], [Char])
-spanEndChars p xs = (dropWhileEnd p xs, takeWhileEndChars p xs)
-
--- takeWhileEnd p xs = reverse (takeWhile p (reverse xs))
-takeWhileEndChars :: (Char -> Bool) -> [Char] -> [Char]
-takeWhileEndChars p xs = reverse (takeWhile p (reverse xs))
-
--- breakEnd p xs = spanEnd (not . p) xs
-breakEndChars :: (Char -> Bool) -> [Char] -> ([Char], [Char])
-breakEndChars p xs = spanEndChars (notPathSeparator p) xs
-
-notPathSeparator :: (Char -> Bool) -> Char -> Bool
-notPathSeparator p c = not (p c)
-
-packPath :: [Char] -> FilePath
-packPath = pack
-
-nullPath :: FilePath -> Bool
-nullPath p = p == ""

@@ -1,28 +1,53 @@
 {-# LANGUAGE NoImplicitPrelude #-}
--- | The `IO` type and its instances, and the `FilePath` spelling of `String`.
+-- | The `IO` type and its instances, and `FilePath`: paths as host strings.
 --
 -- Users import {@link System.IO}; this module exists so dependents that must not
 -- pull in file/console APIs (e.g. Control.Exception.Base, or every module that
 -- only mentions a path) still get the IO monad and `FilePath` without the
 -- filesystem modules.
+--
+-- A `FilePath` is a host-native `String`: bytes on PHP, UTF-16 on the JVM and
+-- .NET — exactly what each host's filesystem API accepts. There is deliberately
+-- no separate `OsPath` type and no encoding step anywhere: pure path
+-- manipulation only ever looks at ASCII (separators, drive letters, extension
+-- markers) and passes everything else through untouched, and host calls take
+-- the string as-is. `packFilePath` and `unpackFilePath` stay as the spelled-out
+-- conversions; both are total, the latter always answering `Just`.
+--
+-- This module is `NoImplicitPrelude` and its imports are too, transitively: it
+-- sits inside `Prelude`'s own import closure (`Prelude` -> `System.IO` ->
+-- here), so anything it imported that reached back to `Prelude` would be a
+-- compile-time import cycle.
 module System.IO.Base
   ( IO
   , FilePath
+  , packFilePath
+  , unpackFilePath
   ) where
 
 import Control.Applicative
 import Control.Monad
 import Data.Functor
+import Data.Maybe (Maybe(..))
 import Data.String (String)
 import Moggi.Internal.Base
 import Moggi.Internal.IO
 
 type IO = IO#
 
--- | File and directory names are values of type `String`, whose precise
--- meaning is operating system dependent. Files can be opened, yielding a
--- handle which can then be used to operate on the contents of that file.
+-- | File and directory names are host-native strings, whose interpretation is
+-- operating system dependent. Files can be opened, yielding a handle which
+-- can then be used to operate on the contents of that file.
 type FilePath = String
+
+-- | Encode a `String` as a path. Paths are host strings, so this is the
+-- identity; it exists so the conversion is spelled out at call sites.
+packFilePath :: String -> FilePath
+packFilePath s = s
+
+-- | Decode a path to text. Paths are host strings, so this always succeeds.
+unpackFilePath :: FilePath -> Maybe String
+unpackFilePath p = Just p
 
 instance Functor IO where
   map f m = ioBind# m (\x -> ioPure# (f x))

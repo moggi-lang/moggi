@@ -28,7 +28,7 @@ import Control.Applicative hiding (empty)
 import Control.Exception (throwIO)
 import Control.Monad
 import Moggi.Internal.Base
-import System.IO.Base (IO)
+import System.IO.Base (IO, FilePath)
 import Data.ByteString (ByteString)
 import Data.Bool
 import Data.Int
@@ -37,7 +37,6 @@ import Data.String hiding (pack, unpack, length, take, drop, isPrefixOf, isSuffi
 import Data.Time.Clock
 import Moggi.IO.Exception
 import Platform.PHP
-import System.Filesystem.Path
 import Moggi.Internal.Prim
 
 foreign php function readFileBytes "file_get_contents" :: String -> IO ByteString
@@ -92,15 +91,24 @@ foreign php function rawErrorClearLast "error_clear_last" :: IO ()
 
 foreign php function rawErrorGetLast "error_get_last" :: IO PHPValue
 
+-- | Host entry points take `FilePath`, and the host calls take `String`:
+-- on every backend a path already is a host-native string
+-- (`type FilePath = String`), so both directions are the identity.
+toHostPath :: FilePath -> String
+toHostPath p = p
+
+fromHostPath :: String -> FilePath
+fromHostPath s = s
+
 -- | PHP reports a failed host call through a diagnostic rather than a return
 -- value, so the call is bracketed and the diagnostic becomes the host failure it
 -- stands for, message and all. Nothing is decided about the failure here — that
 -- belongs to `System.IO`.
-checked :: String -> String -> IO a -> IO a
-checked call pathStr action = do
+checked :: String -> FilePath -> IO a -> IO a
+checked call path action = do
   rawErrorClearLast
   result <- action
-  hostFailureIfAny call pathStr
+  hostFailureIfAny call (toHostPath path)
   pure result
 
 hostFailureIfAny :: String -> String -> IO ()
@@ -121,41 +129,41 @@ describeLastError lastError pathStr = case lastError of
   _ -> pathStr <> ": host call failed"
 
 readFile :: FilePath -> IO ByteString
-readFile p = checked "file_get_contents" (p) (readFileBytes (p))
+readFile p = checked "file_get_contents" p (readFileBytes (toHostPath p))
 
 readTextFile :: FilePath -> IO String
-readTextFile p = checked "file_get_contents" (p) (readTextFileBytes (p))
+readTextFile p = checked "file_get_contents" p (readTextFileBytes (toHostPath p))
 
 writeFile :: FilePath -> ByteString -> IO ()
 writeFile p content =
-  checked "file_put_contents" (p) (writeFileBytes (p) content)
+  checked "file_put_contents" p (writeFileBytes (toHostPath p) content)
 
 writeTextFile :: FilePath -> String -> IO ()
 writeTextFile p content =
-  checked "file_put_contents" (p) (writeTextFileBytes (p) content)
+  checked "file_put_contents" p (writeTextFileBytes (toHostPath p) content)
 
 appendFile :: FilePath -> ByteString -> IO ()
 appendFile p content =
-  checked "file_put_contents" (p) (putBytesFlags (p) content fileAppend)
+  checked "file_put_contents" p (putBytesFlags (toHostPath p) content fileAppend)
 
 appendTextFile :: FilePath -> String -> IO ()
 appendTextFile p content =
-  checked "file_put_contents" (p) (putTextFlags (p) content fileAppend)
+  checked "file_put_contents" p (putTextFlags (toHostPath p) content fileAppend)
 
 isFile :: FilePath -> IO Bool
-isFile p = rawIsFile (p)
+isFile p = rawIsFile (toHostPath p)
 
 getModified :: FilePath -> IO UTCTime
 getModified p = do
-  secs <- rawFilemtime (p)
+  secs <- rawFilemtime (toHostPath p)
   pure (utcTimeFromUnix secs)
 
 getSize :: FilePath -> IO Int
-getSize p = rawFilesize (p)
+getSize p = rawFilesize (toHostPath p)
 
 copyFile :: FilePath -> FilePath -> IO ()
 copyFile src dst = do
-  _ <- rawCopy (src) (dst)
+  _ <- rawCopy (toHostPath src) (toHostPath dst)
   pure ()
 
 copyFileContent :: FilePath -> FilePath -> IO ()
@@ -166,34 +174,35 @@ copyFileContent src dst = do
 
 copyPermissions :: FilePath -> FilePath -> IO ()
 copyPermissions src dst = do
-  perms <- rawFileperms (src)
-  _ <- rawChmod (dst) perms
+  perms <- rawFileperms (toHostPath src)
+  _ <- rawChmod (toHostPath dst) perms
   pure ()
 
 removeFile :: FilePath -> IO ()
 removeFile p = do
-  _ <- rawUnlink (p)
+  _ <- rawUnlink (toHostPath p)
   pure ()
 
 isDirectory :: FilePath -> IO Bool
-isDirectory p = rawIsDir (p)
+isDirectory p = rawIsDir (toHostPath p)
 
 canonicalizePath :: FilePath -> IO FilePath
 canonicalizePath p = do
-  resolved <- rawRealpath (p)
-  pure resolved
+  resolved <- rawRealpath (toHostPath p)
+  pure (fromHostPath resolved)
 
 filterScandir [] = []
 filterScandir ("." : rest) = filterScandir rest
 filterScandir (".." : rest) = filterScandir rest
 filterScandir (x : rest) = x : filterScandir rest
 
+mapPaths :: [String] -> [FilePath]
 mapPaths [] = []
-mapPaths (x : rest) = x : mapPaths rest
+mapPaths (x : rest) = fromHostPath x : mapPaths rest
 
 listDirectory :: FilePath -> IO [FilePath]
 listDirectory p = do
-  names <- rawScandir (p)
+  names <- rawScandir (toHostPath p)
   pure (mapPaths (filterScandir names))
 
 mkdirUnlessExists :: Bool -> String -> IO ()
@@ -218,8 +227,8 @@ createDirectoryFresh dirPath = do
 
 createDirectory :: Bool -> FilePath -> IO ()
 createDirectory existOk p = case existOk of
-  True -> createDirectoryAllow (p)
-  False -> createDirectoryFresh (p)
+  True -> createDirectoryAllow (toHostPath p)
+  False -> createDirectoryFresh (toHostPath p)
 
 createTreePath :: String -> IO ()
 createTreePath "" = pure ()
@@ -239,7 +248,7 @@ createTreePathMissing dirPath = do
   pure ()
 
 createTree :: FilePath -> IO ()
-createTree p = createTreePath (p)
+createTree p = createTreePath (toHostPath p)
 
 removeTreePath :: String -> IO ()
 removeTreePath target = do
@@ -280,24 +289,24 @@ removeTreeEntries target (entry : rest) = do
   removeTreeEntries target rest
 
 removeTree :: FilePath -> IO ()
-removeTree p = removeTreePath (p)
+removeTree p = removeTreePath (toHostPath p)
 
 removeDirectory :: FilePath -> IO ()
 removeDirectory p = do
-  _ <- rawRmdir (p)
+  _ <- rawRmdir (toHostPath p)
   pure ()
 
 getWorkingDirectory :: IO FilePath
 getWorkingDirectory = do
   cwd <- rawGetcwd
-  pure cwd
+  pure (fromHostPath cwd)
 
 setWorkingDirectory :: FilePath -> IO ()
 setWorkingDirectory p = do
-  _ <- rawChdir (p)
+  _ <- rawChdir (toHostPath p)
   pure ()
 
 rename :: FilePath -> FilePath -> IO ()
 rename src dst = do
-  _ <- rawRename (src) (dst)
+  _ <- rawRename (toHostPath src) (toHostPath dst)
   pure ()

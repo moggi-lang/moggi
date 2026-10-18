@@ -12,7 +12,7 @@ main = do
   putStrLn (show (fromMaybe 0 Nothing))
 ```
 
-These are the library's own sources, shipped inside every installation as `lib/`
+These are the library's own sources, shipped inside every installation as `libraries/`
 next to `bin/` and covered by the compiler's `LICENSE`. Read them whenever a
 signature is not obvious; nothing here is hidden behind a build step.
 

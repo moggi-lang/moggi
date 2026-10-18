@@ -1,3 +1,4 @@
+{-# LANGUAGE NoImplicitPrelude #-}
 {-# BACKEND
   php = Data.ByteString.PHP
   jvm = Data.ByteString.JVM

@@ -9,16 +9,27 @@ import Data.Tuple (fst, snd)
 import System.Environment (lookupEnv)
 import System.Filesystem (removeFile)
 import System.IO
+import System.IO.Base (packFilePath, unpackFilePath)
+
+-- Every literal below is ASCII, so the strict decoding in `txt` always
+-- succeeds here.
+fp :: String -> FilePath
+fp = packFilePath
+
+txt :: FilePath -> String
+txt p = case unpackFilePath p of
+  Just s -> s
+  Nothing -> "<?>"
 
 scratchDir :: IO FilePath
 scratchDir = do
   tmp <- lookupEnv "TMPDIR"
   win <- lookupEnv "TEMP"
   pure (case tmp of
-    Just d -> d
+    Just d -> fp d
     Nothing -> case win of
-      Just d -> d
-      Nothing -> "/tmp")
+      Just d -> fp d
+      Nothing -> fp "/tmp")
 
 main :: IO ()
 main = do
@@ -30,7 +41,7 @@ main = do
   hClose h
   s <- readFile path
   putStrLn (show (s == "hello-temp"))
-  putStrLn (show (isInfixOf (unpack "moggi-temp-test") (unpack path)))
+  putStrLn (show (isInfixOf (unpack "moggi-temp-test") (unpack (txt path))))
   t2 <- openBinaryTempFile dir "moggi-bin-test"
   let bpath = fst t2
   let bh = snd t2
@@ -38,10 +49,10 @@ main = do
   hClose bh
   bs <- readFile bpath
   putStrLn (show (bs == "binary-temp"))
-  putStrLn (show (isInfixOf (unpack "moggi-bin-test") (unpack bpath)))
+  putStrLn (show (isInfixOf (unpack "moggi-bin-test") (unpack (txt bpath))))
   removeFile path
   removeFile bpath
-  r <- tryIOError (openTempFile "/no-such-dir-moggi-test" "t")
+  r <- tryIOError (openTempFile (fp "/no-such-dir-moggi-test") "t")
   putStrLn (case r of
     Left _ -> "bad-dir: True"
     Right _ -> "bad-dir: False")

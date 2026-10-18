@@ -78,8 +78,11 @@ foreign php function rawFstat "fstat" :: Handle -> IO StatArray
 
 foreign php function rawFtruncate "ftruncate" :: Handle -> Integer -> IO Bool
 
--- `tempnam` answers false outside a writable directory, which rides `Maybe`.
-foreign php function rawTempnam "tempnam" :: String -> String -> IO (Maybe String)
+-- Temporary names stay `String`: on PHP that is the host byte string
+-- unchanged, and importing `ByteString` here would cycle back to `Prelude`.
+foreign php function rawRandomBytes "random_bytes" :: Int -> IO String
+
+foreign php function rawBin2Hex "bin2hex" :: String -> String
 
 foreign php function isArray "is_array" :: StatArray -> Bool
 
@@ -106,25 +109,27 @@ stderr = rawStderr
 -- refuse; the check keeps the three of them agreeing. Otherwise PHP reports no
 -- errno for a failed `fopen`, so the error type is decided from the path — the
 -- same signals errno would carry.
+-- Paths are host strings (`System.IO.Base`), so they reach `fopen` unchanged:
+-- every byte sequence, valid UTF-8 or not, names exactly those bytes.
 openFile :: FilePath -> IOMode -> IO Handle
-openFile p mode = case rawIsDir (p) of
-  True -> ioError (mkIOError InappropriateType "openFile" Nothing (Just (p)))
-  False -> catch (rawFopen (p) (ioModeToString mode)) (openFileFailed p mode)
+openFile p mode = case rawIsDir p of
+  True -> ioError (mkIOError InappropriateType "openFile" Nothing (Just p))
+  False -> catch (rawFopen p (ioModeToString mode)) (openFileFailed p mode)
 
 openFileFailed :: FilePath -> IOMode -> HostException -> IO Handle
 openFileFailed p mode _ =
-  ioError (mkIOError (openErrorType p mode) "openFile" Nothing (Just (p)))
+  ioError (mkIOError (openErrorType p mode) "openFile" Nothing (Just p))
 
 openErrorType :: FilePath -> IOMode -> IOErrorType
-openErrorType p mode = case rawIsDir (p) of
+openErrorType p mode = case rawIsDir p of
   True -> InappropriateType
-  False -> case rawPathExists (p) of
+  False -> case rawPathExists p of
     False -> NoSuchThing
     True -> case writableMode mode of
-      True -> case rawIsWritable (p) of
+      True -> case rawIsWritable p of
         False -> PermissionDenied
         True -> OtherError
-      False -> case rawIsReadable (p) of
+      False -> case rawIsReadable p of
         False -> PermissionDenied
         True -> OtherError
 
@@ -235,22 +240,44 @@ hSetFileSize h size = do
 print :: Show a => a -> IO ()
 print x = putStr (show x)
 
--- `tempnam` creates the file itself, securely; opening it for writing only
--- truncates what is already empty. `tempnam` falls back to the system temp
--- directory (ignoring the template) instead of failing outside a writable
--- directory, so the directory is checked first and the failure stays
--- deterministic across backends.
+-- Temporary names are `template` plus 64 bits of randomness, created with
+-- `fopen` exclusive mode (`"x"`), which fails when the name is taken instead
+-- of truncating anything. The host's `tempnam` is deliberately not used: on
+-- Windows it goes through `GetTempFileName`, which keeps only the first three
+-- template characters, so the promised prefix would not survive. The directory
+-- is checked first, so a missing directory fails deterministically instead.
 openTempFile :: FilePath -> String -> IO (FilePath, Handle)
 openTempFile dir template = do
   case tempDirOK dir of
     False -> ioError (mkIOError (tempDirError dir) "openTempFile" Nothing (Just dir))
-    True -> do
-      mpath <- rawTempnam dir template
-      case mpath of
-        Nothing -> ioError (mkIOError (tempDirError dir) "openTempFile" Nothing (Just dir))
-        Just path -> do
-          h <- openFile path WriteMode
-          pure (path, h)
+    True -> openTempFileAttempt dir template 100
+
+-- 100 attempts at a 64-bit name: collision is already impractical, and
+-- running out still answers `ResourceExhausted` rather than looping forever.
+openTempFileAttempt :: FilePath -> String -> Int -> IO (FilePath, Handle)
+openTempFileAttempt dir template tries = case intEq# tries 0 of
+  True -> ioError (mkIOError ResourceExhausted "openTempFile" Nothing (Just dir))
+  False -> do
+    rand <- rawRandomBytes 8
+    let path = dir <> "/" <> template <> rawBin2Hex rand
+    mh <- tryOpenExclusive path
+    case mh of
+      Just h -> pure (path, h)
+      Nothing -> openTempFileAttempt dir template (intSub# tries 1)
+
+-- Exclusive creation answers `Nothing` when the name is taken (or vanished
+-- between the directory check and now); anything else about the path was
+-- already settled by the directory check, so every failure retries.
+tryOpenExclusive :: FilePath -> IO (Maybe Handle)
+tryOpenExclusive p = catch (openExclusive p) openExclusiveFailed
+
+openExclusive :: FilePath -> IO (Maybe Handle)
+openExclusive p = do
+  h <- rawFopen p "x"
+  pure (Just h)
+
+openExclusiveFailed :: HostException -> IO (Maybe Handle)
+openExclusiveFailed _ = pure Nothing
 
 tempDirOK :: FilePath -> Bool
 tempDirOK dir = case rawPathExists dir of

@@ -37,9 +37,12 @@ import Data.String qualified as S
 import Data.Time.Clock
 import Moggi.Err
 import Moggi.Internal.Base
-import System.IO.Base (IO)
+import System.IO.Base (IO, FilePath, packFilePath, unpackFilePath)
+import Moggi.IO.Exception
+import System.IO.Error (mkIOError)
+import Text.Show
+import Data.Maybe
 import Moggi.Internal.Prim (word8FromInt#, word8ToInt#)
-import System.Filesystem.Path
 import Moggi.Internal.Prim
 
 foreign jvm type File "java.io.File"
@@ -90,28 +93,47 @@ foreign jvm function newFileWriterAppend "java.io.FileWriter:__con" :: String ->
 foreign jvm function fwWrite "java.io.Writer.write" :: Writer -> String -> IO ()
 foreign jvm function fwClose "java.io.Writer.close" :: Writer -> IO ()
 
-toFile :: FilePath -> File
-toFile p = newFile (p)
+-- | The host only takes `String`: bytes that are not valid UTF-8 cannot cross,
+-- so they fail here with `InvalidArgument` instead of silently opening the
+-- wrong file. `fromHostPath` the other way is total: any host string encodes.
+-- The `loc` names the entry point for the failure, the way `System.IO.JVM`
+-- names its own crossings.
+toHostPath :: String -> FilePath -> IO String
+toHostPath loc p = case unpackFilePath p of
+  Just s -> pure s
+  Nothing -> ioError (mkIOError InvalidArgument loc Nothing (Just (show p)))
 
-toPath :: FilePath -> Path
-toPath p = fileToPath (toFile p)
+fromHostPath :: String -> FilePath
+fromHostPath s = packFilePath s
+
+toFile :: String -> FilePath -> IO File
+toFile loc p = do
+  hp <- toHostPath loc p
+  pure (newFile hp)
+
+toPath :: String -> FilePath -> IO Path
+toPath loc p = do
+  f <- toFile loc p
+  pure (fileToPath f)
 
 readTextFile :: FilePath -> IO String
-readTextFile p = filesReadString (toPath p)
+readTextFile p = do
+  dir <- toPath "readTextFile" p
+  filesReadString dir
 
 writeTextFile :: FilePath -> String -> IO ()
-writeTextFile p content =
-  let fw = newFileWriter (p) in
-  do
-    fwWrite fw content
-    fwClose fw
+writeTextFile p content = do
+  hp <- toHostPath "writeTextFile" p
+  let fw = newFileWriter hp
+  fwWrite fw content
+  fwClose fw
 
 appendTextFile :: FilePath -> String -> IO ()
-appendTextFile p content =
-  let fw = newFileWriterAppend (p) True in
-  do
-    fwWrite fw content
-    fwClose fw
+appendTextFile p content = do
+  hp <- toHostPath "appendTextFile" p
+  let fw = newFileWriterAppend hp True
+  fwWrite fw content
+  fwClose fw
 
 readFile :: FilePath -> IO ByteString
 readFile p = readTextFile p >>= (\s -> pure (fsFromString s))
@@ -134,16 +156,24 @@ fsToString :: ByteString -> String
 fsToString b = S.pack (fsMap (\w -> chr (word8ToInt# w)) (B.unpack b))
 
 isFile :: FilePath -> IO Bool
-isFile p = pure (fileIsFile (toFile p))
+isFile p = do
+  f <- toFile "isFile" p
+  pure (fileIsFile f)
 
 isDirectory :: FilePath -> IO Bool
-isDirectory p = pure (fileIsDirectory (toFile p))
+isDirectory p = do
+  f <- toFile "isDirectory" p
+  pure (fileIsDirectory f)
 
 getModified :: FilePath -> IO UTCTime
-getModified p = pure (utcTimeFromUnix (quot (fileLastModified (toFile p)) 1000))
+getModified p = do
+  f <- toFile "getModified" p
+  pure (utcTimeFromUnix (quot (fileLastModified f) 1000))
 
 getSize :: FilePath -> IO Int
-getSize p = pure (fileLength (toFile p))
+getSize p = do
+  f <- toFile "getSize" p
+  pure (fileLength f)
 
 copyFile :: FilePath -> FilePath -> IO ()
 copyFile src dst = do
@@ -157,12 +187,15 @@ copyPermissions :: FilePath -> FilePath -> IO ()
 copyPermissions _ _ = pure ()
 
 removeFile :: FilePath -> IO ()
-removeFile p = filesDelete (toPath p)
+removeFile p = do
+  dir <- toPath "removeFile" p
+  filesDelete dir
 
 canonicalizePath :: FilePath -> IO FilePath
 canonicalizePath p = do
-  resolved <- fileGetCanonicalPath (toFile p)
-  pure resolved
+  f <- toFile "canonicalizePath" p
+  resolved <- fileGetCanonicalPath f
+  pure (fromHostPath resolved)
 
 iterToList :: Iterator -> [Path]
 iterToList it = case iterHasNext it of
@@ -176,11 +209,12 @@ pathEntryName pe = case objectsIsNull (pathGetFileName pe) of
 
 mapPathEntries :: [Path] -> [FilePath]
 mapPathEntries [] = []
-mapPathEntries (e : rest) = pathEntryName e : mapPathEntries rest
+mapPathEntries (e : rest) = fromHostPath (pathEntryName e) : mapPathEntries rest
 
 listDirectory :: FilePath -> IO [FilePath]
 listDirectory p = do
-  stream <- filesNewDirectoryStream (toPath p)
+  dir <- toPath "listDirectory" p
+  stream <- filesNewDirectoryStream dir
   pure (mapPathEntries (iterToList (iterableIterator stream)))
 
 createDirectory :: Bool -> FilePath -> IO ()
@@ -189,32 +223,42 @@ createDirectory parents p = case parents of
   False -> createDirectoryFresh p
 
 createDirectoryParents :: FilePath -> IO ()
-createDirectoryParents p = case fileMkdirs (toFile p) of
-  True -> pure ()
-  False -> pure ()
+createDirectoryParents p = do
+  f <- toFile "createDirectory" p
+  case fileMkdirs f of
+    True -> pure ()
+    False -> pure ()
 
 createDirectoryFresh :: FilePath -> IO ()
-createDirectoryFresh p = case fileMkdir (toFile p) of
-  True -> pure ()
-  False -> pure ()
+createDirectoryFresh p = do
+  f <- toFile "createDirectory" p
+  case fileMkdir f of
+    True -> pure ()
+    False -> pure ()
 
 createTree :: FilePath -> IO ()
 createTree p = createDirectory True p
 
 removeDirectory :: FilePath -> IO ()
-removeDirectory p = case fileDelete (toFile p) of
-  True -> pure ()
-  False -> pure ()
+removeDirectory p = do
+  f <- toFile "removeDirectory" p
+  case fileDelete f of
+    True -> pure ()
+    False -> pure ()
 
 removeTree :: FilePath -> IO ()
-removeTree p = case fileExists (toFile p) of
-  False -> pure ()
-  True -> removeTreePresent p
+removeTree p = do
+  f <- toFile "removeTree" p
+  case fileExists f of
+    False -> pure ()
+    True -> removeTreePresent p
 
 removeTreePresent :: FilePath -> IO ()
-removeTreePresent p = case fileIsDirectory (toFile p) of
-  True -> removeTreeDirectory p
-  False -> removeTreeFile p
+removeTreePresent p = do
+  f <- toFile "removeTree" p
+  case fileIsDirectory f of
+    True -> removeTreeDirectory p
+    False -> removeTreeFile p
 
 removeTreeDirectory :: FilePath -> IO ()
 removeTreeDirectory p = do
@@ -223,9 +267,11 @@ removeTreeDirectory p = do
   removeDirectory p
 
 removeTreeFile :: FilePath -> IO ()
-removeTreeFile p = case fileDelete (toFile p) of
-  True -> pure ()
-  False -> pure ()
+removeTreeFile p = do
+  f <- toFile "removeTree" p
+  case fileDelete f of
+    True -> pure ()
+    False -> pure ()
 
 removeTreeEntries :: [FilePath] -> IO ()
 removeTreeEntries [] = pure ()
@@ -240,14 +286,18 @@ removeTreeEntry dir e = case dir of
   False -> removeFile e
 
 getWorkingDirectory :: IO FilePath
-getWorkingDirectory = pure (systemGetProperty "user.dir")
+getWorkingDirectory = pure (fromHostPath (systemGetProperty "user.dir"))
 
 setWorkingDirectory :: FilePath -> IO ()
 setWorkingDirectory p = do
-  _ <- pure (systemSetProperty "user.dir" (p))
+  hp <- toHostPath "setWorkingDirectory" p
+  _ <- pure (systemSetProperty "user.dir" hp)
   pure ()
 
 rename :: FilePath -> FilePath -> IO ()
-rename src dst = case fileRenameTo (toFile src) (toFile dst) of
-  True -> pure ()
-  False -> pure ()
+rename src dst = do
+  srcFile <- toFile "rename" src
+  dstFile <- toFile "rename" dst
+  case fileRenameTo srcFile dstFile of
+    True -> pure ()
+    False -> pure ()

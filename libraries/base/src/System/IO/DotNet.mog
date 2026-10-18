@@ -84,8 +84,9 @@ stdout = rawStdout
 stderr :: Handle
 stderr = rawStderr
 
+-- Paths are host strings (`System.IO.Base`): they reach the BCL unchanged.
 openFile :: FilePath -> IOMode -> IO Handle
-openFile p mode = catch (openMode (p) mode) (openFileFailed p mode)
+openFile p mode = catch (openMode p mode) (openFileFailed p mode)
 
 openMode :: String -> IOMode -> IO Handle
 openMode pathStr mode = case mode of
@@ -94,18 +95,18 @@ openMode pathStr mode = case mode of
   AppendMode -> pure (newStreamWriter pathStr True)
   ReadWriteMode -> error "openFile: ReadWriteMode is not supported on DotNet"
 
-openFileFailed :: FilePath -> IOMode -> HostException -> IO Handle
-openFileFailed p mode h =
-  ioError (mkIOError (openErrorType p mode h) "openFile" Nothing (Just (p)))
+openFileFailed :: String -> IOMode -> HostException -> IO Handle
+openFileFailed hp mode h =
+  ioError (mkIOError (openErrorType hp mode h) "openFile" Nothing (Just hp))
 
 -- | The CLR names the failure in the exception type. `UnauthorizedAccessException`
 -- covers both "permission denied" and "is a directory", so that one reads the path.
-openErrorType :: FilePath -> IOMode -> HostException -> IOErrorType
-openErrorType p _ (HostException _be nativeTy _msg) = case nativeTy of
+openErrorType :: String -> IOMode -> HostException -> IOErrorType
+openErrorType hp _ (HostException _be nativeTy _msg) = case nativeTy of
   "System.IO.FileNotFoundException" -> NoSuchThing
   "System.IO.DirectoryNotFoundException" -> NoSuchThing
-  "System.UnauthorizedAccessException" -> unauthorizedErrorType (p)
-  _ -> otherErrorType (p)
+  "System.UnauthorizedAccessException" -> unauthorizedErrorType hp
+  _ -> otherErrorType hp
 
 unauthorizedErrorType :: String -> IOErrorType
 unauthorizedErrorType pathStr = case rawDirectoryExists pathStr of
