@@ -3,14 +3,11 @@
 namespace Moggi\Optimize;
 
 use Moggi\IR\Block;
-
-use function Moggi\IR\entryFromFunctions;
-
 use Moggi\IR\FunctionDecl;
 use Moggi\IR\Module;
-
 use Moggi\IR\Stmt;
 
+use function Moggi\IR\entryFromFunctions;
 use function Moggi\Optimize\CaseFold\foldKnownConstructorsBlock;
 use function Moggi\Optimize\CaseFold\foldKnownMatchesInItems;
 use function Moggi\Optimize\Dict\indexEvidenceByName;

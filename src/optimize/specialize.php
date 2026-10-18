@@ -4,17 +4,14 @@ namespace Moggi\Optimize\Specialize;
 
 use Moggi\IR;
 use Moggi\IR\Visit;
+use Moggi\Optimize\CaseFold\CtorTree;
 
 use function Moggi\IR\Visit\irPatternBoundNames;
-
 use function Moggi\IR\Visit\mapGuards;
 use function Moggi\IR\Visit\mapOperandChildren;
 use function Moggi\Modules\parseResolvedSymbol;
 use function Moggi\Modules\resolvedSymbol;
 use function Moggi\Optimize\CaseFold\clearNullaryCtorCafs;
-
-use Moggi\Optimize\CaseFold\CtorTree;
-
 use function Moggi\Optimize\CaseFold\isPlausibleConstructorName;
 use function Moggi\Optimize\CaseFold\nullaryCtorCaf;
 use function Moggi\Optimize\CaseFold\setFieldAccessorCafs;

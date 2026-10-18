@@ -406,9 +406,6 @@ function lowerNamedApply(string $name, array $args, LowerCtx $ctx, ?SrcLoc $srcL
 
 function lowerApply(Ast\AstNode $function, Ast\AstNode $argument, LowerCtx $ctx): Operand
 {
-    // Collect the argument nodes outside-in without emitting anything, then
-    // lower them left-to-right: argument effects must execute in source order
-    // (backends with eager effects observe emission order).
     $callee = $function;
     $argNodes = [$argument];
 

@@ -19,6 +19,9 @@ use function Moggi\Modules\resolvedSymbol;
 use function Moggi\Optimize\CaseFold\isPlausibleConstructorName;
 use function Moggi\Optimize\CaseFold\joinMatchStmtConsumer;
 use function Moggi\Optimize\CaseFold\nullaryCtorCaf;
+use function Moggi\Optimize\Support\buildLambdaMeta;
+use function Moggi\Optimize\Support\indexCapturedFunctions;
+use function Moggi\Optimize\Support\isCapturedFnName;
 use function Moggi\Optimize\Support\isLambdaName;
 use function Moggi\Optimize\Support\isWiredInBoolCtor;
 use function Moggi\Optimize\Support\mapStmtNestedBlocks;
@@ -125,8 +128,42 @@ function activePeFusionIndex(): array
     return \is_array($idx) ? $idx : [];
 }
 
+/** @param array<string, array{captures: list<string>, params: list<string>}> $meta */
+function setActiveInlineCaptureMeta(array $meta): void
+{
+    $GLOBALS['__moggi_inline_capture_meta'] = $meta;
+}
+
+function clearActiveInlineCaptureMeta(): void
+{
+    unset($GLOBALS['__moggi_inline_capture_meta']);
+}
+
+/** @return array<string, array{captures: list<string>, params: list<string>}> */
+function activeInlineCaptureMeta(): array
+{
+    $meta = $GLOBALS['__moggi_inline_capture_meta'] ?? [];
+
+    return \is_array($meta) ? $meta : [];
+}
+
 /** @param list<IR\FunctionDecl> $functions */
 function inlineFunctions(array $functions, string $moduleName = ''): array
+{
+    // Transitive capture sets are stable across inline rounds: inlining copies
+    // substituted bodies without changing any function's free locals (a call
+    // the guard below refuses can never add a capture, so the sets cannot
+    // grow), so one build covers every round.
+    setActiveInlineCaptureMeta(buildLambdaMeta(indexCapturedFunctions($functions)));
+    try {
+        return inlineFunctionsRounds($functions, $moduleName);
+    } finally {
+        clearActiveInlineCaptureMeta();
+    }
+}
+
+/** @param list<IR\FunctionDecl> $functions @return list<IR\FunctionDecl> */
+function inlineFunctionsRounds(array $functions, string $moduleName = ''): array
 {
     for ($round = 0; $round < 4; ++$round) {
         $index = indexFunctions($functions, $moduleName);
@@ -1013,11 +1050,63 @@ function isCapturedLambdaArg(IR\Operand $arg, array $index): bool
     return false;
 }
 
-/** @param array<string, IR\FunctionDecl> $index */
+/**
+ * Whether inlining this body into another function could leave a lifted local
+ * function call resolving its captures in the wrong scope.
+ *
+ * A lifted `λ`/`__letrec` function reads its free locals as leading parameters:
+ * `bindLambdaCaptures` prepends them at every call site, after inlining has
+ * run, so the capture names only mean something in a scope that binds them.
+ * Copying such a call into another function leaves the prepended names
+ * dangling (or, worse, bound to an unrelated same-named local), which the
+ * emitters report as an unknown local. A body that only mentions a captured
+ * function with no free locals is safe: there is nothing to prepend.
+ */
 function bodyReferencesCapturedLambdas(IR\FunctionDecl $function, array $index): bool
 {
-    foreach (collectLambdaRefsInBlock($function->body, isLambdaName(...)) as $lambdaName) {
-        $lambda = $index[$lambdaName] ?? null;
+    // Callees are module-qualified (`Module::name`); the capture prefixes only
+    // show on the leaf name.
+    $leafCaptured = static fn (string $name): bool => isCapturedFnName(specializationLookupNameSafe($name));
+    $names = collectLambdaRefsInBlock($function->body, $leafCaptured);
+    walkBlock(
+        $function->body,
+        static function (IR\Stmt $stmt) use (&$names, $leafCaptured): void {
+            $callee = null;
+            if ($stmt instanceof IR\Call) {
+                $callee = $stmt->callee;
+            } elseif ($stmt instanceof IR\Ret && $stmt->value instanceof IR\ExprCall) {
+                $callee = $stmt->value->callee;
+            } elseif (($stmt instanceof IR\Assign || $stmt instanceof IR\Let) && $stmt->value instanceof IR\ExprCall) {
+                $callee = $stmt->value->callee;
+            }
+            if (\is_string($callee) && $leafCaptured($callee)) {
+                $names[] = $callee;
+            }
+        },
+        static function (IR\Operand $operand) use (&$names, $leafCaptured): void {
+            if ($operand instanceof IR\ExprCall && $leafCaptured($operand->callee)) {
+                $names[] = $operand->callee;
+            }
+        },
+    );
+    $meta = activeInlineCaptureMeta();
+    foreach (\array_unique($names) as $lambdaName) {
+        $leaf = specializationLookupNameSafe($lambdaName);
+        $info = $meta[$leaf] ?? null;
+        if ($info !== null) {
+            // The transitive capture set: every name here is prepended by
+            // name at the call site, so it only resolves in a scope that
+            // binds it. Copying the call elsewhere leaves it dangling.
+            if ($info['captures'] !== []) {
+                return true;
+            }
+            continue;
+        }
+        // No transitive metadata (a reference the capture index does not
+        // cover): fall back to the direct free-locals check.
+        $lambda = $index[$lambdaName]
+            ?? $index[$leaf]
+            ?? lookupIndexedFunction($index, $lambdaName);
         if ($lambda === null) {
             continue;
         }

@@ -681,8 +681,52 @@ function exportAllLocalDeclarations(
                 $moduleName,
                 $units,
             ),
+            Ast\ClassDecl::class => exportAllClassMethods(
+                $exports,
+                $available,
+                $item,
+                $moduleName,
+                $units,
+            ),
             default => null,
         };
+    }
+}
+
+/**
+ * No export list means everything is exported: a class goes out with all its
+ * methods, the way `Box(..)` spells it. A method that never made it into
+ * scope (the same name declared by two classes of this module) stays home
+ * instead of failing the export; the ambiguity is reported where the method
+ * is used.
+ *
+ * @param array<string, mixed> $exports
+ * @param array<string, mixed> $available
+ * @param array<string, array<string, mixed>> $units
+ */
+function exportAllClassMethods(
+    array &$exports,
+    array $available,
+    Ast\ClassDecl $decl,
+    string $moduleName,
+    array $units = [],
+): void {
+    $methods = \array_map(
+        static fn (Ast\ClassMethodSig $method): string => $method->name,
+        $decl->methods,
+    );
+    $exports['classes'][$decl->name] = $methods;
+    $item = declarationExportItem(
+        'type',
+        $decl->name,
+        $decl,
+        ['children' => ['mode' => 'every', 'names' => []]],
+    );
+    foreach ($methods as $methodName) {
+        if (! isset($available['env'][$methodName])) {
+            continue;
+        }
+        addExportedValue($exports, $available, $methodName, $moduleName, $item, $units);
     }
 }
 

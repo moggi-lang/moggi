@@ -536,8 +536,8 @@ function buildImportContext(
                 ? $selected['origins'][$name]
                 : null;
 
+            $qualifiedEnv[$localPrefix][$name] = $scheme;
             if (! $scheme->classMethod) {
-                $qualifiedEnv[$localPrefix][$name] = $scheme;
                 if ($origin !== null && $origin['module'] !== $targetName) {
                     $qualifiedOrigins[$localPrefix][$name] = $origin;
                 }
