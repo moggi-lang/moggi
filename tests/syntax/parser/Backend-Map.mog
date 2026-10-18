@@ -1,7 +1,7 @@
-{-# BACKEND php = System.Filesystem.PHP #-}
+{-# BACKEND php = System.IO.PHP #-}
 {-# BACKEND
   js  = Platform.JS.FS
-  jvm = System.Filesystem.JVM
+  jvm = System.IO.JVM
 #-}
 module Test.Facade
   ( readFile ) where

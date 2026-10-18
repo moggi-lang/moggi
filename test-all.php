@@ -15,6 +15,8 @@
  *                 run with `moggi run` once per backend
  *   5. time       the `Suite` test-suite in `libraries/time/tests`,
  *                 run with `moggi run` once per backend
+ *   6. filepath   the `Suite` test-suite in `libraries/filepath/tests`,
+ *                 run with `moggi run` once per backend
  *
  * Anything besides `--backend` is forwarded to the two `test.php` stages as
  * is (`--jobs`, `--stop-on-failure`, selectors, …); the json stage only takes
@@ -237,10 +239,23 @@ foreach ($backends as $backend) {
     }
 }
 
+// Stage 6: the filepath package's Suite, once per backend.
+foreach ($backends as $backend) {
+    $filepath = [$php, MOGGI_PROJECT_ROOT . '/moggi.php', 'run',
+        'libraries/filepath/tests/Suite.mog',
+        '--lib', 'libraries/filepath/src',
+        '--lib', 'libraries/filepath/tests',
+        '--backend',
+        $backend];
+    if (runStage("filepath ({$backend})", $filepath) !== 0) {
+        $failed[] = "filepath ({$backend})";
+    }
+}
+
 if ($failed !== []) {
     echo "\nALL TESTS: failed (" . \implode(', ', $failed) . ")\n";
     exit(1);
 }
 
-echo "\nALL TESTS: passed (compiler, base, json, containers, time on " . \implode(', ', $backends) . ")\n";
+echo "\nALL TESTS: passed (compiler, base, json, containers, time, filepath on " . \implode(', ', $backends) . ")\n";
 exit(0);

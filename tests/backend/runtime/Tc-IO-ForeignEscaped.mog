@@ -1,14 +1,12 @@
 module Tc.IO.ForeignEscaped
 
-import System.Filesystem
-import System.Filesystem.Path
-import System.IO.Base (packFilePath)
+import System.Directory (doesFileExist)
 
 isFileP :: FilePath -> IO Bool
-isFileP p = isFile p
+isFileP p = doesFileExist p
 
 main :: IO ()
 main = do
-  let check = isFileP (packFilePath "/tmp/moggi-tc-io-foreign.txt")
+  let check = isFileP "/tmp/moggi-tc-io-foreign.txt"
   b <- check
   pure ()

@@ -1,0 +1,2 @@
+-- Fail: only a trailing Moggi list may pack into a host array; anywhere else a list is not a host value.
+foreign jvm function join2 "java.lang.String:join" :: [String] -> String -> String

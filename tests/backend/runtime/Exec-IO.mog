@@ -1,10 +1,8 @@
 import Data.Foldable
 import Data.Maybe
 import System.Environment (lookupEnv)
-import System.Filesystem (createDirectory, removeTree, writeTextFile)
-import System.Filesystem.Path
+import System.Directory (createDirectory, removeDirectoryRecursive)
 import System.IO
-import System.IO.Base (packFilePath)
 import System.IO.Error
 
 scratchPath :: String -> IO FilePath
@@ -16,7 +14,7 @@ scratchPath name = do
         Nothing -> case win of
           Just d -> d
           Nothing -> "/tmp"
-  pure (packFilePath (dir <> "/" <> name))
+  pure (dir <> "/" <> name)
 
 -- ---- Exec-IO-BatchActions ----
 
@@ -128,15 +126,15 @@ runIOOpenError = do
   missingPath <- scratchPath "moggi-open-error-missing.txt"
   directoryPath <- scratchPath "moggi-open-error-dir"
   filePath <- scratchPath "moggi-open-error-file.txt"
-  removeTree missingPath
-  removeTree directoryPath
-  createDirectory False directoryPath
+  removeDirectoryRecursive missingPath
+  removeDirectoryRecursive directoryPath
+  createDirectory directoryPath
   missing <- openType missingPath
   directory <- openType directoryPath
-  writeTextFile filePath "ok"
+  writeFile filePath "ok"
   file <- openType filePath
-  removeTree filePath
-  removeTree directoryPath
+  removeDirectoryRecursive filePath
+  removeDirectoryRecursive directoryPath
   putStrLn ("missing   " <> missing)
   putStrLn ("directory " <> directory)
   putStrLn ("file      " <> file)

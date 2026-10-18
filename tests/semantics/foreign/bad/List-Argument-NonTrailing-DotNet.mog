@@ -1,0 +1,2 @@
+-- Fail: only a trailing Moggi list may pack into a host array; anywhere else a list is not a host value.
+foreign dotnet function join2 "System.String:Join" :: [String] -> String -> String

@@ -1,2 +1,2 @@
--- Fail: only a php array is the same value as a Moggi list, so a jvm call cannot take one.
+-- Fail: a trailing Moggi list packs element by element, so `[String]` reaches the host check, where `String` is not the `CharSequence` the host takes.
 foreign jvm function join "java.lang.String:join" :: String -> [String] -> String

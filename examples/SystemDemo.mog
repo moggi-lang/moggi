@@ -1,8 +1,8 @@
 module Main where
 
-import System.Filesystem
-import System.Filesystem.Path
-import System.IO.Base (packFilePath, unpackFilePath)
+import System.Directory (getCurrentDirectory, removeFile)
+import System.FilePath (takeFileName)
+import System.IO
 
 -- The working directory is the one place that exists on every platform, so the
 -- demo file goes there and is removed again at the end.
@@ -19,14 +19,9 @@ countLines xs = case xs of
   [] -> 0
   _ : rest -> 1 + countLines rest
 
-txt :: FilePath -> String
-txt p = case unpackFilePath p of
-  Just s -> s
-  Nothing -> "<?>"
-
 showReport :: FilePath -> String -> IO ()
 showReport path content = do
-  putStrLn ("file: " <> txt (takeFileName path))
+  putStrLn ("file: " <> takeFileName path)
   putStrLn ("preview: " <> firstLine (lines content))
   putStrLn ("lines: " <> describeLineCount (countLines (lines content)))
 
@@ -43,15 +38,15 @@ describeLineCount n = case n of
 
 seedFile :: FilePath -> IO ()
 seedFile path = do
-  writeTextFile path (unlines ["alpha", "beta", "gamma"])
-  appendTextFile path (unlines ["delta"])
+  writeFile path (unlines ["alpha", "beta", "gamma"])
+  appendFile path (unlines ["delta"])
 
 main :: IO ()
 main = do
-  here <- getWorkingDirectory
-  let path = here <> packFilePath "/" <> packFilePath demoName
+  here <- getCurrentDirectory
+  let path = here <> "/" <> demoName
   seedFile path
-  content <- readTextFile path
+  content <- readFile path
   putStrLn "=== file report ==="
   showReport path content
   removeFile path

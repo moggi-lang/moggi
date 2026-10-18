@@ -1,10 +1,8 @@
 module Bad.IO.WrongMainReturn
 
-import System.Filesystem
-import System.Filesystem.Path
-import System.IO.Base (packFilePath)
+import System.IO
 
 main :: IO ()
 main = do
-  let x = readFile (packFilePath "a.txt")
+  let x = readFile "a.txt"
   x

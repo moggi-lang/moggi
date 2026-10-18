@@ -1,9 +1,6 @@
 module IO.Hybrid.Stress
 
 import System.IO
-import System.Filesystem hiding (readFile, writeFile, appendFile)
-import System.Filesystem.Path
-import System.IO.Base (packFilePath)
 
 logMsg :: String -> IO ()
 logMsg msg = putStrLn msg
@@ -17,13 +14,13 @@ emitB = putStrLn "B"
 equalBranch :: IO ()
 equalBranch = do
   putStrLn "equal"
-  z <- readTextFile (packFilePath "input.txt")
+  z <- readFile "input.txt"
   putStrLn z
 
 notEqualBranch :: String -> IO ()
 notEqualBranch y = do
   putStrLn "not equal"
-  w <- readTextFile (packFilePath y)
+  w <- readFile y
   putStrLn w
 
 branchOn :: String -> String -> IO ()
@@ -33,8 +30,8 @@ branchOn x y = case x == y of
 
 main :: IO ()
 main = do
-  x <- readTextFile (packFilePath "input.txt")
-  y <- readTextFile (packFilePath x)
+  x <- readFile "input.txt"
+  y <- readFile x
 
   logMsg "start processing"
 

@@ -7,10 +7,7 @@ import Data.Maybe
 import Text.Show
 import Moggi.Exception.Type
 import Moggi.Internal.Prim
-import System.Filesystem (readTextFile)
-import System.Filesystem.Path
 import System.IO
-import System.IO.Base (packFilePath)
 import System.IO.Error
 
 -- ---- Exec-Exception-Arith ----
@@ -207,12 +204,12 @@ runExceptionHostException = do
 
 -- ---- Exec-Exception-HostNormalize ----
 
--- A host failure the library does not translate stays a HostException; only
--- `System.IO` turns a failed operation into an IOException. Neither may be read
--- as the other, and every backend reports the same failure type.
+-- A failed file operation surfaces as an IOException, never as a
+-- HostException: opening and whole-file reading agree, and every backend
+-- reports the same failure type.
 
 missing :: FilePath
-missing = packFilePath "/definitely/not/here"
+missing = "/definitely/not/here"
 
 tryHost_h2 :: IO a -> IO (Either HostException a)
 tryHost_h2 action = try action
@@ -222,12 +219,12 @@ tryIOE_h2 action = try action
 
 runExceptionHostNormalize :: IO ()
 runExceptionHostNormalize = do
-  raw <- tryHost_h2 (tryIOE_h2 (readTextFile missing))
-  putStrLn (case raw of
-    Left _ -> "host-failure"
-    Right _ -> "wrong: host failure read as an IO error")
-  translated <- tryHost_h2 (tryIOE_h2 (openFile missing ReadMode))
-  putStrLn (case translated of
+  opened <- tryHost_h2 (tryIOE_h2 (openFile missing ReadMode))
+  putStrLn (case opened of
+    Left _ -> "wrong: IO error read as a host failure"
+    Right _ -> "io-error")
+  whole <- tryHost_h2 (tryIOE_h2 (readFile missing))
+  putStrLn (case whole of
     Left _ -> "wrong: IO error read as a host failure"
     Right _ -> "io-error")
   detail <- tryIOE_h2 (openFile missing ReadMode)

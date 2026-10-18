@@ -1,4 +1,4 @@
 moggi: ErrorCall: hGetChar: end of input
   at Moggi.Err.error (libraries/base/src/Moggi/Err.mog:8:13)
-  at System.IO.DotNet.hGetChar (libraries/base/src/System/IO/DotNet.mog:172:19)
+  at System.IO.DotNet.hGetChar (libraries/base/src/System/IO/DotNet.mog:160:19)
   at Main.main (tests/backend/runtime/Exec-IO-Char-Eof.mog:8:8)

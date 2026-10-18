@@ -1,0 +1,24 @@
+-- C# `const` and enum members are literal fields: they have no storage, so
+-- loading them with `ldsfld` throws MissingFieldException at runtime. The
+-- backend must inline the constant instead: an 8-byte integer, a 4-byte
+-- integer, a double, and an enum member rebuilt with `Enum.ToObject` (sent
+-- through the `DateTime` constructor and read back through `Ticks`, which
+-- round-trips the value exactly).
+import Data.Int (Int32)
+
+foreign dotnet const maxInt "System.Int64:MaxValue" :: Int
+foreign dotnet const maxInt32 "System.Int32:MaxValue" :: Int32
+foreign dotnet const pi "System.Math:PI" :: Double
+
+foreign dotnet type Kind "valuetype [System.Private.CoreLib]System.DateTimeKind"
+foreign dotnet const utc "System.DateTimeKind:Utc" :: Kind
+foreign dotnet type DTime "valuetype System.DateTime"
+foreign dotnet function newDateTime "System.DateTime:__con" :: Int -> Kind -> DTime
+foreign dotnet function dateTicks "System.DateTime.get_Ticks" :: DTime -> Int
+
+main :: IO ()
+main = do
+  putStrLn (show maxInt)
+  putStrLn (show maxInt32)
+  putStrLn (show (pi > 3.0 && pi < 4.0))
+  putStrLn (show (dateTicks (newDateTime 0 utc)))

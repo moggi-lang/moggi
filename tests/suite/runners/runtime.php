@@ -641,6 +641,32 @@ function testLibraryRoots(string $projectRoot): array
         }
     }
 
+    // The standard distribution: base plus the bundled filepath package, so
+    // fixtures can import System.FilePath like any program built on it.
+    $filepath = $projectRoot . '/libraries/filepath/src';
+    if (\is_dir($filepath)) {
+        $resolved = \array_map(
+            static fn (string $root): string => \Moggi\Modules\resolvePath($root),
+            $roots,
+        );
+        if (! \in_array(\Moggi\Modules\resolvePath($filepath), $resolved, true)) {
+            $roots[] = $filepath;
+        }
+    }
+
+    // The standard distribution: base plus the bundled directory package, so
+    // fixtures can import System.Directory like any program built on it.
+    $directory = $projectRoot . '/libraries/directory/src';
+    if (\is_dir($directory)) {
+        $resolved = \array_map(
+            static fn (string $root): string => \Moggi\Modules\resolvePath($root),
+            $roots,
+        );
+        if (! \in_array(\Moggi\Modules\resolvePath($directory), $resolved, true)) {
+            $roots[] = $directory;
+        }
+    }
+
     // The standard distribution: base plus the bundled time package, so
     // fixtures can import Data.Time.* like any program built on it.
     $time = $projectRoot . '/libraries/time/src';
@@ -750,7 +776,11 @@ function libraryRequirePrefixes(): array
  * re-anchor into the lib build directly. A fixture inside a library package requires its
  * siblings by the package-collapsed form (`../src/...`), which carries no package name —
  * so with the fixture path known, that form maps through the fixture's own package
- * (`libraries/base`), and only when the target exists in the lib build.
+ * (`libraries/base`), and only when the target exists in the lib build. A fixture
+ * inside `libraries/` requires another package by its `libraries/`-relative path
+ * (`../../../directory/src/...`, whose common ancestor with the fixture is
+ * `libraries/` rather than the checkout root), which maps through the matching
+ * project-relative prefix the same way.
  */
 function rewriteLibRequires(string $php, string $libPhpDir, string $compiledFile, ?string $fixturePath = null, ?string $projectRoot = null): string
 {
@@ -772,6 +802,15 @@ function rewriteLibRequires(string $php, string $libPhpDir, string $compiledFile
                     if ($lib === $prefix || \str_starts_with($lib, $prefix . '/')) {
                         return 'require_once '
                             . \Moggi\Paths\requirePathExpression($compiledFile, $libDir . '/' . $lib);
+                    }
+                    $short = \preg_replace('#^libraries/#', '', $prefix);
+                    if ($short !== $prefix && $short !== ''
+                        && ($lib === $short || \str_starts_with($lib, $short . '/'))) {
+                        return 'require_once '
+                            . \Moggi\Paths\requirePathExpression(
+                                $compiledFile,
+                                $libDir . '/' . $prefix . \substr($lib, \strlen($short)),
+                            );
                     }
                 }
                 if ($collapsed !== null && \str_starts_with($lib, 'src/')) {

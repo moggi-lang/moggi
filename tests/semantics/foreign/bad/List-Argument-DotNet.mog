@@ -1,2 +1,2 @@
--- Fail: only a php array is the same value as a Moggi list, so a .NET call cannot take one.
+-- Fail: a trailing Moggi list packs, but two `Join` overloads take `(string, ...)` plus an array, so the FFI refuses to choose.
 foreign dotnet function join "System.String:Join" :: String -> [String] -> String

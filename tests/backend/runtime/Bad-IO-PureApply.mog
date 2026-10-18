@@ -1,10 +1,9 @@
 module Bad.IO.PureApply
 
-import Data.ByteString (length)
-import System.Filesystem (readFile)
-import System.IO.Base (packFilePath)
+import Data.String (length)
+import System.IO (readFile)
 
 main :: IO ()
 main = do
-  let n = length (readFile (packFilePath "f.txt"))
+  let n = length (readFile "f.txt")
   pure ()

@@ -1,0 +1,17 @@
+-- A function whose body is observably pure (`pure`-lifted) but which is
+-- passed as a value and applied through an unknown callee: the runner must
+-- accept the already-executed result as well as a boxed action.
+isLong :: String -> IO Bool
+isLong s = pure (s == "abcd")
+
+applyToAll :: (a -> IO b) -> [a] -> IO [b]
+applyToAll _ [] = pure []
+applyToAll f (x : xs) = do
+  y <- f x
+  rest <- applyToAll f xs
+  pure (y : rest)
+
+main :: IO ()
+main = do
+  bs <- applyToAll isLong ["a", "abcd", "ab"]
+  putStrLn (show bs)

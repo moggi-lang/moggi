@@ -236,18 +236,17 @@ $assert(\str_ends_with((string) ($run['stdout'] ?? ''), $expected), 'run printed
 \file_put_contents($work . '/Probe.mog', <<<'MOG'
 module Probe where
 
-import System.Filesystem (listDirectory)
+import System.Directory (listDirectory)
 import System.IO (putStrLn)
-import System.IO.Base (packFilePath)
 
 main :: IO ()
 main = do
-  entries <- listDirectory (packFilePath "/tmp")
+  entries <- listDirectory "/tmp"
   putStrLn "listed"
 MOG . "\n");
 $unpacked = $moggi(['compile', $work . '/Probe.mog', '--backend', 'jvm', '-o', $work . '/uout', '--unpacked'], 300);
 $assert(($unpacked['exitCode'] ?? 1) === 0, 'probe compile failed: ' . ($unpacked['stderr'] ?? ''));
-$fsClass = null;
+$dirClass = null;
 $walk = new \RecursiveIteratorIterator(
     new \RecursiveDirectoryIterator($work . '/uout', \FilesystemIterator::SKIP_DOTS),
 );
@@ -255,17 +254,17 @@ foreach ($walk as $file) {
     // The pathname carries `\` on Windows; compare `/`-spelled, the way the
     // dotnet bind test already does with `DIRECTORY_SEPARATOR`.
     $spelling = \str_replace('\\', '/', $file->getPathname());
-    if ($file->isFile() && \str_ends_with($spelling, 'Filesystem/JVM.class')) {
-        $fsClass = $spelling;
+    if ($file->isFile() && \str_ends_with($spelling, 'Directory/JVM.class')) {
+        $dirClass = $spelling;
 
         break;
     }
 }
-$assert($fsClass !== null, 'no Filesystem/JVM.class in unpacked output');
+$assert($dirClass !== null, 'no Directory/JVM.class in unpacked output');
 $javap = resolveJdkBinary('javap');
 $assert($javap !== null, 'no `javap` found');
 $uout = \str_replace('\\', '/', $work . '/uout/');
-$relative = (string) \substr((string) $fsClass, \strlen($uout));
+$relative = (string) \substr((string) $dirClass, \strlen($uout));
 $dotted = \str_replace('/', '.', (string) \substr($relative, 0, -6));
 $disassembled = runCompiledProcess(
     [$javap, '-c', '-p', '-classpath', $work . '/uout', $dotted],

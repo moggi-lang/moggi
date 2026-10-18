@@ -1,22 +1,19 @@
-module Tc.IO.FilesystemLinear
+module Tc.IO.WholeFile
 
 import System.IO
-import System.Filesystem hiding (readFile, writeFile, appendFile)
-import System.Filesystem.Path
-import System.IO.Base (packFilePath)
 
 bindPath :: FilePath
-bindPath = packFilePath "/tmp/moggi-tc-io-fs-linear-bind.txt"
+bindPath = "/tmp/moggi-tc-io-whole-bind.txt"
 
 letPath :: FilePath
-letPath = packFilePath "/tmp/moggi-tc-io-fs-linear-let.txt"
+letPath = "/tmp/moggi-tc-io-whole-let.txt"
 
 main :: IO ()
 main = do
   putStrLn "bind"
-  writeTextFile (bindPath) "bind-linear"
-  readTextFile (bindPath) >>= putStrLn
+  writeFile (bindPath) "bind-linear"
+  readFile (bindPath) >>= putStrLn
   putStrLn "let"
-  let x = readTextFile (letPath)
+  let x = readFile (letPath)
   y <- x
   putStrLn y

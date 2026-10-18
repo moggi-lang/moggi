@@ -2,7 +2,6 @@ namespace Interactive;
 
 const __MOGGI_MAP = [[], ['Interactive\\foo' => ['Interactive.foo', 'Interactive.mog', 3, 7]]];
 
-// imports elided: 36 require_once, 499 use
 
 function foo() {
     return 1;

@@ -46,5 +46,17 @@ if (\is_dir($timeRoot)) {
     // fixtures can import Data.Time.* like any program built on it.
     \Moggi\Modules\addLibraryRoot($timeRoot);
 }
+$filepathRoot = MOGGI_PROJECT_ROOT . '/libraries/filepath/src';
+if (\is_dir($filepathRoot)) {
+    // The bundled filepath package is part of the standard distribution, so
+    // fixtures can import System.FilePath like any program built on it.
+    \Moggi\Modules\addLibraryRoot($filepathRoot);
+}
+$directoryRoot = MOGGI_PROJECT_ROOT . '/libraries/directory/src';
+if (\is_dir($directoryRoot)) {
+    // The bundled directory package is part of the standard distribution, so
+    // fixtures can import System.Directory like any program built on it.
+    \Moggi\Modules\addLibraryRoot($directoryRoot);
+}
 
 exit(runSuite());

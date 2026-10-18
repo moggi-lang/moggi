@@ -2,25 +2,22 @@
 
 namespace Tc\IO\ForeignEscaped;
 
-const __MOGGI_MAP = [[14 => ['Tc.IO.ForeignEscaped.isFileP', 'tests/backend/runtime/Tc-IO-ForeignEscaped.mog', 8, 13], 15 => ['Tc.IO.ForeignEscaped.isFileP', 'tests/backend/runtime/Tc-IO-ForeignEscaped.mog', 8, 13], 22 => ['Tc.IO.ForeignEscaped.main', 'tests/backend/runtime/Tc-IO-ForeignEscaped.mog', 12, 15], 23 => ['Tc.IO.ForeignEscaped.main', 'tests/backend/runtime/Tc-IO-ForeignEscaped.mog', 12, 15], 24 => ['Tc.IO.ForeignEscaped.main', 'tests/backend/runtime/Tc-IO-ForeignEscaped.mog', 12, 15], 25 => ['Tc.IO.ForeignEscaped.main', 'tests/backend/runtime/Tc-IO-ForeignEscaped.mog', 14, 3]], ['Tc\\IO\\ForeignEscaped\\isFileP' => ['Tc.IO.ForeignEscaped.isFileP', 'tests/backend/runtime/Tc-IO-ForeignEscaped.mog', 8, 13], 'Tc\\IO\\ForeignEscaped\\main' => ['Tc.IO.ForeignEscaped.main', 'tests/backend/runtime/Tc-IO-ForeignEscaped.mog', 11, 8]]];
+const __MOGGI_MAP = [[12 => ['Tc.IO.ForeignEscaped.isFileP', 'tests/backend/runtime/Tc-IO-ForeignEscaped.mog', 6, 13], 13 => ['Tc.IO.ForeignEscaped.isFileP', 'tests/backend/runtime/Tc-IO-ForeignEscaped.mog', 6, 13], 20 => ['Tc.IO.ForeignEscaped.main', 'tests/backend/runtime/Tc-IO-ForeignEscaped.mog', 10, 15], 21 => ['Tc.IO.ForeignEscaped.main', 'tests/backend/runtime/Tc-IO-ForeignEscaped.mog', 10, 15], 22 => ['Tc.IO.ForeignEscaped.main', 'tests/backend/runtime/Tc-IO-ForeignEscaped.mog', 12, 3]], ['Tc\\IO\\ForeignEscaped\\isFileP' => ['Tc.IO.ForeignEscaped.isFileP', 'tests/backend/runtime/Tc-IO-ForeignEscaped.mog', 6, 13], 'Tc\\IO\\ForeignEscaped\\main' => ['Tc.IO.ForeignEscaped.main', 'tests/backend/runtime/Tc-IO-ForeignEscaped.mog', 9, 8]]];
 
-require_once __DIR__ . '/../../../libraries/base/src/System/Filesystem/PHP.php';
-require_once __DIR__ . '/../../../libraries/base/src/System/IO/Base.php';
+require_once __DIR__ . '/../../../libraries/directory/src/System/Directory/PHP.php';
 
-use function System\Filesystem\PHP\isFile;
-use function System\IO\Base\packFilePath;
+use function System\Directory\PHP\doesFileExist;
 
 function isFileP($p) {
     $__t1 = ['__io', static function() use ($p): mixed {
-        $__t0 = isFile($p);
+        $__t0 = doesFileExist($p);
         return (\is_array($__t0) && ($__t0[0] ?? null) === '__io' ? ($__t0[1])() : $__t0);
     }];
     return $__t1;
 }
 
 function main() {
-    $__t3 = packFilePath("/tmp/moggi-tc-io-foreign.txt");
-    $__t4 = isFileP($__t3);
-    $__t2 = (\is_array($__t4) && ($__t4[0] ?? null) === '__io' ? ($__t4[1])() : $__t4);
+    $__t3 = isFileP("/tmp/moggi-tc-io-foreign.txt");
+    $__t2 = (\is_array($__t3) && ($__t3[0] ?? null) === '__io' ? ($__t3[1])() : $__t3);
     return null;
 }

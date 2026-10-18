@@ -25,7 +25,7 @@ host-boom
 host-boom
 error-boom
 host-boom
-host-failure
+io-error
 io-error
 does not exist
 missing

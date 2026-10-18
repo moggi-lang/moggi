@@ -76,9 +76,9 @@ $assert(\str_contains($one, '.class public abstract'), 'focused .NET :emit must 
 $assert(! \str_contains($one, '.moggi.map'), 'focused .NET :emit must not dump the source map');
 $assert(! \str_contains($one, "{\n\n"), 'dropping a leading method must not leave a stray blank line');
 
-// A whole-module dump collapses the mechanical import preamble — for anything
+// A whole-module dump drops the mechanical import preamble — for anything
 // importing Prelude that is hundreds of lines of `require_once` + `use function`
-// that javap / .NET IL dumps do not have — into a single note.
+// that javap / .NET IL dumps do not have.
 $moduleSource = "<?php declare(strict_types=1);\n\nnamespace Interactive;\n\n"
     . "require_once __DIR__ . '/Data/Int.php';\n"
     . "require_once __DIR__ . '/Prelude.php';\n\n"
@@ -89,8 +89,8 @@ $dumped = $php->describeEmit(['Interactive.php' => $moduleSource], []);
 $assert(\preg_match('/^\s*require_once/m', $dumped) !== 1, 'whole-module PHP dump must elide requires');
 $assert(\preg_match('/^\s*use function/m', $dumped) !== 1, 'whole-module PHP dump must elide use aliases');
 $assert(
-    \str_contains($dumped, '// imports elided: 2 require_once, 2 use'),
-    'whole-module PHP dump must note what it elided',
+    !\str_contains($dumped, 'imports elided'),
+    'whole-module PHP dump must leave no elision note behind',
 );
 $assert(\str_starts_with($dumped, 'namespace Interactive;'), 'the module must dump its namespace, with no file preamble');
 $assert(! \str_contains($dumped, '<?php'), 'the module dump must drop the `<?php` preamble');

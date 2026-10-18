@@ -1,6 +1,6 @@
 program
   backend_map
-    php: System.Filesystem.PHP
+    php: System.IO.PHP
     js: Platform.JS.FS
-    jvm: System.Filesystem.JVM
+    jvm: System.IO.JVM
   function readFile :: String -> IO String signature_only
