@@ -3130,9 +3130,6 @@ function buildRTClass(): string
         }
     );
 
-    // Dual convention (see the PHP backend's emitIoRunResultExpr for the
-    // contract): an IO action runs, anything else passes through — including
-    // null, which instanceof rejects.
     $b->addMethod(
         'ioRun',
         '(Ljava/lang/Object;)Ljava/lang/Object;',

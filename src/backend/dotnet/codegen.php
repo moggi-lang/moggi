@@ -1804,9 +1804,6 @@ function emitForeign(EmitEnv $env, IR\ForeignCall $op): void
             . ' does not match signature ' . $desc,
         );
     }
-    // A proven `params` tail (resolution ran at typecheck): the declaration
-    // either omits it — synthesize an empty array — or supplies a Moggi
-    // list — pack it. Anything else keeps the legacy padding below.
     $paramsTail = false;
     if ($nNeeded > 0 && ($nProvided === $nNeeded || $nProvided === $nNeeded - 1)) {
         $tail = \end($sig['params']);
@@ -2230,15 +2227,10 @@ function unboxForeignArg(EmitEnv $env, string $kind): void
  */
 function emitDotNetConstLiteral(EmitEnv $env, array $lit, string $desc): bool
 {
-    // $lit comes from dotNetConstLiteralValue, which owns the contract: kind
-    // is one of the six literal kinds, value is a canonical invariant-culture
-    // string (null only for a null string constant), so no re-validation here.
     $kind = $lit['kind'];
     $value = $lit['value'];
     $enum = $lit['enum'] ?? null;
     if (\is_string($enum) && $enum !== '') {
-        // `Enum.ToObject` takes the type first: the stack must hold the
-        // `Type` below the value, not the other way round.
         $wide = $kind === 'i8';
         $env->m->emit('ldtoken valuetype ' . qualifyType($enum));
         $env->m->emit('call class [System.Runtime]System.Type'
@@ -2255,8 +2247,6 @@ function emitDotNetConstLiteral(EmitEnv $env, array $lit, string $desc): bool
             $env->m->emit(((int) $value !== 0) ? 'ldc.i4.1' : 'ldc.i4.0');
             break;
         case 'i4':
-            // The verifier only accepts the declared type the field really
-            // has, so the load already matches what an `ldsfld` would leave.
             $env->m->emit('ldc.i4 ' . $value);
             break;
         case 'i8':

@@ -2415,8 +2415,6 @@ IL;
 function rtIoRunIl(): string
 {
     return <<<'IL'
-  // Dual convention (see the PHP backend's emitIoRunResultExpr for the
-  // contract): an IO action runs, anything else passes through.
   .method public hidebysig static object IoRun(object v) cil managed
   {
     .maxstack 8

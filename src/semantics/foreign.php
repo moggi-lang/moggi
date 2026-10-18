@@ -576,9 +576,6 @@ function validateForeignTypeCon(
     }
 
     if ($name === 'List') {
-        // A trailing list packs into a host array (variadic or not); anywhere
-        // else a list is not a host value. The backend verifier decides whether
-        // the host parameter takes it.
         if ($argument && $backend !== 'php' && !$isTrailing) {
             throw typeFail(
                 $state,

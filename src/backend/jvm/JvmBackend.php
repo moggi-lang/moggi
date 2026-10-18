@@ -115,9 +115,6 @@ final class JvmBackend implements Backend
             return $inferred;
         }
 
-        // A declaration may omit a trailing variadic parameter, or supply it as
-        // a Moggi list to pack: resolve once here so the verifier checks, and
-        // the emitter calls, the same host descriptor.
         $classPath = (string) $pathInfo['classPath'];
         $member = (string) ($pathInfo['hostMember'] ?? '');
         $lookup = $member === '<init>' ? null : $member;

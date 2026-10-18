@@ -152,11 +152,6 @@ final class DotNetBackend implements Backend
             ? dotNetSignatureEntry($name, $pathInfo['declaringRoot'] ?? null)
             : null;
 
-        // A declaration may omit a trailing `params` array, or supply it as a
-        // Moggi list to pack: resolve against the host once here so the
-        // verifier checks, and the emitter calls, the same signature.
-        // Hand-written sidecar entries keep precedence — they bless shapes
-        // (interface conversions, optional tails) the host never declares.
         if ($sidecar === null
             && $kind === 'function'
             && ($pathInfo['dispatch'] ?? '') !== 'intrinsic'

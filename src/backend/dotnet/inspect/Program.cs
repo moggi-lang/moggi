@@ -69,10 +69,6 @@ static class Inspector
         var ps = m.GetParameters();
         int optional = 0;
         for (int i = ps.Length - 1; i >= 0 && ps[i].IsOptional; i--) optional++;
-        // The `params` tail, if any: the index of the parameter carrying
-        // ParamArrayAttribute (-1 when the method has none). The compiler only
-        // ever trusts it as the last parameter, but the index is reported
-        // rather than a bool so a surprising shape stays visible.
         int paramsArray = -1;
         for (int i = 0; i < ps.Length; i++)
             if (ps[i].GetCustomAttributes(typeof(ParamArrayAttribute), false).Length > 0) paramsArray = i;
@@ -88,11 +84,6 @@ static class Inspector
         };
     }
 
-    // A C# `const` or enum member is a literal field: it has no storage, so
-    // `ldsfld` on it throws MissingFieldException at runtime. The compiler
-    // inlines these instead, and needs the constant's kind plus its value
-    // rendered in the invariant culture (JSON numbers cannot be trusted for
-    // 64-bit integers, and floats need the round-trip format).
     static string ConstKindOf(FieldInfo f)
     {
         var t = f.FieldType.IsEnum ? Enum.GetUnderlyingType(f.FieldType) : f.FieldType;

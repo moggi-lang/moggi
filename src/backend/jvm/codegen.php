@@ -3064,8 +3064,6 @@ function emitForeign(EmitEnv $env, IR\ForeignCall $op): void
     $paramArgs = \array_slice($args, $argOffset);
     $packIndex = jvmPackArgIndex($desc, $argKinds, $paramArgs);
     if ($packIndex !== null) {
-        // A trailing Moggi list packs into the host array (resolution ran at
-        // typecheck, so the last descriptor parameter is that array).
         $last = \count($paramArgs) - 1;
         foreach ($paramArgs as $i => $arg) {
             if ($i === $last) {
@@ -3078,8 +3076,6 @@ function emitForeign(EmitEnv $env, IR\ForeignCall $op): void
         }
     } else {
         if (\count($paramArgs) < \count($argKinds)) {
-            // An omitted variadic tail (resolution ran at typecheck): synthesize
-            // an empty array per missing parameter, which must each be an array.
             foreach ($paramArgs as $i => $arg) {
                 emitOperand($env, $arg);
                 unboxForeignArg($env, $argKinds[$i]);

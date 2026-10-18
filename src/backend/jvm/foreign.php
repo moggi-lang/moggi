@@ -511,8 +511,6 @@ function resolveJvmForeignOverload(
                 ];
             }
 
-            // Proven non-variadic: not an omission, just a near miss — say
-            // nothing here so the caller reports the overloads instead.
             return ['status' => 'none'];
         }
         $component = $pack[0]['component'];
