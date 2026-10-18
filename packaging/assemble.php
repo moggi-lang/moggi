@@ -20,7 +20,7 @@ use function Moggi\Paths\isAbsolutePath;
  * copy of every runtime it can ship — and the five distributions are derived from it
  * by copying it and adding the runtime directories a variant bundles, so nothing is
  * downloaded or built twice. The result is unpack-and-run: `bin/moggi` *is* the
- * compiler (the micro PHP runtime with the archive appended), it finds `lib/`
+ * compiler (the micro PHP runtime with the archive appended), it finds `libraries/`
  * beside itself, and it puts any bundled runtime in front of `PATH`.
  *
  *   php packaging/assemble.php [--target T] [--out DIR] [--variants a,b]
@@ -404,7 +404,7 @@ function distributionReadme(string $variant, string $target, array $runtimes, st
     $nativeSection = "\n## A compiler with no PHP behind it\n\n"
         . "`bin/moggi` is the compiler as one self-contained executable: the micro\n"
         . "PHP runtime with the compiler archive appended to it. It needs no PHP of\n"
-        . "its own, and it finds `lib/` and `runtime/` beside it.\n";
+        . "its own, and it finds `libraries/` and `runtime/` beside it.\n";
     if (\in_array('php', $runtimes, true)) {
         $nativeSection .= "\n`bin/moggi.phar` beside it is the same compiler as a plain PHP\n"
             . "archive, for running under a PHP you already have.\n";
@@ -449,7 +449,7 @@ function distributionReadme(string $variant, string $target, array $runtimes, st
         * `docs/README.md` — the full documentation index
 
         Examples live in `examples/`; each one is a complete program. The
-        standard library is the `lib/` tree: ordinary Moggi sources, covered by
+        standard library is the `libraries/` tree: ordinary Moggi sources, covered by
         this installation's LICENSE, there to be read. `bin/schnorr` is a
         standalone BIP-340 CLI that ships with the toolchain; nothing in Moggi
         uses it yet.
