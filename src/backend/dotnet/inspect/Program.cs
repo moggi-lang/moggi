@@ -21,6 +21,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -68,6 +69,13 @@ static class Inspector
         var ps = m.GetParameters();
         int optional = 0;
         for (int i = ps.Length - 1; i >= 0 && ps[i].IsOptional; i--) optional++;
+        // The `params` tail, if any: the index of the parameter carrying
+        // ParamArrayAttribute (-1 when the method has none). The compiler only
+        // ever trusts it as the last parameter, but the index is reported
+        // rather than a bool so a surprising shape stays visible.
+        int paramsArray = -1;
+        for (int i = 0; i < ps.Length; i++)
+            if (ps[i].GetCustomAttributes(typeof(ParamArrayAttribute), false).Length > 0) paramsArray = i;
         return new Dictionary<string, object>
         {
             ["params"] = ps.Select(p => RenderType(p.ParameterType)).ToArray(),
@@ -75,8 +83,41 @@ static class Inspector
             ["static"] = m.IsStatic,
             ["public"] = m.IsPublic,
             ["optional"] = optional,
+            ["paramsArray"] = paramsArray,
             ["declared"] = m.DeclaringType?.FullName ?? "",
         };
+    }
+
+    // A C# `const` or enum member is a literal field: it has no storage, so
+    // `ldsfld` on it throws MissingFieldException at runtime. The compiler
+    // inlines these instead, and needs the constant's kind plus its value
+    // rendered in the invariant culture (JSON numbers cannot be trusted for
+    // 64-bit integers, and floats need the round-trip format).
+    static string ConstKindOf(FieldInfo f)
+    {
+        var t = f.FieldType.IsEnum ? Enum.GetUnderlyingType(f.FieldType) : f.FieldType;
+        if (t == typeof(bool)) return "bool";
+        if (t == typeof(char) || t == typeof(sbyte) || t == typeof(byte)
+            || t == typeof(short) || t == typeof(ushort) || t == typeof(int)) return "i4";
+        if (t == typeof(uint) || t == typeof(long) || t == typeof(ulong)) return "i8";
+        if (t == typeof(float)) return "r4";
+        if (t == typeof(double)) return "r8";
+        if (t == typeof(string)) return "string";
+        return "";
+    }
+
+    static string ConstStringOf(FieldInfo f)
+    {
+        object raw;
+        try { raw = f.GetRawConstantValue(); } catch { return null; }
+        if (raw == null) return null;
+        if (raw is string s) return s;
+        if (raw is bool b) return b ? "1" : "0";
+        if (raw is char c) return ((int)c).ToString(CultureInfo.InvariantCulture);
+        if (raw is float fl) return fl.ToString("R", CultureInfo.InvariantCulture);
+        if (raw is double d) return d.ToString("R", CultureInfo.InvariantCulture);
+        if (raw is IFormattable fmt) return fmt.ToString(null, CultureInfo.InvariantCulture);
+        return raw.ToString();
     }
 
     static int ListAssembly(string path)
@@ -199,6 +240,9 @@ static class Inspector
                 ["public"] = f.IsPublic,
                 ["literal"] = f.IsLiteral,
                 ["initOnly"] = f.IsInitOnly,
+                ["constKind"] = f.IsLiteral ? ConstKindOf(f) : "",
+                ["constValue"] = f.IsLiteral ? ConstStringOf(f) : null,
+                ["constEnum"] = (f.IsLiteral && f.FieldType.IsEnum) ? (f.FieldType.FullName ?? "") : "",
             };
         }
         var props = new Dictionary<string, object>();

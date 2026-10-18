@@ -2415,19 +2415,23 @@ IL;
 function rtIoRunIl(): string
 {
     return <<<'IL'
-  .method public hidebysig static object IoRun(class Moggi.Rt.IO io) cil managed
+  // Dual convention (see the PHP backend's emitIoRunResultExpr for the
+  // contract): an IO action runs, anything else passes through.
+  .method public hidebysig static object IoRun(object v) cil managed
   {
     .maxstack 8
     ldarg.0
-    brtrue Run
-    ldnull
-    ret
-    Run:
+    isinst Moggi.Rt.IO
+    brfalse Passthrough
     ldarg.0
+    castclass Moggi.Rt.IO
     ldfld object Moggi.Rt.IO::action
     ldc.i4.0
     newarr object
     call object Moggi.Rt.RT::Apply(object, object[])
+    ret
+    Passthrough:
+    ldarg.0
     ret
   }
 
@@ -3655,7 +3659,7 @@ function rtIoCatchIl(): string
     .try
     {
       ldarg.0
-      call object Moggi.Rt.RT::IoRun(class Moggi.Rt.IO)
+      call object Moggi.Rt.RT::IoRun(object)
       stloc result
       leave Done
     }
@@ -3698,7 +3702,7 @@ function rtIoCatchIl(): string
       stloc handlerIo
       ldloc handlerIo
       castclass Moggi.Rt.IO
-      call object Moggi.Rt.RT::IoRun(class Moggi.Rt.IO)
+      call object Moggi.Rt.RT::IoRun(object)
       stloc result
       leave Done
     }
@@ -3726,7 +3730,7 @@ function rtIoFinallyIl(): string
     .try
     {
       ldarg.0
-      call object Moggi.Rt.RT::IoRun(class Moggi.Rt.IO)
+      call object Moggi.Rt.RT::IoRun(object)
       stloc result
       leave AfterTry1
     }
@@ -3740,7 +3744,7 @@ function rtIoFinallyIl(): string
     .try
     {
       ldarg.1
-      call object Moggi.Rt.RT::IoRun(class Moggi.Rt.IO)
+      call object Moggi.Rt.RT::IoRun(object)
       pop
       leave AfterTry2
     }

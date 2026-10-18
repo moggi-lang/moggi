@@ -244,7 +244,7 @@ function configuredLibraryRoots(): array
  * Extra library roots: the configured `--lib` / `addLibraryRoot()` ones, then
  * the packages bundled with the standard distribution.
  *
- * `base` cannot stand alone — `System.Filesystem.getModified` answers
+ * `base` cannot stand alone — `System.Directory.getModificationTime` answers
  * `IO UTCTime`, so the `time` package beside it in `libraries/` is part of the
  * standard distribution the same way `base` is, and every compilation that can
  * see `base` can see `time` without an explicit `--lib`. Anything else under
@@ -278,9 +278,10 @@ function configuredExtraPaths(): array
 
 /**
  * Bundled packages that join every compilation alongside the standard
- * library: `<root>/libraries/time/src`, where `<root>` is found the way the
- * bundled stdlib is — `MOGGI_ROOT`, the installed distribution, then the
- * checkout. Empty when the distribution ships no such package.
+ * library: `<root>/libraries/{time,filepath,directory}/src`, where `<root>`
+ * is found the way the bundled stdlib is — `MOGGI_ROOT`, the installed
+ * distribution, then the checkout. Empty when the distribution ships no such
+ * package.
  *
  * @return list<string>
  */
@@ -304,13 +305,17 @@ function bundledExtraLibPaths(): array
     }
     $candidates[] = \dirname(__DIR__, 2);
 
+    $packages = ['time', 'filepath', 'directory'];
     foreach ($candidates as $root) {
-        $time = \rtrim($root, '/\\') . DIRECTORY_SEPARATOR . 'libraries'
-            . DIRECTORY_SEPARATOR . 'time' . DIRECTORY_SEPARATOR . 'src';
-        $real = resolvePath($time);
-        if (isLibraryRoot($real)) {
-            $paths[] = $real;
-
+        foreach ($packages as $package) {
+            $dir = \rtrim($root, '/\\') . DIRECTORY_SEPARATOR . 'libraries'
+                . DIRECTORY_SEPARATOR . $package . DIRECTORY_SEPARATOR . 'src';
+            $real = resolvePath($dir);
+            if (isLibraryRoot($real)) {
+                $paths[] = $real;
+            }
+        }
+        if ($paths !== []) {
             return $paths;
         }
     }

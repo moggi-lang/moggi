@@ -4,6 +4,10 @@ namespace Moggi\Backend\DotNet\Codegen;
 
 use function Moggi\Backend\DotNet\Foreign\dotNetHostIsValueType;
 use function Moggi\Backend\DotNet\Foreign\isDotNetConstProperty;
+use function Moggi\Backend\DotNet\resolveDotnetExecutable;
+use function Moggi\Backend\DotNet\Verify\dotNetConstLiteralValue;
+use function Moggi\Backend\DotNet\Verify\ensureInspectorBinary;
+use function Moggi\Backend\DotNet\Verify\inspectDotNetType;
 
 use function Moggi\Backend\DotNet\Foreign\resolveDotNetForeignPath;
 use function Moggi\Backend\DotNet\Il\ilCanonicalize;
@@ -654,7 +658,7 @@ function emitDotNetMain(ClassIlBuilder $b, string $owner, string $mainSym, int $
     $m->emit('brfalse MAIN_DONE');
     $m->load($resultSlot);
     $m->emit('castclass Moggi.Rt.IO');
-    $m->emit('call object Moggi.Rt.RT::IoRun(class Moggi.Rt.IO)');
+    $m->emit('call object Moggi.Rt.RT::IoRun(object)');
     $m->emit('pop');
     $m->label('MAIN_DONE');
     $m->emit('leave MAIN_END');
@@ -714,7 +718,7 @@ function emitPendingIoThunkMethods(
             $m->emit('brfalse ' . $done);
             $m->load($resultSlot);
             $m->emit('castclass Moggi.Rt.IO');
-            $m->emit('call object Moggi.Rt.RT::IoRun(class Moggi.Rt.IO)');
+            $m->emit('call object Moggi.Rt.RT::IoRun(object)');
             $m->emit('ret');
             $m->label($done);
             $m->load($resultSlot);
@@ -847,8 +851,7 @@ function emitStmt(EmitEnv $env, IR\Stmt $stmt): void
         case IR\IoRun::class:
             /** @var IR\IoRun $stmt */
             emitOperand($env, $stmt->action);
-            $env->m->emit('castclass Moggi.Rt.IO');
-            $env->m->emit('call object Moggi.Rt.RT::IoRun(class Moggi.Rt.IO)');
+            $env->m->emit('call object Moggi.Rt.RT::IoRun(object)');
             if ($stmt->dest !== null) {
                 $env->m->store($env->localSlot('t' . $stmt->dest));
             } else {
@@ -1752,6 +1755,12 @@ function emitForeign(EmitEnv $env, IR\ForeignCall $op): void
         if (isDotNetConstProperty($resolved['class'], $resolved['hostMember'])) {
             $env->m->emit("call {$desc} {$typeRef}::get_{$resolved['hostMember']}()");
         } else {
+            $literal = dotNetConstLiteralValue($resolved['class'], $resolved['hostMember']);
+            if ($literal !== null && emitDotNetConstLiteral($env, $literal, $desc)) {
+                emitForeignIoWrap($env, $op->ioWrap);
+
+                return;
+            }
             $env->m->emit("ldsfld {$desc} {$typeRef}::{$resolved['hostMember']}");
         }
         boxForeignReturn($env, $desc);
@@ -1795,12 +1804,46 @@ function emitForeign(EmitEnv $env, IR\ForeignCall $op): void
             . ' does not match signature ' . $desc,
         );
     }
-    foreach ($paramArgs as $i => $arg) {
-        emitOperand($env, $arg);
-        unboxForeignArg($env, $sig['params'][$i]);
+    // A proven `params` tail (resolution ran at typecheck): the declaration
+    // either omits it — synthesize an empty array — or supplies a Moggi
+    // list — pack it. Anything else keeps the legacy padding below.
+    $paramsTail = false;
+    if ($nNeeded > 0 && ($nProvided === $nNeeded || $nProvided === $nNeeded - 1)) {
+        $tail = \end($sig['params']);
+        if (\is_string($tail) && \str_ends_with($tail, '[]') && ! \str_ends_with($tail, '[...]')) {
+            $paramsTail = dotNetProvenParamsTail(
+                $resolved['class'],
+                $resolved['hostMember'],
+                $sig['params'],
+                $sig['ret'],
+            );
+        }
     }
-    for ($i = $nProvided; $i < $nNeeded; $i++) {
-        emitDefaultForeignArg($env, $sig['params'][$i]);
+    if ($paramsTail && $nProvided === $nNeeded) {
+        $last = $nProvided - 1;
+        foreach ($paramArgs as $i => $arg) {
+            if ($i === $last) {
+                emitDotNetPackVarargs($env, $arg, (string) \end($sig['params']));
+
+                continue;
+            }
+            emitOperand($env, $arg);
+            unboxForeignArg($env, $sig['params'][$i]);
+        }
+    } elseif ($paramsTail) {
+        foreach ($paramArgs as $i => $arg) {
+            emitOperand($env, $arg);
+            unboxForeignArg($env, $sig['params'][$i]);
+        }
+        emitDotNetEmptyParamsArray($env, (string) \end($sig['params']), $op->path);
+    } else {
+        foreach ($paramArgs as $i => $arg) {
+            emitOperand($env, $arg);
+            unboxForeignArg($env, $sig['params'][$i]);
+        }
+        for ($i = $nProvided; $i < $nNeeded; $i++) {
+            emitDefaultForeignArg($env, $sig['params'][$i]);
+        }
     }
 
     $paramList = \implode(', ', $sig['params']);
@@ -1932,6 +1975,163 @@ function emitForeignIntrinsic(
 }
 
 /**
+ * Whether the called overload proves its last parameter a `params` array.
+ *
+ * The inspector answer is cached per process, and the signature being
+ * emitted was rebuilt verbatim from it at typecheck — so the lookup is an
+ * exact string match, never a second inference. Never throws: emission must
+ * not die on a metadata question the verifier already answered, and a `false`
+ * simply keeps the legacy padding.
+ *
+ * @param list<string> $sigParams
+ */
+function dotNetProvenParamsTail(
+    string $classPath,
+    string $member,
+    array $sigParams,
+    string $sigRet,
+): bool {
+    try {
+        if ($classPath === '' || $member === '' || $sigParams === []) {
+            return false;
+        }
+        $dotnet = resolveDotnetExecutable();
+        if ($dotnet === null) {
+            return false;
+        }
+        $inspector = ensureInspectorBinary($dotnet);
+        if ($inspector === null) {
+            return false;
+        }
+        $table = inspectDotNetType($dotnet, $inspector, $classPath);
+        if ($table === null || ! ($table['found'] ?? false)) {
+            return false;
+        }
+        foreach ($table['methods'][$member] ?? [] as $candidate) {
+            if (! ($candidate['public'] ?? false)) {
+                continue;
+            }
+            if (($candidate['params'] ?? null) !== $sigParams) {
+                continue;
+            }
+            if ((string) ($candidate['ret'] ?? '') !== $sigRet) {
+                continue;
+            }
+
+            return ($candidate['paramsArray'] ?? -1) === \count($sigParams) - 1;
+        }
+
+        return false;
+    } catch (\Throwable) {
+        return false;
+    }
+}
+
+/**
+ * Synthesize an empty array for one omitted `params` parameter.
+ *
+ * C# omission passes an empty array, not null — so unlike the sidecar's
+ * zero/null padding (see {@see emitDefaultForeignArg}), the proven tail is
+ * built with `newarr`.
+ *
+ * @throws \RuntimeException when the missing parameter is not a single-dimensional array
+ *   (unreachable after typecheck resolution, which only pads proven tails)
+ */
+function emitDotNetEmptyParamsArray(EmitEnv $env, string $kind, string $path): void
+{
+    if (! \str_ends_with($kind, '[]') || \str_ends_with($kind, '[...]')) {
+        throw new \RuntimeException(
+            "DotNet foreign `{$path}`: cannot synthesize a default for parameter type {$kind}",
+        );
+    }
+    $env->m->emit('ldc.i4.0');
+    $env->m->emit('newarr ' . \substr($kind, 0, -2));
+}
+
+/**
+ * Pack a trailing Moggi list into a `params` array (resolution ran at
+ * typecheck, so the last signature parameter is that array).
+ *
+ * Two walks: count the cons cells, allocate with `newarr`, then fill with
+ * `stelem`. Each head unboxes exactly the way a passed argument would (see
+ * {@see unboxForeignArg}). An empty list is null, and `castclass` passes
+ * null through — so `[]` packs to an empty array, not a null one.
+ */
+function emitDotNetPackVarargs(EmitEnv $env, IR\Operand $arg, string $arrayType): void
+{
+    $elem = \substr($arrayType, 0, -2);
+    emitOperand($env, $arg);
+    $env->m->emit('castclass Moggi.Rt.MList');
+    $list = $env->freshLocal('class Moggi.Rt.MList');
+    $env->m->store($list);
+
+    $id = $env->freshLabelId();
+    $count = $env->freshLocal('int32');
+    $cursor = $env->freshLocal('class Moggi.Rt.MList');
+    $env->m->emit('ldc.i4.0');
+    $env->m->emit('stloc ' . $count);
+    $env->m->emit('ldloc ' . $list);
+    $env->m->emit('stloc ' . $cursor);
+    $env->m->label('foreign_pack_count_' . $id);
+    $env->m->emit('ldloc ' . $cursor);
+    $env->m->emit('brfalse foreign_pack_alloc_' . $id);
+    $env->m->emit('ldloc ' . $count);
+    $env->m->emit('ldc.i4.1');
+    $env->m->emit('add');
+    $env->m->emit('stloc ' . $count);
+    $env->m->emit('ldloc ' . $cursor);
+    $env->m->emit('ldfld class Moggi.Rt.MList Moggi.Rt.MList::tail');
+    $env->m->emit('stloc ' . $cursor);
+    $env->m->emit('br foreign_pack_count_' . $id);
+
+    $env->m->label('foreign_pack_alloc_' . $id);
+    $env->m->emit('ldloc ' . $count);
+    $env->m->emit('newarr ' . $elem);
+    $arr = $env->freshLocal($arrayType);
+    $env->m->store($arr);
+
+    $index = $env->freshLocal('int32');
+    $env->m->emit('ldc.i4.0');
+    $env->m->emit('stloc ' . $index);
+    $env->m->emit('ldloc ' . $list);
+    $env->m->emit('stloc ' . $cursor);
+    $env->m->label('foreign_pack_fill_' . $id);
+    $env->m->emit('ldloc ' . $cursor);
+    $env->m->emit('brfalse foreign_pack_done_' . $id);
+    $env->m->emit('ldloc ' . $arr);
+    $env->m->emit('ldloc ' . $index);
+    $env->m->emit('ldloc ' . $cursor);
+    $env->m->emit('ldfld object Moggi.Rt.MList::head');
+    unboxForeignArg($env, $elem);
+    $env->m->emit(dotNetPackStelem($elem));
+    $env->m->emit('ldloc ' . $index);
+    $env->m->emit('ldc.i4.1');
+    $env->m->emit('add');
+    $env->m->emit('stloc ' . $index);
+    $env->m->emit('ldloc ' . $cursor);
+    $env->m->emit('ldfld class Moggi.Rt.MList Moggi.Rt.MList::tail');
+    $env->m->emit('stloc ' . $cursor);
+    $env->m->emit('br foreign_pack_fill_' . $id);
+
+    $env->m->label('foreign_pack_done_' . $id);
+    $env->m->emit('ldloc ' . $arr);
+}
+
+/** The `stelem` form that stores one unpacked value of an array component. */
+function dotNetPackStelem(string $elem): string
+{
+    return match ($elem) {
+        'int8' => 'stelem.i1',
+        'int16', 'char' => 'stelem.i2',
+        'int32' => 'stelem.i4',
+        'int64', 'uint64' => 'stelem.i8',
+        'float32' => 'stelem.r4',
+        'float64' => 'stelem.r8',
+        default => 'stelem.ref',
+    };
+}
+
+/**
  * Push a default argument for optional trailing parameters (zero / null).
  *
  * An omitted tail is filled with the type's zero, not the C# default value:
@@ -2018,6 +2218,65 @@ function unboxForeignArg(EmitEnv $env, string $kind): void
             }
         })($env, $kind),
     };
+}
+
+/**
+ * Inline a C# `const`/enum member as its constant value (see
+ * {@see dotNetConstLiteralValue}). The load leaves exactly what an `ldsfld`
+ * of $desc would have left, so the caller boxes the result the same way —
+ * except enum members, which `Enum.ToObject` already returns boxed, and
+ * which therefore skip the caller's box. Returns false when the literal
+ * cannot be represented, keeping the `ldsfld` fallback.
+ */
+function emitDotNetConstLiteral(EmitEnv $env, array $lit, string $desc): bool
+{
+    // $lit comes from dotNetConstLiteralValue, which owns the contract: kind
+    // is one of the six literal kinds, value is a canonical invariant-culture
+    // string (null only for a null string constant), so no re-validation here.
+    $kind = $lit['kind'];
+    $value = $lit['value'];
+    $enum = $lit['enum'] ?? null;
+    if (\is_string($enum) && $enum !== '') {
+        // `Enum.ToObject` takes the type first: the stack must hold the
+        // `Type` below the value, not the other way round.
+        $wide = $kind === 'i8';
+        $env->m->emit('ldtoken valuetype ' . qualifyType($enum));
+        $env->m->emit('call class [System.Runtime]System.Type'
+            . ' [System.Runtime]System.Type::GetTypeFromHandle('
+            . 'valuetype [System.Runtime]System.RuntimeTypeHandle)');
+        $env->m->emit(($wide ? 'ldc.i8 ' : 'ldc.i4 ') . $value);
+        $env->m->emit('call object [System.Runtime]System.Enum::ToObject('
+            . 'class [System.Runtime]System.Type, ' . ($wide ? 'int64' : 'int32') . ')');
+
+        return true;
+    }
+    switch ($kind) {
+        case 'bool':
+            $env->m->emit(((int) $value !== 0) ? 'ldc.i4.1' : 'ldc.i4.0');
+            break;
+        case 'i4':
+            // The verifier only accepts the declared type the field really
+            // has, so the load already matches what an `ldsfld` would leave.
+            $env->m->emit('ldc.i4 ' . $value);
+            break;
+        case 'i8':
+            $env->m->emit('ldc.i8 ' . $value);
+            break;
+        case 'r4':
+            $env->m->emit('ldc.r4 ' . $value);
+            break;
+        case 'r8':
+            $env->m->emit('ldc.r8 ' . $value);
+            break;
+        case 'string':
+            $env->m->emit($value === null ? 'ldnull' : 'ldstr ' . ilString($value));
+            break;
+        default:
+            return false;
+    }
+    boxForeignReturn($env, $desc);
+
+    return true;
 }
 
 function boxForeignReturn(EmitEnv $env, string $retOrFieldDesc): void

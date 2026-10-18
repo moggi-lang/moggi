@@ -8,7 +8,10 @@ use function Moggi\Backend\Inspect\describeJvmEmit;
 use function Moggi\Backend\Jvm\Codegen\emitModule;
 
 use function Moggi\Backend\Jvm\Foreign\jvmDescriptorFromMoggiType;
+use function Moggi\Backend\Jvm\Foreign\resolveJvmForeignOverload;
 use function Moggi\Backend\Jvm\Naming\artifactPath;
+use function Moggi\Backend\Jvm\Verify\javapClassTable;
+use function Moggi\Backend\Jvm\Verify\javapMethodIsVarargs;
 use function Moggi\Backend\Jvm\Naming\symbolName;
 use function Moggi\Backend\Jvm\Verify\verifyForeignImportAgainstHost;
 use function Moggi\Debug\mapPathForArtifact;
@@ -98,13 +101,57 @@ final class JvmBackend implements Backend
         array $pathInfo,
         string $name,
     ): ?string {
-        return jvmDescriptorFromMoggiType(
+        $inferred = jvmDescriptorFromMoggiType(
             $type,
             $pathInfo['dispatch'],
             $kind,
             $pathInfo['classPath'],
             $pathInfo['hostMember'],
         );
+        if ($kind !== 'function'
+            || ($pathInfo['dispatch'] ?? '') === 'intrinsic'
+            || ($pathInfo['classPath'] ?? '') === ''
+        ) {
+            return $inferred;
+        }
+
+        // A declaration may omit a trailing variadic parameter, or supply it as
+        // a Moggi list to pack: resolve once here so the verifier checks, and
+        // the emitter calls, the same host descriptor.
+        $classPath = (string) $pathInfo['classPath'];
+        $member = (string) ($pathInfo['hostMember'] ?? '');
+        $lookup = $member === '<init>' ? null : $member;
+        $table = javapClassTable($classPath);
+        if ($table === null || ! ($table['found'] ?? false)) {
+            return $inferred;
+        }
+        if ($lookup === null) {
+            $lookup = (string) ($table['simple'] ?? '');
+        }
+        $resolution = resolveJvmForeignOverload(
+            $table['methods'][$lookup] ?? [],
+            $inferred,
+            static fn (string $descriptor): ?bool => javapMethodIsVarargs($classPath, $member, $descriptor),
+            $type,
+        );
+        if ($resolution['status'] === 'omit' || $resolution['status'] === 'pack') {
+            return $resolution['descriptor'];
+        }
+        if ($resolution['status'] === 'ambiguous') {
+            throw new \RuntimeException(
+                "jvm member `{$classPath}.{$member}` is ambiguous for `{$inferred}`:"
+                . ' more than one host overload takes these arguments plus a trailing array'
+                . ' (' . \implode(', ', $resolution['candidates'] ?? []) . ')'
+                . ' — the FFI cannot choose between them',
+            );
+        }
+        if (isset($resolution['detail'])) {
+            throw new \RuntimeException(
+                "jvm member `{$classPath}.{$member}` cannot take `{$inferred}`: " . $resolution['detail'],
+            );
+        }
+
+        return $inferred;
     }
 
     public function validateForeignImport(

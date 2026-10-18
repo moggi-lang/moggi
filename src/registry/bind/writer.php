@@ -9,7 +9,7 @@ use function Moggi\Registry\prettyJson;
  * The writer half of `moggi bind`: a JSON descriptor from the inspector becomes
  * the layered `.mog` file a project compiles against.
  *
- * One module per library, in the established facade shape (`System.Filesystem.PHP`
+ * One module per library, in the established facade shape (`System.IO.PHP`
  * is the model): `foreign` declarations first, then the boundary-checked public
  * face. The two layers collapse onto the declarations themselves — the
  * public name IS the `IO (Either String …)` / `IO (Maybe …)` declaration, so there is no raw twin

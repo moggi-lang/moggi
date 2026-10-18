@@ -15,11 +15,10 @@ use Moggi\IR;
 
 use function Moggi\IR\Visit\collectLocalsInBlock;
 
-function emitIoRunExpr(string $actionExpr): string
-{
-    return '(' . $actionExpr . '[1])()';
-}
-
+// The dual convention every backend runner implements (JVM `RT.ioRun`,
+// .NET `RT.IoRun`): an IO action runs, anything else is already its executed
+// result and passes through. The lowering cannot tell which an unknown
+// callee answered.
 function emitIoRunResultExpr(string $resultExpr): string
 {
     return '(\is_array(' . $resultExpr . ') && (' . $resultExpr . '[0] ?? null) === \'__io\''

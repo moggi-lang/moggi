@@ -270,7 +270,7 @@ function facadeModuleForImpl(array $units, string $implModuleName): ?string
  * not a module a program may name. Only the `{-# BACKEND … #-}` pragma that
  * selects it may mention it -- except from another implementation module, which
  * reaches a sibling's own values the facade does not export
- * (`System.Filesystem.DotNet` takes `Data.Time.Clock.DotNet`'s).
+ * (`System.IO.DotNet` takes `Data.Time.Clock.DotNet`'s).
  *
  * @param array<string, string> $byModule module name => source path
  * @return array<string, array{facade: string, backend: string}> impl module => owner

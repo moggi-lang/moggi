@@ -458,9 +458,8 @@ function displayPhpEmit(string $emit, array $focusNames): string
  * per imported module plus a `use function` alias for every imported binding —
  * hundreds of lines for anything that imports Prelude. None of that is the code
  * being read, and the javap / .NET IL dumps have no equivalent, so the preamble
- * goes (with the blank line that opens the file after it) and the imports
- * collapse into a one-line note that keeps the elision honest. Everything else
- * keeps the layout the emitter gave it.
+ * goes (with the blank line that opens the file after it), and the import
+ * block goes with it. Everything else keeps the layout the emitter gave it.
  */
 function presentPhpModule(string $emit): string
 {
@@ -468,19 +467,12 @@ function presentPhpModule(string $emit): string
 
     $first = null;
     $last = null;
-    $requires = 0;
-    $uses = 0;
     foreach ($lines as $i => $line) {
         if (! isPhpImportLine($line)) {
             continue;
         }
         $first ??= $i;
         $last = $i;
-        if (\preg_match('/^\s*require_once\s/', $line) === 1) {
-            ++$requires;
-        } else {
-            ++$uses;
-        }
     }
 
     $kept = [];
@@ -498,10 +490,6 @@ function presentPhpModule(string $emit): string
             }
         }
         if ($first !== null && $i >= $first && $i <= $last) {
-            if ($i === $first) {
-                $kept[] = '// imports elided: ' . $requires . ' require_once, ' . $uses . ' use';
-            }
-
             if ($line === '' || isPhpImportLine($line)) {
                 continue;
             }

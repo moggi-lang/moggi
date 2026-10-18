@@ -491,29 +491,30 @@ function validateForeignSignatureTypes(
     string $backend,
     Ast\AstNode $context,
     bool $argument = false,
+    bool $isTrailing = false,
 ): void {
     if ($type instanceof Ast\TypeVar) {
         throw typeFail($state, 'foreign import cannot use type variables', $context);
     }
 
     if ($type instanceof Ast\TypeCon) {
-        validateForeignTypeCon($state, $type, $backend, $context, $argument);
+        validateForeignTypeCon($state, $type, $backend, $context, $argument, $isTrailing);
 
         return;
     }
 
     if ($type instanceof Ast\TypeApp) {
-        validateForeignSignatureTypes($state, $type->con, $backend, $context, $argument);
+        validateForeignSignatureTypes($state, $type->con, $backend, $context, $argument, $isTrailing);
         foreach ($type->args ?? [] as $arg) {
-            validateForeignSignatureTypes($state, $arg, $backend, $context, $argument);
+            validateForeignSignatureTypes($state, $arg, $backend, $context, $argument, false);
         }
 
         return;
     }
 
     if ($type instanceof Ast\TypeArrow) {
-        validateForeignSignatureTypes($state, $type->from, $backend, $context, true);
-        validateForeignSignatureTypes($state, $type->to, $backend, $context, false);
+        validateForeignSignatureTypes($state, $type->from, $backend, $context, true, !($type->to instanceof Ast\TypeArrow));
+        validateForeignSignatureTypes($state, $type->to, $backend, $context, false, false);
 
         return;
     }
@@ -525,6 +526,7 @@ function validateForeignTypeCon(
     string $backend,
     Ast\AstNode $context,
     bool $argument = false,
+    bool $isTrailing = false,
 ): void {
     $name = $con->name;
 
@@ -574,7 +576,10 @@ function validateForeignTypeCon(
     }
 
     if ($name === 'List') {
-        if ($argument && $backend !== 'php') {
+        // A trailing list packs into a host array (variadic or not); anywhere
+        // else a list is not a host value. The backend verifier decides whether
+        // the host parameter takes it.
+        if ($argument && $backend !== 'php' && !$isTrailing) {
             throw typeFail(
                 $state,
                 "`[a]` cannot be an argument of a {$backend} foreign call — only php's array is the same value as a Moggi list; call it element by element or declare the host's own type",

@@ -910,10 +910,6 @@ function registerFunctionScheme(TypeCheckState $state, Ast\FunctionDecl $fn): vo
     }
 
     $state->subst = [];
-    // Kind state is name-keyed, so solving one signature must not leak its
-    // variables' kinds into the next: a signature reusing a name (like `a`
-    // for a higher-kinded class parameter) would otherwise corrupt whatever a
-    // later signature instantiates under that name.
     $kindScope = Kinds\pushKindScope($state);
 
     try {

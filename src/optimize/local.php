@@ -188,12 +188,6 @@ function mapMatchArm(IR\MatchArm $arm, array $temps, array $locals, IR\Operand $
         $mappedItems[] = mapStmt($item, $armTemps, $armLocals);
     }
 
-    // Arms keep the lowering convention (a trailing assign to the match
-    // dest), never a `Ret`: only `foldMatchReturn` may turn the trailing
-    // assign into an arm value, and only when it converts the whole match
-    // to a `MatchReturn` with it. Folding eagerly would strand a `return`
-    // in the middle of the enclosing body wherever the match is not the
-    // tail -- every backend emits a bare `return` for it.
     $optimized = cleanupConstructorArm(
         new IR\MatchArm($arm->pattern, optimizeBlock(new IR\Block($mappedItems), $armValueDest), $arm->guards),
         $scrutinee,
@@ -282,8 +276,6 @@ function foldArmMatchReturn(array $items, int $matchDest): array
 
     if ($last->value instanceof IR\Temp && \count($items) >= 2) {
         $expr = Support\exprFromDefiningStmt($items[\count($items) - 2], $last->value->id);
-        // Popping the defining statement is only sound when nothing else
-        // reads the temp: otherwise the earlier read is left dangling.
         if ($expr !== null
             && ! Support\tempUsedInItems(\array_slice($items, 0, -2), $last->value->id)
         ) {

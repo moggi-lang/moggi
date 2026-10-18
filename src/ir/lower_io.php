@@ -558,12 +558,6 @@ function ioActionCall(Ast\AstNode $expr, LowerCtx $ctx): Intrinsic|IoCall|null
 
     $emitCallee = ioActionEmitCalleeName($parts['function'], $ctx) ?? $callee;
 
-    // An `IoCall` is only a saturated call: fewer arguments is a partial
-    // application and more arguments is an over-applied eta-reduced function
-    // (e.g. `f = meth`, whose IR takes the dictionaries and answers the
-    // remaining function). Both are values, not actions -- the pure
-    // lowering splits them correctly (`Partial` / call-then-apply), while a
-    // flat `IoCall` would invoke the callee with the wrong arity.
     $knownArity = $ctx->functionArity[$callee]
         ?? ($emitCallee !== $callee ? ($ctx->functionArity[$emitCallee] ?? null) : null);
     if ($knownArity !== null && \count($parts['args']) !== $knownArity) {

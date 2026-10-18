@@ -369,6 +369,255 @@ function jvmForeignTypeConName(Ast\TypeNode $type): ?string
     };
 }
 
+/** @return list<string> each param type descriptor (I, Z, Ljava/lang/String;, …) */
+function parseJvmParamKinds(string $desc): array
+{
+    if ($desc === '' || $desc[0] !== '(') {
+        return [];
+    }
+    $i = 1;
+    $kinds = [];
+    $n = \strlen($desc);
+    while ($i < $n && $desc[$i] !== ')') {
+        $start = $i;
+        $c = $desc[$i];
+        if ($c === 'L') {
+            $semi = \strpos($desc, ';', $i);
+            if ($semi === false) {
+                throw new \RuntimeException("bad JVM descriptor: {$desc}");
+            }
+            $i = $semi + 1;
+        } elseif ($c === '[') {
+            $i++;
+            while ($i < $n && $desc[$i] === '[') {
+                $i++;
+            }
+            if ($i < $n && $desc[$i] === 'L') {
+                $semi = \strpos($desc, ';', $i);
+                $i = $semi === false ? $n : $semi + 1;
+            } else {
+                $i++;
+            }
+        } else {
+            $i++;
+        }
+        $kinds[] = \substr($desc, $start, $i - $start);
+    }
+
+    return $kinds;
+}
+
+function jvmReturnDescriptor(string $methodDesc): string
+{
+    $pos = \strrpos($methodDesc, ')');
+    if ($pos === false) {
+        return $methodDesc;
+    }
+
+    return \substr($methodDesc, $pos + 1);
+}
+
+/**
+ * Resolve a foreign call against one member's host overloads.
+ *
+ * Exact-descriptor matching stays the default: when any candidate carries the
+ * inferred descriptor, the answer is `exact` and nothing below runs. Otherwise
+ * a trailing host array may complete the call — but only as written here, never
+ * inferred from the array shape alone:
+ *
+ * - omission: the declaration is one parameter short and backend metadata
+ *   proves the host's last parameter variadic — the emitter synthesizes an
+ *   empty array of the component type. The shared prefix compares with
+ *   Object-widening: a declared reference in a host `Object` slot is the
+ *   Java assignment rule, checked nowhere else, so it is allowed here;
+ * - supply: the declaration's last parameter is a Moggi list and the host's
+ *   last parameter is an array (variadic or not) with a compatible element —
+ *   the emitter packs the list. No metadata call: nothing is omitted.
+ *
+ * Exactly one qualifying overload may exist; two is `ambiguous`, never a guess.
+ * A trailing Moggi list against a non-array host, or an unmappable element
+ * type, is `none` with a `detail` saying so.
+ *
+ * @param list<array{descriptor: string, public: bool}> $candidates host overloads under one member name
+ * @param callable(string): ?bool $isVarargs backend metadata: true when (class, member, descriptor)
+ *   declares its trailing array parameter variadic, false when it does not, null when unanswerable
+ * @param ?Ast\TypeNode $moggiType the declared Moggi type, or null to skip element checks (emit trusts verify)
+ * @return array{status: 'exact'|'omit'|'pack'|'none'|'ambiguous', descriptor?: string, pad?: string, candidates?: list<string>, detail?: string}
+ */
+function resolveJvmForeignOverload(
+    array $candidates,
+    string $expected,
+    callable $isVarargs,
+    ?Ast\TypeNode $moggiType = null,
+): array {
+    foreach ($candidates as $candidate) {
+        if (($candidate['descriptor'] ?? '') === $expected) {
+            return ['status' => 'exact'];
+        }
+    }
+
+    $wantParams = parseJvmParamKinds($expected);
+    $wantRet = jvmReturnDescriptor($expected);
+    $declEndsList = $wantParams !== [] && \end($wantParams) === 'Lmoggi/rt/MList;';
+
+    $omit = [];
+    $pack = [];
+    foreach ($candidates as $candidate) {
+        if (! ($candidate['public'] ?? false)) {
+            continue;
+        }
+        $hostParams = parseJvmParamKinds((string) ($candidate['descriptor'] ?? ''));
+        if (jvmReturnDescriptor((string) ($candidate['descriptor'] ?? '')) !== $wantRet) {
+            continue;
+        }
+        $last = \end($hostParams);
+        if ($last === false || ! \str_starts_with($last, '[')) {
+            continue;
+        }
+        if (\count($hostParams) === \count($wantParams) + 1
+            && jvmOmitPrefixMatches($hostParams, $wantParams)
+            && ! $declEndsList
+        ) {
+            $omit[] = $candidate['descriptor'];
+
+            continue;
+        }
+        if (\count($hostParams) === \count($wantParams) && $declEndsList) {
+            $pack[] = ['descriptor' => $candidate['descriptor'], 'component' => \substr($last, 1)];
+        }
+    }
+
+    if ($omit !== [] || $pack !== []) {
+        if (\count($omit) + \count($pack) > 1) {
+            $descs = [...$omit];
+            foreach ($pack as $entry) {
+                $descs[] = $entry['descriptor'];
+            }
+            \sort($descs);
+
+            return ['status' => 'ambiguous', 'candidates' => $descs];
+        }
+        if ($omit !== []) {
+            $hostParams = parseJvmParamKinds($omit[0]);
+            $component = \substr((string) \end($hostParams), 1);
+            $variadic = $isVarargs((string) $omit[0]);
+            if ($variadic === true) {
+                return ['status' => 'omit', 'descriptor' => $omit[0], 'pad' => $component];
+            }
+            if ($variadic === null) {
+                return [
+                    'status' => 'none',
+                    'detail' => 'variadic metadata is unavailable, so the omitted parameter cannot be proven variadic',
+                ];
+            }
+
+            // Proven non-variadic: not an omission, just a near miss — say
+            // nothing here so the caller reports the overloads instead.
+            return ['status' => 'none'];
+        }
+        $component = $pack[0]['component'];
+        $compat = jvmVarargsElementCompat($moggiType, $component);
+        if ($compat !== null) {
+            return ['status' => 'none', 'detail' => $compat];
+        }
+
+        return ['status' => 'pack', 'descriptor' => $pack[0]['descriptor'], 'pad' => $component];
+    }
+
+    if ($declEndsList) {
+        return ['status' => 'none', 'detail' => 'a trailing Moggi list needs a host array parameter to pack into'];
+    }
+
+    return ['status' => 'none'];
+}
+
+/**
+ * Whether the host's leading parameters accept the declaration's: equal, or a
+ * declared reference (object or array) in a host `Object` slot — the Java
+ * widening rule, which needs no check and emits no cast. Primitives never
+ * widen: a boxed Moggi number in an `Object` slot would need a box the
+ * declaration did not ask for.
+ *
+ * @param list<string> $hostParams
+ * @param list<string> $wantParams
+ */
+function jvmOmitPrefixMatches(array $hostParams, array $wantParams): bool
+{
+    foreach ($wantParams as $i => $want) {
+        $host = $hostParams[$i] ?? null;
+        if ($host === $want) {
+            continue;
+        }
+        if ($host === 'Ljava/lang/Object;'
+            && (\str_starts_with($want, 'L') || \str_starts_with($want, '['))
+        ) {
+            continue;
+        }
+
+        return false;
+    }
+
+    return true;
+}
+
+/**
+ * Whether a Moggi list element may pack into a host array component.
+ *
+ * Reference components take an equal element type, or anything for `Object`
+ * (the host checks); primitive components take the Moggi numbers that box
+ * compatibly. Null (no detail) means compatible.
+ */
+function jvmVarargsElementCompat(?Ast\TypeNode $moggiType, string $component): ?string
+{
+    if ($moggiType === null) {
+        return null;
+    }
+    $cursor = $moggiType;
+    $element = null;
+    while ($cursor instanceof Ast\TypeArrow) {
+        $element = $cursor->from;
+        $cursor = $cursor->to;
+    }
+    if ($element instanceof Ast\TypeApp
+        && $element->con instanceof Ast\TypeCon
+        && $element->con->name === 'List'
+        && \count($element->args) === 1
+        && $element->args[0] instanceof Ast\TypeNode
+    ) {
+        $element = $element->args[0];
+    }
+    if (! ($element instanceof Ast\TypeNode)) {
+        return 'cannot read the supplied list element type';
+    }
+    try {
+        $elementDesc = jvmTypeDescriptorFromMoggiType($element, null, false);
+    } catch (\Throwable $e) {
+        return 'cannot map the supplied list element type: ' . $e->getMessage();
+    }
+    if (\str_starts_with($component, 'L') || $component === 'Ljava/lang/Object;') {
+        if ($component === 'Ljava/lang/Object;' || $elementDesc === $component) {
+            return null;
+        }
+        if (\str_starts_with($elementDesc, 'L')) {
+            return "list elements are `{$elementDesc}` but the host takes `{$component}`";
+        }
+
+        return "list elements are `{$elementDesc}` but the host takes `{$component}`";
+    }
+    $numeric = ['J' => ['J', 'I', 'S', 'B'], 'I' => ['J', 'I', 'S', 'B']];
+    if (isset($numeric[$elementDesc]) && \in_array($component, $numeric[$elementDesc], true)) {
+        return null;
+    }
+    if (($elementDesc === 'D' && $component === 'D')
+        || ($elementDesc === 'Z' && $component === 'Z')
+        || ($elementDesc === 'I' && $component === 'C')
+    ) {
+        return null;
+    }
+
+    return "list elements are `{$elementDesc}` but the host takes `{$component}`";
+}
+
 /**
  * Per-arg descriptor override for specific constructors/methods.
  *

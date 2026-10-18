@@ -98,8 +98,6 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
     $userConstraints = [];
     $constraintEnv = [];
     $group = new SolvedGroup([], []);
-    // The signature as written, and the fresh skolems body checking runs
-    // against. Only set when $hasSignature holds; see below.
     $origFnType = null;
     $origConstraints = [];
     $origUserConstraints = [];
@@ -138,15 +136,6 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
             $fn->constraints = $constraints;
         }
 
-        // A declared signature quantifies its variables: skolemize them into
-        // fresh rigid variables before the body is checked, so the body can
-        // use them abstractly but can neither pin one to a concrete type nor
-        // merge two of them. Nested annotations spelling the same names
-        // resolve to the same skolems through `$skolemScope` (installed
-        // below), keeping cross-scope sharing exactly as without skolems.
-        // The originals are restored once the body checks (before
-        // deferral/settling), so nothing downstream ever sees a skolem —
-        // except diagnostics, which show the source spelling.
         $origFnType = $fnType;
         $origConstraints = $constraints;
         $origUserConstraints = $userConstraints;
@@ -187,16 +176,8 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
         }
     }
 
-    // The skolems are rigid while the body is checked, and their source
-    // spellings resolve to them in every nested annotation (see
-    // `$skolemScope`): same-spelled variables stay shared across scopes,
-    // exactly as without skolems, only rigid. Both are restored at the two
-    // exits below; the substitution keeps any flexible-to-rigid aliases.
     $savedRigidVars = $state->rigidVars;
     $savedSkolemScope = $state->skolemScope;
-    // Kinds are keyed by variable name, so a signature that reuses a name
-    // (like `a` for a higher-kinded class parameter) would otherwise leak its
-    // kind into whatever the next function instantiates under that name.
     $savedVarKinds = $state->varKinds;
     if ($skolemNames !== []) {
         $state->rigidVars = \array_fill_keys($skolemNames, true) + $savedRigidVars;
@@ -312,8 +293,6 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
     unify($state, $bodyType, $bodyExpected, $fn->body);
 
     if ($hasSignature) {
-        // The body checked against skolems; everything from here on —
-        // deferral, settling, export — sees the signature as written.
         $fnType = $origFnType;
         $constraints = $origConstraints;
         $userConstraints = $origUserConstraints;
@@ -684,8 +663,6 @@ function settleDeferredDeclaration(TypeCheckState $state, array $entry): void
     $state->declSpan = $entry['declarationSpan'];
     $state->ambientConstraints = [];
     $state->ambientConstraintsByClass = [];
-    // The body was checked under this scope; settling re-resolves its
-    // evidence by name, so the same spellings must meet the same skolems.
     $state->rigidVars = \array_fill_keys($entry['skolemNames'] ?? [], true) + $state->rigidVars;
     $settleScope = $entry['skolemScope'] ?? [];
     if ($settleScope !== []) {

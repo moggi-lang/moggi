@@ -3130,25 +3130,30 @@ function buildRTClass(): string
         }
     );
 
+    // Dual convention (see the PHP backend's emitIoRunResultExpr for the
+    // contract): an IO action runs, anything else passes through — including
+    // null, which instanceof rejects.
     $b->addMethod(
         'ioRun',
-        '(Lmoggi/rt/IO;)Ljava/lang/Object;',
+        '(Ljava/lang/Object;)Ljava/lang/Object;',
         0x0009,
         1,
-        ['moggi/rt/IO'],
+        ['java/lang/Object'],
         static function (CodeBuilder $c, ConstantPool $cp): void {
             $c->aload(0);
-            $c->ifnull('done');
-            $c->noteFrame(['moggi/rt/IO']);
+            $c->instanceof_($cp->class_('moggi/rt/IO'));
+            $c->ifeq('passthrough');
+            $c->noteFrame(['java/lang/Object']);
             $c->aload(0);
+            $c->checkcast($cp->class_('moggi/rt/IO'));
             $c->getfield($cp->fieldRef('moggi/rt/IO', 'action', 'Ljava/lang/Object;'));
             $c->iconst(0);
             $c->anewarray($cp->class_('java/lang/Object'));
             $c->invokestatic($cp->methodRef('moggi/rt/RT', 'apply', '(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;'), 2, true);
             $c->areturn();
-            $c->label('done');
-            $c->noteFrame(['moggi/rt/IO']);
-            $c->aconst_null();
+            $c->label('passthrough');
+            $c->noteFrame(['java/lang/Object']);
+            $c->aload(0);
             $c->areturn();
         }
     );
@@ -3647,7 +3652,7 @@ function buildRTClass(): string
             );
             $c->label('try_start');
             $c->aload(0);
-            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'ioRun', '(Lmoggi/rt/IO;)Ljava/lang/Object;'), 1, true);
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'ioRun', '(Ljava/lang/Object;)Ljava/lang/Object;'), 1, true);
             $c->areturn();
             $c->label('try_end');
 
@@ -3727,7 +3732,7 @@ function buildRTClass(): string
                 true,
             );
             $c->checkcast($cp->class_('moggi/rt/IO'));
-            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'ioRun', '(Lmoggi/rt/IO;)Ljava/lang/Object;'), 1, true);
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'ioRun', '(Ljava/lang/Object;)Ljava/lang/Object;'), 1, true);
             $c->areturn();
         }
     );
@@ -3747,7 +3752,7 @@ function buildRTClass(): string
 
             $c->label('try1_start');
             $c->aload(0);
-            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'ioRun', '(Lmoggi/rt/IO;)Ljava/lang/Object;'), 1, true);
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'ioRun', '(Ljava/lang/Object;)Ljava/lang/Object;'), 1, true);
             $c->astore(3);
             $c->goto_('after_try1');
             $c->label('try1_end');
@@ -3766,7 +3771,7 @@ function buildRTClass(): string
 
             $c->label('try2_start');
             $c->aload(1);
-            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'ioRun', '(Lmoggi/rt/IO;)Ljava/lang/Object;'), 1, true);
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'ioRun', '(Ljava/lang/Object;)Ljava/lang/Object;'), 1, true);
             $c->pop_();
             $c->goto_('after_try2');
             $c->label('try2_end');

@@ -11,12 +11,12 @@ use Moggi\Syntax\Lexer\TokenKind;
 /**
  * Parse the body of a `{-# BACKEND … #-}` pragma into backend => implementation module.
  *
- *   {-# BACKEND php = System.Filesystem.PHP #-}
+ *   {-# BACKEND php = System.IO.PHP #-}
  *
  *   {-# BACKEND
- *     php    = System.Filesystem.PHP
- *     jvm    = System.Filesystem.JVM
- *     dotnet = System.Filesystem.DotNet
+ *     php    = System.IO.PHP
+ *     jvm    = System.IO.JVM
+ *     dotnet = System.IO.DotNet
  *   #-}
  *
  * Entries are separated by newlines or commas.

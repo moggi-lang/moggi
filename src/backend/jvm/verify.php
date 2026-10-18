@@ -90,16 +90,6 @@ function verifyForeignImportAgainstHost(
 }
 
 /**
- * The host class as `javap -s -p` describes it.
- *
- * @return ?array{
- *     found: bool,
- *     simple: string,
- *     methods: array<string, list<array{descriptor: string, public: bool}>>,
- *     fields: array<string, array{descriptor: string, public: bool}>
- * }
- */
-/**
  * Warn once per process when verification answers from `PATH` instead of the build JDK.
  *
  * @param array{binary: ?string, source: ?string} $resolved
@@ -132,6 +122,16 @@ function warnOnceUnverifiedVendorJava(string $name, string $classPath): void
     );
 }
 
+/**
+ * The host class as `javap -s -p` describes it.
+ *
+ * @return ?array{
+ *     found: bool,
+ *     simple: string,
+ *     methods: array<string, list<array{descriptor: string, public: bool, varargs: bool}>>,
+ *     fields: array<string, array{descriptor: string, public: bool}>
+ * }
+ */
 function javapClassTable(string $classPath, ?string $javapBinary = null): ?array
 {
     if ($javapBinary === null) {
@@ -202,7 +202,12 @@ function javapCouldNotReadClass(string $output): bool
  * Read `javap -s -p` output: each member declaration is followed by the `descriptor:` line that
  * belongs to it, which is the pairing the whole file exists for.
  *
- * @return array{found: bool, simple: string, methods: array<string, list<array{descriptor: string, public: bool}>>, fields: array<string, array{descriptor: string, public: bool}>}
+ * `javap -v -p` prints the same pairings plus a `flags:` line per member; when one names
+ * `ACC_VARARGS` the entry carries it, which is the only backend-metadata proof a trailing
+ * host array may be omitted or packed. `-s` output has no flags lines, so those entries read
+ * non-variadic — never inferred from the array shape alone.
+ *
+ * @return array{found: bool, simple: string, methods: array<string, list<array{descriptor: string, public: bool, varargs: bool}>>, fields: array<string, array{descriptor: string, public: bool}>}
  */
 function parseJavapTable(string $output): array
 {
@@ -210,6 +215,7 @@ function parseJavapTable(string $output): array
     $fields = [];
     $simple = '';
     $declaration = null;
+    $lastMethod = null;
 
     foreach (\preg_split('/\R/', $output) ?: [] as $line) {
         $trimmed = \trim($line);
@@ -219,9 +225,19 @@ function parseJavapTable(string $output): array
 
         if (\preg_match('/^descriptor:\s*(\S+)\s*$/', $trimmed, $match) === 1) {
             if ($declaration !== null) {
-                addJavapMember($methods, $fields, $declaration, $match[1]);
+                $lastMethod = addJavapMember($methods, $fields, $declaration, $match[1]);
                 $declaration = null;
             }
+
+            continue;
+        }
+
+        if (\preg_match('/^flags:\s*\(.*\)\s*(.*)$/', $trimmed, $match) === 1 && $lastMethod !== null) {
+            [$name, $index] = $lastMethod;
+            if (isset($methods[$name][$index]) && \str_contains($match[1], 'ACC_VARARGS')) {
+                $methods[$name][$index]['varargs'] = true;
+            }
+            $lastMethod = null;
 
             continue;
         }
@@ -230,11 +246,13 @@ function parseJavapTable(string $output): array
             $header = \substr($trimmed, 0, -1);
             $simple = javapHeaderSimpleName($header);
             $declaration = null;
+            $lastMethod = null;
 
             continue;
         }
 
         $declaration = $trimmed;
+        $lastMethod = null;
     }
 
     return ['found' => false, 'simple' => $simple, 'methods' => $methods, 'fields' => $fields];
@@ -254,33 +272,36 @@ function javapHeaderSimpleName(string $header): string
 }
 
 /**
- * @param array<string, list<array{descriptor: string, public: bool}>> $methods
+ * @param array<string, list<array{descriptor: string, public: bool, varargs: bool}>> $methods
  * @param array<string, array{descriptor: string, public: bool}> $fields
+ * @return ?array{0: string, 1: int} the stored method position, for flags attachment
  */
-function addJavapMember(array &$methods, array &$fields, string $declaration, string $descriptor): void
+function addJavapMember(array &$methods, array &$fields, string $declaration, string $descriptor): ?array
 {
     if (\str_contains($declaration, '{}')) {
-        return;
+        return null;
     }
 
     $public = \str_starts_with($declaration, 'public ');
 
     if (\str_contains($declaration, '(')) {
         if (\preg_match_all('/\b([A-Za-z_$][\w$]*)\s*\(/', $declaration, $matches) === 0) {
-            return;
+            return null;
         }
         $name = (string) \end($matches[1]);
-        $methods[$name][] = ['descriptor' => $descriptor, 'public' => $public];
+        $methods[$name][] = ['descriptor' => $descriptor, 'public' => $public, 'varargs' => false];
 
-        return;
+        return [$name, \count($methods[$name]) - 1];
     }
 
     $head = \preg_replace('/\s*=.*$/s', ';', $declaration) ?? $declaration;
     if (\preg_match('/([A-Za-z_$][\w$]*)\s*;\s*$/', $head, $match) !== 1) {
-        return;
+        return null;
     }
 
     $fields[$match[1]] = ['descriptor' => $descriptor, 'public' => $public];
+
+    return null;
 }
 
 /**
@@ -349,6 +370,52 @@ function verifyForeignMethod(array $class, string $classPath, string $member, st
         : "jvm member `{$classPath}.{$member}` has no signature matching `{$expected}`";
 
     return $subject . '; ' . describeHostSignatures($candidates, descriptorParameterCount($expected));
+}
+
+/**
+ * Whether the host declares one overload variadic, from `javap -v` flags.
+ *
+ * The `-s` tables carry no flags, so this runs one targeted verbose query per
+ * (class, member, descriptor) and caches it: variadic-ness is backend
+ * metadata, never inferred from the trailing array alone. Null when the query
+ * itself is unanswerable (then the omission/pack stays unproven, which fails
+ * closed downstream).
+ */
+function javapMethodIsVarargs(string $classPath, string $member, string $descriptor): ?bool
+{
+    static $answers = [];
+    $resolved = findJavapBinaryWithSource();
+    $binary = $resolved['binary'] ?? null;
+    if ($binary === null) {
+        throw new VerificationUnavailable(
+            'verifying a `foreign jvm` declaration needs `javap` (a JDK); the full moggi distribution ships one',
+        );
+    }
+    $key = $binary . "\0" . $classPath . "\0" . $member . "\0" . $descriptor;
+    if (\array_key_exists($key, $answers)) {
+        return $answers[$key];
+    }
+
+    $command = [$binary, '-v', '-p'];
+    $classpath = verificationClasspath();
+    if ($classpath !== '') {
+        $command[] = '-classpath';
+        $command[] = $classpath;
+    }
+    $command[] = $classPath;
+
+    $captured = runProcess($command, null, null, false, 120);
+    $output = (string) ($captured['stdout'] ?? '') . (string) ($captured['stderr'] ?? '');
+    if (javapCouldNotReadClass($output) || ($captured['exitCode'] ?? -1) !== 0) {
+        return $answers[$key] = null;
+    }
+    foreach (parseJavapTable($output)['methods'][$member] ?? [] as $entry) {
+        if (($entry['descriptor'] ?? '') === $descriptor) {
+            return $answers[$key] = (bool) ($entry['varargs'] ?? false);
+        }
+    }
+
+    return $answers[$key] = false;
 }
 
 /**

@@ -7,6 +7,9 @@ use Moggi\Backend\Jvm\Classfile\CodeBuilder;
 use Moggi\Backend\Jvm\Classfile\ConstantPool;
 
 use function Moggi\Backend\Jvm\Foreign\jvmIsInterface;
+use function Moggi\Backend\Jvm\Foreign\jvmReturnDescriptor;
+use function Moggi\Backend\Jvm\Foreign\parseJvmParamKinds;
+use function Moggi\Backend\Jvm\Foreign\resolveJvmForeignOverload;
 use function Moggi\Backend\Jvm\Foreign\resolveJvmForeignPath;
 
 use function Moggi\Backend\Jvm\Naming\moduleInternalName;
@@ -377,7 +380,7 @@ function emitJvmMain(ClassBuilder $b, string $owner, string $mainFn, int $arity)
             $c->noteFrame(['[Ljava/lang/String;', 'java/lang/Object']);
             $c->aload(1);
             $c->checkcast($cp->class_('moggi/rt/IO'));
-            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'ioRun', '(Lmoggi/rt/IO;)Ljava/lang/Object;'), 1, true);
+            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'ioRun', '(Ljava/lang/Object;)Ljava/lang/Object;'), 1, true);
             $c->pop_();
             $c->label('done');
             $c->noteFrame(['[Ljava/lang/String;', 'java/lang/Object']);
@@ -622,7 +625,7 @@ function emitPendingIoThunkMethods(
                     $env->c->ifeq($done);
                     $env->c->aload($resultSlot);
                     $env->c->checkcast($env->cp->class_('moggi/rt/IO'));
-                    $env->c->invokestatic($env->cp->methodRef('moggi/rt/RT', 'ioRun', '(Lmoggi/rt/IO;)Ljava/lang/Object;'), 1, true);
+                    $env->c->invokestatic($env->cp->methodRef('moggi/rt/RT', 'ioRun', '(Ljava/lang/Object;)Ljava/lang/Object;'), 1, true);
                     $env->c->areturn();
                     $env->c->label($done);
                     $env->c->noteFrame($env->frameLocals());
@@ -760,8 +763,7 @@ function emitStmt(EmitEnv $env, IR\Stmt $stmt): void
         case IR\IoRun::class:
             /** @var IR\IoRun $stmt */
             emitOperand($env, $stmt->action);
-            $env->c->checkcast($env->cp->class_('moggi/rt/IO'));
-            $env->c->invokestatic($env->cp->methodRef('moggi/rt/RT', 'ioRun', '(Lmoggi/rt/IO;)Ljava/lang/Object;'), 1, true);
+            $env->c->invokestatic($env->cp->methodRef('moggi/rt/RT', 'ioRun', '(Ljava/lang/Object;)Ljava/lang/Object;'), 1, true);
             if ($stmt->dest !== null) {
                 $env->c->astore($env->localSlot('t' . $stmt->dest));
             } else {
@@ -3060,16 +3062,43 @@ function emitForeign(EmitEnv $env, IR\ForeignCall $op): void
     }
 
     $paramArgs = \array_slice($args, $argOffset);
-    if (\count($paramArgs) !== \count($argKinds)) {
-        throw new \RuntimeException(
-            "JVM foreign `{$op->path}`: arg count " . \count($paramArgs)
-            . ' does not match descriptor ' . $desc,
-        );
-    }
+    $packIndex = jvmPackArgIndex($desc, $argKinds, $paramArgs);
+    if ($packIndex !== null) {
+        // A trailing Moggi list packs into the host array (resolution ran at
+        // typecheck, so the last descriptor parameter is that array).
+        $last = \count($paramArgs) - 1;
+        foreach ($paramArgs as $i => $arg) {
+            if ($i === $last) {
+                emitJvmPackVarargs($env, $arg, (string) \end($argKinds));
 
-    foreach ($paramArgs as $i => $arg) {
-        emitOperand($env, $arg);
-        unboxForeignArg($env, $argKinds[$i]);
+                continue;
+            }
+            emitOperand($env, $arg);
+            unboxForeignArg($env, $argKinds[$i]);
+        }
+    } else {
+        if (\count($paramArgs) < \count($argKinds)) {
+            // An omitted variadic tail (resolution ran at typecheck): synthesize
+            // an empty array per missing parameter, which must each be an array.
+            foreach ($paramArgs as $i => $arg) {
+                emitOperand($env, $arg);
+                unboxForeignArg($env, $argKinds[$i]);
+            }
+            foreach (\array_slice($argKinds, \count($paramArgs)) as $missing) {
+                emitJvmEmptyArray($env, $missing, $op->path);
+            }
+        } else {
+            if (\count($paramArgs) !== \count($argKinds)) {
+                throw new \RuntimeException(
+                    "JVM foreign `{$op->path}`: arg count " . \count($paramArgs)
+                    . ' does not match descriptor ' . $desc,
+                );
+            }
+            foreach ($paramArgs as $i => $arg) {
+                emitOperand($env, $arg);
+                unboxForeignArg($env, $argKinds[$i]);
+            }
+        }
     }
 
     $retSlots = jvmReturnStackSlots($desc);
@@ -3129,6 +3158,146 @@ function emitForeign(EmitEnv $env, IR\ForeignCall $op): void
 
     boxForeignReturn($env, $ret);
     emitForeignIoWrap($env, $op->ioWrap);
+}
+
+/**
+ * When the resolved descriptor ends in a host array while the declaration
+ * supplied every argument, the last operand is a Moggi list to pack: the
+ * declaration named no array type (JVM foreign types cannot denote arrays),
+ * so a trailing array in the resolved descriptor is always the pack shape.
+ *
+ * @param list<string> $argKinds descriptor parameters of the resolved call
+ * @param list<IR\Operand> $paramArgs
+ */
+function jvmPackArgIndex(string $desc, array $argKinds, array $paramArgs): ?int
+{
+    if (\count($paramArgs) !== \count($argKinds) || $argKinds === []) {
+        return null;
+    }
+    $last = \end($argKinds);
+    if (! \is_string($last) || ! \str_starts_with($last, '[')) {
+        return null;
+    }
+
+    return \count($paramArgs) - 1;
+}
+
+/**
+ * Synthesize an empty array for one omitted variadic parameter.
+ *
+ * @throws \RuntimeException when the missing parameter is not an array (unreachable after
+ *   typecheck resolution, which only pads proven-variadic tails)
+ */
+function emitJvmEmptyArray(EmitEnv $env, string $kind, string $path): void
+{
+    if (! \str_starts_with($kind, '[') || \str_starts_with($kind, '[[')) {
+        throw new \RuntimeException(
+            "JVM foreign `{$path}`: cannot synthesize a default for parameter type {$kind}",
+        );
+    }
+    $env->c->iconst(0);
+    $component = \substr($kind, 1);
+    $atype = ['Z' => 4, 'C' => 5, 'F' => 6, 'D' => 7, 'B' => 8, 'S' => 9, 'I' => 10, 'J' => 11][$component] ?? null;
+    if ($atype !== null) {
+        $env->c->newarray($atype);
+
+        return;
+    }
+    $env->c->anewarray($env->cp->class_(\substr($component, 1, -1)));
+}
+
+/**
+ * Pack a Moggi list operand into a fresh host array (two passes over the
+ * `MList` spine: count, allocate, fill). Elements unbox exactly like scalar
+ * foreign arguments of the component type.
+ */
+function emitJvmPackVarargs(EmitEnv $env, IR\Operand $list, string $arrayKind): void
+{
+    $component = \substr($arrayKind, 1);
+    $cursor = $env->freshLocal();
+    $arr = $env->freshLocal();
+    $idx = $env->freshLocal('int');
+    $headRef = $env->cp->fieldRef('moggi/rt/MList', 'head', 'Ljava/lang/Object;');
+    $tailRef = $env->cp->fieldRef('moggi/rt/MList', 'tail', 'Lmoggi/rt/MList;');
+    $id = $env->freshLabelId();
+
+    emitOperand($env, $list);
+    $env->c->astore($cursor);
+    $env->c->iconst(0);
+    $env->c->istore($idx);
+    $env->c->label('varargs_count_' . $id);
+    $env->c->noteFrame($env->frameLocals());
+    $env->c->aload($cursor);
+    $env->c->ifnull('varargs_sized_' . $id);
+    $env->c->aload($cursor);
+    $env->c->getfield($tailRef);
+    $env->c->astore($cursor);
+    $env->c->iinc($idx, 1);
+    $env->c->goto_('varargs_count_' . $id);
+    $env->c->label('varargs_sized_' . $id);
+    $env->c->noteFrame($env->frameLocals());
+    $env->c->iload($idx);
+    $atype = ['Z' => 4, 'C' => 5, 'F' => 6, 'D' => 7, 'B' => 8, 'S' => 9, 'I' => 10, 'J' => 11][$component] ?? null;
+    if ($atype !== null) {
+        $env->c->newarray($atype);
+    } else {
+        $env->c->anewarray($env->cp->class_(\substr($component, 1, -1)));
+    }
+    $env->c->astore($arr);
+    emitOperand($env, $list);
+    $env->c->astore($cursor);
+    $env->c->iconst(0);
+    $env->c->istore($idx);
+    $env->c->label('varargs_fill_' . $id);
+    $env->c->noteFrame($env->frameLocals());
+    $env->c->aload($cursor);
+    $env->c->ifnull('varargs_done_' . $id);
+    $env->c->aload($arr);
+    $env->c->iload($idx);
+    $env->c->aload($cursor);
+    $env->c->getfield($headRef);
+    emitJvmPackElement($env, $component);
+    $env->c->aload($cursor);
+    $env->c->getfield($tailRef);
+    $env->c->astore($cursor);
+    $env->c->iinc($idx, 1);
+    $env->c->goto_('varargs_fill_' . $id);
+    $env->c->label('varargs_done_' . $id);
+    $env->c->noteFrame($env->frameLocals());
+    $env->c->aload($arr);
+}
+
+/**
+ * Convert one list head (a boxed `Object` under `[arr, idx, head]`) and store
+ * it: the stack holds exactly the array, index and converted value.
+ */
+function emitJvmPackElement(EmitEnv $env, string $component): void
+{
+    if ($component === 'C') {
+        unboxForeignArg($env, 'I');
+        $env->c->i2c();
+        $env->c->castore();
+
+        return;
+    }
+    $store = ['J' => 'lastore', 'I' => 'iastore', 'S' => 'sastore', 'B' => 'bastore',
+        'D' => 'dastore', 'F' => 'fastore', 'Z' => 'bastore'];
+    if (isset($store[$component])) {
+        unboxForeignArg($env, $component);
+        $env->c->{$store[$component]}();
+
+        return;
+    }
+    if (\str_starts_with($component, 'L') && \str_ends_with($component, ';')) {
+        $internal = \substr($component, 1, -1);
+        if ($internal !== 'java/lang/Object') {
+            $env->c->checkcast($env->cp->class_($internal));
+        }
+        $env->c->aastore();
+
+        return;
+    }
+    throw new \RuntimeException("JVM foreign: cannot pack list elements into `{$component}`");
 }
 
 /**
@@ -3194,54 +3363,6 @@ function countJvmArgSlots(array $kinds): int
     }
 
     return $n;
-}
-
-/** @return list<string> each param type descriptor (I, Z, Ljava/lang/String;, …) */
-function parseJvmParamKinds(string $desc): array
-{
-    if ($desc[0] !== '(') {
-        return [];
-    }
-    $i = 1;
-    $kinds = [];
-    $n = \strlen($desc);
-    while ($i < $n && $desc[$i] !== ')') {
-        $start = $i;
-        $c = $desc[$i];
-        if ($c === 'L') {
-            $semi = \strpos($desc, ';', $i);
-            if ($semi === false) {
-                throw new \RuntimeException("bad JVM descriptor: {$desc}");
-            }
-            $i = $semi + 1;
-        } elseif ($c === '[') {
-            $i++;
-            while ($i < $n && $desc[$i] === '[') {
-                $i++;
-            }
-            if ($i < $n && $desc[$i] === 'L') {
-                $semi = \strpos($desc, ';', $i);
-                $i = $semi === false ? $n : $semi + 1;
-            } else {
-                $i++;
-            }
-        } else {
-            $i++;
-        }
-        $kinds[] = \substr($desc, $start, $i - $start);
-    }
-
-    return $kinds;
-}
-
-function jvmReturnDescriptor(string $methodDesc): string
-{
-    $pos = \strrpos($methodDesc, ')');
-    if ($pos === false) {
-        return $methodDesc;
-    }
-
-    return \substr($methodDesc, $pos + 1);
 }
 
 function jvmReturnStackSlots(string $methodDesc): int

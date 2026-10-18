@@ -150,10 +150,6 @@ function activeInlineCaptureMeta(): array
 /** @param list<IR\FunctionDecl> $functions */
 function inlineFunctions(array $functions, string $moduleName = ''): array
 {
-    // Transitive capture sets are stable across inline rounds: inlining copies
-    // substituted bodies without changing any function's free locals (a call
-    // the guard below refuses can never add a capture, so the sets cannot
-    // grow), so one build covers every round.
     setActiveInlineCaptureMeta(buildLambdaMeta(indexCapturedFunctions($functions)));
     try {
         return inlineFunctionsRounds($functions, $moduleName);
@@ -1064,8 +1060,6 @@ function isCapturedLambdaArg(IR\Operand $arg, array $index): bool
  */
 function bodyReferencesCapturedLambdas(IR\FunctionDecl $function, array $index): bool
 {
-    // Callees are module-qualified (`Module::name`); the capture prefixes only
-    // show on the leaf name.
     $leafCaptured = static fn (string $name): bool => isCapturedFnName(specializationLookupNameSafe($name));
     $names = collectLambdaRefsInBlock($function->body, $leafCaptured);
     walkBlock(
@@ -1094,16 +1088,11 @@ function bodyReferencesCapturedLambdas(IR\FunctionDecl $function, array $index):
         $leaf = specializationLookupNameSafe($lambdaName);
         $info = $meta[$leaf] ?? null;
         if ($info !== null) {
-            // The transitive capture set: every name here is prepended by
-            // name at the call site, so it only resolves in a scope that
-            // binds it. Copying the call elsewhere leaves it dangling.
             if ($info['captures'] !== []) {
                 return true;
             }
             continue;
         }
-        // No transitive metadata (a reference the capture index does not
-        // cover): fall back to the direct free-locals check.
         $lambda = $index[$lambdaName]
             ?? $index[$leaf]
             ?? lookupIndexedFunction($index, $lambdaName);

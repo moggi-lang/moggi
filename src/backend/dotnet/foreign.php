@@ -6,6 +6,8 @@ use function Moggi\Backend\DotNet\Dependencies\dotNetTypeIsValueType;
 
 use function Moggi\Backend\DotNet\Naming\bclAssemblyFor;
 use function Moggi\Backend\DotNet\Verify\dotNetConstNeedsGetterCall;
+use function Moggi\Backend\DotNet\Verify\sameClrTypeIgnoringScope;
+use function Moggi\Backend\DotNet\Verify\splitClrSignature;
 use function Moggi\Foreign\splitForeignPathMember;
 use function Moggi\Semantics\IoBoundary\isIoTypeConName;
 use function Moggi\Semantics\Kernel\boolTypeName;
@@ -508,4 +510,257 @@ function clrForeignTypeConName(Ast\TypeNode $type): ?string
         Ast\TypeApp::class => $type->con instanceof Ast\TypeCon ? $type->con->name : null,
         default => null,
     };
+}
+
+/**
+ * Resolve a foreign call against one member's inspector overloads — the CLR
+ * mirror of the JVM's `resolveJvmForeignOverload`.
+ *
+ * Exact-signature matching stays the default: when any candidate carries the
+ * inferred signature, the answer is `exact` and nothing below runs. Otherwise
+ * a trailing host array may complete the call — but only as written here,
+ * never inferred from the array shape alone:
+ *
+ * - omission: the declaration is one parameter short and the host proves the
+ *   last parameter a `params` array (the inspector's `paramsArray` index,
+ *   read from `ParamArrayAttribute`) — the emitter synthesizes an empty
+ *   array of the component type;
+ * - supply: the declaration's last parameter is a Moggi list and the host's
+ *   last parameter is a `params` array with a compatible element — the
+ *   emitter packs the list.
+ *
+ * Exactly one qualifying overload may exist; two is `ambiguous`, never a
+ * guess. A trailing Moggi list against a non-array host, or an unmappable
+ * element type, is `none` with a `detail` saying so. A missing `paramsArray`
+ * proof (older inspector output, unanswerable host) simply never qualifies —
+ * the declaration falls through to the exact-only verdict, the way a proven
+ * non-variadic tail does on the JVM side.
+ *
+ * The emitter trusts this resolution the way the JVM emitter trusts its own:
+ * a value in a proven `params` slot at emit time is packed as a Moggi list,
+ * because no other Moggi value inhabits an array-typed slot by construction.
+ *
+ * @param list<array{params?: list<string>, ret?: string, static?: bool, public?: bool, paramsArray?: int}> $candidates inspector overloads under one member name
+ * @param ?Ast\TypeNode $moggiType the declared Moggi type, or null to skip element checks (emit trusts verify)
+ * @return array{status: 'exact'|'omit'|'pack'|'none'|'ambiguous', signature?: string, candidates?: list<string>, detail?: string}
+ */
+function resolveDotNetForeignOverload(
+    array $candidates,
+    string $expected,
+    ?Ast\TypeNode $moggiType = null,
+    ?string $classPath = null,
+    ?string $member = null,
+    string $dispatch = 'static',
+): array {
+    $want = splitClrSignature($expected);
+    foreach ($candidates as $candidate) {
+        if (! ($candidate['public'] ?? false)) {
+            continue;
+        }
+        if (! dotNetParamsMatch($candidate['params'] ?? [], $want['params'])) {
+            continue;
+        }
+        if (! sameClrTypeIgnoringScope((string) ($candidate['ret'] ?? ''), $want['ret'])) {
+            continue;
+        }
+
+        return ['status' => 'exact'];
+    }
+
+    $declEndsList = $want['params'] !== [] && \end($want['params']) === 'class Moggi.Rt.MList';
+
+    $omit = [];
+    $pack = [];
+    foreach ($candidates as $candidate) {
+        if (! ($candidate['public'] ?? false)) {
+            continue;
+        }
+        $hostParams = $candidate['params'] ?? [];
+        if (! sameClrTypeIgnoringScope((string) ($candidate['ret'] ?? ''), $want['ret'])) {
+            continue;
+        }
+        $last = \end($hostParams);
+        if (! \is_string($last) || ! \str_ends_with($last, '[]') || \str_ends_with($last, '[...]')) {
+            continue;
+        }
+        if (($candidate['paramsArray'] ?? -1) !== \count($hostParams) - 1) {
+            continue;
+        }
+        if (\count($hostParams) === \count($want['params']) + 1
+            && dotNetOmitPrefixMatches($hostParams, $want['params'])
+            && ! $declEndsList
+        ) {
+            $omit[] = $candidate;
+
+            continue;
+        }
+        if (\count($hostParams) === \count($want['params'])
+            && $declEndsList
+            && dotNetOmitPrefixMatches(
+                \array_slice($hostParams, 0, -1),
+                \array_slice($want['params'], 0, -1),
+            )
+        ) {
+            $pack[] = ['candidate' => $candidate, 'component' => \substr($last, 0, -2)];
+        }
+    }
+
+    if ($omit !== [] || $pack !== []) {
+        if (\count($omit) + \count($pack) > 1) {
+            $descs = [];
+            foreach ($omit as $entry) {
+                $descs[] = dotNetCandidateSig($entry);
+            }
+            foreach ($pack as $entry) {
+                $descs[] = dotNetCandidateSig($entry['candidate']);
+            }
+            \sort($descs);
+
+            return ['status' => 'ambiguous', 'candidates' => $descs];
+        }
+        if ($omit !== []) {
+            return ['status' => 'omit', 'signature' => dotNetCandidateSig($omit[0])];
+        }
+        $compat = dotNetVarargsElementCompat(
+            $moggiType,
+            $pack[0]['component'],
+            $classPath,
+            $member,
+            $dispatch,
+        );
+        if ($compat !== null) {
+            return ['status' => 'none', 'detail' => $compat];
+        }
+
+        return ['status' => 'pack', 'signature' => dotNetCandidateSig($pack[0]['candidate'])];
+    }
+
+    if ($declEndsList) {
+        return ['status' => 'none', 'detail' => 'a trailing Moggi list needs a host array parameter to pack into'];
+    }
+
+    return ['status' => 'none'];
+}
+
+/** Rebuild `(params)ret` from an inspector candidate. */
+function dotNetCandidateSig(array $candidate): string
+{
+    return '(' . \implode(',', $candidate['params'] ?? []) . ')' . ($candidate['ret'] ?? 'void');
+}
+
+/** Parameters equal ignoring assembly scopes. */
+function dotNetParamsMatch(array $a, array $b): bool
+{
+    if (\count($a) !== \count($b)) {
+        return false;
+    }
+    foreach ($a as $i => $param) {
+        if (! sameClrTypeIgnoringScope($param, $b[$i])) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/**
+ * Whether the host's leading parameters accept the declaration's: equal
+ * ignoring scopes, or a declared reference in a host `object` slot — the CLR
+ * widening rule, which needs no check and emits no cast. Value types never
+ * widen: a boxed Moggi number in an `object` slot would need a box the
+ * declaration did not ask for.
+ *
+ * @param list<string> $hostParams
+ * @param list<string> $wantParams
+ */
+function dotNetOmitPrefixMatches(array $hostParams, array $wantParams): bool
+{
+    foreach ($wantParams as $i => $want) {
+        $host = $hostParams[$i] ?? null;
+        if (\is_string($host) && sameClrTypeIgnoringScope($host, $want)) {
+            continue;
+        }
+        if ($host === 'object' && dotNetIsReferenceIlType($want)) {
+            continue;
+        }
+
+        return false;
+    }
+
+    return true;
+}
+
+/** A CLR type a reference conversion carries without a check: classes, `string`, `object`, arrays. */
+function dotNetIsReferenceIlType(string $il): bool
+{
+    if ($il === 'object' || $il === 'string') {
+        return true;
+    }
+    if (\str_starts_with($il, 'class ') || \str_ends_with($il, '[]') || \str_ends_with($il, '[...]')) {
+        return true;
+    }
+
+    return false;
+}
+
+/**
+ * Whether a Moggi list element may pack into a host array component.
+ *
+ * Reference components take an equal element type, or anything for `object`
+ * (the host checks); primitive components take the Moggi numbers that box
+ * compatibly. Null (no detail) means compatible.
+ */
+function dotNetVarargsElementCompat(
+    ?Ast\TypeNode $moggiType,
+    string $component,
+    ?string $classPath,
+    ?string $member,
+    string $dispatch,
+): ?string {
+    if ($moggiType === null) {
+        return null;
+    }
+    $cursor = $moggiType;
+    $element = null;
+    while ($cursor instanceof Ast\TypeArrow) {
+        $element = $cursor->from;
+        $cursor = $cursor->to;
+    }
+    if ($element instanceof Ast\TypeApp
+        && $element->con instanceof Ast\TypeCon
+        && $element->con->name === 'List'
+        && \count($element->args) === 1
+        && $element->args[0] instanceof Ast\TypeNode
+    ) {
+        $element = $element->args[0];
+    }
+    if (! ($element instanceof Ast\TypeNode)) {
+        return 'cannot read the supplied list element type';
+    }
+    try {
+        $elementDesc = clrTypeName($element, $classPath, $member, false, $dispatch);
+    } catch (\Throwable $e) {
+        return 'cannot map the supplied list element type: ' . $e->getMessage();
+    }
+    if ($component === 'object') {
+        if (! dotNetIsReferenceIlType($elementDesc)) {
+            return "list elements are `{$elementDesc}` but the host takes `{$component}`";
+        }
+
+        return null;
+    }
+    if (sameClrTypeIgnoringScope($elementDesc, $component)) {
+        return null;
+    }
+    $intish = ['int64', 'int32', 'int16', 'char', 'int8'];
+    if ($elementDesc === 'int64' && \in_array($component, $intish, true)) {
+        return null;
+    }
+    if (($elementDesc === 'float64' && $component === 'float64')
+        || ($elementDesc === 'bool' && $component === 'bool')
+    ) {
+        return null;
+    }
+
+    return "list elements are `{$elementDesc}` but the host takes `{$component}`";
 }

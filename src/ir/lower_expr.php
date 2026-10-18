@@ -271,12 +271,6 @@ function lowerDictMethodPartial(Ast\Apply $expr, LowerCtx $ctx): ?Operand
 
     $missing = remainingArity($ctx, $expr->inferredType);
     if ($missing <= 0 && $callee->methodArity !== null) {
-        // Elaborator-inserted dictionary applications carry no inferredType,
-        // so the arrow spine above sees nothing waiting even when value
-        // arguments are missing (e.g. `f = meth` elaborates to the method
-        // applied to its dictionaries only). Fall back to the method's
-        // declared arity (dictionaries + values) minus the arguments already
-        // in the spine.
         $applied = 0;
         $spine = $expr;
         while ($spine instanceof Ast\Apply) {

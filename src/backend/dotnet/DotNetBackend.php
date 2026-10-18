@@ -6,8 +6,11 @@ use Moggi\Backend\Backend;
 
 use function Moggi\Backend\DotNet\Codegen\emitModule;
 use function Moggi\Backend\DotNet\Dependencies\dotNetSignatureEntry;
-
 use function Moggi\Backend\DotNet\Foreign\clrSigFromMoggiType;
+use function Moggi\Backend\DotNet\Foreign\resolveDotNetForeignOverload;
+use function Moggi\Backend\DotNet\resolveDotnetExecutable;
+use function Moggi\Backend\DotNet\Verify\ensureInspectorBinary;
+use function Moggi\Backend\DotNet\Verify\inspectDotNetType;
 use function Moggi\Backend\DotNet\Naming\artifactPath;
 use function Moggi\Backend\DotNet\Naming\fnWrapperBundlePath;
 use function Moggi\Backend\DotNet\Naming\isFnWrapperArtifact;
@@ -149,6 +152,22 @@ final class DotNetBackend implements Backend
             ? dotNetSignatureEntry($name, $pathInfo['declaringRoot'] ?? null)
             : null;
 
+        // A declaration may omit a trailing `params` array, or supply it as a
+        // Moggi list to pack: resolve against the host once here so the
+        // verifier checks, and the emitter calls, the same signature.
+        // Hand-written sidecar entries keep precedence — they bless shapes
+        // (interface conversions, optional tails) the host never declares.
+        if ($sidecar === null
+            && $kind === 'function'
+            && ($pathInfo['dispatch'] ?? '') !== 'intrinsic'
+            && ($pathInfo['classPath'] ?? '') !== ''
+        ) {
+            $resolved = $this->resolveInspectorOverload($type, $pathInfo, $name);
+            if ($resolved !== null) {
+                return $resolved;
+            }
+        }
+
         return clrSigFromMoggiType(
             $type,
             $pathInfo['dispatch'],
@@ -158,6 +177,71 @@ final class DotNetBackend implements Backend
             $sidecar,
             $name,
         );
+    }
+
+    /**
+     * The inspector-resolved signature for an omitted or packed `params`
+     * tail, or null to keep the inferred (or sidecar) one. Resolution is
+     * opportunistic: an unanswerable host stands down here and lets the
+     * verifier refuse the declaration with its own diagnostic.
+     */
+    private function resolveInspectorOverload(
+        TypeNode $type,
+        array $pathInfo,
+        string $name,
+    ): ?string {
+        $classPath = (string) $pathInfo['classPath'];
+        $member = (string) ($pathInfo['hostMember'] ?? '');
+        if ($member === '' || $member === '.ctor') {
+            return null;
+        }
+        $dotnet = resolveDotnetExecutable();
+        if ($dotnet === null) {
+            return null;
+        }
+        $inspector = ensureInspectorBinary($dotnet);
+        if ($inspector === null) {
+            return null;
+        }
+        $table = inspectDotNetType($dotnet, $inspector, $classPath);
+        if ($table === null || ! ($table['found'] ?? false)) {
+            return null;
+        }
+        $inferred = clrSigFromMoggiType(
+            $type,
+            $pathInfo['dispatch'],
+            'function',
+            $pathInfo['classPath'],
+            $pathInfo['hostMember'],
+            null,
+            $name,
+        );
+        $resolution = resolveDotNetForeignOverload(
+            $table['methods'][$member] ?? [],
+            $inferred,
+            $type,
+            $pathInfo['classPath'],
+            $pathInfo['hostMember'],
+            $pathInfo['dispatch'],
+        );
+        if ($resolution['status'] === 'omit' || $resolution['status'] === 'pack') {
+            return $resolution['signature'];
+        }
+        if ($resolution['status'] === 'ambiguous') {
+            throw new \RuntimeException(
+                "dotnet member `{$classPath}:{$member}` is ambiguous for `{$inferred}`:"
+                . ' more than one host overload takes these arguments plus a trailing array'
+                . ' (' . \implode(', ', $resolution['candidates'] ?? []) . ')'
+                . ' — the FFI cannot choose between them',
+            );
+        }
+        if (isset($resolution['detail'])) {
+            throw new \RuntimeException(
+                "dotnet member `{$classPath}:{$member}` cannot take `{$inferred}`: " . $resolution['detail'],
+            );
+        }
+
+        return null;
     }
 
     public function validateForeignImport(

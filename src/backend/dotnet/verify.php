@@ -445,6 +445,68 @@ function dotNetConstNeedsGetterCall(?string $classPath, ?string $member): bool
 }
 
 /**
+ * A `const` import naming a C# `const` or enum member cannot be emitted as
+ * `ldsfld`: literal fields have no storage and the runtime answers the load
+ * with MissingFieldException (e.g. `System.IO.UnixFileMode:UserExecute`,
+ * `System.Int64:MinValue`). The inspector reports the constant's kind and
+ * invariant-culture value so the emitter can inline it instead.
+ *
+ * Returns ['kind' => 'bool'|'i4'|'i8'|'r4'|'r8'|'string', 'value' => ?string,
+ * 'enum' => ?string] — 'enum' names the enum for literal enum members — or
+ * null when the member is not a known literal. A null value with kind
+ * 'string' is a null string constant. Never throws.
+ */
+function dotNetConstLiteralValue(?string $classPath, ?string $member): ?array
+{
+    try {
+        if ($classPath === null || $classPath === '' || $member === null || $member === '') {
+            return null;
+        }
+        $dotnet = resolveDotnetExecutable();
+        if ($dotnet === null) {
+            return null;
+        }
+        $inspector = ensureInspectorBinary($dotnet);
+        if ($inspector === null) {
+            return null;
+        }
+        $table = inspectDotNetType($dotnet, $inspector, $classPath);
+        if ($table === null || ! ($table['found'] ?? false)) {
+            return null;
+        }
+        $field = $table['fields'][$member] ?? null;
+        if (! \is_array($field) || ($field['literal'] ?? false) !== true) {
+            return null;
+        }
+        $kind = $field['constKind'] ?? '';
+        if (! \is_string($kind)
+            || ! \in_array($kind, ['bool', 'i4', 'i8', 'r4', 'r8', 'string'], true)
+        ) {
+            return null;
+        }
+        $hasValue = \array_key_exists('constValue', $field);
+        $value = $hasValue ? $field['constValue'] : 'missing';
+        if ($value === 'missing' || ($value === null && $kind !== 'string')) {
+            return null;
+        }
+        if ($value !== null && ! \is_string($value)) {
+            return null;
+        }
+        if (($kind === 'i4' || $kind === 'i8') && ! \preg_match('/^-?\d+$/', (string) $value)) {
+            return null;
+        }
+        $enum = $field['constEnum'] ?? '';
+        if (! \is_string($enum)) {
+            $enum = '';
+        }
+
+        return ['kind' => $kind, 'value' => $value, 'enum' => $enum === '' ? null : $enum];
+    } catch (\Throwable) {
+        return null;
+    }
+}
+
+/**
  * A `const` import names a field whose type the declaration states — or a property read through
  * its getter (`System.Console:Out` is `get_Out()`, not a field).
  *

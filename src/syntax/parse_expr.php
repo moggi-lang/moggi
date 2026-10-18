@@ -85,11 +85,6 @@ function parseExprWithWhere(ParserState $state): Ast\AstNode
         return $expr;
     }
 
-    // A `where` dedented to (or left of) the enclosing case's alternatives
-    // belongs to an outer equation, not to this alternative: a nested case
-    // must not swallow the equation's `where` into its last alternative,
-    // which would orphan every name the other alternatives use. Leave it for
-    // the outer level, which re-checks against its own column.
     if ($state->caseAltCol !== null && peek($state)->col <= $state->caseAltCol) {
         return $expr;
     }

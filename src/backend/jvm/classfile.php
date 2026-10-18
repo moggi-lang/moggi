@@ -539,6 +539,41 @@ final class CodeBuilder
         $this->opcode(0x53, -3);
     }
 
+    public function iastore(): void
+    {
+        $this->opcode(0x4f, -3);
+    }
+
+    public function lastore(): void
+    {
+        $this->opcode(0x50, -4);
+    }
+
+    public function fastore(): void
+    {
+        $this->opcode(0x51, -3);
+    }
+
+    public function dastore(): void
+    {
+        $this->opcode(0x52, -4);
+    }
+
+    public function bastore(): void
+    {
+        $this->opcode(0x54, -3);
+    }
+
+    public function castore(): void
+    {
+        $this->opcode(0x55, -3);
+    }
+
+    public function sastore(): void
+    {
+        $this->opcode(0x56, -3);
+    }
+
     public function areturn(): void
     {
         $this->opcode(0xb0, -1);
