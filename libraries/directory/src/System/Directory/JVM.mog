@@ -1,0 +1,450 @@
+module System.Directory.JVM
+  ( createDirectoryIfMissing
+  , removeDirectory
+  , removeDirectoryRecursive
+  , removePathForcibly
+  , renameDirectory
+  , renameFile
+  , renamePath
+  , listDirectory
+  , getDirectoryContents
+  , getCurrentDirectory
+  , setCurrentDirectory
+  , getTemporaryDirectory
+  , removeFile
+  , copyFile
+  , getFileSize
+  , canonicalizePath
+  , doesPathExist
+  , doesFileExist
+  , doesDirectoryExist
+  , createFileLink
+  , createDirectoryLink
+  , removeDirectoryLink
+  , pathIsSymbolicLink
+  , getSymbolicLinkTarget
+  , getPermissions
+  , setPermissions
+  , getAccessTime
+  , getModificationTime
+  , setAccessTime
+  , setModificationTime
+  , exeExtension
+  ) where
+
+import Control.Applicative hiding (empty)
+import Control.Monad
+import Data.Bool
+import Data.Int
+import Data.Integer (Integer, integerFromInt, integerToInt)
+import Data.Real (quot)
+import Data.Semigroup
+import Data.String hiding (pack, unpack, length, take, drop, isPrefixOf, isSuffixOf)
+import Data.Time.Calendar (toModifiedJulianDay)
+import Data.Time.Clock (UTCTime, utcTimeFromUnix, utctDay, utctDayTime, diffTimeToSeconds)
+import Moggi.Internal.Base
+import Moggi.IO.Exception
+import System.Directory.Types
+import System.FilePath (takeDirectory, takeFileName, (</>))
+import System.IO.Base (IO, FilePath)
+import System.IO.Error (mkIOError)
+import Moggi.Internal.Prim
+
+foreign jvm type JFile "java.io.File"
+foreign jvm type JPath "interface java.nio.file.Path"
+foreign jvm type JObject "java.lang.Object"
+foreign jvm type Iterator "interface java.util.Iterator"
+foreign jvm type Iterable "interface java.lang.Iterable"
+foreign jvm type DirectoryStream "interface java.nio.file.DirectoryStream"
+foreign jvm type FileTime "java.nio.file.attribute.FileTime"
+foreign jvm type OutStream "java.io.OutputStream"
+
+foreign jvm function newFile "java.io.File:__con" :: String -> JFile
+foreign jvm function fileToPath "java.io.File.toPath" :: JFile -> JPath
+foreign jvm function fileExists "java.io.File.exists" :: JFile -> Bool
+foreign jvm function fileIsFile "java.io.File.isFile" :: JFile -> Bool
+foreign jvm function fileIsDirectory "java.io.File.isDirectory" :: JFile -> Bool
+foreign jvm function fileCanRead "java.io.File.canRead" :: JFile -> Bool
+foreign jvm function fileCanWrite "java.io.File.canWrite" :: JFile -> Bool
+foreign jvm function fileCanExecute "java.io.File.canExecute" :: JFile -> Bool
+foreign jvm function fileSetReadable "java.io.File.setReadable" :: JFile -> Bool -> Bool -> Bool
+foreign jvm function fileSetWritable "java.io.File.setWritable" :: JFile -> Bool -> Bool -> Bool
+foreign jvm function fileSetExecutable "java.io.File.setExecutable" :: JFile -> Bool -> Bool -> Bool
+foreign jvm function fileLastModified "java.io.File.lastModified" :: JFile -> Int
+foreign jvm function fileLength "java.io.File.length" :: JFile -> Int
+foreign jvm function fileMkdir "java.io.File.mkdir" :: JFile -> Bool
+foreign jvm function fileMkdirs "java.io.File.mkdirs" :: JFile -> Bool
+foreign jvm function fileDelete "java.io.File.delete" :: JFile -> Bool
+foreign jvm function fileRenameTo "java.io.File.renameTo" :: JFile -> JFile -> Bool
+foreign jvm function fileGetCanonicalPath "java.io.File.getCanonicalPath" :: JFile -> IO String
+foreign jvm function fileSetLastModified "java.io.File.setLastModified" :: JFile -> Int -> Bool
+
+foreign jvm function pathToString "java.nio.file.Path.toString" :: JPath -> String
+foreign jvm function pathGetFileName "java.nio.file.Path.getFileName" :: JPath -> JPath
+
+foreign jvm function filesDelete "java.nio.file.Files:delete" :: JPath -> IO ()
+foreign jvm function filesDeleteIfExists "java.nio.file.Files:deleteIfExists" :: JPath -> IO Bool
+foreign jvm function filesCopyToStream "java.nio.file.Files:copy" :: JPath -> OutStream -> IO Int
+foreign jvm function filesIsSymbolicLink "java.nio.file.Files:isSymbolicLink" :: JPath -> Bool
+foreign jvm function filesReadSymbolicLink "java.nio.file.Files:readSymbolicLink" :: JPath -> IO JPath
+foreign jvm function filesNewDirectoryStream "java.nio.file.Files:newDirectoryStream" :: JPath -> IO DirectoryStream
+foreign jvm function filesSetLastModifiedTime "java.nio.file.Files:setLastModifiedTime" :: JPath -> FileTime -> IO JPath
+
+-- | Variadic host calls: the trailing options array is omitted, so the calls
+-- run with the host defaults (follow links, no copy options, no file
+-- attributes). The declarations stay short; overload resolution proves each
+-- elided parameter variadic from `javap -v` flags, never from its shape.
+foreign jvm function filesCreateSymbolicLink "java.nio.file.Files:createSymbolicLink" :: JPath -> JPath -> IO JPath
+foreign jvm function filesGetAttribute "java.nio.file.Files:getAttribute" :: JPath -> String -> IO JObject
+foreign jvm function filesSetAttribute "java.nio.file.Files:setAttribute" :: JPath -> String -> FileTime -> IO JPath
+foreign jvm function objectAsFileTime "java.nio.file.attribute.FileTime:__cast" :: JObject -> FileTime
+
+foreign jvm function newFileOutputStream "java.io.FileOutputStream:__con" :: String -> OutStream
+foreign jvm function outClose "java.io.OutputStream.close" :: OutStream -> IO ()
+
+foreign jvm function fileTimeToMillis "java.nio.file.attribute.FileTime.toMillis" :: FileTime -> Int
+foreign jvm function fileTimeFromMillis "java.nio.file.attribute.FileTime:fromMillis" :: Int -> FileTime
+
+foreign jvm function systemGetProperty "java.lang.System:getProperty" :: String -> String
+foreign jvm function systemSetProperty "java.lang.System:setProperty" :: String -> String -> String
+
+-- | The `java.lang.Object` an erased generic member trades in. `Iterator<E>.next` erases to
+-- `Object` in the class file, so the host's real signature is `()Ljava/lang/Object;` — a
+-- declaration that says `Path` there names a method the JVM does not have (`NoSuchMethodError`).
+-- The value the host returns is cast to what the iteration contract promises, at the one place
+-- that knows it.
+foreign jvm type ErasedIterationValue "java.lang.Object"
+
+foreign jvm function iterableIterator "java.lang.Iterable.iterator" :: DirectoryStream -> Iterator
+foreign jvm function iterHasNext "java.util.Iterator.hasNext" :: Iterator -> Bool
+foreign jvm function iterNextErased "java.util.Iterator.next" :: Iterator -> ErasedIterationValue
+foreign jvm function iterNextPath "java.nio.file.Path:__cast" :: ErasedIterationValue -> JPath
+foreign jvm function objectsIsNull "java.util.Objects:isNull" :: JPath -> Bool
+
+toFile :: FilePath -> JFile
+toFile p = newFile p
+
+toPath :: FilePath -> JPath
+toPath p = fileToPath (toFile p)
+
+doesPathExist :: FilePath -> IO Bool
+doesPathExist p = pure (fileExists (toFile p))
+
+doesFileExist :: FilePath -> IO Bool
+doesFileExist p = pure (fileIsFile (toFile p))
+
+doesDirectoryExist :: FilePath -> IO Bool
+doesDirectoryExist p = pure (fileIsDirectory (toFile p))
+
+removeFile :: FilePath -> IO ()
+removeFile p = do
+  _ <- filesDeleteIfExists (toPath p)
+  pure ()
+
+copyFile :: FilePath -> FilePath -> IO ()
+copyFile src dst = do
+  _ <- filesDeleteIfExists (toPath dst)
+  out <- pure (newFileOutputStream dst)
+  _ <- filesCopyToStream (toPath src) out
+  outClose out
+
+getFileSize :: FilePath -> IO Integer
+getFileSize p = pure (integerFromInt (fileLength (toFile p)))
+
+-- | Creation with parents is the recursive walk; without, a single `mkdir`
+-- with the failure classified from the path, the way errno would classify it.
+createDirectoryIfMissing :: Bool -> FilePath -> IO ()
+createDirectoryIfMissing parents p = case parents of
+  True -> createTreePath p
+  False -> createSingle p
+
+createSingle :: FilePath -> IO ()
+createSingle p = do
+  exists <- doesPathExist p
+  case exists of
+    True -> ioError (mkIOError AlreadyExists "createDirectory" Nothing (Just p))
+    False -> do
+      ok <- pure (fileMkdir (toFile p))
+      case ok of
+        True -> pure ()
+        False -> createSingleFailed p
+
+createSingleFailed :: FilePath -> IO ()
+createSingleFailed p = do
+  let parent = takeDirectory p
+  parentExists <- doesPathExist parent
+  case parentExists of
+    False -> ioError (mkIOError NoSuchThing "createDirectory" Nothing (Just p))
+    True -> do
+      writable <- pure (fileCanWrite (toFile parent))
+      case writable of
+        False -> ioError (mkIOError PermissionDenied "createDirectory" Nothing (Just p))
+        True -> ioError (mkIOError OtherError "createDirectory" Nothing (Just p))
+
+createTreePath :: FilePath -> IO ()
+createTreePath "" = pure ()
+createTreePath dirPath = do
+  exists <- doesDirectoryExist dirPath
+  case exists of
+    True -> pure ()
+    False -> do
+      _ <- createTreePath (takeDirectory dirPath)
+      _ <- pure (fileMkdirs (toFile dirPath))
+      pure ()
+
+removeDirectory :: FilePath -> IO ()
+removeDirectory p = do
+  _ <- pure (fileDelete (toFile p))
+  pure ()
+
+removeDirectoryRecursive :: FilePath -> IO ()
+removeDirectoryRecursive p = removeTreePath p
+
+removeTreePath :: FilePath -> IO ()
+removeTreePath target = do
+  exists <- doesPathExist target
+  case exists of
+    False -> pure ()
+    True -> removeTreePresent target
+
+removeTreePresent :: FilePath -> IO ()
+removeTreePresent target = do
+  link <- pathIsSymbolicLink target
+  case link of
+    True -> removeTreeFile target
+    False -> do
+      isDir <- doesDirectoryExist target
+      case isDir of
+        False -> removeTreeFile target
+        True -> removeTreeDir target
+
+removeTreeFile :: FilePath -> IO ()
+removeTreeFile target = do
+  _ <- filesDeleteIfExists (toPath target)
+  pure ()
+
+removeTreeDir :: FilePath -> IO ()
+removeTreeDir target = do
+  entries <- rawScandir target
+  removeTreeEntries target (filterScandir entries)
+  _ <- pure (fileDelete (toFile target))
+  pure ()
+
+removeTreeEntries :: FilePath -> [FilePath] -> IO ()
+removeTreeEntries _ [] = pure ()
+removeTreeEntries target (entry : rest) = do
+  _ <- removeTreePath (target </> entry)
+  removeTreeEntries target rest
+
+-- | Missing paths are ignored; anything else is made owner-writable first, so
+-- read-only files do not stop the removal.
+removePathForcibly :: FilePath -> IO ()
+removePathForcibly p = do
+  exists <- doesPathExist p
+  case exists of
+    False -> pure ()
+    True -> forceRemovePresent p
+
+forceRemovePresent :: FilePath -> IO ()
+forceRemovePresent target = do
+  link <- pathIsSymbolicLink target
+  case link of
+    True -> forceRemoveFile target
+    False -> do
+      isDir <- doesDirectoryExist target
+      case isDir of
+        False -> forceRemoveFile target
+        True -> forceRemoveDir target
+
+forceRemoveFile :: FilePath -> IO ()
+forceRemoveFile target = do
+  _ <- pure (fileSetWritable (toFile target) True True)
+  _ <- filesDeleteIfExists (toPath target)
+  pure ()
+
+forceRemoveDir :: FilePath -> IO ()
+forceRemoveDir target = do
+  _ <- pure (fileSetWritable (toFile target) True True)
+  entries <- rawScandir target
+  forceRemoveEntries target (filterScandir entries)
+  _ <- pure (fileDelete (toFile target))
+  pure ()
+
+forceRemoveEntries :: FilePath -> [FilePath] -> IO ()
+forceRemoveEntries _ [] = pure ()
+forceRemoveEntries target (entry : rest) = do
+  _ <- removePathForcibly (target </> entry)
+  forceRemoveEntries target rest
+
+rawScandir :: FilePath -> IO [FilePath]
+rawScandir p = do
+  stream <- filesNewDirectoryStream (toPath p)
+  pure (mapPathEntries (iterToList (iterableIterator stream)))
+
+iterToList :: Iterator -> [JPath]
+iterToList it = case iterHasNext it of
+  False -> []
+  True -> iterNextPath (iterNextErased it) : iterToList it
+
+pathEntryName :: JPath -> String
+pathEntryName pe = case objectsIsNull (pathGetFileName pe) of
+  True -> pathToString pe
+  False -> pathToString (pathGetFileName pe)
+
+mapPathEntries :: [JPath] -> [FilePath]
+mapPathEntries [] = []
+mapPathEntries (e : rest) = pathEntryName e : mapPathEntries rest
+
+filterScandir :: [FilePath] -> [FilePath]
+filterScandir [] = []
+filterScandir ("." : rest) = filterScandir rest
+filterScandir (".." : rest) = filterScandir rest
+filterScandir (x : rest) = x : filterScandir rest
+
+listDirectory :: FilePath -> IO [FilePath]
+listDirectory p = do
+  names <- rawScandir p
+  pure (filterScandir names)
+
+getDirectoryContents :: FilePath -> IO [FilePath]
+getDirectoryContents p = do
+  names <- rawScandir p
+  pure ("." : ".." : filterScandir names)
+
+getCurrentDirectory :: IO FilePath
+getCurrentDirectory = pure (systemGetProperty "user.dir")
+
+setCurrentDirectory :: FilePath -> IO ()
+setCurrentDirectory p = do
+  _ <- pure (systemSetProperty "user.dir" p)
+  pure ()
+
+getTemporaryDirectory :: IO FilePath
+getTemporaryDirectory = pure (systemGetProperty "java.io.tmpdir")
+
+renameDirectory :: FilePath -> FilePath -> IO ()
+renameDirectory src dst = do
+  isDir <- doesDirectoryExist src
+  case isDir of
+    True -> renameRaw src dst
+    False -> ioError (mkIOError InappropriateType "renameDirectory" Nothing (Just src))
+
+renameFile :: FilePath -> FilePath -> IO ()
+renameFile src dst = do
+  isDir <- doesDirectoryExist src
+  case isDir of
+    True -> ioError (mkIOError InappropriateType "renameFile" Nothing (Just src))
+    False -> renameRaw src dst
+
+renamePath :: FilePath -> FilePath -> IO ()
+renamePath src dst = renameRaw src dst
+
+renameRaw :: FilePath -> FilePath -> IO ()
+renameRaw src dst = do
+  _ <- pure (fileRenameTo (toFile src) (toFile dst))
+  pure ()
+
+-- | The host resolves the longest existing prefix; the missing suffix is
+-- appended one component at a time, so nonexistent paths still canonicalize.
+canonicalizePath :: FilePath -> IO FilePath
+canonicalizePath p = do
+  exists <- doesPathExist p
+  case exists of
+    True -> fileGetCanonicalPath (toFile p)
+    False -> do
+      let parent = takeDirectory p
+      case parent == p of
+        True -> fileGetCanonicalPath (toFile p)
+        False -> do
+          base <- canonicalizePath parent
+          pure (base </> takeFileName p)
+
+createFileLink :: FilePath -> FilePath -> IO ()
+createFileLink target link = do
+  _ <- filesCreateSymbolicLink (toPath link) (toPath target)
+  pure ()
+
+createDirectoryLink :: FilePath -> FilePath -> IO ()
+createDirectoryLink target link = do
+  _ <- filesCreateSymbolicLink (toPath link) (toPath target)
+  pure ()
+
+removeDirectoryLink :: FilePath -> IO ()
+removeDirectoryLink p = do
+  _ <- filesDelete (toPath p)
+  pure ()
+
+pathIsSymbolicLink :: FilePath -> IO Bool
+pathIsSymbolicLink p = pure (filesIsSymbolicLink (toPath p))
+
+getSymbolicLinkTarget :: FilePath -> IO FilePath
+getSymbolicLinkTarget p = do
+  target <- filesReadSymbolicLink (toPath p)
+  pure (pathToString target)
+
+getPermissions :: FilePath -> IO Permissions
+getPermissions p = do
+  let f = toFile p
+  r <- pure (fileCanRead f)
+  w <- pure (fileCanWrite f)
+  x <- pure (fileCanExecute f)
+  isDir <- doesDirectoryExist p
+  pure (case isDir of
+    True -> Permissions
+      { permissionsReadable = r
+      , permissionsWritable = w
+      , permissionsExecutable = False
+      , permissionsSearchable = r && x
+      }
+    False -> Permissions
+      { permissionsReadable = r
+      , permissionsWritable = w
+      , permissionsExecutable = x
+      , permissionsSearchable = False
+      })
+
+-- | Owner bits only, the way the host's `setReadable`/`setWritable`/
+-- `setExecutable` owner forms set them; a searchable directory takes the
+-- execute bit.
+setPermissions :: FilePath -> Permissions -> IO ()
+setPermissions p perms = do
+  let f = toFile p
+  isDir <- doesDirectoryExist p
+  _ <- pure (fileSetReadable f (readable perms) True)
+  _ <- pure (fileSetWritable f (writable perms) True)
+  _ <- pure (fileSetExecutable f (execBit isDir perms) True)
+  pure ()
+
+execBit :: Bool -> Permissions -> Bool
+execBit isDir perms = case isDir of
+  True -> searchable perms
+  False -> executable perms
+
+getAccessTime :: FilePath -> IO UTCTime
+getAccessTime p = do
+  v <- filesGetAttribute (toPath p) "lastAccessTime"
+  pure (utcTimeFromUnix (quot (fileTimeToMillis (objectAsFileTime v)) 1000))
+
+getModificationTime :: FilePath -> IO UTCTime
+getModificationTime p = pure (utcTimeFromUnix (quot (fileLastModified (toFile p)) 1000))
+
+-- | The attribute call sets one clock at a time, so each setter only touches
+-- its own attribute and leaves the other clock alone.
+setAccessTime :: FilePath -> UTCTime -> IO ()
+setAccessTime p t = do
+  _ <- filesSetAttribute (toPath p) "lastAccessTime" (fileTimeFromMillis (utcToUnix t * 1000))
+  pure ()
+
+setModificationTime :: FilePath -> UTCTime -> IO ()
+setModificationTime p t = do
+  _ <- filesSetLastModifiedTime (toPath p) (fileTimeFromMillis (utcToUnix t * 1000))
+  pure ()
+
+utcToUnix :: UTCTime -> Int
+utcToUnix t = integerToInt (unixDays + daySecs)
+  where
+    unixDays = integerFromInt (toModifiedJulianDay (utctDay t) - 40587) * 86400
+    daySecs = diffTimeToSeconds (utctDayTime t)
+
+exeExtension :: String
+exeExtension = ""

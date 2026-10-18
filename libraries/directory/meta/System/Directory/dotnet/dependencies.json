@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "assemblies": {
+    "System.Runtime": {
+      "signatures": {
+        "modeHasFlag": {
+          "optionalTail": 0,
+          "params": [
+            {
+              "emit": "class [System.Runtime]System.Enum",
+              "from": "valuetype [System.Private.CoreLib]System.IO.UnixFileMode"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

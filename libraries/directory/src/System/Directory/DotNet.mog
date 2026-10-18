@@ -1,0 +1,410 @@
+module System.Directory.DotNet
+  ( createDirectoryIfMissing
+  , removeDirectory
+  , removeDirectoryRecursive
+  , removePathForcibly
+  , renameDirectory
+  , renameFile
+  , renamePath
+  , listDirectory
+  , getDirectoryContents
+  , getCurrentDirectory
+  , setCurrentDirectory
+  , getTemporaryDirectory
+  , removeFile
+  , copyFile
+  , getFileSize
+  , canonicalizePath
+  , doesPathExist
+  , doesFileExist
+  , doesDirectoryExist
+  , createFileLink
+  , createDirectoryLink
+  , removeDirectoryLink
+  , pathIsSymbolicLink
+  , getSymbolicLinkTarget
+  , getPermissions
+  , setPermissions
+  , getAccessTime
+  , getModificationTime
+  , setAccessTime
+  , setModificationTime
+  , exeExtension
+  ) where
+
+import Control.Applicative hiding (empty)
+import Control.Monad
+import Data.Bool
+import Data.Char (toLower)
+import Data.Int (Int, Int32)
+import Data.Integer (Integer, integerFromInt, integerToInt)
+import Data.Real (quot)
+import Data.Semigroup
+import Data.String hiding (pack, unpack, length, take, drop, isPrefixOf, isSuffixOf)
+import Data.Time.Calendar (toModifiedJulianDay)
+import Data.Time.Clock (UTCTime, utcTimeFromUnix, utctDay, utctDayTime, diffTimeToSeconds)
+import Moggi.Internal.Base
+import Moggi.IO.Exception
+import System.Directory.Types
+import System.FilePath (takeDirectory, takeExtension, takeFileName, (</>))
+import System.IO.Base (IO, FilePath)
+import System.IO.Error (mkIOError)
+
+foreign dotnet type DInfo "System.IO.DirectoryInfo"
+foreign dotnet type FInfo "System.IO.FileInfo"
+foreign dotnet type FSInfo "System.IO.FileSystemInfo"
+foreign dotnet type DObject "System.Object"
+foreign dotnet type StrArray "string[]"
+foreign dotnet type DTime "valuetype System.DateTime"
+
+foreign dotnet function fileExists "System.IO.File:Exists" :: String -> Bool
+foreign dotnet function dirExists "System.IO.Directory:Exists" :: String -> Bool
+foreign dotnet function fileDelete "System.IO.File:Delete" :: String -> IO ()
+foreign dotnet function fileCopy "System.IO.File:Copy" :: String -> String -> Bool -> IO ()
+foreign dotnet function fileMove "System.IO.File:Move" :: String -> String -> IO ()
+foreign dotnet function dirMove "System.IO.Directory:Move" :: String -> String -> IO ()
+foreign dotnet function dirCreate "System.IO.Directory:CreateDirectory" :: String -> IO DInfo
+foreign dotnet function dirDelete "System.IO.Directory:Delete" :: String -> IO ()
+foreign dotnet function dirDeleteRecursive "System.IO.Directory:Delete" :: String -> Bool -> IO ()
+foreign dotnet function getEntries "System.IO.Directory:GetFileSystemEntries" :: String -> IO StrArray
+foreign dotnet function arrLength "System.Array.get_Length" :: StrArray -> Int32
+foreign dotnet function arrGetValue "System.Array.GetValue" :: StrArray -> Int32 -> DObject
+foreign dotnet function objToString "System.Convert:ToString" :: DObject -> String
+foreign dotnet function getFullPath "System.IO.Path:GetFullPath" :: String -> String
+foreign dotnet function getCurrentDir "System.IO.Directory:GetCurrentDirectory" :: String
+foreign dotnet function setCurrentDir "System.IO.Directory:SetCurrentDirectory" :: String -> IO ()
+foreign dotnet function getTempPath "System.IO.Path:GetTempPath" :: String
+
+foreign dotnet function newFileInfo "System.IO.FileInfo:__con" :: String -> FInfo
+foreign dotnet function fiLength "System.IO.FileInfo.get_Length" :: FInfo -> Int
+foreign dotnet function fiExists "System.IO.FileInfo.get_Exists" :: FInfo -> Bool
+foreign dotnet function fiReadOnly "System.IO.FileInfo.get_IsReadOnly" :: FInfo -> Bool
+foreign dotnet function fiSetReadOnly "System.IO.FileInfo.set_IsReadOnly" :: FInfo -> Bool -> IO ()
+foreign dotnet function fiLinkTarget "System.IO.FileInfo.get_LinkTarget" :: FInfo -> IO (Maybe String)
+
+foreign dotnet function createSymlink "System.IO.File:CreateSymbolicLink" :: String -> String -> IO FSInfo
+
+foreign dotnet function getAccessTimeRaw "System.IO.File:GetLastAccessTime" :: String -> IO DTime
+foreign dotnet function getWriteTimeRaw "System.IO.File:GetLastWriteTime" :: String -> IO DTime
+foreign dotnet function setAccessTimeRaw "System.IO.File:SetLastAccessTime" :: String -> DTime -> IO ()
+foreign dotnet function setWriteTimeRaw "System.IO.File:SetLastWriteTime" :: String -> DTime -> IO ()
+foreign dotnet function dateTicks "System.DateTime.get_Ticks" :: DTime -> Int
+foreign dotnet function dateFromTicks "System.DateTime:__con" :: Int -> DTime
+
+foreign dotnet function osIsWindows "System.OperatingSystem:IsWindows" :: Bool
+-- `UnixFileMode` lives in the core library, not `System.Runtime`: the verifier
+-- ignores scopes, but the emitter bakes the scope into the field reference,
+-- so a wrong one compiles and then fails at runtime (`MissingField`).
+foreign dotnet type UMode "valuetype [System.Private.CoreLib]System.IO.UnixFileMode"
+foreign dotnet function getUnixMode "System.IO.File:GetUnixFileMode" :: String -> IO UMode
+foreign dotnet const userExecFlag "System.IO.UnixFileMode:UserExecute" :: UMode
+
+-- | `Enum.HasFlag` takes a `System.Enum`, not the concrete mode: the
+-- sidecar blesses the declaration's `UMode` argument into the `Enum` slot,
+-- and the emitter's `castclass` is the upcast the host checks.
+foreign dotnet function modeHasFlag "System.Enum.HasFlag" :: UMode -> UMode -> Bool
+
+doesPathExist :: FilePath -> IO Bool
+doesPathExist p = pure (fileExists p || dirExists p)
+
+doesFileExist :: FilePath -> IO Bool
+doesFileExist p = pure (fileExists p)
+
+doesDirectoryExist :: FilePath -> IO Bool
+doesDirectoryExist p = pure (dirExists p)
+
+removeFile :: FilePath -> IO ()
+removeFile p = fileDelete p
+
+copyFile :: FilePath -> FilePath -> IO ()
+copyFile src dst = fileCopy src dst True
+
+getFileSize :: FilePath -> IO Integer
+getFileSize p = pure (integerFromInt (fiLength (newFileInfo p)))
+
+-- | Creation with parents is one host call, which makes parents itself and
+-- tolerates an existing directory; without, the missing path is created
+-- exactly when its parent exists, with the failure classified from the path.
+createDirectoryIfMissing :: Bool -> FilePath -> IO ()
+createDirectoryIfMissing parents p = case parents of
+  True -> do
+    _ <- dirCreate p
+    pure ()
+  False -> createSingle p
+
+createSingle :: FilePath -> IO ()
+createSingle p = do
+  exists <- doesPathExist p
+  case exists of
+    True -> ioError (mkIOError AlreadyExists "createDirectory" Nothing (Just p))
+    False -> do
+      parentExists <- doesPathExist (takeDirectory p)
+      case parentExists of
+        False -> ioError (mkIOError NoSuchThing "createDirectory" Nothing (Just p))
+        True -> do
+          _ <- dirCreate p
+          pure ()
+
+removeDirectory :: FilePath -> IO ()
+removeDirectory p = dirDelete p
+
+removeDirectoryRecursive :: FilePath -> IO ()
+removeDirectoryRecursive p = removeTreePath p
+
+removeTreePath :: FilePath -> IO ()
+removeTreePath target = do
+  exists <- doesPathExist target
+  case exists of
+    False -> pure ()
+    True -> removeTreePresent target
+
+removeTreePresent :: FilePath -> IO ()
+removeTreePresent target = do
+  link <- pathIsSymbolicLink target
+  case link of
+    True -> removeTreeFile target
+    False -> do
+      isDir <- doesDirectoryExist target
+      case isDir of
+        False -> removeTreeFile target
+        True -> removeTreeDir target
+
+removeTreeFile :: FilePath -> IO ()
+removeTreeFile target = fileDelete target
+
+removeTreeDir :: FilePath -> IO ()
+removeTreeDir target = do
+  entries <- rawScandir target
+  removeTreeEntries target (filterScandir entries)
+  dirDelete target
+
+removeTreeEntries :: FilePath -> [FilePath] -> IO ()
+removeTreeEntries _ [] = pure ()
+removeTreeEntries target (entry : rest) = do
+  _ <- removeTreePath (target </> entry)
+  removeTreeEntries target rest
+
+-- | Missing paths are ignored; anything else is made writable first, so
+-- read-only files do not stop the removal.
+removePathForcibly :: FilePath -> IO ()
+removePathForcibly p = do
+  exists <- doesPathExist p
+  case exists of
+    False -> pure ()
+    True -> forceRemovePresent p
+
+forceRemovePresent :: FilePath -> IO ()
+forceRemovePresent target = do
+  link <- pathIsSymbolicLink target
+  case link of
+    True -> forceRemoveFile target
+    False -> do
+      isDir <- doesDirectoryExist target
+      case isDir of
+        False -> forceRemoveFile target
+        True -> forceRemoveDir target
+
+forceRemoveFile :: FilePath -> IO ()
+forceRemoveFile target = do
+  _ <- fiSetReadOnly (newFileInfo target) False
+  fileDelete target
+
+forceRemoveDir :: FilePath -> IO ()
+forceRemoveDir target = do
+  _ <- fiSetReadOnly (newFileInfo target) False
+  entries <- rawScandir target
+  forceRemoveEntries target (filterScandir entries)
+  dirDelete target
+
+forceRemoveEntries :: FilePath -> [FilePath] -> IO ()
+forceRemoveEntries _ [] = pure ()
+forceRemoveEntries target (entry : rest) = do
+  _ <- removePathForcibly (target </> entry)
+  forceRemoveEntries target rest
+
+-- | The host answers full paths in one exact call; names come from the pure
+-- path splitter, so no host iteration protocol is needed.
+rawScandir :: FilePath -> IO [FilePath]
+rawScandir p = do
+  arr <- getEntries p
+  pure (entryNames arr 0 (arrLength arr))
+
+entryNames :: StrArray -> Int32 -> Int32 -> [FilePath]
+entryNames arr i n = case i == n of
+  True -> []
+  False -> takeFileName (objToString (arrGetValue arr i)) : entryNames arr (i + 1) n
+
+filterScandir :: [FilePath] -> [FilePath]
+filterScandir [] = []
+filterScandir ("." : rest) = filterScandir rest
+filterScandir (".." : rest) = filterScandir rest
+filterScandir (x : rest) = x : filterScandir rest
+
+listDirectory :: FilePath -> IO [FilePath]
+listDirectory p = do
+  names <- rawScandir p
+  pure (filterScandir names)
+
+getDirectoryContents :: FilePath -> IO [FilePath]
+getDirectoryContents p = do
+  names <- rawScandir p
+  pure ("." : ".." : filterScandir names)
+
+getCurrentDirectory :: IO FilePath
+getCurrentDirectory = pure getCurrentDir
+
+setCurrentDirectory :: FilePath -> IO ()
+setCurrentDirectory p = setCurrentDir p
+
+getTemporaryDirectory :: IO FilePath
+getTemporaryDirectory = pure getTempPath
+
+renameDirectory :: FilePath -> FilePath -> IO ()
+renameDirectory src dst = do
+  isDir <- doesDirectoryExist src
+  case isDir of
+    True -> dirMove src dst
+    False -> ioError (mkIOError InappropriateType "renameDirectory" Nothing (Just src))
+
+renameFile :: FilePath -> FilePath -> IO ()
+renameFile src dst = do
+  isDir <- doesDirectoryExist src
+  case isDir of
+    True -> ioError (mkIOError InappropriateType "renameFile" Nothing (Just src))
+    False -> fileMove src dst
+
+renamePath :: FilePath -> FilePath -> IO ()
+renamePath src dst = do
+  isDir <- doesDirectoryExist src
+  case isDir of
+    True -> dirMove src dst
+    False -> fileMove src dst
+
+-- | The host resolves the full path lexically, so missing paths canonicalize
+-- like the JVM's walk up the longest existing prefix.
+canonicalizePath :: FilePath -> IO FilePath
+canonicalizePath p = pure (getFullPath p)
+
+createFileLink :: FilePath -> FilePath -> IO ()
+createFileLink target link = do
+  _ <- createSymlink link target
+  pure ()
+
+createDirectoryLink :: FilePath -> FilePath -> IO ()
+createDirectoryLink target link = do
+  _ <- createSymlink link target
+  pure ()
+
+removeDirectoryLink :: FilePath -> IO ()
+removeDirectoryLink p = fileDelete p
+
+pathIsSymbolicLink :: FilePath -> IO Bool
+pathIsSymbolicLink p = do
+  target <- fiLinkTarget (newFileInfo p)
+  pure (case target of
+    Nothing -> False
+    Just _ -> True)
+
+getSymbolicLinkTarget :: FilePath -> IO FilePath
+getSymbolicLinkTarget p = do
+  target <- fiLinkTarget (newFileInfo p)
+  case target of
+    Nothing -> ioError (mkIOError InappropriateType "getSymbolicLinkTarget" Nothing (Just p))
+    Just t -> pure t
+
+-- | The host knows read-only, not owner bits: readable answers existence, a
+-- missing path reads all-False the way the other backends answer it, and
+-- executability is the `executableBit` convention above, which is what
+-- `findExecutables` searches.
+getPermissions :: FilePath -> IO Permissions
+getPermissions p = do
+  let fi = newFileInfo p
+  exists <- pure (fiExists fi)
+  ro <- pure (fiReadOnly fi)
+  x <- executableBit p
+  isDir <- doesDirectoryExist p
+  pure (case isDir of
+    True -> Permissions
+      { permissionsReadable = exists
+      , permissionsWritable = exists && not ro
+      , permissionsExecutable = False
+      , permissionsSearchable = exists && x
+      }
+    False -> Permissions
+      { permissionsReadable = exists
+      , permissionsWritable = exists && not ro
+      , permissionsExecutable = x
+      , permissionsSearchable = False
+      })
+
+-- | Only the writable bit travels: read-only is set or cleared, everything
+-- else stays as the host keeps it.
+setPermissions :: FilePath -> Permissions -> IO ()
+setPermissions p perms = do
+  _ <- fiSetReadOnly (newFileInfo p) (not (writable perms))
+  pure ()
+
+-- | The executable bit the host can report. Unix reads the owner-execute
+-- bit through `GetUnixFileMode`; Windows has no such bit, so the shell's
+-- convention answers instead: a file whose extension PATHEXT would search.
+-- A missing path is never executable, whatever the host says.
+executableBit :: FilePath -> IO Bool
+executableBit p = do
+  exists <- doesPathExist p
+  case exists of
+    False -> pure False
+    True -> do
+      win <- pure osIsWindows
+      case win of
+        True -> pure (hasExecExtension p)
+        False -> do
+          mode <- getUnixMode p
+          pure (modeHasFlag mode userExecFlag)
+
+-- | The extensions Windows searches as commands: `exeExtension` (which the
+-- facade appends) plus the batch forms shells run the same way.
+hasExecExtension :: FilePath -> Bool
+hasExecExtension p = elem (map toLower (takeExtension p)) [".com", ".exe", ".bat", ".cmd"]
+
+getAccessTime :: FilePath -> IO UTCTime
+getAccessTime p = do
+  t <- getAccessTimeRaw p
+  pure (utcTimeFromUnix (quot (dotNetTicksToUnix (dateTicks t)) 10000000))
+
+getModificationTime :: FilePath -> IO UTCTime
+getModificationTime p = do
+  t <- getWriteTimeRaw p
+  pure (utcTimeFromUnix (quot (dotNetTicksToUnix (dateTicks t)) 10000000))
+
+-- | Each setter touches its own clock and leaves the other one alone.
+setAccessTime :: FilePath -> UTCTime -> IO ()
+setAccessTime p t = do
+  _ <- setAccessTimeRaw p (dateFromTicks (unixToDotNetTicks (utcToUnix t)))
+  pure ()
+
+setModificationTime :: FilePath -> UTCTime -> IO ()
+setModificationTime p t = do
+  _ <- setWriteTimeRaw p (dateFromTicks (unixToDotNetTicks (utcToUnix t)))
+  pure ()
+
+-- | .NET ticks are 100ns since 0001-01-01; the Unix epoch is this many of
+-- them in. Every value here fits an `Int`: the current time is ~1.8e9
+-- seconds, ~1.8e16 ticks.
+dotNetTicksToUnix :: Int -> Int
+dotNetTicksToUnix ticks = ticks - 621355968000000000
+
+unixToDotNetTicks :: Int -> Int
+unixToDotNetTicks s = s * 10000000 + 621355968000000000
+
+utcToUnix :: UTCTime -> Int
+utcToUnix t = integerToInt (unixDays + daySecs)
+  where
+    unixDays = integerFromInt (toModifiedJulianDay (utctDay t) - 40587) * 86400
+    daySecs = diffTimeToSeconds (utctDayTime t)
+
+-- | @".exe"@: the extension the shell's search appends. Harmless on Unix
+-- (the name itself is still tried first) and required on Windows, where
+-- extension-less files are never commands — the Haskell contract, per OS
+-- rather than per backend, since one module serves both hosts here.
+exeExtension :: String
+exeExtension = ".exe"
