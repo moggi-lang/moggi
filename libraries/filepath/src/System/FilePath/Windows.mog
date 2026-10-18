@@ -1,0 +1,1141 @@
+module System.FilePath.Windows
+  ( -- * Separator predicates
+    FilePath
+  , pathSeparator
+  , pathSeparators
+  , isPathSeparator
+  , searchPathSeparator
+  , isSearchPathSeparator
+  , extSeparator
+  , isExtSeparator
+    -- * @$PATH@ methods
+  , splitSearchPath
+  , getSearchPath
+    -- * Extension functions
+  , splitExtension
+  , takeExtension
+  , replaceExtension
+  , (-<.>)
+  , dropExtension
+  , addExtension
+  , hasExtension
+  , (<.>)
+  , splitExtensions
+  , dropExtensions
+  , takeExtensions
+  , replaceExtensions
+  , isExtensionOf
+  , stripExtension
+    -- * Filename/directory functions
+  , splitFileName
+  , takeFileName
+  , replaceFileName
+  , dropFileName
+  , takeBaseName
+  , replaceBaseName
+  , takeDirectory
+  , replaceDirectory
+  , combine
+  , (</>)
+  , splitPath
+  , joinPath
+  , splitDirectories
+    -- * Drive functions
+  , splitDrive
+  , joinDrive
+  , takeDrive
+  , hasDrive
+  , dropDrive
+  , isDrive
+    -- * Trailing slash functions
+  , hasTrailingPathSeparator
+  , addTrailingPathSeparator
+  , dropTrailingPathSeparator
+    -- * File name manipulations
+  , normalise
+  , equalFilePath
+  , makeRelative
+  , isRelative
+  , isAbsolute
+  , isValid
+  , makeValid
+  ) where
+
+import Control.Applicative (pure)
+import Control.Monad
+import Data.Bool
+import Data.Char (Char, chr, toLower, toUpper)
+import Data.Eq
+import Data.List (filter, foldr, map)
+import Data.Maybe (Maybe(..))
+import Data.Semigroup
+import Data.String (String, isPrefixOf, isSuffixOf, singleton, splitOn, unpack)
+import Data.Tuple (fst, snd)
+import Moggi.Internal.Base
+import System.Environment (getEnv)
+import System.FilePath.Units (dropUnits, takeUnits, unitsLength)
+import System.IO.Base (FilePath, IO)
+
+infixr 7 <.>, -<.>
+infixr 5 </>
+
+-- String scanners, exactly as in `System.FilePath.Posix`: paths are host
+-- strings manipulated by code unit, ASCII is all that is ever inspected, and
+-- cuts happen at ASCII boundaries, so everything else passes through
+-- bit-exact without ever becoming a `Char`.
+
+-- | Split from the left: the longest prefix whose units satisfy @p@, and the
+-- rest. The predicate sees one unit as a string.
+spanUnits :: (String -> Bool) -> String -> (String, String)
+spanUnits p s = go 0
+  where
+    len = unitsLength s
+    go i
+      | i >= len = (s, "")
+      | p (takeUnits 1 (dropUnits i s)) = go (i + 1)
+      | otherwise = (takeUnits i s, dropUnits i s)
+
+-- | Split from the left on the first unit satisfying @p@.
+breakUnits :: (String -> Bool) -> String -> (String, String)
+breakUnits p s = spanUnits (\u -> not (p u)) s
+
+-- | Split from the right: the longest suffix whose units satisfy @p@, and
+-- everything before it.
+spanEndUnits :: (String -> Bool) -> String -> (String, String)
+spanEndUnits p s = go (unitsLength s)
+  where
+    go i
+      | i <= 0 = ("", s)
+      | p (takeUnits 1 (dropUnits (i - 1) s)) = go (i - 1)
+      | otherwise = (takeUnits i s, dropUnits i s)
+
+-- | Split from the right on the last unit satisfying @p@.
+breakEndUnits :: (String -> Bool) -> String -> (String, String)
+breakEndUnits p s = spanEndUnits (\u -> not (p u)) s
+
+-- | Drop the longest prefix whose units satisfy @p@.
+dropWhileUnits :: (String -> Bool) -> String -> String
+dropWhileUnits p s = snd (spanUnits p s)
+
+-- | Drop the longest suffix whose units satisfy @p@.
+dropWhileEndUnits :: (String -> Bool) -> String -> String
+dropWhileEndUnits p s = fst (spanEndUnits p s)
+
+-- | Whether any unit satisfies @p@.
+anyUnit :: (String -> Bool) -> String -> Bool
+anyUnit p s = case breakUnits p s of
+  (_, rest) -> not (rest == "")
+
+-- | Whether every unit satisfies @p@.
+allUnits :: (String -> Bool) -> String -> Bool
+allUnits p s = case anyUnit (\u -> not (p u)) s of
+  True -> False
+  False -> True
+
+-- | Whether the string holds no units.
+nullU :: String -> Bool
+nullU s = unitsLength s == 0
+
+-- | Drop a prefix, telling whether it was there.
+stripPrefixUnits :: String -> String -> Maybe String
+stripPrefixUnits pre s = case isPrefixOf pre s of
+  True -> Just (dropUnits (unitsLength pre) s)
+  False -> Nothing
+
+-- | Drop a suffix, telling whether it was there.
+stripSuffixUnits :: String -> String -> Maybe String
+stripSuffixUnits suf s = case isSuffixOf suf s of
+  True -> Just (takeUnits (unitsLength s - unitsLength suf) s)
+  False -> Nothing
+
+-- | Map over units, left to right.
+mapUnits :: (String -> String) -> String -> String
+mapUnits f s = case nullU s of
+  True -> ""
+  False -> f (takeUnits 1 s) <> mapUnits f (dropUnits 1 s)
+
+-- | The last unit, as a string. Only called on non-empty strings.
+lastU :: String -> String
+lastU s = takeUnits 1 (dropUnits (unitsLength s - 1) s)
+
+-- | Everything but the last unit.
+dropLastU :: String -> String
+dropLastU s = takeUnits (unitsLength s - 1) s
+
+-- | The first unit and the rest, telling when the string is empty.
+unconsU :: String -> Maybe (String, String)
+unconsU s = case nullU s of
+  True -> Nothing
+  False -> Just (takeUnits 1 s, dropUnits 1 s)
+
+-- | Everything but the last unit, and the last unit.
+unsnocU :: String -> Maybe (String, String)
+unsnocU s = case nullU s of
+  True -> Nothing
+  False -> Just (dropLastU s, lastU s)
+
+-- | The first two units and the rest. Only answered for strings of two units
+-- or more.
+uncons2U :: String -> Maybe (String, String, String)
+uncons2U s = case unitsLength s >= 2 of
+  True -> Just (takeUnits 1 s, takeUnits 1 (dropUnits 1 s), dropUnits 2 s)
+  False -> Nothing
+
+-- | Whether a unit is an ASCII letter. The range check is exact on every
+-- backend; `unpack` is never consulted, so halves of surrogate pairs and
+-- non-UTF-8 bytes just answer false.
+isAsciiLetterU :: String -> Bool
+isAsciiLetterU u = (u >= "A" && u <= "Z") || (u >= "a" && u <= "z")
+
+-- | Lowercase one ASCII letter; every other unit passes through untouched.
+-- `unpack` only ever sees a proven ASCII letter, so the round trip is exact.
+lowerUnit :: String -> String
+lowerUnit u = case u >= "A" && u <= "Z" of
+  True -> case unpack u of
+    c : _ -> singleton (toLower c)
+    [] -> u
+  False -> u
+
+-- | Uppercase one ASCII letter; every other unit passes through untouched.
+upperUnit :: String -> String
+upperUnit u = case u >= "a" && u <= "z" of
+  True -> case unpack u of
+    c : _ -> singleton (toUpper c)
+    [] -> u
+  False -> u
+
+-- | Lowercase the ASCII letters of a string, unit by unit.
+lowerAscii :: String -> String
+lowerAscii s = mapUnits lowerUnit s
+
+-- | Uppercase the ASCII letters of a string, unit by unit.
+upperAscii :: String -> String
+upperAscii s = mapUnits upperUnit s
+
+
+---------------------------------------------------------------------
+-- The basic functions
+
+-- | Whether a unit is a Windows separator: either slash counts.
+isSepW :: String -> Bool
+isSepW u = u == "/" || u == "\\"
+
+-- | Whether a unit is the extension marker.
+isDotW :: String -> Bool
+isDotW u = u == "."
+
+-- | The character that separates directories.
+--
+-- > pathSeparator == '\\'
+-- > isPathSeparator pathSeparator
+pathSeparator :: Char
+pathSeparator = '\\'
+
+-- | The list of all possible separators.
+--
+-- > pathSeparators == "\\/"
+-- > pathSeparator `elem` pathSeparators
+pathSeparators :: [Char]
+pathSeparators = ['\\', '/']
+
+-- | Rather than using @(== '\\')@, use this. Test if something
+-- is a path separator.
+--
+-- > isPathSeparator a == (a `elem` pathSeparators)
+isPathSeparator :: Char -> Bool
+isPathSeparator '\\' = True
+isPathSeparator '/' = True
+isPathSeparator _ = False
+
+-- | The character that is used to separate the entries in the $PATH environment variable.
+--
+-- > searchPathSeparator == ';'
+searchPathSeparator :: Char
+searchPathSeparator = ';'
+
+-- | Is the character a file separator?
+--
+-- > isSearchPathSeparator a == (a == searchPathSeparator)
+isSearchPathSeparator :: Char -> Bool
+isSearchPathSeparator c = c == searchPathSeparator
+
+-- | File extension character
+--
+-- > extSeparator == '.'
+extSeparator :: Char
+extSeparator = '.'
+
+-- | Is the character an extension character?
+--
+-- > isExtSeparator a == (a == extSeparator)
+isExtSeparator :: Char -> Bool
+isExtSeparator c = c == extSeparator
+
+
+---------------------------------------------------------------------
+-- Path methods (environment $PATH)
+
+-- | Take a string, split it on the 'searchPathSeparator' character.
+-- Blank items are ignored, and path elements in double quotes are unquoted.
+--
+-- > splitSearchPath "File1;File2;File3"  == ["File1","File2","File3"]
+-- > splitSearchPath "File1;;File2;File3" == ["File1","File2","File3"]
+-- > splitSearchPath "File1;\"File2\";File3" == ["File1","File2","File3"]
+splitSearchPath :: String -> [FilePath]
+splitSearchPath s = splitSearchPieces (splitOn ";" s)
+
+-- | Blank pieces vanish; quoted pieces are unquoted.
+splitSearchPieces :: [String] -> [FilePath]
+splitSearchPieces ps = case ps of
+  [] -> []
+  p : rest -> stripQuotesU p <> splitSearchPieces rest
+
+-- | Unquote a quoted piece; a blank piece answers @[]@.
+stripQuotesU :: String -> [FilePath]
+stripQuotesU p = case unconsU p of
+  Nothing -> []
+  Just (h, t) -> case h == "\"" && not (nullU t) && lastU t == "\"" of
+    True -> [dropLastU t]
+    False -> [p]
+
+-- | Get a list of 'FilePath's in the $PATH variable.
+getSearchPath :: IO [FilePath]
+getSearchPath = do
+  pathValue <- getEnv "PATH"
+  pure (splitSearchPath pathValue)
+
+
+---------------------------------------------------------------------
+-- Extension methods
+
+-- | Split on the extension. 'addExtension' is the inverse. Dots inside a
+-- drive or share name do not start an extension.
+--
+-- > splitExtension "/directory/path.ext" == ("/directory/path",".ext")
+-- > splitExtension "file.txt" == ("file",".txt")
+-- > splitExtension "file" == ("file","")
+-- > splitExtension "\\\\shared.with.dots\\no-dots" == ("\\\\shared.with.dots\\no-dots","")
+splitExtension :: FilePath -> (FilePath, FilePath)
+splitExtension x =
+  let parts = breakEndUnits isDotW x
+      nameDot = fst parts
+      ext = snd parts
+  in case nullU nameDot of
+    True -> (x, "")
+    False -> case nullU (dropDrive nameDot) of
+      True -> (x, "")
+      False -> case anyUnit isSepW ext of
+        True -> (x, "")
+        False -> (dropLastU nameDot, "." <> ext)
+
+-- | Get the extension of a file, returns @""@ for no extension, @.ext@ otherwise.
+--
+-- > takeExtension "/directory/path.ext" == ".ext"
+-- > takeExtension x == snd (splitExtension x)
+takeExtension :: FilePath -> FilePath
+takeExtension x = snd (splitExtension x)
+
+-- | Remove the current extension and add another, equivalent to 'replaceExtension'.
+--
+-- > "/directory/path.txt" -<.> "ext" == "/directory/path.ext"
+-- > "/directory/path.txt" -<.> ".ext" == "/directory/path.ext"
+-- > "foo.o" -<.> "c" == "foo.c"
+(-<.>) :: FilePath -> FilePath -> FilePath
+(-<.>) = replaceExtension
+
+-- | Set the extension of a file, overwriting one if already present, equivalent to '-<.>'.
+--
+-- > replaceExtension "/directory/path.txt" "ext" == "/directory/path.ext"
+-- > replaceExtension "/directory/path.txt" ".ext" == "/directory/path.ext"
+-- > replaceExtension "file.txt" ".bob" == "file.bob"
+-- > replaceExtension "file.txt" "bob" == "file.bob"
+-- > replaceExtension "file" ".bob" == "file.bob"
+-- > replaceExtension "file.txt" "" == "file"
+-- > replaceExtension "file.fred.bob" "txt" == "file.fred.txt"
+replaceExtension :: FilePath -> FilePath -> FilePath
+replaceExtension x y = dropExtension x <.> y
+
+-- | Add an extension, even if there is already one there, equivalent to '<.>'.
+--
+-- > "/directory/path" <.> "ext" == "/directory/path.ext"
+-- > "/directory/path" <.> ".ext" == "/directory/path.ext"
+(<.>) :: FilePath -> FilePath -> FilePath
+(<.>) = addExtension
+
+-- | Remove last extension, and the "." preceding it.
+--
+-- > dropExtension "/directory/path.ext" == "/directory/path"
+-- > dropExtension x == fst (splitExtension x)
+dropExtension :: FilePath -> FilePath
+dropExtension x = fst (splitExtension x)
+
+-- | Add an extension, even if there is already one there, equivalent to '<.>'.
+--
+-- > addExtension "/directory/path" "ext" == "/directory/path.ext"
+-- > addExtension "file.txt" "bib" == "file.txt.bib"
+-- > addExtension "file." ".bib" == "file..bib"
+-- > addExtension "file" ".bib" == "file.bib"
+-- > addExtension "\\\\share" ".txt" == "\\\\share\\.txt"
+-- > addExtension x "" == x
+addExtension :: FilePath -> FilePath -> FilePath
+addExtension file ext = case nullU ext of
+  True -> file
+  False ->
+    let parts = splitDrive file
+        drv = fst parts
+        pth = snd parts
+        res = case takeUnits 1 ext == "." of
+          True -> pth <> ext
+          False -> pth <> "." <> ext
+    in joinDrive drv res
+
+-- | Does the given filename have an extension?
+--
+-- > hasExtension "/directory/path.ext" == True
+-- > hasExtension "/directory/path" == False
+-- > null (takeExtension x) == not (hasExtension x)
+hasExtension :: FilePath -> Bool
+hasExtension x = anyUnit isDotW (takeFileName x)
+
+-- | Does the given filename have the specified extension?
+--
+-- > "png" `isExtensionOf` "/directory/file.png" == True
+-- > ".png" `isExtensionOf` "/directory/file.png" == True
+-- > ".tar.gz" `isExtensionOf` "bar/foo.tar.gz" == True
+-- > "ar.gz" `isExtensionOf` "bar/foo.tar.gz" == False
+-- > "png" `isExtensionOf` "/directory/file.png.jpg" == False
+-- > "csv/table.csv" `isExtensionOf` "/data/csv/table.csv" == False
+isExtensionOf :: FilePath -> FilePath -> Bool
+isExtensionOf ext path = case takeUnits 1 ext == "." of
+  True -> isSuffixOf ext (takeExtensions path)
+  False -> isSuffixOf ("." <> ext) (takeExtensions path)
+
+-- | Drop the given extension from a FilePath, and the "." preceding it.
+-- Returns `Nothing` if the FilePath does not have the given extension, or
+-- `Just` and the part before the extension if it does.
+--
+-- > stripExtension "hs.o" "foo.x.hs.o" == Just "foo.x"
+-- > stripExtension "hi.o" "foo.x.hs.o" == Nothing
+-- > stripExtension ".c.d" "a.b.c.d"  == Just "a.b"
+-- > stripExtension ".c.d" "a.b..c.d" == Just "a.b."
+-- > stripExtension "baz"  "foo.bar"  == Nothing
+-- > stripExtension "bar"  "foobar"   == Nothing
+-- > stripExtension ""     x          == Just x
+stripExtension :: FilePath -> FilePath -> Maybe FilePath
+stripExtension ext path = case nullU ext of
+  True -> Just path
+  False ->
+    let dotExt = case takeUnits 1 ext == "." of
+          True -> ext
+          False -> "." <> ext
+    in stripSuffixUnits dotExt path
+
+-- | Split on all extensions.
+--
+-- > splitExtensions "/directory/path.ext" == ("/directory/path",".ext")
+-- > splitExtensions "file.tar.gz" == ("file",".tar.gz")
+splitExtensions :: FilePath -> (FilePath, FilePath)
+splitExtensions x =
+  let fp = splitFileName_ x
+      a = fst fp
+      b = snd fp
+      br = breakUnits isDotW b
+  in (a <> fst br, snd br)
+
+-- | Drop all extensions.
+--
+-- > dropExtensions "/directory/path.ext" == "/directory/path"
+-- > dropExtensions "file.tar.gz" == "file"
+-- > not $ hasExtension $ dropExtensions x
+-- > not $ any isExtSeparator $ takeFileName $ dropExtensions x
+dropExtensions :: FilePath -> FilePath
+dropExtensions x = fst (splitExtensions x)
+
+-- | Get all extensions.
+--
+-- > takeExtensions "/directory/path.ext" == ".ext"
+-- > takeExtensions "file.tar.gz" == ".tar.gz"
+takeExtensions :: FilePath -> FilePath
+takeExtensions x = snd (splitExtensions x)
+
+-- | Replace all extensions of a file with a new extension.
+--
+-- > replaceExtensions "file.fred.bob" "txt" == "file.txt"
+-- > replaceExtensions "file.fred.bob" "tar.gz" == "file.tar.gz"
+replaceExtensions :: FilePath -> FilePath -> FilePath
+replaceExtensions x y = dropExtensions x <.> y
+
+
+---------------------------------------------------------------------
+-- Drive methods
+
+-- | Whether a unit is an upper-case drive-letter position is decided by
+-- `isAsciiLetterU`: only a-z and A-Z are letters, nothing more unicodish.
+
+-- | Split a path into a drive and a path: a drive letter, a @\\\\?\\@ UNC
+-- prefix, or a @\\\\@ share, in that order.
+--
+-- > splitDrive "file" == ("","file")
+-- > splitDrive "c:/file" == ("c:/","file")
+-- > splitDrive "c:\\file" == ("c:\\","file")
+-- > splitDrive "\\\\shared\\test" == ("\\\\shared\\","test")
+-- > splitDrive "\\\\shared" == ("\\\\shared","")
+-- > splitDrive "\\\\?\\UNC\\shared\\file" == ("\\\\?\\UNC\\shared\\","file")
+-- > splitDrive "\\\\?\\UNCshared\\file" == ("\\\\?\\","UNCshared\\file")
+-- > splitDrive "\\\\?\\d:\\file" == ("\\\\?\\d:\\","file")
+-- > splitDrive "/d" == ("","/d")
+splitDrive :: FilePath -> (FilePath, FilePath)
+splitDrive x = case readDriveLetter x of
+  Just y -> y
+  Nothing -> case readDriveUNC x of
+    Just y -> y
+    Nothing -> case readDriveShare x of
+      Just y -> y
+      Nothing -> ("", x)
+
+-- | A drive and the separators after it.
+addSlashU :: FilePath -> FilePath -> (FilePath, FilePath)
+addSlashU a xs =
+  let sp = spanUnits isSepW xs
+  in (a <> fst sp, snd sp)
+
+-- | @\\\\?\\D:\\<path>@ or @\\\\?\\UNC\\<server>\\<share>@.
+readDriveUNC :: FilePath -> Maybe (FilePath, FilePath)
+readDriveUNC s = case unitAtU s 2 == "?" && isSepW (unitAtU s 0) && isSepW (unitAtU s 1) && isSepW (unitAtU s 3) of
+  True ->
+    let xs = dropUnits 4 s
+    in case stripPrefixUnits "UNC" (upperAscii xs) of
+      Just afterU -> case isSepW (takeUnits 1 afterU) of
+        True ->
+          let sh = readDriveShareName (dropUnits 4 xs)
+          in Just (takeUnits 8 s <> fst sh, snd sh)
+        False -> tryDriveLetter xs
+      Nothing -> tryDriveLetter xs
+  False -> Nothing
+  where
+    tryDriveLetter v = case readDriveLetter v of
+      Just (a, b) -> Just (takeUnits 4 s <> a, b)
+      Nothing -> Nothing
+
+-- | The unit at a position, or @""@ past the end.
+unitAtU :: FilePath -> Int -> FilePath
+unitAtU s i = takeUnits 1 (dropUnits i s)
+
+-- | @c:\\@: a letter, a colon, and the separators after it — or just the
+-- letter and the colon for a drive-relative path like @c:foo@.
+readDriveLetter :: FilePath -> Maybe (FilePath, FilePath)
+readDriveLetter s =
+  let l = takeUnits 1 s
+      c = takeUnits 1 (dropUnits 1 s)
+      rest = dropUnits 2 s
+  in case isAsciiLetterU l && c == ":" of
+    True -> Just (addSlashU (l <> ":") rest)
+    False -> Nothing
+
+-- | @\\\\sharename\\@: two separators and the share name with its slash.
+readDriveShare :: FilePath -> Maybe (FilePath, FilePath)
+readDriveShare s = case isSepW (takeUnits 1 s) && isSepW (takeUnits 1 (dropUnits 1 s)) of
+  True ->
+    let sh = readDriveShareName (dropUnits 2 s)
+    in Just (takeUnits 2 s <> fst sh, snd sh)
+  False -> Nothing
+
+-- | Assume the leading @\\\\@ is gone: the share name and its slash.
+readDriveShareName :: FilePath -> (FilePath, FilePath)
+readDriveShareName name = addSlashU a b
+  where
+    br = breakUnits isSepW name
+    a = fst br
+    b = snd br
+
+-- | Join a drive and the rest of the path.
+--
+-- > joinDrive "C:" "foo" == "C:foo"
+-- > joinDrive "C:\\" "bar" == "C:\\bar"
+-- > joinDrive "\\\\share" "foo" == "\\\\share\\foo"
+-- > joinDrive "/:" "foo" == "/:\\foo"
+joinDrive :: FilePath -> FilePath -> FilePath
+joinDrive a b = combineAlways a b
+
+-- | Get the drive from a filepath.
+--
+-- > takeDrive x == fst (splitDrive x)
+takeDrive :: FilePath -> FilePath
+takeDrive x = fst (splitDrive x)
+
+-- | Delete the drive, if it exists.
+--
+-- > dropDrive x == snd (splitDrive x)
+dropDrive :: FilePath -> FilePath
+dropDrive x = snd (splitDrive x)
+
+-- | Does a path have a drive.
+--
+-- > not (hasDrive x) == null (takeDrive x)
+-- > hasDrive "C:\\foo" == True
+-- > hasDrive "C:foo" == True
+-- >          hasDrive "foo" == False
+-- >          hasDrive "" == False
+hasDrive :: FilePath -> Bool
+hasDrive x = not (nullU (takeDrive x))
+
+-- | Is an element a drive
+--
+-- > isDrive "C:\\" == True
+-- > isDrive "C:\\foo" == False
+-- >          isDrive "" == False
+isDrive :: FilePath -> Bool
+isDrive x = not (nullU x) && nullU (dropDrive x)
+
+
+---------------------------------------------------------------------
+-- Operations on a filepath, as a list of directories
+
+-- | Split a filename into directory and file. '</>' is the inverse.
+-- The first component will often end with a trailing slash.
+--
+-- > splitFileName "/directory/file.ext" == ("/directory/","file.ext")
+-- > splitFileName "file/bob.txt" == ("file/", "bob.txt")
+-- > splitFileName "file/" == ("file/", "")
+-- > splitFileName "bob" == ("./", "bob")
+-- > splitFileName "c:" == ("c:","")
+-- > splitFileName "\\\\?\\A:\\fred" == ("\\\\?\\A:\\","fred")
+-- > splitFileName "\\\\?\\A:" == ("\\\\?\\A:","")
+splitFileName :: FilePath -> (FilePath, FilePath)
+splitFileName x =
+  let parts = splitFileName_ x
+  in case nullU (fst parts) of
+    True -> ("./", snd parts)
+    False -> parts
+
+-- | The split without the @"./"@ default. A bare filename answers @("", name)@
+-- — except a bare drive letter, which is all drive — and a mid-drive
+-- separator (an incomplete share or UNC path) answers the whole path with an
+-- empty name rather than cutting the drive in half.
+splitFileName_ :: FilePath -> (FilePath, FilePath)
+splitFileName_ fp =
+  let parts = breakEndUnits isSepW fp
+      dirSlash = fst parts
+      file = snd parts
+  in case nullU dirSlash of
+    True -> case readDriveLetter fp of
+      Just (drv, rest) -> (drv, rest)
+      Nothing -> ("", fp)
+    False -> case uncons2U dirSlash of
+      Just (s1, s2, bs') -> case isSepW s1 of
+        True -> case nullU bs' || isIncompleteUNC of
+          True -> (fp, "")
+          False -> case isSepW s2 of
+            True -> case uncons2U bs' of
+              Just (s3, s4, bs'') -> case s3 == "?" && isSepW s4 && nullU bs'' of
+                True -> case readDriveLetter file of
+                  Just (drive, rest) -> (dirSlash <> drive, rest)
+                  Nothing -> (dirSlash, file)
+                False -> (dirSlash, file)
+              Nothing -> (dirSlash, file)
+            False -> (dirSlash, file)
+        False -> (dirSlash, file)
+      Nothing -> (dirSlash, file)
+  where
+    isIncompleteUNC = case readDriveUNC dirSlash of
+      Just (pref, suff) -> nullU suff && not (hasPenultimateColon pref)
+      Nothing -> False
+
+-- | Whether the second-to-last unit is a colon: @//?/a:/@ and @//?/a://@ are
+-- penultimate-colon paths, @//?/a:@ is not.
+hasPenultimateColon :: FilePath -> Bool
+hasPenultimateColon pref = case hasTrailingPathSeparator pref of
+  True -> case unsnocU (dropExcessTrailingPathSeparators pref) of
+    Just (a, _) -> case unsnocU a of
+      Just (_, secondLast) -> secondLast == ":"
+      Nothing -> False
+    Nothing -> False
+  False -> False
+
+-- | Collapse runs of trailing separators to one, keeping a lone separator.
+dropExcessTrailingPathSeparators :: FilePath -> FilePath
+dropExcessTrailingPathSeparators x = case hasTrailingPathSeparator x of
+  True ->
+    let x' = dropWhileEndUnits isSepW x
+    in case nullU x' of
+      True -> lastU x
+      False -> addTrailingPathSeparator x'
+  False -> x
+
+-- | Set the filename.
+--
+-- > replaceFileName "/directory/other.txt" "file.ext" == "/directory/file.ext"
+replaceFileName :: FilePath -> FilePath -> FilePath
+replaceFileName x y = combine (fst (splitFileName_ x)) y
+
+-- | Drop the filename. Unlike 'takeDirectory', this function will leave
+-- a trailing path separator on the directory.
+--
+-- > dropFileName "/directory/file.ext" == "/directory/"
+-- > dropFileName x == fst (splitFileName x)
+-- > isPrefixOf (takeDrive x) (dropFileName x)
+dropFileName :: FilePath -> FilePath
+dropFileName x = fst (splitFileName x)
+
+-- | Get the file name.
+--
+-- > takeFileName "/directory/file.ext" == "file.ext"
+-- > takeFileName "test/" == ""
+takeFileName :: FilePath -> FilePath
+takeFileName x = snd (splitFileName x)
+
+-- | Get the base name, without an extension or path.
+--
+-- > takeBaseName "/directory/file.ext" == "file"
+-- > takeBaseName "file/test.txt" == "test"
+-- > takeBaseName "dave.ext" == "dave"
+-- > takeBaseName "" == ""
+-- > takeBaseName "test" == "test"
+-- > takeBaseName (addTrailingPathSeparator x) == ""
+-- > takeBaseName "file/file.tar.gz" == "file.tar"
+takeBaseName :: FilePath -> FilePath
+takeBaseName x = dropExtension (takeFileName x)
+
+-- | Set the base name.
+--
+-- > replaceBaseName "/directory/other.ext" "file" == "/directory/file.ext"
+-- > replaceBaseName "file/test.txt" "bob" == "file/bob.txt"
+-- > replaceBaseName "fred" "bill" == "bill"
+-- > replaceBaseName "/dave/fred/bob.gz.tar" "new" == "/dave/fred/new.tar"
+replaceBaseName :: FilePath -> FilePath -> FilePath
+replaceBaseName pth nam =
+  let parts = splitFileName_ pth
+  in combineAlways (fst parts) (nam <.> takeExtension (snd parts))
+
+-- | Is an item either a directory or the last character a path separator?
+--
+-- > hasTrailingPathSeparator "test" == False
+-- > hasTrailingPathSeparator "test\\" == True
+hasTrailingPathSeparator :: FilePath -> Bool
+hasTrailingPathSeparator x = not (nullU x) && isSepW (lastU x)
+
+-- | Add a trailing file path separator if one is not already present.
+--
+-- > hasTrailingPathSeparator (addTrailingPathSeparator x)
+-- > hasTrailingPathSeparator x ==> addTrailingPathSeparator x == x
+addTrailingPathSeparator :: FilePath -> FilePath
+addTrailingPathSeparator x = case hasTrailingPathSeparator x of
+  True -> x
+  False -> x <> "\\"
+
+-- | Remove any trailing path separators, keeping a bare drive whole.
+--
+-- > dropTrailingPathSeparator "file\\test\\" == "file\\test"
+-- > dropTrailingPathSeparator "\\\\" == "\\\\"
+dropTrailingPathSeparator :: FilePath -> FilePath
+dropTrailingPathSeparator x = case hasTrailingPathSeparator x && not (isDrive x) of
+  True ->
+    let x' = dropWhileEndUnits isSepW x
+    in case nullU x' of
+      True -> lastU x
+      False -> x'
+  False -> x
+
+-- | Get the directory name, move up one level.
+--
+-- >           takeDirectory "/directory/other.ext" == "/directory"
+-- >           takeDirectory "foo" == "."
+-- >           takeDirectory "foo\\bar" == "foo"
+-- >           takeDirectory "foo\\bar\\\\" == "foo\\bar"
+-- >           takeDirectory "C:\\" == "C:\\"
+takeDirectory :: FilePath -> FilePath
+takeDirectory x = dropTrailingPathSeparator (dropFileName x)
+
+-- | Set the directory, keeping the filename the same.
+--
+-- > replaceDirectory "root/file.ext" "/directory/" == "/directory/file.ext"
+replaceDirectory :: FilePath -> FilePath -> FilePath
+replaceDirectory x dir = combineAlways dir (takeFileName x)
+
+-- | An alias for '</>'.
+combine :: FilePath -> FilePath -> FilePath
+combine a b = case hasLeadingPathSeparator b || hasDrive b of
+  True -> b
+  False -> combineAlways a b
+
+-- | Whether the first unit is a path separator.
+hasLeadingPathSeparator :: FilePath -> Bool
+hasLeadingPathSeparator x = not (nullU x) && isSepW (takeUnits 1 x)
+
+-- | Combine two paths, assuming rhs is NOT absolute. A bare drive letter
+-- takes its path without a separator: @C:foo@ is drive-relative.
+combineAlways :: FilePath -> FilePath -> FilePath
+combineAlways a b = case nullU a of
+  True -> b
+  False -> case nullU b of
+    True -> a
+    False -> case hasTrailingPathSeparator a of
+      True -> a <> b
+      False -> case isBareDriveLetter a of
+        True -> a <> b
+        False -> a <> "\\" <> b
+
+-- | Whether the path is a letter and a colon and nothing else.
+isBareDriveLetter :: FilePath -> Bool
+isBareDriveLetter a = unitsLength a == 2 && isAsciiLetterU (takeUnits 1 a) && takeUnits 1 (dropUnits 1 a) == ":"
+
+-- | Combine two paths with a path separator.
+--   If the second path starts with a path separator or a drive letter, then it returns the second.
+--
+-- > "/directory" </> "file.ext" == "/directory\\file.ext"
+-- > "directory" </> "/file.ext" == "/file.ext"
+-- > "C:\\foo" </> "bar" == "C:\\foo\\bar"
+-- > "home" </> "bob" == "home\\bob"
+--
+-- Not combined:
+--
+-- > "home" </> "C:\\bob" == "C:\\bob"
+-- > "home" </> "/bob" == "/bob"
+-- > "home" </> "\\bob" == "\\bob"
+-- > "C:\\home" </> "\\bob" == "\\bob"
+-- > "D:\\foo" </> "C:bar" == "C:bar"
+-- > "C:\\foo" </> "C:bar" == "C:bar"
+(</>) :: FilePath -> FilePath -> FilePath
+(</>) = combine
+
+-- | Split a path by the directory separator.
+--
+-- > splitPath "c:\\test\\path" == ["c:\\","test\\","path"]
+-- > splitPath "" == []
+splitPath :: FilePath -> [FilePath]
+splitPath x =
+  let parts = splitDrive x
+      drive = fst parts
+      path = snd parts
+  in (case nullU drive of
+    True -> []
+    False -> [drive]) <> splitPathPieces path
+
+-- | The pieces after the drive, each but the last keeping its separators.
+splitPathPieces :: FilePath -> [FilePath]
+splitPathPieces y = case nullU y of
+  True -> []
+  False ->
+    let br = breakUnits isSepW y
+        sp = spanUnits isSepW (snd br)
+    in (fst br <> fst sp) : splitPathPieces (snd sp)
+
+-- | Just as 'splitPath', but don't add the trailing slashes to each element.
+--
+-- > splitDirectories "C:\\test\\file" == ["C:\\", "test", "file"]
+-- > splitDirectories "" == []
+-- > splitDirectories "C:\\test\\\\\\file" == ["C:\\", "test", "file"]
+splitDirectories :: FilePath -> [FilePath]
+splitDirectories x = map dropTrailingPathSeparator (splitPath x)
+
+-- | Join path elements back together.
+--
+-- > joinPath a == foldr (</>) "" a
+-- > joinPath ["C:\\","test\\","file"] == "C:\\test\\file"
+-- > joinPath [] == ""
+joinPath :: [FilePath] -> FilePath
+joinPath xs = foldr combine "" xs
+
+
+---------------------------------------------------------------------
+-- File name manipulators
+
+-- | Equality of two 'FilePath's: the normalised forms compare without regard
+-- to ASCII case. Case-insensitivity stops at ASCII on purpose: it is
+-- locale-independent and identical on every backend, and only ASCII case ever
+-- distinguishes two spellings of one Windows path in practice (drive
+-- letters). Non-ASCII units compare exact.
+--
+-- > x == y ==> equalFilePath x y
+-- > normalise x == normalise y ==> equalFilePath x y
+-- > equalFilePath "foo" "FOO"
+-- > not (equalFilePath "C:" "C:/")
+equalFilePath :: FilePath -> FilePath -> Bool
+equalFilePath a b = lowerAscii (dropTrailingPathSeparator (normalise a)) == lowerAscii (dropTrailingPathSeparator (normalise b))
+
+-- | Contract a filename, based on a relative path.
+--
+-- > makeRelative "C:\\Home" "c:\\home\\bob" == "bob"
+-- > makeRelative "C:\\Home" "c:/home/bob" == "bob"
+-- > makeRelative "C:\\Home" "D:\\Home\\Bob" == "D:\\Home\\Bob"
+-- > makeRelative "C:\\Home" "C:Home\\Bob" == "C:Home\\Bob"
+-- > makeRelative "/Home" "/home/bob" == "bob"
+-- > makeRelative "/" "//" == "//"
+-- > makeRelative x x == "."
+makeRelative :: FilePath -> FilePath -> FilePath
+makeRelative root path = case equalFilePath root path of
+  True -> "."
+  False -> case takeAbsW root /= takeAbsW path of
+    True -> path
+    False -> makeRelativeLoop (dropAbsW root) (dropAbsW path) path
+
+-- | The absolute prefix a relative computation strips: a lone leading
+-- separator answers one backslash, else the drive, lowercased for comparison.
+takeAbsW :: FilePath -> FilePath
+takeAbsW x = case isSepW (takeUnits 1 x) && not (hasDrive x) of
+  True -> "\\"
+  False -> mapUnits takeAbsUnit (takeDrive x)
+  where
+    takeAbsUnit y = case isSepW y of
+      True -> "\\"
+      False -> lowerAscii y
+
+-- | The path with its absolute prefix dropped.
+dropAbsW :: FilePath -> FilePath
+dropAbsW x = case isSepW (takeUnits 1 x) && not (hasDrive x) of
+  True -> dropUnits 1 x
+  False -> dropDrive x
+
+-- | Strip one leading group at a time while the groups agree.
+makeRelativeLoop :: FilePath -> FilePath -> FilePath -> FilePath
+makeRelativeLoop x y original = case nullU x of
+  True -> dropWhileUnits isSepW y
+  False ->
+    let xg = makeRelativeGroup x
+        yg = makeRelativeGroup y
+    in case equalFilePath (fst xg) (fst yg) of
+      True -> makeRelativeLoop (snd xg) (snd yg) original
+      False -> original
+
+-- | The next group: text to the next separator, without any separators.
+makeRelativeGroup :: FilePath -> (FilePath, FilePath)
+makeRelativeGroup x =
+  let br = breakUnits isSepW (dropWhileUnits isSepW x)
+  in (dropWhileUnits isSepW (fst br), dropWhileUnits isSepW (snd br))
+
+-- | Normalise a file: separators become backslashes, runs collapse outside
+-- the drive, @./@ vanishes, and a drive letter uppercases. Does not remove
+-- @".."@, because of symlinks.
+--
+-- > normalise "c:\\file/bob\\" == "C:\\file\\bob\\"
+-- > normalise "c:\\" == "C:\\"
+-- > normalise "c:\\\\\\\\" == "C:\\"
+-- > normalise "C:.\\" == "C:"
+-- > normalise "\\\\server\\test" == "\\\\server\\test"
+-- > normalise "//server/test" == "\\\\server\\test"
+-- > normalise "c:/file" == "C:\\file"
+-- > normalise "/file" == "\\file"
+-- > normalise "\\" == "\\"
+-- > normalise "/./" == "\\"
+-- > normalise "." == "."
+normalise :: FilePath -> FilePath
+normalise filepath =
+  let parts = splitDrive filepath
+      drv = fst parts
+      pth = snd parts
+      result = normaliseJoinDrive (normaliseDriveW drv) (normaliseBody pth)
+  in case isDirPathW pth && not (hasTrailingPathSeparator result) && not (isRelativeDrive drv) of
+    True -> result <> "\\"
+    False -> result
+
+-- | Join a normalised drive and body, answering @"."@ for two empty halves.
+normaliseJoinDrive :: FilePath -> FilePath -> FilePath
+normaliseJoinDrive d p = case nullU d && nullU p of
+  True -> "."
+  False -> joinDrive d p
+
+-- | A drive normalises to itself with forward slashes flipped and its letter
+-- uppercased: @c:\\@ answers @C:\\@, @c:@ answers @C:@.
+normaliseDriveW :: FilePath -> FilePath
+normaliseDriveW bs = case nullU bs of
+  True -> ""
+  False -> case readDriveLetter x2 of
+    Just (drv, _) -> case unitsLength drv of
+      2 -> upperAscii (takeUnits 1 drv) <> ":"
+      _ -> upperAscii (takeUnits 1 drv) <> ":" <> "\\"
+    Nothing -> x2
+  where
+    x2 = mapUnits repSlash bs
+    repSlash y = case isSepW y of
+      True -> "\\"
+      False -> y
+
+-- | Whether the path names a directory: it ends in a separator, or in a dot
+-- after a separator.
+isDirPathW :: FilePath -> Bool
+isDirPathW xs = hasTrailingPathSeparator xs
+  || (not (nullU xs) && lastU xs == "." && hasTrailingPathSeparator (dropLastU xs))
+
+-- | The normalised body: directories split, separators propagated, dots
+-- dropped, rejoined.
+normaliseBody :: FilePath -> FilePath
+normaliseBody x = joinPath (filterDotW (propSepFirstW (splitDirectories x)))
+
+-- | The first piece keeps one backslash when it is all separators.
+propSepFirstW :: [FilePath] -> [FilePath]
+propSepFirstW xs = case xs of
+  [] -> []
+  x : rest -> case allUnits isSepW x of
+    True -> "\\" : rest
+    False -> xs
+
+-- | Drop the @.@ pieces.
+filterDotW :: [FilePath] -> [FilePath]
+filterDotW xs = filter (\p -> not (p == ".")) xs
+
+-- | Whether a drive letter has no trailing separator: @c:@ is relative to
+-- the drive's working directory, @c:\\@ is not.
+isRelativeDrive :: FilePath -> Bool
+isRelativeDrive x = case readDriveLetter x of
+  Just (drv, _) -> not (hasTrailingPathSeparator drv)
+  Nothing -> False
+
+-- | Is a FilePath valid, i.e. could you create a file like it?
+--
+-- > isValid "" == False
+-- > isValid "\0" == False
+-- > isValid "c:\\test" == True
+-- > isValid "c:\\test:of_test" == False
+-- > isValid "test*" == False
+-- > isValid "c:\\test\\nul" == False
+-- > isValid "c:\\test\\prn.txt" == False
+-- > isValid "c:\\nul\\file" == False
+-- > isValid "\\\\" == False
+-- > isValid "\\\\\\foo" == False
+-- > isValid "\\\\?\\D:file" == False
+-- > isValid "foo\tbar" == False
+-- > isValid "nul .txt" == False
+-- > isValid " nul.txt" == True
+isValid :: FilePath -> Bool
+isValid path = case nullU path of
+  True -> False
+  False -> case anyUnit isNulW path of
+    True -> False
+    False ->
+      let parts = splitDrive path
+          drv = fst parts
+          pth = snd parts
+      in not (anyUnit isBadCharU pth)
+        && not (anyInvalidElement (splitDirectories pth))
+        && not (isShareAllSep drv)
+        && not (isUncNoTrail drv)
+  where
+    isNulW u = u == singleton (chr 0)
+
+-- | Whether a unit is a reserved Windows character: a control character or
+-- one of @<>:"|?*@.
+isBadCharU :: String -> Bool
+isBadCharU u = (u >= nulS && u <= usS)
+  || u == "<" || u == ">" || u == ":" || u == "\"" || u == "|" || u == "?" || u == "*"
+  where
+    nulS = singleton (chr 0)
+    usS = singleton (chr 31)
+
+-- | Reserved device names, compared uppercased.
+badElements :: [FilePath]
+badElements =
+  ["CON", "PRN", "AUX", "NUL", "CLOCK$"
+  , "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9"
+  , "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"]
+
+-- | Whether an element names a reserved device: uppercased, trailing spaces
+-- dropped, extensions dropped.
+isBadElement :: FilePath -> Bool
+isBadElement x = elemFilePath (upperAscii (dropWhileEndUnits isSpaceU (dropExtensions x))) badElements
+  where
+    isSpaceU u = u == " "
+
+-- | Membership for paths.
+elemFilePath :: FilePath -> [FilePath] -> Bool
+elemFilePath x xs = case xs of
+  [] -> False
+  y : rest -> case x == y of
+    True -> True
+    False -> elemFilePath x rest
+
+-- | Whether any directory element is reserved.
+anyInvalidElement :: [FilePath] -> Bool
+anyInvalidElement xs = case xs of
+  [] -> False
+  y : rest -> case isBadElement y of
+    True -> True
+    False -> anyInvalidElement rest
+
+-- | Whether the drive is a bare share: @\\\\@ and nothing after it.
+isShareAllSep :: FilePath -> Bool
+isShareAllSep drv = case readDriveShare drv of
+  Just _ -> allUnits isSepW drv
+  Nothing -> False
+
+-- | Whether the drive is a @\\\\?\\@ prefix without its trailing separator.
+isUncNoTrail :: FilePath -> Bool
+isUncNoTrail drv = case readDriveUNC drv of
+  Just _ -> not (hasTrailingPathSeparator drv)
+  Nothing -> False
+
+-- | Take a FilePath and make it valid; does not change already valid FilePaths.
+--
+-- > isValid (makeValid x)
+-- > isValid x ==> makeValid x == x
+-- > makeValid "" == "_"
+-- > makeValid "file\0name" == "file_name"
+-- > makeValid "c:\\already\\/valid" == "c:\\already\\/valid"
+-- > makeValid "c:\\test:of_test" == "c:\\test_of_test"
+-- > makeValid "test*" == "test_"
+-- > makeValid "c:\\test\\nul" == "c:\\test\\nul_"
+-- > makeValid "c:\\test\\prn.txt" == "c:\\test\\prn_.txt"
+-- > makeValid "c:\\test/prn.txt" == "c:\\test/prn_.txt"
+-- > makeValid "c:\\nul\\file" == "c:\\nul_\\file"
+-- > makeValid "\\\\\\foo" == "\\\\drive"
+-- > makeValid "\\\\?\\D:file" == "\\\\?\\D:\\file"
+-- > makeValid "nul .txt" == "nul _.txt"
+makeValid :: FilePath -> FilePath
+makeValid path = case nullU path of
+  True -> "_"
+  False ->
+    let parts = splitDrive path
+        drv = fst parts
+        pth = snd parts
+    in case isShareAllSep drv of
+      True -> takeUnits 2 drv <> "drive"
+      False -> case isUncNoTrail drv of
+        True -> makeValid (drv <> "\\" <> pth)
+        False -> joinDrive drv (validElements (validCharsU pth))
+  where
+    validCharsU = mapUnits validCharU
+    validCharU u = case isBadCharU u of
+      True -> "_"
+      False -> u
+
+-- | Fix reserved device names element by element.
+validElements :: FilePath -> FilePath
+validElements pth = joinPath (mapValidElement (splitPath pth))
+
+-- | Fix one path piece: a reserved stem gains a trailing underscore.
+mapValidElement :: [FilePath] -> [FilePath]
+mapValidElement xs = case xs of
+  [] -> []
+  x : rest -> validElement x : mapValidElement rest
+  where
+    validElement x =
+      let br = breakUnits isSepW x
+          pre = fst br
+          post = snd br
+          se = splitExtensions pre
+      in case isBadElement (fst se) of
+        True -> fst se <> "_" <.> snd se <> post
+        False -> x
+
+-- | Is a path relative, or is it fixed to the root?
+--
+-- > isRelative "path\\test" == True
+-- > isRelative "c:\\test" == False
+-- > isRelative "c:test" == True
+-- > isRelative "c:\\" == False
+-- > isRelative "c:/" == False
+-- > isRelative "c:" == True
+-- > isRelative "\\\\foo" == False
+-- > isRelative "\\\\?\\foo" == False
+-- > isRelative "\\\\?\\UNC\\foo" == False
+-- > isRelative "/foo" == True
+-- > isRelative "\\foo" == True
+isRelative :: FilePath -> Bool
+isRelative x = nullU drive || isRelativeDrive drive
+  where
+    drive = takeDrive x
+
+-- | @not . 'isRelative'@
+--
+-- > isAbsolute x == not (isRelative x)
+isAbsolute :: FilePath -> Bool
+isAbsolute x = not (isRelative x)

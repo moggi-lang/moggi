@@ -1,0 +1,239 @@
+module System.FilePath
+  ( -- * Separator predicates
+    FilePath
+  , pathSeparator
+  , pathSeparators
+  , isPathSeparator
+  , searchPathSeparator
+  , isSearchPathSeparator
+  , extSeparator
+  , isExtSeparator
+    -- * @$PATH@ methods
+  , splitSearchPath
+  , getSearchPath
+    -- * Extension functions
+  , splitExtension
+  , takeExtension
+  , replaceExtension
+  , (-<.>)
+  , dropExtension
+  , addExtension
+  , hasExtension
+  , (<.>)
+  , splitExtensions
+  , dropExtensions
+  , takeExtensions
+  , replaceExtensions
+  , isExtensionOf
+  , stripExtension
+    -- * Filename/directory functions
+  , splitFileName
+  , takeFileName
+  , replaceFileName
+  , dropFileName
+  , takeBaseName
+  , replaceBaseName
+  , takeDirectory
+  , replaceDirectory
+  , combine
+  , (</>)
+  , splitPath
+  , joinPath
+  , splitDirectories
+    -- * Drive functions
+  , splitDrive
+  , joinDrive
+  , takeDrive
+  , hasDrive
+  , dropDrive
+  , isDrive
+    -- * Trailing slash functions
+  , hasTrailingPathSeparator
+  , addTrailingPathSeparator
+  , dropTrailingPathSeparator
+    -- * File name manipulations
+  , normalise
+  , equalFilePath
+  , makeRelative
+  , isRelative
+  , isAbsolute
+  , isValid
+  , makeValid
+  ) where
+
+import System.FilePath.Posix qualified as P
+import System.FilePath.Windows qualified as W
+import System.Info (isWindows)
+import System.IO.Base (FilePath, IO)
+
+infixr 7 <.>, -<.>
+infixr 5 </>
+
+-- | The `filepath` API on the running operating system's semantics.
+--
+-- A Moggi program compiles once per backend and runs anywhere that backend
+-- runs, so — unlike Haskell's `filepath`, which picks a flavour with CPP at
+-- compile time — this module dispatches every operation at run time on
+-- `System.Info.isWindows`: separators, drives, case-sensitivity,
+-- validity and `$PATH` splitting all follow the machine the program runs on.
+-- `System.FilePath.Posix` and `System.FilePath.Windows` hold the two flavours
+-- for code that needs one deterministically (tests, cross-platform tools).
+--
+-- `FilePath` itself is a host-native `String` on every platform; see
+-- `System.IO.Base`.
+
+pathSeparator :: Char
+pathSeparator = if isWindows then W.pathSeparator else P.pathSeparator
+
+pathSeparators :: [Char]
+pathSeparators = if isWindows then W.pathSeparators else P.pathSeparators
+
+isPathSeparator :: Char -> Bool
+isPathSeparator c = if isWindows then W.isPathSeparator c else P.isPathSeparator c
+
+searchPathSeparator :: Char
+searchPathSeparator = if isWindows then W.searchPathSeparator else P.searchPathSeparator
+
+isSearchPathSeparator :: Char -> Bool
+isSearchPathSeparator c = if isWindows then W.isSearchPathSeparator c else P.isSearchPathSeparator c
+
+extSeparator :: Char
+extSeparator = if isWindows then W.extSeparator else P.extSeparator
+
+isExtSeparator :: Char -> Bool
+isExtSeparator c = if isWindows then W.isExtSeparator c else P.isExtSeparator c
+
+splitSearchPath :: String -> [FilePath]
+splitSearchPath s = if isWindows then W.splitSearchPath s else P.splitSearchPath s
+
+getSearchPath :: IO [FilePath]
+getSearchPath = if isWindows then W.getSearchPath else P.getSearchPath
+
+splitExtension :: FilePath -> (FilePath, FilePath)
+splitExtension x = if isWindows then W.splitExtension x else P.splitExtension x
+
+takeExtension :: FilePath -> FilePath
+takeExtension x = if isWindows then W.takeExtension x else P.takeExtension x
+
+replaceExtension :: FilePath -> FilePath -> FilePath
+replaceExtension x y = if isWindows then W.replaceExtension x y else P.replaceExtension x y
+
+(-<.>) :: FilePath -> FilePath -> FilePath
+(-<.>) = replaceExtension
+
+dropExtension :: FilePath -> FilePath
+dropExtension x = if isWindows then W.dropExtension x else P.dropExtension x
+
+addExtension :: FilePath -> FilePath -> FilePath
+addExtension x y = if isWindows then W.addExtension x y else P.addExtension x y
+
+hasExtension :: FilePath -> Bool
+hasExtension x = if isWindows then W.hasExtension x else P.hasExtension x
+
+(<.>) :: FilePath -> FilePath -> FilePath
+(<.>) = addExtension
+
+splitExtensions :: FilePath -> (FilePath, FilePath)
+splitExtensions x = if isWindows then W.splitExtensions x else P.splitExtensions x
+
+dropExtensions :: FilePath -> FilePath
+dropExtensions x = if isWindows then W.dropExtensions x else P.dropExtensions x
+
+takeExtensions :: FilePath -> FilePath
+takeExtensions x = if isWindows then W.takeExtensions x else P.takeExtensions x
+
+replaceExtensions :: FilePath -> FilePath -> FilePath
+replaceExtensions x y = if isWindows then W.replaceExtensions x y else P.replaceExtensions x y
+
+isExtensionOf :: FilePath -> FilePath -> Bool
+isExtensionOf e x = if isWindows then W.isExtensionOf e x else P.isExtensionOf e x
+
+stripExtension :: FilePath -> FilePath -> Maybe FilePath
+stripExtension e x = if isWindows then W.stripExtension e x else P.stripExtension e x
+
+splitFileName :: FilePath -> (FilePath, FilePath)
+splitFileName x = if isWindows then W.splitFileName x else P.splitFileName x
+
+takeFileName :: FilePath -> FilePath
+takeFileName x = if isWindows then W.takeFileName x else P.takeFileName x
+
+replaceFileName :: FilePath -> FilePath -> FilePath
+replaceFileName x y = if isWindows then W.replaceFileName x y else P.replaceFileName x y
+
+dropFileName :: FilePath -> FilePath
+dropFileName x = if isWindows then W.dropFileName x else P.dropFileName x
+
+takeBaseName :: FilePath -> FilePath
+takeBaseName x = if isWindows then W.takeBaseName x else P.takeBaseName x
+
+replaceBaseName :: FilePath -> FilePath -> FilePath
+replaceBaseName x y = if isWindows then W.replaceBaseName x y else P.replaceBaseName x y
+
+takeDirectory :: FilePath -> FilePath
+takeDirectory x = if isWindows then W.takeDirectory x else P.takeDirectory x
+
+replaceDirectory :: FilePath -> FilePath -> FilePath
+replaceDirectory x y = if isWindows then W.replaceDirectory x y else P.replaceDirectory x y
+
+combine :: FilePath -> FilePath -> FilePath
+combine a b = if isWindows then W.combine a b else P.combine a b
+
+(</>) :: FilePath -> FilePath -> FilePath
+(</>) = combine
+
+splitPath :: FilePath -> [FilePath]
+splitPath x = if isWindows then W.splitPath x else P.splitPath x
+
+joinPath :: [FilePath] -> FilePath
+joinPath xs = if isWindows then W.joinPath xs else P.joinPath xs
+
+splitDirectories :: FilePath -> [FilePath]
+splitDirectories x = if isWindows then W.splitDirectories x else P.splitDirectories x
+
+splitDrive :: FilePath -> (FilePath, FilePath)
+splitDrive x = if isWindows then W.splitDrive x else P.splitDrive x
+
+joinDrive :: FilePath -> FilePath -> FilePath
+joinDrive a b = if isWindows then W.joinDrive a b else P.joinDrive a b
+
+takeDrive :: FilePath -> FilePath
+takeDrive x = if isWindows then W.takeDrive x else P.takeDrive x
+
+hasDrive :: FilePath -> Bool
+hasDrive x = if isWindows then W.hasDrive x else P.hasDrive x
+
+dropDrive :: FilePath -> FilePath
+dropDrive x = if isWindows then W.dropDrive x else P.dropDrive x
+
+isDrive :: FilePath -> Bool
+isDrive x = if isWindows then W.isDrive x else P.isDrive x
+
+hasTrailingPathSeparator :: FilePath -> Bool
+hasTrailingPathSeparator x = if isWindows then W.hasTrailingPathSeparator x else P.hasTrailingPathSeparator x
+
+addTrailingPathSeparator :: FilePath -> FilePath
+addTrailingPathSeparator x = if isWindows then W.addTrailingPathSeparator x else P.addTrailingPathSeparator x
+
+dropTrailingPathSeparator :: FilePath -> FilePath
+dropTrailingPathSeparator x = if isWindows then W.dropTrailingPathSeparator x else P.dropTrailingPathSeparator x
+
+normalise :: FilePath -> FilePath
+normalise x = if isWindows then W.normalise x else P.normalise x
+
+equalFilePath :: FilePath -> FilePath -> Bool
+equalFilePath a b = if isWindows then W.equalFilePath a b else P.equalFilePath a b
+
+makeRelative :: FilePath -> FilePath -> FilePath
+makeRelative a b = if isWindows then W.makeRelative a b else P.makeRelative a b
+
+isRelative :: FilePath -> Bool
+isRelative x = if isWindows then W.isRelative x else P.isRelative x
+
+isAbsolute :: FilePath -> Bool
+isAbsolute x = if isWindows then W.isAbsolute x else P.isAbsolute x
+
+isValid :: FilePath -> Bool
+isValid x = if isWindows then W.isValid x else P.isValid x
+
+makeValid :: FilePath -> FilePath
+makeValid x = if isWindows then W.makeValid x else P.makeValid x

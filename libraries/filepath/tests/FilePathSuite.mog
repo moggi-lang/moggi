@@ -1,0 +1,71 @@
+-- System.FilePath: the dispatched facade. These tests run against whichever
+-- flavour matches the machine under test, so every pin uses values where the
+-- two flavours agree, and every flavour-specific case lives in the Posix /
+-- Windows suites. Reference properties from the module documentation are
+-- assertions.
+
+module FilePathSuite (filePathSuite) where
+
+import Support (assertTrue, expect)
+import System.Environment (getEnv)
+import System.FilePath
+
+-- /directory/file.ext — the example path from the module documentation.
+example :: FilePath
+example = "/directory/file.ext"
+
+filePathSuite :: IO ()
+filePathSuite = do
+  expect "isPathSeparator pathSeparator" (show (isPathSeparator pathSeparator)) "True"
+  expect "isSearchPathSeparator searchPathSeparator" (show (isSearchPathSeparator searchPathSeparator)) "True"
+  expect "isExtSeparator extSeparator" (show (isExtSeparator extSeparator)) "True"
+
+  -- Extension functions.
+  expect "splitExtension file.tar.gz" (show (splitExtension "file.tar.gz")) "(\"file.tar\",\".gz\")"
+  expect "takeExtension" (takeExtension example) ".ext"
+  expect "dropExtension" (dropExtension example) "/directory/file"
+  expect "replaceExtension" (replaceExtension "/directory/path.txt" "ext") "/directory/path.ext"
+  expect "(-<.>)" (("/directory/path.txt" -<.> "ext")) "/directory/path.ext"
+  expect "addExtension file.txt bib" (addExtension "file.txt" "bib") "file.txt.bib"
+  expect "addExtension file bib" (("file" <.> "bib")) "file.bib"
+  expect "takeExtensions file.tar.gz" (takeExtensions "file.tar.gz") ".tar.gz"
+  expect "dropExtensions file.tar.gz" (dropExtensions "file.tar.gz") "file"
+  expect "splitExtensions file.tar.gz" (show (splitExtensions "file.tar.gz")) "(\"file\",\".tar.gz\")"
+
+  -- Filename / directory functions.
+  expect "splitFileName" (show (splitFileName example)) "(\"/directory/\",\"file.ext\")"
+  expect "takeFileName" (takeFileName example) "file.ext"
+  expect "takeBaseName" (takeBaseName example) "file"
+  expect "dropFileName" (dropFileName example) "/directory/"
+  expect "takeDirectory" (takeDirectory example) "/directory"
+  expect "combine" (combine "/directory" "file.ext") "/directory/file.ext"
+  expect "(</>) not combined" (("home" </> "/bob")) "/bob"
+
+  -- Trailing separators.
+  expect "addTrailingPathSeparator" (addTrailingPathSeparator "test/rest") "test/rest/"
+  expect "dropTrailingPathSeparator /" (dropTrailingPathSeparator "/") "/"
+
+  -- File name manipulations.
+  expect "normalise /file/./test" (normalise "/file/./test") "/file/test"
+  expect "normalise /a/../c" (normalise "/a/../c") "/a/../c"
+  expect "makeRelative" (makeRelative "/home/" "/home/bob/foo/bar") "bob/foo/bar"
+
+  -- Reference properties, as assertions.
+  assertTrue "takeExtension == snd (splitExtension x)" (takeExtension example == snd (splitExtension example))
+  assertTrue "dropExtension == fst (splitExtension x)" (dropExtension example == fst (splitExtension example))
+  assertTrue "uncurry (<>) (splitExtension x) == x" (fst (splitExtension example) <> snd (splitExtension example) == example)
+  assertTrue "stripExtension hs.o foo.x.hs.o" (stripExtension "hs.o" "foo.x.hs.o" == Just "foo.x")
+  assertTrue "stripExtension empty is Just x" (stripExtension "" "file.txt" == Just "file.txt")
+  assertTrue "isExtensionOf png" ("png" `isExtensionOf` "/directory/file.png")
+  assertTrue "hasExtension" (hasExtension example)
+  assertTrue "not hasExtension of path" (not (hasExtension "/directory/path"))
+  assertTrue "joinPath (splitPath x) == x" (joinPath (splitPath example) == example)
+  assertTrue "uncurry (</>) (splitFileName x) == x" (fst (splitFileName example) </> snd (splitFileName example) == example)
+  assertTrue "makeRelative x x == ." (makeRelative "/a/b" "/a/b" == ".")
+  assertTrue "isAbsolute == not isRelative" (isAbsolute "/test" == not (isRelative "/test"))
+  assertTrue "isValid makeValid always holds" (isValid (makeValid "file") && isValid (makeValid ""))
+  assertTrue "pathSeparator isPathSeparator" (isPathSeparator pathSeparator)
+  assertTrue "getSearchPath splits PATH" (do
+    raw <- getEnv "PATH"
+    found <- getSearchPath
+    pure (found == splitSearchPath raw))
