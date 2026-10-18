@@ -35,9 +35,9 @@ configuration file, and no per-project settings beyond the compile cache.
 
 Overrides where the standard library is looked for. `<MOGGI_ROOT>/lib` is tried
 *first*, and is only accepted if it actually contains `base.moggi`. Without it
-the compiler looks for `lib/` beside its own installation — for a distribution
-that is `<installation>/lib`, next to `bin/` — and then next to its own sources
-in a checkout. Set it when the compiler has been relocated away from its `lib/`.
+the compiler looks for `libraries/` beside its own installation — for a distribution
+that is `<installation>/libraries`, next to `bin/` — and then next to its own sources
+in a checkout. Set it when the compiler has been relocated away from its `libraries/`.
 
 ### `MOGGI_MICRO_SFX`
 

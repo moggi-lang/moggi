@@ -58,7 +58,7 @@ with `bin/moggi.phar` appended), `bin/moggi.phar` in the variants that bundle PH
 as a plain archive: every file under `src/`, and the `VERSION` entry naming this build),
 `bin/schnorr` (a standalone BIP-340 CLI with no user in the language yet — it ships because it is
 part of the toolbox and costs nothing at run time), the standard library as ordinary sources under
-`lib/`, `docs/`, `examples/`,
+`libraries/`, `docs/`, `examples/`,
 `LICENSE`, `THIRD-PARTY-NOTICES.md` (see [Licences](#licences)), and `runtime/`. The library sits beside the archive rather than inside
 it: users can read the sources they compile against, and the installation's `LICENSE` plainly covers
 them. It also removes the archive's only reason to write outside its own installation. The `moggi-lsp` extension is *not* bundled: it ships as a `.vsix` asset beside the

@@ -101,7 +101,7 @@ Read them in order, or pick the question you have.
 | **Getting running (start here)** | [docs/quickstart.md](docs/quickstart.md) |
 | **The language, by example** | [docs/tour.md](docs/tour.md) |
 | Try expressions, inspect types | [docs/repl.md](docs/repl.md) |
-| Find your way around `lib/` | [docs/stdlib.md](docs/stdlib.md) |
+| Find your way around `libraries/` | [docs/stdlib.md](docs/stdlib.md) |
 | Complete syntax | [docs/language.md](docs/language.md) |
 | Calling PHP, the JVM or .NET | [docs/ffi.md](docs/ffi.md) |
 | Deriving | [docs/deriving.md](docs/deriving.md) |

@@ -104,7 +104,7 @@ basic types (`Bool`, `Maybe`, `Either`, `Ordering`, `Int`, `Integer`, `Double`,
 `Word`, `Char`, `String`, tuples), the classes (`Eq`, `Ord`, `Enum`, `Bounded`,
 `Num`, `Integral`, `Fractional`, `Semigroup`, `Monoid`, `Functor`, `Applicative`,
 `Monad`, `Foldable`, `Traversable`, `Show`), the list and fold functions, and
-`IO` with `putStr`/`putStrLn`. The full list is `lib/Prelude.mog`, one export per
+`IO` with `putStr`/`putStrLn`. The full list is `libraries/base/src/Prelude.mog`, one export per
 line; [stdlib.md](stdlib.md) shows how to search it.
 
 ### What needs an import

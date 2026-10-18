@@ -69,7 +69,13 @@ constructor explicitly is the alternative (see
 - There is `Data.String` but no `Data.Text`. To move between the two worlds,
   `Data.String` provides `pack`, `unpack`, and `singleton`.
 - `Data.String` also provides `length`, `take`, `drop`, `isPrefixOf`, and
-  `isSuffixOf` for strings. A module importing both `Data.String` and
+  `isSuffixOf` for strings, and path manipulation (`System.Filesystem.Path`,
+  `System.FilePath`) works directly on those strings: `FilePath` is
+  `String`, not `[Char]`. There is no `OsPath`/`OsString` layer and no
+  encoding step — pure path functions only ever inspect ASCII (separators,
+  drive letters, extension markers) and pass everything else through
+  untouched, and host calls take the string as-is.
+- A module importing both `Data.String` and
   `Data.List` must disambiguate those names with a `hiding` list.
 
 ## Numbers

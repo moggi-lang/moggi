@@ -63,7 +63,7 @@ runtest
 Doc comments (`-- |`, export-list `-- *`) in `.mog` sources are extracted by **mogdoc** and rendered to static HTML. **moogle** searches the same index by name or by type signature. What they are for, from a user's side, is [stdlib.md](../stdlib.md); what matters here:
 
 ```bash
-moggi moogle --root tests/docs/fixture id   # index an arbitrary tree, not just lib/
+moggi moogle --root tests/docs/fixture id   # index an arbitrary tree, not just libraries/
 ```
 
 All modules are indexed, including `Moggi.Internal.*` (compiler-synthesized primops) and backend implementations (`*.PHP`, `*.JVM`, `*.DotNet`). Facade modules with `backend` declarations show linked backend implementations on their mogdoc page. Symbols not on a module's export list are omitted from that module's page.

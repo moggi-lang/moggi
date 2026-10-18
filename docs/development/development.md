@@ -81,7 +81,7 @@ alongside the compiler fingerprint and the host toolchains:
 
 ```bash
 cat VERSION            # compiler version
-cat lib/base.moggi     # standard-library version, from [package]
+cat libraries/base/base.moggi  # standard-library version, from [package]
 moggi version          # versions + fingerprint + php/java/dotnet
 moggi version --json
 ```

@@ -3,19 +3,19 @@ title: "Standard library"
 ---
 # Standard library
 
-The standard library is written in Moggi and lives in `lib/`. It is part of the
+The standard library is written in Moggi and lives in `libraries/`. It is part of the
 compiler: every program is compiled against it automatically, so you never
 compile the library yourself — you just `import` from it. In an installation that
-is the `lib/` directory next to `bin/`, shipped as ordinary sources: read them
+is the `libraries/` directory next to `bin/`, shipped as ordinary sources: read them
 whenever a signature is not obvious, they are covered by the same `LICENSE`. It
-is one package, `base` — `lib/base.moggi` is its descriptor, and a release
+is one package, `base` — `libraries/base/base.moggi` is its descriptor, and a release
 publishes it at `registry.moggi-lang.org/#/pkg/base`.
 
-`lib/` holds `.mog` sources and nothing else. The .NET host metadata the
+`libraries/` holds `.mog` sources and nothing else. The .NET host metadata the
 stdlib's own `foreign dotnet` declarations need (`dotnet/*.json` sidecars:
 which assembly defines a type, whether it is a value type) lives mirrored in
 `lib-meta/` — `lib-meta/Data/Char/dotnet/dependencies.json` describes
-`libraries/base/src/Data/Char/DotNet.mog` — shipped beside `lib/` and attributed back to the
+`libraries/base/src/Data/Char/DotNet.mog` — shipped beside `libraries/` and attributed back to the
 tree it mirrors, so a sidecar never applies to another tree's imports.
 
 ```moggi
@@ -47,7 +47,7 @@ is in it and what needs an explicit import.
 ## What is in it today
 
 Grouped by namespace, these are the modules a program can import. The list is the
-honest one: a name appears here because `lib/` has it, and the API of each is
+honest one: a name appears here because `libraries/` has it, and the API of each is
 Haskell `base`'s API (porting rules and the few deliberate differences are in
 [differences-to-haskell.md](differences-to-haskell.md)).
 

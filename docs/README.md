@@ -52,7 +52,7 @@ Reference, in the order the questions usually come up:
 |------|---------|
 | `moggi.php` | CLI entry point |
 | `src/` | The compiler (PHP): `syntax/`, `semantics/`, `modules/`, `ir/`, `optimize/`, `backend/`, `cli/`, `lsp/`, `repl/`, `docs/` |
-| `lib/` | The standard library, written in Moggi |
+| `libraries/` | The standard library, written in Moggi |
 | `tests/` | Compiler test suite (`runtest`) |
 | `src/backend/php/runtime.php` | The hand-written PHP runtime, copied into each build as `_runtime.php` |
 | `examples/` | Small programs to run and read |

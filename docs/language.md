@@ -370,4 +370,4 @@ The language also supports lists, tuples, algebraic data types, records, newtype
 
 Low-level primitives are provided by Moggi.Internal.Prim and Moggi.Internal.IO. They are primarily intended for implementing the standard library.
 
-See stdlib.md for the standard library and lib/Prelude.mog for the exact exports of Prelude.
+See stdlib.md for the standard library and libraries/base/src/Prelude.mog for the exact exports of Prelude.

@@ -12,7 +12,7 @@ reaches the compiler is the same `foreign` declaration.
 
 PHP is the one host that needs something the compiler cannot supply, because
 its `mixed` has no type to write down. That support is a library module:
-`Platform.PHP`, the single FFI-specific module in `lib/` (§6).
+`Platform.PHP`, the single FFI-specific module in `libraries/` (§6).
 
 Because the host is chosen at compile time, **a foreign import belongs to one
 backend**, and the language tells you when you got that wrong:
@@ -205,7 +205,7 @@ The JVM and .NET story ends at §2: their members are typed, so a declaration is
 all there is to it. PHP has `mixed` — a host value with no type Moggi can write
 down — and that needs support a declaration cannot give. The support is a
 library module instead of more compiler machinery: **`Platform.PHP` is the one
-module in `lib/` whose entire reason to exist is the FFI.**
+module in `libraries/` whose entire reason to exist is the FFI.**
 
 Two levels cover the boundary; use the weaker one that still works.
 
