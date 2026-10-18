@@ -1,14 +1,9 @@
--- System.FilePath: the dispatched facade. These tests run against whichever
--- flavour matches the machine under test, so every pin uses values where the
--- two flavours agree, and every flavour-specific case lives in the Posix /
--- Windows suites. Reference properties from the module documentation are
--- assertions.
-
 module FilePathSuite (filePathSuite) where
 
 import Support (assertTrue, expect)
 import System.Environment (getEnv)
 import System.FilePath
+import System.Info (isWindows)
 
 -- /directory/file.ext — the example path from the module documentation.
 example :: FilePath
@@ -38,16 +33,16 @@ filePathSuite = do
   expect "takeBaseName" (takeBaseName example) "file"
   expect "dropFileName" (dropFileName example) "/directory/"
   expect "takeDirectory" (takeDirectory example) "/directory"
-  expect "combine" (combine "/directory" "file.ext") "/directory/file.ext"
+  expect "combine" (combine "/directory" "file.ext") (if isWindows then "/directory\\file.ext" else "/directory/file.ext")
   expect "(</>) not combined" (("home" </> "/bob")) "/bob"
 
   -- Trailing separators.
-  expect "addTrailingPathSeparator" (addTrailingPathSeparator "test/rest") "test/rest/"
+  expect "addTrailingPathSeparator" (addTrailingPathSeparator "test/rest") (if isWindows then "test/rest\\" else "test/rest/")
   expect "dropTrailingPathSeparator /" (dropTrailingPathSeparator "/") "/"
 
   -- File name manipulations.
-  expect "normalise /file/./test" (normalise "/file/./test") "/file/test"
-  expect "normalise /a/../c" (normalise "/a/../c") "/a/../c"
+  expect "normalise /file/./test" (normalise "/file/./test") (if isWindows then "\\file\\test" else "/file/test")
+  expect "normalise /a/../c" (normalise "/a/../c") (if isWindows then "\\a\\..\\c" else "/a/../c")
   expect "makeRelative" (makeRelative "/home/" "/home/bob/foo/bar") "bob/foo/bar"
 
   -- Reference properties, as assertions.

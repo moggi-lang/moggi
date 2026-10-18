@@ -12,8 +12,18 @@
 module Suite (main) where
 
 import FilePathSuite (filePathSuite)
+import System.Info (isWindows)
+import WindowsSuite (windowsSuite)
+
+-- The Windows flavour suite only runs on Windows; `case` lives here rather
+-- than in `main`'s `do`-block, which does not lower branches.
+windowsIfNeeded :: IO ()
+windowsIfNeeded = case isWindows of
+  True -> windowsSuite
+  False -> pure ()
 
 main :: IO ()
 main = do
   filePathSuite
+  windowsIfNeeded
   putStrLn "all filepath checks passed"
