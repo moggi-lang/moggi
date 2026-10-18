@@ -7,7 +7,7 @@ import Data.List (isInfixOf)
 import Data.String (unpack)
 import Data.Tuple (fst, snd)
 import System.Environment (lookupEnv)
-import System.Filesystem (removeFile)
+import System.Directory (removeFile)
 import System.IO
 import System.IO.Base (packFilePath, unpackFilePath)
 

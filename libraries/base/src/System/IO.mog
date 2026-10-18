@@ -169,7 +169,7 @@ withFile p mode use =
 -- | Create an empty file in a directory and open it for writing, answering
 -- with its path and an open handle. The file's name starts with the template
 -- and ends with random characters, so callers that create many of them do not
--- collide; remove it with 'System.Filesystem.removeFile' when done.
+-- collide; remove it with 'System.Directory.removeFile' when done.
 openTempFile :: FilePath -> String -> IO (FilePath, Handle)
 
 -- | Moggi has no text/binary mode split, so this is 'openTempFile'.

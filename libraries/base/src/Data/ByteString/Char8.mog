@@ -148,7 +148,7 @@ import Data.Word (Word8)
 import Moggi.Err
 import Moggi.Internal.Base
 import Moggi.Internal.Prim ((:), bytesToString#, bytesFromString#, word8FromInt#, word8ToInt#)
-import System.Filesystem (readTextFile, writeTextFile, appendTextFile)
+
 import System.IO.Base (FilePath)
 import System.IO qualified as IO
 import System.IO (IO, Handle, stdin)
@@ -656,13 +656,13 @@ interact :: (ByteString -> ByteString) -> IO ()
 interact f = getContents >>= (\bs -> putStr (f bs))
 
 readFile :: FilePath -> IO ByteString
-readFile p = readTextFile p >>= (\s -> pure (fromString s))
+readFile p = IO.readFile p >>= (\s -> pure (fromString s))
 
 writeFile :: FilePath -> ByteString -> IO ()
-writeFile p b = writeTextFile p (bsToString b)
+writeFile p b = IO.writeFile p (bsToString b)
 
 appendFile :: FilePath -> ByteString -> IO ()
-appendFile p b = appendTextFile p (bsToString b)
+appendFile p b = IO.appendFile p (bsToString b)
 
 hGetLine :: Handle -> IO ByteString
 hGetLine h = IO.hGetLine h >>= (\m -> case m of

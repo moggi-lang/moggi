@@ -71,13 +71,13 @@ foreign jvm type JsonGenerator "com.fasterxml.jackson.core.JsonGenerator"
 foreign jvm type JsonToken "com.fasterxml.jackson.core.JsonToken"
 foreign jvm type JsonParserNumberType "com.fasterxml.jackson.core.JsonParser$NumberType"
 foreign jvm type StringWriter "java.io.StringWriter"
--- Distinct name from System.Filesystem.JVM's Writer export collision across the program.
+-- Distinct program-global name: host types share one namespace per program.
 foreign jvm type JsonWriter "java.io.Writer"
 foreign jvm type Class "java.lang.Class"
 -- Distinct from Data.Set (project-global type name).
 foreign jvm type JsonSet "interface java.util.Set"
 foreign jvm type Collection "interface java.util.Collection"
--- Distinct from System.Filesystem.JVM's Iterator (same host, program-global name).
+-- Distinct program-global name for the same reason.
 foreign jvm type JsonIterator "interface java.util.Iterator"
 -- Method owners below name these interfaces, so the backend emits
 -- invokeinterface for them; without the declaration they would compile to

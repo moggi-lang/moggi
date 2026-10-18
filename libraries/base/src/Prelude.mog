@@ -131,8 +131,23 @@ module Prelude
   , showParen
     -- Basic input and output
   , IO
+  , putChar
   , putStr
   , putStrLn
+  , print
+  , getChar
+  , getLine
+  , getContents
+  , interact
+  , FilePath
+  , readFile
+  , writeFile
+  , appendFile
+  , readIO
+  , readLn
+  , IOError
+  , ioError
+  , userError
   ) where
 
 import Control.Applicative
@@ -174,4 +189,21 @@ import Data.List hiding (
   intersperse,
   find
 )
-import System.IO (IO, putStr, putStrLn)
+import System.IO
+  ( IO
+  , putChar
+  , putStr
+  , putStrLn
+  , print
+  , getChar
+  , getLine
+  , getContents
+  , interact
+  , FilePath
+  , readFile
+  , writeFile
+  , appendFile
+  , readIO
+  , readLn
+  )
+import System.IO.Error (IOError, ioError, userError)
