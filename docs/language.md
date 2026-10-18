@@ -234,10 +234,11 @@ main = do
   pure ()                  -- the do-nothing action
 ```
 
-`IO`, `putStr` and `putStrLn` come from the Prelude. Everything else that
-touches the world is an explicit import: `System.IO` (handles, files, `print`,
-`getLine`), `System.Environment`, `Control.Exception`, `System.Filesystem`,
-`System.Filesystem.Path`.
+`IO`, `FilePath`, `putStr`, `putStrLn`, `print`, `getLine`, `readFile` and
+the rest of the basic input/output surface come from the Prelude. Beyond
+those, handles are an explicit import (`System.IO`), as are paths
+(`System.FilePath`), directories (`System.Directory`), `System.Environment`,
+and `Control.Exception`.
 
 ## Strictness
 

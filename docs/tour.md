@@ -117,8 +117,8 @@ scope. Import them where you use them:
 | `print`, `getLine`, `readFile`, `writeFile`, `interact`, handles | `System.IO` |
 | `getArgs`, `getEnv`, `lookupEnv` | `System.Environment` |
 | `throwIO`, `catch`, `bracket`, `SomeException` | `Control.Exception` |
-| directories, file metadata, `removeFile`, `copyFile` | `System.Filesystem` |
-| path manipulation (`takeFileName`, `(</>)`, `normalise`) | `System.Filesystem.Path` |
+| directories, file metadata, `removeFile`, `copyFile` | `System.Directory` |
+| path manipulation (`takeFileName`, `(</>)`, `normalise`) | `System.FilePath` |
 | `Data.Map`/`Data.Set` (containers package), `Data.JSON`, `Data.ByteString`, `Data.Time.Clock`, … | their own module |
 
 ## Values and functions

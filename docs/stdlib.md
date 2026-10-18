@@ -20,7 +20,7 @@ tree it mirrors, so a sidecar never applies to another tree's imports.
 
 ```moggi
 import Data.Map as M            -- from the containers package (see below)
-import System.Filesystem (removeFile)
+import System.Directory (removeFile)
 ```
 
 Module names follow the names you would expect from the language Moggi borrows
@@ -58,7 +58,9 @@ Haskell `base`'s API (porting rules and the few deliberate differences are in
 | `Data.*` | `Bits`, `Bifunctor`, `Bool`, `Bounded`, `ByteString` (+ `Char8`), `Char`, `Either`, `Enum`, `Eq`, `Foldable`, `Function`, `Functor`, `Int`, `List` (+ `NonEmpty`), `Maybe`, `Monoid`, `Ord`, `Proxy`, `Semigroup`, `String`, `Traversable`, `Tuple`, `Void`, `Word` |
 | `Data.Time.*` | in the bundled `time` package, not `base` (see below) |
 | `Numeric.*` | `Natural` |
-| `System.*` | `Environment`, `Exit`, `Filesystem` (+ `Filesystem.Path`), `IO` (+ `IO.Base`, `IO.Error`, `IO.Types`) |
+| `System.*` | `Environment`, `Exit`, `IO` (+ `IO.Base`, `IO.Error`, `IO.Types`) |
+| `System.FilePath` | in the bundled `filepath` package, not `base` |
+| `System.Directory` | in the bundled `directory` package, not `base` |
 | `Text.*` | `Show`, `Read` |
 | `Moggi.*` | the compiler-facing side: `Internal.*` (the primitives, the numeric types, `Show`/`Read` machinery), `Exception`, `Err`, `Generics`, `IO.Exception` |
 

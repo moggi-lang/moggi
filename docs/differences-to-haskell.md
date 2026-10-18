@@ -69,8 +69,8 @@ constructor explicitly is the alternative (see
 - There is `Data.String` but no `Data.Text`. To move between the two worlds,
   `Data.String` provides `pack`, `unpack`, and `singleton`.
 - `Data.String` also provides `length`, `take`, `drop`, `isPrefixOf`, and
-  `isSuffixOf` for strings, and path manipulation (`System.Filesystem.Path`,
-  `System.FilePath`) works directly on those strings: `FilePath` is
+  `isSuffixOf` for strings, and path manipulation (`System.FilePath`,
+  `System.Directory`) works directly on those strings: `FilePath` is
   `String`, not `[Char]`. There is no `OsPath`/`OsString` layer and no
   encoding step — pure path functions only ever inspect ASCII (separators,
   drive letters, extension markers) and pass everything else through
@@ -95,12 +95,12 @@ constructor explicitly is the alternative (see
 
 ## The Prelude is smaller
 
-The `Prelude` re-exports the pure core plus `IO`, `putStr`, and `putStrLn`.
-Everything that touches the outside world needs a named import: handles and
-reading (`print`, `getChar`, `getLine`, `readFile`, `writeFile`, `appendFile`,
-…) come from `import System.IO`, paths and directories from
-`import System.Filesystem`. Nothing is missing from the library — only from the
-implicit scope.
+The `Prelude` re-exports the pure core plus the `System.IO` essentials
+(`IO`, `FilePath`, `putChar`, `putStr`, `putStrLn`, `print`, `getChar`,
+`getLine`, `getContents`, `interact`, `readFile`, `writeFile`, `appendFile`,
+`readIO`, `readLn`, `IOError`, `ioError`, `userError`). Beyond those, handles
+come from `import System.IO`, paths from `import System.FilePath`, and
+directories from `import System.Directory`.
 
 ## Exceptions
 

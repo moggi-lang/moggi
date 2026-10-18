@@ -388,13 +388,13 @@ openFile :: FilePath -> IOMode -> IO Handle
 
 Each implementation module holds that backend's `foreign` declarations and its
 bodies; the facade is what users import. The library modules that already work
-this way are the ones to copy — `System.IO`, `System.Filesystem`,
+this way are the ones to copy — `System.IO`, `System.Directory`,
 `System.Environment`, `System.Exit`, `Data.String`, `Data.Char`, `Data.Int`,
 `Data.ByteString`, `Data.Time.Clock` and `Data.JSON.Encoding`.
 
 `Platform.PHP` is the one member of the library that is *not* split this way,
 because it is not portable code behind a facade — it is the PHP boundary
-itself, so importing it makes a module PHP-only. `System.Filesystem.PHP` and
+itself, so importing it makes a module PHP-only. `System.IO.PHP` and
 `Data.JSON.Encoding.PHP` are the two users to look at.
 
 Testing follows from the same fact: a module with a `foreign` import only
