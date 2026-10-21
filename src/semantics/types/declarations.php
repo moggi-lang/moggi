@@ -2,7 +2,6 @@
 
 namespace Moggi\Semantics\Types;
 
-use function Moggi\Backend\compileBackend;
 use function Moggi\Backend\DotNet\Foreign\registerDotNetForeignType;
 use function Moggi\Backend\Jvm\Foreign\registerJvmForeignType;
 use function Moggi\Semantics\IntrinsicRegistry\isMagicHashName;
@@ -972,7 +971,7 @@ function registerForeignType(TypeCheckState $state, Ast\ForeignTypeDecl $decl): 
 
     Kinds\registerTypeKind($state, $decl->name, new Kinds\KType());
 
-    if ($decl->backend === compileBackend()) {
+    if ($decl->backend === $state->compileBackend) {
         match ($decl->backend) {
             'jvm' => registerJvmForeignType($decl->name, $decl->hostType),
             'dotnet' => registerDotNetForeignType($decl->name, $decl->hostType),

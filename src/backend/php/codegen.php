@@ -50,7 +50,6 @@ use function Moggi\IR\Visit\freeLocalsInBlock;
 use function Moggi\IR\Visit\moduleUsesMoggiRuntime;
 use function Moggi\Optimize\Partial\moduleUsesPartialApply;
 
-use function Moggi\Optimize\Support\isCapturedFnName;
 
 /** One line standing in for the module's source map until the map is known. */
 const MAP_PLACEHOLDER = '//@@moggi-source-map@@';
@@ -331,7 +330,7 @@ function analyzeFunctionsForCodegen(array $functions): array
     $lambdaIndex = [];
     $functionArity = [];
     foreach ($functions as $function) {
-        if (isCapturedFnName($function->name)) {
+        if ($function->kind->takesCaptures()) {
             $lambdaIndex[$function->name] = $function;
 
             continue;
@@ -359,7 +358,7 @@ function emitFunction(IR\FunctionDecl $function, array $lambdaMeta, array $lambd
     $name = phpFunctionName($function->name, $phpNames);
     $params = $function->params;
 
-    if (isCapturedFnName($function->name)) {
+    if ($function->kind->takesCaptures()) {
         $captures = $lambdaMeta[$function->name]['captures'] ?? [];
         $params = [...$captures, ...$params];
     }

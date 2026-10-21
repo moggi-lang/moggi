@@ -175,6 +175,32 @@ function dumpPatternInline(IR\Pattern $pattern): string
     };
 }
 
+/**
+ * One line per callable, carrying the identity facts rather than the emitted
+ * spelling: module + declared name, its kind, and — for a clone — the callable
+ * it was declared from.
+ *
+ * Sorted, so two builds of the same module compare byte for byte and a target
+ * switch cannot reorder them.
+ *
+ * @return list<string>
+ */
+function identityLines(IR\Module $module): array
+{
+    $moduleName = $module->moduleName !== '' ? $module->moduleName : '<module>';
+    $lines = [];
+    foreach ($module->functions as $function) {
+        $line = $moduleName . '::' . $function->name . ' kind=' . $function->kind->value;
+        if ($function->origin !== null) {
+            $line .= ' origin=' . $function->origin;
+        }
+        $lines[] = $line;
+    }
+    \sort($lines);
+
+    return $lines;
+}
+
 function dumpDoubleLiteral(float $value): string
 {
     if (\is_nan($value)) {

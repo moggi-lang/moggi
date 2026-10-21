@@ -403,6 +403,28 @@ function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
         }
         $defaulted = isset($defaultedMethods[$method->name]);
         $scope = $defaulted ? defaultBodyScope($state, $classInfo) : [];
+        $defaultOrigins = [];
+        if ($defaulted) {
+            $defaultModule = (string) ($classInfo['module'] ?? '');
+            $classScope = $defaultModule === $state->currentModule
+                ? null
+                : ($state->classModuleScopes[$defaultModule] ?? null);
+            $classFns = \is_array($classScope['fns'] ?? null) ? $classScope['fns'] : [];
+            foreach ($scope as $name => $scheme) {
+                if (! $scheme instanceof Scheme || $scheme->classMethod || isset($constraintEnv[$name])) {
+                    continue;
+                }
+                $origin = $classFns[$name]['origin'] ?? null;
+                if (\is_array($origin)) {
+                    $defaultOrigins[$name] = $origin['module'] . '::' . $origin['phpName'];
+                } elseif ($defaultModule === $state->currentModule) {
+                    $defaultOrigins[$name] = $state->externalFns[$name]
+                        ?? $defaultModule . '::' . $name;
+                }
+            }
+        }
+        $savedDefaultOrigins = $state->defaultBodyOrigins;
+        $state->defaultBodyOrigins = $defaultOrigins;
         $installedTypes = $defaulted
             ? installDefaultBodyTypes($state, defaultBodyVisibleTypes($state, $classInfo))
             : ['names' => [], 'kinds' => [], 'synonyms' => [], 'wrappers' => [], 'env' => [], 'data' => [], 'promoted' => []];
@@ -420,6 +442,7 @@ function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
                 $headType,
             );
         } finally {
+            $state->defaultBodyOrigins = $savedDefaultOrigins;
             removeDefaultBodyTypes($state, $installedTypes);
         }
         $state->instanceMethodNames[$fn->name] = true;

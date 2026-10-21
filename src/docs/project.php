@@ -4,7 +4,6 @@ namespace Moggi\Docs;
 
 require_once __DIR__ . '/../paths.php';
 
-use function Moggi\Backend\setCompileBackend;
 use function Moggi\CLI\findMogFiles;
 
 use function Moggi\CLI\resolveLibraryDirs;
@@ -12,6 +11,9 @@ use function Moggi\Modules\isLibraryRoot;
 use function Moggi\Modules\moduleFileClosureCached;
 
 use Moggi\Modules\PreparedProject;
+
+use Moggi\Pipeline\CompilationContext;
+use Moggi\Pipeline\CompilePurpose;
 
 use function Moggi\Modules\prepareProjectCached;
 use function Moggi\Modules\projectSourceClosure;
@@ -33,18 +35,31 @@ final class ParsedModule
 }
 
 /**
- * Parse and type-check modules for documentation (single prepare pass).
+ * The declared context a documentation pass analyses under.
+ *
+ * The target is an input, not a default: documentation renders one backend's
+ * view of the modules (the facade implementation it links), and the module
+ * cache keys are per target, so the reader that renders has to say which
+ * target its type checking is for.
  *
  * @param list<string> $extraLibDirs
- * @return array{prepared: PreparedProject, modules: array<string, ParsedModule>}
  */
-function loadDocProject(string $inputPath, array $extraLibDirs = [], ?array $docClosure = null): array
+function docsContext(string $backendId, array $libDirs, array $sources = []): CompilationContext
 {
+    return CompilationContext::for($backendId, CompilePurpose::Library, roots: $libDirs, sources: $sources);
+}
+
+function loadDocProject(
+    string $inputPath,
+    CompilationContext $context,
+    array $extraLibDirs = [],
+    ?array $docClosure = null,
+): array {
     if ($docClosure !== null) {
         [$root, $files] = $docClosure;
-        $prepared = prepareProjectCached($files, $root);
+        $prepared = prepareProjectCached($files, $root, $context);
     } else {
-        $prepared = loadPreparedProject($inputPath, $extraLibDirs);
+        $prepared = loadPreparedProject($inputPath, $extraLibDirs, $context);
     }
 
     return [
@@ -149,19 +164,19 @@ function parsedModulesFromPrepared(PreparedProject $prepared, string $docRoot = 
  * @param list<string> $extraLibDirs
  * @return array<string, Program>
  */
-function loadCheckedPrograms(string $inputPath, array $extraLibDirs = []): array
+function loadCheckedPrograms(string $inputPath, array $extraLibDirs, CompilationContext $context): array
 {
-    return loadPreparedProject($inputPath, $extraLibDirs)->checked;
+    return loadPreparedProject($inputPath, $extraLibDirs, $context)->checked;
 }
 
-function loadPreparedProject(string $inputPath, array $extraLibDirs = []): PreparedProject
+function loadPreparedProject(string $inputPath, array $extraLibDirs, CompilationContext $context): PreparedProject
 {
-    [$root, $files] = resolveDocFileClosure($inputPath, $extraLibDirs);
+    [$root, $files] = resolveDocFileClosure($inputPath, $extraLibDirs, $context->backendId);
     if ($files === []) {
         throw new \InvalidArgumentException("no .mog files found under {$inputPath}");
     }
 
-    return prepareProjectCached($files, $root);
+    return prepareProjectCached($files, $root, $context->withSources($files));
 }
 
 /**
@@ -170,9 +185,8 @@ function loadPreparedProject(string $inputPath, array $extraLibDirs = []): Prepa
  * @param list<string> $extraLibDirs
  * @return array{0: string, 1: list<string>}
  */
-function resolveDocFileClosure(string $inputPath, array $extraLibDirs = []): array
+function resolveDocFileClosure(string $inputPath, array $extraLibDirs, string $backendId): array
 {
-    setCompileBackend('php');
     [$root, $files] = resolveDocInputs($inputPath);
     if ($files === []) {
         return [$root, $files];
@@ -188,7 +202,7 @@ function resolveDocFileClosure(string $inputPath, array $extraLibDirs = []): arr
             }
         }
 
-        [$files, $root] = projectSourceClosure($files, $libDirs);
+        [$files, $root] = projectSourceClosure($files, $libDirs, $backendId);
 
         return [$root, $files];
     }
@@ -197,7 +211,7 @@ function resolveDocFileClosure(string $inputPath, array $extraLibDirs = []): arr
         $real = \realpath($inputPath);
         if ($real !== false) {
             try {
-                [$files, $root] = moduleFileClosureCached($real);
+                [$files, $root] = moduleFileClosureCached($real, $backendId);
 
                 return [$root, $files];
             } catch (\Throwable) {

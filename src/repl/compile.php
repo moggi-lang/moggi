@@ -8,7 +8,6 @@ use Moggi\Modules\PreparedProject;
 
 use function Moggi\Paths\moduleNameToPath;
 
-use Moggi\Pipeline\CompilePurpose;
 use Moggi\Pipeline\PipelineArtifacts;
 use Moggi\Pipeline\PipelineRequest;
 use Moggi\Pipeline\PipelineStage;
@@ -45,12 +44,11 @@ function interactivePipelineRequest(
     ?PipelineStage $stopAt = null,
 ): PipelineRequest {
     return new PipelineRequest(
-        purpose: CompilePurpose::Repl,
         filename: $state->interactivePath(),
         program: $stopAt === PipelineStage::Ast ? interactiveParseTree($state, $ctx) : null,
         typedProgram: $ctx['typedProgram'],
         optimize: $optimize,
-        backend: $state->backend,
+        context: $state->context,
         importContext: $ctx['importContext'],
         emitOptions: emitOptionsForInteractive($state, $ctx),
     );

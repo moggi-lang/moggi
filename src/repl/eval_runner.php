@@ -5,11 +5,10 @@ namespace Moggi\Repl\EvalRunner;
 require_once __DIR__ . '/../paths.php';
 
 use function Moggi\Backend\backendById;
-use function Moggi\Backend\codegen;
+use function Moggi\Backend\codegenWith;
 use function Moggi\Backend\DotNet\resolveDotnetExecutable;
 use function Moggi\Backend\Inspect\removeTree;
 use function Moggi\Backend\Php\runtimeOutputPath;
-use function Moggi\Backend\setCompileBackend;
 use function Moggi\Compiler\runProcess;
 
 use Moggi\Modules;
@@ -17,7 +16,6 @@ use Moggi\Modules;
 use function Moggi\Modules\filterCodegenImportsForIr;
 use function Moggi\Paths\globPaths;
 
-use Moggi\Pipeline\CompilePurpose;
 use Moggi\Pipeline\PipelineArtifacts;
 use Moggi\Pipeline\PipelineRequest;
 use Moggi\Pipeline\PipelineStage;
@@ -44,7 +42,6 @@ function runEntry(State $state, string $entryName): string
 
 function runEntryPhp(State $state, string $entryName): string
 {
-    setCompileBackend('php');
     if (! $state->prepared instanceof Modules\PreparedProject
         || ! $state->typedInteractive instanceof Ast\Program) {
         throw new \RuntimeException('interactive module is not prepared');
@@ -209,13 +206,17 @@ function ensurePhpDeps(State $state): string
         throw new \RuntimeException('REPL PHP deps: no Prelude found under --lib');
     }
 
-    $built = Modules\compileProjectBoth($files, $prepared->rootPrefix, $state->optimize, strip: false);
+    $built = Modules\compileProjectBoth($files, $prepared->rootPrefix, $state->context->withSources($files), $state->optimize, strip: false);
     $moduleRel = [];
     foreach ($prepared->units as $name => $unit) {
         if (($unit['synthetic'] ?? false) === true || ! isset($unit['path'])) {
             continue;
         }
-        $moduleRel[$name] = Modules\mogPathToOutputRelative($unit['path'], $prepared->rootPrefix);
+        $moduleRel[$name] = Modules\mogPathToOutputRelative(
+            $unit['path'],
+            $prepared->rootPrefix,
+            $state->context->backend->extension(),
+        );
     }
 
     foreach ($built['emit'] as $rel => $bytes) {
@@ -298,11 +299,10 @@ function emitInteractivePhp(
     bool $optimize = true,
 ): PipelineArtifacts {
     $artifacts = pipelineRun(new PipelineRequest(
-        purpose: CompilePurpose::Repl,
         filename: $state->interactivePath(),
         typedProgram: $ctx['typedProgram'],
         optimize: $optimize,
-        backend: 'php',
+        context: $state->context,
         importContext: $ctx['importContext'],
         emitOptions: [],
     ), PipelineStage::IrOpt);
@@ -342,7 +342,7 @@ function emitInteractivePhp(
         $emitOptions['runtimeRequire'] = \var_export($runtime, true);
     }
 
-    $artifacts->emit = codegen($ir, $state->interactivePath(), $emitOptions);
+    $artifacts->emit = codegenWith($state->context->backend, $ir, $state->interactivePath(), $emitOptions);
 
     return $artifacts;
 }
@@ -356,7 +356,6 @@ function emitInteractivePhp(
  */
 function runEntrySubprocess(State $state, string $entryName): string
 {
-    setCompileBackend($state->backend);
     $work = $state->sessionDir . '/eval-g' . $state->generation;
     if (! \is_dir($work) && ! \mkdir($work, 0777, true) && ! \is_dir($work)) {
         throw new \RuntimeException("cannot create {$work}");
@@ -375,13 +374,13 @@ function runEntrySubprocess(State $state, string $entryName): string
         \file_put_contents($work . '/Main.mog', $mainSrc);
 
         $inputFiles = [$work . '/Main.mog', $work . '/Interactive.mog', ...$state->loadedPaths];
-        [$files, $root] = Modules\projectSourceClosure($inputFiles, $state->libDirs);
+        [$files, $root] = Modules\projectSourceClosure($inputFiles, $state->libDirs, $state->backend);
         $outDir = $work . '/out';
         if (! \is_dir($outDir) && ! \mkdir($outDir, 0777, true) && ! \is_dir($outDir)) {
             throw new \RuntimeException("cannot create {$outDir}");
         }
 
-        $built = Modules\compileProjectBoth($files, $root, $state->optimize, strip: true);
+        $built = Modules\compileProjectBoth($files, $root, $state->context->withSources($files), $state->optimize, strip: true);
         foreach ($built['emit'] as $rel => $bytes) {
             $path = $outDir . '/' . $rel;
             $dir = \dirname($path);
@@ -409,7 +408,6 @@ function runEntrySubprocess(State $state, string $entryName): string
  */
 function packageAndCapture(string $backend, string $outDir, string $entryModule, ?string $entryRelative): array
 {
-    setCompileBackend($backend);
     backendById($backend)->packageOutput($outDir, [
         'entryModule' => $entryModule,
     ]);

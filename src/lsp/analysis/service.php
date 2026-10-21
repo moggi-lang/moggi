@@ -4,7 +4,6 @@ namespace Moggi\LSP\Analysis;
 
 require_once __DIR__ . '/../../paths.php';
 
-use function Moggi\Backend\setCompileBackend;
 
 use Moggi\Docs\DocIndex;
 
@@ -37,6 +36,9 @@ use function Moggi\Modules\projectSourceClosure;
 use function Moggi\Modules\setStdlibLibPath;
 use function Moggi\Modules\stdlibSourcesMissingFrom;
 use function Moggi\Paths\globPaths;
+
+use Moggi\Pipeline\CompilationContext;
+use Moggi\Pipeline\CompilePurpose;
 
 use Moggi\Semantics\Types\TypeError;
 use Moggi\Syntax\Ast;
@@ -251,7 +253,7 @@ final class AnalysisService
     /** Client capabilities / config */
     public bool $inlaysEnabled = false;
 
-    public string $backend = 'php';
+    public CompilationContext $context;
 
     /** Raw initialize-request client capabilities (linkSupport etc.). */
     public array $clientCapabilities = [];
@@ -259,12 +261,17 @@ final class AnalysisService
     /**
      * @param list<string> $libDirs
      */
-    public function __construct(array $libDirs = [])
+    public function __construct(array $libDirs = [], ?CompilationContext $context = null)
     {
         $this->vfs = new VirtualFS();
         $this->modules = new ModuleIndex();
         $this->occurrences = new OccurrenceIndex();
         $this->libDirs = $libDirs;
+        $this->context = $context ?? CompilationContext::for(
+            'php',
+            CompilePurpose::Library,
+            roots: $libDirs,
+        );
     }
 
     public function setWorkspaceRoot(?string $root): void
@@ -525,8 +532,6 @@ final class AnalysisService
             } catch (\Throwable) {
             }
         }
-        setCompileBackend($this->backend);
-
         $path = uriToPath($uri);
         if (\str_contains($uri, '://') && ! \str_starts_with($uri, 'file:')) {
             $tmp = $this->vfs->sessionRoot() . '/untitled/' . \md5($uri) . '.mog';
@@ -649,12 +654,12 @@ final class AnalysisService
             }
 
             try {
-                [$files, $projRoot] = projectSourceClosure([$filename], $libs);
+                [$files, $projRoot] = projectSourceClosure([$filename], $libs, $this->context->backendId);
             } catch (\Throwable) {
-                [$files, $projRoot] = moduleFileClosureCached($filename);
+                [$files, $projRoot] = moduleFileClosureCached($filename, $this->context->backendId);
             }
 
-            $files = [...$files, ...stdlibSourcesMissingFrom($files, $stdlib)];
+            $files = [...$files, ...stdlibSourcesMissingFrom($files, $stdlib, $this->context->backendId)];
             $files = \array_map(
                 static function (string $path) use ($overlayByReal): string {
                     $real = \realpath($path) ?: $path;
@@ -668,7 +673,8 @@ final class AnalysisService
                 $files[] = $filename;
             }
 
-            $prepared = prepareProjectCached($files, $projRoot, $parsed->module ?? null);
+            $this->context = $this->context->withSources($files);
+            $prepared = prepareProjectCached($files, $projRoot, $this->context, $parsed->module ?? null);
             $this->project = $prepared;
             $mod = $parsed->module ?? 'Main';
             $importNames = [];
@@ -817,7 +823,13 @@ final class AnalysisService
         if (! \is_string($rel) || ! \is_string($key)) {
             return null;
         }
-        $cached = \Moggi\Cache\moduleGet($rel, 'checked', $key);
+        $module = $unit['program'] instanceof Ast\Program ? $unit['program']->module : null;
+        $cached = \Moggi\Cache\moduleGet(
+            $rel,
+            'checked',
+            $this->context->moduleKey($module, $key),
+            $this->context->backendId,
+        );
         if (! \is_array($cached)) {
             return null;
         }
@@ -918,8 +930,8 @@ final class AnalysisService
         }
         if ($seed !== null && \is_file($seed)) {
             try {
-                [$files, $root] = moduleFileClosureCached($seed);
-                prepareFocusBase($files, $root);
+                [$files, $root] = moduleFileClosureCached($seed, $this->context->backendId);
+                prepareFocusBase($files, $root, $this->context->withSources($files));
             } catch (\Throwable) {
             }
         }
@@ -951,7 +963,7 @@ final class AnalysisService
         }
 
         try {
-            $this->docIndex = loadOrBuildIndex($seed, \array_values(\array_unique($libs)));
+            $this->docIndex = loadOrBuildIndex($seed, \array_values(\array_unique($libs)), $this->context);
         } catch (\Throwable) {
             $this->docIndex = null;
         }
@@ -1004,11 +1016,11 @@ final class AnalysisService
     }
 }
 
-function getAnalysisService(?array $libDirs = null): AnalysisService
+function getAnalysisService(?array $libDirs = null, ?CompilationContext $context = null): AnalysisService
 {
     static $svc = null;
-    if ($libDirs !== null || $svc === null) {
-        $svc = new AnalysisService($libDirs ?? []);
+    if ($libDirs !== null || $context !== null || $svc === null) {
+        $svc = new AnalysisService($libDirs ?? [], $context);
     }
 
     return $svc;

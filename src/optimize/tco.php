@@ -4,12 +4,11 @@ namespace Moggi\Optimize\Tco;
 
 use Moggi\IR;
 
-use function Moggi\Optimize\Support\isLambdaName;
 use function Moggi\Optimize\Support\preserveMatchArm;
 
-function eliminateTailRecursion(string $name, array $params, IR\Block $body): IR\Block
+function eliminateTailRecursion(string $name, array $params, IR\Block $body, IR\FunctionKind $kind): IR\Block
 {
-    if (isLambdaName($name) || $params === []) {
+    if ($kind->takesCaptures() || $params === []) {
         return $body;
     }
 

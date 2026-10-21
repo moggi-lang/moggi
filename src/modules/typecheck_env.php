@@ -2,7 +2,7 @@
 
 namespace Moggi\Modules;
 
-use function Moggi\Backend\compileBackend;
+use function Moggi\Backend\backendById;
 use function Moggi\Cache\moduleGet;
 use function Moggi\Cache\modulePut;
 
@@ -19,6 +19,8 @@ use function Moggi\Semantics\Registry\foreignFunctionDecl;
 use function Moggi\Semantics\Registry\registerSurfaceConstructorAlias;
 
 use Moggi\Semantics\TypeExpr\Scheme;
+use Moggi\Pipeline\CompilationContext;
+
 use Moggi\Semantics\Types;
 use Moggi\Syntax\Ast;
 
@@ -105,14 +107,16 @@ function buildModuleLocalTypes(
     array &$units,
     string $moduleName,
     array $projectClasses,
-    array $projectInstanceIndex = [],
+    array $projectInstanceIndex,
+    CompilationContext $context,
 ): void {
     $contentKey = $units[$moduleName]['contentKey'] ?? null;
     if ($contentKey !== null) {
         $cached = moduleGet(
             $units[$moduleName]['cacheRelPath'],
             'localtypes',
-            $contentKey,
+            $context->moduleKey($moduleName, $contentKey),
+            $context->backendId,
         );
         if (\is_array($cached)) {
             $units[$moduleName]['localTypes'] = $cached;
@@ -123,6 +127,8 @@ function buildModuleLocalTypes(
 
     $unit = $units[$moduleName];
     $state = Types\newState($unit['source'], $unit['path']);
+    $state->compileBackend = $context->backendId;
+    $state->entryModules = $context->entries;
     $state->classes = $projectClasses;
     Types\syncAssociatedFamiliesFromClasses($state);
     installProjectInstanceIndex($state, $projectInstanceIndex);
@@ -234,8 +240,9 @@ function buildModuleLocalTypes(
         modulePut(
             $units[$moduleName]['cacheRelPath'],
             'localtypes',
-            $contentKey,
+            $context->moduleKey($moduleName, $contentKey),
             $units[$moduleName]['localTypes'],
+            $context->backendId,
         );
     }
 }
@@ -395,8 +402,12 @@ function desugarDoForScope(Ast\AstWalkable $node): void
  * @param ?list<string> $onlyModules
  * @return array<string, array<string, mixed>>
  */
-function classModuleScopes(array $units, array $projectClasses, ?array $onlyModules = null): array
-{
+function classModuleScopes(
+    array $units,
+    array $projectClasses,
+    ?array $onlyModules,
+    string $backendId,
+): array {
     $wanted = $onlyModules !== null ? \array_fill_keys($onlyModules, true) : null;
 
     $referenced = [];
@@ -475,7 +486,7 @@ function classModuleScopes(array $units, array $projectClasses, ?array $onlyModu
             'constructorArity' => $constructorArity,
             'fns' => $fns,
             'dataRefs' => $dataRefs,
-            'visible' => classModuleVisibleTypes($units, $module),
+            'visible' => classModuleVisibleTypes($units, $module, $backendId),
             'wrappers' => \is_array($units[$module]['localTypes']['intrinsicWrappers'] ?? null)
                 ? $units[$module]['localTypes']['intrinsicWrappers']
                 : [],
@@ -826,7 +837,7 @@ function moduleLocalDataNames(array $units, string $moduleName): array
  *   synonyms: array<string, mixed>
  * }
  */
-function classModuleVisibleTypes(array $units, string $moduleName): array
+function classModuleVisibleTypes(array $units, string $moduleName, string $backendId): array
 {
     $types = [];
     $synonyms = [];
@@ -842,7 +853,7 @@ function classModuleVisibleTypes(array $units, string $moduleName): array
 
     $collect($units[$moduleName]['localTypes']['data'] ?? [], $units[$moduleName]['localTypes']['typeSynonyms'] ?? []);
 
-    foreach (moduleDependencyNames($units, $moduleName) as $imported) {
+    foreach (moduleDependencyNames($units, $moduleName, $backendId) as $imported) {
         $exports = $units[$imported]['exports'] ?? null;
         if ($exports === null && isset($units[$imported]['program'], $units[$imported]['localTypes'])) {
             $exports = collectExports(
@@ -915,6 +926,7 @@ function mergeClassScopeRefs(
     array $units = [],
     string $moduleName = '',
     string $rootPrefix = '',
+    string $backendId = '',
 ): array {
     foreach ($refs['actionReturn'] ?? [] as $name => $_) {
         if (isset($localNames[$name])) {
@@ -937,9 +949,16 @@ function mergeClassScopeRefs(
         if (! isset($importContext['codegen']['moduleOutputPaths'][$originModule])
             && isset($units[$originModule]['path'])
         ) {
+            if ($backendId === '') {
+                throw new \RuntimeException(
+                    "planning an import of `{$originModule}` needs the compile target",
+                );
+            }
+
             $importContext['codegen']['moduleOutputPaths'][$originModule] = mogPathToOutputRelative(
                 $units[$originModule]['path'],
                 $rootPrefix,
+                backendById($backendId)->extension(),
             );
         }
     }
@@ -1120,12 +1139,12 @@ function syncExportedInferredSchemesFromTypeEnv(
  *
  * @param array<string, array<string, mixed>> $units
  */
-function isModuleActiveForCompileBackend(array $units, string $moduleName): bool
+function isModuleActiveForCompileBackend(array $units, string $moduleName, string $backendId): bool
 {
     $lower = \strtolower($moduleName);
     foreach (['php', 'jvm', 'js', 'dotnet'] as $backend) {
         if (\str_ends_with($lower, '.' . $backend)) {
-            return $backend === compileBackend();
+            return $backend === $backendId;
         }
     }
 
@@ -1137,5 +1156,5 @@ function isModuleActiveForCompileBackend(array $units, string $moduleName): bool
     $backendMap = $units[$facade]['program']->backendMap
         ?? ($units[$facade]['backendMap'] ?? []);
 
-    return resolveImplModuleName($backendMap) === $moduleName;
+    return ($units[$facade]['implModule'] ?? null) === $moduleName;
 }

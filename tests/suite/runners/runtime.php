@@ -566,7 +566,7 @@ function writeLibBackendOutputs(string $projectRoot, string $backend): string
 
         $staging = $outDir . '.tmp.' . \getmypid() . '.' . \bin2hex(\random_bytes(4));
         Backend\setCompileBackend($backend);
-        $outputs = \Moggi\Modules\compileProject(testLibraryFiles($projectRoot), $projectRoot);
+        $outputs = \Moggi\Modules\compileProject(testLibraryFiles($projectRoot), $projectRoot, \Moggi\Pipeline\CompilationContext::for(Backend\compileBackend(), \Moggi\Pipeline\CompilePurpose::Library, sources: testLibraryFiles($projectRoot)));
         foreach ($outputs as $relative => $source) {
             $target = $staging . '/' . $relative;
             @\mkdir(\dirname($target), 0777, true);

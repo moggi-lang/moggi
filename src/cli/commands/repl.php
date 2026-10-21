@@ -2,8 +2,6 @@
 
 namespace Moggi\CLI\Commands;
 
-use Moggi\Backend;
-
 use function Moggi\CLI\parseBackendValue;
 use function Moggi\CLI\resolveLibraryDirs;
 use function Moggi\Repl\createSession;
@@ -59,7 +57,6 @@ function runRepl(array $argv): int
     }
 
     $backend = parseBackendValue($options['backend']);
-    Backend\setCompileBackend($backend);
     $state = createSession($backend, resolveLibraryDirs($options['lib']));
 
     try {

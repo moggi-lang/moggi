@@ -302,6 +302,7 @@ function lowerFunction(
         srcLoc: $fn->body->line > 0
             ? srcLocFromAst($fn->body, $moduleName, $fn->name, $sourceFile)
             : srcLocFromAst($fn, $moduleName, $fn->name, $sourceFile),
+        kind: FunctionKind::Source,
     );
 }
 

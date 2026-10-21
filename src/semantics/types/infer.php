@@ -13,7 +13,6 @@ use function Moggi\Patterns\Walk\patternVariableNamesOrdered;
 
 use Moggi\Pipeline\CompilePurpose;
 
-use function Moggi\Pipeline\isEntryModule;
 use function Moggi\Semantics\Exhaustiveness\caseExhaustivenessProven;
 use function Moggi\Semantics\Exhaustiveness\checkCaseExhaustiveness;
 use function Moggi\Semantics\IntrinsicRegistry\capturesCallSite;
@@ -1363,7 +1362,7 @@ function rewriteIntrinsicApplies(Ast\AstNode $expr): Ast\AstNode
 
 /**
  * Mark `main` as EntryPointKind::Main under Executable purpose only, in the
- * module this compilation treats as its entry (`isEntryModule`).
+ * module this compilation names in `TypeCheckState::$entryModules`.
  *
  * A package may declare several executables, each with its own entry, so the
  * entry module is named by the compilation rather than fixed at `Main`; the
@@ -1382,7 +1381,7 @@ function validateEntryPoint(
         return;
     }
 
-    if (! isEntryModule($moduleName)) {
+    if ($moduleName === null || ! isset($state->entryModules[$moduleName])) {
         return;
     }
 
@@ -1779,7 +1778,10 @@ function inferVariable(TypeCheckState $state, Ast\AstNode &$expr, array $env): T
     if ($scheme->binderId !== null) {
         $expr->binderId = $scheme->binderId;
     }
-    if (isset($state->externalFns[$expr->name])) {
+    if (isset($state->defaultBodyOrigins[$expr->name]) && $scheme->binderId === null) {
+        $expr->resolvedOrigin = $state->defaultBodyOrigins[$expr->name];
+        $expr->declarationScoped = true;
+    } elseif (isset($state->externalFns[$expr->name])) {
         $expr->resolvedOrigin = $state->externalFns[$expr->name];
     } elseif ($state->currentModule !== null) {
         $expr->resolvedOrigin = resolvedSymbol($state->currentModule, $expr->name);
@@ -1835,7 +1837,10 @@ function inferOperatorRef(TypeCheckState $state, Ast\AstNode &$expr, array $env)
             $expr,
         );
 
-    if (isset($state->externalFns[$expr->name])) {
+    if (isset($state->defaultBodyOrigins[$expr->name]) && $scheme->binderId === null) {
+        $expr->resolvedOrigin = $state->defaultBodyOrigins[$expr->name];
+        $expr->declarationScoped = true;
+    } elseif (isset($state->externalFns[$expr->name])) {
         $expr->resolvedOrigin = $state->externalFns[$expr->name];
     } elseif ($state->currentModule !== null) {
         $expr->resolvedOrigin = resolvedSymbol($state->currentModule, $expr->name);

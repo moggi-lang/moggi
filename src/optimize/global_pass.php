@@ -12,7 +12,6 @@ use function Moggi\IR\Visit\walkStmt;
 use function Moggi\Optimize\Interproc\countLocalUsesInItems;
 use function Moggi\Optimize\Interproc\operandIsNonDuplicable;
 use function Moggi\Optimize\Support\combineOperandsToExpr;
-use function Moggi\Optimize\Support\isCapturedFnName;
 use function Moggi\Optimize\Support\isPropagatableExpr;
 use function Moggi\Optimize\Support\isSimpleOperand;
 use function Moggi\Optimize\Support\mapStmtNestedBlocks;
@@ -1066,7 +1065,7 @@ function setPropagateCopiesLambdaBodies(array $functions): void
     $propagateCopiesLambdaBodies = [];
     $propagateCopiesLambdaParams = [];
     foreach ($functions as $function) {
-        if (isCapturedFnName($function->name)) {
+        if ($function->kind->takesCaptures()) {
             $propagateCopiesLambdaBodies[$function->name] = $function->body;
             $propagateCopiesLambdaParams[$function->name] = $function->params;
         }
@@ -1129,26 +1128,30 @@ function lambdaNamesReferencedInStmt(IR\Stmt $stmt): array
 {
     $names = [];
 
-    $visitStmt = static function (IR\Stmt $s) use (&$names): void {
-        if ($s instanceof IR\Call && isCapturedFnName($s->callee)) {
+    global $propagateCopiesLambdaBodies;
+
+    $captured = static fn (string $name): bool => isset($propagateCopiesLambdaBodies[$name]);
+
+    $visitStmt = static function (IR\Stmt $s) use (&$names, $captured): void {
+        if ($s instanceof IR\Call && $captured($s->callee)) {
             $names[] = $s->callee;
         }
     };
 
-    $visit = static function (IR\Operand $operand) use (&$names): void {
-        if ($operand instanceof IR\FnRef && isCapturedFnName($operand->name)) {
+    $visit = static function (IR\Operand $operand) use (&$names, $captured): void {
+        if ($operand instanceof IR\FnRef && $captured($operand->name)) {
             $names[] = $operand->name;
         }
 
-        if ($operand instanceof IR\Partial && isCapturedFnName($operand->fn)) {
+        if ($operand instanceof IR\Partial && $captured($operand->fn)) {
             $names[] = $operand->fn;
         }
 
-        if ($operand instanceof IR\ExprPartial && isCapturedFnName($operand->fn)) {
+        if ($operand instanceof IR\ExprPartial && $captured($operand->fn)) {
             $names[] = $operand->fn;
         }
 
-        if ($operand instanceof IR\ExprCall && isCapturedFnName($operand->callee)) {
+        if ($operand instanceof IR\ExprCall && $captured($operand->callee)) {
             $names[] = $operand->callee;
         }
     };

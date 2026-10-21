@@ -2,7 +2,7 @@
 
 namespace Moggi\Modules;
 
-use function Moggi\Backend\compileBackend;
+use function Moggi\Backend\backendById;
 use function Moggi\Backend\Php\Naming\basePhpFunctionName;
 use function Moggi\Errors\appendDidYouMean;
 
@@ -432,8 +432,10 @@ function buildImportContext(
     string $currentModule,
     string $currentOutputRelative,
     string $rootPrefix,
+    string $backendId,
 ): array {
-    $planPhpImports = compileBackend() === 'php';
+    $planPhpImports = $backendId === 'php';
+    $outputExtension = backendById($backendId)->extension();
     $env = [];
     $typeSynonyms = [];
     $data = [];
@@ -504,7 +506,7 @@ function buildImportContext(
 
         if ($targetName !== $currentModule) {
             if (! (($target['synthetic'] ?? false) === true)) {
-                $targetOutputRelative = mogPathToOutputRelative($target['path'], $rootPrefix);
+                $targetOutputRelative = mogPathToOutputRelative($target['path'], $rootPrefix, $outputExtension);
                 $moduleOutputPaths[$targetName] = $targetOutputRelative;
                 if ($planPhpImports) {
                     $requireTargets[$targetName] = relativeRequirePath($currentOutputRelative, $targetOutputRelative);
@@ -542,7 +544,7 @@ function buildImportContext(
                     $qualifiedOrigins[$localPrefix][$name] = $origin;
                 }
                 if ($origin !== null && $planPhpImports) {
-                    addOriginRequire($requireTargets, $moduleOutputPaths, $origin, $currentModule, $currentOutputRelative, $units, $rootPrefix);
+                    addOriginRequire($requireTargets, $moduleOutputPaths, $origin, $currentModule, $currentOutputRelative, $units, $rootPrefix, $outputExtension);
                 }
                 if (isset($selected['intrinsicWrappers'][$name])) {
                     $intrinsicWrappers[$name] = $selected['intrinsicWrappers'][$name];
@@ -683,6 +685,7 @@ function buildImportContext(
                     $currentOutputRelative,
                     $units,
                     $rootPrefix,
+                    $outputExtension,
                 );
             }
         }
@@ -704,6 +707,7 @@ function buildImportContext(
         $currentOutputRelative,
         $rootPrefix,
         $planPhpImports,
+        $outputExtension,
     );
 
     $requireLines = [];
@@ -852,7 +856,8 @@ function mergeFacadeBackendExports(
     string $currentModule,
     string $currentOutputRelative,
     string $rootPrefix,
-    bool $planPhpImports = true,
+    bool $planPhpImports,
+    string $outputExtension,
 ): void {
     mergeFacadeBackendEnv($env, $intrinsicWrappers, $units, $currentModule);
 
@@ -903,6 +908,7 @@ function mergeFacadeBackendExports(
                 $currentOutputRelative,
                 $units,
                 $rootPrefix,
+                $outputExtension,
             );
         }
     }
@@ -922,13 +928,14 @@ function addOriginRequire(
     string $currentOutputRelative,
     array $units,
     string $rootPrefix,
+    string $outputExtension,
 ): void {
     $originModule = $origin['module'];
     if ($originModule === $currentModule || ! isset($units[$originModule])) {
         return;
     }
 
-    $originOutputRelative = mogPathToOutputRelative($units[$originModule]['path'], $rootPrefix);
+    $originOutputRelative = mogPathToOutputRelative($units[$originModule]['path'], $rootPrefix, $outputExtension);
     $moduleOutputPaths[$originModule] = $originOutputRelative;
     $requireTargets[$originModule] = relativeRequirePath($currentOutputRelative, $originOutputRelative);
 }

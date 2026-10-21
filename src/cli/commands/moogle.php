@@ -75,13 +75,13 @@ function runMoogle(array $argv): int
     }
 
     try {
-        Backend\setCompileBackend('php');
         if ($options['noCache']) {
             Cache\setCacheEnabled(false);
         }
         $index = Docs\loadOrBuildIndex(
             $options['root'] ?? defaultDocsInput(),
             $options['lib'],
+            Docs\docsContext('php', $options['lib']),
             $options['rebuild'],
         );
 

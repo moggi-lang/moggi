@@ -14,8 +14,6 @@ use function Moggi\Optimize\Interproc\indexFunctions;
 use function Moggi\Optimize\Interproc\isSimpleLambda;
 use function Moggi\Optimize\Support\buildLambdaMeta;
 use function Moggi\Optimize\Support\indexCapturedFunctions;
-use function Moggi\Optimize\Support\isCapturedFnName;
-use function Moggi\Optimize\Support\isLambdaName;
 use function Moggi\Optimize\Support\mapStmtNestedBlocks;
 use function Moggi\Optimize\Support\operandToExpr;
 
@@ -190,7 +188,7 @@ function bindCapturedPartial(IR\Partial|IR\ExprPartial $partial, array $meta): I
  */
 function bindLambdaCapturesOperand(IR\Operand $operand, array $meta): IR\Operand
 {
-    if ($operand instanceof IR\FnRef && isCapturedFnName($operand->name)) {
+    if ($operand instanceof IR\FnRef) {
         $info = $meta[$operand->name] ?? null;
         if ($info !== null && ($info['captures'] ?? []) !== []) {
             $captureArgs = \array_map(
@@ -758,7 +756,7 @@ function knownFunctionArity(array $functions, string $moduleName): array
 {
     $arity = [];
     foreach ($functions as $function) {
-        if (isCapturedFnName($function->name)) {
+        if ($function->kind->takesCaptures()) {
             continue;
         }
         $count = \count($function->params);
@@ -982,6 +980,8 @@ function specializePartialReturnFunction(IR\FunctionDecl $function, array $captu
         $function->foreign,
         $function->ioBodyKind,
         $function->srcLoc,
+        $function->kind,
+        $function->origin,
     );
 }
 
@@ -1115,8 +1115,7 @@ function calleeNeedsRuntimeApply(IR\Operand $callee, array $lambdaIndex): bool
 {
     return match ($callee::class) {
         IR\Partial::class, IR\ExprPartial::class => false,
-        IR\FnRef::class => ! (isLambdaName($callee->name)
-            && isset($lambdaIndex[$callee->name])
+        IR\FnRef::class => ! (isset($lambdaIndex[$callee->name])
             && isSimpleLambda($lambdaIndex[$callee->name])),
         IR\Local::class, IR\Temp::class => true,
         IR\DictMethod::class => true,

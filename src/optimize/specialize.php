@@ -32,7 +32,6 @@ use function Moggi\Optimize\Interproc\setActiveForeignLeaves;
 use function Moggi\Optimize\Interproc\setActivePeFusionIndex;
 use function Moggi\Optimize\Interproc\substituteStmt;
 use function Moggi\Optimize\optimize;
-use function Moggi\Optimize\Support\isLambdaName;
 use function Moggi\Optimize\Support\isWiredInBoolCtor;
 
 /**
@@ -251,12 +250,12 @@ function activateSpecializeWorld(array $modules, array $externalFnsByModule): ar
     $globalEvidence = [];
     /** @var array<string, true> $ambiguousShortNames */
     $ambiguousShortNames = [];
-    /** @var array<string, array<string, true>> $fnsByModule */
+    /** @var array<string, array<string, IR\FunctionKind|true>> $fnsByModule */
     $fnsByModule = [];
     foreach ($modules as $moduleName => $module) {
         foreach ($module->functions as $function) {
             $short = $function->name;
-            $fnsByModule[$moduleName][$short] = true;
+            $fnsByModule[$moduleName][$short] = $function->kind;
             $qualified = resolvedSymbol($moduleName, $short);
             $entry = [
                 'module' => $moduleName,
@@ -587,7 +586,7 @@ function optimizeSpecializationRoots(array &$modules, array $rootNames, int $pas
     $fnsByModule = [];
     foreach ($modules as $moduleName => $module) {
         foreach ($module->functions as $function) {
-            $fnsByModule[$moduleName][$function->name] = true;
+            $fnsByModule[$moduleName][$function->name] = $function->kind;
         }
         registerModuleConstructorNames($fnsByModule, $moduleName, $module);
     }
@@ -1302,7 +1301,7 @@ function resolveSpecializedCallee(
     int &$cacheHits,
 ): ?array {
     $lookup = specializationLookupName($callee);
-    if ($lookup === $selfName || isLambdaName($lookup) || \str_starts_with($lookup, '__spec_')) {
+    if ($lookup === $selfName) {
         return null;
     }
 
@@ -1321,6 +1320,9 @@ function resolveSpecializedCallee(
     }
 
     $target = $targetInfo['function'];
+    if ($target->kind !== IR\FunctionKind::Source) {
+        return null;
+    }
     if ($target->foreign || $target->ioEffect || ! isSpecializeCandidate($target)) {
         return null;
     }
@@ -1348,7 +1350,7 @@ function resolveSpecializedCallee(
     );
 
     $key = specializationKey(
-        $targetInfo['module'] . '::' . $lookup,
+        $targetInfo['module'] . '::' . $target->name,
         $moduleName,
         $burnedArgs,
     );
@@ -1361,13 +1363,13 @@ function resolveSpecializedCallee(
         return ['name' => $cache[$key]['name'], 'burned' => $burned];
     }
 
-    $specName = '__spec_' . \preg_replace('/[^A-Za-z0-9_]/', '_', $lookup) . '_' . \substr(\sha1($key), 0, 12);
+    $specName = '__spec_' . \substr(\sha1($key), 0, 24);
     $cache[$key] = [
         'module' => $moduleName,
         'sourceModule' => $targetInfo['module'],
         'name' => $specName,
     ];
-    $clone = cloneSpecializedFunction($target, $specName, $burnedArgs);
+    $clone = cloneSpecializedFunction($target, $specName, $burnedArgs, $target->name);
     $clone = qualifySourceModuleCallees(
         $clone,
         $targetInfo['module'],
@@ -1423,7 +1425,7 @@ function activeSpecializeEvidence(): array
  * into another module. Register them so qualifySourceModuleCallees rewrites
  * bare `MkMap` → `Data.Map::MkMap` instead of leaving an unmapped short name.
  *
- * @param array<string, array<string, true>> $fnsByModule
+ * @param array<string, array<string, IR\FunctionKind|true>> $fnsByModule
  */
 function registerModuleConstructorNames(array &$fnsByModule, string $moduleName, IR\Module $module): void
 {
@@ -1437,13 +1439,13 @@ function registerModuleConstructorNames(array &$fnsByModule, string $moduleName,
     }
 }
 
-/** @param array<string, array<string, true>> $fnsByModule */
+/** @param array<string, array<string, IR\FunctionKind|true>> $fnsByModule */
 function setActiveSpecializeFnsByModule(array $fnsByModule): void
 {
     $GLOBALS['__moggi_specialize_fns_by_module'] = $fnsByModule;
 }
 
-/** @return array<string, array<string, true>> */
+/** @return array<string, array<string, IR\FunctionKind|true>> */
 function activeSpecializeFnsByModule(): array
 {
     $fns = $GLOBALS['__moggi_specialize_fns_by_module'] ?? [];
@@ -1551,7 +1553,6 @@ function isConcreteSpecializeArg(IR\Operand $arg): bool
 
         if ($arg->args === []) {
             return isEvidenceFactoryName($arg->callee)
-                || isSpecCloneName($arg->callee)
                 || isPlausibleConstFn($arg->callee)
                 || isPlausibleConstructorName($arg->callee);
         }
@@ -1565,11 +1566,6 @@ function isConcreteSpecializeArg(IR\Operand $arg): bool
 function isEvidenceFactoryName(string $name): bool
 {
     return \str_starts_with(specializationLookupName($name), '__ev_');
-}
-
-function isSpecCloneName(string $name): bool
-{
-    return \str_starts_with(specializationLookupName($name), '__spec_');
 }
 
 function isPlausibleConstFn(string $name): bool
@@ -1724,7 +1720,12 @@ function isTransparentEvidenceFactoryCall(IR\ExprCall $call): bool
 }
 
 /** @param list<IR\Operand> $burnedArgs */
-function cloneSpecializedFunction(IR\FunctionDecl $target, string $specName, array $burnedArgs): IR\FunctionDecl
+function cloneSpecializedFunction(
+    IR\FunctionDecl $target,
+    string $specName,
+    array $burnedArgs,
+    string $origin,
+): IR\FunctionDecl
 {
     $burned = \count($burnedArgs);
     $params = \array_slice($target->params, $burned);
@@ -1778,6 +1779,8 @@ function cloneSpecializedFunction(IR\FunctionDecl $target, string $specName, arr
         false,
         $target->ioBodyKind,
         $target->srcLoc,
+        IR\FunctionKind::SpecClone,
+        $origin,
     );
 }
 
@@ -1795,7 +1798,7 @@ function cloneSpecializedFunction(IR\FunctionDecl $target, string $specName, arr
  * Resolves both locally defined source functions and names imported into the
  * source module (`$sourceExternalFns`).
  *
- * @param array<string, true> $sourceFnNames names defined in the source module
+ * @param array<string, IR\FunctionKind|true> $sourceFnNames names defined in the source module
  * @param array<string, true> $destLocalNames names the destination module defines itself
  * @param array<string, string> $sourceExternalFns bare => `Origin::name`
  */
@@ -1823,7 +1826,8 @@ function qualifySourceModuleCallees(
         if (isWiredInBoolCtor($name)) {
             return $name;
         }
-        if (isset($destLocalNames[$name]) && ! isLambdaName($name)) {
+        $sourceKind = $sourceFnNames[$name] ?? null;
+        if (isset($destLocalNames[$name]) && ! ($sourceKind instanceof IR\FunctionKind && $sourceKind->takesCaptures())) {
             return $name;
         }
         if (isset($sourceFnNames[$name])) {
@@ -2133,7 +2137,7 @@ function hoistSpecializeEvidenceCafs(array &$modules, array $rootNames): void
         $newFunctions = [];
         $addedCafs = [];
         foreach ($module->functions as $fn) {
-            if (! \str_starts_with($fn->name, '__spec_')) {
+            if ($fn->kind !== IR\FunctionKind::SpecClone) {
                 $newFunctions[] = $fn;
 
                 continue;
@@ -2176,6 +2180,7 @@ function hoistEvidenceCafsInFunction(IR\FunctionDecl $function, array &$existing
                 [],
                 null,
                 new IR\Block([new IR\Ret($operand)]),
+                kind: IR\FunctionKind::Generated,
             );
             $existingNames[$cafName] = true;
             $out[] = new IR\Call($cafName, [], $item->dest, $item->srcLoc);
@@ -2191,6 +2196,7 @@ function hoistEvidenceCafsInFunction(IR\FunctionDecl $function, array &$existing
                 [],
                 null,
                 new IR\Block([new IR\Ret($item->value)]),
+                kind: IR\FunctionKind::Generated,
             );
             $existingNames[$cafName] = true;
             $out[] = new IR\Assign($item->dest, new IR\ExprCall($cafName, []));

@@ -38,15 +38,18 @@ $throws = static function (callable $call): ?Validate\InvalidIr {
 
 $local = static fn (string $name): IR\Local => new IR\Local($name);
 $temp = static fn (int $id): IR\Temp => new IR\Temp($id);
-$fn = static fn (string $name, IR\Block $body): IR\FunctionDecl => new IR\FunctionDecl($name, [], null, $body);
+$fn = static fn (string $name, IR\Block $body, IR\FunctionKind $kind = IR\FunctionKind::Source): IR\FunctionDecl
+    => new IR\FunctionDecl($name, [], null, $body, kind: $kind);
 
 $good = $fn('good', new IR\Block([
     new IR\Assign(1, new IR\ConstInt(1)),
     new IR\Ret($temp(1)),
 ]));
 $badTemp = $fn('badTemp', new IR\Block([new IR\Ret($temp(7))]));
-$spec = $fn('__spec_clone', new IR\Block([new IR\Ret($local('captured'))]));
+$spec = $fn('__spec_clone', new IR\Block([new IR\Ret($local('captured'))]), IR\FunctionKind::SpecClone);
 $plain = $fn('plain', new IR\Block([new IR\Ret($local('captured'))]));
+// Same spelling as a clone, but a declared function: the prefix is presentation.
+$specLookalike = $fn('__spec_lookalike', new IR\Block([new IR\Ret($local('captured'))]));
 $module = new IR\Module([$good], [], [], null, 'Main', 'Main.mog');
 
 // ---- the flag is inert by default ---------------------------------------
@@ -117,12 +120,20 @@ try {
         static fn (array $fns): array => $fns,
         true,
     ));
+    $lookalikeInWindow = $throws(static fn () => PassCheckpoints\runOnFunctions(
+        'before-capture-binding',
+        $module,
+        [$specLookalike],
+        static fn (array $fns): array => $fns,
+        true,
+    ));
 } finally {
     PassCheckpoints\leaveOptimize();
 }
-$check($inWindow === null, 'a __spec_ clone reading a free local was rejected inside the capture window');
-$check($afterWindow !== null, 'a __spec_ clone reading a free local was accepted after capture binding');
-$check($plainInWindow !== null, 'the capture exception leaked to a plainly named function');
+$check($inWindow === null, 'a SpecClone reading a free local was rejected inside the capture window');
+$check($afterWindow !== null, 'a SpecClone reading a free local was accepted after capture binding');
+$check($plainInWindow !== null, 'the capture exception leaked to a function of another kind');
+$check($lookalikeInWindow !== null, 'the capture exception was decided by the `__spec_` spelling, not the kind');
 
 // ---- no restoration hook, and the boundary check names its finding ------
 

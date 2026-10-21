@@ -21,8 +21,6 @@ use function Moggi\Optimize\CaseFold\joinMatchStmtConsumer;
 use function Moggi\Optimize\CaseFold\nullaryCtorCaf;
 use function Moggi\Optimize\Support\buildLambdaMeta;
 use function Moggi\Optimize\Support\indexCapturedFunctions;
-use function Moggi\Optimize\Support\isCapturedFnName;
-use function Moggi\Optimize\Support\isLambdaName;
 use function Moggi\Optimize\Support\isWiredInBoolCtor;
 use function Moggi\Optimize\Support\mapStmtNestedBlocks;
 use function Moggi\Optimize\Support\tempUsedInItems;
@@ -97,7 +95,10 @@ function lookupIndexedFunction(array $index, string $callee): ?IR\FunctionDecl
     }
 
     $leaf = specializationLookupNameSafe($callee);
-    if ($leaf !== $callee && (\str_starts_with($leaf, '__spec_') || \str_starts_with($leaf, '__ev_'))) {
+    if ($leaf !== $callee && (
+        (isset($index[$leaf]) && $index[$leaf]->kind === IR\FunctionKind::SpecClone)
+        || \str_starts_with($leaf, '__ev_')
+    )) {
         if (isset($index[$leaf])) {
             return $index[$leaf];
         }
@@ -1028,12 +1029,12 @@ function assignMatchArmToDest(array $items, int $dest): array
 /** @param array<string, IR\FunctionDecl> $index */
 function isCapturedLambdaArg(IR\Operand $arg, array $index): bool
 {
-    if (! ($arg instanceof IR\FnRef) || ! isLambdaName($arg->name)) {
+    if (! $arg instanceof IR\FnRef) {
         return false;
     }
 
     $lambda = $index[$arg->name] ?? null;
-    if ($lambda === null) {
+    if ($lambda === null || ! $lambda->kind->takesCaptures()) {
         return false;
     }
 
@@ -1060,7 +1061,13 @@ function isCapturedLambdaArg(IR\Operand $arg, array $index): bool
  */
 function bodyReferencesCapturedLambdas(IR\FunctionDecl $function, array $index): bool
 {
-    $leafCaptured = static fn (string $name): bool => isCapturedFnName(specializationLookupNameSafe($name));
+    $leafCaptured = static function (string $name) use ($index): bool {
+        $lambda = $index[$name]
+            ?? $index[specializationLookupNameSafe($name)]
+            ?? lookupIndexedFunction($index, $name);
+
+        return $lambda !== null && $lambda->kind->takesCaptures();
+    };
     $names = collectLambdaRefsInBlock($function->body, $leafCaptured);
     walkBlock(
         $function->body,
@@ -1948,7 +1955,7 @@ function isInlineCandidate(IR\FunctionDecl $function): bool
         return false;
     }
 
-    if (isLambdaName($function->name)) {
+    if ($function->kind->takesCaptures()) {
         return false;
     }
 
@@ -1989,7 +1996,7 @@ function isInlineCandidate(IR\FunctionDecl $function): bool
  */
 function isMatchWrapperCandidate(IR\FunctionDecl $function): bool
 {
-    if ($function->foreign || $function->ioEffect || isLambdaName($function->name)) {
+    if ($function->foreign || $function->ioEffect || $function->kind->takesCaptures()) {
         return false;
     }
 
@@ -2743,7 +2750,7 @@ function tryFuseLambdaCall(IR\Stmt $call, IR\CallValue $callValue, array $index)
         return null;
     }
 
-    $lambdaName = returnedLambdaName($provider);
+    $lambdaName = returnedLambdaName($provider, $index);
     if ($lambdaName === null) {
         return null;
     }
@@ -2787,8 +2794,8 @@ function tryFuseLambdaRet(IR\Stmt $call, IR\Ret $ret, array $index): ?array
     return new IR\Ret($fused->value);
 }
 
-/** @param IR\FunctionDecl $provider */
-function returnedLambdaName(IR\FunctionDecl $provider): ?string
+/** @param IR\FunctionDecl $provider @param array<string, IR\FunctionDecl> $index */
+function returnedLambdaName(IR\FunctionDecl $provider, array $index): ?string
 {
     $items = $provider->body->items;
     if (\count($items) !== 1 || ! ($items[0] instanceof IR\Ret)) {
@@ -2796,7 +2803,12 @@ function returnedLambdaName(IR\FunctionDecl $provider): ?string
     }
 
     $value = $items[0]->value;
-    if (! ($value instanceof IR\FnRef) || ! isLambdaName($value->name)) {
+    if (! $value instanceof IR\FnRef) {
+        return null;
+    }
+
+    $target = $index[$value->name] ?? null;
+    if ($target === null || $target->kind !== IR\FunctionKind::Lambda) {
         return null;
     }
 
@@ -2806,7 +2818,7 @@ function returnedLambdaName(IR\FunctionDecl $provider): ?string
 /** @param IR\FunctionDecl $lambda */
 function isSimpleLambda(IR\FunctionDecl $lambda): bool
 {
-    if (! isLambdaName($lambda->name) || \count($lambda->params) !== 1) {
+    if ($lambda->kind !== IR\FunctionKind::Lambda || \count($lambda->params) !== 1) {
         return false;
     }
 
@@ -3029,12 +3041,11 @@ function estimateStmtExprSize(IR\Stmt $stmt): int
 
 function isPeFusionInlineCandidate(IR\FunctionDecl $function): bool
 {
-    if ($function->foreign || $function->ioEffect || isLambdaName($function->name)) {
+    if ($function->foreign || $function->ioEffect) {
         return false;
     }
 
-    $leaf = specializationLookupNameSafe($function->name);
-    if (! \str_starts_with($leaf, '__spec_')) {
+    if ($function->kind !== IR\FunctionKind::SpecClone) {
         return false;
     }
 

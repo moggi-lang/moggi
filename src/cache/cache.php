@@ -4,7 +4,6 @@ namespace Moggi\Cache;
 
 require_once __DIR__ . '/../paths.php';
 
-use function Moggi\Backend\compileBackend;
 use function Moggi\Paths\globPaths;
 
 /**
@@ -400,11 +399,24 @@ function decodePayload(string $raw): mixed
 /**
  * Read a cached per-module artifact.
  *
- * @param string $relPath    source path mirrored under the cache root
- * @param string $kind       artifact kind (e.g. 'checked', 'localtypes', 'exports')
- * @param string $contentKey Merkle content key of the module
+ * `$key` is the module's declared cache key: its content Merkle plus the
+ * compilation inputs the product depends on — target, purpose and module
+ * search roots ({@see \Moggi\Pipeline\CompilationContext::moduleKey}). The
+ * key is the entry's identity, not a probe: an entry written under another key
+ * is an incompatible product and is never served. It is reported as a miss and
+ * dropped, so the next write stores the product this compilation derives
+ * rather than leaving one target's result to be handed to the next.
+ *
+ * The `target` stamp is checked as well as the key. The directory already
+ * names the target, so a mismatch means the file was moved or copied by hand
+ * into the wrong tree, and that is exactly the case a key alone would trust.
+ *
+ * @param string $relPath source path mirrored under the cache root
+ * @param string $kind    artifact kind (e.g. 'checked', 'localtypes', 'exports')
+ * @param string $key     declared module cache key
+ * @param string $target  target backend id (also the directory)
  */
-function moduleGet(string $relPath, string $kind, string $contentKey): mixed
+function moduleGet(string $relPath, string $kind, string $key, string $target): mixed
 {
     if (! cacheEnabled()) {
         return null;
@@ -412,7 +424,7 @@ function moduleGet(string $relPath, string $kind, string $contentKey): mixed
 
     ensureCache();
 
-    $path = modulePath($relPath, $kind);
+    $path = modulePath($relPath, $kind, $target);
     if (! \is_file($path)) {
         return null;
     }
@@ -427,14 +439,23 @@ function moduleGet(string $relPath, string $kind, string $contentKey): mixed
         return null;
     }
 
-    if (($value['key'] ?? null) !== $contentKey) {
+    if (($value['key'] ?? null) !== $key || ($value['target'] ?? null) !== $target) {
+        @\unlink($path);
+
         return null;
     }
 
     return $value['payload'] ?? null;
 }
 
-function modulePut(string $relPath, string $kind, string $contentKey, mixed $payload): void
+/**
+ * Write a per-module artifact under its declared key.
+ *
+ * Products are immutable by convention and by construction: `atomicWrite`
+ * renames a complete file into place, so a reader sees either the previous
+ * entry or this one, and an entry is never edited in place under a live key.
+ */
+function modulePut(string $relPath, string $kind, string $key, mixed $payload, string $target): void
 {
     if (! cacheEnabled()) {
         return;
@@ -443,18 +464,16 @@ function modulePut(string $relPath, string $kind, string $contentKey, mixed $pay
     ensureCache();
 
     $raw = \serialize([
-        'key' => $contentKey,
+        'key' => $key,
+        'target' => $target,
         'payload' => $payload,
     ]);
-    atomicWrite(modulePath($relPath, $kind), $raw);
+    atomicWrite(modulePath($relPath, $kind, $target), $raw);
 }
 
-function modulePath(string $relPath, string $kind): string
+function modulePath(string $relPath, string $kind, string $backendId): string
 {
-    $backend = compileBackend();
-    if (\preg_match('/^[a-z0-9_-]+$/', $backend) !== 1) {
-        $backend = 'unknown';
-    }
+    $backend = \preg_match('/^[a-z0-9_-]+$/', $backendId) === 1 ? $backendId : 'unknown';
 
     return compileDir() . '/' . $backend . '/' . mirrorPath($relPath) . '.' . $kind . '.mogc';
 }
@@ -490,8 +509,11 @@ function artifactGet(string $key): mixed
     }
 
     $value = decodePayload($raw);
+    if ($value === null || ($value['key'] ?? null) !== $key) {
+        return null;
+    }
 
-    return $value === null ? null : ($value['payload'] ?? null);
+    return $value['payload'] ?? null;
 }
 
 function artifactPut(string $key, mixed $payload): void
@@ -502,7 +524,7 @@ function artifactPut(string $key, mixed $payload): void
 
     ensureCache();
 
-    $raw = \serialize(['payload' => $payload]);
+    $raw = \serialize(['key' => $key, 'payload' => $payload]);
     atomicWrite(compileDir() . '/artifacts/' . artifactFileName($key) . '.blob', $raw);
 }
 

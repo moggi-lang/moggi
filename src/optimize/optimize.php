@@ -251,7 +251,7 @@ function optimizeFunctionEarly(FunctionDecl $function): FunctionDecl
 
     $body = cseBlock($body);
     $body = dceBlock($body);
-    $body = eliminateTailRecursion($function->name, $function->params, $body);
+    $body = eliminateTailRecursion($function->name, $function->params, $body, $function->kind);
     $body = new Block(foldMatchReturn($body->items));
 
     return $function->withBody($body);

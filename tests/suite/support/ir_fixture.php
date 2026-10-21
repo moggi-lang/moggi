@@ -65,6 +65,9 @@ function functionFromArray(array $fn): IR\FunctionDecl
         $fn['ioStraightLine'] ?? false,
         $fn['foreign'] ?? false,
         $ioBodyKind,
+        kind: isset($fn['kind']) && \is_string($fn['kind'])
+            ? IR\FunctionKind::from($fn['kind'])
+            : IR\FunctionKind::Source,
     );
 }
 

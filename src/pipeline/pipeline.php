@@ -2,10 +2,7 @@
 
 namespace Moggi\Pipeline;
 
-use function Moggi\Backend\codegen;
-
-use function Moggi\Backend\currentBackend;
-use function Moggi\Backend\setCompileBackend;
+use function Moggi\Backend\codegenWith;
 use function Moggi\IR\lower;
 use function Moggi\IR\Validate\validateModule;
 use function Moggi\Modules\moduleNameToNamespace;
@@ -25,12 +22,10 @@ use function Moggi\Syntax\Parser\parse;
  */
 function run(PipelineRequest $request, PipelineStage $stopAt = PipelineStage::Emit): PipelineArtifacts
 {
-    if ($request->backend !== null) {
-        setCompileBackend($request->backend);
-    }
-
     $artifacts = new PipelineArtifacts(
-        purpose: $request->purpose,
+        purpose: $request->context->purposeFor(
+            $request->typedProgram?->module ?? $request->program?->module,
+        ),
     );
 
     if ($request->typedProgram !== null) {
@@ -56,7 +51,9 @@ function run(PipelineRequest $request, PipelineStage $stopAt = PipelineStage::Em
             $request->source,
             $request->filename,
             $request->importContext,
-            $request->purpose,
+            $request->context->purposeFor($program->module),
+            entryModules: $request->context->entries,
+            backendId: $request->context->backendId,
         );
         $artifacts->typedAst = $typed;
 
@@ -100,10 +97,10 @@ function run(PipelineRequest $request, PipelineStage $stopAt = PipelineStage::Em
 
     $emitOptions = $request->emitOptions;
     if ($emitOptions === []) {
-        $emitOptions = defaultEmitOptions($artifacts->typedAst, $request->filename);
+        $emitOptions = defaultEmitOptions($artifacts->typedAst, $request->filename, $request->context);
     }
 
-    $artifacts->emit = codegen($irOpt, $request->filename, $emitOptions);
+    $artifacts->emit = codegenWith($request->context->backend, $irOpt, $request->filename, $emitOptions);
 
     return $artifacts;
 }
@@ -118,12 +115,12 @@ function irCheckpointsEnabled(): bool
 }
 
 /** @return array{outputRelative: string, moduleName?: string, namespace?: string} */
-function defaultEmitOptions(Program $ast, string $filename): array
+function defaultEmitOptions(Program $ast, string $filename, CompilationContext $context): array
 {
     $emitOptions = [
         'outputRelative' => \preg_replace(
             '/\.mog$/',
-            currentBackend()->extension(),
+            $context->backend->extension(),
             \str_replace('\\', '/', $filename),
         ) ?? $filename,
         'artifactModuleName' => $ast->module ?? '',

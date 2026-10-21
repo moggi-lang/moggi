@@ -39,12 +39,11 @@ MOGGI;
 
 $program = parse(lex($source, $filename), $source, $filename);
 $artifacts = pipelineRun(new PipelineRequest(
-    purpose: CompilePurpose::Library,
     source: $source,
     filename: $filename,
     program: $program,
     optimize: false,
-    backend: 'php',
+    context: \Moggi\Pipeline\CompilationContext::for('php', CompilePurpose::Library),
 ), PipelineStage::Ir);
 
 $decls = [];

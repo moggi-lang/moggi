@@ -87,7 +87,7 @@ seedCacheDir($cacheDir);
 \putenv('MOGGI_CACHE_DIR=' . $cacheDir);
 
 try {
-    $index = Docs\loadOrBuildIndex($rootDir, [$depDir], true);
+    $index = Docs\loadOrBuildIndex($rootDir, [$depDir], Docs\docsContext('php', [$depDir]), true);
     assertTrue(isset($index->byModule['Scope']), 'the documented root is indexed');
     assertTrue(! isset($index->byModule['Dep']), 'a dependency module is not indexed');
     echo "instance context kind tests passed\n";

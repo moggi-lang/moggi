@@ -4,7 +4,6 @@ namespace Moggi\Repl;
 
 use function Moggi\Backend\backendById;
 use function Moggi\Backend\knownBackendIds;
-use function Moggi\Backend\setCompileBackend;
 use function Moggi\formatExceptionReport;
 
 use Moggi\Pipeline\PipelineStage;
@@ -132,8 +131,7 @@ function handleCommand(State $state, string $line): array
                 if (! \in_array($arg, $ids, true)) {
                     return 'usage: :backend ' . \implode('|', $ids) . "\n";
                 }
-                $state->backend = $arg;
-                setCompileBackend($arg);
+                $state->setBackend($arg);
                 clearSession($state);
 
                 return "backend = {$arg}\n";

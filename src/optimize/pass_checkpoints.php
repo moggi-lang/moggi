@@ -125,7 +125,7 @@ function checkFunctions(string $label, IR\Module $module, array $functions, bool
     try {
         Validate\validateFunctionList($functions, $qualified, $source);
     } catch (Validate\InvalidIr $e) {
-        if ($captureWindow && isCaptureException($e)) {
+        if ($captureWindow && isCaptureException($e, $functions)) {
             State::$excepted[] = $qualified . ':' . $e->function;
 
             return;
@@ -141,11 +141,27 @@ function checkFunctions(string $label, IR\Module $module, array $functions, bool
     }
 }
 
-/** A `__spec_` clone reading a free local before `bindLambdaCaptures`. */
-function isCaptureException(Validate\InvalidIr $e): bool
+/**
+ * A specialization clone reading a free local before `bindLambdaCaptures`.
+ *
+ * The clone is identified by its declared kind, not its `__spec_` spelling: the
+ * prefix is presentation, and a source function may be named the same way.
+ *
+ * @param list<IR\FunctionDecl> $functions
+ */
+function isCaptureException(Validate\InvalidIr $e, array $functions): bool
 {
-    return \str_starts_with($e->function, '__spec_')
-        && \str_contains($e->getMessage(), 'unbound local');
+    if (! \str_contains($e->getMessage(), 'unbound local')) {
+        return false;
+    }
+
+    foreach ($functions as $function) {
+        if ($function->name === $e->function) {
+            return $function->kind === IR\FunctionKind::SpecClone;
+        }
+    }
+
+    return false;
 }
 
 /** @return list<int> */

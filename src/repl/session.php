@@ -3,7 +3,6 @@
 namespace Moggi\Repl;
 
 use function Moggi\Backend\backendById;
-use function Moggi\Backend\setCompileBackend;
 
 use Moggi\Cache;
 use Moggi\Modules;
@@ -16,6 +15,7 @@ use function Moggi\Modules\moduleFacadeExtraTypes;
 use function Moggi\Modules\moduleNameToNamespace;
 use function Moggi\Paths\moduleNameToPath;
 
+use Moggi\Pipeline\CompilationContext;
 use Moggi\Pipeline\CompilePurpose;
 
 use function Moggi\Semantics\Effects\checkAndNormalize;
@@ -143,8 +143,8 @@ function ensureBasePrepared(State $state): Modules\PreparedProject
         );
     }
 
-    [$files, $root] = Modules\projectSourceClosure($seed, $state->libDirs);
-    $state->basePrepared = Modules\prepareFocusBase($files, $root);
+    [$files, $root] = Modules\projectSourceClosure($seed, $state->libDirs, $state->backend);
+    $state->basePrepared = Modules\prepareFocusBase($files, $root, $state->context->withSources($files));
     $state->basePreparedFp = $fp;
 
     return $state->basePrepared;
@@ -208,7 +208,6 @@ function prepareInteractive(State $state, string $extra = '', bool $normalizeIo 
         return adoptInteractiveCtx($state, $cached);
     }
 
-    setCompileBackend($state->backend);
     $source = interactiveSource($state, $extra);
     $path = writeInteractiveSource($state, $source);
     $base = ensureBasePrepared($state);
@@ -264,12 +263,21 @@ function prepareInteractive(State $state, string $extra = '', bool $normalizeIo 
 
     $outputRelative = moduleNameToPath($moduleName)
         . backendById($state->backend)->extension();
+    $unitPaths = [];
+    foreach ($units as $unit) {
+        if (isset($unit['path'])) {
+            $unitPaths[] = $unit['path'];
+        }
+    }
+    $context = $state->context->withSources([...$unitPaths, $path]);
+    $state->context = $context;
     $importContext = buildImportContext(
         $imports,
         $units,
         $moduleName,
         $outputRelative,
         $base->rootPrefix,
+        $context->backendId,
     );
     $importContext['classes'] = $projectClasses;
     $importContext['projectInstances'] = $projectInstances;
@@ -291,6 +299,8 @@ function prepareInteractive(State $state, string $extra = '', bool $normalizeIo 
             $importContext,
             CompilePurpose::Repl,
             $interface,
+            entryModules: $context->entries,
+            backendId: $context->backendId,
         )
         : Types\checkRaw(
             $program,
@@ -299,6 +309,8 @@ function prepareInteractive(State $state, string $extra = '', bool $normalizeIo 
             $importContext,
             CompilePurpose::Repl,
             $interface,
+            entryModules: $context->entries,
+            backendId: $context->backendId,
         );
     $units[$moduleName]['localTypes'] = $interface;
 
@@ -879,6 +891,8 @@ function destroySession(State $state): void
  */
 function createSession(string $backend, array $libDirs): State
 {
+    Modules\registerLibraryRoots($libDirs);
+
     $dir = \sys_get_temp_dir() . '/moggi-repl-' . \getmypid() . '-' . \bin2hex(\random_bytes(4));
     if (! \mkdir($dir, 0777, true) && ! \is_dir($dir)) {
         throw new \RuntimeException("cannot create session dir {$dir}");
@@ -887,6 +901,12 @@ function createSession(string $backend, array $libDirs): State
         backend: $backend,
         sessionDir: $dir,
         libDirs: $libDirs,
+    );
+    $state->context = CompilationContext::for(
+        $backend,
+        CompilePurpose::Repl,
+        roots: $libDirs,
+        sources: [$state->interactivePath()],
     );
     writeInteractive($state);
     prepareInteractive($state);
@@ -904,14 +924,14 @@ function loadModuleFile(State $state, string $path): string
         throw new \RuntimeException('`:load` expects a .mog file');
     }
 
-    [$files, $root] = Modules\moduleFileClosureCached($real);
+    [$files, $root] = Modules\moduleFileClosureCached($real, $state->backend);
     $header = Modules\cachedModuleHeader($real);
     $mod = $header['module'] ?? null;
     if ($mod === null) {
         throw new \RuntimeException("file `{$path}` is not a module");
     }
 
-    Modules\prepareProjectCached($files, $root, $mod);
+    Modules\prepareProjectCached($files, $root, $state->context->withSources($files), $mod);
 
     $loadedBefore = $state->loadedPaths;
     $primaryBefore = $state->loadedPrimary;
