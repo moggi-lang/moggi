@@ -193,7 +193,7 @@ $homes = Docs\reexportedClassHomes($classFacade, $canonical, 'Docs.ClassFacade')
 assertEq('Docs.ClassHome', $homes[0]->module ?? null, 'class re-export resolves home module');
 
 $fixture = __DIR__ . '/../fixture';
-$index = Docs\loadOrBuildIndex($fixture, [], true);
+$index = Docs\loadOrBuildIndex($fixture, [], Docs\docsContext('php', []), true);
 $typeHits = Docs\search($index, 'a -> a', 5);
 assertTrue(\count($typeHits) > 0, 'type search finds id');
 assertEq('id', $typeHits[0]->entity->name, 'type search top hit is id');
@@ -250,9 +250,15 @@ $classDecl = $classProgram->items[0];
 assertEq('Between methods.', $classDecl->methods[1]->doc ?? null, 'class method doc from parser');
 
 \Moggi\Cache\setCacheEnabled(false);
-$libProject = Docs\loadDocProject($root . '/libraries/base/src');
+$libProject = Docs\loadDocProject($root . '/libraries/base/src', Docs\docsContext('php', []));
 \Moggi\Cache\setCacheEnabled(true);
-$libIndex = Docs\buildIndex($libProject['modules'], $libProject['prepared']->checked, $libProject['prepared'], Docs\docRootFor($root . '/libraries/base/src'));
+$libIndex = Docs\buildIndex(
+    $libProject['modules'],
+    $libProject['prepared']->checked,
+    $libProject['prepared'],
+    Docs\docRootFor($root . '/libraries/base/src'),
+    Docs\docsContext('php', []),
+);
 assertTrue(isset($libIndex->byModule['Moggi.Internal.Prim']), 'Moggi.Internal.Prim is indexed');
 $primNames = \array_map(static fn ($e) => $e->name, $libIndex->byModule['Moggi.Internal.Prim']);
 assertTrue(\in_array('stringAppend#', $primNames, true), 'Prim exports stringAppend#');
@@ -466,7 +472,7 @@ assertTrue(isset($collisionTargets['Docs.Two.x']), 'qualified link target kept f
 
 $extraLibDir = __DIR__ . '/fixture-extra';
 $appDir = __DIR__ . '/fixture-app';
-$appProject = Docs\loadDocProject($appDir, [$extraLibDir]);
+$appProject = Docs\loadDocProject($appDir, Docs\docsContext('php', [$extraLibDir]), [$extraLibDir]);
 assertTrue(isset($appProject['prepared']->units['Lib.Extra']), 'loadDocProject type-checks --lib modules');
 assertTrue(! isset($appProject['modules']['Lib.Extra']), 'a --lib module is not documented');
 assertTrue(isset($appProject['modules']['Docs.App']), 'loadDocProject indexes app modules');
@@ -867,38 +873,38 @@ $prevCacheDir = \getenv('MOGGI_CACHE_DIR') ?: '';
 // rather than being elaborated again in this scratch cache (seeded before the switch).
 seedCacheDir($cacheWorkDir);
 \putenv('MOGGI_CACHE_DIR=' . $cacheWorkDir);
-$cachePath = Docs\indexCachePath($cacheFixtureDir, []);
-Docs\loadOrBuildIndex($cacheFixtureDir, [], true);
+$cachePath = Docs\indexCachePath($cacheFixtureDir, [], Docs\docsContext('php', []));
+Docs\loadOrBuildIndex($cacheFixtureDir, [], Docs\docsContext('php', []), true);
 assertTrue(\is_file($cachePath), 'doc index cache file created');
 $cacheMtimeBefore = \filemtime($cachePath) ?: 0;
 $fixtureSource = (string) \file_get_contents($cacheFixtureMog);
 \usleep(1_100_000);
 \touch($cacheFixtureMog);
-Docs\loadOrBuildIndex($cacheFixtureDir, [], false);
+Docs\loadOrBuildIndex($cacheFixtureDir, [], Docs\docsContext('php', []), false);
 $cacheMtimeAfter = \filemtime($cachePath) ?: 0;
 assertEq($cacheMtimeBefore, $cacheMtimeAfter, 'doc cache survives mtime-only source change');
 \file_put_contents($cacheFixtureMog, \rtrim($fixtureSource) . "\n-- touch\n");
-Docs\loadOrBuildIndex($cacheFixtureDir, [], false);
+Docs\loadOrBuildIndex($cacheFixtureDir, [], Docs\docsContext('php', []), false);
 $cacheMtimeRebuild = \filemtime($cachePath) ?: 0;
 assertTrue($cacheMtimeRebuild > $cacheMtimeAfter, 'doc cache rebuilds when source content changes');
 
-$corruptCachePath = Docs\indexCachePath($cacheFixtureDir, []);
+$corruptCachePath = Docs\indexCachePath($cacheFixtureDir, [], Docs\docsContext('php', []));
 \file_put_contents($corruptCachePath, '{"version":999,"broken":true}');
-Docs\loadOrBuildIndex($cacheFixtureDir, [], false);
+Docs\loadOrBuildIndex($cacheFixtureDir, [], Docs\docsContext('php', []), false);
 $rebuiltCache = \json_decode((string) \file_get_contents($corruptCachePath), true);
 assertEq(Docs\docIndexSchemaVersion(), $rebuiltCache['version'] ?? 0, 'doc cache rebuilds when cache JSON is invalid');
 assertTrue(isset($rebuiltCache['modules']), 'rebuilt doc cache contains modules');
 
 $sourceFingerprint = '';
-Docs\loadOrBuildIndex($cacheFixtureDir, [], false, $sourceFingerprint);
+Docs\loadOrBuildIndex($cacheFixtureDir, [], Docs\docsContext('php', []), false, $sourceFingerprint);
 assertTrue($sourceFingerprint !== '', 'loadOrBuildIndex returns source fingerprint on cache hit');
 $secondFingerprint = '';
-Docs\loadOrBuildIndex($cacheFixtureDir, [], false, $secondFingerprint);
+Docs\loadOrBuildIndex($cacheFixtureDir, [], Docs\docsContext('php', []), false, $secondFingerprint);
 assertEq($sourceFingerprint, $secondFingerprint, 'source fingerprint stable across cache hits');
 
-$malformedCachePath = Docs\indexCachePath($cacheFixtureDir, []);
+$malformedCachePath = Docs\indexCachePath($cacheFixtureDir, [], Docs\docsContext('php', []));
 \file_put_contents($malformedCachePath, '{"version":1,"modules":{}}');
-Docs\loadOrBuildIndex($cacheFixtureDir, [], false);
+Docs\loadOrBuildIndex($cacheFixtureDir, [], Docs\docsContext('php', []), false);
 $malformedCache = \json_decode((string) \file_get_contents($malformedCachePath), true);
 assertTrue(isset($malformedCache['search']), 'doc cache rebuilds when same-version JSON is malformed');
 
@@ -906,6 +912,8 @@ $eitherIndex = Docs\buildIndex(
     ['Data.Either' => $libProject['modules']['Data.Either']],
     ['Data.Either' => $libProject['prepared']->checked['Data.Either']],
     $libProject['prepared'],
+    null,
+    Docs\docsContext('php', []),
 );
 foreach ($eitherIndex->byModule['Data.Either'] ?? [] as $entity) {
     if ($entity->name === 'either') {
@@ -931,6 +939,8 @@ $preludeOps = Docs\buildIndex(
     ['Prelude' => $libProject['modules']['Prelude']],
     ['Prelude' => $libProject['prepared']->checked['Prelude']],
     $libProject['prepared'],
+    null,
+    Docs\docsContext('php', []),
 );
 foreach ($preludeOps->byModule['Prelude'] ?? [] as $entity) {
     if ($entity->name === '!!') {
@@ -1025,7 +1035,7 @@ $scopeDir = \sys_get_temp_dir() . '/moggi-mogdoc-scope-' . \getmypid();
 );
 \file_put_contents($scopeDir . '/tests/Suite.mog', "module Suite\n  ( check\n  ) where\n\ncheck :: Int\ncheck = 1\n");
 
-$scopeIndex = Docs\loadOrBuildIndex($scopeDir, [$root . '/libraries/base/src'], true);
+$scopeIndex = Docs\loadOrBuildIndex($scopeDir, [$root . '/libraries/base/src'], Docs\docsContext('php', [$root . '/libraries/base/src']), true);
 assertTrue(isset($scopeIndex->byModule['Scope']), 'the documented root is indexed');
 assertTrue(! isset($scopeIndex->byModule['Data.Maybe']), 'a dependency module is not indexed');
 assertTrue(! isset($scopeIndex->byModule['Suite']), 'a test-suite module is not indexed');

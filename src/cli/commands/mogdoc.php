@@ -84,7 +84,6 @@ function runMogdoc(array $argv): int
     $input = $options['root'] ?? ($options['positionals'][0] ?? null);
 
     try {
-        Backend\setCompileBackend('php');
         if ($options['noCache']) {
             Cache\setCacheEnabled(false);
         }
@@ -93,6 +92,7 @@ function runMogdoc(array $argv): int
         $index = Docs\loadOrBuildIndex(
             $input,
             $options['lib'],
+            Docs\docsContext('php', $options['lib']),
             $options['rebuild'],
             $sourceFingerprint,
         );

@@ -7,7 +7,6 @@ use Moggi\IR;
 use function Moggi\IR\Visit\boundLocalsInBlock;
 use function Moggi\IR\Visit\collectLambdaRefsInBlock;
 use function Moggi\IR\Visit\walkOperand;
-use function Moggi\Optimize\Support\isCapturedFnName;
 use function Moggi\Semantics\IntrinsicRegistry\reportsSourceLocation;
 use function Moggi\Semantics\Kernel\boolTypeName;
 
@@ -183,7 +182,10 @@ function lambdaMetaFromCaptures(array $byName, callable $capturesOf): array
         $changed = false;
         foreach ($meta as $name => &$info) {
             $needed = [];
-            foreach (collectLambdaRefsInBlock($byName[$name]->body, isCapturedFnName(...)) as $ref) {
+            foreach (collectLambdaRefsInBlock(
+                $byName[$name]->body,
+                static fn (string $ref): bool => isset($byName[$ref]) && $byName[$ref]->kind->takesCaptures(),
+            ) as $ref) {
                 $child = $meta[$ref] ?? null;
                 if ($child === null) {
                     continue;

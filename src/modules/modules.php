@@ -2,9 +2,7 @@
 
 namespace Moggi\Modules;
 
-use function Moggi\Backend\codegen;
-use function Moggi\Backend\compileBackend;
-use function Moggi\Backend\currentBackend;
+use function Moggi\Backend\codegenWith;
 
 use Moggi\Cache;
 
@@ -17,10 +15,9 @@ use function Moggi\IR\Visit\collectIrCodegenUsage;
 use function Moggi\IR\Visit\freeLocalsInBlock;
 
 use function Moggi\Optimize\Specialize\specializeAcrossModules;
-use function Moggi\Optimize\Support\isCapturedFnName;
 use function Moggi\Optimize\TreeShake\treeShakeModules;
-use function Moggi\Pipeline\entryPurpose;
 
+use Moggi\Pipeline\CompilationContext;
 use Moggi\Pipeline\PipelineRequest;
 use Moggi\Pipeline\PipelineStage;
 
@@ -36,9 +33,9 @@ use Moggi\Syntax\Parser\ParseError;
  */
 
 /** @param list<string> $paths @return array<string, string> relative output path => emitted artifact */
-function compileProject(array $paths, string $rootDir, bool $optimize = true, bool $strip = false): array
+function compileProject(array $paths, string $rootDir, CompilationContext $context, bool $optimize = true, bool $strip = false): array
 {
-    return compileProjectBoth($paths, $rootDir, $optimize, $strip)['emit'];
+    return compileProjectBoth($paths, $rootDir, $context, $optimize, $strip)['emit'];
 }
 
 /**
@@ -50,14 +47,14 @@ function compileProject(array $paths, string $rootDir, bool $optimize = true, bo
  *   entryRelative: ?string
  * }
  */
-function compileProjectBoth(array $paths, string $rootDir, bool $optimize = true, bool $strip = false): array
+function compileProjectBoth(array $paths, string $rootDir, CompilationContext $context, bool $optimize = true, bool $strip = false): array
 {
     $outputsKey = Cache\hashContent(
-        preparedProjectDiskKey($paths, $rootDir)
+        preparedProjectDiskKey($paths, $rootDir, $context)
             . '|opt=' . ($optimize ? '1' : '0')
             . '|strip=' . ($strip ? '1' : '0')
-            . '|backend=' . compileBackend()
-            . '|emit=' . currentBackend()->emitCacheDiscriminator()
+            . '|emit=' . $context->backend->emitCacheDiscriminator()
+            . '|context=' . $context->cacheKey()
             . '|out=emit',
     );
     $cached = Cache\artifactGet($outputsKey);
@@ -68,7 +65,7 @@ function compileProjectBoth(array $paths, string $rootDir, bool $optimize = true
         return $cached;
     }
 
-    $outputs = compilePreparedProject(prepareProjectCached($paths, $rootDir), $optimize, $strip);
+    $outputs = compilePreparedProject(prepareProjectCached($paths, $rootDir, $context), $context, $optimize, $strip);
     Cache\artifactPut($outputsKey, $outputs);
 
     return $outputs;
@@ -90,7 +87,7 @@ function compileProjectBoth(array $paths, string $rootDir, bool $optimize = true
  * to leave them disagreeing, which put every generated file at one depth and
  * every require at another.
  */
-function compilePreparedProject(PreparedProject $prepared, bool $optimize = true, bool $strip = false): array
+function compilePreparedProject(PreparedProject $prepared, CompilationContext $context, bool $optimize = true, bool $strip = false): array
 {
     $optByModule = [];
     $relativeByModule = [];
@@ -104,13 +101,15 @@ function compilePreparedProject(PreparedProject $prepared, bool $optimize = true
 
         $relative = outputRelativePath($unit['path'], $prepared->rootPrefix);
         $relativeByModule[$moduleName] = $relative;
-        $purpose = entryPurpose($moduleName);
 
         $irCacheKey = isset($unit['cacheRelPath'])
-            ? ($unit['contentKey'] ?? '') . '|opt=' . ($optimize ? '1' : '0') . '|' . $purpose->name
+            ? $context->moduleKey(
+                $moduleName,
+                ($unit['contentKey'] ?? '') . '|opt=' . ($optimize ? '1' : '0'),
+            )
             : null;
         if ($irCacheKey !== null) {
-            $cachedIr = Cache\moduleGet($unit['cacheRelPath'], 'ir', $irCacheKey);
+            $cachedIr = Cache\moduleGet($unit['cacheRelPath'], 'ir', $irCacheKey, $context->backendId);
             if ($cachedIr instanceof Module) {
                 $optByModule[$moduleName] = $cachedIr;
 
@@ -119,16 +118,16 @@ function compilePreparedProject(PreparedProject $prepared, bool $optimize = true
         }
 
         $artifacts = pipelineRun(new PipelineRequest(
-            purpose: $purpose,
             filename: $unit['path'],
             typedProgram: $prepared->checked[$moduleName],
             optimize: $optimize,
             importContext: $prepared->importContexts[$moduleName],
+            context: $context,
         ), PipelineStage::IrOpt);
         $optByModule[$moduleName] = $artifacts->irOpt
             ?? throw new \RuntimeException("pipeline produced no IR for module `{$moduleName}`");
         if ($irCacheKey !== null) {
-            Cache\modulePut($unit['cacheRelPath'], 'ir', $irCacheKey, $optByModule[$moduleName]);
+            Cache\modulePut($unit['cacheRelPath'], 'ir', $irCacheKey, $optByModule[$moduleName], $context->backendId);
         }
     }
 
@@ -162,7 +161,7 @@ function compilePreparedProject(PreparedProject $prepared, bool $optimize = true
     foreach ($optByModule as $moduleName => $optimizedIr) {
         $lambdaMeta = [];
         foreach ($optimizedIr->functions as $fn) {
-            if (! isCapturedFnName($fn->name)) {
+            if (! $fn->kind->takesCaptures()) {
                 continue;
             }
             $lambdaMeta[$fn->name] = [
@@ -172,7 +171,7 @@ function compilePreparedProject(PreparedProject $prepared, bool $optimize = true
         }
         foreach ($optimizedIr->functions as $fn) {
             $arity = \count($fn->params);
-            if (isCapturedFnName($fn->name)) {
+            if ($fn->kind->takesCaptures()) {
                 $arity += \count($lambdaMeta[$fn->name]['captures'] ?? []);
             }
             $globalFnArity[resolvedSymbol((string) $moduleName, $fn->name)] = $arity;
@@ -181,7 +180,7 @@ function compilePreparedProject(PreparedProject $prepared, bool $optimize = true
 
     $emitOutputs = [];
     $optIrOutputs = [];
-    $ext = currentBackend()->extension();
+    $ext = $context->backend->extension();
     $allModuleOutputPaths = [];
     foreach ($relativeByModule as $mn => $rel) {
         $allModuleOutputPaths[$mn] = \preg_replace('/\.mog$/', $ext, $rel) ?? $rel;
@@ -215,7 +214,7 @@ function compilePreparedProject(PreparedProject $prepared, bool $optimize = true
         );
         $codegenImports['importedData'] = $importContext['data'];
 
-        $emitted = codegen($optimizedIr, $unit['path'], [
+        $emitted = codegenWith($context->backend, $optimizedIr, $unit['path'], [
             'namespace' => $unit['namespace'],
             'imports' => $codegenImports,
             'outputRelative' => $outputRelative,
@@ -242,7 +241,7 @@ function compilePreparedProject(PreparedProject $prepared, bool $optimize = true
         }
     }
 
-    $emitOutputs = currentBackend()->foldProgramEmit($emitOutputs);
+    $emitOutputs = $context->backend->foldProgramEmit($emitOutputs);
 
     return [
         'emit' => $emitOutputs,
@@ -262,26 +261,26 @@ function moduleDeclaresCode(Module $module): bool
 /** @throws ParseError|TypeError|\RuntimeException @return string|array<string, string> */
 function compileModuleFile(
     string $path,
+    CompilationContext $context,
     string $mode = 'php',
     bool $optimize = true,
     ?string $outputFile = null,
     ?Ast\Program $routingProgram = null,
 ): string|array {
     if ($mode === 'ir') {
-        $context = moduleCompileContext($path, $routingProgram);
-        $purpose = entryPurpose($context['typedProgram']->module);
+        $moduleContext = moduleCompileContext($path, $context, $routingProgram);
         $artifacts = pipelineRun(new PipelineRequest(
-            purpose: $purpose,
             filename: $path,
-            typedProgram: $context['typedProgram'],
+            typedProgram: $moduleContext['typedProgram'],
             optimize: false,
-            importContext: $context['importContext'],
+            importContext: $moduleContext['importContext'],
+            context: $context,
         ), PipelineStage::Ir);
 
         return dumpIr($artifacts->ir ?? throw new \RuntimeException('missing IR'));
     }
 
-    $outputs = compileModuleFileOutputs($path, $optimize, $outputFile, $routingProgram);
+    $outputs = compileModuleFileOutputs($path, $context, $optimize, $outputFile, $routingProgram);
 
     return match ($mode) {
         'php', 'emit' => $outputs['emit'],
@@ -295,31 +294,31 @@ function compileModuleFile(
  */
 function compileModuleFileOutputs(
     string $path,
+    CompilationContext $context,
     bool $optimize = true,
     ?string $outputFile = null,
     ?Ast\Program $routingProgram = null,
 ): array {
-    $context = moduleCompileContext($path, $routingProgram);
-    $purpose = entryPurpose($context['typedProgram']->module);
+    $moduleContext = moduleCompileContext($path, $context, $routingProgram);
     $artifacts = pipelineRun(new PipelineRequest(
-        purpose: $purpose,
         filename: $path,
-        typedProgram: $context['typedProgram'],
+        typedProgram: $moduleContext['typedProgram'],
         optimize: $optimize,
-        importContext: $context['importContext'],
+        importContext: $moduleContext['importContext'],
+        context: $context,
     ), PipelineStage::IrOpt);
     $phpIr = $artifacts->irOpt
         ?? throw new \RuntimeException('pipeline produced no optimized IR');
     $projectRoot = projectRootFromPath($path);
     $fromOutputRelative = $outputFile !== null
         ? pathWithinProject($outputFile, $projectRoot)
-        : $context['outputRelative'];
-    $codegen = $context['importContext']['codegen'];
+        : $moduleContext['outputRelative'];
+    $codegen = $moduleContext['importContext']['codegen'];
     $stdlibPhpRoot = detectStdlibPhpPath($outputFile);
     if ($stdlibPhpRoot !== null) {
         $codegen['moduleOutputPaths'] = remapStdlibModuleOutputPaths(
             $codegen['moduleOutputPaths'],
-            $context['units'],
+            $moduleContext['units'],
             $stdlibPhpRoot,
             $projectRoot,
         );
@@ -332,22 +331,22 @@ function compileModuleFileOutputs(
         $fromOutputRelative,
         $irUsage['callees'],
     );
-    $codegenImports['importedData'] = $context['importContext']['data'];
+    $codegenImports['importedData'] = $moduleContext['importContext']['data'];
 
     ProjectCache::releaseProjectCheckedModules();
 
-    $emit = codegen($phpIr, $context['unit']['path'], [
-        'namespace' => $context['unit']['namespace'],
+    $emit = codegenWith($context->backend, $phpIr, $moduleContext['unit']['path'], [
+        'namespace' => $moduleContext['unit']['namespace'],
         'imports' => $codegenImports,
         'outputRelative' => $fromOutputRelative,
         'irUsage' => $irUsage,
-        'artifactModuleName' => $context['typedProgram']->module,
+        'artifactModuleName' => $moduleContext['typedProgram']->module,
         'externalFns' => $codegenImports['externalFns'] ?? [],
-        'externalFnRuntimeArity' => $context['importContext']['externalFnRuntimeArity'] ?? [],
+        'externalFnRuntimeArity' => $moduleContext['importContext']['externalFnRuntimeArity'] ?? [],
     ]);
 
     return [
-        'emit' => \is_array($emit) ? currentBackend()->foldProgramEmit($emit) : $emit,
+        'emit' => \is_array($emit) ? $context->backend->foldProgramEmit($emit) : $emit,
         'opt-ir' => dumpIr($phpIr),
     ];
 }
@@ -361,9 +360,9 @@ function compileModuleFileOutputs(
  *   units: array<string, array<string, mixed>>
  * }
  */
-function moduleCompileContext(string $path, ?Ast\Program $routingProgram = null): array
+function moduleCompileContext(string $path, CompilationContext $context, ?Ast\Program $routingProgram = null): array
 {
-    [$files, $root] = moduleFileClosureCached($path);
+    [$files, $root] = moduleFileClosureCached($path, $context->backendId);
     $realPath = resolvePath($path);
     $targetModule = $routingProgram?->module;
 
@@ -371,14 +370,18 @@ function moduleCompileContext(string $path, ?Ast\Program $routingProgram = null)
         $targetModule = cachedModuleHeader($realPath)['module'] ?? null;
     }
 
-    $prepared = prepareProjectCached($files, $root, $targetModule);
+    $prepared = prepareProjectCached($files, $root, $context, $targetModule);
 
     if ($targetModule === null) {
         throw new TypeError("file `{$path}` is not part of module project under `{$root}`");
     }
 
     $unit = $prepared->units[$targetModule];
-    $outputRelative = mogPathToOutputRelative($unit['path'], $prepared->rootPrefix);
+    $outputRelative = mogPathToOutputRelative(
+        $unit['path'],
+        $prepared->rootPrefix,
+        $context->backend->extension(),
+    );
 
     return [
         'unit' => $unit,

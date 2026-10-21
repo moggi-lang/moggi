@@ -174,11 +174,12 @@ function collectExportsForDocs(
     array $units,
     string $moduleName,
     array $checkedModules,
+    string $backendId,
 ): ?array {
     if (! isset($checkedModules[$moduleName])) {
         return null;
     }
-    if (! isModuleActiveForCompileBackend($units, $moduleName)) {
+    if (! isModuleActiveForCompileBackend($units, $moduleName, $backendId)) {
         return null;
     }
 

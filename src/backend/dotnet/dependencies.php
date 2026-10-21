@@ -244,39 +244,40 @@ function dotNetVendoredAssemblies(): array
 const DOTNET_SIDECAR_FORMAT = 1;
 
 /**
- * Merged metadata from every discovered library directory.
+ * Merged metadata from all discovered library directories.
  *
- * A sidecar *describes* a declaration it shares a tree with; it never overrides one silently. What
- * that means per map:
+ * Sidecars describe declarations in their tree; they never silently override them.
+ * Conflicting `types` claims are errors. `signatures` must extend the matching
+ * declaration (see {@see dotNetSidecarMismatch}) and normally apply only within
+ * their tree; a project file owns the roots it assembles.
  *
- * - `types` associates a CLR type with its defining assembly and value-typeness. Conflicting claims
- *   are hard errors; the first claim wins only when every claimant agrees.
- * - `signatures` gives the exact IL parameter list for one foreign import, keyed by the import's
- *   Moggi binding name. The entry must *extend* the declaration (see {@see dotNetSidecarMismatch})
- *   and applies only to imports from the same tree — a project file, under no library root, owns
- *   every root it assembled, so the project's own imports may use any sidecar.
- *
- * Provenance (`version`, `digest`, `generated-by`) is recorded per assembly. A `digest` is checked
- * against the resolved `<assembly>.dll` when that file is on disk, and a mismatch refuses the
- * compile — a stale sidecar must not describe a new assembly. Assemblies the resolution did not
- * materialize (framework assemblies) carry no checkable file, so their digests are recorded but not
- * verified; the `version` is recorded for the generator round-trip and likewise unchecked until a
- * metadata reader exists.
+ * Assembly provenance (`version`, `digest`, `generated-by`) is recorded per
+ * assembly. On-disk DLL digests are verified; unresolved framework assemblies
+ * have no file to check. Versions remain unchecked until a metadata reader exists.
  *
  * @return array{
- *     types: array<string, array{assembly: string, valueType: bool, roots: list<string>}>
+ *     types: array<string, array{assembly: string, valueType: bool, roots: list<string>}>,
  *     signatures: array<string, array{
- *       params: list<string>, declared: list<string>, optionalTail: int,
- *       roots: list<string>, flat: bool
+ *         params: list<string>, declared: list<string>, optionalTail: int,
+ *         roots: list<string>, flat: bool
  *     }>
- * } `params` are the emit types, `declared` the types the declaration must infer for the shared
- * prefix (they differ only where the entry blesses an interface with `from`)
+ * }
+ * `params` are emitted IL types; `declared` are inferred declaration types for
+ * the shared prefix. They differ only when `from` blesses an interface.
+ *
+ * Memoized per root set because sidecar discovery depends on registered library
+ * roots, which may change in long-running hosts such as the REPL and language
+ * server. A process-wide cache could reuse metadata built before registration,
+ * misclassify value types (e.g. `System.Globalization.UnicodeCategory`), and
+ * reject valid declarations. The number of distinct root sets is small.
  */
 function dotNetLibMetadata(): array
 {
-    static $cache = null;
-    if ($cache !== null) {
-        return $cache;
+    static $cache = [];
+
+    $key = \implode("\n", libraryScanRoots());
+    if (isset($cache[$key])) {
+        return $cache[$key];
     }
 
     $types = [];
@@ -423,7 +424,7 @@ function dotNetLibMetadata(): array
         }
     }
 
-    return $cache = ['types' => $types, 'signatures' => $signatures];
+    return $cache[$key] = ['types' => $types, 'signatures' => $signatures];
 }
 
 /**

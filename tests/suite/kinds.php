@@ -6,6 +6,9 @@ use function Moggi\Compiler\compileFileCapturingErrorsBoth;
 
 use function Moggi\Modules\bundledStdlibLibPath;
 use function Moggi\Modules\compileProjectBoth;
+
+use Moggi\Pipeline\CompilationContext;
+use Moggi\Pipeline\CompilePurpose;
 use function Moggi\Modules\projectSourceClosure;
 use function Moggi\Paths\canonicalSeparators;
 
@@ -288,7 +291,7 @@ function compareProjectSnapshots(TestCase $case, string $backend): void
         if ($case->goldenBeside($base, 'emit', $backend) !== null || $case->goldenBeside($base, 'opt-ir', $backend) !== null) {
             if ($emitted === null) {
                 [$files, $root] = projectClosure($case->input);
-                $built = compileProjectBoth($files, $root);
+                $built = compileProjectBoth($files, $root, CompilationContext::for('php', CompilePurpose::Library, sources: $files));
                 $emitted = [
                     'opt-ir' => projectArtifacts($built['opt-ir']),
                     'emit' => projectArtifacts($built['emit']),
@@ -331,7 +334,7 @@ function projectClosure(string $input): array
         $libDirs[] = $bundled;
     }
 
-    return projectSourceClosure(projectModuleFiles($input), $libDirs);
+    return projectSourceClosure(projectModuleFiles($input), $libDirs, 'php');
 }
 
 /**
@@ -398,7 +401,7 @@ function runProjectErrorCase(TestCase $case, array $goldens, string $backend, st
 
     try {
         [$files, $dir] = projectClosure($case->input);
-        compileProjectBoth($files, $dir);
+        compileProjectBoth($files, $dir, CompilationContext::for('php', CompilePurpose::Library, sources: $files));
     } catch (TestFailure $e) {
         throw $e;
     } catch (\Throwable $e) {

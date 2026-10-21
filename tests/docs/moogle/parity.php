@@ -26,7 +26,7 @@ function hitsToNames(array $hits): array
 }
 
 $fixture = __DIR__ . '/../fixture';
-$index = Docs\loadOrBuildIndex($fixture, [], true);
+$index = Docs\loadOrBuildIndex($fixture, [], Docs\docsContext('php', []), true);
 $rows = [];
 foreach ($index->search as $entity) {
     $rows[] = Docs\entityToSearchRow($entity);

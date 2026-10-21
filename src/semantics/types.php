@@ -127,8 +127,12 @@ function checkRaw(
     array $importContext = [],
     CompilePurpose $purpose = CompilePurpose::Executable,
     ?array &$interface = null,
+    array $entryModules = [],
+    string $backendId = 'php',
 ): Ast\Program {
     $state = newState($source, $filename);
+    $state->compileBackend = $backendId;
+    $state->entryModules = $entryModules;
 
     Registry\applyImportContext($state, $program, $importContext);
     Registry\registerTypeDeclarations($state, $program);

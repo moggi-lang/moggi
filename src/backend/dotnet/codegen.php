@@ -42,8 +42,6 @@ use function Moggi\Modules\parseResolvedSymbol;
 use function Moggi\Modules\resolvedSymbol;
 use function Moggi\Optimize\Support\buildLambdaMeta;
 use function Moggi\Optimize\Support\indexCapturedFunctions;
-use function Moggi\Optimize\Support\isCapturedFnName;
-use function Moggi\Optimize\Support\isLambdaName;
 use function Moggi\Semantics\Kernel\boolCtorValue;
 
 require_once __DIR__ . '/naming.php';
@@ -520,7 +518,7 @@ function emitFunction(
 ): void {
     $name = symbolName($fn->name);
     $params = $fn->params;
-    if (isCapturedFnName($fn->name)) {
+    if ($fn->kind->takesCaptures()) {
         $params = [
             ...($lambdaMeta[$fn->name]['captures'] ?? []),
             ...$params,
@@ -1236,8 +1234,8 @@ function emitStaticCall(EmitEnv $env, string $name, array $args, ?string $ownerM
         return;
     }
     $callArgs = callArgsForLambda($env, $name, $args);
-    if (isCapturedFnName($name)) {
-        $meta = $env->lambdaMeta[$name] ?? ['captures' => [], 'params' => []];
+    if (isset($env->lambdaMeta[$name])) {
+        $meta = $env->lambdaMeta[$name];
         $fullArity = \count($meta['captures']) + \count($meta['params']);
         if (\count($callArgs) < $fullArity) {
             emitPartialValue($env, $name, $fullArity, $callArgs);
@@ -1568,8 +1566,8 @@ function emitOperand(EmitEnv $env, IR\Operand $op): void
 
             return;
         }
-        if (isCapturedFnName($op->name)) {
-            $meta = $env->lambdaMeta[$op->name] ?? ['captures' => [], 'params' => []];
+        if (isset($env->lambdaMeta[$op->name])) {
+            $meta = $env->lambdaMeta[$op->name];
             $captures = $meta['captures'] ?? [];
             if ($captures !== []) {
                 $captureArgs = \array_map(
@@ -1585,7 +1583,7 @@ function emitOperand(EmitEnv $env, IR\Operand $op): void
         $arity = $env->functionArity[$op->name] ?? null;
         if ($arity === null) {
             $parsed = parseResolvedSymbol($op->name);
-            if ($parsed !== null && ! isLambdaName($parsed['name'])) {
+            if ($parsed !== null && ! isset($env->lambdaMeta[$parsed['name']])) {
                 $arity = $env->functionArity[$parsed['name']] ?? null;
             }
         }

@@ -362,12 +362,6 @@ function isLambdaName(string $name): bool
     return \str_starts_with($name, 'λ');
 }
 
-/** The top-level function a recursive local `let`/`where` group is lifted to. */
-function isLetrecName(string $name): bool
-{
-    return \str_starts_with($name, '__letrec');
-}
-
 /**
  * A constructor of the host-boolean type. The library declares it
  * (`Data.Bool`: `data Bool = False | True`), the backends lower it to the host boolean, so its
@@ -377,16 +371,6 @@ function isLetrecName(string $name): bool
 function isWiredInBoolCtor(string $name): bool
 {
     return isBoolCtor($name);
-}
-
-/**
- * A lifted function that is called at its free locals followed by its declared
- * parameters: an anonymous lambda, or the `__letrecN` function a recursive
- * `let`/`where` group is lowered to.
- */
-function isCapturedFnName(string $name): bool
-{
-    return isLambdaName($name) || isLetrecName($name);
 }
 
 function preserveMatchArm(IR\MatchArm $arm, IR\Block $body): IR\MatchArm
@@ -443,7 +427,7 @@ function indexCapturedFunctions(array $functions): array
 {
     $index = [];
     foreach ($functions as $function) {
-        if (isCapturedFnName($function->name)) {
+        if ($function->kind->takesCaptures()) {
             $index[$function->name] = $function;
         }
     }

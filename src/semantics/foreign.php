@@ -5,7 +5,6 @@ namespace Moggi\Semantics\Foreign;
 use Moggi\Backend;
 
 use function Moggi\Backend\backendById;
-use function Moggi\Backend\compileBackend;
 use function Moggi\Backend\implementedBackendIds;
 use function Moggi\Backend\isBackendImplemented;
 
@@ -62,7 +61,7 @@ function checkForeignImportItem(TypeCheckState $state, Ast\ForeignImportDecl $it
         }
     }
 
-    $compileBackend = compileBackend();
+    $compileBackend = $state->compileBackend;
     if ($item->backend !== $compileBackend) {
         throw typeFail(
             $state,

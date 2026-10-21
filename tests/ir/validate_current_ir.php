@@ -44,8 +44,12 @@ $rejects = static function (callable $call): ?Validate\InvalidIr {
 
 $local = static fn (string $name): IR\Local => new IR\Local($name);
 $temp = static fn (int $id): IR\Temp => new IR\Temp($id);
-$fn = static fn (string $name, array $params, IR\Block $body): IR\FunctionDecl
-    => new IR\FunctionDecl($name, $params, null, $body);
+$fn = static fn (
+    string $name,
+    array $params,
+    IR\Block $body,
+    IR\FunctionKind $kind = IR\FunctionKind::Source,
+): IR\FunctionDecl => new IR\FunctionDecl($name, $params, null, $body, kind: $kind);
 $module = static fn (array $functions): IR\Module => new IR\Module($functions, []);
 
 // ---- legal current IR ----------------------------------------------------
@@ -79,10 +83,23 @@ $legal = $module([
         new IR\Ret($temp(3)),
     ])),
     // A lifted lambda's free locals are its captures.
-    $fn('λ0', ['p'], new IR\Block([new IR\Ret($local('outerCapture'))])),
+    $fn('λ0', ['p'], new IR\Block([new IR\Ret($local('outerCapture'))]), IR\FunctionKind::Lambda),
 ]);
 $error = $rejects(static fn () => Validate\validateModule($legal, 'post-lower'));
 $check($error === null, 'legal current IR was rejected: ' . ($error?->getMessage() ?? ''));
+
+// The same spelling as a *declared* function is not a capture binding: the
+// prefix is presentation, the kind is the fact. Before FunctionKind the
+// validator read the name and accepted this free local.
+$lookalike = $module([
+    $fn('λ0', ['p'], new IR\Block([new IR\Ret($local('outerCapture'))])),
+]);
+$error = $rejects(static fn () => Validate\validateModule($lookalike, 'post-lower'));
+$check($error !== null, 'a declared function named like a lambda was treated as a capture binding');
+$check(
+    $error !== null && \str_contains($error->getMessage(), 'unbound local `outerCapture`'),
+    'the lookalike-name failure does not name the free local: ' . ($error?->getMessage() ?? ''),
+);
 
 // ---- malformed IR --------------------------------------------------------
 

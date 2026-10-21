@@ -67,7 +67,7 @@ function findMogFilesOrExit(string $inputDir): array
  * @return array{0: string, 1: list<string>}
  * @throws LexError|ParseError|TypeError|\RuntimeException
  */
-function resolveCompileInputs(string $inputPath, array $extraLibDirs = []): array
+function resolveCompileInputs(string $inputPath, array $extraLibDirs, string $backendId): array
 {
     if (\is_dir($inputPath)) {
         return findMogFiles($inputPath);
@@ -97,12 +97,12 @@ function resolveCompileInputs(string $inputPath, array $extraLibDirs = []): arra
                 $searchRoots[] = $localRoot;
             }
         }
-        [$files, $root] = projectSourceClosure([$real], $searchRoots);
+        [$files, $root] = projectSourceClosure([$real], $searchRoots, $backendId);
 
         return [$root, $files];
     }
 
-    [$files, $root] = moduleFileClosureCached($real);
+    [$files, $root] = moduleFileClosureCached($real, $backendId);
 
     return [$root, $files];
 }

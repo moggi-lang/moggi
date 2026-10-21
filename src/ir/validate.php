@@ -66,17 +66,6 @@ function validateFunctionList(array $functions, string $pass, string $source): v
     }
 }
 
-/**
- * Whether a function's free locals are captures rather than unbound names.
- *
- * Lifting gives anonymous callables their `λ`/`__letrec` names; the capture
- * binding pass later turns each free local into an explicit parameter.
- */
-function isCapturedFunction(string $name): bool
-{
-    return \str_starts_with($name, 'λ') || \str_starts_with($name, '__letrec');
-}
-
 function validateFunction(IR\FunctionDecl $function, string $pass): void
 {
     $bound = \array_fill_keys($function->params, true);
@@ -89,7 +78,7 @@ function validateFunction(IR\FunctionDecl $function, string $pass): void
         $bound,
         $temps,
         $pass,
-        isCapturedFunction($function->name),
+        $function->kind->takesCaptures(),
         'body',
     );
 }

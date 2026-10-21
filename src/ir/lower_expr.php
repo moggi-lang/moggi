@@ -37,6 +37,11 @@ function lowerExpr(Ast\AstNode $expr, LowerCtx $ctx): Operand
                 return lowerIntrinsicValue($expr->intrinsicWrapper, [], $expr, $ctx);
             }
 
+            $origin = crossModuleOrigin($expr, $ctx);
+            if ($origin !== null) {
+                return new FnRef($origin);
+            }
+
             return $ctx->env[$expr->name]
                 ?? throw new \RuntimeException(\sprintf('undefined variable `%s` in IR lowering', $expr->name));
         })(),
@@ -47,6 +52,11 @@ function lowerExpr(Ast\AstNode $expr, LowerCtx $ctx): Operand
             $primop = primopForPublicOperator($expr->name);
             if ($primop !== null) {
                 return lowerIntrinsicValue($primop, [], $expr, $ctx);
+            }
+
+            $origin = crossModuleOrigin($expr, $ctx);
+            if ($origin !== null) {
+                return new FnRef($origin);
             }
 
             return new FnRef($expr->name);
@@ -536,6 +546,11 @@ function applyCalleeName(Ast\AstNode $expr, LowerCtx $ctx): ?string
         Ast\OperatorRef::class => $expr->name,
         Ast\QualifiedRef::class => $expr->backendResolved ?? $expr->name,
         Ast\Variable::class => (static function () use ($expr, $ctx): ?string {
+            $origin = crossModuleOrigin($expr, $ctx);
+            if ($origin !== null) {
+                return $origin;
+            }
+
             $binding = $ctx->env[$expr->name] ?? null;
             if ($binding instanceof FnRef) {
                 return $binding->name;
@@ -549,6 +564,21 @@ function applyCalleeName(Ast\AstNode $expr, LowerCtx $ctx): ?string
         })(),
         default => null,
     };
+}
+
+function crossModuleOrigin(Ast\Variable|Ast\OperatorRef $expr, LowerCtx $ctx): ?string
+{
+    $origin = $expr->resolvedOrigin;
+    if (! $expr->declarationScoped || $origin === null || $expr->binderId !== null || $ctx->moduleName === '') {
+        return null;
+    }
+
+    $separator = \strpos($origin, '::');
+    if ($separator === false) {
+        return null;
+    }
+
+    return \substr($origin, 0, $separator) === $ctx->moduleName ? null : $origin;
 }
 
 /** @param list<Operand> $args */
@@ -616,13 +646,13 @@ function lowerLambda(array $params, Ast\AstNode $body, LowerCtx $ctx): FnRef
 {
     $name = 'λ' . $ctx->state->nextLambda++;
 
-    return lowerNamedLambda($name, $params, $body, $ctx);
+    return lowerNamedLambda($name, $params, $body, $ctx, FunctionKind::Lambda);
 }
 
 /**
  * @param array<int, Ast\LambdaParam|Ast\AstNode> $params
  */
-function lowerNamedLambda(string $name, array $params, Ast\AstNode $body, LowerCtx $ctx): FnRef
+function lowerNamedLambda(string $name, array $params, Ast\AstNode $body, LowerCtx $ctx, FunctionKind $kind): FnRef
 {
     $paramNames = patternParams($params);
     $fnCtx = newCtx($paramNames, $ctx->state, $ctx->data, $ctx->newtypes, $ctx);
@@ -647,15 +677,16 @@ function lowerNamedLambda(string $name, array $params, Ast\AstNode $body, LowerC
         null,
         new Block($fnCtx->items),
         srcLoc: srcLocFromAst($body, $ctx->moduleName, $name, $ctx->sourceFile),
+        kind: $kind,
     );
     $ctx->functionArity[$name] = \count($paramNames);
 
     return new FnRef($name);
 }
 
-function lowerNamedNullary(string $name, Ast\AstNode $body, LowerCtx $ctx): FnRef
+function lowerNamedNullary(string $name, Ast\AstNode $body, LowerCtx $ctx, FunctionKind $kind): FnRef
 {
-    return lowerNamedLambda($name, [], $body, $ctx);
+    return lowerNamedLambda($name, [], $body, $ctx, $kind);
 }
 
 /** @param array<int, Ast\Binding> $bindings */
@@ -736,9 +767,9 @@ function lowerRecursiveBindings(array $bindings, LowerCtx $ctx): void
         if ($plan['kind'] === 'lambda') {
             /** @var Ast\Lambda $lambda */
             $lambda = $plan['rhs'];
-            lowerNamedLambda($plan['fnName'], $lambda->params, $lambda->body, $ctx);
+            lowerNamedLambda($plan['fnName'], $lambda->params, $lambda->body, $ctx, FunctionKind::Letrec);
         } else {
-            lowerNamedNullary($plan['fnName'], $plan['rhs'], $ctx);
+            lowerNamedNullary($plan['fnName'], $plan['rhs'], $ctx, FunctionKind::Letrec);
         }
     }
 

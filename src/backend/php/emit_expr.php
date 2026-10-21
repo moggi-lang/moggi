@@ -16,7 +16,6 @@ use function Moggi\IR\Visit\walkOperand;
 use function Moggi\Modules\isQualifiedSymbol;
 use function Moggi\Modules\moduleNameToNamespace;
 use function Moggi\Modules\parseResolvedSymbol;
-use function Moggi\Optimize\Support\isCapturedFnName;
 use function Moggi\Syntax\isConstructorName as isSyntaxConstructorName;
 
 function emitDictMethodOperand(IR\Operand $operand, array $ctx): string
@@ -117,7 +116,7 @@ function emitRetValue(IR\Operand $value, array $ctx): string
         IR\ExprCallValue::class => emitApplyExpr($value->callee, $value->args, $ctx),
         IR\ExprPartial::class => emitPartialArray($value, $ctx),
         IR\Intrinsic::class => emitOperand($value, $ctx),
-        IR\FnRef::class => isCapturedFnName($value->name)
+        IR\FnRef::class => isset($ctx['lambdaIndex'][$value->name])
             ? emitLambdaReference($value->name, $ctx)
             : emitTopLevelFnUse($value->name, $ctx),
         default => emitOperand($value, $ctx),
@@ -136,7 +135,7 @@ function emitIntLiteral(int $value): string
 
 function emitOperand(IR\Operand $operand, array $ctx): string
 {
-    if ($operand instanceof IR\FnRef && isCapturedFnName($operand->name)) {
+    if ($operand instanceof IR\FnRef && isset($ctx['lambdaIndex'][$operand->name])) {
         return emitLambdaReference($operand->name, $ctx);
     }
 
@@ -404,8 +403,8 @@ function emitApplyExpr(IR\Operand $callee, array $args, array $ctx): string
         return emitPartialArray(new IR\Partial($callee->fn, $callee->arity, $all), $ctx);
     }
 
-    if ($callee instanceof IR\FnRef && isCapturedFnName($callee->name)) {
-        $lambdaFn = $ctx['lambdaIndex'][$callee->name] ?? null;
+    if ($callee instanceof IR\FnRef && isset($ctx['lambdaIndex'][$callee->name])) {
+        $lambdaFn = $ctx['lambdaIndex'][$callee->name];
         if ($lambdaFn !== null && canInlineLambdaAsArrow($lambdaFn) && \count($args) === \count($lambdaFn->params)) {
             $arrow = emitLambdaArrow($lambdaFn, $ctx);
             $callArgs = \array_map(static fn (IR\Operand $arg): string => emitOperand($arg, $ctx), $args);
@@ -453,7 +452,7 @@ function emitApplyExpr(IR\Operand $callee, array $args, array $ctx): string
 function partialArrayForUnderappliedLambda(string $callee, array $args, array $ctx): ?string
 {
     $lambdaFn = $ctx['lambdaIndex'][$callee] ?? null;
-    if ($lambdaFn === null || ! isCapturedFnName($callee)) {
+    if ($lambdaFn === null) {
         return null;
     }
 

@@ -20,6 +20,35 @@ enum IoWrap: string
 }
 
 /**
+ * How a callable came to exist. Capture arity and identity follow this fact,
+ * never the spelling of its name: every generated prefix is presentation
+ * (ADR 4, D1a).
+ */
+enum FunctionKind: string
+{
+    /** Declared at a module's top level: identity is `module + declared name`. */
+    case Source = 'source';
+    /** An anonymous `\x -> …` lowered to a lifted function: lowering-local identity. */
+    case Lambda = 'lambda';
+    /** A lifted recursive `let`/`where` group: lowering-local identity. */
+    case Letrec = 'letrec';
+    /** A specialization clone: identity is its declaration site's. */
+    case SpecClone = 'spec-clone';
+    /** A compiler-synthesized helper (CAF, …): no source identity. */
+    case Generated = 'generated';
+
+    /**
+     * Whether the callable is invoked at its free locals followed by its
+     * declared parameters, i.e. whether capture binding applies.
+     */
+    public function takesCaptures(): bool
+    {
+        return $this === self::Lambda || $this === self::Letrec;
+    }
+
+}
+
+/**
  * Kind of module entry point. Backends bootstrap `Main` as an application
  * entry; `ReplExpression` is a callable eval thunk without auto-run.
  */
@@ -147,6 +176,8 @@ final class FunctionDecl implements IrNode
         public bool $foreign = false,
         public IoBodyKind $ioBodyKind = IoBodyKind::StraightLine,
         public ?SrcLoc $srcLoc = null,
+        public FunctionKind $kind = FunctionKind::Source,
+        public ?string $origin = null,
     ) {
     }
 
@@ -165,6 +196,8 @@ final class FunctionDecl implements IrNode
             $this->foreign,
             $this->ioBodyKind,
             $this->srcLoc,
+            $this->kind,
+            $this->origin,
         );
     }
 }

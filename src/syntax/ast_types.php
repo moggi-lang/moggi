@@ -881,6 +881,9 @@ final class Variable extends AstNode
     /** Resolved `Module::name` for imported (or local) value refs; set during typecheck. */
     public ?string $resolvedOrigin = null;
 
+    /** True when this ref belongs to a copied default body and must keep its declaring module. */
+    public bool $declarationScoped = false;
+
     /** Local binder identity (same-file rename/refs); set during typecheck. */
     public ?int $binderId = null;
 
@@ -925,6 +928,9 @@ final class OperatorRef extends AstNode
 {
     /** Resolved `Module::name` when known. */
     public ?string $resolvedOrigin = null;
+
+    /** True when this ref belongs to a copied default body and must keep its declaring module. */
+    public bool $declarationScoped = false;
 
     public function __construct(public string $name, int $line = 0, int $col = 0, int $endCol = 0)
     {

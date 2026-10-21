@@ -228,14 +228,14 @@ require __DIR__ . '/cli/commands/lsp.php';
 require __DIR__ . '/cli/commands/version.php';
 require __DIR__ . '/cli/main.php';
 
-use function Moggi\Backend\setCompileBackend;
 use function Moggi\IR\Dump\dump as dumpIr;
 use function Moggi\Modules\compileModuleFile;
 use function Moggi\Modules\compileModuleFileOutputs;
 use function Moggi\Modules\isModuleSourceProgram;
 use function Moggi\Modules\moduleCompileContext;
-use function Moggi\Pipeline\entryPurpose;
 
+use Moggi\Pipeline\CompilationContext;
+use Moggi\Pipeline\CompilePurpose;
 use Moggi\Pipeline\PipelineRequest;
 use Moggi\Pipeline\PipelineStage;
 
@@ -284,7 +284,7 @@ function isIntrospectionMode(string $mode): bool
  * The CLI flags and the suite's `tokens`/`ast`/`typed-ast` goldens both come through here, so what a
  * flag prints and what a golden pins cannot drift apart.
  */
-function dumpSourceStage(string $source, string $filename, string $stage): string
+function dumpSourceStage(string $source, string $filename, string $stage, CompilationContext $context): string
 {
     $tokens = lex($source, $filename);
     if ($stage === 'tokens') {
@@ -296,16 +296,9 @@ function dumpSourceStage(string $source, string $filename, string $stage): strin
         return dumpAst($program);
     }
 
-    $typed = moduleCompileContext($filename, $program)['typedProgram'];
+    $typed = moduleCompileContext($filename, $context, $program)['typedProgram'];
 
     return dumpAst($typed);
-}
-
-function applyCompileBackend(?string $backend): void
-{
-    if ($backend !== null) {
-        setCompileBackend($backend);
-    }
 }
 
 /**
@@ -314,16 +307,23 @@ function applyCompileBackend(?string $backend): void
  * `tokens`, `ast` and `typed-ast` are answered from the source before the pipeline runs
  * ({@see dumpSourceStage}), so the stages named here are the ones it reaches itself.
  */
-function compile(string $source, string $filename, string $mode = 'php', bool $optimize = true, ?Program $program = null, ?string $backend = null): string|array
+function compile(string $source, string $filename, string $mode = 'php', bool $optimize = true, ?Program $program = null, ?string $backend = null, ?CompilationContext $context = null): string|array
 {
-    applyCompileBackend($backend);
     $mode = normalizeOutputMode($mode);
-    if (isIntrospectionMode($mode)) {
-        return dumpSourceStage($source, $filename, $mode);
-    }
-
     if ($program === null) {
         $program = parse(lex($source, $filename), $source, $filename);
+    }
+
+    $context ??= CompilationContext::for(
+        $backend ?? 'php',
+        CompilePurpose::Executable,
+        entryModules: ['Main'],
+        roots: [],
+        sources: [$filename],
+    );
+
+    if (isIntrospectionMode($mode)) {
+        return dumpSourceStage($source, $filename, $mode, $context);
     }
 
     $stopAt = match ($mode) {
@@ -333,12 +333,11 @@ function compile(string $source, string $filename, string $mode = 'php', bool $o
     };
 
     $artifacts = pipelineRun(new PipelineRequest(
-        purpose: entryPurpose($program->module),
         source: $source,
         filename: $filename,
         program: $program,
         optimize: $optimize,
-        backend: $backend,
+        context: $context,
     ), $stopAt);
 
     return match ($mode) {
@@ -349,33 +348,40 @@ function compile(string $source, string $filename, string $mode = 'php', bool $o
 }
 
 /** @throws LexError|ParseError|TypeError|\RuntimeException @return string|array<string, string> */
-function compileFile(string $path, string $mode = 'php', bool $optimize = true, ?string $outputFile = null, ?string $backend = null): string|array
+function compileFile(string $path, string $mode = 'php', bool $optimize = true, ?string $outputFile = null, ?string $backend = null, ?CompilationContext $context = null): string|array
 {
-    applyCompileBackend($backend);
     $source = \file_get_contents($path);
     if ($source === false) {
         throw new \RuntimeException("cannot read {$path}");
     }
 
     $mode = normalizeOutputMode($mode);
+    $context ??= CompilationContext::for(
+        $backend ?? 'php',
+        CompilePurpose::Executable,
+        entryModules: ['Main'],
+        roots: [],
+        sources: [$path],
+    );
+
     if (isIntrospectionMode($mode)) {
-        return dumpSourceStage($source, $path, $mode);
+        return dumpSourceStage($source, $path, $mode, $context);
     }
 
     $tokens = lex($source, $path);
     $program = parse($tokens, $source, $path);
     if (isModuleSourceProgram($program)) {
-        return compileModuleFile($path, $mode, $optimize, $outputFile, $program);
+        return compileModuleFile($path, $context, $mode, $optimize, $outputFile, $program);
     }
 
-    return compile($source, $path, $mode, $optimize, $program);
+    return compile($source, $path, $mode, $optimize, $program, context: $context);
 }
 
 /** @return array{output: string, exitCode: 0}|array{output: string, exitCode: 1} */
-function compileFileCapturingErrors(string $path, string $mode = 'php', bool $optimize = true, ?string $backend = null): array
+function compileFileCapturingErrors(string $path, string $mode = 'php', bool $optimize = true, ?string $backend = null, ?CompilationContext $context = null): array
 {
     try {
-        $output = compileFile($path, $mode, $optimize, null, $backend);
+        $output = compileFile($path, $mode, $optimize, null, $backend, $context);
         if (\is_array($output)) {
             $php = '';
             foreach ($output as $rel => $bytes) {
@@ -412,19 +418,26 @@ function compileFileCapturingErrors(string $path, string $mode = 'php', bool $op
  *   opt-ir: array{output: string, exitCode: 0}|array{output: string, exitCode: 1}
  * }
  */
-function compileFileCapturingErrorsBoth(string $path, bool $optimize = true, ?string $backend = null): array
+function compileFileCapturingErrorsBoth(string $path, bool $optimize = true, ?string $backend = null, ?CompilationContext $context = null): array
 {
     try {
-        applyCompileBackend($backend);
         $source = \file_get_contents($path);
         if ($source === false) {
             throw new \RuntimeException("cannot read {$path}");
         }
 
+        $context ??= CompilationContext::for(
+            $backend ?? 'php',
+            CompilePurpose::Executable,
+            entryModules: ['Main'],
+            roots: [],
+            sources: [$path],
+        );
+
         $tokens = lex($source, $path);
         $program = parse($tokens, $source, $path);
         if (isModuleSourceProgram($program)) {
-            $outputs = compileModuleFileOutputs($path, $optimize, null, $program);
+            $outputs = compileModuleFileOutputs($path, $context, $optimize, null, $program);
 
             return [
                 'emit' => ['output' => $outputs['emit'], 'exitCode' => 0],
@@ -432,14 +445,12 @@ function compileFileCapturingErrorsBoth(string $path, bool $optimize = true, ?st
             ];
         }
 
-        $purpose = entryPurpose($program->module);
         $artifacts = pipelineRun(new PipelineRequest(
-            purpose: $purpose,
             source: $source,
             filename: $path,
             program: $program,
             optimize: $optimize,
-            backend: $backend,
+            context: $context,
         ), PipelineStage::Emit);
 
         return [

@@ -1,0 +1,10 @@
+module Provider (Wrap(..), C(..)) where
+
+data Wrap = Wrap Int
+
+helper :: Int -> Int
+helper x = x + 100
+
+class C a where
+  method :: a -> Int
+  method _ = helper 1

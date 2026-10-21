@@ -38,8 +38,19 @@ function checkAndNormalize(
     array $importContext = [],
     CompilePurpose $purpose = CompilePurpose::Executable,
     ?array &$interface = null,
+    array $entryModules = [],
+    string $backendId = 'php',
 ): Program {
-    $typed = checkRaw($program, $source, $filename, $importContext, $purpose, $interface);
+    $typed = checkRaw(
+        $program,
+        $source,
+        $filename,
+        $importContext,
+        $purpose,
+        $interface,
+        $entryModules,
+        $backendId,
+    );
     validateIo($typed, $source, $filename);
     validateSt($typed, $source, $filename);
 
