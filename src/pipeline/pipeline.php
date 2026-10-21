@@ -7,6 +7,7 @@ use function Moggi\Backend\codegen;
 use function Moggi\Backend\currentBackend;
 use function Moggi\Backend\setCompileBackend;
 use function Moggi\IR\lower;
+use function Moggi\IR\Validate\validateModule;
 use function Moggi\Modules\moduleNameToNamespace;
 use function Moggi\Optimize\optimize;
 use function Moggi\Optimize\Partial\bindLambdaCaptures;
@@ -68,6 +69,10 @@ function run(PipelineRequest $request, PipelineStage $stopAt = PipelineStage::Em
     $artifacts->ir = $ir;
     $artifacts->entry = $ir->entry;
 
+    if (irCheckpointsEnabled()) {
+        validateModule($ir, 'post-lower');
+    }
+
     if ($stopAt === PipelineStage::Ir) {
         return $artifacts;
     }
@@ -87,6 +92,8 @@ function run(PipelineRequest $request, PipelineStage $stopAt = PipelineStage::Em
     $artifacts->irOpt = $irOpt;
     $artifacts->entry = $irOpt->entry;
 
+    validateModule($irOpt, 'post-opt');
+
     if ($stopAt === PipelineStage::IrOpt) {
         return $artifacts;
     }
@@ -99,6 +106,15 @@ function run(PipelineRequest $request, PipelineStage $stopAt = PipelineStage::Em
     $artifacts->emit = codegen($irOpt, $request->filename, $emitOptions);
 
     return $artifacts;
+}
+
+/**
+ * Whether the post-lower checkpoint runs for this process. The suite sets it;
+ * a user compile gets the post-optimizer checkpoint only.
+ */
+function irCheckpointsEnabled(): bool
+{
+    return \getenv('MOGGI_IR_CHECKPOINTS') === '1';
 }
 
 /** @return array{outputRelative: string, moduleName?: string, namespace?: string} */

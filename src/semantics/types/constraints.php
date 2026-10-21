@@ -732,15 +732,10 @@ function constraintHeadHasFlexibleVar(TypeCheckState $state, Type $type): bool
     if ($type instanceof TVar) {
         return ! isset($state->rigidVars[$type->name]);
     }
-    if ($type instanceof TArrow) {
-        return constraintHeadHasFlexibleVar($state, $type->from)
-            || constraintHeadHasFlexibleVar($state, $type->to);
-    }
-    if ($type instanceof TCon || $type instanceof TVarApp || $type instanceof TPromoted) {
-        foreach ($type->args as $arg) {
-            if (constraintHeadHasFlexibleVar($state, $arg)) {
-                return true;
-            }
+
+    foreach (typeChildren($type) as $child) {
+        if (constraintHeadHasFlexibleVar($state, $child)) {
+            return true;
         }
     }
 

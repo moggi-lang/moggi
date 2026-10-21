@@ -1175,27 +1175,13 @@ function signatureVarsInType(Type $type, array $known): array
         return [$type->name => true];
     }
 
-    if ($type instanceof TVarApp) {
-        return [$type->name => true] + \array_merge([], ...\array_map(
-            static fn (Type $arg): array => signatureVarsInType($arg, $known),
-            $type->args,
-        ));
+    $variables = [];
+    if ($type instanceof TVarApp || ($type instanceof TCon && ! isset($known[$type->name]))) {
+        $variables[$type->name] = true;
     }
 
-    if ($type instanceof TArrow) {
-        return [
-            ...signatureVarsInType($type->from, $known),
-            ...signatureVarsInType($type->to, $known),
-        ];
-    }
-
-    if (! $type instanceof TCon) {
-        return [];
-    }
-
-    $variables = isset($known[$type->name]) ? [] : [$type->name => true];
-    foreach ($type->args as $arg) {
-        $variables += signatureVarsInType($arg, $known);
+    foreach (typeChildren($type) as $child) {
+        $variables += signatureVarsInType($child, $known);
     }
 
     return $variables;
@@ -2803,16 +2789,9 @@ function collectSkeletonRigidVars(TypeCheckState $state, Type $type, array &$rig
     if ($type instanceof TVarApp) {
         $rigid[$type->name] = true;
     }
-    if ($type instanceof TCon || $type instanceof TVarApp || $type instanceof TPromoted) {
-        foreach ($type->args as $arg) {
-            collectSkeletonRigidVars($state, $arg, $rigid);
-        }
 
-        return;
-    }
-    if ($type instanceof TArrow) {
-        collectSkeletonRigidVars($state, $type->from, $rigid);
-        collectSkeletonRigidVars($state, $type->to, $rigid);
+    foreach (typeChildren($type) as $child) {
+        collectSkeletonRigidVars($state, $child, $rigid);
     }
 }
 
