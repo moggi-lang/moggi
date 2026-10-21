@@ -81,6 +81,7 @@ require __DIR__ . '/optimize/specialize.php';
 require __DIR__ . '/optimize/fold_intrinsic.php';
 require __DIR__ . '/optimize/io_specialize.php';
 require __DIR__ . '/optimize/tree_shake.php';
+require __DIR__ . '/optimize/pass_checkpoints.php';
 require __DIR__ . '/optimize/optimize.php';
 require __DIR__ . '/backend/ir_meta.php';
 require __DIR__ . '/backend/php/intrinsics.php';

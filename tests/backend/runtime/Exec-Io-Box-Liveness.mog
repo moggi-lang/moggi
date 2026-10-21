@@ -1,0 +1,25 @@
+-- A definition read only inside a do-block action box must survive DCE.
+--
+-- `fib` is recursive, so its call is not inlined: the result is a materialized
+-- temp in `main`'s top-level block. The `case ... of` action is lowered into an
+-- `io_assign_action` whose body reads that temp, and nowhere else does. Before
+-- the DCE liveness repair the temp definition was dropped and this program
+-- failed to compile ("temp read before it is defined", first stage
+-- `after-inline-folds`). Expected output: 55.
+module Main (main) where
+
+import System.IO (putStrLn)
+import Text.Show (show)
+
+fib :: Int -> Int
+fib n = case n < 2 of
+  True -> n
+  False -> fib (n - 1) + fib (n - 2)
+
+main :: IO ()
+main = do
+  let a = fib 10
+  v <- case a of
+         55 -> pure a
+         _ -> pure 0
+  putStrLn (show v)

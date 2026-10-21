@@ -37,7 +37,23 @@ function validateModule(IR\Module $module, string $pass): void
     }
 
     $source = $module->sourceFile !== '' ? $module->sourceFile : ($module->moduleName !== '' ? $module->moduleName : '<module>');
-    foreach ($module->functions as $function) {
+    validateFunctionList($module->functions, $pass, $source);
+}
+
+/**
+ * Validates a function list without the entry-point check.
+ *
+ * The per-pass optimizer checkpoint (F1a) sees stages between which a module
+ * does not exist yet — `optimize()` mostly rewrites `list<FunctionDecl>`. The
+ * entry rule stays with the two seams that do have a module (post-lower and
+ * post-opt); a stage is not allowed to invent functions that later stages must
+ * look up by name, and that is what `validateModule` still checks.
+ *
+ * @param list<IR\FunctionDecl> $functions
+ */
+function validateFunctionList(array $functions, string $pass, string $source): void
+{
+    foreach ($functions as $function) {
         try {
             validateFunction($function, $pass);
         } catch (InvalidIr $e) {
@@ -83,6 +99,12 @@ function validateFunction(IR\FunctionDecl $function, string $pass): void
  * function, not a nested scope. Match arms and guard preparations get their own
  * copy; `IoAssignAction` and `Loop` do not, because both are emitted inline and
  * their `let` binders stay visible to whatever follows.
+ *
+ * Return regions are deliberately not restricted (D17, 2026-10-21): the tree's
+ * own optimized IR contains both `Ret` and `MatchReturn` inside `Loop` bodies —
+ * TCO rewrites a tail-recursive function into a loop whose arms return — and the
+ * backends emit them correctly. A legality rule here would reject the standard
+ * library, so the only return rule on record is the observed one.
  *
  * @param array<string, true> $bound
  * @param array<int, true> $temps defined before this block starts; extended in place
