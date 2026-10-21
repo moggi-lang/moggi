@@ -9,7 +9,12 @@
 //
 // The rejected shapes are an unbound local in a function that has no capture
 // mechanism, a temp read before any statement defines it, and an entry point
-// that names no function. Return regions are deliberately not validated.
+// that names no function. Return regions follow D17 as the tree actually emits
+// them (D17, answered 2026-10-21): `Ret` in a match arm is that arm's yield,
+// dead statements after a `Ret` stay legal, and **both** `Ret` and `MatchReturn`
+// inside a `Loop` body are legal — TCO rewrites a tail-recursive function into
+// such a loop, and the standard library compiles that way. There is no return
+// legality rule to enforce, so these are pinned as accepted shapes.
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
@@ -129,6 +134,47 @@ $allBranches = $module([$fn('allTemps', [], new IR\Block([
 $check(
     $rejects(static fn () => Validate\validateModule($allBranches, 'post-lower')) === null,
     'a temp defined by every arm was rejected after the match',
+);
+
+// D17: the legal return regions. An arm may yield via `Ret`, a statement after
+// a `Ret` is dead code (legal IR, not validated), and a loop body may contain
+// anything except a return.
+$legalReturns = $module([
+    $fn('armYield', [], new IR\Block([
+        new IR\MatchStmt(new IR\ConstInt(0), [
+            new IR\MatchArm(new IR\PatWild(), new IR\Block([new IR\Ret(new IR\ConstInt(1))])),
+            new IR\MatchArm(new IR\PatVar('n'), new IR\Block([new IR\Ret($local('n'))])),
+        ], 0),
+        new IR\Ret(new IR\Unit()),
+    ])),
+    $fn('deadAfterRet', [], new IR\Block([
+        new IR\Ret(new IR\Unit()),
+        new IR\Assign(6, new IR\ConstInt(1)),
+    ])),
+    $fn('loopWithoutReturn', [], new IR\Block([
+        new IR\Loop(new IR\Block([new IR\Assign(7, new IR\ConstInt(1))])),
+        new IR\Ret(new IR\Unit()),
+    ])),
+    // The shapes TCO really emits: a loop body returning through MatchReturn,
+    // and a loop arm returning through Ret (`Data/Foldable`'s `__letrec5`).
+    $fn('loopWithMatchReturn', [], new IR\Block([
+        new IR\Loop(new IR\Block([
+            new IR\MatchReturn(new IR\ConstInt(0), [
+                new IR\MatchArm(new IR\PatWild(), new IR\Block([new IR\Ret(new IR\Unit())])),
+            ]),
+        ])),
+    ])),
+    $fn('loopArmRet', [], new IR\Block([
+        new IR\Loop(new IR\Block([
+            new IR\MatchStmt(new IR\ConstInt(0), [
+                new IR\MatchArm(new IR\PatWild(), new IR\Block([new IR\Ret(new IR\Unit())])),
+            ], 8),
+        ])),
+    ])),
+]);
+$check(
+    $rejects(static fn () => Validate\validateModule($legalReturns, 'post-opt')) === null,
+    'a legal return region was rejected',
 );
 
 $missingEntry = new IR\Module(

@@ -39,58 +39,175 @@ use function Moggi\Optimize\Support\buildLambdaMeta;
 use function Moggi\Optimize\Support\indexCapturedFunctions;
 use function Moggi\Optimize\Tco\eliminateTailRecursion;
 
+use Moggi\Optimize\PassCheckpoints;
+
+/** Runs the stage sequence, each stage checked under its own checkpoint label. */
 function optimize(Module $module): Module
 {
-    $functions = $module->functions;
-    $instanceEvidence = $module->instanceEvidence;
-    $evidenceByName = indexEvidenceByName($instanceEvidence);
+    PassCheckpoints\enterOptimize();
+    $result = null;
 
-    setPropagateCopiesLambdaBodies($functions);
-    setHostEffectFunctions(hostEffectFunctionNames($functions, $module->moduleName));
-    $functions = \array_map(optimizeFunctionEarly(...), $functions);
-    clearHostEffectFunctions();
+    try {
+        $moduleName = $module->moduleName;
+        $functions = $module->functions;
+        $instanceEvidence = $module->instanceEvidence;
+        $evidenceByName = indexEvidenceByName($instanceEvidence);
 
-    $functions = fuseAppliedLambdas($functions, $module->moduleName);
-    $functions = specializeDictCallsFunctions($functions, $evidenceByName);
-    $functions = inlineFunctions($functions, $module->moduleName);
-    $functions = specializeDictCallsFunctions($functions, $evidenceByName);
-    setPropagateCopiesLambdaBodies($functions);
-    setHostEffectFunctions(hostEffectFunctionNames($functions, $module->moduleName));
-    $functions = \array_map(optimizeFunctionAfterInline(...), $functions);
-    clearHostEffectFunctions();
-    $functions = normalizeKnownApplies($functions, $module->moduleName);
-    $functions = bindLambdaCaptures($functions);
-    $functions = foldPartialApply($functions, $module->moduleName);
-    $captureMeta = buildLambdaMeta(indexCapturedFunctions($functions));
-    $functions = \array_map(
-        static fn (FunctionDecl $function): FunctionDecl => specializePartialReturnFunction(
-            $function,
-            $captureMeta[$function->name]['captures'] ?? [],
-        ),
-        $functions,
-    );
-    if (shouldRunSecondPartialFold($functions)) {
-        $functions = foldPartialApply($functions, $module->moduleName);
+        $functions = PassCheckpoints\runOnFunctions(
+            'early-folds',
+            $module,
+            $functions,
+            static function (array $fns) use ($moduleName): array {
+                setPropagateCopiesLambdaBodies($fns);
+                setHostEffectFunctions(hostEffectFunctionNames($fns, $moduleName));
+                $optimized = \array_map(optimizeFunctionEarly(...), $fns);
+                clearHostEffectFunctions();
+
+                return $optimized;
+            },
+            true,
+        );
+
+        $functions = PassCheckpoints\runOnFunctions(
+            'fuse-applied-lambdas',
+            $module,
+            $functions,
+            static fn (array $fns): array => fuseAppliedLambdas($fns, $moduleName),
+            true,
+        );
+        $functions = PassCheckpoints\runOnFunctions(
+            'specialize-dict-calls-1',
+            $module,
+            $functions,
+            static fn (array $fns): array => specializeDictCallsFunctions($fns, $evidenceByName),
+            true,
+        );
+        $functions = PassCheckpoints\runOnFunctions(
+            'inline-functions',
+            $module,
+            $functions,
+            static fn (array $fns): array => inlineFunctions($fns, $moduleName),
+            true,
+        );
+        $functions = PassCheckpoints\runOnFunctions(
+            'specialize-dict-calls-2',
+            $module,
+            $functions,
+            static fn (array $fns): array => specializeDictCallsFunctions($fns, $evidenceByName),
+            true,
+        );
+        $functions = PassCheckpoints\runOnFunctions(
+            'after-inline-folds',
+            $module,
+            $functions,
+            static function (array $fns) use ($moduleName): array {
+                setPropagateCopiesLambdaBodies($fns);
+                setHostEffectFunctions(hostEffectFunctionNames($fns, $moduleName));
+                $optimized = \array_map(optimizeFunctionAfterInline(...), $fns);
+                clearHostEffectFunctions();
+
+                return $optimized;
+            },
+            true,
+        );
+        $functions = PassCheckpoints\runOnFunctions(
+            'normalize-known-applies',
+            $module,
+            $functions,
+            static fn (array $fns): array => normalizeKnownApplies($fns, $moduleName),
+            true,
+        );
+        $functions = PassCheckpoints\runOnFunctions(
+            'bind-lambda-captures',
+            $module,
+            $functions,
+            bindLambdaCaptures(...),
+            false,
+        );
+        $functions = PassCheckpoints\runOnFunctions(
+            'fold-partial-apply',
+            $module,
+            $functions,
+            static fn (array $fns): array => foldPartialApply($fns, $moduleName),
+            false,
+        );
+        $functions = PassCheckpoints\runOnFunctions(
+            'specialize-partial-return',
+            $module,
+            $functions,
+            static function (array $fns): array {
+                $captureMeta = buildLambdaMeta(indexCapturedFunctions($fns));
+
+                return \array_map(
+                    static fn (FunctionDecl $function): FunctionDecl => specializePartialReturnFunction(
+                        $function,
+                        $captureMeta[$function->name]['captures'] ?? [],
+                    ),
+                    $fns,
+                );
+            },
+            false,
+        );
+        if (shouldRunSecondPartialFold($functions)) {
+            $functions = PassCheckpoints\runOnFunctions(
+                'fold-partial-apply-2',
+                $module,
+                $functions,
+                static fn (array $fns): array => foldPartialApply($fns, $moduleName),
+                false,
+            );
+        }
+
+        $module = new Module($functions, $module->data, $instanceEvidence, $module->entry, $moduleName, $module->sourceFile);
+        $module = PassCheckpoints\runOnModule('eliminate-intrinsic-wrappers', $module, eliminateIntrinsicWrappers(...));
+        $module = PassCheckpoints\runOnModule('fold-io-action-boxes', $module, foldIoActionBoxes(...));
+        $functions = PassCheckpoints\runOnFunctions(
+            'recompute-io-straight-line',
+            $module,
+            $module->functions,
+            recomputeIoStraightLineAll(...),
+            false,
+        );
+        $module = new Module($functions, $module->data, $module->instanceEvidence, $module->entry, $module->moduleName, $module->sourceFile);
+        $functions = $module->functions;
+
+        setPropagateCopiesLambdaBodies($functions);
+        setHostEffectFunctions(hostEffectFunctionNames($functions, $moduleName));
+        $functions = PassCheckpoints\runOnFunctions(
+            'final-folds',
+            $module,
+            $functions,
+            static fn (array $fns): array => \array_map(optimizeFunctionFinal(...), $fns),
+            false,
+        );
+        $functions = PassCheckpoints\runOnFunctions(
+            'annotate-io-effects',
+            $module,
+            $functions,
+            static fn (array $fns): array => annotateIoEffects($fns, $moduleName),
+            false,
+        );
+        setHostEffectFunctions(hostEffectFunctionNames($functions, $moduleName));
+        $functions = PassCheckpoints\runOnFunctions(
+            'final-dce',
+            $module,
+            $functions,
+            static fn (array $fns): array => \array_map(
+                static fn (FunctionDecl $function): FunctionDecl => $function->withBody(
+                    $function->ioStraightLine ? $function->body : dceBlock($function->body),
+                ),
+                $fns,
+            ),
+            false,
+        );
+        clearHostEffectFunctions();
+
+        $result = new Module($functions, $module->data, $instanceEvidence, entryFromFunctions($functions), $moduleName, $module->sourceFile);
+    } finally {
+        PassCheckpoints\leaveOptimize();
     }
 
-    $module = new Module($functions, $module->data, $instanceEvidence, $module->entry, $module->moduleName, $module->sourceFile);
-    $module = eliminateIntrinsicWrappers($module);
-    $module = foldIoActionBoxes($module);
-    $functions = recomputeIoStraightLineAll($module->functions);
-    $module = new Module($functions, $module->data, $module->instanceEvidence, $module->entry, $module->moduleName, $module->sourceFile);
-    $functions = $module->functions;
-
-    setPropagateCopiesLambdaBodies($functions);
-    setHostEffectFunctions(hostEffectFunctionNames($functions, $module->moduleName));
-    $functions = \array_map(optimizeFunctionFinal(...), $functions);
-    $functions = annotateIoEffects($functions, $module->moduleName);
-    setHostEffectFunctions(hostEffectFunctionNames($functions, $module->moduleName));
-    $functions = \array_map(static fn (FunctionDecl $function): FunctionDecl => $function->withBody(
-        $function->ioStraightLine ? $function->body : dceBlock($function->body),
-    ), $functions);
-    clearHostEffectFunctions();
-
-    return new Module($functions, $module->data, $instanceEvidence, entryFromFunctions($functions), $module->moduleName, $module->sourceFile);
+    return $result;
 }
 
 /**

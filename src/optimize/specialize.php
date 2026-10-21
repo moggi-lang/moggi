@@ -439,11 +439,7 @@ function specializeOneRootModule(
         $module->sourceFile,
     );
     if ($reoptimize) {
-        $beforeByName = [];
-        foreach ($updated->functions as $fn) {
-            $beforeByName[$fn->name] = $fn;
-        }
-        $updated = restoreUnboundAfterOptimize(optimize($updated), $beforeByName);
+        $updated = optimize($updated);
     }
 
     return ['changed' => true, 'module' => $updated];
@@ -613,11 +609,7 @@ function optimizeSpecializationRoots(array &$modules, array $rootNames, int $pas
             }
             for ($optPass = 0; $optPass < $passes; ++$optPass) {
                 setPeFusionIndexFromModules($modules);
-                $beforeByName = [];
-                foreach ($module->functions as $fn) {
-                    $beforeByName[$fn->name] = $fn;
-                }
-                $optimized = restoreUnboundAfterOptimize(optimize($module), $beforeByName);
+                $optimized = optimize($module);
                 $modules[$moduleName] = $optimized;
                 $module = $optimized;
             }
@@ -707,53 +699,7 @@ function setPeFusionIndexFromModules(array $modules): void
     setActivePeFusionIndex($index);
 }
 
-/**
- * If optimize() drops a temp definition while leaving uses (seen on specialized
- * Enum.enumFromThenTo clones), keep the pre-optimize body for that function.
- *
- * @param array<string, IR\FunctionDecl> $beforeByName
- */
-function restoreUnboundAfterOptimize(IR\Module $optimized, array $beforeByName): IR\Module
-{
-    /** @var array<string, true> $restore */
-    $restore = [];
-    foreach ($optimized->functions as $fn) {
-        if (unboundTempsInFunction($fn) === [] || ! isset($beforeByName[$fn->name])) {
-            continue;
-        }
-        if (unboundTempsInFunction($beforeByName[$fn->name]) === []) {
-            $restore[$fn->name] = true;
-        }
-    }
-    if ($restore === []) {
-        return $optimized;
-    }
-
-    foreach ($optimized->functions as $fn) {
-        $prev = $beforeByName[$fn->name] ?? null;
-        if ($prev === null || isset($restore[$fn->name])) {
-            continue;
-        }
-        if (\count($prev->params) !== \count($fn->params) && unboundTempsInFunction($prev) === []) {
-            $restore[$fn->name] = true;
-        }
-    }
-
-    $fns = [];
-    foreach ($optimized->functions as $fn) {
-        $fns[] = isset($restore[$fn->name]) ? $beforeByName[$fn->name] : $fn;
-    }
-
-    return new IR\Module(
-        $fns,
-        $optimized->data,
-        $optimized->instanceEvidence,
-        $optimized->entry,
-        $optimized->moduleName,
-        $optimized->sourceFile,
-    );
-}
-
+/** Rejects a module with a temp read but never defined. */
 function assertNoUnboundTempsAfterSpecialize(IR\Module $module, string $moduleName): void
 {
     if (! moduleHasUnboundTemps($module)) {
