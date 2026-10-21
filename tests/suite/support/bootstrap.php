@@ -7,6 +7,11 @@
  * Everything is a plain global function returning `['passed' => bool, 'message' => string]`.
  */
 
+// G0 checkpoint policy: the suite runs both validator seams (post-lower and
+// post-optimizer); a user compile gets the post-optimizer one only. Set before
+// any case runs, and inherited by the compiler processes the harness spawns.
+\putenv('MOGGI_IR_CHECKPOINTS=1');
+
 require_once __DIR__ . '/paths.php';
 require_once __DIR__ . '/assert.php';
 require_once __DIR__ . '/platform.php';

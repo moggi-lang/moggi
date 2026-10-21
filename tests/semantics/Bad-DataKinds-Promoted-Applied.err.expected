@@ -1,0 +1,4 @@
+tests/semantics/Bad-DataKinds-Promoted-Applied.mog:5:10: type error: promoted constructor `'Red` applied to too many arguments
+
+  5 | type T = 'Red Int
+    |          ^^^

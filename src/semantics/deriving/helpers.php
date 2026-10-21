@@ -4,10 +4,13 @@ namespace Moggi\Semantics\Deriving;
 
 use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TCon;
+use Moggi\Semantics\TypeExpr\TPromoted;
 use Moggi\Semantics\TypeExpr\TVar;
+use Moggi\Semantics\TypeExpr\TVarApp;
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Semantics\Types\TypeCheckState;
 
+use function Moggi\Semantics\Types\typeChildren;
 use function Moggi\Semantics\Types\typeFail;
 
 use Moggi\Syntax\Ast;
@@ -253,15 +256,10 @@ function typeMentionsParam(Ast\TypeNode $type, string $param): bool
  */
 function typeHasNestedClassParam(Type $type, string $param): bool
 {
-    if ($type instanceof TCon) {
-        foreach ($type->args as $arg) {
-            if (internalTypeMentionsParam($arg, $param)) {
-                return true;
-            }
-        }
-
-        return false;
+    if ($type instanceof TCon || $type instanceof TVarApp || $type instanceof TPromoted) {
+        return internalTypeMentionsParam($type, $param);
     }
+    
     if ($type instanceof TArrow) {
         return typeHasNestedClassParam($type->from, $param)
             || typeHasNestedClassParam($type->to, $param);
@@ -276,18 +274,11 @@ function internalTypeMentionsParam(Type $type, string $param): bool
     if ($type instanceof TVar) {
         return $type->name === $param;
     }
-    if ($type instanceof TCon) {
-        foreach ($type->args as $arg) {
-            if (internalTypeMentionsParam($arg, $param)) {
-                return true;
-            }
-        }
 
-        return false;
-    }
-    if ($type instanceof TArrow) {
-        return internalTypeMentionsParam($type->from, $param)
-            || internalTypeMentionsParam($type->to, $param);
+    foreach (typeChildren($type) as $child) {
+        if (internalTypeMentionsParam($child, $param)) {
+            return true;
+        }
     }
 
     return false;

@@ -1238,40 +1238,24 @@ function freshenStableTypeKeyRec(Type $type, array &$rename, int &$n): string
         return $rename[$type->name];
     }
 
-    if ($type instanceof TCon) {
-        if ($type->args === []) {
-            return $type->name;
-        }
-        $args = [];
-        foreach ($type->args as $arg) {
-            $args[] = freshenStableTypeKeyRec($arg, $rename, $n);
-        }
-
-        return $type->name . '(' . \implode(',', $args) . ')';
-    }
-
-    if ($type instanceof TArrow) {
-        return '(' . freshenStableTypeKeyRec($type->from, $rename, $n)
-            . ')->(' . freshenStableTypeKeyRec($type->to, $rename, $n) . ')';
-    }
-
     if ($type instanceof TUnit) {
         return '()';
     }
 
-    if ($type instanceof TPromoted) {
-        if ($type->args === []) {
-            return "'" . $type->name;
-        }
-        $args = [];
-        foreach ($type->args as $arg) {
-            $args[] = freshenStableTypeKeyRec($arg, $rename, $n);
-        }
-
-        return "'" . $type->name . '(' . \implode(',', $args) . ')';
+    if (! $type instanceof TArrow && ! $type instanceof TCon && ! $type instanceof TPromoted) {
+        return typeToString($type);
     }
 
-    return typeToString($type);
+    $keys = [];
+    foreach (typeChildren($type) as $child) {
+        $keys[] = freshenStableTypeKeyRec($child, $rename, $n);
+    }
+
+    return match ($type::class) {
+        TArrow::class => '(' . $keys[0] . ')->(' . $keys[1] . ')',
+        TCon::class => $keys === [] ? $type->name : $type->name . '(' . \implode(',', $keys) . ')',
+        default => "'" . $type->name . ($keys === [] ? '' : '(' . \implode(',', $keys) . ')'),
+    };
 }
 
 /**

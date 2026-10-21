@@ -36,6 +36,7 @@ use Moggi\Syntax\Ast;
 
 require_once __DIR__ . '/../type_expr.php';
 require_once __DIR__ . '/state.php';
+require_once __DIR__ . '/type_laws.php';
 
 function substituteInstanceTypeAst(Ast\TypeNode $type, array $mapping): Ast\TypeNode
 {
@@ -285,13 +286,16 @@ function envFreeVars(array $env): array
 
 function typeVars(Type $type): array
 {
-    return match ($type::class) {
-        TVar::class => [$type->name => true],
-        TVarApp::class => [$type->name => true] + \array_merge([], ...\array_map(typeVars(...), $type->args)),
-        TCon::class => \array_merge([], ...\array_map(typeVars(...), $type->args)),
-        TArrow::class => [...typeVars($type->from), ...typeVars($type->to)],
-        default => [],
-    };
+    if ($type instanceof TVar) {
+        return [$type->name => true];
+    }
+
+    $vars = $type instanceof TVarApp ? [$type->name => true] : [];
+    foreach (typeChildren($type) as $child) {
+        $vars += typeVars($child);
+    }
+
+    return $vars;
 }
 
 /** @return array<string, true> */
@@ -583,7 +587,10 @@ function substitute(Type $type, array $mapping): Type
             substitute($type->from, $mapping),
             substitute($type->to, $mapping),
         ),
-        default => $type,
+        default => mapTypeChildren(
+            $type,
+            static fn (Type $child): Type => substitute($child, $mapping),
+        ),
     };
 }
 
@@ -908,10 +915,6 @@ function typeVarLetter(int $index): string
 
 function prune(TypeCheckState $state, Type $type): Type
 {
-    if ($state->subst === []) {
-        return $type;
-    }
-
     if ($type instanceof TVar) {
         if (! isset($state->subst[$type->name])) {
             return $type;
@@ -926,9 +929,9 @@ function prune(TypeCheckState $state, Type $type): Type
     if ($type instanceof TVarApp) {
         $args = [];
         $changed = false;
-        foreach ($type->args as $i => $arg) {
+        foreach ($type->args as $arg) {
             $pruned = prune($state, $arg);
-            $args[$i] = $pruned;
+            $args[] = $pruned;
             if ($pruned !== $arg) {
                 $changed = true;
             }
@@ -941,28 +944,7 @@ function prune(TypeCheckState $state, Type $type): Type
         return $changed ? new TVarApp($type->name, $args) : $type;
     }
 
-    if ($type instanceof TCon) {
-        $args = [];
-        $changed = false;
-        foreach ($type->args as $i => $arg) {
-            $pruned = prune($state, $arg);
-            $args[$i] = $pruned;
-            if ($pruned !== $arg) {
-                $changed = true;
-            }
-        }
-
-        return $changed ? new TCon($type->name, $args) : $type;
-    }
-
-    if ($type instanceof TArrow) {
-        $from = prune($state, $type->from);
-        $to = prune($state, $type->to);
-
-        return $from === $type->from && $to === $type->to ? $type : new TArrow($from, $to);
-    }
-
-    return $type;
+    return mapTypeChildren($type, static fn (Type $child): Type => prune($state, $child));
 }
 
 /**
@@ -1159,21 +1141,8 @@ function occurs(TypeCheckState $state, string $var, Type $type, ?Ast\AstNode $at
         throw typeFail($state, "infinite type: `{$shown}` occurs in itself", $at);
     }
 
-    if ($type instanceof TCon || $type instanceof TVarApp) {
-        foreach ($type->args as $arg) {
-            occurs($state, $var, $arg, $at);
-        }
-    }
-
-    if ($type instanceof TPromoted) {
-        foreach ($type->args as $arg) {
-            occurs($state, $var, $arg, $at);
-        }
-    }
-
-    if ($type instanceof TArrow) {
-        occurs($state, $var, $type->from, $at);
-        occurs($state, $var, $type->to, $at);
+    foreach (typeChildren($type) as $child) {
+        occurs($state, $var, $child, $at);
     }
 }
 
