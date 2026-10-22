@@ -1657,8 +1657,7 @@ function inferDoExpr(TypeCheckState $state, Ast\DoExpr $expr, array $env): Type
 
 function annotateExprType(TypeCheckState $state, Ast\AstNode $expr, Type $type): void
 {
-    $pruned = prune($state, $type);
-    $expr->inferredType = internalTypeToAst($pruned, $state->subst);
+    $expr->inferredType = internalTypeToAstNode(prune($state, $type));
 }
 
 function inferTypeAsc(TypeCheckState $state, Ast\TypeAsc $expr, array $env): Type

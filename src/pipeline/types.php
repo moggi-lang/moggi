@@ -100,14 +100,24 @@ final class CompilationContext
         );
     }
 
-    /** The purpose a module is compiled with under this context. */
+    /**
+     * The purpose a module is compiled with under this context.
+     *
+     * Only an entry module is compiled *as* the compilation: `main` is promoted
+     * only under `Executable`, and `Library`/`Repl` promote nothing, so a
+     * module's typed product depends on whether it is the entry, not on why the
+     * compilation that reached it runs. Everything else is a library module
+     * whichever entry point asked for it, which is what lets one compilation
+     * answer another's request for the same module
+     * ({@see moduleCacheMaterial}).
+     */
     public function purposeFor(?string $module): CompilePurpose
     {
-        if ($this->purpose !== CompilePurpose::Executable) {
+        if ($this->isEntry($module)) {
             return $this->purpose;
         }
 
-        return $this->isEntry($module) ? CompilePurpose::Executable : CompilePurpose::Library;
+        return CompilePurpose::Library;
     }
 
     public function isEntry(?string $module): bool
@@ -164,18 +174,49 @@ final class CompilationContext
     }
 
     /**
+     * The context inputs a project-level memo depends on.
+     *
+     * `sources` is deliberately absent: the module set a prepared project
+     * covers is already part of the memo key (`checkedModuleCacheKey` of every
+     * path), so folding the source list in as well would give every file in a
+     * process a private memo — no compile could ever reuse the closure another
+     * compile prepared.
+     */
+    public function inputsKey(): string
+    {
+        $entries = \array_keys($this->entries);
+        \sort($entries);
+
+        return \hash('xxh128', \implode("\n", [
+            'backend=' . $this->backendId,
+            'purpose=' . $this->purpose->value,
+            'entries=' . \implode(',', $entries),
+            'roots=' . \implode(',', $this->roots),
+        ]));
+    }
+
+    /**
      * The context inputs a single module's cache entry depends on.
      *
      * Sources are deliberately absent: a module's content key is already a
      * Merkle over its own and its dependencies' sources, so folding the whole
      * source list in would invalidate every module on any edit.
+     *
+     * Roots are absent for the same reason. A root list is an input to import
+     * resolution, not to a module's product: the content key is the Merkle over
+     * the closure resolution produced, so two compilations whose roots supply a
+     * different `Dep` already disagree on it. Folding the caller's roots in
+     * instead gives every compilation that is not the library build itself —
+     * each test case, each REPL session, the language server — a private key for
+     * every standard-library module, so the products one build wrote are never
+     * found again: the shared library cache becomes write-only, and `moduleGet`
+     * deletes the entry it found under the other key.
      */
     public function moduleCacheMaterial(?string $module): string
     {
         return \implode(';', [
             'backend=' . $this->backendId,
             'purpose=' . $this->purposeFor($module)->value,
-            'roots=' . \implode(',', $this->roots),
         ]);
     }
 

@@ -797,26 +797,21 @@ function promotableImportedFieldKind(TypeCheckState $state, mixed $fieldType): ?
 }
 
 /**
- * The kind environment every module starts with: the types the language's own
- * syntax writes, and nothing else.
- *
- * `(a, b)` and `[a]` are syntax, so `Tuple2` and `List` are names the parser
- * writes rather than names a module declares; they are the machine's types
- * (`Moggi.Internal.Prim`'s `Tuple*`/`List#`) and need no import to be written.
- * Every other type constructor a module may name -- `Int`, `String`, `Bool`,
- * `Ordering`, `IO` -- is a library declaration in the module that owns it
- * (`Moggi.Internal.Base` for the machine types' readable names), and reaches a
- * module only through an import: a signature that names one without importing it
- * is a diagnostic ({@see isUndeclaredNominalTypeCon}), not a type the compiler
- * quietly supplies.
+ * The initial kind environment contains only types intrinsic to language syntax.
+ * All other named type constructors must be declared in an imported module;
+ * missing imports are diagnosed, never supplied implicitly.
  */
 function bootstrapKindEnv(TypeCheckState $state): void
 {
-    registerTypeKind($state, 'List', dataKind(1));
-
-    for ($arity = 2; $arity <= 64; ++$arity) {
-        registerTypeKind($state, 'Tuple' . $arity, dataKind($arity));
+    static $table = null;
+    if ($table === null) {
+        $table = ['List' => dataKind(1)];
+        for ($arity = 2; $arity <= 64; ++$arity) {
+            $table['Tuple' . $arity] = dataKind($arity);
+        }
     }
+
+    $state->kindEnv = $table;
 }
 
 /** @param array{name: string, kind?: Kind|Ast\KindNode, resolvedKind?: Kind} $param */

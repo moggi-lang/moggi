@@ -36,7 +36,7 @@ use function Moggi\Syntax\Parser\parse;
  *   lowers its modules. Skips straight to a fresh check when an interface is
  *   missing, so a cold cache still typechecks everything once.
  */
-function prepareProject(array $paths, string $rootDir, CompilationContext $context, bool $shallow = false): PreparedProject
+function prepareProject(array $paths, string $rootDir, CompilationContext $context, bool $shallow = false, bool $widened = false): PreparedProject
 {
     $root = \realpath($rootDir);
     if ($root === false) {
@@ -144,6 +144,34 @@ function prepareProject(array $paths, string $rootDir, CompilationContext $conte
     $sortedModules = sortModulesByDependencies($units, $context->backendId);
     assignModuleCacheKeys($units, $sortedModules, $context);
     hydrateModuleDiskArtifacts($units, $sortedModules, $context);
+
+    if ($shallow && ! $widened) {
+        foreach ($units as $moduleName => $unit) {
+            if (($unit['synthetic'] ?? false) === true) {
+                continue;
+            }
+            if (isset($unit['localTypes']) || ! isModuleActiveForCompileBackend($units, $moduleName, $context->backendId)) {
+                continue;
+            }
+
+            $extra = [];
+            $stdlibRoot = configuredStdlibLibPath() ?? bundledStdlibLibPath();
+            if ($stdlibRoot !== null && \is_dir($stdlibRoot)) {
+                foreach (findMogFilesUnder($stdlibRoot) as $candidate) {
+                    $extra[resolvePath($candidate)] = $candidate;
+                }
+            }
+            foreach ($paths as $path) {
+                unset($extra[resolvePath($path)]);
+            }
+
+            if ($extra !== []) {
+                return prepareProject([...$paths, ...\array_values($extra)], $rootDir, $context, true, true);
+            }
+
+            break;
+        }
+    }
 
     foreach ($fullParseModules as $moduleName) {
         ensureUnitProgram($units, $moduleName);
@@ -649,7 +677,7 @@ function prepareFocusBase(array $paths, string $rootDir, CompilationContext $con
     }
     \sort($parts);
 
-    $key = 'shallow|' . \implode('|', $parts) . '@' . $context->cacheKey();
+    $key = 'shallow|' . \implode('|', $parts) . '@' . $context->inputsKey();
     $memoized = ProjectCache::preparedProject($key);
     if ($memoized !== null) {
         return $memoized;
@@ -672,7 +700,7 @@ function prepareProjectCached(array $paths, string $rootDir, CompilationContext 
 
     $key = \implode('|', $parts)
         . '@' . ($onlyTypecheckModule ?? '*')
-        . '@' . $context->cacheKey();
+        . '@' . $context->inputsKey();
     $memoized = ProjectCache::preparedProject($key);
     if ($memoized !== null) {
         return $memoized;
