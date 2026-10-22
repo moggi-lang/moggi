@@ -915,6 +915,16 @@ function typeVarLetter(int $index): string
 
 function prune(TypeCheckState $state, Type $type): Type
 {
+    if ($state->subst === [] && (
+        $type instanceof TVar
+        || $type instanceof TVarApp
+        || $type instanceof TCon
+        || $type instanceof TArrow
+        || $type instanceof TPromoted
+    )) {
+        return $type;
+    }
+
     if ($type instanceof TVar) {
         if (! isset($state->subst[$type->name])) {
             return $type;
@@ -944,6 +954,37 @@ function prune(TypeCheckState $state, Type $type): Type
         return $changed ? new TVarApp($type->name, $args) : $type;
     }
 
+    if ($type instanceof TArrow) {
+        $from = prune($state, $type->from);
+        $to = prune($state, $type->to);
+
+        return $from === $type->from && $to === $type->to ? $type : new TArrow($from, $to);
+    }
+
+    if ($type instanceof TCon || $type instanceof TPromoted) {
+        if ($type->args === []) {
+            return $type;
+        }
+
+        $args = [];
+        $changed = false;
+        foreach ($type->args as $arg) {
+            $pruned = prune($state, $arg);
+            $args[] = $pruned;
+            if ($pruned !== $arg) {
+                $changed = true;
+            }
+        }
+
+        if (! $changed) {
+            return $type;
+        }
+
+        return $type instanceof TCon
+            ? new TCon($type->name, $args)
+            : new TPromoted($type->name, $args);
+    }
+
     return mapTypeChildren($type, static fn (Type $child): Type => prune($state, $child));
 }
 
@@ -954,9 +995,8 @@ function prune(TypeCheckState $state, Type $type): Type
 function zonkInferredTypesInExpr(TypeCheckState $state, Ast\AstNode $expr): void
 {
     if ($expr->inferredType !== null) {
-        $expr->inferredType = internalTypeToAst(
+        $expr->inferredType = internalTypeToAstNode(
             prune($state, inferredTypeAstToInternal($expr->inferredType)),
-            $state->subst,
         );
     }
 
@@ -1450,10 +1490,18 @@ function internedTypeNode(Ast\TypeNode $node): Ast\TypeNode
 
 function internalTypeToAst(Type $type, array $subst): Ast\TypeNode
 {
-    $pruneState = new TypeCheckState('');
-    $pruneState->subst = $subst;
-    $type = prune($pruneState, $type);
+    if ($subst !== []) {
+        $pruneState = new TypeCheckState('');
+        $pruneState->subst = $subst;
+        $type = prune($pruneState, $type);
+    }
 
+    return internalTypeToAstNode($type);
+}
+
+/** Convert a type whose variables are already pruned; only allocates the nodes. */
+function internalTypeToAstNode(Type $type): Ast\TypeNode
+{
     $node = match ($type::class) {
         TInt::class => new Ast\TypeCon('Int'),
         TStr::class => new Ast\TypeCon('String'),
@@ -1474,7 +1522,7 @@ function internalTypeToAst(Type $type, array $subst): Ast\TypeNode
         TPromoted::class => \count($type->args) === 0
             ? new Ast\TypePromoted($type->name)
             : new Ast\TypeApp(new Ast\TypePromoted($type->name), \array_map(
-                static fn (Type $arg): Ast\TypeNode => internalTypeToAst($arg, $subst),
+                static fn (Type $arg): Ast\TypeNode => internalTypeToAstNode($arg),
                 $type->args,
             )),
         TStringLit::class => new Ast\TypeStringLit($type->value),
@@ -1482,16 +1530,16 @@ function internalTypeToAst(Type $type, array $subst): Ast\TypeNode
         TCon::class => \count($type->args) === 0
             ? new Ast\TypeCon($type->name)
             : new Ast\TypeApp(new Ast\TypeCon($type->name), \array_map(
-                static fn (Type $arg): Ast\TypeNode => internalTypeToAst($arg, $subst),
+                static fn (Type $arg): Ast\TypeNode => internalTypeToAstNode($arg),
                 $type->args,
             )),
         TVarApp::class => new Ast\TypeApp(new Ast\TypeVar($type->name), \array_map(
-            static fn (Type $arg): Ast\TypeNode => internalTypeToAst($arg, $subst),
+            static fn (Type $arg): Ast\TypeNode => internalTypeToAstNode($arg),
             $type->args,
         )),
         TArrow::class => new Ast\TypeArrow(
-            internalTypeToAst($type->from, $subst),
-            internalTypeToAst($type->to, $subst),
+            internalTypeToAstNode($type->from),
+            internalTypeToAstNode($type->to),
         ),
         default => throw new \InvalidArgumentException('unknown type: ' . $type::class),
     };

@@ -268,18 +268,31 @@ try {
         'the incompatible project artifact was not replaced',
     );
 
-    // 8. The key itself names each declared input: two contexts that differ in target, purpose or
-    // roots address different products for the same module content, and the entry set decides a
-    // module's purpose.
+    // 8. The key names the module's own inputs: the target, whether the module is the entry, and
+    // its content Merkle. The caller's roots and a purpose that promotes nothing do not enter it,
+    // because the Merkle already pins what those roots resolved
+    // (see CompilationContext::moduleCacheMaterial); a product built once is the one every later
+    // compilation finds.
     $contentKey = 'content-key';
-    $libraryContext = CompilationContext::for('php', CompilePurpose::Library, ['Main'], [$rootA], $filesA);
     $keys = [
         $php($filesA)->moduleKey('Main', $contentKey),
+        $php($filesA)->moduleKey('Alt', $contentKey),
         $jvm->moduleKey('Main', $contentKey),
-        $libraryContext->moduleKey('Main', $contentKey),
-        $contextB->moduleKey('Main', $contentKey),
+        $jvm->moduleKey('Alt', $contentKey),
     ];
     $assert(\count(\array_unique($keys)) === \count($keys), 'two distinct declared inputs shared a module cache key');
+    $replFromB = CompilationContext::for('php', CompilePurpose::Repl, roots: [$rootB]);
+    $libraryContext = CompilationContext::for('php', CompilePurpose::Library, ['Main'], [$rootA], $filesA);
+    $shared = [
+        $php($filesA)->moduleKey('Dep', $contentKey),
+        $contextB->moduleKey('Dep', $contentKey),
+        $libraryContext->moduleKey('Dep', $contentKey),
+        $replFromB->moduleKey('Dep', $contentKey),
+    ];
+    $assert(
+        \count(\array_unique($shared)) === 1,
+        'the caller\'s roots or a purpose that promotes nothing gave a library module a private key',
+    );
     $assert(
         $php($filesA)->purposeFor('Main') !== $php($filesA)->purposeFor('Alt'),
         'the entry set did not decide which module is compiled as the entry',
