@@ -2,27 +2,23 @@
 
 namespace Moggi\IR;
 
+use Moggi\Semantics\TypeExpr;
+use Moggi\Syntax\Ast;
+
 use function Moggi\Semantics\Exhaustiveness\guardIsConstantTrue;
 use function Moggi\Semantics\IntrinsicRegistry\isIoExceptionPrimop;
 use function Moggi\Semantics\IntrinsicRegistry\isShortCircuitPrimop;
 use function Moggi\Semantics\IntrinsicRegistry\primopForPublicOperator;
 use function Moggi\Semantics\IntrinsicRegistry\schemeArity;
-
 use function Moggi\Semantics\IntrinsicRegistry\shortCircuitPrimop;
 use function Moggi\Semantics\IntrinsicRegistry\typeSchemes;
 use function Moggi\Semantics\IoBoundary\isIoType;
 use function Moggi\Semantics\Kernel\boolFalseCtor;
 use function Moggi\Semantics\Kernel\boolTrueCtor;
-
-use Moggi\Semantics\TypeExpr;
-
 use function Moggi\Semantics\Types\bindingGroupSccs;
 use function Moggi\Semantics\Types\evidenceRefOperand;
 use function Moggi\Semantics\Types\peelBindingAnnotation;
 use function Moggi\Semantics\Types\prune;
-
-use Moggi\Syntax\Ast;
-
 use function Moggi\Syntax\isIdentifier;
 
 function lowerExpr(Ast\AstNode $expr, LowerCtx $ctx): Operand
@@ -65,7 +61,7 @@ function lowerExpr(Ast\AstNode $expr, LowerCtx $ctx): Operand
         Ast\Apply::class => lowerApplyFromExpr($expr, $ctx),
         Ast\Tuple::class => lowerTuple($expr->elements, $ctx),
         Ast\ListLit::class => lowerList($expr->elements, $ctx),
-        Ast\Lambda::class => lowerLambda($expr->params, $expr->body, $ctx),
+        Ast\Lambda::class => lowerLambda($expr->params, $expr->body, $ctx, $expr->inferredType),
         Ast\DoExpr::class => lowerDoExpr($expr, $ctx),
         Ast\Let::class => lowerLet($expr->bindings, $expr->body, $ctx),
         Ast\Where::class => lowerWhere($expr->expr, $expr->bindings, $ctx),
@@ -99,7 +95,11 @@ function lowerExpr(Ast\AstNode $expr, LowerCtx $ctx): Operand
 
 function lowerEvidenceMethod(Ast\EvidenceMethod $expr, LowerCtx $ctx): Operand
 {
-    $method = new DictMethod(evidenceMethodOperand($expr, $ctx), $expr->method);
+    $method = new DictMethod(
+        evidenceMethodOperand($expr, $ctx),
+        $expr->method,
+        \count($expr->contextEvidence),
+    );
 
     if ($expr->methodNullary) {
         return lowerDictMethodCallFromValue($method, [], $ctx, srcLocFromAst($expr, $ctx->moduleName, $ctx->functionName, $ctx->sourceFile));
@@ -157,7 +157,7 @@ function lowerForeignCall(Ast\ForeignCall $expr, LowerCtx $ctx): ForeignCall
 function evidenceMethodOperand(Ast\EvidenceMethod $expr, LowerCtx $ctx): Operand
 {
     if ($expr->evidenceInstance !== null) {
-        return lowerEvidenceRefValue(
+        return projectedEvidenceOperand(
             $expr->class,
             $expr->evidenceInstance,
             $expr->contextEvidence,
@@ -166,6 +166,47 @@ function evidenceMethodOperand(Ast\EvidenceMethod $expr, LowerCtx $ctx): Operand
     }
 
     return new Local($expr->evidence);
+}
+
+/**
+ * The owner dictionary of a projected method, acquired once per block.
+ *
+ * A projection names its instance's dictionary (`@__ev_Labelled_Int`), so the builder used to run
+ * again at every use of the method. The first use in a block keeps the builder call and records
+ * the operand it produced; later uses in the same block read that operand instead of calling the
+ * builder again, which is what ADR 8 asks for when it says the projected method owns its
+ * instance-context dictionary (S5). Correctness is unchanged — a dictionary is an immutable method
+ * table — and no emitter needs to know: every backend already accepts a local/temp as `DictCall`'s
+ * evidence.
+ *
+ * A context-taking instance (`instance Monoid a => Monoid (Dual a)`) is left in its per-use form:
+ * its builder takes the dictionaries in scope at that use, which is the capture-vector slice, not
+ * this one.
+ *
+ * @param list<Ast\AstNode> $context
+ */
+function projectedEvidenceOperand(string $class, Ast\TypeNode $head, array $context, LowerCtx $ctx): Operand
+{
+    $fn = evidenceRefOperand($class, $head);
+
+    if ($context !== []) {
+        $args = [];
+        foreach ($context as $ev) {
+            $args[] = lowerExpr($ev, $ctx);
+        }
+
+        return lowerCall($fn->name, $args, $ctx);
+    }
+
+    $bound = $ctx->evidenceBindings[$fn->name] ?? null;
+    if ($bound !== null) {
+        return $bound;
+    }
+
+    $value = lowerCall($fn->name, [], $ctx);
+    $ctx->evidenceBindings[$fn->name] = $value;
+
+    return $value;
 }
 
 function lowerEvidenceRef(Ast\EvidenceRef $expr, LowerCtx $ctx): Operand
@@ -464,6 +505,7 @@ function lowerDictMethodCall(Ast\EvidenceMethod $expr, array $args, LowerCtx $ct
         $ctx->stmtSrcLoc
             ?? $srcLoc
             ?? srcLocFromAst($expr, $ctx->moduleName, $ctx->functionName, $ctx->sourceFile),
+        \count($expr->contextEvidence),
     );
 
     return new Temp($dest);
@@ -473,7 +515,14 @@ function lowerDictMethodCall(Ast\EvidenceMethod $expr, array $args, LowerCtx $ct
 function lowerDictMethodCallFromValue(DictMethod $value, array $args, LowerCtx $ctx, ?SrcLoc $srcLoc = null): Operand
 {
     $dest = freshTemp($ctx);
-    $ctx->items[] = new DictCall($value->evidence, $value->method, $args, $dest, $ctx->stmtSrcLoc ?? $srcLoc);
+    $ctx->items[] = new DictCall(
+        $value->evidence,
+        $value->method,
+        $args,
+        $dest,
+        $ctx->stmtSrcLoc ?? $srcLoc,
+        $value->localEvidence,
+    );
 
     return new Temp($dest);
 }
@@ -641,19 +690,31 @@ function lowerList(array $elements, LowerCtx $ctx): ListLit
 
 /**
  * @param array<int, Ast\LambdaParam|Ast\AstNode> $params
+ * @param ?Ast\AstNode $type the lambda's inferred type, when the checker left one on the node
  */
-function lowerLambda(array $params, Ast\AstNode $body, LowerCtx $ctx): FnRef
+function lowerLambda(array $params, Ast\AstNode $body, LowerCtx $ctx, ?Ast\AstNode $type = null): FnRef
 {
     $name = 'λ' . $ctx->state->nextLambda++;
 
-    return lowerNamedLambda($name, $params, $body, $ctx, FunctionKind::Lambda);
+    return lowerNamedLambda($name, $params, $body, $ctx, FunctionKind::Lambda, $type);
 }
 
 /**
+ * A lifted callable's declaration. `$type` is the checker's type for the lambda, recorded where
+ * the declaration is made — the callable table publishes the entry's result convention from it,
+ * which is why a lifted entry is no longer `Unclassified`.
+ *
  * @param array<int, Ast\LambdaParam|Ast\AstNode> $params
+ * @param ?Ast\AstNode $type the lambda's inferred type, when the checker left one on the node
  */
-function lowerNamedLambda(string $name, array $params, Ast\AstNode $body, LowerCtx $ctx, FunctionKind $kind): FnRef
-{
+function lowerNamedLambda(
+    string $name,
+    array $params,
+    Ast\AstNode $body,
+    LowerCtx $ctx,
+    FunctionKind $kind,
+    ?Ast\AstNode $type = null,
+): FnRef {
     $paramNames = patternParams($params);
     $fnCtx = newCtx($paramNames, $ctx->state, $ctx->data, $ctx->newtypes, $ctx);
     $fnCtx->functionArity = $ctx->functionArity;
@@ -674,10 +735,11 @@ function lowerNamedLambda(string $name, array $params, Ast\AstNode $body, LowerC
     $ctx->state->functions[] = new FunctionDecl(
         $name,
         $paramNames,
-        null,
+        $type,
         new Block($fnCtx->items),
         srcLoc: srcLocFromAst($body, $ctx->moduleName, $name, $ctx->sourceFile),
         kind: $kind,
+        evidenceScope: $ctx->evidenceNames,
     );
     $ctx->functionArity[$name] = \count($paramNames);
 

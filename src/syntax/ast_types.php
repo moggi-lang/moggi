@@ -445,6 +445,7 @@ final class Program extends AstNode
      * @param array<string, int> $externalFnRuntimeArity
      * @param array<string, true> $externalActionReturnFns imported functions whose body is a boxed action
      * @param array<string, true> $externalTrueBindings imported `<Module>::<name>` bindings whose body is the host boolean `true`
+     * @param array<string, int> $externalCallableArity published runtime arity of imported function entries
      * @param array<string, string> $backendMap
      * @param array<string, true> $language LANGUAGE pragma flags (e.g. NoImplicitPrelude)
      */
@@ -472,6 +473,16 @@ final class Program extends AstNode
 
         /** Imported `<Module>::<name>` bindings whose body is the host boolean `true` (e.g. `otherwise`). */
         public array $externalTrueBindings = [],
+
+        /**
+         * Published runtime arity of the imported *function* entries, keyed by the name this
+         * module calls them by. Narrower than `externalFnRuntimeArity`, which also carries the
+         * instance-evidence builders: those are not exported entries and their argument list is
+         * an evidence slice, not a callable layout.
+         *
+         * @var array<string, int>
+         */
+        public array $externalCallableArity = [],
         int $line = 0,
         int $col = 0,
         int $endCol = 0,

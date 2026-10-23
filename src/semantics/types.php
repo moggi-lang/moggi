@@ -244,6 +244,7 @@ function checkRaw(
         $program->fixityDocs,
         externalActionReturnFns: $importContext['externalActionReturnFns'] ?? [],
         externalTrueBindings: $importContext['externalTrueBindings'] ?? [],
+        externalCallableArity: $importContext['externalCallableArity'] ?? [],
     );
 
     return $checked;

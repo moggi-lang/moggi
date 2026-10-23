@@ -3,10 +3,9 @@
 namespace Moggi\Syntax\Parser;
 
 use Moggi\Syntax\Ast;
+use Moggi\Syntax\Lexer\TokenKind;
 
 use function Moggi\Syntax\Lexer\lex;
-
-use Moggi\Syntax\Lexer\TokenKind;
 
 /**
  * Result of parsing a single REPL input unit (one top-level decl, statement

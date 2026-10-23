@@ -1318,10 +1318,15 @@ function entityFromRow(array $row): DocEntity
 /**
  * The index file one documented tree writes under this context.
  *
- * The context is the one the caller declared — target, purpose and roots — not
- * one extended with the sources the closure happened to resolve: the index
- * carries its own source fingerprint, so the file it writes must not move when
- * a header-only edit changes the closure.
+ * The context is the one the caller declared — target, purpose, entries and
+ * roots — not one extended with the sources the closure happened to resolve:
+ * the index carries its own source fingerprint, so the file it writes must not
+ * move when a header-only edit changes the closure. `sources` is the one input
+ * that cannot be here: the documented closure is a function of the input path
+ * and the roots, so a caller that happened to analyse another file first would
+ * otherwise move the index and rebuild it — for the language server, which
+ * seeds this from the standard library and analyses a file per request, that
+ * was a full index build per analysis.
  */
 function indexCachePath(string $inputPath, array $libDirs, CompilationContext $context): string
 {
@@ -1329,7 +1334,7 @@ function indexCachePath(string $inputPath, array $libDirs, CompilationContext $c
     $key = \hash(
         'xxh3',
         $inputPath . '|' . \implode(',', $resolvedLibDirs) . '|docs-v' . docIndexSchemaVersion()
-            . '|' . $context->cacheKey(),
+            . '|' . $context->inputsKey(),
     );
 
     return compileDir() . '/docs-index/' . \substr($key, 0, 16) . '.json';

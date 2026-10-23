@@ -2,35 +2,29 @@
 
 namespace Moggi\Modules;
 
-use function Moggi\Backend\codegenWith;
-
-use Moggi\Cache;
-
-use function Moggi\IR\Dump\dump as dumpIr;
-
-use Moggi\IR\EntryPointKind;
-use Moggi\IR\Module;
-
-use function Moggi\IR\Visit\collectIrCodegenUsage;
-use function Moggi\IR\Visit\freeLocalsInBlock;
-
-use function Moggi\Optimize\Specialize\specializeAcrossModules;
-use function Moggi\Optimize\TreeShake\treeShakeModules;
-
-use Moggi\Pipeline\CompilationContext;
-use Moggi\Pipeline\PipelineRequest;
-use Moggi\Pipeline\PipelineStage;
-
-use function Moggi\Pipeline\run as pipelineRun;
-
-use Moggi\Semantics\Types\TypeError;
-use Moggi\Syntax\Ast;
-use Moggi\Syntax\Parser\ParseError;
-
 /**
  * Module compilation entry points: whole-project and single-file compiles,
  * built on top of `prepareProject`/`prepareProjectCached`.
  */
+
+use Moggi\Cache;
+use Moggi\IR\EntryPointKind;
+use Moggi\IR\Module;
+use Moggi\Pipeline\CompilationContext;
+use Moggi\Pipeline\PipelineRequest;
+use Moggi\Pipeline\PipelineStage;
+use Moggi\Semantics\Types\TypeError;
+use Moggi\Syntax\Ast;
+use Moggi\Syntax\Parser\ParseError;
+
+use function Moggi\Backend\codegenWith;
+use function Moggi\Backend\Jvm\Foreign\jvmInterfaceNamesFromPrograms;
+use function Moggi\IR\Dump\dump as dumpIr;
+use function Moggi\IR\Validate\validateCallableLayouts;
+use function Moggi\IR\Visit\collectIrCodegenUsage;
+use function Moggi\Optimize\Specialize\specializeAcrossModules;
+use function Moggi\Optimize\TreeShake\treeShakeModules;
+use function Moggi\Pipeline\run as pipelineRun;
 
 /** @param list<string> $paths @return array<string, string> relative output path => emitted artifact */
 function compileProject(array $paths, string $rootDir, CompilationContext $context, bool $optimize = true, bool $strip = false): array
@@ -147,28 +141,26 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
         $optByModule = treeShakeModules($optByModule)['modules'];
     }
 
-    $globalEvidenceMaps = [];
     foreach ($optByModule as $moduleName => $optimizedIr) {
-        foreach ($optimizedIr->instanceEvidence as $ev) {
-            $globalEvidenceMaps[$ev->evidenceName] = [
-                'module' => $moduleName,
-                'methods' => $ev->methods,
-            ];
-        }
+        validateCallableLayouts(
+            $optimizedIr,
+            'post-specialize',
+            $prepared->importContexts[$moduleName]['externalCallableArity'] ?? [],
+        );
     }
+
+    $foreignInterfaces = $context->backendId === 'jvm'
+        ? jvmInterfaceNamesFromPrograms(\array_filter(\array_map(
+            static fn (array $unit): ?Ast\Program => $unit['program'] ?? null,
+            \array_values($prepared->units),
+        )))
+        : [];
 
     $globalFnArity = [];
     foreach ($optByModule as $moduleName => $optimizedIr) {
-        $lambdaMeta = [];
-        foreach ($optimizedIr->functions as $fn) {
-            if (! $fn->kind->takesCaptures()) {
-                continue;
-            }
-            $lambdaMeta[$fn->name] = [
-                'captures' => freeLocalsInBlock($fn->body, \array_fill_keys($fn->params, true)),
-                'params' => $fn->params,
-            ];
-        }
+        $lambdaMeta = \Moggi\IR\Callables\captureMeta(
+            \Moggi\IR\Callables\captureCandidates($optimizedIr->functions),
+        );
         foreach ($optimizedIr->functions as $fn) {
             $arity = \count($fn->params);
             if ($fn->kind->takesCaptures()) {
@@ -222,8 +214,8 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
             'artifactModuleName' => $moduleName,
             'externalFns' => $codegenImports['externalFns'] ?? [],
             'externalFnRuntimeArity' => $importContext['externalFnRuntimeArity'] ?? [],
-            'globalEvidenceMaps' => $globalEvidenceMaps,
             'globalFnArity' => $globalFnArity,
+            'foreignInterfaces' => $foreignInterfaces,
         ]);
 
         if ($optimizedIr->entry !== null && $optimizedIr->entry->kind === EntryPointKind::Main) {

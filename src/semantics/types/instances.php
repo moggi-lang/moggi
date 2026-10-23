@@ -2,14 +2,8 @@
 
 namespace Moggi\Semantics\Types;
 
-use function Moggi\Semantics\IntrinsicRegistry\isIoIntrinsic;
-use function Moggi\Semantics\IntrinsicRegistry\isStIntrinsic;
-
 use Moggi\Semantics\Kinds;
 use Moggi\Semantics\TypeExpr\Scheme;
-
-use function Moggi\Semantics\TypeExpr\scheme;
-
 use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TChar;
 use Moggi\Semantics\TypeExpr\TCon;
@@ -30,9 +24,12 @@ use Moggi\Semantics\TypeExpr\TWord32;
 use Moggi\Semantics\TypeExpr\TWord64;
 use Moggi\Semantics\TypeExpr\TWord8;
 use Moggi\Semantics\TypeExpr\Type;
-
 use Moggi\Syntax\Ast;
 use Moggi\Syntax\Ast\TypeNode;
+
+use function Moggi\Semantics\IntrinsicRegistry\isIoIntrinsic;
+use function Moggi\Semantics\IntrinsicRegistry\isStIntrinsic;
+use function Moggi\Semantics\TypeExpr\scheme;
 
 require_once __DIR__ . '/type_core.php';
 require_once __DIR__ . '/constraints.php';

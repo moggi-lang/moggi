@@ -2,9 +2,9 @@
 
 namespace Moggi\Syntax\Lexer;
 
-use function Moggi\Errors\formatDiagnostic;
-
 use Moggi\Syntax\Parser\Token;
+
+use function Moggi\Errors\formatDiagnostic;
 
 final class LexError extends \RuntimeException
 {

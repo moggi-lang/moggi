@@ -5,14 +5,12 @@ namespace Moggi\Modules;
 require_once __DIR__ . '/../paths.php';
 
 use Moggi\Cache;
+use Moggi\Semantics\Types\TypeError;
 
 use function Moggi\Install\installationRoot;
-
 use function Moggi\Paths\canonicalPath;
 use function Moggi\Paths\canonicalSeparators;
 use function Moggi\Paths\globPaths;
-
-use Moggi\Semantics\Types\TypeError;
 
 /** Whether `$path` names a stream (`phar://…`) rather than a real filesystem path. */
 function isStreamPath(string $path): bool

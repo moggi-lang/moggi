@@ -3,11 +3,13 @@
 namespace Moggi\Pipeline;
 
 use function Moggi\Backend\codegenWith;
+use function Moggi\Backend\Jvm\Foreign\jvmInterfaceNamesFromPrograms;
 use function Moggi\IR\lower;
+use function Moggi\IR\Validate\validateCallableLayouts;
 use function Moggi\IR\Validate\validateModule;
 use function Moggi\Modules\moduleNameToNamespace;
 use function Moggi\Optimize\optimize;
-use function Moggi\Optimize\Partial\bindLambdaCaptures;
+use function Moggi\Optimize\Partial\legalizeCallables;
 use function Moggi\Semantics\Effects\checkAndNormalize;
 
 use Moggi\Syntax\Ast\Program;
@@ -78,7 +80,7 @@ function run(PipelineRequest $request, PipelineStage $stopAt = PipelineStage::Em
         $irOpt = optimize($ir);
     } else {
         $irOpt = new \Moggi\IR\Module(
-            bindLambdaCaptures($ir->functions),
+            legalizeCallables($ir->functions),
             $ir->data,
             $ir->instanceEvidence,
             $ir->entry,
@@ -90,6 +92,7 @@ function run(PipelineRequest $request, PipelineStage $stopAt = PipelineStage::Em
     $artifacts->entry = $irOpt->entry;
 
     validateModule($irOpt, 'post-opt');
+    validateCallableLayouts($irOpt, 'post-legalize', $artifacts->typedAst?->externalCallableArity ?? []);
 
     if ($stopAt === PipelineStage::IrOpt) {
         return $artifacts;
@@ -129,6 +132,10 @@ function defaultEmitOptions(Program $ast, string $filename, CompilationContext $
     if ($moduleName !== null) {
         $emitOptions['namespace'] = moduleNameToNamespace($moduleName);
         $emitOptions['artifactModuleName'] = $moduleName;
+    }
+
+    if ($context->backendId === 'jvm') {
+        $emitOptions['foreignInterfaces'] = jvmInterfaceNamesFromPrograms([$ast]);
     }
 
     return $emitOptions;

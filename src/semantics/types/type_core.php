@@ -4,9 +4,6 @@ namespace Moggi\Semantics\Types;
 
 use Moggi\Semantics\IntrinsicRegistry;
 use Moggi\Semantics\Kinds;
-
-use function Moggi\Semantics\TypeExpr\canonicalNatDigits;
-
 use Moggi\Semantics\TypeExpr\Scheme;
 use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TBytes;
@@ -31,8 +28,9 @@ use Moggi\Semantics\TypeExpr\TWord32;
 use Moggi\Semantics\TypeExpr\TWord64;
 use Moggi\Semantics\TypeExpr\TWord8;
 use Moggi\Semantics\TypeExpr\Type;
-
 use Moggi\Syntax\Ast;
+
+use function Moggi\Semantics\TypeExpr\canonicalNatDigits;
 
 require_once __DIR__ . '/../type_expr.php';
 require_once __DIR__ . '/state.php';

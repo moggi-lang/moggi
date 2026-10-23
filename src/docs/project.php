@@ -4,24 +4,20 @@ namespace Moggi\Docs;
 
 require_once __DIR__ . '/../paths.php';
 
-use function Moggi\CLI\findMogFiles;
+use Moggi\Modules\PreparedProject;
+use Moggi\Pipeline\CompilationContext;
+use Moggi\Pipeline\CompilePurpose;
+use Moggi\Syntax\Ast\Program;
 
+use function Moggi\CLI\findMogFiles;
 use function Moggi\CLI\resolveLibraryDirs;
 use function Moggi\Modules\isLibraryRoot;
 use function Moggi\Modules\moduleFileClosureCached;
-
-use Moggi\Modules\PreparedProject;
-
-use Moggi\Pipeline\CompilationContext;
-use Moggi\Pipeline\CompilePurpose;
-
 use function Moggi\Modules\prepareProjectCached;
 use function Moggi\Modules\projectSourceClosure;
 use function Moggi\Modules\setStdlibLibPath;
 use function Moggi\Paths\canonicalSeparators;
 use function Moggi\Paths\globPaths;
-
-use Moggi\Syntax\Ast\Program;
 
 final class ParsedModule
 {

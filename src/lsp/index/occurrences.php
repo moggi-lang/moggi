@@ -2,12 +2,11 @@
 
 namespace Moggi\LSP\Index;
 
-use function Moggi\LSP\Protocol\nodeToLspRange;
+use Moggi\Syntax\Ast;
 
+use function Moggi\LSP\Protocol\nodeToLspRange;
 use function Moggi\Modules\parseResolvedSymbol;
 use function Moggi\Modules\resolvedSymbol;
-
-use Moggi\Syntax\Ast;
 
 final class SymbolOccurrence
 {

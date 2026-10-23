@@ -2,15 +2,21 @@
 
 namespace Moggi\CLI\Commands;
 
-use function Moggi\Registry\badPackagesAmong;
-use function Moggi\Registry\badPackagesRefusal;
-
-use function Moggi\Registry\bundledArchiveDigest;
-use function Moggi\Registry\bundledPackages;
+/**
+ * What `update`, `install`, `build` and `verify` share: one option parser, one
+ * way to load a catalog, and one way to resolve-and-write a lock. They differ in
+ * what they do *with* a resolution, not in how they read one — and the lock check
+ * `install` and `build` both run has to be the same check in both places or it is
+ * not a check.
+ */
 
 use Moggi\Registry\Catalog;
 use Moggi\Registry\FetchLog;
 
+use function Moggi\Registry\badPackagesAmong;
+use function Moggi\Registry\badPackagesRefusal;
+use function Moggi\Registry\bundledArchiveDigest;
+use function Moggi\Registry\bundledPackages;
 use function Moggi\Registry\loadCatalog;
 use function Moggi\Registry\lockDocument;
 use function Moggi\Registry\lockPath;
@@ -22,14 +28,6 @@ use function Moggi\Registry\rememberRootVersion;
 use function Moggi\Registry\resolveDependencies;
 use function Moggi\Registry\rootIntegrityProblem;
 use function Moggi\Registry\writeLock;
-
-/**
- * What `update`, `install`, `build` and `verify` share: one option parser, one
- * way to load a catalog, and one way to resolve-and-write a lock. They differ in
- * what they do *with* a resolution, not in how they read one — and the lock check
- * `install` and `build` both run has to be the same check in both places or it is
- * not a check.
- */
 
 /**
  * The registry the compiler defaults to.

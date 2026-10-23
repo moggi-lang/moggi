@@ -3,14 +3,12 @@
 namespace Moggi\Repl;
 
 use Moggi\Modules\PreparedProject;
-
-use function Moggi\Paths\moduleNameToPath;
-
 use Moggi\Pipeline\CompilationContext;
 use Moggi\Pipeline\CompilePurpose;
 use Moggi\Pipeline\PipelineArtifacts;
-
 use Moggi\Syntax\Ast\Program;
+
+use function Moggi\Paths\moduleNameToPath;
 
 /** Mutable interactive session state for the Moggi REPL. */
 final class State

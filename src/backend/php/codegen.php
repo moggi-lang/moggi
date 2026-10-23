@@ -19,7 +19,6 @@ use function Moggi\Backend\Meta\boolConstructorMapFromRegistry;
 use function Moggi\Backend\Meta\constructorArityMap;
 use function Moggi\Backend\Meta\constructorArityMapFromRegistry;
 use function Moggi\Backend\Meta\isBoolBackedData;
-use function Moggi\Backend\Meta\lambdaMetaFromCaptures;
 use function Moggi\Backend\Meta\newtypeConstructorMap;
 use function Moggi\Backend\Meta\newtypeConstructorMapFromRegistry;
 use function Moggi\Backend\Meta\operandCallSrcLoc;
@@ -46,7 +45,6 @@ use Moggi\IR;
 
 use function Moggi\IR\Visit\collectIrCodegenUsage;
 use function Moggi\IR\Visit\collectLocalsInOperand;
-use function Moggi\IR\Visit\freeLocalsInBlock;
 use function Moggi\IR\Visit\moduleUsesMoggiRuntime;
 use function Moggi\Optimize\Partial\moduleUsesPartialApply;
 
@@ -341,13 +339,7 @@ function analyzeFunctionsForCodegen(array $functions): array
 
     return [
         'lambdaIndex' => $lambdaIndex,
-        'lambdaMeta' => lambdaMetaFromCaptures(
-            $lambdaIndex,
-            static fn (IR\FunctionDecl $fn): array => freeLocalsInBlock(
-                $fn->body,
-                \array_fill_keys($fn->params, true),
-            ),
-        ),
+        'lambdaMeta' => \Moggi\IR\Callables\captureMeta($lambdaIndex),
         'functionArity' => $functionArity,
     ];
 }

@@ -2,6 +2,27 @@
 
 namespace Moggi\Compiler;
 
+use Moggi\Pipeline\CompilationContext;
+use Moggi\Pipeline\CompilePurpose;
+use Moggi\Pipeline\PipelineRequest;
+use Moggi\Pipeline\PipelineStage;
+use Moggi\Semantics\Types\TypeError;
+use Moggi\Syntax\Ast\Program;
+use Moggi\Syntax\Lexer\LexError;
+use Moggi\Syntax\Parser\ParseError;
+
+use function Moggi\IR\Dump\dump as dumpIr;
+use function Moggi\Modules\compileModuleFile;
+use function Moggi\Modules\compileModuleFileOutputs;
+use function Moggi\Modules\isModuleSourceProgram;
+use function Moggi\Modules\moduleCompileContext;
+use function Moggi\Pipeline\printModeNames;
+use function Moggi\Pipeline\run as pipelineRun;
+use function Moggi\Syntax\Ast\dump as dumpAst;
+use function Moggi\Syntax\Lexer\dump as dumpTokens;
+use function Moggi\Syntax\Lexer\lex;
+use function Moggi\Syntax\Parser\parse;
+
 (static function (): void {
     $current = \trim((string) \ini_get('memory_limit'));
     if ($current === '-1') {
@@ -63,6 +84,7 @@ require __DIR__ . '/semantics/effects.php';
 require __DIR__ . '/ir/lower.php';
 require __DIR__ . '/ir/dump.php';
 require __DIR__ . '/ir/visit.php';
+require __DIR__ . '/ir/callables.php';
 require __DIR__ . '/ir/validate.php';
 require __DIR__ . '/debug/sourcemap.php';
 require __DIR__ . '/pipeline/pipeline.php';
@@ -197,7 +219,6 @@ require __DIR__ . '/registry/bind/jvm.php';
 require __DIR__ . '/registry/bind/dotnet.php';
 require __DIR__ . '/registry/bind/writer.php';
 require __DIR__ . '/registry/bind/build.php';
-
 require __DIR__ . '/cli/commands/command.php';
 require __DIR__ . '/cli/commands/packaging.php';
 require __DIR__ . '/cli/commands/pack.php';
@@ -227,35 +248,6 @@ require __DIR__ . '/cli/commands/moogle.php';
 require __DIR__ . '/cli/commands/lsp.php';
 require __DIR__ . '/cli/commands/version.php';
 require __DIR__ . '/cli/main.php';
-
-use function Moggi\IR\Dump\dump as dumpIr;
-use function Moggi\Modules\compileModuleFile;
-use function Moggi\Modules\compileModuleFileOutputs;
-use function Moggi\Modules\isModuleSourceProgram;
-use function Moggi\Modules\moduleCompileContext;
-
-use Moggi\Pipeline\CompilationContext;
-use Moggi\Pipeline\CompilePurpose;
-use Moggi\Pipeline\PipelineRequest;
-use Moggi\Pipeline\PipelineStage;
-
-use function Moggi\Pipeline\printModeNames;
-use function Moggi\Pipeline\run as pipelineRun;
-
-use Moggi\Semantics\Types\TypeError;
-
-use function Moggi\Syntax\Ast\dump as dumpAst;
-
-use Moggi\Syntax\Ast\Program;
-
-use function Moggi\Syntax\Lexer\dump as dumpTokens;
-use function Moggi\Syntax\Lexer\lex;
-
-use Moggi\Syntax\Lexer\LexError;
-
-use function Moggi\Syntax\Parser\parse;
-
-use Moggi\Syntax\Parser\ParseError;
 
 /**
  * The mode the compiler entry points accept: `php` and `emit` are the same run, the artifact, and

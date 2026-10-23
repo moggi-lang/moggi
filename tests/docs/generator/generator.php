@@ -877,6 +877,21 @@ $cachePath = Docs\indexCachePath($cacheFixtureDir, [], Docs\docsContext('php', [
 Docs\loadOrBuildIndex($cacheFixtureDir, [], Docs\docsContext('php', []), true);
 assertTrue(\is_file($cachePath), 'doc index cache file created');
 $cacheMtimeBefore = \filemtime($cachePath) ?: 0;
+// The index belongs to the documented tree, not to whichever sources the caller happened to have
+// declared. The language server seeds this from the standard library while analysing a file per
+// request; a key that moved with those sources rebuilt the whole index on every analysis.
+$callerSources = Docs\docsContext('php', [], [$cacheFixtureMog]);
+assertEq(
+    $cachePath,
+    Docs\indexCachePath($cacheFixtureDir, [], $callerSources),
+    'doc cache path does not move with the caller declared sources',
+);
+Docs\loadOrBuildIndex($cacheFixtureDir, [], $callerSources);
+assertEq(
+    $cacheMtimeBefore,
+    \filemtime($cachePath) ?: 0,
+    'a caller with other declared sources is served the built index',
+);
 $fixtureSource = (string) \file_get_contents($cacheFixtureMog);
 \usleep(1_100_000);
 \touch($cacheFixtureMog);

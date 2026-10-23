@@ -3,31 +3,26 @@
 namespace Moggi\CLI\Commands;
 
 use Moggi\Backend;
+use Moggi\Modules;
+use Moggi\Pipeline\CompilationContext;
+use Moggi\Pipeline\CompilePurpose;
+use Moggi\Semantics\Types\TypeError;
+use Moggi\Syntax\Lexer\LexError;
+use Moggi\Syntax\Parser\ParseError;
 
 use function Moggi\Backend\Php\Dependencies\composerVendorRoots;
 use function Moggi\CLI\parseBackendValue;
 use function Moggi\CLI\printUsage;
 use function Moggi\CLI\resolveCompileInputs;
-
 use function Moggi\CLI\resolveLibraryDirs;
 use function Moggi\Compiler\compileFile;
 use function Moggi\Compiler\executableName;
 use function Moggi\Compiler\findExecutable;
 use function Moggi\Compiler\findToolchainExecutable;
-
-use Moggi\Modules;
-
-use Moggi\Pipeline\CompilationContext;
-use Moggi\Pipeline\CompilePurpose;
-
 use function Moggi\Modules\bundledStdlibLibPath;
 use function Moggi\Modules\cachedModuleHeader;
 use function Moggi\Paths\globPaths;
 use function Moggi\Pipeline\printModeNames;
-
-use Moggi\Semantics\Types\TypeError;
-use Moggi\Syntax\Lexer\LexError;
-use Moggi\Syntax\Parser\ParseError;
 
 /**
  * Register the roots a compile searches ({@see Modules\registerLibraryRoots}).

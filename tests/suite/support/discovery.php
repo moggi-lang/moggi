@@ -31,6 +31,12 @@ final class TestCase
         public array $backends = [],
         public bool $project = false,
         public bool $scriptCase = false,
+        /**
+         * An example program whose case is "it still builds". `examples/` is the one tree where
+         * a program is a case without a golden: a stdout expectation there pins the text a demo
+         * happens to print, and the thing the suite is guarding is that the sample still compiles.
+         */
+        public bool $buildOnly = false,
     ) {
     }
 
@@ -473,7 +479,18 @@ function fixtureCase(string $path, string $root): ?TestCase
     $base = \substr($path, 0, -\strlen($ext));
     $goldens = goldensBeside($base);
     if ($goldens === [] && ! \is_file($base . '.exec.php')) {
-        return null;
+        if ($root !== MOGGI_PROJECT_ROOT . '/examples') {
+            return null;
+        }
+
+        return new TestCase(
+            name: logicalTestName($path, $root),
+            group: groupOf($path, $root),
+            input: $path,
+            files: [$path],
+            backends: exampleBackends([$path]),
+            buildOnly: true,
+        );
     }
 
     $files = [$path => true, $base . '.exec.php' => true, $base . '.stdin' => true];
@@ -503,14 +520,53 @@ function projectCase(string $dir, string $root): TestCase
         }
     }
 
+    $buildOnly = $goldens === [] && $root === MOGGI_PROJECT_ROOT . '/examples';
+
     return new TestCase(
         name: logicalTestName($dir, $root),
         group: groupOf($dir, $root),
         input: $input,
         goldens: $goldens,
         files: [$dir],
+        backends: $buildOnly ? exampleBackends(findProjectModules($dir)) : [],
         project: true,
+        buildOnly: $buildOnly,
     );
+}
+
+/**
+ * The backends an example can be built for: the ones its `foreign` declarations name, or all of
+ * them when it declares none.
+ *
+ * A host example is written for one backend (`foreign jvm type …`), and the compiler rejects a
+ * foreign declaration for another backend. This is the case's *selection*, not a verdict: the
+ * declared backend is read here so the example is offered to the backend it is written for, and
+ * the build itself remains the check.
+ *
+ * @param list<string> $files
+ * @return list<string>
+ */
+function exampleBackends(array $files): array
+{
+    $named = [];
+    foreach ($files as $file) {
+        $source = \is_file($file) ? \file_get_contents($file) : false;
+        if ($source === false) {
+            continue;
+        }
+        if (\preg_match_all('/\bforeign\s+(php|jvm|dotnet)\b/', $source, $matches) > 0) {
+            foreach ($matches[1] as $backend) {
+                $named[$backend] = true;
+            }
+        }
+    }
+
+    $known = knownTestBackends();
+    if ($named === []) {
+        return $known;
+    }
+
+    return \array_values(\array_intersect($known, \array_keys($named)));
 }
 
 function scriptCase(string $path, string $root): TestCase

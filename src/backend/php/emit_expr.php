@@ -29,11 +29,6 @@ function emitDictMethodOperand(IR\Operand $operand, array $ctx): string
 /** @param list<IR\Operand> $args */
 function emitCallExpr(string $callee, array $args, array $ctx): string
 {
-    $partial = partialArrayForUnderappliedLambda($callee, $args, $ctx);
-    if ($partial !== null) {
-        return $partial;
-    }
-
     $argsCode = \implode(', ', \array_map(static fn (IR\Operand $arg): string => emitOperand($arg, $ctx), $args));
 
     if (\str_starts_with($callee, '__tuple_field')) {
@@ -94,16 +89,6 @@ function emitCallExpr(string $callee, array $args, array $ctx): string
 function emitCall(string $callee, array $args, int $dest, int $indent, array $ctx): string
 {
     $pad = \str_repeat('    ', $indent);
-    $arity = $ctx['functionArity'][$callee] ?? null;
-
-    if (
-        $arity !== null
-        && \count($args) !== $arity
-        && ! \str_starts_with($callee, '__ev_')
-    ) {
-        return $pad . phpTemp($dest) . ' = '
-            . emitApplyExpr(new IR\FnRef($callee), $args, $ctx) . ";\n";
-    }
 
     return $pad . phpTemp($dest) . ' = ' . emitCallExpr($callee, $args, $ctx) . ";\n";
 }
@@ -253,13 +238,11 @@ function emitLambdaReference(string $name, array $ctx): string
         return emitLambdaArrow($lambdaFn, $ctx);
     }
 
-    $meta = $ctx['lambdaMeta'][$name];
     $mangled = phpFunctionName($name, $ctx['phpNames']);
-    $captureArgs = \array_map(static fn (string $v): string => '$' . mangleVar($v), $meta['captures']);
-    $paramArgs = \array_map(static fn (string $p): string => '$' . mangleVar($p), $meta['params']);
+    $params = $lambdaFn?->params ?? ($ctx['lambdaMeta'][$name]['params'] ?? []);
+    $paramArgs = \array_map(static fn (string $p): string => '$' . mangleVar($p), $params);
 
-    return 'fn(' . \implode(', ', \array_map(static fn (string $p): string => '$' . mangleVar($p), $meta['params'])) . ') => '
-        . $mangled . '(' . \implode(', ', [...$captureArgs, ...$paramArgs]) . ')';
+    return 'fn(' . \implode(', ', $paramArgs) . ') => ' . $mangled . '(' . \implode(', ', $paramArgs) . ')';
 }
 
 /** @param array{phpNames: array<string, string>, functionArity?: array<string, int>, externalFns?: array<string, string>, boolConstructors?: array<string, bool>} $ctx */
@@ -412,10 +395,6 @@ function emitApplyExpr(IR\Operand $callee, array $args, array $ctx): string
             return '(' . $arrow . ')(' . \implode(', ', $callArgs) . ')';
         }
 
-        $partial = partialArrayForUnderappliedLambda($callee->name, $args, $ctx);
-        if ($partial !== null) {
-            return $partial;
-        }
     }
 
     if ($callee instanceof IR\FnRef) {
@@ -435,33 +414,6 @@ function emitApplyExpr(IR\Operand $callee, array $args, array $ctx): string
     $argsCode = \implode(', ', \array_map(static fn (IR\Operand $arg): string => emitOperand($arg, $ctx), $args));
 
     return '__apply(' . $calleeCode . ($argsCode === '' ? '' : ', ' . $argsCode) . ')';
-}
-
-/**
- * A lambda applied to fewer arguments than it declares is a partial
- * application, not a call: PHP would reject the call outright ("too few
- * arguments"), and the runtime already knows how to hold the arguments and
- * dispatch once the rest arrive.
- *
- * This is what a constrained local binding with two or more parameters lowers
- * to -- `let go = λ(dict, p) -> λ3(dict, p)` -- so without it the adapter dies
- * the moment it is applied.
- *
- * @param list<IR\Operand> $args
- */
-function partialArrayForUnderappliedLambda(string $callee, array $args, array $ctx): ?string
-{
-    $lambdaFn = $ctx['lambdaIndex'][$callee] ?? null;
-    if ($lambdaFn === null) {
-        return null;
-    }
-
-    $arity = \count($lambdaFn->params) + \count($ctx['lambdaMeta'][$callee]['captures'] ?? []);
-    if (\count($args) >= $arity) {
-        return null;
-    }
-
-    return emitPartialArray(new IR\Partial($callee, $arity, $args), $ctx);
 }
 
 function emitPartialArray(IR\Partial|IR\ExprPartial $partial, array $ctx): string

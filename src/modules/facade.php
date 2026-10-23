@@ -2,31 +2,26 @@
 
 namespace Moggi\Modules;
 
+use Moggi\Semantics\TypeExpr\Scheme;
+use Moggi\Semantics\TypeExpr\TArrow;
+use Moggi\Semantics\TypeExpr\TCon;
+use Moggi\Semantics\TypeExpr\TVar;
+use Moggi\Semantics\TypeExpr\Type;
+use Moggi\Semantics\Types\TypeCheckState;
+use Moggi\Semantics\Types\TypeError;
+use Moggi\Syntax\Ast;
+
 use const Moggi\Semantics\IntrinsicRegistry\MODULE_IO;
 use const Moggi\Semantics\IntrinsicRegistry\MODULE_PRIM;
 use const Moggi\Semantics\IntrinsicRegistry\MODULE_ST;
 
 use function Moggi\Semantics\Kinds\dataKind;
 use function Moggi\Semantics\Kinds\registerTypeKind;
-
-use Moggi\Semantics\TypeExpr\Scheme;
-use Moggi\Semantics\TypeExpr\TArrow;
-use Moggi\Semantics\TypeExpr\TCon;
-
-use Moggi\Semantics\TypeExpr\TVar;
-use Moggi\Semantics\TypeExpr\Type;
-
 use function Moggi\Semantics\Types\canonicalizePrimitiveTypes;
 use function Moggi\Semantics\Types\registerData;
 use function Moggi\Semantics\Types\registerForeignType;
 use function Moggi\Semantics\Types\registerTypeSynonym;
-
-use Moggi\Semantics\Types\TypeCheckState;
-use Moggi\Semantics\Types\TypeError;
-
 use function Moggi\Semantics\Types\typeToString;
-
-use Moggi\Syntax\Ast;
 
 /** @param array<string, string> $mapping */
 function typesAlphaEqual(Type $left, Type $right, array &$mapping = []): bool

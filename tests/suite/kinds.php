@@ -77,11 +77,13 @@ function nativeSmokeFixture(): string
 function runTestCase(TestCase $case, string $backend, string $projectRoot): array
 {
     try {
-        $outcome = $case->scriptCase
-            ? runStandaloneTest($case->input)
-            : ($case->project
-                ? runProjectCase($case, $backend, $projectRoot)
-                : runFixtureCase($case, $backend, $projectRoot));
+        $outcome = $case->buildOnly
+            ? runExampleBuild($case, $backend, $case->project)
+            : ($case->scriptCase
+                ? runStandaloneTest($case->input)
+                : ($case->project
+                    ? runProjectCase($case, $backend, $projectRoot)
+                    : runFixtureCase($case, $backend, $projectRoot)));
     } catch (TestFailure $e) {
         return ['passed' => false, 'message' => $e->getMessage()];
     }
@@ -104,6 +106,46 @@ function nativeSmokeRequested(TestCase $case, string $backend): bool
         && ! $case->scriptCase
         && \dirname(testRelativePath($case->input)) === nativeSmokeFixture()
         && nativeToolchainLabel($backend) !== null;
+}
+
+/**
+ * An example with no golden: the verdict is that it still builds for this backend.
+ *
+ * `examples/` is where the suite keeps the samples honest, and what it guards is the compile —
+ * typecheck, lowering, legalization, optimization, emission — not the text the demo prints. A
+ * stdout expectation made every output tweak a golden change and pinned nothing the language
+ * promises, so an example is a case by existing.
+ *
+ * @return array{passed: bool, message: string}
+ */
+function runExampleBuild(TestCase $case, string $backend, bool $project = false): array
+{
+    try {
+        if ($project) {
+            [$files, $dir] = projectClosure($case->input);
+            compileProjectBoth($files, $dir, CompilationContext::for(
+                $backend,
+                CompilePurpose::Executable,
+                entryModules: ['Main'],
+                sources: $files,
+            ));
+        } else {
+            $outputs = compileFileCapturingErrorsBoth(testRelativePath($case->input), true, $backend);
+            foreach (['emit', 'opt-ir'] as $artifact) {
+                if (($outputs[$artifact]['exitCode'] ?? 1) !== 0) {
+                    throw new TestFailure(
+                        "example did not build for {$backend}:\n" . ($outputs[$artifact]['output'] ?? ''),
+                    );
+                }
+            }
+        }
+    } catch (TestFailure $e) {
+        throw $e;
+    } catch (\Throwable $e) {
+        throw new TestFailure("example did not build for {$backend}:\n" . diagnosticText($e));
+    }
+
+    return ['passed' => true, 'message' => ''];
 }
 
 /** @return array{passed: bool, message: string} */
@@ -364,7 +406,7 @@ function runErrorFixture(TestCase $case, string $golden, string $backend): array
             'parser' => sourceStageDump($case->input, 'ast'),
             'ir' => irLoweringDump($case->input),
             'optimize' => optimizedIrFromSource($case->input, $backend),
-            default => sourceStageDump($case->input, 'typed-ast'),
+            default => sourceStageDump($case->input, 'typed-ast', $backend),
         };
     } catch (TestFailure $e) {
         // A harness failure is not a compiler diagnostic.
@@ -401,7 +443,9 @@ function runProjectErrorCase(TestCase $case, array $goldens, string $backend, st
 
     try {
         [$files, $dir] = projectClosure($case->input);
-        compileProjectBoth($files, $dir, CompilationContext::for('php', CompilePurpose::Library, sources: $files));
+        // The request says which backend this run is for; the diagnostic names it
+        // (`… does not match compile backend `jvm``), so the compile must be that backend's.
+        compileProjectBoth($files, $dir, CompilationContext::for($backend, CompilePurpose::Library, sources: $files));
     } catch (TestFailure $e) {
         throw $e;
     } catch (\Throwable $e) {

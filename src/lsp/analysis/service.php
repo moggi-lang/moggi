@@ -6,50 +6,36 @@ require_once __DIR__ . '/../../paths.php';
 
 
 use Moggi\Docs\DocIndex;
+use Moggi\LSP\Index\DeclInfo;
+use Moggi\LSP\Index\ModuleIndex;
+use Moggi\LSP\Index\OccurrenceIndex;
+use Moggi\Modules\PreparedProject;
+use Moggi\Pipeline\CompilationContext;
+use Moggi\Pipeline\CompilePurpose;
+use Moggi\Semantics\Types\TypeError;
+use Moggi\Syntax\Ast;
+use Moggi\Syntax\Lexer\LexError;
+use Moggi\Syntax\Parser\ParseError;
 
 use function Moggi\Docs\dumpTypeForDocs;
 use function Moggi\Docs\loadOrBuildIndex;
 use function Moggi\LSP\applyContentChanges;
 use function Moggi\LSP\Index\buildDeclsFromProgram;
 use function Moggi\LSP\Index\buildOccurrenceIndex;
-
-use Moggi\LSP\Index\DeclInfo;
-
 use function Moggi\LSP\Index\indexTypeRelations;
-
-use function Moggi\LSP\Index\merge;
-
-use Moggi\LSP\Index\ModuleIndex;
-use Moggi\LSP\Index\OccurrenceIndex;
-
 use function Moggi\LSP\Protocol\nodeToLspRange;
 use function Moggi\LSP\Protocol\pathToUri;
 use function Moggi\LSP\Protocol\uriToPath;
 use function Moggi\Modules\bundledStdlibLibPath;
 use function Moggi\Modules\moduleFileClosureCached;
-
-use Moggi\Modules\PreparedProject;
-
 use function Moggi\Modules\prepareFocusBase;
 use function Moggi\Modules\prepareProjectCached;
 use function Moggi\Modules\projectSourceClosure;
 use function Moggi\Modules\setStdlibLibPath;
 use function Moggi\Modules\stdlibSourcesMissingFrom;
 use function Moggi\Paths\globPaths;
-
-use Moggi\Pipeline\CompilationContext;
-use Moggi\Pipeline\CompilePurpose;
-
-use Moggi\Semantics\Types\TypeError;
-use Moggi\Syntax\Ast;
-
 use function Moggi\Syntax\Lexer\lex;
-
-use Moggi\Syntax\Lexer\LexError;
-
 use function Moggi\Syntax\Parser\parse;
-
-use Moggi\Syntax\Parser\ParseError;
 
 final class VirtualFS
 {

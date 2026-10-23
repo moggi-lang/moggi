@@ -2,8 +2,9 @@
 
 namespace Moggi\CLI\Commands;
 
-use function Moggi\Registry\badPackageProblem;
+use Moggi\Registry\FetchLog;
 
+use function Moggi\Registry\badPackageProblem;
 use function Moggi\Registry\badPackagesAmong;
 use function Moggi\Registry\badPackagesRefusal;
 use function Moggi\Registry\Bind\bindDeclaredForBuild;
@@ -11,9 +12,6 @@ use function Moggi\Registry\Bind\ffiBindingsForBackend;
 use function Moggi\Registry\checkBundledInstalled;
 use function Moggi\Registry\collectHostToolCoordinates;
 use function Moggi\Registry\declaredBackends;
-
-use Moggi\Registry\FetchLog;
-
 use function Moggi\Registry\fetchVerifiedRelease;
 use function Moggi\Registry\findDescriptor;
 use function Moggi\Registry\hostToolCoordinates;

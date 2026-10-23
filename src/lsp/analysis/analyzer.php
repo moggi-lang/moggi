@@ -2,30 +2,24 @@
 
 namespace Moggi\LSP\Analysis;
 
+use Moggi\Pipeline\CompilationContext;
+use Moggi\Pipeline\CompilePurpose;
+use Moggi\Semantics\Types\TypeError;
+use Moggi\Syntax\Ast;
+use Moggi\Syntax\Lexer\LexError;
+use Moggi\Syntax\Lexer\TokenKind;
+use Moggi\Syntax\Parser\ParseError;
+
 use function Moggi\Docs\declarationTypeSignature;
 use function Moggi\LSP\Protocol\locToRange;
 use function Moggi\LSP\Protocol\uriToPath;
 use function Moggi\Modules\bundledStdlibLibPath;
-
 use function Moggi\Modules\moduleFileClosureCached;
 use function Moggi\Modules\prepareProjectCached;
 use function Moggi\Modules\setStdlibLibPath;
 use function Moggi\Modules\stdlibSourcesMissingFrom;
-
-use Moggi\Pipeline\CompilationContext;
-use Moggi\Pipeline\CompilePurpose;
-
-use Moggi\Semantics\Types\TypeError;
-use Moggi\Syntax\Ast;
-
 use function Moggi\Syntax\Lexer\lex;
-
-use Moggi\Syntax\Lexer\LexError;
-use Moggi\Syntax\Lexer\TokenKind;
-
 use function Moggi\Syntax\Parser\parse;
-
-use Moggi\Syntax\Parser\ParseError;
 
 class AnalysisResult
 {

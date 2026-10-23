@@ -7,6 +7,7 @@ use Moggi\IR;
 use function Moggi\IR\Visit\irPatternBoundNames;
 use function Moggi\IR\Visit\operandChildren;
 use function Moggi\IR\Visit\stmtDirectOperands;
+use function Moggi\IR\Visit\walkBlock;
 
 final class InvalidIr extends \RuntimeException
 {
@@ -63,6 +64,178 @@ function validateFunctionList(array $functions, string $pass, string $source): v
                 $function->name,
             );
         }
+    }
+}
+
+/**
+ * Check every call, partial and reference against the published callable table.
+ *
+ * This is the post-legalization seam: after capture binding, a direct call's argument vector is
+ * exactly the entry's published slots (evidence, captures, values, in that order), a partial is
+ * unsaturated, and a lifted entry with captures is never referenced bare. It runs on the no-opt
+ * path too, so an unoptimized compile is legal by the same contract as an optimized one.
+ *
+ * A call to an entry the module does not declare is checked against the arities the importer was
+ * given (`$importedArities`, keyed by the name the IR uses, from the checked program's
+ * `externalFnRuntimeArity`). That map comes from the defining module's published callable facts
+ * (S3), so an imported call is held to the same contract as a local one — its vector is the
+ * entry's published arity, nothing shorter and nothing longer.
+ *
+ * @param array<string, int> $importedArities
+ */
+function validateCallableLayouts(IR\Module $module, string $pass, array $importedArities = []): void
+{
+    $table = \Moggi\IR\Callables\table($module->functions, (string) $module->moduleName);
+    if ($table->byEntry === [] && $importedArities === []) {
+        return;
+    }
+
+    foreach ($module->functions as $function) {
+        $name = $function->name;
+        walkBlock(
+            $function->body,
+            static function (IR\Stmt $stmt) use ($table, $importedArities, $pass, $name): void {
+                if ($stmt instanceof IR\Call) {
+                    checkDirectCall($table, $importedArities, $stmt->callee, \count($stmt->args), $pass, $name);
+                }
+            },
+            static function (IR\Operand $operand) use ($table, $importedArities, $pass, $name): void {
+                if ($operand instanceof IR\ExprCall) {
+                    checkDirectCall($table, $importedArities, $operand->callee, \count($operand->args), $pass, $name);
+                }
+
+                if ($operand instanceof IR\Partial || $operand instanceof IR\ExprPartial) {
+                    checkPartial($table, $importedArities, $operand->fn, $operand->arity, \count($operand->args), $pass, $name);
+                }
+
+                if ($operand instanceof IR\FnRef) {
+                    checkBareReference($table, $operand->name, $pass, $name);
+                }
+            },
+        );
+    }
+}
+
+function checkDirectCall(
+    \Moggi\IR\Callables\CallableTable $table,
+    array $importedArities,
+    string $callee,
+    int $actual,
+    string $pass,
+    string $function,
+): void {
+    $sig = $table->sig($callee);
+    if ($sig === null) {
+        $imported = $importedArities[$callee] ?? null;
+        if ($imported === null) {
+            return;
+        }
+
+        if ($actual !== $imported) {
+            throw new InvalidIr(
+                "function {$function}: call `{$callee}` supplies {$actual} of {$imported} published "
+                . 'slot(s) (imported entry, ABI v' . \Moggi\IR\Callables\ABI_VERSION . ')',
+                $pass,
+                $function,
+            );
+        }
+
+        return;
+    }
+
+    $expected = $sig->runtimeArity();
+    if ($actual === $expected) {
+        return;
+    }
+
+    if ($actual < $expected) {
+        throw new InvalidIr(
+            "function {$function}: direct call `{$callee}` supplies {$actual} of "
+            . "{$expected} slots; an under-application is a `Partial`, not a call (ABI v{$sig->abiVersion})",
+            $pass,
+            $function,
+        );
+    }
+
+    throw new InvalidIr(
+        "function {$function}: direct call `{$callee}` carries {$actual} argument(s); its published "
+        . 'layout is |E|=' . \count($sig->evidence) . ' |C|=' . \count($sig->captures)
+        . ' |V|=' . \count($sig->params) . " ({$expected} slots, ABI v{$sig->abiVersion})",
+        $pass,
+        $function,
+    );
+}
+
+/**
+ * A reference that is not applied at all: legal only for an entry with no hidden slots.
+ *
+ * A captured entry's value is `Partial(entry, arity, captures)`; anything else is the second
+ * encoding ADR 8 §8 forbids, because the emitter would have to recover the capture list from
+ * the entry's body to make the reference callable.
+ */
+function checkBareReference(\Moggi\IR\Callables\CallableTable $table, string $entry, string $pass, string $function): void
+{
+    $sig = $table->sig($entry);
+    if ($sig === null || $sig->captures === []) {
+        return;
+    }
+
+    throw new InvalidIr(
+        "function {$function}: `{$entry}` is referenced bare; an entry with " . \count($sig->captures)
+        . ' capture(s) is acquired as a partial of ' . $sig->runtimeArity()
+        . " slot(s) (|E|=" . \count($sig->evidence) . ' |C|=' . \count($sig->captures)
+        . ' |V|=' . \count($sig->params) . ', ABI v' . $sig->abiVersion . ')',
+        $pass,
+        $function,
+    );
+}
+
+function checkPartial(
+    \Moggi\IR\Callables\CallableTable $table,
+    array $importedArities,
+    string $fn,
+    int $arity,
+    int $supplied,
+    string $pass,
+    string $function,
+): void {
+    $sig = $table->sig($fn);
+    if ($sig === null) {
+        $imported = $importedArities[$fn] ?? null;
+        if ($imported === null) {
+            return;
+        }
+
+        if ($arity !== $imported) {
+            throw new InvalidIr(
+                "function {$function}: partial of imported `{$fn}` declares arity {$arity}; its "
+                . 'published runtime arity is ' . $imported . ' (ABI v' . \Moggi\IR\Callables\ABI_VERSION . ')',
+                $pass,
+                $function,
+            );
+        }
+
+        return;
+    }
+
+    $expected = $sig->runtimeArity();
+    if ($arity !== $expected) {
+        throw new InvalidIr(
+            "function {$function}: partial of `{$fn}` declares arity {$arity}; its published runtime "
+            . "arity is {$expected} (|E|=" . \count($sig->evidence) . ' |C|=' . \count($sig->captures)
+            . ' |V|=' . \count($sig->params) . ', ABI v' . $sig->abiVersion . ')',
+            $pass,
+            $function,
+        );
+    }
+
+    if ($supplied >= $arity) {
+        throw new InvalidIr(
+            "function {$function}: partial of `{$fn}` supplies {$supplied} of {$arity} slots, which is not "
+            . 'an underapplication (ABI v' . $sig->abiVersion . ')',
+            $pass,
+            $function,
+        );
     }
 }
 
