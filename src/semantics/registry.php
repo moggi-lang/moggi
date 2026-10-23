@@ -3,12 +3,12 @@
 namespace Moggi\Semantics\Registry;
 
 use Moggi\Semantics\Deriving\ClassDeriveFacts;
+use Moggi\Semantics\Kinds;
+use Moggi\Semantics\Types\TypeCheckState;
+use Moggi\Syntax\Ast;
 
 use function Moggi\Semantics\Deriving\derivedProjectInstanceRecords;
 use function Moggi\Semantics\Foreign\foreignParamNames;
-
-use Moggi\Semantics\Kinds;
-
 use function Moggi\Semantics\Types\associatedEquationsMapFromDecl;
 use function Moggi\Semantics\Types\indexAssociatedEquations;
 use function Moggi\Semantics\Types\installTypeSynonymKind;
@@ -24,13 +24,7 @@ use function Moggi\Semantics\Types\registerInferredFunctionPlaceholder;
 use function Moggi\Semantics\Types\registerInferredSignatureScheme;
 use function Moggi\Semantics\Types\registerTypeSynonym;
 use function Moggi\Semantics\Types\syncAssociatedFamiliesFromClasses;
-
-use Moggi\Semantics\Types\TypeCheckState;
-
 use function Moggi\Semantics\Types\typeFail;
-
-use Moggi\Syntax\Ast;
-
 use function Moggi\Syntax\exportedChildrenSpec;
 use function Moggi\Syntax\surfaceConstructorAlias;
 

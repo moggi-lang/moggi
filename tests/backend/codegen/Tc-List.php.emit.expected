@@ -2,7 +2,7 @@
 
 namespace Tc\List;
 
-const __MOGGI_MAP = [[44 => ['Tc.List.listLength', 'tests/backend/codegen/Tc-List.mog', 16, 17], 49 => ['Tc.List.listFoldl', 'tests/backend/codegen/Tc-List.mog', 19, 20], 54 => ['Tc.List.len', 'tests/backend/codegen/Tc-List.mog', 22, 7], 58 => ['Tc.List.total', 'tests/backend/codegen/Tc-List.mog', 25, 9], 63 => ['Tc.List.doubled', 'tests/backend/codegen/Tc-List.mog', 28, 11], 67 => ['Tc.List.leftFold', 'tests/backend/codegen/Tc-List.mog', 31, 12], 75 => ['Tc.List.fromCons', 'tests/backend/codegen/Tc-List.mog', 37, 12], 84 => ['Tc.List.builtLen', 'tests/backend/codegen/Tc-List.mog', 43, 12], 106 => ['Tc.List.sumList', 'tests/backend/codegen/Tc-List.mog', 53, 15], 140 => ['Tc.List.taken', 'tests/backend/codegen/Tc-List.mog', 69, 9], 144 => ['Tc.List.dropped', 'tests/backend/codegen/Tc-List.mog', 72, 11], 148 => ['Tc.List.evens', 'tests/backend/codegen/Tc-List.mog', 75, 9], 152 => ['Tc.List.triples', 'tests/backend/codegen/Tc-List.mog', 78, 11], 156 => ['Tc.List.zipped', 'tests/backend/codegen/Tc-List.mog', 81, 10], 160 => ['Tc.List.found', 'tests/backend/codegen/Tc-List.mog', 84, 9], 165 => ['Tc.List.whileTaken', 'tests/backend/codegen/Tc-List.mog', 87, 14], 169 => ['Tc.List.whileDropped', 'tests/backend/codegen/Tc-List.mog', 90, 16], 173 => ['Tc.List.compDoubled', 'tests/backend/codegen/Tc-List.mog', 93, 15], 177 => ['Tc.List.compEvens', 'tests/backend/codegen/Tc-List.mog', 96, 13], 181 => ['Tc.List.pairs', 'tests/backend/codegen/Tc-List.mog', 99, 9], 185 => ['Tc.List.emptyGuard', 'tests/backend/codegen/Tc-List.mog', 102, 14], 189 => ['Tc.List.format', 'tests/backend/codegen/Tc-List.mog', 105, 13], 190 => ['Tc.List.format', 'tests/backend/codegen/Tc-List.mog', 105, 13], 195 => ['Tc.List.shown', 'tests/backend/codegen/Tc-List.mog', 108, 9], 207 => ['Tc.List.λ2', 'tests/backend/codegen/Tc-List.mog', 75, 23], 212 => ['Tc.List.λ3', 'tests/backend/codegen/Tc-List.mog', 87, 31], 217 => ['Tc.List.λ4', 'tests/backend/codegen/Tc-List.mog', 90, 33], 226 => ['Tc.List.compEvens', 'tests/backend/codegen/Tc-List.mog', 96, 13], 234 => ['Tc.List.pairs', 'tests/backend/codegen/Tc-List.mog', 99, 9], 242 => ['Tc.List.pairs', 'tests/backend/codegen/Tc-List.mog', 99, 9]], ['Tc\\List\\literal' => ['Tc.List.literal', 'tests/backend/codegen/Tc-List.mog', 10, 11], 'Tc\\List\\joined' => ['Tc.List.joined', 'tests/backend/codegen/Tc-List.mog', 13, 10], 'Tc\\List\\listLength' => ['Tc.List.listLength', 'tests/backend/codegen/Tc-List.mog', 16, 17], 'Tc\\List\\listFoldl' => ['Tc.List.listFoldl', 'tests/backend/codegen/Tc-List.mog', 19, 20], 'Tc\\List\\len' => ['Tc.List.len', 'tests/backend/codegen/Tc-List.mog', 22, 7], 'Tc\\List\\total' => ['Tc.List.total', 'tests/backend/codegen/Tc-List.mog', 25, 9], 'Tc\\List\\doubled' => ['Tc.List.doubled', 'tests/backend/codegen/Tc-List.mog', 28, 11], 'Tc\\List\\leftFold' => ['Tc.List.leftFold', 'tests/backend/codegen/Tc-List.mog', 31, 12], 'Tc\\List\\built' => ['Tc.List.built', 'tests/backend/codegen/Tc-List.mog', 34, 9], 'Tc\\List\\fromCons' => ['Tc.List.fromCons', 'tests/backend/codegen/Tc-List.mog', 37, 12], 'Tc\\List\\same' => ['Tc.List.same', 'tests/backend/codegen/Tc-List.mog', 40, 8], 'Tc\\List\\builtLen' => ['Tc.List.builtLen', 'tests/backend/codegen/Tc-List.mog', 43, 12], 'Tc\\List\\sumHead' => ['Tc.List.sumHead', 'tests/backend/codegen/Tc-List.mog', 46, 14], 'Tc\\List\\sumList' => ['Tc.List.sumList', 'tests/backend/codegen/Tc-List.mog', 51, 14], 'Tc\\List\\headOrZero' => ['Tc.List.headOrZero', 'tests/backend/codegen/Tc-List.mog', 56, 17], 'Tc\\List\\pairSum' => ['Tc.List.pairSum', 'tests/backend/codegen/Tc-List.mog', 61, 14], 'Tc\\List\\xs' => ['Tc.List.xs', 'tests/backend/codegen/Tc-List.mog', 66, 6], 'Tc\\List\\taken' => ['Tc.List.taken', 'tests/backend/codegen/Tc-List.mog', 69, 9], 'Tc\\List\\dropped' => ['Tc.List.dropped', 'tests/backend/codegen/Tc-List.mog', 72, 11], 'Tc\\List\\evens' => ['Tc.List.evens', 'tests/backend/codegen/Tc-List.mog', 75, 9], 'Tc\\List\\triples' => ['Tc.List.triples', 'tests/backend/codegen/Tc-List.mog', 78, 11], 'Tc\\List\\zipped' => ['Tc.List.zipped', 'tests/backend/codegen/Tc-List.mog', 81, 10], 'Tc\\List\\found' => ['Tc.List.found', 'tests/backend/codegen/Tc-List.mog', 84, 9], 'Tc\\List\\whileTaken' => ['Tc.List.whileTaken', 'tests/backend/codegen/Tc-List.mog', 87, 14], 'Tc\\List\\whileDropped' => ['Tc.List.whileDropped', 'tests/backend/codegen/Tc-List.mog', 90, 16], 'Tc\\List\\compDoubled' => ['Tc.List.compDoubled', 'tests/backend/codegen/Tc-List.mog', 93, 15], 'Tc\\List\\compEvens' => ['Tc.List.compEvens', 'tests/backend/codegen/Tc-List.mog', 96, 13], 'Tc\\List\\pairs' => ['Tc.List.pairs', 'tests/backend/codegen/Tc-List.mog', 99, 9], 'Tc\\List\\emptyGuard' => ['Tc.List.emptyGuard', 'tests/backend/codegen/Tc-List.mog', 102, 14], 'Tc\\List\\format' => ['Tc.List.format', 'tests/backend/codegen/Tc-List.mog', 105, 13], 'Tc\\List\\shown' => ['Tc.List.shown', 'tests/backend/codegen/Tc-List.mog', 108, 9], 'Tc\\List\\__lambda_0' => ['Tc.List.λ0', 'tests/backend/codegen/Tc-List.mog', 28, 28], 'Tc\\List\\__lambda_1' => ['Tc.List.λ1', 'tests/backend/codegen/Tc-List.mog', 31, 33], 'Tc\\List\\__lambda_2' => ['Tc.List.λ2', 'tests/backend/codegen/Tc-List.mog', 75, 23], 'Tc\\List\\__lambda_3' => ['Tc.List.λ3', 'tests/backend/codegen/Tc-List.mog', 87, 31], 'Tc\\List\\__lambda_4' => ['Tc.List.λ4', 'tests/backend/codegen/Tc-List.mog', 90, 33]]];
+const __MOGGI_MAP = [[44 => ['Tc.List.listLength', 'tests/backend/codegen/Tc-List.mog', 16, 17], 49 => ['Tc.List.listFoldl', 'tests/backend/codegen/Tc-List.mog', 19, 20], 54 => ['Tc.List.len', 'tests/backend/codegen/Tc-List.mog', 22, 7], 58 => ['Tc.List.total', 'tests/backend/codegen/Tc-List.mog', 25, 9], 59 => ['Tc.List.total', 'tests/backend/codegen/Tc-List.mog', 25, 9], 64 => ['Tc.List.doubled', 'tests/backend/codegen/Tc-List.mog', 28, 11], 68 => ['Tc.List.leftFold', 'tests/backend/codegen/Tc-List.mog', 31, 12], 76 => ['Tc.List.fromCons', 'tests/backend/codegen/Tc-List.mog', 37, 12], 85 => ['Tc.List.builtLen', 'tests/backend/codegen/Tc-List.mog', 43, 12], 107 => ['Tc.List.sumList', 'tests/backend/codegen/Tc-List.mog', 53, 15], 141 => ['Tc.List.taken', 'tests/backend/codegen/Tc-List.mog', 69, 9], 145 => ['Tc.List.dropped', 'tests/backend/codegen/Tc-List.mog', 72, 11], 149 => ['Tc.List.evens', 'tests/backend/codegen/Tc-List.mog', 75, 9], 153 => ['Tc.List.triples', 'tests/backend/codegen/Tc-List.mog', 78, 11], 157 => ['Tc.List.zipped', 'tests/backend/codegen/Tc-List.mog', 81, 10], 161 => ['Tc.List.found', 'tests/backend/codegen/Tc-List.mog', 84, 9], 162 => ['Tc.List.found', 'tests/backend/codegen/Tc-List.mog', 84, 9], 167 => ['Tc.List.whileTaken', 'tests/backend/codegen/Tc-List.mog', 87, 14], 171 => ['Tc.List.whileDropped', 'tests/backend/codegen/Tc-List.mog', 90, 16], 175 => ['Tc.List.compDoubled', 'tests/backend/codegen/Tc-List.mog', 93, 15], 179 => ['Tc.List.compEvens', 'tests/backend/codegen/Tc-List.mog', 96, 13], 183 => ['Tc.List.pairs', 'tests/backend/codegen/Tc-List.mog', 99, 9], 187 => ['Tc.List.emptyGuard', 'tests/backend/codegen/Tc-List.mog', 102, 14], 191 => ['Tc.List.format', 'tests/backend/codegen/Tc-List.mog', 105, 13], 192 => ['Tc.List.format', 'tests/backend/codegen/Tc-List.mog', 105, 13], 197 => ['Tc.List.shown', 'tests/backend/codegen/Tc-List.mog', 108, 9], 209 => ['Tc.List.λ2', 'tests/backend/codegen/Tc-List.mog', 75, 23], 210 => ['Tc.List.λ2', 'tests/backend/codegen/Tc-List.mog', 75, 23], 215 => ['Tc.List.λ3', 'tests/backend/codegen/Tc-List.mog', 87, 31], 216 => ['Tc.List.λ3', 'tests/backend/codegen/Tc-List.mog', 87, 31], 221 => ['Tc.List.λ4', 'tests/backend/codegen/Tc-List.mog', 90, 33], 222 => ['Tc.List.λ4', 'tests/backend/codegen/Tc-List.mog', 90, 33], 231 => ['Tc.List.compEvens', 'tests/backend/codegen/Tc-List.mog', 96, 13], 232 => ['Tc.List.compEvens', 'tests/backend/codegen/Tc-List.mog', 96, 13], 240 => ['Tc.List.pairs', 'tests/backend/codegen/Tc-List.mog', 99, 9], 241 => ['Tc.List.pairs', 'tests/backend/codegen/Tc-List.mog', 99, 9], 249 => ['Tc.List.pairs', 'tests/backend/codegen/Tc-List.mog', 99, 9]], ['Tc\\List\\literal' => ['Tc.List.literal', 'tests/backend/codegen/Tc-List.mog', 10, 11], 'Tc\\List\\joined' => ['Tc.List.joined', 'tests/backend/codegen/Tc-List.mog', 13, 10], 'Tc\\List\\listLength' => ['Tc.List.listLength', 'tests/backend/codegen/Tc-List.mog', 16, 17], 'Tc\\List\\listFoldl' => ['Tc.List.listFoldl', 'tests/backend/codegen/Tc-List.mog', 19, 20], 'Tc\\List\\len' => ['Tc.List.len', 'tests/backend/codegen/Tc-List.mog', 22, 7], 'Tc\\List\\total' => ['Tc.List.total', 'tests/backend/codegen/Tc-List.mog', 25, 9], 'Tc\\List\\doubled' => ['Tc.List.doubled', 'tests/backend/codegen/Tc-List.mog', 28, 11], 'Tc\\List\\leftFold' => ['Tc.List.leftFold', 'tests/backend/codegen/Tc-List.mog', 31, 12], 'Tc\\List\\built' => ['Tc.List.built', 'tests/backend/codegen/Tc-List.mog', 34, 9], 'Tc\\List\\fromCons' => ['Tc.List.fromCons', 'tests/backend/codegen/Tc-List.mog', 37, 12], 'Tc\\List\\same' => ['Tc.List.same', 'tests/backend/codegen/Tc-List.mog', 40, 8], 'Tc\\List\\builtLen' => ['Tc.List.builtLen', 'tests/backend/codegen/Tc-List.mog', 43, 12], 'Tc\\List\\sumHead' => ['Tc.List.sumHead', 'tests/backend/codegen/Tc-List.mog', 46, 14], 'Tc\\List\\sumList' => ['Tc.List.sumList', 'tests/backend/codegen/Tc-List.mog', 51, 14], 'Tc\\List\\headOrZero' => ['Tc.List.headOrZero', 'tests/backend/codegen/Tc-List.mog', 56, 17], 'Tc\\List\\pairSum' => ['Tc.List.pairSum', 'tests/backend/codegen/Tc-List.mog', 61, 14], 'Tc\\List\\xs' => ['Tc.List.xs', 'tests/backend/codegen/Tc-List.mog', 66, 6], 'Tc\\List\\taken' => ['Tc.List.taken', 'tests/backend/codegen/Tc-List.mog', 69, 9], 'Tc\\List\\dropped' => ['Tc.List.dropped', 'tests/backend/codegen/Tc-List.mog', 72, 11], 'Tc\\List\\evens' => ['Tc.List.evens', 'tests/backend/codegen/Tc-List.mog', 75, 9], 'Tc\\List\\triples' => ['Tc.List.triples', 'tests/backend/codegen/Tc-List.mog', 78, 11], 'Tc\\List\\zipped' => ['Tc.List.zipped', 'tests/backend/codegen/Tc-List.mog', 81, 10], 'Tc\\List\\found' => ['Tc.List.found', 'tests/backend/codegen/Tc-List.mog', 84, 9], 'Tc\\List\\whileTaken' => ['Tc.List.whileTaken', 'tests/backend/codegen/Tc-List.mog', 87, 14], 'Tc\\List\\whileDropped' => ['Tc.List.whileDropped', 'tests/backend/codegen/Tc-List.mog', 90, 16], 'Tc\\List\\compDoubled' => ['Tc.List.compDoubled', 'tests/backend/codegen/Tc-List.mog', 93, 15], 'Tc\\List\\compEvens' => ['Tc.List.compEvens', 'tests/backend/codegen/Tc-List.mog', 96, 13], 'Tc\\List\\pairs' => ['Tc.List.pairs', 'tests/backend/codegen/Tc-List.mog', 99, 9], 'Tc\\List\\emptyGuard' => ['Tc.List.emptyGuard', 'tests/backend/codegen/Tc-List.mog', 102, 14], 'Tc\\List\\format' => ['Tc.List.format', 'tests/backend/codegen/Tc-List.mog', 105, 13], 'Tc\\List\\shown' => ['Tc.List.shown', 'tests/backend/codegen/Tc-List.mog', 108, 9], 'Tc\\List\\__lambda_0' => ['Tc.List.λ0', 'tests/backend/codegen/Tc-List.mog', 28, 28], 'Tc\\List\\__lambda_1' => ['Tc.List.λ1', 'tests/backend/codegen/Tc-List.mog', 31, 33], 'Tc\\List\\__lambda_2' => ['Tc.List.λ2', 'tests/backend/codegen/Tc-List.mog', 75, 23], 'Tc\\List\\__lambda_3' => ['Tc.List.λ3', 'tests/backend/codegen/Tc-List.mog', 87, 31], 'Tc\\List\\__lambda_4' => ['Tc.List.λ4', 'tests/backend/codegen/Tc-List.mog', 90, 33]]];
 
 require_once __DIR__ . '/../../../libraries/base/src/Data/Bool.php';
 require_once __DIR__ . '/../../../libraries/base/src/Data/Eq.php';
@@ -55,7 +55,8 @@ function len() {
 }
 
 function total() {
-    $__t3 = (__ev_Foldable_List()["sum"])(__ev_Num_Int(), joined());
+    $__t4 = __ev_Foldable_List();
+    $__t3 = ($__t4["sum"])(__ev_Num_Int(), joined());
     return $__t3;
 }
 
@@ -72,8 +73,8 @@ function built() {
 }
 
 function fromCons() {
-    $__t6 = tail(built());
-    return [1, ...$__t6];
+    $__t7 = tail(built());
+    return [1, ...$__t7];
 }
 
 function same() {
@@ -103,8 +104,8 @@ function sumList($xs) {
         $__scrut_1 = $xs;
         $x = $__scrut_1[0];
         $rest = \array_slice($__scrut_1, 1);
-        $__t10 = sumList(\array_slice($xs, 1));
-        return moggi_i64_add($xs[0], $__t10);
+        $__t11 = sumList(\array_slice($xs, 1));
+        return moggi_i64_add($xs[0], $__t11);
     }
 }
 
@@ -157,8 +158,9 @@ function zipped() {
 }
 
 function found() {
-    $__t19 = (__ev_Foldable_List()["elem"])(__ev_Eq_Int(), 3, xs());
-    return $__t19;
+    $__t22 = __ev_Foldable_List();
+    $__t21 = ($__t22["elem"])(__ev_Eq_Int(), 3, xs());
+    return $__t21;
 }
 
 function whileTaken() {
@@ -186,9 +188,9 @@ function emptyGuard() {
 }
 
 function format($__ev_Show, $xs) {
-    $__t35 = __ev_Show_List($__ev_Show);
-    $__t34 = ($__t35["show"])($xs);
-    return $__t34;
+    $__t42 = __ev_Show_List($__ev_Show);
+    $__t41 = ($__t42["show"])($xs);
+    return $__t41;
 }
 
 function shown() {
@@ -204,18 +206,21 @@ function __lambda_1($acc, $x) {
 }
 
 function __lambda_2($x) {
-    $__t15 = (__ev_Foldable_List()["elem"])(__ev_Eq_Int(), $x, [2, 4]);
-    return $__t15;
+    $__t17 = __ev_Foldable_List();
+    $__t16 = ($__t17["elem"])(__ev_Eq_Int(), $x, [2, 4]);
+    return $__t16;
 }
 
 function __lambda_3($x) {
-    $__t20 = (__ev_Foldable_List()["elem"])(__ev_Eq_Int(), $x, [1, 2, 3]);
-    return $__t20;
+    $__t24 = __ev_Foldable_List();
+    $__t23 = ($__t24["elem"])(__ev_Eq_Int(), $x, [1, 2, 3]);
+    return $__t23;
 }
 
 function __lambda_4($x) {
-    $__t22 = (__ev_Foldable_List()["elem"])(__ev_Eq_Int(), $x, [1, 2]);
-    return $__t22;
+    $__t27 = __ev_Foldable_List();
+    $__t26 = ($__t27["elem"])(__ev_Eq_Int(), $x, [1, 2]);
+    return $__t26;
 }
 
 function __lambda_5($x) {
@@ -223,16 +228,18 @@ function __lambda_5($x) {
 }
 
 function __lambda_6($x) {
-    $__t25 = (__ev_Foldable_List()["elem"])(__ev_Eq_Int(), $x, [3, 4, 5]);
-    return match ($__t25) {
+    $__t31 = __ev_Foldable_List();
+    $__t30 = ($__t31["elem"])(__ev_Eq_Int(), $x, [3, 4, 5]);
+    return match ($__t30) {
         true => [$x],
         false => [],
     };
 }
 
 function __lambda_8($x, $y) {
-    $__t28 = (__ev_Foldable_List()["elem"])(__ev_Eq_Int(), (\is_int($__m64 = $x + $y) ? $__m64 : moggi_u64_add($x, $y)), [21, 22]);
-    return match ($__t28) {
+    $__t35 = __ev_Foldable_List();
+    $__t34 = ($__t35["elem"])(__ev_Eq_Int(), (\is_int($__m64 = $x + $y) ? $__m64 : moggi_u64_add($x, $y)), [21, 22]);
+    return match ($__t34) {
         true => [(\is_int($__m64 = $x + $y) ? $__m64 : moggi_u64_add($x, $y))],
         false => [],
     };

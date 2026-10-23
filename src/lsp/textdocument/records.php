@@ -2,13 +2,11 @@
 
 namespace Moggi\LSP\TextDocument;
 
-use function Moggi\Docs\surfaceTypeSignature;
-
 use Moggi\LSP\Analysis\AnalysisService;
-
-use function Moggi\LSP\Analysis\findNodeChainAt;
-
 use Moggi\Syntax\Ast;
+
+use function Moggi\Docs\surfaceTypeSignature;
+use function Moggi\LSP\Analysis\findNodeChainAt;
 
 /**
  * Record knowledge shared by completion and hover: which `data` declaration a

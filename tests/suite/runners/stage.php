@@ -32,10 +32,15 @@ function diagnosticText(\Throwable $e): string
 /**
  * One pre-lowering stage of a source, dumped by the compiler — the same producer that answers the
  * CLI's `--tokens`/`--ast`/`--typed-ast`, so a flag and a golden cannot describe a stage differently.
+ *
+ * `$backend` matters from `typed-ast` on: the check records the compile backend in the request's
+ * context, and a diagnostic about a foreign import names it (`… does not match compile backend
+ * `jvm``). The suite asks for a stage "as this backend", exactly as `--backend` does on the CLI, so
+ * a `.jvm.err.expected` golden is compared against a jvm compile rather than the php default.
  */
-function sourceStageDump(string $path, string $stage): string
+function sourceStageDump(string $path, string $stage, ?string $backend = null): string
 {
-    $dump = compileFile($path, $stage);
+    $dump = compileFile($path, $stage, backend: $backend);
     if (! \is_string($dump)) {
         throw new TestFailure("{$stage} dump unexpectedly produced multiple artifacts");
     }

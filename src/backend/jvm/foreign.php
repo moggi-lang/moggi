@@ -100,6 +100,37 @@ function dottedToInternal(string $dotted): string
 }
 
 /**
+ * The interface owners a compilation's `foreign jvm type` declarations name, by internal name.
+ *
+ * The kind is a fact of the declaration (`interface java.io.Closeable`), so it is read from the
+ * parsed programs the compilation is made of — not from {@see registerJvmForeignType}'s registry,
+ * which only a *typecheck* fills. A project compile emits modules it did not re-check in this
+ * process (shallow library units, cached products), and those are exactly the modules that carry
+ * the declarations; reading the source facts keeps the answer attached to the compilation instead
+ * of to which modules happened to run through the checker first.
+ *
+ * @param iterable<Ast\Program> $programs
+ * @return array<string, true>
+ */
+function jvmInterfaceNamesFromPrograms(iterable $programs): array
+{
+    $names = [];
+    foreach ($programs as $program) {
+        foreach ($program->items as $item) {
+            if (! $item instanceof Ast\ForeignTypeDecl || $item->backend !== 'jvm') {
+                continue;
+            }
+            [$dotted, $isInterface] = jvmParseForeignHostType($item->hostType);
+            if ($isInterface) {
+                $names[dottedToInternal($dotted)] = true;
+            }
+        }
+    }
+
+    return $names;
+}
+
+/**
  * Moggi interface types that require InterfaceMethodref + invokeinterface.
  * (checkcast to an interface is fine; invokevirtual is not.)
  *
@@ -108,6 +139,11 @@ function dottedToInternal(string $dotted): string
  * binder emits the prefix for every interface `javap` reports. An interface
  * reached with no such declaration is a missing declaration, not a missing
  * table entry.
+ *
+ * This reads the process registry, which only a check fills. An emitter should
+ * consult the set its compilation published instead
+ * ({@see jvmInterfaceNamesFromPrograms}); this remains for callers that have no
+ * compilation to ask.
  */
 function jvmIsInterface(string $internalName): bool
 {

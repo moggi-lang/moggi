@@ -2,10 +2,9 @@
 
 namespace Moggi\CLI\Commands;
 
-use function Moggi\Registry\badPackageMarker;
-
 use Moggi\Registry\FetchLog;
 
+use function Moggi\Registry\badPackageMarker;
 use function Moggi\Registry\prettyJson;
 use function Moggi\Registry\unmaintainedMarker;
 

@@ -2,11 +2,11 @@
 
 namespace Moggi\Docs;
 
-use function Moggi\Modules\classMethodsFromUnits;
-use function Moggi\Modules\exportItemChildNames;
-
 use Moggi\Syntax\Ast;
 use Moggi\Syntax\Ast\Program;
+
+use function Moggi\Modules\classMethodsFromUnits;
+use function Moggi\Modules\exportItemChildNames;
 
 function isLocallyDefinedValue(Program $program, string $name): bool
 {

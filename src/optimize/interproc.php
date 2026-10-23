@@ -4,6 +4,7 @@ namespace Moggi\Optimize\Interproc;
 
 use Moggi\IR;
 
+use function Moggi\IR\Callables\captureMeta;
 use function Moggi\IR\Visit\collectLambdaRefsInBlock;
 use function Moggi\IR\Visit\collectLocalsInBlock;
 use function Moggi\IR\Visit\irPatternBoundNames;
@@ -19,12 +20,11 @@ use function Moggi\Modules\resolvedSymbol;
 use function Moggi\Optimize\CaseFold\isPlausibleConstructorName;
 use function Moggi\Optimize\CaseFold\joinMatchStmtConsumer;
 use function Moggi\Optimize\CaseFold\nullaryCtorCaf;
-use function Moggi\Optimize\Support\buildLambdaMeta;
 use function Moggi\Optimize\Support\indexCapturedFunctions;
-use function Moggi\Optimize\Support\isWiredInBoolCtor;
 use function Moggi\Optimize\Support\mapStmtNestedBlocks;
 use function Moggi\Optimize\Support\tempUsedInItems;
 use function Moggi\Semantics\IntrinsicRegistry\isListConsForm;
+use function Moggi\Semantics\Kernel\isBoolCtor;
 
 /** @param array<int, mixed> $items @return list<IR\Stmt> */
 function denseStmtItems(array $items): array
@@ -151,7 +151,7 @@ function activeInlineCaptureMeta(): array
 /** @param list<IR\FunctionDecl> $functions */
 function inlineFunctions(array $functions, string $moduleName = ''): array
 {
-    setActiveInlineCaptureMeta(buildLambdaMeta(indexCapturedFunctions($functions)));
+    setActiveInlineCaptureMeta(captureMeta(indexCapturedFunctions($functions)));
     try {
         return inlineFunctionsRounds($functions, $moduleName);
     } finally {
@@ -1397,6 +1397,7 @@ function reduceMatchArmBodyToExpr(
                 new IR\DictMethod(
                     replaceTempsInOperand($stmt->evidence, $tempEnv, $sticky),
                     $stmt->method,
+                    $stmt->localEvidence,
                 ),
                 \array_map(
                     static fn (IR\Operand $a): IR\Operand => replaceTempsInOperand($a, $tempEnv, $sticky),
@@ -1662,6 +1663,7 @@ function replaceTempsInOperand(IR\Operand $operand, array $tempEnv, array $stick
         return new IR\DictMethod(
             replaceTempsInOperand($operand->evidence, $tempEnv, $sticky),
             $operand->method,
+            $operand->localEvidence,
         );
     }
 
@@ -1973,7 +1975,7 @@ function isInlineCandidate(IR\FunctionDecl $function): bool
         return false;
     }
 
-    if ($last->value instanceof IR\FnRef && ! isWiredInBoolCtor($last->value->name)) {
+    if ($last->value instanceof IR\FnRef && ! isBoolCtor($last->value->name)) {
         return false;
     }
 
@@ -2140,7 +2142,7 @@ function substituteStmt(IR\Stmt $stmt, array $params, array $args, array $bound 
         IR\DictCall::class => new IR\DictCall(substituteOperand($stmt->evidence, $params, $args, $bound), $stmt->method, \array_map(
             static fn (IR\Operand $arg): IR\Operand => substituteOperand($arg, $params, $args, $bound),
             $stmt->args,
-        ), $stmt->dest, $stmt->srcLoc),
+        ), $stmt->dest, $stmt->srcLoc, $stmt->localEvidence),
         IR\Ret::class => new IR\Ret(substituteExpr($stmt->value, $params, $args, $bound)),
         IR\MatchStmt::class => new IR\MatchStmt(
             substituteOperand($stmt->scrutinee, $params, $args, $bound),
@@ -2410,6 +2412,7 @@ function remapTempsInStmt(IR\Stmt $stmt, array $remap): IR\Stmt
             \array_map(static fn (IR\Operand $a): IR\Operand => remapTempsInOperand($a, $remap), $stmt->args),
             remapTempId($stmt->dest, $remap),
             $stmt->srcLoc,
+            $stmt->localEvidence,
         ),
         IR\Ret::class => new IR\Ret(remapTempsInOperand($stmt->value, $remap)),
         IR\MatchStmt::class => new IR\MatchStmt(
@@ -2556,6 +2559,7 @@ function remapTempsInOperand(IR\Operand $operand, array $remap): IR\Operand
         IR\DictMethod::class => new IR\DictMethod(
             remapTempsInOperand($operand->evidence, $remap),
             $operand->method,
+            $operand->localEvidence,
         ),
         IR\IoAction::class => new IR\IoAction(remapTempsInOperand($operand->expr, $remap)),
         IR\ForeignCall::class => new IR\ForeignCall(

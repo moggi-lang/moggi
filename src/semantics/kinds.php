@@ -8,14 +8,11 @@ use Moggi\Semantics\TypeExpr\TPromoted;
 use Moggi\Semantics\TypeExpr\TStringLit;
 use Moggi\Semantics\TypeExpr\TVar;
 use Moggi\Semantics\TypeExpr\Type;
+use Moggi\Semantics\Types\TypeCheckState;
+use Moggi\Syntax\Ast;
 
 use function Moggi\Semantics\Types\prune;
-
-use Moggi\Semantics\Types\TypeCheckState;
-
 use function Moggi\Semantics\Types\typeFail;
-
-use Moggi\Syntax\Ast;
 
 /** Internal kind representation (distinct from surface `Ast\KindNode`). */
 interface Kind

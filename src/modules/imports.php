@@ -2,28 +2,22 @@
 
 namespace Moggi\Modules;
 
-use function Moggi\Backend\backendById;
-use function Moggi\Backend\Php\Naming\basePhpFunctionName;
-use function Moggi\Errors\appendDidYouMean;
-
 use Moggi\IR;
-
-use function Moggi\IR\Visit\collectIrCodegenUsage;
-
-use function Moggi\Paths\relativeRequirePath;
-use function Moggi\Semantics\Exhaustiveness\trueBindingOrigins;
-use function Moggi\Semantics\Kinds\dataKind;
-use function Moggi\Semantics\Kinds\registerTypeKind;
-
 use Moggi\Semantics\TypeExpr\Scheme;
-
-use function Moggi\Semantics\TypeExpr\schemeRuntimeArity;
-use function Moggi\Semantics\Types\evidenceFunctionName;
-
 use Moggi\Semantics\Types\TypeCheckState;
 use Moggi\Semantics\Types\TypeError;
 use Moggi\Syntax\Ast;
 
+use function Moggi\Backend\backendById;
+use function Moggi\Backend\Php\Naming\basePhpFunctionName;
+use function Moggi\Errors\appendDidYouMean;
+use function Moggi\IR\Visit\collectIrCodegenUsage;
+use function Moggi\Paths\relativeRequirePath;
+use function Moggi\Semantics\Exhaustiveness\trueBindingOrigins;
+use function Moggi\Semantics\Kinds\dataKind;
+use function Moggi\Semantics\Kinds\registerTypeKind;
+use function Moggi\Semantics\TypeExpr\schemeRuntimeArity;
+use function Moggi\Semantics\Types\evidenceFunctionName;
 use function Moggi\Syntax\Ast\moduleName;
 use function Moggi\Syntax\isConstructorName;
 
@@ -308,6 +302,11 @@ function moduleDeclaredFunctionArity(array $units, string $moduleName, string $n
         return null;
     }
 
+    $callable = moduleCallableEntry($units, $moduleName, $name);
+    if ($callable !== null) {
+        return (int) $callable['arity'];
+    }
+
     $factsArity = $unit['facts']['fnArity'] ?? null;
     if (\is_array($factsArity)) {
         return $factsArity[$name] ?? null;
@@ -358,7 +357,8 @@ function declaredFunctionArityMapFromProgram(Ast\Program $program): array
  *   evidenceChecked: array{origins: array<string, array{namespace: string, phpName: string, module: string}>, arity: array<string, int>},
  *   actionReturn: array<string, true>,
  *   trueBindings: array<string, true>,
- *   fnArity: array<string, int>
+ *   fnArity: array<string, int>,
+ *   callables: array{abi: int, entries: array<string, array{evidence: int, params: int, arity: int}>}
  * }
  */
 function preparedModuleFacts(array $unit, Ast\Program $checked, string $moduleName): array
@@ -378,16 +378,119 @@ function preparedModuleFacts(array $unit, Ast\Program $checked, string $moduleNa
         'actionReturn' => actionReturnFnNamesFromProgram($checked),
         'trueBindings' => trueBindingOrigins($checked->items, $moduleName),
         'fnArity' => declaredFunctionArityMapFromProgram($checked),
+        'callables' => callableFactsFromProgram($checked),
     ];
 }
 
 /**
- * Runtime arity of an imported function: the number of parameters its
- * definition actually declares, not the arrow count of its type. The two
- * differ for eta-reduced definitions — `($) f = f` has type
- * `(a -> b) -> a -> b` but a single parameter — and handing such a function
- * more arguments than it declares has to go through the runtime `__apply`
- * trampoline instead of a direct call.
+ * The callable layout a module publishes for its exported entries — the same shape the in-module
+ * table publishes (`IR\Callables\CallableSig`), narrowed to what an importer can use: the runtime
+ * arity and its evidence/value split, under the entry's own name in the defining module.
+ *
+ * Publishing it here is what makes an imported entry's arity a published fact rather than a
+ * guess. Before this record the importer looked the entry up by the name it imported it under, so
+ * a re-export that renamed the entry found nothing and fell back to counting the scheme's arrows
+ * (`schemeRuntimeArity`), which disagrees with the declared arity of every eta-reduced definition.
+ *
+ * Imported entries are source declarations, so their capture layout is empty: `|E| + |V|` is the
+ * whole runtime vector. `evidence` and `params` are published separately so an importer can tell
+ * a hidden slot from a value parameter without re-deriving either.
+ *
+ * @return array{abi: int, entries: array<string, array{evidence: int, params: int, arity: int}>}
+ */
+function callableFactsFromProgram(Ast\Program $program): array
+{
+    $entries = [];
+    foreach ($program->items as $item) {
+        if (! $item instanceof Ast\FunctionDecl || $item->signatureOnly) {
+            continue;
+        }
+
+        $arity = \count($item->params);
+        $evidence = 0;
+        foreach ($item->constraints as $constraint) {
+            if ($constraint->evidence !== '') {
+                ++$evidence;
+            }
+        }
+
+        $entries[$item->name] = [
+            'evidence' => $evidence,
+            'params' => $arity - $evidence,
+            'arity' => $arity,
+        ];
+    }
+
+    return ['abi' => \Moggi\IR\Callables\ABI_VERSION, 'entries' => $entries];
+}
+
+/**
+ * The callable half of a module's facts, from its parsed declarations.
+ *
+ * A single-file compile prepares the standard library *shallow*: interfaces without checked
+ * bodies. A parsed declaration still states two of the three facts the record needs — its declared
+ * parameter count (an eta-reduced definition declares fewer parameters than its scheme has arrows)
+ * and, from the exported scheme, how many evidence slots the checker published
+ * (`runtimeConstraintCount`). Their sum is the same `|E| + |V|` the full check publishes, so an
+ * importer reads one arity whether the library was checked in this process or not.
+ *
+ * @param array<string, mixed> $exports the module's collected exports (`env` holds the schemes)
+ * @return array{abi: int, entries: array<string, array{evidence: int, params: int, arity: int}>}
+ */
+function parsedCallableFacts(Ast\Program $program, array $exports): array
+{
+    $env = $exports['env'] ?? null;
+    $entries = [];
+    foreach ($program->items as $item) {
+        if (! $item instanceof Ast\FunctionDecl || $item->signatureOnly) {
+            continue;
+        }
+
+        $params = \count($item->params);
+        $scheme = \is_array($env) ? ($env[$item->name] ?? null) : null;
+        $evidence = $scheme instanceof Scheme ? $scheme->runtimeConstraintCount : 0;
+
+        $entries[$item->name] = [
+            'evidence' => $evidence,
+            'params' => $params,
+            'arity' => $evidence + $params,
+        ];
+    }
+
+    return ['abi' => \Moggi\IR\Callables\ABI_VERSION, 'entries' => $entries];
+}
+
+/**
+ * The published callable facts of one entry, looked up by the name the defining module uses.
+ *
+ * @param array<string, array<string, mixed>> $units
+ * @return ?array{evidence: int, params: int, arity: int}
+ */
+function moduleCallableEntry(array $units, string $moduleName, string $name): ?array
+{
+    $unit = $units[$moduleName] ?? null;
+    if (! \is_array($unit)) {
+        return null;
+    }
+
+    $entries = $unit['facts']['callables']['entries'] ?? null;
+    if (! \is_array($entries)) {
+        return null;
+    }
+
+    $entry = $entries[$name] ?? null;
+
+    return \is_array($entry) && isset($entry['arity']) ? $entry : null;
+}
+
+/**
+ * Runtime arity of an imported function: the vector its definition publishes, not the arrow
+ * count of its type. The two differ for eta-reduced definitions — `($) f = f` has type
+ * `(a -> b) -> a -> b` but a single parameter — and handing such a function more arguments than
+ * it declares has to go through the runtime `__apply` trampoline instead of a direct call.
+ *
+ * `$name` is the entry's name in `$moduleName`, not the name the importing file selected it as:
+ * a re-export renames the entry, and the defining module knows only its own spelling.
  *
  * @param array<string, array<string, mixed>> $units
  */
@@ -398,6 +501,11 @@ function externalFunctionRuntimeArity(
     Scheme $scheme,
 ): int {
     if ($moduleName !== null) {
+        $callable = moduleCallableEntry($units, $moduleName, $name);
+        if ($callable !== null) {
+            return (int) $callable['arity'];
+        }
+
         $declared = moduleDeclaredFunctionArity($units, $moduleName, $name);
         if ($declared !== null) {
             return $declared;
@@ -448,6 +556,7 @@ function buildImportContext(
     $namespaceUseLines = [];
     $externalFns = [];
     $externalFnRuntimeArity = [];
+    $externalCallableArity = [];
     $actionReturnFns = [];
     $fnOriginModules = [];
     $intrinsicWrappers = [];
@@ -557,9 +666,10 @@ function buildImportContext(
                     $externalFnRuntimeArity[$name] = externalFunctionRuntimeArity(
                         $units,
                         $origin['module'],
-                        $name,
+                        $origin['phpName'],
                         $scheme,
                     );
+                    $externalCallableArity[$name] = $externalFnRuntimeArity[$name];
                     $fnOriginModules[$name] = $origin['module'];
                     if (isset(moduleActionReturnFnNames($units, $origin['module'])[$origin['phpName']])) {
                         $actionReturnFns[$name] = true;
@@ -605,9 +715,10 @@ function buildImportContext(
             $externalFnRuntimeArity[$name] = externalFunctionRuntimeArity(
                 $units,
                 $origin['module'],
-                $name,
+                $origin['phpName'],
                 $scheme,
             );
+            $externalCallableArity[$name] = $externalFnRuntimeArity[$name];
             $fnOriginModules[$name] = $origin['module'];
             if (isset(moduleActionReturnFnNames($units, $origin['module'])[$origin['phpName']])) {
                 $actionReturnFns[$name] = true;
@@ -744,6 +855,7 @@ function buildImportContext(
             'namespaceModules' => $namespaceModules,
         ],
         'externalFnRuntimeArity' => $externalFnRuntimeArity,
+        'externalCallableArity' => $externalCallableArity,
         'externalActionReturnFns' => $actionReturnFns,
         'externalTrueBindings' => moduleTrueBindingOriginsAll($units),
         'intrinsicWrappers' => $intrinsicWrappers,
@@ -891,9 +1003,10 @@ function mergeFacadeBackendExports(
         $externalFnRuntimeArity[$name] = externalFunctionRuntimeArity(
             $units,
             $origin['module'],
-            $name,
+            $origin['phpName'],
             $scheme,
         );
+        $externalCallableArity[$name] = $externalFnRuntimeArity[$name];
         $fnOriginModules[$name] = $origin['module'];
         if (isset(moduleActionReturnFnNames($units, $origin['module'])[$origin['phpName']])) {
             $actionReturnFns[$name] = true;
@@ -991,33 +1104,10 @@ function filterCodegenImportsForIr(
     ?string $fromOutputRelative = null,
     ?array $usedCallees = null,
     ?string $absoluteRequireRoot = null,
-    array $globalEvidenceMaps = [],
     array $globalFnOrigins = [],
 ): array {
     if ($usedCallees === null) {
         $usedCallees = collectIrCodegenUsage($ir)['callees'];
-    }
-
-    foreach (dictCallResolvedMethods($ir, $globalEvidenceMaps) as $methodName => $originModule) {
-        $usedCallees[$methodName] = true;
-        if (! isset($codegen['externalFns'][$methodName])) {
-            $codegen['externalFns'][$methodName] = resolvedSymbol($originModule, $methodName);
-        }
-        if (! isset($codegen['fnOriginModules'][$methodName])) {
-            $codegen['fnOriginModules'][$methodName] = $originModule;
-        }
-    }
-
-    foreach (evidenceSymbolOrigins($globalEvidenceMaps) as $symbol => $originModule) {
-        if (! isset($usedCallees[$symbol])) {
-            continue;
-        }
-        if (! isset($codegen['externalFns'][$symbol])) {
-            $codegen['externalFns'][$symbol] = resolvedSymbol($originModule, $symbol);
-        }
-        if (! isset($codegen['fnOriginModules'][$symbol])) {
-            $codegen['fnOriginModules'][$symbol] = $originModule;
-        }
     }
 
     $localFnNames = [];
@@ -1167,91 +1257,3 @@ function filterCodegenImportsForIr(
     ];
 }
 
-/**
- * Map instance-method IR names that PHP/JVM emit will resolve from nullary
- * DictCall evidence FnRefs → defining module name.
- *
- * @param array<string, array{module?: string, methods?: array<string, string>}> $globalEvidenceMaps
- * @return array<string, string> methodIrName => originModule
- */
-function dictCallResolvedMethods(IR\Module $ir, array $globalEvidenceMaps): array
-{
-    if ($globalEvidenceMaps === []) {
-        return [];
-    }
-
-    $out = [];
-    $visit = static function ($node) use (&$visit, &$out, $globalEvidenceMaps): void {
-        if ($node instanceof IR\DictCall) {
-            $evName = null;
-            if ($node->evidence instanceof IR\FnRef) {
-                $evName = $node->evidence->name;
-            } elseif ($node->evidence instanceof IR\ExprCall && $node->evidence->args === []) {
-                $evName = $node->evidence->callee;
-            }
-            if ($evName !== null && isset($globalEvidenceMaps[$evName])) {
-                $info = $globalEvidenceMaps[$evName];
-                $methods = $info['methods'] ?? [];
-                $methodIr = \is_array($methods) ? ($methods[$node->method] ?? null) : null;
-                $module = $info['module'] ?? null;
-                if (\is_string($methodIr) && \is_string($module)) {
-                    $out[$methodIr] = $module;
-                }
-            }
-        }
-        if ($node instanceof IR\Block) {
-            foreach ($node->items as $item) {
-                $visit($item);
-            }
-        }
-        if ($node instanceof IR\MatchStmt || $node instanceof IR\MatchReturn) {
-            foreach ($node->arms as $arm) {
-                $visit($arm->body);
-            }
-        }
-        if ($node instanceof IR\FunctionDecl) {
-            $visit($node->body);
-        }
-    };
-
-    foreach ($ir->functions as $fn) {
-        $visit($fn);
-    }
-
-    return $out;
-}
-
-/**
- * Map every evidence factory and its method IR names to the defining module.
- *
- * Used when specialization has already rewritten DictCalls into direct Calls
- * so the symbols still appear in callees without a remaining DictCall.
- *
- * @param array<string, array{module?: string, methods?: array<string, string>}> $globalEvidenceMaps
- * @return array<string, string> irName => originModule
- */
-function evidenceSymbolOrigins(array $globalEvidenceMaps): array
-{
-    $out = [];
-    foreach ($globalEvidenceMaps as $evName => $info) {
-        if (! \is_string($evName) || $evName === '') {
-            continue;
-        }
-        $module = $info['module'] ?? null;
-        if (! \is_string($module) || $module === '') {
-            continue;
-        }
-        $out[$evName] = $module;
-        $methods = $info['methods'] ?? [];
-        if (! \is_array($methods)) {
-            continue;
-        }
-        foreach ($methods as $methodIr) {
-            if (\is_string($methodIr) && $methodIr !== '') {
-                $out[$methodIr] = $module;
-            }
-        }
-    }
-
-    return $out;
-}

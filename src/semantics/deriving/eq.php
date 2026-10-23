@@ -2,11 +2,11 @@
 
 namespace Moggi\Semantics\Deriving;
 
-use function Moggi\Semantics\Kernel\boolFalseCtor;
-use function Moggi\Semantics\Kernel\boolTrueCtor;
-
 use Moggi\Semantics\Types\TypeCheckState;
 use Moggi\Syntax\Ast;
+
+use function Moggi\Semantics\Kernel\boolFalseCtor;
+use function Moggi\Semantics\Kernel\boolTrueCtor;
 
 /**
  * Stock `deriving Eq`: synthesize `instance Eq … where (==) = …; (/=) = …`.

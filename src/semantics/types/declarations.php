@@ -2,22 +2,20 @@
 
 namespace Moggi\Semantics\Types;
 
-use function Moggi\Backend\DotNet\Foreign\registerDotNetForeignType;
-use function Moggi\Backend\Jvm\Foreign\registerJvmForeignType;
-use function Moggi\Semantics\IntrinsicRegistry\isMagicHashName;
 
 use Moggi\Semantics\Kernel;
 use Moggi\Semantics\Kinds;
-
-use function Moggi\Semantics\TypeExpr\scheme;
-
 use Moggi\Semantics\TypeExpr\TArrow;
-
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TVar;
 use Moggi\Semantics\TypeExpr\TVarApp;
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Syntax\Ast;
+
+use function Moggi\Backend\DotNet\Foreign\registerDotNetForeignType;
+use function Moggi\Backend\Jvm\Foreign\registerJvmForeignType;
+use function Moggi\Semantics\IntrinsicRegistry\isMagicHashName;
+use function Moggi\Semantics\TypeExpr\scheme;
 
 require_once __DIR__ . '/type_core.php';
 require_once __DIR__ . '/constraints.php';

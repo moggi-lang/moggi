@@ -1,13 +1,15 @@
 module
   function positive(n)
-      t0 = dict_call @__ev_Ord_Int->>(n, 0)
+      t1 = call __ev_Ord_Int()
+      t0 = dict_call t1->>(n, 0)
       ret t0
   function twice(n)
       ret intrinsic intMul#(n, 2)
   function firstSign(_p0)
       match_return _p0
-        t2 = dict_call @__ev_Ord_Int-><(x, 0)
-        arm x : _ when t2
+        t4 = call __ev_Ord_Int()
+        t3 = dict_call t4-><(x, 0)
+        arm x : _ when t3
             ret "neg-first"
         arm x__0 : _ when intrinsic intEq#(x__0, 0)
             ret "zero-first"
@@ -18,9 +20,9 @@ module
   function classify(n)
       match_return n
         let m = n
-        t4 = call twice(m)
-        t5 = call positive(t4)
-        arm m when t5
+        t6 = call twice(m)
+        t7 = call positive(t6)
+        arm m when t7
             ret "positive-double"
         let m__0 = n
         arm m__0 when @otherwise

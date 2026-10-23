@@ -64,6 +64,7 @@ function remapTempsInStmt(IR\Stmt $stmt, array $temps): IR\Stmt
             ),
             $stmt->dest,
             $stmt->srcLoc,
+            $stmt->localEvidence,
         ),
         IR\IoCall::class => new IR\IoCall(
             $stmt->callee,

@@ -54,6 +54,10 @@ function runExecTest(string $path, string $projectRoot): array
         return ['passed' => false, 'message' => "compile failed:\n{$php['output']}"];
     }
 
+    // The compile above is seconds long, long enough for the cache to have been emptied under it.
+    // Ask again: this is a stat when the tree is there, and a rebuild when it is not.
+    $libPhpDir = writeLibPhpOutputs($projectRoot);
+
     $execDir = \Moggi\Cache\cacheScratchDir() . '/exec';
     @\mkdir($execDir, 0777, true);
     $compiled = $execDir . '/' . $name . '.' . \getmypid() . '.' . \uniqid('', true) . '.php';
@@ -313,7 +317,11 @@ function nativeSmokeOutputArgs(string $outDir, string $backend): array
 
 /**
  * The `--native` mode: build one example into a native executable and run it, comparing its stdout
- * with the same golden the managed run uses.
+ * with the same program built the ordinary (managed) way and run the same way.
+ *
+ * The example itself carries no golden — its case is "it still compiles" — so the reference is the
+ * managed run: what this mode adds is "…and also as an executable", and a native build that prints
+ * something else than the managed one is the failure worth reporting.
  *
  * Such a build takes minutes and needs a toolchain most machines do not have, so it is opt-in, and
  * a toolchain that is not installed is a **skip** (the case applies, the machine cannot run it) —
@@ -324,10 +332,6 @@ function nativeSmokeOutputArgs(string $outDir, string $backend): array
 function runNativeExampleSmoke(string $exampleDir, string $backend, string $projectRoot): array
 {
     $name = testRelativePath($exampleDir) . ' (native)';
-    $stdoutExpected = runtimeExpectedPath($exampleDir . '/Main', '.stdout.expected', $backend);
-    if (! \is_file($stdoutExpected)) {
-        return ['passed' => false, 'message' => "{$name}: missing {$stdoutExpected}"];
-    }
 
     $label = nativeToolchainLabel($backend);
     if ($label === null || ! nativeToolchainAvailable($backend)) {
@@ -335,8 +339,40 @@ function runNativeExampleSmoke(string $exampleDir, string $backend, string $proj
     }
 
     $outDir = createTempDir('moggi-native-' . \md5($exampleDir . ':' . $backend));
+    $managedDir = createTempDir('moggi-native-managed-' . \md5($exampleDir . ':' . $backend));
 
     try {
+        $managedBuild = runCompiledProcess([
+            PHP_BINARY,
+            $projectRoot . '/moggi.php',
+            'compile',
+            $exampleDir,
+            ...fixtureCompileOutputArgs($managedDir, $backend),
+            '--backend',
+            $backend,
+        ], 300);
+        if (($managedBuild['exitCode'] ?? 1) !== 0) {
+            return [
+                'passed' => false,
+                'message' => "{$name}: managed build failed:\n"
+                    . \trim(($managedBuild['stdout'] ?? '') . "\n" . ($managedBuild['stderr'] ?? '')),
+            ];
+        }
+
+        $managed = runPackagedBackendApp($managedDir, $backend, $name . ' (managed)', 60);
+        if (isset($managed['passed']) && $managed['passed'] === false) {
+            return $managed;
+        }
+        if (($managed['timedOut'] ?? false) === true) {
+            return ['passed' => false, 'message' => "{$name}: managed run timed out"];
+        }
+        if (($managed['exitCode'] ?? 1) !== 0) {
+            return [
+                'passed' => false,
+                'message' => "{$name}: " . childExitMessage('managed run', $managed),
+            ];
+        }
+
         $build = runCompiledProcess([
             PHP_BINARY,
             $projectRoot . '/moggi.php',
@@ -371,11 +407,17 @@ function runNativeExampleSmoke(string $exampleDir, string $backend, string $proj
             ];
         }
 
-        assertSameOutput(\basename($exampleDir), $stdoutExpected, $run['stdout'] ?? '', 'stdout');
+        $expected = normalize((string) ($managed['stdout'] ?? ''));
+        $actual = normalize((string) ($run['stdout'] ?? ''));
+        if ($expected !== $actual) {
+            throw new TestFailure("{$name}: stdout differs from the managed run\n--- managed\n+++ native\n"
+                . diffText($expected, $actual));
+        }
     } catch (TestFailure $e) {
         return ['passed' => false, 'message' => $e->getMessage()];
     } finally {
         removeDirectory($outDir);
+        removeDirectory($managedDir);
     }
 
     return ['passed' => true, 'message' => ''];
@@ -543,7 +585,10 @@ function runReplCase(string $scriptPath, string $projectRoot): array
 function writeLibBackendOutputs(string $projectRoot, string $backend): string
 {
     static $written = [];
-    if (isset($written[$backend])) {
+    // The memo is not an existence proof: the compiler empties its own cache when its sources
+    // change, and a worker outlives that — the tree this memo names can be gone while the case
+    // that needs it is still running. Rebuild it instead of handing out a path into nothing.
+    if (isset($written[$backend]) && \is_file($written[$backend] . '/.complete')) {
         return $written[$backend];
     }
 

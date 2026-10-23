@@ -178,6 +178,20 @@ final class FunctionDecl implements IrNode
         public ?SrcLoc $srcLoc = null,
         public FunctionKind $kind = FunctionKind::Source,
         public ?string $origin = null,
+        /**
+         * The evidence slots in scope where this declaration was created, in definition order.
+         *
+         * For a source declaration that is its solved constraint list, so `E` is exactly the
+         * slots the typechecker committed to, with the multiplicity it committed to. For a lifted
+         * callable it is the enclosing scope's list, and the table splits the callable's capture
+         * vector against it — the same vector the binder built, so the two cannot disagree.
+         *
+         * Never re-read from the spelling of `params`: a dictionary slot and a value parameter are
+         * different layouts even though both are positional at the runtime.
+         *
+         * @var list<string>
+         */
+        public array $evidenceScope = [],
     ) {
     }
 
@@ -198,6 +212,7 @@ final class FunctionDecl implements IrNode
             $this->srcLoc,
             $this->kind,
             $this->origin,
+            $this->evidenceScope,
         );
     }
 }
@@ -471,9 +486,22 @@ final class Intrinsic implements Operand
 
 final class DictMethod implements Operand
 {
+    /**
+     * `localEvidence` is how many dictionaries the *instance* this method was projected from takes
+     * — its context (`instance Monoid a => Monoid (Dual a)` is one), which is exactly the argument
+     * list of the owner builder the projection calls (`C2a`, `S5`).
+     *
+     * It is not a prefix of an application's arguments. Those dictionaries are already closed into
+     * the owner dictionary the projection produced, so a call's leading arguments are the method's
+     * remaining evidence slots followed by its values; for a projected `show` the instance's
+     * context can be two dicts while the call carries a single value. Here the fact is recorded
+     * because the producer knows it and no consumer can recover it from the argument list; the call
+     * vector itself is unchanged by this field.
+     */
     public function __construct(
         public Operand $evidence,
         public string $method,
+        public ?int $localEvidence = null,
     ) {
     }
 }
@@ -557,13 +585,22 @@ final class CallValue implements Stmt
 
 final class DictCall implements Stmt
 {
-    /** @param list<Operand> $args */
+    /**
+     * @param list<Operand> $args the method's own evidence slots (when the projection did not close
+     *        them) followed by its value arguments
+     * @param ?int $localEvidence how many dictionaries the projected instance takes — its context,
+     *        i.e. the owner builder's argument list (`DictMethod::$localEvidence`). Recorded by
+     *        lowering where the projection is built; it describes the projection, not a prefix of
+     *        `$args`, so it cannot be re-derived from the call and no emitter splits on it. Null
+     *        when the producer could not state it.
+     */
     public function __construct(
         public Operand $evidence,
         public string $method,
         public array $args,
         public int $dest,
         public ?SrcLoc $srcLoc = null,
+        public ?int $localEvidence = null,
     ) {
     }
 }
@@ -772,6 +809,30 @@ final class LowerCtx
          * the `putStrLn` column, and `show`/`boom` become operand sites).
          */
         public ?SrcLoc $stmtSrcLoc = null,
+        /**
+         * Evidence slot names in scope, in the enclosing declaration's solved order.
+         *
+         * A lifted callable closes over some of them; which ones is a fact of this scope, so it
+         * is carried here rather than recovered later from a name prefix.
+         *
+         * @var list<string>
+         */
+        public array $evidenceNames = [],
+        /**
+         * The owner dictionary a projected method carries, keyed by the builder that makes it.
+         *
+         * A projection names its instance's dictionary rather than capturing the enclosing scope,
+         * so the builder used to run again at every use (`@__ev_Labelled_Int()` per call). The
+         * first use in a block binds the builder's result and stores that operand here; later uses
+         * in the same block read it, which is the "instance-context closure" (S5): the projected
+         * method owns its dictionary instead of re-materialising it.
+         *
+         * The map is per block, and a nested block starts with its own, so a dictionary is never
+         * built for a region that does not run.
+         *
+         * @var array<string, Operand>
+         */
+        public array $evidenceBindings = [],
     ) {
     }
 }

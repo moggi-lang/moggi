@@ -5,13 +5,13 @@ namespace Moggi\Backend\Jvm\Codegen;
 use Moggi\Backend\Jvm\Classfile\ClassBuilder;
 use Moggi\Backend\Jvm\Classfile\CodeBuilder;
 use Moggi\Backend\Jvm\Classfile\ConstantPool;
+use Moggi\Debug\SourceMapBuilder;
+use Moggi\IR;
 
 use function Moggi\Backend\Jvm\Foreign\jvmIsInterface;
 use function Moggi\Backend\Jvm\Foreign\jvmReturnDescriptor;
 use function Moggi\Backend\Jvm\Foreign\parseJvmParamKinds;
-use function Moggi\Backend\Jvm\Foreign\resolveJvmForeignOverload;
 use function Moggi\Backend\Jvm\Foreign\resolveJvmForeignPath;
-
 use function Moggi\Backend\Jvm\Naming\moduleInternalName;
 use function Moggi\Backend\Jvm\Naming\symbolName;
 use function Moggi\Backend\Meta\constructorArityMap;
@@ -21,13 +21,8 @@ use function Moggi\Backend\Meta\lambdaCaptureNamesInBlock;
 use function Moggi\Backend\Meta\newtypeConstructorMap;
 use function Moggi\Backend\Meta\newtypeConstructorMapFromRegistry;
 use function Moggi\Debug\normalizeDisplayPath;
-
-use Moggi\Debug\SourceMapBuilder;
-
 use function Moggi\Debug\symbolId;
-
-use Moggi\IR;
-
+use function Moggi\IR\Callables\captureMeta;
 use function Moggi\IR\Visit\collectLocalsInBlock;
 use function Moggi\IR\Visit\collectLocalsInOperand;
 use function Moggi\IR\Visit\stmtNestedBlocks;
@@ -35,7 +30,6 @@ use function Moggi\IR\Visit\walkBlock;
 use function Moggi\IR\Visit\walkOperand;
 use function Moggi\Modules\parseResolvedSymbol;
 use function Moggi\Modules\resolvedSymbol;
-use function Moggi\Optimize\Support\buildLambdaMeta;
 use function Moggi\Optimize\Support\indexCapturedFunctions;
 use function Moggi\Semantics\Kernel\boolCtorValue;
 
@@ -58,7 +52,7 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
     }
     $artifact = (string) ($options['outputRelative'] ?? ($internal . '.class'));
     $sourceMap = new SourceMapBuilder($moduleName !== '' ? $moduleName : 'Main', 'jvm', $artifact);
-    $lambdaMeta = buildLambdaMeta(indexCapturedFunctions($module->functions));
+    $lambdaMeta = captureMeta(indexCapturedFunctions($module->functions));
     $wrapperRegistry = new JvmFnWrapperRegistry();
     $ioThunkRegistry = new JvmIoThunkRegistry();
 
@@ -77,11 +71,6 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
     foreach (constructorArityMapFromRegistry($options['imports']['importedData'] ?? []) as $name => $arity) {
         if (! isset($localBindings[$name])) {
             $functionArity[$name] = $arity;
-        }
-    }
-    foreach (\array_keys($options['globalEvidenceMaps'] ?? []) as $evidenceName) {
-        if (! isset($functionArity[$evidenceName])) {
-            $functionArity[$evidenceName] = 0;
         }
     }
     foreach ($options['externalFnRuntimeArity'] ?? [] as $name => $arity) {
@@ -137,20 +126,14 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
         ...newtypeConstructorMap($module->data),
     ];
 
-    $evidenceMaps = $options['globalEvidenceMaps'] ?? [];
-    foreach ($module->instanceEvidence as $ev) {
-        $evidenceMaps[$ev->evidenceName] = [
-            'module' => $moduleName !== '' ? $moduleName : ($options['artifactModuleName'] ?? ''),
-            'methods' => $ev->methods,
-        ];
-    }
+    $foreignInterfaces = $options['foreignInterfaces'] ?? [];
 
     foreach ($module->functions as $fn) {
         $sourceMap->ensureSymbol(
             $fn->srcLoc ?? new IR\SrcLoc($moduleName, $fn->name, $displaySource, 0, 0),
             symbolName($fn->name),
         );
-        emitFunction($b, $fn, $internal, $functionArity, $externalFns, $evidenceMaps, $lambdaMeta, $wrapperRegistry, $ioThunkRegistry, $newtypeConstructors, $sourceMap, $localCallables);
+        emitFunction($b, $fn, $internal, $functionArity, $externalFns, $lambdaMeta, $wrapperRegistry, $ioThunkRegistry, $newtypeConstructors, $sourceMap, $localCallables, $foreignInterfaces);
     }
 
     foreach ($module->data as $decl) {
@@ -165,7 +148,7 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
         emitJvmMain($b, $internal, symbolName($module->entry->name), $functionArity[$module->entry->name] ?? 0);
     }
 
-    emitPendingIoThunkMethods($b, $internal, $functionArity, $externalFns, $evidenceMaps, $lambdaMeta, $wrapperRegistry, $ioThunkRegistry, $newtypeConstructors, $localCallables);
+    emitPendingIoThunkMethods($b, $internal, $functionArity, $externalFns, $lambdaMeta, $wrapperRegistry, $ioThunkRegistry, $newtypeConstructors, $localCallables, $foreignInterfaces);
 
     $classes = [$internal => $b->toBytes()];
     foreach ($wrapperRegistry->specs() as $spec) {
@@ -183,9 +166,9 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
 
 /**
  * @param array<string, int> $functionArity
- * @param array<string, string> $externalFns
- * @param array<string, array{module?: string, methods: array<string, string>}|array<string, string>> $evidenceMaps
+ * @param array<string, string> $externalFns * @param array<string, array{captures: list<string>, params: list<string>}> $lambdaMeta
  * @param array<string, true> $localCallables
+ * @param array<string, true> $foreignInterfaces interface owners this compilation declares
  */
 function emitFunction(
     ClassBuilder $b,
@@ -193,13 +176,13 @@ function emitFunction(
     string $owner,
     array $functionArity,
     array $externalFns,
-    array $evidenceMaps = [],
     array $lambdaMeta = [],
     ?JvmFnWrapperRegistry $wrapperRegistry = null,
     ?JvmIoThunkRegistry $ioThunkRegistry = null,
     array $newtypeConstructors = [],
     ?SourceMapBuilder $sourceMap = null,
     array $localCallables = [],
+    array $foreignInterfaces = [],
 ): void {
     $name = symbolName($fn->name);
     $params = $fn->params;
@@ -220,8 +203,8 @@ function emitFunction(
         0x0009,
         $maxLocals,
         $paramV,
-        static function (CodeBuilder $c, ConstantPool $cp) use ($fn, $name, $owner, $functionArity, $externalFns, $evidenceMaps, $lambdaMeta, $params, $arity, $wrapperRegistry, $ioThunkRegistry, $newtypeConstructors, $sourceMap, $localCallables): void {
-            $env = new EmitEnv($c, $cp, $owner, $functionArity, $externalFns, $arity, $evidenceMaps, $lambdaMeta, $wrapperRegistry, $ioThunkRegistry, $newtypeConstructors, $sourceMap, $localCallables);
+        static function (CodeBuilder $c, ConstantPool $cp) use ($fn, $name, $owner, $functionArity, $externalFns, $lambdaMeta, $params, $arity, $wrapperRegistry, $ioThunkRegistry, $newtypeConstructors, $sourceMap, $localCallables, $foreignInterfaces): void {
+            $env = new EmitEnv($c, $cp, $owner, $functionArity, $externalFns, $arity, $lambdaMeta, $wrapperRegistry, $ioThunkRegistry, $newtypeConstructors, $sourceMap, $localCallables, $foreignInterfaces);
             $env->currentMethod = $name;
             foreach ($params as $i => $p) {
                 $env->locals[$p] = $i;
@@ -430,10 +413,11 @@ final class EmitEnv
     /**
      * @param array<string, int> $functionArity
      * @param array<string, string> $externalFns
-     * @param array<string, array<string, string>> $evidenceMaps
      * @param array<string, array{captures: list<string>, params: list<string>}> $lambdaMeta
      * @param array<string, true> $newtypeConstructors
      * @param array<string, true> $localCallables
+     * @param array<string, true> $foreignInterfaces internal names of interface owners, from this
+     *   compilation's `foreign jvm type` declarations
      */
     public function __construct(
         public CodeBuilder $c,
@@ -442,13 +426,13 @@ final class EmitEnv
         public array $functionArity,
         public array $externalFns,
         int $paramCount,
-        public array $evidenceMaps = [],
         public array $lambdaMeta = [],
         public ?JvmFnWrapperRegistry $wrapperRegistry = null,
         public ?JvmIoThunkRegistry $ioThunkRegistry = null,
         public array $newtypeConstructors = [],
         public ?SourceMapBuilder $sourceMap = null,
         public array $localCallables = [],
+        public array $foreignInterfaces = [],
     ) {
         $this->nextLocal = $paramCount;
         for ($i = 0; $i < $paramCount; ++$i) {
@@ -574,22 +558,21 @@ final class JvmIoThunkRegistry
 
 /**
  * @param array<string, int> $functionArity
- * @param array<string, string> $externalFns
- * @param array<string, array{module?: string, methods: array<string, string>}|array<string, string>> $evidenceMaps
- * @param array<string, array{captures: list<string>, params: list<string>}> $lambdaMeta
+ * @param array<string, string> $externalFns * @param array<string, array{captures: list<string>, params: list<string>}> $lambdaMeta
  * @param array<string, true> $localCallables
+ * @param array<string, true> $foreignInterfaces
  */
 function emitPendingIoThunkMethods(
     ClassBuilder $b,
     string $owner,
     array $functionArity,
     array $externalFns,
-    array $evidenceMaps,
     array $lambdaMeta,
     ?JvmFnWrapperRegistry $wrapperRegistry,
     JvmIoThunkRegistry $ioThunkRegistry,
     array $newtypeConstructors = [],
     array $localCallables = [],
+    array $foreignInterfaces = [],
 ): void {
     while (($pending = $ioThunkRegistry->pending()) !== []) {
         $ioThunkRegistry->markEmitted();
@@ -608,8 +591,8 @@ function emitPendingIoThunkMethods(
                 0x0009,
                 $maxLocals,
                 $paramV,
-                static function (CodeBuilder $c, ConstantPool $cp) use ($owner, $functionArity, $externalFns, $evidenceMaps, $lambdaMeta, $wrapperRegistry, $ioThunkRegistry, $params, $arity, $body, $result, $newtypeConstructors, $localCallables): void {
-                    $env = new EmitEnv($c, $cp, $owner, $functionArity, $externalFns, $arity, $evidenceMaps, $lambdaMeta, $wrapperRegistry, $ioThunkRegistry, $newtypeConstructors, null, $localCallables);
+                static function (CodeBuilder $c, ConstantPool $cp) use ($owner, $functionArity, $externalFns, $lambdaMeta, $wrapperRegistry, $ioThunkRegistry, $params, $arity, $body, $result, $newtypeConstructors, $localCallables, $foreignInterfaces): void {
+                    $env = new EmitEnv($c, $cp, $owner, $functionArity, $externalFns, $arity, $lambdaMeta, $wrapperRegistry, $ioThunkRegistry, $newtypeConstructors, null, $localCallables, $foreignInterfaces);
                     foreach ($params as $i => $p) {
                         $env->locals[$p] = $i;
                     }
@@ -868,13 +851,6 @@ function emitStmt(EmitEnv $env, IR\Stmt $stmt): void
 
         case IR\DictCall::class:
             /** @var IR\DictCall $stmt */
-            $resolved = jvmResolveDictMethod($env, $stmt->evidence, $stmt->method);
-            if ($resolved !== null) {
-                emitStaticCall($env, $resolved['name'], $stmt->args, $resolved['module']);
-                $env->c->astore($env->localSlot('t' . $stmt->dest));
-
-                return;
-            }
             emitOperand($env, $stmt->evidence);
             $env->c->ldc($env->cp->string_($stmt->method));
             pushObjectArray($env, $stmt->args);
@@ -983,38 +959,6 @@ function emitTailRecall(EmitEnv $env, IR\TailRecall $stmt): void
     }
 
     $env->c->goto_($head);
-}
-
-function jvmResolveDictMethod(EmitEnv $env, IR\Operand $evidence, string $method): ?array
-{
-    $evName = null;
-    if ($evidence instanceof IR\ExprCall && $evidence->args === []) {
-        $evName = $evidence->callee;
-    } elseif ($evidence instanceof IR\FnRef) {
-        $evName = $evidence->name;
-    }
-    if ($evName === null) {
-        return null;
-    }
-
-    $entry = $env->evidenceMaps[$evName] ?? null;
-    if ($entry === null) {
-        return null;
-    }
-
-    if (isset($entry[$method]) && \is_string($entry[$method])) {
-        return ['name' => $entry[$method], 'module' => null];
-    }
-
-    $methods = $entry['methods'] ?? null;
-    if (! \is_array($methods) || ! isset($methods[$method])) {
-        return null;
-    }
-
-    return [
-        'name' => $methods[$method],
-        'module' => \is_string($entry['module'] ?? null) ? $entry['module'] : null,
-    ];
 }
 
 function emitIoCall(EmitEnv $env, IR\IoCall $stmt): void
@@ -1179,15 +1123,6 @@ function emitStaticCall(EmitEnv $env, string $name, array $args, ?string $ownerM
         return;
     }
     $callArgs = jvmCallArgs($env, $name, $args);
-    if (isset($env->lambdaMeta[$name])) {
-        $meta = $env->lambdaMeta[$name];
-        $fullArity = \count($meta['captures']) + \count($meta['params']);
-        if (\count($callArgs) < $fullArity) {
-            emitPartialValue($env, $name, $fullArity, $callArgs);
-
-            return;
-        }
-    }
     $argSlots = [];
     foreach ($callArgs as $arg) {
         emitOperand($env, $arg);
@@ -1433,21 +1368,6 @@ function emitOperand(EmitEnv $env, IR\Operand $op): void
         return;
     }
     if ($op instanceof IR\DictMethod) {
-        $resolved = jvmResolveDictMethod($env, $op->evidence, $op->method);
-        if ($resolved !== null) {
-            $arity = $env->functionArity[$resolved['name']] ?? null;
-            if ($arity === null && \is_string($resolved['module'] ?? null) && $resolved['module'] !== '') {
-                $arity = $env->functionArity[
-                    resolvedSymbol($resolved['module'], $resolved['name'])
-                ] ?? null;
-            }
-            if ($arity === null) {
-                throw new \RuntimeException("JVM emit: DictMethod `{$op->method}` resolved to unknown arity");
-            }
-            emitTopLevelFnValue($env, $resolved['name'], $arity, $resolved['module']);
-
-            return;
-        }
         emitOperand($env, $op->evidence);
         $env->c->ldc($env->cp->string_($op->method));
         $env->c->invokestatic(
@@ -1466,18 +1386,15 @@ function emitOperand(EmitEnv $env, IR\Operand $op): void
             return;
         }
         if (isset($env->lambdaMeta[$op->name])) {
-            $meta = $env->lambdaMeta[$op->name] ?? ['captures' => [], 'params' => []];
-            $captures = $meta['captures'] ?? [];
-            if ($captures !== []) {
-                $captureArgs = \array_map(
-                    static fn (string $capture): IR\Operand => new IR\Local($capture),
-                    $captures,
-                );
-                $fullArity = \count($captures) + \count($meta['params'] ?? []);
-                emitPartialValue($env, $op->name, $fullArity, $captureArgs);
+            $arity = \count($env->lambdaMeta[$op->name]['params'] ?? []);
+            if ($arity === 0) {
+                emitStaticCall($env, $op->name, []);
 
                 return;
             }
+            emitTopLevelFnValue($env, $op->name, $arity);
+
+            return;
         }
         $arity = $env->functionArity[$op->name] ?? null;
         if ($arity === null) {
@@ -3104,7 +3021,7 @@ function emitForeign(EmitEnv $env, IR\ForeignCall $op): void
             $argc,
             $retSlots,
         ),
-        'instance' => jvmIsInterface($resolved['class'])
+        'instance' => ($env->foreignInterfaces[$resolved['class']] ?? false) || jvmIsInterface($resolved['class'])
             ? $env->c->invokeinterface(
                 $env->cp->ifaceMethodRef($resolved['class'], $resolved['hostMember'], $desc),
                 $argc,

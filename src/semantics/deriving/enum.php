@@ -3,10 +3,9 @@
 namespace Moggi\Semantics\Deriving;
 
 use Moggi\Semantics\Types\TypeCheckState;
+use Moggi\Syntax\Ast;
 
 use function Moggi\Semantics\Types\typeFail;
-
-use Moggi\Syntax\Ast;
 
 /**
  * Stock `deriving Enum` for nullary-constructor enumerations.

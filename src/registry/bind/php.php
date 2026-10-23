@@ -2,22 +2,17 @@
 
 namespace Moggi\Registry\Bind;
 
-use function Moggi\Backend\DotNet\Dependencies\dotNetSidecarDiscriminator;
-
 use Moggi\Backend\Jvm\JvmBackend;
-
-use function Moggi\Backend\Php\Dependencies\phpDeclaredSymbols;
-
 use Moggi\Backend\Php\PhpBackend;
-
-use function Moggi\Cache\runtimeCacheDir;
-
 use ReflectionClass;
 use ReflectionFunction;
-
 use ReflectionFunctionAbstract;
 use ReflectionNamedType;
 use ReflectionType;
+
+use function Moggi\Backend\DotNet\Dependencies\dotNetSidecarDiscriminator;
+use function Moggi\Backend\Php\Dependencies\phpDeclaredSymbols;
+use function Moggi\Cache\runtimeCacheDir;
 
 /**
  * The PHP side of `moggi bind`: read a Composer-style tree on disk and describe

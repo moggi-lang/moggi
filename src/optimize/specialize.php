@@ -32,7 +32,8 @@ use function Moggi\Optimize\Interproc\setActiveForeignLeaves;
 use function Moggi\Optimize\Interproc\setActivePeFusionIndex;
 use function Moggi\Optimize\Interproc\substituteStmt;
 use function Moggi\Optimize\optimize;
-use function Moggi\Optimize\Support\isWiredInBoolCtor;
+use function Moggi\Semantics\Kernel\isBoolCtor;
+
 
 /**
  * Whole-program call-site specialization for concrete evidence / constant args.
@@ -1431,7 +1432,7 @@ function registerModuleConstructorNames(array &$fnsByModule, string $moduleName,
 {
     foreach ($module->data as $decl) {
         foreach ($decl->constructors as $ctor) {
-            if (isWiredInBoolCtor($ctor->name)) {
+            if (isBoolCtor($ctor->name)) {
                 continue;
             }
             $fnsByModule[$moduleName][$ctor->name] = true;
@@ -1598,7 +1599,7 @@ function qualifyBurnedFnRefsForDest(array $burned, string $destModule, array $de
             $name !== ''
             && ! \str_contains($name, '::')
             && ! \str_contains($name, '\\')
-            && ! isWiredInBoolCtor($name)
+            && ! isBoolCtor($name)
             && isset($destLocalNames[$name])
         ) {
             $out[] = new IR\FnRef(resolvedSymbol($destModule, $name));
@@ -1823,7 +1824,7 @@ function qualifySourceModuleCallees(
         if ($name === '' || \str_contains($name, '::') || \str_contains($name, '\\')) {
             return $name;
         }
-        if (isWiredInBoolCtor($name)) {
+        if (isBoolCtor($name)) {
             return $name;
         }
         $sourceKind = $sourceFnNames[$name] ?? null;
@@ -1891,6 +1892,7 @@ function qualifySourceModuleCallees(
                 \array_map($rewriteOperand, $stmt->args),
                 $stmt->dest,
                 $stmt->srcLoc,
+                $stmt->localEvidence,
             ),
             IR\Assign::class => new IR\Assign($stmt->dest, $rewriteOperand($stmt->value)),
             IR\Ret::class => new IR\Ret($rewriteOperand($stmt->value)),

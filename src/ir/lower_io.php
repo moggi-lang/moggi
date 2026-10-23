@@ -2,11 +2,10 @@
 
 namespace Moggi\IR;
 
-use function Moggi\Semantics\IntrinsicRegistry\ioPrimopRole;
-
-use function Moggi\Semantics\IoBoundary\isIoUnitType;
-
 use Moggi\Syntax\Ast;
+
+use function Moggi\Semantics\IntrinsicRegistry\ioPrimopRole;
+use function Moggi\Semantics\IoBoundary\isIoUnitType;
 
 /** @param array<int, Ast\AstNode> $items @return array<string, true> */
 function ioActionReturnFnNames(array $items): array

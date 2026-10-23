@@ -2,15 +2,12 @@
 
 namespace Moggi\Modules;
 
-use function Moggi\Errors\appendDidYouMean;
-
 use Moggi\Semantics\TypeExpr\Scheme;
-
-use function Moggi\Semantics\Types\ambiguousImportMessage;
-
 use Moggi\Semantics\Types\TypeError;
 use Moggi\Syntax\Ast;
 
+use function Moggi\Errors\appendDidYouMean;
+use function Moggi\Semantics\Types\ambiguousImportMessage;
 use function Moggi\Syntax\exportedChildrenSpec;
 use function Moggi\Syntax\isConstructorName;
 use function Moggi\Syntax\surfaceConstructorAlias;

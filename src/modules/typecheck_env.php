@@ -2,38 +2,31 @@
 
 namespace Moggi\Modules;
 
-use function Moggi\Backend\backendById;
-use function Moggi\Cache\moduleGet;
-use function Moggi\Cache\modulePut;
-
-use Moggi\IR;
-use Moggi\Semantics\Deriving\ClassDeriveFacts;
-
-use function Moggi\Semantics\Deriving\derivedProjectInstanceRecords;
-use function Moggi\Semantics\Kernel\boolTypeName;
-
-use Moggi\Semantics\Kinds;
-
-use function Moggi\Semantics\Registry\foreignFunctionDecl;
-
-use function Moggi\Semantics\Registry\registerSurfaceConstructorAlias;
-
-use Moggi\Semantics\TypeExpr\Scheme;
-use Moggi\Pipeline\CompilationContext;
-
-use Moggi\Semantics\Types;
-use Moggi\Syntax\Ast;
-
-use function Moggi\Syntax\Ast\moduleName;
-use function Moggi\Syntax\isConstructorName;
-
-require_once \dirname(__DIR__) . '/semantics/deriving/framework.php';
-
 /**
  * Type-environment plumbing for the module pipeline: project-wide class index,
  * per-module local type environments, import/export env merging, and the
  * module subset selection used for `--only` typechecking.
  */
+
+use Moggi\IR;
+use Moggi\Semantics\Deriving\ClassDeriveFacts;
+use Moggi\Semantics\Kinds;
+use Moggi\Semantics\TypeExpr\Scheme;
+use Moggi\Pipeline\CompilationContext;
+use Moggi\Semantics\Types;
+use Moggi\Syntax\Ast;
+
+use function Moggi\Backend\backendById;
+use function Moggi\Cache\moduleGet;
+use function Moggi\Cache\modulePut;
+use function Moggi\Semantics\Deriving\derivedProjectInstanceRecords;
+use function Moggi\Semantics\Kernel\boolTypeName;
+use function Moggi\Semantics\Registry\foreignFunctionDecl;
+use function Moggi\Semantics\Registry\registerSurfaceConstructorAlias;
+use function Moggi\Syntax\Ast\moduleName;
+use function Moggi\Syntax\isConstructorName;
+
+require_once \dirname(__DIR__) . '/semantics/deriving/framework.php';
 
 /**
  * Types stay module-scoped: the state starts from the module's declared names and

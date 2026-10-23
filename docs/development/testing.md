@@ -103,10 +103,11 @@ backend but the machine could not run it (a missing toolchain).
 ## The native smoke (`--native`)
 
 One example (`examples/twice`) is additionally built into a native executable — the micro PHP
-runtime on php, GraalVM `native-image` on jvm, .NET Native AOT on dotnet — and run, comparing stdout
-with the same golden the managed run uses. It is a **mode of that example's case, not a case of its
-own**: the example already compiles and runs on every backend, and the flag only adds "…and also as
-an executable".
+runtime on php, GraalVM `native-image` on jvm, .NET Native AOT on dotnet — and run, comparing its
+stdout with the same program built the ordinary way and run on the same backend. The example carries
+no golden (an example's case is only that it still compiles), so the managed run is the reference. It
+is a **mode of that example's case, not a case of its own**, and the flag only adds "…and also as an
+executable".
 
 It is opt-in because the build takes minutes. If the toolchain is not at hand, the case is reported
 as skipped with its name (`GraalVM native-image not available`, `micro PHP runtime not available`);
@@ -126,7 +127,10 @@ A `.php` file is a case or it is support — there is no third kind. Helpers a s
 path live under `tests/suite/` or a directory `supportInputPaths()` names, never beside the cases.
 
 Which means the files have to agree: discovery refuses a fixture no golden claims and a golden no
-input claims, because either one is a case that never runs rather than a case that fails. A `.mog` a
+input claims, because either one is a case that never runs rather than a case that fails. The one
+exception is `examples/`, where a program is a case by existing — its verdict is that it still
+compiles, for the backends its `foreign` declarations name — so an example needs no golden and none
+belongs beside it. A `.mog` a
 script case opens by path is the one input claimed by no golden, and it is named in
 `supportInputPaths()` in `tests/suite/support/discovery.php`.
 

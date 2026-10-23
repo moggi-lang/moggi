@@ -2,17 +2,14 @@
 
 namespace Moggi\Optimize\Support;
 
-use function Moggi\Backend\Meta\lambdaMetaFromCaptures;
 
 use Moggi\IR;
 
-use function Moggi\IR\Visit\freeLocalsInBlock;
 use function Moggi\IR\Visit\mapOperandChildren;
 use function Moggi\IR\Visit\operandChildren;
 use function Moggi\IR\Visit\stmtDirectOperands;
 use function Moggi\IR\Visit\stmtNestedBlocks;
 use function Moggi\IR\Visit\walkBlock;
-use function Moggi\Semantics\Kernel\isBoolCtor;
 
 function operandEqual(IR\Operand $left, IR\Operand $right): bool
 {
@@ -362,17 +359,6 @@ function isLambdaName(string $name): bool
     return \str_starts_with($name, 'λ');
 }
 
-/**
- * A constructor of the host-boolean type. The library declares it
- * (`Data.Bool`: `data Bool = False | True`), the backends lower it to the host boolean, so its
- * constructors are bare in IR — never qualified to `Data.Bool::True` the way a user data
- * constructor is — and their identity is asked of the kernel key rather than spelled here.
- */
-function isWiredInBoolCtor(string $name): bool
-{
-    return isBoolCtor($name);
-}
-
 function preserveMatchArm(IR\MatchArm $arm, IR\Block $body): IR\MatchArm
 {
     return $arm->withBody($body);
@@ -402,24 +388,6 @@ function mapStmtNestedBlocks(IR\Stmt $stmt, callable $mapBlock): IR\Stmt
         IR\Loop::class => new IR\Loop($mapBlock($stmt->body)),
         default => $stmt,
     };
-}
-
-/**
- * The captures of every lifted function in `$byName` (see
- * {@see indexCapturedFunctions}).
- *
- * @param array<string, IR\FunctionDecl> $byName
- * @return array<string, array{captures: list<string>, params: list<string>}>
- */
-function buildLambdaMeta(array $byName): array
-{
-    return lambdaMetaFromCaptures(
-        $byName,
-        static fn (IR\FunctionDecl $function): array => freeLocalsInBlock(
-            $function->body,
-            \array_fill_keys($function->params, true),
-        ),
-    );
 }
 
 /** The lifted functions of a module, the ones that take captures. @param list<IR\FunctionDecl> $functions */

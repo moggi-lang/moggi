@@ -2,13 +2,15 @@
 
 namespace Moggi\Backend\DotNet\Codegen;
 
+use Moggi\Debug\SourceMapBuilder;
+use Moggi\IR;
+
 use function Moggi\Backend\DotNet\Foreign\dotNetHostIsValueType;
 use function Moggi\Backend\DotNet\Foreign\isDotNetConstProperty;
 use function Moggi\Backend\DotNet\resolveDotnetExecutable;
 use function Moggi\Backend\DotNet\Verify\dotNetConstLiteralValue;
 use function Moggi\Backend\DotNet\Verify\ensureInspectorBinary;
 use function Moggi\Backend\DotNet\Verify\inspectDotNetType;
-
 use function Moggi\Backend\DotNet\Foreign\resolveDotNetForeignPath;
 use function Moggi\Backend\DotNet\Il\ilCanonicalize;
 use function Moggi\Backend\DotNet\Il\ilInstructionSize;
@@ -26,13 +28,8 @@ use function Moggi\Backend\Meta\newtypeConstructorMap;
 use function Moggi\Backend\Meta\newtypeConstructorMapFromRegistry;
 use function Moggi\Backend\Meta\operandCallSrcLoc;
 use function Moggi\Debug\normalizeDisplayPath;
-
-use Moggi\Debug\SourceMapBuilder;
-
 use function Moggi\Debug\symbolId;
-
-use Moggi\IR;
-
+use function Moggi\IR\Callables\captureMeta;
 use function Moggi\IR\Visit\collectLocalsInBlock;
 use function Moggi\IR\Visit\collectLocalsInOperand;
 use function Moggi\IR\Visit\stmtNestedBlocks;
@@ -40,7 +37,6 @@ use function Moggi\IR\Visit\walkBlock;
 use function Moggi\IR\Visit\walkOperand;
 use function Moggi\Modules\parseResolvedSymbol;
 use function Moggi\Modules\resolvedSymbol;
-use function Moggi\Optimize\Support\buildLambdaMeta;
 use function Moggi\Optimize\Support\indexCapturedFunctions;
 use function Moggi\Semantics\Kernel\boolCtorValue;
 
@@ -69,7 +65,7 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
     $displaySource = normalizeDisplayPath($module->sourceFile !== '' ? $module->sourceFile : $sourcePath);
     $artifact = (string) ($options['outputRelative'] ?? ($owner . '.il'));
     $sourceMap = new SourceMapBuilder($moduleName !== '' ? $moduleName : 'Main', 'dotnet', $artifact);
-    $lambdaMeta = buildLambdaMeta(indexCapturedFunctions($module->functions));
+    $lambdaMeta = captureMeta(indexCapturedFunctions($module->functions));
     $wrapperRegistry = new FnWrapperRegistry();
     $ioThunkRegistry = new IoThunkRegistry();
 
@@ -88,11 +84,6 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
     foreach (constructorArityMapFromRegistry($options['imports']['importedData'] ?? []) as $name => $arity) {
         if (! isset($localBindings[$name])) {
             $functionArity[$name] = $arity;
-        }
-    }
-    foreach (\array_keys($options['globalEvidenceMaps'] ?? []) as $evidenceName) {
-        if (! isset($functionArity[$evidenceName])) {
-            $functionArity[$evidenceName] = 0;
         }
     }
     foreach ($options['externalFnRuntimeArity'] ?? [] as $name => $arity) {
@@ -143,20 +134,12 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
         ...newtypeConstructorMap($module->data),
     ];
 
-    $evidenceMaps = $options['globalEvidenceMaps'] ?? [];
-    foreach ($module->instanceEvidence as $ev) {
-        $evidenceMaps[$ev->evidenceName] = [
-            'module' => $moduleName !== '' ? $moduleName : ($options['artifactModuleName'] ?? ''),
-            'methods' => $ev->methods,
-        ];
-    }
-
     foreach ($module->functions as $fn) {
         $sourceMap->ensureSymbol(
             $fn->srcLoc ?? new IR\SrcLoc($moduleName, $fn->name, $displaySource, 0, 0),
             symbolName($fn->name),
         );
-        emitFunction($classBuilder, $fn, $owner, $functionArity, $externalFns, $evidenceMaps, $lambdaMeta, $wrapperRegistry, $ioThunkRegistry, $newtypeConstructors, $sourceMap, $localCallables);
+        emitFunction($classBuilder, $fn, $owner, $functionArity, $externalFns, $lambdaMeta, $wrapperRegistry, $ioThunkRegistry, $newtypeConstructors, $sourceMap, $localCallables);
     }
 
     foreach ($module->data as $decl) {
@@ -171,7 +154,7 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
         emitDotNetMain($classBuilder, $owner, symbolName($module->entry->name), $functionArity[$module->entry->name] ?? 0);
     }
 
-    emitPendingIoThunkMethods($classBuilder, $owner, $functionArity, $externalFns, $evidenceMaps, $lambdaMeta, $wrapperRegistry, $ioThunkRegistry, $newtypeConstructors, $localCallables);
+    emitPendingIoThunkMethods($classBuilder, $owner, $functionArity, $externalFns, $lambdaMeta, $wrapperRegistry, $ioThunkRegistry, $newtypeConstructors, $localCallables);
 
     $types = [$owner => $classBuilder->toIl()];
     foreach ($wrapperRegistry->specs() as $spec) {
@@ -384,7 +367,6 @@ final class EmitEnv
     /**
      * @param array<string, int> $functionArity
      * @param array<string, string> $externalFns
-     * @param array<string, array{module?: string, methods: array<string, string>}|array<string, string>> $evidenceMaps
      * @param array<string, array{captures: list<string>, params: list<string>}> $lambdaMeta
      * @param array<string, true> $newtypeConstructors
      * @param array<string, true> $localCallables
@@ -394,7 +376,6 @@ final class EmitEnv
         public string $owner,
         public array $functionArity,
         public array $externalFns,
-        public array $evidenceMaps = [],
         public array $lambdaMeta = [],
         public ?FnWrapperRegistry $wrapperRegistry = null,
         public ?IoThunkRegistry $ioThunkRegistry = null,
@@ -498,7 +479,6 @@ final class IoThunkRegistry
 /**
  * @param array<string, int> $functionArity
  * @param array<string, string> $externalFns
- * @param array<string, array{module?: string, methods: array<string, string>}|array<string, string>> $evidenceMaps
  * @param array<string, array{captures: list<string>, params: list<string>}> $lambdaMeta
  * @param array<string, true> $localCallables
  */
@@ -508,7 +488,6 @@ function emitFunction(
     string $owner,
     array $functionArity,
     array $externalFns,
-    array $evidenceMaps,
     array $lambdaMeta,
     FnWrapperRegistry $wrapperRegistry,
     IoThunkRegistry $ioThunkRegistry,
@@ -527,7 +506,7 @@ function emitFunction(
     $arity = \count($params);
 
     $m = new MethodIl();
-    $env = new EmitEnv($m, $owner, $functionArity, $externalFns, $evidenceMaps, $lambdaMeta, $wrapperRegistry, $ioThunkRegistry, $newtypeConstructors, $sourceMap, $localCallables);
+    $env = new EmitEnv($m, $owner, $functionArity, $externalFns, $lambdaMeta, $wrapperRegistry, $ioThunkRegistry, $newtypeConstructors, $sourceMap, $localCallables);
     foreach ($params as $i => $p) {
         $env->locals[$p] = 'arg:' . $i;
     }
@@ -566,7 +545,7 @@ function emitEvidence(
     $ctxArity = \count($ev->contextParams);
 
     $m = new MethodIl();
-    $env = new EmitEnv($m, $owner, $functionArity, $externalFns, [], [], $wrapperRegistry, null, [], null, $localCallables);
+    $env = new EmitEnv($m, $owner, $functionArity, $externalFns, [], $wrapperRegistry, null, [], null, $localCallables);
     foreach ($ev->contextParams as $i => $p) {
         $env->locals[$p] = 'arg:' . $i;
     }
@@ -677,7 +656,6 @@ function emitDotNetMain(ClassIlBuilder $b, string $owner, string $mainSym, int $
 /**
  * @param array<string, int> $functionArity
  * @param array<string, string> $externalFns
- * @param array<string, array{module?: string, methods: array<string, string>}|array<string, string>> $evidenceMaps
  * @param array<string, array{captures: list<string>, params: list<string>}> $lambdaMeta
  */
 function emitPendingIoThunkMethods(
@@ -685,7 +663,6 @@ function emitPendingIoThunkMethods(
     string $owner,
     array $functionArity,
     array $externalFns,
-    array $evidenceMaps,
     array $lambdaMeta,
     FnWrapperRegistry $wrapperRegistry,
     IoThunkRegistry $ioThunkRegistry,
@@ -702,7 +679,7 @@ function emitPendingIoThunkMethods(
             $result = $spec['result'];
 
             $m = new MethodIl();
-            $env = new EmitEnv($m, $owner, $functionArity, $externalFns, $evidenceMaps, $lambdaMeta, $wrapperRegistry, $ioThunkRegistry, $newtypeConstructors, null, $localCallables);
+            $env = new EmitEnv($m, $owner, $functionArity, $externalFns, $lambdaMeta, $wrapperRegistry, $ioThunkRegistry, $newtypeConstructors, null, $localCallables);
             foreach ($params as $i => $p) {
                 $env->locals[$p] = 'arg:' . $i;
             }
@@ -944,13 +921,6 @@ function emitStmt(EmitEnv $env, IR\Stmt $stmt): void
 
         case IR\DictCall::class:
             /** @var IR\DictCall $stmt */
-            $resolved = resolveDictMethod($env, $stmt->evidence, $stmt->method);
-            if ($resolved !== null) {
-                emitStaticCall($env, $resolved['name'], $stmt->args, $resolved['module']);
-                $env->m->store($env->localSlot('t' . $stmt->dest));
-
-                return;
-            }
             emitOperand($env, $stmt->evidence);
             $env->m->emit('ldstr ' . ilString($stmt->method));
             pushObjectArray($env, $stmt->args);
@@ -1049,39 +1019,6 @@ function emitTailRecall(EmitEnv $env, IR\TailRecall $stmt): void
     }
 
     $env->m->emit('br ' . $head);
-}
-
-/** @return ?array{name: string, module: ?string} */
-function resolveDictMethod(EmitEnv $env, IR\Operand $evidence, string $method): ?array
-{
-    $evName = null;
-    if ($evidence instanceof IR\ExprCall && $evidence->args === []) {
-        $evName = $evidence->callee;
-    } elseif ($evidence instanceof IR\FnRef) {
-        $evName = $evidence->name;
-    }
-    if ($evName === null) {
-        return null;
-    }
-
-    $entry = $env->evidenceMaps[$evName] ?? null;
-    if ($entry === null) {
-        return null;
-    }
-
-    if (isset($entry[$method]) && \is_string($entry[$method])) {
-        return ['name' => $entry[$method], 'module' => null];
-    }
-
-    $methods = $entry['methods'] ?? null;
-    if (! \is_array($methods) || ! isset($methods[$method])) {
-        return null;
-    }
-
-    return [
-        'name' => $methods[$method],
-        'module' => \is_string($entry['module'] ?? null) ? $entry['module'] : null,
-    ];
 }
 
 function emitIoCall(EmitEnv $env, IR\IoCall $stmt): void
@@ -1234,15 +1171,6 @@ function emitStaticCall(EmitEnv $env, string $name, array $args, ?string $ownerM
         return;
     }
     $callArgs = callArgsForLambda($env, $name, $args);
-    if (isset($env->lambdaMeta[$name])) {
-        $meta = $env->lambdaMeta[$name];
-        $fullArity = \count($meta['captures']) + \count($meta['params']);
-        if (\count($callArgs) < $fullArity) {
-            emitPartialValue($env, $name, $fullArity, $callArgs);
-
-            return;
-        }
-    }
     foreach ($callArgs as $arg) {
         emitOperand($env, $arg);
     }
@@ -1538,21 +1466,6 @@ function emitOperand(EmitEnv $env, IR\Operand $op): void
         return;
     }
     if ($op instanceof IR\DictMethod) {
-        $resolved = resolveDictMethod($env, $op->evidence, $op->method);
-        if ($resolved !== null) {
-            $arity = $env->functionArity[$resolved['name']] ?? null;
-            if ($arity === null && \is_string($resolved['module'] ?? null) && $resolved['module'] !== '') {
-                $arity = $env->functionArity[
-                    resolvedSymbol($resolved['module'], $resolved['name'])
-                ] ?? null;
-            }
-            if ($arity === null) {
-                throw new \RuntimeException("DotNet emit: DictMethod `{$op->method}` resolved to unknown arity");
-            }
-            emitTopLevelFnValue($env, $resolved['name'], $arity, $resolved['module']);
-
-            return;
-        }
         emitOperand($env, $op->evidence);
         $env->m->emit('ldstr ' . ilString($op->method));
         $env->m->emit('call object Moggi.Rt.RT::DictMethod(object, string)');
@@ -1567,18 +1480,15 @@ function emitOperand(EmitEnv $env, IR\Operand $op): void
             return;
         }
         if (isset($env->lambdaMeta[$op->name])) {
-            $meta = $env->lambdaMeta[$op->name];
-            $captures = $meta['captures'] ?? [];
-            if ($captures !== []) {
-                $captureArgs = \array_map(
-                    static fn (string $capture): IR\Operand => new IR\Local($capture),
-                    $captures,
-                );
-                $fullArity = \count($captures) + \count($meta['params'] ?? []);
-                emitPartialValue($env, $op->name, $fullArity, $captureArgs);
+            $arity = \count($env->lambdaMeta[$op->name]['params'] ?? []);
+            if ($arity === 0) {
+                emitStaticCall($env, $op->name, []);
 
                 return;
             }
+            emitTopLevelFnValue($env, $op->name, $arity);
+
+            return;
         }
         $arity = $env->functionArity[$op->name] ?? null;
         if ($arity === null) {

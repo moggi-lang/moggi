@@ -2,10 +2,9 @@
 
 namespace Moggi\CLI\Commands;
 
-use function Moggi\Registry\badPackageMarker;
-
 use Moggi\Registry\FetchLog;
 
+use function Moggi\Registry\badPackageMarker;
 use function Moggi\Registry\isPackageName;
 use function Moggi\Registry\newestFirst;
 use function Moggi\Registry\prettyJson;

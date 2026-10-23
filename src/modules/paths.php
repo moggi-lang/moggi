@@ -2,13 +2,13 @@
 
 namespace Moggi\Modules;
 
-use function Moggi\Paths\canonicalSeparators;
-
 /**
  * Output-tree layout for module compilation: where a module's artifact sits under the output root.
  * Spelling and relative-path math live in Moggi\Paths; semantic import/export resolution and
  * stdlib discovery are not here.
  */
+
+use function Moggi\Paths\canonicalSeparators;
 
 function moduleFilenameWarning(string $path, string $moduleName): ?string
 {

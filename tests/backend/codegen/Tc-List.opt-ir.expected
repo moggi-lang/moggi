@@ -12,7 +12,8 @@ module
   function len()
       ret call listLength(@__ev_Foldable_List, @joined)
   function total()
-      t3 = dict_call @__ev_Foldable_List->sum(@__ev_Num_Int, @joined)
+      t4 = call __ev_Foldable_List()
+      t3 = dict_call t4->sum(@__ev_Num_Int, @joined)
       ret t3
   function doubled()
       ret call concatMap(@__ev_Foldable_List, @λ0, @joined)
@@ -21,8 +22,8 @@ module
   function built()
       ret [1, 2, 3]
   function fromCons()
-      t6 = call tail(@built)
-      ret intrinsic listCons#(1, t6)
+      t7 = call tail(@built)
+      ret intrinsic listCons#(1, t7)
   function same()
       ret intrinsic listEq#(@built, [1, 2, 3])
   function builtLen()
@@ -38,8 +39,8 @@ module
         arm []
             ret 0
         arm x : rest
-            t10 = call sumList(intrinsic listTail#(xs))
-            ret intrinsic intAdd#(intrinsic listHead#(xs), t10)
+            t11 = call sumList(intrinsic listTail#(xs))
+            ret intrinsic intAdd#(intrinsic listHead#(xs), t11)
   function headOrZero(xs)
       match_return xs
         arm []
@@ -65,8 +66,9 @@ module
   function zipped()
       ret call zip(@taken, @dropped)
   function found()
-      t19 = dict_call @__ev_Foldable_List->elem(@__ev_Eq_Int, 3, @xs)
-      ret t19
+      t22 = call __ev_Foldable_List()
+      t21 = dict_call t22->elem(@__ev_Eq_Int, 3, @xs)
+      ret t21
   function whileTaken()
       ret call takeWhile(@λ3, @xs)
   function whileDropped()
@@ -80,9 +82,9 @@ module
   function emptyGuard()
       ret call concatMap(@__ev_Foldable_List, @λ9, [1, 2, 3])
   function format(__ev_Show, xs)
-      t35 = call __ev_Show_List(__ev_Show)
-      t34 = dict_call t35->show(xs)
-      ret t34
+      t42 = call __ev_Show_List(__ev_Show)
+      t41 = dict_call t42->show(xs)
+      ret t41
   function shown()
       ret call format(@__ev_Show_Bool, [@True, @False])
   function λ0(x)
@@ -90,26 +92,31 @@ module
   function λ1(acc, x)
       ret intrinsic intAdd#(acc, x)
   function λ2(x)
-      t15 = dict_call @__ev_Foldable_List->elem(@__ev_Eq_Int, x, [2, 4])
-      ret t15
+      t17 = call __ev_Foldable_List()
+      t16 = dict_call t17->elem(@__ev_Eq_Int, x, [2, 4])
+      ret t16
   function λ3(x)
-      t20 = dict_call @__ev_Foldable_List->elem(@__ev_Eq_Int, x, [1, 2, 3])
-      ret t20
+      t24 = call __ev_Foldable_List()
+      t23 = dict_call t24->elem(@__ev_Eq_Int, x, [1, 2, 3])
+      ret t23
   function λ4(x)
-      t22 = dict_call @__ev_Foldable_List->elem(@__ev_Eq_Int, x, [1, 2])
-      ret t22
+      t27 = call __ev_Foldable_List()
+      t26 = dict_call t27->elem(@__ev_Eq_Int, x, [1, 2])
+      ret t26
   function λ5(x)
       ret [intrinsic intMul#(x, 2)]
   function λ6(x)
-      t25 = dict_call @__ev_Foldable_List->elem(@__ev_Eq_Int, x, [3, 4, 5])
-      match_return t25
+      t31 = call __ev_Foldable_List()
+      t30 = dict_call t31->elem(@__ev_Eq_Int, x, [3, 4, 5])
+      match_return t30
         arm True
             ret [x]
         arm False
             ret []
   function λ8(y)
-      t28 = dict_call @__ev_Foldable_List->elem(@__ev_Eq_Int, intrinsic intAdd#(x, y), [21, 22])
-      match_return t28
+      t35 = call __ev_Foldable_List()
+      t34 = dict_call t35->elem(@__ev_Eq_Int, intrinsic intAdd#(x, y), [21, 22])
+      match_return t34
         arm True
             ret [intrinsic intAdd#(x, y)]
         arm False

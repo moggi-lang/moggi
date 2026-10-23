@@ -138,7 +138,7 @@ function mapOperandChildren(IR\Operand $operand, callable $mapChild): IR\Operand
 
             return $evidence === $operand->evidence
                 ? $operand
-                : new IR\DictMethod($evidence, $operand->method);
+                : new IR\DictMethod($evidence, $operand->method, $operand->localEvidence);
         })(),
         IR\ListLit::class => (function () use ($operand, $mapChild): IR\Operand {
             [$elements, $changed] = mapChildList($operand->elements, $mapChild);

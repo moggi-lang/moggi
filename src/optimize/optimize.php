@@ -6,8 +6,10 @@ use Moggi\IR\Block;
 use Moggi\IR\FunctionDecl;
 use Moggi\IR\Module;
 use Moggi\IR\Stmt;
+use Moggi\Optimize\PassCheckpoints;
 
 use function Moggi\IR\entryFromFunctions;
+use function Moggi\IR\Callables\captureMeta;
 use function Moggi\Optimize\CaseFold\foldKnownConstructorsBlock;
 use function Moggi\Optimize\CaseFold\foldKnownMatchesInItems;
 use function Moggi\Optimize\Dict\indexEvidenceByName;
@@ -31,15 +33,12 @@ use function Moggi\Optimize\Local\foldMatchReturn;
 use function Moggi\Optimize\Local\foldSingleUseCallResults;
 use function Moggi\Optimize\Local\foldTailReturn;
 use function Moggi\Optimize\Local\optimizeBlock;
-use function Moggi\Optimize\Partial\bindLambdaCaptures;
+use function Moggi\Optimize\Partial\legalizeCallables;
 use function Moggi\Optimize\Partial\foldPartialApply;
 use function Moggi\Optimize\Partial\normalizeKnownApplies;
 use function Moggi\Optimize\Partial\specializePartialReturnFunction;
-use function Moggi\Optimize\Support\buildLambdaMeta;
 use function Moggi\Optimize\Support\indexCapturedFunctions;
 use function Moggi\Optimize\Tco\eliminateTailRecursion;
-
-use Moggi\Optimize\PassCheckpoints;
 
 /** Runs the stage sequence, each stage checked under its own checkpoint label. */
 function optimize(Module $module): Module
@@ -118,10 +117,10 @@ function optimize(Module $module): Module
             true,
         );
         $functions = PassCheckpoints\runOnFunctions(
-            'bind-lambda-captures',
+            'legalize-callables',
             $module,
             $functions,
-            bindLambdaCaptures(...),
+            legalizeCallables(...),
             false,
         );
         $functions = PassCheckpoints\runOnFunctions(
@@ -136,7 +135,7 @@ function optimize(Module $module): Module
             $module,
             $functions,
             static function (array $fns): array {
-                $captureMeta = buildLambdaMeta(indexCapturedFunctions($fns));
+                $captureMeta = captureMeta(indexCapturedFunctions($fns));
 
                 return \array_map(
                     static fn (FunctionDecl $function): FunctionDecl => specializePartialReturnFunction(
@@ -201,6 +200,14 @@ function optimize(Module $module): Module
             false,
         );
         clearHostEffectFunctions();
+
+        $functions = PassCheckpoints\runOnFunctions(
+            'legalize-callables-final',
+            $module,
+            $functions,
+            legalizeCallables(...),
+            false,
+        );
 
         $result = new Module($functions, $module->data, $instanceEvidence, entryFromFunctions($functions), $moduleName, $module->sourceFile);
     } finally {

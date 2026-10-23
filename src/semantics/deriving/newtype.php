@@ -12,11 +12,11 @@ use Moggi\Semantics\TypeExpr\TVar;
 use Moggi\Semantics\TypeExpr\TVarApp;
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Semantics\Types\TypeCheckState;
+use Moggi\Syntax\Ast;
 
 use function Moggi\Semantics\Types\typeChildren;
 use function Moggi\Semantics\Types\typeFail;
 
-use Moggi\Syntax\Ast;
 
 /**
  * Generalized newtype deriving: reuse the underlying type's instance by

@@ -2,23 +2,18 @@
 
 namespace Moggi\Modules;
 
+use Moggi\Semantics\Types\TypeError;
+use Moggi\Syntax\Ast;
+use Moggi\Syntax\Lexer\LexError;
+use Moggi\Syntax\Parser\ParseError;
+
 use function Moggi\Errors\appendDidYouMean;
 use function Moggi\Paths\canonicalPath;
 use function Moggi\Paths\canonicalSeparators;
-
-use Moggi\Semantics\Types\TypeError;
-use Moggi\Syntax\Ast;
-
 use function Moggi\Syntax\Ast\moduleName;
 use function Moggi\Syntax\Lexer\lex;
-
-use Moggi\Syntax\Lexer\LexError;
-
 use function Moggi\Syntax\Parser\importedFixityForImports;
 use function Moggi\Syntax\Parser\mergeFixity;
-
-use Moggi\Syntax\Parser\ParseError;
-
 use function Moggi\Syntax\Parser\parseModuleHeader;
 
 /**

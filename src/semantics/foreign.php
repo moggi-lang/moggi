@@ -3,17 +3,16 @@
 namespace Moggi\Semantics\Foreign;
 
 use Moggi\Backend;
+use Moggi\IR\IoWrap;
+use Moggi\Modules;
+use Moggi\Semantics\Types\TypeCheckState;
+use Moggi\Syntax\Ast;
 
 use function Moggi\Backend\backendById;
 use function Moggi\Backend\implementedBackendIds;
 use function Moggi\Backend\isBackendImplemented;
-
 use function Moggi\Errors\formatKnownAlternatives;
 use function Moggi\Foreign\parseForeignPath;
-
-use Moggi\IR\IoWrap;
-use Moggi\Modules;
-
 use function Moggi\Semantics\IntrinsicRegistry\isMagicHashName;
 use function Moggi\Semantics\IoBoundary\isIoType;
 use function Moggi\Semantics\IoBoundary\isIoTypeConName;
@@ -25,12 +24,7 @@ use function Moggi\Semantics\Kernel\boundaryReifiedTypeName;
 use function Moggi\Semantics\Kernel\boundaryStringTypeName;
 use function Moggi\Semantics\Kernel\isBoundaryContainerType;
 use function Moggi\Semantics\Kernel\isBoundaryHandleType;
-
-use Moggi\Semantics\Types\TypeCheckState;
-
 use function Moggi\Semantics\Types\typeFail;
-
-use Moggi\Syntax\Ast;
 
 function checkForeignImportItem(TypeCheckState $state, Ast\ForeignImportDecl $item): Ast\FunctionDecl
 {

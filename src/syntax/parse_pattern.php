@@ -3,10 +3,9 @@
 namespace Moggi\Syntax\Parser;
 
 use Moggi\Syntax\Ast;
+use Moggi\Syntax\Lexer\TokenKind;
 
 use function Moggi\Syntax\isConstructorOperator;
-
-use Moggi\Syntax\Lexer\TokenKind;
 
 /**
  * @return list<Ast\PatField>

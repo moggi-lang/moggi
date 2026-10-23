@@ -16,9 +16,12 @@ use Moggi\Modules;
 use function Moggi\Modules\filterCodegenImportsForIr;
 use function Moggi\Paths\globPaths;
 
+use Moggi\Pipeline\CompilationContext;
 use Moggi\Pipeline\PipelineArtifacts;
 use Moggi\Pipeline\PipelineRequest;
 use Moggi\Pipeline\PipelineStage;
+
+use Moggi\Pipeline\CompilePurpose;
 
 use function Moggi\Pipeline\run as pipelineRun;
 use function Moggi\Repl\ensureBasePrepared;
@@ -380,7 +383,19 @@ function runEntrySubprocess(State $state, string $entryName): string
             throw new \RuntimeException("cannot create {$outDir}");
         }
 
-        $built = Modules\compileProjectBoth($files, $root, $state->context->withSources($files), $state->optimize, strip: true);
+        $built = Modules\compileProjectBoth(
+            $files,
+            $root,
+            CompilationContext::for(
+                $state->backend,
+                CompilePurpose::Executable,
+                entryModules: ['Main'],
+                roots: $state->libDirs,
+                sources: $files,
+            ),
+            $state->optimize,
+            strip: true,
+        );
         foreach ($built['emit'] as $rel => $bytes) {
             $path = $outDir . '/' . $rel;
             $dir = \dirname($path);

@@ -2,38 +2,13 @@
 
 namespace Moggi\CLI\Commands;
 
-use function Moggi\Cache\atomicWrite;
+use Moggi\Registry;
+use Moggi\Registry\FetchLog;
 
-use function Moggi\Registry\badPackageProblem;
-use function Moggi\Registry\badPackagesAmong;
+use function Moggi\Cache\atomicWrite;
 use function Moggi\Registry\Bind\bindForBuild;
 use function Moggi\Registry\Bind\bindModuleName;
 use function Moggi\Registry\Bind\facadeModuleName;
-use function Moggi\Registry\bundledConstraintFor;
-use function Moggi\Registry\bundledPackages;
-use function Moggi\Registry\collectHostToolCoordinates;
-use function Moggi\Registry\demandsCloseLocally;
-use function Moggi\Registry\descriptorAdditionProblems;
-use function Moggi\Registry\descriptorProblems;
-use function Moggi\Registry\descriptorWithCoordinate;
-use function Moggi\Registry\descriptorWithFfiBinding;
-
-use Moggi\Registry\FetchLog;
-
-use function Moggi\Registry\findDescriptor;
-use function Moggi\Registry\hostToolDescriptor;
-use function Moggi\Registry\installLockedPackages;
-use function Moggi\Registry\newestFirst;
-use function Moggi\Registry\parseAddCoordinate;
-use function Moggi\Registry\prettyJson;
-use function Moggi\Registry\providedPackages;
-use function Moggi\Registry\readDescriptor;
-use function Moggi\Registry\resolveHostTools;
-use function Moggi\Registry\satisfies;
-use function Moggi\Registry\shortNpub;
-use function Moggi\Registry\unmaintainedPackageNote;
-use function Moggi\Registry\unmaintainedPackagesAmong;
-use function Moggi\Registry\withAddConstraint;
 
 /**
  * `moggi add` — one requirement, into the table it belongs to.
@@ -49,15 +24,10 @@ use function Moggi\Registry\withAddConstraint;
  *
  * * A package of ours is resolved by the registry we already have: the catalog is
  *   loaded and verified, the lock is written, and the release is fetched and
- *   unpacked — the same `writeResolution()`/`installLockedPackages()` pair that
- *   `moggi update` and `moggi install` run, so `add` cannot drift from them. The
- *   descriptor entry comes first here, because the dependency *is* what the
- *   resolver reads; a package the registry does not list is refused before that,
- *   so the common typo leaves nothing behind.
- * * A host coordinate is resolved by the ecosystem's own tool through
- *   `resolveHostTools()`, and resolution comes *before* the write, the way
- *   `sky add` runs `go get` before it touches its manifest: a missing tool or an
- *   artifact that does not exist then leaves the descriptor exactly as it was.
+ *   unpacked.
+ * * A host coordinate is resolved by the ecosystem's own tool, and resolution
+ *   comes *before* the write: a missing tool or an artifact that does not exist
+ *   then leaves the descriptor exactly as it was.
  *
  * `--print` shows the lines it would write and stops — nothing fetched, nothing
  * written. For a package of ours that means it will not ask the registry which
@@ -176,7 +146,7 @@ function runAddCommand(array $argv): int
     }
 
     if ($options['json']) {
-        echo prettyJson($report) . "\n";
+        echo Registry\prettyJson($report) . "\n";
 
         return $report['ok'] ? 0 : 1;
     }
@@ -189,18 +159,12 @@ function runAddCommand(array $argv): int
 /**
  * Declare one requirement in a package's descriptor, and make it real.
  *
- * Both halves end with the same three promises: the descriptor is the last thing
- * that changes when resolution can happen first, a requirement already declared
- * identically is a no-op, and the file it wrote is one the parser accepts
- * (`descriptorAdditionProblems()`). What differs is the resolver, and therefore
- * what can be checked before the write.
- *
  * @return array<string, mixed>
  */
 function addDependency(string $root, string $argument, ?string $version, bool $print, bool $useCache, string $registry, bool $bind = false, bool $facade = false): array
 {
-    $descriptorPath = findDescriptor($root);
-    $problems = descriptorProblems($descriptorPath);
+    $descriptorPath = Registry\findDescriptor($root);
+    $problems = Registry\descriptorProblems($descriptorPath);
     if ($problems !== []) {
         throw new \RuntimeException(
             "{$descriptorPath} is not a descriptor this compiler accepts, so `add` will not edit it:\n  "
@@ -213,8 +177,8 @@ function addDependency(string $root, string $argument, ?string $version, bool $p
         throw new \RuntimeException("cannot read {$descriptorPath}");
     }
 
-    $descriptor = readDescriptor($descriptorPath);
-    $edit = parseAddCoordinate($argument, $version);
+    $descriptor = Registry\readDescriptor($descriptorPath);
+    $edit = Registry\parseAddCoordinate($argument, $version);
 
     if (($edit['kind'] === 'registry') && ($bind || $facade)) {
         throw new \RuntimeException(
@@ -243,12 +207,12 @@ function addDependency(string $root, string $argument, ?string $version, bool $p
 function addRegistryDependency(array $descriptor, string $descriptorPath, string $text, array $edit, bool $print, bool $useCache, string $registry): array
 {
     $name = (string) $edit['package'];
-    $bundled = bundledPackages();
+    $bundled = Registry\bundledPackages();
     $bundledSpec = $bundled[$name] ?? null;
     if ($bundledSpec !== null
-        && (($edit['deferred'] ?? false) === true || satisfies((string) $bundledSpec['version'], (string) ($edit['value'] ?? '')))
+        && (($edit['deferred'] ?? false) === true || Registry\satisfies((string) $bundledSpec['version'], (string) ($edit['value'] ?? '')))
     ) {
-        $edit = withAddConstraint($edit, bundledConstraintFor((string) $bundledSpec['version']));
+        $edit = Registry\withAddConstraint($edit, Registry\bundledConstraintFor((string) $bundledSpec['version']));
     }
     if (($edit['deferred'] ?? false) === true && $print) {
         throw new \RuntimeException(
@@ -258,21 +222,21 @@ function addRegistryDependency(array $descriptor, string $descriptorPath, string
 
     $log = new FetchLog();
     $prospective = \array_merge((array) ($descriptor['dependencies'] ?? []), [$name => (string) ($edit['value'] ?? '')]);
-    $local = demandsCloseLocally($prospective, $bundled, providedPackages());
+    $local = Registry\demandsCloseLocally($prospective, $bundled, Registry\providedPackages());
     $catalog = ($print || $local) ? null : loadVerifiedCatalog($registry, $useCache, $log);
 
     if ($catalog !== null) {
         $entry = $catalog->entry($name);
-        $servedLocally = $bundledSpec !== null && satisfies((string) $bundledSpec['version'], (string) ($edit['value'] ?? ''));
+        $servedLocally = $bundledSpec !== null && Registry\satisfies((string) $bundledSpec['version'], (string) ($edit['value'] ?? ''));
         if ($entry === null && ! $servedLocally) {
             throw new \RuntimeException("the registry at {$registry} lists no package `{$name}`");
         }
         if (($edit['deferred'] ?? false) === true) {
-            $edit = withAddConstraint($edit, registryConstraintFor($entry, $name));
+            $edit = Registry\withAddConstraint($edit, registryConstraintFor($entry, $name));
         }
     }
 
-    $candidate = descriptorWithCoordinate($text, $edit, $descriptorPath);
+    $candidate = Registry\descriptorWithCoordinate($text, $edit, $descriptorPath);
     $changed = $candidate['text'] !== $text;
 
     $report = addReport($descriptor, $descriptorPath, $edit, $candidate, $print);
@@ -281,7 +245,7 @@ function addRegistryDependency(array $descriptor, string $descriptorPath, string
     }
 
     if ($changed) {
-        $additionProblems = descriptorAdditionProblems($candidate['text'], $descriptorPath);
+        $additionProblems = Registry\descriptorAdditionProblems($candidate['text'], $descriptorPath);
         if ($additionProblems !== []) {
             throw new \RuntimeException(
                 "writing this dependency would produce a descriptor this compiler refuses:\n  "
@@ -304,19 +268,19 @@ function addRegistryDependency(array $descriptor, string $descriptorPath, string
     $lock = $resolution['document'];
 
     $entries = $catalog?->entries(lockedPackageNames($lock)) ?? [];
-    foreach (badPackagesAmong($entries) as $bad => $marker) {
-        \fwrite(STDERR, 'warning: ' . badPackageProblem((string) $bad, $marker) . "\n");
+    foreach (Registry\badPackagesAmong($entries) as $bad => $marker) {
+        \fwrite(STDERR, 'warning: ' . Registry\badPackageProblem((string) $bad, $marker) . "\n");
     }
-    foreach (unmaintainedPackagesAmong($entries) as $unmaintained => $marker) {
-        \fwrite(STDERR, 'warning: ' . unmaintainedPackageNote((string) $unmaintained, $marker) . "\n");
+    foreach (Registry\unmaintainedPackagesAmong($entries) as $unmaintained => $marker) {
+        \fwrite(STDERR, 'warning: ' . Registry\unmaintainedPackageNote((string) $unmaintained, $marker) . "\n");
     }
 
-    $installed = installLockedPackages($registry, $lock, $entries, $useCache, null, $log, $catalog?->blobsBase());
+    $installed = Registry\installLockedPackages($registry, $lock, $entries, $useCache, null, $log, $catalog?->blobsBase());
 
     return [
         'written' => $changed,
         'registry' => $registry,
-        'registryNpub' => shortNpub((string) ($catalog?->npub() ?? '—')),
+        'registryNpub' => Registry\shortNpub((string) ($catalog?->npub() ?? '—')),
         'resolved' => (string) ($resolution['chosen'][$name] ?? ''),
         'lock' => $resolution['lockFile'],
         'dependencies' => \array_keys((array) ($lock['packages'] ?? [])),
@@ -342,7 +306,7 @@ function registryConstraintFor(array $entry, string $name): string
     if ($versions === []) {
         throw new \RuntimeException("the registry lists no released version of `{$name}`, so there is no line to record");
     }
-    \usort($versions, newestFirst(...));
+    \usort($versions, Registry\newestFirst(...));
     $parts = \explode('.', (string) $versions[0]);
 
     return \count($parts) >= 2 ? $parts[0] . '.' . $parts[1] : (string) $versions[0];
@@ -370,7 +334,7 @@ function addHostCoordinate(array $descriptor, string $descriptorPath, string $te
         );
     }
 
-    $candidate = descriptorWithCoordinate($text, $edit, $descriptorPath);
+    $candidate = Registry\descriptorWithCoordinate($text, $edit, $descriptorPath);
     $changed = $candidate['text'] !== $text;
 
     $report = addReport($descriptor, $descriptorPath, $edit, $candidate, $print);
@@ -380,7 +344,7 @@ function addHostCoordinate(array $descriptor, string $descriptorPath, string $te
 
     $ffiEntry = $ecosystem . ':' . (string) $edit['package'];
     $ffi = $bind
-        ? descriptorWithFfiBinding($candidate['text'], $ffiEntry)
+        ? Registry\descriptorWithFfiBinding($candidate['text'], $ffiEntry)
         : ['text' => $candidate['text'], 'status' => 'present', 'line' => null];
     $ffiChanged = $ffi['text'] !== $candidate['text'];
 
@@ -408,7 +372,7 @@ function addHostCoordinate(array $descriptor, string $descriptorPath, string $te
     }
 
     if ($changed || $ffiChanged) {
-        $additionProblems = descriptorAdditionProblems($ffi['text'], $descriptorPath);
+        $additionProblems = Registry\descriptorAdditionProblems($ffi['text'], $descriptorPath);
         if ($additionProblems !== []) {
             throw new \RuntimeException(
                 "writing this coordinate would produce a descriptor this compiler refuses:\n  "
@@ -417,8 +381,8 @@ function addHostCoordinate(array $descriptor, string $descriptorPath, string $te
         }
     }
 
-    $coordinates = collectHostToolCoordinates([hostToolDescriptor($candidate['text'])], $ecosystem);
-    $tools = resolveHostTools($ecosystem, $coordinates, $descriptor['name'], $useCache);
+    $coordinates = Registry\collectHostToolCoordinates([Registry\hostToolDescriptor($candidate['text'])], $ecosystem);
+    $tools = Registry\resolveHostTools($ecosystem, $coordinates, $descriptor['name'], $useCache);
     if (! $tools['ok']) {
         throw new \RuntimeException((string) $tools['detail']);
     }

@@ -4,12 +4,10 @@ namespace Moggi\Syntax\Parser;
 
 use Moggi\Syntax\Ast;
 use Moggi\Syntax\Ast\ImportDecl;
+use Moggi\Syntax\Lexer\TokenKind;
 
 use function Moggi\Syntax\Ast\moduleName;
-
 use function Moggi\Syntax\isConstructorOperator;
-
-use Moggi\Syntax\Lexer\TokenKind;
 
 /**
  * @return array{assoc: string, precedence: ?int, operators: array<int, string>}

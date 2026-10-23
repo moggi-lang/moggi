@@ -2,9 +2,9 @@
 
 namespace Moggi\Syntax\Parser;
 
-use function Moggi\Errors\formatDiagnostic;
-
 use Moggi\Syntax\Lexer\TokenKind;
+
+use function Moggi\Errors\formatDiagnostic;
 
 /**
  * Lexer token. Replaces the previous `['kind'=>TokenKind,'lexeme'=>…,'line'=>…,'col'=>…]` arrays.

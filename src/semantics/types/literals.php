@@ -2,16 +2,15 @@
 
 namespace Moggi\Semantics\Types;
 
-use function Moggi\Semantics\Kernel\literalRole;
-use function Moggi\Semantics\Kinds\canonicalTypeConName;
-
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TDouble;
 use Moggi\Semantics\TypeExpr\TInt;
 use Moggi\Semantics\TypeExpr\TVar;
-
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Syntax\Ast;
+
+use function Moggi\Semantics\Kernel\literalRole;
+use function Moggi\Semantics\Kinds\canonicalTypeConName;
 
 /**
  * An integer literal denotes the value `fromInteger` returns for the integer it

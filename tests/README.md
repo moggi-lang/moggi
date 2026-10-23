@@ -84,10 +84,12 @@ Which **stage** owns a fixture is the directory it is in; which **golden kinds**
 | that random input cannot crash the frontend | `tests/fuzz/` | a script |
 | a rule about the compiler's own source (no `src/` stage names a library declaration) | `tests/source/` | a script, with the sites that are still allowed |
 | what a compiled function *returns* (a native throwable, an exported function no `main` reaches) | any group, beside the fixture | `Foo.exec.php`, and no `stdout`/`stderr` golden |
-| that an example program still works | `examples/` | `Main.stdout.expected` |
+| that an example program still compiles | `examples/` | none |
 
 Most cases are **one fixture plus goldens beside it** — add the file, add the golden, done. No
-registration anywhere. A `.ir.php` fixture is for a stage that needs IR to exist before it can do
+registration anywhere. `examples/` is the one tree where the verdict is just "it still compiles": the
+walk compiles an example and stops, so an example needs no golden and none belongs beside it — an
+example is a program we ship, not a claim about the output it prints. A `.ir.php` fixture is for a stage that needs IR to exist before it can do
 anything (the optimizer, codegen); a `.mog` fixture is used wherever source suffices.
 
 ## Naming

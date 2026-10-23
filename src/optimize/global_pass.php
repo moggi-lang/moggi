@@ -198,7 +198,7 @@ function markLambdaCaptureLocalsUsed(array $items, array &$used): void
  *
  * A body that only mentions another lifted lambda still needs that lambda's
  * captures: the callee is reached from this body's scope, so those locals have
- * to stay live in the enclosing block. `lambdaMetaFromCaptures` folds the same
+ * to stay live in the enclosing block. `Callables\captureMeta` folds the same
  * transitivity into the capture set the emitters pass, so leaving it out here
  * makes the two disagree. For `f -> λ2 -> λ3 -> x`, where `λ2`'s body is only
  * `ret @λ3`, DCE then deleted the `let x = ...` the emitted call site still
@@ -491,6 +491,7 @@ function rewriteStmtOperands(IR\Stmt $stmt, callable $rewriteOp): IR\Stmt
             \array_map($rewriteOp, $stmt->args),
             $stmt->dest,
             $stmt->srcLoc,
+            $stmt->localEvidence,
         ),
         IR\MatchStmt::class => new IR\MatchStmt(
             $rewriteOp($stmt->scrutinee),
@@ -702,6 +703,7 @@ function rewriteFieldTempsInStmt(IR\Stmt $stmt, array $fieldVars, IR\Operand $sc
             ),
             $stmt->dest,
             $stmt->srcLoc,
+            $stmt->localEvidence,
         ),
         IR\Assign::class => new IR\Assign($stmt->dest, rewriteFieldOperand($stmt->value, $fieldVars, $scrutinee)),
         IR\Let::class => new IR\Let($stmt->name, rewriteFieldOperand($stmt->value, $fieldVars, $scrutinee)),
@@ -981,7 +983,7 @@ function mapCopyStmt(IR\Stmt $stmt, array &$temps, array &$locals): IR\Stmt
         IR\Binop::class => new IR\Binop($stmt->op, mapCopyOperand($stmt->left, $temps, $locals), mapCopyOperand($stmt->right, $temps, $locals), $stmt->dest),
         IR\Call::class => new IR\Call($stmt->callee, \array_map(static fn (IR\Operand $a): IR\Operand => mapCopyOperand($a, $temps, $locals), $stmt->args), $stmt->dest, $stmt->srcLoc),
         IR\CallValue::class => new IR\CallValue(mapCopyOperand($stmt->callee, $temps, $locals), \array_map(static fn (IR\Operand $a): IR\Operand => mapCopyOperand($a, $temps, $locals), $stmt->args), $stmt->dest, $stmt->srcLoc),
-        IR\DictCall::class => new IR\DictCall(mapCopyOperand($stmt->evidence, $temps, $locals), $stmt->method, \array_map(static fn (IR\Operand $a): IR\Operand => mapCopyOperand($a, $temps, $locals), $stmt->args), $stmt->dest, $stmt->srcLoc),
+        IR\DictCall::class => new IR\DictCall(mapCopyOperand($stmt->evidence, $temps, $locals), $stmt->method, \array_map(static fn (IR\Operand $a): IR\Operand => mapCopyOperand($a, $temps, $locals), $stmt->args), $stmt->dest, $stmt->srcLoc, $stmt->localEvidence),
         IR\Assign::class => new IR\Assign($stmt->dest, mapCopyOperand($stmt->value, $temps, $locals)),
         IR\Let::class => new IR\Let($stmt->name, mapCopyOperand($stmt->value, $temps, $locals)),
         IR\IoCall::class => new IR\IoCall($stmt->callee, \array_map(static fn (IR\Operand $a): IR\Operand => mapCopyOperand($a, $temps, $locals), $stmt->args), $stmt->dest, $stmt->intrinsic ?? null, $stmt->runtime ?? null, $stmt->foreign ?? null, $stmt->srcLoc),

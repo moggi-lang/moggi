@@ -2,6 +2,8 @@
 
 namespace Moggi\CLI\Commands;
 
+use Moggi\Syntax\Lexer\TokenKind;
+
 use function Moggi\Backend\implementedBackendIds;
 use function Moggi\Modules\cachedModuleHeader;
 use function Moggi\Modules\findMogFilesUnder;
@@ -17,8 +19,6 @@ use function Moggi\Registry\providedDependencyProblems;
 use function Moggi\Registry\readDescriptor;
 use function Moggi\Registry\readLock;
 use function Moggi\Syntax\Lexer\lex;
-
-use Moggi\Syntax\Lexer\TokenKind;
 
 /**
  * `moggi check` — everything that can be wrong with a package, before a build

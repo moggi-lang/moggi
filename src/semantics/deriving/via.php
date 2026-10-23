@@ -5,16 +5,13 @@ namespace Moggi\Semantics\Deriving;
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TVar;
 use Moggi\Semantics\TypeExpr\Type;
+use Moggi\Semantics\Types\TypeCheckState;
+use Moggi\Syntax\Ast;
 
 use function Moggi\Semantics\Types\astType;
 use function Moggi\Semantics\Types\substitute;
-
-use Moggi\Semantics\Types\TypeCheckState;
-
 use function Moggi\Semantics\Types\typeFail;
 use function Moggi\Semantics\Types\typeToString;
-
-use Moggi\Syntax\Ast;
 
 /**
  * Deriving via: delegate a class instance to another representationally equal

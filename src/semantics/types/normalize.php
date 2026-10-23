@@ -12,7 +12,6 @@ use Moggi\Semantics\TypeExpr\TStringLit;
 use Moggi\Semantics\TypeExpr\TUnit;
 use Moggi\Semantics\TypeExpr\TVar;
 use Moggi\Semantics\TypeExpr\Type;
-
 use Moggi\Syntax\Ast;
 
 /**

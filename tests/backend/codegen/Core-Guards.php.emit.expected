@@ -2,7 +2,7 @@
 
 namespace Core\Guards;
 
-const __MOGGI_MAP = [[19 => ['Core.Guards.positive', 'tests/backend/codegen/Core-Guards.mog', 9, 14], 32 => ['Core.Guards.firstSign', 'tests/backend/codegen/Core-Guards.mog', 15, 29], 63 => ['Core.Guards.classify', 'tests/backend/codegen/Core-Guards.mog', 23, 31], 64 => ['Core.Guards.classify', 'tests/backend/codegen/Core-Guards.mog', 23, 31]], ['Core\\Guards\\positive' => ['Core.Guards.positive', 'tests/backend/codegen/Core-Guards.mog', 9, 14], 'Core\\Guards\\twice' => ['Core.Guards.twice', 'tests/backend/codegen/Core-Guards.mog', 12, 11], 'Core\\Guards\\firstSign' => ['Core.Guards.firstSign', 'tests/backend/codegen/Core-Guards.mog', 14, 1], 'Core\\Guards\\classify' => ['Core.Guards.classify', 'tests/backend/codegen/Core-Guards.mog', 22, 3]]];
+const __MOGGI_MAP = [[19 => ['Core.Guards.positive', 'tests/backend/codegen/Core-Guards.mog', 9, 14], 20 => ['Core.Guards.positive', 'tests/backend/codegen/Core-Guards.mog', 9, 14], 33 => ['Core.Guards.firstSign', 'tests/backend/codegen/Core-Guards.mog', 15, 29], 34 => ['Core.Guards.firstSign', 'tests/backend/codegen/Core-Guards.mog', 15, 29], 65 => ['Core.Guards.classify', 'tests/backend/codegen/Core-Guards.mog', 23, 31], 66 => ['Core.Guards.classify', 'tests/backend/codegen/Core-Guards.mog', 23, 31]], ['Core\\Guards\\positive' => ['Core.Guards.positive', 'tests/backend/codegen/Core-Guards.mog', 9, 14], 'Core\\Guards\\twice' => ['Core.Guards.twice', 'tests/backend/codegen/Core-Guards.mog', 12, 11], 'Core\\Guards\\firstSign' => ['Core.Guards.firstSign', 'tests/backend/codegen/Core-Guards.mog', 14, 1], 'Core\\Guards\\classify' => ['Core.Guards.classify', 'tests/backend/codegen/Core-Guards.mog', 22, 3]]];
 
 require_once __DIR__ . '/../../../libraries/base/src/Data/Bool.php';
 require_once __DIR__ . '/../../../libraries/base/src/Data/Ord.php';
@@ -16,7 +16,8 @@ function moggi_u64_mul(int $a, int $b): int { $a0 = $a & 0xffff; $a1 = ($a >> 16
 function moggi_i64_mul(int $a, int $b): int { $r = $a * $b; return \is_int($r) ? $r : moggi_u64_mul($a, $b); }
 
 function positive($n) {
-    $__t0 = (__ev_Ord_Int()[">"])($n, 0);
+    $__t1 = __ev_Ord_Int();
+    $__t0 = ($__t1[">"])($n, 0);
     return $__t0;
 }
 
@@ -29,8 +30,9 @@ function firstSign($_p0) {
         if ($_p0 !== []) {
             $__scrut_0 = $_p0;
             $x = $__scrut_0[0];
-            $__t2 = (__ev_Ord_Int()["<"])($x, 0);
-            if ($__t2) {
+            $__t4 = __ev_Ord_Int();
+            $__t3 = ($__t4["<"])($x, 0);
+            if ($__t3) {
                 return "neg-first";
                 break;
             }
@@ -60,9 +62,9 @@ function classify($n) {
     do {
         if (true) {
             $m = $n;
-            $__t4 = twice($m);
-            $__t5 = positive($__t4);
-            if ($__t5) {
+            $__t6 = twice($m);
+            $__t7 = positive($__t6);
+            if ($__t7) {
                 return "positive-double";
                 break;
             }

@@ -2,19 +2,16 @@
 
 namespace Moggi\LSP\TextDocument;
 
+use Moggi\LSP\Analysis\AnalysisService;
+use Moggi\Syntax\Ast;
+
 use function Moggi\Docs\dumpAstTypeForDocs;
 use function Moggi\Docs\dumpTypeForDocs;
-
 use function Moggi\Docs\friendlyAstTypeVarNames;
 use function Moggi\Docs\surfaceTypeSignature;
-
-use Moggi\LSP\Analysis\AnalysisService;
-
 use function Moggi\LSP\Index\declTokenMaps;
 use function Moggi\LSP\Index\tokenNameRange;
 use function Moggi\LSP\Protocol\nodeToLspRange;
-
-use Moggi\Syntax\Ast;
 
 function svcInlayHints(AnalysisService $svc, string $uri, array $range): array
 {

@@ -2,16 +2,14 @@
 
 namespace Moggi\CLI\Commands;
 
-use Moggi\Backend;
 use Moggi\Cache;
+use Moggi\Docs;
+use Moggi\Syntax\Lexer\LexError;
+use Moggi\Syntax\Parser\ParseError;
 
 use function Moggi\Cache\docsCacheDir;
 use function Moggi\CLI\defaultDocsInput;
 use function Moggi\CLI\printUsage;
-
-use Moggi\Docs;
-use Moggi\Syntax\Lexer\LexError;
-use Moggi\Syntax\Parser\ParseError;
 
 /**
  * `moggi mogdoc [serve]` — render API documentation, or serve it live.

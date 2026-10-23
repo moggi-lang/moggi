@@ -303,7 +303,11 @@ function specializeDictMethodOperand(IR\DictMethod $operand, array $evidenceByNa
         }
     }
 
-    return new IR\DictMethod(specializeDictCallsOperand($evidence, $evidenceByName), $operand->method);
+    return new IR\DictMethod(
+        specializeDictCallsOperand($evidence, $evidenceByName),
+        $operand->method,
+        $operand->localEvidence,
+    );
 }
 
 /**

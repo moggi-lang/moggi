@@ -4,17 +4,15 @@ namespace Moggi\LSP\TextDocument;
 
 require_once __DIR__ . '/../../paths.php';
 
-use function Moggi\Docs\search;
-
 use Moggi\LSP\Analysis\AnalysisService;
+use Moggi\Syntax\Ast;
 
+use function Moggi\Docs\search;
 use function Moggi\LSP\Analysis\findNodeChainAt;
 use function Moggi\LSP\Protocol\lspPosToCompiler;
 use function Moggi\LSP\Protocol\splitLines;
 use function Moggi\Modules\resolvedSymbol;
 use function Moggi\Paths\globPaths;
-
-use Moggi\Syntax\Ast;
 
 function svcCompletion(AnalysisService $svc, string $uri, array $pos): array
 {

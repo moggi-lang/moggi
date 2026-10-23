@@ -2,14 +2,11 @@
 
 namespace Moggi\LSP\Formatter;
 
-use function Moggi\Docs\surfaceTypeSignature;
-
 use Moggi\LSP\Analysis\AnalysisService;
-
-use function Moggi\LSP\Protocol\splitLines;
-
 use Moggi\Syntax\Ast;
 
+use function Moggi\Docs\surfaceTypeSignature;
+use function Moggi\LSP\Protocol\splitLines;
 use function Moggi\Syntax\Lexer\lex;
 use function Moggi\Syntax\Parser\parse;
 

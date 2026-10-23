@@ -2,13 +2,8 @@
 
 namespace Moggi\Semantics\Types;
 
-use function Moggi\Errors\appendDidYouMean;
-
 use Moggi\Semantics\Kinds;
 use Moggi\Semantics\TypeExpr\Scheme;
-
-use function Moggi\Semantics\TypeExpr\scheme;
-
 use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TNatLit;
@@ -17,9 +12,11 @@ use Moggi\Semantics\TypeExpr\TStringLit;
 use Moggi\Semantics\TypeExpr\TUnit;
 use Moggi\Semantics\TypeExpr\TVar;
 use Moggi\Semantics\TypeExpr\Type;
-
 use Moggi\Syntax\Ast;
 use Moggi\Syntax\Ast\AstNode;
+
+use function Moggi\Semantics\TypeExpr\scheme;
+use function Moggi\Errors\appendDidYouMean;
 
 require_once __DIR__ . '/type_core.php';
 

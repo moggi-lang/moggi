@@ -1,19 +1,20 @@
 module
   function positive(n)
-      t0 = dict_call @__ev_Ord_Int->>(n, 0)
+      t1 = call __ev_Ord_Int()
+      t0 = dict_call t1->>(n, 0)
       ret t0
   function twice(n)
       ret intrinsic intMul#(n, 2)
   function classify(n)
-      t1 = match n
+      t2 = match n
         let m = n
-        t2 = call twice(m)
-        t3 = call positive(t2)
-        arm m when t3
-            t1 = "positive-double"
+        t3 = call twice(m)
+        t4 = call positive(t3)
+        arm m when t4
+            t2 = "positive-double"
         let m__0 = n
         arm m__0 when @otherwise
-            t1 = "not-positive-double"
+            t2 = "not-positive-double"
         arm _
-            t1 = "unused"
-      ret t1
+            t2 = "unused"
+      ret t2

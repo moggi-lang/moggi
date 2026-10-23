@@ -2,9 +2,9 @@
 
 namespace Moggi\LSP\Index;
 
-use function Moggi\Syntax\Lexer\lex;
-
 use Moggi\Syntax\Lexer\TokenKind;
+
+use function Moggi\Syntax\Lexer\lex;
 
 function declTokenMaps(string $source, string $filename): array
 {

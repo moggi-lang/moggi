@@ -6,14 +6,11 @@ use Moggi\Semantics\TypeExpr\Scheme;
 use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\Type;
+use Moggi\Syntax\Ast;
 
 use function Moggi\Semantics\Types\friendlyTypeVarNames;
 use function Moggi\Semantics\Types\skolemTypeVarBase;
-
 use function Moggi\Semantics\Types\internalTypeToAst;
-
-use Moggi\Syntax\Ast;
-
 use function Moggi\Syntax\Ast\dumpTypeInline;
 use function Moggi\Syntax\isConstructorOperator;
 

@@ -5,39 +5,11 @@ namespace Moggi\Semantics\Types;
 use function Moggi\Errors\appendDidYouMean;
 
 use Moggi\IR\EntryPointKind;
-
-use function Moggi\Modules\resolvedSymbol;
-use function Moggi\Patterns\Walk\patternDuplicateBinder;
-use function Moggi\Patterns\Walk\patternVariableNames;
-use function Moggi\Patterns\Walk\patternVariableNamesOrdered;
-
 use Moggi\Pipeline\CompilePurpose;
-
-use function Moggi\Semantics\Exhaustiveness\caseExhaustivenessProven;
-use function Moggi\Semantics\Exhaustiveness\checkCaseExhaustiveness;
-use function Moggi\Semantics\IntrinsicRegistry\capturesCallSite;
-use function Moggi\Semantics\IntrinsicRegistry\isMagicHashName;
-use function Moggi\Semantics\IntrinsicRegistry\isShortCircuitPrimop;
-use function Moggi\Semantics\IntrinsicRegistry\primitiveTypeOwnerModule;
-use function Moggi\Semantics\IntrinsicRegistry\resolveIntrinsicName;
-use function Moggi\Semantics\IntrinsicRegistry\schemeArity;
-use function Moggi\Semantics\IntrinsicRegistry\shortCircuitPrimopId;
-use function Moggi\Semantics\IntrinsicRegistry\typeSchemes;
-use function Moggi\Semantics\Kernel\bindRole;
-use function Moggi\Semantics\Kernel\literalRole;
-
 use Moggi\Semantics\Kinds;
-
-use function Moggi\Semantics\TypeExpr\canonicalNatDigits;
-
 use Moggi\Semantics\TypeExpr\Scheme;
-
-use function Moggi\Semantics\TypeExpr\scheme;
-use function Moggi\Semantics\TypeExpr\schemeFreeTypeVars;
-
 use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TChar;
-
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TDouble;
 use Moggi\Semantics\TypeExpr\TInt;
@@ -60,6 +32,25 @@ use Moggi\Semantics\TypeExpr\TWord8;
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Syntax\Ast;
 
+use function Moggi\Modules\resolvedSymbol;
+use function Moggi\Patterns\Walk\patternDuplicateBinder;
+use function Moggi\Patterns\Walk\patternVariableNames;
+use function Moggi\Patterns\Walk\patternVariableNamesOrdered;
+use function Moggi\Semantics\Exhaustiveness\caseExhaustivenessProven;
+use function Moggi\Semantics\Exhaustiveness\checkCaseExhaustiveness;
+use function Moggi\Semantics\IntrinsicRegistry\capturesCallSite;
+use function Moggi\Semantics\IntrinsicRegistry\isMagicHashName;
+use function Moggi\Semantics\IntrinsicRegistry\isShortCircuitPrimop;
+use function Moggi\Semantics\IntrinsicRegistry\primitiveTypeOwnerModule;
+use function Moggi\Semantics\IntrinsicRegistry\resolveIntrinsicName;
+use function Moggi\Semantics\IntrinsicRegistry\schemeArity;
+use function Moggi\Semantics\IntrinsicRegistry\shortCircuitPrimopId;
+use function Moggi\Semantics\IntrinsicRegistry\typeSchemes;
+use function Moggi\Semantics\Kernel\bindRole;
+use function Moggi\Semantics\Kernel\literalRole;
+use function Moggi\Semantics\TypeExpr\canonicalNatDigits;
+use function Moggi\Semantics\TypeExpr\scheme;
+use function Moggi\Semantics\TypeExpr\schemeFreeTypeVars;
 use function Moggi\Syntax\Ast\desugarDo;
 use function Moggi\Syntax\isConstructorName;
 use function Moggi\Syntax\isConstructorOperator;
