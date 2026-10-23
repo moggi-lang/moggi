@@ -61,8 +61,6 @@ $rootB = $work . '/root-b';
 $writeRoot($rootA, 'root-a');
 $writeRoot($rootB, 'root-b');
 
-// A process-global library root would make the roots argument decorative: the context declares the
-// roots, and the closure is resolved against exactly those roots.
 $closureFor = static function (string $libRoot, string $backendId = 'php') use ($project, $root): array {
     [$files] = Modules\projectSourceClosure(
         [$project . '/Main.mog', $project . '/Alt.mog'],
@@ -101,7 +99,6 @@ $emitsExtension = static function (array $emit, string $extension): bool {
     );
 };
 
-/** Every file in `$dir` with `$extension`, recursively; `[]` when the directory is absent. */
 $cachePaths = static function (string $dir, string $extension): array {
     if (! \is_dir($dir)) {
         return [];
@@ -132,8 +129,6 @@ try {
         'the cold run did not emit the module the root resolves',
     );
 
-    // The same sources as two other targets: each emits its own artifact and disturbs neither the
-    // other target's products nor php's.
     $jvmFiles = $closureFor($rootA, 'jvm');
     $jvmContext = $contextFor('jvm', ['Main'], [$rootA], $jvmFiles);
     $jvmExtension = Backend\backendById('jvm')->extension();
@@ -155,8 +150,6 @@ try {
     $assert($dotnetRun['emit'] !== $cold['emit'], 'the dotnet run served the php run\'s products');
     $assert($dotnetRun['emit'] !== $jvmRun['emit'], 'the dotnet run served the jvm run\'s products');
 
-    // The same sources with another entry: the promoted `main` follows the request, and Main loses
-    // the entry treatment it had.
     $alt = $compile($filesA, $project, $contextFor('php', ['Alt'], [$rootA], $filesA));
     $assert(
         \str_contains($cold['emit']['Main.php'] ?? '', 'reportUncaught')
@@ -169,8 +162,6 @@ try {
         'Alt was not treated as this request\'s entry',
     );
 
-    // A second module root for the same sources: the request resolves its own `Dep`, and the first
-    // root's artifact is not what answers it.
     $rootBRun = $compile($filesB, $project, $contextFor('php', ['Main'], [$rootB], $filesB));
     $assert(
         \str_contains($rootBRun['emit']['Main.php'] ?? '', 'root-b'),
@@ -181,10 +172,6 @@ try {
         'the second root served the first root\'s artifact',
     );
 
-    // A failed request writes nothing a later request reads. This last compile is also the return
-    // leg for everything above: it asks for Main under root A after a cross-target request, an
-    // entry change and a root change, and must get the cold artifacts back. One compile, both
-    // claims — a separate "php again" request would prove the same thing and cost the same work.
     \file_put_contents($project . '/Broken.mog', "module Broken where\n\nbad :: Int\nbad = \"not an int\"\n");
     $brokenFiles = [...$filesA, $project . '/Broken.mog'];
     try {
@@ -227,11 +214,6 @@ try {
         throw new \RuntimeException("the fresh process wrote no Main.php under {$outDir}");
     };
 
-    // The CLI mirrors the source tree under `-o`, so its `__DIR__`-relative `require`s carry a
-    // different depth than an artifact keyed at the project root — and the in-process emitter spells
-    // a library at its absolute path while the CLI spells the same file as a `..` walk. Canonicalize
-    // that one line shape (the last two path segments, after dropping `..` and the root) and require
-    // everything else to be byte-identical: same requires, same module body.
     $canonicalRequire = static function (string $path): string {
         $parts = \array_values(\array_filter(
             \explode('/', $path),
@@ -267,41 +249,30 @@ try {
         \unlink($blob);
     }
 
-    // One product per target: scenario 1 compiled php, jvm and dotnet, so `Main.checked.mogc`
-    // exists three times under `compile/<backend>/…`. Pick the php one by the target it records —
-    // the file the next php compile reads — not the first the directory iterator returns: that
-    // order is the filesystem's, not the cache's. Returning another target's product turned the
-    // tamper into a no-op on a file no php compile touches, which is the macOS failure, and it
-    // reproduces on ext4 by selecting that product deliberately.
-    $phpModuleCaches = \array_values(\array_filter(
-        $cachePaths($cacheDir, 'mogc'),
-        static function (string $path): bool {
-            if (\basename($path) !== 'Main.checked.mogc') {
-                return false;
-            }
-            $value = \unserialize((string) \file_get_contents($path));
+    $moduleCache = Cache\modulePath(
+        Modules\moduleCacheRelPath($project . '/Main.mog'),
+        'checked',
+        'php',
+    );
+    $assert(\is_file($moduleCache), 'the compile wrote no php module product to tamper with');
+    $contentKey = (string) (Modules\prepareProject($filesA, $project, $phpMainA)->units['Main']['contentKey'] ?? '');
 
-            return \is_array($value) && ($value['target'] ?? null) === 'php';
-        },
-    ));
-    $moduleCache = $phpModuleCaches[0] ?? null;
-    $assert(\is_string($moduleCache), 'the compile wrote no php module product to tamper with');
     $tampered = \unserialize((string) \file_get_contents($moduleCache));
     $assert(\is_array($tampered), 'the module product did not decode');
     $tampered['target'] = 'jvm';
     \file_put_contents($moduleCache, \serialize($tampered));
+
     $afterTamper = $compile($filesA, $project, $phpMainA);
     $assert($afterTamper['emit'] === $cold['emit'], 'an incompatible cached entry was served');
+
     $rebuilt = \unserialize((string) \file_get_contents($moduleCache));
     $assert(
-        \is_array($rebuilt) && ($rebuilt['target'] ?? null) === 'php',
-        'the incompatible module entry was not replaced',
+        \is_array($rebuilt)
+            && ($rebuilt['target'] ?? null) === 'php'
+            && ($rebuilt['key'] ?? null) === $phpMainA->moduleKey('Main', $contentKey),
+        'the incompatible module entry was not replaced by this request\'s product',
     );
 
-    // The project artifact is keyed by the whole compilation rather than by `cacheKey()` alone, so
-    // it is identified by what it holds: the one whose payload is this run's php emit. Position
-    // would do today — the `.blob` sweep above leaves nothing else — but not by construction, and
-    // position is exactly what made the module-product tamper pass on ext4 and fail on APFS.
     $artifact = \array_find(
         $cachePaths($cacheDir . '/compile/artifacts', 'blob'),
         static function (string $path) use ($cold): bool {
@@ -323,11 +294,6 @@ try {
         'the incompatible project artifact was not replaced',
     );
 
-    // The key names the module's own inputs: the target, whether the module is the entry, and its
-    // content Merkle. The caller's roots and a purpose that promotes nothing do not enter it,
-    // because the Merkle already pins what those roots resolved
-    // (see CompilationContext::moduleCacheMaterial); a product built once is the one every later
-    // compilation finds. No compilation needed for any of this.
     $contentKey = 'content-key';
     $keys = [
         $phpMainA->moduleKey('Main', $contentKey),
