@@ -28,7 +28,7 @@ final class PreparedProject
     /**
      * @param array<string, array<string, mixed>> $units
      * @param array<string, Ast\Program> $checked
-     * @param array<string, array<string, mixed>> $importContexts
+     * @param array<string, ImportContext> $importContexts
      */
     public function __construct(
         public readonly string $rootPrefix,

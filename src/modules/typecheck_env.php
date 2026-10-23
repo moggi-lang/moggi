@@ -908,18 +908,16 @@ function classScopeFunctionRefs(array $units, array $classScopes): array
  * when the module is emitted, so a fact published after the import walk reaches
  * the emitter without a second view of the interface being kept in step.
  *
- * @param array<string, mixed> $importContext
  * @param array{externalFns: array<string, string>, arity: array<string, int>, dataRefs: array<string, array<string, mixed>>, origins?: array<string, string>, actionReturn?: array<string, true>} $refs
  * @param array<string, true> $localNames names the module binds itself
- * @return array<string, mixed>
  */
 function mergeClassScopeRefs(
-    array $importContext,
+    ImportContext $importContext,
     array $refs,
     array $localNames = [],
     array $seenData = [],
-): array {
-    $interface = $importContext['interface']->withClassScopeRefs($refs, $localNames);
+): ImportContext {
+    $interface = $importContext->interface->withClassScopeRefs($refs, $localNames);
 
     $dataRefs = [];
     foreach ($refs['dataRefs'] ?? [] as $typeName => $info) {
@@ -928,11 +926,11 @@ function mergeClassScopeRefs(
         }
     }
 
-    $importContext['interface'] = $dataRefs === []
-        ? $interface
-        : $interface->withExtraTypes(['data' => $dataRefs]);
-
-    return $importContext;
+    return $importContext->withInterface(
+        $dataRefs === []
+            ? $interface
+            : $interface->withExtraTypes(['data' => $dataRefs]),
+    );
 }
 
 /** @param array<string, array<string, mixed>> $units @param list<string>|null $onlyModules @return list<array{module: string, class: string, head: array<string, mixed>}> */

@@ -204,15 +204,26 @@ function prepareProject(array $paths, string $rootDir, CompilationContext $conte
             }
 
             $checked[$moduleName] = $units[$moduleName]['checkedProgram'] ?? $units[$moduleName]['program'];
-            $importContexts[$moduleName] = mergeClassScopeRefs([
-                'interface' => ModuleInterface::withoutImports($moduleName),
-                'plan' => EmitPlan::forTarget($context->backendId, ''),
-                'classes' => $projectClasses,
-                'classScopes' => $classScopes,
-                'projectInstances' => $projectInstances,
-                'projectInstanceIndex' => $projectInstanceIndex,
-                'currentModule' => $moduleName,
-            ],
+            $importContexts[$moduleName] = mergeClassScopeRefs(
+                (new ImportContext(
+                    ModuleInterface::withoutImports($moduleName),
+                    EmitPlan::forTarget(
+                        $context->backendId,
+                        isset($units[$moduleName]['path'])
+                            ? mogPathToOutputRelative(
+                                $units[$moduleName]['path'],
+                                $rootPrefix,
+                                $context->backend->extension(),
+                            )
+                            : '',
+                    ),
+                ))->withProjectScopes(
+                    $projectClasses,
+                    $classScopes,
+                    $projectInstances,
+                    $projectInstanceIndex,
+                    $moduleName,
+                ),
                 $classScopeFns,
                 moduleLocalValueNames($units, $moduleName),
                 moduleLocalDataNames($units, $moduleName),
@@ -331,26 +342,25 @@ function prepareProject(array $paths, string $rootDir, CompilationContext $conte
             $outputRelative,
             $rootPrefix,
             $context->backendId,
+        )->withProjectScopes(
+            $projectClasses,
+            $classScopes,
+            $projectInstances,
+            $projectInstanceIndex,
+            $moduleName,
         );
-        $importContext['classes'] = $projectClasses;
-        $importContext['classScopes'] = $classScopes;
         $importContext = mergeClassScopeRefs(
             $importContext,
             $classScopeFns,
             moduleLocalValueNames($units, $moduleName),
             moduleLocalDataNames($units, $moduleName),
-            $units,
-            $rootPrefix,
-            $context->backendId,
         );
-        $importContext['projectInstances'] = $projectInstances;
-        $importContext['projectInstanceIndex'] = $projectInstanceIndex;
-        $importContext['currentModule'] = $moduleName;
+        $importContext = $importContext->withInterface(
+            $importContext->interface->withExtraTypes(
+                moduleFacadeExtraTypes($units, $moduleName, $projectClasses, $projectInstanceIndex),
+            ),
+        );
         $importContexts[$moduleName] = $importContext;
-
-        $importContext['interface'] = $importContext['interface']->withExtraTypes(
-            moduleFacadeExtraTypes($units, $moduleName, $projectClasses, $projectInstanceIndex),
-        );
 
         $purpose = $context->purposeFor($moduleName);
         $interface = null;
@@ -433,12 +443,17 @@ function prepareProject(array $paths, string $rootDir, CompilationContext $conte
             $outputRelative,
             $rootPrefix,
             $context->backendId,
+        )->withProjectScopes(
+            $projectClasses,
+            $classScopes,
+            $projectInstances,
+            $projectInstanceIndex,
+            $moduleName,
         );
     }
 
-    foreach ($importContexts as $moduleName => $context) {
-        $importContexts[$moduleName]['classes'] = $projectClasses;
-        $importContexts[$moduleName]['classScopes'] = $classScopes;
+    foreach ($importContexts as $moduleName => $importContext) {
+        $importContexts[$moduleName] = $importContext->withClassScopes($projectClasses, $classScopes);
     }
 
     disableCollectExportsCache();
@@ -457,7 +472,6 @@ function prepareProject(array $paths, string $rootDir, CompilationContext $conte
  * @param array<string, mixed> $classScopeFns
  * @param list<array<string, mixed>> $projectInstances
  * @param array<string, mixed> $projectInstanceIndex
- * @return array<string, mixed>
  */
 function buildPreparedModuleContext(
     array &$units,
@@ -470,32 +484,31 @@ function buildPreparedModuleContext(
     array $projectInstances,
     array $projectInstanceIndex,
     CompilationContext $context,
-): array {
+): ImportContext {
     ensureModuleInterface($units, $moduleName, $projectClasses, $projectInstanceIndex, $context);
     publishModuleExports($units, $moduleName, $context);
     addModuleClassScope($units, $moduleName, $projectClasses, $classScopes, $classScopeFns, $context->backendId);
     $outputRelative = mogPathToOutputRelative($path, $rootPrefix, $context->backend->extension());
-    $importContext = buildImportContext(
-        $units[$moduleName]['program']->imports,
-        $units,
-        $moduleName,
-        $outputRelative,
-        $rootPrefix,
-        $context->backendId,
-    );
-    $importContext['classes'] = $projectClasses;
-    $importContext['classScopes'] = $classScopes;
-    $importContext = mergeClassScopeRefs(
-        $importContext,
+
+    return mergeClassScopeRefs(
+        buildImportContext(
+            $units[$moduleName]['program']->imports,
+            $units,
+            $moduleName,
+            $outputRelative,
+            $rootPrefix,
+            $context->backendId,
+        )->withProjectScopes(
+            $projectClasses,
+            $classScopes,
+            $projectInstances,
+            $projectInstanceIndex,
+            $moduleName,
+        ),
         $classScopeFns,
         moduleLocalValueNames($units, $moduleName),
         moduleLocalDataNames($units, $moduleName),
     );
-    $importContext['projectInstances'] = $projectInstances;
-    $importContext['projectInstanceIndex'] = $projectInstanceIndex;
-    $importContext['currentModule'] = $moduleName;
-
-    return $importContext;
 }
 
 /**
@@ -827,10 +840,10 @@ function prepareProjectExtendingFocus(
         return prepareProject(\array_values(\array_unique($fallbackPaths)), $rootDir, $context);
     }
 
-    $projectInstances = $sampleCtx['projectInstances'] ?? [];
-    $projectInstanceIndex = $sampleCtx['projectInstanceIndex'] ?? indexProjectInstances($projectInstances);
-    $projectClasses = $sampleCtx['classes'] ?? [];
-    $classScopes = $sampleCtx['classScopes'] ?? [];
+    $projectInstances = $sampleCtx->projectInstances;
+    $projectInstanceIndex = $sampleCtx->projectInstanceIndex ?? indexProjectInstances($projectInstances);
+    $projectClasses = $sampleCtx->classes;
+    $classScopes = $sampleCtx->classScopes;
 
     $focusExtra = collectProjectInstances($units, [$focusModule]);
     if ($focusExtra !== []) {
@@ -846,28 +859,29 @@ function prepareProjectExtendingFocus(
     updateProjectClassesForModule($units[$focusModule], $units, $focusModule, $projectClasses);
 
     $outputRelative = mogPathToOutputRelative($focusPath, $rootPrefix, $context->backend->extension());
-    $importContext = buildImportContext(
-        $units[$focusModule]['program']->imports,
-        $units,
-        $focusModule,
-        $outputRelative,
-        $rootPrefix,
-        $context->backendId,
-    );
-    $importContext['classes'] = $projectClasses;
-    $importContext['classScopes'] = $classScopes;
     $importContext = mergeClassScopeRefs(
-        $importContext,
+        buildImportContext(
+            $units[$focusModule]['program']->imports,
+            $units,
+            $focusModule,
+            $outputRelative,
+            $rootPrefix,
+            $context->backendId,
+        )->withProjectScopes(
+            $projectClasses,
+            $classScopes,
+            $projectInstances,
+            $projectInstanceIndex,
+            $focusModule,
+        ),
         $classScopeFns,
         moduleLocalValueNames($units, $focusModule),
         moduleLocalDataNames($units, $focusModule),
     );
-    $importContext['projectInstances'] = $projectInstances;
-    $importContext['projectInstanceIndex'] = $projectInstanceIndex;
-    $importContext['currentModule'] = $focusModule;
-
-    $importContext['interface'] = $importContext['interface']->withExtraTypes(
-        moduleFacadeExtraTypes($units, $focusModule, $projectClasses, $projectInstanceIndex),
+    $importContext = $importContext->withInterface(
+        $importContext->interface->withExtraTypes(
+            moduleFacadeExtraTypes($units, $focusModule, $projectClasses, $projectInstanceIndex),
+        ),
     );
 
     $purpose = $context->purposeFor($focusModule);
