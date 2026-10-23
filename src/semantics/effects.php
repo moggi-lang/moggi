@@ -24,7 +24,7 @@ use function Moggi\Semantics\Types\checkRaw;
  * @return Program
  */
 /**
- * @param array<string, mixed> $importContext
+ * @param ?array<string, mixed> $importContext null when the module imports nothing
  * @param ?array{env: array<string, mixed>, data: array<string, mixed>, typeSynonyms: array<string, mixed>, intrinsicWrappers: array<string, string>} $interface
  *   receives the local type environment the check commits, so a caller can
  *   publish it as the module interface instead of building one separately
@@ -33,7 +33,7 @@ function checkAndNormalize(
     Program $program,
     string $source = '',
     string $filename = '',
-    array $importContext = [],
+    ?array $importContext = null,
     CompilePurpose $purpose = CompilePurpose::Executable,
     ?array &$interface = null,
     array $entryModules = [],

@@ -723,7 +723,7 @@ final class AnalysisService
                 if (! ($prog instanceof Ast\Program)) {
                     continue;
                 }
-                $this->indexModule($mUri, $mSource, $prog, $mName, $prog->externalFns ?? []);
+                $this->indexModule($mUri, $mSource, $prog, $mName, $prog->interface?->externalFns ?? []);
             }
         } catch (TypeError|LexError|ParseError $e) {
             if (! $e instanceof TypeError || $e->filename === '' || $e->filename === $filename) {
@@ -830,7 +830,7 @@ final class AnalysisService
         if ($result->program instanceof Ast\Program && $result->program->module !== null) {
             $moduleName = $result->program->module;
         }
-        $external = $result->program instanceof Ast\Program ? $result->program->externalFns : [];
+        $external = $result->program instanceof Ast\Program ? ($result->program->interface?->externalFns ?? []) : [];
         $this->indexModule($uri, $result->source, $result->program, $moduleName, $external);
     }
 

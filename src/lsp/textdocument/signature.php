@@ -136,7 +136,7 @@ function signatureForFunction(AnalysisService $svc, object $analysis, string $na
     }
 
     if ($params === [] && $label === null && $analysis->program instanceof Ast\Program) {
-        $ext = $analysis->program->externalFns[$name] ?? null;
+        $ext = $analysis->program->interface?->externalFns[$name] ?? null;
         if ($ext !== null) {
             $d = $svc->modules->declForResolved($ext);
             if ($d !== null) {

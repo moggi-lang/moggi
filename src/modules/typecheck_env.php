@@ -16,7 +16,6 @@ use Moggi\Pipeline\CompilationContext;
 use Moggi\Semantics\Types;
 use Moggi\Syntax\Ast;
 
-use function Moggi\Backend\backendById;
 use function Moggi\Cache\moduleGet;
 use function Moggi\Cache\modulePut;
 use function Moggi\Semantics\Deriving\derivedProjectInstanceRecords;
@@ -903,12 +902,15 @@ function classScopeFunctionRefs(array $units, array $classScopes): array
 }
 
 /**
- * Fold class-scope symbol and data references into a module's codegen imports.
+ * Fold class-scope symbol and data references into a module's interface.
+ *
+ * Nothing is re-rendered here: the target plan is rendered from the interface
+ * when the module is emitted, so a fact published after the import walk reaches
+ * the emitter without a second view of the interface being kept in step.
  *
  * @param array<string, mixed> $importContext
  * @param array{externalFns: array<string, string>, arity: array<string, int>, dataRefs: array<string, array<string, mixed>>, origins?: array<string, string>, actionReturn?: array<string, true>} $refs
  * @param array<string, true> $localNames names the module binds itself
- * @param array<string, array<string, mixed>> $units project units, for origin output paths
  * @return array<string, mixed>
  */
 function mergeClassScopeRefs(
@@ -916,52 +918,19 @@ function mergeClassScopeRefs(
     array $refs,
     array $localNames = [],
     array $seenData = [],
-    array $units = [],
-    string $moduleName = '',
-    string $rootPrefix = '',
-    string $backendId = '',
 ): array {
-    foreach ($refs['actionReturn'] ?? [] as $name => $_) {
-        if (isset($localNames[$name])) {
-            continue;
-        }
-        $importContext['externalActionReturnFns'][$name] = true;
-    }
+    $interface = $importContext['interface']->withClassScopeRefs($refs, $localNames);
 
-    foreach ($refs['externalFns'] as $name => $symbol) {
-        if (isset($localNames[$name])) {
-            continue;
-        }
-        $importContext['codegen']['externalFns'][$name] ??= $symbol;
-        $importContext['externalFnRuntimeArity'][$name] ??= $refs['arity'][$name] ?? 0;
-        $originModule = $refs['origins'][$name] ?? null;
-        if (! \is_string($originModule) || $originModule === '' || $originModule === $moduleName) {
-            continue;
-        }
-        $importContext['codegen']['fnOriginModules'][$name] ??= $originModule;
-        if (! isset($importContext['codegen']['moduleOutputPaths'][$originModule])
-            && isset($units[$originModule]['path'])
-        ) {
-            if ($backendId === '') {
-                throw new \RuntimeException(
-                    "planning an import of `{$originModule}` needs the compile target",
-                );
-            }
-
-            $importContext['codegen']['moduleOutputPaths'][$originModule] = mogPathToOutputRelative(
-                $units[$originModule]['path'],
-                $rootPrefix,
-                backendById($backendId)->extension(),
-            );
-        }
-    }
-
+    $dataRefs = [];
     foreach ($refs['dataRefs'] ?? [] as $typeName => $info) {
-        if (isset($seenData[$typeName])) {
-            continue;
+        if (! isset($seenData[$typeName])) {
+            $dataRefs[$typeName] = $info;
         }
-        $importContext['data'][$typeName] ??= $info;
     }
+
+    $importContext['interface'] = $dataRefs === []
+        ? $interface
+        : $interface->withExtraTypes(['data' => $dataRefs]);
 
     return $importContext;
 }

@@ -450,7 +450,7 @@ function svcHover(AnalysisService $svc, string $uri, array $pos): ?array
     }
 
     if ($name !== null) {
-        $resolved ??= $analysis->program->externalFns[$name]
+        $resolved ??= $analysis->program->interface?->externalFns[$name]
             ?? (isset($analysis->declarations[$name])
                 ? resolvedSymbol($module, $name)
                 : null);

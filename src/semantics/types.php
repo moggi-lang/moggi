@@ -3,6 +3,7 @@
 namespace Moggi\Semantics\Types;
 
 use function Moggi\Errors\formatDiagnostic;
+use function Moggi\Modules\standaloneImportContext;
 
 use Moggi\Pipeline\CompilePurpose;
 
@@ -124,12 +125,14 @@ function checkRaw(
     Ast\Program $program,
     string $source = '',
     string $filename = '',
-    array $importContext = [],
+    ?array $importContext = null,
     CompilePurpose $purpose = CompilePurpose::Executable,
     ?array &$interface = null,
     array $entryModules = [],
     string $backendId = 'php',
 ): Ast\Program {
+    $importContext ??= standaloneImportContext($program->module ?? '', $backendId);
+
     $state = newState($source, $filename);
     $state->compileBackend = $backendId;
     $state->entryModules = $entryModules;
@@ -227,24 +230,20 @@ function checkRaw(
     uniquifyCollidingInstanceMethods($state, $freeFnNames);
 
     $checked = new Ast\Program(
-        $items,
-        $program->module,
-        $program->imports,
-        $program->exports,
-        $importContext['codegen']['externalFns'] ?? [],
-        $state->constructorRenames,
-        $state->instanceEvidence,
-        $importContext['externalFnRuntimeArity'] ?? [],
-        $program->moduleBackend,
-        $program->backendMap,
-        exportedInferredSchemesFromEnv($state, $program),
-        $program->implicitMain,
-        $program->language,
-        $program->moduleDoc,
-        $program->fixityDocs,
-        externalActionReturnFns: $importContext['externalActionReturnFns'] ?? [],
-        externalTrueBindings: $importContext['externalTrueBindings'] ?? [],
-        externalCallableArity: $importContext['externalCallableArity'] ?? [],
+        items: $items,
+        module: $program->module,
+        imports: $program->imports,
+        exports: $program->exports,
+        interface: $importContext['interface'],
+        constructorRenames: $state->constructorRenames,
+        instanceEvidence: $state->instanceEvidence,
+        moduleBackend: $program->moduleBackend,
+        backendMap: $program->backendMap,
+        exportedInferredSchemes: exportedInferredSchemesFromEnv($state, $program),
+        implicitMain: $program->implicitMain,
+        language: $program->language,
+        moduleDoc: $program->moduleDoc,
+        fixityDocs: $program->fixityDocs,
     );
 
     return $checked;

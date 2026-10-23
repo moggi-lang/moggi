@@ -128,6 +128,8 @@ require __DIR__ . '/modules/facade.php';
 require __DIR__ . '/modules/exports.php';
 require __DIR__ . '/modules/prim_modules.php';
 require __DIR__ . '/modules/graph.php';
+require __DIR__ . '/modules/interface.php';
+require __DIR__ . '/modules/emit_plan.php';
 require __DIR__ . '/modules/imports.php';
 require __DIR__ . '/modules/typecheck_env.php';
 require __DIR__ . '/modules/prepare.php';

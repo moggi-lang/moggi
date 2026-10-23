@@ -8,6 +8,7 @@ use function Moggi\IR\lower;
 use function Moggi\IR\Validate\validateCallableLayouts;
 use function Moggi\IR\Validate\validateModule;
 use function Moggi\Modules\moduleNameToNamespace;
+use function Moggi\Modules\standaloneImportContext;
 use function Moggi\Optimize\optimize;
 use function Moggi\Optimize\Partial\legalizeCallables;
 use function Moggi\Semantics\Effects\checkAndNormalize;
@@ -28,6 +29,11 @@ function run(PipelineRequest $request, PipelineStage $stopAt = PipelineStage::Em
         purpose: $request->context->purposeFor(
             $request->typedProgram?->module ?? $request->program?->module,
         ),
+    );
+
+    $importContext = $request->importContext ?? standaloneImportContext(
+        $request->typedProgram?->module ?? $request->program?->module ?? '',
+        $request->context->backendId,
     );
 
     if ($request->typedProgram !== null) {
@@ -52,7 +58,7 @@ function run(PipelineRequest $request, PipelineStage $stopAt = PipelineStage::Em
             $program,
             $request->source,
             $request->filename,
-            $request->importContext,
+            $importContext,
             $request->context->purposeFor($program->module),
             entryModules: $request->context->entries,
             backendId: $request->context->backendId,
@@ -64,7 +70,7 @@ function run(PipelineRequest $request, PipelineStage $stopAt = PipelineStage::Em
         }
     }
 
-    $ir = lower($artifacts->typedAst, $request->importContext['data'] ?? [], $request->filename);
+    $ir = lower($artifacts->typedAst, $importContext['interface']->data, $request->filename);
     $artifacts->ir = $ir;
     $artifacts->entry = $ir->entry;
 
@@ -92,7 +98,7 @@ function run(PipelineRequest $request, PipelineStage $stopAt = PipelineStage::Em
     $artifacts->entry = $irOpt->entry;
 
     validateModule($irOpt, 'post-opt');
-    validateCallableLayouts($irOpt, 'post-legalize', $artifacts->typedAst?->externalCallableArity ?? []);
+    validateCallableLayouts($irOpt, 'post-legalize', $artifacts->typedAst?->interface?->callableArity() ?? []);
 
     if ($stopAt === PipelineStage::IrOpt) {
         return $artifacts;

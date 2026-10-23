@@ -284,11 +284,9 @@ function prepareInteractive(State $state, string $extra = '', bool $normalizeIo 
     $importContext['projectInstanceIndex'] = $projectInstanceIndex;
     $importContext['currentModule'] = $moduleName;
 
-    foreach (moduleFacadeExtraTypes($units, $moduleName, $projectClasses, $projectInstanceIndex) as $kind => $entries) {
-        foreach ($entries as $name => $entry) {
-            $importContext[$kind][$name] ??= $entry;
-        }
-    }
+    $importContext['interface'] = $importContext['interface']->withExtraTypes(
+        moduleFacadeExtraTypes($units, $moduleName, $projectClasses, $projectInstanceIndex),
+    );
 
     $interface = null;
     $checked = $normalizeIo

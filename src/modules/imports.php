@@ -11,15 +11,12 @@ use Moggi\Syntax\Ast;
 use function Moggi\Backend\backendById;
 use function Moggi\Backend\Php\Naming\basePhpFunctionName;
 use function Moggi\Errors\appendDidYouMean;
-use function Moggi\IR\Visit\collectIrCodegenUsage;
-use function Moggi\Paths\relativeRequirePath;
 use function Moggi\Semantics\Exhaustiveness\trueBindingOrigins;
 use function Moggi\Semantics\Kinds\dataKind;
 use function Moggi\Semantics\Kinds\registerTypeKind;
 use function Moggi\Semantics\TypeExpr\schemeRuntimeArity;
 use function Moggi\Semantics\Types\evidenceFunctionName;
 use function Moggi\Syntax\Ast\moduleName;
-use function Moggi\Syntax\isConstructorName;
 
 /**
  * @return array{
@@ -461,6 +458,22 @@ function parsedCallableFacts(Ast\Program $program, array $exports): array
 }
 
 /**
+ * The layout an importer reads for one imported entry: the declaring module's
+ * published split (`evidence`/`params`) alongside the runtime arity the importer
+ * already computed. Only the arity is present when the declaring module published
+ * no record — an evidence builder, or a facade entry with no source declaration.
+ *
+ * @param array<string, array<string, mixed>> $units
+ * @return array{arity: int, evidence?: int, params?: int}
+ */
+function importedCallableLayout(array $units, string $originModule, string $name, int $arity): array
+{
+    $entry = moduleCallableEntry($units, $originModule, $name);
+
+    return $entry === null ? ['arity' => $arity] : $entry;
+}
+
+/**
  * The published callable facts of one entry, looked up by the name the defining module uses.
  *
  * @param array<string, array<string, mixed>> $units
@@ -516,23 +529,13 @@ function externalFunctionRuntimeArity(
 }
 
 /**
+ * Everything a module needs from the modules it imports: the facts, published
+ * as one `ModuleInterface`, and the target layout those facts were resolved
+ * against, as an `EmitPlan` the emitter renders from.
+ *
  * @param list<Ast\ImportDecl> $imports
  * @param array<string, array<string, mixed>> $units
- * @return array{
- *   env: array<string, Scheme>,
- *   typeSynonyms: array<string, array<string, mixed>>,
- *   data: array<string, array<string, mixed>>,
- *   qualifiedModules: array<string, string>,
- *   constructorRenames: array<string, string>,
- *   codegen: array{
- *     requireLines: list<string>,
- *     functionUseLines: list<string>,
- *     namespaceUseLines: list<string>,
- *     externalFns: array<string, string>,
- *     moduleAsNames: array<string, string>,
- *     constructorRenames: array<string, string>
- *   }
- * }
+ * @return array<string, mixed>
  */
 function buildImportContext(
     array $imports,
@@ -552,11 +555,9 @@ function buildImportContext(
     $moduleAsNames = [];
     $qualifiedOrigins = [];
     $qualifiedEnv = [];
-    $requireTargets = [];
-    $namespaceUseLines = [];
     $externalFns = [];
     $externalFnRuntimeArity = [];
-    $externalCallableArity = [];
+    $callables = [];
     $actionReturnFns = [];
     $fnOriginModules = [];
     $intrinsicWrappers = [];
@@ -617,9 +618,6 @@ function buildImportContext(
             if (! (($target['synthetic'] ?? false) === true)) {
                 $targetOutputRelative = mogPathToOutputRelative($target['path'], $rootPrefix, $outputExtension);
                 $moduleOutputPaths[$targetName] = $targetOutputRelative;
-                if ($planPhpImports) {
-                    $requireTargets[$targetName] = relativeRequirePath($currentOutputRelative, $targetOutputRelative);
-                }
             }
         }
 
@@ -653,7 +651,7 @@ function buildImportContext(
                     $qualifiedOrigins[$localPrefix][$name] = $origin;
                 }
                 if ($origin !== null && $planPhpImports) {
-                    addOriginRequire($requireTargets, $moduleOutputPaths, $origin, $currentModule, $currentOutputRelative, $units, $rootPrefix, $outputExtension);
+                    recordOriginOutputPath($moduleOutputPaths, $origin, $currentModule, $units, $rootPrefix, $outputExtension);
                 }
                 if (isset($selected['intrinsicWrappers'][$name])) {
                     $intrinsicWrappers[$name] = $selected['intrinsicWrappers'][$name];
@@ -669,7 +667,7 @@ function buildImportContext(
                         $origin['phpName'],
                         $scheme,
                     );
-                    $externalCallableArity[$name] = $externalFnRuntimeArity[$name];
+                    $callables[$name] = importedCallableLayout($units, $origin['module'], $origin['phpName'], $externalFnRuntimeArity[$name]);
                     $fnOriginModules[$name] = $origin['module'];
                     if (isset(moduleActionReturnFnNames($units, $origin['module'])[$origin['phpName']])) {
                         $actionReturnFns[$name] = true;
@@ -718,7 +716,7 @@ function buildImportContext(
                 $origin['phpName'],
                 $scheme,
             );
-            $externalCallableArity[$name] = $externalFnRuntimeArity[$name];
+            $callables[$name] = importedCallableLayout($units, $origin['module'], $origin['phpName'], $externalFnRuntimeArity[$name]);
             $fnOriginModules[$name] = $origin['module'];
             if (isset(moduleActionReturnFnNames($units, $origin['module'])[$origin['phpName']])) {
                 $actionReturnFns[$name] = true;
@@ -755,7 +753,6 @@ function buildImportContext(
 
             foreach ($exports['moduleAsNames'] as $originNamespace => $asName) {
                 $moduleAsNames[$originNamespace] = $asName;
-                $namespaceUseLines[] = "{$originNamespace} as {$asName}";
             }
         } elseif ($import->kind === 'glob' || $import->kind === 'named') {
             foreach ($exports['qualifiedModules'] as $prefix => $originModule) {
@@ -764,7 +761,6 @@ function buildImportContext(
         }
 
         if ($planPhpImports && $import->kind === 'qualifiedAs' && $import->asName !== null) {
-            $namespaceUseLines[] = "{$namespace} as {$import->asName}";
             $moduleAsNames[$namespace] = $import->asName;
         }
     }
@@ -788,12 +784,10 @@ function buildImportContext(
             $externalFnRuntimeArity[$evName] = $meta['arity'][$evName] ?? 0;
             $fnOriginModules[$evName] = $origin['module'];
             if ($planPhpImports) {
-                addOriginRequire(
-                    $requireTargets,
+                recordOriginOutputPath(
                     $moduleOutputPaths,
                     $origin,
                     $currentModule,
-                    $currentOutputRelative,
                     $units,
                     $rootPrefix,
                     $outputExtension,
@@ -802,64 +796,48 @@ function buildImportContext(
         }
     }
 
-    $namespaceUseLines = $planPhpImports ? dedupeUseLines($namespaceUseLines) : [];
-
     mergeFacadeBackendExports(
         $env,
         $externalFns,
         $externalFnRuntimeArity,
+        $callables,
         $actionReturnFns,
         $fnOriginModules,
         $intrinsicWrappers,
-        $requireTargets,
         $moduleOutputPaths,
         $units,
         $currentModule,
-        $currentOutputRelative,
         $rootPrefix,
         $planPhpImports,
         $outputExtension,
     );
 
-    $requireLines = [];
-    $functionUseLines = [];
-    if ($planPhpImports) {
-        \ksort($requireTargets, SORT_STRING);
-        $requireLines = \array_values(\array_unique($requireTargets));
-
-        foreach ($externalFns as $local => $resolved) {
-            $functionUseLines[] = functionUseLine($local, $resolved);
-        }
-        $functionUseLines = dedupeUseLines($functionUseLines);
-    }
-
     return [
-        'env' => $env,
-        'typeSynonyms' => $typeSynonyms,
-        'data' => $data,
-        'qualifiedModules' => $qualifiedModules,
-        'constructorRenames' => $constructorRenames,
-        'qualifiedOrigins' => $qualifiedOrigins,
-        'qualifiedEnv' => $qualifiedEnv,
-        'codegen' => [
-            'requireLines' => $requireLines,
-            'functionUseLines' => $functionUseLines,
-            'namespaceUseLines' => $namespaceUseLines,
-            'externalFns' => $externalFns,
-            'externalFnRuntimeArity' => $externalFnRuntimeArity,
-            'moduleAsNames' => $moduleAsNames,
-            'constructorRenames' => $constructorRenames,
-            'fnOriginModules' => $fnOriginModules,
-            'moduleOutputPaths' => $moduleOutputPaths,
-            'currentOutputRelative' => $currentOutputRelative,
-            'namespaceModules' => $namespaceModules,
-        ],
-        'externalFnRuntimeArity' => $externalFnRuntimeArity,
-        'externalCallableArity' => $externalCallableArity,
-        'externalActionReturnFns' => $actionReturnFns,
-        'externalTrueBindings' => moduleTrueBindingOriginsAll($units),
-        'intrinsicWrappers' => $intrinsicWrappers,
-        'ambiguousNames' => $ambiguousNames,
+        'interface' => new ModuleInterface(
+            module: $currentModule,
+            env: $env,
+            data: $data,
+            typeSynonyms: $typeSynonyms,
+            qualifiedModules: $qualifiedModules,
+            qualifiedOrigins: $qualifiedOrigins,
+            qualifiedEnv: $qualifiedEnv,
+            intrinsicWrappers: $intrinsicWrappers,
+            ambiguousNames: $ambiguousNames,
+            constructorRenames: $constructorRenames,
+            externalFns: $externalFns,
+            fnOriginModules: $fnOriginModules,
+            externalFnRuntimeArity: $externalFnRuntimeArity,
+            callables: $callables,
+            actionReturn: $actionReturnFns,
+            trueBindings: moduleTrueBindingOriginsAll($units),
+        ),
+        'plan' => EmitPlan::forTarget(
+            $backendId,
+            $currentOutputRelative,
+            $planPhpImports ? $moduleOutputPaths : [],
+            $moduleAsNames,
+            $namespaceModules,
+        ),
     ];
 }
 
@@ -948,9 +926,9 @@ function mergeFacadeBackendEnv(
  * @param array<string, Scheme> $env
  * @param array<string, string> $externalFns
  * @param array<string, int> $externalFnRuntimeArity
+ * @param array<string, array{arity: int, evidence?: int, params?: int}> $callables
  * @param array<string, string> $fnOriginModules
  * @param array<string, string> $intrinsicWrappers
- * @param array<string, string> $requireTargets
  * @param array<string, string> $moduleOutputPaths
  * @param array<string, true> $actionReturnFns
  * @param array<string, array<string, mixed>> $units
@@ -959,14 +937,13 @@ function mergeFacadeBackendExports(
     array &$env,
     array &$externalFns,
     array &$externalFnRuntimeArity,
+    array &$callables,
     array &$actionReturnFns,
     array &$fnOriginModules,
     array &$intrinsicWrappers,
-    array &$requireTargets,
     array &$moduleOutputPaths,
     array $units,
     string $currentModule,
-    string $currentOutputRelative,
     string $rootPrefix,
     bool $planPhpImports,
     string $outputExtension,
@@ -1006,19 +983,17 @@ function mergeFacadeBackendExports(
             $origin['phpName'],
             $scheme,
         );
-        $externalCallableArity[$name] = $externalFnRuntimeArity[$name];
+        $callables[$name] = importedCallableLayout($units, $origin['module'], $origin['phpName'], $externalFnRuntimeArity[$name]);
         $fnOriginModules[$name] = $origin['module'];
         if (isset(moduleActionReturnFnNames($units, $origin['module'])[$origin['phpName']])) {
             $actionReturnFns[$name] = true;
         }
 
         if ($planPhpImports) {
-            addOriginRequire(
-                $requireTargets,
+            recordOriginOutputPath(
                 $moduleOutputPaths,
                 $origin,
                 $currentModule,
-                $currentOutputRelative,
                 $units,
                 $rootPrefix,
                 $outputExtension,
@@ -1028,17 +1003,18 @@ function mergeFacadeBackendExports(
 }
 
 /**
- * @param array<string, string> $requireTargets
+ * Remember where an entry's declaring module is written, for the target that
+ * links files. The relative path from this module's artifact is computed when
+ * the plan is rendered, from whichever spelling the caller settled on.
+ *
  * @param array<string, string> $moduleOutputPaths
  * @param array{module: string, namespace: string, phpName: string} $origin
  * @param array<string, array<string, mixed>> $units
  */
-function addOriginRequire(
-    array &$requireTargets,
+function recordOriginOutputPath(
     array &$moduleOutputPaths,
     array $origin,
     string $currentModule,
-    string $currentOutputRelative,
     array $units,
     string $rootPrefix,
     string $outputExtension,
@@ -1048,9 +1024,11 @@ function addOriginRequire(
         return;
     }
 
-    $originOutputRelative = mogPathToOutputRelative($units[$originModule]['path'], $rootPrefix, $outputExtension);
-    $moduleOutputPaths[$originModule] = $originOutputRelative;
-    $requireTargets[$originModule] = relativeRequirePath($currentOutputRelative, $originOutputRelative);
+    $moduleOutputPaths[$originModule] = mogPathToOutputRelative(
+        $units[$originModule]['path'],
+        $rootPrefix,
+        $outputExtension,
+    );
 }
 
 /** @param list<string> $lines @return list<string> */
@@ -1087,173 +1065,3 @@ function functionUseLine(string $localName, string $resolvedName): string
 
     return "function {$resolved} as {$localMangled}";
 }
-
-/**
- * Backend import planning for module code generation.
- *
- * Consumes module-origin metadata gathered by `buildImportContext` above, but
- * owns only PHP import pruning derived from IR usage. Semantic import/export
- * resolution belongs in the functions above and in exports.php, not here.
- */
-/**
- * @param ?string $absoluteRequireRoot when set, emit `require_once '/abs/...php'` instead of `__DIR__`-relative paths
- */
-function filterCodegenImportsForIr(
-    IR\Module $ir,
-    array $codegen,
-    ?string $fromOutputRelative = null,
-    ?array $usedCallees = null,
-    ?string $absoluteRequireRoot = null,
-    array $globalFnOrigins = [],
-): array {
-    if ($usedCallees === null) {
-        $usedCallees = collectIrCodegenUsage($ir)['callees'];
-    }
-
-    $localFnNames = [];
-    foreach ($ir->functions as $fn) {
-        $localFnNames[$fn->name] = true;
-    }
-
-    foreach (\array_keys($usedCallees) as $symbol) {
-        if (isset($codegen['externalFns'][$symbol]) || isset($localFnNames[$symbol])) {
-            continue;
-        }
-        $originModule = $globalFnOrigins[$symbol] ?? null;
-        if (! \is_string($originModule) || $originModule === '') {
-            continue;
-        }
-        $codegen['externalFns'][$symbol] = resolvedSymbol($originModule, $symbol);
-        $codegen['fnOriginModules'][$symbol] = $originModule;
-    }
-
-    $usedExternal = [];
-    $usedModules = [];
-
-    foreach (\array_keys($usedCallees) as $callee) {
-        if (isset($codegen['externalFns'][$callee])) {
-            $usedExternal[$callee] = true;
-            $originModule = $codegen['fnOriginModules'][$callee] ?? null;
-            if ($originModule !== null) {
-                $usedModules[$originModule] = true;
-            }
-
-            continue;
-        }
-
-        $parsed = parseResolvedSymbol($callee);
-        if ($parsed !== null) {
-            $usedModules[$parsed['module']] = true;
-            if (isset($codegen['externalFns'][$parsed['name']])) {
-                $usedExternal[$parsed['name']] = true;
-            }
-
-            continue;
-        }
-
-        if (! \str_contains($callee, '\\')) {
-            continue;
-        }
-
-        $separator = \strrpos($callee, '\\');
-        $namespace = \substr($callee, 0, $separator);
-        $member = \substr($callee, $separator + 1);
-        $originModule = $codegen['namespaceModules'][$namespace] ?? null;
-        if ($originModule !== null) {
-            $usedModules[$originModule] = true;
-        }
-
-        if (isset($codegen['externalFns'][$member])) {
-            $usedExternal[$member] = true;
-        }
-    }
-
-    $externalFns = \array_intersect_key($codegen['externalFns'], $usedExternal);
-    $requireByModule = [];
-    $fromOutput = $fromOutputRelative ?? $codegen['currentOutputRelative'] ?? '';
-    $absRoot = $absoluteRequireRoot !== null
-        ? \rtrim(\str_replace('\\', '/', $absoluteRequireRoot), '/')
-        : null;
-    foreach (\array_keys($usedModules) as $moduleName) {
-        $targetPath = $codegen['moduleOutputPaths'][$moduleName] ?? null;
-        if ($targetPath === null) {
-            continue;
-        }
-
-        if ($absRoot !== null) {
-            $requireByModule[$moduleName] = \var_export($absRoot . '/' . \str_replace('\\', '/', $targetPath), true);
-        } else {
-            $requireByModule[$moduleName] = relativeRequirePath($fromOutput, $targetPath);
-        }
-    }
-
-    \ksort($requireByModule, SORT_STRING);
-    $requireLines = \array_values(\array_unique($requireByModule));
-
-    $localFnNames = [];
-    foreach ($ir->functions as $fn) {
-        $localFnNames[$fn->name] = true;
-    }
-
-    $functionUseLines = [];
-    foreach ($externalFns as $local => $resolved) {
-        if (isConstructorName($local)) {
-            continue;
-        }
-        if (isset($localFnNames[$local])) {
-            continue;
-        }
-
-        $functionUseLines[] = functionUseLine($local, $resolved);
-    }
-    $functionUseLines = dedupeUseLines($functionUseLines);
-
-    $namespaceUseLines = [];
-    $usedNamespaces = [];
-    foreach (\array_keys($usedCallees) as $callee) {
-        $parsed = parseResolvedSymbol($callee);
-        if ($parsed !== null) {
-            $usedNamespaces[moduleNameToNamespace($parsed['module'])] = true;
-
-            continue;
-        }
-        if (! \str_contains($callee, '\\')) {
-            continue;
-        }
-
-        $usedNamespaces[\substr($callee, 0, \strrpos($callee, '\\'))] = true;
-    }
-
-    foreach ($codegen['namespaceUseLines'] as $line) {
-        foreach (\array_keys($usedNamespaces) as $namespace) {
-            $asName = $codegen['moduleAsNames'][$namespace] ?? null;
-            if ($asName !== null && \str_starts_with($line, "{$namespace} as {$asName}")) {
-                $namespaceUseLines[] = $line;
-            }
-        }
-    }
-    $namespaceUseLines = dedupeUseLines($namespaceUseLines);
-
-    $moduleAsNames = [];
-    foreach ($codegen['moduleAsNames'] as $namespace => $asName) {
-        if (isset($usedNamespaces[$namespace])) {
-            $moduleAsNames[$namespace] = $asName;
-        }
-    }
-
-    $externalFnRuntimeArity = \array_intersect_key(
-        $codegen['externalFnRuntimeArity'] ?? [],
-        $usedExternal,
-    );
-
-    return [
-        'requireLines' => $requireLines,
-        'functionUseLines' => $functionUseLines,
-        'namespaceUseLines' => $namespaceUseLines,
-        'externalFns' => $externalFns,
-        'externalFnRuntimeArity' => $externalFnRuntimeArity,
-        'moduleAsNames' => $moduleAsNames,
-        'constructorRenames' => $codegen['constructorRenames'] ?? [],
-    ];
-}
-

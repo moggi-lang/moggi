@@ -7,6 +7,7 @@ use Moggi\Backend\Jvm\Classfile\CodeBuilder;
 use Moggi\Backend\Jvm\Classfile\ConstantPool;
 use Moggi\Debug\SourceMapBuilder;
 use Moggi\IR;
+use Moggi\Modules\EmitPlan;
 
 use function Moggi\Backend\Jvm\Foreign\jvmIsInterface;
 use function Moggi\Backend\Jvm\Foreign\jvmReturnDescriptor;
@@ -68,16 +69,16 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
         $localBindings[$name] = true;
         $functionArity[$name] = $arity;
     }
-    foreach (constructorArityMapFromRegistry($options['imports']['importedData'] ?? []) as $name => $arity) {
+    foreach (constructorArityMapFromRegistry($options['plan']?->importedData ?? []) as $name => $arity) {
         if (! isset($localBindings[$name])) {
             $functionArity[$name] = $arity;
         }
     }
-    foreach ($options['externalFnRuntimeArity'] ?? [] as $name => $arity) {
+    foreach ($options['plan']?->externalFnRuntimeArity ?? [] as $name => $arity) {
         if (! isset($localBindings[$name])) {
             $functionArity[$name] = $arity;
         }
-        $resolved = $options['externalFns'][$name] ?? null;
+        $resolved = $options['plan']?->externalFns[$name] ?? null;
         if (\is_string($resolved)) {
             $parsed = parseResolvedSymbol($resolved);
             if ($parsed !== null) {
@@ -107,7 +108,7 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
         }
     }
 
-    $externalFns = $options['externalFns'] ?? [];
+    $externalFns = $options['plan']?->externalFns ?? [];
 
     /** @var array<string, true> $localCallables */
     $localCallables = [];
@@ -122,7 +123,7 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
     }
 
     $newtypeConstructors = [
-        ...newtypeConstructorMapFromRegistry($options['imports']['importedData'] ?? []),
+        ...newtypeConstructorMapFromRegistry($options['plan']?->importedData ?? []),
         ...newtypeConstructorMap($module->data),
     ];
 

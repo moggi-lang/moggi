@@ -3,6 +3,7 @@
 namespace Moggi\Syntax\Ast;
 
 use Moggi\IR;
+use Moggi\Modules\ModuleInterface;
 use Moggi\Semantics\TypeExpr\Type;
 
 /** Surface-syntax type AST (distinct from `Moggi\Semantics\TypeExpr\Type`). */
@@ -439,13 +440,8 @@ final class Program extends AstNode
      * @param array<int, AstNode> $items
      * @param list<ImportDecl> $imports
      * @param ?list<array{tag: string, name: string, path?: list<string>, children?: array{mode: string, names: list<string>}}> $exports
-     * @param array<string, string> $externalFns
      * @param array<string, string> $constructorRenames
      * @param list<array<string, mixed>> $instanceEvidence
-     * @param array<string, int> $externalFnRuntimeArity
-     * @param array<string, true> $externalActionReturnFns imported functions whose body is a boxed action
-     * @param array<string, true> $externalTrueBindings imported `<Module>::<name>` bindings whose body is the host boolean `true`
-     * @param array<string, int> $externalCallableArity published runtime arity of imported function entries
      * @param array<string, string> $backendMap
      * @param array<string, true> $language LANGUAGE pragma flags (e.g. NoImplicitPrelude)
      */
@@ -454,10 +450,15 @@ final class Program extends AstNode
         public ?string $module = null,
         public array $imports = [],
         public ?array $exports = null,
-        public array $externalFns = [],
+
+        /**
+         * What the compilation published to this module: the imported ABI, one value
+         * (`Modules\ModuleInterface`). Null only on a program that was parsed and not
+         * checked — lowering requires it.
+         */
+        public ?ModuleInterface $interface = null,
         public array $constructorRenames = [],
         public array $instanceEvidence = [],
-        public array $externalFnRuntimeArity = [],
         public ?string $moduleBackend = null,
         public array $backendMap = [],
         public array $exportedInferredSchemes = [],
@@ -467,22 +468,6 @@ final class Program extends AstNode
         public ?string $moduleDoc = null,
         /** @var list<array{doc: string, operators: list<string>, assoc: string, prec: int}> */
         public array $fixityDocs = [],
-
-        /** Imported names whose body is an action value; callers must run the box. */
-        public array $externalActionReturnFns = [],
-
-        /** Imported `<Module>::<name>` bindings whose body is the host boolean `true` (e.g. `otherwise`). */
-        public array $externalTrueBindings = [],
-
-        /**
-         * Published runtime arity of the imported *function* entries, keyed by the name this
-         * module calls them by. Narrower than `externalFnRuntimeArity`, which also carries the
-         * instance-evidence builders: those are not exported entries and their argument list is
-         * an evidence slice, not a callable layout.
-         *
-         * @var array<string, int>
-         */
-        public array $externalCallableArity = [],
         int $line = 0,
         int $col = 0,
         int $endCol = 0,

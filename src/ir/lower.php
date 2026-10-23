@@ -16,6 +16,10 @@ require_once __DIR__ . '/lower_io.php';
 
 function lower(Ast\Program $program, array $importedData = [], string $sourceFile = ''): Module
 {
+    $moduleName = $program->module ?? '';
+    $interface = $program->interface
+        ?? throw new \RuntimeException("lowering `{$moduleName}` needs its module interface");
+
     $state = newLowerState();
     $dataIndex = buildDataIndex($program, $importedData);
     $newtypeIndex = buildNewtypeIndex($program, $importedData);
@@ -23,8 +27,7 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
     $data = [];
     $knownFunctions = [];
     $functionArity = [];
-    $externalFns = $program->externalFns;
-    $moduleName = $program->module ?? '';
+    $externalFns = $interface->externalFns;
     $constructorRenames = $program->constructorRenames;
 
     $localBindings = [];
@@ -58,10 +61,10 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
         }
     }
 
-    $ioActionReturnFns = ioActionReturnFnNames($program->items) + $program->externalActionReturnFns;
-    $state->trueBindings = trueBindingOrigins($program->items, $moduleName) + $program->externalTrueBindings;
+    $ioActionReturnFns = ioActionReturnFnNames($program->items) + $interface->actionReturn;
+    $state->trueBindings = trueBindingOrigins($program->items, $moduleName) + $interface->trueBindings;
 
-    foreach ($program->externalFnRuntimeArity as $name => $arity) {
+    foreach ($interface->externalFnRuntimeArity as $name => $arity) {
         if (isset($localBindings[$name])) {
             continue;
         }
