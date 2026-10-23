@@ -128,7 +128,7 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
     if ($optimize) {
         $externalFnsByModule = [];
         foreach ($prepared->importContexts as $moduleName => $importContext) {
-            $externalFnsByModule[$moduleName] = $importContext['interface']->externalFns;
+            $externalFnsByModule[$moduleName] = $importContext->interface->externalFns;
         }
         $specialized = specializeAcrossModules($optByModule, $externalFnsByModule);
         $optByModule = $specialized['modules'];
@@ -142,7 +142,7 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
         validateCallableLayouts(
             $optimizedIr,
             'post-specialize',
-            $prepared->importContexts[$moduleName]['interface']->callableArity(),
+            $prepared->importContexts[$moduleName]->interface->callableArity(),
         );
     }
 
@@ -189,13 +189,13 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
             continue;
         }
 
-        $plan = $importContext['plan'];
+        $plan = $importContext->plan;
         if ($context->backendId === 'php') {
             $plan = $plan->withModuleOutputPaths($allModuleOutputPaths);
         }
 
         $plan = planEmission(
-            $importContext['interface'],
+            $importContext->interface,
             $plan,
             $optimizedIr,
             $irUsage['callees'],
@@ -299,8 +299,8 @@ function compileModuleFileOutputs(
     $fromOutputRelative = $outputFile !== null
         ? pathWithinProject($outputFile, $projectRoot)
         : $moduleContext['outputRelative'];
-    $interface = $moduleContext['importContext']['interface'];
-    $plan = $moduleContext['importContext']['plan'];
+    $interface = $moduleContext['importContext']->interface;
+    $plan = $moduleContext['importContext']->plan;
     if ($context->backendId === 'php') {
         $plan = $plan->withModuleOutputPaths(moduleOutputPathsForUnits(
             $moduleContext['units'],
@@ -348,7 +348,7 @@ function compileModuleFileOutputs(
  * @return array{
  *   unit: array<string, mixed>,
  *   checked: Ast\Program,
- *   importContext: array<string, mixed>,
+ *   importContext: ImportContext,
  *   outputRelative: string,
  *   rootPrefix: string,
  *   units: array<string, array<string, mixed>>

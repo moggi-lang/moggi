@@ -5,6 +5,7 @@ namespace Moggi\Semantics\Types;
 use function Moggi\Errors\formatDiagnostic;
 use function Moggi\Modules\standaloneImportContext;
 
+use Moggi\Modules\ImportContext;
 use Moggi\Pipeline\CompilePurpose;
 
 use function Moggi\Semantics\Deriving\commitProjectInstance;
@@ -115,7 +116,6 @@ function inferredFunctionDecls(Ast\Program $program): array
 }
 
 /**
- * @param array<string, mixed> $importContext
  * @param ?array{env: array<string, mixed>, data: array<string, mixed>, typeSynonyms: array<string, mixed>, intrinsicWrappers: array<string, string>} $interface
  *   receives the local type environment this check commits (its env, data,
  *   type synonyms and intrinsic wrappers), so the module interface is a product
@@ -125,7 +125,7 @@ function checkRaw(
     Ast\Program $program,
     string $source = '',
     string $filename = '',
-    ?array $importContext = null,
+    ?ImportContext $importContext = null,
     CompilePurpose $purpose = CompilePurpose::Executable,
     ?array &$interface = null,
     array $entryModules = [],
@@ -234,7 +234,7 @@ function checkRaw(
         module: $program->module,
         imports: $program->imports,
         exports: $program->exports,
-        interface: $importContext['interface'],
+        interface: $importContext->interface,
         constructorRenames: $state->constructorRenames,
         instanceEvidence: $state->instanceEvidence,
         moduleBackend: $program->moduleBackend,

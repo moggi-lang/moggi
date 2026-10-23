@@ -173,6 +173,7 @@ function planEmission(
         array $functionUseLines,
         array $namespaceUseLines,
         array $externalFns,
+        array $externalFnRuntimeArity,
         array $moduleAsNames,
     ): EmitPlan => new EmitPlan(
         backendId: $target->backendId,
@@ -184,16 +185,12 @@ function planEmission(
         functionUseLines: $functionUseLines,
         namespaceUseLines: $namespaceUseLines,
         externalFns: $externalFns,
-        externalFnRuntimeArity: $interface->externalFnRuntimeArity,
+        externalFnRuntimeArity: $externalFnRuntimeArity,
         constructorRenames: $interface->constructorRenames,
         importedData: $interface->data,
     );
 
     if ($ir === null) {
-        // Without the module's own IR nothing can be pruned — and nothing may be dropped. The
-        // use lines are the pre-rendered form the REPL's display path always showed; what is
-        // not planned is a file, because which module is written where is the emitter's to
-        // decide once it has the IR.
         $functionUseLines = [];
         foreach ($interface->externalFns as $local => $resolved) {
             if (isConstructorName($local)) {
@@ -203,7 +200,14 @@ function planEmission(
             $functionUseLines[] = functionUseLine($local, $resolved);
         }
 
-        return $render([], dedupeUseLines($functionUseLines), [], $interface->externalFns, $target->moduleAsNames);
+        return $render(
+            [],
+            dedupeUseLines($functionUseLines),
+            [],
+            $interface->externalFns,
+            $interface->externalFnRuntimeArity,
+            $target->moduleAsNames,
+        );
     }
 
     $usedCallees ??= collectIrCodegenUsage($ir)['callees'];
@@ -257,6 +261,7 @@ function planEmission(
     }
 
     $externalFns = \array_intersect_key($interface->externalFns, $usedExternal);
+    $externalFnRuntimeArity = \array_intersect_key($interface->externalFnRuntimeArity, $externalFns);
 
     $moduleAsNames = [];
     $namespaceUseLines = [];
@@ -273,9 +278,6 @@ function planEmission(
     $absoluteRoot = $absoluteRequireRoot !== null
         ? \rtrim(\str_replace('\\', '/', $absoluteRequireRoot), '/')
         : null;
-    // Keyed by module, not by path spelling: two modules may live under a path whose
-    // spelling sorts differently, and the order the requires are written in is the order
-    // of the modules the emitter links, so it must not follow the filesystem's spelling.
     $requireByModule = [];
     foreach (\array_keys($usedModules) as $moduleName) {
         $moduleOutput = $target->moduleOutputPaths[$moduleName] ?? null;
@@ -304,6 +306,7 @@ function planEmission(
         dedupeUseLines($functionUseLines),
         dedupeUseLines($namespaceUseLines),
         $externalFns,
+        $externalFnRuntimeArity,
         $moduleAsNames,
     );
 }

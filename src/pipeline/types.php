@@ -5,6 +5,7 @@ namespace Moggi\Pipeline;
 use Moggi\Backend\Backend;
 use Moggi\IR\EntryPoint;
 use Moggi\IR\Module as IrModule;
+use Moggi\Modules\ImportContext;
 use Moggi\Syntax\Ast\Program;
 
 use function Moggi\Backend\backendById;
@@ -247,7 +248,6 @@ final class CompilationContext
  * request that could carry a second opinion about why it is compiling is a
  * request that can disagree with the key its products are cached under.
  *
- * @param array<string, mixed> $importContext
  * @param array<string, mixed> $emitOptions
  */
 final class PipelineRequest
@@ -259,8 +259,8 @@ final class PipelineRequest
         public ?Program $program = null,
         public ?Program $typedProgram = null,
         public bool $optimize = true,
-        /** Null means the module imports nothing; `run` supplies that interface. */
-        public ?array $importContext = null,
+        /** Null means the module imports nothing; `run` supplies that context. */
+        public ?ImportContext $importContext = null,
         public array $emitOptions = [],
     ) {
     }

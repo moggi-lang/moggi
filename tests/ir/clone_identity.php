@@ -12,8 +12,11 @@ while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
 require $root . '/src/compiler.php';
 
 use Moggi\Backend;
+use Moggi\Modules\EmitPlan;
+use Moggi\Modules\ModuleInterface;
 
 use function Moggi\Backend\codegenWith;
+use function Moggi\Modules\planEmission;
 use function Moggi\IR\Dump\identityLines;
 use function Moggi\Optimize\Partial\specializePartialReturnFunction;
 use function Moggi\Optimize\Specialize\cloneSpecializedFunction;
@@ -98,6 +101,11 @@ foreach (Backend\implementedBackendIds() as $backendId) {
         'outputRelative' => 'Main.out',
         'artifactModuleName' => 'Main',
         'namespace' => 'Main',
+        'plan' => planEmission(
+            ModuleInterface::withoutImports('Main'),
+            EmitPlan::forTarget($backendId, 'Main.out'),
+            null,
+        ),
     ]);
     $check($emitted !== '', "{$backendId}: emit produced nothing");
     $check(identityLines($module) === $before, "{$backendId}: emit changed the identity lines");

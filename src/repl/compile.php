@@ -2,6 +2,7 @@
 
 namespace Moggi\Repl;
 
+use Moggi\Modules\ImportContext;
 use Moggi\Modules\PreparedProject;
 use Moggi\Syntax\Ast;
 use Moggi\Syntax\Ast\Program;
@@ -87,7 +88,7 @@ function compileInteractiveInspect(State $state, PipelineStage $stopAt, bool $op
 }
 
 /**
- * @param array{prepared: PreparedProject, checked: Program, importContext: array<string, mixed>} $ctx
+ * @param array{prepared: PreparedProject, checked: Program, importContext: ImportContext} $ctx
  */
 function compileFromInteractiveCtx(
     State $state,
@@ -111,7 +112,7 @@ function compileFromInteractiveCtx(
 }
 
 /**
- * @param array{prepared: PreparedProject, checked: Program, importContext: array<string, mixed>} $ctx
+ * @param array{prepared: PreparedProject, checked: Program, importContext: ImportContext} $ctx
  * @return array<string, mixed>
  */
 function emitOptionsForInteractive(State $state, array $ctx): array
@@ -121,12 +122,9 @@ function emitOptionsForInteractive(State $state, array $ctx): array
     return [
         'namespace' => $unit['namespace'],
         'artifactModuleName' => $state->moduleName,
-        // The pipeline has not produced the interactive IR yet, so the plan is
-        // rendered without usage: every ABI fact, no file lines. The PHP emit
-        // path renders it again once it has the IR, where pruning matters.
         'plan' => planEmission(
-            $ctx['importContext']['interface'],
-            $ctx['importContext']['plan'],
+            $ctx['importContext']->interface,
+            $ctx['importContext']->plan,
             null,
         ),
         'outputRelative' => moduleNameToPath($state->moduleName)

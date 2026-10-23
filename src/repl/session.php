@@ -198,7 +198,7 @@ function rememberInteractiveCtx(State $state, string $fingerprint, array $ctx): 
  * queries on an unchanged session are common — neither should pay for a second
  * full typecheck.
  *
- * @return array{prepared: Modules\PreparedProject, checked: Ast\Program, importContext: array<string, mixed>}
+ * @return array{prepared: Modules\PreparedProject, checked: Ast\Program, importContext: Modules\ImportContext}
  */
 function prepareInteractive(State $state, string $extra = '', bool $normalizeIo = true): array
 {
@@ -256,9 +256,9 @@ function prepareInteractive(State $state, string $extra = '', bool $normalizeIo 
 
         break;
     }
-    $projectClasses = $sampleCtx['classes'] ?? [];
-    $projectInstances = $sampleCtx['projectInstances'] ?? [];
-    $projectInstanceIndex = $sampleCtx['projectInstanceIndex']
+    $projectClasses = $sampleCtx->classes;
+    $projectInstances = $sampleCtx->projectInstances;
+    $projectInstanceIndex = $sampleCtx->projectInstanceIndex
         ?? indexProjectInstances($projectInstances);
 
     $outputRelative = moduleNameToPath($moduleName)
@@ -278,14 +278,17 @@ function prepareInteractive(State $state, string $extra = '', bool $normalizeIo 
         $outputRelative,
         $base->rootPrefix,
         $context->backendId,
+    )->withProjectScopes(
+        $projectClasses,
+        [],
+        $projectInstances,
+        $projectInstanceIndex,
+        $moduleName,
     );
-    $importContext['classes'] = $projectClasses;
-    $importContext['projectInstances'] = $projectInstances;
-    $importContext['projectInstanceIndex'] = $projectInstanceIndex;
-    $importContext['currentModule'] = $moduleName;
-
-    $importContext['interface'] = $importContext['interface']->withExtraTypes(
-        moduleFacadeExtraTypes($units, $moduleName, $projectClasses, $projectInstanceIndex),
+    $importContext = $importContext->withInterface(
+        $importContext->interface->withExtraTypes(
+            moduleFacadeExtraTypes($units, $moduleName, $projectClasses, $projectInstanceIndex),
+        ),
     );
 
     $interface = null;
@@ -743,12 +746,12 @@ function typeOfInput(State $state, string $source): string
 }
 
 /**
- * @param array{checked: Ast\Program, importContext: array<string, mixed>} $ctx
+ * @param array{checked: Ast\Program, importContext: Modules\ImportContext} $ctx
  */
 function schemeTypeLine(array $ctx, string $name): ?string
 {
     $scheme = $ctx['typedProgram']->exportedInferredSchemes[$name]
-        ?? ($ctx['importContext']['env'][$name] ?? null);
+        ?? ($ctx['importContext']->interface->env[$name] ?? null);
     if (! $scheme instanceof Scheme) {
         return null;
     }

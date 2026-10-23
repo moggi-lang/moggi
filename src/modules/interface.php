@@ -196,13 +196,11 @@ final class ModuleInterface
  * The import context of a module that imports nothing: one source checked on its
  * own. The interface is empty, not absent, so no consumer needs a null check,
  * and the target layout is empty because there is nothing to place.
- *
- * @return array{interface: ModuleInterface, plan: EmitPlan}
  */
-function standaloneImportContext(string $module, string $backendId): array
+function standaloneImportContext(string $module, string $backendId): ImportContext
 {
-    return [
-        'interface' => ModuleInterface::withoutImports($module),
-        'plan' => EmitPlan::forTarget($backendId, ''),
-    ];
+    return new ImportContext(
+        interface: ModuleInterface::withoutImports($module),
+        plan: EmitPlan::forTarget($backendId, ''),
+    );
 }

@@ -535,7 +535,6 @@ function externalFunctionRuntimeArity(
  *
  * @param list<Ast\ImportDecl> $imports
  * @param array<string, array<string, mixed>> $units
- * @return array<string, mixed>
  */
 function buildImportContext(
     array $imports,
@@ -544,7 +543,7 @@ function buildImportContext(
     string $currentOutputRelative,
     string $rootPrefix,
     string $backendId,
-): array {
+): ImportContext {
     $planPhpImports = $backendId === 'php';
     $outputExtension = backendById($backendId)->extension();
     $env = [];
@@ -812,8 +811,8 @@ function buildImportContext(
         $outputExtension,
     );
 
-    return [
-        'interface' => new ModuleInterface(
+    return new ImportContext(
+        interface: new ModuleInterface(
             module: $currentModule,
             env: $env,
             data: $data,
@@ -831,14 +830,14 @@ function buildImportContext(
             actionReturn: $actionReturnFns,
             trueBindings: moduleTrueBindingOriginsAll($units),
         ),
-        'plan' => EmitPlan::forTarget(
+        plan: EmitPlan::forTarget(
             $backendId,
             $currentOutputRelative,
             $planPhpImports ? $moduleOutputPaths : [],
             $moduleAsNames,
             $namespaceModules,
         ),
-    ];
+    );
 }
 
 /**

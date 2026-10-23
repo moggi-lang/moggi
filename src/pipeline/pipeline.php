@@ -8,11 +8,14 @@ use function Moggi\IR\lower;
 use function Moggi\IR\Validate\validateCallableLayouts;
 use function Moggi\IR\Validate\validateModule;
 use function Moggi\Modules\moduleNameToNamespace;
+use function Moggi\Modules\planEmission;
 use function Moggi\Modules\standaloneImportContext;
 use function Moggi\Optimize\optimize;
 use function Moggi\Optimize\Partial\legalizeCallables;
 use function Moggi\Semantics\Effects\checkAndNormalize;
 
+use Moggi\Modules\EmitPlan;
+use Moggi\Modules\ModuleInterface;
 use Moggi\Syntax\Ast\Program;
 
 use function Moggi\Syntax\Lexer\lex;
@@ -70,7 +73,9 @@ function run(PipelineRequest $request, PipelineStage $stopAt = PipelineStage::Em
         }
     }
 
-    $ir = lower($artifacts->typedAst, $importContext['interface']->data, $request->filename);
+    $checked = $artifacts->typedAst;
+    $interface = $checked->interface ?? $importContext->interface;
+    $ir = lower($checked, $interface->data, $request->filename);
     $artifacts->ir = $ir;
     $artifacts->entry = $ir->entry;
 
@@ -107,6 +112,15 @@ function run(PipelineRequest $request, PipelineStage $stopAt = PipelineStage::Em
     $emitOptions = $request->emitOptions;
     if ($emitOptions === []) {
         $emitOptions = defaultEmitOptions($artifacts->typedAst, $request->filename, $request->context);
+    } elseif (($emitOptions['plan'] ?? null) instanceof EmitPlan) {
+        $fromOutput = $emitOptions['outputRelative'] ?? null;
+        $emitOptions['plan'] = planEmission(
+            $interface,
+            $emitOptions['plan'],
+            $irOpt,
+            null,
+            \is_string($fromOutput) ? $fromOutput : null,
+        );
     }
 
     $artifacts->emit = codegenWith($request->context->backend, $irOpt, $request->filename, $emitOptions);
@@ -123,7 +137,7 @@ function irCheckpointsEnabled(): bool
     return \getenv('MOGGI_IR_CHECKPOINTS') === '1';
 }
 
-/** @return array{outputRelative: string, moduleName?: string, namespace?: string} */
+/** @return array{outputRelative: string, moduleName?: string, namespace?: string, plan: EmitPlan} */
 function defaultEmitOptions(Program $ast, string $filename, CompilationContext $context): array
 {
     $emitOptions = [
@@ -143,6 +157,12 @@ function defaultEmitOptions(Program $ast, string $filename, CompilationContext $
     if ($context->backendId === 'jvm') {
         $emitOptions['foreignInterfaces'] = jvmInterfaceNamesFromPrograms([$ast]);
     }
+
+    $emitOptions['plan'] = planEmission(
+        $ast->interface ?? ModuleInterface::withoutImports($ast->module ?? ''),
+        EmitPlan::forTarget($context->backendId, $emitOptions['outputRelative']),
+        null,
+    );
 
     return $emitOptions;
 }

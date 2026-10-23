@@ -169,6 +169,39 @@ foreach ($holeResult->diagnostics as $d) {
     }
 }
 $assert($holeDiag !== null, 'hole diagnostic present: ' . \json_encode($holeResult->diagnostics));
+
+// A foreign declaration is verified where the declarations are checked, so the editor sees the
+// diagnostic the compiler prints — and an editor on another target sees the backend mismatch
+// instead. Either way the declaration is refused rather than compiled or silently dropped.
+$foreignSrc = <<<'MOG'
+module ForeignDiag where
+
+foreign php function rawLen "strlen" :: String -> Int -> Int
+MOG;
+$foreignPath = $tmp . '/ForeignDiag.mog';
+\file_put_contents($foreignPath, $foreignSrc);
+$foreignUri = pathToUri($foreignPath);
+$foreignSvc = new AnalysisService();
+$foreignSvc->setWorkspaceRoot($tmp);
+$foreignSvc->openDocument($foreignUri, $foreignSrc, 1);
+$foreignResult = $foreignSvc->ensureAnalyzed($foreignUri);
+$assert($foreignResult !== null, 'foreign module analyzed');
+$foreignDiag = null;
+foreach ($foreignResult->diagnostics as $d) {
+    if (\str_contains((string) ($d['message'] ?? ''), 'foreign')) {
+        $foreignDiag = $d;
+
+        break;
+    }
+}
+$assert(
+    $foreignDiag !== null,
+    'a foreign declaration is verified through the LSP too: ' . \json_encode($foreignResult->diagnostics),
+);
+$assert(
+    \array_key_exists((string) ($foreignDiag['code'] ?? ''), $registry),
+    'the foreign diagnostic carries a registered code: ' . \json_encode($foreignDiag),
+);
 $holeActions = svcCodeActions($holeSvc, $holeUri, $holeDiag['range'], ['diagnostics' => [$holeDiag]]);
 $fill = null;
 foreach ($holeActions as $a) {

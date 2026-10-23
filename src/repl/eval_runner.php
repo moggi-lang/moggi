@@ -292,7 +292,7 @@ function phpDepsFingerprint(State $state): string
 }
 
 /**
- * @param array{prepared: Modules\PreparedProject, checked: Ast\Program, importContext: array<string, mixed>} $ctx
+ * @param array{prepared: Modules\PreparedProject, checked: Ast\Program, importContext: Modules\ImportContext} $ctx
  */
 function emitInteractivePhp(
     State $state,
@@ -311,13 +311,13 @@ function emitInteractivePhp(
     ), PipelineStage::IrOpt);
 
     $ir = $artifacts->irOpt ?? throw new \RuntimeException('missing optimized IR');
-    $plan = $ctx['importContext']['plan'];
+    $plan = $ctx['importContext']->plan;
     if ($absoluteDepsRoot !== null && $state->phpDepsModuleRel !== []) {
         $plan = $plan->withModuleOutputPaths($state->phpDepsModuleRel);
     }
 
     $plan = planEmission(
-        $ctx['importContext']['interface'],
+        $ctx['importContext']->interface,
         $plan,
         $ir,
         null,

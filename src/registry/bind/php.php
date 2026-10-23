@@ -62,12 +62,6 @@ function phpSegmentToModule(string $segment): string
     return bindSegmentToModule($segment);
 }
 
-/**
- * The module a bound library lives in: `acme/hello` is `Composer.Acme.Hello`.
- * The ecosystem prefix keeps three backends' bindings for "the same" library
- * apart (R7), and one segment per component keeps the module/file law resolving
- * generated modules with no new lookup rule.
- */
 function phpBindModuleName(string $vendor, string $package): string
 {
     $segments = ['Composer', phpSegmentToModule($vendor)];

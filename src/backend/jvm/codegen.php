@@ -69,16 +69,22 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
         $localBindings[$name] = true;
         $functionArity[$name] = $arity;
     }
-    foreach (constructorArityMapFromRegistry($options['plan']?->importedData ?? []) as $name => $arity) {
+    $plan = $options['plan'] ?? null;
+    if (! $plan instanceof EmitPlan) {
+        throw new \RuntimeException(
+            "emitting `{$moduleName}` needs its EmitPlan",
+        );
+    }
+    foreach (constructorArityMapFromRegistry($plan->importedData) as $name => $arity) {
         if (! isset($localBindings[$name])) {
             $functionArity[$name] = $arity;
         }
     }
-    foreach ($options['plan']?->externalFnRuntimeArity ?? [] as $name => $arity) {
+    foreach ($plan->externalFnRuntimeArity as $name => $arity) {
         if (! isset($localBindings[$name])) {
             $functionArity[$name] = $arity;
         }
-        $resolved = $options['plan']?->externalFns[$name] ?? null;
+        $resolved = $plan->externalFns[$name] ?? null;
         if (\is_string($resolved)) {
             $parsed = parseResolvedSymbol($resolved);
             if ($parsed !== null) {
@@ -108,7 +114,7 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
         }
     }
 
-    $externalFns = $options['plan']?->externalFns ?? [];
+    $externalFns = $plan->externalFns;
 
     /** @var array<string, true> $localCallables */
     $localCallables = [];
@@ -123,7 +129,7 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
     }
 
     $newtypeConstructors = [
-        ...newtypeConstructorMapFromRegistry($options['plan']?->importedData ?? []),
+        ...newtypeConstructorMapFromRegistry($plan->importedData),
         ...newtypeConstructorMap($module->data),
     ];
 

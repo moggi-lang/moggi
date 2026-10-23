@@ -81,12 +81,6 @@ function parseDotNetCoordinate(string $coordinate): array
     return ['id' => $parts[0], 'version' => $parts[1] ?? null];
 }
 
-/**
- * The module a bound library lives in: `Acme.Hello` is `Nuget.Acme.Hello`.
- * The ecosystem prefix keeps three backends' bindings apart (R7); id dots
- * become nesting so the module/file law resolves the generated module with no
- * new lookup rule.
- */
 function dotNetBindModuleName(string $id): string
 {
     $segments = ['Nuget'];

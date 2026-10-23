@@ -105,7 +105,7 @@ $context = CompilationContext::for(
 
 $prepared = Modules\prepareProject($files, $dir, $context);
 $module = static function (array $importContexts, string $name): ModuleInterface {
-    $interface = $importContexts[$name]['interface'] ?? null;
+    $interface = ($importContexts[$name] ?? null)?->interface;
     if (! $interface instanceof ModuleInterface) {
         throw new \RuntimeException("module `{$name}` published no ModuleInterface");
     }
@@ -136,13 +136,13 @@ $check(
 // ---- 2 · one interface, and no second rendering of it ----------------------
 
 $check(
-    ! isset($prepared->importContexts['Main']['codegen']),
+    ! \property_exists($prepared->importContexts['Main'], 'codegen'),
     'the import context still renders a `codegen` view beside the interface',
 );
 
 // ---- 3 · the emission plan is rendered from the interface ------------------
 
-$layout = $prepared->importContexts['Main']['plan'];
+$layout = $prepared->importContexts['Main']->plan;
 $check($layout instanceof EmitPlan, 'the import context published no EmitPlan');
 $check(
     $layout instanceof EmitPlan && $layout->backendId === $backendId,
@@ -197,6 +197,24 @@ $check(
     'the plan dropped an entry the module calls: ' . \json_encode(\array_keys($planned->externalFns)),
 );
 $check($planned->functionUseLines !== [], 'the plan planned no `use function` lines for called entries');
+$check(
+    \array_diff_key($planned->externalFnRuntimeArity, $planned->externalFns) === [],
+    'the plan pruned an external but kept its runtime arity: '
+        . \json_encode(\array_keys(\array_diff_key($planned->externalFnRuntimeArity, $planned->externalFns))),
+);
+
+// Emitting without a plan writes a module with no requires, no `use` lines and no imported
+// constructors, so the emitters refuse it instead of degrading.
+$refused = false;
+try {
+    \Moggi\Backend\codegenWith(\Moggi\Backend\backendById($backendId), $ir, $mainPath, [
+        'outputRelative' => 'Main.php',
+        'artifactModuleName' => 'Main',
+    ]);
+} catch (\RuntimeException $e) {
+    $refused = \str_contains($e->getMessage(), 'EmitPlan');
+}
+$check($refused, 'an emitter accepted a module with no EmitPlan');
 
 // The program lowering receives carries the interface, not a copy of its facts. `===` would
 // only hold for a compile that read its program from memory; a hydrated one decodes the same
