@@ -204,36 +204,18 @@ function prepareProject(array $paths, string $rootDir, CompilationContext $conte
             }
 
             $checked[$moduleName] = $units[$moduleName]['checkedProgram'] ?? $units[$moduleName]['program'];
-            $importContexts[$moduleName] = [
-                'env' => [],
-                'typeSynonyms' => [],
-                'data' => [],
-                'qualifiedModules' => [],
-                'constructorRenames' => [],
-                'intrinsicWrappers' => [],
-                'codegen' => [
-                    'requireLines' => [],
-                    'functionUseLines' => [],
-                    'namespaceUseLines' => [],
-                    'externalFns' => [],
-                    'moduleAsNames' => [],
-                    'constructorRenames' => [],
-                ],
+            $importContexts[$moduleName] = mergeClassScopeRefs([
+                'interface' => ModuleInterface::withoutImports($moduleName),
+                'plan' => EmitPlan::forTarget($context->backendId, ''),
                 'classes' => $projectClasses,
                 'classScopes' => $classScopes,
                 'projectInstances' => $projectInstances,
                 'projectInstanceIndex' => $projectInstanceIndex,
                 'currentModule' => $moduleName,
-            ];
-            $importContexts[$moduleName] = mergeClassScopeRefs(
-                $importContexts[$moduleName],
+            ],
                 $classScopeFns,
                 moduleLocalValueNames($units, $moduleName),
                 moduleLocalDataNames($units, $moduleName),
-                $units,
-                $moduleName,
-                $rootPrefix,
-                $context->backendId,
             );
 
             continue;
@@ -358,7 +340,6 @@ function prepareProject(array $paths, string $rootDir, CompilationContext $conte
             moduleLocalValueNames($units, $moduleName),
             moduleLocalDataNames($units, $moduleName),
             $units,
-            $moduleName,
             $rootPrefix,
             $context->backendId,
         );
@@ -367,11 +348,9 @@ function prepareProject(array $paths, string $rootDir, CompilationContext $conte
         $importContext['currentModule'] = $moduleName;
         $importContexts[$moduleName] = $importContext;
 
-        foreach (moduleFacadeExtraTypes($units, $moduleName, $projectClasses, $projectInstanceIndex) as $kind => $entries) {
-            foreach ($entries as $name => $entry) {
-                $importContext[$kind][$name] ??= $entry;
-            }
-        }
+        $importContext['interface'] = $importContext['interface']->withExtraTypes(
+            moduleFacadeExtraTypes($units, $moduleName, $projectClasses, $projectInstanceIndex),
+        );
 
         $purpose = $context->purposeFor($moduleName);
         $interface = null;
@@ -511,10 +490,6 @@ function buildPreparedModuleContext(
         $classScopeFns,
         moduleLocalValueNames($units, $moduleName),
         moduleLocalDataNames($units, $moduleName),
-        $units,
-        $moduleName,
-        $rootPrefix,
-        $context->backendId,
     );
     $importContext['projectInstances'] = $projectInstances;
     $importContext['projectInstanceIndex'] = $projectInstanceIndex;
@@ -886,20 +861,14 @@ function prepareProjectExtendingFocus(
         $classScopeFns,
         moduleLocalValueNames($units, $focusModule),
         moduleLocalDataNames($units, $focusModule),
-        $units,
-        $focusModule,
-        $rootPrefix,
-        $context->backendId,
     );
     $importContext['projectInstances'] = $projectInstances;
     $importContext['projectInstanceIndex'] = $projectInstanceIndex;
     $importContext['currentModule'] = $focusModule;
 
-    foreach (moduleFacadeExtraTypes($units, $focusModule, $projectClasses, $projectInstanceIndex) as $kind => $entries) {
-        foreach ($entries as $name => $entry) {
-            $importContext[$kind][$name] ??= $entry;
-        }
-    }
+    $importContext['interface'] = $importContext['interface']->withExtraTypes(
+        moduleFacadeExtraTypes($units, $focusModule, $projectClasses, $projectInstanceIndex),
+    );
 
     $purpose = $context->purposeFor($focusModule);
     $interface = null;

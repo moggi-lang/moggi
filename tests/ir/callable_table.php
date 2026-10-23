@@ -540,19 +540,19 @@ $check($typed !== null, 'the imported-entry example did not typecheck');
 if ($typed !== null) {
     // The importer's copy of the published arity, keyed by the name this module calls it by.
     $check(
-        ($typed->externalCallableArity['showString'] ?? null) === 2,
-        'showString reached the importer as ' . \json_encode($typed->externalCallableArity['showString'] ?? null)
+        ($typed->interface?->callableArity()['showString'] ?? null) === 2,
+        'showString reached the importer as ' . \json_encode($typed->interface?->callableArity()['showString'] ?? null)
             . ' slot(s); its declared parameters are 2',
     );
     $check(
-        ($typed->externalCallableArity['shows'] ?? null) === 3,
-        'shows reached the importer as ' . \json_encode($typed->externalCallableArity['shows'] ?? null)
+        ($typed->interface?->callableArity()['shows'] ?? null) === 3,
+        'shows reached the importer as ' . \json_encode($typed->interface?->callableArity()['shows'] ?? null)
             . ' slot(s); one evidence slot plus two parameters is 3',
     );
     // `($) f = f` declares one parameter and has two arrows: only the declaration says so.
     $check(
-        ($typed->externalCallableArity['$'] ?? null) === 1,
-        '($) reached the importer as ' . \json_encode($typed->externalCallableArity['$'] ?? null)
+        ($typed->interface?->callableArity()['$'] ?? null) === 1,
+        '($) reached the importer as ' . \json_encode($typed->interface?->callableArity()['$'] ?? null)
             . ' slot(s); its declared vector is 1',
     );
 

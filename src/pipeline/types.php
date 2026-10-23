@@ -259,7 +259,8 @@ final class PipelineRequest
         public ?Program $program = null,
         public ?Program $typedProgram = null,
         public bool $optimize = true,
-        public array $importContext = [],
+        /** Null means the module imports nothing; `run` supplies that interface. */
+        public ?array $importContext = null,
         public array $emitOptions = [],
     ) {
     }

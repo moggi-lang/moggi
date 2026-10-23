@@ -1,0 +1,14 @@
+module Types (Shape(..), Area(area), describe) where
+
+data Shape = Circle Int | Square Int
+
+class Area a where
+  area :: a -> Int
+
+instance Area Shape where
+  area s = case s of
+    Circle r -> 3 * r * r
+    Square w -> w * w
+
+describe :: Area a => a -> String
+describe x = "area=" <> show (area x)

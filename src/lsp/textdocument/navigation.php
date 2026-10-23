@@ -538,7 +538,7 @@ function resolveNavTarget(AnalysisService $svc, string $uri, array $pos): ?array
         return null;
     }
     if ($resolved === null && $analysis->program instanceof Ast\Program) {
-        $resolved = $analysis->program->externalFns[$name] ?? null;
+        $resolved = $analysis->program->interface?->externalFns[$name] ?? null;
         if ($resolved === null && isset($analysis->declarations[$name])) {
             $resolved = resolvedSymbol($analysis->program->module ?? 'Main', $name);
         }

@@ -10,6 +10,7 @@ use Moggi\Pipeline\PipelineRequest;
 use Moggi\Pipeline\PipelineStage;
 
 use function Moggi\Backend\backendById;
+use function Moggi\Modules\planEmission;
 use function Moggi\Paths\moduleNameToPath;
 use function Moggi\Pipeline\run as pipelineRun;
 use function Moggi\Syntax\Parser\parse;
@@ -116,15 +117,19 @@ function compileFromInteractiveCtx(
 function emitOptionsForInteractive(State $state, array $ctx): array
 {
     $unit = $ctx['prepared']->units[$state->moduleName];
-    $codegen = $ctx['importContext']['codegen'] ?? [];
 
     return [
         'namespace' => $unit['namespace'],
         'artifactModuleName' => $state->moduleName,
-        'imports' => $codegen,
+        // The pipeline has not produced the interactive IR yet, so the plan is
+        // rendered without usage: every ABI fact, no file lines. The PHP emit
+        // path renders it again once it has the IR, where pruning matters.
+        'plan' => planEmission(
+            $ctx['importContext']['interface'],
+            $ctx['importContext']['plan'],
+            null,
+        ),
         'outputRelative' => moduleNameToPath($state->moduleName)
             . backendById($state->backend)->extension(),
-        'externalFns' => $codegen['externalFns'] ?? [],
-        'externalFnRuntimeArity' => $ctx['importContext']['externalFnRuntimeArity'] ?? [],
     ];
 }

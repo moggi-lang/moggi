@@ -128,10 +128,7 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
     if ($optimize) {
         $externalFnsByModule = [];
         foreach ($prepared->importContexts as $moduleName => $importContext) {
-            $codegen = $importContext['codegen'] ?? [];
-            $externalFnsByModule[$moduleName] = \is_array($codegen['externalFns'] ?? null)
-                ? $codegen['externalFns']
-                : [];
+            $externalFnsByModule[$moduleName] = $importContext['interface']->externalFns;
         }
         $specialized = specializeAcrossModules($optByModule, $externalFnsByModule);
         $optByModule = $specialized['modules'];
@@ -145,7 +142,7 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
         validateCallableLayouts(
             $optimizedIr,
             'post-specialize',
-            $prepared->importContexts[$moduleName]['externalCallableArity'] ?? [],
+            $prepared->importContexts[$moduleName]['interface']->callableArity(),
         );
     }
 
@@ -192,28 +189,25 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
             continue;
         }
 
-        $codegenForFilter = $importContext['codegen'];
-        $codegenForFilter['moduleOutputPaths'] = \array_merge(
-            $allModuleOutputPaths,
-            $codegenForFilter['moduleOutputPaths'] ?? [],
-        );
+        $plan = $importContext['plan'];
+        if ($context->backendId === 'php') {
+            $plan = $plan->withModuleOutputPaths($allModuleOutputPaths);
+        }
 
-        $codegenImports = filterCodegenImportsForIr(
+        $plan = planEmission(
+            $importContext['interface'],
+            $plan,
             $optimizedIr,
-            $codegenForFilter,
-            null,
             $irUsage['callees'],
+            $outputRelative,
         );
-        $codegenImports['importedData'] = $importContext['data'];
 
         $emitted = codegenWith($context->backend, $optimizedIr, $unit['path'], [
             'namespace' => $unit['namespace'],
-            'imports' => $codegenImports,
+            'plan' => $plan,
             'outputRelative' => $outputRelative,
             'irUsage' => $irUsage,
             'artifactModuleName' => $moduleName,
-            'externalFns' => $codegenImports['externalFns'] ?? [],
-            'externalFnRuntimeArity' => $importContext['externalFnRuntimeArity'] ?? [],
             'globalFnArity' => $globalFnArity,
             'foreignInterfaces' => $foreignInterfaces,
         ]);
@@ -305,36 +299,43 @@ function compileModuleFileOutputs(
     $fromOutputRelative = $outputFile !== null
         ? pathWithinProject($outputFile, $projectRoot)
         : $moduleContext['outputRelative'];
-    $codegen = $moduleContext['importContext']['codegen'];
+    $interface = $moduleContext['importContext']['interface'];
+    $plan = $moduleContext['importContext']['plan'];
+    if ($context->backendId === 'php') {
+        $plan = $plan->withModuleOutputPaths(moduleOutputPathsForUnits(
+            $moduleContext['units'],
+            $moduleContext['rootPrefix'],
+            $context->backendId,
+        ));
+    }
+
     $stdlibPhpRoot = detectStdlibPhpPath($outputFile);
     if ($stdlibPhpRoot !== null) {
-        $codegen['moduleOutputPaths'] = remapStdlibModuleOutputPaths(
-            $codegen['moduleOutputPaths'],
+        $plan = $plan->withModuleOutputPaths(remapStdlibModuleOutputPaths(
+            $plan->moduleOutputPaths,
             $moduleContext['units'],
             $stdlibPhpRoot,
             $projectRoot,
-        );
+        ));
     }
 
     $irUsage = collectIrCodegenUsage($phpIr);
-    $codegenImports = filterCodegenImportsForIr(
+    $plan = planEmission(
+        $interface,
+        $plan,
         $phpIr,
-        $codegen,
-        $fromOutputRelative,
         $irUsage['callees'],
+        $fromOutputRelative,
     );
-    $codegenImports['importedData'] = $moduleContext['importContext']['data'];
 
     ProjectCache::releaseProjectCheckedModules();
 
     $emit = codegenWith($context->backend, $phpIr, $moduleContext['unit']['path'], [
         'namespace' => $moduleContext['unit']['namespace'],
-        'imports' => $codegenImports,
+        'plan' => $plan,
         'outputRelative' => $fromOutputRelative,
         'irUsage' => $irUsage,
         'artifactModuleName' => $moduleContext['typedProgram']->module,
-        'externalFns' => $codegenImports['externalFns'] ?? [],
-        'externalFnRuntimeArity' => $moduleContext['importContext']['externalFnRuntimeArity'] ?? [],
     ]);
 
     return [
@@ -349,6 +350,7 @@ function compileModuleFileOutputs(
  *   checked: Ast\Program,
  *   importContext: array<string, mixed>,
  *   outputRelative: string,
+ *   rootPrefix: string,
  *   units: array<string, array<string, mixed>>
  * }
  */
@@ -380,6 +382,7 @@ function moduleCompileContext(string $path, CompilationContext $context, ?Ast\Pr
         'typedProgram' => $prepared->checked[$targetModule],
         'importContext' => $prepared->importContexts[$targetModule],
         'outputRelative' => $outputRelative,
+        'rootPrefix' => $prepared->rootPrefix,
         'units' => $prepared->units,
     ];
 }

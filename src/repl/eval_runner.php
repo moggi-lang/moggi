@@ -13,7 +13,7 @@ use function Moggi\Compiler\runProcess;
 
 use Moggi\Modules;
 
-use function Moggi\Modules\filterCodegenImportsForIr;
+use function Moggi\Modules\planEmission;
 use function Moggi\Paths\globPaths;
 
 use Moggi\Pipeline\CompilationContext;
@@ -61,7 +61,7 @@ function runEntryPhp(State $state, string $entryName): string
     $ctx = [
         'prepared' => $state->prepared,
         'typedProgram' => $state->typedInteractive,
-        'importContext' => $state->prepared->importContexts[$state->moduleName] ?? [],
+        'importContext' => $state->prepared->importContexts[$state->moduleName],
     ];
     $artifacts = emitInteractivePhp($state, $ctx, $ns, $depsDir);
     $state->lastFragment = $artifacts;
@@ -311,34 +311,25 @@ function emitInteractivePhp(
     ), PipelineStage::IrOpt);
 
     $ir = $artifacts->irOpt ?? throw new \RuntimeException('missing optimized IR');
-    $codegen = $ctx['importContext']['codegen'] ?? [];
+    $plan = $ctx['importContext']['plan'];
     if ($absoluteDepsRoot !== null && $state->phpDepsModuleRel !== []) {
-        $codegen = [
-            ...$codegen,
-            'moduleOutputPaths' => [
-                ...($codegen['moduleOutputPaths'] ?? []),
-                ...$state->phpDepsModuleRel,
-            ],
-        ];
+        $plan = $plan->withModuleOutputPaths($state->phpDepsModuleRel);
     }
-    $imports = filterCodegenImportsForIr(
+
+    $plan = planEmission(
+        $ctx['importContext']['interface'],
+        $plan,
         $ir,
-        $codegen,
-        'Interactive.php',
         null,
+        'Interactive.php',
         $absoluteDepsRoot,
     );
-    $imports['importedData'] = $ctx['importContext']['data'] ?? [];
-    $imports['externalFnRuntimeArity'] = $ctx['importContext']['externalFnRuntimeArity']
-        ?? ($codegen['externalFnRuntimeArity'] ?? []);
 
     $emitOptions = [
         'namespace' => $namespace,
         'artifactModuleName' => $state->moduleName,
-        'imports' => $imports,
+        'plan' => $plan,
         'outputRelative' => 'Interactive.php',
-        'externalFns' => $imports['externalFns'] ?? [],
-        'externalFnRuntimeArity' => $imports['externalFnRuntimeArity'] ?? [],
     ];
     if ($absoluteDepsRoot !== null) {
         $runtime = \rtrim(\str_replace('\\', '/', $absoluteDepsRoot), '/') . '/_runtime.php';

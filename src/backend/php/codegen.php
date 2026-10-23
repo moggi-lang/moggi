@@ -42,6 +42,7 @@ use function Moggi\Debug\normalizeDisplayPath;
 
 use Moggi\Debug\SourceMapBuilder;
 use Moggi\IR;
+use Moggi\Modules\EmitPlan;
 
 use function Moggi\IR\Visit\collectIrCodegenUsage;
 use function Moggi\IR\Visit\collectLocalsInOperand;
@@ -52,7 +53,11 @@ use function Moggi\Optimize\Partial\moduleUsesPartialApply;
 /** One line standing in for the module's source map until the map is known. */
 const MAP_PLACEHOLDER = '//@@moggi-source-map@@';
 
-/** @param IR\Module $module @param array{namespace?: ?string, outputRelative?: string, imports?: array{requireLines?: list<string>, functionUseLines?: list<string>, namespaceUseLines?: list<string>, externalFns?: array<string, string>, moduleAsNames?: array<string, string>, constructorRenames?: array<string, string>}} $options @return string|array<string, string> */
+/**
+ * @param IR\Module $module
+ * @param array{namespace?: ?string, outputRelative?: string, artifactModuleName?: string, runtimeRequire?: string, plan?: ?EmitPlan, irUsage?: array<string, mixed>, globalFnArity?: array<string, int>} $options
+ * @return string|array<string, string>
+ */
 function emit(IR\Module $module, string $sourcePath, array $options = []): string|array
 {
     $GLOBALS['__moggi_php_scrut_snap'] = 0;
@@ -63,7 +68,7 @@ function emit(IR\Module $module, string $sourcePath, array $options = []): strin
     $lambdaIndex = $analysis['lambdaIndex'];
     $lambdaMeta = $analysis['lambdaMeta'];
     $phpNames = buildPhpNameMap($module);
-    $importOptions = $options['imports'] ?? [];
+    $plan = $options['plan'] ?? null;
     $functionArity = $analysis['functionArity'];
     $localBindings = [];
     foreach ($module->functions as $fn) {
@@ -73,7 +78,7 @@ function emit(IR\Module $module, string $sourcePath, array $options = []): strin
         $localBindings[$name] = true;
         $functionArity[$name] = $arity;
     }
-    foreach (constructorArityMapFromRegistry($importOptions['importedData'] ?? []) as $name => $arity) {
+    foreach (constructorArityMapFromRegistry($plan?->importedData ?? []) as $name => $arity) {
         if (! isset($localBindings[$name])) {
             $functionArity[$name] = $arity;
         }
@@ -81,7 +86,7 @@ function emit(IR\Module $module, string $sourcePath, array $options = []): strin
     foreach ($module->instanceEvidence as $evidence) {
         $functionArity[$evidence->evidenceName] = \count($evidence->contextParams);
     }
-    foreach ($importOptions['externalFnRuntimeArity'] ?? [] as $name => $runtimeArity) {
+    foreach ($plan?->externalFnRuntimeArity ?? [] as $name => $runtimeArity) {
         if (! isset($localBindings[$name])) {
             $functionArity[$name] = $runtimeArity;
         }
@@ -93,16 +98,16 @@ function emit(IR\Module $module, string $sourcePath, array $options = []): strin
     $codegenCtx = [
         'moduleNamespace' => $namespace,
         'artifactModuleName' => $moduleName,
-        'moduleAsNames' => $importOptions['moduleAsNames'] ?? [],
-        'constructorRenames' => $importOptions['constructorRenames'] ?? [],
-        'externalFns' => $importOptions['externalFns'] ?? [],
+        'moduleAsNames' => $plan?->moduleAsNames ?? [],
+        'constructorRenames' => $plan?->constructorRenames ?? [],
+        'externalFns' => $plan?->externalFns ?? [],
         'functionArity' => $functionArity,
         'boolConstructors' => [
-            ...boolConstructorMapFromRegistry($importOptions['importedData'] ?? []),
+            ...boolConstructorMapFromRegistry($plan?->importedData ?? []),
             ...boolConstructorMap($module->data),
         ],
         'newtypeConstructors' => [
-            ...newtypeConstructorMapFromRegistry($importOptions['importedData'] ?? []),
+            ...newtypeConstructorMapFromRegistry($plan?->importedData ?? []),
             ...newtypeConstructorMap($module->data),
         ],
         'sourceMap' => $sourceMap,
@@ -170,24 +175,24 @@ function emit(IR\Module $module, string $sourcePath, array $options = []): strin
         $lines[] = '';
     }
 
-    foreach ($importOptions['requireLines'] ?? [] as $requireLine) {
+    foreach ($plan?->requireLines ?? [] as $requireLine) {
         $lines[] = "require_once {$requireLine};";
     }
 
-    if (($importOptions['requireLines'] ?? []) !== []) {
+    if (($plan?->requireLines ?? []) !== []) {
         $lines[] = '';
     }
 
-    foreach ($importOptions['functionUseLines'] ?? [] as $useLine) {
+    foreach ($plan?->functionUseLines ?? [] as $useLine) {
         $lines[] = "use {$useLine};";
     }
 
-    foreach ($importOptions['namespaceUseLines'] ?? [] as $useLine) {
+    foreach ($plan?->namespaceUseLines ?? [] as $useLine) {
         $lines[] = "use {$useLine};";
     }
 
-    if (($importOptions['functionUseLines'] ?? []) !== []
-        || ($importOptions['namespaceUseLines'] ?? []) !== []) {
+    if (($plan?->functionUseLines ?? []) !== []
+        || ($plan?->namespaceUseLines ?? []) !== []) {
         $lines[] = '';
     }
 

@@ -45,20 +45,22 @@ function foreignFunctionDecl(Ast\ForeignImportDecl $item): Ast\FunctionDecl
 
 function applyImportContext(TypeCheckState $state, Ast\Program $program, array $importContext): void
 {
-    foreach ($importContext['env'] ?? [] as $name => $scheme) {
+    $interface = $importContext['interface'];
+
+    foreach ($interface->env as $name => $scheme) {
         $state->env[$name] = $scheme;
     }
 
-    foreach ($importContext['constructorRenames'] ?? [] as $local => $canonical) {
+    foreach ($interface->constructorRenames as $local => $canonical) {
         $state->constructorRenames[$local] = $canonical;
     }
 
-    foreach ($importContext['typeSynonyms'] ?? [] as $name => $type) {
+    foreach ($interface->typeSynonyms as $name => $type) {
         $state->typeSynonyms[$name] = $type;
         installTypeSynonymKind($state, $name, $type);
     }
 
-    foreach ($importContext['data'] ?? [] as $name => $info) {
+    foreach ($interface->data as $name => $info) {
         $state->data[$name] = $info;
         Kinds\registerTypeKind($state, $name, Kinds\kindFromDataInfo($info));
         Kinds\installPromotedFromDataInfo($state, $name, $info);
@@ -70,14 +72,14 @@ function applyImportContext(TypeCheckState $state, Ast\Program $program, array $
     $state->classParamKindsCache = null;
     syncAssociatedFamiliesFromClasses($state);
 
-    $state->qualifiedModules = $importContext['qualifiedModules'] ?? [];
-    $state->qualifiedOrigins = $importContext['qualifiedOrigins'] ?? [];
-    $state->qualifiedEnv = $importContext['qualifiedEnv'] ?? [];
-    $state->intrinsicWrappers = $importContext['intrinsicWrappers'] ?? [];
+    $state->qualifiedModules = $interface->qualifiedModules;
+    $state->qualifiedOrigins = $interface->qualifiedOrigins;
+    $state->qualifiedEnv = $interface->qualifiedEnv;
+    $state->intrinsicWrappers = $interface->intrinsicWrappers;
 
-    $state->ambiguousImports = $importContext['ambiguousNames'] ?? [];
+    $state->ambiguousImports = $interface->ambiguousNames;
     $state->classModuleScopes = $importContext['classScopes'] ?? [];
-    $state->externalFns = $importContext['codegen']['externalFns'] ?? [];
+    $state->externalFns = $interface->externalFns;
     $instanceIndex = $importContext['projectInstanceIndex'] ?? null;
     if ($instanceIndex !== null) {
         $state->projectInstancesByClass = $instanceIndex['byClass'];
