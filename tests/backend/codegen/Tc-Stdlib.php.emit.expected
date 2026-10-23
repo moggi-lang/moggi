@@ -9,11 +9,11 @@ require_once __DIR__ . '/../../../libraries/base/src/Data/Bool.php';
 require_once __DIR__ . '/../../../libraries/base/src/Data/Char/PHP.php';
 require_once __DIR__ . '/../../../libraries/base/src/Data/Eq.php';
 require_once __DIR__ . '/../../../libraries/base/src/Data/List.php';
+require_once __DIR__ . '/../../../libraries/containers/src/Data/Map.php';
 require_once __DIR__ . '/../../../libraries/base/src/Data/Maybe.php';
 require_once __DIR__ . '/../../../libraries/base/src/Data/Ord.php';
-require_once __DIR__ . '/../../../libraries/base/src/Data/Tuple.php';
-require_once __DIR__ . '/../../../libraries/containers/src/Data/Map.php';
 require_once __DIR__ . '/../../../libraries/containers/src/Data/Set.php';
+require_once __DIR__ . '/../../../libraries/base/src/Data/Tuple.php';
 
 use function Control\Applicative\__ev_Alternative_Maybe;
 use function Data\Char\PHP\isDigit;

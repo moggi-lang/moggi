@@ -824,8 +824,8 @@ function buildImportContext(
     $requireLines = [];
     $functionUseLines = [];
     if ($planPhpImports) {
+        \ksort($requireTargets, SORT_STRING);
         $requireLines = \array_values(\array_unique($requireTargets));
-        \sort($requireLines, SORT_STRING);
 
         foreach ($externalFns as $local => $resolved) {
             $functionUseLines[] = functionUseLine($local, $resolved);
@@ -1169,7 +1169,7 @@ function filterCodegenImportsForIr(
     }
 
     $externalFns = \array_intersect_key($codegen['externalFns'], $usedExternal);
-    $requireLines = [];
+    $requireByModule = [];
     $fromOutput = $fromOutputRelative ?? $codegen['currentOutputRelative'] ?? '';
     $absRoot = $absoluteRequireRoot !== null
         ? \rtrim(\str_replace('\\', '/', $absoluteRequireRoot), '/')
@@ -1181,14 +1181,14 @@ function filterCodegenImportsForIr(
         }
 
         if ($absRoot !== null) {
-            $requireLines[] = \var_export($absRoot . '/' . \str_replace('\\', '/', $targetPath), true);
+            $requireByModule[$moduleName] = \var_export($absRoot . '/' . \str_replace('\\', '/', $targetPath), true);
         } else {
-            $requireLines[] = relativeRequirePath($fromOutput, $targetPath);
+            $requireByModule[$moduleName] = relativeRequirePath($fromOutput, $targetPath);
         }
     }
 
-    \sort($requireLines, SORT_STRING);
-    $requireLines = \array_values(\array_unique($requireLines));
+    \ksort($requireByModule, SORT_STRING);
+    $requireLines = \array_values(\array_unique($requireByModule));
 
     $localFnNames = [];
     foreach ($ir->functions as $fn) {
