@@ -7,6 +7,7 @@ use function Moggi\Backend\Jvm\Foreign\jvmInterfaceNamesFromPrograms;
 use function Moggi\IR\lower;
 use function Moggi\IR\Validate\validateCallableLayouts;
 use function Moggi\IR\Validate\validateModule;
+use function Moggi\IR\Visit\collectIrCodegenUsage;
 use function Moggi\Modules\moduleNameToNamespace;
 use function Moggi\Modules\planEmission;
 use function Moggi\Modules\standaloneImportContext;
@@ -131,7 +132,7 @@ function run(PipelineRequest $request, PipelineStage $stopAt = PipelineStage::Em
             $interface,
             $emitOptions['plan'],
             $irOpt,
-            null,
+            collectIrCodegenUsage($irOpt)['callees'],
             \is_string($fromOutput) ? $fromOutput : null,
         );
     }

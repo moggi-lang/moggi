@@ -228,6 +228,12 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
         ];
 
         if ($optimizedIr->entry !== null && $optimizedIr->entry->kind === EntryPointKind::Main) {
+            if ($entryModule !== null) {
+                throw new \LogicException(
+                    "this compilation has two entry modules, `{$entryModule}` and `{$moduleName}`; "
+                    . 'a project compiles one `main`',
+                );
+            }
             $entryModule = $moduleName;
             $entryRelative = $outputRelative;
         }
@@ -235,27 +241,10 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
 
     $written = \array_keys($plans);
     if ($context->backendId === 'php' && $entryModule !== null) {
-        $reachable = [$entryModule => true];
-        $pending = [$entryModule];
-        while ($pending !== []) {
-            $moduleName = \array_pop($pending);
-            foreach (\array_keys($plans[$moduleName]['plan']->requiredModules) as $dependency) {
-                if (isset($reachable[$dependency])) {
-                    continue;
-                }
-                if (! isset($plans[$dependency])) {
-                    throw new \LogicException(
-                        "module `{$moduleName}` requires `{$dependency}`, which this compilation does not emit",
-                    );
-                }
-                $reachable[$dependency] = true;
-                $pending[] = $dependency;
-            }
-        }
-        $written = \array_values(\array_filter(
-            \array_keys($plans),
-            static fn (string $moduleName): bool => isset($reachable[$moduleName]),
-        ));
+        $written = emittedClosure(
+            \array_map(static fn (array $planned): EmitPlan => $planned['plan'], $plans),
+            $entryModule,
+        );
     }
 
     foreach ($written as $moduleName) {
@@ -292,6 +281,47 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
         'entryModule' => $entryModule,
         'entryRelative' => $entryRelative,
     ];
+}
+
+/**
+ * The modules a compile writes: the entry and everything its plan's require lines reach.
+ *
+ * This is the one place that decides what the tree holds. An emitted require can only name a
+ * module this returns, and a module it returns is reachable from the entry, so a written tree is
+ * the entry's own closure and no artifact can point at a file the same compile did not write.
+ *
+ * @param array<string, EmitPlan> $planByModule
+ * @return list<string>
+ * @throws \LogicException when a plan requires a module this compile does not emit
+ */
+function emittedClosure(array $planByModule, string $entryModule): array
+{
+    if (! isset($planByModule[$entryModule])) {
+        throw new \LogicException("the entry module `{$entryModule}` has no emission plan");
+    }
+
+    $reachable = [$entryModule => true];
+    $pending = [$entryModule];
+    while ($pending !== []) {
+        $moduleName = \array_pop($pending);
+        foreach (\array_keys($planByModule[$moduleName]->requiredModules) as $dependency) {
+            if (isset($reachable[$dependency])) {
+                continue;
+            }
+            if (! isset($planByModule[$dependency])) {
+                throw new \LogicException(
+                    "module `{$moduleName}` requires `{$dependency}`, which this compilation does not emit",
+                );
+            }
+            $reachable[$dependency] = true;
+            $pending[] = $dependency;
+        }
+    }
+
+    return \array_values(\array_filter(
+        \array_keys($planByModule),
+        static fn (string $moduleName): bool => isset($reachable[$moduleName]),
+    ));
 }
 
 function moduleDeclaresCode(Module $module): bool

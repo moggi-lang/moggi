@@ -32,6 +32,8 @@ use function Moggi\Optimize\Interproc\setActiveFnArity;
 use function Moggi\Optimize\Interproc\setActiveForeignLeaves;
 use function Moggi\Optimize\Interproc\setActivePeFusionIndex;
 use function Moggi\Optimize\Interproc\substituteStmt;
+use function Moggi\Optimize\Support\callArgsAreLeaves;
+use function Moggi\Optimize\Support\dropUnreadTemps;
 use function Moggi\Optimize\optimize;
 use function Moggi\Semantics\Kernel\isBoolCtor;
 
@@ -784,7 +786,7 @@ function resolveConcreteDictCallsInItems(array $items, array $globalEvidence): a
         $out[] = $item;
     }
 
-    return ['items' => dropUnreadEvidenceBindings(denseStmtItems($out)), 'changed' => $changed];
+    return ['items' => dropUnreadEvidenceBindings(denseStmtItems($out), $globalEvidence), 'changed' => $changed];
 }
 
 /**
@@ -793,66 +795,28 @@ function resolveConcreteDictCallsInItems(array $items, array $globalEvidence): a
  * `t2 = call __ev_Show_Int()` followed by `t1 = dict_call t2->show(t0)` becomes a direct call to
  * the instance method, and then nothing reads `t2`. Keeping it keeps the whole dictionary — every
  * method of the instance, and with `showList` the module that method calls — in the artifact for
- * a value nobody uses. A factory only allocates an array, so an unread one is removable when its
- * own arguments are leaves; anything that could evaluate user code is kept.
+ * a value nobody uses.
+ *
+ * A call is a factory only when its callee is a name in the evidence index this pass published;
+ * the index is what says "this name is an instance dictionary of this layout". An ordinary
+ * declaration that happens to start with `__ev_` is not in the index and is left alone.
  *
  * @param list<IR\Stmt> $items
+ * @param array<string, mixed> $globalEvidence
  * @return list<IR\Stmt>
  */
-function dropUnreadEvidenceBindings(array $items): array
+function dropUnreadEvidenceBindings(array $items, array $globalEvidence): array
 {
     $dests = [];
     foreach ($items as $item) {
-        if ($item instanceof IR\Call && isEvidenceFactoryName($item->callee) && callArgsAreLeaves($item->args)) {
+        if ($item instanceof IR\Call
+            && isset($globalEvidence[$item->callee])
+            && callArgsAreLeaves($item->args)) {
             $dests[$item->dest] = true;
         }
     }
 
-    if ($dests === []) {
-        return $items;
-    }
-
-    $used = [];
-    walkBlock(
-        new IR\Block($items),
-        static function (IR\Stmt $stmt): void {
-        },
-        static function (IR\Operand $operand) use (&$used): void {
-            if ($operand instanceof IR\Temp) {
-                $used[$operand->id] = true;
-            }
-        },
-    );
-
-    $out = [];
-    foreach ($items as $item) {
-        if ($item instanceof IR\Call && isset($dests[$item->dest]) && ! isset($used[$item->dest])) {
-            continue;
-        }
-
-        $out[] = $item;
-    }
-
-    return $out;
-}
-
-/** @param list<IR\Operand> $args */
-function callArgsAreLeaves(array $args): bool
-{
-    foreach ($args as $arg) {
-        if (! ($arg instanceof IR\Temp
-            || $arg instanceof IR\Local
-            || $arg instanceof IR\FnRef
-            || $arg instanceof IR\ConstInt
-            || $arg instanceof IR\ConstStr
-            || $arg instanceof IR\ConstChar
-            || $arg instanceof IR\ConstDouble
-            || $arg instanceof IR\Unit)) {
-            return false;
-        }
-    }
-
-    return true;
+    return dropUnreadTemps($items, $dests);
 }
 
 /**

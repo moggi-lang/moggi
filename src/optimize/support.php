@@ -390,6 +390,73 @@ function mapStmtNestedBlocks(IR\Stmt $stmt, callable $mapBlock): IR\Stmt
     };
 }
 
+/**
+ * Whether reading a call's arguments runs nothing: a temp, a local, a literal or a function
+ * reference is already a value, so a call built only from them can be dropped or repeated
+ * without an observable effect.
+ *
+ * @param list<IR\Operand> $args
+ */
+function callArgsAreLeaves(array $args): bool
+{
+    foreach ($args as $arg) {
+        if (! ($arg instanceof IR\Temp
+            || $arg instanceof IR\Local
+            || $arg instanceof IR\FnRef
+            || $arg instanceof IR\ConstInt
+            || $arg instanceof IR\ConstStr
+            || $arg instanceof IR\ConstChar
+            || $arg instanceof IR\ConstDouble
+            || $arg instanceof IR\Unit)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/**
+ * Drop the calls named in `$droppable` whose dest temp nothing else in the block reads.
+ *
+ * `$droppable` is the set of dests the caller has already established to be pure allocations
+ * (a dictionary built from leaves, say). The set is decided from what the call *is* — its
+ * indexed identity and its arguments — never from the callee's spelling, so an ordinary
+ * declaration can never be mistaken for a factory. A call whose dest is not named is kept.
+ *
+ * @param list<IR\Stmt> $items
+ * @param array<int, true> $droppable
+ * @return list<IR\Stmt>
+ */
+function dropUnreadTemps(array $items, array $droppable): array
+{
+    if ($droppable === []) {
+        return $items;
+    }
+
+    $used = [];
+    walkBlock(
+        new IR\Block($items),
+        static function (IR\Stmt $stmt): void {
+        },
+        static function (IR\Operand $operand) use (&$used): void {
+            if ($operand instanceof IR\Temp) {
+                $used[$operand->id] = true;
+            }
+        },
+    );
+
+    $out = [];
+    foreach ($items as $item) {
+        if ($item instanceof IR\Call && isset($droppable[$item->dest]) && ! isset($used[$item->dest])) {
+            continue;
+        }
+
+        $out[] = $item;
+    }
+
+    return $out;
+}
+
 /** The lifted functions of a module, the ones that take captures. @param list<IR\FunctionDecl> $functions */
 function indexCapturedFunctions(array $functions): array
 {

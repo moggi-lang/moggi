@@ -26,10 +26,9 @@ use function Moggi\Syntax\isConstructorName;
  *    written where, which namespace each module's PHP lives in, and the aliases
  *    its imports gave those namespaces. It needs no IR.
  *  - `planEmission()` renders the plan an emitter consumes from that layout and
- *    the interface, pruned to what the module's IR actually calls. A target that
- *    emits before its IR exists (the REPL's non-PHP option builder) passes no IR
- *    and gets the whole interface published instead: planning less must never
- *    take a fact away.
+ *    the interface, pruned to what the module's IR actually calls. Its IR is
+ *    required: what a module calls is a fact about its body, so there is no
+ *    second, IR-less way to plan.
  *
  * Emitters read this one value. Host foreign verification does not: it runs
  * while the declarations are checked, before any target planning happens, so a
@@ -168,7 +167,7 @@ function planEmission(
     ImportInterface $interface,
     EmitPlan $target,
     IR\Module $ir,
-    ?array $usedCallees = null,
+    array $usedCallees,
     ?string $fromOutputRelative = null,
     ?string $absoluteRequireRoot = null,
 ): EmitPlan {
@@ -195,8 +194,6 @@ function planEmission(
         importedData: $interface->data,
         requiredModules: $requiredModules,
     );
-
-    $usedCallees ??= collectIrCodegenUsage($ir)['callees'];
 
     $localFnNames = [];
     foreach ($ir->functions as $fn) {
