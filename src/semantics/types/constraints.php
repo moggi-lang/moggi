@@ -1424,14 +1424,11 @@ function walkAstValues(Ast\AstNode $expr, callable $visit): void
  * the evidence passes read the second. A path that refreshes one without the
  * other leaves a list over variables the other never had (`Tag a` where the
  * definition took `Tag t122`), which the arity assertions cannot see because
- * both sides are still the same length. Gated, because it walks a body.
+ * both sides are still the same length. The walk runs on every elaborated body:
+ * it reads the tree the elaborator just built and costs no measurable time.
  */
 function assertPendingDictsConsistentInExpr(TypeCheckState $state, Ast\AstNode $expr): void
 {
-    if (\getenv('MOGGI_ASSERT_PENDING_DICTS') === false) {
-        return;
-    }
-
     walkAstValues($expr, static function (Ast\AstNode $node) use ($state): void {
         if ($node->pendingConstraints === [] || $node->pendingDicts === []) {
             return;
