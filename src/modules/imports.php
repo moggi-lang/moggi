@@ -452,12 +452,31 @@ function evidenceCallableLayout(int $dictionaryCount): array
 }
 
 /**
+ * The tree a unit's callable record is rendered from: its checked program when it has one, else its
+ * parsed program.
+ *
+ * @param array<string, mixed> $unit
+ */
+function unitCallableProgram(array $unit, string $moduleName): Ast\Program
+{
+    $program = $unit['checkedProgram'] ?? $unit['program'] ?? null;
+    if (! $program instanceof Ast\Program) {
+        throw new \LogicException(
+            "module `{$moduleName}` has neither a checked nor a parsed program to publish callables from",
+        );
+    }
+
+    return $program;
+}
+
+/**
  * The callable layouts a unit publishes for its callable entries.
  *
- * `facts.callables` is the record; a unit this run has not checked yet publishes it from its parsed
- * tree through the same producer, with its exports collected the way the import walk collects them
- * for a module it has not visited. Either way the entries come from one place — the unit's own
- * declarations and instances — so a reader never re-derives a vector from a scheme or a call site.
+ * `facts.callables` is the record, and {@see unitCallableProgram()} names the one tree it is
+ * rendered from: the checked program once the unit has one, the parsed program before that. The
+ * two trees are not interchangeable — checking a backend facade synthesizes its foreign bindings,
+ * so the parsed declarations are a strict subset of the checked ones — which is why the choice is
+ * made once, here and in {@see publishCallableFacts()}, rather than at each reader.
  *
  * @param array<string, mixed> $unit
  * @param array<string, array<string, mixed>> $units
@@ -471,15 +490,7 @@ function unitCallableEntries(array $unit, array $units, string $moduleName): arr
     }
 
     $namespace = (string) ($unit['namespace'] ?? '');
-    $checked = $unit['checkedProgram'] ?? null;
-    if ($checked instanceof Ast\Program) {
-        return callableFactsFromProgram($checked, unitEvidenceArities($unit, $moduleName, $namespace))['entries'];
-    }
-
-    $program = $unit['program'] ?? null;
-    if (! $program instanceof Ast\Program) {
-        throw new \LogicException("module `{$moduleName}` has no program to publish callables from");
-    }
+    $program = unitCallableProgram($unit, $moduleName);
 
     $exports = $unit['exports'] ?? null;
     if (! \is_array($exports)) {

@@ -843,9 +843,11 @@ final class AnalysisService
      * A checked program always carries its import interface (`checkRaw` stamps it on the
      * program it returns). A hydrated dependency whose interface did not survive would index as
      * "imports nothing" — hover, definition and references on every imported name would degrade
-     * with no signal — so report the producer bug instead of guessing, and keep the index usable.
+     * — so a checked program without one is refused: the index is never built from a guess about
+     * what a module imports.
      *
-     * `$checkedOnly: false` is for the parsed fallback, where a missing interface is expected.
+     * `$checkedOnly: false` is for the parsed fallback, where a module has not been checked and
+     * so has no interface to carry.
      *
      * @return array<string, string>
      */
@@ -854,9 +856,9 @@ final class AnalysisService
         $interface = $program->interface;
         if ($interface === null) {
             if ($checkedOnly) {
-                \error_log(
-                    "moggi lsp: checked program `{$moduleName}` carries no import interface; "
-                    . 'its imported names will not resolve',
+                throw new \LogicException(
+                    "checked program `{$moduleName}` carries no import interface; the analysis index "
+                    . 'cannot name its imports',
                 );
             }
 

@@ -512,24 +512,28 @@ function buildPreparedModuleContext(
 }
 
 /**
- * Publish the callable facts a module's interface already determines, for a module whose bodies
- * have not been checked — the shallow library closure a single-file compile prepares.
+ * Publish the callable facts a module's interface already determines, for a module whose bodies are
+ * not checked in this run — the shallow library closure a single-file compile prepares.
  *
  * Without it an importer of such a module has only its scheme to go on, and counting arrows
  * disagrees with the declared parameter list for every eta-reduced definition (`($) f = f`
  * declares one parameter and has two arrows) and for every result that is a type synonym of a
- * function type. A checked module keeps the facts its check publishes.
+ * function type. A module checked in this run keeps the facts its check publishes.
+ *
+ * The tree is the one the record is rendered from everywhere: a unit hydrated from the checked
+ * cache publishes from that checked program, since checking a backend facade synthesizes foreign
+ * bindings the parsed tree does not carry.
  *
  * @param array<string, array<string, mixed>> $units
  */
-function publishParsedCallableFacts(array &$units, string $moduleName): void
+function publishCallableFacts(array &$units, string $moduleName): void
 {
     $unit = $units[$moduleName] ?? null;
     if (! \is_array($unit) || isset($unit['facts']['callables'])) {
         return;
     }
 
-    $program = $unit['program'] ?? null;
+    $program = $unit['checkedProgram'] ?? $unit['program'] ?? null;
     $exports = $unit['exports'] ?? null;
     if (! $program instanceof Ast\Program || ! \is_array($exports)) {
         return;
@@ -552,7 +556,7 @@ function publishParsedCallableFacts(array &$units, string $moduleName): void
 function publishModuleExports(array &$units, string $moduleName, CompilationContext $context): void
 {
     if (isset($units[$moduleName]['exports'])) {
-        publishParsedCallableFacts($units, $moduleName);
+        publishCallableFacts($units, $moduleName);
 
         return;
     }
@@ -571,7 +575,7 @@ function publishModuleExports(array &$units, string $moduleName, CompilationCont
         );
         if (\is_array($cached)) {
             $units[$moduleName]['exports'] = $cached;
-            publishParsedCallableFacts($units, $moduleName);
+            publishCallableFacts($units, $moduleName);
 
             return;
         }

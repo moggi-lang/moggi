@@ -13,6 +13,7 @@ use function Moggi\Compiler\runProcess;
 
 use Moggi\Modules;
 
+use function Moggi\IR\Visit\collectIrCodegenUsage;
 use function Moggi\Modules\planEmission;
 use function Moggi\Paths\globPaths;
 
@@ -320,7 +321,7 @@ function emitInteractivePhp(
         $ctx['importContext']->interface,
         $plan,
         $ir,
-        null,
+        collectIrCodegenUsage($ir)['callees'],
         'Interactive.php',
         $absoluteDepsRoot,
     );

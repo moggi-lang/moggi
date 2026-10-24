@@ -1,20 +1,26 @@
 <?php declare(strict_types=1);
 
-// A module's interface is one value, and the `codegen` array the emitters read is a
-// rendering of it.
-//
-// What this holds down:
-//   1. every module the preparation touches — checked, hydrated, or shallow — publishes
-//      one `ImportInterface`, with the required regions present even when empty and
-//      the optional optimizer region empty;
-//   2. the checked program carries the interface itself, not a copy of its maps, and the
-//      import context keeps no second rendering of it;
-//   3. the emission plan is rendered per target from the interface: its ABI facts are the
-//      interface's, its require lines are the modules the IR calls, and a plan rendered
-//      before the IR exists publishes everything and plans no file;
-//   4. an entry keeps its declaring module across a re-export chain, and a module's own
-//      names are never published as imports;
-//   5. the callable layout an importer reads is the defining module's published record.
+/**
+ * A module's interface is one value; the `codegen` array emitters read is
+ * a rendering of it.
+ *
+ * What this holds down:
+ *   1. Every prepared module — checked, hydrated or shallow — publishes one
+ *      `ImportInterface`, with required regions present even when empty and
+ *      the optional optimizer region empty.
+ *   2. The checked program carries the interface itself, not copies of its
+ *      maps; the import context keeps no second rendering.
+ *   3. The emission plan is rendered per target from the interface: ABI facts
+ *      come from the interface and require lines from the modules the IR
+ *      calls, so a plan needs the IR and there is no IR-less planning.
+ *   4. Re-exports preserve the declaring module; a module never publishes
+ *      its own names as imports.
+ *   5. Importers read the callable layout published by the defining module.
+ *   6. The pipeline refuses a checked program that carries no import
+ *      interface.
+ *   7. The emitted set is the entry's closure, and a require naming a module
+ *      the compile does not emit is refused.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
@@ -33,6 +39,7 @@ use Moggi\Pipeline\PipelineRequest;
 use Moggi\Pipeline\PipelineStage;
 use Moggi\Syntax\Ast;
 
+use function Moggi\IR\Visit\collectIrCodegenUsage;
 use function Moggi\Modules\planEmission;
 use function Moggi\Pipeline\run as pipelineRun;
 
@@ -158,7 +165,7 @@ $ir = pipelineRun(new PipelineRequest(
     importContext: $prepared->importContexts['Main'],
 ), PipelineStage::Ir)->ir;
 $check($ir !== null, 'the prepared module lowered no IR');
-$planned = planEmission($main, $layout, $ir);
+$planned = planEmission($main, $layout, $ir, collectIrCodegenUsage($ir)['callees']);
 $check(
     $planned->importedData === $main->data,
     'the plan dropped an imported type fact; constructor renames and data travel whole because a '
@@ -223,7 +230,7 @@ $check(
     'the checked program carries a different interface than the import context',
 );
 
-// ---- 3 · identity survives a re-export, locals are not imports ------------
+// ---- 4 · identity survives a re-export, locals are not imports ------------
 
 $check(
     isset($main->externalFns['bump']),
@@ -273,6 +280,46 @@ try {
     $refusedLowering = \str_contains($e->getMessage(), 'import interface');
 }
 $check($refusedLowering, 'the pipeline lowered a checked program that carries no import interface');
+
+// ---- 7 · the emitted set is the entry's own closure, and a gap is refused ----
+
+$planRequiring = static fn (string $relative, array $requires): EmitPlan => new EmitPlan(
+    backendId: $backendId,
+    outputRelative: $relative,
+    requiredModules: \array_fill_keys($requires, true),
+);
+$closure = Modules\emittedClosure(
+    [
+        'Main' => $planRequiring('Main.php', ['Prov']),
+        'Prov' => $planRequiring('Prov.php', ['Leaf']),
+        'Leaf' => $planRequiring('Leaf.php', []),
+        'Unused' => $planRequiring('Unused.php', []),
+    ],
+    'Main',
+);
+\sort($closure);
+$check(
+    $closure === ['Leaf', 'Main', 'Prov'],
+    'the emitted set is not the entry\'s transitive closure: ' . \json_encode($closure),
+);
+
+$refusedGap = false;
+try {
+    Modules\emittedClosure([
+        'Main' => $planRequiring('Main.php', ['Missing']),
+    ], 'Main');
+} catch (\LogicException $e) {
+    $refusedGap = \str_contains($e->getMessage(), 'does not emit');
+}
+$check($refusedGap, 'the compiler accepted a require naming a module it does not emit');
+
+$refusedMissingEntry = false;
+try {
+    Modules\emittedClosure([], 'Main');
+} catch (\LogicException $e) {
+    $refusedMissingEntry = \str_contains($e->getMessage(), 'no emission plan');
+}
+$check($refusedMissingEntry, 'the compiler emitted a project whose entry has no plan');
 
 if ($failures !== []) {
     throw new \RuntimeException(
