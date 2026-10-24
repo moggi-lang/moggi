@@ -77,12 +77,6 @@ function runExecTest(string $path, string $projectRoot): array
 /**
  * Compile one fixture to its entry artifact inside the run's library tree.
  *
- * The single-module compile emits the entry with the `require`s the compiler composes for its
- * project-relative position (`../../../libraries/base/src/...`); those files are the shared library
- * build, which this mirrors once per process at the same layout. The entry is written where its own
- * `__DIR__`-relative requires land, so the program opens exactly the tree the compiler described and
- * no require string is edited.
- *
  * @return array{entry: string}|array{passed: false, message: string}
  */
 function compileFixtureEntry(string $path, string $projectRoot): array
@@ -109,11 +103,6 @@ function compileFixtureEntry(string $path, string $projectRoot): array
 
 /**
  * The run's library build, mirrored at its project-relative layout, once per process.
- *
- * The build itself is the harness's content-addressed library tree — one per run under a signature
- * of backend, compiler fingerprint, library sources and the PHP runtime — so a mirror is a hardlink
- * away and a stale one cannot exist: a different compiler or library source is a different tree.
- * Each case writes only its own entry into an otherwise read-only mirror.
  */
 function execTreeRoot(string $projectRoot): string
 {
@@ -132,8 +121,6 @@ function execTreeRoot(string $projectRoot): string
     return $root;
 }
 
-/** Link a tree into a fresh root: directories are created, files are hardlinked (copied if the
- * filesystem refuses the link), so a mirror costs one link per library module per process. */
 function mirrorTree(string $source, string $target): void
 {
     $iterator = new RecursiveIteratorIterator(
@@ -622,6 +609,22 @@ function runReplCase(string $scriptPath, string $projectRoot): array
 }
 
 /**
+ * The directory `$backend`'s prepared library tree is published under: named by a signature of the
+ * backend, the compiler, the library sources and the PHP runtime, so a different compiler or
+ * library source is a different tree rather than a stale one.
+ */
+function libBackendTreeDir(string $projectRoot, string $backend): string
+{
+    return \Moggi\Cache\cacheScratchDir() . '/lib-' . $backend . '-' . \substr(testLibSignature($projectRoot, $backend), 0, 12);
+}
+
+/** Whether that tree is already published, so waiting for it is not what the run is about to do. */
+function libBackendTreeReady(string $projectRoot, string $backend): bool
+{
+    return \is_file(libBackendTreeDir($projectRoot, $backend) . '/.complete');
+}
+
+/**
  * Build `lib/` for a backend and publish it under a content-addressed directory (the name is a
  * signature of backend, compiler fingerprint, lib sources and runtime).
  *
@@ -629,15 +632,21 @@ function runReplCase(string $scriptPath, string $projectRoot): array
  * `rename()`, and `.complete` is the last thing written into it, so a directory without that marker
  * is the wreckage of an interrupted build and is replaced instead of used. Two workers racing to
  * publish the same name would otherwise fight over a directory that cannot be renamed onto itself.
+ *
+ * `$built` reports which of the two happened — this call built and published the tree, or it found
+ * one already published (by an earlier call in this process or another worker) — so a caller that
+ * reports the wait can name it.
  */
-function writeLibBackendOutputs(string $projectRoot, string $backend): string
+function writeLibBackendOutputs(string $projectRoot, string $backend, ?bool &$built = null): string
 {
+    $built = false;
+
     static $written = [];
     if (isset($written[$backend]) && \is_file($written[$backend] . '/.complete')) {
         return $written[$backend];
     }
 
-    $outDir = \Moggi\Cache\cacheScratchDir() . '/lib-' . $backend . '-' . \substr(testLibSignature($projectRoot, $backend), 0, 12);
+    $outDir = libBackendTreeDir($projectRoot, $backend);
     $complete = $outDir . '/.complete';
     if (\is_file($complete)) {
         return $written[$backend] = $outDir;
@@ -680,6 +689,8 @@ function writeLibBackendOutputs(string $projectRoot, string $backend): string
         if (! @\rename($staging, $outDir)) {
             removeDirectory($staging);
         }
+
+        $built = \is_file($complete);
 
         return $written[$backend] = $outDir;
     } finally {

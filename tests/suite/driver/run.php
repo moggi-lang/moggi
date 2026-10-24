@@ -251,6 +251,9 @@ function runSuite(): int
  * ones; a serial selection is not warmed, because the case it is about to run pays for the library
  * itself and a warm-up in front of it would only add to that.
  *
+ * A backend whose prepared library tree has to be built says so before it starts and then reports
+ * the build's duration, so the seconds before the first case read as work rather than a stall.
+ *
  * @param list<string> $backends
  */
 function warmSharedCache(array $backends): void
@@ -271,7 +274,11 @@ function warmSharedCache(array $backends): void
         return;
     }
 
+    $multiBackend = \count($backends) > 1;
     foreach ($backends as $backend) {
+        if (! libBackendTreeReady($projectRoot, $backend)) {
+            suiteEcho(renderLibWarmupStart($backend, $multiBackend));
+        }
         try {
             \Moggi\Backend\setCompileBackend($backend);
             \Moggi\Compiler\compileFile($source, 'php');
@@ -282,9 +289,14 @@ function warmSharedCache(array $backends): void
         if (\function_exists('gc_collect_cycles')) {
             gc_collect_cycles();
         }
+        $startedAt = \microtime(true);
+        $built = false;
         try {
-            writeLibBackendOutputs($projectRoot, $backend);
+            writeLibBackendOutputs($projectRoot, $backend, $built);
         } catch (\Throwable) {
+        }
+        if ($built || libBackendTreeReady($projectRoot, $backend)) {
+            suiteEcho(renderLibWarmupDone($backend, $built, \microtime(true) - $startedAt, $multiBackend));
         }
         \Moggi\Modules\ProjectCache::clearCheckedModules();
         \Moggi\Modules\ProjectCache::clearPreparedProjects();
