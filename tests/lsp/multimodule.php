@@ -7,6 +7,7 @@ while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
 require $root . '/src/compiler.php';
 
 use Moggi\LSP\Analysis\AnalysisService;
+use Moggi\Modules\ProjectCache;
 
 use function Moggi\LSP\Formatter\formatMoggiSource;
 use function Moggi\LSP\Protocol\pathToUri;
@@ -90,8 +91,6 @@ $assert(\count($refs) >= 1, 'references non-empty');
 
 $renamed = svcRename($svc, $mainUri, ['line' => $useLine, 'character' => (int) $col], 'solution');
 $assert($renamed !== null && isset($renamed['documentChanges']), 'cross-file rename workspace edit');
-
-// Slice 2: edit Lib → Main's import of answer stays navigable after reindex
 $newLib = <<<'MOG'
 module Lib where
 
@@ -109,8 +108,6 @@ $assert(
     \str_contains((string) ($def2['uri'] ?? ''), 'Lib.mog') || ($def2['uri'] ?? '') === $libUri,
     'def still Lib after reindex',
 );
-
-// Warm prepare caches (DocIndex is lazy — avoid cold rebuild in unit tests)
 $svc->warm();
 $ws = svcWorkspaceSymbol($svc, 'answer');
 $assert(\is_array($ws) && $ws !== [], 'workspace symbol finds answer from module index');
@@ -136,8 +133,6 @@ $assert(holeFillStub('Maybe a') === 'Nothing', 'hole stub Maybe');
 $assert(holeFillStub('Foo') === 'undefined', 'hole stub fallback');
 $assert(holeFillStub('Bool') === 'False', 'hole stub Bool');
 $assert(holeFillStub('Int -> Int') === '\\_ -> undefined', 'hole stub arrow');
-
-// Typed hole `_`: diagnostic must include expected type + fill code action
 $typedHoleSrc = <<<'MOG'
 module TypedHole where
 
@@ -210,8 +205,6 @@ $assert(
     \str_contains($hoverVal, 'Int') || \str_contains($hoverVal, 'hole'),
     'hover shows hole type: ' . $hoverVal,
 );
-
-// Slice 3: exhaustiveness actions
 $holeSrc = <<<'MOG'
 module Hole where
 
@@ -242,8 +235,6 @@ foreach ($hr->diagnostics as $d) {
     }
 }
 $assert($hasNonEx, 'expected non-exhaustive diagnostic: ' . \json_encode($hr->diagnostics));
-
-// Binder-safe local rename
 $bindSrc = <<<'MOG'
 module Bind where
 
@@ -279,18 +270,14 @@ foreach ($ren['documentChanges'] as $docChange) {
     }
 }
 $assert(\count($edits) >= 1, 'at least one rename edit');
-// Must not rename the outer parameter or its uses
 $badLines = [];
 foreach ($edits as $e) {
     $ln = (int) ($e['range']['start']['line'] ?? -1);
-    // line 2: `outer x =`, line 3: `let y = x in` (outer x)
     if ($ln === 2 || $ln === 3) {
         $badLines[] = $ln;
     }
 }
 $assert($badLines === [], 'binder-safe rename must not touch outer x: ' . \json_encode($edits));
-
-// Cross-module binder isolation: local `x` in A and B must not collide
 $aSrc = <<<'MOG'
 module A where
 
@@ -339,8 +326,6 @@ foreach ($renA['documentChanges'] ?? [] as $docChange) {
 }
 $assert($aEditCount > 0, 'A has edits');
 $assert($bEditCount === 0, 'rename in A must not touch B: ' . \json_encode($renA));
-
-// Hierarchy: outgoing calls from a caller
 $callSrc = <<<'MOG'
 module Call where
 
@@ -406,6 +391,84 @@ if ($th !== []) {
     $subs = svcTypeHierarchySubtypes($svc, $th[0]);
     $assert($subs !== [], 'type hierarchy subtypes include instance: ' . \json_encode($subs));
 }
+$hBaseSrc = <<<'MOG'
+module HBase where
+
+value :: Int
+value = 7
+MOG;
+$hLibSrc = <<<'MOG'
+module HLib where
+
+import HBase
+
+answer :: Int
+answer = value
+MOG;
+$hMainSrc = <<<'MOG'
+module HMain where
+
+import HLib
+
+useAnswer :: Int
+useAnswer = answer
+MOG;
+$hBasePath = $tmp . '/HBase.mog';
+$hLibPath = $tmp . '/HLib.mog';
+$hMainPath = $tmp . '/HMain.mog';
+\file_put_contents($hBasePath, $hBaseSrc);
+\file_put_contents($hLibPath, $hLibSrc);
+\file_put_contents($hMainPath, $hMainSrc);
+$hBaseUri = pathToUri($hBasePath);
+$hLibUri = pathToUri($hLibPath);
+$hMainUri = pathToUri($hMainPath);
+foreach ([[$hBaseUri, $hBaseSrc], [$hLibUri, $hLibSrc], [$hMainUri, $hMainSrc]] as [$u, $s]) {
+    $svc->openDocument($u, $s, 1);
+    $svc->ensureAnalyzed($u);
+}
+
+ProjectCache::clearPreparedProjects();
+ProjectCache::clearCheckedModules();
+
+$svcHydrated = new AnalysisService();
+$svcHydrated->setWorkspaceRoot($tmp);
+$svcHydrated->openDocument($hBaseUri, $hBaseSrc, 1);
+$svcHydrated->openDocument($hMainUri, $hMainSrc, 1);
+$svcHydrated->ensureAnalyzed($hMainUri);
+$svcHydrated->ensureAnalyzed($hBaseUri);
+$assert(
+    isset($svcHydrated->modules->modules['HLib']),
+    'HLib was not indexed from the hydrated checked program: ' . \json_encode(\array_keys($svcHydrated->modules->modules)),
+);
+$hBaseLines = \explode("\n", $hBaseSrc);
+$hValueLine = null;
+foreach ($hBaseLines as $i => $line) {
+    if (\str_starts_with($line, 'value =')) {
+        $hValueLine = $i;
+
+        break;
+    }
+}
+$assert($hValueLine !== null, 'HBase value line');
+$hRefs = svcReferences(
+    $svcHydrated,
+    $hBaseUri,
+    ['line' => $hValueLine, 'character' => (int) \strpos($hBaseLines[$hValueLine], 'value')],
+    true,
+);
+$hLibRef = null;
+foreach ($hRefs as $ref) {
+    if (($ref['uri'] ?? '') === $hLibUri) {
+        $hLibRef = $ref;
+
+        break;
+    }
+}
+$assert(
+    $hLibRef !== null,
+    'an imported name in the hydrated HLib did not resolve (its import interface was dropped): '
+        . \json_encode($hRefs),
+);
 
 @\unlink($lib);
 @\unlink($main);
@@ -416,6 +479,9 @@ if ($th !== []) {
 @\unlink($bPath);
 @\unlink($callPath);
 @\unlink($hierPath);
+@\unlink($hBasePath);
+@\unlink($hLibPath);
+@\unlink($hMainPath);
 @\rmdir($tmp);
 
 echo "lsp multimodule tests passed\n";

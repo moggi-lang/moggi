@@ -32,7 +32,6 @@ $lay = static function (string $path, string $content) use ($cache): void {
 };
 
 try {
-    // What a compile writes, and what packaging wrote.
     $lay('fingerprint', 'the-old-compiler');
     $lay('compile/artifacts/index.blob', 'compiler artifact');
     $lay('compile/php/Modules/Json.mogc', 'a cache entry');
@@ -55,7 +54,6 @@ try {
     $assert(\is_file($cache . '/catalog/registry-abcd1234/index.json'), 'a reset must keep the fetched catalog');
     $assert(\is_file($cache . '/runtime/jackson/jackson-core.jar'), 'a reset must keep tool-fetched runtime artifacts');
 
-    // One area at a time: the compiler's half goes and the fetched half stays.
     $lay('compile/php/Modules/Json.mogc', 'a cache entry');
     $lay('docs/index.html', 'the served site');
     $assert(\Moggi\Cache\clearArea('compiler') > 0, 'clearing the compiler area must report what it removed');
@@ -71,7 +69,6 @@ try {
     $assert(\Moggi\Cache\clearArea('runtime') > 0, 'clearing the runtime area must report what it removed');
     $assert(! \is_dir($cache . '/runtime'), 'clearing the runtime area must take the tool-fetched artifacts');
 
-    // `moggi cache clear` is a user asking for the space back, and still takes everything.
     $assert(\Moggi\Cache\clear() > 0, 'clear must report what it removed');
     $assert(! \is_dir($cache . '/packages'), 'clear must remove the installed packages');
 } finally {

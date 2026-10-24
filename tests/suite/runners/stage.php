@@ -11,11 +11,9 @@ use function Moggi\Backend\setCompileBackend;
 
 use function Moggi\Compiler\compileFile;
 use function Moggi\IR\Dump\dump as dumpIr;
-use function Moggi\Modules\planEmission;
 use function Moggi\Optimize\optimize;
 
 use Moggi\Modules\EmitPlan;
-use Moggi\Modules\ModuleInterface;
 
 use Moggi\Semantics\Types\TypeError;
 use Moggi\Syntax\Lexer\LexError;
@@ -77,15 +75,9 @@ function emitPhpArtifact(string $path): string
     $module = loadIrFixture($path);
     $sourcePath = testRelativePath($path);
     $outputRelative = \preg_replace('/\.ir\.php$/', '.php', $sourcePath) ?? $sourcePath;
-    // An IR fixture is a bare module: it imports nothing, but the emitter still requires the plan
-    // that says so rather than reading its absence as an empty ABI.
     $actual = emit($module, $sourcePath, [
         'outputRelative' => $outputRelative,
-        'plan' => planEmission(
-            ModuleInterface::withoutImports($module->moduleName ?? ''),
-            EmitPlan::forTarget('php', $outputRelative),
-            null,
-        ),
+        'plan' => EmitPlan::forTarget('php', $outputRelative),
     ]);
     if (\is_string($actual)) {
         return $actual;

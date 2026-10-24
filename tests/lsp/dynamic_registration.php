@@ -50,8 +50,6 @@ $assert(\count($svc->getDynamicRegistrations()) === 1, 'removing unknown id is a
 
 $svc->removeDynamicRegistration('reg-2');
 $assert($svc->getDynamicRegistrations() === [], 'all registrations removed');
-
-// Framing sanity: writeMessage → readMessage round-trips a JSON-RPC frame.
 $stream = \fopen('php://memory', 'r+');
 if ($stream === false) {
     throw new RuntimeException('Cannot create memory stream');

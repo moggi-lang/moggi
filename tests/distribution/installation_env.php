@@ -112,10 +112,6 @@ try {
 
     $assert(! \is_dir($work . '/runtime/php-native'), 'the micro runtime is a file, not a directory of commands');
 
-    // The platform decisions are pure, so all three are asserted here, not only
-    // the one this machine runs. Windows has no loader variable and a flat PHP
-    // build; macOS reads dyld's fallback path; the exported paths are spelled
-    // the host's way.
     $assert(loaderVariable('Windows') === null, 'Windows has no dynamic-loader variable to prepend to');
     $assert(
         loaderVariable('Darwin') === 'DYLD_FALLBACK_LIBRARY_PATH',

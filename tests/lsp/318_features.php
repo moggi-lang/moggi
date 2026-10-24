@@ -60,9 +60,6 @@ $svc->setWorkspaceRoot($fixturesDir);
 $svc->openDocument($basicUri, $src, 1);
 $svc->warm();
 
-/**
- * 0-based {line, character} of the first occurrence of a substring.
- */
 $find = static function (string $needle) use ($src): array {
     $next = \strpos($src, $needle);
     if ($next === false) {
@@ -74,8 +71,6 @@ $find = static function (string $needle) use ($src): array {
 
     return ['line' => $line, 'character' => $next - ($lineStart === false ? -1 : $lineStart) - 1];
 };
-
-// 9. Cancellation registry semantics
 
 $reg = new CancellationRegistry();
 $reg->cancel(7);
@@ -94,8 +89,6 @@ try {
 }
 $assert($cancelled, 'checkCancelled throws RequestCancelled for cancelled id');
 
-// 10. Progress helpers (pure parts)
-
 $assert(workDoneParamsToken(['workDoneToken' => 'tok-1']) === 'tok-1', 'workDoneParamsToken parses string tokens');
 $assert(workDoneParamsToken(['workDoneToken' => 42]) === 42, 'workDoneParamsToken parses int tokens');
 $assert(workDoneParamsToken(['workDoneToken' => ['nope']]) === null, 'workDoneParamsToken rejects non-tokens');
@@ -104,8 +97,6 @@ $assert(progressPercent(0, 10) === 0, 'progressPercent 0%');
 $assert(progressPercent(5, 10) === 50, 'progressPercent 50%');
 $assert(progressPercent(10, 10) === 100, 'progressPercent 100%');
 $assert(progressPercent(3, 0) === null, 'progressPercent rejects zero total');
-
-// 5. Navigation shapes: single target = Location (not array)
 
 $def = svcDefinition($svc, $basicUri, $find('useTarget = targetValue'));
 $assert(
@@ -120,18 +111,13 @@ $assert(
     'typeDefinition single target is a Location: ' . \json_encode($td)
 );
 
-// 1. Hover completeness: operator application shows result type
-
 $p = $find('anotherInt = anInt + 10');
 $hv = svcHover($svc, $basicUri, ['line' => $p['line'], 'character' => $p['character'] + \strlen('anotherInt = anInt +')]);
 $assert($hv !== null, 'operator-position hover returns a result');
 $hvText = (string) ($hv['contents']['value'] ?? '');
 $assert(\str_contains($hvText, 'Int'), 'operator application hover carries Int type: ' . $hvText);
 
-// 2. Signature help: nested call, activeParameter counts
-
 $p = $find('composed = compose double bump 20');
-// at `bump` argument (3rd arg of compose): activeParameter 2
 $sig = svcSignatureHelp($svc, $basicUri, ['line' => $p['line'], 'character' => $p['character'] + \strlen('composed = compose double ')]);
 $assert($sig !== null && isset($sig['signatures'][0]['label']), 'nested signature help resolves');
 $assert(($sig['activeSignature'] ?? 0) === 0, 'single signature selected');
@@ -147,7 +133,6 @@ $assert(
     'import context completes module names: ' . \json_encode(\array_slice($labels, 0, 8))
 );
 
-// Member completion on a typed record receiver.
 $memberSrc = <<<'MOG'
 module Members where
 
@@ -171,14 +156,12 @@ $assert(
 );
 $assert((int) ($memberItems[0]['kind'] ?? 0) === 5, 'field items use CompletionItemKind.Field(5)');
 
-// Still resolves with a type error in the file (mid-edit state, no stamped types).
 $memberItems2 = \Moggi\LSP\TextDocument\memberCompletionItems($svc, $svc->ensureAnalyzed($memberUri), 7, 14, '');
 $assert(
     $memberItems2 !== null && \in_array('name', \array_column($memberItems2, 'label'), true),
     'member completion works despite a type error in the file'
 );
 
-// Modern item fields present on cross-module suggestions.
 $completion2 = svcCompletion($svc, $basicUri, ['line' => 40, 'character' => 1]);
 $hasModern = false;
 foreach ($completion2['items'] as $item) {
@@ -266,7 +249,6 @@ $assert(($entry['kind'] ?? '') === 'full', 'workspace report is full');
 $assert(\array_key_exists('version', $entry), 'workspace entry carries version');
 $assert(($entry['version'] ?? null) === 1, 'workspace entry carries the doc version');
 
-// A first pull has no client result ids, so nothing may claim to be unchanged.
 foreach ($ws['items'] as $e) {
     $assert(($e['kind'] ?? '') === 'full', 'no unchanged report without a previous resultId: ' . $e['uri']);
 }
@@ -281,8 +263,6 @@ $assert(($same['resultId'] ?? '') === $entry['resultId'], 'unchanged report echo
 $assert(($same['version'] ?? null) === 1, 'unchanged report echoes version');
 $assert(! isset($same['items']), 'unchanged report carries no items');
 
-// A document that became clean must be reported `full` with no items — that is
-// the only signal that retires the diagnostics the client cached earlier.
 $svc->changeDocument($badUri, [[
     'range' => ['start' => ['line' => 0, 'character' => 0], 'end' => ['line' => 2, 'character' => 1000]],
     'text' => "module BadMath where\n\nwrong = 1\n",
@@ -314,7 +294,6 @@ if ($closed !== null) {
     $assert(($closed['kind'] ?? '') === 'full', 'closed module with diagnostics → full');
     $assert(($closed['items'] ?? []) !== [], 'closed module reports its diagnostics');
     $assert(\array_key_exists('version', $closed) && $closed['version'] === null, 'closed module reports null version');
-    // Deleting the file must retire the client's cached report, not omit it.
     \unlink($wsDir . '/Closed.mog');
     $retired = $wsEntry(svcWorkspaceDiagnostic($wsSvc, [
         'previousResultIds' => [['uri' => $closedUri, 'value' => $closed['resultId']]],
@@ -322,23 +301,17 @@ if ($closed !== null) {
     $assert($retired !== null, 'deleted module is reported to retire its result id');
     $assert(($retired['kind'] ?? '') === 'full' && ($retired['items'] ?? null) === [], 'deleted module → full with empty items');
 } else {
-    // No closed module in the index: the deleted-file path still has to retire
-    // an id the client holds for a URI we no longer know about.
     $assert(true, 'closed module not indexed');
 }
 @\unlink($wsDir . '/Entry.mog');
 @\rmdir($wsDir);
 
-// Capability: clients that see workspaceDiagnostics:true poll workspace/diagnostic
-// on a timer, so it stays false while the handler remains served (push handles
-// diagnostics for VS Code).
 $caps = serverCapabilities();
 $assert(($caps['diagnosticProvider']['workspaceDiagnostics'] ?? null) === false, 'workspaceDiagnostics is not advertised');
 $assert(($caps['diagnosticProvider']['interFileDependencies'] ?? null) === true, 'diagnosticProvider still advertises inter-file dependencies');
 $assert(isset(lspMethodHandlers()['workspace/diagnostic']), 'workspace/diagnostic handler is still served');
 $assert(capabilityDispatchMismatches() === [], 'no capability/dispatch drift: ' . \json_encode(capabilityDispatchMismatches()));
 
-// resultIdFor determinism / sensitivity.
 $assert(resultIdFor('u', []) === resultIdFor('u', []), 'resultId stable for equal input');
 $assert(resultIdFor('u', []) !== resultIdFor('u', [['x']]), 'resultId changes with items');
 

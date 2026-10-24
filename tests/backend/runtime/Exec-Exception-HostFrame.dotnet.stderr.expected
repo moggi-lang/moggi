@@ -3,5 +3,5 @@ moggi: HostException: Attempted to divide by zero.
   at Main.main (tests/backend/runtime/Exec-Exception-HostFrame.mog:13:8)
 caused by: System.DivideByZeroException: Attempted to divide by zero.
   #0 Moggi.Main.boom (il:0)
-  #1 Moggi.Main.main (il:6)
+  #1 Moggi.Main.main (il:0)
   #2 Moggi.Main.Main (il:6)

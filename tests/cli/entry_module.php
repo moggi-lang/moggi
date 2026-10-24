@@ -19,7 +19,6 @@ $npub = 'npub1yywlmj053p4qp7z2qvqsrgcwz488mw0pr0t50xz3e5rx7s9uaelsjpdmfm';
 $work = createTempDir('moggi-entry-module');
 $env = \getenv();
 $env['MOGGI_CACHE_DIR'] = $work . '/cache';
-// A cache to itself, but not a cold standard library: this case is about the entry module.
 seedCacheDir($env['MOGGI_CACHE_DIR']);
 
 $descriptor = static function (string $name, string $section, string $main, string $dirs) use ($npub): string {

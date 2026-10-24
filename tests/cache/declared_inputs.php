@@ -72,8 +72,6 @@ $closureFor = static function (string $libRoot, string $backendId = 'php') use (
 };
 
 $compile = static function (array $files, string $projectRoot, CompilationContext $context): array {
-    // A second process has no in-memory memo; clearing it models that, so what answers the request
-    // is the declared keys and the on-disk products, not a leftover object graph.
     Modules\clearPrepareProjectCaches();
 
     return Modules\compileProjectBoth($files, $projectRoot, $context, false, false);

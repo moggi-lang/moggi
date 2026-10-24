@@ -67,8 +67,6 @@ foreach (['boom', 'twice'] as $name) {
     );
 }
 
-// The declaration span is a diagnostic position (line 3, the signature); a runtime frame points
-// at the call on line 4 instead.
 $assert(
     $irFunctions['boom']->srcLoc->line === 4 && $irFunctions['boom']->srcLoc->col === 8,
     'boom: IR location is not the `twice ()` call',

@@ -1,10 +1,12 @@
 <?php declare(strict_types=1);
 
-// A package the registry marks bad is refused, not fetched: `bad` is a
-// package-level field in the signed catalog shard, so it travels with the version
-// list and a client reads it without a package file. These checks cover the
-// marker shapes a shard may carry, the refusal line, and that a directory
-// registry's `bad` reaches the client through the ordinary catalog read.
+/**
+ * A package the registry marks bad is refused, not fetched: `bad` is a
+ * package-level field in the signed catalog shard, so it travels with the version
+ * list and a client reads it without a package file. These checks cover the
+ * marker shapes a shard may carry, the refusal line, and that a directory
+ * registry's `bad` reaches the client through the ordinary catalog read.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
@@ -131,8 +133,6 @@ try {
     $assert(\count($packages) === 2 && isset($packages['json'], $packages['evil']), 'every shard is read: ' . \json_encode(\array_keys($packages)));
     $assert(\array_keys(badPackagesAmong($packages)) === ['json'], 'the bad set is derived from the catalog read');
 
-    // A shard that does not match the root it is named in refuses the whole read
-    // rather than answering from the shards that did load.
     \file_put_contents($work . '/broken/catalog/js.json', $jsShard);
     \file_put_contents($work . '/broken/index.json', \json_encode([
         'format' => 1,

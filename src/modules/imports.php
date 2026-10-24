@@ -14,9 +14,10 @@ use function Moggi\Errors\appendDidYouMean;
 use function Moggi\Semantics\Exhaustiveness\trueBindingOrigins;
 use function Moggi\Semantics\Kinds\dataKind;
 use function Moggi\Semantics\Kinds\registerTypeKind;
-use function Moggi\Semantics\TypeExpr\schemeRuntimeArity;
 use function Moggi\Semantics\Types\evidenceFunctionName;
 use function Moggi\Syntax\Ast\moduleName;
+use function Moggi\Syntax\exportedChildrenSpec;
+use function Moggi\Syntax\surfaceConstructorAlias;
 
 /**
  * @return array{
@@ -83,12 +84,6 @@ function moduleEvidenceMeta(
     return $cache[$key] = ['origins' => $origins, 'arity' => $arity];
 }
 
-/** @return array<string, array{namespace: string, phpName: string, module: string}> */
-function moduleEvidenceOrigins(Ast\Program $program, string $moduleName, string $namespace): array
-{
-    return moduleEvidenceMeta($program, $moduleName, $namespace)['origins'];
-}
-
 /**
  * Evidence origins/arity for one unit, merging its pre-check program with its
  * checked program.
@@ -141,7 +136,12 @@ function mergeEvidenceMetas(array $metas): array
                 continue;
             }
             $origins[$evName] = $origin;
-            $arity[$evName] = $meta['arity'][$evName] ?? 0;
+            if (! isset($meta['arity'][$evName])) {
+                throw new \LogicException(
+                    "evidence `{$evName}` was published by module `{$origin['module']}` without a runtime arity",
+                );
+            }
+            $arity[$evName] = $meta['arity'][$evName];
         }
     }
 
@@ -149,13 +149,27 @@ function mergeEvidenceMetas(array $metas): array
 }
 
 /**
- * Map evidence factory name → runtime arity for one program.
+ * Runtime arity of every evidence factory a unit publishes.
  *
+ * The checked program is authoritative: elaborating an instance adds the superclass dictionaries its
+ * pre-check declaration does not spell, so `instance Monoid (Dual a)` takes two slots where the
+ * parsed declaration shows one. A name only the parsed tree carries (a module this run did not
+ * check) keeps its declared count.
+ *
+ * @param array<string, mixed> $unit
  * @return array<string, int>
  */
-function moduleEvidenceArityMap(Ast\Program $program): array
+function unitEvidenceArities(array $unit, string $moduleName, string $namespace): array
 {
-    return moduleEvidenceMeta($program, '', '')['arity'];
+    $checked = $unit['facts']['evidenceChecked']['arity'] ?? null;
+    if (! \is_array($checked)) {
+        $program = $unit['checkedProgram'] ?? null;
+        $checked = $program instanceof Ast\Program
+            ? moduleEvidenceMeta($program, $moduleName, $namespace)['arity']
+            : [];
+    }
+
+    return $checked + unitEvidenceMeta($unit, $moduleName, $namespace)['arity'];
 }
 
 /**
@@ -254,92 +268,6 @@ function moduleTrueBindingOriginsAll(array $units): array
 }
 
 /**
- * Runtime arity of an evidence factory: unconstrained instances are nullary;
- * `C a => C (F a)` takes one dictionary per instance-context constraint
- * (including superclasses once the defining module has been type-checked).
- *
- * @param array<string, array<string, mixed>> $units
- */
-function moduleEvidenceArity(array $units, string $moduleName, string $evName): int
-{
-    $unit = $units[$moduleName] ?? null;
-    $factsArity = \is_array($unit) ? ($unit['facts']['evidenceChecked']['arity'] ?? null) : null;
-    if (\is_array($factsArity) && \array_key_exists($evName, $factsArity)) {
-        return (int) $factsArity[$evName];
-    }
-    $program = \is_array($unit)
-        ? ($unit['checkedProgram'] ?? $unit['program'] ?? null)
-        : null;
-    if (! ($program instanceof Ast\Program)) {
-        return 0;
-    }
-    $namespace = (string) ($unit['namespace'] ?? '');
-    $cacheKey = $moduleName . "\0" . $namespace . "\0" . \hash(
-        'xxh3',
-        (string) ($unit['source'] ?? '') . "\0" . (string) ($unit['path'] ?? ''),
-    );
-
-    return moduleEvidenceMeta($program, $moduleName, $namespace, $cacheKey)['arity'][$evName] ?? 0;
-}
-
-/**
- * Runtime parameter count of an exported function, from the defining module's
- * *checked* program (constraint evidence parameters are already included, so
- * this agrees with the scheme's runtime arity for ordinary definitions).
- *
- * Returns null when the module has not been checked yet, in which case callers
- * fall back to the scheme-derived arity.
- *
- * @param array<string, array<string, mixed>> $units
- */
-function moduleDeclaredFunctionArity(array $units, string $moduleName, string $name): ?int
-{
-    $unit = $units[$moduleName] ?? null;
-    if (! \is_array($unit)) {
-        return null;
-    }
-
-    $callable = moduleCallableEntry($units, $moduleName, $name);
-    if ($callable !== null) {
-        return (int) $callable['arity'];
-    }
-
-    $factsArity = $unit['facts']['fnArity'] ?? null;
-    if (\is_array($factsArity)) {
-        return $factsArity[$name] ?? null;
-    }
-
-    $program = $unit['checkedProgram'] ?? null;
-    if (! ($program instanceof Ast\Program)) {
-        return null;
-    }
-
-    static $cache = [];
-    $key = $moduleName . "\0" . \hash(
-        'xxh3',
-        (string) ($unit['source'] ?? '') . "\0" . (string) ($unit['path'] ?? ''),
-    );
-    if (! isset($cache[$key])) {
-        $cache[$key] = declaredFunctionArityMapFromProgram($program);
-    }
-
-    return $cache[$key][$name] ?? null;
-}
-
-/** @return array<string, int> */
-function declaredFunctionArityMapFromProgram(Ast\Program $program): array
-{
-    $arities = [];
-    foreach ($program->items as $item) {
-        if ($item instanceof Ast\FunctionDecl && ! $item->signatureOnly) {
-            $arities[$item->name] = \count($item->params);
-        }
-    }
-
-    return $arities;
-}
-
-/**
  * Elaboration facts a checked module publishes for importers, compact enough
  * to load without the checked program itself: merged instance-evidence
  * metadata (hand-written instances from the parsed tree plus derived ones,
@@ -354,7 +282,6 @@ function declaredFunctionArityMapFromProgram(Ast\Program $program): array
  *   evidenceChecked: array{origins: array<string, array{namespace: string, phpName: string, module: string}>, arity: array<string, int>},
  *   actionReturn: array<string, true>,
  *   trueBindings: array<string, true>,
- *   fnArity: array<string, int>,
  *   callables: array{abi: int, entries: array<string, array{evidence: int, params: int, arity: int}>}
  * }
  */
@@ -369,13 +296,17 @@ function preparedModuleFacts(array $unit, Ast\Program $checked, string $moduleNa
     $checkedMeta = moduleEvidenceMeta($checked, $moduleName, $namespace);
     $metas[] = $checkedMeta;
 
+    $evidence = mergeEvidenceMetas($metas);
+
     return [
-        'evidence' => mergeEvidenceMetas($metas),
+        'evidence' => $evidence,
         'evidenceChecked' => $checkedMeta,
         'actionReturn' => actionReturnFnNamesFromProgram($checked),
         'trueBindings' => trueBindingOrigins($checked->items, $moduleName),
-        'fnArity' => declaredFunctionArityMapFromProgram($checked),
-        'callables' => callableFactsFromProgram($checked),
+        'callables' => callableFactsFromProgram(
+            $checked,
+            $checkedMeta['arity'] + $evidence['arity'],
+        ),
     ];
 }
 
@@ -386,16 +317,17 @@ function preparedModuleFacts(array $unit, Ast\Program $checked, string $moduleNa
  *
  * Publishing it here is what makes an imported entry's arity a published fact rather than a
  * guess. Before this record the importer looked the entry up by the name it imported it under, so
- * a re-export that renamed the entry found nothing and fell back to counting the scheme's arrows
- * (`schemeRuntimeArity`), which disagrees with the declared arity of every eta-reduced definition.
+ * a re-export that renamed the entry found nothing and fell back to counting the scheme's arrows,
+ * which disagrees with the declared arity of every eta-reduced definition.
  *
  * Imported entries are source declarations, so their capture layout is empty: `|E| + |V|` is the
  * whole runtime vector. `evidence` and `params` are published separately so an importer can tell
  * a hidden slot from a value parameter without re-deriving either.
  *
+ * @param array<string, int> $evidenceArities evidence factory name => dictionary count
  * @return array{abi: int, entries: array<string, array{evidence: int, params: int, arity: int}>}
  */
-function callableFactsFromProgram(Ast\Program $program): array
+function callableFactsFromProgram(Ast\Program $program, array $evidenceArities = []): array
 {
     $entries = [];
     foreach ($program->items as $item) {
@@ -418,7 +350,50 @@ function callableFactsFromProgram(Ast\Program $program): array
         ];
     }
 
+    foreach (programConstructorArities($program) as $name => $arity) {
+        $entries[$name] ??= ['evidence' => 0, 'params' => $arity, 'arity' => $arity];
+    }
+
+    foreach ($evidenceArities as $name => $arity) {
+        $entries[$name] ??= evidenceCallableLayout($arity);
+    }
+
     return ['abi' => \Moggi\IR\Callables\ABI_VERSION, 'entries' => $entries];
+}
+
+/**
+ * Runtime arity of every constructor a program declares: its field count.
+ *
+ * A type whose single constructor the surface lets callers spell as the type name itself publishes
+ * that spelling too, so both names resolve to one layout.
+ *
+ * @return array<string, int>
+ */
+function programConstructorArities(Ast\Program $program): array
+{
+    $arities = [];
+    foreach ($program->items as $item) {
+        if (! $item instanceof Ast\DataDecl) {
+            continue;
+        }
+
+        $declared = [];
+        foreach ($item->constructors as $constructor) {
+            $declared[] = $constructor->name;
+            $arities[$constructor->name] = \count($constructor->fields);
+        }
+
+        $alias = surfaceConstructorAlias(
+            $item->name,
+            $declared,
+            exportedChildrenSpec($program->exports, $item->name),
+        );
+        if ($alias !== null && isset($arities[$alias])) {
+            $arities[$item->name] ??= $arities[$alias];
+        }
+    }
+
+    return $arities;
 }
 
 /**
@@ -432,9 +407,10 @@ function callableFactsFromProgram(Ast\Program $program): array
  * importer reads one arity whether the library was checked in this process or not.
  *
  * @param array<string, mixed> $exports the module's collected exports (`env` holds the schemes)
+ * @param array<string, int> $evidenceArities evidence factory name => dictionary count
  * @return array{abi: int, entries: array<string, array{evidence: int, params: int, arity: int}>}
  */
-function parsedCallableFacts(Ast\Program $program, array $exports): array
+function parsedCallableFacts(Ast\Program $program, array $exports, array $evidenceArities = []): array
 {
     $env = $exports['env'] ?? null;
     $entries = [];
@@ -454,83 +430,132 @@ function parsedCallableFacts(Ast\Program $program, array $exports): array
         ];
     }
 
+    foreach (programConstructorArities($program) as $name => $arity) {
+        $entries[$name] ??= ['evidence' => 0, 'params' => $arity, 'arity' => $arity];
+    }
+    foreach ($evidenceArities as $name => $arity) {
+        $entries[$name] ??= evidenceCallableLayout($arity);
+    }
+
     return ['abi' => \Moggi\IR\Callables\ABI_VERSION, 'entries' => $entries];
 }
 
 /**
- * The layout an importer reads for one imported entry: the declaring module's
- * published split (`evidence`/`params`) alongside the runtime arity the importer
- * already computed. Only the arity is present when the declaring module published
- * no record — an evidence builder, or a facade entry with no source declaration.
+ * The layout of an evidence factory: it takes one dictionary per instance-context constraint and no
+ * value parameters.
  *
- * @param array<string, array<string, mixed>> $units
- * @return array{arity: int, evidence?: int, params?: int}
+ * @return array{evidence: int, params: int, arity: int}
  */
-function importedCallableLayout(array $units, string $originModule, string $name, int $arity): array
+function evidenceCallableLayout(int $dictionaryCount): array
 {
-    $entry = moduleCallableEntry($units, $originModule, $name);
-
-    return $entry === null ? ['arity' => $arity] : $entry;
+    return ['evidence' => $dictionaryCount, 'params' => 0, 'arity' => $dictionaryCount];
 }
 
 /**
- * The published callable facts of one entry, looked up by the name the defining module uses.
+ * The callable layouts a unit publishes for its callable entries.
+ *
+ * `facts.callables` is the record; a unit this run has not checked yet publishes it from its parsed
+ * tree through the same producer, with its exports collected the way the import walk collects them
+ * for a module it has not visited. Either way the entries come from one place — the unit's own
+ * declarations and instances — so a reader never re-derives a vector from a scheme or a call site.
+ *
+ * @param array<string, mixed> $unit
+ * @param array<string, array<string, mixed>> $units
+ * @return array<string, array{evidence: int, params: int, arity: int}>
+ */
+function unitCallableEntries(array $unit, array $units, string $moduleName): array
+{
+    $entries = $unit['facts']['callables']['entries'] ?? null;
+    if (\is_array($entries)) {
+        return $entries;
+    }
+
+    $namespace = (string) ($unit['namespace'] ?? '');
+    $checked = $unit['checkedProgram'] ?? null;
+    if ($checked instanceof Ast\Program) {
+        return callableFactsFromProgram($checked, unitEvidenceArities($unit, $moduleName, $namespace))['entries'];
+    }
+
+    $program = $unit['program'] ?? null;
+    if (! $program instanceof Ast\Program) {
+        throw new \LogicException("module `{$moduleName}` has no program to publish callables from");
+    }
+
+    $exports = $unit['exports'] ?? null;
+    if (! \is_array($exports)) {
+        $localTypes = $unit['localTypes'] ?? null;
+        if (! \is_array($localTypes)) {
+            throw new \LogicException(
+                "module `{$moduleName}` has neither exports nor a type environment, so it publishes no "
+                . 'function layouts',
+            );
+        }
+        $exports = collectExports($program, $localTypes, $units, $moduleName);
+    }
+
+    return parsedCallableFacts($program, $exports, unitEvidenceArities($unit, $moduleName, $namespace))['entries'];
+}
+
+/**
+ * The layout a module publishes for one of its callable entries, looked up by the name the defining
+ * module uses.
+ *
+ * Every entry an importer can call has one — a function (its declared parameters, with the
+ * constraint slots the check published), a data constructor (its field count) or an evidence factory
+ * (its dictionary count) — so a consumer reads one record. A name the module does not publish is a
+ * producer defect: the entry exists in the module's exports, so its layout has to exist too.
  *
  * @param array<string, array<string, mixed>> $units
- * @return ?array{evidence: int, params: int, arity: int}
+ * @return array{evidence: int, params: int, arity: int}
  */
-function moduleCallableEntry(array $units, string $moduleName, string $name): ?array
+function publishedCallableLayout(array $units, string $moduleName, string $name): array
 {
     $unit = $units[$moduleName] ?? null;
     if (! \is_array($unit)) {
-        return null;
+        throw new \LogicException(
+            "callable `{$moduleName}::{$name}` has no unit in this compilation, so it publishes no layout",
+        );
     }
 
-    $entries = $unit['facts']['callables']['entries'] ?? null;
-    if (! \is_array($entries)) {
-        return null;
+    $entry = unitCallableEntries($unit, $units, $moduleName)[$name] ?? null;
+    if (! \is_array($entry) || ! isset($entry['evidence'], $entry['params'], $entry['arity'])) {
+        throw new \LogicException(
+            "module `{$moduleName}` publishes no callable layout for `{$name}`; a function, data "
+            . 'constructor and evidence factory each have to publish one where the module is checked '
+            . 'or parsed',
+        );
     }
 
-    $entry = $entries[$name] ?? null;
-
-    return \is_array($entry) && isset($entry['arity']) ? $entry : null;
+    return [
+        'evidence' => (int) $entry['evidence'],
+        'params' => (int) $entry['params'],
+        'arity' => (int) $entry['arity'],
+    ];
 }
 
 /**
- * Runtime arity of an imported function: the vector its definition publishes, not the arrow
- * count of its type. The two differ for eta-reduced definitions — `($) f = f` has type
- * `(a -> b) -> a -> b` but a single parameter — and handing such a function more arguments than
- * it declares has to go through the runtime `__apply` trampoline instead of a direct call.
+ * Runtime arity of an imported function: the vector its definition publishes, not the arrow count of
+ * its type. The two differ for eta-reduced definitions — `($) f = f` has type `(a -> b) -> a -> b`
+ * but a single parameter — and handing such a function more arguments than it declares has to go
+ * through the runtime `__apply` trampoline instead of a direct call.
  *
- * `$name` is the entry's name in `$moduleName`, not the name the importing file selected it as:
- * a re-export renames the entry, and the defining module knows only its own spelling.
+ * `$name` is the entry's name in `$moduleName`, not the name the importing file selected it as: a
+ * re-export renames the entry, and the defining module knows only its own spelling.
  *
  * @param array<string, array<string, mixed>> $units
  */
-function externalFunctionRuntimeArity(
-    array $units,
-    ?string $moduleName,
-    string $name,
-    Scheme $scheme,
-): int {
-    if ($moduleName !== null) {
-        $callable = moduleCallableEntry($units, $moduleName, $name);
-        if ($callable !== null) {
-            return (int) $callable['arity'];
-        }
-
-        $declared = moduleDeclaredFunctionArity($units, $moduleName, $name);
-        if ($declared !== null) {
-            return $declared;
-        }
+function externalFunctionRuntimeArity(array $units, ?string $moduleName, string $name): int
+{
+    if ($moduleName === null) {
+        throw new \LogicException("imported entry `{$name}` has no declaring module, so it publishes no layout");
     }
 
-    return schemeRuntimeArity($scheme);
+    return publishedCallableLayout($units, $moduleName, $name)['arity'];
 }
 
 /**
  * Everything a module needs from the modules it imports: the facts, published
- * as one `ModuleInterface`, and the target layout those facts were resolved
+ * as one `ImportInterface`, and the target layout those facts were resolved
  * against, as an `EmitPlan` the emitter renders from.
  *
  * @param list<Ast\ImportDecl> $imports
@@ -555,7 +580,6 @@ function buildImportContext(
     $qualifiedOrigins = [];
     $qualifiedEnv = [];
     $externalFns = [];
-    $externalFnRuntimeArity = [];
     $callables = [];
     $actionReturnFns = [];
     $fnOriginModules = [];
@@ -660,13 +684,7 @@ function buildImportContext(
             if ($import->qualifiedOnly) {
                 if ($origin !== null && ! isset($fnOriginModules[$name])) {
                     $externalFns[$name] = resolvedSymbol($origin['module'], $origin['phpName']);
-                    $externalFnRuntimeArity[$name] = externalFunctionRuntimeArity(
-                        $units,
-                        $origin['module'],
-                        $origin['phpName'],
-                        $scheme,
-                    );
-                    $callables[$name] = importedCallableLayout($units, $origin['module'], $origin['phpName'], $externalFnRuntimeArity[$name]);
+                    $callables[$name] = publishedCallableLayout($units, $origin['module'], $origin['phpName']);
                     $fnOriginModules[$name] = $origin['module'];
                     if (isset(moduleActionReturnFnNames($units, $origin['module'])[$origin['phpName']])) {
                         $actionReturnFns[$name] = true;
@@ -691,7 +709,7 @@ function buildImportContext(
                             $selected['origins'][$name]['module'] ?? '',
                         ])),
                     ];
-                    unset($externalFns[$name], $externalFnRuntimeArity[$name]);
+                    unset($externalFns[$name], $callables[$name]);
                 }
             }
 
@@ -709,13 +727,7 @@ function buildImportContext(
             }
 
             $externalFns[$name] = resolvedSymbol($origin['module'], $origin['phpName']);
-            $externalFnRuntimeArity[$name] = externalFunctionRuntimeArity(
-                $units,
-                $origin['module'],
-                $origin['phpName'],
-                $scheme,
-            );
-            $callables[$name] = importedCallableLayout($units, $origin['module'], $origin['phpName'], $externalFnRuntimeArity[$name]);
+            $callables[$name] = publishedCallableLayout($units, $origin['module'], $origin['phpName']);
             $fnOriginModules[$name] = $origin['module'];
             if (isset(moduleActionReturnFnNames($units, $origin['module'])[$origin['phpName']])) {
                 $actionReturnFns[$name] = true;
@@ -724,9 +736,15 @@ function buildImportContext(
 
         if ($targetName !== $currentModule) {
             $targetMeta = unitEvidenceMeta($target, $targetName, $namespace);
+            $targetArities = unitEvidenceArities($target, $targetName, $namespace);
             foreach ($targetMeta['origins'] as $evName => $origin) {
                 $externalFns[$evName] = resolvedSymbol($origin['module'], $origin['phpName']);
-                $externalFnRuntimeArity[$evName] = moduleEvidenceArity($units, $targetName, $evName);
+                $callables[$evName] = evidenceCallableLayout(
+                    $targetArities[$evName]
+                        ?? throw new \LogicException(
+                            "evidence `{$evName}` was published by module `{$targetName}` without a runtime arity",
+                        ),
+                );
                 $fnOriginModules[$evName] = $origin['module'];
             }
         }
@@ -774,13 +792,19 @@ function buildImportContext(
             (string) ($unit['source'] ?? '') . "\0" . (string) ($unit['path'] ?? ''),
         );
         $meta = unitEvidenceMeta($unit, $unitName, $unit['namespace'], $cacheKey);
+        $unitArities = unitEvidenceArities($unit, $unitName, $unit['namespace']);
         foreach ($meta['origins'] as $evName => $origin) {
             if (isset($externalFns[$evName])) {
                 continue;
             }
 
             $externalFns[$evName] = resolvedSymbol($origin['module'], $origin['phpName']);
-            $externalFnRuntimeArity[$evName] = $meta['arity'][$evName] ?? 0;
+            $callables[$evName] = evidenceCallableLayout(
+                $unitArities[$evName]
+                    ?? throw new \LogicException(
+                        "evidence `{$evName}` was published by module `{$unitName}` without a runtime arity",
+                    ),
+            );
             $fnOriginModules[$evName] = $origin['module'];
             if ($planPhpImports) {
                 recordOriginOutputPath(
@@ -798,7 +822,6 @@ function buildImportContext(
     mergeFacadeBackendExports(
         $env,
         $externalFns,
-        $externalFnRuntimeArity,
         $callables,
         $actionReturnFns,
         $fnOriginModules,
@@ -812,7 +835,7 @@ function buildImportContext(
     );
 
     return new ImportContext(
-        interface: new ModuleInterface(
+        interface: new ImportInterface(
             module: $currentModule,
             env: $env,
             data: $data,
@@ -825,7 +848,6 @@ function buildImportContext(
             constructorRenames: $constructorRenames,
             externalFns: $externalFns,
             fnOriginModules: $fnOriginModules,
-            externalFnRuntimeArity: $externalFnRuntimeArity,
             callables: $callables,
             actionReturn: $actionReturnFns,
             trueBindings: moduleTrueBindingOriginsAll($units),
@@ -924,8 +946,7 @@ function mergeFacadeBackendEnv(
 /**
  * @param array<string, Scheme> $env
  * @param array<string, string> $externalFns
- * @param array<string, int> $externalFnRuntimeArity
- * @param array<string, array{arity: int, evidence?: int, params?: int}> $callables
+ * @param array<string, array{evidence: int, params: int, arity: int}> $callables
  * @param array<string, string> $fnOriginModules
  * @param array<string, string> $intrinsicWrappers
  * @param array<string, string> $moduleOutputPaths
@@ -935,7 +956,6 @@ function mergeFacadeBackendEnv(
 function mergeFacadeBackendExports(
     array &$env,
     array &$externalFns,
-    array &$externalFnRuntimeArity,
     array &$callables,
     array &$actionReturnFns,
     array &$fnOriginModules,
@@ -976,13 +996,7 @@ function mergeFacadeBackendExports(
 
         $origin = $implExports['origins'][$name];
         $externalFns[$name] = resolvedSymbol($origin['module'], $origin['phpName']);
-        $externalFnRuntimeArity[$name] = externalFunctionRuntimeArity(
-            $units,
-            $origin['module'],
-            $origin['phpName'],
-            $scheme,
-        );
-        $callables[$name] = importedCallableLayout($units, $origin['module'], $origin['phpName'], $externalFnRuntimeArity[$name]);
+        $callables[$name] = publishedCallableLayout($units, $origin['module'], $origin['phpName']);
         $fnOriginModules[$name] = $origin['module'];
         if (isset(moduleActionReturnFnNames($units, $origin['module'])[$origin['phpName']])) {
             $actionReturnFns[$name] = true;

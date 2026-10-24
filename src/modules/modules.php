@@ -26,6 +26,15 @@ use function Moggi\Optimize\Specialize\specializeAcrossModules;
 use function Moggi\Optimize\TreeShake\treeShakeModules;
 use function Moggi\Pipeline\run as pipelineRun;
 
+/**
+ * The shape of a cached project product.
+ *
+ * Part of the artifact key, not a field patched on read: a product written by another shape is a
+ * different key, so a reader either gets a record of exactly this shape or prepares the project.
+ * Every field the product promises is present, including the two that may be null.
+ */
+const PROJECT_PRODUCT_SHAPE = 2;
+
 /** @param list<string> $paths @return array<string, string> relative output path => emitted artifact */
 function compileProject(array $paths, string $rootDir, CompilationContext $context, bool $optimize = true, bool $strip = false): array
 {
@@ -49,13 +58,11 @@ function compileProjectBoth(array $paths, string $rootDir, CompilationContext $c
             . '|strip=' . ($strip ? '1' : '0')
             . '|emit=' . $context->backend->emitCacheDiscriminator()
             . '|context=' . $context->cacheKey()
-            . '|out=emit',
+            . '|out=emit'
+            . '|shape=' . PROJECT_PRODUCT_SHAPE,
     );
     $cached = Cache\artifactGet($outputsKey);
-    if (\is_array($cached) && isset($cached['emit'], $cached['opt-ir'])) {
-        $cached['entryModule'] ??= null;
-        $cached['entryRelative'] ??= null;
-
+    if (\is_array($cached)) {
         return $cached;
     }
 
@@ -174,37 +181,93 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
     foreach ($relativeByModule as $mn => $rel) {
         $allModuleOutputPaths[$mn] = \preg_replace('/\.mog$/', $ext, $rel) ?? $rel;
     }
-    $entryModule = null;
-    $entryRelative = null;
+
+    $candidateOutputPaths = [];
     foreach ($optByModule as $moduleName => $optimizedIr) {
-        $unit = $prepared->units[$moduleName];
-        $relative = $relativeByModule[$moduleName];
-        $outputRelative = \preg_replace('/\.mog$/', $ext, $relative) ?? $relative;
-        $importContext = $prepared->importContexts[$moduleName];
-        $irUsage = collectIrCodegenUsage($optimizedIr);
-
-        $optIrOutputs[\preg_replace('/\.mog$/', '.opt-ir', $relative) ?? $relative] = dumpIr($optimizedIr);
-
         if ($optimizedIr->entry === null && ! moduleDeclaresCode($optimizedIr)) {
             continue;
         }
+        $candidateOutputPaths[$moduleName] = $allModuleOutputPaths[$moduleName]
+            ?? throw new \LogicException("module `{$moduleName}` has no artifact to write");
+    }
+
+    /** @var array<string, array{unit: array<string, mixed>, outputRelative: string, plan: EmitPlan, ir: Module, irUsage: array{callees: array<string, true>, intrinsics: array<string, true>}}> $plans */
+    $plans = [];
+    $entryModule = null;
+    $entryRelative = null;
+    foreach ($optByModule as $moduleName => $optimizedIr) {
+        $relative = $relativeByModule[$moduleName];
+        $optIrOutputs[\preg_replace('/\.mog$/', '.opt-ir', $relative) ?? $relative] = dumpIr($optimizedIr);
+
+        if (! isset($candidateOutputPaths[$moduleName])) {
+            continue;
+        }
+
+        $unit = $prepared->units[$moduleName];
+        $outputRelative = $candidateOutputPaths[$moduleName];
+        $importContext = $prepared->importContexts[$moduleName];
+        $irUsage = collectIrCodegenUsage($optimizedIr);
 
         $plan = $importContext->plan;
         if ($context->backendId === 'php') {
-            $plan = $plan->withModuleOutputPaths($allModuleOutputPaths);
+            $plan = $plan->withModuleOutputPaths($candidateOutputPaths);
         }
 
-        $plan = planEmission(
-            $importContext->interface,
-            $plan,
-            $optimizedIr,
-            $irUsage['callees'],
-            $outputRelative,
-        );
+        $plans[$moduleName] = [
+            'unit' => $unit,
+            'outputRelative' => $outputRelative,
+            'plan' => planEmission(
+                $importContext->interface,
+                $plan,
+                $optimizedIr,
+                $irUsage['callees'],
+                $outputRelative,
+            ),
+            'ir' => $optimizedIr,
+            'irUsage' => $irUsage,
+        ];
+
+        if ($optimizedIr->entry !== null && $optimizedIr->entry->kind === EntryPointKind::Main) {
+            $entryModule = $moduleName;
+            $entryRelative = $outputRelative;
+        }
+    }
+
+    $written = \array_keys($plans);
+    if ($context->backendId === 'php' && $entryModule !== null) {
+        $reachable = [$entryModule => true];
+        $pending = [$entryModule];
+        while ($pending !== []) {
+            $moduleName = \array_pop($pending);
+            foreach (\array_keys($plans[$moduleName]['plan']->requiredModules) as $dependency) {
+                if (isset($reachable[$dependency])) {
+                    continue;
+                }
+                if (! isset($plans[$dependency])) {
+                    throw new \LogicException(
+                        "module `{$moduleName}` requires `{$dependency}`, which this compilation does not emit",
+                    );
+                }
+                $reachable[$dependency] = true;
+                $pending[] = $dependency;
+            }
+        }
+        $written = \array_values(\array_filter(
+            \array_keys($plans),
+            static fn (string $moduleName): bool => isset($reachable[$moduleName]),
+        ));
+    }
+
+    foreach ($written as $moduleName) {
+        $planned = $plans[$moduleName];
+        $unit = $planned['unit'];
+        $optimizedIr = $planned['ir'];
+        $irUsage = $planned['irUsage'];
+        $outputRelative = $planned['outputRelative'];
 
         $emitted = codegenWith($context->backend, $optimizedIr, $unit['path'], [
             'namespace' => $unit['namespace'],
-            'plan' => $plan,
+            'plan' => $planned['plan'],
             'outputRelative' => $outputRelative,
             'irUsage' => $irUsage,
             'artifactModuleName' => $moduleName,
@@ -212,18 +275,12 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
             'foreignInterfaces' => $foreignInterfaces,
         ]);
 
-        if ($optimizedIr->entry !== null && $optimizedIr->entry->kind === EntryPointKind::Main) {
-            $entryModule = $moduleName;
-            $entryRelative = \preg_replace('/\.mog$/', $ext, $relative) ?? $relative;
-        }
-
         if (\is_array($emitted)) {
             foreach ($emitted as $path => $bytes) {
                 $emitOutputs[$path] = $bytes;
             }
         } else {
-            $emitRelative = \preg_replace('/\.mog$/', $ext, $relative) ?? $relative;
-            $emitOutputs[$emitRelative] = $emitted;
+            $emitOutputs[$outputRelative] = $emitted;
         }
     }
 

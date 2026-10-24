@@ -21,11 +21,7 @@ $assert = static function (bool $condition, string $message): void {
         throw new RuntimeException($message);
     }
 };
-
-// Nothing changed: no notice.
 $assert(compilerRevisionWarning('abc123', 'abc123') === null, 'equal revisions stay quiet');
-
-// Both revisions are named, and the fix (restart) is stated.
 $warning = compilerRevisionWarning('abc123', 'def456');
 $assert($warning !== null, 'a moved-on compiler warns');
 $assert($warning['type'] === 2, 'the notice is a warning: ' . $warning['type']);
@@ -37,9 +33,6 @@ $assert(
     \stripos($warning['message'], 'restart') !== false,
     'the notice says what to do: ' . $warning['message'],
 );
-
-// The running revision and the on-disk one come out of one computation, so they
-// can only differ when the sources really differ.
 $running = compilerFingerprint();
 $assert($running === freshCompilerFingerprint(), 'fresh fingerprint matches the memoized one when nothing moved');
 $assert(\preg_match('/^[0-9a-f]{32}$/', $running) === 1, 'a fingerprint is 32 hex chars: ' . $running);

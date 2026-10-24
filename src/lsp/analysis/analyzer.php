@@ -40,6 +40,8 @@ class AnalysisResult
         public readonly array $imports,
         public readonly string $source,
         public readonly string $uri,
+        /** True when `$program` is the checked tree; false for the parsed fallback. */
+        public readonly bool $checked = false,
     ) {
     }
 }
@@ -139,6 +141,7 @@ function analyze(string $uri, string $content, array $libDirs = [], ?Compilation
             $imports,
             $source,
             $uri,
+            checked: $checkedProgram !== null,
         );
     });
 }

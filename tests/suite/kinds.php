@@ -34,8 +34,6 @@ use Moggi\Pipeline\PipelineStage;
  */
 function testTreeKinds(): array
 {
-    // A stage's kind is the stage's own name, and only codegen can change what a stage before it
-    // produces. `tokens` is the lexer's dump; `stdout`, `stderr` and `err` are not stages at all.
     $stages = ['tokens' => ['pre' => true]];
     foreach (PipelineStage::cases() as $stage) {
         $stages[$stage->value] = ['pre' => $stage !== PipelineStage::Emit];
@@ -91,9 +89,6 @@ function runTestCase(TestCase $case, string $backend, string $projectRoot): arra
     if (($outcome['passed'] ?? false) !== true || ! nativeSmokeRequested($case, $backend)) {
         return $outcome;
     }
-
-    // A case that already passed gains a second verdict, and `native` says so in the report; a `skip`
-    // verdict (no toolchain) replaces the pass.
     return ['native' => true] + runNativeExampleSmoke(\dirname($case->input), $backend, $projectRoot);
 }
 
@@ -151,7 +146,6 @@ function runExampleBuild(TestCase $case, string $backend, bool $project = false)
 /** @return array{passed: bool, message: string} */
 function runFixtureCase(TestCase $case, string $backend, string $projectRoot): array
 {
-    // A fixture is either rejected or accepted, never both: an `err` golden is the verdict.
     $errorGolden = $case->goldenBeside($case->base(), 'err', $backend);
     if ($errorGolden !== null) {
         return runErrorFixture($case, $errorGolden, $backend);
@@ -409,7 +403,6 @@ function runErrorFixture(TestCase $case, string $golden, string $backend): array
             default => sourceStageDump($case->input, 'typed-ast', $backend),
         };
     } catch (TestFailure $e) {
-        // A harness failure is not a compiler diagnostic.
         throw $e;
     } catch (\Throwable $e) {
         $shape = diagnosticShapeFailure($e);
@@ -443,8 +436,6 @@ function runProjectErrorCase(TestCase $case, array $goldens, string $backend, st
 
     try {
         [$files, $dir] = projectClosure($case->input);
-        // The request says which backend this run is for; the diagnostic names it
-        // (`… does not match compile backend `jvm``), so the compile must be that backend's.
         compileProjectBoth($files, $dir, CompilationContext::for($backend, CompilePurpose::Library, sources: $files));
     } catch (TestFailure $e) {
         throw $e;

@@ -1,13 +1,15 @@
 <?php declare(strict_types=1);
 
-// A1: the five structural laws agree on every type head.
-//
-// The table below is the law's own coverage report: each of the 22 constructors
-// of the internal type representation gets one case, and the test fails if the
-// compiler declares a head the table does not cover. The promoted (`'Pair a`)
-// and variable-headed (`f a`) cases are the ones that used to disagree: free
-// variables said they had none, prune left their arguments unsubstituted and
-// normalization skipped synonyms inside a variable-headed application.
+/**
+ * The five structural laws agree on every type head.
+ *
+ * The table below is the law's own coverage report: each of the 22 constructors
+ * of the internal type representation gets one case, and the test fails if the
+ * compiler declares a head the table does not cover. The promoted (`'Pair a`)
+ * and variable-headed (`f a`) cases are the ones that used to disagree: free
+ * variables said they had none, prune left their arguments unsubstituted and
+ * normalization skipped synonyms inside a variable-headed application.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
@@ -46,12 +48,7 @@ $freeVars = static function (TypeExpr\Type $type): array {
 };
 
 $var = static fn (string $name): TypeExpr\TVar => new TypeExpr\TVar($name);
-
-// ---- one case per head ---------------------------------------------------
 //
-// `children` is what the head owns; `free` is the free-variable set of the
-// sample, which is also what `typeChildren` has to reach for the sample to be
-// meaningful.
 
 $heads = [
     TypeExpr\TInt::class => [new TypeExpr\TInt(), 0, []],
@@ -111,8 +108,6 @@ foreach ($heads as $class => [$sample, $children, $free]) {
     );
 }
 
-// ---- promoted heads ------------------------------------------------------
-
 $promoted = new TypeExpr\TPromoted('Pair', [$var('a')]);
 $state = Types\newState('');
 $state->subst = ['a' => new TypeExpr\TInt()];
@@ -146,13 +141,7 @@ $check(
     $freeVars($nestedPromoted) === [],
     'nested promoted heads gained a free variable',
 );
-
-// ---- associated families: structure only --------------------------------
 //
-// An associated family application is traversed like any constructor-headed
-// type; nothing here asserts when two family applications are *equal*. That is
-// G3/D10, and a fixture that assumed injectivity would encode a theory this
-// tree has not adopted.
 $familyState = new Types\TypeCheckState('');
 $familyState->associatedFamilies['Rep'] = ['params' => ['x'], 'class' => 'Generic'];
 $familyState->associatedEquations['Generic']['Rep'] = [[
@@ -191,8 +180,6 @@ $check(
     'occurs does not reject a family application that mentions the variable',
 );
 
-// ---- variable-headed applications ---------------------------------------
-
 $applied = new TypeExpr\TVarApp('f', [$var('a')]);
 $check(\array_keys(Types\typeVars($applied)) === ['f', 'a'], 'typeVars lost the variable head of an application');
 $check(
@@ -208,9 +195,6 @@ $check(
     Types\typeToString(Types\substitute($applied, ['f' => new TypeExpr\TCon('Maybe')])) === 'Maybe a',
     'substitute did not rewrite the head of a variable-headed application',
 );
-
-// A synonym inside a variable-headed application has to expand exactly as it
-// does inside a constructor application.
 $synonymState = new Types\TypeCheckState('');
 $synonymState->typeSynonyms['Alias'] = [
     'params' => ['x'],
@@ -226,8 +210,6 @@ $check(
     Types\typeToString(Types\normalizeType($synonymState, $insideApp)) === 'f Int',
     'normalization leaves a synonym inside a variable-headed application unexpanded',
 );
-
-// ---- unknown heads fail loudly -------------------------------------------
 
 $unknown = new class implements TypeExpr\Type {
 };
@@ -252,8 +234,6 @@ foreach ($unknownChecks as $law => $call) {
         "{$law}: the unknown-head error does not name the head",
     );
 }
-
-// ---- laws on generated trees --------------------------------------------
 
 $generator = static function (int $depth) use (&$generator, $var): TypeExpr\Type {
     $pick = \mt_rand(0, $depth <= 0 ? 1 : 5);

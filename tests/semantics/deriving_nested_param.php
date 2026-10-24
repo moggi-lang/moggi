@@ -1,7 +1,7 @@
 <?php declare(strict_types=1);
 
-// A1 follow-up: the gate `via` deriving uses to decide whether a class method
-// can be delegated, or must be left to its class default.
+// The gate `via` deriving uses to decide whether a class method can be
+// delegated, or must be left to its class default.
 //
 // `typeHasNestedClassParam` reads a method's type and asks whether the class
 // parameter sits *under a container*. Its contract names three shapes: `[a]`,

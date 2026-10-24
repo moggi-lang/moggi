@@ -32,7 +32,6 @@ function countsFailed(array $counts): bool
         if ($count === 0) {
             continue;
         }
-        // An unknown status is a harness bug; fail on it rather than let it count for nothing.
         $info = CASE_STATUSES[$status] ?? null;
         if ($info === null || $info['failure']) {
             return true;
@@ -91,13 +90,11 @@ function caseResultToArray(CaseResult $result): array
         'name' => $result->name,
         'group' => $result->group,
         'status' => $result->status,
-        // `--jobs N` workers merge on this, so the report does not depend on finish order.
         'order' => $result->order,
         'durationMs' => \round($result->durationMs, 1),
         'message' => $result->message,
         'skipReason' => $result->skipReason,
         'log' => $result->logPath,
-        // Part of the wire form, or a `--jobs` run would report the case without its mode.
         'native' => $result->native,
     ];
 }

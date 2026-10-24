@@ -1,15 +1,16 @@
 <?php declare(strict_types=1);
 
-// Bindings Phase 3: `moggi bind dotnet:Acme.Hello` reads the fixture assembly
-// and writes the `Nuget.Acme.Hello` module plus the versioned sidecar, which
-// then compiles and runs on the .NET backend. One targeted test only: the
-// inspector/writer units, the golden render, the golden sidecar, the CLI
-// surface (`--print`, `--json`, `--out`), the round-trip self-check, the
-// emit-cache discriminator in the bind cache key, and the run itself —
-// including the optional-parameter tail the emitter pads from the sidecar.
-// Needs a .NET 8 SDK (`DOTNET_ROOT` or `PATH`): `csc` builds the fixture
-// without restore or network, the CLR inspector reads it the way the
-// verifier does, and `dotnet build` assembles the program.
+/**
+ * Bindings Phase 3: `moggi bind dotnet:Acme.Hello` inspects the fixture
+ * assembly and generates the `Nuget.Acme.Hello` module and versioned sidecar.
+ * One targeted test covers inspection, rendering, CLI options, round-trip
+ * validation, cache-key discrimination and execution, including optional
+ * parameters padded from the sidecar.
+ *
+ * Requires a .NET 8 SDK (`DOTNET_ROOT` or `PATH`). `csc` builds the fixture
+ * offline, the CLR inspector reads it as the verifier does, and `dotnet build`
+ * assembles the program.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
@@ -58,7 +59,6 @@ $fixture = $root . '/tests/registry/bind/fixtures/acme-hello-dotnet';
 $golden = (string) \file_get_contents($root . '/tests/registry/bind/Nuget.Acme.Hello.mog.expected');
 $goldenSidecar = (string) \file_get_contents($root . '/tests/registry/bind/Nuget.Acme.Hello.sidecar.json.expected');
 
-// The coordinate shape, and the module it names.
 $parts = parseDotNetCoordinate('Acme.Hello:1.0.0');
 $assert(
     $parts === ['id' => 'Acme.Hello', 'version' => '1.0.0'],
@@ -80,9 +80,6 @@ foreach (['', 'a:b:c', ':1.0', 'Acme.Hello:'] as $bad) {
     }
 }
 
-// The fixture tree: sources compiled by the SDK's own Roslyn — no project, no
-// restore, no network — into `dotnet/Acme.Hello.dll`, the discovery shape the
-// backend itself scans.
 $tree = $work . '/tree';
 $buildEnv = \getenv();
 $buildEnv['DOTNET_ROOT'] = \dirname((string) $dotnet);
@@ -120,10 +117,6 @@ $assert(
     'fixture csc failed: ' . ($cscResult['stderr'] ?? '') . ($cscResult['stdout'] ?? ''),
 );
 
-// The inspector: the fixture's two types, the seven functions (including the
-// optional-tail declaration and the nominal-parameter round-trip), and the two
-// consts — a readonly field through `ldsfld`, a static property through its
-// getter.
 $descriptor = inspectDotNetTree($tree, 'Acme.Hello', '1.0.0');
 $assert($descriptor['module'] === 'Nuget.Acme.Hello', 'module is ' . $descriptor['module']);
 $assert(
@@ -166,9 +159,6 @@ $assert(
     ($byName['newGreeter']['sig'] ?? '') === 'String -> Greeter',
     'constructor: ' . ($byName['newGreeter']['sig'] ?? ''),
 );
-// The coverage report: overload, unrepresentable parameter, C# const,
-// property plumbing and inherited members each name their reason — and the
-// round-trip self-check fired on nothing.
 $skipReasons = [];
 foreach ($descriptor['skipped'] as $skip) {
     $skipReasons[$skip['symbol'] . "\0" . $skip['reason']] = true;
@@ -188,9 +178,6 @@ foreach ($descriptor['skipped'] as $skip) {
 }
 $assert(\count($descriptor['skipped']) === 23, 'skipped: ' . \count($descriptor['skipped']));
 
-// The sidecar is the point: value-typeness per type, the full IL list and the
-// optional tail for the one member whose declaration cannot spell it, the
-// bound version, and the digest of the dll it was read from.
 $sidecar = $descriptor['sidecar'];
 $assert(($sidecar['format'] ?? 0) === 1, 'sidecar format: ' . \json_encode($sidecar['format'] ?? null));
 $assembly = $sidecar['assemblies']['Acme.Hello'] ?? null;
@@ -214,9 +201,6 @@ $assert(
     'sidecar generated-by: ' . \json_encode($assembly['generated-by'] ?? null),
 );
 
-// The render is the golden, byte for byte — and the written sidecar is its
-// golden once the per-build provenance (digest, generator version) is
-// normalized.
 $rendered = renderBinding($descriptor);
 $assert(normalize($rendered) === normalize($golden), "render differs from golden:\n" . diffText(normalize($golden), normalize($rendered)));
 $writtenSidecar = prettyJson($sidecar) . "\n";
@@ -227,7 +211,6 @@ $normalizedSidecar = (string) \preg_replace(
 );
 $assert(normalize($normalizedSidecar) === normalize($goldenSidecar), "sidecar differs from golden:\n" . diffText(normalize($goldenSidecar), normalize($normalizedSidecar)));
 
-// The bind cache key folds the .NET emit discriminator in.
 $key = bindCacheKey('dotnet', 'Acme.Hello:1.0.0');
 $discriminator = (new DotNetBackend())->emitCacheDiscriminator();
 $assert(
@@ -237,8 +220,6 @@ $assert(
 $assert(bindCacheKey('dotnet', 'Acme.Hello:1.0.0') === $key, 'cache key is not deterministic');
 $assert(bindCacheKey('php', 'Acme.Hello:1.0.0') !== $key, 'cache key ignores the backend');
 
-// The CLI: `--print` renders the golden, `--json` carries the sidecar, `--out`
-// writes the module and the sidecar beside it, and an unknown backend is refused.
 $env = \getenv();
 $env['MOGGI_CACHE_DIR'] = $work . '/cache';
 $env['DOTNET_ROOT'] = \dirname((string) $dotnet);
@@ -283,10 +264,6 @@ $refused = $moggi(['bind', 'go:github.com/acme/hello', '--tree', $tree]);
 $assert(($refused['exitCode'] ?? 0) !== 0, 'a go: coordinate bound');
 $assert(\str_contains((string) ($refused['stderr'] ?? ''), 'only `php:`, `jvm:` and `dotnet:`'), 'refusal says: ' . ($refused['stderr'] ?? ''));
 
-// End to end: compile a program against the binding and run it on the .NET
-// backend. The tree rides along as a library root, so the verifier reads its
-// assembly, the sidecar scopes the calls and pads the optional tail, and the
-// packager stages the dll beside the app.
 \file_put_contents($work . '/Main.mog', <<<'MOG'
 module Main where
 
@@ -307,8 +284,6 @@ $assert(($run['exitCode'] ?? 1) === 0, 'run failed: ' . ($run['stderr'] ?? ''));
 $expected = "Hello, Moggi!\n\ngreeter(Ac)\n[hello]\n1.0.0\n";
 $assert(\str_ends_with((string) ($run['stdout'] ?? ''), $expected), 'run printed: ' . ($run['stdout'] ?? '') . "\nstderr: " . ($run['stderr'] ?? ''));
 
-// The emitted optional call is the full one: the sidecar's IL list names
-// `(string, int32)` and the unpassed tail is padded with a zero.
 $unpacked = $moggi(['compile', $work . '/Main.mog', '--backend', 'dotnet', '-o', $work . '/uout', '--unpacked', '--lib', $gen, '--lib', $tree], 600);
 $assert(($unpacked['exitCode'] ?? 1) === 0, 'unpacked compile failed: ' . ($unpacked['stderr'] ?? ''));
 $helloIl = null;

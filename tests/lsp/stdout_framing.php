@@ -26,10 +26,6 @@ $assert = static function (bool $condition, string $message): void {
         throw new \RuntimeException($message);
     }
 };
-
-// 1. The server entry point sends PHP diagnostics to stderr. Assert the
-//    override actually applies even when the interpreter was started with
-//    `display_errors=1` (which is what put the warning on stdout).
 $previous = \ini_get('display_errors');
 \ini_set('display_errors', '1');
 configureStdioErrors();
@@ -38,8 +34,6 @@ $assert(
     'configureStdioErrors() must route PHP errors away from stdout, got ' . \var_export(\ini_get('display_errors'), true),
 );
 \ini_set('display_errors', $previous === false ? '' : $previous);
-
-// 2. Analyzing a file whose import closure fails to prepare must stay silent.
 $dir = \sys_get_temp_dir() . '/moggi-lsp-framing-' . \getmypid();
 @\mkdir($dir, 0777, true);
 $main = "module Main where\n\nimport Bad\n\nmain :: Int\nmain = 1\n";
@@ -66,9 +60,6 @@ $assert(
     $warnings === [],
     'analysis must not emit PHP warnings on the protocol channel: ' . \implode('; ', $warnings),
 );
-
-// The dependency's parse error is still reported against the open file, so the
-// missing project data cost no diagnostics.
 $codes = [];
 foreach ($result?->diagnostics ?? [] as $diagnostic) {
     $codes[] = $diagnostic['code'] ?? '?';

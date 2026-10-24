@@ -361,16 +361,12 @@ try {
     $pinProblem = registryIdentityProblem('https://reg.example.org', $seedNpub, $otherNpub);
     $assert(\str_contains($pinProblem, 'not the pinned key'), 'a mismatched pin must be refused: ' . $pinProblem);
     $assert(\str_contains(registryIdentityProblem('https://reg.example.org', $seedNpub, 'not-a-key'), 'not an npub'), 'a malformed pin must be refused');
-
-    // With no pin, the first key is recorded and a later change is refused.
     $base = 'https://first.example.org';
     $assert(registryIdentityProblem($base, $seedNpub, null) === '', 'the first use of a key is trusted');
     $assert(rememberedRegistryNpub($base) === $seedNpub, 'the first key must be remembered');
     $assert(registryIdentityProblem($base, $seedNpub, null) === '', 'the remembered key must keep verifying');
     $changed = registryIdentityProblem($base, $otherNpub, null);
     $assert(\str_contains($changed, 'different registry key'), 'a changed key must be refused: ' . $changed);
-
-    // --- library roots stay inside the package they came from ---------------
     $install = $work . '/installed';
     \mkdir($install . '/src', 0777, true);
     $roots = \Moggi\Registry\libraryRoots($install, "[lib]\nsource-dirs = src\n");
@@ -392,8 +388,6 @@ try {
     $assert(\Moggi\Registry\containedPath('/base', 'a/../b') === '/base/b', 'interior .. is folded');
     $assert(\Moggi\Registry\containedPath('/base', '../x') === null, 'a climbing path is refused');
     $assert(\Moggi\Registry\containedPath('/base', '/x') === null, 'an absolute path is refused');
-
-    // --- third-party artifacts are held to the signed map -------------------
     $toolDir = $work . '/tool-tree';
     \mkdir($toolDir . '/vendor/acme/thing/src', 0777, true);
     \mkdir($toolDir . '/vendor/composer', 0777, true);
@@ -423,8 +417,6 @@ try {
     \file_put_contents($toolDir . '/vendor/acme/thing/src/Thing.php', '<?php class Thing {}');
 
     // An artifact no release declares is refused only when the local package
-    // contributes no coordinates of its own for the backend, because those are
-    // the project's own unsigned artifacts.
     \file_put_contents($toolDir . '/jvm/evil.jar', 'evil');
     $jvmMap = ['jvm/thing-1.0.jar' => \Moggi\Registry\sha256Digest('jar-bytes')];
     $assert(\Moggi\Registry\thirdPartyProblems('jvm', $toolDir, $jvmMap) === [], 'a non-strict check ignores an undeclared extra');
@@ -434,8 +426,6 @@ try {
         'a strict check must refuse an injected artifact: ' . \var_export($strict, true),
     );
     \unlink($toolDir . '/jvm/evil.jar');
-
-    // A substituted jar is caught by bytes, not by name.
     \file_put_contents($toolDir . '/jvm/thing-1.0.jar', 'evil-jar');
     $jarProblem = \Moggi\Registry\thirdPartyProblems('jvm', $toolDir, $jvmMap);
     $assert(
@@ -443,8 +433,6 @@ try {
         'a substituted jar must fail: ' . \var_export($jarProblem, true),
     );
     \file_put_contents($toolDir . '/jvm/thing-1.0.jar', 'jar-bytes');
-
-    // The map is a map even where it is empty, and is covered by the signature.
     $release = [
         'blob' => 'sha256:' . $hex,
         'source' => ['kind' => 'dir', 'sha256' => 'sha256:' . $hexC],

@@ -29,7 +29,6 @@ function renderTestList(array $cases, array $backends, array $pathFilters, array
         $entries[] = [
             'name' => $case->name,
             'group' => $case->group,
-            // The *case*'s backends, not this run's, so the list reads the same under any `--backend`.
             'backends' => $case->caseBackends(),
             'files' => \array_map(testRelativePath(...), $case->files),
             'runsOn' => backendMatrixForCase($case),
@@ -96,7 +95,6 @@ function listBackendMatrix(array $cases, array $pathFilters, array $groupFilters
         foreach (selectCases($cases, $pathFilters, $groupFilters, $backend) as $case) {
             ++$entry['total'];
             $reason = caseSkipReason($case, $backend);
-            // Not this backend's case: neither counted nor named. A real skip (missing toolchain) is.
             if ($reason === null) {
                 ++$entry['run'];
             } elseif ($reason['applicable']) {

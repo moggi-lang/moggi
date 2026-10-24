@@ -10,11 +10,11 @@ use function Moggi\Paths\relativeRequirePath;
 use function Moggi\Syntax\isConstructorName;
 
 /**
- * What one target needs to emit one module (A8 / D08).
+ * What one target needs to emit one module.
  *
  * The interface says what a module *means*; this says where that meaning is
  * written for the target being compiled. It holds nothing of its own: every ABI
- * fact below is copied from the module's {@see ModuleInterface}, and every path
+ * fact below is copied from the module's {@see ImportInterface}, and every path
  * and alias is the target's own spelling of a module the interface named. That
  * is why it lives beside the interface rather than inside it — an importer's
  * require path is PHP's business, not a fact about the module — and why it is
@@ -49,6 +49,7 @@ final class EmitPlan
      * @param array<string, int> $externalFnRuntimeArity called name => runtime arity
      * @param array<string, string> $constructorRenames local constructor name => canonical name
      * @param array<string, array<string, mixed>> $importedData the imported data declarations the emitters install
+     * @param array<string, true> $requiredModules the modules this plan's require lines name
      */
     public function __construct(
         public readonly string $backendId,
@@ -63,6 +64,7 @@ final class EmitPlan
         public readonly array $externalFnRuntimeArity = [],
         public readonly array $constructorRenames = [],
         public readonly array $importedData = [],
+        public readonly array $requiredModules = [],
     ) {
     }
 
@@ -118,6 +120,7 @@ final class EmitPlan
             externalFnRuntimeArity: $this->externalFnRuntimeArity,
             constructorRenames: $this->constructorRenames,
             importedData: $this->importedData,
+            requiredModules: $this->requiredModules,
         );
     }
 }
@@ -149,21 +152,22 @@ function moduleOutputPathsForUnits(array $units, string $rootPrefix, string $bac
 }
 
 /**
- * Render the emission plan from a module's interface.
+ * Render the emission plan a module's artifact consumes, from its interface and its IR.
  *
- * Without `$ir` the module's usage is unknown (the REPL builds its emit options
- * before the pipeline runs), so every ABI fact is published whole and every
- * external gets its use line; nothing is pruned and no file is planned, because
- * which module is written where is the emitter's to decide once it has the IR.
- * With `$ir`, the externals and files are the ones the module actually calls —
- * a listed module that is never reached must not be required.
+ * Pruned to what the module calls: externals, `use function`/`use namespace` lines and require
+ * lines are the ones its IR reaches, because a listed module that is never called must not be
+ * required and an external it never names must not be installed. Two regions travel whole, and
+ * deliberately: `constructorRenames` and `importedData` describe *types*, not calls — an imported
+ * constructor a match arm names is not a callee, so pruning by call site would drop a constructor
+ * the emitted code still has to build — and a type fact is the same in every artifact that imports
+ * it.
  *
  * @param list<string>|null $usedCallees the callees the caller already collected from `$ir`
  */
 function planEmission(
-    ModuleInterface $interface,
+    ImportInterface $interface,
     EmitPlan $target,
-    ?IR\Module $ir,
+    IR\Module $ir,
     ?array $usedCallees = null,
     ?string $fromOutputRelative = null,
     ?string $absoluteRequireRoot = null,
@@ -175,6 +179,7 @@ function planEmission(
         array $externalFns,
         array $externalFnRuntimeArity,
         array $moduleAsNames,
+        array $requiredModules = [],
     ): EmitPlan => new EmitPlan(
         backendId: $target->backendId,
         outputRelative: $target->outputRelative,
@@ -188,27 +193,8 @@ function planEmission(
         externalFnRuntimeArity: $externalFnRuntimeArity,
         constructorRenames: $interface->constructorRenames,
         importedData: $interface->data,
+        requiredModules: $requiredModules,
     );
-
-    if ($ir === null) {
-        $functionUseLines = [];
-        foreach ($interface->externalFns as $local => $resolved) {
-            if (isConstructorName($local)) {
-                continue;
-            }
-
-            $functionUseLines[] = functionUseLine($local, $resolved);
-        }
-
-        return $render(
-            [],
-            dedupeUseLines($functionUseLines),
-            [],
-            $interface->externalFns,
-            $interface->externalFnRuntimeArity,
-            $target->moduleAsNames,
-        );
-    }
 
     $usedCallees ??= collectIrCodegenUsage($ir)['callees'];
 
@@ -221,6 +207,10 @@ function planEmission(
     $usedModules = [];
     $usedNamespaces = [];
     foreach (\array_keys($usedCallees) as $callee) {
+        if (isset($localFnNames[$callee])) {
+            continue;
+        }
+
         if (isset($interface->externalFns[$callee])) {
             $usedExternal[$callee] = true;
             $originModule = $interface->fnOriginModules[$callee] ?? null;
@@ -233,6 +223,10 @@ function planEmission(
 
         $parsed = parseResolvedSymbol($callee);
         if ($parsed !== null) {
+            if ($parsed['module'] === $interface->module) {
+                continue;
+            }
+
             $usedModules[$parsed['module']] = true;
             $usedNamespaces[moduleNameToNamespace($parsed['module'])] = true;
             if (isset($interface->externalFns[$parsed['name']])) {
@@ -282,6 +276,17 @@ function planEmission(
     foreach (\array_keys($usedModules) as $moduleName) {
         $moduleOutput = $target->moduleOutputPaths[$moduleName] ?? null;
         if ($moduleOutput === null) {
+            if ($target->backendId === 'php' && $moduleName !== $interface->module) {
+                throw new \LogicException(
+                    "module `{$interface->module}` calls `{$moduleName}`, which this compilation does "
+                    . 'not emit: the plan\'s module set and the emitted set must agree',
+                );
+            }
+
+            continue;
+        }
+
+        if ($moduleOutput === $fromOutput) {
             continue;
         }
 
@@ -308,5 +313,6 @@ function planEmission(
         $externalFns,
         $externalFnRuntimeArity,
         $moduleAsNames,
+        $usedModules,
     );
 }

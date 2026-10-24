@@ -1,10 +1,12 @@
 <?php declare(strict_types=1);
 
-// A module's interface is now a product of its typecheck, published to the cache with it. That
-// makes the cache load-bearing in a new way: a warm run reads the checked interface from disk and
-// must agree with the cold run that computed it. This pins that across a module boundary with an
-// *inferred* constrained export (`tests/semantics/inferred-constrained-export`), where a differing
-// interface shows up as a differing dictionary argument at the consumer's call site.
+/**
+ * A module's interface is now a product of its typecheck, published to the cache with it. That
+ * makes the cache load-bearing in a new way: a warm run reads the checked interface from disk and
+ * must agree with the cold run that computed it. This pins that across a module boundary with an
+ * *inferred* constrained export (`tests/semantics/inferred-constrained-export`), where a differing
+ * interface shows up as a differing dictionary argument at the consumer's call site.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
@@ -25,14 +27,9 @@ $consumer = $root . '/tests/semantics/inferred-constrained-export/Consumer.mog';
 $work = createTempDir('moggi-cache-inferred-interface');
 
 try {
-    // `$seed` puts the standard library into the directory and leaves every module of the fixture
-    // project out of it: the import boundary this test is about is still compiled cold. The third
-    // run takes an empty directory instead, so a library that lowers differently coming from entries
-    // than from source still shows up as a differing dump.
     $dumpIr = static function (string $cacheDir, bool $seed = true) use ($consumer, $root): array {
         $env = \getenv();
         $env['MOGGI_CACHE_DIR'] = $cacheDir;
-        // The module cache is what differs between the runs; keep everything else equal.
         unset($env['MOGGI_NO_CACHE']);
         if ($seed) {
             seedCacheDir($cacheDir);

@@ -14,7 +14,7 @@ final class ImportContext
      * }|null $projectInstanceIndex
      */
     public function __construct(
-        public readonly ModuleInterface $interface,
+        public readonly ImportInterface $interface,
         public readonly EmitPlan $plan,
         public readonly array $classes = [],
         public readonly array $classScopes = [],
@@ -25,7 +25,7 @@ final class ImportContext
     }
 
     /** The same context with a re-published interface (class-scope refs, facade types). */
-    public function withInterface(ModuleInterface $interface): self
+    public function withInterface(ImportInterface $interface): self
     {
         return new self(
             interface: $interface,

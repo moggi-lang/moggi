@@ -66,10 +66,6 @@ $previousSfx = \getenv(MICRO_SFX_ENV);
 $previousRoot = \getenv('MOGGI_ROOT');
 
 try {
-    // 1. The INI injection object: the SAPI reads its configuration from between
-    //    the runtime and the program, which is the only place a directive that
-    //    cannot change once a process runs (`phar.readonly`) can come from.
-
     $assertSame('', microIniObject([]), 'no directives must produce no object');
 
     $directive = 'phar.readonly=0';
@@ -93,8 +89,6 @@ try {
         'directives must be newline-separated, in insertion order',
     );
     $assertSame(\strlen("a=1\nb=\"x\""), \unpack('N', \substr($two, 4, 4))[1], 'the length must count the text, not the object');
-
-    // 2. The concatenation, which is the whole native build.
 
     $sfx = $scratch . '/micro.sfx';
     $payload = $scratch . '/app.phar';
@@ -125,9 +119,6 @@ try {
         }
     }
     $assertTrue(! \is_file($scratch . '/never'), 'a refused build must write nothing');
-
-    // 3. Resolving the runtime: a file, or a directory holding `micro.sfx`.
-
     $assertSamePath($sfx, microSfxAt($sfx), 'a file is the runtime');
     $assertSamePath($sfx, microSfxAt($scratch), 'a directory resolves to the micro.sfx inside it');
     $assertSamePath($sfx, microSfxAt($scratch . '/'), 'a trailing separator must not matter');
@@ -144,8 +135,6 @@ try {
     \putenv(MICRO_SFX_ENV . '=');
     \putenv('MOGGI_ROOT=');
     $assertSame(null, resolveMicroSfx(), 'a checkout with nothing bundled and nothing named has no runtime');
-
-    // 4. The build step: the archive beside the package, the executable beside it.
 
     $outputRoot = $scratch . '/build';
     \mkdir($outputRoot, 0777, true);
@@ -175,11 +164,6 @@ try {
         'a missing runtime must fail',
     );
     $assertTrue(! \is_file($outputRoot . '/moggi-app-2'), 'a failed native build must write nothing');
-
-    // 5. The stub marker. `packagePhar` runs for real (in a second process when
-    //    this one may not write archives), so this is the shipped artifact's
-    //    bytes, not a template.
-
     $assertTrue(
         \str_contains(buildPharStub(), '__HALT_COMPILER();'),
         'the stub template must close with the canonical token',

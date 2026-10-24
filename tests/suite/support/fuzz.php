@@ -200,8 +200,6 @@ function fuzzShrink(string $source, callable $drop, callable $fails): string
     $changed = true;
     while ($changed) {
         $changed = false;
-        // `$drop` decides where the units end: null *or* an unchanged string means there is no unit
-        // left at that index (a substring past the end returns the input untouched).
         for ($i = 0; ; ++$i) {
             $candidate = $drop($source, $i);
             if ($candidate === null || $candidate === $source) {
@@ -311,8 +309,6 @@ function fuzzFrontendSmoke(string $projectRoot, int $seed, int $count): array
  */
 function fuzzFailure(string $workDir, int $seed, int $count, ?int $index, string $message, string $minimized = ''): string
 {
-    // The child writes each input before running it, so the highest-numbered one is the input it
-    // died on — including when it died without printing a report at all.
     $index ??= fuzzLastInputIndex($workDir);
     $source = $minimized !== '' ? $minimized : fuzzInputSource($workDir, $index);
     $saved = fuzzSaveReproducer($seed, $index, $source);

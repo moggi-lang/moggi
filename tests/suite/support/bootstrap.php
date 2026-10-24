@@ -6,13 +6,7 @@
  *
  * Everything is a plain global function returning `['passed' => bool, 'message' => string]`.
  */
-
-// G0 checkpoint policy: the suite runs both validator seams (post-lower and
-// post-optimizer); a user compile gets the post-optimizer one only. Set before
-// any case runs, and inherited by the compiler processes the harness spawns.
 \putenv('MOGGI_IR_CHECKPOINTS=1');
-// F1a: the suite also runs the per-pass optimizer checkpoints, which are off
-// for a user compile. Each stage failure then names the stage that produced it.
 \putenv('MOGGI_IR_PASS_CHECKPOINTS=1');
 
 require_once __DIR__ . '/paths.php';

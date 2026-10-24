@@ -81,8 +81,6 @@ function renderWorkerBanner(int $jobs, int $requested): string
             ? \sprintf("using %d workers (--jobs %d)\n", $jobs, $requested)
             : \sprintf("using %d workers (auto; --jobs 1 to serialise)\n", $jobs);
     }
-
-    // One worker, which is either what was asked for or all the selection could be split into.
     if ($requested > 1) {
         return \sprintf("using 1 worker (--jobs %d: only one shard to give)\n", $requested);
     }
@@ -245,8 +243,6 @@ function renderRecap(ResultSet $set): string
             $out .= "\n";
         }
     }
-
-    // One block per dying worker, whose message carries the worker's own last words.
     if ($lost !== []) {
         $out .= \sprintf("LOST CASES (%d)\n", \count($lost));
         foreach ($lost as $result) {
@@ -325,7 +321,6 @@ function renderSummary(array $counts, string $label, float $durationMs): string
 {
     $parts = [];
     foreach (SUMMARY_ORDER as $status) {
-        // Cases that were never candidates here are not worth reporting.
         if ($status === 'not-applicable') {
             continue;
         }

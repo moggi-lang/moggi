@@ -169,9 +169,9 @@ function checkDirectCall(
 /**
  * A reference that is not applied at all: legal only for an entry with no hidden slots.
  *
- * A captured entry's value is `Partial(entry, arity, captures)`; anything else is the second
- * encoding ADR 8 §8 forbids, because the emitter would have to recover the capture list from
- * the entry's body to make the reference callable.
+ * A captured entry's value is `Partial(entry, arity, captures)`; anything else is a second
+ * encoding, because the emitter would have to recover the capture list from the entry's body to
+ * make the reference callable.
  */
 function checkBareReference(\Moggi\IR\Callables\CallableTable $table, string $entry, string $pass, string $function): void
 {
@@ -262,11 +262,11 @@ function validateFunction(IR\FunctionDecl $function, string $pass): void
  * copy; `IoAssignAction` and `Loop` do not, because both are emitted inline and
  * their `let` binders stay visible to whatever follows.
  *
- * Return regions are deliberately not restricted (D17, 2026-10-21): the tree's
- * own optimized IR contains both `Ret` and `MatchReturn` inside `Loop` bodies —
- * TCO rewrites a tail-recursive function into a loop whose arms return — and the
- * backends emit them correctly. A legality rule here would reject the standard
- * library, so the only return rule on record is the observed one.
+ * Return regions are deliberately not restricted: the tree's own optimized IR
+ * contains both `Ret` and `MatchReturn` inside `Loop` bodies — TCO rewrites a
+ * tail-recursive function into a loop whose arms return — and the backends emit
+ * them correctly. A legality rule here would reject the standard library, so the
+ * only return rule is the observed one.
  *
  * @param array<string, true> $bound
  * @param array<int, true> $temps defined before this block starts; extended in place
@@ -354,6 +354,15 @@ function validateBlock(
             continue;
         }
 
+        if ($stmt instanceof IR\DictCall && $stmt->localEvidence === null) {
+            throw new InvalidIr(
+                "function {$function->name}: dict_call t{$stmt->dest}->{$stmt->method} publishes no "
+                . "localEvidence at {$where} (the projection's context width is a required fact)",
+                $pass,
+                $function->name,
+            );
+        }
+
         foreach (stmtDirectOperands($stmt) as $operand) {
             checkOperand($function, $operand, $bound, $temps, $pass, $capturesAllowed, $where);
         }
@@ -408,6 +417,15 @@ function checkOperand(
     if ($operand instanceof IR\Temp && ! isset($temps[$operand->id])) {
         throw new InvalidIr(
             "function {$function->name}: temp t{$operand->id} read before it is defined at {$path} (node Temp)",
+            $pass,
+            $function->name,
+        );
+    }
+
+    if ($operand instanceof IR\DictMethod && $operand->localEvidence === null) {
+        throw new InvalidIr(
+            "function {$function->name}: dict_method ->{$operand->method} publishes no localEvidence "
+            . "at {$path} (the projection's context width is a required fact)",
             $pass,
             $function->name,
         );

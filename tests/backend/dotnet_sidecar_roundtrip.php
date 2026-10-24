@@ -1,18 +1,5 @@
 <?php declare(strict_types=1);
 
-// Step-7 pin: the round-trip property — a sidecar generated from the host, and
-// nothing else, must verify the declaration written against that host.
-//
-// The test drives the compiler's own inspector over framework types, renders a
-// `dotnet/*.json` sidecar purely from its answer (defining assembly, valueType,
-// parameter lists), then compiles a probe whose declarations name those host
-// members. A successful compile *is* the verdict: `verifyForeignImport` runs on
-// every import, so anything the generated sidecar gets wrong — a wrong
-// assembly, a wrong `valueType`, a wrong parameter list, a wrong optional tail
-// — refuses the build. Overload *selection* below is test scaffolding (a fixed
-// rule, stated where it is used); choosing overloads for users is the binding
-// generator's policy, Phase 3, not this test's.
-
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
@@ -40,7 +27,6 @@ $assert($inspector !== null, 'the round-trip needs the inspector built');
 $work = createTempDir('moggi-dotnet-roundtrip');
 
 try {
-    // --- generate: inspector answers in, sidecar out, nothing hand-tuned ----
     $intTable = inspectDotNetType($dotnet, $inspector, 'System.Int32');
     $mathTable = inspectDotNetType($dotnet, $inspector, 'System.Math');
     $dtoTable = inspectDotNetType($dotnet, $inspector, 'System.DateTimeOffset');
@@ -48,8 +34,6 @@ try {
     $assert(($mathTable['found'] ?? false) === true, 'the inspector sees System.Math');
     $assert(($dtoTable['found'] ?? false) === true, 'the inspector sees System.DateTimeOffset');
 
-    // The 2-param Parse overload starting from a string: the exact case the
-    // sidecar exists for (C# optional parameters the Moggi type cannot name).
     $parseParams = null;
     foreach ($intTable['methods']['Parse'] ?? [] as $overload) {
         $params = $overload['params'] ?? [];
@@ -62,7 +46,6 @@ try {
     }
     $assert($parseParams !== null, 'the inspector lists a (string, IFormatProvider) Parse');
 
-    // The (int32, int32) Max overload, taken whole: no tail to bless.
     $maxParams = null;
     foreach ($mathTable['methods']['Max'] ?? [] as $overload) {
         $params = $overload['params'] ?? [];
@@ -74,10 +57,6 @@ try {
     }
     $assert($maxParams !== null, 'the inspector lists a (int32, int32) Max');
 
-    // The generated assembly is the forwarding facade where one exists, else the defining
-    // assembly: the tree's sidecars all scope BCL TypeRefs to the contract (`System.Runtime`),
-    // and two scopes for one type are a hard error — so the generator must pick the same one.
-    // (Overload *selection* above is test scaffolding the same way; choosing for users is Phase 3.)
     $forwardedBy = $dtoTable['forwardedBy'] ?? [];
     $assert(
         \in_array('System.Runtime', $forwardedBy, true),
@@ -116,7 +95,6 @@ try {
     );
     \Moggi\Modules\addLibraryRoot($sidecarRoot);
 
-    // --- verify: the declaration, checked against the generated sidecar -----
     $probe = $work . '/ProbeRt.mog';
     \file_put_contents($probe, <<<'MOGGI'
         module ProbeRt

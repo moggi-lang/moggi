@@ -42,8 +42,8 @@ function bindUsage(): string
 
     Read a third-party host tree and write the typed Moggi bindings for it:
     one `foreign`-declaration module per library, prefixed by ecosystem
-    (`Composer`, `Maven`, `Nuget` — the full coordinate table is docs/ffi.md
-    §12). Bind once, review the diff, then `moggi publish` —
+    (`Composer`, `Maven`, `Nuget` — the full coordinate table is docs/ffi.md).
+    Bind once, review the diff, then `moggi publish` —
     a binding is a package like any other.
 
     A PHP tree is a resolved Composer tree whose installed sources live under

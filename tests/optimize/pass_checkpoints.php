@@ -48,11 +48,8 @@ $good = $fn('good', new IR\Block([
 $badTemp = $fn('badTemp', new IR\Block([new IR\Ret($temp(7))]));
 $spec = $fn('__spec_clone', new IR\Block([new IR\Ret($local('captured'))]), IR\FunctionKind::SpecClone);
 $plain = $fn('plain', new IR\Block([new IR\Ret($local('captured'))]));
-// Same spelling as a clone, but a declared function: the prefix is presentation.
 $specLookalike = $fn('__spec_lookalike', new IR\Block([new IR\Ret($local('captured'))]));
 $module = new IR\Module([$good], [], [], null, 'Main', 'Main.mog');
-
-// ---- the flag is inert by default ---------------------------------------
 
 \putenv('MOGGI_IR_PASS_CHECKPOINTS=0');
 $off = $throws(static fn () => PassCheckpoints\runOnFunctions(
@@ -63,8 +60,6 @@ $off = $throws(static fn () => PassCheckpoints\runOnFunctions(
     false,
 ));
 $check($off === null, 'an invalid stage was rejected with the checkpoint flag off');
-
-// ---- a failing stage names itself ---------------------------------------
 
 \putenv('MOGGI_IR_PASS_CHECKPOINTS=1');
 PassCheckpoints\enterOptimize();
@@ -86,15 +81,11 @@ $check(
     'the stage failure does not name the undefined temp',
 );
 
-// ---- the trace line is the exact stage-invalid form ----------------------
-
 $check(
     PassCheckpoints\stageEventLine('final-dce', 'show', [211])
         === "MOGGI_IR_TRACE stage-invalid pass=final-dce function=show temps=[211]\n",
     'the stage trace line changed shape: ' . PassCheckpoints\stageEventLine('final-dce', 'show', [211]),
 );
-
-// ---- the capture window exception is narrow ------------------------------
 
 \putenv('MOGGI_IR_PASS_CHECKPOINTS=1');
 PassCheckpoints\enterOptimize();
@@ -134,8 +125,6 @@ $check($inWindow === null, 'a SpecClone reading a free local was rejected inside
 $check($afterWindow !== null, 'a SpecClone reading a free local was accepted after capture binding');
 $check($plainInWindow !== null, 'the capture exception leaked to a function of another kind');
 $check($lookalikeInWindow !== null, 'the capture exception was decided by the `__spec_` spelling, not the kind');
-
-// ---- no restoration hook, and the boundary check names its finding ------
 
 $check(
     ! \function_exists('Moggi\\Optimize\\Specialize\\restoreUnboundAfterOptimize'),

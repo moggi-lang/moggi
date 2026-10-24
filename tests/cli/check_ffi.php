@@ -46,7 +46,6 @@ $check = static function (string $dir) use ($root, $env): array {
 };
 
 try {
-    // Uncovered foreign warns; a comment and a longer name do not.
     $uncovered = $work . '/uncovered';
     $package($uncovered, 'uncovered');
     $foreignModule($uncovered, 'Probe');
@@ -59,7 +58,6 @@ try {
     $assert(\str_contains($ran['stdout'], 'src/Probe.mog: hand-written `foreign`'), 'uncovered foreign not flagged: ' . $ran['stdout']);
     $assert(! \str_contains($ran['stdout'], 'Clean.mog'), 'comment/name lookalikes flagged as foreign: ' . $ran['stdout']);
 
-    // A declared binding silences the foreign it covers.
     $bound = $work . '/bound';
     $package($bound, 'bound');
     \file_put_contents($bound . '/bound.moggi', "\n[ffi]\nbindings = php:com.acme:thing:1.0\n", FILE_APPEND);
@@ -68,7 +66,6 @@ try {
     $assert(($ran['exitCode'] ?? 1) === 0, 'a bound package failed check: ' . $ran['stdout'] . $ran['stderr']);
     $assert(! \str_contains($ran['stdout'], 'hand-written `foreign`'), 'covered foreign still flagged: ' . $ran['stdout']);
 
-    // Malformed entries and narrowed backends with nothing bound warn.
     $shape = $work . '/shape';
     $package($shape, 'shape', 'backends = php, jvm');
     \file_put_contents($shape . '/shape.moggi', "\n[ffi]\nbindings = php:com.acme:thing:1.0, bogus\n", FILE_APPEND);
@@ -78,7 +75,6 @@ try {
     $assert(\str_contains($ran['stdout'], 'backend `jvm` is in [package] backends'), 'backend asymmetry not flagged: ' . $ran['stdout']);
     $assert(! \str_contains($ran['stdout'], 'hand-written `foreign`'), 'declared bindings re-flagged the foreign: ' . $ran['stdout']);
 
-    // A facade with its implementation present is clean; a missing one warns.
     $facade = $work . '/facade';
     $package($facade, 'facade');
     \file_put_contents($facade . '/facade.moggi', "\n[ffi]\nbindings = php:com.acme:thing:1.0\n", FILE_APPEND);
@@ -100,7 +96,6 @@ try {
     $ran = $check($dangling);
     $assert(\str_contains($ran['stdout'], 'maps backend `php` to `Gone`'), 'dangling facade not flagged: ' . $ran['stdout']);
 
-    // Bindings for two backends with no facade between them warn.
     $multi = $work . '/multi';
     $package($multi, 'multi');
     \file_put_contents($multi . '/multi.moggi', "\n[ffi]\nbindings = php:com.acme:thing:1.0, jvm:com.acme:thing:1.0\n", FILE_APPEND);
@@ -108,7 +103,6 @@ try {
     $ran = $check($multi);
     $assert(\str_contains($ran['stdout'], 'with no `{-# BACKEND #-}` facade'), 'facade-less multi-backend bindings not flagged: ' . $ran['stdout']);
 
-    // `--strict-ffi` fails on `[ffi]` findings and nothing else.
     $strict = static fn (string $dir): array => runCompiledProcess(
         [PHP_BINARY, $root . '/moggi.php', 'check', '--strict-ffi', $dir],
         120,

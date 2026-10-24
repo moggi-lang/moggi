@@ -22,8 +22,6 @@ $assert = static function (bool $condition, string $message): void {
 
 $fixturesDir = $root . '/tests/lsp';
 
-// Basic.mog — valid code must analyze cleanly
-
 $basicPath = $fixturesDir . '/Basic.mog';
 $basicUri = pathToUri($basicPath);
 $basicSrc = (string) \file_get_contents($basicPath);
@@ -51,8 +49,6 @@ $assert(
     'mogdoc attached to declaration',
 );
 
-// Diagnostics.mog — broken code yields diagnostics
-
 $diagPath = $fixturesDir . '/Diagnostics.mog';
 $diagUri = pathToUri($diagPath);
 $diagSrc = (string) \file_get_contents($diagPath);
@@ -63,9 +59,6 @@ $diagSvc->openDocument($diagUri, $diagSrc, 1);
 $diagResult = $diagSvc->ensureAnalyzed($diagUri);
 $assert($diagResult !== null, 'Diagnostics.mog analyzed');
 $assert($diagResult->diagnostics !== [], 'Diagnostics.mog has diagnostics');
-
-// Every diagnostic an editor sees carries a code the compiler's registry knows: the code is what
-// tooling branches on, so a diagnostic without one is a diagnostic tooling cannot handle.
 $registry = \Moggi\Errors\diagnosticRegistry();
 foreach ($diagResult->diagnostics as $diag) {
     $code = (string) ($diag['code'] ?? '');
@@ -74,9 +67,6 @@ foreach ($diagResult->diagnostics as $diag) {
         "diagnostic code `{$code}` must be in the registry: " . \json_encode($diag),
     );
 }
-
-// The mismatch is reported as `unify`, not the blanket `type`: the specific code is what lets a
-// client tell "two types disagreed" from "this does not typecheck".
 $typeErrors = \array_values(\array_filter(
     $diagResult->diagnostics,
     static fn (array $d): bool => ($d['code'] ?? '') === 'unify',
@@ -104,8 +94,6 @@ $assert(
     (int) ($typeErrors[0]['range']['end']['character'] ?? 0) > (int) ($typeErrors[0]['range']['start']['character'] ?? 0),
     'a diagnostic span covers the offending expression: ' . \json_encode($typeErrors[0]['range'] ?? null),
 );
-
-// Parse errors and typed holes via inline sources
 
 $tmp = \sys_get_temp_dir() . '/moggi-lsp-analyze-' . \bin2hex(\random_bytes(4));
 $assert(\mkdir($tmp), 'create temp dir');
@@ -144,8 +132,6 @@ $assert(
     'lex/parse error code: ' . \json_encode($bad->diagnostics),
 );
 $assert(\file_get_contents($path) === $original, 'overlay restored after parse error');
-
-// Typed hole: diagnostic + fill code action
 $holeSrc = <<<'MOG'
 module TypedHole where
 
@@ -169,10 +155,6 @@ foreach ($holeResult->diagnostics as $d) {
     }
 }
 $assert($holeDiag !== null, 'hole diagnostic present: ' . \json_encode($holeResult->diagnostics));
-
-// A foreign declaration is verified where the declarations are checked, so the editor sees the
-// diagnostic the compiler prints — and an editor on another target sees the backend mismatch
-// instead. Either way the declaration is refused rather than compiled or silently dropped.
 $foreignSrc = <<<'MOG'
 module ForeignDiag where
 
@@ -214,8 +196,6 @@ foreach ($holeActions as $a) {
 $assert($fill !== null, 'hole fill code action present: ' . \json_encode(\array_column($holeActions, 'title')));
 $newText = $fill['edit']['documentChanges'][0]['edits'][0]['newText'] ?? null;
 $assert($newText === '0', 'Int hole fills with 0, got: ' . \json_encode($fill));
-
-// Hover on hole shows expected type
 $holeLines = \explode("\n", $holeSrc);
 $holeLine = null;
 foreach ($holeLines as $i => $line) {
@@ -234,8 +214,6 @@ $assert(
     "hover shows hole type: {$hoverVal}",
 );
 
-// Completion.mog — incomplete code tolerated; completion still works
-
 $compFixturePath = $fixturesDir . '/Completion.mog';
 $compFixtureUri = pathToUri($compFixturePath);
 $compFixtureSrc = (string) \file_get_contents($compFixturePath);
@@ -251,8 +229,6 @@ $completion = svcCompletion($compSvc, $compFixtureUri, ['line' => 0, 'character'
 $labels = \array_column($completion['items'], 'label');
 $assert(\in_array('data', $labels, true), 'completion offers keywords on broken file');
 $assert(\in_array('let', $labels, true), 'completion offers let');
-
-// Live completion on a valid open buffer still includes local decls.
 $svc2 = new AnalysisService();
 $svc2->setWorkspaceRoot($tmp);
 $svc2->openDocument($uri, $unsaved, 1);
@@ -261,8 +237,6 @@ $live = svcCompletion($svc2, $uri, ['line' => 0, 'character' => 0]);
 $liveLabels = \array_column($live['items'], 'label');
 $assert(\in_array('inc', $liveLabels, true), 'live completion includes inc');
 $assert(\in_array('do', $liveLabels, true), 'live completion includes do snippet');
-
-// Hover on inc definition line (0-based line 4).
 $hover = svcHover($svc2, $uri, ['line' => 4, 'character' => 1]);
 $assert($hover !== null, 'hover on inc returns content');
 $value = (string) ($hover['contents']['value'] ?? '');

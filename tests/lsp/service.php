@@ -92,8 +92,6 @@ $syms = svcWorkspaceSymbol($svc, 'hel');
 $assert($syms !== [], 'workspace symbol finds hello');
 $fmt = svcFormatDocument($svc, $uri);
 $assert(\is_array($fmt), 'format returns edits array');
-
-// Range formatting: only intersecting top-level items (not whole-file rewrite).
 $messy = "module Main where\n\nhello :: Int\nhello = 1\n\nworld :: Int\nworld=2\n";
 \file_put_contents($path, $messy);
 $svc->changeDocument($uri, [['text' => $messy]], 3);
@@ -109,8 +107,6 @@ $assert(\str_contains($newText, 'world'), 'range edit covers world');
 $assert(! \str_contains($newText, 'hello'), 'range edit does not rewrite hello: ' . $newText);
 $editStart = (int) ($rangeEdits[0]['range']['start']['line'] ?? -1);
 $assert($editStart >= 4, 'range edit starts near world, not file start: ' . $editStart);
-
-// Selection range parent chain (inner lit → surrounding expr/decl)
 $selSrc = "module Main where\n\nadd = 1 + 2\n";
 \file_put_contents($path, $selSrc);
 $svc->changeDocument($uri, [['text' => $selSrc]], 5);
@@ -124,15 +120,11 @@ while (isset($cur['parent'])) {
     $cur = $cur['parent'];
 }
 $assert($depth >= 1, 'selection range has parent chain depth=' . $depth);
-
-// Binder-safe linked editing on hello (restore messy for hello decl)
 \file_put_contents($path, $messy);
 $svc->changeDocument($uri, [['text' => $messy]], 6);
 $svc->ensureAnalyzed($uri);
 $link = svcLinkedEditing($svc, $uri, ['line' => 2, 'character' => 0]);
 $assert($link !== null && ($link['ranges'] ?? []) !== [], 'linked editing ranges');
-
-// Slice 1: didChange must not sync-typecheck; only schedule
 $svc->changeDocument($uri, [['text' => $messy . "\n"]], 7);
 $assert(isset((function () use ($svc) {
     $ref = new ReflectionClass($svc);
@@ -142,11 +134,8 @@ $assert(isset((function () use ($svc) {
 })()[$uri]), 'change schedules pending analyze');
 $quick = $svc->quickDiagnostics($uri);
 $assert(\is_array($quick), 'quick diags without full typecheck');
-// ensureAnalyzed still works (forces sync)
 $r2 = $svc->ensureAnalyzed($uri);
 $assert($r2 !== null, 'ensureAnalyzed forces sync');
-
-// Warm stdlib
 $svc->warm();
 $assert($svc->warmed === true, 'warmed flag');
 

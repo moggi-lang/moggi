@@ -13,8 +13,8 @@ require_once __DIR__ . '/dotnet/DotNetBackend.php';
 /**
  * Emit through an explicitly chosen backend.
  *
- * The pipeline uses this with its `CompilationContext`; `codegen()` remains for
- * callers that still resolve the target from process state.
+ * The backend is an argument, never process state: the pipeline passes the one its
+ * `CompilationContext` names. There is no `codegen()` that resolves a target from a global.
  *
  * @param array<string, mixed> $options
  * @return string|array<string, string>
@@ -22,13 +22,4 @@ require_once __DIR__ . '/dotnet/DotNetBackend.php';
 function codegenWith(Backend $backend, Module $ir, string $sourcePath, array $options = []): string|array
 {
     return $backend->emit($ir, $sourcePath, $options);
-}
-
-/**
- * @param array<string, mixed> $options
- * @return string|array<string, string>
- */
-function codegen(Module $ir, string $sourcePath, array $options = []): string|array
-{
-    return codegenWith(currentBackend(), $ir, $sourcePath, $options);
 }

@@ -66,8 +66,6 @@ $author = "[author]\nname = Test\nemail = test@example.com\n"
     . "npub = npub1yywlmj053p4qp7z2qvqsrgcwz488mw0pr0t50xz3e5rx7s9uaelsjpdmfm\n";
 
 try {
-    // --- a bare name is a package of ours -------------------------------------
-
     [$status, $ours] = $parse('json');
     $assert($status === 'ok', 'a bare name parses');
     $assert($ours['kind'] === 'registry' && $ours['section'] === 'dependencies', 'a bare name is a `[dependencies]` entry');
@@ -81,10 +79,6 @@ try {
     [$status, $explicit] = $parse('moggi:json');
     $assert($status === 'ok' && $explicit['kind'] === 'registry', '`moggi:` says "ours" explicitly');
 
-    // A name that would also read as a host coordinate stays ours. `newtonsoft.json` is a legal
-    // package name *and* a plausible NuGet id, and the spelling decides the table — so it is a
-    // `[dependencies]` entry, never a guessed `[dotnet.nuget]` one. This is the case a shape rule
-    // would have split on a capital letter.
     [$status, $shaped] = $parse('newtonsoft.json', '13.0.3');
     $assert($status === 'ok' && $shaped['kind'] === 'registry', 'a bare id is a package of ours, whatever it looks like');
     $assert($shaped['section'] === 'dependencies' && $shaped['value'] === '13.0.3', 'a bare id goes to [dependencies] with its constraint: ' . \json_encode($shaped));

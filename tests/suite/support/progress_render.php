@@ -157,13 +157,9 @@ function progressRender(): void
         return;
     }
 
-    // Leave the last column free: writing into it can itself wrap on some terminals.
     $columns = \max(20, terminalSize()['cols'] - 1);
 
     $rows = \array_map(static fn (string $key): array => $state['rows'][$key], $state['order']);
-
-    // Fold the earliest rows away until the rest fits the screen, headers included. One at a time,
-    // because the aggregate row itself takes lines and can change how many backends are on screen.
     $maxRows = \max(2, terminalSize()['rows'] - 2);
     $folded = [];
     $lines = progressLines($rows, $columns);
@@ -176,7 +172,6 @@ function progressRender(): void
         $lines = progressLines($rows, $columns);
     }
 
-    // The previous paint left the cursor on the last line; rewrite the block on its own lines.
     $out = $state['painted'] > 0 ? "\r" . progressCursorUp($state['painted'] - 1) : '';
 
     $last = \count($lines) - 1;

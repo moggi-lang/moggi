@@ -46,8 +46,6 @@ if (\count($args) === 1 && \is_file($args[0])) {
     );
     exit(2);
 }
-
-// The path only reaches diagnostics, but it has to look like a source file the frontend was given.
 $path = \sys_get_temp_dir() . '/moggi-fuzz-replay-' . \getmypid() . '.mog';
 \file_put_contents($path, $source);
 

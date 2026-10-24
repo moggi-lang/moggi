@@ -442,7 +442,6 @@ function classModuleScopes(
         );
         $fns = [];
         $dataRefs = [];
-        $constructorArity = [];
         foreach (\array_keys($names) as $name) {
             $scheme = $env[$name] ?? null;
             if (! $scheme instanceof Scheme || $scheme->classMethod) {
@@ -460,9 +459,6 @@ function classModuleScopes(
                     'origin' => $origin,
                     'scheme' => $scheme,
                 ];
-                $constructorArity[$name] = \count(
-                    $dataRefs[$owner]['constructors'][$name]['fields'] ?? [],
-                );
 
                 continue;
             }
@@ -475,7 +471,6 @@ function classModuleScopes(
 
         $scopes[$module] = [
             'env' => $env,
-            'constructorArity' => $constructorArity,
             'fns' => $fns,
             'dataRefs' => $dataRefs,
             'visible' => classModuleVisibleTypes($units, $module, $backendId),
@@ -872,12 +867,12 @@ function classModuleVisibleTypes(array $units, string $moduleName, string $backe
  *
  * @param array<string, array<string, mixed>> $units
  * @param array<string, array<string, mixed>> $classScopes
- * @return array{externalFns: array<string, string>, arity: array<string, int>, dataRefs: array<string, array<string, mixed>>, origins: array<string, string>, actionReturn: array<string, true>}
+ * @return array{externalFns: array<string, string>, callables: array<string, array{evidence: int, params: int, arity: int}>, dataRefs: array<string, array<string, mixed>>, origins: array<string, string>, actionReturn: array<string, true>}
  */
 function classScopeFunctionRefs(array $units, array $classScopes): array
 {
     $externalFns = [];
-    $arity = [];
+    $callables = [];
     $dataRefs = [];
     $origins = [];
     $actionReturn = [];
@@ -885,8 +880,7 @@ function classScopeFunctionRefs(array $units, array $classScopes): array
         foreach ($scope['fns'] ?? [] as $name => $fn) {
             $origin = $fn['origin'];
             $externalFns[$name] = resolvedSymbol($origin['module'], $origin['phpName']);
-            $arity[$name] = $scope['constructorArity'][$name]
-                ?? externalFunctionRuntimeArity($units, $origin['module'], $name, $fn['scheme']);
+            $callables[$name] = publishedCallableLayout($units, $origin['module'], $origin['phpName']);
             $origins[$name] = $origin['module'];
             if (isset(moduleActionReturnFnNames($units, $origin['module'])[$origin['phpName']])) {
                 $actionReturn[$name] = true;
@@ -898,7 +892,7 @@ function classScopeFunctionRefs(array $units, array $classScopes): array
         }
     }
 
-    return ['externalFns' => $externalFns, 'arity' => $arity, 'dataRefs' => $dataRefs, 'origins' => $origins, 'actionReturn' => $actionReturn];
+    return ['externalFns' => $externalFns, 'callables' => $callables, 'dataRefs' => $dataRefs, 'origins' => $origins, 'actionReturn' => $actionReturn];
 }
 
 /**
@@ -908,7 +902,7 @@ function classScopeFunctionRefs(array $units, array $classScopes): array
  * when the module is emitted, so a fact published after the import walk reaches
  * the emitter without a second view of the interface being kept in step.
  *
- * @param array{externalFns: array<string, string>, arity: array<string, int>, dataRefs: array<string, array<string, mixed>>, origins?: array<string, string>, actionReturn?: array<string, true>} $refs
+ * @param array{externalFns: array<string, string>, callables: array<string, array{evidence: int, params: int, arity: int}>, dataRefs: array<string, array<string, mixed>>, origins?: array<string, string>, actionReturn?: array<string, true>} $refs
  * @param array<string, true> $localNames names the module binds itself
  */
 function mergeClassScopeRefs(
