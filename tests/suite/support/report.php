@@ -97,6 +97,35 @@ function formatDuration(float $ms): string
     return \sprintf('%.1fs', $ms / 1000);
 }
 
+/** The library cache under discussion, named by backend only when the run has several. */
+function libCacheName(string $backend, bool $multiBackend): string
+{
+    return 'shared library cache' . ($multiBackend ? ' for ' . $backend : '');
+}
+
+/**
+ * Printed before the warm-up builds, so the reader knows why the run is quiet: the tree every test
+ * links against is compiled once here instead of once per worker.
+ */
+function renderLibWarmupStart(string $backend, bool $multiBackend): string
+{
+    return \sprintf(
+        "preparing the %s...\n",
+        libCacheName($backend, $multiBackend),
+    );
+}
+
+/** The same sentence finished: what the wait produced and how long it took. */
+function renderLibWarmupDone(string $backend, bool $built, float $seconds, bool $multiBackend): string
+{
+    $name = libCacheName($backend, $multiBackend);
+    $detail = formatDuration($seconds * 1000.0);
+
+    return $built
+        ? \sprintf("%s built in %s\n", $name, $detail)
+        : \sprintf("%s loaded from cache (%s)\n", $name, $detail);
+}
+
 /**
  * How a group's row counts its cases, in the order it reads. Timeouts count as failures here (the
  * recap tells them apart); `lost` and `n/a` do not — nothing ran, so nothing is known about them.
