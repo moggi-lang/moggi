@@ -402,6 +402,7 @@ function settleCheckedBody(
             ? []
             : quantifiedVars($state, peelDictArrows($fnType, \count($group->dicts)))
                 + \array_fill_keys($skolemNames, true),
+        $fn,
     );
 
     resolveDeferredInfixPrimops($state, $fn->body);
@@ -424,7 +425,7 @@ function settleCheckedBody(
     $userFnType = peelDictArrows($fnType, \count($group->dicts));
     $prunedUserConstraints = refreshConstraintArgs($state, $group->user);
     $prunedDicts = refreshConstraintArgs($state, $group->dicts);
-    $state->env[$fn->name] = $restricted
+    $checkedScheme = $restricted
         ? scheme($userFnType, [], [])
         : scheme(
             $userFnType,
@@ -433,6 +434,8 @@ function settleCheckedBody(
             \count($prunedDicts),
             $prunedDicts,
         );
+    $state->env[$fn->name] = $checkedScheme;
+    $state->checkedSchemes[\spl_object_id($fn)] = $checkedScheme;
 
     return $fnType;
 }
@@ -1700,12 +1703,77 @@ function methodClassObligation(array $info): ?Ast\PendingConstraint
 }
 
 /**
+ * The type variables of the dictionary a method reference is projected from.
+ *
+ * A projected method's type is already written in terms of the resolved
+ * constraint's arguments — `substituteClassMethod` puts them there — so the
+ * *rigid* variables among them are the instance head, not method-local
+ * polymorphism. Freshening those hands the use site a type that no longer
+ * mentions the dictionary it dispatches on, which is what left an
+ * associated-type result (`Rep a`) stuck on a variable where the constraint had
+ * already fixed `a`.
+ *
+ * A flexible head variable is deliberately *not* kept: it is not yet the
+ * dictionary's answer, so each use still gets its own copy and may constrain it
+ * freely, which is how such declarations were typed before.
+ *
+ * @param array{class: string, method: string, type: Type, constraintArgs?: list<Type>, constraintHead?: ?Type} $info
+ * @return array<string, true>
+ */
+function dictionaryHeadVars(TypeCheckState $state, array $info): array
+{
+    $args = $info['constraintArgs'] ?? null;
+    if ($args === null) {
+        $head = $info['constraintHead'] ?? null;
+        $args = $head === null ? [] : [$head];
+    }
+
+    $vars = [];
+    foreach ($args as $arg) {
+        $vars += typeVars($arg);
+    }
+
+    return \array_intersect_key($vars, $state->rigidVars, associatedTypeArgumentVars($state, $info['type']));
+}
+
+/**
+ * The variables an associated-type application in this method type passes to
+ * its family (`Rep a` contributes `a`).
+ *
+ * Only these have to stay linked to the dictionary: they are what decides the
+ * family's reduction. A head variable outside a family application is still
+ * freshened, which is how the rest of the tree has always typed a projected
+ * method, and keeps this slice to the defect it repairs.
+ *
+ * @return array<string, true>
+ */
+function associatedTypeArgumentVars(TypeCheckState $state, Type $type): array
+{
+    if ($type instanceof TCon && isset($state->associatedFamilies[$type->name])) {
+        $vars = [];
+        foreach ($type->args as $arg) {
+            $vars += typeVars($arg) + associatedTypeArgumentVars($state, $arg);
+        }
+
+        return $vars;
+    }
+
+    $vars = [];
+    foreach (typeChildren($type) as $child) {
+        $vars += associatedTypeArgumentVars($state, $child);
+    }
+
+    return $vars;
+}
+
+/**
  * Freshen an ambient-projected method reference, keeping its class obligation
- * aligned with its type (see {@see methodClassObligation}). Returns the
+ * aligned with its type (see {@see methodClassObligation}) and keeping the
+ * dictionary's own variables fixed (see {@see dictionaryHeadVars}). Returns the
  * freshened type; the method-local obligations land in pendingConstraints as
  * before, the class obligation on the node's classObligation field.
  *
- * @param array{class: string, method: string, type: Type, userConstraints?: list<Ast\PendingConstraint>} $info
+ * @param array{class: string, method: string, type: Type, userConstraints?: list<Ast\PendingConstraint>, constraintArgs?: list<Type>, constraintHead?: ?Type} $info
  */
 function freshenConstraintMethod(TypeCheckState $state, Ast\EvidenceMethod $expr, array $info): Type
 {
@@ -1714,7 +1782,12 @@ function freshenConstraintMethod(TypeCheckState $state, Ast\EvidenceMethod $expr
     if ($obligation !== null) {
         $constraints[] = $obligation;
     }
-    $instantiated = freshenTypeWithConstraints($state, $info['type'], $constraints);
+    $instantiated = freshenTypeWithConstraintsKeeping(
+        $state,
+        $info['type'],
+        $constraints,
+        dictionaryHeadVars($state, $info),
+    );
     if ($obligation !== null) {
         $expr->classObligation = \array_pop($instantiated['constraints']);
     }

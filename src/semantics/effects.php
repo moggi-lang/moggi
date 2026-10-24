@@ -3,6 +3,7 @@
 namespace Moggi\Semantics\Effects;
 
 use Moggi\Modules\ImportContext;
+use function Moggi\Modules\publishElaboration;
 use Moggi\Pipeline\CompilePurpose;
 use Moggi\Syntax\Ast\Program;
 
@@ -52,5 +53,8 @@ function checkAndNormalize(
     validateIo($typed, $source, $filename);
     validateSt($typed, $source, $filename);
 
-    return analyze(normalize($typed));
+    $final = analyze(normalize($typed));
+    publishElaboration($final);
+
+    return $final;
 }

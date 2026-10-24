@@ -839,6 +839,18 @@ final class LowerCtx
          * @var array<string, Operand>
          */
         public array $evidenceBindings = [],
+        /**
+         * The checked core's evidence plans for the declaration being lowered, by elaboration
+         * site.
+         *
+         * Null for a declaration the core does not record: then the branch's existing reads of
+         * the elaborated node's `evidence` fields are the compiler's own path. Non-null means the
+         * record owns every evidence decision in this declaration, so a site without a plan is a
+         * producer bug and lowering refuses it instead of reading the node.
+         *
+         * @var array<int, \Moggi\Modules\EvidencePlan>|null
+         */
+        public ?array $evidencePlans = null,
     ) {
     }
 }

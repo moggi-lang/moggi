@@ -1,0 +1,15 @@
+program
+  data Phantom (a :: Type)
+    constructor Phantom
+  data Higher (a :: Type -> Type)
+    constructor Higher
+      field  :: a Int
+  function higher :: Higher Maybe -> Int
+    pat_var h
+    integer 0
+  function phantom :: Phantom Int -> Int
+    pat_var p
+    integer 0
+  function identity :: a -> a
+    pat_var x
+    variable x

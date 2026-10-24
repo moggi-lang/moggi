@@ -3,6 +3,7 @@
 namespace Moggi\Syntax\Ast;
 
 use Moggi\IR;
+use Moggi\Modules\CheckedCore;
 use Moggi\Modules\ImportInterface;
 use Moggi\Semantics\TypeExpr\Type;
 
@@ -474,6 +475,17 @@ final class Program extends AstNode
     ) {
         parent::__construct($line, $col, $endCol);
     }
+
+    /**
+     * The closed checked product for this module (see `Modules\CheckedCore`).
+     *
+     * Set by the check that produced this program, and carried inside every
+     * module product that the check publishes, so a module read back from the
+     * cache lowers from the same record. Null on a program nobody checked
+     * (parsing and dumping stop before this point); lowering refuses a category
+     * function without its record instead of falling back to the mutable tree.
+     */
+    public ?CheckedCore $core = null;
 
     /**
      * Every name the export list re-exports: a plain value or type export, and

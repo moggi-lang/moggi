@@ -2,9 +2,11 @@
 
 namespace Moggi\IR;
 
+use Moggi\Modules\CheckedFunction;
 use Moggi\Syntax\Ast;
 
 use function Moggi\Debug\normalizeDisplayPath;
+use function Moggi\Modules\isCheckedCoreFunction;
 use function Moggi\Semantics\Exhaustiveness\trueBindingOrigins;
 use function Moggi\Semantics\IoBoundary\functionReturnsIo;
 use function Moggi\Patterns\Walk\patternBoundNames;
@@ -19,8 +21,9 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
     $moduleName = $program->module ?? '';
     $interface = $program->interface
         ?? throw new \RuntimeException("lowering `{$moduleName}` needs its module interface");
+    $core = $program->core;
 
-    $state = newLowerState();
+    $state = new LowerState();
     $dataIndex = buildDataIndex($program, $importedData);
     $newtypeIndex = buildNewtypeIndex($program, $importedData);
     $functions = [];
@@ -90,6 +93,14 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
                 continue;
             }
 
+            $record = $core?->function($item->name);
+            if ($record === null && isCheckedCoreFunction($item)) {
+                throw new \RuntimeException(
+                    "lowering `{$moduleName}::{$item->name}` needs its checked-core record:"
+                    . ' a checked module is always lowered from its closed product, never from the source tree',
+                );
+            }
+
             $functions[] = lowerFunction(
                 $item,
                 $state,
@@ -102,6 +113,7 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
                 $moduleName,
                 $sourceFile,
                 $constructorRenames,
+                $record,
             );
         }
     }
@@ -125,11 +137,6 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
     );
 
     return new Module($functions, $data, $instanceEvidence, $entry, $moduleName, $sourceFile);
-}
-
-function newLowerState(): LowerState
-{
-    return new LowerState();
 }
 
 function lowerData(Ast\DataDecl $decl): DataDecl
@@ -221,6 +228,7 @@ function lowerFunction(
     string $moduleName = '',
     string $sourceFile = '',
     array $constructorRenames = [],
+    ?CheckedFunction $core = null,
 ): FunctionDecl {
     $state->usedLocals = [];
     $state->nextLocalSuffix = 0;
@@ -234,7 +242,9 @@ function lowerFunction(
     $ctx->sourceFile = $sourceFile;
     $ctx->functionName = $fn->name;
     $ctx->constructorRenames = $constructorRenames;
-    $ctx->evidenceNames = evidenceSlotNames($fn->constraints);
+    $ctx->evidenceNames = $core !== null ? $core->evidenceBinders() : evidenceSlotNames($fn->constraints);
+    $ctx->evidencePlans = $core?->evidencePlanIndex();
+
     foreach (\array_keys($externalFns) as $name) {
         if (\in_array($name, $slotNames, true)) {
             continue;
@@ -242,6 +252,7 @@ function lowerFunction(
 
         $ctx->env[$name] = new FnRef($name);
     }
+
     foreach (\array_keys($knownFunctions) as $name) {
         if (\in_array($name, $slotNames, true)) {
             continue;
@@ -264,6 +275,7 @@ function lowerFunction(
 
     $straightLineIo = false;
     $ioBodyKind = $fn->ioBodyKind;
+
     if (functionReturnsIo($fn->type)) {
         $ctx->ioActionStore = [];
         $ctx->hasIoRun = false;
@@ -454,6 +466,7 @@ function newCtx(
         $ctx->ioActionStore = $from->ioActionStore;
         $ctx->constructorRenames = $from->constructorRenames;
         $ctx->evidenceNames = $from->evidenceNames;
+        $ctx->evidencePlans = $from->evidencePlans;
     }
 
     return $ctx;

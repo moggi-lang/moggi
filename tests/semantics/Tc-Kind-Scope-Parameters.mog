@@ -1,0 +1,20 @@
+-- Declaration parameter kinds are scoped to their declaration: two declarations
+-- may use the same parameter name at different kinds without either one's
+-- annotation reaching the other.
+
+data Phantom (a :: Type) = Phantom
+
+data Higher (a :: Type -> Type) = Higher (a Int)
+
+-- `a` in `Higher` is `Type -> Type`, so applying it is well kinded ...
+higher :: Higher Maybe -> Int
+higher h = 0
+
+-- ... while in `Phantom` the same spelling is `Type`, so it is not applicable.
+phantom :: Phantom Int -> Int
+phantom p = 0
+
+-- Neither registration is left in the ambient map: a function's `a` is an
+-- ordinary type variable of kind `Type`, not `Higher`'s parameter.
+identity :: a -> a
+identity x = x
