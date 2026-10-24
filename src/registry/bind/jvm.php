@@ -72,12 +72,6 @@ function parseJvmCoordinate(string $coordinate): array
     ];
 }
 
-/**
- * The module a bound library lives in: `com.acme:hello` is
- * `Maven.Com.Acme.Hello`. The ecosystem prefix keeps three backends' bindings
- * apart (R7); group dots become nesting so the module/file law resolves the
- * generated module with no new lookup rule.
- */
 function jvmBindModuleName(string $group, string $artifact): string
 {
     $segments = ['Maven'];

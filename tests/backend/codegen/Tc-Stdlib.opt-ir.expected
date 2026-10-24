@@ -14,10 +14,12 @@ module
   function altMaybeDemo()
       t14 = call Just(1)
       t15 = call Just(2)
-      t16 = dict_call @__ev_Alternative_Maybe-><|>(t14, t15)
+      t17 = call __ev_Alternative_Maybe()
+      t16 = dict_call t17-><|>(t14, t15)
       ret t16
   function altListDemo()
-      t17 = dict_call @__ev_Alternative_List-><|>([1], [2, 3])
-      ret t17
+      t19 = call __ev_Alternative_List()
+      t18 = dict_call t19-><|>([1], [2, 3])
+      ret t18
   function pairDemo()
       ret call fst(call __tuple2(41, @True))

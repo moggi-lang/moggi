@@ -6,6 +6,9 @@ use function Moggi\Compiler\compileFileCapturingErrorsBoth;
 
 use function Moggi\Modules\bundledStdlibLibPath;
 use function Moggi\Modules\compileProjectBoth;
+
+use Moggi\Pipeline\CompilationContext;
+use Moggi\Pipeline\CompilePurpose;
 use function Moggi\Modules\projectSourceClosure;
 use function Moggi\Paths\canonicalSeparators;
 
@@ -31,8 +34,6 @@ use Moggi\Pipeline\PipelineStage;
  */
 function testTreeKinds(): array
 {
-    // A stage's kind is the stage's own name, and only codegen can change what a stage before it
-    // produces. `tokens` is the lexer's dump; `stdout`, `stderr` and `err` are not stages at all.
     $stages = ['tokens' => ['pre' => true]];
     foreach (PipelineStage::cases() as $stage) {
         $stages[$stage->value] = ['pre' => $stage !== PipelineStage::Emit];
@@ -74,11 +75,13 @@ function nativeSmokeFixture(): string
 function runTestCase(TestCase $case, string $backend, string $projectRoot): array
 {
     try {
-        $outcome = $case->scriptCase
-            ? runStandaloneTest($case->input)
-            : ($case->project
-                ? runProjectCase($case, $backend, $projectRoot)
-                : runFixtureCase($case, $backend, $projectRoot));
+        $outcome = $case->buildOnly
+            ? runExampleBuild($case, $backend, $case->project)
+            : ($case->scriptCase
+                ? runStandaloneTest($case->input)
+                : ($case->project
+                    ? runProjectCase($case, $backend, $projectRoot)
+                    : runFixtureCase($case, $backend, $projectRoot)));
     } catch (TestFailure $e) {
         return ['passed' => false, 'message' => $e->getMessage()];
     }
@@ -86,9 +89,6 @@ function runTestCase(TestCase $case, string $backend, string $projectRoot): arra
     if (($outcome['passed'] ?? false) !== true || ! nativeSmokeRequested($case, $backend)) {
         return $outcome;
     }
-
-    // A case that already passed gains a second verdict, and `native` says so in the report; a `skip`
-    // verdict (no toolchain) replaces the pass.
     return ['native' => true] + runNativeExampleSmoke(\dirname($case->input), $backend, $projectRoot);
 }
 
@@ -103,10 +103,49 @@ function nativeSmokeRequested(TestCase $case, string $backend): bool
         && nativeToolchainLabel($backend) !== null;
 }
 
+/**
+ * An example with no golden: the verdict is that it still builds for this backend.
+ *
+ * `examples/` is where the suite keeps the samples honest, and what it guards is the compile —
+ * typecheck, lowering, legalization, optimization, emission — not the text the demo prints. A
+ * stdout expectation made every output tweak a golden change and pinned nothing the language
+ * promises, so an example is a case by existing.
+ *
+ * @return array{passed: bool, message: string}
+ */
+function runExampleBuild(TestCase $case, string $backend, bool $project = false): array
+{
+    try {
+        if ($project) {
+            [$files, $dir] = projectClosure($case->input);
+            compileProjectBoth($files, $dir, CompilationContext::for(
+                $backend,
+                CompilePurpose::Executable,
+                entryModules: ['Main'],
+                sources: $files,
+            ));
+        } else {
+            $outputs = compileFileCapturingErrorsBoth(testRelativePath($case->input), true, $backend);
+            foreach (['emit', 'opt-ir'] as $artifact) {
+                if (($outputs[$artifact]['exitCode'] ?? 1) !== 0) {
+                    throw new TestFailure(
+                        "example did not build for {$backend}:\n" . ($outputs[$artifact]['output'] ?? ''),
+                    );
+                }
+            }
+        }
+    } catch (TestFailure $e) {
+        throw $e;
+    } catch (\Throwable $e) {
+        throw new TestFailure("example did not build for {$backend}:\n" . diagnosticText($e));
+    }
+
+    return ['passed' => true, 'message' => ''];
+}
+
 /** @return array{passed: bool, message: string} */
 function runFixtureCase(TestCase $case, string $backend, string $projectRoot): array
 {
-    // A fixture is either rejected or accepted, never both: an `err` golden is the verdict.
     $errorGolden = $case->goldenBeside($case->base(), 'err', $backend);
     if ($errorGolden !== null) {
         return runErrorFixture($case, $errorGolden, $backend);
@@ -288,7 +327,7 @@ function compareProjectSnapshots(TestCase $case, string $backend): void
         if ($case->goldenBeside($base, 'emit', $backend) !== null || $case->goldenBeside($base, 'opt-ir', $backend) !== null) {
             if ($emitted === null) {
                 [$files, $root] = projectClosure($case->input);
-                $built = compileProjectBoth($files, $root);
+                $built = compileProjectBoth($files, $root, CompilationContext::for('php', CompilePurpose::Library, sources: $files));
                 $emitted = [
                     'opt-ir' => projectArtifacts($built['opt-ir']),
                     'emit' => projectArtifacts($built['emit']),
@@ -331,7 +370,7 @@ function projectClosure(string $input): array
         $libDirs[] = $bundled;
     }
 
-    return projectSourceClosure(projectModuleFiles($input), $libDirs);
+    return projectSourceClosure(projectModuleFiles($input), $libDirs, 'php');
 }
 
 /**
@@ -361,10 +400,9 @@ function runErrorFixture(TestCase $case, string $golden, string $backend): array
             'parser' => sourceStageDump($case->input, 'ast'),
             'ir' => irLoweringDump($case->input),
             'optimize' => optimizedIrFromSource($case->input, $backend),
-            default => sourceStageDump($case->input, 'typed-ast'),
+            default => sourceStageDump($case->input, 'typed-ast', $backend),
         };
     } catch (TestFailure $e) {
-        // A harness failure is not a compiler diagnostic.
         throw $e;
     } catch (\Throwable $e) {
         $shape = diagnosticShapeFailure($e);
@@ -398,7 +436,7 @@ function runProjectErrorCase(TestCase $case, array $goldens, string $backend, st
 
     try {
         [$files, $dir] = projectClosure($case->input);
-        compileProjectBoth($files, $dir);
+        compileProjectBoth($files, $dir, CompilationContext::for($backend, CompilePurpose::Library, sources: $files));
     } catch (TestFailure $e) {
         throw $e;
     } catch (\Throwable $e) {

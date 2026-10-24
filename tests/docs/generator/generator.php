@@ -193,7 +193,7 @@ $homes = Docs\reexportedClassHomes($classFacade, $canonical, 'Docs.ClassFacade')
 assertEq('Docs.ClassHome', $homes[0]->module ?? null, 'class re-export resolves home module');
 
 $fixture = __DIR__ . '/../fixture';
-$index = Docs\loadOrBuildIndex($fixture, [], true);
+$index = Docs\loadOrBuildIndex($fixture, [], Docs\docsContext('php', []), true);
 $typeHits = Docs\search($index, 'a -> a', 5);
 assertTrue(\count($typeHits) > 0, 'type search finds id');
 assertEq('id', $typeHits[0]->entity->name, 'type search top hit is id');
@@ -250,9 +250,15 @@ $classDecl = $classProgram->items[0];
 assertEq('Between methods.', $classDecl->methods[1]->doc ?? null, 'class method doc from parser');
 
 \Moggi\Cache\setCacheEnabled(false);
-$libProject = Docs\loadDocProject($root . '/libraries/base/src');
+$libProject = Docs\loadDocProject($root . '/libraries/base/src', Docs\docsContext('php', []));
 \Moggi\Cache\setCacheEnabled(true);
-$libIndex = Docs\buildIndex($libProject['modules'], $libProject['prepared']->checked, $libProject['prepared'], Docs\docRootFor($root . '/libraries/base/src'));
+$libIndex = Docs\buildIndex(
+    $libProject['modules'],
+    $libProject['prepared']->checked,
+    $libProject['prepared'],
+    Docs\docRootFor($root . '/libraries/base/src'),
+    Docs\docsContext('php', []),
+);
 assertTrue(isset($libIndex->byModule['Moggi.Internal.Prim']), 'Moggi.Internal.Prim is indexed');
 $primNames = \array_map(static fn ($e) => $e->name, $libIndex->byModule['Moggi.Internal.Prim']);
 assertTrue(\in_array('stringAppend#', $primNames, true), 'Prim exports stringAppend#');
@@ -466,7 +472,7 @@ assertTrue(isset($collisionTargets['Docs.Two.x']), 'qualified link target kept f
 
 $extraLibDir = __DIR__ . '/fixture-extra';
 $appDir = __DIR__ . '/fixture-app';
-$appProject = Docs\loadDocProject($appDir, [$extraLibDir]);
+$appProject = Docs\loadDocProject($appDir, Docs\docsContext('php', [$extraLibDir]), [$extraLibDir]);
 assertTrue(isset($appProject['prepared']->units['Lib.Extra']), 'loadDocProject type-checks --lib modules');
 assertTrue(! isset($appProject['modules']['Lib.Extra']), 'a --lib module is not documented');
 assertTrue(isset($appProject['modules']['Docs.App']), 'loadDocProject indexes app modules');
@@ -863,42 +869,52 @@ $cacheFixtureDir = $cacheWorkDir . '/fixture';
 $cacheFixtureMog = $cacheFixtureDir . '/Docs/Fixture.mog';
 \copy($fixture . '/Docs/Fixture.mog', $cacheFixtureMog);
 $prevCacheDir = \getenv('MOGGI_CACHE_DIR') ?: '';
-// Indexing a fixture compiles the modules it reaches; the library arrives from the run's cache
-// rather than being elaborated again in this scratch cache (seeded before the switch).
 seedCacheDir($cacheWorkDir);
 \putenv('MOGGI_CACHE_DIR=' . $cacheWorkDir);
-$cachePath = Docs\indexCachePath($cacheFixtureDir, []);
-Docs\loadOrBuildIndex($cacheFixtureDir, [], true);
+$cachePath = Docs\indexCachePath($cacheFixtureDir, [], Docs\docsContext('php', []));
+Docs\loadOrBuildIndex($cacheFixtureDir, [], Docs\docsContext('php', []), true);
 assertTrue(\is_file($cachePath), 'doc index cache file created');
 $cacheMtimeBefore = \filemtime($cachePath) ?: 0;
+$callerSources = Docs\docsContext('php', [], [$cacheFixtureMog]);
+assertEq(
+    $cachePath,
+    Docs\indexCachePath($cacheFixtureDir, [], $callerSources),
+    'doc cache path does not move with the caller declared sources',
+);
+Docs\loadOrBuildIndex($cacheFixtureDir, [], $callerSources);
+assertEq(
+    $cacheMtimeBefore,
+    \filemtime($cachePath) ?: 0,
+    'a caller with other declared sources is served the built index',
+);
 $fixtureSource = (string) \file_get_contents($cacheFixtureMog);
 \usleep(1_100_000);
 \touch($cacheFixtureMog);
-Docs\loadOrBuildIndex($cacheFixtureDir, [], false);
+Docs\loadOrBuildIndex($cacheFixtureDir, [], Docs\docsContext('php', []), false);
 $cacheMtimeAfter = \filemtime($cachePath) ?: 0;
 assertEq($cacheMtimeBefore, $cacheMtimeAfter, 'doc cache survives mtime-only source change');
 \file_put_contents($cacheFixtureMog, \rtrim($fixtureSource) . "\n-- touch\n");
-Docs\loadOrBuildIndex($cacheFixtureDir, [], false);
+Docs\loadOrBuildIndex($cacheFixtureDir, [], Docs\docsContext('php', []), false);
 $cacheMtimeRebuild = \filemtime($cachePath) ?: 0;
 assertTrue($cacheMtimeRebuild > $cacheMtimeAfter, 'doc cache rebuilds when source content changes');
 
-$corruptCachePath = Docs\indexCachePath($cacheFixtureDir, []);
+$corruptCachePath = Docs\indexCachePath($cacheFixtureDir, [], Docs\docsContext('php', []));
 \file_put_contents($corruptCachePath, '{"version":999,"broken":true}');
-Docs\loadOrBuildIndex($cacheFixtureDir, [], false);
+Docs\loadOrBuildIndex($cacheFixtureDir, [], Docs\docsContext('php', []), false);
 $rebuiltCache = \json_decode((string) \file_get_contents($corruptCachePath), true);
 assertEq(Docs\docIndexSchemaVersion(), $rebuiltCache['version'] ?? 0, 'doc cache rebuilds when cache JSON is invalid');
 assertTrue(isset($rebuiltCache['modules']), 'rebuilt doc cache contains modules');
 
 $sourceFingerprint = '';
-Docs\loadOrBuildIndex($cacheFixtureDir, [], false, $sourceFingerprint);
+Docs\loadOrBuildIndex($cacheFixtureDir, [], Docs\docsContext('php', []), false, $sourceFingerprint);
 assertTrue($sourceFingerprint !== '', 'loadOrBuildIndex returns source fingerprint on cache hit');
 $secondFingerprint = '';
-Docs\loadOrBuildIndex($cacheFixtureDir, [], false, $secondFingerprint);
+Docs\loadOrBuildIndex($cacheFixtureDir, [], Docs\docsContext('php', []), false, $secondFingerprint);
 assertEq($sourceFingerprint, $secondFingerprint, 'source fingerprint stable across cache hits');
 
-$malformedCachePath = Docs\indexCachePath($cacheFixtureDir, []);
+$malformedCachePath = Docs\indexCachePath($cacheFixtureDir, [], Docs\docsContext('php', []));
 \file_put_contents($malformedCachePath, '{"version":1,"modules":{}}');
-Docs\loadOrBuildIndex($cacheFixtureDir, [], false);
+Docs\loadOrBuildIndex($cacheFixtureDir, [], Docs\docsContext('php', []), false);
 $malformedCache = \json_decode((string) \file_get_contents($malformedCachePath), true);
 assertTrue(isset($malformedCache['search']), 'doc cache rebuilds when same-version JSON is malformed');
 
@@ -906,11 +922,11 @@ $eitherIndex = Docs\buildIndex(
     ['Data.Either' => $libProject['modules']['Data.Either']],
     ['Data.Either' => $libProject['prepared']->checked['Data.Either']],
     $libProject['prepared'],
+    null,
+    Docs\docsContext('php', []),
 );
 foreach ($eitherIndex->byModule['Data.Either'] ?? [] as $entity) {
     if ($entity->name === 'either') {
-        // The signature `Data.Either` writes, with its own variables and its
-        // arrow domain parenthesised.
         assertTrue(
             \str_contains((string) $entity->signature, '(a -> c) -> (b -> c) -> Either a b -> c'),
             'a written signature renders as written: ' . $entity->signature,
@@ -919,8 +935,6 @@ foreach ($eitherIndex->byModule['Data.Either'] ?? [] as $entity) {
     if ($entity->name === 'isLeft') {
         assertTrue(\str_contains((string) $entity->signature, 'Either a b'), 'isLeft uses friendly type variables');
     }
-    // Instance methods have no written signature, so theirs is inferred — and an
-    // inferred one must carry friendly letters, never compiler-internal names.
     assertTrue(
         \preg_match('/\bt\d+\b/', (string) $entity->signature) !== 1,
         'signatures hide compiler t-vars: ' . $entity->name . ' :: ' . $entity->signature,
@@ -931,6 +945,8 @@ $preludeOps = Docs\buildIndex(
     ['Prelude' => $libProject['modules']['Prelude']],
     ['Prelude' => $libProject['prepared']->checked['Prelude']],
     $libProject['prepared'],
+    null,
+    Docs\docsContext('php', []),
 );
 foreach ($preludeOps->byModule['Prelude'] ?? [] as $entity) {
     if ($entity->name === '!!') {
@@ -976,19 +992,10 @@ MOG;
 $interImportDocProgram = parseModule($interImportDocSource, 'InterImportDoc.mog');
 assertEq('Documents the next import.', $interImportDocProgram->imports[1]->doc ?? null, 'inter-import docs attach to following import');
 
-// A release's docs describe the release. `--lib` roots are how a package's
-// stdlib arrives; the modules there are type-checked but are the dependency's
-// pages, not this release's, and a test suite is not API at all.
 assertTrue(Docs\sourceUnderRoot('/pkg/src/A.mog', '/pkg/'), 'a file under the root is documented');
 assertTrue(! Docs\sourceUnderRoot('/stdlib/lib/A.mog', '/pkg/'), 'a dependency file is not documented');
 assertTrue(Docs\sourceUnderRoot('', '/pkg/'), 'a synthetic module with no path stays');
 
-// A module's path arrives from `realpath`, so it is spelled with the host's
-// separator, while a prepared root prefix is canonical. These two paths are the
-// ones Windows hands over — `C:\a\moggi\lib\Data\Ord.mog` against
-// `C:/a/moggi/lib/` — and a prefix test that only holds on the host that
-// spelled the root cannot see that the file is the release's, nor subtract the
-// root to find the source page.
 $nativeRoot = 'C:' . DIRECTORY_SEPARATOR . 'a' . DIRECTORY_SEPARATOR . 'moggi'
     . DIRECTORY_SEPARATOR . 'lib' . DIRECTORY_SEPARATOR;
 $nativeSource = $nativeRoot . 'Data' . DIRECTORY_SEPARATOR . 'Ord.mog';
@@ -1025,7 +1032,7 @@ $scopeDir = \sys_get_temp_dir() . '/moggi-mogdoc-scope-' . \getmypid();
 );
 \file_put_contents($scopeDir . '/tests/Suite.mog', "module Suite\n  ( check\n  ) where\n\ncheck :: Int\ncheck = 1\n");
 
-$scopeIndex = Docs\loadOrBuildIndex($scopeDir, [$root . '/libraries/base/src'], true);
+$scopeIndex = Docs\loadOrBuildIndex($scopeDir, [$root . '/libraries/base/src'], Docs\docsContext('php', [$root . '/libraries/base/src']), true);
 assertTrue(isset($scopeIndex->byModule['Scope']), 'the documented root is indexed');
 assertTrue(! isset($scopeIndex->byModule['Data.Maybe']), 'a dependency module is not indexed');
 assertTrue(! isset($scopeIndex->byModule['Suite']), 'a test-suite module is not indexed');

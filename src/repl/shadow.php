@@ -2,13 +2,11 @@
 
 namespace Moggi\Repl;
 
-use function Moggi\Patterns\Walk\patternVariableNames;
-
 use Moggi\Syntax\Ast;
-
-use function Moggi\Syntax\Parser\parseReplFragment;
-
 use Moggi\Syntax\Parser\ReplFragment;
+
+use function Moggi\Patterns\Walk\patternVariableNames;
+use function Moggi\Syntax\Parser\parseReplFragment;
 
 /**
  * Rename interactive OccName `$from` to `$to` in a single declaration source:

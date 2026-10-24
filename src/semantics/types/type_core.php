@@ -4,9 +4,6 @@ namespace Moggi\Semantics\Types;
 
 use Moggi\Semantics\IntrinsicRegistry;
 use Moggi\Semantics\Kinds;
-
-use function Moggi\Semantics\TypeExpr\canonicalNatDigits;
-
 use Moggi\Semantics\TypeExpr\Scheme;
 use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TBytes;
@@ -31,11 +28,13 @@ use Moggi\Semantics\TypeExpr\TWord32;
 use Moggi\Semantics\TypeExpr\TWord64;
 use Moggi\Semantics\TypeExpr\TWord8;
 use Moggi\Semantics\TypeExpr\Type;
-
 use Moggi\Syntax\Ast;
+
+use function Moggi\Semantics\TypeExpr\canonicalNatDigits;
 
 require_once __DIR__ . '/../type_expr.php';
 require_once __DIR__ . '/state.php';
+require_once __DIR__ . '/type_laws.php';
 
 function substituteInstanceTypeAst(Ast\TypeNode $type, array $mapping): Ast\TypeNode
 {
@@ -285,13 +284,16 @@ function envFreeVars(array $env): array
 
 function typeVars(Type $type): array
 {
-    return match ($type::class) {
-        TVar::class => [$type->name => true],
-        TVarApp::class => [$type->name => true] + \array_merge([], ...\array_map(typeVars(...), $type->args)),
-        TCon::class => \array_merge([], ...\array_map(typeVars(...), $type->args)),
-        TArrow::class => [...typeVars($type->from), ...typeVars($type->to)],
-        default => [],
-    };
+    if ($type instanceof TVar) {
+        return [$type->name => true];
+    }
+
+    $vars = $type instanceof TVarApp ? [$type->name => true] : [];
+    foreach (typeChildren($type) as $child) {
+        $vars += typeVars($child);
+    }
+
+    return $vars;
 }
 
 /** @return array<string, true> */
@@ -583,7 +585,10 @@ function substitute(Type $type, array $mapping): Type
             substitute($type->from, $mapping),
             substitute($type->to, $mapping),
         ),
-        default => $type,
+        default => mapTypeChildren(
+            $type,
+            static fn (Type $child): Type => substitute($child, $mapping),
+        ),
     };
 }
 
@@ -908,7 +913,13 @@ function typeVarLetter(int $index): string
 
 function prune(TypeCheckState $state, Type $type): Type
 {
-    if ($state->subst === []) {
+    if ($state->subst === [] && (
+        $type instanceof TVar
+        || $type instanceof TVarApp
+        || $type instanceof TCon
+        || $type instanceof TArrow
+        || $type instanceof TPromoted
+    )) {
         return $type;
     }
 
@@ -926,9 +937,9 @@ function prune(TypeCheckState $state, Type $type): Type
     if ($type instanceof TVarApp) {
         $args = [];
         $changed = false;
-        foreach ($type->args as $i => $arg) {
+        foreach ($type->args as $arg) {
             $pruned = prune($state, $arg);
-            $args[$i] = $pruned;
+            $args[] = $pruned;
             if ($pruned !== $arg) {
                 $changed = true;
             }
@@ -941,20 +952,6 @@ function prune(TypeCheckState $state, Type $type): Type
         return $changed ? new TVarApp($type->name, $args) : $type;
     }
 
-    if ($type instanceof TCon) {
-        $args = [];
-        $changed = false;
-        foreach ($type->args as $i => $arg) {
-            $pruned = prune($state, $arg);
-            $args[$i] = $pruned;
-            if ($pruned !== $arg) {
-                $changed = true;
-            }
-        }
-
-        return $changed ? new TCon($type->name, $args) : $type;
-    }
-
     if ($type instanceof TArrow) {
         $from = prune($state, $type->from);
         $to = prune($state, $type->to);
@@ -962,7 +959,31 @@ function prune(TypeCheckState $state, Type $type): Type
         return $from === $type->from && $to === $type->to ? $type : new TArrow($from, $to);
     }
 
-    return $type;
+    if ($type instanceof TCon || $type instanceof TPromoted) {
+        if ($type->args === []) {
+            return $type;
+        }
+
+        $args = [];
+        $changed = false;
+        foreach ($type->args as $arg) {
+            $pruned = prune($state, $arg);
+            $args[] = $pruned;
+            if ($pruned !== $arg) {
+                $changed = true;
+            }
+        }
+
+        if (! $changed) {
+            return $type;
+        }
+
+        return $type instanceof TCon
+            ? new TCon($type->name, $args)
+            : new TPromoted($type->name, $args);
+    }
+
+    return mapTypeChildren($type, static fn (Type $child): Type => prune($state, $child));
 }
 
 /**
@@ -972,9 +993,8 @@ function prune(TypeCheckState $state, Type $type): Type
 function zonkInferredTypesInExpr(TypeCheckState $state, Ast\AstNode $expr): void
 {
     if ($expr->inferredType !== null) {
-        $expr->inferredType = internalTypeToAst(
+        $expr->inferredType = internalTypeToAstNode(
             prune($state, inferredTypeAstToInternal($expr->inferredType)),
-            $state->subst,
         );
     }
 
@@ -1159,21 +1179,8 @@ function occurs(TypeCheckState $state, string $var, Type $type, ?Ast\AstNode $at
         throw typeFail($state, "infinite type: `{$shown}` occurs in itself", $at);
     }
 
-    if ($type instanceof TCon || $type instanceof TVarApp) {
-        foreach ($type->args as $arg) {
-            occurs($state, $var, $arg, $at);
-        }
-    }
-
-    if ($type instanceof TPromoted) {
-        foreach ($type->args as $arg) {
-            occurs($state, $var, $arg, $at);
-        }
-    }
-
-    if ($type instanceof TArrow) {
-        occurs($state, $var, $type->from, $at);
-        occurs($state, $var, $type->to, $at);
+    foreach (typeChildren($type) as $child) {
+        occurs($state, $var, $child, $at);
     }
 }
 
@@ -1481,10 +1488,18 @@ function internedTypeNode(Ast\TypeNode $node): Ast\TypeNode
 
 function internalTypeToAst(Type $type, array $subst): Ast\TypeNode
 {
-    $pruneState = new TypeCheckState('');
-    $pruneState->subst = $subst;
-    $type = prune($pruneState, $type);
+    if ($subst !== []) {
+        $pruneState = new TypeCheckState('');
+        $pruneState->subst = $subst;
+        $type = prune($pruneState, $type);
+    }
 
+    return internalTypeToAstNode($type);
+}
+
+/** Convert a type whose variables are already pruned; only allocates the nodes. */
+function internalTypeToAstNode(Type $type): Ast\TypeNode
+{
     $node = match ($type::class) {
         TInt::class => new Ast\TypeCon('Int'),
         TStr::class => new Ast\TypeCon('String'),
@@ -1505,7 +1520,7 @@ function internalTypeToAst(Type $type, array $subst): Ast\TypeNode
         TPromoted::class => \count($type->args) === 0
             ? new Ast\TypePromoted($type->name)
             : new Ast\TypeApp(new Ast\TypePromoted($type->name), \array_map(
-                static fn (Type $arg): Ast\TypeNode => internalTypeToAst($arg, $subst),
+                static fn (Type $arg): Ast\TypeNode => internalTypeToAstNode($arg),
                 $type->args,
             )),
         TStringLit::class => new Ast\TypeStringLit($type->value),
@@ -1513,16 +1528,16 @@ function internalTypeToAst(Type $type, array $subst): Ast\TypeNode
         TCon::class => \count($type->args) === 0
             ? new Ast\TypeCon($type->name)
             : new Ast\TypeApp(new Ast\TypeCon($type->name), \array_map(
-                static fn (Type $arg): Ast\TypeNode => internalTypeToAst($arg, $subst),
+                static fn (Type $arg): Ast\TypeNode => internalTypeToAstNode($arg),
                 $type->args,
             )),
         TVarApp::class => new Ast\TypeApp(new Ast\TypeVar($type->name), \array_map(
-            static fn (Type $arg): Ast\TypeNode => internalTypeToAst($arg, $subst),
+            static fn (Type $arg): Ast\TypeNode => internalTypeToAstNode($arg),
             $type->args,
         )),
         TArrow::class => new Ast\TypeArrow(
-            internalTypeToAst($type->from, $subst),
-            internalTypeToAst($type->to, $subst),
+            internalTypeToAstNode($type->from),
+            internalTypeToAstNode($type->to),
         ),
         default => throw new \InvalidArgumentException('unknown type: ' . $type::class),
     };

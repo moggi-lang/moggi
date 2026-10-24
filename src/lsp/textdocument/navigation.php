@@ -3,15 +3,13 @@
 namespace Moggi\LSP\TextDocument;
 
 use Moggi\LSP\Analysis\AnalysisService;
+use Moggi\LSP\Index\DeclInfo;
+use Moggi\Syntax\Ast;
 
 use function Moggi\LSP\Analysis\findNodeAt;
 use function Moggi\LSP\Analysis\findNodeChainAt;
-
 use function Moggi\LSP\checkCancelledPoint;
 use function Moggi\LSP\Index\binderResolved;
-
-use Moggi\LSP\Index\DeclInfo;
-
 use function Moggi\LSP\Index\isBinderResolved;
 use function Moggi\LSP\Protocol\codepointColToUtf16;
 use function Moggi\LSP\Protocol\compilerPosToLsp;
@@ -22,8 +20,6 @@ use function Moggi\LSP\Protocol\splitLines;
 use function Moggi\LSP\Protocol\utf16Length;
 use function Moggi\Modules\parseResolvedSymbol;
 use function Moggi\Modules\resolvedSymbol;
-
-use Moggi\Syntax\Ast;
 
 function svcDefinition(AnalysisService $svc, string $uri, array $pos): mixed
 {
@@ -542,7 +538,7 @@ function resolveNavTarget(AnalysisService $svc, string $uri, array $pos): ?array
         return null;
     }
     if ($resolved === null && $analysis->program instanceof Ast\Program) {
-        $resolved = $analysis->program->externalFns[$name] ?? null;
+        $resolved = $analysis->program->interface?->externalFns[$name] ?? null;
         if ($resolved === null && isset($analysis->declarations[$name])) {
             $resolved = resolvedSymbol($analysis->program->module ?? 'Main', $name);
         }

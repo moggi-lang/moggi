@@ -57,14 +57,11 @@ function platformCpuTopology(): array
 
     return match (PHP_OS_FAMILY) {
         'Linux' => linuxCpuTopology(),
-        // `hw.ncpu` is the older spelling of the logical count.
         'Darwin' => [
             'cores' => platformFirstNumber(platformShellOutput('sysctl -n hw.physicalcpu')),
             'threads' => platformFirstNumber(platformShellOutput('sysctl -n hw.logicalcpu'))
                 ?? platformFirstNumber(platformShellOutput('sysctl -n hw.ncpu')),
         ],
-        // CIM (PowerShell) reports both, summed over sockets; `NUMBER_OF_PROCESSORS` is the CPU set
-        // the OS gave this process.
         'Windows' => [
             'cores' => windowsCimInt('NumberOfCores'),
             'threads' => windowsCimInt('NumberOfLogicalProcessors')
@@ -200,8 +197,6 @@ function cgroupCpuQuota(string $v2Max, string $v1Quota, string $v1Period): ?int
     if ($quotaUs === null || $periodUs === null || $quotaUs <= 0 || $periodUs <= 0) {
         return null;
     }
-
-    // A quota smaller than one CPU's worth still allows one worker.
     return (int) \max(1, (int) \ceil($quotaUs / $periodUs));
 }
 
@@ -217,9 +212,6 @@ function cgroupCpuDirs(): array
     if (PHP_OS_FAMILY !== 'Linux' || ! \is_dir('/sys/fs/cgroup')) {
         return [];
     }
-
-    // "0::/user.slice/x.scope" is the unified hierarchy; "5:cpu,cpuacct:/docker/y" is v1, which
-    // mounts one hierarchy per controller.
     $dirs = [];
     foreach (\preg_split('/\R/', cgroupRead('/proc/self/cgroup')) ?: [] as $line) {
         if (\preg_match('#^\d+:([^:]*):(/.+)$#', $line, $match) !== 1) {

@@ -2,29 +2,22 @@
 
 namespace Moggi\Repl;
 
-use Moggi\Backend\Backend;
-
-use function Moggi\Backend\backendById;
-use function Moggi\Errors\formatDiagnostic;
-use function Moggi\IR\Dump\dump as dumpIr;
-use function Moggi\IR\entryFromFunctions;
-
 use Moggi\IR\EntryPointKind;
 use Moggi\IR\Module;
 use Moggi\Pipeline\PipelineArtifacts;
 use Moggi\Pipeline\PipelineStage;
 use Moggi\Semantics\Types\TypeError;
-
 use Moggi\Syntax\Ast;
-
-use function Moggi\Syntax\Ast\dump as dumpAst;
-
 use Moggi\Syntax\Lexer\LexError;
 use Moggi\Syntax\Parser\ParseError;
-
-use function Moggi\Syntax\Parser\parseReplFragment;
-
 use Moggi\Syntax\Parser\ReplFragment;
+
+use function Moggi\Backend\backendById;
+use function Moggi\Errors\formatDiagnostic;
+use function Moggi\IR\Dump\dump as dumpIr;
+use function Moggi\IR\entryFromFunctions;
+use function Moggi\Syntax\Ast\dump as dumpAst;
+use function Moggi\Syntax\Parser\parseReplFragment;
 
 /**
  * REPL inspection: the `:ast` / `:ir` / `:emit` fragment dispatch, compiler

@@ -3,62 +3,35 @@
 namespace Moggi\CLI\Commands;
 
 use Moggi\Backend;
+use Moggi\Modules;
+use Moggi\Pipeline\CompilationContext;
+use Moggi\Pipeline\CompilePurpose;
+use Moggi\Semantics\Types\TypeError;
+use Moggi\Syntax\Lexer\LexError;
+use Moggi\Syntax\Parser\ParseError;
 
 use function Moggi\Backend\Php\Dependencies\composerVendorRoots;
 use function Moggi\CLI\parseBackendValue;
 use function Moggi\CLI\printUsage;
 use function Moggi\CLI\resolveCompileInputs;
-
 use function Moggi\CLI\resolveLibraryDirs;
 use function Moggi\Compiler\compileFile;
 use function Moggi\Compiler\executableName;
 use function Moggi\Compiler\findExecutable;
 use function Moggi\Compiler\findToolchainExecutable;
-
-use Moggi\Modules;
-
 use function Moggi\Modules\bundledStdlibLibPath;
 use function Moggi\Modules\cachedModuleHeader;
 use function Moggi\Paths\globPaths;
 use function Moggi\Pipeline\printModeNames;
-use function Moggi\Pipeline\setEntryModules;
-
-use Moggi\Semantics\Types\TypeError;
-use Moggi\Syntax\Lexer\LexError;
-use Moggi\Syntax\Parser\ParseError;
 
 /**
- * Pin the library roots this compile searches, so the backend dependency scanners
- * see the same set the module resolver does.
- *
- * The first root that carries a `base.moggi` becomes the primary standard library;
- * every other root is registered as an extra. Extra roots matter beyond module
- * lookup: a package's vendored jars, CLR metadata and PHP helpers live under
- * whichever root it was installed into, and a dependency tree resolved by
- * `moggi build` is one of those roots.
+ * Register the roots a compile searches ({@see Modules\registerLibraryRoots}).
  *
  * @param list<string> $libDirs
  */
 function registerLibraryRoots(array $libDirs): void
 {
-    $primary = null;
-    foreach ($libDirs as $dir) {
-        if (Modules\isLibraryRoot($dir)) {
-            $primary = $dir;
-
-            break;
-        }
-    }
-
-    if ($primary !== null) {
-        Modules\setStdlibLibPath($primary);
-    }
-
-    foreach ($libDirs as $dir) {
-        if ($dir !== $primary && \is_dir($dir)) {
-            Modules\addLibraryRoot($dir);
-        }
-    }
+    Modules\registerLibraryRoots($libDirs);
 }
 
 /**
@@ -105,11 +78,10 @@ function compileIntoRoot(
         return $empty(1);
     }
 
-    Backend\setCompileBackend($backend);
     echo "backend: {$backend}\n";
 
     try {
-        [$root, $files] = resolveCompileInputs($inputPath, $libDirs);
+        [$root, $files] = resolveCompileInputs($inputPath, $libDirs, $backend);
     } catch (\InvalidArgumentException $e) {
         \fwrite(STDERR, 'error: ' . $e->getMessage() . "\n");
 
@@ -134,7 +106,6 @@ function compileIntoRoot(
             $entryModule = $header['module'];
         }
     }
-    setEntryModules([$entryModule]);
 
     $libDirs = resolveLibraryDirs($libDirs);
 
@@ -142,7 +113,7 @@ function compileIntoRoot(
         registerLibraryRoots($libDirs);
 
         try {
-            [$files, $root] = Modules\projectSourceClosure($files, $libDirs);
+            [$files, $root] = Modules\projectSourceClosure($files, $libDirs, $backend);
         } catch (LexError|ParseError|TypeError|\RuntimeException $e) {
             if ($e instanceof LexError || $e instanceof ParseError || $e instanceof TypeError) {
                 \fwrite(STDERR, $e->display());
@@ -153,6 +124,14 @@ function compileIntoRoot(
             return $empty(1);
         }
     }
+
+    $context = CompilationContext::for(
+        $backend,
+        CompilePurpose::Executable,
+        [$entryModule],
+        $libDirs,
+        $files,
+    );
 
     if (\is_file($buildRoot)) {
         \fwrite(STDERR, "error: output path is a file: {$buildRoot}\n");
@@ -190,8 +169,7 @@ function compileIntoRoot(
             $ext = Backend\backendById($backend)->extension();
 
             try {
-                Backend\setCompileBackend($backend);
-                $output = compileFile($sourcePath, 'php', $optimize);
+                $output = compileFile($sourcePath, 'php', $optimize, null, $backend, $context);
             } catch (LexError|ParseError|TypeError|\RuntimeException $e) {
                 if ($e instanceof LexError || $e instanceof ParseError || $e instanceof TypeError) {
                     \fwrite(STDERR, $e->display());
@@ -251,7 +229,7 @@ function compileIntoRoot(
     }
 
     try {
-        $compiledBoth = Modules\compileProjectBoth($files, $root, $optimize, $strip);
+        $compiledBoth = Modules\compileProjectBoth($files, $root, $context, $optimize, $strip);
         $compiled = $compiledBoth['emit'];
         $entryModule = $compiledBoth['entryModule'] ?? null;
         $entryRelative = $compiledBoth['entryRelative'] ?? null;
@@ -724,7 +702,6 @@ function copyTreeInto(string $source, string $target): bool
 function bundleRuntime(string $outputRoot, string $backend, array $options = []): bool
 {
     try {
-        Backend\setCompileBackend($backend);
         Backend\backendById($backend)->packageOutput($outputRoot, $options);
     } catch (\Throwable $e) {
         \fwrite(STDERR, 'error: ' . $e->getMessage() . "\n");
@@ -1175,10 +1152,18 @@ function compileSingleFile(string $input, array $options): int
     }
 
     try {
-        Backend\setCompileBackend($options['backend']);
         registerLibraryRoots($options['libDirs']);
 
-        $output = compileFile($input, $options['mode'], $options['optimize']);
+        $header = cachedModuleHeader($input);
+        $entryModule = \is_string($header['module'] ?? null) ? $header['module'] : 'Main';
+        $context = CompilationContext::for(
+            $options['backend'],
+            CompilePurpose::Executable,
+            [$entryModule],
+            $options['libDirs'],
+            [$input],
+        );
+        $output = compileFile($input, $options['mode'], $options['optimize'], null, $options['backend'], $context);
     } catch (LexError|ParseError|TypeError $e) {
         \fwrite(STDERR, $e->display());
 

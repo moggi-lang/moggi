@@ -322,6 +322,7 @@ function mapStmt(IR\Stmt $stmt, array &$temps, array &$locals): IR\Stmt
             \array_map(static fn (IR\Operand $arg): IR\Operand => mapOperand($arg, $temps, $locals), $stmt->args),
             $stmt->dest,
             $stmt->srcLoc,
+            $stmt->localEvidence,
         ),
         IR\IoCall::class => new IR\IoCall(
             $stmt->callee,

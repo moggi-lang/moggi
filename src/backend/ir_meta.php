@@ -7,7 +7,6 @@ use Moggi\IR;
 use function Moggi\IR\Visit\boundLocalsInBlock;
 use function Moggi\IR\Visit\collectLambdaRefsInBlock;
 use function Moggi\IR\Visit\walkOperand;
-use function Moggi\Optimize\Support\isCapturedFnName;
 use function Moggi\Semantics\IntrinsicRegistry\reportsSourceLocation;
 use function Moggi\Semantics\Kernel\boolTypeName;
 
@@ -142,78 +141,6 @@ function boolConstructorMapFromRegistry(array $registryData): array
 // --- Lambda captures ----------------------------------------------------------
 
 /**
- * Transitive capture closure.
- *
- * `$capturesOf` supplies each lifted function's direct free locals; this
- * propagates the captures a function needs from the functions it references, to
- * a fixpoint. A target may derive the direct captures itself, so that rule is a
- * parameter rather than a copy of the whole closure. What the function itself
- * binds -- its parameters, its `let`s, its match binders -- is never added: a
- * local a nested lambda reaches there is that body's own, and passing it would
- * put an undefined name in the caller's scope.
- *
- * The returned capture lists are sorted: direct captures miss the locals hidden
- * inside nested lifted-function references (those only become visible as
- * operands once captures are bound), so first-seen order depends on *when* in
- * the pipeline the set is computed. Use sites freeze captures early, definition
- * sites are read late; without a canonical order the two disagree and calls
- * pass arguments to the wrong parameters.
- *
- * @see boundLocalsInBlock
- *
- * @param array<string, IR\FunctionDecl> $byName
- * @param callable(IR\FunctionDecl): list<string> $capturesOf
- * @return array<string, array{captures: list<string>, params: list<string>}>
- */
-function lambdaMetaFromCaptures(array $byName, callable $capturesOf): array
-{
-    $meta = [];
-    $owned = [];
-    foreach ($byName as $name => $function) {
-        $meta[$name] = [
-            'captures' => $capturesOf($function),
-            'params' => $function->params,
-        ];
-        $owned[$name] = boundLocalsInBlock($function->body)
-            + \array_fill_keys($function->params, true);
-    }
-
-    $changed = true;
-    while ($changed) {
-        $changed = false;
-        foreach ($meta as $name => &$info) {
-            $needed = [];
-            foreach (collectLambdaRefsInBlock($byName[$name]->body, isCapturedFnName(...)) as $ref) {
-                $child = $meta[$ref] ?? null;
-                if ($child === null) {
-                    continue;
-                }
-                foreach ($child['captures'] as $capture) {
-                    if (isset($owned[$name][$capture]) || \in_array($capture, $info['captures'], true)) {
-                        continue;
-                    }
-
-                    $needed[] = $capture;
-                }
-            }
-            $needed = \array_values(\array_unique($needed));
-            if ($needed !== []) {
-                $info['captures'] = [...$info['captures'], ...$needed];
-                $changed = true;
-            }
-        }
-        unset($info);
-    }
-
-    foreach ($meta as &$info) {
-        \sort($info['captures']);
-    }
-    unset($info);
-
-    return $meta;
-}
-
-/**
  * Names a block must have in scope in order to *build* the lifted-function
  * values it references.
  *
@@ -223,7 +150,7 @@ function lambdaMetaFromCaptures(array $byName, callable $capturesOf): array
  * set computed from the operands alone misses them (an IO thunk holding
  * `catch io (\e -> …)` needs the lambda's captures, not just its own free
  * locals). Transitivity is already folded into `$lambdaMeta` by
- * {@see lambdaMetaFromCaptures}.
+ * {@see \Moggi\IR\Callables\captureMeta()}.
  *
  * @param array<string, array{captures: list<string>, params: list<string>}> $lambdaMeta
  * @return list<string>

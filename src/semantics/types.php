@@ -3,7 +3,9 @@
 namespace Moggi\Semantics\Types;
 
 use function Moggi\Errors\formatDiagnostic;
+use function Moggi\Modules\standaloneImportContext;
 
+use Moggi\Modules\ImportContext;
 use Moggi\Pipeline\CompilePurpose;
 
 use function Moggi\Semantics\Deriving\commitProjectInstance;
@@ -114,7 +116,6 @@ function inferredFunctionDecls(Ast\Program $program): array
 }
 
 /**
- * @param array<string, mixed> $importContext
  * @param ?array{env: array<string, mixed>, data: array<string, mixed>, typeSynonyms: array<string, mixed>, intrinsicWrappers: array<string, string>} $interface
  *   receives the local type environment this check commits (its env, data,
  *   type synonyms and intrinsic wrappers), so the module interface is a product
@@ -124,11 +125,17 @@ function checkRaw(
     Ast\Program $program,
     string $source = '',
     string $filename = '',
-    array $importContext = [],
+    ?ImportContext $importContext = null,
     CompilePurpose $purpose = CompilePurpose::Executable,
     ?array &$interface = null,
+    array $entryModules = [],
+    string $backendId = 'php',
 ): Ast\Program {
+    $importContext ??= standaloneImportContext($program->module ?? '', $backendId);
+
     $state = newState($source, $filename);
+    $state->compileBackend = $backendId;
+    $state->entryModules = $entryModules;
 
     Registry\applyImportContext($state, $program, $importContext);
     Registry\registerTypeDeclarations($state, $program);
@@ -223,23 +230,20 @@ function checkRaw(
     uniquifyCollidingInstanceMethods($state, $freeFnNames);
 
     $checked = new Ast\Program(
-        $items,
-        $program->module,
-        $program->imports,
-        $program->exports,
-        $importContext['codegen']['externalFns'] ?? [],
-        $state->constructorRenames,
-        $state->instanceEvidence,
-        $importContext['externalFnRuntimeArity'] ?? [],
-        $program->moduleBackend,
-        $program->backendMap,
-        exportedInferredSchemesFromEnv($state, $program),
-        $program->implicitMain,
-        $program->language,
-        $program->moduleDoc,
-        $program->fixityDocs,
-        externalActionReturnFns: $importContext['externalActionReturnFns'] ?? [],
-        externalTrueBindings: $importContext['externalTrueBindings'] ?? [],
+        items: $items,
+        module: $program->module,
+        imports: $program->imports,
+        exports: $program->exports,
+        interface: $importContext->interface,
+        constructorRenames: $state->constructorRenames,
+        instanceEvidence: $state->instanceEvidence,
+        moduleBackend: $program->moduleBackend,
+        backendMap: $program->backendMap,
+        exportedInferredSchemes: exportedInferredSchemesFromEnv($state, $program),
+        implicitMain: $program->implicitMain,
+        language: $program->language,
+        moduleDoc: $program->moduleDoc,
+        fixityDocs: $program->fixityDocs,
     );
 
     return $checked;

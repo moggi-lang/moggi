@@ -2,36 +2,30 @@
 
 namespace Moggi\Modules;
 
-use function Moggi\Backend\compileBackend;
-use function Moggi\Cache\moduleGet;
-use function Moggi\Cache\modulePut;
-
-use Moggi\IR;
-use Moggi\Semantics\Deriving\ClassDeriveFacts;
-
-use function Moggi\Semantics\Deriving\derivedProjectInstanceRecords;
-use function Moggi\Semantics\Kernel\boolTypeName;
-
-use Moggi\Semantics\Kinds;
-
-use function Moggi\Semantics\Registry\foreignFunctionDecl;
-
-use function Moggi\Semantics\Registry\registerSurfaceConstructorAlias;
-
-use Moggi\Semantics\TypeExpr\Scheme;
-use Moggi\Semantics\Types;
-use Moggi\Syntax\Ast;
-
-use function Moggi\Syntax\Ast\moduleName;
-use function Moggi\Syntax\isConstructorName;
-
-require_once \dirname(__DIR__) . '/semantics/deriving/framework.php';
-
 /**
  * Type-environment plumbing for the module pipeline: project-wide class index,
  * per-module local type environments, import/export env merging, and the
  * module subset selection used for `--only` typechecking.
  */
+
+use Moggi\IR;
+use Moggi\Semantics\Deriving\ClassDeriveFacts;
+use Moggi\Semantics\Kinds;
+use Moggi\Semantics\TypeExpr\Scheme;
+use Moggi\Pipeline\CompilationContext;
+use Moggi\Semantics\Types;
+use Moggi\Syntax\Ast;
+
+use function Moggi\Cache\moduleGet;
+use function Moggi\Cache\modulePut;
+use function Moggi\Semantics\Deriving\derivedProjectInstanceRecords;
+use function Moggi\Semantics\Kernel\boolTypeName;
+use function Moggi\Semantics\Registry\foreignFunctionDecl;
+use function Moggi\Semantics\Registry\registerSurfaceConstructorAlias;
+use function Moggi\Syntax\Ast\moduleName;
+use function Moggi\Syntax\isConstructorName;
+
+require_once \dirname(__DIR__) . '/semantics/deriving/framework.php';
 
 /**
  * Types stay module-scoped: the state starts from the module's declared names and
@@ -105,14 +99,16 @@ function buildModuleLocalTypes(
     array &$units,
     string $moduleName,
     array $projectClasses,
-    array $projectInstanceIndex = [],
+    array $projectInstanceIndex,
+    CompilationContext $context,
 ): void {
     $contentKey = $units[$moduleName]['contentKey'] ?? null;
     if ($contentKey !== null) {
         $cached = moduleGet(
             $units[$moduleName]['cacheRelPath'],
             'localtypes',
-            $contentKey,
+            $context->moduleKey($moduleName, $contentKey),
+            $context->backendId,
         );
         if (\is_array($cached)) {
             $units[$moduleName]['localTypes'] = $cached;
@@ -123,6 +119,8 @@ function buildModuleLocalTypes(
 
     $unit = $units[$moduleName];
     $state = Types\newState($unit['source'], $unit['path']);
+    $state->compileBackend = $context->backendId;
+    $state->entryModules = $context->entries;
     $state->classes = $projectClasses;
     Types\syncAssociatedFamiliesFromClasses($state);
     installProjectInstanceIndex($state, $projectInstanceIndex);
@@ -234,8 +232,9 @@ function buildModuleLocalTypes(
         modulePut(
             $units[$moduleName]['cacheRelPath'],
             'localtypes',
-            $contentKey,
+            $context->moduleKey($moduleName, $contentKey),
             $units[$moduleName]['localTypes'],
+            $context->backendId,
         );
     }
 }
@@ -395,8 +394,12 @@ function desugarDoForScope(Ast\AstWalkable $node): void
  * @param ?list<string> $onlyModules
  * @return array<string, array<string, mixed>>
  */
-function classModuleScopes(array $units, array $projectClasses, ?array $onlyModules = null): array
-{
+function classModuleScopes(
+    array $units,
+    array $projectClasses,
+    ?array $onlyModules,
+    string $backendId,
+): array {
     $wanted = $onlyModules !== null ? \array_fill_keys($onlyModules, true) : null;
 
     $referenced = [];
@@ -439,7 +442,6 @@ function classModuleScopes(array $units, array $projectClasses, ?array $onlyModu
         );
         $fns = [];
         $dataRefs = [];
-        $constructorArity = [];
         foreach (\array_keys($names) as $name) {
             $scheme = $env[$name] ?? null;
             if (! $scheme instanceof Scheme || $scheme->classMethod) {
@@ -457,9 +459,6 @@ function classModuleScopes(array $units, array $projectClasses, ?array $onlyModu
                     'origin' => $origin,
                     'scheme' => $scheme,
                 ];
-                $constructorArity[$name] = \count(
-                    $dataRefs[$owner]['constructors'][$name]['fields'] ?? [],
-                );
 
                 continue;
             }
@@ -472,10 +471,9 @@ function classModuleScopes(array $units, array $projectClasses, ?array $onlyModu
 
         $scopes[$module] = [
             'env' => $env,
-            'constructorArity' => $constructorArity,
             'fns' => $fns,
             'dataRefs' => $dataRefs,
-            'visible' => classModuleVisibleTypes($units, $module),
+            'visible' => classModuleVisibleTypes($units, $module, $backendId),
             'wrappers' => \is_array($units[$module]['localTypes']['intrinsicWrappers'] ?? null)
                 ? $units[$module]['localTypes']['intrinsicWrappers']
                 : [],
@@ -826,7 +824,7 @@ function moduleLocalDataNames(array $units, string $moduleName): array
  *   synonyms: array<string, mixed>
  * }
  */
-function classModuleVisibleTypes(array $units, string $moduleName): array
+function classModuleVisibleTypes(array $units, string $moduleName, string $backendId): array
 {
     $types = [];
     $synonyms = [];
@@ -842,7 +840,7 @@ function classModuleVisibleTypes(array $units, string $moduleName): array
 
     $collect($units[$moduleName]['localTypes']['data'] ?? [], $units[$moduleName]['localTypes']['typeSynonyms'] ?? []);
 
-    foreach (moduleDependencyNames($units, $moduleName) as $imported) {
+    foreach (moduleDependencyNames($units, $moduleName, $backendId) as $imported) {
         $exports = $units[$imported]['exports'] ?? null;
         if ($exports === null && isset($units[$imported]['program'], $units[$imported]['localTypes'])) {
             $exports = collectExports(
@@ -869,12 +867,12 @@ function classModuleVisibleTypes(array $units, string $moduleName): array
  *
  * @param array<string, array<string, mixed>> $units
  * @param array<string, array<string, mixed>> $classScopes
- * @return array{externalFns: array<string, string>, arity: array<string, int>, dataRefs: array<string, array<string, mixed>>, origins: array<string, string>, actionReturn: array<string, true>}
+ * @return array{externalFns: array<string, string>, callables: array<string, array{evidence: int, params: int, arity: int}>, dataRefs: array<string, array<string, mixed>>, origins: array<string, string>, actionReturn: array<string, true>}
  */
 function classScopeFunctionRefs(array $units, array $classScopes): array
 {
     $externalFns = [];
-    $arity = [];
+    $callables = [];
     $dataRefs = [];
     $origins = [];
     $actionReturn = [];
@@ -882,8 +880,7 @@ function classScopeFunctionRefs(array $units, array $classScopes): array
         foreach ($scope['fns'] ?? [] as $name => $fn) {
             $origin = $fn['origin'];
             $externalFns[$name] = resolvedSymbol($origin['module'], $origin['phpName']);
-            $arity[$name] = $scope['constructorArity'][$name]
-                ?? externalFunctionRuntimeArity($units, $origin['module'], $name, $fn['scheme']);
+            $callables[$name] = publishedCallableLayout($units, $origin['module'], $origin['phpName']);
             $origins[$name] = $origin['module'];
             if (isset(moduleActionReturnFnNames($units, $origin['module'])[$origin['phpName']])) {
                 $actionReturn[$name] = true;
@@ -895,63 +892,39 @@ function classScopeFunctionRefs(array $units, array $classScopes): array
         }
     }
 
-    return ['externalFns' => $externalFns, 'arity' => $arity, 'dataRefs' => $dataRefs, 'origins' => $origins, 'actionReturn' => $actionReturn];
+    return ['externalFns' => $externalFns, 'callables' => $callables, 'dataRefs' => $dataRefs, 'origins' => $origins, 'actionReturn' => $actionReturn];
 }
 
 /**
- * Fold class-scope symbol and data references into a module's codegen imports.
+ * Fold class-scope symbol and data references into a module's interface.
  *
- * @param array<string, mixed> $importContext
- * @param array{externalFns: array<string, string>, arity: array<string, int>, dataRefs: array<string, array<string, mixed>>, origins?: array<string, string>, actionReturn?: array<string, true>} $refs
+ * Nothing is re-rendered here: the target plan is rendered from the interface
+ * when the module is emitted, so a fact published after the import walk reaches
+ * the emitter without a second view of the interface being kept in step.
+ *
+ * @param array{externalFns: array<string, string>, callables: array<string, array{evidence: int, params: int, arity: int}>, dataRefs: array<string, array<string, mixed>>, origins?: array<string, string>, actionReturn?: array<string, true>} $refs
  * @param array<string, true> $localNames names the module binds itself
- * @param array<string, array<string, mixed>> $units project units, for origin output paths
- * @return array<string, mixed>
  */
 function mergeClassScopeRefs(
-    array $importContext,
+    ImportContext $importContext,
     array $refs,
     array $localNames = [],
     array $seenData = [],
-    array $units = [],
-    string $moduleName = '',
-    string $rootPrefix = '',
-): array {
-    foreach ($refs['actionReturn'] ?? [] as $name => $_) {
-        if (isset($localNames[$name])) {
-            continue;
-        }
-        $importContext['externalActionReturnFns'][$name] = true;
-    }
+): ImportContext {
+    $interface = $importContext->interface->withClassScopeRefs($refs, $localNames);
 
-    foreach ($refs['externalFns'] as $name => $symbol) {
-        if (isset($localNames[$name])) {
-            continue;
-        }
-        $importContext['codegen']['externalFns'][$name] ??= $symbol;
-        $importContext['externalFnRuntimeArity'][$name] ??= $refs['arity'][$name] ?? 0;
-        $originModule = $refs['origins'][$name] ?? null;
-        if (! \is_string($originModule) || $originModule === '' || $originModule === $moduleName) {
-            continue;
-        }
-        $importContext['codegen']['fnOriginModules'][$name] ??= $originModule;
-        if (! isset($importContext['codegen']['moduleOutputPaths'][$originModule])
-            && isset($units[$originModule]['path'])
-        ) {
-            $importContext['codegen']['moduleOutputPaths'][$originModule] = mogPathToOutputRelative(
-                $units[$originModule]['path'],
-                $rootPrefix,
-            );
-        }
-    }
-
+    $dataRefs = [];
     foreach ($refs['dataRefs'] ?? [] as $typeName => $info) {
-        if (isset($seenData[$typeName])) {
-            continue;
+        if (! isset($seenData[$typeName])) {
+            $dataRefs[$typeName] = $info;
         }
-        $importContext['data'][$typeName] ??= $info;
     }
 
-    return $importContext;
+    return $importContext->withInterface(
+        $dataRefs === []
+            ? $interface
+            : $interface->withExtraTypes(['data' => $dataRefs]),
+    );
 }
 
 /** @param array<string, array<string, mixed>> $units @param list<string>|null $onlyModules @return list<array{module: string, class: string, head: array<string, mixed>}> */
@@ -1120,12 +1093,12 @@ function syncExportedInferredSchemesFromTypeEnv(
  *
  * @param array<string, array<string, mixed>> $units
  */
-function isModuleActiveForCompileBackend(array $units, string $moduleName): bool
+function isModuleActiveForCompileBackend(array $units, string $moduleName, string $backendId): bool
 {
     $lower = \strtolower($moduleName);
     foreach (['php', 'jvm', 'js', 'dotnet'] as $backend) {
         if (\str_ends_with($lower, '.' . $backend)) {
-            return $backend === compileBackend();
+            return $backend === $backendId;
         }
     }
 
@@ -1137,5 +1110,5 @@ function isModuleActiveForCompileBackend(array $units, string $moduleName): bool
     $backendMap = $units[$facade]['program']->backendMap
         ?? ($units[$facade]['backendMap'] ?? []);
 
-    return resolveImplModuleName($backendMap) === $moduleName;
+    return ($units[$facade]['implModule'] ?? null) === $moduleName;
 }

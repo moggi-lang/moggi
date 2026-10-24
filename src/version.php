@@ -8,14 +8,6 @@ use function Moggi\Modules\bundledStdlibLibPath;
 use function Moggi\Modules\libraryRootMarker;
 
 /**
- * Version strings for the compiler and its bundled standard library.
- *
- * The compiler's is a plain-text `VERSION` file at the compiler root; the
- * standard library's is the `[package] version` of its own manifest, so there is
- * exactly one number to bump per component and no second file to keep in step.
- */
-
-/**
  * Compiler version, from `<compiler root>/VERSION`.
  *
  * Inside a packaged archive that file carries the build identity rather than the

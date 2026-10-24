@@ -2,7 +2,7 @@
 
 namespace Moggi\LSP;
 
-use function Moggi\Backend\setCompileBackend;
+use Moggi\Pipeline\CompilationContext;
 
 use Moggi\LSP\Analysis\AnalysisService;
 
@@ -65,11 +65,11 @@ function configureStdioErrors(): void
     \ini_set('display_errors', 'stderr');
 }
 
-function runServer(array $libDirs = []): int
+function runServer(array $libDirs = [], ?CompilationContext $context = null): int
 {
     configureStdioErrors();
-    setCompileBackend('php');
-    $svc = getAnalysisService($libDirs);
+    $context ??= CompilationContext::for('php', \Moggi\Pipeline\CompilePurpose::Library, roots: $libDirs);
+    $svc = getAnalysisService($libDirs, $context);
     $shutdownReceived = false;
     $initialized = false;
     $workDoneProgress = false;

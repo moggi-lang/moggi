@@ -83,7 +83,7 @@ function resolveDotNetForeignPath(string $path): array
  *
  * @param 'static'|'instance'|'constructor'|'intrinsic' $dispatch
  * @param 'function'|'const' $kind
- * @param ?array{params: list<string>, declared: list<string>, optionalTail: int, flat: bool} $sidecar
+ * @param ?array{params: list<string>, declared: list<string>, optionalTail: int} $sidecar
  */
 function clrSigFromMoggiType(
     Ast\TypeNode $type,
@@ -145,11 +145,10 @@ function clrSigFromMoggiType(
  * list over the shared prefix (they differ only where the entry blesses an interface with
  * `from`), and every sidecar parameter past the declaration must sit inside `optionalTail`.
  * Anything else is a compile error naming both sides — the sidecar cannot invent arguments, drop
- * them, or retype them. A flat entry names no optional tail, so any extra beyond the declaration
- * is refused with a pointer at the object form.
+ * them, or retype them.
  *
  * @param list<string> $declaredParams IL types inferred from the Moggi declaration
- * @param array{params: list<string>, declared: list<string>, optionalTail: int, flat: bool} $sidecar
+ * @param array{params: list<string>, declared: list<string>, optionalTail: int} $sidecar
  * @return list<string> the emit parameter list (the sidecar's full `params`)
  */
 function applyDotNetSidecarParams(
@@ -170,7 +169,7 @@ function applyDotNetSidecarParams(
 
 /**
  * @param list<string> $declaredParams
- * @param array{params: list<string>, declared: list<string>, optionalTail: int, flat: bool} $sidecar
+ * @param array{params: list<string>, declared: list<string>, optionalTail: int} $sidecar
  */
 function dotNetSidecarMismatch(
     string $name,
@@ -186,12 +185,6 @@ function dotNetSidecarMismatch(
     }
     $nExtra = $nSidecar - $nDeclared;
     if ($nExtra > $sidecar['optionalTail']) {
-        if ($sidecar['flat']) {
-            return "foreign dotnet `{$name}` ({$path}) passes {$nDeclared} argument(s)"
-                . " but its sidecar entry lists {$nSidecar}: a flat entry cannot bless extras,"
-                . ' spell it as {"params": [...], "optionalTail": N}';
-        }
-
         return "foreign dotnet `{$name}` ({$path}) passes {$nDeclared} argument(s)"
             . " but its sidecar entry lists {$nSidecar} with optionalTail {$sidecar['optionalTail']}"
             . ' — the entry cannot invent required arguments';

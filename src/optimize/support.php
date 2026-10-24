@@ -2,17 +2,14 @@
 
 namespace Moggi\Optimize\Support;
 
-use function Moggi\Backend\Meta\lambdaMetaFromCaptures;
 
 use Moggi\IR;
 
-use function Moggi\IR\Visit\freeLocalsInBlock;
 use function Moggi\IR\Visit\mapOperandChildren;
 use function Moggi\IR\Visit\operandChildren;
 use function Moggi\IR\Visit\stmtDirectOperands;
 use function Moggi\IR\Visit\stmtNestedBlocks;
 use function Moggi\IR\Visit\walkBlock;
-use function Moggi\Semantics\Kernel\isBoolCtor;
 
 function operandEqual(IR\Operand $left, IR\Operand $right): bool
 {
@@ -362,33 +359,6 @@ function isLambdaName(string $name): bool
     return \str_starts_with($name, 'λ');
 }
 
-/** The top-level function a recursive local `let`/`where` group is lifted to. */
-function isLetrecName(string $name): bool
-{
-    return \str_starts_with($name, '__letrec');
-}
-
-/**
- * A constructor of the host-boolean type. The library declares it
- * (`Data.Bool`: `data Bool = False | True`), the backends lower it to the host boolean, so its
- * constructors are bare in IR — never qualified to `Data.Bool::True` the way a user data
- * constructor is — and their identity is asked of the kernel key rather than spelled here.
- */
-function isWiredInBoolCtor(string $name): bool
-{
-    return isBoolCtor($name);
-}
-
-/**
- * A lifted function that is called at its free locals followed by its declared
- * parameters: an anonymous lambda, or the `__letrecN` function a recursive
- * `let`/`where` group is lowered to.
- */
-function isCapturedFnName(string $name): bool
-{
-    return isLambdaName($name) || isLetrecName($name);
-}
-
 function preserveMatchArm(IR\MatchArm $arm, IR\Block $body): IR\MatchArm
 {
     return $arm->withBody($body);
@@ -421,21 +391,70 @@ function mapStmtNestedBlocks(IR\Stmt $stmt, callable $mapBlock): IR\Stmt
 }
 
 /**
- * The captures of every lifted function in `$byName` (see
- * {@see indexCapturedFunctions}).
+ * Whether reading a call's arguments runs nothing: a temp, a local, a literal or a function
+ * reference is already a value, so a call built only from them can be dropped or repeated
+ * without an observable effect.
  *
- * @param array<string, IR\FunctionDecl> $byName
- * @return array<string, array{captures: list<string>, params: list<string>}>
+ * @param list<IR\Operand> $args
  */
-function buildLambdaMeta(array $byName): array
+function callArgsAreLeaves(array $args): bool
 {
-    return lambdaMetaFromCaptures(
-        $byName,
-        static fn (IR\FunctionDecl $function): array => freeLocalsInBlock(
-            $function->body,
-            \array_fill_keys($function->params, true),
-        ),
+    foreach ($args as $arg) {
+        if (! ($arg instanceof IR\Temp
+            || $arg instanceof IR\Local
+            || $arg instanceof IR\FnRef
+            || $arg instanceof IR\ConstInt
+            || $arg instanceof IR\ConstStr
+            || $arg instanceof IR\ConstChar
+            || $arg instanceof IR\ConstDouble
+            || $arg instanceof IR\Unit)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/**
+ * Drop the calls named in `$droppable` whose dest temp nothing else in the block reads.
+ *
+ * `$droppable` is the set of dests the caller has already established to be pure allocations
+ * (a dictionary built from leaves, say). The set is decided from what the call *is* — its
+ * indexed identity and its arguments — never from the callee's spelling, so an ordinary
+ * declaration can never be mistaken for a factory. A call whose dest is not named is kept.
+ *
+ * @param list<IR\Stmt> $items
+ * @param array<int, true> $droppable
+ * @return list<IR\Stmt>
+ */
+function dropUnreadTemps(array $items, array $droppable): array
+{
+    if ($droppable === []) {
+        return $items;
+    }
+
+    $used = [];
+    walkBlock(
+        new IR\Block($items),
+        static function (IR\Stmt $stmt): void {
+        },
+        static function (IR\Operand $operand) use (&$used): void {
+            if ($operand instanceof IR\Temp) {
+                $used[$operand->id] = true;
+            }
+        },
     );
+
+    $out = [];
+    foreach ($items as $item) {
+        if ($item instanceof IR\Call && isset($droppable[$item->dest]) && ! isset($used[$item->dest])) {
+            continue;
+        }
+
+        $out[] = $item;
+    }
+
+    return $out;
 }
 
 /** The lifted functions of a module, the ones that take captures. @param list<IR\FunctionDecl> $functions */
@@ -443,7 +462,7 @@ function indexCapturedFunctions(array $functions): array
 {
     $index = [];
     foreach ($functions as $function) {
-        if (isCapturedFnName($function->name)) {
+        if ($function->kind->takesCaptures()) {
             $index[$function->name] = $function;
         }
     }

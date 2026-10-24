@@ -46,7 +46,7 @@ try {
     $threw = false;
 
     try {
-        projectSourceClosure([$dirs['a'] . '/Alpha.mog'], [$dirs['a'], $dirs['b']]);
+        projectSourceClosure([$dirs['a'] . '/Alpha.mog'], [$dirs['a'], $dirs['b']], 'php');
     } catch (TypeError $error) {
         $threw = true;
         $assert(
@@ -62,7 +62,7 @@ try {
     $assert($threw, 'a program that reaches a doubly offered name must be refused');
 
     $write($dirs['a'], 'Other');
-    [$files] = projectSourceClosure([$dirs['a'] . '/Other.mog'], [$dirs['a'], $dirs['b']]);
+    [$files] = projectSourceClosure([$dirs['a'] . '/Other.mog'], [$dirs['a'], $dirs['b']], 'php');
     $assert(
         \count($files) === 1 && canonicalPath($files[0]) === canonicalPath($dirs['a'] . '/Other.mog'),
         'a name no import reaches is not resolved, so nothing clashes',

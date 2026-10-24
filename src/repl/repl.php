@@ -2,8 +2,6 @@
 
 namespace Moggi\Repl;
 
-use function Moggi\Backend\setCompileBackend;
-
 use function Moggi\Syntax\Parser\parseReplFragment;
 
 use Moggi\Syntax\Parser\ReplFragment;
@@ -15,7 +13,6 @@ use Moggi\Syntax\Parser\ReplFragment;
  */
 function runLoop(State $state, $input = null, bool $quiet = false): int
 {
-    setCompileBackend($state->backend);
     $in = $input ?? STDIN;
 
     if (! $quiet) {

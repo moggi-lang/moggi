@@ -2,7 +2,14 @@
 
 namespace Moggi\Modules;
 
-use function Moggi\Backend\compileBackend;
+use Moggi\Semantics\TypeExpr\Scheme;
+use Moggi\Semantics\TypeExpr\TArrow;
+use Moggi\Semantics\TypeExpr\TCon;
+use Moggi\Semantics\TypeExpr\TVar;
+use Moggi\Semantics\TypeExpr\Type;
+use Moggi\Semantics\Types\TypeCheckState;
+use Moggi\Semantics\Types\TypeError;
+use Moggi\Syntax\Ast;
 
 use const Moggi\Semantics\IntrinsicRegistry\MODULE_IO;
 use const Moggi\Semantics\IntrinsicRegistry\MODULE_PRIM;
@@ -10,25 +17,11 @@ use const Moggi\Semantics\IntrinsicRegistry\MODULE_ST;
 
 use function Moggi\Semantics\Kinds\dataKind;
 use function Moggi\Semantics\Kinds\registerTypeKind;
-
-use Moggi\Semantics\TypeExpr\Scheme;
-use Moggi\Semantics\TypeExpr\TArrow;
-use Moggi\Semantics\TypeExpr\TCon;
-
-use Moggi\Semantics\TypeExpr\TVar;
-use Moggi\Semantics\TypeExpr\Type;
-
 use function Moggi\Semantics\Types\canonicalizePrimitiveTypes;
 use function Moggi\Semantics\Types\registerData;
 use function Moggi\Semantics\Types\registerForeignType;
 use function Moggi\Semantics\Types\registerTypeSynonym;
-
-use Moggi\Semantics\Types\TypeCheckState;
-use Moggi\Semantics\Types\TypeError;
-
 use function Moggi\Semantics\Types\typeToString;
-
-use Moggi\Syntax\Ast;
 
 /** @param array<string, string> $mapping */
 function typesAlphaEqual(Type $left, Type $right, array &$mapping = []): bool
@@ -80,9 +73,9 @@ function isFacadeProgram(Ast\Program $program): bool
  *
  * @param array<string, string> $backendMap
  */
-function resolveImplModuleName(array $backendMap, ?string $compileBackend = null): ?string
+function resolveImplModuleName(array $backendMap, string $backendId): ?string
 {
-    return $backendMap[$compileBackend ?? compileBackend()] ?? null;
+    return $backendMap[$backendId] ?? null;
 }
 
 /**
@@ -107,7 +100,23 @@ function facadeImplModuleNameFor(string $moduleName, array $units): ?string
         return null;
     }
 
-    $implName = resolveImplModuleName($backendMap);
+    if (\array_key_exists('implModule', $unit)) {
+        $implName = $unit['implModule'];
+        if ($implName === null) {
+            throw facadeMissingBackendError($moduleName, $backendMap, $unit);
+        }
+
+        return $implName;
+    }
+
+    $backendId = $unit['compileBackend'] ?? null;
+    if (! \is_string($backendId) || $backendId === '') {
+        throw new \RuntimeException(
+            "module `{$moduleName}` has no compile target: prepare it with a CompilationContext",
+        );
+    }
+
+    $implName = resolveImplModuleName($backendMap, $backendId);
     if ($implName === null) {
         throw facadeMissingBackendError($moduleName, $backendMap, $unit);
     }
@@ -124,7 +133,7 @@ function facadeMissingBackendError(string $moduleName, array $backendMap, array 
     $span = $unit['headerSpan'] ?? null;
 
     return new TypeError(
-        "module `{$moduleName}` has no `" . compileBackend() . '` implementation (it implements: '
+        "module `{$moduleName}` has no `" . (string) ($unit['compileBackend'] ?? 'unknown') . '` implementation (it implements: '
             . \implode(', ', \array_keys($backendMap)) . ')',
         (string) ($unit['path'] ?? ''),
         (string) ($unit['source'] ?? ''),
@@ -134,13 +143,13 @@ function facadeMissingBackendError(string $moduleName, array $backendMap, array 
     );
 }
 
-function facadeImplModuleName(Ast\Program $program): ?string
+function facadeImplModuleName(Ast\Program $program, string $backendId): ?string
 {
     if (! isFacadeProgram($program)) {
         return null;
     }
 
-    return resolveImplModuleName($program->backendMap);
+    return resolveImplModuleName($program->backendMap, $backendId);
 }
 
 /** @param array<string, array<string, mixed>> $units */
@@ -226,10 +235,27 @@ function validateFacadeExport(
     }
 }
 
-/** @param array<string, array<string, mixed>> $units @return list<string> */
-function facadeDependencyModules(array $units, string $moduleName): array
+/**
+ * The implementation module a facade depends on for one target.
+ *
+ * A facade declares every backend it implements, but a compilation carries
+ * only the one it selected: naming the other implementations as dependencies
+ * would make the module graph demand a module the closure never resolved.
+ * Which one is selected is the target's answer, so it is passed in rather than
+ * read from process state.
+ *
+ * @param array<string, array<string, mixed>> $units
+ * @return list<string>
+ */
+function facadeDependencyModules(array $units, string $moduleName, string $backendId): array
 {
-    $implName = facadeImplModuleNameFor($moduleName, $units);
+    $unit = $units[$moduleName] ?? [];
+    $program = $unit['program'] ?? null;
+    $backendMap = $program instanceof Ast\Program
+        ? $program->backendMap
+        : ($unit['backendMap'] ?? []);
+
+    $implName = resolveImplModuleName($backendMap, $backendId);
 
     return $implName === null ? [] : [$implName];
 }

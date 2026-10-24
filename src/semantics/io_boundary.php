@@ -3,16 +3,14 @@
 namespace Moggi\Semantics\IoBoundary;
 
 use Moggi\IR\EntryPointKind;
+use Moggi\Semantics\Types\TypeError;
+use Moggi\Syntax\Ast;
 
 use function Moggi\Semantics\IntrinsicRegistry\ioPrimopRole;
 use function Moggi\Semantics\IntrinsicRegistry\isIoIntrinsic;
-
 use function Moggi\Semantics\IntrinsicRegistry\primopArity;
 use function Moggi\Semantics\Kernel\bindRole;
 use function Moggi\Semantics\Kinds\canonicalTypeConName;
-
-use Moggi\Semantics\Types\TypeError;
-use Moggi\Syntax\Ast;
 
 /**
  * Validate IO surface constraints on a typed program.

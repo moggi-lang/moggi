@@ -1,11 +1,13 @@
 <?php declare(strict_types=1);
 
-// A runtime requirement a registry cannot fetch, so the resolver gathers it
-// across a closure and answers which runtime provides it. These checks cover the
-// `[php.extensions]` table and the entry syntax, the merge across the root and
-// installed packages, and the two runtimes: the PHP running this and the micro
-// runtime a `--native` build appends to. The compiler is a native executable, so
-// there is one requirement set and no role axis.
+/**
+ * Runtime requirements cannot be fetched from a registry, so the resolver
+ * gathers them across the dependency closure and determines which runtime
+ * provides each one. Tests cover the `[php.extensions]` table and entry
+ * syntax, merging root and installed-package requirements, and both runtimes:
+ * the current PHP and the micro runtime appended by `--native` builds.
+ * The compiler is a native executable, so requirements have no role axis.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
@@ -13,12 +15,10 @@ while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
 }
 require $root . '/src/compiler.php';
 
-use function Moggi\Registry\collectPhpExtensions;
-
-use function Moggi\Registry\descriptorProblems;
-
 use const Moggi\Registry\EXTENSION_MANIFEST;
 
+use function Moggi\Registry\collectPhpExtensions;
+use function Moggi\Registry\descriptorProblems;
 use function Moggi\Registry\installDir;
 use function Moggi\Registry\installedRequirements;
 use function Moggi\Registry\microRuntimeExtensions;
@@ -120,10 +120,6 @@ try {
     $assert($descriptors['demo']['requirements'] === ['php.extensions' => ['redis', 'gd']], 'the installed package contributes its own entries');
 
     // --- a runtime's recorded manifest --------------------------------------
-    // The running PHP's set is the host's, not this test's, so the manifest is
-    // built from a name this PHP certainly reports plus a name no runtime has:
-    // `$present` stands for an extension a runtime has, `$absent` for one it
-    // lacks. Neither the names nor the counts then depend on what a host ships.
     $running = phpRuntimeExtensions();
     $present = $running[0] ?? 'core';
     $absent = 'moggi-no-such-extension';

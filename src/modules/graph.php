@@ -2,24 +2,18 @@
 
 namespace Moggi\Modules;
 
-use function Moggi\Backend\compileBackend;
+use Moggi\Semantics\Types\TypeError;
+use Moggi\Syntax\Ast;
+use Moggi\Syntax\Lexer\LexError;
+use Moggi\Syntax\Parser\ParseError;
+
 use function Moggi\Errors\appendDidYouMean;
 use function Moggi\Paths\canonicalPath;
 use function Moggi\Paths\canonicalSeparators;
-
-use Moggi\Semantics\Types\TypeError;
-use Moggi\Syntax\Ast;
-
 use function Moggi\Syntax\Ast\moduleName;
 use function Moggi\Syntax\Lexer\lex;
-
-use Moggi\Syntax\Lexer\LexError;
-
 use function Moggi\Syntax\Parser\importedFixityForImports;
 use function Moggi\Syntax\Parser\mergeFixity;
-
-use Moggi\Syntax\Parser\ParseError;
-
 use function Moggi\Syntax\Parser\parseModuleHeader;
 
 /**
@@ -279,8 +273,7 @@ function preludeDependencyClosure(string $fromPath): array
             $header['imports'],
         );
 
-        $implName = resolveImplModuleName($header['backendMap'] ?? []);
-        if ($implName !== null) {
+        foreach (\array_values($header['backendMap'] ?? []) as $implName) {
             $dependencies[] = $implName;
         }
 
@@ -401,7 +394,7 @@ function cachedModuleHeader(string $path): array
  *
  * @return array{0: list<string>, 1: string}
  */
-function moduleFileClosure(string $path): array
+function moduleFileClosure(string $path, string $backendId): array
 {
     $realPath = resolvePath($path);
     if (! \is_file($realPath)) {
@@ -538,7 +531,7 @@ function moduleFileClosure(string $path): array
             }
         }
 
-        $implName = resolveImplModuleName($header['backendMap'] ?? []);
+        $implName = resolveImplModuleName($header['backendMap'] ?? [], $backendId);
         if ($implName !== null && ! isset($needed[$implName])) {
             $queue[] = $implName;
         }
@@ -598,25 +591,23 @@ function moduleFileClosure(string $path): array
 }
 
 /** @return array{0: list<string>, 1: string} */
-function moduleFileClosureCached(string $path): array
+function moduleFileClosureCached(string $path, string $backendId): array
 {
     static $closures = [];
 
     $realPath = resolvePath($path);
     if (! \is_file($realPath)) {
-        return moduleFileClosure($path);
+        return moduleFileClosure($path, $backendId);
     }
 
     $stdlibRoot = locateStdlibRoot($path);
     $stdlibMtime = $stdlibRoot !== null ? stdlibMaxMtime($stdlibRoot) : 0;
-    $backend = compileBackend();
-
-    $key = $realPath . ':' . (\filemtime($realPath) ?: 0) . ':' . $stdlibMtime . ':' . $backend;
+    $key = $realPath . ':' . (\filemtime($realPath) ?: 0) . ':' . $stdlibMtime . ':' . $backendId;
     if (isset($closures[$key])) {
         return $closures[$key];
     }
 
-    $closure = moduleFileClosure($path);
+    $closure = moduleFileClosure($path, $backendId);
     $closures[$key] = $closure;
 
     return $closure;
@@ -899,7 +890,7 @@ function importSiteAt(?array $origin, string $fallbackPath): array
  * @param list<string> $files
  * @return list<string>
  */
-function stdlibSourcesMissingFrom(array $files, ?string $stdlibDir): array
+function stdlibSourcesMissingFrom(array $files, ?string $stdlibDir, string $backendId): array
 {
     if ($stdlibDir === null) {
         return [];
@@ -911,7 +902,7 @@ function stdlibSourcesMissingFrom(array $files, ?string $stdlibDir): array
     }
 
     try {
-        [$closure] = moduleFileClosureCached($seed);
+        [$closure] = moduleFileClosureCached($seed, $backendId);
     } catch (\Throwable) {
         return [];
     }
@@ -972,7 +963,7 @@ function stdlibSourcesMissingFrom(array $files, ?string $stdlibDir): array
  * @param list<string> $libDirs    additional module search roots
  * @return array{0: list<string>, 1: string} [closureFiles, commonRoot]
  */
-function projectSourceClosure(array $inputFiles, array $libDirs): array
+function projectSourceClosure(array $inputFiles, array $libDirs, string $backendId): array
 {
     [$libraryPaths, $duplicates] = libraryModuleScan($libDirs);
     $byModule = [...syntheticCompilerModuleIndex(), ...$libraryPaths];
@@ -1022,7 +1013,7 @@ function projectSourceClosure(array $inputFiles, array $libDirs): array
 
     $primaryPath = $byModule[\array_key_first($entryModules)];
 
-    return closureFromModuleIndex($entryModules, $byModule, $primaryPath, $duplicates);
+    return closureFromModuleIndex($entryModules, $byModule, $primaryPath, $duplicates, $backendId);
 }
 
 /**
@@ -1047,7 +1038,8 @@ function closureFromModuleIndex(
     array $entryModules,
     array $byModule,
     string $primaryPath,
-    array $duplicates = [],
+    array $duplicates,
+    string $backendId,
 ): array {
     $implOwners = backendImplOwners($byModule);
 
@@ -1136,7 +1128,7 @@ function closureFromModuleIndex(
             }
         }
 
-        $implName = resolveImplModuleName($header['backendMap'] ?? []);
+        $implName = resolveImplModuleName($header['backendMap'] ?? [], $backendId);
         if ($implName !== null && ! isset($needed[$implName])) {
             $queue[] = $implName;
         }
@@ -1162,6 +1154,8 @@ function closureFromModuleIndex(
         }
     }
 
+    $needed = withPreludeDependencyClosure($needed);
+
     $files = [];
     foreach ($needed as $modulePath) {
         if (! isSyntheticCompilerPath($modulePath)) {
@@ -1177,10 +1171,63 @@ function closureFromModuleIndex(
 }
 
 /**
+ * Extend a closure with the Prelude dependency closure when it carries any of
+ * its members.
+ *
+ * Modules inside the Prelude closure deliberately import neither `Prelude`
+ * (that would be a cycle) nor one another's instances, so they are only
+ * well-formed together with the rest of the closure: `Data.Semigroup` derives
+ * `Eq` for a list field and needs the `Eq [a]` instance `Data.List` declares.
+ * A project that reaches one of them without the others — a
+ * `NoImplicitPrelude` module importing `Data.Int` is the ordinary case —
+ * otherwise type-checks them without the instances they were written against,
+ * and only succeeds by accident when another prepare happened to run first.
+ * Declaring the closure here makes the module set the compilation's input
+ * instead of a leftover from whatever ran before it.
+ *
+ * @param array<string, string> $needed module name => source path
+ * @return array<string, string>
+ */
+function withPreludeDependencyClosure(array $needed): array
+{
+    $stdlibPath = null;
+    foreach ($needed as $modulePath) {
+        if (locateStdlibRoot($modulePath) !== null) {
+            $stdlibPath = $modulePath;
+
+            break;
+        }
+    }
+
+    if ($stdlibPath === null) {
+        return $needed;
+    }
+
+    $prelude = preludeDependencyClosure($stdlibPath);
+    if ($prelude === [] || \array_intersect_key($needed, $prelude) === []) {
+        return $needed;
+    }
+
+    $root = locateStdlibRoot($stdlibPath);
+    if ($root === null) {
+        return $needed;
+    }
+
+    $index = stdlibModuleIndex($root);
+    foreach ($prelude as $moduleName => $_) {
+        if (! isset($needed[$moduleName]) && isset($index[$moduleName])) {
+            $needed[$moduleName] = $index[$moduleName];
+        }
+    }
+
+    return $needed;
+}
+
+/**
  * @param array<string, array<string, mixed>> $units
  * @return list<string>
  */
-function moduleDependencyNames(array $units, string $moduleName): array
+function moduleDependencyNames(array $units, string $moduleName, string $backendId): array
 {
     $imports = \array_map(
         static fn (Ast\ImportDecl $import): string => moduleName($import->path),
@@ -1190,7 +1237,7 @@ function moduleDependencyNames(array $units, string $moduleName): array
     if (isset($units[$moduleName]['program'])
         || (($units[$moduleName]['backendMap'] ?? []) !== [])
     ) {
-        $imports = [...$imports, ...facadeDependencyModules($units, $moduleName)];
+        $imports = [...$imports, ...facadeDependencyModules($units, $moduleName, $backendId)];
     }
 
     return $imports;
@@ -1201,13 +1248,13 @@ function moduleDependencyNames(array $units, string $moduleName): array
  * @param list<string> $pending
  * @param array<string, true> $sortedSet
  */
-function throwCyclicModuleImports(array $units, array $pending, array $sortedSet): void
+function throwCyclicModuleImports(array $units, array $pending, array $sortedSet, string $backendId): void
 {
     $pendingSet = \array_fill_keys($pending, true);
     $deps = [];
     foreach ($pending as $moduleName) {
         $unsatisfied = [];
-        foreach (moduleDependencyNames($units, $moduleName) as $importName) {
+        foreach (moduleDependencyNames($units, $moduleName, $backendId) as $importName) {
             if (! isset($sortedSet[$importName]) && isset($pendingSet[$importName])) {
                 $unsatisfied[] = $importName;
             }
@@ -1326,7 +1373,7 @@ function findModuleImportCycle(array $deps): ?array
  * @param array<string, array<string, mixed>> $units
  * @return list<string>
  */
-function sortModulesByDependencies(array $units): array
+function sortModulesByDependencies(array $units, string $backendId): array
 {
     $pending = \array_keys($units);
     $sorted = [];
@@ -1335,7 +1382,7 @@ function sortModulesByDependencies(array $units): array
     while ($pending !== []) {
         $progress = false;
         foreach ($pending as $index => $moduleName) {
-            $imports = moduleDependencyNames($units, $moduleName);
+            $imports = moduleDependencyNames($units, $moduleName, $backendId);
 
             $ready = true;
             foreach ($imports as $importName) {
@@ -1370,7 +1417,7 @@ function sortModulesByDependencies(array $units): array
         }
 
         if (! $progress) {
-            throwCyclicModuleImports($units, \array_values($pending), $sortedSet);
+            throwCyclicModuleImports($units, \array_values($pending), $sortedSet, $backendId);
         }
     }
 

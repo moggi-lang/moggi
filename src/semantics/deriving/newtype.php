@@ -12,10 +12,11 @@ use Moggi\Semantics\TypeExpr\TVar;
 use Moggi\Semantics\TypeExpr\TVarApp;
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Semantics\Types\TypeCheckState;
+use Moggi\Syntax\Ast;
 
+use function Moggi\Semantics\Types\typeChildren;
 use function Moggi\Semantics\Types\typeFail;
 
-use Moggi\Syntax\Ast;
 
 /**
  * Generalized newtype deriving: reuse the underlying type's instance by
@@ -192,27 +193,17 @@ function assertNominalGndEligible(TypeCheckState $state, Ast\DerivingClassRef $r
  */
 function internalTypeUsesParamAsConstructor(Type $type, string $param, bool $paramIsHigherKinded): bool
 {
-    if ($type instanceof TVarApp) {
-        if ($type->name === $param) {
-            return true;
-        }
-    } elseif ($type instanceof TVar && $paramIsHigherKinded && $type->name === $param) {
+    if ($type instanceof TVarApp && $type->name === $param) {
+        return true;
+    }
+    if ($type instanceof TVar && $paramIsHigherKinded && $type->name === $param) {
         return true;
     }
 
-    if ($type instanceof TVarApp || $type instanceof TCon) {
-        foreach ($type->args as $arg) {
-            if (internalTypeUsesParamAsConstructor($arg, $param, $paramIsHigherKinded)) {
-                return true;
-            }
+    foreach (typeChildren($type) as $child) {
+        if (internalTypeUsesParamAsConstructor($child, $param, $paramIsHigherKinded)) {
+            return true;
         }
-
-        return false;
-    }
-
-    if ($type instanceof TArrow) {
-        return internalTypeUsesParamAsConstructor($type->from, $param, $paramIsHigherKinded)
-            || internalTypeUsesParamAsConstructor($type->to, $param, $paramIsHigherKinded);
     }
 
     return false;
@@ -329,15 +320,14 @@ function delegateMentionsParam(Type|array $type, string $param): bool
     if ($type instanceof TVar) {
         return $type->name === $param;
     }
-    if ($type instanceof TVarApp) {
-        return $type->name === $param || delegateMentionsParam($type->args, $param);
+    if ($type instanceof TVarApp && $type->name === $param) {
+        return true;
     }
-    if ($type instanceof TCon) {
-        return delegateMentionsParam($type->args, $param);
-    }
-    if ($type instanceof TArrow) {
-        return delegateMentionsParam($type->from, $param)
-            || delegateMentionsParam($type->to, $param);
+
+    foreach (typeChildren($type) as $child) {
+        if (delegateMentionsParam($child, $param)) {
+            return true;
+        }
     }
 
     return false;

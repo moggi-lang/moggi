@@ -12,7 +12,6 @@ use Moggi\Semantics\TypeExpr\TStringLit;
 use Moggi\Semantics\TypeExpr\TUnit;
 use Moggi\Semantics\TypeExpr\TVar;
 use Moggi\Semantics\TypeExpr\Type;
-
 use Moggi\Syntax\Ast;
 
 /**
@@ -41,26 +40,11 @@ function normalizeType(
             : new TArrow($from, $to);
     }
 
-    if ($type instanceof TPromoted) {
-        if ($type->args === []) {
-            return $type;
-        }
-
-        $args = [];
-        $changed = false;
-        foreach ($type->args as $arg) {
-            $normalized = normalizeType($state, $arg, $expanding, $reduceFamilies);
-            $args[] = $normalized;
-            if ($normalized !== $arg) {
-                $changed = true;
-            }
-        }
-
-        return $changed ? new TPromoted($type->name, $args) : $type;
-    }
-
     if (! $type instanceof TCon) {
-        return $type;
+        return mapTypeChildren(
+            $type,
+            static fn (Type $child): Type => normalizeType($state, $child, $expanding, $reduceFamilies),
+        );
     }
 
     $args = [];

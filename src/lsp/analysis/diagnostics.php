@@ -2,15 +2,14 @@
 
 namespace Moggi\LSP\Analysis;
 
-use function Moggi\LSP\Protocol\compilerToLsp;
-use function Moggi\LSP\Protocol\pathToUri;
-
 use Moggi\Modules\PreparedProject;
 use Moggi\Semantics\Types\TypeError;
 use Moggi\Syntax\Ast;
-
 use Moggi\Syntax\Lexer\LexError;
 use Moggi\Syntax\Parser\ParseError;
+
+use function Moggi\LSP\Protocol\compilerToLsp;
+use function Moggi\LSP\Protocol\pathToUri;
 
 /**
  * Stable resultId for a diagnostics snapshot (LSP 3.18 pull model): a short

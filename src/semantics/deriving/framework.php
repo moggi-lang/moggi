@@ -3,23 +3,19 @@
 namespace Moggi\Semantics\Deriving;
 
 use Moggi\Semantics\TypeExpr\Type;
+use Moggi\Semantics\Types\TypeCheckState;
+use Moggi\Syntax\Ast;
 
 use function Moggi\Semantics\Types\associatedEquationsMapFromDecl;
 use function Moggi\Semantics\Types\astType;
-
 use function Moggi\Semantics\Types\checkInstance;
 use function Moggi\Semantics\Types\evidenceFunctionName;
 use function Moggi\Semantics\Types\friendlyTypeVarNames;
 use function Moggi\Semantics\Types\instanceHeadIndexKeyFromAst;
 use function Moggi\Semantics\Types\instanceHeadsMatch;
 use function Moggi\Semantics\Types\newState;
-
-use Moggi\Semantics\Types\TypeCheckState;
-
 use function Moggi\Semantics\Types\typeFail;
 use function Moggi\Semantics\Types\typeToString;
-
-use Moggi\Syntax\Ast;
 
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/class_facts.php';

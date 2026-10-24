@@ -24,6 +24,19 @@ final class TypeCheckState
     /** @var array<string, Type> */
     public array $subst = [];
 
+    /**
+     * The backend this module is being checked for. A foreign import or type
+     * names one backend; it is active only when that is this one.
+     */
+    public string $compileBackend = 'php';
+
+    /**
+     * Entry modules of the compilation this check belongs to.
+     *
+     * @var array<string, true>
+     */
+    public array $entryModules = [];
+
     /** @var array<string, Scheme> */
     public array $env = [];
 
@@ -81,6 +94,19 @@ final class TypeCheckState
      * @var array<string, array<string, Scheme>>
      */
     public array $classModuleScopes = [];
+
+    /**
+     * Module whose default body is being checked, and the names that body must
+     * resolve there.
+     *
+     * A default body is copied into the instance's AST, but its references
+     * belong to the declaring module. Recording that here lets name resolution
+     * write the declaring module into `Variable::$resolvedOrigin`, which lowering
+     * follows instead of the instance module's same-named binding.
+     *
+     * @var array<string, string> name => declaring module
+     */
+    public array $defaultBodyOrigins = [];
 
     /** @var array<string, string> */
     public array $constructorRenames = [];
@@ -366,6 +392,10 @@ final class TypeCheckState
         public string $source,
         public string $filename = '',
         public int $fresh = 0,
+        string $compileBackend = 'php',
+        array $entryModules = [],
     ) {
+        $this->compileBackend = $compileBackend;
+        $this->entryModules = $entryModules;
     }
 }

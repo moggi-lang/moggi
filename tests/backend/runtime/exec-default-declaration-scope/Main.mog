@@ -1,0 +1,15 @@
+module Main where
+
+import Provider (Wrap(..), C(..))
+import System.IO (putStrLn)
+import Text.Show (show)
+
+-- Shadows Provider.helper. The default body was written in Provider and must
+-- keep calling Provider.helper, not this one.
+helper :: Int -> Int
+helper x = x
+
+instance C Wrap where
+
+main :: IO ()
+main = putStrLn (show (method (Wrap 0)))

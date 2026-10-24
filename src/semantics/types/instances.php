@@ -2,14 +2,8 @@
 
 namespace Moggi\Semantics\Types;
 
-use function Moggi\Semantics\IntrinsicRegistry\isIoIntrinsic;
-use function Moggi\Semantics\IntrinsicRegistry\isStIntrinsic;
-
 use Moggi\Semantics\Kinds;
 use Moggi\Semantics\TypeExpr\Scheme;
-
-use function Moggi\Semantics\TypeExpr\scheme;
-
 use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TChar;
 use Moggi\Semantics\TypeExpr\TCon;
@@ -30,9 +24,12 @@ use Moggi\Semantics\TypeExpr\TWord32;
 use Moggi\Semantics\TypeExpr\TWord64;
 use Moggi\Semantics\TypeExpr\TWord8;
 use Moggi\Semantics\TypeExpr\Type;
-
 use Moggi\Syntax\Ast;
 use Moggi\Syntax\Ast\TypeNode;
+
+use function Moggi\Semantics\IntrinsicRegistry\isIoIntrinsic;
+use function Moggi\Semantics\IntrinsicRegistry\isStIntrinsic;
+use function Moggi\Semantics\TypeExpr\scheme;
 
 require_once __DIR__ . '/type_core.php';
 require_once __DIR__ . '/constraints.php';
@@ -403,6 +400,28 @@ function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
         }
         $defaulted = isset($defaultedMethods[$method->name]);
         $scope = $defaulted ? defaultBodyScope($state, $classInfo) : [];
+        $defaultOrigins = [];
+        if ($defaulted) {
+            $defaultModule = (string) ($classInfo['module'] ?? '');
+            $classScope = $defaultModule === $state->currentModule
+                ? null
+                : ($state->classModuleScopes[$defaultModule] ?? null);
+            $classFns = \is_array($classScope['fns'] ?? null) ? $classScope['fns'] : [];
+            foreach ($scope as $name => $scheme) {
+                if (! $scheme instanceof Scheme || $scheme->classMethod || isset($constraintEnv[$name])) {
+                    continue;
+                }
+                $origin = $classFns[$name]['origin'] ?? null;
+                if (\is_array($origin)) {
+                    $defaultOrigins[$name] = $origin['module'] . '::' . $origin['phpName'];
+                } elseif ($defaultModule === $state->currentModule) {
+                    $defaultOrigins[$name] = $state->externalFns[$name]
+                        ?? $defaultModule . '::' . $name;
+                }
+            }
+        }
+        $savedDefaultOrigins = $state->defaultBodyOrigins;
+        $state->defaultBodyOrigins = $defaultOrigins;
         $installedTypes = $defaulted
             ? installDefaultBodyTypes($state, defaultBodyVisibleTypes($state, $classInfo))
             : ['names' => [], 'kinds' => [], 'synonyms' => [], 'wrappers' => [], 'env' => [], 'data' => [], 'promoted' => []];
@@ -420,6 +439,7 @@ function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
                 $headType,
             );
         } finally {
+            $state->defaultBodyOrigins = $savedDefaultOrigins;
             removeDefaultBodyTypes($state, $installedTypes);
         }
         $state->instanceMethodNames[$fn->name] = true;
@@ -1238,40 +1258,24 @@ function freshenStableTypeKeyRec(Type $type, array &$rename, int &$n): string
         return $rename[$type->name];
     }
 
-    if ($type instanceof TCon) {
-        if ($type->args === []) {
-            return $type->name;
-        }
-        $args = [];
-        foreach ($type->args as $arg) {
-            $args[] = freshenStableTypeKeyRec($arg, $rename, $n);
-        }
-
-        return $type->name . '(' . \implode(',', $args) . ')';
-    }
-
-    if ($type instanceof TArrow) {
-        return '(' . freshenStableTypeKeyRec($type->from, $rename, $n)
-            . ')->(' . freshenStableTypeKeyRec($type->to, $rename, $n) . ')';
-    }
-
     if ($type instanceof TUnit) {
         return '()';
     }
 
-    if ($type instanceof TPromoted) {
-        if ($type->args === []) {
-            return "'" . $type->name;
-        }
-        $args = [];
-        foreach ($type->args as $arg) {
-            $args[] = freshenStableTypeKeyRec($arg, $rename, $n);
-        }
-
-        return "'" . $type->name . '(' . \implode(',', $args) . ')';
+    if (! $type instanceof TArrow && ! $type instanceof TCon && ! $type instanceof TPromoted) {
+        return typeToString($type);
     }
 
-    return typeToString($type);
+    $keys = [];
+    foreach (typeChildren($type) as $child) {
+        $keys[] = freshenStableTypeKeyRec($child, $rename, $n);
+    }
+
+    return match ($type::class) {
+        TArrow::class => '(' . $keys[0] . ')->(' . $keys[1] . ')',
+        TCon::class => $keys === [] ? $type->name : $type->name . '(' . \implode(',', $keys) . ')',
+        default => "'" . $type->name . ($keys === [] ? '' : '(' . \implode(',', $keys) . ')'),
+    };
 }
 
 /**

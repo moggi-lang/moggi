@@ -10,10 +10,10 @@ use function Moggi\Paths\canonicalPath;
 use function Moggi\Paths\canonicalSeparators;
 
 use function Moggi\Paths\moduleNameToPath;
-use function Moggi\Pipeline\entryModules;
-use function Moggi\Pipeline\entryPurpose;
 use function Moggi\Semantics\Effects\checkAndNormalize;
 use function Moggi\Semantics\Types\clearInternedTypeNodes;
+
+use Moggi\Pipeline\CompilationContext;
 
 use Moggi\Semantics\Types\TypeError;
 
@@ -36,7 +36,7 @@ use function Moggi\Syntax\Parser\parse;
  *   lowers its modules. Skips straight to a fresh check when an interface is
  *   missing, so a cold cache still typechecks everything once.
  */
-function prepareProject(array $paths, string $rootDir, bool $shallow = false): PreparedProject
+function prepareProject(array $paths, string $rootDir, CompilationContext $context, bool $shallow = false): PreparedProject
 {
     $root = \realpath($rootDir);
     if ($root === false) {
@@ -133,11 +133,17 @@ function prepareProject(array $paths, string $rootDir, bool $shallow = false): P
 
     injectSyntheticCompilerUnits($units);
 
+    foreach ($units as $moduleName => &$unit) {
+        $unit['compileBackend'] = $context->backendId;
+        $unit['implModule'] = resolveImplModuleName($unit['backendMap'] ?? [], $context->backendId);
+    }
+    unset($unit);
+
     $fullParseModules = \array_keys($pending);
 
-    $sortedModules = sortModulesByDependencies($units);
-    assignModuleCacheKeys($units, $sortedModules);
-    hydrateModuleDiskArtifacts($units, $sortedModules);
+    $sortedModules = sortModulesByDependencies($units, $context->backendId);
+    assignModuleCacheKeys($units, $sortedModules, $context);
+    hydrateModuleDiskArtifacts($units, $sortedModules, $context);
 
     foreach ($fullParseModules as $moduleName) {
         ensureUnitProgram($units, $moduleName);
@@ -165,47 +171,41 @@ function prepareProject(array $paths, string $rootDir, bool $shallow = false): P
                     $units[$moduleName]['localTypes'],
                 );
             }
-            if (! isModuleActiveForCompileBackend($units, $moduleName)) {
+            if (! isModuleActiveForCompileBackend($units, $moduleName, $context->backendId)) {
                 continue;
             }
 
             $checked[$moduleName] = $units[$moduleName]['checkedProgram'] ?? $units[$moduleName]['program'];
-            $importContexts[$moduleName] = [
-                'env' => [],
-                'typeSynonyms' => [],
-                'data' => [],
-                'qualifiedModules' => [],
-                'constructorRenames' => [],
-                'intrinsicWrappers' => [],
-                'codegen' => [
-                    'requireLines' => [],
-                    'functionUseLines' => [],
-                    'namespaceUseLines' => [],
-                    'externalFns' => [],
-                    'moduleAsNames' => [],
-                    'constructorRenames' => [],
-                ],
-                'classes' => $projectClasses,
-                'classScopes' => $classScopes,
-                'projectInstances' => $projectInstances,
-                'projectInstanceIndex' => $projectInstanceIndex,
-                'currentModule' => $moduleName,
-            ];
             $importContexts[$moduleName] = mergeClassScopeRefs(
-                $importContexts[$moduleName],
+                (new ImportContext(
+                    ImportInterface::withoutImports($moduleName),
+                    EmitPlan::forTarget(
+                        $context->backendId,
+                        isset($units[$moduleName]['path'])
+                            ? mogPathToOutputRelative(
+                                $units[$moduleName]['path'],
+                                $rootPrefix,
+                                $context->backend->extension(),
+                            )
+                            : '',
+                    ),
+                ))->withProjectScopes(
+                    $projectClasses,
+                    $classScopes,
+                    $projectInstances,
+                    $projectInstanceIndex,
+                    $moduleName,
+                ),
                 $classScopeFns,
                 moduleLocalValueNames($units, $moduleName),
                 moduleLocalDataNames($units, $moduleName),
-                $units,
-                $moduleName,
-                $rootPrefix,
             );
 
             continue;
         }
 
-        if (! isModuleActiveForCompileBackend($units, $moduleName)) {
-            publishModuleExports($units, $moduleName);
+        if (! isModuleActiveForCompileBackend($units, $moduleName, $context->backendId)) {
+            publishModuleExports($units, $moduleName, $context);
 
             continue;
         }
@@ -213,17 +213,17 @@ function prepareProject(array $paths, string $rootDir, bool $shallow = false): P
         updateProjectClassesForModule($units[$moduleName], $units, $moduleName, $projectClasses);
 
         if (($units[$moduleName]['parsed'] ?? false) !== true) {
-            ensureModuleInterface($units, $moduleName, $projectClasses, $projectInstanceIndex);
-            publishModuleExports($units, $moduleName);
+            ensureImportInterface($units, $moduleName, $projectClasses, $projectInstanceIndex, $context);
+            publishModuleExports($units, $moduleName, $context);
             if (isset($units[$moduleName]['localTypes'])) {
-                addModuleClassScope($units, $moduleName, $projectClasses, $classScopes, $classScopeFns);
+                addModuleClassScope($units, $moduleName, $projectClasses, $classScopes, $classScopeFns, $context->backendId);
             }
 
             continue;
         }
 
         $path = $units[$moduleName]['path'];
-        $cacheKey = checkedModuleCacheKey($path);
+        $cacheKey = checkedModuleCacheKey($path, $context);
 
         $memoized = ProjectCache::checkedModule($cacheKey);
         $interfacesReady = isset($units[$moduleName]['localTypes'], $units[$moduleName]['exports'], $units[$moduleName]['facts']);
@@ -245,6 +245,7 @@ function prepareProject(array $paths, string $rootDir, bool $shallow = false): P
                 $classScopeFns,
                 $projectInstances,
                 $projectInstanceIndex,
+                $context,
             );
 
             continue;
@@ -255,7 +256,8 @@ function prepareProject(array $paths, string $rootDir, bool $shallow = false): P
             $cachedCheck = Cache\moduleGet(
                 $units[$moduleName]['cacheRelPath'],
                 'checked',
-                $contentKey,
+                $context->moduleKey($moduleName, $contentKey),
+                $context->backendId,
             );
             if (\is_array($cachedCheck) && isset($cachedCheck['program'])) {
                 $fromDisk = new CheckedModule(
@@ -280,6 +282,7 @@ function prepareProject(array $paths, string $rootDir, bool $shallow = false): P
                     $classScopeFns,
                     $projectInstances,
                     $projectInstanceIndex,
+                    $context,
                 );
 
                 continue;
@@ -297,42 +300,41 @@ function prepareProject(array $paths, string $rootDir, bool $shallow = false): P
                 $classScopeFns,
                 $projectInstances,
                 $projectInstanceIndex,
+                $context,
             );
 
             continue;
         }
 
-        $outputRelative = mogPathToOutputRelative($path, $rootPrefix);
+        $outputRelative = mogPathToOutputRelative($path, $rootPrefix, $context->backend->extension());
         $importContext = buildImportContext(
             $units[$moduleName]['program']->imports,
             $units,
             $moduleName,
             $outputRelative,
             $rootPrefix,
+            $context->backendId,
+        )->withProjectScopes(
+            $projectClasses,
+            $classScopes,
+            $projectInstances,
+            $projectInstanceIndex,
+            $moduleName,
         );
-        $importContext['classes'] = $projectClasses;
-        $importContext['classScopes'] = $classScopes;
         $importContext = mergeClassScopeRefs(
             $importContext,
             $classScopeFns,
             moduleLocalValueNames($units, $moduleName),
             moduleLocalDataNames($units, $moduleName),
-            $units,
-            $moduleName,
-            $rootPrefix,
         );
-        $importContext['projectInstances'] = $projectInstances;
-        $importContext['projectInstanceIndex'] = $projectInstanceIndex;
-        $importContext['currentModule'] = $moduleName;
+        $importContext = $importContext->withInterface(
+            $importContext->interface->withExtraTypes(
+                moduleFacadeExtraTypes($units, $moduleName, $projectClasses, $projectInstanceIndex),
+            ),
+        );
         $importContexts[$moduleName] = $importContext;
 
-        foreach (moduleFacadeExtraTypes($units, $moduleName, $projectClasses, $projectInstanceIndex) as $kind => $entries) {
-            foreach ($entries as $name => $entry) {
-                $importContext[$kind][$name] ??= $entry;
-            }
-        }
-
-        $purpose = entryPurpose($moduleName);
+        $purpose = $context->purposeFor($moduleName);
         $interface = null;
         $checkedFull = checkAndNormalize(
             $units[$moduleName]['program'],
@@ -341,6 +343,8 @@ function prepareProject(array $paths, string $rootDir, bool $shallow = false): P
             $importContext,
             $purpose,
             $interface,
+            entryModules: $context->entries,
+            backendId: $context->backendId,
         );
         $units[$moduleName]['localTypes'] = $interface;
         $exportedInferredSchemes = $checkedFull->exportedInferredSchemes;
@@ -353,30 +357,33 @@ function prepareProject(array $paths, string $rootDir, bool $shallow = false): P
             Cache\modulePut(
                 $units[$moduleName]['cacheRelPath'],
                 'localtypes',
-                $contentKey,
+                $context->moduleKey($moduleName, $contentKey),
                 $units[$moduleName]['localTypes'],
+                $context->backendId,
             );
         }
 
-        publishModuleExports($units, $moduleName);
-        addModuleClassScope($units, $moduleName, $projectClasses, $classScopes, $classScopeFns);
+        publishModuleExports($units, $moduleName, $context);
+        addModuleClassScope($units, $moduleName, $projectClasses, $classScopes, $classScopeFns, $context->backendId);
 
         $units[$moduleName]['facts'] = preparedModuleFacts($units[$moduleName], $checkedFull, $moduleName);
         if ($contentKey !== null) {
             Cache\modulePut(
                 $units[$moduleName]['cacheRelPath'],
                 'checked',
-                $contentKey,
+                $context->moduleKey($moduleName, $contentKey),
                 [
                     'program' => $checkedFull,
                     'exportedInferredSchemes' => $exportedInferredSchemes,
                 ],
+                $context->backendId,
             );
             Cache\modulePut(
                 $units[$moduleName]['cacheRelPath'],
                 'facts',
-                $contentKey,
+                $context->moduleKey($moduleName, $contentKey),
                 $units[$moduleName]['facts'],
+                $context->backendId,
             );
         }
 
@@ -400,19 +407,25 @@ function prepareProject(array $paths, string $rootDir, bool $shallow = false): P
             continue;
         }
 
-        $outputRelative = mogPathToOutputRelative($units[$moduleName]['path'], $rootPrefix);
+        $outputRelative = mogPathToOutputRelative($units[$moduleName]['path'], $rootPrefix, $context->backend->extension());
         $importContexts[$moduleName] = buildImportContext(
             $units[$moduleName]['program']->imports,
             $units,
             $moduleName,
             $outputRelative,
             $rootPrefix,
+            $context->backendId,
+        )->withProjectScopes(
+            $projectClasses,
+            $classScopes,
+            $projectInstances,
+            $projectInstanceIndex,
+            $moduleName,
         );
     }
 
-    foreach ($importContexts as $moduleName => $context) {
-        $importContexts[$moduleName]['classes'] = $projectClasses;
-        $importContexts[$moduleName]['classScopes'] = $classScopes;
+    foreach ($importContexts as $moduleName => $importContext) {
+        $importContexts[$moduleName] = $importContext->withClassScopes($projectClasses, $classScopes);
     }
 
     disableCollectExportsCache();
@@ -431,7 +444,6 @@ function prepareProject(array $paths, string $rootDir, bool $shallow = false): P
  * @param array<string, mixed> $classScopeFns
  * @param list<array<string, mixed>> $projectInstances
  * @param array<string, mixed> $projectInstanceIndex
- * @return array<string, mixed>
  */
 function buildPreparedModuleContext(
     array &$units,
@@ -443,34 +455,69 @@ function buildPreparedModuleContext(
     array &$classScopeFns,
     array $projectInstances,
     array $projectInstanceIndex,
-): array {
-    ensureModuleInterface($units, $moduleName, $projectClasses, $projectInstanceIndex);
-    publishModuleExports($units, $moduleName);
-    addModuleClassScope($units, $moduleName, $projectClasses, $classScopes, $classScopeFns);
-    $outputRelative = mogPathToOutputRelative($path, $rootPrefix);
-    $importContext = buildImportContext(
-        $units[$moduleName]['program']->imports,
-        $units,
-        $moduleName,
-        $outputRelative,
-        $rootPrefix,
-    );
-    $importContext['classes'] = $projectClasses;
-    $importContext['classScopes'] = $classScopes;
-    $importContext = mergeClassScopeRefs(
-        $importContext,
+    CompilationContext $context,
+): ImportContext {
+    ensureImportInterface($units, $moduleName, $projectClasses, $projectInstanceIndex, $context);
+    publishModuleExports($units, $moduleName, $context);
+    addModuleClassScope($units, $moduleName, $projectClasses, $classScopes, $classScopeFns, $context->backendId);
+    $outputRelative = mogPathToOutputRelative($path, $rootPrefix, $context->backend->extension());
+
+    return mergeClassScopeRefs(
+        buildImportContext(
+            $units[$moduleName]['program']->imports,
+            $units,
+            $moduleName,
+            $outputRelative,
+            $rootPrefix,
+            $context->backendId,
+        )->withProjectScopes(
+            $projectClasses,
+            $classScopes,
+            $projectInstances,
+            $projectInstanceIndex,
+            $moduleName,
+        ),
         $classScopeFns,
         moduleLocalValueNames($units, $moduleName),
         moduleLocalDataNames($units, $moduleName),
-        $units,
-        $moduleName,
-        $rootPrefix,
     );
-    $importContext['projectInstances'] = $projectInstances;
-    $importContext['projectInstanceIndex'] = $projectInstanceIndex;
-    $importContext['currentModule'] = $moduleName;
+}
 
-    return $importContext;
+/**
+ * Publish the callable facts a module's interface already determines, for a module whose bodies are
+ * not checked in this run — the shallow library closure a single-file compile prepares.
+ *
+ * Without it an importer of such a module has only its scheme to go on, and counting arrows
+ * disagrees with the declared parameter list for every eta-reduced definition (`($) f = f`
+ * declares one parameter and has two arrows) and for every result that is a type synonym of a
+ * function type. A module checked in this run keeps the facts its check publishes.
+ *
+ * The tree is the one the record is rendered from everywhere: a unit hydrated from the checked
+ * cache publishes from that checked program, since checking a backend facade synthesizes foreign
+ * bindings the parsed tree does not carry.
+ *
+ * @param array<string, array<string, mixed>> $units
+ */
+function publishCallableFacts(array &$units, string $moduleName): void
+{
+    $unit = $units[$moduleName] ?? null;
+    if (! \is_array($unit) || isset($unit['facts']['callables'])) {
+        return;
+    }
+
+    $program = $unit['checkedProgram'] ?? $unit['program'] ?? null;
+    $exports = $unit['exports'] ?? null;
+    if (! $program instanceof Ast\Program || ! \is_array($exports)) {
+        return;
+    }
+
+    $facts = \is_array($unit['facts'] ?? null) ? $unit['facts'] : [];
+    $unit['facts'] = $facts;
+    $facts['callables'] = [
+        'abi' => \Moggi\IR\Callables\ABI_VERSION,
+        'entries' => \Moggi\Modules\unitCallableEntries($unit, $units, $moduleName),
+    ];
+    $units[$moduleName]['facts'] = $facts;
 }
 
 /**
@@ -478,9 +525,11 @@ function buildPreparedModuleContext(
  *
  * @param array<string, array<string, mixed>> $units
  */
-function publishModuleExports(array &$units, string $moduleName): void
+function publishModuleExports(array &$units, string $moduleName, CompilationContext $context): void
 {
     if (isset($units[$moduleName]['exports'])) {
+        publishCallableFacts($units, $moduleName);
+
         return;
     }
 
@@ -493,10 +542,12 @@ function publishModuleExports(array &$units, string $moduleName): void
         $cached = Cache\moduleGet(
             $units[$moduleName]['cacheRelPath'],
             'exports',
-            $contentKey,
+            $context->moduleKey($moduleName, $contentKey),
+            $context->backendId,
         );
         if (\is_array($cached)) {
             $units[$moduleName]['exports'] = $cached;
+            publishCallableFacts($units, $moduleName);
 
             return;
         }
@@ -525,8 +576,9 @@ function publishModuleExports(array &$units, string $moduleName): void
         Cache\modulePut(
             $units[$moduleName]['cacheRelPath'],
             'exports',
-            $contentKey,
+            $context->moduleKey($moduleName, $contentKey),
             $units[$moduleName]['exports'],
+            $context->backendId,
         );
     }
 }
@@ -542,17 +594,18 @@ function publishModuleExports(array &$units, string $moduleName): void
  * @param array<string, mixed> $projectClasses
  * @param array<string, mixed> $projectInstanceIndex
  */
-function ensureModuleInterface(
+function ensureImportInterface(
     array &$units,
     string $moduleName,
     array $projectClasses,
     array $projectInstanceIndex,
+    CompilationContext $context,
 ): void {
     if (isset($units[$moduleName]['localTypes']) || ($units[$moduleName]['parsed'] ?? false) !== true) {
         return;
     }
 
-    buildModuleLocalTypes($units, $moduleName, $projectClasses, $projectInstanceIndex);
+    buildModuleLocalTypes($units, $moduleName, $projectClasses, $projectInstanceIndex, $context);
 }
 
 /**
@@ -570,8 +623,9 @@ function addModuleClassScope(
     array $projectClasses,
     array &$classScopes,
     array &$classScopeFns,
+    string $backendId,
 ): void {
-    $classScopes += classModuleScopes($units, $projectClasses, [$moduleName]);
+    $classScopes += classModuleScopes($units, $projectClasses, [$moduleName], $backendId);
     $classScopeFns = classScopeFunctionRefs($units, $classScopes);
 }
 
@@ -582,11 +636,11 @@ function addModuleClassScope(
  * name: the same module can be an entry for one compilation and a library for
  * another, and the checked program differs (the entry's `main` is promoted).
  */
-function checkedModuleCacheKey(string $path): string
+function checkedModuleCacheKey(string $path, CompilationContext $context): string
 {
     $module = cachedModuleHeader($path)['module'] ?? null;
 
-    return sourceIdentityKey($path) . ':' . compileBackend() . ':' . entryPurpose($module)->name;
+    return sourceIdentityKey($path) . ':' . $context->moduleCacheMaterial($module);
 }
 
 function clearPrepareProjectCaches(): void
@@ -615,38 +669,38 @@ function isStdlibSourcePath(string $path): bool
  *
  * @param list<string> $paths
  */
-function prepareFocusBase(array $paths, string $rootDir): PreparedProject
+function prepareFocusBase(array $paths, string $rootDir, CompilationContext $context): PreparedProject
 {
     $parts = [];
     foreach ($paths as $path) {
-        $parts[] = checkedModuleCacheKey($path);
+        $parts[] = checkedModuleCacheKey($path, $context);
     }
     \sort($parts);
 
-    $key = 'shallow|' . \implode('|', $parts) . '@' . compileBackend();
+    $key = 'shallow|' . \implode('|', $parts) . '@' . $context->inputsKey();
     $memoized = ProjectCache::preparedProject($key);
     if ($memoized !== null) {
         return $memoized;
     }
 
-    $prepared = prepareProject($paths, $rootDir, true);
+    $prepared = prepareProject($paths, $rootDir, $context, true);
     ProjectCache::rememberPreparedProject($key, $prepared);
 
     return $prepared;
 }
 
 /** @param list<string> $paths */
-function prepareProjectCached(array $paths, string $rootDir, ?string $onlyTypecheckModule = null): PreparedProject
+function prepareProjectCached(array $paths, string $rootDir, CompilationContext $context, ?string $onlyTypecheckModule = null): PreparedProject
 {
     $parts = [];
     foreach ($paths as $path) {
-        $parts[] = checkedModuleCacheKey($path);
+        $parts[] = checkedModuleCacheKey($path, $context);
     }
     \sort($parts);
 
     $key = \implode('|', $parts)
         . '@' . ($onlyTypecheckModule ?? '*')
-        . '@' . compileBackend();
+        . '@' . $context->inputsKey();
     $memoized = ProjectCache::preparedProject($key);
     if ($memoized !== null) {
         return $memoized;
@@ -665,21 +719,22 @@ function prepareProjectCached(array $paths, string $rootDir, ?string $onlyTypech
             }
         }
         if (\count($focusPaths) === 1 && $basePaths !== []) {
-            $base = prepareFocusBase($basePaths, $rootDir);
+            $base = prepareFocusBase($basePaths, $rootDir, $context);
             $prepared = prepareProjectExtendingFocus(
                 $base,
                 $focusPaths[0],
                 $onlyTypecheckModule,
                 $rootDir,
+                $context,
             );
 
             return $prepared;
         }
 
-        return prepareProjectCached($paths, $rootDir, null);
+        return prepareProjectCached($paths, $rootDir, $context, null);
     }
 
-    return prepareProject($paths, $rootDir);
+    return prepareProject($paths, $rootDir, $context);
 }
 
 /**
@@ -690,6 +745,7 @@ function prepareProjectExtendingFocus(
     string $focusPath,
     string $focusModule,
     string $rootDir,
+    CompilationContext $context,
 ): PreparedProject {
     $rootPrefix = $base->rootPrefix;
 
@@ -761,13 +817,13 @@ function prepareProjectExtendingFocus(
             }
         }
 
-        return prepareProject(\array_values(\array_unique($fallbackPaths)), $rootDir);
+        return prepareProject(\array_values(\array_unique($fallbackPaths)), $rootDir, $context);
     }
 
-    $projectInstances = $sampleCtx['projectInstances'] ?? [];
-    $projectInstanceIndex = $sampleCtx['projectInstanceIndex'] ?? indexProjectInstances($projectInstances);
-    $projectClasses = $sampleCtx['classes'] ?? [];
-    $classScopes = $sampleCtx['classScopes'] ?? [];
+    $projectInstances = $sampleCtx->projectInstances;
+    $projectInstanceIndex = $sampleCtx->projectInstanceIndex ?? indexProjectInstances($projectInstances);
+    $projectClasses = $sampleCtx->classes;
+    $classScopes = $sampleCtx->classScopes;
 
     $focusExtra = collectProjectInstances($units, [$focusModule]);
     if ($focusExtra !== []) {
@@ -778,40 +834,37 @@ function prepareProjectExtendingFocus(
     unset($classScopes[$focusModule]);
     $classScopeFns = classScopeFunctionRefs($units, $classScopes);
 
-    $sortedNames = sortModulesByDependencies($units);
-    assignModuleCacheKeys($units, $sortedNames);
+    $sortedNames = sortModulesByDependencies($units, $context->backendId);
+    assignModuleCacheKeys($units, $sortedNames, $context);
     updateProjectClassesForModule($units[$focusModule], $units, $focusModule, $projectClasses);
 
-    $outputRelative = mogPathToOutputRelative($focusPath, $rootPrefix);
-    $importContext = buildImportContext(
-        $units[$focusModule]['program']->imports,
-        $units,
-        $focusModule,
-        $outputRelative,
-        $rootPrefix,
-    );
-    $importContext['classes'] = $projectClasses;
-    $importContext['classScopes'] = $classScopes;
+    $outputRelative = mogPathToOutputRelative($focusPath, $rootPrefix, $context->backend->extension());
     $importContext = mergeClassScopeRefs(
-        $importContext,
+        buildImportContext(
+            $units[$focusModule]['program']->imports,
+            $units,
+            $focusModule,
+            $outputRelative,
+            $rootPrefix,
+            $context->backendId,
+        )->withProjectScopes(
+            $projectClasses,
+            $classScopes,
+            $projectInstances,
+            $projectInstanceIndex,
+            $focusModule,
+        ),
         $classScopeFns,
         moduleLocalValueNames($units, $focusModule),
         moduleLocalDataNames($units, $focusModule),
-        $units,
-        $focusModule,
-        $rootPrefix,
     );
-    $importContext['projectInstances'] = $projectInstances;
-    $importContext['projectInstanceIndex'] = $projectInstanceIndex;
-    $importContext['currentModule'] = $focusModule;
+    $importContext = $importContext->withInterface(
+        $importContext->interface->withExtraTypes(
+            moduleFacadeExtraTypes($units, $focusModule, $projectClasses, $projectInstanceIndex),
+        ),
+    );
 
-    foreach (moduleFacadeExtraTypes($units, $focusModule, $projectClasses, $projectInstanceIndex) as $kind => $entries) {
-        foreach ($entries as $name => $entry) {
-            $importContext[$kind][$name] ??= $entry;
-        }
-    }
-
-    $purpose = entryPurpose($focusModule);
+    $purpose = $context->purposeFor($focusModule);
     $interface = null;
     $checkedFull = checkAndNormalize(
         $units[$focusModule]['program'],
@@ -820,6 +873,8 @@ function prepareProjectExtendingFocus(
         $importContext,
         $purpose,
         $interface,
+        entryModules: $context->entries,
+        backendId: $context->backendId,
     );
     $units[$focusModule]['localTypes'] = $interface;
     syncExportedInferredSchemesFromTypeEnv(
@@ -829,22 +884,40 @@ function prepareProjectExtendingFocus(
     );
     $contentKey = $units[$focusModule]['contentKey'] ?? null;
     if ($contentKey !== null) {
-        Cache\modulePut($units[$focusModule]['cacheRelPath'], 'localtypes', $contentKey, $units[$focusModule]['localTypes']);
+        Cache\modulePut(
+            $units[$focusModule]['cacheRelPath'],
+            'localtypes',
+            $context->moduleKey($focusModule, $contentKey),
+            $units[$focusModule]['localTypes'],
+            $context->backendId,
+        );
     }
 
-    publishModuleExports($units, $focusModule);
+    publishModuleExports($units, $focusModule, $context);
 
     $units[$focusModule]['checkedProgram'] = $checkedFull;
     $units[$focusModule]['facts'] = preparedModuleFacts($units[$focusModule], $checkedFull, $focusModule);
     if ($contentKey !== null) {
-        Cache\modulePut($units[$focusModule]['cacheRelPath'], 'checked', $contentKey, [
-            'program' => $checkedFull,
-            'exportedInferredSchemes' => $checkedFull->exportedInferredSchemes,
-        ]);
-        Cache\modulePut($units[$focusModule]['cacheRelPath'], 'facts', $contentKey, $units[$focusModule]['facts']);
+        Cache\modulePut(
+            $units[$focusModule]['cacheRelPath'],
+            'checked',
+            $context->moduleKey($focusModule, $contentKey),
+            [
+                'program' => $checkedFull,
+                'exportedInferredSchemes' => $checkedFull->exportedInferredSchemes,
+            ],
+            $context->backendId,
+        );
+        Cache\modulePut(
+            $units[$focusModule]['cacheRelPath'],
+            'facts',
+            $context->moduleKey($focusModule, $contentKey),
+            $units[$focusModule]['facts'],
+            $context->backendId,
+        );
     }
     ProjectCache::rememberCheckedModule(
-        checkedModuleCacheKey($focusPath),
+        checkedModuleCacheKey($focusPath, $context),
         new CheckedModule($checkedFull, $checkedFull->exportedInferredSchemes),
         ! isStdlibSourcePath($focusPath),
     );
@@ -864,15 +937,12 @@ function prepareProjectExtendingFocus(
  * source change, the project root, and backend. Used only for the coarse
  * whole-project `outputs` cache (`moggi compile`).
  */
-function preparedProjectDiskKey(array $paths, string $rootDir): string
+function preparedProjectDiskKey(array $paths, string $rootDir, CompilationContext $context): string
 {
     $root = \realpath($rootDir) ?: $rootDir;
-    $entryNames = \array_keys(entryModules());
-    \sort($entryNames);
     $parts = [
         'root=' . $root,
-        'backend=' . compileBackend(),
-        'entries=' . \implode(',', $entryNames),
+        'context=' . $context->cacheKey(),
     ];
 
     $fps = [];
@@ -897,9 +967,9 @@ function preparedProjectDiskKey(array $paths, string $rootDir): string
  * @param list<string> $sortedModules  topological order (deps before dependents)
  * @return array<string, string>
  */
-function computeModuleContentKeys(array $units, array $sortedModules): array
+function computeModuleContentKeys(array $units, array $sortedModules, CompilationContext $context): array
 {
-    $backend = compileBackend();
+    $backend = $context->backendId;
     $keys = [];
 
     foreach ($sortedModules as $moduleName) {
@@ -918,7 +988,7 @@ function computeModuleContentKeys(array $units, array $sortedModules): array
             : 'none';
 
         $depKeys = [];
-        foreach (moduleDependencyNames($units, $moduleName) as $dep) {
+        foreach (moduleDependencyNames($units, $moduleName, $context->backendId) as $dep) {
             if (isset($keys[$dep])) {
                 $depKeys[] = $keys[$dep];
             } elseif (isset($units[$dep]['path'])) {
@@ -934,7 +1004,7 @@ function computeModuleContentKeys(array $units, array $sortedModules): array
         $keys[$moduleName] = Cache\hashContent(
             'b=' . $backend . ';m=' . $moduleName . ';s=' . $srcHash
                 . ';d=' . \implode(',', $depKeys)
-                . ';p=' . entryPurpose($moduleName)->name,
+                . ';' . $context->moduleCacheMaterial($moduleName),
         );
     }
 
@@ -971,9 +1041,9 @@ function moduleCacheRelPath(string $path): string
 }
 
 /** @param array<string, array<string, mixed>> $units @param list<string> $sortedModules */
-function assignModuleCacheKeys(array &$units, array $sortedModules): void
+function assignModuleCacheKeys(array &$units, array $sortedModules, CompilationContext $context): void
 {
-    foreach (computeModuleContentKeys($units, $sortedModules) as $moduleName => $contentKey) {
+    foreach (computeModuleContentKeys($units, $sortedModules, $context) as $moduleName => $contentKey) {
         $units[$moduleName]['contentKey'] = $contentKey;
         if (($units[$moduleName]['synthetic'] ?? false) === true) {
             $units[$moduleName]['cacheRelPath'] = 'synthetic' . DIRECTORY_SEPARATOR . moduleNameToPath($moduleName) . '.mog';
@@ -985,7 +1055,7 @@ function assignModuleCacheKeys(array &$units, array $sortedModules): void
 }
 
 /** @param array<string, array<string, mixed>> $units @param list<string> $sortedModules */
-function hydrateModuleDiskArtifacts(array &$units, array $sortedModules): void
+function hydrateModuleDiskArtifacts(array &$units, array $sortedModules, CompilationContext $context): void
 {
     if (! Cache\cacheEnabled()) {
         return;
@@ -1002,22 +1072,23 @@ function hydrateModuleDiskArtifacts(array &$units, array $sortedModules): void
         }
 
         $relPath = $units[$moduleName]['cacheRelPath'];
+        $moduleKey = $context->moduleKey($moduleName, $contentKey);
         if (! isset($units[$moduleName]['localTypes'])) {
-            $cached = Cache\moduleGet($relPath, 'localtypes', $contentKey);
+            $cached = Cache\moduleGet($relPath, 'localtypes', $moduleKey, $context->backendId);
             if (\is_array($cached)) {
                 $units[$moduleName]['localTypes'] = $cached;
             }
         }
 
         if (! isset($units[$moduleName]['exports'])) {
-            $cached = Cache\moduleGet($relPath, 'exports', $contentKey);
+            $cached = Cache\moduleGet($relPath, 'exports', $moduleKey, $context->backendId);
             if (\is_array($cached)) {
                 $units[$moduleName]['exports'] = $cached;
             }
         }
 
         if (! isset($units[$moduleName]['facts'])) {
-            $cached = Cache\moduleGet($relPath, 'facts', $contentKey);
+            $cached = Cache\moduleGet($relPath, 'facts', $moduleKey, $context->backendId);
             if (\is_array($cached)) {
                 $units[$moduleName]['facts'] = $cached;
             }
@@ -1030,7 +1101,7 @@ function hydrateModuleDiskArtifacts(array &$units, array $sortedModules): void
  * @param list<string> $roots
  * @return array<string, true>
  */
-function importDependencyClosure(array $units, array $roots): array
+function importDependencyClosure(array $units, array $roots, string $backendId): array
 {
     $needed = [];
     $rootSet = \array_fill_keys($roots, true);
@@ -1041,7 +1112,7 @@ function importDependencyClosure(array $units, array $roots): array
             continue;
         }
 
-        foreach (moduleDependencyNames($units, $moduleName) as $dep) {
+        foreach (moduleDependencyNames($units, $moduleName, $backendId) as $dep) {
             if (isset($needed[$dep]) || isset($rootSet[$dep]) || ! isset($units[$dep])) {
                 continue;
             }

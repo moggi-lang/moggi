@@ -2,16 +2,14 @@
 
 namespace Moggi\CLI\Commands;
 
-use Moggi\Backend;
 use Moggi\Cache;
+use Moggi\Docs;
+use Moggi\Syntax\Lexer\LexError;
+use Moggi\Syntax\Parser\ParseError;
 
 use function Moggi\Cache\docsCacheDir;
 use function Moggi\CLI\defaultDocsInput;
 use function Moggi\CLI\printUsage;
-
-use Moggi\Docs;
-use Moggi\Syntax\Lexer\LexError;
-use Moggi\Syntax\Parser\ParseError;
 
 /**
  * `moggi mogdoc [serve]` — render API documentation, or serve it live.
@@ -84,7 +82,6 @@ function runMogdoc(array $argv): int
     $input = $options['root'] ?? ($options['positionals'][0] ?? null);
 
     try {
-        Backend\setCompileBackend('php');
         if ($options['noCache']) {
             Cache\setCacheEnabled(false);
         }
@@ -93,6 +90,7 @@ function runMogdoc(array $argv): int
         $index = Docs\loadOrBuildIndex(
             $input,
             $options['lib'],
+            Docs\docsContext('php', $options['lib']),
             $options['rebuild'],
             $sourceFingerprint,
         );

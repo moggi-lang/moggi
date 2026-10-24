@@ -2,13 +2,14 @@
 
 namespace Moggi\Semantics\Registry;
 
+use Moggi\Modules\ImportContext;
 use Moggi\Semantics\Deriving\ClassDeriveFacts;
+use Moggi\Semantics\Kinds;
+use Moggi\Semantics\Types\TypeCheckState;
+use Moggi\Syntax\Ast;
 
 use function Moggi\Semantics\Deriving\derivedProjectInstanceRecords;
 use function Moggi\Semantics\Foreign\foreignParamNames;
-
-use Moggi\Semantics\Kinds;
-
 use function Moggi\Semantics\Types\associatedEquationsMapFromDecl;
 use function Moggi\Semantics\Types\indexAssociatedEquations;
 use function Moggi\Semantics\Types\installTypeSynonymKind;
@@ -24,13 +25,7 @@ use function Moggi\Semantics\Types\registerInferredFunctionPlaceholder;
 use function Moggi\Semantics\Types\registerInferredSignatureScheme;
 use function Moggi\Semantics\Types\registerTypeSynonym;
 use function Moggi\Semantics\Types\syncAssociatedFamiliesFromClasses;
-
-use Moggi\Semantics\Types\TypeCheckState;
-
 use function Moggi\Semantics\Types\typeFail;
-
-use Moggi\Syntax\Ast;
-
 use function Moggi\Syntax\exportedChildrenSpec;
 use function Moggi\Syntax\surfaceConstructorAlias;
 
@@ -49,42 +44,44 @@ function foreignFunctionDecl(Ast\ForeignImportDecl $item): Ast\FunctionDecl
     );
 }
 
-function applyImportContext(TypeCheckState $state, Ast\Program $program, array $importContext): void
+function applyImportContext(TypeCheckState $state, Ast\Program $program, ImportContext $importContext): void
 {
-    foreach ($importContext['env'] ?? [] as $name => $scheme) {
+    $interface = $importContext->interface;
+
+    foreach ($interface->env as $name => $scheme) {
         $state->env[$name] = $scheme;
     }
 
-    foreach ($importContext['constructorRenames'] ?? [] as $local => $canonical) {
+    foreach ($interface->constructorRenames as $local => $canonical) {
         $state->constructorRenames[$local] = $canonical;
     }
 
-    foreach ($importContext['typeSynonyms'] ?? [] as $name => $type) {
+    foreach ($interface->typeSynonyms as $name => $type) {
         $state->typeSynonyms[$name] = $type;
         installTypeSynonymKind($state, $name, $type);
     }
 
-    foreach ($importContext['data'] ?? [] as $name => $info) {
+    foreach ($interface->data as $name => $info) {
         $state->data[$name] = $info;
         Kinds\registerTypeKind($state, $name, Kinds\kindFromDataInfo($info));
         Kinds\installPromotedFromDataInfo($state, $name, $info);
     }
 
-    foreach ($importContext['classes'] ?? [] as $name => $info) {
+    foreach ($importContext->classes as $name => $info) {
         $state->classes[$name] = $info;
     }
     $state->classParamKindsCache = null;
     syncAssociatedFamiliesFromClasses($state);
 
-    $state->qualifiedModules = $importContext['qualifiedModules'] ?? [];
-    $state->qualifiedOrigins = $importContext['qualifiedOrigins'] ?? [];
-    $state->qualifiedEnv = $importContext['qualifiedEnv'] ?? [];
-    $state->intrinsicWrappers = $importContext['intrinsicWrappers'] ?? [];
+    $state->qualifiedModules = $interface->qualifiedModules;
+    $state->qualifiedOrigins = $interface->qualifiedOrigins;
+    $state->qualifiedEnv = $interface->qualifiedEnv;
+    $state->intrinsicWrappers = $interface->intrinsicWrappers;
 
-    $state->ambiguousImports = $importContext['ambiguousNames'] ?? [];
-    $state->classModuleScopes = $importContext['classScopes'] ?? [];
-    $state->externalFns = $importContext['codegen']['externalFns'] ?? [];
-    $instanceIndex = $importContext['projectInstanceIndex'] ?? null;
+    $state->ambiguousImports = $interface->ambiguousNames;
+    $state->classModuleScopes = $importContext->classScopes;
+    $state->externalFns = $interface->externalFns;
+    $instanceIndex = $importContext->projectInstanceIndex;
     if ($instanceIndex !== null) {
         $state->projectInstancesByClass = $instanceIndex['byClass'];
         $state->projectInstancesByClassHead = $instanceIndex['byClassHead'];
@@ -97,10 +94,10 @@ function applyImportContext(TypeCheckState $state, Ast\Program $program, array $
             $headKey = instanceHeadIndexKeyFromAst($instance['instanceHead']);
             $instancesByClassHead[$instance['class']][$headKey][] = $instance;
         };
-        foreach ($importContext['projectInstances'] ?? [] as $instance) {
+        foreach ($importContext->projectInstances as $instance) {
             $addInstance($instance);
         }
-        $currentModule = $importContext['currentModule'] ?? '';
+        $currentModule = $importContext->currentModule ?? '';
         foreach ($program->items as $item) {
             if (! $item instanceof Ast\InstanceDecl) {
                 continue;
@@ -116,13 +113,13 @@ function applyImportContext(TypeCheckState $state, Ast\Program $program, array $
         }
         $state->projectInstancesByClass = $instancesByClass;
         $state->projectInstancesByClassHead = $instancesByClassHead;
-        $equationSource = $importContext['projectInstances'] ?? [];
+        $equationSource = $importContext->projectInstances;
         if ($equationSource === []) {
             $equationSource = projectInstancesFromProgram($program, ClassDeriveFacts::fromState($state));
         }
         indexAssociatedEquations($state, $equationSource);
     }
-    $state->currentModule = $importContext['currentModule'] ?? null;
+    $state->currentModule = $importContext->currentModule;
     $state->checkedInstances = [];
     $state->programModuleBackend = $program->moduleBackend;
 

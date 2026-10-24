@@ -6,6 +6,8 @@
  *
  * Everything is a plain global function returning `['passed' => bool, 'message' => string]`.
  */
+\putenv('MOGGI_IR_CHECKPOINTS=1');
+\putenv('MOGGI_IR_PASS_CHECKPOINTS=1');
 
 require_once __DIR__ . '/paths.php';
 require_once __DIR__ . '/assert.php';

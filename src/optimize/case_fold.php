@@ -398,6 +398,7 @@ function replaceTempsInItems(array $items, array $tempEnv): array
                 ),
                 $item->dest,
                 $item->srcLoc,
+                $item->localEvidence,
             );
 
             continue;

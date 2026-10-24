@@ -68,8 +68,6 @@ $find = static function (string $needle, int $occ = 0) use ($src): array {
     throw new RuntimeException('unreachable');
 };
 
-// Declaration (go-to-declaration distinct from definition)
-
 $p = $find('fromJust justValue');
 $decl = svcDeclaration($svc, $basicUri, $p);
 $assert($decl !== null, 'declaration resolves imported fromJust');
@@ -77,8 +75,6 @@ $assert(\str_ends_with((string) ($decl['uri'] ?? ''), 'Maybe.mog'), 'declaration
 $localDecl = svcDeclaration($svc, $basicUri, $find('bump x = x + 1'));
 $assert($localDecl !== null, 'declaration resolves local decl');
 $assert((string) ($localDecl['uri'] ?? '') === $basicUri, 'local declaration uri is the file');
-
-// Document links (URLs in comments)
 
 $linkSrc = <<<'MOG'
 module Links where
@@ -98,8 +94,6 @@ $assert(($links[0]['target'] ?? '') === 'https://example.com/spec', 'link target
 $assert((int) ($links[0]['range']['start']['line'] ?? -1) === 2, 'link anchored on comment line');
 $resolved = svcDocumentLinks($linkSvc, $linkUri); // resolve path returns links unchanged
 $assert(\is_array($resolved), 'document link resolve is idempotent');
-
-// Document colors + presentations
 
 $colorSrc = <<<'MOG'
 module Colors where
@@ -126,8 +120,6 @@ $assert(\abs(($rgb['blue'] ?? 0) - 1.0) < 0.01, 'rgb blue component');
 $presentations = svcColorPresentations($colorSvc, $colorUri, $hex6, $colors[0]['range'], []);
 $assert(($presentations[0]['label'] ?? '') === '#ff0000', 'presentation label is hex: ' . \json_encode($presentations));
 
-// Inline values
-
 $tmp = \sys_get_temp_dir() . '/moggi-lsp-features-' . \bin2hex(\random_bytes(3));
 \mkdir($tmp);
 $ivPath = $tmp . '/Inline.mog';
@@ -147,11 +139,8 @@ $ivSvc->setWorkspaceRoot($tmp);
 $ivSvc->openDocument($ivUri, $ivSrc, 1);
 $inlines = svcInlineValues($ivSvc, $ivUri, ['start' => ['line' => 0, 'character' => 0], 'end' => ['line' => 99, 'character' => 0]]);
 $assert(\is_array($inlines), 'inline values return array');
-// Decl nodes are unpositioned; token-derived ranges + declared surface types
-// must still produce one inline value per function declaration.
 $doubledLine = null;
 foreach (\explode("\n", $ivSrc) as $i => $line) {
-    // Anchored at the type signature line (first column-1 occurrence).
     if (\str_starts_with($line, 'doubled ::')) {
         $doubledLine = $i;
 
@@ -161,7 +150,6 @@ foreach (\explode("\n", $ivSrc) as $i => $line) {
 $assert($doubledLine !== null, 'found doubled decl line');
 $doubledIv = null;
 foreach ($inlines as $v) {
-    // Spec shape InlineValueText {range, text} — text is "name :: type".
     if (($v['text'] ?? '') === 'doubled :: Int -> Int') {
         $doubledIv = $v;
 
@@ -171,8 +159,6 @@ foreach ($inlines as $v) {
 $assert($doubledIv !== null, 'inline value present for doubled: ' . \json_encode($inlines));
 $assert((int) ($doubledIv['range']['start']['line'] ?? -1) === $doubledLine, 'inline value anchored at decl');
 $assert(\str_contains((string) ($doubledIv['text'] ?? ''), 'Int -> Int'), 'inline value shows declared type: ' . \json_encode($doubledIv));
-
-// Inlay hints + resolve (off by default; opt in for the feature assertions)
 
 $inlays = svcInlayHints($ivSvc, $ivUri, ['start' => ['line' => 0, 'character' => 0], 'end' => ['line' => 99, 'character' => 0]]);
 $assert($inlays === [], 'inlay hints off by default (moggi.inlayHints=false)');
@@ -191,13 +177,9 @@ if ($hintItem !== null) {
     $assert($resolvedHint === $hintItem, 'inlay hint resolve echoes hint');
 }
 
-// Code action resolve
-
 $caItem = ['title' => 'Fill hole with `0`', 'kind' => 'quickfix'];
 $caResolved = svcCodeActionResolve($ivSvc, $caItem);
 $assert(($caResolved['title'] ?? '') === 'Fill hole with `0`', 'code action resolve echoes item');
-
-// Moniker
 
 $p = $find('fromJust justValue');
 $monikers = svcMoniker($svc, $basicUri, $p);
@@ -207,13 +189,10 @@ $assert(($monikers[0]['identifier'] ?? '') === 'Data.Maybe::fromJust', 'moniker 
 $assert(($monikers[0]['unique'] ?? '') === 'scheme', 'moniker unique is scheme');
 $assert(($monikers[0]['kind'] ?? '') === 'export', 'moniker kind is export');
 
-// Code lens + folding + selection range on Basic.mog
-
 $lenses = svcCodeLens($svc, $basicUri);
 $assert(\count($lenses) >= 40, 'code lens per top-level decl: ' . \count($lenses));
 $folds = svcFoldingRanges($svc, $basicUri);
 $assert(\count($folds) >= 40, 'folding ranges per decl: ' . \count($folds));
-// Token-derived spans must cover multi-line decl bodies, not just one line.
 $dcLine = $find('describeColor color =')['line'];
 $bodyFold = null;
 foreach ($folds as $f) {
@@ -227,8 +206,6 @@ $assert($bodyFold !== null, 'describeColor has a folding range');
 $assert((int) $bodyFold['endLine'] >= $dcLine + 3, 'folding span covers the case body: ' . \json_encode($bodyFold));
 $sel = svcSelectionRange($svc, $basicUri, [$find('targetValue = 123')]);
 $assert($sel !== [] && isset($sel[0]['range']), 'selection range present');
-
-// Call + type hierarchy
 
 $hierPath = $tmp . '/Hier.mog';
 $hierSrc = <<<'MOG'
@@ -293,8 +270,6 @@ if ($th !== []) {
     $assert(\is_array($sups), 'supertypes return array');
 }
 
-// willRenameFiles: import rewrites
-
 $utilPath = $tmp . '/Util.mog';
 \file_put_contents($utilPath, "module Util where\n\nmagic = 7\n");
 $appPath = $tmp . '/App.mog';
@@ -308,17 +283,12 @@ $rnSvc->openDocument($appUri, $appSrc, 1);
 $renames = svcWillRenameFiles($rnSvc, [
     ['oldUri' => $utilUri, 'newUri' => pathToUri($tmp . '/Helper.mog')],
 ]);
-// Returns the uri→edits map; the server wraps it as {changes: …}.
 $assert(isset($renames[$appUri]), 'willRename rewrites importer: ' . \json_encode($renames));
 $importEdit = $renames[$appUri][0]['newText'] ?? '';
 $assert(\str_contains($importEdit, 'import Helper'), 'import rewritten to Helper: ' . \json_encode($importEdit));
 
-// On-type formatting
-
 $fmt = svcOnTypeFormatting($ivSvc, $ivUri, ['line' => 0, 'character' => 0], '{', ['tabSize' => 4, 'insertSpaces' => true]);
 $assert(\is_array($fmt), 'on-type formatting returns edits');
-
-// Pull diagnostics (textDocument/diagnostic)
 
 $pull = svcDiagnostic($diagSvc ?? $ivSvc, $ivUri);
 $assert(($pull['kind'] ?? '') === 'full', 'pull diagnostics kind=full');

@@ -1,12 +1,14 @@
 <?php declare(strict_types=1);
 
+/**
+ * describeTokenKind() must describe every `TokenKind::cases()` entry: a token kind
+ * missing from the `match` used to turn a parse diagnostic into an UnhandledMatchError.
+ */
+
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
-
-// describeTokenKind() must describe every `TokenKind::cases()` entry: a token kind
-// missing from the `match` used to turn a parse diagnostic into an UnhandledMatchError.
 
 require_once $root . '/src/compiler.php';
 
@@ -32,8 +34,6 @@ $assertSame = static function (mixed $expected, mixed $actual, string $message) 
     }
 };
 
-// 1. Every TokenKind has a description
-
 foreach (TokenKind::cases() as $kind) {
     try {
         $description = describeTokenKind($kind);
@@ -49,12 +49,8 @@ foreach (TokenKind::cases() as $kind) {
     }
 }
 
-// 2. `float` and `qualified`, the two kinds that used to crash
-
 $assertSame('float literal', describeTokenKind(TokenKind::Float), 'Float description');
 $assertSame("keyword 'qualified'", describeTokenKind(TokenKind::KwQualified), 'KwQualified description');
-
-// `describeToken()` delegates through its `default` arm, so it was affected too.
 $assertSame(
     'float literal',
     describeToken(new Token(TokenKind::Float, '1.5', 1, 1)),
@@ -65,8 +61,6 @@ $assertSame(
     describeToken(new Token(TokenKind::KwQualified, 'qualified', 1, 1)),
     'describeToken() on the qualified keyword',
 );
-
-// 3. End to end: the parse error itself, not an UnhandledMatchError
 
 /** @return array{0: string, 1: string} [error class, message] for a snippet */
 $parseError = static function (string $source): array {
@@ -88,8 +82,6 @@ $assertSame('expected pattern, found float literal', $message, 'float literal di
 [$class, $message] = $parseError('x = qualified');
 $assertSame(ParseError::class, $class, 'the qualified keyword must be a ParseError');
 $assertSame("expected expression, found keyword 'qualified'", $message, 'qualified keyword diagnostic');
-
-// Report
 
 if ($failures !== []) {
     \fwrite(STDERR, 'token-kind description test FAILED: ' . \count($failures) . " of {$checks} checks\n");

@@ -2,13 +2,8 @@
 
 namespace Moggi\Semantics\Types;
 
-use function Moggi\Errors\appendDidYouMean;
-
 use Moggi\Semantics\Kinds;
 use Moggi\Semantics\TypeExpr\Scheme;
-
-use function Moggi\Semantics\TypeExpr\scheme;
-
 use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TNatLit;
@@ -17,9 +12,11 @@ use Moggi\Semantics\TypeExpr\TStringLit;
 use Moggi\Semantics\TypeExpr\TUnit;
 use Moggi\Semantics\TypeExpr\TVar;
 use Moggi\Semantics\TypeExpr\Type;
-
 use Moggi\Syntax\Ast;
 use Moggi\Syntax\Ast\AstNode;
+
+use function Moggi\Semantics\TypeExpr\scheme;
+use function Moggi\Errors\appendDidYouMean;
 
 require_once __DIR__ . '/type_core.php';
 
@@ -732,15 +729,10 @@ function constraintHeadHasFlexibleVar(TypeCheckState $state, Type $type): bool
     if ($type instanceof TVar) {
         return ! isset($state->rigidVars[$type->name]);
     }
-    if ($type instanceof TArrow) {
-        return constraintHeadHasFlexibleVar($state, $type->from)
-            || constraintHeadHasFlexibleVar($state, $type->to);
-    }
-    if ($type instanceof TCon || $type instanceof TVarApp || $type instanceof TPromoted) {
-        foreach ($type->args as $arg) {
-            if (constraintHeadHasFlexibleVar($state, $arg)) {
-                return true;
-            }
+
+    foreach (typeChildren($type) as $child) {
+        if (constraintHeadHasFlexibleVar($state, $child)) {
+            return true;
         }
     }
 
@@ -1432,14 +1424,11 @@ function walkAstValues(Ast\AstNode $expr, callable $visit): void
  * the evidence passes read the second. A path that refreshes one without the
  * other leaves a list over variables the other never had (`Tag a` where the
  * definition took `Tag t122`), which the arity assertions cannot see because
- * both sides are still the same length. Gated, because it walks a body.
+ * both sides are still the same length. The walk runs on every elaborated body:
+ * it reads the tree the elaborator just built and costs no measurable time.
  */
 function assertPendingDictsConsistentInExpr(TypeCheckState $state, Ast\AstNode $expr): void
 {
-    if (\getenv('MOGGI_ASSERT_PENDING_DICTS') === false) {
-        return;
-    }
-
     walkAstValues($expr, static function (Ast\AstNode $node) use ($state): void {
         if ($node->pendingConstraints === [] || $node->pendingDicts === []) {
             return;

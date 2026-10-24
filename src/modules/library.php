@@ -5,14 +5,12 @@ namespace Moggi\Modules;
 require_once __DIR__ . '/../paths.php';
 
 use Moggi\Cache;
+use Moggi\Semantics\Types\TypeError;
 
 use function Moggi\Install\installationRoot;
-
 use function Moggi\Paths\canonicalPath;
 use function Moggi\Paths\canonicalSeparators;
 use function Moggi\Paths\globPaths;
-
-use Moggi\Semantics\Types\TypeError;
 
 /** Whether `$path` names a stream (`phar://…`) rather than a real filesystem path. */
 function isStreamPath(string $path): bool
@@ -222,6 +220,40 @@ function addLibraryRoot(string $path): void
 function configuredStdlibLibPath(): ?string
 {
     return ConfiguredStdlib::libPath();
+}
+
+/**
+ * Pin the library roots a session searches, so the module resolver and every
+ * backend dependency scanner see the same set.
+ *
+ * The first root that carries a package descriptor becomes the primary standard
+ * library; every other root is registered as an extra. The split matters beyond
+ * module lookup: a package's vendored jars, CLR metadata and PHP helpers live
+ * under whichever root it was installed into, and only a root registered here is
+ * scanned for them.
+ *
+ * @param list<string> $libDirs
+ */
+function registerLibraryRoots(array $libDirs): void
+{
+    $primary = null;
+    foreach ($libDirs as $dir) {
+        if (isLibraryRoot($dir)) {
+            $primary = $dir;
+
+            break;
+        }
+    }
+
+    if ($primary !== null) {
+        setStdlibLibPath($primary);
+    }
+
+    foreach ($libDirs as $dir) {
+        if ($dir !== $primary && \is_dir($dir)) {
+            addLibraryRoot($dir);
+        }
+    }
 }
 
 /**

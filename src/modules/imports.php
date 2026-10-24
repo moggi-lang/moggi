@@ -2,30 +2,22 @@
 
 namespace Moggi\Modules;
 
-use function Moggi\Backend\compileBackend;
-use function Moggi\Backend\Php\Naming\basePhpFunctionName;
-use function Moggi\Errors\appendDidYouMean;
-
 use Moggi\IR;
-
-use function Moggi\IR\Visit\collectIrCodegenUsage;
-
-use function Moggi\Paths\relativeRequirePath;
-use function Moggi\Semantics\Exhaustiveness\trueBindingOrigins;
-use function Moggi\Semantics\Kinds\dataKind;
-use function Moggi\Semantics\Kinds\registerTypeKind;
-
 use Moggi\Semantics\TypeExpr\Scheme;
-
-use function Moggi\Semantics\TypeExpr\schemeRuntimeArity;
-use function Moggi\Semantics\Types\evidenceFunctionName;
-
 use Moggi\Semantics\Types\TypeCheckState;
 use Moggi\Semantics\Types\TypeError;
 use Moggi\Syntax\Ast;
 
+use function Moggi\Backend\backendById;
+use function Moggi\Backend\Php\Naming\basePhpFunctionName;
+use function Moggi\Errors\appendDidYouMean;
+use function Moggi\Semantics\Exhaustiveness\trueBindingOrigins;
+use function Moggi\Semantics\Kinds\dataKind;
+use function Moggi\Semantics\Kinds\registerTypeKind;
+use function Moggi\Semantics\Types\evidenceFunctionName;
 use function Moggi\Syntax\Ast\moduleName;
-use function Moggi\Syntax\isConstructorName;
+use function Moggi\Syntax\exportedChildrenSpec;
+use function Moggi\Syntax\surfaceConstructorAlias;
 
 /**
  * @return array{
@@ -92,12 +84,6 @@ function moduleEvidenceMeta(
     return $cache[$key] = ['origins' => $origins, 'arity' => $arity];
 }
 
-/** @return array<string, array{namespace: string, phpName: string, module: string}> */
-function moduleEvidenceOrigins(Ast\Program $program, string $moduleName, string $namespace): array
-{
-    return moduleEvidenceMeta($program, $moduleName, $namespace)['origins'];
-}
-
 /**
  * Evidence origins/arity for one unit, merging its pre-check program with its
  * checked program.
@@ -150,7 +136,12 @@ function mergeEvidenceMetas(array $metas): array
                 continue;
             }
             $origins[$evName] = $origin;
-            $arity[$evName] = $meta['arity'][$evName] ?? 0;
+            if (! isset($meta['arity'][$evName])) {
+                throw new \LogicException(
+                    "evidence `{$evName}` was published by module `{$origin['module']}` without a runtime arity",
+                );
+            }
+            $arity[$evName] = $meta['arity'][$evName];
         }
     }
 
@@ -158,13 +149,27 @@ function mergeEvidenceMetas(array $metas): array
 }
 
 /**
- * Map evidence factory name → runtime arity for one program.
+ * Runtime arity of every evidence factory a unit publishes.
  *
+ * The checked program is authoritative: elaborating an instance adds the superclass dictionaries its
+ * pre-check declaration does not spell, so `instance Monoid (Dual a)` takes two slots where the
+ * parsed declaration shows one. A name only the parsed tree carries (a module this run did not
+ * check) keeps its declared count.
+ *
+ * @param array<string, mixed> $unit
  * @return array<string, int>
  */
-function moduleEvidenceArityMap(Ast\Program $program): array
+function unitEvidenceArities(array $unit, string $moduleName, string $namespace): array
 {
-    return moduleEvidenceMeta($program, '', '')['arity'];
+    $checked = $unit['facts']['evidenceChecked']['arity'] ?? null;
+    if (! \is_array($checked)) {
+        $program = $unit['checkedProgram'] ?? null;
+        $checked = $program instanceof Ast\Program
+            ? moduleEvidenceMeta($program, $moduleName, $namespace)['arity']
+            : [];
+    }
+
+    return $checked + unitEvidenceMeta($unit, $moduleName, $namespace)['arity'];
 }
 
 /**
@@ -263,87 +268,6 @@ function moduleTrueBindingOriginsAll(array $units): array
 }
 
 /**
- * Runtime arity of an evidence factory: unconstrained instances are nullary;
- * `C a => C (F a)` takes one dictionary per instance-context constraint
- * (including superclasses once the defining module has been type-checked).
- *
- * @param array<string, array<string, mixed>> $units
- */
-function moduleEvidenceArity(array $units, string $moduleName, string $evName): int
-{
-    $unit = $units[$moduleName] ?? null;
-    $factsArity = \is_array($unit) ? ($unit['facts']['evidenceChecked']['arity'] ?? null) : null;
-    if (\is_array($factsArity) && \array_key_exists($evName, $factsArity)) {
-        return (int) $factsArity[$evName];
-    }
-    $program = \is_array($unit)
-        ? ($unit['checkedProgram'] ?? $unit['program'] ?? null)
-        : null;
-    if (! ($program instanceof Ast\Program)) {
-        return 0;
-    }
-    $namespace = (string) ($unit['namespace'] ?? '');
-    $cacheKey = $moduleName . "\0" . $namespace . "\0" . \hash(
-        'xxh3',
-        (string) ($unit['source'] ?? '') . "\0" . (string) ($unit['path'] ?? ''),
-    );
-
-    return moduleEvidenceMeta($program, $moduleName, $namespace, $cacheKey)['arity'][$evName] ?? 0;
-}
-
-/**
- * Runtime parameter count of an exported function, from the defining module's
- * *checked* program (constraint evidence parameters are already included, so
- * this agrees with the scheme's runtime arity for ordinary definitions).
- *
- * Returns null when the module has not been checked yet, in which case callers
- * fall back to the scheme-derived arity.
- *
- * @param array<string, array<string, mixed>> $units
- */
-function moduleDeclaredFunctionArity(array $units, string $moduleName, string $name): ?int
-{
-    $unit = $units[$moduleName] ?? null;
-    if (! \is_array($unit)) {
-        return null;
-    }
-
-    $factsArity = $unit['facts']['fnArity'] ?? null;
-    if (\is_array($factsArity)) {
-        return $factsArity[$name] ?? null;
-    }
-
-    $program = $unit['checkedProgram'] ?? null;
-    if (! ($program instanceof Ast\Program)) {
-        return null;
-    }
-
-    static $cache = [];
-    $key = $moduleName . "\0" . \hash(
-        'xxh3',
-        (string) ($unit['source'] ?? '') . "\0" . (string) ($unit['path'] ?? ''),
-    );
-    if (! isset($cache[$key])) {
-        $cache[$key] = declaredFunctionArityMapFromProgram($program);
-    }
-
-    return $cache[$key][$name] ?? null;
-}
-
-/** @return array<string, int> */
-function declaredFunctionArityMapFromProgram(Ast\Program $program): array
-{
-    $arities = [];
-    foreach ($program->items as $item) {
-        if ($item instanceof Ast\FunctionDecl && ! $item->signatureOnly) {
-            $arities[$item->name] = \count($item->params);
-        }
-    }
-
-    return $arities;
-}
-
-/**
  * Elaboration facts a checked module publishes for importers, compact enough
  * to load without the checked program itself: merged instance-evidence
  * metadata (hand-written instances from the parsed tree plus derived ones,
@@ -358,7 +282,7 @@ function declaredFunctionArityMapFromProgram(Ast\Program $program): array
  *   evidenceChecked: array{origins: array<string, array{namespace: string, phpName: string, module: string}>, arity: array<string, int>},
  *   actionReturn: array<string, true>,
  *   trueBindings: array<string, true>,
- *   fnArity: array<string, int>
+ *   callables: array{abi: int, entries: array<string, array{evidence: int, params: int, arity: int}>}
  * }
  */
 function preparedModuleFacts(array $unit, Ast\Program $checked, string $moduleName): array
@@ -372,59 +296,281 @@ function preparedModuleFacts(array $unit, Ast\Program $checked, string $moduleNa
     $checkedMeta = moduleEvidenceMeta($checked, $moduleName, $namespace);
     $metas[] = $checkedMeta;
 
+    $evidence = mergeEvidenceMetas($metas);
+
     return [
-        'evidence' => mergeEvidenceMetas($metas),
+        'evidence' => $evidence,
         'evidenceChecked' => $checkedMeta,
         'actionReturn' => actionReturnFnNamesFromProgram($checked),
         'trueBindings' => trueBindingOrigins($checked->items, $moduleName),
-        'fnArity' => declaredFunctionArityMapFromProgram($checked),
+        'callables' => callableFactsFromProgram(
+            $checked,
+            $checkedMeta['arity'] + $evidence['arity'],
+        ),
     ];
 }
 
 /**
- * Runtime arity of an imported function: the number of parameters its
- * definition actually declares, not the arrow count of its type. The two
- * differ for eta-reduced definitions — `($) f = f` has type
- * `(a -> b) -> a -> b` but a single parameter — and handing such a function
- * more arguments than it declares has to go through the runtime `__apply`
- * trampoline instead of a direct call.
+ * The callable layout a module publishes for its exported entries — the same shape the in-module
+ * table publishes (`IR\Callables\CallableSig`), narrowed to what an importer can use: the runtime
+ * arity and its evidence/value split, under the entry's own name in the defining module.
  *
- * @param array<string, array<string, mixed>> $units
+ * Publishing it here is what makes an imported entry's arity a published fact rather than a
+ * guess. Before this record the importer looked the entry up by the name it imported it under, so
+ * a re-export that renamed the entry found nothing and fell back to counting the scheme's arrows,
+ * which disagrees with the declared arity of every eta-reduced definition.
+ *
+ * Imported entries are source declarations, so their capture layout is empty: `|E| + |V|` is the
+ * whole runtime vector. `evidence` and `params` are published separately so an importer can tell
+ * a hidden slot from a value parameter without re-deriving either.
+ *
+ * @param array<string, int> $evidenceArities evidence factory name => dictionary count
+ * @return array{abi: int, entries: array<string, array{evidence: int, params: int, arity: int}>}
  */
-function externalFunctionRuntimeArity(
-    array $units,
-    ?string $moduleName,
-    string $name,
-    Scheme $scheme,
-): int {
-    if ($moduleName !== null) {
-        $declared = moduleDeclaredFunctionArity($units, $moduleName, $name);
-        if ($declared !== null) {
-            return $declared;
+function callableFactsFromProgram(Ast\Program $program, array $evidenceArities = []): array
+{
+    $entries = [];
+    foreach ($program->items as $item) {
+        if (! $item instanceof Ast\FunctionDecl || $item->signatureOnly) {
+            continue;
         }
+
+        $arity = \count($item->params);
+        $evidence = 0;
+        foreach ($item->constraints as $constraint) {
+            if ($constraint->evidence !== '') {
+                ++$evidence;
+            }
+        }
+
+        $entries[$item->name] = [
+            'evidence' => $evidence,
+            'params' => $arity - $evidence,
+            'arity' => $arity,
+        ];
     }
 
-    return schemeRuntimeArity($scheme);
+    foreach (programConstructorArities($program) as $name => $arity) {
+        $entries[$name] ??= ['evidence' => 0, 'params' => $arity, 'arity' => $arity];
+    }
+
+    foreach ($evidenceArities as $name => $arity) {
+        $entries[$name] ??= evidenceCallableLayout($arity);
+    }
+
+    return ['abi' => \Moggi\IR\Callables\ABI_VERSION, 'entries' => $entries];
 }
 
 /**
+ * Runtime arity of every constructor a program declares: its field count.
+ *
+ * A type whose single constructor the surface lets callers spell as the type name itself publishes
+ * that spelling too, so both names resolve to one layout.
+ *
+ * @return array<string, int>
+ */
+function programConstructorArities(Ast\Program $program): array
+{
+    $arities = [];
+    foreach ($program->items as $item) {
+        if (! $item instanceof Ast\DataDecl) {
+            continue;
+        }
+
+        $declared = [];
+        foreach ($item->constructors as $constructor) {
+            $declared[] = $constructor->name;
+            $arities[$constructor->name] = \count($constructor->fields);
+        }
+
+        $alias = surfaceConstructorAlias(
+            $item->name,
+            $declared,
+            exportedChildrenSpec($program->exports, $item->name),
+        );
+        if ($alias !== null && isset($arities[$alias])) {
+            $arities[$item->name] ??= $arities[$alias];
+        }
+    }
+
+    return $arities;
+}
+
+/**
+ * The callable half of a module's facts, from its parsed declarations.
+ *
+ * A single-file compile prepares the standard library *shallow*: interfaces without checked
+ * bodies. A parsed declaration still states two of the three facts the record needs — its declared
+ * parameter count (an eta-reduced definition declares fewer parameters than its scheme has arrows)
+ * and, from the exported scheme, how many evidence slots the checker published
+ * (`runtimeConstraintCount`). Their sum is the same `|E| + |V|` the full check publishes, so an
+ * importer reads one arity whether the library was checked in this process or not.
+ *
+ * @param array<string, mixed> $exports the module's collected exports (`env` holds the schemes)
+ * @param array<string, int> $evidenceArities evidence factory name => dictionary count
+ * @return array{abi: int, entries: array<string, array{evidence: int, params: int, arity: int}>}
+ */
+function parsedCallableFacts(Ast\Program $program, array $exports, array $evidenceArities = []): array
+{
+    $env = $exports['env'] ?? null;
+    $entries = [];
+    foreach ($program->items as $item) {
+        if (! $item instanceof Ast\FunctionDecl || $item->signatureOnly) {
+            continue;
+        }
+
+        $params = \count($item->params);
+        $scheme = \is_array($env) ? ($env[$item->name] ?? null) : null;
+        $evidence = $scheme instanceof Scheme ? $scheme->runtimeConstraintCount : 0;
+
+        $entries[$item->name] = [
+            'evidence' => $evidence,
+            'params' => $params,
+            'arity' => $evidence + $params,
+        ];
+    }
+
+    foreach (programConstructorArities($program) as $name => $arity) {
+        $entries[$name] ??= ['evidence' => 0, 'params' => $arity, 'arity' => $arity];
+    }
+    foreach ($evidenceArities as $name => $arity) {
+        $entries[$name] ??= evidenceCallableLayout($arity);
+    }
+
+    return ['abi' => \Moggi\IR\Callables\ABI_VERSION, 'entries' => $entries];
+}
+
+/**
+ * The layout of an evidence factory: it takes one dictionary per instance-context constraint and no
+ * value parameters.
+ *
+ * @return array{evidence: int, params: int, arity: int}
+ */
+function evidenceCallableLayout(int $dictionaryCount): array
+{
+    return ['evidence' => $dictionaryCount, 'params' => 0, 'arity' => $dictionaryCount];
+}
+
+/**
+ * The tree a unit's callable record is rendered from: its checked program when it has one, else its
+ * parsed program.
+ *
+ * @param array<string, mixed> $unit
+ */
+function unitCallableProgram(array $unit, string $moduleName): Ast\Program
+{
+    $program = $unit['checkedProgram'] ?? $unit['program'] ?? null;
+    if (! $program instanceof Ast\Program) {
+        throw new \LogicException(
+            "module `{$moduleName}` has neither a checked nor a parsed program to publish callables from",
+        );
+    }
+
+    return $program;
+}
+
+/**
+ * The callable layouts a unit publishes for its callable entries.
+ *
+ * `facts.callables` is the record, and {@see unitCallableProgram()} names the one tree it is
+ * rendered from: the checked program once the unit has one, the parsed program before that. The
+ * two trees are not interchangeable — checking a backend facade synthesizes its foreign bindings,
+ * so the parsed declarations are a strict subset of the checked ones — which is why the choice is
+ * made once, here and in {@see publishCallableFacts()}, rather than at each reader.
+ *
+ * @param array<string, mixed> $unit
+ * @param array<string, array<string, mixed>> $units
+ * @return array<string, array{evidence: int, params: int, arity: int}>
+ */
+function unitCallableEntries(array $unit, array $units, string $moduleName): array
+{
+    $entries = $unit['facts']['callables']['entries'] ?? null;
+    if (\is_array($entries)) {
+        return $entries;
+    }
+
+    $namespace = (string) ($unit['namespace'] ?? '');
+    $program = unitCallableProgram($unit, $moduleName);
+
+    $exports = $unit['exports'] ?? null;
+    if (! \is_array($exports)) {
+        $localTypes = $unit['localTypes'] ?? null;
+        if (! \is_array($localTypes)) {
+            throw new \LogicException(
+                "module `{$moduleName}` has neither exports nor a type environment, so it publishes no "
+                . 'function layouts',
+            );
+        }
+        $exports = collectExports($program, $localTypes, $units, $moduleName);
+    }
+
+    return parsedCallableFacts($program, $exports, unitEvidenceArities($unit, $moduleName, $namespace))['entries'];
+}
+
+/**
+ * The layout a module publishes for one of its callable entries, looked up by the name the defining
+ * module uses.
+ *
+ * Every entry an importer can call has one — a function (its declared parameters, with the
+ * constraint slots the check published), a data constructor (its field count) or an evidence factory
+ * (its dictionary count) — so a consumer reads one record. A name the module does not publish is a
+ * producer defect: the entry exists in the module's exports, so its layout has to exist too.
+ *
+ * @param array<string, array<string, mixed>> $units
+ * @return array{evidence: int, params: int, arity: int}
+ */
+function publishedCallableLayout(array $units, string $moduleName, string $name): array
+{
+    $unit = $units[$moduleName] ?? null;
+    if (! \is_array($unit)) {
+        throw new \LogicException(
+            "callable `{$moduleName}::{$name}` has no unit in this compilation, so it publishes no layout",
+        );
+    }
+
+    $entry = unitCallableEntries($unit, $units, $moduleName)[$name] ?? null;
+    if (! \is_array($entry) || ! isset($entry['evidence'], $entry['params'], $entry['arity'])) {
+        throw new \LogicException(
+            "module `{$moduleName}` publishes no callable layout for `{$name}`; a function, data "
+            . 'constructor and evidence factory each have to publish one where the module is checked '
+            . 'or parsed',
+        );
+    }
+
+    return [
+        'evidence' => (int) $entry['evidence'],
+        'params' => (int) $entry['params'],
+        'arity' => (int) $entry['arity'],
+    ];
+}
+
+/**
+ * Runtime arity of an imported function: the vector its definition publishes, not the arrow count of
+ * its type. The two differ for eta-reduced definitions — `($) f = f` has type `(a -> b) -> a -> b`
+ * but a single parameter — and handing such a function more arguments than it declares has to go
+ * through the runtime `__apply` trampoline instead of a direct call.
+ *
+ * `$name` is the entry's name in `$moduleName`, not the name the importing file selected it as: a
+ * re-export renames the entry, and the defining module knows only its own spelling.
+ *
+ * @param array<string, array<string, mixed>> $units
+ */
+function externalFunctionRuntimeArity(array $units, ?string $moduleName, string $name): int
+{
+    if ($moduleName === null) {
+        throw new \LogicException("imported entry `{$name}` has no declaring module, so it publishes no layout");
+    }
+
+    return publishedCallableLayout($units, $moduleName, $name)['arity'];
+}
+
+/**
+ * Everything a module needs from the modules it imports: the facts, published
+ * as one `ImportInterface`, and the target layout those facts were resolved
+ * against, as an `EmitPlan` the emitter renders from.
+ *
  * @param list<Ast\ImportDecl> $imports
  * @param array<string, array<string, mixed>> $units
- * @return array{
- *   env: array<string, Scheme>,
- *   typeSynonyms: array<string, array<string, mixed>>,
- *   data: array<string, array<string, mixed>>,
- *   qualifiedModules: array<string, string>,
- *   constructorRenames: array<string, string>,
- *   codegen: array{
- *     requireLines: list<string>,
- *     functionUseLines: list<string>,
- *     namespaceUseLines: list<string>,
- *     externalFns: array<string, string>,
- *     moduleAsNames: array<string, string>,
- *     constructorRenames: array<string, string>
- *   }
- * }
  */
 function buildImportContext(
     array $imports,
@@ -432,8 +578,10 @@ function buildImportContext(
     string $currentModule,
     string $currentOutputRelative,
     string $rootPrefix,
-): array {
-    $planPhpImports = compileBackend() === 'php';
+    string $backendId,
+): ImportContext {
+    $planPhpImports = $backendId === 'php';
+    $outputExtension = backendById($backendId)->extension();
     $env = [];
     $typeSynonyms = [];
     $data = [];
@@ -442,10 +590,8 @@ function buildImportContext(
     $moduleAsNames = [];
     $qualifiedOrigins = [];
     $qualifiedEnv = [];
-    $requireTargets = [];
-    $namespaceUseLines = [];
     $externalFns = [];
-    $externalFnRuntimeArity = [];
+    $callables = [];
     $actionReturnFns = [];
     $fnOriginModules = [];
     $intrinsicWrappers = [];
@@ -504,11 +650,8 @@ function buildImportContext(
 
         if ($targetName !== $currentModule) {
             if (! (($target['synthetic'] ?? false) === true)) {
-                $targetOutputRelative = mogPathToOutputRelative($target['path'], $rootPrefix);
+                $targetOutputRelative = mogPathToOutputRelative($target['path'], $rootPrefix, $outputExtension);
                 $moduleOutputPaths[$targetName] = $targetOutputRelative;
-                if ($planPhpImports) {
-                    $requireTargets[$targetName] = relativeRequirePath($currentOutputRelative, $targetOutputRelative);
-                }
             }
         }
 
@@ -542,7 +685,7 @@ function buildImportContext(
                     $qualifiedOrigins[$localPrefix][$name] = $origin;
                 }
                 if ($origin !== null && $planPhpImports) {
-                    addOriginRequire($requireTargets, $moduleOutputPaths, $origin, $currentModule, $currentOutputRelative, $units, $rootPrefix);
+                    recordOriginOutputPath($moduleOutputPaths, $origin, $currentModule, $units, $rootPrefix, $outputExtension);
                 }
                 if (isset($selected['intrinsicWrappers'][$name])) {
                     $intrinsicWrappers[$name] = $selected['intrinsicWrappers'][$name];
@@ -552,12 +695,7 @@ function buildImportContext(
             if ($import->qualifiedOnly) {
                 if ($origin !== null && ! isset($fnOriginModules[$name])) {
                     $externalFns[$name] = resolvedSymbol($origin['module'], $origin['phpName']);
-                    $externalFnRuntimeArity[$name] = externalFunctionRuntimeArity(
-                        $units,
-                        $origin['module'],
-                        $name,
-                        $scheme,
-                    );
+                    $callables[$name] = publishedCallableLayout($units, $origin['module'], $origin['phpName']);
                     $fnOriginModules[$name] = $origin['module'];
                     if (isset(moduleActionReturnFnNames($units, $origin['module'])[$origin['phpName']])) {
                         $actionReturnFns[$name] = true;
@@ -582,7 +720,7 @@ function buildImportContext(
                             $selected['origins'][$name]['module'] ?? '',
                         ])),
                     ];
-                    unset($externalFns[$name], $externalFnRuntimeArity[$name]);
+                    unset($externalFns[$name], $callables[$name]);
                 }
             }
 
@@ -600,12 +738,7 @@ function buildImportContext(
             }
 
             $externalFns[$name] = resolvedSymbol($origin['module'], $origin['phpName']);
-            $externalFnRuntimeArity[$name] = externalFunctionRuntimeArity(
-                $units,
-                $origin['module'],
-                $name,
-                $scheme,
-            );
+            $callables[$name] = publishedCallableLayout($units, $origin['module'], $origin['phpName']);
             $fnOriginModules[$name] = $origin['module'];
             if (isset(moduleActionReturnFnNames($units, $origin['module'])[$origin['phpName']])) {
                 $actionReturnFns[$name] = true;
@@ -614,9 +747,15 @@ function buildImportContext(
 
         if ($targetName !== $currentModule) {
             $targetMeta = unitEvidenceMeta($target, $targetName, $namespace);
+            $targetArities = unitEvidenceArities($target, $targetName, $namespace);
             foreach ($targetMeta['origins'] as $evName => $origin) {
                 $externalFns[$evName] = resolvedSymbol($origin['module'], $origin['phpName']);
-                $externalFnRuntimeArity[$evName] = moduleEvidenceArity($units, $targetName, $evName);
+                $callables[$evName] = evidenceCallableLayout(
+                    $targetArities[$evName]
+                        ?? throw new \LogicException(
+                            "evidence `{$evName}` was published by module `{$targetName}` without a runtime arity",
+                        ),
+                );
                 $fnOriginModules[$evName] = $origin['module'];
             }
         }
@@ -642,7 +781,6 @@ function buildImportContext(
 
             foreach ($exports['moduleAsNames'] as $originNamespace => $asName) {
                 $moduleAsNames[$originNamespace] = $asName;
-                $namespaceUseLines[] = "{$originNamespace} as {$asName}";
             }
         } elseif ($import->kind === 'glob' || $import->kind === 'named') {
             foreach ($exports['qualifiedModules'] as $prefix => $originModule) {
@@ -651,7 +789,6 @@ function buildImportContext(
         }
 
         if ($planPhpImports && $import->kind === 'qualifiedAs' && $import->asName !== null) {
-            $namespaceUseLines[] = "{$namespace} as {$import->asName}";
             $moduleAsNames[$namespace] = $import->asName;
         }
     }
@@ -666,85 +803,74 @@ function buildImportContext(
             (string) ($unit['source'] ?? '') . "\0" . (string) ($unit['path'] ?? ''),
         );
         $meta = unitEvidenceMeta($unit, $unitName, $unit['namespace'], $cacheKey);
+        $unitArities = unitEvidenceArities($unit, $unitName, $unit['namespace']);
         foreach ($meta['origins'] as $evName => $origin) {
             if (isset($externalFns[$evName])) {
                 continue;
             }
 
             $externalFns[$evName] = resolvedSymbol($origin['module'], $origin['phpName']);
-            $externalFnRuntimeArity[$evName] = $meta['arity'][$evName] ?? 0;
+            $callables[$evName] = evidenceCallableLayout(
+                $unitArities[$evName]
+                    ?? throw new \LogicException(
+                        "evidence `{$evName}` was published by module `{$unitName}` without a runtime arity",
+                    ),
+            );
             $fnOriginModules[$evName] = $origin['module'];
             if ($planPhpImports) {
-                addOriginRequire(
-                    $requireTargets,
+                recordOriginOutputPath(
                     $moduleOutputPaths,
                     $origin,
                     $currentModule,
-                    $currentOutputRelative,
                     $units,
                     $rootPrefix,
+                    $outputExtension,
                 );
             }
         }
     }
 
-    $namespaceUseLines = $planPhpImports ? dedupeUseLines($namespaceUseLines) : [];
-
     mergeFacadeBackendExports(
         $env,
         $externalFns,
-        $externalFnRuntimeArity,
+        $callables,
         $actionReturnFns,
         $fnOriginModules,
         $intrinsicWrappers,
-        $requireTargets,
         $moduleOutputPaths,
         $units,
         $currentModule,
-        $currentOutputRelative,
         $rootPrefix,
         $planPhpImports,
+        $outputExtension,
     );
 
-    $requireLines = [];
-    $functionUseLines = [];
-    if ($planPhpImports) {
-        $requireLines = \array_values(\array_unique($requireTargets));
-        \sort($requireLines, SORT_STRING);
-
-        foreach ($externalFns as $local => $resolved) {
-            $functionUseLines[] = functionUseLine($local, $resolved);
-        }
-        $functionUseLines = dedupeUseLines($functionUseLines);
-    }
-
-    return [
-        'env' => $env,
-        'typeSynonyms' => $typeSynonyms,
-        'data' => $data,
-        'qualifiedModules' => $qualifiedModules,
-        'constructorRenames' => $constructorRenames,
-        'qualifiedOrigins' => $qualifiedOrigins,
-        'qualifiedEnv' => $qualifiedEnv,
-        'codegen' => [
-            'requireLines' => $requireLines,
-            'functionUseLines' => $functionUseLines,
-            'namespaceUseLines' => $namespaceUseLines,
-            'externalFns' => $externalFns,
-            'externalFnRuntimeArity' => $externalFnRuntimeArity,
-            'moduleAsNames' => $moduleAsNames,
-            'constructorRenames' => $constructorRenames,
-            'fnOriginModules' => $fnOriginModules,
-            'moduleOutputPaths' => $moduleOutputPaths,
-            'currentOutputRelative' => $currentOutputRelative,
-            'namespaceModules' => $namespaceModules,
-        ],
-        'externalFnRuntimeArity' => $externalFnRuntimeArity,
-        'externalActionReturnFns' => $actionReturnFns,
-        'externalTrueBindings' => moduleTrueBindingOriginsAll($units),
-        'intrinsicWrappers' => $intrinsicWrappers,
-        'ambiguousNames' => $ambiguousNames,
-    ];
+    return new ImportContext(
+        interface: new ImportInterface(
+            module: $currentModule,
+            env: $env,
+            data: $data,
+            typeSynonyms: $typeSynonyms,
+            qualifiedModules: $qualifiedModules,
+            qualifiedOrigins: $qualifiedOrigins,
+            qualifiedEnv: $qualifiedEnv,
+            intrinsicWrappers: $intrinsicWrappers,
+            ambiguousNames: $ambiguousNames,
+            constructorRenames: $constructorRenames,
+            externalFns: $externalFns,
+            fnOriginModules: $fnOriginModules,
+            callables: $callables,
+            actionReturn: $actionReturnFns,
+            trueBindings: moduleTrueBindingOriginsAll($units),
+        ),
+        plan: EmitPlan::forTarget(
+            $backendId,
+            $currentOutputRelative,
+            $planPhpImports ? $moduleOutputPaths : [],
+            $moduleAsNames,
+            $namespaceModules,
+        ),
+    );
 }
 
 /**
@@ -831,10 +957,9 @@ function mergeFacadeBackendEnv(
 /**
  * @param array<string, Scheme> $env
  * @param array<string, string> $externalFns
- * @param array<string, int> $externalFnRuntimeArity
+ * @param array<string, array{evidence: int, params: int, arity: int}> $callables
  * @param array<string, string> $fnOriginModules
  * @param array<string, string> $intrinsicWrappers
- * @param array<string, string> $requireTargets
  * @param array<string, string> $moduleOutputPaths
  * @param array<string, true> $actionReturnFns
  * @param array<string, array<string, mixed>> $units
@@ -842,17 +967,16 @@ function mergeFacadeBackendEnv(
 function mergeFacadeBackendExports(
     array &$env,
     array &$externalFns,
-    array &$externalFnRuntimeArity,
+    array &$callables,
     array &$actionReturnFns,
     array &$fnOriginModules,
     array &$intrinsicWrappers,
-    array &$requireTargets,
     array &$moduleOutputPaths,
     array $units,
     string $currentModule,
-    string $currentOutputRelative,
     string $rootPrefix,
-    bool $planPhpImports = true,
+    bool $planPhpImports,
+    string $outputExtension,
 ): void {
     mergeFacadeBackendEnv($env, $intrinsicWrappers, $units, $currentModule);
 
@@ -883,54 +1007,52 @@ function mergeFacadeBackendExports(
 
         $origin = $implExports['origins'][$name];
         $externalFns[$name] = resolvedSymbol($origin['module'], $origin['phpName']);
-        $externalFnRuntimeArity[$name] = externalFunctionRuntimeArity(
-            $units,
-            $origin['module'],
-            $name,
-            $scheme,
-        );
+        $callables[$name] = publishedCallableLayout($units, $origin['module'], $origin['phpName']);
         $fnOriginModules[$name] = $origin['module'];
         if (isset(moduleActionReturnFnNames($units, $origin['module'])[$origin['phpName']])) {
             $actionReturnFns[$name] = true;
         }
 
         if ($planPhpImports) {
-            addOriginRequire(
-                $requireTargets,
+            recordOriginOutputPath(
                 $moduleOutputPaths,
                 $origin,
                 $currentModule,
-                $currentOutputRelative,
                 $units,
                 $rootPrefix,
+                $outputExtension,
             );
         }
     }
 }
 
 /**
- * @param array<string, string> $requireTargets
+ * Remember where an entry's declaring module is written, for the target that
+ * links files. The relative path from this module's artifact is computed when
+ * the plan is rendered, from whichever spelling the caller settled on.
+ *
  * @param array<string, string> $moduleOutputPaths
  * @param array{module: string, namespace: string, phpName: string} $origin
  * @param array<string, array<string, mixed>> $units
  */
-function addOriginRequire(
-    array &$requireTargets,
+function recordOriginOutputPath(
     array &$moduleOutputPaths,
     array $origin,
     string $currentModule,
-    string $currentOutputRelative,
     array $units,
     string $rootPrefix,
+    string $outputExtension,
 ): void {
     $originModule = $origin['module'];
     if ($originModule === $currentModule || ! isset($units[$originModule])) {
         return;
     }
 
-    $originOutputRelative = mogPathToOutputRelative($units[$originModule]['path'], $rootPrefix);
-    $moduleOutputPaths[$originModule] = $originOutputRelative;
-    $requireTargets[$originModule] = relativeRequirePath($currentOutputRelative, $originOutputRelative);
+    $moduleOutputPaths[$originModule] = mogPathToOutputRelative(
+        $units[$originModule]['path'],
+        $rootPrefix,
+        $outputExtension,
+    );
 }
 
 /** @param list<string> $lines @return list<string> */
@@ -966,285 +1088,4 @@ function functionUseLine(string $localName, string $resolvedName): string
     }
 
     return "function {$resolved} as {$localMangled}";
-}
-
-/**
- * Backend import planning for module code generation.
- *
- * Consumes module-origin metadata gathered by `buildImportContext` above, but
- * owns only PHP import pruning derived from IR usage. Semantic import/export
- * resolution belongs in the functions above and in exports.php, not here.
- */
-/**
- * @param ?string $absoluteRequireRoot when set, emit `require_once '/abs/...php'` instead of `__DIR__`-relative paths
- */
-function filterCodegenImportsForIr(
-    IR\Module $ir,
-    array $codegen,
-    ?string $fromOutputRelative = null,
-    ?array $usedCallees = null,
-    ?string $absoluteRequireRoot = null,
-    array $globalEvidenceMaps = [],
-    array $globalFnOrigins = [],
-): array {
-    if ($usedCallees === null) {
-        $usedCallees = collectIrCodegenUsage($ir)['callees'];
-    }
-
-    foreach (dictCallResolvedMethods($ir, $globalEvidenceMaps) as $methodName => $originModule) {
-        $usedCallees[$methodName] = true;
-        if (! isset($codegen['externalFns'][$methodName])) {
-            $codegen['externalFns'][$methodName] = resolvedSymbol($originModule, $methodName);
-        }
-        if (! isset($codegen['fnOriginModules'][$methodName])) {
-            $codegen['fnOriginModules'][$methodName] = $originModule;
-        }
-    }
-
-    foreach (evidenceSymbolOrigins($globalEvidenceMaps) as $symbol => $originModule) {
-        if (! isset($usedCallees[$symbol])) {
-            continue;
-        }
-        if (! isset($codegen['externalFns'][$symbol])) {
-            $codegen['externalFns'][$symbol] = resolvedSymbol($originModule, $symbol);
-        }
-        if (! isset($codegen['fnOriginModules'][$symbol])) {
-            $codegen['fnOriginModules'][$symbol] = $originModule;
-        }
-    }
-
-    $localFnNames = [];
-    foreach ($ir->functions as $fn) {
-        $localFnNames[$fn->name] = true;
-    }
-
-    foreach (\array_keys($usedCallees) as $symbol) {
-        if (isset($codegen['externalFns'][$symbol]) || isset($localFnNames[$symbol])) {
-            continue;
-        }
-        $originModule = $globalFnOrigins[$symbol] ?? null;
-        if (! \is_string($originModule) || $originModule === '') {
-            continue;
-        }
-        $codegen['externalFns'][$symbol] = resolvedSymbol($originModule, $symbol);
-        $codegen['fnOriginModules'][$symbol] = $originModule;
-    }
-
-    $usedExternal = [];
-    $usedModules = [];
-
-    foreach (\array_keys($usedCallees) as $callee) {
-        if (isset($codegen['externalFns'][$callee])) {
-            $usedExternal[$callee] = true;
-            $originModule = $codegen['fnOriginModules'][$callee] ?? null;
-            if ($originModule !== null) {
-                $usedModules[$originModule] = true;
-            }
-
-            continue;
-        }
-
-        $parsed = parseResolvedSymbol($callee);
-        if ($parsed !== null) {
-            $usedModules[$parsed['module']] = true;
-            if (isset($codegen['externalFns'][$parsed['name']])) {
-                $usedExternal[$parsed['name']] = true;
-            }
-
-            continue;
-        }
-
-        if (! \str_contains($callee, '\\')) {
-            continue;
-        }
-
-        $separator = \strrpos($callee, '\\');
-        $namespace = \substr($callee, 0, $separator);
-        $member = \substr($callee, $separator + 1);
-        $originModule = $codegen['namespaceModules'][$namespace] ?? null;
-        if ($originModule !== null) {
-            $usedModules[$originModule] = true;
-        }
-
-        if (isset($codegen['externalFns'][$member])) {
-            $usedExternal[$member] = true;
-        }
-    }
-
-    $externalFns = \array_intersect_key($codegen['externalFns'], $usedExternal);
-    $requireLines = [];
-    $fromOutput = $fromOutputRelative ?? $codegen['currentOutputRelative'] ?? '';
-    $absRoot = $absoluteRequireRoot !== null
-        ? \rtrim(\str_replace('\\', '/', $absoluteRequireRoot), '/')
-        : null;
-    foreach (\array_keys($usedModules) as $moduleName) {
-        $targetPath = $codegen['moduleOutputPaths'][$moduleName] ?? null;
-        if ($targetPath === null) {
-            continue;
-        }
-
-        if ($absRoot !== null) {
-            $requireLines[] = \var_export($absRoot . '/' . \str_replace('\\', '/', $targetPath), true);
-        } else {
-            $requireLines[] = relativeRequirePath($fromOutput, $targetPath);
-        }
-    }
-
-    \sort($requireLines, SORT_STRING);
-    $requireLines = \array_values(\array_unique($requireLines));
-
-    $localFnNames = [];
-    foreach ($ir->functions as $fn) {
-        $localFnNames[$fn->name] = true;
-    }
-
-    $functionUseLines = [];
-    foreach ($externalFns as $local => $resolved) {
-        if (isConstructorName($local)) {
-            continue;
-        }
-        if (isset($localFnNames[$local])) {
-            continue;
-        }
-
-        $functionUseLines[] = functionUseLine($local, $resolved);
-    }
-    $functionUseLines = dedupeUseLines($functionUseLines);
-
-    $namespaceUseLines = [];
-    $usedNamespaces = [];
-    foreach (\array_keys($usedCallees) as $callee) {
-        $parsed = parseResolvedSymbol($callee);
-        if ($parsed !== null) {
-            $usedNamespaces[moduleNameToNamespace($parsed['module'])] = true;
-
-            continue;
-        }
-        if (! \str_contains($callee, '\\')) {
-            continue;
-        }
-
-        $usedNamespaces[\substr($callee, 0, \strrpos($callee, '\\'))] = true;
-    }
-
-    foreach ($codegen['namespaceUseLines'] as $line) {
-        foreach (\array_keys($usedNamespaces) as $namespace) {
-            $asName = $codegen['moduleAsNames'][$namespace] ?? null;
-            if ($asName !== null && \str_starts_with($line, "{$namespace} as {$asName}")) {
-                $namespaceUseLines[] = $line;
-            }
-        }
-    }
-    $namespaceUseLines = dedupeUseLines($namespaceUseLines);
-
-    $moduleAsNames = [];
-    foreach ($codegen['moduleAsNames'] as $namespace => $asName) {
-        if (isset($usedNamespaces[$namespace])) {
-            $moduleAsNames[$namespace] = $asName;
-        }
-    }
-
-    $externalFnRuntimeArity = \array_intersect_key(
-        $codegen['externalFnRuntimeArity'] ?? [],
-        $usedExternal,
-    );
-
-    return [
-        'requireLines' => $requireLines,
-        'functionUseLines' => $functionUseLines,
-        'namespaceUseLines' => $namespaceUseLines,
-        'externalFns' => $externalFns,
-        'externalFnRuntimeArity' => $externalFnRuntimeArity,
-        'moduleAsNames' => $moduleAsNames,
-        'constructorRenames' => $codegen['constructorRenames'] ?? [],
-    ];
-}
-
-/**
- * Map instance-method IR names that PHP/JVM emit will resolve from nullary
- * DictCall evidence FnRefs → defining module name.
- *
- * @param array<string, array{module?: string, methods?: array<string, string>}> $globalEvidenceMaps
- * @return array<string, string> methodIrName => originModule
- */
-function dictCallResolvedMethods(IR\Module $ir, array $globalEvidenceMaps): array
-{
-    if ($globalEvidenceMaps === []) {
-        return [];
-    }
-
-    $out = [];
-    $visit = static function ($node) use (&$visit, &$out, $globalEvidenceMaps): void {
-        if ($node instanceof IR\DictCall) {
-            $evName = null;
-            if ($node->evidence instanceof IR\FnRef) {
-                $evName = $node->evidence->name;
-            } elseif ($node->evidence instanceof IR\ExprCall && $node->evidence->args === []) {
-                $evName = $node->evidence->callee;
-            }
-            if ($evName !== null && isset($globalEvidenceMaps[$evName])) {
-                $info = $globalEvidenceMaps[$evName];
-                $methods = $info['methods'] ?? [];
-                $methodIr = \is_array($methods) ? ($methods[$node->method] ?? null) : null;
-                $module = $info['module'] ?? null;
-                if (\is_string($methodIr) && \is_string($module)) {
-                    $out[$methodIr] = $module;
-                }
-            }
-        }
-        if ($node instanceof IR\Block) {
-            foreach ($node->items as $item) {
-                $visit($item);
-            }
-        }
-        if ($node instanceof IR\MatchStmt || $node instanceof IR\MatchReturn) {
-            foreach ($node->arms as $arm) {
-                $visit($arm->body);
-            }
-        }
-        if ($node instanceof IR\FunctionDecl) {
-            $visit($node->body);
-        }
-    };
-
-    foreach ($ir->functions as $fn) {
-        $visit($fn);
-    }
-
-    return $out;
-}
-
-/**
- * Map every evidence factory and its method IR names to the defining module.
- *
- * Used when specialization has already rewritten DictCalls into direct Calls
- * so the symbols still appear in callees without a remaining DictCall.
- *
- * @param array<string, array{module?: string, methods?: array<string, string>}> $globalEvidenceMaps
- * @return array<string, string> irName => originModule
- */
-function evidenceSymbolOrigins(array $globalEvidenceMaps): array
-{
-    $out = [];
-    foreach ($globalEvidenceMaps as $evName => $info) {
-        if (! \is_string($evName) || $evName === '') {
-            continue;
-        }
-        $module = $info['module'] ?? null;
-        if (! \is_string($module) || $module === '') {
-            continue;
-        }
-        $out[$evName] = $module;
-        $methods = $info['methods'] ?? [];
-        if (! \is_array($methods)) {
-            continue;
-        }
-        foreach ($methods as $methodIr) {
-            if (\is_string($methodIr) && $methodIr !== '') {
-                $out[$methodIr] = $module;
-            }
-        }
-    }
-
-    return $out;
 }

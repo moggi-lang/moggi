@@ -5,40 +5,11 @@ namespace Moggi\Semantics\Types;
 use function Moggi\Errors\appendDidYouMean;
 
 use Moggi\IR\EntryPointKind;
-
-use function Moggi\Modules\resolvedSymbol;
-use function Moggi\Patterns\Walk\patternDuplicateBinder;
-use function Moggi\Patterns\Walk\patternVariableNames;
-use function Moggi\Patterns\Walk\patternVariableNamesOrdered;
-
 use Moggi\Pipeline\CompilePurpose;
-
-use function Moggi\Pipeline\isEntryModule;
-use function Moggi\Semantics\Exhaustiveness\caseExhaustivenessProven;
-use function Moggi\Semantics\Exhaustiveness\checkCaseExhaustiveness;
-use function Moggi\Semantics\IntrinsicRegistry\capturesCallSite;
-use function Moggi\Semantics\IntrinsicRegistry\isMagicHashName;
-use function Moggi\Semantics\IntrinsicRegistry\isShortCircuitPrimop;
-use function Moggi\Semantics\IntrinsicRegistry\primitiveTypeOwnerModule;
-use function Moggi\Semantics\IntrinsicRegistry\resolveIntrinsicName;
-use function Moggi\Semantics\IntrinsicRegistry\schemeArity;
-use function Moggi\Semantics\IntrinsicRegistry\shortCircuitPrimopId;
-use function Moggi\Semantics\IntrinsicRegistry\typeSchemes;
-use function Moggi\Semantics\Kernel\bindRole;
-use function Moggi\Semantics\Kernel\literalRole;
-
 use Moggi\Semantics\Kinds;
-
-use function Moggi\Semantics\TypeExpr\canonicalNatDigits;
-
 use Moggi\Semantics\TypeExpr\Scheme;
-
-use function Moggi\Semantics\TypeExpr\scheme;
-use function Moggi\Semantics\TypeExpr\schemeFreeTypeVars;
-
 use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TChar;
-
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TDouble;
 use Moggi\Semantics\TypeExpr\TInt;
@@ -61,6 +32,25 @@ use Moggi\Semantics\TypeExpr\TWord8;
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Syntax\Ast;
 
+use function Moggi\Modules\resolvedSymbol;
+use function Moggi\Patterns\Walk\patternDuplicateBinder;
+use function Moggi\Patterns\Walk\patternVariableNames;
+use function Moggi\Patterns\Walk\patternVariableNamesOrdered;
+use function Moggi\Semantics\Exhaustiveness\caseExhaustivenessProven;
+use function Moggi\Semantics\Exhaustiveness\checkCaseExhaustiveness;
+use function Moggi\Semantics\IntrinsicRegistry\capturesCallSite;
+use function Moggi\Semantics\IntrinsicRegistry\isMagicHashName;
+use function Moggi\Semantics\IntrinsicRegistry\isShortCircuitPrimop;
+use function Moggi\Semantics\IntrinsicRegistry\primitiveTypeOwnerModule;
+use function Moggi\Semantics\IntrinsicRegistry\resolveIntrinsicName;
+use function Moggi\Semantics\IntrinsicRegistry\schemeArity;
+use function Moggi\Semantics\IntrinsicRegistry\shortCircuitPrimopId;
+use function Moggi\Semantics\IntrinsicRegistry\typeSchemes;
+use function Moggi\Semantics\Kernel\bindRole;
+use function Moggi\Semantics\Kernel\literalRole;
+use function Moggi\Semantics\TypeExpr\canonicalNatDigits;
+use function Moggi\Semantics\TypeExpr\scheme;
+use function Moggi\Semantics\TypeExpr\schemeFreeTypeVars;
 use function Moggi\Syntax\Ast\desugarDo;
 use function Moggi\Syntax\isConstructorName;
 use function Moggi\Syntax\isConstructorOperator;
@@ -1175,27 +1165,13 @@ function signatureVarsInType(Type $type, array $known): array
         return [$type->name => true];
     }
 
-    if ($type instanceof TVarApp) {
-        return [$type->name => true] + \array_merge([], ...\array_map(
-            static fn (Type $arg): array => signatureVarsInType($arg, $known),
-            $type->args,
-        ));
+    $variables = [];
+    if ($type instanceof TVarApp || ($type instanceof TCon && ! isset($known[$type->name]))) {
+        $variables[$type->name] = true;
     }
 
-    if ($type instanceof TArrow) {
-        return [
-            ...signatureVarsInType($type->from, $known),
-            ...signatureVarsInType($type->to, $known),
-        ];
-    }
-
-    if (! $type instanceof TCon) {
-        return [];
-    }
-
-    $variables = isset($known[$type->name]) ? [] : [$type->name => true];
-    foreach ($type->args as $arg) {
-        $variables += signatureVarsInType($arg, $known);
+    foreach (typeChildren($type) as $child) {
+        $variables += signatureVarsInType($child, $known);
     }
 
     return $variables;
@@ -1377,7 +1353,7 @@ function rewriteIntrinsicApplies(Ast\AstNode $expr): Ast\AstNode
 
 /**
  * Mark `main` as EntryPointKind::Main under Executable purpose only, in the
- * module this compilation treats as its entry (`isEntryModule`).
+ * module this compilation names in `TypeCheckState::$entryModules`.
  *
  * A package may declare several executables, each with its own entry, so the
  * entry module is named by the compilation rather than fixed at `Main`; the
@@ -1396,7 +1372,7 @@ function validateEntryPoint(
         return;
     }
 
-    if (! isEntryModule($moduleName)) {
+    if ($moduleName === null || ! isset($state->entryModules[$moduleName])) {
         return;
     }
 
@@ -1672,8 +1648,7 @@ function inferDoExpr(TypeCheckState $state, Ast\DoExpr $expr, array $env): Type
 
 function annotateExprType(TypeCheckState $state, Ast\AstNode $expr, Type $type): void
 {
-    $pruned = prune($state, $type);
-    $expr->inferredType = internalTypeToAst($pruned, $state->subst);
+    $expr->inferredType = internalTypeToAstNode(prune($state, $type));
 }
 
 function inferTypeAsc(TypeCheckState $state, Ast\TypeAsc $expr, array $env): Type
@@ -1793,7 +1768,10 @@ function inferVariable(TypeCheckState $state, Ast\AstNode &$expr, array $env): T
     if ($scheme->binderId !== null) {
         $expr->binderId = $scheme->binderId;
     }
-    if (isset($state->externalFns[$expr->name])) {
+    if (isset($state->defaultBodyOrigins[$expr->name]) && $scheme->binderId === null) {
+        $expr->resolvedOrigin = $state->defaultBodyOrigins[$expr->name];
+        $expr->declarationScoped = true;
+    } elseif (isset($state->externalFns[$expr->name])) {
         $expr->resolvedOrigin = $state->externalFns[$expr->name];
     } elseif ($state->currentModule !== null) {
         $expr->resolvedOrigin = resolvedSymbol($state->currentModule, $expr->name);
@@ -1849,7 +1827,10 @@ function inferOperatorRef(TypeCheckState $state, Ast\AstNode &$expr, array $env)
             $expr,
         );
 
-    if (isset($state->externalFns[$expr->name])) {
+    if (isset($state->defaultBodyOrigins[$expr->name]) && $scheme->binderId === null) {
+        $expr->resolvedOrigin = $state->defaultBodyOrigins[$expr->name];
+        $expr->declarationScoped = true;
+    } elseif (isset($state->externalFns[$expr->name])) {
         $expr->resolvedOrigin = $state->externalFns[$expr->name];
     } elseif ($state->currentModule !== null) {
         $expr->resolvedOrigin = resolvedSymbol($state->currentModule, $expr->name);
@@ -2803,16 +2784,9 @@ function collectSkeletonRigidVars(TypeCheckState $state, Type $type, array &$rig
     if ($type instanceof TVarApp) {
         $rigid[$type->name] = true;
     }
-    if ($type instanceof TCon || $type instanceof TVarApp || $type instanceof TPromoted) {
-        foreach ($type->args as $arg) {
-            collectSkeletonRigidVars($state, $arg, $rigid);
-        }
 
-        return;
-    }
-    if ($type instanceof TArrow) {
-        collectSkeletonRigidVars($state, $type->from, $rigid);
-        collectSkeletonRigidVars($state, $type->to, $rigid);
+    foreach (typeChildren($type) as $child) {
+        collectSkeletonRigidVars($state, $child, $rigid);
     }
 }
 

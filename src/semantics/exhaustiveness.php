@@ -7,16 +7,12 @@ use function Moggi\Semantics\Kernel\boolTypeName;
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TInt;
 use Moggi\Semantics\TypeExpr\Type;
+use Moggi\Semantics\Types\TypeCheckState;
+use Moggi\Semantics\Types\TypeError;
+use Moggi\Syntax\Ast;
 
 use function Moggi\Semantics\Types\prune;
-
-use Moggi\Semantics\Types\TypeCheckState;
-
-use Moggi\Semantics\Types\TypeError;
-
 use function Moggi\Semantics\Types\typeFail;
-
-use Moggi\Syntax\Ast;
 
 /**
  * Module-level bindings whose body is the host-boolean `true`, keyed `<Module>::<name>`.

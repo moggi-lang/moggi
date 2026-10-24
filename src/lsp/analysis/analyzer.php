@@ -2,28 +2,24 @@
 
 namespace Moggi\LSP\Analysis;
 
-use function Moggi\Backend\setCompileBackend;
+use Moggi\Pipeline\CompilationContext;
+use Moggi\Pipeline\CompilePurpose;
+use Moggi\Semantics\Types\TypeError;
+use Moggi\Syntax\Ast;
+use Moggi\Syntax\Lexer\LexError;
+use Moggi\Syntax\Lexer\TokenKind;
+use Moggi\Syntax\Parser\ParseError;
+
 use function Moggi\Docs\declarationTypeSignature;
 use function Moggi\LSP\Protocol\locToRange;
 use function Moggi\LSP\Protocol\uriToPath;
 use function Moggi\Modules\bundledStdlibLibPath;
-
 use function Moggi\Modules\moduleFileClosureCached;
 use function Moggi\Modules\prepareProjectCached;
 use function Moggi\Modules\setStdlibLibPath;
 use function Moggi\Modules\stdlibSourcesMissingFrom;
-
-use Moggi\Semantics\Types\TypeError;
-use Moggi\Syntax\Ast;
-
 use function Moggi\Syntax\Lexer\lex;
-
-use Moggi\Syntax\Lexer\LexError;
-use Moggi\Syntax\Lexer\TokenKind;
-
 use function Moggi\Syntax\Parser\parse;
-
-use Moggi\Syntax\Parser\ParseError;
 
 class AnalysisResult
 {
@@ -44,6 +40,8 @@ class AnalysisResult
         public readonly array $imports,
         public readonly string $source,
         public readonly string $uri,
+        /** True when `$program` is the checked tree; false for the parsed fallback. */
+        public readonly bool $checked = false,
     ) {
     }
 }
@@ -54,7 +52,7 @@ class AnalysisResult
  *
  * @param list<string> $libDirs
  */
-function analyze(string $uri, string $content, array $libDirs = []): AnalysisResult
+function analyze(string $uri, string $content, array $libDirs = [], ?CompilationContext $context = null): AnalysisResult
 {
     $path = uriToPath($uri);
     $filename = $path;
@@ -77,9 +75,9 @@ function analyze(string $uri, string $content, array $libDirs = []): AnalysisRes
         }
     }
 
-    setCompileBackend('php');
+    $context ??= CompilationContext::for('php', CompilePurpose::Library, roots: $libDirs);
 
-    return withOverlayFile($filename, $content, static function (string $filename) use ($uri, $content): AnalysisResult {
+    return withOverlayFile($filename, $content, static function (string $filename) use ($uri, $content, $context): AnalysisResult {
         $diagnostics = [];
         $parsedProgram = null;
         $checkedProgram = null;
@@ -103,9 +101,9 @@ function analyze(string $uri, string $content, array $libDirs = []): AnalysisRes
         }
 
         try {
-            [$files, $root] = moduleFileClosureCached($filename);
-            $files = [...$files, ...stdlibSourcesMissingFrom($files, bundledStdlibLibPath())];
-            $prepared = prepareProjectCached($files, $root, $parsedProgram->module ?? null);
+            [$files, $root] = moduleFileClosureCached($filename, $context->backendId);
+            $files = [...$files, ...stdlibSourcesMissingFrom($files, bundledStdlibLibPath(), $context->backendId)];
+            $prepared = prepareProjectCached($files, $root, $context->withSources($files), $parsedProgram->module ?? null);
             if ($parsedProgram->module !== null && isset($prepared->checked[$parsedProgram->module])) {
                 $checkedProgram = $prepared->checked[$parsedProgram->module];
             } elseif (isset($prepared->checked['Main'])) {
@@ -143,6 +141,7 @@ function analyze(string $uri, string $content, array $libDirs = []): AnalysisRes
             $imports,
             $source,
             $uri,
+            checked: $checkedProgram !== null,
         );
     });
 }

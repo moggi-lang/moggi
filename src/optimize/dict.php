@@ -4,6 +4,8 @@ namespace Moggi\Optimize\Dict;
 
 use Moggi\IR;
 
+use function Moggi\Optimize\Support\callArgsAreLeaves;
+use function Moggi\Optimize\Support\dropUnreadTemps;
 use function Moggi\Optimize\Support\preserveMatchArm;
 
 /**
@@ -98,6 +100,8 @@ function specializeDictCallsBlockWithEnv(
     array $localFns = [],
 ): IR\Block {
     $out = [];
+    /** @var array<int, true> $evidenceBindings dests of factory calls this block introduced */
+    $evidenceBindings = [];
 
     foreach ($block->items as $item) {
         if ($item instanceof IR\MatchStmt || $item instanceof IR\MatchReturn) {
@@ -108,12 +112,14 @@ function specializeDictCallsBlockWithEnv(
 
         $item = specializeDictCallsStmt($item, $evidenceByName, $tempEvidence, $localEvidence, $localFns);
 
-        if ($item instanceof IR\Call
-            && (isset($evidenceByName[$item->callee]) || \str_starts_with($item->callee, '__ev_'))) {
+        if ($item instanceof IR\Call && isset($evidenceByName[$item->callee])) {
             $tempEvidence[$item->dest] = [
                 'name' => $item->callee,
                 'args' => $item->args,
             ];
+            if (callArgsAreLeaves($item->args)) {
+                $evidenceBindings[$item->dest] = true;
+            }
         }
 
         if ($item instanceof IR\Assign) {
@@ -133,9 +139,8 @@ function specializeDictCallsBlockWithEnv(
         $out[] = $item;
     }
 
-    return new IR\Block($out);
+    return new IR\Block(dropUnreadTemps($out, $evidenceBindings));
 }
-
 /**
  * @param array<string, IR\InstanceEvidence> $evidenceByName
  * @param array<int, array{name: string, args: list<IR\Operand>}> $tempEvidence
@@ -303,7 +308,11 @@ function specializeDictMethodOperand(IR\DictMethod $operand, array $evidenceByNa
         }
     }
 
-    return new IR\DictMethod(specializeDictCallsOperand($evidence, $evidenceByName), $operand->method);
+    return new IR\DictMethod(
+        specializeDictCallsOperand($evidence, $evidenceByName),
+        $operand->method,
+        $operand->localEvidence,
+    );
 }
 
 /**

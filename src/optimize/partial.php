@@ -2,93 +2,171 @@
 
 namespace Moggi\Optimize\Partial;
 
-use Moggi\Backend\Php\Emit\emitApplyExpr;
 use Moggi\IR;
+use Moggi\Syntax\Ast;
 
+use function Moggi\IR\Callables\captureMeta;
 use function Moggi\IR\Visit\mapOperandChildren;
-
 use function Moggi\IR\Visit\stmtDirectOperands;
 use function Moggi\IR\Visit\stmtNestedBlocks;
 use function Moggi\Optimize\GlobalPass\rewriteStmtOperands;
 use function Moggi\Optimize\Interproc\indexFunctions;
 use function Moggi\Optimize\Interproc\isSimpleLambda;
-use function Moggi\Optimize\Support\buildLambdaMeta;
 use function Moggi\Optimize\Support\indexCapturedFunctions;
-use function Moggi\Optimize\Support\isCapturedFnName;
-use function Moggi\Optimize\Support\isLambdaName;
 use function Moggi\Optimize\Support\mapStmtNestedBlocks;
 use function Moggi\Optimize\Support\operandToExpr;
 
-use Moggi\Syntax\Ast;
-
-/** @param list<IR\FunctionDecl> $functions */
-function bindLambdaCaptures(array $functions): array
+/**
+ * Legalization: give every call the vector the published callable table describes.
+ *
+ * Two things happen here, and they are the same thing — a call's runtime vector is its
+ * callee's hidden slots (evidence and captures) followed by its value parameters:
+ *
+ * 1. a call that a lifted function's captures reach through carries them, prepended once;
+ * 2. a call that supplies *fewer* slots than the entry publishes is a partial application,
+ *    and becomes an explicit `IR\Partial` here rather than at emission time.
+ *
+ * (2) makes the tree the only place a partial is built: the emitters used to build the missing
+ * partial themselves, keyed on "the callee is a lifted function and I have fewer arguments", which
+ * is both a second producer of the layout and a rescue that hid real producer defects.
+ * Legalization runs on the no-opt path too, and again after the last optimizer stage, so the IR
+ * the emitters see cannot contain an under-supplied direct call.
+ *
+ * @param list<IR\FunctionDecl> $functions
+ */
+function legalizeCallables(array $functions): array
 {
-    $meta = buildLambdaMeta(indexCapturedFunctions($functions));
+    $meta = captureMeta(indexCapturedFunctions($functions));
+    $arity = callableArities($functions, $meta);
 
     return \array_map(
         static fn (IR\FunctionDecl $function): IR\FunctionDecl => $function->withBody(
-            new IR\Block(bindLambdaCapturesItems($function->body->items, $meta)),
+            new IR\Block(bindLambdaCapturesItems($function->body->items, $meta, $arity)),
         ),
         $functions,
     );
 }
 
 /**
+ * Every entry's runtime vector length: the hidden slots it takes before its declared
+ * parameters. A lifted function's signature is its captures followed by its parameters; a
+ * source declaration's already includes its evidence slots in front.
+ *
+ * @param list<IR\FunctionDecl> $functions
+ * @param array<string, array{captures: list<string>, params: list<string>}> $meta
+ * @return array<string, int>
+ */
+function callableArities(array $functions, array $meta): array
+{
+    $arity = [];
+    foreach ($functions as $function) {
+        $arity[$function->name] = $function->kind->takesCaptures()
+            ? \count($meta[$function->name]['captures'] ?? []) + \count($function->params)
+            : \count($function->params);
+    }
+
+    return $arity;
+}
+
+/**
+ * A direct call that supplies fewer slots than its entry publishes is a partial: the runtime
+ * holds the supplied prefix and waits for the rest. Making that an `IR\Partial` here keeps the
+ * judgement in one place — the table's own arity — instead of in each emitter.
+ *
+ * @param array<string, array{captures: list<string>, params: list<string>}> $meta
+ * @param array<string, int> $arity
+ */
+function underapplied(IR\Call $call, array $args, array $arity): ?IR\Partial
+{
+    $full = $arity[$call->callee] ?? null;
+    if ($full === null || \count($args) >= $full) {
+        return null;
+    }
+
+    return new IR\Partial($call->callee, $full, $args);
+}
+
+/**
  * @param list<IR\Stmt> $items
  * @param array<string, array{captures: list<string>, params: list<string>}> $meta
+ * @param array<string, int> $arity
  * @return list<IR\Stmt>
  */
-function bindLambdaCapturesItems(array $items, array $meta): array
+function bindLambdaCapturesItems(array $items, array $meta, array $arity = []): array
 {
     return \array_map(
-        static fn (IR\Stmt $item): IR\Stmt => bindLambdaCapturesStmt($item, $meta),
+        static fn (IR\Stmt $item): IR\Stmt => bindLambdaCapturesStmt($item, $meta, $arity),
         $items,
     );
 }
 
 /**
  * @param array<string, array{captures: list<string>, params: list<string>}> $meta
+ * @param array<string, int> $arity
  */
-function bindLambdaCapturesStmt(IR\Stmt $stmt, array $meta): IR\Stmt
+function bindLambdaCapturesStmt(IR\Stmt $stmt, array $meta, array $arity = []): IR\Stmt
 {
-    return match ($stmt::class) {
-        IR\Ret::class => new IR\Ret(bindLambdaCapturesOperand($stmt->value, $meta)),
-        IR\Assign::class => new IR\Assign($stmt->dest, bindLambdaCapturesOperand($stmt->value, $meta)),
-        IR\Let::class => new IR\Let($stmt->name, bindLambdaCapturesOperand($stmt->value, $meta)),
-        IR\Binop::class => new IR\Binop(
-            $stmt->op,
-            bindLambdaCapturesOperand($stmt->left, $meta),
-            bindLambdaCapturesOperand($stmt->right, $meta),
-            $stmt->dest,
-        ),
-        IR\Call::class => new IR\Call(
-            $stmt->callee,
-            captureArgsForCall($stmt->callee, \array_map(
-                static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $meta),
-                $stmt->args,
-            ), $meta),
+    if ($stmt instanceof IR\Call) {
+        return legalizeCall($stmt, $meta, $arity);
+    }
+
+    $rewrite = static fn (IR\Operand $operand): IR\Operand => bindLambdaCapturesOperand($operand, $meta, $arity);
+
+    $rewritten = $stmt instanceof IR\CallValue
+        ? new IR\CallValue(
+            legalizeCallee($rewrite($stmt->callee), \count($stmt->args), $arity),
+            \array_map($rewrite, $stmt->args),
             $stmt->dest,
             $stmt->srcLoc,
-        ),
-        IR\CallValue::class => new IR\CallValue(
-            bindLambdaCapturesOperand($stmt->callee, $meta),
-            \array_map(static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $meta), $stmt->args),
-            $stmt->dest,
-            $stmt->srcLoc,
-        ),
-        IR\DictCall::class => new IR\DictCall(
-            bindLambdaCapturesOperand($stmt->evidence, $meta),
-            $stmt->method,
-            \array_map(static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $meta), $stmt->args),
-            $stmt->dest,
-            $stmt->srcLoc,
-        ),
-        default => mapStmtNestedBlocks(
-            $stmt,
-            static fn (IR\Block $block): IR\Block => new IR\Block(bindLambdaCapturesItems($block->items, $meta)),
-        ),
-    };
+        )
+        : rewriteStmtOperands($stmt, $rewrite);
+
+    return mapStmtNestedBlocks(
+        $rewritten,
+        static fn (IR\Block $block): IR\Block => new IR\Block(bindLambdaCapturesItems($block->items, $meta, $arity)),
+    );
+}
+
+/**
+ * A call by name: its arguments, its captures, then either the call or — when the vector is a
+ * proper prefix of what the entry publishes — the partial that holds it.
+ *
+ * @param array<string, array{captures: list<string>, params: list<string>}> $meta
+ * @param array<string, int> $arity
+ */
+function legalizeCall(IR\Call $call, array $meta, array $arity): IR\Stmt
+{
+    $args = captureArgsForCall($call->callee, \array_map(
+        static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $meta, $arity),
+        $call->args,
+    ), $meta);
+
+    $partial = underapplied($call, $args, $arity);
+    if ($partial !== null) {
+        return new IR\Assign($call->dest, $partial);
+    }
+
+    return new IR\Call($call->callee, $args, $call->dest, $call->srcLoc);
+}
+
+/**
+ * The callee of an application: a reference to a local entry applied to fewer slots than it
+ * publishes is the partial that holds them, so the emitter never has to decide.
+ *
+ * @param array<string, int> $arity
+ */
+function legalizeCallee(IR\Operand $callee, int $supplied, array $arity): IR\Operand
+{
+    if ($callee instanceof IR\FnRef) {
+        $full = $arity[$callee->name] ?? null;
+        if ($full !== null && $supplied < $full) {
+            return new IR\Partial($callee->name, $full, []);
+        }
+
+        return $callee;
+    }
+
+    return $callee;
 }
 
 /**
@@ -154,11 +232,12 @@ function callArgsLeadWithCaptures(array $args, array $captures): bool
  * built from the declared parameters alone is widened to the full arity.
  *
  * @param array<string, array{captures: list<string>, params: list<string>}> $meta
+ * @param array<string, int> $arity
  */
-function bindCapturedPartial(IR\Partial|IR\ExprPartial $partial, array $meta): IR\Partial|IR\ExprPartial
+function bindCapturedPartial(IR\Partial|IR\ExprPartial $partial, array $meta, array $arity = []): IR\Partial|IR\ExprPartial
 {
     $args = \array_map(
-        static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $meta),
+        static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $meta, $arity),
         $partial->args,
     );
     $info = $meta[$partial->fn] ?? null;
@@ -187,56 +266,76 @@ function bindCapturedPartial(IR\Partial|IR\ExprPartial $partial, array $meta): I
 
 /**
  * @param array<string, array{captures: list<string>, params: list<string>}> $meta
+ * @param array<string, int> $arity
  */
-function bindLambdaCapturesOperand(IR\Operand $operand, array $meta): IR\Operand
+function bindLambdaCapturesOperand(IR\Operand $operand, array $meta, array $arity = []): IR\Operand
 {
-    if ($operand instanceof IR\FnRef && isCapturedFnName($operand->name)) {
+    if ($operand instanceof IR\FnRef) {
         $info = $meta[$operand->name] ?? null;
         if ($info !== null && ($info['captures'] ?? []) !== []) {
             $captureArgs = \array_map(
                 static fn (string $name): IR\Operand => new IR\Local($name),
                 $info['captures'],
             );
-            $arity = \count($info['captures']) + \count($info['params']);
+            $full = \count($info['captures']) + \count($info['params']);
 
-            return new IR\Partial($operand->name, $arity, $captureArgs);
+            return new IR\Partial($operand->name, $full, $captureArgs);
         }
     }
 
     return match ($operand::class) {
-        IR\ExprCall::class => new IR\ExprCall(
-            $operand->callee,
-            captureArgsForCall($operand->callee, \array_map(
-                static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $meta),
-                $operand->args,
-            ), $meta),
-            $operand->srcLoc,
-        ),
+        IR\ExprCall::class => legalizeExprCall($operand, $meta, $arity),
         IR\ExprCallValue::class => new IR\ExprCallValue(
-            bindLambdaCapturesOperand($operand->callee, $meta),
-            \array_map(static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $meta), $operand->args),
+            legalizeCallee(
+                bindLambdaCapturesOperand($operand->callee, $meta, $arity),
+                \count($operand->args),
+                $arity,
+            ),
+            \array_map(static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $meta, $arity), $operand->args),
             $operand->srcLoc,
         ),
         IR\ExprBinop::class => new IR\ExprBinop(
             $operand->op,
-            bindLambdaCapturesOperand($operand->left, $meta),
-            bindLambdaCapturesOperand($operand->right, $meta),
+            bindLambdaCapturesOperand($operand->left, $meta, $arity),
+            bindLambdaCapturesOperand($operand->right, $meta, $arity),
         ),
-        IR\ExprPartial::class, IR\Partial::class => bindCapturedPartial($operand, $meta),
+        IR\ExprPartial::class, IR\Partial::class => bindCapturedPartial($operand, $meta, $arity),
         IR\Intrinsic::class => new IR\Intrinsic(
             $operand->name,
-            \array_map(static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $meta), $operand->args),
+            \array_map(static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $meta, $arity), $operand->args),
             $operand->srcLoc,
         ),
         IR\ListLit::class => new IR\ListLit(
-            \array_map(static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $meta), $operand->elements),
+            \array_map(static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $meta, $arity), $operand->elements),
         ),
         IR\DictMethod::class => new IR\DictMethod(
-            bindLambdaCapturesOperand($operand->evidence, $meta),
+            bindLambdaCapturesOperand($operand->evidence, $meta, $arity),
             $operand->method,
+            $operand->localEvidence,
         ),
         default => $operand,
     };
+}
+
+/**
+ * A call in operand position: same decision as a call statement, without a destination.
+ *
+ * @param array<string, array{captures: list<string>, params: list<string>}> $meta
+ * @param array<string, int> $arity
+ */
+function legalizeExprCall(IR\ExprCall $call, array $meta, array $arity): IR\Operand
+{
+    $args = captureArgsForCall($call->callee, \array_map(
+        static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $meta, $arity),
+        $call->args,
+    ), $meta);
+
+    $full = $arity[$call->callee] ?? null;
+    if ($full !== null && \count($args) < $full) {
+        return new IR\ExprPartial($call->callee, $full, $args);
+    }
+
+    return new IR\ExprCall($call->callee, $args, $call->srcLoc);
 }
 
 /** @param list<IR\FunctionDecl> $functions */
@@ -758,7 +857,7 @@ function knownFunctionArity(array $functions, string $moduleName): array
 {
     $arity = [];
     foreach ($functions as $function) {
-        if (isCapturedFnName($function->name)) {
+        if ($function->kind->takesCaptures()) {
             continue;
         }
         $count = \count($function->params);
@@ -982,6 +1081,8 @@ function specializePartialReturnFunction(IR\FunctionDecl $function, array $captu
         $function->foreign,
         $function->ioBodyKind,
         $function->srcLoc,
+        $function->kind,
+        $function->origin,
     );
 }
 
@@ -1102,21 +1203,13 @@ function operandExprNeedsRuntimeApply(IR\Operand $operand, array $lambdaIndex): 
 /**
  * Whether applying this callee has to go through the runtime `__apply`.
  *
- * Mirrors {@see emitApplyExpr}: the emitter resolves
- * partials, inlinable arrows and known-arity `FnRef`s without the runtime and
- * falls through to `__apply` for everything else. Answering `false` here makes
- * codegen omit both the runtime require and `use function Moggi\__apply`, which
- * is a fatal `Undefined function` at run time — so the only safe `false`s are
- * the forms the emitter provably resolves itself.
- *
  * @param array<string, IR\FunctionDecl> $lambdaIndex
  */
 function calleeNeedsRuntimeApply(IR\Operand $callee, array $lambdaIndex): bool
 {
     return match ($callee::class) {
         IR\Partial::class, IR\ExprPartial::class => false,
-        IR\FnRef::class => ! (isLambdaName($callee->name)
-            && isset($lambdaIndex[$callee->name])
+        IR\FnRef::class => ! (isset($lambdaIndex[$callee->name])
             && isSimpleLambda($lambdaIndex[$callee->name])),
         IR\Local::class, IR\Temp::class => true,
         IR\DictMethod::class => true,

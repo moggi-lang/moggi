@@ -3,12 +3,12 @@
 namespace Moggi\Repl;
 
 use Moggi\Modules\PreparedProject;
+use Moggi\Pipeline\CompilationContext;
+use Moggi\Pipeline\CompilePurpose;
+use Moggi\Pipeline\PipelineArtifacts;
+use Moggi\Syntax\Ast\Program;
 
 use function Moggi\Paths\moduleNameToPath;
-
-use Moggi\Pipeline\PipelineArtifacts;
-
-use Moggi\Syntax\Ast\Program;
 
 /** Mutable interactive session state for the Moggi REPL. */
 final class State
@@ -55,7 +55,27 @@ final class State
          * @var array<string, array<string, mixed>>
          */
         public array $interactiveCache = [],
+        ?CompilationContext $context = null,
     ) {
+        $this->context = $context ?? CompilationContext::for(
+            $backend,
+            CompilePurpose::Repl,
+            roots: $libDirs,
+        );
+    }
+
+    public CompilationContext $context;
+
+    /** Switch target and rebuild the session's declared context. */
+    public function setBackend(string $backend): void
+    {
+        $this->backend = $backend;
+        $this->context = CompilationContext::for(
+            $backend,
+            CompilePurpose::Repl,
+            roots: $this->libDirs,
+            sources: [$this->interactivePath()],
+        );
     }
 
     /** Drop every memoized interactive context (source or libraries changed). */

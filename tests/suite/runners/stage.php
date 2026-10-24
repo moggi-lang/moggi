@@ -13,6 +13,8 @@ use function Moggi\Compiler\compileFile;
 use function Moggi\IR\Dump\dump as dumpIr;
 use function Moggi\Optimize\optimize;
 
+use Moggi\Modules\EmitPlan;
+
 use Moggi\Semantics\Types\TypeError;
 use Moggi\Syntax\Lexer\LexError;
 use Moggi\Syntax\Parser\ParseError;
@@ -32,10 +34,15 @@ function diagnosticText(\Throwable $e): string
 /**
  * One pre-lowering stage of a source, dumped by the compiler — the same producer that answers the
  * CLI's `--tokens`/`--ast`/`--typed-ast`, so a flag and a golden cannot describe a stage differently.
+ *
+ * `$backend` matters from `typed-ast` on: the check records the compile backend in the request's
+ * context, and a diagnostic about a foreign import names it (`… does not match compile backend
+ * `jvm``). The suite asks for a stage "as this backend", exactly as `--backend` does on the CLI, so
+ * a `.jvm.err.expected` golden is compared against a jvm compile rather than the php default.
  */
-function sourceStageDump(string $path, string $stage): string
+function sourceStageDump(string $path, string $stage, ?string $backend = null): string
 {
-    $dump = compileFile($path, $stage);
+    $dump = compileFile($path, $stage, backend: $backend);
     if (! \is_string($dump)) {
         throw new TestFailure("{$stage} dump unexpectedly produced multiple artifacts");
     }
@@ -67,8 +74,10 @@ function emitPhpArtifact(string $path): string
 {
     $module = loadIrFixture($path);
     $sourcePath = testRelativePath($path);
+    $outputRelative = \preg_replace('/\.ir\.php$/', '.php', $sourcePath) ?? $sourcePath;
     $actual = emit($module, $sourcePath, [
-        'outputRelative' => \preg_replace('/\.ir\.php$/', '.php', $sourcePath) ?? $sourcePath,
+        'outputRelative' => $outputRelative,
+        'plan' => EmitPlan::forTarget('php', $outputRelative),
     ]);
     if (\is_string($actual)) {
         return $actual;

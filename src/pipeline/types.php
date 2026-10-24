@@ -2,9 +2,13 @@
 
 namespace Moggi\Pipeline;
 
+use Moggi\Backend\Backend;
 use Moggi\IR\EntryPoint;
 use Moggi\IR\Module as IrModule;
+use Moggi\Modules\ImportContext;
 use Moggi\Syntax\Ast\Program;
+
+use function Moggi\Backend\backendById;
 
 /**
  * Why this compilation is happening. Controls entry validation, tree-shake
@@ -15,52 +19,6 @@ enum CompilePurpose: string
     case Executable = 'executable';
     case Library = 'library';
     case Repl = 'repl';
-}
-
-/**
- * The module names this compilation treats as entry points.
- *
- * A package can declare several executables and test suites, so an entry point
- * cannot be identified by name alone — `Main` is only the default. The CLI sets
- * the declared entry (the file it was handed, or the descriptor's `main`) before
- * compiling; every other caller keeps the conventional `Main`.
- *
- * A static holder rather than a function local, so the getter and setter share
- * one slot; `null` means "never configured", which reads as `Main` alone.
- */
-final class EntryPointPolicy
-{
-    public static ?array $modules = null;
-}
-
-/**
- * @param ?list<string> $modules entry module names, or null for the `Main` default
- */
-function setEntryModules(?array $modules): void
-{
-    EntryPointPolicy::$modules = $modules === null ? null : \array_fill_keys($modules, true);
-}
-
-/** @return array<string, true> */
-function entryModules(): array
-{
-    return EntryPointPolicy::$modules ?? ['Main' => true];
-}
-
-/** Whether `$module` is one of this compilation's entry points. */
-function isEntryModule(?string $module): bool
-{
-    return $module !== null && isset(entryModules()[$module]);
-}
-
-/**
- * The purpose of compiling `$module`: an entry module is the executable, every
- * other module is a library. Deriving it in one place keeps the entry-point
- * policy from drifting between the single-file, project and focus paths.
- */
-function entryPurpose(?string $module): CompilePurpose
-{
-    return isEntryModule($module) ? CompilePurpose::Executable : CompilePurpose::Library;
 }
 
 /** How far Pipeline::run should go before returning artifacts. */
@@ -96,25 +54,213 @@ function printModeNames(): array
 }
 
 /**
+ * The declared inputs one compilation runs with.
+ *
+ * Target, purpose, entries, roots and sources are named here, once, by the
+ * entry point that knows them. Downstream code reads them from the context
+ * instead of from process state, so two compilations in one process cannot
+ * disagree about what they are compiling or for which backend. `backendById`
+ * is a pure registry lookup — it does not consult `setCompileBackend`.
+ */
+final class CompilationContext
+{
+    /**
+     * @param array<string, true> $entries module names treated as entry points
+     * @param list<string> $roots module search roots, in search order
+     * @param list<string> $sources source paths in the compilation
+     */
+    public function __construct(
+        public readonly string $backendId,
+        public readonly Backend $backend,
+        public readonly CompilePurpose $purpose,
+        public readonly array $entries,
+        public readonly array $roots,
+        public readonly array $sources,
+    ) {
+    }
+
+    /**
+     * @param list<string> $entryModules
+     * @param list<string> $roots
+     * @param list<string> $sources
+     */
+    public static function for(
+        string $backendId,
+        CompilePurpose $purpose,
+        array $entryModules = [],
+        array $roots = [],
+        array $sources = [],
+    ): self {
+        return new self(
+            $backendId,
+            backendById($backendId),
+            $purpose,
+            \array_fill_keys($entryModules, true),
+            \array_values($roots),
+            \array_values($sources),
+        );
+    }
+
+    /**
+     * The purpose a module is compiled with under this context.
+     *
+     * Only an entry module is compiled *as* the compilation: `main` is promoted
+     * only under `Executable`, and `Library`/`Repl` promote nothing, so a
+     * module's typed product depends on whether it is the entry, not on why the
+     * compilation that reached it runs. Everything else is a library module
+     * whichever entry point asked for it, which is what lets one compilation
+     * answer another's request for the same module
+     * ({@see moduleCacheMaterial}).
+     */
+    public function purposeFor(?string $module): CompilePurpose
+    {
+        if ($this->isEntry($module)) {
+            return $this->purpose;
+        }
+
+        return CompilePurpose::Library;
+    }
+
+    public function isEntry(?string $module): bool
+    {
+        return $module !== null && isset($this->entries[$module]);
+    }
+
+    /** @param list<string> $sources */
+    public function withSources(array $sources): self
+    {
+        return new self(
+            $this->backendId,
+            $this->backend,
+            $this->purpose,
+            $this->entries,
+            $this->roots,
+            \array_values($sources),
+        );
+    }
+
+    /** @param list<string> $roots */
+    public function withRoots(array $roots): self
+    {
+        return new self(
+            $this->backendId,
+            $this->backend,
+            $this->purpose,
+            $this->entries,
+            \array_values($roots),
+            $this->sources,
+        );
+    }
+
+    /** The inputs a cache entry depends on, in one stable spelling. */
+    public function cacheKeyMaterial(): string
+    {
+        $entries = \array_keys($this->entries);
+        \sort($entries);
+        $sources = $this->sources;
+        \sort($sources);
+
+        return \implode("\n", [
+            'backend=' . $this->backendId,
+            'purpose=' . $this->purpose->value,
+            'entries=' . \implode(',', $entries),
+            'roots=' . \implode(',', $this->roots),
+            'sources=' . \implode(',', $sources),
+        ]);
+    }
+
+    public function cacheKey(): string
+    {
+        return \hash('xxh128', $this->cacheKeyMaterial());
+    }
+
+    /**
+     * The context inputs a project-level memo depends on.
+     *
+     * `sources` is deliberately absent: the module set a prepared project
+     * covers is already part of the memo key (`checkedModuleCacheKey` of every
+     * path), so folding the source list in as well would give every file in a
+     * process a private memo — no compile could ever reuse the closure another
+     * compile prepared.
+     */
+    public function inputsKey(): string
+    {
+        $entries = \array_keys($this->entries);
+        \sort($entries);
+
+        return \hash('xxh128', \implode("\n", [
+            'backend=' . $this->backendId,
+            'purpose=' . $this->purpose->value,
+            'entries=' . \implode(',', $entries),
+            'roots=' . \implode(',', $this->roots),
+        ]));
+    }
+
+    /**
+     * The context inputs a single module's cache entry depends on.
+     *
+     * Sources are deliberately absent: a module's content key is already a
+     * Merkle over its own and its dependencies' sources, so folding the whole
+     * source list in would invalidate every module on any edit.
+     *
+     * Roots are absent for the same reason. A root list is an input to import
+     * resolution, not to a module's product: the content key is the Merkle over
+     * the closure resolution produced, so two compilations whose roots supply a
+     * different `Dep` already disagree on it. Folding the caller's roots in
+     * instead gives every compilation that is not the library build itself —
+     * each test case, each REPL session, the language server — a private key for
+     * every standard-library module, so the products one build wrote are never
+     * found again: the shared library cache becomes write-only, and `moduleGet`
+     * deletes the entry it found under the other key.
+     */
+    public function moduleCacheMaterial(?string $module): string
+    {
+        return \implode(';', [
+            'backend=' . $this->backendId,
+            'purpose=' . $this->purposeFor($module)->value,
+        ]);
+    }
+
+    /**
+     * The declared cache key for one module product.
+     *
+     * The content key is a Merkle over the module's own and its dependencies'
+     * sources; the context material adds the target, the purpose the module is
+     * compiled with and the roots its imports were resolved against. Both are
+     * required, which is why this takes the content key rather than defaulting
+     * it: a product addressed by source alone would let one compilation's
+     * result answer another's request.
+     */
+    public function moduleKey(?string $module, string $contentKey): string
+    {
+        return \hash('xxh128', $contentKey . "\n" . $this->moduleCacheMaterial($module));
+    }
+}
+
+/**
  * Inputs for a single-module (or standalone) pipeline run.
  *
  * When `$typedProgram` is set (prepared-project path), parse and typecheck are
  * skipped and lowering starts from that typed AST.
  *
- * @param array<string, mixed> $importContext
+ * There is deliberately no `purpose` here: the context owns it, derived from
+ * the module the request names ({@see CompilationContext::purposeFor}). A
+ * request that could carry a second opinion about why it is compiling is a
+ * request that can disagree with the key its products are cached under.
+ *
  * @param array<string, mixed> $emitOptions
  */
 final class PipelineRequest
 {
     public function __construct(
-        public CompilePurpose $purpose = CompilePurpose::Executable,
+        public CompilationContext $context,
         public string $source = '',
         public string $filename = '',
         public ?Program $program = null,
         public ?Program $typedProgram = null,
         public bool $optimize = true,
-        public ?string $backend = null,
-        public array $importContext = [],
+        /** Null means the module imports nothing; `run` supplies that context. */
+        public ?ImportContext $importContext = null,
         public array $emitOptions = [],
     ) {
     }

@@ -2,21 +2,24 @@
 
 namespace Moggi\IR;
 
+use Moggi\Syntax\Ast;
+
 use function Moggi\Debug\normalizeDisplayPath;
 use function Moggi\Semantics\Exhaustiveness\trueBindingOrigins;
 use function Moggi\Semantics\IoBoundary\functionReturnsIo;
+use function Moggi\Patterns\Walk\patternBoundNames;
 
 require_once __DIR__ . '/types.php';
 require_once __DIR__ . '/lower_pattern.php';
 require_once __DIR__ . '/lower_expr.php';
 require_once __DIR__ . '/lower_io.php';
 
-use function Moggi\Patterns\Walk\patternBoundNames;
-
-use Moggi\Syntax\Ast;
-
 function lower(Ast\Program $program, array $importedData = [], string $sourceFile = ''): Module
 {
+    $moduleName = $program->module ?? '';
+    $interface = $program->interface
+        ?? throw new \RuntimeException("lowering `{$moduleName}` needs its module interface");
+
     $state = newLowerState();
     $dataIndex = buildDataIndex($program, $importedData);
     $newtypeIndex = buildNewtypeIndex($program, $importedData);
@@ -24,8 +27,7 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
     $data = [];
     $knownFunctions = [];
     $functionArity = [];
-    $externalFns = $program->externalFns;
-    $moduleName = $program->module ?? '';
+    $externalFns = $interface->externalFns;
     $constructorRenames = $program->constructorRenames;
 
     $localBindings = [];
@@ -59,10 +61,10 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
         }
     }
 
-    $ioActionReturnFns = ioActionReturnFnNames($program->items) + $program->externalActionReturnFns;
-    $state->trueBindings = trueBindingOrigins($program->items, $moduleName) + $program->externalTrueBindings;
+    $ioActionReturnFns = ioActionReturnFnNames($program->items) + $interface->actionReturn;
+    $state->trueBindings = trueBindingOrigins($program->items, $moduleName) + $interface->trueBindings;
 
-    foreach ($program->externalFnRuntimeArity as $name => $arity) {
+    foreach ($interface->externalFnRuntimeArity as $name => $arity) {
         if (isset($localBindings[$name])) {
             continue;
         }
@@ -232,6 +234,7 @@ function lowerFunction(
     $ctx->sourceFile = $sourceFile;
     $ctx->functionName = $fn->name;
     $ctx->constructorRenames = $constructorRenames;
+    $ctx->evidenceNames = evidenceSlotNames($fn->constraints);
     foreach (\array_keys($externalFns) as $name) {
         if (\in_array($name, $slotNames, true)) {
             continue;
@@ -302,7 +305,31 @@ function lowerFunction(
         srcLoc: $fn->body->line > 0
             ? srcLocFromAst($fn->body, $moduleName, $fn->name, $sourceFile)
             : srcLocFromAst($fn, $moduleName, $fn->name, $sourceFile),
+        kind: FunctionKind::Source,
+        evidenceScope: $ctx->evidenceNames,
     );
+}
+
+/**
+ * The solved evidence slots of a declaration, in definition-time order.
+ *
+ * `constraints` is the superclass-closed list `solveConstraints` produced for this declaration
+ * (see `checkFunction`), so the order and the multiplicity are the ones the typechecker
+ * committed to; nothing here re-expands or deduplicates it.
+ *
+ * @param list<Ast\PendingConstraint> $constraints
+ * @return list<string>
+ */
+function evidenceSlotNames(array $constraints): array
+{
+    $names = [];
+    foreach ($constraints as $constraint) {
+        if ($constraint->evidence !== '') {
+            $names[] = $constraint->evidence;
+        }
+    }
+
+    return $names;
 }
 
 function srcLocFromAst(Ast\AstNode $node, string $module, string $function, string $file): SrcLoc
@@ -426,6 +453,7 @@ function newCtx(
         $ctx->ioActionReturnFns = $from->ioActionReturnFns;
         $ctx->ioActionStore = $from->ioActionStore;
         $ctx->constructorRenames = $from->constructorRenames;
+        $ctx->evidenceNames = $from->evidenceNames;
     }
 
     return $ctx;

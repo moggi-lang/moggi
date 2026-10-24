@@ -3,14 +3,12 @@
 namespace Moggi\Semantics\IoEscape;
 
 use Moggi\IR\IoBodyKind;
+use Moggi\Syntax\Ast;
 
 use function Moggi\Semantics\IoBoundary\functionReturnsIo;
-
 use function Moggi\Semantics\IoBoundary\isIoType;
 use function Moggi\Semantics\IoBoundary\isIoUnitType;
 use function Moggi\Semantics\IoBoundary\stripConstraints;
-
-use Moggi\Syntax\Ast;
 
 /** True for Data.Foo.PHP / Data.Foo.JVM / Data.Foo.DotNet / … backend implementation modules. */
 function isBackendImplModuleName(string $moduleName): bool

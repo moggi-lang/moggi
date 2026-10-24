@@ -46,8 +46,6 @@ $assert = static function (bool $condition, string $message) use (&$checks): voi
 $work = createTempDir('moggi-build-bind');
 \putenv('MOGGI_CACHE_DIR=' . $work . '/cache');
 
-// The descriptor round-trips `[ffi] bindings` as a list; the build filter
-// keeps this backend's entries and refuses entries no binder could own.
 $descriptorPath = $work . '/acme.moggi';
 \file_put_contents($descriptorPath, <<<'MOGGI'
 [package]
@@ -86,7 +84,6 @@ foreach (['go:github.com/acme/hello', 'phpacme/hello'] as $bad) {
     }
 }
 
-// The tree is a copy: staleness is proven by touching it, never the fixture.
 $tree = $work . '/tree';
 \mkdir($tree, 0777, true);
 $fixtureRoot = $root . '/tests/registry/bind/fixtures/acme-hello-php';
@@ -111,8 +108,6 @@ foreach ($scan as $file) {
 }
 $assert(\is_file($tree . '/vendor/acme/hello/src/Greeter.php'), 'the copied tree misses Greeter.php');
 
-// Generate: the root is the bind cache key, the module lands under the
-// module/file law, and the marker records the coordinate.
 $bound = bindDeclaredForBuild('php', $tree, $descriptor);
 $expectedRoot = bindCacheKey('php', 'acme/hello');
 $assert($bound['roots'] === [$expectedRoot], 'generated roots: ' . \json_encode($bound['roots']));
@@ -120,16 +115,12 @@ $assert(\count($bound['lines']) === 1 && \str_starts_with($bound['lines'][0], 'g
 $assert(\is_file($expectedRoot . '/Composer/Acme/Hello.mog'), 'no generated module under the root');
 $marker = \json_decode((string) \file_get_contents(bindCacheMarkerPath($expectedRoot)), true);
 $assert(\is_array($marker) && ($marker['coordinate'] ?? '') === 'acme/hello', 'marker: ' . \json_encode($marker));
-// `globPaths` answers `/`-spelled paths on every host; the key is built with
-// `/` — compare flat.
 $flatRoots = \array_map(static fn (string $root): string => \str_replace('\\', '/', $root), bindCacheRoots());
 $assert(\in_array(\str_replace('\\', '/', $expectedRoot . '/'), $flatRoots, true), 'bindCacheRoots misses the tree');
 
-// Reuse: an unchanged tree never re-runs the host inspection.
 $again = bindForBuild('php', 'acme/hello', $tree);
 $assert($again['root'] === $expectedRoot && $again['regenerated'] === false, 'a clean rebuild regenerated');
 
-// Staleness: a touched source regenerates; a deleted module regenerates too.
 \file_put_contents($tree . '/vendor/acme/hello/src/Greeter.php', "\n// touched\n", \FILE_APPEND);
 $touched = bindForBuild('php', 'acme/hello', $tree);
 $assert($touched['regenerated'] === true, 'a touched tree reused the cache');
@@ -138,8 +129,6 @@ $restored = bindForBuild('php', 'acme/hello', $tree);
 $assert($restored['regenerated'] === true, 'a marker with missing outputs reused the cache');
 $assert(\is_file($expectedRoot . '/Composer/Acme/Hello.mog'), 'regeneration did not restore the module');
 
-// End to end: a program compiles and runs against the generated root, with
-// the host tree riding as its library root.
 \file_put_contents($work . '/Main.mog', <<<'MOG'
 module Main where
 
@@ -174,9 +163,6 @@ $assert(
     'run printed: ' . ($run['stdout'] ?? '') . "\nstderr: " . ($run['stderr'] ?? ''),
 );
 
-// The emit discriminator folds sidecar bytes: a new sidecar under a library
-// root changes the key, so a regenerated binding beside an unchanged
-// declaration still re-emits.
 \Moggi\Modules\setStdlibLibPath($root . '/libraries/base/src');
 $before = (new DotNetBackend())->emitCacheDiscriminator();
 \mkdir($work . '/sideroot/dotnet', 0777, true);
@@ -185,22 +171,17 @@ $before = (new DotNetBackend())->emitCacheDiscriminator();
 $after = (new DotNetBackend())->emitCacheDiscriminator();
 $assert($after !== '' && $after !== $before, 'the sidecar fold did not move the discriminator');
 
-// The bind-root key excludes generated trees, or the marker could never hit:
-// the predicate recognizes the layout textually.
 $assert(isGeneratedBindPath(runtimeCacheDir() . '/dotnet/bind-acme-1-plain/dotnet/dependencies.json'), 'bind layout not recognized');
 $assert(isGeneratedBindPath($expectedRoot . '/Composer/Acme/Hello.mog'), 'generated module not recognized');
 $assert(! isGeneratedBindPath($root . '/lib-meta/Data/Integer/dotnet/dependencies.json'), 'stdlib sidecar misread as generated');
 $assert(! isGeneratedBindPath('/tmp/acme-hello-dotnet/dotnet/Acme.Hello.dll'), 'host tree misread as generated');
 $assert(dotNetSidecarDiscriminator(false) === dotNetSidecarDiscriminator(false), 'host-only discriminator is not deterministic');
 
-// `cache clear bindings` drops exactly the generated trees.
 $cleared = $moggi(['cache', 'clear', 'bindings']);
 $assert(($cleared['exitCode'] ?? 1) === 0, 'cache clear bindings failed: ' . ($cleared['stderr'] ?? ''));
 $assert(! \is_dir($expectedRoot), 'cache clear bindings left the tree');
 $assert(\str_contains((string) ($cleared['stdout'] ?? ''), 'bindings'), 'clear says: ' . ($cleared['stdout'] ?? ''));
 
-// The `build` surface names the flag (the flag-to-roots glue needs a signed
-// registry, so this pins the contract it offers).
 $help = $moggi(['build', '--help']);
 $assert(($help['exitCode'] ?? 1) === 0, 'build --help failed');
 $assert(\str_contains((string) ($help['stdout'] ?? ''), '--bind'), 'build --help names no --bind flag');

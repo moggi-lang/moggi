@@ -1,0 +1,29 @@
+module Main where
+
+-- The imported half: `Mid` re-exports `Types`, so `Area`/`area`, `Shape`/`Circle`/`Square` and
+-- the constrained `describe` reach this module across two hops. The qualified import carries the
+-- same facts on the alias path.
+import Mid
+import Mid qualified as M
+
+-- The local half: the same class and the same constrained-function shape, but the data type and
+-- its instance are declared here. Both halves must agree on the evidence layout, or a call would
+-- hand a dictionary to the wrong entry.
+data Local = Local Int
+
+instance Area Local where
+  area (Local n) = n
+
+localTwice :: Area a => a -> Int
+localTwice x = area x + area x
+
+main :: IO ()
+main = do
+  putStrLn (describe (Circle 2))
+  putStrLn (show (twice (Square 3)))
+  putStrLn (show (area (Circle 1)))
+  putStrLn (show (localTwice (Local 4)))
+  putStrLn (show (area (Local 9)))
+  putStrLn (describe (Local 7))
+  putStrLn (M.describe (M.Circle 4))
+  putStrLn (show (M.twice (Local 5)))

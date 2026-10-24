@@ -1,0 +1,8 @@
+module
+  function main()
+      t4 = call fib(10)
+      t5 = io_assign_action
+          io_run t4
+        result ()
+      t6 = io_run t5
+      ret ()

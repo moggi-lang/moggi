@@ -2,6 +2,9 @@
 
 namespace Moggi\Semantics\StBoundary;
 
+use Moggi\Semantics\Types\TypeError;
+use Moggi\Syntax\Ast;
+
 use function Moggi\Semantics\IntrinsicRegistry\isStIntrinsic;
 use function Moggi\Semantics\IntrinsicRegistry\primopArity;
 use function Moggi\Semantics\IntrinsicRegistry\stPrimopRole;
@@ -9,35 +12,7 @@ use function Moggi\Semantics\IoBoundary\stripConstraints;
 use function Moggi\Semantics\IoBoundary\typeMentionsIo;
 use function Moggi\Semantics\Kinds\canonicalTypeConName;
 
-use Moggi\Semantics\Types\TypeError;
-use Moggi\Syntax\Ast;
-
-/**
- * Validate ST surface constraints on a typed program.
- *
- * ST actions are re-executable descriptions (a thunk wrapper on every
- * backend), so unlike IO they need no straight-line normalization: building a
- * description is pure, sharing one shares no state, and each *use* runs it,
- * which is what keeps allocation and read/write order. What the compiler must
- * still enforce is confinement and escape:
- *
- * - `ST`, `STRef` and `RealWorld` are forbidden in data fields, synonyms,
- *   foreign signatures and any function *result* outside `ST` (so a cell
- *   can never hide in a pure value, while the eliminators `runST` and
- *   `stToIO` may still consume a thread);
- * - an `ST`-returning function type must not mention `IO` (there is no
- *   `IO`-in-`ST` embedding; the other direction is `stToIO#`);
- * - `ST (ST a)` nesting is rejected, like nested `IO`;
- * - every `runST#` application is escape-checked: the thread variable must
- *   not occur free in the result type, so a cell cannot leave its thread.
- *
- * Inward mixing from `IO` scope (a `RealWorld` cell observed inside `runST#`)
- * is rejected outright: the inner thread would run at a pure evaluation
- * point while the cell is also touched in `IO` order, which no pure label
- * can describe. Inward mixing across nested `runST#` threads unifies two
- * thread variables and stays operationally safe — execution still follows
- * the binds — so only concrete threads and outward escape are rejected.
- */
+/** Validate ST surface constraints on a typed program. */
 function validate(Ast\Program $program, string $source = '', string $filename = ''): void
 {
     foreach ($program->items as $item) {
