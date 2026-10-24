@@ -50,10 +50,10 @@ function removeDirectory(string $path): void
  * Every compile elaborates the whole standard library before it reaches the program, which is what
  * the cache exists to avoid — but a case that wants a cache to itself (its own module, its own
  * project) would pay that elaboration again from an empty directory, seconds each time. The
- * library's entries (`compile/<backend>/lib/`) and the `stdlib-index` artifact the linker reads are
- * hard-linked out of the run's cache, which the harness keeps warm, while everything derived from
- * the *case's* sources stays absent: the program under test is still compiled from scratch, and the
- * case still sees a cache that has never built it.
+ * library modules' cached products (`compile/<backend>/libraries/`) and the `stdlib-index` artifact
+ * the linker reads are hard-linked out of the run's cache, which the harness keeps warm, while
+ * everything derived from the *case's* sources stays absent: the program under test is still
+ * compiled from scratch, and the case still sees a cache that has never built it.
  *
  * Hard links are safe here because every cache write replaces its file atomically (temp + rename)
  * instead of editing one in place, so a seeded directory cannot reach back into the run's cache.
@@ -75,9 +75,9 @@ function seedCacheDir(string $dir): void
         @\copy($fingerprint, $dir . '/fingerprint');
     }
 
-    foreach (\Moggi\Paths\globPaths($source . '/compile/*/lib', \GLOB_ONLYDIR) as $entries) {
-        $backend = \basename(\dirname($entries));
-        hardlinkTree($entries, $dir . '/compile/' . $backend . '/lib');
+    foreach (\Moggi\Paths\globPaths($source . '/compile/*/libraries', \GLOB_ONLYDIR) as $libraries) {
+        $backend = \basename(\dirname($libraries));
+        hardlinkTree($libraries, $dir . '/compile/' . $backend . '/libraries');
     }
 
     foreach (\Moggi\Paths\globPaths($source . '/compile/artifacts/stdlib-index*.blob') as $blob) {
