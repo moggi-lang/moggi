@@ -2,12 +2,12 @@
 
 // A use site's solved dictionaries are written beside its pending constraints
 // and read by the evidence passes; the in-compiler walker
-// (`assertPendingDictsConsistentInExpr`, gated by `MOGGI_ASSERT_PENDING_DICTS`)
-// checks that every node still carrying constraints carries a dictionary list
-// over the same obligations, or none. This compiles the fixtures that exercise
-// the boundary -- class methods, a collapsing multi-parameter superclass, a
-// probed/restored local, recursive groups, records, and the runtime shapes --
-// with the walker on.
+// (`assertPendingDictsConsistentInExpr`) checks, on every elaborated body, that
+// each node still carrying constraints carries a dictionary list over the same
+// obligations, or none. This compiles the fixtures that exercise the boundary --
+// class methods, a collapsing multi-parameter superclass, a probed/restored local,
+// recursive groups, records, and the runtime shapes -- so a disagreement on any of
+// them fails here with the fixture's name on it.
 //
 // The fixtures share one process: the walker runs on every elaboration, and the
 // first compile has already elaborated the standard library the rest reuse, so
@@ -21,7 +21,6 @@ while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
 }
 
 \putenv('MOGGI_NO_CACHE=1');
-\putenv('MOGGI_ASSERT_PENDING_DICTS=1');
 
 require $root . '/src/compiler.php';
 
