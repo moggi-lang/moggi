@@ -368,6 +368,29 @@ final class TypeCheckState
     /** @var array<string, Type> how a use site solved a restricted variable */
     public array $restrictedSolutions = [];
 
+    /**
+     * Steps that settled an obligation without unification, in the order they
+     * ran: the checked core publishes them as residuals with their provenance.
+     *
+     * @var list<array{decl: string, wanted: string, decision: string, provenance: string}>
+     */
+    public array $defaultingLog = [];
+
+    /**
+     * The scheme this check settled, per checked declaration (`spl_object_id`
+     * of the `FunctionDecl`), for the duration of one check.
+     *
+     * `env` is keyed by name and a later writer can take the name over — a
+     * module that declares a value a class method already has (`Data.Map.null`
+     * beside `Foldable.null`) and then checks an instance of that class finds
+     * the instance method's scheme under `null` at the end. A product that
+     * publishes a declaration's checked answer reads this map, not `env`.
+     *
+     * @var array<int, Scheme>
+     */
+    public array $checkedSchemes = [];
+
+
     /** @var list<array<string, mixed>> restricted declarations waiting for the module end */
     public array $deferredRestricted = [];
 

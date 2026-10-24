@@ -1,0 +1,4 @@
+tests/semantics/Tc-Kind-Scope-Parameters-Bad.mog:7:6: type error: kind error in data type `Bad`: could not unify kind `Type` with `Type -> k2`
+
+  7 | data Bad (a :: Type) = Bad (a Int)
+    |      ^^^

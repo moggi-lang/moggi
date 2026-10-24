@@ -3,6 +3,7 @@
 namespace Moggi\Semantics\Types;
 
 use function Moggi\Errors\formatDiagnostic;
+use function Moggi\Modules\checkedCoreFor;
 use function Moggi\Modules\standaloneImportContext;
 
 use Moggi\Modules\ImportContext;
@@ -245,6 +246,8 @@ function checkRaw(
         moduleDoc: $program->moduleDoc,
         fixityDocs: $program->fixityDocs,
     );
+
+    $checked->core = checkedCoreFor($state, $items, $program->module ?? '');
 
     return $checked;
 }

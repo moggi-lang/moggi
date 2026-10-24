@@ -1925,7 +1925,7 @@ function checkInstanceMethod(
     $state->constraintMethods = $savedConstraintMethods;
     $state->constraintMethodAmbiguities = $savedConstraintMethodAmbiguities;
     unify($state, $bodyType, $bodyExpected, $fn);
-    defaultAmbiguousNumericVars($state, $fn->body, quantifiedVars($state, $peeledType));
+    defaultAmbiguousNumericVars($state, $fn->body, quantifiedVars($state, $peeledType), $fn);
     resolveDeferredInfixPrimops($state, $fn->body);
     $fn->body = resolvePendingEvidenceInExpr($state, $fn->body);
     $fn->body = tryResolveValueEvidence($state, $fn->body);

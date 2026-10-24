@@ -81,9 +81,15 @@ function numericDefaultClasses(): array
  *
  * @param array<string, true> $bound variables the enclosing declaration
  *        quantifies over
+ * @param ?Ast\FunctionDecl $owner the declaration this body belongs to, so the
+ *        decision can be published with the declaration it settled
  */
-function defaultAmbiguousNumericVars(TypeCheckState $state, Ast\AstNode $body, array $bound): void
-{
+function defaultAmbiguousNumericVars(
+    TypeCheckState $state,
+    Ast\AstNode $body,
+    array $bound,
+    ?Ast\FunctionDecl $owner = null,
+): void {
     if (classWithRole($state, literalRole()) === null) {
         return;
     }
@@ -124,6 +130,15 @@ function defaultAmbiguousNumericVars(TypeCheckState $state, Ast\AstNode $body, a
 
         foreach (numericDefaultTypes() as $candidate) {
             if (constraintsHoldAtType($state, $defaultable, $name, $candidate)) {
+                $state->defaultingLog[] = [
+                    'decl' => $owner === null ? '' : $owner->line . ':' . $owner->col,
+                    'wanted' => \implode(' & ', \array_map(
+                        static fn (Ast\PendingConstraint $c): string => $c->class . '(' . $name . ')',
+                        $defaultable,
+                    )),
+                    'decision' => typeToString($candidate),
+                    'provenance' => 'numeric defaulting: the first candidate type whose instances hold',
+                ];
                 unify($state, new TVar($name), $candidate);
 
                 break;

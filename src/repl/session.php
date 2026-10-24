@@ -303,7 +303,7 @@ function prepareInteractive(State $state, string $extra = '', bool $normalizeIo 
             entryModules: $context->entries,
             backendId: $context->backendId,
         )
-        : Types\checkRaw(
+        : Modules\publishElaboration(Types\checkRaw(
             $program,
             $source,
             $path,
@@ -312,7 +312,7 @@ function prepareInteractive(State $state, string $extra = '', bool $normalizeIo 
             $interface,
             entryModules: $context->entries,
             backendId: $context->backendId,
-        );
+        ));
     $units[$moduleName]['localTypes'] = $interface;
 
     $checkedMap = $base->checked;

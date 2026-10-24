@@ -1,0 +1,7 @@
+-- A declaration's parameter kind belongs to that declaration: `a :: Type` cannot
+-- be applied, even though another declaration in the same module gives a
+-- same-named parameter the kind `Type -> Type`.
+
+data Higher (a :: Type -> Type) = Higher (a Int)
+
+data Bad (a :: Type) = Bad (a Int)

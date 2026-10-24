@@ -2,6 +2,8 @@
 
 namespace Moggi\IR;
 
+use Moggi\Modules\EvidencePlan;
+use Moggi\Modules\EvidencePlanKind;
 use Moggi\Semantics\TypeExpr;
 use Moggi\Syntax\Ast;
 
@@ -98,7 +100,7 @@ function lowerEvidenceMethod(Ast\EvidenceMethod $expr, LowerCtx $ctx): Operand
     $method = new DictMethod(
         evidenceMethodOperand($expr, $ctx),
         $expr->method,
-        \count($expr->contextEvidence),
+        evidenceContextWidth($expr, $ctx),
     );
 
     if ($expr->methodNullary) {
@@ -156,6 +158,10 @@ function lowerForeignCall(Ast\ForeignCall $expr, LowerCtx $ctx): ForeignCall
 
 function evidenceMethodOperand(Ast\EvidenceMethod $expr, LowerCtx $ctx): Operand
 {
+    if ($ctx->evidencePlans !== null) {
+        return evidencePlanOperand(plannedEvidence($expr, $ctx), $ctx);
+    }
+
     if ($expr->evidenceInstance !== null) {
         return projectedEvidenceOperand(
             $expr->class,
@@ -166,6 +172,89 @@ function evidenceMethodOperand(Ast\EvidenceMethod $expr, LowerCtx $ctx): Operand
     }
 
     return new Local($expr->evidence);
+}
+
+/**
+ * The record's evidence decision for one elaborated site, or a refusal.
+ *
+ * A recorded declaration's evidence is the record's; a site it does not plan is
+ * a producer bug, and reading the node's own fields here would hide it.
+ */
+function plannedEvidence(Ast\AstNode $site, LowerCtx $ctx): EvidencePlan
+{
+    $plan = $ctx->evidencePlans[\spl_object_id($site)] ?? null;
+    if ($plan === null) {
+        $class = $site::class;
+        throw new \RuntimeException(
+            "lowering `{$ctx->moduleName}::{$ctx->functionName}` met an evidence site"
+            . " (`{$class}` at line {$site->line}) that its checked-core record does not plan",
+        );
+    }
+
+    return $plan;
+}
+
+/**
+ * How many dictionaries the instance an elaborated method site projects from takes.
+ *
+ * `DictMethod` and `DictCall` carry it so the runtime can tell the method's own
+ * dictionaries from its arguments; for a recorded declaration it is the plan's
+ * context width, not a count taken off the node.
+ */
+function evidenceContextWidth(Ast\EvidenceMethod $site, LowerCtx $ctx): int
+{
+    if ($ctx->evidencePlans !== null) {
+        return plannedEvidence($site, $ctx)->contextWidth();
+    }
+
+    return \count($site->contextEvidence);
+}
+
+/**
+ * Lower one planned evidence decision.
+ *
+ * The three kinds lower exactly as their unplanned counterparts do — a
+ * parameter is a local, a reference is the instance's builder (applied to its
+ * own dictionaries when the instance takes any), and a projection acquires its
+ * owner dictionary once per block — so a recorded declaration and the rest of the
+ * tree agree on every emitted operand.
+ */
+function evidencePlanOperand(EvidencePlan $plan, LowerCtx $ctx): Operand
+{
+    if ($plan->kind === EvidencePlanKind::Parameter) {
+        return new Local($plan->parameter
+            ?? throw new \LogicException("an evidence plan for `{$plan->class}` names no dictionary parameter"));
+    }
+
+    $args = [];
+    foreach ($plan->context as $inner) {
+        $args[] = evidencePlanOperand($inner, $ctx);
+    }
+
+    $fn = new FnRef(
+        $plan->builder
+            ?? throw new \LogicException("an evidence plan for `{$plan->class}` names no evidence builder"),
+        $plan->class,
+        $plan->builderHead,
+    );
+
+    if ($plan->kind === EvidencePlanKind::Reference) {
+        return $args === [] ? $fn : lowerCall($fn->name, $args, $ctx);
+    }
+
+    if ($args !== []) {
+        return lowerCall($fn->name, $args, $ctx);
+    }
+
+    $bound = $ctx->evidenceBindings[$fn->name] ?? null;
+    if ($bound !== null) {
+        return $bound;
+    }
+
+    $value = lowerCall($fn->name, [], $ctx);
+    $ctx->evidenceBindings[$fn->name] = $value;
+
+    return $value;
 }
 
 /**
@@ -211,6 +300,10 @@ function projectedEvidenceOperand(string $class, Ast\TypeNode $head, array $cont
 
 function lowerEvidenceRef(Ast\EvidenceRef $expr, LowerCtx $ctx): Operand
 {
+    if ($ctx->evidencePlans !== null) {
+        return evidencePlanOperand(plannedEvidence($expr, $ctx), $ctx);
+    }
+
     return lowerEvidenceRefValue($expr->class, $expr->head, $expr->context, $ctx);
 }
 
@@ -505,7 +598,7 @@ function lowerDictMethodCall(Ast\EvidenceMethod $expr, array $args, LowerCtx $ct
         $ctx->stmtSrcLoc
             ?? $srcLoc
             ?? srcLocFromAst($expr, $ctx->moduleName, $ctx->functionName, $ctx->sourceFile),
-        \count($expr->contextEvidence),
+        evidenceContextWidth($expr, $ctx),
     );
 
     return new Temp($dest);
