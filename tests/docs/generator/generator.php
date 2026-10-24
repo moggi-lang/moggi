@@ -869,17 +869,12 @@ $cacheFixtureDir = $cacheWorkDir . '/fixture';
 $cacheFixtureMog = $cacheFixtureDir . '/Docs/Fixture.mog';
 \copy($fixture . '/Docs/Fixture.mog', $cacheFixtureMog);
 $prevCacheDir = \getenv('MOGGI_CACHE_DIR') ?: '';
-// Indexing a fixture compiles the modules it reaches; the library arrives from the run's cache
-// rather than being elaborated again in this scratch cache (seeded before the switch).
 seedCacheDir($cacheWorkDir);
 \putenv('MOGGI_CACHE_DIR=' . $cacheWorkDir);
 $cachePath = Docs\indexCachePath($cacheFixtureDir, [], Docs\docsContext('php', []));
 Docs\loadOrBuildIndex($cacheFixtureDir, [], Docs\docsContext('php', []), true);
 assertTrue(\is_file($cachePath), 'doc index cache file created');
 $cacheMtimeBefore = \filemtime($cachePath) ?: 0;
-// The index belongs to the documented tree, not to whichever sources the caller happened to have
-// declared. The language server seeds this from the standard library while analysing a file per
-// request; a key that moved with those sources rebuilt the whole index on every analysis.
 $callerSources = Docs\docsContext('php', [], [$cacheFixtureMog]);
 assertEq(
     $cachePath,
@@ -932,8 +927,6 @@ $eitherIndex = Docs\buildIndex(
 );
 foreach ($eitherIndex->byModule['Data.Either'] ?? [] as $entity) {
     if ($entity->name === 'either') {
-        // The signature `Data.Either` writes, with its own variables and its
-        // arrow domain parenthesised.
         assertTrue(
             \str_contains((string) $entity->signature, '(a -> c) -> (b -> c) -> Either a b -> c'),
             'a written signature renders as written: ' . $entity->signature,
@@ -942,8 +935,6 @@ foreach ($eitherIndex->byModule['Data.Either'] ?? [] as $entity) {
     if ($entity->name === 'isLeft') {
         assertTrue(\str_contains((string) $entity->signature, 'Either a b'), 'isLeft uses friendly type variables');
     }
-    // Instance methods have no written signature, so theirs is inferred — and an
-    // inferred one must carry friendly letters, never compiler-internal names.
     assertTrue(
         \preg_match('/\bt\d+\b/', (string) $entity->signature) !== 1,
         'signatures hide compiler t-vars: ' . $entity->name . ' :: ' . $entity->signature,
@@ -1001,19 +992,10 @@ MOG;
 $interImportDocProgram = parseModule($interImportDocSource, 'InterImportDoc.mog');
 assertEq('Documents the next import.', $interImportDocProgram->imports[1]->doc ?? null, 'inter-import docs attach to following import');
 
-// A release's docs describe the release. `--lib` roots are how a package's
-// stdlib arrives; the modules there are type-checked but are the dependency's
-// pages, not this release's, and a test suite is not API at all.
 assertTrue(Docs\sourceUnderRoot('/pkg/src/A.mog', '/pkg/'), 'a file under the root is documented');
 assertTrue(! Docs\sourceUnderRoot('/stdlib/lib/A.mog', '/pkg/'), 'a dependency file is not documented');
 assertTrue(Docs\sourceUnderRoot('', '/pkg/'), 'a synthetic module with no path stays');
 
-// A module's path arrives from `realpath`, so it is spelled with the host's
-// separator, while a prepared root prefix is canonical. These two paths are the
-// ones Windows hands over — `C:\a\moggi\lib\Data\Ord.mog` against
-// `C:/a/moggi/lib/` — and a prefix test that only holds on the host that
-// spelled the root cannot see that the file is the release's, nor subtract the
-// root to find the source page.
 $nativeRoot = 'C:' . DIRECTORY_SEPARATOR . 'a' . DIRECTORY_SEPARATOR . 'moggi'
     . DIRECTORY_SEPARATOR . 'lib' . DIRECTORY_SEPARATOR;
 $nativeSource = $nativeRoot . 'Data' . DIRECTORY_SEPARATOR . 'Ord.mog';

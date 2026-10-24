@@ -150,14 +150,12 @@ try {
         ],
     ]);
 
-    // `install` refuses the marked package, names the reason and the way past.
     $refused = $cli(['install', '--dry-run', '--registry', $registry, '--no-cache'], $project);
     $assert($refused['exitCode'] === 1, 'install of a marked package must fail: ' . $refused['stdout']);
     $assert(\str_contains($refused['stderr'], 'marked bad'), 'the refusal names the package as bad: ' . $refused['stderr']);
     $assert(\str_contains($refused['stderr'], 'RCE in the decoder'), 'the refusal carries the reason the registry published: ' . $refused['stderr']);
     $assert(\str_contains($refused['stderr'], '--allow-bad'), 'the refusal names the way past: ' . $refused['stderr']);
 
-    // `--allow-bad` is that way past, and it warns rather than staying silent.
     $allowed = $cli(['install', '--dry-run', '--allow-bad', '--registry', $registry, '--no-cache'], $project);
     $assert($allowed['exitCode'] === 0, '--allow-bad must let the install through: ' . $allowed['stderr']);
     $assert(\str_contains($allowed['stdout'], 'would install'), 'an allowed install proceeds: ' . $allowed['stdout']);
@@ -165,8 +163,6 @@ try {
     $assert(! \str_contains($allowed['stderr'], 'pass --allow-bad'), 'an allowed install is not refused: ' . $allowed['stderr']);
     $assert(\str_contains($allowed['stderr'], 'marked unmaintained'), 'an allowed install warns about an unmaintained package: ' . $allowed['stderr']);
 
-    // `update` refuses to write a lock that names a marked package, and leaves no
-    // file behind; `--allow-bad` is the way past it here too.
     $updateRefused = $cli(['update', '--registry', $registry, '--no-cache'], $project);
     $assert($updateRefused['exitCode'] === 1, 'update of a marked package must fail: ' . $updateRefused['stderr']);
     $assert(\str_contains($updateRefused['stderr'], 'marked bad'), 'the update refusal names the package as bad: ' . $updateRefused['stderr']);
@@ -185,7 +181,6 @@ try {
     $assert(\str_contains($buildAllowed['stderr'], 'warning:'), 'an allowed build warns about the marked package: ' . $buildAllowed['stderr']);
     $assert(! \str_contains($buildAllowed['stderr'], 'links as bad'), 'an allowed build is not refused for linking it: ' . $buildAllowed['stderr']);
 
-    // `show` prints the marker first; `search` flags the row.
     $show = $cli(['show', 'evil', '--registry', $registry, '--no-cache'], $project);
     $assert($show['exitCode'] === 0, 'show of a known package succeeds: ' . $show['stderr']);
     $assert(\str_contains($show['stdout'], 'BAD'), 'show surfaces the bad marker: ' . $show['stdout']);
@@ -198,8 +193,6 @@ try {
     $searchBad = $cli(['search', 'pulled', '--registry', $registry, '--no-cache'], $project);
     $assert(\str_contains($searchBad['stdout'], 'evil') && \str_contains($searchBad['stdout'], 'BAD'), 'search flags the marked package: ' . $searchBad['stdout']);
 
-    // The unmaintained marker travels the same read path, but warns rather than
-    // refusing: `show` and `search` display it, and the lock commands note it.
     $showStale = $cli(['show', 'stale', '--registry', $registry, '--no-cache'], $project);
     $assert($showStale['exitCode'] === 0, 'show of an unmaintained package succeeds: ' . $showStale['stderr']);
     $assert(\str_contains($showStale['stdout'], 'UNMAINTAINED'), 'show surfaces the unmaintained marker: ' . $showStale['stdout']);
@@ -216,7 +209,6 @@ try {
     $assert($why['exitCode'] === 0, 'why succeeds: ' . $why['stderr']);
     $assert(\str_contains($why['stdout'], 'marked unmaintained'), 'why notes the unmaintained package: ' . $why['stdout']);
 
-    // `verify` reports both markers beside the signature verdict it is about.
     $verify = $cli(['verify', '--registry', $registry, '--no-cache'], $project);
     $assert(\str_contains($verify['stdout'], 'marked bad'), 'verify reports the bad package: ' . $verify['stdout']);
     $assert(\str_contains($verify['stdout'], 'marked unmaintained'), 'verify reports the unmaintained package: ' . $verify['stdout']);

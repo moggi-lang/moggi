@@ -9,6 +9,7 @@ use Moggi\Optimize\CaseFold\CtorTree;
 use function Moggi\IR\Visit\irPatternBoundNames;
 use function Moggi\IR\Visit\mapGuards;
 use function Moggi\IR\Visit\mapOperandChildren;
+use function Moggi\IR\Visit\walkBlock;
 use function Moggi\Modules\parseResolvedSymbol;
 use function Moggi\Modules\resolvedSymbol;
 use function Moggi\Optimize\CaseFold\clearNullaryCtorCafs;
@@ -783,7 +784,75 @@ function resolveConcreteDictCallsInItems(array $items, array $globalEvidence): a
         $out[] = $item;
     }
 
-    return ['items' => denseStmtItems($out), 'changed' => $changed];
+    return ['items' => dropUnreadEvidenceBindings(denseStmtItems($out)), 'changed' => $changed];
+}
+
+/**
+ * A rewrite can make the dictionary a binding built unreachable while the call it fed stays.
+ *
+ * `t2 = call __ev_Show_Int()` followed by `t1 = dict_call t2->show(t0)` becomes a direct call to
+ * the instance method, and then nothing reads `t2`. Keeping it keeps the whole dictionary — every
+ * method of the instance, and with `showList` the module that method calls — in the artifact for
+ * a value nobody uses. A factory only allocates an array, so an unread one is removable when its
+ * own arguments are leaves; anything that could evaluate user code is kept.
+ *
+ * @param list<IR\Stmt> $items
+ * @return list<IR\Stmt>
+ */
+function dropUnreadEvidenceBindings(array $items): array
+{
+    $dests = [];
+    foreach ($items as $item) {
+        if ($item instanceof IR\Call && isEvidenceFactoryName($item->callee) && callArgsAreLeaves($item->args)) {
+            $dests[$item->dest] = true;
+        }
+    }
+
+    if ($dests === []) {
+        return $items;
+    }
+
+    $used = [];
+    walkBlock(
+        new IR\Block($items),
+        static function (IR\Stmt $stmt): void {
+        },
+        static function (IR\Operand $operand) use (&$used): void {
+            if ($operand instanceof IR\Temp) {
+                $used[$operand->id] = true;
+            }
+        },
+    );
+
+    $out = [];
+    foreach ($items as $item) {
+        if ($item instanceof IR\Call && isset($dests[$item->dest]) && ! isset($used[$item->dest])) {
+            continue;
+        }
+
+        $out[] = $item;
+    }
+
+    return $out;
+}
+
+/** @param list<IR\Operand> $args */
+function callArgsAreLeaves(array $args): bool
+{
+    foreach ($args as $arg) {
+        if (! ($arg instanceof IR\Temp
+            || $arg instanceof IR\Local
+            || $arg instanceof IR\FnRef
+            || $arg instanceof IR\ConstInt
+            || $arg instanceof IR\ConstStr
+            || $arg instanceof IR\ConstChar
+            || $arg instanceof IR\ConstDouble
+            || $arg instanceof IR\Unit)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 /**

@@ -15,7 +15,7 @@ use function Moggi\Optimize\Partial\legalizeCallables;
 use function Moggi\Semantics\Effects\checkAndNormalize;
 
 use Moggi\Modules\EmitPlan;
-use Moggi\Modules\ModuleInterface;
+use Moggi\Modules\ImportInterface;
 use Moggi\Syntax\Ast\Program;
 
 use function Moggi\Syntax\Lexer\lex;
@@ -74,7 +74,13 @@ function run(PipelineRequest $request, PipelineStage $stopAt = PipelineStage::Em
     }
 
     $checked = $artifacts->typedAst;
-    $interface = $checked->interface ?? $importContext->interface;
+    $interface = $checked->interface;
+    if ($interface === null) {
+        throw new \LogicException(
+            "the checked program `{$checked->module}` carries no import interface; a checked "
+            . 'program without one is a producer bug, not a module that imports nothing',
+        );
+    }
     $ir = lower($checked, $interface->data, $request->filename);
     $artifacts->ir = $ir;
     $artifacts->entry = $ir->entry;
@@ -103,7 +109,14 @@ function run(PipelineRequest $request, PipelineStage $stopAt = PipelineStage::Em
     $artifacts->entry = $irOpt->entry;
 
     validateModule($irOpt, 'post-opt');
-    validateCallableLayouts($irOpt, 'post-legalize', $artifacts->typedAst?->interface?->callableArity() ?? []);
+    $layoutInterface = $artifacts->typedAst->interface;
+    if ($layoutInterface === null) {
+        throw new \LogicException(
+            'the post-legalize layout check has no import interface; the checked program must '
+            . 'carry the arities of the entries it calls',
+        );
+    }
+    validateCallableLayouts($irOpt, 'post-legalize', $layoutInterface->callableArity());
 
     if ($stopAt === PipelineStage::IrOpt) {
         return $artifacts;
@@ -158,11 +171,13 @@ function defaultEmitOptions(Program $ast, string $filename, CompilationContext $
         $emitOptions['foreignInterfaces'] = jvmInterfaceNamesFromPrograms([$ast]);
     }
 
-    $emitOptions['plan'] = planEmission(
-        $ast->interface ?? ModuleInterface::withoutImports($ast->module ?? ''),
-        EmitPlan::forTarget($context->backendId, $emitOptions['outputRelative']),
-        null,
-    );
+    if ($ast->interface === null) {
+        throw new \LogicException(
+            "the program `{$ast->module}` has no import interface to render its emission plan from",
+        );
+    }
+
+    $emitOptions['plan'] = EmitPlan::forTarget($context->backendId, $emitOptions['outputRelative']);
 
     return $emitOptions;
 }

@@ -36,9 +36,6 @@ $editStarts = static function (?array $result, string $uri): array {
 
     return $starts;
 };
-
-// Case 1: value with type signature + implementation + usage.
-// Renaming must update the signature, the equation, and the usage.
 $src1 = <<<'MOG'
 module Main where
 
@@ -56,30 +53,21 @@ $svc1 = new AnalysisService();
 $svc1->setWorkspaceRoot($tmp1);
 $svc1->openDocument($uri1, $src1, 1);
 $svc1->ensureAnalyzed($uri1);
-
-// 3 occurrences: signature (compiler line 3), equation (line 4), usage (line 6).
 $occs1 = $svc1->occurrences->findInUri($uri1, 'documentedValue');
 $assert(\count($occs1) === 3, 'signature+equation+usage occurrences: ' . \json_encode(
     \array_map(static fn ($o) => ['kind' => $o->kind, 'line' => $o->range['start']['line']], $occs1)
 ));
-
-// Rename from the signature line (LSP line 2 = compiler line 3).
 $result1 = svcRename($svc1, $uri1, ['line' => 2, 'character' => 0], 'renamedValue');
 $assert($result1 !== null, 'rename from signature returns a WorkspaceEdit');
 $assert(
     $editStarts($result1, $uri1) === ['2:0', '3:0', '5:21'],
     'signature rename covers sig+equation+usage: ' . \json_encode($editStarts($result1, $uri1))
 );
-
-// Rename from the equation line (LSP line 3) resolves the same symbol.
 $result1b = svcRename($svc1, $uri1, ['line' => 3, 'character' => 0], 'renamedValue');
 $assert(
     $result1b !== null && $editStarts($result1b, $uri1) === ['2:0', '3:0', '5:21'],
     'rename from equation covers the same occurrences: ' . \json_encode($result1b === null ? null : $editStarts($result1b, $uri1))
 );
-
-// Case 2: Multi-equation function. Every equation is a defining
-// occurrence; the signature and all usages rename with them.
 $src2 = <<<'MOG'
 module Main where
 
@@ -99,9 +87,6 @@ $svc2 = new AnalysisService();
 $svc2->setWorkspaceRoot($tmp2);
 $svc2->openDocument($uri2, $src2, 1);
 $svc2->ensureAnalyzed($uri2);
-
-// 6 occurrences: 3 defs (signature + two equations) and 3 uses
-// (one recursive, two at call sites).
 $defs2 = \array_filter(
     $svc2->occurrences->findInUri($uri2, 'someFun'),
     static fn ($o) => $o->kind === 'def'
@@ -115,8 +100,6 @@ $assert(
     'multi-equation rename covers every equation and usage: '
         . \json_encode($editStarts(svcRename($svc2, $uri2, ['line' => 2, 'character' => 0], 'renamedFun'), $uri2))
 );
-
-// Case 3: same scenarios against the shared Basic.mog workspace fixture.
 $fixturesDir = $root . '/tests/lsp';
 $basicPath = $fixturesDir . '/Basic.mog';
 $basicUri = pathToUri($basicPath);
@@ -127,18 +110,11 @@ $svc3->setWorkspaceRoot($fixturesDir);
 $svc3->openDocument($basicUri, $basicSrc, 1);
 $svc3->warm();
 $svc3->ensureAnalyzed($basicUri);
-
-// Multi-equation function in the fixture: 3 defs (signature + two
-// equations) + 3 uses (one recursive).
 $someFunStarts = \array_map(
     static fn ($o) => ['kind' => $o->kind, 'line' => $o->range['start']['line'], 'character' => $o->range['start']['character']],
     $svc3->occurrences->findInUri($basicUri, 'someFun')
 );
 $assert(\count($someFunStarts) === 6, 'Basic.mog someFun has 6 occurrences: ' . \json_encode($someFunStarts));
-
-// Anchored to the fixture's own occurrences, so a fixture that gains lines does not silently move
-// the target: the rename must edit exactly the occurrences the analysis found, from the signature
-// and from an equation line alike.
 $someFunPositions = \array_map(
     static fn (array $o): string => $o['line'] . ':' . $o['character'],
     $someFunStarts
@@ -161,8 +137,6 @@ $assert(
     $rename3Eq !== null && \count($editStarts($rename3Eq, $basicUri)) === 6,
     'rename from an equation line edits all occurrences'
 );
-
-// Value with signature + implementation + usage in the fixture.
 $docValStarts = \array_map(
     static fn ($o) => ['kind' => $o->kind, 'line' => $o->range['start']['line'], 'character' => $o->range['start']['character']],
     $svc3->occurrences->findInUri($basicUri, 'documentedValue')
@@ -170,8 +144,6 @@ $docValStarts = \array_map(
 $assert(\count($docValStarts) === 3, 'Basic.mog documentedValue has 3 occurrences: ' . \json_encode($docValStarts));
 $rename3b = svcRename($svc3, $basicUri, ['line' => \min(\array_map(static fn (array $o): int => $o['line'], $docValStarts)), 'character' => 0], 'renamedDocValue');
 $assert($rename3b !== null && \count($editStarts($rename3b, $basicUri)) === 3, 'Basic.mog documentedValue rename edits all occurrences');
-
-// No duplicate edit ranges anywhere.
 foreach ([$rename3, $rename3b] as $res) {
     foreach ($res['documentChanges'] ?? [] as $docChange) {
         $edits = $docChange['edits'];

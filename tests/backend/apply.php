@@ -312,12 +312,8 @@ foreach ($matrix as $i => [$cell, $args]) {
     );
 }
 
-// The closure-based bare-callable cases go through ReflectionFunction, which is
-// identity-sensitive; cover them separately with explicit expectations.
 $assertSame(3, __apply($cl2, 1, 2), 'closure bare callable, exact arity');
 $assertSame('__partial', (__apply($cl2, 1)[0] ?? null), 'closure bare callable, under-applied');
-
-// Report
 
 if ($failures !== []) {
     \fwrite(STDERR, 'apply (__apply) test FAILED: ' . \count($failures) . "\n");

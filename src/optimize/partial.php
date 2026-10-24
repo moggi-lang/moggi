@@ -26,11 +26,11 @@ use function Moggi\Optimize\Support\operandToExpr;
  * 2. a call that supplies *fewer* slots than the entry publishes is a partial application,
  *    and becomes an explicit `IR\Partial` here rather than at emission time.
  *
- * (2) is what ADR 8 §8 asks for: the emitters used to build the missing partial themselves,
- * keyed on "the callee is a lifted function and I have fewer arguments", which is both a
- * second producer of the layout and a rescue that hid real producer defects. Legalization runs
- * on the no-opt path too (ADR 8 §7) and again after the last optimizer stage, so the IR the
- * emitters see cannot contain an under-supplied direct call.
+ * (2) makes the tree the only place a partial is built: the emitters used to build the missing
+ * partial themselves, keyed on "the callee is a lifted function and I have fewer arguments", which
+ * is both a second producer of the layout and a rescue that hid real producer defects.
+ * Legalization runs on the no-opt path too, and again after the last optimizer stage, so the IR
+ * the emitters see cannot contain an under-supplied direct call.
  *
  * @param list<IR\FunctionDecl> $functions
  */

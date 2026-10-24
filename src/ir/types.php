@@ -21,8 +21,7 @@ enum IoWrap: string
 
 /**
  * How a callable came to exist. Capture arity and identity follow this fact,
- * never the spelling of its name: every generated prefix is presentation
- * (ADR 4, D1a).
+ * never the spelling of its name: every generated prefix is presentation.
  */
 enum FunctionKind: string
 {
@@ -496,7 +495,8 @@ final class DictMethod implements Operand
      * remaining evidence slots followed by its values; for a projected `show` the instance's
      * context can be two dicts while the call carries a single value. Here the fact is recorded
      * because the producer knows it and no consumer can recover it from the argument list; the call
-     * vector itself is unchanged by this field.
+     * vector itself is unchanged by this field. The validator requires it at both seams, so null
+     * (a hand-built pre-validation operand) is refused rather than read as zero.
      */
     public function __construct(
         public Operand $evidence,
@@ -591,8 +591,14 @@ final class DictCall implements Stmt
      * @param ?int $localEvidence how many dictionaries the projected instance takes — its context,
      *        i.e. the owner builder's argument list (`DictMethod::$localEvidence`). Recorded by
      *        lowering where the projection is built; it describes the projection, not a prefix of
-     *        `$args`, so it cannot be re-derived from the call and no emitter splits on it. Null
-     *        when the producer could not state it.
+     *        `$args`, so it cannot be re-derived from the call.
+     *
+     *        **Required by the validator at both seams.** Lowering is the only producer and always
+     *        states it, so `validateModule` rejects a `dict_call` whose value is null instead of
+     *        letting a missing fact read as "nullary" later. No emitter reads it today (C1b's
+     *        second half made every `dict_call` dispatch through the runtime dictionary) and it is
+     *        not part of `CallableSig`; the null case exists only for a hand-built pre-validation
+     *        IR, which the validator refuses.
      */
     public function __construct(
         public Operand $evidence,

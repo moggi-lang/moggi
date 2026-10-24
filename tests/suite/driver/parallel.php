@@ -113,7 +113,6 @@ function ingestWorkerLine(array &$stream, int $shard, string $line): void
     }
 
     $backend = (string) $event['backend'];
-    // The worker numbers cases from zero within its shard; map that to the selection's position.
     $position = $stream['globalByLocal'][$shard][$backend][(int) ($event['order'] ?? -1)] ?? null;
     if ($position === null) {
         return;
@@ -127,8 +126,6 @@ function ingestWorkerLine(array &$stream, int $shard, string $line): void
     if (! progressReported() && $result->status !== 'not-applicable') {
         suiteEcho(renderCaseLine($result, $multi ? $backend : null));
     }
-
-    // The parent is the only thing a pool run prints, so the block is fed from the stream here.
     if (! ($stream['announced'][$backend] ?? false)) {
         $stream['announced'][$backend] = true;
         progressPlan($stream['planByBackend'][$backend] ?? [], $multi ? $backend : null);
@@ -274,7 +271,6 @@ final class ShardPool
         };
 
         $results = runProcessesInParallel($commands, $onChunk);
-        // The pool is complete, so the last section's block is the one the run keeps on screen.
         progressFreeze();
 
         /** @var array<string, array<int, CaseResult>> $merged */
@@ -282,15 +278,11 @@ final class ShardPool
         /** @var array<int, string> $stderr shard => its last words */
         $stderr = [];
         foreach ($results as $shard => $result) {
-            // A worker that never said `done` died; its stderr is the only explanation why.
             if (($stream['done'][$shard] ?? false) !== true) {
                 $this->dead[] = (int) $shard;
                 $stderr[(int) $shard] = (string) $result['stderr'];
             }
         }
-
-        // A dead worker still reported every case it finished, so only the rest are lost — reported
-        // once per shard, not once per case.
         foreach ($this->dead as $shard) {
             $this->markLost($merged, $shard, $stderr[$shard] ?? '');
         }

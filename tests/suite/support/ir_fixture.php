@@ -99,7 +99,7 @@ function stmtFromArray(array $stmt): IR\Stmt
         'binop' => new IR\Binop($stmt['op'], operandFromArray($stmt['left']), operandFromArray($stmt['right']), $stmt['dest']),
         'call' => new IR\Call($stmt['callee'], \array_map(operandFromArray(...), $stmt['args']), $stmt['dest']),
         'call_value' => new IR\CallValue(operandFromArray($stmt['callee']), \array_map(operandFromArray(...), $stmt['args']), $stmt['dest']),
-        'dict_call' => new IR\DictCall(operandFromArray($stmt['evidence']), $stmt['method'], \array_map(operandFromArray(...), $stmt['args']), $stmt['dest']),
+        'dict_call' => new IR\DictCall(operandFromArray($stmt['evidence']), $stmt['method'], \array_map(operandFromArray(...), $stmt['args']), $stmt['dest'], null, $stmt['localEvidence'] ?? null),
         'assign' => new IR\Assign($stmt['dest'], operandFromArray($stmt['value'])),
         'let' => new IR\Let($stmt['name'], operandFromArray($stmt['value'])),
         'match' => new IR\MatchStmt(
@@ -192,7 +192,7 @@ function operandFromArray(array $operand): IR\Operand
         'expr_call' => new IR\ExprCall($operand['callee'], \array_map(operandFromArray(...), $operand['args'] ?? [])),
         'expr_call_value' => new IR\ExprCallValue(operandFromArray($operand['callee']), \array_map(operandFromArray(...), $operand['args'] ?? [])),
         'intrinsic' => new IR\Intrinsic($operand['name'], \array_map(operandFromArray(...), $operand['args'] ?? [])),
-        'dict_method' => new IR\DictMethod(operandFromArray($operand['evidence']), $operand['method']),
+        'dict_method' => new IR\DictMethod(operandFromArray($operand['evidence']), $operand['method'], $operand['localEvidence'] ?? null),
         'foreign_call' => foreignFromArray($operand),
         'io_action' => new IR\IoAction(operandFromArray($operand['expr'])),
         default => throw new \RuntimeException('unsupported IR operand tag in fixture: ' . $operand['tag']),
@@ -223,8 +223,5 @@ function foreignFromArray(array $foreign): IR\ForeignCall
 
 function typeFromArray(mixed $type): ?Ast\TypeNode
 {
-    // Fixtures embed type ASTs as arrays; only object-typed fixtures that
-    // already carry a `TypeNode` survive. Optimizer/codegen mostly need null
-    // or an `Ast\TypeNode` for IO checks.
     return $type instanceof Ast\TypeNode ? $type : null;
 }

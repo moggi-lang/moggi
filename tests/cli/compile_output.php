@@ -49,8 +49,6 @@ $stage = static function (int $n, array $files) use ($scratch): string {
 };
 
 try {
-    // A native php build: the archive and the executable, from both spellings of
-    // the destination. Extensionless `-o Plain` used to put both at `Plain`.
     $withExtension = movePackagedArtifacts(
         $stage(1, ['moggi-app.phar', executableName('moggi-app')]),
         $scratch . '/App.phar',
@@ -122,8 +120,6 @@ try {
         'dotnet artifacts must not share a path',
     );
 
-    // A vendored assembly whose name is the archive's chosen destination is a
-    // same-run clash: refused before anything moves, so nothing is clobbered.
     $threw = false;
 
     try {
@@ -139,7 +135,6 @@ try {
     $assert($threw, 'a vendored assembly colliding with the archive destination must be refused');
     $assert(! \is_file($scratch . '/Clash.dll'), 'a refused clash must write nothing');
 
-    // A destination that cannot be written is a failure, not a skipped line.
     \file_put_contents($scratch . '/blocker', 'x');
     $writeThrew = false;
 
@@ -170,8 +165,6 @@ try {
     $assert(! \is_file($scratch . '/Roll/Plain.phar'), 'a failed move must roll back the artifact it already committed');
     $assert(\glob($scratch . '/Roll/*.moggi-tmp-*') === [], 'a failed move must leave no staging file behind');
 
-    // A pre-existing destination the run legitimately replaced is never deleted:
-    // removing it would lose the file `-o` asked to overwrite.
     \mkdir($scratch . '/Keep', 0777, true);
     \mkdir($scratch . '/Keep/' . executableName('Plain'), 0777, true);
     \file_put_contents($scratch . '/Keep/' . executableName('Plain') . '/keep', 'x');
@@ -191,8 +184,6 @@ try {
     $assert($keepThrew, 'the second rename still fails with a pre-existing archive');
     $assert(\is_file($scratch . '/Keep/Plain.phar'), 'a pre-existing destination must not be deleted by a rollback');
 
-    // A native build's deliverable is the executable, so it is the primary
-    // artifact; a managed build's is the archive.
     $assert(
         artifactPrimaryRel('php', true) === [executableName('moggi-app'), 'moggi-app.phar'],
         'a native php build leads with the executable',
@@ -210,9 +201,6 @@ try {
         'a native dotnet build leads with the executable, sidecars last',
     );
 
-    // A native executable is built from the packaged archive, so `--unpacked`
-    // (which keeps the generated tree) is refused up front rather than failing
-    // later on a missing PHAR.
     $app = $scratch . '/app';
     \mkdir($app, 0777, true);
     \file_put_contents($app . '/Main.mog', "main :: IO ()\nmain = putStrLn \"hi\"\n");

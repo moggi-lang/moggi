@@ -14,18 +14,18 @@ use function Moggi\Semantics\IoBoundary\stripConstraints;
  * The callable table: one authoritative record per entry, and the one producer of a lifted
  * callable's capture layout.
  *
- * ADR 8 asks for a published `CallableSig` per entry — evidence slots, capture slots and user
- * value parameters as three distinct things, plus the result, acquisition and execution
- * conventions — computed once per compilation revision. Before this module the same logical
+ * Every entry has a published `CallableSig` — evidence slots, capture slots and user value
+ * parameters as three distinct things, plus the result, acquisition and execution conventions —
+ * computed once per compilation revision. Before this module the same logical
  * layout was derived at seven independent sites (`bindLambdaCaptures`, the optimizer's inline
  * metadata, the module arity table, and each of the three backends), and the two sides of a call
  * could only agree because every one of them sorted the capture names alphabetically. Nothing
  * here changes the runtime order: `captures` is the list the binder already produced, with the
  * evidence slots taken out of it, because making `E ++ C` the runtime order is a separate slice.
  *
- * What this module does not yet publish: imported entries (their facts travel in the module
- * `facts` record, see run 05 S3) and the action worker/action-value split at the IR node level
- * (B3a; `ExecutionConvention` is recorded here and `IoBodyKind` remains its adapter).
+ * What this module does not yet publish: imported entries — their facts travel in the module
+ * `facts` record — and the action worker/action-value split at the IR node level, where
+ * `ExecutionConvention` is recorded here and `IoBodyKind` carries it in the tree.
  */
 const ABI_VERSION = 1;
 
@@ -38,9 +38,9 @@ enum ResultConvention: string
 
     /**
      * The declaration carries no signature, so the tree has no fact to classify it from — a
-     * lifted callable today. It is a named gap rather than a default: nothing migrated may consume
-     * it (B3a publishes the convention the checker already knows, which is the slice that closes
-     * this case).
+     * lifted callable today. It is a named gap rather than a default: a consumer that needs a
+     * result convention may not treat it as a value, and the checker publishing the convention it
+     * already knows is what closes the gap.
      */
     case Unclassified = 'unclassified';
 }
@@ -48,25 +48,26 @@ enum ResultConvention: string
 /**
  * How a caller obtains an entry's result.
  *
- * `ReturnAction` builds an action value and runs nothing (ADR 3's value-level convention);
- * `RunAndReturn` is the current direct worker — the statements of the body execute in the
- * caller's execution region — and is a transitional tag until ADR 3 is decided;
- * `TransitionalMixed` names the entries the checker could not classify.
+ * `ReturnAction` builds an action value and runs nothing; `RunAndReturn` runs the body's
+ * statements in the caller's execution region and returns its value. `MixedBody` is the entry whose
+ * body both runs statements and returns an action, and the entry whose type the checker left
+ * unclassified: the IR does not settle which convention it follows, so it is recorded as its own
+ * kind rather than folded into one of the three above.
  */
 enum ExecutionConvention: string
 {
     case ReturnValue = 'return-value';
     case ReturnAction = 'return-action';
     case RunAndReturn = 'run-and-return';
-    case TransitionalMixed = 'transitional-mixed';
+    case MixedBody = 'mixed-body';
 }
 
 /**
  * How a reference to the entry becomes a value.
  *
- * `EvaluateBinding` is a declaration with no user parameters whose body produces the value
- * (ADR 8 §5); a callable with parameters is acquired as itself. `ConstructorValue` is for an
- * entry that is a value by construction; no source declaration reaches it today.
+ * `EvaluateBinding` is a declaration with no user parameters whose body produces the value; a
+ * callable with parameters is acquired as itself. `ConstructorValue` is for an entry that is a
+ * value by construction; no source declaration reaches it today.
  */
 enum AcquisitionKind: string
 {
@@ -195,8 +196,8 @@ final class CallableTable
  * The returned lists are sorted. Direct captures miss the locals hidden inside nested lifted
  * references (they only appear once captures are bound), so first-seen order depends on when in
  * the pipeline the set is computed; sorting is what has kept the use site and the definition site
- * agreeing so far. It is a workaround, not a contract: ADR 8 §2 asks for binder-identity order
- * published with the entry, which is the next slice (`CallableSig::$captures` is where it lands).
+ * agreeing so far. It is a workaround, not a contract: the order a binder produced is what the
+ * signature has to publish (`CallableSig::$captures` is where that lands).
  *
  * @param array<string, IR\FunctionDecl> $byName
  * @param callable(IR\FunctionDecl): list<string> $capturesOf
@@ -371,7 +372,7 @@ function resultConventions(IR\FunctionDecl $function, int $evidenceSlots = 0): a
 {
     $type = $function->type;
     if ($type === null) {
-        return [ResultConvention::Unclassified, ExecutionConvention::TransitionalMixed, null];
+        return [ResultConvention::Unclassified, ExecutionConvention::MixedBody, null];
     }
 
     if (functionReturnsIo($type)) {
@@ -381,7 +382,7 @@ function resultConventions(IR\FunctionDecl $function, int $evidenceSlots = 0): a
 
         return match ($function->ioBodyKind) {
             IR\IoBodyKind::ActionReturn => [ResultConvention::Action, ExecutionConvention::ReturnAction, null],
-            IR\IoBodyKind::Mixed => [ResultConvention::Action, ExecutionConvention::TransitionalMixed, null],
+            IR\IoBodyKind::Mixed => [ResultConvention::Action, ExecutionConvention::MixedBody, null],
             IR\IoBodyKind::StraightLine => [ResultConvention::Action, ExecutionConvention::RunAndReturn, null],
         };
     }

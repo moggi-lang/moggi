@@ -4,6 +4,7 @@ namespace Moggi\Optimize\Dict;
 
 use Moggi\IR;
 
+use function Moggi\IR\Visit\walkBlock;
 use function Moggi\Optimize\Support\preserveMatchArm;
 
 /**
@@ -98,6 +99,8 @@ function specializeDictCallsBlockWithEnv(
     array $localFns = [],
 ): IR\Block {
     $out = [];
+    /** @var array<int, true> $evidenceBindings dests of factory calls this block introduced */
+    $evidenceBindings = [];
 
     foreach ($block->items as $item) {
         if ($item instanceof IR\MatchStmt || $item instanceof IR\MatchReturn) {
@@ -114,6 +117,9 @@ function specializeDictCallsBlockWithEnv(
                 'name' => $item->callee,
                 'args' => $item->args,
             ];
+            if (isRepeatableFactoryCall($item)) {
+                $evidenceBindings[$item->dest] = true;
+            }
         }
 
         if ($item instanceof IR\Assign) {
@@ -133,7 +139,59 @@ function specializeDictCallsBlockWithEnv(
         $out[] = $item;
     }
 
+    if ($evidenceBindings !== []) {
+        $blockAfter = new IR\Block($out);
+        $used = [];
+        walkBlock(
+            $blockAfter,
+            static function (IR\Stmt $stmt): void {
+            },
+            static function (IR\Operand $operand) use (&$used): void {
+                if ($operand instanceof IR\Temp) {
+                    $used[$operand->id] = true;
+                }
+            },
+        );
+
+        $out = [];
+        foreach ($blockAfter->items as $item) {
+            if ($item instanceof IR\Call
+                && isset($evidenceBindings[$item->dest])
+                && ! isset($used[$item->dest])) {
+                continue;
+            }
+
+            $out[] = $item;
+        }
+    }
+
     return new IR\Block($out);
+}
+
+/**
+ * Whether an evidence factory call can be dropped when its result is unread.
+ *
+ * The factory only allocates a dictionary array; it has no observable effect. Its arguments are
+ * the instance's context dictionaries, so the call is only repeatable when reading them is free
+ * (a temp, a local, a literal or a function reference) — anything that could run code keeps the
+ * binding.
+ */
+function isRepeatableFactoryCall(IR\Call $call): bool
+{
+    foreach ($call->args as $arg) {
+        if (! ($arg instanceof IR\Temp
+            || $arg instanceof IR\Local
+            || $arg instanceof IR\FnRef
+            || $arg instanceof IR\ConstInt
+            || $arg instanceof IR\ConstStr
+            || $arg instanceof IR\ConstChar
+            || $arg instanceof IR\ConstDouble
+            || $arg instanceof IR\Unit)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 /**

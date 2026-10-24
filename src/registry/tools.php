@@ -45,7 +45,7 @@ const HOST_TOOL_MANIFESTS = ['php' => 'composer.json', 'jvm' => 'pom.xml', 'dotn
 const HOST_TOOL_DOTNET_TFM = 'net8.0';
 
 /**
- * The resolver's own format version (audit F17).
+ * The resolver's own format version.
  *
  * It goes into the cache key and the `.complete` marker beside the tool, its
  * version and the coordinates, so changing how resolutions are produced — the
@@ -614,8 +614,8 @@ function hostConsumerNote(array $descriptor): ?string
 }
 
 /**
- * Schema versions that invalidate a cached resolution when they move (audit F17): a resolution
- * must not outlive the format that produced it, in either direction.
+ * Schema versions that invalidate a cached resolution when they move: a resolution must not
+ * outlive the format that produced it, in either direction.
  *
  * The version is owned by the backend that owns the schema; compiler.php loads the backends
  * before this file, so the constant is defined wherever this runs.

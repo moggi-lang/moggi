@@ -38,8 +38,6 @@ $check = static function (bool $condition, string $message) use (&$failures): vo
 $temp = static fn (int $id): IR\Temp => new IR\Temp($id);
 $unit = static fn (): IR\Unit => new IR\Unit();
 
-// ---- every statement kind carries its reads to the collector ---------------
-
 $read = 40;
 $armRead = static fn (): IR\MatchArm => new IR\MatchArm(
     new IR\PatWild(),
@@ -71,8 +69,6 @@ foreach ($kinds as $kind => $stmt) {
         "usedInItems does not see t{$read} through {$kind}",
     );
 }
-
-// A local read inside an io_assign_action body is a use too.
 $localFunction = new IR\FunctionDecl('main', [], null, new IR\Block([
     new IR\Let('a', new IR\ConstInt(7)),
     new IR\IoAssignAction(
@@ -87,8 +83,6 @@ $check(
     isset(usedInItems($localFunction->body->items)['locals']['a']),
     'usedInItems misses a local read inside an io_assign_action body',
 );
-
-// ---- the drop that motivated the repair ------------------------------------
 
 $function = new IR\FunctionDecl('main', [], null, new IR\Block([
     new IR\Call('fib', [new IR\ConstInt(10)], 4),
@@ -110,8 +104,6 @@ walkBlock($optimized->body, static function (IR\Stmt $stmt) use (&$destinations)
 });
 $check($destinations === [4], 'dceBlock dropped the call read by the box (kept: ' . \implode(',', $destinations) . ')');
 $check(unboundTempsInFunction($optimized) === [], 'dceBlock left an unbound temp behind');
-
-// ---- operand children the hand-written descent used to skip ---------------
 
 $foreign = new IR\ForeignCall('php', 'call', 'strlen', 'static', [$temp(30)]);
 $check(

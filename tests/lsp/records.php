@@ -31,9 +31,6 @@ $assert = static function (bool $condition, string $message): void {
 
 $tmp = \sys_get_temp_dir() . '/moggi-lsp-records-' . \bin2hex(\random_bytes(3));
 $assert(\mkdir($tmp), 'create temp dir');
-
-// `name` is declared by two records at different positions, which is the case a
-// name-only lookup cannot answer.
 $source = <<<'MOG'
 module Records where
 
@@ -104,9 +101,6 @@ $hover = static function (array $position) use ($svc, $uri): string {
 
     return $result === null ? '' : $result['contents']['value'];
 };
-
-// ---- Hover on a projected field: the receiver's type chooses the record.
-// The dot itself is not the field, so the label is one character further in.
 $dot = $at('.name', 0);
 $hovered = $hover($at('.name', 0, 1)); // alice.name -> Person.name
 $assert(\str_contains($hovered, 'name :: String'), 'projection hover shows the field type: ' . $hovered);
@@ -120,14 +114,9 @@ $hovered = $hover($at('.name', 1, 1)); // moggi.name -> Company.name
 $assert(\str_contains($hovered, 'field of `Company`'), 'the same label on another record resolves by receiver: ' . $hovered);
 $assert(\str_contains($hovered, 'Records.mog:16'), 'Company.name line: ' . $hovered);
 $assert(\str_contains($hovered, 'city :: String') === false, 'Company.name is not Address.city for the same label: ' . $hovered);
-
-// The dot is part of the projection expression, not the field label, so it
-// answers with the projection's own type.
 $hovered = $hover($dot);
 $assert(\str_contains($hovered, 'String'), 'hover on the dot gives the projection type: ' . $hovered);
 $assert(! \str_contains($hovered, 'field of'), 'hover on the dot is not a field hover: ' . $hovered);
-
-// ---- Hover on a label the reader wrote, in every place a record names fields.
 foreach ([
     ['name = "Alice"', 0, 'construction label'],
     ['{ age = 31 }', 2, 'update label'],
@@ -138,8 +127,6 @@ foreach ([
     $assert(\str_contains($hovered, ':: '), "{$where} hover has a type: " . $hovered);
     $assert(\str_contains($hovered, 'field of `'), "{$where} hover names its record: " . $hovered);
 }
-
-// ---- A projection's hover covers only the label, not the receiver.
 $range = svcHover($svc, $uri, ['line' => $dot[0], 'character' => $dot[1] + 1]);
 $assert($range !== null && isset($range['range']), 'projection hover carries a range');
 $assert(
@@ -153,8 +140,6 @@ $labels = static function (array $position) use ($svc, $uri): array {
 
     return \array_map(static fn (array $item): string => (string) $item['label'], $result['items']);
 };
-
-// ---- Completion inside braces, while the buffer is one token short of parsing.
 $broken = "module Broken where\n\n"
     . "data Address = Address\n  { city :: String\n  , zip  :: String\n  } deriving (Show)\n\n"
     . "data Person = Person\n  { name    :: String\n  , age     :: Int\n  , address :: Address\n  } deriving (Show)\n\n"
@@ -193,12 +178,8 @@ $assert($labelsIn('born = Person { name = "Baby",') === ['age', 'address'], 'con
 $assert($labelsIn('renamed p = p { age = 1,') === ['name', 'address'], 'update on a parameter resolves through its signature: ' . \json_encode($labelsIn('renamed p = p { age = 1,')));
 $assert($labelsIn('go q = q { age = 1,') === ['name', 'address'], 'update on a where-bound parameter');
 $assert($labelsIn('nested = alice { address = Address {') === ['city', 'zip'], 'nested braces answer for the inner record');
-
-// Outside braces the record-label path stays out of the way.
 $plain = $labelsIn('born = Person { name = "Baby",');
 $assert($plain !== [], 'labels were offered');
-
-// ---- The same completion on a buffer that parses.
 $closed = \str_replace('born = Person { name = "Baby",', 'born = Person { name = "Baby" }', $broken);
 $svc->changeDocument($brokenUri, [['text' => $closed]], 2);
 $svc->ensureAnalyzed($brokenUri);

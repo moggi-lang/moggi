@@ -723,7 +723,7 @@ final class AnalysisService
                 if (! ($prog instanceof Ast\Program)) {
                     continue;
                 }
-                $this->indexModule($mUri, $mSource, $prog, $mName, $prog->interface?->externalFns ?? []);
+                $this->indexModule($mUri, $mSource, $prog, $mName, $this->importedNames($prog, $mName));
             }
         } catch (TypeError|LexError|ParseError $e) {
             if (! $e instanceof TypeError || $e->filename === '' || $e->filename === $filename) {
@@ -765,6 +765,7 @@ final class AnalysisService
             $imports,
             $content,
             $uri,
+            checked: $checked !== null,
         );
     }
 
@@ -830,8 +831,39 @@ final class AnalysisService
         if ($result->program instanceof Ast\Program && $result->program->module !== null) {
             $moduleName = $result->program->module;
         }
-        $external = $result->program instanceof Ast\Program ? ($result->program->interface?->externalFns ?? []) : [];
+        $external = $result->program instanceof Ast\Program
+            ? $this->importedNames($result->program, $moduleName, checkedOnly: $result->checked)
+            : [];
         $this->indexModule($uri, $result->source, $result->program, $moduleName, $external);
+    }
+
+    /**
+     * The imported names a navigation index needs for one program.
+     *
+     * A checked program always carries its import interface (`checkRaw` stamps it on the
+     * program it returns). A hydrated dependency whose interface did not survive would index as
+     * "imports nothing" — hover, definition and references on every imported name would degrade
+     * with no signal — so report the producer bug instead of guessing, and keep the index usable.
+     *
+     * `$checkedOnly: false` is for the parsed fallback, where a missing interface is expected.
+     *
+     * @return array<string, string>
+     */
+    private function importedNames(Ast\Program $program, string $moduleName, bool $checkedOnly = true): array
+    {
+        $interface = $program->interface;
+        if ($interface === null) {
+            if ($checkedOnly) {
+                \error_log(
+                    "moggi lsp: checked program `{$moduleName}` carries no import interface; "
+                    . 'its imported names will not resolve',
+                );
+            }
+
+            return [];
+        }
+
+        return $interface->externalFns;
     }
 
     /**

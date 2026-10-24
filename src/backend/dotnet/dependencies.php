@@ -430,34 +430,18 @@ function dotNetLibMetadata(): array
 /**
  * A `signatures` entry in normal form, or null when it is not an entry at all.
  *
- * Two spellings: the flat list (deprecated — warns once per file, and refuses extras, since a flat
- * list cannot say which tail is optional) and the object form
- * `{"params": [...], "optionalTail": N}`. A param is an IL type string, or
+ * One spelling: `{"params": [...], "optionalTail": N}`. A param is an IL type string, or
  * `{"emit": "<il>", "from": "<declared-il>"}` where the call passes a value of a subtype the
  * declaration names (an interface the host type implements) and the emitter converts it.
  *
- * @return ?array{params: list<string>, declared: list<string>, optionalTail: int, flat: bool}
+ * @return ?array{params: list<string>, declared: list<string>, optionalTail: int}
  */
 function parseDotNetSignatureEntry(string $name, mixed $entry, string $file): ?array
 {
-    if (\is_array($entry) && \array_is_list($entry)) {
-        warnOnceFlatDotNetSidecar($file);
-        $params = [];
-        foreach ($entry as $param) {
-            if (! \is_string($param)) {
-                throw new \RuntimeException(
-                    ".NET foreign signature `{$name}` in `{$file}` holds a non-string parameter",
-                );
-            }
-            $params[] = $param;
-        }
-
-        return ['params' => $params, 'declared' => $params, 'optionalTail' => 0, 'flat' => true];
-    }
     if (! \is_array($entry) || ! isset($entry['params']) || ! \is_array($entry['params'])) {
         throw new \RuntimeException(
-            ".NET foreign signature `{$name}` in `{$file}` is neither a parameter list"
-            . ' nor {"params": [...], "optionalTail": N}',
+            ".NET foreign signature `{$name}` in `{$file}` is not {\"params\": [...], "
+            . '"optionalTail": N}',
         );
     }
     assertClosedDotNetSidecarKeys($entry, ['params', 'optionalTail'], "signature `{$name}`", $file);
@@ -498,7 +482,7 @@ function parseDotNetSignatureEntry(string $name, mixed $entry, string $file): ?a
         );
     }
 
-    return ['params' => $params, 'declared' => $declared, 'optionalTail' => $optionalTail, 'flat' => false];
+    return ['params' => $params, 'declared' => $declared, 'optionalTail' => $optionalTail];
 }
 
 /**
@@ -519,20 +503,6 @@ function assertClosedDotNetSidecarKeys(array $map, array $allowed, string $where
             );
         }
     }
-}
-
-function warnOnceFlatDotNetSidecar(string $file): void
-{
-    static $warned = [];
-    if (isset($warned[$file])) {
-        return;
-    }
-    $warned[$file] = true;
-    \fwrite(
-        STDERR,
-        "warning: `{$file}` uses the flat `signatures` form; spell entries as"
-        . ' {"params": [...], "optionalTail": N} (format ' . DOTNET_SIDECAR_FORMAT . ")\n",
-    );
 }
 
 /**
@@ -605,7 +575,7 @@ function dotNetTypeIsValueType(string $clrType): ?bool
  * the entry *agrees* with the declaration is a separate question, asked by {@see dotNetSidecarMismatch}
  * where both are known.
  *
- * @return ?array{params: list<string>, declared: list<string>, optionalTail: int, flat: bool}
+ * @return ?array{params: list<string>, declared: list<string>, optionalTail: int}
  */
 function dotNetSignatureEntry(string $name, ?string $importerRoot = null): ?array
 {

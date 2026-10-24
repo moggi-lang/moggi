@@ -11,10 +11,6 @@ while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
 }
 require $root . '/src/compiler.php';
 
-// Own process, so no harness configured the library roots: set them like
-// test.php does. Without the base root the .NET library metadata (valuetype
-// flags, assembly scopes) is never discovered and cold compiles mis-render
-// foreign types, failing only when the emit cache is cold.
 \Moggi\Modules\setStdlibLibPath($root . '/libraries/base/src');
 foreach (['containers', 'time'] as $bundled) {
     $extra = $root . '/libraries/' . $bundled . '/src';
@@ -31,10 +27,6 @@ if (! \is_file($fixture)) {
 
 foreach (['jvm', 'dotnet'] as $backend) {
     try {
-        // One backend closure at a time: a suite worker already holds the php
-        // closure in its checked-module memos, and two cold elaborations at
-        // once blow the 1G limit. The memos are a pure cache — later cases
-        // reload them from disk — so drop them before each backend compile.
         \Moggi\Modules\ProjectCache::clearCheckedModules();
         \Moggi\Modules\ProjectCache::clearPreparedProjects();
         if (\function_exists('gc_collect_cycles')) {

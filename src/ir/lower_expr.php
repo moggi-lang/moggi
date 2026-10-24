@@ -174,8 +174,8 @@ function evidenceMethodOperand(Ast\EvidenceMethod $expr, LowerCtx $ctx): Operand
  * A projection names its instance's dictionary (`@__ev_Labelled_Int`), so the builder used to run
  * again at every use of the method. The first use in a block keeps the builder call and records
  * the operand it produced; later uses in the same block read that operand instead of calling the
- * builder again, which is what ADR 8 asks for when it says the projected method owns its
- * instance-context dictionary (S5). Correctness is unchanged — a dictionary is an immutable method
+ * builder again: the projected method owns its instance-context dictionary, so it is acquired once
+ * per block. Correctness is unchanged — a dictionary is an immutable method
  * table — and no emitter needs to know: every backend already accepts a local/temp as `DictCall`'s
  * evidence.
  *

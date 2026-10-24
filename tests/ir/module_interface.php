@@ -1,11 +1,11 @@
 <?php declare(strict_types=1);
 
 // A module's interface is one value, and the `codegen` array the emitters read is a
-// rendering of it (D08 / A8).
+// rendering of it.
 //
 // What this holds down:
 //   1. every module the preparation touches — checked, hydrated, or shallow — publishes
-//      one `ModuleInterface`, with the required regions present even when empty and
+//      one `ImportInterface`, with the required regions present even when empty and
 //      the optional optimizer region empty;
 //   2. the checked program carries the interface itself, not a copy of its maps, and the
 //      import context keeps no second rendering of it;
@@ -26,19 +26,18 @@ require $root . '/tests/suite/support/workspace.php';
 
 use Moggi\Modules;
 use Moggi\Modules\EmitPlan;
-use Moggi\Modules\ModuleInterface;
+use Moggi\Modules\ImportInterface;
 use Moggi\Pipeline\CompilationContext;
 use Moggi\Pipeline\CompilePurpose;
 use Moggi\Pipeline\PipelineRequest;
 use Moggi\Pipeline\PipelineStage;
+use Moggi\Syntax\Ast;
 
 use function Moggi\Modules\planEmission;
 use function Moggi\Pipeline\run as pipelineRun;
 
 \Moggi\Modules\setStdlibLibPath($root . '/libraries/base/src');
 
-// Outside the compiler's own cache root: `.moggi` is emptied whenever a fingerprint
-// changes, which would delete this test's sources mid-compile.
 $scratch = createTempDir('moggi-module-interface');
 \register_shutdown_function(static function () use ($scratch): void {
     removeDirectory($scratch);
@@ -63,7 +62,6 @@ $write = static function (string $relative, string $source) use ($scratch): stri
     return $path;
 };
 
-// A re-export chain: `Prov` declares, `Hub` re-exports it as its own, `Main` imports the hub.
 $write('Prov.mog', <<<'MOGGI'
 module Prov (ProvData(..), provValue, bump) where
 
@@ -104,10 +102,10 @@ $context = CompilationContext::for(
 );
 
 $prepared = Modules\prepareProject($files, $dir, $context);
-$module = static function (array $importContexts, string $name): ModuleInterface {
+$module = static function (array $importContexts, string $name): ImportInterface {
     $interface = ($importContexts[$name] ?? null)?->interface;
-    if (! $interface instanceof ModuleInterface) {
-        throw new \RuntimeException("module `{$name}` published no ModuleInterface");
+    if (! $interface instanceof ImportInterface) {
+        throw new \RuntimeException("module `{$name}` published no ImportInterface");
     }
 
     return $interface;
@@ -153,17 +151,6 @@ $check(
     'the target layout already holds ABI facts; the plan is rendered from the interface, not stored',
 );
 
-// Without the IR (the REPL's non-emitting option builder) every ABI fact is published and
-// no file is planned: planning less must never take a fact away.
-$unpruned = planEmission($main, $layout, null);
-$check($unpruned->externalFns === $main->externalFns, 'a plan rendered without IR dropped an external entry');
-$check($unpruned->requireLines === [], 'a plan rendered without IR planned a require line');
-$check($unpruned->importedData === $main->data, 'the plan does not carry the imported data declarations');
-$check($unpruned->externalFnRuntimeArity === $main->externalFnRuntimeArity, 'the plan disagrees with the interface on runtime arity');
-$check($unpruned->constructorRenames === $main->constructorRenames, 'the plan disagrees with the interface on constructor renames');
-
-// With the IR, the plan holds only what this module calls. `Hub` re-exports `Prov`, so nothing
-// needs the hub's file; `Prov` is where every entry is written.
 $ir = pipelineRun(new PipelineRequest(
     context: $context,
     filename: $mainPath,
@@ -172,6 +159,15 @@ $ir = pipelineRun(new PipelineRequest(
 ), PipelineStage::Ir)->ir;
 $check($ir !== null, 'the prepared module lowered no IR');
 $planned = planEmission($main, $layout, $ir);
+$check(
+    $planned->importedData === $main->data,
+    'the plan dropped an imported type fact; constructor renames and data travel whole because a '
+        . 'match arm names a constructor that is not a callee',
+);
+$check(
+    $planned->constructorRenames === $main->constructorRenames,
+    'the plan dropped a constructor rename the emitted code may still need',
+);
 $check(
     isset($planned->moduleOutputPaths['Prov'], $planned->moduleOutputPaths['Hub']),
     'the plan lost a module the interface names: '
@@ -185,6 +181,10 @@ $check(
 $check(
     ! \in_array("__DIR__ . '/Hub.php'", $planned->requireLines, true),
     'the plan required a re-export hub it never calls: ' . \json_encode($planned->requireLines),
+);
+$check(
+    ! \in_array("__DIR__ . '/Main.php'", $planned->requireLines, true),
+    'the plan required the module\'s own artifact: ' . \json_encode($planned->requireLines),
 );
 $check(
     $planned->externalFns !== []
@@ -203,8 +203,6 @@ $check(
         . \json_encode(\array_keys(\array_diff_key($planned->externalFnRuntimeArity, $planned->externalFns))),
 );
 
-// Emitting without a plan writes a module with no requires, no `use` lines and no imported
-// constructors, so the emitters refuse it instead of degrading.
 $refused = false;
 try {
     \Moggi\Backend\codegenWith(\Moggi\Backend\backendById($backendId), $ir, $mainPath, [
@@ -216,11 +214,8 @@ try {
 }
 $check($refused, 'an emitter accepted a module with no EmitPlan');
 
-// The program lowering receives carries the interface, not a copy of its facts. `===` would
-// only hold for a compile that read its program from memory; a hydrated one decodes the same
-// value, so the facts are what the test holds to.
 $carried = $prepared->checked['Main']->interface;
-$check($carried instanceof ModuleInterface, 'the checked program carries no module interface');
+$check($carried instanceof ImportInterface, 'the checked program carries no import interface');
 $check(
     $carried->externalFns === $main->externalFns
         && $carried->callableArity() === $main->callableArity()
@@ -262,6 +257,22 @@ $check(
     ($main->callableArity()['bump'] ?? null) === ($published['arity'] ?? null),
     'the importer\'s callable arity for `bump` disagrees with the published layout',
 );
+
+// ---- 6 · the pipeline refuses a checked program without its import interface ----
+
+$stripped = new Ast\Program(items: $prepared->checked['Main']->items, module: 'Main');
+$refusedLowering = false;
+try {
+    pipelineRun(new PipelineRequest(
+        context: $context,
+        filename: $mainPath,
+        typedProgram: $stripped,
+        importContext: $prepared->importContexts['Main'],
+    ), PipelineStage::Ir);
+} catch (\LogicException $e) {
+    $refusedLowering = \str_contains($e->getMessage(), 'import interface');
+}
+$check($refusedLowering, 'the pipeline lowered a checked program that carries no import interface');
 
 if ($failures !== []) {
     throw new \RuntimeException(

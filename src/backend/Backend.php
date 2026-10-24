@@ -173,6 +173,17 @@ function knownBackendIds(): array
     return ['php', 'jvm', 'dotnet'];
 }
 
+/**
+ * Process-wide backend selection, for the test harness and the phar builder only.
+ *
+ * No production compile path reads this: the pipeline takes its target from
+ * `CompilationContext`, and the emitter is the one that context names. `setCompileBackend()`
+ * exists for tests that drive a whole suite as one backend and for `build_phar.php`; a new
+ * caller outside those two is a regression to the global this refactor removed.
+ *
+ * The `'php'` default stays because the harness reads it before it has a context; it is not a
+ * target that a compile silently falls back to.
+ */
 function compileBackend(): string
 {
     return $GLOBALS['moggi_compile_backend'] ?? 'php';
@@ -228,11 +239,6 @@ function backendById(string $id): Backend
     }
 
     return $registry[$id];
-}
-
-function currentBackend(): Backend
-{
-    return backendById(compileBackend());
 }
 
 /** @return list<string> */

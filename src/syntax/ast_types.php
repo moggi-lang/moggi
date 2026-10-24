@@ -3,7 +3,7 @@
 namespace Moggi\Syntax\Ast;
 
 use Moggi\IR;
-use Moggi\Modules\ModuleInterface;
+use Moggi\Modules\ImportInterface;
 use Moggi\Semantics\TypeExpr\Type;
 
 /** Surface-syntax type AST (distinct from `Moggi\Semantics\TypeExpr\Type`). */
@@ -453,10 +453,10 @@ final class Program extends AstNode
 
         /**
          * What the compilation published to this module: the imported ABI, one value
-         * (`Modules\ModuleInterface`). Null only on a program that was parsed and not
+         * (`Modules\ImportInterface`). Null only on a program that was parsed and not
          * checked — lowering requires it.
          */
-        public ?ModuleInterface $interface = null,
+        public ?ImportInterface $interface = null,
         public array $constructorRenames = [],
         public array $instanceEvidence = [],
         public ?string $moduleBackend = null,

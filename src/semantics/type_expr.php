@@ -292,20 +292,3 @@ function collectTypeVars(Type $type, array $acc): array
     return $acc;
 }
 
-function schemeRuntimeArity(Scheme $scheme): int
-{
-    return schemeTypeArity($scheme) + $scheme->runtimeConstraintCount;
-}
-
-function schemeTypeArity(Scheme $scheme): int
-{
-    $type = $scheme->type;
-    $arity = 0;
-
-    while ($type instanceof TArrow) {
-        ++$arity;
-        $type = $type->to;
-    }
-
-    return $arity;
-}

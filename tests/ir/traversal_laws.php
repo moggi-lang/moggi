@@ -1,6 +1,6 @@
 <?php declare(strict_types=1);
 
-// A2: the IR traversal is total — every node's children are enumerable and
+// The IR traversal is total — every node's children are enumerable and
 // mappable, the two never disagree, and neither a deep chain nor an unknown node
 // class is silently accepted.
 //
@@ -84,7 +84,6 @@ foreach ($operands as $class => [$operand, $children]) {
     }
 }
 
-// `IoAction` used to be the one asymmetry: enumerable, not mappable.
 $action = new IR\IoAction(new IR\ExprCall('orig', []));
 $mappedAction = Visit\mapOperandChildren(
     $action,
@@ -136,8 +135,6 @@ foreach ($statements as $class => [$stmt, $direct, $nested]) {
     );
 }
 
-// A guard's `prep` and `cond` are both on the walk surface, and mapGuards
-// rewrites them together.
 $match = new IR\MatchStmt($local('s'), [$arm], 0);
 $check(
     \count(Visit\stmtDirectOperands($match)) === 2,

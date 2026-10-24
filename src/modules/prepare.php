@@ -206,7 +206,7 @@ function prepareProject(array $paths, string $rootDir, CompilationContext $conte
             $checked[$moduleName] = $units[$moduleName]['checkedProgram'] ?? $units[$moduleName]['program'];
             $importContexts[$moduleName] = mergeClassScopeRefs(
                 (new ImportContext(
-                    ModuleInterface::withoutImports($moduleName),
+                    ImportInterface::withoutImports($moduleName),
                     EmitPlan::forTarget(
                         $context->backendId,
                         isset($units[$moduleName]['path'])
@@ -241,7 +241,7 @@ function prepareProject(array $paths, string $rootDir, CompilationContext $conte
         updateProjectClassesForModule($units[$moduleName], $units, $moduleName, $projectClasses);
 
         if (($units[$moduleName]['parsed'] ?? false) !== true) {
-            ensureModuleInterface($units, $moduleName, $projectClasses, $projectInstanceIndex, $context);
+            ensureImportInterface($units, $moduleName, $projectClasses, $projectInstanceIndex, $context);
             publishModuleExports($units, $moduleName, $context);
             if (isset($units[$moduleName]['localTypes'])) {
                 addModuleClassScope($units, $moduleName, $projectClasses, $classScopes, $classScopeFns, $context->backendId);
@@ -485,7 +485,7 @@ function buildPreparedModuleContext(
     array $projectInstanceIndex,
     CompilationContext $context,
 ): ImportContext {
-    ensureModuleInterface($units, $moduleName, $projectClasses, $projectInstanceIndex, $context);
+    ensureImportInterface($units, $moduleName, $projectClasses, $projectInstanceIndex, $context);
     publishModuleExports($units, $moduleName, $context);
     addModuleClassScope($units, $moduleName, $projectClasses, $classScopes, $classScopeFns, $context->backendId);
     $outputRelative = mogPathToOutputRelative($path, $rootPrefix, $context->backend->extension());
@@ -536,7 +536,11 @@ function publishParsedCallableFacts(array &$units, string $moduleName): void
     }
 
     $facts = \is_array($unit['facts'] ?? null) ? $unit['facts'] : [];
-    $facts['callables'] = \Moggi\Modules\parsedCallableFacts($program, $exports);
+    $unit['facts'] = $facts;
+    $facts['callables'] = [
+        'abi' => \Moggi\IR\Callables\ABI_VERSION,
+        'entries' => \Moggi\Modules\unitCallableEntries($unit, $units, $moduleName),
+    ];
     $units[$moduleName]['facts'] = $facts;
 }
 
@@ -614,7 +618,7 @@ function publishModuleExports(array &$units, string $moduleName, CompilationCont
  * @param array<string, mixed> $projectClasses
  * @param array<string, mixed> $projectInstanceIndex
  */
-function ensureModuleInterface(
+function ensureImportInterface(
     array &$units,
     string $moduleName,
     array $projectClasses,

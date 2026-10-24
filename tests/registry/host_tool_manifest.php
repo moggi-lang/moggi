@@ -1,6 +1,6 @@
 <?php declare(strict_types=1);
 
-// Step 2 (audit WS1): coordinates are validated before a tool sees them, and
+// Coordinates are validated before a tool sees them, and
 // the manifests are quote-safe even for input that gets that far. A hostile
 // coordinate is refused with its own diagnostic; a hostile *string* handed
 // straight to a manifest writer still parses back to itself.

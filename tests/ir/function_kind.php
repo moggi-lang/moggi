@@ -75,8 +75,6 @@ $check(
     'the recursive local group is not recorded as Letrec: ' . \implode(', ', \array_keys($letrecs)),
 );
 
-// Every function the kind classifies as capture-taking is exactly the lifted set;
-// the names agree today, but the classification must not read them.
 $captured = indexCapturedFunctions(\array_values($byName));
 $capturedNames = \array_keys($captured);
 $kindNames = [...\array_keys($lambdas), ...\array_keys($letrecs)];
@@ -87,8 +85,6 @@ $check(
     'indexCapturedFunctions disagrees with the declared kinds: captured='
         . \implode(',', $capturedNames) . ' kinds=' . \implode(',', $kindNames),
 );
-
-// ---- spelling is not classification --------------------------------------
 
 $free = new IR\Block([new IR\Ret(new IR\Local('free'))]);
 $lookalike = new IR\FunctionDecl('λ0', [], null, $free);

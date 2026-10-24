@@ -122,11 +122,7 @@ function emitOptionsForInteractive(State $state, array $ctx): array
     return [
         'namespace' => $unit['namespace'],
         'artifactModuleName' => $state->moduleName,
-        'plan' => planEmission(
-            $ctx['importContext']->interface,
-            $ctx['importContext']->plan,
-            null,
-        ),
+        'plan' => $ctx['importContext']->plan,
         'outputRelative' => moduleNameToPath($state->moduleName)
             . backendById($state->backend)->extension(),
     ];

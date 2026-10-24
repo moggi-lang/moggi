@@ -197,7 +197,7 @@ function syntheticProgram(string $moduleName, array $localTypes): Ast\Program
         module: $moduleName,
         imports: [],
         exports: $exportItems,
-        interface: ModuleInterface::withoutImports($moduleName),
+        interface: ImportInterface::withoutImports($moduleName),
         language: ['NoImplicitPrelude' => true],
     );
 }

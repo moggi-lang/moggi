@@ -1,9 +1,9 @@
 <?php declare(strict_types=1);
 
-// The callable table is the one published record of an entry's layout (ADR 8 §1, A5):
-// distinct evidence / capture / value slots, plus the result, execution and acquisition
-// conventions. These four programs are the ADR's four worked examples (§9), so this pins the
-// compiler-produced signatures against the document rather than against a dump.
+// The callable table is the one published record of an entry's layout: distinct evidence /
+// capture / value slots, plus the result, execution and acquisition conventions. These four
+// programs are the conventions' worked examples, so this pins the compiler-produced signatures
+// against what the tree promises rather than against a dump.
 //
 // What it holds down:
 //   1. lowering records a declaration's evidence slots where the declaration is made, so the
@@ -32,9 +32,6 @@ use function Moggi\Syntax\Parser\parse;
 
 \Moggi\Modules\setStdlibLibPath($root . '/libraries/base/src');
 
-// The scratch sources live outside the compiler's cache root. `.moggi` belongs to the compiler and
-// a fingerprint change — any edit under `src/` — empties it, which would delete this test's own
-// input halfway through the compile that reads it.
 $scratch = createTempDir('moggi-callable-table');
 \register_shutdown_function(static function () use ($scratch): void {
     removeDirectory($scratch);
@@ -54,7 +51,6 @@ $check = static function (bool $condition, string $message) use (&$failures): vo
  * @return array{IR\Module, Callables\CallableTable}
  */
 $compile = static function (string $source, string $filename, bool $optimize = false) use ($scratch): array {
-    // The module projection needs a real file: it is keyed by path like any compile.
     $dir = $scratch . '/' . \preg_replace('/\.mog$/', '', $filename);
     if (! \is_dir($dir)) {
         \mkdir($dir, 0o777, true);
@@ -89,8 +85,6 @@ $shape = static function (Callables\CallableSig $sig, array $evidence): string {
         . ' C=' . \count($sig->captures) . '|' . \implode(',', $sig->captures)
         . ' V=' . \count($sig->params) . '|' . \implode(',', $sig->params);
 };
-
-// ---- 1 · captured constrained closure (§9, first example) -------------------
 
 [$module, $table] = $compile(<<<'MOGGI'
 module Main where
@@ -144,8 +138,6 @@ if ($lambdaSig !== null) {
     $check($lambdaSig->kind === IR\FunctionKind::Lambda, 'the closure entry lost its kind');
 }
 
-// The evidence slot is a fact of the scope, not of the name: a lambda in a scope with no
-// constraints closes over no evidence, whatever its locals are called.
 [, $plain] = $compile(<<<'MOGGI'
 module Main where
 
@@ -169,8 +161,6 @@ if ($pickLambda !== null) {
         $pickLambda->evidence === [] && $pickLambda->captures === ['x'] && $pickLambda->params === ['y'],
         'a lambda in an unconstrained scope recorded evidence: ' . $shape($pickLambda, $pickLambda->evidenceNames()),
     );
-    // The checker's type for `\y -> tag x <> tag y` is recorded on the declaration, so the entry
-    // publishes a value result — B3a's follow-up, which closed `Unclassified` for lifted entries.
     $check(
         $pickLambda->result === Callables\ResultConvention::Value,
         'a lifted callable did not publish its value result: ' . $pickLambda->result->value,
@@ -184,8 +174,6 @@ if ($pickLambda !== null) {
         'a lifted callable returning a String published a callable result',
     );
 }
-
-// ---- 2 · projected constrained method (§9, second example) ------------------
 
 [$module, $table] = $compile(<<<'MOGGI'
 module Main where
@@ -237,8 +225,6 @@ if ($withOne !== null) {
     );
 }
 
-// ---- 3 · constrained nullary provider (§9, third example) -------------------
-
 [$module, $table] = $compile(<<<'MOGGI'
 module Main where
 
@@ -267,8 +253,6 @@ if ($provider !== null) {
     $check($provider->runtimeArity() === 1, 'the provider entry arity is not its evidence slot');
 }
 
-// Both occurrences acquire it: the table publishes the layout, and the value-level policy
-// (per reference, B2a) is the caller's, which is what the two calls in `main` show.
 $acquires = 0;
 foreach ($module->functions as $function) {
     \Moggi\IR\Visit\walkBlock(
@@ -283,8 +267,6 @@ foreach ($module->functions as $function) {
     );
 }
 $check($acquires >= 2, "expected one acquisition per reference, found {$acquires}");
-
-// ---- 4 · returned-function overapplication (§9, fourth example) -------------
 
 [$module, $table] = $compile(<<<'MOGGI'
 module Main where
@@ -309,9 +291,6 @@ if ($choose !== null) {
     $check($choose->result === Callables\ResultConvention::Callable, 'the entry does not return a callable');
 }
 
-// ---- 5 · the post-legalize check rejects malformed vectors -------------------
-
-// One entry with one value parameter; a call that supplies none of it.
 $callee = new IR\FunctionDecl(
     'takesOne',
     ['x'],
@@ -340,7 +319,6 @@ try {
     $check($e->pass === 'test', 'the failure does not carry its pass label');
 }
 
-// A partial that supplies every slot is a call, not a partial.
 $saturated = new IR\FunctionDecl(
     'partialCaller',
     [],
@@ -354,7 +332,6 @@ try {
     $check(\str_contains($e->getMessage(), 'underapplication'), 'the failure is not about saturation: ' . $e->getMessage());
 }
 
-// A partial that declares an arity the table does not publish is a stale layout.
 $stale = new IR\FunctionDecl(
     'staleCaller',
     [],
@@ -368,12 +345,6 @@ try {
     $check(\str_contains($e->getMessage(), 'arity 2'), 'the failure does not state the stale arity: ' . $e->getMessage());
 }
 
-// ---- 6 · under-application is a `Partial`, not a call ------------------------
-
-// `add 1` supplies one of `add`'s two slots. Legalization is the only place that may decide that
-// (ADR 8 §8): the resulting IR holds the partial, and no direct call anywhere is short of the
-// vector the table publishes — with and without the optimizer, because legalization runs on both
-// paths and again after the optimizer's last stage.
 $underapplied = <<<'MOGGI'
 module Main where
 
@@ -415,8 +386,6 @@ foreach ([false, true] as $optimize) {
 
     $check($shortCalls === [], "{$label}: under-supplied calls survived legalization: " . \implode('; ', $shortCalls));
     if (! $optimize) {
-        // The optimized path may fuse the partial back into a saturated call; the unoptimized
-        // one has no such stage, so the partial is what the emitters must see there.
         $check(
             $partialArities !== [],
             'no-opt: the under-application is not an explicit partial: ' . \implode(', ', $partialArities),
@@ -432,8 +401,6 @@ foreach ([false, true] as $optimize) {
     }
 }
 
-// A reference to an entry that takes captures is the partial holding them; the bare form is the
-// second encoding the emitters used to expand from the capture map.
 $captured = new IR\FunctionDecl(
     'λ0',
     [],
@@ -457,8 +424,6 @@ try {
     );
 }
 
-// The optimized path publishes the same layout the no-opt path did: the optimizer may fuse the
-// call, but it may not move a slot or change what the entry takes.
 [$optimizedModule, $optimizedTable] = $compile(<<<'MOGGI'
 module Main where
 
@@ -496,12 +461,6 @@ if ($optimizedLambda !== null && $lambdaSig !== null) {
     );
 }
 
-// ---- 7 · imported entries publish their layout too ---------------------------
-
-// `showString :: String -> ShowS` declares two parameters and its scheme has one arrow (the second
-// hop is `ShowS`, a synonym for a function type); `($) :: (a -> b) -> a -> b` declares *one* and
-// has two. Neither number is the arrow count, so an importer has to receive it as a published
-// fact — and the check holds imported calls to that number.
 $importSource = <<<'MOGGI'
 module Main where
 
@@ -538,7 +497,6 @@ $typed = $typedArtifacts->typedAst;
 $check($typed !== null, 'the imported-entry example did not typecheck');
 
 if ($typed !== null) {
-    // The importer's copy of the published arity, keyed by the name this module calls it by.
     $check(
         ($typed->interface?->callableArity()['showString'] ?? null) === 2,
         'showString reached the importer as ' . \json_encode($typed->interface?->callableArity()['showString'] ?? null)
@@ -549,15 +507,12 @@ if ($typed !== null) {
         'shows reached the importer as ' . \json_encode($typed->interface?->callableArity()['shows'] ?? null)
             . ' slot(s); one evidence slot plus two parameters is 3',
     );
-    // `($) f = f` declares one parameter and has two arrows: only the declaration says so.
     $check(
         ($typed->interface?->callableArity()['$'] ?? null) === 1,
         '($) reached the importer as ' . \json_encode($typed->interface?->callableArity()['$'] ?? null)
             . ' slot(s); its declared vector is 1',
     );
 
-    // The module that publishes them: a shallow library unit's record comes from its parsed
-    // declarations plus the scheme's evidence count, and a checked unit's from the check.
     $units = \Moggi\Modules\moduleCompileContext($importPath, $importContext, $importProgram)['units'];
     $function = $units['Data.Function']['facts']['callables']['entries'] ?? null;
     $check(\is_array($function), 'Data.Function published no callable facts');
@@ -578,7 +533,6 @@ if ($typed !== null) {
     );
 }
 
-// An imported call is held to the number the importer was given, exactly like a local one.
 $importedCall = static function (array $args): IR\FunctionDecl {
     return new IR\FunctionDecl(
         'importedCaller',
@@ -606,13 +560,6 @@ validateCallableLayouts(
     ['shows' => 2],
 );
 
-// ---- 8 · a method call publishes its owner cell and local slots (C1b) --------
-
-// `both` on `Both A A` is the flattened instance entry: its runtime vector is the instance's two
-// context dictionaries followed by its two value parameters. The call site passes the two
-// dictionaries and nothing else — the values arrive through `call_value` — so `args[0..k]` was a
-// convention rather than a published fact. Lowering now records `k` on the `DictCall` itself, and
-// that number is the entry's published evidence count: the two records cannot drift apart.
 $methodCall = <<<'MOGGI'
 module Main where
 
@@ -660,11 +607,6 @@ foreach ([false, true] as $optimize) {
 
     $check($calls !== [], "{$label}: the method call did not lower to a dict_call");
     foreach ($calls as $call) {
-        // The published number is the projected instance's context width: for `Both A A` that is
-        // the two dictionaries the parser closed over (`Tag a` and `Tag b`), which is what the
-        // owner builder takes. It is deliberately *not* an argument prefix — `show` on a projected
-        // instance publishes two while its call carries one value, because the dictionaries are
-        // already inside the owner dict — so nothing here asserts a relation to `args`.
         $check(
             $call->localEvidence !== null,
             "{$label}: {$call->method} carries no published instance-context width",
@@ -677,11 +619,6 @@ foreach ([false, true] as $optimize) {
     }
 }
 
-// ---- 9 · a qualified name resolves only inside its own module ---------------
-
-// Cross-module specialization writes `Data.Foldable::λ2` into a caller. Stripping any `Module::`
-// prefix and matching a local `λ2` checked that call against the wrong entry's layout (the
-// post-specialize check found it on the JVM corpus), so the fallback is this module's name only.
 $ownTable = Callables\table([
     new IR\FunctionDecl(
         'helper',
@@ -699,6 +636,77 @@ $check(
     $ownTable->sig('Data.Foldable::helper') === null,
     "a qualified reference to another module's `helper` resolved to this module's entry",
 );
+
+$threw = false;
+try {
+    \Moggi\Modules\externalFunctionRuntimeArity([], 'Facade', 'entry');
+} catch (\LogicException) {
+    $threw = true;
+}
+$check(
+    $threw,
+    'an entry with no published layout resolved anyway',
+);
+$check(
+    \Moggi\Modules\externalFunctionRuntimeArity(
+        ['Lib' => ['facts' => ['callables' => ['entries' => ['eta' => ['evidence' => 0, 'params' => 1, 'arity' => 1]]]]]],
+        'Lib',
+        'eta',
+    ) === 1,
+    "a declared entry's published vector was not read",
+);
+$threw = false;
+try {
+    \Moggi\Modules\publishedCallableLayout(
+        ['Lib' => ['facts' => ['callables' => ['entries' => ['partial' => ['arity' => 2]]]]]],
+        'Lib',
+        'partial',
+    );
+} catch (\LogicException) {
+    $threw = true;
+}
+$check(
+    $threw,
+    'an arity-only record was published as if it were a layout, and the split read as zero',
+);
+
+$scopeInterface = (new \Moggi\Modules\ImportInterface(
+    'Main',
+    externalFns: ['importedEntry' => 'Prov::importedEntry'],
+))->withClassScopeRefs(
+    [
+        'externalFns' => ['importedEntry' => 'Prov::importedEntry'],
+        'callables' => ['importedEntry' => ['evidence' => 0, 'params' => 2, 'arity' => 2]],
+    ],
+    [],
+);
+$check(
+    ($scopeInterface->externalFnRuntimeArity['importedEntry'] ?? null) === 2,
+    'a class-scope reference published a layout the runtime arities do not carry',
+);
+$check(
+    ($scopeInterface->callableArity()['importedEntry'] ?? null) === 2,
+    'a class-scope reference published an arity the layout check cannot see',
+);
+
+$scopeCaller = new IR\FunctionDecl(
+    'scopeCaller',
+    [],
+    null,
+    new IR\Block([
+        new IR\Call('importedEntry', [new IR\Local('x')], 0),
+        new IR\Ret(new IR\Unit()),
+    ]),
+);
+try {
+    validateCallableLayouts(new IR\Module([$scopeCaller], [], [], null, 'Main'), 'class-scope', $scopeInterface->callableArity());
+    $check(false, 'a class-scope reference with a wrong published arity was accepted');
+} catch (InvalidIr $e) {
+    $check(
+        \str_contains($e->getMessage(), 'published slot'),
+        'the failure does not state the published arity: ' . $e->getMessage(),
+    );
+}
 
 if ($failures !== []) {
     throw new \RuntimeException(

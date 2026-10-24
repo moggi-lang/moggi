@@ -5,7 +5,14 @@ namespace Moggi\Modules;
 use Moggi\Semantics\TypeExpr\Scheme;
 
 /**
- * Everything one module publishes to the compilation, in one value (D08 / A8).
+ * The facts one module *imports*, in one value.
+ *
+ * The name says what the value is: it is the view a module has of the modules it
+ * imports, named after the importing module. It is **not** the module's own
+ * published interface — what a module exports is `PreparedProject`'s
+ * `units[...]['localTypes']` and the `facts` built from the check
+ * (`facts.callables`, `facts.evidence`, …). A consumer that needs the
+ * published side must read those, not this value.
  *
  * Two regions, and nothing else:
  *
@@ -13,12 +20,15 @@ use Moggi\Semantics\TypeExpr\Scheme;
  *    installs (`env`, `data`, `typeSynonyms`, `qualifiedModules`,
  *    `qualifiedOrigins`, `qualifiedEnv`, `intrinsicWrappers`, `ambiguousNames`),
  *    kind/constructor identity (`constructorRenames`), the symbol and ownership
- *    facts (`externalFns`, `fnOriginModules`), every imported entry's runtime
- *    arity (`externalFnRuntimeArity`), the published
- *    callable layouts (`callables`, whose arity `callableArity()` projects), the
- *    current action convention (`actionReturn`) and the imported `true` bindings
- *    (`trueBindings`). Every one of these is
+ *    facts (`externalFns`, `fnOriginModules`), the published
+ *    callable layouts (`callables`), the current action convention (`actionReturn`)
+ *    and the imported `true` bindings (`trueBindings`). Every one of these is
  *    mandatory: an unset map is an empty map, never an absent one.
+ *
+ *    `callables` is the one home for an imported entry's runtime vector: a
+ *    function, a data constructor and an evidence factory each publish their
+ *    layout there, and `externalFnRuntimeArity` is projected from it in the
+ *    constructor, so no consumer can see an arity the list does not carry.
  *  - `summaries`: the optimizer's optional region. It starts empty and may stay
  *    empty; a missing summary may only cost optimization, never a correct
  *    program.
@@ -26,6 +36,8 @@ use Moggi\Semantics\TypeExpr\Scheme;
  * Declared foreign ABI is required, and already lives in the type facts: a
  * foreign function's scheme is in `env`, a foreign type's record is in `data`
  * (`foreign`, `owner`), and an entry's declaring module is `fnOriginModules`.
+ * Every map is the importer's: names are the spellings the importing module
+ * uses, resolved symbols carry the declaring module.
  *
  * Target rendering is deliberately *not* here: where a module's artifact sits,
  * what a module requires and which alias its namespace was bound to are the
@@ -33,7 +45,7 @@ use Moggi\Semantics\TypeExpr\Scheme;
  * at emission, and the emitters read that plan; no consumer of this class needs
  * a second copy of any region above.
  */
-final class ModuleInterface
+final class ImportInterface
 {
     /**
      * @param array<string, Scheme> $env
@@ -47,8 +59,7 @@ final class ModuleInterface
      * @param array<string, string> $constructorRenames
      * @param array<string, string> $externalFns
      * @param array<string, string> $fnOriginModules
-     * @param array<string, int> $externalFnRuntimeArity
-     * @param array<string, array{arity: int, evidence?: int, params?: int}> $callables
+     * @param array<string, array{evidence: int, params: int, arity: int}> $callables
      * @param array<string, true> $actionReturn
      * @param array<string, true> $trueBindings imported bindings whose body is the host boolean `true`
      * @param array<string, mixed> $summaries optional optimizer region
@@ -66,13 +77,25 @@ final class ModuleInterface
         public readonly array $constructorRenames = [],
         public readonly array $externalFns = [],
         public readonly array $fnOriginModules = [],
-        public readonly array $externalFnRuntimeArity = [],
         public readonly array $callables = [],
         public readonly array $actionReturn = [],
         public readonly array $trueBindings = [],
         public readonly array $summaries = [],
     ) {
+        $arity = [];
+        foreach ($callables as $name => $entry) {
+            $arity[$name] = $entry['arity'];
+        }
+        $this->externalFnRuntimeArity = $arity;
     }
+
+    /**
+     * The runtime vector of every imported entry, keyed by the name this module calls it by —
+     * projected from `callables`, so it cannot disagree with the published layouts.
+     *
+     * @var array<string, int>
+     */
+    public readonly array $externalFnRuntimeArity;
 
     /** An interface for a unit that imports nothing — the synthetic compiler modules. */
     public static function withoutImports(string $module): self
@@ -81,10 +104,10 @@ final class ModuleInterface
     }
 
     /**
-     * The runtime arity of every imported *function* entry, keyed by the name this
-     * module calls it by. Narrower than `externalFnRuntimeArity`, which also carries
-     * the instance-evidence builders: those are not exported entries and their
-     * argument list is an evidence slice, not a callable layout.
+     * The runtime arity of every imported entry — a function, a data constructor or
+     * an evidence factory — keyed by the name this module calls it by. This is what
+     * the post-legalize layout check reads, so the check sees every entry an
+     * artifact can call.
      *
      * @return array<string, int>
      */
@@ -102,7 +125,7 @@ final class ModuleInterface
      * where that module's artifact sits is target planning, so no path is
      * derived here.
      *
-     * @param array{externalFns: array<string, string>, arity: array<string, int>, origins?: array<string, string>, actionReturn?: array<string, true>} $refs
+     * @param array{externalFns: array<string, string>, callables: array<string, array{evidence: int, params: int, arity: int}>, origins?: array<string, string>, actionReturn?: array<string, true>} $refs
      * @param array<string, true> $localNames names the module binds itself
      */
     public function withClassScopeRefs(array $refs, array $localNames): self
@@ -115,7 +138,7 @@ final class ModuleInterface
         }
 
         $externalFns = $this->externalFns;
-        $externalFnRuntimeArity = $this->externalFnRuntimeArity;
+        $callables = $this->callables;
         $fnOriginModules = $this->fnOriginModules;
         foreach ($refs['externalFns'] as $name => $symbol) {
             if (isset($localNames[$name])) {
@@ -123,7 +146,14 @@ final class ModuleInterface
             }
 
             $externalFns[$name] ??= $symbol;
-            $externalFnRuntimeArity[$name] ??= $refs['arity'][$name] ?? 0;
+            if (! isset($callables[$name])) {
+                if (! isset($refs['callables'][$name])) {
+                    throw new \LogicException(
+                        "class-scope reference `{$name}` has no published callable layout",
+                    );
+                }
+                $callables[$name] = $refs['callables'][$name];
+            }
             $originModule = $refs['origins'][$name] ?? null;
             if (! \is_string($originModule) || $originModule === '' || $originModule === $this->module) {
                 continue;
@@ -134,8 +164,8 @@ final class ModuleInterface
 
         return $this->with(
             externalFns: $externalFns,
-            externalFnRuntimeArity: $externalFnRuntimeArity,
             fnOriginModules: $fnOriginModules,
+            callables: $callables,
             actionReturn: $actionReturn,
         );
     }
@@ -167,7 +197,7 @@ final class ModuleInterface
         ?array $typeSynonyms = null,
         ?array $externalFns = null,
         ?array $fnOriginModules = null,
-        ?array $externalFnRuntimeArity = null,
+        ?array $callables = null,
         ?array $actionReturn = null,
     ): self {
         return new self(
@@ -183,8 +213,7 @@ final class ModuleInterface
             constructorRenames: $this->constructorRenames,
             externalFns: $externalFns ?? $this->externalFns,
             fnOriginModules: $fnOriginModules ?? $this->fnOriginModules,
-            externalFnRuntimeArity: $externalFnRuntimeArity ?? $this->externalFnRuntimeArity,
-            callables: $this->callables,
+            callables: $callables ?? $this->callables,
             actionReturn: $actionReturn ?? $this->actionReturn,
             trueBindings: $this->trueBindings,
             summaries: $this->summaries,
@@ -194,13 +223,13 @@ final class ModuleInterface
 
 /**
  * The import context of a module that imports nothing: one source checked on its
- * own. The interface is empty, not absent, so no consumer needs a null check,
+ * own. The import interface is empty, not absent, so no consumer needs a null check,
  * and the target layout is empty because there is nothing to place.
  */
 function standaloneImportContext(string $module, string $backendId): ImportContext
 {
     return new ImportContext(
-        interface: ModuleInterface::withoutImports($module),
+        interface: ImportInterface::withoutImports($module),
         plan: EmitPlan::forTarget($backendId, ''),
     );
 }

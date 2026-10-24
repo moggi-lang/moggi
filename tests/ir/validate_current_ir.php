@@ -1,6 +1,6 @@
 <?php declare(strict_types=1);
 
-// A2: the current-IR validator's positive and malformed-negative cases.
+// The current-IR validator's positive and malformed-negative cases.
 //
 // The legal shapes are the ones this tree really emits: a match whose arms share
 // a destination, two matches writing the same destination, an action body whose
@@ -9,8 +9,8 @@
 //
 // The rejected shapes are an unbound local in a function that has no capture
 // mechanism, a temp read before any statement defines it, and an entry point
-// that names no function. Return regions follow D17 as the tree actually emits
-// them (D17, answered 2026-10-21): `Ret` in a match arm is that arm's yield,
+// that names no function. Return regions are unrestricted, following the tree
+// as it actually emits them: `Ret` in a match arm is that arm's yield,
 // dead statements after a `Ret` stay legal, and **both** `Ret` and `MatchReturn`
 // inside a `Loop` body are legal — TCO rewrites a tail-recursive function into
 // such a loop, and the standard library compiles that way. There is no return
@@ -73,7 +73,6 @@ $action = new IR\IoAssignAction(
 );
 
 $legal = $module([
-    // Two matches writing the same destination, then a read of it, is legal.
     $fn('main', [], new IR\Block([
         new IR\Let('x', new IR\ConstInt(1)),
         $sharedMatch,
@@ -82,15 +81,11 @@ $legal = $module([
         new IR\Assign(3, $temp(0)),
         new IR\Ret($temp(3)),
     ])),
-    // A lifted lambda's free locals are its captures.
     $fn('λ0', ['p'], new IR\Block([new IR\Ret($local('outerCapture'))]), IR\FunctionKind::Lambda),
 ]);
 $error = $rejects(static fn () => Validate\validateModule($legal, 'post-lower'));
 $check($error === null, 'legal current IR was rejected: ' . ($error?->getMessage() ?? ''));
 
-// The same spelling as a *declared* function is not a capture binding: the
-// prefix is presentation, the kind is the fact. Before FunctionKind the
-// validator read the name and accepted this free local.
 $lookalike = $module([
     $fn('λ0', ['p'], new IR\Block([new IR\Ret($local('outerCapture'))])),
 ]);
@@ -125,8 +120,6 @@ $check(
     'the temp error does not name the temp',
 );
 
-// A temp defined by only one arm is undefined on the other path, so reading it
-// after the match is rejected; a temp defined by every arm is available.
 $branchPartial = $module([$fn('partialTemp', [], new IR\Block([
     new IR\MatchStmt(new IR\ConstInt(0), [
         new IR\MatchArm(new IR\PatWild(), new IR\Block([new IR\Assign(4, new IR\ConstInt(1))])),
@@ -153,9 +146,6 @@ $check(
     'a temp defined by every arm was rejected after the match',
 );
 
-// D17: the legal return regions. An arm may yield via `Ret`, a statement after
-// a `Ret` is dead code (legal IR, not validated), and a loop body may contain
-// anything except a return.
 $legalReturns = $module([
     $fn('armYield', [], new IR\Block([
         new IR\MatchStmt(new IR\ConstInt(0), [
@@ -172,8 +162,6 @@ $legalReturns = $module([
         new IR\Loop(new IR\Block([new IR\Assign(7, new IR\ConstInt(1))])),
         new IR\Ret(new IR\Unit()),
     ])),
-    // The shapes TCO really emits: a loop body returning through MatchReturn,
-    // and a loop arm returning through Ret (`Data/Foldable`'s `__letrec5`).
     $fn('loopWithMatchReturn', [], new IR\Block([
         new IR\Loop(new IR\Block([
             new IR\MatchReturn(new IR\ConstInt(0), [
@@ -205,8 +193,6 @@ $check(
     'an entry point naming no function was accepted',
 );
 
-// A guard preparation's binder is available to that arm's body, and to nothing
-// else: reading it from a sibling arm is an availability error.
 $leaky = $module([$fn('leaky', [], new IR\Block([
     new IR\MatchStmt($local('x'), [
         new IR\MatchArm(new IR\PatVar('a'), new IR\Block([]), [
