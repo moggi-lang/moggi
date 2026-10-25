@@ -16,25 +16,15 @@ require_once __DIR__ . '/constraints.php';
 /**
  * A recursive top-level binding group, checked once.
  *
- * A cycle has no order in which its members can be checked one after another:
- * `isEven` cannot publish a scheme before `isOdd`'s body is typed, and vice
- * versa. The group therefore allocates a *monotype* for every member up front,
- * checks each body exactly once against those monotypes, decides the group's
- * dictionaries from what those bodies reported, and only then lifts each member
- * and publishes its scheme.
+ * A cycle has no order in which its members could publish a scheme one after
+ * another, so the group allocates a *monotype* for every member up front, checks
+ * each body once against those monotypes, decides the group's dictionaries from
+ * what the bodies reported, then lifts each member: the recursion's own evidence
+ * is in scope for every body, and a recursive call is given its callee's
+ * dictionaries. No body is inferred twice.
  *
- * This is the same shape a local `let`/`where` group is checked with
- * ({@see inferRecursiveBindings()}) and it has the same consequence: the
- * recursion's own evidence is in scope for every member body, and a member's
- * recursive calls are given the dictionaries of the member they call
- * ({@see markRecursiveGroupEvidence()}). What it removes is the copied-body
- * probe: no member's body is inferred twice, and nothing the check discovers is
- * read back out of a printed signature.
- *
- * The one thing the group cannot decide on its own is a restricted member
- * (`f = e`, no parameters): its variables belong to the module end, not to the
- * group. Such a member is inferred here like the rest and then deferred
- * ({@see deferDeclaration()}).
+ * A restricted member (`f = e`, no parameters) is inferred here too, but its
+ * variables belong to the module end, so it is deferred (@see deferDeclaration()).
  */
 function inferRecursiveDeclarations(TypeCheckState $state, array $members): array
 {
@@ -100,13 +90,9 @@ function inferRecursiveDeclarations(TypeCheckState $state, array $members): arra
 /**
  * Refuse a restricted member that calls a member the group gave dictionaries.
  *
- * A restricted member's body is checked before the group decides its
- * dictionaries, so a call it makes carries no evidence; the call site would be
- * lowered as a partial application of a dictionary-taking function, which is a
- * program that type-checks and then fails at run time. Nothing here can repair
- * it after the fact -- the instantiation the call site would have to hand
- * dictionaries over was discarded with the monotype -- so the shape is refused
- * by name instead. A signature on the restricted member moves it out of this
+ * Its body is checked before the group decides those dictionaries, so the call
+ * would be lowered as a partial application and fail at run time; the shape is
+ * refused by name. A signature on the restricted member moves it out of this
  * producer, where the call is checked against the published scheme.
  *
  * @param list<RecursiveMember> $group
@@ -163,10 +149,9 @@ final class RecursiveMember
 /**
  * Give every member a monotype and publish it, before any body is checked.
  *
- * The monotype is the member's spine — one fresh variable per parameter and one
- * for the result — with no dictionary arrows: what the group will be lifted with
- * is not known until its bodies are. A restricted member gets a single variable,
- * because its body is not a function of anything.
+ * One fresh variable per parameter and one for the result, with no dictionary
+ * arrows: the lift is unknown until the bodies are typed. A restricted member
+ * gets a single variable.
  *
  * @param list<Ast\FunctionDecl> $members
  * @return list<RecursiveMember>
@@ -202,11 +187,8 @@ function allocateRecursiveMonotypes(TypeCheckState $state, array $members): arra
 /**
  * Infer one member's body, once, against the monotype the group published.
  *
- * The body is typed with the group's monotypes in scope and with no dictionaries
- * of its own yet, exactly like a signature-less declaration whose obligations
- * are decided at its checkpoint. Nothing here decides those obligations: the
- * body reports what it wants as pending constraints at its call sites, and the
- * group solves them.
+ * No dictionaries are in scope yet: the body reports what it wants as pending
+ * constraints and the group solves them.
  */
 function inferRecursiveMemberBody(TypeCheckState $state, RecursiveMember $member): void
 {
@@ -265,18 +247,10 @@ function inferRecursiveMemberBody(TypeCheckState $state, RecursiveMember $member
 /**
  * Decide each member's dictionaries from what the group's bodies reported.
  *
- * A member's own body says what it needs. It also needs what the *members it
- * calls* need — a recursive call has to hand its callee the callee's
- * dictionaries — so each round marks every intra-group reference with the
- * constraints its callee currently carries and re-reads the bodies' reports.
- * That is a monotone fixpoint over a finite set of obligations, so it settles
- * after at most one round per obligation; in the common case, where every member
- * of a cycle reaches every other, the first round already gives the group one
- * vocabulary.
- *
- * Annotated members are not here: their signature is their own, registered
- * before any of this ran, so their call sites already carry the dictionaries
- * they hand over.
+ * A member needs its own obligations and the ones of the members it calls, so a
+ * round marks every intra-group reference with its callee's current constraints
+ * and re-reads the reports. That is a monotone fixpoint over a finite set of
+ * obligations. Annotated members are absent: their signature is their own.
  *
  * @param list<RecursiveMember> $group
  * @return array<string, list<Ast\PendingConstraint>> member name => its obligations
@@ -323,13 +297,11 @@ function solveRecursiveGroupConstraints(TypeCheckState $state, array $group): ar
 }
 
 /**
- * Give a member's references to its group the dictionaries the callee takes.
+ * Mark a member's references to its group with the dictionaries the callee takes.
  *
- * A member's body was inferred while its callees were monotypes, so its
- * recursive calls carry no evidence yet. Each reference to a group name is
- * marked with that name's obligations here, and the evidence pass that follows
- * settlement resolves them exactly as it resolves any other call site: on the
- * member's own dictionaries when the obligation is one it was lifted with.
+ * The calls were inferred while the callees were monotypes, so they carry no
+ * evidence yet; the pass that runs after settlement resolves them like any other
+ * call site.
  *
  * @param array<string, list<Ast\PendingConstraint>> $byName
  */
@@ -349,10 +321,8 @@ function markRecursiveGroupEvidence(Ast\AstNode $expr, array $byName): void
 /**
  * Lift one member with the dictionaries the group decided and publish it.
  *
- * The lift is the declaration's ordinary one — prepend the evidence parameters,
- * make them the ambient dictionaries, settle the body through them — so the
- * published scheme, the elaborated body and the checked-core record come from
- * the check itself rather than from a signature discovered earlier and re-parsed.
+ * The lift is the declaration's ordinary one: prepend the evidence parameters,
+ * install them as the ambient dictionaries, settle the body through them.
  *
  * @param list<Ast\PendingConstraint> $userConstraints
  */

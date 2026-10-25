@@ -24,8 +24,9 @@
  *      IR;
  *   4. injects the failures a record can carry — a type the declaration does not
  *      have, every kind flattened to `Type`, an obligation in a variable the
- *      scheme does not bind, an origin nothing is written at — and requires the
- *      same checks that passed every real record to refuse each one, so a record
+ *      scheme does not bind, an origin nothing is written at and an origin on a
+ *      real position the declaration is not written at — and requires the same
+ *      checks that passed every real record to refuse each one, so a record
  *      cannot be counted rather than checked.
  *
  * The corpus is the point: a fixture proves the shapes someone thought of, and
@@ -277,9 +278,14 @@ $validateRecord = static function (
             . ' end of `' . $unitPaths[$originModule] . '`',
     );
 
-    // The scheme and the declaration are two renderings of one settled type: the
-    // record's internal type must be the declaration's, alpha-equivalent, once
-    // the dictionary parameters the declaration spells out are peeled off.
+    $writtenAt = $declaration->sourceOrigin
+        ?? $moduleName . ':' . $declaration->line . ':' . $declaration->col;
+    $assert(
+        $record->origin === $writtenAt,
+        "the record for `{$moduleName}::{$name}` publishes `{$record->origin}` as its origin, and the"
+            . " declaration is written at `{$writtenAt}`",
+    );
+
     $declaredType = $declaration->type;
     for ($peel = \count($record->evidence); $peel > 0; --$peel) {
         if (! $declaredType instanceof Ast\TypeArrow
@@ -455,6 +461,14 @@ $injections['an origin nothing is written at'] = [
     $mutate($record, ['origin' => $moduleName . ':0:0']),
     'not a position anything is written at',
 ];
+$plainOrigin = \explode(':', $record->origin);
+$injections['an origin on another position of the module'] = [
+    $moduleName,
+    $name,
+    $declaration,
+    $mutate($record, ['origin' => $plainOrigin[0] . ':' . $plainOrigin[1] . ':' . ($plainOrigin[2] + 1)]),
+    'written at',
+];
 
 [$moduleName, $name, $record, $declaration] = $samples['evidence'] ?? [null, null, null, null];
 $assert($record !== null, 'the differential found no evidence-bearing record to mutate');
@@ -509,24 +523,25 @@ foreach ($injections as $label => [$moduleName, $name, $declaration, $record, $f
     ++$refused;
 }
 
-$assert($modules >= 40, "the differential covered only {$modules} modules of the base library");
+$assert($modules >= 68, "the differential covered only {$modules} of the base library's modules");
 $assert(
-    $records >= 950,
+    $records >= 3800,
     "the differential covered only {$records} records; every declaration of the base library that is"
         . ' lowered is record-owned, so a smaller number means a category was silently lost',
 );
 $assert(
-    $instanceMethodRecords >= 500,
+    $instanceMethodRecords >= 2700,
     "the differential covered only {$instanceMethodRecords} instance methods; the base library declares"
-        . ' hundreds of them across its classes, so a smaller number means the category was not walked',
+        . ' thousands, so a smaller number means the category was not walked',
 );
 $assert(
-    $foreignRecords > 0,
-    'the differential covered no foreign import, so the category was not walked',
+    $foreignRecords >= 95,
+    "the differential covered only {$foreignRecords} foreign imports; the base library declares dozens,"
+        . ' so a smaller number means the category was not walked',
 );
 $assert(
-    $scrubbedSites > 0,
-    'the differential scrubbed no site, so it compared a tree it never touched',
+    $scrubbedSites >= 64000,
+    "the differential scrubbed only {$scrubbedSites} sites; it has to compare the trees it touched",
 );
 
 echo "checked-core differential passed: {$records} records over {$modules} modules"
