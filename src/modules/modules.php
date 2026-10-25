@@ -66,8 +66,15 @@ function compileProjectBoth(array $paths, string $rootDir, CompilationContext $c
         return $cached;
     }
 
+    /*
+     * Releasing a checked program is what keeps a whole-project compile inside the
+     * memory floor, and it is sound only where the module cache can hand the program
+     * back. A compile with the cache off (`--no-cache`, `MOGGI_NO_CACHE=1`, a
+     * read-only cache root) keeps its products in memory — the behaviour this call
+     * had before releasing existed — instead of refusing to compile at all.
+     */
     $outputs = compilePreparedProject(
-        prepareProjectCached($paths, $rootDir, $context, releaseChecked: true),
+        prepareProjectCached($paths, $rootDir, $context, releaseChecked: Cache\cacheEnabled()),
         $context,
         $optimize,
         $strip,

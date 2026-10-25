@@ -4443,83 +4443,25 @@ function describeUnresolvedConstraints(TypeCheckState $state, array $constraints
     return "unresolved type class {$noun}: `" . \implode('`, `', $list) . '`';
 }
 
+/**
+ * Refuse an expression tree that still carries an unresolved obligation.
+ *
+ * One walk over every node the tree reaches: `walkAstValues()` descends
+ * `childValues()`, lists included, so an argument of a `ForeignCall` and an
+ * evidence site's context are inspected like any other child. The hand-written
+ * match this replaced listed the shapes someone thought of and returned
+ * silently on the rest, which is the failure `walkElaboration()` exists to
+ * prevent -- an obligation inside an unlisted shape went unreported.
+ */
 function assertNoPendingConstraintsInExpr(TypeCheckState $state, Ast\AstNode $expr, ?Ast\AstNode $at = null): void
 {
-    if ($expr->pendingConstraints !== []) {
-        throw typeFail($state, describeUnresolvedConstraints($state, $expr->pendingConstraints), $at ?? $expr);
-    }
+    walkAstValues($expr, static function (Ast\AstNode $node) use ($state, $at): void {
+        if ($node->pendingConstraints === []) {
+            return;
+        }
 
-    match ($expr::class) {
-        Ast\Apply::class => (static function () use ($state, $expr, $at): void {
-            assertNoPendingConstraintsInExpr($state, $expr->function, $at);
-            assertNoPendingConstraintsInExpr($state, $expr->argument, $at);
-        })(),
-        Ast\Infix::class => (static function () use ($state, $expr, $at): void {
-            assertNoPendingConstraintsInExpr($state, $expr->left, $at);
-            assertNoPendingConstraintsInExpr($state, $expr->right, $at);
-        })(),
-        Ast\Lambda::class => assertNoPendingConstraintsInExpr($state, $expr->body, $at),
-        Ast\Let::class => (static function () use ($state, $expr, $at): void {
-            foreach ($expr->bindings as $binding) {
-                assertNoPendingConstraintsInExpr($state, $binding->value, $at);
-            }
-
-            assertNoPendingConstraintsInExpr($state, $expr->body, $at);
-        })(),
-        Ast\Where::class => (static function () use ($state, $expr, $at): void {
-            foreach ($expr->bindings as $binding) {
-                assertNoPendingConstraintsInExpr($state, $binding->value, $at);
-            }
-
-            assertNoPendingConstraintsInExpr($state, $expr->expr, $at);
-        })(),
-        Ast\CaseExpr::class => (static function () use ($state, $expr, $at): void {
-            assertNoPendingConstraintsInExpr($state, $expr->scrutinee, $at);
-            foreach ($expr->alts as $alt) {
-                assertNoPendingConstraintsInExpr($state, $alt->body, $at);
-            }
-        })(),
-        Ast\GuardsExpr::class => (static function () use ($state, $expr, $at): void {
-            foreach ($expr->clauses as $clause) {
-                assertNoPendingConstraintsInExpr($state, $clause->guard, $at);
-                assertNoPendingConstraintsInExpr($state, $clause->body, $at);
-            }
-        })(),
-        Ast\DoExpr::class => (static function () use ($state, $expr, $at): void {
-            if (isset($expr->desugared)) {
-                assertNoPendingConstraintsInExpr($state, $expr->desugared, $at);
-            }
-        })(),
-        Ast\TypeAsc::class => assertNoPendingConstraintsInExpr($state, $expr->expr, $at),
-        Ast\IntrinsicCall::class => (static function () use ($state, $expr, $at): void {
-            foreach ($expr->args as $arg) {
-                assertNoPendingConstraintsInExpr($state, $arg, $at);
-            }
-        })(),
-        Ast\Tuple::class => (static function () use ($state, $expr, $at): void {
-            foreach ($expr->elements as $elem) {
-                assertNoPendingConstraintsInExpr($state, $elem, $at);
-            }
-        })(),
-        Ast\ListLit::class => (static function () use ($state, $expr, $at): void {
-            foreach ($expr->elements as $elem) {
-                assertNoPendingConstraintsInExpr($state, $elem, $at);
-            }
-        })(),
-        Ast\RecordCon::class => (static function () use ($state, $expr, $at): void {
-            foreach ($expr->fields as $field) {
-                assertNoPendingConstraintsInExpr($state, $field->expr, $at);
-            }
-        })(),
-        Ast\RecordUpdate::class => (static function () use ($state, $expr, $at): void {
-            assertNoPendingConstraintsInExpr($state, $expr->object, $at);
-            foreach ($expr->fields as $field) {
-                assertNoPendingConstraintsInExpr($state, $field->expr, $at);
-            }
-        })(),
-        Ast\FieldAccess::class => assertNoPendingConstraintsInExpr($state, $expr->object, $at),
-        default => null,
-    };
+        throw typeFail($state, describeUnresolvedConstraints($state, $node->pendingConstraints), $at ?? $node);
+    });
 }
 
 function unifyCaseBranches(TypeCheckState $state, Type $left, Type $right, Ast\AstNode $at): void
