@@ -3,7 +3,6 @@
 namespace Moggi\Semantics\Registry;
 
 use Moggi\Modules\ImportContext;
-use Moggi\Modules\InstanceWorld;
 use Moggi\Semantics\Deriving\ClassDeriveFacts;
 use Moggi\Semantics\Kinds;
 use Moggi\Semantics\Types\TypeCheckState;
@@ -81,11 +80,7 @@ function applyImportContext(TypeCheckState $state, Ast\Program $program, ImportC
     $state->classModuleScopes = $importContext->classScopes;
     $state->externalFns = $interface->externalFns;
 
-    $standaloneModule = $importContext->currentModule ?? '';
-    $world = $importContext->instanceWorld ?? InstanceWorld::over(
-        projectInstancesFromProgram($program, ClassDeriveFacts::fromState($state), $standaloneModule),
-        [$standaloneModule],
-    );
+    $world = $importContext->instanceWorld;
     $state->instanceWorld = $world;
     $index = $world->index();
     $state->projectInstancesByClass = $index['byClass'];

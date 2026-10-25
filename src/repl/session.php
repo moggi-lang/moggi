@@ -276,10 +276,10 @@ function prepareInteractive(State $state, string $extra = '', bool $normalizeIo 
         $outputRelative,
         $base->rootPrefix,
         $context->backendId,
+        $instanceWorld,
     )->withProjectScopes(
         $projectClasses,
         [],
-        $instanceWorld,
         $moduleName,
     );
     $importContext = $importContext->withInterface(

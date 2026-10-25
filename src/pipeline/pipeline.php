@@ -36,11 +36,6 @@ function run(PipelineRequest $request, PipelineStage $stopAt = PipelineStage::Em
         ),
     );
 
-    $importContext = $request->importContext ?? standaloneImportContext(
-        $request->typedProgram?->module ?? $request->program?->module ?? '',
-        $request->context->backendId,
-    );
-
     if ($request->typedProgram !== null) {
         $typed = $request->typedProgram;
         $artifacts->ast = $request->program;
@@ -63,7 +58,8 @@ function run(PipelineRequest $request, PipelineStage $stopAt = PipelineStage::Em
             $program,
             $request->source,
             $request->filename,
-            $importContext,
+            $request->importContext
+                ?? standaloneImportContext($program, $request->context->backendId),
             $request->context->purposeFor($program->module),
             entryModules: $request->context->entries,
             backendId: $request->context->backendId,

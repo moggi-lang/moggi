@@ -6,7 +6,7 @@ use Moggi\Modules\CheckedFunction;
 use Moggi\Syntax\Ast;
 
 use function Moggi\Debug\normalizeDisplayPath;
-use function Moggi\Modules\isCheckedCoreFunction;
+use function Moggi\Modules\isOrdinaryDeclaration;
 use function Moggi\Semantics\Exhaustiveness\trueBindingOrigins;
 use function Moggi\Semantics\IoBoundary\functionReturnsIo;
 use function Moggi\Patterns\Walk\patternBoundNames;
@@ -94,7 +94,10 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
             }
 
             $record = $core?->function($item->name);
-            if ($record === null && isCheckedCoreFunction($item)) {
+            if ($record === null
+                && isOrdinaryDeclaration($item)
+                && ! isset($core?->unowned[$item->name])
+            ) {
                 throw new \RuntimeException(
                     "lowering `{$moduleName}::{$item->name}` needs its checked-core record:"
                     . ' a checked module is always lowered from its closed product, never from the source tree',

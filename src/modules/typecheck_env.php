@@ -18,9 +18,9 @@ use Moggi\Syntax\Ast;
 
 use function Moggi\Cache\moduleGet;
 use function Moggi\Cache\modulePut;
-use function Moggi\Semantics\Deriving\derivedProjectInstanceRecords;
 use function Moggi\Semantics\Kernel\boolTypeName;
 use function Moggi\Semantics\Registry\foreignFunctionDecl;
+use function Moggi\Semantics\Registry\projectInstancesFromProgram;
 use function Moggi\Semantics\Registry\registerSurfaceConstructorAlias;
 use function Moggi\Syntax\Ast\moduleName;
 use function Moggi\Syntax\isConstructorName;
@@ -982,36 +982,38 @@ function projectClassDeclarations(array $units): array
     return $declarations;
 }
 
+/**
+ * The instance records the project's units declare, in canonical module order.
+ *
+ * {@see projectInstancesFromProgram()} is the only place a record is shaped, so
+ * a fact added to one route's records cannot be missing from another's and give
+ * the same modules two identities.
+ *
+ * A named module whose unit preparation did not parse is refused rather than
+ * skipped: the world's identity names the module set it was collected over, so
+ * a module that contributed no records would claim coverage it does not have,
+ * and that is indistinguishable from a route that legitimately sees fewer
+ * modules.
+ *
+ * @param array<string, array<string, mixed>> $units
+ * @param list<string>|null $onlyModules
+ * @return list<array<string, mixed>>
+ */
 function collectProjectInstances(array $units, ?array $onlyModules = null): array
 {
-    $instances = [];
     $facts = ClassDeriveFacts::fromClassDeclarations(projectClassDeclarations($units));
 
+    $instances = [];
     foreach (canonicalModuleOrder($units, $onlyModules) as $moduleName) {
         $unit = $units[$moduleName] ?? null;
         if ($unit === null || ($unit['parsed'] ?? false) !== true) {
-            continue;
+            throw new \LogicException(
+                "the instance world was asked for `{$moduleName}`, which preparation did not parse",
+            );
         }
 
-        foreach ($unit['program']->items as $item) {
-            if ($item instanceof Ast\InstanceDecl) {
-                $instances[] = [
-                    'module' => $moduleName,
-                    'class' => $item->class,
-                    'instanceHead' => $item->head,
-                    'constraints' => $item->constraints,
-                    'intrinsicMethods' => Types\instanceIntrinsicMethods($item),
-                    'associatedEquations' => Types\associatedEquationsMapFromDecl($item),
-                ];
-
-                continue;
-            }
-
-            if ($item instanceof Ast\DataDecl && $item->derivingClasses !== []) {
-                foreach (derivedProjectInstanceRecords($item, $moduleName, $facts) as $record) {
-                    $instances[] = $record;
-                }
-            }
+        foreach (projectInstancesFromProgram($unit['program'], $facts, $moduleName) as $record) {
+            $instances[] = $record;
         }
     }
 

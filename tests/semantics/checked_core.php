@@ -1,8 +1,9 @@
 <?php declare(strict_types=1);
 
 /**
- * The checked core, end to end, for the one category it covers: an ordinary
- * function that spells its own signature and does not call itself.
+ * The checked core, end to end, for the category it covers: an ordinary
+ * function — one that spells its own signature or that the check inferred and
+ * generalized, and whether or not it belongs to a recursive binding group.
  *
  * The module below is compiled the way a project compiles it — same prepare, same
  * checker — and the test then reads only the *closed product* the check
@@ -29,9 +30,13 @@
  *   from the surface tree;
  * - a same-named instance method does not take over the exported scheme of a
  *   declaration the record owns (`Data.Map.null` beside `Foldable.null`);
- * - the record states the kind of each of its scheme's parameters (H2), and the
+ * - the record states the kind of each of its scheme's parameters, and the
  *   kinds are the declaration's own: `f` is `Type -> Type` under `Holder` and
- *   `Type` in the sibling that spells the same name.
+ *   `Type` in the sibling that spells the same name;
+ * - a declaration of a recursive binding group is owned like any other, and its
+ *   record is as complete: the group's settled scheme, its dictionary parameter,
+ *   the terms of its own body, and the plan for the evidence site of its
+ *   self-call.
  */
 
 $root = __DIR__;
@@ -112,7 +117,7 @@ listed n xs = lookup n xs
 class Peek f where
   bigness :: f a -> Int
 
--- H2: a parameter's kind is its own declaration's. `Holder`'s parameter is
+-- A parameter's kind is its own declaration's. `Holder`'s parameter is
 -- `Type -> Type`, so `hollow`'s `f` is too; `keyed` spells the same name at
 -- `Type` in a sibling declaration and neither answer reaches the other.
 class Holder f where
@@ -135,11 +140,24 @@ hollow x = hold x
 keyed :: Tagged f => f -> Int
 keyed x = tag x
 
--- Not the category: inferred, and recursive with a signature.
+-- Inferred, and closed: the check generalizes it, so the record can state it.
 inferred x = twice x
 
+-- Inferred *and* constrained: the `Tagged` dictionary is one signature discovery found, not one the
+-- declaration wrote, and the record still has to carry it in positional order.
+inferredConstrained x = tag x
+
+-- The category too: a recursive group's signature is settled before any member's body is
+-- checked, so the record states the closed scheme the group was checked against.
 countdown :: Int -> Int
-countdown n = countdown n
+countdown n = case n of
+  0 -> 0
+  _ -> countdown (n - 1)
+
+sumDown :: Tagged a => a -> Int -> Int
+sumDown x n = case n of
+  0 -> tag x
+  _ -> tag x + sumDown x (n - 1)
 
 main :: IO ()
 main = do
@@ -173,17 +191,98 @@ try {
     $names = $core === null ? [] : \array_keys($core->functions);
     \sort($names);
     $check(
-        $names === ['bigness', 'both', 'bound', 'chosen', 'hollow', 'keyed', 'listed', 'main', 'projected', 'shown', 'twice'],
-        'the category is annotated nonrecursive ordinary functions, got: ' . \implode(', ', $names),
+        $names === [
+            'bigness', 'both', 'bound', 'chosen', 'countdown', 'hollow', 'inferred', 'inferredConstrained',
+            'keyed', 'listed', 'main', 'projected', 'shown', 'sumDown', 'twice',
+        ],
+        'the category is ordinary declarations with a closed scheme, got: ' . \implode(', ', $names),
     );
     $check(
-        $core?->function('inferred') === null,
-        'an inferred declaration is not in the pilot category',
+        $core?->unowned === [],
+        'every ordinary declaration here has a closed scheme, so none is left to the existing producer,'
+            . ' got: ' . \json_encode($core?->unowned),
     );
-    $check(
-        $core?->function('countdown') === null,
-        'a recursive declaration is not in the pilot category',
-    );
+
+    // ---- A recursive declaration is owned, and its record is as complete ----
+
+    $countdown = $core?->function('countdown');
+    $check($countdown !== null, 'a declaration of a recursive binding group has no record');
+    if ($countdown !== null) {
+        $check(
+            $countdown->scheme->freeTypeVars === [],
+            'the recursive record publishes a scheme with an uncommitted variable: '
+                . \implode(', ', \array_keys($countdown->scheme->freeTypeVars)),
+        );
+        $check(
+            Types\typeToString($countdown->scheme->type) === 'Int -> Int',
+            'the recursive record publishes the signature the group was checked against, got: '
+                . Types\typeToString($countdown->scheme->type),
+        );
+        $check(
+            $countdown->terms !== [],
+            'the recursive record publishes no term types for its own body',
+        );
+    }
+
+    // A recursive declaration that also takes a dictionary: the group's scheme and the
+    // declaration's own evidence vector, with every site in the recursive body planned.
+    $sumDown = $core?->function('sumDown');
+    $check($sumDown !== null, 'a constrained declaration of a recursive group has no record');
+    if ($sumDown !== null) {
+        $classes = \array_map(static fn (array $slot): string => $slot['class'], $sumDown->evidence);
+        $check(
+            $classes === ['Tagged'],
+            'the recursive record carries the group\'s dictionary parameter, got: ' . \implode(', ', $classes),
+        );
+        $check(
+            \count($sumDown->evidence) === $sumDown->scheme->runtimeConstraintCount,
+            'the recursive record\'s vector does not match the scheme it publishes',
+        );
+        $planKinds = \array_map(static fn ($plan): string => $plan->kind->name, $sumDown->bodyEvidence);
+        $check(
+            $planKinds === ['Parameter', 'Parameter'],
+            'every evidence site of the recursive body is planned, got: ' . \implode(', ', $planKinds),
+        );
+    }
+
+    // ---- An inferred declaration is owned, and its scheme is the generalized one ----
+
+    $inferred = $core?->function('inferred');
+    $check($inferred !== null, 'an inferred declaration with a closed scheme has no record');
+    if ($inferred !== null) {
+        $check(
+            $inferred->scheme->freeTypeVars === [],
+            'an inferred record publishes a scheme with an uncommitted variable: '
+                . \implode(', ', \array_keys($inferred->scheme->freeTypeVars)),
+        );
+        $check(
+            \count($inferred->scheme->bound) === 1,
+            'the inferred record publishes the generalized scheme, got bound: '
+                . \json_encode(\array_keys($inferred->scheme->bound)),
+        );
+        $check(
+            \array_keys($inferred->parameterKinds) === $inferred->scheme->bound,
+            'the record states a kind for every parameter its scheme binds, got: '
+                . \json_encode($inferred->parameterKinds) . ' for bound '
+                . \json_encode($inferred->scheme->bound),
+        );
+    }
+
+    // ---- And one discovery found a dictionary for keeps that dictionary ----
+
+    $discovered = $core?->function('inferredConstrained');
+    $check($discovered !== null, 'an inferred constrained declaration has no record');
+    if ($discovered !== null) {
+        $classes = \array_map(static fn (array $slot): string => $slot['class'], $discovered->evidence);
+        $check(
+            $classes === ['Tagged'],
+            'the record carries the dictionary discovery found, got: ' . \implode(', ', $classes),
+        );
+        $check(
+            $discovered->scheme->runtimeConstraintCount === \count($discovered->evidence),
+            'the inferred record\'s vector does not match the scheme it publishes',
+        );
+    }
 
     $twice = $core?->function('twice');
     $check($twice !== null, '`twice` has no checked record');
@@ -260,7 +359,7 @@ try {
         $check($paired, 'every slot pairs its wanted obligation with the given dictionary that discharges it');
     }
 
-    // ---- H2: the record states the kind of each of its own parameters ----
+    // ---- The record states the kind of each of its own parameters ----
 
     $hollow = $core?->function('hollow');
     $check($hollow !== null, '`hollow` has no checked record');
@@ -371,7 +470,7 @@ try {
             'evidence' => 'evidence_for_the_test',
             'origin' => $twice->origin,
         ]]);
-        $substitutedCore = new CheckedCore('Main', ['twice' => $substituted] + $core->functions);
+        $substitutedCore = new CheckedCore('Main', ['twice' => $substituted] + $core->functions, $core->unowned);
         $program->core = $substitutedCore;
         $substitutedIr = IR\lower($program, $program->interface->data, $path);
         $substitutedTwice = null;

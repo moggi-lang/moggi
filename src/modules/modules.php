@@ -66,7 +66,12 @@ function compileProjectBoth(array $paths, string $rootDir, CompilationContext $c
         return $cached;
     }
 
-    $outputs = compilePreparedProject(prepareProjectCached($paths, $rootDir, $context), $context, $optimize, $strip);
+    $outputs = compilePreparedProject(
+        prepareProjectCached($paths, $rootDir, $context, releaseChecked: true),
+        $context,
+        $optimize,
+        $strip,
+    );
     Cache\artifactPut($outputsKey, $outputs);
 
     return $outputs;
@@ -96,7 +101,7 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
         if (($unit['synthetic'] ?? false) === true) {
             continue;
         }
-        if (! isset($prepared->checked[$moduleName], $prepared->importContexts[$moduleName])) {
+        if (! isset($prepared->importContexts[$moduleName]) || ! $prepared->has($moduleName)) {
             continue;
         }
 
@@ -120,7 +125,7 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
 
         $artifacts = pipelineRun(new PipelineRequest(
             filename: $unit['path'],
-            typedProgram: $prepared->checked[$moduleName],
+            typedProgram: $prepared->program($moduleName, $context),
             optimize: $optimize,
             importContext: $prepared->importContexts[$moduleName],
             context: $context,

@@ -132,7 +132,7 @@ function checkRaw(
     array $entryModules = [],
     string $backendId = 'php',
 ): Ast\Program {
-    $importContext ??= standaloneImportContext($program->module ?? '', $backendId);
+    $importContext ??= standaloneImportContext($program, $backendId);
 
     $state = newState($source, $filename);
     $state->compileBackend = $backendId;

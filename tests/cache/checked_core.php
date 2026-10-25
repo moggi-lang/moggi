@@ -11,8 +11,9 @@
  * pins is whether that link survives the cache's encoding — and whether the IR
  * lowered from the decoded product is the IR the cold run emitted.
  *
- * The program is a pilot-category declaration with a dictionary parameter and a
- * projected instance method, so the record carries both plan kinds.
+ * The program is a checked-core declaration (an annotated, nonrecursive function)
+ * with a dictionary parameter and a projected instance method, so the record
+ * carries both plan kinds.
  */
 
 $root = __DIR__;
@@ -109,6 +110,16 @@ try {
     $assert(
         \count($roundCore->function('scaled')?->bodyEvidence ?? []) === \count($core->function('scaled')?->bodyEvidence ?? []),
         'the cached record lost the body evidence plans',
+    );
+    $assert(
+        ($core->function('scaled')?->parameterKinds ?? []) === ['a' => 'Type'],
+        'the record does not state the kind `scaled`\'s signature fixed: '
+            . \json_encode($core->function('scaled')?->parameterKinds),
+    );
+    $assert(
+        $roundCore->function('scaled')?->parameterKinds === $core->function('scaled')?->parameterKinds,
+        'the cached record lost the parameter kinds: '
+            . \json_encode($roundCore->function('scaled')?->parameterKinds),
     );
 
     $warm = IR\Dump\dump(IR\lower($round, $round->interface->data, $path));

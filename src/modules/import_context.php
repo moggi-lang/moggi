@@ -6,16 +6,17 @@ final class ImportContext
     /**
      * @param array<string, array<string, mixed>> $classes
      * @param array<string, array<string, mixed>> $classScopes
-     * @param ?InstanceWorld $instanceWorld the prepared project's instance world, when this
-     *   module is checked as part of one; null only for a check that was given no project
-     *   (`checkRaw` with no context), which is then its own world
+     * @param InstanceWorld $instanceWorld the world this module is checked against: the
+     *   prepared project's, or the module's own when it is checked on its own. A context
+     *   without one would let the checker fall back to a narrower world than the project,
+     *   which is why it is a constructor argument rather than a nullable field.
      */
     public function __construct(
         public readonly ImportInterface $interface,
         public readonly EmitPlan $plan,
+        public readonly InstanceWorld $instanceWorld,
         public readonly array $classes = [],
         public readonly array $classScopes = [],
-        public readonly ?InstanceWorld $instanceWorld = null,
         public readonly ?string $currentModule = null,
     ) {
     }
@@ -36,21 +37,23 @@ final class ImportContext
     /**
      * The same context with the project scopes it is checked in.
      *
+     * The world is not a scope: it is fixed when the context is built, so a
+     * later stage cannot hand the same module a different one.
+     *
      * @param array<string, array<string, mixed>> $classes
      * @param array<string, array<string, mixed>> $classScopes
      */
     public function withProjectScopes(
         array $classes,
         array $classScopes,
-        InstanceWorld $instanceWorld,
         string $currentModule,
     ): self {
         return new self(
             interface: $this->interface,
             plan: $this->plan,
+            instanceWorld: $this->instanceWorld,
             classes: $classes,
             classScopes: $classScopes,
-            instanceWorld: $instanceWorld,
             currentModule: $currentModule,
         );
     }

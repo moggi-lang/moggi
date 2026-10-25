@@ -6,9 +6,10 @@
  *
  * The world is collected from the *prepared project's* modules rather than from
  * any module's import closure, so a module sees instances of modules it never
- * imports — that is the semantics H4 keeps. What H4 adds is that the product
- * says which world its schemes mean, and that the answer does not depend on
- * which entry point prepared the units or in what order it walked them.
+ * imports — that is the semantics every route keeps. What this fixture pins is
+ * that the product says which world its schemes mean, and that the answer does
+ * not depend on which entry point prepared the units or in what order it walked
+ * them.
  *
  * The fixture is a project whose `Wide` module is imported by nobody, so its
  * instance exists only in the project-wide world:
