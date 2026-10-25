@@ -4,8 +4,6 @@ namespace Moggi\Dist;
 
 use function Moggi\Compiler\runProcess;
 
-use const Moggi\Install\INSTALL_ROOT_CONSTANT;
-
 require_once __DIR__ . '/../src/executables.php';
 require_once __DIR__ . '/../src/installation.php';
 
@@ -27,12 +25,12 @@ const PHAR_STUB = <<<'PHP'
 
 namespace Moggi\Dist;
 
-if (\PHP_VERSION_ID < 80500) {
-    \fwrite(STDERR, "moggi: PHP 8.5+ is required, this is " . \PHP_VERSION . "\n");
+if (\PHP_VERSION_ID < 80512) {
+    \fwrite(STDERR, "moggi: PHP 8.5.12+ is required, this is " . \PHP_VERSION . "\n");
     exit(1);
 }
 
-\define('@INSTALL_ROOT_CONSTANT@', \dirname(__FILE__, 2));
+\define('MOGGI_INSTALL_ROOT', \dirname(__FILE__, 2));
 
 require 'phar://' . __FILE__ . '/src/compiler.php';
 
@@ -48,16 +46,15 @@ const PHAR_INCLUDES = ['src'];
 const PHAR_EXCLUDES_PREFIX = '_';
 
 /**
- * The archive stub with the install-root constant named from the module that
- * owns that contract.
+ * The archive stub as the archive carries it.
  *
- * The stub is a string, so it cannot read `Moggi\Install` for itself; this one
- * substitution keeps the name it defines and the name `installationRoot()`
- * looks up from ever drifting apart.
+ * It defines `MOGGI_INSTALL_ROOT` before loading the compiler, which is what
+ * `Moggi\Install\installationRoot()` reads; a checkout defines nothing and
+ * resolves to its own root instead.
  */
 function pharStub(): string
 {
-    return \str_replace('@INSTALL_ROOT_CONSTANT@', INSTALL_ROOT_CONSTANT, PHAR_STUB);
+    return PHAR_STUB;
 }
 
 function compilerBuildVersion(string $sourceRoot): string

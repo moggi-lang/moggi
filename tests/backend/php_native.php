@@ -1,5 +1,6 @@
 <?php declare(strict_types=1);
 
+
 /**
  * `--native` appends the packaged PHAR to a micro PHP runtime
  * (`src/backend/php/native.php`). Two contracts are consumed by the foreign
@@ -23,8 +24,6 @@ require_once $root . '/src/compiler.php';
 
 use const Moggi\Backend\Php\MICRO_INI_MAGIC;
 use const Moggi\Backend\Php\MICRO_SFX_ENV;
-
-use Moggi\Install\ConfiguredInstallation;
 
 use function Moggi\Backend\Php\buildPharStub;
 use function Moggi\Backend\Php\buildPhpNativeExecutable;
@@ -64,7 +63,6 @@ $scratch = \sys_get_temp_dir() . '/moggi-native-' . \getmypid() . '-' . \bin2hex
 \mkdir($scratch, 0777, true);
 
 $previousSfx = \getenv(MICRO_SFX_ENV);
-$previousRoot = ConfiguredInstallation::root();
 
 try {
     $assertSame('', microIniObject([]), 'no directives must produce no object');
@@ -134,7 +132,6 @@ try {
     \putenv(MICRO_SFX_ENV . '=' . $payload);
     $assertSamePath($payload, resolveMicroSfx(), 'the environment may name a file');
     \putenv(MICRO_SFX_ENV . '=');
-    ConfiguredInstallation::set(null);
     $assertSame(null, resolveMicroSfx(), 'a checkout with nothing bundled and nothing named has no runtime');
 
     $outputRoot = $scratch . '/build';
@@ -197,7 +194,6 @@ try {
     unset($packaged);
 } finally {
     \putenv(MICRO_SFX_ENV . '=' . ($previousSfx === false ? '' : $previousSfx));
-    ConfiguredInstallation::set($previousRoot);
     if (\is_dir($scratch)) {
         $remove = static function (string $dir) use (&$remove): void {
             foreach (\scandir($dir) ?: [] as $entry) {

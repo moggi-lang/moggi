@@ -12,7 +12,9 @@
 
 let
   pinnedVersions = {
-    php = "8.5.7";
+    # 8.5.12 is the minimum the compiler runs on (see `MOGGI_MINIMUM_PHP`);
+    # 8.5.7 and older carry a security issue.
+    php = "8.5.12";
     dotnet = "8";
     composer = "2.10.1";
     maven = "3.9.12";

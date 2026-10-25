@@ -23,6 +23,24 @@ use function Moggi\Syntax\Lexer\dump as dumpTokens;
 use function Moggi\Syntax\Lexer\lex;
 use function Moggi\Syntax\Parser\parse;
 
+/**
+ * The oldest PHP this compiler runs on.
+ *
+ * 8.5.7 and older carry a security issue, so an older runtime is refused rather
+ * than run: a compiler is not the place to decide that a known-vulnerable
+ * interpreter is close enough. The dev shell pins the same version
+ * (`nix/devshell.nix`), and the bundled micro runtime the `--native` build
+ * appends is pinned in `dist/runtimes.json`.
+ */
+const MINIMUM_PHP = '8.5.12';
+
+if (\version_compare(\PHP_VERSION, MINIMUM_PHP, '<')) {
+    throw new \RuntimeException(
+        'moggi needs PHP ' . MINIMUM_PHP . ' or newer, and this is ' . \PHP_VERSION
+        . '; older releases carry a security issue',
+    );
+}
+
 (static function (): void {
     $current = \trim((string) \ini_get('memory_limit'));
     if ($current === '-1') {

@@ -2,10 +2,9 @@
 
 namespace Moggi\Registry;
 
-use Moggi\Install\ConfiguredInstallation;
-
 use function Moggi\Cache\ensureDir;
 use function Moggi\Modules\installationCandidates;
+use function Moggi\Modules\installationCandidatesKey;
 use function Moggi\Paths\globPaths;
 
 /**
@@ -37,18 +36,18 @@ use function Moggi\Paths\globPaths;
 
 /**
  * The `libraries/` tree this compiler ships: `<root>/libraries`, where the
- * root is found the way the bundled stdlib is — the installed distribution,
- * the checkout, or a root a test configured — or null when none holds one.
+ * root is found the way the bundled stdlib is — the installed distribution, or
+ * the checkout — or null when none holds one.
  */
 function bundledLibrariesDir(): ?string
 {
-    static $memoGeneration = -1;
+    static $memoKey = null;
     static $memoDir = null;
-    $generation = ConfiguredInstallation::generation();
-    if ($memoGeneration === $generation) {
+    $key = installationCandidatesKey();
+    if ($memoKey === $key) {
         return $memoDir;
     }
-    $memoGeneration = $generation;
+    $memoKey = $key;
     $memoDir = null;
 
     foreach (installationCandidates() as $root) {

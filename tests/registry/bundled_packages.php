@@ -17,8 +17,6 @@ while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
 require $root . '/src/compiler.php';
 require $root . '/tests/suite/support/workspace.php';
 
-use Moggi\Install\ConfiguredInstallation;
-
 use function Moggi\CLI\Commands\writeResolution;
 
 use function Moggi\Registry\archiveDigest;
@@ -52,6 +50,7 @@ $assert = static function (bool $condition, string $message) use (&$checks): voi
 };
 
 $work = createTempDir('moggi-bundled');
+\define('MOGGI_INSTALL_ROOT', $work);
 $author = "[author]\nname = Test\nemail = test@example.com\n"
     . "npub = npub1yywlmj053p4qp7z2qvqsrgcwz488mw0pr0t50xz3e5rx7s9uaelsjpdmfm\n";
 $manifest = static function (string $name, string $version, string $extra = '') use ($author): string {
@@ -68,10 +67,8 @@ $writeLib = static function (string $name, string $version, string $extra = '') 
     return $dir;
 };
 
-$oldRoot = ConfiguredInstallation::root();
 $oldCache = \getenv('MOGGI_CACHE_DIR');
 $oldUserCache = \getenv('MOGGI_USER_CACHE');
-ConfiguredInstallation::set($work);
 \putenv('MOGGI_CACHE_DIR=' . $work . '/cache');
 \putenv('MOGGI_USER_CACHE=' . $work . '/ucache');
 
@@ -202,7 +199,6 @@ try {
 
     echo "bundled package tests passed ({$checks} checks)\n";
 } finally {
-    ConfiguredInstallation::set($oldRoot);
     if ($oldCache === false) {
         \putenv('MOGGI_CACHE_DIR');
     } else {

@@ -1,15 +1,23 @@
 <?php declare(strict_types=1);
 
 /**
- * The checked boundary refuses a body that still carries an obligation —
- * wherever in the body it sits.
+ * The checked boundary refuses, by name, everything it promises to refuse.
  *
- * The guard used to be a hand-written `match` over expression kinds that fell
- * through on everything it did not list, so an obligation under a `ForeignCall`
- * argument or an evidence site's context was never looked at. These cases plant
- * one obligation in each of those shapes and require the refusal, and then pin
- * the second gate: the body that is actually published (after normalization)
- * must be settled too, for the same reason — it is the tree lowering reads.
+ * Two kinds of case:
+ *
+ * - a body that still carries an obligation, wherever in the body it sits. The
+ *   guard used to be a hand-written `match` over expression kinds that fell
+ *   through on everything it did not list, so an obligation under a `ForeignCall`
+ *   argument or an evidence site's context was never looked at; the second gate
+ *   is the body that is actually published (after normalization), because that
+ *   is the tree lowering reads;
+ * - one broken input per guard the producer runs, so the refusal cannot be lost
+ *   silently. Each guard is a named function — the one `checkedCoreFor()` and
+ *   `publishElaboration()` call — and its message is required here by name: a
+ *   scheme still open, an obligation without a dictionary, one dictionary for two
+ *   obligations, a vector that disagrees with the scheme, a parameter without a
+ *   kind, a kind for a parameter the scheme never binds, a term type naming a
+ *   variable the check already solved.
  */
 
 $root = __DIR__;
@@ -22,7 +30,9 @@ use Moggi\Modules;
 use Moggi\Modules\CheckedCore;
 use Moggi\Modules\CheckedFunction;
 use Moggi\Semantics\TypeExpr\Scheme;
+use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TCon;
+use Moggi\Semantics\TypeExpr\TVar;
 use Moggi\Semantics\Types\TypeCheckState;
 use Moggi\Syntax\Ast;
 
@@ -128,6 +138,153 @@ $assert(
     \str_contains($message, 'Main::probe') && \str_contains($message, 'unresolved obligation'),
     'a published body carrying an obligation must be refused by name, got: '
         . ($message === '' ? 'no refusal' : $message),
+);
+
+// --- One broken input per guard, refused by name. --------------------------
+
+/** Run `$guard` and answer the message it refused with, or ''. */
+$refusal = static function (callable $guard): string {
+    try {
+        $guard();
+    } catch (\Throwable $e) {
+        return (string) $e->getMessage();
+    }
+
+    return '';
+};
+
+$declaration = static function (bool $declared, string $name = 'probe'): Ast\FunctionDecl {
+    $fn = new Ast\FunctionDecl($name, null, [], new Ast\Variable('x', 2, 1, 2), line: 1, col: 1, endCol: 2);
+    if ($declared) {
+        $fn->type = new Ast\TypeCon('Int');
+    }
+
+    return $fn;
+};
+
+$obligations = static fn (string ...$evidence): array => \array_map(
+    static fn (string $name): Ast\PendingConstraint => new Ast\PendingConstraint(
+        'Eq',
+        [new TCon('Int', [])],
+        $name,
+    ),
+    $evidence,
+);
+
+$oneDictionary = new Scheme(new TCon('Int', []), [], [], 1, []);
+$twoDictionaries = new Scheme(new TCon('Int', []), [], [], 2, []);
+
+// A scheme that still has an uncommitted variable: refused when the declaration
+// promised a closed one, and published as the one reason it can stay unowned
+// when the signature was inferred.
+$openScheme = new Scheme(new TCon('Int', []), [], [], 0, ['t3' => true]);
+$message = $refusal(static fn () => Modules\unownedReason($state, $declaration(true), $openScheme, 'Main'));
+$assert(
+    \str_contains($message, 'still has the uncommitted') && \str_contains($message, 't3'),
+    'an open scheme on a declared signature must be refused by name, got: ' . $message,
+);
+$assert(
+    Modules\unownedReason($state, $declaration(false), $openScheme, 'Main') === 'an inferred signature that did not close',
+    'an inferred open scheme must be published as unowned, with the fact that kept it out',
+);
+$assert(
+    Modules\unownedReason($state, $declaration(true), $oneDictionary, 'Main') === null,
+    'a closed scheme must be ownable',
+);
+
+// The evidence vector.
+$message = $refusal(static function () use ($state, $declaration, $obligations, $oneDictionary): void {
+    $fn = $declaration(true);
+    $fn->constraints = $obligations('');
+    Modules\evidenceVectorFor($state, $fn, $oneDictionary, 'Main:1:1');
+});
+$assert(
+    \str_contains($message, 'has no evidence parameter'),
+    'an obligation without a dictionary parameter must be refused, got: ' . $message,
+);
+
+$message = $refusal(static function () use ($state, $declaration, $obligations, $twoDictionaries): void {
+    $fn = $declaration(true);
+    $fn->constraints = $obligations('ev1', 'ev1');
+    Modules\evidenceVectorFor($state, $fn, $twoDictionaries, 'Main:1:1');
+});
+$assert(
+    \str_contains($message, 'names two dictionary parameters'),
+    'one dictionary for two obligations must be refused, got: ' . $message,
+);
+
+$message = $refusal(static function () use ($state, $declaration, $obligations, $twoDictionaries): void {
+    $fn = $declaration(true);
+    $fn->constraints = $obligations('ev1');
+    Modules\evidenceVectorFor($state, $fn, $twoDictionaries, 'Main:1:1');
+});
+$assert(
+    \str_contains($message, 'its scheme takes 2 dictionaries but its evidence vector has 1'),
+    'a vector that disagrees with the scheme must be refused, got: ' . $message,
+);
+
+$vector = Modules\evidenceVectorFor(
+    $state,
+    (static function () use ($declaration, $obligations): Ast\FunctionDecl {
+        $fn = $declaration(true);
+        $fn->constraints = $obligations('ev1');
+
+        return $fn;
+    })(),
+    $oneDictionary,
+    'Main:1:1',
+);
+$assert(
+    \count($vector) === 1 && $vector[0]['wanted'] === 'Eq(Int)' && $vector[0]['evidence'] === 'ev1',
+    'a consistent vector is published as one slot per obligation, got: ' . \json_encode($vector),
+);
+
+// The parameter kinds.
+$kindsState = new TypeCheckState('', 'checked_core_boundary.mog');
+$withParameters = new Scheme(new TCon('Int', []), ['a'], [], 0, []);
+$message = $refusal(static fn () => Modules\parameterKindsFor($kindsState, $declaration(true), $withParameters, 'Main'));
+$assert(
+    \str_contains($message, 'recorded no kind for'),
+    'a declaration whose kinds the check never recorded must be refused, got: ' . $message,
+);
+
+$fn = $declaration(true);
+$kindsState->checkedParameterKinds[\spl_object_id($fn)] = [];
+$message = $refusal(static fn () => Modules\parameterKindsFor($kindsState, $fn, $withParameters, 'Main'));
+$assert(
+    \str_contains($message, 'fixed no kind for it'),
+    'a scheme parameter without a recorded kind must be refused, got: ' . $message,
+);
+
+$kindsState->checkedParameterKinds[\spl_object_id($fn)] = ['a' => 'Type'];
+$assert(
+    Modules\parameterKindsFor($kindsState, $fn, $withParameters, 'Main') === ['a' => 'Type'],
+    'a recorded kind is published for the parameter the scheme binds',
+);
+
+// A published term type that still names a solved variable.
+$solved = new TypeCheckState('', 'checked_core_boundary.mog');
+$solved->subst = ['t7' => new TCon('Int', [])];
+$zonkedFn = $declaration(true);
+$zonkedFn->body->inferredInternalType = new TCon('Int', []);
+Modules\assertTermsCommitted($solved, $zonkedFn, 'Main');
+$zonkedFn->body->inferredInternalType = new TArrow(new TVar('t7'), new TCon('Int', []));
+$message = $refusal(static fn () => Modules\assertTermsCommitted($solved, $zonkedFn, 'Main'));
+$assert(
+    \str_contains($message, 'already solved variable(s) t7'),
+    'a term type still naming a solved variable must be refused, got: ' . $message,
+);
+$zonkedFn->body->inferredInternalType = new TArrow(new TVar('t9'), new TCon('Int', []));
+Modules\assertTermsCommitted($solved, $zonkedFn, 'Main');
+
+$strict = new TypeCheckState('', 'checked_core_boundary.mog');
+$strict->subst = ['a$sk8' => new TCon('Int', [])];
+$skolemFn = $declaration(true);
+$skolemFn->body->inferredInternalType = new TVar('a$sk8');
+$message = $refusal(static fn () => Modules\assertTermsCommitted($strict, $skolemFn, 'Main'));
+$assert(
+    \str_contains($message, 'already solved variable(s) a$sk8'),
+    'a skolem the check solved is a stale published type too, got: ' . $message,
 );
 
 echo "checked-core boundary guard tests passed\n";

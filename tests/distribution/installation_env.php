@@ -17,7 +17,7 @@ $work = \sys_get_temp_dir() . '/moggi-install-' . \bin2hex(\random_bytes(6));
 
 require $root . '/src/compiler.php';
 
-\define(\Moggi\Install\INSTALL_ROOT_CONSTANT, $work);
+\define('MOGGI_INSTALL_ROOT', $work);
 
 use function Moggi\Install\activateBundledRuntimes;
 use function Moggi\Install\bundledPhpBinDirectory;

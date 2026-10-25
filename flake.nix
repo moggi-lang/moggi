@@ -3,10 +3,10 @@
 
   inputs = {
     # Pin nixpkgs to a specific commit so PHP versions stay fixed.
-    # Current: PHP 8.5.7
+    # Current: PHP 8.5.12 — the minimum this compiler runs on.
     # To upgrade: nix flake update nixpkgs, then update this rev and the
     # `nixpkgsRev` passed below (it only feeds the shellHook banner).
-    nixpkgs.url = "github:NixOS/nixpkgs/9ae611a455b90cf061d8f332b977e387bda8e1ca";
+    nixpkgs.url = "github:NixOS/nixpkgs/674a2028661e550a97400c1cc992b9cca9a668a1";
   };
 
   outputs = { self, nixpkgs, ... }:
@@ -24,7 +24,7 @@
         in
         pkgs.mkShell (import ./nix/devshell.nix {
           inherit pkgs;
-          nixpkgsRev = "9ae611a455b90cf061d8f332b977e387bda8e1ca";
+          nixpkgsRev = "674a2028661e550a97400c1cc992b9cca9a668a1";
         });
     in
     {

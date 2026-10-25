@@ -147,6 +147,12 @@ inferred x = twice x
 -- declaration wrote, and the record still has to carry it in positional order.
 inferredConstrained x = tag x
 
+-- Inferred and open: the monomorphism restriction leaves `id`'s variable
+-- ungeneralized here, so the check publishes the declaration as unowned with the
+-- fact that kept it out, and lowering serves it from the existing producer. The
+-- record claims only what it closed.
+openValue = id
+
 -- The category too: a recursive group's signature is settled before any member's body is
 -- checked, so the record states the closed scheme the group was checked against.
 countdown :: Int -> Int
@@ -198,9 +204,9 @@ try {
         'the category is ordinary declarations with a closed scheme, got: ' . \implode(', ', $names),
     );
     $check(
-        $core?->unowned === [],
-        'every ordinary declaration here has a closed scheme, so none is left to the existing producer,'
-            . ' got: ' . \json_encode($core?->unowned),
+        $core?->unowned === ['openValue' => 'an inferred signature that did not close'],
+        'exactly the declaration whose inferred signature did not close is left to the existing producer,'
+            . ' with the fact that kept it out, got: ' . \json_encode($core?->unowned),
     );
 
     // ---- A recursive declaration is owned, and its record is as complete ----
@@ -456,6 +462,18 @@ try {
         }
     }
     $check($irTwice !== null, 'lowering produced no `twice`');
+
+    $irUnowned = null;
+    foreach ($ir->functions as $function) {
+        if ($function->name === 'openValue') {
+            $irUnowned = $function;
+        }
+    }
+    $check(
+        $irUnowned !== null,
+        'a declaration published as unowned is lowered by the existing producer, not refused: '
+            . 'the IR has no `openValue`',
+    );
     if ($irTwice !== null && $twice !== null) {
         $check(
             $irTwice->evidenceScope === $twice->evidenceBinders(),
@@ -614,6 +632,11 @@ try {
         $roundTwice !== null && $roundTwice->evidenceBinders() === $twice?->evidenceBinders(),
         'the record read back from its encoding lost its evidence vector',
     );
+    $check(
+        ($roundCore?->unowned ?? null) === $core?->unowned,
+        'the split of unowned declarations did not survive the module product encoding, got: '
+            . \json_encode($roundCore?->unowned),
+    );
 
     $pristine = IR\Dump\dump($ir);
     $check(
@@ -645,6 +668,27 @@ try {
         IR\Dump\dump($scrubbedIr) === $pristine,
         'lowering still reads the elaborated node\'s evidence fields: scrubbing them changed the IR',
     );
+
+    $publishedBoth = $program->core?->function('both');
+    if ($publishedBoth !== null) {
+        $program->core = new CheckedCore(
+            'Main',
+            ['both' => $publishedBoth->withElaboration($publishedBoth->terms, [])] + $program->core->functions,
+            $program->core->unowned,
+        );
+        $unplanned = '';
+        try {
+            IR\lower($program, $program->interface->data, $path);
+        } catch (\RuntimeException $error) {
+            $unplanned = $error->getMessage();
+        }
+        $check(
+            \str_contains($unplanned, 'Main::both') && \str_contains($unplanned, 'does not plan'),
+            'lowering an evidence site its record does not plan must be refused by name, got: ' . $unplanned,
+        );
+        $program->core = $core;
+        Modules\publishElaboration($program);
+    }
 
     $program->core = null;
     $refused = '';

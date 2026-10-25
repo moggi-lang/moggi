@@ -245,6 +245,12 @@ function lowerFunction(
     $ctx->sourceFile = $sourceFile;
     $ctx->functionName = $fn->name;
     $ctx->constructorRenames = $constructorRenames;
+    // The record is the authority for a declaration the check owned. A declaration
+    // it left unowned is the one case that still reads `$fn->constraints` — the
+    // check's own write of the evidence vector, not the source syntax — and the
+    // null plan index below is what sends its body's sites down the same path:
+    // a sentinel, not a category test. That is the residual adapter 2 names in the
+    // migration register, and a category declaration never reaches it.
     $ctx->evidenceNames = $core !== null ? $core->evidenceBinders() : evidenceSlotNames($fn->constraints);
     $ctx->evidencePlans = $core?->evidencePlanIndex();
 
