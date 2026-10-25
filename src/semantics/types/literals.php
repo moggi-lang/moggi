@@ -131,7 +131,7 @@ function defaultAmbiguousNumericVars(
         foreach (numericDefaultTypes() as $candidate) {
             if (constraintsHoldAtType($state, $defaultable, $name, $candidate)) {
                 $state->defaultingLog[] = [
-                    'decl' => $owner === null ? '' : $owner->line . ':' . $owner->col,
+                    'decl' => $owner === null ? null : \spl_object_id($owner),
                     'wanted' => \implode(' & ', \array_map(
                         static fn (Ast\PendingConstraint $c): string => $c->class . '(' . $name . ')',
                         $defaultable,

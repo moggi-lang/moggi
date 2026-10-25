@@ -111,7 +111,7 @@ are staged beside your `.dll`; a Composer `vendor/` tree is copied into your
 | `dotnet` | `moggi build --backend dotnet` → `app.dll` | `dotnet app.dll` |
 
 `moggi run <dir> --backend <B>` compiles and runs in one step when you are
-iterating. You need the host toolchain for the backend you build — PHP 8.5+
+iterating. You need the host toolchain for the backend you build — PHP 8.5.12+
 and Composer, JDK 21+ and Maven, or the .NET 8 SDK — or a distribution that
 bundles them.
 

@@ -8,7 +8,8 @@ Working on the compiler itself. To *use* Moggi, start at
 runtime it needs, and none of what follows is needed for that.
 
 Nix is the development environment, on **Linux and macOS**. It pins every
-Toolchain the compiler and the test suite use: **PHP 8.5.7**, **nginx 1.31.1**,
+Toolchain the compiler and the test suite use: **PHP 8.5.12** (the minimum the compiler runs on;
+older 8.5.x releases carry a security issue), **nginx 1.31.1**,
 **.NET SDK 8**, GraalVM CE (Java 21+). On Windows, or without Nix, `php moggi.php`
 and `php test.php` run the same two entry points with whatever is installed.
 

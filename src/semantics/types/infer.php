@@ -4445,13 +4445,6 @@ function describeUnresolvedConstraints(TypeCheckState $state, array $constraints
 
 /**
  * Refuse an expression tree that still carries an unresolved obligation.
- *
- * One walk over every node the tree reaches: `walkAstValues()` descends
- * `childValues()`, lists included, so an argument of a `ForeignCall` and an
- * evidence site's context are inspected like any other child. The hand-written
- * match this replaced listed the shapes someone thought of and returned
- * silently on the rest, which is the failure `walkElaboration()` exists to
- * prevent -- an obligation inside an unlisted shape went unreported.
  */
 function assertNoPendingConstraintsInExpr(TypeCheckState $state, Ast\AstNode $expr, ?Ast\AstNode $at = null): void
 {
@@ -4477,11 +4470,7 @@ function unifyCaseBranches(TypeCheckState $state, Type $left, Type $right, Ast\A
     try {
         unify($state, $left, $right, $at);
     } finally {
-        if ($saved === null) {
-            $state->unifyMessage = null;
-        } else {
-            $state->unifyMessage = $saved;
-        }
+        $state->unifyMessage = $saved;
     }
 }
 

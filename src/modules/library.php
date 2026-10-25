@@ -5,7 +5,6 @@ namespace Moggi\Modules;
 require_once __DIR__ . '/../paths.php';
 
 use Moggi\Cache;
-use Moggi\Install\ConfiguredInstallation;
 use Moggi\Semantics\Types\TypeError;
 
 use function Moggi\Install\installationRoot;
@@ -312,21 +311,20 @@ function configuredExtraPaths(): array
 /**
  * Bundled packages that join every compilation alongside the standard
  * library: `<root>/libraries/{time,filepath,directory}/src`, where `<root>`
- * is found the way the bundled stdlib is — the installed distribution, the
- * checkout, or a root a test configured. Empty when the distribution ships no
- * such package.
+ * is found the way the bundled stdlib is — the installed distribution, or the
+ * checkout. Empty when the distribution ships no such package.
  *
  * @return list<string>
  */
 function bundledExtraLibPaths(): array
 {
-    static $memoGeneration = -1;
+    static $memoKey = null;
     static $memoPaths = [];
-    $generation = ConfiguredInstallation::generation();
-    if ($memoGeneration === $generation) {
+    $key = installationCandidatesKey();
+    if ($memoKey === $key) {
         return $memoPaths;
     }
-    $memoGeneration = $generation;
+    $memoKey = $key;
     $memoPaths = [];
 
     $packages = ['time', 'filepath', 'directory'];
@@ -349,25 +347,40 @@ function bundledExtraLibPaths(): array
 
 /**
  * The roots a bundled `libraries/` tree is looked for under, most
- * authoritative first: a root a test configured, the installation this process
- * runs from, then the checkout it was built in.
+ * authoritative first: the installation this process runs from, then the
+ * checkout it was started from.
+ *
+ * Both are facts of the process, not settings: the installation is the one the
+ * executable was started from (`MOGGI_INSTALL_ROOT`, or the archive's own
+ * location) and the checkout is this tree. There is nothing to point elsewhere.
  *
  * @return list<string>
  */
 function installationCandidates(): array
 {
     $candidates = [];
-    $configured = ConfiguredInstallation::root();
-    if ($configured !== null) {
-        $candidates[] = $configured;
-    }
     $installRoot = installationRoot();
     if ($installRoot !== null) {
         $candidates[] = $installRoot;
     }
-    $candidates[] = \dirname(__DIR__, 2);
+    $checkout = \dirname(__DIR__, 2);
+    if (! \in_array($checkout, $candidates, true)) {
+        $candidates[] = $checkout;
+    }
 
     return $candidates;
+}
+
+/**
+ * The candidate list as a memo key.
+ *
+ * A lookup memoized on the installation must notice the root changing — a test
+ * defines `MOGGI_INSTALL_ROOT` before its first lookup, and the memos must not
+ * answer for the tree that was consulted before it.
+ */
+function installationCandidatesKey(): string
+{
+    return \implode("\0", installationCandidates());
 }
 
 /**
@@ -404,13 +417,13 @@ function libraryScanRoots(): array
  */
 function bundledStdlibLibPath(): ?string
 {
-    static $memoGeneration = -1;
+    static $memoKey = null;
     static $memoPath = null;
-    $generation = ConfiguredInstallation::generation();
-    if ($memoGeneration === $generation) {
+    $key = installationCandidatesKey();
+    if ($memoKey === $key) {
         return $memoPath;
     }
-    $memoGeneration = $generation;
+    $memoKey = $key;
     $memoPath = null;
 
     $candidates = [];

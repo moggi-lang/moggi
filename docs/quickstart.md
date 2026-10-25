@@ -34,7 +34,7 @@ The distributions differ only in which runtimes they carry:
 
 A bundled runtime is preferred over the one on your `PATH`; anything the
 variant does not bundle has to be installed yourself. Only `moggi-minimal`
-needs PHP 8.5+ to be installed first. The micro PHP runtime is not on `PATH` at
+needs PHP 8.5.12+ to be installed first. The micro PHP runtime is not on `PATH` at
 all: it is the `micro.sfx` file a `--native` build on the `php` backend appends
 the artifact to, so a variant without it can only build a native executable from
 a runtime named by `MOGGI_MICRO_SFX`.
@@ -90,7 +90,7 @@ dotnet hello.dll
 
 | Backend | Default artifact | Needs | Run with |
 |---|---|---|---|
-| `php` (default) | `hello.phar` | PHP 8.5+ | `php hello.phar` |
+| `php` (default) | `hello.phar` | PHP 8.5.12+ | `php hello.phar` |
 | `jvm` | `hello.jar` | JDK 21+ | `java -jar hello.jar` |
 | `dotnet` | `hello.dll` (+ `hello.deps.json`, `hello.runtimeconfig.json`) | .NET 8 SDK | `dotnet hello.dll` |
 
@@ -152,7 +152,7 @@ to it over the language server protocol. Point it at your installation:
 | Setting | Value |
 |---|---|
 | `moggi.serverPath` | `<installation>/bin/moggi.phar` where PHP is bundled, `<installation>/bin/moggi` in a PHP-less variant, or `<root>/moggi.php` in a checkout |
-| `moggi.phpPath` | a PHP 8.5 binary — the bundled `runtime/php/bin/php` will do; not used when `serverPath` is the native `bin/moggi` |
+| `moggi.phpPath` | a PHP 8.5.12 binary — the bundled `runtime/php/bin/php` will do; not used when `serverPath` is the native `bin/moggi` |
 
 Any other editor works too: `moggi lsp` is a plain stdio language server.
 [lsp.md](lsp.md) describes the server and the extension's commands in full.

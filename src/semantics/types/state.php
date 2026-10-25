@@ -383,7 +383,12 @@ final class TypeCheckState
      * Steps that settled an obligation without unification, in the order they
      * ran: the checked core publishes them as residuals with their provenance.
      *
-     * @var list<array{decl: string, wanted: string, decision: string, provenance: string}>
+     * `decl` is the owning declaration's object id, the same key
+     * {@see $checkedSchemes} uses, or null when the pass ran with no owner. A
+     * span would be the wrong key: declarations the checker synthesized share
+     * `0:0`, and two nodes can share one span.
+     *
+     * @var list<array{decl: ?int, wanted: string, decision: string, provenance: string}>
      */
     public array $defaultingLog = [];
 

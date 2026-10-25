@@ -7,10 +7,12 @@ use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Semantics\Types\TypeCheckState;
 use Moggi\Syntax\Ast;
 
+use function Moggi\Semantics\TypeExpr\collectTypeVars;
 use function Moggi\Semantics\Types\assertNoPendingConstraintsInExpr;
 use function Moggi\Semantics\Types\prune;
 use function Moggi\Semantics\Types\typeFail;
 use function Moggi\Semantics\Types\typeToString;
+use function Moggi\Semantics\Types\walkAstValues;
 
 /**
  * One checked-core record for an owned ordinary function, whether its
@@ -258,87 +260,18 @@ function checkedCoreFor(TypeCheckState $state, array $items, string $module): Ch
             );
         }
 
-        if ($scheme->freeTypeVars !== []) {
-            if (! Ast\hasDeclaredSignature($item)) {
-                $unowned[$item->name] = 'an inferred signature that did not close';
+        $reason = unownedReason($state, $item, $scheme, $module);
+        if ($reason !== null) {
+            $unowned[$item->name] = $reason;
 
-                continue;
-            }
-
-            throw typeFail(
-                $state,
-                "the checked boundary refuses `{$item->name}`: its type still has the uncommitted"
-                . ' variable(s) ' . \implode(', ', \array_keys($scheme->freeTypeVars)),
-                $item,
-            );
+            continue;
         }
 
         $origin = $module . ':' . $item->line . ':' . $item->col;
-
-        $evidence = [];
-        $seen = [];
-        foreach ($item->constraints as $constraint) {
-            if ($constraint->evidence === '') {
-                throw typeFail(
-                    $state,
-                    "the checked boundary refuses `{$item->name}`: the `{$constraint->class}` obligation has"
-                    . ' no evidence parameter',
-                    $item,
-                );
-            }
-            if (isset($seen[$constraint->evidence])) {
-                throw typeFail(
-                    $state,
-                    "the checked boundary refuses `{$item->name}`: evidence `{$constraint->evidence}` names"
-                    . ' two dictionary parameters',
-                    $item,
-                );
-            }
-            $seen[$constraint->evidence] = true;
-
-            $evidence[] = [
-                'wanted' => constraintKey($constraint),
-                'class' => $constraint->class,
-                'evidence' => $constraint->evidence,
-                'origin' => $origin,
-            ];
-        }
-
-        if (\count($evidence) !== $scheme->runtimeConstraintCount) {
-            throw typeFail(
-                $state,
-                "the checked boundary refuses `{$module}::{$item->name}` (line {$item->line}): its scheme takes "
-                . $scheme->runtimeConstraintCount . ' dictionaries but its evidence vector has '
-                . \count($evidence),
-                $item,
-            );
-        }
+        $evidence = evidenceVectorFor($state, $item, $scheme, $origin);
 
         assertNoPendingConstraintsInExpr($state, $item->body, $item);
-
-        $fixedKinds = $state->checkedParameterKinds[\spl_object_id($item)] ?? null;
-        if ($fixedKinds === null) {
-            throw typeFail(
-                $state,
-                "the checked boundary refuses `{$module}::{$item->name}`: the check recorded no kind for"
-                . ' the parameters of its signature',
-                $item,
-            );
-        }
-
-        $parameterKinds = [];
-        foreach ($scheme->bound as $parameter) {
-            if (! isset($fixedKinds[$parameter])) {
-                throw typeFail(
-                    $state,
-                    "the checked boundary refuses `{$module}::{$item->name}`: the scheme binds"
-                    . " `{$parameter}` but the declaration's signature fixed no kind for it",
-                    $item,
-                );
-            }
-
-            $parameterKinds[$parameter] = $fixedKinds[$parameter];
-        }
+        assertTermsCommitted($state, $item, $module);
 
         $functions[$item->name] = new CheckedFunction(
             $item->name,
@@ -346,11 +279,193 @@ function checkedCoreFor(TypeCheckState $state, array $items, string $module): Ch
             $scheme->withPruned(prune($state, $scheme->type), $scheme->constraints, $scheme->freeTypeVars),
             $evidence,
             residualsFor($state, $item, $origin),
-            parameterKinds: $parameterKinds,
+            parameterKinds: parameterKindsFor($state, $item, $scheme, $module),
         );
     }
 
     return new CheckedCore($module, $functions, $unowned);
+}
+
+/**
+ * Refuse a term type the check has already solved but never zonked.
+ *
+ * A node's internal type is the checker's answer for that term, and the last
+ * step of checking prunes the substitution through the body
+ * ({@see \Moggi\Semantics\Types\zonkInferredTypesInExpr()}). A published type
+ * that still names a solved variable is therefore an answer the check has
+ * replaced — exactly the uncommitted meta the boundary promises not to publish —
+ * and a consumer has no way to recover the committed one.
+ *
+ * A variable the substitution does not solve is not refused: a locally
+ * generalized binding quantifies its own variable, and that binder is a real
+ * part of the term's type rather than a leftover. Those are the only two origins
+ * a variable in a settled body has.
+ *
+ * An evidence plan's `builderHead` needs no such rule: it is the *source*
+ * instance head (`evidenceRefOperand()` converts the `TypeNode` the instance
+ * declared), so its variables are that instance's own implicitly quantified
+ * patterns — `instance Array [s]` — and no inference variable can appear in it.
+ */
+function assertTermsCommitted(TypeCheckState $state, Ast\FunctionDecl $item, string $module): void
+{
+    if ($state->subst === []) {
+        return;
+    }
+
+    $refuse = static function (Ast\AstNode $node) use ($state, $item, $module): void {
+        if ($node->inferredInternalType === null) {
+            return;
+        }
+
+        $solved = [];
+        foreach (collectTypeVars($node->inferredInternalType, []) as $name => $_) {
+            if (isset($state->subst[$name])) {
+                $solved[] = $name;
+            }
+        }
+
+        if ($solved === []) {
+            return;
+        }
+
+        throw typeFail(
+            $state,
+            "the checked boundary refuses `{$module}::{$item->name}`: the term at "
+            . CheckedFunction::termOrigin($node) . ' publishes the already solved variable(s) '
+            . \implode(', ', $solved) . '; the check replaced them and never zonked the term',
+            $item,
+        );
+    };
+
+    foreach ($item->params as $param) {
+        walkAstValues($param, $refuse);
+    }
+    walkAstValues($item->body, $refuse);
+}
+
+/**
+ * Why this declaration stays with the existing producer, or null when the
+ * record can own it.
+ *
+ * A declaration that spells its own signature has promised a closed type, so a
+ * variable still uncommitted there is a producer defect and refusing it is the
+ * point of the boundary — it is not a licence to fall back. An inferred
+ * signature may legitimately stay open under the monomorphism restriction, and
+ * that is the one fact this reason states; lowering then serves it from the
+ * existing producer.
+ */
+function unownedReason(TypeCheckState $state, Ast\FunctionDecl $item, Scheme $scheme, string $module): ?string
+{
+    if ($scheme->freeTypeVars === []) {
+        return null;
+    }
+
+    if (! Ast\hasDeclaredSignature($item)) {
+        return 'an inferred signature that did not close';
+    }
+
+    throw typeFail(
+        $state,
+        "the checked boundary refuses `{$item->name}`: its type still has the uncommitted"
+        . ' variable(s) ' . \implode(', ', \array_keys($scheme->freeTypeVars)),
+        $item,
+    );
+}
+
+/**
+ * The dictionary parameters of this declaration, in positional ABI order.
+ *
+ * One slot per obligation the declaration carries, each pairing the wanted
+ * obligation with the given dictionary that discharges it. The vector has to be
+ * exactly what the published scheme will pass at a call site — one dictionary
+ * per runtime constraint, in the order the scheme took them — because the slot
+ * order *is* the ABI the backends emit; a vector that disagrees with the scheme
+ * would compile to a signature its callers cannot satisfy.
+ *
+ * @return list<array{wanted: string, class: string, evidence: string, origin: string}>
+ */
+function evidenceVectorFor(TypeCheckState $state, Ast\FunctionDecl $item, Scheme $scheme, string $origin): array
+{
+    $evidence = [];
+    $seen = [];
+    foreach ($item->constraints as $constraint) {
+        if ($constraint->evidence === '') {
+            throw typeFail(
+                $state,
+                "the checked boundary refuses `{$item->name}`: the `{$constraint->class}` obligation has"
+                . ' no evidence parameter',
+                $item,
+            );
+        }
+        if (isset($seen[$constraint->evidence])) {
+            throw typeFail(
+                $state,
+                "the checked boundary refuses `{$item->name}`: evidence `{$constraint->evidence}` names"
+                . ' two dictionary parameters',
+                $item,
+            );
+        }
+        $seen[$constraint->evidence] = true;
+
+        $evidence[] = [
+            'wanted' => constraintKey($constraint),
+            'class' => $constraint->class,
+            'evidence' => $constraint->evidence,
+            'origin' => $origin,
+        ];
+    }
+
+    if (\count($evidence) !== $scheme->runtimeConstraintCount) {
+        throw typeFail(
+            $state,
+            "the checked boundary refuses `{$origin}`: its scheme takes "
+            . $scheme->runtimeConstraintCount . ' dictionaries but its evidence vector has '
+            . \count($evidence),
+            $item,
+        );
+    }
+
+    return $evidence;
+}
+
+/**
+ * The kind of each type parameter the published scheme binds.
+ *
+ * Kinds are declaration-local — the same name may be `Type` here and
+ * `Type -> Type` in a sibling — so the answer is the one this declaration's own
+ * signature scope fixed, read from the check that fixed it. A parameter the
+ * scheme binds but no kind covers cannot be published: the record would state a
+ * type parameter without saying what may be substituted for it.
+ *
+ * @return array<string, string>
+ */
+function parameterKindsFor(TypeCheckState $state, Ast\FunctionDecl $item, Scheme $scheme, string $module): array
+{
+    $fixedKinds = $state->checkedParameterKinds[\spl_object_id($item)] ?? null;
+    if ($fixedKinds === null) {
+        throw typeFail(
+            $state,
+            "the checked boundary refuses `{$module}::{$item->name}`: the check recorded no kind for"
+            . ' the parameters of its signature',
+            $item,
+        );
+    }
+
+    $parameterKinds = [];
+    foreach ($scheme->bound as $parameter) {
+        if (! isset($fixedKinds[$parameter])) {
+            throw typeFail(
+                $state,
+                "the checked boundary refuses `{$module}::{$item->name}`: the scheme binds"
+                . " `{$parameter}` but the declaration's signature fixed no kind for it",
+                $item,
+            );
+        }
+
+        $parameterKinds[$parameter] = $fixedKinds[$parameter];
+    }
+
+    return $parameterKinds;
 }
 
 /**
@@ -389,10 +504,10 @@ function publishElaboration(Ast\Program $program): Ast\Program
 
         assertObligationsSettled($declaration, $core->module);
 
-        $core = $core->withFunction($record->withElaboration(
-            termTypesFor($declaration),
-            evidencePlansIn($declaration->body),
-        ));
+        $terms = termTypesFor($declaration);
+        $plans = evidencePlansIn($declaration->body);
+
+        $core = $core->withFunction($record->withElaboration($terms, $plans));
     }
 
     $program->core = $core;
@@ -445,7 +560,7 @@ function residualsFor(TypeCheckState $state, Ast\FunctionDecl $fn, string $origi
 {
     $residuals = [];
     foreach ($state->defaultingLog as $entry) {
-        if (($entry['decl'] ?? null) !== $fn->line . ':' . $fn->col) {
+        if ($entry['decl'] !== \spl_object_id($fn)) {
             continue;
         }
         $residuals[] = [

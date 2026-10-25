@@ -70,7 +70,7 @@ dotnet hello.dll
 
 | Backend | Artifact | Toolchain |
 |---|---|---|
-| `php` (default) | `hello.phar` | PHP 8.5+ |
+| `php` (default) | `hello.phar` | PHP 8.5.12+ |
 | `jvm` | `hello.jar` | JDK 21+ |
 | `dotnet` | `hello.dll` (+ `hello.deps.json`, `hello.runtimeconfig.json`) | .NET 8 SDK |
 

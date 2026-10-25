@@ -11,7 +11,7 @@
 
   "runtimes": {
     "php": {
-      "version": "8.5.7",
+      "version": "8.5.12",
       "upstream": "php.net",
       "license": {
         "name": "PHP License 3.01",
