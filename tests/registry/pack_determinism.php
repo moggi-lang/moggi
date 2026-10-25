@@ -1,10 +1,14 @@
 <?php declare(strict_types=1);
 
-// A package's identity is a digest, so packing one tree twice has to give the same bytes — on this
-// machine and on the next one — and `extractArchive` has to be the same contract read backwards.
-// The records are asserted byte for byte so a field creeping back in is caught here rather than by a
-// registry refusing a release packed on someone else's laptop; `$golden` states the same claim as
-// one value that every platform has to agree with.
+/**
+ * A package's identity is its digest, so packing the same tree must produce
+ * identical bytes across runs and machines. `extractArchive` must satisfy
+ * the inverse contract.
+ *
+ * Pin records byte for byte to catch format drift before a registry rejects
+ * an artifact packed elsewhere. `$golden` expresses the same cross-platform
+ * requirement as a single value.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/registry/pack.php') && \dirname($root) !== $root) {

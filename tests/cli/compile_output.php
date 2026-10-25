@@ -1,9 +1,11 @@
 <?php declare(strict_types=1);
 
-// `moggi compile --native` writes two artifacts — the packaged archive and the
-// executable beside it — and they must never resolve to the same path, or the
-// second move silently overwrites the first. This exercises the naming rule the
-// CLI calls, including the extensionless `-o` that used to collide.
+/**
+ * `moggi compile --native` writes a packaged archive and an executable
+ * beside it. Their paths must differ, or the second move overwrites the
+ * first. Exercise the CLI's naming rule, including the extensionless
+ * `-o` case that previously caused a collision.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {

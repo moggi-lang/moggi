@@ -44,17 +44,11 @@ function detectedCpuCount(): int
 
 /**
  * The machine's CPU counts; `cores` is null when the platform cannot tell cores from threads.
- * `MOGGI_TEST_CPU_COUNT` overrides the whole probe.
  *
  * @return array{cores: ?int, threads: ?int}
  */
 function platformCpuTopology(): array
 {
-    $override = \getenv('MOGGI_TEST_CPU_COUNT');
-    if (\is_string($override) && \ctype_digit($override) && (int) $override > 0) {
-        return ['cores' => (int) $override, 'threads' => (int) $override];
-    }
-
     return match (PHP_OS_FAMILY) {
         'Linux' => linuxCpuTopology(),
         'Darwin' => [

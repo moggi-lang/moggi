@@ -1,19 +1,19 @@
 <?php declare(strict_types=1);
 
-// Direct pass regression for the DCE liveness collector.
-//
-// `collectUsedStmt` used to be a hand-written switch over 17 of the 18 statement
-// kinds with `default: return`. The missing kind was `IoAssignAction` — the box
-// a do-block action lowers into — so a definition read only inside the box
-// looked dead and `dceItems` dropped it while the box kept reading it. The
-// source reproducer is `tests/backend/runtime/Exec-Io-Box-Liveness.mog`, the
-// pipeline pin is `tests/optimize/Opt-Io-Box-Liveness.ir.php`, and this file
-// drives the collectors directly so a failure names the statement kind.
-//
-// The operand half is pinned too: the old collector descended by hand and
-// stopped at `ForeignCall` and `IoAction`, whose children it never looked at.
-// Both now come from the shared `operandChildren`/`walkOperand`, so the table
-// below asserts a read is visible through every statement kind the IR has.
+/**
+ * Direct pass regression for DCE liveness collection.
+ *
+ * `collectUsedStmt` previously handled only 17 of 18 statement kinds,
+ * silently skipping `IoAssignAction`. Definitions read only inside an
+ * `IoAction` box were therefore dropped by `dceItems`. The source and
+ * pipeline regressions are covered by `Exec-Io-Box-Liveness.mog` and
+ * `Opt-Io-Box-Liveness.ir.php`; this test isolates the collectors.
+ *
+ * Operand traversal had the same gap: hand-written descent stopped at
+ * `ForeignCall` and `IoAction`. Both now use `operandChildren` /
+ * `walkOperand`, with the table verifying reads are visible through every
+ * IR statement kind.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {

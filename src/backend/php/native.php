@@ -2,6 +2,8 @@
 
 namespace Moggi\Backend\Php;
 
+use Moggi\Install\ConfiguredInstallation;
+
 use function Moggi\Install\installationRoot;
 
 /**
@@ -72,8 +74,8 @@ function microSfxAt(string $path): ?string
 }
 
 /**
- * The installations a bundled micro runtime can sit in: an explicit
- * `$MOGGI_ROOT`, then the installation this archive lives in
+ * The installations a bundled micro runtime can sit in: a root a test
+ * configured, then the installation this archive lives in
  * (`<installation>/bin/moggi.phar` → `<installation>/runtime/php-native`).
  *
  * @return list<string>
@@ -81,9 +83,9 @@ function microSfxAt(string $path): ?string
 function microSfxInstallationRoots(): array
 {
     $roots = [];
-    $envRoot = \getenv('MOGGI_ROOT');
-    if (\is_string($envRoot) && $envRoot !== '') {
-        $roots[] = \rtrim($envRoot, '/\\');
+    $configured = ConfiguredInstallation::root();
+    if ($configured !== null) {
+        $roots[] = $configured;
     }
     $installRoot = installationRoot();
     if ($installRoot !== null) {

@@ -1,0 +1,4 @@
+tests/semantics/Bad-Associated-Not-Injective.mog:26:9: type error: could not unify `Int` with `Tag a`
+
+  26 | bad x = wantsFooTag (firstTag x)
+     |         ^^^^^^^^^^^^^^^^^^^^^^^

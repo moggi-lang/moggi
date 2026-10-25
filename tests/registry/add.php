@@ -1,23 +1,21 @@
 <?php declare(strict_types=1);
 
-// `moggi add` — the descriptor half of Sky's one command, and the half that needs
-// no host toolchain, no binding generator and no registry.
-//
-// One verb, two tables: a bare name is a package of ours (`[dependencies]`), a
-// `php:`/`jvm:`/`dotnet:` prefix is a host package in that ecosystem's vocabulary.
-// The spelling decides, and *only* the spelling does — a name that is not a package
-// name is refused with the prefix it was probably missing, because a silent guess
-// between four tables is the expensive kind of convenience.
-//
-// The writer's whole contract is that a descriptor it produces is a descriptor the
-// compiler's own reader accepts, so every edit here is checked twice: through
-// `descriptorProblems()` (the format), and by reading the result back through
-// `readDescriptor()` and asking the layer that consumes the table
-// (`hostToolCoordinates()` for a host one), which is what `moggi build` asks.
-//
-// The CLI half runs with `--print`, which is offline by construction: `--print`
-// fetches nothing, writes nothing, and — because the version a registry dependency
-// records is the registry's answer — wants `--version`.
+/**
+ * `moggi add` edits the project descriptor without requiring a host
+ * toolchain, binding generator, or registry.
+ *
+ * A bare name adds a Moggi dependency; `php:`, `jvm:`, and `dotnet:`
+ * select host packages. Spelling alone determines the target. Invalid
+ * package names are rejected with the likely missing prefix rather than
+ * guessed across dependency tables.
+ *
+ * Every edit is validated by `descriptorProblems()` and read back through
+ * `readDescriptor()`. Host entries are also checked via
+ * `hostToolCoordinates()`, the same consumer used by `moggi build`.
+ *
+ * CLI checks use offline `--print`, which requires `--version` for
+ * registry dependencies and performs no fetches or writes.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
@@ -31,6 +29,7 @@ use function Moggi\Registry\Bind\bindModuleName;
 use function Moggi\Registry\Bind\facadeModuleName;
 use function Moggi\Registry\Bind\renderFacade;
 use function Moggi\Registry\descriptorAdditionProblems;
+use function Moggi\Registry\schnorrBinary;
 use function Moggi\Registry\descriptorProblems;
 use function Moggi\Registry\descriptorWithCoordinate;
 use function Moggi\Registry\descriptorWithFfiBinding;
@@ -90,8 +89,6 @@ try {
     $assert($filled['value'] === '0.4' && $filled['deferred'] === false, 'the registry answer fills the deferred constraint in');
     $assert($filled['coordinate'] === 'json = 0.4' && $filled['section'] === 'dependencies', 'filling it in keeps the table it belongs to');
 
-    // --- a prefix is somebody else's ecosystem --------------------------------
-
     [$status, $jvm] = $parse('jvm:com.google.code.gson:gson:2.11.0');
     $assert($status === 'ok' && $jvm['kind'] === 'host', 'a jvm coordinate is a host package');
     $assert($jvm['section'] === 'jvm.maven' && $jvm['key'] === 'com.google.code.gson:gson', 'a jvm coordinate keys [jvm.maven] by group:artifact');
@@ -109,13 +106,9 @@ try {
     [$status, $withVersion] = $parse('dotnet:System.Text.Json', '8.0.0');
     $assert($status === 'ok' && $withVersion['coordinate'] === 'System.Text.Json:8.0.0', '--version supplies the version the coordinate left out');
 
-    // --- what is refused, and with which hint ---------------------------------
-
     $refuses('monolog/monolog', 'for a Composer package say `php:monolog/monolog`');
     $refuses('foo:bar', 'say `jvm:foo:bar`, `php:foo:bar` or `dotnet:foo:bar`');
     $refuses('Foo', 'is not a package name');
-    // A host-shaped name with no `/` and no `:` leaves nothing to read an ecosystem from, so the
-    // refusal names the rule rather than guessing a table — `dotnet:` is the fix, and `add` says so.
     $refuses('Newtonsoft.Json', 'a bare name is a package of ours; a host package is spelled with its ecosystem');
     $refuses('json', 'is not a version or a comparison', 'not-a-version');
     $refuses('jvm:com.example:lib', 'mvn wants one');
@@ -125,8 +118,6 @@ try {
     $refuses('jvm:a:b:c:d', 'is not a Maven coordinate');
     $refuses('php:notapackage', 'is not a Composer package');
     $refuses('php:monolog/monolog:^3.0,^4.0', 'no `,`, `;`, `#` or newline');
-
-    // --- the edit itself, on a descriptor with comments and four tables -------
 
     $project = $work . '/project';
     \mkdir($project . '/src', 0777, true);
@@ -146,23 +137,19 @@ try {
         return descriptorWithCoordinate((string) \file_get_contents($descriptorPath), $edit, $descriptorPath);
     };
 
-    // ours: appended to the existing [dependencies] table, above the next header
     $oursApplied = $apply($coordinate('json', '0.4'));
     $assert($oursApplied['status'] === 'added' && $oursApplied['sectionCreated'] === false, 'a dependency is added to the existing table: ' . $oursApplied['detail']);
     $assert(\str_contains($oursApplied['text'], "\nbase = >=0.2.0\njson = 0.4\n"), 'the dependency joins the table it belongs to, got: ' . \json_encode($oursApplied['text']));
     $assert(descriptorAdditionProblems($oursApplied['text'], $descriptorPath) === [], 'the edited descriptor is one the parser accepts');
 
-    // ours: the same requirement again is a no-op, byte for byte
     $again = descriptorWithCoordinate($oursApplied['text'], $coordinate('json', '0.4'), $descriptorPath);
     $assert($again['status'] === 'present' && $again['text'] === $oursApplied['text'], 'an already-declared dependency writes nothing');
 
-    // ours: the same package at another constraint is a conflict, not a rewrite
     $conflict = descriptorWithCoordinate($oursApplied['text'], $coordinate('json', '>=0.5'), $descriptorPath);
     $assert($conflict['status'] === 'conflict' && $conflict['text'] === $oursApplied['text'], 'another constraint for the same package is a conflict that leaves the text alone');
     $assert(\str_contains($conflict['detail'], '`json` is already declared as `0.4`'), 'the conflict names what is declared: ' . $conflict['detail']);
     \file_put_contents($descriptorPath, $oursApplied['text']);
 
-    // php: appended to the existing list, comment intact
     $phpApplied = $apply($coordinate('php:monolog/monolog:^3.0'));
     $assert($phpApplied['status'] === 'added', 'a new Composer package is added: ' . $phpApplied['detail']);
     $assert(
@@ -171,7 +158,6 @@ try {
         . (\preg_match('/^composer =.*$/m', $phpApplied['text'], $m) === 1 ? $m[0] : 'no composer line'),
     );
 
-    // jvm: a new key joins its own table, above the next section header
     $jvmApplied = $apply($coordinate('jvm:com.google.code.gson:gson:2.11.0'));
     $assert($jvmApplied['status'] === 'added' && $jvmApplied['sectionCreated'] === false, 'a jvm key is added to the existing table');
     $jvmBody = \substr($jvmApplied['text'], (int) \strpos($jvmApplied['text'], '[jvm.maven]'));
@@ -180,7 +166,6 @@ try {
         'the new key is written inside [jvm.maven], before the next header',
     );
 
-    // a table the descriptor does not have yet is created at the end
     $bare = $work . '/bare';
     \mkdir($bare, 0777, true);
     $barePath = $bare . '/app.moggi';
@@ -198,8 +183,6 @@ try {
         'a package of ours creates [dependencies] when the package has none, got: ' . \json_encode($createdDependencies['text']),
     );
 
-    // --- the reader and the host-tool layer read back what was written -------
-
     \file_put_contents($descriptorPath, $jvmApplied['text']);
     $read = readDescriptor($descriptorPath);
     $assert(
@@ -214,8 +197,6 @@ try {
         hostToolCoordinates($read, 'jvm') === ['org.jetbrains:annotations:24.1.0', 'com.google.code.gson:gson:2.11.0'],
         'the host-tool layer reads the jvm table in descriptor order: ' . \implode(', ', hostToolCoordinates($read, 'jvm')),
     );
-
-    // --- the CLI through --print: the edit is shown and nothing is written ----
 
     $run = static fn (string ...$arguments): array => runCompiledProcess(
         [\PHP_BINARY, $root . '/moggi.php', ...$arguments],
@@ -242,9 +223,6 @@ try {
     $assert($hostPrinted['exitCode'] === 0 && \str_contains($hostPrinted['stdout'], '+ org.slf4j:slf4j-api = 2.0.16'), 'a printed host add still works: ' . $hostPrinted['stdout']);
     $assert((string) \file_get_contents($descriptorPath) === $jvmApplied['text'], 'the printed host edit wrote nothing');
 
-    // A host coordinate belongs to the backend it names, so one the package does not
-    // declare is refused rather than recorded: `[jvm.maven]` in a PHP-only package is
-    // a dependency no build of it would ever resolve.
     $phpOnly = $work . '/php-only';
     \mkdir($phpOnly, 0777, true);
     $phpOnlyPath = $phpOnly . '/app.moggi';
@@ -255,7 +233,6 @@ try {
     $assert(\str_contains($undeclared['stderr'], 'does not declare the `jvm` backend'), 'the refusal names the backend: ' . $undeclared['stderr']);
     $assert((string) \file_get_contents($phpOnlyPath) === $phpOnlyText, 'a refused coordinate writes nothing');
 
-    // The same package takes a coordinate for the backend it does declare.
     $declaredBackend = $run('add', '--print', '--root', $phpOnly, 'php:monolog/monolog:^3.0');
     $assert($declaredBackend['exitCode'] === 0, 'a coordinate for a declared backend prints: ' . $declaredBackend['stderr'] . $declaredBackend['stdout']);
     $assert(\str_contains($declaredBackend['stdout'], '+ composer = monolog/monolog:^3.0'), 'and the printed edit is the Composer entry: ' . $declaredBackend['stdout']);
@@ -265,9 +242,6 @@ try {
     $assert($hint['exitCode'] === 1, 'a bare vendor/package fails the command');
     $assert(\str_contains($hint['stderr'], 'php:monolog/monolog'), 'the refusal names the prefix: ' . $hint['stderr']);
 
-    // The same rule through the command itself: a NuGet-shaped bare id is resolved as a package of
-    // ours and never lands in `[dotnet.nuget]`, and a name that is not a package name at all is
-    // refused with the prefix rather than guessed into that table.
     $nugetShaped = $run('add', '--print', '--version', '13.0.3', '--root', $project, 'newtonsoft.json');
     $assert($nugetShaped['exitCode'] === 0, 'a NuGet-shaped bare id prints: ' . $nugetShaped['stderr']);
     $assert(\str_contains($nugetShaped['stdout'], 'registry newtonsoft.json = 13.0.3'), 'a bare id resolves as a package of ours: ' . $nugetShaped['stdout']);
@@ -294,11 +268,6 @@ try {
     $assert($help['exitCode'] === 0 && \str_contains($help['stdout'], 'moggi add <name>'), 'add has help for both halves');
     $assert(\str_contains($help['stdout'], '--bind'), 'the help names the binding flags');
 
-    // --- --bind/--facade: the plan, the [ffi] entry, the skeleton ------------
-    //
-    // `--print` plans the binding without fetching: the module names are a
-    // function of the coordinate alone, so no host tool runs here.
-
     $bindPlan = $run('add', '--print', '--bind', '--root', $phpOnly, 'php:monolog/monolog:^3.0');
     $assert($bindPlan['exitCode'] === 0, 'a printed bind plans: ' . $bindPlan['stderr'] . $bindPlan['stdout']);
     $assert(\str_contains($bindPlan['stdout'], 'Composer.Monolog.Monolog'), 'the plan names the bound module: ' . $bindPlan['stdout']);
@@ -318,7 +287,6 @@ try {
     $assert($registryBind['exitCode'] === 1, 'a package of ours does not bind');
     $assert(\str_contains($registryBind['stderr'], 'only a host coordinate binds'), 'the refusal says why: ' . $registryBind['stderr']);
 
-    // The [ffi] entry is appended, deduplicated exactly, and still a descriptor.
     $ffiBase = "[package]\nname = app\nversion = 0.1.0\n\n" . $author;
     $ffiCreated = descriptorWithFfiBinding($ffiBase, 'php:acme/hello');
     $assert($ffiCreated['status'] === 'added' && $ffiCreated['sectionCreated'] === true, 'the first binding creates [ffi]');
@@ -332,7 +300,6 @@ try {
     $assert(\str_contains($ffiSecond['text'], 'bindings = php:acme/hello, jvm:com.acme:hello'), 'the list stays one line, got: ' . \json_encode($ffiSecond['text']));
     $assert(descriptorAdditionProblems($ffiSecond['text'], $descriptorPath) === [], 'the edited descriptor is one the parser accepts');
 
-    // The module names are pure functions of the coordinate.
     $assert(bindModuleName('php', 'acme/hello') === 'Composer.Acme.Hello', 'the php module name');
     $assert(bindModuleName('jvm', 'com.acme:hello') === 'Maven.Com.Acme.Hello', 'the jvm module name');
     $assert(bindModuleName('dotnet', 'Acme.Hello') === 'Nuget.Acme.Hello', 'the dotnet module name');
@@ -345,7 +312,6 @@ try {
         $assert(\str_contains($error->getMessage(), 'only `php:`, `jvm:` and `dotnet:`'), 'the refusal names the backends that bind');
     }
 
-    // The skeleton faces the bound module: pragma, exports, qualified aliases.
     $skeletonFrom = [
         'backend' => 'php',
         'module' => 'Composer.Acme.Hello',
@@ -365,28 +331,9 @@ try {
     $assert(\str_contains($skeleton, 'version :: String') && \str_contains($skeleton, 'version = Bound.version'), 'consts delegate too');
     $assert(\str_contains($skeleton, 'import Data.String'), 'the signatures\u2019 imports are there');
 
-    // --- the registry half, against a local signed registry -------------------
-    //
-    // The catalog is signed metadata, so this needs the checkout's own `schnorr`;
-    // without it the checks are reported as skipped rather than faked. What it
-    // proves is everything `add` does *itself*: load and verify the catalog, refuse
-    // a name the registry does not list before touching the descriptor, turn
-    // "newest release" into the constraint the descriptor records, and write the
-    // lock through the same resolver `update` uses. The fetch that follows is
-    // `install`'s, and a metadata-only registry cannot serve a blob — which is
-    // asserted too, because "the record is written and `install` is the retry" is
-    // the behaviour a failed fetch has to leave behind.
-
-    $schnorrBinary = \getenv('MOGGI_SCHNORR');
-    if (! \is_string($schnorrBinary) || $schnorrBinary === '') {
-        $schnorrBinary = $root . '/schnorr/schnorr';
-    }
-    if (! \is_file($schnorrBinary) || ! \is_executable($schnorrBinary)) {
-        $schnorrBinary = $root . '/schnorr/build/schnorr';
-    }
-
-    if (! \is_file($schnorrBinary) || ! \is_executable($schnorrBinary)) {
-        echo "add tests passed ({$checks} checks; registry half skipped — no schnorr CLI, set MOGGI_SCHNORR)\n";
+    $schnorrBinary = schnorrBinary();
+    if ($schnorrBinary === null) {
+        echo "add tests passed ({$checks} checks; registry half skipped — no schnorr CLI in this installation)\n";
 
         return;
     }
@@ -445,8 +392,7 @@ try {
     ]);
 
     $env = \getenv();
-    $env['MOGGI_SCHNORR'] = $schnorrBinary;
-    $env['MOGGI_CACHE_DIR'] = $work . '/cache';
+        $env['MOGGI_CACHE_DIR'] = $work . '/cache';
     $env['MOGGI_USER_CACHE'] = $work . '/user-cache';
     unset($env['MOGGI_REGISTRY_NPUB'], $env['MOGGI_REGISTRY']);
 

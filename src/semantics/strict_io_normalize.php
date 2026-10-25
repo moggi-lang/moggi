@@ -9,7 +9,7 @@ use function Moggi\Semantics\IoBoundary\functionReturnsIo;
 use function Moggi\Semantics\IoBoundary\hasLeadingArrow;
 use function Moggi\Semantics\IoBoundary\ioBindParts;
 use function Moggi\Semantics\IoBoundary\isIoMethodWithRole;
-use function Moggi\Semantics\IoBoundary\isIoType;
+use function Moggi\Semantics\IoBoundary\isIoCheckedType;
 use function Moggi\Semantics\IoBoundary\stripConstraints;
 use function Moggi\Semantics\Kernel\pureRole;
 
@@ -394,7 +394,7 @@ function ioPureApply(Ast\AstNode $expr): ?Ast\AstNode
 
 function exprHasIoType(Ast\AstNode $expr): bool
 {
-    $type = $expr->inferredType;
+    $type = $expr->inferredInternalType;
 
-    return $type !== null && isIoType($type);
+    return $type !== null && isIoCheckedType($type);
 }

@@ -6,14 +6,19 @@ use Moggi\IR;
 use Moggi\IR\Validate;
 
 /**
- * Per-pass checkpoints (`MOGGI_IR_PASS_CHECKPOINTS=1`) and the stage trace
- * (`MOGGI_IR_TRACE=1`). Lifted callables read free locals until
+ * Per-pass checkpoints. Lifted callables read free locals until
  * `bindLambdaCaptures`, so a `__spec_` clone is excepted inside that window only;
  * nested runs report `d2/<stage>`.
+ *
+ * The checkpoints are off unless the harness turns them on (see
+ * {@see setEnabled()}): validating the whole module after every pass is the
+ * suite's cost to pay, not every compile's.
  */
 final class State
 {
     public static int $depth = 0;
+
+    public static bool $enabled = false;
 
     /** @var list<array<string, array{label: string, function: string, temps: list<int>}>> */
     public static array $frames = [];
@@ -22,36 +27,15 @@ final class State
     public static array $excepted = [];
 }
 
+/** Turn the per-pass checkpoints on for this process (the test harness does). */
+function setEnabled(bool $enabled): void
+{
+    State::$enabled = $enabled;
+}
+
 function enabled(): bool
 {
-    return \getenv('MOGGI_IR_PASS_CHECKPOINTS') === '1';
-}
-
-function traceEnabled(): bool
-{
-    return \getenv('MOGGI_IR_TRACE') === '1';
-}
-
-/**
- * Writes a trace line to stderr and, when `MOGGI_IR_TRACE_FILE` names a path,
- * appends it there too.
- */
-function emit(string $line): void
-{
-    \fwrite(\STDERR, $line);
-
-    $file = \getenv('MOGGI_IR_TRACE_FILE');
-    if ($file === false || $file === '') {
-        return;
-    }
-    $handle = @\fopen($file, 'ab');
-    if ($handle === false) {
-        return;
-    }
-    \flock($handle, \LOCK_EX);
-    \fwrite($handle, $line);
-    \flock($handle, \LOCK_UN);
-    \fclose($handle);
+    return State::$enabled;
 }
 
 function enterOptimize(): void
@@ -134,7 +118,6 @@ function checkFunctions(string $label, IR\Module $module, array $functions, bool
         $temps = tempsFromMessage($e->getMessage());
         if ($temps !== []) {
             recordUnbound($qualified, $e->function, $temps);
-            emitStageEvent($qualified, $e->function, $temps);
         }
 
         throw $e;
@@ -188,20 +171,3 @@ function recordUnbound(string $label, string $function, array $temps): void
     ];
 }
 
-/** @param list<int> $temps */
-function emitStageEvent(string $label, string $function, array $temps): void
-{
-    if (! traceEnabled()) {
-        return;
-    }
-
-    emit(stageEventLine($label, $function, $temps));
-}
-
-/** @param list<int> $temps */
-function stageEventLine(string $label, string $function, array $temps): string
-{
-    return 'MOGGI_IR_TRACE stage-invalid pass=' . $label
-        . ' function=' . $function
-        . ' temps=[' . \implode(',', $temps) . "]\n";
-}

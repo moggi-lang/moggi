@@ -18,11 +18,7 @@ let
     maven = "3.9.12";
   };
   moggiRootScript = ''
-    if [ -n "''${MOGGI_ROOT:-}" ]; then
-      echo "''${MOGGI_ROOT}"
-    else
-      git -C "''${PWD}" rev-parse --show-toplevel 2>/dev/null || pwd
-    fi
+    git -C "''${PWD}" rev-parse --show-toplevel 2>/dev/null || pwd
   '';
 in
 {
@@ -74,9 +70,6 @@ in
   ];
 
   shellHook = ''
-    MOGGI_ROOT="$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null || echo "$PWD")"
-    export MOGGI_ROOT
-
     echo "PHP $(php --version | head -n1) (pinned ${pinnedVersions.php})"
     echo "nixpkgs ${nixpkgsRev}"
     echo "Java $(java -version 2>&1 | head -n1) (nixpkgs graalvmPackages.graalvm-ce; JVM backend target)"

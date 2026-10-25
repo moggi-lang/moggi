@@ -449,7 +449,7 @@ function elaborateNumericLiteral(TypeCheckState $state, Ast\IntegerLit $expr): A
             $expr->endCol,
         );
     $integerValue->intrinsicId = $expr->digits === null ? 'intToInteger#' : 'integerFromDigits#';
-    $integerValue->inferredType = $expr->inferredType;
+    copyInferredType($integerValue, $expr);
 
     if ($type instanceof TCon && $type->name === canonicalTypeConName('Integer#') && $type->args === []) {
         $expr->pendingConstraints = [];
@@ -472,7 +472,7 @@ function elaborateNumericLiteral(TypeCheckState $state, Ast\IntegerLit $expr): A
     );
     $expr->pendingConstraints = [];
     $converted = new Ast\Apply($method, $integerValue, $expr->line, $expr->col, $expr->endCol);
-    $converted->inferredType = $expr->inferredType;
+    copyInferredType($converted, $expr);
 
     return $converted;
 }

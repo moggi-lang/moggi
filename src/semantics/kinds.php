@@ -13,6 +13,7 @@ use Moggi\Syntax\Ast;
 
 use function Moggi\Semantics\Types\prune;
 use function Moggi\Semantics\Types\typeFail;
+use function Moggi\Semantics\Types\typeVars;
 
 /** Internal kind representation (distinct from surface `Ast\KindNode`). */
 interface Kind
@@ -698,6 +699,26 @@ function assertKind(
         );
     }
     commitKindInferCtx($state, $ctx);
+}
+
+/**
+ * The kinds this declaration's signature fixed for its own type parameters.
+ *
+ * Run while the declaration's kind scope is live ({@see pushKindScope}), so the answer is the
+ * declaration's alone: two declarations may spell one parameter name at different kinds, and
+ * neither reaches the other. A parameter with no entry is `Type` — what the tree's own kind walk
+ * assumes for a signature variable ({@see kindOfType}), stated here rather than left implied.
+ *
+ * @return array<string, string> parameter name => its kind, in the order the signature mentions it
+ */
+function declarationParameterKinds(TypeCheckState $state, Type $type): array
+{
+    $kinds = [];
+    foreach (\array_keys(typeVars($type)) as $name) {
+        $kinds[$name] = kindToString($state->varKinds[$name] ?? new KType());
+    }
+
+    return $kinds;
 }
 
 /**

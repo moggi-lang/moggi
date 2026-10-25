@@ -1,16 +1,11 @@
 <?php declare(strict_types=1);
 
 /**
- * Watchdog for one standalone test: 300s, and `MOGGI_TEST_STANDALONE_TIMEOUT` (seconds) lets the
- * suite assert the kill-and-report path in a second instead of five minutes.
+ * Watchdog for one standalone test: 300s. A case that needs to assert the kill-and-report path
+ * spawns its own short-lived process instead of shortening this.
  */
 function standaloneTimeoutSeconds(): int
 {
-    $override = \getenv('MOGGI_TEST_STANDALONE_TIMEOUT');
-    if (\is_string($override) && \ctype_digit($override) && (int) $override > 0) {
-        return (int) $override;
-    }
-
     return 300;
 }
 

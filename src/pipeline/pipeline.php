@@ -12,6 +12,7 @@ use function Moggi\Modules\moduleNameToNamespace;
 use function Moggi\Modules\planEmission;
 use function Moggi\Modules\standaloneImportContext;
 use function Moggi\Optimize\optimize;
+use function Moggi\Optimize\PassCheckpoints\enabled;
 use function Moggi\Optimize\Partial\legalizeCallables;
 use function Moggi\Semantics\Effects\checkAndNormalize;
 
@@ -143,12 +144,12 @@ function run(PipelineRequest $request, PipelineStage $stopAt = PipelineStage::Em
 }
 
 /**
- * Whether the post-lower checkpoint runs for this process. The suite sets it;
- * a user compile gets the post-optimizer checkpoint only.
+ * Whether the post-lower checkpoint runs for this process. The suite turns the
+ * checkpoints on; a user compile gets the post-optimizer checkpoint only.
  */
 function irCheckpointsEnabled(): bool
 {
-    return \getenv('MOGGI_IR_CHECKPOINTS') === '1';
+    return enabled();
 }
 
 /** @return array{outputRelative: string, moduleName?: string, namespace?: string, plan: EmitPlan} */

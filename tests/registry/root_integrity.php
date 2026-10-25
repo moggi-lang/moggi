@@ -12,8 +12,6 @@ while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
 }
 require $root . '/src/compiler.php';
 
-use const Moggi\Registry\ALLOW_STALE_REGISTRY_ENV;
-
 use function Moggi\Registry\registryTimestamp;
 use function Moggi\Registry\rememberedRootVersion;
 use function Moggi\Registry\rememberRootVersion;
@@ -30,7 +28,6 @@ $assert = static function (bool $condition, string $message) use (&$checks): voi
 $work = \sys_get_temp_dir() . '/moggi-root-integrity-' . \bin2hex(\random_bytes(6));
 \mkdir($work, 0777, true);
 \putenv('MOGGI_USER_CACHE=' . $work . '/user-cache');
-\putenv(ALLOW_STALE_REGISTRY_ENV);
 
 $remove = static function (string $path) use (&$remove): void {
     if (! \file_exists($path) && ! \is_link($path)) {
@@ -93,27 +90,15 @@ try {
 
     $rollback = rootIntegrityProblem($base, $fresh, $now);
     $assert(\str_contains($rollback, 'older than 2'), 'an older signed root is refused as a rollback: ' . $rollback);
-    $assert(\str_contains($rollback, ALLOW_STALE_REGISTRY_ENV), 'the rollback refusal names the waiver');
+    $assert(! \str_contains($rollback, 'MOGGI_'), 'the rollback refusal offers no waiver: ' . $rollback);
 
     // --- expiry --------------------------------------------------------------
     $expired = ['registry_npub' => 'npub1x', 'version' => 3, 'expires' => $past];
     $assert(\str_contains(rootIntegrityProblem($base, $expired, $now), 'expired'), 'an expired root is refused');
-
-    // --- the waiver, and that it never lowers the mark -----------------------
-    \putenv(ALLOW_STALE_REGISTRY_ENV . '=1');
-    $assert(rootIntegrityProblem($base, $expired, $now) === '', 'the waiver accepts an expired root');
-    $assert(rootIntegrityProblem($base, $fresh, $now) === '', 'the waiver accepts a rollback');
-    rememberRootVersion($base, 3);
-    $assert(rememberedRootVersion($base) === 3, 'the high-water mark still rises under the waiver');
-    \putenv(ALLOW_STALE_REGISTRY_ENV);
-
-    $assert(rootIntegrityProblem($base, $fresh, $now) !== '', 'without the waiver the rollback is refused again');
-
-    \putenv(ALLOW_STALE_REGISTRY_ENV . '=yes');
-    $assert(rootIntegrityProblem($base, $fresh, $now) === '', '`yes` is a waiver spelling');
-    \putenv(ALLOW_STALE_REGISTRY_ENV . '=maybe');
-    $assert(rootIntegrityProblem($base, $fresh, $now) !== '', 'a non-affirmative value is not a waiver');
-    \putenv(ALLOW_STALE_REGISTRY_ENV);
+    $assert(
+        rootIntegrityProblem($base, $expired, $now) === rootIntegrityProblem($base, $expired, $now),
+        'the refusal is a fact of the root, not of the environment',
+    );
 
     echo "root integrity tests passed ({$checks} checks)\n";
 } finally {

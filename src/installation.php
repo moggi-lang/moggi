@@ -47,6 +47,44 @@ function installationRoot(): ?string
 }
 
 /**
+ * The root a *bundled* tree is looked for under, when a caller in this process
+ * says it is not the one the compiler is running from.
+ *
+ * A distribution's root is the directory its executable was started from and a
+ * checkout's is the checkout: there is no scenario in which pointing a running
+ * compiler at a different installation is meaningful, because the standard
+ * library, the packaged binaries and the runtimes it hands its children must be
+ * the ones shipped beside it. So this is not an environment variable — an
+ * operator cannot relocate an install after the fact — but a process-local seam
+ * for the tests that need to stand a fake `libraries/` beside a real binary.
+ *
+ * Every lookup memoized on the root keys its memo on `generation()`, so a test
+ * that sets a root after a lookup has already run cannot read the old answer.
+ */
+final class ConfiguredInstallation
+{
+    private static ?string $root = null;
+
+    private static int $generation = 0;
+
+    public static function set(?string $root): void
+    {
+        self::$root = $root === null || $root === '' ? null : \rtrim($root, '/\\');
+        self::$generation++;
+    }
+
+    public static function root(): ?string
+    {
+        return self::$root;
+    }
+
+    public static function generation(): int
+    {
+        return self::$generation;
+    }
+}
+
+/**
  * Put the bundled runtimes in front of `PATH`, and hand the roots the compiler
  * looks for to the environment it passes to its children.
  *

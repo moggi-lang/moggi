@@ -692,27 +692,6 @@ function syncAssociatedFamiliesFromClasses(TypeCheckState $state): void
 }
 
 /**
- * Index associated type equations from project/program instance records.
- *
- * @param list<array{class: string, module?: string, associatedEquations?: array<string, array{lhsArgs: list<Ast\TypeNode>, rhs: Ast\TypeNode}>}> $instances
- */
-function indexAssociatedEquations(TypeCheckState $state, array $instances): void
-{
-    $state->associatedEquations = [];
-    foreach ($instances as $instance) {
-        $className = $instance['class'];
-        $module = $instance['module'] ?? '';
-        foreach ($instance['associatedEquations'] ?? [] as $famName => $eq) {
-            $state->associatedEquations[$className][$famName][] = [
-                'lhsArgs' => $eq['lhsArgs'],
-                'rhs' => $eq['rhs'],
-                'module' => $module,
-            ];
-        }
-    }
-}
-
-/**
  * @return array<string, array{lhsArgs: list<Ast\TypeNode>, rhs: Ast\TypeNode}>
  */
 function associatedEquationsMapFromDecl(Ast\InstanceDecl $decl): array

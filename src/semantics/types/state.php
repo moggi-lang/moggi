@@ -2,6 +2,7 @@
 
 namespace Moggi\Semantics\Types;
 
+use Moggi\Modules\InstanceWorld;
 use Moggi\Semantics\Kinds;
 use Moggi\Semantics\TypeExpr\Scheme;
 use Moggi\Semantics\TypeExpr\Type;
@@ -283,6 +284,16 @@ final class TypeCheckState
     /** @var array<string, true> */
     public array $declaredTypeNames = [];
 
+    /**
+     * The instance world this module is checked against — the prepared
+     * project's, or the module's own at the single-module boundary.
+     *
+     * Installed by `applyImportContext` from the context's named world, and the
+     * one producer of the two indexes below. The checked program publishes its
+     * identity; nothing downstream re-derives it.
+     */
+    public ?InstanceWorld $instanceWorld = null;
+
     /** @var array<string, list<array<string, mixed>>> */
     public array $projectInstancesByClass = [];
 
@@ -389,6 +400,18 @@ final class TypeCheckState
      * @var array<int, Scheme>
      */
     public array $checkedSchemes = [];
+
+    /**
+     * The kinds this check fixed for each checked declaration's own type parameters, per
+     * `spl_object_id` of the `FunctionDecl`.
+     *
+     * Captured while the declaration's kind scope is live: `Kinds\pushKindScope()` restores it once
+     * the signature is done, so by the end of the check the scope no longer says whose kinds these
+     * were. The checked core publishes the map; nothing else reads it.
+     *
+     * @var array<int, array<string, string>>
+     */
+    public array $checkedParameterKinds = [];
 
 
     /** @var list<array<string, mixed>> restricted declarations waiting for the module end */

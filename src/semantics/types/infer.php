@@ -110,6 +110,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
             $constraintEnv = buildConstraintEnv($state, $constraints);
             $fnType = astType($state, $bodyTypeAst);
             Kinds\assertKind($state, $fnType, new Kinds\KType(), $state->varKinds, $fn);
+            $state->checkedParameterKinds[\spl_object_id($fn)] = Kinds\declarationParameterKinds($state, $fnType);
             foreach (\array_reverse($constraints) as $constraint) {
                 $fnType = new TArrow(new TCon('__Dict_' . $constraint->class), $fnType);
             }
@@ -877,10 +878,9 @@ function needsInferredSignature(Ast\FunctionDecl $fn): bool
  * deep-copied first, the copy is typed against throwaway variables, and the
  * substitution is rolled back. The caller then checks the untouched original
  * with the constraints in scope, deriving its own abstraction from scratch. The
- * copy is the whole contract -- because every field the let/where machinery
- * writes (the `Lambda::$abstractedConstraints` cache, the rewrites the evidence
- * passes make inside a binding's value) lands on a tree that is thrown away, the
- * probe is observationally equivalent to not having run.
+ * copy is the whole contract -- because every rewrite the let/where machinery
+ * makes inside a binding's value lands on a tree that is thrown away, the probe
+ * is observationally equivalent to not having run.
  *
  * @return ?array{
  *   type: Type,
@@ -1201,7 +1201,7 @@ function rewriteIntrinsicApplies(Ast\AstNode $expr): Ast\AstNode
 
             $call = new Ast\IntrinsicCall($internal, [], $expr->line, $expr->col, $expr->endCol);
             $call->intrinsicId = $internal;
-            $call->inferredType = $expr->inferredType;
+            copyInferredType($call, $expr);
             $call->pendingConstraints = $expr->pendingConstraints;
 
             return $call;
@@ -1232,7 +1232,7 @@ function rewriteIntrinsicApplies(Ast\AstNode $expr): Ast\AstNode
 
             $call = new Ast\IntrinsicCall($internal, $args, $expr->line, $expr->col, $expr->endCol);
             $call->intrinsicId = $internal;
-            $call->inferredType = $expr->inferredType;
+            copyInferredType($call, $expr);
             $call->pendingConstraints = $expr->pendingConstraints;
 
             return $call;
@@ -1314,7 +1314,7 @@ function rewriteIntrinsicApplies(Ast\AstNode $expr): Ast\AstNode
                 $expr->endCol,
             );
             $call->intrinsicId = $internal;
-            $call->inferredType = $expr->inferredType;
+            copyInferredType($call, $expr);
 
             return $call;
         })(),
@@ -1651,7 +1651,7 @@ function inferDoExpr(TypeCheckState $state, Ast\DoExpr $expr, array $env): Type
 
 function annotateExprType(TypeCheckState $state, Ast\AstNode $expr, Type $type): void
 {
-    $expr->inferredType = internalTypeToAstNode(prune($state, $type));
+    publishInferredType($state, $expr, $type);
 }
 
 function inferTypeAsc(TypeCheckState $state, Ast\TypeAsc $expr, array $env): Type
@@ -2017,6 +2017,8 @@ function inferApply(TypeCheckState $state, Ast\Apply $expr, array $env): Type
         return $result;
     }
 
+    resolveMethodHeadFromArgument($state, $expr->function, $fnType->from, $argType);
+
     unify($state, $fnType->from, $argType, $expr);
     $result = $fnType->to;
 
@@ -2024,6 +2026,144 @@ function inferApply(TypeCheckState $state, Ast\Apply $expr, array $env): Type
     propagateCallMetadata($expr);
 
     return $result;
+}
+
+/**
+ * Instantiate a class method's dictionary head from the argument it is applied to.
+ *
+ * A class method's declared type is written in terms of the class's parameter —
+ * `to :: Generic b => Rep b x -> b` — so the associated-family application in its domain stays
+ * stuck until `b` is known, and a use site that supplies the head has been reaching the result by
+ * comparing the two applications (`Rep b x` against `Rep Foo x`), which only an injectivity rule
+ * could do: the family is not injective, so that comparison is neither the language's rule nor a
+ * sound one to carry.
+ *
+ * The dictionary answers it instead. The operand is a `Rep Foo x`, so the `Generic` dictionary the
+ * call dispatches on is `Foo`'s, and the whole method type instantiates at that head: the domain
+ * becomes `Rep Foo x` — the same application the operand has, matched by ordinary unification —
+ * and the result is `Foo` rather than a stuck `Rep b x`.
+ *
+ * The improvement names no family. It binds a dictionary head variable only when all of these hold:
+ *
+ *  - the variable is one of the callee's own obligations' arguments and is still flexible (a rigid
+ *    skolem is already the dictionary's answer, and a bound one is not this call's to choose),
+ *  - the domain applies an associated family **of that same class** at that variable — `Rep` belongs
+ *    to `Generic`, so `Generic`'s head is the one its equation is looked up by,
+ *  - the operand applies the same family at the same position at a head that names an instance (a
+ *    constructor, a promoted constructor, or a rigid variable), not at another stuck application.
+ */
+function resolveMethodHeadFromArgument(
+    TypeCheckState $state,
+    Ast\AstNode $callee,
+    Type $domain,
+    Type $argType,
+): void {
+    $heads = methodDictionaryHeadVars($state, $callee);
+    if ($heads === []) {
+        return;
+    }
+
+    $improvements = [];
+    collectFamilyHeadImprovements($state, $domain, $argType, $heads, $improvements);
+
+    foreach ($improvements as $var => $head) {
+        if (isset($state->subst[$var])) {
+            continue;
+        }
+        $state->subst[$var] = $head;
+    }
+}
+
+/**
+ * The head variables of the callee's own obligations, mapped to the class that asks for them.
+ *
+ * @return array<string, string>
+ */
+function methodDictionaryHeadVars(TypeCheckState $state, Ast\AstNode $callee): array
+{
+    [$pending] = pendingConstraintsAndDicts($callee);
+
+    $heads = [];
+    foreach ($pending as $constraint) {
+        foreach ($constraint->args as $arg) {
+            $arg = prune($state, $arg);
+            if ($arg instanceof TVar && ! isset($state->rigidVars[$arg->name])) {
+                $heads[$arg->name] = $constraint->class;
+            }
+        }
+    }
+
+    return $heads;
+}
+
+/**
+ * Walk a domain and an operand side by side, recording the heads the operand fixes.
+ *
+ * @param array<string, string> $heads dictionary head variable => its class
+ * @param array<string, Type> $out
+ */
+function collectFamilyHeadImprovements(
+    TypeCheckState $state,
+    Type $pattern,
+    Type $actual,
+    array $heads,
+    array &$out,
+): void {
+    $pattern = prune($state, $pattern);
+    $actual = prune($state, $actual);
+
+    if ($pattern instanceof TArrow && $actual instanceof TArrow) {
+        collectFamilyHeadImprovements($state, $pattern->from, $actual->from, $heads, $out);
+        collectFamilyHeadImprovements($state, $pattern->to, $actual->to, $heads, $out);
+
+        return;
+    }
+
+    if (! $pattern instanceof TCon || ! $actual instanceof TCon
+        || $pattern->name !== $actual->name
+        || \count($pattern->args) !== \count($actual->args)
+    ) {
+        if ($pattern instanceof TVarApp && $actual instanceof TVarApp
+            && \count($pattern->args) === \count($actual->args)
+        ) {
+            foreach ($pattern->args as $i => $arg) {
+                collectFamilyHeadImprovements($state, $arg, $actual->args[$i], $heads, $out);
+            }
+        }
+
+        return;
+    }
+
+    $family = $state->associatedFamilies[$pattern->name] ?? null;
+    foreach ($pattern->args as $i => $arg) {
+        $var = prune($state, $arg);
+        if ($var instanceof TVar
+            && isset($heads[$var->name])
+            && $family !== null
+            && $heads[$var->name] === $family['class']
+        ) {
+            $head = prune($state, $actual->args[$i]);
+            if (isInstanceHeadType($state, $head)) {
+                $out[$var->name] ??= $head;
+            }
+        }
+
+        collectFamilyHeadImprovements($state, $arg, $actual->args[$i], $heads, $out);
+    }
+}
+
+/** Whether a type names a head an instance can be selected by, rather than a stuck application. */
+function isInstanceHeadType(TypeCheckState $state, Type $type): bool
+{
+    if ($type instanceof TVar) {
+        return isset($state->rigidVars[$type->name]);
+    }
+
+    if ($type instanceof TCon) {
+        return ! isset($state->associatedFamilies[$type->name]);
+    }
+
+    return $type instanceof TPromoted;
 }
 
 /**
@@ -2968,7 +3108,7 @@ function inferRewrittenInfix(TypeCheckState $state, Ast\AstNode $surface, Ast\Ap
 {
     $type = inferApplyAndElaborate($state, $call, $env);
     annotateExprType($state, $call, $type);
-    $surface->inferredType = $call->inferredType;
+    copyInferredType($surface, $call);
 
     return $type;
 }
@@ -3501,34 +3641,6 @@ function isRestrictedBindingGroup(array $group): bool
 }
 
 /**
- * Assert that a reused binding's scheme agrees with the lambda that implements
- * it when MOGGI_ASSERT_DICT_ARITY is set.
- *
- * A binding's scheme tells every use site how many dictionaries to build; the
- * abstracted lambda is what consumes them. The two are derived by different
- * passes -- the scheme from the recorded constraints, the lambda from the
- * dictionary parameters allocated for them -- so this is where an expansion
- * applied twice at one end but once at the other shows up as a use site that
- * passes more dictionaries than the definition takes.
- *
- * @param list<Ast\PendingConstraint> $abstracted the lambda's dictionary parameters
- */
-function assertDictArity(TypeCheckState $state, Scheme $scheme, array $abstracted, Ast\AstNode $at): void
-{
-    if (\getenv('MOGGI_ASSERT_DICT_ARITY') === false) {
-        return;
-    }
-
-    if ($scheme->runtimeConstraintCount !== \count($abstracted)) {
-        throw new \RuntimeException(
-            'dictionary arity mismatch at line ' . $at->line . ': scheme passes '
-            . $scheme->runtimeConstraintCount . ' dictionaries, the definition takes '
-            . \count($abstracted),
-        );
-    }
-}
-
-/**
  * @param list<Ast\Binding> $bindings
  * @param array<string, Scheme> $env
  * @return array<string, Scheme>
@@ -3644,9 +3756,8 @@ function functionParamTypeAsts(Ast\TypeNode $type): array
  * types, and the body resolves its evidence through the new dictionaries.
  *
  * The returned constraints are the annotation's own, superclasses unexpanded:
- * the parameters are allocated for the expanded list (kept on the lambda's
- * `abstractedConstraints`), while the binding's scheme keeps this one so a use
- * site expands it exactly once.
+ * the parameters are allocated for the expanded list, while the binding's
+ * scheme keeps this one so a use site expands it exactly once.
  *
  * @param array<string, Scheme> $env
  * @return array{0: Ast\AstNode, 1: Type, 2: list<Ast\PendingConstraint>}
@@ -3694,7 +3805,6 @@ function abstractAnnotatedLocalBinding(TypeCheckState $state, Ast\AstNode $value
     }
 
     $lambda = wrapDictLambda($state, $inner, $params, $dictTypes);
-    $lambda->abstractedConstraints = $abstracted;
 
     return [$lambda, $valueType, $userConstraints];
 }
@@ -3731,24 +3841,8 @@ function abstractLocalConstraints(TypeCheckState $state, Ast\AstNode $rhs, array
     }
 
     $lambda = wrapDictLambda($state, $rhs, $params, $dictTypes);
-    $lambda->abstractedConstraints = $abstracted;
 
     return [$lambda, $abstracted];
-}
-
-/**
- * The dictionary parameters a local binding was abstracted over, if any.
- *
- * `abstractLocalConstraints` turns a constrained binding's value into a lambda
- * whose leading parameters are the dictionaries the binding takes; the list is
- * kept on the lambda so the binding's scheme can be asserted against the
- * adapter it was built for.
- *
- * @return list<Ast\PendingConstraint>
- */
-function abstractedLocalConstraints(Ast\AstNode $value): array
-{
-    return $value instanceof Ast\Lambda ? $value->abstractedConstraints : [];
 }
 
 /**
@@ -3888,6 +3982,7 @@ function allocateDictParams(TypeCheckState $state, array $constraints): array
         $dictTypes[] = $dictType;
         $param = new Ast\PatVar($name);
         $dictAst = internalTypeToAst($dictType, $state->subst);
+        $param->inferredInternalType = $dictType;
         $param->inferredType = $dictAst;
         $params[] = new Ast\LambdaParam($param, $dictAst);
         $abstracted[] = new Ast\PendingConstraint(
@@ -3943,7 +4038,7 @@ function wrapDictLambda(TypeCheckState $state, Ast\AstNode $rhs, array $params, 
     foreach (\array_reverse($dictTypes) as $dictType) {
         $fnType = new TArrow($dictType, $fnType);
     }
-    $lambda->inferredType = internalTypeToAst($fnType, $state->subst);
+    publishInferredType($state, $lambda, $fnType);
 
     return $lambda;
 }
@@ -4105,11 +4200,6 @@ function inferRecursiveBindings(TypeCheckState $state, array $bindings, array $e
                 $schemeDicts !== [] ? \count($schemeDicts) : null,
                 $schemeDicts,
             );
-            $abstracted = abstractedLocalConstraints($binding->value);
-            if ($abstracted !== []) {
-                assertDictArity($state, $local[$name], $abstracted, $binding->value);
-            }
-
             continue;
         }
 
@@ -4235,6 +4325,7 @@ function overloadedLiteralPatternNode(TypeCheckState $state, Ast\AstNode $patter
         $binder->binderId = ++$state->nextBinderId;
         $name = '__litpat' . $binder->binderId;
         $binder->name = $name;
+        $binder->inferredInternalType = $type;
         $binder->inferredType = internalTypeToAst($type, $state->subst);
         $env[$name] = scheme($type, []);
         $literal = new Ast\IntegerLit($pattern->value, $pattern->line, $pattern->col, $pattern->endCol);
@@ -4503,6 +4594,7 @@ function bindPattern(TypeCheckState $state, Ast\AstNode $pattern, Type $expected
             if (isset($env[$pattern->name])) {
                 $env[$pattern->name]->binderId = $pattern->binderId;
             }
+            $pattern->inferredInternalType = prune($state, $type);
             $pattern->inferredType = internalTypeToAst(prune($state, $type), $state->subst);
 
             return [$type, $env];
@@ -4511,6 +4603,7 @@ function bindPattern(TypeCheckState $state, Ast\AstNode $pattern, Type $expected
             if (\is_string($pattern->value)) {
                 unify($state, $expected, new TStr());
             }
+            $pattern->inferredInternalType = prune($state, $expected);
             $pattern->inferredType = internalTypeToAst(prune($state, $expected), $state->subst);
 
             return [$expected, $env];

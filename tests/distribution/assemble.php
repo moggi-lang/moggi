@@ -1,20 +1,18 @@
 <?php declare(strict_types=1);
 
-// A distribution is what users actually get, so its shape is asserted rather
-// than assumed: `bin/moggi` *is* the compiler (the micro PHP runtime with the
-// archive appended), the archive is not shipped where PHP is not, no compiler
-// sources beside it, user-facing documentation only, examples that run, and an
-// archive that unpacks somewhere clean and works from there.
-//
-// The variant built here is `moggi-minimal`, which bundles no runtime: the
-// compiler still runs itself natively, which is the whole point. The variants
-// that bundle toolchains are built and tested by the packaging workflow, which
-// has to prepare them anyway.
-//
-// `bin/moggi` is built from the micro PHP runtime, and that runtime is compiled
-// rather than downloaded — so a machine that has not prepared it cannot assemble
-// any distribution, and the assembly half of this test is skipped there. The
-// resolution and preflight checks above it run everywhere.
+/**
+ * Assert the distribution users receive: `bin/moggi` is the compiler
+ * (micro PHP runtime with the archive appended), no PHP runtime or compiler
+ * sources are shipped separately, documentation is user-facing, examples
+ * run, and the archive works when unpacked into a clean directory.
+ *
+ * This builds `moggi-minimal`, which bundles no runtime but runs natively.
+ * Toolchain-bundling variants are built and tested by the packaging workflow.
+ *
+ * The micro PHP runtime must be compiled locally, so distribution assembly
+ * is skipped when it is unavailable. Resolution and preflight checks still
+ * run everywhere.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/packaging/assemble.php') && \dirname($root) !== $root) {
@@ -181,7 +179,7 @@ try {
     $noRuntimes = $work . '/no-runtimes';
     \mkdir($noRuntimes, 0777, true);
     $env = ['PATH' => $noRuntimes] + \getenv();
-    unset($env['JAVA_HOME'], $env['DOTNET_ROOT'], $env['GRAALVM_HOME'], $env['JDK_HOME'], $env['MOGGI_ROOT']);
+    unset($env['JAVA_HOME'], $env['DOTNET_ROOT'], $env['GRAALVM_HOME'], $env['JDK_HOME']);
     $reported = runCompiledProcess([$compilerExe, 'version'], 120, $env, $work);
     $assert($reported['exitCode'] === 0, 'the native compiler must run with no PHP on PATH: ' . $reported['stderr']);
     $assert(

@@ -1,21 +1,18 @@
 <?php declare(strict_types=1);
 
-// Regression tests for the apply-collapsing rewrites.
-//
-//   * `normalizeKnownApplies` — an application whose callee arity is statically
-//     known becomes a direct `expr_call` (`expr_partial` when under-applied),
-//     and a curried call on a parameter whose declared type fixes its arity
-//     flattens into one `expr_call_value`. Both stop the backends from
-//     reaching for the runtime `__apply`.
-//   * `foldPartialApply` — `t = partial f(a)` followed by `t(b)` fuses into
-//     `f(a, b)`, including when the intermediate spelling is `expr_partial`
-//     (the shape a preceding fusion in the same pass produces).
-//
-// The passes are driven directly rather than through `optimize()`, so each
-// assertion says exactly what that rewrite is responsible for; the whole-
-// pipeline result is pinned by
-// `tests/backend/codegen/Core-Apply-Collapse.mog` and
-// `tests/optimize/Opt-Apply-Collapse.ir.php`.
+/**
+ * Regression tests for apply-collapsing rewrites.
+ *
+ * - `normalizeKnownApplies` converts statically known applications into
+ *   direct `expr_call` / `expr_partial` nodes and flattens known curried
+ *   calls into `expr_call_value`, avoiding runtime `__apply`.
+ * - `foldPartialApply` fuses `partial f(a)` followed by `t(b)` into
+ *   `f(a, b)`, including intermediate `expr_partial` nodes.
+ *
+ * Drive each pass directly to isolate its responsibility. Whole-pipeline
+ * behavior is covered by `Core-Apply-Collapse.mog` and
+ * `Opt-Apply-Collapse.ir.php`.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {

@@ -1,22 +1,15 @@
 <?php declare(strict_types=1);
 
-// The in-compiler dictionary assertions cannot run on every compile, so this
-// test compiles the fixtures that pin the dictionary boundary with them on:
-// `MOGGI_ASSERT_DICT_ARITY` catches a use site whose scheme expanded its
-// superclasses one more time than the definition did, and
-// `MOGGI_ASSERT_EXPAND_CLOSED` catches a superclass expansion that did not
-// reach a fixed point (the property that makes expanding twice a no-op). The
-// fixtures cover a probed/restored local, a recursive group -- inferred and
-// with a declared signature -- a restricted local signature, a superclass
-// chain, a class method and the multi-obligation shape whose superclass
-// closures overlap, and the runtime shapes those feed.
-//
-// The fixtures share one process: the assertions run on every elaboration, and
-// the first compile has already elaborated the standard library the rest reuse,
-// so nothing is checked twice while the whole library is still elaborated under
-// the assertions on a cold run. The cache stays off -- a cache hit answers
-// without running the checker at all, which would leave the assertions nothing
-// to check.
+/**
+ * Compile the dictionary-boundary fixtures from a cold checker: probed and
+ * restored locals, recursive groups (inferred and declared), restricted local
+ * signatures, superclass chains, class methods, overlapping superclass closures,
+ * and the runtime shapes that follow from them.
+ *
+ * Run all fixtures in one process: the first compile elaborates the standard
+ * library, which subsequent fixtures reuse. Disable the cache because a cache
+ * hit bypasses the checker this case is exercising.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
@@ -24,8 +17,6 @@ while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
 }
 
 \putenv('MOGGI_NO_CACHE=1');
-\putenv('MOGGI_ASSERT_DICT_ARITY=1');
-\putenv('MOGGI_ASSERT_EXPAND_CLOSED=1');
 
 require $root . '/src/compiler.php';
 

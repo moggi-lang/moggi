@@ -1,34 +1,26 @@
 <?php declare(strict_types=1);
 
-// The gate `via` deriving uses to decide whether a class method can be
-// delegated, or must be left to its class default.
-//
-// `typeHasNestedClassParam` reads a method's type and asks whether the class
-// parameter sits *under a container*. Its contract names three shapes: `[a]`,
-// `Maybe a` and `f a` all need a structural conversion of the whole container,
-// which this language has no primitive for, so the method is skipped and the
-// class default runs. A parameter directly in an arrow position (`a -> Bool`)
-// is wrapped or unwrapped, which every backend can do, so it is derived.
-//
-// The children come from `typeChildren`, which is why `f a` and `'Pair a` are
-// seen at all: walking `->args` by hand made a variable-headed or promoted
-// application look like a leaf, and a method matching the contract's own
-// example was synthesized as if its parameter were bare.
-//
-// Why this is a unit pin and not a program fixture: the type checker currently
-// rejects both source spellings of the interesting arms —
-//
-//   class C a where m :: f a -> String
-//     → "kind error in class `C`: could not unify kind `Type` with `Type -> k1`"
-//       (an applied parameter is inferred higher-kinded, so `a` cannot also be
-//        the class parameter)
-//   m :: OnlyBox ('Box a) -> String        (Box a data type with a param)
-//     → "data constructor `Box` is not promotable" / kind error
-//
-// so no program in the suite exercises them. The gate is still the place the
-// decision is made, and a walker that quietly went back to `->args` would
-// reintroduce the hole without any suite case noticing; this file is what
-// notices.
+/**
+ * `via` derivation delegates a class method only when its parameter shape
+ * supports structural conversion. `typeHasNestedClassParam` detects class
+ * parameters under containers (`[a]`, `Maybe a`, `f a`), which require
+ * converting the whole container and are therefore skipped. Direct arrow
+ * parameters (`a -> Bool`) can be wrapped or unwrapped on every backend.
+ *
+ * It uses `typeChildren` to see variable-headed and promoted applications;
+ * walking `->args` alone misses them and can incorrectly derive the method.
+ *
+ * This needs a unit test because the type checker currently rejects both
+ * source forms of these cases:
+ *
+ *   class C a where m :: f a -> String
+ *     -- Kind error: `a` cannot also be the class parameter.
+ *   m :: OnlyBox ('Box a) -> String
+ *     -- `Box` is not promotable / kind error.
+ *
+ * No program fixture can cover the gate, so this test pins its contract
+ * directly and catches regressions the suite cannot express.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
@@ -98,9 +90,6 @@ foreach ($nested as $shape => $type) {
     );
 }
 
-// The parameter appearing as a *head* is a different question, and this
-// predicate deliberately answers "not nested": `f`'s own application is what a
-// delegation would unwrap. Pinned so a later change has to decide, not drift.
 $check(
     ! typeHasNestedClassParam(new TypeExpr\TVarApp('f', [$var('b')]), 'f'),
     'a parameter used as an application head was treated as nested',

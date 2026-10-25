@@ -1,11 +1,12 @@
 <?php declare(strict_types=1);
 
-// `moggi outdated` and `moggi why`, through the real CLI, against a real signed
-// registry directory and a real lock: a lock that is behind, a version the
-// descriptor refuses, a version the catalog no longer publishes, and a package
-// pulled in transitively. The registry is signed with the checkout's own
-// `schnorr`; without that binary the signing half cannot run and the checks are
-// reported as skipped rather than faked.
+/**
+ * Exercise `moggi outdated` and `moggi why` through the real CLI against
+ * a signed registry directory and lock, covering outdated locks, versions
+ * rejected by descriptors, unpublished catalog versions, and transitive
+ * dependencies. The registry uses the checkout's `schnorr` binary;
+ * without it, signing checks are skipped rather than faked.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
@@ -22,15 +23,13 @@ $assert = static function (bool $condition, string $message) use (&$checks): voi
     }
 };
 
-$binary = \getenv('MOGGI_SCHNORR');
-if (! \is_string($binary) || $binary === '') {
-    $binary = $root . '/schnorr/schnorr';
-}
-if (! \is_file($binary) || ! \is_executable($binary)) {
-    $binary = $root . '/schnorr/build/schnorr';
-}
-if (! \is_file($binary) || ! \is_executable($binary)) {
-    echo "outdated/why tests skipped (no schnorr CLI; set MOGGI_SCHNORR)\n";
+require $root . '/src/compiler.php';
+
+use function Moggi\Registry\schnorrBinary;
+
+$binary = schnorrBinary();
+if ($binary === null) {
+    echo "outdated/why tests skipped (no schnorr CLI)\n";
     exit(0);
 }
 
@@ -61,11 +60,10 @@ $schnorr = static function (array $arguments, ?string $stdin = null) use ($binar
 
 $work = createTempDir('moggi-outdated-why');
 $env = \getenv();
-$env['MOGGI_SCHNORR'] = $binary;
 $env['MOGGI_CACHE_DIR'] = $work . '/cache';
 seedCacheDir($env['MOGGI_CACHE_DIR']);
 $env['MOGGI_USER_CACHE'] = $work . '/user-cache';
-unset($env['MOGGI_REGISTRY_NPUB'], $env['MOGGI_ALLOW_STALE_REGISTRY']);
+unset($env['MOGGI_REGISTRY_NPUB']);
 
 $cli = static function (array $arguments, string $cwd) use ($root, $env): array {
     $result = runCompiledProcess([PHP_BINARY, $root . '/moggi.php', ...$arguments], 120, $env, $cwd);

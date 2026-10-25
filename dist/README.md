@@ -142,10 +142,9 @@ php packaging/assemble.php --variants moggi-minimal --out dist-out   # one varia
 php packaging/assemble.php --target linux-x86_64 --glibc-floor       # what a release does
 ```
 
-The target defaults to the host. `schnorr` is built with `cc`/`gcc`/`clang`
-(`MOGGI_DIST_SCHNORR_CC` overrides it, and `MOGGI_DIST_SCHNORR` hands the
-assembler an already-built binary instead — which is how Windows, whose Makefile
-needs a POSIX shell, gets one from an MSYS2 step), runtimes are prepared once per
+The target defaults to the host. `schnorr` is built from the pinned sources with
+`cc`/`gcc`/`clang` — on Windows, whose Makefile needs a POSIX shell, in an MSYS2
+step the assembler then picks up — runtimes are prepared once per
 target under `.dist-cache/` and reused, and each variant is smoke-tested —
 `bin/moggi` reports its version, `examples/factorial` is compiled and run with
 every backend the variant bundles, `bin/schnorr generate` produces a keypair, and

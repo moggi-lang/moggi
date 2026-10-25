@@ -336,7 +336,7 @@ function buildOccurrenceIndex(
             return;
         }
         foreach (\get_object_vars($node) as $key => $prop) {
-            if ($key === 'inferredType') {
+            if ($key === 'inferredType' || $key === 'inferredInternalType') {
                 continue;
             }
             if (\is_object($prop)) {

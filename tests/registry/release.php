@@ -1,13 +1,16 @@
 <?php declare(strict_types=1);
 
-// The Step 3 release split: `pack --record`, `moggi sign` and `publish
-// --signed`/`--dry-run` share one record shape and one signing path, in
-// `src/registry/manifest.php`. These tests pin that shared path offline: the
-// record's shape, the author and source selection, the file round trip, and —
-// with the real `schnorr` CLI, never a fake — the sign/verify round trip,
-// every mismatch `publish --signed` refuses, and the `sign` command's core.
-// No network happens here; without the CLI the signing checks are skipped
-// rather than faked.
+/**
+ * Step 3 release split: `pack --record`, `moggi sign`, and
+ * `publish --signed` / `--dry-run` share one record shape and signing
+ * path in `src/registry/manifest.php`.
+ *
+ * Offline tests cover the record shape, author and source selection,
+ * file round-trip, signing and verification with the real `schnorr` CLI,
+ * every mismatch rejected by `publish --signed`, and the `sign`
+ * command's core. No network is used. Without `schnorr`, signing checks
+ * are skipped rather than faked.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
@@ -22,6 +25,7 @@ use function Moggi\Registry\checkSignedRelease;
 use function Moggi\Registry\readReleaseRecord;
 use function Moggi\Registry\releaseSource;
 use function Moggi\Registry\selectAuthor;
+use function Moggi\Registry\schnorrBinary;
 use function Moggi\Registry\signRelease;
 use function Moggi\Registry\verifyRelease;
 use function Moggi\Registry\writeReleaseRecord;
@@ -107,14 +111,10 @@ $throws(static fn () => readReleaseRecord($tmp . '/nameless.json'), 'a record wi
 $throws(static fn () => readReleaseRecord($tmp . '/missing.json'), 'an unreadable file is refused');
 
 // --- sign and verify with a throwaway key, if the CLI is here -------------------
-$binary = \getenv('MOGGI_SCHNORR');
-if (! \is_string($binary) || $binary === '') {
-    $binary = $root . '/schnorr/schnorr';
-}
-if (! \is_file($binary) || ! \is_executable($binary)) {
-    echo "  (skipped the signing checks: no schnorr CLI at {$binary})\n";
+$binary = schnorrBinary();
+if ($binary === null) {
+    echo "  (skipped the signing checks: no schnorr CLI in this installation)\n";
 } else {
-    \putenv('MOGGI_SCHNORR=' . $binary);
     $schnorr = static function (array $arguments, ?string $stdin = null) use ($binary): string {
         $process = \proc_open(
             \array_merge([$binary], $arguments),

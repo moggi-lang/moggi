@@ -1,15 +1,14 @@
 <?php declare(strict_types=1);
 
-// Packages that travel with the compiler (`json` today, `containers` tomorrow)
-// resolve and install from the shipped tree, with no web requests, whenever the
-// bundled version satisfies what was asked for. Anything else takes the registry
-// path as before, and the escape hatch is the constraint itself.
-//
-// These checks run against a fake `libraries/` tree (pointed at with
-// `MOGGI_ROOT`), with a `$fetch` that explodes if anything so much as looks at
-// the network: a bundled resolution that fetched would fail here, not just go
-// slowly. `base` rides along as the provided package, so closures through it
-// are exercised too.
+/**
+ * Packages shipped with the compiler resolve and install locally without
+ * network access when their bundled versions satisfy the requested
+ * constraints. Otherwise, resolution falls back to the registry.
+ *
+ * Tests point the compiler at a fake `libraries/` tree and use a `$fetch` that
+ * fails on any network access, proving bundled resolution stays offline.
+ * `base` is included as a provided package to exercise transitive closures.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
@@ -17,6 +16,8 @@ while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
 }
 require $root . '/src/compiler.php';
 require $root . '/tests/suite/support/workspace.php';
+
+use Moggi\Install\ConfiguredInstallation;
 
 use function Moggi\CLI\Commands\writeResolution;
 
@@ -67,10 +68,10 @@ $writeLib = static function (string $name, string $version, string $extra = '') 
     return $dir;
 };
 
-$oldRoot = \getenv('MOGGI_ROOT');
+$oldRoot = ConfiguredInstallation::root();
 $oldCache = \getenv('MOGGI_CACHE_DIR');
 $oldUserCache = \getenv('MOGGI_USER_CACHE');
-\putenv('MOGGI_ROOT=' . $work);
+ConfiguredInstallation::set($work);
 \putenv('MOGGI_CACHE_DIR=' . $work . '/cache');
 \putenv('MOGGI_USER_CACHE=' . $work . '/ucache');
 
@@ -201,11 +202,7 @@ try {
 
     echo "bundled package tests passed ({$checks} checks)\n";
 } finally {
-    if ($oldRoot === false) {
-        \putenv('MOGGI_ROOT');
-    } else {
-        \putenv('MOGGI_ROOT=' . $oldRoot);
-    }
+    ConfiguredInstallation::set($oldRoot);
     if ($oldCache === false) {
         \putenv('MOGGI_CACHE_DIR');
     } else {

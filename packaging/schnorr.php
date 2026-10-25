@@ -14,9 +14,9 @@ use function Moggi\Compiler\findExecutable;
  * rather than committed — the tool ships as a binary, so their sources are a
  * build input, not project content. The Makefile next to them owns the flags.
  *
- * `MOGGI_DIST_SCHNORR` names an already-built binary to use instead of building
- * (Windows, where `make` needs an MSYS2 shell), and `MOGGI_DIST_SCHNORR_CC`
- * names the compiler.
+ * The binary is always built here, from these sources, with the platform's own
+ * toolchain: a distribution says which binary it ships and carries no way to
+ * have someone else's substituted for it.
  */
 
 const SCHNORR_DIR = 'schnorr';
@@ -65,10 +65,7 @@ function ensureSchnorrSources(string $repo): void
 /** The C compiler the Makefile is driven with. */
 function schnorrCompiler(bool $windows): string
 {
-    $wanted = \getenv('MOGGI_DIST_SCHNORR_CC');
-    $candidates = \is_string($wanted) && $wanted !== ''
-        ? [$wanted]
-        : ($windows ? ['x86_64-w64-mingw32-gcc', 'gcc', 'clang'] : ['cc', 'gcc', 'clang']);
+    $candidates = $windows ? ['x86_64-w64-mingw32-gcc', 'gcc', 'clang'] : ['cc', 'gcc', 'clang'];
 
     foreach ($candidates as $candidate) {
         if (findExecutable($candidate) !== null) {
@@ -77,24 +74,13 @@ function schnorrCompiler(bool $windows): string
     }
 
     throw new \RuntimeException(
-        'no C compiler for the schnorr CLI (tried ' . \implode(', ', $candidates) . '); '
-        . 'install one, or point MOGGI_DIST_SCHNORR_CC at it',
+        'no C compiler for the schnorr CLI (tried ' . \implode(', ', $candidates) . '); install one',
     );
 }
 
 /** Build the CLI where its Makefile expects to be run, and return the binary's path. */
 function buildSchnorr(string $repo, bool $windows = false): string
 {
-    $prebuilt = \getenv('MOGGI_DIST_SCHNORR');
-    if (\is_string($prebuilt) && $prebuilt !== '') {
-        if (! \is_file($prebuilt)) {
-            throw new \RuntimeException("MOGGI_DIST_SCHNORR names {$prebuilt}, which is not a file");
-        }
-        ensureSchnorrSources($repo);
-
-        return $prebuilt;
-    }
-
     ensureSchnorrSources($repo);
 
     $make = findExecutable('make') ?? findExecutable('mingw32-make');

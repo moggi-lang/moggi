@@ -133,10 +133,6 @@ function runStage(string $title, array $argv): int
     echo "=== {$title}\n";
     \flush();
 
-    // One pipe with stderr merged into it, streamed live. Inheriting a
-    // redirected stdout lets concurrent workers overwrite each other's bytes
-    // through the shared file offset, which garbles the log and can hide the
-    // very diagnostic a failed stage printed.
     $command = \implode(' ', \array_map('escapeshellarg', $argv)) . ' 2>&1';
     $process = \proc_open($command, [0 => STDIN, 1 => ['pipe', 'w']], $pipes);
     if (! \is_resource($process)) {

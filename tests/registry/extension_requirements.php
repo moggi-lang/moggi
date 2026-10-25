@@ -61,7 +61,6 @@ $remove = static function (string $path) use (&$remove): void {
 };
 
 try {
-    // --- entry syntax --------------------------------------------------------
     $plain = parsePhpExtensionEntry('redis');
     $assert($plain['name'] === 'redis' && $plain['path'] === null, 'a bare entry is a name');
 
@@ -73,7 +72,6 @@ try {
     $pathed = parsePhpExtensionEntry('imagick=ext/imagick.so');
     $assert($pathed['name'] === 'imagick' && $pathed['path'] === 'ext/imagick.so', 'a `=` entry names a path');
 
-    // --- the table is the whole requirement section set ----------------------
     $sections = requirementSections(\parse_ini_string(
         "[php.extensions]\nbcmath = *\n\n[jvm.maven]\ncom.acme:lib = 1.0\n",
         true,
@@ -81,7 +79,6 @@ try {
     ));
     $assert($sections === ['php.extensions' => ['bcmath']], 'only php extensions are requirement sections: ' . \json_encode($sections));
 
-    // --- the merge across the closure ---------------------------------------
     $collected = collectPhpExtensions([
         'root' => ['requirements' => ['php.extensions' => ['bcmath', 'redis']]],
         'demo' => ['requirements' => ['php.extensions' => ['redis', 'intl']]],

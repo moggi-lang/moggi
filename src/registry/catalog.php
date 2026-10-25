@@ -473,17 +473,6 @@ function rememberRegistryNpub(string $base, string $npub): void
     atomicWrite(registryIdentityPath($base), $npub . "\n");
 }
 
-/** The variable that turns the root freshness and rollback checks off for a development registry. */
-const ALLOW_STALE_REGISTRY_ENV = 'MOGGI_ALLOW_STALE_REGISTRY';
-
-/** Whether the freshness and rollback checks have been waived for this run. */
-function staleRegistryAllowed(): bool
-{
-    $value = \getenv(ALLOW_STALE_REGISTRY_ENV);
-
-    return \is_string($value) && \in_array(\strtolower(\trim($value)), ['1', 'true', 'yes', 'on'], true);
-}
-
 /** Where a registry's highest accepted root version is remembered: one file per base, in the user cache. */
 function registryRootVersionPath(string $base): string
 {
@@ -536,9 +525,9 @@ function registryTimestamp(string $text): ?int
  *   - `version`, a positive integer: a root below the highest this machine has
  *     already accepted is refused, so an older root cannot be replayed.
  *
- * `MOGGI_ALLOW_STALE_REGISTRY` waives both, for a development registry whose
- * clock or versioning is not maintained; the highest version is still remembered,
- * so a later run without the waiver compares against the real high-water mark.
+ * Neither check has a waiver: a stale or replayed root is refused, because a
+ * registry that has gone silent and one that is being replayed look the same
+ * from here.
  *
  * Call this only for a root whose signature has already verified.
  *
@@ -565,18 +554,14 @@ function rootIntegrityProblem(string $base, array $root, int $now): string
     if ($version < 1) {
         return "the registry at {$base} has a root version below 1 ({$version})";
     }
-    if (staleRegistryAllowed()) {
-        return '';
-    }
 
     $remembered = rememberedRootVersion($base);
     if ($remembered !== null && $version < $remembered) {
         return "the registry at {$base} presents root version {$version}, older than {$remembered} which this machine already accepted "
-            . '— refusing a rollback (set ' . ALLOW_STALE_REGISTRY_ENV . '=1 to accept a deliberate downgrade)';
+            . '— refusing a rollback';
     }
     if ($at < $now) {
-        return "the registry at {$base} root expired at {$expires} — refresh the registry, or set "
-            . ALLOW_STALE_REGISTRY_ENV . '=1 to use a stale one';
+        return "the registry at {$base} root expired at {$expires} — refresh the registry";
     }
 
     return '';

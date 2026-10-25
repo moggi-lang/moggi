@@ -5,7 +5,7 @@ namespace Moggi\IR;
 use Moggi\Syntax\Ast;
 
 use function Moggi\Semantics\IntrinsicRegistry\ioPrimopRole;
-use function Moggi\Semantics\IoBoundary\isIoUnitType;
+use function Moggi\Semantics\IoBoundary\isIoUnitCheckedType;
 
 /** @param array<int, Ast\AstNode> $items @return array<string, true> */
 function ioActionReturnFnNames(array $items): array
@@ -161,9 +161,9 @@ function ioActionExprReturnsUnit(Ast\AstNode $expr): bool
         $expr = $expr->expr;
     }
 
-    $type = $expr->inferredType;
+    $type = $expr->inferredInternalType;
 
-    return $type !== null && isIoUnitType($type);
+    return $type !== null && isIoUnitCheckedType($type);
 }
 
 /**

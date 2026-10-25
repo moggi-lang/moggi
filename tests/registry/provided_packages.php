@@ -1,11 +1,14 @@
 <?php declare(strict_types=1);
 
-// `base` is the standard library and travels with the compiler, so a descriptor
-// that depends on it names a toolchain floor rather than a download. These checks
-// cover the two halves of that: a requirement the bundled version meets resolves
-// with no catalog read at all, and one it does not meet is refused with the
-// chains that asked for it — while `base` stays absent from the resolver's view of
-// a catalog it is never fetched from.
+/**
+ * `base` ships with the compiler, so a dependency on it sets a toolchain
+ * floor rather than requiring a download. A satisfied requirement resolves
+ * without reading the catalog; an unsatisfied one is refused with the
+ * dependency chains that requested it.
+ *
+ * `base` must remain absent from the resolver's catalog view because it
+ * is never fetched.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {

@@ -1,12 +1,12 @@
 <?php declare(strict_types=1);
 
-// F1a/F2a: per-pass checkpoints, the stage trace, and the specialization
-// boundary check that rejects unbound temps.
+// F1a/F2a: per-pass checkpoints and the specialization boundary check that
+// rejects unbound temps.
 //
-// Pinned: the checkpoint is inert unless `MOGGI_IR_PASS_CHECKPOINTS=1`; a stage
-// that leaves an undefined temp fails with its own label; the capture-binding
-// exception is narrow; the trace line is the exact `stage-invalid` form; and no
-// restoration hook remains to hide such a failure.
+// Pinned: the checkpoint is inert while the switch is off and the harness turns
+// it on for its own run; a stage that leaves an undefined temp fails with its own
+// label; the capture-binding exception is narrow; and no restoration hook remains
+// to hide such a failure.
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
@@ -51,7 +51,7 @@ $plain = $fn('plain', new IR\Block([new IR\Ret($local('captured'))]));
 $specLookalike = $fn('__spec_lookalike', new IR\Block([new IR\Ret($local('captured'))]));
 $module = new IR\Module([$good], [], [], null, 'Main', 'Main.mog');
 
-\putenv('MOGGI_IR_PASS_CHECKPOINTS=0');
+PassCheckpoints\setEnabled(false);
 $off = $throws(static fn () => PassCheckpoints\runOnFunctions(
     'test-stage',
     $module,
@@ -61,7 +61,7 @@ $off = $throws(static fn () => PassCheckpoints\runOnFunctions(
 ));
 $check($off === null, 'an invalid stage was rejected with the checkpoint flag off');
 
-\putenv('MOGGI_IR_PASS_CHECKPOINTS=1');
+PassCheckpoints\setEnabled(true);
 PassCheckpoints\enterOptimize();
 try {
     $error = $throws(static fn () => PassCheckpoints\runOnFunctions(
@@ -81,13 +81,7 @@ $check(
     'the stage failure does not name the undefined temp',
 );
 
-$check(
-    PassCheckpoints\stageEventLine('final-dce', 'show', [211])
-        === "MOGGI_IR_TRACE stage-invalid pass=final-dce function=show temps=[211]\n",
-    'the stage trace line changed shape: ' . PassCheckpoints\stageEventLine('final-dce', 'show', [211]),
-);
-
-\putenv('MOGGI_IR_PASS_CHECKPOINTS=1');
+PassCheckpoints\setEnabled(true);
 PassCheckpoints\enterOptimize();
 try {
     $inWindow = $throws(static fn () => PassCheckpoints\runOnFunctions(
@@ -156,4 +150,4 @@ if ($failures !== []) {
     );
 }
 
-echo "pass checkpoint and stage trace tests passed\n";
+echo "pass checkpoint tests passed\n";

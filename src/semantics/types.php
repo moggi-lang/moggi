@@ -248,6 +248,7 @@ function checkRaw(
     );
 
     $checked->core = checkedCoreFor($state, $items, $program->module ?? '');
+    $checked->instanceWorld = $state->instanceWorld?->id;
 
     return $checked;
 }

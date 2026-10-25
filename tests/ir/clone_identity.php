@@ -1,9 +1,11 @@
 <?php declare(strict_types=1);
 
-// A specialization clone's identity is its declaration site, carried as facts:
-// kind SpecClone and the origin callable's declared name. Its generated name is
-// presentation — no consumer may answer a question about it by parsing the
-// spelling, and renaming it must not change the answer.
+/**
+ * A specialization clone is identified by its declaration facts: kind
+ * `SpecClone` and the origin callable's declared name. Its generated name
+ * is presentation only; consumers must use the facts, so renaming it
+ * cannot change its identity.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {

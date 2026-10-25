@@ -1,17 +1,19 @@
 <?php declare(strict_types=1);
 
-// A cached product answers exactly the compilation that asked for it. Two requests in one process
-// that differ in target, purpose, entry module, module root or source must not see each other's
-// products, and a fresh process with the same declared inputs must derive the same artifacts as the
-// warm one. The case exercises the real entry points — `compileProjectBoth` for a project and
-// `moggi compile` for a fresh process — and checks products by the artifacts they produce.
-//
-// Three scenarios, each one question, and every request answers as many assertions as it can:
-//   1. in-process cache behavior — cold/warm, php/jvm/dotnet isolation, entry modules, module
-//      roots, and recovery after a failed compilation
-//   2. cross-process persistence — a fresh process derives the warm artifact, and its own root
-//   3. cache integrity and the key contract — tampered products are rebuilt, and the key names
-//      exactly the inputs it claims to (no compilation)
+/**
+ * A cached product must match the compilation that requested it. Requests
+ * differing in target, purpose, entry module, module root, or source must
+ * remain isolated; a fresh process with identical inputs must reproduce the
+ * warm process's artifacts.
+ *
+ * Three scenarios exercise the real entry points and verify resulting artifacts:
+ *   1. In-process isolation: cold/warm, targets, entry modules, module roots,
+ *      and recovery after failed compilation.
+ *   2. Cross-process persistence: fresh processes reproduce warm artifacts
+ *      and maintain root isolation.
+ *   3. Cache integrity: tampered products are rebuilt, and the key contains
+ *      exactly its declared inputs, without compiling.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
@@ -118,7 +120,6 @@ $phpMainA = $contextFor('php', ['Main'], [$rootA], $filesA);
 
 try {
     // ==== 1 · in-process cache behavior ====================================
-    // One declared input, asked for twice in a row: cold and warm must agree.
     $cold = $compile($filesA, $project, $phpMainA);
     $warm = $compile($filesA, $project, $phpMainA);
     $assert($cold['emit'] === $warm['emit'], 'a warm run did not reproduce the cold artifacts');
@@ -186,9 +187,6 @@ try {
     );
 
     // ==== 2 · cross-process persistence ====================================
-    // A cold process with the same declared inputs derives the artifact the warm in-process one
-    // did — the parity claim, and it replaces a second same-root CLI run: that comparison already
-    // answers determinism against `$cold`, so the remaining run asks the root question.
     $env = \getenv();
     $env['MOGGI_CACHE_DIR'] = $cacheDir;
     $cliCompile = static function (string $libRoot, string $outDir) use ($root, $project, $env): string {
@@ -241,8 +239,6 @@ try {
     );
 
     // ==== 3 · cache integrity and the key contract =========================
-    // The project artifact answers before the module products do, so drop it first and then tamper
-    // the module entry the prepare pass would read.
     foreach ($cachePaths($cacheDir, 'blob') as $blob) {
         \unlink($blob);
     }

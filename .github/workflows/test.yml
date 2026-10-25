@@ -92,13 +92,6 @@ jobs:
         shell: msys2 {0}
         run: ./schnorr/tests/bip340_test.sh
 
-      - name: Point the assembler at the schnorr binary (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $schnorr = if (Test-Path schnorr/schnorr.exe) { 'schnorr\schnorr.exe' } else { 'schnorr\schnorr' }
-          "MOGGI_DIST_SCHNORR=$env:GITHUB_WORKSPACE\$schnorr" >> $env:GITHUB_ENV
-
       - name: Set up the MSVC toolchain (Windows)
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1.13.0

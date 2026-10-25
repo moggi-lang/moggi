@@ -1,0 +1,26 @@
+-- Equality of an associated family is identity after reduction, not injectivity.
+--
+-- `Tag Foo` reduces through Foo's instance; `Tag a` is stuck on a variable and no
+-- equation mentions it. A family's equations are keyed by the instance head, so a
+-- stuck application says nothing about the type it was applied at, and learning
+-- `a = Foo` from `Tag a ~ Tag Foo` is exactly the injectivity the family does not
+-- have. The method that used to rescue this shape is the dictionary's, not the
+-- unifier's: `wantsFooTag (from x)` instantiates `from`'s head from the operand.
+
+class Tagged a where
+  type Tag a
+  tag :: a -> Tag a
+
+data Foo = Foo
+
+instance Tagged Foo where
+  type Tag Foo = Int
+  tag _ = 1
+
+firstTag :: Tagged a => a -> Tag a
+firstTag x = tag x
+
+wantsFooTag :: Tag Foo -> Int
+wantsFooTag _ = 0
+
+bad x = wantsFooTag (firstTag x)

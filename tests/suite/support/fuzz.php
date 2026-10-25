@@ -374,18 +374,11 @@ function fuzzSaveReproducer(int $seed, ?int $index, string $source): ?string
 }
 
 /**
- * Where fuzz reproducers are kept: beside the case logs, under the cache directory.
- *
- * `MOGGI_FUZZ_DIR` overrides it, which is how the unit test asserts a reproducer was saved without
- * writing into the working copy's cache.
+ * Where fuzz reproducers are kept: beside the case logs, under the cache directory — the same
+ * root the rest of the harness's scratch lives under, so `MOGGI_CACHE_DIR` already moves it.
  */
 function fuzzReproducerDir(): string
 {
-    $override = \getenv('MOGGI_FUZZ_DIR');
-    if (\is_string($override) && $override !== '') {
-        return \rtrim($override, '/');
-    }
-
     $base = \function_exists('Moggi\\Cache\\cacheScratchDir')
         ? \Moggi\Cache\cacheScratchDir()
         : \dirname(__DIR__, 2) . '/.moggi';

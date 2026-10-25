@@ -25,37 +25,24 @@ if ($testArgs['help']) {
 }
 
 \Moggi\Modules\setStdlibLibPath(MOGGI_PROJECT_ROOT . '/libraries/base/src');
-// Only the bundled standard library: packages (`json`) ship from their own repo, and a checkout
-// of one joins the library roots through `--lib` or `addLibraryRoot()`.
 $arrayRoot = MOGGI_PROJECT_ROOT . '/libraries/array/src';
 if (\is_dir($arrayRoot)) {
-    // The bundled array package is part of the standard distribution, so
-    // fixtures can import Data.Array like any program built on it (the
-    // bundled containers package builds on it).
     \Moggi\Modules\addLibraryRoot($arrayRoot);
 }
 $containersRoot = MOGGI_PROJECT_ROOT . '/libraries/containers/src';
 if (\is_dir($containersRoot)) {
-    // The bundled containers package is part of the standard distribution, so
-    // fixtures can import Data.Set / Data.Map like any program built on it.
     \Moggi\Modules\addLibraryRoot($containersRoot);
 }
 $timeRoot = MOGGI_PROJECT_ROOT . '/libraries/time/src';
 if (\is_dir($timeRoot)) {
-    // The bundled time package is part of the standard distribution, so
-    // fixtures can import Data.Time.* like any program built on it.
     \Moggi\Modules\addLibraryRoot($timeRoot);
 }
 $filepathRoot = MOGGI_PROJECT_ROOT . '/libraries/filepath/src';
 if (\is_dir($filepathRoot)) {
-    // The bundled filepath package is part of the standard distribution, so
-    // fixtures can import System.FilePath like any program built on it.
     \Moggi\Modules\addLibraryRoot($filepathRoot);
 }
 $directoryRoot = MOGGI_PROJECT_ROOT . '/libraries/directory/src';
 if (\is_dir($directoryRoot)) {
-    // The bundled directory package is part of the standard distribution, so
-    // fixtures can import System.Directory like any program built on it.
     \Moggi\Modules\addLibraryRoot($directoryRoot);
 }
 

@@ -1,18 +1,21 @@
 <?php declare(strict_types=1);
 
-// A module's artifact path and the `require`s between artifacts are two
-// computations of one thing. A root prefix that only one of them can subtract
-// leaves the tree written at one depth and its requires counting from another,
-// so the file that opens is not the file the require resolves against.
-//
-// The shape that exposes it is Windows-only: a closure whose sources share no
-// root (an application in a temp directory, the standard library in a checkout
-// on the same drive), so `commonPathPrefix` reports the bare separator and
-// `realpath()` turns it into a drive root. The inputs below are the spelling
-// Windows resolves to — `/`, which `canonicalSeparators` produces and this host
-// leaves alone — so the arithmetic under test is the same on both. The tree the
-// compiler would write is then built for real, and the expressions it computes
-// are executed against it.
+/**
+ * Artifact paths and inter-artifact `require` paths must use the same
+ * root-relative calculation. If only one handles the root prefix correctly,
+ * artifacts are written at one depth while their requires resolve from
+ * another.
+ *
+ * The Windows-only case is a closure with sources on the same drive but
+ * no common root: an application in a temp directory and the standard
+ * library in a checkout. `commonPathPrefix` returns the bare separator,
+ * which `realpath()` resolves to the drive root.
+ *
+ * The inputs use Windows' resolved spelling, `/`, produced by
+ * `canonicalSeparators` and left unchanged on this host. This keeps the
+ * path arithmetic identical across platforms. Build the resulting tree
+ * for real and execute the compiler-generated path expressions against it.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
@@ -44,10 +47,6 @@ $libRelative = \preg_replace('/\.mog$/', '.php', $libSourceRelative) ?? $libSour
 $work = createTempDir('moggi-artifact-require');
 
 try {
-    // The prefix as `realpath()` returns it with the compiler's separator
-    // appended: the raw shape that used to lose characters to a prefix the path
-    // did not have, and the canonicalised one the compiler builds. Both have to
-    // answer with the same path, or the tree and its requires disagree.
     foreach (['C://', 'C:/'] as $prefix) {
         $assert(
             outputRelativePath($appSource, $prefix) === $appSourceRelative,
@@ -88,11 +87,6 @@ try {
     );
     $assert(\str_contains($ran['stdout'], 'the app ran'), 'the application did not finish: ' . $ran['stdout']);
 
-    // The arithmetic above is only half of it: what broke was the compiler
-    // writing a file where one computation said and its requires where the
-    // other did. So compile a real program — from a directory outside the
-    // checkout, which is the shape that has no common root — and hold the tree
-    // it emitted to its own `require_once` lines.
     \mkdir($work . '/app/src', 0777, true);
     \file_put_contents(
         $work . '/app/src/App.mog',

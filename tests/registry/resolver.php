@@ -1,10 +1,14 @@
 <?php declare(strict_types=1);
 
-// The resolver, against an in-memory catalog so no registry is needed: the
-// greedy walk answers the common case, and the CDCL fallback is what rescues a
-// dead end the greedy walk cannot undo (a newest release whose dependency does
-// not exist). The error a human reads still comes from the greedy walk, so it
-// names the chains in play rather than a learned clause.
+/**
+ * Exercise the resolver against an in-memory catalog, without a registry.
+ * The greedy walk handles the common case; CDCL fallback recovers from
+ * dead ends it cannot undo, such as a newest release with a missing
+ * dependency.
+ *
+ * Human-readable errors still come from the greedy walk, preserving the
+ * relevant dependency chains rather than exposing learned clauses.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
@@ -76,11 +80,9 @@ $assert(\str_contains($result['error'] ?? '', 'cannot satisfy `c`'), 'the error 
 $assert(\str_contains($result['error'] ?? '', 'a -> c') && \str_contains($result['error'] ?? '', 'b -> c'), 'the error names both demanding chains: ' . ($result['error'] ?? ''));
 $assert(cdclResolve($conflict, ['a' => '>=1', 'b' => '>=1']) === null, 'the CDCL core agrees the request is unsatisfiable');
 
-// --- an unknown package is its own message -----------------------------------
 $result = resolveWith($entryFor(['a' => ['1.0.0' => []]]), ['nope' => '>=1']);
 $assert(! $result['ok'] && \str_contains($result['error'] ?? '', 'unknown package `nope`'), 'an unknown root package is named: ' . ($result['error'] ?? ''));
 
-// --- pre-release ordering reaches the resolver -------------------------------
 $result = resolveWith(
     $entryFor(['a' => ['1.0.0-alpha' => [], '1.0.0' => []]]),
     ['a' => '>=1.0.0-alpha'],
@@ -91,15 +93,9 @@ $assert(
     'a floor the pre-release sits below excludes it',
 );
 
-// --- a self-referential dependency does not loop -----------------------------
 $result = resolveWith($entryFor(['a' => ['1.0.0' => ['a' => '>=1.0.0']]]), ['a' => '>=1']);
 $assert($result['ok'] && $result['chosen'] === ['a' => '1.0.0'], 'a package depending on itself resolves once');
 
-// --- randomized differential check against a brute-force oracle --------------
-// A hand-built case proves the CDCL core handles one shape; random small worlds
-// check that whatever it says is *true*: a returned choice must satisfy every
-// constraint along the closure it reaches, and a refusal must mean no assignment
-// of the same names does. A greedy-only walk would fail the second half.
 $valid = static function (array $chosen, array $packages, array $rootDeps): bool {
     foreach ($rootDeps as $name => $constraint) {
         if (! isset($chosen[$name]) || ! satisfies($chosen[$name], $constraint)) {

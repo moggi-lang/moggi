@@ -1,15 +1,17 @@
 <?php declare(strict_types=1);
 
-// A registry that does not serve `blobs/<digest>` is not a dead end: a release's
-// own `source` is the same bytes from another place, and `blob` is the check that
-// makes the origin irrelevant. These checks exercise the reproductions a client
-// will perform — an upstream archive and a git commit — plus the rule that a
-// registry-served blob still wins, and the transport policy that keeps a signed
-// record from talking a client into reading its own disk.
-//
-// A `source` URL must be `https`, so the archive cases fetch through the injected
-// `$fetch` a client is given rather than a network: what is being tested is the
-// unpack, the re-pack and the digest comparison, not the socket.
+/**
+ * A registry without `blobs/<digest>` can still serve a release through
+ * its own `source`: `blob` verifies the bytes regardless of origin.
+ *
+ * Cover upstream archive and git-commit retrieval, registry-blob
+ * precedence, and the transport rule preventing a signed record from
+ * directing the client to read local files.
+ *
+ * Source URLs must use HTTPS. Archive tests inject `$fetch` rather than
+ * using the network, exercising unpacking, re-packing, and digest
+ * verification independently of the socket.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {

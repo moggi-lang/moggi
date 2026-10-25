@@ -40,6 +40,10 @@ final class CheckedFunction
      *   evidence site in the declaration's elaboration, in walk order, each
      *   naming its site's source origin; a category declaration is lowered from
      *   these, never from the site's own evidence fields
+     * @param array<string, string> $parameterKinds the kind this declaration's own signature fixed for
+     *   each of its type parameters, by parameter name. The kinds are the declaration's, not the
+     *   module's: two declarations may spell one name at different kinds, and this map is built inside
+     *   the declaration's kind scope so neither reaches the other
      */
     public function __construct(
         public readonly string $name,
@@ -49,6 +53,7 @@ final class CheckedFunction
         public readonly array $residuals,
         public readonly array $terms = [],
         public readonly array $bodyEvidence = [],
+        public readonly array $parameterKinds = [],
     ) {
     }
 
@@ -73,6 +78,7 @@ final class CheckedFunction
             $this->residuals,
             $terms,
             $bodyEvidence,
+            $this->parameterKinds,
         );
     }    /**
      * This record with a different evidence vector — the same declaration, the
@@ -90,6 +96,7 @@ final class CheckedFunction
             $this->residuals,
             $this->terms,
             $this->bodyEvidence,
+            $this->parameterKinds,
         );
     }
 
@@ -314,12 +321,19 @@ function checkedCoreFor(TypeCheckState $state, array $items, string $module): Ch
 
         assertNoPendingConstraintsInExpr($state, $item->body, $item);
 
+        $fixedKinds = $state->checkedParameterKinds[\spl_object_id($item)] ?? [];
+        $parameterKinds = [];
+        foreach ($scheme->bound as $parameter) {
+            $parameterKinds[$parameter] = $fixedKinds[$parameter] ?? 'Type';
+        }
+
         $functions[$item->name] = new CheckedFunction(
             $item->name,
             $origin,
             $scheme->withPruned(prune($state, $scheme->type), $scheme->constraints, $scheme->freeTypeVars),
             $evidence,
             residualsFor($state, $item, $origin),
+            parameterKinds: $parameterKinds,
         );
     }
 

@@ -1,10 +1,13 @@
 <?php declare(strict_types=1);
 
-// `check` holds hand-written `foreign` against the `[ffi] bindings` a package
-// declares: uncovered foreign warns, and once bindings exist the shape of the
-// declaration is checked instead (malformed entries, narrowed backends with
-// nothing bound, facades pointing at missing modules, several bound backends
-// with no facade). All warnings — a package `check` passes may bind nothing.
+/**
+ * `check` compares hand-written `foreign` declarations with a package's
+ * `[ffi.bindings]`: uncovered foreign declarations warn, while declared
+ * bindings trigger structural checks for malformed entries, narrowed
+ * backends with no bindings, missing facade modules, and multiple bound
+ * backends without a facade. All findings are warnings; a passing package
+ * need not bind anything.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {

@@ -1,7 +1,9 @@
 <?php declare(strict_types=1);
 
-// A function's IR location is the start of its body, not its signature: backends record it as the
-// function's debug line, so a signature position would point a runtime frame at the type annotation.
+/**
+ * A function's IR location is the start of its body, not its signature: backends record it as the
+ * function's debug line, so a signature position would point a runtime frame at the type annotation.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {

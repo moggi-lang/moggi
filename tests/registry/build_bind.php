@@ -1,14 +1,17 @@
 <?php declare(strict_types=1);
 
-// Bindings Phase 4: `build --bind` turns `[ffi] bindings` into library roots.
-// One targeted test only, on the PHP binder (no host tool needed — reflection
-// runs in-process): the descriptor round-trip of `[ffi]`, the per-backend
-// filter, the marker hit/miss/staleness contract of `bindForBuild`, the
-// compile+run against the generated root, the .NET sidecar fold in the emit
-// discriminator, and `cache clear bindings` end to end. `moggi build --bind`
-// itself needs a signed registry and a lock, so the CLI glue (flag to
-// `bindDeclaredForBuild` to `--lib`) is covered by reading, and by the
-// `--help` surface assert below — everything the flag feeds on is run here.
+/**
+ * Bindings Phase 4: `build --bind` turns `[ffi] bindings` into library roots.
+ *
+ * One targeted PHP binder test (reflection runs in-process, no host toolchain)
+ * covers descriptor round-trip, backend filtering, `bindForBuild` marker
+ * hit/miss/staleness, compile and run against the generated root, .NET
+ * sidecar cache discrimination, and `cache clear bindings`.
+ *
+ * `moggi build --bind` requires a signed registry and lock, so CLI wiring
+ * is covered by source inspection and the `--help` assertion; all inputs
+ * consumed by the flag are exercised here.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {

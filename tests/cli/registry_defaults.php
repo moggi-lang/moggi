@@ -1,10 +1,11 @@
 <?php declare(strict_types=1);
 
-// Reads and writes are two origins: the tree is static and is served from the
-// read host, while the API that accepts a signed write answers on its own host.
-// The signature binds the host, so a write sent to the read origin is refused
-// rather than redirected — which makes the default each verb resolves a
-// correctness question, not a convenience.
+/**
+ * Reads and writes use separate origins: the static tree is served by the
+ * read host, while signed writes go to the API host. Since signatures bind
+ * the host, writes cannot be redirected from the read origin. Each verb's
+ * default origin is therefore a correctness requirement, not a convenience.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {

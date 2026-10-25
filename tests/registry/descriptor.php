@@ -1,13 +1,14 @@
 <?php declare(strict_types=1);
 
-// The descriptor's metadata: the four `[package]` fields plan 3 adds, and the
-// absence of the old `format` integer. `descriptorProblems()` is the one gate a
-// descriptor passes, so every check goes through it — an accepted descriptor
-// reads back through `readDescriptor()`, and a rejected one names the field.
-//
-// A descriptor carries no `format` of its own. One that writes it is refused as
-// a key the closed schema does not declare, which is the sentence to keep, and
-// not the old "unsupported descriptor format" one.
+/**
+ * Cover the four `[package]` metadata fields introduced in plan 3 and the
+ * absence of the legacy `format` integer. Every case goes through
+ * `descriptorProblems()`: accepted descriptors round-trip through
+ * `readDescriptor()`, rejected ones identify the offending field.
+ *
+ * The schema declares no `format` key, so descriptors containing it are
+ * rejected as an undeclared key, not as an unsupported format.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
@@ -58,7 +59,6 @@ try {
     };
     $problems = static fn (string $path): string => \implode("\n", descriptorProblems($path));
 
-    // --- no `format`, and a maintainer that defaults --------------------------
     $plain = $write('plain', '', "[lib]\nsource-dirs = .\n");
     $assert(descriptorProblems($plain) === [], 'a descriptor without `format` is valid: ' . $problems($plain));
     $read = readDescriptor($plain);
@@ -67,7 +67,6 @@ try {
     $assert($read['keywords'] === [], 'omitted keywords read as an empty list');
     $assert($read['maintainer'] === 'test@example.com', 'the maintainer defaults to the first author email');
 
-    // --- `format` is gone, and refused as an undeclared key -------------------
     $formatted = $write('formatted', "format = 1\n");
     $assert(\str_contains($problems($formatted), 'does not take `format`'), '`format` is refused as an undeclared key');
     $assert(! \str_contains($problems($formatted), 'unsupported descriptor format'), 'the removed format check no longer speaks');

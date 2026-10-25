@@ -14,7 +14,7 @@ use function Moggi\Semantics\IntrinsicRegistry\primopForPublicOperator;
 use function Moggi\Semantics\IntrinsicRegistry\schemeArity;
 use function Moggi\Semantics\IntrinsicRegistry\shortCircuitPrimop;
 use function Moggi\Semantics\IntrinsicRegistry\typeSchemes;
-use function Moggi\Semantics\IoBoundary\isIoType;
+use function Moggi\Semantics\IoBoundary\isIoCheckedType;
 use function Moggi\Semantics\Kernel\boolFalseCtor;
 use function Moggi\Semantics\Kernel\boolTrueCtor;
 use function Moggi\Semantics\Types\bindingGroupSccs;
@@ -413,7 +413,7 @@ function lowerDictMethodPartial(Ast\Apply $expr, LowerCtx $ctx): ?Operand
         return null;
     }
 
-    $missing = remainingArity($ctx, $expr->inferredType);
+    $missing = remainingArity($expr->inferredInternalType);
     if ($missing <= 0 && $callee->methodArity !== null) {
         $applied = 0;
         $spine = $expr;
@@ -440,21 +440,19 @@ function lowerDictMethodPartial(Ast\Apply $expr, LowerCtx $ctx): ?Operand
 
 /**
  * How many user-facing arrows an expression's type still has -- the arguments
- * it is still waiting for. 0 when the type is not known here. The typechecker
- * leaves either the internal type or the surface type it was written from, and
- * both carry the arrow spine.
+ * it is still waiting for. 0 when the type is not known here.
+ *
+ * A term's type is the checker's internal type; a declaration's signature is
+ * still the surface type it was written as. Both carry the arrow spine, so the
+ * one counting here does not care which it was handed.
  */
-function remainingArity(LowerCtx $ctx, ?Ast\TypeNode $type): int
+function remainingArity(Ast\TypeNode|TypeExpr\Type|null $type): int
 {
     $remaining = 0;
     while (true) {
         if ($type instanceof Ast\TypeArrow) {
             $type = $type->to;
-        } elseif ($type instanceof TypeExpr\Type) {
-            $type = prune($ctx->state, $type);
-            if (! ($type instanceof TypeExpr\TArrow)) {
-                return $remaining;
-            }
+        } elseif ($type instanceof TypeExpr\TArrow) {
             $type = $type->to;
         } else {
             return $remaining;
@@ -1147,7 +1145,7 @@ function lowerFieldAccess(Ast\FieldAccess $expr, LowerCtx $ctx): Operand
 
 function astExprReturnsIo(Ast\AstNode $expr): bool
 {
-    $type = $expr->inferredType;
+    $type = $expr->inferredInternalType;
 
-    return $type !== null && isIoType($type);
+    return $type !== null && isIoCheckedType($type);
 }

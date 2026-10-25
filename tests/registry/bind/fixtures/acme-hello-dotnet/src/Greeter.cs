@@ -1,19 +1,19 @@
 namespace Acme.Hello;
 
-/// <summary>
-/// Fixture third-party class for `moggi bind` Phase 3: a static method, an
-/// instance method, a constructor, a constant, a static property, a nominal
-/// factory in both argument and result position, and the exact case the
-/// sidecar exists for — an instance method with an optional parameter, whose
-/// declaration passes the required prefix while the sidecar carries the full
-/// IL list and the optional tail the emitter pads.
-/// </summary>
+/**
+ * Fixture third-party class for `moggi bind` Phase 3. Covers static and
+ * instance methods, a constructor, constant, static property, and nominal
+ * factories in argument and result positions.
+ *
+ * Also covers the sidecar's key case: an instance method with an optional
+ * parameter. The declaration exposes the required prefix; the sidecar
+ * carries the full IL parameter list, including the optional tail that
+ * the emitter pads.
+ */
 public class Greeter
 {
     public static readonly string Version = "1.0.0";
 
-    // A C# const has no runtime field to load, so the binder skips it with
-    // its reason; the hand-written overlay would name the value instead.
     public const int VersionMajor = 1;
 
     public static string Tag => "hello";
@@ -30,15 +30,11 @@ public class Greeter
         return "Hello, " + name + "!";
     }
 
-    // Overload of Greet: one Moggi name cannot spell two members, so the
-    // binder keeps the first and reports this one as skipped.
     public static string Greet(string name, int times)
     {
         return Greet(name) + " x" + times;
     }
 
-    // `byte` has no Moggi counterpart, so this member is skipped with its
-    // reason rather than bound from a guessed type.
     public static string GreetLevel(string name, byte level)
     {
         return Greet(name) + " #" + level;

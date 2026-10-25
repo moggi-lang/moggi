@@ -6,10 +6,10 @@ use function Moggi\Backend\backendById;
 
 use Moggi\Cache;
 use Moggi\Modules;
+use Moggi\Modules\InstanceWorld;
 
 use function Moggi\Modules\buildImportContext;
 use function Moggi\Modules\computeEffectiveFixityByModule;
-use function Moggi\Modules\indexProjectInstances;
 use function Moggi\Modules\injectPreludeImport;
 use function Moggi\Modules\moduleFacadeExtraTypes;
 use function Moggi\Modules\moduleNameToNamespace;
@@ -257,9 +257,7 @@ function prepareInteractive(State $state, string $extra = '', bool $normalizeIo 
         break;
     }
     $projectClasses = $sampleCtx->classes;
-    $projectInstances = $sampleCtx->projectInstances;
-    $projectInstanceIndex = $sampleCtx->projectInstanceIndex
-        ?? indexProjectInstances($projectInstances);
+    $instanceWorld = InstanceWorld::forUnits($units);
 
     $outputRelative = moduleNameToPath($moduleName)
         . backendById($state->backend)->extension();
@@ -281,13 +279,12 @@ function prepareInteractive(State $state, string $extra = '', bool $normalizeIo 
     )->withProjectScopes(
         $projectClasses,
         [],
-        $projectInstances,
-        $projectInstanceIndex,
+        $instanceWorld,
         $moduleName,
     );
     $importContext = $importContext->withInterface(
         $importContext->interface->withExtraTypes(
-            moduleFacadeExtraTypes($units, $moduleName, $projectClasses, $projectInstanceIndex),
+            moduleFacadeExtraTypes($units, $moduleName, $projectClasses, $instanceWorld->index()),
         ),
     );
 

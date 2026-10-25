@@ -22,10 +22,16 @@
  *   byte-identical: lowering reads the plans, never the nodes;
  * - the product survives the module product's own encoding. It has to: a module
  *   read back from `cache/modulePut('checked')` lowers from the same record;
+ * - the term→type table is the checker's internal type per term, not the
+ *   surface projection: scrubbing every `inferredType` in a recorded
+ *   declaration's elaborated tree and re-publishing leaves the table intact;
  * - lowering a category function with no record is refused, never re-derived
  *   from the surface tree;
  * - a same-named instance method does not take over the exported scheme of a
- *   declaration the record owns (`Data.Map.null` beside `Foldable.null`).
+ *   declaration the record owns (`Data.Map.null` beside `Foldable.null`);
+ * - the record states the kind of each of its scheme's parameters (H2), and the
+ *   kinds are the declaration's own: `f` is `Type -> Type` under `Holder` and
+ *   `Type` in the sibling that spells the same name.
  */
 
 $root = __DIR__;
@@ -53,7 +59,7 @@ $check = static function (bool $condition, string $message) use (&$failures): vo
 };
 
 $source = <<<'MOG'
-module Main (twice, shown, both, projected, bigness, bound, chosen, listed, countdown, main) where
+module Main (twice, shown, both, projected, bigness, bound, chosen, listed, hollow, keyed, countdown, main) where
 
 class Tagged a where
   tag :: a -> Int
@@ -106,6 +112,15 @@ listed n xs = lookup n xs
 class Peek f where
   bigness :: f a -> Int
 
+-- H2: a parameter's kind is its own declaration's. `Holder`'s parameter is
+-- `Type -> Type`, so `hollow`'s `f` is too; `keyed` spells the same name at
+-- `Type` in a sibling declaration and neither answer reaches the other.
+class Holder f where
+  hold :: f Int -> Int
+
+instance Holder Maybe where
+  hold _ = 0
+
 data Box a = Box a
 
 instance Peek Box where
@@ -113,6 +128,12 @@ instance Peek Box where
 
 bigness :: Box Int -> Int
 bigness box = 9
+
+hollow :: Holder f => f Int -> Int
+hollow x = hold x
+
+keyed :: Tagged f => f -> Int
+keyed x = tag x
 
 -- Not the category: inferred, and recursive with a signature.
 inferred x = twice x
@@ -152,7 +173,7 @@ try {
     $names = $core === null ? [] : \array_keys($core->functions);
     \sort($names);
     $check(
-        $names === ['bigness', 'both', 'bound', 'chosen', 'listed', 'main', 'projected', 'shown', 'twice'],
+        $names === ['bigness', 'both', 'bound', 'chosen', 'hollow', 'keyed', 'listed', 'main', 'projected', 'shown', 'twice'],
         'the category is annotated nonrecursive ordinary functions, got: ' . \implode(', ', $names),
     );
     $check(
@@ -239,6 +260,29 @@ try {
         $check($paired, 'every slot pairs its wanted obligation with the given dictionary that discharges it');
     }
 
+    // ---- H2: the record states the kind of each of its own parameters ----
+
+    $hollow = $core?->function('hollow');
+    $check($hollow !== null, '`hollow` has no checked record');
+    $check(
+        $hollow?->parameterKinds === ['f' => 'Type -> Type'],
+        'the record publishes the kind `Holder` fixed for its parameter, got: '
+            . \json_encode($hollow?->parameterKinds),
+    );
+
+    $keyed = $core?->function('keyed');
+    $check($keyed !== null, '`keyed` has no checked record');
+    $check(
+        $keyed?->parameterKinds === ['f' => 'Type'],
+        'the same parameter name in a sibling declaration is its own declaration\'s kind, got: '
+            . \json_encode($keyed?->parameterKinds),
+    );
+
+    $check(
+        $twice?->parameterKinds === ['a' => 'Type'],
+        'a parameter no declaration fixed is `Type`, got: ' . \json_encode($twice?->parameterKinds),
+    );
+
     $shown = $core?->function('shown');
     $check($shown !== null, '`shown` has no checked record');
     if ($shown !== null) {
@@ -261,7 +305,50 @@ try {
         );
     }
 
-    // One consumer: lowering reads the record's evidence vector.
+    $termsBefore = [];
+    foreach ($core?->functions ?? [] as $name => $record) {
+        $termsBefore[$name] = \array_map(
+            static fn (array $term): string => $term['origin'] . ' => ' . Types\typeToString($term['type']),
+            $record->terms,
+        );
+    }
+    $check($termsBefore !== [] && $termsBefore['twice'] !== [], 'the fixture published no term table to compare');
+
+    $projections = [];
+    foreach ($program->items as $item) {
+        if (! $item instanceof Ast\FunctionDecl || $core?->function($item->name) === null) {
+            continue;
+        }
+        $scrubProjection = static function (Ast\AstNode $node) use (&$projections): void {
+            if ($node->inferredType !== null) {
+                $projections[] = [$node, $node->inferredType];
+                $node->inferredType = new Ast\TypeCon('Scrubbed');
+            }
+        };
+        foreach ($item->params as $param) {
+            Modules\walkElaboration($param, $scrubProjection);
+        }
+        Modules\walkElaboration($item->body, $scrubProjection);
+    }
+    $check($projections !== [], 'the elaboration carries no surface type projection for a recorded term');
+
+    Modules\publishElaboration($program);
+    foreach ($termsBefore as $name => $expected) {
+        $after = \array_map(
+            static fn (array $term): string => $term['origin'] . ' => ' . Types\typeToString($term['type']),
+            $program->core?->function($name)?->terms ?? [],
+        );
+        $check(
+            $after === $expected,
+            "the term table of `{$name}` is still read off the surface projection: scrubbing it changed the table",
+        );
+    }
+
+    foreach ($projections as [$node, $projection]) {
+        $node->inferredType = $projection;
+    }
+    Modules\publishElaboration($program);
+
     $ir = IR\lower($program, $program->interface->data, $path);
     $irTwice = null;
     foreach ($ir->functions as $function) {
@@ -277,7 +364,6 @@ try {
         );
     }
 
-    // The record is the authority: substituting its binder changes the IR.
     if ($twice !== null) {
         $substituted = $twice->withEvidence([[
             'wanted' => 'Tagged(a)',
@@ -301,10 +387,6 @@ try {
         $program->core = $core;
     }
 
-    // The body's evidence applications are the record's as well. Every evidence
-    // site in a recorded declaration's body has a plan, the plan names the
-    // site's source origin, and scrubbing the site's own fields cannot change
-    // the emitted IR — lowering reads the record, not the elaborated node.
     $sites = [];
     foreach ($program->items as $item) {
         if (! $item instanceof Ast\FunctionDecl || $core?->function($item->name) === null) {
@@ -369,9 +451,6 @@ try {
         );
     }
 
-    // The two shapes are planned differently: a superclass obligation is a
-    // parameter of the declaration, an instance-selected method is a projection
-    // of the instance's builder.
     $bothPlans = $core?->function('both')?->bodyEvidence ?? [];
     $bothKinds = \array_map(static fn ($plan): string => $plan->kind->name, $bothPlans);
     $check(
@@ -428,7 +507,6 @@ try {
             . ($core?->function('bigness') === null ? 'no record' : Types\typeToString($core->function('bigness')->scheme->type)),
     );
 
-    // The product travels with the module product: a cache read lowers from it.
     $round = \unserialize(\serialize($program));
     $roundCore = $round instanceof Ast\Program ? $round->core : null;
     $check($roundCore instanceof CheckedCore, 'the record does not survive the module product encoding');
@@ -438,8 +516,6 @@ try {
         'the record read back from its encoding lost its evidence vector',
     );
 
-    // The scrub that proves it lives last: it mutates the elaborated tree, and
-    // everything above must have run on the tree the checker handed over.
     $pristine = IR\Dump\dump($ir);
     $check(
         \str_contains($pristine, '__ev_Eq_Int'),
@@ -450,9 +526,6 @@ try {
             )),
     );
 
-    // The scrub drops every fact lowering is not allowed to read: the vector, the
-    // instance it came from, the site's own context *and* its class name (which is
-    // what a re-derived builder symbol would be computed from).
     foreach ($sites as $declarationSites) {
         foreach ($declarationSites as $site) {
             $site->class = 'Scrubbed';
@@ -474,7 +547,6 @@ try {
         'lowering still reads the elaborated node\'s evidence fields: scrubbing them changed the IR',
     );
 
-    // No fallback: a category declaration without a record is refused.
     $program->core = null;
     $refused = '';
     try {

@@ -1,12 +1,12 @@
 <?php declare(strict_types=1);
 
-// `moggi takeover` files a public takeover request over the signed write
-// transport, and — as an admin — decides one. These checks drive the real CLI
-// against a throwaway endpoint that verifies the same schnorr signature the
-// registry does, so the request a real registry would accept is the one the
-// client actually sent: the route, the body, and the identity. Without the
-// `schnorr` binary the signing half cannot run and the checks are reported as
-// skipped rather than faked.
+/**
+ * `moggi takeover` files a public takeover request over the signed write
+ * transport and lets an admin decide one. These checks drive the real CLI
+ * against a throwaway endpoint that verifies registry-compatible Schnorr
+ * signatures, validating the actual route, body, and identity. Without the
+ * `schnorr` binary, signing checks are skipped rather than faked.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
@@ -24,15 +24,13 @@ $assert = static function (bool $condition, string $message) use (&$checks): voi
     }
 };
 
-$binary = \getenv('MOGGI_SCHNORR');
-if (! \is_string($binary) || $binary === '') {
-    $binary = $root . '/schnorr/schnorr';
-}
-if (! \is_file($binary) || ! \is_executable($binary)) {
-    $binary = $root . '/schnorr/build/schnorr';
-}
-if (! \is_file($binary) || ! \is_executable($binary)) {
-    echo "takeover command tests skipped (no schnorr CLI; set MOGGI_SCHNORR)\n";
+require $root . '/src/compiler.php';
+
+use function Moggi\Registry\schnorrBinary;
+
+$binary = schnorrBinary();
+if ($binary === null) {
+    echo "takeover command tests skipped (no schnorr CLI)\n";
     exit(0);
 }
 
@@ -48,20 +46,19 @@ $keyFile = $work . '/key.nsec';
 \chmod($keyFile, 0600);
 
 $env = \getenv();
-$env['MOGGI_SCHNORR'] = $binary;
 $env['MOGGI_CACHE_DIR'] = $work . '/cache';
 seedCacheDir($env['MOGGI_CACHE_DIR']);
 $env['MOGGI_USER_CACHE'] = $work . '/user-cache';
-unset($env['MOGGI_REGISTRY_NPUB'], $env['MOGGI_ALLOW_STALE_REGISTRY'], $env['MOGGI_NSEC_FILE']);
+unset($env['MOGGI_REGISTRY_NPUB'], $env['MOGGI_NSEC_FILE']);
 
-$router = $work . '/router.php';
-\file_put_contents($router, fakeRegistryRouterSource($root));
 $log = $work . '/requests.log';
+$router = $work . '/router.php';
+\file_put_contents($router, fakeRegistryRouterSource($root, $log));
 
 $server = null;
 
 try {
-    $server = startFakeRegistry($router, $log, $env);
+    $server = startFakeRegistry($router, $env);
     $base = 'http://127.0.0.1:' . $server['port'];
 
     $cli = static fn (array $arguments, ?string $cwd = null): array => runCompiledProcess(
