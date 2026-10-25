@@ -2,6 +2,8 @@
 
 namespace Moggi\Modules;
 
+use Moggi\Cache;
+use Moggi\Pipeline\CompilationContext;
 use Moggi\Semantics\TypeExpr\Scheme;
 use Moggi\Syntax\Ast;
 
@@ -36,6 +38,49 @@ final class PreparedProject
         public readonly array $checked,
         public readonly array $importContexts,
     ) {
+    }
+
+    /** Whether this project prepared the module at all (checked, synthetic, or read from cache). */
+    public function has(string $moduleName): bool
+    {
+        return isset($this->checked[$moduleName]) || isset($this->importContexts[$moduleName]);
+    }
+
+    /**
+     * The checked program to lower one module from.
+     *
+     * A project that released its checked programs (`prepareProject(..., releaseChecked: true)`)
+     * holds each module's product on disk and not in memory, so the program is read back here — the
+     * same read the next compile of that module would do, and the one record `Cache\modulePut('checked')`
+     * wrote. It is a refusal, not a fallback, when the entry cannot answer: a product that was released
+     * and then lost means the caller is lowering a module nobody has.
+     */
+    public function program(string $moduleName, CompilationContext $context): Ast\Program
+    {
+        $held = $this->checked[$moduleName] ?? null;
+        if ($held instanceof Ast\Program) {
+            return $held;
+        }
+
+        $unit = $this->units[$moduleName] ?? null;
+        $contentKey = \is_array($unit) ? ($unit['contentKey'] ?? null) : null;
+        $relPath = \is_array($unit) ? ($unit['cacheRelPath'] ?? null) : null;
+        if ($contentKey !== null && $relPath !== null) {
+            $cached = Cache\moduleGet(
+                $relPath,
+                'checked',
+                $context->moduleKey($moduleName, $contentKey),
+                $context->backendId,
+            );
+            if (\is_array($cached) && ($cached['program'] ?? null) instanceof Ast\Program) {
+                return $cached['program'];
+            }
+        }
+
+        throw new \RuntimeException(
+            "the prepared project `{$moduleName}` carries no checked program and its module cache entry"
+            . ' does not either; a released program cannot be invented from the source tree',
+        );
     }
 }
 

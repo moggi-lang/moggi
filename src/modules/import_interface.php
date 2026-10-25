@@ -2,7 +2,11 @@
 
 namespace Moggi\Modules;
 
+use Moggi\Semantics\Deriving\ClassDeriveFacts;
 use Moggi\Semantics\TypeExpr\Scheme;
+use Moggi\Syntax\Ast;
+
+use function Moggi\Semantics\Registry\projectInstancesFromProgram;
 
 /**
  * The facts one module *imports*, in one value.
@@ -224,12 +228,32 @@ final class ImportInterface
 /**
  * The import context of a module that imports nothing: one source checked on its
  * own. The import interface is empty, not absent, so no consumer needs a null check,
- * and the target layout is empty because there is nothing to place.
+ * the target layout is empty because there is nothing to place, and the instance
+ * world is the module's own declarations — a module checked on its own is its own
+ * project, and saying so is the same fact `prepareProject` states for a project of
+ * one.
  */
-function standaloneImportContext(string $module, string $backendId): ImportContext
+function standaloneImportContext(Ast\Program $program, string $backendId): ImportContext
 {
+    $module = $program->module ?? '';
+    $classDecls = [];
+    foreach ($program->items as $item) {
+        if ($item instanceof Ast\ClassDecl) {
+            $classDecls[] = $item;
+        }
+    }
+
     return new ImportContext(
         interface: ImportInterface::withoutImports($module),
         plan: EmitPlan::forTarget($backendId, ''),
+        instanceWorld: InstanceWorld::over(
+            projectInstancesFromProgram(
+                $program,
+                ClassDeriveFacts::fromClassDeclarations($classDecls),
+                $module,
+            ),
+            [$module],
+        ),
+        currentModule: $module,
     );
 }

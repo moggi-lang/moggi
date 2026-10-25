@@ -579,6 +579,7 @@ function buildImportContext(
     string $currentOutputRelative,
     string $rootPrefix,
     string $backendId,
+    InstanceWorld $instanceWorld,
 ): ImportContext {
     $planPhpImports = $backendId === 'php';
     $outputExtension = backendById($backendId)->extension();
@@ -846,6 +847,7 @@ function buildImportContext(
     );
 
     return new ImportContext(
+        instanceWorld: $instanceWorld,
         interface: new ImportInterface(
             module: $currentModule,
             env: $env,

@@ -81,10 +81,14 @@ final class InstanceWorld
     /**
      * The world the given units declare, over a canonical module set.
      *
-     * `$moduleNames` defaults to every non-synthetic unit — the modules a
-     * preparation accepted as its project — so every route that prepares the
-     * same paths asks for the same set without restating it. Synthetic compiler
-     * units declare no instances and are not part of a project.
+     * `$moduleNames` defaults to every non-synthetic unit the preparation
+     * parsed — the modules this route actually read — so every route that
+     * prepares the same paths asks for the same set without restating it. A
+     * module that was not parsed declares instances nothing can see, so naming
+     * it would claim coverage the identity does not have; a caller that passes
+     * such a module explicitly is refused by the collector rather than served a
+     * world with a hole in it. Synthetic compiler units declare no instances and
+     * are not part of a project.
      *
      * @param array<string, array<string, mixed>> $units
      * @param list<string>|null $moduleNames
@@ -94,9 +98,11 @@ final class InstanceWorld
         if ($moduleNames === null) {
             $moduleNames = [];
             foreach ($units as $name => $unit) {
-                if (($unit['synthetic'] ?? false) !== true) {
-                    $moduleNames[] = (string) $name;
+                if (($unit['synthetic'] ?? false) === true || ($unit['parsed'] ?? false) !== true) {
+                    continue;
                 }
+
+                $moduleNames[] = (string) $name;
             }
         }
 

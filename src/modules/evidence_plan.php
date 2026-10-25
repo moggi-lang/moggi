@@ -68,8 +68,7 @@ final class EvidencePlan
  *
  * The site's fields are the checker's elaboration, written when it resolved the
  * reference. This is the **only** read of them: it runs once, while the check is
- * live, and publishes values, so lowering never looks at the node again (the
- * evidence adapter that used to read them, `migrations.md` row 4, is deleted).
+ * live, and publishes values, so lowering never looks at the node again.
  * A context entry is a dictionary the instance itself needs: either an ambient
  * parameter or another projected instance, and anything else is refused — an
  * unplannable entry would otherwise be lowered as if it were one of those two.

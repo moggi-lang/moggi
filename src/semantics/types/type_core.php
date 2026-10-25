@@ -1174,44 +1174,6 @@ function zonkInferredTypesInPattern(TypeCheckState $state, ?Ast\AstNode $pattern
     };
 }
 
-/**
- * Lenient AST→internal conversion for inferredType snapshots (no kind checks).
- * Fresh HKT heads like `t0` are ordinary TCon names; prune rewrites them.
- */
-function inferredTypeAstToInternal(Ast\TypeNode $type): Type
-{
-    return match ($type::class) {
-        Ast\TypeVar::class => new TVar($type->name),
-        Ast\TypeUnit::class => new TUnit(),
-        Ast\TypeCon::class => new TCon($type->name),
-        Ast\TypePromoted::class => new TPromoted($type->name),
-        Ast\TypeStringLit::class => new TStringLit($type->value),
-        Ast\TypeNatLit::class => new TNatLit(canonicalNatDigits($type->digits)),
-        Ast\TypeApp::class => (static function () use ($type): Type {
-            $args = \array_map(inferredTypeAstToInternal(...), $type->args);
-            if ($type->con instanceof Ast\TypePromoted) {
-                return new TPromoted($type->con->name, $args);
-            }
-
-            return match ($type->con::class) {
-                Ast\TypeVar::class => new TVarApp($type->con->name, $args),
-                Ast\TypeCon::class => new TCon($type->con->name, $args),
-                default => throw new \InvalidArgumentException(
-                    'unexpected inferred type app head: ' . $type->con::class,
-                ),
-            };
-        })(),
-        Ast\TypeArrow::class => new TArrow(
-            inferredTypeAstToInternal($type->from),
-            inferredTypeAstToInternal($type->to),
-        ),
-        Ast\TypeConstrained::class => inferredTypeAstToInternal($type->body),
-        default => throw new \InvalidArgumentException(
-            'unexpected inferred type node: ' . $type::class,
-        ),
-    };
-}
-
 function occurs(TypeCheckState $state, string $var, Type $type, ?Ast\AstNode $at = null): void
 {
     $type = prune($state, $type);

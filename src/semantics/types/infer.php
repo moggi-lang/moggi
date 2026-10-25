@@ -424,6 +424,9 @@ function settleCheckedBody(
     );
     $fn->typeInferred = ! $hadDeclaredSignature;
     $userFnType = peelDictArrows($fnType, \count($group->dicts));
+    if (! \array_key_exists(\spl_object_id($fn), $state->checkedParameterKinds)) {
+        $state->checkedParameterKinds[\spl_object_id($fn)] = Kinds\declarationParameterKinds($state, $userFnType);
+    }
     $prunedUserConstraints = refreshConstraintArgs($state, $group->user);
     $prunedDicts = refreshConstraintArgs($state, $group->dicts);
     $checkedScheme = $restricted
@@ -1596,8 +1599,8 @@ function reportTypedHoles(TypeCheckState $state): void
     }
 
     $hole = $state->holes[0];
-    $type = $hole->inferredType !== null
-        ? inferredTypeAstToInternal($hole->inferredType)
+    $type = $hole->inferredInternalType !== null
+        ? $hole->inferredInternalType
         : freshType($state);
     $type = prune($state, $type);
     $rename = friendlyTypeVarNames([$type]);
@@ -1614,8 +1617,8 @@ function reportTypedHoles(TypeCheckState $state): void
         $related = [];
         for ($i = 1, $n = \count($state->holes); $i < $n; $i++) {
             $h = $state->holes[$i];
-            $ht = $h->inferredType !== null
-                ? typeToString(prune($state, inferredTypeAstToInternal($h->inferredType)), $rename)
+            $ht = $h->inferredInternalType !== null
+                ? typeToString(prune($state, $h->inferredInternalType), $rename)
                 : '?';
             $related[] = [
                 'message' => "also hole with type: `{$ht}`",
@@ -2855,9 +2858,9 @@ function argumentType(TypeCheckState $state, Ast\AstNode $argument, array $env):
         return $scheme instanceof Scheme ? $scheme->type : null;
     }
 
-    return $argument->inferredType === null
+    return $argument->inferredInternalType === null
         ? null
-        : astType($state, $argument->inferredType);
+        : prune($state, $argument->inferredInternalType);
 }
 
 /**
@@ -3203,12 +3206,12 @@ function resolveDeferredInfixPrimops(TypeCheckState $state, Ast\AstNode $expr): 
 
         $types = [];
         foreach ($operands as $operand) {
-            if ($operand->inferredType === null) {
+            if ($operand->inferredInternalType === null) {
                 return;
             }
 
             $types[] = canonicalPrimitiveType(
-                prune($state, inferredTypeAstToInternal($operand->inferredType)),
+                prune($state, $operand->inferredInternalType),
             );
         }
 
@@ -4032,8 +4035,8 @@ function restoreAmbientConstraints(TypeCheckState $state, array $saved): void
 function wrapDictLambda(TypeCheckState $state, Ast\AstNode $rhs, array $params, array $dictTypes): Ast\Lambda
 {
     $lambda = new Ast\Lambda($params, $rhs);
-    $fnType = $rhs->inferredType !== null
-        ? astType($state, $rhs->inferredType)
+    $fnType = $rhs->inferredInternalType !== null
+        ? prune($state, $rhs->inferredInternalType)
         : freshType($state);
     foreach (\array_reverse($dictTypes) as $dictType) {
         $fnType = new TArrow($dictType, $fnType);
@@ -4312,11 +4315,11 @@ function literalPatternIsOverloaded(TypeCheckState $state, Type $type): bool
 function overloadedLiteralPatternNode(TypeCheckState $state, Ast\AstNode $pattern, array &$tests, array &$env): Ast\AstNode
 {
     if ($pattern instanceof Ast\PatLit && \is_int($pattern->value)) {
-        $type = prune($state, inferredTypeAstToInternal($pattern->inferredType ?? throw typeFail(
+        $type = prune($state, $pattern->inferredInternalType ?? throw typeFail(
             $state,
             'literal pattern has no inferred type',
             $pattern,
-        )));
+        ));
         if (! literalPatternIsOverloaded($state, $type)) {
             return $pattern;
         }

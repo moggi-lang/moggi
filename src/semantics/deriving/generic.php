@@ -7,7 +7,25 @@ use Moggi\Syntax\Ast;
 
 use function Moggi\Semantics\Kernel\boolFalseCtor;
 use function Moggi\Semantics\Kernel\boolTrueCtor;
+use function Moggi\Semantics\Types\typeFail;
 use function Moggi\Syntax\isConstructorOperator;
+
+/**
+ * The module a derived `MetaData` names.
+ *
+ * `MetaData`'s second field is the declaring module, which a program can read at runtime
+ * (`moduleName`). A check that does not know which module it is checking cannot state it, and
+ * spelling `"Main"` instead is a wrong answer that looks right — the one failure mode a derived
+ * instance is worst at, because nothing downstream can tell it from a real one. So it is refused.
+ */
+function declaringModule(TypeCheckState $state, Ast\AstNode $at): string
+{
+    return $state->currentModule ?? throw typeFail(
+        $state,
+        'deriving `Generic` needs the module the declaration is checked in: `MetaData` names it',
+        $at,
+    );
+}
 
 /**
  * Stock `deriving Generic`: synthesize `instance Generic …` with
@@ -122,7 +140,7 @@ function typeApp(string $name, array $args): Ast\TypeNode
 
 function metaDataType(TypeCheckState $state, Ast\DataDecl $decl): Ast\TypeNode
 {
-    $module = $state->currentModule ?? 'Main';
+    $module = declaringModule($state, $decl);
     $isNewtype = $decl->isNewtype
         ? new Ast\TypePromoted(boolTrueCtor())
         : new Ast\TypePromoted(boolFalseCtor());
@@ -481,7 +499,7 @@ function deriveDatatypeInstance(
         [],
         [
             metaStringMethod('datatypeName', $ignored, $decl->name, $ref),
-            metaStringMethod('moduleName', $ignored, $state->currentModule ?? 'Main', $ref),
+            metaStringMethod('moduleName', $ignored, declaringModule($state, $ref), $ref),
             metaStringMethod('packageName', $ignored, 'moggi', $ref),
             new Ast\FunctionDecl(
                 'isNewtype',

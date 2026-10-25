@@ -2,42 +2,53 @@
 
 namespace Moggi\Modules;
 
-use function Moggi\Backend\compileBackend;
+/**
+ * Whole-project preparation: parses, type-checks, and caches every module in
+ * a closure, producing a `PreparedProject` ready to be lowered and emitted.
+ */
+
 
 use Moggi\Cache;
+use Moggi\Pipeline\CompilationContext;
+use Moggi\Semantics\Types\TypeError;
 
 use function Moggi\Paths\canonicalPath;
 use function Moggi\Paths\canonicalSeparators;
-
 use function Moggi\Paths\moduleNameToPath;
 use function Moggi\Semantics\Effects\checkAndNormalize;
 use function Moggi\Semantics\Types\clearInternedTypeNodes;
-
-use Moggi\Pipeline\CompilationContext;
-
-use Moggi\Semantics\Types\TypeError;
-
 use function Moggi\Syntax\Lexer\lex;
 use function Moggi\Syntax\Parser\importedFixityForImports;
 use function Moggi\Syntax\Parser\mergeFixity;
 use function Moggi\Syntax\Parser\parse;
 
 /**
- * Whole-project preparation: parses, type-checks, and caches every module in
- * a closure, producing a `PreparedProject` ready to be lowered and emitted.
- */
-
-/**
  * @param list<string> $paths
- * @param bool $shallow when true, build the import closure without loading
- *   checked programs: hydrated interfaces already carry final inferred
- *   schemes plus the elaboration facts (`facts` blob) importers read off
- *   checked programs, and the focus path that consumes a shallow base never
- *   lowers its modules. Skips straight to a fresh check when an interface is
- *   missing, so a cold cache still typechecks everything once.
+ * @param bool $shallow Build the import closure without loading checked
+ *   programs. Hydrated interfaces already contain final schemes and
+ *   elaboration facts; shallow-base modules are never lowered. Missing
+ *   interfaces trigger a fresh check, so cold caches still typecheck once.
+ * @param bool $releaseChecked Write checked programs to the module cache
+ *   and release them from memory; callers reload them via
+ *   {@see PreparedProject::program()} when lowering. This keeps whole-project
+ *   builds from retaining the entire closure (which exceeded 1 GB for
+ *   library builds). Requires the module cache, which is authoritative
+ *   in this mode.
  */
-function prepareProject(array $paths, string $rootDir, CompilationContext $context, bool $shallow = false): PreparedProject
-{
+function prepareProject(
+    array $paths,
+    string $rootDir,
+    CompilationContext $context,
+    bool $shallow = false,
+    bool $releaseChecked = false,
+): PreparedProject {
+    if ($releaseChecked && ! Cache\cacheEnabled()) {
+        throw new \LogicException(
+            'a prepare that releases its checked programs needs the module cache: the disk product is'
+            . ' what the program is read back from',
+        );
+    }
+
     $root = \realpath($rootDir);
     if ($root === false) {
         throw new \RuntimeException("cannot resolve project root {$rootDir}");
@@ -188,10 +199,10 @@ function prepareProject(array $paths, string $rootDir, CompilationContext $conte
                             )
                             : '',
                     ),
+                    $instanceWorld,
                 ))->withProjectScopes(
                     $projectClasses,
                     $classScopes,
-                    $instanceWorld,
                     $moduleName,
                 ),
                 $classScopeFns,
@@ -266,9 +277,11 @@ function prepareProject(array $paths, string $rootDir, CompilationContext $conte
                     $moduleName,
                     $fromDisk->exportedInferredSchemes,
                 );
-                ProjectCache::rememberCheckedModule($cacheKey, $fromDisk, ! isStdlibSourcePath($path));
-                $checked[$moduleName] = $fromDisk->program;
-                $units[$moduleName]['checkedProgram'] = $fromDisk->program;
+                if (! $releaseChecked) {
+                    ProjectCache::rememberCheckedModule($cacheKey, $fromDisk, ! isStdlibSourcePath($path));
+                    $checked[$moduleName] = $fromDisk->program;
+                    $units[$moduleName]['checkedProgram'] = $fromDisk->program;
+                }
                 $importContexts[$moduleName] = buildPreparedModuleContext(
                     $units,
                     $moduleName,
@@ -309,10 +322,10 @@ function prepareProject(array $paths, string $rootDir, CompilationContext $conte
             $outputRelative,
             $rootPrefix,
             $context->backendId,
+            $instanceWorld,
         )->withProjectScopes(
             $projectClasses,
             $classScopes,
-            $instanceWorld,
             $moduleName,
         );
         $importContext = mergeClassScopeRefs(
@@ -381,7 +394,9 @@ function prepareProject(array $paths, string $rootDir, CompilationContext $conte
             );
         }
 
-        if (! $shallow) {
+        $releasable = $releaseChecked && $contentKey !== null
+            && isset($units[$moduleName]['cacheRelPath']);
+        if (! $shallow && ! $releasable) {
             ProjectCache::rememberCheckedModule(
                 $cacheKey,
                 new CheckedModule($checkedFull, $exportedInferredSchemes),
@@ -409,10 +424,10 @@ function prepareProject(array $paths, string $rootDir, CompilationContext $conte
             $outputRelative,
             $rootPrefix,
             $context->backendId,
+            $instanceWorld,
         )->withProjectScopes(
             $projectClasses,
             $classScopes,
-            $instanceWorld,
             $moduleName,
         );
     }
@@ -460,10 +475,10 @@ function buildPreparedModuleContext(
             $outputRelative,
             $rootPrefix,
             $context->backendId,
+            $instanceWorld,
         )->withProjectScopes(
             $projectClasses,
             $classScopes,
-            $instanceWorld,
             $moduleName,
         ),
         $classScopeFns,
@@ -678,9 +693,21 @@ function prepareFocusBase(array $paths, string $rootDir, CompilationContext $con
     return $prepared;
 }
 
-/** @param list<string> $paths */
-function prepareProjectCached(array $paths, string $rootDir, CompilationContext $context, ?string $onlyTypecheckModule = null): PreparedProject
-{
+/**
+ * A prepared project, memoized for the routes that re-prepare the same closure.
+ *
+ * `$releaseChecked` is the whole-project compile's mode ({@see prepareProject()}): the product is
+ * not memoized, so releasing is safe here, and the compile lowers one module at a time.
+ *
+ * @param list<string> $paths
+ */
+function prepareProjectCached(
+    array $paths,
+    string $rootDir,
+    CompilationContext $context,
+    ?string $onlyTypecheckModule = null,
+    bool $releaseChecked = false,
+): PreparedProject {
     $parts = [];
     foreach ($paths as $path) {
         $parts[] = checkedModuleCacheKey($path, $context);
@@ -689,7 +716,8 @@ function prepareProjectCached(array $paths, string $rootDir, CompilationContext 
 
     $key = \implode('|', $parts)
         . '@' . ($onlyTypecheckModule ?? '*')
-        . '@' . $context->inputsKey();
+        . '@' . $context->inputsKey()
+        . ($releaseChecked ? '@released' : '');
     $memoized = ProjectCache::preparedProject($key);
     if ($memoized !== null) {
         return $memoized;
@@ -720,10 +748,10 @@ function prepareProjectCached(array $paths, string $rootDir, CompilationContext 
             return $prepared;
         }
 
-        return prepareProjectCached($paths, $rootDir, $context, null);
+        return prepareProjectCached($paths, $rootDir, $context, null, $releaseChecked);
     }
 
-    return prepareProject($paths, $rootDir, $context);
+    return prepareProject($paths, $rootDir, $context, releaseChecked: $releaseChecked);
 }
 
 /**
@@ -829,10 +857,10 @@ function prepareProjectExtendingFocus(
             $outputRelative,
             $rootPrefix,
             $context->backendId,
+            $instanceWorld,
         )->withProjectScopes(
             $projectClasses,
             $classScopes,
-            $instanceWorld,
             $focusModule,
         ),
         $classScopeFns,
