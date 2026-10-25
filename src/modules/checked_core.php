@@ -13,37 +13,32 @@ use function Moggi\Semantics\Types\typeFail;
 use function Moggi\Semantics\Types\typeToString;
 
 /**
- * One declaration the checked core owns: an ordinary function, whether it
- * spells its own signature or the check inferred (and generalized) one for it.
+ * One checked-core record for an owned ordinary function, whether its
+ * signature was declared or inferred and generalized.
  *
- * The record is the *closed* answer the rest of the compiler reads: the checked
- * scheme, the evidence its dictionary parameters carry, the residual decisions
- * that were taken while solving it (with their provenance), the type of every
- * term in its elaboration, and the source origin that names the declaration and
- * its terms for tooling. Nothing here is recomputed from the mutable source tree
- * afterwards.
+ * Captures the checker's closed result: scheme, dictionary evidence,
+ * residual decisions and provenance, elaborated term types, and source
+ * origins for tooling. Nothing is recomputed from the mutable source tree.
  */
 final class CheckedFunction
 {
     /**
-     * @param string $origin the declaration's tooling link: `module:line:col`
+     * @param string $origin Tooling link for the declaration (`module:line:col`).
      * @param list<array{wanted: string, class: string, evidence: string, origin: string}> $evidence
-     *   one entry per dictionary parameter, in positional ABI order: the wanted
-     *   obligation (`wanted`, its class applied to its arguments) and the given
-     *   dictionary that discharges it (`evidence`, the emitted parameter's name)
+     *   Dictionary parameters in positional ABI order: the wanted obligation
+     *   and the given dictionary that discharges it.
      * @param list<array{wanted: string, decision: string, provenance: string, origin: string}> $residuals
-     *   obligations that were not solved by unification, with the step that settled them
-     * @param list<array{origin: string, type: Type}> $terms the elaboration's term→type
-     *   table, in elaboration order, each entry named by its source origin
-     *   (see {@see termOrigin()})
-     * @param list<EvidencePlan> $bodyEvidence the evidence decision for every
-     *   evidence site in the declaration's elaboration, in walk order, each
-     *   naming its site's source origin; a category declaration is lowered from
-     *   these, never from the site's own evidence fields
-     * @param array<string, string> $parameterKinds the kind this declaration's own signature fixed for
-     *   each of its type parameters, by parameter name. The kinds are the declaration's, not the
-     *   module's: two declarations may spell one name at different kinds, and this map is built inside
-     *   the declaration's kind scope so neither reaches the other
+     *   Obligations not solved by unification, with their resolution step.
+     * @param list<array{origin: string, type: Type}> $terms
+     *   Term-to-type entries in elaboration order, keyed by source origin
+     *   (see {@see termOrigin()}).
+     * @param list<EvidencePlan> $bodyEvidence
+     *   Evidence decisions for every site in walk order. Category declarations
+     *   use these plans, never the site's own evidence fields.
+     * @param array<string, string> $parameterKinds
+     *   Each type parameter's kind in this declaration's signature scope.
+     *   Kinds are declaration-local, so identical names may have different
+     *   kinds in different declarations.
      */
     public function __construct(
         public readonly string $name,
@@ -80,7 +75,9 @@ final class CheckedFunction
             $bodyEvidence,
             $this->parameterKinds,
         );
-    }    /**
+    }
+
+    /**
      * This record with a different evidence vector — the same declaration, the
      * same elaboration, other dictionary parameters.
      *
@@ -101,17 +98,15 @@ final class CheckedFunction
     }
 
     /**
-     * The evidence plans by the elaboration site each belongs to.
- *
- * Keyed by object id: a plan's `site` is the very node the elaborated tree
- * carries, and PHP's serializer preserves that shared identity, so the map
- * is correct in the process that checked the module and in one that read it
- * back from the cache. The plan's `origin` is the fact a reader outside the
- * process gets; this index is only how lowering finds the plan for a node it is
- * already holding. It is built once per lowered declaration, not per use.
- *
- * @return array<int, EvidencePlan>
- */
+     * Evidence plans indexed by their elaboration site.
+     *
+     * The key is the node's object id, preserving identity across checking
+     * and PHP serialization. `origin` provides the external identity; this
+     * index lets lowering find the plan for a node it already holds.
+     * Built once per lowered declaration, not per use.
+     *
+     * @return array<int, EvidencePlan>
+     */
     public function evidencePlanIndex(): array
     {
         $index = [];
@@ -170,14 +165,14 @@ final class CheckedFunction
 }
 
 /**
- * The closed checked product for one module: a record per declaration the check
- * could close, indexed by the name the rest of the compiler uses, plus the split
- * that says which ordinary declarations it did not take and why.
+ * The module's closed checked product: records for declarations with
+ * settled schemes, plus the published split of ordinary declarations
+ * left unowned and why.
  *
- * The split is published rather than re-derived: `IR\lower` needs to know both
- * what must have a record and what legitimately has none, and asking a predicate
- * of its own is how two answers to one question drift apart. A declaration in
- * neither map is a producer defect and lowering refuses it.
+ * `IR\lower` uses this split to distinguish required records from
+ * legitimate omissions. A declaration in neither map is a producer
+ * defect and causes lowering to fail; downstream code must not
+ * re-derive the decision.
  */
 final class CheckedCore
 {
@@ -211,19 +206,15 @@ final class CheckedCore
 }
 
 /**
- * Whether a declaration is one the checked core may own: an ordinary
- * declaration rather than a signature-only stub, a foreign import or an
- * instance method.
+ * Whether a declaration is eligible for checked-core ownership: ordinary,
+ * not a signature stub, foreign import, or instance method.
  *
- * Being ordinary is the *first* question, not the whole answer. A declaration is
- * actually owned when the check also settled a closed scheme for it, which a
- * recursive declaration has too: the group's signature is discovered (or
- * declared) before any member's body is checked, so recursion is a fact about
- * *how* the scheme was settled, not a reason to leave the declaration out.
- * {@see checkedCoreFor()} answers the closure question once and publishes the
- * split in {@see CheckedCore::$unowned}, so nothing downstream has to re-derive
- * the decision. `IR\lower` reads the split rather than this predicate to decide
- * what must have a record.
+ * Eligibility also requires a closed scheme. Recursive declarations qualify
+ * because their group signature is settled before any body is checked.
+ * {@see checkedCoreFor()} records the final decision in
+ * {@see CheckedCore::$unowned}; downstream code uses that split rather
+ * than re-deriving it. `IR\lower` reads the split to determine which
+ * declarations require a record.
  */
 function isOrdinaryDeclaration(Ast\FunctionDecl $fn): bool
 {
@@ -233,28 +224,20 @@ function isOrdinaryDeclaration(Ast\FunctionDecl $fn): bool
 }
 
 /**
- * Build the module's checked core from the checker's own results.
+ * Build the module's checked core from the checker's results.
  *
- * This is the single producer: it runs once, at the end of checking, and every
- * fact it publishes comes from the state that just checked the declaration. It
- * refuses to publish a declaration it owns whose obligation is still open, whose
- * type is not generalized, or whose evidence vector does not match the scheme it
- * publishes — so a hole cannot enter the product and be discovered later as a
- * lowering surprise.
+ * The single producer runs at the end of checking and publishes only
+ * settled declarations: obligations must be closed, types generalized,
+ * and evidence vectors consistent with their schemes.
  *
- * A declaration is *owned* when it is ordinary and the check settled a closed
- * scheme for it. A declaration of a recursive group is owned like any other: the
- * group's signature is settled — declared, or discovered for the whole component
- * before any member's body is checked — before the body that calls back into the
- * group is checked, so the scheme the record publishes is the closed one the
- * group was checked against.
+ * Ordinary declarations are owned when checking settles a closed scheme.
+ * Recursive groups qualify too: their shared signature is settled before
+ * any member body is checked.
  *
- * The closure answer is recorded in `$unowned` when it says no, so the split is a
- * published fact rather than something lowering has to guess: an inferred
- * declaration whose signature never closed (the monomorphism restriction leaves
- * one open on purpose) keeps the producer it already had. A declaration that
- * spells its own signature is a different matter — its scheme is the signature's,
- * so an open one there is a defect and is refused.
+ * `$unowned` records declarations whose inferred signatures remain open,
+ * such as under the monomorphism restriction; they keep their existing
+ * producer. An explicitly declared signature must be closed or publication
+ * fails.
  */
 function checkedCoreFor(TypeCheckState $state, array $items, string $module): CheckedCore
 {
