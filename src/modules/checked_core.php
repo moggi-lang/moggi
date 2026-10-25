@@ -133,34 +133,12 @@ final class CheckedFunction
     }
 
     /**
-     * The checked types of the terms at this origin, in elaboration order.
-     *
-     * Most origins name one term. An origin can name more than one — the
-     * parser and the desugarer give several nodes the same span — so the answer
-     * is a list rather than a single type: the record never invents an identity
-     * to pick one of them, and never silently keeps only the last.
-     *
-     * @return list<Type>
-     */
-    public function typesAt(string $origin): array
-    {
-        $types = [];
-        foreach ($this->terms as $term) {
-            if ($term['origin'] === $origin) {
-                $types[] = $term['type'];
-            }
-        }
-
-        return $types;
-    }
-
-    /**
      * The origin that names a term inside one elaboration.
      *
      * It is a *link*, not an identity the checker maintains: an outside reader
      * can point at the file and line it names. A synthesized node has no span
      * (line 0) and so no origin; several nodes can share one span, which is why
-     * {@see terms} is a list and {@see typesAt()} answers with a list.
+     * {@see terms} is a list rather than a map from origin to one type.
      */
     public static function termOrigin(Ast\AstNode $node): string
     {
