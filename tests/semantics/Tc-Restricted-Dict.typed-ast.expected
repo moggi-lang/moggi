@@ -1,0 +1,48 @@
+program
+  class PShow a
+    method pshow :: a -> String
+  function pshow :: Int -> String
+    pat_var x
+    string "i"
+  function sx :: __Dict_PShow -> __Dict_Num -> a -> String
+    pat_var __ev_PShow
+    pat_var __ev_Num_1
+    pat_var x
+    apply
+      evidence_method PShow.pshow evidence=__ev_PShow nullary=0
+      apply
+        apply
+          evidence_method Num.+ evidence=__ev_Num_1 nullary=0
+          variable x
+        apply
+          evidence_method Num.fromInteger evidence=__ev_Num_1 nullary=0
+          intrinsic intToInteger#
+            integer 1
+  function sy :: __Dict_PShow -> __Dict_Num -> a -> String
+    pat_var __ev_PShow
+    pat_var __ev_Num_1
+    pat_var y
+    apply
+      apply
+        apply
+          variable sx
+          variable __ev_PShow
+        variable __ev_Num_1
+      apply
+        apply
+          evidence_method Num.+ evidence=__ev_Num_1 nullary=0
+          variable y
+        apply
+          evidence_method Num.fromInteger evidence=__ev_Num_1 nullary=0
+          intrinsic intToInteger#
+            integer 2
+  function dz :: String
+    apply
+      apply
+        apply
+          variable sy
+          evidence_ref PShow Int
+        evidence_ref Num Int
+      integer 7
+  function main :: String
+    variable dz

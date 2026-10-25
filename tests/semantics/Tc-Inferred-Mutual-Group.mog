@@ -1,0 +1,45 @@
+import Data.Ord
+import Text.Show
+
+-- A top-level *inferred* recursive group: neither member spells a signature and
+-- the two call each other, so the pair is one component and is checked once --
+-- a monotype for each member before either body, one body each, then the
+-- group's dictionaries, decided together.
+--
+-- `Label` asks for `Tag`, so the group's obligations close under a superclass.
+-- Every member of the cycle reaches every other, so both are lifted with the
+-- same dictionary parameters and each recursive call forwards the same
+-- evidence; a producer that expanded the obligation set per member, or that
+-- inferred a member twice, disagrees in arity here.
+--
+-- The typed-ast golden pins both sides of that: the `__ev_dict` parameters each
+-- member is lifted with, and the arguments the two recursive calls hand over.
+
+class Tag a where
+  tag :: a -> String
+
+class Tag a => Label a where
+  label :: a -> String
+
+instance Tag Int where
+  tag x = "int"
+
+instance Label Int where
+  label x = tag x
+
+instance Tag Bool where
+  tag x = "bool"
+
+instance Label Bool where
+  label x = tag x
+
+-- `start` and `hop` are a single recursive group: acyclic order does not exist
+-- for them, and `start`'s literal and `hop`'s `label` are one vocabulary. It
+-- terminates, so the same fixture can be run: `start 2` = `hop 1` = `label 1`
+-- <> `start 1` = "int" <> "int" <> "done".
+start n = if n == 0 then "done" else hop (n - 1)
+
+hop n = label n <> start n
+
+main :: IO ()
+main = putStrLn (start 2)

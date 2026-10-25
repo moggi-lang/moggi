@@ -58,6 +58,7 @@ use function Moggi\Syntax\isConstructorOperator;
 require_once __DIR__ . '/../../patterns/walk.php';
 require_once __DIR__ . '/let_groups.php';
 require_once __DIR__ . '/type_core.php';
+require_once __DIR__ . '/allocation.php';
 require_once __DIR__ . '/constraints.php';
 require_once __DIR__ . '/instances.php';
 require_once __DIR__ . '/../exhaustiveness.php';
@@ -71,9 +72,122 @@ function isIoTypeCon(TypeCheckState $state, Type $type): bool
         && \count($type->args) === 1;
 }
 
+/**
+ * Make the class methods of the given obligations the ones a body in scope can
+ * call, projecting each through the dictionary the obligation names.
+ *
+ * Installed once per declaration, for the declaration's own vocabulary, before
+ * its body is checked. A local annotated group installs its own map over this
+ * one for the duration of its body (see `abstractAnnotatedLocalBinding`), so a
+ * method call never resolves through a dictionary that is not in scope where the
+ * call sits.
+ *
+ * Whether a dictionary is one the declaration *wrote* (rather than one a
+ * superclass brought along) is the allocation's answer, so an obligation an open
+ * declaration takes on mid-body is marked exactly like one in its signature.
+ *
+ * @param list<Ast\\PendingConstraint> $constraintList
+ * @param array<string, Scheme> $bodyEnv names that shadow a method are unset here
+ */
+function installConstraintMethods(
+    TypeCheckState $state,
+    array $constraintList,
+    array &$bodyEnv,
+): void {
+    foreach ($constraintList as $constraint) {
+        $classInfo = $state->classes[$constraint->class];
+        $mapping = [];
+        foreach ($classInfo['params'] as $i => $param) {
+            $mapping[$param['name']] = constructorMappingValue($state, $param, $constraint->args[$i]);
+        }
+
+        foreach ($classInfo['methods'] as $methodName => $methodInfo) {
+            $substituted = substituteClassMethod(
+                $state,
+                $methodInfo['type'],
+                $methodInfo['userConstraints'] ?? [],
+                $classInfo['params'],
+                $mapping,
+            );
+            $userConstraints = $substituted['constraints'];
+            $methodType = peelDictArrows(
+                $substituted['type'],
+                \count($userConstraints),
+            );
+            $info = [
+                'class' => $constraint->class,
+                'method' => $methodName,
+                'evidence' => $constraint->evidence,
+                'type' => $methodType,
+                'userConstraints' => $userConstraints,
+                'constraintHead' => prune($state, $constraint->args[0]),
+                'constraintArgs' => $constraint->args,
+                'implicit' => $constraint->implicit,
+                'instanceHeadAst' => $constraint->instanceHeadAst,
+                'declared' => $state->allocation?->declares($state, $constraint) ?? false,
+            ];
+
+            if (isset($state->constraintMethodCandidates[$methodName])) {
+                $state->constraintMethodCandidates[$methodName][] = $info;
+            }
+
+            if (isset($state->constraintMethods[$methodName])) {
+                $existing = $state->constraintMethods[$methodName];
+                if (($existing['class'] ?? null) !== $info['class']
+                    || constraintArgKey($existing['constraintHead']) !== constraintArgKey($info['constraintHead'])
+                ) {
+                    unset($state->constraintMethods[$methodName]);
+                    $state->constraintMethodAmbiguities[$methodName] = true;
+                    $state->constraintMethodCandidates[$methodName] = [$existing, $info];
+                    unset($bodyEnv[$methodName]);
+                }
+
+                continue;
+            }
+
+            if (isset($state->constraintMethodAmbiguities[$methodName])) {
+                unset($bodyEnv[$methodName]);
+
+                continue;
+            }
+
+            $state->constraintMethods[$methodName] = $info;
+            unset($bodyEnv[$methodName]);
+        }
+    }
+
+}
+
+/**
+ * The dictionary parameters a declaration's body reads its evidence from: one
+ * `__ev_` pattern per dictionary, in parameter order, in front of the function's
+ * own parameters.
+ *
+ * One producer for a signature's obligations and for the ones an inferred
+ * declaration takes on at its checkpoint -- the two lists are the same contract,
+ * so they must be spelled the same way.
+ *
+ * @param list<Ast\PendingConstraint> $constraints
+ */
+function prependEvidenceParams(Ast\FunctionDecl $fn, array $constraints): void
+{
+    if ($constraints === []) {
+        return;
+    }
+
+    $patterns = [];
+    foreach ($constraints as $constraint) {
+        $patterns[] = new Ast\PatVar($constraint->evidence);
+    }
+
+    $fn->params = [...$patterns, ...$fn->params];
+    $fn->constraints = $constraints;
+}
+
 function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\FunctionDecl
 {
     $hadDeclaredSignature = Ast\hasDeclaredSignature($fn);
+    $savedAllocation = $state->allocation;
     $state->subst = [];
     $state->holes = [];
     if (! $fn->instanceMethod && isset($state->instanceMethodNames[$fn->name])) {
@@ -81,6 +195,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
     }
 
     $hasSignature = $hadDeclaredSignature || $fn->inferredSignatureType !== null;
+    $restricted = isRestrictedDeclaration($fn);
 
     $env = $state->env;
     $paramTypes = [];
@@ -104,9 +219,10 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
                 $fn->params = userParamsOf($fn);
             }
 
-            $group = solveConstraints($state, $userConstraints);
-            $constraints = $group->dicts;
-            applyConstraintVarKinds($state, $constraints);
+            $allocation = DeclarationAllocation::closed($state, $userConstraints);
+            $userConstraints = $allocation->userObligations();
+            $constraints = $allocation->obligations();
+            $group = new SolvedGroup($userConstraints, $constraints);
             $constraintEnv = buildConstraintEnv($state, $constraints);
             $fnType = astType($state, $bodyTypeAst);
             Kinds\assertKind($state, $fnType, new Kinds\KType(), $state->varKinds, $fn);
@@ -118,14 +234,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
             Kinds\restoreKindScope($state, $kindScope);
         }
 
-        if ($constraints !== []) {
-            $evidencePatterns = [];
-            foreach ($constraints as $constraint) {
-                $evidencePatterns[] = new Ast\PatVar($constraint->evidence);
-            }
-            $fn->params = [...$evidencePatterns, ...$fn->params];
-            $fn->constraints = $constraints;
-        }
+        prependEvidenceParams($fn, $constraints);
 
         $origFnType = $fnType;
         $origConstraints = $constraints;
@@ -135,6 +244,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
             $fnType = substitute($fnType, $skolemSubst);
             $constraints = substitutePendingConstraints($constraints, $skolemSubst);
             $userConstraints = substitutePendingConstraints($userConstraints, $skolemSubst);
+            $allocation->substitute($skolemSubst);
             $constraintEnv = buildConstraintEnv($state, $constraints);
             $skolemNames = \array_map(
                 static fn (TVar $skolem): string => $skolem->name,
@@ -155,6 +265,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
         }
         $bodyExpected = $expected;
     } else {
+        $allocation = DeclarationAllocation::open();
         $bodyExpected = freshType($state);
         $fnType = $bodyExpected;
         foreach (\array_reverse($fn->params) as $_) {
@@ -184,6 +295,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
     $selfType = peelDictArrows($fnType, \count($constraints));
     $bodyEnv[$fn->name] = scheme($selfType, [], $userConstraints, \count($constraints), $constraints);
 
+    $state->allocation = $allocation;
     $savedConstraintMethods = $state->constraintMethods;
     $savedConstraintMethodAmbiguities = $state->constraintMethodAmbiguities;
     $savedConstraintMethodCandidates = $state->constraintMethodCandidates;
@@ -192,76 +304,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
     $state->constraintMethodCandidates = [];
     $methodConstraints = $constraints;
 
-    $declaredConstraintKeys = [];
-    foreach ($userConstraints as $userConstraint) {
-        $declaredConstraintKeys[$userConstraint->class . ':' . constraintArgsKey($userConstraint->args)] = true;
-    }
-
-    $registerConstraintMethods = static function (array $constraintList) use ($state, &$bodyEnv, $declaredConstraintKeys): void {
-        foreach ($constraintList as $constraint) {
-            $classInfo = $state->classes[$constraint->class];
-            $mapping = [];
-            foreach ($classInfo['params'] as $i => $param) {
-                $mapping[$param['name']] = constructorMappingValue($state, $param, $constraint->args[$i]);
-            }
-
-            foreach ($classInfo['methods'] as $methodName => $methodInfo) {
-                $substituted = substituteClassMethod(
-                    $state,
-                    $methodInfo['type'],
-                    $methodInfo['userConstraints'] ?? [],
-                    $classInfo['params'],
-                    $mapping,
-                );
-                $userConstraints = $substituted['constraints'];
-                $methodType = peelDictArrows(
-                    $substituted['type'],
-                    \count($userConstraints),
-                );
-                $info = [
-                    'class' => $constraint->class,
-                    'method' => $methodName,
-                    'evidence' => $constraint->evidence,
-                    'type' => $methodType,
-                    'userConstraints' => $userConstraints,
-                    'constraintHead' => prune($state, $constraint->args[0]),
-                    'constraintArgs' => $constraint->args,
-                    'implicit' => $constraint->implicit,
-                    'instanceHeadAst' => $constraint->instanceHeadAst,
-                    'declared' => isset($declaredConstraintKeys[$constraint->class . ':' . constraintArgsKey($constraint->args)]),
-                ];
-
-                if (isset($state->constraintMethodCandidates[$methodName])) {
-                    $state->constraintMethodCandidates[$methodName][] = $info;
-                }
-
-                if (isset($state->constraintMethods[$methodName])) {
-                    $existing = $state->constraintMethods[$methodName];
-                    if (($existing['class'] ?? null) !== $info['class']
-                        || constraintArgKey($existing['constraintHead']) !== constraintArgKey($info['constraintHead'])
-                    ) {
-                        unset($state->constraintMethods[$methodName]);
-                        $state->constraintMethodAmbiguities[$methodName] = true;
-                        $state->constraintMethodCandidates[$methodName] = [$existing, $info];
-                        unset($bodyEnv[$methodName]);
-                    }
-
-                    continue;
-                }
-
-                if (isset($state->constraintMethodAmbiguities[$methodName])) {
-                    unset($bodyEnv[$methodName]);
-
-                    continue;
-                }
-
-                $state->constraintMethods[$methodName] = $info;
-                unset($bodyEnv[$methodName]);
-            }
-        }
-    };
-
-    $registerConstraintMethods($methodConstraints);
+    installConstraintMethods($state, $methodConstraints, $bodyEnv);
     $methodConstraintEnv = buildConstraintEnv($state, $methodConstraints);
     if ($methodConstraintEnv !== []) {
         $bodyEnv = [...$bodyEnv, ...$methodConstraintEnv];
@@ -287,9 +330,37 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
         $fnType = $origFnType;
         $constraints = $origConstraints;
         $userConstraints = $origUserConstraints;
+    } else {
+        if (! $restricted) {
+            $found = inferredFunctionConstraints($state, $fn->body, $fnType);
+            if ($found !== []) {
+                $found = \array_values(\array_filter(
+                    $found,
+                    static fn (Ast\PendingConstraint $constraint): bool => ! constraintOverRestrictedVar($state, $constraint),
+                ));
+            }
+            $allocation->adoptPending($state, $found);
+        }
+
+        $userConstraints = $allocation->userObligations();
+        $constraints = $allocation->obligations();
+        $group = new SolvedGroup($userConstraints, $constraints);
+
+        foreach (\array_reverse($constraints) as $constraint) {
+            $fnType = new TArrow(new TCon('__Dict_' . $constraint->class), $fnType);
+        }
+
+        prependEvidenceParams($fn, $constraints);
+        if ($constraints !== []) {
+            $state->ambientConstraints = $constraints;
+            $byClass = [];
+            foreach ($constraints as $constraint) {
+                $byClass[$constraint->class][] = $constraint;
+            }
+            $state->ambientConstraintsByClass = $byClass;
+        }
     }
 
-    $restricted = isRestrictedDeclaration($fn);
     $ownsOpenVars = $restricted
         && quantifiedVars($state, peelDictArrows($fnType, \count($constraints))) !== [];
     $openRestricted = openRestrictedVarsInExpr($state, $fn->body);
@@ -313,6 +384,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
         $state->rigidVars = $savedRigidVars;
         $state->skolemScope = $savedSkolemScope;
         $state->varKinds = $savedVarKinds;
+        $state->allocation = $savedAllocation;
 
         return $fn;
     }
@@ -332,6 +404,7 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
     $state->rigidVars = $savedRigidVars;
     $state->skolemScope = $savedSkolemScope;
     $state->varKinds = $savedVarKinds;
+    $state->allocation = $savedAllocation;
 
     return $fn;
 }
@@ -374,6 +447,35 @@ function skolemizeSignatureVars(TypeCheckState $state, Type $fnType, array $cons
 }
 
 /**
+ * The variables the declaration's own obligations mention.
+ *
+ * A literal under `Num a` is not ambiguous even when `a` is not written in the
+ * declaration's type: the obligation is part of what the declaration takes, so
+ * defaulting it to `Integer` would contradict the dictionary it is about to be
+ * handed. A local annotated binding that turns out to constrain the enclosing
+ * declaration (`f n = go n [] where go :: Num a => a -> [a]`) is exactly that
+ * shape -- the group's variable never appears in `f`'s type, but `Num` of it is
+ * `f`'s dictionary.
+ *
+ * @param list<Ast\PendingConstraint> $obligations
+ * @return array<string, true>
+ */
+function obligationVars(TypeCheckState $state, array $obligations): array
+{
+    $known = \array_flip(knownTypeConstructorNames($state));
+    $vars = [];
+    foreach ($obligations as $obligation) {
+        foreach ($obligation->args as $arg) {
+            foreach (signatureVarsInType(prune($state, $arg), $known) as $name => $_) {
+                $vars[$name] = true;
+            }
+        }
+    }
+
+    return $vars;
+}
+
+/**
  * Finish a declaration whose body has been inferred: default what its own type
  * does not determine, resolve the dictionaries its calls need, elaborate its
  * literals, and record its scheme.
@@ -402,7 +504,8 @@ function settleCheckedBody(
         $restricted
             ? []
             : quantifiedVars($state, peelDictArrows($fnType, \count($group->dicts)))
-                + \array_fill_keys($skolemNames, true),
+                + \array_fill_keys($skolemNames, true)
+                + obligationVars($state, $group->dicts),
         $fn,
     );
 
@@ -417,18 +520,73 @@ function settleCheckedBody(
     }
     reportTypedHoles($state);
     $fnType = prune($state, $fnType);
-    $fn->type = signatureTypeAst(
-        $fnType,
-        \array_flip(knownTypeConstructorNames($state)),
-        $state->subst,
-    );
-    $fn->typeInferred = ! $hadDeclaredSignature;
-    $userFnType = peelDictArrows($fnType, \count($group->dicts));
-    if (! \array_key_exists(\spl_object_id($fn), $state->checkedParameterKinds)) {
-        $state->checkedParameterKinds[\spl_object_id($fn)] = Kinds\declarationParameterKinds($state, $userFnType);
-    }
+    $renderedType = $fnType;
+    $renderedUserType = null;
+    $renderedUser = [];
     $prunedUserConstraints = refreshConstraintArgs($state, $group->user);
     $prunedDicts = refreshConstraintArgs($state, $group->dicts);
+    if (! $hadDeclaredSignature) {
+        $userType = peelDictArrows($fnType, \count($group->dicts));
+        $userArgs = [];
+        foreach ($prunedUserConstraints as $constraint) {
+            foreach ($constraint->args as $arg) {
+                $userArgs[] = $arg;
+            }
+        }
+        $rename = friendlyTypeVarNames([$userType, ...$userArgs]);
+        if ($rename !== []) {
+            $mapping = [];
+            foreach ($rename as $from => $to) {
+                $mapping[$from] = new TVar($to);
+            }
+            $renderedType = substitute($fnType, $mapping);
+            $userType = substitute($userType, $mapping);
+            $renderedUser = \array_map(
+                static fn (Ast\PendingConstraint $constraint): Ast\PendingConstraint => new Ast\PendingConstraint(
+                    $constraint->class,
+                    \array_map(
+                        static fn (Type $arg): Type => substitute($arg, $mapping),
+                        $constraint->args,
+                    ),
+                    $constraint->evidence,
+                    $constraint->implicit,
+                    $constraint->instanceHeadAst,
+                ),
+                $prunedUserConstraints,
+            );
+        } else {
+            $renderedUser = $prunedUserConstraints;
+        }
+        $renderedUserType = $userType;
+    }
+
+    $fn->type = signatureTypeAst(
+        $renderedType,
+        \array_flip(knownTypeConstructorNames($state)),
+        $hadDeclaredSignature ? $state->subst : [],
+    );
+    $fn->typeInferred = ! $hadDeclaredSignature;
+    if ($renderedUserType !== null) {
+        $fn->inferredSignatureType = inferredSignatureAst(
+            $renderedUserType,
+            $renderedUser,
+            \array_flip(knownTypeConstructorNames($state)),
+        );
+    }
+    $userFnType = peelDictArrows($fnType, \count($group->dicts));
+    if (! \array_key_exists(\spl_object_id($fn), $state->checkedParameterKinds)) {
+        $dictArgs = [];
+        foreach ($prunedDicts as $dict) {
+            foreach ($dict->args as $arg) {
+                $dictArgs[] = $arg;
+            }
+        }
+        $state->checkedParameterKinds[\spl_object_id($fn)] = Kinds\declarationParameterKinds(
+            $state,
+            $userFnType,
+            $dictArgs,
+        );
+    }
     $checkedScheme = $restricted
         ? scheme($userFnType, [], [])
         : scheme(
@@ -597,14 +755,18 @@ function resolveRestrictedSolution(TypeCheckState $state, string $var): ?Type
  *
  * A declaration that owns restricted variables settles before one that merely
  * uses them, so a use site can read the owner's settled type.
+ *
+ * @return list<string> the names whose scheme the module end settled, for the
+ *   interface the module publishes
  */
-function finishRestrictedDeclarations(TypeCheckState $state): void
+function finishRestrictedDeclarations(TypeCheckState $state): array
 {
     $deferred = $state->deferredRestricted;
     $state->deferredRestricted = [];
 
     $owners = [];
     $users = [];
+    $settled = [];
     foreach ($deferred as $entry) {
         if ($entry['owns']) {
             $owners[] = $entry;
@@ -615,7 +777,10 @@ function finishRestrictedDeclarations(TypeCheckState $state): void
 
     foreach ([...$owners, ...$users] as $entry) {
         settleDeferredDeclaration($state, $entry);
+        $settled[] = $entry['fn']->name;
     }
+
+    return $settled;
 }
 
 /** @param array<string, mixed> $entry a record of {@see deferDeclaration} */
@@ -658,8 +823,12 @@ function settleDeferredDeclaration(TypeCheckState $state, array $entry): void
     $state->constraintMethodAmbiguities = $entry['ambiguities'];
     $state->constraintMethodCandidates = $entry['methodCandidates'];
     $state->declSpan = $entry['declarationSpan'];
-    $state->ambientConstraints = [];
+    $own = $entry['bindingGroup'] instanceof SolvedGroup ? $entry['bindingGroup']->dicts : [];
+    $state->ambientConstraints = $own;
     $state->ambientConstraintsByClass = [];
+    foreach ($own as $constraint) {
+        $state->ambientConstraintsByClass[$constraint->class][] = $constraint;
+    }
     $state->rigidVars = \array_fill_keys($entry['skolemNames'] ?? [], true) + $state->rigidVars;
     $settleScope = $entry['skolemScope'] ?? [];
     if ($settleScope !== []) {
@@ -726,244 +895,73 @@ function constraintOverRestrictedVar(TypeCheckState $state, Ast\PendingConstrain
 }
 
 /**
- * Discover what every inferred declaration needs to be called with before any
- * body is checked.
- *
- * A call site is lowered with the dictionaries of the function it calls, so a
- * declaration has to know its own before any caller is checked -- but a
- * mutually recursive pair has no order in which both could be. Grouping the
- * declarations into the strongly connected components of the name-reference
- * graph and walking those in dependency order gives every probe the schemes of
- * everything it can reach: `f n = g n`, `g n = show n` is two components, and
- * `g` is discovered and published before `f` is probed, so `f` learns `Show`
- * in one pass. Only a cycle -- `isEven`/`isOdd` -- has to be discovered
- * together, and that is the one place the probe repeats.
+ * The dependency-ordered components a set of inferred declarations is inferred
+ * in, with the members resolved back to the declarations.
  *
  * @param list<Ast\FunctionDecl> $functions
+ * @return list<array{members: list<Ast\FunctionDecl>, recursive: bool}>
  */
-function discoverInferredSignatures(TypeCheckState $state, array $functions): void
+function inferredSignatureComponents(array $functions): array
 {
-    $byIndex = $functions;
+    $components = [];
     foreach (topLevelBindingSccs($functions) as $component) {
         $members = [];
         foreach ($component['indices'] as $index) {
-            $members[] = $byIndex[$index];
+            $members[] = $functions[$index];
         }
 
-        discoverComponentSignatures($state, $members);
+        $components[] = ['members' => $members, 'recursive' => $component['recursive']];
     }
+
+    return $components;
 }
 
 /**
- * Settle one component's declarations, using only schemes from components
- * already discovered.
+ * Infer every inferred declaration once, in the order its dependencies allow.
  *
- * A cycle's members are probed together and repeated until none gains a
- * constraint, because neither sees the other's dictionaries until the other is
- * materialized. An acyclic component settles with one probe per member. A
- * signature-less declaration that gains no dictionary is given the probe's
- * type as it stands -- a call site can only use such a declaration once its
- * type is known, and while it is a bare placeholder its variables are unrelated
- * to each other, so `k : findIndicesGo p xs (0 :: ?)` cannot tell that the
- * counter is the list's index type and the literal is defaulted instead of
- * unified.
+ * An acyclic declaration needs no signature before its body is checked: by the
+ * time it is reached, every declaration it can call already publishes its
+ * scheme, so the check itself is what discovers its type, takes on the
+ * obligations its body raised at its own checkpoint, and generalizes it. Such a
+ * declaration is therefore checked here and its checked form handed back for the
+ * source walk to place -- one inference, one elaboration, no copied body.
  *
- * The restricted declarations settle before that last sweep: a pattern
- * binding's variables are not that declaration's to generalize, so settling
- * them first lets a declaration that only looked constrained through one of
- * those variables see its real type instead of staying a placeholder.
+ * A pattern binding is one of those: its body check *is* its inference. The
+ * monomorphism restriction does not change when the body is checked, only what
+ * the checkpoint does with the result -- `deferDeclaration()` hands its variables
+ * to the module end instead of generalizing them.
  *
- * @param list<Ast\FunctionDecl> $members
- */
-function discoverComponentSignatures(TypeCheckState $state, array $members): void
-{
-    do {
-        $materialized = false;
-        foreach ($members as $fn) {
-            if (! needsInferredSignature($fn)) {
-                continue;
-            }
-
-            $discovered = discoverFunctionConstraints($state, $fn);
-            if ($discovered === null || $discovered['constraints'] === []) {
-                continue;
-            }
-
-            materializeInferredSignature(
-                $state,
-                $fn,
-                $discovered['type'],
-                $discovered['constraints'],
-            );
-            registerInferredSignatureScheme($state, $fn);
-            $materialized = true;
-        }
-    } while ($materialized);
-
-    materializeRestrictedSignatures($state, $members);
-
-    foreach ($members as $fn) {
-        if (! needsInferredSignature($fn)) {
-            continue;
-        }
-
-        $discovered = discoverFunctionConstraints($state, $fn);
-        if ($discovered === null || ($discovered['deferredOverRestricted'] ?? false)) {
-            continue;
-        }
-
-        materializeInferredSignature(
-            $state,
-            $fn,
-            $discovered['type'],
-            $discovered['constraints'],
-        );
-        registerInferredSignatureScheme($state, $fn);
-    }
-}
-
-/**
- * Give a restricted declaration the type the probe found, so the interface a
- * module publishes does not depend on a body check.
- *
- * `isLetter = isAlpha` has no signature and no parameters, so it is settled by
- * the monomorphism restriction rather than generalized, and discovery left it at
- * `registerInferredFunctionPlaceholder`'s bare variable. A bare variable unifies
- * with anything, so an importer reading that interface entry saw `t0` -- the
- * facade/implementation type check reported `export isLetter type Char -> Bool
- * does not match implementation t0`. The probe's type is registered as it is --
- * no quantification, no dictionaries, its variables marked restricted like the
- * placeholder's -- with the probe's variables renamed first: the probe rolls its
- * own numbering back, so an unrenamed type would alias whatever the next run
- * allocates under the same names.
+ * A cycle has no such order (`isEven`/`isOdd` need each other before either
+ * body can be checked), so the whole component is checked once as a group:
+ * monotypes for every member, one body each, one decision about the group's
+ * dictionaries ({@see inferRecursiveDeclarations()}).
  *
  * @param list<Ast\FunctionDecl> $functions
+ * @return array<int, Ast\FunctionDecl> the declarations checked here, by object id
  */
-function materializeRestrictedSignatures(TypeCheckState $state, array $functions): void
+function inferInferredDeclarations(TypeCheckState $state, array $functions): array
 {
-    foreach ($functions as $fn) {
-        if (! isRestrictedDeclaration($fn)) {
+    $checked = [];
+    foreach (inferredSignatureComponents($functions) as $component) {
+        $members = $component['members'];
+        if (! $component['recursive']) {
+            $fn = $members[0];
+            $state->declSpan = [
+                'line' => $fn->line,
+                'col' => $fn->col,
+                'endCol' => $fn->endCol,
+            ];
+            $checked[\spl_object_id($fn)] = checkFunction($state, $fn);
+
             continue;
         }
 
-        $discovered = discoverFunctionConstraints($state, $fn);
-        if ($discovered === null) {
-            continue;
+        foreach (inferRecursiveDeclarations($state, $members) as $id => $fn) {
+            $checked[$id] = $fn;
         }
-
-        [$type] = renameProbeTypeVars(prune($state, $discovered['type']), []);
-        foreach (\array_keys(quantifiedVars($state, $type)) as $var) {
-            $state->restrictedVars[$var] = true;
-        }
-
-        $state->env[$fn->name] = scheme($type, [], []);
     }
-}
 
-/**
- * Whether a declaration is still waiting for the signature the probe discovers:
- * one the user did not spell out, that is not a pattern binding (the
- * monomorphism restriction settles those, not generalization), and that no
- * earlier walk has already materialized.
- */
-function needsInferredSignature(Ast\FunctionDecl $fn): bool
-{
-    return ! Ast\hasDeclaredSignature($fn)
-        && $fn->inferredSignatureType === null
-        && userParamsOf($fn) !== [];
-}
-
-/**
- * Infer a signature-less function's body once, only to find out which
- * constraints its own type carries.
- *
- * The probe runs on a copy of the declaration: the body and the parameters are
- * deep-copied first, the copy is typed against throwaway variables, and the
- * substitution is rolled back. The caller then checks the untouched original
- * with the constraints in scope, deriving its own abstraction from scratch. The
- * copy is the whole contract -- because every rewrite the let/where machinery
- * makes inside a binding's value lands on a tree that is thrown away, the probe
- * is observationally equivalent to not having run.
- *
- * @return ?array{
- *   type: Type,
- *   constraints: list<Ast\PendingConstraint>,
- *   deferredOverRestricted: bool,
- * } null only when the probe cannot see the body's type at all
- */
-function discoverFunctionConstraints(TypeCheckState $state, Ast\FunctionDecl $fn): ?array
-{
-    $savedSubst = $state->subst;
-    $savedHoles = $state->holes;
-    $savedFresh = $state->fresh;
-    $savedMethods = [
-        $state->constraintMethods,
-        $state->constraintMethodAmbiguities,
-        $state->constraintMethodCandidates,
-    ];
-    $savedSpan = $state->declSpan;
-    $savedEvidenceParam = $state->nextEvidenceParam;
-    $savedBinderId = $state->nextBinderId;
-    $savedAmbient = installAmbientConstraints($state, []);
-    $state->declSpan = [
-        'line' => $fn->line,
-        'col' => $fn->col,
-        'endCol' => $fn->endCol,
-    ];
-    $state->constraintMethods = [];
-    $state->constraintMethodAmbiguities = [];
-    $state->constraintMethodCandidates = [];
-
-    try {
-        $bodyEnv = $state->env;
-        $fnType = freshType($state);
-        $probeParams = [];
-        foreach ($fn->params as $param) {
-            $probeParams[] = Ast\copyNode($param);
-        }
-        foreach (\array_reverse($probeParams) as $_) {
-            $fnType = new TArrow(freshType($state), $fnType);
-        }
-
-        $expected = $fnType;
-        foreach ($probeParams as $param) {
-            if (! $expected instanceof TArrow) {
-                throw typeFail($state, "function `{$fn->name}` has too many parameters", $fn);
-            }
-            [$_, $bodyEnv] = bindPattern($state, $param, $expected->from, $bodyEnv, generalize: false);
-            $expected = $expected->to;
-        }
-
-        $body = Ast\copyNode($fn->body);
-        $bodyEnv[$fn->name] = scheme($fnType, [], [], 0);
-        $bodyType = inferExpr($state, $body, $bodyEnv);
-        unify($state, $bodyType, $expected, $body);
-
-        $found = inferredFunctionConstraints($state, $body, $fnType);
-        $constraints = \array_values(\array_filter(
-            $found,
-            static fn (Ast\PendingConstraint $constraint): bool => ! constraintOverRestrictedVar($state, $constraint),
-        ));
-
-        return [
-            'type' => prune($state, $fnType),
-            'constraints' => refreshConstraintArgs($state, $constraints),
-            'deferredOverRestricted' => $constraints === [] && $found !== [],
-        ];
-    } finally {
-        restoreAmbientConstraints($state, $savedAmbient);
-        [
-            $state->constraintMethods,
-            $state->constraintMethodAmbiguities,
-            $state->constraintMethodCandidates,
-        ] = $savedMethods;
-        $state->subst = $savedSubst;
-        $state->holes = $savedHoles;
-        $state->fresh = $savedFresh;
-        $state->declSpan = $savedSpan;
-        $state->nextEvidenceParam = $savedEvidenceParam;
-        $state->nextBinderId = $savedBinderId;
-    }
+    return $checked;
 }
 
 /**
@@ -1002,52 +1000,22 @@ function userParamsOf(Ast\FunctionDecl $fn): array
 }
 
 /**
- * Turn the constraints found in a signature-less body into a real signature on
- * the declaration, so the rest of the checker treats it like one the user wrote:
- * `g x = show x` becomes `g :: Show a => a -> String`.
+ * The signature AST a body type and the obligations it takes on spell.
  *
- * The discovered variables are renamed to readable letters, and the constraint
- * arguments are renamed with them, keeping each argument tied to the type it was
- * inferred from.
+ * One producer for the discovered signature and for the one a checked inferred
+ * declaration publishes at its own checkpoint: two spellings of the same
+ * obligations would make the source-facing type and the elaborating one drift.
  *
  * @param list<Ast\PendingConstraint> $constraints
+ * @param array<string, int> $known type constructors in scope
+ * @param ?Ast\AstNode $at the declaration whose position the node carries
  */
-function materializeInferredSignature(
-    TypeCheckState $state,
-    Ast\FunctionDecl $fn,
+function inferredSignatureAst(
     Type $userType,
     array $constraints,
-): void {
-    $args = [];
-    foreach ($constraints as $constraint) {
-        foreach ($constraint->args as $arg) {
-            $args[] = $arg;
-        }
-    }
-
-    $rename = friendlyTypeVarNames([$userType, ...$args]);
-    if ($rename !== []) {
-        $mapping = [];
-        foreach ($rename as $from => $to) {
-            $mapping[$from] = new TVar($to);
-        }
-        $userType = substitute($userType, $mapping);
-        $constraints = \array_map(
-            static fn (Ast\PendingConstraint $constraint): Ast\PendingConstraint => new Ast\PendingConstraint(
-                $constraint->class,
-                \array_map(
-                    static fn (Type $arg): Type => substitute($arg, $mapping),
-                    $constraint->args,
-                ),
-                $constraint->evidence,
-                $constraint->implicit,
-                $constraint->instanceHeadAst,
-            ),
-            $constraints,
-        );
-    }
-
-    $known = \array_flip(knownTypeConstructorNames($state));
+    array $known,
+    ?Ast\AstNode $at = null,
+): Ast\TypeNode {
     $toSignatureType = static fn (Type $type): Ast\TypeNode => signatureTypeAst(
         $type,
         $known,
@@ -1061,16 +1029,18 @@ function materializeInferredSignature(
         );
     }
 
-    $fn->inferredSignatureType = $constraintNodes === []
-        ? $toSignatureType($userType)
-        : new Ast\TypeConstrained(
-            $constraintNodes,
-            $toSignatureType($userType),
-            $fn->line,
-            $fn->col,
-            $fn->endCol,
-        );
-    $fn->typeInferred = true;
+    $body = $toSignatureType($userType);
+    if ($constraintNodes === []) {
+        return $body;
+    }
+
+    return new Ast\TypeConstrained(
+        $constraintNodes,
+        $body,
+        $at->line ?? 0,
+        $at->col ?? 0,
+        $at->endCol ?? 0,
+    );
 }
 
 /**
@@ -3756,7 +3726,15 @@ function functionParamTypeAsts(Ast\TypeNode $type): array
  * Check `go :: C a => a -> T` (a constrained local signature) the way a
  * top-level function is checked: the annotation's constraints become leading
  * dictionary parameters, the function's own parameters take the annotation's
- * types, and the body resolves its evidence through the new dictionaries.
+ * types, and the body resolves its evidence through **those** dictionaries.
+ *
+ * Ownership is what keeps the group polymorphic. The annotation's variables are
+ * the group's own: the body is checked against the parameters allocated here, so
+ * nothing inside it can reach the enclosing declaration's evidence and tie the
+ * two vocabularies together. A use site then wants the group's dictionaries at
+ * the types it instantiates, which is where an enclosing inferred declaration
+ * learns the obligation -- from the call, as a wanted constraint at its own
+ * checkpoint, not from the group's body.
  *
  * The returned constraints are the annotation's own, superclasses unexpanded:
  * the parameters are allocated for the expanded list, while the binding's
@@ -3778,6 +3756,8 @@ function abstractAnnotatedLocalBinding(TypeCheckState $state, Ast\AstNode $value
 
     [$params, $abstracted, $dictTypes] = allocateDictParams($state, $constraints);
 
+    $ambient = $abstracted;
+
     $inner = $value->expr;
     if ($inner instanceof Ast\Lambda) {
         $paramAsts = functionParamTypeAsts($bodyTypeAst);
@@ -3792,19 +3772,36 @@ function abstractAnnotatedLocalBinding(TypeCheckState $state, Ast\AstNode $value
         }
     }
 
-    $saved = installAmbientConstraints($state, $abstracted);
+    $savedMethods = [
+        $state->constraintMethods,
+        $state->constraintMethodAmbiguities,
+        $state->constraintMethodCandidates,
+    ];
+    $savedAllocation = $state->allocation;
+    $saved = installAmbientConstraints($state, $ambient);
 
     try {
-        $valueType = inferExpr($state, $inner, $env);
+        $state->constraintMethods = [];
+        $state->constraintMethodAmbiguities = [];
+        $state->constraintMethodCandidates = [];
+        $state->allocation = DeclarationAllocation::ofSolved($userConstraints, $abstracted);
+        $innerEnv = $env;
+        installConstraintMethods($state, $abstracted, $innerEnv);
+
+        $valueType = inferExpr($state, $inner, $innerEnv);
         $bodyExpected = astType($state, $bodyTypeAst);
         unify($state, $valueType, $bodyExpected, $value);
         $valueType = prune($state, $bodyExpected);
-        if (pendingConstraintsFromExpr($inner) !== []) {
-            $inner = resolvePendingEvidenceInExpr($state, $inner);
-            $inner = tryResolveValueEvidence($state, $inner);
-        }
+
+        $inner = resolvePendingEvidenceInExpr($state, $inner);
+        $inner = tryResolveValueEvidence($state, $inner);
+        $inner = elaborateNumericLiterals($state, $inner);
+
+        assertNoPendingConstraintsInExpr($state, $inner, $value);
     } finally {
         restoreAmbientConstraints($state, $saved);
+        [$state->constraintMethods, $state->constraintMethodAmbiguities, $state->constraintMethodCandidates] = $savedMethods;
+        $state->allocation = $savedAllocation;
     }
 
     $lambda = wrapDictLambda($state, $inner, $params, $dictTypes);
@@ -3849,62 +3846,6 @@ function abstractLocalConstraints(TypeCheckState $state, Ast\AstNode $rhs, array
 }
 
 /**
- * Rename a type's variables to a fresh, process-unique prefix.
- *
- * `materializeRestrictedSignatures` installs the probe's type as a scheme in
- * the module environment. The probe rolls its own variable numbering back, so
- * an unrenamed type would name the same `t<n>` variables the next run is about
- * to allocate; renaming keeps the installed scheme from aliasing them.
- *
- * @param list<Ast\PendingConstraint> $constraints
- * @return array{0: Type, 1: list<Ast\PendingConstraint>, 2: list<string>}
- */
-function renameProbeTypeVars(Type $type, array $constraints): array
-{
-    static $recordId = 0;
-
-    $names = [];
-    foreach ([...typeVars($type), ...constraintTypeVars($constraints)] as $name => $_) {
-        $names[$name] = true;
-    }
-
-    $prefix = 'r' . (++$recordId) . '_';
-    $mapping = [];
-    $bound = [];
-    $index = 0;
-    foreach (\array_keys($names) as $name) {
-        $renamed = $prefix . $index++;
-        $mapping[$name] = new TVar($renamed);
-        $bound[] = $renamed;
-    }
-
-    $renamedConstraints = [];
-    foreach ($constraints as $constraint) {
-        $renamedConstraints[] = new Ast\PendingConstraint(
-            $constraint->class,
-            \array_map(static fn (Type $arg): Type => substitute($arg, $mapping), $constraint->args),
-        );
-    }
-
-    return [substitute($type, $mapping), $renamedConstraints, $bound];
-}
-
-/** @param list<Ast\PendingConstraint> $constraints @return array<string, true> */
-function constraintTypeVars(array $constraints): array
-{
-    $vars = [];
-    foreach ($constraints as $constraint) {
-        foreach ($constraint->args as $arg) {
-            foreach (typeVars($arg) as $name => $_) {
-                $vars[$name] = true;
-            }
-        }
-    }
-
-    return $vars;
-}
-
-/**
  * The constraints a recursive binding group is generalized over: the union of
  * the obligations its members' bodies carry, one dictionary per class and type.
  *
@@ -3945,27 +3886,6 @@ function recursiveGroupConstraints(
     }
 
     return $merged;
-}
-
-/**
- * Give the group's own references the dictionaries their callee takes.
- *
- * A member's body was inferred before the group was generalized, when its own
- * name had no constraints, so its recursive calls carry no evidence yet. The
- * names are marked here and the evidence pass that follows resolves them: in a
- * member's body the group's dictionaries are that member's own parameters.
- *
- * @param array<int, string> $members binding index to name
- * @param list<Ast\PendingConstraint> $constraints
- */
-function markGroupCallEvidence(Ast\AstNode $expr, array $members, array $constraints): void
-{
-    $names = \array_flip($members);
-    walkAstValues($expr, static function (Ast\AstNode $node) use ($names, $constraints): void {
-        if ($node instanceof Ast\Variable && isset($names[$node->name])) {
-            $node->pendingConstraints = $constraints;
-        }
-    });
 }
 
 /**
@@ -4159,10 +4079,15 @@ function inferRecursiveBindings(TypeCheckState $state, array $bindings, array $e
             }
         }
 
+        $byName = [];
+        foreach ($members as $name) {
+            $byName[$name] = $groupConstraints;
+        }
+
         foreach ($members as $bi => $name) {
             $binding = $bindings[$bi];
             [$rhs] = peelBindingAnnotation($binding->value);
-            markGroupCallEvidence($rhs, $members, $groupConstraints);
+            markRecursiveGroupEvidence($rhs, $byName);
             [$wrapped, $abstracted] = abstractLocalConstraints($state, $rhs, $groupDictConstraints);
             if ($binding->value instanceof Ast\TypeAsc) {
                 $binding->value->expr = $wrapped;

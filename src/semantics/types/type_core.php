@@ -336,7 +336,7 @@ function freshenTypeVars(TypeCheckState $state, Type $type): Type
  * type variables stay aligned (e.g. `Applicative f` with `a -> f b`).
  *
  * @param list<Ast\PendingConstraint> $constraints
- * @return array{type: Type, constraints: list<Ast\PendingConstraint>}
+ * @return array{type: Type, constraints: list<Ast\PendingConstraint>, mapping: array<string, Type>}
  */
 function freshenTypeWithConstraints(TypeCheckState $state, Type $type, array $constraints): array
 {
@@ -369,6 +369,7 @@ function freshenTypeWithConstraints(TypeCheckState $state, Type $type, array $co
     return [
         'type' => substitute($type, $mapping),
         'constraints' => $freshConstraints,
+        'mapping' => $mapping,
     ];
 }
 
@@ -406,7 +407,7 @@ function substitutePendingConstraints(array $constraints, array $mapping): array
  *
  * @param list<Ast\PendingConstraint> $constraints
  * @param array<string, true> $keep
- * @return array{type: Type, constraints: list<Ast\PendingConstraint>}
+ * @return array{type: Type, constraints: list<Ast\PendingConstraint>, mapping: array<string, Type>}
  */
 function freshenTypeWithConstraintsKeeping(TypeCheckState $state, Type $type, array $constraints, array $keep): array
 {
@@ -442,6 +443,7 @@ function freshenTypeWithConstraintsKeeping(TypeCheckState $state, Type $type, ar
     return [
         'type' => substitute($type, $mapping),
         'constraints' => $freshConstraints,
+        'mapping' => $mapping,
     ];
 }
 
@@ -640,6 +642,13 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
                 unify($state, $right, $left, $at);
 
                 return;
+            }
+            if (isset($state->restrictedVars[$left->name], $state->restrictedVars[$right->name])) {
+                if (\strnatcmp($left->name, $right->name) < 0) {
+                    unify($state, $right, $left, $at);
+
+                    return;
+                }
             }
         } elseif (isset($state->rigidVars[$left->name])) {
             throw typeFail($state, formatUnifyError($state, $left, $right), $at, 'unify');

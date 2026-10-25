@@ -2,11 +2,13 @@
 
 namespace Moggi\Semantics\Kinds;
 
+use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TNatLit;
 use Moggi\Semantics\TypeExpr\TPromoted;
 use Moggi\Semantics\TypeExpr\TStringLit;
 use Moggi\Semantics\TypeExpr\TVar;
+use Moggi\Semantics\TypeExpr\TVarApp;
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Semantics\Types\TypeCheckState;
 use Moggi\Syntax\Ast;
@@ -711,14 +713,207 @@ function assertKind(
  *
  * @return array<string, string> parameter name => its kind, in the order the signature mentions it
  */
-function declarationParameterKinds(TypeCheckState $state, Type $type): array
+function declarationParameterKinds(TypeCheckState $state, Type $type, array $constraintArgs = []): array
 {
+    $vars = typeVars($type);
+    foreach ($constraintArgs as $arg) {
+        $vars += typeVars($arg);
+    }
+
+    $settled = [];
+    foreach ($state->varKinds as $recorded => $kind) {
+        $representative = prune($state, new TVar($recorded));
+        if ($representative instanceof TVar) {
+            $settled[$representative->name] ??= $kind;
+        }
+    }
+
     $kinds = [];
-    foreach (\array_keys(typeVars($type)) as $name) {
-        $kinds[$name] = kindToString($state->varKinds[$name] ?? new KType());
+    $kindOf = static fn (string $name): Kind => defaultUnresolvedKindVars(
+        $settled[$name] ?? $state->varKinds[$name] ?? new KType(),
+    );
+    foreach (\array_keys($vars) as $name) {
+        $kinds[$name] = kindToString($kindOf($name));
     }
 
     return $kinds;
+}
+
+/**
+ * A kind read back from the text {@see kindToString()} writes.
+ *
+ * A record publishes its kinds as text, so a check that holds them against the
+ * declaration's type has to turn them into kinds again rather than count arrows
+ * in a string.
+ */
+function parseKind(string $text): Kind
+{
+    $text = \trim($text);
+    while (\str_starts_with($text, '(') && \str_ends_with($text, ')')) {
+        $depth = 0;
+        $wraps = true;
+        for ($i = 0, $n = \strlen($text); $i < $n; ++$i) {
+            $depth += match ($text[$i]) { '(' => 1, ')' => -1, default => 0 };
+            if ($depth === 0 && $i < $n - 1) {
+                $wraps = false;
+
+                break;
+            }
+        }
+        if (! $wraps) {
+            break;
+        }
+        $text = \trim(\substr($text, 1, -1));
+    }
+
+    $depth = 0;
+    for ($i = 0, $n = \strlen($text) - 1; $i < $n; ++$i) {
+        $depth += match ($text[$i]) { '(' => 1, ')' => -1, default => 0 };
+        if ($depth === 0 && \substr($text, $i, 2) === '->') {
+            return new KArrow(parseKind(\substr($text, 0, $i)), parseKind(\substr($text, $i + 2)));
+        }
+    }
+
+    return match ($text) {
+        'Type' => new KType(),
+        '' => throw new \InvalidArgumentException('empty kind'),
+        default => new KCon($text),
+    };
+}
+
+/**
+ * What a type fixes about the kinds of the variables it mentions.
+ *
+ * Every expected kind is a fact the checker already owns: an arrow's two sides
+ * are `Type`, and a type constructor, type synonym, associated family or
+ * promoted constructor is applied at the kind its declaration gives it. Walking
+ * the type with those facts answers two things:
+ *
+ *   - `vars` — variables whose kind a position fixes exactly, so `m` passed to a
+ *     head at `Type -> Type` is a type function;
+ *   - `applied` — variables the type applies, with the arity and the kind the
+ *     result has to be, so a variable applied once in a `Type` position takes
+ *     exactly one arrow whatever its argument's kind is.
+ *
+ * A head the facts say nothing about leaves its arguments undetermined: an
+ * unknown kind is not a wrong kind, and answering `Type` for it is the defaulting
+ * this exists in place of.
+ *
+ * @return array{vars: array<string, Kind>, applied: array<string, array{0: int, 1: Kind}>}
+ */
+function typeKindRequirements(TypeCheckState $facts, Type $type): array
+{
+    $vars = [];
+    $applied = [];
+    $walk = function (Type $node, ?Kind $want) use (&$walk, &$vars, &$applied, $facts): void {
+        if ($node instanceof TArrow) {
+            $walk($node->from, new KType());
+            $walk($node->to, new KType());
+
+            return;
+        }
+
+        if ($node instanceof TVar) {
+            if ($want !== null && ! isset($vars[$node->name])) {
+                $vars[$node->name] = $want;
+            }
+
+            return;
+        }
+
+        if ($node instanceof TVarApp) {
+            if ($want !== null && ! isset($vars[$node->name]) && ! isset($applied[$node->name])) {
+                $applied[$node->name] = [\count($node->args), $want];
+            }
+            foreach ($node->args as $argument) {
+                $walk($argument, null);
+            }
+
+            return;
+        }
+
+        if (! $node instanceof TCon && ! $node instanceof TPromoted) {
+            return;
+        }
+
+        $kind = $node instanceof TCon
+            ? ($facts->kindEnv[canonicalTypeConName($node->name)] ?? null)
+            : (isset($facts->promoted[$node->name])
+                ? promotedConstructorKind($facts->promoted[$node->name])
+                : null);
+        foreach ($node->args as $argument) {
+            if (! $kind instanceof KArrow) {
+                return;
+            }
+            $walk($argument, $kind->from);
+            $kind = $kind->to;
+        }
+    };
+    $walk($type, new KType());
+
+    return ['vars' => $vars, 'applied' => $applied];
+}
+
+/**
+ * Hold a declaration's type against the kinds its parameters are published with.
+ *
+ * The requirements are {@see typeKindRequirements()}, so a published kind is
+ * checked against the facts that fixed it rather than against a rule of its own:
+ * a parameter published at `Type` that a head puts at `Type -> Type` contradicts
+ * the type, and so does one published at `Type -> Type -> Type` that the type
+ * applies once.
+ *
+ * Only published kinds are checked. A variable the scheme does not bind is not a
+ * parameter — an inferred declaration the monomorphism restriction left open has
+ * one, and a kind about it would be a statement the record cannot make.
+ *
+ * @param array<string, string> $parameterKinds the kinds the declaration publishes
+ * @return list<string> every disagreement, empty when the type is well kinded
+ */
+function signatureKindErrors(TypeCheckState $facts, Type $type, array $parameterKinds): array
+{
+    $errors = [];
+    $requirements = typeKindRequirements($facts, $type);
+    $kindOf = static fn (string $name): ?Kind
+        => isset($parameterKinds[$name]) ? parseKind($parameterKinds[$name]) : null;
+
+    foreach ($requirements['vars'] as $name => $required) {
+        $kind = $kindOf($name);
+        if ($kind === null) {
+            continue;
+        }
+        $spelled = $parameterKinds[$name];
+        if (! sameKind($kind, $required)) {
+            $errors[] = "states `{$name}` at kind `{$spelled}` where the type requires `"
+                . kindToString($required) . '`';
+        }
+    }
+
+    foreach ($requirements['applied'] as $name => [$count, $result]) {
+        if (isset($requirements['vars'][$name])) {
+            continue;
+        }
+        $kind = $kindOf($name);
+        if ($kind === null) {
+            continue;
+        }
+        $spelled = $parameterKinds[$name];
+        for ($applied = 0; $applied < $count; ++$applied) {
+            if (! $kind instanceof KArrow) {
+                $errors[] = "states `{$name}` at kind `{$spelled}`, applied to {$count} argument(s) where"
+                    . ' the result must be `' . kindToString($result) . '`';
+
+                continue 2;
+            }
+            $kind = $kind->to;
+        }
+        if (! sameKind($kind, $result)) {
+            $errors[] = "states `{$name}` at kind `{$spelled}`, applied to {$count} argument(s) where the"
+                . ' result must be `' . kindToString($result) . '`';
+        }
+    }
+
+    return $errors;
 }
 
 /**

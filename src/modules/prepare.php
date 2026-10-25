@@ -25,9 +25,11 @@ use function Moggi\Syntax\Parser\parse;
 /**
  * @param list<string> $paths
  * @param bool $shallow Build the import closure without loading checked
- *   programs. Hydrated interfaces already contain final schemes and
- *   elaboration facts; shallow-base modules are never lowered. Missing
- *   interfaces trigger a fresh check, so cold caches still typecheck once.
+ *   programs. A module's interface is the product of that module's own check:
+ *   a shallow-base module reads the one its check wrote to the module cache, and
+ *   a module with no cached interface is checked here like any other, so a cold
+ *   cache still typechecks once. Nothing else produces an interface. Shallow-base
+ *   modules are never lowered.
  * @param bool $releaseChecked Write checked programs to the module cache
  *   and release them from memory; callers reload them via
  *   {@see PreparedProject::program()} when lowering. This keeps whole-project
@@ -222,21 +224,21 @@ function prepareProject(
         updateProjectClassesForModule($units[$moduleName], $units, $moduleName, $projectClasses);
 
         if (($units[$moduleName]['parsed'] ?? false) !== true) {
-            ensureImportInterface($units, $moduleName, $projectClasses, $instanceWorld->index(), $context);
-            publishModuleExports($units, $moduleName, $context);
-            if (isset($units[$moduleName]['localTypes'])) {
-                addModuleClassScope($units, $moduleName, $projectClasses, $classScopes, $classScopeFns, $context->backendId);
-            }
-
-            continue;
+            throw new \LogicException(
+                "the closure hands `{$moduleName}` over for classification without its program: every"
+                . ' module is parsed before any is classified, so an unparsed unit means the run was'
+                . ' handed a module it does not check',
+            );
         }
 
         $path = $units[$moduleName]['path'];
         $cacheKey = checkedModuleCacheKey($path, $context);
 
+        $interfaceInHand = isset($units[$moduleName]['localTypes']);
         $memoized = ProjectCache::checkedModule($cacheKey);
-        $interfacesReady = isset($units[$moduleName]['localTypes'], $units[$moduleName]['exports'], $units[$moduleName]['facts']);
-        if ($memoized !== null && !($shallow && $interfacesReady)) {
+        $interfacesReady = $interfaceInHand
+            && isset($units[$moduleName]['exports'], $units[$moduleName]['facts']);
+        if ($interfaceInHand && $memoized !== null && !($shallow && $interfacesReady)) {
             syncExportedInferredSchemesFromTypeEnv(
                 $units,
                 $moduleName,
@@ -267,7 +269,7 @@ function prepareProject(
                 $context->moduleKey($moduleName, $contentKey),
                 $context->backendId,
             );
-            if (\is_array($cachedCheck) && isset($cachedCheck['program'])) {
+            if ($interfaceInHand && \is_array($cachedCheck) && isset($cachedCheck['program'])) {
                 $fromDisk = new CheckedModule(
                     $cachedCheck['program'],
                     $cachedCheck['exportedInferredSchemes'] ?? [],
@@ -462,7 +464,6 @@ function buildPreparedModuleContext(
     InstanceWorld $instanceWorld,
     CompilationContext $context,
 ): ImportContext {
-    ensureImportInterface($units, $moduleName, $projectClasses, $instanceWorld->index(), $context);
     publishModuleExports($units, $moduleName, $context);
     addModuleClassScope($units, $moduleName, $projectClasses, $classScopes, $classScopeFns, $context->backendId);
     $outputRelative = mogPathToOutputRelative($path, $rootPrefix, $context->backend->extension());
@@ -585,31 +586,6 @@ function publishModuleExports(array &$units, string $moduleName, CompilationCont
             $context->backendId,
         );
     }
-}
-
-/**
- * Give a module the interface it publishes when it is not checked in this run.
- *
- * A module the run checks publishes its interface from the check itself, so this
- * is only for one that is hydrated from disk or skipped by `--only`: its
- * interface is the registration pass of `buildModuleLocalTypes`.
- *
- * @param array<string, array<string, mixed>> $units
- * @param array<string, mixed> $projectClasses
- * @param array<string, mixed> $projectInstanceIndex
- */
-function ensureImportInterface(
-    array &$units,
-    string $moduleName,
-    array $projectClasses,
-    array $projectInstanceIndex,
-    CompilationContext $context,
-): void {
-    if (isset($units[$moduleName]['localTypes']) || ($units[$moduleName]['parsed'] ?? false) !== true) {
-        return;
-    }
-
-    buildModuleLocalTypes($units, $moduleName, $projectClasses, $projectInstanceIndex, $context);
 }
 
 /**

@@ -2,6 +2,7 @@
 
 namespace Moggi\Modules;
 
+use Moggi\Semantics\Kinds;
 use Moggi\Semantics\TypeExpr\Scheme;
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Semantics\Types\TypeCheckState;
@@ -15,10 +16,11 @@ use function Moggi\Semantics\Types\typeToString;
 use function Moggi\Semantics\Types\walkAstValues;
 
 /**
- * One checked-core record for an owned ordinary function, whether its
- * signature was declared or inferred and generalized.
+ * One checked-core record for a declaration the module lowers: an ordinary
+ * function, a recursive group's member, an instance method, a class default, a
+ * derived member or a foreign import.
  *
- * Captures the checker's closed result: scheme, dictionary evidence,
+ * Captures the checker's settled result: scheme, dictionary evidence,
  * residual decisions and provenance, elaborated term types, and source
  * origins for tooling. Nothing is recomputed from the mutable source tree.
  */
@@ -35,8 +37,8 @@ final class CheckedFunction
      *   Term-to-type entries in elaboration order, keyed by source origin
      *   (see {@see termOrigin()}).
      * @param list<EvidencePlan> $bodyEvidence
-     *   Evidence decisions for every site in walk order. Category declarations
-     *   use these plans, never the site's own evidence fields.
+     *   Evidence decisions for every site in walk order. Lowering reads these
+     *   plans, never the site's own evidence fields.
      * @param array<string, string> $parameterKinds
      *   Each type parameter's kind in this declaration's signature scope.
      *   Kinds are declaration-local, so identical names may have different
@@ -167,27 +169,18 @@ final class CheckedFunction
 }
 
 /**
- * The module's closed checked product: records for declarations with
- * settled schemes, plus the published split of ordinary declarations
- * left unowned and why.
+ * The module's checked product: one record per declaration the module lowers.
  *
- * `IR\lower` uses this split to distinguish required records from
- * legitimate omissions. A declaration in neither map is a producer
- * defect and causes lowering to fail; downstream code must not
- * re-derive the decision.
+ * There is no second bucket. A declaration the run lowers either has a record
+ * here or the module does not lower at all, so lowering never has to decide
+ * whether a declaration it meets is owned — it reads the record or refuses.
  */
 final class CheckedCore
 {
-    /**
-     * @param array<string, CheckedFunction> $functions the declarations this check closed
-     * @param array<string, string> $unowned the ordinary declarations it left to the existing
-     *   producer, by name, each with the fact that kept it out (an inferred signature that did not
-     *   close)
-     */
+    /** @param array<string, CheckedFunction> $functions records, by the name the declaration lowers as */
     public function __construct(
         public readonly string $module,
         public readonly array $functions,
-        public readonly array $unowned = [],
     ) {
     }
 
@@ -202,52 +195,26 @@ final class CheckedCore
         return new self(
             $this->module,
             [$function->name => $function] + $this->functions,
-            $this->unowned,
         );
     }
 }
 
 /**
- * Whether a declaration is eligible for checked-core ownership: ordinary,
- * not a signature stub, foreign import, or instance method.
- *
- * Eligibility also requires a closed scheme. Recursive declarations qualify
- * because their group signature is settled before any body is checked.
- * {@see checkedCoreFor()} records the final decision in
- * {@see CheckedCore::$unowned}; downstream code uses that split rather
- * than re-deriving it. `IR\lower` reads the split to determine which
- * declarations require a record.
- */
-function isOrdinaryDeclaration(Ast\FunctionDecl $fn): bool
-{
-    return ! $fn->signatureOnly
-        && ! $fn->foreign
-        && ! $fn->instanceMethod;
-}
-
-/**
  * Build the module's checked core from the checker's results.
  *
- * The single producer runs at the end of checking and publishes only
- * settled declarations: obligations must be closed, types generalized,
- * and evidence vectors consistent with their schemes.
- *
- * Ordinary declarations are owned when checking settles a closed scheme.
- * Recursive groups qualify too: their shared signature is settled before
- * any member body is checked.
- *
- * `$unowned` records declarations whose inferred signatures remain open,
- * such as under the monomorphism restriction; they keep their existing
- * producer. An explicitly declared signature must be closed or publication
- * fails.
+ * One producer for every declaration the module lowers. Each category's check
+ * publishes the two facts only it knows — the scheme it settled and the kinds of
+ * the parameters that scheme binds (`TypeCheckState::$checkedSchemes`,
+ * `$checkedParameterKinds`) — and this function turns those into the record,
+ * which is why an instance method, a derived member and a foreign import read
+ * the same way an ordinary declaration does.
  */
 function checkedCoreFor(TypeCheckState $state, array $items, string $module): CheckedCore
 {
     $functions = [];
-    $unowned = [];
 
     foreach ($items as $item) {
-        if (! $item instanceof Ast\FunctionDecl || ! isOrdinaryDeclaration($item)) {
+        if (! $item instanceof Ast\FunctionDecl || $item->signatureOnly) {
             continue;
         }
 
@@ -260,14 +227,9 @@ function checkedCoreFor(TypeCheckState $state, array $items, string $module): Ch
             );
         }
 
-        $reason = unownedReason($state, $item, $scheme, $module);
-        if ($reason !== null) {
-            $unowned[$item->name] = $reason;
+        assertSignatureClosed($state, $item, $scheme);
+        $origin = originFor($state, $item, $module);
 
-            continue;
-        }
-
-        $origin = $module . ':' . $item->line . ':' . $item->col;
         $evidence = evidenceVectorFor($state, $item, $scheme, $origin);
 
         assertNoPendingConstraintsInExpr($state, $item->body, $item);
@@ -283,7 +245,7 @@ function checkedCoreFor(TypeCheckState $state, array $items, string $module): Ch
         );
     }
 
-    return new CheckedCore($module, $functions, $unowned);
+    return new CheckedCore($module, $functions);
 }
 
 /**
@@ -344,32 +306,51 @@ function assertTermsCommitted(TypeCheckState $state, Ast\FunctionDecl $item, str
 }
 
 /**
- * Why this declaration stays with the existing producer, or null when the
- * record can own it.
+ * A declaration that spelled its type out promised a closed one.
  *
- * A declaration that spells its own signature has promised a closed type, so a
- * variable still uncommitted there is a producer defect and refusing it is the
- * point of the boundary — it is not a licence to fall back. An inferred
- * signature may legitimately stay open under the monomorphism restriction, and
- * that is the one fact this reason states; lowering then serves it from the
- * existing producer.
+ * A variable still uncommitted under a written signature is a producer defect,
+ * and refusing it here is the point of the boundary. An *inferred* signature may
+ * keep a variable the monomorphism restriction left unsettled — the module end
+ * already decided that, and the record states the scheme as it stands, with no
+ * parameter kind for a variable the scheme does not bind.
  */
-function unownedReason(TypeCheckState $state, Ast\FunctionDecl $item, Scheme $scheme, string $module): ?string
+function assertSignatureClosed(TypeCheckState $state, Ast\FunctionDecl $item, Scheme $scheme): void
 {
-    if ($scheme->freeTypeVars === []) {
-        return null;
-    }
-
-    if (! Ast\hasDeclaredSignature($item)) {
-        return 'an inferred signature that did not close';
+    if ($scheme->freeTypeVars === [] || ! Ast\hasDeclaredSignature($item)) {
+        return;
     }
 
     throw typeFail(
         $state,
-        "the checked boundary refuses `{$item->name}`: its type still has the uncommitted"
-        . ' variable(s) ' . \implode(', ', \array_keys($scheme->freeTypeVars)),
+        "the checked boundary refuses `{$item->name}`: its type " . typeToString($scheme->type)
+        . ' still has the uncommitted variable(s) ' . \implode(', ', \array_keys($scheme->freeTypeVars)),
         $item,
     );
+}
+
+/**
+ * The site this declaration is written at, as the record publishes it.
+ *
+ * A synthesized declaration — an instance method, a class default, a derived
+ * member, a foreign axiom — has no span of its own, so the producer that built
+ * it records the site it copied its body from (`FunctionDecl::$sourceOrigin`,
+ * which can be in another module). Anything without a site is refused here: a
+ * record whose origin names no position is a link that opens nothing, and an
+ * origin of `module:0:0` is the shape that collision takes.
+ */
+function originFor(TypeCheckState $state, Ast\FunctionDecl $item, string $module): string
+{
+    $origin = $item->sourceOrigin ?? ($module . ':' . $item->line . ':' . $item->col);
+    if (\str_ends_with($origin, ':0:0')) {
+        throw typeFail(
+            $state,
+            "the checked core cannot record `{$module}::{$item->name}`: the declaration has no"
+            . ' source site, so its record would publish an origin no tool can open',
+            $item,
+        );
+    }
+
+    return $origin;
 }
 
 /**
@@ -465,6 +446,15 @@ function parameterKindsFor(TypeCheckState $state, Ast\FunctionDecl $item, Scheme
         $parameterKinds[$parameter] = $fixedKinds[$parameter];
     }
 
+    $kindErrors = Kinds\signatureKindErrors($state, $scheme->type, $parameterKinds);
+    if ($kindErrors !== []) {
+        throw typeFail(
+            $state,
+            "the checked boundary refuses `{$module}::{$item->name}`: {$kindErrors[0]}",
+            $item,
+        );
+    }
+
     return $parameterKinds;
 }
 
@@ -488,17 +478,17 @@ function publishElaboration(Ast\Program $program): Ast\Program
 
     $declarations = [];
     foreach ($program->items as $item) {
-        if ($item instanceof Ast\FunctionDecl && $core->function($item->name) !== null) {
+        if ($item instanceof Ast\FunctionDecl && ! $item->signatureOnly) {
             $declarations[$item->name] = $item;
         }
     }
 
     foreach ($core->functions as $name => $record) {
         $declaration = $declarations[$name] ?? null;
-        if ($declaration === null || ! isOrdinaryDeclaration($declaration)) {
+        if ($declaration === null) {
             throw new \LogicException(
                 "the checked core records `{$core->module}::{$name}` but the elaboration has no such"
-                . ' declaration in its category',
+                . ' lowered declaration',
             );
         }
 

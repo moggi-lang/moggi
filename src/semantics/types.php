@@ -26,10 +26,12 @@ require_once __DIR__ . '/type_expr.php';
 require_once __DIR__ . '/types/state.php';
 require_once __DIR__ . '/evidence_names.php';
 require_once __DIR__ . '/types/type_core.php';
+require_once __DIR__ . '/types/allocation.php';
 require_once __DIR__ . '/types/constraints.php';
 require_once __DIR__ . '/types/literals.php';
 require_once __DIR__ . '/types/instances.php';
 require_once __DIR__ . '/types/infer.php';
+require_once __DIR__ . '/types/recursive_declarations.php';
 require_once __DIR__ . '/types/normalize.php';
 require_once __DIR__ . '/types/declarations.php';
 require_once __DIR__ . '/registry.php';
@@ -141,7 +143,7 @@ function checkRaw(
     Registry\applyImportContext($state, $program, $importContext);
     Registry\registerTypeDeclarations($state, $program);
     Registry\registerFunctionSchemesFromProgram($state, $program);
-    discoverInferredSignatures($state, inferredFunctionDecls($program));
+    $checkedInferred = inferInferredDeclarations($state, inferredFunctionDecls($program));
 
     $interface = [
         'env' => $state->env,
@@ -193,7 +195,9 @@ function checkRaw(
                 validateForeignTypeDecl($state, $item);
                 $items[] = $item;
             })(),
-            Ast\FunctionDecl::class => $items[] = $item->signatureOnly ? $item : checkFunction($state, $item),
+            Ast\FunctionDecl::class => $items[] = $item->signatureOnly
+                ? $item
+                : ($checkedInferred[\spl_object_id($item)] ?? checkFunction($state, $item)),
             Ast\DataDecl::class => (function () use ($state, $item, &$items, &$seenData): void {
                 if (isset($seenData[$item->name])) {
                     throw typeFail($state, "duplicate data type `{$item->name}`", $item);
@@ -214,7 +218,10 @@ function checkRaw(
         };
     }
 
-    finishRestrictedDeclarations($state);
+    $settledRestricted = finishRestrictedDeclarations($state);
+    foreach ($settledRestricted as $name) {
+        $interface['env'][$name] = $state->env[$name];
+    }
 
     validateEntryPoint($state, $items, $program->module, $purpose);
 

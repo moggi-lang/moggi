@@ -18,9 +18,7 @@ use function Moggi\Semantics\IoBoundary\isIoCheckedType;
 use function Moggi\Semantics\Kernel\boolFalseCtor;
 use function Moggi\Semantics\Kernel\boolTrueCtor;
 use function Moggi\Semantics\Types\bindingGroupSccs;
-use function Moggi\Semantics\Types\evidenceRefOperand;
 use function Moggi\Semantics\Types\peelBindingAnnotation;
-use function Moggi\Semantics\Types\prune;
 use function Moggi\Syntax\isIdentifier;
 
 function lowerExpr(Ast\AstNode $expr, LowerCtx $ctx): Operand
@@ -80,7 +78,7 @@ function lowerExpr(Ast\AstNode $expr, LowerCtx $ctx): Operand
             return new FnRef($expr->backendResolved ?? $expr->name);
         })(),
         Ast\TypeAsc::class => lowerExpr($expr->expr, $ctx),
-        Ast\EvidenceRef::class => lowerEvidenceRef($expr, $ctx),
+        Ast\EvidenceRef::class => evidencePlanOperand(plannedEvidence($expr, $ctx), $ctx),
         Ast\EvidenceMethod::class => lowerEvidenceMethod($expr, $ctx),
         Ast\IntrinsicCall::class => (static function () use ($expr, $ctx): Operand {
             if (isIoExceptionPrimop($expr->name)) {
@@ -98,7 +96,7 @@ function lowerExpr(Ast\AstNode $expr, LowerCtx $ctx): Operand
 function lowerEvidenceMethod(Ast\EvidenceMethod $expr, LowerCtx $ctx): Operand
 {
     $method = new DictMethod(
-        evidenceMethodOperand($expr, $ctx),
+        evidencePlanOperand(plannedEvidence($expr, $ctx), $ctx),
         $expr->method,
         evidenceContextWidth($expr, $ctx),
     );
@@ -156,24 +154,6 @@ function lowerForeignCall(Ast\ForeignCall $expr, LowerCtx $ctx): ForeignCall
     );
 }
 
-function evidenceMethodOperand(Ast\EvidenceMethod $expr, LowerCtx $ctx): Operand
-{
-    if ($ctx->evidencePlans !== null) {
-        return evidencePlanOperand(plannedEvidence($expr, $ctx), $ctx);
-    }
-
-    if ($expr->evidenceInstance !== null) {
-        return projectedEvidenceOperand(
-            $expr->class,
-            $expr->evidenceInstance,
-            $expr->contextEvidence,
-            $ctx,
-        );
-    }
-
-    return new Local($expr->evidence);
-}
-
 /**
  * The record's evidence decision for one elaborated site, or a refusal.
  *
@@ -203,21 +183,16 @@ function plannedEvidence(Ast\AstNode $site, LowerCtx $ctx): EvidencePlan
  */
 function evidenceContextWidth(Ast\EvidenceMethod $site, LowerCtx $ctx): int
 {
-    if ($ctx->evidencePlans !== null) {
-        return plannedEvidence($site, $ctx)->contextWidth();
-    }
-
-    return \count($site->contextEvidence);
+    return plannedEvidence($site, $ctx)->contextWidth();
 }
 
 /**
  * Lower one planned evidence decision.
  *
- * The three kinds lower exactly as their unplanned counterparts do — a
- * parameter is a local, a reference is the instance's builder (applied to its
- * own dictionaries when the instance takes any), and a projection acquires its
- * owner dictionary once per block — so a recorded declaration and the rest of the
- * tree agree on every emitted operand.
+ * A parameter is the local its slot names, a reference is the instance's builder
+ * (applied to its own dictionaries when the instance takes any), and a projection
+ * acquires its owner dictionary once per block — a dictionary is immutable, so
+ * later uses in the same block read the operand the first one produced.
  */
 function evidencePlanOperand(EvidencePlan $plan, LowerCtx $ctx): Operand
 {
@@ -255,74 +230,6 @@ function evidencePlanOperand(EvidencePlan $plan, LowerCtx $ctx): Operand
     $ctx->evidenceBindings[$fn->name] = $value;
 
     return $value;
-}
-
-/**
- * The owner dictionary of a projected method, acquired once per block.
- *
- * A projection names its instance's dictionary (`@__ev_Labelled_Int`), so the builder used to run
- * again at every use of the method. The first use in a block keeps the builder call and records
- * the operand it produced; later uses in the same block read that operand instead of calling the
- * builder again: the projected method owns its instance-context dictionary, so it is acquired once
- * per block. Correctness is unchanged — a dictionary is an immutable method
- * table — and no emitter needs to know: every backend already accepts a local/temp as `DictCall`'s
- * evidence.
- *
- * A context-taking instance (`instance Monoid a => Monoid (Dual a)`) is left in its per-use form:
- * its builder takes the dictionaries in scope at that use, which is the capture-vector slice, not
- * this one.
- *
- * @param list<Ast\AstNode> $context
- */
-function projectedEvidenceOperand(string $class, Ast\TypeNode $head, array $context, LowerCtx $ctx): Operand
-{
-    $fn = evidenceRefOperand($class, $head);
-
-    if ($context !== []) {
-        $args = [];
-        foreach ($context as $ev) {
-            $args[] = lowerExpr($ev, $ctx);
-        }
-
-        return lowerCall($fn->name, $args, $ctx);
-    }
-
-    $bound = $ctx->evidenceBindings[$fn->name] ?? null;
-    if ($bound !== null) {
-        return $bound;
-    }
-
-    $value = lowerCall($fn->name, [], $ctx);
-    $ctx->evidenceBindings[$fn->name] = $value;
-
-    return $value;
-}
-
-function lowerEvidenceRef(Ast\EvidenceRef $expr, LowerCtx $ctx): Operand
-{
-    if ($ctx->evidencePlans !== null) {
-        return evidencePlanOperand(plannedEvidence($expr, $ctx), $ctx);
-    }
-
-    return lowerEvidenceRefValue($expr->class, $expr->head, $expr->context, $ctx);
-}
-
-/**
- * @param list<Ast\AstNode> $context
- */
-function lowerEvidenceRefValue(string $class, Ast\TypeNode $head, array $context, LowerCtx $ctx): Operand
-{
-    $fn = evidenceRefOperand($class, $head);
-    if ($context === []) {
-        return $fn;
-    }
-
-    $args = [];
-    foreach ($context as $ev) {
-        $args[] = lowerExpr($ev, $ctx);
-    }
-
-    return lowerCall($fn->name, $args, $ctx);
 }
 
 function lowerInfix(Ast\Infix $expr, LowerCtx $ctx): Operand
@@ -589,7 +496,7 @@ function lowerDictMethodCall(Ast\EvidenceMethod $expr, array $args, LowerCtx $ct
 {
     $dest = freshTemp($ctx);
     $ctx->items[] = new DictCall(
-        evidenceMethodOperand($expr, $ctx),
+        evidencePlanOperand(plannedEvidence($expr, $ctx), $ctx),
         $expr->method,
         $args,
         $dest,

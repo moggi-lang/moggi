@@ -78,8 +78,9 @@ try {
     $names = \array_keys($core->functions);
     \sort($names);
     $assert(
-        $names === ['main', 'picked', 'scaled'],
-        'the category is annotated nonrecursive ordinary functions, got: ' . \implode(', ', $names),
+        $names === ['main', 'picked', 'scaled', 'tag'],
+        'every declaration the module lowers is recorded — the instance method `tag` beside the'
+            . ' ordinary functions, got: ' . \implode(', ', $names),
     );
 
     $cold = IR\Dump\dump(IR\lower($program, $program->interface->data, $path));

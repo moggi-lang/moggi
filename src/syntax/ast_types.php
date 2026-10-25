@@ -707,6 +707,15 @@ final class FunctionDecl extends AstNode
 
     public ?string $intrinsicWrapper = null;
 
+    /**
+     * Where the declaration is written when that is not the node's own span.
+     *
+     * An instance method synthesized from a class default has the class's body,
+     * not this module's: without this, the record it publishes would name a line
+     * of the wrong file. `module:line:col`, exactly the shape the record uses.
+     */
+    public ?string $sourceOrigin = null;
+
     /** Set by validateEntryPoint (Main) or the REPL session compiler (ReplExpression). */
     public ?IR\EntryPointKind $entryKind = null;
 

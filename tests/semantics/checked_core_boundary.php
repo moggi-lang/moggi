@@ -16,8 +16,8 @@
  *   `publishElaboration()` call — and its message is required here by name: a
  *   scheme still open, an obligation without a dictionary, one dictionary for two
  *   obligations, a vector that disagrees with the scheme, a parameter without a
- *   kind, a kind for a parameter the scheme never binds, a term type naming a
- *   variable the check already solved.
+ *   kind, a kind for a parameter the scheme never binds, a declaration with no
+ *   source site, a term type naming a variable the check already solved.
  */
 
 $root = __DIR__;
@@ -175,22 +175,17 @@ $oneDictionary = new Scheme(new TCon('Int', []), [], [], 1, []);
 $twoDictionaries = new Scheme(new TCon('Int', []), [], [], 2, []);
 
 // A scheme that still has an uncommitted variable: refused when the declaration
-// promised a closed one, and published as the one reason it can stay unowned
-// when the signature was inferred.
+// promised a closed one, and recorded as it stands when the signature was
+// inferred — the monomorphism restriction is the module end's decision, not a
+// reason to leave the declaration for a second producer.
 $openScheme = new Scheme(new TCon('Int', []), [], [], 0, ['t3' => true]);
-$message = $refusal(static fn () => Modules\unownedReason($state, $declaration(true), $openScheme, 'Main'));
+$message = $refusal(static fn () => Modules\assertSignatureClosed($state, $declaration(true), $openScheme));
 $assert(
     \str_contains($message, 'still has the uncommitted') && \str_contains($message, 't3'),
     'an open scheme on a declared signature must be refused by name, got: ' . $message,
 );
-$assert(
-    Modules\unownedReason($state, $declaration(false), $openScheme, 'Main') === 'an inferred signature that did not close',
-    'an inferred open scheme must be published as unowned, with the fact that kept it out',
-);
-$assert(
-    Modules\unownedReason($state, $declaration(true), $oneDictionary, 'Main') === null,
-    'a closed scheme must be ownable',
-);
+Modules\assertSignatureClosed($state, $declaration(false), $openScheme);
+Modules\assertSignatureClosed($state, $declaration(true), $oneDictionary);
 
 // The evidence vector.
 $message = $refusal(static function () use ($state, $declaration, $obligations, $oneDictionary): void {
@@ -260,6 +255,28 @@ $kindsState->checkedParameterKinds[\spl_object_id($fn)] = ['a' => 'Type'];
 $assert(
     Modules\parameterKindsFor($kindsState, $fn, $withParameters, 'Main') === ['a' => 'Type'],
     'a recorded kind is published for the parameter the scheme binds',
+);
+
+// The origin a record publishes.
+$originState = new TypeCheckState('', 'checked_core_boundary.mog');
+$written = $declaration(true);
+$assert(
+    Modules\originFor($originState, $written, 'Main') === 'Main:1:1',
+    'a declaration with a span publishes it as its origin, got: '
+        . Modules\originFor($originState, $written, 'Main'),
+);
+$written->sourceOrigin = 'Provider:10:14';
+$assert(
+    Modules\originFor($originState, $written, 'Main') === 'Provider:10:14',
+    'a synthesized declaration publishes the site its producer recorded, in the module it is written in',
+);
+$written->sourceOrigin = null;
+$written->line = 0;
+$written->col = 0;
+$message = $refusal(static fn () => Modules\originFor($originState, $written, 'Main'));
+$assert(
+    \str_contains($message, 'no source site'),
+    'a declaration with no site must be refused by name, got: ' . $message,
 );
 
 // A published term type that still names a solved variable.

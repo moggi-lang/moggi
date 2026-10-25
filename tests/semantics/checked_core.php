@@ -148,9 +148,9 @@ inferred x = twice x
 inferredConstrained x = tag x
 
 -- Inferred and open: the monomorphism restriction leaves `id`'s variable
--- ungeneralized here, so the check publishes the declaration as unowned with the
--- fact that kept it out, and lowering serves it from the existing producer. The
--- record claims only what it closed.
+-- ungeneralized here. The record still owns the declaration — lowering it needs
+-- no dictionary and no generalization — and states the scheme as the check left
+-- it, with no parameter kind for a variable the scheme does not bind.
 openValue = id
 
 -- The category too: a recursive group's signature is settled before any member's body is
@@ -198,15 +198,26 @@ try {
     \sort($names);
     $check(
         $names === [
-            'bigness', 'both', 'bound', 'chosen', 'countdown', 'hollow', 'inferred', 'inferredConstrained',
-            'keyed', 'listed', 'main', 'projected', 'shown', 'sumDown', 'twice',
+            '__ev_Peek_Box_bigness', 'bigness', 'both', 'bound', 'chosen', 'countdown', 'hold', 'hollow',
+            'inferred', 'inferredConstrained', 'keyed', 'label', 'listed', 'main', 'openValue', 'projected',
+            'shown', 'sumDown', 'tag', 'twice',
         ],
-        'the category is ordinary declarations with a closed scheme, got: ' . \implode(', ', $names),
+        'every declaration the module lowers is recorded, got: ' . \implode(', ', $names),
+    );
+    $openValue = $core?->function('openValue');
+    $check(
+        $openValue !== null,
+        'a declaration whose inferred scheme the monomorphism restriction left open must still be recorded:'
+            . ' lowering it needs its evidence vector, which the check did settle',
     );
     $check(
-        $core?->unowned === ['openValue' => 'an inferred signature that did not close'],
-        'exactly the declaration whose inferred signature did not close is left to the existing producer,'
-            . ' with the fact that kept it out, got: ' . \json_encode($core?->unowned),
+        $openValue !== null
+            && $openValue->scheme->bound === []
+            && $openValue->scheme->freeTypeVars !== []
+            && $openValue->parameterKinds === [],
+        'the record of an open inferred scheme states it as it stands: nothing bound, no parameter kind,'
+            . ' got bound=' . \json_encode($openValue?->scheme->bound)
+            . ' free=' . \json_encode(\array_keys($openValue?->scheme->freeTypeVars ?? [])),
     );
 
     // ---- A recursive declaration is owned, and its record is as complete ----
@@ -463,16 +474,16 @@ try {
     }
     $check($irTwice !== null, 'lowering produced no `twice`');
 
-    $irUnowned = null;
+    $irOpen = null;
     foreach ($ir->functions as $function) {
         if ($function->name === 'openValue') {
-            $irUnowned = $function;
+            $irOpen = $function;
         }
     }
     $check(
-        $irUnowned !== null,
-        'a declaration published as unowned is lowered by the existing producer, not refused: '
-            . 'the IR has no `openValue`',
+        $irOpen !== null && $irOpen->evidenceScope === [],
+        'an open inferred declaration is lowered from its record, with the (empty) evidence vector the'
+            . ' record states',
     );
     if ($irTwice !== null && $twice !== null) {
         $check(
@@ -488,7 +499,7 @@ try {
             'evidence' => 'evidence_for_the_test',
             'origin' => $twice->origin,
         ]]);
-        $substitutedCore = new CheckedCore('Main', ['twice' => $substituted] + $core->functions, $core->unowned);
+        $substitutedCore = new CheckedCore('Main', ['twice' => $substituted] + $core->functions);
         $program->core = $substitutedCore;
         $substitutedIr = IR\lower($program, $program->interface->data, $path);
         $substitutedTwice = null;
@@ -633,9 +644,8 @@ try {
         'the record read back from its encoding lost its evidence vector',
     );
     $check(
-        ($roundCore?->unowned ?? null) === $core?->unowned,
-        'the split of unowned declarations did not survive the module product encoding, got: '
-            . \json_encode($roundCore?->unowned),
+        \array_keys($roundCore?->functions ?? []) === \array_keys($core?->functions ?? []),
+        'the set of recorded declarations did not survive the module product encoding',
     );
 
     $pristine = IR\Dump\dump($ir);
@@ -674,7 +684,6 @@ try {
         $program->core = new CheckedCore(
             'Main',
             ['both' => $publishedBoth->withElaboration($publishedBoth->terms, [])] + $program->core->functions,
-            $program->core->unowned,
         );
         $unplanned = '';
         try {
@@ -690,7 +699,11 @@ try {
         Modules\publishElaboration($program);
     }
 
-    $program->core = null;
+    // One declaration the record does not own is a producer defect, and lowering
+    // says so by name: there is no second bucket to send it to.
+    $withoutTwice = $core->functions;
+    unset($withoutTwice['twice']);
+    $program->core = new CheckedCore('Main', $withoutTwice);
     $refused = '';
     try {
         IR\lower($program, $program->interface->data, $path);
@@ -699,7 +712,19 @@ try {
     }
     $check(
         \str_contains($refused, 'Main::twice') && \str_contains($refused, 'checked-core record'),
-        'lowering a category function without its record must be refused by name, got: ' . $refused,
+        'lowering a declaration the record does not own must be refused by name, got: ' . $refused,
+    );
+
+    $program->core = null;
+    $refused = '';
+    try {
+        IR\lower($program, $program->interface->data, $path);
+    } catch (\RuntimeException $error) {
+        $refused = $error->getMessage();
+    }
+    $check(
+        \str_contains($refused, 'lowering `Main` needs its checked core'),
+        'lowering a module with no checked core must be refused by name, got: ' . $refused,
     );
 
     if ($failures !== []) {

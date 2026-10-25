@@ -4,24 +4,22 @@ namespace Moggi\Modules;
 
 /**
  * Type-environment plumbing for the module pipeline: project-wide class index,
- * per-module local type environments, import/export env merging, and the
- * module subset selection used for `--only` typechecking.
+ * export/type merging for the modules an interface hands on, class default-body
+ * scopes, and the module subset selection used for `--only` typechecking.
+ *
+ * Nothing here produces a module's interface: that is the product of the module's
+ * own check (`prepareProject`), read back from the module cache by a later run.
  */
 
 use Moggi\IR;
 use Moggi\Semantics\Deriving\ClassDeriveFacts;
 use Moggi\Semantics\Kinds;
 use Moggi\Semantics\TypeExpr\Scheme;
-use Moggi\Pipeline\CompilationContext;
 use Moggi\Semantics\Types;
 use Moggi\Syntax\Ast;
 
-use function Moggi\Cache\moduleGet;
-use function Moggi\Cache\modulePut;
 use function Moggi\Semantics\Kernel\boolTypeName;
-use function Moggi\Semantics\Registry\foreignFunctionDecl;
 use function Moggi\Semantics\Registry\projectInstancesFromProgram;
-use function Moggi\Semantics\Registry\registerSurfaceConstructorAlias;
 use function Moggi\Syntax\Ast\moduleName;
 use function Moggi\Syntax\isConstructorName;
 
@@ -83,229 +81,6 @@ function updateProjectClassesForModule(
         }
 
         $projectClasses[$name] = $state->classes[$name];
-    }
-}
-
-/**
- * @param array<string, array<string, mixed>> $units
- * @param array<string, mixed> $projectClasses
- * @param array{
- *   byClass?: array<string, list<array<string, mixed>>>,
- *   byClassHead?: array<string, array<string, list<array<string, mixed>>>>,
- *   associatedEquations?: array<string, array<string, list<array<string, mixed>>>>
- * } $projectInstanceIndex an empty array is the "no project instances" index
- */
-function buildModuleLocalTypes(
-    array &$units,
-    string $moduleName,
-    array $projectClasses,
-    array $projectInstanceIndex,
-    CompilationContext $context,
-): void {
-    $contentKey = $units[$moduleName]['contentKey'] ?? null;
-    if ($contentKey !== null) {
-        $cached = moduleGet(
-            $units[$moduleName]['cacheRelPath'],
-            'localtypes',
-            $context->moduleKey($moduleName, $contentKey),
-            $context->backendId,
-        );
-        if (\is_array($cached)) {
-            $units[$moduleName]['localTypes'] = $cached;
-
-            return;
-        }
-    }
-
-    $unit = $units[$moduleName];
-    $state = Types\newState($unit['source'], $unit['path']);
-    $state->compileBackend = $context->backendId;
-    $state->entryModules = $context->entries;
-    $state->classes = $projectClasses;
-    Types\syncAssociatedFamiliesFromClasses($state);
-    installProjectInstanceIndex($state, $projectInstanceIndex);
-
-    foreach ($unit['program']->imports as $import) {
-        $targetName = moduleName($import->path);
-        if (isset($units[$targetName])) {
-            $localPrefix = $import->asName ?? $targetName;
-            $state->qualifiedModules[$localPrefix] = $units[$targetName]['namespace'];
-            mergeExportedTypes($state, $units[$targetName], $units);
-        }
-    }
-
-    mergeImportedEnv($state, $units, $moduleName);
-    mergeFacadeTypesForImpl($state, $units, $moduleName);
-
-    $localFunctionNames = [];
-    foreach ($unit['program']->items as $item) {
-        if ($item instanceof Ast\FunctionDecl) {
-            $localFunctionNames[$item->name] = true;
-        }
-    }
-
-    mergeFacadeBackendEnv(
-        $state->env,
-        $state->intrinsicWrappers,
-        $units,
-        $moduleName,
-        $localFunctionNames,
-        $state,
-    );
-
-    foreach ($unit['program']->items as $item) {
-        if ($item instanceof Ast\DataDecl || $item instanceof Ast\TypeSynonymDecl) {
-            $state->declaredTypeNames[$item->name] = true;
-        }
-    }
-
-    foreach ($unit['program']->items as $item) {
-        if ($item instanceof Ast\FunctionDecl || $item instanceof Ast\ForeignImportDecl) {
-            $state->localDeclNames[$item->name] = true;
-        }
-    }
-
-    foreach ($unit['program']->items as $item) {
-        if ($item instanceof Ast\DataDecl) {
-            Types\registerData($state, $item);
-            registerSurfaceConstructorAlias($state, $item, $unit['program']->exports);
-        }
-
-        if ($item instanceof Ast\ForeignTypeDecl) {
-            Types\registerForeignType($state, $item);
-        }
-
-        if ($item instanceof Ast\TypeSynonymDecl) {
-            Types\registerTypeSynonym($state, $item);
-        }
-
-        if ($item instanceof Ast\ClassDecl) {
-            if (! isset($state->classes[$item->name])) {
-                Types\registerClass($state, $item, $moduleName);
-            }
-
-            Types\registerClassMethodExportSchemes($state, $item);
-        }
-    }
-
-    $inferredFunctions = [];
-    foreach ($unit['program']->items as $item) {
-        if ($item instanceof Ast\InstanceDecl) {
-            Types\registerInstanceSchemes($state, $item);
-
-            continue;
-        }
-
-        if ($item instanceof Ast\ForeignImportDecl) {
-            Types\registerFunctionScheme($state, foreignFunctionDecl($item));
-
-            continue;
-        }
-
-        if (! $item instanceof Ast\FunctionDecl) {
-            continue;
-        }
-
-        if (Ast\hasDeclaredSignature($item)) {
-            Types\registerFunctionScheme($state, $item);
-        } elseif ($item->inferredSignatureType !== null) {
-            Types\registerInferredSignatureScheme($state, $item);
-        } elseif (! $item->signatureOnly) {
-            $inferredFunctions[] = $item;
-        }
-    }
-
-    foreach ($inferredFunctions as $function) {
-        Types\registerInferredFunctionPlaceholder($state, $function);
-    }
-
-    Types\discoverInferredSignatures($state, $inferredFunctions);
-
-    $units[$moduleName]['localTypes'] = [
-        'env' => $state->env,
-        'data' => $state->data,
-        'typeSynonyms' => $state->typeSynonyms,
-        'intrinsicWrappers' => $state->intrinsicWrappers,
-    ];
-
-    if ($contentKey !== null) {
-        modulePut(
-            $units[$moduleName]['cacheRelPath'],
-            'localtypes',
-            $context->moduleKey($moduleName, $contentKey),
-            $units[$moduleName]['localTypes'],
-            $context->backendId,
-        );
-    }
-}
-
-/** @param array<string, array<string, mixed>> $units */
-function mergeImportedEnv(Types\TypeCheckState $state, array $units, string $moduleName): void
-{
-    foreach ($units[$moduleName]['program']->imports as $import) {
-        $targetName = moduleName($import->path);
-        if (! isset($units[$targetName])) {
-            continue;
-        }
-
-        $target = $units[$targetName];
-
-        try {
-            $exports = $target['exports'] ?? collectExports($target['program'], $target['localTypes'], $units, $targetName);
-            $selected = selectImportedNames($import, $exports);
-        } catch (Types\TypeError $e) {
-            if ($e->filename !== '') {
-                throw $e;
-            }
-
-            throw new Types\TypeError(
-                $e->getMessage(),
-                $units[$moduleName]['path'],
-                $units[$moduleName]['source'],
-                $import->line,
-                $import->col,
-                $import->endCol,
-            );
-        }
-
-        $localPrefix = $import->asName ?? $targetName;
-        foreach ($selected['env'] as $name => $scheme) {
-            $state->qualifiedEnv[$localPrefix][$name] = $scheme;
-            if (isset($selected['intrinsicWrappers'][$name])) {
-                $state->intrinsicWrappers[$name] = $selected['intrinsicWrappers'][$name];
-            }
-            if ($import->qualifiedOnly) {
-                continue;
-            }
-
-            if (! isset($state->env[$name])) {
-                $state->env[$name] = $scheme;
-            }
-        }
-
-        foreach ($selected['typeSynonyms'] as $name => $type) {
-            if (! isset($state->typeSynonyms[$name])) {
-                $state->typeSynonyms[$name] = $type;
-            }
-            Types\installTypeSynonymKind($state, $name, $type);
-        }
-
-        foreach ($selected['data'] as $name => $info) {
-            if (! isset($state->data[$name])) {
-                $state->data[$name] = $info;
-                Kinds\registerTypeKind(
-                    $state,
-                    $name,
-                    Kinds\dataKind(\count($info['params'])),
-                );
-            }
-        }
-
-        if (! $import->qualifiedOnly) {
-            foreach ($selected['constructorRenames'] as $local => $canonical) {
-                $state->constructorRenames[$local] = $canonical;
-            }
-        }
     }
 }
 
@@ -747,14 +522,9 @@ function classModuleValueOrigins(array $units, string $moduleName, array $names)
  */
 function moduleLocalValueNames(array $units, string $moduleName): array
 {
-    static $cache = [];
-    if (isset($cache[$moduleName])) {
-        return $cache[$moduleName];
-    }
-
     $program = $units[$moduleName]['program'] ?? null;
     if (! $program instanceof Ast\Program) {
-        return $cache[$moduleName] = [];
+        return [];
     }
 
     $names = [];
@@ -764,7 +534,7 @@ function moduleLocalValueNames(array $units, string $moduleName): array
         }
     }
 
-    return $cache[$moduleName] = $names;
+    return $names;
 }
 
 /**
@@ -784,15 +554,10 @@ function moduleLocalValueNames(array $units, string $moduleName): array
  */
 function moduleLocalDataNames(array $units, string $moduleName): array
 {
-    static $cache = [];
-    if (isset($cache[$moduleName])) {
-        return $cache[$moduleName];
-    }
-
     $names = [boolTypeName() => true];
     $program = $units[$moduleName]['program'] ?? null;
     if (! $program instanceof Ast\Program) {
-        return $cache[$moduleName] = $names;
+        return $names;
     }
 
     foreach ($program->items as $item) {
@@ -801,7 +566,7 @@ function moduleLocalDataNames(array $units, string $moduleName): array
         }
     }
 
-    return $cache[$moduleName] = $names;
+    return $names;
 }
 
 /**
