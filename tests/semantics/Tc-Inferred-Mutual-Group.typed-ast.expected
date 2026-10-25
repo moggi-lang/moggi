@@ -1,0 +1,97 @@
+program
+  class Tag a
+    method tag :: a -> String
+  class Label a
+    method label :: a -> String
+  function __ev_Tag_Int_tag :: Int -> String
+    pat_var x
+    string "int"
+  function __ev_Label_Int_label :: Int -> String
+    pat_var x
+    apply
+      evidence_method Tag.tag evidence= nullary=0
+        instance Int
+      variable x
+  function __ev_Tag_Bool_tag :: Bool -> String
+    pat_var x
+    string "bool"
+  function __ev_Label_Bool_label :: Bool -> String
+    pat_var x
+    apply
+      evidence_method Tag.tag evidence= nullary=0
+        instance Bool
+      variable x
+  function start :: __Dict_Eq -> __Dict_Num -> __Dict_Tag -> __Dict_Label -> a -> String
+    pat_var __ev_Eq
+    pat_var __ev_Num_1
+    pat_var __ev_Tag_2
+    pat_var __ev_Label_3
+    pat_var n
+    case
+      apply
+        apply
+          evidence_method Eq.== evidence=__ev_Eq nullary=0
+          variable n
+        apply
+          evidence_method Num.fromInteger evidence=__ev_Num_1 nullary=0
+          intrinsic intToInteger#
+            integer 0
+      alt
+        pat_con True
+        string "done"
+      alt
+        pat_con False
+        apply
+          apply
+            apply
+              apply
+                apply
+                  variable hop
+                  variable __ev_Tag_2
+                variable __ev_Label_3
+              variable __ev_Eq
+            variable __ev_Num_1
+          apply
+            apply
+              evidence_method Num.- evidence=__ev_Num_1 nullary=0
+              variable n
+            apply
+              evidence_method Num.fromInteger evidence=__ev_Num_1 nullary=0
+              intrinsic intToInteger#
+                integer 1
+  function hop :: __Dict_Tag -> __Dict_Label -> __Dict_Eq -> __Dict_Num -> a -> String
+    pat_var __ev_Tag
+    pat_var __ev_Label_1
+    pat_var __ev_Eq_2
+    pat_var __ev_Num_3
+    pat_var n
+    intrinsic stringAppend#
+      apply
+        evidence_method Label.label evidence=__ev_Label_1 nullary=0
+        variable n
+      apply
+        apply
+          apply
+            apply
+              apply
+                variable start
+                variable __ev_Eq_2
+              variable __ev_Num_3
+            variable __ev_Tag
+          variable __ev_Label_1
+        variable n
+  function main :: IO ()
+    io_action
+      apply
+        variable putStrLn
+        apply
+          apply
+            apply
+              apply
+                apply
+                  variable start
+                  evidence_ref Eq Int
+                evidence_ref Num Int
+              evidence_ref Tag Int
+            evidence_ref Label Int
+          integer 2

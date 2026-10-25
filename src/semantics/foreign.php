@@ -101,7 +101,7 @@ function checkForeignImportItem(TypeCheckState $state, Ast\ForeignImportDecl $it
         nativeSig: $nativeSig,
     );
 
-    return new Ast\FunctionDecl(
+    $axiom = new Ast\FunctionDecl(
         $item->name,
         $item->type,
         \array_map(
@@ -110,8 +110,13 @@ function checkForeignImportItem(TypeCheckState $state, Ast\ForeignImportDecl $it
         ),
         $body,
         false,
-        true
+        true,
     );
+    if ($item->line > 0 && (string) $state->currentModule !== '') {
+        $axiom->sourceOrigin = $state->currentModule . ':' . $item->line . ':' . $item->col;
+    }
+
+    return $axiom;
 }
 
 /**

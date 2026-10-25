@@ -270,6 +270,14 @@ final class TypeCheckState
     /** @var list<array<string, Type>> */
     public array $substStack = [];
 
+    /**
+     * The dictionaries of the declaration currently being checked: one owner for
+     * what it takes and what its body resolves against. `checkFunction` installs
+     * it before the body is inferred and clears it afterwards, so a nested
+     * declaration cannot inherit another's vocabulary.
+     */
+    public ?DeclarationAllocation $allocation = null;
+
     /** @var list<Ast\PendingConstraint> */
     public array $ambientConstraints = [];
 

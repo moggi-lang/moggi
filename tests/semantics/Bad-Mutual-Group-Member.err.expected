@@ -1,0 +1,4 @@
+tests/semantics/Bad-Mutual-Group-Member.mog:9:1: type error: unresolved type class constraint: `Num String`
+
+   9 | hop n = n + "oops"
+     | ^^^

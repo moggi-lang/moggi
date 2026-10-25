@@ -1,0 +1,51 @@
+program
+  function inferredPair :: __Dict_Show -> __Dict_Show -> a -> b -> Tuple2 String String
+    pat_var __ev_Show
+    pat_var __ev_Show_1
+    pat_var n
+    pat_var b
+    where
+      tuple
+        apply
+          apply
+            variable describe
+            variable __ev_Show
+          variable n
+        apply
+          apply
+            variable describe
+            variable __ev_Show_1
+          variable b
+      binding
+        pat_var describe
+        lambda
+          pat_var __ev_dict0
+          lambda
+            pat_var v
+            apply
+              evidence_method Show.show evidence=__ev_dict0 nullary=0
+              variable v
+  function signedPair :: Int -> Bool -> Tuple2 String String
+    pat_var n
+    pat_var b
+    where
+      tuple
+        apply
+          apply
+            variable describe
+            evidence_ref Show Int
+          variable n
+        apply
+          apply
+            variable describe
+            evidence_ref Show Bool
+          variable b
+      binding
+        pat_var describe
+        lambda
+          pat_var __ev_dict1
+          lambda
+            pat_var v
+            apply
+              evidence_method Show.show evidence=__ev_dict1 nullary=0
+              variable v

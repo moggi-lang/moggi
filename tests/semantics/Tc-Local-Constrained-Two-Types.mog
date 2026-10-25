@@ -1,0 +1,26 @@
+-- A constrained local helper used at two different types from inside one
+-- declaration.
+--
+-- The annotation is the group's own scheme: its body resolves `show` through the
+-- group's dictionary parameter, so the annotation's variable stays the group's
+-- and each use instantiates it independently. The enclosing declaration then
+-- learns one obligation per use -- two `Show` parameters, not one.
+--
+-- A compiler that lets the group's body borrow the enclosing declaration's
+-- dictionaries instead unifies the annotation's variable with the declaration's:
+-- the group becomes monomorphic, the two uses collapse onto one type, and the
+-- declaration is published as `a -> a -> ...`. `inferredPair` is the case that
+-- would be silently mistyped, `signedPair` the same shape with the declaration's
+-- own dictionaries already fixed by its signature.
+import Text.Show
+
+inferredPair n b = (describe n, describe b)
+  where
+    describe :: Show a => a -> String
+    describe v = show v
+
+signedPair :: Int -> Bool -> (String, String)
+signedPair n b = (describe n, describe b)
+  where
+    describe :: Show a => a -> String
+    describe v = show v

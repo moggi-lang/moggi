@@ -1,0 +1,21 @@
+module Main
+
+-- A restricted declaration's parameter type can come from a class method's
+-- dictionary projection: `pshow` contributes `PShow <param>`, and the body's
+-- arithmetic pins that variable, so the declaration settles from its own body.
+-- The user below then takes its type from the restricted scheme it calls.
+
+class PShow a where
+  pshow :: a -> String
+
+instance PShow Int where
+  pshow x = "i"
+
+sx x = pshow (x + 1)
+
+sy y = sx (y + 2)
+
+dz = sy 7
+
+main :: String
+main = dz

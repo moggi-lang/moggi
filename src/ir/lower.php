@@ -6,7 +6,6 @@ use Moggi\Modules\CheckedFunction;
 use Moggi\Syntax\Ast;
 
 use function Moggi\Debug\normalizeDisplayPath;
-use function Moggi\Modules\isOrdinaryDeclaration;
 use function Moggi\Semantics\Exhaustiveness\trueBindingOrigins;
 use function Moggi\Semantics\IoBoundary\functionReturnsIo;
 use function Moggi\Patterns\Walk\patternBoundNames;
@@ -21,7 +20,11 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
     $moduleName = $program->module ?? '';
     $interface = $program->interface
         ?? throw new \RuntimeException("lowering `{$moduleName}` needs its module interface");
-    $core = $program->core;
+    $core = $program->core
+        ?? throw new \RuntimeException(
+            "lowering `{$moduleName}` needs its checked core: a checked module is lowered from its"
+            . ' closed product, never from the source tree',
+        );
 
     $state = new LowerState();
     $dataIndex = buildDataIndex($program, $importedData);
@@ -93,20 +96,16 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
                 continue;
             }
 
-            $record = $core?->function($item->name);
-            if ($record === null
-                && isOrdinaryDeclaration($item)
-                && ! isset($core?->unowned[$item->name])
-            ) {
-                throw new \RuntimeException(
+            $record = $core->function($item->name)
+                ?? throw new \RuntimeException(
                     "lowering `{$moduleName}::{$item->name}` needs its checked-core record:"
-                    . ' a checked module is always lowered from its closed product, never from the source tree',
+                    . ' the check did not publish one for a declaration it lowers',
                 );
-            }
 
             $functions[] = lowerFunction(
                 $item,
                 $state,
+                $record,
                 $knownFunctions,
                 $functionArity,
                 $dataIndex,
@@ -116,7 +115,6 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
                 $moduleName,
                 $sourceFile,
                 $constructorRenames,
-                $record,
             );
         }
     }
@@ -222,6 +220,7 @@ function buildNewtypeIndex(Ast\Program $program, array $importedData = []): arra
 function lowerFunction(
     Ast\FunctionDecl $fn,
     LowerState $state,
+    CheckedFunction $core,
     array $knownFunctions,
     array $functionArity,
     array $dataIndex,
@@ -231,7 +230,6 @@ function lowerFunction(
     string $moduleName = '',
     string $sourceFile = '',
     array $constructorRenames = [],
-    ?CheckedFunction $core = null,
 ): FunctionDecl {
     $state->usedLocals = [];
     $state->nextLocalSuffix = 0;
@@ -245,14 +243,11 @@ function lowerFunction(
     $ctx->sourceFile = $sourceFile;
     $ctx->functionName = $fn->name;
     $ctx->constructorRenames = $constructorRenames;
-    // The record is the authority for a declaration the check owned. A declaration
-    // it left unowned is the one case that still reads `$fn->constraints` — the
-    // check's own write of the evidence vector, not the source syntax — and the
-    // null plan index below is what sends its body's sites down the same path:
-    // a sentinel, not a category test. That is the residual adapter 2 names in the
-    // migration register, and a category declaration never reaches it.
-    $ctx->evidenceNames = $core !== null ? $core->evidenceBinders() : evidenceSlotNames($fn->constraints);
-    $ctx->evidencePlans = $core?->evidencePlanIndex();
+    // The record is the only authority for the evidence vector and for every
+    // evidence site in the body: no lowering path reads the elaborated node's own
+    // fields or the declaration's constraint list.
+    $ctx->evidenceNames = $core->evidenceBinders();
+    $ctx->evidencePlans = $core->evidencePlanIndex();
 
     foreach (\array_keys($externalFns) as $name) {
         if (\in_array($name, $slotNames, true)) {
@@ -329,28 +324,6 @@ function lowerFunction(
         kind: FunctionKind::Source,
         evidenceScope: $ctx->evidenceNames,
     );
-}
-
-/**
- * The solved evidence slots of a declaration, in definition-time order.
- *
- * `constraints` is the superclass-closed list `solveConstraints` produced for this declaration
- * (see `checkFunction`), so the order and the multiplicity are the ones the typechecker
- * committed to; nothing here re-expands or deduplicates it.
- *
- * @param list<Ast\PendingConstraint> $constraints
- * @return list<string>
- */
-function evidenceSlotNames(array $constraints): array
-{
-    $names = [];
-    foreach ($constraints as $constraint) {
-        if ($constraint->evidence !== '') {
-            $names[] = $constraint->evidence;
-        }
-    }
-
-    return $names;
 }
 
 function srcLocFromAst(Ast\AstNode $node, string $module, string $function, string $file): SrcLoc

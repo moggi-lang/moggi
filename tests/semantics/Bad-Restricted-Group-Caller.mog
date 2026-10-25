@@ -1,0 +1,15 @@
+-- A pattern binding inside a recursive group calls a member the group gives
+-- dictionaries to. The binding's body is checked before the group decides its
+-- members' dictionaries, so its call site carries no evidence and would be
+-- lowered as a partial application -- a program that type-checks and then adds
+-- two closures at run time. The shape is refused by name instead; a signature on
+-- the binding moves it out of this producer, where the call is checked against
+-- the member's published scheme.
+a = b 1
+
+b n = case n == 0 of
+  True -> a
+  False -> b (n - 1)
+
+main :: IO ()
+main = putStrLn (show (a + b 2))

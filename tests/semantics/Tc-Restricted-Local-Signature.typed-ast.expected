@@ -26,14 +26,20 @@ program
                 apply
                   evidence_method Ord.> evidence=__ev_dict1 nullary=0
                   variable x
-                integer 0
+                apply
+                  evidence_method Num.fromInteger evidence=__ev_dict2 nullary=0
+                  intrinsic intToInteger#
+                    integer 0
               alt
                 pat_con True
                 apply
                   apply
                     evidence_method Num.+ evidence=__ev_dict2 nullary=0
                     variable x
-                  integer 1
+                  apply
+                    evidence_method Num.fromInteger evidence=__ev_dict2 nullary=0
+                    intrinsic intToInteger#
+                      integer 1
               alt
                 pat_con False
                 variable x

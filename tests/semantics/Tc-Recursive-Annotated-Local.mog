@@ -13,11 +13,14 @@ import Text.Show
 -- superclass; a pass that expanded it twice, or not at all, would build a
 -- dictionary list that disagrees with the lambda the member was lifted into.
 --
--- `probedDeclared` has no signature, so the discovery probe checks its body --
--- and this group -- once, on a copy, before the real check runs. The probe
--- leaves the declaration untouched, so the real check derives this group's
--- dictionaries itself: the golden pins the second pass's own `__ev_dict`
--- parameters, not any the probe happened to allocate.
+-- `probedDeclared` has no signature but is acyclic, so it is checked once. The
+-- group's annotation is the group's own scheme: its body resolves `==`, `-` and
+-- the literals through the parameters the annotation allocated, and the
+-- declaration learns `Eq`/`Ord`/`Num` from the *call sites*, one dictionary each,
+-- at its own checkpoint. A compiler that let the group's body borrow the
+-- declaration's dictionaries would tie the annotation's variable to the
+-- declaration's and publish the group as monomorphic. The golden pins both
+-- sides: the group's own parameters in its body, the declaration's at the calls.
 
 recursiveDeclared :: Int -> [Int]
 recursiveDeclared n = go n []

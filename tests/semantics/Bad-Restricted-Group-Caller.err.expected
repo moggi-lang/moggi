@@ -1,0 +1,4 @@
+tests/semantics/Bad-Restricted-Group-Caller.mog:8:5: type error: `b` takes dictionaries, and the pattern binding `a` calls it from a recursive group that has not decided them yet; give the caller a signature
+
+   8 | a = b 1
+     |     ^

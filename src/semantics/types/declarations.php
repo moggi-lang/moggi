@@ -385,11 +385,22 @@ function registerClass(TypeCheckState $state, Ast\ClassDecl $decl, string $modul
                 $methodType = new TArrow(new TCon('__Dict_' . $constraint->class), $methodType);
             }
 
+            $constraintArgTypes = [];
+            foreach ($methodUserConstraints as $constraint) {
+                foreach ($constraint->args as $argument) {
+                    $constraintArgTypes[] = $argument;
+                }
+            }
+
             $methods[$methodName] = [
                 'type' => $methodType,
                 'userConstraints' => $methodUserConstraints,
+                'kinds' => Kinds\declarationParameterKinds($state, $methodType, $constraintArgTypes),
                 'defaultParams' => $method->params,
                 'defaultBody' => $method->body,
+                'line' => $method->body?->line ?? 0,
+                'col' => $method->body?->col ?? 0,
+                'endCol' => $method->body?->endCol ?? 0,
             ];
             $owner = $state->classMethodOwners[$methodName] ?? null;
             if ($owner !== null && $owner !== $name) {

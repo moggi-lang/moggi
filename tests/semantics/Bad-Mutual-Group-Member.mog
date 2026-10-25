@@ -1,0 +1,12 @@
+-- One member of an inferred recursive group is ill-typed; its sibling is not.
+-- The group gives every member a monotype and checks every body before any of
+-- them is settled, so the failure has to be reported at the offending member and
+-- nothing else: a group that settled the sibling first would report the error
+-- inside the sibling's body (`hop`'s result unified with a `String`), and one
+-- that folded the two monotypes would lose the operator's own type.
+start n = if n == 0 then "z" else hop n
+
+hop n = n + "oops"
+
+main :: IO ()
+main = putStrLn (start 0)
