@@ -5,6 +5,7 @@ namespace Moggi\Syntax\Ast;
 use Moggi\IR;
 use Moggi\Modules\CheckedCore;
 use Moggi\Modules\ImportInterface;
+use Moggi\Modules\InstanceWorldId;
 use Moggi\Semantics\TypeExpr\Type;
 
 /** Surface-syntax type AST (distinct from `Moggi\Semantics\TypeExpr\Type`). */
@@ -108,6 +109,17 @@ final class PendingConstraint extends AstValue
 
 abstract class AstNode implements AstWalkable
 {
+    /**
+     * The checked term's type, in the checker's own algebra: the authority a
+     * consumer reads.
+     *
+     * {@see $inferredType} is this type's projection onto source syntax, written
+     * for tooling (hover, inlay hints, completion). Both halves are published
+     * together — {@see \Moggi\Semantics\Types\publishInferredType()} — so a
+     * reader never has to convert the projection back to recover the fact.
+     */
+    public ?Type $inferredInternalType = null;
+
     public ?TypeNode $inferredType = null;
 
     /** Doc comment attached by the parser (`-- |`, `{-|`, `-- ^`). */
@@ -486,6 +498,17 @@ final class Program extends AstNode
      * function without its record instead of falling back to the mutable tree.
      */
     public ?CheckedCore $core = null;
+
+    /**
+     * The instance world this module was checked against, as an identity rather
+     * than a copy of its records (see `Modules\InstanceWorldId`).
+     *
+     * Set by the check that produced this program, so a module product says
+     * which project-wide instance set its schemes mean — including one read back
+     * from the cache, which records the world it was checked against rather than
+     * the one that happens to be current. Null only on a program nobody checked.
+     */
+    public ?InstanceWorldId $instanceWorld = null;
 
     /**
      * Every name the export list re-exports: a plain value or type export, and
@@ -1018,16 +1041,6 @@ final class ListLit extends AstNode
 
 final class Lambda extends AstNode
 {
-    /**
-     * Class constraints the type checker abstracted into this lambda's leading
-     * dictionary parameters. Empty for a source-level lambda; set only on the
-     * synthetic lambda that implements a constrained let/where binding, so the
-     * binding's scheme can be asserted against the adapter it was built for.
-     *
-     * @var list<PendingConstraint>
-     */
-    public array $abstractedConstraints = [];
-
     /** @param array<int, LambdaParam> $params */
     public function __construct(
         public array $params,

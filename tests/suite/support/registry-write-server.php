@@ -15,14 +15,20 @@
  *
  * The repo root is baked in so the router can `require` the compiler and use the
  * project's own `writeMessageHex` and `verifySignature` — the same code the
- * client signs with, so the test cannot drift from the wire format.
+ * client signs with, so the test cannot drift from the wire format. The request
+ * log's path is baked in alongside it, so the router holds it as an ordinary
+ * variable and no environment is involved.
+ *
+ * @param string $logPath the file the router appends every request to
  */
-function fakeRegistryRouterSource(string $root): string
+function fakeRegistryRouterSource(string $root, string $logPath): string
 {
     $source = <<<'PHP'
     <?php declare(strict_types=1);
 
     require __COMPILER__;
+
+    $logPath = __WRITE_LOG__;
 
     $body = (string) \file_get_contents('php://input');
     $host = \strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
@@ -40,7 +46,7 @@ function fakeRegistryRouterSource(string $root): string
     );
 
     \file_put_contents(
-        (string) \getenv('MOGGI_WRITE_LOG'),
+        $logPath,
         \json_encode([
             'method' => $method,
             'path' => $path,
@@ -65,8 +71,11 @@ function fakeRegistryRouterSource(string $root): string
     PHP;
 
     return \str_replace(
-        '__COMPILER__',
-        \var_export(\rtrim($root, '/') . '/src/compiler.php', true),
+        ['__COMPILER__', '__WRITE_LOG__'],
+        [
+            \var_export(\rtrim($root, '/') . '/src/compiler.php', true),
+            \var_export($logPath, true),
+        ],
         $source,
     );
 }
@@ -91,10 +100,9 @@ function freeTcpPort(): int
  * @param array<string, string> $env the environment the server and its router run with
  * @return array{process: resource, pipes: array<int, resource>, port: int}
  */
-function startFakeRegistry(string $routerPath, string $logPath, array $env = []): array
+function startFakeRegistry(string $routerPath, array $env = []): array
 {
     $port = freeTcpPort();
-    $env['MOGGI_WRITE_LOG'] = $logPath;
     $process = \proc_open(
         [PHP_BINARY, '-S', '127.0.0.1:' . $port, $routerPath],
         [

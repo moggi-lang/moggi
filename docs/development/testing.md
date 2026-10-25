@@ -188,19 +188,12 @@ itself.
 
 ## Environment
 
-The suite reads exactly six variables, all optional:
+The suite reads exactly three variables, all optional:
 
 | Variable | Default | Effect |
 |----------|---------|--------|
 | `MOGGI_CACHE_DIR` | pinned to `<repo>/.moggi` | Where the compile cache lives. The suite pins it *only* when it is unset, so a test run never writes into your working directory's cache and an explicit choice wins. |
 | `MOGGI_NO_CACHE` | unset (cache on) | Inherited: disables the cache for the compiler the cases invoke. |
-| `MOGGI_FUZZ_DIR` | `<cache>/fuzz-failures` | Where the frontend fuzzer keeps generated inputs and minimised reproducers. |
-| `MOGGI_TEST_STANDALONE_TIMEOUT` | `300` | Watchdog seconds for one script case before it is killed and reported as `timeout`. |
-| `MOGGI_TEST_CPU_COUNT` | probed | Pin the machine's CPU count, so a run that asserts a worker count gets a machine of exactly that size. |
-| `MOGGI_TEST_FORCE_TTY` | unset | `1` makes stderr count as a terminal, so the progress block is on without allocating a pty. |
-| `MOGGI_TEST_COLUMNS` | `COLUMNS`, the terminal, 80 | Progress-block width. |
-| `MOGGI_TEST_LINES` | `LINES`, the terminal, 24 | Progress-block height; a block taller than this folds its earliest rows instead of scrolling. |
-| `NUMBER_OF_PROCESSORS` | probed | Window's CPU count, used only to size an automatic `--jobs`. |
 | `JAVA_HOME` | probed | Locating `java` and `native-image` for jvm cases. |
 
 `MOGGI_PROJECT_ROOT` is a PHP constant the harness defines, not an environment variable. Everything

@@ -132,6 +132,7 @@ require __DIR__ . '/modules/exports.php';
 require __DIR__ . '/modules/prim_modules.php';
 require __DIR__ . '/modules/graph.php';
 require __DIR__ . '/modules/import_interface.php';
+require __DIR__ . '/modules/instance_world.php';
 require __DIR__ . '/modules/import_context.php';
 require __DIR__ . '/modules/emit_plan.php';
 require __DIR__ . '/modules/imports.php';

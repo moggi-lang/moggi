@@ -84,7 +84,6 @@ try {
     $cold = IR\Dump\dump(IR\lower($program, $program->interface->data, $path));
     $assert(\str_contains($cold, 'scaled'), 'the cold lowering produced no `scaled`');
 
-    // Exactly what `prepareProject()` writes and reads back.
     $relPath = 'checked-core-cache-test/' . \bin2hex(\random_bytes(6));
     $key = 'checked-core-' . \bin2hex(\random_bytes(6));
     $payload = [
@@ -119,9 +118,6 @@ try {
             . diffText($cold, $warm),
     );
 
-    // A second write of the same product is the same bytes: the record has no
-    // run-dependent part (a plan's node link is written as a shared reference,
-    // not as an address).
     $bytes = static function (string $rel, string $key, array $payload): string {
         Cache\modulePut($rel, 'checked', $key, $payload, 'php');
 

@@ -69,7 +69,7 @@ function applyEvidenceMethodInfo(TypeCheckState $state, Ast\AstNode &$expr, arra
         methodValueArity($state, $methodType, $methodUserConstraints),
     );
     $method->pendingConstraints = $expr->pendingConstraints;
-    $method->inferredType = $expr->inferredType;
+    copyInferredType($method, $expr);
     $expr = $method;
 }
 
@@ -328,12 +328,7 @@ function expandConstraintsWithSuperclasses(TypeCheckState $state, array $constra
         $add($constraint);
     }
 
-    $result = constraintsWithPositionalEvidence($expanded);
-    if (\getenv('MOGGI_ASSERT_EXPAND_CLOSED') !== false && ! constraintsSuperclassClosed($state, $result)) {
-        throw new \RuntimeException('dictionary expansion did not close its constraint list');
-    }
-
-    return $result;
+    return constraintsWithPositionalEvidence($expanded);
 }
 
 /**

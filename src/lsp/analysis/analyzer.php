@@ -460,7 +460,7 @@ function findNodeChainAt($ast, int $line, int $col, array &$seen = []): array
 
     $bestChildChain = [];
     foreach (\get_object_vars($ast) as $key => $prop) {
-        if ($key === 'inferredType' || $prop instanceof Ast\TypeNode) {
+        if ($key === 'inferredType' || $key === 'inferredInternalType' || $prop instanceof Ast\TypeNode) {
             continue;
         }
         if (\is_object($prop)) {

@@ -5,8 +5,6 @@ namespace Moggi\Modules;
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Syntax\Ast;
 
-use function Moggi\Semantics\Types\inferredTypeAstToInternal;
-
 /**
  * Every node of one elaboration, once, in pre-order.
  *
@@ -55,10 +53,10 @@ function walkElaboration(Ast\AstWalkable $root, callable $visit): void
 /**
  * The elaboration's term→type table.
  *
- * The types come from the checker's own zonked annotations — the one place it
- * publishes a term's type today — so this conversion is the pilot's registered
- * read of the surface tree (adapter 3 in `migrations.md`); when inference hands
- * the internal type over directly, it is deleted.
+ * The type is the checker's own internal type for the term — the fact inference
+ * publishes on the node, not a projection it would have to be converted back
+ * from. The surface annotation beside it exists for tooling only; nothing that
+ * reads this table touches it.
  *
  * Only terms that have a source origin are published. A node the checker
  * synthesized (a desugared `do`, an elaborated literal, an inserted dictionary
@@ -72,10 +70,10 @@ function termTypesFor(Ast\FunctionDecl $fn): array
     $terms = [];
 
     $visit = static function (Ast\AstNode $node) use (&$terms): void {
-        if ($node->inferredType !== null && $node->line > 0) {
+        if ($node->inferredInternalType !== null && $node->line > 0) {
             $terms[] = [
                 'origin' => CheckedFunction::termOrigin($node),
-                'type' => inferredTypeAstToInternal($node->inferredType),
+                'type' => $node->inferredInternalType,
             ];
         }
     };

@@ -1,9 +1,10 @@
 <?php declare(strict_types=1);
 
-// A compiled module carries its own map as `__MOGGI_MAP`, keyed off the namespace of the
-// generated function a host frame names. These checks pin that contract: a frame from a
-// module without a map, an unmapped line, or a malformed map must never resolve, and must
-// never crash reporting.
+/**
+ * Each compiled module carries its own `__MOGGI_MAP`, keyed by the namespace
+ * of its generated functions. Frames from modules without a map, unmapped
+ * lines, or malformed maps must never resolve or crash reporting.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {

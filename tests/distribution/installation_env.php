@@ -1,10 +1,11 @@
 <?php declare(strict_types=1);
 
-// A distribution's `bin/moggi` is the compiler itself, so the environment the
-// retired C launcher used to prepare — bundled runtimes in front of PATH, and
-// the roots the compiler looks for handed to its child processes — is prepared
-// in PHP before any command runs. This drives the installation layout by hand
-// and asserts what `activateBundledRuntimes()` leaves behind.
+/**
+ * `bin/moggi` is the compiler itself, so PHP prepares the environment
+ * formerly set up by the C launcher: bundled runtimes precede PATH, and
+ * compiler roots are passed to child processes. Exercise the installation
+ * layout and assert the result of `activateBundledRuntimes()`.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {

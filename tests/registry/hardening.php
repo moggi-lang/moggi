@@ -1,18 +1,20 @@
 <?php declare(strict_types=1);
 
-// Adversarial checks for the registry client's trust boundaries. Each one is a
-// thing a hostile registry, a hostile lock, or a misplaced binary could try, and
-// each asserts the *refusal* rather than a happy path. They run without a
-// registry, a network, or a real `schnorr`: where a binary is needed, a fake one
-// is written to a temp directory and named through `MOGGI_SCHNORR`.
+/**
+ * Adversarial checks for the registry client's trust boundaries. Each test
+ * asserts refusal of an attack involving a hostile registry, hostile lock,
+ * or misplaced binary—not a happy path.
+ *
+ * Tests run without a registry, network, or real `schnorr`. When needed, a
+ * `schnorr` is always the one shipped with the compiler, so no test here names,
+ * installs or fakes a verifier: the token policy it enforces is covered by the
+ * signing checks, which run the real binary from the checkout.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/registry/names.php') && \dirname($root) !== $root) {
     $root = \dirname($root);
 }
-// The whole compiler, not just the registry files: a descriptor names backends,
-// and `implementedBackendIds()` reaches the backend registry. Loading it once is also how
-// the suite loads it, so this test sees the same code the CLI does.
 require $root . '/src/compiler.php';
 require $root . '/tests/suite/support/workspace.php';
 
@@ -74,13 +76,10 @@ $otherNpub = \substr($seedNpub, 0, -1) . 'q';
 $hex = \str_repeat('a', 64);
 $hexC = \str_repeat('c', 64);
 
-// A registry, a lock and a name are all untrusted input that becomes a path, so
-// the whole run is kept off the real caches.
 $work = createTempDir('moggi-hardening');
 \putenv('MOGGI_CACHE_DIR=' . $work . '/cache');
 \putenv('MOGGI_USER_CACHE=' . $work . '/user-cache');
 \putenv('MOGGI_REGISTRY_NPUB');
-\putenv('MOGGI_SCHNORR');
 
 try {
     // --- package names -------------------------------------------------------
@@ -167,8 +166,6 @@ try {
         'the refusal names the variable that raises the cap',
     );
 
-    // The same `fetchBytes` a mirror or a checkout is read with is capped too, so
-    // the refusal does not need a network to be exercised.
     $mirror = $work . '/mirror';
     \mkdir($mirror, 0777, true);
     \file_put_contents($mirror . '/big.json', \str_repeat('a', 5000));
@@ -180,8 +177,6 @@ try {
     );
     $assert(\Moggi\Registry\fetchBytes($mirror, 'small.json') === 'ok', 'a file inside the cap must read');
 
-    // A caller-supplied reader is held to the cap too: the same bytes reach
-    // install through it, so it must not be a way around the limit.
     $fatReader = static fn (string $base, string $path): string => \str_repeat('x', 9000);
     $refuses(
         static fn () => \Moggi\Registry\fetchRegistryBytes('base', 'blobs/' . $hex, $fatReader),
@@ -222,53 +217,6 @@ try {
     $assert(
         $mentions(descriptorProblems($file), 'not a package name'),
         'a dependency named `Bad` must be refused: ' . \var_export(descriptorProblems($file), true),
-    );
-
-    // --- the verifier needs the success token, not just exit 0 ---------------
-    if (\PHP_OS_FAMILY !== 'Windows') {
-        $fake = static function (string $path, string $body) use ($work): string {
-            \file_put_contents($work . '/' . $path, "#!/bin/sh\n{$body}\n");
-            \chmod($work . '/' . $path, 0755);
-
-            return $work . '/' . $path;
-        };
-
-        \putenv('MOGGI_SCHNORR=' . $fake('valid', 'echo valid; exit 0'));
-        $verdict = verifySignature('aa', 'bb', $seedNpub);
-        $assert($verdict['ok'] === true, 'a verifier that prints `valid` must verify: ' . $verdict['note']);
-
-        \putenv('MOGGI_SCHNORR=' . $fake('says-ok', 'echo ok; exit 0'));
-        $assert(verifySignature('aa', 'bb', $seedNpub)['ok'] === false, 'a verifier that exits 0 without saying `valid` must not verify');
-
-        \putenv('MOGGI_SCHNORR=' . $fake('silent', 'exit 0'));
-        $assert(verifySignature('aa', 'bb', $seedNpub)['ok'] === false, 'a silent success must not verify');
-
-        \putenv('MOGGI_SCHNORR=' . $fake('invalid', 'echo invalid; exit 1'));
-        $assert(verifySignature('aa', 'bb', $seedNpub)['ok'] === false, '`invalid` must not verify');
-
-        // A `schnorr` on `PATH` is never the verifier.
-        $pathDir = $work . '/path-dir';
-        \mkdir($pathDir, 0777, true);
-        \file_put_contents($pathDir . '/schnorr', "#!/bin/sh\necho valid\n");
-        \chmod($pathDir . '/schnorr', 0755);
-        \putenv('MOGGI_SCHNORR');
-        $savedPath = (string) \getenv('PATH');
-        \putenv('PATH=' . $pathDir);
-        $found = schnorrBinary();
-        $assert(
-            $found === null || ! \str_starts_with((string) $found, $pathDir),
-            'a `schnorr` on PATH must not be used: ' . \var_export($found, true),
-        );
-        \putenv('PATH=' . $savedPath);
-    }
-
-    // A set-but-missing `MOGGI_SCHNORR` is how a caller says "no binary": the
-    // override wins and does not fall through to the bundled checkout copy.
-    \putenv('MOGGI_SCHNORR=' . $work . '/no-such-schnorr');
-    $verdict = verifySignature('aa', 'bb', $seedNpub);
-    $assert(
-        $verdict['ok'] === false && \str_contains($verdict['note'], 'no bundled'),
-        'with no binary, verification must fail with a clear note',
     );
 
     // --- the write signature is bound to the host ----------------------------

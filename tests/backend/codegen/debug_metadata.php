@@ -1,9 +1,11 @@
 <?php declare(strict_types=1);
 
-// A native stack frame can only name a source line if emit wrote the metadata: `LineNumberTable`
-// and `SourceFile` in the JVM classfiles, `.line` sequence points in .NET IL. The exception-trace
-// goldens would keep passing without them, because the runtime carries its own frame data — this
-// asserts what the backends actually emit.
+/**
+ * Native stack frames can name source lines only if the backends emit the
+ * metadata: JVM `LineNumberTable` and `SourceFile`, .NET IL `.line` sequence
+ * points. Exception-trace goldens cannot verify this because runtimes carry
+ * their own frame data, so assert the emitted metadata directly.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {

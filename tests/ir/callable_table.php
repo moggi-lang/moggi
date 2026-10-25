@@ -1,17 +1,18 @@
 <?php declare(strict_types=1);
 
-// The callable table is the one published record of an entry's layout: distinct evidence /
-// capture / value slots, plus the result, execution and acquisition conventions. These four
-// programs are the conventions' worked examples, so this pins the compiler-produced signatures
-// against what the tree promises rather than against a dump.
-//
-// What it holds down:
-//   1. lowering records a declaration's evidence slots where the declaration is made, so the
-//      table gets `E` from the solved constraint list and the scope a lambda closed over, never
-//      from the `__ev_` spelling;
-//   2. the flattened runtime vector is `E ++ C ++ V`, and its length is the entry's runtime arity;
-//   3. the post-legalize check rejects a direct call whose vector disagrees with the table, and
-//      a partial that is not an underapplication — with or without the optimizer.
+/**
+ * The callable table is the published record of an entry's layout:
+ * evidence, capture and value slots, plus result, execution and acquisition
+ * conventions. Four programs pin compiler-produced signatures against the
+ * tree's contract.
+ *
+ * What it holds down:
+ *   1. Lowering records evidence slots at declaration sites, deriving `E`
+ *      from solved constraints and captured lambda scope, never `__ev_` names.
+ *   2. The runtime vector is `E ++ C ++ V`, with its length defining runtime arity.
+ *   3. Post-legalize checks reject direct calls with mismatched vectors and
+ *      partials that are not underapplications, with or without optimization.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {

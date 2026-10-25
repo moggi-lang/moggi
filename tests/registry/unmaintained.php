@@ -1,10 +1,13 @@
 <?php declare(strict_types=1);
 
-// The `unmaintained` marker is the package-level maintenance signal beside
-// `bad`: it travels in the signed catalog shard, warns instead of refusing, and
-// a marker without a note is still a marker. These checks cover the shapes a
-// shard may carry, that the two markers are independent of each other, and the
-// one warning line every command prints.
+/**
+ * The `unmaintained` marker is a package-level maintenance signal alongside
+ * `bad`. It travels in the signed catalog shard, warns without refusing,
+ * and remains valid without a note.
+ *
+ * Cover accepted shard shapes, independence from the `bad` marker, and
+ * the warning line printed by every command.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/registry/unmaintained.php') && \dirname($root) !== $root) {

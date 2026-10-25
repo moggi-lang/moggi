@@ -317,13 +317,14 @@ checked out yet (a shallow clone of the pinned tag, verified against the pinned 
 `COMB_BLOCKS` / `COMB_TEETH` values the shipped precomputed tables were generated for. The clone
 directories are git-ignored: they are a build input, not project content.
 
-`MOGGI_DIST_SCHNORR_CC` names the compiler (default: `cc`, `gcc` or `clang` on Linux and macOS;
-MinGW on Windows). `MOGGI_DIST_SCHNORR` names an already-built binary to use instead of building —
-which is what Windows does, because the Makefile's recipes need a POSIX shell and the assembler runs
-under PowerShell there; the Windows jobs build it in an MSYS2 step and pass the result on. MinGW is
-detected by the triple the compiler reports, not by its name (in MSYS2's UCRT64 shell the Windows
-compiler is simply `gcc`), and it forces a static link: MinGW would otherwise make `bin/schnorr.exe`
-depend on `libgcc_s_*.dll` and `libwinpthread-1.dll`, which no Windows machine has by default.
+The binary is always built here, from these sources: a distribution says which binary it ships, so
+there is no way to have a different one substituted. The compiler is the first of `cc`, `gcc`,
+`clang` on the PATH (`x86_64-w64-mingw32-gcc`, `gcc`, `clang` on Windows), and no variable changes
+that list. On Windows the Makefile's recipes need a POSIX shell, so the build runs in an MSYS2 step
+and the assembler picks the result up from `schnorr/`. MinGW is detected by the triple the compiler
+reports, not by its name (in MSYS2's UCRT64 shell the Windows compiler is simply `gcc`), and it
+forces a static link: MinGW would otherwise make `bin/schnorr.exe` depend on `libgcc_s_*.dll` and
+`libwinpthread-1.dll`, which no Windows machine has by default.
 
 ```bash
 php packaging/schnorr.php                 # fetch the pinned sources and build in place

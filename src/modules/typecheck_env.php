@@ -927,6 +927,29 @@ function mergeClassScopeRefs(
     );
 }
 
+/**
+ * The modules a project-wide scan runs over, in one canonical order.
+ *
+ * The scans below (class declarations, instance records) feed the checked
+ * product's instance world, so their order must not depend on the route that
+ * prepared the units — a full project compile, a single-file compile's focus
+ * base and the language server all reach here with different insertion orders.
+ *
+ * @param array<string, array<string, mixed>> $units
+ * @param list<string>|null $onlyModules
+ * @return list<string>
+ */
+function canonicalModuleOrder(array $units, ?array $onlyModules = null): array
+{
+    $names = \array_values(\array_unique(\array_map(
+        static fn (mixed $name): string => (string) $name,
+        $onlyModules ?? \array_keys($units),
+    )));
+    \sort($names);
+
+    return $names;
+}
+
 /** @param array<string, array<string, mixed>> $units @param list<string>|null $onlyModules @return list<array{module: string, class: string, head: array<string, mixed>}> */
 /**
  * Every class declaration the units parsed, for the strategy facts the instance
@@ -944,8 +967,8 @@ function mergeClassScopeRefs(
 function projectClassDeclarations(array $units): array
 {
     $declarations = [];
-    foreach ($units as $unit) {
-        $program = $unit['program'] ?? null;
+    foreach (canonicalModuleOrder($units) as $moduleName) {
+        $program = $units[$moduleName]['program'] ?? null;
         if (! $program instanceof Ast\Program) {
             continue;
         }
@@ -963,14 +986,10 @@ function collectProjectInstances(array $units, ?array $onlyModules = null): arra
 {
     $instances = [];
     $facts = ClassDeriveFacts::fromClassDeclarations(projectClassDeclarations($units));
-    $allowed = $onlyModules !== null ? \array_fill_keys($onlyModules, true) : null;
 
-    foreach ($units as $moduleName => $unit) {
-        if ($allowed !== null && ! isset($allowed[$moduleName])) {
-            continue;
-        }
-
-        if (($unit['parsed'] ?? false) !== true) {
+    foreach (canonicalModuleOrder($units, $onlyModules) as $moduleName) {
+        $unit = $units[$moduleName] ?? null;
+        if ($unit === null || ($unit['parsed'] ?? false) !== true) {
             continue;
         }
 

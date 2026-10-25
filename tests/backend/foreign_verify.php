@@ -164,38 +164,16 @@ $same(
 require $root . '/tests/suite/support/process.php';
 
 $fixture = $root . '/tests/semantics/foreign/bad/Host-Arity.mog';
-$probe = static function (?string $verify) use ($root, $fixture): array {
-    $code = 'require ' . \var_export($root . '/src/compiler.php', true) . ';'
-        . ' $out = \Moggi\Compiler\compileFileCapturingErrorsBoth(' . \var_export($fixture, true) . ', true, "php");'
-        . ' echo $out["emit"]["output"];';
-    $env = \getenv();
-    unset($env['MOGGI_NO_FFI_VERIFY']);
-    if ($verify !== null) {
-        $env['MOGGI_NO_FFI_VERIFY'] = $verify;
-    }
+$code = 'require ' . \var_export($root . '/src/compiler.php', true) . ';'
+    . ' $out = \Moggi\Compiler\compileFileCapturingErrorsBoth(' . \var_export($fixture, true) . ', true, "php");'
+    . ' echo $out["emit"]["output"];';
+$plain = runCompiledProcess([\PHP_BINARY, '-r', $code], 60);
 
-    return runCompiledProcess([\PHP_BINARY, '-r', $code], 60, $env);
-};
-
-$plain = $probe(null);
 $same(0, $plain['exitCode'], 'the fixture compiles far enough to be refused: ' . $plain['stderr']);
 $assert(
     \str_contains($plain['stdout'], 'php function `strlen` takes at most 1 argument'),
     'the host rejection is what the fixture is for: ' . $plain['stdout'],
 );
-
-foreach (['1', 'php', 'all', 'jvm'] as $value) {
-    $skipped = $probe($value);
-    $same(
-        $plain['stdout'],
-        $skipped['stdout'],
-        "MOGGI_NO_FFI_VERIFY={$value} no longer changes the verdict",
-    );
-    $assert(
-        ! \str_contains($skipped['stderr'], 'FFI_VERIFY'),
-        'and nothing claims a check was skipped: ' . $skipped['stderr'],
-    );
-}
 
 require_once $root . '/tests/suite/support/workspace.php';
 
@@ -313,7 +291,6 @@ if (\PHP_OS_FAMILY !== 'Windows') {
     }
     removeDirectory($fakeBin);
 }
-//
 
 $toolchainWork = createTempDir('moggi-javap-toolchain');
 $badMember = $toolchainWork . '/Bad.mog';

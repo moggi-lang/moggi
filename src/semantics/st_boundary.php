@@ -2,6 +2,8 @@
 
 namespace Moggi\Semantics\StBoundary;
 
+use Moggi\Semantics\TypeExpr\TCon;
+use Moggi\Semantics\TypeExpr\TVar;
 use Moggi\Semantics\Types\TypeError;
 use Moggi\Syntax\Ast;
 
@@ -11,6 +13,7 @@ use function Moggi\Semantics\IntrinsicRegistry\stPrimopRole;
 use function Moggi\Semantics\IoBoundary\stripConstraints;
 use function Moggi\Semantics\IoBoundary\typeMentionsIo;
 use function Moggi\Semantics\Kinds\canonicalTypeConName;
+use function Moggi\Semantics\TypeExpr\collectTypeVars;
 
 /** Validate ST surface constraints on a typed program. */
 function validate(Ast\Program $program, string $source = '', string $filename = ''): void
@@ -294,23 +297,21 @@ function checkRunStEscape(Ast\IntrinsicCall $expr, string $source, string $filen
         return;
     }
 
-    $argType = $arg->inferredType;
-    if (! $argType instanceof Ast\TypeApp
-        || ! $argType->con instanceof Ast\TypeCon
-        || ! isStTypeConName($argType->con->name)
-        || ! isset($argType->args[0], $argType->args[1])
+    $argType = $arg->inferredInternalType;
+    if (! $argType instanceof TCon
+        || ! isStTypeConName($argType->name)
+        || \count($argType->args) < 2
     ) {
         fail('runST# argument must have type ST s a', $arg, $source, $filename);
     }
 
     $thread = $argType->args[0];
     $result = $argType->args[1];
-    if (! $thread instanceof Ast\TypeVar) {
+    if (! $thread instanceof TVar) {
         fail('runST# cannot run the shared RealWorld thread', $expr, $source, $filename);
     }
 
-    $free = freeTypeVars($result);
-    if (isset($free[$thread->name])) {
+    if (isset(collectTypeVars($result, [])[$thread->name])) {
         fail(
             'runST# would let the state thread escape (thread variable occurs in the result type)',
             $expr,
@@ -320,47 +321,12 @@ function checkRunStEscape(Ast\IntrinsicCall $expr, string $source, string $filen
     }
 }
 
-/** @return array<string, true> */
-function freeTypeVars(Ast\AstNode $node): array
-{
-    $free = [];
-    collectFreeTypeVars($node, $free);
-
-    return $free;
-}
-
-/** @param array<string, true> $free */
-function collectFreeTypeVars(Ast\AstNode $node, array &$free): void
-{
-    if ($node instanceof Ast\TypeVar) {
-        $free[$node->name] = true;
-
-        return;
-    }
-
-    foreach (\get_object_vars($node) as $key => $value) {
-        if ($key === 'inferredType' || $key === 'pendingConstraints') {
-            continue;
-        }
-
-        if ($value instanceof Ast\AstNode) {
-            collectFreeTypeVars($value, $free);
-        } elseif (\is_array($value)) {
-            foreach ($value as $child) {
-                if ($child instanceof Ast\AstNode) {
-                    collectFreeTypeVars($child, $free);
-                }
-            }
-        }
-    }
-}
-
 /** @return list<Ast\AstNode> */
 function childExpressions(Ast\AstNode $expr): array
 {
     $children = [];
     foreach (\get_object_vars($expr) as $key => $value) {
-        if ($key === 'inferredType' || $key === 'pendingConstraints') {
+        if ($key === 'inferredType' || $key === 'inferredInternalType' || $key === 'pendingConstraints') {
             continue;
         }
 

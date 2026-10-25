@@ -3,6 +3,7 @@
 namespace Moggi\Semantics\Registry;
 
 use Moggi\Modules\ImportContext;
+use Moggi\Modules\InstanceWorld;
 use Moggi\Semantics\Deriving\ClassDeriveFacts;
 use Moggi\Semantics\Kinds;
 use Moggi\Semantics\Types\TypeCheckState;
@@ -11,9 +12,7 @@ use Moggi\Syntax\Ast;
 use function Moggi\Semantics\Deriving\derivedProjectInstanceRecords;
 use function Moggi\Semantics\Foreign\foreignParamNames;
 use function Moggi\Semantics\Types\associatedEquationsMapFromDecl;
-use function Moggi\Semantics\Types\indexAssociatedEquations;
 use function Moggi\Semantics\Types\installTypeSynonymKind;
-use function Moggi\Semantics\Types\instanceHeadIndexKeyFromAst;
 use function Moggi\Semantics\Types\instanceIntrinsicMethods;
 use function Moggi\Semantics\Types\registerClass;
 use function Moggi\Semantics\Types\registerClassMethodExportSchemes;
@@ -81,44 +80,18 @@ function applyImportContext(TypeCheckState $state, Ast\Program $program, ImportC
     $state->ambiguousImports = $interface->ambiguousNames;
     $state->classModuleScopes = $importContext->classScopes;
     $state->externalFns = $interface->externalFns;
-    $instanceIndex = $importContext->projectInstanceIndex;
-    if ($instanceIndex !== null) {
-        $state->projectInstancesByClass = $instanceIndex['byClass'];
-        $state->projectInstancesByClassHead = $instanceIndex['byClassHead'];
-        $state->associatedEquations = $instanceIndex['associatedEquations'];
-    } else {
-        $instancesByClass = [];
-        $instancesByClassHead = [];
-        $addInstance = static function (array $instance) use (&$instancesByClass, &$instancesByClassHead): void {
-            $instancesByClass[$instance['class']][] = $instance;
-            $headKey = instanceHeadIndexKeyFromAst($instance['instanceHead']);
-            $instancesByClassHead[$instance['class']][$headKey][] = $instance;
-        };
-        foreach ($importContext->projectInstances as $instance) {
-            $addInstance($instance);
-        }
-        $currentModule = $importContext->currentModule ?? '';
-        foreach ($program->items as $item) {
-            if (! $item instanceof Ast\InstanceDecl) {
-                continue;
-            }
-            $addInstance([
-                'module' => $currentModule,
-                'class' => $item->class,
-                'instanceHead' => $item->head,
-                'constraints' => $item->constraints,
-                'intrinsicMethods' => instanceIntrinsicMethods($item),
-                'associatedEquations' => associatedEquationsMapFromDecl($item),
-            ]);
-        }
-        $state->projectInstancesByClass = $instancesByClass;
-        $state->projectInstancesByClassHead = $instancesByClassHead;
-        $equationSource = $importContext->projectInstances;
-        if ($equationSource === []) {
-            $equationSource = projectInstancesFromProgram($program, ClassDeriveFacts::fromState($state));
-        }
-        indexAssociatedEquations($state, $equationSource);
-    }
+
+    $standaloneModule = $importContext->currentModule ?? '';
+    $world = $importContext->instanceWorld ?? InstanceWorld::over(
+        projectInstancesFromProgram($program, ClassDeriveFacts::fromState($state), $standaloneModule),
+        [$standaloneModule],
+    );
+    $state->instanceWorld = $world;
+    $index = $world->index();
+    $state->projectInstancesByClass = $index['byClass'];
+    $state->projectInstancesByClassHead = $index['byClassHead'];
+    $state->associatedEquations = $index['associatedEquations'];
+
     $state->currentModule = $importContext->currentModule;
     $state->checkedInstances = [];
     $state->programModuleBackend = $program->moduleBackend;
@@ -227,12 +200,17 @@ function registerFunctionSchemesFromProgram(TypeCheckState $state, Ast\Program $
 /**
  * Build project-instance records (including associated equations) from a single program.
  *
- * @return list<array{module: string, class: string, head: Ast\TypeNode, constraints: list<Ast\TypeNode>, associatedEquations: array<string, array{lhsArgs: list<Ast\TypeNode>, rhs: Ast\TypeNode}>}>
+ * This is the record shape a module is its own instance world in — the
+ * single-module boundary `applyImportContext` falls back to, and the shape the
+ * project collector produces for the same declarations (a record for every
+ * instance declaration, plus the ones data declarations derive).
+ *
+ * @return list<array{module: string, class: string, head: Ast\TypeNode, constraints: list<Ast\TypeNode>, intrinsicMethods: list<string>, associatedEquations: array<string, array{lhsArgs: list<Ast\TypeNode>, rhs: Ast\TypeNode}>}>
  */
-function projectInstancesFromProgram(Ast\Program $program, ClassDeriveFacts $facts, string $moduleName = ''): array
+function projectInstancesFromProgram(Ast\Program $program, ClassDeriveFacts $facts, ?string $moduleName = null): array
 {
     $instances = [];
-    $mod = $moduleName !== '' ? $moduleName : ($program->module ?? '');
+    $mod = $moduleName ?? $program->module ?? '';
     foreach ($program->items as $item) {
         if ($item instanceof Ast\InstanceDecl) {
             $instances[] = [
@@ -240,6 +218,7 @@ function projectInstancesFromProgram(Ast\Program $program, ClassDeriveFacts $fac
                 'class' => $item->class,
                 'instanceHead' => $item->head,
                 'constraints' => $item->constraints,
+                'intrinsicMethods' => instanceIntrinsicMethods($item),
                 'associatedEquations' => associatedEquationsMapFromDecl($item),
             ];
 

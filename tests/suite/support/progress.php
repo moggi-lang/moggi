@@ -28,13 +28,8 @@ function progressEnabled(): bool
     return $enabled = progressStderrIsTerminal();
 }
 
-/** `MOGGI_TEST_FORCE_TTY` pins the terminal default without the test having to allocate a pty. */
 function progressStderrIsTerminal(): bool
 {
-    if (\getenv('MOGGI_TEST_FORCE_TTY') === '1') {
-        return true;
-    }
-
     return \function_exists('stream_isatty') && @\stream_isatty(\STDERR);
 }
 

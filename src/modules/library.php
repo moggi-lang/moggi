@@ -5,6 +5,7 @@ namespace Moggi\Modules;
 require_once __DIR__ . '/../paths.php';
 
 use Moggi\Cache;
+use Moggi\Install\ConfiguredInstallation;
 use Moggi\Semantics\Types\TypeError;
 
 use function Moggi\Install\installationRoot;
@@ -311,25 +312,54 @@ function configuredExtraPaths(): array
 /**
  * Bundled packages that join every compilation alongside the standard
  * library: `<root>/libraries/{time,filepath,directory}/src`, where `<root>`
- * is found the way the bundled stdlib is — `MOGGI_ROOT`, the installed
- * distribution, then the checkout. Empty when the distribution ships no such
- * package.
+ * is found the way the bundled stdlib is — the installed distribution, the
+ * checkout, or a root a test configured. Empty when the distribution ships no
+ * such package.
  *
  * @return list<string>
  */
 function bundledExtraLibPaths(): array
 {
-    static $cached = false;
-    static $paths = [];
-    if ($cached) {
-        return $paths;
+    static $memoGeneration = -1;
+    static $memoPaths = [];
+    $generation = ConfiguredInstallation::generation();
+    if ($memoGeneration === $generation) {
+        return $memoPaths;
     }
-    $cached = true;
+    $memoGeneration = $generation;
+    $memoPaths = [];
 
+    $packages = ['time', 'filepath', 'directory'];
+    foreach (installationCandidates() as $root) {
+        foreach ($packages as $package) {
+            $dir = \rtrim($root, '/\\') . DIRECTORY_SEPARATOR . 'libraries'
+                . DIRECTORY_SEPARATOR . $package . DIRECTORY_SEPARATOR . 'src';
+            $real = resolvePath($dir);
+            if (isLibraryRoot($real)) {
+                $memoPaths[] = $real;
+            }
+        }
+        if ($memoPaths !== []) {
+            return $memoPaths;
+        }
+    }
+
+    return $memoPaths;
+}
+
+/**
+ * The roots a bundled `libraries/` tree is looked for under, most
+ * authoritative first: a root a test configured, the installation this process
+ * runs from, then the checkout it was built in.
+ *
+ * @return list<string>
+ */
+function installationCandidates(): array
+{
     $candidates = [];
-    $envRoot = \getenv('MOGGI_ROOT');
-    if (\is_string($envRoot) && $envRoot !== '') {
-        $candidates[] = \rtrim($envRoot, '/\\');
+    $configured = ConfiguredInstallation::root();
+    if ($configured !== null) {
+        $candidates[] = $configured;
     }
     $installRoot = installationRoot();
     if ($installRoot !== null) {
@@ -337,22 +367,7 @@ function bundledExtraLibPaths(): array
     }
     $candidates[] = \dirname(__DIR__, 2);
 
-    $packages = ['time', 'filepath', 'directory'];
-    foreach ($candidates as $root) {
-        foreach ($packages as $package) {
-            $dir = \rtrim($root, '/\\') . DIRECTORY_SEPARATOR . 'libraries'
-                . DIRECTORY_SEPARATOR . $package . DIRECTORY_SEPARATOR . 'src';
-            $real = resolvePath($dir);
-            if (isLibraryRoot($real)) {
-                $paths[] = $real;
-            }
-        }
-        if ($paths !== []) {
-            return $paths;
-        }
-    }
-
-    return $paths;
+    return $candidates;
 }
 
 /**
@@ -383,39 +398,33 @@ function libraryScanRoots(): array
 
 /**
  * Standard library shipped next to the compiler: `<root>/libraries/base/src`
- * where `<root>` is an explicit `$MOGGI_ROOT`, the installation an archive
- * lives in (`<installation>/bin/moggi.phar` → `<installation>/libraries/...`),
- * or the checkout.
+ * where `<root>` is the installation an archive lives in
+ * (`<installation>/bin/moggi.phar` → `<installation>/libraries/...`), the
+ * checkout, or a root a test configured.
  */
 function bundledStdlibLibPath(): ?string
 {
-    static $cached = false;
-    static $path = null;
-    if ($cached) {
-        return $path;
+    static $memoGeneration = -1;
+    static $memoPath = null;
+    $generation = ConfiguredInstallation::generation();
+    if ($memoGeneration === $generation) {
+        return $memoPath;
     }
-    $cached = true;
+    $memoGeneration = $generation;
+    $memoPath = null;
 
     $candidates = [];
-    $envRoot = \getenv('MOGGI_ROOT');
-    if (\is_string($envRoot) && $envRoot !== '') {
-        $candidates[] = \rtrim($envRoot, '/\\') . DIRECTORY_SEPARATOR . 'libraries'
+    foreach (installationCandidates() as $root) {
+        $candidates[] = $root . DIRECTORY_SEPARATOR . 'libraries'
             . DIRECTORY_SEPARATOR . 'base' . DIRECTORY_SEPARATOR . 'src';
     }
-    $installRoot = installationRoot();
-    if ($installRoot !== null) {
-        $candidates[] = $installRoot . DIRECTORY_SEPARATOR . 'libraries'
-            . DIRECTORY_SEPARATOR . 'base' . DIRECTORY_SEPARATOR . 'src';
-    }
-    $candidates[] = \dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'libraries'
-        . DIRECTORY_SEPARATOR . 'base' . DIRECTORY_SEPARATOR . 'src';
 
     foreach ($candidates as $candidate) {
         $real = resolvePath($candidate);
         if (isLibraryRoot($real)) {
-            $path = $real;
+            $memoPath = $real;
 
-            return $path;
+            return $memoPath;
         }
     }
 

@@ -149,8 +149,7 @@ function prepareProject(array $paths, string $rootDir, CompilationContext $conte
         ensureUnitProgram($units, $moduleName);
     }
 
-    $projectInstances = collectProjectInstances($units, $fullParseModules);
-    $projectInstanceIndex = indexProjectInstances($projectInstances);
+    $instanceWorld = InstanceWorld::forUnits($units, $fullParseModules);
     $projectClasses = [];
     enableCollectExportsCache();
     $classScopes = [];
@@ -192,8 +191,7 @@ function prepareProject(array $paths, string $rootDir, CompilationContext $conte
                 ))->withProjectScopes(
                     $projectClasses,
                     $classScopes,
-                    $projectInstances,
-                    $projectInstanceIndex,
+                    $instanceWorld,
                     $moduleName,
                 ),
                 $classScopeFns,
@@ -213,7 +211,7 @@ function prepareProject(array $paths, string $rootDir, CompilationContext $conte
         updateProjectClassesForModule($units[$moduleName], $units, $moduleName, $projectClasses);
 
         if (($units[$moduleName]['parsed'] ?? false) !== true) {
-            ensureImportInterface($units, $moduleName, $projectClasses, $projectInstanceIndex, $context);
+            ensureImportInterface($units, $moduleName, $projectClasses, $instanceWorld->index(), $context);
             publishModuleExports($units, $moduleName, $context);
             if (isset($units[$moduleName]['localTypes'])) {
                 addModuleClassScope($units, $moduleName, $projectClasses, $classScopes, $classScopeFns, $context->backendId);
@@ -243,8 +241,7 @@ function prepareProject(array $paths, string $rootDir, CompilationContext $conte
                 $projectClasses,
                 $classScopes,
                 $classScopeFns,
-                $projectInstances,
-                $projectInstanceIndex,
+                $instanceWorld,
                 $context,
             );
 
@@ -280,8 +277,7 @@ function prepareProject(array $paths, string $rootDir, CompilationContext $conte
                     $projectClasses,
                     $classScopes,
                     $classScopeFns,
-                    $projectInstances,
-                    $projectInstanceIndex,
+                    $instanceWorld,
                     $context,
                 );
 
@@ -298,8 +294,7 @@ function prepareProject(array $paths, string $rootDir, CompilationContext $conte
                 $projectClasses,
                 $classScopes,
                 $classScopeFns,
-                $projectInstances,
-                $projectInstanceIndex,
+                $instanceWorld,
                 $context,
             );
 
@@ -317,8 +312,7 @@ function prepareProject(array $paths, string $rootDir, CompilationContext $conte
         )->withProjectScopes(
             $projectClasses,
             $classScopes,
-            $projectInstances,
-            $projectInstanceIndex,
+            $instanceWorld,
             $moduleName,
         );
         $importContext = mergeClassScopeRefs(
@@ -329,7 +323,7 @@ function prepareProject(array $paths, string $rootDir, CompilationContext $conte
         );
         $importContext = $importContext->withInterface(
             $importContext->interface->withExtraTypes(
-                moduleFacadeExtraTypes($units, $moduleName, $projectClasses, $projectInstanceIndex),
+                moduleFacadeExtraTypes($units, $moduleName, $projectClasses, $instanceWorld->index()),
             ),
         );
         $importContexts[$moduleName] = $importContext;
@@ -418,8 +412,7 @@ function prepareProject(array $paths, string $rootDir, CompilationContext $conte
         )->withProjectScopes(
             $projectClasses,
             $classScopes,
-            $projectInstances,
-            $projectInstanceIndex,
+            $instanceWorld,
             $moduleName,
         );
     }
@@ -442,8 +435,6 @@ function prepareProject(array $paths, string $rootDir, CompilationContext $conte
  * @param array<string, mixed> $projectClasses
  * @param array<string, mixed> $classScopes
  * @param array<string, mixed> $classScopeFns
- * @param list<array<string, mixed>> $projectInstances
- * @param array<string, mixed> $projectInstanceIndex
  */
 function buildPreparedModuleContext(
     array &$units,
@@ -453,11 +444,10 @@ function buildPreparedModuleContext(
     array $projectClasses,
     array &$classScopes,
     array &$classScopeFns,
-    array $projectInstances,
-    array $projectInstanceIndex,
+    InstanceWorld $instanceWorld,
     CompilationContext $context,
 ): ImportContext {
-    ensureImportInterface($units, $moduleName, $projectClasses, $projectInstanceIndex, $context);
+    ensureImportInterface($units, $moduleName, $projectClasses, $instanceWorld->index(), $context);
     publishModuleExports($units, $moduleName, $context);
     addModuleClassScope($units, $moduleName, $projectClasses, $classScopes, $classScopeFns, $context->backendId);
     $outputRelative = mogPathToOutputRelative($path, $rootPrefix, $context->backend->extension());
@@ -473,8 +463,7 @@ function buildPreparedModuleContext(
         )->withProjectScopes(
             $projectClasses,
             $classScopes,
-            $projectInstances,
-            $projectInstanceIndex,
+            $instanceWorld,
             $moduleName,
         ),
         $classScopeFns,
@@ -820,16 +809,9 @@ function prepareProjectExtendingFocus(
         return prepareProject(\array_values(\array_unique($fallbackPaths)), $rootDir, $context);
     }
 
-    $projectInstances = $sampleCtx->projectInstances;
-    $projectInstanceIndex = $sampleCtx->projectInstanceIndex ?? indexProjectInstances($projectInstances);
+    $instanceWorld = InstanceWorld::forUnits($units);
     $projectClasses = $sampleCtx->classes;
     $classScopes = $sampleCtx->classScopes;
-
-    $focusExtra = collectProjectInstances($units, [$focusModule]);
-    if ($focusExtra !== []) {
-        $projectInstances = \array_merge($projectInstances, $focusExtra);
-        $projectInstanceIndex = indexProjectInstances($projectInstances);
-    }
 
     unset($classScopes[$focusModule]);
     $classScopeFns = classScopeFunctionRefs($units, $classScopes);
@@ -850,8 +832,7 @@ function prepareProjectExtendingFocus(
         )->withProjectScopes(
             $projectClasses,
             $classScopes,
-            $projectInstances,
-            $projectInstanceIndex,
+            $instanceWorld,
             $focusModule,
         ),
         $classScopeFns,
@@ -860,7 +841,7 @@ function prepareProjectExtendingFocus(
     );
     $importContext = $importContext->withInterface(
         $importContext->interface->withExtraTypes(
-            moduleFacadeExtraTypes($units, $focusModule, $projectClasses, $projectInstanceIndex),
+            moduleFacadeExtraTypes($units, $focusModule, $projectClasses, $instanceWorld->index()),
         ),
     );
 

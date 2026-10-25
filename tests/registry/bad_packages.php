@@ -32,7 +32,6 @@ $assert = static function (bool $condition, string $message) use (&$checks): voi
 $npub = 'npub1yywlmj053p4qp7z2qvqsrgcwz488mw0pr0t50xz3e5rx7s9uaelsjpdmfm';
 $short = \substr($npub, 0, 12);
 
-// --- the shapes a shard may carry -------------------------------------------
 $assert(badPackageMarker([]) === null, 'an entry with no `bad` is not marked');
 $assert(badPackageMarker(['bad' => null]) === null, 'a null `bad` is not marked');
 $assert(badPackageMarker(['bad' => false]) === null, 'a false `bad` is not marked');
@@ -46,7 +45,6 @@ $assert($full === ['reason' => 'RCE in the decoder', 'at' => '2026-10-05', 'by' 
 $assert(badPackageMarker(['bad' => ['at' => '2026-10-05']])['reason'] === 'no reason given', 'a marker without a reason still refuses');
 $assert(badPackageMarker(['bad' => ['reason' => '   ']])['reason'] === 'no reason given', 'a blank reason is no reason');
 
-// --- the refusal line and the derived set -----------------------------------
 $problem = badPackageProblem('json', $full);
 $assert(\str_contains($problem, '`json` is marked bad'), 'the line names the package: ' . $problem);
 $assert(\str_contains($problem, 'RCE in the decoder'), 'the line carries the reason');
@@ -60,13 +58,11 @@ $among = badPackagesAmong([
 ]);
 $assert(\array_keys($among) === ['json', 'evil'], 'only marked packages are collected: ' . \json_encode(\array_keys($among)));
 
-// --- the shared refusal, so install/build/update phrase it the same way ------
 $refusal = badPackagesRefusal(['json' => $full], 'in this lock', 'pass --allow-bad to install them anyway');
 $assert(\str_contains($refusal, 'in this lock as bad'), 'the refusal names the context: ' . $refusal);
 $assert(\str_contains($refusal, 'RCE in the decoder'), 'the refusal carries the reason: ' . $refusal);
 $assert(\str_contains($refusal, 'pass --allow-bad'), 'the refusal names the way past: ' . $refusal);
 
-// --- through a signed catalog shard -----------------------------------------
 $work = \sys_get_temp_dir() . '/moggi-bad-' . \bin2hex(\random_bytes(6));
 \mkdir($work . '/catalog', 0777, true);
 \mkdir($work . '/broken/catalog', 0777, true);

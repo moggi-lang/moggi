@@ -43,7 +43,7 @@ function smokeTest(string $stage, string $target, array $runtimes, string $work,
         throw new \RuntimeException("cannot create {$work}");
     }
 
-    $env = \array_diff_key(\getenv(), ['MOGGI_ROOT' => '']);
+    $env = \getenv();
 
     $checked = [];
     [$code, $stdout, $stderr] = runProcess([$compiler, 'version'], $work, $env);

@@ -1,10 +1,12 @@
 <?php declare(strict_types=1);
 
-// Version order and constraint matching, with pre-release ordering pinned down.
-// A pre-release sorts *below* the release it precedes, so a resolver prefers
-// `0.3.0` over `0.3.0-rc.1` and a floor below the release excludes it. Ordering
-// is not gating: a pre-release of a range's upper bound still orders inside the
-// range, which is a consequence of comparison and not a separate rule.
+/**
+ * Pin version ordering and constraint matching, including pre-releases.
+ * A pre-release sorts below its release, so resolvers prefer `0.3.0`
+ * over `0.3.0-rc.1`, and a floor below the release excludes the pre-release.
+ * Ordering is not gating: a pre-release of the upper bound remains in range
+ * through ordinary comparison, not a separate rule.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/registry/constraint.php') && \dirname($root) !== $root) {

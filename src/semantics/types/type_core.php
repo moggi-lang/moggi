@@ -621,20 +621,6 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
     $left = prune($state, $left);
     $right = prune($state, $right);
 
-    if ($left instanceof TCon && $right instanceof TCon
-        && $left->name === $right->name
-        && isset($state->associatedFamilies[$left->name])
-    ) {
-        if (\count($left->args) !== \count($right->args)) {
-            throw typeFail($state, 'type arity mismatch on `' . $left->name . '`', $at);
-        }
-        foreach ($left->args as $i => $arg) {
-            unify($state, $arg, $right->args[$i], $at);
-        }
-
-        return;
-    }
-
     if ($left instanceof TVar) {
         if ($right instanceof TVar) {
             if ($left->name === $right->name) {
@@ -689,6 +675,39 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
 
             return;
         }
+    }
+
+    if ($left instanceof TCon && $right instanceof TCon
+        && $left->name === $right->name
+        && isset($state->associatedFamilies[$left->name])
+    ) {
+        if (\count($left->args) !== \count($right->args)) {
+            throw typeFail($state, 'type arity mismatch on `' . $left->name . '`', $at);
+        }
+
+        /*
+         * Neither side reduced, so both applications are stuck on their head.
+         *
+         * The head decides which instance's equation the family applies, so two
+         * applications are the same type only when the head is *the same head* --
+         * compared by identity, never unified: learning `a = Foo` from
+         * `Rep a x ~ Rep Foo y` is the injectivity the family does not have.
+         *
+         * At that fixed head the family is an ordinary function of what is left,
+         * so `Rep a b ~ Rep a c` is `b ~ c` and those arguments unify as any
+         * other type's do.
+         */
+        $headArgs = \count($state->associatedFamilies[$left->name]['params']);
+        for ($i = 0; $i < $headArgs && $i < \count($left->args); ++$i) {
+            if (! typesMatchForAmbient($state, $left->args[$i], $right->args[$i])) {
+                throw typeFail($state, formatUnifyError($state, $left, $right), $at, 'unify');
+            }
+        }
+        for ($i = $headArgs; $i < \count($left->args); ++$i) {
+            unify($state, $left->args[$i], $right->args[$i], $at);
+        }
+
+        return;
     }
 
     if (samePrimitiveType($left, $right)) {
@@ -987,15 +1006,42 @@ function prune(TypeCheckState $state, Type $type): Type
 }
 
 /**
+ * Publish a term's checked type: the internal type is the authority a consumer
+ * reads, and the surface node is only its projection for tooling.
+ *
+ * Every place the checker settles a node's type goes through here, so the two
+ * halves cannot disagree and no reader has to convert one back into the other.
+ */
+function publishInferredType(TypeCheckState $state, Ast\AstNode $node, Type $type): void
+{
+    $pruned = prune($state, $type);
+    $node->inferredInternalType = $pruned;
+    $node->inferredType = internalTypeToAstNode($pruned);
+}
+
+/**
+ * Hand a node the type another node publishes, both halves together.
+ *
+ * A rewrite that substitutes one elaborated node for another — an intrinsic
+ * wrapper, an evidence application, a desugared literal — carries the source
+ * node's type across, so the term the caller holds keeps the fact its source
+ * had.
+ */
+function copyInferredType(Ast\AstNode $to, Ast\AstNode $from): void
+{
+    $to->inferredInternalType = $from->inferredInternalType;
+    $to->inferredType = $from->inferredType;
+}
+
+/**
  * Rewrite inferredType annotations after the body's unifications are complete,
  * so HKT heads like `t0 Handle` become `IO Handle` for later IO-boundary checks.
  */
 function zonkInferredTypesInExpr(TypeCheckState $state, Ast\AstNode $expr): void
 {
-    if ($expr->inferredType !== null) {
-        $expr->inferredType = internalTypeToAstNode(
-            prune($state, inferredTypeAstToInternal($expr->inferredType)),
-        );
+    if ($expr->inferredInternalType !== null) {
+        $expr->inferredInternalType = prune($state, $expr->inferredInternalType);
+        $expr->inferredType = internalTypeToAstNode($expr->inferredInternalType);
     }
 
     match ($expr::class) {
@@ -1097,11 +1143,9 @@ function zonkInferredTypesInPattern(TypeCheckState $state, ?Ast\AstNode $pattern
     if ($pattern === null || ! \is_object($pattern) || $pattern instanceof Ast\TypeNode) {
         return;
     }
-    if ($pattern->inferredType !== null) {
-        $pattern->inferredType = internalTypeToAst(
-            prune($state, inferredTypeAstToInternal($pattern->inferredType)),
-            $state->subst,
-        );
+    if ($pattern->inferredInternalType !== null) {
+        $pattern->inferredInternalType = prune($state, $pattern->inferredInternalType);
+        $pattern->inferredType = internalTypeToAstNode($pattern->inferredInternalType);
     }
 
     match ($pattern::class) {

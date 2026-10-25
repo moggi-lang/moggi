@@ -3,6 +3,10 @@
 namespace Moggi\Semantics\IoBoundary;
 
 use Moggi\IR\EntryPointKind;
+use Moggi\Semantics\TypeExpr\TArrow;
+use Moggi\Semantics\TypeExpr\TCon;
+use Moggi\Semantics\TypeExpr\TUnit;
+use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Semantics\Types\TypeError;
 use Moggi\Syntax\Ast;
 
@@ -240,15 +244,29 @@ function isIoUnitType(Ast\TypeNode $type): bool
         && $type->args[0] instanceof Ast\TypeUnit;
 }
 
-function isNestedIoType(Ast\TypeNode $type): bool
+/**
+ * The same IO tests over the checker's own types — the authority a term's type
+ * carries.
+ *
+ * A declaration's signature is still read as the source syntax it was written
+ * as, so the projection-based tests above keep their callers; a *term*, whose
+ * annotation is only a projection, is read here.
+ */
+function isIoCheckedType(Type $type): bool
 {
-    if (! isIoType($type)) {
-        return false;
-    }
+    return $type instanceof TCon
+        && isIoTypeConName($type->name)
+        && \count($type->args) === 1;
+}
 
-    $inner = $type->args[0] ?? null;
+function isIoUnitCheckedType(Type $type): bool
+{
+    return isIoCheckedType($type) && $type->args[0] instanceof TUnit;
+}
 
-    return $inner instanceof Ast\TypeNode && isIoType($inner);
+function isNestedIoCheckedType(Type $type): bool
+{
+    return isIoCheckedType($type) && isIoCheckedType($type->args[0]);
 }
 
 function typeMentionsIo(Ast\TypeNode $type): bool
@@ -434,14 +452,14 @@ function validateStraightLineDo(array $stmts, string $source, string $filename):
         }
 
         if ($last && $stmt->expr instanceof Ast\Variable) {
-            $varType = $stmt->expr->inferredType;
-            if ($varType !== null && isIoType($varType)) {
+            $varType = $stmt->expr->inferredInternalType;
+            if ($varType !== null && isIoCheckedType($varType)) {
                 continue;
             }
         }
 
-        $stmtType = $stmt->expr->inferredType;
-        if (! $last && ! ($stmtType !== null && isIoUnitType($stmtType))) {
+        $stmtType = $stmt->expr->inferredInternalType;
+        if (! $last && ! ($stmtType !== null && isIoUnitCheckedType($stmtType))) {
             fail('intermediate IO statements must return ()', $stmt->expr, $source, $filename);
         }
 
@@ -617,9 +635,9 @@ function validateIoActionArgs(Ast\AstNode $expr, string $source, string $filenam
 
 function exprIsIoContinuation(Ast\AstNode $expr): bool
 {
-    $type = $expr->inferredType;
-    while ($type instanceof Ast\TypeArrow) {
-        if (isIoType($type->to)) {
+    $type = $expr->inferredInternalType;
+    while ($type instanceof TArrow) {
+        if (isIoCheckedType($type->to)) {
             return true;
         }
         $type = $type->to;
@@ -638,9 +656,9 @@ function exprIsIoContinuation(Ast\AstNode $expr): bool
  */
 function exprReturnsIo(Ast\AstNode $expr): bool
 {
-    $type = $expr->inferredType;
+    $type = $expr->inferredInternalType;
 
-    return $type !== null && isIoType($type);
+    return $type !== null && isIoCheckedType($type);
 }
 
 function validateIoBindExpr(Ast\AstNode $expr, string $source, string $filename): void
@@ -664,16 +682,16 @@ function validateIoBindExpr(Ast\AstNode $expr, string $source, string $filename)
 
 function doBindingHasIoType(Ast\DoBind $binding): bool
 {
-    $type = $binding->expr->inferredType;
+    $type = $binding->expr->inferredInternalType;
 
-    return $type !== null && isIoType($type);
+    return $type !== null && isIoCheckedType($type);
 }
 
 function validateIoBuildExpr(Ast\AstNode $expr, string $source, string $filename): void
 {
     if (exprReturnsIo($expr)) {
-        $type = $expr->inferredType;
-        if ($type !== null && isNestedIoType($type)) {
+        $type = $expr->inferredInternalType;
+        if ($type !== null && isNestedIoCheckedType($type)) {
             fail('nested IO actions are not supported', $expr, $source, $filename);
         }
 
@@ -806,12 +824,12 @@ function isUnsaturatedPartialIo(Ast\AstNode $expr): bool
         return false;
     }
 
-    $type = $expr->inferredType;
-    if (! $type instanceof Ast\TypeArrow) {
+    $type = $expr->inferredInternalType;
+    if (! $type instanceof TArrow) {
         return false;
     }
 
-    return ! isIoType($type->to);
+    return ! isIoCheckedType($type->to);
 }
 
 /** @return ?array{left: Ast\AstNode, right: Ast\AstNode} */

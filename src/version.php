@@ -87,8 +87,9 @@ function distributionVariant(): ?string
  *
  * The manifest is the library's descriptor, so its version is the single place
  * that number lives — a `VERSION` beside it would be one fact in two files,
- * free to drift. The root honors `MOGGI_ROOT`, so this reports the stdlib
- * actually in use rather than the one shipped next to the compiler.
+ * free to drift. The root is the one the compiler actually loads its standard
+ * library from, so this reports the stdlib in use rather than a copy someone
+ * assumed it would use.
  */
 function stdlibVersion(): ?string
 {

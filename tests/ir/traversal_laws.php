@@ -1,13 +1,14 @@
 <?php declare(strict_types=1);
 
-// The IR traversal is total — every node's children are enumerable and
-// mappable, the two never disagree, and neither a deep chain nor an unknown node
-// class is silently accepted.
-//
-// The tables are the law's coverage report: one row per node family member, and
-// the test fails when the compiler declares an `IrNode` the tables do not cover.
-// `IoAction` is the head that used to be enumerable but not mappable, so a pass
-// rewriting operands skipped the action body it had just been shown.
+/**
+ * IR traversal must be total: every node's children can be enumerated and
+ * mapped consistently, with no silent acceptance of deep chains or unknown
+ * node classes.
+ *
+ * Coverage tables list every `IrNode` family member and fail when one is
+ * missing. `IoAction` was previously enumerable but not mappable, causing
+ * operand-rewriting passes to skip the action body.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {

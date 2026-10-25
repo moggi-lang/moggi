@@ -6,20 +6,16 @@ final class ImportContext
     /**
      * @param array<string, array<string, mixed>> $classes
      * @param array<string, array<string, mixed>> $classScopes
-     * @param list<array<string, mixed>> $projectInstances
-     * @param array{
-     *   byClass: array<string, list<array<string, mixed>>>,
-     *   byClassHead: array<string, array<string, list<array<string, mixed>>>>,
-     *   associatedEquations: array<string, array<string, list<array<string, mixed>>>>
-     * }|null $projectInstanceIndex
+     * @param ?InstanceWorld $instanceWorld the prepared project's instance world, when this
+     *   module is checked as part of one; null only for a check that was given no project
+     *   (`checkRaw` with no context), which is then its own world
      */
     public function __construct(
         public readonly ImportInterface $interface,
         public readonly EmitPlan $plan,
         public readonly array $classes = [],
         public readonly array $classScopes = [],
-        public readonly array $projectInstances = [],
-        public readonly ?array $projectInstanceIndex = null,
+        public readonly ?InstanceWorld $instanceWorld = null,
         public readonly ?string $currentModule = null,
     ) {
     }
@@ -32,8 +28,7 @@ final class ImportContext
             plan: $this->plan,
             classes: $this->classes,
             classScopes: $this->classScopes,
-            projectInstances: $this->projectInstances,
-            projectInstanceIndex: $this->projectInstanceIndex,
+            instanceWorld: $this->instanceWorld,
             currentModule: $this->currentModule,
         );
     }
@@ -43,18 +38,11 @@ final class ImportContext
      *
      * @param array<string, array<string, mixed>> $classes
      * @param array<string, array<string, mixed>> $classScopes
-     * @param list<array<string, mixed>> $projectInstances
-     * @param array{
-     *   byClass: array<string, list<array<string, mixed>>>,
-     *   byClassHead: array<string, array<string, list<array<string, mixed>>>>,
-     *   associatedEquations: array<string, array<string, list<array<string, mixed>>>>
-     * }|null $projectInstanceIndex
      */
     public function withProjectScopes(
         array $classes,
         array $classScopes,
-        array $projectInstances,
-        ?array $projectInstanceIndex,
+        InstanceWorld $instanceWorld,
         string $currentModule,
     ): self {
         return new self(
@@ -62,8 +50,7 @@ final class ImportContext
             plan: $this->plan,
             classes: $classes,
             classScopes: $classScopes,
-            projectInstances: $projectInstances,
-            projectInstanceIndex: $projectInstanceIndex,
+            instanceWorld: $instanceWorld,
             currentModule: $currentModule,
         );
     }
@@ -84,8 +71,7 @@ final class ImportContext
             plan: $this->plan,
             classes: $classes,
             classScopes: $classScopes,
-            projectInstances: $this->projectInstances,
-            projectInstanceIndex: $this->projectInstanceIndex,
+            instanceWorld: $this->instanceWorld,
             currentModule: $this->currentModule,
         );
     }

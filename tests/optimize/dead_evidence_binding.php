@@ -1,13 +1,16 @@
 <?php declare(strict_types=1);
 
-// A rewrite that turns a `dict_call` into a direct instance-method call must not leave the
-// dictionary binding behind. `t2 = call __ev_Show_Int()` is pure, but DCE keeps calls unless it
-// can prove them inert, so the unread binding used to survive — and with it every method of the
-// instance. `Show Int`'s `showList` calls `Text.Show.showListWith`, so the artifact grew a whole
-// module for a value nobody read.
-//
-// Pins the repair in `Optimize\Specialize`: a specialized dictionary binding that nothing reads is
-// dropped, so the factory and the methods only it reached disappear with it.
+/**
+ * Rewriting a `dict_call` as a direct instance-method call must also remove
+ * its dictionary binding. DCE preserves calls unless proven inert, so the
+ * unread factory call previously survived and retained every method of the
+ * instance. `Show Int`'s `showList` pulled in the entire
+ * `Text.Show.showListWith` module for an unused value.
+ *
+ * Pin the fix in `Optimize\Specialize`: unread specialized dictionary
+ * bindings are dropped, allowing their factories and reachable methods
+ * to disappear.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {

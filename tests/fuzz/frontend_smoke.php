@@ -1,8 +1,9 @@
 <?php declare(strict_types=1);
 
-// Random input must never hang or crash the frontend: every generated input ends in output or a
-// diagnostic. One fixed corpus pinned forever, one from a different seed so it cannot decay into
-// "600 copies of the same shape".
+/**
+ * Random input must never hang or crash the frontend: every generated
+ * input ends in output or a diagnostic.
+ */
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
