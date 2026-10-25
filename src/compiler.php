@@ -25,12 +25,6 @@ use function Moggi\Syntax\Parser\parse;
 
 /**
  * The oldest PHP this compiler runs on.
- *
- * 8.5.7 and older carry a security issue, so an older runtime is refused rather
- * than run: a compiler is not the place to decide that a known-vulnerable
- * interpreter is close enough. The dev shell pins the same version
- * (`nix/devshell.nix`), and the bundled micro runtime the `--native` build
- * appends is pinned in `dist/runtimes.json`.
  */
 const MINIMUM_PHP = '8.5.12';
 
