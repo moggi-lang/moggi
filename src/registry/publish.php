@@ -164,14 +164,7 @@ function httpSend(string $url, string $method, array $headers, string $body = ''
 }
 
 /**
- * Whether this filesystem reports POSIX permission bits at all.
- *
- * Windows has no group/other bits: `fileperms()` synthesizes `0666` for a writable
- * file and `0444` for a read-only one out of the read-only attribute, so masking
- * group/other there rejects every key file while saying nothing about who can read
- * it. What actually protects such a file is its ACL, which this API does not
- * expose — so the mode check is enforced where the bits are real, and not claimed
- * where they are not.
+ * Whether this filesystem reports POSIX permission bits at all
  */
 function reportsPosixModeBits(): bool
 {

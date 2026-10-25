@@ -387,6 +387,8 @@ function publishElaboration(Ast\Program $program): Ast\Program
             );
         }
 
+        assertObligationsSettled($declaration, $core->module);
+
         $core = $core->withFunction($record->withElaboration(
             termTypesFor($declaration),
             evidencePlansIn($declaration->body),
@@ -396,6 +398,37 @@ function publishElaboration(Ast\Program $program): Ast\Program
     $program->core = $core;
 
     return $program;
+}
+
+/**
+ * Refuse an elaboration that still carries an unresolved obligation.
+ *
+ * The boundary asserts this over the body the check leaves behind, and
+ * normalization then rewrites that body (strict IO sequencing, eta-expanded IO
+ * bindings) before the record is attached to it. A body published with an
+ * obligation still on it would be lowered from plans that never planned it, so
+ * the last gate is the published tree itself, walked by the same
+ * {@see walkElaboration()} the terms and plans come from — no shape is skipped
+ * because someone forgot it in a match.
+ */
+function assertObligationsSettled(Ast\FunctionDecl $declaration, string $module): void
+{
+    $refuse = static function (Ast\AstNode $node) use ($declaration, $module): void {
+        if ($node->pendingConstraints === []) {
+            return;
+        }
+
+        throw new \LogicException(
+            "the elaboration of `{$module}::{$declaration->name}` still carries "
+            . \count($node->pendingConstraints) . ' unresolved obligation(s) on a '
+            . $node::class . " at line {$node->line}; the checked core cannot publish a body it did not settle",
+        );
+    };
+
+    foreach ($declaration->params as $param) {
+        walkElaboration($param, $refuse);
+    }
+    walkElaboration($declaration->body, $refuse);
 }
 
 /**
