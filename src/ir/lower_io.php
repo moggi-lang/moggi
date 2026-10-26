@@ -9,26 +9,8 @@ use Moggi\Semantics\TypeExpr\TArrow;
 
 use function Moggi\Semantics\IntrinsicRegistry\ioPrimopRole;
 use function Moggi\Semantics\IntrinsicRegistry\stPrimopRole;
-use function Moggi\Semantics\IoBoundary\functionReturnsIo;
 use function Moggi\Semantics\IoBoundary\isIoCheckedType;
 use function Moggi\Semantics\IoBoundary\isIoUnitCheckedType;
-
-/** @param array<int, Ast\AstNode> $items @return array<string, true> */
-function actionReturningEntryNames(array $items): array
-{
-    $names = [];
-    foreach ($items as $item) {
-        if (! $item instanceof Ast\FunctionDecl || ! functionReturnsIo($item->type)) {
-            continue;
-        }
-
-        if ($item->actionConvention === ActionConvention::ReturnsAction) {
-            $names[$item->name] = true;
-        }
-    }
-
-    return $names;
-}
 
 /**
  * Every FFI worker this module can call: a declaration that performs the host call and answers
@@ -86,8 +68,8 @@ function importedWorkerEntries(\Moggi\Modules\ImportInterface $interface, array 
 }
 
 /**
- * Allocate one worker per action entry in this module: the entries `Modules\workerFnNames()` names,
- * which is also the set the module publishes to its importers.
+ * Allocate one worker per action entry in this module: the entries `Modules\actionEntryFacts()`
+ * names, which is also the set the module publishes to its importers.
  *
  * A worker keeps the entry's parameter vector, so a saturated call can be redirected without
  * changing the argument list.
@@ -105,7 +87,7 @@ function workerEntries(array $items): array
     }
 
     $workers = [];
-    foreach (\Moggi\Modules\workerFnNames($items) as $name => $_) {
+    foreach (\Moggi\Modules\actionEntryFacts($items)['workers'] as $name => $_) {
         $worker = Callables\workerName($name);
         if (isset($declared[$worker])) {
             throw new \RuntimeException("the worker name `{$worker}` collides with a declaration");

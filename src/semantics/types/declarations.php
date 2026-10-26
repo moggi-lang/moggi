@@ -811,6 +811,27 @@ function registerInstanceSchemes(TypeCheckState $state, Ast\AstNode $decl): void
  * of the same spelling in particular: `drop n s = length s` in a module that
  * also imports `Data.List.length` must call the module's own `length`.
  */
+/**
+ * A declaration may not enter the namespace the compiler generates worker names into.
+ *
+ * `IR\Callables\workerName()` spells an action entry's worker `__w_<entry>`, and the optimizer reads
+ * a call by that spelling where the callee's declaration is not at hand. Refusing a source name in
+ * the namespace is what keeps that spelling from having two possible meanings.
+ */
+function assertNotGeneratedWorkerName(TypeCheckState $state, Ast\FunctionDecl $fn): void
+{
+    $prefix = Ast\generatedWorkerPrefix();
+    if (! \str_starts_with($fn->name, $prefix)) {
+        return;
+    }
+
+    throw typeFail(
+        $state,
+        "function `{$fn->name}` is in the compiler's generated worker namespace (`{$prefix}`), which no declaration may name",
+        $fn,
+    );
+}
+
 function registerInferredFunctionPlaceholder(TypeCheckState $state, Ast\ClassDecl|Ast\FunctionDecl $fn): void
 {
     if (isMagicHashName($fn->name)) {
@@ -819,6 +840,10 @@ function registerInferredFunctionPlaceholder(TypeCheckState $state, Ast\ClassDec
             "function `{$fn->name}` uses the reserved `#` suffix (compiler intrinsics only)",
             $fn instanceof Ast\AstNode ? $fn : null,
         );
+    }
+
+    if ($fn instanceof Ast\FunctionDecl) {
+        assertNotGeneratedWorkerName($state, $fn);
     }
 
     $fnType = freshType($state);
@@ -887,6 +912,8 @@ function registerFunctionScheme(TypeCheckState $state, Ast\FunctionDecl $fn): vo
             $fn,
         );
     }
+
+    assertNotGeneratedWorkerName($state, $fn);
 
     if (! Ast\hasDeclaredSignature($fn)) {
         throw typeFail($state, "exported function `{$fn->name}` needs a type signature", $fn);

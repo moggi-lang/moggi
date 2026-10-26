@@ -27,8 +27,9 @@ use Moggi\Pipeline\PipelineStage;
  *   stdout      the program's stdout   stderr      its stderr (uncaught error and trace)
  *   err         the compiler rejects the input: message, srcLoc, caret
  *
- * `pre` marks the kinds produced before codegen: no backend can change them, so a backend-qualified
- * one would only repeat the shared golden.
+ * `pre` marks the kinds produced before codegen: no backend can change what the stage computes. Its
+ * dump can still name a library bound for that backend (`System.IO.PHP` against `System.IO.JVM`),
+ * so a golden for a fixture that calls one is published per backend rather than shared.
  *
  * @return array<string, array{pre: bool}>
  */
@@ -215,7 +216,10 @@ function testKindSnapshot(string $kind, string $input, string $backend): string
     };
 }
 
-/** The optimized IR of a source fixture: lower it, then optimize (`php` pins the backend). */
+/**
+ * The optimized IR of a source fixture: lower it, then optimize, for `$backend`. A call into a bound
+ * library names that backend's module, so the dump is the backend's own even though the stages are.
+ */
 function optimizedIrFromSource(string $path, string $backend): string
 {
     $outputs = compileFileCapturingErrorsBoth(testRelativePath($path), true, $backend);

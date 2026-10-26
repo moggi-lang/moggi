@@ -15,6 +15,15 @@ use Moggi\IR;
 
 use function Moggi\IR\Visit\collectLocalsInBlock;
 
+/**
+ * A run site: one layer of the action value the compiler resolved for it.
+ *
+ * Inline, not through a runtime helper that names a wrong shape: the guard costs 37 ns more per run
+ * (2.4× the bare dispatch, `php -r` dispatch bench, 3 000 000 runs) and, called from the program
+ * entry, its frame lands in every uncaught-exception report (`Exec-Exception-HostFrame`,
+ * `Exec-Exception-HostCause-PHP`). Every producer of an `IO` value emits `['__io', thunk]`, so a
+ * value of another shape here is a fatal error at this line already.
+ */
 function emitIoRunResultExpr(string $resultExpr): string
 {
     return '(' . $resultExpr . '[1])()';

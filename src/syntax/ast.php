@@ -536,6 +536,19 @@ function instanceHeadMarker(): string
 }
 
 /**
+ * The namespace the compiler writes an action entry's worker into.
+ *
+ * One spelling for the module that creates the worker and for every importer that calls it
+ * (`IR\Callables\workerName()`), and a name no source declaration may use — that reservation is
+ * what lets a `__w_` call be read as a worker call wherever the callee's declaration is not at
+ * hand.
+ */
+function generatedWorkerPrefix(): string
+{
+    return '__w_';
+}
+
+/**
  * @param list<TypeNode> $args
  */
 function instanceHeadFromArgs(array $args): TypeNode

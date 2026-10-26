@@ -558,9 +558,10 @@ function exprTempsDefinedBefore(IR\Operand $expr, array $items, int $beforeIndex
  * would run the call once per arm, or not at all — both stay untouched.
  *
  * @param list<IR\Stmt> $items
+ * @param array<string, IR\FunctionDecl> $workers the module's workers: a run stays a statement
  * @return list<IR\Stmt>
  */
-function foldSingleUseCallResults(array $items): array
+function foldSingleUseCallResults(array $items, array $workers): array
 {
     $items = denseStmtItems($items);
     $count = \count($items);
@@ -579,7 +580,8 @@ function foldSingleUseCallResults(array $items): array
             continue;
         }
 
-        if ($stmt instanceof IR\Call && \Moggi\IR\Callables\isWorkerName($stmt->callee)) {
+        if ($stmt instanceof IR\Call
+            && \Moggi\IR\Callables\calleeIsRun($workers[$stmt->callee] ?? null, $stmt->callee)) {
             $out[] = $stmt;
 
             continue;

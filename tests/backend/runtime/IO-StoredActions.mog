@@ -1,0 +1,34 @@
+-- A `let`-bound action runs where it is used, an action passed to a function runs
+-- inside it, and a stored action re-executes on each run. The same scenarios as the
+-- shape fixture `Tc-IO-StoredActions`, in a module the harness can execute, so the
+-- stored/duplicate-action half of the ABI is pinned at run time on every backend.
+import Control.Monad (when)
+import System.IO
+
+idIO :: IO () -> IO ()
+idIO act = act
+
+scenarioLet :: IO ()
+scenarioLet = do
+  let act = putStrLn "later"
+  putStrLn "first"
+  act
+
+scenarioPass :: IO ()
+scenarioPass = do
+  let act = putStrLn "x"
+  idIO act
+
+scenarioWhen :: IO ()
+scenarioWhen = do
+  putStrLn "system-io-ok"
+  when True (putStrLn "when")
+
+main :: IO ()
+main = do
+  putStrLn "let"
+  scenarioLet
+  putStrLn "pass"
+  scenarioPass
+  putStrLn "when"
+  scenarioWhen

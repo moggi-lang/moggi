@@ -1,0 +1,32 @@
+module
+  function sequenceLocal(_p0)
+      t3 = io_assign_action
+        result call __w_sequenceLocal(_p0)
+      ret t3
+  function __w_sequenceLocal(_p0)
+      io_match _p0
+        arm []
+            t0 = call __tuple0()
+            ret t0
+        arm a : rest
+            io_run intrinsic listHead#(_p0)
+            t1 = call __w_sequenceLocal(intrinsic listTail#(_p0))
+            ret ()
+      ret ()
+  function main()
+      t13 = io_assign_action
+        result call __w_main()
+      ret t13
+  function __w_main()
+      t4 = call System.IO.JVM::__w_putStrLn("custom-sequence")
+      t6 = io_assign_action
+          t5 = call System.IO.JVM::__w_putStrLn("a")
+        result ()
+      t8 = io_assign_action
+          t7 = call System.IO.JVM::__w_putStrLn("b")
+        result ()
+      t9 = call __w_sequenceLocal([t6, t8])
+      t10 = call System.IO.JVM::__w_putStrLn("traverse_")
+      t11 = io_call traverse_(@__ev_Foldable_List, @__ev_Functor_IO, @__ev_Applicative_IO, @putStrLn, ["c", "d"])
+      io_run t11
+      ret ()

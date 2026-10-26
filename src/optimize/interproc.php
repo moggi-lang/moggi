@@ -560,7 +560,7 @@ function inlineCallsInExpr(IR\Operand $expr, string $selfName, array $index, int
         $fakeCall = new IR\Call($expr->callee, $expr->args, $nextTemp++, $expr->srcLoc);
         $inlined = tryInlineCall($index[$expr->callee], $fakeCall, $selfName, $index, $nextTemp);
         if ($inlined !== null) {
-            $folded = foldInlinedItemsToExpr($inlined);
+            $folded = foldInlinedItemsToExpr($inlined, $index);
             if ($folded !== null) {
                 return inlineCallsInExpr($folded, $selfName, $index, $nextTemp);
             }
@@ -1214,15 +1214,16 @@ function inlinedItemsToRet(array $inlined): ?array
  * cannot be represented as a pure expression binding.
  *
  * @param list<IR\Stmt> $inlined
+ * @param array<string, IR\FunctionDecl> $index the module's declarations
  */
-function foldInlinedItemsToExpr(array $inlined): ?IR\Operand
+function foldInlinedItemsToExpr(array $inlined, array $index): ?IR\Operand
 {
     $asRet = inlinedItemsToRet($inlined);
     if ($asRet === null) {
         return null;
     }
 
-    return reduceMatchArmBodyToExpr($asRet, [], [], []);
+    return reduceMatchArmBodyToExpr($asRet, [], [], [], $index);
 }
 
 /** @return list<IR\Stmt> */
@@ -1237,84 +1238,18 @@ function inlineExprAsItems(IR\Operand $expr, int $dest): array
 }
 
 /**
- * Expression-level case-of-known for match wrappers: when the wrapper's
- * scrutinee is a concrete constructor application at the call site, return the
- * matching arm's Ret value with pattern binders substituted.
- *
- * Multi-statement arms are reduced when every prefix statement is a simple
- * value binding (Assign / Call / CallValue / Let / Binop) that can be folded
- * into the Ret expression — the common shape of specialized record-field
- * encoders after dictionary specialization.
- *
- * @param list<IR\Operand> $args
- */
-function tryReduceMatchWrapperToExpr(IR\FunctionDecl $target, array $args): ?IR\Operand
-{
-    if (! isMatchWrapperCandidate($target) || \count($args) !== \count($target->params)) {
-        return null;
-    }
-
-    $items = denseStmtItems($target->body->items);
-    $match = $items[0];
-    if (! ($match instanceof IR\MatchReturn) || \count($match->arms) === 0) {
-        return null;
-    }
-
-    $bound = [];
-    $scrutinee = substituteOperand($match->scrutinee, $target->params, $args, $bound);
-    if (! ($scrutinee instanceof IR\ExprCall) || $scrutinee->args === []) {
-        return null;
-    }
-    if ($scrutinee->callee === '' || \str_starts_with($scrutinee->callee, '__')) {
-        return null;
-    }
-
-    foreach ($match->arms as $arm) {
-        $pat = $arm->pattern;
-        if (! ($pat instanceof IR\PatCon) || $pat->name !== $scrutinee->callee) {
-            continue;
-        }
-        if (\count($pat->args) !== \count($scrutinee->args)) {
-            continue;
-        }
-
-        $envParams = $target->params;
-        $envArgs = $args;
-        $patParams = [];
-        $patArgs = [];
-        foreach ($pat->args as $i => $subPat) {
-            if (! ($subPat instanceof IR\PatVar)) {
-                return null;
-            }
-            $patParams[] = $subPat->name;
-            $patArgs[] = $scrutinee->args[$i];
-        }
-
-        $armBound = $bound;
-        foreach (matchArmPatternBoundNames($pat) as $name) {
-            $armBound[$name] = true;
-        }
-
-        $reduced = reduceMatchArmBodyToExpr($arm->body->items, $envParams, $envArgs, $armBound);
-        if ($reduced !== null) {
-            return substituteOperand($reduced, $patParams, $patArgs, []);
-        }
-    }
-
-    return null;
-}
-
-/**
  * @param list<IR\Stmt> $items
  * @param list<string> $envParams
  * @param list<IR\Operand> $envArgs
  * @param array<string, true> $armBound
+ * @param array<string, IR\FunctionDecl> $index the module's declarations
  */
 function reduceMatchArmBodyToExpr(
     array $items,
     array $envParams,
     array $envArgs,
     array $armBound,
+    array $index,
 ): ?IR\Operand {
     $armItems = denseStmtItems($items);
     if ($armItems === []) {
@@ -1363,7 +1298,7 @@ function reduceMatchArmBodyToExpr(
             continue;
         }
         if ($stmt instanceof IR\Call) {
-            if (\Moggi\IR\Callables\isWorkerName($stmt->callee)) {
+            if (\Moggi\IR\Callables\calleeIsRun($index[$stmt->callee] ?? null, $stmt->callee)) {
                 return null;
             }
 

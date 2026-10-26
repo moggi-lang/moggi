@@ -705,18 +705,6 @@ function emitPendingIoThunkMethods(
             }
             emitBlock($env, $body);
             emitOperand($env, $result);
-            $resultSlot = $env->freshLocal();
-            $m->store($resultSlot);
-            $m->load($resultSlot);
-            $m->emit('isinst Moggi.Rt.IO');
-            $done = 'io_thunk_done_' . $env->freshLabelId();
-            $m->emit('brfalse ' . $done);
-            $m->load($resultSlot);
-            $m->emit('castclass Moggi.Rt.IO');
-            $m->emit('call object Moggi.Rt.RT::IoRun(object)');
-            $m->emit('ret');
-            $m->label($done);
-            $m->load($resultSlot);
             $m->emit('ret');
 
             $b->addMethod($m->render($name, \array_fill(0, $arity, 'object')));

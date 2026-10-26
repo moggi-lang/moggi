@@ -39,6 +39,7 @@ use Moggi\Pipeline\PipelineRequest;
 use Moggi\Pipeline\PipelineStage;
 use Moggi\Syntax\Ast;
 
+use function Moggi\IR\Callables\workerName;
 use function Moggi\IR\Visit\collectIrCodegenUsage;
 use function Moggi\Modules\planEmission;
 use function Moggi\Pipeline\run as pipelineRun;
@@ -70,7 +71,7 @@ $write = static function (string $relative, string $source) use ($scratch): stri
 };
 
 $write('Prov.mog', <<<'MOGGI'
-module Prov (ProvData(..), provValue, bump) where
+module Prov (ProvData(..), provValue, bump, greet, twice) where
 
 data ProvData = ProvData Int
 
@@ -79,6 +80,12 @@ provValue = 41
 
 bump :: Int -> Int
 bump n = n + 1
+
+greet :: IO ()
+greet = putStrLn "hi"
+
+twice :: Monad m => m () -> m ()
+twice act = act >> act
 MOGGI);
 $write('Hub.mog', <<<'MOGGI'
 module Hub (module Prov) where
@@ -91,7 +98,10 @@ module Main where
 import Hub
 
 main :: IO ()
-main = putStrLn (show (bump provValue))
+main = do
+  greet
+  twice greet
+  putStrLn (show (bump provValue))
 MOGGI);
 
 $backendId = \Moggi\Backend\compileBackend();
@@ -325,6 +335,71 @@ try {
     $refusedMissingEntry = \str_contains($e->getMessage(), 'no emission plan');
 }
 $check($refusedMissingEntry, 'the compiler emitted a project whose entry has no plan');
+
+// ---- 8 · one producer of the action facts: the worker an importer is told about is lowered ---
+
+$provFacts = Modules\moduleActionFacts($prepared->units, 'Prov');
+$check(
+    isset($provFacts['workers']['greet']),
+    'an `IO ()` entry got no worker: ' . \json_encode($provFacts),
+);
+$check(
+    isset($provFacts['actionReturn']['twice']) && ! isset($provFacts['workers']['twice']),
+    'an entry returning a monadic variable was published as having a worker: ' . \json_encode($provFacts),
+);
+$check(
+    \is_string($main->workers['greet'] ?? null)
+        && \str_ends_with($main->workers['greet'], '::' . workerName('greet')),
+    'the importer was not told the worker symbol its producer publishes: '
+        . \json_encode($main->workers['greet'] ?? null),
+);
+$check(
+    ! isset($main->workers['twice']) && isset($main->actionReturn['twice']),
+    'the importer\'s view of a monadic entry disagrees with its producer: '
+        . \json_encode(['workers' => $main->workers, 'actionReturn' => $main->actionReturn]),
+);
+
+$provChecked = $prepared->checked['Prov'] ?? null;
+$check($provChecked instanceof Ast\Program, 'the fixture project kept no checked program for `Prov`');
+if ($provChecked instanceof Ast\Program) {
+    $provIr = pipelineRun(new PipelineRequest(
+        context: $context,
+        filename: $scratch . '/Prov.mog',
+        typedProgram: $provChecked,
+        importContext: $prepared->importContexts['Prov'] ?? null,
+    ), PipelineStage::Ir)->ir;
+    $lowered = [];
+    if ($provIr !== null) {
+        foreach ($provIr->functions as $fn) {
+            $lowered[$fn->name] = true;
+        }
+    }
+    $unlowered = [];
+    foreach (\array_keys($provFacts['workers']) as $name) {
+        if (! isset($lowered[workerName((string) $name)])) {
+            $unlowered[] = $name;
+        }
+    }
+    $check(
+        $unlowered === [],
+        'the module publishes workers it never lowered: ' . \json_encode($unlowered),
+    );
+    $check(
+        ! isset($lowered[workerName('twice')]),
+        'lowering allocated a worker for an entry that answers through its entry',
+    );
+}
+
+$refusedFacts = false;
+try {
+    Modules\moduleActionFacts(['Ghost' => ['path' => 'Ghost.mog']], 'Ghost');
+} catch (\RuntimeException $e) {
+    $refusedFacts = \str_contains($e->getMessage(), 'Ghost');
+}
+$check(
+    $refusedFacts,
+    'a module that published no action facts and was never checked answered instead of refusing',
+);
 
 if ($failures !== []) {
     throw new \RuntimeException(
