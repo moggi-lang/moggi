@@ -5,6 +5,7 @@ namespace Moggi\Optimize\Interproc;
 use Moggi\IR;
 
 use function Moggi\IR\Callables\captureMeta;
+use function Moggi\IR\Callables\calleeIsRun;
 use function Moggi\IR\Visit\collectLambdaRefsInBlock;
 use function Moggi\IR\Visit\collectLocalsInBlock;
 use function Moggi\IR\Visit\irPatternBoundNames;
@@ -1298,7 +1299,7 @@ function reduceMatchArmBodyToExpr(
             continue;
         }
         if ($stmt instanceof IR\Call) {
-            if (\Moggi\IR\Callables\calleeIsRun($index[$stmt->callee] ?? null, $stmt->callee)) {
+            if (calleeIsRun($index[$stmt->callee] ?? null, $stmt->callee)) {
                 return null;
             }
 

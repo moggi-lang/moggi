@@ -1,0 +1,16 @@
+module
+  function emit(msg)
+      t2 = io_assign_action
+        result call __w_emit(msg)
+      ret t2
+  function __w_emit(msg)
+      t0 = call System.IO.DotNet::__w_putStrLn(msg)
+      ret ()
+  function main()
+      t6 = io_assign_action
+        result call __w_main()
+      ret t6
+  function __w_main()
+      t3 = call System.IO.DotNet::__w_putStrLn("hello")
+      t4 = call __w_emit("wrapped")
+      ret ()

@@ -105,10 +105,17 @@ directory of your own code instead of the standard library.
 ## Building it on its own
 
 ```bash
-moggi compile lib -o out/lib      # a library build: nothing is stripped
+moggi compile libraries/base/src -o out/lib --unpacked   # nothing is stripped
 ```
 
 An executable build (`moggi compile app`) keeps only what `main` reaches. A
 library build keeps everything, which is what you want when the compiled library
-is an output in its own right: `--lib-php out/lib` then lets a later single-file
-compile reuse that precompiled tree.
+is an output in its own right.
+
+Third-party host code is a separate axis. `--lib` names Moggi library roots —
+modules are looked up there — while the host libraries the program calls through
+FFI are named after the package manager that resolved them: `--lib-composer` (a
+Composer project, or its `vendor/` directory, whose autoloader travels with the
+artifact), `--lib-maven` (a directory of jars) and `--lib-nuget` (a directory of
+DLLs with their `.json` type sidecars). The flag names the resolver, so it also
+names the target: a `--lib-maven` tree is rejected by a `php` build.

@@ -4,6 +4,7 @@ namespace Moggi\Optimize\Local;
 
 use Moggi\IR;
 
+use function Moggi\IR\Callables\calleeIsRun;
 use function Moggi\IR\Visit\mapGuards;
 
 use function Moggi\IR\Visit\mapOperandChildren;
@@ -581,7 +582,7 @@ function foldSingleUseCallResults(array $items, array $workers): array
         }
 
         if ($stmt instanceof IR\Call
-            && \Moggi\IR\Callables\calleeIsRun($workers[$stmt->callee] ?? null, $stmt->callee)) {
+            && calleeIsRun($workers[$stmt->callee] ?? null, $stmt->callee)) {
             $out[] = $stmt;
 
             continue;

@@ -4,9 +4,11 @@ namespace Moggi\IR;
 
 use Moggi\Syntax\Ast;
 
+use Moggi\Modules\ImportInterface;
 use Moggi\Semantics\TypeExpr\Scheme;
 use Moggi\Semantics\TypeExpr\TArrow;
 
+use function Moggi\Modules\actionEntryFacts;
 use function Moggi\Semantics\IntrinsicRegistry\ioPrimopRole;
 use function Moggi\Semantics\IntrinsicRegistry\stPrimopRole;
 use function Moggi\Semantics\IoBoundary\isIoCheckedType;
@@ -62,7 +64,7 @@ function executingEntryNames(array $items, array $importedEnv, array $actionRetu
  * @param array<string, true> $local bindings this module declares itself
  * @return array<string, string> imported name => worker symbol
  */
-function importedWorkerEntries(\Moggi\Modules\ImportInterface $interface, array $local): array
+function importedWorkerEntries(ImportInterface $interface, array $local): array
 {
     return \array_diff_key($interface->workers, $local);
 }
@@ -87,7 +89,7 @@ function workerEntries(array $items): array
     }
 
     $workers = [];
-    foreach (\Moggi\Modules\actionEntryFacts($items)['workers'] as $name => $_) {
+    foreach (actionEntryFacts($items)['workers'] as $name => $_) {
         $worker = Callables\workerName($name);
         if (isset($declared[$worker])) {
             throw new \RuntimeException("the worker name `{$worker}` collides with a declaration");

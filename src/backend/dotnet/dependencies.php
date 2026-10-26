@@ -6,6 +6,7 @@ use function Moggi\Cache\fileFingerprint;
 use function Moggi\Cache\hashContent;
 use function Moggi\Cache\runtimeCacheDir;
 use function Moggi\Modules\declaringLibraryRoot;
+use function Moggi\Modules\hostLibraryRoots;
 use function Moggi\Modules\libraryScanRoots;
 use function Moggi\Paths\globPaths;
 use function Moggi\Registry\safeDigestKey;
@@ -111,6 +112,12 @@ function discoverDotNetLibDirs(): array
 {
     $roots = libraryScanRoots();
     $dirs = [];
+    foreach (hostLibraryRoots() as $host) {
+        $host = \rtrim($host, '/');
+        if (globPaths($host . '/*.dll') !== [] || globPaths($host . '/*.json') !== []) {
+            $dirs[$host] = true;
+        }
+    }
     foreach ([...$roots, ...dotNetMetaMirrors($roots)] as $lib) {
         $iterator = new \RecursiveIteratorIterator(
             new \RecursiveDirectoryIterator($lib, \FilesystemIterator::SKIP_DOTS),
@@ -275,7 +282,7 @@ function dotNetLibMetadata(): array
 {
     static $cache = [];
 
-    $key = \implode("\n", libraryScanRoots());
+    $key = \implode("\n", [...libraryScanRoots(), ...hostLibraryRoots()]);
     if (isset($cache[$key])) {
         return $cache[$key];
     }

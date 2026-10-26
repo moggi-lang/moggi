@@ -16,6 +16,7 @@ use function Moggi\Optimize\PassCheckpoints\enabled;
 use function Moggi\Optimize\Partial\legalizeCallables;
 use function Moggi\Semantics\Effects\checkAndNormalize;
 
+use Moggi\IR\Module;
 use Moggi\Modules\EmitPlan;
 use Moggi\Modules\ImportInterface;
 use Moggi\Syntax\Ast\Program;
@@ -94,7 +95,7 @@ function run(PipelineRequest $request, PipelineStage $stopAt = PipelineStage::Em
     if ($request->optimize) {
         $irOpt = optimize($ir);
     } else {
-        $irOpt = new \Moggi\IR\Module(
+        $irOpt = new Module(
             legalizeCallables($ir->functions),
             $ir->data,
             $ir->instanceEvidence,

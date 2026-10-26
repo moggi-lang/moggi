@@ -15,6 +15,7 @@ use Moggi\Syntax\Ast;
 use function Moggi\Backend\DotNet\Foreign\registerDotNetForeignType;
 use function Moggi\Backend\Jvm\Foreign\registerJvmForeignType;
 use function Moggi\Semantics\IntrinsicRegistry\isMagicHashName;
+use function Moggi\Semantics\StBoundary\isTransparentPrimopWrapper;
 use function Moggi\Semantics\TypeExpr\scheme;
 
 require_once __DIR__ . '/type_core.php';
@@ -98,7 +99,7 @@ function registerData(TypeCheckState $state, Ast\DataDecl $decl): void
         || $decl->name === Kinds\canonicalTypeConName('Array#')
         || $decl->name === Kinds\canonicalTypeConName('RealWorld#')
     ) {
-        if (! \Moggi\Semantics\StBoundary\isTransparentPrimopWrapper($decl)) {
+        if (! isTransparentPrimopWrapper($decl)) {
             throw typeFail(
                 $state,
                 "`{$decl->name}` is a compiler primitive and cannot be redefined",
@@ -373,6 +374,7 @@ function registerClass(TypeCheckState $state, Ast\ClassDecl $decl, string $modul
             if (isset($methods[$methodName])) {
                 throw typeFail($state, \sprintf('duplicate method `%s` in class `%s`', $methodName, $name), $decl);
             }
+            assertNotGeneratedWorkerName($state, $methodName, $decl, 'method');
 
             [$constraintAsts, $bodyTypeAst] = splitTypeAst($method->type);
             $methodUserConstraints = $constraintAsts !== []
@@ -817,18 +819,25 @@ function registerInstanceSchemes(TypeCheckState $state, Ast\AstNode $decl): void
  * `IR\Callables\workerName()` spells an action entry's worker `__w_<entry>`, and the optimizer reads
  * a call by that spelling where the callee's declaration is not at hand. Refusing a source name in
  * the namespace is what keeps that spelling from having two possible meanings.
+ *
+ * A class method is a declaration too: an instance implements it, but the name is written once, in
+ * the class, so that is where it is refused.
  */
-function assertNotGeneratedWorkerName(TypeCheckState $state, Ast\FunctionDecl $fn): void
-{
+function assertNotGeneratedWorkerName(
+    TypeCheckState $state,
+    string $name,
+    Ast\AstNode $at,
+    string $declarationKind = 'function',
+): void {
     $prefix = Ast\generatedWorkerPrefix();
-    if (! \str_starts_with($fn->name, $prefix)) {
+    if (! \str_starts_with($name, $prefix)) {
         return;
     }
 
     throw typeFail(
         $state,
-        "function `{$fn->name}` is in the compiler's generated worker namespace (`{$prefix}`), which no declaration may name",
-        $fn,
+        "{$declarationKind} `{$name}` is in the compiler's generated worker namespace (`{$prefix}`), which no declaration may name",
+        $at,
     );
 }
 
@@ -843,7 +852,7 @@ function registerInferredFunctionPlaceholder(TypeCheckState $state, Ast\ClassDec
     }
 
     if ($fn instanceof Ast\FunctionDecl) {
-        assertNotGeneratedWorkerName($state, $fn);
+        assertNotGeneratedWorkerName($state, $fn->name, $fn);
     }
 
     $fnType = freshType($state);
@@ -913,7 +922,7 @@ function registerFunctionScheme(TypeCheckState $state, Ast\FunctionDecl $fn): vo
         );
     }
 
-    assertNotGeneratedWorkerName($state, $fn);
+    assertNotGeneratedWorkerName($state, $fn->name, $fn);
 
     if (! Ast\hasDeclaredSignature($fn)) {
         throw typeFail($state, "exported function `{$fn->name}` needs a type signature", $fn);
