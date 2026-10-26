@@ -36,10 +36,10 @@ function resolvePath(string $path): string
  * Standard-library / library-root discovery and pinning.
  *
  * This layer owns everything about *where the library lives*: the pinned
- * `--lib` source root, the pinned `--lib-php` compiled-output root, discovery
- * of an unpinned stdlib by walking up from a source file, and the memoized
- * module-name index built over a library root. It has no opinion on module
- * graphs, exports, or codegen.
+ * `--lib` source roots, the `--lib-composer` / `--lib-maven` / `--lib-nuget`
+ * host trees, discovery of an unpinned stdlib by walking up from a source file,
+ * and the memoized module-name index built over a library root. It has no
+ * opinion on module graphs, exports, or codegen.
  */
 
 /** The file that marks a package root, named after the package: `base.moggi`. */
@@ -674,134 +674,84 @@ function stdlibModuleIndex(string $stdlibRoot): array
 }
 
 /**
- * Compiled library PHP tree pinned with `--lib-php` (typically a prebuilt stdlib
- * output such as `build/lib`). Used only for single-file compiles so generated
- * `require`s can point at that tree instead of source-tree `*.php` paths.
- */
-final class ConfiguredStdlibPhp
-{
-    private static ?string $path = null;
-
-    public static function set(?string $path): void
-    {
-        self::$path = $path;
-    }
-
-    public static function get(): ?string
-    {
-        return self::$path;
-    }
-}
-
-/**
- * The ABI stamp a compiled tree carries: the one thing that says whether it can be linked against.
+ * Host library roots registered with `--lib-composer`, `--lib-maven` or `--lib-nuget`.
  *
- * Every `IO` entry in a tree defines a `__w_` worker whose name this compiler generates, so a tree
- * built by another compiler has the entries and not the workers the emitted calls name.
+ * A host root is the resolved closure one package manager produced for this build: a Composer
+ * project (or its `vendor/`), a directory of jars, a directory of DLLs. The backends' dependency
+ * scanners look in these for third-party code; nothing here is searched for `.mog` modules, so a
+ * vendor tree can never shadow a Moggi module, and a host root is not a Moggi library root.
  */
-const ABI_STAMP = '__moggi_abi';
-
-function writeAbiStamp(string $root): bool
+final class ConfiguredHostLibraries
 {
-    return \file_put_contents($root . DIRECTORY_SEPARATOR . ABI_STAMP, \Moggi\IR\Callables\ABI_VERSION . "\n") !== false;
-}
+    /** @var list<string> */
+    private static array $roots = [];
 
-function assertAbiStamp(string $root, string $shown): void
-{
-    $stamp = $root . DIRECTORY_SEPARATOR . ABI_STAMP;
-    $version = \is_file($stamp) ? \trim((string) \file_get_contents($stamp)) : '';
-    if ($version === (string) \Moggi\IR\Callables\ABI_VERSION) {
-        return;
+    /** @param list<string> $roots */
+    public static function set(array $roots): void
+    {
+        self::$roots = $roots;
     }
 
-    throw new TypeError(
-        $version === ''
-            ? "the prebuilt library tree `{$shown}` carries no ABI stamp, so it cannot be shown to define the `__w_` workers this compiler calls; rebuild it with this compiler and `--unpacked`"
-            : "the prebuilt library tree `{$shown}` was built for ABI v{$version}; this compiler emits ABI v" . \Moggi\IR\Callables\ABI_VERSION . " — rebuild it",
-    );
-}
-
-function setStdlibPhpPath(?string $path): void
-{
-    if ($path === null) {
-        ConfiguredStdlibPhp::set(null);
-
-        return;
+    /** @return list<string> */
+    public static function get(): array
+    {
+        return self::$roots;
     }
-
-    $real = \realpath($path);
-    if ($real === false || ! \is_dir($real)) {
-        throw new TypeError("invalid stdlib PHP path `{$path}`");
-    }
-
-    $marker = $real . DIRECTORY_SEPARATOR . 'Data' . DIRECTORY_SEPARATOR . 'Eq.php';
-    if (! \is_file($marker)) {
-        throw new TypeError(
-            "stdlib PHP path `{$path}` is missing `Data/Eq.php`; compile the stdlib first (e.g. `moggi compile lib -o out/lib`)",
-        );
-    }
-
-    assertAbiStamp($real, $path);
-    ConfiguredStdlibPhp::set($real);
-}
-
-function detectStdlibPhpPath(?string $outputFile): ?string
-{
-    $configured = ConfiguredStdlibPhp::get();
-    if ($configured !== null) {
-        return $configured;
-    }
-
-    if ($outputFile === null) {
-        return null;
-    }
-
-    $dir = \dirname(\realpath($outputFile) ?: $outputFile);
-    if (\is_file($dir . DIRECTORY_SEPARATOR . 'Data' . DIRECTORY_SEPARATOR . 'Eq.php')) {
-        assertAbiStamp($dir, $dir);
-
-        return $dir;
-    }
-
-    $sibling = $dir . DIRECTORY_SEPARATOR . 'lib';
-    if (\is_file($sibling . DIRECTORY_SEPARATOR . 'Data' . DIRECTORY_SEPARATOR . 'Eq.php')) {
-        assertAbiStamp($sibling, $sibling);
-
-        return $sibling;
-    }
-
-    return null;
 }
 
 /**
- * @param array<string, string> $moduleOutputPaths
- * @param array<string, array<string, mixed>> $units
- * @return array<string, string>
+ * Register the host libraries a compile links against.
+ *
+ * The flag names the package manager (`--lib-composer`, `--lib-maven`, `--lib-nuget`) and so the
+ * target: artifacts have to be shaped for the backend being emitted. Each tree is checked for the
+ * artifact that backend's package manager produces, so a path that resolves to nothing usable is
+ * refused here rather than dropped silently.
+ *
+ * A Composer tree may be named by its `vendor/` directory or by the project that owns it; both
+ * register the project, because the artifact always carries `vendor/autoload.php`.
+ *
+ * @param list<string> $paths
  */
-function remapStdlibModuleOutputPaths(
-    array $moduleOutputPaths,
-    array $units,
-    string $stdlibPhpRoot,
-    string $projectRoot,
-): array {
-    $stdlibLib = configuredStdlibLibPath();
-    if ($stdlibLib === null) {
-        return $moduleOutputPaths;
+function registerHostLibraryRoots(string $backend, array $paths): void
+{
+    $roots = ConfiguredHostLibraries::get();
+    foreach ($paths as $path) {
+        $real = \realpath($path);
+        if ($real === false || ! \is_dir($real)) {
+            throw new TypeError("host library path `{$path}` is not a directory");
+        }
+        if ($backend === 'php' && \basename($real) === 'vendor' && \is_file($real . '/autoload.php')) {
+            $real = \dirname($real);
+        }
+        assertHostLibraryShape($backend, $real, $path);
+        if (! \in_array($real, $roots, true)) {
+            $roots[] = $real;
+        }
     }
 
-    $out = $moduleOutputPaths;
-    foreach ($moduleOutputPaths as $moduleName => $path) {
-        if (! isset($units[$moduleName])) {
-            continue;
-        }
+    ConfiguredHostLibraries::set($roots);
+}
 
-        if (! isModuleUnderLibraryRoot($units[$moduleName]['path'])) {
-            continue;
-        }
+/** What each backend's package manager leaves in the tree a compile is handed. */
+function assertHostLibraryShape(string $backend, string $root, string $shown): void
+{
+    [$artifact, $detail] = match ($backend) {
+        'php' => ['vendor/autoload.php', 'a Composer project (or its `vendor/`), so it must hold `vendor/autoload.php`'],
+        'jvm' => ['*.jar', 'the classpath Maven resolved, so it must hold jars'],
+        'dotnet' => ['*.dll', 'the assemblies NuGet resolved, so it must hold DLLs'],
+        default => throw new TypeError("no host package manager for backend `{$backend}`"),
+    };
 
-        $relative = mogPathToOutputRelative($units[$moduleName]['path'], $stdlibLib . DIRECTORY_SEPARATOR, '.php');
-        $out[$moduleName] = pathWithinProject($stdlibPhpRoot . DIRECTORY_SEPARATOR . $relative, $projectRoot);
+    $present = $backend === 'php'
+        ? \is_file(\rtrim($root, '/') . '/' . $artifact)
+        : globPaths(\rtrim($root, '/') . '/' . $artifact) !== [];
+    if (! $present) {
+        throw new TypeError("`{$shown}` is not {$detail}");
     }
+}
 
-    return $out;
+/** @return list<string> */
+function hostLibraryRoots(): array
+{
+    return ConfiguredHostLibraries::get();
 }

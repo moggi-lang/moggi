@@ -19,6 +19,8 @@ use Moggi\Syntax\Parser\ParseError;
 
 use function Moggi\Backend\codegenWith;
 use function Moggi\Backend\Jvm\Foreign\jvmInterfaceNamesFromPrograms;
+use function Moggi\IR\Callables\captureCandidates;
+use function Moggi\IR\Callables\captureMeta;
 use function Moggi\IR\Dump\dump as dumpIr;
 use function Moggi\IR\Validate\validateCallableLayouts;
 use function Moggi\IR\Visit\collectIrCodegenUsage;
@@ -168,8 +170,8 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
 
     $globalFnArity = [];
     foreach ($optByModule as $moduleName => $optimizedIr) {
-        $lambdaMeta = \Moggi\IR\Callables\captureMeta(
-            \Moggi\IR\Callables\captureCandidates($optimizedIr->functions),
+        $lambdaMeta = captureMeta(
+            captureCandidates($optimizedIr->functions),
         );
         foreach ($optimizedIr->functions as $fn) {
             $arity = \count($fn->params);
@@ -399,16 +401,6 @@ function compileModuleFileOutputs(
             $moduleContext['units'],
             $moduleContext['rootPrefix'],
             $context->backendId,
-        ));
-    }
-
-    $stdlibPhpRoot = detectStdlibPhpPath($outputFile);
-    if ($stdlibPhpRoot !== null) {
-        $plan = $plan->withModuleOutputPaths(remapStdlibModuleOutputPaths(
-            $plan->moduleOutputPaths,
-            $moduleContext['units'],
-            $stdlibPhpRoot,
-            $projectRoot,
         ));
     }
 

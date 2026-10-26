@@ -2,6 +2,7 @@
 
 namespace Moggi\Backend\Jvm\Dependencies;
 
+use function Moggi\Modules\hostLibraryRoots;
 use function Moggi\Modules\libraryScanRoots;
 use function Moggi\Paths\globPaths;
 
@@ -45,19 +46,27 @@ function mergeDemandClasspathJars(array &$classes, array &$resources): void
 }
 
 /**
- * Absolute paths of every `jvm` dir under a library root that holds jars or
- * companion Java.
+ * Absolute paths of every directory that holds jars or companion Java: a library root's `jvm/`
+ * dir, and the host tree `--lib-maven` names.
  *
  * Every root, not just the standard library: a package installed beside the
  * standard library (or a dependency tree `moggi build` resolved) vendors its
  * jars in its own root, and a root the compile was given but this scan skipped
  * would silently drop those classes from the artifact.
  *
+ * A host tree is the classpath itself — Maven and Gradle resolve dependencies into a directory of
+ * jars — so it is taken as a jar dir without the `jvm/` naming a library root uses.
+ *
  * @return list<string>
  */
 function discoverVendorJvmDirs(): array
 {
     $dirs = [];
+    foreach (hostLibraryRoots() as $host) {
+        if (globPaths(\rtrim($host, '/') . '/*.jar') !== []) {
+            $dirs[$host] = true;
+        }
+    }
     foreach (libraryScanRoots() as $lib) {
         $it = new \RecursiveIteratorIterator(
             new \RecursiveDirectoryIterator($lib, \FilesystemIterator::SKIP_DOTS),

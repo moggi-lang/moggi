@@ -3,7 +3,11 @@
 namespace Moggi\IR\Validate;
 
 use Moggi\IR;
+use Moggi\IR\Callables\CallableTable;
 
+use const Moggi\IR\Callables\ABI_VERSION;
+
+use function Moggi\IR\Callables\table;
 use function Moggi\IR\Visit\irPatternBoundNames;
 use function Moggi\IR\Visit\operandChildren;
 use function Moggi\IR\Visit\stmtDirectOperands;
@@ -85,7 +89,7 @@ function validateFunctionList(array $functions, string $pass, string $source): v
  */
 function validateCallableLayouts(IR\Module $module, string $pass, array $importedArities = []): void
 {
-    $table = \Moggi\IR\Callables\table($module->functions, (string) $module->moduleName);
+    $table = table($module->functions, (string) $module->moduleName);
     if ($table->byEntry === [] && $importedArities === []) {
         return;
     }
@@ -117,7 +121,7 @@ function validateCallableLayouts(IR\Module $module, string $pass, array $importe
 }
 
 function checkDirectCall(
-    \Moggi\IR\Callables\CallableTable $table,
+    CallableTable $table,
     array $importedArities,
     string $callee,
     int $actual,
@@ -134,7 +138,7 @@ function checkDirectCall(
         if ($actual !== $imported) {
             throw new InvalidIr(
                 "function {$function}: call `{$callee}` supplies {$actual} of {$imported} published "
-                . 'slot(s) (imported entry, ABI v' . \Moggi\IR\Callables\ABI_VERSION . ')',
+                . 'slot(s) (imported entry, ABI v' . ABI_VERSION . ')',
                 $pass,
                 $function,
             );
@@ -173,7 +177,7 @@ function checkDirectCall(
  * encoding, because the emitter would have to recover the capture list from the entry's body to
  * make the reference callable.
  */
-function checkBareReference(\Moggi\IR\Callables\CallableTable $table, string $entry, string $pass, string $function): void
+function checkBareReference(CallableTable $table, string $entry, string $pass, string $function): void
 {
     $sig = $table->sig($entry);
     if ($sig === null || $sig->captures === []) {
@@ -191,7 +195,7 @@ function checkBareReference(\Moggi\IR\Callables\CallableTable $table, string $en
 }
 
 function checkPartial(
-    \Moggi\IR\Callables\CallableTable $table,
+    CallableTable $table,
     array $importedArities,
     string $fn,
     int $arity,
@@ -209,7 +213,7 @@ function checkPartial(
         if ($arity !== $imported) {
             throw new InvalidIr(
                 "function {$function}: partial of imported `{$fn}` declares arity {$arity}; its "
-                . 'published runtime arity is ' . $imported . ' (ABI v' . \Moggi\IR\Callables\ABI_VERSION . ')',
+                . 'published runtime arity is ' . $imported . ' (ABI v' . ABI_VERSION . ')',
                 $pass,
                 $function,
             );

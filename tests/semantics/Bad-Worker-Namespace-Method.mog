@@ -1,0 +1,12 @@
+-- Fail: a class method is a declaration too, and `__w_` is the compiler's generated worker
+-- namespace. Left unchecked it reached lowering as an unlocated `worker name … collides` error.
+module Bad.Worker.Namespace.Method
+
+class C a where
+  __w_m :: a -> String
+
+instance C Int where
+  __w_m n = show n
+
+main :: IO ()
+main = putStrLn "__w_m"

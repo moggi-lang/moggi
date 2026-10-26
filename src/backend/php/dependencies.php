@@ -2,6 +2,7 @@
 
 namespace Moggi\Backend\Php\Dependencies;
 
+use function Moggi\Modules\hostLibraryRoots;
 use function Moggi\Modules\libraryScanRoots;
 use function Moggi\Paths\globPaths;
 
@@ -21,19 +22,18 @@ use function Moggi\Paths\globPaths;
 const COMPOSER_AUTOLOAD = 'vendor/autoload.php';
 
 /**
- * Library roots that hold a resolved Composer project.
+ * Roots that hold a resolved Composer project: library roots that vendor one, and the host trees
+ * named with `--lib-composer`.
  *
- * A resolved tree is a library root like any other (`moggi build` hands it to
- * the compile as one), so discovery is the same generic walk the JVM and .NET
- * scanners do. An entry is the root, not the autoloader, because the whole tree
- * travels with the artifact.
+ * An entry is the project root, not the autoloader, because the whole `vendor/` tree travels with
+ * the artifact.
  *
  * @return list<string>
  */
 function composerVendorRoots(): array
 {
     $roots = [];
-    foreach (libraryScanRoots() as $root) {
+    foreach ([...libraryScanRoots(), ...hostLibraryRoots()] as $root) {
         if (\is_file(\rtrim($root, '/') . '/' . COMPOSER_AUTOLOAD)) {
             $roots[] = $root;
         }

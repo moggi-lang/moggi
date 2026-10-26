@@ -8,6 +8,8 @@ use Moggi\Semantics\Types\TypeCheckState;
 use Moggi\Semantics\Types\TypeError;
 use Moggi\Syntax\Ast;
 
+use const Moggi\IR\Callables\ABI_VERSION;
+
 use function Moggi\Backend\backendById;
 use function Moggi\Backend\Php\Naming\basePhpFunctionName;
 use function Moggi\Errors\appendDidYouMean;
@@ -418,7 +420,7 @@ function callableFactsFromProgram(Ast\Program $program, array $evidenceArities =
         $entries[$name] ??= evidenceCallableLayout($arity);
     }
 
-    return ['abi' => \Moggi\IR\Callables\ABI_VERSION, 'entries' => $entries];
+    return ['abi' => ABI_VERSION, 'entries' => $entries];
 }
 
 /**
@@ -497,7 +499,7 @@ function parsedCallableFacts(Ast\Program $program, array $exports, array $eviden
         $entries[$name] ??= evidenceCallableLayout($arity);
     }
 
-    return ['abi' => \Moggi\IR\Callables\ABI_VERSION, 'entries' => $entries];
+    return ['abi' => ABI_VERSION, 'entries' => $entries];
 }
 
 /**

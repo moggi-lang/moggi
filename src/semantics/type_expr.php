@@ -6,6 +6,8 @@ require_once __DIR__ . '/types/type_laws.php';
 
 use Moggi\Syntax\Ast\PendingConstraint;
 
+use function Moggi\Semantics\Types\typeChildren;
+
 /**
  * Marker interface for the compiler's internal type representation.
  */
@@ -285,7 +287,7 @@ function collectTypeVars(Type $type, array $acc): array
         $acc[$type->name] = true;
     }
 
-    foreach (\Moggi\Semantics\Types\typeChildren($type) as $child) {
+    foreach (typeChildren($type) as $child) {
         $acc = collectTypeVars($child, $acc);
     }
 

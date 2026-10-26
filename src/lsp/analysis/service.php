@@ -17,6 +17,7 @@ use Moggi\Syntax\Ast;
 use Moggi\Syntax\Lexer\LexError;
 use Moggi\Syntax\Parser\ParseError;
 
+use function Moggi\Cache\moduleGet;
 use function Moggi\Docs\dumpTypeForDocs;
 use function Moggi\Docs\loadOrBuildIndex;
 use function Moggi\LSP\applyContentChanges;
@@ -811,7 +812,7 @@ final class AnalysisService
             return null;
         }
         $module = $unit['program'] instanceof Ast\Program ? $unit['program']->module : null;
-        $cached = \Moggi\Cache\moduleGet(
+        $cached = moduleGet(
             $rel,
             'checked',
             $this->context->moduleKey($module, $key),

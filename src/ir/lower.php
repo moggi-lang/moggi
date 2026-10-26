@@ -6,6 +6,7 @@ use Moggi\Modules\CheckedFunction;
 use Moggi\Syntax\Ast;
 
 use function Moggi\Debug\normalizeDisplayPath;
+use function Moggi\Modules\actionEntryFacts;
 use function Moggi\Semantics\Exhaustiveness\trueBindingOrigins;
 use function Moggi\Semantics\IoBoundary\functionReturnsIo;
 use function Moggi\Patterns\Walk\patternBoundNames;
@@ -67,7 +68,7 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
         }
     }
 
-    $actionReturningEntries = \Moggi\Modules\actionEntryFacts($program->items)['actionReturn'] + $interface->actionReturn;
+    $actionReturningEntries = actionEntryFacts($program->items)['actionReturn'] + $interface->actionReturn;
     $workers = workerEntries($program->items) + importedWorkerEntries($interface, $localBindings);
     $workerEntries = executingEntryNames($program->items, $interface->env, $interface->actionReturn);
     $state->trueBindings = trueBindingOrigins($program->items, $moduleName) + $interface->trueBindings;

@@ -1,0 +1,4 @@
+tests/semantics/Bad-Worker-Namespace-Method.mog:5:7: type error: method `__w_m` is in the compiler's generated worker namespace (`__w_`), which no declaration may name
+
+   5 | class C a where
+     |       ^

@@ -215,12 +215,6 @@ function compileIntoRoot(
         if ($native && ! buildNativeExecutable($outputRoot, $backend)) {
             return $empty(1);
         }
-        if ($packageUnpacked && ! Modules\writeAbiStamp($outputRoot)) {
-            \fwrite(STDERR, "error: cannot write the ABI stamp in {$outputRoot}\n");
-
-            return $empty(1);
-        }
-
         echo \count($files) . " file(s) compiled\n";
 
         return [
@@ -277,11 +271,6 @@ function compileIntoRoot(
         return $empty(1);
     }
     if ($native && ! buildNativeExecutable($outputRoot, $backend)) {
-        return $empty(1);
-    }
-    if ($packageUnpacked && ! Modules\writeAbiStamp($outputRoot)) {
-        \fwrite(STDERR, "error: cannot write the ABI stamp in {$outputRoot}\n");
-
         return $empty(1);
     }
 
@@ -817,8 +806,8 @@ function projectUsesModules(array $files): bool
 /**
  * @return array{
  *   input: string, output: ?string, mode: string, optimize: bool,
- *   backend: string, strip: bool, libDirs: list<string>, native: bool,
- *   unpacked: bool, libPhp: ?string
+ *   backend: string, strip: bool, libDirs: list<string>,
+ *   hostLibDirs: array<string, list<string>>, native: bool, unpacked: bool
  * }
  */
 /** @param list<string> $argv */
@@ -834,6 +823,17 @@ function parseCompileArgs(array $argv): array
     try {
         $options = parseArgs($argv, $spec);
         requireDirectories($options['lib'], '--lib');
+        $backend = parseBackendValue($options['backend']);
+        $hostLibDirs = [];
+        foreach (hostLibraryFlags() as $hostBackend => $flag) {
+            requireDirectories($options[$flag], '--' . $flag);
+            if ($options[$flag] !== [] && $hostBackend !== $backend) {
+                throw new \InvalidArgumentException(
+                    "--{$flag} names the {$hostBackend} host tree; this build targets `{$backend}`",
+                );
+            }
+            $hostLibDirs[$hostBackend] = $options[$flag];
+        }
     } catch (\InvalidArgumentException $error) {
         \fwrite(STDERR, 'error: ' . $error->getMessage() . "\n\n" . $spec->help . "\n");
         exit(1);
@@ -865,12 +865,12 @@ function parseCompileArgs(array $argv): array
         'output' => $output,
         'mode' => $mode,
         'optimize' => ! $options['noOpt'],
-        'backend' => parseBackendValue($options['backend']),
+        'backend' => $backend,
         'strip' => ! $options['noStrip'],
         'libDirs' => $options['lib'],
+        'hostLibDirs' => $hostLibDirs,
         'native' => (bool) $options['native'],
         'unpacked' => (bool) $options['unpacked'],
-        'libPhp' => $options['lib-php'],
     ];
 }
 
@@ -894,8 +894,16 @@ function compileUsage(): string
     options:
       --backend B      compile target: php, jvm, dotnet (default: php)
       -o PATH          the artifact to write (with --unpacked, an output directory)
-      --lib PATH       extra module search root. Repeatable.
-      --lib-php PATH   a precompiled stdlib PHP tree to link against
+      --lib PATH       a Moggi library root: modules are looked up here. Repeatable.
+      --lib-composer PATH
+                       host PHP libraries: a Composer project, or its `vendor/`
+                       directory, whose autoloader the artifact carries.
+                       Repeatable.
+      --lib-maven PATH host JVM libraries: a directory of jars, as
+                       `mvn dependency:copy-dependencies` resolves them.
+                       Repeatable.
+      --lib-nuget PATH host .NET libraries: a directory of DLLs with the `.json`
+                       sidecars that describe their types. Repeatable.
       --unpacked       keep the generated tree on disk instead of packaging
       --native         build a native executable
       --no-opt         skip optimizations when generating code
@@ -927,8 +935,25 @@ function compileSpec(): CommandSpec
         ['name' => 'noCache'],
         ['name' => 'backend', 'value' => true],
         ['name' => 'lib', 'value' => true, 'repeat' => true],
-        ['name' => 'lib-php', 'value' => true],
+        ...\array_map(
+            static fn (string $flag): array => ['name' => $flag, 'value' => true, 'repeat' => true],
+            \array_values(hostLibraryFlags()),
+        ),
     ]);
+}
+
+/**
+ * The host-library flag each backend reads, keyed by backend.
+ *
+ * One flag per package manager, not per target: Composer, Maven and NuGet each resolve their
+ * dependencies into their own artifact shape, so the flag names the resolver whose output the
+ * compile is being handed.
+ *
+ * @return array<string, string>
+ */
+function hostLibraryFlags(): array
+{
+    return ['php' => 'lib-composer', 'jvm' => 'lib-maven', 'dotnet' => 'lib-nuget'];
 }
 
 function removeOutputTree(string $dir): void
@@ -1119,9 +1144,12 @@ function runCompileCommand(array $argv): int
         return 1;
     }
 
-    if ($options['libPhp'] !== null) {
+    foreach (hostLibraryFlags() as $hostBackend => $hostFlag) {
+        if ($options['hostLibDirs'][$hostBackend] === []) {
+            continue;
+        }
         try {
-            Modules\setStdlibPhpPath($options['libPhp']);
+            Modules\registerHostLibraryRoots($hostBackend, $options['hostLibDirs'][$hostBackend]);
         } catch (TypeError $e) {
             \fwrite(STDERR, 'error: ' . $e->getMessage() . "\n");
 

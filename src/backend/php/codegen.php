@@ -44,6 +44,7 @@ use Moggi\Debug\SourceMapBuilder;
 use Moggi\IR;
 use Moggi\Modules\EmitPlan;
 
+use function Moggi\IR\Callables\captureMeta;
 use function Moggi\IR\Visit\collectIrCodegenUsage;
 use function Moggi\IR\Visit\collectLocalsInOperand;
 use function Moggi\IR\Visit\moduleUsesMoggiRuntime;
@@ -348,7 +349,7 @@ function analyzeFunctionsForCodegen(array $functions): array
 
     return [
         'lambdaIndex' => $lambdaIndex,
-        'lambdaMeta' => \Moggi\IR\Callables\captureMeta($lambdaIndex),
+        'lambdaMeta' => captureMeta($lambdaIndex),
         'functionArity' => $functionArity,
     ];
 }

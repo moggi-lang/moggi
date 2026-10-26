@@ -4,4 +4,4 @@ caused by: java.lang.NumberFormatException: For input string: "uncaught-host"
   #0 java.lang.NumberFormatException.forInputString
   #1 java.lang.Long.parseLong
   #2 java.lang.Long.parseLong
-  #3 moggi.Main.main (Exec-Exception-HostCause-JVM.mog:11)
+  #3 moggi.Main.__w_main (Exec-Exception-HostCause-JVM.mog:11)

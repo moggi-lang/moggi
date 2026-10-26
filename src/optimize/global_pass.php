@@ -9,6 +9,7 @@ use function Moggi\IR\Visit\freeLocalsInBlock;
 use function Moggi\IR\Visit\mapOperandChildren;
 use function Moggi\IR\Visit\walkOperand;
 use function Moggi\IR\Visit\walkStmt;
+use function Moggi\Modules\isQualifiedSymbol;
 use function Moggi\Optimize\Interproc\countLocalUsesInItems;
 use function Moggi\Optimize\Interproc\operandIsNonDuplicable;
 use function Moggi\Optimize\Support\combineOperandsToExpr;
@@ -363,7 +364,7 @@ function calleeIsEffectful(string $name): bool
         return true;
     }
 
-    return \Moggi\Modules\isQualifiedSymbol($name);
+    return isQualifiedSymbol($name);
 }
 
 function isDeadStmt(IR\Stmt $stmt, array $used, ?int $matchDest = null): bool
