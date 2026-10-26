@@ -1,8 +1,17 @@
 module
   function abort()
-      io_call putStrLn("before")
-      io_call error("boom")
+      t3 = io_assign_action
+        result call __w_abort()
+      ret t3
+  function __w_abort()
+      t0 = call System.IO.PHP::__w_putStrLn("before")
+      t1 = io_call error("boom")
+      io_run t1
       ret ()
   function main()
-      io_call abort()
+      t6 = io_assign_action
+        result call __w_main()
+      ret t6
+  function __w_main()
+      t4 = call __w_abort()
       ret ()

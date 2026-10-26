@@ -721,7 +721,7 @@ final class FunctionDecl extends AstNode
 
     public bool $export = false;
 
-    public IR\IoBodyKind $ioBodyKind = IR\IoBodyKind::StraightLine;
+    public IR\ActionConvention $actionConvention = IR\ActionConvention::Executes;
 
     /**
      * True once `checkFunction` has filled `$type` in from the inferred body type.

@@ -4,20 +4,117 @@ namespace Moggi\IR;
 
 use Moggi\Syntax\Ast;
 
+use Moggi\Semantics\TypeExpr\Scheme;
+use Moggi\Semantics\TypeExpr\TArrow;
+
 use function Moggi\Semantics\IntrinsicRegistry\ioPrimopRole;
+use function Moggi\Semantics\IntrinsicRegistry\stPrimopRole;
+use function Moggi\Semantics\IoBoundary\functionReturnsIo;
+use function Moggi\Semantics\IoBoundary\isIoCheckedType;
 use function Moggi\Semantics\IoBoundary\isIoUnitCheckedType;
 
 /** @param array<int, Ast\AstNode> $items @return array<string, true> */
-function ioActionReturnFnNames(array $items): array
+function actionReturningEntryNames(array $items): array
 {
     $names = [];
     foreach ($items as $item) {
-        if ($item instanceof Ast\FunctionDecl && $item->ioBodyKind === IoBodyKind::ActionReturn) {
+        if (! $item instanceof Ast\FunctionDecl || ! functionReturnsIo($item->type)) {
+            continue;
+        }
+
+        if ($item->actionConvention === ActionConvention::ReturnsAction) {
             $names[$item->name] = true;
         }
     }
 
     return $names;
+}
+
+/**
+ * Every FFI worker this module can call: a declaration that performs the host call and answers
+ * with its value, so no caller runs what it returns.
+ *
+ * A foreign import is one wherever it is declared. An imported declaration is one exactly when its
+ * published scheme returns `IO` and it is not in the interface's action-return set: under the
+ * uniform convention every other `IO` result is an action, whatever the body does.
+ *
+ * @param array<int, Ast\AstNode> $items
+ * @param array<string, mixed> $importedEnv
+ * @param array<string, true> $actionReturn
+ * @return array<string, true>
+ */
+function executingEntryNames(array $items, array $importedEnv, array $actionReturn): array
+{
+    $names = [];
+    foreach ($items as $item) {
+        if ($item instanceof Ast\FunctionDecl && $item->foreign) {
+            $names[$item->name] = true;
+        }
+    }
+
+    foreach ($importedEnv as $name => $scheme) {
+        if (isset($actionReturn[$name]) || ! $scheme instanceof Scheme) {
+            continue;
+        }
+
+        $type = $scheme->type;
+        while ($type instanceof TArrow) {
+            $type = $type->to;
+        }
+
+        if (isIoCheckedType($type)) {
+            $names[$name] = true;
+        }
+    }
+
+    return $names;
+}
+
+/**
+ * The worker to call for an action entry this module did not declare.
+ *
+ * A run crosses a module boundary the same way it crosses a function boundary: the entry is the
+ * action value and a run site calls the worker. The declaring module publishes which of its
+ * entries have one, so the importer reads that set instead of deciding from the scheme.
+ *
+ * @param array<string, true> $local bindings this module declares itself
+ * @return array<string, string> imported name => worker symbol
+ */
+function importedWorkerEntries(\Moggi\Modules\ImportInterface $interface, array $local): array
+{
+    return \array_diff_key($interface->workers, $local);
+}
+
+/**
+ * Allocate one worker per action entry in this module: the entries `Modules\workerFnNames()` names,
+ * which is also the set the module publishes to its importers.
+ *
+ * A worker keeps the entry's parameter vector, so a saturated call can be redirected without
+ * changing the argument list.
+ *
+ * @param array<int, Ast\AstNode> $items
+ * @return array<string, string>
+ */
+function workerEntries(array $items): array
+{
+    $declared = [];
+    foreach ($items as $item) {
+        if ($item instanceof Ast\FunctionDecl) {
+            $declared[$item->name] = true;
+        }
+    }
+
+    $workers = [];
+    foreach (\Moggi\Modules\workerFnNames($items) as $name => $_) {
+        $worker = Callables\workerName($name);
+        if (isset($declared[$worker])) {
+            throw new \RuntimeException("the worker name `{$worker}` collides with a declaration");
+        }
+
+        $workers[$name] = $worker;
+    }
+
+    return $workers;
 }
 
 /**
@@ -257,20 +354,33 @@ function lowerIoRunVariable(string $name, LowerCtx $ctx, ?int $dest, ?SrcLoc $sr
     $ctx->items[] = new IoRun($action, $dest, $ctx->stmtSrcLoc ?? $srcLoc);
 }
 
-function lowerIoActionToBox(Ast\AstNode $expr, LowerCtx $ctx): Operand
+/**
+ * The body of an action: the statements it runs and the value it answers with.
+ *
+ * `deferred` says whose body it is, and the two are not interchangeable. A box body answers with
+ * the *value* its action produces, so a nested action stays deferred (one run peels one layer). A
+ * worker body *runs* under the action, so a nested action is executed where it stands — lowering a
+ * worker as if it were a box answers with an un-run box, which is a wrong value, not a slow one.
+ *
+ * @return array{list<Stmt>, Operand, bool} the statements, the answered value, and whether the body
+ *         itself allocates or runs an action (the worker's `ioStraightLine` hint)
+ */
+function lowerActionBody(Ast\AstNode $expr, LowerCtx $ctx, bool $deferred): array
 {
     $subCtx = newCtx([], $ctx->state, $ctx->data, $ctx->newtypes, $ctx);
     $subCtx->env = $ctx->env;
     $subCtx->externalFnNames = $ctx->externalFnNames;
     $subCtx->functionArity = $ctx->functionArity;
+    $subCtx->workers = $ctx->workers;
+    $subCtx->executingEntries = $ctx->executingEntries;
     $subCtx->ioActionStore = $ctx->ioActionStore;
     $subCtx->hasIoRun = false;
     $subCtx->hasIoAssignAction = false;
-    $subCtx->inActionBox = true;
+    $subCtx->inActionBox = $deferred;
     $subCtx->stmtSrcLoc = ioStmtSrcLoc($expr instanceof Ast\IoAction ? $expr->expr : $expr, $ctx)
         ?? $ctx->stmtSrcLoc;
 
-    $result = lowerIoReturnOrAction($expr, $subCtx);
+    $result = $deferred ? lowerIoReturnOrAction($expr, $subCtx) : null;
     if ($result === null) {
         lowerIoFunctionBody($expr, $subCtx);
         $result = new Unit();
@@ -284,6 +394,13 @@ function lowerIoActionToBox(Ast\AstNode $expr, LowerCtx $ctx): Operand
             $result = $last->value;
         }
     }
+
+    return [$items, $result, $subCtx->hasIoRun || $subCtx->hasIoAssignAction];
+}
+
+function lowerIoActionToBox(Ast\AstNode $expr, LowerCtx $ctx): Operand
+{
+    [$items, $result] = lowerActionBody($expr, $ctx, true);
 
     $dest = freshTemp($ctx);
     $ctx->hasIoAssignAction = true;
@@ -347,13 +464,27 @@ function lowerIoAction(Ast\AstNode $expr, LowerCtx $ctx, ?int $dest, bool $isTai
             return true;
         }
 
+        $answersWithAction = stPrimopRole($call->name) === 'st-to-io';
+        $callDest = $answersWithAction ? freshTemp($ctx) : $dest;
         $ctx->items[] = new IoCall(
             $call->name,
             $call->args,
-            $dest,
+            $callDest,
             intrinsic: $call->name,
             srcLoc: $call->srcLoc,
         );
+
+        if ($answersWithAction) {
+            $ctx->items[] = new IoRun(new Temp($callDest), $dest, ioStmtSrcLoc($expr, $ctx));
+            $ctx->hasIoRun = true;
+        }
+
+        return true;
+    }
+
+    $worker = $ctx->workers[$call->callee] ?? null;
+    if ($worker !== null) {
+        $ctx->items[] = new Call($worker, $call->args, $dest ?? freshTemp($ctx), $call->srcLoc);
 
         return true;
     }
@@ -362,18 +493,11 @@ function lowerIoAction(Ast\AstNode $expr, LowerCtx $ctx, ?int $dest, bool $isTai
     $call->dest = $dest;
     $ctx->items[] = $call;
 
-    if (ioCallNeedsRunBoxedResult($call, $ctx)) {
+    if (callYieldsAction($call, $ctx, $expr)) {
         $tmp = freshTemp($ctx);
         $call->dest = $tmp;
-        if ($ctx->inActionBox && $dest === null && $isTail) {
-            $ctx->items[] = new Ret(new Temp($tmp));
-        } elseif ($dest === null) {
-            $ctx->items[] = new IoRun(new Temp($tmp), null, ioStmtSrcLoc($expr, $ctx));
-            $ctx->hasIoRun = true;
-        } else {
-            $ctx->items[] = new IoRun(new Temp($tmp), $dest, ioStmtSrcLoc($expr, $ctx));
-            $ctx->hasIoRun = true;
-        }
+        $ctx->items[] = new IoRun(new Temp($tmp), $dest, ioStmtSrcLoc($expr, $ctx));
+        $ctx->hasIoRun = true;
     }
 
     return true;
@@ -390,8 +514,15 @@ function lowerIoAction(Ast\AstNode $expr, LowerCtx $ctx, ?int $dest, bool $isTai
  */
 function lowerIoNullaryCall(string $name, LowerCtx $ctx, ?int $dest, ?SrcLoc $srcLoc, bool $isTail = true): bool
 {
+    $worker = $ctx->workers[$name] ?? null;
+    if ($worker !== null) {
+        $ctx->items[] = new Call($worker, [], $dest ?? freshTemp($ctx), $srcLoc);
+
+        return true;
+    }
+
     $call = new IoCall($name, [], null, srcLoc: $srcLoc);
-    if (! ioCallNeedsRunBoxedResult($call, $ctx)) {
+    if (! callYieldsAction($call, $ctx)) {
         $call->dest = $dest;
         $ctx->items[] = $call;
 
@@ -401,19 +532,13 @@ function lowerIoNullaryCall(string $name, LowerCtx $ctx, ?int $dest, ?SrcLoc $sr
     $tmp = freshTemp($ctx);
     $call->dest = $tmp;
     $ctx->items[] = $call;
-    if ($ctx->inActionBox && $dest === null && $isTail) {
-        $ctx->items[] = new Ret(new Temp($tmp));
-
-        return true;
-    }
-
     $ctx->items[] = new IoRun(new Temp($tmp), $dest, $srcLoc ?? $ctx->stmtSrcLoc);
     $ctx->hasIoRun = true;
 
     return true;
 }
 
-function ioCallNeedsRunBoxedResult(IoCall $call, LowerCtx $ctx): bool
+function callYieldsAction(IoCall $call, LowerCtx $ctx, ?Ast\AstNode $expr = null): bool
 {
     if ($call->foreign !== null || $call->intrinsic !== null) {
         return false;
@@ -423,7 +548,16 @@ function ioCallNeedsRunBoxedResult(IoCall $call, LowerCtx $ctx): bool
         return false;
     }
 
-    return isset($ctx->ioActionReturnFns[$call->callee]);
+    if (isset($ctx->actionReturningEntries[$call->callee])) {
+        return true;
+    }
+
+    if (isset($ctx->executingEntries[$call->callee])) {
+        return false;
+    }
+
+    return $expr !== null
+        && astExprReturnsIo($expr instanceof Ast\IoAction ? $expr->expr : $expr);
 }
 
 function lowerIoCase(Ast\IoCase $expr, LowerCtx $ctx): bool

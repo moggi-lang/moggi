@@ -200,8 +200,13 @@ $check(
         . \json_encode(\array_keys($planned->externalFns)),
 );
 $check(
-    isset($planned->externalFns['bump'], $planned->externalFns['provValue'], $planned->externalFns['putStrLn']),
+    isset($planned->externalFns['bump'], $planned->externalFns['provValue']),
     'the plan dropped an entry the module calls: ' . \json_encode(\array_keys($planned->externalFns)),
+);
+$check(
+    ! isset($planned->externalFns['putStrLn']),
+    'the plan kept an entry the module only reaches through its worker: '
+        . \json_encode(\array_keys($planned->externalFns)),
 );
 $check($planned->functionUseLines !== [], 'the plan planned no `use function` lines for called entries');
 $check(

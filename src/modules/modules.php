@@ -85,20 +85,14 @@ function compileProjectBoth(array $paths, string $rootDir, CompilationContext $c
 }
 
 /**
+ * Compile a prepared project into backend artifacts and optimized IR.
+ *
  * @return array{
  *   emit: array<string, string>,
  *   opt-ir: array<string, string>,
  *   entryModule: ?string,
  *   entryRelative: ?string
  * }
- *
- * Every artifact path is spelled by `outputRelativePath()` — the same function
- * the import contexts were planned with — so the tree a module is written to and
- * the `require`s that count their way back to `_runtime.php` from inside it are
- * one spelling. They are two independent computations of the same thing, and a
- * root prefix that only one of them can subtract (a drive root on Windows) used
- * to leave them disagreeing, which put every generated file at one depth and
- * every require at another.
  */
 function compilePreparedProject(PreparedProject $prepared, CompilationContext $context, bool $optimize = true, bool $strip = false): array
 {

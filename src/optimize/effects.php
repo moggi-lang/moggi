@@ -117,23 +117,27 @@ function operandHasIoEffect(IR\Operand $operand, array $index): bool
 }
 
 /**
- * Host-effect = may execute foreign imports (including Unit-returning ones).
- * Used by DCE so unused temps that only exist to sequence FFI are not deleted
- * after Unit case-fold (which would drop the foreign call entirely).
+ * Callees whose call is an observable effect, so DCE may not delete one whose result is unused.
+ *
+ * Three authorities, because they become available at different times:
+ *  - a foreign import executes the host call;
+ *  - a worker executes the effects its producer's box deferred — a run site is a plain call to it,
+ *    which is why this is not "foreign only" any more;
+ *  - a body that performs IO, once `annotateIoEffects` has marked it.
  *
  * @param list<IR\FunctionDecl> $functions
- * @return array<string, true> callee names with host effect
+ * @return array<string, true>
  */
-function hostEffectFunctionNames(array $functions, string $moduleName = ''): array
+function effectfulCalleeNames(array $functions, string $moduleName = ''): array
 {
     $index = indexFunctions($functions, $moduleName);
-    /** @var array<string, true> $host */
-    $host = [];
+    /** @var array<string, true> $effectful */
+    $effectful = [];
     foreach ($functions as $function) {
-        if ($function->foreign || blockHasDirectForeign($function->body)) {
-            $host[$function->name] = true;
+        if ($function->foreign || $function->kind === IR\FunctionKind::Worker || $function->ioEffect) {
+            $effectful[$function->name] = true;
             if ($moduleName !== '' && ! \str_contains($function->name, '::')) {
-                $host[resolvedSymbol($moduleName, $function->name)] = true;
+                $effectful[resolvedSymbol($moduleName, $function->name)] = true;
             }
         }
     }
@@ -142,20 +146,20 @@ function hostEffectFunctionNames(array $functions, string $moduleName = ''): arr
     while ($changed) {
         $changed = false;
         foreach ($functions as $function) {
-            if (isset($host[$function->name])) {
+            if (isset($effectful[$function->name])) {
                 continue;
             }
-            if (blockCallsHostEffect($function->body, $host, $index)) {
-                $host[$function->name] = true;
+            if (blockCallsHostEffect($function->body, $effectful, $index)) {
+                $effectful[$function->name] = true;
                 if ($moduleName !== '' && ! \str_contains($function->name, '::')) {
-                    $host[resolvedSymbol($moduleName, $function->name)] = true;
+                    $effectful[resolvedSymbol($moduleName, $function->name)] = true;
                 }
                 $changed = true;
             }
         }
     }
 
-    return $host;
+    return $effectful;
 }
 
 function blockHasDirectForeign(IR\Block $block): bool

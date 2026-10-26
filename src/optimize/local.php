@@ -579,6 +579,12 @@ function foldSingleUseCallResults(array $items): array
             continue;
         }
 
+        if ($stmt instanceof IR\Call && \Moggi\IR\Callables\isWorkerName($stmt->callee)) {
+            $out[] = $stmt;
+
+            continue;
+        }
+
         $operands = stmtDirectOperands($items[$i + 1]);
         if ($operands === []
             || ! $operands[0] instanceof IR\Temp

@@ -359,6 +359,19 @@ function emitFunction(IR\FunctionDecl $function, array $lambdaMeta, array $lambd
     $name = phpFunctionName($function->name, $phpNames);
     $params = $function->params;
 
+    $namespace = (string) ($codegenCtx['moduleNamespace'] ?? '');
+    $generated = $namespace !== '' ? $namespace . '\\' . $name : $name;
+
+    if (($codegenCtx['sourceMap'] ?? null) instanceof SourceMapBuilder
+        && $function->kind === IR\FunctionKind::Worker
+    ) {
+        $codegenCtx['sourceMap']->markGeneratedFrame($generated, false);
+        if (isset($phpNames[(string) $function->origin])) {
+            $entry = phpFunctionName((string) $function->origin, $phpNames);
+            $codegenCtx['sourceMap']->markGeneratedFrame($namespace !== '' ? $namespace . '\\' . $entry : $entry, true);
+        }
+    }
+
     if ($function->kind->takesCaptures()) {
         $captures = $lambdaMeta[$function->name]['captures'] ?? [];
         $params = [...$captures, ...$params];
@@ -385,6 +398,7 @@ function emitFunction(IR\FunctionDecl $function, array $lambdaMeta, array $lambd
         'functionParams' => $params,
         'tailRecParams' => $function->params,
         'sourceMap' => $codegenCtx['sourceMap'] ?? null,
+        'frameFunction' => $generated,
     ]);
 
     return "function {$name}({$paramsCode}) {\n"
@@ -502,7 +516,9 @@ function frameMark(array $ctx, ?IR\SrcLoc $loc): string
         return '';
     }
 
-    return $map->allocFrame($loc, $loc->function);
+    $generated = (string) ($ctx['frameFunction'] ?? '');
+
+    return $map->allocFrame($loc, $generated !== '' ? $generated : $loc->function);
 }
 
 /** The first tail-call argument that is itself a call or a faulting intrinsic. */
@@ -636,8 +652,23 @@ function emitEntryBootstrap(IR\Module $module, array $phpNames): string
     }
 
     $mainName = phpFunctionName($entry->name, $phpNames);
+    $call = entryReturnsAction($module)
+        ? "\$__moggiEntry = {$mainName}();\n    (\$__moggiEntry[1])();"
+        : "{$mainName}();";
 
-    return "\ntry {\n    {$mainName}();\n} catch (\\Throwable \$__moggiUncaught) {\n"
+    return "\ntry {\n    {$call}\n} catch (\\Throwable \$__moggiUncaught) {\n"
         . "    \\Moggi\\reportUncaught(\$__moggiUncaught);\n"
         . "}\n";
+}
+
+/** Whether the module's entry answers with an action value — its own published convention. */
+function entryReturnsAction(IR\Module $module): bool
+{
+    foreach ($module->functions as $function) {
+        if ($function->name === $module->entry?->name) {
+            return $function->actionConvention === IR\ActionConvention::ReturnsAction;
+        }
+    }
+
+    throw new \LogicException('the entry `' . ($module->entry?->name ?? '?') . '` has no lowered declaration');
 }

@@ -24,6 +24,13 @@ final class SourceMapBuilder
     /** @var array<string, true> */
     private array $symbolSeen = [];
 
+    /** @var array<string, true> generated names of box-building entries: they report through the worker */
+    private array $entryFrames = [];
+
+    /** @var array<string, true> generated names of workers: they are scaffolding in a raw host list */
+    private array $workerFrames = [];
+
+
     /** @var list<array<string, mixed>> */
     private array $sites = [];
 
@@ -69,10 +76,10 @@ final class SourceMapBuilder
         $module = $loc->module ?? $this->module;
         $function = $loc->function ?? '';
         $symbolId = symbolId($module, $function);
-        if (isset($this->symbolSeen[$symbolId])) {
+        if (isset($this->symbolSeen[$generated])) {
             return $symbolId;
         }
-        $this->symbolSeen[$symbolId] = true;
+        $this->symbolSeen[$generated] = true;
         $display = normalizeDisplayPath($loc->file ?? '');
         $sourceId = $display !== '' ? $display : $this->module;
         $this->addSource($sourceId, $display !== '' ? $display : $sourceId);
@@ -302,6 +309,28 @@ final class SourceMapBuilder
         }
     }
 
+    /**
+     * Register a generated name that must not appear as its own Mogg frame.
+     *
+     * An action entry answers with a box and the worker is what runs; a run site — in this module or
+     * across one — therefore adds an entry frame and a worker frame for a single source call. The
+     * entry's frame is scaffolding for the report, while the worker's frame keeps the source sites,
+     * so the two are recorded separately: `entry` is dropped from the call trace, `worker` from the
+     * raw host list.
+     */
+    public function markGeneratedFrame(string $generated, bool $isEntry): void
+    {
+        if ($generated === '') {
+            return;
+        }
+
+        if ($isEntry) {
+            $this->entryFrames[$generated] = true;
+        } else {
+            $this->workerFrames[$generated] = true;
+        }
+    }
+
     /** Whether this module has anything a report could resolve. */
     public function carriesRuntimeMap(): bool
     {
@@ -339,11 +368,17 @@ final class SourceMapBuilder
             ];
         }
 
-        if ($rows === [] && $functions === []) {
+        if ($rows === [] && $functions === [] && $this->entryFrames === [] && $this->workerFrames === []) {
             return null;
         }
 
-        return 'const ' . $name . ' = ' . self::phpLiteral([$rows, $functions]) . ';';
+        $payload = [$rows, $functions];
+        if ($this->entryFrames !== [] || $this->workerFrames !== []) {
+            $payload[] = \array_keys($this->entryFrames);
+            $payload[] = \array_keys($this->workerFrames);
+        }
+
+        return 'const ' . $name . ' = ' . self::phpLiteral($payload) . ';';
     }
 
     /** One-line PHP literal for map data (ints, strings, and arrays of both). */

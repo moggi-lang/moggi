@@ -2,7 +2,7 @@
 
 namespace Tc\IO\BatchActions;
 
-const __MOGGI_MAP = [[20 => ['Tc.IO.BatchActions.sequenceLocal', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 7, 20], 27 => ['Tc.IO.BatchActions.sequenceLocal', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 9, 8], 28 => ['Tc.IO.BatchActions.sequenceLocal', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 10, 3], 34 => ['Tc.IO.BatchActions.main', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 14, 3], 36 => ['Tc.IO.BatchActions.main', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 15, 15], 40 => ['Tc.IO.BatchActions.main', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 15, 29], 43 => ['Tc.IO.BatchActions.main', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 16, 3], 44 => ['Tc.IO.BatchActions.main', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 17, 3], 45 => ['Tc.IO.BatchActions.main', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 18, 3], 46 => ['Tc.IO.BatchActions.main', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 18, 3]], ['Tc\\IO\\BatchActions\\sequenceLocal' => ['Tc.IO.BatchActions.sequenceLocal', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 6, 1], 'Tc\\IO\\BatchActions\\main' => ['Tc.IO.BatchActions.main', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 13, 8]]];
+const __MOGGI_MAP = [[27 => ['Tc.IO.BatchActions.sequenceLocal', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 7, 20], 34 => ['Tc.IO.BatchActions.sequenceLocal', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 9, 8], 35 => ['Tc.IO.BatchActions.sequenceLocal', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 10, 3], 42 => ['Tc.IO.BatchActions.main', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 13, 8], 49 => ['Tc.IO.BatchActions.main', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 14, 3], 51 => ['Tc.IO.BatchActions.main', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 15, 15], 55 => ['Tc.IO.BatchActions.main', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 15, 29], 58 => ['Tc.IO.BatchActions.main', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 16, 3], 59 => ['Tc.IO.BatchActions.main', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 17, 3], 60 => ['Tc.IO.BatchActions.main', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 18, 3], 61 => ['Tc.IO.BatchActions.main', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 18, 3]], ['Tc\\IO\\BatchActions\\sequenceLocal' => ['Tc.IO.BatchActions.sequenceLocal', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 6, 1], 'Tc\\IO\\BatchActions\\main' => ['Tc.IO.BatchActions.main', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 13, 8], 'Tc\\IO\\BatchActions\\__w_main' => ['Tc.IO.BatchActions.main', 'tests/backend/runtime/Tc-IO-BatchActions.mog', 13, 8]], ['Tc\\IO\\BatchActions\\sequenceLocal', 'Tc\\IO\\BatchActions\\main'], ['Tc\\IO\\BatchActions\\__w_sequenceLocal', 'Tc\\IO\\BatchActions\\__w_main']];
 
 require_once __DIR__ . '/../../../libraries/base/src/Data/Foldable.php';
 require_once __DIR__ . '/../../../libraries/base/src/Data/List.php';
@@ -16,6 +16,13 @@ use function System\IO\Base\__ev_Functor_IO;
 use function System\IO\PHP\putStrLn;
 
 function sequenceLocal($_p0) {
+    $__t3 = ['__io', static function() use (&$_p0): mixed {
+        return __w_sequenceLocal($_p0);
+    }];
+    return $__t3;
+}
+
+function __w_sequenceLocal($_p0) {
     if ($_p0 === []) {
         $__t0 = null;
         return $__t0;
@@ -24,25 +31,33 @@ function sequenceLocal($_p0) {
         $__scrut_0 = $_p0;
         $a = $__scrut_0[0];
         $rest = \array_slice($__scrut_0, 1);
-        (\is_array($_p0[0]) && ($_p0[0][0] ?? null) === '__io' ? ($_p0[0][1])() : $_p0[0]);
-        sequenceLocal(\array_slice($_p0, 1));
+        ($_p0[0][1])();
+        $__t1 = __w_sequenceLocal(\array_slice($_p0, 1));
         return null;
     }
+    return null;
 }
 
 function main() {
-    putStrLn("custom-sequence");
-    $__t1 = ['__io', static function(): mixed {
-        putStrLn("a");
+    $__t13 = ['__io', static function(): mixed {
+        return __w_main();
+    }];
+    return $__t13;
+}
+
+function __w_main() {
+    $__t4 = \System\IO\PHP\__w_putStrLn("custom-sequence");
+    $__t6 = ['__io', static function(): mixed {
+        $__t5 = \System\IO\PHP\__w_putStrLn("a");
         return null;
     }];
-    $__t2 = ['__io', static function(): mixed {
-        putStrLn("b");
+    $__t8 = ['__io', static function(): mixed {
+        $__t7 = \System\IO\PHP\__w_putStrLn("b");
         return null;
     }];
-    sequenceLocal([$__t1, $__t2]);
-    putStrLn("traverse_");
-    $__t3 = traverse_(__ev_Foldable_List(), __ev_Functor_IO(), __ev_Applicative_IO(), putStrLn(...), ["c", "d"]);
-    (\is_array($__t3) && ($__t3[0] ?? null) === '__io' ? ($__t3[1])() : $__t3);
+    $__t9 = __w_sequenceLocal([$__t6, $__t8]);
+    $__t10 = \System\IO\PHP\__w_putStrLn("traverse_");
+    $__t11 = traverse_(__ev_Foldable_List(), __ev_Functor_IO(), __ev_Applicative_IO(), putStrLn(...), ["c", "d"]);
+    ($__t11[1])();
     return null;
 }

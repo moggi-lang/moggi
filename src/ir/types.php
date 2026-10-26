@@ -4,11 +4,20 @@ namespace Moggi\IR;
 
 use Moggi\Syntax\Ast;
 
-enum IoBodyKind: string
+/**
+ * How a caller obtains a declaration's result.
+ *
+ * `ReturnsAction` is every Moggi-level entry whose result is `IO a`: it answers with an action
+ * value, and `IoRun` executes exactly one layer of it. `Executes` is the FFI worker — a foreign
+ * import — which performs the host call and answers with the value itself.
+ *
+ * Decided once, at the declaration, from its kind and its result type; every consumer reads the
+ * decision instead of re-deriving it from a body, a module's suffix or an instance's status.
+ */
+enum ActionConvention: string
 {
-    case StraightLine = 'straight-line';
-    case ActionReturn = 'action_return';
-    case Mixed = 'mixed';
+    case ReturnsAction = 'returns-action';
+    case Executes = 'executes';
 }
 
 /** How a foreign call's `IO` result is unwrapped by the backend. */
@@ -35,6 +44,13 @@ enum FunctionKind: string
     case SpecClone = 'spec-clone';
     /** A compiler-synthesized helper (CAF, …): no source identity. */
     case Generated = 'generated';
+
+    /**
+     * The direct half of a `ReturnsAction` entry: same parameter vector, performs the body and
+     * answers with the value. Created by one producer (`IR\lower`), reached only through
+     * `origin`, never published in a module interface.
+     */
+    case Worker = 'worker';
 
     /**
      * Whether the callable is invoked at its free locals followed by its
@@ -173,7 +189,7 @@ final class FunctionDecl implements IrNode
         public bool $ioEffect = false,
         public bool $ioStraightLine = false,
         public bool $foreign = false,
-        public IoBodyKind $ioBodyKind = IoBodyKind::StraightLine,
+        public ActionConvention $actionConvention = ActionConvention::Executes,
         public ?SrcLoc $srcLoc = null,
         public FunctionKind $kind = FunctionKind::Source,
         public ?string $origin = null,
@@ -207,7 +223,7 @@ final class FunctionDecl implements IrNode
             $this->ioEffect,
             $this->ioStraightLine,
             $this->foreign,
-            $this->ioBodyKind,
+            $this->actionConvention,
             $this->srcLoc,
             $this->kind,
             $this->origin,
@@ -783,7 +799,7 @@ final class LowerCtx
      * @param list<string> $externalFnNames
      * @param array<string, Ast\AstNode> $ioActionStore pending IO actions, keyed by bound name
      * @param array<string, int> $functionArity
-     * @param array<string, true> $ioActionReturnFns
+     * @param array<string, true> $actionReturningEntries
      */
     public function __construct(
         public array $items = [],
@@ -796,7 +812,11 @@ final class LowerCtx
         public bool $hasIoRun = false,
         public bool $hasIoAssignAction = false,
         public array $functionArity = [],
-        public array $ioActionReturnFns = [],
+        public array $actionReturningEntries = [],
+        /** entry name → the direct worker `IR\lower` created for it, in this module */
+        public array $workers = [],
+        /** @var array<string, true> FFI workers this module can call: a call answers with the value */
+        public array $executingEntries = [],
         /** @var array<string, true> `<Module>::<name>` of bindings whose body is the host boolean `true` */
         public array $trueBindings = [],
         public bool $inActionBox = false,

@@ -2,7 +2,7 @@
 
 namespace Moggi\Semantics\IoEscape;
 
-use Moggi\IR\IoBodyKind;
+use Moggi\IR\ActionConvention;
 use Moggi\Syntax\Ast;
 
 use function Moggi\Semantics\IoBoundary\functionReturnsIo;
@@ -10,23 +10,8 @@ use function Moggi\Semantics\IoBoundary\isIoType;
 use function Moggi\Semantics\IoBoundary\isIoUnitType;
 use function Moggi\Semantics\IoBoundary\stripConstraints;
 
-/** True for Data.Foo.PHP / Data.Foo.JVM / Data.Foo.DotNet / … backend implementation modules. */
-function isBackendImplModuleName(string $moduleName): bool
-{
-    $lower = \strtolower($moduleName);
-    foreach (['.php', '.jvm', '.js', '.dotnet'] as $suffix) {
-        if (\str_ends_with($lower, $suffix)) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 function analyze(Ast\Program $program): Ast\Program
 {
-    $backendImpl = isBackendImplModuleName($program->module ?? '');
-
     foreach ($program->items as $item) {
         if (! $item instanceof Ast\FunctionDecl) {
             continue;
@@ -40,47 +25,33 @@ function analyze(Ast\Program $program): Ast\Program
             continue;
         }
 
-        annotateFunction($item, $backendImpl);
+        annotateFunction($item);
     }
 
     return $program;
 }
 
-function annotateFunction(Ast\FunctionDecl $fn, bool $backendImpl = false): void
+/**
+ * The one producer of a declaration's result convention.
+ *
+ * A foreign import is the FFI worker: it performs the host call and answers with the value. Every
+ * other declaration whose result is `IO a` — or a monadic variable application, which is an action
+ * at any instantiation — answers with the action value instead.
+ *
+ * Nothing here looks at the body's shape, the module's name or the declaration's instance status;
+ * the body is walked only to record the do-block binding hints lowering uses, which say where an
+ * action can be run in place, not what the entry's convention is.
+ */
+function annotateFunction(Ast\FunctionDecl $fn): void
 {
-    $body = $fn->body;
-    $hasNonFoldAction = false;
-    $hasIoParam = functionHasIoParam($fn->type);
-
-    if ($body instanceof Ast\IoSequence) {
-        annotateIoSequence($body->stmts, $hasNonFoldAction);
+    if ($fn->body instanceof Ast\IoSequence) {
+        $hasNonFoldAction = false;
+        annotateIoSequence($fn->body->stmts, $hasNonFoldAction);
     }
 
-    if ($backendImpl || $fn->foreign || isForeignIoBody($body)) {
-        $fn->ioBodyKind = IoBodyKind::StraightLine;
-
-        return;
-    }
-
-    if (returnsMonadicValue($fn->type)) {
-        $fn->ioBodyKind = IoBodyKind::ActionReturn;
-
-        return;
-    }
-
-    if ($fn->instanceMethod) {
-        $fn->ioBodyKind = IoBodyKind::ActionReturn;
-
-        return;
-    }
-
-    if (isActionReturnBody($body, $fn->type)) {
-        $fn->ioBodyKind = IoBodyKind::ActionReturn;
-    } elseif ($hasIoParam || $hasNonFoldAction) {
-        $fn->ioBodyKind = IoBodyKind::Mixed;
-    } else {
-        $fn->ioBodyKind = IoBodyKind::StraightLine;
-    }
+    $fn->actionConvention = ($fn->foreign || isForeignIoBody($fn->body))
+        ? ActionConvention::Executes
+        : ActionConvention::ReturnsAction;
 }
 
 /** @param list<Ast\AstNode> $stmts */
@@ -201,15 +172,6 @@ function isForeignIoBody(Ast\AstNode $body): bool
     return $body instanceof Ast\IoAction && $body->expr instanceof Ast\ForeignCall;
 }
 
-function isActionReturnBody(Ast\AstNode $body, ?Ast\AstNode $type): bool
-{
-    if (! $body instanceof Ast\IoAction) {
-        return false;
-    }
-
-    return ! functionReturnsIoUnit($type);
-}
-
 function functionReturnsIoUnit(?Ast\AstNode $type): bool
 {
     if ($type === null) {
@@ -247,19 +209,3 @@ function returnsMonadicValue(?Ast\AstNode $type): bool
     return $result instanceof Ast\TypeApp && $result->con instanceof Ast\TypeVar;
 }
 
-function functionHasIoParam(?Ast\AstNode $type): bool
-{
-    if ($type === null) {
-        return false;
-    }
-
-    $cursor = stripConstraints($type);
-    while ($cursor instanceof Ast\TypeArrow) {
-        if (isIoType($cursor->from)) {
-            return true;
-        }
-        $cursor = $cursor->to;
-    }
-
-    return false;
-}

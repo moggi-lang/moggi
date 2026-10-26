@@ -15,13 +15,13 @@ use function Moggi\Optimize\CaseFold\foldKnownMatchesInItems;
 use function Moggi\Optimize\Dict\indexEvidenceByName;
 use function Moggi\Optimize\Dict\specializeDictCallsFunctions;
 use function Moggi\Optimize\Effects\annotateIoEffects;
-use function Moggi\Optimize\Effects\hostEffectFunctionNames;
+use function Moggi\Optimize\Effects\effectfulCalleeNames;
 use function Moggi\Optimize\FoldIntrinsic\foldIntrinsicsItems;
-use function Moggi\Optimize\GlobalPass\clearHostEffectFunctions;
+use function Moggi\Optimize\GlobalPass\clearEffectfulCallees;
 use function Moggi\Optimize\GlobalPass\cseBlock;
 use function Moggi\Optimize\GlobalPass\dceBlock;
 use function Moggi\Optimize\GlobalPass\propagateCopiesBlock;
-use function Moggi\Optimize\GlobalPass\setHostEffectFunctions;
+use function Moggi\Optimize\GlobalPass\setEffectfulCallees;
 use function Moggi\Optimize\GlobalPass\setPropagateCopiesLambdaBodies;
 use function Moggi\Optimize\Interproc\fuseAppliedLambdas;
 use function Moggi\Optimize\Interproc\inlineFunctions;
@@ -58,9 +58,9 @@ function optimize(Module $module): Module
             $functions,
             static function (array $fns) use ($moduleName): array {
                 setPropagateCopiesLambdaBodies($fns);
-                setHostEffectFunctions(hostEffectFunctionNames($fns, $moduleName));
+                setEffectfulCallees(effectfulCalleeNames($fns, $moduleName));
                 $optimized = \array_map(optimizeFunctionEarly(...), $fns);
-                clearHostEffectFunctions();
+                clearEffectfulCallees();
 
                 return $optimized;
             },
@@ -101,9 +101,9 @@ function optimize(Module $module): Module
             $functions,
             static function (array $fns) use ($moduleName): array {
                 setPropagateCopiesLambdaBodies($fns);
-                setHostEffectFunctions(hostEffectFunctionNames($fns, $moduleName));
+                setEffectfulCallees(effectfulCalleeNames($fns, $moduleName));
                 $optimized = \array_map(optimizeFunctionAfterInline(...), $fns);
-                clearHostEffectFunctions();
+                clearEffectfulCallees();
 
                 return $optimized;
             },
@@ -171,7 +171,7 @@ function optimize(Module $module): Module
         $functions = $module->functions;
 
         setPropagateCopiesLambdaBodies($functions);
-        setHostEffectFunctions(hostEffectFunctionNames($functions, $moduleName));
+        setEffectfulCallees(effectfulCalleeNames($functions, $moduleName));
         $functions = PassCheckpoints\runOnFunctions(
             'final-folds',
             $module,
@@ -186,7 +186,7 @@ function optimize(Module $module): Module
             static fn (array $fns): array => annotateIoEffects($fns, $moduleName),
             false,
         );
-        setHostEffectFunctions(hostEffectFunctionNames($functions, $moduleName));
+        setEffectfulCallees(effectfulCalleeNames($functions, $moduleName));
         $functions = PassCheckpoints\runOnFunctions(
             'final-dce',
             $module,
@@ -199,7 +199,7 @@ function optimize(Module $module): Module
             ),
             false,
         );
-        clearHostEffectFunctions();
+        clearEffectfulCallees();
 
         $functions = PassCheckpoints\runOnFunctions(
             'legalize-callables-final',

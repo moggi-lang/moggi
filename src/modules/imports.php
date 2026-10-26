@@ -12,6 +12,8 @@ use function Moggi\Backend\backendById;
 use function Moggi\Backend\Php\Naming\basePhpFunctionName;
 use function Moggi\Errors\appendDidYouMean;
 use function Moggi\Semantics\Exhaustiveness\trueBindingOrigins;
+use function Moggi\Semantics\IoBoundary\functionReturnsIo;
+use function Moggi\Semantics\IoEscape\isForeignIoBody;
 use function Moggi\Semantics\Kinds\dataKind;
 use function Moggi\Semantics\Kinds\registerTypeKind;
 use function Moggi\Semantics\Types\evidenceFunctionName;
@@ -174,7 +176,7 @@ function unitEvidenceArities(array $unit, string $moduleName, string $namespace)
 
 /**
  * Names a module defines whose body is an action *value*: callers receive a
- * boxed action and have to run it. `ioBodyKind` never reaches the exported
+ * boxed action and have to run it. `actionConvention` never reaches the exported
  * scheme, so this is read straight off the defining module's checked program.
  *
  * @param array<string, array<string, mixed>> $units
@@ -209,7 +211,7 @@ function actionReturnFnNamesFromProgram(Ast\Program $program): array
 {
     $names = [];
     foreach ($program->items as $item) {
-        if ($item instanceof Ast\FunctionDecl && $item->ioBodyKind === IR\IoBodyKind::ActionReturn) {
+        if ($item instanceof Ast\FunctionDecl && $item->actionConvention === IR\ActionConvention::ReturnsAction) {
             $names[$item->name] = true;
         }
     }
@@ -218,8 +220,88 @@ function actionReturnFnNamesFromProgram(Ast\Program $program): array
 }
 
 /**
+ * Names a module declares a worker for: the direct half of an action-returning entry.
+ *
+ * The set is a property of the declaration — it returns `IO` and its body is not the host call
+ * itself — so it is computed from the tree lowering reads and published with the module's facts.
+ * An importer reads it from there instead of deciding from a scheme whether a worker exists, and
+ * lowering allocates exactly the workers this names.
+ *
+ * @param list<Ast\AstNode> $items
+ * @return array<string, true>
+ */
+function workerFnNames(array $items): array
+{
+    $names = [];
+    foreach ($items as $item) {
+        if (! $item instanceof Ast\FunctionDecl || $item->signatureOnly || $item->foreign) {
+            continue;
+        }
+
+        if (! functionReturnsIo($item->type) || isForeignIoBody($item->body)) {
+            continue;
+        }
+
+        $names[$item->name] = true;
+    }
+
+    return $names;
+}
+
+/**
+ * The workers a module publishes, from its facts when it has them and from its checked program
+ * otherwise.
+ *
+ * @param array<string, array<string, mixed>> $units
+ * @return array<string, true>
+ */
+function moduleWorkerFnNames(array $units, string $moduleName): array
+{
+    /** @var array<string, array<string, true>> $cache */
+    static $cache = [];
+
+    $unit = $units[$moduleName] ?? null;
+    $facts = \is_array($unit) ? ($unit['facts']['workers'] ?? null) : null;
+    if (\is_array($facts)) {
+        return $facts;
+    }
+
+    $key = \is_array($unit)
+        ? $moduleName . "\0" . \hash('xxh3', (string) ($unit['source'] ?? '') . "\0" . (string) ($unit['path'] ?? ''))
+        : $moduleName;
+    if (isset($cache[$key])) {
+        return $cache[$key];
+    }
+
+    $program = \is_array($unit) ? ($unit['checkedProgram'] ?? null) : null;
+
+    return $cache[$key] = ($program instanceof Ast\Program)
+        ? workerFnNames($program->items)
+        : [];
+}
+
+/**
+ * The worker an imported entry is run through, when its declaring module publishes one.
+ *
+ * The declaring module owns the fact — an entry has a worker exactly when its facts name it — so
+ * the importer reads the set and names the symbol here, rather than deciding from the scheme and
+ * spelling the worker itself.
+ *
+ * @param array<string, array<string, mixed>> $units
+ * @param array{module: string, phpName: string} $origin
+ */
+function importedWorkerSymbol(array $units, array $origin): ?string
+{
+    if (! isset(moduleWorkerFnNames($units, $origin['module'])[$origin['phpName']])) {
+        return null;
+    }
+
+    return resolvedSymbol($origin['module'], IR\Callables\workerName($origin['phpName']));
+}
+
+/**
  * A module's bindings whose body is the host boolean `true`, keyed `<Module>::<name>` — the fact the
- * guard desugaring reads instead of recognising `otherwise` by spelling. `ioBodyKind` has a sibling
+ * guard desugaring reads instead of recognising `otherwise` by spelling. `actionConvention` has a sibling
  * accessor above for the same reason: the fact is computed where the definition is visible.
  *
  * @param array<string, array<string, mixed>> $units
@@ -272,7 +354,7 @@ function moduleTrueBindingOriginsAll(array $units): array
  * to load without the checked program itself: merged instance-evidence
  * metadata (hand-written instances from the parsed tree plus derived ones,
  * which exist only post-check), the checked-only evidence arities, and the
- * elaborated function facts (`ioBodyKind`, guard bindings, runtime arities)
+ * elaborated function facts (`actionConvention`, guard bindings, runtime arities)
  * that never reach the exported schemes. Computed with the same readers the
  * live path uses, so the values are identical by construction.
  *
@@ -281,6 +363,7 @@ function moduleTrueBindingOriginsAll(array $units): array
  *   evidence: array{origins: array<string, array{namespace: string, phpName: string, module: string}>, arity: array<string, int>},
  *   evidenceChecked: array{origins: array<string, array{namespace: string, phpName: string, module: string}>, arity: array<string, int>},
  *   actionReturn: array<string, true>,
+ *   workers: array<string, true>,
  *   trueBindings: array<string, true>,
  *   callables: array{abi: int, entries: array<string, array{evidence: int, params: int, arity: int}>}
  * }
@@ -302,6 +385,7 @@ function preparedModuleFacts(array $unit, Ast\Program $checked, string $moduleNa
         'evidence' => $evidence,
         'evidenceChecked' => $checkedMeta,
         'actionReturn' => actionReturnFnNamesFromProgram($checked),
+        'workers' => workerFnNames($checked->items),
         'trueBindings' => trueBindingOrigins($checked->items, $moduleName),
         'callables' => callableFactsFromProgram(
             $checked,
@@ -594,6 +678,7 @@ function buildImportContext(
     $externalFns = [];
     $callables = [];
     $actionReturnFns = [];
+    $workers = [];
     $fnOriginModules = [];
     $intrinsicWrappers = [];
     $moduleOutputPaths = [];
@@ -701,6 +786,10 @@ function buildImportContext(
                     if (isset(moduleActionReturnFnNames($units, $origin['module'])[$origin['phpName']])) {
                         $actionReturnFns[$name] = true;
                     }
+                    $worker = importedWorkerSymbol($units, $origin);
+                    if ($worker !== null) {
+                        $workers[$name] = $worker;
+                    }
                 }
 
                 continue;
@@ -743,6 +832,10 @@ function buildImportContext(
             $fnOriginModules[$name] = $origin['module'];
             if (isset(moduleActionReturnFnNames($units, $origin['module'])[$origin['phpName']])) {
                 $actionReturnFns[$name] = true;
+            }
+            $worker = importedWorkerSymbol($units, $origin);
+            if ($worker !== null) {
+                $workers[$name] = $worker;
             }
         }
 
@@ -836,6 +929,7 @@ function buildImportContext(
         $externalFns,
         $callables,
         $actionReturnFns,
+        $workers,
         $fnOriginModules,
         $intrinsicWrappers,
         $moduleOutputPaths,
@@ -863,6 +957,7 @@ function buildImportContext(
             fnOriginModules: $fnOriginModules,
             callables: $callables,
             actionReturn: $actionReturnFns,
+            workers: $workers,
             trueBindings: moduleTrueBindingOriginsAll($units),
         ),
         plan: EmitPlan::forTarget(
@@ -964,6 +1059,7 @@ function mergeFacadeBackendEnv(
  * @param array<string, string> $intrinsicWrappers
  * @param array<string, string> $moduleOutputPaths
  * @param array<string, true> $actionReturnFns
+ * @param array<string, string> $workers imported name => worker symbol
  * @param array<string, array<string, mixed>> $units
  */
 function mergeFacadeBackendExports(
@@ -971,6 +1067,7 @@ function mergeFacadeBackendExports(
     array &$externalFns,
     array &$callables,
     array &$actionReturnFns,
+    array &$workers,
     array &$fnOriginModules,
     array &$intrinsicWrappers,
     array &$moduleOutputPaths,
@@ -1013,6 +1110,10 @@ function mergeFacadeBackendExports(
         $fnOriginModules[$name] = $origin['module'];
         if (isset(moduleActionReturnFnNames($units, $origin['module'])[$origin['phpName']])) {
             $actionReturnFns[$name] = true;
+        }
+        $worker = importedWorkerSymbol($units, $origin);
+        if ($worker !== null) {
+            $workers[$name] = $worker;
         }
 
         if ($planPhpImports) {

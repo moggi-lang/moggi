@@ -158,7 +158,13 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
     }
 
     if ($module->entry !== null && $module->entry->kind === IR\EntryPointKind::Main) {
-        emitDotNetMain($classBuilder, $owner, symbolName($module->entry->name), $functionArity[$module->entry->name] ?? 0);
+        emitDotNetMain(
+            $classBuilder,
+            $owner,
+            symbolName($module->entry->name),
+            $functionArity[$module->entry->name] ?? 0,
+            entryReturnsAction($module),
+        );
     }
 
     emitPendingIoThunkMethods($classBuilder, $owner, $functionArity, $externalFns, $lambdaMeta, $wrapperRegistry, $ioThunkRegistry, $newtypeConstructors, $localCallables);
@@ -610,6 +616,18 @@ function emitEvidenceMethodValue(EmitEnv $env, array $target, int $arity, array 
     $env->m->emit('newobj instance void Moggi.Rt.Partial::.ctor(int32, class Moggi.Rt.Fn, object[])');
 }
 
+/** Whether the module's entry answers with an action value (its published convention). */
+function entryReturnsAction(IR\Module $module): bool
+{
+    foreach ($module->functions as $function) {
+        if ($function->name === $module->entry?->name) {
+            return $function->actionConvention === IR\ActionConvention::ReturnsAction;
+        }
+    }
+
+    throw new \LogicException('the entry `' . ($module->entry?->name ?? '?') . '` has no lowered declaration');
+}
+
 /**
  * DotNet entry bridge for `Main.main :: IO a` (result discarded at runtime).
  *
@@ -617,7 +635,7 @@ function emitEvidenceMethodValue(EmitEnv $env, array $target, int $arity, array 
  * Straight-line foreign IO may already have run eagerly (returns Unit/null);
  * in that case there is nothing left to execute.
  */
-function emitDotNetMain(ClassIlBuilder $b, string $owner, string $mainSym, int $arity): void
+function emitDotNetMain(ClassIlBuilder $b, string $owner, string $mainSym, int $arity, bool $returnsAction): void
 {
     $m = new MethodIl();
     if ($arity !== 0) {
@@ -636,15 +654,10 @@ function emitDotNetMain(ClassIlBuilder $b, string $owner, string $mainSym, int $
     $m->emit('ldarg 0');
     $m->emit('call void Moggi.Rt.Platform::SetArgs(string[])');
     $m->emit("call object {$owner}::{$mainSym}()");
-    $m->store($resultSlot);
-    $m->load($resultSlot);
-    $m->emit('isinst Moggi.Rt.IO');
-    $m->emit('brfalse MAIN_DONE');
-    $m->load($resultSlot);
-    $m->emit('castclass Moggi.Rt.IO');
-    $m->emit('call object Moggi.Rt.RT::IoRun(object)');
+    if ($returnsAction) {
+        $m->emit('call object Moggi.Rt.RT::IoRun(object)');
+    }
     $m->emit('pop');
-    $m->label('MAIN_DONE');
     $m->emit('leave MAIN_END');
     $m->emit('}');
     $m->emit('catch [System.Runtime]System.Exception');

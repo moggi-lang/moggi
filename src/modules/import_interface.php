@@ -9,45 +9,18 @@ use Moggi\Syntax\Ast;
 use function Moggi\Semantics\Registry\projectInstancesFromProgram;
 
 /**
- * The facts one module *imports*, in one value.
+ * The facts this module imports, keyed by the names it uses.
  *
- * The name says what the value is: it is the view a module has of the modules it
- * imports, named after the importing module. It is **not** the module's own
- * published interface — what a module exports is `PreparedProject`'s
- * `units[...]['localTypes']` and the `facts` built from the check
- * (`facts.callables`, `facts.evidence`, …). A consumer that needs the
- * published side must read those, not this value.
+ * Contains the required imported ABI (type, symbol, ownership, callable and
+ * action facts) and optional optimizer summaries. Required maps are always
+ * present, even when empty.
  *
- * Two regions, and nothing else:
+ * `callables` is the single source of truth for imported runtime layouts;
+ * `externalFnRuntimeArity` is derived from it. Foreign declarations are
+ * represented in the type facts and origins.
  *
- *  - the **required ABI**: identity (`module`), the type facts an importer
- *    installs (`env`, `data`, `typeSynonyms`, `qualifiedModules`,
- *    `qualifiedOrigins`, `qualifiedEnv`, `intrinsicWrappers`, `ambiguousNames`),
- *    kind/constructor identity (`constructorRenames`), the symbol and ownership
- *    facts (`externalFns`, `fnOriginModules`), the published
- *    callable layouts (`callables`), the current action convention (`actionReturn`)
- *    and the imported `true` bindings (`trueBindings`). Every one of these is
- *    mandatory: an unset map is an empty map, never an absent one.
- *
- *    `callables` is the one home for an imported entry's runtime vector: a
- *    function, a data constructor and an evidence factory each publish their
- *    layout there, and `externalFnRuntimeArity` is projected from it in the
- *    constructor, so no consumer can see an arity the list does not carry.
- *  - `summaries`: the optimizer's optional region. It starts empty and may stay
- *    empty; a missing summary may only cost optimization, never a correct
- *    program.
- *
- * Declared foreign ABI is required, and already lives in the type facts: a
- * foreign function's scheme is in `env`, a foreign type's record is in `data`
- * (`foreign`, `owner`), and an entry's declaring module is `fnOriginModules`.
- * Every map is the importer's: names are the spellings the importing module
- * uses, resolved symbols carry the declaring module.
- *
- * Target rendering is deliberately *not* here: where a module's artifact sits,
- * what a module requires and which alias its namespace was bound to are the
- * target's facts, not the module's. {@see EmitPlan} renders them from this value
- * at emission, and the emitters read that plan; no consumer of this class needs
- * a second copy of any region above.
+ * Target-specific artifact paths, dependencies and namespace aliases belong
+ * to `EmitPlan`, not this interface.
  */
 final class ImportInterface
 {
@@ -64,8 +37,10 @@ final class ImportInterface
      * @param array<string, string> $externalFns
      * @param array<string, string> $fnOriginModules
      * @param array<string, array{evidence: int, params: int, arity: int}> $callables
-     * @param array<string, true> $actionReturn
-     * @param array<string, true> $trueBindings imported bindings whose body is the host boolean `true`
+ * @param array<string, true> $actionReturn
+ * @param array<string, string> $workers imported action entries => the worker their declaring module
+ *        publishes, so a run site calls it instead of building the action value and running it
+ * @param array<string, true> $trueBindings imported bindings whose body is the host boolean `true`
      * @param array<string, mixed> $summaries optional optimizer region
      */
     public function __construct(
@@ -83,6 +58,7 @@ final class ImportInterface
         public readonly array $fnOriginModules = [],
         public readonly array $callables = [],
         public readonly array $actionReturn = [],
+        public readonly array $workers = [],
         public readonly array $trueBindings = [],
         public readonly array $summaries = [],
     ) {
@@ -129,15 +105,21 @@ final class ImportInterface
      * where that module's artifact sits is target planning, so no path is
      * derived here.
      *
-     * @param array{externalFns: array<string, string>, callables: array<string, array{evidence: int, params: int, arity: int}>, origins?: array<string, string>, actionReturn?: array<string, true>} $refs
+     * @param array{externalFns: array<string, string>, callables: array<string, array{evidence: int, params: int, arity: int}>, origins?: array<string, string>, actionReturn?: array<string, true>, workers?: array<string, string>} $refs
      * @param array<string, true> $localNames names the module binds itself
      */
     public function withClassScopeRefs(array $refs, array $localNames): self
     {
         $actionReturn = $this->actionReturn;
+        $workers = $this->workers;
         foreach ($refs['actionReturn'] ?? [] as $name => $_) {
             if (! isset($localNames[$name])) {
                 $actionReturn[$name] = true;
+            }
+        }
+        foreach ($refs['workers'] ?? [] as $name => $symbol) {
+            if (! isset($localNames[$name])) {
+                $workers[$name] ??= $symbol;
             }
         }
 
@@ -171,6 +153,7 @@ final class ImportInterface
             fnOriginModules: $fnOriginModules,
             callables: $callables,
             actionReturn: $actionReturn,
+            workers: $workers,
         );
     }
 
@@ -203,6 +186,7 @@ final class ImportInterface
         ?array $fnOriginModules = null,
         ?array $callables = null,
         ?array $actionReturn = null,
+        ?array $workers = null,
     ): self {
         return new self(
             module: $this->module,
@@ -219,6 +203,7 @@ final class ImportInterface
             fnOriginModules: $fnOriginModules ?? $this->fnOriginModules,
             callables: $callables ?? $this->callables,
             actionReturn: $actionReturn ?? $this->actionReturn,
+            workers: $workers ?? $this->workers,
             trueBindings: $this->trueBindings,
             summaries: $this->summaries,
         );
@@ -226,12 +211,8 @@ final class ImportInterface
 }
 
 /**
- * The import context of a module that imports nothing: one source checked on its
- * own. The import interface is empty, not absent, so no consumer needs a null check,
- * the target layout is empty because there is nothing to place, and the instance
- * world is the module's own declarations — a module checked on its own is its own
- * project, and saying so is the same fact `prepareProject` states for a project of
- * one.
+ * Build the import context for a standalone module, treating it as its own
+ * project with an empty import interface and target layout.
  */
 function standaloneImportContext(Ast\Program $program, string $backendId): ImportContext
 {

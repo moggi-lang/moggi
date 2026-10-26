@@ -545,7 +545,12 @@ function moduleMap(string $function): ?array
     if (\defined($const)) {
         $value = \constant($const);
         if (\is_array($value) && \is_array($value[0] ?? null) && \is_array($value[1] ?? null)) {
-            $map = ['rows' => $value[0], 'functions' => $value[1]];
+            $map = [
+                'rows' => $value[0],
+                'functions' => $value[1],
+                'entries' => \is_array($value[2] ?? null) ? \array_fill_keys($value[2], true) : [],
+                'workers' => \is_array($value[3] ?? null) ? \array_fill_keys($value[3], true) : [],
+            ];
         }
     }
 
@@ -800,6 +805,9 @@ function moggCallerFrames(MoggiException $e, bool $includeUnmapped = true): arra
             if (isMoggiRuntimeFile($frame['file'])) {
                 continue;
             }
+            if (isGeneratedEntryFrame($frame['name'])) {
+                continue;
+            }
             $resolved = lookupGeneratedFrame($frame['line'], $frame['name'])
                 ?? lookupGeneratedFunction($frame['name']);
             if ($resolved !== null) {
@@ -842,7 +850,7 @@ function hostCauseFrames(\Throwable $cause, array $shown): string
         $out = '';
         $index = 0;
         foreach (javaStyleFrames($cause->getFile(), $cause->getLine(), $cause->getTrace()) as $frame) {
-            if ($frame['name'] === '' || $frame['line'] <= 0) {
+            if ($frame['name'] === '' || $frame['line'] <= 0 || isGeneratedWorkerFrame($frame['name'])) {
                 continue;
             }
             $mapped = lookupGeneratedFrame($frame['line'], $frame['name']);
@@ -949,6 +957,22 @@ function lookupGeneratedFunction(string $name): ?array
         'line' => (int) $fn[2],
         'col' => (int) $fn[3],
     ];
+}
+
+/** Whether a host frame is a box-building entry, which reports through its worker. */
+function isGeneratedEntryFrame(string $name): bool
+{
+    $map = $name === '' ? null : moduleMap($name);
+
+    return $map !== null && isset($map['entries'][$name]);
+}
+
+/** Whether a host frame is a generated worker, scaffolding a raw host list may not name. */
+function isGeneratedWorkerFrame(string $name): bool
+{
+    $map = $name === '' ? null : moduleMap($name);
+
+    return $map !== null && isset($map['workers'][$name]);
 }
 
 /**
