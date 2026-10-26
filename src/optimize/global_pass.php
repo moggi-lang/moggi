@@ -66,7 +66,7 @@ function cseKey(IR\Stmt $stmt): ?string
 {
     return match ($stmt::class) {
         IR\Binop::class => 'binop:' . $stmt->op . ':' . operandKey($stmt->left) . ':' . operandKey($stmt->right),
-        IR\Call::class => isHostEffectCallee($stmt->callee)
+        IR\Call::class => calleeIsEffectful($stmt->callee)
             ? null
             : 'call:' . $stmt->callee . ':' . \implode(',', \array_map(operandKey(...), $stmt->args)),
         default => null,
@@ -339,26 +339,31 @@ function usedInOperand(IR\Operand $operand): array
 
 /** @param array{temps: array<int, true>, locals: array<string, true>} $used @param int|null $matchDest */
 /**
- * Callee names with host (foreign) effects — consulted by {@see isDeadStmt}.
+ * Callee names whose call is an effect — foreign imports, workers, and every body the IO
+ * annotation marks. Consulted by {@see isDeadStmt}, which may not delete their call.
  *
  * @var array<string, true>
  */
-$GLOBALS['moggi_host_effect_fns'] = [];
+$GLOBALS['moggi_effectful_callees'] = [];
 
 /** @param array<string, true> $names */
-function setHostEffectFunctions(array $names): void
+function setEffectfulCallees(array $names): void
 {
-    $GLOBALS['moggi_host_effect_fns'] = $names;
+    $GLOBALS['moggi_effectful_callees'] = $names;
 }
 
-function clearHostEffectFunctions(): void
+function clearEffectfulCallees(): void
 {
-    $GLOBALS['moggi_host_effect_fns'] = [];
+    $GLOBALS['moggi_effectful_callees'] = [];
 }
 
-function isHostEffectCallee(string $name): bool
+function calleeIsEffectful(string $name): bool
 {
-    return isset($GLOBALS['moggi_host_effect_fns'][$name]);
+    if (isset($GLOBALS['moggi_effectful_callees'][$name])) {
+        return true;
+    }
+
+    return \Moggi\Modules\isQualifiedSymbol($name);
 }
 
 function isDeadStmt(IR\Stmt $stmt, array $used, ?int $matchDest = null): bool
@@ -369,34 +374,34 @@ function isDeadStmt(IR\Stmt $stmt, array $used, ?int $matchDest = null): bool
     };
 
     return match ($stmt::class) {
-        IR\Assign::class => $unusedTemp($stmt->dest) && ! operandHasHostEffect($stmt->value),
+        IR\Assign::class => $unusedTemp($stmt->dest) && ! operandHasEffect($stmt->value),
         IR\Binop::class => $unusedTemp($stmt->dest),
-        IR\Call::class => $unusedTemp($stmt->dest) && ! isHostEffectCallee($stmt->callee),
-        IR\CallValue::class => $unusedTemp($stmt->dest) && ! operandHasHostEffect($stmt->callee),
-        IR\Let::class => ! isset($used['locals'][$stmt->name]) && ! operandHasHostEffect($stmt->value),
+        IR\Call::class => $unusedTemp($stmt->dest) && ! calleeIsEffectful($stmt->callee),
+        IR\CallValue::class => $unusedTemp($stmt->dest) && ! operandHasEffect($stmt->callee),
+        IR\Let::class => ! isset($used['locals'][$stmt->name]) && ! operandHasEffect($stmt->value),
         default => false,
     };
 }
 
-function operandHasHostEffect(IR\Operand $operand): bool
+function operandHasEffect(IR\Operand $operand): bool
 {
     return match ($operand::class) {
         IR\ForeignCall::class => true,
-        IR\ExprCall::class => isHostEffectCallee($operand->callee) || operandsHaveHostEffect($operand->args),
-        IR\ExprCallValue::class => operandHasHostEffect($operand->callee) || operandsHaveHostEffect($operand->args),
-        IR\FnRef::class => isHostEffectCallee($operand->name),
-        IR\Partial::class => isHostEffectCallee($operand->fn) || operandsHaveHostEffect($operand->args),
-        IR\ListLit::class => operandsHaveHostEffect($operand->elements),
-        IR\ExprBinop::class => operandHasHostEffect($operand->left) || operandHasHostEffect($operand->right),
+        IR\ExprCall::class => calleeIsEffectful($operand->callee) || operandsHaveEffect($operand->args),
+        IR\ExprCallValue::class => operandHasEffect($operand->callee) || operandsHaveEffect($operand->args),
+        IR\FnRef::class => calleeIsEffectful($operand->name),
+        IR\Partial::class => calleeIsEffectful($operand->fn) || operandsHaveEffect($operand->args),
+        IR\ListLit::class => operandsHaveEffect($operand->elements),
+        IR\ExprBinop::class => operandHasEffect($operand->left) || operandHasEffect($operand->right),
         default => false,
     };
 }
 
 /** @param list<IR\Operand> $operands */
-function operandsHaveHostEffect(array $operands): bool
+function operandsHaveEffect(array $operands): bool
 {
     foreach ($operands as $operand) {
-        if (operandHasHostEffect($operand)) {
+        if (operandHasEffect($operand)) {
             return true;
         }
     }

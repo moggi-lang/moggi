@@ -3138,19 +3138,11 @@ function buildRTClass(): string
         ['java/lang/Object'],
         static function (CodeBuilder $c, ConstantPool $cp): void {
             $c->aload(0);
-            $c->instanceof_($cp->class_('moggi/rt/IO'));
-            $c->ifeq('passthrough');
-            $c->noteFrame(['java/lang/Object']);
-            $c->aload(0);
             $c->checkcast($cp->class_('moggi/rt/IO'));
             $c->getfield($cp->fieldRef('moggi/rt/IO', 'action', 'Ljava/lang/Object;'));
             $c->iconst(0);
             $c->anewarray($cp->class_('java/lang/Object'));
             $c->invokestatic($cp->methodRef('moggi/rt/RT', 'apply', '(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;'), 2, true);
-            $c->areturn();
-            $c->label('passthrough');
-            $c->noteFrame(['java/lang/Object']);
-            $c->aload(0);
             $c->areturn();
         }
     );

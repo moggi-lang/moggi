@@ -152,7 +152,13 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
     }
 
     if ($module->entry !== null && $module->entry->kind === IR\EntryPointKind::Main) {
-        emitJvmMain($b, $internal, symbolName($module->entry->name), $functionArity[$module->entry->name] ?? 0);
+        emitJvmMain(
+            $b,
+            $internal,
+            symbolName($module->entry->name),
+            $functionArity[$module->entry->name] ?? 0,
+            entryReturnsAction($module),
+        );
     }
 
     emitPendingIoThunkMethods($b, $internal, $functionArity, $externalFns, $lambdaMeta, $wrapperRegistry, $ioThunkRegistry, $newtypeConstructors, $localCallables, $foreignInterfaces);
@@ -330,6 +336,18 @@ function emitEvidence(
     );
 }
 
+/** Whether the module's entry answers with an action value (its published convention). */
+function entryReturnsAction(IR\Module $module): bool
+{
+    foreach ($module->functions as $function) {
+        if ($function->name === $module->entry?->name) {
+            return $function->actionConvention === IR\ActionConvention::ReturnsAction;
+        }
+    }
+
+    throw new \LogicException('the entry `' . ($module->entry?->name ?? '?') . '` has no lowered declaration');
+}
+
 /**
  * JVM entry bridge for `Main.main :: IO a` (result discarded at runtime).
  *
@@ -337,7 +355,7 @@ function emitEvidence(
  * Straight-line foreign IO may already have run eagerly (returns Unit/null);
  * in that case there is nothing left to execute.
  */
-function emitJvmMain(ClassBuilder $b, string $owner, string $mainFn, int $arity): void
+function emitJvmMain(ClassBuilder $b, string $owner, string $mainFn, int $arity, bool $returnsAction): void
 {
     $b->addMethod(
         'main',
@@ -345,7 +363,7 @@ function emitJvmMain(ClassBuilder $b, string $owner, string $mainFn, int $arity)
         0x0009,
         3,
         ['[Ljava/lang/String;'],
-        static function (CodeBuilder $c, ConstantPool $cp) use ($owner, $mainFn, $arity): void {
+        static function (CodeBuilder $c, ConstantPool $cp) use ($owner, $mainFn, $arity, $returnsAction): void {
             if ($arity !== 0) {
                 $c->new_($cp->class_('java/lang/RuntimeException'));
                 $c->dup();
@@ -361,17 +379,10 @@ function emitJvmMain(ClassBuilder $b, string $owner, string $mainFn, int $arity)
             $c->aload(0);
             $c->invokestatic($cp->methodRef('moggi/rt/Platform', 'setArgs', '([Ljava/lang/String;)V'), 1, false);
             $c->invokestatic($cp->methodRef($owner, $mainFn, '()Ljava/lang/Object;'), 0, true);
-            $c->astore(1);
-            $c->aload(1);
-            $c->instanceof_($cp->class_('moggi/rt/IO'));
-            $c->ifeq('done');
-            $c->noteFrame(['[Ljava/lang/String;', 'java/lang/Object']);
-            $c->aload(1);
-            $c->checkcast($cp->class_('moggi/rt/IO'));
-            $c->invokestatic($cp->methodRef('moggi/rt/RT', 'ioRun', '(Ljava/lang/Object;)Ljava/lang/Object;'), 1, true);
+            if ($returnsAction) {
+                $c->invokestatic($cp->methodRef('moggi/rt/RT', 'ioRun', '(Ljava/lang/Object;)Ljava/lang/Object;'), 1, true);
+            }
             $c->pop_();
-            $c->label('done');
-            $c->noteFrame(['[Ljava/lang/String;', 'java/lang/Object']);
             $c->return_();
             $c->label('main_try_end');
 

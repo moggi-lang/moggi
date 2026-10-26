@@ -1,36 +1,65 @@
 module
   function logMsg(msg)
-      io_call putStrLn(msg)
+      t2 = io_assign_action
+        result call __w_logMsg(msg)
+      ret t2
+  function __w_logMsg(msg)
+      t0 = call System.IO.PHP::__w_putStrLn(msg)
       ret ()
   function emitA()
-      io_call putStrLn("A")
+      t5 = io_assign_action
+        result call __w_emitA()
+      ret t5
+  function __w_emitA()
+      t3 = call System.IO.PHP::__w_putStrLn("A")
       ret ()
   function emitB()
-      io_call putStrLn("B")
+      t8 = io_assign_action
+        result call __w_emitB()
+      ret t8
+  function __w_emitB()
+      t6 = call System.IO.PHP::__w_putStrLn("B")
       ret ()
   function equalBranch()
-      io_call putStrLn("equal")
-      t0 = io_call readFile("input.txt")
-      io_call putStrLn(t0)
+      t13 = io_assign_action
+        result call __w_equalBranch()
+      ret t13
+  function __w_equalBranch()
+      t9 = call System.IO.PHP::__w_putStrLn("equal")
+      t10 = call System.IO::__w_readFile("input.txt")
+      t11 = call System.IO.PHP::__w_putStrLn(t10)
       ret ()
   function notEqualBranch(y)
-      io_call putStrLn("not equal")
-      t1 = io_call readFile(y)
-      io_call putStrLn(t1)
+      t18 = io_assign_action
+        result call __w_notEqualBranch(y)
+      ret t18
+  function __w_notEqualBranch(y)
+      t14 = call System.IO.PHP::__w_putStrLn("not equal")
+      t15 = call System.IO::__w_readFile(y)
+      t16 = call System.IO.PHP::__w_putStrLn(t15)
       ret ()
   function branchOn(x, y)
+      t22 = io_assign_action
+        result call __w_branchOn(x, y)
+      ret t22
+  function __w_branchOn(x, y)
       io_match intrinsic stringEq#(x, y)
         arm True
-            io_call equalBranch()
+            t19 = call __w_equalBranch()
             ret ()
         arm False
-            io_call notEqualBranch(y)
+            t20 = call __w_notEqualBranch(y)
             ret ()
+      ret ()
   function main()
-      t2 = io_call readFile("input.txt")
-      t3 = io_call readFile(t2)
-      io_call logMsg("start processing")
-      io_call branchOn(t2, t3)
-      io_call emitA()
-      io_call emitB()
+      t30 = io_assign_action
+        result call __w_main()
+      ret t30
+  function __w_main()
+      t23 = call System.IO::__w_readFile("input.txt")
+      t24 = call System.IO::__w_readFile(t23)
+      t25 = call __w_logMsg("start processing")
+      t26 = call __w_branchOn(t23, t24)
+      t27 = call __w_emitA()
+      t28 = call __w_emitB()
       ret ()

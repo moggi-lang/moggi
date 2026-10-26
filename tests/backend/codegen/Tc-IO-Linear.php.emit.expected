@@ -2,19 +2,31 @@
 
 namespace Tc\IO\Linear;
 
-const __MOGGI_MAP = [[12 => ['Tc.IO.Linear.emit', 'tests/backend/codegen/Tc-IO-Linear.mog', 6, 12], 17 => ['Tc.IO.Linear.main', 'tests/backend/codegen/Tc-IO-Linear.mog', 10, 3], 18 => ['Tc.IO.Linear.main', 'tests/backend/codegen/Tc-IO-Linear.mog', 11, 3]], ['Tc\\IO\\Linear\\emit' => ['Tc.IO.Linear.emit', 'tests/backend/codegen/Tc-IO-Linear.mog', 6, 12], 'Tc\\IO\\Linear\\main' => ['Tc.IO.Linear.main', 'tests/backend/codegen/Tc-IO-Linear.mog', 9, 8]]];
+const __MOGGI_MAP = [[10 => ['Tc.IO.Linear.emit', 'tests/backend/codegen/Tc-IO-Linear.mog', 6, 12], 17 => ['Tc.IO.Linear.emit', 'tests/backend/codegen/Tc-IO-Linear.mog', 6, 12], 22 => ['Tc.IO.Linear.main', 'tests/backend/codegen/Tc-IO-Linear.mog', 9, 8], 29 => ['Tc.IO.Linear.main', 'tests/backend/codegen/Tc-IO-Linear.mog', 10, 3], 30 => ['Tc.IO.Linear.main', 'tests/backend/codegen/Tc-IO-Linear.mog', 11, 3]], ['Tc\\IO\\Linear\\emit' => ['Tc.IO.Linear.emit', 'tests/backend/codegen/Tc-IO-Linear.mog', 6, 12], 'Tc\\IO\\Linear\\__w_emit' => ['Tc.IO.Linear.emit', 'tests/backend/codegen/Tc-IO-Linear.mog', 6, 12], 'Tc\\IO\\Linear\\main' => ['Tc.IO.Linear.main', 'tests/backend/codegen/Tc-IO-Linear.mog', 9, 8], 'Tc\\IO\\Linear\\__w_main' => ['Tc.IO.Linear.main', 'tests/backend/codegen/Tc-IO-Linear.mog', 9, 8]], ['Tc\\IO\\Linear\\emit', 'Tc\\IO\\Linear\\main'], ['Tc\\IO\\Linear\\__w_emit', 'Tc\\IO\\Linear\\__w_main']];
 
 require_once __DIR__ . '/../../../libraries/base/src/System/IO/PHP.php';
 
-use function System\IO\PHP\putStrLn as renamedPrint;
-
 function emit($msg) {
-    renamedPrint($msg);
+    $__t2 = ['__io', static function() use (&$msg): mixed {
+        return __w_emit($msg);
+    }];
+    return $__t2;
+}
+
+function __w_emit($msg) {
+    $__t0 = \System\IO\PHP\__w_putStrLn($msg);
     return null;
 }
 
 function main() {
-    renamedPrint("hello");
-    emit("wrapped");
+    $__t6 = ['__io', static function(): mixed {
+        return __w_main();
+    }];
+    return $__t6;
+}
+
+function __w_main() {
+    $__t3 = \System\IO\PHP\__w_putStrLn("hello");
+    $__t4 = __w_emit("wrapped");
     return null;
 }

@@ -17,8 +17,7 @@ use function Moggi\IR\Visit\collectLocalsInBlock;
 
 function emitIoRunResultExpr(string $resultExpr): string
 {
-    return '(\is_array(' . $resultExpr . ') && (' . $resultExpr . '[0] ?? null) === \'__io\''
-        . ' ? (' . $resultExpr . '[1])() : ' . $resultExpr . ')';
+    return '(' . $resultExpr . '[1])()';
 }
 
 function emitIoAssignAction(IR\Stmt $stmt, int $indent, array $ctx): string
@@ -95,11 +94,14 @@ function emitIoAssignAction(IR\Stmt $stmt, int $indent, array $ctx): string
 
     $useList = $captured === []
         ? ''
-        : ' use (' . \implode(', ', \array_values($captured)) . ')';
+        : ' use (' . \implode(', ', \array_map(
+            static fn (string $var): string => '&' . $var,
+            \array_values($captured),
+        )) . ')';
 
     $inner = emitBlock($body, $indent + 1, $ctx);
     $value = emitRetValue($result, $ctx);
-    $return = 'return ' . ($result instanceof IR\Unit ? $value : emitIoRunResultExpr($value)) . ';';
+    $return = 'return ' . $value . ';';
 
     return $pad . $dest . " = ['__io', static function(){$useList}: mixed {\n"
         . $inner

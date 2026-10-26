@@ -25,9 +25,43 @@ use function Moggi\Semantics\IoBoundary\stripConstraints;
  *
  * What this module does not yet publish: imported entries — their facts travel in the module
  * `facts` record — and the action worker/action-value split at the IR node level, where
- * `ExecutionConvention` is recorded here and `IoBodyKind` carries it in the tree.
+ * `ExecutionConvention` is recorded here and `ActionConvention` carries it in the tree.
  */
 const ABI_VERSION = 1;
+
+/**
+ * The local name of an entry's worker.
+ *
+ * A `ReturnsAction` entry answers with an action value and its worker performs the body. One
+ * spelling for the module that creates the worker and for every importer that calls it.
+ */
+function workerName(string $entry): string
+{
+    return '__w_' . $entry;
+}
+
+/**
+ * Whether a callable name is a generated worker — `__w_x` here, `Module::__w_x` across one.
+ *
+ * The inverse of {@see workerName()}, for the passes that must keep a run in statement position
+ * without the callee's body at hand.
+ */
+function isWorkerName(string $name): bool
+{
+    return workerEntry($name) !== null;
+}
+
+/** The entry a worker's name runs, or null when `$name` is not a worker. */
+function workerEntry(string $name): ?string
+{
+    $tail = \strrpos($name, '::');
+    $local = $tail === false ? $name : \substr($name, $tail + 2);
+    if (! \str_starts_with($local, '__w_')) {
+        return null;
+    }
+
+    return \substr($local, \strlen('__w_'));
+}
 
 /** Whether an entry's result is a plain value, a callable value, or an action value. */
 enum ResultConvention: string
@@ -48,18 +82,17 @@ enum ResultConvention: string
 /**
  * How a caller obtains an entry's result.
  *
- * `ReturnAction` builds an action value and runs nothing; `RunAndReturn` runs the body's
- * statements in the caller's execution region and returns its value. `MixedBody` is the entry whose
- * body both runs statements and returns an action, and the entry whose type the checker left
- * unclassified: the IR does not settle which convention it follows, so it is recorded as its own
- * kind rather than folded into one of the three above.
+ * `ReturnAction` builds an action value and runs nothing; `RunAndReturn` is the FFI worker — it
+ * performs the host call in the caller's execution region and answers with the value. `Unresolved`
+ * is the entry whose type the checker left unclassified: the IR does not settle which convention
+ * it follows, so it is recorded as its own kind rather than defaulted.
  */
 enum ExecutionConvention: string
 {
     case ReturnValue = 'return-value';
     case ReturnAction = 'return-action';
     case RunAndReturn = 'run-and-return';
-    case MixedBody = 'mixed-body';
+    case Unresolved = 'unresolved';
 }
 
 /**
@@ -309,7 +342,7 @@ function table(array $functions, string $module = ''): CallableTable
         $evidenceNames = [];
         $captures = $meta[$function->name]['captures'] ?? [];
 
-        if ($function->kind === IR\FunctionKind::Source) {
+        if ($function->kind === IR\FunctionKind::Source || $function->kind === IR\FunctionKind::Worker) {
             $evidenceNames = $scope;
         } else {
             $inScope = \array_fill_keys($scope, true);
@@ -370,9 +403,13 @@ function table(array $functions, string $module = ''): CallableTable
  */
 function resultConventions(IR\FunctionDecl $function, int $evidenceSlots = 0): array
 {
+    if ($function->kind === IR\FunctionKind::Worker) {
+        return [ResultConvention::Value, ExecutionConvention::ReturnValue, null];
+    }
+
     $type = $function->type;
     if ($type === null) {
-        return [ResultConvention::Unclassified, ExecutionConvention::MixedBody, null];
+        return [ResultConvention::Unclassified, ExecutionConvention::Unresolved, null];
     }
 
     if (functionReturnsIo($type)) {
@@ -380,10 +417,9 @@ function resultConventions(IR\FunctionDecl $function, int $evidenceSlots = 0): a
             return [ResultConvention::Action, ExecutionConvention::ReturnAction, null];
         }
 
-        return match ($function->ioBodyKind) {
-            IR\IoBodyKind::ActionReturn => [ResultConvention::Action, ExecutionConvention::ReturnAction, null],
-            IR\IoBodyKind::Mixed => [ResultConvention::Action, ExecutionConvention::MixedBody, null],
-            IR\IoBodyKind::StraightLine => [ResultConvention::Action, ExecutionConvention::RunAndReturn, null],
+        return match ($function->actionConvention) {
+            IR\ActionConvention::ReturnsAction => [ResultConvention::Action, ExecutionConvention::ReturnAction, null],
+            IR\ActionConvention::Executes => [ResultConvention::Action, ExecutionConvention::RunAndReturn, null],
         };
     }
 

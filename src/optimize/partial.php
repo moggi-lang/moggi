@@ -356,9 +356,39 @@ function foldPartialApply(array $functions, string $moduleName = ''): array
  * @param array<string, IR\FunctionDecl> $index
  * @return list<IR\Stmt>
  */
+/**
+ * How often each temp is read across these items, nested blocks included.
+ *
+ * The fusions below replace the statement that defines a partial with the expression that applies
+ * it. That is only sound when the definition's temp is read exactly once — otherwise the other
+ * readers are left naming a temp nothing defines.
+ *
+ * @param list<IR\Stmt> $items
+ * @return array<int, int>
+ */
+function tempReadCounts(array $items): array
+{
+    $reads = [];
+    foreach ($items as $item) {
+        IR\Visit\walkStmt(
+            $item,
+            static function (): void {
+            },
+            static function (IR\Operand $operand) use (&$reads): void {
+                if ($operand instanceof IR\Temp) {
+                    $reads[$operand->id] = ($reads[$operand->id] ?? 0) + 1;
+                }
+            },
+        );
+    }
+
+    return $reads;
+}
+
 function foldPartialApplyItems(array $items, array $index): array
 {
     $out = [];
+    $reads = tempReadCounts($items);
 
     for ($i = 0; $i < \count($items); ++$i) {
         $item = $items[$i];
@@ -374,7 +404,9 @@ function foldPartialApplyItems(array $items, array $index): array
         }
 
         if ($item instanceof IR\Assign && $next !== null && $next instanceof IR\CallValue) {
-            $fusedAssign = tryFuseAssignPartialCallValue($item, $next);
+            $fusedAssign = ($reads[$item->dest] ?? 0) === 1
+                ? tryFuseAssignPartialCallValue($item, $next)
+                : null;
             if ($fusedAssign !== null) {
                 $out[] = $fusedAssign;
                 ++$i;
@@ -383,7 +415,7 @@ function foldPartialApplyItems(array $items, array $index): array
             }
         }
 
-        if ($item instanceof IR\Call && $next !== null) {
+        if ($item instanceof IR\Call && $next !== null && ($reads[$item->dest] ?? 0) === 1) {
             $fused = tryFusePartialCall($item, $next, $index);
             if ($fused !== null) {
                 $out[] = $fused;
@@ -1079,7 +1111,7 @@ function specializePartialReturnFunction(IR\FunctionDecl $function, array $captu
         $function->ioEffect,
         $function->ioStraightLine,
         $function->foreign,
-        $function->ioBodyKind,
+        $function->actionConvention,
         $function->srcLoc,
         $function->kind,
         $function->origin,

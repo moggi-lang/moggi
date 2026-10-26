@@ -1,4 +1,5 @@
 moggi: ErrorCall: origin
   at Moggi.Err.error (libraries/base/src/Moggi/Err.mog:8:13)
   at Main.boom (tests/backend/runtime/Exec-Exception-Rethrow-Origin.mog:7:8)
+  at Control.Exception.Base.catch (libraries/base/src/Control/Exception/Base.mog:59:3)
   at Main.main (tests/backend/runtime/Exec-Exception-Rethrow-Origin.mog:16:8)

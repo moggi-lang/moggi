@@ -41,9 +41,9 @@ function moduleFromArray(array $module): IR\Module
 
 function functionFromArray(array $fn): IR\FunctionDecl
 {
-    $ioBodyKind = IR\IoBodyKind::StraightLine;
+    $actionConvention = IR\ActionConvention::Executes;
     if ($fn['ioActionReturn'] ?? false) {
-        $ioBodyKind = IR\IoBodyKind::ActionReturn;
+        $actionConvention = IR\ActionConvention::ReturnsAction;
     }
 
     $entryKind = null;
@@ -64,7 +64,7 @@ function functionFromArray(array $fn): IR\FunctionDecl
         $fn['ioEffect'] ?? false,
         $fn['ioStraightLine'] ?? false,
         $fn['foreign'] ?? false,
-        $ioBodyKind,
+        $actionConvention,
         kind: isset($fn['kind']) && \is_string($fn['kind'])
             ? IR\FunctionKind::from($fn['kind'])
             : IR\FunctionKind::Source,

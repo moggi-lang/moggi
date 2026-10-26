@@ -1811,7 +1811,7 @@ function cloneSpecializedFunction(
         $target->ioEffect,
         $target->ioStraightLine,
         false,
-        $target->ioBodyKind,
+        $target->actionConvention,
         $target->srcLoc,
         IR\FunctionKind::SpecClone,
         $origin,

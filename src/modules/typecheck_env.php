@@ -632,7 +632,7 @@ function classModuleVisibleTypes(array $units, string $moduleName, string $backe
  *
  * @param array<string, array<string, mixed>> $units
  * @param array<string, array<string, mixed>> $classScopes
- * @return array{externalFns: array<string, string>, callables: array<string, array{evidence: int, params: int, arity: int}>, dataRefs: array<string, array<string, mixed>>, origins: array<string, string>, actionReturn: array<string, true>}
+ * @return array{externalFns: array<string, string>, callables: array<string, array{evidence: int, params: int, arity: int}>, dataRefs: array<string, array<string, mixed>>, origins: array<string, string>, actionReturn: array<string, true>, workers: array<string, string>}
  */
 function classScopeFunctionRefs(array $units, array $classScopes): array
 {
@@ -641,6 +641,7 @@ function classScopeFunctionRefs(array $units, array $classScopes): array
     $dataRefs = [];
     $origins = [];
     $actionReturn = [];
+    $workers = [];
     foreach ($classScopes as $scope) {
         foreach ($scope['fns'] ?? [] as $name => $fn) {
             $origin = $fn['origin'];
@@ -650,6 +651,10 @@ function classScopeFunctionRefs(array $units, array $classScopes): array
             if (isset(moduleActionReturnFnNames($units, $origin['module'])[$origin['phpName']])) {
                 $actionReturn[$name] = true;
             }
+            $worker = importedWorkerSymbol($units, $origin);
+            if ($worker !== null) {
+                $workers[$name] = $worker;
+            }
         }
 
         foreach ($scope['dataRefs'] ?? [] as $typeName => $info) {
@@ -657,7 +662,7 @@ function classScopeFunctionRefs(array $units, array $classScopes): array
         }
     }
 
-    return ['externalFns' => $externalFns, 'callables' => $callables, 'dataRefs' => $dataRefs, 'origins' => $origins, 'actionReturn' => $actionReturn];
+    return ['externalFns' => $externalFns, 'callables' => $callables, 'dataRefs' => $dataRefs, 'origins' => $origins, 'actionReturn' => $actionReturn, 'workers' => $workers];
 }
 
 /**

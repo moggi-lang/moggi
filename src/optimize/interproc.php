@@ -1363,6 +1363,10 @@ function reduceMatchArmBodyToExpr(
             continue;
         }
         if ($stmt instanceof IR\Call) {
+            if (\Moggi\IR\Callables\isWorkerName($stmt->callee)) {
+                return null;
+            }
+
             $val = new IR\ExprCall(
                 $stmt->callee,
                 \array_map(
@@ -1984,12 +1988,23 @@ function isInlineCandidate(IR\FunctionDecl $function): bool
     }
 
     foreach ($items as $item) {
-        if (\in_array($item::class, [IR\MatchStmt::class, IR\MatchReturn::class, IR\Loop::class, IR\TailRecall::class, IR\DictCall::class], true)) {
+        if (\in_array($item::class, [
+            IR\MatchStmt::class, IR\MatchReturn::class, IR\Loop::class,
+            IR\TailRecall::class, IR\DictCall::class,
+        ], true)) {
             return false;
         }
     }
 
-    return true;
+    $rets = 0;
+    walkBlock($function->body, static function (IR\Stmt $stmt) use (&$rets): void {
+        if ($stmt instanceof IR\Ret) {
+            ++$rets;
+        }
+    }, static function (): void {
+    });
+
+    return $rets === 1;
 }
 
 /**

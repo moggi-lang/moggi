@@ -2,23 +2,36 @@
 
 namespace Tc\IO\HoSpecialize;
 
-const __MOGGI_MAP = [[12 => ['Tc.IO.HoSpecialize.runTwice', 'tests/backend/runtime/Tc-IO-HoSpecialize.mog', 7, 3], 13 => ['Tc.IO.HoSpecialize.runTwice', 'tests/backend/runtime/Tc-IO-HoSpecialize.mog', 8, 3], 19 => ['Tc.IO.HoSpecialize.main', 'tests/backend/runtime/Tc-IO-HoSpecialize.mog', 11, 18], 22 => ['Tc.IO.HoSpecialize.main', 'tests/backend/runtime/Tc-IO-HoSpecialize.mog', 11, 8]], ['Tc\\IO\\HoSpecialize\\runTwice' => ['Tc.IO.HoSpecialize.runTwice', 'tests/backend/runtime/Tc-IO-HoSpecialize.mog', 6, 16], 'Tc\\IO\\HoSpecialize\\main' => ['Tc.IO.HoSpecialize.main', 'tests/backend/runtime/Tc-IO-HoSpecialize.mog', 11, 8]]];
+const __MOGGI_MAP = [[10 => ['Tc.IO.HoSpecialize.runTwice', 'tests/backend/runtime/Tc-IO-HoSpecialize.mog', 6, 16], 17 => ['Tc.IO.HoSpecialize.runTwice', 'tests/backend/runtime/Tc-IO-HoSpecialize.mog', 7, 3], 18 => ['Tc.IO.HoSpecialize.runTwice', 'tests/backend/runtime/Tc-IO-HoSpecialize.mog', 8, 3], 23 => ['Tc.IO.HoSpecialize.main', 'tests/backend/runtime/Tc-IO-HoSpecialize.mog', 11, 8], 31 => ['Tc.IO.HoSpecialize.main', 'tests/backend/runtime/Tc-IO-HoSpecialize.mog', 11, 18], 34 => ['Tc.IO.HoSpecialize.runTwice', 'tests/backend/runtime/Tc-IO-HoSpecialize.mog', 7, 3], 35 => ['Tc.IO.HoSpecialize.runTwice', 'tests/backend/runtime/Tc-IO-HoSpecialize.mog', 8, 3]], ['Tc\\IO\\HoSpecialize\\runTwice' => ['Tc.IO.HoSpecialize.runTwice', 'tests/backend/runtime/Tc-IO-HoSpecialize.mog', 6, 16], 'Tc\\IO\\HoSpecialize\\__w_runTwice' => ['Tc.IO.HoSpecialize.runTwice', 'tests/backend/runtime/Tc-IO-HoSpecialize.mog', 6, 16], 'Tc\\IO\\HoSpecialize\\main' => ['Tc.IO.HoSpecialize.main', 'tests/backend/runtime/Tc-IO-HoSpecialize.mog', 11, 8], 'Tc\\IO\\HoSpecialize\\__w_main' => ['Tc.IO.HoSpecialize.main', 'tests/backend/runtime/Tc-IO-HoSpecialize.mog', 11, 8]], ['Tc\\IO\\HoSpecialize\\runTwice', 'Tc\\IO\\HoSpecialize\\main'], ['Tc\\IO\\HoSpecialize\\__w_runTwice', 'Tc\\IO\\HoSpecialize\\__w_main']];
 
 require_once __DIR__ . '/../../../libraries/base/src/System/IO/PHP.php';
 
-use function System\IO\PHP\putStrLn;
-
 function runTwice($act) {
-    (\is_array($act) && ($act[0] ?? null) === '__io' ? ($act[1])() : $act);
-    (\is_array($act) && ($act[0] ?? null) === '__io' ? ($act[1])() : $act);
+    $__t1 = ['__io', static function() use (&$act): mixed {
+        return __w_runTwice($act);
+    }];
+    return $__t1;
+}
+
+function __w_runTwice($act) {
+    ($act[1])();
+    ($act[1])();
     return null;
 }
 
 function main() {
-    $__t0 = ['__io', static function(): mixed {
-        putStrLn("x");
+    $__t6 = ['__io', static function(): mixed {
+        return __w_main();
+    }];
+    return $__t6;
+}
+
+function __w_main() {
+    $__t3 = ['__io', static function(): mixed {
+        $__t2 = \System\IO\PHP\__w_putStrLn("x");
         return null;
     }];
-    runTwice($__t0);
+    ($__t3[1])();
+    ($__t3[1])();
     return null;
 }

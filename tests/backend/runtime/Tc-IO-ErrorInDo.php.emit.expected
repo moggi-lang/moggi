@@ -2,21 +2,35 @@
 
 namespace Tc\IO\ErrorInDo;
 
-const __MOGGI_MAP = [[14 => ['Tc.IO.ErrorInDo.abort', 'tests/backend/runtime/Tc-IO-ErrorInDo.mog', 7, 3], 15 => ['Tc.IO.ErrorInDo.abort', 'tests/backend/runtime/Tc-IO-ErrorInDo.mog', 8, 3], 20 => ['Tc.IO.ErrorInDo.main', 'tests/backend/runtime/Tc-IO-ErrorInDo.mog', 11, 8]], ['Tc\\IO\\ErrorInDo\\abort' => ['Tc.IO.ErrorInDo.abort', 'tests/backend/runtime/Tc-IO-ErrorInDo.mog', 6, 9], 'Tc\\IO\\ErrorInDo\\main' => ['Tc.IO.ErrorInDo.main', 'tests/backend/runtime/Tc-IO-ErrorInDo.mog', 11, 8]]];
+const __MOGGI_MAP = [[13 => ['Tc.IO.ErrorInDo.abort', 'tests/backend/runtime/Tc-IO-ErrorInDo.mog', 6, 9], 20 => ['Tc.IO.ErrorInDo.abort', 'tests/backend/runtime/Tc-IO-ErrorInDo.mog', 7, 3], 21 => ['Tc.IO.ErrorInDo.abort', 'tests/backend/runtime/Tc-IO-ErrorInDo.mog', 8, 3], 22 => ['Tc.IO.ErrorInDo.abort', 'tests/backend/runtime/Tc-IO-ErrorInDo.mog', 8, 3], 27 => ['Tc.IO.ErrorInDo.main', 'tests/backend/runtime/Tc-IO-ErrorInDo.mog', 11, 8], 34 => ['Tc.IO.ErrorInDo.main', 'tests/backend/runtime/Tc-IO-ErrorInDo.mog', 11, 8]], ['Tc\\IO\\ErrorInDo\\abort' => ['Tc.IO.ErrorInDo.abort', 'tests/backend/runtime/Tc-IO-ErrorInDo.mog', 6, 9], 'Tc\\IO\\ErrorInDo\\__w_abort' => ['Tc.IO.ErrorInDo.abort', 'tests/backend/runtime/Tc-IO-ErrorInDo.mog', 6, 9], 'Tc\\IO\\ErrorInDo\\main' => ['Tc.IO.ErrorInDo.main', 'tests/backend/runtime/Tc-IO-ErrorInDo.mog', 11, 8], 'Tc\\IO\\ErrorInDo\\__w_main' => ['Tc.IO.ErrorInDo.main', 'tests/backend/runtime/Tc-IO-ErrorInDo.mog', 11, 8]], ['Tc\\IO\\ErrorInDo\\abort', 'Tc\\IO\\ErrorInDo\\main'], ['Tc\\IO\\ErrorInDo\\__w_abort', 'Tc\\IO\\ErrorInDo\\__w_main']];
 
 require_once __DIR__ . '/../../../libraries/base/src/Moggi/Err.php';
 require_once __DIR__ . '/../../../libraries/base/src/System/IO/PHP.php';
 
 use function Moggi\Err\error;
-use function System\IO\PHP\putStrLn;
 
 function abort() {
-    putStrLn("before");
-    error("boom");
+    $__t3 = ['__io', static function(): mixed {
+        return __w_abort();
+    }];
+    return $__t3;
+}
+
+function __w_abort() {
+    $__t0 = \System\IO\PHP\__w_putStrLn("before");
+    $__t1 = error("boom");
+    ($__t1[1])();
     return null;
 }
 
 function main() {
-    abort();
+    $__t6 = ['__io', static function(): mixed {
+        return __w_main();
+    }];
+    return $__t6;
+}
+
+function __w_main() {
+    $__t4 = __w_abort();
     return null;
 }

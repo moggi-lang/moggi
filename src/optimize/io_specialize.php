@@ -4,7 +4,9 @@ namespace Moggi\Optimize\IoSpecialize;
 
 use Moggi\IR;
 
+use function Moggi\IR\Visit\stmtDirectOperands;
 use function Moggi\IR\Visit\walkBlock;
+use function Moggi\IR\Visit\walkStmt;
 
 use function Moggi\Optimize\GlobalPass\usedInOperand;
 use function Moggi\Semantics\IoBoundary\functionReturnsIo as ioBoundaryFunctionReturnsIo;
@@ -106,35 +108,35 @@ function inlineIoRun(IR\IoRun $stmt, array $assignByTemp): ?array
     return $body;
 }
 
-/** @return list<int> */
+/**
+ * Every temp a statement reads, including the ones read by a block it owns.
+ *
+ * A box's body is a nested block; a temp defined in the enclosing function and read only there is
+ * still live, so the walk has to descend or the box that defines it looks unreferenced.
+ *
+ * @return list<int>
+ */
 function tempRefsInStmt(IR\Stmt $stmt): array
 {
-    $operands = stmtOperands($stmt);
     $refs = [];
-    foreach ($operands as $operand) {
-        foreach (\array_keys(usedInOperand($operand)['temps']) as $tempId) {
-            $refs[] = $tempId;
-        }
-    }
+    walkStmt(
+        $stmt,
+        static function (): void {
+        },
+        static function (IR\Operand $operand) use (&$refs): void {
+            foreach (\array_keys(usedInOperand($operand)['temps']) as $tempId) {
+                $refs[$tempId] = true;
+            }
+        },
+    );
 
-    return $refs;
+    return \array_keys($refs);
 }
 
 /** @return list<IR\Operand> */
 function stmtOperands(IR\Stmt $stmt): array
 {
-    return match ($stmt::class) {
-        IR\Assign::class, IR\Let::class, IR\Ret::class => [$stmt->value],
-        IR\Binop::class => [$stmt->left, $stmt->right],
-        IR\Call::class, IR\IoCall::class, IR\DictCall::class => $stmt->args,
-        IR\CallValue::class => [$stmt->callee, ...$stmt->args],
-        IR\IoRun::class => [$stmt->action],
-        IR\IoThrow::class => [$stmt->exception],
-        IR\IoCatch::class => [$stmt->action, $stmt->handler],
-        IR\IoFinally::class => [$stmt->action, $stmt->cleanup],
-        IR\MatchStmt::class, IR\IoMatch::class => [$stmt->scrutinee],
-        default => [],
-    };
+    return stmtDirectOperands($stmt);
 }
 
 function recomputeIoStraightLine(IR\FunctionDecl $function): IR\FunctionDecl

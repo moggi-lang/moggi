@@ -2419,17 +2419,11 @@ function rtIoRunIl(): string
   {
     .maxstack 8
     ldarg.0
-    isinst Moggi.Rt.IO
-    brfalse Passthrough
-    ldarg.0
     castclass Moggi.Rt.IO
     ldfld object Moggi.Rt.IO::action
     ldc.i4.0
     newarr object
     call object Moggi.Rt.RT::Apply(object, object[])
-    ret
-    Passthrough:
-    ldarg.0
     ret
   }
 

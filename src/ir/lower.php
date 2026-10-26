@@ -67,7 +67,9 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
         }
     }
 
-    $ioActionReturnFns = ioActionReturnFnNames($program->items) + $interface->actionReturn;
+    $actionReturningEntries = actionReturningEntryNames($program->items) + $interface->actionReturn;
+    $workers = workerEntries($program->items) + importedWorkerEntries($interface, $localBindings);
+    $workerEntries = executingEntryNames($program->items, $interface->env, $interface->actionReturn);
     $state->trueBindings = trueBindingOrigins($program->items, $moduleName) + $interface->trueBindings;
 
     foreach ($interface->externalFnRuntimeArity as $name => $arity) {
@@ -102,7 +104,7 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
                     . ' the check did not publish one for a declaration it lowers',
                 );
 
-            $functions[] = lowerFunction(
+            \array_push($functions, ...lowerFunction(
                 $item,
                 $state,
                 $record,
@@ -110,12 +112,14 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
                 $functionArity,
                 $dataIndex,
                 $externalFns,
-                $ioActionReturnFns,
+                $actionReturningEntries,
                 $newtypeIndex,
                 $moduleName,
                 $sourceFile,
                 $constructorRenames,
-            );
+                $workers,
+                $workerEntries,
+            ));
         }
     }
 
@@ -214,8 +218,10 @@ function buildNewtypeIndex(Ast\Program $program, array $importedData = []): arra
 
 /**
  * @param array<string, string> $externalFns
- * @param array<string, true> $ioActionReturnFns
+ * @param array<string, true> $actionReturningEntries
  * @param array<string, true> $newtypeIndex
+ * @param array<string, string> $workers entry name → the worker this module creates for it
+ * @return list<FunctionDecl> the entry, followed by its worker when it has one
  */
 function lowerFunction(
     Ast\FunctionDecl $fn,
@@ -225,27 +231,28 @@ function lowerFunction(
     array $functionArity,
     array $dataIndex,
     array $externalFns = [],
-    array $ioActionReturnFns = [],
+    array $actionReturningEntries = [],
     array $newtypeIndex = [],
     string $moduleName = '',
     string $sourceFile = '',
     array $constructorRenames = [],
-): FunctionDecl {
+    array $workers = [],
+    array $executingEntries = [],
+): array {
     $state->usedLocals = [];
     $state->nextLocalSuffix = 0;
     $slotNames = functionParamSlots($fn->params);
     $ctx = newCtx($slotNames, $state, $dataIndex, $newtypeIndex);
     $ctx->functionArity = $functionArity;
     $ctx->externalFnNames = \array_keys($externalFns);
-    $ctx->ioActionReturnFns = $ioActionReturnFns;
+    $ctx->actionReturningEntries = $actionReturningEntries;
     $ctx->trueBindings = $state->trueBindings;
     $ctx->moduleName = $moduleName;
     $ctx->sourceFile = $sourceFile;
     $ctx->functionName = $fn->name;
     $ctx->constructorRenames = $constructorRenames;
-    // The record is the only authority for the evidence vector and for every
-    // evidence site in the body: no lowering path reads the elaborated node's own
-    // fields or the declaration's constraint list.
+    $ctx->workers = $workers;
+    $ctx->executingEntries = $executingEntries;
     $ctx->evidenceNames = $core->evidenceBinders();
     $ctx->evidencePlans = $core->evidencePlanIndex();
 
@@ -278,22 +285,50 @@ function lowerFunction(
     }
 
     $straightLineIo = false;
-    $ioBodyKind = $fn->ioBodyKind;
+    $worker = null;
+    $actionConvention = $fn->actionConvention;
 
     if (functionReturnsIo($fn->type)) {
         $ctx->ioActionStore = [];
         $ctx->hasIoRun = false;
         $ctx->hasIoAssignAction = false;
-        $bodyKind = $fn->ioBodyKind;
 
-        if ($bodyKind === IoBodyKind::ActionReturn) {
-            $operand = lowerIoActionToBox($fn->body, $ctx);
-            $ctx->items[] = new Ret($operand);
-            $ioBodyKind = IoBodyKind::ActionReturn;
-        } else {
-            if (! lowerIoFunctionBody($fn->body, $ctx)) {
-                throw new \RuntimeException("failed to lower IO body for `{$fn->name}`");
-            }
+        if ($fn->actionConvention === ActionConvention::ReturnsAction) {
+            $workerName = $workers[$fn->name] ?? throw new \RuntimeException(
+                "`{$moduleName}::{$fn->name}` returns an action but has no worker allocated",
+            );
+            [$bodyItems, $result, $bodyHasBox] = lowerActionBody($fn->body, $ctx, false);
+
+            $worker = new FunctionDecl(
+                $workerName,
+                $slotNames,
+                null,
+                new Block([...$bodyItems, new Ret($result)]),
+                export: false,
+                foreign: false,
+                actionConvention: ActionConvention::Executes,
+                srcLoc: srcLocFromAst($fn->body, $moduleName, $fn->name, $sourceFile),
+                kind: FunctionKind::Worker,
+                origin: $fn->name,
+                evidenceScope: $ctx->evidenceNames,
+                ioStraightLine: ! $bodyHasBox,
+            );
+
+            $callDest = freshTemp($ctx);
+            $boxDest = freshTemp($ctx);
+            $ctx->hasIoAssignAction = true;
+            $ctx->items[] = new IoAssignAction(
+                $boxDest,
+                new Block([new Call($workerName, \array_map(
+                    static fn (string $slot): Operand => new Local($slot),
+                    $slotNames,
+                ), $callDest)]),
+                new Temp($callDest),
+                srcLocFromAst($fn->body, $moduleName, $fn->name, $sourceFile),
+            );
+            $ctx->items[] = new Ret(new Temp($boxDest));
+        } elseif (! lowerIoFunctionBody($fn->body, $ctx)) {
+            throw new \RuntimeException("failed to lower IO body for `{$fn->name}`");
         }
 
         $straightLineIo = ! $ctx->hasIoRun && ! $ctx->hasIoAssignAction;
@@ -302,11 +337,7 @@ function lowerFunction(
         $ctx->items[] = new Ret($tail);
     }
 
-    if ($fn->ioBodyKind === IoBodyKind::ActionReturn) {
-        $ioBodyKind = IoBodyKind::ActionReturn;
-    }
-
-    return new FunctionDecl(
+    $entry = new FunctionDecl(
         $fn->name,
         $slotNames,
         $fn->type,
@@ -317,13 +348,15 @@ function lowerFunction(
         ioEffect: false,
         ioStraightLine: $straightLineIo,
         foreign: $fn->foreign,
-        ioBodyKind: $ioBodyKind,
+        actionConvention: $actionConvention,
         srcLoc: $fn->body->line > 0
             ? srcLocFromAst($fn->body, $moduleName, $fn->name, $sourceFile)
             : srcLocFromAst($fn, $moduleName, $fn->name, $sourceFile),
         kind: FunctionKind::Source,
         evidenceScope: $ctx->evidenceNames,
     );
+
+    return $worker === null ? [$entry] : [$entry, $worker];
 }
 
 function srcLocFromAst(Ast\AstNode $node, string $module, string $function, string $file): SrcLoc
@@ -444,7 +477,9 @@ function newCtx(
 
         $ctx->externalFnNames = $from->externalFnNames;
         $ctx->functionArity = $from->functionArity;
-        $ctx->ioActionReturnFns = $from->ioActionReturnFns;
+        $ctx->actionReturningEntries = $from->actionReturningEntries;
+        $ctx->workers = $from->workers;
+        $ctx->executingEntries = $from->executingEntries;
         $ctx->ioActionStore = $from->ioActionStore;
         $ctx->constructorRenames = $from->constructorRenames;
         $ctx->evidenceNames = $from->evidenceNames;
