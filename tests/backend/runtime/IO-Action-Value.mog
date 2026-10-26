@@ -13,6 +13,10 @@ holding act = pure act
 lvl2 :: IO (IO Int)
 lvl2 = pure (pure 42)
 
+-- `pure act` answers with the action, it does not run it: `after` prints first.
+throughPure :: IO (IO ())
+throughPure = pure (putStrLn "p")
+
 main :: IO ()
 main = do
   a <- boxed
@@ -24,3 +28,6 @@ main = do
   c <- lvl2
   n <- c
   putStrLn (show n)
+  d <- throughPure
+  putStrLn "after"
+  d

@@ -2,14 +2,46 @@
 
 use Moggi\Backend;
 
-/** @return array{passed: bool, message: string} */
+/**
+ * A fixture marked `<name>.noopt` also runs with the optimizer off and has to produce the *same*
+ * expectation: the entry/wrapper/worker ABI has to hold where no pass has rewritten it, and the
+ * only honest comparison is the one the optimized leg already makes.
+ *
+ * @return array{passed: bool, message: string}
+ */
 function runExecTest(string $path, string $projectRoot): array
+{
+    $result = runExecTestOnce($path, $projectRoot);
+    if ($result['passed'] !== true || ! \is_file(fixtureBasePath($path) . '.noopt')) {
+        return $result;
+    }
+
+    $noOpt = runExecTestOnce($path, $projectRoot, noOpt: true);
+
+    return $noOpt['passed'] === true
+        ? $result
+        : ['passed' => false, 'message' => 'no-optimization run — ' . $noOpt['message']];
+}
+
+/** @return array{passed: bool, message: string} */
+function runExecTestOnce(string $path, string $projectRoot, bool $noOpt = false): array
 {
     $name = \basename($path, '.mog');
     $base = fixtureBasePath($path);
     $backend = Backend\compileBackend();
     $stdoutExpected = runtimeExpectedPath($base, '.stdout.expected', $backend);
     $stderrExpected = runtimeExpectedPath($base, '.stderr.expected', $backend);
+    if ($noOpt) {
+        if (\is_file($stderrExpected)) {
+            return runBackendReportFixture($path, $stderrExpected, $backend, $projectRoot, noOpt: true);
+        }
+        if (! \is_file($stdoutExpected)) {
+            return ['passed' => false, 'message' => "missing expected output file {$stdoutExpected}"];
+        }
+
+        return runBackendStdoutFixture($path, $stdoutExpected, $backend, $projectRoot, noOpt: true);
+    }
+
     if ($backend !== 'php') {
         if (\is_file($stderrExpected)) {
             return runBackendReportFixture($path, $stderrExpected, $backend, $projectRoot);
@@ -254,6 +286,7 @@ function runBackendStdoutFixture(
     string $stdoutExpected,
     string $backend,
     string $projectRoot,
+    bool $noOpt = false,
 ): array {
     $name = testRelativePath($inputPath);
     $outDir = createTempDir('moggi-runtime-' . \md5($inputPath . ':' . $backend));
@@ -267,6 +300,7 @@ function runBackendStdoutFixture(
             $inputPath,
             ...fixtureExtraLibArgs($projectRoot),
             ...fixtureCompileOutputArgs($outDir, $backend),
+            ...($noOpt ? ['--no-opt'] : []),
             '--backend',
             $backend,
         ], 120);
@@ -474,6 +508,7 @@ function runBackendReportFixture(
     string $stderrExpected,
     string $backend,
     string $projectRoot,
+    bool $noOpt = false,
 ): array {
     $name = testRelativePath($inputPath);
     $outDir = createTempDir('moggi-runtime-' . \md5($inputPath . ':report:' . $backend));
@@ -487,6 +522,7 @@ function runBackendReportFixture(
             $inputPath,
             ...fixtureExtraLibArgs($projectRoot),
             ...fixtureCompileOutputArgs($outDir, $backend),
+            ...($noOpt ? ['--no-opt'] : []),
             '--backend',
             $backend,
         ], 120);

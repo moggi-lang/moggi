@@ -616,19 +616,6 @@ function emitPendingIoThunkMethods(
                     }
                     emitBlock($env, $body);
                     emitOperand($env, $result);
-                    $resultSlot = $env->freshLocal();
-                    $env->c->astore($resultSlot);
-                    $done = 'io_thunk_done_' . $env->freshLabelId();
-                    $env->c->aload($resultSlot);
-                    $env->c->instanceof_($env->cp->class_('moggi/rt/IO'));
-                    $env->c->ifeq($done);
-                    $env->c->aload($resultSlot);
-                    $env->c->checkcast($env->cp->class_('moggi/rt/IO'));
-                    $env->c->invokestatic($env->cp->methodRef('moggi/rt/RT', 'ioRun', '(Ljava/lang/Object;)Ljava/lang/Object;'), 1, true);
-                    $env->c->areturn();
-                    $env->c->label($done);
-                    $env->c->noteFrame($env->frameLocals());
-                    $env->c->aload($resultSlot);
                     $env->c->areturn();
                 }
             );

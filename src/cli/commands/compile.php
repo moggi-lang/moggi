@@ -215,6 +215,11 @@ function compileIntoRoot(
         if ($native && ! buildNativeExecutable($outputRoot, $backend)) {
             return $empty(1);
         }
+        if ($packageUnpacked && ! Modules\writeAbiStamp($outputRoot)) {
+            \fwrite(STDERR, "error: cannot write the ABI stamp in {$outputRoot}\n");
+
+            return $empty(1);
+        }
 
         echo \count($files) . " file(s) compiled\n";
 
@@ -272,6 +277,11 @@ function compileIntoRoot(
         return $empty(1);
     }
     if ($native && ! buildNativeExecutable($outputRoot, $backend)) {
+        return $empty(1);
+    }
+    if ($packageUnpacked && ! Modules\writeAbiStamp($outputRoot)) {
+        \fwrite(STDERR, "error: cannot write the ABI stamp in {$outputRoot}\n");
+
         return $empty(1);
     }
 

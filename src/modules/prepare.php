@@ -373,9 +373,9 @@ function prepareProject(
         }
 
         publishModuleExports($units, $moduleName, $context);
+        $units[$moduleName]['facts'] = preparedModuleFacts($units[$moduleName], $checkedFull, $moduleName);
         addModuleClassScope($units, $moduleName, $projectClasses, $classScopes, $classScopeFns, $context->backendId);
 
-        $units[$moduleName]['facts'] = preparedModuleFacts($units[$moduleName], $checkedFull, $moduleName);
         if ($contentKey !== null) {
             Cache\modulePut(
                 $units[$moduleName]['cacheRelPath'],

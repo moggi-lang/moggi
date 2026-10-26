@@ -10,6 +10,7 @@ use Moggi\Optimize\PassCheckpoints;
 
 use function Moggi\IR\entryFromFunctions;
 use function Moggi\IR\Callables\captureMeta;
+use function Moggi\IR\Callables\workerDeclarations;
 use function Moggi\Optimize\CaseFold\foldKnownConstructorsBlock;
 use function Moggi\Optimize\CaseFold\foldKnownMatchesInItems;
 use function Moggi\Optimize\Dict\indexEvidenceByName;
@@ -172,11 +173,15 @@ function optimize(Module $module): Module
 
         setPropagateCopiesLambdaBodies($functions);
         setEffectfulCallees(effectfulCalleeNames($functions, $moduleName));
+        $workers = workerDeclarations($module);
         $functions = PassCheckpoints\runOnFunctions(
             'final-folds',
             $module,
             $functions,
-            static fn (array $fns): array => \array_map(optimizeFunctionFinal(...), $fns),
+            static fn (array $fns): array => \array_map(
+                static fn (FunctionDecl $function): FunctionDecl => optimizeFunctionFinal($function, $workers),
+                $fns,
+            ),
             false,
         );
         $functions = PassCheckpoints\runOnFunctions(
@@ -283,11 +288,14 @@ function optimizeFunctionAfterInline(FunctionDecl $function): FunctionDecl
     return $function->withBody($body);
 }
 
-function optimizeFunctionFinal(FunctionDecl $function): FunctionDecl
+/**
+ * @param array<string, FunctionDecl> $workers the module's workers, so a run stays a statement
+ */
+function optimizeFunctionFinal(FunctionDecl $function, array $workers): FunctionDecl
 {
     if ($function->ioStraightLine) {
         $body = propagateCopiesBlock($function->body);
-        $items = foldSingleUseCallResults(foldTailReturn($body->items));
+        $items = foldSingleUseCallResults(foldTailReturn($body->items), $workers);
 
         return $function->withBody(new Block($items));
     }

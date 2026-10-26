@@ -1,0 +1,7 @@
+module Bad.Worker.Namespace
+
+__w_putStrLn :: String -> IO ()
+__w_putStrLn s = pure ()
+
+main :: IO ()
+main = __w_putStrLn "x"

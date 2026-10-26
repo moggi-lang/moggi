@@ -167,10 +167,6 @@ if ($pickLambda !== null) {
         'a lifted callable did not publish its value result: ' . $pickLambda->result->value,
     );
     $check(
-        $pickLambda->execution === Callables\ExecutionConvention::ReturnValue,
-        'a lifted value callable published execution ' . $pickLambda->execution->value,
-    );
-    $check(
         $pickLambda->returnsCallable === false,
         'a lifted callable returning a String published a callable result',
     );

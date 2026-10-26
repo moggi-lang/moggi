@@ -13,7 +13,6 @@ use function Moggi\Backend\Php\Naming\basePhpFunctionName;
 use function Moggi\Errors\appendDidYouMean;
 use function Moggi\Semantics\Exhaustiveness\trueBindingOrigins;
 use function Moggi\Semantics\IoBoundary\functionReturnsIo;
-use function Moggi\Semantics\IoEscape\isForeignIoBody;
 use function Moggi\Semantics\Kinds\dataKind;
 use function Moggi\Semantics\Kinds\registerTypeKind;
 use function Moggi\Semantics\Types\evidenceFunctionName;
@@ -175,109 +174,84 @@ function unitEvidenceArities(array $unit, string $moduleName, string $namespace)
 }
 
 /**
- * Names a module defines whose body is an action *value*: callers receive a
- * boxed action and have to run it. `actionConvention` never reaches the exported
- * scheme, so this is read straight off the defining module's checked program.
+ * A module's action facts: the entries that answer with an action value, and the subset lowering
+ * gives a worker.
+ *
+ * `actionReturn` is the result convention `IoEscape\annotateFunction()` decided and nothing else, so
+ * a caller knows to run what the entry returns. `workers` is the part of that set whose result is
+ * literally `IO a` — the only shape with a body to move into `__w_<name>`. An entry returning a
+ * monadic variable answers with an action but is called through its entry, with no worker allocated.
+ *
+ * Both sets are read in this one walk, so the worker an importer is told exists and the worker a
+ * module lowers are one answer, not two that happen to agree.
+ *
+ * @param list<Ast\AstNode> $items
+ * @return array{actionReturn: array<string, true>, workers: array<string, true>}
+ */
+function actionEntryFacts(array $items): array
+{
+    $actionReturn = [];
+    $workers = [];
+    foreach ($items as $item) {
+        if (! $item instanceof Ast\FunctionDecl
+            || $item->actionConvention !== IR\ActionConvention::ReturnsAction) {
+            continue;
+        }
+
+        $actionReturn[$item->name] = true;
+        if (functionReturnsIo($item->type)) {
+            $workers[$item->name] = true;
+        }
+    }
+
+    return ['actionReturn' => $actionReturn, 'workers' => $workers];
+}
+
+/**
+ * A module's action facts, from what it published or from the program it was checked as.
+ *
+ * A unit with neither published nothing and was not checked in this run, so there is no answer to
+ * read: refusing names the module rather than answering "no workers", which an importer would
+ * believe and then emit a call to a worker no module lowered.
  *
  * @param array<string, array<string, mixed>> $units
- * @return array<string, true>
+ * @return array{actionReturn: array<string, true>, workers: array<string, true>}
  */
-function moduleActionReturnFnNames(array $units, string $moduleName): array
+function moduleActionFacts(array $units, string $moduleName): array
 {
-    /** @var array<string, array<string, true>> $cache */
+    /** @var array<string, array{actionReturn: array<string, true>, workers: array<string, true>}> $cache */
     static $cache = [];
 
     $unit = $units[$moduleName] ?? null;
-    $facts = \is_array($unit) ? ($unit['facts']['actionReturn'] ?? null) : null;
-    if (\is_array($facts)) {
-        return $facts;
+    if (! \is_array($unit)) {
+        throw new \RuntimeException("module `{$moduleName}` is not part of this compilation");
     }
-    $key = \is_array($unit)
-        ? $moduleName . "\0" . \hash('xxh3', (string) ($unit['source'] ?? '') . "\0" . (string) ($unit['path'] ?? ''))
-        : $moduleName;
+
+    $actionReturn = $unit['facts']['actionReturn'] ?? null;
+    $workers = $unit['facts']['workers'] ?? null;
+    if (\is_array($actionReturn) && \is_array($workers)) {
+        return ['actionReturn' => $actionReturn, 'workers' => $workers];
+    }
+
+    $key = $moduleName . "\0" . \hash('xxh3', (string) ($unit['source'] ?? '') . "\0" . (string) ($unit['path'] ?? ''));
     if (isset($cache[$key])) {
         return $cache[$key];
     }
 
-    $program = \is_array($unit) ? ($unit['checkedProgram'] ?? null) : null;
+    $program = $unit['checkedProgram'] ?? null;
+    if (! $program instanceof Ast\Program) {
+        throw new \RuntimeException(
+            "module `{$moduleName}` published no action facts and was not checked in this run",
+        );
+    }
 
-    return $cache[$key] = ($program instanceof Ast\Program)
-        ? actionReturnFnNamesFromProgram($program)
-        : [];
+    return $cache[$key] = actionEntryFacts($program->items);
 }
 
 /** @return array<string, true> */
-function actionReturnFnNamesFromProgram(Ast\Program $program): array
+function moduleActionReturnFnNames(array $units, string $moduleName): array
 {
-    $names = [];
-    foreach ($program->items as $item) {
-        if ($item instanceof Ast\FunctionDecl && $item->actionConvention === IR\ActionConvention::ReturnsAction) {
-            $names[$item->name] = true;
-        }
-    }
-
-    return $names;
-}
-
-/**
- * Names a module declares a worker for: the direct half of an action-returning entry.
- *
- * The set is a property of the declaration — it returns `IO` and its body is not the host call
- * itself — so it is computed from the tree lowering reads and published with the module's facts.
- * An importer reads it from there instead of deciding from a scheme whether a worker exists, and
- * lowering allocates exactly the workers this names.
- *
- * @param list<Ast\AstNode> $items
- * @return array<string, true>
- */
-function workerFnNames(array $items): array
-{
-    $names = [];
-    foreach ($items as $item) {
-        if (! $item instanceof Ast\FunctionDecl || $item->signatureOnly || $item->foreign) {
-            continue;
-        }
-
-        if (! functionReturnsIo($item->type) || isForeignIoBody($item->body)) {
-            continue;
-        }
-
-        $names[$item->name] = true;
-    }
-
-    return $names;
-}
-
-/**
- * The workers a module publishes, from its facts when it has them and from its checked program
- * otherwise.
- *
- * @param array<string, array<string, mixed>> $units
- * @return array<string, true>
- */
-function moduleWorkerFnNames(array $units, string $moduleName): array
-{
-    /** @var array<string, array<string, true>> $cache */
-    static $cache = [];
-
-    $unit = $units[$moduleName] ?? null;
-    $facts = \is_array($unit) ? ($unit['facts']['workers'] ?? null) : null;
-    if (\is_array($facts)) {
-        return $facts;
-    }
-
-    $key = \is_array($unit)
-        ? $moduleName . "\0" . \hash('xxh3', (string) ($unit['source'] ?? '') . "\0" . (string) ($unit['path'] ?? ''))
-        : $moduleName;
-    if (isset($cache[$key])) {
-        return $cache[$key];
-    }
-
-    $program = \is_array($unit) ? ($unit['checkedProgram'] ?? null) : null;
-
-    return $cache[$key] = ($program instanceof Ast\Program)
-        ? workerFnNames($program->items)
-        : [];
+    return moduleActionFacts($units, $moduleName)['actionReturn'];
 }
 
 /**
@@ -292,7 +266,7 @@ function moduleWorkerFnNames(array $units, string $moduleName): array
  */
 function importedWorkerSymbol(array $units, array $origin): ?string
 {
-    if (! isset(moduleWorkerFnNames($units, $origin['module'])[$origin['phpName']])) {
+    if (! isset(moduleActionFacts($units, $origin['module'])['workers'][$origin['phpName']])) {
         return null;
     }
 
@@ -381,11 +355,13 @@ function preparedModuleFacts(array $unit, Ast\Program $checked, string $moduleNa
 
     $evidence = mergeEvidenceMetas($metas);
 
+    $actions = actionEntryFacts($checked->items);
+
     return [
         'evidence' => $evidence,
         'evidenceChecked' => $checkedMeta,
-        'actionReturn' => actionReturnFnNamesFromProgram($checked),
-        'workers' => workerFnNames($checked->items),
+        'actionReturn' => $actions['actionReturn'],
+        'workers' => $actions['workers'],
         'trueBindings' => trueBindingOrigins($checked->items, $moduleName),
         'callables' => callableFactsFromProgram(
             $checked,

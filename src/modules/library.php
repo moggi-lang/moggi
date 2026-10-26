@@ -693,6 +693,34 @@ final class ConfiguredStdlibPhp
     }
 }
 
+/**
+ * The ABI stamp a compiled tree carries: the one thing that says whether it can be linked against.
+ *
+ * Every `IO` entry in a tree defines a `__w_` worker whose name this compiler generates, so a tree
+ * built by another compiler has the entries and not the workers the emitted calls name.
+ */
+const ABI_STAMP = '__moggi_abi';
+
+function writeAbiStamp(string $root): bool
+{
+    return \file_put_contents($root . DIRECTORY_SEPARATOR . ABI_STAMP, \Moggi\IR\Callables\ABI_VERSION . "\n") !== false;
+}
+
+function assertAbiStamp(string $root, string $shown): void
+{
+    $stamp = $root . DIRECTORY_SEPARATOR . ABI_STAMP;
+    $version = \is_file($stamp) ? \trim((string) \file_get_contents($stamp)) : '';
+    if ($version === (string) \Moggi\IR\Callables\ABI_VERSION) {
+        return;
+    }
+
+    throw new TypeError(
+        $version === ''
+            ? "the prebuilt library tree `{$shown}` carries no ABI stamp, so it cannot be shown to define the `__w_` workers this compiler calls; rebuild it with this compiler and `--unpacked`"
+            : "the prebuilt library tree `{$shown}` was built for ABI v{$version}; this compiler emits ABI v" . \Moggi\IR\Callables\ABI_VERSION . " — rebuild it",
+    );
+}
+
 function setStdlibPhpPath(?string $path): void
 {
     if ($path === null) {
@@ -713,6 +741,7 @@ function setStdlibPhpPath(?string $path): void
         );
     }
 
+    assertAbiStamp($real, $path);
     ConfiguredStdlibPhp::set($real);
 }
 
@@ -729,11 +758,15 @@ function detectStdlibPhpPath(?string $outputFile): ?string
 
     $dir = \dirname(\realpath($outputFile) ?: $outputFile);
     if (\is_file($dir . DIRECTORY_SEPARATOR . 'Data' . DIRECTORY_SEPARATOR . 'Eq.php')) {
+        assertAbiStamp($dir, $dir);
+
         return $dir;
     }
 
     $sibling = $dir . DIRECTORY_SEPARATOR . 'lib';
     if (\is_file($sibling . DIRECTORY_SEPARATOR . 'Data' . DIRECTORY_SEPARATOR . 'Eq.php')) {
+        assertAbiStamp($sibling, $sibling);
+
         return $sibling;
     }
 

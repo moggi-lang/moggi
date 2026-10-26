@@ -3,19 +3,21 @@
 namespace Moggi\IR\Callables;
 
 use Moggi\IR;
+use Moggi\Syntax\Ast\TypeArrow;
 
 use function Moggi\IR\Visit\boundLocalsInBlock;
 use function Moggi\IR\Visit\collectLambdaRefsInBlock;
 use function Moggi\IR\Visit\freeLocalsInBlock;
 use function Moggi\Semantics\IoBoundary\functionReturnsIo;
 use function Moggi\Semantics\IoBoundary\stripConstraints;
+use function Moggi\Syntax\Ast\generatedWorkerPrefix;
 
 /**
  * The callable table: one authoritative record per entry, and the one producer of a lifted
  * callable's capture layout.
  *
  * Every entry has a published `CallableSig` — evidence slots, capture slots and user value
- * parameters as three distinct things, plus the result, acquisition and execution conventions —
+ * parameters as three distinct things, plus the result and acquisition conventions —
  * computed once per compilation revision. Before this module the same logical
  * layout was derived at seven independent sites (`bindLambdaCaptures`, the optimizer's inline
  * metadata, the module arity table, and each of the three backends), and the two sides of a call
@@ -24,8 +26,8 @@ use function Moggi\Semantics\IoBoundary\stripConstraints;
  * evidence slots taken out of it, because making `E ++ C` the runtime order is a separate slice.
  *
  * What this module does not yet publish: imported entries — their facts travel in the module
- * `facts` record — and the action worker/action-value split at the IR node level, where
- * `ExecutionConvention` is recorded here and `ActionConvention` carries it in the tree.
+ * `facts` record — and the action worker/action-value split at the IR node level, which
+ * `IR\FunctionDecl::$kind` (`Worker`) and `$actionConvention` carry in the tree.
  */
 const ABI_VERSION = 1;
 
@@ -37,30 +39,49 @@ const ABI_VERSION = 1;
  */
 function workerName(string $entry): string
 {
-    return '__w_' . $entry;
+    return generatedWorkerPrefix() . $entry;
 }
 
 /**
- * Whether a callable name is a generated worker — `__w_x` here, `Module::__w_x` across one.
+ * The workers a lowered module declares, by worker name.
  *
- * The inverse of {@see workerName()}, for the passes that must keep a run in statement position
- * without the callee's body at hand.
+ * The fact is `FunctionKind::Worker` on the lowered declaration — what lowering allocated — so a
+ * pass asks {@see calleeIsRun()} with a declaration instead of the generated spelling.
+ *
+ * @return array<string, IR\FunctionDecl>
  */
-function isWorkerName(string $name): bool
+function workerDeclarations(IR\Module $module): array
 {
-    return workerEntry($name) !== null;
-}
-
-/** The entry a worker's name runs, or null when `$name` is not a worker. */
-function workerEntry(string $name): ?string
-{
-    $tail = \strrpos($name, '::');
-    $local = $tail === false ? $name : \substr($name, $tail + 2);
-    if (! \str_starts_with($local, '__w_')) {
-        return null;
+    $workers = [];
+    foreach ($module->functions as $decl) {
+        if ($decl->kind === IR\FunctionKind::Worker) {
+            $workers[$decl->name] = $decl;
+        }
     }
 
-    return \substr($local, \strlen('__w_'));
+    return $workers;
+}
+
+/**
+ * Whether a call to `$callee` is a run.
+ *
+ * A run site calls the producer's worker, so the answer is the declaration's kind whenever the
+ * callee is at hand. For a callee from another module — an inlined body's imported call, where
+ * only the resolved symbol is left — the answer is the generated namespace, which is exact
+ * because the checker refuses a source declaration that names itself into it
+ * (`assertNotGeneratedWorkerName()`): a `__w_` name can only have been written by
+ * {@see workerName()}.
+ */
+function calleeIsRun(?IR\FunctionDecl $decl, string $callee): bool
+{
+    if ($decl !== null) {
+        return $decl->kind === IR\FunctionKind::Worker;
+    }
+
+    $prefix = generatedWorkerPrefix();
+    $tail = \strrpos($callee, '::');
+
+    return \str_starts_with($tail === false ? $callee : \substr($callee, $tail + 2), $prefix);
 }
 
 /** Whether an entry's result is a plain value, a callable value, or an action value. */
@@ -77,22 +98,6 @@ enum ResultConvention: string
      * already knows is what closes the gap.
      */
     case Unclassified = 'unclassified';
-}
-
-/**
- * How a caller obtains an entry's result.
- *
- * `ReturnAction` builds an action value and runs nothing; `RunAndReturn` is the FFI worker — it
- * performs the host call in the caller's execution region and answers with the value. `Unresolved`
- * is the entry whose type the checker left unclassified: the IR does not settle which convention
- * it follows, so it is recorded as its own kind rather than defaulted.
- */
-enum ExecutionConvention: string
-{
-    case ReturnValue = 'return-value';
-    case ReturnAction = 'return-action';
-    case RunAndReturn = 'run-and-return';
-    case Unresolved = 'unresolved';
 }
 
 /**
@@ -141,7 +146,6 @@ final class CallableSig
         public array $captures,
         public array $params,
         public ResultConvention $result,
-        public ExecutionConvention $execution,
         public AcquisitionKind $acquisition,
         public ?bool $returnsCallable = null,
         public int $abiVersion = ABI_VERSION,
@@ -365,7 +369,7 @@ function table(array $functions, string $module = ''): CallableTable
             $evidence[] = new EvidenceSlot($slot);
         }
 
-        [$result, $execution, $returnsCallable] = resultConventions($function, \count($evidenceNames));
+        [$result, $returnsCallable] = resultConventions($function, \count($evidenceNames));
 
         $byEntry[$function->name] = new CallableSig(
             $function->name,
@@ -375,7 +379,6 @@ function table(array $functions, string $module = ''): CallableTable
             $captures,
             $params,
             $result,
-            $execution,
             $result === ResultConvention::Action || $result === ResultConvention::Unclassified
                 ? AcquisitionKind::Callable
                 : (($params === [] && $function->kind === IR\FunctionKind::Source)
@@ -399,33 +402,26 @@ function table(array $functions, string $module = ''): CallableTable
  * lowering records the checker's type on lifted callables too, that case is now limited to a
  * synthetic lambda the checker left no type on (`\x -> …` desugared inside lowering).
  *
- * @return array{ResultConvention, ExecutionConvention, ?bool}
+ * @return array{ResultConvention, ?bool}
  */
 function resultConventions(IR\FunctionDecl $function, int $evidenceSlots = 0): array
 {
     if ($function->kind === IR\FunctionKind::Worker) {
-        return [ResultConvention::Value, ExecutionConvention::ReturnValue, null];
+        return [ResultConvention::Value, null];
     }
 
     $type = $function->type;
     if ($type === null) {
-        return [ResultConvention::Unclassified, ExecutionConvention::Unresolved, null];
+        return [ResultConvention::Unclassified, null];
     }
 
     if (functionReturnsIo($type)) {
-        if ($function->kind !== IR\FunctionKind::Source) {
-            return [ResultConvention::Action, ExecutionConvention::ReturnAction, null];
-        }
-
-        return match ($function->actionConvention) {
-            IR\ActionConvention::ReturnsAction => [ResultConvention::Action, ExecutionConvention::ReturnAction, null],
-            IR\ActionConvention::Executes => [ResultConvention::Action, ExecutionConvention::RunAndReturn, null],
-        };
+        return [ResultConvention::Action, null];
     }
 
     $arrows = 0;
     $cursor = stripConstraints($type);
-    while ($cursor instanceof \Moggi\Syntax\Ast\TypeArrow) {
+    while ($cursor instanceof TypeArrow) {
         ++$arrows;
         $cursor = $cursor->to;
     }
@@ -435,7 +431,6 @@ function resultConventions(IR\FunctionDecl $function, int $evidenceSlots = 0): a
 
     return [
         $returnsCallable ? ResultConvention::Callable : ResultConvention::Value,
-        ExecutionConvention::ReturnValue,
         $returnsCallable,
     ];
 }

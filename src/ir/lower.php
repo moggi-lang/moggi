@@ -67,7 +67,7 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
         }
     }
 
-    $actionReturningEntries = actionReturningEntryNames($program->items) + $interface->actionReturn;
+    $actionReturningEntries = \Moggi\Modules\actionEntryFacts($program->items)['actionReturn'] + $interface->actionReturn;
     $workers = workerEntries($program->items) + importedWorkerEntries($interface, $localBindings);
     $workerEntries = executingEntryNames($program->items, $interface->env, $interface->actionReturn);
     $state->trueBindings = trueBindingOrigins($program->items, $moduleName) + $interface->trueBindings;
