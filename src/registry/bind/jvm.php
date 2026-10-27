@@ -96,6 +96,9 @@ function jvmClassPrefix(string $group): string
  * shape the backend itself scans), keeping the classes under the coordinate's
  * group prefix.
  *
+ * `$treeRoot` is the resolver's tree, which holds the `jvm/` directory
+ * {@see \Moggi\Registry\hostToolArtifactRoot()} forwards to `--lib-maven` — not that root itself.
+ *
  * @return array{backend: string, coordinate: string, module: string, jars: list<string>, types: list<array<string, mixed>>, functions: list<array<string, mixed>>, consts: list<array<string, mixed>>, skipped: list<array{symbol: string, reason: string}>}
  */
 function inspectJvmTree(string $treeRoot, string $group, string $artifact): array

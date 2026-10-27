@@ -7,6 +7,8 @@ use Moggi\Pipeline\CompilationContext;
 use Moggi\Semantics\TypeExpr\Scheme;
 use Moggi\Syntax\Ast;
 
+use function Moggi\Semantics\Foreign\programDeclaresForeign;
+
 /** A single module after type checking and IO normalization. */
 final class CheckedModule
 {
@@ -65,11 +67,16 @@ final class PreparedProject
         $unit = $this->units[$moduleName] ?? null;
         $contentKey = \is_array($unit) ? ($unit['contentKey'] ?? null) : null;
         $relPath = \is_array($unit) ? ($unit['cacheRelPath'] ?? null) : null;
+        $program = \is_array($unit) ? ($unit['program'] ?? null) : null;
         if ($contentKey !== null && $relPath !== null) {
             $cached = Cache\moduleGet(
                 $relPath,
                 'checked',
-                $context->moduleKey($moduleName, $contentKey),
+                $context->checkedKey(
+                    $moduleName,
+                    $contentKey,
+                    $program instanceof Ast\Program && programDeclaresForeign($program),
+                ),
                 $context->backendId,
             );
             if (\is_array($cached) && ($cached['program'] ?? null) instanceof Ast\Program) {

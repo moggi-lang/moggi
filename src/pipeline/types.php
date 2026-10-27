@@ -9,6 +9,7 @@ use Moggi\Modules\ImportContext;
 use Moggi\Syntax\Ast\Program;
 
 use function Moggi\Backend\backendById;
+use function Moggi\Modules\hostLibraryCacheMaterial;
 
 /**
  * Why this compilation is happening. Controls entry validation, tree-shake
@@ -68,6 +69,9 @@ final class CompilationContext
      * @param array<string, true> $entries module names treated as entry points
      * @param list<string> $roots module search roots, in search order
      * @param list<string> $sources source paths in the compilation
+     * @param string $host the host trees this compilation links against, as
+     *   {@see \Moggi\Modules\hostLibraryCacheMaterial} spells them. Held rather than read from the
+     *   registry at key time, which can be reset between construction and lookup.
      */
     public function __construct(
         public readonly string $backendId,
@@ -76,6 +80,7 @@ final class CompilationContext
         public readonly array $entries,
         public readonly array $roots,
         public readonly array $sources,
+        public readonly string $host = '',
     ) {
     }
 
@@ -98,6 +103,7 @@ final class CompilationContext
             \array_fill_keys($entryModules, true),
             \array_values($roots),
             \array_values($sources),
+            hostLibraryCacheMaterial(),
         );
     }
 
@@ -136,6 +142,7 @@ final class CompilationContext
             $this->entries,
             $this->roots,
             \array_values($sources),
+            $this->host,
         );
     }
 
@@ -149,10 +156,16 @@ final class CompilationContext
             $this->entries,
             \array_values($roots),
             $this->sources,
+            $this->host,
         );
     }
 
-    /** The inputs a cache entry depends on, in one stable spelling. */
+    /**
+     * The inputs a cache entry depends on, in one stable spelling.
+     *
+     * `host` is there because host trees are registered outside `roots`; without it a compile that
+     * carries a host tree and one that does not would key the same and share products.
+     */
     public function cacheKeyMaterial(): string
     {
         $entries = \array_keys($this->entries);
@@ -166,6 +179,7 @@ final class CompilationContext
             'entries=' . \implode(',', $entries),
             'roots=' . \implode(',', $this->roots),
             'sources=' . \implode(',', $sources),
+            'host=' . $this->host,
         ]);
     }
 
@@ -234,6 +248,23 @@ final class CompilationContext
     public function moduleKey(?string $module, string $contentKey): string
     {
         return \hash('xxh128', $contentKey . "\n" . $this->moduleCacheMaterial($module));
+    }
+
+    /**
+     * The declared cache key for one module's *checked* product.
+     *
+     * Checking a host declaration asks the backend whether the carried tree backs it, so that product
+     * is valid only for the host identity it was checked against. A module with no host declaration
+     * keeps the shared {@see moduleKey}, and IR and the export products are host-blank either way.
+     */
+    public function checkedKey(?string $module, string $contentKey, bool $declaresForeign): string
+    {
+        $key = $this->moduleKey($module, $contentKey);
+        if (! $declaresForeign) {
+            return $key;
+        }
+
+        return \hash('xxh128', $key . "\nhost=" . $this->host);
     }
 }
 

@@ -985,13 +985,18 @@ function hostToolArtifactPaths(string $backend, string $dir): array
  * artifact directory and not the tree around it: pointing `--lib-maven` at the
  * tree would leave the jars one level down from where the flag says they are,
  * and the compile refuses a tree that does not hold its artifact.
+ *
+ * Every backend is named, so an unknown one is refused (as
+ * `\Moggi\Modules\hostLibraryShape()` refuses it) instead of silently forwarding
+ * the tree. The bind inspectors take the tree, not this root.
  */
 function hostToolArtifactRoot(string $backend, string $dir): string
 {
     return match ($backend) {
+        'php' => $dir,
         'jvm' => \rtrim($dir, '/') . '/jvm',
         'dotnet' => \rtrim($dir, '/') . '/dotnet',
-        default => $dir,
+        default => throw new \RuntimeException("no host package manager for backend `{$backend}`"),
     };
 }
 

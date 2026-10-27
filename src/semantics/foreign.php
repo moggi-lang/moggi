@@ -25,6 +25,25 @@ use function Moggi\Semantics\Kernel\boundaryStringTypeName;
 use function Moggi\Semantics\Kernel\isBoundaryContainerType;
 use function Moggi\Semantics\Kernel\isBoundaryHandleType;
 use function Moggi\Semantics\Types\typeFail;
+use function Moggi\Semantics\Types\walkAstValues;
+
+/**
+ * Does this module declare a host symbol?
+ *
+ * Such a module is checked against the carried host tree, so only it needs a host-specific cache key
+ * ({@see \Moggi\Pipeline\CompilationContext::checkedKey}); the library cache stays shared.
+ */
+function programDeclaresForeign(Ast\Program $program): bool
+{
+    $found = false;
+    walkAstValues($program, static function (Ast\AstNode $node) use (&$found): void {
+        if ($node instanceof Ast\ForeignImportDecl) {
+            $found = true;
+        }
+    });
+
+    return $found;
+}
 
 function checkForeignImportItem(TypeCheckState $state, Ast\ForeignImportDecl $item): Ast\FunctionDecl
 {

@@ -13,6 +13,24 @@ use function Moggi\Paths\globPaths;
 use function Moggi\Registry\safeDigestKey;
 
 /**
+ * What a scan would read: each directory, and the fingerprint of every sidecar and assembly in it.
+ *
+ * @param list<string> $dirs
+ */
+function dotNetLibMetadataKey(array $dirs): string
+{
+    $parts = [];
+    foreach ($dirs as $dir) {
+        $parts[] = 'dir=' . $dir;
+        foreach ([...globPaths($dir . '/*.json'), ...globPaths($dir . '/*.dll')] as $file) {
+            $parts[] = $file . ':' . fileFingerprint($file);
+        }
+    }
+
+    return \hash('xxh128', \implode("\n", $parts));
+}
+
+/**
  * Library-owned .NET host metadata.
  *
  * A library may drop `dotnet/*.json` files under its module directory (next to
@@ -277,12 +295,17 @@ const DOTNET_SIDECAR_FORMAT = 1;
  * server. A process-wide cache could reuse metadata built before registration,
  * misclassify value types (e.g. `System.Globalization.UnicodeCategory`), and
  * reject valid declarations. The number of distinct root sets is small.
+ *
+ * The key is the roots with the fingerprint of every sidecar and assembly they
+ * hold, not the root paths, so a tree rebuilt in place is read again in a
+ * long-lived host.
  */
 function dotNetLibMetadata(): array
 {
     static $cache = [];
 
-    $key = \implode("\n", [...libraryScanRoots(), ...hostLibraryRoots()]);
+    $dirs = discoverDotNetLibDirs();
+    $key = dotNetLibMetadataKey($dirs);
     if (isset($cache[$key])) {
         return $cache[$key];
     }
@@ -290,7 +313,7 @@ function dotNetLibMetadata(): array
     $types = [];
     $signatures = [];
 
-    foreach (discoverDotNetLibDirs() as $dir) {
+    foreach ($dirs as $dir) {
         $files = globPaths($dir . '/*.json');
         \sort($files);
         foreach ($files as $file) {

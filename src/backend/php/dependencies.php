@@ -3,6 +3,7 @@
 namespace Moggi\Backend\Php\Dependencies;
 
 use function Moggi\Modules\hostLibraryRoots;
+use function Moggi\Modules\hostLibraryShapeSatisfied;
 use function Moggi\Modules\libraryScanRoots;
 use function Moggi\Paths\globPaths;
 
@@ -34,7 +35,7 @@ function composerVendorRoots(): array
 {
     $roots = [];
     foreach ([...libraryScanRoots(), ...hostLibraryRoots()] as $root) {
-        if (\is_file(\rtrim($root, '/') . '/' . COMPOSER_AUTOLOAD)) {
+        if (hostLibraryShapeSatisfied('php', $root)) {
             $roots[] = $root;
         }
     }

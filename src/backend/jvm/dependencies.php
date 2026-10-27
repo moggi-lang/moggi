@@ -3,6 +3,7 @@
 namespace Moggi\Backend\Jvm\Dependencies;
 
 use function Moggi\Modules\hostLibraryRoots;
+use function Moggi\Modules\hostLibraryShapeSatisfied;
 use function Moggi\Modules\libraryScanRoots;
 use function Moggi\Paths\globPaths;
 
@@ -63,7 +64,7 @@ function discoverVendorJvmDirs(): array
 {
     $dirs = [];
     foreach (hostLibraryRoots() as $host) {
-        if (globPaths(\rtrim($host, '/') . '/*.jar') !== []) {
+        if (hostLibraryShapeSatisfied('jvm', $host)) {
             $dirs[$host] = true;
         }
     }

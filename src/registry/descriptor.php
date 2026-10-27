@@ -388,8 +388,6 @@ function descriptorFormatProblems(string $path): array
             continue;
         }
         if (\preg_match('/^([A-Za-z0-9_.\-:\/]+)\s*=/', $trimmed, $match) !== 1) {
-            // A quoted or otherwise unspellable key (`"acme:hello" = 1.0.0`) is reported like any other
-            // line that is not `key = value`, rather than reading an absent group as the key.
             $problems[] = "{$where}: not `key = value` and not a section header";
 
             continue;

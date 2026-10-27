@@ -690,16 +690,30 @@ final class ConfiguredHostLibraries
     /** @var list<string> */
     private static array $roots = [];
 
+    /** The identity of {@see $roots}, or null until it is computed for this set. */
+    private static ?string $material = null;
+
     /** @param list<string> $roots */
     public static function set(array $roots): void
     {
         self::$roots = $roots;
+        self::$material = null;
     }
 
     /** @return list<string> */
     public static function get(): array
     {
         return self::$roots;
+    }
+
+    public static function material(): ?string
+    {
+        return self::$material;
+    }
+
+    public static function rememberMaterial(string $material): void
+    {
+        self::$material = $material;
     }
 }
 
@@ -791,4 +805,54 @@ function assertHostLibraryShape(string $backend, string $root, string $shown): v
 function hostLibraryRoots(): array
 {
     return ConfiguredHostLibraries::get();
+}
+
+/**
+ * The host trees a compilation is linked against, as one cache-key component: each tree's canonical
+ * path plus a content hash of every file under it, so an edit in place is a different identity too.
+ * Empty when no tree is registered. Computed once per set, since keys are evaluated per module.
+ */
+function hostLibraryCacheMaterial(): string
+{
+    $roots = hostLibraryRoots();
+    if ($roots === []) {
+        return '';
+    }
+
+    $remembered = ConfiguredHostLibraries::material();
+    if ($remembered !== null) {
+        return $remembered;
+    }
+
+    \sort($roots, \SORT_STRING);
+    $parts = [];
+    foreach ($roots as $root) {
+        $real = \realpath($root);
+        if ($real === false || ! \is_dir($real)) {
+            $parts[] = 'tree=' . $root . ':missing';
+
+            continue;
+        }
+        $parts[] = 'tree=' . $real;
+        $files = [];
+        $items = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($real, \FilesystemIterator::SKIP_DOTS),
+        );
+        /** @var \SplFileInfo $item */
+        foreach ($items as $item) {
+            if (! $item->isFile()) {
+                continue;
+            }
+            $path = $item->getPathname();
+            $hash = @\hash_file('xxh128', $path);
+            $files[] = \substr($path, \strlen($real) + 1) . ':' . ($hash === false ? 'unreadable' : $hash);
+        }
+        \sort($files, \SORT_STRING);
+        $parts[] = \implode("\n", $files);
+    }
+
+    $material = \hash('xxh128', \implode("\n", $parts));
+    ConfiguredHostLibraries::rememberMaterial($material);
+
+    return $material;
 }
