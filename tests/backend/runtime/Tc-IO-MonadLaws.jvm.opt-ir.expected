@@ -1,9 +1,0 @@
-module
-  function main()
-      t3 = io_assign_action
-        result call __w_main()
-      ret t3
-  function __w_main()
-      t0 = call System.IO.JVM::__w_putStrLn("a")
-      t1 = call System.IO.JVM::__w_putStrLn("left-id")
-      ret ()

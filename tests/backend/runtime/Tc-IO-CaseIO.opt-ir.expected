@@ -1,38 +1,41 @@
 module
   function emitWhen(b)
       t3 = io_assign_action
-        result call __w_emitWhen(b)
+          t2 = call __w_emitWhen(b)
+        result t2
       ret t3
   function __w_emitWhen(b)
       io_match b
         arm True
-            t0 = call System.IO.PHP::__w_putStrLn("y")
+            t0 = call System.IO::__w_putStrLn("y")
             ret ()
         arm False
-            t1 = call System.IO.PHP::__w_putStrLn("n")
+            t1 = call System.IO::__w_putStrLn("n")
             ret ()
       ret ()
   function pick(b)
       t7 = io_assign_action
-        result call __w_pick(b)
+          t6 = call __w_pick(b)
+        result t6
       ret t7
   function __w_pick(b)
       io_match b
         arm True
-            t4 = call System.IO.PHP::__w_putStrLn("yes")
+            t4 = call System.IO::__w_putStrLn("yes")
             ret ()
         arm False
-            t5 = call System.IO.PHP::__w_putStrLn("no")
+            t5 = call System.IO::__w_putStrLn("no")
             ret ()
       ret ()
   function pickOrError(b)
       t11 = io_assign_action
-        result call __w_pickOrError(b)
+          t10 = call __w_pickOrError(b)
+        result t10
       ret t11
   function __w_pickOrError(b)
       io_match b
         arm True
-            t8 = call System.IO.PHP::__w_putStrLn("yes")
+            t8 = call System.IO::__w_putStrLn("yes")
             ret ()
         arm False
             t9 = io_call error("no")
@@ -41,14 +44,15 @@ module
       ret ()
   function main()
       t20 = io_assign_action
-        result call __w_main()
+          t19 = call __w_main()
+        result t19
       ret t20
   function __w_main()
-      t12 = call System.IO.PHP::__w_putStrLn("linear")
+      t12 = call System.IO::__w_putStrLn("linear")
       t13 = call __w_emitWhen(@True)
-      t14 = call System.IO.PHP::__w_putStrLn("deferred")
-      t15 = call System.IO.PHP::__w_putStrLn("before")
+      t14 = call System.IO::__w_putStrLn("deferred")
+      t15 = call System.IO::__w_putStrLn("before")
       t16 = call __w_pick(@True)
-      t17 = call System.IO.PHP::__w_putStrLn("error-branch")
+      t17 = call System.IO::__w_putStrLn("error-branch")
       t18 = call __w_pickOrError(@True)
       ret ()

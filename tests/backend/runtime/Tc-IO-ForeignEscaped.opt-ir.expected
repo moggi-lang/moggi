@@ -1,14 +1,18 @@
 module
   function isFileP(p)
       t2 = io_assign_action
-        result call __w_isFileP(p)
+          t1 = call __w_isFileP(p)
+        result t1
       ret t2
   function __w_isFileP(p)
-      ret call System.Directory.PHP::__w_doesFileExist(p)
+      t0 = call System.Directory::__w_doesFileExist(p)
+      ret t0
   function main()
       t6 = io_assign_action
-        result call __w_main()
+          t5 = call __w_main()
+        result t5
       ret t6
   function __w_main()
       t3 = call __w_isFileP("\/tmp\/moggi-tc-io-foreign.txt")
-      ret call __tuple0()
+      t4 = call __tuple0()
+      ret t4

@@ -15,6 +15,7 @@ use function Moggi\Modules\resolvedSymbol;
 use function Moggi\Optimize\CaseFold\clearNullaryCtorCafs;
 use function Moggi\Optimize\CaseFold\isPlausibleConstructorName;
 use function Moggi\Optimize\CaseFold\nullaryCtorCaf;
+use function Moggi\Optimize\CaseFold\recordCtorDef;
 use function Moggi\Optimize\CaseFold\setFieldAccessorCafs;
 use function Moggi\Optimize\CaseFold\setNullaryCtorCafs;
 use function Moggi\Optimize\GlobalPass\rewriteStmtOperands;
@@ -25,6 +26,7 @@ use function Moggi\Optimize\Interproc\countLocalUsesInItems;
 use function Moggi\Optimize\Interproc\denseStmtItems;
 use function Moggi\Optimize\Interproc\isPeFusionInlineCandidate;
 use function Moggi\Optimize\Interproc\maxTempInItems;
+use function Moggi\Optimize\Interproc\nullaryFnNameIsNonDuplicableSeed;
 use function Moggi\Optimize\Interproc\operandHasFreeTemps;
 use function Moggi\Optimize\Interproc\operandIsNonDuplicable;
 use function Moggi\Optimize\Interproc\remapTempsInItems;
@@ -39,31 +41,14 @@ use function Moggi\Semantics\Kernel\isBoolCtor;
 
 
 /**
- * Whole-program call-site specialization for concrete evidence / constant args.
+ * Specialize concrete call arguments by cloning callees with leading FnRef/Const
+ * arguments burned in, then re-optimize affected modules.
  *
- * Clones a callee with known leading FnRef/Const arguments burned in, caches
- * by (callee, arg key), then re-optimizes affected modules.
+ * Only executable modules initiate specialization; clones may cross module
+ * boundaries. Reject unsafe clones and bound specialization to four rounds.
  *
- * Eligibility (architectural boundary, not an ad-hoc module denylist):
- * - Only *call sites* in modules that have an executable `Main` entry point
- *   are rewritten. Library modules stay polymorphic so evidence factories and
- *   shared dictionaries are not specialized from every consumer.
- * - Callees may live in any module; clones are added to the caller's module
- *   with qualified `Module::name` references (definitions and imports).
- * - Nested ExprCalls inside Ret/Call args are specialized (e.g.
- *   `buildRecord(fieldPairs(…))`), not only top-level Call statements.
- * - Fresh clones are specializeItems'd in the same round (bounded queue) so
- *   nested concrete calls are not stranded on the last outer round.
- * - Clones that would retain unbound `__ev_*` parameters, invented dict
- *   methods, Loop, or TailRecall are refused.
- * - At most 4 specialize→reoptimize rounds.
- *
- * @param array<string, IR\Module> $modules module name => optimized IR
+ * @param array<string, IR\Module> $modules
  * @param array<string, array<string, string>> $externalFnsByModule
- *        module => (bare local name => `Origin::name`) from that module's
- *        import context. Required so cross-module clones keep the source
- *        module's binding when the destination imports a different symbol
- *        under the same short name (e.g. `Data.Map.lookup` vs `Data.List.lookup`).
  * @return array{modules: array<string, IR\Module>, stats: array{specializations: int, cacheHits: int}}
  */
 function specializeAcrossModules(array $modules, array $externalFnsByModule = []): array
@@ -465,20 +450,20 @@ function collectFieldAccessorCafs(array $modules): array
                 continue;
             }
             $items = denseStmtItems($function->body->items);
-            if (\count($items) !== 1 || ! ($items[0] instanceof IR\Ret)) {
-                continue;
-            }
-            $ret = $items[0]->value;
             if (
-                ! ($ret instanceof IR\ExprCall)
-                || ! \str_starts_with($ret->callee, '__field')
-                || \count($ret->args) !== 1
-                || ! ($ret->args[0] instanceof IR\Local)
-                || $ret->args[0]->name !== $function->params[0]
+                \count($items) !== 2
+                || ! ($items[0] instanceof IR\Call)
+                || ! \str_starts_with($items[0]->callee, '__field')
+                || \count($items[0]->args) !== 1
+                || ! ($items[0]->args[0] instanceof IR\Local)
+                || $items[0]->args[0]->name !== $function->params[0]
+                || ! ($items[1] instanceof IR\Ret)
+                || ! ($items[1]->value instanceof IR\Temp)
+                || $items[1]->value->id !== $items[0]->dest
             ) {
                 continue;
             }
-            $idx = (int) \substr($ret->callee, \strlen('__field'));
+            $idx = (int) \substr($items[0]->callee, \strlen('__field'));
             $accessors[$function->name] = $idx;
             if ($moduleName !== '') {
                 $accessors[resolvedSymbol($moduleName, $function->name)] = $idx;
@@ -507,11 +492,7 @@ function collectNullaryCtorCafs(array $modules, array $externalFnsByModule = [])
             if ($function->params !== [] || $function->foreign) {
                 continue;
             }
-            $items = denseStmtItems($function->body->items);
-            if (\count($items) !== 1 || ! ($items[0] instanceof IR\Ret)) {
-                continue;
-            }
-            $tree = cafRetToCtorTree($items[0]->value, $moduleName, $externals);
+            $tree = cafRetToCtorTree(denseStmtItems($function->body->items), $moduleName, $externals);
             if ($tree === null) {
                 continue;
             }
@@ -526,59 +507,78 @@ function collectNullaryCtorCafs(array $modules, array $externalFnsByModule = [])
 }
 
 /**
+ * The constructor tree a function's body describes, or null when the body is not one call whose
+ * value it returns.
+ *
+ * A constructor application is a `Call` statement that writes a temp and a `Ret` that reads it, so
+ * the tree is read back through the same `CtorTree` records the case folder keeps: a nested
+ * constructor is the argument temp's own tree.
+ *
+ * @param list<IR\Stmt> $items
  * @param array<string, string> $externals
  */
-function cafRetToCtorTree(IR\Operand $value, string $moduleName = '', array $externals = []): ?CtorTree
+function cafRetToCtorTree(array $items, string $moduleName = '', array $externals = []): ?CtorTree
 {
-    if ($value instanceof IR\FnRef) {
-        if (isPlausibleConstructorName($value->name)) {
-            return new CtorTree($value->name, []);
-        }
-
+    $last = $items === [] ? null : $items[\count($items) - 1];
+    if (! ($last instanceof IR\Ret)) {
         return null;
     }
-    if ($value instanceof IR\ExprCall && isPlausibleConstructorName($value->callee)) {
-        $args = [];
-        foreach ($value->args as $arg) {
-            if ($arg instanceof IR\FnRef && isPlausibleConstructorName($arg->name)) {
-                $args[] = new CtorTree($arg->name, []);
 
-                continue;
-            }
-            if ($arg instanceof IR\FnRef) {
-                $name = $arg->name;
-                if ($name !== '' && ! \str_contains($name, '::') && ! \str_contains($name, '\\')) {
-                    if (isset($externals[$name])) {
-                        $args[] = new IR\FnRef($externals[$name]);
-
-                        continue;
-                    }
-                    if ($moduleName !== '') {
-                        $args[] = new IR\FnRef(resolvedSymbol($moduleName, $name));
-
-                        continue;
-                    }
-                }
-                $args[] = $arg;
-
-                continue;
-            }
-            if ($arg instanceof IR\ExprCall && isPlausibleConstructorName($arg->callee)) {
-                $nested = cafRetToCtorTree($arg, $moduleName, $externals);
-                if ($nested === null) {
-                    return null;
-                }
-                $args[] = $nested;
-
-                continue;
-            }
-            $args[] = $arg;
-        }
-
-        return new CtorTree($value->callee, $args);
+    if ($last->value instanceof IR\FnRef) {
+        return isPlausibleConstructorName($last->value->name)
+            ? new CtorTree($last->value->name, [])
+            : null;
     }
 
-    return null;
+    if (! ($last->value instanceof IR\Temp)) {
+        return null;
+    }
+
+    /** @var array<int, CtorTree|IR\Operand> $ctors */
+    $ctors = [];
+    /** @var array<int, IR\Operand> $aliases */
+    $aliases = [];
+    foreach ($items as $item) {
+        recordCtorDef($item, $ctors, $aliases);
+    }
+
+    $tree = $ctors[$last->value->id] ?? null;
+
+    return $tree instanceof CtorTree ? qualifyCtorTreeFns($tree, $moduleName, $externals) : null;
+}
+
+/** Qualify the bare `FnRef` leaves of a constructor tree to their module or external name.
+ *
+ * @param array<string, string> $externals
+ */
+function qualifyCtorTreeFns(CtorTree $tree, string $moduleName, array $externals): CtorTree
+{
+    $args = [];
+    foreach ($tree->args as $arg) {
+        if ($arg instanceof CtorTree) {
+            $args[] = qualifyCtorTreeFns($arg, $moduleName, $externals);
+
+            continue;
+        }
+        if ($arg instanceof IR\FnRef) {
+            $name = $arg->name;
+            if ($name !== '' && ! \str_contains($name, '::') && ! \str_contains($name, '\\')) {
+                if (isset($externals[$name])) {
+                    $args[] = new IR\FnRef($externals[$name]);
+
+                    continue;
+                }
+                if ($moduleName !== '') {
+                    $args[] = new IR\FnRef(resolvedSymbol($moduleName, $name));
+
+                    continue;
+                }
+            }
+        }
+        $args[] = $arg;
+    }
+
+    return new CtorTree($tree->name, $args, $tree->srcLoc);
 }
 
 /**
@@ -660,7 +660,7 @@ function operandHasHostOrForeign(IR\Operand $operand): bool
     if ($operand instanceof IR\ForeignCall) {
         return true;
     }
-    if ($operand instanceof IR\ExprCall || $operand instanceof IR\Intrinsic) {
+    if ($operand instanceof IR\Intrinsic) {
         foreach ($operand->args as $arg) {
             if (operandHasHostOrForeign($arg)) {
                 return true;
@@ -759,7 +759,7 @@ function resolveConcreteDictCallsInItems(array $items, array $globalEvidence): a
         }
 
         if ($item instanceof IR\Call && isConcreteSpecializeCall($item, $concreteTemps)) {
-            $concreteTemps[$item->dest] = new IR\ExprCall($item->callee, resolveConcreteArgs($item->args, $concreteTemps));
+            $concreteTemps[$item->dest] = ['callee' => $item->callee, 'args' => $item->args];
         } elseif ($item instanceof IR\Assign && isConcreteSpecializeArg(resolveConcreteOperand($item->value, $concreteTemps))) {
             $concreteTemps[$item->dest] = resolveConcreteOperand($item->value, $concreteTemps);
         }
@@ -838,13 +838,12 @@ function rewriteConcreteDictMethodOperand(
 ): IR\Operand {
     if ($operand instanceof IR\DictMethod) {
         $evidence = resolveConcreteOperand($operand->evidence, $concreteTemps);
+        $call = concreteCallOf($operand->evidence, $concreteTemps);
         $evName = null;
-        if ($evidence instanceof IR\FnRef && isEvidenceFactoryName($evidence->name)) {
+        if ($call !== null && $call['args'] === [] && isEvidenceFactoryName($call['callee'])) {
+            $evName = specializationLookupName($call['callee']);
+        } elseif ($evidence instanceof IR\FnRef && isEvidenceFactoryName($evidence->name)) {
             $evName = specializationLookupName($evidence->name);
-        } elseif ($evidence instanceof IR\ExprCall
-            && isEvidenceFactoryName($evidence->callee)
-            && $evidence->args === []) {
-            $evName = specializationLookupName($evidence->callee);
         }
 
         $evInfo = $evName === null ? null : ($globalEvidence[$evName] ?? null);
@@ -875,16 +874,13 @@ function rewriteConcreteDictMethodOperand(
 function tryResolveConcreteDictCall(IR\DictCall $stmt, array $concreteTemps, array $globalEvidence): ?IR\Stmt
 {
     $evidence = resolveConcreteOperand($stmt->evidence, $concreteTemps);
+    $call = concreteCallOf($stmt->evidence, $concreteTemps);
     $binding = null;
 
-    if ($evidence instanceof IR\FnRef && isEvidenceFactoryName($evidence->name)) {
+    if ($call !== null && isEvidenceFactoryName($call['callee']) && isConcreteApplication($call, $concreteTemps)) {
+        $binding = ['name' => specializationLookupName($call['callee']), 'args' => $call['args']];
+    } elseif ($evidence instanceof IR\FnRef && isEvidenceFactoryName($evidence->name)) {
         $binding = ['name' => specializationLookupName($evidence->name), 'args' => []];
-    } elseif (
-        $evidence instanceof IR\ExprCall
-        && isEvidenceFactoryName($evidence->callee)
-        && isConcreteSpecializeArg($evidence)
-    ) {
-        $binding = ['name' => specializationLookupName($evidence->callee), 'args' => $evidence->args];
     }
 
     if ($binding === null) {
@@ -973,7 +969,7 @@ function specializeItems(
         }
 
         if ($item instanceof IR\Call && isConcreteSpecializeCall($item, $concreteTemps)) {
-            $concreteTemps[$item->dest] = new IR\ExprCall($item->callee, resolveConcreteArgs($item->args, $concreteTemps));
+            $concreteTemps[$item->dest] = ['callee' => $item->callee, 'args' => $item->args];
         } elseif ($item instanceof IR\Assign && isConcreteSpecializeArg(resolveConcreteOperand($item->value, $concreteTemps))) {
             $concreteTemps[$item->dest] = resolveConcreteOperand($item->value, $concreteTemps);
         }
@@ -1088,9 +1084,8 @@ function specializeItems(
 }
 
 /**
- * Specialize nested ExprCalls inside an operand (e.g. `buildRecord(fieldPairs(…))`).
- * Top-level Call/Ret sites alone miss nested concrete dictionaries after folding.
- *
+ * Specialize the operands of a statement's call — arguments still to be resolved against the
+ * concrete records the block has seen.
  * @param array<string, true> $localNames
  * @param array<string, array{module: string, function: IR\FunctionDecl}> $globalIndex
  * @param array<string, array{module: string, name: string}> $cache
@@ -1110,83 +1105,6 @@ function specializeOperand(
     int &$cacheHits,
     array $concreteTemps,
 ): array {
-    if ($operand instanceof IR\ExprCall) {
-        $nested = specializeOperandList(
-            $operand->args,
-            $selfName,
-            $moduleName,
-            $localNames,
-            $globalIndex,
-            $cache,
-            $added,
-            $specializations,
-            $cacheHits,
-            $concreteTemps,
-        );
-        $args = resolveConcreteArgs($nested['args'], $concreteTemps);
-        $spec = resolveSpecializedCallee(
-            $operand->callee,
-            $args,
-            $selfName,
-            $moduleName,
-            $localNames,
-            $globalIndex,
-            $cache,
-            $added,
-            $specializations,
-            $cacheHits,
-        );
-        if ($spec !== null) {
-            return [
-                'operand' => new IR\ExprCall($spec['name'], \array_slice($args, $spec['burned']), $operand->srcLoc),
-                'changed' => true,
-            ];
-        }
-        if ($nested['changed']) {
-            return [
-                'operand' => new IR\ExprCall($operand->callee, $nested['args']),
-                'changed' => true,
-            ];
-        }
-
-        return ['operand' => $operand, 'changed' => false];
-    }
-
-    if ($operand instanceof IR\ExprBinop) {
-        $left = specializeOperand(
-            $operand->left,
-            $selfName,
-            $moduleName,
-            $localNames,
-            $globalIndex,
-            $cache,
-            $added,
-            $specializations,
-            $cacheHits,
-            $concreteTemps,
-        );
-        $right = specializeOperand(
-            $operand->right,
-            $selfName,
-            $moduleName,
-            $localNames,
-            $globalIndex,
-            $cache,
-            $added,
-            $specializations,
-            $cacheHits,
-            $concreteTemps,
-        );
-        if ($left['changed'] || $right['changed']) {
-            return [
-                'operand' => new IR\ExprBinop($operand->op, $left['operand'], $right['operand']),
-                'changed' => true,
-            ];
-        }
-
-        return ['operand' => $operand, 'changed' => false];
-    }
-
     if ($operand instanceof IR\ListLit) {
         $els = specializeOperandList(
             $operand->elements,
@@ -1291,27 +1209,85 @@ function resolveConcreteArgs(array $args, array $concreteTemps): array
     );
 }
 
-/** @param array<int, IR\Operand> $concreteTemps */
+/** @param array<int, IR\Operand|array{callee: string, args: list<IR\Operand>}> $concreteTemps */
 function resolveConcreteOperand(IR\Operand $arg, array $concreteTemps): IR\Operand
 {
     if ($arg instanceof IR\Temp && isset($concreteTemps[$arg->id])) {
-        return $concreteTemps[$arg->id];
-    }
-    if ($arg instanceof IR\ExprCall) {
-        return new IR\ExprCall($arg->callee, resolveConcreteArgs($arg->args, $concreteTemps), $arg->srcLoc);
-    }
+        $record = $concreteTemps[$arg->id];
 
+        return $record instanceof IR\Operand ? $record : $arg;
+    }
     return $arg;
 }
 
-/** @param array<int, IR\Operand> $concreteTemps */
+/** @param array<int, IR\Operand|array{callee: string, args: list<IR\Operand>}> $concreteTemps */
 function isConcreteSpecializeCall(IR\Call $call, array $concreteTemps): bool
 {
-    return isConcreteSpecializeArg(new IR\ExprCall(
-        $call->callee,
-        resolveConcreteArgs($call->args, $concreteTemps),
-        $call->srcLoc,
-    ));
+    return isConcreteApplication(['callee' => $call->callee, 'args' => $call->args], $concreteTemps);
+}
+
+/**
+ * Whether a call this pass recorded may be named in a specialized call.
+ *
+ * The record holds the call's *description* — callee and arguments — because a computation is not an
+ * operand; these are the rules {@see isConcreteSpecializeArg} applies to a value, applied to that
+ * description.
+ *
+ * @param array{callee: string, args: list<IR\Operand>} $call
+ * @param array<int, IR\Operand|array{callee: string, args: list<IR\Operand>}> $concreteTemps
+ */
+function isConcreteApplication(array $call, array $concreteTemps): bool
+{
+    if ($call['args'] === []) {
+        if (operandIsNonDuplicable(new IR\FnRef($call['callee']))) {
+            return false;
+        }
+
+        return isEvidenceFactoryName($call['callee'])
+            || isPlausibleConstFn($call['callee'])
+            || isPlausibleConstructorName($call['callee']);
+    }
+
+    foreach ($call['args'] as $arg) {
+        if (! isConcreteRecordArg($arg, $concreteTemps)) {
+            return false;
+        }
+    }
+
+    return isPlausibleConstructorName($call['callee']);
+}
+
+/**
+ * @param array<int, IR\Operand|array{callee: string, args: list<IR\Operand>}> $concreteTemps
+ */
+function isConcreteRecordArg(IR\Operand $arg, array $concreteTemps): bool
+{
+    if ($arg instanceof IR\Temp && isset($concreteTemps[$arg->id])) {
+        $record = $concreteTemps[$arg->id];
+
+        return \is_array($record)
+            ? isConcreteApplication($record, $concreteTemps)
+            : isConcreteSpecializeArg($record);
+    }
+
+    return isConcreteSpecializeArg($arg);
+}
+
+/**
+ * The call description a read holds, or null when its record is a plain value.
+ *
+ * @param array<int, IR\Operand|array{callee: string, args: list<IR\Operand>}> $concreteTemps
+ * @return array{callee: string, args: list<IR\Operand>}|null
+ */
+function concreteCallOf(IR\Operand $operand, array $concreteTemps): ?array
+{
+    if (! ($operand instanceof IR\Temp) || ! isset($concreteTemps[$operand->id])) {
+        return null;
+    }
+
+    $record = $concreteTemps[$operand->id];
+
+    return \is_array($record) ? $record : null;
 }
 
 /**
@@ -1423,11 +1399,6 @@ function resolveSpecializedCallee(
         return null;
     }
     if (unboundTempsInFunction($clone) !== []) {
-        unset($cache[$key]);
-
-        return null;
-    }
-    if (unresolvedNonNullaryDictCalls($clone) !== []) {
         unset($cache[$key]);
 
         return null;
@@ -1575,26 +1546,41 @@ function isConcreteSpecializeArg(IR\Operand $arg): bool
         return true;
     }
 
-    if ($arg instanceof IR\ExprCall) {
-        if ($arg->args === [] && operandIsNonDuplicable($arg)) {
+    return false;
+}
+
+/**
+ * A call's description answers what an operand-carried call used to: is this application concrete
+ * enough to specialize on, key on, or hoist? A call is a statement, so the callee and its arguments
+ * are asked about directly.
+ *
+ * @param list<IR\Operand> $args
+ */
+function isConcreteCall(string $callee, array $args): bool
+{
+    foreach ($args as $inner) {
+        if (! isConcreteSpecializeArg($inner)) {
             return false;
         }
-        foreach ($arg->args as $inner) {
-            if (! isConcreteSpecializeArg($inner)) {
-                return false;
-            }
-        }
-
-        if ($arg->args === []) {
-            return isEvidenceFactoryName($arg->callee)
-                || isPlausibleConstFn($arg->callee)
-                || isPlausibleConstructorName($arg->callee);
-        }
-
-        return isPlausibleConstructorName($arg->callee);
     }
 
-    return false;
+    if ($args === []) {
+        if (nullaryFnNameIsNonDuplicableSeed($callee)) {
+            return false;
+        }
+
+        return isEvidenceFactoryName($callee)
+            || isPlausibleConstFn($callee)
+            || isPlausibleConstructorName($callee);
+    }
+
+    return isPlausibleConstructorName($callee);
+}
+
+/** The key two calls with the same callee and arguments share. @param list<IR\Operand> $args */
+function callKey(string $callee, array $args): string
+{
+    return 'call:' . $callee . '(' . \implode(',', \array_map(concreteArgKey(...), $args)) . ')';
 }
 
 function isEvidenceFactoryName(string $name): bool
@@ -1666,7 +1652,6 @@ function concreteArgKey(IR\Operand $arg): string
         IR\ConstStr::class => 's:' . \strlen($arg->value) . ':' . $arg->value,
         IR\ConstChar::class => 'c:' . $arg->value,
         IR\ConstDouble::class => 'd:' . $arg->value,
-        IR\ExprCall::class => 'e:' . $arg->callee . '(' . \implode(',', \array_map(concreteArgKey(...), $arg->args)) . ')',
         default => throw new \RuntimeException(
             'concreteArgKey: non-concrete operand ' . $arg::class
             . ' (refuse specialization rather than collide on "?")',
@@ -1691,18 +1676,7 @@ function burnedArgsIncludeFnRef(array $args, int $burned): bool
 
 function argMentionsFnRef(IR\Operand $arg): bool
 {
-    if ($arg instanceof IR\FnRef) {
-        return true;
-    }
-    if ($arg instanceof IR\ExprCall) {
-        foreach ($arg->args as $inner) {
-            if (argMentionsFnRef($inner)) {
-                return true;
-            }
-        }
-    }
-
-    return false;
+    return $arg instanceof IR\FnRef;
 }
 
 /**
@@ -1718,39 +1692,11 @@ function burnedSpecializeArgMustBindOnce(IR\Operand $arg, array $bodyItems, stri
     if (operandIsNonDuplicable($arg)) {
         return true;
     }
-    if (! ($arg instanceof IR\ExprCall) && ! ($arg instanceof IR\ForeignCall)) {
-        return false;
-    }
-    if (operandHasFreeTemps($arg)) {
-        return false;
-    }
-    if ($arg instanceof IR\ExprCall && isTransparentEvidenceFactoryCall($arg)) {
-        return false;
-    }
-    if (
-        $arg instanceof IR\ExprCall
-        && isPlausibleConstructorName(
-            specializationLookupName($arg->callee),
-        )
-    ) {
+    if (! ($arg instanceof IR\ForeignCall)) {
         return false;
     }
 
-    return true;
-}
-
-/** Evidence dict builders (`__ev_Foo` / `__ev_Foo_h_HASH`), not method calls. */
-function isTransparentEvidenceFactoryCall(IR\ExprCall $call): bool
-{
-    $leaf = specializationLookupName($call->callee);
-    if (! \str_starts_with($leaf, '__ev_')) {
-        return false;
-    }
-    if (\preg_match('/^__ev_.+_h_[0-9a-f]+_[A-Za-z]/', $leaf) === 1) {
-        return false;
-    }
-
-    return true;
+    return ! operandHasFreeTemps($arg);
 }
 
 /** @param list<IR\Operand> $burnedArgs */
@@ -1878,20 +1824,6 @@ function qualifySourceModuleCallees(
     $rewriteOperand = static function (IR\Operand $op) use (&$rewriteOperand, $rewriteName): IR\Operand {
         if ($op instanceof IR\FnRef) {
             return new IR\FnRef($rewriteName($op->name));
-        }
-        if ($op instanceof IR\ExprCall) {
-            return new IR\ExprCall(
-                $rewriteName($op->callee),
-                \array_map($rewriteOperand, $op->args),
-                $op->srcLoc,
-            );
-        }
-        if ($op instanceof IR\ExprPartial) {
-            return new IR\ExprPartial(
-                $rewriteName($op->fn),
-                $op->arity,
-                \array_map($rewriteOperand, $op->args),
-            );
         }
         if ($op instanceof IR\Partial) {
             return new IR\Partial(
@@ -2042,38 +1974,7 @@ function collectTempDefsUsesInItems(array $items, array &$defined, array &$used)
         }
     };
 
-    Visit\walkBlock(new IR\Block(denseStmtItems($items)), $visitStmt, $visitOperand);
-}
-
-/**
- * DictCalls whose evidence is a concrete non-nullary ExprCall — emit-time
- * nullary resolution cannot handle these, and inventing method names is unsafe.
- *
- * @return list<string> method names
- */
-function unresolvedNonNullaryDictCalls(IR\FunctionDecl $function): array
-{
-    $out = [];
-    $visit = static function (array $items) use (&$visit, &$out): void {
-        foreach (denseStmtItems($items) as $item) {
-            if (
-                $item instanceof IR\DictCall
-                && $item->evidence instanceof IR\ExprCall
-                && $item->evidence->args !== []
-                && isConcreteSpecializeArg($item->evidence)
-            ) {
-                $out[] = $item->method;
-            }
-            if ($item instanceof IR\MatchStmt || $item instanceof IR\MatchReturn) {
-                foreach ($item->arms as $arm) {
-                    $visit($arm->body->items);
-                }
-            }
-        }
-    };
-    $visit($function->body->items);
-
-    return $out;
+    walkBlock(new IR\Block(denseStmtItems($items)), $visitStmt, $visitOperand);
 }
 
 /**
@@ -2150,7 +2051,7 @@ function collectFreeLocalsInOperand(IR\Operand $operand, array $bound, array &$f
 }
 
 /**
- * Hoist pure concrete evidence ExprCalls in __spec_* clones to module CAFs.
+ * Hoist pure concrete evidence calls in __spec_* clones to module CAFs.
  *
  * Specialized Generic codecs rebuild large __ev_* trees on every call; when
  * those trees are parameter-pure, lift them to nullary __caf_* bindings so
@@ -2206,35 +2107,18 @@ function hoistEvidenceCafsInFunction(IR\FunctionDecl $function, array &$existing
 
     foreach ($items as $item) {
         if ($item instanceof IR\Call && $item->callee !== ''
-            && operandIsParamPure(new IR\ExprCall($item->callee, $item->args), $paramSet)
+            && callIsParamPure($item->callee, $item->args, $paramSet)
             && isHoistableEvidenceCall($item)) {
-            $operand = new IR\ExprCall($item->callee, $item->args);
-            $cafName = uniqueCafName($operand, $existingNames);
+            $cafName = uniqueCafName(callKey($item->callee, $item->args), $existingNames);
             $cafs[] = new IR\FunctionDecl(
                 $cafName,
                 [],
                 null,
-                new IR\Block([new IR\Ret($operand)]),
+                new IR\Block([new IR\Call($item->callee, $item->args, 0, $item->srcLoc), new IR\Ret(new IR\Temp(0))]),
                 kind: IR\FunctionKind::Generated,
             );
             $existingNames[$cafName] = true;
             $out[] = new IR\Call($cafName, [], $item->dest, $item->srcLoc);
-            $changed = true;
-
-            continue;
-        }
-        if ($item instanceof IR\Assign && operandIsParamPure($item->value, $paramSet)
-            && isHoistableEvidenceOperand($item->value)) {
-            $cafName = uniqueCafName($item->value, $existingNames);
-            $cafs[] = new IR\FunctionDecl(
-                $cafName,
-                [],
-                null,
-                new IR\Block([new IR\Ret($item->value)]),
-                kind: IR\FunctionKind::Generated,
-            );
-            $existingNames[$cafName] = true;
-            $out[] = new IR\Assign($item->dest, new IR\ExprCall($cafName, []));
             $changed = true;
 
             continue;
@@ -2250,65 +2134,56 @@ function hoistEvidenceCafsInFunction(IR\FunctionDecl $function, array &$existing
         'function' => $function->withBody(new IR\Block($out)),
         'cafs' => $cafs,
     ];
-}
-
-/** @param array<string, true> $paramSet */
-function operandIsParamPure(IR\Operand $operand, array $paramSet): bool
-{
-    $free = [];
-    collectFreeLocalsInOperand($operand, [], $free);
-    foreach (\array_keys($free) as $name) {
-        if (isset($paramSet[$name])) {
-            return false;
-        }
-    }
-
-    return ! operandHasForeignOrIo($operand);
-}
-
-function operandHasForeignOrIo(IR\Operand $operand): bool
-{
-    if ($operand instanceof IR\ForeignCall || $operand instanceof IR\ExprCallValue) {
-        return true;
-    }
-    if ($operand instanceof IR\ExprCall) {
-        if ($operand->callee === 'perform' || \str_starts_with($operand->callee, 'perform#')) {
-            return true;
-        }
-    }
-    foreach (Visit\operandChildren($operand) as $child) {
-        if (operandHasForeignOrIo($child)) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-function isHoistableEvidenceOperand(IR\Operand $operand): bool
-{
-    if ($operand instanceof IR\ExprCall) {
-        return isConcreteSpecializeArg($operand)
-            && (isEvidenceFactoryName($operand->callee)
-                || isPlausibleConstFn($operand->callee));
-    }
-
-    return false;
-}
-
-function isHoistableEvidenceCall(IR\Call $call): bool
+}function isHoistableEvidenceCall(IR\Call $call): bool
 {
     if (! isEvidenceFactoryName($call->callee) && ! isPlausibleConstFn($call->callee)) {
         return false;
     }
 
-    return isConcreteSpecializeArg(new IR\ExprCall($call->callee, $call->args, $call->srcLoc));
+    return isConcreteCall($call->callee, $call->args);
+}
+
+/** True when a call's arguments name no parameter and run nothing foreign. @param array<string, true> $paramSet @param list<IR\Operand> $args */
+function callIsParamPure(string $callee, array $args, array $paramSet): bool
+{
+    if ($callee === 'perform' || \str_starts_with($callee, 'perform#')) {
+        return false;
+    }
+    foreach ($args as $arg) {
+        $free = [];
+        collectFreeLocalsInOperand($arg, [], $free);
+        foreach (\array_keys($free) as $name) {
+            if (isset($paramSet[$name])) {
+                return false;
+            }
+        }
+        if (operandRunsForeign($arg)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/** True when the operand tree reaches a host call. */
+function operandRunsForeign(IR\Operand $operand): bool
+{
+    if ($operand instanceof IR\ForeignCall) {
+        return true;
+    }
+    foreach (Visit\operandChildren($operand) as $child) {
+        if (operandRunsForeign($child)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 /** @param array<string, true> $existingNames */
-function uniqueCafName(IR\Operand $operand, array $existingNames): string
+function uniqueCafName(string $key, array $existingNames): string
 {
-    $base = '__caf_' . \substr(\hash('sha256', concreteArgKey($operand)), 0, 12);
+    $base = '__caf_' . \substr(\hash('sha256', $key), 0, 12);
     $name = $base;
     $i = 0;
     while (isset($existingNames[$name])) {

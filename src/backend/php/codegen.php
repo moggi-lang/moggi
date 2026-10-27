@@ -22,6 +22,8 @@ use function Moggi\Backend\Meta\isBoolBackedData;
 use function Moggi\Backend\Meta\newtypeConstructorMap;
 use function Moggi\Backend\Meta\newtypeConstructorMapFromRegistry;
 use function Moggi\Backend\Meta\operandCallSrcLoc;
+use function Moggi\Backend\Meta\returnedCall;
+use function Moggi\Backend\Meta\tempReadCounts;
 use function Moggi\Backend\Php\Intrinsics\emitCall as emitIntrinsicCall;
 use function Moggi\Backend\Php\Intrinsics\localHelpersForUsed;
 use function Moggi\Backend\Php\Intrinsics\phpHelpersForModule;
@@ -496,10 +498,21 @@ function tailRecallAssignOrder(array $params, array $args): ?array
 
 function emitBlock(IR\Block $block, int $indent, array $ctx): string
 {
+    $items = \array_values($block->items);
+    $tempReads = tempReadCounts($block);
     $out = '';
 
-    foreach ($block->items as $item) {
-        $out .= emitStmt($item, $indent, $ctx);
+    for ($i = 0; $i < \count($items); ++$i) {
+        $call = returnedCall($items[$i], $items[$i + 1] ?? null, $tempReads);
+        if ($call !== null) {
+            $out .= frameMark($ctx, $call->srcLoc)
+                . \str_repeat('    ', $indent) . 'return ' . emitReturnedCall($call, $ctx) . ";\n";
+            ++$i;
+
+            continue;
+        }
+
+        $out .= emitStmt($items[$i], $indent, $ctx);
     }
 
     return $out;

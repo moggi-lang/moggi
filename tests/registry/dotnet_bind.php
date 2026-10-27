@@ -1,7 +1,7 @@
 <?php declare(strict_types=1);
 
 /**
- * Bindings Phase 3: `moggi bind dotnet:Acme.Hello` inspects the fixture
+ * The .NET binding: `moggi bind dotnet:Acme.Hello` inspects the fixture
  * assembly and generates the `Nuget.Acme.Hello` module and versioned sidecar.
  * One targeted test covers inspection, rendering, CLI options, round-trip
  * validation, cache-key discrimination and execution, including optional

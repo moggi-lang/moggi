@@ -22,15 +22,6 @@ function operandEqual(IR\Operand $left, IR\Operand $right): bool
         IR\Local::class => $left->name === $right->name,
         IR\Temp::class => $left->id === $right->id,
         IR\FnRef::class => $left->name === $right->name,
-        IR\ExprBinop::class => $left->op === $right->op
-            && operandEqual($left->left, $right->left)
-            && operandEqual($left->right, $right->right),
-        IR\ExprCall::class => $left->callee === $right->callee
-            && \count($left->args) === \count($right->args)
-            && \array_all(
-                $left->args,
-                static fn (IR\Operand $arg, int $i): bool => operandEqual($arg, $right->args[$i]),
-            ),
         IR\Intrinsic::class => $left->name === $right->name
             && \count($left->args) === \count($right->args)
             && \array_all(
@@ -55,12 +46,8 @@ function operandKey(IR\Operand $operand): string
         IR\FnRef::class => 'f' . $operand->name,
         IR\Unit::class => 'unit',
         IR\ListLit::class => 'list:' . \implode(',', \array_map(operandKey(...), $operand->elements)),
-        IR\ExprBinop::class => 'binop:' . $operand->op . ':' . operandKey($operand->left) . ':' . operandKey($operand->right),
-        IR\ExprCall::class => 'call:' . $operand->callee . '(' . \implode(',', \array_map(operandKey(...), $operand->args)) . ')',
-        IR\ExprCallValue::class => 'callv:' . operandKey($operand->callee) . '(' . \implode(',', \array_map(operandKey(...), $operand->args)) . ')',
         IR\Intrinsic::class => 'intr:' . $operand->name . '(' . \implode(',', \array_map(operandKey(...), $operand->args)) . ')',
         IR\Partial::class => 'part:' . $operand->fn . '/' . $operand->arity . '(' . \implode(',', \array_map(operandKey(...), $operand->args)) . ')',
-        IR\ExprPartial::class => 'epart:' . $operand->fn . '/' . $operand->arity . '(' . \implode(',', \array_map(operandKey(...), $operand->args)) . ')',
         IR\DictMethod::class => 'dictm:' . operandKey($operand->evidence) . '.' . $operand->method,
         IR\ForeignCall::class => 'foreign:' . $operand->backend . ':' . $operand->kind . ':' . $operand->path
             . '(' . \implode(',', \array_map(operandKey(...), $operand->args)) . ')',
@@ -101,7 +88,6 @@ function isPropagatableExpr(IR\Operand $expr): bool
 {
     return match ($expr::class) {
         IR\ConstInt::class, IR\ConstDouble::class, IR\ConstStr::class, IR\ConstChar::class, IR\Local::class, IR\Temp::class, IR\FnRef::class, IR\Partial::class => true,
-        IR\ExprBinop::class => isPropagatableExpr($expr->left) && isPropagatableExpr($expr->right),
         IR\Intrinsic::class => \array_reduce(
             $expr->args,
             static fn (bool $ok, IR\Operand $arg): bool => $ok && isPropagatableExpr($arg),
@@ -128,61 +114,23 @@ function isSimpleOperand(IR\Operand $operand): bool
         || $operand instanceof IR\Partial;
 }
 
-function operandToExpr(IR\Operand $operand): IR\Operand
+/**
+ * The operand a `Binop` statement folds to, or null when it stays a statement.
+ *
+ * A binop is a statement with a `dest`, so the only values that can stand for one are the constant
+ * its arithmetic folds to and an operand an identity rule selects — never a binop expression of its
+ * own, because a computation is not an operand.
+ */
+function foldedBinopOperand(string $op, IR\Operand $left, IR\Operand $right): ?IR\Operand
 {
-    return match ($operand::class) {
-        IR\ExprBinop::class, IR\ExprCall::class, IR\ExprCallValue::class, IR\ExprPartial::class => $operand,
-        IR\Partial::class => new IR\ExprPartial($operand->fn, $operand->arity, $operand->args),
-        default => $operand,
-    };
-}
-
-function combineOperandsToExpr(string $op, IR\Operand $left, IR\Operand $right): IR\Operand
-{
-    return foldExpr(new IR\ExprBinop($op, operandToExpr($left), operandToExpr($right)));
-}
-
-function foldExpr(IR\Operand $expr): IR\Operand
-{
-    $expr = match ($expr::class) {
-        IR\ExprBinop::class => new IR\ExprBinop(
-            $expr->op,
-            foldExpr($expr->left),
-            foldExpr($expr->right),
-        ),
-        IR\ExprCall::class => new IR\ExprCall(
-            $expr->callee,
-            \array_map(foldExpr(...), $expr->args),
-            $expr->srcLoc,
-        ),
-        IR\ExprCallValue::class => new IR\ExprCallValue(
-            foldExpr($expr->callee),
-            \array_map(foldExpr(...), $expr->args),
-            $expr->srcLoc,
-        ),
-        default => $expr,
-    };
-
-    if (! $expr instanceof IR\ExprBinop) {
-        return $expr;
-    }
-
-    $left = $expr->left;
-    $right = $expr->right;
-
     if ($left instanceof IR\ConstInt && $right instanceof IR\ConstInt) {
-        $folded = tryFoldBinopInt($expr->op, $left->value, $right->value);
+        $folded = tryFoldBinopInt($op, $left->value, $right->value);
         if ($folded !== null) {
             return new IR\ConstInt($folded);
         }
     }
 
-    $identity = foldBinopPeephole($expr->op, $left, $right);
-    if ($identity !== null) {
-        return foldExpr($identity);
-    }
-
-    return $expr;
+    return foldBinopIdentity($op, $left, $right);
 }
 
 /**
@@ -203,19 +151,6 @@ function tryFoldBinopInt(string $op, int $left, int $right): ?int
     return \is_int($folded) ? $folded : null;
 }
 
-function foldBinopPeephole(string $op, IR\Operand $left, IR\Operand $right): ?IR\Operand
-{
-    if ($op === '-' && operandEqual($left, $right)) {
-        return new IR\ConstInt(0);
-    }
-
-    if ($op === '+' && operandEqual($left, $right)) {
-        return new IR\ExprBinop('*', $left, new IR\ConstInt(2));
-    }
-
-    return foldBinopIdentity($op, $left, $right);
-}
-
 function foldBinopIdentity(string $op, IR\Operand $left, IR\Operand $right): ?IR\Operand
 {
     return match ($op) {
@@ -225,6 +160,7 @@ function foldBinopIdentity(string $op, IR\Operand $left, IR\Operand $right): ?IR
             default => null,
         },
         '-' => match (true) {
+            operandEqual($left, $right) => new IR\ConstInt(0),
             $right instanceof IR\ConstInt && $right->value === 0 => $left,
             default => null,
         },
@@ -239,21 +175,38 @@ function foldBinopIdentity(string $op, IR\Operand $left, IR\Operand $right): ?IR
     };
 }
 
+/**
+ * The operand a defining statement stands for, or null when it must stay a statement.
+ *
+ * Only an `Assign` states a value. A `Binop` and a call are computations: folding one into its
+ * reader would put a computation where the schema allows only values, so both stay statements and
+ * their readers take the temp they define.
+ */
 function exprFromDefiningStmt(IR\Stmt $stmt, int $dest): ?IR\Operand
 {
-    return match ($stmt::class) {
-        IR\Assign::class => $stmt->dest === $dest ? $stmt->value : null,
-        IR\Binop::class => $stmt->dest === $dest
-            ? new IR\ExprBinop($stmt->op, $stmt->left, $stmt->right)
-            : null,
-        IR\Call::class => $stmt->dest === $dest
-            ? new IR\ExprCall($stmt->callee, $stmt->args, $stmt->srcLoc)
-            : null,
-        IR\CallValue::class => $stmt->dest === $dest
-            ? new IR\ExprCallValue($stmt->callee, $stmt->args, $stmt->srcLoc)
-            : null,
-        default => null,
-    };
+    return $stmt instanceof IR\Assign && $stmt->dest === $dest ? $stmt->value : null;
+}
+
+/**
+ * Emit a call of a known callee as a statement and hand back the temp it defines.
+ *
+ * A rewrite that already knows which call it wants says so here, rather than building an operand
+ * that some later walk has to take apart.
+ *
+ * `$dest` is the destination the caller already owns — the `dest` of the statement it is rewriting.
+ * A caller that owns one passes it and the call writes it directly, so the value never needs a copy;
+ * a caller that does not gets a fresh temp.
+ *
+ * @param list<IR\Operand> $args
+ * @param list<IR\Stmt> $out appended to, in evaluation order
+ * @return array{IR\Temp, int} the temp the call defines, and the cursor after it
+ */
+function scheduleCall(string $callee, array $args, array &$out, int $nextTemp, ?IR\SrcLoc $srcLoc = null, ?int $dest = null): array
+{
+    $dest ??= $nextTemp++;
+    $out[] = new IR\Call($callee, $args, $dest, $srcLoc);
+
+    return [new IR\Temp($dest), $nextTemp];
 }
 
 /**
@@ -294,9 +247,6 @@ function tempUseCountInRewritableExpr(IR\Operand $expr, int $id): int
 {
     return match ($expr::class) {
         IR\Temp::class => $expr->id === $id ? 1 : 0,
-        IR\ExprBinop::class => tempUseCountInRewritableExpr($expr->left, $id) + tempUseCountInRewritableExpr($expr->right, $id),
-        IR\ExprCall::class => tempUseCountInRewritableOperands($expr->args, $id),
-        IR\ExprCallValue::class => tempUseCountInRewritableExpr($expr->callee, $id) + tempUseCountInRewritableOperands($expr->args, $id),
         default => 0,
     };
 }

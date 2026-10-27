@@ -204,7 +204,7 @@ function ensurePhpDeps(State $state): string
         if (($unit['synthetic'] ?? false) === true || ! isset($unit['path'])) {
             continue;
         }
-        $files[] = $unit['path'];
+        \array_push($files, ...Modules\unitSourceFiles($unit));
     }
     if ($files === []) {
         throw new \RuntimeException('REPL PHP deps: no Prelude found under --lib');

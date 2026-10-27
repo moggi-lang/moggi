@@ -23,7 +23,8 @@ use function Moggi\Paths\globPaths;
  *
  * Entries mirror the source tree under a per-backend directory so php/jvm/dotnet
  * caches coexist (switching backends must not overwrite each other). The content
- * key is stored inside and checked on read.
+ * key is stored inside and checked on read: a product written under another key
+ * is a different product and is never served.
  *
  * One compiler owns the tree: `fingerprint` holds the hash of its sources, and a
  * compiler whose fingerprint does not match what is written there drops what the
@@ -489,7 +490,12 @@ function artifactFileName(string $key): string
     return $safe === $key ? $key : $safe . '-' . \substr(\hash('xxh3', $key), 0, 12);
 }
 
-/** Whole-project artifact cache (e.g. `moggi compile` outputs). */
+/**
+ * Whole-project artifact cache (e.g. `moggi compile` outputs).
+ *
+ * Stamped with the IR shape like a per-module entry: these outputs are derived from the IR, so a
+ * product from another shape is dropped rather than handed to a build of this compiler.
+ */
 function artifactGet(string $key): mixed
 {
     if (! cacheEnabled()) {

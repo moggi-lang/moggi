@@ -1616,6 +1616,9 @@ function inferDoExpr(TypeCheckState $state, Ast\DoExpr $expr, array $env): Type
     }
 
     $desugared = desugarDo($expr->stmts, $bind);
+    if ($expr->sourceFile !== null) {
+        Ast\markSourceFile($desugared, $expr->sourceFile);
+    }
     $type = inferExpr($state, $desugared, $env);
     $expr->desugared = $desugared;
 

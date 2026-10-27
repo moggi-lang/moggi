@@ -8,7 +8,6 @@ use function Moggi\Modules\classMethodsForExport;
 use function Moggi\Modules\collectExports;
 use function Moggi\Modules\constructorsForExport;
 use function Moggi\Modules\exportItemChildNames;
-use function Moggi\Modules\isModuleActiveForCompileBackend;
 
 /** Resolved export list for documentation (local declarations only). */
 final class DocExportFilter
@@ -173,12 +172,8 @@ function collectExportsForDocs(
     array $units,
     string $moduleName,
     array $checkedModules,
-    string $backendId,
 ): ?array {
     if (! isset($checkedModules[$moduleName])) {
-        return null;
-    }
-    if (! isModuleActiveForCompileBackend($units, $moduleName, $backendId)) {
         return null;
     }
 

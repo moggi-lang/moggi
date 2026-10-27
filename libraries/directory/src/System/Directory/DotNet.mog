@@ -40,7 +40,7 @@ import Data.Int (Int, Int32)
 import Data.Integer (Integer, integerFromInt, integerToInt)
 import Data.Real (quot)
 import Data.Semigroup
-import Data.String hiding (pack, unpack, length, take, drop, isPrefixOf, isSuffixOf)
+import Data.String qualified as S
 import Data.Time.Calendar (toModifiedJulianDay)
 import Data.Time.Clock (UTCTime, utcTimeFromUnix, utctDay, utctDayTime, diffTimeToSeconds)
 import Moggi.Internal.Base
@@ -364,7 +364,7 @@ executableBit p = do
 -- | The extensions Windows searches as commands: `exeExtension` (which the
 -- facade appends) plus the batch forms shells run the same way.
 hasExecExtension :: FilePath -> Bool
-hasExecExtension p = elem (map toLower (takeExtension p)) [".com", ".exe", ".bat", ".cmd"]
+hasExecExtension p = elem (S.map toLower (takeExtension p)) [".com", ".exe", ".bat", ".cmd"]
 
 getAccessTime :: FilePath -> IO UTCTime
 getAccessTime p = do

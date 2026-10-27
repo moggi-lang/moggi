@@ -8,6 +8,7 @@ use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Semantics\Types\TypeCheckState;
 use Moggi\Syntax\Ast;
 
+use function Moggi\Debug\normalizeDisplayPath;
 use function Moggi\Semantics\TypeExpr\collectTypeVars;
 use function Moggi\Semantics\Types\assertNoPendingConstraintsInExpr;
 use function Moggi\Semantics\Types\prune;
@@ -27,7 +28,7 @@ use function Moggi\Semantics\Types\walkAstValues;
 final class CheckedFunction
 {
     /**
-     * @param string $origin Tooling link for the declaration (`module:line:col`).
+     * @param string $origin Tooling link for the declaration (`module:file:line:col`).
      * @param list<array{wanted: string, class: string, evidence: string, origin: string}> $evidence
      *   Dictionary parameters in positional ABI order: the wanted obligation
      *   and the given dictionary that discharges it.
@@ -307,6 +308,27 @@ function assertSignatureClosed(TypeCheckState $state, Ast\FunctionDecl $item, Sc
 }
 
 /**
+ * The site a declaration is written at, as the record publishes it: the unit that
+ * owns it, the file it is written in, and the position in that file.
+ *
+ * The module name does not name the position's file. A unit is written in more
+ * than one file once a backend half is merged into it, and the two sides' spans
+ * do not agree: a declaration the half supplies keeps the facade's span while the
+ * half's code runs, and a declaration the half *is* carries the half's own span.
+ * The file is therefore read off the node that holds the position — or, for a node
+ * built by desugaring, off the unit being checked, the same fallback
+ * `IR\srcLocFromAst` uses. `null` means there is no site to publish.
+ */
+function sourceSite(string $module, string $file, int $line, int $col): ?string
+{
+    if ($module === '' || $file === '' || $line <= 0) {
+        return null;
+    }
+
+    return $module . ':' . normalizeDisplayPath($file) . ':' . $line . ':' . $col;
+}
+
+/**
  * The site this declaration is written at, as the record publishes it.
  *
  * A synthesized declaration — an instance method, a class default, a derived
@@ -318,8 +340,9 @@ function assertSignatureClosed(TypeCheckState $state, Ast\FunctionDecl $item, Sc
  */
 function originFor(TypeCheckState $state, Ast\FunctionDecl $item, string $module): string
 {
-    $origin = $item->sourceOrigin ?? ($module . ':' . $item->line . ':' . $item->col);
-    if (\str_ends_with($origin, ':0:0')) {
+    $origin = $item->sourceOrigin
+        ?? sourceSite($module, $item->sourceFile ?? $state->filename, $item->line, $item->col);
+    if ($origin === null || \str_ends_with($origin, ':0:0')) {
         throw typeFail(
             $state,
             "the checked core cannot record `{$module}::{$item->name}`: the declaration has no"

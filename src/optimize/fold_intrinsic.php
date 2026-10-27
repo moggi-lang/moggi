@@ -5,20 +5,21 @@ namespace Moggi\Optimize\FoldIntrinsic;
 use Moggi\IR;
 
 use function Moggi\IR\Visit\mapGuards;
-use function Moggi\Optimize\CaseFold\isPlausibleConstructorName;
 use function Moggi\Optimize\Interproc\denseStmtItems;
-use function Moggi\Optimize\Support\foldExpr;
 use function Moggi\Optimize\Support\mapStmtNestedBlocks;
 use function Moggi\Optimize\Support\operandEqual;
-use function Moggi\Optimize\Support\operandToExpr;
 use function Moggi\Optimize\Support\tryFoldBinopInt;
 use function Moggi\Semantics\IntrinsicRegistry\foldStrategy;
 use function Moggi\Semantics\IntrinsicRegistry\isListForm;
 
 /**
- * Fold intrinsics in a statement list, resolving Temps to known pure list/ctor
+ * Fold intrinsics in a statement list, resolving Temps to known pure list
  * values defined earlier in the same block so `listAppend#(t0, t1)` folds when
  * `t0`/`t1` are known list spines (even if multi-use blocked copy-prop).
+ *
+ * A list spine is a value, so a read of one is answered with the spine itself. A constructor
+ * application is a computation: the statement that ran it stays, and a read of its temp stays a
+ * read of its temp, so nothing puts a call where the schema allows only a value.
  *
  * @param list<IR\Stmt> $items
  * @return list<IR\Stmt>
@@ -29,16 +30,8 @@ function foldIntrinsicsItems(array $items): array
     $out = [];
     foreach (denseStmtItems($items) as $item) {
         $folded = foldIntrinsicsStmtWithKnown($item, $known);
-        if ($folded instanceof IR\Assign) {
-            $val = $folded->value;
-            if (isKnownListOperand($val) || isKnownCtorOperand($val)) {
-                $known[$folded->dest] = $val;
-            }
-        } elseif ($folded instanceof IR\Call) {
-            $asExpr = new IR\ExprCall($folded->callee, $folded->args);
-            if (isKnownCtorOperand($asExpr)) {
-                $known[$folded->dest] = $asExpr;
-            }
+        if ($folded instanceof IR\Assign && isKnownListOperand($folded->value)) {
+            $known[$folded->dest] = $folded->value;
         }
         $out[] = $folded;
     }
@@ -121,37 +114,9 @@ function foldOperand(IR\Operand $operand, array $known = []): IR\Operand
             $known,
             argsAlreadyResolved: true,
         ),
-        IR\ExprBinop::class => operandFromExpr(foldExpr(new IR\ExprBinop(
-            $operand->op,
-            operandToExpr($resolve($operand->left)),
-            operandToExpr($resolve($operand->right)),
-        ))),
-        IR\ExprCall::class => new IR\ExprCall(
-            $operand->callee,
-            \array_map($resolve, $operand->args),
-            $operand->srcLoc,
-        ),
-        IR\ExprCallValue::class => new IR\ExprCallValue(
-            $resolve($operand->callee),
-            \array_map($resolve, $operand->args),
-            $operand->srcLoc,
-        ),
         IR\Partial::class => new IR\Partial($operand->fn, $operand->arity, \array_map($resolve, $operand->args)),
-        IR\ExprPartial::class => new IR\ExprPartial($operand->fn, $operand->arity, \array_map(operandToExpr(...), $operand->args)),
         IR\ListLit::class => new IR\ListLit(\array_map($resolve, $operand->elements)),
         default => $operand,
-    };
-}
-
-function operandFromExpr(IR\Operand $expr): IR\Operand
-{
-    return match ($expr::class) {
-        IR\ConstInt::class => $expr,
-        IR\ConstDouble::class => $expr,
-        IR\ConstStr::class => $expr,
-        IR\ConstChar::class => $expr,
-        IR\ExprBinop::class, IR\ExprCall::class, IR\ExprCallValue::class, IR\ExprPartial::class => $expr,
-        default => $expr,
     };
 }
 
@@ -364,22 +329,6 @@ function isKnownListOperand(IR\Operand $operand): bool
     return flattenKnownList($operand) !== null || isKnownEmptyList($operand);
 }
 
-function isKnownCtorOperand(IR\Operand $operand): bool
-{
-    if (! ($operand instanceof IR\ExprCall)) {
-        return false;
-    }
-    $leaf = $operand->callee;
-    if (\str_contains($leaf, '::')) {
-        $leaf = \substr($leaf, \strrpos($leaf, '::') + 2);
-    }
-    if (\preg_match('/^__tuple\d+$/', $leaf) === 1) {
-        return true;
-    }
-
-    return isPlausibleConstructorName($operand->callee);
-}
-
 /** @return list<IR\Operand>|null */
 function flattenKnownList(IR\Operand $operand): ?array
 {
@@ -414,7 +363,6 @@ function rebuildKnownList(array $elems): IR\Operand
             && ! ($el instanceof IR\ConstChar)
             && ! ($el instanceof IR\ConstDouble)
             && ! ($el instanceof IR\FnRef)
-            && ! ($el instanceof IR\ExprCall)
         ) {
             $allSimple = false;
 

@@ -1,7 +1,7 @@
 <?php declare(strict_types=1);
 
-// F1a/F2a: per-pass checkpoints and the specialization boundary check that
-// rejects unbound temps.
+// Per-pass checkpoints and the specialization boundary check that rejects
+// unbound temps.
 //
 // Pinned: the checkpoint is inert while the switch is off and the harness turns
 // it on for its own run; a stage that leaves an undefined temp fails with its own

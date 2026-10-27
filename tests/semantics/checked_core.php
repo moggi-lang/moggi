@@ -336,7 +336,7 @@ try {
             }
         }
         $check(
-            $twice->origin === 'Main:' . $declLine . ':1',
+            $twice->origin === 'Main:Main.mog:' . $declLine . ':1',
             'the record names its declaration by origin, got: ' . $twice->origin,
         );
 

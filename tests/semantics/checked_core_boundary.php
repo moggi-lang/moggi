@@ -261,16 +261,23 @@ $assert(
 $originState = new TypeCheckState('', 'checked_core_boundary.mog');
 $written = $declaration(true);
 $assert(
-    Modules\originFor($originState, $written, 'Main') === 'Main:1:1',
-    'a declaration with a span publishes it as its origin, got: '
+    Modules\originFor($originState, $written, 'Main') === 'Main:checked_core_boundary.mog:1:1',
+    'a declaration with a span and no file of its own publishes the file the unit being checked is'
+        . ' written in, got: ' . Modules\originFor($originState, $written, 'Main'),
+);
+$written->sourceFile = 'libraries/base/src/Data/Int/PHP.mog';
+$assert(
+    Modules\originFor($originState, $written, 'Main') === 'Main:libraries/base/src/Data/Int/PHP.mog:1:1',
+    'a declaration written in another file of its unit publishes that file, got: '
         . Modules\originFor($originState, $written, 'Main'),
 );
-$written->sourceOrigin = 'Provider:10:14';
+$written->sourceOrigin = 'Provider:libraries/base/src/Provider.mog:10:14';
 $assert(
-    Modules\originFor($originState, $written, 'Main') === 'Provider:10:14',
-    'a synthesized declaration publishes the site its producer recorded, in the module it is written in',
+    Modules\originFor($originState, $written, 'Main') === 'Provider:libraries/base/src/Provider.mog:10:14',
+    'a synthesized declaration publishes the site its producer recorded, in the file it is written in',
 );
 $written->sourceOrigin = null;
+$written->sourceFile = null;
 $written->line = 0;
 $written->col = 0;
 $message = $refusal(static fn () => Modules\originFor($originState, $written, 'Main'));

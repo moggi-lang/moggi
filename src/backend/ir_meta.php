@@ -6,6 +6,7 @@ use Moggi\IR;
 
 use function Moggi\IR\Visit\boundLocalsInBlock;
 use function Moggi\IR\Visit\collectLambdaRefsInBlock;
+use function Moggi\IR\Visit\walkBlock;
 use function Moggi\IR\Visit\walkOperand;
 use function Moggi\Semantics\IntrinsicRegistry\reportsSourceLocation;
 use function Moggi\Semantics\Kernel\boolTypeName;
@@ -23,6 +24,64 @@ use function Moggi\Semantics\Kernel\boolTypeName;
  * Nothing here emits code or knows a target's naming/packaging rules; the
  * emitters stay in `Moggi\Backend\{Php,Jvm,DotNet}\Codegen`.
  */
+
+// --- A call whose value the next statement returns -----------------------------
+
+/**
+ * How many times each temp is read in a function body, nested scopes included.
+ *
+ * @return array<int, int>
+ */
+function tempReadCounts(IR\Block $body): array
+{
+    $counts = [];
+    walkBlock(
+        $body,
+        static function (IR\Stmt $stmt): void {
+        },
+        static function (IR\Operand $operand) use (&$counts): void {
+            if ($operand instanceof IR\Temp) {
+                $counts[$operand->id] = ($counts[$operand->id] ?? 0) + 1;
+            }
+        },
+    );
+
+    return $counts;
+}
+
+/**
+ * The call to emit as a direct return, when the statement after it returns exactly the temp it
+ * defines and nothing else reads that temp.
+ *
+ * The IR keeps its shape: a call is a statement that defines its destination and `Ret` reads an
+ * operand, so `Call(dest)` + `Ret(Temp(dest))` is the canonical form and the operand twin stays
+ * deleted. What this decides is *rendering* — an emitter returns the call's value instead of
+ * storing it and loading it back, which on the JVM and .NET is a store and a load fewer per
+ * returned call. The call's arguments are evaluated where the call stands, so a fused return
+ * neither reorders nor duplicates them.
+ *
+ * A destination read twice, or read after the return, stays a store: the value is needed again. So
+ * does a call with any statement between it and the return, which is why this takes the statement
+ * that immediately follows rather than searching for a reader.
+ *
+ * @param array<int, int> $tempReads from {@see tempReadCounts}
+ */
+function returnedCall(IR\Stmt $stmt, ?IR\Stmt $next, array $tempReads): ?IR\Stmt
+{
+    if (! ($next instanceof IR\Ret) || ! ($next->value instanceof IR\Temp)) {
+        return null;
+    }
+
+    $dest = match ($stmt::class) {
+        IR\Call::class, IR\CallValue::class => $stmt->dest,
+        default => null,
+    };
+    if ($dest === null || $next->value->id !== $dest || ($tempReads[$dest] ?? 0) !== 1) {
+        return null;
+    }
+
+    return $stmt;
+}
 
 // --- Constructors / data declarations -----------------------------------------
 
@@ -201,9 +260,6 @@ function operandCallSrcLoc(?IR\Operand $operand): ?IR\SrcLoc
             $found = $op->srcLoc;
 
             return;
-        }
-        if (($op instanceof IR\ExprCall || $op instanceof IR\ExprCallValue) && $op->srcLoc !== null) {
-            $found = $op->srcLoc;
         }
     });
 

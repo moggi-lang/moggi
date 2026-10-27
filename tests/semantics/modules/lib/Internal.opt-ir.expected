@@ -2,4 +2,5 @@ module
   data Secret
     constructor Secret
   function peek(_p0)
-      ret call __field0(_p0)
+      t0 = call __field0(_p0)
+      ret t0

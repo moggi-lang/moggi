@@ -1,3 +1,4 @@
 module
   function label()
-      ret call_value @Data.Function::id("tVal")
+      t0 = call_value @Data.Function::id("tVal")
+      ret t0

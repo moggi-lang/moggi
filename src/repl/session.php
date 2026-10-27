@@ -11,7 +11,6 @@ use Moggi\Modules\InstanceWorld;
 use function Moggi\Modules\buildImportContext;
 use function Moggi\Modules\computeEffectiveFixityByModule;
 use function Moggi\Modules\injectPreludeImport;
-use function Moggi\Modules\moduleFacadeExtraTypes;
 use function Moggi\Modules\moduleNameToNamespace;
 use function Moggi\Paths\moduleNameToPath;
 
@@ -263,9 +262,7 @@ function prepareInteractive(State $state, string $extra = '', bool $normalizeIo 
         . backendById($state->backend)->extension();
     $unitPaths = [];
     foreach ($units as $unit) {
-        if (isset($unit['path'])) {
-            $unitPaths[] = $unit['path'];
-        }
+        \array_push($unitPaths, ...Modules\unitSourceFiles($unit));
     }
     $context = $state->context->withSources([...$unitPaths, $path]);
     $state->context = $context;
@@ -281,11 +278,6 @@ function prepareInteractive(State $state, string $extra = '', bool $normalizeIo 
         $projectClasses,
         [],
         $moduleName,
-    );
-    $importContext = $importContext->withInterface(
-        $importContext->interface->withExtraTypes(
-            moduleFacadeExtraTypes($units, $moduleName, $projectClasses, $instanceWorld->index()),
-        ),
     );
 
     $interface = null;

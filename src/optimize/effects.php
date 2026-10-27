@@ -106,11 +106,6 @@ function operandHasIoEffect(IR\Operand $operand, array $index): bool
 {
     return match ($operand::class) {
         IR\Intrinsic::class => false,
-        IR\ExprCall::class => calleeIoEffect($operand->callee, $index),
-        IR\ExprCallValue::class => operandHasIoEffect($operand->callee, $index)
-            || operandsHaveIoEffect($operand->args, $index),
-        IR\ExprBinop::class => operandHasIoEffect($operand->left, $index)
-            || operandHasIoEffect($operand->right, $index),
         IR\FnRef::class => calleeIoEffect($operand->name, $index),
         default => false,
     };
@@ -217,11 +212,6 @@ function operandHasDirectForeign(IR\Operand $operand): bool
 {
     return match ($operand::class) {
         IR\ForeignCall::class => true,
-        IR\ExprCall::class => operandsHaveDirectForeign($operand->args),
-        IR\ExprCallValue::class => operandHasDirectForeign($operand->callee)
-            || operandsHaveDirectForeign($operand->args),
-        IR\ExprBinop::class => operandHasDirectForeign($operand->left)
-            || operandHasDirectForeign($operand->right),
         IR\ListLit::class => operandsHaveDirectForeign($operand->elements),
         IR\Partial::class => operandsHaveDirectForeign($operand->args),
         IR\DictMethod::class => operandHasDirectForeign($operand->evidence),
@@ -281,15 +271,8 @@ function matchArmsCallHostEffect(array $arms, array $host, array $index): bool
 /** @param array<string, true> $host */
 function operandCallsHostEffect(IR\Operand $operand, array $host): bool
 {
-    if ($operand instanceof IR\ExprCall) {
-        return isset($host[$operand->callee]) || operandsCallHostEffect($operand->args, $host);
-    }
     if ($operand instanceof IR\FnRef) {
         return isset($host[$operand->name]);
-    }
-    if ($operand instanceof IR\ExprCallValue) {
-        return operandCallsHostEffect($operand->callee, $host)
-            || operandsCallHostEffect($operand->args, $host);
     }
     if ($operand instanceof IR\Partial) {
         return isset($host[$operand->fn]) || operandsCallHostEffect($operand->args, $host);

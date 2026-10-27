@@ -1,11 +1,19 @@
 module
   function add4(a, b, c, d)
-      ret a intAdd# b intAdd# c intAdd# d intAdd# 1
+      t0 = a intAdd# b
+      t1 = t0 intAdd# c
+      t2 = t1 intAdd# d
+      t3 = t2 intAdd# 1
+      ret t3
   function chain(n)
-      ret call add4(1, 2, 3, n)
+      t3 = call_value partial add4(1, 2, 3)(n)
+      ret t3
   function exact()
-      ret call add4(10, 20, 30, 40)
+      t0 = call add4(10, 20, 30, 40)
+      ret t0
   function over(n)
-      ret call_value @add4(1, 2, 3, 4, n)
+      t0 = call_value @add4(1, 2, 3, 4, n)
+      ret t0
   function unknown(f, n)
-      ret call_value f(n)
+      t0 = call_value f(n)
+      ret t0

@@ -17,17 +17,19 @@
  *      dictionary count with the names the declaration's own parameters carry, a
  *      kind for every parameter the scheme binds, a scheme that names no variable
  *      its dictionaries do not, the type the declaration is lowered with, the
- *      documented obligation spelling, and an origin that is a real position;
+ *      documented obligation spelling, and an origin that is a real position in a
+ *      file this project is written in;
  *   3. scrubs every elaborated site of every recorded declaration — the surface
  *      projection on each term, the class, dictionary and instance fields on
  *      each evidence site — lowers the module again, and requires byte-identical
  *      IR;
  *   4. injects the failures a record can carry — a type the declaration does not
  *      have, every kind flattened to `Type`, an obligation in a variable the
- *      scheme does not bind, an origin nothing is written at and an origin on a
- *      real position the declaration is not written at — and requires the same
- *      checks that passed every real record to refuse each one, so a record
- *      cannot be counted rather than checked.
+ *      scheme does not bind, an origin nothing is written at, an origin past the
+ *      end of its file, an origin in a file this project does not have and an
+ *      origin on a real position the declaration is not written at — and requires
+ *      the same checks that passed every real record to refuse each one, so a
+ *      record cannot be counted rather than checked.
  *
  * The corpus is the point: a fixture proves the shapes someone thought of, and
  * the library is the acceptance surface the compiler has to keep. The counts it
@@ -44,6 +46,7 @@ require $root . '/tests/suite/support/workspace.php';
 
 use Moggi\IR;
 use Moggi\Modules;
+use function Moggi\Debug\normalizeDisplayPath;
 use Moggi\Pipeline\CompilationContext;
 use Moggi\Pipeline\CompilePurpose;
 use Moggi\Semantics\Kinds;
@@ -141,13 +144,15 @@ $records = 0;
 $instanceMethodRecords = 0;
 $foreignRecords = 0;
 $modules = 0;
+$moduleFiles = 0;
 $scrubbedSites = 0;
 
 /**
- * Where each prepared unit is written, so an origin can be held against a file.
+ * The file each prepared unit is written in — its own, and the half merged into it — so an
+ * origin can be held against the files its unit actually has.
  *
- * @var array<string, string> $unitPaths
- * @var array<string, int> $unitLines
+ * @var array<string, string> $unitPaths the unit's own file, the one a site without a file falls back to
+ * @var array<string, int> $unitLines every file this project is written in, display path => lines
  */
 $unitPaths = [];
 $unitLines = [];
@@ -157,7 +162,11 @@ foreach ($prepared->units as $unitName => $unit) {
         continue;
     }
     $unitPaths[$unitName] = $sourcePath;
-    $unitLines[$unitName] = \count(\file($sourcePath));
+    foreach (Modules\unitSourceFiles($unit) as $file) {
+        if (\is_file($file)) {
+            $unitLines[normalizeDisplayPath($file)] = \count(\file($file));
+        }
+    }
 }
 
 /** The dictionary parameter names the declaration's own parameters carry, in order. */
@@ -217,6 +226,20 @@ $canonicalType = static function (Ast\TypeNode $node): string {
 };
 
 /**
+ * The site a declaration is written at, composed as the record's owner composes it
+ * ({@see Modules\originFor()}): the unit, the file the declaration is written in — the node's own, or
+ * the unit's when the node was built by desugaring — and the position in that file.
+ */
+$siteOf = static fn (string $moduleName, Ast\FunctionDecl $declaration): string
+    => $declaration->sourceOrigin
+        ?? (string) Modules\sourceSite(
+            $moduleName,
+            $declaration->sourceFile ?? ($unitPaths[$moduleName] ?? ''),
+            $declaration->line,
+            $declaration->col,
+        );
+
+/**
  * Every fact a record publishes, held against the declaration it describes.
  *
  * The injections at the end of this case run this same closure over records
@@ -228,7 +251,7 @@ $validateRecord = static function (
     string $name,
     Modules\CheckedFunction $record,
     Ast\FunctionDecl $declaration,
-) use ($assert, $slotNames, $canonicalType, $kindFacts, $unitPaths, $unitLines): void {
+) use ($assert, $slotNames, $canonicalType, $kindFacts, $unitPaths, $unitLines, $siteOf): void {
     $assert(
         $record->scheme->freeTypeVars === [],
         "the record for `{$moduleName}::{$name}` states a scheme with an uncommitted variable: "
@@ -254,14 +277,18 @@ $validateRecord = static function (
 
     // The origin names a position in a file a tool can open. An inherited class
     // default is written in the class's module, so the origin's module is held
-    // against the project's units instead of being assumed to be this one.
-    $parts = \explode(':', $record->origin);
+    // against the project's units instead of being assumed to be this one — and
+    // since a unit is one file plus the half merged into it, the origin's file is
+    // held against the files that unit actually has.
+    // A path may carry a drive colon, so the position is read from the end.
+    $matched = \preg_match('/^([^:]+):(.+):([0-9]+):([0-9]+)$/', $record->origin, $originParts) === 1;
     $assert(
-        \count($parts) === 3,
+        $matched,
         "the record for `{$moduleName}::{$name}` publishes `{$record->origin}` as its origin, which is"
-            . ' not a `module:line:col` position',
+            . ' not a `module:file:line:col` position',
     );
-    [$originModule, $originLine, $originCol] = $parts;
+    [$originModule, $originFile] = [$originParts[1], $originParts[2]];
+    [$originLine, $originCol] = [(int) $originParts[3], (int) $originParts[4]];
     $assert(
         $originLine > 0 && $originCol > 0,
         "the record for `{$moduleName}::{$name}` publishes `{$record->origin}` as its origin, which is"
@@ -273,13 +300,17 @@ $validateRecord = static function (
             . " `{$originModule}` is no module of this project",
     );
     $assert(
-        $originLine <= $unitLines[$originModule],
+        isset($unitLines[$originFile]),
+        "the record for `{$moduleName}::{$name}` publishes `{$record->origin}` as its origin, and"
+            . " `{$originFile}` is no file of this project",
+    );
+    $assert(
+        $originLine <= $unitLines[$originFile],
         "the record for `{$moduleName}::{$name}` publishes `{$record->origin}` as its origin, past the"
-            . ' end of `' . $unitPaths[$originModule] . '`',
+            . " end of `{$originFile}`",
     );
 
-    $writtenAt = $declaration->sourceOrigin
-        ?? $moduleName . ':' . $declaration->line . ':' . $declaration->col;
+    $writtenAt = $siteOf($moduleName, $declaration);
     $assert(
         $record->origin === $writtenAt,
         "the record for `{$moduleName}::{$name}` publishes `{$record->origin}` as its origin, and the"
@@ -340,6 +371,7 @@ $samples = ['plain' => null, 'evidence' => null, 'kinded' => null];
 
 foreach ($prepared->checked as $moduleName => $program) {
     $unit = $prepared->units[$moduleName] ?? [];
+    $moduleFiles += \count(Modules\unitSourceFiles($unit));
     if (($unit['synthetic'] ?? false) === true) {
         // The compiler's own units declare no source-level functions; their product is the tree it
         // generated, so there is nothing here for the record to own or to be missing.
@@ -454,19 +486,34 @@ $injections['a type the declaration does not have'] = [
     $mutate($record, ['scheme' => $schemeWithType($record->scheme, new TypeExpr\TCon('Int', []))]),
     'different type',
 ];
+$plainOrigin = \explode(':', $record->origin);
+[$plainFile, $plainLine, $plainCol] = \array_slice($plainOrigin, 1);
 $injections['an origin nothing is written at'] = [
     $moduleName,
     $name,
     $declaration,
-    $mutate($record, ['origin' => $moduleName . ':0:0']),
+    $mutate($record, ['origin' => $plainOrigin[0] . ':' . $plainFile . ':0:0']),
     'not a position anything is written at',
 ];
-$plainOrigin = \explode(':', $record->origin);
+$injections['an origin past the end of its file'] = [
+    $moduleName,
+    $name,
+    $declaration,
+    $mutate($record, ['origin' => $plainOrigin[0] . ':' . $plainFile . ':' . ($unitLines[$plainFile] + 1) . ':1']),
+    'past the end of',
+];
+$injections['an origin in a file this project does not have'] = [
+    $moduleName,
+    $name,
+    $declaration,
+    $mutate($record, ['origin' => $plainOrigin[0] . ':elsewhere.mog:' . $plainLine . ':' . $plainCol]),
+    'is no file of this project',
+];
 $injections['an origin on another position of the module'] = [
     $moduleName,
     $name,
     $declaration,
-    $mutate($record, ['origin' => $plainOrigin[0] . ':' . $plainOrigin[1] . ':' . ($plainOrigin[2] + 1)]),
+    $mutate($record, ['origin' => $plainOrigin[0] . ':' . $plainFile . ':' . $plainLine . ':' . ((int) $plainCol + 1)]),
     'written at',
 ];
 
@@ -523,7 +570,16 @@ foreach ($injections as $label => [$moduleName, $name, $declaration, $record, $f
     ++$refused;
 }
 
-$assert($modules >= 68, "the differential covered only {$modules} of the base library's modules");
+// A unit is one file plus the half merged into it, so the corpus's claim is counted in files: a
+// half stops being a module of its own the moment it is merged, and its declarations are records of
+// the unit it was merged into.
+$assert($modules >= 59, "the differential covered only {$modules} of the base library's units");
+$assert(
+    $moduleFiles >= 68,
+    "the differential covered the declarations of only {$moduleFiles} files; every file the base"
+        . ' library is written in — a unit\'s own and the half merged into it — is lowered by a unit'
+        . ' it walked',
+);
 $assert(
     $records >= 3800,
     "the differential covered only {$records} records; every declaration of the base library that is"
@@ -544,7 +600,7 @@ $assert(
     "the differential scrubbed only {$scrubbedSites} sites; it has to compare the trees it touched",
 );
 
-echo "checked-core differential passed: {$records} records over {$modules} modules"
-    . " ({$instanceMethodRecords} instance methods, {$foreignRecords} foreign imports),"
+echo "checked-core differential passed: {$records} records over {$modules} units"
+    . " ({$moduleFiles} files, {$instanceMethodRecords} instance methods, {$foreignRecords} foreign imports),"
     . " {$scrubbedSites} sites scrubbed,"
     . " {$refused} injected faults refused\n";

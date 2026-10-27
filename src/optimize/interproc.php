@@ -341,18 +341,6 @@ function collectLocalCalleesInStmt(IR\Stmt $stmt, array $index, array &$callees)
         $callees[$stmt->callee] = true;
     }
 
-    if ($stmt instanceof IR\Ret && $stmt->value instanceof IR\ExprCall && isset($index[$stmt->value->callee])) {
-        $callees[$stmt->value->callee] = true;
-    }
-
-    if ($stmt instanceof IR\Assign || $stmt instanceof IR\Let) {
-        if ($stmt->value instanceof IR\ExprCall && isset($index[$stmt->value->callee])) {
-            $callees[$stmt->value->callee] = true;
-        }
-        if ($stmt->value instanceof IR\FnRef && isset($index[$stmt->value->name])) {
-        }
-    }
-
     if ($stmt instanceof IR\MatchStmt || $stmt instanceof IR\MatchReturn) {
         foreach ($stmt->arms as $arm) {
             collectLocalCalleesInBlock($arm->body, $index, $callees);
@@ -407,25 +395,7 @@ function inlineItems(
 ): array {
     $out = [];
 
-    foreach (denseStmtItems(flattenNestedRetExprCalls($items, $nextTemp)) as $item) {
-        if ($item instanceof IR\Call) {
-            $item = new IR\Call(
-                $item->callee,
-                \array_map(
-                    static fn (IR\Operand $arg): IR\Operand => inlineCallsInExpr(
-                        $arg,
-                        $selfName,
-                        $index,
-                        $nextTemp,
-                        $recursive,
-                    ),
-                    $item->args,
-                ),
-                $item->dest,
-                $item->srcLoc,
-            );
-        }
-
+    foreach (denseStmtItems($items) as $item) {
         if ($item instanceof IR\Call) {
             $target = lookupIndexedFunction($index, $item->callee);
             if ($target !== null) {
@@ -441,236 +411,6 @@ function inlineItems(
         }
 
         $out[] = inlineStmt($item, $selfName, $index, $recursive, $depth, $peBlocked, $nextTemp);
-    }
-
-    return denseStmtItems(inlineNestedRetCalls(
-        inlineRetCalls($out, $selfName, $index, $nextTemp, $recursive),
-        $selfName,
-        $index,
-        $nextTemp,
-        $recursive,
-    ));
-}
-
-/**
- * Turn `ret call f(call g(x), …)` into statement Calls so match-wrappers can inline.
- *
- * @param list<IR\Stmt> $items
- * @return list<IR\Stmt>
- */
-function flattenNestedRetExprCalls(array $items, int &$nextTemp): array
-{
-    $out = [];
-    foreach (denseStmtItems($items) as $item) {
-        if (! ($item instanceof IR\Ret) || ! ($item->value instanceof IR\ExprCall)) {
-            if ($item instanceof IR\MatchStmt || $item instanceof IR\MatchReturn) {
-                $out[] = match ($item::class) {
-                    IR\MatchStmt::class => new IR\MatchStmt(
-                        $item->scrutinee,
-                        \array_map(
-                            static function (IR\MatchArm $arm) use (&$nextTemp): IR\MatchArm {
-                                return new IR\MatchArm(
-                                    $arm->pattern,
-                                    new IR\Block(flattenNestedRetExprCalls($arm->body->items, $nextTemp)),
-                                    $arm->guards,
-                                );
-                            },
-                            $item->arms,
-                        ),
-                        $item->dest,
-                        $item->exhaustive,
-                    ),
-                    IR\MatchReturn::class => new IR\MatchReturn(
-                        $item->scrutinee,
-                        \array_map(
-                            static function (IR\MatchArm $arm) use (&$nextTemp): IR\MatchArm {
-                                return new IR\MatchArm(
-                                    $arm->pattern,
-                                    new IR\Block(flattenNestedRetExprCalls($arm->body->items, $nextTemp)),
-                                    $arm->guards,
-                                );
-                            },
-                            $item->arms,
-                        ),
-                        $item->exhaustive,
-                    ),
-                };
-
-                continue;
-            }
-            $out[] = $item;
-
-            continue;
-        }
-
-        $args = [];
-        $prefix = [];
-        $changed = false;
-        foreach ($item->value->args as $arg) {
-            if ($arg instanceof IR\ExprCall) {
-                $dest = $nextTemp++;
-                $prefix[] = new IR\Call($arg->callee, $arg->args, $dest, $arg->srcLoc);
-                $args[] = new IR\Temp($dest);
-                $changed = true;
-            } else {
-                $args[] = $arg;
-            }
-        }
-
-        if (! $changed) {
-            $out[] = $item;
-
-            continue;
-        }
-
-        foreach ($prefix as $stmt) {
-            $out[] = $stmt;
-        }
-        $out[] = new IR\Ret(new IR\ExprCall($item->value->callee, $args, $item->value->srcLoc));
-    }
-
-    return denseStmtItems($out);
-}
-
-/**
- * @param list<IR\Stmt> $items
- * @param array<string, IR\FunctionDecl> $index
- * @return list<IR\Stmt>
- */
-function inlineNestedRetCalls(array $items, string $selfName, array $index, int &$nextTemp): array
-{
-    return \array_map(
-        static function (IR\Stmt $item) use ($selfName, $index, &$nextTemp): IR\Stmt {
-            if (! ($item instanceof IR\Ret)) {
-                return $item;
-            }
-
-            return new IR\Ret(inlineCallsInExpr($item->value, $selfName, $index, $nextTemp));
-        },
-        denseStmtItems($items),
-    );
-}
-
-/**
- * @param array<string, IR\FunctionDecl> $index
- * @param IR\Operand $expr
- */
-function inlineCallsInExpr(IR\Operand $expr, string $selfName, array $index, int &$nextTemp): IR\Operand
-{
-    if ($expr instanceof IR\ExprCall && isset($index[$expr->callee])) {
-        $fakeCall = new IR\Call($expr->callee, $expr->args, $nextTemp++, $expr->srcLoc);
-        $inlined = tryInlineCall($index[$expr->callee], $fakeCall, $selfName, $index, $nextTemp);
-        if ($inlined !== null) {
-            $folded = foldInlinedItemsToExpr($inlined, $index);
-            if ($folded !== null) {
-                return inlineCallsInExpr($folded, $selfName, $index, $nextTemp);
-            }
-        }
-    }
-
-    if ($expr instanceof IR\ExprBinop) {
-        return new IR\ExprBinop(
-            $expr->op,
-            inlineCallsInExpr($expr->left, $selfName, $index, $nextTemp),
-            inlineCallsInExpr($expr->right, $selfName, $index, $nextTemp),
-        );
-    }
-
-    if ($expr instanceof IR\ExprCallValue) {
-        return new IR\ExprCallValue(
-            inlineCallsInExpr($expr->callee, $selfName, $index, $nextTemp),
-            \array_map(
-                static fn (IR\Operand $arg): IR\Operand => inlineCallsInExpr($arg, $selfName, $index, $nextTemp),
-                $expr->args,
-            ),
-            $expr->srcLoc,
-        );
-    }
-
-    return $expr;
-}
-
-/**
- * @param list<IR\Stmt> $items
- * @param array<string, IR\FunctionDecl> $index
- * @return list<IR\Stmt>
- */
-function inlineRetCalls(array $items, string $selfName, array $index, int &$nextTemp): array
-{
-    $out = [];
-
-    foreach (denseStmtItems($items) as $item) {
-        if (! ($item instanceof IR\Ret) || ! ($item->value instanceof IR\ExprCall)) {
-            if ($item instanceof IR\Call) {
-                $args = [];
-                $prefix = [];
-                $changed = false;
-                foreach ($item->args as $arg) {
-                    if ($arg instanceof IR\ExprCall) {
-                        $dest = $nextTemp++;
-                        $prefix[] = new IR\Call($arg->callee, $arg->args, $dest, $item->srcLoc);
-                        $args[] = new IR\Temp($dest);
-                        $changed = true;
-                    } else {
-                        $args[] = $arg;
-                    }
-                }
-                if ($changed) {
-                    foreach ($prefix as $stmt) {
-                        $out[] = $stmt;
-                    }
-                    $out[] = new IR\Call($item->callee, $args, $item->dest, $item->srcLoc);
-
-                    continue;
-                }
-            }
-            $out[] = $item;
-
-            continue;
-        }
-
-        $callee = $item->value->callee;
-        if (! isset($index[$callee])) {
-            $out[] = $item;
-
-            continue;
-        }
-
-        $target = $index[$callee];
-        $fakeCall = new IR\Call($callee, $item->value->args, 0);
-        $inlined = tryInlineCall($target, $fakeCall, $selfName, $index, $nextTemp);
-        if ($inlined === null) {
-            $out[] = $item;
-
-            continue;
-        }
-
-        $converted = inlinedItemsToRet($inlined);
-        if ($converted !== null) {
-            foreach (denseStmtItems($converted) as $convertedItem) {
-                $out[] = $convertedItem;
-            }
-
-            continue;
-        }
-
-        $inlined = denseStmtItems($inlined);
-        if (\count($inlined) === 1 && $inlined[0] instanceof IR\MatchStmt) {
-            $ms = $inlined[0];
-            $arms = [];
-            foreach ($ms->arms as $arm) {
-                $arms[] = new IR\MatchArm(
-                    $arm->pattern,
-                    new IR\Block(matchArmAssignsToRets($arm->body->items, $ms->dest)),
-                    $arm->guards,
-                );
-            }
-            $out[] = new IR\MatchReturn($ms->scrutinee, $arms, $ms->exhaustive);
-
-            continue;
-        }
-
-        $out[] = $item;
     }
 
     return denseStmtItems($out);
@@ -889,7 +629,7 @@ function tryInlineCall(IR\FunctionDecl $target, IR\Stmt $call, string $selfName,
 }
 
 /**
- * Bind ExprCall / ForeignCall args to temps so substitute cannot duplicate them.
+ * Bind foreign-call args to temps so substitute cannot duplicate them.
  *
  * @param list<IR\Operand> $args
  * @return array{prefix: list<IR\Stmt>, args: list<IR\Operand>, nextTemp: int}
@@ -899,7 +639,7 @@ function materializeInlineArgs(array $args, int $nextTemp): array
     $prefix = [];
     $out = [];
     foreach ($args as $arg) {
-        if ($arg instanceof IR\ExprCall || $arg instanceof IR\ForeignCall || $arg instanceof IR\ExprCallValue) {
+        if ($arg instanceof IR\ForeignCall) {
             $dest = $nextTemp++;
             $prefix[] = new IR\Assign($dest, $arg);
             $out[] = new IR\Temp($dest);
@@ -1073,22 +813,11 @@ function bodyReferencesCapturedLambdas(IR\FunctionDecl $function, array $index):
     walkBlock(
         $function->body,
         static function (IR\Stmt $stmt) use (&$names, $leafCaptured): void {
-            $callee = null;
-            if ($stmt instanceof IR\Call) {
-                $callee = $stmt->callee;
-            } elseif ($stmt instanceof IR\Ret && $stmt->value instanceof IR\ExprCall) {
-                $callee = $stmt->value->callee;
-            } elseif (($stmt instanceof IR\Assign || $stmt instanceof IR\Let) && $stmt->value instanceof IR\ExprCall) {
-                $callee = $stmt->value->callee;
-            }
-            if (\is_string($callee) && $leafCaptured($callee)) {
-                $names[] = $callee;
+            if ($stmt instanceof IR\Call && $leafCaptured($stmt->callee)) {
+                $names[] = $stmt->callee;
             }
         },
-        static function (IR\Operand $operand) use (&$names, $leafCaptured): void {
-            if ($operand instanceof IR\ExprCall && $leafCaptured($operand->callee)) {
-                $names[] = $operand->callee;
-            }
+        static function (IR\Operand $operand): void {
         },
     );
     $meta = activeInlineCaptureMeta();
@@ -1157,16 +886,8 @@ function matchArmAssignsToRets(array $items, int $dest): array
         return denseStmtItems($items);
     }
 
-    if ($last instanceof IR\Call && $last->dest === $dest) {
-        \array_pop($items);
-        $items[] = new IR\Ret(new IR\ExprCall($last->callee, $last->args));
-
-        return denseStmtItems($items);
-    }
-
-    if ($last instanceof IR\CallValue && $last->dest === $dest) {
-        \array_pop($items);
-        $items[] = new IR\Ret(new IR\ExprCallValue($last->callee, $last->args));
+    if (($last instanceof IR\Call || $last instanceof IR\CallValue) && $last->dest === $dest) {
+        $items[] = new IR\Ret(new IR\Temp($dest));
 
         return denseStmtItems($items);
     }
@@ -1191,213 +912,22 @@ function inlinedItemsToRet(array $inlined): ?array
         return null;
     }
 
-    if ($last instanceof IR\DictCall) {
+    if ($last instanceof IR\DictCall || $last instanceof IR\Call || $last instanceof IR\CallValue
+        || $last instanceof IR\Binop) {
         return denseStmtItems([...$inlined, new IR\Ret(new IR\Temp($last->dest))]);
     }
 
-    $ret = match ($last::class) {
-        IR\Binop::class => new IR\Ret(new IR\ExprBinop($last->op, $last->left, $last->right)),
-        IR\Assign::class => new IR\Ret($last->value),
-        IR\Call::class => new IR\Ret(new IR\ExprCall($last->callee, $last->args, $last->srcLoc)),
-        IR\CallValue::class => new IR\Ret(new IR\ExprCallValue($last->callee, $last->args, $last->srcLoc)),
-        default => null,
-    };
-    if ($ret === null) {
+    if (! $last instanceof IR\Assign) {
         return null;
     }
 
-    return denseStmtItems([...\array_slice($inlined, 0, -1), $ret]);
-}
-
-/**
- * Collapse a statement-form inline into one operand for expression contexts.
- * Prefix temp defs are substituted into the Ret value; refuses if any stmt
- * cannot be represented as a pure expression binding.
- *
- * @param list<IR\Stmt> $inlined
- * @param array<string, IR\FunctionDecl> $index the module's declarations
- */
-function foldInlinedItemsToExpr(array $inlined, array $index): ?IR\Operand
-{
-    $asRet = inlinedItemsToRet($inlined);
-    if ($asRet === null) {
-        return null;
-    }
-
-    return reduceMatchArmBodyToExpr($asRet, [], [], [], $index);
+    return denseStmtItems([...\array_slice($inlined, 0, -1), new IR\Ret($last->value)]);
 }
 
 /** @return list<IR\Stmt> */
 function inlineExprAsItems(IR\Operand $expr, int $dest): array
 {
-    return match ($expr::class) {
-        IR\ExprBinop::class => [new IR\Binop($expr->op, $expr->left, $expr->right, $dest)],
-        IR\ExprCall::class => [new IR\Call($expr->callee, $expr->args, $dest, $expr->srcLoc)],
-        IR\ExprCallValue::class => [new IR\CallValue($expr->callee, $expr->args, $dest, $expr->srcLoc)],
-        default => [new IR\Assign($dest, $expr)],
-    };
-}
-
-/**
- * @param list<IR\Stmt> $items
- * @param list<string> $envParams
- * @param list<IR\Operand> $envArgs
- * @param array<string, true> $armBound
- * @param array<string, IR\FunctionDecl> $index the module's declarations
- */
-function reduceMatchArmBodyToExpr(
-    array $items,
-    array $envParams,
-    array $envArgs,
-    array $armBound,
-    array $index,
-): ?IR\Operand {
-    $armItems = denseStmtItems($items);
-    if ($armItems === []) {
-        return null;
-    }
-
-    $last = $armItems[\count($armItems) - 1];
-    if (! ($last instanceof IR\Ret)) {
-        return null;
-    }
-
-    foreach ($envParams as $i => $param) {
-        $arg = $envArgs[$i] ?? null;
-        if ($arg === null || ! operandIsNonDuplicable($arg)) {
-            continue;
-        }
-        if (countLocalUsesInItems($armItems, $param) > 1) {
-            return null;
-        }
-    }
-
-    /** @var array<int, IR\Operand> $tempEnv */
-    $tempEnv = [];
-    /** @var array<int, true> $sticky non-duplicable temps — do not expand early */
-    $sticky = [];
-    foreach (\array_slice($armItems, 0, -1) as $item) {
-        $stmt = substituteStmt($item, $envParams, $envArgs, $armBound);
-        if ($stmt instanceof IR\Let) {
-            $val = replaceTempsInOperand($stmt->value, $tempEnv, $sticky);
-            if (operandIsNonDuplicable($val) && countLocalUsesInItems($armItems, $stmt->name) > 1) {
-                return null;
-            }
-            $envParams[] = $stmt->name;
-            $envArgs[] = $val;
-            $armBound[$stmt->name] = true;
-
-            continue;
-        }
-        if ($stmt instanceof IR\Assign) {
-            $val = replaceTempsInOperand($stmt->value, $tempEnv, $sticky);
-            if (operandContainsNonDuplicable($val)) {
-                $sticky[$stmt->dest] = true;
-            }
-            $tempEnv[$stmt->dest] = $val;
-
-            continue;
-        }
-        if ($stmt instanceof IR\Call) {
-            if (calleeIsRun($index[$stmt->callee] ?? null, $stmt->callee)) {
-                return null;
-            }
-
-            $val = new IR\ExprCall(
-                $stmt->callee,
-                \array_map(
-                    static fn (IR\Operand $a): IR\Operand => replaceTempsInOperand($a, $tempEnv, $sticky),
-                    $stmt->args,
-                ),
-            );
-            if (operandContainsNonDuplicable($val)) {
-                $sticky[$stmt->dest] = true;
-            }
-            $tempEnv[$stmt->dest] = $val;
-
-            continue;
-        }
-        if ($stmt instanceof IR\CallValue) {
-            $val = new IR\ExprCallValue(
-                replaceTempsInOperand($stmt->callee, $tempEnv, $sticky),
-                \array_map(
-                    static fn (IR\Operand $a): IR\Operand => replaceTempsInOperand($a, $tempEnv, $sticky),
-                    $stmt->args,
-                ),
-            );
-            if (operandContainsNonDuplicable($val)) {
-                $sticky[$stmt->dest] = true;
-            }
-            $tempEnv[$stmt->dest] = $val;
-
-            continue;
-        }
-        if ($stmt instanceof IR\DictCall) {
-            $val = new IR\ExprCallValue(
-                new IR\DictMethod(
-                    replaceTempsInOperand($stmt->evidence, $tempEnv, $sticky),
-                    $stmt->method,
-                    $stmt->localEvidence,
-                ),
-                \array_map(
-                    static fn (IR\Operand $a): IR\Operand => replaceTempsInOperand($a, $tempEnv, $sticky),
-                    $stmt->args,
-                ),
-            );
-            if (operandContainsNonDuplicable($val)) {
-                $sticky[$stmt->dest] = true;
-            }
-            $tempEnv[$stmt->dest] = $val;
-
-            continue;
-        }
-        if ($stmt instanceof IR\Binop) {
-            $val = new IR\ExprBinop(
-                $stmt->op,
-                replaceTempsInOperand($stmt->left, $tempEnv, $sticky),
-                replaceTempsInOperand($stmt->right, $tempEnv, $sticky),
-            );
-            if (operandContainsNonDuplicable($val)) {
-                $sticky[$stmt->dest] = true;
-            }
-            $tempEnv[$stmt->dest] = $val;
-
-            continue;
-        }
-
-        return null;
-    }
-
-    $retOp = substituteOperand($last->value, $envParams, $envArgs, $armBound);
-    foreach ($sticky as $id => $_) {
-        $uses = countTempUsesInOperand($retOp, $id);
-        foreach ($tempEnv as $otherId => $otherVal) {
-            if ($otherId === $id) {
-                continue;
-            }
-            $uses += countTempUsesInOperand($otherVal, $id);
-        }
-        if ($uses > 1) {
-            return null;
-        }
-    }
-    foreach ($tempEnv as $id => $value) {
-        if (! operandIsNonDuplicable($value) || isset($sticky[$id])) {
-            continue;
-        }
-        $uses = countTempUsesInOperand($retOp, $id);
-        foreach ($tempEnv as $otherId => $otherVal) {
-            if ($otherId === $id) {
-                continue;
-            }
-            $uses += countTempUsesInOperand($otherVal, $id);
-        }
-        if ($uses > 1) {
-            return null;
-        }
-    }
-
-    return replaceTempsInOperand($retOp, $tempEnv, []);
+    return [new IR\Assign($dest, $expr)];
 }
 
 /**
@@ -1409,9 +939,6 @@ function operandIsNonDuplicable(IR\Operand $op): bool
 {
     if ($op instanceof IR\ForeignCall) {
         return true;
-    }
-    if ($op instanceof IR\ExprCall && $op->args === []) {
-        return nullaryFnNameIsNonDuplicableSeed($op->callee);
     }
     if ($op instanceof IR\FnRef) {
         return nullaryFnNameIsNonDuplicableSeed($op->name);
@@ -1487,18 +1014,6 @@ function activeFnArity(string $name): ?int
     return null;
 }
 
-function operandContainsNonDuplicable(IR\Operand $op): bool
-{
-    $found = false;
-    walkOperand($op, static function (IR\Operand $inner) use (&$found): void {
-        if (operandIsNonDuplicable($inner)) {
-            $found = true;
-        }
-    });
-
-    return $found;
-}
-
 /**
  * @param list<string> $params
  * @param list<IR\Operand> $args
@@ -1538,18 +1053,6 @@ function countLocalUsesInItems(array $items, string $name): int
     return $n;
 }
 
-function countTempUsesInOperand(IR\Operand $operand, int $id): int
-{
-    $n = 0;
-    walkOperand($operand, static function (IR\Operand $op) use (&$n, $id): void {
-        if ($op instanceof IR\Temp && $op->id === $id) {
-            ++$n;
-        }
-    });
-
-    return $n;
-}
-
 function countLocalUsesInOperand(IR\Operand $operand, string $name): int
 {
     $n = 0;
@@ -1577,41 +1080,11 @@ function replaceTempsInOperand(IR\Operand $operand, array $tempEnv, array $stick
         return replaceTempsInOperand($tempEnv[$operand->id], $tempEnv, $sticky);
     }
 
-    if ($operand instanceof IR\ExprCall) {
-        return new IR\ExprCall(
-            $operand->callee,
-            \array_map(
-                static fn (IR\Operand $a): IR\Operand => replaceTempsInOperand($a, $tempEnv, $sticky),
-                $operand->args,
-            ),
-            $operand->srcLoc,
-        );
-    }
-
-    if ($operand instanceof IR\ExprCallValue) {
-        return new IR\ExprCallValue(
-            replaceTempsInOperand($operand->callee, $tempEnv, $sticky),
-            \array_map(
-                static fn (IR\Operand $a): IR\Operand => replaceTempsInOperand($a, $tempEnv, $sticky),
-                $operand->args,
-            ),
-            $operand->srcLoc,
-        );
-    }
-
     if ($operand instanceof IR\DictMethod) {
         return new IR\DictMethod(
             replaceTempsInOperand($operand->evidence, $tempEnv, $sticky),
             $operand->method,
             $operand->localEvidence,
-        );
-    }
-
-    if ($operand instanceof IR\ExprBinop) {
-        return new IR\ExprBinop(
-            $operand->op,
-            replaceTempsInOperand($operand->left, $tempEnv, $sticky),
-            replaceTempsInOperand($operand->right, $tempEnv, $sticky),
         );
     }
 
@@ -1633,17 +1106,6 @@ function replaceTempsInOperand(IR\Operand $operand, array $tempEnv, array $stick
         }
 
         return new IR\Intrinsic($operand->name, $args, $operand->srcLoc);
-    }
-
-    if ($operand instanceof IR\ExprPartial) {
-        return new IR\ExprPartial(
-            $operand->fn,
-            $operand->arity,
-            \array_map(
-                static fn (IR\Operand $a): IR\Operand => replaceTempsInOperand($a, $tempEnv, $sticky),
-                $operand->args,
-            ),
-        );
     }
 
     if ($operand instanceof IR\Partial) {
@@ -1737,31 +1199,11 @@ function bodyReferencesForeignFunctions(array $items, array $index): bool
         if ($op instanceof IR\FnRef) {
             return $isForeignName($op->name);
         }
-        if ($op instanceof IR\ExprCall) {
-            if ($isForeignName($op->callee)) {
-                return true;
-            }
-            foreach ($op->args as $arg) {
-                if ($visitOp($arg)) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
         if ($op instanceof IR\ForeignCall) {
             return true;
         }
-        if ($op instanceof IR\Intrinsic || $op instanceof IR\ListLit || $op instanceof IR\Partial
-            || $op instanceof IR\ExprCallValue || $op instanceof IR\ExprPartial
-        ) {
-            $args = $op instanceof IR\ListLit ? $op->elements
-                : ($op instanceof IR\ExprCallValue
-                    ? \array_merge([$op->callee], $op->args)
-                    : $op->args);
-            if ($op instanceof IR\ExprCallValue && $visitOp($op->callee)) {
-                return true;
-            }
+        if ($op instanceof IR\Intrinsic || $op instanceof IR\ListLit || $op instanceof IR\Partial) {
+            $args = $op instanceof IR\ListLit ? $op->elements : $op->args;
             foreach ($args as $arg) {
                 if ($arg instanceof IR\Operand && $visitOp($arg)) {
                     return true;
@@ -1835,7 +1277,7 @@ function activeForeignLeaves(): array
 }
 
 /**
- * True when any Call/ExprCall in `$items` targets a known recursive/SCC name
+ * True when any `Call` in `$items` targets a known recursive/SCC name
  * (including specialization-leaf aliases).
  *
  * @param list<IR\Stmt> $items
@@ -1863,14 +1305,6 @@ function bodyCallsRecursiveScc(array $items, array $recursive, string $selfName,
         foreach (denseStmtItems($stmts) as $item) {
             if ($item instanceof IR\Call && $isRec($item->callee)) {
                 return true;
-            }
-            if ($item instanceof IR\Ret && $item->value instanceof IR\ExprCall && $isRec($item->value->callee)) {
-                return true;
-            }
-            if ($item instanceof IR\Assign || $item instanceof IR\Let) {
-                if ($item->value instanceof IR\ExprCall && $isRec($item->value->callee)) {
-                    return true;
-                }
             }
             if ($item instanceof IR\MatchStmt || $item instanceof IR\MatchReturn) {
                 foreach ($item->arms as $arm) {
@@ -2001,17 +1435,7 @@ function stmtReferencesFunction(IR\Stmt $stmt, string $name): bool
 {
     return match ($stmt::class) {
         IR\Call::class => $stmt->callee === $name,
-        IR\Assign::class, IR\Let::class => operandReferencesFunction($stmt->value, $name),
-        IR\Binop::class => operandReferencesFunction($stmt->left, $name)
-            || operandReferencesFunction($stmt->right, $name),
-        IR\CallValue::class => operandReferencesFunction($stmt->callee, $name)
-            || operandsReferenceFunction($stmt->args, $name),
-        IR\Ret::class => operandReferencesFunction($stmt->value, $name),
         IR\MatchStmt::class, IR\MatchReturn::class => (static function () use ($stmt, $name): bool {
-            if (operandReferencesFunction($stmt->scrutinee, $name)) {
-                return true;
-            }
-
             foreach ($stmt->arms as $arm) {
                 if (functionBodyCallsSelf($arm->body->items, $name)) {
                     return true;
@@ -2020,33 +1444,7 @@ function stmtReferencesFunction(IR\Stmt $stmt, string $name): bool
 
             return false;
         })(),
-        IR\TailRecall::class => operandsReferenceFunction($stmt->args, $name),
         IR\Loop::class => functionBodyCallsSelf($stmt->body->items, $name),
-        default => false,
-    };
-}
-
-/** @param list<IR\Operand> $operands */
-function operandsReferenceFunction(array $operands, string $name): bool
-{
-    foreach ($operands as $operand) {
-        if (operandReferencesFunction($operand, $name)) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-function operandReferencesFunction(IR\Operand $operand, string $name): bool
-{
-    return match ($operand::class) {
-        IR\ExprCall::class => $operand->callee === $name
-            || operandsReferenceFunction($operand->args, $name),
-        IR\ExprCallValue::class => operandReferencesFunction($operand->callee, $name)
-            || operandsReferenceFunction($operand->args, $name),
-        IR\ExprBinop::class => operandReferencesFunction($operand->left, $name)
-            || operandReferencesFunction($operand->right, $name),
         default => false,
     };
 }
@@ -2474,21 +1872,6 @@ function remapTempsInOperand(IR\Operand $operand, array $remap): IR\Operand
 {
     return match ($operand::class) {
         IR\Temp::class => new IR\Temp(remapTempId($operand->id, $remap)),
-        IR\ExprBinop::class => new IR\ExprBinop(
-            $operand->op,
-            remapTempsInOperand($operand->left, $remap),
-            remapTempsInOperand($operand->right, $remap),
-        ),
-        IR\ExprCall::class => new IR\ExprCall(
-            $operand->callee,
-            \array_map(static fn (IR\Operand $a): IR\Operand => remapTempsInOperand($a, $remap), $operand->args),
-            $operand->srcLoc,
-        ),
-        IR\ExprCallValue::class => new IR\ExprCallValue(
-            remapTempsInOperand($operand->callee, $remap),
-            \array_map(static fn (IR\Operand $a): IR\Operand => remapTempsInOperand($a, $remap), $operand->args),
-            $operand->srcLoc,
-        ),
         IR\Intrinsic::class => new IR\Intrinsic($operand->name, \array_map(
             static fn (IR\Operand $a): IR\Operand => remapTempsInOperand($a, $remap),
             $operand->args,
@@ -2498,11 +1881,6 @@ function remapTempsInOperand(IR\Operand $operand, array $remap): IR\Operand
             $operand->elements,
         )),
         IR\Partial::class => new IR\Partial(
-            $operand->fn,
-            $operand->arity,
-            \array_map(static fn (IR\Operand $a): IR\Operand => remapTempsInOperand($a, $remap), $operand->args),
-        ),
-        IR\ExprPartial::class => new IR\ExprPartial(
             $operand->fn,
             $operand->arity,
             \array_map(static fn (IR\Operand $a): IR\Operand => remapTempsInOperand($a, $remap), $operand->args),
@@ -2548,28 +1926,7 @@ function substituteExpr(IR\Operand $expr, array $params, array $args, array $bou
         IR\ConstInt::class, IR\FnRef::class => $expr,
         IR\Local::class => substituteLocal($expr, $params, $args, $bound),
         IR\Temp::class => $expr,
-        IR\ExprBinop::class => new IR\ExprBinop(
-            $expr->op,
-            substituteExpr($expr->left, $params, $args, $bound),
-            substituteExpr($expr->right, $params, $args, $bound),
-        ),
-        IR\ExprCall::class => new IR\ExprCall(
-            $expr->callee,
-            \array_map(
-                static fn (IR\Operand $arg): IR\Operand => substituteOperand($arg, $params, $args, $bound),
-                $expr->args,
-            ),
-            $expr->srcLoc,
-        ),
-        IR\ExprCallValue::class => new IR\ExprCallValue(
-            substituteOperand($expr->callee, $params, $args, $bound),
-            \array_map(
-                static fn (IR\Operand $arg): IR\Operand => substituteOperand($arg, $params, $args, $bound),
-                $expr->args,
-            ),
-            $expr->srcLoc,
-        ),
-        IR\Partial::class, IR\ExprPartial::class, IR\Intrinsic::class, IR\ListLit::class,
+        IR\Partial::class, IR\Intrinsic::class, IR\ListLit::class,
         IR\DictMethod::class, IR\ForeignCall::class => substituteOperand($expr, $params, $args, $bound),
         default => substituteOperand($expr, $params, $args, $bound),
     };
@@ -2659,115 +2016,11 @@ function fuseItems(array $items, array $index): array
 {
     $out = [];
 
-    for ($i = 0; $i < \count($items); ++$i) {
-        $item = $items[$i];
-        $next = $items[$i + 1] ?? null;
-
-        if ($item instanceof IR\Call && $next !== null) {
-            if ($next instanceof IR\CallValue) {
-                $fused = tryFuseLambdaCall($item, $next, $index);
-                if ($fused !== null) {
-                    $out[] = $fused;
-                    ++$i;
-
-                    continue;
-                }
-            }
-
-            if ($next instanceof IR\Ret && $next->value instanceof IR\ExprCallValue) {
-                $fused = tryFuseLambdaRet($item, $next, $index);
-                if ($fused !== null) {
-                    $out[] = $fused;
-                    ++$i;
-
-                    continue;
-                }
-            }
-        }
-
+    foreach ($items as $item) {
         $out[] = fuseStmt($item, $index);
     }
 
     return $out;
-}
-
-/**
- * @param array<string, IR\FunctionDecl> $index
- */
-function tryFuseLambdaCall(IR\Stmt $call, IR\CallValue $callValue, array $index): ?IR\Stmt
-{
-    if (! ($callValue->callee instanceof IR\Temp) || $callValue->callee->id !== $call->dest) {
-        return null;
-    }
-
-    $provider = $index[$call->callee] ?? null;
-    if ($provider === null) {
-        return null;
-    }
-
-    $lambdaName = returnedLambdaName($provider, $index);
-    if ($lambdaName === null) {
-        return null;
-    }
-
-    $lambda = $index[$lambdaName] ?? null;
-    if ($lambda === null || ! isSimpleLambda($lambda)) {
-        return null;
-    }
-
-    $body = $lambda->body->items;
-    $ret = $body[\count($body) - 1];
-    if (! ($ret instanceof IR\Ret) || ! ($ret->value instanceof IR\ExprBinop)) {
-        return null;
-    }
-
-    $left = mapCapture($ret->value->left, $lambda, $provider->params, $call->args);
-    $right = mapCapture($ret->value->right, $lambda, $provider->params, $call->args, $callValue->args);
-
-    return new IR\Assign(
-        $callValue->dest,
-        new IR\ExprBinop($ret->value->op, $left, $right),
-    );
-}
-
-/**
- * @param array<string, IR\FunctionDecl> $index
- */
-function tryFuseLambdaRet(IR\Stmt $call, IR\Ret $ret, array $index): ?array
-{
-    $value = $ret->value;
-    if (! ($value->callee instanceof IR\Temp) || $value->callee->id !== $call->dest) {
-        return null;
-    }
-
-    $synthetic = new IR\CallValue(new IR\Temp($call->dest), $value->args, 0);
-    $fused = tryFuseLambdaCall($call, $synthetic, $index);
-    if ($fused === null) {
-        return null;
-    }
-
-    return new IR\Ret($fused->value);
-}
-
-/** @param IR\FunctionDecl $provider @param array<string, IR\FunctionDecl> $index */
-function returnedLambdaName(IR\FunctionDecl $provider, array $index): ?string
-{
-    $items = $provider->body->items;
-    if (\count($items) !== 1 || ! ($items[0] instanceof IR\Ret)) {
-        return null;
-    }
-
-    $value = $items[0]->value;
-    if (! $value instanceof IR\FnRef) {
-        return null;
-    }
-
-    $target = $index[$value->name] ?? null;
-    if ($target === null || $target->kind !== IR\FunctionKind::Lambda) {
-        return null;
-    }
-
-    return $value->name;
 }
 
 /** @param IR\FunctionDecl $lambda */
@@ -2782,34 +2035,6 @@ function isSimpleLambda(IR\FunctionDecl $lambda): bool
     return \count($items) === 1 && $items[0] instanceof IR\Ret;
 }
 
-/**
- * @param list<IR\Operand> $providerArgs
- * @param list<IR\Operand> $applyArgs
- */
-function mapCapture(
-    IR\Operand $operand,
-    IR\FunctionDecl $lambda,
-    array $providerParams,
-    array $providerArgs,
-    array $applyArgs = [],
-): IR\Operand {
-    if ($operand instanceof IR\Local) {
-        foreach ($lambda->params as $i => $param) {
-            if ($param === $operand->name) {
-                return $applyArgs[$i] ?? $operand;
-            }
-        }
-
-        foreach ($providerParams as $i => $param) {
-            if ($param === $operand->name) {
-                return $providerArgs[$i];
-            }
-        }
-    }
-
-    return $operand;
-}
-
 /** @param array<string, IR\FunctionDecl> $index */
 function fuseStmt(IR\Stmt $stmt, array $index): IR\Stmt
 {
@@ -2817,96 +2042,6 @@ function fuseStmt(IR\Stmt $stmt, array $index): IR\Stmt
         $stmt,
         static fn (IR\Block $block): IR\Block => fuseBlock($block, $index),
     );
-}
-
-function appendConsumerToArm(array $armItems, int $dest, array $consumer): array
-{
-    $armItems = denseStmtItems($armItems);
-    if ($armItems === []) {
-        $value = new IR\Temp($dest);
-        if ($consumer['kind'] === 'ret_temp') {
-            return [new IR\Ret($value)];
-        }
-        $args = $consumer['args'];
-        $args[$consumer['scrutIndex']] = $value;
-
-        return [new IR\Ret(new IR\ExprCall($consumer['callee'], $args))];
-    }
-
-    $last = $armItems[\count($armItems) - 1];
-
-    if ($last instanceof IR\MatchReturn) {
-        \array_pop($armItems);
-        $arms = [];
-        foreach ($last->arms as $arm) {
-            $arms[] = new IR\MatchArm(
-                $arm->pattern,
-                new IR\Block(appendConsumerToArm($arm->body->items, $dest, $consumer)),
-                $arm->guards,
-            );
-        }
-        $armItems[] = new IR\MatchReturn($last->scrutinee, $arms, $last->exhaustive);
-
-        return denseStmtItems($armItems);
-    }
-
-    $value = null;
-    if ($last instanceof IR\Assign && $last->dest === $dest) {
-        $value = $last->value;
-        \array_pop($armItems);
-    } elseif ($last instanceof IR\Ret) {
-        $value = $last->value;
-        \array_pop($armItems);
-    } elseif ($last instanceof IR\Call && $last->dest === $dest) {
-        $value = new IR\ExprCall($last->callee, $last->args);
-        \array_pop($armItems);
-    } elseif ($last instanceof IR\CallValue && $last->dest === $dest) {
-        $value = new IR\ExprCallValue($last->callee, $last->args);
-        \array_pop($armItems);
-    }
-
-    if ($value === null) {
-        $value = new IR\Temp($dest);
-    }
-
-    if ($consumer['kind'] === 'ret_temp') {
-        $armItems[] = new IR\Ret($value);
-
-        return denseStmtItems($armItems);
-    }
-
-    $args = $consumer['args'];
-    $args[$consumer['scrutIndex']] = $value;
-    $armItems[] = new IR\Ret(new IR\ExprCall($consumer['callee'], $args));
-
-    return denseStmtItems($armItems);
-}
-
-function appendMatchReturnToArm(array $armItems, int $dest, IR\MatchReturn $consumer): array
-{
-    $armItems = denseStmtItems($armItems);
-    $value = null;
-    if ($armItems !== []) {
-        $last = $armItems[\count($armItems) - 1];
-        if ($last instanceof IR\Assign && $last->dest === $dest) {
-            $value = $last->value;
-            \array_pop($armItems);
-        } elseif ($last instanceof IR\Call && $last->dest === $dest) {
-            $value = new IR\ExprCall($last->callee, $last->args);
-            \array_pop($armItems);
-        } elseif ($last instanceof IR\Ret) {
-            $value = $last->value;
-            \array_pop($armItems);
-        }
-    }
-
-    if ($value === null) {
-        $value = new IR\Temp($dest);
-    }
-
-    $armItems[] = new IR\MatchReturn($value, $consumer->arms, $consumer->exhaustive);
-
-    return denseStmtItems($armItems);
 }
 
 function callResultIsImmediatelyMatched(int $dest, array $rest): bool
@@ -2937,16 +2072,8 @@ function estimateOperandTreeSize(IR\Operand $operand, int $depth = 0): int
     if ($depth > 64) {
         return 10_000;
     }
-    if ($operand instanceof IR\ExprCall || $operand instanceof IR\ForeignCall) {
+    if ($operand instanceof IR\ForeignCall) {
         $n = 1;
-        foreach ($operand->args as $arg) {
-            $n += estimateOperandTreeSize($arg, $depth + 1);
-        }
-
-        return $n;
-    }
-    if ($operand instanceof IR\ExprCallValue) {
-        $n = 1 + estimateOperandTreeSize($operand->callee, $depth + 1);
         foreach ($operand->args as $arg) {
             $n += estimateOperandTreeSize($arg, $depth + 1);
         }
@@ -3060,13 +2187,6 @@ function qualifyBareCalleesInItems(array $items, string $module, array $index = 
 /** @param array<string, IR\FunctionDecl> $index */
 function qualifyBareCalleesInOperand(IR\Operand $operand, string $module, array $index = []): IR\Operand
 {
-    if ($operand instanceof IR\ExprCall) {
-        return new IR\ExprCall(
-            qualifyBareName($operand->callee, $module, $index),
-            \array_map(static fn (IR\Operand $a): IR\Operand => qualifyBareCalleesInOperand($a, $module, $index), $operand->args),
-            $operand->srcLoc,
-        );
-    }
     if ($operand instanceof IR\FnRef) {
         return new IR\FnRef(qualifyBareName($operand->name, $module, $index));
     }
@@ -3082,14 +2202,6 @@ function qualifyBareCalleesInOperand(IR\Operand $operand, string $module, array 
             $operand->elements,
         ));
     }
-    if ($operand instanceof IR\ExprCallValue) {
-        return new IR\ExprCallValue(
-            qualifyBareCalleesInOperand($operand->callee, $module, $index),
-            \array_map(static fn (IR\Operand $a): IR\Operand => qualifyBareCalleesInOperand($a, $module, $index), $operand->args),
-            $operand->srcLoc,
-        );
-    }
-
     return $operand;
 }
 

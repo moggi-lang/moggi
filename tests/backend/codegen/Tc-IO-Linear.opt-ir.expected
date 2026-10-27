@@ -1,16 +1,18 @@
 module
   function emit(msg)
       t2 = io_assign_action
-        result call __w_emit(msg)
+          t1 = call __w_emit(msg)
+        result t1
       ret t2
   function __w_emit(msg)
-      t0 = call System.IO.JVM::__w_putStrLn(msg)
+      t0 = call System.IO::__w_putStrLn(msg)
       ret ()
   function main()
       t6 = io_assign_action
-        result call __w_main()
+          t5 = call __w_main()
+        result t5
       ret t6
   function __w_main()
-      t3 = call System.IO.JVM::__w_putStrLn("hello")
+      t3 = call System.IO::__w_putStrLn("hello")
       t4 = call __w_emit("wrapped")
       ret ()

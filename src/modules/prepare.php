@@ -111,6 +111,8 @@ function prepareProject(
         ];
     }
 
+    mergeFacadeHalves($pending, $fixityByModule, $context->backendId, $paths[0] ?? null);
+
     foreach ($pending as $moduleName => $info) {
         $pending[$moduleName]['imports'] = injectPreludeImport(
             $info['imports'],
@@ -145,13 +147,20 @@ function prepareProject(
             'program' => null,
             'parsed' => false,
         ];
+        foreach (mergedHalfFields() as $halfField) {
+            if (isset($info[$halfField])) {
+                $units[$moduleName][$halfField] = $info[$halfField];
+            }
+        }
     }
 
     injectSyntheticCompilerUnits($units);
 
     foreach ($units as $moduleName => &$unit) {
         $unit['compileBackend'] = $context->backendId;
-        $unit['implModule'] = resolveImplModuleName($unit['backendMap'] ?? [], $context->backendId);
+        if (isset($unit['halfImports'])) {
+            $unit['halfImportedFixity'] = importedFixityForImports($unit['halfImports'], $effectiveFixityByModule);
+        }
     }
     unset($unit);
 
@@ -186,9 +195,6 @@ function prepareProject(
                     $units[$moduleName]['localTypes'],
                 );
             }
-            if (! isModuleActiveForCompileBackend($units, $moduleName, $context->backendId)) {
-                continue;
-            }
 
             $checked[$moduleName] = $units[$moduleName]['checkedProgram'] ?? $units[$moduleName]['program'];
             $importContexts[$moduleName] = mergeClassScopeRefs(
@@ -214,12 +220,6 @@ function prepareProject(
                 moduleLocalValueNames($units, $moduleName),
                 moduleLocalDataNames($units, $moduleName),
             );
-
-            continue;
-        }
-
-        if (! isModuleActiveForCompileBackend($units, $moduleName, $context->backendId)) {
-            publishModuleExports($units, $moduleName, $context);
 
             continue;
         }
@@ -342,11 +342,6 @@ function prepareProject(
             $classScopeFns,
             moduleLocalValueNames($units, $moduleName),
             moduleLocalDataNames($units, $moduleName),
-        );
-        $importContext = $importContext->withInterface(
-            $importContext->interface->withExtraTypes(
-                moduleFacadeExtraTypes($units, $moduleName, $projectClasses, $instanceWorld->index()),
-            ),
         );
         $importContexts[$moduleName] = $importContext;
 
@@ -630,8 +625,8 @@ function addModuleClassScope(
  *
  * The host trees are part of it because the *checked* product records which foreign declarations the
  * checker accepted against them: a module whose `foreign php function` was verified with a Composer
- * tree must not answer a compile that was given no tree (review rev-4 B1). Nothing else in the key
- * can see that state — it lives in `ConfiguredHostLibraries`, not in the module roots.
+ * tree must not answer a compile that was given no tree. Nothing else in the key can see that
+ * state — it lives in `ConfiguredHostLibraries`, not in the module roots.
  */
 function checkedModuleCacheKey(string $path, CompilationContext $context): string
 {
@@ -861,11 +856,6 @@ function prepareProjectExtendingFocus(
         moduleLocalValueNames($units, $focusModule),
         moduleLocalDataNames($units, $focusModule),
     );
-    $importContext = $importContext->withInterface(
-        $importContext->interface->withExtraTypes(
-            moduleFacadeExtraTypes($units, $focusModule, $projectClasses, $instanceWorld->index()),
-        ),
-    );
 
     $purpose = $context->purposeFor($focusModule);
     $interface = null;
@@ -994,8 +984,12 @@ function computeModuleContentKeys(array $units, array $sortedModules, Compilatio
             ? Cache\fileFingerprint($units[$moduleName]['path'])
             : 'none';
 
+        if (isset($units[$moduleName]['halfPath'])) {
+            $srcHash .= ';half=' . Cache\fileFingerprint($units[$moduleName]['halfPath']);
+        }
+
         $depKeys = [];
-        foreach (moduleDependencyNames($units, $moduleName, $context->backendId) as $dep) {
+        foreach (moduleDependencyNames($units, $moduleName) as $dep) {
             if (isset($keys[$dep])) {
                 $depKeys[] = $keys[$dep];
             } elseif (isset($units[$dep]['path'])) {
@@ -1119,7 +1113,7 @@ function importDependencyClosure(array $units, array $roots, string $backendId):
             continue;
         }
 
-        foreach (moduleDependencyNames($units, $moduleName, $backendId) as $dep) {
+        foreach (moduleDependencyNames($units, $moduleName) as $dep) {
             if (isset($needed[$dep]) || isset($rootSet[$dep]) || ! isset($units[$dep])) {
                 continue;
             }
@@ -1152,7 +1146,112 @@ function ensureUnitProgram(array &$units, string $moduleName): void
         $unit['localFixity'],
         $unit['imports'],
     );
+
+    if (isset($unit['halfSource']) && $unit['halfSource'] !== '') {
+        $halfProgram = parse(
+            lex($unit['halfSource'], $unit['halfPath']),
+            $unit['halfSource'],
+            $unit['halfPath'],
+            $unit['halfImportedFixity'] ?? [],
+            $unit['halfLocalFixity'] ?? [],
+            $unit['halfImports'] ?? [],
+        );
+        $program = mergeBackendHalfProgram(
+            $program,
+            $halfProgram,
+            (string) ($unit['backendMap'][$unit['compileBackend']] ?? ''),
+            (string) $unit['halfPath'],
+        );
+    }
+
     $unit['program'] = $program;
     $unit['parsed'] = true;
     unset($unit['tokens']);
+}
+
+/** @return list<string> */
+function mergedHalfFields(): array
+{
+    return ['halfPath', 'halfSource', 'halfImports', 'halfLocalFixity'];
+}
+
+/**
+ * One compilation unit per module: the half a facade's pragma selects stops being
+ * a module of its own and its source joins the facade's unit, so the checked
+ * program, the emitted path and the symbols all carry the facade's name.
+ *
+ * @param array<string, array<string, mixed>> $pending
+ * @param array<string, array<string, array{assoc: string, prec: int}>> $fixityByModule
+ * @param ?string $entryPath the file the compile started from
+ */
+function mergeFacadeHalves(array &$pending, array &$fixityByModule, string $backendId, ?string $entryPath): void
+{
+    $halves = [];
+    $selected = [];
+    foreach ($pending as $moduleName => $info) {
+        $backendMap = $info['backendMap'] ?? [];
+        if ($backendMap === []) {
+            continue;
+        }
+
+        $halfName = resolveImplModuleName($backendMap, $backendId);
+        if ($halfName === null) {
+            throw facadeMissingBackendError($moduleName, $backendMap, $backendId, $info);
+        }
+
+        if (! isset($pending[$halfName])) {
+            throw new TypeError(
+                "module `{$moduleName}` names `{$halfName}` as its `{$backendId}` implementation, which is not"
+                . ' part of this compilation',
+                (string) $info['path'],
+                (string) $info['source'],
+                (int) ($info['headerSpan']['line'] ?? 0),
+                (int) ($info['headerSpan']['col'] ?? 0),
+                (int) ($info['headerSpan']['endCol'] ?? 0),
+            );
+        }
+
+        foreach ($backendMap as $impl) {
+            $owner = $halves[$impl] ?? null;
+            if ($owner !== null && $owner !== $moduleName) {
+                throw new TypeError(
+                    "module `{$impl}` is the implementation of `{$owner}` and of `{$moduleName}`:"
+                    . ' one half supplies the bindings of one facade',
+                );
+            }
+
+            $halves[$impl] = $moduleName;
+        }
+
+        $selected[$moduleName] = $halfName;
+    }
+
+    if ($entryPath !== null) {
+        $entryModule = cachedModuleHeader($entryPath)['module'] ?? null;
+        if (\is_string($entryModule) && isset($halves[$entryModule])) {
+            throw new TypeError(
+                "`{$entryModule}` is the `{$backendId}` implementation of `{$halves[$entryModule]}`: it is merged"
+                . " into that module, so compile `{$halves[$entryModule]}` instead",
+                $entryPath,
+                (string) \file_get_contents($entryPath),
+            );
+        }
+    }
+
+    foreach ($selected as $facadeName => $halfName) {
+        $half = $pending[$halfName];
+        $facade = &$pending[$facadeName];
+        $facade['halfPath'] = $half['path'];
+        $facade['halfSource'] = $half['source'];
+        $facade['halfImports'] = $half['imports'];
+        $facade['halfLocalFixity'] = $half['localFixity'];
+        $facade['imports'] = mergeUnitImports($facade['imports'], $half['imports']);
+        $facade['language'] = ($facade['language'] ?? []) + ($half['language'] ?? []);
+        $fixityByModule[$facadeName] = mergeFixity($fixityByModule[$facadeName] ?? [], $half['localFixity']);
+        unset($facade);
+    }
+
+    foreach (\array_keys($halves) as $halfName) {
+        unset($pending[$halfName], $fixityByModule[$halfName]);
+    }
 }

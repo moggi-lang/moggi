@@ -2,7 +2,7 @@
 
 namespace Main;
 
-const __MOGGI_MAP = [[26 => ['Main.apply2', 'tests/backend/codegen/Core-Apply-Collapse.mog', 8, 16], 30 => ['Main.apply3', 'tests/backend/codegen/Core-Apply-Collapse.mog', 11, 18]], ['Main\\add2' => ['Main.add2', 'tests/backend/codegen/Core-Apply-Collapse.mog', 2, 12], 'Main\\add3' => ['Main.add3', 'tests/backend/codegen/Core-Apply-Collapse.mog', 5, 14], 'Main\\apply2' => ['Main.apply2', 'tests/backend/codegen/Core-Apply-Collapse.mog', 8, 16], 'Main\\apply3' => ['Main.apply3', 'tests/backend/codegen/Core-Apply-Collapse.mog', 11, 18], 'Main\\direct2' => ['Main.direct2', 'tests/backend/codegen/Core-Apply-Collapse.mog', 14, 11], 'Main\\direct3' => ['Main.direct3', 'tests/backend/codegen/Core-Apply-Collapse.mog', 17, 11], 'Main\\loop2' => ['Main.loop2', 'tests/backend/codegen/Core-Apply-Collapse.mog', 20, 15], 'Main\\loop3' => ['Main.loop3', 'tests/backend/codegen/Core-Apply-Collapse.mog', 25, 15]]];
+const __MOGGI_MAP = [[26 => ['Main.apply2', 'tests/backend/codegen/Core-Apply-Collapse.mog', 8, 16], 27 => ['Main.apply2', 'tests/backend/codegen/Core-Apply-Collapse.mog', 8, 16], 31 => ['Main.apply3', 'tests/backend/codegen/Core-Apply-Collapse.mog', 11, 18], 32 => ['Main.apply3', 'tests/backend/codegen/Core-Apply-Collapse.mog', 11, 18], 33 => ['Main.apply3', 'tests/backend/codegen/Core-Apply-Collapse.mog', 11, 18]], ['Main\\add2' => ['Main.add2', 'tests/backend/codegen/Core-Apply-Collapse.mog', 2, 12], 'Main\\add3' => ['Main.add3', 'tests/backend/codegen/Core-Apply-Collapse.mog', 5, 14], 'Main\\apply2' => ['Main.apply2', 'tests/backend/codegen/Core-Apply-Collapse.mog', 8, 16], 'Main\\apply3' => ['Main.apply3', 'tests/backend/codegen/Core-Apply-Collapse.mog', 11, 18], 'Main\\direct2' => ['Main.direct2', 'tests/backend/codegen/Core-Apply-Collapse.mog', 14, 11], 'Main\\direct3' => ['Main.direct3', 'tests/backend/codegen/Core-Apply-Collapse.mog', 17, 11], 'Main\\loop2' => ['Main.loop2', 'tests/backend/codegen/Core-Apply-Collapse.mog', 20, 15], 'Main\\loop3' => ['Main.loop3', 'tests/backend/codegen/Core-Apply-Collapse.mog', 25, 15]]];
 
 require_once __DIR__ . '/../../../_runtime.php';
 
@@ -23,11 +23,14 @@ function add3($a, $b, $c) {
 }
 
 function apply2($f, $x, $y) {
-    return __apply($f, $x, $y);
+    $__t0 = __apply($f, $x);
+    return __apply($__t0, $y);
 }
 
 function apply3($f, $x, $y, $z) {
-    return __apply($f, $x, $y, $z);
+    $__t2 = __apply($f, $x);
+    $__t3 = __apply($__t2, $y);
+    return __apply($__t3, $z);
 }
 
 function direct2() {
@@ -44,9 +47,9 @@ function loop2($n, $acc) {
             return $acc;
         }
         else {
-            $__t8 = add2(1, $n);
+            $__t10 = add2(1, $n);
             $n = (\is_int($__m64 = $n - 1) ? $__m64 : moggi_u64_sub($n, 1));
-            $acc = (\is_int($__m64 = $acc + $__t8) ? $__m64 : moggi_u64_add($acc, $__t8));
+            $acc = (\is_int($__m64 = $acc + $__t10) ? $__m64 : moggi_u64_add($acc, $__t10));
             continue;
         }
     }
@@ -58,9 +61,9 @@ function loop3($n, $acc) {
             return $acc;
         }
         else {
-            $__t11 = add3(1, 2, $n);
+            $__t14 = add3(1, 2, $n);
             $n = (\is_int($__m64 = $n - 1) ? $__m64 : moggi_u64_sub($n, 1));
-            $acc = (\is_int($__m64 = $acc + $__t11) ? $__m64 : moggi_u64_add($acc, $__t11));
+            $acc = (\is_int($__m64 = $acc + $__t14) ? $__m64 : moggi_u64_add($acc, $__t14));
             continue;
         }
     }

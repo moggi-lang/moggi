@@ -5,14 +5,15 @@ module
       ret "\/tmp\/moggi-tc-io-whole-let.txt"
   function main()
       t8 = io_assign_action
-        result call __w_main()
+          t7 = call __w_main()
+        result t7
       ret t8
   function __w_main()
-      t0 = call System.IO.PHP::__w_putStrLn("bind")
+      t0 = call System.IO::__w_putStrLn("bind")
       t1 = call System.IO::__w_writeFile(@bindPath, "bind-linear")
       t2 = call System.IO::__w_readFile(@bindPath)
-      t3 = call System.IO.PHP::__w_putStrLn(t2)
-      t4 = call System.IO.PHP::__w_putStrLn("let")
+      t3 = call System.IO::__w_putStrLn(t2)
+      t4 = call System.IO::__w_putStrLn("let")
       t5 = call System.IO::__w_readFile(@letPath)
-      t6 = call System.IO.PHP::__w_putStrLn(t5)
+      t6 = call System.IO::__w_putStrLn(t5)
       ret ()

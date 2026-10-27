@@ -1586,16 +1586,35 @@ function knownTypeConstructorNames(TypeCheckState $state): array
     return \array_values(\array_unique($names));
 }
 
+/** The text of a file a diagnostic points into, read at most once per compile. */
+function sourceTextForDiagnostic(string $path): ?string
+{
+    static $sources = [];
+    if (\array_key_exists($path, $sources)) {
+        return $sources[$path];
+    }
+
+    return $sources[$path] = \is_file($path) ? (\file_get_contents($path) ?: null) : null;
+}
+
 function typeFail(TypeCheckState $state, string $message, Ast\AstNode|Ast\TypeNode|null $at = null, ?string $code = null): TypeError
 {
     $line = 0;
     $col = 0;
     $endCol = 0;
 
+    $filename = $state->filename;
+    $source = $state->source;
+
     if ($at !== null && $at->line !== 0) {
         $line = $at->line;
         $col = $at->col;
         $endCol = $at->endCol;
+        $file = $at instanceof Ast\AstNode ? $at->sourceFile : null;
+        if ($file !== null && $file !== $filename) {
+            $filename = $file;
+            $source = sourceTextForDiagnostic($filename) ?? $source;
+        }
     } elseif ($state->declSpan['line'] !== 0) {
         $line = $state->declSpan['line'];
         $col = $state->declSpan['col'];
@@ -1604,8 +1623,8 @@ function typeFail(TypeCheckState $state, string $message, Ast\AstNode|Ast\TypeNo
 
     $error = new TypeError(
         $message,
-        $state->filename,
-        $state->source,
+        $filename,
+        $source,
         $line,
         $col,
         $endCol,

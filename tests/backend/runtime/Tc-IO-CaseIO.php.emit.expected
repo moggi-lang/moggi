@@ -2,28 +2,29 @@
 
 namespace Tc\IO\CaseIO;
 
-const __MOGGI_MAP = [[14 => ['Tc.IO.CaseIO.emitWhen', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 6, 14], 22 => ['Tc.IO.CaseIO.emitWhen', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 7, 11], 26 => ['Tc.IO.CaseIO.emitWhen', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 8, 12], 33 => ['Tc.IO.CaseIO.pick', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 11, 10], 41 => ['Tc.IO.CaseIO.pick', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 12, 11], 45 => ['Tc.IO.CaseIO.pick', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 13, 12], 52 => ['Tc.IO.CaseIO.pickOrError', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 16, 17], 60 => ['Tc.IO.CaseIO.pickOrError', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 17, 11], 64 => ['Tc.IO.CaseIO.pickOrError', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 18, 12], 65 => ['Tc.IO.CaseIO.pickOrError', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 18, 12], 72 => ['Tc.IO.CaseIO.main', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 21, 8], 79 => ['Tc.IO.CaseIO.main', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 22, 3], 80 => ['Tc.IO.CaseIO.main', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 23, 3], 81 => ['Tc.IO.CaseIO.main', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 24, 3], 82 => ['Tc.IO.CaseIO.main', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 26, 3], 83 => ['Tc.IO.CaseIO.main', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 25, 13], 84 => ['Tc.IO.CaseIO.main', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 28, 3], 85 => ['Tc.IO.CaseIO.main', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 29, 3]], ['Tc\\IO\\CaseIO\\emitWhen' => ['Tc.IO.CaseIO.emitWhen', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 6, 14], 'Tc\\IO\\CaseIO\\__w_emitWhen' => ['Tc.IO.CaseIO.emitWhen', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 6, 14], 'Tc\\IO\\CaseIO\\pick' => ['Tc.IO.CaseIO.pick', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 11, 10], 'Tc\\IO\\CaseIO\\__w_pick' => ['Tc.IO.CaseIO.pick', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 11, 10], 'Tc\\IO\\CaseIO\\pickOrError' => ['Tc.IO.CaseIO.pickOrError', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 16, 17], 'Tc\\IO\\CaseIO\\__w_pickOrError' => ['Tc.IO.CaseIO.pickOrError', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 16, 17], 'Tc\\IO\\CaseIO\\main' => ['Tc.IO.CaseIO.main', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 21, 8], 'Tc\\IO\\CaseIO\\__w_main' => ['Tc.IO.CaseIO.main', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 21, 8]], ['Tc\\IO\\CaseIO\\emitWhen', 'Tc\\IO\\CaseIO\\pick', 'Tc\\IO\\CaseIO\\pickOrError', 'Tc\\IO\\CaseIO\\main'], ['Tc\\IO\\CaseIO\\__w_emitWhen', 'Tc\\IO\\CaseIO\\__w_pick', 'Tc\\IO\\CaseIO\\__w_pickOrError', 'Tc\\IO\\CaseIO\\__w_main']];
+const __MOGGI_MAP = [[14 => ['Tc.IO.CaseIO.emitWhen', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 6, 14], 23 => ['Tc.IO.CaseIO.emitWhen', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 7, 11], 27 => ['Tc.IO.CaseIO.emitWhen', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 8, 12], 34 => ['Tc.IO.CaseIO.pick', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 11, 10], 43 => ['Tc.IO.CaseIO.pick', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 12, 11], 47 => ['Tc.IO.CaseIO.pick', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 13, 12], 54 => ['Tc.IO.CaseIO.pickOrError', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 16, 17], 63 => ['Tc.IO.CaseIO.pickOrError', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 17, 11], 67 => ['Tc.IO.CaseIO.pickOrError', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 18, 12], 68 => ['Tc.IO.CaseIO.pickOrError', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 18, 12], 75 => ['Tc.IO.CaseIO.main', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 21, 8], 83 => ['Tc.IO.CaseIO.main', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 22, 3], 84 => ['Tc.IO.CaseIO.main', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 23, 3], 85 => ['Tc.IO.CaseIO.main', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 24, 3], 86 => ['Tc.IO.CaseIO.main', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 26, 3], 87 => ['Tc.IO.CaseIO.main', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 25, 13], 88 => ['Tc.IO.CaseIO.main', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 28, 3], 89 => ['Tc.IO.CaseIO.main', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 29, 3]], ['Tc\\IO\\CaseIO\\emitWhen' => ['Tc.IO.CaseIO.emitWhen', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 6, 14], 'Tc\\IO\\CaseIO\\__w_emitWhen' => ['Tc.IO.CaseIO.emitWhen', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 6, 14], 'Tc\\IO\\CaseIO\\pick' => ['Tc.IO.CaseIO.pick', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 11, 10], 'Tc\\IO\\CaseIO\\__w_pick' => ['Tc.IO.CaseIO.pick', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 11, 10], 'Tc\\IO\\CaseIO\\pickOrError' => ['Tc.IO.CaseIO.pickOrError', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 16, 17], 'Tc\\IO\\CaseIO\\__w_pickOrError' => ['Tc.IO.CaseIO.pickOrError', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 16, 17], 'Tc\\IO\\CaseIO\\main' => ['Tc.IO.CaseIO.main', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 21, 8], 'Tc\\IO\\CaseIO\\__w_main' => ['Tc.IO.CaseIO.main', 'tests/backend/runtime/Tc-IO-CaseIO.mog', 21, 8]], ['Tc\\IO\\CaseIO\\emitWhen', 'Tc\\IO\\CaseIO\\pick', 'Tc\\IO\\CaseIO\\pickOrError', 'Tc\\IO\\CaseIO\\main'], ['Tc\\IO\\CaseIO\\__w_emitWhen', 'Tc\\IO\\CaseIO\\__w_pick', 'Tc\\IO\\CaseIO\\__w_pickOrError', 'Tc\\IO\\CaseIO\\__w_main']];
 
 require_once __DIR__ . '/../../../libraries/base/src/Data/Bool.php';
 require_once __DIR__ . '/../../../libraries/base/src/Moggi/Err.php';
-require_once __DIR__ . '/../../../libraries/base/src/System/IO/PHP.php';
+require_once __DIR__ . '/../../../libraries/base/src/System/IO.php';
 
 use function Moggi\Err\error;
 
 function emitWhen($b) {
     $__t3 = ['__io', static function() use (&$b): mixed {
-        return __w_emitWhen($b);
+        $__t2 = __w_emitWhen($b);
+        return $__t2;
     }];
     return $__t3;
 }
 
 function __w_emitWhen($b) {
     if ($b === true) {
-        $__t0 = \System\IO\PHP\__w_putStrLn("y");
+        $__t0 = \System\IO\__w_putStrLn("y");
         return null;
     }
     elseif ($b === false) {
-        $__t1 = \System\IO\PHP\__w_putStrLn("n");
+        $__t1 = \System\IO\__w_putStrLn("n");
         return null;
     }
     return null;
@@ -31,18 +32,19 @@ function __w_emitWhen($b) {
 
 function pick($b) {
     $__t7 = ['__io', static function() use (&$b): mixed {
-        return __w_pick($b);
+        $__t6 = __w_pick($b);
+        return $__t6;
     }];
     return $__t7;
 }
 
 function __w_pick($b) {
     if ($b === true) {
-        $__t4 = \System\IO\PHP\__w_putStrLn("yes");
+        $__t4 = \System\IO\__w_putStrLn("yes");
         return null;
     }
     elseif ($b === false) {
-        $__t5 = \System\IO\PHP\__w_putStrLn("no");
+        $__t5 = \System\IO\__w_putStrLn("no");
         return null;
     }
     return null;
@@ -50,14 +52,15 @@ function __w_pick($b) {
 
 function pickOrError($b) {
     $__t11 = ['__io', static function() use (&$b): mixed {
-        return __w_pickOrError($b);
+        $__t10 = __w_pickOrError($b);
+        return $__t10;
     }];
     return $__t11;
 }
 
 function __w_pickOrError($b) {
     if ($b === true) {
-        $__t8 = \System\IO\PHP\__w_putStrLn("yes");
+        $__t8 = \System\IO\__w_putStrLn("yes");
         return null;
     }
     elseif ($b === false) {
@@ -70,18 +73,19 @@ function __w_pickOrError($b) {
 
 function main() {
     $__t20 = ['__io', static function(): mixed {
-        return __w_main();
+        $__t19 = __w_main();
+        return $__t19;
     }];
     return $__t20;
 }
 
 function __w_main() {
-    $__t12 = \System\IO\PHP\__w_putStrLn("linear");
+    $__t12 = \System\IO\__w_putStrLn("linear");
     $__t13 = __w_emitWhen(true);
-    $__t14 = \System\IO\PHP\__w_putStrLn("deferred");
-    $__t15 = \System\IO\PHP\__w_putStrLn("before");
+    $__t14 = \System\IO\__w_putStrLn("deferred");
+    $__t15 = \System\IO\__w_putStrLn("before");
     $__t16 = __w_pick(true);
-    $__t17 = \System\IO\PHP\__w_putStrLn("error-branch");
+    $__t17 = \System\IO\__w_putStrLn("error-branch");
     $__t18 = __w_pickOrError(true);
     return null;
 }

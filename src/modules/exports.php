@@ -333,8 +333,6 @@ function collectExportsUncached(Ast\Program $program, array $localTypes, array $
         }
     }
 
-    redirectFacadeOrigins($available, $program, $units, $moduleName);
-
     $exportItems = $program->exports;
     if ($exportItems === null) {
         exportAllLocalDeclarations($exports, $program, $available, $moduleName, $units);

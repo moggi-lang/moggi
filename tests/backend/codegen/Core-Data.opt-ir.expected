@@ -8,12 +8,15 @@ module
         arm Nothing
             ret d
   function makeUser()
-      ret call User(1, 30)
+      t2 = call User(1, 30)
+      ret t2
   function getAge(user)
-      ret call __field1(user)
+      t3 = call __field1(user)
+      ret t3
   function showUser(_p0)
       t4 = call __field0(_p0)
       t5 = call __field1(_p0)
       ret intrinsic intAdd#(t4, t5)
   function ageOf(_p0)
-      ret call __field1(_p0)
+      t7 = call __field1(_p0)
+      ret t7

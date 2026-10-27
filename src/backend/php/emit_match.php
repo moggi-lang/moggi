@@ -2,6 +2,8 @@
 
 namespace Moggi\Backend\Php\Codegen;
 
+use function Moggi\Backend\Meta\returnedCall;
+use function Moggi\Backend\Meta\tempReadCounts;
 use function Moggi\Backend\Php\Naming\mangleVar;
 
 use function Moggi\Backend\Php\Naming\phpSingleQuoted;
@@ -286,12 +288,15 @@ function emitMatchArmExpression(IR\MatchArm $arm, array $ctx, int $indent): stri
         return emitRetValue($last->value, $ctx);
     }
 
+    $fused = returnedCall($items[\count($items) - 2], $last, tempReadCounts($arm->body));
+
     $innerPad = \str_repeat('    ', $indent + 2);
     $inner = '';
-    foreach (\array_slice($items, 0, -1) as $item) {
+    foreach (\array_slice($items, 0, $fused !== null ? -2 : -1) as $item) {
         $inner .= emitStmt($item, $indent + 2, $ctx);
     }
-    $inner .= $innerPad . 'return ' . emitRetValue($last->value, $ctx) . ";\n";
+    $inner .= $innerPad . 'return '
+        . ($fused !== null ? emitReturnedCall($fused, $ctx) : emitRetValue($last->value, $ctx)) . ";\n";
 
     $uses = matchArmClosureUses($arm->body, $ctx);
     $useClause = $uses === [] ? '' : ' use (' . \implode(', ', $uses) . ')';

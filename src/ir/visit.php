@@ -67,10 +67,6 @@ function mapGuards(array $guards, callable $mapCond, callable $mapStmt): array
 function operandChildren(IR\Operand $operand): array
 {
     return match ($operand::class) {
-        IR\ExprBinop::class => [$operand->left, $operand->right],
-        IR\ExprCall::class => $operand->args,
-        IR\ExprCallValue::class => [$operand->callee, ...$operand->args],
-        IR\ExprPartial::class => $operand->args,
         IR\Partial::class => $operand->args,
         IR\Intrinsic::class => $operand->args,
         IR\DictMethod::class => [$operand->evidence],
@@ -95,34 +91,6 @@ function operandChildren(IR\Operand $operand): array
 function mapOperandChildren(IR\Operand $operand, callable $mapChild): IR\Operand
 {
     return match ($operand::class) {
-        IR\ExprBinop::class => (function () use ($operand, $mapChild): IR\Operand {
-            $left = $mapChild($operand->left);
-            $right = $mapChild($operand->right);
-            if ($left === $operand->left && $right === $operand->right) {
-                return $operand;
-            }
-
-            return new IR\ExprBinop($operand->op, $left, $right);
-        })(),
-        IR\ExprCall::class => (function () use ($operand, $mapChild): IR\Operand {
-            [$args, $changed] = mapChildList($operand->args, $mapChild);
-
-            return $changed ? new IR\ExprCall($operand->callee, $args, $operand->srcLoc) : $operand;
-        })(),
-        IR\ExprCallValue::class => (function () use ($operand, $mapChild): IR\Operand {
-            $callee = $mapChild($operand->callee);
-            [$args, $changed] = mapChildList($operand->args, $mapChild);
-            if (! $changed && $callee === $operand->callee) {
-                return $operand;
-            }
-
-            return new IR\ExprCallValue($callee, $args, $operand->srcLoc);
-        })(),
-        IR\ExprPartial::class => (function () use ($operand, $mapChild): IR\Operand {
-            [$args, $changed] = mapChildList($operand->args, $mapChild);
-
-            return $changed ? new IR\ExprPartial($operand->fn, $operand->arity, $args) : $operand;
-        })(),
         IR\Partial::class => (function () use ($operand, $mapChild): IR\Operand {
             [$args, $changed] = mapChildList($operand->args, $mapChild);
 
@@ -335,8 +303,6 @@ function collectIrCodegenUsage(IR\Module $module): array
         match ($operand::class) {
             IR\FnRef::class => $callees[$operand->name] = true,
             IR\Partial::class => $callees[$operand->fn] = true,
-            IR\ExprCall::class => $callees[$operand->callee] = true,
-            IR\ExprPartial::class => $callees[$operand->fn] = true,
             IR\Intrinsic::class => $intrinsics[$operand->name] = true,
             default => null,
         };

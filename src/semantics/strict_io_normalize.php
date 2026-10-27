@@ -26,9 +26,13 @@ function normalize(Ast\Program $program): Ast\Program
         if ($item instanceof Ast\FunctionDecl) {
             $counter = 0;
             etaExpandIoBinding($item);
+            $written = $item->body;
             $item->body = functionReturnsIo($item->type)
-                ? normalizeIoBody($item->body, $counter)
-                : normalizePureExpr($item->body, $counter);
+                ? normalizeIoBody($written, $counter)
+                : normalizePureExpr($written, $counter);
+            if ($written->sourceFile !== null) {
+                Ast\markSourceFile($item->body, $written->sourceFile);
+            }
         }
     }
 
@@ -36,24 +40,15 @@ function normalize(Ast\Program $program): Ast\Program
 }
 
 /**
- * Give a parameterless IO-returning declaration the parameters its type
- * promises, so its body is lowered as the body of a function.
+ * Expand parameterless IO bindings to the arity promised by their type before
+ * lowering the body as an IO action.
  *
- * Two written forms need this, and both are the same rewrite, applied before
- * the IO body is lowered:
+ * This handles both explicit lambdas (`f = \a -> \b -> body`) and eta-reduced
+ * function values (`f = g`, where `f :: A -> IO B`). Without expansion, the
+ * former is lowered as a pure expression and the latter as an IO action,
+ * potentially dropping the intended function application.
  *
- * - `f = \a -> \b -> <io body>` is `f a b = <io body>`. A lambda is not an IO
- *   statement context, so leaving it in place normalizes its body as a *pure*
- *   expression — the effect would be silently dropped.
- * - `f = g` with `f :: A -> IO B` is the eta-reduced `f a = g a`. The type
- *   checker has already turned the body into the function *value* `g` (with its
- *   dictionaries applied), whose type is `A -> IO B`; without a parameter the IO
- *   lowering reads that value as the action itself and calls `g` with the
- *   dictionary arguments only.
- *
- * The remaining parameters come from the declared type, which is why arity is
- * counted off the signature rather than off the body. Pure bindings are left
- * alone: their lambdas and function values already lower correctly.
+ * Arity comes from the declared type, not the body. Pure bindings are unchanged.
  */
 function etaExpandIoBinding(Ast\FunctionDecl $item): void
 {

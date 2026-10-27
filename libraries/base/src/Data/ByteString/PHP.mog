@@ -9,7 +9,6 @@ module Data.ByteString.PHP
   ) where
 
 import Data.Int
-import Data.List hiding (singleton)
 import Data.Ord
 import Moggi.Err
 import Moggi.Internal.Base

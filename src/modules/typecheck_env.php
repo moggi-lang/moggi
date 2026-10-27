@@ -142,8 +142,13 @@ function mergeExportedTypes(Types\TypeCheckState $state, array $unit, array $uni
  */
 function desugarDoForScope(Ast\AstWalkable $node): void
 {
-    if ($node instanceof Ast\DoExpr && $node->desugared === null && $node->stmts !== []) {
-        $node->desugared = Ast\desugarDo($node->stmts, '(>>=)');
+    if ($node instanceof Ast\DoExpr && $node->stmts !== []) {
+        if ($node->desugared === null) {
+            $node->desugared = Ast\desugarDo($node->stmts, '(>>=)');
+        }
+        if ($node->sourceFile !== null) {
+            Ast\markSourceFile($node->desugared, $node->sourceFile);
+        }
     }
 
     foreach ($node->childValues() as $child) {
@@ -253,123 +258,11 @@ function classModuleScopes(
                 ? $units[$module]['localTypes']['intrinsicWrappers']
                 : [],
             'names' => $names,
+            'path' => (string) ($units[$module]['path'] ?? ''),
         ];
     }
 
     return $scopes;
-}
-
-/**
- * Types a facade module needs from the impl it re-exports: the impl's foreign
- * types and the facade ADTs copied into it.
- *
- * @param array<string, array<string, mixed>> $units
- * @return array{data: array<string, mixed>, typeSynonyms: array<string, mixed>}
- */
-function facadeImplExtraTypes(array $units, string $moduleName, Ast\Program $program): array
-{
-    $implName = facadeImplModuleNameFor($moduleName, $units);
-    if ($implName === null || ! isset($units[$implName])) {
-        return ['data' => [], 'typeSynonyms' => []];
-    }
-
-    $implExports = implExportsForFacadeMerge($units[$implName], $units, $implName);
-    if ($implExports === null) {
-        return ['data' => [], 'typeSynonyms' => []];
-    }
-
-    $declaredData = [];
-    foreach ($program->items as $item) {
-        if ($item instanceof Ast\DataDecl || $item instanceof Ast\ForeignTypeDecl) {
-            $declaredData[$item->name] = true;
-        }
-    }
-
-    $data = [];
-    foreach ($implExports['data'] ?? [] as $name => $info) {
-        if (! isset($declaredData[$name])) {
-            $data[$name] = $info;
-        }
-    }
-
-    return ['data' => $data, 'typeSynonyms' => []];
-}
-
-/**
- * Types a module needs but does not declare: the facade's ADTs and the
- * primitive data its facade introduces (for an impl), or the impl's foreign
- * types and ADTs (for a facade).
- *
- * A module's check registers its own declarations, so the only interface data it
- * cannot derive is what the other side of the facade contributes; the caller
- * merges this into the check's import context, where the interface pass used to
- * put it as `localTypes`.
- *
- * @param array<string, array<string, mixed>> $units
- * @param array<string, mixed> $projectClasses
- * @param array<string, mixed> $projectInstanceIndex
- * @return array{data: array<string, mixed>, typeSynonyms: array<string, mixed>}
- */
-function moduleFacadeExtraTypes(
-    array $units,
-    string $moduleName,
-    array $projectClasses,
-    array $projectInstanceIndex = [],
-): array {
-    $unit = $units[$moduleName];
-    $program = $unit['program'] ?? null;
-    if (! $program instanceof Ast\Program) {
-        return ['data' => [], 'typeSynonyms' => []];
-    }
-
-    if (isFacadeProgram($program)) {
-        return facadeImplExtraTypes($units, $moduleName, $program);
-    }
-
-    if (facadeModuleForImpl($units, $moduleName) === null) {
-        return ['data' => [], 'typeSynonyms' => []];
-    }
-
-    $state = Types\newState($unit['source'], $unit['path']);
-    $state->classes = $projectClasses;
-    installProjectInstanceIndex($state, $projectInstanceIndex);
-
-    foreach ($unit['program']->imports as $import) {
-        $targetName = moduleName($import->path);
-        if (isset($units[$targetName])) {
-            mergeExportedTypes($state, $units[$targetName], $units);
-        }
-    }
-
-    mergeFacadeTypesForImpl($state, $units, $moduleName);
-
-    $declaredData = [];
-    $declaredSynonyms = [];
-    foreach ($unit['program']->items as $item) {
-        if ($item instanceof Ast\DataDecl || $item instanceof Ast\ForeignTypeDecl) {
-            $declaredData[$item->name] = true;
-        }
-
-        if ($item instanceof Ast\TypeSynonymDecl) {
-            $declaredSynonyms[$item->name] = true;
-        }
-    }
-
-    $data = [];
-    foreach ($state->data as $name => $info) {
-        if (! isset($declaredData[$name])) {
-            $data[$name] = $info;
-        }
-    }
-
-    $synonyms = [];
-    foreach ($state->typeSynonyms as $name => $type) {
-        if (! isset($declaredSynonyms[$name])) {
-            $synonyms[$name] = $type;
-        }
-    }
-
-    return ['data' => $data, 'typeSynonyms' => $synonyms];
 }
 
 /**
@@ -605,7 +498,7 @@ function classModuleVisibleTypes(array $units, string $moduleName, string $backe
 
     $collect($units[$moduleName]['localTypes']['data'] ?? [], $units[$moduleName]['localTypes']['typeSynonyms'] ?? []);
 
-    foreach (moduleDependencyNames($units, $moduleName, $backendId) as $imported) {
+    foreach (moduleDependencyNames($units, $moduleName) as $imported) {
         $exports = $units[$imported]['exports'] ?? null;
         if ($exports === null && isset($units[$imported]['program'], $units[$imported]['localTypes'])) {
             $exports = collectExports(
@@ -877,29 +770,3 @@ function syncExportedInferredSchemesFromTypeEnv(
     }
 }
 
-/**
- * Backend impl modules for a non-selected compile backend are parsed for the
- * module graph but must not be typechecked/codegen'd (their foreign imports
- * target a different backend).
- *
- * @param array<string, array<string, mixed>> $units
- */
-function isModuleActiveForCompileBackend(array $units, string $moduleName, string $backendId): bool
-{
-    $lower = \strtolower($moduleName);
-    foreach (['php', 'jvm', 'js', 'dotnet'] as $backend) {
-        if (\str_ends_with($lower, '.' . $backend)) {
-            return $backend === $backendId;
-        }
-    }
-
-    $facade = facadeModuleForImpl($units, $moduleName);
-    if ($facade === null) {
-        return true;
-    }
-
-    $backendMap = $units[$facade]['program']->backendMap
-        ?? ($units[$facade]['backendMap'] ?? []);
-
-    return ($units[$facade]['implModule'] ?? null) === $moduleName;
-}

@@ -1,16 +1,30 @@
 module
   function mapLookupDemo()
-      ret call lookup(@__ev_Eq_Int, @__ev_Ord_Int, 2, call insert(@__ev_Eq_Int, @__ev_Ord_Int, 1, 10, call insert(@__ev_Eq_Int, @__ev_Ord_Int, 2, 20, @empty)))
+      t0 = call insert(@__ev_Eq_Int, @__ev_Ord_Int, 2, 20, @empty)
+      t1 = call insert(@__ev_Eq_Int, @__ev_Ord_Int, 1, 10, t0)
+      t2 = call lookup(@__ev_Eq_Int, @__ev_Ord_Int, 2, t1)
+      ret t2
   function mapSizeDemo()
-      ret call size(call insert(@__ev_Eq_Int, @__ev_Ord_Int, 1, 2, @empty))
+      t3 = call insert(@__ev_Eq_Int, @__ev_Ord_Int, 1, 2, @empty)
+      t4 = call size(t3)
+      ret t4
   function setMemberDemo()
-      ret call member(@__ev_Eq_Int, @__ev_Ord_Int, 2, call setFromList(@__ev_Eq_Int, @__ev_Ord_Int, [1, 2, 3]))
+      t5 = call setFromList(@__ev_Eq_Int, @__ev_Ord_Int, [1, 2, 3])
+      t6 = call member(@__ev_Eq_Int, @__ev_Ord_Int, 2, t5)
+      ret t6
   function setUnionDemo()
-      ret call setSize(call union(@__ev_Eq_Int, @__ev_Ord_Int, call setFromList(@__ev_Eq_Int, @__ev_Ord_Int, [1, 2]), call setFromList(@__ev_Eq_Int, @__ev_Ord_Int, [2, 3])))
+      t7 = call setFromList(@__ev_Eq_Int, @__ev_Ord_Int, [1, 2])
+      t8 = call setFromList(@__ev_Eq_Int, @__ev_Ord_Int, [2, 3])
+      t9 = call union(@__ev_Eq_Int, @__ev_Ord_Int, t7, t8)
+      t10 = call setSize(t9)
+      ret t10
   function clampDemo()
-      ret call clamp(@__ev_Eq_Int, @__ev_Ord_Int, call __tuple2(0, 10), 99)
+      t11 = call __tuple2(0, 10)
+      t12 = call clamp(@__ev_Eq_Int, @__ev_Ord_Int, t11, 99)
+      ret t12
   function charDemo()
-      ret call isDigit('\u{37}')
+      t13 = call isDigit('\u{37}')
+      ret t13
   function altMaybeDemo()
       t14 = call Just(1)
       t15 = call Just(2)
@@ -22,4 +36,6 @@ module
       t18 = dict_call t19-><|>([1], [2, 3])
       ret t18
   function pairDemo()
-      ret call fst(call __tuple2(41, @True))
+      t20 = call __tuple2(41, @True)
+      t21 = call fst(t20)
+      ret t21

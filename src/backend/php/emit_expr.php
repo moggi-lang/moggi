@@ -96,16 +96,25 @@ function emitCall(string $callee, array $args, int $dest, int $indent, array $ct
 function emitRetValue(IR\Operand $value, array $ctx): string
 {
     return match ($value::class) {
-        IR\ExprBinop::class => emitOperand($value->left, $ctx) . ' ' . $value->op . ' ' . emitOperand($value->right, $ctx),
-        IR\ExprCall::class => emitCallExpr($value->callee, $value->args, $ctx),
-        IR\ExprCallValue::class => emitApplyExpr($value->callee, $value->args, $ctx),
-        IR\ExprPartial::class => emitPartialArray($value, $ctx),
+        IR\Partial::class => emitPartialArray($value, $ctx),
         IR\Intrinsic::class => emitOperand($value, $ctx),
         IR\FnRef::class => isset($ctx['lambdaIndex'][$value->name])
             ? emitLambdaReference($value->name, $ctx)
             : emitTopLevelFnUse($value->name, $ctx),
         default => emitOperand($value, $ctx),
     };
+}
+
+/**
+ * A call rendered as the value a `return` produces, for the one case where the call's destination
+ * has no other reader (`\Moggi\Backend\Meta\returnedCall`). Same builders the statement form uses,
+ * so the emitted call is the same call — only the store and the load of its temp are gone.
+ */
+function emitReturnedCall(IR\Call|IR\CallValue $call, array $ctx): string
+{
+    return $call instanceof IR\Call
+        ? emitCallExpr($call->callee, $call->args, $ctx)
+        : emitApplyExpr($call->callee, $call->args, $ctx);
 }
 
 /**
@@ -139,9 +148,6 @@ function emitOperand(IR\Operand $operand, array $ctx): string
             $operand->elements,
         )) . ']',
         IR\Partial::class => emitPartialArray($operand, $ctx),
-        IR\ExprCall::class => emitCallExpr($operand->callee, $operand->args, $ctx),
-        IR\ExprPartial::class => emitPartialArray($operand, $ctx),
-        IR\ExprBinop::class, IR\ExprCallValue::class => '(' . emitRetValue($operand, $ctx) . ')',
         IR\Intrinsic::class => emitIntrinsicCall(
             $operand->name,
             \array_map(static fn (IR\Operand $arg): string => emitOperand($arg, $ctx), $operand->args),
@@ -210,10 +216,8 @@ function retValueMentionsFn(IR\Operand $operand, string $name): bool
         }
         if ($op instanceof IR\FnRef && $op->name === $name) {
             $found = true;
-        } elseif ($op instanceof IR\ExprCall && $op->callee === $name) {
-            $found = true;
         } elseif (
-            ($op instanceof IR\Partial || $op instanceof IR\ExprPartial)
+            ($op instanceof IR\Partial)
             && $op->fn === $name
         ) {
             $found = true;
@@ -377,7 +381,7 @@ function constructorTag(string $name): ?string
 /** @param list<IR\Operand> $args */
 function emitApplyExpr(IR\Operand $callee, array $args, array $ctx): string
 {
-    if ($callee instanceof IR\Partial || $callee instanceof IR\ExprPartial) {
+    if ($callee instanceof IR\Partial) {
         $all = [...$callee->args, ...$args];
         if (\count($all) === $callee->arity) {
             return emitCallExpr($callee->fn, $all, $ctx);
@@ -416,7 +420,7 @@ function emitApplyExpr(IR\Operand $callee, array $args, array $ctx): string
     return '__apply(' . $calleeCode . ($argsCode === '' ? '' : ', ' . $argsCode) . ')';
 }
 
-function emitPartialArray(IR\Partial|IR\ExprPartial $partial, array $ctx): string
+function emitPartialArray(IR\Partial $partial, array $ctx): string
 {
     $fn = emitPartialCallableName($partial->fn, $ctx);
     $args = \array_map(static fn (IR\Operand $arg): string => emitOperand($arg, $ctx), $partial->args);

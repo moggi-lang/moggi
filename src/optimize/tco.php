@@ -45,20 +45,20 @@ function findTailRecPlan(string $name, array $params, array $items): ?array
 /** @param list<IR\Stmt> $items @return list<IR\Stmt>|null */
 function tailSelfCallFromRetValue(IR\Operand $value, string $name, array $params, array $items): ?array
 {
-    if ($value instanceof IR\ExprCall && $value->callee === $name && \count($value->args) === \count($params)) {
-        return $value->args;
-    }
+    if ($value instanceof IR\Temp) {
+        if (\count($items) !== 2) {
+            return null;
+        }
 
-    if (! ($value instanceof IR\ExprCallValue) || ! ($value->callee instanceof IR\Temp)) {
+        $defining = $items[0];
+        if ($defining instanceof IR\Call && $defining->dest === $value->id) {
+            return tailSelfCallFromCall($defining, $name, $params);
+        }
+
         return null;
     }
 
-    $partialCall = findCallDefiningTemp($items, $value->callee->id);
-    if ($partialCall === null) {
-        return null;
-    }
-
-    return tailSelfCallFromCall($partialCall, $name, $params, $value->args);
+    return null;
 }
 
 /** @param list<IR\Operand> $extraArgs @return list<IR\Stmt>|null */
@@ -239,9 +239,7 @@ function stripRecursiveTail(array $items, int $matchDest, string $name): array
         $retValue = \array_pop($items)->value;
     }
 
-    if ($retValue !== null && $retValue instanceof IR\ExprCallValue && $retValue->callee instanceof IR\Temp) {
-        $items = removeCallDefiningTemp($items, $retValue->callee->id);
-    } elseif ($retValue === null && $items !== [] && $items[\count($items) - 1] instanceof IR\CallValue) {
+    if ($retValue === null && $items !== [] && $items[\count($items) - 1] instanceof IR\CallValue) {
         $callValue = $items[\count($items) - 1];
         if ($callValue->callee instanceof IR\Temp && isSelfCallDefiningTemp($items, $callValue->callee->id, $name)) {
             \array_pop($items);

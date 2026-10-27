@@ -21,6 +21,8 @@ use function Moggi\Backend\Meta\isBoolBackedData;
 use function Moggi\Backend\Meta\lambdaCaptureNamesInBlock;
 use function Moggi\Backend\Meta\newtypeConstructorMap;
 use function Moggi\Backend\Meta\newtypeConstructorMapFromRegistry;
+use function Moggi\Backend\Meta\returnedCall;
+use function Moggi\Backend\Meta\tempReadCounts;
 use function Moggi\Debug\normalizeDisplayPath;
 use function Moggi\Debug\symbolId;
 use function Moggi\IR\Callables\captureMeta;
@@ -669,9 +671,53 @@ function buildJvmFnWrapperClass(string $internal, string $targetOwner, string $t
 
 function emitBlock(EmitEnv $env, IR\Block $block): void
 {
-    foreach ($block->items as $stmt) {
-        emitStmt($env, $stmt);
+    $items = \array_values($block->items);
+    $tempReads = tempReadCounts($block);
+
+    for ($i = 0; $i < \count($items); ++$i) {
+        $call = returnedCall($items[$i], $items[$i + 1] ?? null, $tempReads);
+        if ($call !== null) {
+            noteJvmLoc($env, $call->srcLoc);
+            emitCallValue($env, $call);
+            emitReturnTail($env);
+            ++$i;
+
+            continue;
+        }
+
+        emitStmt($env, $items[$i]);
     }
+}
+
+/** A call whose value is on the stack, without storing it in its destination temp. */
+function emitCallValue(EmitEnv $env, IR\Call|IR\CallValue $call): void
+{
+    if ($call instanceof IR\Call) {
+        emitStaticCall($env, $call->callee, $call->args);
+
+        return;
+    }
+
+    emitOperand($env, $call->callee);
+    emitRuntimeApply($env, $call->args);
+}
+
+/**
+ * The end of an `IR\Ret`: inside a match arm the value yields to the match's destination instead of
+ * returning, which a fused return has to keep doing.
+ */
+function emitReturnTail(EmitEnv $env): void
+{
+    if ($env->matchYieldDest !== null) {
+        $env->c->astore($env->localSlot('t' . $env->matchYieldDest));
+        if ($env->matchJoinLabel !== null) {
+            $env->c->goto_($env->matchJoinLabel);
+        }
+
+        return;
+    }
+
+    emitJvmFunctionReturn($env);
 }
 
 /**
@@ -698,15 +744,7 @@ function emitStmt(EmitEnv $env, IR\Stmt $stmt): void
         case IR\Ret::class:
             /** @var IR\Ret $stmt */
             emitOperand($env, $stmt->value);
-            if ($env->matchYieldDest !== null) {
-                $env->c->astore($env->localSlot('t' . $env->matchYieldDest));
-                if ($env->matchJoinLabel !== null) {
-                    $env->c->goto_($env->matchJoinLabel);
-                }
-
-                return;
-            }
-            emitJvmFunctionReturn($env);
+            emitReturnTail($env);
 
             return;
 
@@ -1344,30 +1382,12 @@ function emitOperand(EmitEnv $env, IR\Operand $op): void
 
         return;
     }
-    if ($op instanceof IR\ExprCall) {
-        noteJvmLoc($env, $op->srcLoc);
-        emitStaticCall($env, $op->callee, $op->args);
-
-        return;
-    }
-    if ($op instanceof IR\ExprCallValue) {
-        noteJvmLoc($env, $op->srcLoc);
-        emitOperand($env, $op->callee);
-        emitRuntimeApply($env, $op->args);
-
-        return;
-    }
-    if ($op instanceof IR\ExprBinop) {
-        emitIntBinopToStack($env, $op->op, $op->left, $op->right);
-
-        return;
-    }
     if ($op instanceof IR\ForeignCall) {
         emitForeign($env, $op);
 
         return;
     }
-    if ($op instanceof IR\Partial || $op instanceof IR\ExprPartial) {
+    if ($op instanceof IR\Partial) {
         emitPartialValue($env, $op->fn, $op->arity, $op->args);
 
         return;
@@ -3838,16 +3858,12 @@ function jvmOperandRefsUnboundLocal(IR\Operand $op, array $bound): bool
     if ($op instanceof IR\Local) {
         return ! isset($bound[$op->name]);
     }
-    if ($op instanceof IR\Intrinsic || $op instanceof IR\ExprCall || $op instanceof IR\ForeignCall || $op instanceof IR\ListLit) {
+    if ($op instanceof IR\Intrinsic || $op instanceof IR\ForeignCall || $op instanceof IR\ListLit) {
         foreach ($op->args ?? [] as $arg) {
             if ($arg instanceof IR\Operand && jvmOperandRefsUnboundLocal($arg, $bound)) {
                 return true;
             }
         }
     }
-    if ($op instanceof IR\ExprBinop) {
-        return jvmOperandRefsUnboundLocal($op->left, $bound) || jvmOperandRefsUnboundLocal($op->right, $bound);
-    }
-
     return false;
 }

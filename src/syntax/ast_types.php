@@ -125,6 +125,13 @@ abstract class AstNode implements AstWalkable
     /** Doc comment attached by the parser (`-- |`, `{-|`, `-- ^`). */
     public ?string $doc = null;
 
+    /**
+     * The file this item was written in, when that is not the unit's own file: a
+     * module with a backend half is one unit whose declarations come from two
+     * files, and a diagnostic or a frame has to name the one it is written in.
+     */
+    public ?string $sourceFile = null;
+
     /** @var list<PendingConstraint> */
     public array $pendingConstraints = [];
 
