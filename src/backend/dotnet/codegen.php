@@ -29,7 +29,7 @@ use function Moggi\Backend\Meta\newtypeConstructorMap;
 use function Moggi\Backend\Meta\newtypeConstructorMapFromRegistry;
 use function Moggi\Backend\Meta\operandCallSrcLoc;
 use function Moggi\Backend\Meta\returnedCall;
-use function Moggi\Backend\Meta\tempReadCounts;
+use function Moggi\Backend\Meta\tempReadsForFunction;
 use function Moggi\Debug\normalizeDisplayPath;
 use function Moggi\Debug\symbolId;
 use function Moggi\IR\Callables\captureMeta;
@@ -366,6 +366,10 @@ final class EmitEnv
     public ?int $matchYieldDest = null;
 
     public ?string $matchJoinLabel = null;
+
+    /** Read counts of the body being emitted, computed once per function ({@see tempReadsForFunction}).
+     * @var ?array<int, int> */
+    public ?array $tempReads = null;
 
     /**
      * `arg:N` slots of the enclosing function's declared parameters, in
@@ -764,7 +768,7 @@ IL;
 function emitBlock(EmitEnv $env, IR\Block $block): void
 {
     $items = \array_values($block->items);
-    $tempReads = tempReadCounts($block);
+    $tempReads = tempReadsForFunction($env->tempReads, $block);
 
     for ($i = 0; $i < \count($items); ++$i) {
         $call = returnedCall($items[$i], $items[$i + 1] ?? null, $tempReads);

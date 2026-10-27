@@ -24,6 +24,7 @@ use function Moggi\Backend\Meta\newtypeConstructorMapFromRegistry;
 use function Moggi\Backend\Meta\operandCallSrcLoc;
 use function Moggi\Backend\Meta\returnedCall;
 use function Moggi\Backend\Meta\tempReadCounts;
+use function Moggi\Backend\Meta\tempReadsForFunction;
 use function Moggi\Backend\Php\Intrinsics\emitCall as emitIntrinsicCall;
 use function Moggi\Backend\Php\Intrinsics\localHelpersForUsed;
 use function Moggi\Backend\Php\Intrinsics\phpHelpersForModule;
@@ -402,6 +403,7 @@ function emitFunction(IR\FunctionDecl $function, array $lambdaMeta, array $lambd
         'tailRecParams' => $function->params,
         'sourceMap' => $codegenCtx['sourceMap'] ?? null,
         'frameFunction' => $generated,
+        'tempReads' => tempReadCounts($function->body),
     ]);
 
     return "function {$name}({$paramsCode}) {\n"
@@ -499,7 +501,7 @@ function tailRecallAssignOrder(array $params, array $args): ?array
 function emitBlock(IR\Block $block, int $indent, array $ctx): string
 {
     $items = \array_values($block->items);
-    $tempReads = tempReadCounts($block);
+    $tempReads = tempReadsForFunction($ctx['tempReads'], $block);
     $out = '';
 
     for ($i = 0; $i < \count($items); ++$i) {

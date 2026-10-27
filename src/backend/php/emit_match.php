@@ -3,7 +3,7 @@
 namespace Moggi\Backend\Php\Codegen;
 
 use function Moggi\Backend\Meta\returnedCall;
-use function Moggi\Backend\Meta\tempReadCounts;
+use function Moggi\Backend\Meta\tempReadsForFunction;
 use function Moggi\Backend\Php\Naming\mangleVar;
 
 use function Moggi\Backend\Php\Naming\phpSingleQuoted;
@@ -288,7 +288,7 @@ function emitMatchArmExpression(IR\MatchArm $arm, array $ctx, int $indent): stri
         return emitRetValue($last->value, $ctx);
     }
 
-    $fused = returnedCall($items[\count($items) - 2], $last, tempReadCounts($arm->body));
+    $fused = returnedCall($items[\count($items) - 2], $last, tempReadsForFunction($ctx['tempReads'], $arm->body));
 
     $innerPad = \str_repeat('    ', $indent + 2);
     $inner = '';
