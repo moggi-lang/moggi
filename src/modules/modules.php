@@ -18,6 +18,7 @@ use Moggi\Syntax\Ast;
 use Moggi\Syntax\Parser\ParseError;
 
 use function Moggi\Backend\codegenWith;
+use function Moggi\Semantics\Foreign\programDeclaresForeign;
 use function Moggi\Backend\Jvm\Foreign\jvmInterfaceNamesFromPrograms;
 use function Moggi\IR\Callables\captureCandidates;
 use function Moggi\IR\Callables\captureMeta;
@@ -111,10 +112,12 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
         $relative = outputRelativePath($unit['path'], $prepared->rootPrefix);
         $relativeByModule[$moduleName] = $relative;
 
+        $program = ($unit['program'] ?? null) instanceof Ast\Program ? $unit['program'] : null;
         $irCacheKey = isset($unit['cacheRelPath'])
-            ? $context->moduleKey(
+            ? $context->moduleProductKey(
                 $moduleName,
                 ($unit['contentKey'] ?? '') . '|opt=' . ($optimize ? '1' : '0'),
+                $program !== null && programDeclaresForeign($program),
             )
             : null;
         if ($irCacheKey !== null) {

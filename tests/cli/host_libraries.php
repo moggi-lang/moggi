@@ -60,6 +60,37 @@ $compile = static function (array $arguments) use ($root, $env): array {
     return runCompiledProcess([\PHP_BINARY, $root . '/moggi.php', ...$arguments], 120, $env, $root);
 };
 
+/**
+ * Write a stub resolver a `PATH` lookup finds on either platform: this PHP runs the script on Windows
+ * through a `.bat` launcher (`findExecutable` resolves the extension, `runProcess` starts the batch
+ * file through `cmd`), and a `#!/usr/bin/env php` launcher elsewhere. A bash stub is invisible to a
+ * Windows lookup, which reaches the real resolver instead.
+ */
+$stubResolver = static function (string $directory, string $name, string $body): void {
+    \mkdir($directory, 0777, true);
+    $script = $directory . '/' . $name . '-stub.php';
+    \file_put_contents($script, "<?php declare(strict_types=1);\n\n" . $body);
+    if (\PHP_OS_FAMILY === 'Windows') {
+        \file_put_contents($directory . '/' . $name . '.bat', "@echo off\r\n\"" . \PHP_BINARY . "\" \"" . $script . "\" %*\r\n");
+
+        return;
+    }
+    \file_put_contents($directory . '/' . $name, "#!/usr/bin/env php\n" . \file_get_contents($script));
+    \chmod($directory . '/' . $name, 0755);
+};
+
+/** Put `$directory` first on the child's `PATH`, spelled as that platform's environment has it. */
+$prependPath = static function (array $env, string $directory): array {
+    foreach (\array_keys($env) as $key) {
+        if (\strcasecmp((string) $key, 'PATH') === 0) {
+            unset($env[$key]);
+        }
+    }
+    $env['PATH'] = $directory . \PATH_SEPARATOR . (string) \getenv('PATH');
+
+    return $env;
+};
+
 try {
     $project = $work . '/composer-project';
     $copyTree($fixture, $project);
@@ -152,17 +183,27 @@ try {
     );
     \copy($work . '/Acme.mog', $phpProject . '/src/Main.mog');
     $composerBin = $work . '/composer-bin';
-    \mkdir($composerBin, 0777, true);
-    \file_put_contents(
-        $composerBin . '/composer',
-        "#!/usr/bin/env bash\n"
-        . "for arg in \"\$@\"; do\n"
-        . "  if [ \"\$arg\" = \"--version\" ]; then\n    echo 'Composer version 2.10.3 (stub)'\n    exit 0\n  fi\ndone\n"
-        . "rm -rf vendor\ncp -R \"\$ACME_VENDOR\" vendor\n",
-    );
-    \chmod($composerBin . '/composer', 0755);
-    $composerEnv = $env;
-    $composerEnv['PATH'] = $composerBin . ':' . (string) \getenv('PATH');
+    $stubResolver($composerBin, 'composer', <<<'PHP'
+        foreach ($argv as $arg) {
+            if ($arg === '--version') {
+                echo "Composer version 2.10.3 (stub)\n";
+                exit(0);
+            }
+        }
+        $copy = static function (string $from, string $to) use (&$copy): void {
+            @\mkdir($to, 0777, true);
+            foreach (\scandir($from) ?: [] as $entry) {
+                if ($entry === '.' || $entry === '..') {
+                    continue;
+                }
+                \is_dir($from . '/' . $entry)
+                    ? $copy($from . '/' . $entry, $to . '/' . $entry)
+                    : \copy($from . '/' . $entry, $to . '/' . $entry);
+            }
+        };
+        $copy((string) \getenv('ACME_VENDOR'), 'vendor');
+        PHP);
+    $composerEnv = $prependPath($env, $composerBin);
     $composerEnv['ACME_VENDOR'] = $fixture . '/vendor';
     $phpInstalled = runCompiledProcess([\PHP_BINARY, $root . '/moggi.php', 'install'], 300, $composerEnv, $phpProject);
     $assert(($phpInstalled['exitCode'] ?? 1) === 0, 'moggi install must write the lock offline: ' . \trim($phpInstalled['stderr']));
@@ -272,18 +313,17 @@ try {
         );
         \copy($work . '/maven-prog/Main.mog', $project . '/src/Main.mog');
         $stubBin = $work . '/stub-bin';
-        \mkdir($stubBin, 0777, true);
-        \file_put_contents(
-            $stubBin . '/mvn',
-            "#!/usr/bin/env bash\n"
-            . "for arg in \"\$@\"; do\n"
-            . "  if [ \"\$arg\" = \"-version\" ] || [ \"\$arg\" = \"--version\" ]; then\n"
-            . "    echo 'Apache Maven 3.9.12 (stub)'\n    exit 0\n  fi\ndone\n"
-            . "mkdir -p jvm\ncp \"\$ACME_JAR\" jvm/acme-hello.jar\n",
-        );
-        \chmod($stubBin . '/mvn', 0755);
-        $buildEnv = $env;
-        $buildEnv['PATH'] = $stubBin . ':' . (string) \getenv('PATH');
+        $stubResolver($stubBin, 'mvn', <<<'PHP'
+            foreach ($argv as $arg) {
+                if ($arg === '-version' || $arg === '--version') {
+                    echo "Apache Maven 3.9.12 (stub)\n";
+                    exit(0);
+                }
+            }
+            @\mkdir('jvm', 0777, true);
+            \copy((string) \getenv('ACME_JAR'), 'jvm/acme-hello.jar');
+            PHP);
+        $buildEnv = $prependPath($env, $stubBin);
         $buildEnv['ACME_JAR'] = $mavenTree . '/acme-hello.jar';
         $installed = runCompiledProcess([\PHP_BINARY, $root . '/moggi.php', 'install'], 300, $buildEnv, $project);
         $assert(($installed['exitCode'] ?? 1) === 0, 'moggi install must write the lock offline: ' . \trim($installed['stderr']));
@@ -374,18 +414,27 @@ try {
             'packageFolders' => [$work . '/nuget-package-folder/' => new \stdClass()],
         ], \JSON_PRETTY_PRINT | \JSON_UNESCAPED_SLASHES);
         $dotnetBin = $work . '/dotnet-bin';
-        \mkdir($dotnetBin, 0777, true);
-        \file_put_contents(
-            $dotnetBin . '/dotnet',
-            "#!/usr/bin/env bash\n"
-            . "if [ \"\$1\" = \"--version\" ]; then\n  echo '8.0.425'\n  exit 0\nfi\n"
-            . "if [ \"\$1\" = \"restore\" ]; then\n  mkdir -p obj\n  cat > obj/project.assets.json <<'JSON'\n"
-            . $assets . "\nJSON\n  exit 0\nfi\n"
-            . 'exec ' . \escapeshellarg($dotnet) . " \"\$@\"\n",
-        );
-        \chmod($dotnetBin . '/dotnet', 0755);
-        $dotnetBuildEnv = $env;
-        $dotnetBuildEnv['PATH'] = $dotnetBin . ':' . (string) \getenv('PATH');
+        \file_put_contents($work . '/project.assets.json', $assets);
+        $stubResolver($dotnetBin, 'dotnet', <<<'PHP'
+            if (($argv[1] ?? '') === '--version') {
+                echo "8.0.425\n";
+                exit(0);
+            }
+            if (($argv[1] ?? '') === 'restore') {
+                @\mkdir('obj', 0777, true);
+                \copy((string) \getenv('ACME_ASSETS'), 'obj/project.assets.json');
+                exit(0);
+            }
+            $process = \proc_open(
+                [(string) \getenv('ACME_DOTNET'), ...\array_slice($argv, 1)],
+                [0 => \STDIN, 1 => \STDOUT, 2 => \STDERR],
+                $pipes,
+            );
+            exit(\is_resource($process) ? \proc_close($process) : 1);
+            PHP);
+        $dotnetBuildEnv = $prependPath($env, $dotnetBin);
+        $dotnetBuildEnv['ACME_ASSETS'] = $work . '/project.assets.json';
+        $dotnetBuildEnv['ACME_DOTNET'] = (string) $dotnet;
         $nugetInstalled = runCompiledProcess([\PHP_BINARY, $root . '/moggi.php', 'install'], 300, $dotnetBuildEnv, $nugetProject);
         $assert(($nugetInstalled['exitCode'] ?? 1) === 0, 'moggi install must write the lock offline: ' . \trim($nugetInstalled['stderr']));
         $dotnetBuilt = runCompiledProcess([\PHP_BINARY, $root . '/moggi.php', 'build', '--backend', 'dotnet', '-o', $work . '/built.dll'], 300, $dotnetBuildEnv, $nugetProject);

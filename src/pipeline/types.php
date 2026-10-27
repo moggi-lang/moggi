@@ -251,13 +251,14 @@ final class CompilationContext
     }
 
     /**
-     * The declared cache key for one module's *checked* product.
+     * The key for a module product whose content the carried host tree decides.
      *
-     * Checking a host declaration asks the backend whether the carried tree backs it, so that product
-     * is valid only for the host identity it was checked against. A module with no host declaration
-     * keeps the shared {@see moduleKey}, and IR and the export products are host-blank either way.
+     * Two products are: the checked program, because a host declaration is verified against the tree,
+     * and the IR, because the `nativeSig` it embeds is resolved from that tree (javap for jvm, the
+     * sidecars and CLR inspector for dotnet). A module with no host declaration keeps the shared
+     * {@see moduleKey}, as do the export products, which carry neither.
      */
-    public function checkedKey(?string $module, string $contentKey, bool $declaresForeign): string
+    public function moduleProductKey(?string $module, string $contentKey, bool $declaresForeign): string
     {
         $key = $this->moduleKey($module, $contentKey);
         if (! $declaresForeign) {

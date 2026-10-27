@@ -72,7 +72,7 @@ final class PreparedProject
             $cached = Cache\moduleGet(
                 $relPath,
                 'checked',
-                $context->checkedKey(
+                $context->moduleProductKey(
                     $moduleName,
                     $contentKey,
                     $program instanceof Ast\Program && programDeclaresForeign($program),

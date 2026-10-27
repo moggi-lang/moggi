@@ -269,7 +269,7 @@ function prepareProject(
             $cachedCheck = Cache\moduleGet(
                 $units[$moduleName]['cacheRelPath'],
                 'checked',
-                $context->checkedKey(
+                $context->moduleProductKey(
                     $moduleName,
                     $contentKey,
                     programDeclaresForeign($units[$moduleName]['program']),
@@ -387,7 +387,7 @@ function prepareProject(
             Cache\modulePut(
                 $units[$moduleName]['cacheRelPath'],
                 'checked',
-                $context->checkedKey(
+                $context->moduleProductKey(
                     $moduleName,
                     $contentKey,
                     programDeclaresForeign($units[$moduleName]['program']),
@@ -904,7 +904,7 @@ function prepareProjectExtendingFocus(
         Cache\modulePut(
             $units[$focusModule]['cacheRelPath'],
             'checked',
-            $context->checkedKey(
+            $context->moduleProductKey(
                 $focusModule,
                 $contentKey,
                 programDeclaresForeign($units[$focusModule]['program']),
