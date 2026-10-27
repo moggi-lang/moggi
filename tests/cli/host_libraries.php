@@ -29,6 +29,8 @@ use function Moggi\Backend\DotNet\resolveIlasmExecutable;
 use function Moggi\Compiler\findExecutable;
 
 $checks = 0;
+/** @var list<string> $skipped legs this machine cannot build, reported as the case's skip reason */
+$skipped = [];
 $assert = static function (bool $condition, string $message) use (&$checks): void {
     ++$checks;
     if (! $condition) {
@@ -291,7 +293,7 @@ try {
         $assert(($builtRun['exitCode'] ?? 1) === 0, 'the built artifact must run: ' . \trim($builtRun['stderr']));
         $assert(\trim($builtRun['stdout']) === 'hello maven', 'the built artifact must carry the host jar: ' . $builtRun['stdout']);
     } else {
-        \fwrite(STDERR, "cli/host_libraries: skipped the --lib-maven leg (no javac/jar/java on PATH)\n");
+        $skipped[] = 'the --lib-maven leg needs javac, jar and java on PATH';
     }
 
     // `--lib-nuget`: a DLL assembled offline, with the sidecar that scopes its type, linked for real.
@@ -396,7 +398,12 @@ try {
         $assert(($dotnetBuiltRun['exitCode'] ?? 1) === 0, 'the built dll must run: ' . \trim($dotnetBuiltRun['stderr']));
         $assert(trim($dotnetBuiltRun['stdout']) === '42', 'the built dll must answer: ' . $dotnetBuiltRun['stdout']);
     } else {
-        \fwrite(STDERR, "cli/host_libraries: skipped the --lib-nuget leg (no ilasm or dotnet)\n");
+        $skipped[] = 'the --lib-nuget leg needs ilasm and dotnet on PATH';
+    }
+
+    if ($skipped !== []) {
+        \fwrite(STDERR, \implode('; ', $skipped) . "\n");
+        exit(2);
     }
 
     \printf("cli/host_libraries: %d checks passed\n", $checks);

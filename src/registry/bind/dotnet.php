@@ -96,6 +96,9 @@ function dotNetBindModuleName(string $id): string
  * directory whose simple name matches the package id, keeping the types under
  * the id's namespace.
  *
+ * `$treeRoot` is the resolver's tree, which holds the `dotnet/` directory
+ * {@see \Moggi\Registry\hostToolArtifactRoot()} forwards to `--lib-nuget` — not that root itself.
+ *
  * @return array{backend: string, coordinate: string, module: string, assemblies: list<array{file: string, name: string, digest: string}>, types: list<array<string, mixed>>, functions: list<array<string, mixed>>, consts: list<array<string, mixed>>, skipped: list<array{symbol: string, reason: string}>, sidecar: array<string, mixed>}
  */
 function inspectDotNetTree(string $treeRoot, string $id, ?string $version): array

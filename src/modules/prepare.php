@@ -18,6 +18,7 @@ use function Moggi\Paths\canonicalPath;
 use function Moggi\Paths\canonicalSeparators;
 use function Moggi\Paths\moduleNameToPath;
 use function Moggi\Semantics\Effects\checkAndNormalize;
+use function Moggi\Semantics\Foreign\programDeclaresForeign;
 use function Moggi\Semantics\Types\clearInternedTypeNodes;
 use function Moggi\Syntax\Lexer\lex;
 use function Moggi\Syntax\Parser\importedFixityForImports;
@@ -268,7 +269,11 @@ function prepareProject(
             $cachedCheck = Cache\moduleGet(
                 $units[$moduleName]['cacheRelPath'],
                 'checked',
-                $context->moduleKey($moduleName, $contentKey),
+                $context->checkedKey(
+                    $moduleName,
+                    $contentKey,
+                    programDeclaresForeign($units[$moduleName]['program']),
+                ),
                 $context->backendId,
             );
             if ($interfaceInHand && \is_array($cachedCheck) && isset($cachedCheck['program'])) {
@@ -382,7 +387,11 @@ function prepareProject(
             Cache\modulePut(
                 $units[$moduleName]['cacheRelPath'],
                 'checked',
-                $context->moduleKey($moduleName, $contentKey),
+                $context->checkedKey(
+                    $moduleName,
+                    $contentKey,
+                    programDeclaresForeign($units[$moduleName]['program']),
+                ),
                 [
                     'program' => $checkedFull,
                     'exportedInferredSchemes' => $exportedInferredSchemes,
@@ -612,17 +621,24 @@ function addModuleClassScope(
 }
 
 /**
- * Memo key for a single module: path identity, compile backend, and purpose.
+ * Memo key for a single module: path identity, compile backend, purpose, and the host trees the
+ * compilation links against.
  *
  * Purpose is part of the key because it is no longer a function of the module's
  * name: the same module can be an entry for one compilation and a library for
  * another, and the checked program differs (the entry's `main` is promoted).
+ *
+ * The host trees are part of it because the *checked* product records which foreign declarations the
+ * checker accepted against them: a module whose `foreign php function` was verified with a Composer
+ * tree must not answer a compile that was given no tree (review rev-4 B1). Nothing else in the key
+ * can see that state — it lives in `ConfiguredHostLibraries`, not in the module roots.
  */
 function checkedModuleCacheKey(string $path, CompilationContext $context): string
 {
     $module = cachedModuleHeader($path)['module'] ?? null;
 
-    return sourceIdentityKey($path) . ':' . $context->moduleCacheMaterial($module);
+    return sourceIdentityKey($path) . ':' . $context->moduleCacheMaterial($module)
+        . ':host=' . $context->host;
 }
 
 function clearPrepareProjectCaches(): void
@@ -888,7 +904,11 @@ function prepareProjectExtendingFocus(
         Cache\modulePut(
             $units[$focusModule]['cacheRelPath'],
             'checked',
-            $context->moduleKey($focusModule, $contentKey),
+            $context->checkedKey(
+                $focusModule,
+                $contentKey,
+                programDeclaresForeign($units[$focusModule]['program']),
+            ),
             [
                 'program' => $checkedFull,
                 'exportedInferredSchemes' => $checkedFull->exportedInferredSchemes,
