@@ -50,6 +50,19 @@ function tempReadCounts(IR\Block $body): array
 }
 
 /**
+ * The read counts for the function body being emitted, computed once for it: `$cache` is the
+ * emitter's per-function slot, so a nested block reuses the whole body's counts instead of walking
+ * its own subtree again. A wider map can only refuse a fusion, never allow one.
+ *
+ * @param ?array<int, int> $cache
+ * @return array<int, int>
+ */
+function tempReadsForFunction(?array &$cache, IR\Block $body): array
+{
+    return $cache ??= tempReadCounts($body);
+}
+
+/**
  * The call to emit as a direct return, when the statement after it returns exactly the temp it
  * defines and nothing else reads that temp.
  *
