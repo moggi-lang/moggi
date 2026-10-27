@@ -37,6 +37,7 @@ use function Moggi\Optimize\Interproc\substituteStmt;
 use function Moggi\Optimize\Support\callArgsAreLeaves;
 use function Moggi\Optimize\Support\dropUnreadTemps;
 use function Moggi\Optimize\optimize;
+use function Moggi\Semantics\IntrinsicRegistry\primopForPublicOperator;
 use function Moggi\Semantics\Kernel\isBoolCtor;
 
 
@@ -526,7 +527,7 @@ function cafRetToCtorTree(array $items, string $moduleName = '', array $external
 
     if ($last->value instanceof IR\FnRef) {
         return isPlausibleConstructorName($last->value->name)
-            ? new CtorTree($last->value->name, [])
+            ? qualifyCtorTreeFns(new CtorTree($last->value->name, []), $moduleName, $externals)
             : null;
     }
 
@@ -547,10 +548,30 @@ function cafRetToCtorTree(array $items, string $moduleName = '', array $external
     return $tree instanceof CtorTree ? qualifyCtorTreeFns($tree, $moduleName, $externals) : null;
 }
 
-/** Qualify the bare `FnRef` leaves of a constructor tree to their module or external name.
+/**
+ * The name a constructor tree and its bare leaves go by outside the module they were read in.
+ *
+ * A tree names a constructor the way its own body spelled it, which is enough to match on but not to
+ * emit: a module that reads another module's nullary CAF gets a constructor its own imports never
+ * named, and a bare name resolves against the reader. The name the reading module's interface knows
+ * it by, or its own qualification, is what the reader can emit.
  *
  * @param array<string, string> $externals
  */
+function qualifyCtorRefName(string $name, string $moduleName, array $externals): string
+{
+    if ($name === '' || \str_contains($name, '::') || \str_contains($name, '\\')
+        || primopForPublicOperator($name) !== null) {
+        return $name;
+    }
+    if (isset($externals[$name])) {
+        return $externals[$name];
+    }
+
+    return $moduleName !== '' ? resolvedSymbol($moduleName, $name) : $name;
+}
+
+/** Qualify the name of a constructor tree and of its `FnRef` leaves. @param array<string, string> $externals */
 function qualifyCtorTreeFns(CtorTree $tree, string $moduleName, array $externals): CtorTree
 {
     $args = [];
@@ -561,24 +582,15 @@ function qualifyCtorTreeFns(CtorTree $tree, string $moduleName, array $externals
             continue;
         }
         if ($arg instanceof IR\FnRef) {
-            $name = $arg->name;
-            if ($name !== '' && ! \str_contains($name, '::') && ! \str_contains($name, '\\')) {
-                if (isset($externals[$name])) {
-                    $args[] = new IR\FnRef($externals[$name]);
+            $qualified = qualifyCtorRefName($arg->name, $moduleName, $externals);
+            $args[] = $qualified === $arg->name ? $arg : new IR\FnRef($qualified);
 
-                    continue;
-                }
-                if ($moduleName !== '') {
-                    $args[] = new IR\FnRef(resolvedSymbol($moduleName, $name));
-
-                    continue;
-                }
-            }
+            continue;
         }
         $args[] = $arg;
     }
 
-    return new CtorTree($tree->name, $args, $tree->srcLoc);
+    return new CtorTree(qualifyCtorRefName($tree->name, $moduleName, $externals), $args, $tree->srcLoc);
 }
 
 /**
@@ -1235,8 +1247,9 @@ function isConcreteSpecializeCall(IR\Call $call, array $concreteTemps): bool
  *
  * @param array{callee: string, args: list<IR\Operand>} $call
  * @param array<int, IR\Operand|array{callee: string, args: list<IR\Operand>}> $concreteTemps
+ * @param array<int, true> $seen temps whose record this walk already entered
  */
-function isConcreteApplication(array $call, array $concreteTemps): bool
+function isConcreteApplication(array $call, array $concreteTemps, array $seen = []): bool
 {
     if ($call['args'] === []) {
         if (operandIsNonDuplicable(new IR\FnRef($call['callee']))) {
@@ -1249,7 +1262,7 @@ function isConcreteApplication(array $call, array $concreteTemps): bool
     }
 
     foreach ($call['args'] as $arg) {
-        if (! isConcreteRecordArg($arg, $concreteTemps)) {
+        if (! isConcreteRecordArg($arg, $concreteTemps, $seen)) {
             return false;
         }
     }
@@ -1258,15 +1271,24 @@ function isConcreteApplication(array $call, array $concreteTemps): bool
 }
 
 /**
+ * A temp id may be defined more than once, so a record can read the temp it defines and the walk
+ * would follow that read back into the record it is already inside: such a read is not the record
+ * but the temp, which nothing can name, so it answers not-concrete.
+ *
  * @param array<int, IR\Operand|array{callee: string, args: list<IR\Operand>}> $concreteTemps
+ * @param array<int, true> $seen records this walk is already inside
  */
-function isConcreteRecordArg(IR\Operand $arg, array $concreteTemps): bool
+function isConcreteRecordArg(IR\Operand $arg, array $concreteTemps, array $seen = []): bool
 {
     if ($arg instanceof IR\Temp && isset($concreteTemps[$arg->id])) {
+        if (isset($seen[$arg->id])) {
+            return false;
+        }
+        $seen[$arg->id] = true;
         $record = $concreteTemps[$arg->id];
 
         return \is_array($record)
-            ? isConcreteApplication($record, $concreteTemps)
+            ? isConcreteApplication($record, $concreteTemps, $seen)
             : isConcreteSpecializeArg($record);
     }
 

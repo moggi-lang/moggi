@@ -493,8 +493,9 @@ function artifactFileName(string $key): string
 /**
  * Whole-project artifact cache (e.g. `moggi compile` outputs).
  *
- * Stamped with the IR shape like a per-module entry: these outputs are derived from the IR, so a
- * product from another shape is dropped rather than handed to a build of this compiler.
+ * An entry is keyed by the inputs that produced it, and the tree it sits in belongs to one compiler:
+ * `ensureCache()` drops everything below the fingerprint when the compiler on disk is not the one
+ * that wrote it, so a product is never handed to a build that did not derive it.
  */
 function artifactGet(string $key): mixed
 {

@@ -251,17 +251,6 @@ function tempUseCountInRewritableExpr(IR\Operand $expr, int $id): int
     };
 }
 
-/** @param list<IR\Operand> $operands */
-function tempUseCountInRewritableOperands(array $operands, int $id): int
-{
-    $count = 0;
-    foreach ($operands as $operand) {
-        $count += tempUseCountInRewritableExpr($operand, $id);
-    }
-
-    return $count;
-}
-
 /** @param list<IR\Stmt> $items */
 function tempUsedInItems(array $items, int $id): bool
 {
