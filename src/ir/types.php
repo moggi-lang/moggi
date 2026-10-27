@@ -445,49 +445,6 @@ final class Partial implements Operand
     }
 }
 
-final class ExprPartial implements Operand
-{
-    /** @param list<Operand> $args */
-    public function __construct(
-        public string $fn,
-        public int $arity,
-        public array $args,
-    ) {
-    }
-}
-
-final class ExprBinop implements Operand
-{
-    public function __construct(
-        public string $op,
-        public Operand $left,
-        public Operand $right,
-    ) {
-    }
-}
-
-final class ExprCall implements Operand
-{
-    /** @param list<Operand> $args */
-    public function __construct(
-        public string $callee,
-        public array $args,
-        public ?SrcLoc $srcLoc = null,
-    ) {
-    }
-}
-
-final class ExprCallValue implements Operand
-{
-    /** @param list<Operand> $args */
-    public function __construct(
-        public Operand $callee,
-        public array $args,
-        public ?SrcLoc $srcLoc = null,
-    ) {
-    }
-}
-
 final class Intrinsic implements Operand
 {
     /** @param list<Operand> $args */
@@ -504,7 +461,7 @@ final class DictMethod implements Operand
     /**
      * `localEvidence` is how many dictionaries the *instance* this method was projected from takes
      * — its context (`instance Monoid a => Monoid (Dual a)` is one), which is exactly the argument
-     * list of the owner builder the projection calls (`C2a`, `S5`).
+     * list of the owner builder the projection calls.
      *
      * It is not a prefix of an application's arguments. Those dictionaries are already closed into
      * the owner dictionary the projection produced, so a call's leading arguments are the method's
@@ -611,10 +568,10 @@ final class DictCall implements Stmt
      *
      *        **Required by the validator at both seams.** Lowering is the only producer and always
      *        states it, so `validateModule` rejects a `dict_call` whose value is null instead of
-     *        letting a missing fact read as "nullary" later. No emitter reads it today (C1b's
-     *        second half made every `dict_call` dispatch through the runtime dictionary) and it is
-     *        not part of `CallableSig`; the null case exists only for a hand-built pre-validation
-     *        IR, which the validator refuses.
+     *        letting a missing fact read as "nullary" later. No emitter reads it today — every
+     *        `dict_call` dispatches through the runtime dictionary — and it is not part of
+     *        `CallableSig`; the null case exists only for a hand-built pre-validation IR, which the
+     *        validator refuses.
      */
     public function __construct(
         public Operand $evidence,
@@ -850,8 +807,8 @@ final class LowerCtx
          * A projection names its instance's dictionary rather than capturing the enclosing scope,
          * so the builder used to run again at every use (`@__ev_Labelled_Int()` per call). The
          * first use in a block binds the builder's result and stores that operand here; later uses
-         * in the same block read it, which is the "instance-context closure" (S5): the projected
-         * method owns its dictionary instead of re-materialising it.
+         * in the same block read it, which is the "instance-context closure": the projected method
+         * owns its dictionary instead of re-materialising it.
          *
          * The map is per block, and a nested block starts with its own, so a dictionary is never
          * built for a region that does not run.

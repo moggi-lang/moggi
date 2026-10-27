@@ -116,7 +116,7 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
                 $actionReturningEntries,
                 $newtypeIndex,
                 $moduleName,
-                $sourceFile,
+                $item->sourceFile ?? $sourceFile,
                 $constructorRenames,
                 $workers,
                 $workerEntries,
@@ -362,7 +362,7 @@ function lowerFunction(
 
 function srcLocFromAst(Ast\AstNode $node, string $module, string $function, string $file): SrcLoc
 {
-    return new SrcLoc($module, $function, normalizeDisplayPath($file), $node->line, $node->col);
+    return new SrcLoc($module, $function, normalizeDisplayPath($node->sourceFile ?? $file), $node->line, $node->col);
 }
 
 /** @param array<int, Ast\AstNode> $patterns @return array<int, string> */

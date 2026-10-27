@@ -48,7 +48,7 @@ function validateModule(IR\Module $module, string $pass): void
 /**
  * Validates a function list without the entry-point check.
  *
- * The per-pass optimizer checkpoint (F1a) sees stages between which a module
+ * The per-pass optimizer checkpoint sees stages between which a module
  * does not exist yet — `optimize()` mostly rewrites `list<FunctionDecl>`. The
  * entry rule stays with the two seams that do have a module (post-lower and
  * post-opt); a stage is not allowed to invent functions that later stages must
@@ -81,9 +81,9 @@ function validateFunctionList(array $functions, string $pass, string $source): v
  *
  * A call to an entry the module does not declare is checked against the arities the importer was
  * given (`$importedArities`, keyed by the name the IR uses, from the checked program's
- * `externalFnRuntimeArity`). That map comes from the defining module's published callable facts
- * (S3), so an imported call is held to the same contract as a local one — its vector is the
- * entry's published arity, nothing shorter and nothing longer.
+ * `externalFnRuntimeArity`). That map comes from the defining module's published callable facts,
+ * so an imported call is held to the same contract as a local one — its vector is the entry's
+ * published arity, nothing shorter and nothing longer.
  *
  * @param array<string, int> $importedArities
  */
@@ -104,11 +104,7 @@ function validateCallableLayouts(IR\Module $module, string $pass, array $importe
                 }
             },
             static function (IR\Operand $operand) use ($table, $importedArities, $pass, $name): void {
-                if ($operand instanceof IR\ExprCall) {
-                    checkDirectCall($table, $importedArities, $operand->callee, \count($operand->args), $pass, $name);
-                }
-
-                if ($operand instanceof IR\Partial || $operand instanceof IR\ExprPartial) {
+                if ($operand instanceof IR\Partial) {
                     checkPartial($table, $importedArities, $operand->fn, $operand->arity, \count($operand->args), $pass, $name);
                 }
 

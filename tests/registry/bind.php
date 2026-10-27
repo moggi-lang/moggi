@@ -1,7 +1,7 @@
 <?php declare(strict_types=1);
 
 /**
- * Bindings Phase 1: `moggi bind php:acme/hello` reads the fixture tree and
+ * The PHP binding: `moggi bind php:acme/hello` reads the fixture tree and
  * writes the `Composer.Acme.Hello` module, which then compiles and runs. One
  * targeted test only: the inspector/writer units, the golden render, the CLI
  * surface (`--print`, `--out`, the non-php refusal), the `[ffi]` descriptor

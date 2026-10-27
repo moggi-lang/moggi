@@ -2,6 +2,7 @@ module
   function inc(x)
       ret partial λ0(x)
   function bump(x)
-      ret call_value call inc(x)(5)
+      t1 = call λ0(x, 5)
+      ret t1
   function λ0(y)
       ret intrinsic intAdd#(x, y)

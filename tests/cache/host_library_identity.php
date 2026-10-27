@@ -82,7 +82,8 @@ try {
     $ran = $runArtifact($work . '/cold.phar');
     $assert(\trim((string) $ran['stdout']) === 'Hello, composer!', 'the artifact must call into the tree: ' . \trim((string) $ran['stdout'] . $ran['stderr']));
 
-    // The row B1 was: the same cache dir, no host flag, must refuse instead of inheriting.
+    // The same cache dir with no host flag must refuse the flagged compile's product instead of
+    // inheriting it.
     $unflagged = $compile($shared, ['-o', $work . '/unflagged.phar']);
     $assert(($unflagged['exitCode'] ?? 0) !== 0, 'a compile without the host tree must not accept the flagged compile\'s checked product');
     $assert(

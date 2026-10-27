@@ -2,6 +2,7 @@
 
 namespace Moggi\Semantics\Types;
 
+use Moggi\Modules;
 use Moggi\Semantics\Kinds;
 use Moggi\Semantics\TypeExpr\Scheme;
 use Moggi\Semantics\TypeExpr\TArrow;
@@ -402,16 +403,24 @@ function checkInstance(TypeCheckState $state, Ast\InstanceDecl $decl): array
             $fn->doc = $method->doc;
         }
         $defaultModule = (string) ($classInfo['module'] ?? '');
-        $siteModule = $defaulted && $defaultModule !== '' ? $defaultModule : (string) $state->currentModule;
-        $siteLine = $defaulted ? ($methodInfo['line'] ?? 0) : $method->line;
-        $siteCol = $defaulted ? ($methodInfo['col'] ?? 0) : $method->col;
-        if ($siteLine <= 0) {
+        $defaultLine = (int) ($methodInfo['line'] ?? 0);
+        if ($defaulted && $defaultLine > 0) {
+            $written = $methodInfo['defaultBody'] ?? null;
+            $siteModule = $defaultModule !== '' ? $defaultModule : (string) $state->currentModule;
+            $siteFile = $written?->sourceFile
+                ?? ($state->classModuleScopes[$defaultModule]['path'] ?? null);
+            $siteLine = $defaultLine;
+            $siteCol = (int) ($methodInfo['col'] ?? 0);
+        } else {
+            $written = $method->line > 0 ? $method : $decl;
             $siteModule = (string) $state->currentModule;
-            $siteLine = $decl->line;
-            $siteCol = $decl->col;
+            $siteFile = $written->sourceFile;
+            $siteLine = $written->line;
+            $siteCol = $written->col;
         }
-        if ($siteModule !== '' && $siteLine > 0) {
-            $fn->sourceOrigin = $siteModule . ':' . $siteLine . ':' . $siteCol;
+        $site = Modules\sourceSite($siteModule, $siteFile ?? $state->filename, $siteLine, $siteCol);
+        if ($site !== null) {
+            $fn->sourceOrigin = $site;
         }
         $scope = $defaulted ? defaultBodyScope($state, $classInfo) : [];
         $defaultOrigins = [];

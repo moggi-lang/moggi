@@ -217,8 +217,8 @@ function testKindSnapshot(string $kind, string $input, string $backend): string
 }
 
 /**
- * The optimized IR of a source fixture: lower it, then optimize, for `$backend`. A call into a bound
- * library names that backend's module, so the dump is the backend's own even though the stages are.
+ * The optimized IR of a source fixture: lower it, then optimize, for `$backend`. A module with a
+ * backend half is one unit, so the dump is the same for every backend and one golden covers them all.
  */
 function optimizedIrFromSource(string $path, string $backend): string
 {

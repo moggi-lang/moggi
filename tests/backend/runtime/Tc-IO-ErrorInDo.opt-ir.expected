@@ -1,16 +1,18 @@
 module
   function abort()
       t3 = io_assign_action
-        result call __w_abort()
+          t2 = call __w_abort()
+        result t2
       ret t3
   function __w_abort()
-      t0 = call System.IO.JVM::__w_putStrLn("before")
+      t0 = call System.IO::__w_putStrLn("before")
       t1 = io_call error("boom")
       io_run t1
       ret ()
   function main()
       t6 = io_assign_action
-        result call __w_main()
+          t5 = call __w_main()
+        result t5
       ret t6
   function __w_main()
       t4 = call __w_abort()

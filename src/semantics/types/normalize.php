@@ -87,7 +87,7 @@ function normalizeType(
 }
 
 /**
- * Phase 4: reduce associated type family applications (forward only, non-injective).
+ * Reduce associated type family applications (forward only, non-injective).
  * Returns null when the head is not an associated family or is under-applied /
  * does not yet match any equation (e.g. still polymorphic).
  * Errors on overlapping equations (coherence).

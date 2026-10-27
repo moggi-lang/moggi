@@ -9,30 +9,46 @@ module
       t2 = dict_call __ev_Monad_2->>>=(mx, f)
       ret t2
   function justDemo()
-      ret call fmapMaybe(@__ev_Functor_Maybe, @λ0, call Just(41))
+      t3 = call Just(41)
+      t4 = call fmapMaybe(@__ev_Functor_Maybe, @λ0, t3)
+      ret t4
   function apDemo()
-      ret call apMaybe(@__ev_Functor_Maybe, @__ev_Applicative_Maybe, call Just(@λ1), call Just(21))
+      t5 = call Just(@λ1)
+      t6 = call Just(21)
+      t7 = call apMaybe(@__ev_Functor_Maybe, @__ev_Applicative_Maybe, t5, t6)
+      ret t7
   function bindDemo()
-      ret call bindMaybe(@__ev_Functor_Maybe, @__ev_Applicative_Maybe, @__ev_Monad_Maybe, call Just(2), @λ2)
+      t8 = call Just(2)
+      t10 = call bindMaybe(@__ev_Functor_Maybe, @__ev_Applicative_Maybe, @__ev_Monad_Maybe, t8, @λ2)
+      ret t10
   function nothingShort()
-      ret call bindMaybe(@__ev_Functor_Maybe, @__ev_Applicative_Maybe, @__ev_Monad_Maybe, @Nothing, @λ3)
+      t12 = call bindMaybe(@__ev_Functor_Maybe, @__ev_Applicative_Maybe, @__ev_Monad_Maybe, @Nothing, @λ3)
+      ret t12
   function fromMaybeDemo()
-      ret call fromMaybe(0, @Nothing)
+      t13 = call fromMaybe(0, @Nothing)
+      ret t13
   function catMaybesDemo()
-      ret call catMaybes([@Nothing, call Just(1), @Nothing, call Just(2)])
+      t14 = call Just(1)
+      t15 = call Just(2)
+      t16 = call catMaybes([@Nothing, t14, @Nothing, t15])
+      ret t16
   function dropTwo(x)
       match_return intrinsic intEq#(x, 2)
         arm True
             ret @Nothing
         arm False
-            ret call Just(x)
+            t18 = call Just(x)
+            ret t18
   function mapMaybeDemo()
-      ret call mapMaybe(@dropTwo, [1, 2, 3])
+      t19 = call mapMaybe(@dropTwo, [1, 2, 3])
+      ret t19
   function λ0(x)
       ret intrinsic intAdd#(x, 1)
   function λ1(x)
       ret intrinsic intMul#(x, 2)
   function λ2(x)
-      ret call Just(intrinsic intAdd#(x, 1))
+      t9 = call Just(intrinsic intAdd#(x, 1))
+      ret t9
   function λ3(x)
-      ret call Just(x)
+      t11 = call Just(x)
+      ret t11

@@ -158,11 +158,6 @@ function resolveEvidenceBinding(
         return ['name' => $value->name, 'args' => []];
     }
 
-    if ($value instanceof IR\ExprCall
-        && (isset($evidenceByName[$value->callee]) || \str_starts_with($value->callee, '__ev_'))) {
-        return ['name' => $value->callee, 'args' => $value->args];
-    }
-
     if ($value instanceof IR\Temp && isset($tempEvidence[$value->id])) {
         return $tempEvidence[$value->id];
     }
@@ -252,35 +247,6 @@ function resolveMethodCallee(
 function specializeDictCallsOperand(IR\Operand $operand, array $evidenceByName = []): IR\Operand
 {
     return match ($operand::class) {
-        IR\ExprBinop::class => new IR\ExprBinop(
-            $operand->op,
-            specializeDictCallsOperand($operand->left, $evidenceByName),
-            specializeDictCallsOperand($operand->right, $evidenceByName),
-        ),
-        IR\ExprCall::class => new IR\ExprCall(
-            $operand->callee,
-            \array_map(
-                static fn (IR\Operand $a): IR\Operand => specializeDictCallsOperand($a, $evidenceByName),
-                $operand->args,
-            ),
-            $operand->srcLoc,
-        ),
-        IR\ExprCallValue::class => new IR\ExprCallValue(
-            specializeDictCallsOperand($operand->callee, $evidenceByName),
-            \array_map(
-                static fn (IR\Operand $a): IR\Operand => specializeDictCallsOperand($a, $evidenceByName),
-                $operand->args,
-            ),
-            $operand->srcLoc,
-        ),
-        IR\ExprPartial::class => new IR\ExprPartial(
-            $operand->fn,
-            $operand->arity,
-            \array_map(
-                static fn (IR\Operand $a): IR\Operand => specializeDictCallsOperand($a, $evidenceByName),
-                $operand->args,
-            ),
-        ),
         IR\Intrinsic::class => new IR\Intrinsic(
             $operand->name,
             \array_map(

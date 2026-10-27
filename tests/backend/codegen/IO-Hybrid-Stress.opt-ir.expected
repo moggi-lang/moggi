@@ -1,46 +1,52 @@
 module
   function logMsg(msg)
       t2 = io_assign_action
-        result call __w_logMsg(msg)
+          t1 = call __w_logMsg(msg)
+        result t1
       ret t2
   function __w_logMsg(msg)
-      t0 = call System.IO.PHP::__w_putStrLn(msg)
+      t0 = call System.IO::__w_putStrLn(msg)
       ret ()
   function emitA()
       t5 = io_assign_action
-        result call __w_emitA()
+          t4 = call __w_emitA()
+        result t4
       ret t5
   function __w_emitA()
-      t3 = call System.IO.PHP::__w_putStrLn("A")
+      t3 = call System.IO::__w_putStrLn("A")
       ret ()
   function emitB()
       t8 = io_assign_action
-        result call __w_emitB()
+          t7 = call __w_emitB()
+        result t7
       ret t8
   function __w_emitB()
-      t6 = call System.IO.PHP::__w_putStrLn("B")
+      t6 = call System.IO::__w_putStrLn("B")
       ret ()
   function equalBranch()
       t13 = io_assign_action
-        result call __w_equalBranch()
+          t12 = call __w_equalBranch()
+        result t12
       ret t13
   function __w_equalBranch()
-      t9 = call System.IO.PHP::__w_putStrLn("equal")
+      t9 = call System.IO::__w_putStrLn("equal")
       t10 = call System.IO::__w_readFile("input.txt")
-      t11 = call System.IO.PHP::__w_putStrLn(t10)
+      t11 = call System.IO::__w_putStrLn(t10)
       ret ()
   function notEqualBranch(y)
       t18 = io_assign_action
-        result call __w_notEqualBranch(y)
+          t17 = call __w_notEqualBranch(y)
+        result t17
       ret t18
   function __w_notEqualBranch(y)
-      t14 = call System.IO.PHP::__w_putStrLn("not equal")
+      t14 = call System.IO::__w_putStrLn("not equal")
       t15 = call System.IO::__w_readFile(y)
-      t16 = call System.IO.PHP::__w_putStrLn(t15)
+      t16 = call System.IO::__w_putStrLn(t15)
       ret ()
   function branchOn(x, y)
       t22 = io_assign_action
-        result call __w_branchOn(x, y)
+          t21 = call __w_branchOn(x, y)
+        result t21
       ret t22
   function __w_branchOn(x, y)
       io_match intrinsic stringEq#(x, y)
@@ -53,7 +59,8 @@ module
       ret ()
   function main()
       t30 = io_assign_action
-        result call __w_main()
+          t29 = call __w_main()
+        result t29
       ret t30
   function __w_main()
       t23 = call System.IO::__w_readFile("input.txt")

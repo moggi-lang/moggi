@@ -1,3 +1,4 @@
 module
   function useDemo()
-      ret call applPure(@__ev_Functor_List, @__ev_Applicative_List, 7)
+      t0 = call applPure(@__ev_Functor_List, @__ev_Applicative_List, 7)
+      ret t0

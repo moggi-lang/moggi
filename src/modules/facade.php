@@ -2,74 +2,27 @@
 
 namespace Moggi\Modules;
 
-use Moggi\Semantics\TypeExpr\Scheme;
-use Moggi\Semantics\TypeExpr\TArrow;
-use Moggi\Semantics\TypeExpr\TCon;
-use Moggi\Semantics\TypeExpr\TVar;
-use Moggi\Semantics\TypeExpr\Type;
-use Moggi\Semantics\Types\TypeCheckState;
-use Moggi\Semantics\Types\TypeError;
 use Moggi\Syntax\Ast;
+use Moggi\Semantics\Types\TypeError;
 
-use const Moggi\Semantics\IntrinsicRegistry\MODULE_IO;
-use const Moggi\Semantics\IntrinsicRegistry\MODULE_PRIM;
-use const Moggi\Semantics\IntrinsicRegistry\MODULE_ST;
+use function Moggi\Syntax\Ast\markSourceFile;
 
-use function Moggi\Semantics\Kinds\dataKind;
-use function Moggi\Semantics\Kinds\registerTypeKind;
-use function Moggi\Semantics\Types\canonicalizePrimitiveTypes;
-use function Moggi\Semantics\Types\registerData;
-use function Moggi\Semantics\Types\registerForeignType;
-use function Moggi\Semantics\Types\registerTypeSynonym;
-use function Moggi\Semantics\Types\typeToString;
-
-/** @param array<string, string> $mapping */
-function typesAlphaEqual(Type $left, Type $right, array &$mapping = []): bool
-{
-    if ($left::class !== $right::class) {
-        return false;
-    }
-
-    return match ($left::class) {
-        TVar::class => match (true) {
-            isset($mapping[$left->name]) => $mapping[$left->name] === $right->name,
-            \in_array($right->name, $mapping, true) => false,
-            default => (($mapping[$left->name] = $right->name) || true),
-        },
-        TCon::class => $left->name === $right->name
-            && \count($left->args) === \count($right->args)
-            && \array_all(
-                $left->args,
-                static fn (Type $arg, int $i): bool => typesAlphaEqual($arg, $right->args[$i], $mapping),
-            ),
-        TArrow::class => typesAlphaEqual($left->from, $right->from, $mapping)
-            && typesAlphaEqual($left->to, $right->to, $mapping),
-        default => true,
-    };
-}
-
-function schemesAlphaEqual(Scheme $left, Scheme $right): bool
-{
-    $mapping = [];
-
-    return typesAlphaEqual(
-        canonicalizePrimitiveTypes($left->type),
-        canonicalizePrimitiveTypes($right->type),
-        $mapping,
-    );
-}
-
+/**
+ * A module that has a backend half: its declarations plus whichever half the
+ * compilation selected are one unit, so the module a program imports is the
+ * module that is checked, emitted and named in the IR.
+ */
 function isFacadeProgram(Ast\Program $program): bool
 {
     return $program->backendMap !== [];
 }
 
 /**
- * The implementation module a backend map selects, or null when it has no entry for that backend.
+ * The half a backend map selects, or null when it has no entry for that backend.
  *
- * A missing entry is not an internal error: a facade may deliberately omit a backend (a host
- * binding that exists for one platform only), so callers that must have an implementation raise a
- * diagnostic instead — see `facadeImplModuleNameFor`.
+ * A missing entry is a deliberate omission (a host binding that exists on one
+ * platform only), so the caller raises the located refusal rather than a
+ * runtime error.
  *
  * @param array<string, string> $backendMap
  */
@@ -78,62 +31,17 @@ function resolveImplModuleName(array $backendMap, string $backendId): ?string
     return $backendMap[$backendId] ?? null;
 }
 
-/**
- * The implementation module a facade builds against, or a diagnostic naming the facade and the
- * backends it does implement for.
- *
- * The message carries both names because either side may be the thing to change: compile for a
- * backend the module implements, or add an implementation module and a map entry for the one you
- * are compiling for.
- *
- * @param array<string, array<string, mixed>> $units
- */
-function facadeImplModuleNameFor(string $moduleName, array $units): ?string
-{
-    $unit = $units[$moduleName] ?? [];
-    $program = $unit['program'] ?? null;
-    $backendMap = $program instanceof Ast\Program
-        ? $program->backendMap
-        : ($unit['backendMap'] ?? []);
-
-    if ($backendMap === []) {
-        return null;
-    }
-
-    if (\array_key_exists('implModule', $unit)) {
-        $implName = $unit['implModule'];
-        if ($implName === null) {
-            throw facadeMissingBackendError($moduleName, $backendMap, $unit);
-        }
-
-        return $implName;
-    }
-
-    $backendId = $unit['compileBackend'] ?? null;
-    if (! \is_string($backendId) || $backendId === '') {
-        throw new \RuntimeException(
-            "module `{$moduleName}` has no compile target: prepare it with a CompilationContext",
-        );
-    }
-
-    $implName = resolveImplModuleName($backendMap, $backendId);
-    if ($implName === null) {
-        throw facadeMissingBackendError($moduleName, $backendMap, $unit);
-    }
-
-    return $implName;
-}
-
-/**
- * @param array<string, string> $backendMap
- * @param array<string, mixed> $unit
- */
-function facadeMissingBackendError(string $moduleName, array $backendMap, array $unit): TypeError
-{
+/** @param array<string, string> $backendMap @param array<string, mixed> $unit */
+function facadeMissingBackendError(
+    string $moduleName,
+    array $backendMap,
+    string $backendId,
+    array $unit,
+): TypeError {
     $span = $unit['headerSpan'] ?? null;
 
     return new TypeError(
-        "module `{$moduleName}` has no `" . (string) ($unit['compileBackend'] ?? 'unknown') . '` implementation (it implements: '
+        "module `{$moduleName}` has no `{$backendId}` implementation (it implements: "
             . \implode(', ', \array_keys($backendMap)) . ')',
         (string) ($unit['path'] ?? ''),
         (string) ($unit['source'] ?? ''),
@@ -143,163 +51,15 @@ function facadeMissingBackendError(string $moduleName, array $backendMap, array 
     );
 }
 
-function facadeImplModuleName(Ast\Program $program, string $backendId): ?string
-{
-    if (! isFacadeProgram($program)) {
-        return null;
-    }
-
-    return resolveImplModuleName($program->backendMap, $backendId);
-}
-
-/** @param array<string, array<string, mixed>> $units */
-function redirectFacadeOrigins(array &$available, Ast\Program $program, array $units, string $moduleName): void
-{
-    if (! isFacadeProgram($program)) {
-        return;
-    }
-
-    $implName = facadeImplModuleNameFor($moduleName, $units);
-    if ($implName === null || ! isset($units[$implName])) {
-        throw new TypeError('unknown facade implementation module `' . ($implName ?? '') . '`');
-    }
-
-    $impl = $units[$implName];
-    if (($impl['parsed'] ?? false) !== true) {
-        throw new TypeError("facade implementation module `{$implName}` is not fully parsed");
-    }
-
-    $implExports = implExportsForFacadeMerge($impl, $units, $implName);
-    if ($implExports === null) {
-        throw new TypeError(
-            "facade implementation module `{$implName}` is missing export metadata required by `{$moduleName}`",
-            $units[$moduleName]['path'] ?? '',
-            $units[$moduleName]['source'] ?? '',
-        );
-    }
-
-    foreach ($implExports['data'] ?? [] as $name => $info) {
-        if (! isset($available['data'][$name])) {
-            $available['data'][$name] = $info;
-        }
-    }
-
-    foreach ($program->items as $item) {
-        if (! $item instanceof Ast\FunctionDecl || ! $item->signatureOnly) {
-            continue;
-        }
-
-        $name = $item->name;
-        $scheme = $available['env'][$name] ?? null;
-        if ($scheme === null) {
-            continue;
-        }
-
-        validateFacadeExport($name, $scheme, $implExports, $implName, $units[$moduleName]['path'], $units[$moduleName]['source']);
-        $available['origins'][$name] = $implExports['origins'][$name];
-    }
-}
-
 /**
- * @param array{env: array<string, mixed>, origins: array<string, array{module: string, namespace: string, phpName: string}>} $implExports
- * @param Scheme $facadeScheme
- */
-function validateFacadeExport(
-    string $name,
-    Scheme $facadeScheme,
-    array $implExports,
-    string $implName,
-    string $filename,
-    string $source,
-): void {
-    if (! isset($implExports['env'][$name])) {
-        throw new TypeError(
-            "facade export `{$name}` is missing from implementation module `{$implName}`",
-            $filename,
-            $source,
-        );
-    }
-
-    $implType = $implExports['env'][$name];
-    $facadeType = $facadeScheme;
-    if (! schemesAlphaEqual($facadeType, $implType)) {
-        throw new TypeError(
-            "facade export `{$name}` type `"
-            . typeToString($facadeType->type)
-            . '` does not match implementation `'
-            . typeToString($implType->type)
-            . '`',
-            $filename,
-            $source,
-        );
-    }
-}
-
-/**
- * The implementation module a facade depends on for one target.
+ * The facade each backend half belongs to, and the backend it implements.
  *
- * A facade declares every backend it implements, but a compilation carries
- * only the one it selected: naming the other implementations as dependencies
- * would make the module graph demand a module the closure never resolved.
- * Which one is selected is the target's answer, so it is passed in rather than
- * read from process state.
- *
- * @param array<string, array<string, mixed>> $units
- * @return list<string>
- */
-function facadeDependencyModules(array $units, string $moduleName, string $backendId): array
-{
-    $unit = $units[$moduleName] ?? [];
-    $program = $unit['program'] ?? null;
-    $backendMap = $program instanceof Ast\Program
-        ? $program->backendMap
-        : ($unit['backendMap'] ?? []);
-
-    $implName = resolveImplModuleName($backendMap, $backendId);
-
-    return $implName === null ? [] : [$implName];
-}
-
-/** @param array<string, array<string, mixed>> $units */
-function facadeModuleForImpl(array $units, string $implModuleName): ?string
-{
-    foreach ($units as $moduleName => $unit) {
-        $program = $unit['program'] ?? null;
-        if ($program instanceof Ast\Program) {
-            if (! isFacadeProgram($program)) {
-                continue;
-            }
-            $backendMap = $program->backendMap;
-        } else {
-            $backendMap = $unit['backendMap'] ?? [];
-            if ($backendMap === []) {
-                continue;
-            }
-        }
-
-        foreach ($backendMap as $impl) {
-            if ($impl === $implModuleName) {
-                return $moduleName;
-            }
-        }
-    }
-
-    return null;
-}
-
-/**
- * The facade each backend implementation module belongs to, and the backend it
- * implements.
- *
- * An implementation module is the `php`/`jvm`/`dotnet` half of its facade: the
- * compiler merges it into the facade ({@see redirectFacadeOrigins}), so it is
- * not a module a program may name. Only the `{-# BACKEND … #-}` pragma that
- * selects it may mention it -- except from another implementation module, which
- * reaches a sibling's own values the facade does not export
- * (`System.IO.DotNet` takes `Data.Time.Clock.DotNet`'s).
+ * A half is the `php`/`jvm`/`dotnet` half of its facade, merged into it, so it is
+ * not a module a program may name: only the `{-# BACKEND … #-}` pragma that
+ * selects it may mention it.
  *
  * @param array<string, string> $byModule module name => source path
- * @return array<string, array{facade: string, backend: string}> impl module => owner
+ * @return array<string, array{facade: string, backend: string}> half module => owner
  */
 function backendImplOwners(array $byModule): array
 {
@@ -317,11 +77,7 @@ function backendImplOwners(array $byModule): array
     return $owners;
 }
 
-/**
- * The diagnostic for an import that names a backend implementation module.
- *
- * @param array{facade: string, backend: string} $owner
- */
+/** @param array{facade: string, backend: string} $owner */
 function backendImplImportError(
     string $implName,
     array $owner,
@@ -344,55 +100,207 @@ function backendImplImportError(
 }
 
 /**
- * Backend impl modules cannot import their facade (cycle). Copy facade ADT/type-synonym
- * declarations into the impl typecheck state so foreign imports can name them.
+ * Reads one compilation unit out of a facade program and its half: the facade's
+ * items in the facade's order, each implemented by the half where the half binds
+ * the name, then the half's own items (its private helpers, its instances).
  *
- *
- * @param array<string, array<string, mixed>> $units
+ * A name the half binds is the half's implementation, whether the facade stated
+ * only a signature or also a portable default; the facade's declaration stays,
+ * so the unit still publishes the interface `-- |` docs and signatures describe.
  */
-function mergeFacadeTypesForImpl(TypeCheckState $state, array $units, string $implModuleName): void
-{
-    $facadeName = facadeModuleForImpl($units, $implModuleName);
-    if ($facadeName === null || ! isset($units[$facadeName]['program'])) {
-        return;
-    }
+function mergeBackendHalfProgram(
+    Ast\Program $facade,
+    Ast\Program $half,
+    string $halfName,
+    string $halfPath,
+): Ast\Program {
+    $facadeName = (string) $facade->module;
+    markHalfSourceFiles($half, $halfPath);
 
-    foreach ([
-        MODULE_PRIM,
-        MODULE_IO,
-        MODULE_ST,
-    ] as $primModule) {
-        $primLocal = $units[$primModule]['localTypes'] ?? null;
-        if (! \is_array($primLocal)) {
+    $halfValues = [];
+    $halfTypes = [];
+    foreach ($half->items as $item) {
+        if ($item instanceof Ast\FunctionDecl || $item instanceof Ast\ForeignImportDecl) {
+            $halfValues[$item->name] ??= $item;
+
             continue;
         }
-        foreach ($primLocal['data'] ?? [] as $name => $info) {
-            if (! isset($state->data[$name])) {
-                $state->data[$name] = $info;
-                registerTypeKind(
-                    $state,
-                    $name,
-                    dataKind(\count($info['params'])),
-                );
+        if (
+            $item instanceof Ast\DataDecl
+            || $item instanceof Ast\TypeSynonymDecl
+            || $item instanceof Ast\ForeignTypeDecl
+        ) {
+            $halfTypes[$item->name] ??= true;
+        }
+    }
+
+    $items = [];
+    $absorbed = [];
+    foreach ($facade->items as $item) {
+        if ($item instanceof Ast\FunctionDecl) {
+            $halfItem = $halfValues[$item->name] ?? null;
+            if ($halfItem === null) {
+                $items[] = $item;
+
+                continue;
             }
-        }
-    }
 
-    foreach ($units[$facadeName]['program']->items as $item) {
-        if ($item instanceof Ast\DataDecl) {
-            registerData($state, $item);
+            $absorbed[$item->name] = true;
+            if ($halfItem instanceof Ast\ForeignImportDecl) {
+                $halfItem->doc ??= $item->doc;
+                $items[] = $halfItem;
+
+                continue;
+            }
+
+            $item->params = $halfItem->params;
+            $item->body = $halfItem->body;
+            $item->foreign = $halfItem->foreign;
+            $item->intrinsicWrapper = $halfItem->intrinsicWrapper;
+            $item->actionConvention = $halfItem->actionConvention;
+            $item->signatureOnly = false;
+            $items[] = $item;
 
             continue;
         }
 
-        if ($item instanceof Ast\ForeignTypeDecl) {
-            registerForeignType($state, $item);
+        if (
+            ($item instanceof Ast\DataDecl
+                || $item instanceof Ast\TypeSynonymDecl
+                || $item instanceof Ast\ForeignTypeDecl)
+            && isset($halfTypes[$item->name])
+        ) {
+            throw facadeHalfCollision($facadeName, $halfName, $halfPath, $item->name, $item);
+        }
 
+        $items[] = $item;
+    }
+
+    foreach ($half->items as $item) {
+        if (
+            ($item instanceof Ast\FunctionDecl || $item instanceof Ast\ForeignImportDecl)
+            && isset($absorbed[$item->name])
+        ) {
             continue;
         }
 
-        if ($item instanceof Ast\TypeSynonymDecl) {
-            registerTypeSynonym($state, $item);
+        $items[] = $item;
+    }
+
+    return new Ast\Program(
+        items: $items,
+        module: $facade->module,
+        imports: $facade->imports,
+        exports: $facade->exports,
+        constructorRenames: $facade->constructorRenames,
+        backendMap: $facade->backendMap,
+        implicitMain: $facade->implicitMain,
+        language: $facade->language,
+        moduleDoc: $facade->moduleDoc,
+        fixityDocs: $facade->fixityDocs,
+        line: $facade->line,
+        col: $facade->col,
+        endCol: $facade->endCol,
+    );
+}
+
+/**
+ * The files a unit is written in: its own, and the half merged into it.
+ *
+ * A route that re-prepares from source paths has to hand back both, or the unit
+ * arrives without the half its pragma names.
+ *
+ * @param array<string, mixed> $unit
+ * @return list<string>
+ */
+function unitSourceFiles(array $unit): array
+{
+    $files = [];
+    foreach (['path', 'halfPath'] as $field) {
+        $file = $unit[$field] ?? null;
+        if (\is_string($file) && $file !== '') {
+            $files[] = $file;
         }
     }
+
+    return $files;
+}
+
+/**
+ * Name the file every node of a half is written in, so a diagnostic or a frame
+ * lands in the half rather than in the unit's own file — and so the site a record
+ * publishes for a declaration the half owns is the half's own file.
+ */
+function markHalfSourceFiles(Ast\Program $half, string $path): void
+{
+    foreach ($half->items as $item) {
+        if ($item instanceof Ast\AstWalkable) {
+            markSourceFile($item, $path);
+        }
+    }
+}
+
+/**
+ * A name the facade declares as a type and its half declares too: a half
+ * supplies bindings and its own host types, not a second shape for one name.
+ */
+function facadeHalfCollision(
+    string $facadeName,
+    string $halfName,
+    string $halfPath,
+    string $name,
+    Ast\AstNode $at,
+): TypeError {
+    return new TypeError(
+        "`{$name}` is declared by `{$facadeName}` and by its `{$halfName}` half:"
+            . ' a half binds what the facade declares, so the type has to live on one side',
+        $halfPath,
+        '',
+        $at->line,
+        $at->col,
+        $at->endCol,
+    );
+}
+
+/**
+ * The imports one unit has: the half's, then the facade's.
+ *
+ * The facade owns the namespace a program imports, so its imports come last and
+ * win where the two lists disagree — a half that means another module's `map`
+ * has to say so. A name only the half imports stays in scope for both sides.
+ *
+ * @param list<Ast\ImportDecl> $facadeImports
+ * @param list<Ast\ImportDecl> $halfImports
+ * @return list<Ast\ImportDecl>
+ */
+function mergeUnitImports(array $facadeImports, array $halfImports): array
+{
+    $merged = [];
+    $seen = [];
+    foreach ([...$halfImports, ...$facadeImports] as $import) {
+        $key = importIdentity($import);
+        if (isset($seen[$key])) {
+            continue;
+        }
+
+        $seen[$key] = true;
+        $merged[] = $import;
+    }
+
+    return $merged;
+}
+
+/** Module plus the spec it was written with, so an identical import is not listed twice. */
+function importIdentity(Ast\ImportDecl $import): string
+{
+    $item = static fn (mixed $entry): string => \is_object($entry) && isset($entry->name)
+        ? (string) $entry->name . '(' . \implode(',', (array) ($entry->children ?? [])) . ')'
+        : (\is_string($entry) ? $entry : '');
+
+    return \implode('.', $import->path)
+        . '|' . $import->kind
+        . '|' . \implode(',', \array_map($item, $import->items))
+        . '|' . \implode(',', \array_map($item, $import->hiding))
+        . '|' . ($import->asName ?? '')
+        . '|' . ($import->qualifiedOnly ? 'q' : '');
 }

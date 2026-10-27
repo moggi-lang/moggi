@@ -1,7 +1,7 @@
 <?php declare(strict_types=1);
 
 /**
- * Bindings Phase 4: `build --bind` turns `[ffi] bindings` into library roots.
+ * The build binding: `build --bind` turns `[ffi] bindings` into library roots.
  *
  * One targeted PHP binder test (reflection runs in-process, no host toolchain)
  * covers descriptor round-trip, backend filtering, `bindForBuild` marker

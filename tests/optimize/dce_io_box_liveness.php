@@ -115,8 +115,8 @@ $check(
     'usedInOperand misses the expression of a deferred io_action',
 );
 $check(
-    isset(usedInOperand(new IR\ExprCall('f', [$temp(32)]))['temps'][32]),
-    'usedInOperand misses an argument of an expr_call',
+    isset(usedInOperand(new IR\Intrinsic('f', [$temp(32)]))['temps'][32]),
+    'usedInOperand misses an argument of an intrinsic call',
 );
 
 if ($failures !== []) {

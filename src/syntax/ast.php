@@ -618,3 +618,36 @@ function dumpTypeInline(TypeNode $node): string
         default => throw new \InvalidArgumentException('unknown type: ' . $node::class),
     };
 }
+
+/**
+ * Name the file a tree is written in, so a diagnostic or a frame lands in it.
+ *
+ * A node built by desugaring starts out with no file: it is written where the
+ * construct it came from is.
+ */
+function markSourceFile(AstWalkable $root, string $path): void
+{
+    $seen = [];
+    markSourceFileBelow($root, $path, $seen);
+}
+
+/** @param array<int, true> $seen */
+function markSourceFileBelow(AstWalkable $root, string $path, array &$seen): void
+{
+    if ($root instanceof AstNode) {
+        if (isset($seen[\spl_object_id($root)])) {
+            return;
+        }
+
+        $seen[\spl_object_id($root)] = true;
+        $root->sourceFile ??= $path;
+    }
+
+    foreach ($root->childValues() as $child) {
+        foreach (\is_array($child) ? $child : [$child] as $value) {
+            if ($value instanceof AstWalkable) {
+                markSourceFileBelow($value, $path, $seen);
+            }
+        }
+    }
+}

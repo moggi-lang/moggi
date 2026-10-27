@@ -19,7 +19,6 @@ import Data.Bool
 import Data.Char
 import Data.Eq
 import Data.Int
-import Data.List hiding (singleton, take, drop, isPrefixOf, isSuffixOf)
 import Data.List qualified as L
 import Data.Num
 import Data.Ord
@@ -92,9 +91,9 @@ splitOn :: String -> String -> [String]
 splitOn sep s = rawExplode sep s
 
 lines "" = ([] :: [String])
-lines s = L.reverse (dropWhile (\x -> x == "") (L.reverse (splitOn "\n" s)))
+lines s = L.reverse (L.dropWhile (\x -> x == "") (L.reverse (splitOn "\n" s)))
 
-words s = (filter (\w -> w /= "") (splitOn " " s) :: [String])
+words s = (L.filter (\w -> w /= "") (splitOn " " s) :: [String])
 
 unlines [] = ""
 unlines (line : rest) = line <> "\n" <> unlines rest

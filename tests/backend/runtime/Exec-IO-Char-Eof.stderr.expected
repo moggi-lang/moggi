@@ -1,5 +1,5 @@
 moggi: ErrorCall: hGetChar: end of input
   at Moggi.Err.error (libraries/base/src/Moggi/Err.mog:8:13)
-  at System.IO.PHP.hGetChar (libraries/base/src/System/IO/PHP.mog:168:16)
-  at System.IO.getChar (libraries/base/src/System/IO.mog:116:11)
+  at System.IO.hGetChar (libraries/base/src/System/IO/PHP.mog:168:16)
+  at System.IO.getChar (libraries/base/src/System/IO/PHP.mog:213:11)
   at Main.main (tests/backend/runtime/Exec-IO-Char-Eof.mog:8:8)

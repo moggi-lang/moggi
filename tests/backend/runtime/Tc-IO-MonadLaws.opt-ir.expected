@@ -1,0 +1,10 @@
+module
+  function main()
+      t3 = io_assign_action
+          t2 = call __w_main()
+        result t2
+      ret t3
+  function __w_main()
+      t0 = call System.IO::__w_putStrLn("a")
+      t1 = call System.IO::__w_putStrLn("left-id")
+      ret ()

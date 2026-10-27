@@ -180,7 +180,7 @@ function compEvens() {
 }
 
 function pairs() {
-    return concatMap(__ev_Foldable_List(), fn($x) => concatMap(__ev_Foldable_List(), ['__partial', 2, '\\Tc\\List\\__lambda_8', $x], [10, 20]), [1, 2]);
+    return concatMap(__ev_Foldable_List(), fn($x) => __lambda_7($x), [1, 2]);
 }
 
 function emptyGuard() {

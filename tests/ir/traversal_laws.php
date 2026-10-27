@@ -52,14 +52,10 @@ $operands = [
     IR\ListLit::class => [new IR\ListLit([$local('a'), $temp(1)]), 2],
     IR\Unit::class => [new IR\Unit(), 0],
     IR\Partial::class => [new IR\Partial('f', 2, [$local('a'), $local('b')]), 2],
-    IR\ExprPartial::class => [new IR\ExprPartial('f', 2, [$local('a')]), 1],
-    IR\ExprBinop::class => [new IR\ExprBinop('intAdd#', $local('a'), $temp(1)), 2],
-    IR\ExprCall::class => [new IR\ExprCall('f', [$local('a'), $temp(1)]), 2],
-    IR\ExprCallValue::class => [new IR\ExprCallValue($local('callee'), [$local('a')]), 2],
     IR\Intrinsic::class => [new IR\Intrinsic('intAdd#', [$local('a')]), 1],
     IR\DictMethod::class => [new IR\DictMethod($local('dict'), 'method'), 1],
     IR\ForeignCall::class => [new IR\ForeignCall('php', 'static', 'Path', 'd', [$local('a')]), 1],
-    IR\IoAction::class => [new IR\IoAction(new IR\ExprCall('f', [])), 1],
+    IR\IoAction::class => [new IR\IoAction($local('a')), 1],
 ];
 
 foreach ($operands as $class => [$operand, $children]) {
@@ -85,13 +81,13 @@ foreach ($operands as $class => [$operand, $children]) {
     }
 }
 
-$action = new IR\IoAction(new IR\ExprCall('orig', []));
+$action = new IR\IoAction(new IR\FnRef('orig'));
 $mappedAction = Visit\mapOperandChildren(
     $action,
-    static fn (IR\Operand $child): IR\Operand => new IR\ExprCall('rewritten', []),
+    static fn (IR\Operand $child): IR\Operand => new IR\FnRef('rewritten'),
 );
 $check(
-    $mappedAction instanceof IR\IoAction && $mappedAction->expr->callee === 'rewritten',
+    $mappedAction instanceof IR\IoAction && $mappedAction->expr->name === 'rewritten',
     'mapOperandChildren does not reach IoAction::$expr',
 );
 
@@ -218,7 +214,7 @@ $check(
     'mapOperandTree silently truncated a chain deeper than the documented bound',
 );
 $shallowVisits = 0;
-Visit\walkOperand(new IR\ExprCall('f', [$local('a')]), static function () use (&$shallowVisits): void {
+Visit\walkOperand(new IR\Intrinsic('f', [$local('a')]), static function () use (&$shallowVisits): void {
     ++$shallowVisits;
 });
 $check($shallowVisits === 2, 'walkOperand no longer visits a shallow tree in full');

@@ -4,12 +4,15 @@ module
         arm []
             ret 0
         arm x : rest
-            ret call_value dict_method __ev_Ord_1->max(x, rest)
+            t1 = call_value dict_method __ev_Ord_1->max(x, rest)
+            ret t1
   function maximum(xs)
       match_return xs
         arm []
             ret 0
         arm x : rest
-            ret call_value dict_method @__ev_Ord_Char->max(x, rest)
+            t2 = call_value dict_method @__ev_Ord_Char->max(x, rest)
+            ret t2
   function apply2(f, a, b)
-      ret call_value f(a, b)
+      t1 = call_value f(a, b)
+      ret t1

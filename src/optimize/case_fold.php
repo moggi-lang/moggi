@@ -11,9 +11,11 @@ use function Moggi\IR\Visit\stmtNestedBlocks;
 use function Moggi\Modules\parseResolvedSymbol;
 use function Moggi\Optimize\GlobalPass\fieldExtractIndex;
 use function Moggi\Optimize\Interproc\denseStmtItems;
+use function Moggi\Optimize\Interproc\maxTempInItems;
 use function Moggi\Optimize\Interproc\operandIsNonDuplicable;
 use function Moggi\Optimize\Interproc\replaceTempsInOperand;
 use function Moggi\Optimize\Interproc\substituteStmt;
+use function Moggi\Optimize\Support\scheduleCall;
 use function Moggi\Semantics\IntrinsicRegistry\isListConsForm;
 use function Moggi\Semantics\IntrinsicRegistry\isListSpineForm;
 use function Moggi\Semantics\IntrinsicRegistry\listFormShape;
@@ -25,10 +27,16 @@ use function Moggi\Syntax\isConstructorName;
  */
 final class CtorTree
 {
-    /** @param list<CtorTree|IR\Operand> $args */
+    /**
+     * @param list<CtorTree|IR\Operand> $args
+     * @param ?IR\SrcLoc $srcLoc where the constructor application was written, when it came from a
+     *   statement: a tree is materialized into an operand later, and that operand has to carry the
+     *   site the call had or the frame it should own leaves the module's map.
+     */
     public function __construct(
         public string $name,
         public array $args,
+        public ?IR\SrcLoc $srcLoc = null,
     ) {
     }
 }
@@ -119,15 +127,8 @@ function operandShapeKey(IR\Operand $op): string
         IR\ConstChar::class => 'c:' . $op->value,
         IR\ConstDouble::class => 'd:' . $op->value,
         IR\Unit::class => 'unit',
-        IR\ExprCall::class => 'ec:' . $op->callee . '(' . operandListShapeKey($op->args) . ')',
-        IR\ExprCallValue::class => 'ecv:' . operandShapeKey($op->callee)
-            . '(' . operandListShapeKey($op->args) . ')',
-        IR\ExprPartial::class => 'ep:' . $op->fn . '/' . $op->arity
-            . '(' . operandListShapeKey($op->args) . ')',
         IR\Partial::class => 'p:' . $op->fn . '/' . $op->arity
             . '(' . operandListShapeKey($op->args) . ')',
-        IR\ExprBinop::class => 'eb:' . $op->op
-            . '(' . operandShapeKey($op->left) . ',' . operandShapeKey($op->right) . ')',
         IR\Intrinsic::class => 'in:' . $op->name . '(' . operandListShapeKey($op->args) . ')',
         IR\DictMethod::class => 'dm:' . operandShapeKey($op->evidence) . '.' . $op->method,
         IR\ListLit::class => 'L[' . operandListShapeKey($op->elements) . ']',
@@ -218,10 +219,11 @@ function joinMatchStmtConsumer(array $items, int $depth = 0): array
             $consumer = matchStmtTailConsumer($next, $item->dest);
             if ($consumer !== null) {
                 $arms = [];
+                $nextTemp = maxTempInItems([...$out, $item]) + 1;
                 foreach ($item->arms as $arm) {
                     $arms[] = new IR\MatchArm(
                         $arm->pattern,
-                        new IR\Block(appendConsumerToArm($arm->body->items, $item->dest, $consumer)),
+                        new IR\Block(appendConsumerToArm($arm->body->items, $item->dest, $consumer, $nextTemp)),
                         $arm->guards,
                     );
                 }
@@ -482,7 +484,7 @@ function appendMatchReturnToArm(array $armItems, int $dest, IR\MatchReturn $cons
 }
 
 /**
- * @return null|array{kind: 'ret_temp'}|array{kind: 'ret_call', callee: string, args: list<IR\Operand>, scrutIndex: int}
+ * @return null|array{kind: 'ret_temp'}
  */
 function matchStmtTailConsumer(IR\Stmt $stmt, int $dest): ?array
 {
@@ -494,39 +496,20 @@ function matchStmtTailConsumer(IR\Stmt $stmt, int $dest): ?array
         return ['kind' => 'ret_temp'];
     }
 
-    if ($stmt->value instanceof IR\ExprCall) {
-        foreach ($stmt->value->args as $i => $arg) {
-            if ($arg instanceof IR\Temp && $arg->id === $dest) {
-                return [
-                    'kind' => 'ret_call',
-                    'callee' => $stmt->value->callee,
-                    'args' => $stmt->value->args,
-                    'scrutIndex' => $i,
-                ];
-            }
-        }
-    }
-
     return null;
 }
 
 /**
  * @param list<IR\Stmt> $armItems
- * @param array{kind: string, callee?: string, args?: list<IR\Operand>, scrutIndex?: int} $consumer
+ * @param array{kind: 'ret_temp'} $consumer
+ * @param int $nextTemp the allocator's cursor, threaded across the arms of one match
  * @return list<IR\Stmt>
  */
-function appendConsumerToArm(array $armItems, int $dest, array $consumer): array
+function appendConsumerToArm(array $armItems, int $dest, array $consumer, int &$nextTemp): array
 {
     $armItems = denseStmtItems($armItems);
     if ($armItems === []) {
-        $value = new IR\Temp($dest);
-        if ($consumer['kind'] === 'ret_temp') {
-            return [new IR\Ret($value)];
-        }
-        $args = $consumer['args'];
-        $args[$consumer['scrutIndex']] = $value;
-
-        return [new IR\Ret(new IR\ExprCall($consumer['callee'], $args))];
+        return appendConsumerValue(new IR\Temp($dest), $armItems, $consumer, $nextTemp);
     }
 
     $last = $armItems[\count($armItems) - 1];
@@ -537,7 +520,7 @@ function appendConsumerToArm(array $armItems, int $dest, array $consumer): array
         foreach ($last->arms as $arm) {
             $arms[] = new IR\MatchArm(
                 $arm->pattern,
-                new IR\Block(appendConsumerToArm($arm->body->items, $dest, $consumer)),
+                new IR\Block(appendConsumerToArm($arm->body->items, $dest, $consumer, $nextTemp)),
                 $arm->guards,
             );
         }
@@ -553,27 +536,26 @@ function appendConsumerToArm(array $armItems, int $dest, array $consumer): array
     } elseif ($last instanceof IR\Ret) {
         $value = $last->value;
         \array_pop($armItems);
-    } elseif ($last instanceof IR\Call && $last->dest === $dest) {
-        $value = new IR\ExprCall($last->callee, $last->args, $last->srcLoc);
-        \array_pop($armItems);
-    } elseif ($last instanceof IR\CallValue && $last->dest === $dest) {
-        $value = new IR\ExprCallValue($last->callee, $last->args, $last->srcLoc);
-        \array_pop($armItems);
-    }
-
-    if ($value === null) {
+    } elseif (($last instanceof IR\Call || $last instanceof IR\CallValue) && $last->dest === $dest) {
         $value = new IR\Temp($dest);
     }
 
-    if ($consumer['kind'] === 'ret_temp') {
-        $armItems[] = new IR\Ret($value);
+    return appendConsumerValue($value ?? new IR\Temp($dest), $armItems, $consumer, $nextTemp);
+}
 
-        return denseStmtItems($armItems);
-    }
-
-    $args = $consumer['args'];
-    $args[$consumer['scrutIndex']] = $value;
-    $armItems[] = new IR\Ret(new IR\ExprCall($consumer['callee'], $args));
+/**
+ * The arm's statements, ending in the value the consumer asked for.
+ *
+ * The consumer's call becomes a statement of its own and the arm returns the temp the scheduling
+ * primitive chose, so an arm never puts a computation where the schema allows only a value.
+ *
+ * @param list<IR\Stmt> $armItems
+ * @param array{kind: 'ret_temp'} $consumer
+ * @return list<IR\Stmt>
+ */
+function appendConsumerValue(IR\Operand $value, array $armItems, array $consumer, int &$nextTemp): array
+{
+    $armItems[] = new IR\Ret($value);
 
     return denseStmtItems($armItems);
 }
@@ -629,7 +611,8 @@ function foldKnownMatchesInItems(array $items, int $depth = 0): array
             }
 
             $scrut = resolveOperand($item->scrutinee, $ctors, $aliases);
-            $folded = tryFoldMatch($item, $scrut, $ctors, $aliases);
+            $nextTemp = maxTempInItems([...$out, $item]) + 1;
+            $folded = tryFoldMatch($item, $scrut, $ctors, $aliases, $nextTemp);
             if ($folded !== null) {
                 if ($item instanceof IR\MatchStmt) {
                     $folded = rewriteRetsToAssigns($folded, $item->dest);
@@ -769,15 +752,7 @@ function tempsReferencedInStmt(IR\Stmt $stmt): array
 
             return;
         }
-        if ($op instanceof IR\ExprCall || $op instanceof IR\Intrinsic) {
-            foreach ($op->args as $arg) {
-                $add($arg);
-            }
-
-            return;
-        }
-        if ($op instanceof IR\ExprCallValue) {
-            $add($op->callee);
+        if ($op instanceof IR\Intrinsic) {
             foreach ($op->args as $arg) {
                 $add($arg);
             }
@@ -790,10 +765,6 @@ function tempsReferencedInStmt(IR\Stmt $stmt): array
             }
 
             return;
-        }
-        if ($op instanceof IR\ExprBinop) {
-            $add($op->left);
-            $add($op->right);
         }
     };
 
@@ -882,6 +853,7 @@ function tryFoldMatch(
     CtorTree|IR\Operand $scrut,
     array $ctors,
     array $aliases,
+    int &$nextTemp,
 ): ?array {
     $scrut = resolveMatchScrutinee($scrut, $ctors, $aliases);
     if (
@@ -918,19 +890,12 @@ function tryFoldMatch(
             continue;
         }
 
-        if ($match instanceof IR\MatchReturn) {
-            $rewritten = rewriteArmRetFromLeaves($arm->body->items, $bindings);
-            if ($rewritten !== null) {
-                return denseStmtItems($rewritten);
-            }
-        }
-
         $body = [];
         static $seedSeq = 0;
         $params = [];
         $args = [];
         foreach ($bindings as $name => $operand) {
-            $leaf = materializeOperand($operand);
+            $leaf = materializeOperand($operand, $body, $nextTemp);
             if (operandIsNonDuplicable($leaf)) {
                 $fresh = $name . '__seed' . ($seedSeq++);
                 $body[] = new IR\Let($fresh, $leaf);
@@ -951,46 +916,6 @@ function tryFoldMatch(
     }
 
     return null;
-}
-
-/**
- * @param array<string, CtorTree|IR\Operand> $bindings
- * @param list<IR\Stmt> $items
- * @return list<IR\Stmt>|null
- */
-function rewriteArmRetFromLeaves(array $items, array $bindings): ?array
-{
-    $items = denseStmtItems($items);
-    if (\count($items) !== 1 || $bindings === []) {
-        return null;
-    }
-
-    $last = $items[0];
-    if (! ($last instanceof IR\Ret) || ! ($last->value instanceof IR\ExprCall)) {
-        return null;
-    }
-
-    $call = $last->value;
-    $newArgs = [];
-    $substituted = false;
-    foreach ($call->args as $arg) {
-        if ($arg instanceof IR\Local && isset($bindings[$arg->name])) {
-            $newArgs[] = materializeOperand($bindings[$arg->name]);
-            $substituted = true;
-
-            continue;
-        }
-        if (! ($arg instanceof IR\Temp) && ! ($arg instanceof IR\Local) && ! ($arg instanceof IR\FnRef)) {
-            return null;
-        }
-        $newArgs[] = $arg;
-    }
-
-    if (! $substituted) {
-        return null;
-    }
-
-    return [new IR\Ret(new IR\ExprCall($call->callee, $newArgs))];
 }
 
 /**
@@ -1363,6 +1288,7 @@ function foldFieldExtractsInItems(array $items, int $depth = 0): array
     $ctors = [];
     $aliases = [];
     $out = [];
+    $nextTemp = maxTempInItems($items) + 1;
 
     foreach ($items as $item) {
         if ($item instanceof IR\MatchStmt || $item instanceof IR\MatchReturn) {
@@ -1382,25 +1308,11 @@ function foldFieldExtractsInItems(array $items, int $depth = 0): array
             if ($scrut instanceof CtorTree) {
                 $idx = fieldExtractIndex($item->callee);
                 if (isset($scrut->args[$idx])) {
-                    $out[] = new IR\Assign($item->dest, materializeOperand($scrut->args[$idx]));
-                    recordCtorDef($out[\count($out) - 1], $ctors, $aliases);
-
-                    continue;
-                }
-            }
-        }
-
-        if (
-            $item instanceof IR\Ret
-            && $item->value instanceof IR\ExprCall
-            && isFieldExtractCallee($item->value->callee)
-            && \count($item->value->args) === 1
-        ) {
-            $scrut = resolveOperand($item->value->args[0], $ctors, $aliases);
-            if ($scrut instanceof CtorTree) {
-                $idx = fieldExtractIndex($item->value->callee);
-                if (isset($scrut->args[$idx])) {
-                    $out[] = new IR\Ret(materializeOperand($scrut->args[$idx]));
+                    $from = \count($out);
+                    $out[] = new IR\Assign($item->dest, materializeOperand($scrut->args[$idx], $out, $nextTemp));
+                    foreach (\array_slice($out, $from) as $fresh) {
+                        recordCtorDef($fresh, $ctors, $aliases);
+                    }
 
                     continue;
                 }
@@ -1481,30 +1393,6 @@ function foldNestedFieldExtractOperand(IR\Operand $operand, array $ctors, array 
         static fn (IR\Operand $child): IR\Operand => foldNestedFieldExtractOperand($child, $ctors, $aliases),
     );
 
-    if (
-        $operand instanceof IR\ExprCall
-        && isFieldExtractCallee($operand->callee)
-        && \count($operand->args) === 1
-    ) {
-        $scrut = resolveOperand($operand->args[0], $ctors, $aliases);
-        if ($scrut instanceof CtorTree) {
-            $idx = fieldExtractIndex($operand->callee);
-            if (isset($scrut->args[$idx])) {
-                return materializeOperand($scrut->args[$idx]);
-            }
-        }
-    }
-
-    if ($operand instanceof IR\ExprCall && \count($operand->args) === 1) {
-        $idx = fieldAccessorCafIndex($operand->callee);
-        if ($idx !== null) {
-            $scrut = resolveOperand($operand->args[0], $ctors, $aliases);
-            if ($scrut instanceof CtorTree && isset($scrut->args[$idx])) {
-                return materializeOperand($scrut->args[$idx]);
-            }
-        }
-    }
-
     return $operand;
 }
 
@@ -1522,6 +1410,7 @@ function recordCtorDef(IR\Stmt $stmt, array &$ctors, array &$aliases): void
                     static fn (IR\Operand $arg): CtorTree|IR\Operand => resolveOperand($arg, $ctors, $aliases),
                     $stmt->args,
                 ),
+                $stmt->srcLoc,
             );
 
             return;
@@ -1535,6 +1424,7 @@ function recordCtorDef(IR\Stmt $stmt, array &$ctors, array &$aliases): void
                 static fn (IR\Operand $arg): CtorTree|IR\Operand => resolveOperand($arg, $ctors, $aliases),
                 $stmt->args,
             ),
+            $stmt->srcLoc,
         );
 
         return;
@@ -1544,29 +1434,6 @@ function recordCtorDef(IR\Stmt $stmt, array &$ctors, array &$aliases): void
         $resolved = resolveOperand($stmt->value, $ctors, $aliases);
         if ($resolved instanceof CtorTree) {
             $ctors[$stmt->dest] = $resolved;
-        } elseif (
-            $stmt->value instanceof IR\ExprCall
-            && isTupleCtorCallee($stmt->value->callee)
-        ) {
-            $ctors[$stmt->dest] = new CtorTree(
-                '()',
-                \array_map(
-                    static fn (IR\Operand $arg): CtorTree|IR\Operand => resolveOperand($arg, $ctors, $aliases),
-                    $stmt->value->args,
-                ),
-            );
-        } elseif (
-            $stmt->value instanceof IR\ExprCall
-            && ! isFieldExtractCallee($stmt->value->callee)
-            && isPlausibleConstructorName($stmt->value->callee)
-        ) {
-            $ctors[$stmt->dest] = new CtorTree(
-                $stmt->value->callee,
-                \array_map(
-                    static fn (IR\Operand $arg): CtorTree|IR\Operand => resolveOperand($arg, $ctors, $aliases),
-                    $stmt->value->args,
-                ),
-            );
         } else {
             $aliases[$stmt->dest] = $stmt->value instanceof IR\Temp
                 ? ($aliases[$stmt->value->id] ?? $stmt->value)
@@ -1637,50 +1504,8 @@ function resolveOperand(IR\Operand $operand, array $ctors, array $aliases, array
         return $operand;
     }
 
-    if ($operand instanceof IR\ExprCall) {
-        if (isTupleCtorCallee($operand->callee)) {
-            return new CtorTree(
-                '()',
-                \array_map(
-                    static fn (IR\Operand $arg): CtorTree|IR\Operand => resolveOperand($arg, $ctors, $aliases, $seen),
-                    $operand->args,
-                ),
-            );
-        }
-        if (isFieldExtractCallee($operand->callee) || ! isPlausibleConstructorName($operand->callee)) {
-            return $operand;
-        }
-
-        return new CtorTree(
-            $operand->callee,
-            \array_map(
-                static fn (IR\Operand $arg): CtorTree|IR\Operand => resolveOperand($arg, $ctors, $aliases, $seen),
-                $operand->args,
-            ),
-        );
-    }
-
     if ($operand instanceof IR\FnRef && isPlausibleConstructorName($operand->name)) {
         return new CtorTree($operand->name, []);
-    }
-
-    if ($operand instanceof IR\ExprCallValue) {
-        $callee = resolveOperand($operand->callee, $ctors, $aliases, $seen);
-        $ctorName = null;
-        if ($callee instanceof IR\FnRef && isPlausibleConstructorName($callee->name)) {
-            $ctorName = $callee->name;
-        } elseif ($callee instanceof CtorTree && $callee->args === []) {
-            $ctorName = $callee->name;
-        }
-        if ($ctorName !== null) {
-            return new CtorTree(
-                $ctorName,
-                \array_map(
-                    static fn (IR\Operand $arg): CtorTree|IR\Operand => resolveOperand($arg, $ctors, $aliases, $seen),
-                    $operand->args,
-                ),
-            );
-        }
     }
 
     if ($operand instanceof IR\FnRef) {
@@ -1753,7 +1578,16 @@ function fieldAccessorCafIndex(string $name): ?int
     return \is_int($idx) ? $idx : null;
 }
 
-function materializeOperand(CtorTree|IR\Operand $value): IR\Operand
+/**
+ * A `CtorTree` read as a value, with the constructor application scheduled in the reading block.
+ *
+ * A nullary constructor is already a value (`FnRef`); a constructor application is a computation, so
+ * it becomes a `Call` statement in the block that reads it and the reader takes its temp — the schema
+ * has no value-shaped call, so no `CtorTree` may be handed back as one.
+ *
+ * @param list<IR\Stmt> $out appended to, in evaluation order
+ */
+function materializeOperand(CtorTree|IR\Operand $value, array &$out, int &$nextTemp): IR\Operand
 {
     if ($value instanceof IR\Operand) {
         return $value;
@@ -1763,10 +1597,14 @@ function materializeOperand(CtorTree|IR\Operand $value): IR\Operand
         return new IR\FnRef($value->name);
     }
 
-    return new IR\ExprCall(
-        $value->name,
-        \array_map(materializeOperand(...), $value->args),
-    );
+    $args = [];
+    foreach ($value->args as $arg) {
+        $args[] = materializeOperand($arg, $out, $nextTemp);
+    }
+
+    [$temp, $nextTemp] = scheduleCall($value->name, $args, $out, $nextTemp, $value->srcLoc);
+
+    return $temp;
 }
 
 /**
@@ -1827,20 +1665,12 @@ function tempUsedInOperand(IR\Operand $operand, int $tempId): bool
         return $operand->id === $tempId;
     }
 
-    if ($operand instanceof IR\ExprCall || $operand instanceof IR\Intrinsic) {
+    if ($operand instanceof IR\Intrinsic) {
         return tempsUsedInOperands($operand->args, $tempId);
-    }
-
-    if ($operand instanceof IR\ExprCallValue) {
-        return tempUsedInOperand($operand->callee, $tempId) || tempsUsedInOperands($operand->args, $tempId);
     }
 
     if ($operand instanceof IR\ListLit) {
         return tempsUsedInOperands($operand->elements, $tempId);
-    }
-
-    if ($operand instanceof IR\ExprBinop) {
-        return tempUsedInOperand($operand->left, $tempId) || tempUsedInOperand($operand->right, $tempId);
     }
 
     return false;

@@ -1,8 +1,10 @@
 module
   function unitVal()
-      ret call __tuple0()
+      t0 = call __tuple0()
+      ret t0
   function pair()
-      ret call __tuple2(1, 2)
+      t1 = call __tuple2(1, 2)
+      ret t1
   function items()
       ret [1, 2, 3]
   function +(x, y)

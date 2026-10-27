@@ -1,7 +1,7 @@
 <?php declare(strict_types=1);
 
 /**
- * Bindings Phase 2: `moggi bind jvm:com.acme:hello` inspects a fixture JAR
+ * The JVM binding: `moggi bind jvm:com.acme:hello` inspects a fixture JAR
  * and generates `Maven.Com.Acme.Hello`, which must compile and run on the
  * JVM backend.
  *
@@ -247,13 +247,15 @@ foreach ($walk as $file) {
     // The pathname carries `\` on Windows; compare `/`-spelled, the way the
     // dotnet bind test already does with `DIRECTORY_SEPARATOR`.
     $spelling = \str_replace('\\', '/', $file->getPathname());
-    if ($file->isFile() && \str_ends_with($spelling, 'Directory/JVM.class')) {
+    // The unit's own class: the facade is the compiled unit, so the directory library's jvm half is
+    // emitted into `System/Directory.class` rather than a `Directory/JVM.class` beside it.
+    if ($file->isFile() && \str_ends_with($spelling, 'System/Directory.class')) {
         $dirClass = $spelling;
 
         break;
     }
 }
-$assert($dirClass !== null, 'no Directory/JVM.class in unpacked output');
+$assert($dirClass !== null, 'no System/Directory.class in unpacked output');
 $javap = resolveJdkBinary('javap');
 $assert($javap !== null, 'no `javap` found');
 $uout = \str_replace('\\', '/', $work . '/uout/');

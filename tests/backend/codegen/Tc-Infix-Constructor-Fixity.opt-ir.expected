@@ -2,7 +2,8 @@ module
   data Chain a
     constructor :>
   function nested()
-      ret call :>(1, [2, 3])
+      t0 = call :>(1, [2, 3])
+      ret t0
   function ok()
       match_return @nested
         arm x :> xs

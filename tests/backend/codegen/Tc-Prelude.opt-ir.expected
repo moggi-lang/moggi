@@ -4,7 +4,8 @@ module
   function flag()
       ret intrinsic boolNot#(@False)
   function m()
-      ret call Just(3)
+      t1 = call Just(3)
+      ret t1
   function xs()
       ret [1, 2]
   function isTrue(b)

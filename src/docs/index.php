@@ -599,7 +599,6 @@ function attachReexportAliases(
             $units,
             $moduleName,
             $checkedPrograms,
-            $context->backendId,
         );
         if ($exports === null) {
             continue;
@@ -683,7 +682,6 @@ function addReexportModuleEntries(
             $units,
             $moduleName,
             $checkedPrograms,
-            $context->backendId,
         );
         if ($exports === null) {
             continue;

@@ -1017,7 +1017,7 @@ function lowerRecordUpdate(Ast\RecordUpdate $expr, LowerCtx $ctx): Operand
  * Bind a value to a temp so it can be read more than once.
  *
  * An operand is usually a `Temp` a previous statement wrote, but some shapes are
- * the expression themselves (`ExprBinop`, `Intrinsic`, `Partial`) and would be
+ * the expression themselves (`Intrinsic`, `Partial`) and would be
  * recomputed by every read. A record update reads its receiver once per field it
  * keeps, so the receiver goes through here first.
  */

@@ -145,13 +145,6 @@ function dumpExpr(IR\Operand $node): string
     return match ($node::class) {
         IR\ConstInt::class, IR\ConstDouble::class, IR\ConstStr::class, IR\ConstChar::class, IR\Local::class, IR\Temp::class, IR\Unit::class,
         IR\FnRef::class, IR\Partial::class, IR\Intrinsic::class, IR\ForeignCall::class, IR\ListLit::class, IR\DictMethod::class => dumpOperand($node),
-        IR\ExprBinop::class => dumpExpr($node->left) . ' ' . $node->op . ' ' . dumpExpr($node->right),
-        IR\ExprCall::class => 'call ' . $node->callee
-            . '(' . \implode(', ', \array_map(dumpExpr(...), $node->args)) . ')',
-        IR\ExprCallValue::class => 'call_value ' . dumpOperand($node->callee)
-            . '(' . \implode(', ', \array_map(dumpExpr(...), $node->args)) . ')',
-        IR\ExprPartial::class => 'partial ' . $node->fn
-            . '(' . \implode(', ', \array_map(dumpExpr(...), $node->args)) . ')',
         default => throw new \InvalidArgumentException('unknown expr: ' . $node::class),
     };
 }

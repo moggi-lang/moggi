@@ -1,7 +1,8 @@
 module
   function sequenceLocal(_p0)
       t3 = io_assign_action
-        result call __w_sequenceLocal(_p0)
+          t2 = call __w_sequenceLocal(_p0)
+        result t2
       ret t3
   function __w_sequenceLocal(_p0)
       io_match _p0
@@ -15,18 +16,19 @@ module
       ret ()
   function main()
       t13 = io_assign_action
-        result call __w_main()
+          t12 = call __w_main()
+        result t12
       ret t13
   function __w_main()
-      t4 = call System.IO.JVM::__w_putStrLn("custom-sequence")
+      t4 = call System.IO::__w_putStrLn("custom-sequence")
       t6 = io_assign_action
-          t5 = call System.IO.JVM::__w_putStrLn("a")
+          t5 = call System.IO::__w_putStrLn("a")
         result ()
       t8 = io_assign_action
-          t7 = call System.IO.JVM::__w_putStrLn("b")
+          t7 = call System.IO::__w_putStrLn("b")
         result ()
       t9 = call __w_sequenceLocal([t6, t8])
-      t10 = call System.IO.JVM::__w_putStrLn("traverse_")
+      t10 = call System.IO::__w_putStrLn("traverse_")
       t11 = io_call traverse_(@__ev_Foldable_List, @__ev_Functor_IO, @__ev_Applicative_IO, @putStrLn, ["c", "d"])
       io_run t11
       ret ()

@@ -19,7 +19,6 @@ import Data.Bool
 import Data.Char
 import Data.Eq
 import Data.Int
-import Data.List hiding (singleton, take, drop, isPrefixOf, isSuffixOf)
 import Data.List qualified as L
 import Data.Num
 import Data.Ord
@@ -155,10 +154,10 @@ isSuffixOf suffix s = rawEndsWith s suffix
 
 lines :: String -> [String]
 lines "" = ([] :: [String])
-lines s = L.reverse (dropWhile (\x -> x == "") (L.reverse (splitOn "\n" s)))
+lines s = L.reverse (L.dropWhile (\x -> x == "") (L.reverse (splitOn "\n" s)))
 
 words :: String -> [String]
-words s = filter (\w -> w /= "") (splitOn " " s)
+words s = L.filter (\w -> w /= "") (splitOn " " s)
 
 unlines :: [String] -> String
 unlines [] = ""

@@ -394,7 +394,7 @@ try {
     );
 
     // --- hostile inputs are refused where they become output (step 2) -------
-    // F5: the generated `.csproj` escapes quotes as well as `<`, `>` and `&`,
+    // The generated `.csproj` escapes quotes as well as `<`, `>` and `&`,
     // so a coordinate cannot break out of the attribute; coordinates are also
     // validated before a tool sees them (`host_tool_manifest_test.php`).
     $injected = hostToolCsproj(['evil" Foo="bar:1.0'], 'app');
@@ -403,7 +403,7 @@ try {
         'a quote in a coordinate must be escaped: ' . $injected,
     );
 
-    // F6: `downloadPath()` validates the digest like `installDir` does, and a
+    // `downloadPath()` validates the digest like `installDir` does, and a
     // malformed digest is refused instead of concatenated into the path.
     $refuses(
         static fn () => downloadPath('sha256:../../../tmp/x'),

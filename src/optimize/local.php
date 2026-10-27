@@ -95,41 +95,21 @@ function optimizeBlock(IR\Block $block, ?int $armValueDest = null): IR\Block
             $left = $item->left;
             $right = $item->right;
 
-            if ($left instanceof IR\ConstInt && $right instanceof IR\ConstInt) {
-                $folded = Support\tryFoldBinopInt($item->op, $left->value, $right->value);
-                if ($folded !== null) {
-                    $temps[$item->dest] = new IR\ConstInt($folded);
-
-                    continue;
-                }
-            }
-
-            $identity = Support\foldBinopPeephole($item->op, $left, $right);
-            if ($identity !== null) {
-                if (Support\isPropagatableExpr($identity)) {
-                    $temps[$item->dest] = $identity;
+            $folded = Support\foldedBinopOperand($item->op, $left, $right);
+            if ($folded !== null) {
+                if (Support\isPropagatableExpr($folded)) {
+                    $temps[$item->dest] = $folded;
 
                     continue;
                 }
 
-                $items[] = new IR\Assign($item->dest, $identity);
-                $temps[$item->dest] = $identity;
+                $items[] = new IR\Assign($item->dest, $folded);
+                $temps[$item->dest] = $folded;
 
                 continue;
             }
 
-            $expr = Support\combineOperandsToExpr($item->op, $left, $right);
-            if (Support\isPropagatableExpr($expr)) {
-                $temps[$item->dest] = $expr;
-
-                continue;
-            }
-
-            if (Support\isSimpleOperand($left) && Support\isSimpleOperand($right)) {
-                $items[] = new IR\Binop($item->op, $left, $right, $item->dest);
-            } else {
-                $items[] = new IR\Assign($item->dest, $expr);
-            }
+            $items[] = $item;
 
             continue;
         }
@@ -460,10 +440,6 @@ function mapOperand(IR\Operand $operand, array $temps, array $locals): IR\Operan
         static fn (IR\Operand $child): IR\Operand => mapOperand($child, $temps, $locals),
     );
 
-    if ($mapped instanceof IR\ExprBinop) {
-        return Support\foldExpr($mapped);
-    }
-
     return $mapped;
 }
 
@@ -688,11 +664,6 @@ function exprOperandsDefined(IR\Operand $expr, array $defined): bool
     return match ($expr::class) {
         IR\Temp::class => isset($defined[$expr->id]),
         IR\Local::class, IR\ConstInt::class, IR\FnRef::class => true,
-        IR\ExprBinop::class => exprOperandsDefined($expr->left, $defined)
-            && exprOperandsDefined($expr->right, $defined),
-        IR\ExprCall::class => operandsDefined($expr->args, $defined),
-        IR\ExprCallValue::class => exprOperandsDefined($expr->callee, $defined)
-            && operandsDefined($expr->args, $defined),
         default => true,
     };
 }

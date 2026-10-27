@@ -2,41 +2,53 @@ module
   function add(x, y)
       ret intrinsic intAdd#(x, y)
   function inc(_p1)
-      ret call add(1, _p1)
+      t0 = call add(1, _p1)
+      ret t0
   function useInc(x)
-      ret call add(1, x)
+      t1 = call add(1, x)
+      ret t1
   function sum2()
       ret 3
   function viaLet()
-      ret call add(1, 2)
+      t3 = call add(1, 2)
+      ret t3
   function id(x)
       ret x
   function ho()
-      ret call add(1, 2)
+      t5 = call add(1, 2)
+      ret t5
   function apply(f, x)
-      ret call_value f(x)
+      t6 = call_value f(x)
+      ret t6
   function useAdd(x)
-      ret call apply(partial add(1), x)
+      t7 = call apply(partial add(1), x)
+      ret t7
   function passPartial(g)
-      ret call_value g(5)
+      t8 = call_value g(5)
+      ret t8
   function +(x, y)
       ret intrinsic intAdd#(x, y)
   function plus10(_p1)
-      ret call +(10, _p1)
+      t0 = call +(10, _p1)
+      ret t0
   function triple(a, b, c)
       ret intrinsic intAdd#(intrinsic intAdd#(a, b), c)
   function step1(_p1, _p2)
-      ret call triple(1, _p1, _p2)
+      t0 = call triple(1, _p1, _p2)
+      ret t0
   function step2(_p1)
-      ret call triple(1, 2, _p1)
+      t0 = call triple(1, 2, _p1)
+      ret t0
   function step3()
       ret 6
   function justHi()
-      ret call Just("hi")
+      t10 = call Just("hi")
+      ret t10
   function always(x, _p1)
       ret x
   function polyPartial(_p1)
-      ret call always(42, _p1)
+      t0 = call always(42, _p1)
+      ret t0
   function incLambda(x)
       ret partial λ0(x)
   function typedParam()

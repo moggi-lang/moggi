@@ -1227,20 +1227,12 @@ function withPreludeDependencyClosure(array $needed): array
  * @param array<string, array<string, mixed>> $units
  * @return list<string>
  */
-function moduleDependencyNames(array $units, string $moduleName, string $backendId): array
+function moduleDependencyNames(array $units, string $moduleName): array
 {
-    $imports = \array_map(
+    return \array_map(
         static fn (Ast\ImportDecl $import): string => moduleName($import->path),
         $units[$moduleName]['imports'] ?? $units[$moduleName]['program']->imports,
     );
-
-    if (isset($units[$moduleName]['program'])
-        || (($units[$moduleName]['backendMap'] ?? []) !== [])
-    ) {
-        $imports = [...$imports, ...facadeDependencyModules($units, $moduleName, $backendId)];
-    }
-
-    return $imports;
 }
 
 /**
@@ -1254,7 +1246,7 @@ function throwCyclicModuleImports(array $units, array $pending, array $sortedSet
     $deps = [];
     foreach ($pending as $moduleName) {
         $unsatisfied = [];
-        foreach (moduleDependencyNames($units, $moduleName, $backendId) as $importName) {
+        foreach (moduleDependencyNames($units, $moduleName) as $importName) {
             if (! isset($sortedSet[$importName]) && isset($pendingSet[$importName])) {
                 $unsatisfied[] = $importName;
             }
@@ -1382,7 +1374,7 @@ function sortModulesByDependencies(array $units, string $backendId): array
     while ($pending !== []) {
         $progress = false;
         foreach ($pending as $index => $moduleName) {
-            $imports = moduleDependencyNames($units, $moduleName, $backendId);
+            $imports = moduleDependencyNames($units, $moduleName);
 
             $ready = true;
             foreach ($imports as $importName) {

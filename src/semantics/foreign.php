@@ -131,8 +131,14 @@ function checkForeignImportItem(TypeCheckState $state, Ast\ForeignImportDecl $it
         false,
         true,
     );
-    if ($item->line > 0 && (string) $state->currentModule !== '') {
-        $axiom->sourceOrigin = $state->currentModule . ':' . $item->line . ':' . $item->col;
+    $site = Modules\sourceSite(
+        (string) $state->currentModule,
+        $item->sourceFile ?? $state->filename,
+        $item->line,
+        $item->col,
+    );
+    if ($site !== null) {
+        $axiom->sourceOrigin = $site;
     }
 
     return $axiom;

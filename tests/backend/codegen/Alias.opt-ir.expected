@@ -2,7 +2,8 @@ module
   data User
     constructor User id
   function getId(u)
-      ret call __field0(u)
+      t0 = call __field0(u)
+      ret t0
   function emptyUsers()
       ret []
   function doubleId(x)
