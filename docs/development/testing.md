@@ -155,11 +155,11 @@ backend-qualified one would only repeat the shared file. `emit`, `stdout` and `s
 backend and are qualified when they do. A golden whose kind nothing produces is an error at
 discovery, not a case that never runs.
 
-`ir` and `opt-ir` are persisted IR documents, so each opens with the schema it was written under —
-`; ir-shape 1` today. That line is not decoration: the comparison refuses a golden declaring another
-shape and says so, instead of showing a diff of two schemas, which is the same gate the cache applies
-to a stored product. A schema change therefore moves every `ir` and `opt-ir` golden by that one line
-and bumps [`src/ir/shape.php`](../../src/ir/shape.php) in the same change.
+`ir` and `opt-ir` are persisted IR documents, compared as text: a change to the IR moves the goldens
+it touches and the new text is written deliberately, per case. The gate is on the other boundary — a
+stored product is only served to the compiler that built it, because [`src/cache/cache.php`](../../src/cache/cache.php)'s
+`ensureCache()` drops the whole compiler-owned half of the cache when its fingerprint (a hash of the
+compiler's own sources) is not the one on disk.
 
 A verdict is a golden: there is no `Foo.exec.php` any more (`Exec-Exception-HostCause`'s was the
 last, and it became a `stderr` golden). Asserting in the host language from the harness is not a

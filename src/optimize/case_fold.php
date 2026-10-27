@@ -19,6 +19,7 @@ use function Moggi\Optimize\Support\scheduleCall;
 use function Moggi\Semantics\IntrinsicRegistry\isListConsForm;
 use function Moggi\Semantics\IntrinsicRegistry\isListSpineForm;
 use function Moggi\Semantics\IntrinsicRegistry\listFormShape;
+use function Moggi\Semantics\IntrinsicRegistry\primopForPublicOperator;
 use function Moggi\Syntax\isConstructorName;
 
 /**
@@ -1230,23 +1231,20 @@ function flattenResolvedListCons(
         $elems[] = resolveOperand($cur->args[0], $ctors, $aliases);
         $tail = resolveOperand($cur->args[1], $ctors, $aliases);
         if ($tail instanceof IR\ListLit) {
-            return new IR\ListLit([
-                ...\array_map(
-                    static fn (CtorTree|IR\Operand $e): IR\Operand => $e instanceof CtorTree
-                        ? materializeOperand($e)
-                        : $e,
-                    $elems,
-                ),
-                ...$tail->elements,
-            ]);
+            $head = ctorTreeValues($elems);
+            if ($head === null) {
+                return null;
+            }
+
+            return new IR\ListLit([...$head, ...$tail->elements]);
         }
         if ($tail instanceof IR\Intrinsic && listFormShape($tail->name) === 'list-nil' && $tail->args === []) {
-            return new IR\ListLit(\array_map(
-                static fn (CtorTree|IR\Operand $e): IR\Operand => $e instanceof CtorTree
-                    ? materializeOperand($e)
-                    : $e,
-                $elems,
-            ));
+            $head = ctorTreeValues($elems);
+            if ($head === null) {
+                return null;
+            }
+
+            return new IR\ListLit($head);
         }
         if (! ($tail instanceof IR\Intrinsic && isListConsForm($tail->name))) {
             return null;
@@ -1345,7 +1343,11 @@ function foldNestedFieldExtractsInStmt(IR\Stmt $stmt, array $ctors, array $alias
                 $aliases,
             );
             if ($scrut instanceof CtorTree && isset($scrut->args[$idx])) {
-                return new IR\Assign($stmt->dest, materializeOperand($scrut->args[$idx]));
+                $field = $scrut->args[$idx];
+                $value = $field instanceof CtorTree ? ctorTreeValue($field) : $field;
+                if ($value !== null) {
+                    return new IR\Assign($stmt->dest, $value);
+                }
             }
         }
     }
@@ -1522,16 +1524,16 @@ function resolveOperand(IR\Operand $operand, array $ctors, array $aliases, array
         if (isListConsForm($operand->name) && \count($operand->args) === 2) {
             $head = resolveOperand($operand->args[0], $ctors, $aliases, $seen);
             $tail = resolveOperand($operand->args[1], $ctors, $aliases, $seen);
-            if ($tail instanceof IR\ListLit) {
-                return new IR\ListLit([$head instanceof CtorTree ? materializeOperand($head) : $head, ...$tail->elements]);
+            $values = ctorTreeValues([$head, $tail]);
+            if ($values === null) {
+                return $operand;
+            }
+            [$headValue, $tailValue] = $values;
+            if ($tailValue instanceof IR\ListLit) {
+                return new IR\ListLit([$headValue, ...$tailValue->elements]);
             }
 
-            return $operand instanceof IR\Intrinsic
-                ? new IR\Intrinsic('listCons#', [
-                    $head instanceof CtorTree ? materializeOperand($head) : $head,
-                    $tail instanceof CtorTree ? materializeOperand($tail) : $tail,
-                ])
-                : $operand;
+            return new IR\Intrinsic('listCons#', [$headValue, $tailValue]);
         }
     }
 
@@ -1579,11 +1581,44 @@ function fieldAccessorCafIndex(string $name): ?int
 }
 
 /**
+ * A tree as a value, when it already is one.
+ *
+ * A nullary constructor is an `FnRef`. A constructor application is a computation, and a site with no
+ * block to schedule it into cannot hand one back — {@see materializeOperand} is that form, for a site
+ * that has a block — so the answer is null and the caller declines the fold.
+ */
+function ctorTreeValue(CtorTree $tree): ?IR\Operand
+{
+    return $tree->args === [] ? new IR\FnRef($tree->name) : null;
+}
+
+/**
+ * @param list<CtorTree|IR\Operand> $values
+ * @return ?list<IR\Operand> null when one of them is a computation
+ */
+function ctorTreeValues(array $values): ?array
+{
+    $out = [];
+    foreach ($values as $value) {
+        $operand = $value instanceof CtorTree ? ctorTreeValue($value) : $value;
+        if ($operand === null) {
+            return null;
+        }
+        $out[] = $operand;
+    }
+
+    return $out;
+}
+
+/**
  * A `CtorTree` read as a value, with the constructor application scheduled in the reading block.
  *
  * A nullary constructor is already a value (`FnRef`); a constructor application is a computation, so
  * it becomes a `Call` statement in the block that reads it and the reader takes its temp — the schema
  * has no value-shaped call, so no `CtorTree` may be handed back as one.
+ *
+ * A name that stands for a primop is not a callable at all: `(:)` is `listCons#` wherever it appears,
+ * so it becomes the intrinsic every other cons in the tree is built from.
  *
  * @param list<IR\Stmt> $out appended to, in evaluation order
  */
@@ -1600,6 +1635,11 @@ function materializeOperand(CtorTree|IR\Operand $value, array &$out, int &$nextT
     $args = [];
     foreach ($value->args as $arg) {
         $args[] = materializeOperand($arg, $out, $nextTemp);
+    }
+
+    $primop = primopForPublicOperator($value->name);
+    if ($primop !== null) {
+        return new IR\Intrinsic($primop, $args);
     }
 
     [$temp, $nextTemp] = scheduleCall($value->name, $args, $out, $nextTemp, $value->srcLoc);

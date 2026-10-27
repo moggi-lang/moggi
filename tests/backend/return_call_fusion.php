@@ -15,7 +15,9 @@
  * and the call's arguments are evaluated where the call stands — which is why fusing can neither
  * reorder nor duplicate them.
  *
- * The JVM half needs `javap` (`Backend::describeEmit` runs it).
+ * The JVM half is read off a real disassembly, so it needs `javap` (`Backend::describeEmit` runs it).
+ * Without it the case reports itself unavailable — exit 2, the harness's skip — rather than asserting on
+ * the class-file description `describeEmit` falls back to, which would read as a wrong emission.
  */
 
 $root = __DIR__;
@@ -28,6 +30,7 @@ use Moggi\IR;
 use Moggi\Modules\EmitPlan;
 
 use function Moggi\Backend\backendById;
+use function Moggi\Backend\Inspect\findJavapBinary;
 use function Moggi\Backend\Meta\returnedCall;
 use function Moggi\Backend\Meta\tempReadCounts;
 
@@ -131,6 +134,11 @@ $assert(
     \str_contains($ilRefusing, 'stloc') && \str_contains($ilRefusing, 'ldloc'),
     ".NET must keep the store and the load when the call is not the block's last action, got:\n{$ilRefusing}",
 );
+
+if (findJavapBinary() === null) {
+    \fwrite(STDERR, "the JVM half needs `javap`, which this machine has not installed\n");
+    exit(2);
+}
 
 $jvmFusing = $emitted('jvm', $fusing);
 $jvmRefusing = $emitted('jvm', $refusing);
