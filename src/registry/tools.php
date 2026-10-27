@@ -976,6 +976,26 @@ function hostToolArtifactPaths(string $backend, string $dir): array
 }
 
 /**
+ * The directory a resolved tree hands to the compile as its host root.
+ *
+ * Each resolver writes into a subdirectory of its own — Maven into `jvm/`,
+ * `dotnet restore` into `dotnet/` — while a Composer tree *is* the directory the
+ * autoloader sits in. The host flags name the tree that holds the artifact
+ * ("a directory of jars", "a directory of DLLs"), so a build has to forward the
+ * artifact directory and not the tree around it: pointing `--lib-maven` at the
+ * tree would leave the jars one level down from where the flag says they are,
+ * and the compile refuses a tree that does not hold its artifact.
+ */
+function hostToolArtifactRoot(string $backend, string $dir): string
+{
+    return match ($backend) {
+        'jvm' => \rtrim($dir, '/') . '/jvm',
+        'dotnet' => \rtrim($dir, '/') . '/dotnet',
+        default => $dir,
+    };
+}
+
+/**
  * The resolved tree's artifact files whose bytes are *reproducible*, as
  * `<tree-relative path> => <absolute path>`.
  *
