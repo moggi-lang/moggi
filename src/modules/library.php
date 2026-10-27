@@ -680,6 +680,10 @@ function stdlibModuleIndex(string $stdlibRoot): array
  * project (or its `vendor/`), a directory of jars, a directory of DLLs. The backends' dependency
  * scanners look in these for third-party code; nothing here is searched for `.mog` modules, so a
  * vendor tree can never shadow a Moggi module, and a host root is not a Moggi library root.
+ *
+ * One compilation owns the set: `clearHostLibraryRoots()` empties it and
+ * `registerHostLibraryRoots()` replaces it, so a second compile in one process cannot inherit the
+ * first one's trees.
  */
 final class ConfiguredHostLibraries
 {
@@ -699,6 +703,12 @@ final class ConfiguredHostLibraries
     }
 }
 
+/** Forget the host roots a previous compilation in this process registered. */
+function clearHostLibraryRoots(): void
+{
+    ConfiguredHostLibraries::set([]);
+}
+
 /**
  * Register the host libraries a compile links against.
  *
@@ -714,7 +724,7 @@ final class ConfiguredHostLibraries
  */
 function registerHostLibraryRoots(string $backend, array $paths): void
 {
-    $roots = ConfiguredHostLibraries::get();
+    $roots = [];
     foreach ($paths as $path) {
         $real = \realpath($path);
         if ($real === false || ! \is_dir($real)) {
@@ -732,21 +742,48 @@ function registerHostLibraryRoots(string $backend, array $paths): void
     ConfiguredHostLibraries::set($roots);
 }
 
-/** What each backend's package manager leaves in the tree a compile is handed. */
-function assertHostLibraryShape(string $backend, string $root, string $shown): void
+/**
+ * What each backend's package manager has to leave in the tree a compile is handed.
+ *
+ * One table, so the refusal at registration and the dependency scanners cannot disagree about what
+ * a usable tree is: the paths, relative to the root, that must exist, and the sentence printed when
+ * one is missing. Only the package manager's own artifact is required — a Composer autoloader, jars,
+ * assemblies — never the `.json` type sidecars a Moggi library may add beside them, because a real
+ * NuGet resolution ships DLLs alone and a program that calls only framework types is served by them.
+ *
+ * @return array{0: list<string>, 1: string}
+ */
+function hostLibraryShape(string $backend): array
 {
-    [$artifact, $detail] = match ($backend) {
-        'php' => ['vendor/autoload.php', 'a Composer project (or its `vendor/`), so it must hold `vendor/autoload.php`'],
-        'jvm' => ['*.jar', 'the classpath Maven resolved, so it must hold jars'],
-        'dotnet' => ['*.dll', 'the assemblies NuGet resolved, so it must hold DLLs'],
+    return match ($backend) {
+        'php' => [['vendor/autoload.php'], 'a Composer project (or its `vendor/`), so it must hold `vendor/autoload.php`'],
+        'jvm' => [['*.jar'], 'the classpath Maven resolved, so it must hold jars'],
+        'dotnet' => [['*.dll'], 'the assemblies NuGet resolved, so it must hold DLLs (a package keeps them under `lib/<tfm>/` — name that directory, which is the set a build stages)'],
         default => throw new TypeError("no host package manager for backend `{$backend}`"),
     };
+}
 
-    $present = $backend === 'php'
-        ? \is_file(\rtrim($root, '/') . '/' . $artifact)
-        : globPaths(\rtrim($root, '/') . '/' . $artifact) !== [];
-    if (! $present) {
-        throw new TypeError("`{$shown}` is not {$detail}");
+/** Whether `$root` holds the artifact set `$backend`'s package manager produces. */
+function hostLibraryShapeSatisfied(string $backend, string $root): bool
+{
+    foreach (hostLibraryShape($backend)[0] as $relative) {
+        $path = \rtrim($root, '/') . '/' . $relative;
+        $present = \str_starts_with($relative, '*')
+            ? globPaths($path) !== []
+            : \is_file($path);
+        if (! $present) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/** Refuse a host tree that does not hold the artifact its package manager produces. */
+function assertHostLibraryShape(string $backend, string $root, string $shown): void
+{
+    if (! hostLibraryShapeSatisfied($backend, $root)) {
+        throw new TypeError("`{$shown}` is not " . hostLibraryShape($backend)[1]);
     }
 }
 

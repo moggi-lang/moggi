@@ -98,10 +98,48 @@ error: demo-php does not declare the `jvm` backend ([package] backends = php) �
 
 `moggi build` reads your descriptor, resolves the host coordinates with the
 host's own tool (`composer install`, `mvn dependency:copy-dependencies`,
-`dotnet restore`), and hands the resolved tree to the compile as one more
-library root. Resolved jars are merged into your `.jar`; resolved assemblies
-are staged beside your `.dll`; a Composer `vendor/` tree is copied into your
-`.phar` with its autoloader. Then run the artifact the way you always do
+`dotnet restore`), and then **forwards** the result to the compile: every Moggi
+root as `--lib`, and the directory it resolved into as `--lib-composer`,
+`--lib-maven` or `--lib-nuget` — the flag names the package manager, not the
+target. Resolved jars are merged into your `.jar`; resolved assemblies are
+staged beside your `.dll`; a Composer `vendor/` tree is copied into your
+`.phar` with its autoloader.
+
+Because that is only forwarding, every build is reproducible as a `moggi
+compile` with the same flags — nothing about the host tree is injected behind
+your back:
+
+```bash
+moggi compile app/src -o app.phar --backend php   --lib-composer vendor
+moggi compile app/src -o app.jar  --backend jvm   --lib-maven target/dependency
+moggi compile app/src -o app.dll  --backend dotnet --lib-nuget packages
+```
+
+`--lib` is the other flag, and it is not a host flag: it names an additional
+**Moggi** library root, where `.mog` modules live. A host tree passed as `--lib`
+is never searched for modules, so it does not make its packages callable — the
+`foreign` call still needs the host flag. Each host flag is checked for the
+artifact its resolver produces before the compile starts — `vendor/autoload.php`,
+jars, DLLs — and a directory missing it is refused by name, rather than
+compiling and then failing to link.
+
+Each flag names a **directory**, and the one its resolver leaves the artifact
+in, because that is what the artifact carries:
+
+| Flag | What the directory holds |
+|---|---|
+| `--lib-composer` | a Composer project whose autoloader is `vendor/autoload.php`, or that `vendor/` directory itself. A `composer.json` is neither: it names dependencies and holds no code, and `composer install` (which `moggi build` runs) is what writes `vendor/`. The autoloader's location is fixed at `vendor/autoload.php` inside the artifact, so a project that sets `config.vendor-dir` elsewhere cannot be named and is refused — the conventional `vendor/` is the contract. |
+| `--lib-maven` | the directory `mvn dependency:copy-dependencies` copied its jars into. |
+| `--lib-nuget` | the directory of DLLs a restore resolved to and a build stages — `dotnet restore` records them nested under `<package>/lib/<tfm>/`, and that directory of DLLs, not the package cache around it, is what belongs here. |
+
+On .NET, a `.json` file beside a DLL is *Moggi* metadata, not something NuGet
+writes: it says which assembly defines a CLR type and what its IL signature is.
+A NuGet tree therefore works as it comes, which is enough for a program that
+calls the framework, while calling a type from a third-party assembly needs that
+sidecar — without it the type is looked for in `System.Runtime` and the call
+fails at run time with `TypeLoadException`.
+
+Then run the artifact the way you always do
 ([quickstart.md](quickstart.md)):
 
 | Backend | Build | Run |

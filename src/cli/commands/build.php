@@ -29,6 +29,7 @@ use function Moggi\Registry\phpExtensionProblems;
 use function Moggi\Registry\providedDependencyProblems;
 use function Moggi\Registry\readDescriptor;
 use function Moggi\Registry\readLock;
+use function Moggi\Registry\hostToolArtifactRoot;
 use function Moggi\Registry\resolveHostTools;
 use function Moggi\Registry\thirdPartyProblems;
 use function Moggi\Registry\unmaintainedPackageNote;
@@ -288,7 +289,7 @@ function runBuildCommand(array $argv): int
             \array_merge(\array_slice($executable['sourceDirs'], 1), $descriptor['lib']['sourceDirs']),
         );
         $hostRoots = $tools['dir'] !== null && $tools['artifacts'] !== []
-            ? [(string) $tools['dir']]
+            ? [hostToolArtifactRoot($backend, (string) $tools['dir'])]
             : [];
         $libraryRoots = \array_merge($localRoots, $roots, $bindRoots);
 

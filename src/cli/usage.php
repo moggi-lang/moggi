@@ -139,8 +139,9 @@ options:
                     host JVM libraries: a directory of jars, as
                     `mvn dependency:copy-dependencies` resolves them. Repeatable.
     --lib-nuget PATH
-                    host .NET libraries: a directory of DLLs with the `.json`
-                    sidecars that describe their types. Repeatable.
+                    host .NET libraries: a directory of DLLs, as NuGet resolves
+                    them. A `.json` type sidecar beside them is what scopes a
+                    third-party CLR type to its own assembly. Repeatable.
     --script PATH   repl: run commands from a file (non-interactive; for tests)
     -h, --help      show this help
 
@@ -152,7 +153,8 @@ examples:
     moggi compile examples/twice --opt-ir        # optimized IR to stdout
     moggi compile examples/twice -o /tmp/twice.phar
     moggi compile examples/twice -o /tmp/out --unpacked --backend php
-    moggi compile app/src -o app.jar --backend jvm --lib vendor/foo
+    moggi compile app/src -o app.jar --backend jvm --lib-maven target/dependency
+    moggi compile app/src -o app.phar --backend php --lib-composer vendor
     moggi compile libraries/array/src -o out/lib --unpacked --backend php
     moggi check
     moggi verify

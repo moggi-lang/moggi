@@ -902,8 +902,10 @@ function compileUsage(): string
       --lib-maven PATH host JVM libraries: a directory of jars, as
                        `mvn dependency:copy-dependencies` resolves them.
                        Repeatable.
-      --lib-nuget PATH host .NET libraries: a directory of DLLs with the `.json`
-                       sidecars that describe their types. Repeatable.
+      --lib-nuget PATH host .NET libraries: a directory of DLLs, as NuGet
+                       resolves them. A `.json` type sidecar beside them is
+                       what scopes a third-party CLR type to its own assembly.
+                       Repeatable.
       --unpacked       keep the generated tree on disk instead of packaging
       --native         build a native executable
       --no-opt         skip optimizations when generating code
@@ -1144,6 +1146,7 @@ function runCompileCommand(array $argv): int
         return 1;
     }
 
+    Modules\clearHostLibraryRoots();
     foreach (hostLibraryFlags() as $hostBackend => $hostFlag) {
         if ($options['hostLibDirs'][$hostBackend] === []) {
             continue;

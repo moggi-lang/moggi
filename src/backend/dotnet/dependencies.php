@@ -7,6 +7,7 @@ use function Moggi\Cache\hashContent;
 use function Moggi\Cache\runtimeCacheDir;
 use function Moggi\Modules\declaringLibraryRoot;
 use function Moggi\Modules\hostLibraryRoots;
+use function Moggi\Modules\hostLibraryShapeSatisfied;
 use function Moggi\Modules\libraryScanRoots;
 use function Moggi\Paths\globPaths;
 use function Moggi\Registry\safeDigestKey;
@@ -113,9 +114,8 @@ function discoverDotNetLibDirs(): array
     $roots = libraryScanRoots();
     $dirs = [];
     foreach (hostLibraryRoots() as $host) {
-        $host = \rtrim($host, '/');
-        if (globPaths($host . '/*.dll') !== [] || globPaths($host . '/*.json') !== []) {
-            $dirs[$host] = true;
+        if (hostLibraryShapeSatisfied('dotnet', $host)) {
+            $dirs[\rtrim($host, '/')] = true;
         }
     }
     foreach ([...$roots, ...dotNetMetaMirrors($roots)] as $lib) {
