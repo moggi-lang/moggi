@@ -11,7 +11,8 @@
  * `tests/suite/` or a directory `supportInputPaths()` names, never beside the cases.
  *
  * The goldens decide the case's backends: unqualified ones claim every backend, qualified ones only
- * their own.
+ * their own. A script declares its own on a `// backends: jvm` line, because a case that drives one
+ * backend's host toolchain should not pay for two more on every other backend's run.
  */
 
 final class TestCase
@@ -576,8 +577,34 @@ function scriptCase(string $path, string $root): TestCase
         group: groupOf($path, $root),
         input: $path,
         files: [$path],
+        backends: declaredScriptBackends($path),
         scriptCase: true,
     );
+}
+
+/**
+ * The backends a script declares on a `// backends: jvm` line, empty when it names none.
+ *
+ * A name the suite does not know is an error: an unread declaration would silently put the case
+ * back on every backend, which is the cost the line exists to avoid.
+ *
+ * @return list<string>
+ */
+function declaredScriptBackends(string $path): array
+{
+    $head = \file_get_contents($path, false, null, 0, 2048);
+    if ($head === false || \preg_match('/^\/\/ backends: ([a-z ]+)$/m', $head, $match) !== 1) {
+        return [];
+    }
+
+    $declared = \array_values(\array_intersect(knownTestBackends(), \preg_split('/\s+/', \trim($match[1])) ?: []));
+    if ($declared === []) {
+        throw new \RuntimeException(
+            'unknown backend on the `// backends:` line of ' . testRelativePath($path),
+        );
+    }
+
+    return $declared;
 }
 
 /** @return list<string> every `.mog` of a project, entry included */

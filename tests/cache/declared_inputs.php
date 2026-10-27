@@ -39,6 +39,9 @@ $assert = static function (bool $condition, string $message) use (&$checks): voi
 
 $work = createTempDir('moggi-cache-declared-inputs');
 $cacheDir = $work . '/cache';
+// Seed the library products before the case points the compiler here: the case is about its own
+// modules' keys, and elaborating three backends' standard libraries first is not part of it.
+seedCacheDir($cacheDir);
 \putenv('MOGGI_CACHE_DIR=' . $cacheDir);
 Cache\setCacheEnabled(true);
 Modules\setStdlibLibPath($root . '/libraries/base/src');

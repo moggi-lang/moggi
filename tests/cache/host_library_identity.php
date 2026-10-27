@@ -71,7 +71,10 @@ try {
     $project = $work . '/project';
     $copyTree($root . '/tests/registry/bind/fixtures/acme-hello-php', $project);
 
+    // Each cache dir starts with the library products but nothing of this case: what is being pinned
+    // is the host identity in *this program's* key, not the standard library's elaboration time.
     $shared = $work . '/cache-shared';
+    seedCacheDir($shared);
     $flag = ['--lib-composer', $project];
 
     $cold = $compile($shared, [...$flag, '-o', $work . '/cold.phar']);
@@ -93,7 +96,9 @@ try {
     $warmRun = $runArtifact($work . '/warm.phar');
     $assert(\trim((string) $warmRun['stdout']) === 'Hello, composer!', 'a warm compile must emit the same program: ' . \trim((string) ($warmRun['stdout'] . $warmRun['stderr'])));
 
-    $coldOther = $compile($work . '/cache-cold', [...$flag, '-o', $work . '/cold-other.phar']);
+    $coldOtherDir = $work . '/cache-cold';
+    seedCacheDir($coldOtherDir);
+    $coldOther = $compile($coldOtherDir, [...$flag, '-o', $work . '/cold-other.phar']);
     $assert(($coldOther['exitCode'] ?? 1) === 0, 'a cold cache dir must compile: ' . \trim((string) $coldOther['stderr']));
     $coldOtherRun = $runArtifact($work . '/cold-other.phar');
     $assert(
@@ -112,6 +117,7 @@ try {
 
     // Reverse order: the refusal above caches nothing, so a flagged compile in a fresh dir works.
     $reverse = $work . '/cache-reverse';
+    seedCacheDir($reverse);
     $reversePlain = $compile($reverse, ['-o', $work . '/reverse-plain.phar']);
     $assert(($reversePlain['exitCode'] ?? 0) !== 0, 'without the tree the compile must refuse here too');
     $reverseFlagged = $compile($reverse, ['--lib-composer', $root . '/tests/registry/bind/fixtures/acme-hello-php', '-o', $work . '/reverse-flagged.phar']);

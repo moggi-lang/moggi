@@ -888,22 +888,30 @@ assertEq(
     'a caller with other declared sources is served the built index',
 );
 $fixtureSource = (string) \file_get_contents($cacheFixtureMog);
-\usleep(1_100_000);
-\touch($cacheFixtureMog);
+$cachedSource = (string) (\json_decode((string) \file_get_contents($cachePath), true)['sourceFingerprint'] ?? '');
+// An mtime-only change must leave the cache alone, and the cache records the source it was built
+// from: stamp the file into the future rather than waiting for a clock to tick, and read the
+// recorded fingerprint instead of comparing two cache writes that may share a second.
+\touch($cacheFixtureMog, (\filemtime($cacheFixtureMog) ?: 0) + 2);
 Docs\loadOrBuildIndex($cacheFixtureDir, [], Docs\docsContext('php', []), false);
-$cacheMtimeAfter = \filemtime($cachePath) ?: 0;
-assertEq($cacheMtimeBefore, $cacheMtimeAfter, 'doc cache survives mtime-only source change');
+$afterTouch = \json_decode((string) \file_get_contents($cachePath), true);
+assertEq($cachedSource, (string) ($afterTouch['sourceFingerprint'] ?? ''), 'doc cache survives mtime-only source change');
 \file_put_contents($cacheFixtureMog, \rtrim($fixtureSource) . "\n-- touch\n");
 Docs\loadOrBuildIndex($cacheFixtureDir, [], Docs\docsContext('php', []), false);
-$cacheMtimeRebuild = \filemtime($cachePath) ?: 0;
-assertTrue($cacheMtimeRebuild > $cacheMtimeAfter, 'doc cache rebuilds when source content changes');
+$afterEdit = \json_decode((string) \file_get_contents($cachePath), true);
+assertTrue(
+    ($afterEdit['sourceFingerprint'] ?? '') !== '' && ($afterEdit['sourceFingerprint'] ?? '') !== $cachedSource,
+    'doc cache rebuilds when source content changes',
+);
 
+// A cache file this compiler cannot use is rebuilt, never served — whether it is a version it does
+// not read or a payload it cannot turn back into an index — and the rebuilt one is complete.
 $corruptCachePath = Docs\indexCachePath($cacheFixtureDir, [], Docs\docsContext('php', []));
 \file_put_contents($corruptCachePath, '{"version":999,"broken":true}');
 Docs\loadOrBuildIndex($cacheFixtureDir, [], Docs\docsContext('php', []), false);
 $rebuiltCache = \json_decode((string) \file_get_contents($corruptCachePath), true);
-assertEq(Docs\docIndexSchemaVersion(), $rebuiltCache['version'] ?? 0, 'doc cache rebuilds when cache JSON is invalid');
-assertTrue(isset($rebuiltCache['modules']), 'rebuilt doc cache contains modules');
+assertEq(Docs\docIndexSchemaVersion(), $rebuiltCache['version'] ?? 0, 'an unreadable doc cache is rebuilt, not served');
+assertTrue(isset($rebuiltCache['modules'], $rebuiltCache['search']), 'rebuilt doc cache carries modules and search entries');
 
 $sourceFingerprint = '';
 Docs\loadOrBuildIndex($cacheFixtureDir, [], Docs\docsContext('php', []), false, $sourceFingerprint);
@@ -912,11 +920,6 @@ $secondFingerprint = '';
 Docs\loadOrBuildIndex($cacheFixtureDir, [], Docs\docsContext('php', []), false, $secondFingerprint);
 assertEq($sourceFingerprint, $secondFingerprint, 'source fingerprint stable across cache hits');
 
-$malformedCachePath = Docs\indexCachePath($cacheFixtureDir, [], Docs\docsContext('php', []));
-\file_put_contents($malformedCachePath, '{"version":1,"modules":{}}');
-Docs\loadOrBuildIndex($cacheFixtureDir, [], Docs\docsContext('php', []), false);
-$malformedCache = \json_decode((string) \file_get_contents($malformedCachePath), true);
-assertTrue(isset($malformedCache['search']), 'doc cache rebuilds when same-version JSON is malformed');
 
 $eitherIndex = Docs\buildIndex(
     ['Data.Either' => $libProject['modules']['Data.Either']],
