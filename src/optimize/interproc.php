@@ -913,7 +913,7 @@ function inlinedItemsToRet(array $inlined): ?array
     }
 
     if ($last instanceof IR\DictCall || $last instanceof IR\Call || $last instanceof IR\CallValue
-        || $last instanceof IR\Binop) {
+        ) {
         return denseStmtItems([...$inlined, new IR\Ret(new IR\Temp($last->dest))]);
     }
 
@@ -1479,7 +1479,6 @@ function substituteStmt(IR\Stmt $stmt, array $params, array $args, array $bound 
     return match ($stmt::class) {
         IR\Let::class => new IR\Let($stmt->name, substituteOperand($stmt->value, $params, $args, $bound)),
         IR\Assign::class => new IR\Assign($stmt->dest, substituteOperand($stmt->value, $params, $args, $bound)),
-        IR\Binop::class => new IR\Binop($stmt->op, substituteOperand($stmt->left, $params, $args, $bound), substituteOperand($stmt->right, $params, $args, $bound), $stmt->dest),
         IR\Call::class => new IR\Call($stmt->callee, \array_map(
             static fn (IR\Operand $arg): IR\Operand => substituteOperand($arg, $params, $args, $bound),
             $stmt->args,
@@ -1543,7 +1542,6 @@ function substituteStmt(IR\Stmt $stmt, array $params, array $args, array $bound 
                 static fn (IR\MatchArm $arm): IR\MatchArm => substituteArm($arm, $params, $args, $bound),
                 $stmt->arms,
             ),
-            $stmt->dest,
             $stmt->exhaustive,
         ),
         IR\IoAssignAction::class => new IR\IoAssignAction(
@@ -1752,7 +1750,6 @@ function remapTempsInStmt(IR\Stmt $stmt, array $remap): IR\Stmt
     return match ($stmt::class) {
         IR\Let::class => new IR\Let($stmt->name, remapTempsInOperand($stmt->value, $remap)),
         IR\Assign::class => new IR\Assign(remapTempId($stmt->dest, $remap), remapTempsInOperand($stmt->value, $remap)),
-        IR\Binop::class => new IR\Binop($stmt->op, remapTempsInOperand($stmt->left, $remap), remapTempsInOperand($stmt->right, $remap), remapTempId($stmt->dest, $remap)),
         IR\Call::class => new IR\Call($stmt->callee, \array_map(static fn (IR\Operand $a): IR\Operand => remapTempsInOperand($a, $remap), $stmt->args), remapTempId($stmt->dest, $remap), $stmt->srcLoc),
         IR\CallValue::class => new IR\CallValue(remapTempsInOperand($stmt->callee, $remap), \array_map(static fn (IR\Operand $a): IR\Operand => remapTempsInOperand($a, $remap), $stmt->args), remapTempId($stmt->dest, $remap), $stmt->srcLoc),
         IR\DictCall::class => new IR\DictCall(
@@ -1819,7 +1816,6 @@ function remapTempsInStmt(IR\Stmt $stmt, array $remap): IR\Stmt
         IR\IoMatch::class => new IR\IoMatch(
             remapTempsInOperand($stmt->scrutinee, $remap),
             \array_map(static fn (IR\MatchArm $arm): IR\MatchArm => remapTempsInArm($arm, $remap), $stmt->arms),
-            remapNullableTempId($stmt->dest, $remap),
             $stmt->exhaustive,
         ),
         IR\IoAssignAction::class => new IR\IoAssignAction(
@@ -1890,7 +1886,6 @@ function remapTempsInOperand(IR\Operand $operand, array $remap): IR\Operand
             $operand->method,
             $operand->localEvidence,
         ),
-        IR\IoAction::class => new IR\IoAction(remapTempsInOperand($operand->expr, $remap)),
         IR\ForeignCall::class => new IR\ForeignCall(
             $operand->backend,
             $operand->kind,

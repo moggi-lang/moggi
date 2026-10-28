@@ -5,12 +5,12 @@
  *
  * `collectUsedStmt` previously handled only 17 of 18 statement kinds,
  * silently skipping `IoAssignAction`. Definitions read only inside an
- * `IoAction` box were therefore dropped by `dceItems`. The source and
+ * action box were therefore dropped by `dceItems`. The source and
  * pipeline regressions are covered by `Exec-Io-Box-Liveness.mog` and
  * `Opt-Io-Box-Liveness.ir.php`; this test isolates the collectors.
  *
- * Operand traversal had the same gap: hand-written descent stopped at
- * `ForeignCall` and `IoAction`. Both now use `operandChildren` /
+ * Operand traversal had the same gap: hand-written descent stopped at a
+ * boxed action's `ForeignCall` argument. It now uses `operandChildren` /
  * `walkOperand`, with the table verifying reads are visible through every
  * IR statement kind.
  */
@@ -47,7 +47,6 @@ $kinds = [
     'Ret' => new IR\Ret($temp($read)),
     'Assign' => new IR\Assign(41, $temp($read)),
     'Let' => new IR\Let('x', $temp($read)),
-    'Binop' => new IR\Binop('+', $temp($read), new IR\ConstInt(1), 42),
     'Call' => new IR\Call('f', [$temp($read)], 43),
     'CallValue' => new IR\CallValue($temp($read), [], 44),
     'DictCall' => new IR\DictCall($temp($read), 'm', [], 45),
@@ -57,7 +56,7 @@ $kinds = [
     'Loop' => new IR\Loop(new IR\Block([new IR\Ret($temp($read))])),
     'IoCall' => new IR\IoCall('putStrLn', [$temp($read)], 49),
     'IoRun' => new IR\IoRun($temp($read)),
-    'IoMatch' => new IR\IoMatch($temp($read), [$armRead()], 47),
+    'IoMatch' => new IR\IoMatch($temp($read), [$armRead()]),
     'IoAssignAction' => new IR\IoAssignAction(48, new IR\Block([new IR\Ret($temp($read))]), $temp($read)),
     'IoThrow' => new IR\IoThrow($temp($read)),
     'IoCatch' => new IR\IoCatch($temp($read), $temp($read)),
@@ -109,10 +108,6 @@ $foreign = new IR\ForeignCall('php', 'call', 'strlen', 'static', [$temp(30)]);
 $check(
     isset(usedInOperand($foreign)['temps'][30]),
     'usedInOperand misses an argument of a foreign call',
-);
-$check(
-    isset(usedInOperand(new IR\IoAction($temp(31)))['temps'][31]),
-    'usedInOperand misses the expression of a deferred io_action',
 );
 $check(
     isset(usedInOperand(new IR\Intrinsic('f', [$temp(32)]))['temps'][32]),

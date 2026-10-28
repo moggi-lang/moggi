@@ -1,10 +1,6 @@
 module
   function add4(a, b, c, d)
-      t0 = a intAdd# b
-      t1 = t0 intAdd# c
-      t2 = t1 intAdd# d
-      t3 = t2 intAdd# 1
-      ret t3
+      ret intrinsic intAdd#(a, b)
   function chain(n)
       t3 = call_value partial add4(1, 2, 3)(n)
       ret t3

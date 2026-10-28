@@ -3469,8 +3469,10 @@ function dictAwaitingResolution(TypeCheckState $state, array $constraints): bool
 }
 
 /**
- * Whether either operand is still a type variable. Such an operand has no host
- * representation yet, so the native Binop path cannot be right for it.
+ * Whether either operand is still a type variable.
+ *
+ * Such an operand has no host representation yet, so settling the operator on its instance's primop
+ * now would pick a method before the type is known; the constraint is carried instead.
  */
 function operandTypeIsUnresolved(TypeCheckState $state, Type $left, Type $right): bool
 {

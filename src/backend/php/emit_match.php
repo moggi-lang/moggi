@@ -12,14 +12,14 @@ use Moggi\IR;
 
 use function Moggi\IR\Visit\mapOperandChildren;
 
-function emitMatchStmt(IR\Stmt $stmt, int $indent, array $ctx, bool $isReturn): string
+function emitMatchStmt(IR\Stmt $stmt, int $indent, array $ctx): string
 {
     $depth = (int) ($GLOBALS['__moggi_php_match_nest'] ?? 0);
     $GLOBALS['__moggi_php_match_nest'] = $depth + 1;
 
     try {
         $body = canUsePhpMatch($stmt, $ctx)
-            ? emitPhpMatch($stmt, $indent, $ctx, $isReturn)
+            ? emitPhpMatch($stmt, $indent, $ctx)
             : emitIfMatch($stmt, $indent, $ctx);
         if ($depth > 0) {
             return emitWithSavedFieldBinders($body, $indent, $depth);
@@ -75,6 +75,13 @@ function emitWithSavedFieldBinders(string $body, int $indent, int $depth): strin
     return $out;
 }
 
+/**
+ * Whether a match can be PHP's own `match` expression.
+ *
+ * That expression answers with the matched arm's value, so this form is the *return*-position one:
+ * a value-position region names its result in its own slot, which its arms write, so they are never
+ * the single `Ret` this rendering needs.
+ */
 function canUsePhpMatch(IR\Stmt $stmt, array $ctx = []): bool
 {
     $mode = null;
@@ -186,7 +193,7 @@ function phpMatchMode(IR\Stmt $stmt): string
     return 'literal';
 }
 
-function emitPhpMatch(IR\Stmt $stmt, int $indent, array $ctx, bool $isReturn): string
+function emitPhpMatch(IR\Stmt $stmt, int $indent, array $ctx): string
 {
     $pad = \str_repeat('    ', $indent);
     $scrutinee = emitOperand($stmt->scrutinee, $ctx);
@@ -198,8 +205,7 @@ function emitPhpMatch(IR\Stmt $stmt, int $indent, array $ctx, bool $isReturn): s
         default => "(({$scrutinee})[0] ?? null)",
     };
     $exhaustive = $stmt->exhaustive;
-    $prefix = $isReturn ? 'return ' : phpTemp($stmt->dest) . ' = ';
-    $out = $pad . $prefix . "match ({$matchScrutinee}) {\n";
+    $out = $pad . "return match ({$matchScrutinee}) {\n";
 
     foreach ($stmt->arms as $arm) {
         $pattern = $arm->pattern;
@@ -364,13 +370,12 @@ function stmtDefinedTemp(IR\Stmt $stmt): ?int
 {
     return match ($stmt::class) {
         IR\Assign::class,
-        IR\Binop::class,
         IR\Call::class,
         IR\CallValue::class,
         IR\DictCall::class,
         IR\MatchStmt::class,
         IR\IoAssignAction::class => $stmt->dest,
-        IR\IoRun::class, IR\IoMatch::class, IR\IoCall::class => $stmt->dest,
+        IR\IoRun::class, IR\IoCall::class => $stmt->dest,
         default => null,
     };
 }
@@ -380,7 +385,6 @@ function stmtReferencedLocals(IR\Stmt $stmt): array
 {
     return match ($stmt::class) {
         IR\Ret::class => operandReferencedLocals($stmt->value),
-        IR\Binop::class => [...operandReferencedLocals($stmt->left), ...operandReferencedLocals($stmt->right)],
         IR\Call::class => \array_merge(...\array_map(operandReferencedLocals(...), $stmt->args)),
         IR\CallValue::class => [...operandReferencedLocals($stmt->callee), ...\array_merge(...\array_map(operandReferencedLocals(...), $stmt->args))],
         IR\DictCall::class => [...operandReferencedLocals($stmt->evidence), ...\array_merge([], ...\array_map(operandReferencedLocals(...), $stmt->args))],
@@ -461,7 +465,6 @@ function stmtReferencedTemps(IR\Stmt $stmt): array
 {
     return match ($stmt::class) {
         IR\Ret::class => operandReferencedTemps($stmt->value),
-        IR\Binop::class => [...operandReferencedTemps($stmt->left), ...operandReferencedTemps($stmt->right)],
         IR\Call::class => $stmt->args === [] ? [] : \array_merge(...\array_map(operandReferencedTemps(...), $stmt->args)),
         IR\CallValue::class => [...operandReferencedTemps($stmt->callee), ...($stmt->args === [] ? [] : \array_merge(...\array_map(operandReferencedTemps(...), $stmt->args)))],
         IR\DictCall::class => [...operandReferencedTemps($stmt->evidence), ...($stmt->args === [] ? [] : \array_merge(...\array_map(operandReferencedTemps(...), $stmt->args)))],
@@ -801,12 +804,6 @@ function renameLocalsInStmtDeep(IR\Stmt $stmt, array $map): IR\Stmt
             \array_map(static fn (IR\Operand $a): IR\Operand => renameLocalsInOperand($a, $map), $stmt->args),
             $stmt->dest,
             $stmt->srcLoc,
-        ),
-        IR\Binop::class => new IR\Binop(
-            $stmt->op,
-            renameLocalsInOperand($stmt->left, $map),
-            renameLocalsInOperand($stmt->right, $map),
-            $stmt->dest,
         ),
         default => $stmt,
     };

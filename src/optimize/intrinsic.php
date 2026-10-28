@@ -114,7 +114,6 @@ function rewriteIntrinsicWrapperStmt(IR\Stmt $stmt, array $wrappers): IR\Stmt
             $stmt->name,
             rewriteIntrinsicWrapperOperand($stmt->value, $wrappers),
         ),
-        IR\Binop::class => new IR\Binop($stmt->op, rewriteIntrinsicWrapperOperand($stmt->left, $wrappers), rewriteIntrinsicWrapperOperand($stmt->right, $wrappers), $stmt->dest),
         IR\Call::class => rewriteIntrinsicWrapperCall($stmt, $wrappers),
         IR\CallValue::class => new IR\CallValue(rewriteIntrinsicWrapperOperand($stmt->callee, $wrappers), \array_map(
             static fn (IR\Operand $operand): IR\Operand => rewriteIntrinsicWrapperOperand($operand, $wrappers),
@@ -218,10 +217,6 @@ function collectReferencedFunctionsStmt(IR\Stmt $stmt, array &$refs): void
         IR\Call::class => addReferencedFunction($stmt->callee, $refs),
         IR\CallValue::class => collectReferencedFunctionsOperand($stmt->callee, $refs),
         IR\Assign::class, IR\Let::class, IR\Ret::class => collectReferencedFunctionsOperand($stmt->value, $refs),
-        IR\Binop::class => (static function () use ($stmt, &$refs): void {
-            collectReferencedFunctionsOperand($stmt->left, $refs);
-            collectReferencedFunctionsOperand($stmt->right, $refs);
-        })(),
         IR\MatchStmt::class, IR\MatchReturn::class => (static function () use ($stmt, &$refs): void {
             collectReferencedFunctionsOperand($stmt->scrutinee, $refs);
             foreach ($stmt->arms as $arm) {

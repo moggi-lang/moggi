@@ -31,12 +31,6 @@ function remapTempsInStmt(IR\Stmt $stmt, array $temps): IR\Stmt
 
     return match ($stmt::class) {
         IR\Ret::class => new IR\Ret(remapTempsInOperand($stmt->value, $temps)),
-        IR\Binop::class => new IR\Binop(
-            $stmt->op,
-            remapTempsInOperand($stmt->left, $temps),
-            remapTempsInOperand($stmt->right, $temps),
-            $stmt->dest,
-        ),
         IR\Call::class => new IR\Call(
             $stmt->callee,
             \array_map(
@@ -118,7 +112,6 @@ function remapTempsInStmt(IR\Stmt $stmt, array $temps): IR\Stmt
         IR\IoMatch::class => new IR\IoMatch(
             remapTempsInOperand($stmt->scrutinee, $temps),
             remapTempsInArms($stmt->arms, $temps),
-            $stmt->dest,
             $stmt->exhaustive,
         ),
         IR\Loop::class => new IR\Loop(new IR\Block(remapTempsInItems($stmt->body->items, $temps))),

@@ -12,7 +12,6 @@ use function Moggi\IR\Visit\walkStmt;
 use function Moggi\Modules\isQualifiedSymbol;
 use function Moggi\Optimize\Interproc\countLocalUsesInItems;
 use function Moggi\Optimize\Interproc\operandIsNonDuplicable;
-use function Moggi\Optimize\Support\foldedBinopOperand;
 use function Moggi\Optimize\Support\isPropagatableExpr;
 use function Moggi\Optimize\Support\isSimpleOperand;
 use function Moggi\Optimize\Support\mapStmtNestedBlocks;
@@ -66,7 +65,6 @@ function cseStmt(IR\Stmt $stmt): IR\Stmt
 function cseKey(IR\Stmt $stmt): ?string
 {
     return match ($stmt::class) {
-        IR\Binop::class => 'binop:' . $stmt->op . ':' . operandKey($stmt->left) . ':' . operandKey($stmt->right),
         IR\Call::class => calleeIsEffectful($stmt->callee)
             ? null
             : 'call:' . $stmt->callee . ':' . \implode(',', \array_map(operandKey(...), $stmt->args)),
@@ -140,7 +138,6 @@ function dceStmt(IR\Stmt $stmt): IR\Stmt
                 ),
                 $stmt->arms,
             ),
-            $stmt->dest,
             $stmt->exhaustive,
         ),
         default => mapStmtNestedBlocks($stmt, static fn (IR\Block $block): IR\Block => dceBlock($block)),
@@ -355,7 +352,6 @@ function isDeadStmt(IR\Stmt $stmt, array $used, ?int $matchDest = null): bool
 
     return match ($stmt::class) {
         IR\Assign::class => $unusedTemp($stmt->dest) && ! operandHasEffect($stmt->value),
-        IR\Binop::class => $unusedTemp($stmt->dest),
         IR\Call::class => $unusedTemp($stmt->dest) && ! calleeIsEffectful($stmt->callee),
         IR\CallValue::class => $unusedTemp($stmt->dest) && ! operandHasEffect($stmt->callee),
         IR\Let::class => ! isset($used['locals'][$stmt->name]) && ! operandHasEffect($stmt->value),
@@ -448,12 +444,6 @@ function rewriteStmtOperands(IR\Stmt $stmt, callable $rewriteOp): IR\Stmt
         IR\Ret::class => new IR\Ret($rewriteOp($stmt->value)),
         IR\Assign::class => new IR\Assign($stmt->dest, $rewriteOp($stmt->value)),
         IR\Let::class => new IR\Let($stmt->name, $rewriteOp($stmt->value)),
-        IR\Binop::class => new IR\Binop(
-            $stmt->op,
-            $rewriteOp($stmt->left),
-            $rewriteOp($stmt->right),
-            $stmt->dest,
-        ),
         IR\Call::class => new IR\Call(
             $stmt->callee,
             \array_map($rewriteOp, $stmt->args),
@@ -517,7 +507,6 @@ function rewriteStmtOperands(IR\Stmt $stmt, callable $rewriteOp): IR\Stmt
         IR\IoMatch::class => new IR\IoMatch(
             $rewriteOp($stmt->scrutinee),
             rewriteMatchArms($stmt->arms, $rewriteOp),
-            $stmt->dest,
             $stmt->exhaustive,
         ),
         default => $stmt,
@@ -726,44 +715,10 @@ function propagateCopiesBlock(IR\Block $block, array $temps = [], array $locals 
             continue;
         }
 
-        if ($item instanceof IR\Binop) {
-            if ($matchDest !== null && $item->dest === $matchDest) {
-                $items[] = $item;
-
-                continue;
-            }
-
-            $folded = foldedBinopOperand($item->op, $item->left, $item->right);
-            if ($folded !== null) {
-                if (isSimpleOperand($folded)) {
-                    $temps[$item->dest] = $folded;
-
-                    continue;
-                }
-
-                $useCounts ??= tempUseCountsInItems($block->items);
-                if (($useCounts[$item->dest] ?? 0) <= 1) {
-                    $temps[$item->dest] = $folded;
-
-                    continue;
-                }
-
-                unset($temps[$item->dest]);
-                $items[] = new IR\Assign($item->dest, $folded);
-
-                continue;
-            }
-
-            unset($temps[$item->dest]);
-            $items[] = $item;
-
-            continue;
-        }
-
         if ($item instanceof IR\Call || $item instanceof IR\CallValue || $item instanceof IR\DictCall) {
             unset($temps[$item->dest]);
         }
-        if ($item instanceof IR\MatchStmt || $item instanceof IR\IoMatch) {
+        if ($item instanceof IR\MatchStmt) {
             unset($temps[$item->dest]);
         }
 
@@ -793,7 +748,6 @@ function mapCopyStmt(IR\Stmt $stmt, array &$temps, array &$locals): IR\Stmt
 
     return match ($stmt::class) {
         IR\Ret::class => new IR\Ret(mapCopyOperand($stmt->value, $temps, $locals)),
-        IR\Binop::class => new IR\Binop($stmt->op, mapCopyOperand($stmt->left, $temps, $locals), mapCopyOperand($stmt->right, $temps, $locals), $stmt->dest),
         IR\Call::class => new IR\Call($stmt->callee, \array_map(static fn (IR\Operand $a): IR\Operand => mapCopyOperand($a, $temps, $locals), $stmt->args), $stmt->dest, $stmt->srcLoc),
         IR\CallValue::class => new IR\CallValue(mapCopyOperand($stmt->callee, $temps, $locals), \array_map(static fn (IR\Operand $a): IR\Operand => mapCopyOperand($a, $temps, $locals), $stmt->args), $stmt->dest, $stmt->srcLoc),
         IR\DictCall::class => new IR\DictCall(mapCopyOperand($stmt->evidence, $temps, $locals), $stmt->method, \array_map(static fn (IR\Operand $a): IR\Operand => mapCopyOperand($a, $temps, $locals), $stmt->args), $stmt->dest, $stmt->srcLoc, $stmt->localEvidence),
@@ -833,10 +787,9 @@ function mapCopyStmt(IR\Stmt $stmt, array &$temps, array &$locals): IR\Stmt
         IR\IoMatch::class => new IR\IoMatch(
             mapCopyOperand($stmt->scrutinee, $temps, $locals),
             \array_map(
-                static fn (IR\MatchArm $arm): IR\MatchArm => $mapArm($arm, $stmt->dest),
+                static fn (IR\MatchArm $arm): IR\MatchArm => $mapArm($arm, null),
                 $stmt->arms,
             ),
-            $stmt->dest,
             $stmt->exhaustive,
         ),
         IR\Loop::class => new IR\Loop(propagateCopiesBlock($stmt->body, $temps, $locals)),

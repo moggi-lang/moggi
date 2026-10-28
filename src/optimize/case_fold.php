@@ -101,8 +101,6 @@ function stmtShapeKey(IR\Stmt $stmt): string
             . '(' . operandListShapeKey($stmt->args) . ')',
         IR\DictCall::class => 'Dict:' . $stmt->dest . '=' . operandShapeKey($stmt->evidence)
             . '.' . $stmt->method . '(' . operandListShapeKey($stmt->args) . ')',
-        IR\Binop::class => 'Binop:' . $stmt->dest . '=' . $stmt->op
-            . '(' . operandShapeKey($stmt->left) . ',' . operandShapeKey($stmt->right) . ')',
         IR\MatchStmt::class => 'MatchS:' . $stmt->dest . '@' . operandShapeKey($stmt->scrutinee)
             . '#' . \count($stmt->arms),
         IR\MatchReturn::class => 'MatchR:@' . operandShapeKey($stmt->scrutinee)
@@ -406,16 +404,6 @@ function replaceTempsInItems(array $items, array $tempEnv): array
 
             continue;
         }
-        if ($item instanceof IR\Binop) {
-            $out[] = new IR\Binop(
-                $item->op,
-                replaceTempsInOperand($item->left, $tempEnv),
-                replaceTempsInOperand($item->right, $tempEnv),
-                $item->dest,
-            );
-
-            continue;
-        }
         $out[] = $item;
     }
 
@@ -711,7 +699,7 @@ function collectTempDefsInItems(array $items, array &$defs): void
 {
     foreach (denseStmtItems($items) as $item) {
         if ($item instanceof IR\Assign || $item instanceof IR\Call || $item instanceof IR\CallValue
-            || $item instanceof IR\Binop || $item instanceof IR\DictCall) {
+            || $item instanceof IR\DictCall) {
             if (isset($item->dest)) {
                 $defs[$item->dest] = true;
             }
@@ -785,10 +773,6 @@ function tempsReferencedInStmt(IR\Stmt $stmt): array
     match ($stmt::class) {
         IR\Ret::class => $add($stmt->value),
         IR\Assign::class, IR\Let::class => $add($stmt->value),
-        IR\Binop::class => (static function () use ($stmt, $add): void {
-            $add($stmt->left);
-            $add($stmt->right);
-        })(),
         IR\Call::class => (static function () use ($stmt, $add): void {
             foreach ($stmt->args as $arg) {
                 $add($arg);

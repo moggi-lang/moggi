@@ -503,13 +503,6 @@ final class ForeignCall implements Operand
     }
 }
 
-final class IoAction implements Operand
-{
-    public function __construct(public Operand $expr)
-    {
-    }
-}
-
 /* ---------------------------------------------------------------------------
    Statements
    --------------------------------------------------------------------------- */
@@ -518,17 +511,6 @@ final class Ret implements Stmt
 {
     public function __construct(public Operand $value)
     {
-    }
-}
-
-final class Binop implements Stmt
-{
-    public function __construct(
-        public string $op,
-        public Operand $left,
-        public Operand $right,
-        public int $dest,
-    ) {
     }
 }
 
@@ -667,11 +649,15 @@ final class IoRun implements Stmt
 
 final class IoMatch implements Stmt
 {
-    /** @param list<MatchArm> $arms */
+    /**
+     * A `case` inside an action body: a statement, not a value region — every arm answers by
+     * returning, so the region names no result and has no slot to name it in.
+     *
+     * @param list<MatchArm> $arms
+     */
     public function __construct(
         public Operand $scrutinee,
         public array $arms,
-        public ?int $dest = null,
         public bool $exhaustive = false,
     ) {
     }

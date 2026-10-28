@@ -2030,10 +2030,6 @@ function collectFreeLocalsInItems(array $items, array $bound, array &$free): voi
         match ($item::class) {
             IR\Ret::class => collectFreeLocalsInOperand($item->value, $bound, $free),
             IR\Assign::class => collectFreeLocalsInOperand($item->value, $bound, $free),
-            IR\Binop::class => (static function () use ($item, $bound, &$free): void {
-                collectFreeLocalsInOperand($item->left, $bound, $free);
-                collectFreeLocalsInOperand($item->right, $bound, $free);
-            })(),
             IR\Call::class => (static function () use ($item, $bound, &$free): void {
                 foreach ($item->args as $arg) {
                     collectFreeLocalsInOperand($arg, $bound, $free);

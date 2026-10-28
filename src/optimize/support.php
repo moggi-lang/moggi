@@ -58,7 +58,7 @@ function operandKey(IR\Operand $operand): string
 function stmtDest(IR\Stmt $stmt): ?int
 {
     return match ($stmt::class) {
-        IR\Assign::class, IR\Binop::class, IR\Call::class, IR\CallValue::class, IR\MatchStmt::class => $stmt->dest,
+        IR\Assign::class, IR\Call::class, IR\CallValue::class, IR\MatchStmt::class => $stmt->dest,
         default => null,
     };
 }
@@ -115,72 +115,11 @@ function isSimpleOperand(IR\Operand $operand): bool
 }
 
 /**
- * The operand a `Binop` statement folds to, or null when it stays a statement.
- *
- * A binop is a statement with a `dest`, so the only values that can stand for one are the constant
- * its arithmetic folds to and an operand an identity rule selects — never a binop expression of its
- * own, because a computation is not an operand.
- */
-function foldedBinopOperand(string $op, IR\Operand $left, IR\Operand $right): ?IR\Operand
-{
-    if ($left instanceof IR\ConstInt && $right instanceof IR\ConstInt) {
-        $folded = tryFoldBinopInt($op, $left->value, $right->value);
-        if ($folded !== null) {
-            return new IR\ConstInt($folded);
-        }
-    }
-
-    return foldBinopIdentity($op, $left, $right);
-}
-
-/**
- * Fold compile-time Int arithmetic binops; comparisons stay runtime (Bool case
- * patterns). An overflowing fold is left alone: PHP promotes the host op to a
- * float, while Int arithmetic wraps at 64 bits, so the constant would disagree
- * with the code every backend emits for the same expression.
- */
-function tryFoldBinopInt(string $op, int $left, int $right): ?int
-{
-    $folded = match ($op) {
-        '+' => $left + $right,
-        '-' => $left - $right,
-        '*' => $left * $right,
-        default => null,
-    };
-
-    return \is_int($folded) ? $folded : null;
-}
-
-function foldBinopIdentity(string $op, IR\Operand $left, IR\Operand $right): ?IR\Operand
-{
-    return match ($op) {
-        '+' => match (true) {
-            $left instanceof IR\ConstInt && $left->value === 0 => $right,
-            $right instanceof IR\ConstInt && $right->value === 0 => $left,
-            default => null,
-        },
-        '-' => match (true) {
-            operandEqual($left, $right) => new IR\ConstInt(0),
-            $right instanceof IR\ConstInt && $right->value === 0 => $left,
-            default => null,
-        },
-        '*' => match (true) {
-            $left instanceof IR\ConstInt && $left->value === 1 => $right,
-            $right instanceof IR\ConstInt && $right->value === 1 => $left,
-            $left instanceof IR\ConstInt && $left->value === 0 => new IR\ConstInt(0),
-            $right instanceof IR\ConstInt && $right->value === 0 => new IR\ConstInt(0),
-            default => null,
-        },
-        default => null,
-    };
-}
-
-/**
  * The operand a defining statement stands for, or null when it must stay a statement.
  *
- * Only an `Assign` states a value. A `Binop` and a call are computations: folding one into its
- * reader would put a computation where the schema allows only values, so both stay statements and
- * their readers take the temp they define.
+ * Only an `Assign` states a value. A call is a computation: folding one into its reader would put
+ * a computation where the schema allows only values, so it stays a statement and its reader takes
+ * the temp it defines.
  */
 function exprFromDefiningStmt(IR\Stmt $stmt, int $dest): ?IR\Operand
 {

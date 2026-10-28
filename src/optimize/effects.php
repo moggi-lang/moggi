@@ -62,7 +62,6 @@ function stmtHasIoEffect(IR\Stmt $stmt, array $index): bool
         IR\CallValue::class => operandHasIoEffect($stmt->callee, $index)
             || operandsHaveIoEffect($stmt->args, $index),
         IR\Assign::class, IR\Let::class => operandHasIoEffect($stmt->value, $index),
-        IR\Binop::class => operandHasIoEffect($stmt->left, $index) || operandHasIoEffect($stmt->right, $index),
         IR\Ret::class => operandHasIoEffect($stmt->value, $index),
         IR\MatchStmt::class, IR\MatchReturn::class, IR\IoMatch::class => operandHasIoEffect($stmt->scrutinee, $index)
             || matchArmsHaveIoEffect($stmt->arms, $index),
@@ -172,7 +171,6 @@ function stmtHasDirectForeign(IR\Stmt $stmt): bool
 {
     return match ($stmt::class) {
         IR\Assign::class, IR\Let::class, IR\Ret::class => operandHasDirectForeign($stmt->value),
-        IR\Binop::class => operandHasDirectForeign($stmt->left) || operandHasDirectForeign($stmt->right),
         IR\Call::class => operandsHaveDirectForeign($stmt->args),
         IR\CallValue::class => operandHasDirectForeign($stmt->callee) || operandsHaveDirectForeign($stmt->args),
         IR\DictCall::class => operandHasDirectForeign($stmt->evidence) || operandsHaveDirectForeign($stmt->args),

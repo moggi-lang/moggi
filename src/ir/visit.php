@@ -72,7 +72,6 @@ function operandChildren(IR\Operand $operand): array
         IR\DictMethod::class => [$operand->evidence],
         IR\ListLit::class => $operand->elements,
         IR\ForeignCall::class => $operand->args,
-        IR\IoAction::class => [$operand->expr],
         IR\ConstInt::class, IR\ConstStr::class, IR\ConstChar::class, IR\ConstDouble::class,
         IR\Local::class, IR\Temp::class, IR\FnRef::class, IR\Unit::class => [],
         default => throw UnknownIrNode::for($operand),
@@ -112,11 +111,6 @@ function mapOperandChildren(IR\Operand $operand, callable $mapChild): IR\Operand
             [$elements, $changed] = mapChildList($operand->elements, $mapChild);
 
             return $changed ? new IR\ListLit($elements) : $operand;
-        })(),
-        IR\IoAction::class => (function () use ($operand, $mapChild): IR\Operand {
-            $expr = $mapChild($operand->expr);
-
-            return $expr === $operand->expr ? $operand : new IR\IoAction($expr);
         })(),
         IR\ForeignCall::class => (function () use ($operand, $mapChild): IR\Operand {
             [$args, $changed] = mapChildList($operand->args, $mapChild);
@@ -216,7 +210,6 @@ function stmtDirectOperands(IR\Stmt $stmt): array
 {
     return match ($stmt::class) {
         IR\Ret::class, IR\Assign::class, IR\Let::class => [$stmt->value],
-        IR\Binop::class => [$stmt->left, $stmt->right],
         IR\Call::class => $stmt->args,
         IR\IoCall::class => $stmt->args,
         IR\IoRun::class => [$stmt->action],
@@ -261,7 +254,7 @@ function stmtNestedBlocks(IR\Stmt $stmt): array
         ),
         IR\Loop::class => [$stmt->body],
         IR\IoAssignAction::class => [$stmt->body],
-        IR\Ret::class, IR\Binop::class, IR\Call::class, IR\CallValue::class, IR\DictCall::class,
+        IR\Ret::class, IR\Call::class, IR\CallValue::class, IR\DictCall::class,
         IR\Assign::class, IR\Let::class, IR\TailRecall::class, IR\IoCall::class, IR\IoRun::class,
         IR\IoThrow::class, IR\IoCatch::class, IR\IoFinally::class => [],
         default => throw UnknownIrNode::for($stmt),

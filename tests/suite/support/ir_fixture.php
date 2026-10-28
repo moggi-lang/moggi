@@ -96,7 +96,6 @@ function stmtFromArray(array $stmt): IR\Stmt
 {
     return match ($stmt['tag']) {
         'ret' => new IR\Ret(operandFromArray($stmt['value'])),
-        'binop' => new IR\Binop($stmt['op'], operandFromArray($stmt['left']), operandFromArray($stmt['right']), $stmt['dest']),
         'call' => new IR\Call($stmt['callee'], \array_map(operandFromArray(...), $stmt['args']), $stmt['dest']),
         'call_value' => new IR\CallValue(operandFromArray($stmt['callee']), \array_map(operandFromArray(...), $stmt['args']), $stmt['dest']),
         'dict_call' => new IR\DictCall(operandFromArray($stmt['evidence']), $stmt['method'], \array_map(operandFromArray(...), $stmt['args']), $stmt['dest'], null, $stmt['localEvidence']),
@@ -127,7 +126,6 @@ function stmtFromArray(array $stmt): IR\Stmt
         'io_match' => new IR\IoMatch(
             operandFromArray($stmt['scrutinee']),
             \array_map(armFromArray(...), $stmt['arms']),
-            $stmt['dest'] ?? null,
             $stmt['exhaustive'] ?? false,
         ),
         'io_assign_action' => new IR\IoAssignAction(
@@ -190,7 +188,6 @@ function operandFromArray(array $operand): IR\Operand
         'intrinsic' => new IR\Intrinsic($operand['name'], \array_map(operandFromArray(...), $operand['args'] ?? [])),
         'dict_method' => new IR\DictMethod(operandFromArray($operand['evidence']), $operand['method'], $operand['localEvidence']),
         'foreign_call' => foreignFromArray($operand),
-        'io_action' => new IR\IoAction(operandFromArray($operand['expr'])),
         default => throw new \RuntimeException('unsupported IR operand tag in fixture: ' . $operand['tag']),
     };
 }
