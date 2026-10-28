@@ -3,7 +3,14 @@ title: "IR optimizations"
 ---
 # IR optimizations
 
-The compiler runs an optimization pass on IR after type checking and before PHP codegen. Optimizations are enabled by default; use `--no-opt` to skip them.
+The optimizer runs on IR after type checking and before codegen, on every backend; `--no-opt` skips it.
+
+Its subject is a tree in which **a computation is an operand, not a statement kind**. `x + 1` lowers to
+`intrinsic intAdd#(x, 1)`, an application to `call f(x)`, a method projection to `dictMethod …`. A statement
+names a computation only when a later read needs the result: `ret intrinsic intAdd#(x, 1)` and
+`t0 = intrinsic intAdd#(x, 1)` are the same operation with and without a destination, exactly as `ret local`
+and `t0 = local` are. A pass that folds a computation rewrites the operand; a pass that schedules one emits
+the statement.
 
 ## Inspecting the pipeline
 
@@ -11,166 +18,105 @@ The compiler runs an optimization pass on IR after type checking and before PHP 
 |------|--------|
 | `--ir` | IR before optimization |
 | `--opt-ir` | IR after optimization |
-| *(default)* | Optimized PHP codegen |
-| `--no-opt` | Unoptimized PHP codegen |
-
-Example workflow:
+| *(default)* | Optimized codegen |
+| `--no-opt` | Unoptimized codegen |
 
 ```bash
-moggi compile tests/let.mog --ir
-moggi compile tests/let.mog --opt-ir
-moggi compile tests/let.mog --no-opt
-moggi compile tests/let.mog
+moggi compile tests/backend/codegen/Int-Arithmetic.mog --ir
+moggi compile tests/backend/codegen/Int-Arithmetic.mog --opt-ir
+moggi compile tests/backend/codegen/Int-Arithmetic.mog --no-opt
 ```
+
+The stored dumps under `tests/**/*.opt-ir.expected` are this output; each is compared as text.
 
 ---
 
 ## 1. Copy propagation
 
-Redundant `let` and `assign` bindings to constants, locals, temps, or function references are removed; uses are rewritten to the value directly. Pure `binop` results are also tracked (`t1 = x + x` propagates into `t1 + 1` as `(x + x) + 1` without a separate temp). The same idea runs again in finalize as `propagateCopiesBlock` (after CSE creates copyable temps).
+A statement whose value is already a value is deleted and its readers rewritten to that value. `isPropagatableExpr`
+admits literals, locals, temps, function references, partials, and an `intrinsic`/`list` whose own operands are all
+propagatable; a `call` and a foreign call are computations and are never propagated — `exprFromDefiningStmt()`
+states that rule. A value that would be duplicated is kept: `operandIsNonDuplicable()`, the read count
+(`tempUseCountsInItems()`, propagate only at one read) and the lambda capture index all veto a rewrite.
 
-**Example:** `tests/let.mog`
+It runs in the forward block walk (`optimizeBlock`) and again as `propagateCopiesBlock` after CSE.
 
-```moggi
-addOne x = let y = 1 in x + y
+**Example:** `tests/optimize/Opt-Const-Fold.ir.php` (`area`), the fixture's input and its `--opt-ir`:
+
+Before:
+```
+let product = intrinsic intMul#(w, h)
+let pad = 2
+ret intrinsic intAdd#(product, pad)
+```
+After (`--opt-ir`):
+```
+ret intrinsic intAdd#(intrinsic intMul#(w, h), 2)
 ```
 
-**Before (`--ir`):**
+---
+
+## 2. Intrinsic folding
+
+`foldIntrinsicNode()` folds a primop by the registry's own strategy (`foldStrategy()` in
+`src/semantics/intrinsic_registry.php`), never by a host operator:
+
+| Strategy | Fold |
+|----------|------|
+| `int-add`, `int-sub`, `int-mul` | two literals → one literal (an overflow is left alone: PHP would promote to float while `Int` wraps at 64 bits) |
+| `int-add` | `x + x` → `intMul#(x, 2)`; `intMul#(x, a) + intMul#(x, b)` → `intMul#(x, a + b)` |
+| `int-mul` | `x * 1` and `1 * x` → `x`; `intMul#(x, a) * b` → `intMul#(x, a * b)` |
+| `string-append`, `bytes-append` | two literals → one literal |
+| `list-append`, `list-cons`, `list-head`, `list-tail` | known list spines → the spine, its head, its tail, or one `ListLit`/`listCons#` chain |
+
+A folded node is folded again (so `(2 + 3) + x` reaches `5 + x`), except for a list-spine result.
+
+`foldIntrinsicsItems()` walks a statement list, resolving temps that hold known spines, and runs in the
+after-inline and final stages — not in the early stage.
+
+**Example:** `tests/optimize/Opt-Fold.ir.php` (`six`), `--opt-ir`
 ```
-let y = 1
-t0 = x + y
+ret intrinsic intAdd#(5, x)
+```
+**Example:** `tests/optimize/Opt-Const-Fold.ir.php` (`hypot2`, `score`)
+```
+function hypot2(x, y)
+    ret intrinsic intAdd#(intrinsic intMul#(x, x), intrinsic intMul#(y, y))
+function score()
+    ret 81
+```
+
+---
+
+## 3. Tail return folding
+
+A block whose last statement defines a temp and whose last item is `ret` of that temp becomes one `ret` of the
+value (`foldTailReturn()`). It runs at the end of the forward walk and again in the after-inline and final stages.
+
+**Example:** `tests/optimize/Opt-Dead.ir.php` (`dead`), the fixture's input and its `--opt-ir`:
+
+Before:
+```
+let y = 42
+t0 = intrinsic intAdd#(x, 1)
 ret t0
 ```
-
-**After (`--opt-ir`):**
+After (`--opt-ir`):
 ```
-ret x + 1
-```
-
----
-
-## 2. Constant folding
-
-Binary operations on two integer constants are evaluated at compile time. Only `+`, `-`, and `*` on integer literals are folded.
-
-Folding runs in two places:
-
-1. **Statement-level** — during the local forward pass, when a `binop` statement has two constant operands.
-2. **Expression trees** — `foldExpr` recursively folds nested `expr_binop` nodes (in `ret` values and propagated copies). This matters after inlining collapses a call chain into one big return expression.
-
-**Example:** `tests/opt-fold.mog`
-
-```moggi
-six x = 2 + 3 + x
-```
-
-**Before (`--ir`):**
-```
-t0 = 2 + 3
-t1 = t0 + x
-ret t1
-```
-
-**After (`--opt-ir`):**
-```
-ret 5 + x
-```
-
-(Verified: `moggi compile tests/opt-fold.mog --opt-ir`.)
-
-**Example (expression folding after inlining):** `tests/php-keywords.mog`
-
-```moggi
-useKeywords = list 1 + echo 2 + match 3 + function 4 + __fn_list 5 + fn_list 6
-```
-
-After inlining the helper calls, the body of `useKeywords` is one addition tree. Expression folding reduces it to a single constant:
-
-**After (`--opt-ir`, `useKeywords` only):**
-```
-ret 24
-```
-
-**Codegen (`useKeywords`):**
-```php
-function useKeywords() {
-    return 24;
-}
-```
-
-The helper functions (`list`, `echo`, …) are still emitted — every top-level binding is kept as an exported PHP function even when inlined away at call sites.
-
----
-
-## 3. Algebraic identities and peephole rules
-
-Peephole rules on binops:
-
-| Rule | Example |
-|------|---------|
-| `x + 0` → `x` | |
-| `0 + x` → `x` | |
-| `x - 0` → `x` | |
-| `x - x` → `0` | `tests/opt-zero.mog` |
-| `x + x` → `x * 2` | `double` in `tests/opt-inline.mog` |
-| `x * 1` → `x` | |
-| `1 * x` → `x` | |
-| `x * 0` → `0` | |
-| `0 * x` → `0` | |
-
-**Example:** `tests/opt-zero.mog`
-
-```moggi
-zero x = x - x
-```
-
-**After (`--opt-ir`):**
-```
-ret 0
-```
-
-**Codegen:**
-```php
-return 0;
+ret intrinsic intAdd#(x, 1)
 ```
 
 ---
 
-## 4. Tail return folding
+## 4. Match arm return folding
 
-When the last statement defines a temp and the final `ret` returns that same temp, both are merged into a single `return` of the expression. Runs at the end of each local block walk and again in the finalize pass.
+`case` lowers to a `match` that writes each arm's result into one temp and returns it. Inside an arm that temp is
+the match's destination, so copy propagation would erase arm bodies: assigns to it are protected, a copyable value
+becomes the arm's `ret`, and a non-copyable one goes through `foldArmMatchReturn()`. When every arm ends in `ret`
+and the block ends with `ret` of the match temp, `foldMatchReturn()` turns the match into a `match_return` and drops
+the outer `ret`.
 
-**Example:** a function body whose final `ret` returns a locally-bound temp — e.g. `add x y = x + y` from the add codegen fixtures
-
-**Before:**
-```
-t0 = x + 1
-ret t0
-```
-
-**After (`--opt-ir`):**
-```
-ret x + 1
-```
-
----
-
-## 5. Match arm return folding
-
-`case` lowers to a `match` that writes each arm’s result into a shared temp, then returns it. Inside match arms, that temp is the same ID as the match’s destination — copy propagation would incorrectly erase arm bodies.
-
-### Dest aliasing fix
-
-Inside match arms, assigns to the match result temp are treated specially:
-
-- Copyable values become `ret` in the arm.
-- Non-copyable values are folded via `foldArmMatchReturn` (e.g. `call` + assign → `ret call …`).
-
-When every arm ends with `ret` and the block ends with `ret t0` where `t0` is the match dest, the match becomes a `match_return` and the outer `ret` is dropped.
-
-**Example:** `tests/int-case.mog`
-
-**After (final `--opt-ir`):**
+**Example:** `tests/backend/codegen/Core-Recursion.opt-ir.expected` (`sign`)
 ```
 match_return x
   arm 0
@@ -181,287 +127,169 @@ match_return x
 
 ---
 
-## 6. Constructor field cleanup
+## 5. Constructor field cleanup
 
-Pattern matching on ADT constructors lowers to `__fieldN` extractions plus pattern bindings. Codegen also binds fields from the scrutinee, so the IR work is redundant.
+Pattern matching on ADT constructors lowers to `__fieldN` extractions plus pattern bindings, while codegen also
+binds fields from the scrutinee, so the IR extraction is redundant. `case_fold.php` removes a duplicate
+field-extract `let` and rewrites `ret call __fieldN(scrutinee)` to `ret local(var)` when the pattern already binds
+`var`. It runs inside the after-inline stage, around the forward walk, not as a separate pipeline step.
 
-This pass removes duplicate field-extract `let`s and rewrites `ret call __fieldN(scrutinee)` to `ret local(var)` when the pattern already binds `var`. It runs **inside the local forward pass** when each `match` / `match_return` arm is optimized (not as a separate pipeline step).
-
-**Example:** `tests/case.mog`
-
-```moggi
-fromMaybe d mx = case mx of
-  Just a -> a
-  Nothing -> d
+**Example:** `tests/backend/codegen/Core-Data.opt-ir.expected` (`fromMaybe`, `getAge`)
 ```
-
-**Before (arm body, mid-opt):**
-```
-ret call __field0(mx)
-```
-
-**After:**
-```
-ret a
-```
-
-**Codegen:**
-```php
-$a = $mx[1];
-return $a;
+function fromMaybe(d, mx)
+    match_return mx
+      arm Just a
+          ret a
+      arm Nothing
+          ret d
+function getAge(user)
+    t3 = call __field1(user)
+    ret t3
 ```
 
 ---
 
-## 7. Dead assignment elimination (DCE)
+## 6. Dead statement elimination (DCE)
 
-Removes `assign`, `let`, `binop`, and `call` statements whose result is never used. Runs twice (after local pass and in finalize).
+`dceBlock()` drops an `assign`, `call`, `call_value` or `let` whose destination is read nowhere and whose value has
+no effect (`operandHasEffect()`: a foreign call, an effectful function reference, or a partial/list over one). It
+runs to a fixed point (16 rounds) within a function body — top-level declarations are never removed here.
 
-**Example:** `tests/opt-dead.mog`
+Runs after the earlier folds, after inlining, and once more as the `final-dce` stage.
 
-```moggi
-dead x = let y = 42 in x + 1
+**Example:** `tests/optimize/Opt-Dead.ir.php` → `ret intrinsic intAdd#(x, 1)` (the unused `let y = 42` is gone).
+
+---
+
+## 7. Common subexpression elimination (CSE)
+
+`cseBlock()` keys on `Call` statements — callee plus argument keys, with an effectful callee excluded — and replaces
+a repeated one with `assign <dest> <first temp>`; the follow-up copy propagation rewrites the readers. It runs
+twice: after the local pass and in the after-inline stage.
+
+An intrinsic is an operand, not a statement, so identical primops are *not* merged: `tests/optimize/Opt-CSE.opt-ir.expected`
+keeps both copies of `intAdd#(x, 1)` in `intMul#(intrinsic intAdd#(x, 1), intrinsic intAdd#(x, 1))`. A computation
+that would be read twice wants a temp at lowering time, which is what the lowering pass's `stabilizeOperand()` does.
+
+---
+
+## 8. Function inlining
+
+A direct `call` to an eligible callee is replaced by the callee's body with parameters substituted and temps
+remapped (`inlineFunctions()`, up to 4 rounds, so `f → g → h` collapses).
+
+Eligibility: not foreign, not an IO action, not a capture-taking lambda; not a self-call; at most 4 statements
+ending in `ret`; not returning a function reference (a data constructor is the exception); arity matches; no
+`partial` or captured-lambda argument; and the inline must not rebind a name the caller still reads. A match wrapper
+and an applied-partial provider have their own inline paths. Callee definitions are not removed from the module.
+
+**Example:** `tests/optimize/Opt-Inline-Chain.ir.php` (`f`), `--opt-ir`
 ```
-
-**Before (`--ir`):**
-```
-let y = 42
-t0 = x + 1
-ret t0
-```
-
-**After (`--opt-ir`):**
-```
-ret x + 1
+ret intrinsic intAdd#(intrinsic intMul#(x, 2), 1)
 ```
 
 ---
 
-## 8. Common subexpression elimination (CSE)
+## 9. Applied-lambda fusion
 
-Identical `binop` and `call` expressions within a block share one temp. A follow-up copy-propagation pass rewrites uses of the duplicate temp.
+A function that returns a lambda — `ret partial λ0(x)`, its captures already leading — applied by the caller
+(`call inc(x)` then `call_value t(5)`) is fused into one call of the lambda, captures and arguments together. The
+work is `foldPartialApply()` in `partial.php`, gated by `isSimpleLambda()`: a one-parameter lambda whose body is a
+single `ret`.
 
-CSE runs **twice**: once per function after the local pass, and again in finalize (after inlining and lambda fusion may have introduced new duplicates).
-
-**Example:** `tests/opt-cse.mog`
-
-```moggi
-dup x = (x + 1) * (x + 1)
+**Example:** `tests/optimize/Opt-Lambda.opt-ir.expected`
 ```
-
-**Before (`--ir`):**
-```
-t0 = x + 1
-t1 = x + 1
-t2 = t0 * t1
-ret t2
-```
-
-**After (`--opt-ir`):**
-```
-t0 = x + 1
-ret t0 * t0
+function inc(x)
+    ret partial λ0(x)
+function bump(x)
+    t1 = call λ0(x, 5)
+    ret t1
+function λ0(y)
+    ret intrinsic intAdd#(x, y)
 ```
 
 ---
 
-## 9. Function inlining
+## 10. Tail recursion elimination
 
-Eligible callees are inlined at direct `call` sites and in some `ret call …` expressions. The pass runs to a fixed point (up to 4 rounds) so call chains like `f → g → h` can collapse.
+A self tail call becomes a `loop` with parameter reassignment and a jump back to the head
+(`eliminateTailRecursion()`). Every backend emits it: PHP `while (true)` + `continue`, JVM a label + `goto`,
+.NET/CIL a label + `br`.
 
-**Eligibility:** not a lambda; body ends with `ret` (not returning a lambda); at most 10 statements; no `match`, `loop`, or `tail_recall`; no self-calls; callee temps are remapped when splicing a multi-statement body.
+Argument values are evaluated into scratch temps before any parameter is written, so an argument that reads a
+parameter another argument overwrites still sees the pre-recall value. Skipped for lambdas and for functions with no
+parameters.
 
-**Limits:** no recursive/self inlining; functions returning a lambda reference are skipped; callees with control-flow constructs are skipped.
-
-**Example:** `tests/opt-inline.mog`
-
-```moggi
-double x = x + x
-quad x = double (double x)
+**Example:** `tests/backend/codegen/Core-Recursion.opt-ir.expected` (`fact`)
 ```
-
-**Before (`--ir`, `quad` only):**
-```
-t1 = call double(x)
-t2 = call double(t1)
-ret t2
-```
-
-**After (`--opt-ir`, `quad`):**
-```
-ret x * 2 * 2
-```
-
-(Copy-through binop propagates `x + x` into later binops; `x + x` is rewritten to `x * 2`.)
-
-**Example (call chain):** `tests/opt-inline-chain.mog`
-
-```moggi
-h x = x + x
-g x = h x + 1
-f x = g x
-```
-
-**After (`--opt-ir`, `f`):**
-```
-ret x * 2 + 1
-```
-
-(Callees are inlined into callers using an index updated as each function is processed; nested calls inside spliced bodies are inlined too.)
-
-**Codegen (`quad`):**
-```php
-function double($x) {
-    return $x * 2;
-}
-
-function quad($x) {
-    return ($x * 2) * 2;
-}
-```
-
-(`double` remains in the module for direct calls; `quad` no longer calls it. Top-level functions are never removed from the module after inlining.)
-
----
-
-## 10. Lambda fusion
-
-When a function returns a lambda (`ret @λN`) and the caller immediately applies it (`call f(x)` followed by `call_value t(y)` or `ret call_value t(y)`), the call chain is fused into the lambda body with captures and arguments substituted.
-
-**Limits:** provider is a single `ret` of a lambda; lambda has one parameter and a single `ret` of an `expr_binop`; fusion runs before inlining.
-
-**Example:** `tests/opt-lambda.mog`
-
-```moggi
-inc x = \y -> x + y
-bump x = inc x 5
-```
-
-**Before (`--ir`, `bump` only):**
-```
-t1 = call inc(x)
-t2 = call_value t1(5)
-ret t2
-```
-
-**After (`--opt-ir`):**
-```
-ret x + 5
-```
-
-**Codegen (`inc` still returns a native PHP arrow function; `bump` is fused):**
-```php
-function inc($x) {
-    return fn($y) => $x + $y;
-}
-
-function bump($x) {
-    return $x + 5;
-}
+function fact(n, acc)
+    loop
+        match_return n
+          arm 0
+              ret acc
+          arm _
+              tail_recall(intrinsic intSub#(n, 1), intrinsic intMul#(n, acc))
 ```
 
 ---
 
-## 11. Tail recursion elimination
+## 11. Dictionary-call specialization
 
-Self tail calls are turned into a `while (true)` loop with parameter reassignment and a jump back to the loop head. This runs on **every** backend: PHP emits `while (true)` + `continue`, JVM emits a label + `goto`, .NET/CIL emits a label + `br`.
+`specializeDictCallsFunctions()` (`dict.php`) replaces a `dictCall` whose dictionary and method are settled by the
+module's own instance evidence with a direct call to the resolved method, at the call's own statement position. It
+runs twice, before and after inlining, because inlining changes which evidence is in scope. A `dictMethod` used as a
+value stays a value.
 
-Supports direct tail calls, `case` with one recursive arm, and curried tail calls (`f (g x) (h y)`).
+---
 
-Because the recall reuses the parameter slots, every argument is evaluated into a
-scratch local *before* any parameter is written, so arguments that mention a
-parameter another argument overwrites (e.g. `swapAndDec a b = … swapAndDec b (a - 1)`)
-still read the pre-recall values.
+## 12. Partial application and call legalization
 
-**Limits:** skipped for lambda functions and for functions with no parameters.
+`partial.php` owns the callable forms:
 
-**Example:** `tests/countdown.mog`, `tests/fact.mog`
+* `specializePartialReturnFunction()` — a function whose body is only `ret partial f(…)` gains the remaining
+  parameters and calls `f` directly, so a named binding `inc = add 1` does not build a partial at run time.
+* `foldPartialApply()` — saturates a partial at its use site; an applied partial becomes the `call` it stood for.
+* `normalizeKnownApplies()` — rewrites an application whose callee arity is statically known into the canonical
+  direct form, so the backends never reach for the runtime `__apply`. Conservatively: module-level names only (never
+  a `λN`, whose partial arity counts captures), only when the surface type accounts for every parameter, never past
+  the declared arity.
+* `legalizeCallables()` — brings every stray callable form back to `call`/`partial`/`call_value` before emission,
+  again at the end of the pipeline.
 
-```moggi
-countdown n = case n of
-  0 -> 0
-  _ -> countdown (n - 1)
+**Example:** `tests/optimize/Opt-Apply-Collapse.opt-ir.expected` (`exact`, `over`)
 ```
-
-**Before (`--ir`, `countdown`):**
-```
-match n
-  arm 0
-      assign t0 0
-  arm _
-      t1 = n - 1
-      t2 = call countdown(t1)
-      assign t0 t2
-ret t0
-```
-
-**After (`--opt-ir`):**
-```
-loop
-    match_return n
-      arm 0
-          ret 0
-      arm _
-          tail_recall(intrinsic intSub#(n, 1))
-```
-
-(Verified: `moggi compile tests/integration/full-pipeline/Core-Recursion.mog --backend jvm --opt-ir`. The recursive arm becomes `tail_recall` inside a `loop`, and the match becomes a `match_return` because its arms now end in `ret` / `tail_recall` themselves — a `MatchStmt` carries a result temp, and codegen would turn an arm's `ret` into a *yield* into that temp instead of a return. This is the same shape on all three backends.)
-
-**Codegen (`countdown`):**
-```php
-function countdown($n) {
-    while (true) {
-        if ($n === 0) {
-            return 0;
-        } elseif (true) {
-            $t1 = $n - 1;
-            $n = $t1;
-            continue;
-        } else {
-            throw new \RuntimeException('non-exhaustive match');
-        }
-    }
-}
-```
-
-**Codegen (`fact` — two accumulator params):**
-```php
-function fact($n, $acc) {
-    while (true) {
-        if ($n === 0) {
-            return $acc;
-        } elseif (true) {
-            $t1 = $n - 1;
-            $t3 = $n * $acc;
-            $n = $t1;
-            $acc = $t3;
-            continue;
-        } else {
-            throw new \RuntimeException('non-exhaustive match');
-        }
-    }
-}
+function exact()
+    t0 = call add4(10, 20, 30, 40)
+    ret t0
+function over(n)
+    t0 = call_value @add4(1, 2, 3, 4, n)
+    ret t0
 ```
 
 ---
 
 ## Pass order
 
-Per function (`optimizeFunction`), then module-wide passes, then per-function finalize:
+`optimize()` runs these stages, each under its own checkpoint label; the harness validates the module after every
+one (the compiler itself does not).
 
-1. **Local forward pass** (`optimizeBlock`): copy propagation, constant folding (statements and `foldExpr` on expression trees), peephole rules, constructor field cleanup inside match arms, tail-return / arm-return folding at block end
-2. **CSE** (first round)
-3. **DCE** (first round) — unused temps and lets within a function body only
-4. **Tail recursion elimination** (converts eligible `match` + `ret` bodies into `loop` + `tail_recall`)
-5. **Match-return folding** (`foldMatchReturnBlock` — applies when step 4 did not rewrite the body, e.g. `int-case.mog`)
-6. **Lambda fusion** (module-wide)
-7. **Function inlining** (module-wide, fixed-point up to 4 rounds)
-8. **Local re-pass** (`reoptimizeLocal`: forward block pass including `foldExpr`, copy propagation, DCE, tail-return fold)
-9. **Finalize** per function: CSE → post-CSE copy propagation → DCE → tail-return fold
-
-Copy propagation appears in step 1 (fused with the forward walk), step 8 (`propagateCopiesBlock` after inlining), and step 9 (`propagateCopiesBlock` after CSE). CSE and DCE each run twice (steps 2 and 9). `foldExpr` runs during steps 1, 8, and 9 via `optimizeBlock` / `mapOperand`.
-
-All top-level functions are always emitted to PHP, even when every call site has been inlined.
+1. **`early-folds`** — per function `optimizeFunctionEarly`: forward block walk → CSE → DCE → tail recursion
+   elimination → match-return folding. An IO-returning function stops after the walk; a straight-line action is
+   skipped entirely.
+2. **`specialize-dict-calls-1`**
+3. **`inline-functions`** (4 rounds)
+4. **`specialize-dict-calls-2`**
+5. **`after-inline-folds`** — per function `optimizeFunctionAfterInline`: constructor field cleanup → forward walk →
+   constructor field cleanup → CSE → copy propagation → intrinsic folding → DCE → tail-return folding →
+   match-return folding. A straight-line action gets only `foldKnownMatchesInItems`.
+6. **`normalize-known-applies`**
+7. **`legalize-callables`**
+8. **`fold-partial-apply`**, **`specialize-partial-return`**, then `fold-partial-apply-2` when the module still has
+   more than two functions or more than 24 statements
+9. **`eliminate-intrinsic-wrappers`**, **`fold-io-action-boxes`**, **`recompute-io-straight-line`** (module-wide)
+10. **`final-folds`** — per function `optimizeFunctionFinal`: copy propagation → intrinsic folding → DCE →
+    tail-return folding (a straight-line action: copy propagation, tail-return folding and single-use call folding).
+11. **`annotate-io-effects`**, **`final-dce`**, **`legalize-callables-final`**
 
 ---
 
@@ -469,21 +297,18 @@ All top-level functions are always emitted to PHP, even when every call site has
 
 | Pass | Not handled (yet) |
 |------|-------------------|
-| Copy propagation | Simple operands plus copy-through `binop` chains (`expr_binop` in the temps map); no copy-through `call` |
-| Constant folding | Integer `+`, `-`, `*` only; no floats or division folding; expression folding does not run as a separate fixed-point loop beyond the local passes |
-| Peephole | Rules listed in §3 (including `x + x` → `x * 2`) |
-| CSE | Within a single block only; `binop` and `call` (not `call_value`) |
-| DCE | Within a function body only; top-level functions are always kept in the module |
-| Inlining | Up to 10 stmts ending in `ret`; no match/loop/TCO; fixed-point (4 rounds); no lambda-returning callees; does not remove callee definitions from the module |
-| Lambda fusion | Immediate `call` + `call_value`/`ret call_value` pattern; simple one-param lambdas with `expr_binop` body |
-| TCO | Named functions with ≥1 param; one recursive tail-call shape per function; lambdas excluded |
-| Match-return | Entire function body must be `match` + `ret` of the match temp, all arms returning |
+| Copy propagation | Values only, never a `call`; no rewrite that would duplicate a non-duplicable value or a temp read more than once |
+| Intrinsic folding | Two-literal arithmetic (overflow excluded), string/bytes append, list spine head/tail/append; no float folding and no folding across a temp that copy propagation kept |
+| CSE | `call` statements within one block; an intrinsic operand is never merged, because it is not a statement |
+| DCE | Within a function body only; declarations stay in the module |
+| Inlining | ≤4 statements ending in `ret`; 4 rounds; bodies with `match`/`loop` only through the match-wrapper path; callee definitions stay |
+| Applied-lambda fusion | Provider is a single `ret` of a lambda; a one-parameter lambda with a single `ret` |
+| Tail recursion | Named functions with ≥1 parameter; one recursive tail-call shape per function; lambdas excluded |
+| Match-return | Whole body must be a `match` plus `ret` of the match temp, every arm returning |
+| Dict-call specialization | Needs the module's instance evidence to fix the dictionary and method |
 
-**Not optimized:** cross-block/global value numbering, loop invariant code motion, strength reduction, unused top-level function elimination.
-
-**Partial-application specialization** (in `src/optimize/partial.php`): functions whose body is only `ret partial f(...)` are rewritten to take the remaining parameters and call `f` directly, avoiding runtime partial thunks when the binding is named (e.g. `inc = add 1` becomes `inc(_p1) = add(1, _p1)`). Call-site folding (`foldPartialApply`) saturates partials at use sites, consuming the `partial` operand a previous fusion left behind.
-
-**Known-arity apply canonicalization** (also `partial.php`): after inlining, an application whose callee arity is statically known is rewritten into the canonical direct forms, so the backends never reach for the runtime `__apply`: `call_value @f(args)` with `|args|` equal to `f`'s arity becomes `expr_call f(args)` (under-applied stays `partial f(args)`), and a curried call on a parameter whose declared type fixes its arity flattens `(f x) y` into one `f(x, y)`. Deliberately conservative: only module-level names (never `@λN`, whose partial arity counts captures), only when the surface type accounts for every parameter, and never past the declared arity.
+**Not optimized:** global value numbering, loop-invariant code motion, strength reduction, unused top-level
+declaration elimination.
 
 ---
 
@@ -491,19 +316,20 @@ All top-level functions are always emitted to PHP, even when every call site has
 
 | File | Passes |
 |------|--------|
-| `optimize.php` | Driver (`optimize`), per-function stages (`optimizeFunctionEarly` / `AfterInline` / `Final`), pass ordering |
-| `support.php` | Shared IR helpers (`operandEqual`, `operandKey`, `stmtDest`, `operandToExpr`, `foldExpr`, `foldBinop*`, temp use counts, `isLambdaName`, `mapStmtNestedBlocks`, `buildLambdaMeta`) |
-| `local.php` | `optimizeBlock` forward block pass: copy propagation, constant folding, `foldExpr` in `mapOperand`, peephole; block-end `foldMatchReturn` / `foldArmMatchReturn` / `foldTailReturn`; `optimizeIoAssignAction` |
-| `global_pass.php` | CSE (`cseBlock`), DCE (`dceBlock`), post-CSE copy propagation (`propagateCopiesBlock`), constructor field cleanup; `rewriteStmtOperands` operand rewrite helper; host-effect tracking |
-| `case_fold.php` | Known-constructor match folding (`foldKnownConstructors`, `foldKnownMatchesInItems`), mid-block match-return rewriting (`rewriteMidBlockMatchReturns`), match-statement tail-consumer joining (`joinMatchStmtConsumer`), field-extract folding |
-| `fold_intrinsic.php` | Intrinsic constant folding (`foldIntrinsicsItems`, `foldIntAdd`, `foldIntMul`, `foldStringAppend`, list spine/head/tail/append) |
-| `intrinsic.php` | `eliminateIntrinsicWrappers`: collapse one-primop wrapper functions into the primop |
-| `partial.php` | `bindLambdaCaptures`, partial-application folding (`foldPartialApply`), known-arity apply canonicalization (`normalizeKnownApplies`), partial-return specialization, runtime-`__apply` requirement analysis (`moduleUsesPartialApply`) |
+| `optimize.php` | Driver (`optimize`), the checkpoint labels, per-function stage sets (`optimizeFunctionEarly` / `AfterInline` / `Final`) |
+| `support.php` | Shared helpers: `operandEqual`, `operandKey`, `stmtDest`, `tempUseCountsInItems`, `isPropagatableExpr`, `isSimpleOperand`, `exprFromDefiningStmt`, `scheduleCall`, `substituteTempInExpr`, `mapStmtNestedBlocks`, `callArgsAreLeaves`, `dropUnreadTemps`, `indexCapturedFunctions` |
+| `local.php` | `optimizeBlock` forward walk (copy propagation, operand mapping, match-arm handling), `foldMatchReturn`, `foldArmMatchReturn`, `foldTailReturn`, `foldSingleUseCallResults`, `optimizeIoAssignAction` |
+| `global_pass.php` | `cseBlock`, `dceBlock`, `propagateCopiesBlock`, effect tracking (`setEffectfulCallees`, `calleeIsEffectful`) |
+| `case_fold.php` | Constructor field cleanup and known-match folding (`foldKnownConstructors`, `foldKnownConstructorsBlock`, `foldKnownMatchesInItems`), mid-block match-return rewriting, match-statement tail-consumer joining |
+| `fold_intrinsic.php` | `foldIntrinsicsItems`, `foldIntrinsicNode`, the per-primop folders and the list-spine helpers |
+| `intrinsic.php` | `eliminateIntrinsicWrappers` (a one-primop wrapper function collapses into its primop) |
+| `partial.php` | `legalizeCallables`, `bindLambdaCaptures*`, `foldPartialApply`, `normalizeKnownApplies`, `specializePartialReturnFunction` |
 | `dict.php` | Dictionary-call specialization (`specializeDictCalls*`) |
-| `effects.php` | IO / host-effect annotation (`annotateIoEffects`, `hostEffectFunctionNames`) |
-| `io_specialize.php` | IO action box folding (`foldIoActionBoxes`), `recomputeIoStraightLineAll` |
-| `interproc.php` | Lambda fusion, function inlining |
-| `ir_transform.php` | Temp remapping (`remapTempsIn*`), used by inlining |
-| `tco.php` | Tail recursion elimination |
-| `specialize.php` | Cross-module specialization (root-module selection, evidence/const burning, spec-clone naming) |
-| `tree_shake.php` | Reachability-based module / function elimination |
+| `effects.php` | IO and host-effect annotation (`annotateIoEffects`), and the effectful-callee table (`effectfulCalleeNames`) |
+| `io_specialize.php` | `foldIoActionBoxes`, `recomputeIoStraightLineAll` |
+| `interproc.php` | `inlineFunctions` and the inline helpers (temp remap, capture and qualification guards) |
+| `ir_transform.php` | `remapTempsIn*`, used by inlining |
+| `tco.php` | `eliminateTailRecursion` |
+| `specialize.php` | Cross-module specialization (root-module selection, evidence and constant burning, spec-clone naming) |
+| `tree_shake.php` | Module reachability |
+| `pass_checkpoints.php` | The per-stage validation the harness turns on; off during a normal compile |

@@ -558,7 +558,7 @@ function emitStmt(IR\Stmt $stmt, int $indent, array $ctx): string
     $pad = \str_repeat('    ', $indent);
 
     return match ($stmt::class) {
-        IR\Ret::class => frameMark($ctx, operandCallSrcLoc($stmt->value) ?? ($stmt->srcLoc ?? null))
+        IR\Ret::class => frameMark($ctx, operandCallSrcLoc($stmt->value))
             . $pad . 'return ' . emitRetValue($stmt->value, $ctx) . ";\n",
         IR\Call::class => frameMark($ctx, $stmt->srcLoc) . emitCall($stmt->callee, $stmt->args, $stmt->dest, $indent, $ctx),
         IR\IoCall::class => frameMark($ctx, $stmt->srcLoc) . emitIoCall($stmt, $indent, $ctx),
@@ -572,14 +572,14 @@ function emitStmt(IR\Stmt $stmt, int $indent, array $ctx): string
             . '[' . \json_encode($stmt->method, JSON_UNESCAPED_UNICODE) . '])('
             . \implode(', ', \array_map(static fn (IR\Operand $arg): string => emitOperand($arg, $ctx), $stmt->args))
             . ");\n",
-        IR\Assign::class => frameMark($ctx, operandCallSrcLoc($stmt->value) ?? ($stmt->srcLoc ?? null))
+        IR\Assign::class => frameMark($ctx, operandCallSrcLoc($stmt->value))
             . $pad . phpTemp($stmt->dest) . ' = ' . emitOperand($stmt->value, $ctx) . ";\n",
-        IR\Let::class => frameMark($ctx, operandCallSrcLoc($stmt->value) ?? ($stmt->srcLoc ?? null))
+        IR\Let::class => frameMark($ctx, operandCallSrcLoc($stmt->value))
             . $pad . '$' . mangleVar($stmt->name) . ' = ' . emitOperand($stmt->value, $ctx) . ";\n",
         IR\MatchStmt::class, IR\MatchReturn::class => emitMatchStmt($stmt, $indent, $ctx),
         IR\IoMatch::class => emitIfMatch($stmt, $indent, $ctx),
         IR\Loop::class => $pad . "while (true) {\n" . emitBlock($stmt->body, $indent + 1, $ctx) . $pad . "}\n",
-        IR\TailRecall::class => frameMark($ctx, tailRecallSrcLoc($stmt) ?? ($stmt->srcLoc ?? null))
+        IR\TailRecall::class => frameMark($ctx, tailRecallSrcLoc($stmt))
             . emitTailRecall($stmt, $indent, $ctx),
         default => throw new \RuntimeException('unsupported ir stmt `' . $stmt::class . '` in codegen'),
     };

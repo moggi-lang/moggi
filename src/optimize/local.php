@@ -635,14 +635,3 @@ function exprOperandsDefined(IR\Operand $expr, array $defined): bool
     };
 }
 
-/** @param list<IR\Operand> $operands @param array<int, true> $defined */
-function operandsDefined(array $operands, array $defined): bool
-{
-    foreach ($operands as $operand) {
-        if (! exprOperandsDefined($operand, $defined)) {
-            return false;
-        }
-    }
-
-    return true;
-}

@@ -24,7 +24,6 @@ use function Moggi\Optimize\GlobalPass\dceBlock;
 use function Moggi\Optimize\GlobalPass\propagateCopiesBlock;
 use function Moggi\Optimize\GlobalPass\setEffectfulCallees;
 use function Moggi\Optimize\GlobalPass\setPropagateCopiesLambdaBodies;
-use function Moggi\Optimize\Interproc\fuseAppliedLambdas;
 use function Moggi\Optimize\Interproc\inlineFunctions;
 use function Moggi\Optimize\Intrinsic\eliminateIntrinsicWrappers;
 use function Moggi\Optimize\IoSpecialize\foldIoActionBoxes;
@@ -68,13 +67,6 @@ function optimize(Module $module): Module
             true,
         );
 
-        $functions = PassCheckpoints\runOnFunctions(
-            'fuse-applied-lambdas',
-            $module,
-            $functions,
-            static fn (array $fns): array => fuseAppliedLambdas($fns, $moduleName),
-            true,
-        );
         $functions = PassCheckpoints\runOnFunctions(
             'specialize-dict-calls-1',
             $module,
@@ -220,23 +212,6 @@ function optimize(Module $module): Module
     }
 
     return $result;
-}
-
-/**
- * @param list<Stmt> $items
- * @param callable(Stmt): Stmt $fn
- * @return list<Stmt>
- */
-function mapStmtItems(array $items, callable $fn): array
-{
-    foreach ($items as $i => $item) {
-        $mapped = $fn($item);
-        if ($mapped !== $item) {
-            $items[$i] = $mapped;
-        }
-    }
-
-    return $items;
 }
 
 /** @param list<FunctionDecl> $functions */
