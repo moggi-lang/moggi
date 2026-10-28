@@ -45,13 +45,12 @@ function emitIoAssignAction(IR\Stmt $stmt, int $indent, array $ctx): string
             }
             $definedTemp = match ($item::class) {
                 IR\Assign::class,
-                IR\Binop::class,
                 IR\Call::class,
                 IR\CallValue::class,
                 IR\DictCall::class,
                 IR\MatchStmt::class,
                 IR\IoAssignAction::class => $item->dest,
-                IR\IoRun::class, IR\IoMatch::class, IR\IoCall::class,
+                IR\IoRun::class, IR\IoCall::class,
                 IR\IoThrow::class, IR\IoCatch::class, IR\IoFinally::class => $item->dest,
                 default => null,
             };

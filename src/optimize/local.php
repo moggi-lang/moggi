@@ -91,29 +91,6 @@ function optimizeBlock(IR\Block $block, ?int $armValueDest = null): IR\Block
             continue;
         }
 
-        if ($item instanceof IR\Binop) {
-            $left = $item->left;
-            $right = $item->right;
-
-            $folded = Support\foldedBinopOperand($item->op, $left, $right);
-            if ($folded !== null) {
-                if (Support\isPropagatableExpr($folded)) {
-                    $temps[$item->dest] = $folded;
-
-                    continue;
-                }
-
-                $items[] = new IR\Assign($item->dest, $folded);
-                $temps[$item->dest] = $folded;
-
-                continue;
-            }
-
-            $items[] = $item;
-
-            continue;
-        }
-
         if ($item instanceof IR\Call || $item instanceof IR\CallValue) {
             unset($temps[$item->dest]);
             $items[] = $item;
@@ -279,12 +256,6 @@ function mapStmt(IR\Stmt $stmt, array &$temps, array &$locals): IR\Stmt
 {
     return match ($stmt::class) {
         IR\Ret::class => new IR\Ret(mapOperand($stmt->value, $temps, $locals)),
-        IR\Binop::class => new IR\Binop(
-            $stmt->op,
-            mapOperand($stmt->left, $temps, $locals),
-            mapOperand($stmt->right, $temps, $locals),
-            $stmt->dest,
-        ),
         IR\Call::class => new IR\Call(
             $stmt->callee,
             \array_map(static fn (IR\Operand $arg): IR\Operand => mapOperand($arg, $temps, $locals), $stmt->args),
@@ -359,7 +330,6 @@ function mapStmt(IR\Stmt $stmt, array &$temps, array &$locals): IR\Stmt
                 static fn (IR\MatchArm $arm): IR\MatchArm => mapMatchArmOperands($arm, $temps, $locals),
                 $stmt->arms,
             ),
-            $stmt->dest,
             $stmt->exhaustive,
         ),
         IR\IoAssignAction::class => (function () use ($stmt, $temps, $locals): IR\IoAssignAction {
@@ -603,9 +573,6 @@ function withFirstOperandReplaced(IR\Stmt $stmt, int $dest, IR\Operand $value): 
         IR\Ret::class => $isDest($stmt->value) ? new IR\Ret($value) : null,
         IR\Assign::class => $isDest($stmt->value) ? new IR\Assign($stmt->dest, $value) : null,
         IR\Let::class => $isDest($stmt->value) ? new IR\Let($stmt->name, $value) : null,
-        IR\Binop::class => $isDest($stmt->left)
-            ? new IR\Binop($stmt->op, $value, $stmt->right, $stmt->dest)
-            : null,
         IR\Call::class => $firstArgIsDest($stmt->args)
             ? new IR\Call($stmt->callee, [$value, ...\array_slice($stmt->args, 1)], $stmt->dest, $stmt->srcLoc)
             : null,

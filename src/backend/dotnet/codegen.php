@@ -362,10 +362,6 @@ final class EmitEnv
     /** @var array<string, string> source name => IL local id, or `arg:N` */
     public array $locals = [];
 
-    /** When set, IR\Ret inside match arms yields to this temp instead of returning. */
-    public ?int $matchYieldDest = null;
-
-    public ?string $matchJoinLabel = null;
 
     /** Read counts of the body being emitted, computed once per function ({@see tempReadsForFunction}).
      * @var ?array<int, int> */
@@ -775,7 +771,7 @@ function emitBlock(EmitEnv $env, IR\Block $block): void
         if ($call !== null) {
             $env->m->emitLine($call->srcLoc);
             emitCallValue($env, $call);
-            emitReturnTail($env);
+            emitDotNetFunctionReturn($env);
             ++$i;
 
             continue;
@@ -798,23 +794,6 @@ function emitCallValue(EmitEnv $env, IR\Call|IR\CallValue $call): void
     emitRuntimeApply($env, $call->args);
 }
 
-/**
- * The end of an `IR\Ret`: inside a match arm the value yields to the match's destination instead of
- * returning, which a fused return has to keep doing.
- */
-function emitReturnTail(EmitEnv $env): void
-{
-    if ($env->matchYieldDest !== null) {
-        $env->m->store($env->localSlot('t' . $env->matchYieldDest));
-        if ($env->matchJoinLabel !== null) {
-            $env->m->emit('br ' . $env->matchJoinLabel);
-        }
-
-        return;
-    }
-
-    emitDotNetFunctionReturn($env);
-}
 
 function emitStmt(EmitEnv $env, IR\Stmt $stmt): void
 {
@@ -833,7 +812,7 @@ function emitStmt(EmitEnv $env, IR\Stmt $stmt): void
         case IR\Ret::class:
             /** @var IR\Ret $stmt */
             emitOperand($env, $stmt->value);
-            emitReturnTail($env);
+            emitDotNetFunctionReturn($env);
 
             return;
 
@@ -848,13 +827,6 @@ function emitStmt(EmitEnv $env, IR\Stmt $stmt): void
             /** @var IR\Let $stmt */
             emitOperand($env, $stmt->value);
             $env->m->store($env->localSlot($stmt->name));
-
-            return;
-
-        case IR\Binop::class:
-            /** @var IR\Binop $stmt */
-            emitIntBinopToStack($env, $stmt->op, $stmt->left, $stmt->right);
-            $env->m->store($env->localSlot('t' . $stmt->dest));
 
             return;
 
@@ -1136,13 +1108,12 @@ function emitIoAssignAction(EmitEnv $env, IR\IoAssignAction $stmt): void
             }
             $definedTemp = match ($item::class) {
                 IR\Assign::class,
-                IR\Binop::class,
                 IR\Call::class,
                 IR\CallValue::class,
                 IR\DictCall::class,
                 IR\MatchStmt::class,
                 IR\IoAssignAction::class => $item->dest,
-                IR\IoRun::class, IR\IoMatch::class, IR\IoCall::class,
+                IR\IoRun::class, IR\IoCall::class,
                 IR\IoThrow::class, IR\IoCatch::class, IR\IoFinally::class => $item->dest,
                 default => null,
             };
@@ -1333,10 +1304,10 @@ function emitIntBinopToStack(EmitEnv $env, string $op, IR\Operand $left, IR\Oper
     emitOperand($env, $right);
     unboxInt($env);
     match ($op) {
-        '+', 'intAdd#' => $env->m->emit('add'),
-        '-', 'intSub#' => $env->m->emit('sub'),
-        '*', 'intMul#' => $env->m->emit('mul'),
-        '/', 'intDiv#' => $env->m->emit('div'),
+        'intAdd#' => $env->m->emit('add'),
+        'intSub#' => $env->m->emit('sub'),
+        'intMul#' => $env->m->emit('mul'),
+        'intDiv#' => $env->m->emit('div'),
         default => throw new \RuntimeException("DotNet emit: unsupported binop {$op}"),
     };
     boxInt($env);
@@ -3354,22 +3325,12 @@ function emitMatchReturn(EmitEnv $env, IR\MatchReturn $stmt): void
 
 function emitMatchStmt(EmitEnv $env, IR\MatchStmt $stmt): void
 {
-    $prevDest = $env->matchYieldDest;
-    $prevJoin = $env->matchJoinLabel;
-    $env->matchYieldDest = $stmt->dest;
     emitMatchCommon($env, $stmt->scrutinee, $stmt->arms, $stmt->dest, false);
-    $env->matchYieldDest = $prevDest;
-    $env->matchJoinLabel = $prevJoin;
 }
 
 function emitIoMatch(EmitEnv $env, IR\IoMatch $stmt): void
 {
-    $prevDest = $env->matchYieldDest;
-    $prevJoin = $env->matchJoinLabel;
-    $env->matchYieldDest = $stmt->dest;
-    emitMatchCommon($env, $stmt->scrutinee, $stmt->arms, $stmt->dest, false);
-    $env->matchYieldDest = $prevDest;
-    $env->matchJoinLabel = $prevJoin;
+    emitMatchCommon($env, $stmt->scrutinee, $stmt->arms, null, false);
 }
 
 /** @param list<IR\MatchArm> $arms */
@@ -3383,8 +3344,6 @@ function emitMatchCommon(EmitEnv $env, IR\Operand $scrutinee, array $arms, ?int 
     if ($dest !== null) {
         $env->localSlot('t' . $dest);
     }
-    $prevJoin = $env->matchJoinLabel;
-    $env->matchJoinLabel = $end;
 
     $armId = 0;
     foreach ($arms as $arm) {
@@ -3410,7 +3369,6 @@ function emitMatchCommon(EmitEnv $env, IR\Operand $scrutinee, array $arms, ?int 
     $env->m->emit('newobj instance void [System.Runtime]System.Exception::.ctor(string)');
     $env->m->emit('throw');
 
-    $env->matchJoinLabel = $prevJoin;
     if (! $needsEndLabel) {
         return;
     }

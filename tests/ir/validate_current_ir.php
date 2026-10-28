@@ -7,14 +7,25 @@
 // `let` the action's result reads, a lifted lambda reading its captures, and a
 // guard preparation bound for the arm that owns it. None of them is SSA.
 //
+// A region that declares a result names it in its own slot: every arm of a
+// value-position match defines the region's destination temp, which is what the
+// standard library does (5347 lowered and 2446 optimized arms, and the two
+// fixtures below). An arm that returns instead of naming the region's result is
+// refused by name, because a `Ret` in that position would leave the destination
+// unnamed. An action box's deferred body has one such slot too — the statement's
+// own `result` — so a body whose last statement returns is refused the same way
+// (0 of the corpus's 221 lowered and 231 optimized boxes answer by return).
+//
 // The rejected shapes are an unbound local in a function that has no capture
-// mechanism, a temp read before any statement defines it, and an entry point
-// that names no function. Return regions are unrestricted, following the tree
-// as it actually emits them: `Ret` in a match arm is that arm's yield,
-// dead statements after a `Ret` stay legal, and **both** `Ret` and `MatchReturn`
-// inside a `Loop` body are legal — TCO rewrites a tail-recursive function into
-// such a loop, and the standard library compiles that way. There is no return
-// legality rule to enforce, so these are pinned as accepted shapes.
+// mechanism, a temp read before any statement defines it, an arm that returns
+// instead of naming its region's result, and an entry point that names no
+// function. Return regions are otherwise unrestricted, following the tree
+// as it actually emits them: dead statements after a `Ret` stay legal, a `Ret`
+// inside an arm stays legal as long as the arm still names its result, and
+// **both** `Ret` and `MatchReturn` inside a `Loop` body are legal — TCO rewrites
+// a tail-recursive function into such a loop, and the standard library compiles
+// that way. There is no return legality rule to enforce, so these are pinned as
+// accepted shapes.
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
@@ -122,8 +133,11 @@ $check(
 
 $branchPartial = $module([$fn('partialTemp', [], new IR\Block([
     new IR\MatchStmt(new IR\ConstInt(0), [
-        new IR\MatchArm(new IR\PatWild(), new IR\Block([new IR\Assign(4, new IR\ConstInt(1))])),
-        new IR\MatchArm(new IR\PatWild(), new IR\Block([])),
+        new IR\MatchArm(new IR\PatWild(), new IR\Block([
+            new IR\Assign(0, new IR\ConstInt(1)),
+            new IR\Assign(4, new IR\ConstInt(1)),
+        ])),
+        new IR\MatchArm(new IR\PatWild(), new IR\Block([new IR\Assign(0, new IR\ConstInt(2))])),
     ], 0),
     new IR\Ret($temp(4)),
 ]))]);
@@ -136,8 +150,14 @@ $check(
 
 $allBranches = $module([$fn('allTemps', [], new IR\Block([
     new IR\MatchStmt(new IR\ConstInt(0), [
-        new IR\MatchArm(new IR\PatWild(), new IR\Block([new IR\Assign(5, new IR\ConstInt(1))])),
-        new IR\MatchArm(new IR\PatWild(), new IR\Block([new IR\Assign(5, new IR\ConstInt(2))])),
+        new IR\MatchArm(new IR\PatWild(), new IR\Block([
+            new IR\Assign(0, new IR\ConstInt(1)),
+            new IR\Assign(5, new IR\ConstInt(1)),
+        ])),
+        new IR\MatchArm(new IR\PatWild(), new IR\Block([
+            new IR\Assign(0, new IR\ConstInt(2)),
+            new IR\Assign(5, new IR\ConstInt(2)),
+        ])),
     ], 0),
     new IR\Ret($temp(5)),
 ]))]);
@@ -147,12 +167,22 @@ $check(
 );
 
 $legalReturns = $module([
-    $fn('armYield', [], new IR\Block([
+    // The canonical value-position match: every arm names the region's result in its own slot.
+    $fn('armNamesResult', [], new IR\Block([
         new IR\MatchStmt(new IR\ConstInt(0), [
-            new IR\MatchArm(new IR\PatWild(), new IR\Block([new IR\Ret(new IR\ConstInt(1))])),
-            new IR\MatchArm(new IR\PatVar('n'), new IR\Block([new IR\Ret($local('n'))])),
+            new IR\MatchArm(new IR\PatWild(), new IR\Block([new IR\Assign(0, new IR\ConstInt(1))])),
+            new IR\MatchArm(new IR\PatVar('n'), new IR\Block([new IR\Assign(0, $local('n'))])),
         ], 0),
-        new IR\Ret(new IR\Unit()),
+        new IR\Ret($temp(0)),
+    ])),
+    $fn('armReturnsThenNames', [], new IR\Block([
+        new IR\MatchStmt(new IR\ConstInt(0), [
+            new IR\MatchArm(new IR\PatWild(), new IR\Block([
+                new IR\Ret(new IR\Unit()),
+                new IR\Assign(9, new IR\ConstInt(1)),
+            ])),
+        ], 9),
+        new IR\Ret($temp(9)),
     ])),
     $fn('deadAfterRet', [], new IR\Block([
         new IR\Ret(new IR\Unit()),
@@ -169,10 +199,10 @@ $legalReturns = $module([
             ]),
         ])),
     ])),
-    $fn('loopArmRet', [], new IR\Block([
+    $fn('loopArmNamesResult', [], new IR\Block([
         new IR\Loop(new IR\Block([
             new IR\MatchStmt(new IR\ConstInt(0), [
-                new IR\MatchArm(new IR\PatWild(), new IR\Block([new IR\Ret(new IR\Unit())])),
+                new IR\MatchArm(new IR\PatWild(), new IR\Block([new IR\Assign(8, new IR\Unit())])),
             ], 8),
         ])),
     ])),
@@ -180,6 +210,38 @@ $legalReturns = $module([
 $check(
     $rejects(static fn () => Validate\validateModule($legalReturns, 'post-opt')) === null,
     'a legal return region was rejected',
+);
+
+$armReturns = $module([$fn('armReturns', [], new IR\Block([
+    new IR\MatchStmt(new IR\ConstInt(0), [
+        new IR\MatchArm(new IR\PatWild(), new IR\Block([new IR\Assign(0, new IR\ConstInt(1))])),
+        new IR\MatchArm(new IR\PatVar('n'), new IR\Block([new IR\Ret($local('n'))])),
+    ], 0),
+    new IR\Ret($temp(0)),
+]))]);
+$error = $rejects(static fn () => Validate\validateModule($armReturns, 'post-lower'));
+$check($error !== null, 'an arm that returns instead of naming the region\'s result was accepted');
+$check(
+    $error !== null && \str_contains($error->getMessage(), 't0') && \str_contains($error->getMessage(), 'arm[1]'),
+    'the unnamed-region-result error does not name the arm and the slot: ' . ($error?->getMessage() ?? ''),
+);
+
+// The action region's second shape: a deferred body that answers by return while the region also
+// names a `result`. Every emitter would render the body's return and then the region's value, so the
+// tree would carry two answers and emission order would pick one.
+$boxAnswersByReturn = $module([$fn('boxAnswersByReturn', [], new IR\Block([
+    new IR\IoAssignAction(
+        2,
+        new IR\Block([new IR\Ret(new IR\ConstInt(1))]),
+        new IR\Unit(),
+    ),
+    new IR\Ret(new IR\Unit()),
+]))]);
+$error = $rejects(static fn () => Validate\validateModule($boxAnswersByReturn, 'post-lower'));
+$check($error !== null, 'a deferred body that answers by return was accepted beside its region result');
+$check(
+    $error !== null && \str_contains($error->getMessage(), 't2') && \str_contains($error->getMessage(), 'Ret'),
+    'the deferred-body error does not name the region and the answering statement: ' . ($error?->getMessage() ?? ''),
 );
 
 $missingEntry = new IR\Module(

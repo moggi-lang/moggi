@@ -6,8 +6,7 @@
  * node classes.
  *
  * Coverage tables list every `IrNode` family member and fail when one is
- * missing. `IoAction` was previously enumerable but not mappable, causing
- * operand-rewriting passes to skip the action body.
+ * missing, and the depth bound is loud rather than truncating.
  */
 
 $root = __DIR__;
@@ -55,7 +54,6 @@ $operands = [
     IR\Intrinsic::class => [new IR\Intrinsic('intAdd#', [$local('a')]), 1],
     IR\DictMethod::class => [new IR\DictMethod($local('dict'), 'method'), 1],
     IR\ForeignCall::class => [new IR\ForeignCall('php', 'static', 'Path', 'd', [$local('a')]), 1],
-    IR\IoAction::class => [new IR\IoAction($local('a')), 1],
 ];
 
 foreach ($operands as $class => [$operand, $children]) {
@@ -81,16 +79,6 @@ foreach ($operands as $class => [$operand, $children]) {
     }
 }
 
-$action = new IR\IoAction(new IR\FnRef('orig'));
-$mappedAction = Visit\mapOperandChildren(
-    $action,
-    static fn (IR\Operand $child): IR\Operand => new IR\FnRef('rewritten'),
-);
-$check(
-    $mappedAction instanceof IR\IoAction && $mappedAction->expr->name === 'rewritten',
-    'mapOperandChildren does not reach IoAction::$expr',
-);
-
 // ---- statements: one row per head ---------------------------------------
 
 $guard = new IR\Guard(new IR\Block([new IR\Let('g', $local('x'))]), $local('ok'));
@@ -98,7 +86,6 @@ $arm = new IR\MatchArm(new IR\PatVar('p'), new IR\Block([new IR\Ret($local('p'))
 
 $statements = [
     IR\Ret::class => [new IR\Ret($local('a')), 1, 0],
-    IR\Binop::class => [new IR\Binop('intAdd#', $local('a'), $local('b'), 0), 2, 0],
     IR\Call::class => [new IR\Call('f', [$local('a')], 0), 1, 0],
     IR\CallValue::class => [new IR\CallValue($local('callee'), [$local('a')], 0), 2, 0],
     IR\DictCall::class => [new IR\DictCall($local('dict'), 'm', [$local('a')], 0), 2, 0],
@@ -106,7 +93,7 @@ $statements = [
     IR\Let::class => [new IR\Let('n', $local('a')), 1, 0],
     IR\MatchStmt::class => [new IR\MatchStmt($local('s'), [$arm], 0), 2, 2],
     IR\MatchReturn::class => [new IR\MatchReturn($local('s'), [$arm]), 2, 2],
-    IR\IoMatch::class => [new IR\IoMatch($local('s'), [$arm], 0), 2, 2],
+    IR\IoMatch::class => [new IR\IoMatch($local('s'), [$arm]), 2, 2],
     IR\TailRecall::class => [new IR\TailRecall([$local('a')]), 1, 0],
     IR\Loop::class => [new IR\Loop(new IR\Block([new IR\Ret($local('a'))])), 0, 1],
     IR\IoCall::class => [new IR\IoCall('f', [$local('a')], 0), 1, 0],
@@ -200,7 +187,7 @@ foreach (\array_keys($declared) as $class) {
 $deep = $local('x');
 $nodes = 1;
 for ($i = 0; $i < 70; ++$i) {
-    $deep = new IR\IoAction($deep);
+    $deep = new IR\Partial('f', 2, [$deep]);
     ++$nodes;
 }
 $check(

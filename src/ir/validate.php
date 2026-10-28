@@ -262,6 +262,14 @@ function validateFunction(IR\FunctionDecl $function, string $pass): void
  * copy; `IoAssignAction` and `Loop` do not, because both are emitted inline and
  * their `let` binders stay visible to whatever follows.
  *
+ * A region that declares a result names it in its own slot: a value-position `MatchStmt` carries the
+ * `dest` its arms write, and a boxed action carries the `result` its deferred body answers with. An
+ * arm that leaves the destination undefined — which is what an arm ending in `Ret` amounts to — is
+ * refused by name, and so is a deferred body whose last statement returns: both would give the
+ * region a second answer, and only emission order would pick between them. This is not a return
+ * rule: a `Ret` inside an arm stays legal wherever it sits, as long as the arm still names the
+ * region's result.
+ *
  * Return regions are deliberately not restricted: the tree's own optimized IR
  * contains both `Ret` and `MatchReturn` inside `Loop` bodies — TCO rewrites a
  * tail-recursive function into a loop whose arms return — and the backends emit
@@ -333,7 +341,17 @@ function validateBlock(
                 $common = \array_intersect_key($common, $armTemps);
             }
             $temps = $common;
-            if (($stmt instanceof IR\MatchStmt || $stmt instanceof IR\IoMatch) && $stmt->dest !== null) {
+            if ($stmt instanceof IR\MatchStmt && $stmt->dest !== null) {
+                foreach ($armTempsList as $armIndex => $armDefinitions) {
+                    if (! isset($armDefinitions[$stmt->dest])) {
+                        throw new InvalidIr(
+                            "function {$function->name}: arm[{$armIndex}] of {$where} names no result: a "
+                            . "value-position region declares t{$stmt->dest} and every arm must define it",
+                            $pass,
+                            $function->name,
+                        );
+                    }
+                }
                 $temps[$stmt->dest] = true;
             }
 
@@ -347,6 +365,16 @@ function validateBlock(
         }
 
         if ($stmt instanceof IR\IoAssignAction) {
+            $tail = $stmt->body->items === [] ? null : $stmt->body->items[\count($stmt->body->items) - 1];
+            if ($tail instanceof IR\Ret || $tail instanceof IR\MatchReturn) {
+                throw new InvalidIr(
+                    "function {$function->name}: the deferred body of t{$stmt->dest} at {$where} answers "
+                    . 'by ' . ($tail instanceof IR\Ret ? 'ret' : 'match_return')
+                    . ': a region names its result in one slot, the statement\'s own `result`',
+                    $pass,
+                    $function->name,
+                );
+            }
             validateBlock($function, $stmt->body, $bound, $temps, $pass, $capturesAllowed, $where . '.body');
             checkOperand($function, $stmt->result, $bound, $temps, $pass, $capturesAllowed, $where);
             $temps[$stmt->dest] = true;
@@ -368,7 +396,6 @@ function validateBlock(
         }
 
         if ($stmt instanceof IR\Assign
-            || $stmt instanceof IR\Binop
             || $stmt instanceof IR\Call
             || $stmt instanceof IR\CallValue
             || $stmt instanceof IR\DictCall) {

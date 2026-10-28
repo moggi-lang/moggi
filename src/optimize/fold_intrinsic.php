@@ -8,7 +8,6 @@ use function Moggi\IR\Visit\mapGuards;
 use function Moggi\Optimize\Interproc\denseStmtItems;
 use function Moggi\Optimize\Support\mapStmtNestedBlocks;
 use function Moggi\Optimize\Support\operandEqual;
-use function Moggi\Optimize\Support\tryFoldBinopInt;
 use function Moggi\Semantics\IntrinsicRegistry\foldStrategy;
 use function Moggi\Semantics\IntrinsicRegistry\isListForm;
 
@@ -48,7 +47,6 @@ function foldIntrinsicsStmtWithKnown(IR\Stmt $stmt, array $known): IR\Stmt
         IR\Ret::class => new IR\Ret($foldOp($stmt->value)),
         IR\Assign::class => new IR\Assign($stmt->dest, $foldOp($stmt->value)),
         IR\Let::class => new IR\Let($stmt->name, $foldOp($stmt->value)),
-        IR\Binop::class => new IR\Binop($stmt->op, $foldOp($stmt->left), $foldOp($stmt->right), $stmt->dest),
         IR\Call::class => new IR\Call($stmt->callee, \array_map($foldOp, $stmt->args), $stmt->dest, $stmt->srcLoc),
         IR\CallValue::class => new IR\CallValue($foldOp($stmt->callee), \array_map($foldOp, $stmt->args), $stmt->dest, $stmt->srcLoc),
         IR\TailRecall::class => new IR\TailRecall(\array_map($foldOp, $stmt->args)),
@@ -139,7 +137,7 @@ function foldIntrinsicNode(IR\Intrinsic $node, array $known = [], bool $argsAlre
         ? null
         : match ($strategy) {
             'int-add' => foldIntAdd($args),
-            'int-sub' => foldIntBinop('-', $args),
+            'int-sub' => foldIntConstants('int-sub', $args),
             'int-mul' => foldIntMul($args),
             'string-append' => foldStringAppend($args),
             'bytes-append' => foldStringAppend($args),
@@ -166,7 +164,7 @@ function foldIntrinsicNode(IR\Intrinsic $node, array $known = [], bool $argsAlre
 /** @param list<IR\Operand> $args */
 function foldIntAdd(array $args): ?IR\Operand
 {
-    $const = foldIntBinop('+', $args);
+    $const = foldIntConstants('int-add', $args);
     if ($const !== null) {
         return $const;
     }
@@ -193,7 +191,7 @@ function foldIntAdd(array $args): ?IR\Operand
 /** @param list<IR\Operand> $args */
 function foldIntMul(array $args): ?IR\Operand
 {
-    $const = foldIntBinop('*', $args);
+    $const = foldIntConstants('int-mul', $args);
     if ($const !== null) {
         return $const;
     }
@@ -217,16 +215,29 @@ function foldIntMul(array $args): ?IR\Operand
     return null;
 }
 
-/** @param list<IR\Operand> $args */
-function foldIntBinop(string $op, array $args): ?IR\Operand
+/**
+ * An integer primop whose operands are both constants, keyed by the registry's own fold strategy
+ * (`int-add`, `int-sub`, `int-mul`) — never by a host operator, which is not a spelling this IR has.
+ *
+ * An overflowing fold is left alone: PHP promotes the arithmetic to float, while `Int` wraps at 64
+ * bits, so the constant would disagree with the code every backend emits for the same primop.
+ *
+ * @param list<IR\Operand> $args
+ */
+function foldIntConstants(string $strategy, array $args): ?IR\Operand
 {
     if (! ($args[0] instanceof IR\ConstInt) || ! ($args[1] instanceof IR\ConstInt)) {
         return null;
     }
 
-    $folded = tryFoldBinopInt($op, $args[0]->value, $args[1]->value);
+    $folded = match ($strategy) {
+        'int-add' => $args[0]->value + $args[1]->value,
+        'int-sub' => $args[0]->value - $args[1]->value,
+        'int-mul' => $args[0]->value * $args[1]->value,
+        default => null,
+    };
 
-    return $folded === null ? null : new IR\ConstInt($folded);
+    return \is_int($folded) ? new IR\ConstInt($folded) : null;
 }
 
 /** @param array<int, IR\Operand> $args */

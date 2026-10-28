@@ -28,12 +28,6 @@ function specializeDictCallsStmt(IR\Stmt $stmt, array $evidenceByName = [], arra
     return match ($stmt::class) {
         IR\Assign::class => new IR\Assign($stmt->dest, specializeDictCallsOperand($stmt->value, $evidenceByName)),
         IR\Let::class => new IR\Let($stmt->name, specializeDictCallsOperand($stmt->value, $evidenceByName)),
-        IR\Binop::class => new IR\Binop(
-            $stmt->op,
-            specializeDictCallsOperand($stmt->left, $evidenceByName),
-            specializeDictCallsOperand($stmt->right, $evidenceByName),
-            $stmt->dest,
-        ),
         IR\Call::class => new IR\Call(
             $stmt->callee,
             \array_map(

@@ -34,8 +34,6 @@ function dump(IR\IrNode $node, int $indent = 0): string
             $node->items,
         )),
         IR\Ret::class => $pad . 'ret ' . dumpExpr($node->value) . "\n",
-        IR\Binop::class => $pad . 't' . $node->dest . ' = ' . dumpOperand($node->left)
-            . ' ' . $node->op . ' ' . dumpOperand($node->right) . "\n",
         IR\Call::class => $pad . 't' . $node->dest . ' = call ' . $node->callee
             . '(' . \implode(', ', \array_map(dumpOperand(...), $node->args)) . ")\n",
         IR\CallValue::class => $pad . 't' . $node->dest . ' = call_value ' . dumpOperand($node->callee)
