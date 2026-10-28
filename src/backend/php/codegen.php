@@ -560,8 +560,7 @@ function emitStmt(IR\Stmt $stmt, int $indent, array $ctx): string
         IR\Ret::class => frameMark($ctx, operandCallSrcLoc($stmt->value) ?? ($stmt->srcLoc ?? null))
             . $pad . 'return ' . emitRetValue($stmt->value, $ctx) . ";\n",
         IR\Binop::class => frameMark($ctx, operandCallSrcLoc($stmt->left) ?? operandCallSrcLoc($stmt->right) ?? ($stmt->srcLoc ?? null))
-            . $pad . phpTemp($stmt->dest) . ' = ' . emitOperand($stmt->left, $ctx)
-            . ' ' . $stmt->op . ' ' . emitOperand($stmt->right, $ctx) . ";\n",
+            . $pad . phpTemp($stmt->dest) . ' = ' . emitBinopExpr($stmt, $ctx) . ";\n",
         IR\Call::class => frameMark($ctx, $stmt->srcLoc) . emitCall($stmt->callee, $stmt->args, $stmt->dest, $indent, $ctx),
         IR\IoCall::class => frameMark($ctx, $stmt->srcLoc) . emitIoCall($stmt, $indent, $ctx),
         IR\IoRun::class => frameMark($ctx, $stmt->srcLoc) . emitIoRun($stmt, $indent, $ctx),
@@ -586,6 +585,36 @@ function emitStmt(IR\Stmt $stmt, int $indent, array $ctx): string
             . emitTailRecall($stmt, $indent, $ctx),
         default => throw new \RuntimeException('unsupported ir stmt `' . $stmt::class . '` in codegen'),
     };
+}
+
+/**
+ * A binary operation, rendered as the intrinsic it names.
+ *
+ * The statement spells its operation either as the primitive (`intAdd#`) or as the host operator
+ * (`+`) — the two spellings the JVM and .NET emitters accept for one instruction — and PHP renders
+ * both through the intrinsic owner, because `+` on two PHP ints is not what `intAdd#` is: the
+ * primitive wraps where the operator promotes a float. An operation no target knows is refused
+ * here rather than emitted as text PHP cannot parse.
+ */
+function emitBinopExpr(IR\Binop $stmt, array $ctx): string
+{
+    $name = match ($stmt->op) {
+        'intAdd#', '+' => 'intAdd#',
+        'intSub#', '-' => 'intSub#',
+        'intMul#', '*' => 'intMul#',
+        'intDiv#', '/' => 'intDiv#',
+        default => throw new \RuntimeException('unsupported ir binop `' . $stmt->op . '` in codegen'),
+    };
+    $args = [$stmt->left, $stmt->right];
+
+    return emitIntrinsicCall(
+        $name,
+        \array_map(static fn (IR\Operand $arg): string => emitOperand($arg, $ctx), $args),
+        $ctx['localIntrinsicHelpers'] ?? [],
+        null,
+        $ctx,
+        \array_map(static fn (IR\Operand $arg): bool => isLeafOperand($arg), $args),
+    );
 }
 
 function emitIoCall(IR\Stmt $stmt, int $indent, array $ctx): string
