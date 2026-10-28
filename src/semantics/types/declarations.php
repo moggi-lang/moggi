@@ -14,6 +14,8 @@ use Moggi\Syntax\Ast;
 
 use function Moggi\Backend\DotNet\Foreign\registerDotNetForeignType;
 use function Moggi\Backend\Jvm\Foreign\registerJvmForeignType;
+use function Moggi\IR\Projection\parse as projectionParse;
+use function Moggi\IR\Projection\tupleArity as projectionTupleArity;
 use function Moggi\Semantics\IntrinsicRegistry\isMagicHashName;
 use function Moggi\Semantics\StBoundary\isTransparentPrimopWrapper;
 use function Moggi\Semantics\TypeExpr\scheme;
@@ -374,7 +376,7 @@ function registerClass(TypeCheckState $state, Ast\ClassDecl $decl, string $modul
             if (isset($methods[$methodName])) {
                 throw typeFail($state, \sprintf('duplicate method `%s` in class `%s`', $methodName, $name), $decl);
             }
-            assertNotGeneratedWorkerName($state, $methodName, $decl, 'method');
+            assertNotGeneratedName($state, $methodName, $decl, 'method');
 
             [$constraintAsts, $bodyTypeAst] = splitTypeAst($method->type);
             $methodUserConstraints = $constraintAsts !== []
@@ -814,31 +816,43 @@ function registerInstanceSchemes(TypeCheckState $state, Ast\AstNode $decl): void
  * also imports `Data.List.length` must call the module's own `length`.
  */
 /**
- * A declaration may not enter the namespace the compiler generates worker names into.
+ * A declaration may not enter a namespace the compiler generates names into.
  *
- * `IR\Callables\workerName()` spells an action entry's worker `__w_<entry>`, and the optimizer reads
- * a call by that spelling where the callee's declaration is not at hand. Refusing a source name in
- * the namespace is what keeps that spelling from having two possible meanings.
+ * Two kinds of spelling are written by the compiler rather than by a program. `IR\Callables\workerName()`
+ * spells an action entry's worker `__w_<entry>`, and lowering spells a record field read `__fieldN`, a
+ * tuple field read `__tuple_fieldN` and a tuple construction `__tupleN`. Each is read back by its
+ * spelling where the declaration that wrote it is not at hand — the optimizer for a worker, the three
+ * emitters for a projection — so a source declaration in one of them would give that spelling two
+ * meanings. Refusing the name here is what keeps the reading exact.
+ *
+ * The projection spellings accepted are exactly `IR\Projection\parse()`'s and `tupleArity()`'s own, the
+ * two functions every reader already asks, so the reservation cannot drift from what is read.
  *
  * A class method is a declaration too: an instance implements it, but the name is written once, in
  * the class, so that is where it is refused.
  */
-function assertNotGeneratedWorkerName(
+function assertNotGeneratedName(
     TypeCheckState $state,
     string $name,
     Ast\AstNode $at,
     string $declarationKind = 'function',
 ): void {
     $prefix = Ast\generatedWorkerPrefix();
-    if (! \str_starts_with($name, $prefix)) {
-        return;
+    if (\str_starts_with($name, $prefix)) {
+        throw typeFail(
+            $state,
+            "{$declarationKind} `{$name}` is in the compiler's generated worker namespace (`{$prefix}`), which no declaration may name",
+            $at,
+        );
     }
 
-    throw typeFail(
-        $state,
-        "{$declarationKind} `{$name}` is in the compiler's generated worker namespace (`{$prefix}`), which no declaration may name",
-        $at,
-    );
+    if (projectionParse($name) !== null || projectionTupleArity($name) !== null) {
+        throw typeFail(
+            $state,
+            "{$declarationKind} `{$name}` is in the compiler's generated projection namespace (`__fieldN`, `__tuple_fieldN`, `__tupleN`), which no declaration may name",
+            $at,
+        );
+    }
 }
 
 function registerInferredFunctionPlaceholder(TypeCheckState $state, Ast\ClassDecl|Ast\FunctionDecl $fn): void
@@ -852,7 +866,7 @@ function registerInferredFunctionPlaceholder(TypeCheckState $state, Ast\ClassDec
     }
 
     if ($fn instanceof Ast\FunctionDecl) {
-        assertNotGeneratedWorkerName($state, $fn->name, $fn);
+        assertNotGeneratedName($state, $fn->name, $fn);
     }
 
     $fnType = freshType($state);
@@ -922,7 +936,7 @@ function registerFunctionScheme(TypeCheckState $state, Ast\FunctionDecl $fn): vo
         );
     }
 
-    assertNotGeneratedWorkerName($state, $fn->name, $fn);
+    assertNotGeneratedName($state, $fn->name, $fn);
 
     if (! Ast\hasDeclaredSignature($fn)) {
         throw typeFail($state, "exported function `{$fn->name}` needs a type signature", $fn);

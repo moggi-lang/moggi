@@ -85,7 +85,8 @@ input files
                                      and the symbol origins the emitters need)
   → per-module pipeline, up to the optimized IR   (memoized in the compile cache)
   → specializeAcrossModules         (one whole-program pass over all modules)
-  → treeShakeModules                (only what `main` reaches, unless --no-strip)
+  → treeShakeModules                (what the entry, the exports and the dictionary
+                                     tables can still reach, unless --no-strip)
   → per-module code generation      (with global evidence and arity maps)
   → packaging
 ```
@@ -96,9 +97,13 @@ Two facts make this layer worth knowing about:
   because a module imported it but because instances are global in Moggi. The
   whole-program pass relies on that to specialize a call the module that
   declared it cannot see.
-* **Only what `main` reaches is kept** in an executable build. A library build
-  (`CompilePurpose::Library`) keeps everything, which is why `moggi compile lib`
-  produces the full standard library.
+* **Only what the program can still call is kept** in an executable build: the
+  entry, the exports, the foreign bindings, and — through them — everything a kept
+  declaration names, plus the methods of an instance table anything still dispatches
+  through. A name that cannot be resolved to exactly one declaration is kept in every
+  module that declares it, because a name the pass cannot place is the one it must not
+  drop. A build with no entry has nothing to root at and keeps everything, which is why
+  `moggi compile lib` produces the full standard library.
 
 ## What the optimizer does
 

@@ -3,6 +3,7 @@
 namespace Moggi\Optimize\Interproc;
 
 use Moggi\IR;
+use Moggi\Optimize\Facts\Facts;
 
 use function Moggi\IR\Callables\captureMeta;
 use function Moggi\IR\Callables\calleeIsRun;
@@ -20,7 +21,6 @@ use function Moggi\Modules\parseResolvedSymbol;
 use function Moggi\Modules\resolvedSymbol;
 use function Moggi\Optimize\CaseFold\isPlausibleConstructorName;
 use function Moggi\Optimize\CaseFold\joinMatchStmtConsumer;
-use function Moggi\Optimize\CaseFold\nullaryCtorCaf;
 use function Moggi\Optimize\Support\indexCapturedFunctions;
 use function Moggi\Optimize\Support\mapStmtNestedBlocks;
 use function Moggi\Optimize\Support\tempUsedInItems;
@@ -90,7 +90,7 @@ function lookupIndexedFunction(array $index, string $callee): ?IR\FunctionDecl
     if (isset($index[$callee])) {
         return $index[$callee];
     }
-    $pe = activePeFusionIndex();
+    $pe = Facts::current()->fusionIndex;
     if (isset($pe[$callee])) {
         return $pe[$callee];
     }
@@ -98,7 +98,7 @@ function lookupIndexedFunction(array $index, string $callee): ?IR\FunctionDecl
     $leaf = specializationLookupNameSafe($callee);
     if ($leaf !== $callee && (
         (isset($index[$leaf]) && $index[$leaf]->kind === IR\FunctionKind::SpecClone)
-        || \str_starts_with($leaf, '__ev_')
+        || Facts::current()->isEvidence($leaf)
     )) {
         if (isset($index[$leaf])) {
             return $index[$leaf];
@@ -111,52 +111,14 @@ function lookupIndexedFunction(array $index, string $callee): ?IR\FunctionDecl
     return null;
 }
 
-/** @var array<string, IR\FunctionDecl> */
-function setActivePeFusionIndex(array $index): void
-{
-    $GLOBALS['__moggi_pe_fusion_index'] = $index;
-}
-
-function clearActivePeFusionIndex(): void
-{
-    unset($GLOBALS['__moggi_pe_fusion_index']);
-}
-
-/** @return array<string, IR\FunctionDecl> */
-function activePeFusionIndex(): array
-{
-    $idx = $GLOBALS['__moggi_pe_fusion_index'] ?? [];
-
-    return \is_array($idx) ? $idx : [];
-}
-
-/** @param array<string, array{captures: list<string>, params: list<string>}> $meta */
-function setActiveInlineCaptureMeta(array $meta): void
-{
-    $GLOBALS['__moggi_inline_capture_meta'] = $meta;
-}
-
-function clearActiveInlineCaptureMeta(): void
-{
-    unset($GLOBALS['__moggi_inline_capture_meta']);
-}
-
-/** @return array<string, array{captures: list<string>, params: list<string>}> */
-function activeInlineCaptureMeta(): array
-{
-    $meta = $GLOBALS['__moggi_inline_capture_meta'] ?? [];
-
-    return \is_array($meta) ? $meta : [];
-}
-
 /** @param list<IR\FunctionDecl> $functions */
 function inlineFunctions(array $functions, string $moduleName = ''): array
 {
-    setActiveInlineCaptureMeta(captureMeta(indexCapturedFunctions($functions)));
+    Facts::current()->publishCaptureMeta(captureMeta(indexCapturedFunctions($functions)));
     try {
         return inlineFunctionsRounds($functions, $moduleName);
     } finally {
-        clearActiveInlineCaptureMeta();
+        Facts::current()->publishCaptureMeta([]);
     }
 }
 
@@ -165,7 +127,7 @@ function inlineFunctionsRounds(array $functions, string $moduleName = ''): array
 {
     for ($round = 0; $round < 4; ++$round) {
         $index = indexFunctions($functions, $moduleName);
-        $recursive = functionNamesInRecursiveSccs($index);
+        $inlineable = inlineableCandidates($functions);
         $next = [];
         $changed = false;
         /** @var array<string, true> $rewrittenNames */
@@ -174,7 +136,7 @@ function inlineFunctionsRounds(array $functions, string $moduleName = ''): array
         foreach ($index as $name => $callee) {
             $boundNames[$name] = functionBoundNames($callee);
         }
-        setActiveInlineTargetBoundNames($boundNames);
+        Facts::current()->publishInlineTargetBound($boundNames);
 
         foreach ($functions as $function) {
             if ($function->ioStraightLine) {
@@ -185,7 +147,7 @@ function inlineFunctionsRounds(array $functions, string $moduleName = ''): array
 
             $peBlocked = [];
             $nextTemp = null;
-            setActiveInlineProtectedNames(\array_fill_keys(
+            Facts::current()->publishInlineProtected(\array_fill_keys(
                 [...$function->params, ...collectLocalsInBlock($function->body)],
                 true,
             ));
@@ -193,13 +155,13 @@ function inlineFunctionsRounds(array $functions, string $moduleName = ''): array
                 $function->body,
                 $function->name,
                 $index,
-                $recursive,
+                $inlineable,
                 0,
                 $peBlocked,
                 $nextTemp,
                 $rewrittenNames,
             );
-            clearActiveInlineProtectedNames();
+            Facts::current()->publishInlineProtected([]);
             $joined = new IR\Block(joinMatchStmtConsumer($inlinedBody->items));
             if ($joined !== $function->body) {
                 $changed = true;
@@ -208,7 +170,7 @@ function inlineFunctionsRounds(array $functions, string $moduleName = ''): array
             $next[] = $function->withBody($joined);
         }
 
-        clearActiveInlineTargetBoundNames();
+        Facts::current()->publishInlineTargetBound([]);
 
         if ($rewrittenNames !== []) {
             $changed = true;
@@ -239,15 +201,20 @@ function inlineFunctionsRounds(array $functions, string $moduleName = ''): array
  * strongly connected component of the direct Call graph.
  *
  * @param array<string, IR\FunctionDecl> $index
+ * @param array<string, array{names: array<string, true>, mentions: array<string, true>, unresolved: bool, throws: bool, loops: bool, dictMethods: array<string, true>}> $bodies the scan the model was built from
  * @return array<string, true>
  */
-function functionNamesInRecursiveSccs(array $index): array
+function functionNamesInRecursiveSccs(array $index, array $bodies): array
 {
     /** @var array<string, list<string>> $edges */
     $edges = [];
     foreach ($index as $name => $function) {
         $callees = [];
-        collectLocalCalleesInBlock($function->body, $index, $callees);
+        foreach (\array_keys($bodies[$function->name]['names']) as $callee) {
+            if (isset($index[$callee])) {
+                $callees[$callee] = true;
+            }
+        }
         $edges[$name] = \array_keys($callees);
     }
 
@@ -322,39 +289,7 @@ function functionNamesInRecursiveSccs(array $index): array
 
 /**
  * @param array<string, IR\FunctionDecl> $index
- * @param array<string, true> $callees
- */
-function collectLocalCalleesInBlock(IR\Block $block, array $index, array &$callees): void
-{
-    foreach ($block->items as $item) {
-        collectLocalCalleesInStmt($item, $index, $callees);
-    }
-}
-
-/**
- * @param array<string, IR\FunctionDecl> $index
- * @param array<string, true> $callees
- */
-function collectLocalCalleesInStmt(IR\Stmt $stmt, array $index, array &$callees): void
-{
-    if ($stmt instanceof IR\Call && isset($index[$stmt->callee])) {
-        $callees[$stmt->callee] = true;
-    }
-
-    if ($stmt instanceof IR\MatchStmt || $stmt instanceof IR\MatchReturn) {
-        foreach ($stmt->arms as $arm) {
-            collectLocalCalleesInBlock($arm->body, $index, $callees);
-        }
-    }
-
-    if ($stmt instanceof IR\Loop) {
-        collectLocalCalleesInBlock($stmt->body, $index, $callees);
-    }
-}
-
-/**
- * @param array<string, IR\FunctionDecl> $index
- * @param array<string, true> $recursive
+ * @param array<string, true> $inlineable
  * @param array<string, true> $peBlocked
  * @param-out int $nextTemp
  */
@@ -362,7 +297,7 @@ function inlineBlock(
     IR\Block $block,
     string $selfName,
     array $index,
-    array $recursive = [],
+    array $inlineable = [],
     int $depth = 0,
     array &$peBlocked = [],
     ?int &$nextTemp = null,
@@ -374,13 +309,13 @@ function inlineBlock(
         $nextTemp = \max($nextTemp, $localMax);
     }
 
-    return new IR\Block(inlineItems($block->items, $selfName, $index, $nextTemp, $recursive, $depth, $peBlocked));
+    return new IR\Block(inlineItems($block->items, $selfName, $index, $nextTemp, $inlineable, $depth, $peBlocked));
 }
 
 /**
  * @param list<IR\Stmt> $items
  * @param array<string, IR\FunctionDecl> $index
- * @param array<string, true> $recursive
+ * @param array<string, true> $inlineable
  * @param array<string, true> $peBlocked
  * @return list<IR\Stmt>
  */
@@ -389,7 +324,7 @@ function inlineItems(
     string $selfName,
     array $index,
     int &$nextTemp,
-    array $recursive = [],
+    array $inlineable = [],
     int $depth = 0,
     array &$peBlocked = [],
 ): array {
@@ -399,7 +334,7 @@ function inlineItems(
         if ($item instanceof IR\Call) {
             $target = lookupIndexedFunction($index, $item->callee);
             if ($target !== null) {
-                $inlined = tryInlineCall($target, $item, $selfName, $index, $nextTemp, $recursive);
+                $inlined = tryInlineCall($target, $item, $selfName, $index, $nextTemp, $inlineable);
                 if ($inlined !== null) {
                     foreach (denseStmtItems($inlined) as $inlinedItem) {
                         $out[] = $inlinedItem;
@@ -410,69 +345,10 @@ function inlineItems(
             }
         }
 
-        $out[] = inlineStmt($item, $selfName, $index, $recursive, $depth, $peBlocked, $nextTemp);
+        $out[] = inlineStmt($item, $selfName, $index, $inlineable, $depth, $peBlocked, $nextTemp);
     }
 
     return denseStmtItems($out);
-}
-
-/**
- * What the inline pass running right now has to avoid rebinding.
- *
- * One pass, deep recursive rewrites, so the context rides along here rather
- * than through every `inlineBlock`/`tryInlineCall` signature.
- */
-function &inlinePassState(): array
-{
-    static $state = ['protected' => [], 'targetBound' => []];
-
-    return $state;
-}
-
-/**
- * Names the function being inlined *into* reads or binds for itself.
- *
- * An inlined body brings its match-arm binders and `let` names into the
- * caller's scope verbatim, so any of them that appear there would take over the
- * caller's value, and the function is left alone.
- *
- * @param array<string, true> $names
- */
-function setActiveInlineProtectedNames(array $names): void
-{
-    inlinePassState()['protected'] = $names;
-}
-
-function clearActiveInlineProtectedNames(): void
-{
-    inlinePassState()['protected'] = [];
-}
-
-/** @return array<string, true> */
-function activeInlineProtectedNames(): array
-{
-    return inlinePassState()['protected'];
-}
-
-/**
- * Bound names per candidate callee, computed once per pass.
- *
- * @param array<string, list<string>> $names
- */
-function setActiveInlineTargetBoundNames(array $names): void
-{
-    inlinePassState()['targetBound'] = $names;
-}
-
-function clearActiveInlineTargetBoundNames(): void
-{
-    inlinePassState()['targetBound'] = [];
-}
-
-/** @return array<string, list<string>> */
-function activeInlineTargetBoundNames(): array
-{
-    return inlinePassState()['targetBound'];
 }
 
 /**
@@ -518,12 +394,12 @@ function functionBoundNames(IR\FunctionDecl $function): array
  */
 function inliningWouldRebindCallerName(IR\FunctionDecl $target): bool
 {
-    $protected = activeInlineProtectedNames();
+    $protected = Facts::current()->inlineProtectedNames;
     if ($protected === []) {
         return false;
     }
 
-    $bound = activeInlineTargetBoundNames()[$target->name] ?? functionBoundNames($target);
+    $bound = Facts::current()->inlineTargetBoundNames[$target->name] ?? functionBoundNames($target);
     foreach ($bound as $name) {
         if (isset($protected[$name])) {
             return true;
@@ -535,19 +411,12 @@ function inliningWouldRebindCallerName(IR\FunctionDecl $target): bool
 
 /**
  * @param array<string, IR\FunctionDecl> $index
+ * @param array<string, true> $inlineable
  * @return list<IR\Stmt>|null
  */
-function tryInlineCall(IR\FunctionDecl $target, IR\Stmt $call, string $selfName, array $index, int &$nextTemp): ?array
+function tryInlineCall(IR\FunctionDecl $target, IR\Stmt $call, string $selfName, array $index, int &$nextTemp, array $inlineable): ?array
 {
-    if ($target->foreign) {
-        return null;
-    }
-
-    if ($target->ioEffect) {
-        return null;
-    }
-
-    if ($target->name === $selfName || ! isInlineCandidate($target)) {
+    if ($target->name === $selfName || ! isset($inlineable[$target->name])) {
         return null;
     }
 
@@ -572,7 +441,7 @@ function tryInlineCall(IR\FunctionDecl $target, IR\Stmt $call, string $selfName,
         }
     }
 
-    if (isMatchWrapperCandidate($target)) {
+    if (isMatchWrapperBody($target)) {
         $inlined = tryInlineMatchWrapper($target, $call, $nextTemp);
         if ($inlined === null) {
             return null;
@@ -629,7 +498,7 @@ function tryInlineCall(IR\FunctionDecl $target, IR\Stmt $call, string $selfName,
 }
 
 /**
- * Bind foreign-call args to temps so substitute cannot duplicate them.
+ * Bind foreign-call args to temps so substitution cannot run one twice.
  *
  * @param list<IR\Operand> $args
  * @return array{prefix: list<IR\Stmt>, args: list<IR\Operand>, nextTemp: int}
@@ -640,13 +509,6 @@ function materializeInlineArgs(array $args, int $nextTemp): array
     $out = [];
     foreach ($args as $arg) {
         if ($arg instanceof IR\ForeignCall) {
-            $dest = $nextTemp++;
-            $prefix[] = new IR\Assign($dest, $arg);
-            $out[] = new IR\Temp($dest);
-
-            continue;
-        }
-        if ($arg instanceof IR\FnRef && operandIsNonDuplicable($arg)) {
             $dest = $nextTemp++;
             $prefix[] = new IR\Assign($dest, $arg);
             $out[] = new IR\Temp($dest);
@@ -820,7 +682,7 @@ function bodyReferencesCapturedLambdas(IR\FunctionDecl $function, array $index):
         static function (IR\Operand $operand): void {
         },
     );
-    $meta = activeInlineCaptureMeta();
+    $meta = Facts::current()->captureMeta;
     foreach (\array_unique($names) as $lambdaName) {
         $leaf = specializationLookupNameSafe($lambdaName);
         $info = $meta[$leaf] ?? null;
@@ -877,20 +739,15 @@ function inlineExprAsItems(IR\Operand $expr, int $dest): array
 }
 
 /**
- * Host allocators / foreign seeds must not be copied into multiple use sites.
- * Only nullary FnRefs/calls rematerialize on emit (arity-0 → static call).
- * Higher-arity FnRefs are function values and are safe to duplicate.
+ * Whether copying this operand into a second use would run something twice.
+ *
+ * Operand position holds values; the one computation the canonical IR still admits there is a foreign
+ * call, which executes on every copy. Everything else is a value the emitter re-materializes from the
+ * same inputs, so duplicating it re-computes a value rather than performing work.
  */
 function operandIsNonDuplicable(IR\Operand $op): bool
 {
-    if ($op instanceof IR\ForeignCall) {
-        return true;
-    }
-    if ($op instanceof IR\FnRef) {
-        return nullaryFnNameIsNonDuplicableSeed($op->name);
-    }
-
-    return false;
+    return $op instanceof IR\ForeignCall;
 }
 
 /** True when `$op` mentions any Temp (not safe to hoist into a specialized clone). */
@@ -904,60 +761,6 @@ function operandHasFreeTemps(IR\Operand $op): bool
     });
 
     return $found;
-}
-
-function nullaryFnNameIsNonDuplicableSeed(string $name): bool
-{
-    $leaf = specializationLookupNameSafe($name);
-    if (isPlausibleConstructorName($leaf)) {
-        return false;
-    }
-    if (nullaryCtorCaf($name) !== null) {
-        return false;
-    }
-    if (\str_starts_with($leaf, '__ev_')) {
-        return false;
-    }
-    $arity = activeFnArity($name);
-    if ($arity === null) {
-        $fn = lookupIndexedFunction(activePeFusionIndex(), $name);
-        if ($fn !== null) {
-            $arity = \count($fn->params);
-        }
-    }
-    if ($arity === null) {
-        return true;
-    }
-
-    return $arity === 0;
-}
-
-/** @param array<string, int> $arity */
-function setActiveFnArity(array $arity): void
-{
-    $GLOBALS['__moggi_active_fn_arity'] = $arity;
-}
-
-function clearActiveFnArity(): void
-{
-    unset($GLOBALS['__moggi_active_fn_arity']);
-}
-
-function activeFnArity(string $name): ?int
-{
-    $map = $GLOBALS['__moggi_active_fn_arity'] ?? null;
-    if (! \is_array($map)) {
-        return null;
-    }
-    if (isset($map[$name]) && \is_int($map[$name])) {
-        return $map[$name];
-    }
-    $leaf = specializationLookupNameSafe($name);
-    if ($leaf !== $name && isset($map[$leaf]) && \is_int($map[$leaf])) {
-        return $map[$leaf];
-    }
-
-    return null;
 }
 
 /** @param list<IR\Stmt> $items */
@@ -1098,30 +901,30 @@ function foldListIntrinsicExpr(string $name, array $args): ?IR\Operand
     return null;
 }
 
-function isInlineCandidate(IR\FunctionDecl $function): bool
+/**
+ * Whether this callee may be copied into a caller at all.
+ *
+ * Replacing one call with one body executes the same work once, at the same place, so a body's own
+ * effects say nothing about whether it may be inlined -- what would duplicate is an *argument*
+ * substituted into several parameter uses, which is why {@see materializeInlineArgs()} binds the one
+ * operand kind that executes and `partial`/captured-lambda arguments are refused outright. What is
+ * decided here is shape: a loop, a scoped return or a dictionary call has its own legality rules
+ * elsewhere, and splicing one into a caller's block would bypass them.
+ */
+function inlineIsLegal(IR\FunctionDecl $function): bool
 {
-    if ($function->foreign) {
+    if ($function->foreign || $function->kind->takesCaptures()) {
         return false;
     }
 
-    if ($function->ioEffect) {
-        return false;
-    }
+    return isMatchWrapperBody($function) || inlineBodyIsSpliceable($function);
+}
 
-    if ($function->kind->takesCaptures()) {
-        return false;
-    }
-
-    if (isMatchWrapperCandidate($function)) {
-        return true;
-    }
-
-    $items = $function->body->items;
-    if ($items === [] || \count($items) > 4) {
-        return false;
-    }
-
-    $last = $items[\count($items) - 1];
+/** A straight-line body ending in its single `ret`. */
+function inlineBodyIsSpliceable(IR\FunctionDecl $function): bool
+{
+    $items = denseStmtItems($function->body->items);
+    $last = $items[\count($items) - 1] ?? null;
     if (! ($last instanceof IR\Ret)) {
         return false;
     }
@@ -1155,26 +958,56 @@ function isInlineCandidate(IR\FunctionDecl $function): bool
 }
 
 /**
- * Single MatchReturn body with shallow arms — typical ADT converters (from/to).
- * Kept separate from general inlining so we do not re-open Match+DictCall blow-up.
+ * Whether copying this body pays for itself.
+ *
+ * A budget, and only a budget: the answer may move without changing what the program computes, so a
+ * later tuning change edits this function and nothing else.
  */
-function isMatchWrapperCandidate(IR\FunctionDecl $function): bool
+function inlineIsWorthwhile(IR\FunctionDecl $function): bool
+{
+    if (isMatchWrapperBody($function)) {
+        return matchWrapperIsWithinBudget($function);
+    }
+
+    return \count(denseStmtItems($function->body->items)) <= 4;
+}
+
+/**
+ * A single MatchReturn body whose arms hold no nested control -- a typical ADT converter (from/to).
+ * Spliced as a whole match, so the arms have to be straight-line for the caller's block to stay legal.
+ */
+function isMatchWrapperBody(IR\FunctionDecl $function): bool
 {
     if ($function->foreign || $function->ioEffect || $function->kind->takesCaptures()) {
         return false;
     }
 
     $items = denseStmtItems($function->body->items);
-    if (\count($items) !== 1 || ! ($items[0] instanceof IR\MatchReturn)) {
-        return false;
-    }
-
-    $match = $items[0];
-    if (\count($match->arms) > 4) {
+    $match = $items[0] ?? null;
+    if (\count($items) !== 1 || ! ($match instanceof IR\MatchReturn)) {
         return false;
     }
 
     if (functionBodyCallsSelf($items, $function->name)) {
+        return false;
+    }
+
+    foreach ($match->arms as $arm) {
+        foreach (denseStmtItems($arm->body->items) as $item) {
+            if (\in_array($item::class, [IR\MatchStmt::class, IR\MatchReturn::class, IR\Loop::class, IR\TailRecall::class], true)) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+/** Arm count and arm size: a converter's match is copied until it costs more than the call. */
+function matchWrapperIsWithinBudget(IR\FunctionDecl $function): bool
+{
+    $match = denseStmtItems($function->body->items)[0] ?? null;
+    if (! ($match instanceof IR\MatchReturn) || \count($match->arms) > 4) {
         return false;
     }
 
@@ -1184,9 +1017,6 @@ function isMatchWrapperCandidate(IR\FunctionDecl $function): bool
             return false;
         }
         foreach ($armItems as $item) {
-            if (\in_array($item::class, [IR\MatchStmt::class, IR\MatchReturn::class, IR\Loop::class, IR\TailRecall::class], true)) {
-                return false;
-            }
             if (estimateStmtExprSize($item) > 64) {
                 return false;
             }
@@ -1194,6 +1024,27 @@ function isMatchWrapperCandidate(IR\FunctionDecl $function): bool
     }
 
     return true;
+}
+
+/**
+ * The callees this round may copy, and nothing else.
+ *
+ * Both halves of the decision are taken once per callee, because neither depends on which call reaches
+ * it: legality is a property of the body's shape, profitability a budget on its size.
+ *
+ * @param list<IR\FunctionDecl> $functions
+ * @return array<string, true>
+ */
+function inlineableCandidates(array $functions): array
+{
+    $inlineable = [];
+    foreach ($functions as $function) {
+        if (inlineIsLegal($function) && inlineIsWorthwhile($function)) {
+            $inlineable[$function->name] = true;
+        }
+    }
+
+    return $inlineable;
 }
 
 /** @param list<IR\Stmt> $items */
@@ -1719,26 +1570,26 @@ function substituteLocal(IR\Local $local, array $params, array $args, array $bou
 
 /**
  * @param array<string, IR\FunctionDecl> $index
- * @param array<string, true> $recursive
+ * @param array<string, true> $inlineable
  * @param array<string, true> $peBlocked
  */
 function inlineStmt(
     IR\Stmt $stmt,
     string $selfName,
     array $index,
-    array $recursive = [],
+    array $inlineable = [],
     int $depth = 0,
     array &$peBlocked = [],
     ?int &$nextTemp = null,
 ): IR\Stmt {
     return mapStmtNestedBlocks(
         $stmt,
-        static function (IR\Block $block) use ($selfName, $index, $recursive, $depth, &$peBlocked, &$nextTemp): IR\Block {
+        static function (IR\Block $block) use ($selfName, $index, $inlineable, $depth, &$peBlocked, &$nextTemp): IR\Block {
             return inlineBlock(
                 $block,
                 $selfName,
                 $index,
-                $recursive,
+                $inlineable,
                 $depth + 1,
                 $peBlocked,
                 $nextTemp,

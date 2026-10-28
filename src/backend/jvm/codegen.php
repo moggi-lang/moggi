@@ -26,6 +26,8 @@ use function Moggi\Backend\Meta\tempReadsForFunction;
 use function Moggi\Debug\normalizeDisplayPath;
 use function Moggi\Debug\symbolId;
 use function Moggi\IR\Callables\captureMeta;
+use function Moggi\IR\Projection\parse as projectionParse;
+use function Moggi\IR\Projection\tupleArity as projectionTupleArity;
 use function Moggi\IR\Visit\collectLocalsInBlock;
 use function Moggi\IR\Visit\collectLocalsInOperand;
 use function Moggi\IR\Visit\stmtNestedBlocks;
@@ -154,7 +156,7 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
     }
 
     if ($module->entry !== null && $module->entry->kind === IR\EntryPointKind::Main) {
-        emitJvmMain(
+        emitMain(
             $b,
             $internal,
             symbolName($module->entry->name),
@@ -237,7 +239,7 @@ function emitFunction(
             }
             $env->c->noteFrame($env->frameLocals($arity));
             $env->c->aconst_null();
-            emitJvmFunctionReturn($env);
+            emitFunctionReturn($env);
         }
     );
 }
@@ -357,7 +359,7 @@ function entryReturnsAction(IR\Module $module): bool
  * Straight-line foreign IO may already have run eagerly (returns Unit/null);
  * in that case there is nothing left to execute.
  */
-function emitJvmMain(ClassBuilder $b, string $owner, string $mainFn, int $arity, bool $returnsAction): void
+function emitMain(ClassBuilder $b, string $owner, string $mainFn, int $arity, bool $returnsAction): void
 {
     $b->addMethod(
         'main',
@@ -678,7 +680,7 @@ function emitBlock(EmitEnv $env, IR\Block $block): void
         if ($call !== null) {
             noteJvmLoc($env, $call->srcLoc);
             emitCallValue($env, $call);
-            emitJvmFunctionReturn($env);
+            emitFunctionReturn($env);
             ++$i;
 
             continue;
@@ -726,7 +728,7 @@ function emitStmt(EmitEnv $env, IR\Stmt $stmt): void
         case IR\Ret::class:
             /** @var IR\Ret $stmt */
             emitOperand($env, $stmt->value);
-            emitJvmFunctionReturn($env);
+            emitFunctionReturn($env);
 
             return;
 
@@ -792,7 +794,7 @@ function emitStmt(EmitEnv $env, IR\Stmt $stmt): void
         case IR\IoThrow::class:
             /** @var IR\IoThrow $stmt */
             emitOperand($env, $stmt->exception);
-            emitJvmPushSrcLoc($env, $stmt->srcLoc);
+            emitPushSrcLoc($env, $stmt->srcLoc);
             $env->c->invokestatic(
                 $env->cp->methodRef('moggi/rt/RT', 'throwSomeException', '(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;'),
                 2,
@@ -1136,7 +1138,7 @@ function emitIoAssignAction(EmitEnv $env, IR\IoAssignAction $stmt): void
 /** @param list<IR\Operand> $args */
 function emitStaticCall(EmitEnv $env, string $name, array $args, ?string $ownerModule = null): void
 {
-    if (emitJvmBuiltinCall($env, $name, $args)) {
+    if (emitBuiltinCall($env, $name, $args)) {
         return;
     }
     $callArgs = jvmCallArgs($env, $name, $args);
@@ -1229,32 +1231,30 @@ function emitPartialValue(EmitEnv $env, string $fn, int $arity, array $args): vo
 }
 
 /** @param list<IR\Operand> $args */
-function emitJvmBuiltinCall(EmitEnv $env, string $name, array $args): bool
+function emitBuiltinCall(EmitEnv $env, string $name, array $args): bool
 {
-    if (\str_starts_with($name, '__tuple_field')) {
+    $projection = projectionParse($name);
+    if ($projection !== null) {
         emitOperand($env, $args[0]);
-        $env->c->checkcast($env->cp->class_('[Ljava/lang/Object;'));
-        $env->c->iconst((int) \substr($name, \strlen('__tuple_field')));
+        if ($projection['tuple']) {
+            $env->c->checkcast($env->cp->class_('[Ljava/lang/Object;'));
+        } else {
+            $env->c->checkcast($env->cp->class_('moggi/rt/Con'));
+            $env->c->getfield($env->cp->fieldRef('moggi/rt/Con', 'fields', '[Ljava/lang/Object;'));
+        }
+        $env->c->iconst($projection['index']);
         $env->c->aaload();
 
         return true;
     }
-    if (\str_starts_with($name, '__tuple')) {
-        if ($args === []) {
+    $tupleArity = projectionTupleArity($name);
+    if ($tupleArity !== null) {
+        if ($tupleArity === 0) {
             $env->c->aconst_null();
 
             return true;
         }
         pushObjectArray($env, $args);
-
-        return true;
-    }
-    if (\str_starts_with($name, '__field')) {
-        emitOperand($env, $args[0]);
-        $env->c->checkcast($env->cp->class_('moggi/rt/Con'));
-        $env->c->getfield($env->cp->fieldRef('moggi/rt/Con', 'fields', '[Ljava/lang/Object;'));
-        $env->c->iconst((int) \substr($name, \strlen('__field')));
-        $env->c->aaload();
 
         return true;
     }
@@ -1561,7 +1561,7 @@ function emitOrderingTagNe(EmitEnv $env, IR\Operand $ord, string $tag): void
     $env->c->invokestatic($env->cp->methodRef('java/lang/Boolean', 'valueOf', '(Z)Ljava/lang/Boolean;'), 1, true);
 }
 
-function emitJvmBitReverse(EmitEnv $env, IR\Operand $arg, int $bits, int $finalMask): void
+function emitBitReverse(EmitEnv $env, IR\Operand $arg, int $bits, int $finalMask): void
 {
     emitOperand($env, $arg);
     unboxInt($env);
@@ -2569,19 +2569,19 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
 
             return;
         case 'bitReverse8#':
-            emitJvmBitReverse($env, $args[0], 8, 255);
+            emitBitReverse($env, $args[0], 8, 255);
 
             return;
         case 'bitReverse16#':
-            emitJvmBitReverse($env, $args[0], 16, 65535);
+            emitBitReverse($env, $args[0], 16, 65535);
 
             return;
         case 'bitReverse32#':
-            emitJvmBitReverse($env, $args[0], 32, 4294967295);
+            emitBitReverse($env, $args[0], 32, 4294967295);
 
             return;
         case 'bitReverse64#':
-            emitJvmBitReverse($env, $args[0], 64, -1);
+            emitBitReverse($env, $args[0], 64, -1);
 
             return;
         case 'listCons#':
@@ -2761,7 +2761,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
         case 'integerToNatural#':
             emitOperand($env, $args[0]);
             $env->c->checkcast($env->cp->class_('java/math/BigInteger'));
-            emitJvmPushSrcLoc($env, $op->srcLoc);
+            emitPushSrcLoc($env, $op->srcLoc);
             $env->c->invokestatic(
                 $env->cp->methodRef(
                     'moggi/rt/RT',
@@ -2776,7 +2776,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
         case 'error#':
             emitOperand($env, $args[0]);
             $env->c->checkcast($env->cp->class_('java/lang/String'));
-            emitJvmPushSrcLoc($env, $op->srcLoc);
+            emitPushSrcLoc($env, $op->srcLoc);
             $env->c->invokestatic(
                 $env->cp->methodRef('moggi/rt/RT', 'throwErrorCall', '(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Object;'),
                 2,
@@ -2810,7 +2810,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             return;
         case 'exceptionThrow#':
             emitOperand($env, $args[0]);
-            emitJvmPushSrcLoc($env, $op->srcLoc);
+            emitPushSrcLoc($env, $op->srcLoc);
             $env->c->invokestatic(
                 $env->cp->methodRef('moggi/rt/RT', 'throwSomeException', '(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;'),
                 2,
@@ -2889,7 +2889,7 @@ function pushObjectArray(EmitEnv $env, array $args): void
  * every value as an object ref, so the cast is one `checkcast` and the target
  * comes from the descriptor the signature already inferred.
  */
-function emitJvmForeignIntrinsic(EmitEnv $env, IR\ForeignCall $op, string $member, string $desc): void
+function emitForeignIntrinsic(EmitEnv $env, IR\ForeignCall $op, string $member, string $desc): void
 {
     if ($member !== '__cast') {
         throw new \RuntimeException("JVM foreign `{$op->path}`: unknown intrinsic `{$member}`");
@@ -2946,7 +2946,7 @@ function emitForeign(EmitEnv $env, IR\ForeignCall $op): void
     }
 
     if ($resolved['dispatch'] === 'intrinsic') {
-        emitJvmForeignIntrinsic($env, $op, $resolved['hostMember'], $desc);
+        emitForeignIntrinsic($env, $op, $resolved['hostMember'], $desc);
 
         return;
     }
@@ -2981,7 +2981,7 @@ function emitForeign(EmitEnv $env, IR\ForeignCall $op): void
         $last = \count($paramArgs) - 1;
         foreach ($paramArgs as $i => $arg) {
             if ($i === $last) {
-                emitJvmPackVarargs($env, $arg, (string) \end($argKinds));
+                emitPackVarargs($env, $arg, (string) \end($argKinds));
 
                 continue;
             }
@@ -3121,7 +3121,7 @@ function emitJvmEmptyArray(EmitEnv $env, string $kind, string $path): void
  * `MList` spine: count, allocate, fill). Elements unbox exactly like scalar
  * foreign arguments of the component type.
  */
-function emitJvmPackVarargs(EmitEnv $env, IR\Operand $list, string $arrayKind): void
+function emitPackVarargs(EmitEnv $env, IR\Operand $list, string $arrayKind): void
 {
     $component = \substr($arrayKind, 1);
     $cursor = $env->freshLocal();
@@ -3435,10 +3435,10 @@ function emitMatchCommon(EmitEnv $env, IR\Operand $scrutinee, array $arms, ?int 
         return;
     }
     $env->c->aconst_null();
-    emitJvmFunctionReturn($env);
+    emitFunctionReturn($env);
 }
 
-function emitJvmPushSrcLoc(EmitEnv $env, ?IR\SrcLoc $loc): void
+function emitPushSrcLoc(EmitEnv $env, ?IR\SrcLoc $loc): void
 {
     if ($loc === null) {
         $env->c->aconst_null();
@@ -3473,7 +3473,7 @@ function emitJvmPushSrcLoc(EmitEnv $env, ?IR\SrcLoc $loc): void
     );
 }
 
-function emitJvmFunctionReturn(EmitEnv $env): void
+function emitFunctionReturn(EmitEnv $env): void
 {
     $env->c->areturn();
 }

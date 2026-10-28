@@ -24,7 +24,9 @@ source
   -> Codegen\emit            (bootstrap only for EntryPointKind::Main)
 ```
 
-`CompilePurpose` controls entry validation and (with strip) tree-shake roots.
+`CompilePurpose` controls entry validation and whether a module carries an `EntryPoint` at
+all; stripping roots only at an entry (plus exports, foreign bindings and the dictionary
+methods still dispatched through), so a library build keeps every declaration.
 `EntryPointKind` is `Main` (application) or `ReplExpression` (callable eval thunk,
 no auto-run bootstrap).
 
@@ -170,7 +172,8 @@ the pass explicitly documents why it needs semantic metadata.
 ### Code Generation
 
 Each target implements the `Backend` interface (`src/backend/Backend.php`) and
-keeps the same file set, so a concern has the same home on every backend:
+keeps the same file set for the target-independent roles, so those concerns have the
+same home on every backend:
 
 | File | Owner of |
 | --- | --- |
@@ -198,7 +201,12 @@ consumes already-resolved IR plus backend import metadata.
 Target-specific files keep their own names where the toolchain differs
 (`jvm/classfile.php`, `dotnet/il.php` + `dotnet/il_size.php`,
 `php/emit_expr.php` + `php/emit_match.php`, `php/intrinsics.php` +
-`php/io.php`, `php/native.php`). The PHP backend ships a hand-written
+`php/io.php`, `php/native.php`); the four php emitter files are php's
+expression-valued split of what jvm and .NET keep inside `codegen.php`. Emitter
+functions are named for their job in all three backends (`emitIntrinsic`,
+`emitFunctionReturn`, `emitTopLevelFnValue`, `emitPartialValue`, `emitMain`,
+`emitEvidence`, `emitPatternTest`, …); what differs is the value model, not the
+name. The PHP backend ships a hand-written
 `php/runtime.php`, copied into every build as `_runtime.php` at the root of the
 generated tree;
 the JVM and .NET backends generate their runtime in `runtime_abi.php`.

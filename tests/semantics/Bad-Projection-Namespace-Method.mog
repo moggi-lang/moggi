@@ -1,0 +1,12 @@
+-- Fail: a class method is a declaration too, and `__tuple_fieldN` is the compiler's generated tuple
+-- field spelling. Left unchecked it reached lowering and was emitted as a tuple field read.
+module Bad.Projection.Namespace.Method
+
+class C a where
+  __tuple_field0 :: a -> String
+
+instance C Int where
+  __tuple_field0 n = show n
+
+main :: IO ()
+main = pure ()

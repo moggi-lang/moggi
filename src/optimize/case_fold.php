@@ -3,13 +3,14 @@
 namespace Moggi\Optimize\CaseFold;
 
 use Moggi\IR;
+use Moggi\Optimize\Facts\Facts;
 
+use function Moggi\IR\Projection\index as projectionIndex;
 use function Moggi\IR\Visit\mapGuards;
 use function Moggi\IR\Visit\mapOperandChildren;
 use function Moggi\IR\Visit\stmtDirectOperands;
 use function Moggi\IR\Visit\stmtNestedBlocks;
 use function Moggi\Modules\parseResolvedSymbol;
-use function Moggi\Optimize\GlobalPass\fieldExtractIndex;
 use function Moggi\Optimize\Interproc\denseStmtItems;
 use function Moggi\Optimize\Interproc\maxTempInItems;
 use function Moggi\Optimize\Interproc\operandIsNonDuplicable;
@@ -1285,10 +1286,13 @@ function foldFieldExtractsInItems(array $items, int $depth = 0): array
             continue;
         }
 
-        if ($item instanceof IR\Call && isFieldExtractCallee($item->callee) && \count($item->args) === 1) {
+        $fieldIndex = $item instanceof IR\Call && \count($item->args) === 1
+            ? projectionIndex($item->callee)
+            : null;
+        if ($fieldIndex !== null) {
             $scrut = resolveOperand($item->args[0], $ctors, $aliases);
             if ($scrut instanceof CtorTree) {
-                $idx = fieldExtractIndex($item->callee);
+                $idx = $fieldIndex;
                 if (isset($scrut->args[$idx])) {
                     $from = \count($out);
                     $out[] = new IR\Assign($item->dest, materializeOperand($scrut->args[$idx], $out, $nextTemp));
@@ -1316,10 +1320,7 @@ function foldFieldExtractsInItems(array $items, int $depth = 0): array
 function foldNestedFieldExtractsInStmt(IR\Stmt $stmt, array $ctors, array $aliases): IR\Stmt
 {
     if ($stmt instanceof IR\Call && \count($stmt->args) === 1) {
-        $idx = fieldAccessorCafIndex($stmt->callee);
-        if ($idx === null && isFieldExtractCallee($stmt->callee)) {
-            $idx = fieldExtractIndex($stmt->callee);
-        }
+        $idx = projectionIndex($stmt->callee);
         if ($idx !== null) {
             $scrut = resolveOperand(
                 foldNestedFieldExtractOperand($stmt->args[0], $ctors, $aliases),
@@ -1401,7 +1402,7 @@ function recordCtorDef(IR\Stmt $stmt, array &$ctors, array &$aliases): void
 
             return;
         }
-        if (isFieldExtractCallee($stmt->callee) || ! isPlausibleConstructorName($stmt->callee)) {
+        if (projectionIndex($stmt->callee) !== null || ! isPlausibleConstructorName($stmt->callee)) {
             return;
         }
         $ctors[$stmt->dest] = new CtorTree(
@@ -1495,7 +1496,7 @@ function resolveOperand(IR\Operand $operand, array $ctors, array $aliases, array
     }
 
     if ($operand instanceof IR\FnRef) {
-        $caf = nullaryCtorCaf($operand->name);
+        $caf = Facts::current()->nullaryCtor($operand->name);
         if ($caf !== null) {
             return $caf;
         }
@@ -1524,45 +1525,6 @@ function resolveOperand(IR\Operand $operand, array $ctors, array $aliases, array
     return $operand;
 }
 
-/** @param array<string, CtorTree> $cafs */
-function setNullaryCtorCafs(array $cafs): void
-{
-    $GLOBALS['__moggi_nullary_ctor_cafs'] = $cafs;
-}
-
-function clearNullaryCtorCafs(): void
-{
-    unset($GLOBALS['__moggi_nullary_ctor_cafs'], $GLOBALS['__moggi_field_accessor_cafs']);
-
-}
-
-function nullaryCtorCaf(string $name): ?CtorTree
-{
-    $cafs = $GLOBALS['__moggi_nullary_ctor_cafs'] ?? null;
-    if (! \is_array($cafs)) {
-        return null;
-    }
-    $tree = $cafs[$name] ?? null;
-
-    return $tree instanceof CtorTree ? $tree : null;
-}
-
-/** @param array<string, int> $accessors leaf/qualified name → __field index */
-function setFieldAccessorCafs(array $accessors): void
-{
-    $GLOBALS['__moggi_field_accessor_cafs'] = $accessors;
-}
-
-function fieldAccessorCafIndex(string $name): ?int
-{
-    $accessors = $GLOBALS['__moggi_field_accessor_cafs'] ?? null;
-    if (! \is_array($accessors)) {
-        return null;
-    }
-    $idx = $accessors[$name] ?? null;
-
-    return \is_int($idx) ? $idx : null;
-}
 
 /**
  * A tree as a value, when it already is one.
@@ -1676,12 +1638,6 @@ function tempUsedInStmt(IR\Stmt $stmt, int $tempId): bool
     );
 }
 
-function isFieldExtractCallee(string $callee): bool
-{
-    $leaf = constructorLeafName($callee);
-
-    return \str_starts_with($leaf, '__field') || \str_starts_with($leaf, '__tuple_field');
-}
 
 function tempUsedInOperand(IR\Operand $operand, int $tempId): bool
 {

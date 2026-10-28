@@ -1,0 +1,8 @@
+module
+  function id(v)
+      ret v
+  function use(n)
+      t0 = call id(partial λ0(n))
+      ret t0
+  function λ0(x)
+      ret intrinsic intAdd#(x, n)

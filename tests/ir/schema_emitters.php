@@ -7,9 +7,9 @@
  * did would fail codegen, so every walker, dump, validator and mapping arm it has is unreachable and
  * any change to those arms is compared by nothing. Two kinds have been removed from this schema for
  * that reason (`Binop`, whose arms three backends kept for a shape no lowering ever built, and
- * `IoAction`, which no backend named at all). This is the mechanical half of that rule — the
- * producer side is measured by `probes/phase-10/kind-producers.php`, because deciding whether a
- * construction site builds a shape or rebuilds one needs the pass's intent, not its text.
+ * `IoAction`, which no backend named at all). This is the mechanical half of that rule; whether a
+ * construction site builds a shape or rebuilds one is not decidable from its text, so the
+ * producer side stays a reading of the pass that owns it.
  *
  * Coverage is the three emitters; patterns are excluded because they are handled through the
  * pattern surface (`emitPatternTest`, `emitPhpMatchKey`) rather than per class.

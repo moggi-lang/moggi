@@ -33,6 +33,8 @@ use function Moggi\Backend\Meta\tempReadsForFunction;
 use function Moggi\Debug\normalizeDisplayPath;
 use function Moggi\Debug\symbolId;
 use function Moggi\IR\Callables\captureMeta;
+use function Moggi\IR\Projection\parse as projectionParse;
+use function Moggi\IR\Projection\tupleArity as projectionTupleArity;
 use function Moggi\IR\Visit\collectLocalsInBlock;
 use function Moggi\IR\Visit\collectLocalsInOperand;
 use function Moggi\IR\Visit\stmtNestedBlocks;
@@ -160,7 +162,7 @@ function emitModule(IR\Module $module, string $sourcePath, array $options = []):
     }
 
     if ($module->entry !== null && $module->entry->kind === IR\EntryPointKind::Main) {
-        emitDotNetMain(
+        emitMain(
             $classBuilder,
             $owner,
             symbolName($module->entry->name),
@@ -537,7 +539,7 @@ function emitFunction(
         throw new \RuntimeException($e->getMessage() . " while emitting `{$fn->name}`", 0, $e);
     }
     $m->emit('ldnull');
-    emitDotNetFunctionReturn($env);
+    emitFunctionReturn($env);
 
     $b->addMethod($m->render($name, \array_fill(0, $arity, 'object'), 'object', false, $sourceMap, $owner));
 }
@@ -637,7 +639,7 @@ function entryReturnsAction(IR\Module $module): bool
  * Straight-line foreign IO may already have run eagerly (returns Unit/null);
  * in that case there is nothing left to execute.
  */
-function emitDotNetMain(ClassIlBuilder $b, string $owner, string $mainSym, int $arity, bool $returnsAction): void
+function emitMain(ClassIlBuilder $b, string $owner, string $mainSym, int $arity, bool $returnsAction): void
 {
     $m = new MethodIl();
     if ($arity !== 0) {
@@ -771,7 +773,7 @@ function emitBlock(EmitEnv $env, IR\Block $block): void
         if ($call !== null) {
             $env->m->emitLine($call->srcLoc);
             emitCallValue($env, $call);
-            emitDotNetFunctionReturn($env);
+            emitFunctionReturn($env);
             ++$i;
 
             continue;
@@ -812,7 +814,7 @@ function emitStmt(EmitEnv $env, IR\Stmt $stmt): void
         case IR\Ret::class:
             /** @var IR\Ret $stmt */
             emitOperand($env, $stmt->value);
-            emitDotNetFunctionReturn($env);
+            emitFunctionReturn($env);
 
             return;
 
@@ -878,7 +880,7 @@ function emitStmt(EmitEnv $env, IR\Stmt $stmt): void
         case IR\IoThrow::class:
             /** @var IR\IoThrow $stmt */
             emitOperand($env, $stmt->exception);
-            emitDotNetPushSrcLoc($env, $stmt->srcLoc);
+            emitPushSrcLoc($env, $stmt->srcLoc);
             $env->m->emit('call object Moggi.Rt.RT::ThrowSomeException(object, object[])');
             if ($stmt->dest !== null) {
                 $env->m->store($env->localSlot('t' . $stmt->dest));
@@ -1254,30 +1256,28 @@ function emitPartialValue(EmitEnv $env, string $fn, int $arity, array $args): vo
 /** @param list<IR\Operand> $args */
 function emitBuiltinCall(EmitEnv $env, string $name, array $args): bool
 {
-    if (\str_starts_with($name, '__tuple_field')) {
+    $projection = projectionParse($name);
+    if ($projection !== null) {
         emitOperand($env, $args[0]);
-        $env->m->emit('castclass object[]');
-        $env->m->emit('ldc.i4 ' . (int) \substr($name, \strlen('__tuple_field')));
+        if (! $projection['tuple']) {
+            $env->m->emit('castclass Moggi.Rt.Con');
+            $env->m->emit('ldfld object[] Moggi.Rt.Con::fields');
+        } else {
+            $env->m->emit('castclass object[]');
+        }
+        $env->m->emit('ldc.i4 ' . $projection['index']);
         $env->m->emit('ldelem.ref');
 
         return true;
     }
-    if (\str_starts_with($name, '__tuple')) {
-        if ($args === []) {
+    $tupleArity = projectionTupleArity($name);
+    if ($tupleArity !== null) {
+        if ($tupleArity === 0) {
             $env->m->emit('ldnull');
 
             return true;
         }
         pushObjectArray($env, $args);
-
-        return true;
-    }
-    if (\str_starts_with($name, '__field')) {
-        emitOperand($env, $args[0]);
-        $env->m->emit('castclass Moggi.Rt.Con');
-        $env->m->emit('ldfld object[] Moggi.Rt.Con::fields');
-        $env->m->emit('ldc.i4 ' . (int) \substr($name, \strlen('__field')));
-        $env->m->emit('ldelem.ref');
 
         return true;
     }
@@ -1330,7 +1330,7 @@ function emitDoubleBinopToStack(EmitEnv $env, string $op, IR\Operand $left, IR\O
 }
 
 /** One-argument `System.Math` call on a boxed `Double` (Sqrt, Exp, Sin, ...). */
-function emitDotNetDoubleUnaryMath(EmitEnv $env, string $method, IR\Operand $arg): void
+function emitDoubleUnaryMath(EmitEnv $env, string $method, IR\Operand $arg): void
 {
     emitOperand($env, $arg);
     unboxDouble($env);
@@ -1733,7 +1733,7 @@ function emitForeign(EmitEnv $env, IR\ForeignCall $op): void
         $last = $nProvided - 1;
         foreach ($paramArgs as $i => $arg) {
             if ($i === $last) {
-                emitDotNetPackVarargs($env, $arg, (string) \end($sig['params']));
+                emitPackVarargs($env, $arg, (string) \end($sig['params']));
 
                 continue;
             }
@@ -1967,7 +1967,7 @@ function emitDotNetEmptyParamsArray(EmitEnv $env, string $kind, string $path): v
  * {@see unboxForeignArg}). An empty list is null, and `castclass` passes
  * null through — so `[]` packs to an empty array, not a null one.
  */
-function emitDotNetPackVarargs(EmitEnv $env, IR\Operand $arg, string $arrayType): void
+function emitPackVarargs(EmitEnv $env, IR\Operand $arg, string $arrayType): void
 {
     $elem = \substr($arrayType, 0, -2);
     emitOperand($env, $arg);
@@ -2202,7 +2202,7 @@ function boxForeignReturn(EmitEnv $env, string $retOrFieldDesc): void
 }
 // --- Intrinsics (full allowlist for platform_* and scalar ops) ----------------
 
-function emitDotNetBitReverse(EmitEnv $env, IR\Operand $arg, int $bits, int $finalMask): void
+function emitBitReverse(EmitEnv $env, IR\Operand $arg, int $bits, int $finalMask): void
 {
     emitOperand($env, $arg);
     $env->m->emit('call int64 Moggi.Rt.RT::UnboxInt(object)');
@@ -2312,43 +2312,43 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
 
             return;
         case 'doubleExp#':
-            emitDotNetDoubleUnaryMath($env, 'Exp', $args[0]);
+            emitDoubleUnaryMath($env, 'Exp', $args[0]);
 
             return;
         case 'doubleLog#':
-            emitDotNetDoubleUnaryMath($env, 'Log', $args[0]);
+            emitDoubleUnaryMath($env, 'Log', $args[0]);
 
             return;
         case 'doubleSqrt#':
-            emitDotNetDoubleUnaryMath($env, 'Sqrt', $args[0]);
+            emitDoubleUnaryMath($env, 'Sqrt', $args[0]);
 
             return;
         case 'doubleSin#':
-            emitDotNetDoubleUnaryMath($env, 'Sin', $args[0]);
+            emitDoubleUnaryMath($env, 'Sin', $args[0]);
 
             return;
         case 'doubleCos#':
-            emitDotNetDoubleUnaryMath($env, 'Cos', $args[0]);
+            emitDoubleUnaryMath($env, 'Cos', $args[0]);
 
             return;
         case 'doubleAsin#':
-            emitDotNetDoubleUnaryMath($env, 'Asin', $args[0]);
+            emitDoubleUnaryMath($env, 'Asin', $args[0]);
 
             return;
         case 'doubleAcos#':
-            emitDotNetDoubleUnaryMath($env, 'Acos', $args[0]);
+            emitDoubleUnaryMath($env, 'Acos', $args[0]);
 
             return;
         case 'doubleAtan#':
-            emitDotNetDoubleUnaryMath($env, 'Atan', $args[0]);
+            emitDoubleUnaryMath($env, 'Atan', $args[0]);
 
             return;
         case 'doubleSinh#':
-            emitDotNetDoubleUnaryMath($env, 'Sinh', $args[0]);
+            emitDoubleUnaryMath($env, 'Sinh', $args[0]);
 
             return;
         case 'doubleCosh#':
-            emitDotNetDoubleUnaryMath($env, 'Cosh', $args[0]);
+            emitDoubleUnaryMath($env, 'Cosh', $args[0]);
 
             return;
         case 'doubleSignum#':
@@ -3131,19 +3131,19 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
 
             return;
         case 'bitReverse8#':
-            emitDotNetBitReverse($env, $args[0], 8, 255);
+            emitBitReverse($env, $args[0], 8, 255);
 
             return;
         case 'bitReverse16#':
-            emitDotNetBitReverse($env, $args[0], 16, 65535);
+            emitBitReverse($env, $args[0], 16, 65535);
 
             return;
         case 'bitReverse32#':
-            emitDotNetBitReverse($env, $args[0], 32, 4294967295);
+            emitBitReverse($env, $args[0], 32, 4294967295);
 
             return;
         case 'bitReverse64#':
-            emitDotNetBitReverse($env, $args[0], 64, -1);
+            emitBitReverse($env, $args[0], 64, -1);
 
             return;
         case 'listCons#':
@@ -3261,7 +3261,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
         case 'integerToNatural#':
             emitOperand($env, $args[0]);
             $env->m->emit('unbox.any valuetype [System.Runtime.Numerics]System.Numerics.BigInteger');
-            emitDotNetPushSrcLoc($env, $op->srcLoc);
+            emitPushSrcLoc($env, $op->srcLoc);
             $env->m->emit('call valuetype [System.Runtime.Numerics]System.Numerics.BigInteger Moggi.Rt.RT::NaturalFromInteger(valuetype [System.Runtime.Numerics]System.Numerics.BigInteger, object[])');
             $env->m->emit('box valuetype [System.Runtime.Numerics]System.Numerics.BigInteger');
 
@@ -3269,7 +3269,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
         case 'error#':
             emitOperand($env, $args[0]);
             $env->m->emit('castclass string');
-            emitDotNetPushSrcLoc($env, $op->srcLoc);
+            emitPushSrcLoc($env, $op->srcLoc);
             $env->m->emit('call object Moggi.Rt.RT::ThrowErrorCall(string, object[])');
 
             return;
@@ -3296,7 +3296,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): void
             return;
         case 'exceptionThrow#':
             emitOperand($env, $args[0]);
-            emitDotNetPushSrcLoc($env, $op->srcLoc);
+            emitPushSrcLoc($env, $op->srcLoc);
             $env->m->emit('call object Moggi.Rt.RT::ThrowSomeException(object, object[])');
 
             return;
@@ -3380,10 +3380,10 @@ function emitMatchCommon(EmitEnv $env, IR\Operand $scrutinee, array $arms, ?int 
         return;
     }
     $env->m->emit('ldnull');
-    emitDotNetFunctionReturn($env);
+    emitFunctionReturn($env);
 }
 
-function emitDotNetPushSrcLoc(EmitEnv $env, ?IR\SrcLoc $loc): void
+function emitPushSrcLoc(EmitEnv $env, ?IR\SrcLoc $loc): void
 {
     if ($loc === null) {
         $env->m->emit('ldnull');
@@ -3410,7 +3410,7 @@ function emitDotNetPushSrcLoc(EmitEnv $env, ?IR\SrcLoc $loc): void
     $env->m->emit('call object[] Moggi.Rt.RT::ThrowSite(int32, string, string, int32, int32)');
 }
 
-function emitDotNetFunctionReturn(EmitEnv $env): void
+function emitFunctionReturn(EmitEnv $env): void
 {
     $env->m->emit('ret');
 }

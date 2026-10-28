@@ -37,21 +37,36 @@ function operandEqual(IR\Operand $left, IR\Operand $right): bool
     };
 }
 
-function operandKey(IR\Operand $operand): string
+/**
+ * Structural identity of an operand: one tagged node per step, so two operands share a key only when
+ * they are the same value. A textual key would let a string that reads like a number collide with the
+ * number.
+ *
+ * @return array<int, mixed>
+ */
+function operandKey(IR\Operand $operand): array
 {
     return match ($operand::class) {
-        IR\ConstInt::class, IR\ConstDouble::class, IR\ConstStr::class, IR\ConstChar::class => 'c' . $operand->value,
-        IR\Local::class => 'l' . $operand->name,
-        IR\Temp::class => 't' . $operand->id,
-        IR\FnRef::class => 'f' . $operand->name,
-        IR\Unit::class => 'unit',
-        IR\ListLit::class => 'list:' . \implode(',', \array_map(operandKey(...), $operand->elements)),
-        IR\Intrinsic::class => 'intr:' . $operand->name . '(' . \implode(',', \array_map(operandKey(...), $operand->args)) . ')',
-        IR\Partial::class => 'part:' . $operand->fn . '/' . $operand->arity . '(' . \implode(',', \array_map(operandKey(...), $operand->args)) . ')',
-        IR\DictMethod::class => 'dictm:' . operandKey($operand->evidence) . '.' . $operand->method,
-        IR\ForeignCall::class => 'foreign:' . $operand->backend . ':' . $operand->kind . ':' . $operand->path
-            . '(' . \implode(',', \array_map(operandKey(...), $operand->args)) . ')',
-        default => $operand::class,
+        IR\ConstInt::class => ['int', $operand->value],
+        IR\ConstDouble::class => ['double', $operand->value],
+        IR\ConstStr::class => ['string', $operand->value],
+        IR\ConstChar::class => ['char', $operand->value],
+        IR\Local::class => ['local', $operand->name],
+        IR\Temp::class => ['temp', $operand->id],
+        IR\FnRef::class => ['fn', $operand->name],
+        IR\Unit::class => ['unit'],
+        IR\ListLit::class => ['list', \array_map(operandKey(...), $operand->elements)],
+        IR\Intrinsic::class => ['intrinsic', $operand->name, \array_map(operandKey(...), $operand->args)],
+        IR\Partial::class => ['partial', $operand->fn, $operand->arity, \array_map(operandKey(...), $operand->args)],
+        IR\DictMethod::class => ['dict-method', operandKey($operand->evidence), $operand->method],
+        IR\ForeignCall::class => [
+            'foreign',
+            $operand->backend,
+            $operand->kind,
+            $operand->path,
+            \array_map(operandKey(...), $operand->args),
+        ],
+        default => ['unknown', $operand::class],
     };
 }
 

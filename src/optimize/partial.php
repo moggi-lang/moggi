@@ -16,6 +16,7 @@ use function Moggi\Optimize\Interproc\maxTempInItems;
 use function Moggi\Optimize\Support\indexCapturedFunctions;
 use function Moggi\Optimize\Support\mapStmtNestedBlocks;
 use function Moggi\Optimize\Support\scheduleCall;
+use function Moggi\Optimize\Support\tempUseCountsInItems;
 
 /**
  * Legalize calls against published callable layouts: prepend hidden evidence
@@ -730,10 +731,66 @@ function functionTypeArity(Ast\TypeNode $type): int
  */
 function normalizeApplyItems(array $items, array $arity, array $paramArities): array
 {
-    return \array_map(
-        static fn (IR\Stmt $item): IR\Stmt => normalizeApplyStmt($item, $arity, $paramArities),
-        $items,
+    return fuseKnownApplyChains(
+        \array_map(
+            static fn (IR\Stmt $item): IR\Stmt => normalizeApplyStmt($item, $arity, $paramArities),
+            $items,
+        ),
+        $paramArities,
     );
+}
+
+/**
+ * One application of a known-arity value, not one per argument.
+ *
+ * `apply2 f x y = f x y` with `f :: Int -> Int -> Int` lowers to two statements, the second applying the
+ * temp the first defined. While the first link is *under*-applied the two are the same application: an
+ * under-applied apply builds a partial value and runs no user code, so merging it with the adjacent
+ * application keeps every argument's evaluation in the order it had — the producer's arguments, then the
+ * consumer's — and runs the function at the same point.
+ *
+ * Nothing else is merged, and each refusal is a legality rule rather than a budget: an over-applied link
+ * runs the function between the two argument lists, so merging would move that call past the consumer's
+ * arguments; a temp with another reader is a value in its own right; a callee whose arity the pass does
+ * not have is unknown; and a consumer that is not the very next statement would be reordered past
+ * whatever sits between them.
+ *
+ * @param list<IR\Stmt> $items
+ * @param array<string, int> $paramArities the arity each parameter's declared type gives its value
+ * @return list<IR\Stmt>
+ */
+function fuseKnownApplyChains(array $items, array $paramArities): array
+{
+    $uses = tempUseCountsInItems($items);
+    $out = [];
+    foreach ($items as $item) {
+        $last = \count($out) - 1;
+        $previous = $last >= 0 ? $out[$last] : null;
+        $declared = $previous instanceof IR\CallValue && $previous->callee instanceof IR\Local
+            ? ($paramArities[$previous->callee->name] ?? null)
+            : null;
+        if ($declared !== null
+            && $item instanceof IR\CallValue
+            && $item->callee instanceof IR\Temp
+            && $item->callee->id === $previous->dest
+            && ($uses[$previous->dest] ?? 0) === 1
+            && \count($previous->args) < $declared
+            && \count($previous->args) + \count($item->args) <= $declared
+        ) {
+            $out[$last] = new IR\CallValue(
+                $previous->callee,
+                [...$previous->args, ...$item->args],
+                $item->dest,
+                $item->srcLoc,
+            );
+
+            continue;
+        }
+
+        $out[] = $item;
+    }
+
+    return $out;
 }
 
 /**

@@ -1,0 +1,9 @@
+-- Fail: `__tupleN` is the spelling lowering writes tuple construction in, and the emitters read it
+-- back as an arity. A source declaration in it would typecheck and then be emitted as a tuple build.
+module Bad.Projection.Namespace.Tuple
+
+__tuple1 :: Int -> Int
+__tuple1 n = n + 1
+
+main :: IO ()
+main = pure ()

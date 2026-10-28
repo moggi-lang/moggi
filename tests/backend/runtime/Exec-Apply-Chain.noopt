@@ -1,0 +1,3 @@
+-- This fixture also runs with the optimizer off (tests/suite/runners/runtime.php): the chain the
+-- lowering produces and the one application `fuseKnownApplyChains` makes are the same computation,
+-- so both legs must print the same values and report the same failing callee.

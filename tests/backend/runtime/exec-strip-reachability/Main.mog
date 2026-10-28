@@ -1,0 +1,18 @@
+module Main where
+
+import Text.Show (show)
+import System.IO (putStrLn)
+import Helper (bump)
+
+-- `bump` is reached only as a value handed to `apply`, and through another
+-- module; `deadWeight` is mentioned nowhere and is stripped.
+apply :: (a -> b) -> a -> b
+apply f x = f x
+
+deadWeight :: Int -> Int
+deadWeight x = x * 1000
+
+main :: IO ()
+main = do
+  putStrLn (show (apply bump 41))
+  putStrLn (show (apply (\y -> y * 2) 21))

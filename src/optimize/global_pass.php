@@ -3,13 +3,14 @@
 namespace Moggi\Optimize\GlobalPass;
 
 use Moggi\IR;
+use Moggi\Optimize\Effects\Model;
 
+use function Moggi\IR\Projection\index as projectionIndex;
 use function Moggi\IR\Visit\boundLocalsInBlock;
 use function Moggi\IR\Visit\freeLocalsInBlock;
 use function Moggi\IR\Visit\mapOperandChildren;
 use function Moggi\IR\Visit\walkOperand;
 use function Moggi\IR\Visit\walkStmt;
-use function Moggi\Modules\isQualifiedSymbol;
 use function Moggi\Optimize\Interproc\countLocalUsesInItems;
 use function Moggi\Optimize\Interproc\operandIsNonDuplicable;
 use function Moggi\Optimize\Support\isPropagatableExpr;
@@ -21,20 +22,20 @@ use function Moggi\Optimize\Support\preserveMatchArm;
 use function Moggi\Optimize\Support\stmtDest;
 use function Moggi\Optimize\Support\tempUseCountsInItems;
 
-function cseBlock(IR\Block $block): IR\Block
+function cseBlock(IR\Block $block, Model $effects): IR\Block
 {
-    return new IR\Block(cseItems($block->items));
+    return new IR\Block(cseItems($block->items, $effects));
 }
 
 /** @param list<IR\Stmt> $items @return list<IR\Stmt> */
-function cseItems(array $items): array
+function cseItems(array $items, Model $effects): array
 {
     $seen = [];
     $out = [];
 
     foreach ($items as $item) {
-        $item = cseStmt($item);
-        $key = cseKey($item);
+        $item = cseStmt($item, $effects);
+        $key = cseKey($item, $effects);
         if ($key !== null && isset($seen[$key])) {
             $dest = stmtDest($item);
             if ($dest !== null) {
@@ -57,30 +58,34 @@ function cseItems(array $items): array
     return $out;
 }
 
-function cseStmt(IR\Stmt $stmt): IR\Stmt
+function cseStmt(IR\Stmt $stmt, Model $effects): IR\Stmt
 {
-    return mapStmtNestedBlocks($stmt, cseBlock(...));
+    return mapStmtNestedBlocks($stmt, static fn (IR\Block $block): IR\Block => cseBlock($block, $effects));
 }
 
-function cseKey(IR\Stmt $stmt): ?string
+/**
+ * Structural identity of a repeated call: the callee and each argument's typed key, so two arguments
+ * that only look alike in text never collapse into one.
+ */
+function cseKey(IR\Stmt $stmt, Model $effects): ?string
 {
-    return match ($stmt::class) {
-        IR\Call::class => calleeIsEffectful($stmt->callee)
-            ? null
-            : 'call:' . $stmt->callee . ':' . \implode(',', \array_map(operandKey(...), $stmt->args)),
-        default => null,
-    };
+    if (! $stmt instanceof IR\Call
+        || $effects->ofCall($stmt->callee)->union($effects->evaluationsOf($stmt->args))->discardIsObservable()) {
+        return null;
+    }
+
+    return \serialize(['call', $stmt->callee, \array_map(operandKey(...), $stmt->args)]);
 }
 
-function dceBlock(IR\Block $block, ?int $matchDest = null): IR\Block
+function dceBlock(IR\Block $block, Model $effects, ?int $matchDest = null): IR\Block
 {
-    return new IR\Block(dceItems($block->items, $matchDest));
+    return new IR\Block(dceItems($block->items, $effects, $matchDest));
 }
 
 /** @param list<IR\Stmt> $items @return list<IR\Stmt> */
-function dceItems(array $items, ?int $matchDest = null): array
+function dceItems(array $items, Model $effects, ?int $matchDest = null): array
 {
-    $items = \array_map(dceStmt(...), $items);
+    $items = \array_map(static fn (IR\Stmt $stmt): IR\Stmt => dceStmt($stmt, $effects), $items);
     for ($round = 0; $round < 16; ++$round) {
         $used = usedInItems($items);
         if ($matchDest !== null) {
@@ -90,7 +95,7 @@ function dceItems(array $items, ?int $matchDest = null): array
         $changed = false;
 
         foreach ($items as $item) {
-            if (isDeadStmt($item, $used, $matchDest)) {
+            if (isDeadStmt($item, $used, $effects, $matchDest)) {
                 $changed = true;
 
                 continue;
@@ -108,13 +113,13 @@ function dceItems(array $items, ?int $matchDest = null): array
     return $items;
 }
 
-function dceStmt(IR\Stmt $stmt): IR\Stmt
+function dceStmt(IR\Stmt $stmt, Model $effects): IR\Stmt
 {
     return match ($stmt::class) {
         IR\MatchStmt::class => new IR\MatchStmt($stmt->scrutinee, \array_map(
             static fn (IR\MatchArm $arm): IR\MatchArm => preserveMatchArm(
                 $arm,
-                dceBlock($arm->body, $stmt->dest),
+                dceBlock($arm->body, $effects, $stmt->dest),
             ),
             $stmt->arms,
         ), $stmt->dest, $stmt->exhaustive),
@@ -123,7 +128,7 @@ function dceStmt(IR\Stmt $stmt): IR\Stmt
             \array_map(
                 static fn (IR\MatchArm $arm): IR\MatchArm => preserveMatchArm(
                     $arm,
-                    dceBlock($arm->body),
+                    dceBlock($arm->body, $effects),
                 ),
                 $stmt->arms,
             ),
@@ -134,13 +139,13 @@ function dceStmt(IR\Stmt $stmt): IR\Stmt
             \array_map(
                 static fn (IR\MatchArm $arm): IR\MatchArm => preserveMatchArm(
                     $arm,
-                    dceBlock($arm->body),
+                    dceBlock($arm->body, $effects),
                 ),
                 $stmt->arms,
             ),
             $stmt->exhaustive,
         ),
-        default => mapStmtNestedBlocks($stmt, static fn (IR\Block $block): IR\Block => dceBlock($block)),
+        default => mapStmtNestedBlocks($stmt, static fn (IR\Block $block): IR\Block => dceBlock($block, $effects)),
     };
 }
 
@@ -306,36 +311,13 @@ function usedInOperand(IR\Operand $operand): array
     return $used;
 }
 
-/** @param array{temps: array<int, true>, locals: array<string, true>} $used @param int|null $matchDest */
 /**
- * Callee names whose call is an effect — foreign imports, workers, and every body the IO
- * annotation marks. Consulted by {@see isDeadStmt}, which may not delete their call.
+ * Whether a statement whose result nobody reads may be dropped: its effect must be unobservable, which
+ * only a construction is (see {@see Model}).
  *
- * @var array<string, true>
+ * @param array{temps: array<int, true>, locals: array<string, true>} $used
  */
-$GLOBALS['moggi_effectful_callees'] = [];
-
-/** @param array<string, true> $names */
-function setEffectfulCallees(array $names): void
-{
-    $GLOBALS['moggi_effectful_callees'] = $names;
-}
-
-function clearEffectfulCallees(): void
-{
-    $GLOBALS['moggi_effectful_callees'] = [];
-}
-
-function calleeIsEffectful(string $name): bool
-{
-    if (isset($GLOBALS['moggi_effectful_callees'][$name])) {
-        return true;
-    }
-
-    return isQualifiedSymbol($name);
-}
-
-function isDeadStmt(IR\Stmt $stmt, array $used, ?int $matchDest = null): bool
+function isDeadStmt(IR\Stmt $stmt, array $used, Model $effects, ?int $matchDest = null): bool
 {
     $unusedTemp = static function (int $dest) use ($used, $matchDest): bool {
         return ! isset($used['temps'][$dest])
@@ -343,35 +325,15 @@ function isDeadStmt(IR\Stmt $stmt, array $used, ?int $matchDest = null): bool
     };
 
     return match ($stmt::class) {
-        IR\Assign::class => $unusedTemp($stmt->dest) && ! operandHasEffect($stmt->value),
-        IR\Call::class => $unusedTemp($stmt->dest) && ! calleeIsEffectful($stmt->callee),
-        IR\CallValue::class => $unusedTemp($stmt->dest) && ! operandHasEffect($stmt->callee),
-        IR\Let::class => ! isset($used['locals'][$stmt->name]) && ! operandHasEffect($stmt->value),
+        IR\Assign::class => $unusedTemp($stmt->dest) && ! $effects->ofOperand($stmt->value)->discardIsObservable(),
+        IR\Call::class => $unusedTemp($stmt->dest)
+            && ! $effects->ofCall($stmt->callee)->union($effects->evaluationsOf($stmt->args))->discardIsObservable(),
+        IR\CallValue::class => $unusedTemp($stmt->dest)
+            && ! $effects->ofOperand($stmt->callee)->union($effects->ofOperands($stmt->args))->discardIsObservable(),
+        IR\Let::class => ! isset($used['locals'][$stmt->name])
+            && ! $effects->ofOperand($stmt->value)->discardIsObservable(),
         default => false,
     };
-}
-
-function operandHasEffect(IR\Operand $operand): bool
-{
-    return match ($operand::class) {
-        IR\ForeignCall::class => true,
-        IR\FnRef::class => calleeIsEffectful($operand->name),
-        IR\Partial::class => calleeIsEffectful($operand->fn) || operandsHaveEffect($operand->args),
-        IR\ListLit::class => operandsHaveEffect($operand->elements),
-        default => false,
-    };
-}
-
-/** @param list<IR\Operand> $operands */
-function operandsHaveEffect(array $operands): bool
-{
-    foreach ($operands as $operand) {
-        if (operandHasEffect($operand)) {
-            return true;
-        }
-    }
-
-    return false;
 }
 
 /**
@@ -562,8 +524,8 @@ function cleanupFieldExtractLets(array $items, IR\Pattern $pattern, IR\Operand $
 
     foreach ($items as $item) {
         if ($item instanceof IR\Call && isFieldExtractCall($item, $scrutinee)) {
-            $index = fieldExtractIndex($item->callee);
-            $var = $fieldVars[$index] ?? null;
+            $index = projectionIndex($item->callee);
+            $var = $index === null ? null : ($fieldVars[$index] ?? null);
             if ($var !== null) {
                 $skipTemps[$item->dest] = $var;
 
@@ -600,27 +562,9 @@ function constructorFieldVars(IR\Pattern $pattern): array
 /** @param IR\Stmt $call @param IR\Operand $scrutinee */
 function isFieldExtractCall(IR\Call $call, IR\Operand $scrutinee): bool
 {
-    return \str_starts_with($call->callee, '__field')
+    return projectionIndex($call->callee) !== null
         && \count($call->args) === 1
         && operandEqual($call->args[0], $scrutinee);
-}
-
-function fieldExtractIndex(string $callee): int
-{
-    $leaf = $callee;
-    if (\str_contains($callee, '::')) {
-        $leaf = \substr($callee, \strrpos($callee, '::') + 2);
-    } elseif (\str_contains($callee, '\\')) {
-        $leaf = \substr($callee, \strrpos($callee, '\\') + 1);
-    }
-    if (\str_starts_with($leaf, '__tuple_field')) {
-        return (int) \substr($leaf, \strlen('__tuple_field'));
-    }
-    if (\str_starts_with($leaf, '__field')) {
-        return (int) \substr($leaf, \strlen('__field'));
-    }
-
-    return (int) \substr($callee, \strlen('__field'));
 }
 
 /**

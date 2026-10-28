@@ -1,0 +1,4 @@
+tests/semantics/Bad-Projection-Namespace-Method.mog:5:7: type error: method `__tuple_field0` is in the compiler's generated projection namespace (`__fieldN`, `__tuple_fieldN`, `__tupleN`), which no declaration may name
+
+   5 | class C a where
+     |       ^
