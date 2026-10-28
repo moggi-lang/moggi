@@ -870,60 +870,6 @@ function alignInlineCallDest(array $inlined, int $callDest): array
     return [...$inlined, new IR\Assign($callDest, new IR\Temp($last->dest))];
 }
 
-/** @param list<IR\Stmt> $items @return list<IR\Stmt> */
-function matchArmAssignsToRets(array $items, int $dest): array
-{
-    $items = denseStmtItems($items);
-    if ($items === []) {
-        return $items;
-    }
-
-    $last = $items[\count($items) - 1];
-    if ($last instanceof IR\Assign && $last->dest === $dest) {
-        \array_pop($items);
-        $items[] = new IR\Ret($last->value);
-
-        return denseStmtItems($items);
-    }
-
-    if (($last instanceof IR\Call || $last instanceof IR\CallValue) && $last->dest === $dest) {
-        $items[] = new IR\Ret(new IR\Temp($dest));
-
-        return denseStmtItems($items);
-    }
-
-    if ($last instanceof IR\Ret) {
-        return $items;
-    }
-
-    return $items;
-}
-
-/** @param list<IR\Stmt> $inlined @return list<IR\Stmt>|null */
-function inlinedItemsToRet(array $inlined): ?array
-{
-    $inlined = denseStmtItems($inlined);
-    if ($inlined === []) {
-        return null;
-    }
-
-    $last = lastStmtItem($inlined);
-    if ($last === null) {
-        return null;
-    }
-
-    if ($last instanceof IR\DictCall || $last instanceof IR\Call || $last instanceof IR\CallValue
-        ) {
-        return denseStmtItems([...$inlined, new IR\Ret(new IR\Temp($last->dest))]);
-    }
-
-    if (! $last instanceof IR\Assign) {
-        return null;
-    }
-
-    return denseStmtItems([...\array_slice($inlined, 0, -1), new IR\Ret($last->value)]);
-}
-
 /** @return list<IR\Stmt> */
 function inlineExprAsItems(IR\Operand $expr, int $dest): array
 {
@@ -1012,25 +958,6 @@ function activeFnArity(string $name): ?int
     }
 
     return null;
-}
-
-/**
- * @param list<string> $params
- * @param list<IR\Operand> $args
- */
-function substitutingWouldDuplicateNonDuplicable(array $params, array $args, IR\Operand $body): bool
-{
-    foreach ($params as $i => $param) {
-        $arg = $args[$i] ?? null;
-        if ($arg === null || ! operandIsNonDuplicable($arg)) {
-            continue;
-        }
-        if (countLocalUsesInOperand($body, $param) > 1) {
-            return true;
-        }
-    }
-
-    return false;
 }
 
 /** @param list<IR\Stmt> $items */
@@ -1169,156 +1096,6 @@ function foldListIntrinsicExpr(string $name, array $args): ?IR\Operand
     }
 
     return null;
-}
-
-/**
- * True when any Call/FnRef targets a `foreign` FunctionDecl in `$index`
- * (including the active pe-fusion index).
- *
- * @param list<IR\Stmt> $items
- * @param array<string, IR\FunctionDecl> $index
- */
-function bodyReferencesForeignFunctions(array $items, array $index): bool
-{
-    $foreignLeaves = activeForeignLeaves();
-    $isForeignName = static function (string $callee) use ($index, $foreignLeaves): bool {
-        $t = lookupIndexedFunction($index, $callee);
-        if ($t !== null && $t->foreign) {
-            return true;
-        }
-        if (isset($foreignLeaves[$callee])) {
-            return true;
-        }
-        $leaf = specializationLookupNameSafe($callee);
-
-        return isset($foreignLeaves[$leaf]);
-    };
-
-    $visitOp = null;
-    $visitOp = static function (IR\Operand $op) use (&$visitOp, $isForeignName): bool {
-        if ($op instanceof IR\FnRef) {
-            return $isForeignName($op->name);
-        }
-        if ($op instanceof IR\ForeignCall) {
-            return true;
-        }
-        if ($op instanceof IR\Intrinsic || $op instanceof IR\ListLit || $op instanceof IR\Partial) {
-            $args = $op instanceof IR\ListLit ? $op->elements : $op->args;
-            foreach ($args as $arg) {
-                if ($arg instanceof IR\Operand && $visitOp($arg)) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    };
-
-    $visit = null;
-    $visit = static function (array $stmts) use (&$visit, $visitOp, $isForeignName): bool {
-        foreach (denseStmtItems($stmts) as $item) {
-            if ($item instanceof IR\Call) {
-                if ($isForeignName($item->callee)) {
-                    return true;
-                }
-                foreach ($item->args as $arg) {
-                    if ($visitOp($arg)) {
-                        return true;
-                    }
-                }
-            } elseif ($item instanceof IR\Ret || $item instanceof IR\Assign || $item instanceof IR\Let) {
-                if ($visitOp($item->value)) {
-                    return true;
-                }
-            } elseif ($item instanceof IR\MatchStmt || $item instanceof IR\MatchReturn) {
-                if ($visitOp($item->scrutinee)) {
-                    return true;
-                }
-                foreach ($item->arms as $arm) {
-                    if ($visit($arm->body->items)) {
-                        return true;
-                    }
-                }
-            } elseif ($item instanceof IR\CallValue) {
-                if ($visitOp($item->callee)) {
-                    return true;
-                }
-                foreach ($item->args as $arg) {
-                    if ($visitOp($arg)) {
-                        return true;
-                    }
-                }
-            }
-        }
-
-        return false;
-    };
-
-    return $visit($items);
-}
-
-/** @param array<string, true> $leaves */
-function setActiveForeignLeaves(array $leaves): void
-{
-    $GLOBALS['__moggi_active_foreign_leaves'] = $leaves;
-}
-
-function clearActiveForeignLeaves(): void
-{
-    unset($GLOBALS['__moggi_active_foreign_leaves']);
-}
-
-/** @return array<string, true> */
-function activeForeignLeaves(): array
-{
-    $leaves = $GLOBALS['__moggi_active_foreign_leaves'] ?? [];
-
-    return \is_array($leaves) ? $leaves : [];
-}
-
-/**
- * True when any `Call` in `$items` targets a known recursive/SCC name
- * (including specialization-leaf aliases).
- *
- * @param list<IR\Stmt> $items
- * @param array<string, true> $recursive
- */
-function bodyCallsRecursiveScc(array $items, array $recursive, string $selfName, string $selfLeaf): bool
-{
-    if ($recursive === [] && $selfName === '' && $selfLeaf === '') {
-        return false;
-    }
-    $isRec = static function (string $callee) use ($recursive, $selfName, $selfLeaf): bool {
-        if ($callee === $selfName || $callee === $selfLeaf) {
-            return true;
-        }
-        $leaf = specializationLookupNameSafe($callee);
-        if ($leaf === $selfName || $leaf === $selfLeaf) {
-            return true;
-        }
-
-        return isset($recursive[$callee]) || isset($recursive[$leaf]);
-    };
-
-    $visit = null;
-    $visit = static function (array $stmts) use (&$visit, $isRec): bool {
-        foreach (denseStmtItems($stmts) as $item) {
-            if ($item instanceof IR\Call && $isRec($item->callee)) {
-                return true;
-            }
-            if ($item instanceof IR\MatchStmt || $item instanceof IR\MatchReturn) {
-                foreach ($item->arms as $arm) {
-                    if ($visit($arm->body->items)) {
-                        return true;
-                    }
-                }
-            }
-        }
-
-        return false;
-    };
-
-    return $visit($items);
 }
 
 function isInlineCandidate(IR\FunctionDecl $function): bool
@@ -1713,19 +1490,6 @@ function collectTempIdsInStmt(IR\Stmt $stmt): array
 }
 
 /** @return list<int> */
-function collectTempIdsInOperands(array $operands): array
-{
-    $ids = [];
-    foreach ($operands as $operand) {
-        foreach (collectTempIdsInOperand($operand) as $id) {
-            $ids[$id] = true;
-        }
-    }
-
-    return \array_map(intval(...), \array_keys($ids));
-}
-
-/** @return list<int> */
 function collectTempIdsInOperand(IR\Operand $operand): array
 {
     $ids = [];
@@ -1983,41 +1747,6 @@ function inlineStmt(
     );
 }
 
-/** @param list<IR\FunctionDecl> $functions */
-function fuseAppliedLambdas(array $functions, string $moduleName = ''): array
-{
-    $index = indexFunctions($functions, $moduleName);
-
-    return \array_map(
-        static fn (IR\FunctionDecl $function): IR\FunctionDecl => $function->withBody(
-            fuseBlock($function->body, $index),
-        ),
-        $functions,
-    );
-}
-
-/** @param array<string, IR\FunctionDecl> $index */
-function fuseBlock(IR\Block $block, array $index): IR\Block
-{
-    return new IR\Block(fuseItems($block->items, $index));
-}
-
-/**
- * @param list<IR\Stmt> $items
- * @param array<string, IR\FunctionDecl> $index
- * @return list<IR\Stmt>
- */
-function fuseItems(array $items, array $index): array
-{
-    $out = [];
-
-    foreach ($items as $item) {
-        $out[] = fuseStmt($item, $index);
-    }
-
-    return $out;
-}
-
 /** @param IR\FunctionDecl $lambda */
 function isSimpleLambda(IR\FunctionDecl $lambda): bool
 {
@@ -2028,31 +1757,6 @@ function isSimpleLambda(IR\FunctionDecl $lambda): bool
     $items = $lambda->body->items;
 
     return \count($items) === 1 && $items[0] instanceof IR\Ret;
-}
-
-/** @param array<string, IR\FunctionDecl> $index */
-function fuseStmt(IR\Stmt $stmt, array $index): IR\Stmt
-{
-    return mapStmtNestedBlocks(
-        $stmt,
-        static fn (IR\Block $block): IR\Block => fuseBlock($block, $index),
-    );
-}
-
-function callResultIsImmediatelyMatched(int $dest, array $rest): bool
-{
-    $rest = denseStmtItems($rest);
-    if ($rest === []) {
-        return false;
-    }
-    $next = $rest[0];
-    if ($next instanceof IR\MatchStmt || $next instanceof IR\MatchReturn) {
-        if ($next->scrutinee instanceof IR\Temp && $next->scrutinee->id === $dest) {
-            return ! tempUsedInItems(\array_slice($rest, 1), $dest);
-        }
-    }
-
-    return false;
 }
 
 function calleeModuleName(string $callee): ?string

@@ -133,12 +133,6 @@ function tempRefsInStmt(IR\Stmt $stmt): array
     return \array_keys($refs);
 }
 
-/** @return list<IR\Operand> */
-function stmtOperands(IR\Stmt $stmt): array
-{
-    return stmtDirectOperands($stmt);
-}
-
 function recomputeIoStraightLine(IR\FunctionDecl $function): IR\FunctionDecl
 {
     $hasBoxOrRun = false;

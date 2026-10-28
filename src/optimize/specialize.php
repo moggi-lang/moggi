@@ -31,7 +31,6 @@ use function Moggi\Optimize\Interproc\operandHasFreeTemps;
 use function Moggi\Optimize\Interproc\operandIsNonDuplicable;
 use function Moggi\Optimize\Interproc\remapTempsInItems;
 use function Moggi\Optimize\Interproc\setActiveFnArity;
-use function Moggi\Optimize\Interproc\setActiveForeignLeaves;
 use function Moggi\Optimize\Interproc\setActivePeFusionIndex;
 use function Moggi\Optimize\Interproc\substituteStmt;
 use function Moggi\Optimize\Support\callArgsAreLeaves;
@@ -274,16 +273,6 @@ function activateSpecializeWorld(array $modules, array $externalFnsByModule): ar
     setActiveSpecializeEvidence($globalEvidence);
     setActiveSpecializeFnsByModule($fnsByModule);
     setActiveSpecializeExternalFnsByModule($externalFnsByModule);
-    $foreignLeaves = [];
-    foreach ($modules as $moduleName => $module) {
-        foreach ($module->functions as $function) {
-            if ($function->foreign) {
-                $foreignLeaves[$function->name] = true;
-                $foreignLeaves[resolvedSymbol((string) $moduleName, $function->name)] = true;
-            }
-        }
-    }
-    setActiveForeignLeaves($foreignLeaves);
     $fnArity = [];
     foreach ($modules as $moduleName => $module) {
         foreach ($module->functions as $function) {

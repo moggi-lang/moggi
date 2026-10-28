@@ -285,14 +285,6 @@ function collectUsedStmt(IR\Stmt $stmt, array &$used): void
     );
 }
 
-/** @param list<IR\Operand> $operands @param array{temps: array<int, true>, locals: array<string, true>} $used */
-function collectUsedOperands(array $operands, array &$used): void
-{
-    foreach ($operands as $operand) {
-        collectUsedOperand($operand, $used);
-    }
-}
-
 /** @param array{temps: array<int, true>, locals: array<string, true>} $used */
 function collectUsedOperand(IR\Operand $operand, array &$used): void
 {
