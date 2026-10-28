@@ -134,6 +134,16 @@ binds fields from the scrutinee, so the IR extraction is redundant. `case_fold.p
 field-extract `let` and rewrites `ret call __fieldN(scrutinee)` to `ret local(var)` when the pattern already binds
 `var`. It runs inside the after-inline stage, around the forward walk, not as a separate pipeline step.
 
+A projection is identified by its callee's spelling and by nothing else: `IR\Projection\index()` answers the index
+for `__fieldN`/`__tuple_fieldN` in canonical decimal form (after a module or namespace qualifier) and `null` for
+every other name, so `__fieldTotal` — an ordinary function whose name merely starts like a projection — is never read
+as field 0. A user accessor `age(u) = __field1(u)` needs no separate registry: it is a two-statement body, so the
+inliner exposes the projection at the call site and this fold takes it from there. The emitters ask the same owner —
+`Projection\parse()` for the index and which spelling it used, `Projection\tupleArity()` for `__tupleN` — so a
+look-alike name is emitted as an ordinary call on every backend instead of as a field read or a tuple. The
+canonical forms are the compiler's own namespace: the checker refuses a source declaration written in one of them
+(`assertNotGeneratedName()`), so a callee that reaches a reader in one of these shapes was written by lowering.
+
 **Example:** `tests/backend/codegen/Core-Data.opt-ir.expected` (`fromMaybe`, `getAge`)
 ```
 function fromMaybe(d, mx)
@@ -151,11 +161,22 @@ function getAge(user)
 
 ## 6. Dead statement elimination (DCE)
 
-`dceBlock()` drops an `assign`, `call`, `call_value` or `let` whose destination is read nowhere and whose value has
-no effect (`operandHasEffect()`: a foreign call, an effectful function reference, or a partial/list over one). It
-runs to a fixed point (16 rounds) within a function body — top-level declarations are never removed here.
+`dceBlock()` drops an `assign`, `call`, `call_value` or `let` whose destination is read nowhere and whose value is
+not observable (`Effects\Model`: it constructs rather than executes, cannot throw, and cannot diverge). The model
+answers through the call graph, so a body that reaches a faulting primop through a function value or a partial
+application counts the same as one that calls it directly, and a callee the IR does not name counts as
+possibly-throwing. A `call` is judged on its callee **and** on its arguments' evaluation (`evaluationsOf()`): the
+arguments run before the call, so a total callee with a throwing operand keeps the statement. A function value in
+argument position is a value, not an execution — passing `@f` costs nothing, applying it is what would. It runs to a
+fixed point (16 rounds) within a function body — top-level declarations are never removed here.
 
 Runs after the earlier folds, after inlining, and once more as the `final-dce` stage.
+
+The model is not rebuilt blindly at each of those points. `Effects\Analysis` is the run's one owner of it: it
+answers for a program's *shape* — every body's scan plus each declaration's kind, foreign flag and `ioEffect` —
+and keeps the model it last built, so a stage that hands over a program none of those moved gets the model the run
+already holds, and one that hands over a rewrite of them gets a new one. `ioEffect` is in that key because
+`annotateIoEffects` marks a declaration in place rather than replacing it.
 
 **Example:** `tests/optimize/Opt-Dead.ir.php` → `ret intrinsic intAdd#(x, 1)` (the unused `let y = 42` is gone).
 
@@ -163,7 +184,8 @@ Runs after the earlier folds, after inlining, and once more as the `final-dce` s
 
 ## 7. Common subexpression elimination (CSE)
 
-`cseBlock()` keys on `Call` statements — callee plus argument keys, with an effectful callee excluded — and replaces
+`cseBlock()` keys on `Call` statements — callee plus argument keys, with an effectful callee or an argument whose
+evaluation is observable excluded — and replaces
 a repeated one with `assign <dest> <first temp>`; the follow-up copy propagation rewrites the readers. It runs
 twice: after the local pass and in the after-inline stage.
 
@@ -178,10 +200,17 @@ that would be read twice wants a temp at lowering time, which is what the loweri
 A direct `call` to an eligible callee is replaced by the callee's body with parameters substituted and temps
 remapped (`inlineFunctions()`, up to 4 rounds, so `f → g → h` collapses).
 
-Eligibility: not foreign, not an IO action, not a capture-taking lambda; not a self-call; at most 4 statements
-ending in `ret`; not returning a function reference (a data constructor is the exception); arity matches; no
-`partial` or captured-lambda argument; and the inline must not rebind a name the caller still reads. A match wrapper
-and an applied-partial provider have their own inline paths. Callee definitions are not removed from the module.
+Two separate questions decide it, and only the first can make the output wrong. **Legality** (`inlineIsLegal()`): not
+foreign, not an IO action, not a capture-taking lambda; the shape must be spliceable — not a self-call, at most one
+`ret`, nothing returning a function reference except a data constructor, no `match`/`loop`/`tailrecall`/`dict_call`;
+arity matches; no `partial` or captured-lambda argument; and the inline must not rebind a name the caller still reads.
+A body's own effects are not part of legality: copying it to one call site runs the same work once, in the same
+place. What *can* duplicate work is an argument substituted into several parameter uses, so
+`materializeInlineArgs()` binds a `foreignCall` argument first — the only operand kind whose evaluation runs work —
+and a `partial` or captured-lambda
+argument is refused. **Profitability** (`inlineIsWorthwhile()`): the size budget — at most 4 statements, or a match
+wrapper within its arm budget. A tuning change edits that second function and nothing else. A match wrapper and an
+applied-partial provider have their own inline paths. Callee definitions are not removed from the module.
 
 **Example:** `tests/optimize/Opt-Inline-Chain.ir.php` (`f`), `--opt-ir`
 ```
@@ -236,9 +265,11 @@ function fact(n, acc)
 ## 11. Dictionary-call specialization
 
 `specializeDictCallsFunctions()` (`dict.php`) replaces a `dictCall` whose dictionary and method are settled by the
-module's own instance evidence with a direct call to the resolved method, at the call's own statement position. It
-runs twice, before and after inlining, because inlining changes which evidence is in scope. A `dictMethod` used as a
-value stays a value.
+module's own instance evidence with a direct call to the resolved method, at the call's own statement position. Two
+facts have to be known before it rewrites: which instance the evidence names (a constructor reference, or a temp or
+local bound to one) and that the resolved method is a function this pass can see — unknown evidence, or a method
+outside the module, leaves the `dict_call` standing rather than inventing a callee. It runs twice, before and after
+inlining, because inlining changes which evidence is in scope. A `dictMethod` used as a value stays a value.
 
 ---
 
@@ -253,6 +284,11 @@ value stays a value.
   direct form, so the backends never reach for the runtime `__apply`. Conservatively: module-level names only (never
   a `λN`, whose partial arity counts captures), only when the surface type accounts for every parameter, never past
   the declared arity.
+  It also applies a known-arity value **once**: `f x y` with `f :: a -> b -> c` is one `call_value f(x, y)` instead
+  of a chain of two, because an under-applied apply only builds a partial and runs no user code, so merging it with
+  the adjacent application keeps every argument's evaluation where it was. A link that is already saturated, a temp
+  with a second reader, a callee whose arity the pass does not have, and a consumer that is not the very next
+  statement all keep their chain — each is a legality rule, not a budget.
 * `legalizeCallables()` — brings every stray callable form back to `call`/`partial`/`call_value` before emission,
   again at the end of the pipeline.
 
@@ -284,8 +320,8 @@ one (the compiler itself does not).
    match-return folding. A straight-line action gets only `foldKnownMatchesInItems`.
 6. **`normalize-known-applies`**
 7. **`legalize-callables`**
-8. **`fold-partial-apply`**, **`specialize-partial-return`**, then `fold-partial-apply-2` when the module still has
-   more than two functions or more than 24 statements
+8. **`fold-partial-apply`**, **`specialize-partial-return`**, then `fold-partial-apply-2` — unconditionally, so no
+   size budget decides whether a fold runs after `legalize-callables`
 9. **`eliminate-intrinsic-wrappers`**, **`fold-io-action-boxes`**, **`recompute-io-straight-line`** (module-wide)
 10. **`final-folds`** — per function `optimizeFunctionFinal`: copy propagation → intrinsic folding → DCE →
     tail-return folding (a straight-line action: copy propagation, tail-return folding and single-use call folding).
@@ -319,13 +355,15 @@ declaration elimination.
 | `optimize.php` | Driver (`optimize`), the checkpoint labels, per-function stage sets (`optimizeFunctionEarly` / `AfterInline` / `Final`) |
 | `support.php` | Shared helpers: `operandEqual`, `operandKey`, `stmtDest`, `tempUseCountsInItems`, `isPropagatableExpr`, `isSimpleOperand`, `exprFromDefiningStmt`, `scheduleCall`, `substituteTempInExpr`, `mapStmtNestedBlocks`, `callArgsAreLeaves`, `dropUnreadTemps`, `indexCapturedFunctions` |
 | `local.php` | `optimizeBlock` forward walk (copy propagation, operand mapping, match-arm handling), `foldMatchReturn`, `foldArmMatchReturn`, `foldTailReturn`, `foldSingleUseCallResults`, `optimizeIoAssignAction` |
-| `global_pass.php` | `cseBlock`, `dceBlock`, `propagateCopiesBlock`, effect tracking (`setEffectfulCallees`, `calleeIsEffectful`) |
+| `global_pass.php` | `cseBlock`, `dceBlock`, `propagateCopiesBlock`, field-extract cleanup |
 | `case_fold.php` | Constructor field cleanup and known-match folding (`foldKnownConstructors`, `foldKnownConstructorsBlock`, `foldKnownMatchesInItems`), mid-block match-return rewriting, match-statement tail-consumer joining |
 | `fold_intrinsic.php` | `foldIntrinsicsItems`, `foldIntrinsicNode`, the per-primop folders and the list-spine helpers |
 | `intrinsic.php` | `eliminateIntrinsicWrappers` (a one-primop wrapper function collapses into its primop) |
 | `partial.php` | `legalizeCallables`, `bindLambdaCaptures*`, `foldPartialApply`, `normalizeKnownApplies`, `specializePartialReturnFunction` |
 | `dict.php` | Dictionary-call specialization (`specializeDictCalls*`) |
-| `effects.php` | IO and host-effect annotation (`annotateIoEffects`), and the effectful-callee table (`effectfulCalleeNames`) |
+| `effects.php` | IO and host-effect annotation (`annotateIoEffects`), the four effect answers `Effects\Model` gives — constructs, executes, may throw, may diverge — and `Effects\Analysis`, the run's revision-keyed owner of the model |
+| `facts.php` | The facts the passes share (`Facts`: instance evidence, each module's functions and imports, nullary constructor trees, the fusion index, the inline pass's capture and rebinding tables) — one owner installed by the run that owns it (`optimize()` per module, `specializeAcrossModules()` per program, each restoring what it found) and published per round; a pass that reads it with no owner installed fails rather than inventing one |
+| `../ir/projection.php` | Which callee names are field projections, and which field (`IR\Projection\index`) |
 | `io_specialize.php` | `foldIoActionBoxes`, `recomputeIoStraightLineAll` |
 | `interproc.php` | `inlineFunctions` and the inline helpers (temp remap, capture and qualification guards) |
 | `ir_transform.php` | `remapTempsIn*`, used by inlining |

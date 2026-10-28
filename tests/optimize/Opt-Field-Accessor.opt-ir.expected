@@ -1,0 +1,6 @@
+module
+  function age(u)
+      t0 = call __field1(u)
+      ret t0
+  function ageOf()
+      ret 30

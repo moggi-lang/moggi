@@ -4,7 +4,7 @@ namespace Moggi\Backend\Php\Codegen;
 
 use function Moggi\Backend\Php\Foreign\emitForeignExpression;
 
-use function Moggi\Backend\Php\Intrinsics\emitCall as emitIntrinsicCall;
+use function Moggi\Backend\Php\Intrinsics\emitIntrinsic;
 use function Moggi\Backend\Php\Naming\basePhpFunctionName;
 use function Moggi\Backend\Php\Naming\mangleVar;
 use function Moggi\Backend\Php\Naming\phpFunctionName;
@@ -12,6 +12,8 @@ use function Moggi\Backend\Php\Naming\phpTemp;
 
 use Moggi\IR;
 
+use function Moggi\IR\Projection\parse as projectionParse;
+use function Moggi\IR\Projection\tupleArity as projectionTupleArity;
 use function Moggi\IR\Visit\walkOperand;
 use function Moggi\Modules\isQualifiedSymbol;
 use function Moggi\Modules\moduleNameToNamespace;
@@ -31,25 +33,18 @@ function emitCallExpr(string $callee, array $args, array $ctx): string
 {
     $argsCode = \implode(', ', \array_map(static fn (IR\Operand $arg): string => emitOperand($arg, $ctx), $args));
 
-    if (\str_starts_with($callee, '__tuple_field')) {
-        $index = (int) \substr($callee, \strlen('__tuple_field'));
+    $projection = projectionParse($callee);
+    if ($projection !== null) {
+        $base = emitOperand($args[0], $ctx);
 
-        return emitOperand($args[0], $ctx) . '[' . $index . ']';
+        return $projection['tuple']
+            ? $base . '[' . $projection['index'] . ']'
+            : $base . '[' . ($projection['index'] + 1) . ']';
     }
 
-    if (\str_starts_with($callee, '__tuple')) {
-        $arity = (int) \substr($callee, \strlen('__tuple'));
-        if ($arity === 0) {
-            return 'null';
-        }
-
-        return '[' . $argsCode . ']';
-    }
-
-    if (\str_starts_with($callee, '__field')) {
-        $index = (int) \substr($callee, \strlen('__field'));
-
-        return emitOperand($args[0], $ctx) . '[' . ($index + 1) . ']';
+    $tupleArity = projectionTupleArity($callee);
+    if ($tupleArity !== null) {
+        return $tupleArity === 0 ? 'null' : '[' . $argsCode . ']';
     }
 
     $ctorTag = constructorTag($callee);
@@ -93,14 +88,14 @@ function emitCall(string $callee, array $args, int $dest, int $indent, array $ct
     return $pad . phpTemp($dest) . ' = ' . emitCallExpr($callee, $args, $ctx) . ";\n";
 }
 
-function emitRetValue(IR\Operand $value, array $ctx): string
+function emitFunctionReturn(IR\Operand $value, array $ctx): string
 {
     return match ($value::class) {
-        IR\Partial::class => emitPartialArray($value, $ctx),
+        IR\Partial::class => emitPartialValue($value, $ctx),
         IR\Intrinsic::class => emitOperand($value, $ctx),
         IR\FnRef::class => isset($ctx['lambdaIndex'][$value->name])
             ? emitLambdaReference($value->name, $ctx)
-            : emitTopLevelFnUse($value->name, $ctx),
+            : emitTopLevelFnValue($value->name, $ctx),
         default => emitOperand($value, $ctx),
     };
 }
@@ -142,20 +137,13 @@ function emitOperand(IR\Operand $operand, array $ctx): string
             ?? ('$' . mangleVar($operand->name)),
         IR\Temp::class => phpTemp($operand->id),
         IR\Unit::class => 'null',
-        IR\FnRef::class => emitTopLevelFnUse($operand->name, $ctx),
+        IR\FnRef::class => emitTopLevelFnValue($operand->name, $ctx),
         IR\ListLit::class => '[' . \implode(', ', \array_map(
             static fn (IR\Operand $element): string => emitOperand($element, $ctx),
             $operand->elements,
         )) . ']',
-        IR\Partial::class => emitPartialArray($operand, $ctx),
-        IR\Intrinsic::class => emitIntrinsicCall(
-            $operand->name,
-            \array_map(static fn (IR\Operand $arg): string => emitOperand($arg, $ctx), $operand->args),
-            $ctx['localIntrinsicHelpers'] ?? [],
-            $operand->srcLoc,
-            $ctx,
-            \array_map(static fn (IR\Operand $arg): bool => isLeafOperand($arg), $operand->args),
-        ),
+        IR\Partial::class => emitPartialValue($operand, $ctx),
+        IR\Intrinsic::class => emitIntrinsic($ctx, $operand),
         IR\ForeignCall::class => emitForeignExpression(
             $operand,
             \array_map(static fn (IR\Operand $arg): string => emitOperand($arg, $ctx), $operand->args),
@@ -232,7 +220,7 @@ function emitLambdaArrow(IR\FunctionDecl $lambdaFn, array $ctx): string
     $params = \array_map(static fn (string $p): string => '$' . mangleVar($p), $lambdaFn->params);
     $ret = $lambdaFn->body->items[0];
 
-    return 'fn(' . \implode(', ', $params) . ') => ' . emitRetValue($ret->value, $ctx);
+    return 'fn(' . \implode(', ', $params) . ') => ' . emitFunctionReturn($ret->value, $ctx);
 }
 
 function emitLambdaReference(string $name, array $ctx): string
@@ -250,7 +238,7 @@ function emitLambdaReference(string $name, array $ctx): string
 }
 
 /** @param array{phpNames: array<string, string>, functionArity?: array<string, int>, externalFns?: array<string, string>, boolConstructors?: array<string, bool>} $ctx */
-function emitTopLevelFnUse(string $name, array $ctx): string
+function emitTopLevelFnValue(string $name, array $ctx): string
 {
     if (\array_key_exists($name, $ctx['boolConstructors'] ?? [])) {
         return $ctx['boolConstructors'][$name] ? 'true' : 'false';
@@ -387,7 +375,7 @@ function emitApplyExpr(IR\Operand $callee, array $args, array $ctx): string
             return emitCallExpr($callee->fn, $all, $ctx);
         }
 
-        return emitPartialArray(new IR\Partial($callee->fn, $callee->arity, $all), $ctx);
+        return emitPartialValue(new IR\Partial($callee->fn, $callee->arity, $all), $ctx);
     }
 
     if ($callee instanceof IR\FnRef && isset($ctx['lambdaIndex'][$callee->name])) {
@@ -409,7 +397,7 @@ function emitApplyExpr(IR\Operand $callee, array $args, array $ctx): string
             }
 
             if (\count($args) < $arity) {
-                return emitPartialArray(new IR\Partial($callee->name, $arity, $args), $ctx);
+                return emitPartialValue(new IR\Partial($callee->name, $arity, $args), $ctx);
             }
         }
     }
@@ -420,7 +408,7 @@ function emitApplyExpr(IR\Operand $callee, array $args, array $ctx): string
     return '__apply(' . $calleeCode . ($argsCode === '' ? '' : ', ' . $argsCode) . ')';
 }
 
-function emitPartialArray(IR\Partial $partial, array $ctx): string
+function emitPartialValue(IR\Partial $partial, array $ctx): string
 {
     $fn = emitPartialCallableName($partial->fn, $ctx);
     $args = \array_map(static fn (IR\Operand $arg): string => emitOperand($arg, $ctx), $partial->args);

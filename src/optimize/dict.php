@@ -147,8 +147,7 @@ function resolveEvidenceBinding(
     array $tempEvidence,
     array $localEvidence,
 ): ?array {
-    if ($value instanceof IR\FnRef
-        && (isset($evidenceByName[$value->name]) || \str_starts_with($value->name, '__ev_'))) {
+    if ($value instanceof IR\FnRef && isset($evidenceByName[$value->name])) {
         return ['name' => $value->name, 'args' => []];
     }
 
@@ -214,7 +213,7 @@ function specializeDictCall(
         return $stmt;
     }
 
-    if ($localFns !== [] && ! isset($localFns[$resolved])) {
+    if (! isset($localFns[$resolved])) {
         return $stmt;
     }
 

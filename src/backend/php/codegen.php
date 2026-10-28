@@ -24,7 +24,7 @@ use function Moggi\Backend\Meta\newtypeConstructorMapFromRegistry;
 use function Moggi\Backend\Meta\operandCallSrcLoc;
 use function Moggi\Backend\Meta\returnedCall;
 use function Moggi\Backend\Meta\tempReadCounts;
-use function Moggi\Backend\Php\Intrinsics\emitCall as emitIntrinsicCall;
+use function Moggi\Backend\Php\Intrinsics\emitIntrinsic;
 use function Moggi\Backend\Php\Intrinsics\localHelpersForUsed;
 use function Moggi\Backend\Php\Intrinsics\phpHelpersForModule;
 use function Moggi\Backend\Php\Io\emitIoAssignAction;
@@ -221,7 +221,7 @@ function emit(IR\Module $module, string $sourcePath, array $options = []): strin
     }
 
     foreach ($module->instanceEvidence as $evidence) {
-        $lines[] = \rtrim(emitEvidenceFunction($evidence, $phpNames), "\n");
+        $lines[] = \rtrim(emitEvidence($evidence, $phpNames), "\n");
         $lines[] = '';
     }
 
@@ -252,7 +252,7 @@ function emit(IR\Module $module, string $sourcePath, array $options = []): strin
         $php = \str_replace([MAP_PLACEHOLDER . "\n\n", MAP_PLACEHOLDER . "\n"], '', $php);
     }
 
-    $bootstrap = \rtrim(emitEntryBootstrap($module, $phpNames), "\n");
+    $bootstrap = \rtrim(emitMain($module, $phpNames), "\n");
     if ($bootstrap !== '') {
         $php .= "\n" . $bootstrap . "\n";
     }
@@ -264,7 +264,7 @@ function emit(IR\Module $module, string $sourcePath, array $options = []): strin
 }
 
 /** @param array<string, string> $phpNames */
-function emitEvidenceFunction(IR\InstanceEvidence $evidence, array $phpNames): string
+function emitEvidence(IR\InstanceEvidence $evidence, array $phpNames): string
 {
     $name = phpFunctionName($evidence->evidenceName, $phpNames);
     $ctxParams = $evidence->contextParams;
@@ -559,7 +559,7 @@ function emitStmt(IR\Stmt $stmt, int $indent, array $ctx): string
 
     return match ($stmt::class) {
         IR\Ret::class => frameMark($ctx, operandCallSrcLoc($stmt->value))
-            . $pad . 'return ' . emitRetValue($stmt->value, $ctx) . ";\n",
+            . $pad . 'return ' . emitFunctionReturn($stmt->value, $ctx) . ";\n",
         IR\Call::class => frameMark($ctx, $stmt->srcLoc) . emitCall($stmt->callee, $stmt->args, $stmt->dest, $indent, $ctx),
         IR\IoCall::class => frameMark($ctx, $stmt->srcLoc) . emitIoCall($stmt, $indent, $ctx),
         IR\IoRun::class => frameMark($ctx, $stmt->srcLoc) . emitIoRun($stmt, $indent, $ctx),
@@ -588,17 +588,12 @@ function emitStmt(IR\Stmt $stmt, int $indent, array $ctx): string
 function emitIoCall(IR\Stmt $stmt, int $indent, array $ctx): string
 {
     $pad = \str_repeat('    ', $indent);
-    $args = \array_map(static fn (IR\Operand $arg): string => emitOperand($arg, $ctx), $stmt->args);
     $dest = $stmt->dest;
     $assign = $dest === null ? '' : phpTemp($dest) . ' = ';
     $runtime = $stmt->runtime ?? null;
 
     if (\is_string($stmt->intrinsic) && $stmt->intrinsic !== '') {
-        $leaves = \array_map(
-            static fn (IR\Operand $arg): bool => isLeafOperand($arg),
-            $stmt->args,
-        );
-        $expr = emitIntrinsicCall($stmt->intrinsic, $args, [], null, $ctx, $leaves);
+        $expr = emitIntrinsic($ctx, new IR\Intrinsic($stmt->intrinsic, $stmt->args));
 
         return $pad . $assign . $expr . ";\n";
     }
@@ -611,7 +606,7 @@ function emitIoCall(IR\Stmt $stmt, int $indent, array $ctx): string
 
         return emitForeignIoStatement(
             $foreign,
-            $args,
+            \array_map(static fn (IR\Operand $arg): string => emitOperand($arg, $ctx), $stmt->args),
             $dest,
             $pad,
             $foreign->ioWrap,
@@ -656,7 +651,7 @@ function moduleHasMainEntry(IR\Module $module): bool
 }
 
 /** @param IR\Module $module @param array<string, string> $phpNames */
-function emitEntryBootstrap(IR\Module $module, array $phpNames): string
+function emitMain(IR\Module $module, array $phpNames): string
 {
     $entry = $module->entry;
     if (! moduleHasMainEntry($module)) {

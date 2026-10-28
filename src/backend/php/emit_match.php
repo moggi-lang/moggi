@@ -290,7 +290,7 @@ function emitMatchArmExpression(IR\MatchArm $arm, array $ctx, int $indent): stri
     }
 
     if (\count($items) === 1) {
-        return emitRetValue($last->value, $ctx);
+        return emitFunctionReturn($last->value, $ctx);
     }
 
     $fused = returnedCall($items[\count($items) - 2], $last, $ctx['tempReads']);
@@ -301,7 +301,7 @@ function emitMatchArmExpression(IR\MatchArm $arm, array $ctx, int $indent): stri
         $inner .= emitStmt($item, $indent + 2, $ctx);
     }
     $inner .= $innerPad . 'return '
-        . ($fused !== null ? emitReturnedCall($fused, $ctx) : emitRetValue($last->value, $ctx)) . ";\n";
+        . ($fused !== null ? emitReturnedCall($fused, $ctx) : emitFunctionReturn($last->value, $ctx)) . ";\n";
 
     $uses = matchArmClosureUses($arm->body, $ctx);
     $useClause = $uses === [] ? '' : ' use (' . \implode(', ', $uses) . ')';

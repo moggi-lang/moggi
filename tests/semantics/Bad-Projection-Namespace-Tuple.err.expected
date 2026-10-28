@@ -1,0 +1,4 @@
+tests/semantics/Bad-Projection-Namespace-Tuple.mog:5:1: type error: function `__tuple1` is in the compiler's generated projection namespace (`__fieldN`, `__tuple_fieldN`, `__tupleN`), which no declaration may name
+
+   5 | __tuple1 :: Int -> Int
+     | ^^^^^^^^

@@ -6,7 +6,7 @@ use function Moggi\Backend\Meta\lambdaCaptureNamesInBlock;
 
 use function Moggi\Backend\Php\Codegen\emitBlock;
 use function Moggi\Backend\Php\Codegen\emitOperand;
-use function Moggi\Backend\Php\Codegen\emitRetValue;
+use function Moggi\Backend\Php\Codegen\emitFunctionReturn;
 use function Moggi\Backend\Php\Intrinsics\emitSrcLocExpr;
 use function Moggi\Backend\Php\Naming\mangleVar;
 use function Moggi\Backend\Php\Naming\phpTemp;
@@ -108,7 +108,7 @@ function emitIoAssignAction(IR\Stmt $stmt, int $indent, array $ctx): string
         )) . ')';
 
     $inner = emitBlock($body, $indent + 1, $ctx);
-    $value = emitRetValue($result, $ctx);
+    $value = emitFunctionReturn($result, $ctx);
     $return = 'return ' . $value . ';';
 
     return $pad . $dest . " = ['__io', static function(){$useList}: mixed {\n"

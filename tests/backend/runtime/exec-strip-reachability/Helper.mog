@@ -1,0 +1,11 @@
+module Helper (bump) where
+
+import Util (shift)
+
+-- Reached from Main, across a module boundary, and it reaches Util's export.
+bump :: Int -> Int
+bump x = shift x
+
+-- Nothing names this one: the shake must drop it from this module too.
+spare :: Int -> Int
+spare x = x * 1000

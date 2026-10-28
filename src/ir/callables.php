@@ -69,7 +69,7 @@ function workerDeclarations(IR\Module $module): array
  * callee is at hand. For a callee from another module — an inlined body's imported call, where
  * only the resolved symbol is left — the answer is the generated namespace, which is exact
  * because the checker refuses a source declaration that names itself into it
- * (`assertNotGeneratedWorkerName()`): a `__w_` name can only have been written by
+ * (`assertNotGeneratedName()`): a `__w_` name can only have been written by
  * {@see workerName()}.
  */
 function calleeIsRun(?IR\FunctionDecl $decl, string $callee): bool

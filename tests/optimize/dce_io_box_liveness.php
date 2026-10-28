@@ -23,6 +23,8 @@ require $root . '/src/compiler.php';
 
 use Moggi\IR;
 
+use Moggi\Optimize\Effects\Model;
+
 use function Moggi\IR\Visit\walkBlock;
 use function Moggi\Optimize\GlobalPass\dceBlock;
 use function Moggi\Optimize\GlobalPass\usedInItems;
@@ -93,7 +95,8 @@ $function = new IR\FunctionDecl('main', [], null, new IR\Block([
     new IR\IoRun($temp(5), 6),
     new IR\Ret($unit()),
 ]));
-$optimized = $function->withBody(dceBlock($function->body));
+$totalFib = new IR\FunctionDecl('fib', ['n'], null, new IR\Block([new IR\Ret(new IR\ConstInt(0))]));
+$optimized = $function->withBody(dceBlock($function->body, Model::forFunctions([$totalFib, $function])));
 $destinations = [];
 walkBlock($optimized->body, static function (IR\Stmt $stmt) use (&$destinations): void {
     if ($stmt instanceof IR\Call && $stmt->dest !== null) {

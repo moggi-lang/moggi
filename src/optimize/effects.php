@@ -4,8 +4,12 @@ namespace Moggi\Optimize\Effects;
 
 use Moggi\IR;
 
+use function Moggi\IR\Visit\walkBlock;
+use function Moggi\Modules\isQualifiedSymbol;
 use function Moggi\Modules\resolvedSymbol;
+use function Moggi\Optimize\Interproc\functionNamesInRecursiveSccs;
 use function Moggi\Optimize\Interproc\indexFunctions;
+use function Moggi\Semantics\IntrinsicRegistry\reportsSourceLocation;
 use function Moggi\Semantics\IoBoundary\typeMentionsIo;
 
 /** @param list<IR\FunctionDecl> $functions @return list<IR\FunctionDecl> */
@@ -120,11 +124,11 @@ function operandHasIoEffect(IR\Operand $operand, array $index): bool
  *  - a body that performs IO, once `annotateIoEffects` has marked it.
  *
  * @param list<IR\FunctionDecl> $functions
+ * @param array<string, IR\FunctionDecl> $index the same functions, indexed by bare and qualified name
  * @return array<string, true>
  */
-function effectfulCalleeNames(array $functions, string $moduleName = ''): array
+function effectfulCalleeNames(array $functions, array $index, string $moduleName = ''): array
 {
-    $index = indexFunctions($functions, $moduleName);
     /** @var array<string, true> $effectful */
     $effectful = [];
     foreach ($functions as $function) {
@@ -292,4 +296,369 @@ function operandsCallHostEffect(array $operands, array $host): bool
     }
 
     return false;
+}
+
+/**
+ * What running a piece of the program can do, in the four categories the optimizer decides on.
+ *
+ * A construction is unobservable on its own; executing, throwing and diverging are observable even
+ * when the result is never read, so a discard may only drop a construction.
+ */
+final class Effect
+{
+    public function __construct(
+        public readonly bool $constructs,
+        public readonly bool $executes,
+        public readonly bool $mayThrow,
+        public readonly bool $mayDiverge,
+    ) {
+    }
+
+    public static function none(): self
+    {
+        return new self(false, false, false, false);
+    }
+
+    public static function constructor(): self
+    {
+        return new self(true, false, false, false);
+    }
+
+    public static function throws(): self
+    {
+        return new self(false, false, true, false);
+    }
+
+    public function union(self $other): self
+    {
+        return new self(
+            $this->constructs || $other->constructs,
+            $this->executes || $other->executes,
+            $this->mayThrow || $other->mayThrow,
+            $this->mayDiverge || $other->mayDiverge,
+        );
+    }
+
+    /** Whether dropping the computation would change what the program does. */
+    public function discardIsObservable(): bool
+    {
+        return $this->executes || $this->mayThrow || $this->mayDiverge;
+    }
+}
+
+/**
+ * The calls one body can make, and the two things that make a body observable without a named call.
+ *
+ * `call` and `io_call` name their callee. A `call_value` names it when the value is a function
+ * reference or a partial application; applied through a temp, a local or a dictionary method the IR
+ * does not say which function runs, and a `dict_call`'s method is named by the evidence table rather
+ * than by the statement — both are reported as `unresolved`, because a body that calls something it
+ * cannot name may do whatever that call can.
+ *
+ * One traversal with three readers: {@see Model} for may-throw and may-diverge, the recursive-SCC
+ * detector for the call graph, and the tree shake for the names a body mentions.
+ *
+ * @return array{names: array<string, true>, mentions: array<string, true>, unresolved: bool, throws: bool, loops: bool, dictMethods: array<string, true>}
+ */
+function scanBody(IR\Block $block): array
+{
+    $names = [];
+    $mentions = [];
+    $unresolved = false;
+    $throws = false;
+    $loops = false;
+    /** @var array<string, true> $dictMethods the methods reachable code dispatches through a dictionary */
+    $dictMethods = [];
+
+    walkBlock(
+        $block,
+        static function (IR\Stmt $stmt) use (&$names, &$mentions, &$unresolved, &$loops, &$dictMethods): void {
+            if ($stmt instanceof IR\Call || $stmt instanceof IR\IoCall) {
+                $names[$stmt->callee] = true;
+                $mentions[$stmt->callee] = true;
+            } elseif ($stmt instanceof IR\CallValue) {
+                $callee = namedCallee($stmt->callee);
+                if ($callee === null) {
+                    $unresolved = true;
+                } else {
+                    $names[$callee] = true;
+                }
+            } elseif ($stmt instanceof IR\DictCall) {
+                $dictMethods[$stmt->method] = true;
+                $unresolved = true;
+            }
+            if ($stmt instanceof IR\Loop || $stmt instanceof IR\TailRecall) {
+                $loops = true;
+            }
+        },
+        static function (IR\Operand $operand) use (&$throws, &$mentions): void {
+            if ($operand instanceof IR\Intrinsic && reportsSourceLocation($operand->name)) {
+                $throws = true;
+            }
+            if ($operand instanceof IR\ForeignCall) {
+                $throws = true;
+            }
+            if ($operand instanceof IR\FnRef) {
+                $mentions[$operand->name] = true;
+            }
+            if ($operand instanceof IR\Partial) {
+                $mentions[$operand->fn] = true;
+            }
+        },
+    );
+
+    return [
+        'names' => $names,
+        'mentions' => $mentions,
+        'unresolved' => $unresolved,
+        'throws' => $throws,
+        'loops' => $loops,
+        'dictMethods' => $dictMethods,
+    ];
+}
+
+/**
+ * Every body's scan, keyed by function name — the one table a model and its revision are both built from.
+ *
+ * @param list<IR\FunctionDecl> $functions
+ * @return array<string, array{names: array<string, true>, mentions: array<string, true>, unresolved: bool, throws: bool, loops: bool, dictMethods: array<string, true>}>
+ */
+function scanFunctions(array $functions): array
+{
+    $scanned = [];
+    foreach ($functions as $function) {
+        $scanned[$function->name] = scanBody($function->body);
+    }
+
+    return $scanned;
+}
+
+/** The function a value calls when it is applied, or null when the IR does not say which one. */
+function namedCallee(IR\Operand $callee): ?string
+{
+    return match ($callee::class) {
+        IR\FnRef::class => $callee->name,
+        IR\Partial::class => $callee->fn,
+        default => null,
+    };
+}
+
+/**
+ * The one owner of "what can this do", for the optimizer passes that decide whether a computation may
+ * be dropped or reused. A call is resolved through the module's own functions; a callee outside the
+ * module is an import and is treated as executing, throwing and possibly diverging, so it can never be
+ * deleted.
+ *
+ * A callee the IR does not place in this module and does not qualify is a name this module does not
+ * declare: a constructor, a projection or an entry a pass generated. It is a construction, which is
+ * why `ofCall()` answers `none()` for it rather than the conservative answer a qualified import gets.
+ */
+final class Model
+{
+    /** @var array<string, bool> */
+    private array $throwMemo = [];
+
+    /** @var array<string, bool> */
+    private array $divergeMemo = [];
+
+    /** @var array<string, array{names: array<string, true>, unresolved: bool, throws: bool, loops: bool, dictMethods: array<string, true>}> */
+    private array $bodies = [];
+
+    /**
+     * @param array<string, IR\FunctionDecl> $index
+     * @param array<string, true> $executes
+     * @param array<string, true> $recursive
+     */
+    private function __construct(
+        private array $index,
+        private array $executes,
+        private array $recursive,
+    ) {
+    }
+
+    /** @param list<IR\FunctionDecl> $functions */
+    public static function forFunctions(array $functions, string $moduleName = ''): self
+    {
+        return self::fromScan($functions, scanFunctions($functions), $moduleName);
+    }
+
+    /**
+     * The model over one program, from the scan its caller already holds.
+     *
+     * {@see Analysis} keys its revision on that scan and then hands it here, so the model must be built from
+     * the same one: scanning again would answer a body the key no longer describes.
+     *
+     * @param list<IR\FunctionDecl> $functions
+     * @param array<string, array{names: array<string, true>, mentions: array<string, true>, unresolved: bool, throws: bool, loops: bool, dictMethods: array<string, true>}> $bodies
+     */
+    public static function fromScan(array $functions, array $bodies, string $moduleName = ''): self
+    {
+        $index = indexFunctions($functions, $moduleName);
+        $model = new self(
+            $index,
+            effectfulCalleeNames($functions, $index, $moduleName),
+            \array_fill_keys(functionNamesInRecursiveSccs($index, $bodies), true),
+        );
+        $model->bodies = $bodies;
+
+        return $model;
+    }
+
+    public function ofCall(string $callee): Effect
+    {
+        if (! isset($this->index[$callee])) {
+            return isQualifiedSymbol($callee)
+                ? new Effect(false, true, true, true)
+                : Effect::none();
+        }
+
+        return new Effect(false, isset($this->executes[$callee]), $this->mayThrow($callee), $this->mayDiverge($callee));
+    }
+
+    public function ofOperand(IR\Operand $operand): Effect
+    {
+        return match ($operand::class) {
+            IR\ConstInt::class, IR\ConstDouble::class, IR\ConstStr::class, IR\ConstChar::class,
+            IR\Unit::class, IR\Temp::class, IR\Local::class => Effect::none(),
+            IR\FnRef::class => $this->ofCall($operand->name),
+            IR\ListLit::class => Effect::constructor()->union($this->ofOperands($operand->elements)),
+            IR\Intrinsic::class => (reportsSourceLocation($operand->name) ? Effect::throws() : Effect::none())
+                ->union($this->ofOperands($operand->args)),
+            IR\Partial::class => $this->ofCall($operand->fn)->union($this->ofOperands($operand->args)),
+            IR\DictMethod::class => $this->ofOperand($operand->evidence),
+            IR\ForeignCall::class => new Effect(false, true, true, false),
+            default => new Effect(false, true, true, true),
+        };
+    }
+
+    /** @param list<IR\Operand> $operands */
+    public function ofOperands(array $operands): Effect
+    {
+        $effect = Effect::none();
+        foreach ($operands as $operand) {
+            $effect = $effect->union($this->ofOperand($operand));
+        }
+
+        return $effect;
+    }
+
+    /**
+     * What evaluating this expression costs, as opposed to what applying it would do ({@see ofOperand}, which
+     * answers that for a value in callee position). A function reference evaluates to itself, so it is not an
+     * execution; a partial application constructs a closure without running the function it wraps; a faulting
+     * primop throws where it stands.
+     */
+    public function evaluationOf(IR\Operand $operand): Effect
+    {
+        return match ($operand::class) {
+            IR\ConstInt::class, IR\ConstDouble::class, IR\ConstStr::class, IR\ConstChar::class,
+            IR\Unit::class, IR\Temp::class, IR\Local::class, IR\FnRef::class => Effect::none(),
+            IR\ListLit::class => Effect::constructor()->union($this->evaluationsOf($operand->elements)),
+            IR\Intrinsic::class => (reportsSourceLocation($operand->name) ? Effect::throws() : Effect::none())
+                ->union($this->evaluationsOf($operand->args)),
+            IR\Partial::class => $this->evaluationsOf($operand->args),
+            IR\DictMethod::class => $this->evaluationOf($operand->evidence),
+            IR\ForeignCall::class => new Effect(false, true, true, false),
+            default => new Effect(false, true, true, true),
+        };
+    }
+
+    /** @param list<IR\Operand> $operands */
+    public function evaluationsOf(array $operands): Effect
+    {
+        $effect = Effect::none();
+        foreach ($operands as $operand) {
+            $effect = $effect->union($this->evaluationOf($operand));
+        }
+
+        return $effect;
+    }
+
+    private function mayThrow(string $name): bool
+    {
+        if (isset($this->throwMemo[$name])) {
+            return $this->throwMemo[$name];
+        }
+
+        $body = $this->bodies[$name] ?? null;
+        if ($body === null) {
+            return $this->throwMemo[$name] = true;
+        }
+
+        $this->throwMemo[$name] = false;
+        $throws = $body['throws'] || $body['unresolved'];
+        foreach (\array_keys($body['names']) as $callee) {
+            if ($this->mayThrow($callee)) {
+                $throws = true;
+
+                break;
+            }
+        }
+
+        return $this->throwMemo[$name] = $throws;
+    }
+
+    private function mayDiverge(string $name): bool
+    {
+        if (isset($this->divergeMemo[$name])) {
+            return $this->divergeMemo[$name];
+        }
+
+        $body = $this->bodies[$name] ?? null;
+        if ($body === null) {
+            return $this->divergeMemo[$name] = true;
+        }
+
+        $this->divergeMemo[$name] = true;
+        $diverges = isset($this->recursive[$name]) || $body['loops'] || $body['unresolved'];
+        foreach (\array_keys($body['names']) as $callee) {
+            if ($this->mayDiverge($callee)) {
+                $diverges = true;
+
+                break;
+            }
+        }
+
+        return $this->divergeMemo[$name] = $diverges;
+    }
+}
+
+/**
+ * The model a module's optimize run asks for, held across the whole run.
+ *
+ * Four points in the pipeline need the model, and between them passes rewrite the program it was built
+ * from, so the answers cannot simply be computed once. They can be keyed, though: the model reads a
+ * function's name, its kind, whether it is foreign, whether `annotateIoEffects` marked it, and the scan of
+ * its body, so a run that has not moved any of those is a run whose model still holds. This object keeps
+ * the revision it last answered for, so each of the four asks is a question — is this still the program I
+ * answered for — rather than a rebuild it cannot avoid, and a hit reuses both the model and its scan.
+ *
+ * The marks are part of the revision because they are the one fact the model reads that a pass changes in
+ * place (`annotateIoEffects` sets `ioEffect` on the declaration); a rewrite replaces the declaration and a
+ * mark does not, and both have to invalidate.
+ */
+final class Analysis
+{
+    private ?Model $model = null;
+
+    /** @var array{0: string, 1: array<string, array{IR\FunctionKind, bool, bool}>, 2: array<string, array{names: array<string, true>, mentions: array<string, true>, unresolved: bool, throws: bool, loops: bool, dictMethods: array<string, true>}>}|null */
+    private ?array $revision = null;
+
+    /** @param list<IR\FunctionDecl> $functions */
+    public function modelFor(array $functions, string $moduleName = ''): Model
+    {
+        $bodies = scanFunctions($functions);
+        $marks = [];
+        foreach ($functions as $function) {
+            $marks[$function->name] = [$function->kind, $function->foreign, $function->ioEffect];
+        }
+        $revision = [$moduleName, $marks, $bodies];
+
+        if ($this->model === null || $revision !== $this->revision) {
+            $this->revision = $revision;
+            $this->model = Model::fromScan($functions, $bodies, $moduleName);
+        }
+
+        return $this->model;
+    }
 }

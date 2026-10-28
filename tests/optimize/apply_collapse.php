@@ -176,6 +176,105 @@ $assertStaysTwoCalls(
     'a curried application stays two calls'
 );
 
+/** One application of a value whose arity the parameter's type declares. */
+$intToIntToInt = $funcType([$int(), $int()], $int());
+$intToIntToIntToInt = $funcType([$int(), $int(), $int()], $int());
+$assertFusedInto = static function (IR\FunctionDecl $function, int $arity, string $message) use ($assert): void {
+    $items = $function->body->items;
+    $assert(\count($items) === 2, $message . ': the chain must become one application and its reader');
+    $assert(
+        $items[0] instanceof IR\CallValue
+            && $items[0]->callee instanceof IR\Local
+            && \count($items[0]->args) === $arity,
+        $message . ": one application carrying every argument in order"
+    );
+    $order = \implode(',', \array_map(
+        static fn (IR\Operand $arg): string => $arg instanceof IR\Local ? $arg->name : '?',
+        $items[0]->args,
+    ));
+    $assert(
+        $order === 'x,y' || $order === 'x,y,z',
+        $message . ": the producer's argument comes first, then the consumer's ({$order})"
+    );
+    $assert(
+        $items[1] instanceof IR\Ret && $items[1]->value instanceof IR\Temp && $items[1]->value->id === $items[0]->dest,
+        $message . ": the reader takes the fused application's temp"
+    );
+};
+
+$fn = $decl('typedCurried', ['f', 'x', 'y'], $funcType([$intToIntToInt, $int(), $int()], $int()), $flattenBody);
+$assertFusedInto(
+    normalizeKnownApplies([$fn], 'Main')[0],
+    2,
+    'a parameter applied to its declared arity is one application'
+);
+
+$threeLinks = [
+    new IR\CallValue(new IR\Local('f'), [new IR\Local('x')], 0),
+    new IR\CallValue(new IR\Temp(0), [new IR\Local('y')], 1),
+    new IR\CallValue(new IR\Temp(1), [new IR\Local('z')], 2),
+    new IR\Ret(new IR\Temp(2)),
+];
+$fn = $decl(
+    'typedCurried3',
+    ['f', 'x', 'y', 'z'],
+    $funcType([$intToIntToIntToInt, $int(), $int(), $int()], $int()),
+    $threeLinks,
+);
+$assertFusedInto(
+    normalizeKnownApplies([$fn], 'Main')[0],
+    3,
+    'three links of one declared-arity value are one application'
+);
+
+// A link that is already saturated runs the function there, so merging it with the next
+// application would move that call past the consumer's argument.
+$fn = $decl('typedSaturated', ['f', 'x', 'y'], $funcType([$intToIntToInt, $int(), $int()], $int()), [
+    new IR\CallValue(new IR\Local('f'), [new IR\Local('x'), new IR\Local('y')], 0),
+    new IR\CallValue(new IR\Temp(0), [new IR\ConstInt(1)], 1),
+    new IR\Ret(new IR\Temp(1)),
+]);
+$out = normalizeKnownApplies([$fn], 'Main')[0];
+$assert(
+    \count($out->body->items) === 3
+        && $out->body->items[0] instanceof IR\CallValue
+        && \count($out->body->items[0]->args) === 2
+        && $out->body->items[1] instanceof IR\CallValue
+        && $out->body->items[1]->callee instanceof IR\Temp,
+    'a saturated link followed by another application stays two calls'
+);
+
+// An intermediate value with a second reader is a value, not a step of one application.
+$fn = $decl('typedShared', ['f', 'x', 'y'], $funcType([$intToIntToInt, $int(), $int()], $int()), [
+    new IR\CallValue(new IR\Local('f'), [new IR\Local('x')], 0),
+    new IR\CallValue(new IR\Temp(0), [new IR\Local('y')], 1),
+    new IR\Assign(2, new IR\Intrinsic('intAdd#', [new IR\Temp(0), new IR\Temp(1)])),
+    new IR\Ret(new IR\Temp(2)),
+]);
+$out = normalizeKnownApplies([$fn], 'Main')[0];
+$assert(
+    \count($out->body->items) === 4
+        && $out->body->items[0] instanceof IR\CallValue
+        && $out->body->items[1] instanceof IR\CallValue,
+    'an intermediate apply with a second reader stays a statement of its own'
+);
+
+// A consumer that is not the very next statement would be reordered past whatever sits between.
+$fn = $decl('typedNonAdjacent', ['f', 'x', 'y'], $funcType([$intToIntToInt, $int(), $int()], $int()), [
+    new IR\CallValue(new IR\Local('f'), [new IR\Local('x')], 0),
+    new IR\Let('between', new IR\ConstInt(1)),
+    new IR\CallValue(new IR\Temp(0), [new IR\Local('y')], 1),
+    new IR\Ret(new IR\Temp(1)),
+]);
+$out = normalizeKnownApplies([$fn], 'Main')[0];
+$assert(
+    \count($out->body->items) === 4
+        && $out->body->items[0] instanceof IR\CallValue
+        && \count($out->body->items[0]->args) === 1
+        && $out->body->items[2] instanceof IR\CallValue,
+    'a non-adjacent application stays two calls'
+);
+
 // A collapsed apply belongs to the scope that reads it: nothing may be hoisted out of an arm or out
 // of a guard, because a match tests its guards and runs one arm — a call hoisted in front of the
 // match would run unconditionally.

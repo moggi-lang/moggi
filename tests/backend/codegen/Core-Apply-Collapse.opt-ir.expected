@@ -4,13 +4,10 @@ module
   function add3(a, b, c)
       ret intrinsic intAdd#(intrinsic intAdd#(a, b), c)
   function apply2(f, x, y)
-      t0 = call_value f(x)
-      t1 = call_value t0(y)
+      t1 = call_value f(x, y)
       ret t1
   function apply3(f, x, y, z)
-      t2 = call_value f(x)
-      t3 = call_value t2(y)
-      t4 = call_value t3(z)
+      t4 = call_value f(x, y, z)
       ret t4
   function direct2()
       ret 9

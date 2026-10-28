@@ -1,0 +1,5 @@
+<?php declare(strict_types=1);
+
+return \json_decode(<<<'JSON'
+{"tag":"module","functions":[{"tag":"function","name":"id","params":["v"],"type":{"tag":"type_arrow","from":{"tag":"type_con","name":"Int"},"to":{"tag":"type_con","name":"Int"}},"body":{"tag":"block","items":[{"tag":"ret","value":{"tag":"local","name":"v"}}]},"export":false,"instanceMethod":false,"entryPoint":false},{"tag":"function","name":"use","params":["n"],"type":{"tag":"type_arrow","from":{"tag":"type_con","name":"Int"},"to":{"tag":"type_con","name":"Int"}},"body":{"tag":"block","items":[{"tag":"call","callee":"id","args":[{"tag":"fn","name":"λ0"}],"dest":0},{"tag":"ret","value":{"tag":"temp","id":0}}]},"export":false,"instanceMethod":false,"entryPoint":false},{"tag":"function","name":"λ0","kind":"lambda","params":["x"],"type":null,"body":{"tag":"block","items":[{"tag":"ret","value":{"tag":"intrinsic","name":"intAdd#","args":[{"tag":"local","name":"x"},{"tag":"local","name":"n"}]}}]},"export":false,"instanceMethod":false,"entryPoint":false}],"data":[],"instanceEvidence":[],"entryMain":null}
+JSON, true, flags: JSON_THROW_ON_ERROR);

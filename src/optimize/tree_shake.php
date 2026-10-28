@@ -2,184 +2,202 @@
 
 namespace Moggi\Optimize\TreeShake;
 
+use Moggi\IR;
 use Moggi\IR\FunctionDecl;
 use Moggi\IR\Module;
 
-use function Moggi\IR\Visit\collectIrCodegenUsage;
-use function Moggi\Modules\isQualifiedSymbol;
+use function Moggi\IR\Projection\leafName;
 use function Moggi\Modules\parseResolvedSymbol;
+use function Moggi\Optimize\Effects\scanBody;
 
 /**
- * Whole-program dead-binding elimination for Moggi-defined functions.
+ * Whole-program removal of Moggi functions nothing can reach.
  *
- * Reachability keys are `module::shortName` so instance methods that share a
- * surface name (e.g. `show` for Int vs List) are not kept as a single bucket.
+ * Roots: an entry and an export. A root keeps whatever it names — `call`, `io_call`, a function value, a
+ * partial application — transitively, and that is also how a `foreign` binding survives: it is kept when a kept
+ * declaration calls it, never merely for being declared. A name is resolved by identity (`module::name`): a
+ * bare name resolves inside its own module first, and when it cannot be placed exactly it is kept in every
+ * module declaring that leaf, because an ambiguous spelling is no evidence of absence.
  *
- * @param array<string, Module> $modulesByName  moduleName => optimized IR module
+ * Dictionary dispatch is the one edge the IR does not spell as a call: a `dict_call` looks its method up in
+ * an instance-evidence table, and the emitted table names the methods while no operand does. So an evidence
+ * entry is kept when a reachable function mentions it (that is how a dictionary is passed: as a value), or
+ * when its module still dispatches through one of the methods that entry declares — the method name is the
+ * edge, not the mere presence of a dispatch, because a table that names no method its module dispatches
+ * cannot be the one that call needs. A kept entry keeps every method the table names. An entry nothing can
+ * reach is dropped with its methods, which is the whole point of shaking an instance-heavy module.
+ *
+ * Modules are rebuilt rather than mutated: a caller holding the optimized IR keeps what it had, and a module
+ * nothing was removed from is returned as the same object.
+ *
+ * @param array<string, Module> $modulesByName moduleName => optimized IR module
  * @return array{modules: array<string, Module>, removed: int, kept: int, total: int}
  */
 function treeShakeModules(array $modulesByName): array
 {
-    $entryModule = null;
-    foreach ($modulesByName as $name => $module) {
+    $total = 0;
+    $hasEntry = false;
+    foreach ($modulesByName as $module) {
+        $total += \count($module->functions);
         if ($module->entry !== null) {
-            $entryModule = $name;
+            $hasEntry = true;
+        }
+    }
 
+    if (! $hasEntry) {
+        return ['modules' => $modulesByName, 'removed' => 0, 'kept' => $total, 'total' => $total];
+    }
+
+    /** @var array<string, FunctionDecl> $byKey */
+    $byKey = [];
+    /** @var array<string, list<string>> $keysByLeaf */
+    $keysByLeaf = [];
+    foreach ($modulesByName as $moduleName => $module) {
+        foreach ($module->functions as $function) {
+            $key = $moduleName . '::' . $function->name;
+            $byKey[$key] = $function;
+            $keysByLeaf[leafName($function->name)][] = $key;
+        }
+    }
+
+    /** @var array<string, true> $reachable */
+    $reachable = [];
+    /** @var list<string> $queue */
+    $queue = [];
+    $mark = static function (string $key) use (&$reachable, &$queue): void {
+        if (! isset($reachable[$key])) {
+            $reachable[$key] = true;
+            $queue[] = $key;
+        }
+    };
+
+    foreach ($modulesByName as $moduleName => $module) {
+        foreach ($module->functions as $function) {
+            if ($function->entryKind !== null || $function->export) {
+                $mark($moduleName . '::' . $function->name);
+            }
+        }
+    }
+
+    if ($reachable === []) {
+        // An entry whose declaration did not mark itself is not a license to drop the program.
+        return ['modules' => $modulesByName, 'removed' => 0, 'kept' => $total, 'total' => $total];
+    }
+
+    /** @var array<string, true> $mentioned names any reachable declaration refers to */
+    $mentioned = [];
+    /** @var array<string, array<string, true>> $dispatched module => methods its reachable code dispatches */
+    $dispatched = [];
+    /** @var array<string, array<int, true>> $keptEvidence module => evidence index */
+    $keptEvidence = [];
+
+    while (true) {
+        while ($queue !== []) {
+            $key = \array_pop($queue);
+            $function = $byKey[$key] ?? null;
+            if ($function === null) {
+                continue;
+            }
+
+            $moduleName = \substr($key, 0, (int) \strpos($key, '::'));
+            $body = scanBody($function->body);
+            foreach (\array_keys($body['dictMethods']) as $method) {
+                $dispatched[$moduleName][$method] = true;
+            }
+
+            foreach (\array_keys($body['mentions']) as $name) {
+                $mentioned[$name] = true;
+                $mentioned[leafName($name)] = true;
+
+                $parsed = parseResolvedSymbol($name);
+                if ($parsed !== null) {
+                    $mark($parsed['module'] . '::' . $parsed['name']);
+
+                    continue;
+                }
+
+                $localKey = $moduleName . '::' . $name;
+                if (isset($byKey[$localKey])) {
+                    $mark($localKey);
+
+                    continue;
+                }
+
+                foreach ($keysByLeaf[leafName($name)] ?? [] as $ambiguousKey) {
+                    $mark($ambiguousKey);
+                }
+            }
+        }
+
+        $marked = false;
+        foreach ($modulesByName as $moduleName => $module) {
+            foreach ($module->instanceEvidence as $index => $evidence) {
+                if (isset($keptEvidence[$moduleName][$index])) {
+                    continue;
+                }
+                if (! isset($mentioned[$evidence->evidenceName]) && ! dispatchesOneOf($dispatched[$moduleName] ?? [], $evidence)) {
+                    continue;
+                }
+
+                $keptEvidence[$moduleName][$index] = true;
+                $marked = true;
+                foreach ($evidence->methods as $irName) {
+                    $mark($moduleName . '::' . $irName);
+                }
+            }
+        }
+
+        if (! $marked) {
             break;
         }
     }
 
-    $total = 0;
-    foreach ($modulesByName as $module) {
-        $total += \count($module->functions);
-    }
-
-    if ($entryModule === null) {
-        return ['modules' => $modulesByName, 'removed' => 0, 'kept' => $total, 'total' => $total];
-    }
-
-    /** @var array<string, FunctionDecl> $functionsByKey module::short => fn */
-    $functionsByKey = [];
-    /** @var array<string, list<string>> $keysByShort short => list of module::short */
-    $keysByShort = [];
-    /** @var array<string, array{module: string, methods: list<string>}> $evidenceByShort */
-    $evidenceByShort = [];
-    $rootKeys = [];
-
-    foreach ($modulesByName as $moduleName => $module) {
-        foreach ($module->functions as $fn) {
-            $short = shortName($fn->name);
-            $key = $moduleName . '::' . $short;
-            $functionsByKey[$key] = $fn;
-            $keysByShort[$short][] = $key;
-            if ($fn->entryKind !== null) {
-                $rootKeys[$key] = true;
-            }
-        }
-
-        foreach ($module->instanceEvidence as $evidence) {
-            $methods = [];
-            foreach ($evidence->methods as $irName) {
-                $methods[] = shortName($irName);
-            }
-            $evidenceByShort[shortName($evidence->evidenceName)] = [
-                'module' => $moduleName,
-                'methods' => $methods,
-            ];
-        }
-    }
-
-    $reachable = $rootKeys;
-    $queue = \array_keys($rootKeys);
-    $head = 0;
-    while ($head < \count($queue)) {
-        $key = $queue[$head++];
-        [$moduleName, $short] = \explode('::', $key, 2);
-
-        $ev = $evidenceByShort[$short] ?? null;
-        if ($ev !== null) {
-            foreach ($ev['methods'] as $methodShort) {
-                $methodKey = $ev['module'] . '::' . $methodShort;
-                if (! isset($reachable[$methodKey]) && isset($functionsByKey[$methodKey])) {
-                    $reachable[$methodKey] = true;
-                    $queue[] = $methodKey;
-                }
-            }
-            $reachable[$ev['module'] . '::' . $short] = true;
-        }
-
-        $fn = $functionsByKey[$key] ?? null;
-        if ($fn === null) {
-            continue;
-        }
-
-        foreach (functionCalleeNames($fn) as $callee) {
-            $parsed = parseResolvedSymbol($callee);
-            if ($parsed !== null) {
-                $calleeKey = $parsed['module'] . '::' . $parsed['name'];
-                if (! isset($reachable[$calleeKey])) {
-                    $reachable[$calleeKey] = true;
-                    $queue[] = $calleeKey;
-                }
-
-                continue;
-            }
-
-            $localKey = $moduleName . '::' . $callee;
-            if (isset($functionsByKey[$localKey])) {
-                if (! isset($reachable[$localKey])) {
-                    $reachable[$localKey] = true;
-                    $queue[] = $localKey;
-                }
-
-                continue;
-            }
-
-            foreach ($keysByShort[$callee] ?? [] as $calleeKey) {
-                if (! isset($reachable[$calleeKey])) {
-                    $reachable[$calleeKey] = true;
-                    $queue[] = $calleeKey;
-                }
-            }
-
-            if (isset($evidenceByShort[$callee])) {
-                $evKey = $evidenceByShort[$callee]['module'] . '::' . $callee;
-                if (! isset($reachable[$evKey])) {
-                    $reachable[$evKey] = true;
-                    $queue[] = $evKey;
-                }
-            }
-        }
-    }
-
+    $modules = [];
     $removed = 0;
     $kept = 0;
-    foreach ($modulesByName as $name => $module) {
-        $filtered = [];
-        foreach ($module->functions as $fn) {
-            $key = $name . '::' . shortName($fn->name);
-            if (isset($reachable[$key])) {
-                $filtered[] = $fn;
+    foreach ($modulesByName as $moduleName => $module) {
+        $functions = [];
+        foreach ($module->functions as $function) {
+            if (isset($reachable[$moduleName . '::' . $function->name])) {
+                $functions[] = $function;
                 ++$kept;
-            } else {
-                ++$removed;
+
+                continue;
+            }
+            ++$removed;
+        }
+
+        $evidence = [];
+        foreach ($module->instanceEvidence as $index => $entry) {
+            if (isset($keptEvidence[$moduleName][$index])) {
+                $evidence[] = $entry;
             }
         }
-        $module->functions = $filtered;
-        $module->instanceEvidence = \array_values(\array_filter(
-            $module->instanceEvidence,
-            static function ($ev) use ($reachable, $name): bool {
-                $evKey = $name . '::' . shortName($ev->evidenceName);
 
-                return isset($reachable[$evKey]);
-            },
-        ));
-        $modulesByName[$name] = $module;
+        $modules[$moduleName] = \count($functions) === \count($module->functions)
+            && \count($evidence) === \count($module->instanceEvidence)
+            ? $module
+            : new Module(
+                $functions,
+                $module->data,
+                $evidence,
+                $module->entry,
+                $module->moduleName,
+                $module->sourceFile,
+            );
     }
 
-    return ['modules' => $modulesByName, 'removed' => $removed, 'kept' => $kept, 'total' => $total];
+    return ['modules' => $modules, 'removed' => $removed, 'kept' => $kept, 'total' => $total];
 }
 
-function shortName(string $name): string
+/** Whether a reachable function of the module dispatches a method this evidence table declares. */
+function dispatchesOneOf(array $methods, IR\InstanceEvidence $evidence): bool
 {
-    $parsed = parseResolvedSymbol($name);
-    if ($parsed !== null) {
-        return $parsed['name'];
+    foreach (\array_keys($evidence->methods) as $declared) {
+        if (isset($methods[$declared])) {
+            return true;
+        }
     }
 
-    if (! isQualifiedSymbol($name)) {
-        return $name;
-    }
-
-    $pos = \strrpos($name, '\\');
-
-    return $pos === false ? $name : \substr($name, $pos + 1);
-}
-
-/** @return list<string> */
-function functionCalleeNames(FunctionDecl $fn): array
-{
-    $usage = collectIrCodegenUsage(new Module([$fn], []));
-
-    return \array_keys($usage['callees']);
+    return false;
 }

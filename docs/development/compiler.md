@@ -25,8 +25,8 @@ The bootstrap compiler is implemented in PHP until a self-hosted version replace
 
 ### Backend layout
 
-Every backend uses the same file set, so one concern lives in the same-named
-file regardless of target:
+Every backend uses the same file set for the target-independent roles, so those
+concerns live in the same-named file regardless of target:
 
 | File | Role |
 |------|------|
@@ -42,12 +42,19 @@ file regardless of target:
 | `src/backend/Backend.php` | `Backend` interface and compile-target registry |
 | `src/backend/inspect.php` | `describeEmit` helpers: render emitted artifacts for tooling (`:emit`) |
 
+The emitters agree on one function name per job — `emitIntrinsic`, `emitFunctionReturn`,
+`emitTopLevelFnValue`, `emitPartialValue`, `emitMain`, `emitEvidence`, `emitBlock`, `emitStmt`,
+`emitOperand`, `emitFunction`, `emitMatchStmt`, `emitPatternTest`, `emitTailRecall` — and differ
+where the value model differs: php's take and return generated text, jvm/.NET push to the stack.
+
 Files that describe a specific toolchain keep their own names: `jvm/classfile.php`
 (class-file encoding), `dotnet/il.php` + `dotnet/il_size.php` (IL text and
 instruction sizing), `php/emit_expr.php` + `php/emit_match.php` (expression and
 match emission), `php/intrinsics.php` + `php/io.php` (intrinsic and IO
 emission), and `php/native.php` (the micro PHP runtime `--native` appends the
-packaged PHAR to). The PHP runtime ships as `php/runtime.php` (deployed as `_runtime.php`)
+packaged PHAR to). Those four php emitter files exist because php is
+expression-valued; jvm and .NET keep the same concerns inside their
+`codegen.php`. The PHP runtime ships as `php/runtime.php` (deployed as `_runtime.php`)
 rather than generated
 `runtime_abi.php`, because the JVM/.NET runtimes are emitted per build.
 

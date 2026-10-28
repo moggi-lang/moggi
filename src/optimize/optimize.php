@@ -15,14 +15,15 @@ use function Moggi\Optimize\CaseFold\foldKnownConstructorsBlock;
 use function Moggi\Optimize\CaseFold\foldKnownMatchesInItems;
 use function Moggi\Optimize\Dict\indexEvidenceByName;
 use function Moggi\Optimize\Dict\specializeDictCallsFunctions;
+use Moggi\Optimize\Effects\Analysis;
+use Moggi\Optimize\Effects\Model;
+use Moggi\Optimize\Facts\Facts;
+
 use function Moggi\Optimize\Effects\annotateIoEffects;
-use function Moggi\Optimize\Effects\effectfulCalleeNames;
 use function Moggi\Optimize\FoldIntrinsic\foldIntrinsicsItems;
-use function Moggi\Optimize\GlobalPass\clearEffectfulCallees;
 use function Moggi\Optimize\GlobalPass\cseBlock;
 use function Moggi\Optimize\GlobalPass\dceBlock;
 use function Moggi\Optimize\GlobalPass\propagateCopiesBlock;
-use function Moggi\Optimize\GlobalPass\setEffectfulCallees;
 use function Moggi\Optimize\GlobalPass\setPropagateCopiesLambdaBodies;
 use function Moggi\Optimize\Interproc\inlineFunctions;
 use function Moggi\Optimize\Intrinsic\eliminateIntrinsicWrappers;
@@ -44,6 +45,10 @@ use function Moggi\Optimize\Tco\eliminateTailRecursion;
 function optimize(Module $module): Module
 {
     PassCheckpoints\enterOptimize();
+    $ownsFacts = Facts::installed() === null;
+    if ($ownsFacts) {
+        Facts::install(new Facts());
+    }
     $result = null;
 
     try {
@@ -51,16 +56,20 @@ function optimize(Module $module): Module
         $functions = $module->functions;
         $instanceEvidence = $module->instanceEvidence;
         $evidenceByName = indexEvidenceByName($instanceEvidence);
+        Facts::current()->publishModuleEvidence($moduleName, $instanceEvidence);
+        $analysis = new Analysis();
 
         $functions = PassCheckpoints\runOnFunctions(
             'early-folds',
             $module,
             $functions,
-            static function (array $fns) use ($moduleName): array {
+            static function (array $fns) use ($moduleName, $analysis): array {
                 setPropagateCopiesLambdaBodies($fns);
-                setEffectfulCallees(effectfulCalleeNames($fns, $moduleName));
-                $optimized = \array_map(optimizeFunctionEarly(...), $fns);
-                clearEffectfulCallees();
+                $effects = $analysis->modelFor($fns, $moduleName);
+                $optimized = \array_map(
+                    static fn (FunctionDecl $function): FunctionDecl => optimizeFunctionEarly($function, $effects),
+                    $fns,
+                );
 
                 return $optimized;
             },
@@ -92,11 +101,13 @@ function optimize(Module $module): Module
             'after-inline-folds',
             $module,
             $functions,
-            static function (array $fns) use ($moduleName): array {
+            static function (array $fns) use ($moduleName, $analysis): array {
                 setPropagateCopiesLambdaBodies($fns);
-                setEffectfulCallees(effectfulCalleeNames($fns, $moduleName));
-                $optimized = \array_map(optimizeFunctionAfterInline(...), $fns);
-                clearEffectfulCallees();
+                $effects = $analysis->modelFor($fns, $moduleName);
+                $optimized = \array_map(
+                    static fn (FunctionDecl $function): FunctionDecl => optimizeFunctionAfterInline($function, $effects),
+                    $fns,
+                );
 
                 return $optimized;
             },
@@ -140,15 +151,13 @@ function optimize(Module $module): Module
             },
             false,
         );
-        if (shouldRunSecondPartialFold($functions)) {
-            $functions = PassCheckpoints\runOnFunctions(
-                'fold-partial-apply-2',
-                $module,
-                $functions,
-                static fn (array $fns): array => foldPartialApply($fns, $moduleName),
-                false,
-            );
-        }
+        $functions = PassCheckpoints\runOnFunctions(
+            'fold-partial-apply-2',
+            $module,
+            $functions,
+            static fn (array $fns): array => foldPartialApply($fns, $moduleName),
+            false,
+        );
 
         $module = new Module($functions, $module->data, $instanceEvidence, $module->entry, $moduleName, $module->sourceFile);
         $module = PassCheckpoints\runOnModule('eliminate-intrinsic-wrappers', $module, eliminateIntrinsicWrappers(...));
@@ -164,14 +173,14 @@ function optimize(Module $module): Module
         $functions = $module->functions;
 
         setPropagateCopiesLambdaBodies($functions);
-        setEffectfulCallees(effectfulCalleeNames($functions, $moduleName));
         $workers = workerDeclarations($module);
+        $effects = $analysis->modelFor($functions, $moduleName);
         $functions = PassCheckpoints\runOnFunctions(
             'final-folds',
             $module,
             $functions,
             static fn (array $fns): array => \array_map(
-                static fn (FunctionDecl $function): FunctionDecl => optimizeFunctionFinal($function, $workers),
+                static fn (FunctionDecl $function): FunctionDecl => optimizeFunctionFinal($function, $workers, $effects),
                 $fns,
             ),
             false,
@@ -183,20 +192,19 @@ function optimize(Module $module): Module
             static fn (array $fns): array => annotateIoEffects($fns, $moduleName),
             false,
         );
-        setEffectfulCallees(effectfulCalleeNames($functions, $moduleName));
+        $effects = $analysis->modelFor($functions, $moduleName);
         $functions = PassCheckpoints\runOnFunctions(
             'final-dce',
             $module,
             $functions,
             static fn (array $fns): array => \array_map(
                 static fn (FunctionDecl $function): FunctionDecl => $function->withBody(
-                    $function->ioStraightLine ? $function->body : dceBlock($function->body),
+                    $function->ioStraightLine ? $function->body : dceBlock($function->body, $effects),
                 ),
                 $fns,
             ),
             false,
         );
-        clearEffectfulCallees();
 
         $functions = PassCheckpoints\runOnFunctions(
             'legalize-callables-final',
@@ -209,23 +217,15 @@ function optimize(Module $module): Module
         $result = new Module($functions, $module->data, $instanceEvidence, entryFromFunctions($functions), $moduleName, $module->sourceFile);
     } finally {
         PassCheckpoints\leaveOptimize();
+        if ($ownsFacts) {
+            Facts::clear();
+        }
     }
 
     return $result;
 }
 
-/** @param list<FunctionDecl> $functions */
-function shouldRunSecondPartialFold(array $functions): bool
-{
-    $stmtCount = 0;
-    foreach ($functions as $function) {
-        $stmtCount += \count($function->body->items);
-    }
-
-    return \count($functions) > 2 || $stmtCount > 24;
-}
-
-function optimizeFunctionEarly(FunctionDecl $function): FunctionDecl
+function optimizeFunctionEarly(FunctionDecl $function, Model $effects): FunctionDecl
 {
     if ($function->ioStraightLine) {
         return $function;
@@ -236,15 +236,15 @@ function optimizeFunctionEarly(FunctionDecl $function): FunctionDecl
         return $function->withBody($body);
     }
 
-    $body = cseBlock($body);
-    $body = dceBlock($body);
+    $body = cseBlock($body, $effects);
+    $body = dceBlock($body, $effects);
     $body = eliminateTailRecursion($function->name, $function->params, $body, $function->kind);
     $body = new Block(foldMatchReturn($body->items));
 
     return $function->withBody($body);
 }
 
-function optimizeFunctionAfterInline(FunctionDecl $function): FunctionDecl
+function optimizeFunctionAfterInline(FunctionDecl $function, Model $effects): FunctionDecl
 {
     if ($function->ioStraightLine) {
         return $function->withBody(new Block(foldKnownMatchesInItems($function->body->items)));
@@ -253,10 +253,10 @@ function optimizeFunctionAfterInline(FunctionDecl $function): FunctionDecl
     $body = foldKnownConstructorsBlock($function->body);
     $body = optimizeBlock($body);
     $body = foldKnownConstructorsBlock($body);
-    $body = cseBlock($body);
+    $body = cseBlock($body, $effects);
     $body = propagateCopiesBlock($body);
     $body = new Block(foldIntrinsicsItems($body->items));
-    $body = dceBlock($body);
+    $body = dceBlock($body, $effects);
     $body = new Block(foldTailReturn($body->items));
     $body = new Block(foldMatchReturn($body->items));
 
@@ -266,7 +266,7 @@ function optimizeFunctionAfterInline(FunctionDecl $function): FunctionDecl
 /**
  * @param array<string, FunctionDecl> $workers the module's workers, so a run stays a statement
  */
-function optimizeFunctionFinal(FunctionDecl $function, array $workers): FunctionDecl
+function optimizeFunctionFinal(FunctionDecl $function, array $workers, Model $effects): FunctionDecl
 {
     if ($function->ioStraightLine) {
         $body = propagateCopiesBlock($function->body);
@@ -277,7 +277,7 @@ function optimizeFunctionFinal(FunctionDecl $function, array $workers): Function
 
     $body = propagateCopiesBlock($function->body);
     $body = new Block(foldIntrinsicsItems($body->items));
-    $body = dceBlock($body);
+    $body = dceBlock($body, $effects);
     $body = new Block(foldTailReturn($body->items));
 
     return $function->withBody($body);

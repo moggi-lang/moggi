@@ -2,6 +2,8 @@
 
 namespace Moggi\Backend\Php\Intrinsics;
 
+use function Moggi\Backend\Php\Codegen\emitOperand;
+use function Moggi\Backend\Php\Codegen\isLeafOperand;
 use function Moggi\Backend\Php\Naming\phpFunctionName;
 use function Moggi\Debug\normalizeDisplayPath;
 
@@ -13,20 +15,28 @@ use Moggi\IR;
 use Moggi\IR\SrcLoc;
 
 /**
- * @param array<int, string> $argExprs
- * @param array<string, string> $localHelpers
- * @param array<int, bool> $argLeaves whether each argument is a leaf (a temp,
- *   local or literal), so an inlined wrapper can repeat it for free
+ * One intrinsic operation as a php expression. The other two backends emit it to the stack from
+ * `emitIntrinsic(EmitEnv, IR\Intrinsic)`; this one returns the expression text, and takes the codegen
+ * context the php emitters pass everywhere instead of an env object.
  */
-function emitCall(string $name, array $argExprs, array $localHelpers = [], ?SrcLoc $srcLoc = null, array $ctx = [], array $argLeaves = []): string
+function emitIntrinsic(array $ctx, IR\Intrinsic $op): string
 {
-    if (isset($localHelpers[$name])) {
-        return localHelperCall($name, $localHelpers[$name], $argExprs);
+    $argExprs = \array_map(
+        static fn (IR\Operand $arg): string => emitOperand($arg, $ctx),
+        $op->args,
+    );
+
+    $localHelpers = $ctx['localIntrinsicHelpers'] ?? [];
+    if (isset($localHelpers[$op->name])) {
+        return localHelperCall($op->name, $localHelpers[$op->name], $argExprs);
     }
 
-    $ctx['intrinsicArgLeaves'] = $argLeaves;
+    $ctx['intrinsicArgLeaves'] = \array_map(
+        static fn (IR\Operand $arg): bool => isLeafOperand($arg),
+        $op->args,
+    );
 
-    return emitQualifiedCall($name, $argExprs, $srcLoc, $ctx);
+    return emitQualifiedCall($op->name, $argExprs, $op->srcLoc, $ctx);
 }
 
 function emitSrcLocExpr(?SrcLoc $loc, array $ctx = []): string

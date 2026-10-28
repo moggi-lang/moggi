@@ -1,0 +1,6 @@
+module Util (shift) where
+
+-- Everything this module declares is reachable, so a whole-program shake must
+-- leave its emitted text exactly as the unstripped build wrote it.
+shift :: Int -> Int
+shift x = x + 1
