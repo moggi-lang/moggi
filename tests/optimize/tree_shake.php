@@ -39,9 +39,7 @@ $fn = static function (
         params: [],
         type: null,
         body: new IR\Block($items),
-        export: $export,
-        foreign: $foreign,
-        entryKind: $entryKind,
+        shape: new IR\FunctionShape(export: $export, foreign: $foreign, entryKind: $entryKind),
     );
 };
 

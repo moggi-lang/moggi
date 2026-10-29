@@ -288,6 +288,7 @@ function supportInputPaths(): array
         'docs/generator/fixture-app',
         'docs/generator/fixture-extra',
         'optimize/noopt-entry-bootstrap.mog', // read by noopt_entry_bootstrap.php
+        'optimize/opt-differential-folds.mog', // one program in the opt/no-opt differential's corpus
         'registry/bind',                    // goldens and fixtures the bind scripts open by path
     ];
 }

@@ -147,6 +147,7 @@ final class DotNetBackend implements Backend
         string $kind,
         array $pathInfo,
         string $name,
+        ?string $module = null,
     ): ?string {
         $sidecar = ($kind === 'function' && ($pathInfo['dispatch'] ?? '') !== 'intrinsic')
             ? dotNetSignatureEntry($name, $pathInfo['declaringRoot'] ?? null)
@@ -157,7 +158,7 @@ final class DotNetBackend implements Backend
             && ($pathInfo['dispatch'] ?? '') !== 'intrinsic'
             && ($pathInfo['classPath'] ?? '') !== ''
         ) {
-            $resolved = $this->resolveInspectorOverload($type, $pathInfo, $name);
+            $resolved = $this->resolveInspectorOverload($type, $pathInfo, $name, $module);
             if ($resolved !== null) {
                 return $resolved;
             }
@@ -171,6 +172,7 @@ final class DotNetBackend implements Backend
             $pathInfo['hostMember'],
             $sidecar,
             $name,
+            $module,
         );
     }
 
@@ -184,6 +186,7 @@ final class DotNetBackend implements Backend
         TypeNode $type,
         array $pathInfo,
         string $name,
+        ?string $module,
     ): ?string {
         $classPath = (string) $pathInfo['classPath'];
         $member = (string) ($pathInfo['hostMember'] ?? '');
@@ -210,6 +213,7 @@ final class DotNetBackend implements Backend
             $pathInfo['hostMember'],
             null,
             $name,
+            $module,
         );
         $resolution = resolveDotNetForeignOverload(
             $table['methods'][$member] ?? [],

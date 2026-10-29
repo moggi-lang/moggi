@@ -80,7 +80,7 @@ function run(PipelineRequest $request, PipelineStage $stopAt = PipelineStage::Em
             . 'program without one is a producer bug, not a module that imports nothing',
         );
     }
-    $ir = lower($checked, $interface->data, $request->filename);
+    $ir = lower($checked, $interface->data(), $request->filename);
     $artifacts->ir = $ir;
     $artifacts->entry = $ir->entry;
 

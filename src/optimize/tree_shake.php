@@ -73,7 +73,7 @@ function treeShakeModules(array $modulesByName): array
 
     foreach ($modulesByName as $moduleName => $module) {
         foreach ($module->functions as $function) {
-            if ($function->entryKind !== null || $function->export) {
+            if ($function->shape->entryKind !== null || $function->shape->export) {
                 $mark($moduleName . '::' . $function->name);
             }
         }

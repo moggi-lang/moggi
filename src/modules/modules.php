@@ -146,7 +146,7 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
     if ($optimize) {
         $externalFnsByModule = [];
         foreach ($prepared->importContexts as $moduleName => $importContext) {
-            $externalFnsByModule[$moduleName] = $importContext->interface->externalFns;
+            $externalFnsByModule[$moduleName] = $importContext->interface->externalFns();
         }
         $specialized = specializeAcrossModules($optByModule, $externalFnsByModule);
         $optByModule = $specialized['modules'];
@@ -178,7 +178,7 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
         );
         foreach ($optimizedIr->functions as $fn) {
             $arity = \count($fn->params);
-            if ($fn->kind->takesCaptures()) {
+            if ($fn->shape->kind->takesCaptures()) {
                 $arity += \count($lambdaMeta[$fn->name]['captures'] ?? []);
             }
             $globalFnArity[resolvedSymbol((string) $moduleName, $fn->name)] = $arity;

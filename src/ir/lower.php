@@ -3,6 +3,8 @@
 namespace Moggi\IR;
 
 use Moggi\Modules\CheckedFunction;
+use Moggi\Modules\CheckedPattern;
+use Moggi\Modules\PatternShape;
 use Moggi\Syntax\Ast;
 
 use function Moggi\Debug\normalizeDisplayPath;
@@ -34,7 +36,7 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
     $data = [];
     $knownFunctions = [];
     $functionArity = [];
-    $externalFns = $interface->externalFns;
+    $externalFns = $interface->externalFns();
     $constructorRenames = $program->constructorRenames;
 
     $localBindings = [];
@@ -68,12 +70,12 @@ function lower(Ast\Program $program, array $importedData = [], string $sourceFil
         }
     }
 
-    $actionReturningEntries = actionEntryFacts($program->items)['actionReturn'] + $interface->actionReturn;
+    $actionReturningEntries = actionEntryFacts($program->items)['actionReturn'] + $interface->actionReturn();
     $workers = workerEntries($program->items) + importedWorkerEntries($interface, $localBindings);
-    $workerEntries = executingEntryNames($program->items, $interface->env, $interface->actionReturn);
+    $workerEntries = executingEntryNames($program->items, $interface->env(), $interface->actionReturn());
     $state->trueBindings = trueBindingOrigins($program->items, $moduleName) + $interface->trueBindings;
 
-    foreach ($interface->externalFnRuntimeArity as $name => $arity) {
+    foreach ($interface->externalFnRuntimeArity() as $name => $arity) {
         if (isset($localBindings[$name])) {
             continue;
         }
@@ -242,7 +244,7 @@ function lowerFunction(
 ): array {
     $state->usedLocals = [];
     $state->nextLocalSuffix = 0;
-    $slotNames = functionParamSlots($fn->params);
+    $slotNames = functionParamSlots($fn->params, $core->terms);
     $ctx = newCtx($slotNames, $state, $dataIndex, $newtypeIndex);
     $ctx->functionArity = $functionArity;
     $ctx->externalFnNames = \array_keys($externalFns);
@@ -255,7 +257,7 @@ function lowerFunction(
     $ctx->workers = $workers;
     $ctx->executingEntries = $executingEntries;
     $ctx->evidenceNames = $core->evidenceBinders();
-    $ctx->evidencePlans = $core->evidencePlanIndex();
+    $ctx->terms = $core->terms;
 
     foreach (\array_keys($externalFns) as $name) {
         if (\in_array($name, $slotNames, true)) {
@@ -274,11 +276,18 @@ function lowerFunction(
     }
 
     foreach ($fn->params as $i => $pattern) {
-        if ($pattern instanceof Ast\PatVar && $pattern->name === $slotNames[$i]) {
+        $term = plannedPattern($pattern, $ctx);
+        if ($term->shape === PatternShape::Var) {
+            // A parameter that is already its own slot gets no `Let`; its binder still has to be
+            // resolvable by identity, which is what a use of it asks for.
+            if ($term->binder !== null) {
+                $ctx->binders[$term->binder] = new Local($slotNames[$i]);
+            }
+
             continue;
         }
 
-        bindPattern(lowerPattern($pattern, $ctx->constructorRenames, $dataIndex), new Local($slotNames[$i]), $ctx);
+        bindPattern(lowerPatternTerm($term, $ctx), new Local($slotNames[$i]), $ctx);
     }
 
     if ($fn->body->line > 0) {
@@ -300,19 +309,20 @@ function lowerFunction(
             );
             [$bodyItems, $result, $bodyHasBox] = lowerActionBody($fn->body, $ctx, false);
 
+            // A worker runs the action where it stands, so it is not exported, not foreign and -
+            // unlike the entry it sits beside - answers with its result rather than an action.
             $worker = new FunctionDecl(
                 $workerName,
                 $slotNames,
                 null,
                 new Block([...$bodyItems, new Ret($result)]),
-                export: false,
-                foreign: false,
-                actionConvention: ActionConvention::Executes,
-                srcLoc: srcLocFromAst($fn->body, $moduleName, $fn->name, $sourceFile),
-                kind: FunctionKind::Worker,
-                origin: $fn->name,
-                evidenceScope: $ctx->evidenceNames,
-                ioStraightLine: ! $bodyHasBox,
+                new FunctionShape(
+                    kind: FunctionKind::Worker,
+                    origin: $fn->name,
+                    ioStraightLine: ! $bodyHasBox,
+                ),
+                srcLocFromAst($fn->body, $moduleName, $fn->name, $sourceFile),
+                $ctx->evidenceNames,
             );
 
             $callDest = freshTemp($ctx);
@@ -343,18 +353,18 @@ function lowerFunction(
         $slotNames,
         $fn->type,
         new Block($ctx->items),
-        $fn->export,
-        $fn->instanceMethod,
-        $fn->entryKind,
-        ioEffect: false,
-        ioStraightLine: $straightLineIo,
-        foreign: $fn->foreign,
-        actionConvention: $actionConvention,
-        srcLoc: $fn->body->line > 0
+        new FunctionShape(
+            export: $fn->export,
+            instanceMethod: $fn->instanceMethod,
+            entryKind: $fn->entryKind,
+            foreign: $fn->foreign,
+            actionConvention: $actionConvention,
+            ioStraightLine: $straightLineIo,
+        ),
+        $fn->body->line > 0
             ? srcLocFromAst($fn->body, $moduleName, $fn->name, $sourceFile)
             : srcLocFromAst($fn, $moduleName, $fn->name, $sourceFile),
-        kind: FunctionKind::Source,
-        evidenceScope: $ctx->evidenceNames,
+        $ctx->evidenceNames,
     );
 
     return $worker === null ? [$entry] : [$entry, $worker];
@@ -365,13 +375,26 @@ function srcLocFromAst(Ast\AstNode $node, string $module, string $function, stri
     return new SrcLoc($module, $function, normalizeDisplayPath($node->sourceFile ?? $file), $node->line, $node->col);
 }
 
-/** @param array<int, Ast\AstNode> $patterns @return array<int, string> */
-function functionParamSlots(array $patterns): array
+/**
+ * The IR slot name of each declaration parameter.
+ *
+ * A variable pattern is its own slot, and the name it gives the slot is the one its term
+ * publishes — not the node's spelling, which a scrub, a re-parse or a cache round-trip can leave
+ * empty. Anything else (a constructor, a tuple, a wildcard) is a slot of its own that binds
+ * nothing by that name and is called `_pN`, N being its position.
+ *
+ * @param array<int, Ast\AstNode> $patterns
+ * @param array<int, \Moggi\Modules\CheckedTerm> $terms the declaration's published terms
+ * @return array<int, string>
+ */
+function functionParamSlots(array $patterns, array $terms): array
 {
     $names = [];
     foreach ($patterns as $i => $pattern) {
-        if ($pattern instanceof Ast\PatVar) {
-            $names[] = $pattern->name;
+        $term = $pattern->checkedTerm === null ? null : ($terms[$pattern->checkedTerm] ?? null);
+        if ($term instanceof CheckedPattern && $term->shape === PatternShape::Var) {
+            $names[] = $term->name
+                ?? throw new \RuntimeException("the parameter pattern at {$term->origin} publishes no name");
 
             continue;
         }
@@ -383,56 +406,109 @@ function functionParamSlots(array $patterns): array
 }
 
 /**
- * @param array<string, string> $constructorRenames
- * @param array<string, list<string>> $fieldOrderByData constructor => its fields, in declared order
+ * A pattern, lowered from the term that owns its shape.
+ *
+ * A pattern is structure — a constructor's arguments, a record's fields, a list's head and tail,
+ * a variable's name — and it was the last family whose structure lowering read off the node one
+ * level below the term that owned it. The term publishes the shape, the names and the
+ * sub-patterns by their own ids, so this function reads the site's `checkedTerm` and nothing
+ * else: scrubbing every pattern node's fields leaves the IR identical, which is what
+ * `tests/semantics/checked_pattern_terms.php` asserts.
  */
-function lowerPattern(
-    Ast\AstNode $pattern,
-    array $constructorRenames = [],
-    array $fieldOrderByData = [],
-): Pattern {
-    $lower = static fn (Ast\AstNode $p): Pattern => lowerPattern($p, $constructorRenames, $fieldOrderByData);
+function lowerPattern(Ast\AstNode $pattern, LowerCtx $ctx): Pattern
+{
+    return lowerPatternTerm(plannedPattern($pattern, $ctx), $ctx);
+}
 
-    return match ($pattern::class) {
-        Ast\PatWild::class => new PatWild(),
-        Ast\PatVar::class => new PatVar($pattern->name),
-        Ast\PatLit::class => new PatLit($pattern->value),
-        Ast\PatChar::class => new PatChar($pattern->value),
-        Ast\PatNil::class => new PatNil(),
-        Ast\PatCons::class => new PatCons(
-            $lower($pattern->head),
-            $lower($pattern->tail),
+/**
+ * The checked term that owns a pattern site's shape, or a refusal.
+ *
+ * The site is consulted for one thing — the id the record published for it — so a tree that was
+ * scrubbed, re-parsed or restored from a cache answers the same way, and a pattern the record
+ * does not cover is refused rather than lowered from whatever the node still happens to carry.
+ */
+function plannedPattern(Ast\AstNode $site, LowerCtx $ctx): CheckedPattern
+{
+    $term = siteTerm($site, $ctx);
+
+    if ($term instanceof CheckedPattern) {
+        return $term;
+    }
+
+    throw new \RuntimeException(
+        "lowering `{$ctx->moduleName}::{$ctx->functionName}` met a pattern (`" . $site::class
+        . "` at line {$site->line}) that its checked-core record does not plan",
+    );
+}
+
+/** A pattern term by its own id, for a sub-pattern the parent names. */
+function patternTermById(int $id, LowerCtx $ctx, CheckedPattern $parent): CheckedPattern
+{
+    $term = $ctx->terms[$id] ?? null;
+
+    if ($term instanceof CheckedPattern) {
+        return $term;
+    }
+
+    throw new \RuntimeException(
+        "the checked pattern at {$parent->origin} names sub-pattern #{$id}, which its record does"
+        . ' not hold as a pattern',
+    );
+}
+
+function lowerPatternTerm(CheckedPattern $term, LowerCtx $ctx): Pattern
+{
+    $lower = static fn (int $id): Pattern => lowerPatternTerm(patternTermById($id, $ctx, $term), $ctx);
+
+    return match ($term->shape) {
+        PatternShape::Wild => new PatWild(),
+        PatternShape::Var => new PatVar(
+            $term->name ?? throw new \RuntimeException("the variable pattern at {$term->origin} publishes no name"),
+            $term->binder,
         ),
-        Ast\PatCon::class => new PatCon(
-            $constructorRenames[$pattern->name] ?? $pattern->name,
-            \array_map($lower, $pattern->args),
+        PatternShape::Lit => new PatLit(
+            $term->value ?? throw new \RuntimeException("the literal pattern at {$term->origin} publishes no value"),
         ),
-        Ast\PatTuple::class => new PatTuple(
-            \array_map($lower, $pattern->elements),
+        PatternShape::Char => new PatChar(
+            \is_int($term->value)
+                ? $term->value
+                : throw new \RuntimeException("the character pattern at {$term->origin} publishes no value"),
         ),
-        Ast\PatRecord::class => new PatCon(
-            $constructorRenames[$pattern->name] ?? $pattern->name,
-            recordPatternArgs($pattern, $fieldOrderByData, $lower),
+        PatternShape::Nil => new PatNil(),
+        PatternShape::Cons => new PatCons($lower($term->children[0]), $lower($term->children[1])),
+        PatternShape::Con => new PatCon(
+            $ctx->constructorRenames[$term->name] ?? ($term->name
+                ?? throw new \RuntimeException("the constructor pattern at {$term->origin} publishes no name")),
+            \array_map($lower, $term->children),
         ),
-        default => throw new \RuntimeException('unsupported pattern in IR lowering'),
+        PatternShape::Tuple => new PatTuple(\array_map($lower, $term->children)),
+        PatternShape::Record => new PatCon(
+            $ctx->constructorRenames[$term->name] ?? ($term->name
+                ?? throw new \RuntimeException("the record pattern at {$term->origin} publishes no name")),
+            recordPatternArgs($term, $ctx, $lower),
+        ),
     };
 }
 
 /**
  * A record pattern's sub-patterns in the constructor's declared field order.
  *
- * @param array<string, list<string>> $fieldOrderByData
- * @param callable(Ast\AstNode): Pattern $lower
+ * The field order is the data declaration's, which lowering holds in its context; the fields and
+ * the sub-patterns are the term's. A field the pattern left out is a wildcard, exactly as the
+ * source means it.
+ *
+ * @param array<string, list<string>> $fieldOrderByData constructor => its fields, in declared order
+ * @param callable(int): Pattern $lower
  * @return list<Pattern>
  */
-function recordPatternArgs(Ast\AstNode $pattern, array $fieldOrderByData, callable $lower): array
+function recordPatternArgs(CheckedPattern $term, LowerCtx $ctx, callable $lower): array
 {
-    $order = $fieldOrderByData[$pattern->name]
-        ?? throw new \RuntimeException("record pattern `{$pattern->name}`: unknown field order");
+    $name = $term->name ?? throw new \RuntimeException("the record pattern at {$term->origin} publishes no name");
+    $order = $ctx->data[$name] ?? throw new \RuntimeException("record pattern `{$name}`: unknown field order");
 
     $byName = [];
-    foreach ($pattern->fields as $field) {
-        $byName[$field->name] = $field->pattern;
+    foreach ($term->fields as $field) {
+        $byName[$field['name']] = $field['id'];
     }
 
     $args = [];
@@ -484,7 +560,11 @@ function newCtx(
         $ctx->ioActionStore = $from->ioActionStore;
         $ctx->constructorRenames = $from->constructorRenames;
         $ctx->evidenceNames = $from->evidenceNames;
-        $ctx->evidencePlans = $from->evidencePlans;
+        $ctx->terms = $from->terms;
+        // Binder identities are unique for the whole declaration, so inheriting the map keeps every
+        // enclosing binder reachable (a lambda body is where they are captured) without a name ever
+        // standing in for an identity.
+        $ctx->binders = $from->binders;
     }
 
     return $ctx;
@@ -511,9 +591,34 @@ function freshLocalName(LowerCtx $ctx, string $occ): string
     return $name;
 }
 
-/** @param array<string, true> $bound @return array<int, string> */
-function freeVarsExpr(Ast\AstNode $expr, array $bound): array
+/**
+ * The names an expression refers to that its own binders do not bind.
+ *
+ * Three callers ask this about two different trees. Lowering asks about the
+ * elaboration its terms describe; the publication pass asks about the same tree
+ * before its terms are complete; and the checker asks about a copied default body
+ * that carries no terms at all. Two of those answers are parameters the caller
+ * supplies rather than fields this function reads: `$evidenceParameter` for where a
+ * dispatched dictionary is named, and `$terms` for the enclosure's published terms.
+ *
+ * With `$terms` supplied, a `case` or a binding group is walked through its own
+ * structure — the arms and the members of {@see CheckedCase} /
+ * {@see CheckedLetGroup} — so nothing that lowers ever reads `CaseExpr::$alts` or
+ * `Let::$bindings` for structure. The node's own lists are read only for a tree that
+ * was never published, which is the checker's copy: a tree with no terms has no
+ * structural term to read, and falling back to the node there is honest rather than
+ * a second authority, because no lowered compilation takes that path.
+ *
+ * @param array<string, true> $bound
+ * @param callable(Ast\EvidenceMethod): ?string $evidenceParameter
+ * @param array<int, \Moggi\Modules\CheckedTerm> $terms the enclosure's published terms, when it has them
+ * @return array<int, string>
+ */
+function freeVarsExpr(Ast\AstNode $expr, array $bound, callable $evidenceParameter, array $terms = []): array
 {
+    $walk = static fn (Ast\AstNode $node, array $names): array
+        => freeVarsExpr($node, $names, $evidenceParameter, $terms);
+
     return match ($expr::class) {
         Ast\Variable::class => isset($bound[$expr->name]) ? [] : [$expr->name],
         Ast\IntegerLit::class,
@@ -524,111 +629,328 @@ function freeVarsExpr(Ast\AstNode $expr, array $bound): array
         Ast\OperatorRef::class,
         Ast\QualifiedRef::class,
         Ast\ExprHole::class => [],
-        Ast\TypeAsc::class => freeVarsExpr($expr->expr, $bound),
-        Ast\Apply::class => [...freeVarsExpr($expr->function, $bound), ...freeVarsExpr($expr->argument, $bound)],
-        Ast\Infix::class => [...freeVarsExpr($expr->left, $bound), ...freeVarsExpr($expr->right, $bound)],
+        Ast\TypeAsc::class => $walk($expr->expr, $bound),
+        Ast\Apply::class => [...$walk($expr->function, $bound), ...$walk($expr->argument, $bound)],
+        Ast\Infix::class => [...$walk($expr->left, $bound), ...$walk($expr->right, $bound)],
         Ast\Tuple::class,
-        Ast\ListLit::class => freeVarsInExprs($expr->elements, $bound),
-        Ast\Lambda::class => freeVarsExpr($expr->body, [
-            ...$bound,
-            ...\array_fill_keys(patternParams($expr->params), true),
-        ]),
+        Ast\ListLit::class => freeVarsInExprs($expr->elements, $bound, $evidenceParameter, $terms),
+        Ast\Lambda::class => $walk($expr->body, [...$bound, ...lambdaBoundSet($expr, $terms)]),
         Ast\DoExpr::class => $expr->desugared !== null
-            ? freeVarsExpr($expr->desugared, $bound)
+            ? $walk($expr->desugared, $bound)
             : throw new \RuntimeException('do expression reached free-variable analysis before desugaring'),
-        Ast\Let::class => freeVarsLet($expr->bindings, $expr->body, $bound),
-        Ast\Where::class => freeVarsLet($expr->bindings, $expr->expr, $bound),
-        Ast\CaseExpr::class => [
-            ...freeVarsExpr($expr->scrutinee, $bound),
-            ...freeVarsInCaseAlts($expr->alts, $bound),
-        ],
-        Ast\GuardsExpr::class => freeVarsInGuards($expr->clauses, $bound),
-        Ast\RecordCon::class => freeVarsInRecordFields($expr->fields, $bound),
+        Ast\Let::class,
+        Ast\Where::class => freeVarsInGroupNode($expr, $bound, $evidenceParameter, $terms),
+        Ast\CaseExpr::class => freeVarsInCaseNode($expr, $bound, $evidenceParameter, $terms),
+        Ast\GuardsExpr::class => freeVarsInGuards(guardsClauses($expr, $terms), $bound, $evidenceParameter, $terms),
+        Ast\RecordCon::class => freeVarsInRecordFields(recordFieldValues($expr, $terms), $bound, $evidenceParameter, $terms),
         Ast\RecordUpdate::class => [
-            ...freeVarsExpr($expr->object, $bound),
-            ...freeVarsInRecordFields($expr->fields, $bound),
+            ...$walk(recordReceiver($expr, $terms), $bound),
+            ...freeVarsInRecordFields(recordFieldValues($expr, $terms), $bound, $evidenceParameter, $terms),
         ],
-        Ast\FieldAccess::class => freeVarsExpr($expr->object, $bound),
-        Ast\IntrinsicCall::class => freeVarsInExprs($expr->args, $bound),
-        Ast\EvidenceRef::class => freeVarsInExprs($expr->context, $bound),
-        Ast\EvidenceMethod::class => [
-            ...(isset($bound[$expr->evidence]) ? [] : [$expr->evidence]),
-            ...freeVarsInExprs($expr->contextEvidence, $bound),
-        ],
-        default => freeVarsInChildren($expr, $bound),
+        Ast\FieldAccess::class => $walk($expr->object, $bound),
+        Ast\IntrinsicCall::class => freeVarsInExprs($expr->args, $bound, $evidenceParameter, $terms),
+        Ast\EvidenceRef::class => freeVarsInExprs($expr->context, $bound, $evidenceParameter, $terms),
+        Ast\EvidenceMethod::class => (static function () use ($expr, $bound, $evidenceParameter, $terms): array {
+            $parameter = $evidenceParameter($expr);
+
+            return [
+                ...($parameter === null || isset($bound[$parameter]) ? [] : [$parameter]),
+                ...freeVarsInExprs($expr->contextEvidence, $bound, $evidenceParameter, $terms),
+            ];
+        })(),
+        default => freeVarsInChildren($expr, $bound, $evidenceParameter, $terms),
     };
 }
 
-function freeVarsInChildren(Ast\AstNode $expr, array $bound): array
+/**
+ * @param array<string, true> $bound
+ * @param callable(Ast\EvidenceMethod): ?string $evidenceParameter
+ * @param array<int, \Moggi\Modules\CheckedTerm> $terms
+ * @return array<int, string>
+ */
+function freeVarsInChildren(Ast\AstNode $expr, array $bound, callable $evidenceParameter, array $terms = []): array
 {
     $free = [];
     foreach ($expr->childValues() as $child) {
         if ($child instanceof Ast\AstNode) {
-            $free = [...$free, ...freeVarsExpr($child, $bound)];
+            $free = [...$free, ...freeVarsExpr($child, $bound, $evidenceParameter, $terms)];
         }
     }
 
     return \array_values(\array_unique($free));
 }
 
-/** @param list<Ast\RecordField> $fields @param array<string, true> $bound @return array<int, string> */
-function freeVarsInRecordFields(array $fields, array $bound): array
+/**
+ * @param list<array{0: string, 1: Ast\AstNode}> $fields a record's written fields, label and value
+ * @param array<string, true> $bound
+ * @param callable(Ast\EvidenceMethod): ?string $evidenceParameter
+ * @param array<int, \Moggi\Modules\CheckedTerm> $terms
+ * @return array<int, string>
+ */
+function freeVarsInRecordFields(array $fields, array $bound, callable $evidenceParameter, array $terms = []): array
 {
     $free = [];
     foreach ($fields as $field) {
-        $free = [...$free, ...freeVarsExpr($field->expr, $bound)];
+        $free = [...$free, ...freeVarsExpr($field[1], $bound, $evidenceParameter, $terms)];
     }
 
     return $free;
 }
 
-/** @param array<int, Ast\AstNode> $exprs @param array<string, true> $bound @return array<int, string> */
-function freeVarsInExprs(array $exprs, array $bound): array
+/**
+ * @param array<int, Ast\AstNode> $exprs
+ * @param array<string, true> $bound
+ * @param callable(Ast\EvidenceMethod): ?string $evidenceParameter
+ * @param array<int, \Moggi\Modules\CheckedTerm> $terms
+ * @return array<int, string>
+ */
+function freeVarsInExprs(array $exprs, array $bound, callable $evidenceParameter, array $terms = []): array
 {
     $free = [];
     foreach ($exprs as $expr) {
-        $free = [...$free, ...freeVarsExpr($expr, $bound)];
+        $free = [...$free, ...freeVarsExpr($expr, $bound, $evidenceParameter, $terms)];
     }
 
     return \array_values(\array_unique($free));
 }
 
-/** @param array<int, Ast\Binding> $bindings @param array<string, true> $bound @return array<int, string> */
-function freeVarsLet(array $bindings, Ast\AstNode $body, array $bound): array
+/**
+ * A `let`/`where` group's free names, from the term that owns its members and order.
+ *
+ * The group binds its members over its own bodies before either is scanned, which is
+ * why the bound set is built in one pass and read in the next. A group with no
+ * published term — a checker copy — is walked from the node instead
+ * ({@see freeVarsLet()}).
+ *
+ * @param array<string, true> $bound
+ * @param callable(Ast\EvidenceMethod): ?string $evidenceParameter
+ * @param array<int, \Moggi\Modules\CheckedTerm> $terms
+ * @return array<int, string>
+ */
+function freeVarsInGroupNode(Ast\AstNode $expr, array $bound, callable $evidenceParameter, array $terms): array
+{
+    $term = $expr->checkedTerm === null ? null : ($terms[$expr->checkedTerm] ?? null);
+    if (! $term instanceof \Moggi\Modules\CheckedLetGroup) {
+        $node = $expr instanceof Ast\Where ? $expr->expr : $expr->body;
+
+        return freeVarsLet($expr->bindings, $node, $bound, $evidenceParameter, $terms);
+    }
+
+    $members = $term->members();
+    $groupBound = $bound;
+    foreach ($members as $binding) {
+        $groupBound = [...$groupBound, ...patternBoundSet($binding->pattern, $terms)];
+    }
+
+    $free = [];
+    foreach ($members as $binding) {
+        $free = [...$free, ...freeVarsExpr($binding->value, $groupBound, $evidenceParameter, $terms)];
+    }
+
+    if ($term->body !== null) {
+        $free = [...$free, ...freeVarsExpr($term->body, $groupBound, $evidenceParameter, $terms)];
+    }
+
+    return \array_values(\array_unique($free));
+}
+
+/**
+ * A `case`'s free names, from the term that owns its arms.
+ *
+ * Each clause is scanned under its arm's binders, guards included; an arm with no
+ * guarded clauses has exactly one clause whose guard is null.
+ *
+ * @param array<string, true> $bound
+ * @param callable(Ast\EvidenceMethod): ?string $evidenceParameter
+ * @param array<int, \Moggi\Modules\CheckedTerm> $terms
+ * @return array<int, string>
+ */
+function freeVarsInCaseNode(Ast\CaseExpr $expr, array $bound, callable $evidenceParameter, array $terms): array
+{
+    $term = $expr->checkedTerm === null ? null : ($terms[$expr->checkedTerm] ?? null);
+    if (! $term instanceof \Moggi\Modules\CheckedCase) {
+        return [
+            ...freeVarsExpr($expr->scrutinee, $bound, $evidenceParameter, $terms),
+            ...freeVarsInCaseAlts($expr->alts, $bound, $evidenceParameter, $terms),
+        ];
+    }
+
+    $free = freeVarsExpr($expr->scrutinee, $bound, $evidenceParameter, $terms);
+    foreach ($term->arms as $arm) {
+        $armBound = [...$bound, ...patternBoundSet($arm->pattern, $terms)];
+        foreach ($arm->clauses as $clause) {
+            if ($clause['guard'] !== null) {
+                $free = [...$free, ...freeVarsExpr($clause['guard'], $armBound, $evidenceParameter, $terms)];
+            }
+            $free = [...$free, ...freeVarsExpr($clause['body'], $armBound, $evidenceParameter, $terms)];
+        }
+    }
+
+    return \array_values(\array_unique($free));
+}
+
+/**
+ * @param array<int, Ast\Binding> $bindings
+ * @param array<string, true> $bound
+ * @param callable(Ast\EvidenceMethod): ?string $evidenceParameter
+ * @param array<int, \Moggi\Modules\CheckedTerm> $terms
+ * @return array<int, string>
+ */
+function freeVarsLet(array $bindings, Ast\AstNode $body, array $bound, callable $evidenceParameter, array $terms = []): array
 {
     $groupBound = $bound;
     foreach ($bindings as $binding) {
-        $groupBound = [...$groupBound, ...patternBoundNames($binding->pattern)];
+        $groupBound = [...$groupBound, ...patternBoundSet($binding->pattern, $terms)];
     }
 
     $free = [];
     foreach ($bindings as $binding) {
-        $free = [...$free, ...freeVarsExpr($binding->value, $groupBound)];
+        $free = [...$free, ...freeVarsExpr($binding->value, $groupBound, $evidenceParameter, $terms)];
     }
 
-    return [...$free, ...freeVarsExpr($body, $groupBound)];
+    return [...$free, ...freeVarsExpr($body, $groupBound, $evidenceParameter, $terms)];
 }
 
-/** @param array<int, Ast\Guarded> $clauses @param array<string, true> $bound @return array<int, string> */
-function freeVarsInGuards(array $clauses, array $bound): array
+/**
+ * @param array<int, Ast\Guarded> $clauses
+ * @param array<string, true> $bound
+ * @param callable(Ast\EvidenceMethod): ?string $evidenceParameter
+ * @param array<int, \Moggi\Modules\CheckedTerm> $terms
+ * @return array<int, string>
+ */
+function freeVarsInGuards(array $clauses, array $bound, callable $evidenceParameter, array $terms = []): array
 {
     $free = [];
     foreach ($clauses as $clause) {
-        $free = [...$free, ...freeVarsExpr($clause->guard, $bound), ...freeVarsExpr($clause->body, $bound)];
+        $free = [
+            ...$free,
+            ...freeVarsExpr($clause->guard, $bound, $evidenceParameter, $terms),
+            ...freeVarsExpr($clause->body, $bound, $evidenceParameter, $terms),
+        ];
     }
 
     return \array_values(\array_unique($free));
 }
 
-/** @param array<int, Ast\Alt> $alts @param array<string, true> $bound @return array<int, string> */
-function freeVarsInCaseAlts(array $alts, array $bound): array
+/**
+ * @param array<int, Ast\Alt> $alts
+ * @param array<string, true> $bound
+ * @param callable(Ast\EvidenceMethod): ?string $evidenceParameter
+ * @param array<int, \Moggi\Modules\CheckedTerm> $terms
+ * @return array<int, string>
+ */
+function freeVarsInCaseAlts(array $alts, array $bound, callable $evidenceParameter, array $terms = []): array
 {
     $free = [];
     foreach ($alts as $alt) {
-        $free = [...$free, ...freeVarsExpr($alt->body, [...$bound, ...patternBoundNames($alt->pattern)])];
+        $free = [...$free, ...freeVarsExpr(
+            $alt->body,
+            [...$bound, ...patternBoundSet($alt->pattern, $terms)],
+            $evidenceParameter,
+            $terms,
+        )];
     }
 
     return \array_values(\array_unique($free));
+}
+
+/**
+ * A record's written fields as (label, value) pairs, from its term when the tree was published.
+ *
+ * The record term owns which fields were written and in what order; the values stay children of
+ * the node and are what free-variable analysis walks. A tree with no terms — the checker's
+ * pre-elaboration copy — falls back to the node's own list.
+ *
+ * @param array<int, \Moggi\Modules\CheckedTerm> $terms
+ * @return list<array{0: string, 1: Ast\AstNode}>
+ */
+function recordFieldValues(Ast\AstNode $expr, array $terms): array
+{
+    $term = $expr->checkedTerm === null ? null : ($terms[$expr->checkedTerm] ?? null);
+    if ($term instanceof \Moggi\Modules\CheckedRecord) {
+        $fields = [];
+        foreach ($term->fields as $field) {
+            $fields[] = [$field->name, $field->value];
+        }
+
+        return $fields;
+    }
+
+    $fields = [];
+    foreach (\property_exists($expr, 'fields') ? $expr->fields : [] as $field) {
+        $fields[] = [$field->name, $field->expr];
+    }
+
+    return $fields;
+}
+
+/**
+ * The record an update reads its unmentioned fields from, from its term when the tree was
+ * published.
+ *
+ * @param array<int, \Moggi\Modules\CheckedTerm> $terms
+ */
+function recordReceiver(Ast\AstNode $expr, array $terms): Ast\AstNode
+{
+    $term = $expr->checkedTerm === null ? null : ($terms[$expr->checkedTerm] ?? null);
+    if ($term instanceof \Moggi\Modules\CheckedRecord && $term->receiver !== null) {
+        return $term->receiver;
+    }
+
+    return $expr->object ?? throw new \RuntimeException(
+        'a record update reached free-variable analysis with neither a term nor a receiver',
+    );
+}
+
+/**
+ * A guard chain's clauses, from its term when the tree was published.
+ *
+ * @param array<int, \Moggi\Modules\CheckedTerm> $terms
+ * @return list<Ast\Guarded>
+ */
+function guardsClauses(Ast\GuardsExpr $expr, array $terms): array
+{
+    $term = $expr->checkedTerm === null ? null : ($terms[$expr->checkedTerm] ?? null);
+
+    return $term instanceof \Moggi\Modules\CheckedGuards ? $term->clauses : $expr->clauses;
+}
+
+/**
+ * The names a pattern subtree binds, from its term when the tree was published.
+ *
+ * Free-variable analysis asks this for every arm binder and every group member. Answering it
+ * from the term keeps the answer the one the producer read off the node, so a scrubbed, re-parsed
+ * or cache-restored pattern still binds what it bound. A tree that carries no terms — the
+ * checker's pre-elaboration copy — falls back to the walk, which is the only honest answer
+ * there.
+ *
+ * @param array<int, \Moggi\Modules\CheckedTerm> $terms
+ * @return array<string, true>
+ */
+function patternBoundSet(Ast\AstNode $pattern, array $terms): array
+{
+    $term = $pattern->checkedTerm === null ? null : ($terms[$pattern->checkedTerm] ?? null);
+
+    return $term instanceof CheckedPattern ? $term->boundNames() : patternBoundNames($pattern);
+}
+
+/**
+ * The names a lambda's slots bind, from its term once it has one.
+ *
+ * Its own capture set is computed while its term is still being built, so there the answer comes
+ * from the node — the same answer the published term then carries.
+ *
+ * @param array<int, \Moggi\Modules\CheckedTerm> $terms
+ * @return array<string, true>
+ */
+function lambdaBoundSet(Ast\Lambda $lambda, array $terms): array
+{
+    $term = $lambda->checkedTerm === null ? null : ($terms[$lambda->checkedTerm] ?? null);
+
+    return \array_fill_keys(
+        $term instanceof \Moggi\Modules\CheckedLambda ? $term->parameterNames : patternParams($lambda->params),
+        true,
+    );
 }
 
 /** @param array<int, Ast\LambdaParam|Ast\AstNode> $patterns @return array<int, string> */

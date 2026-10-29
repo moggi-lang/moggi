@@ -258,7 +258,7 @@ $check(
 );
 
 $marked = new IR\FunctionDecl('faulting', ['n'], null, $quiet->body);
-$marked->ioEffect = true;
+$marked->shape->ioEffect = true;
 $withIo = $analysis->modelFor([$total, $marked, $indirectBody, $indirectApply, $indirectPartial]);
 $check($withIo !== $rewritten, 'the analysis owner kept its model across an io mark set in place');
 $check($withIo->ofCall('faulting')->executes, 'the analysis owner missed an io mark while reusing its scan');

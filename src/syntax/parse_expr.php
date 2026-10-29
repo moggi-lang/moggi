@@ -602,6 +602,14 @@ function reachedDoExprBoundary(ParserState $state): bool
         return false;
     }
 
+    // A statement is laid out at the block's column, so a token deeper than that column continues
+    // the statement being parsed. Without this, the body of a multi-line `if` in a `do` block ended
+    // at the first token of its `then` branch that was on a later line than the `if`
+    // (`then putStrLn "pos"` stopped before `"pos"`, and the parser then demanded `else` there).
+    if ($state->doBlockCol !== null && peek($state)->col > $state->doBlockCol) {
+        return false;
+    }
+
     return startsDoStmt($state) || isFollowingTopLevelDecl($state);
 }
 

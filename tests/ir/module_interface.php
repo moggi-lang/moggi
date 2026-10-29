@@ -104,7 +104,10 @@ main = do
   putStrLn (show (bump provValue))
 MOGGI);
 
-$backendId = \Moggi\Backend\compileBackend();
+// This case runs as a standalone PHP process, which the suite starts without a backend argument:
+// it is the `php` case, so it compiles the closure for `php`. (The suite used to keep a process-wide
+// backend global for this; it is gone — every other case receives its backend as an argument.)
+$backendId = 'php';
 [$files, $dir] = Modules\projectSourceClosure(
     [$mainPath],
     [$scratch, $root . '/libraries/base/src'],
@@ -135,16 +138,16 @@ $check($main->module === 'Main', 'the interface does not carry its own module na
 
 $check($main->summaries === [], 'the optional summary region is not empty by default');
 $check(
-    $main->externalFns !== [] && $main->fnOriginModules !== [],
+    $main->externalFns() !== [] && $main->symbol('bump')?->originModule !== null,
     'a module with imports published an empty ABI region',
 );
 $check(
-    \is_array($main->env) && \is_array($main->data) && \is_array($main->typeSynonyms)
-        && \is_array($main->qualifiedModules) && \is_array($main->qualifiedOrigins)
-        && \is_array($main->qualifiedEnv) && \is_array($main->intrinsicWrappers)
-        && \is_array($main->ambiguousNames) && \is_array($main->constructorRenames)
-        && \is_array($main->externalFnRuntimeArity) && \is_array($main->callables)
-        && \is_array($main->callables) && \is_array($main->actionReturn),
+    \is_array($main->env()) && \is_array($main->data()) && \is_array($main->typeSynonyms())
+        && \is_array($main->qualifiedModules) && \is_array($main->qualifiedOrigins())
+        && \is_array($main->qualifiedEnv()) && \is_array($main->intrinsicWrappers())
+        && \is_array($main->ambiguousNames()) && \is_array($main->constructorRenames())
+        && \is_array($main->externalFnRuntimeArity()) && \is_array($main->callables())
+        && \is_array($main->actionReturn()),
     'the required ABI regions are not all arrays',
 );
 
@@ -177,12 +180,12 @@ $ir = pipelineRun(new PipelineRequest(
 $check($ir !== null, 'the prepared module lowered no IR');
 $planned = planEmission($main, $layout, $ir, collectIrCodegenUsage($ir)['callees']);
 $check(
-    $planned->importedData === $main->data,
+    $planned->importedData === $main->data(),
     'the plan dropped an imported type fact; constructor renames and data travel whole because a '
         . 'match arm names a constructor that is not a callee',
 );
 $check(
-    $planned->constructorRenames === $main->constructorRenames,
+    $planned->constructorRenames === $main->constructorRenames(),
     'the plan dropped a constructor rename the emitted code may still need',
 );
 $check(
@@ -205,7 +208,7 @@ $check(
 );
 $check(
     $planned->externalFns !== []
-        && \array_diff_key($planned->externalFns, $main->externalFns) === [],
+        && \array_diff_key($planned->externalFns, $main->externalFns()) === [],
     'the plan invented an external the interface never published: '
         . \json_encode(\array_keys($planned->externalFns)),
 );
@@ -239,26 +242,25 @@ $check($refused, 'an emitter accepted a module with no EmitPlan');
 $carried = $prepared->checked['Main']->interface;
 $check($carried instanceof ImportInterface, 'the checked program carries no import interface');
 $check(
-    $carried->externalFns === $main->externalFns
-        && $carried->callableArity() === $main->callableArity()
-        && $carried->fnOriginModules === $main->fnOriginModules,
+    $carried->symbols === $main->symbols
+        && $carried->callableArity() === $main->callableArity(),
     'the checked program carries a different interface than the import context',
 );
 
 // ---- 4 · identity survives a re-export, locals are not imports ------------
 
 $check(
-    isset($main->externalFns['bump']),
+    $main->symbol('bump') !== null,
     'an entry re-exported through a hub is missing from the importer: '
-        . \json_encode(\array_keys($main->externalFns)),
+        . \json_encode(\array_keys($main->externalFns())),
 );
 $check(
-    ($main->fnOriginModules['bump'] ?? null) === 'Prov',
+    $main->fnOrigin('bump') === 'Prov',
     'a re-exported entry lost its declaring module: '
-        . \json_encode($main->fnOriginModules['bump'] ?? null),
+        . \json_encode($main->fnOrigin('bump')),
 );
 $check(
-    ! isset($main->externalFns['main']),
+    $main->symbol('main') === null,
     'the module published its own entry as an import',
 );
 
@@ -271,9 +273,9 @@ $check(
     'the shallow closure published no callable record for `bump`',
 );
 $check(
-    ($main->callables['bump'] ?? null) === $published,
+    ($main->callables()['bump'] ?? null) === $published,
     'the importer\'s callable layout for `bump` is not the declaring module\'s record: '
-        . \json_encode($main->callables['bump'] ?? null) . ' vs ' . \json_encode($published),
+        . \json_encode($main->callables()['bump'] ?? null) . ' vs ' . \json_encode($published),
 );
 $check(
     ($main->callableArity()['bump'] ?? null) === ($published['arity'] ?? null),
@@ -348,15 +350,15 @@ $check(
     'an entry returning a monadic variable was published as having a worker: ' . \json_encode($provFacts),
 );
 $check(
-    \is_string($main->workers['greet'] ?? null)
-        && \str_ends_with($main->workers['greet'], '::' . workerName('greet')),
+    \is_string($main->workers()['greet'] ?? null)
+        && \str_ends_with($main->workers()['greet'], '::' . workerName('greet')),
     'the importer was not told the worker symbol its producer publishes: '
-        . \json_encode($main->workers['greet'] ?? null),
+        . \json_encode($main->workers()['greet'] ?? null),
 );
 $check(
-    ! isset($main->workers['twice']) && isset($main->actionReturn['twice']),
+    ! isset($main->workers()['twice']) && isset($main->actionReturn()['twice']),
     'the importer\'s view of a monadic entry disagrees with its producer: '
-        . \json_encode(['workers' => $main->workers, 'actionReturn' => $main->actionReturn]),
+        . \json_encode(['workers' => $main->workers(), 'actionReturn' => $main->actionReturn()]),
 );
 
 $provChecked = $prepared->checked['Prov'] ?? null;
@@ -400,6 +402,108 @@ $check(
     $refusedFacts,
     'a module that published no action facts and was never checked answered instead of refusing',
 );
+
+// ---- 9 · ambiguity and qualification are answers about one record ----------
+//
+// A name two modules export unqualified is ambiguous, and both `A.foo` and `B.foo` stay well
+// defined. The two answers used to live in different maps, so the check that dropped the symbol
+// left the qualified answer standing on its own; the interface now states both on the record the
+// name is keyed by, and this section holds that: one record, one ambiguity report, and no qualified
+// answer that its record does not carry.
+
+$conflict = createTempDir('moggi-module-interface-conflict');
+$conflictPath = static function (string $relative, string $source) use ($conflict): string {
+    $path = $conflict . '/' . $relative;
+    if (! \is_dir(\dirname($path))) {
+        \mkdir(\dirname($path), 0o777, true);
+    }
+    \file_put_contents($path, $source);
+
+    return $path;
+};
+$conflictPath('lib/A.mog', <<<'MOGGI'
+module Conflict.A (foo) where
+
+foo :: Int -> Int
+foo x = x
+MOGGI);
+$conflictPath('lib/B.mog', <<<'MOGGI'
+module Conflict.B (foo) where
+
+foo :: Int -> Int
+foo x = x
+MOGGI);
+$conflictMain = $conflictPath('Main.mog', <<<'MOGGI'
+module Main where
+
+import Conflict.A (foo)
+import Conflict.B (foo)
+import Conflict.A qualified as A
+import Conflict.B qualified as B
+
+main :: IO ()
+main = putStrLn (show (A.foo 1 + B.foo 2))
+MOGGI);
+
+[$conflictFiles, $conflictDir] = Modules\projectSourceClosure(
+    [$conflictMain],
+    [$conflict, $root . '/libraries/base/src'],
+    $backendId,
+);
+$conflictContext = CompilationContext::for(
+    $backendId,
+    CompilePurpose::Executable,
+    entryModules: ['Main'],
+    roots: [$conflict, $root . '/libraries/base/src'],
+    sources: $conflictFiles,
+);
+$conflictPrepared = Modules\prepareProject($conflictFiles, $conflictDir, $conflictContext);
+$conflictInterface = $module($conflictPrepared->importContexts, 'Main');
+$ambiguous = $conflictInterface->record('foo');
+$check(
+    $ambiguous !== null,
+    'an ambiguously imported name has no record at all: '
+        . \json_encode(\array_keys($conflictInterface->symbols)),
+);
+$check(
+    $conflictInterface->symbol('foo') === null,
+    'an ambiguous name answered as a callable the module may name',
+);
+$check(
+    ($conflictInterface->ambiguousNames()['foo']['origins'] ?? []) === ['Conflict.A', 'Conflict.B'],
+    'the ambiguity report is not on the record in import order: '
+        . \json_encode($conflictInterface->ambiguousNames()),
+);
+$check(
+    isset($ambiguous?->scheme),
+    'the ambiguous record dropped the type the import published',
+);
+foreach (['Conflict.A', 'Conflict.B'] as $prefix) {
+    $check(
+        isset($conflictInterface->qualifiedEnv()[$prefix]['foo']),
+        "the qualified answer `{$prefix}.foo` is missing from the record's own prefixes: "
+            . \json_encode(\array_keys($conflictInterface->qualifiedEnv()[$prefix] ?? [])),
+    );
+    $check(
+        isset($ambiguous?->qualified[$prefix]),
+        "`{$prefix}.foo` resolves through the qualified projection but not through the record",
+    );
+}
+// Nothing in the qualified maps can outlive the record that states it.
+$orphans = [];
+foreach ($conflictInterface->qualifiedEnv() as $prefix => $names) {
+    foreach (\array_keys($names) as $name) {
+        if (! isset($conflictInterface->symbols[$name]->qualified[$prefix])) {
+            $orphans[] = $prefix . '.' . $name;
+        }
+    }
+}
+$check(
+    $orphans === [],
+    'a qualified answer is published for a name whose record does not state it: '
+        . \json_encode($orphans),
+);
+removeDirectory($conflict);
 
 if ($failures !== []) {
     throw new \RuntimeException(

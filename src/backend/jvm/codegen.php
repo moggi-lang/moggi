@@ -203,7 +203,7 @@ function emitFunction(
 ): void {
     $name = symbolName($fn->name);
     $params = $fn->params;
-    if ($fn->kind->takesCaptures()) {
+    if ($fn->shape->kind->takesCaptures()) {
         $params = [
             ...($lambdaMeta[$fn->name]['captures'] ?? []),
             ...$params,
@@ -345,7 +345,7 @@ function entryReturnsAction(IR\Module $module): bool
 {
     foreach ($module->functions as $function) {
         if ($function->name === $module->entry?->name) {
-            return $function->actionConvention === IR\ActionConvention::ReturnsAction;
+            return $function->shape->actionConvention === IR\ActionConvention::ReturnsAction;
         }
     }
 
@@ -2952,7 +2952,13 @@ function emitForeign(EmitEnv $env, IR\ForeignCall $op): void
     }
 
     if (($op->kind ?? 'function') === 'const') {
-        $env->c->getstatic($env->cp->fieldRef($resolved['class'], $resolved['hostMember'], $desc));
+        // A `long`/`double` static field occupies two operand slots. Reading one is one class
+        // field of width `$desc`, and the verifier counts that width, so the push must say so —
+        // `java.lang.Long:MAX_VALUE` computed a max stack of one and failed to load.
+        $env->c->getstatic(
+            $env->cp->fieldRef($resolved['class'], $resolved['hostMember'], $desc),
+            jvmValueSlots($desc),
+        );
         boxForeignReturn($env, $desc);
         emitForeignIoWrap($env, $op->ioWrap);
 
@@ -3325,6 +3331,17 @@ function unboxForeignArg(EmitEnv $env, string $kind): void
             }
         })(),
     };
+}
+
+/**
+ * How many operand slots one value of this descriptor occupies.
+ *
+ * `J` and `D` take two; everything else, including every reference and `void`, takes one or
+ * none. The stack accounting asks this rather than assuming one value is one slot.
+ */
+function jvmValueSlots(string $desc): int
+{
+    return $desc === 'J' || $desc === 'D' ? 2 : 1;
 }
 
 function boxForeignReturn(EmitEnv $env, string $retOrFieldDesc): void

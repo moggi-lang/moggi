@@ -211,6 +211,8 @@ function inferRecursiveMemberBody(TypeCheckState $state, RecursiveMember $member
 
     $env = $state->env;
     assertParamListLinear($state, $fn->params);
+    // The member's parameters open their own frame, exactly as a standalone declaration's do.
+    $state->pushBinderScope();
     foreach ($fn->params as $i => $param) {
         [$_, $env] = bindPattern($state, $param, $paramTypes[$i], $env, generalize: false);
     }
@@ -241,6 +243,7 @@ function inferRecursiveMemberBody(TypeCheckState $state, RecursiveMember $member
             $state->constraintMethodAmbiguities,
             $state->constraintMethodCandidates,
         ] = $savedMethods;
+        $state->popBinderScope();
     }
 }
 
@@ -275,7 +278,12 @@ function solveRecursiveGroupConstraints(TypeCheckState $state, array $group): ar
     do {
         $changed = false;
         foreach ($inferred as $member) {
-            markRecursiveGroupEvidence($member->fn->body, $byName);
+            markRecursiveGroupEvidence(
+                $member->fn->body,
+                static fn (Ast\Variable $use): ?array => $use->binderId === null
+                    ? ($byName[$use->name] ?? null)
+                    : null,
+            );
 
             $found = inferredFunctionConstraints($state, $member->fn->body, $member->monotype);
             if ($found !== []) {
@@ -303,17 +311,23 @@ function solveRecursiveGroupConstraints(TypeCheckState $state, array $group): ar
  * evidence yet; the pass that runs after settlement resolves them like any other
  * call site.
  *
- * @param array<string, list<Ast\PendingConstraint>> $byName
+ * Which member a reference means is the caller's question, answered by a predicate: a local group
+ * asks the use's binder identity, and a module-level group asks the spelling only of a use that names
+ * no local binder (a `let` inside a declaration may shadow a member's name). Marking a same-spelling
+ * neighbour would apply the group's dictionaries to a binding that takes none.
+ *
+ * @param callable(Ast\Variable): (?list<Ast\PendingConstraint>) $constraintsFor
  */
-function markRecursiveGroupEvidence(Ast\AstNode $expr, array $byName): void
+function markRecursiveGroupEvidence(Ast\AstNode $expr, callable $constraintsFor): void
 {
-    if ($byName === []) {
-        return;
-    }
+    walkAstValues($expr, static function (Ast\AstNode $node) use ($constraintsFor): void {
+        if (! $node instanceof Ast\Variable) {
+            return;
+        }
 
-    walkAstValues($expr, static function (Ast\AstNode $node) use ($byName): void {
-        if ($node instanceof Ast\Variable && isset($byName[$node->name])) {
-            $node->pendingConstraints = $byName[$node->name];
+        $constraints = $constraintsFor($node);
+        if ($constraints !== null) {
+            $node->pendingConstraints = $constraints;
         }
     });
 }

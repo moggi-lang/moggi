@@ -181,9 +181,9 @@ function identityLines(IR\Module $module): array
     $moduleName = $module->moduleName !== '' ? $module->moduleName : '<module>';
     $lines = [];
     foreach ($module->functions as $function) {
-        $line = $moduleName . '::' . $function->name . ' kind=' . $function->kind->value;
-        if ($function->origin !== null) {
-            $line .= ' origin=' . $function->origin;
+        $line = $moduleName . '::' . $function->name . ' kind=' . $function->shape->kind->value;
+        if ($function->shape->origin !== null) {
+            $line .= ' origin=' . $function->shape->origin;
         }
         $lines[] = $line;
     }

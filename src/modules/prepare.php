@@ -11,6 +11,7 @@ namespace Moggi\Modules;
 use Moggi\Cache;
 use Moggi\Pipeline\CompilationContext;
 use Moggi\Semantics\Types\TypeError;
+use Moggi\Syntax\Ast;
 
 use const Moggi\IR\Callables\ABI_VERSION;
 

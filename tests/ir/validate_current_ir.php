@@ -60,7 +60,7 @@ $fn = static fn (
     array $params,
     IR\Block $body,
     IR\FunctionKind $kind = IR\FunctionKind::Source,
-): IR\FunctionDecl => new IR\FunctionDecl($name, $params, null, $body, kind: $kind);
+): IR\FunctionDecl => new IR\FunctionDecl($name, $params, null, $body, new IR\FunctionShape(kind: $kind));
 $module = static fn (array $functions): IR\Module => new IR\Module($functions, []);
 
 // ---- legal current IR ----------------------------------------------------

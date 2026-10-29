@@ -1,0 +1,4 @@
+tests/semantics/Bad-Pattern-Binding-Polymorphic-Use.mog:11:7: type error: the pattern binding's type would have to be the rigid type variable `a`; give the binding a signature
+
+  11 | use = count
+     |       ^^^^^

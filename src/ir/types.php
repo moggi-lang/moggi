@@ -20,6 +20,55 @@ enum ActionConvention: string
     case Executes = 'executes';
 }
 
+/**
+ * What a `do` statement's expression is, decided by the checker and read once by lowering.
+ *
+ * This is the fact the IO spine used to re-derive with `instanceof` chains inside lowering: which
+ * shape a statement has decides whether it is run, boxed, deferred through the action store or
+ * evaluated as a value. Publishing it makes the question total — the producer throws on an IO shape
+ * it does not know, so a new node class cannot reach lowering as an unclassified expression (a
+ * nested `do` in bind position did exactly that and cost two passes).
+ *
+ * `Deferred` is a use of a binder that a `let` bound to an action; the set of such binders is
+ * lexical, so the checker answers from the bindings it made and lowering from the entries its store
+ * holds — the same rule, asked by the one producer.
+ */
+enum IoStatementForm: string
+{
+    /** `pure e`: a value to evaluate, never an action to run. */
+    case Pure = 'pure';
+    /** A `case` in a `do` block: a computation boxed or run in place. */
+    case Case = 'case';
+    /** A nested `do`: a computation boxed or run in place. */
+    case Sequence = 'sequence';
+    /** A variable bound by a `let` to an action: the store holds the action it defers. */
+    case Deferred = 'deferred';
+    /** Everything else: a call, a foreign op, a primop — the action ABI classifies it. */
+    case Action = 'action';
+}
+
+/**
+ * What a `do` statement does with its expression, decided by the checker and read once by lowering.
+ *
+ * The form above answers run-or-value, which is not the same question: `x <- e` and `let x = e` give
+ * the same form for the same `e` while one runs it and binds the result and the other keeps it as an
+ * action for a later use. So the spine used to ask the statement's *class* — the dispatch a new
+ * statement shape had to be taught by hand. This is that question, published where the statement
+ * list is walked and the `let`-bound actions in scope are known ({@see \Moggi\Semantics\IoEscape}),
+ * so lowering dispatches on the answer instead of on a class.
+ */
+enum IoStatementKind: string
+{
+    /** `let …`: opens a binding group. */
+    case Let = 'let';
+    /** `let x = <action>`: binds an action for a later use, without running it. */
+    case LetAction = 'let-action';
+    /** `p <- <statement>`: runs the statement and binds its result to a pattern. */
+    case Bind = 'bind';
+    /** A bare statement: evaluate it, or run it for its effect. */
+    case Expr = 'expr';
+}
+
 /** How a foreign call's `IO` result is unwrapped by the backend. */
 enum IoWrap: string
 {
@@ -149,8 +198,8 @@ final class SrcLoc
 function entryFromFunctions(array $functions): ?EntryPoint
 {
     foreach ($functions as $function) {
-        if ($function->entryKind !== null) {
-            return new EntryPoint($function->name, $function->entryKind);
+        if ($function->shape->entryKind !== null) {
+            return new EntryPoint($function->name, $function->shape->entryKind);
         }
     }
 
@@ -172,27 +221,79 @@ final class InstanceEvidence
     }
 }
 
+/**
+ * The traits of an emitted declaration: how it is reached, how its body talks to the host, and where
+ * it came from. Everything that is not its identity, signature, body or source site.
+ *
+ * These nine fields travel together — a rewrite copies the whole shape, never three of its flags — so
+ * they are one record with one copy helper instead of nine constructor slots. A new trait lands in
+ * this constructor (with a default), which is also the only place that has to change for it: no call
+ * site passes the shape positionally, so no call site changes.
+ */
+final class FunctionShape
+{
+    /**
+     * @param bool $export reachable from outside its module
+     * @param bool $instanceMethod a class or instance method, not a top-level binding
+     * @param ?EntryPointKind $entryKind how the runtime enters the program here, when it does
+     * @param bool $foreign performs a host call rather than running a body of its own
+     * @param ActionConvention $actionConvention whether the body runs, or answers with, its action
+     * @param bool $ioEffect the body performs effects
+     * @param bool $ioStraightLine the body allocates or runs no action of its own
+     * @param FunctionKind $kind source, worker, lifted callable, specialization or generated stub
+     * @param ?string $origin the declaration this function was cloned or lifted from
+     */
+    public function __construct(
+        public bool $export = false,
+        public bool $instanceMethod = false,
+        public ?EntryPointKind $entryKind = null,
+        public bool $foreign = false,
+        public ActionConvention $actionConvention = ActionConvention::Executes,
+        public bool $ioEffect = false,
+        public bool $ioStraightLine = false,
+        public FunctionKind $kind = FunctionKind::Source,
+        public ?string $origin = null,
+    ) {
+    }
+
+    /**
+     * A copy of this shape with the named traits replaced.
+     *
+     * A rewrite changes a trait or two; listing them by name reads better than re-passing nine
+     * positionals, and a property that does not exist is a caller error rather than a silent drop.
+     *
+     * @param array<string, mixed> $fields
+     */
+    public function with(array $fields): self
+    {
+        $copy = clone $this;
+        foreach ($fields as $field => $value) {
+            if (! \property_exists($copy, $field)) {
+                throw new \InvalidArgumentException("FunctionShape has no `{$field}` trait");
+            }
+            $copy->{$field} = $value;
+        }
+
+        return $copy;
+    }
+}
+
 final class FunctionDecl implements IrNode
 {
     /**
      * @param list<string> $params parameter slot names
      * @param ?Ast\TypeNode $type declared surface type, when the source had a signature
+     * @param FunctionShape $shape the declaration's emitted traits
+     * @param ?SrcLoc $srcLoc where the declaration is written, when that is not the body's span
+     * @param list<string> $evidenceScope the evidence slots in scope where it was created, in order
      */
     public function __construct(
         public string $name,
         public array $params,
         public ?Ast\TypeNode $type,
         public Block $body,
-        public bool $export = false,
-        public bool $instanceMethod = false,
-        public ?EntryPointKind $entryKind = null,
-        public bool $ioEffect = false,
-        public bool $ioStraightLine = false,
-        public bool $foreign = false,
-        public ActionConvention $actionConvention = ActionConvention::Executes,
+        public FunctionShape $shape = new FunctionShape(),
         public ?SrcLoc $srcLoc = null,
-        public FunctionKind $kind = FunctionKind::Source,
-        public ?string $origin = null,
         /**
          * The evidence slots in scope where this declaration was created, in definition order.
          *
@@ -203,8 +304,6 @@ final class FunctionDecl implements IrNode
          *
          * Never re-read from the spelling of `params`: a dictionary slot and a value parameter are
          * different layouts even though both are positional at the runtime.
-         *
-         * @var list<string>
          */
         public array $evidenceScope = [],
     ) {
@@ -212,23 +311,45 @@ final class FunctionDecl implements IrNode
 
     public function withBody(Block $body): self
     {
-        return new self(
-            $this->name,
-            $this->params,
-            $this->type,
-            $body,
-            $this->export,
-            $this->instanceMethod,
-            $this->entryKind,
-            $this->ioEffect,
-            $this->ioStraightLine,
-            $this->foreign,
-            $this->actionConvention,
-            $this->srcLoc,
-            $this->kind,
-            $this->origin,
-            $this->evidenceScope,
-        );
+        return $this->with(['body' => $body]);
+    }
+
+    /**
+     * A copy of this declaration with the named fields replaced.
+     *
+     * A rewrite changes a field or two, so one copy helper reads the field list
+     * from the object instead of re-listing all fifteen in every `with*`. A
+     * property that does not exist is a caller error, not a silently dropped
+     * field. A shape trait is addressed by its own name (`with(['ioEffect' => …])`),
+     * so a rewrite of one trait does not have to build a whole new shape.
+     *
+     * @param array<string, mixed> $fields
+     */
+    public function with(array $fields): self
+    {
+        $copy = clone $this;
+        $shape = [];
+        foreach ($fields as $field => $value) {
+            if ($field === 'shape') {
+                $copy->shape = $value;
+
+                continue;
+            }
+            if (\property_exists($copy->shape, $field)) {
+                $shape[$field] = $value;
+
+                continue;
+            }
+            if (! \property_exists($copy, $field)) {
+                throw new \InvalidArgumentException("FunctionDecl has no `{$field}` field");
+            }
+            $copy->{$field} = $value;
+        }
+        if ($shape !== []) {
+            $copy->shape = $copy->shape->with($shape);
+        }
+
+        return $copy;
     }
 }
 
@@ -308,8 +429,16 @@ final class PatWild implements Pattern
 
 final class PatVar implements Pattern
 {
-    public function __construct(public string $name)
-    {
+    /**
+     * @param ?int $binderId the checker's identity for this binder, when the pattern came from a
+     *        checked tree; lowering binds the slot under that identity as well as under the name,
+     *        so a use resolves to the binder it names rather than to a name that happens to be
+     *        in scope
+     */
+    public function __construct(
+        public string $name,
+        public ?int $binderId = null,
+    ) {
     }
 }
 
@@ -443,7 +572,24 @@ final class Partial implements Operand
 
 final class Intrinsic implements Operand
 {
-    /** @param list<Operand> $args */
+    /**
+     * A primop application: one of the two operand forms that carry a computation (the other is
+     * {@see ForeignCall}), where the statement/operand split otherwise keeps computations in
+     * statements.
+     *
+     * They stay operands because that is what an argument-position expression is. A `do` block passed
+     * to a function is the sharpest case: in a pure position it keeps its desugared action-building
+     * primops, so it arrives here and the callee decides when to run the action. Promoting every such
+     * argument to a temp would add a statement without changing what the program means.
+     *
+     * What makes that honest is the ordering rule: an operand's own operands are evaluated **left to
+     * right, before the statement that consumes this one**, and every emitter walks `$args` in list
+     * order (`emitIntrinsic()` in all three backends; `Exec-Foreign-Operand-Order` pins it through
+     * observable host calls). A rewrite may duplicate this operand only when it is duplicable — an
+     * effectful primop argument is not, and the inliner asks before substituting.
+     *
+     * @param list<Operand> $args
+     */
     public function __construct(
         public string $name,
         public array $args,
@@ -478,6 +624,14 @@ final class DictMethod implements Operand
 final class ForeignCall implements Operand
 {
     /**
+     * A host call: the second of the two operand forms that carry a computation ({@see Intrinsic}).
+     *
+     * A foreign call used as an argument is not hoisted to a temp — it performs its host call when
+     * that operand list is evaluated, **left to right, before the enclosing statement**, which is why
+     * a rewrite must treat it as effectful: substituting it into two uses would run the call twice.
+     * `Exec-Foreign-Operand-Order` pins the order and `Exec-IO-Operand-Position` the surrounding
+     * action-position shapes, on all three backends where the fixture is backend-neutral.
+     *
      * @param list<Operand> $args
      * @param list<int> $handleUnboxArgs indexes of args passed as unboxed handles
      */
@@ -736,7 +890,7 @@ final class LowerCtx
      * @param array<string, list<string>> $data
      * @param array<string, true> $newtypes constructor names declared via `newtype`
      * @param list<string> $externalFnNames
-     * @param array<string, Ast\AstNode> $ioActionStore pending IO actions, keyed by bound name
+     * @param array<int, Ast\AstNode> $ioActionStore pending IO actions, keyed by binder identity
      * @param array<string, int> $functionArity
      * @param array<string, true> $actionReturningEntries
      */
@@ -756,6 +910,16 @@ final class LowerCtx
         public array $workers = [],
         /** @var array<string, true> FFI workers this module can call: a call answers with the value */
         public array $executingEntries = [],
+        /**
+         * The operands bound by the binders in scope, keyed by the checker's binder identity.
+         *
+         * A name-keyed environment cannot tell two binders of the same spelling apart, so a use
+         * resolves through this map when its checked term names a binder, and through `$env` (a
+         * top-level entry, an imported name, a synthesized local) when it does not.
+         *
+         * @var array<int, Operand>
+         */
+        public array $binders = [],
         /** @var array<string, true> `<Module>::<name>` of bindings whose body is the host boolean `true` */
         public array $trueBindings = [],
         public bool $inActionBox = false,
@@ -799,17 +963,16 @@ final class LowerCtx
          */
         public array $evidenceBindings = [],
         /**
-         * The checked core's evidence plans for the declaration being lowered, by elaboration
-         * site.
+         * The checked core's terms for the declaration being lowered, by the id each term owns.
          *
-         * Null for a declaration the core does not record: then the branch's existing reads of
-         * the elaborated node's `evidence` fields are the compiler's own path. Non-null means the
-         * record owns every evidence decision in this declaration, so a site without a plan is a
-         * producer bug and lowering refuses it instead of reading the node.
+         * The record owns every evidence decision in this declaration: an evidence position
+         * whose term is missing here is a producer bug, and lowering refuses it rather than
+         * reading the elaborated node's own fields. Empty for a declaration built outside a
+         * checked core (the suite's hand-built IR), which then has no evidence positions at all.
          *
-         * @var array<int, \Moggi\Modules\EvidencePlan>|null
+         * @var array<int, \Moggi\Modules\CheckedTerm>
          */
-        public ?array $evidencePlans = null,
+        public array $terms = [],
     ) {
     }
 }

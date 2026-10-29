@@ -251,7 +251,7 @@ function validateFunction(IR\FunctionDecl $function, string $pass): void
         $bound,
         $temps,
         $pass,
-        $function->kind->takesCaptures(),
+        $function->shape->kind->takesCaptures(),
         'body',
     );
 }

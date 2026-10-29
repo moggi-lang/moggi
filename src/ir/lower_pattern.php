@@ -12,6 +12,11 @@ function bindPattern(Pattern $pattern, Operand $value, LowerCtx $ctx): void
             $pattern->name = $irName;
             $ctx->items[] = new Let($irName, $value);
             $ctx->env[$occ] = new Local($irName);
+            if ($pattern->binderId !== null) {
+                // The identity is what a use resolves through; `$ctx->env` keeps the spelling for the
+                // two readers that still work by name (a callable's capture set, an IO action store).
+                $ctx->binders[$pattern->binderId] = new Local($irName);
+            }
         })(),
         PatLit::class => null,
         PatChar::class => null,

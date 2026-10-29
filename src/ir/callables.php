@@ -54,7 +54,7 @@ function workerDeclarations(IR\Module $module): array
 {
     $workers = [];
     foreach ($module->functions as $decl) {
-        if ($decl->kind === IR\FunctionKind::Worker) {
+        if ($decl->shape->kind === IR\FunctionKind::Worker) {
             $workers[$decl->name] = $decl;
         }
     }
@@ -75,7 +75,7 @@ function workerDeclarations(IR\Module $module): array
 function calleeIsRun(?IR\FunctionDecl $decl, string $callee): bool
 {
     if ($decl !== null) {
-        return $decl->kind === IR\FunctionKind::Worker;
+        return $decl->shape->kind === IR\FunctionKind::Worker;
     }
 
     $prefix = generatedWorkerPrefix();
@@ -255,7 +255,7 @@ function captureClosure(array $byName, callable $capturesOf): array
             $needed = [];
             foreach (collectLambdaRefsInBlock(
                 $byName[$name]->body,
-                static fn (string $ref): bool => isset($byName[$ref]) && $byName[$ref]->kind->takesCaptures(),
+                static fn (string $ref): bool => isset($byName[$ref]) && $byName[$ref]->shape->kind->takesCaptures(),
             ) as $ref) {
                 $child = $meta[$ref] ?? null;
                 if ($child === null) {
@@ -309,7 +309,7 @@ function captureCandidates(array $functions): array
 {
     $index = [];
     foreach ($functions as $function) {
-        if ($function->kind->takesCaptures()) {
+        if ($function->shape->kind->takesCaptures()) {
             $index[$function->name] = $function;
         }
     }
@@ -341,7 +341,7 @@ function table(array $functions, string $module = ''): CallableTable
         $evidenceNames = [];
         $captures = $meta[$function->name]['captures'] ?? [];
 
-        if ($function->kind === IR\FunctionKind::Source || $function->kind === IR\FunctionKind::Worker) {
+        if ($function->shape->kind === IR\FunctionKind::Source || $function->shape->kind === IR\FunctionKind::Worker) {
             $evidenceNames = $scope;
         } else {
             $inScope = \array_fill_keys($scope, true);
@@ -368,7 +368,7 @@ function table(array $functions, string $module = ''): CallableTable
 
         $byEntry[$function->name] = new CallableSig(
             $function->name,
-            $function->kind,
+            $function->shape->kind,
             $module,
             $evidence,
             $captures,
@@ -376,7 +376,7 @@ function table(array $functions, string $module = ''): CallableTable
             $result,
             $result === ResultConvention::Action || $result === ResultConvention::Unclassified
                 ? AcquisitionKind::Callable
-                : (($params === [] && $function->kind === IR\FunctionKind::Source)
+                : (($params === [] && $function->shape->kind === IR\FunctionKind::Source)
                     ? AcquisitionKind::EvaluateBinding
                     : AcquisitionKind::Callable),
             $returnsCallable,
@@ -401,7 +401,7 @@ function table(array $functions, string $module = ''): CallableTable
  */
 function resultConventions(IR\FunctionDecl $function, int $evidenceSlots = 0): array
 {
-    if ($function->kind === IR\FunctionKind::Worker) {
+    if ($function->shape->kind === IR\FunctionKind::Worker) {
         return [ResultConvention::Value, null];
     }
 

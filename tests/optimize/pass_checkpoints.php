@@ -39,7 +39,7 @@ $throws = static function (callable $call): ?Validate\InvalidIr {
 $local = static fn (string $name): IR\Local => new IR\Local($name);
 $temp = static fn (int $id): IR\Temp => new IR\Temp($id);
 $fn = static fn (string $name, IR\Block $body, IR\FunctionKind $kind = IR\FunctionKind::Source): IR\FunctionDecl
-    => new IR\FunctionDecl($name, [], null, $body, kind: $kind);
+    => new IR\FunctionDecl($name, [], null, $body, new IR\FunctionShape(kind: $kind));
 
 $good = $fn('good', new IR\Block([
     new IR\Assign(1, new IR\ConstInt(1)),
@@ -60,6 +60,18 @@ $off = $throws(static fn () => PassCheckpoints\runOnFunctions(
     false,
 ));
 $check($off === null, 'an invalid stage was rejected with the checkpoint flag off');
+
+// The approved switch (approval #5 / D18) is an environment variable, so a user
+// can localise a miscompile without the harness. An explicit setting still wins.
+\putenv('MOGGI_IR_PASS_CHECKPOINTS=1');
+PassCheckpoints\setEnabled(null);
+$check(PassCheckpoints\enabled(), 'MOGGI_IR_PASS_CHECKPOINTS=1 did not turn the checkpoints on');
+\putenv('MOGGI_IR_PASS_CHECKPOINTS=0');
+PassCheckpoints\setEnabled(null);
+$check(! PassCheckpoints\enabled(), 'MOGGI_IR_PASS_CHECKPOINTS=0 did not leave the checkpoints off');
+\putenv('MOGGI_IR_PASS_CHECKPOINTS');
+PassCheckpoints\setEnabled(null);
+$check(! PassCheckpoints\enabled(), 'unset MOGGI_IR_PASS_CHECKPOINTS did not leave the checkpoints off');
 
 PassCheckpoints\setEnabled(true);
 PassCheckpoints\enterOptimize();

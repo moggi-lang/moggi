@@ -100,6 +100,7 @@ final class JvmBackend implements Backend
         string $kind,
         array $pathInfo,
         string $name,
+        ?string $module = null,
     ): ?string {
         $inferred = jvmDescriptorFromMoggiType(
             $type,
@@ -107,6 +108,7 @@ final class JvmBackend implements Backend
             $kind,
             $pathInfo['classPath'],
             $pathInfo['hostMember'],
+            $module,
         );
         if ($kind !== 'function'
             || ($pathInfo['dispatch'] ?? '') === 'intrinsic'

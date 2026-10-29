@@ -514,7 +514,7 @@ function emitFunction(
 ): void {
     $name = symbolName($fn->name);
     $params = $fn->params;
-    if ($fn->kind->takesCaptures()) {
+    if ($fn->shape->kind->takesCaptures()) {
         $params = [
             ...($lambdaMeta[$fn->name]['captures'] ?? []),
             ...$params,
@@ -625,7 +625,7 @@ function entryReturnsAction(IR\Module $module): bool
 {
     foreach ($module->functions as $function) {
         if ($function->name === $module->entry?->name) {
-            return $function->actionConvention === IR\ActionConvention::ReturnsAction;
+            return $function->shape->actionConvention === IR\ActionConvention::ReturnsAction;
         }
     }
 

@@ -146,9 +146,9 @@ function recomputeIoStraightLine(IR\FunctionDecl $function): IR\FunctionDecl
     });
 
     if ($hasBoxOrRun) {
-        $function->ioStraightLine = false;
+        $function->shape->ioStraightLine = false;
     } elseif ($function->type !== null && functionReturnsIo($function->type)) {
-        $function->ioStraightLine = true;
+        $function->shape->ioStraightLine = true;
     }
 
     return $function;

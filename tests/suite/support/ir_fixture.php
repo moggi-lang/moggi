@@ -53,21 +53,25 @@ function functionFromArray(array $fn): IR\FunctionDecl
         $entryKind = IR\EntryPointKind::Main;
     }
 
+    // One shape from the fixture's flat keys: a fixture names the traits it cares about and the
+    // defaults answer the rest, so a new trait needs no fixture edit at all.
     return new IR\FunctionDecl(
         $fn['name'],
         $fn['params'],
         typeFromArray($fn['type'] ?? null),
         blockFromArray($fn['body']),
-        $fn['export'] ?? false,
-        $fn['instanceMethod'] ?? false,
-        $entryKind,
-        $fn['ioEffect'] ?? false,
-        $fn['ioStraightLine'] ?? false,
-        $fn['foreign'] ?? false,
-        $actionConvention,
-        kind: isset($fn['kind']) && \is_string($fn['kind'])
-            ? IR\FunctionKind::from($fn['kind'])
-            : IR\FunctionKind::Source,
+        new IR\FunctionShape(
+            export: $fn['export'] ?? false,
+            instanceMethod: $fn['instanceMethod'] ?? false,
+            entryKind: $entryKind,
+            foreign: $fn['foreign'] ?? false,
+            actionConvention: $actionConvention,
+            ioEffect: $fn['ioEffect'] ?? false,
+            ioStraightLine: $fn['ioStraightLine'] ?? false,
+            kind: isset($fn['kind']) && \is_string($fn['kind'])
+                ? IR\FunctionKind::from($fn['kind'])
+                : IR\FunctionKind::Source,
+        ),
     );
 }
 

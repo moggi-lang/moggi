@@ -32,6 +32,16 @@ final class TypeCheckState
     public string $compileBackend = 'php';
 
     /**
+     * The module being checked, as its program declares it.
+     *
+     * A declaration's facts belong to the module that wrote them — two modules may each
+     * declare a foreign type named `Path` against different host types — so anything that
+     * registers or reads such a fact keys it by this name. A program with no module header
+     * keeps the empty name, which is one module for that purpose.
+     */
+    public string $module = '';
+
+    /**
      * Entry modules of the compilation this check belongs to.
      *
      * @var array<string, true>
@@ -439,6 +449,56 @@ final class TypeCheckState
 
     /** Fresh counter for local binder ids (LSP rename/refs). */
     public int $nextBinderId = 0;
+
+    /**
+     * The lexical scope, innermost frame last: each frame maps a spelling to the binder identity
+     * that spelling means *in it*.
+     *
+     * A local binder is stored in the environment under its identity, never under its spelling, so a
+     * lookup that finds a name here is answered by that frame's identity and by nothing else. Two
+     * binders of one spelling are therefore two environment entries, not one entry overwritten — the
+     * old shape could only answer the innermost by name, and answered a stale one when an
+     * environment copy outlived its binding.
+     *
+     * @var list<array<string, int>>
+     */
+    public array $binderScopes = [];
+
+    /** Open a frame; every binding made until the matching pop belongs to it. */
+    public function pushBinderScope(): void
+    {
+        $this->binderScopes[] = [];
+    }
+
+    /** Close the innermost frame. */
+    public function popBinderScope(): void
+    {
+        \array_pop($this->binderScopes);
+    }
+
+    /** Record that, in the current frame, this spelling means this binder. */
+    public function registerBinder(string $name, int $id): void
+    {
+        if ($this->binderScopes === []) {
+            throw new \LogicException(
+                "the checker bound `{$name}` with no scope open; a binding must belong to a frame",
+            );
+        }
+
+        $this->binderScopes[\count($this->binderScopes) - 1][$name] = $id;
+    }
+
+    /** The identity this spelling means here, or null when no local binder of that spelling is in scope. */
+    public function resolveBinder(string $name): ?int
+    {
+        for ($i = \count($this->binderScopes) - 1; $i >= 0; --$i) {
+            if (isset($this->binderScopes[$i][$name])) {
+                return $this->binderScopes[$i][$name];
+            }
+        }
+
+        return null;
+    }
 
     /**
      * Fresh counter for synthesized dictionary-parameter names on local

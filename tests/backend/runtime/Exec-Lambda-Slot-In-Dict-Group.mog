@@ -1,0 +1,64 @@
+import Data.Int
+import Text.Show
+import System.IO
+
+-- A lambda slot inside a dictionary-bearing recursive group member.
+--
+-- The member `go` is a recursive group member lifted with the group's
+-- dictionaries; its lambda slot reuses the member's spelling, so the slot is a
+-- different binder that happens to need the same `Tag Int` dictionary. The
+-- dictionary reaches it as a capture of the enclosing member, and legalization
+-- has to publish the arity of the partial it builds for that member *after* the
+-- capture is bound — the shape that used to fail post-legalize with
+-- "partial of λ1 declares arity 5; its published runtime arity is 6".
+
+class Tag a where
+  tag :: a -> String
+
+instance Tag Int where
+  tag x = "i" <> show x
+
+-- The reported shape: the slot calls the class method itself.
+callsMethod :: String
+callsMethod = go 3
+  where
+    go 0 = tag 0
+    go k = (\go -> tag go) (k - 1)
+
+-- The same shape with an identity slot, which compiled before the fix: the
+-- member's dictionary is still captured, but the slot does not use it.
+plainSlot :: Int
+plainSlot = go 3
+  where
+    go 0 = 0
+    go k = (\go -> go) (k - 1)
+
+-- A lambda inside the slot, both slots naming the member.
+nestedSlot :: String
+nestedSlot = go 5
+  where
+    go 0 = tag 0
+    go k = (\go -> (\go -> tag go) go) (k - 2)
+
+-- A member whose parameter names a sibling member, with the slot bound by the
+-- sibling: two different binders of one spelling around a dictionary use.
+twoSlots :: Int -> String
+twoSlots n = a n
+  where
+    a k = b k (\b -> tag b)
+    b k f = f (k - 1)
+
+-- A group member whose own parameter shares a sibling's spelling.
+siblingSlot :: Int -> String
+siblingSlot n = go n
+  where
+    go k = hop k
+    hop hop = tag hop
+
+main :: IO ()
+main = do
+  putStrLn callsMethod
+  putStrLn (show plainSlot)
+  putStrLn nestedSlot
+  putStrLn (twoSlots 4)
+  putStrLn (siblingSlot 4)

@@ -89,7 +89,13 @@ function checkForeignImportItem(TypeCheckState $state, Ast\ForeignImportDecl $it
     $pathInfo['declaringRoot'] = Modules\declaringLibraryRoot($state->filename);
 
     try {
-        $nativeSig = backendById($item->backend)->foreignNativeSig($item->type, $item->kind, $pathInfo, $item->name);
+        $nativeSig = backendById($item->backend)->foreignNativeSig(
+            $item->type,
+            $item->kind,
+            $pathInfo,
+            $item->name,
+            $state->module,
+        );
     } catch (\Throwable $e) {
         throw typeFail($state, $e->getMessage(), $item);
     }

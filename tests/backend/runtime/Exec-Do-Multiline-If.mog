@@ -1,0 +1,20 @@
+-- A multi-line `if` as a bare `do` statement: the `then`/`else` branches are laid out
+-- deeper than the block's column, so they continue the statement instead of starting a
+-- new one. The parser used to end the `then` branch at the first token of its own line
+-- and demand `else` there (`then putStrLn "pos"` stopped before `"pos"`).
+import System.IO
+
+describe :: Int -> IO ()
+describe n = do
+  if n > 0
+    then putStrLn "pos"
+    else if n == 0
+      then putStrLn "zero"
+      else putStrLn "neg"
+  putStrLn "done"
+
+main :: IO ()
+main = do
+  describe 1
+  describe 0
+  describe (0 - 1)

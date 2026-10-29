@@ -11,14 +11,17 @@ use Moggi\IR\Validate;
  * nested runs report `d2/<stage>`.
  *
  * The checkpoints are off unless the harness turns them on (see
- * {@see setEnabled()}): validating the whole module after every pass is the
- * suite's cost to pay, not every compile's.
+ * {@see setEnabled()}) or `MOGGI_IR_PASS_CHECKPOINTS=1` is set in the
+ * environment: validating the whole module after every pass is the suite's cost
+ * to pay, not every compile's. The variable is the approved escape hatch for a
+ * user localising a miscompile; an explicit `setEnabled()` wins over it.
  */
 final class State
 {
     public static int $depth = 0;
 
-    public static bool $enabled = false;
+    /** null until answered: the environment decides, unless the harness said. */
+    public static ?bool $enabled = null;
 
     /** @var list<array<string, array{label: string, function: string, temps: list<int>}>> */
     public static array $frames = [];
@@ -27,15 +30,20 @@ final class State
     public static array $excepted = [];
 }
 
-/** Turn the per-pass checkpoints on for this process (the test harness does). */
-function setEnabled(bool $enabled): void
+/**
+ * Turn the per-pass checkpoints on or off for this process (the test harness
+ * does), or pass null to let the environment decide again.
+ */
+function setEnabled(?bool $enabled = null): void
 {
     State::$enabled = $enabled;
 }
 
 function enabled(): bool
 {
-    return State::$enabled;
+    $flag = \getenv('MOGGI_IR_PASS_CHECKPOINTS');
+
+    return State::$enabled ??= \in_array($flag, ['1', 'true', 'yes'], true);
 }
 
 function enterOptimize(): void
@@ -140,7 +148,7 @@ function isCaptureException(Validate\InvalidIr $e, array $functions): bool
 
     foreach ($functions as $function) {
         if ($function->name === $e->function) {
-            return $function->kind === IR\FunctionKind::SpecClone;
+            return $function->shape->kind === IR\FunctionKind::SpecClone;
         }
     }
 

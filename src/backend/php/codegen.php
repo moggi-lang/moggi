@@ -340,7 +340,7 @@ function analyzeFunctionsForCodegen(array $functions): array
     $lambdaIndex = [];
     $functionArity = [];
     foreach ($functions as $function) {
-        if ($function->kind->takesCaptures()) {
+        if ($function->shape->kind->takesCaptures()) {
             $lambdaIndex[$function->name] = $function;
 
             continue;
@@ -366,16 +366,16 @@ function emitFunction(IR\FunctionDecl $function, array $lambdaMeta, array $lambd
     $generated = $namespace !== '' ? $namespace . '\\' . $name : $name;
 
     if (($codegenCtx['sourceMap'] ?? null) instanceof SourceMapBuilder
-        && $function->kind === IR\FunctionKind::Worker
+        && $function->shape->kind === IR\FunctionKind::Worker
     ) {
         $codegenCtx['sourceMap']->markGeneratedFrame($generated, false);
-        if (isset($phpNames[(string) $function->origin])) {
-            $entry = phpFunctionName((string) $function->origin, $phpNames);
+        if (isset($phpNames[(string) $function->shape->origin])) {
+            $entry = phpFunctionName((string) $function->shape->origin, $phpNames);
             $codegenCtx['sourceMap']->markGeneratedFrame($namespace !== '' ? $namespace . '\\' . $entry : $entry, true);
         }
     }
 
-    if ($function->kind->takesCaptures()) {
+    if ($function->shape->kind->takesCaptures()) {
         $captures = $lambdaMeta[$function->name]['captures'] ?? [];
         $params = [...$captures, ...$params];
     }
@@ -673,7 +673,7 @@ function entryReturnsAction(IR\Module $module): bool
 {
     foreach ($module->functions as $function) {
         if ($function->name === $module->entry?->name) {
-            return $function->actionConvention === IR\ActionConvention::ReturnsAction;
+            return $function->shape->actionConvention === IR\ActionConvention::ReturnsAction;
         }
     }
 

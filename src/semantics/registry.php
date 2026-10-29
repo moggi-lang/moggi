@@ -9,6 +9,7 @@ use Moggi\Semantics\Types\TypeCheckState;
 use Moggi\Syntax\Ast;
 
 use function Moggi\Semantics\Deriving\derivedProjectInstanceRecords;
+use function Moggi\Semantics\Deriving\standaloneDerivingProjectRecords;
 use function Moggi\Semantics\Foreign\foreignParamNames;
 use function Moggi\Semantics\Types\associatedEquationsMapFromDecl;
 use function Moggi\Semantics\Types\installTypeSynonymKind;
@@ -46,20 +47,22 @@ function applyImportContext(TypeCheckState $state, Ast\Program $program, ImportC
 {
     $interface = $importContext->interface;
 
-    foreach ($interface->env as $name => $scheme) {
+    // One table, read once per payload the checker keeps separately: the records are the source and
+    // these are the state maps inference resolves through.
+    foreach ($interface->env() as $name => $scheme) {
         $state->env[$name] = $scheme;
     }
 
-    foreach ($interface->constructorRenames as $local => $canonical) {
+    foreach ($interface->constructorRenames() as $local => $canonical) {
         $state->constructorRenames[$local] = $canonical;
     }
 
-    foreach ($interface->typeSynonyms as $name => $type) {
+    foreach ($interface->typeSynonyms() as $name => $type) {
         $state->typeSynonyms[$name] = $type;
         installTypeSynonymKind($state, $name, $type);
     }
 
-    foreach ($interface->data as $name => $info) {
+    foreach ($interface->data() as $name => $info) {
         $state->data[$name] = $info;
         Kinds\registerTypeKind($state, $name, Kinds\kindFromDataInfo($info));
         Kinds\installPromotedFromDataInfo($state, $name, $info);
@@ -72,13 +75,13 @@ function applyImportContext(TypeCheckState $state, Ast\Program $program, ImportC
     syncAssociatedFamiliesFromClasses($state);
 
     $state->qualifiedModules = $interface->qualifiedModules;
-    $state->qualifiedOrigins = $interface->qualifiedOrigins;
-    $state->qualifiedEnv = $interface->qualifiedEnv;
-    $state->intrinsicWrappers = $interface->intrinsicWrappers;
+    $state->qualifiedOrigins = $interface->qualifiedOrigins();
+    $state->qualifiedEnv = $interface->qualifiedEnv();
+    $state->intrinsicWrappers = $interface->intrinsicWrappers();
 
-    $state->ambiguousImports = $interface->ambiguousNames;
+    $state->ambiguousImports = $interface->ambiguousNames();
     $state->classModuleScopes = $importContext->classScopes;
-    $state->externalFns = $interface->externalFns;
+    $state->externalFns = $interface->externalFns();
 
     $world = $importContext->instanceWorld;
     $state->instanceWorld = $world;
@@ -198,11 +201,22 @@ function registerFunctionSchemesFromProgram(TypeCheckState $state, Ast\Program $
  * This is the record shape a module is its own instance world in — the
  * single-module boundary `applyImportContext` falls back to, and the shape the
  * project collector produces for the same declarations (a record for every
- * instance declaration, plus the ones data declarations derive).
+ * instance declaration, plus the ones data declarations and standalone deriving
+ * declarations contribute).
  *
+ * `$dataDecls` is what a standalone `deriving instance` needs to answer for a type the program
+ * does not declare itself: the project collector passes the whole project, the single-module
+ * route passes the program's own declarations.
+ *
+ * @param array<string, Ast\DataDecl> $dataDecls every data/newtype the caller can name
  * @return list<array{module: string, class: string, head: Ast\TypeNode, constraints: list<Ast\TypeNode>, intrinsicMethods: list<string>, associatedEquations: array<string, array{lhsArgs: list<Ast\TypeNode>, rhs: Ast\TypeNode}>}>
  */
-function projectInstancesFromProgram(Ast\Program $program, ClassDeriveFacts $facts, ?string $moduleName = null): array
+function projectInstancesFromProgram(
+    Ast\Program $program,
+    ClassDeriveFacts $facts,
+    ?string $moduleName = null,
+    array $dataDecls = [],
+): array
 {
     $instances = [];
     $mod = $moduleName ?? $program->module ?? '';
@@ -224,8 +238,17 @@ function projectInstancesFromProgram(Ast\Program $program, ClassDeriveFacts $fac
             foreach (derivedProjectInstanceRecords($item, $mod, $facts) as $record) {
                 $instances[] = $record;
             }
+
+            continue;
+        }
+
+        if ($item instanceof Ast\StandaloneDerivingDecl) {
+            foreach (standaloneDerivingProjectRecords($item, $mod, $facts, $dataDecls) as $record) {
+                $instances[] = $record;
+            }
         }
     }
 
     return $instances;
 }
+

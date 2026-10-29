@@ -138,6 +138,7 @@ require __DIR__ . '/backend/codegen.php';
 require __DIR__ . '/modules/types.php';
 require __DIR__ . '/modules/elaboration.php';
 require __DIR__ . '/modules/evidence_plan.php';
+require __DIR__ . '/modules/checked_term.php';
 require __DIR__ . '/modules/checked_core.php';
 require __DIR__ . '/modules/paths.php';
 require __DIR__ . '/modules/library.php';

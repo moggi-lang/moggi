@@ -4,6 +4,11 @@ namespace Moggi\Modules;
 
 use Moggi\Syntax\Ast;
 
+use function Moggi\IR\freeVarsExpr;
+use function Moggi\IR\patternParams;
+use function Moggi\IR\remainingArity;
+use function Moggi\Patterns\Walk\patternBoundNames;
+use function Moggi\Semantics\Types\bindingGroupSccs;
 use function Moggi\Semantics\Types\evidenceRefOperand;
 
 /**
@@ -28,11 +33,10 @@ enum EvidencePlanKind
  *
  * The facts are the ones lowering needs and nothing else: which parameter
  * carries the dictionary, or which builder and instance head name it, plus the
- * ordered context a constrained instance needs. `site` is a *link* to the
- * elaboration node the decision was made for — lowering uses it to find the
- * plan and never reads the node's own evidence fields again — and `origin` is
- * that node's source origin, so the record can be read, printed and pointed at
- * without the tree.
+ * ordered context a constrained instance needs. The plan holds no part of the
+ * tree — the site it was decided for is the term that carries it
+ * ({@see CheckedEvidenceRef}, {@see CheckedEvidenceMethod}), keyed by that
+ * term's own id — so a plan can be read, printed and cached without the AST.
  */
 final class EvidencePlan
 {
@@ -44,7 +48,6 @@ final class EvidencePlan
      * @param list<EvidencePlan> $context the instance's own dictionaries, in order
      */
     public function __construct(
-        public readonly Ast\AstNode $site,
         public readonly string $origin,
         public readonly EvidencePlanKind $kind,
         public readonly string $class,
@@ -83,7 +86,6 @@ function evidencePlanFor(Ast\AstNode $site): ?EvidencePlan
             $builder = evidenceRefOperand($site->class, $site->evidenceInstance);
 
             return new EvidencePlan(
-                $site,
                 $origin,
                 EvidencePlanKind::Projection,
                 $site->class,
@@ -100,14 +102,13 @@ function evidencePlanFor(Ast\AstNode $site): ?EvidencePlan
             );
         }
 
-        return new EvidencePlan($site, $origin, EvidencePlanKind::Parameter, $site->class, parameter: $site->evidence);
+        return new EvidencePlan($origin, EvidencePlanKind::Parameter, $site->class, parameter: $site->evidence);
     }
 
     if ($site instanceof Ast\EvidenceRef) {
         $builder = evidenceRefOperand($site->class, $site->head);
 
         return new EvidencePlan(
-            $site,
             $origin,
             EvidencePlanKind::Reference,
             $site->class,
@@ -121,40 +122,444 @@ function evidencePlanFor(Ast\AstNode $site): ?EvidencePlan
 }
 
 /**
- * The plan for every evidence site under one elaboration root, in walk order.
+ * The checked terms under one elaboration root, keyed by their own identity.
  *
- * Walk order is the record's own order: the same list, read back, states where
- * each decision sits in the elaboration. A plain variable is not a site — only
- * a method reference and an instance reference are planned by the walk — while
- * a variable is still plannable *as context* ({@see evidencePlansFor()}),
- * because that is how an instance receives a dictionary from its scope.
+ * Walk order is the record's order: ids are allocated in it, so the same source
+ * publishes the same ids. Eleven families are published here — evidence (a method
+ * reference or an instance reference), a foreign call's resolved host target, the
+ * primop a position names ({@see intrinsicNameFor()}), a lambda's slots and
+ * captures, the arity an application still wants, a variable's referent
+ * ({@see CheckedVariable}), a pattern's shape and the binders it introduces
+ * ({@see CheckedPattern}), a literal's value ({@see CheckedLiteral}), a record's
+ * constructor and fields ({@see CheckedRecord}),
+ * the three that own *structure*: a `case`'s arms with their guards
+ * flattened ({@see CheckedCase}), a `let`/`where` group's members in binding
+ * order ({@see CheckedLetGroup}) and a bare guard chain ({@see CheckedGuards}). A variable is still plannable *as context* too
+ * ({@see evidencePlansFor()}), because that is how an instance receives a
+ * dictionary from its scope.
  *
- * One plan per site: a site that is also some instance's context is planned
- * once, not twice, so the list's length is the number of evidence sites the
- * elaboration carries.
+ * One term per site: a site that is also some instance's context is made once,
+ * not twice. The id is written back onto the node it elaborates
+ * (`$node->checkedTerm`), which is the one link lowering follows; the node's own
+ * evidence fields are never read again.
  *
- * @return list<EvidencePlan>
+ * A lambda's capture set is completed in a second pass over the sites this walk
+ * reserved ids for, because answering it needs the evidence terms *inside* the
+ * body — and pre-order visits the lambda first. The ids stay the walk's: only the
+ * fill happens later, so the record is the same for the same source.
+ *
+ * @return array<int, CheckedTerm>
  */
-function evidencePlansIn(Ast\AstNode $root): array
+function checkedTermsIn(Ast\AstNode $root): array
 {
-    $plans = [];
+    $terms = [];
     $seen = [];
+    $next = 0;
+    /** @var list<array{id: TermId, node: Ast\Lambda}> $lambdas */
+    $lambdas = [];
 
-    walkElaboration($root, static function (Ast\AstNode $node) use (&$plans, &$seen): void {
+    // A pattern's term names its sub-patterns by their own ids, so a parent can only be built
+    // after its children exist: this walk is post-order, and it marks every node it publishes so
+    // the pre-order visit below skips the ones it already covered. One node, one term — a pattern
+    // nested in a `case` arm, a binding, a lambda slot or a declaration parameter is published
+    // once, wherever the enclosing family happens to sit.
+    $publishPattern = null;
+    $publishPattern = static function (Ast\AstNode $pattern) use (&$terms, &$seen, &$next, &$publishPattern): int {
+        $key = \spl_object_id($pattern);
+        if (isset($seen[$key])) {
+            return $pattern->checkedTerm ?? throw new \LogicException(
+                'a pattern published a second time lost the id of its first review',
+            );
+        }
+
+        $children = [];
+        $fields = [];
+        switch (true) {
+            case $pattern instanceof Ast\PatCons:
+                $children = [$publishPattern($pattern->head), $publishPattern($pattern->tail)];
+                break;
+            case $pattern instanceof Ast\PatCon:
+                foreach ($pattern->args as $arg) {
+                    $children[] = $publishPattern($arg);
+                }
+                break;
+            case $pattern instanceof Ast\PatTuple:
+                foreach ($pattern->elements as $element) {
+                    $children[] = $publishPattern($element);
+                }
+                break;
+            case $pattern instanceof Ast\PatRecord:
+                foreach ($pattern->fields as $field) {
+                    $fields[] = ['name' => $field->name, 'id' => $publishPattern($field->pattern)];
+                }
+                break;
+        }
+
+        $id = new TermId(++$next);
+        $pattern->checkedTerm = $id->value;
+        $seen[$key] = true;
+        $terms[$id->value] = new CheckedPattern(
+            $id,
+            CheckedFunction::termOrigin($pattern),
+            patternShape($pattern),
+            // The identity the checker allocated for this site, read here and nowhere else: a
+            // scrubbed, re-parsed or cache-restored tree has no `binderId`, while the term survives
+            // all three.
+            $pattern instanceof Ast\PatVar ? $pattern->binderId : null,
+            // A variable's occurrence name, or a constructor's/record's source name — what lowering
+            // needs to build the IR node and to apply its rename map.
+            $pattern instanceof Ast\PatVar || $pattern instanceof Ast\PatCon || $pattern instanceof Ast\PatRecord
+                ? $pattern->name
+                : null,
+            $pattern instanceof Ast\PatLit || $pattern instanceof Ast\PatChar ? $pattern->value : null,
+            $children,
+            $fields,
+            // The names this subtree binds, so free-variable analysis asks the term instead of
+            // walking the pattern's nodes a second time.
+            \array_keys(patternBoundNames($pattern)),
+        );
+
+        return $id->value;
+    };
+
+    walkElaboration($root, static function (Ast\AstNode $node) use (&$terms, &$seen, &$next, &$lambdas, &$publishPattern): void {
+        $intrinsic = intrinsicNameFor($node);
+        if ($intrinsic !== null) {
+            $key = \spl_object_id($node);
+            if (isset($seen[$key])) {
+                return;
+            }
+            $seen[$key] = true;
+
+            $id = new TermId(++$next);
+            $node->checkedTerm = $id->value;
+            $terms[$id->value] = new CheckedIntrinsicCall($id, CheckedFunction::termOrigin($node), $intrinsic);
+
+            return;
+        }
+
+        if ($node instanceof Ast\Variable) {
+            $key = \spl_object_id($node);
+            if (isset($seen[$key])) {
+                return;
+            }
+            $seen[$key] = true;
+
+            $id = new TermId(++$next);
+            $node->checkedTerm = $id->value;
+            // The checker resolved the use when it inferred it; publishing that answer is the whole
+            // producer for this family. A use with no binder names something outside the local scope
+            // and is planned as such.
+            $terms[$id->value] = new CheckedVariable($id, CheckedFunction::termOrigin($node), $node->binderId);
+
+            return;
+        }
+
+        if (isLiteralNode($node)) {
+            $key = \spl_object_id($node);
+            if (isset($seen[$key])) {
+                return;
+            }
+            $seen[$key] = true;
+
+            $id = new TermId(++$next);
+            $node->checkedTerm = $id->value;
+            // The value as written, plus the digits of an integer the host `int` cannot hold: the
+            // second is what a big-integer type is built from, and reading it off the node later is
+            // exactly the read this family removes.
+            $terms[$id->value] = new CheckedLiteral(
+                $id,
+                CheckedFunction::termOrigin($node),
+                literalShape($node),
+                $node->value,
+                $node instanceof Ast\IntegerLit ? $node->digits : null,
+            );
+
+            return;
+        }
+
+        if ($node instanceof Ast\GuardsExpr) {
+            $key = \spl_object_id($node);
+            if (isset($seen[$key])) {
+                return;
+            }
+            $seen[$key] = true;
+
+            $id = new TermId(++$next);
+            $node->checkedTerm = $id->value;
+            // The clauses in source order; each guard and body stays a child, lowered in place.
+            $terms[$id->value] = new CheckedGuards($id, CheckedFunction::termOrigin($node), $node->clauses);
+
+            return;
+        }
+
+        if ($node instanceof Ast\RecordCon || $node instanceof Ast\RecordUpdate) {
+            $key = \spl_object_id($node);
+            if (isset($seen[$key])) {
+                return;
+            }
+            $seen[$key] = true;
+
+            $fields = [];
+            foreach ($node->fields as $field) {
+                $fields[] = new CheckedRecordField($field->name, $field->expr);
+            }
+
+            $id = new TermId(++$next);
+            $node->checkedTerm = $id->value;
+            // One family, two node shapes: a construction is an update with no receiver. The
+            // constructor of an update is the checker's answer from the receiver's type, so it is
+            // required here rather than defaulted.
+            $constructor = $node instanceof Ast\RecordCon
+                ? $node->name
+                : ($node->constructor ?? throw new \LogicException(
+                    'a record update at ' . CheckedFunction::termOrigin($node)
+                    . ' reached publication without a constructor the check resolved',
+                ));
+            $terms[$id->value] = new CheckedRecord(
+                $id,
+                CheckedFunction::termOrigin($node),
+                $constructor,
+                $fields,
+                $node instanceof Ast\RecordUpdate ? $node->object : null,
+                $node instanceof Ast\RecordUpdate ? $node->fieldOnNewtype : false,
+            );
+
+            return;
+        }
+
+        if (isPatternNode($node)) {
+            if (isset($seen[\spl_object_id($node)])) {
+                return;
+            }
+
+            // One identity per binding site, published where the checker allocated it, and the
+            // shape beside it. A pattern that binds nothing (a wildcard, a literal) is still a
+            // term: the arm it belongs to has to be matched against something.
+            $publishPattern($node);
+
+            return;
+        }
+
+        if ($node instanceof Ast\Lambda) {
+            $key = \spl_object_id($node);
+            if (isset($seen[$key])) {
+                return;
+            }
+            $seen[$key] = true;
+
+            $lambdas[] = ['id' => new TermId(++$next), 'node' => $node];
+
+            return;
+        }
+
+        if ($node instanceof Ast\Apply) {
+            $key = \spl_object_id($node);
+            if (isset($seen[$key])) {
+                return;
+            }
+            $seen[$key] = true;
+
+            $id = new TermId(++$next);
+            $node->checkedTerm = $id->value;
+            $terms[$id->value] = new CheckedApplication(
+                $id,
+                CheckedFunction::termOrigin($node),
+                remainingArity($node->inferredInternalType),
+            );
+
+            return;
+        }
+
+        // `IoCase` is the same family in a `do` block: a scrutinee, its arms in source order and
+        // whether the check proved them total, so one term covers both node shapes and neither
+        // lowerer reads the node's own list.
+        if ($node instanceof Ast\CaseExpr || $node instanceof Ast\IoCase) {
+            $key = \spl_object_id($node);
+            if (isset($seen[$key])) {
+                return;
+            }
+            $seen[$key] = true;
+
+            // The arms are the structure: their order and their guard flattening are stated once
+            // here, so lowering reads a list of arms instead of asking each alternative whether its
+            // body happens to be a `GuardsExpr`. The patterns, guards and bodies stay children,
+            // lowered in place.
+            $arms = [];
+            foreach ($node->alts as $alt) {
+                $clauses = [];
+                if ($alt->body instanceof Ast\GuardsExpr) {
+                    foreach ($alt->body->clauses as $clause) {
+                        $clauses[] = ['guard' => $clause->guard, 'body' => $clause->body];
+                    }
+                } else {
+                    $clauses[] = ['guard' => null, 'body' => $alt->body];
+                }
+                $arms[] = new CheckedCaseArm($alt->pattern, $clauses);
+            }
+
+            $id = new TermId(++$next);
+            $node->checkedTerm = $id->value;
+            $terms[$id->value] = new CheckedCase(
+                $id,
+                CheckedFunction::termOrigin($node),
+                $arms,
+                $node->exhaustive,
+            );
+
+            return;
+        }
+
+        if ($node instanceof Ast\Let || $node instanceof Ast\Where || $node instanceof Ast\IoLet) {
+            $key = \spl_object_id($node);
+            if (isset($seen[$key])) {
+                return;
+            }
+            $seen[$key] = true;
+
+            // Binding order is the check's answer, not lowering's: the same decomposition inference
+            // grouped these members by is published here, computed once on the final tree.
+            $components = [];
+            foreach (bindingGroupSccs($node->bindings) as $component) {
+                $group = [];
+                foreach ($component['indices'] as $index) {
+                    $group[] = $node->bindings[$index];
+                }
+                $components[] = new CheckedBindingGroup($group, $component['recursive']);
+            }
+
+            $body = match (true) {
+                $node instanceof Ast\Let => $node->body,
+                $node instanceof Ast\Where => $node->expr,
+                default => null,
+            };
+
+            $id = new TermId(++$next);
+            $node->checkedTerm = $id->value;
+            $terms[$id->value] = new CheckedLetGroup(
+                $id,
+                CheckedFunction::termOrigin($node),
+                $components,
+                $body,
+            );
+
+            return;
+        }
+
         $plan = evidencePlanFor($node);
         if ($plan === null) {
+            if (! $node instanceof Ast\ForeignCall) {
+                return;
+            }
+
+            $key = \spl_object_id($node);
+            if (isset($seen[$key])) {
+                return;
+            }
+            $seen[$key] = true;
+
+            $id = new TermId(++$next);
+            $node->checkedTerm = $id->value;
+            $terms[$id->value] = new CheckedForeignCall(
+                $id,
+                CheckedFunction::termOrigin($node),
+                $node->name,
+                $node->backend,
+                $node->kind,
+                $node->path,
+                $node->dispatch,
+                $node->classPath,
+                $node->member,
+                $node->ioWrap,
+                $node->phpValueBox,
+                $node->handleBox,
+                $node->handleUnboxArgs,
+                $node->nativeSig,
+            );
+
             return;
         }
 
-        $id = \spl_object_id($node);
-        if (isset($seen[$id])) {
+        $key = \spl_object_id($node);
+        if (isset($seen[$key])) {
             return;
         }
-        $seen[$id] = true;
-        $plans[] = $plan;
+        $seen[$key] = true;
+
+        $id = new TermId(++$next);
+        $node->checkedTerm = $id->value;
+        $origin = $plan->origin;
+
+        $terms[$id->value] = $node instanceof Ast\EvidenceMethod
+            ? new CheckedEvidenceMethod(
+                $id,
+                $origin,
+                $node->class,
+                $node->method,
+                $node->methodArity,
+                $node->methodNullary,
+                $plan,
+            )
+            : new CheckedEvidenceRef($id, $origin, $node->class, $plan);
     });
 
-    return $plans;
+    // A lambda's slots and captures, once every term its body names exists: the
+    // capture question is answered with the dictionary parameter each evidence
+    // site dispatches through, and those sites are terms of this same product.
+    foreach ($lambdas as $lambda) {
+        $node = $lambda['node'];
+        $parameterNames = patternParams($node->params);
+        // The slots' identities, published with them: a lowering frame is opened from the term, so
+        // a re-parse (or a scrub of the node's parameter list) cannot cost a use its binder.
+        $parameterBinders = [];
+        foreach ($node->params as $param) {
+            $pattern = $param instanceof Ast\LambdaParam ? $param->pattern : $param;
+            $parameterBinders[] = patternBinder($pattern, $terms);
+        }
+        $captures = freeVarsExpr(
+            $node->body,
+            \array_fill_keys($parameterNames, true),
+            static fn (Ast\EvidenceMethod $method): ?string
+                => ($terms[$method->checkedTerm ?? 0] ?? null) instanceof CheckedEvidenceMethod
+                    ? $terms[$method->checkedTerm]->plan->parameter
+                    : null,
+            // The terms published so far: a `case` or a group inside this body is walked through its
+            // own structure, so the capture set is the same answer lowering will read.
+            $terms,
+        );
+
+        $node->checkedTerm = $lambda['id']->value;
+        $terms[$lambda['id']->value] = new CheckedLambda(
+            $lambda['id'],
+            CheckedFunction::termOrigin($node),
+            $parameterNames,
+            $parameterBinders,
+            \array_values(\array_unique($captures)),
+        );
+    }
+
+    return $terms;
+}
+
+/**
+ * The binder a pattern site allocates, read from its published term.
+ *
+ * The question is asked twice — once when a lambda publishes its slots, once when lowering opens a
+ * frame for a `let` binding, a `case` arm or a function's parameter — and it is asked of the term
+ * both times, so the node's own field is never a second answer. A pattern that binds nothing (a
+ * wildcard, a literal) has no term and answers null.
+ *
+ * @param array<int, CheckedTerm> $terms
+ */
+function patternBinder(Ast\AstNode $pattern, array $terms): ?int
+{
+    if (! $pattern instanceof Ast\PatVar) {
+        return null;
+    }
+
+    $term = $pattern->checkedTerm === null ? null : ($terms[$pattern->checkedTerm] ?? null);
+
+    return $term instanceof CheckedPattern ? $term->binder : null;
 }
 
 /**
@@ -165,7 +570,6 @@ function contextPlanFor(Ast\AstNode $entry, Ast\AstNode $at): EvidencePlan
 {
     if ($entry instanceof Ast\Variable) {
         return new EvidencePlan(
-            $entry,
             CheckedFunction::termOrigin($entry),
             EvidencePlanKind::Parameter,
             '',

@@ -23,9 +23,9 @@ function annotateIoEffects(array $functions, string $moduleName = ''): array
         $changed = false;
         foreach ($functions as $i => $function) {
             $ioEffect = functionIoEffect($function, $index);
-            if ($function->ioEffect !== $ioEffect) {
-                $function->ioEffect = $ioEffect;
-                $index[$function->name]->ioEffect = $ioEffect;
+            if ($function->shape->ioEffect !== $ioEffect) {
+                $function->shape->ioEffect = $ioEffect;
+                $index[$function->name]->shape->ioEffect = $ioEffect;
                 $changed = true;
             }
         }
@@ -102,7 +102,7 @@ function operandsHaveIoEffect(array $operands, array $index): bool
 /** @param array<string, IR\FunctionDecl> $index */
 function calleeIoEffect(string $callee, array $index): bool
 {
-    return $index[$callee]->ioEffect ?? false;
+    return $index[$callee]->shape->ioEffect ?? false;
 }
 
 /** @param array<string, IR\FunctionDecl> $index */
@@ -133,7 +133,7 @@ function effectfulCalleeNames(array $functions, array $index, string $moduleName
     /** @var array<string, true> $effectful */
     $effectful = [];
     foreach ($functions as $function) {
-        if ($function->foreign || $function->kind === IR\FunctionKind::Worker || $function->ioEffect) {
+        if ($function->shape->foreign || $function->shape->kind === IR\FunctionKind::Worker || $function->shape->ioEffect) {
             $effectful[$function->name] = true;
             if ($moduleName !== '' && ! \str_contains($function->name, '::')) {
                 $effectful[resolvedSymbol($moduleName, $function->name)] = true;
@@ -660,7 +660,7 @@ final class Analysis
         $bodies = scanFunctions($functions);
         $marks = [];
         foreach ($functions as $function) {
-            $marks[$function->name] = [$function->kind, $function->foreign, $function->ioEffect];
+            $marks[$function->name] = [$function->shape->kind, $function->shape->foreign, $function->shape->ioEffect];
         }
         $revision = [$moduleName, $marks, $bodies];
 
