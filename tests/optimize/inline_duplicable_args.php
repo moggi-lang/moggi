@@ -15,6 +15,10 @@
  * the inlined result: one parameterless-entry reference, one foreign call, two for an argument that is
  * only a value; and the callee's body is still inlined in every case, so the rule cannot be bought by
  * refusing to inline.
+ *
+ * `tryInlineCall` splices a body three ways — a match wrapper, a PE-fusion clone and a straight-line body
+ * — and the decision is taken once before any of them, so every shape is driven here with the same seed:
+ * binding in one arm only is the defect this rule removed.
  */
 
 $root = __DIR__;
@@ -67,41 +71,96 @@ $dup = new IR\FunctionDecl(
 );
 /** A parameterless entry: naming it runs it. */
 $seed = new IR\FunctionDecl('mk', [], null, new IR\Block([new IR\Ret(new IR\ForeignCall('php', 'call', 'fresh', 'static', []))]));
+/** A match wrapper: `wrap p = match p { 0 -> p; _ -> p }`, i.e. two mentions of its one parameter. */
+$wrap = new IR\FunctionDecl(
+    'wrap',
+    ['p'],
+    null,
+    new IR\Block([
+        new IR\MatchReturn(new IR\Local('p'), [
+            new IR\MatchArm(new IR\PatLit(0), new IR\Block([new IR\Ret(new IR\Local('p'))])),
+            new IR\MatchArm(new IR\PatWild(), new IR\Block([new IR\Ret(new IR\Local('p'))])),
+        ]),
+    ]),
+);
+/** A PE-fusion clone: `pe p = observe p p`, the same two mentions through the third splice shape. */
+$pe = new IR\FunctionDecl(
+    'pe',
+    ['p'],
+    null,
+    new IR\Block([new IR\Ret(new IR\ForeignCall('php', 'call', 'observe', 'static', [new IR\Local('p'), new IR\Local('p')]))]),
+    kind: IR\FunctionKind::SpecClone,
+);
 /** A function that takes a parameter: a reference to it is a value. */
 $closure = new IR\FunctionDecl('takesOne', ['x'], null, new IR\Block([new IR\Ret(new IR\Local('x'))]));
 
-$inlineWith = static function (IR\Operand $arg) use ($dup, $seed, $closure): ?array {
+$inlineWith = static function (IR\FunctionDecl $callee, IR\Operand $arg) use ($seed, $closure): ?array {
     Facts::install(new Facts());
-    Facts::current()->publishFunctions([$seed, $closure, $dup]);
+    Facts::current()->publishFunctions([$seed, $closure, $callee]);
     $index = [];
-    foreach ([$seed, $closure, $dup] as $decl) {
+    foreach ([$seed, $closure, $callee] as $decl) {
         $index[$decl->name] = $decl;
     }
     $nextTemp = 10;
 
-    return tryInlineCall($dup, new IR\Call('dup', [$arg], 9), 'caller', $index, $nextTemp, ['dup' => true]);
+    return tryInlineCall($callee, new IR\Call($callee->name, [$arg], 9), 'caller', $index, $nextTemp, [$callee->name => true]);
 };
 
-$seedCall = $inlineWith(new IR\FnRef('mk'));
+$seedCall = $inlineWith($dup, new IR\FnRef('mk'));
 $check($seedCall !== null, 'a parameterless-entry argument still inlines the callee');
 $check(
     $count($seedCall ?? [], static fn (IR\Operand $op): bool => $op instanceof IR\FnRef && $op->name === 'mk') === 1,
     'a parameterless entry is bound once, not once per parameter mention',
 );
 
-$foreignCall = $inlineWith(new IR\ForeignCall('php', 'call', 'fresh', 'static', []));
+$wrapCall = $inlineWith($wrap, new IR\FnRef('mk'));
+$check($wrapCall !== null, 'a match-wrapper callee still inlines');
+$check(
+    $count($wrapCall ?? [], static fn (IR\Operand $op): bool => $op instanceof IR\FnRef && $op->name === 'mk') === 1,
+    'the match-wrapper shape binds a parameterless entry once, like the straight-line shape',
+);
+
+$peCall = $inlineWith($pe, new IR\FnRef('mk'));
+$check($peCall !== null, 'a PE-fusion clone still inlines');
+$check(
+    $count($peCall ?? [], static fn (IR\Operand $op): bool => $op instanceof IR\FnRef && $op->name === 'mk') === 1,
+    'the PE-fusion shape binds a parameterless entry once, like the straight-line shape',
+);
+
+$foreignCall = $inlineWith($dup, new IR\ForeignCall('php', 'call', 'fresh', 'static', []));
 $check($foreignCall !== null, 'a foreign-call argument still inlines the callee');
 $check(
     $count($foreignCall ?? [], static fn (IR\Operand $op): bool => $op instanceof IR\ForeignCall && $op->path === 'fresh') === 1,
     'a foreign call is still bound once (the behaviour this rule extends)',
 );
 
-$closureCall = $inlineWith(new IR\FnRef('takesOne'));
+$closureCall = $inlineWith($dup, new IR\FnRef('takesOne'));
 $check($closureCall !== null, 'a closure argument still inlines the callee');
 $check(
     $count($closureCall ?? [], static fn (IR\Operand $op): bool => $op instanceof IR\FnRef && $op->name === 'takesOne') === 2,
     'a reference to a function that takes parameters is a value and is substituted at both mentions',
 );
+
+// An operand may name the entry bare or qualified; both are the same entry, so both answer the same
+// fact. Keying the owner by the spelling an operand happened to carry would have missed this one.
+$qualifiedSeed = $inlineWith($dup, new IR\FnRef('Other::mk'));
+$check($qualifiedSeed !== null, 'a qualified parameterless reference still inlines the callee');
+$check(
+    $count($qualifiedSeed ?? [], static fn (IR\Operand $op): bool => $op instanceof IR\FnRef && $op->name === 'Other::mk') === 1,
+    'a parameterless entry named by its qualified spelling is bound once too',
+);
+
+// The other half of the same rule: the owner publishes by leaf too, because a declaration's own name may
+// be qualified while the operand that asks about it carries its own spelling. Without this the read-side
+// keying would only work for names that arrive qualified and are published bare.
+$owner = new Facts();
+$owner->publishFunctions([
+    new IR\FunctionDecl('Main::mk', [], null, new IR\Block([new IR\Ret(new IR\ConstInt(1))])),
+    new IR\FunctionDecl('Main::takesOne', ['x'], null, new IR\Block([new IR\Ret(new IR\Local('x'))])),
+]);
+$check($owner->runsOnReference('mk'), 'a declaration named by its qualified spelling is published under its leaf');
+$check($owner->runsOnReference('Main::mk'), 'the qualified spelling of a nullary entry is answered');
+$check(! $owner->runsOnReference('takesOne'), 'an entry that takes a parameter is not a nullary fact');
 
 if ($failures !== []) {
     \fwrite(STDERR, "inline_duplicable_args failures:\n");
@@ -110,5 +169,9 @@ if ($failures !== []) {
     }
     exit(1);
 }
+
+// Each case installs the owner it needs; a run that leaves one installed models a state the
+// production path never leaves behind.
+Facts::clear();
 
 echo "inline_duplicable_args: ok\n";

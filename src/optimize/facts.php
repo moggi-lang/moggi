@@ -18,6 +18,12 @@ use function Moggi\IR\Projection\leafName;
  *
  * The object is ambient because the passes that read it sit at the bottom of rewrite recursion that
  * carries no context of its own; the size of that ambient surface is this one object, not four keys.
+ *
+ * Name identity, where the maps differ and why: the boolean facts ({@see runsOnReference()}) are keyed by
+ * leaf on both sides, so any spelling of an operand answers and a leaf collision over-answers — which only
+ * costs a binding. A map that carries a *payload* cannot do that: {@see nullaryCtor()} is published under
+ * every spelling its callers use, because a leaf collision there would hand back another module's tree.
+ * The evidence map is keyed by the name the table declares, and a qualified lookup falls back to the leaf.
  */
 final class Facts
 {
@@ -201,10 +207,15 @@ final class Facts
      * that reference into a call, so two references run the body twice — which for an allocating host
      * call means two objects. A reference to a function that *does* take parameters is a closure value
      * and may be shared.
+     *
+     * Keyed by leaf name, like {@see evidenceFor()}: an operand may name an entry bare or qualified and
+     * both spellings are the same entry. A leaf shared by two modules answers *true*, which binds a value
+     * to a temp; that is the safe direction, because the alternative answer is the duplicate work this
+     * fact exists to prevent.
      */
     public function runsOnReference(string $name): bool
     {
-        return isset($this->nullary[$name]);
+        return isset($this->nullary[leafName($name)]);
     }
 
     /**
@@ -217,7 +228,7 @@ final class Facts
     {
         foreach ($functions as $function) {
             if ($function->params === []) {
-                $this->nullary[$function->name] = true;
+                $this->nullary[leafName($function->name)] = true;
             }
         }
     }

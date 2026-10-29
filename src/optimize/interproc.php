@@ -414,7 +414,7 @@ function inliningWouldRebindCallerName(IR\FunctionDecl $target): bool
  * @param array<string, true> $inlineable
  * @return list<IR\Stmt>|null
  */
-function tryInlineCall(IR\FunctionDecl $target, IR\Stmt $call, string $selfName, array $index, int &$nextTemp, array $inlineable): ?array
+function tryInlineCall(IR\FunctionDecl $target, IR\Call $call, string $selfName, array $index, int &$nextTemp, array $inlineable): ?array
 {
     if ($target->name === $selfName || ! isset($inlineable[$target->name])) {
         return null;
@@ -537,7 +537,7 @@ function materializeInlineArgs(array $args, int $nextTemp): array
  * @param array<string, IR\FunctionDecl> $index
  * @return list<IR\Stmt>|null
  */
-function tryInlineMatchWrapper(IR\FunctionDecl $target, IR\Stmt $call, int &$nextTemp): ?array
+function tryInlineMatchWrapper(IR\FunctionDecl $target, IR\Call $call, int &$nextTemp): ?array
 {
     $items = denseStmtItems($target->body->items);
     $match = $items[0];
@@ -1821,12 +1821,8 @@ function specializationLookupNameSafe(string $callee): string
     return $parsed !== null ? $parsed['name'] : $callee;
 }
 
-function tryInlinePeFusionBody(IR\FunctionDecl $target, IR\Stmt $call, int &$nextTemp): ?array
+function tryInlinePeFusionBody(IR\FunctionDecl $target, IR\Call $call, int &$nextTemp): ?array
 {
-    if (! ($call instanceof IR\Call)) {
-        return null;
-    }
-
     $body = denseStmtItems($target->body->items);
     $remap = buildTempRemap($body, $nextTemp);
     if ($remap !== []) {
