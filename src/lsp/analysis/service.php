@@ -467,17 +467,6 @@ final class AnalysisService
         return $kept;
     }
 
-    public function seedResult(string $uri, AnalysisResult $result): void
-    {
-        unset($this->dirty[$uri], $this->pendingAnalyze[$uri]);
-        $this->results[$uri] = $result;
-        $this->completedVersions[$uri] = $this->vfs->version($uri);
-        if (! $this->vfs->has($uri)) {
-            $this->vfs->open($uri, $result->source, 1);
-        }
-        $this->indexResult($uri, $result);
-    }
-
     public function ensureAnalyzed(string $uri): ?AnalysisResult
     {
         if (isset($this->dirty[$uri]) || ! isset($this->results[$uri]) || isset($this->pendingAnalyze[$uri])) {

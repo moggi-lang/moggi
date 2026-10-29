@@ -3736,24 +3736,6 @@ function jvmCallArgs(EmitEnv $env, string $name, array $args): array
     return $args;
 }
 
-function jvmLambdaHasFreeLocals(IR\FunctionDecl $fn): bool
-{
-    $bound = \array_fill_keys($fn->params, true);
-    foreach ($fn->body->items as $stmt) {
-        if ($stmt instanceof IR\Let) {
-            $bound[$stmt->name] = true;
-        }
-        if ($stmt instanceof IR\Assign) {
-            $bound['t' . $stmt->dest] = true;
-        }
-        if ($stmt instanceof IR\Call && $stmt->dest !== null) {
-            $bound['t' . $stmt->dest] = true;
-        }
-    }
-
-    return jvmBlockRefsUnboundLocal($fn->body, $bound);
-}
-
 /** @param array<string, true> $bound */
 function jvmBlockRefsUnboundLocal(IR\Block $block, array $bound): bool
 {

@@ -793,19 +793,6 @@ function registerClassMethodExportSchemes(TypeCheckState $state, Ast\ClassDecl $
     }
 }
 
-function registerInstanceSchemes(TypeCheckState $state, Ast\AstNode $decl): void
-{
-    $registration = instanceMethodSchemes($state, $decl);
-    foreach ($registration['schemes'] as $methodName => $scheme) {
-        $state->instanceMethodNames[$methodName] = true;
-        $existing = $state->env[$methodName] ?? null;
-        if ($existing?->classMethod || isset($state->localDeclNames[$methodName])) {
-            continue;
-        }
-        $state->env[$methodName] = $scheme;
-    }
-}
-
 /**
  * Give a signature-less declaration a scheme before any body is checked, so a
  * call between two declarations of the same module (mutually recursive ones

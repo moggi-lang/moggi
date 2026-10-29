@@ -8,16 +8,6 @@ use Moggi\Semantics\Types\TypeError;
 use function Moggi\Syntax\Ast\markSourceFile;
 
 /**
- * A module that has a backend half: its declarations plus whichever half the
- * compilation selected are one unit, so the module a program imports is the
- * module that is checked, emitted and named in the IR.
- */
-function isFacadeProgram(Ast\Program $program): bool
-{
-    return $program->backendMap !== [];
-}
-
-/**
  * The half a backend map selects, or null when it has no entry for that backend.
  *
  * A missing entry is a deliberate omission (a host binding that exists on one

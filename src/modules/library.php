@@ -78,43 +78,6 @@ function isLibraryRoot(string $dir): bool
 }
 
 /**
- * The library package holding `$path`, as a project-relative dir: the nearest
- * enclosing library root, unwrapped — a packaged `src/` root answers its
- * package dir (`libraries/base` for anything under `libraries/base/src`), a
- * flat root answers itself. Null when `$path` is not inside a library package.
- *
- * The single-file require rewriting uses this to read the package-collapsed
- * form: a fixture in `libraries/base` requiring `src/Data/Bool.php` means
- * `libraries/base/src/Data/Bool.php`, which the checkout-relative require
- * prefixes alone cannot see.
- */
-function enclosingLibraryPackageDir(string $path, string $projectRoot): ?string
-{
-    $root = \rtrim(canonicalSeparators(resolvePath($projectRoot)), '/');
-    $dir = canonicalSeparators(resolvePath(\dirname($path)));
-    while (true) {
-        if ($dir === $root || ! \str_starts_with($dir . '/', $root . '/')) {
-            return null;
-        }
-        if (\basename($dir) === 'src' && libraryRootMarker($dir) !== null) {
-            $relative = \substr(\dirname($dir), \strlen($root) + 1);
-
-            return $relative !== '' ? $relative : null;
-        }
-        if (isLibraryRoot($dir)) {
-            $relative = \substr($dir, \strlen($root) + 1);
-
-            return $relative !== '' ? $relative : null;
-        }
-        $parent = \dirname($dir);
-        if ($parent === $dir) {
-            return null;
-        }
-        $dir = $parent;
-    }
-}
-
-/**
  * The project root output paths are relativized against for a standard-library
  * source root: the workspace holding the library, not the `src/` dir itself.
  *

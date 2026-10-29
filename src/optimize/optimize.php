@@ -57,6 +57,7 @@ function optimize(Module $module): Module
         $instanceEvidence = $module->instanceEvidence;
         $evidenceByName = indexEvidenceByName($instanceEvidence);
         Facts::current()->publishModuleEvidence($moduleName, $instanceEvidence);
+        Facts::current()->publishFunctions($functions);
         $analysis = new Analysis();
 
         $functions = PassCheckpoints\runOnFunctions(

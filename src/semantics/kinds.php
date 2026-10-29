@@ -226,16 +226,6 @@ function sameKind(Kind $left, Kind $right): bool
     };
 }
 
-function applyKind(KindInferCtx $ctx, Kind $kind, Kind $argKind): Kind
-{
-    $kind = pruneKind($ctx, $kind);
-    $argKind = pruneKind($ctx, $argKind);
-    $result = freshKindVar($ctx);
-    unifyKind($ctx, $kind, new KArrow($argKind, $result));
-
-    return pruneKind($ctx, $result);
-}
-
 function freshKindVar(KindInferCtx $ctx): KVar
 {
     return new KVar('k' . ($ctx->fresh++));

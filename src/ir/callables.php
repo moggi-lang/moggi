@@ -210,11 +210,6 @@ final class CallableTable
     }
 
     /** @return list<string> */
-    public function capturesOf(string $entry): array
-    {
-        return $this->meta[$entry]['captures'] ?? [];
-    }
-
     /** @return array<string, array{captures: list<string>, params: list<string>}> */
     public function meta(): array
     {

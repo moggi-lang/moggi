@@ -156,21 +156,6 @@ function validateTypeNoSt(Ast\TypeNode $type, Ast\AstNode $at, string $source, s
     }
 }
 
-/** Whether a declared type returns an ST action. */
-function functionReturnsSt(?Ast\TypeNode $type): bool
-{
-    if ($type === null) {
-        return false;
-    }
-
-    $result = stripConstraints($type);
-    while ($result instanceof Ast\TypeArrow) {
-        $result = $result->to;
-    }
-
-    return isStType($result);
-}
-
 /** The ST type constructor: the kernel id `ST#`, or the name the library publishes it under. */
 function isStTypeConName(string $name): bool
 {

@@ -3423,52 +3423,6 @@ function instanceHeadOperand(TypeCheckState $state, string $op, Type $left, Type
 }
 
 /**
- * Whether a constraint names an instance that a later unification could still
- * make available.
- *
- * A class method applied at an operand whose instance is not decided yet has no
- * dictionary to pass *yet*. Two shapes of that: the operand's type is headed by
- * an open variable (`(pure (1 :: Int) <* pure ()) >>= f` types its left operand
- * as `f Int` while `pure`'s own dictionary is still open), or the instance is in
- * scope but its own context is (`mempty <> Sum n` is a `Semigroup (Sum a)` whose
- * instance needs the `Semigroup a` a later unification supplies, and a derived
- * `Ord (Pair a b)` needs the `Ord a`/`Eq a` its `Pair Int Int` use has). Keeping
- * the constraint on the node lets {@see resolvePendingEvidenceInExpr} build the
- * dictionary call once the body is settled. Dropping it leaves the use to
- * lowering, which is only right for the operators the host performs on its own
- * values; a `Pair` compared as a native `<` is not.
- *
- * An instance that simply is not in scope is *not* waited for: no later
- * unification brings it in, and the operator's own lowering decides what the
- * use means.
- *
- * @param list<Constraint> $constraints
- */
-function dictAwaitingResolution(TypeCheckState $state, array $constraints): bool
-{
-    foreach ($constraints as $constraint) {
-        $resolved = constraintInstanceHead($state, $constraint);
-        if ($resolved === null || $resolved['ambient'] !== null) {
-            continue;
-        }
-
-        if (prune($state, $resolved['instanceHead']) instanceof TVar) {
-            return true;
-        }
-
-        foreach (instanceLeafConstraints($state, $constraint) ?? [] as $leaf) {
-            if (constraintHeadType($state, $leaf->args) instanceof TVar
-                && ambientEvidenceFor($state, $leaf) === null
-            ) {
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
-
-/**
  * Whether either operand is still a type variable.
  *
  * Such an operand has no host representation yet, so settling the operator on its instance's primop

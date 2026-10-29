@@ -150,38 +150,3 @@ function canonicalPath(string $path): string
 
     return $tail === [] ? $resolved : \rtrim($resolved, '/') . '/' . \implode('/', \array_reverse($tail));
 }
-
-/**
- * The path from `$fromFile` to `$toFile`, or the absolute target when the two are anchored on
- * different roots (a Windows temp directory and the project on another drive).
- */
-function relativeFilePath(string $fromFile, string $toFile): string
-{
-    $fromDir = canonicalPath(\dirname($fromFile));
-    $toPath = canonicalPath($toFile);
-
-    $fromParts = $fromDir === '' ? [] : \explode('/', $fromDir);
-    $toParts = \explode('/', $toPath);
-    $sameRoot = ($fromParts[0] ?? null) !== null && ($fromParts[0] ?? null) === ($toParts[0] ?? null);
-
-    while ($fromParts !== [] && $toParts !== [] && $fromParts[0] === $toParts[0]) {
-        \array_shift($fromParts);
-        \array_shift($toParts);
-    }
-
-    if (! $sameRoot && isAbsolutePath($fromDir) && isAbsolutePath($toPath)) {
-        return $toPath;
-    }
-
-    $relParts = \array_merge(\array_fill(0, \count($fromParts), '..'), $toParts);
-
-    return \implode('/', $relParts);
-}
-
-/** The expression a generated `require_once` uses to reach `$toFile` from `$fromFile`. */
-function requirePathExpression(string $fromFile, string $toFile): string
-{
-    $relative = relativeFilePath($fromFile, $toFile);
-
-    return isAbsolutePath($relative) ? \var_export($relative, true) : "__DIR__ . '/{$relative}'";
-}

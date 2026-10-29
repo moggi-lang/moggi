@@ -45,14 +45,6 @@ function uriToPath(string $uri): string
 }
 
 /**
- * Detect whether a URI designates a `.mog` source file.
- */
-function isMoguri(string $uri): bool
-{
-    return \str_ends_with(\strtolower($uri), '.mog');
-}
-
-/**
  * Read one JSON-RPC message from a stream handle.
  *
  * @param resource $stream The PHP stream to read from (defaults to STDIN).

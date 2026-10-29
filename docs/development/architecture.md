@@ -140,8 +140,8 @@ IR lowering translates normalized effect nodes mechanically.
 
 ### IR Lowering
 
-`src/ir/ir.php` owns the IR representation and AST-to-IR lowering. The target
-boundary is:
+`src/ir/types.php` owns the IR representation; `src/ir/lower.php` and the
+`src/ir/lower_*.php` files own AST-to-IR lowering. The target boundary is:
 
 ```text
 typed/elaborated AST
@@ -232,8 +232,11 @@ strict-normalization and lowering rules. General Magichash types and primops
 live in `Moggi.Internal.Prim`. A primop's `#`-suffixed MagicHash name is its only
 name, and is used verbatim as the IR/backend id.
 
-`src/backend/php/intrinsics.php` currently contains both. Refactors should split the
-primitive registry from the PHP intrinsic emitter.
+The registry is the only owner of what a primop means; a backend owns only how it
+is spelled. Each backend therefore exposes one entry point per operation
+(`emitIntrinsic`), and php's returns an expression where jvm's and .NET's emit to
+the stack — php's `src/backend/php/intrinsics.php` holds its helpers and that
+entry point, not a second catalog of primops.
 
 ### REPL
 
@@ -276,6 +279,24 @@ The compiler should converge on these phase representations:
 | IR | IR lowering | functions, blocks, operands, explicit calls/matches | source-only syntax, unresolved types |
 | Optimized IR | optimizer | IR plus documented optimization metadata | frontend resolver state |
 | Target source | `<backend>/codegen.php` | backend output | compiler-internal metadata |
+
+## Owner map
+
+A feature that needs one of these facts asks the owner. Adding a second reader — a class check, a
+name-shaped test, a private table — is the defect this map exists to prevent.
+
+| Question | Owner |
+| --- | --- |
+| May this computation be dropped, reused or duplicated? What can it do (construct, execute, throw, diverge)? | `Optimize\Effects\Model` (`ofOperand`, `evaluationOf`); it asks the facts owner whether a bare reference to an entry runs it, and IO effect marks come from `Semantics\Effects\annotateIoEffects` |
+| What does this run know about the program — evidence tables, function index, nullary constructor trees, which entries run when referenced? | `Optimize\Facts\Facts`, installed and cleared by `optimize()` |
+| What is this callable's shape — its parameters, captures, lifted entry, result convention? | `IR\Callables` (the callable table) |
+| Is this callee a field/tuple projection, and at what index? | `IR\Projection` (`parse`, `index`, `tupleArity`, `leafName`) |
+| Is this name compiler-generated, and may a declaration use it? | `Syntax\Ast\generatedWorkerPrefix()`, `Semantics\EvidenceNames`, `Syntax\Ast\instanceHeadMarker()` for the spellings; `Types\Declarations` (`assertNotGeneratedName`) is the one refusal |
+| What evidence does a declaration take, and where is each site applied? | `Modules\CheckedCore` (the record) and `Modules\EvidencePlan` (elaboration sites) |
+| What is a constructor's layout, arity or backing, or the throwing-call source location? | `Backend\Meta` (`src/backend/ir_meta.php`) |
+| Which host library trees are in force, and are they usable? | `Modules\ConfiguredHostLibraries` |
+| Is this compiled product still valid, and what is its identity? | `Compiler\compilerFingerprint()`, `CompilationContext` |
+| Which entries return an action, and which worker runs them? | `Modules\actionEntryFacts()` |
 
 ## Refactoring Rules
 

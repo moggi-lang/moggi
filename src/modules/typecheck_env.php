@@ -736,20 +736,6 @@ function indexProjectInstances(array $projectInstances): array
 }
 
 /**
- * @param array{
- *   byClass?: array<string, list<array<string, mixed>>>,
- *   byClassHead?: array<string, array<string, list<array<string, mixed>>>>,
- *   associatedEquations?: array<string, array<string, list<array<string, mixed>>>>
- * } $index
- */
-function installProjectInstanceIndex(Types\TypeCheckState $state, array $index): void
-{
-    $state->projectInstancesByClass = $index['byClass'] ?? [];
-    $state->projectInstancesByClassHead = $index['byClassHead'] ?? [];
-    $state->associatedEquations = $index['associatedEquations'] ?? [];
-}
-
-/**
  * @param array<string, array<string, mixed>> $units
  * @param array<string, Scheme> $schemes
  */

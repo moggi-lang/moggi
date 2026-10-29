@@ -38,6 +38,8 @@ final class Facts
         public array $fusionIndex = [],
         public array $inlineProtectedNames = [],
         public array $inlineTargetBoundNames = [],
+        /** @var array<string, true> the entries a reference runs instead of closing over */
+        public array $nullary = [],
     ) {
     }
 
@@ -190,6 +192,34 @@ final class Facts
         $tree = $this->nullaryCtorCafs[$name] ?? null;
 
         return $tree instanceof CtorTree ? $tree : null;
+    }
+
+    /**
+     * Whether naming this entry runs it, because it takes no parameters.
+     *
+     * A function of no parameters is a CAF: the IR reaches it as a bare `FnRef` and the backends force
+     * that reference into a call, so two references run the body twice — which for an allocating host
+     * call means two objects. A reference to a function that *does* take parameters is a closure value
+     * and may be shared.
+     */
+    public function runsOnReference(string $name): bool
+    {
+        return isset($this->nullary[$name]);
+    }
+
+    /**
+     * @param list<IR\FunctionDecl> $functions the entries this run knows, merged into what it already had
+     *
+     * Merging is what makes a nested run safe: the whole-program owner publishes every module's entries,
+     * and a per-module run inside it adds its own rather than narrowing the owner to one module.
+     */
+    public function publishFunctions(array $functions): void
+    {
+        foreach ($functions as $function) {
+            if ($function->params === []) {
+                $this->nullary[$function->name] = true;
+            }
+        }
     }
 
     /** @return array<string, mixed> */

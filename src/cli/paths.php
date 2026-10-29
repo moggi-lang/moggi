@@ -42,17 +42,6 @@ function findMogFiles(string $inputDir): array
     return [$root, $files];
 }
 
-/** @return array{0: string, 1: list<string>} */
-function findMogFilesOrExit(string $inputDir): array
-{
-    try {
-        return findMogFiles($inputDir);
-    } catch (\InvalidArgumentException $e) {
-        \fwrite(STDERR, 'error: ' . $e->getMessage() . "\n");
-        exit(1);
-    }
-}
-
 /**
  * The files to compile, and the root they are relative to.
  *

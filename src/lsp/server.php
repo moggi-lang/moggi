@@ -47,12 +47,6 @@ function clearRequestContext(): void
     );
 }
 
-/** Active per-request progress token (null when none/no support). */
-function currentProgressToken(): int|string|null
-{
-    return $GLOBALS['__moggi_lsp_progress_token'] ?? null;
-}
-
 /**
  * The server speaks JSON-RPC over stdout, so *nothing* else may ever be written
  * there: a single PHP notice lands between the previous body and the next

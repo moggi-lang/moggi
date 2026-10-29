@@ -441,6 +441,13 @@ function tryInlineCall(IR\FunctionDecl $target, IR\Stmt $call, string $selfName,
         }
     }
 
+    // Decided once, before any variant splices a body: every inlined form substitutes these args into
+    // parameter positions, so work-carrying arguments are bound here rather than three times over.
+    $materialized = materializeInlineArgs($call->args, $nextTemp);
+    $nextTemp = $materialized['nextTemp'];
+    $prefix = $materialized['prefix'];
+    $call = new IR\Call($call->callee, $materialized['args'], $call->dest, $call->srcLoc);
+
     if (isMatchWrapperBody($target)) {
         $inlined = tryInlineMatchWrapper($target, $call, $nextTemp);
         if ($inlined === null) {
@@ -451,11 +458,13 @@ function tryInlineCall(IR\FunctionDecl $target, IR\Stmt $call, string $selfName,
             $inlined = qualifyBareCalleesInItems($inlined, $srcModule, $index);
         }
 
-        return $inlined;
+        return [...$prefix, ...$inlined];
     }
 
     if (isPeFusionInlineCandidate($target)) {
-        return tryInlinePeFusionBody($target, $call, $nextTemp);
+        $inlined = tryInlinePeFusionBody($target, $call, $nextTemp);
+
+        return $inlined === null ? null : [...$prefix, ...$inlined];
     }
 
     $body = denseStmtItems($target->body->items);
@@ -478,10 +487,7 @@ function tryInlineCall(IR\FunctionDecl $target, IR\Stmt $call, string $selfName,
         return null;
     }
 
-    $materialized = materializeInlineArgs($call->args, $nextTemp);
-    $prefix = $materialized['prefix'];
-    $args = $materialized['args'];
-    $nextTemp = $materialized['nextTemp'];
+    $args = $call->args;
 
     $bound = [];
     foreach (\array_slice($body, 0, -1) as $item) {
@@ -498,7 +504,13 @@ function tryInlineCall(IR\FunctionDecl $target, IR\Stmt $call, string $selfName,
 }
 
 /**
- * Bind foreign-call args to temps so substitution cannot run one twice.
+ * Bind an argument that runs work to a temp, so substitution can only read it.
+ *
+ * An operand position holds values, except the two kinds the fact owner answers for
+ * ({@see operandIsNonDuplicable()}): a foreign call, and a bare reference to a parameterless entry,
+ * which the backends force into a call. Substituting either into a callee that mentions its parameter
+ * more than once runs the work once per mention — two `StringWriter`s for one encoder — so each is bound
+ * once, before the body, and every mention reads the temp.
  *
  * @param list<IR\Operand> $args
  * @return array{prefix: list<IR\Stmt>, args: list<IR\Operand>, nextTemp: int}
@@ -508,7 +520,7 @@ function materializeInlineArgs(array $args, int $nextTemp): array
     $prefix = [];
     $out = [];
     foreach ($args as $arg) {
-        if ($arg instanceof IR\ForeignCall) {
+        if (operandIsNonDuplicable($arg)) {
             $dest = $nextTemp++;
             $prefix[] = new IR\Assign($dest, $arg);
             $out[] = new IR\Temp($dest);
@@ -747,7 +759,8 @@ function inlineExprAsItems(IR\Operand $expr, int $dest): array
  */
 function operandIsNonDuplicable(IR\Operand $op): bool
 {
-    return $op instanceof IR\ForeignCall;
+    return $op instanceof IR\ForeignCall
+        || ($op instanceof IR\FnRef && Facts::current()->runsOnReference($op->name));
 }
 
 /** True when `$op` mentions any Temp (not safe to hoist into a specialized clone). */
@@ -779,18 +792,6 @@ function countLocalUsesInItems(array $items, string $name): int
             },
         );
     }
-
-    return $n;
-}
-
-function countLocalUsesInOperand(IR\Operand $operand, string $name): int
-{
-    $n = 0;
-    walkOperand($operand, static function (IR\Operand $op) use (&$n, $name): void {
-        if ($op instanceof IR\Local && $op->name === $name) {
-            ++$n;
-        }
-    });
 
     return $n;
 }
@@ -1832,14 +1833,10 @@ function tryInlinePeFusionBody(IR\FunctionDecl $target, IR\Stmt $call, int &$nex
         $nextTemp = \max($remap) + 1;
     }
     $body = denseStmtItems(remapTempsInItems($body, $remap));
-
-    $materialized = materializeInlineArgs($call->args, $nextTemp);
-    $prefix = $materialized['prefix'];
-    $args = $materialized['args'];
-    $nextTemp = $materialized['nextTemp'];
+    $args = $call->args;
 
     $bound = [];
-    $out = $prefix;
+    $out = [];
     $lastIdx = \count($body) - 1;
     foreach ($body as $i => $item) {
         if ($i === $lastIdx && $item instanceof IR\Ret) {
