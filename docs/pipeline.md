@@ -1,175 +1,101 @@
 ---
-title: "The compiler, stage by stage"
+title: "Inspecting a build"
+description: The flags and cache that show what the compiler did with your program, and what ends up in an artifact.
 ---
-# The compiler, stage by stage
+# Inspecting a build
 
-You give Moggi a `.mog` file; you get a `.phar`, a `.jar` or a `.dll`. This
-document is the whole road between those two points — what each stage consumes
-and produces, where it lives in the source, and which flag shows it to you.
+The compiler turns a `.mog` program into an artifact without asking you to
+configure stages. When something surprises you, these are the ways to look
+inside — every one is a flag on `moggi compile` or a command in `moggi repl`.
 
-```text
-    hello.mog  (source text)
-        │
-        │  lexer                       src/syntax/lexer.php
-        ▼
-    tokens                             ·  moggi compile hello.mog --tokens
-        │
-        │  parser (fixity-aware)       src/syntax/parser.php
-        ▼
-    AST  (the shape you wrote)         ·  --ast
-        │
-        │  kind checking               src/semantics/kinds.php
-        │  type inference + classes     src/semantics/types/**
-        │  evidence (dictionary) insertion
-        │  IO surface validation        src/semantics/io_boundary.php
-        │  strict IO sequencing         src/semantics/strict_io_normalize.php
-        ▼
-    typed AST  (every decision made)   ·  --typed-ast
-        │
-        │  IR lowering                  src/ir/**
-        ▼
-    IR  (backend-neutral, explicit calls/matches/temps)
-        │                              ·  --ir
-        │  optimizer, per module       src/optimize/**, src/optimize/optimize.php
-        ▼
-    optimized IR                       ·  --opt-ir
-        │
-        │  whole-program pass           src/optimize/specialize.php
-        │    · specialize across module boundaries
-        │    · drop what `main` cannot reach (unless --no-strip)
-        ▼
-    optimized program
-        │
-        │  code generation              src/backend/<target>/codegen.php
-        ▼
-    target code    php: .php per module      jvm: .class files      dotnet: .il + .ilproj
-        │
-        │  packaging                    src/backend/<target>/package.php
-        ▼
-    hello.phar  ·  hello.jar  ·  moggi-app.dll      (or --unpacked, or --native)
+```bash
+moggi compile hello.mog --tokens        # the token stream
+moggi compile hello.mog --ast           # the parsed tree
+moggi compile hello.mog --typed-ast     # after type checking and elaboration
+moggi compile hello.mog --ir            # before optimization
+moggi compile hello.mog --opt-ir        # after optimization
 ```
 
-## The stages
+Each flag stops after that stage and prints it to stdout; none of them writes an
+artifact. The same stages are available one expression at a time in the REPL
+(`:ast`, `:typed-ast`, `:ir`, `:opt-ir`, `:emit`, `:emit-opt`), and for a whole
+session module with `:dump` ([repl.md](repl.md)).
 
-| Stage | Input → output | Owner | See it with |
-|---|---|---|---|
-| Lexing | source → tokens | `src/syntax/lexer.php` | `--tokens` |
-| Parsing | tokens → AST | `src/syntax/parser.php`, `src/syntax/ast*.php` | `--ast` |
-| Kind checking | AST → kinded type constructors | `src/semantics/kinds.php` | (inside type checking) |
-| Type checking | AST → typed AST | `src/semantics/types/**` | `--typed-ast` |
-| Effect validation | typed AST → validated effects | `src/semantics/io_boundary.php` | — |
-| Strict IO lowering | typed AST → explicit sequencing nodes | `src/semantics/strict_io_normalize.php` | — |
-| IR lowering | typed AST → IR | `src/ir/**` | `--ir` |
-| Optimization | IR → IR | `src/optimize/**` | `--opt-ir` |
-| Whole-program pass | modules → optimized modules | `src/optimize/specialize.php` | — |
-| Code generation | IR → target code | `src/backend/<target>/codegen.php` | `:emit` in the REPL |
-| Packaging | generated tree → artifact | `src/backend/<target>/package.php` | — |
+## What the stages are for
 
-The driver for a single module is `Moggi\Pipeline\run`
-(`src/pipeline/pipeline.php`); its `stopAt` parameter is what the print flags
-use to cut the pipeline early. Everything above `--opt-ir` is **backend-neutral**
-— the same tokens, AST, typed AST and IR come out regardless of the target.
+You do not need the stage names to use the language, but each answers a
+different question:
 
-## The project layer
+| When you want to know | Look at |
+|---|---|
+| whether the lexer split the source the way you read it | `--tokens` |
+| whether an operator or layout choice parsed as you intended | `--ast` |
+| what type inference decided, and where dictionaries were inserted | `--typed-ast` |
+| whether the program is already reduced before the target backend sees it | `--ir`, `--opt-ir` |
+| what host code a construct becomes | `:emit` in the REPL |
 
-A program is a *set* of modules, so the work starts one level up, in
-`src/modules/modules.php`:
+`--no-opt` disables optimization entirely, which is the first thing to try when
+a program behaves correctly with a simpler compile and wrongly with the default.
+`--no-strip` keeps bindings that `main` cannot reach, which is what you want when
+inspecting a library build rather than an executable.
 
-```text
-input files
-  → module closure discovery        (which files are in the program)
-  → fixity collection               (operators from imports, before parsing bodies)
-  → dependency ordering
-  → import / export resolution      (what each module can see, under what alias)
-  → import contexts                 (values, types, constructors, classes, evidence,
-                                     and the symbol origins the emitters need)
-  → per-module pipeline, up to the optimized IR   (memoized in the compile cache)
-  → specializeAcrossModules         (one whole-program pass over all modules)
-  → treeShakeModules                (what the entry, the exports and the dictionary
-                                     tables can still reach, unless --no-strip)
-  → per-module code generation      (with global evidence and arity maps)
-  → packaging
+The stages themselves, the passes and the source layout behind them are
+compiler-internals material:
+[development/architecture.md](development/architecture.md) and
+[development/optimizations.md](development/optimizations.md).
+
+## The generated tree
+
+`--unpacked` keeps the whole generated program instead of packing it into one
+artifact:
+
+```bash
+moggi compile hello.mog -o out --unpacked
 ```
 
-Two facts make this layer worth knowing about:
+What lands in `out/` differs by target:
 
-* **Instances are project-wide.** An `instance` is visible everywhere, not
-  because a module imported it but because instances are global in Moggi. The
-  whole-program pass relies on that to specialize a call the module that
-  declared it cannot see.
-* **Only what the program can still call is kept** in an executable build: the
-  entry, the exports, the foreign bindings, and — through them — everything a kept
-  declaration names, plus the methods of an instance table anything still dispatches
-  through. A name that cannot be resolved to exactly one declaration is kept in every
-  module that declares it, because a name the pass cannot place is the one it must not
-  drop. A build with no entry has nothing to root at and keeps everything, which is why
-  `moggi compile lib` produces the full standard library.
+| Target | Generated tree |
+|---|---|
+| `php` | one `.php` per module, plus `_runtime.php` at the root |
+| `jvm` | `.class` files per module, plus the emitted runtime |
+| `dotnet` | `.il` per module and an `.ilproj`, assembled by the SDK |
 
-## What the optimizer does
+This is the fastest way to see what a construct became, and it is also how a
+library is built when the compiled tree, not an executable, is the output
+([stdlib.md](stdlib.md)).
 
-Passes live in `src/optimize/`, ordered by `src/optimize/optimize.php`. They are
-grouped by how much of the program they need to see:
+## Failures point back at `.mog`
 
-| Group | Files | Examples |
-|---|---|---|
-| Local / block | `local.php`, `case_fold.php`, `tco.php` | fold a `match` on a known constructor, eliminate tail recursion, fold a single-use call result |
-| Global (per module) | `global.php`, `effects.php`, `dict.php`, `intrinsic.php` | copy propagation, dead-code elimination, dictionary-call specialization, intrinsic wrappers |
-| Partial application | `partial.php` | collapse `partial`/`call_value` chains, bind lambda captures |
-| Interprocedural | `interproc.php` | inline functions, fuse applied lambdas |
-| IO | `io_specialize.php` | fold IO action boxes, straight-line IO |
-| Whole program | `specialize.php` | specialize across module boundaries |
-
-`--no-opt` skips all of it (useful when a miscompile is suspected).
-[optimizations.md](development/optimizations.md) has the per-pass detail.
-
-## Code generation and packaging
-
-Each target implements the same `Backend` interface (`src/backend/Backend.php`)
-and keeps the same file set, so a concern has one home per target
-([architecture.md](development/architecture.md) lists the files). What lands on disk differs:
-
-| Target | Generated tree | Artifact |
-|---|---|---|
-| `php` | one `.php` per module, plus `_runtime.php` at the root of the tree | `.phar` (or the bare tree with `--unpacked`, or a native binary with `--native`, via the micro PHP runtime from `src/backend/php/native.php`) |
-| `jvm` | `.class` files per module, plus the emitted runtime | `.jar` (or a native binary with `--native`, via GraalVM `native-image`) |
-| `dotnet` | `.il` per module and an `.ilproj`, assembled by the SDK | `moggi-app.dll` (or a native binary with `--native`, via `dotnet publish -p:PublishAot=true`) |
-
-The PHP runtime is a hand-written file (`src/backend/php/runtime.php`) copied
-into each build as `_runtime.php`; the JVM and .NET runtimes are generated per
-build (`runtime_abi.php`).
-
-## Failures come back as your code
-
-Generation also records **how a location in the artifact corresponds to a
-location in `.mog`** — the PHP backend as a `.moggi.map` next to each module
-(loaded only when a trace is actually printed), the JVM and .NET backends as a
-frames table baked into the build (JVM line numbers, .NET IL offsets). That is
-what lets an uncaught exception print `at Main.boom (Main.mog:5:8)` instead of a
-PHP file and line. [diagnostics.md](diagnostics.md) documents the report format
-and the per-backend precision.
+Every build records how a location in the artifact corresponds to a location in
+the source: the PHP backend as a map beside each module, loaded only when a
+trace is printed; the JVM and .NET backends as a frames table baked into the
+build. That is what makes an uncaught exception print
+`at Main.boom (Main.mog:5:8)` instead of a PHP file and line, with per-backend
+precision documented in [diagnostics.md](diagnostics.md).
 
 ## The compile cache
 
-Everything expensive is memoized under `.moggi/` — parsed and checked modules,
-per-module IR, and whole builds. The cache is keyed by a fingerprint of the
-compiler sources and the host runtime, so upgrading either invalidates it
-automatically; `moggi cache info` shows the fingerprint, `moggi cache clear`
-drops the tree, and `--no-cache` / `MOGGI_NO_CACHE=1` bypass it for one run.
-[env-vars.md](env-vars.md) lists the switches.
-
-## Reading the pipeline in practice
+Compiled modules, optimized IR and whole builds are cached under `.moggi/` in
+the working directory. The cache is keyed by a fingerprint of the compiler's own
+sources, so upgrading the compiler invalidates what it derived and keeps what it
+merely downloaded.
 
 ```bash
-moggi compile hello.mog --tokens        # did the lexer see what I think it did?
-moggi compile hello.mog --ast           # is the parse tree the shape I wrote?
-moggi compile hello.mog --typed-ast     # what did inference decide?
-moggi compile hello.mog --ir            # what does it compile to before optimization?
-moggi compile hello.mog --opt-ir        # …and after?
-moggi compile hello.mog -o out --unpacked   # the generated program, one file per module
+moggi cache info            # the fingerprint and each area's size
+moggi cache clear           # drop everything
+moggi cache clear compile   # drop one area
 ```
 
-The same stages are available interactively (`:ast`, `:typed-ast`, `:ir`,
-`:opt-ir`, `:emit` in `moggi repl`), and the compiler's own code is laid out to
-match the pipeline: `src/syntax/` (front end), `src/semantics/` (types, kinds,
-classes, intrinsics), `src/modules/` (project graph and imports), `src/ir/`,
-`src/optimize/`, `src/backend/` (targets), `src/cli/` (argv only).
+`--no-cache` bypasses the cache for one run, and `MOGGI_NO_CACHE=1` does the same
+for a whole shell ([env-vars.md](env-vars.md) lists the areas and variables).
+
+## When a build is slow
+
+The first compile of a program pays for the library modules it imports; later
+ones reuse cached entries. If `moggi cache info` shows a different fingerprint
+than the compiler you expect, something rebuilt the compiler sources and
+invalidated the cache. If a build is slow with a warm cache, the likely causes
+are a large generated tree (`--unpacked` on a big program), `--no-cache`, or a
+target that has to invoke its host toolchain (`--native`, or the .NET assembler
+fallback).

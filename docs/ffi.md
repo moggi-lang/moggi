@@ -519,16 +519,8 @@ so a regenerated module only diffs when the host API did.
 
 `moggi build --bind` generates from the descriptor instead of the command
 line: every `[ffi] bindings` entry for the build's backend is bound from the
-resolved host tree into the cache (reused while the tree is unchanged, bumpless
-without `--bind`), and the generated root rides as a library root. A binding
-is then an ordinary package: `moggi bind` → review the diff → `moggi pack` →
-`moggi publish` → `moggi install`, and downstream builds compile the shipped
-`.mog` (and sidecar) without running a host tool at all.
-
-Signing can happen on another machine than the upload. `pack --record`
-prints the signed release record instead of writing the archive,
-`moggi sign` signs a record file, `publish --signed` uploads either one's
-output after checking it against the packed tree byte for byte, and
-`publish --dry-run` prints the payload and the requests it would travel in
-without sending them. The record, the signature and the checks are one shared
-path, so the three verbs cannot drift apart.
+resolved host tree into the cache (reused while the tree is unchanged, and
+skipped without `--bind`), and the generated root rides as a library root. A
+binding is then an ordinary package: `moggi bind` → check the diff → `moggi pack`
+→ `moggi install`, and downstream builds compile the shipped `.mog` (and
+sidecar) without running a host tool at all.

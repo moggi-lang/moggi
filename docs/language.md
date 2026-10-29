@@ -3,9 +3,17 @@ title: "Language overview"
 ---
 # Language overview
 
-# Language overview
+This reference describes Moggi's syntax and language constructs, with examples of how to use them. For a gentler introduction, start with [tour.md](tour.md).
 
-This reference describes Moggi's syntax and language constructs, with examples of how to use them. For a gentler introduction, start with [tour.md](tour.md); for an explanation of how the compiler processes source code, see [pipeline.md](pipeline.md).
+## The type system
+
+The type system has its own pages, because it is more than syntax. [The type system](types/index.md) is the reading order, from
+[data types](types/data-types.md) through
+[polymorphism and inference](types/polymorphism.md),
+[classes](types/classes.md), [kinds](types/kinds.md),
+[higher-kinded types](types/higher-kinded-types.md),
+[type-level data](types/data-kinds.md) and [generic programming](types/generics.md).
+This page is the syntax reference those pages assume.
 
 ## Basics
 
@@ -38,11 +46,39 @@ sign x =
 
 `if` is syntax, not a function, and desugars to a `case` on the condition with `True`/`False` alternatives — the same shape the type checker and the backends already handle. `then` and `else` are keywords: they may sit on later lines as long as they are indented deeper than the enclosing declaration, and both branches are required.
 
-## Data and patterns
+## List comprehensions
+
+A list comprehension builds a list from one or more generators, with optional
+guards. Later generators and guards see the variables bound before them:
 
 ```moggi
-data Maybe a = Just a | Nothing
+evens :: [Int]
+evens = [x | x <- [1, 2, 3, 4, 5, 6], even x]
 
+pairs :: [(Int, Int)]
+pairs = [(x, y) | x <- [1, 2, 3], y <- [1, 2], x /= y]
+
+main :: IO ()
+main = do
+  putStrLn (show evens)
+  putStrLn (show pairs)
+```
+
+```text
+[2,4,6]
+[(1,2),(2,1),(3,1),(3,2)]
+```
+
+`x <- xs` draws each element of a list; a boolean expression between commas is
+a guard. The result is always a list, and the element expression may use every
+variable bound by an earlier generator.
+
+## Data and patterns
+
+`Maybe`, `Either`, `Ordering` and lists come from the Prelude, so a pattern can
+use them without an import:
+
+```moggi
 fromMaybe d mx = case mx of
   Just a -> a
   Nothing -> d
@@ -78,7 +114,7 @@ plus :: Int -> Int -> Int
 plus a b = a + b
 
 main :: IO ()
-main = putStrLn (show (1 \`plus\` 2))
+main = putStrLn (show (1 `plus` 2))
 ```
 
 Records and type synonyms:
@@ -166,7 +202,7 @@ double x = x + x           -- partial application / currying
 
 ## Type classes
 
-A **type class** defines a set of operations that types can implement. Instances provide implementations for specific types, allowing the same functions to work with different types.
+A **type class** names operations that several types can provide; an instance supplies them for one type. [The type-class page](types/classes.md) explains instance choice, superclasses, multi-parameter classes and associated types; this section gives the syntax.
 
 ```moggi
 class Eq a => Pretty a where
@@ -189,7 +225,7 @@ instance Pretty a => Pretty [a] where
 - **Default methods** provide implementations that instances can inherit or override. Here, `prettyList` uses `pretty` to format a list of values.
 - **Instances** define how a type implements a class. The `Bool` instance formats booleans as `"yes"` or `"no"`, while the list instance formats lists using the element type's `Pretty` instance.
 - **Constraints** restrict which types a function accepts. For example, `Pretty a => a -> String` works for any type with a `Pretty` instance.
-- **One equation per method.** A method is one definition: a class allows a single default per method, so a default that matches on its argument uses `case` rather than a second equation, and an instance's equations have to be written together — together they are one definition, matched in order. A method an instance leaves out is the class's default body.
+- **A method is one definition.** Its clauses are matched in order, so an instance can write several equations for one method as long as together they cover the constructors; a method an instance leaves out uses the class's default body, which is also one definition.
 - **Minimal definitions** name what an instance must provide: `{-# MINIMAL pretty #-}` requires `pretty`, and an instance is complete when it satisfies one alternative of the pragma. Alternatives are separated by `|`, and an alternative is satisfied only when every method it lists is written — `{-# MINIMAL bimap | first, second #-}` means an instance either defines `bimap` or defines both `first` and `second`.
 
 Operators can also be class methods. Their names must be in scope, usually through an import or the `Prelude`, and what an operator means is what the instance for its operands' type declares: `n + 1` at `Int` is the `Num` instance `Data.Num` gives `Int`, and the same `+` at another type is that type's instance.
@@ -198,16 +234,31 @@ Instances are available program-wide, regardless of which module defines them.
 
 ## Deriving
 
+The full rules, including `newtype`, `anyclass` and `via`, are in
+[deriving.md](deriving.md).
+
 ```moggi
+import Moggi.Generics
+
 data Color = Red | Green | Blue
   deriving (Show, Eq, Ord, Enum, Bounded)
 
 newtype Age = Age Int
   deriving newtype (Num)              -- borrow the representation's instance
 
+class Describe a where
+  describe :: a -> String
+  describe _ = "something"
+
 data Person = Person { name :: String, age :: Int }
-  deriving (Generic)
-  deriving anyclass (ToJSON, FromJSON)  -- an empty instance per class
+  deriving (Generic, Show)
+  deriving anyclass (Describe)        -- an instance from the class defaults
+
+class MyEq a where
+  same :: a -> a -> Bool
+
+instance MyEq Int where
+  same a b = a == b
 
 newtype Wrapped = Wrapped Int
   deriving via (Int) MyEq             -- run the instance of the `via` type
@@ -242,19 +293,12 @@ and `Control.Exception`.
 
 ## Strictness
 
-Expressions are evaluated eagerly. Function arguments are evaluated before the function is called, and data structures are evaluated as they are constructed.
-
-Folds evaluate their input eagerly. Recursive functions should consume data as they process it rather than rely on deferred evaluation.
+Expressions are evaluated eagerly: function arguments before the call, constructor fields as the value is built. There are no thunks, no `seq` and no infinite structures, so recursion must consume what it produces ([data types § Strictness](types/data-types.md#strictness)).
 
 ## Modules
 
 One `module` name per file. Module path segments start with an uppercase letter.
-Imports are explicit. An omitted module header means:
-
-```moggi
-module Main (main) where
-```
-
+Imports are explicit. An omitted module header means `module Main (main) where`.
 So the smallest executable is:
 
 ```moggi
@@ -318,13 +362,22 @@ There are two:
 
 ```moggi
 {-# LANGUAGE NoImplicitPrelude #-}
-module Data.Char (Char, ord) where
+module Demo.LowLevel (double) where
+
+import Data.Int
+import Data.Num
+
+double :: Int -> Int
+double n = n + n
 ```
 
 `LANGUAGE` takes the one extension Moggi has. `NoImplicitPrelude` is for a module
 that must see exactly what it imported — the `Prelude` itself, or a low-level
 module the `Prelude` is built from — and it turns off the implicit `import Prelude`
-(see [tour.md](tour.md#modules-imports-and-the-prelude)).
+(see [tour.md](tour.md#modules-imports-and-the-prelude)). Nothing is left in
+scope by accident: in the module above, `+` comes from `Data.Num` and `Int` from
+`Data.Int`, and dropping either import is an error, as it would be in any other
+module under `NoImplicitPrelude`.
 
 ```moggi
 {-# BACKEND
@@ -369,6 +422,5 @@ Moggi provides the fundamental types Int (64-bit), Integer (arbitrary precision)
 
 The language also supports lists, tuples, algebraic data types, records, newtypes, lambdas, type classes and instances.
 
-Low-level primitives are provided by Moggi.Internal.Prim and Moggi.Internal.IO. They are primarily intended for implementing the standard library.
-
-See stdlib.md for the standard library and libraries/base/src/Prelude.mog for the exact exports of Prelude.
+See [stdlib.md](stdlib.md) for the standard library and
+`libraries/base/src/Prelude.mog` for the exact exports of the Prelude.

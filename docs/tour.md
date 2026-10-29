@@ -50,9 +50,9 @@ Two terms this tour uses that have no direct equivalent:
   gives you a function of the remaining argument: `add 1` is "add one". Any
   function can be used that way.
 * **Type inference.** You may write a signature for every definition, or none at
-  all — the compiler works out the type, use by use, and reports it when
-  something does not fit. Writing the signature is the norm for anything you
-  intend to reuse.
+  all — the compiler generalises a function from its body and reports the type
+  when something does not fit. Writing the signature is the norm for anything
+  you intend to reuse.
 
 Terms used later here, defined once: a **constructor** is a way to build an
 alternative of a data type (`Circle 3.0`); a **pattern** is the shape-matching
@@ -109,12 +109,14 @@ line; [stdlib.md](stdlib.md) shows how to search it.
 
 ### What needs an import
 
-Things that touch the world outside the program are **not** in every module's
-scope. Import them where you use them:
+The Prelude includes the console and file basics — `print`, `getLine`,
+`readFile`, `writeFile`, `appendFile`, `interact`. What is **not** implicit is
+everything else that reaches the world: handles, arguments, directories, paths
+and exceptions. Import those where you use them:
 
 | You want | Import |
 |---|---|
-| `print`, `getLine`, `readFile`, `writeFile`, `interact`, handles | `System.IO` |
+| handles (`openFile`, `hClose`, `hGetLine`, `hPutStr`, …) | `System.IO` |
 | `getArgs`, `getEnv`, `lookupEnv` | `System.Environment` |
 | `throwIO`, `catch`, `bracket`, `SomeException` | `Control.Exception` |
 | directories, file metadata, `removeFile`, `copyFile` | `System.Directory` |
@@ -129,7 +131,7 @@ Signatures are optional; when you write one, it is checked.
 twice :: Int -> Int
 twice x = x + x
 
-add x y = x + y             -- inferred: Int -> Int -> Int
+add x y = x + y             -- inferred: Num a => a -> a -> a
 
 increment = add 1           -- partial application
 plusOne = (+ 1)             -- a section: the same thing, written differently
@@ -176,7 +178,10 @@ data Shape = Circle Double | Rect Double Double
 
 newtype UserId = UserId Int              -- one constructor, one field: no tag at runtime
 
-data Person = Person { name :: String, age :: Int }
+data Address = Address { city :: String, zip :: String }
+  deriving (Show)
+
+data Person = Person { name :: String, age :: Int, address :: Address }
   deriving (Show)
 
 data Tree a = Leaf | Node (Tree a) a (Tree a)
@@ -193,32 +198,23 @@ describe s = case s of
   Circle r -> "circle " <> show r
   Rect w h -> "rect " <> show w <> "x" <> show h
 
-nameOf (Person n _) = n            -- constructor pattern in a function head
+nameOf (Person n _ _) = n          -- constructor pattern in a function head
 grownUp Person { age = a }         -- a record pattern names only what it needs
   | a >= 18 = True
   | otherwise = False
 ```
 
-A record field is read with `.` on the value — `person.name` — and reads chain:
-`person.address.city`. The field is not a function, and the dot binds tighter
-than application, so `show person.age` is `show (person.age)`. Field names
-belong to their record, not to the module, so two records may both declare
-`name`.
-
-To change a field, name it in braces after the value; the fields you leave out
-are kept. Construction is the one place that must name *all* fields; a pattern
-may name a subset, and the rest are wildcards.
+A record field is read with `.` on the value — `person.name`, and chains such as
+`person.address.city`. `person { age = 31 }` copies the value with that field
+replaced; fields left out keep their values. Construction names every field, a
+pattern may name a subset.
 
 ```moggi
-alice = Person { name = "Alice", age = 30, address = home }
-
--- the updated Alice: only the field that changes is written
+alice = Person { name = "Alice", age = 30, address = Address { city = "Berlin", zip = "10115" } }
 older = alice { age = alice.age + 1 }
-
--- nested, one level down
-moveTo :: String -> Person -> Person
-moveTo c p = p { address = p.address { city = c } }
 ```
+
+The field, pattern and update rules are in [data types](types/data-types.md).
 
 Matching is exhaustive: a `case` that misses an alternative is a compile error,
 not a runtime surprise. Infix constructors start with `:` (`data NonEmpty a = a :| [a]`),
@@ -242,20 +238,18 @@ instance Pretty Shape where
     Rect w h -> show w <> "x" <> show h
 ```
 
-* A class may have superclasses (`class Eq a => Pretty a where …`), and a method
-  may have a default body that instances inherit.
-* **One equation per method inside an instance** — match on the argument with
-  `case` instead of writing a second equation for the same method.
-* Instances are global: every module sees every instance, without importing
-  anything. That is why you can call `pretty` on a type another module declared.
-* Instances may be constrained (`instance Pretty a => Pretty [a] where …`), which
-  is how the standard library gives you behaviour for containers of anything.
-* A signature may require a class: `biggest :: Ord a => [a] -> a` means "works
-  for any `a` that has `Ord`". That is generics with the constraint written in
-  front, not a type parameter list.
+* Superclasses are requirements (`class Eq a => Pretty a where …`), a method
+  may have a default body, and instances may be constrained
+  (`instance Pretty a => Pretty [a] where …`).
+* Instances are global: every module sees every instance without importing it.
+* A signature may require a class: `biggest :: Ord a => [a] -> a`. That is the
+  constraint written in front, not a type parameter list.
 * `Show`, `Eq`, `Ord`, `Enum`, `Bounded`, `Functor`, `Foldable`, `Traversable`
   and `Generic` can be derived instead of written by hand
-  ([deriving.md](deriving.md) has every strategy):
+  ([deriving.md](deriving.md)).
+
+[Type classes](types/classes.md) has the rules: how an instance is chosen,
+superclasses, multi-parameter classes and associated types.
 
 ```moggi
 data Color = Red | Green | Blue
@@ -269,8 +263,6 @@ is discarded). `do` runs actions **in order** — a line is not deferred, it is 
 next thing that happens:
 
 ```moggi
-import System.IO
-
 main :: IO ()
 main = do
   putStrLn "What is your name?"
@@ -280,18 +272,17 @@ main = do
   putStrLn greeting
 ```
 
-* `x <- action` runs the action and binds its result; a bare `action` line
-  discards the result.
-* `let x = …` binds a pure value inside `do` (no `in`).
-* `pure v` is the action that does nothing and returns `v`.
-* Pure computations are values, not actions: `putStrLn (show (twice 21))` shows
-  the result of an ordinary function call.
+`x <- action` binds the action's result; a bare action discards it; `let` binds a
+pure value without `in`; `pure v` does nothing and returns `v`. Pure calls can
+be nested inside an action: `putStrLn (show (twice 21))`.
+
+[IO and effects](effects/io.md) covers ordering, `main`, the purity boundary and
+local mutation with `ST`.
 
 Reading arguments and environment:
 
 ```moggi
 import System.Environment (getArgs)
-import System.IO
 import Data.List as L
 
 main :: IO ()
@@ -383,6 +374,8 @@ Three rules that decide whether a signature works:
   `"java.lang.Integer:parseInt"` is `String -> Int32` and needs `fromIntegral`:
 
   ```moggi
+  import Data.Int
+
   foreign jvm function parseInt "java.lang.Integer:parseInt" :: String -> Int32
 
   answer :: Int
@@ -409,9 +402,9 @@ These are deliberate, and they are the ones most likely to surprise you:
 | Topic | Behaviour |
 |---|---|
 | `Int` | 64-bit signed on every backend, and it **wraps** on overflow: `maxBound + 1` is `minBound`, on php too |
-| Numeric literals | an untyped literal is an `Int`; write `9223372036854775808 :: Integer` when you need arbitrary precision |
-| Overflow | there is no overflow *exception*: bit operations and `bitSize` report it as `ErrorCall` |
-| Shifts | a shift count at or beyond the width is clamped (`shiftL (1 :: Int) 100` is `0`); `shiftR` on a signed type is arithmetic (`shiftR minBound 100` is `-1`) |
+| Numeric literals | a literal defaults to `Int` when nothing pins its type; write `9223372036854775808 :: Integer` when you need arbitrary precision |
+| Overflow | arithmetic wraps silently; there is no overflow *exception*. `bitSize` of an `Integer` is an `ErrorCall`, because it has no fixed width |
+| Shifts | `shiftL`/`shiftR` come from `Data.Bits`; a count at or beyond the width is clamped (`shiftL (1 :: Int) 100` is `0`), `shiftR` on a signed type is arithmetic (`shiftR minBound 100` is `-1`), and a negative count raises `ArithException` (`arithmetic overflow`) |
 | `String` | the host's native string, and **not** a list of `Char`: `head "abc"` is a type error. Use `Data.String` for string work, `Data.ByteString` for bytes |
 | Folds | one `foldl`, and it is strict — no `foldl'`, no `seq`, no `$!` |
 | Structures | no infinite or lazy structures anywhere; recursion must terminate |
@@ -420,9 +413,9 @@ These are deliberate, and they are the ones most likely to surprise you:
 | Frames | a trace names the statement being executed, with the fault's own location in the innermost frame |
 
 The rest of the language, when you want it: [language.md](language.md) for
-complete syntax, [deriving.md](deriving.md) for every deriving strategy, and
-[differences-to-haskell.md](differences-to-haskell.md) if you already know
-Haskell (whose module and function names the library follows).
+complete syntax, [deriving.md](deriving.md) for every deriving strategy, and the
+[differences page](differences-to-haskell.md) if you already know the language
+Moggi's library takes its names from.
 
 ## Next
 

@@ -15,6 +15,51 @@ New to Moggi? Start with the [tour](tour.md) instead; this page assumes you
 already know Haskell. The language itself is described in the
 [language reference](language.md), and host calls in the [FFI guide](ffi.md).
 
+## No language extensions to enable
+
+There are no `{-# LANGUAGE … #-}` opt-ins for features. Everything the compiler
+implements — multi-parameter classes and their associated types, higher-kinded
+types, type-level data, generic programming — is available in every module; no
+feature is switched on per module or per file. The only `LANGUAGE` pragma is
+`{-# LANGUAGE NoImplicitPrelude #-}`, which drops the implicit `Prelude`
+import. A module can also carry a `{-# BACKEND … #-}` pragma above its header
+([language.md § Pragmas](language.md#pragmas)).
+
+So a program ported here does not need its pragmas translated, and there is no
+way to disable a feature to get different behaviour: a feature either exists,
+with one behaviour, or it does not exist at all.
+
+### Extensions that are simply on
+
+The list is what has a counterpart, not what exists; each row names the pragma
+you would write there and the syntax that works here with no pragma at all.
+
+| Extension | What is available in every module |
+|---|---|
+| `MultiParamTypeClasses` | `class Convert a b where convert :: a -> b` |
+| `FlexibleInstances` | `instance C (Pair Int b)` — an instance head may be a partially applied type |
+| `FlexibleContexts` | `f :: Eq [a] => [a] -> Bool` |
+| `ConstrainedClassMethods` | `class C a where c :: Eq a => a -> a -> Bool` |
+| `TypeFamilies` | associated types: `class Collection c where type Element c` |
+| `KindSignatures` | `data Tagged (c :: Color) = Tagged` |
+| `DataKinds` | promoted constructors (`'Red`), `Nat`, `Symbol` |
+| `DuplicateRecordFields` | two records may both declare `name` |
+| `OverloadedRecordDot` | `person.name`, chained |
+| `OverloadedRecordUpdate` | `p { age = 31 }`, nested included |
+| `DeriveFunctor`, `DeriveFoldable`, `DeriveTraversable` | `deriving (Functor, Foldable, Traversable)` |
+| `DeriveGeneric` | `deriving (Generic)` with `import Moggi.Generics` |
+| `GeneralizedNewtypeDeriving` | `deriving newtype (Num)` |
+| `DeriveAnyClass` | `deriving anyclass (C)` |
+| `DerivingVia` | `deriving via (V) C` |
+| `DerivingStrategies` | `deriving stock (C)`, `deriving newtype (C)`, `deriving anyclass (C)`, `deriving via (V) C` |
+| `StandaloneDeriving` | `deriving instance (Eq a) => Eq (T a)` |
+| `BlockArguments` | `when True do …`, with no `$` |
+
+The reverse has no analogue: an extension with nothing behind it has no pragma
+either. `GADTs` is the one readers look for first — `data Expr a where …` is a
+parse error — and [data types](types/data-types.md#what-is-not-available)
+documents the rest of the gaps.
+
 ## Evaluation is strict
 
 This is the one big difference, and most of the rest follows from it.
@@ -28,9 +73,10 @@ function arguments, not record fields, not constructor fields.
   provided — on lists or on `NonEmpty`. In a strict language each of them would
   diverge while looking like the value `base` promises, so they are left out on
   purpose rather than shipped broken.
-- Folds come in one strict flavour each. `fold` is the strict left fold; there
-  is no `foldl'`, no lazy `foldl`, and no `Data.Map.Strict` beside a lazy
-  `Data.Map` — the containers package's `Data.Map` is strict, full stop.
+- Folds come in one strict flavour each. `foldl` and `foldr` evaluate as they
+  go and there is no `foldl'`; `fold` is the monoidal fold (`t m -> m`, the
+  `foldMap` role). There is no `Data.Map.Strict` beside a lazy `Data.Map` — the
+  containers package's `Data.Map` is strict, full stop.
 - Partial application is still a value you can pass around; it just holds
   already-evaluated arguments instead of a suspended computation.
 
@@ -54,9 +100,12 @@ Field access uses projection: `person.name`, which binds tighter than function
 application, as `.` does in the host languages. A record declaration generates
 no selector function, so two records in one module can freely share field names
 — the receiver's type selects the field, and there is no `name person` spelling.
+This is what `DuplicateRecordFields` and `OverloadedRecordDot` give you there,
+always on here.
 
 Record update (`p { age = 31 }`, nested form included) works on record types
-with a single constructor. A multi-constructor type cannot be updated, because
+with a single constructor and is spelled as it is there, without
+`OverloadedRecordUpdate` or `RebindableSyntax`. A multi-constructor type cannot be updated, because
 which fields the value has is only known at run time; matching on the
 constructor explicitly is the alternative (see
 [language.md § Records](language.md#records)).
@@ -136,8 +185,10 @@ directly with `foreign` declarations (see the [FFI guide](ffi.md)):
   code keeps the portable surface in a facade module and puts each backend's
   declarations in an implementation module behind it
   (`System.IO` → `System.IO.PHP` / `System.IO.JVM` / `System.IO.DotNet`).
-- The compiler trusts the declared path and types; mistakes surface as host
-  failures, wrapped in `HostException`, rather than compile errors.
+- A declaration is checked against the host wherever the host can be asked at
+  compile time: a missing member, a wrong member kind or a wrong descriptor is
+  a compile error. What the check cannot promise is the host's *behaviour*, so
+  a failure at run time still arrives as `HostException`.
 - There is no `Foreign.*` layer: no pointers, no `Storable`, no manual
   marshalling. In result position `Maybe`, `Either`, lists, and `Handle` are
   converted from the host value; in argument position Moggi's own
@@ -172,7 +223,8 @@ Honest gaps — listed here so nobody mistakes them for design choices:
   strict Moggi cannot build) and `WrappedArrow` (needs an `Arrow` class, which
   does not exist yet). `WrappedMonad` lives in `Control.Monad` and `Const` in
   `Data.Functor.Const`.
-- `Control.Monad.Reader`, `Control.Monad.State`, and `Control.Monad.ST`.
+- `Control.Monad.Reader` and `Control.Monad.State` (the `ST` monad itself is
+  implemented in `Control.Monad.ST`).
 - `Data.Char`'s `lexLitChar` and `readLitChar` (the rest of `Data.Char`,
   including `GeneralCategory` and `generalCategory`, is implemented).
 - `System.Environment`'s `getEnvironment`, `setEnv`, `unsetEnv`, `withArgs`,

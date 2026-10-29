@@ -97,7 +97,7 @@ character and its code point), plus ``unterminated string literal``,
 | Message | What it means |
 |---|---|
 | ``infinite type: `a` occurs in itself`` | The program asked `a` to equal a type containing `a` (`f = \x -> x x`). |
-| ``kind mismatch applying `OnlyColor`: expected `Color`, got `Bool` `` | A promoted data constructor or a higher-kinded type was applied to the wrong kind. Kind errors always name both sides. |
+| ``kind mismatch applying `OnlyColor`: expected `Color`, got `Type` `` | A promoted data constructor or a higher-kinded type was applied to the wrong kind. Kind errors always name both sides, and an ordinary type on the wrong side prints as `Type`. |
 | `` `Nat` is a kind, not a type `` | A promoted kind was used where a type belongs. |
 
 ### Calling the host platform
@@ -134,9 +134,9 @@ moggi: ErrorCall: mapped
 
 * **Header** — `moggi: <Tag>: <message>`. An `IOException` also names its
   subtype: `moggi: IOException (NoSuchThing): gone`.
-* **Frames** — `  at <Module.Function> (<path>:<line>:<col>)`, innermost first.
-  The named function is the one *executing*, and the location is the call it
-  was making. Paths are project-relative, so a report never leaks the build
+* **Frames** — each indented two spaces: `at <Module.Function> (<path>:<line>:<col>)`,
+  innermost first. The named function is the one *executing*, and the location
+  is the call it was making. Paths are project-relative, so a report never leaks the build
   machine's directory layout.
 * **Cap** — at most 50 frames per section; the remainder is summarized as
   `  ... N more`.

@@ -1,22 +1,28 @@
 ---
 title: Documentation
-description: Read the first four pages in order, then use the reference.
+description: One reading path from install to tooling, then the reference and the compiler pages.
 ---
-
 # Documentation
 
-Read the first four pages in order. Each one is short, and each ends where the
-next begins — you can stop after any of them and have a working language.
+Read the path in order. Each page ends where the next begins, and each marks the
+point where the beginner material stops: a section headed **Advanced** can wait
+until you need it. You can stop after any step and still write working programs.
 
 | | Page | After it you can… |
 |---|---|---|
-| 1 | [quickstart.md](quickstart.md) | install Moggi, run a program, build a `.phar` / `.jar` / `.dll`, run the examples |
-| 2 | [tour.md](tour.md) | read and write real code: modules, data types, pattern matching, records, type classes, IO, failure, and a first host call |
-| 3 | [repl.md](repl.md) | try any expression interactively, ask for a type, and look at the stages the compiler runs |
-| 4 | [stdlib.md](stdlib.md) | find the module or function you need — `moogle` by name or by type, `mogdoc` for browsable HTML |
+| 1 | [quickstart.md](quickstart.md) | install Moggi, run a program, build a `.phar` / `.jar` / `.dll` or a native executable, run the examples |
+| 2 | [tour.md](tour.md) | read real code: modules, values, data types, classes, IO, failure, a first host call |
+| 3 | [types/data-types.md](types/data-types.md) | model a problem as data and take it apart with patterns |
+| 4 | [types/polymorphism.md](types/polymorphism.md) | read a signature, know when inference needs help, fix a type error |
+| 5 | [types/classes.md](types/classes.md) and [deriving.md](deriving.md) | write instances, constrain a function, derive `Show`/`Eq`/`Ord` |
+| 6 | [effects/io.md](effects/io.md) | write a program that reads input, writes output and keeps its pure parts pure |
+| 7 | [repl.md](repl.md) and [stdlib.md](stdlib.md) | try an expression, ask for a type, find a library function |
 
-Then write something. The programs in `examples/` are meant to be read and
-edited; `moggi run examples/twice` and change a line.
+The [type system](types/index.md) is the same material indexed by concept, with
+the pages beyond the path — [kinds](types/kinds.md),
+[higher-kinded types](types/higher-kinded-types.md),
+[type-level data](types/data-kinds.md), [generic programming](types/generics.md)
+— all written for a reader who has finished step 6.
 
 ## Reference
 
@@ -25,10 +31,10 @@ edited; `moggi run examples/twice` and change a line.
 | [language.md](language.md) | complete syntax — every construct, pragma and rule |
 | [ffi.md](ffi.md) | calling PHP, the JVM or .NET |
 | [host-packages.md](host-packages.md) | using Composer, Maven and NuGet libraries from Moggi |
-| [deriving.md](deriving.md) | every deriving strategy |
-| [diagnostics.md](diagnostics.md) | the error catalogue, uncaught-exception reports, source maps |
-| [pipeline.md](pipeline.md) | what the compiler does with your file, stage by stage |
-| [differences-to-haskell.md](differences-to-haskell.md) | everything observable that differs from Haskell |
+| [diagnostics.md](diagnostics.md) | compiler messages, uncaught-exception reports, source maps |
+| [pipeline.md](pipeline.md) | inspecting a build: tokens, AST, IR, cache, unpacked output |
+| [api-docs.md](api-docs.md) | doc comments, `moogle` search by name or type, `mogdoc` HTML and live server |
+| [differences](differences-to-haskell.md) | every observable behaviour that deliberately differs from Haskell |
 | [lsp.md](lsp.md) | the language server: editor setup, capabilities, limits |
 | [env-vars.md](env-vars.md) | the environment variables the compiler, runtimes and tests read |
 
@@ -36,12 +42,17 @@ edited; `moggi run examples/twice` and change a line.
 
 | Page | Contents |
 |------|----------|
-| [architecture.md](development/architecture.md) | phase responsibilities, representation contracts |
-| [compiler.md](development/compiler.md) | bootstrap compiler layout, the backend file set, CLI, mogdoc and moogle |
-| [design.md](development/design.md) | design decisions: the FFI boundary, primitives, intrinsics, the numeric tower |
-| [optimizations.md](development/optimizations.md) | the IR passes, pass order, and the flags that inspect them |
-| [testing.md](development/testing.md) | the test suite: groups, kinds of comparison, adding a case |
-| [packaging.md](development/packaging.md) | CI: workflows, targets, distributions, release channels |
-| [development.md](development/development.md) | Nix dev shell, project layout, building, debugging |
+| [development/index.md](development/index.md) | setup, build and test commands, repo layout, debugging |
+| [development/architecture.md](development/architecture.md) | phases, representation contracts, invariants, backend layout |
+| [development/testing.md](development/testing.md) | the suite: commands, discovery, goldens, adding a case |
+| [development/optimizations.md](development/optimizations.md) | the IR model, stage order, pass families, adding a pass |
+| [development/packaging.md](development/packaging.md) | CI, targets, distributions, runtimes, versions, signing |
 
-The longer index of the same pages is [README.md](README.md).
+## License and copyright
+
+Moggi is released under the [BSD 3-Clause License](https://github.com/moggi-lang/moggi/blob/main/LICENSE).
+The full text also ships as `LICENSE` at the root of every distribution; the
+licences of the bundled runtimes and of the C libraries `bin/schnorr` links are
+listed in `THIRD-PARTY-NOTICES.md` beside it.
+
+Copyright © 2026 Sascha-Oliver Prolic.
