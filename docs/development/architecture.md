@@ -291,7 +291,7 @@ name-shaped test, a private table — is the defect this map exists to prevent.
 | What does this run know about the program — evidence tables, function index, nullary constructor trees, which entries run when referenced? | `Optimize\Facts\Facts`, installed and cleared by `optimize()` |
 | What is this callable's shape — its parameters, captures, lifted entry, result convention? | `IR\Callables` (the callable table) |
 | Is this callee a field/tuple projection, and at what index? | `IR\Projection` (`parse`, `index`, `tupleArity`, `leafName`) |
-| Is this name compiler-generated, and may a declaration use it? | `Syntax\Ast\generatedWorkerPrefix()`, `Semantics\EvidenceNames`, `Syntax\Ast\instanceHeadMarker()` for the spellings; `Types\Declarations` (`assertNotGeneratedName`) is the one refusal |
+| Is this name compiler-generated, and may a declaration use it? | The spellings: `Syntax\Ast\generatedWorkerPrefix()`, `Syntax\Ast\instanceHeadMarker()`, `Semantics\Types\evidenceFunctionName()`, `instanceMethodIrName()`, `hashedEvidenceHeadSuffix()`, and `IR\Projection\parse()`/`tupleArity()` for the field and tuple forms — the reserved set *is* the readable set, so no second test can drift from the readers. `Types\Declarations\assertNotGeneratedName()` is the one refusal |
 | What evidence does a declaration take, and where is each site applied? | `Modules\CheckedCore` (the record) and `Modules\EvidencePlan` (elaboration sites) |
 | What is a constructor's layout, arity or backing, or the throwing-call source location? | `Backend\Meta` (`src/backend/ir_meta.php`) |
 | Which host library trees are in force, and are they usable? | `Modules\ConfiguredHostLibraries` |
