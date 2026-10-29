@@ -156,15 +156,6 @@ function parsedModulesFromPrepared(PreparedProject $prepared, string $docRoot = 
     return $modules;
 }
 
-/**
- * @param list<string> $extraLibDirs
- * @return array<string, Program>
- */
-function loadCheckedPrograms(string $inputPath, array $extraLibDirs, CompilationContext $context): array
-{
-    return loadPreparedProject($inputPath, $extraLibDirs, $context)->checked;
-}
-
 function loadPreparedProject(string $inputPath, array $extraLibDirs, CompilationContext $context): PreparedProject
 {
     [$root, $files] = resolveDocFileClosure($inputPath, $extraLibDirs, $context->backendId);

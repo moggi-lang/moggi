@@ -507,16 +507,6 @@ function typeSchemes(): array
     ];
 }
 
-function isCon(Type $type, string $name): bool
-{
-    return $type instanceof TCon && $type->name === $name;
-}
-
-function isNullaryCon(Type $type, string $name): bool
-{
-    return isCon($type, $name) && $type->args === [];
-}
-
 const MODULE_PRIM = 'Moggi.Internal.Prim';
 const MODULE_IO = 'Moggi.Internal.IO';
 const MODULE_ST = 'Moggi.Internal.ST';

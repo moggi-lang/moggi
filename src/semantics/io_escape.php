@@ -172,20 +172,6 @@ function isForeignIoBody(Ast\AstNode $body): bool
     return $body instanceof Ast\IoAction && $body->expr instanceof Ast\ForeignCall;
 }
 
-function functionReturnsIoUnit(?Ast\AstNode $type): bool
-{
-    if ($type === null) {
-        return false;
-    }
-
-    $result = stripConstraints($type);
-    while ($result instanceof Ast\TypeArrow) {
-        $result = $result->to;
-    }
-
-    return isIoType($result) && isIoUnitType($result);
-}
-
 /**
  * The declared result is a *monadic* type variable applied to arguments (`f ()`, `m a`): at any
  * instantiation — `IO` included — such a value is a description of an action, which callers receive

@@ -400,15 +400,6 @@ function extractCallHead(object $fn, string $moduleName, array $externalFns): ?a
 
     return null;
 }
-function resolveSymbolParts(?string $resolved): ?array
-{
-    if ($resolved === null || $resolved === '') {
-        return null;
-    }
-
-    return parseResolvedSymbol($resolved);
-}
-
 /** Stable binder key: module-scoped so OccurrenceIndex merges never collide. */
 function binderResolved(string $module, int $binderId): string
 {

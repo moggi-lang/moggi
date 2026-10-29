@@ -1356,6 +1356,13 @@ function publishProgramFacts(array $modules, array $externalFnsByModule): void
 {
     Facts::install(new Facts(externalFnsByModule: $externalFnsByModule));
     Facts::current()->publishNullaryCtorCafs(collectNullaryCtorCafs($modules, $externalFnsByModule));
+    $functions = [];
+    foreach ($modules as $module) {
+        foreach ($module->functions as $function) {
+            $functions[] = $function;
+        }
+    }
+    Facts::current()->publishFunctions($functions);
 }
 
 /** Bare IR name for specialization lookup (`Module::fn` → `fn`). */

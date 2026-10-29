@@ -280,10 +280,6 @@ final class Guard implements IrNode
     ) {
     }
 
-    public function withPrep(Block $prep): self
-    {
-        return new self($prep, $this->cond);
-    }
 }
 
 final class MatchArm implements IrNode

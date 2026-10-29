@@ -1097,35 +1097,6 @@ function hydrateModuleDiskArtifacts(array &$units, array $sortedModules, Compila
     }
 }
 
-/**
- * @param array<string, array<string, mixed>> $units
- * @param list<string> $roots
- * @return array<string, true>
- */
-function importDependencyClosure(array $units, array $roots, string $backendId): array
-{
-    $needed = [];
-    $rootSet = \array_fill_keys($roots, true);
-    $queue = $roots;
-    while ($queue !== []) {
-        $moduleName = \array_shift($queue);
-        if (! isset($units[$moduleName])) {
-            continue;
-        }
-
-        foreach (moduleDependencyNames($units, $moduleName) as $dep) {
-            if (isset($needed[$dep]) || isset($rootSet[$dep]) || ! isset($units[$dep])) {
-                continue;
-            }
-
-            $needed[$dep] = true;
-            $queue[] = $dep;
-        }
-    }
-
-    return $needed;
-}
-
 /** @param array<string, array<string, mixed>> $units */
 function ensureUnitProgram(array &$units, string $moduleName): void
 {

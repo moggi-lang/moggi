@@ -19,6 +19,7 @@ require $root . '/src/compiler.php';
 use Moggi\IR;
 use Moggi\Optimize\Effects\Analysis;
 use Moggi\Optimize\Effects\Model;
+use Moggi\Optimize\Facts\Facts;
 
 use function Moggi\Optimize\Effects\scanBody;
 use function Moggi\Optimize\GlobalPass\cseBlock;
@@ -50,6 +51,10 @@ $indirectPartial = $function('indirectPartial', $block([
     new IR\CallValue(new IR\Partial('faulting', 1, [new IR\ConstInt(1)]), [], 92),
     new IR\Ret(new IR\Temp(92)),
 ]));
+
+// The model asks the run's facts owner which entries a reference runs, so a case that builds a model
+// directly installs one, exactly as a pass driving an optimize run finds it.
+Facts::install(new Facts());
 
 $module = [$total, $faulting, $indirectBody, $indirectApply, $indirectPartial];
 $effects = Model::forFunctions($module);
@@ -191,6 +196,48 @@ $check(
     $fnArgCse->items[1] instanceof IR\Assign && $fnArgCse->items[1]->value instanceof IR\Temp,
     'CSE stopped sharing two identical calls that only pass a function value',
 );
+
+// A reference to an entry that takes *no* parameters is not a value: the backends force it into a call,
+// so passing one evaluates work in argument position and the same arity question decides both halves.
+// The effectful one keeps the call alive and apart; the pure one is still a construction.
+$quirk = new IR\FunctionDecl('quirk', [], null, $block([
+    new IR\Ret(new IR\Intrinsic('intDiv#', [new IR\ConstInt(1), new IR\ConstInt(0)])),
+]));
+$pureCaf = new IR\FunctionDecl('pureCaf', [], null, $block([new IR\Ret(new IR\ConstInt(7))]));
+Facts::current()->publishFunctions([...$module, $quirk, $pureCaf]);
+$withCafs = Model::forFunctions([...$module, $quirk, $pureCaf]);
+
+$check(
+    $withCafs->evaluationOf(new IR\FnRef('quirk'))->discardIsObservable(),
+    'evaluating a reference to a parameterless effectful entry was treated as producing a value',
+);
+$check(
+    $withCafs->evaluationOf(new IR\FnRef('pureCaf'))->discardIsObservable() === false,
+    'a reference to a parameterless total entry should still be a construction',
+);
+$check(
+    $withCafs->evaluationOf(new IR\FnRef('total'))->discardIsObservable() === false,
+    'a reference to a function that takes parameters is a closure, not an evaluation',
+);
+
+$keptCafArg = dceBlock($block([
+    new IR\Call('total', [new IR\FnRef('quirk')], 18),
+    new IR\Ret(new IR\Unit()),
+]), $withCafs);
+$check(\count($keptCafArg->items) === 2, 'DCE dropped a total call whose argument runs a parameterless entry');
+
+$pureCafArg = dceBlock($block([
+    new IR\Call('total', [new IR\FnRef('pureCaf')], 19),
+    new IR\Ret(new IR\Unit()),
+]), $withCafs);
+$check(\count($pureCafArg->items) === 1, 'DCE kept a call whose argument is a parameterless total entry');
+
+$cafArgCse = cseBlock($block([
+    new IR\Call('total', [new IR\FnRef('quirk')], 20),
+    new IR\Call('total', [new IR\FnRef('quirk')], 21),
+    new IR\Ret(new IR\Unit()),
+]), $withCafs);
+$check($cafArgCse->items[1] instanceof IR\Call, 'CSE shared two calls whose argument runs a parameterless entry');
 
 // The run's one analysis owner answers for the program it was handed. An unchanged program is one scan and
 // one model; a rewritten body has to be a different one — and an `ioEffect` mark is the change a pass makes

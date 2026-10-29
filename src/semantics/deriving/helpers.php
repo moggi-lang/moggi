@@ -183,48 +183,11 @@ function applyOp(string $op, Ast\AstNode $left, Ast\AstNode $right): Ast\AstNode
     );
 }
 
-function strAppend(Ast\AstNode $left, Ast\AstNode $right): Ast\AstNode
-{
-    return applyOp('<>', $left, $right);
-}
-
-function showCall(Ast\AstNode $value): Ast\AstNode
-{
-    return new Ast\Apply(new Ast\Variable('show'), $value);
-}
-
 function compareCall(Ast\AstNode $left, Ast\AstNode $right): Ast\AstNode
 {
     return new Ast\Apply(
         new Ast\Apply(new Ast\Variable('compare'), $left),
         $right,
-    );
-}
-
-function mapCall(Ast\AstNode $f, Ast\AstNode $value): Ast\AstNode
-{
-    return new Ast\Apply(
-        new Ast\Apply(new Ast\Variable('map'), $f),
-        $value,
-    );
-}
-
-function foldrCall(Ast\AstNode $f, Ast\AstNode $z, Ast\AstNode $value): Ast\AstNode
-{
-    return new Ast\Apply(
-        new Ast\Apply(
-            new Ast\Apply(new Ast\Variable('foldr'), $f),
-            $z,
-        ),
-        $value,
-    );
-}
-
-function traverseCall(Ast\AstNode $f, Ast\AstNode $value): Ast\AstNode
-{
-    return new Ast\Apply(
-        new Ast\Apply(new Ast\Variable('traverse'), $f),
-        $value,
     );
 }
 

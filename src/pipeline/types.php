@@ -147,19 +147,6 @@ final class CompilationContext
     }
 
     /** @param list<string> $roots */
-    public function withRoots(array $roots): self
-    {
-        return new self(
-            $this->backendId,
-            $this->backend,
-            $this->purpose,
-            $this->entries,
-            \array_values($roots),
-            $this->sources,
-            $this->host,
-        );
-    }
-
     /**
      * The inputs a cache entry depends on, in one stable spelling.
      *

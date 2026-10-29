@@ -3,6 +3,7 @@
 namespace Moggi\Optimize\Effects;
 
 use Moggi\IR;
+use Moggi\Optimize\Facts\Facts;
 
 use function Moggi\IR\Visit\walkBlock;
 use function Moggi\Modules\isQualifiedSymbol;
@@ -452,6 +453,10 @@ function namedCallee(IR\Operand $callee): ?string
  * A callee the IR does not place in this module and does not qualify is a name this module does not
  * declare: a constructor, a projection or an entry a pass generated. It is a construction, which is
  * why `ofCall()` answers `none()` for it rather than the conservative answer a qualified import gets.
+ *
+ * One question it does not answer from the IR is whether naming an entry runs it: a function of no
+ * parameters is a CAF the backends force, so a bare reference to one is an evaluation. That is the facts
+ * owner's answer (`Facts::runsOnReference()`), and this model asks it rather than deriving a second one.
  */
 final class Model
 {
@@ -544,15 +549,20 @@ final class Model
 
     /**
      * What evaluating this expression costs, as opposed to what applying it would do ({@see ofOperand}, which
-     * answers that for a value in callee position). A function reference evaluates to itself, so it is not an
-     * execution; a partial application constructs a closure without running the function it wraps; a faulting
-     * primop throws where it stands.
+     * answers that for a value in callee position). A function reference to a function that takes parameters
+     * evaluates to itself, so it is not an execution — but a reference to an entry with no parameters is the
+     * forced call the backends make of it, which is why that one arm asks the facts owner. A partial
+     * application constructs a closure without running the function it wraps; a faulting primop throws where
+     * it stands.
      */
     public function evaluationOf(IR\Operand $operand): Effect
     {
         return match ($operand::class) {
             IR\ConstInt::class, IR\ConstDouble::class, IR\ConstStr::class, IR\ConstChar::class,
-            IR\Unit::class, IR\Temp::class, IR\Local::class, IR\FnRef::class => Effect::none(),
+            IR\Unit::class, IR\Temp::class, IR\Local::class => Effect::none(),
+            IR\FnRef::class => Facts::current()->runsOnReference($operand->name)
+                ? $this->ofCall($operand->name)
+                : Effect::none(),
             IR\ListLit::class => Effect::constructor()->union($this->evaluationsOf($operand->elements)),
             IR\Intrinsic::class => (reportsSourceLocation($operand->name) ? Effect::throws() : Effect::none())
                 ->union($this->evaluationsOf($operand->args)),

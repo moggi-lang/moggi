@@ -193,10 +193,3 @@ function rejectUnknownSubcommand(string $command): never
     printUsage();
     exit(1);
 }
-
-function cliError(string $message): never
-{
-    \fwrite(STDERR, $message . "\n\n");
-    printUsage();
-    exit(1);
-}

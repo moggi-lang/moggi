@@ -614,39 +614,6 @@ function emitGuardedIfMatch(IR\Stmt $stmt, int $indent, array $ctx, string $scru
     return $out . $pad . "} while (false);\n";
 }
 
-/**
- * Rename pattern binders to unique names and rewrite shallow arm-body locals.
- * Nested MatchStmt/MatchReturn arms are left untouched (freshened when emitted).
- */
-function freshenMatchArmBinders(IR\MatchArm $arm): IR\MatchArm
-{
-    $map = [];
-    $id = nextPhpBinderFreshenId();
-    $n = 0;
-    collectPatternBinderNames($arm->pattern, $map, $id, $n);
-    if ($map === []) {
-        return $arm;
-    }
-
-    $pattern = renamePatternBinders($arm->pattern, $map);
-    $guards = IR\Visit\mapGuards(
-        $arm->guards,
-        static fn (IR\Operand $g): IR\Operand => renameLocalsInOperand($g, $map),
-        static fn (IR\Stmt $s): IR\Stmt => renameLocalsInItemsShallow([$s], $map)[0],
-    );
-    $body = new IR\Block(renameLocalsInItemsShallow($arm->body->items, $map));
-
-    return new IR\MatchArm($pattern, $body, $guards);
-}
-
-function nextPhpBinderFreshenId(): int
-{
-    $n = (int) ($GLOBALS['__moggi_php_binder_freshen'] ?? 0);
-    $GLOBALS['__moggi_php_binder_freshen'] = $n + 1;
-
-    return $n;
-}
-
 /** @param array<string, string> $map */
 function collectPatternBinderNames(IR\Pattern $pattern, array &$map, int $id, int &$n): void
 {

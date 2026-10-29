@@ -456,9 +456,3 @@ function localHelperCall(string $name, string $helper, array $argExprs): string
 {
     throw new \InvalidArgumentException("no local helper call for intrinsic `{$name}`");
 }
-
-/** @return array<string, true> */
-function helpersUsedByModule(IR\Module $module): array
-{
-    return IR\Visit\collectIrCodegenUsage($module)['intrinsics'];
-}

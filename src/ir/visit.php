@@ -423,35 +423,6 @@ function collectLambdaRefsInBlock(IR\Block $block, callable $isLambda): array
 }
 
 /**
- * @param callable(string): bool $isLambda
- * @return array{locals: list<string>, lambdaRefs: list<string>}
- */
-function analyzeBlockForCodegen(IR\Block $block, callable $isLambda): array
-{
-    $locals = [];
-    $lambdaRefs = [];
-    walkBlock(
-        $block,
-        static function (IR\Stmt $stmt) use (&$locals, &$lambdaRefs): void {
-        },
-        static function (IR\Operand $op) use (&$locals, &$lambdaRefs, $isLambda): void {
-            if ($op instanceof IR\Local) {
-                $locals[] = $op->name;
-            }
-
-            if ($op instanceof IR\FnRef && $isLambda($op->name)) {
-                $lambdaRefs[] = $op->name;
-            }
-        },
-    );
-
-    return [
-        'locals' => \array_values(\array_unique($locals)),
-        'lambdaRefs' => \array_values(\array_unique($lambdaRefs)),
-    ];
-}
-
-/**
  * Names bound by an IR pattern (match-arm binders, including nested
  * constructor / cons / record / tuple sub-patterns).
  *

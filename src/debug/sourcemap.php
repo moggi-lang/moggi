@@ -301,14 +301,6 @@ final class SourceMapBuilder
     }
 
     /** Register all function symbols from IR (even if they never throw). */
-    public function addModuleSymbols(IR\Module $ir, callable $generatedName): void
-    {
-        foreach ($ir->functions as $fn) {
-            $gen = (string) $generatedName($fn);
-            $this->ensureSymbol($fn->srcLoc ?? new IR\SrcLoc($this->module, $fn->name, $ir->sourceFile, 0, 0), $gen);
-        }
-    }
-
     /**
      * Register a generated name that must not appear as its own Mogg frame.
      *

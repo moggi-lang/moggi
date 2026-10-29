@@ -61,17 +61,6 @@ function isQualifiedSymbol(string $name): bool
         && \preg_match('/^[A-Za-z_][A-Za-z0-9_]*(\\[A-Za-z_][A-Za-z0-9_]*)*$/', $prefix) === 1;
 }
 
-/** PHP FQN for a resolved symbol (emit / `use function` only). */
-function phpFqnFromResolved(string $resolved): string
-{
-    $parsed = parseResolvedSymbol($resolved);
-    if ($parsed === null) {
-        return $resolved;
-    }
-
-    return moduleNameToNamespace($parsed['module']) . '\\' . $parsed['name'];
-}
-
 /**
  * Per-module export memo, live only for the duration of a prepare pass.
  *

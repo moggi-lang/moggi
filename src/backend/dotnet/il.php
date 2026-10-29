@@ -3,55 +3,6 @@
 namespace Moggi\Backend\DotNet\Il;
 
 /** Append-only buffer for ILASM (ECMA-335) source fragments. */
-final class IlText
-{
-    private string $buf = '';
-
-    public function line(string $s = ''): self
-    {
-        $this->buf .= $s . "\n";
-
-        return $this;
-    }
-
-    public function lines(string ...$lines): self
-    {
-        foreach ($lines as $line) {
-            $this->line($line);
-        }
-
-        return $this;
-    }
-
-    /** Indent helper for nested IL. */
-    public function indented(string $s, int $spaces = 2): self
-    {
-        $pad = \str_repeat(' ', $spaces);
-        foreach (\explode("\n", $s) as $line) {
-            $this->line($line === '' ? '' : $pad . $line);
-        }
-
-        return $this;
-    }
-
-    public function raw(string $s): self
-    {
-        $this->buf .= $s;
-
-        return $this;
-    }
-
-    public function toString(): string
-    {
-        return $this->buf;
-    }
-
-    public function clear(): void
-    {
-        $this->buf = '';
-    }
-}
-
 /** Escape a string for ILASM `ldstr "..."` / custom attributes. */
 function ilString(string $s): string
 {
