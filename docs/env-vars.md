@@ -20,6 +20,7 @@ variables the **test harness** sets.
 | `MOGGI_REGISTRY` | the canonical registry | The registry a *read* command uses when `--registry` is not given. |
 | `MOGGI_REGISTRY_WRITE` | the registry's write origin | The registry a *write* command — `publish`, `bad`, `unmaintained`, `takeover` — uses when `--registry` is not given; falls back to `MOGGI_REGISTRY`. |
 | `MOGGI_REGISTRY_NPUB` | unset (trust on first use) | Pin the registry's signing key. |
+| `MOGGI_NSEC_FILE` | unset (prompt) | Path to the secret key `publish` signs with when `--nsec-file` is not given. |
 | `MOGGI_USER_CACHE` | `$XDG_CACHE_HOME/moggi`, else `$HOME/.cache/moggi` | The user-level cache: downloaded archives, plus the remembered key and accepted root version of each registry. |
 
 ### `MOGGI_MICRO_SFX`

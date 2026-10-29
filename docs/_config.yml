@@ -4,6 +4,14 @@ kramdown:
   input: GFM
 plugins:
   - jekyll-relative-links
+# `build.sh` is the local build entry point, not a page. The rest is what Jekyll
+# excludes by default, repeated because setting `exclude` replaces that list.
+exclude:
+  - build.sh
+  - Gemfile
+  - Gemfile.lock
+  - node_modules
+  - vendor
 defaults:
   - scope:
       path: ""

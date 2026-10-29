@@ -66,6 +66,9 @@ java -jar hello.jar
 
 ./bin/moggi compile hello.mog --backend dotnet   # -> hello.dll
 dotnet hello.dll
+
+./bin/moggi compile hello.mog --native      # -> hello (+ hello.phar), no runtime needed
+./hello
 ```
 
 | Backend | Artifact | Toolchain |
@@ -73,24 +76,26 @@ dotnet hello.dll
 | `php` (default) | `hello.phar` | PHP 8.5.12+ |
 | `jvm` | `hello.jar` | JDK 21+ |
 | `dotnet` | `hello.dll` (+ `hello.deps.json`, `hello.runtimeconfig.json`) | .NET 8 SDK |
+| any of the three, with `--native` | `hello` (and the archive beside it) | the backend's native toolchain |
 
 Which distributions bundle which runtime, and how to use a checkout instead:
 
 | Distribution | Bundles |
 |---|---|
-| `moggi` | PHP, .NET SDK, JDK, GraalVM — everything, including `--native` — plus Composer and Maven |
-| `moggi-php` | PHP and Composer |
-| `moggi-dotnet` | PHP and the .NET SDK (whose `dotnet nuget` resolves `[dotnet.nuget]`) |
-| `moggi-jvm` | PHP, JDK, GraalVM and Maven |
+| `moggi` | PHP, the micro PHP runtime, .NET SDK, JDK, GraalVM — everything, including `--native` — plus Composer and Maven |
+| `moggi-php` | PHP, the micro PHP runtime and Composer |
+| `moggi-dotnet` | the .NET SDK (whose `dotnet nuget` resolves `[dotnet.nuget]`) |
+| `moggi-jvm` | JDK, GraalVM and Maven |
 | `moggi-minimal` | nothing — uses the runtimes on your `PATH` |
 
 Without `-o` the artifact is named after the entry source file; pass a full file
 name to choose your own (`-o app.phar`, `-o app.jar`, `-o app.dll`).
 
 Useful flags: `--unpacked` keeps the generated tree instead of packaging it,
-`--native` builds a native executable (GraalVM `native-image`, .NET
-`PublishAot`), and `--tokens`/`--ast`/`--typed-ast`/`--ir`/`--opt-ir` dump the
-compiler's intermediate stages. `--help` lists everything.
+`--native` builds a standalone executable (the PHAR appended to the micro PHP
+runtime, GraalVM `native-image`, or .NET `PublishAot`), and
+`--tokens`/`--ast`/`--typed-ast`/`--ir`/`--opt-ir` dump the compiler's
+intermediate stages. `--help` lists everything.
 
 ## Documentation
 
@@ -101,7 +106,9 @@ Read them in order, or pick the question you have.
 | **Getting running (start here)** | [docs/quickstart.md](docs/quickstart.md) |
 | **The language, by example** | [docs/tour.md](docs/tour.md) |
 | Try expressions, inspect types | [docs/repl.md](docs/repl.md) |
+| The type system, concept by concept | [docs/types/index.md](docs/types/index.md) |
 | Find your way around `libraries/` | [docs/stdlib.md](docs/stdlib.md) |
+| Doc comments, search and generated API docs | [docs/api-docs.md](docs/api-docs.md) |
 | Complete syntax | [docs/language.md](docs/language.md) |
 | Calling PHP, the JVM or .NET | [docs/ffi.md](docs/ffi.md) |
 | Deriving | [docs/deriving.md](docs/deriving.md) |
@@ -121,3 +128,9 @@ the three backends are kept byte-for-byte identical by a differential test.
 ## AI disclaimer
 
 Parts of this project — including code, tests and documentation — were developed with assistance from large language models. The language design, semantics, architecture and implementation decisions were developed independently. LLMs were used as a development aid, primarily for well-defined implementation tasks, boilerplate and iteration. Generated code was reviewed, modified, or discarded as appropriate.
+
+## License
+
+Moggi is released under the BSD 3-Clause License — see [LICENSE](LICENSE).
+
+Copyright © 2026 Sascha-Oliver Prolic.
