@@ -645,24 +645,13 @@ function buildImportContext(
 ): ImportContext {
     $planPhpImports = $backendId === 'php';
     $outputExtension = backendById($backendId)->extension();
-    $env = [];
-    $typeSynonyms = [];
-    $data = [];
+    /** @var array<string, ImportSymbol> $symbols the one table: every fact about every imported spelling */
+    $symbols = [];
     $qualifiedModules = [];
-    $constructorRenames = [];
     $moduleAsNames = [];
-    $qualifiedOrigins = [];
-    $qualifiedEnv = [];
-    $externalFns = [];
-    $callables = [];
-    $actionReturnFns = [];
-    $workers = [];
-    $fnOriginModules = [];
-    $intrinsicWrappers = [];
     $moduleOutputPaths = [];
     $namespaceModules = [];
     $implicitNames = [];
-    $ambiguousNames = [];
 
     foreach ($imports as $import) {
         $importLine = $import->line;
@@ -742,61 +731,71 @@ function buildImportContext(
             $origin = (! $scheme->classMethod && isset($selected['origins'][$name]))
                 ? $selected['origins'][$name]
                 : null;
+            // Whether this spelling was already imported, captured before the qualified answer below
+            // adds to the record: the ambiguity rules are stated over the earlier import.
+            $existing = $symbols[$name] ?? null;
 
-            $qualifiedEnv[$localPrefix][$name] = $scheme;
+            $reExported = ! $scheme->classMethod && $origin !== null && $origin['module'] !== $targetName;
+            $symbols[$name] = ($existing ?? new ImportSymbol())->withQualified(
+                $localPrefix,
+                new ImportQualified(
+                    module: $targetName,
+                    scheme: $scheme,
+                    originModule: $reExported ? $origin['module'] : null,
+                    originName: $reExported ? $origin['phpName'] : null,
+                ),
+            );
             if (! $scheme->classMethod) {
-                if ($origin !== null && $origin['module'] !== $targetName) {
-                    $qualifiedOrigins[$localPrefix][$name] = $origin;
-                }
                 if ($origin !== null && $planPhpImports) {
                     recordOriginOutputPath($moduleOutputPaths, $origin, $currentModule, $units, $rootPrefix, $outputExtension);
                 }
                 if (isset($selected['intrinsicWrappers'][$name])) {
-                    $intrinsicWrappers[$name] = $selected['intrinsicWrappers'][$name];
+                    $symbols[$name] = $symbols[$name]->withIntrinsicWrapper($selected['intrinsicWrappers'][$name]);
                 }
             }
 
             if ($import->qualifiedOnly) {
-                if ($origin !== null && ! isset($fnOriginModules[$name])) {
-                    $externalFns[$name] = resolvedSymbol($origin['module'], $origin['phpName']);
-                    $callables[$name] = publishedCallableLayout($units, $origin['module'], $origin['phpName']);
-                    $fnOriginModules[$name] = $origin['module'];
+                if ($origin !== null && $symbols[$name]->symbol === null) {
+                    $symbols[$name] = $symbols[$name]->withSymbol(
+                        resolvedSymbol($origin['module'], $origin['phpName']),
+                        $origin['module'],
+                        publishedCallableLayout($units, $origin['module'], $origin['phpName']),
+                    );
                     if (isset(moduleActionReturnFnNames($units, $origin['module'])[$origin['phpName']])) {
-                        $actionReturnFns[$name] = true;
+                        $symbols[$name] = $symbols[$name]->withActionReturn();
                     }
                     $worker = importedWorkerSymbol($units, $origin);
                     if ($worker !== null) {
-                        $workers[$name] = $worker;
+                        $symbols[$name] = $symbols[$name]->withWorker($worker);
                     }
                 }
 
                 continue;
             }
 
-            if (isset($env[$name])) {
+            if ($existing !== null) {
                 if ($import->implicit) {
                     continue;
                 }
 
-                if ($env[$name]->classMethod !== $scheme->classMethod) {
+                if ($existing->scheme?->classMethod !== $scheme->classMethod) {
                 } elseif (! isset($implicitNames[$name])
-                    && ! ($env[$name]->classMethod && $scheme->classMethod)
-                    && (($fnOriginModules[$name] ?? null) !== ($selected['origins'][$name]['module'] ?? null))) {
-                    $ambiguousNames[$name] = [
-                        'origins' => \array_values(\array_unique([
-                            ...($ambiguousNames[$name]['origins'] ?? [$fnOriginModules[$name] ?? '']),
-                            $selected['origins'][$name]['module'] ?? '',
-                        ])),
-                    ];
-                    unset($externalFns[$name], $callables[$name]);
+                    && ! ($existing->scheme?->classMethod && $scheme->classMethod)
+                    && ($existing->originModule !== ($selected['origins'][$name]['module'] ?? null))) {
+                    $symbols[$name] = $symbols[$name]->withAmbiguousOrigins(\array_values(\array_unique([
+                        ...($existing->ambiguousOrigins !== []
+                            ? $existing->ambiguousOrigins
+                            : [$existing->originModule ?? '']),
+                        $selected['origins'][$name]['module'] ?? '',
+                    ])));
                 }
             }
 
-            if (isset($ambiguousNames[$name])) {
+            if ($symbols[$name]->ambiguousOrigins !== []) {
                 continue;
             }
 
-            $env[$name] = $scheme;
+            $symbols[$name] = $symbols[$name]->withScheme($scheme);
             if ($import->implicit) {
                 $implicitNames[$name] = true;
             }
@@ -805,15 +804,17 @@ function buildImportContext(
                 continue;
             }
 
-            $externalFns[$name] = resolvedSymbol($origin['module'], $origin['phpName']);
-            $callables[$name] = publishedCallableLayout($units, $origin['module'], $origin['phpName']);
-            $fnOriginModules[$name] = $origin['module'];
+            $symbols[$name] = $symbols[$name]->withSymbol(
+                resolvedSymbol($origin['module'], $origin['phpName']),
+                $origin['module'],
+                publishedCallableLayout($units, $origin['module'], $origin['phpName']),
+            );
             if (isset(moduleActionReturnFnNames($units, $origin['module'])[$origin['phpName']])) {
-                $actionReturnFns[$name] = true;
+                $symbols[$name] = $symbols[$name]->withActionReturn();
             }
             $worker = importedWorkerSymbol($units, $origin);
             if ($worker !== null) {
-                $workers[$name] = $worker;
+                $symbols[$name] = $symbols[$name]->withWorker($worker);
             }
         }
 
@@ -821,29 +822,31 @@ function buildImportContext(
             $targetMeta = unitEvidenceMeta($target, $targetName, $namespace);
             $targetArities = unitEvidenceArities($target, $targetName, $namespace);
             foreach ($targetMeta['origins'] as $evName => $origin) {
-                $externalFns[$evName] = resolvedSymbol($origin['module'], $origin['phpName']);
-                $callables[$evName] = evidenceCallableLayout(
-                    $targetArities[$evName]
-                        ?? throw new \LogicException(
-                            "evidence `{$evName}` was published by module `{$targetName}` without a runtime arity",
-                        ),
+                $symbols[$evName] = ($symbols[$evName] ?? new ImportSymbol())->withSymbol(
+                    resolvedSymbol($origin['module'], $origin['phpName']),
+                    $origin['module'],
+                    evidenceCallableLayout(
+                        $targetArities[$evName]
+                            ?? throw new \LogicException(
+                                "evidence `{$evName}` was published by module `{$targetName}` without a runtime arity",
+                            ),
+                    ),
                 );
-                $fnOriginModules[$evName] = $origin['module'];
             }
         }
 
         if (! $import->qualifiedOnly) {
             foreach ($selected['constructorRenames'] as $local => $canonical) {
-                $constructorRenames[$local] = $canonical;
+                $symbols[$local] = ($symbols[$local] ?? new ImportSymbol())->withConstructorName($canonical);
             }
         }
 
         foreach ($selected['typeSynonyms'] as $name => $type) {
-            $typeSynonyms[$name] = $type;
+            $symbols[$name] = ($symbols[$name] ?? new ImportSymbol())->withTypeSynonym($type);
         }
 
         foreach ($selected['data'] as $name => $info) {
-            $data[$name] = $info;
+            $symbols[$name] = ($symbols[$name] ?? new ImportSymbol())->withData($info);
         }
 
         if ($planPhpImports && ($import->kind === 'glob' || $import->kind === 'named')) {
@@ -877,18 +880,20 @@ function buildImportContext(
         $meta = unitEvidenceMeta($unit, $unitName, $unit['namespace'], $cacheKey);
         $unitArities = unitEvidenceArities($unit, $unitName, $unit['namespace']);
         foreach ($meta['origins'] as $evName => $origin) {
-            if (isset($externalFns[$evName])) {
+            if (isset($symbols[$evName])) {
                 continue;
             }
 
-            $externalFns[$evName] = resolvedSymbol($origin['module'], $origin['phpName']);
-            $callables[$evName] = evidenceCallableLayout(
-                $unitArities[$evName]
-                    ?? throw new \LogicException(
-                        "evidence `{$evName}` was published by module `{$unitName}` without a runtime arity",
-                    ),
+            $symbols[$evName] = ($symbols[$evName] ?? new ImportSymbol())->withSymbol(
+                resolvedSymbol($origin['module'], $origin['phpName']),
+                $origin['module'],
+                evidenceCallableLayout(
+                    $unitArities[$evName]
+                        ?? throw new \LogicException(
+                            "evidence `{$evName}` was published by module `{$unitName}` without a runtime arity",
+                        ),
+                ),
             );
-            $fnOriginModules[$evName] = $origin['module'];
             if ($planPhpImports) {
                 recordOriginOutputPath(
                     $moduleOutputPaths,
@@ -906,20 +911,8 @@ function buildImportContext(
         instanceWorld: $instanceWorld,
         interface: new ImportInterface(
             module: $currentModule,
-            env: $env,
-            data: $data,
-            typeSynonyms: $typeSynonyms,
+            symbols: $symbols,
             qualifiedModules: $qualifiedModules,
-            qualifiedOrigins: $qualifiedOrigins,
-            qualifiedEnv: $qualifiedEnv,
-            intrinsicWrappers: $intrinsicWrappers,
-            ambiguousNames: $ambiguousNames,
-            constructorRenames: $constructorRenames,
-            externalFns: $externalFns,
-            fnOriginModules: $fnOriginModules,
-            callables: $callables,
-            actionReturn: $actionReturnFns,
-            workers: $workers,
             trueBindings: moduleTrueBindingOriginsAll($units),
         ),
         plan: EmitPlan::forTarget(

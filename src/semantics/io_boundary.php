@@ -901,3 +901,57 @@ function fail(string $message, Ast\AstNode $at, string $source, string $filename
         $at->endCol,
     );
 }
+
+/**
+ * The form of a `do` statement's expression (or of a `do` body) — the one action-versus-value
+ * question, answered here and published on the node by {@see \Moggi\Semantics\IoEscape\analyze}.
+ *
+ * This is the only caller of this function: lowering reads the published field
+ * (`Lower\Io::ioStatementFormOf`) and never re-asks, so a node cannot be classified twice with two
+ * answers. `Deferred` is lexical: the producer passes the binder identities its `let`-bound actions
+ * introduced in the enclosing sequence.
+ *
+ * Anything this function does not recognise is `Action`: an expression whose value is an action the
+ * action ABI handles at the call site. That is deliberate — statement and body positions are
+ * guarded at publication, where an unclassified shape is a compiler error rather than a quiet
+ * fallback.
+ *
+ * @param array<int, true> $deferred binder identities a `let` bound to an action, in scope here
+ */
+function ioStatementForm(Ast\AstNode $expr, array $deferred): \Moggi\IR\IoStatementForm
+{
+    if ($expr instanceof Ast\IoPure) {
+        return \Moggi\IR\IoStatementForm::Pure;
+    }
+
+    if ($expr instanceof Ast\IoCase) {
+        return \Moggi\IR\IoStatementForm::Case;
+    }
+
+    if ($expr instanceof Ast\IoSequence) {
+        return \Moggi\IR\IoStatementForm::Sequence;
+    }
+
+    $inner = $expr instanceof Ast\IoAction ? $expr->expr : $expr;
+    if ($inner instanceof Ast\Variable
+        && $inner->binderId !== null
+        && isset($deferred[$inner->binderId])) {
+        return \Moggi\IR\IoStatementForm::Deferred;
+    }
+
+    return \Moggi\IR\IoStatementForm::Action;
+}
+
+/**
+ * Whether a node is one of the four shapes a `do` statement's expression (or a `do` body) can have.
+ *
+ * The answer is the AST's own marker ({@see Ast\IoStatementExpression}), not a list kept here, so a
+ * new IO expression node is classified by declaring itself one. The producer refuses an expression
+ * outside the marker, by class and line, so a new IO node reaches the boundary as an error rather
+ * than as an unclassified expression lowering has to guess at. A nested `do` in bind position
+ * arrived exactly that way once.
+ */
+function isIoStatementExpression(Ast\AstNode $expr): bool
+{
+    return $expr instanceof Ast\IoStatementExpression;
+}

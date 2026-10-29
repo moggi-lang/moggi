@@ -101,12 +101,16 @@ interface Backend
      * @param 'function'|'const' $kind
      * @param array{dispatch: string, classPath: ?string, hostMember: ?string, path?: string} $pathInfo
      * @param string $name the Moggi binding name of the foreign import
+     * @param ?string $module the module whose declaration this is, so a foreign type it
+     *   declares is read from that declaration rather than from whichever module a
+     *   process-wide registry happened to see last; null keeps the module-less read
      */
     public function foreignNativeSig(
         TypeNode $type,
         string $kind,
         array $pathInfo,
         string $name,
+        ?string $module = null,
     ): ?string;
 
     /**
@@ -173,36 +177,9 @@ function knownBackendIds(): array
     return ['php', 'jvm', 'dotnet'];
 }
 
-/**
- * Process-wide backend selection, for the test harness and the phar builder only.
- *
- * No production compile path reads this: the pipeline takes its target from
- * `CompilationContext`, and the emitter is the one that context names. `setCompileBackend()`
- * exists for tests that drive a whole suite as one backend and for `build_phar.php`; a new
- * caller outside those two is a regression to the global this refactor removed.
- *
- * The `'php'` default stays because the harness reads it before it has a context; it is not a
- * target that a compile silently falls back to.
- */
-function compileBackend(): string
-{
-    return $GLOBALS['moggi_compile_backend'] ?? 'php';
-}
-
 function isBackendImplemented(string $backend): bool
 {
     return \in_array($backend, implementedBackendIds(), true);
-}
-
-function setCompileBackend(string $backend): void
-{
-    assertBackend($backend);
-    if (! isBackendImplemented($backend)) {
-        throw new \InvalidArgumentException(
-            "code generation for backend `{$backend}` is not implemented",
-        );
-    }
-    $GLOBALS['moggi_compile_backend'] = $backend;
 }
 
 /** @param list<string> $allowed */

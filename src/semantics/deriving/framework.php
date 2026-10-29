@@ -229,7 +229,24 @@ function resolveDeriveStrategy(
     Ast\DataDecl $decl,
     Ast\DerivingClassRef $ref,
 ): string {
-    $facts = ClassDeriveFacts::fromState($state);
+    return resolveDeriveStrategyFor($state, $decl, $ref, ClassDeriveFacts::fromState($state));
+}
+
+/**
+ * The strategy a deriving clause resolves to, from class facts the caller already holds.
+ *
+ * A phase that has no type check behind it (`standaloneDerivingProjectRecords`, the
+ * project-instance stubs) still has to answer the same question, and it answers it here rather
+ * than with a second rule. `$state` is used for where a diagnostic points, not for the answer.
+ *
+ * @return 'Stock'|'Newtype'|'Anyclass'|'Via'
+ */
+function resolveDeriveStrategyFor(
+    TypeCheckState $state,
+    Ast\DataDecl $decl,
+    Ast\DerivingClassRef $ref,
+    ClassDeriveFacts $facts,
+): string {
     $explicit = $ref->strategy;
     if ($explicit === 'stock') {
         if (stockDeriveFor($ref->name) === null) {
@@ -260,6 +277,90 @@ function resolveDeriveStrategy(
     }
 
     return 'Anyclass';
+}
+
+/**
+ * The project-instance records a standalone deriving declaration contributes.
+ *
+ * A module is checked against the instance world its project's *parsed* declarations describe,
+ * not against another module's checked state, so a standalone `deriving instance` has to appear
+ * here beside the inline `deriving` clause's stub or an importer cannot resolve it at all — the
+ * module that wrote it resolves it only because it commits the instance while checking itself.
+ *
+ * The context is the one the checked instance will carry, built with the same helpers the
+ * checked path uses: written as written for stock, the representation's constraint for a
+ * newtype, `C V` for via. `Generic` also contributes the metadata instances the inline stub
+ * contributes, from the same two producers.
+ *
+ * A declaration whose target type is not among `$dataDecls` is answered only when its own
+ * strategy needs no representation (`via`); anything else needs the declaration, and this phase
+ * has no business inventing a context for a type it cannot read.
+ *
+ * @param array<string, Ast\DataDecl> $dataDecls every data/newtype the project declares
+ * @return list<array{module: string, class: string, instanceHead: Ast\TypeNode, constraints: list<Ast\TypeNode>, associatedEquations: array<string, mixed>, fromDeriving: true}>
+ */
+function standaloneDerivingProjectRecords(
+    Ast\StandaloneDerivingDecl $decl,
+    string $moduleName,
+    ClassDeriveFacts $facts,
+    array $dataDecls,
+): array {
+    $targetName = extractTypeConstructorName(standaloneDerivingTarget($decl->head));
+    $dataDecl = $targetName === null ? null : ($dataDecls[$targetName] ?? null);
+    $ref = new Ast\DerivingClassRef(
+        $decl->className,
+        $decl->line,
+        $decl->col,
+        $decl->endCol,
+        strategy: $decl->strategy,
+        viaType: $decl->viaType,
+    );
+
+    $state = newState('');
+    $state->currentModule = $moduleName;
+
+    if ($dataDecl === null) {
+        if ($decl->strategy !== 'via' || $decl->viaType === null) {
+            return [];
+        }
+        $strategy = 'Via';
+    } else {
+        $strategy = resolveDeriveStrategyFor($state, $dataDecl, $ref, $facts);
+    }
+
+    $derivedConstraints = [];
+    if ($strategy === 'Via' && $decl->viaType !== null) {
+        $derivedConstraints[] = viaDelegationConstraint(
+            $decl->className,
+            standaloneDerivingHeadArgs($decl->head),
+            $decl->viaType,
+        );
+    } elseif ($strategy === 'Newtype' && $dataDecl !== null) {
+        $derivedConstraints[] = newtypeDelegationConstraint($state, $dataDecl, $ref, $facts);
+    }
+
+    $constraints = standaloneDerivingContext($decl->constraints, $strategy, $derivedConstraints);
+
+    $records = [[
+        'module' => $moduleName,
+        'class' => $decl->className,
+        'instanceHead' => $decl->head,
+        'constraints' => $constraints,
+        'associatedEquations' => [],
+        'fromDeriving' => true,
+    ]];
+
+    $stock = $strategy === 'Stock' ? stockDeriveFor($decl->className) : null;
+    if ($stock !== null && $stock->synthesizesRepresentation && $dataDecl !== null) {
+        $records[0]['associatedEquations'] = genericProjectAssociatedEquations(
+            $dataDecl,
+            $moduleName,
+            $facts->associatedTypeNames($decl->className),
+        );
+        $records = [...$records, ...genericMetadataProjectInstances($dataDecl, $moduleName)];
+    }
+
+    return $records;
 }
 
 /**
@@ -395,18 +496,7 @@ function processStandaloneDeriving(
     $derived = resolveAndDerive($state, $dataDecl, $ref, standaloneDerivingHeadArgs($decl->head));
     $inst = derivedInstanceToDecl($derived);
 
-    $constraints = $decl->constraints;
-    if ($derived->strategy === 'Via') {
-        $constraints = mergeDerivedConstraints($constraints, $derived->constraints);
-    } elseif ($derived->strategy === 'Newtype' && $constraints === []) {
-        $constraints = mergeDerivedConstraints(
-            $constraints,
-            \array_values(\array_filter(
-                $derived->constraints,
-                static fn (Ast\TypeNode $c): bool => typeNodeMentionsVar($c),
-            )),
-        );
-    }
+    $constraints = standaloneDerivingContext($decl->constraints, $derived->strategy, $derived->constraints);
 
     $inst = new Ast\InstanceDecl(
         $decl->className,
@@ -420,6 +510,41 @@ function processStandaloneDeriving(
     );
 
     return $inst;
+}
+
+/**
+ * The context a standalone derived instance carries: the written context, widened only where the
+ * strategy adds what the user did not write.
+ *
+ * A class at `* -> *` contributes its via argument; newtype deriving contributes the
+ * representation's constraint, but only over the head's variables — `Eq Int` for a nullary
+ * newtype is ambient, and a dictionary parameter nobody supplies is an ABI error rather than a
+ * weaker obligation. Stock and anyclass use the written context as written.
+ *
+ * The checked path and the project-instance stub another module reads both come through here,
+ * so one instance cannot be described two ways.
+ *
+ * @param list<Ast\TypeNode> $written
+ * @param list<Ast\TypeNode> $derivedConstraints what the strategy's delegation requires
+ * @return list<Ast\TypeNode>
+ */
+function standaloneDerivingContext(array $written, string $strategy, array $derivedConstraints): array
+{
+    if ($strategy === 'Via') {
+        return mergeDerivedConstraints($written, $derivedConstraints);
+    }
+
+    if ($strategy === 'Newtype' && $written === []) {
+        return mergeDerivedConstraints(
+            $written,
+            \array_values(\array_filter(
+                $derivedConstraints,
+                static fn (Ast\TypeNode $c): bool => typeNodeMentionsVar($c),
+            )),
+        );
+    }
+
+    return $written;
 }
 
 function typeNodeMentionsVar(Ast\TypeNode $type): bool

@@ -190,8 +190,8 @@ function planEmission(
         namespaceUseLines: $namespaceUseLines,
         externalFns: $externalFns,
         externalFnRuntimeArity: $externalFnRuntimeArity,
-        constructorRenames: $interface->constructorRenames,
-        importedData: $interface->data,
+        constructorRenames: $interface->constructorRenames(),
+        importedData: $interface->data(),
         requiredModules: $requiredModules,
     );
 
@@ -208,9 +208,9 @@ function planEmission(
             continue;
         }
 
-        if (isset($interface->externalFns[$callee])) {
+        if ($interface->symbol($callee) !== null) {
             $usedExternal[$callee] = true;
-            $originModule = $interface->fnOriginModules[$callee] ?? null;
+            $originModule = $interface->fnOrigin($callee);
             if ($originModule !== null) {
                 $usedModules[$originModule] = true;
             }
@@ -226,7 +226,7 @@ function planEmission(
 
             $usedModules[$parsed['module']] = true;
             $usedNamespaces[moduleNameToNamespace($parsed['module'])] = true;
-            if (isset($interface->externalFns[$parsed['name']])) {
+            if ($interface->symbol($parsed['name']) !== null) {
                 $usedExternal[$parsed['name']] = true;
             }
 
@@ -246,13 +246,13 @@ function planEmission(
             $usedModules[$originModule] = true;
         }
 
-        if (isset($interface->externalFns[$member])) {
+        if ($interface->symbol($member) !== null) {
             $usedExternal[$member] = true;
         }
     }
 
-    $externalFns = \array_intersect_key($interface->externalFns, $usedExternal);
-    $externalFnRuntimeArity = \array_intersect_key($interface->externalFnRuntimeArity, $externalFns);
+    $externalFns = \array_intersect_key($interface->externalFns(), $usedExternal);
+    $externalFnRuntimeArity = \array_intersect_key($interface->externalFnRuntimeArity(), $externalFns);
 
     $moduleAsNames = [];
     $namespaceUseLines = [];

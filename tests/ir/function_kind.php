@@ -60,10 +60,10 @@ foreach ($artifacts->ir->functions as $function) {
     $byName[$function->name] = $function;
 }
 
-$check(($byName['main'] ?? null)?->kind === IR\FunctionKind::Source, 'a declared function is not Source');
+$check(($byName['main'] ?? null)?->shape->kind === IR\FunctionKind::Source, 'a declared function is not Source');
 
-$lambdas = \array_filter($byName, static fn (IR\FunctionDecl $fn): bool => $fn->kind === IR\FunctionKind::Lambda);
-$letrecs = \array_filter($byName, static fn (IR\FunctionDecl $fn): bool => $fn->kind === IR\FunctionKind::Letrec);
+$lambdas = \array_filter($byName, static fn (IR\FunctionDecl $fn): bool => $fn->shape->kind === IR\FunctionKind::Lambda);
+$letrecs = \array_filter($byName, static fn (IR\FunctionDecl $fn): bool => $fn->shape->kind === IR\FunctionKind::Letrec);
 $check(\count($lambdas) === 1, 'expected one Lambda declaration, found ' . \count($lambdas));
 $check(\count($letrecs) === 1, 'expected one Letrec declaration, found ' . \count($letrecs));
 $check(
@@ -88,19 +88,19 @@ $check(
 
 $free = new IR\Block([new IR\Ret(new IR\Local('free'))]);
 $lookalike = new IR\FunctionDecl('λ0', [], null, $free);
-$liftedOddly = new IR\FunctionDecl('plain', [], null, $free, kind: IR\FunctionKind::Lambda);
+$liftedOddly = new IR\FunctionDecl('plain', [], null, $free, new IR\FunctionShape(kind: IR\FunctionKind::Lambda));
 
 $index = indexCapturedFunctions([$lookalike, $liftedOddly]);
 $check(! isset($index['λ0']), 'a Source function named λ0 was indexed as a capture binding');
 $check(isset($index['plain']), 'a Lambda named plain was not indexed as a capture binding');
 
 $check(
-    $liftedOddly->withBody($free)->kind === IR\FunctionKind::Lambda,
+    $liftedOddly->withBody($free)->shape->kind === IR\FunctionKind::Lambda,
     'withBody dropped the function kind',
 );
 $check(
-    $lookalike->kind->takesCaptures() === false
-        && $liftedOddly->kind->takesCaptures() === true
+    $lookalike->shape->kind->takesCaptures() === false
+        && $liftedOddly->shape->kind->takesCaptures() === true
         && IR\FunctionKind::SpecClone->takesCaptures() === false
         && IR\FunctionKind::Generated->takesCaptures() === false,
     'FunctionKind::takesCaptures disagrees with the documented capture set',

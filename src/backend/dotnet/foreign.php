@@ -18,14 +18,93 @@ use function Moggi\Semantics\Types\primitiveTypeIdOf;
 
 use Moggi\Syntax\Ast;
 
-function registerDotNetForeignType(string $moggiName, string $hostType): void
+/**
+ * Foreign host types, keyed by the declaring module and then by Moggi type name.
+ *
+ * A `foreign dotnet type Stream "…"` is one module's statement about one of its own names.
+ * Two modules may each declare `Stream` against different host types — this corpus has
+ * `System.IO.MemoryStream` and `System.IO.Stream` — so a bare-name map cannot answer for
+ * both: whichever module was checked last would overwrite the other and every reader after
+ * it would get a fact the compilation never stated. The module is part of the key.
+ */
+function registerDotNetForeignType(string $module, string $moggiName, string $hostType): void
 {
-    $GLOBALS['moggi_dotnet_foreign_types'][$moggiName] = $hostType;
+    $GLOBALS['moggi_dotnet_foreign_types'][$module][$moggiName] = $hostType;
 }
 
-function lookupDotNetForeignType(string $name): ?string
+/**
+ * Every module that declares `$name`, with the host type it declares.
+ *
+ * @return array<string, string> module => host type
+ */
+function dotNetForeignTypeDeclarations(string $name): array
 {
-    return $GLOBALS['moggi_dotnet_foreign_types'][$name] ?? null;
+    $found = [];
+    foreach ($GLOBALS['moggi_dotnet_foreign_types'] ?? [] as $module => $declarations) {
+        if (\is_array($declarations) && isset($declarations[$name])) {
+            $found[(string) $module] = (string) $declarations[$name];
+        }
+    }
+
+    return $found;
+}
+
+/**
+ * The host type `$name` stands for, read from the module that declared it.
+ *
+ * With a module, that module's declaration and nothing else; re-checking the same module —
+ * what the REPL and LSP do on every keystroke — replaces its entry instead of colliding with
+ * it. Without one, the answer must be the same in every declaring module, and a real
+ * cross-module disagreement is refused rather than resolved by whichever module ran last.
+ */
+function lookupDotNetForeignType(string $name, ?string $module = null): ?string
+{
+    if ($module !== null) {
+        return $GLOBALS['moggi_dotnet_foreign_types'][$module][$name] ?? null;
+    }
+
+    $byModule = dotNetForeignTypeDeclarations($name);
+    if ($byModule === []) {
+        return null;
+    }
+
+    $hosts = \array_values(\array_unique($byModule));
+    if (\count($hosts) > 1) {
+        $said = [];
+        foreach ($byModule as $declaringModule => $host) {
+            $said[] = "`{$declaringModule}` says {$host}";
+        }
+
+        throw new \RuntimeException(
+            "foreign dotnet type `{$name}` is declared with different host types ("
+            . \implode('; ', $said)
+            . '); a read with no module to answer from cannot pick one',
+        );
+    }
+
+    return $hosts[0];
+}
+
+/**
+ * Every host type any module declares.
+ *
+ * For set membership, where the declaring module is not part of the question.
+ *
+ * @return list<string>
+ */
+function dotNetDeclaredForeignHostTypes(): array
+{
+    $hosts = [];
+    foreach ($GLOBALS['moggi_dotnet_foreign_types'] ?? [] as $declarations) {
+        if (! \is_array($declarations)) {
+            continue;
+        }
+        foreach ($declarations as $host) {
+            $hosts[] = (string) $host;
+        }
+    }
+
+    return $hosts;
 }
 
 /**
@@ -93,13 +172,14 @@ function clrSigFromMoggiType(
     ?string $member = null,
     ?array $sidecar = null,
     string $name = '',
+    ?string $module = null,
 ): string {
     if ($kind === 'const') {
-        return clrFieldTypeName(clrForeignIoInnerType($type), $classPath, $member);
+        return clrFieldTypeName(clrForeignIoInnerType($type), $classPath, $member, $module);
     }
 
     if ($dispatch === 'intrinsic') {
-        return clrIntrinsicSig($type, $classPath, $member);
+        return clrIntrinsicSig($type, $classPath, $member, $module);
     }
 
     $argTypes = [];
@@ -119,7 +199,7 @@ function clrSigFromMoggiType(
 
     $params = [];
     foreach ($argTypes as $arg) {
-        $params[] = clrTypeName($arg, $classPath, $member, false, $dispatch);
+        $params[] = clrTypeName($arg, $classPath, $member, false, $dispatch, $module);
     }
 
     if ($sidecar !== null) {
@@ -132,7 +212,7 @@ function clrSigFromMoggiType(
 
     $ret = $result instanceof Ast\TypeUnit
         ? 'void'
-        : clrTypeName($result, $classPath, $member, true, $dispatch);
+        : clrTypeName($result, $classPath, $member, true, $dispatch, $module);
 
     return '(' . \implode(',', $params) . ')' . $ret;
 }
@@ -203,12 +283,12 @@ function dotNetSidecarMismatch(
 /**
  * Signatures for emit-only intrinsics (__cast / __default / __null).
  */
-function clrIntrinsicSig(Ast\TypeNode $type, ?string $classPath, ?string $member): string
+function clrIntrinsicSig(Ast\TypeNode $type, ?string $classPath, ?string $member, ?string $module = null): string
 {
     $result = clrForeignIoInnerType($type);
     $ret = $result instanceof Ast\TypeUnit
         ? 'void'
-        : clrTypeName($result, $classPath, $member, true, 'intrinsic');
+        : clrTypeName($result, $classPath, $member, true, 'intrinsic', $module);
 
     $argTypes = [];
     $cursor = $type;
@@ -221,7 +301,7 @@ function clrIntrinsicSig(Ast\TypeNode $type, ?string $classPath, ?string $member
         if (\count($argTypes) !== 1) {
             throw new \RuntimeException('dotnet __cast requires exactly one argument');
         }
-        $param = clrTypeName($argTypes[0], $classPath, $member, false, 'intrinsic');
+        $param = clrTypeName($argTypes[0], $classPath, $member, false, 'intrinsic', $module);
 
         return '(' . $param . ')' . $ret;
     }
@@ -241,7 +321,12 @@ function clrIntrinsicSig(Ast\TypeNode $type, ?string $classPath, ?string $member
  * Static-field / property descriptors whose real CLR type differs from the
  * generic Moggi-type mapping (e.g. `System.Console:Out` is a TextWriter).
  */
-function clrFieldTypeName(Ast\TypeNode $type, ?string $classPath, ?string $member): string
+function clrFieldTypeName(
+    Ast\TypeNode $type,
+    ?string $classPath,
+    ?string $member,
+    ?string $module = null,
+): string
 {
     $key = ($classPath ?? '') . ':' . ($member ?? '');
     static $known = null;
@@ -258,7 +343,7 @@ function clrFieldTypeName(Ast\TypeNode $type, ?string $classPath, ?string $membe
         return $known[$key];
     }
 
-    return clrTypeName($type, $classPath, $member, true, 'static');
+    return clrTypeName($type, $classPath, $member, true, 'static', $module);
 }
 
 /**
@@ -291,6 +376,7 @@ function clrTypeName(
     ?string $member,
     bool $isReturn,
     string $dispatch = 'static',
+    ?string $module = null,
 ): string {
     if ($type instanceof Ast\TypeUnit) {
         return 'void';
@@ -301,13 +387,13 @@ function clrTypeName(
         if ($container === boundaryMaybeTypeName()) {
             $inner = $type->args[0] ?? null;
             if ($inner instanceof Ast\AstNode) {
-                return clrTypeName($inner, $classPath, $member, $isReturn, $dispatch);
+                return clrTypeName($inner, $classPath, $member, $isReturn, $dispatch, $module);
             }
         }
         if ($container === boundaryEitherTypeName()) {
             $inner = $type->args[1] ?? $type->args[0] ?? null;
             if ($inner instanceof Ast\AstNode) {
-                return clrTypeName($inner, $classPath, $member, $isReturn, $dispatch);
+                return clrTypeName($inner, $classPath, $member, $isReturn, $dispatch, $module);
             }
         }
     }
@@ -335,7 +421,7 @@ function clrTypeName(
         boolTypeName() => 'bool',
         boundaryHandleTypeName() => clrOpaqueObjectMapping($classPath, $isReturn, $dispatch),
         'List' => 'class Moggi.Rt.MList',
-        default => clrForeignLeafToIl((string) $con),
+        default => clrForeignLeafToIl((string) $con, $module),
     };
 }
 
@@ -365,9 +451,9 @@ function clrKernelTypeName(?string $kernelId): ?string
  * Map a foreign nominal leaf to its IL type descriptor. Fail closed — never
  * silently fall back to `object` for an unresolved foreign type.
  */
-function clrForeignLeafToIl(string $con): string
+function clrForeignLeafToIl(string $con, ?string $module = null): string
 {
-    $host = lookupDotNetForeignType($con);
+    $host = lookupDotNetForeignType($con, $module);
     if ($host === null) {
         throw new \RuntimeException(
             "dotnet foreign type `{$con}` is not registered (no hostType); refusing object fallback",
@@ -453,7 +539,7 @@ function dotNetHostIsValueType(string $classPath): bool
         return $declared;
     }
 
-    foreach ($GLOBALS['moggi_dotnet_foreign_types'] ?? [] as $host) {
+    foreach (dotNetDeclaredForeignHostTypes() as $host) {
         $host = \trim((string) $host);
         if (! \str_starts_with($host, 'valuetype ')) {
             continue;

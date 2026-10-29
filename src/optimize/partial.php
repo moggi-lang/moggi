@@ -6,6 +6,7 @@ use Moggi\IR;
 use Moggi\Syntax\Ast;
 
 use function Moggi\IR\Callables\captureMeta;
+use function Moggi\IR\Callables\table;
 use function Moggi\IR\Visit\mapOperandChildren;
 use function Moggi\IR\Visit\stmtDirectOperands;
 use function Moggi\IR\Visit\stmtNestedBlocks;
@@ -24,37 +25,63 @@ use function Moggi\Optimize\Support\tempUseCountsInItems;
  *
  * Ensures emitters never need to construct partials or repair call layouts.
  *
+ * Legalization is a fixed point, not a single rewrite, because a rewrite changes the layout it is
+ * legalizing against. Prepending a capture to `call λ2(x)` names a local the enclosing `λ1` does
+ * not otherwise use, so `λ1`'s own capture set grows — and with it the arity of every partial of
+ * `λ1` an outer entry holds. Publishing the old arity beside the new body is the one place a
+ * partial and the table could disagree (the `partial of λ1` / "published runtime arity" failure at
+ * post-legalize), so each round rewrites the input functions against the layout the previous round
+ * produced, and the loop ends only when the tree it returns publishes exactly the layout it was
+ * built with. The arities come from {@see table()} — the same publication the emitters and the
+ * layout check read — rather than from a second count kept here.
+ *
  * @param list<IR\FunctionDecl> $functions
  */
 function legalizeCallables(array $functions): array
 {
     $meta = captureMeta(indexCapturedFunctions($functions));
-    $arity = callableArities($functions, $meta);
+    $arity = publishedArities($functions);
 
-    return \array_map(
-        static fn (IR\FunctionDecl $function): IR\FunctionDecl => $function->withBody(
-            new IR\Block(bindLambdaCapturesItems($function->body->items, $meta, $arity)),
-        ),
-        $functions,
+    // One round per level a capture can propagate through the call graph, plus slack: a round that
+    // grows nothing returns, so the bound only turns a bug into a diagnostic.
+    for ($round = 0, $limit = 2 * \count($functions) + 4; $round < $limit; ++$round) {
+        $rewritten = \array_map(
+            static fn (IR\FunctionDecl $function): IR\FunctionDecl => $function->withBody(
+                new IR\Block(bindLambdaCapturesItems($function->body->items, $meta, $arity)),
+            ),
+            $functions,
+        );
+
+        $nextMeta = captureMeta(indexCapturedFunctions($rewritten));
+        $nextArity = publishedArities($rewritten);
+        // Order-insensitive: the two maps must agree on every entry, not on the order they were
+        // built in.
+        if ($nextMeta == $meta && $nextArity == $arity) {
+            return $rewritten;
+        }
+
+        $meta = $nextMeta;
+        $arity = $nextArity;
+    }
+
+    throw new \RuntimeException(
+        'callable legalization did not settle: every round grew a capture set, so the layout a '
+        . 'partial is built against never became the layout the module publishes',
     );
 }
 
 /**
- * Every entry's runtime vector length: the hidden slots it takes before its declared
- * parameters. A lifted function's signature is its captures followed by its parameters; a
- * source declaration's already includes its evidence slots in front.
+ * The runtime arity every entry publishes, read from the same table the emitters and the layout
+ * check consult.
  *
  * @param list<IR\FunctionDecl> $functions
- * @param array<string, array{captures: list<string>, params: list<string>}> $meta
  * @return array<string, int>
  */
-function callableArities(array $functions, array $meta): array
+function publishedArities(array $functions): array
 {
     $arity = [];
-    foreach ($functions as $function) {
-        $arity[$function->name] = $function->kind->takesCaptures()
-            ? \count($meta[$function->name]['captures'] ?? []) + \count($function->params)
-            : \count($function->params);
+    foreach (table($functions)->byEntry as $name => $sig) {
+        $arity[$name] = $sig->runtimeArity();
     }
 
     return $arity;
@@ -657,7 +684,7 @@ function knownFunctionArity(array $functions, string $moduleName): array
 {
     $arity = [];
     foreach ($functions as $function) {
-        if ($function->kind->takesCaptures()) {
+        if ($function->shape->kind->takesCaptures()) {
             continue;
         }
         $count = \count($function->params);
@@ -880,22 +907,12 @@ function specializePartialReturnFunction(IR\FunctionDecl $function, array $captu
     [$value] = scheduleCall($partial->fn, $callArgs, $body, maxTempInItems($items) + 1);
     $body[] = new IR\Ret($value);
 
-    return new IR\FunctionDecl(
-        $function->name,
-        $newParams,
-        $function->type,
-        new IR\Block($body),
-        $function->export,
-        $function->instanceMethod,
-        $function->entryKind,
-        $function->ioEffect,
-        $function->ioStraightLine,
-        $function->foreign,
-        $function->actionConvention,
-        $function->srcLoc,
-        $function->kind,
-        $function->origin,
-    );
+    // The clone keeps everything about its source except the parameter list and the body it now
+    // heads, so the shape travels as the record it is instead of nine copied flags.
+    return $function->with([
+        'params' => $newParams,
+        'body' => new IR\Block($body),
+    ]);
 }
 
 function partialFromOperand(IR\Operand $value): ?IR\Partial

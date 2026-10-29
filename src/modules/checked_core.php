@@ -34,12 +34,14 @@ final class CheckedFunction
      *   and the given dictionary that discharges it.
      * @param list<array{wanted: string, decision: string, provenance: string, origin: string}> $residuals
      *   Obligations not solved by unification, with their resolution step.
-     * @param list<array{origin: string, type: Type}> $terms
+     * @param list<array{origin: string, type: Type}> $termTypes
      *   Term-to-type entries in elaboration order, keyed by source origin
-     *   (see {@see termOrigin()}).
-     * @param list<EvidencePlan> $bodyEvidence
-     *   Evidence decisions for every site in walk order. Lowering reads these
-     *   plans, never the site's own evidence fields.
+     *   (see {@see termOrigin()}). Tooling: a type is looked up by where a term
+     *   is written, not by which term it is.
+     * @param array<int, CheckedTerm> $terms
+     *   The elaboration's terms, keyed by their own {@see TermId}'s value. Lowering
+     *   reads the term at the position it is lowering and refuses when there is
+     *   none; it never re-derives payload from the AST node.
      * @param array<string, string> $parameterKinds
      *   Each type parameter's kind in this declaration's signature scope.
      *   Kinds are declaration-local, so identical names may have different
@@ -51,8 +53,8 @@ final class CheckedFunction
         public readonly Scheme $scheme,
         public readonly array $evidence,
         public readonly array $residuals,
+        public readonly array $termTypes = [],
         public readonly array $terms = [],
-        public readonly array $bodyEvidence = [],
         public readonly array $parameterKinds = [],
     ) {
     }
@@ -65,10 +67,10 @@ final class CheckedFunction
      * rewritten the body ({@see publishElaboration()}), so the two halves are
      * built at different moments and joined here.
      *
-     * @param list<array{origin: string, type: Type}> $terms
-     * @param list<EvidencePlan> $bodyEvidence
+     * @param list<array{origin: string, type: Type}> $termTypes
+     * @param array<int, CheckedTerm> $terms
      */
-    public function withElaboration(array $terms, array $bodyEvidence): self
+    public function withElaboration(array $termTypes, array $terms): self
     {
         return new self(
             $this->name,
@@ -76,8 +78,8 @@ final class CheckedFunction
             $this->scheme,
             $this->evidence,
             $this->residuals,
+            $termTypes,
             $terms,
-            $bodyEvidence,
             $this->parameterKinds,
         );
     }
@@ -96,30 +98,23 @@ final class CheckedFunction
             $this->scheme,
             $evidence,
             $this->residuals,
+            $this->termTypes,
             $this->terms,
-            $this->bodyEvidence,
             $this->parameterKinds,
         );
     }
 
     /**
-     * Evidence plans indexed by their elaboration site.
+     * One term of this elaboration, by its own identity.
      *
-     * The key is the node's object id, preserving identity across checking
-     * and PHP serialization. `origin` provides the external identity; this
-     * index lets lowering find the plan for a node it already holds.
-     * Built once per lowered declaration, not per use.
-     *
-     * @return array<int, EvidencePlan>
+     * This is how lowering resolves a position it is lowering: the node carries
+     * the id the producer wrote, and the record answers with the term that id
+     * names. No object id and no origin-string key stands between them, so a
+     * copied or reparsed node fails loudly instead of answering by position.
      */
-    public function evidencePlanIndex(): array
+    public function term(int $id): ?CheckedTerm
     {
-        $index = [];
-        foreach ($this->bodyEvidence as $plan) {
-            $index[\spl_object_id($plan->site)] = $plan;
-        }
-
-        return $index;
+        return $this->terms[$id] ?? null;
     }
 
     /**
@@ -464,11 +459,11 @@ function parameterKindsFor(TypeCheckState $state, Ast\FunctionDecl $item, Scheme
  *
  * A declaration's own facts are settled at the end of the check, but the body
  * lowering receives is the one left by normalization, which rewrites it (strict
- * IO sequencing, eta-expanded IO bindings). Terms and evidence plans are links
- * into that tree — the plans by site identity — so they are published here, once
- * the tree is final, rather than during checking. Every entry point that lowers
- * a checked program calls this; a record without it is a record of the wrong
- * tree, and lowering refuses an evidence site it cannot plan.
+ * IO sequencing, eta-expanded IO bindings). The terms are built here, once the
+ * tree is final, and each node they elaborate gets its term id — the one link
+ * lowering follows. Every entry point that lowers a checked program calls this;
+ * a record without it is a record of the wrong tree, and lowering refuses an
+ * evidence site it has no term for.
  */
 function publishElaboration(Ast\Program $program): Ast\Program
 {
@@ -495,10 +490,12 @@ function publishElaboration(Ast\Program $program): Ast\Program
 
         assertObligationsSettled($declaration, $core->module);
 
-        $terms = termTypesFor($declaration);
-        $plans = evidencePlansIn($declaration->body);
+        $termTypes = termTypesFor($declaration);
+        // The declaration, not just its body: a parameter pattern is a binding site too, and its
+        // identity has to be published for lowering to register the slot by identity.
+        $terms = checkedTermsIn($declaration);
 
-        $core = $core->withFunction($record->withElaboration($terms, $plans));
+        $core = $core->withFunction($record->withElaboration($termTypes, $terms));
     }
 
     $program->core = $core;

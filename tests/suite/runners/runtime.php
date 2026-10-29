@@ -9,14 +9,14 @@ use Moggi\Backend;
  *
  * @return array{passed: bool, message: string}
  */
-function runExecTest(string $path, string $projectRoot): array
+function runExecTest(string $path, string $projectRoot, string $backend): array
 {
-    $result = runExecTestOnce($path, $projectRoot);
+    $result = runExecTestOnce($path, $projectRoot, $backend);
     if ($result['passed'] !== true || ! \is_file(fixtureBasePath($path) . '.noopt')) {
         return $result;
     }
 
-    $noOpt = runExecTestOnce($path, $projectRoot, noOpt: true);
+    $noOpt = runExecTestOnce($path, $projectRoot, $backend, noOpt: true);
 
     return $noOpt['passed'] === true
         ? $result
@@ -24,11 +24,10 @@ function runExecTest(string $path, string $projectRoot): array
 }
 
 /** @return array{passed: bool, message: string} */
-function runExecTestOnce(string $path, string $projectRoot, bool $noOpt = false): array
+function runExecTestOnce(string $path, string $projectRoot, string $backend, bool $noOpt = false): array
 {
     $name = \basename($path, '.mog');
     $base = fixtureBasePath($path);
-    $backend = Backend\compileBackend();
     $stdoutExpected = runtimeExpectedPath($base, '.stdout.expected', $backend);
     $stderrExpected = runtimeExpectedPath($base, '.stderr.expected', $backend);
     if ($noOpt) {
@@ -631,9 +630,8 @@ function runReplScriptTest(string $scriptPath, string $expectedPath, string $bac
 }
 
 /** @return array{passed: bool, message: string} */
-function runReplCase(string $scriptPath, string $projectRoot): array
+function runReplCase(string $scriptPath, string $projectRoot, string $backend): array
 {
-    $backend = \Moggi\Backend\compileBackend();
     $expected = \preg_replace('/\.script$/', '.' . $backend . '.stdout.expected', $scriptPath)
         ?? ($scriptPath . '.stdout.expected');
     if (! \is_file($expected)) {
@@ -700,8 +698,7 @@ function writeLibBackendOutputs(string $projectRoot, string $backend, ?bool &$bu
         }
 
         $staging = $outDir . '.tmp.' . \getmypid() . '.' . \bin2hex(\random_bytes(4));
-        Backend\setCompileBackend($backend);
-        $outputs = \Moggi\Modules\compileProject(testLibraryFiles($projectRoot), $projectRoot, \Moggi\Pipeline\CompilationContext::for(Backend\compileBackend(), \Moggi\Pipeline\CompilePurpose::Library, sources: testLibraryFiles($projectRoot)));
+        $outputs = \Moggi\Modules\compileProject(testLibraryFiles($projectRoot), $projectRoot, \Moggi\Pipeline\CompilationContext::for($backend, \Moggi\Pipeline\CompilePurpose::Library, sources: testLibraryFiles($projectRoot)));
         foreach ($outputs as $relative => $source) {
             $target = $staging . '/' . $relative;
             @\mkdir(\dirname($target), 0777, true);

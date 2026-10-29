@@ -60,7 +60,6 @@ function runShardMode(array $cases, array $backends, array $pathFilters): int
             continue;
         }
 
-        \Moggi\Backend\setCompileBackend($backend);
         $emit = static function (CaseResult $result) use ($backend): void {
             workerEmitCase($backend, $result);
         };

@@ -6,20 +6,30 @@ while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
 }
 require $root . '/src/compiler.php';
 
+$types = $root . '/src/semantics/types';
+
 /**
  * The source of one top-level function, from its `function name(` to the next.
+ *
+ * The function is looked up across `src/semantics/types/`, not in one named file: the checker's
+ * passes are split by what they do (the walk, evidence, patterns, …), so which file holds a
+ * pass is not something this test should have to know.
  */
-$bodyOf = static function (string $file, string $function): string {
-    $source = \file_get_contents($file);
-    $start = \strpos($source, 'function ' . $function . '(');
-    if ($start === false) {
-        throw new \RuntimeException("function {$function} not found in {$file}");
+$bodyOf = static function (string $function) use ($types): string {
+    foreach (\glob($types . '/*.php') as $file) {
+        $source = \file_get_contents($file);
+        $start = \strpos($source, 'function ' . $function . '(');
+        if ($start === false) {
+            continue;
+        }
+
+        $rest = \substr($source, $start);
+        $end = \strpos($rest, "\nfunction ", 1);
+
+        return $end === false ? $rest : \substr($rest, 0, $end);
     }
 
-    $rest = \substr($source, $start);
-    $end = \strpos($rest, "\nfunction ", 1);
-
-    return $end === false ? $rest : \substr($rest, 0, $end);
+    throw new \RuntimeException("function {$function} not found under {$types}");
 };
 
 /**
@@ -49,13 +59,10 @@ $assert = static function (bool $condition, string $message): void {
     }
 };
 
-$infer = $root . '/src/semantics/types/infer.php';
-$typeCore = $root . '/src/semantics/types/type_core.php';
-
-$guardBody = $bodyOf($infer, 'assertNoPendingConstraintsInExpr');
+$guardBody = $bodyOf('assertNoPendingConstraintsInExpr');
 $guard = $arms($guardBody);
-$resolver = $arms($bodyOf($infer, 'resolvePendingEvidenceInExpr'));
-$zonk = $arms($bodyOf($typeCore, 'zonkInferredTypesInExpr'));
+$resolver = $arms($bodyOf('resolvePendingEvidenceInExpr'));
+$zonk = $arms($bodyOf('zonkInferredTypesInExpr'));
 
 $assert(
     $guard === [] && \str_contains($guardBody, 'walkAstValues('),

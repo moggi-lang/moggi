@@ -1,0 +1,12 @@
+-- A binding with no signature whose numeric type is defaulted: the monomorphism
+-- restriction settles `n` at `Integer`, and `m` follows it. Pins the shape that used to
+-- raise `ClassCastException` at run time on the JVM (boxed value read as the wrong width).
+import System.IO
+
+n = 1 + 1
+m = n + n
+
+main :: IO ()
+main = do
+  putStrLn (show n)
+  putStrLn (show m)

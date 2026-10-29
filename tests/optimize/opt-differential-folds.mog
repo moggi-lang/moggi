@@ -1,0 +1,28 @@
+import Text.Show
+import System.IO
+
+-- Constant arithmetic at a binding, which the optimizer folds: `sumCaf` is a
+-- `ret` of a literal in the optimized IR and two primop calls in the
+-- unoptimized one. Both modes have to print the same thing, so this program is
+-- the differential's constant-folding pair — a fold that computes the wrong
+-- value is visible here and nowhere in the corpus that only folds *through*
+-- another argument.
+
+sumCaf :: Int
+sumCaf = 1 + 2
+
+productCaf :: Int
+productCaf = 7 * 6
+
+differenceCaf :: Int
+differenceCaf = 100 - 1
+
+chain :: Int
+chain = sumCaf + productCaf - differenceCaf
+
+main :: IO ()
+main = do
+  putStrLn (show sumCaf)
+  putStrLn (show productCaf)
+  putStrLn (show differenceCaf)
+  putStrLn (show chain)

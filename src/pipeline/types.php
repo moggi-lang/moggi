@@ -61,7 +61,7 @@ function printModeNames(): array
  * entry point that knows them. Downstream code reads them from the context
  * instead of from process state, so two compilations in one process cannot
  * disagree about what they are compiling or for which backend. `backendById`
- * is a pure registry lookup — it does not consult `setCompileBackend`.
+ * is a pure registry lookup; there is no process-wide selection to consult.
  */
 final class CompilationContext
 {

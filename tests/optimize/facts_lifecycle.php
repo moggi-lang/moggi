@@ -48,7 +48,7 @@ $module = static fn (array $evidence = []): IR\Module => new IR\Module(
         [],
         null,
         new IR\Block([new IR\Ret(new IR\ConstInt(1))]),
-        entryKind: IR\EntryPointKind::Main,
+        new IR\FunctionShape(entryKind: IR\EntryPointKind::Main),
     )],
     [],
     $evidence,
@@ -71,6 +71,51 @@ $check($owner->isEvidence('Main::__ev_Foo_Int'), 'the owner did not answer the q
 $check(! $owner->isEvidence('__ev_Unrelated_9'), 'a name that only looks like evidence was answered as a table');
 specializeAcrossModules([]);
 $check(Facts::installed() === $owner, 'the whole-program run replaced the owner it found instead of restoring it');
+
+// The function facts carry the revision they were published for. A reader that captured the
+// revision before a rewrite cannot read the map afterwards: the map describes the old program.
+$facts = new Facts();
+Facts::install($facts);
+$before = new IR\FunctionDecl(
+    'bump',
+    ['n'],
+    null,
+    new IR\Block([new IR\Ret(new IR\Local('n'))]),
+);
+$after = $before->withBody(new IR\Block([new IR\Ret(new IR\ConstInt(2))]));
+$facts->publishFnsByModule(['Prov' => ['bump' => $before->shape->kind]]);
+$revision = $facts->functionsRevision();
+$check(
+    $facts->fnsIn('Prov', $revision) === ['bump' => $before->shape->kind],
+    'a reader could not read the facts it had just captured the revision of',
+);
+$facts->publishFnsByModule(['Prov' => ['bump' => $after->shape->kind, 'bump2' => $after->shape->kind]]);
+$stale = null;
+try {
+    $facts->fnsIn('Prov', $revision);
+} catch (\LogicException $e) {
+    $stale = $e->getMessage();
+}
+$check($stale !== null, 'a fact set published before the body changed was read after it');
+$check(
+    $stale !== null && \str_contains($stale, 'cannot be read after it'),
+    'the refusal does not say the facts are older than the reader: ' . ($stale ?? '<no failure>'),
+);
+$check(
+    $facts->fnsIn('Prov', $facts->functionsRevision()) === ['bump' => $after->shape->kind, 'bump2' => $after->shape->kind],
+    'a reader at the current revision was refused or answered with the old map',
+);
+$check(
+    $facts->fnsIn('Prov') === ['bump' => $after->shape->kind, 'bump2' => $after->shape->kind],
+    'an unguarded read changed behaviour; it still answers the latest published map',
+);
+$staleExternal = null;
+try {
+    $facts->externalFnsIn('Prov', $revision);
+} catch (\LogicException $e) {
+    $staleExternal = $e->getMessage();
+}
+$check($staleExternal !== null, 'the external-function map answered a pre-rewrite revision');
 Facts::clear();
 $check(Facts::installed() === null, 'clearing an installed owner did not release it');
 

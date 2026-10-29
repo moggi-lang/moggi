@@ -998,8 +998,8 @@ function registerForeignType(TypeCheckState $state, Ast\ForeignTypeDecl $decl): 
 
     if ($decl->backend === $state->compileBackend) {
         match ($decl->backend) {
-            'jvm' => registerJvmForeignType($decl->name, $decl->hostType),
-            'dotnet' => registerDotNetForeignType($decl->name, $decl->hostType),
+            'jvm' => registerJvmForeignType($state->module, $decl->name, $decl->hostType),
+            'dotnet' => registerDotNetForeignType($state->module, $decl->name, $decl->hostType),
             default => null,
         };
     }

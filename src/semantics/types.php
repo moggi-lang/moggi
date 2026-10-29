@@ -31,6 +31,14 @@ require_once __DIR__ . '/types/constraints.php';
 require_once __DIR__ . '/types/literals.php';
 require_once __DIR__ . '/types/instances.php';
 require_once __DIR__ . '/types/infer.php';
+require_once __DIR__ . '/types/declaration_check.php';
+require_once __DIR__ . '/types/signature_syntax.php';
+require_once __DIR__ . '/types/type_syntax.php';
+require_once __DIR__ . '/types/primops.php';
+require_once __DIR__ . '/types/evidence.php';
+require_once __DIR__ . '/types/local_bindings.php';
+require_once __DIR__ . '/types/patterns.php';
+require_once __DIR__ . '/types/records.php';
 require_once __DIR__ . '/types/recursive_declarations.php';
 require_once __DIR__ . '/types/normalize.php';
 require_once __DIR__ . '/types/declarations.php';
@@ -138,6 +146,7 @@ function checkRaw(
 
     $state = newState($source, $filename);
     $state->compileBackend = $backendId;
+    $state->module = $program->module ?? '';
     $state->entryModules = $entryModules;
 
     Registry\applyImportContext($state, $program, $importContext);

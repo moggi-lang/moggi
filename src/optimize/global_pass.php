@@ -769,7 +769,7 @@ function setPropagateCopiesLambdaBodies(array $functions): void
     $propagateCopiesLambdaBodies = [];
     $propagateCopiesLambdaParams = [];
     foreach ($functions as $function) {
-        if ($function->kind->takesCaptures()) {
+        if ($function->shape->kind->takesCaptures()) {
             $propagateCopiesLambdaBodies[$function->name] = $function->body;
             $propagateCopiesLambdaParams[$function->name] = $function->params;
         }

@@ -2,8 +2,6 @@
 
 namespace Moggi\Backend\Php;
 
-use function Moggi\Backend\setCompileBackend;
-
 /**
  * Standalone PHAR builder for the PHP backend.
  *
@@ -37,7 +35,6 @@ if (! \is_dir($outputRoot)) {
 }
 
 try {
-    setCompileBackend('php');
     writePhar($outputRoot, $pharPath, ['entryRelative' => $entryRelative]);
 } catch (\Throwable $e) {
     \fwrite(STDERR, 'error: ' . $e->getMessage() . "\n");

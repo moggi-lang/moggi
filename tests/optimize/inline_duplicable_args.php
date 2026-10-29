@@ -89,7 +89,7 @@ $pe = new IR\FunctionDecl(
     ['p'],
     null,
     new IR\Block([new IR\Ret(new IR\ForeignCall('php', 'call', 'observe', 'static', [new IR\Local('p'), new IR\Local('p')]))]),
-    kind: IR\FunctionKind::SpecClone,
+    new IR\FunctionShape(kind: IR\FunctionKind::SpecClone),
 );
 /** A function that takes a parameter: a reference to it is a value. */
 $closure = new IR\FunctionDecl('takesOne', ['x'], null, new IR\Block([new IR\Ret(new IR\Local('x'))]));

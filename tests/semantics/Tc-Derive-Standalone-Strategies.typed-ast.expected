@@ -2,7 +2,7 @@ program
   data DefFoo a
     constructor DefFoo
       field  :: a
-  function __ev_Eq_DefFoo_Op3d3d :: __Dict_Eq -> DefFoo t0 -> DefFoo t0 -> Bool
+  function __ev_Eq_DefFoo_Op3d3d :: __Dict_Eq -> DefFoo t1 -> DefFoo t1 -> Bool
     pat_var __ev_Eq
     pat_var __l
     pat_var __r
@@ -24,7 +24,7 @@ program
           alt
             pat_wild _
             constructor_ref False
-  function __ev_Eq_DefFoo_Op2f3d :: __Dict_Eq -> DefFoo t0 -> DefFoo t0 -> Bool
+  function __ev_Eq_DefFoo_Op2f3d :: __Dict_Eq -> DefFoo t1 -> DefFoo t1 -> Bool
     pat_var __ev_Eq
     pat_var __l
     pat_var __r
@@ -53,7 +53,7 @@ program
       alt
         pat_con False
         constructor_ref True
-  function __ev_Show_DefFoo_showsPrec :: __Dict_Show -> Int -> DefFoo t21 -> String -> String
+  function __ev_Show_DefFoo_showsPrec :: __Dict_Show -> Int -> DefFoo t23 -> String -> String
     pat_var __ev_Show
     pat_var __d
     pat_var __x
@@ -85,7 +85,7 @@ program
                     variable __f0
                   variable __r
           variable __s
-  function __ev_Show_DefFoo_show :: __Dict_Show -> DefFoo t21 -> String
+  function __ev_Show_DefFoo_show :: __Dict_Show -> DefFoo t23 -> String
     pat_var __ev_Show
     pat_var x
     apply
@@ -95,7 +95,7 @@ program
           evidence_ref Show DefFoo a
         variable x
       string ""
-  function __ev_Show_DefFoo_showList :: __Dict_Show -> [DefFoo t21] -> String -> String
+  function __ev_Show_DefFoo_showList :: __Dict_Show -> [DefFoo t23] -> String -> String
     pat_var __ev_Show
     pat_var ls
     pat_var s
@@ -111,7 +111,7 @@ program
   data StockFoo a
     constructor StockFoo
       field  :: a
-  function __ev_Eq_StockFoo_Op3d3d :: __Dict_Eq -> StockFoo t53 -> StockFoo t53 -> Bool
+  function __ev_Eq_StockFoo_Op3d3d :: __Dict_Eq -> StockFoo t56 -> StockFoo t56 -> Bool
     pat_var __ev_Eq
     pat_var __l
     pat_var __r
@@ -133,7 +133,7 @@ program
           alt
             pat_wild _
             constructor_ref False
-  function __ev_Eq_StockFoo_Op2f3d :: __Dict_Eq -> StockFoo t53 -> StockFoo t53 -> Bool
+  function __ev_Eq_StockFoo_Op2f3d :: __Dict_Eq -> StockFoo t56 -> StockFoo t56 -> Bool
     pat_var __ev_Eq
     pat_var __l
     pat_var __r
@@ -162,7 +162,7 @@ program
       alt
         pat_con False
         constructor_ref True
-  function __ev_Show_StockFoo_showsPrec :: __Dict_Show -> Int -> StockFoo t75 -> String -> String
+  function __ev_Show_StockFoo_showsPrec :: __Dict_Show -> Int -> StockFoo t79 -> String -> String
     pat_var __ev_Show
     pat_var __d
     pat_var __x
@@ -194,7 +194,7 @@ program
                     variable __f0
                   variable __r
           variable __s
-  function __ev_Show_StockFoo_show :: __Dict_Show -> StockFoo t75 -> String
+  function __ev_Show_StockFoo_show :: __Dict_Show -> StockFoo t79 -> String
     pat_var __ev_Show
     pat_var x
     apply
@@ -204,7 +204,7 @@ program
           evidence_ref Show StockFoo a
         variable x
       string ""
-  function __ev_Show_StockFoo_showList :: __Dict_Show -> [StockFoo t75] -> String -> String
+  function __ev_Show_StockFoo_showList :: __Dict_Show -> [StockFoo t79] -> String -> String
     pat_var __ev_Show
     pat_var ls
     pat_var s

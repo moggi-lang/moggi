@@ -409,9 +409,13 @@ final class CodeBuilder
         $this->opcode(0x5f, 0);
     }
 
-    public function getstatic(int $fieldRef): void
+    /**
+     * Push a static field. `$slots` is the field's descriptor width: 2 for a `long`/`double`
+     * field, which is what the max-stack computation and the verifier count, not one value.
+     */
+    public function getstatic(int $fieldRef, int $slots = 1): void
     {
-        $this->opcode(0xb2, 1);
+        $this->opcode(0xb2, $slots);
         $this->code .= u2($fieldRef);
     }
 

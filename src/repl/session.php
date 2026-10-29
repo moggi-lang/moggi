@@ -740,7 +740,7 @@ function typeOfInput(State $state, string $source): string
 function schemeTypeLine(array $ctx, string $name): ?string
 {
     $scheme = $ctx['typedProgram']->exportedInferredSchemes[$name]
-        ?? ($ctx['importContext']->interface->env[$name] ?? null);
+        ?? ($ctx['importContext']->interface->env()[$name] ?? null);
     if (! $scheme instanceof Scheme) {
         return null;
     }

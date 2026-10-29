@@ -122,6 +122,19 @@ abstract class AstNode implements AstWalkable
 
     public ?TypeNode $inferredType = null;
 
+    /**
+     * The id of the checked term this node elaborates to, in its declaration's
+     * elaboration.
+     *
+     * Written once, by {@see \Moggi\Modules\publishElaboration()} on the final
+     * elaboration, and read once, by lowering, to find the term at this position
+     * ({@see \Moggi\Modules\CheckedTerm}). Lowering reads the term and never the
+     * node's copy of the same facts, so the node is a link and not a second
+     * authority. Null on a tree that was parsed and not checked, and on a node
+     * whose shape no published family covers.
+     */
+    public ?int $checkedTerm = null;
+
     /** Doc comment attached by the parser (`-- |`, `{-|`, `-- ^`). */
     public ?string $doc = null;
 
@@ -1298,6 +1311,15 @@ final class EvidenceMethod extends AstNode
     ) {
         parent::__construct($line, $col, $endCol);
     }
+
+    /**
+     * The id of the checked term this node elaborates to.
+     *
+     * Written once, by {@see \Moggi\Modules\publishElaboration()} on the final
+     * elaboration; lowering follows it to the term and reads the term, never this
+     * node's evidence fields. Null on a tree that was parsed and not checked.
+     */
+    public ?int $checkedTerm = null;
 }
 
 final class ForeignCall extends AstNode
@@ -1329,16 +1351,48 @@ final class ForeignCall extends AstNode
     }
 }
 
-final class IoAction extends AstNode
+/**
+ * One of the four expressions a `do` statement (or a `do` body) can be.
+ *
+ * The marker is the single answer to "may a form have been published for this node?": the checker
+ * fills `$ioForm` on every node carrying it ({@see \Moggi\Semantics\IoEscape\analyze}), and the IR
+ * spine reads that field instead of asking what the node's class is.
+ */
+interface IoStatementExpression
 {
+}
+
+/**
+ * What the checker publishes on an IO statement's node: the two answers lowering used to re-derive.
+ *
+ * A statement *expression* (`IoPure`, `IoCase`, `IoSequence`, `IoAction`) carries `$ioForm` — run or
+ * value. A `do` statement (`IoLet`, `IoLetAction`, `IoBind`, `IoExpr`) carries `$ioKind` — what it does
+ * with its expression. Both are written once, where the type and the `let`-bound actions in scope are
+ * both known ({@see \Moggi\Semantics\IoEscape}), and read once, by lowering. One carrier, because
+ * they are one question asked at two levels of the same construct.
+ */
+trait PublishesIoForm
+{
+    public ?\Moggi\IR\IoStatementForm $ioForm = null;
+
+    public ?\Moggi\IR\IoStatementKind $ioKind = null;
+}
+
+
+final class IoAction extends AstNode implements IoStatementExpression
+{
+    use PublishesIoForm;
+
     public function __construct(public AstNode $expr, int $line = 0, int $col = 0, int $endCol = 0)
     {
         parent::__construct($line, $col, $endCol);
     }
 }
 
-final class IoSequence extends AstNode
+final class IoSequence extends AstNode implements IoStatementExpression
 {
+    use PublishesIoForm;
+
     /** @param list<AstNode> $stmts */
     public function __construct(public array $stmts, int $line = 0, int $col = 0, int $endCol = 0)
     {
@@ -1348,6 +1402,9 @@ final class IoSequence extends AstNode
 
 final class IoLet extends AstNode
 {
+    use PublishesIoForm;
+
+
     /** @param list<Binding> $bindings */
     public function __construct(public array $bindings, int $line = 0, int $col = 0, int $endCol = 0)
     {
@@ -1357,7 +1414,8 @@ final class IoLet extends AstNode
 
 final class IoLetAction extends AstNode
 {
-    public bool $ioFoldHint = false;
+    use PublishesIoForm;
+
 
     public function __construct(
         public AstNode $pattern,
@@ -1372,6 +1430,9 @@ final class IoLetAction extends AstNode
 
 final class IoBind extends AstNode
 {
+    use PublishesIoForm;
+
+
     public function __construct(
         public AstNode $pattern,
         public AstNode $expr,
@@ -1385,22 +1446,29 @@ final class IoBind extends AstNode
 
 final class IoExpr extends AstNode
 {
+    use PublishesIoForm;
+
+
     public function __construct(public AstNode $expr, int $line = 0, int $col = 0, int $endCol = 0)
     {
         parent::__construct($line, $col, $endCol);
     }
 }
 
-final class IoPure extends AstNode
+final class IoPure extends AstNode implements IoStatementExpression
 {
+    use PublishesIoForm;
+
     public function __construct(public AstNode $expr, int $line = 0, int $col = 0, int $endCol = 0)
     {
         parent::__construct($line, $col, $endCol);
     }
 }
 
-final class IoCase extends AstNode
+final class IoCase extends AstNode implements IoStatementExpression
 {
+    use PublishesIoForm;
+
     /** @param list<Alt> $alts */
     public function __construct(
         public AstNode $scrutinee,

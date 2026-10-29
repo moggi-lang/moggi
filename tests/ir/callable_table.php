@@ -119,7 +119,7 @@ if ($choose !== null) {
 
 $lambda = null;
 foreach ($module->functions as $function) {
-    if ($function->kind === IR\FunctionKind::Lambda) {
+    if ($function->shape->kind === IR\FunctionKind::Lambda) {
         $lambda = $function;
     }
 }
@@ -403,7 +403,7 @@ $captured = new IR\FunctionDecl(
     [],
     null,
     new IR\Block([new IR\Ret(new IR\Local('c'))]),
-    kind: IR\FunctionKind::Lambda,
+    new IR\FunctionShape(kind: IR\FunctionKind::Lambda),
 );
 $bareReference = new IR\FunctionDecl(
     'bareCaller',
@@ -622,7 +622,7 @@ $ownTable = Callables\table([
         [],
         null,
         new IR\Block([new IR\Ret(new IR\Unit())]),
-        kind: IR\FunctionKind::Source,
+        new IR\FunctionShape(kind: IR\FunctionKind::Source),
     ),
 ], 'Main');
 $check(
@@ -669,7 +669,7 @@ $check(
 
 $scopeInterface = (new \Moggi\Modules\ImportInterface(
     'Main',
-    externalFns: ['importedEntry' => 'Prov::importedEntry'],
+    symbols: ['importedEntry' => new \Moggi\Modules\ImportSymbol('Prov::importedEntry')],
 ))->withClassScopeRefs(
     [
         'externalFns' => ['importedEntry' => 'Prov::importedEntry'],
@@ -678,12 +678,30 @@ $scopeInterface = (new \Moggi\Modules\ImportInterface(
     [],
 );
 $check(
-    ($scopeInterface->externalFnRuntimeArity['importedEntry'] ?? null) === 2,
+    ($scopeInterface->externalFnRuntimeArity()['importedEntry'] ?? null) === 2,
     'a class-scope reference published a layout the runtime arities do not carry',
 );
 $check(
     ($scopeInterface->callableArity()['importedEntry'] ?? null) === 2,
     'a class-scope reference published an arity the layout check cannot see',
+);
+
+// A class-scope entry that both answers with an action and has a worker: the two facts are written
+// by different loops over the same table, so the second must extend the record the first wrote
+// rather than a copy of it.
+$scoped = (new \Moggi\Modules\ImportInterface('Main'))->withClassScopeRefs(
+    [
+        'externalFns' => ['entry' => 'Prov::entry'],
+        'callables' => ['entry' => ['evidence' => 0, 'params' => 0, 'arity' => 0]],
+        'actionReturn' => ['entry' => true],
+        'workers' => ['entry' => 'Prov::__w_entry'],
+    ],
+    [],
+);
+$check(
+    isset($scoped->actionReturn()['entry']) && ($scoped->workers()['entry'] ?? null) === 'Prov::__w_entry',
+    'the class-scope fold lost one of two facts written for the same entry: '
+        . \json_encode(['actionReturn' => $scoped->actionReturn(), 'workers' => $scoped->workers()]),
 );
 
 $scopeCaller = new IR\FunctionDecl(

@@ -44,15 +44,15 @@ $target = new IR\FunctionDecl(
 $clone = cloneSpecializedFunction($target, '__spec_0123456789abcdef01234567', [], $target->name);
 $renamed = cloneSpecializedFunction($target, 'q', [], $target->name);
 
-$check($clone->kind === IR\FunctionKind::SpecClone, 'a clone is not SpecClone');
-$check($clone->origin === 'originFn', 'a clone does not carry its declaration origin');
-$check($renamed->origin === 'originFn', 'renaming a clone changed its origin');
+$check($clone->shape->kind === IR\FunctionKind::SpecClone, 'a clone is not SpecClone');
+$check($clone->shape->origin === 'originFn', 'a clone does not carry its declaration origin');
+$check($renamed->shape->origin === 'originFn', 'renaming a clone changed its origin');
 $check(
     ! \str_contains($clone->name, 'originFn') && ! \str_contains($renamed->name, 'originFn'),
     'a clone name embeds the origin callable',
 );
 $check(
-    $clone->withBody(new IR\Block([new IR\Ret(new IR\ConstInt(2))]))->origin === 'originFn',
+    $clone->withBody(new IR\Block([new IR\Ret(new IR\ConstInt(2))]))->shape->origin === 'originFn',
     'withBody dropped the origin',
 );
 
@@ -69,7 +69,7 @@ $partialClone = cloneSpecializedFunction(
 );
 $wrapped = specializePartialReturnFunction($partialClone);
 $check(
-    $wrapped->kind === IR\FunctionKind::SpecClone && $wrapped->origin === 'originFn',
+    $wrapped->shape->kind === IR\FunctionKind::SpecClone && $wrapped->shape->origin === 'originFn',
     'a partial-apply wrapper dropped the clone identity',
 );
 

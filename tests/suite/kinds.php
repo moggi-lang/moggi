@@ -160,7 +160,7 @@ function runFixtureCase(TestCase $case, string $backend, string $projectRoot): a
         assertSameOutput($case->name, $golden, testKindSnapshot($kind, $case->input, $backend), $kind);
     }
 
-    return runProgramVerdict($case);
+    return runProgramVerdict($case, $backend);
 }
 
 /** @return array{passed: bool, message: string} */
@@ -182,19 +182,19 @@ function runProjectCase(TestCase $case, string $backend, string $projectRoot): a
  *
  * @return array{passed: bool, message: string}
  */
-function runProgramVerdict(TestCase $case): array
+function runProgramVerdict(TestCase $case, string $backend): array
 {
-    if ($case->goldenBeside($case->base(), 'stdout', Backend\compileBackend()) === null
-        && $case->goldenBeside($case->base(), 'stderr', Backend\compileBackend()) === null
+    if ($case->goldenBeside($case->base(), 'stdout', $backend) === null
+        && $case->goldenBeside($case->base(), 'stderr', $backend) === null
         && ! \is_file($case->base() . '.exec.php')) {
         return ['passed' => true, 'message' => ''];
     }
 
     if (\str_ends_with($case->input, '.script')) {
-        return runReplCase($case->input, MOGGI_PROJECT_ROOT);
+        return runReplCase($case->input, MOGGI_PROJECT_ROOT, $backend);
     }
 
-    return runExecTest($case->input, MOGGI_PROJECT_ROOT);
+    return runExecTest($case->input, MOGGI_PROJECT_ROOT, $backend);
 }
 
 /**

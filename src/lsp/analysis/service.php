@@ -855,7 +855,7 @@ final class AnalysisService
             return [];
         }
 
-        return $interface->externalFns;
+        return $interface->externalFns();
     }
 
     /**

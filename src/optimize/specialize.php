@@ -235,7 +235,7 @@ function activateSpecializeWorld(array $modules, array $externalFnsByModule): ar
     foreach ($modules as $moduleName => $module) {
         foreach ($module->functions as $function) {
             $short = $function->name;
-            $fnsByModule[$moduleName][$short] = $function->kind;
+            $fnsByModule[$moduleName][$short] = $function->shape->kind;
             $qualified = resolvedSymbol($moduleName, $short);
             $entry = [
                 'module' => $moduleName,
@@ -301,7 +301,7 @@ function specializeOneRootModule(
             continue;
         }
 
-        if ($function->ioStraightLine) {
+        if ($function->shape->ioStraightLine) {
             $resolved = resolveConcreteDictCallsInItems($function->body->items);
             if ($resolved['changed']) {
                 $moduleChanged = true;
@@ -415,7 +415,7 @@ function collectNullaryCtorCafs(array $modules, array $externalFnsByModule = [])
     foreach ($modules as $moduleName => $module) {
         $externals = $externalFnsByModule[$moduleName] ?? [];
         foreach ($module->functions as $function) {
-            if ($function->params !== [] || $function->foreign) {
+            if ($function->params !== [] || $function->shape->foreign) {
                 continue;
             }
             $tree = cafRetToCtorTree(denseStmtItems($function->body->items), $moduleName, $externals);
@@ -527,7 +527,7 @@ function optimizeSpecializationRoots(array &$modules, array $rootNames, int $pas
     $fnsByModule = [];
     foreach ($modules as $moduleName => $module) {
         foreach ($module->functions as $function) {
-            $fnsByModule[$moduleName][$function->name] = $function->kind;
+            $fnsByModule[$moduleName][$function->name] = $function->shape->kind;
         }
         registerModuleConstructorNames($fnsByModule, $moduleName, $module);
     }
@@ -840,6 +840,10 @@ function specializeItems(
     int &$specializations,
     int &$cacheHits,
 ): array {
+    // Captured once per body: a rewrite that republishes the module's functions while this body is
+    // being specialized changes the revision, and the reads below refuse instead of answering with
+    // facts from the pre-rewrite program.
+    $factsRevision = Facts::current()->functionsRevision();
     $out = [];
     $changed = false;
     /** @var array<int, IR\Operand> $concreteTemps */
@@ -919,6 +923,7 @@ function specializeItems(
                 $args,
                 $selfName,
                 $moduleName,
+                $factsRevision,
                 $localNames,
                 $globalIndex,
                 $cache,
@@ -1218,6 +1223,7 @@ function resolveSpecializedCallee(
     array $args,
     string $selfName,
     string $moduleName,
+    int $factsRevision,
     array &$localNames,
     array &$globalIndex,
     array &$cache,
@@ -1245,10 +1251,10 @@ function resolveSpecializedCallee(
     }
 
     $target = $targetInfo['function'];
-    if ($target->kind !== IR\FunctionKind::Source) {
+    if ($target->shape->kind !== IR\FunctionKind::Source) {
         return null;
     }
-    if ($target->foreign || $target->ioEffect || ! isSpecializeCandidate($target)) {
+    if ($target->shape->foreign || $target->shape->ioEffect || ! isSpecializeCandidate($target)) {
         return null;
     }
 
@@ -1300,9 +1306,9 @@ function resolveSpecializedCallee(
         $clone,
         $targetInfo['module'],
         $moduleName,
-        Facts::current()->fnsIn($targetInfo['module']),
+        Facts::current()->fnsIn($targetInfo['module'], $factsRevision),
         $localNames,
-        Facts::current()->externalFnsIn($targetInfo['module']),
+        Facts::current()->externalFnsIn($targetInfo['module'], $factsRevision),
     );
     $resolved = resolveConcreteDictCallsInItems($clone->body->items);
     if ($resolved['changed']) {
@@ -1627,21 +1633,21 @@ function cloneSpecializedFunction(
         }
     }
 
+    // A clone is reachable only through its call sites, so it resets the reachability traits; it
+    // keeps the target's action shape and records where it came from.
     return new IR\FunctionDecl(
         $specName,
         $params,
         null,
         new IR\Block(denseStmtItems($out)),
-        false,
-        false,
-        null,
-        $target->ioEffect,
-        $target->ioStraightLine,
-        false,
-        $target->actionConvention,
+        new IR\FunctionShape(
+            actionConvention: $target->shape->actionConvention,
+            ioEffect: $target->shape->ioEffect,
+            ioStraightLine: $target->shape->ioStraightLine,
+            kind: IR\FunctionKind::SpecClone,
+            origin: $origin,
+        ),
         $target->srcLoc,
-        IR\FunctionKind::SpecClone,
-        $origin,
     );
 }
 
@@ -1950,7 +1956,7 @@ function hoistSpecializeEvidenceCafs(array &$modules, array $rootNames): void
         $newFunctions = [];
         $addedCafs = [];
         foreach ($module->functions as $fn) {
-            if ($fn->kind !== IR\FunctionKind::SpecClone) {
+            if ($fn->shape->kind !== IR\FunctionKind::SpecClone) {
                 $newFunctions[] = $fn;
 
                 continue;
@@ -1992,7 +1998,7 @@ function hoistEvidenceCafsInFunction(IR\FunctionDecl $function, array &$existing
                 [],
                 null,
                 new IR\Block([new IR\Call($item->callee, $item->args, 0, $item->srcLoc), new IR\Ret(new IR\Temp(0))]),
-                kind: IR\FunctionKind::Generated,
+                new IR\FunctionShape(kind: IR\FunctionKind::Generated),
             );
             $existingNames[$cafName] = true;
             $out[] = new IR\Call($cafName, [], $item->dest, $item->srcLoc);

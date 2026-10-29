@@ -5,9 +5,7 @@
  * `kinds.php` picks the producer by the golden's kind.
  */
 
-use function Moggi\Backend\compileBackend;
 use function Moggi\Backend\Php\Codegen\emit;
-use function Moggi\Backend\setCompileBackend;
 
 use function Moggi\Compiler\compileFile;
 use function Moggi\IR\Dump\dump as dumpIr;
@@ -53,7 +51,7 @@ function sourceStageDump(string $path, string $stage, ?string $backend = null): 
 /** The unoptimized IR of a `.mog` fixture, as the lowering golden stores it (backend-neutral). */
 function irLoweringDump(string $path): string
 {
-    $actual = withCompileBackend('php', static fn () => compileFile($path, 'ir', false));
+    $actual = compileFile($path, 'ir', false);
     if (! \is_string($actual)) {
         throw new TestFailure('lowering dump unexpectedly produced multiple artifacts');
     }
@@ -66,7 +64,7 @@ function optimizedIrDump(string $path): string
 {
     $module = loadIrFixture($path);
 
-    return withCompileBackend('php', static fn (): string => dumpIr(optimize($module)));
+    return dumpIr(optimize($module));
 }
 
 /** The PHP module `emit` produces for an IR fixture, with the source map dropped. */
@@ -114,15 +112,3 @@ function loadIrFixture(string $path): \Moggi\IR\Module
     return moduleFromArray($fixture['module']);
 }
 
-/** Run $body with the compile backend pinned: stage goldens are backend-neutral. */
-function withCompileBackend(string $backend, callable $body): mixed
-{
-    $previous = compileBackend();
-    setCompileBackend($backend);
-
-    try {
-        return $body();
-    } finally {
-        setCompileBackend($previous);
-    }
-}

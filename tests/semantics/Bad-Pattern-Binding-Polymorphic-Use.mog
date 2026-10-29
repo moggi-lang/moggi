@@ -1,0 +1,11 @@
+-- A pattern binding is monomorphic, so `use :: Num a => a` cannot be implemented by
+-- `count = 1 + 1`: the binding was compiled for one `Num` type and `use` promises every one.
+-- This used to exhaust memory inside `unify()` (each variable refused to be the one bound),
+-- and pinning the binding to `use`'s skolem instead let `use` be used at `Double` while the
+-- binding's code produced an `Int`, which is a run-time cast failure on the JVM.
+import Data.Num
+
+count = 1 + 1
+
+use :: Num a => a
+use = count

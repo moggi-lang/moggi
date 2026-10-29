@@ -278,15 +278,54 @@ try {
         'the foreign import\'s record states a closed scheme and no dictionaries',
     );
 
+    // The foreign call is a term of its own: the host target the checker resolved is
+    // the record's, not the node's.
+    $foreignSites = [];
+    foreach ($program->items as $item) {
+        if (! $item instanceof Ast\FunctionDecl || ! $item->foreign) {
+            continue;
+        }
+        Modules\walkElaboration($item->body, static function (Ast\AstNode $node) use (&$foreignSites): void {
+            if ($node instanceof Ast\ForeignCall) {
+                $foreignSites[] = $node;
+            }
+        });
+    }
+    $assert($foreignSites !== [], 'the foreign import has no `ForeignCall` body');
+    $foreignTerm = null;
+    foreach ($foreignSites as $site) {
+        $term = $site->checkedTerm === null ? null : $foreign?->term($site->checkedTerm);
+        $assert(
+            $term instanceof Modules\CheckedForeignCall,
+            'the foreign call at line ' . $site->line . ' is not published as a term',
+        );
+        $foreignTerm = $term;
+    }
+    $assert(
+        $foreignTerm !== null
+        && $foreignTerm->name === 'hostLength'
+        && $foreignTerm->backend === 'php'
+        && $foreignTerm->path === 'strlen'
+        && $foreignTerm->nativeSig === null,
+        'the foreign term does not carry the host target the import resolved: '
+            . \json_encode($foreignTerm === null ? null : [
+                'name' => $foreignTerm->name,
+                'backend' => $foreignTerm->backend,
+                'path' => $foreignTerm->path,
+                'nativeSig' => $foreignTerm->nativeSig,
+            ]),
+    );
+
     // The product is what lowering reads: scrubbing every recorded body's own
     // evidence fields changes no IR, because the plans are the authority.
-    $pristine = IR\Dump\dump(IR\lower($program, $program->interface->data, $path));
+    $pristine = IR\Dump\dump(IR\lower($program, $program->interface->data(), $path));
     $scrubbed = 0;
+    $scrubbedForeign = 0;
     foreach ($program->items as $item) {
         if (! $item instanceof Ast\FunctionDecl || $core->function($item->name) === null) {
             continue;
         }
-        Modules\walkElaboration($item->body, static function (Ast\AstNode $node) use (&$scrubbed): void {
+        Modules\walkElaboration($item->body, static function (Ast\AstNode $node) use (&$scrubbed, &$scrubbedForeign): void {
             if ($node instanceof Ast\EvidenceMethod) {
                 $node->class = 'Scrubbed';
                 $node->evidence = 'scrubbed';
@@ -300,11 +339,26 @@ try {
                 $node->class = 'Scrubbed';
                 $node->context = [];
                 ++$scrubbed;
+
+                return;
+            }
+            if ($node instanceof Ast\ForeignCall) {
+                $node->name = 'scrubbed';
+                $node->path = 'scrubbed';
+                $node->classPath = 'scrubbed';
+                $node->member = 'scrubbed';
+                $node->nativeSig = '(scrubbed)scrubbed';
+                $node->handleUnboxArgs = [];
+                ++$scrubbedForeign;
             }
         });
     }
     $assert($scrubbed > 0, 'the fixture elaborated no evidence site, so the scrub proved nothing');
-    $after = IR\Dump\dump(IR\lower($program, $program->interface->data, $path));
+    $assert(
+        $scrubbedForeign > 0,
+        'the fixture elaborated no foreign call, so the scrub said nothing about that family',
+    );
+    $after = IR\Dump\dump(IR\lower($program, $program->interface->data(), $path));
     $assert(
         $after === $pristine,
         "lowering reads the elaborated nodes' evidence fields in a category declaration:\n"

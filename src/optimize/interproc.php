@@ -97,7 +97,7 @@ function lookupIndexedFunction(array $index, string $callee): ?IR\FunctionDecl
 
     $leaf = specializationLookupNameSafe($callee);
     if ($leaf !== $callee && (
-        (isset($index[$leaf]) && $index[$leaf]->kind === IR\FunctionKind::SpecClone)
+        (isset($index[$leaf]) && $index[$leaf]->shape->kind === IR\FunctionKind::SpecClone)
         || Facts::current()->isEvidence($leaf)
     )) {
         if (isset($index[$leaf])) {
@@ -139,7 +139,7 @@ function inlineFunctionsRounds(array $functions, string $moduleName = ''): array
         Facts::current()->publishInlineTargetBound($boundNames);
 
         foreach ($functions as $function) {
-            if ($function->ioStraightLine) {
+            if ($function->shape->ioStraightLine) {
                 $next[] = $function;
 
                 continue;
@@ -649,7 +649,7 @@ function isCapturedLambdaArg(IR\Operand $arg, array $index): bool
     }
 
     $lambda = $index[$arg->name] ?? null;
-    if ($lambda === null || ! $lambda->kind->takesCaptures()) {
+    if ($lambda === null || ! $lambda->shape->kind->takesCaptures()) {
         return false;
     }
 
@@ -681,7 +681,7 @@ function bodyReferencesCapturedLambdas(IR\FunctionDecl $function, array $index):
             ?? $index[specializationLookupNameSafe($name)]
             ?? lookupIndexedFunction($index, $name);
 
-        return $lambda !== null && $lambda->kind->takesCaptures();
+        return $lambda !== null && $lambda->shape->kind->takesCaptures();
     };
     $names = collectLambdaRefsInBlock($function->body, $leafCaptured);
     walkBlock(
@@ -914,7 +914,7 @@ function foldListIntrinsicExpr(string $name, array $args): ?IR\Operand
  */
 function inlineIsLegal(IR\FunctionDecl $function): bool
 {
-    if ($function->foreign || $function->kind->takesCaptures()) {
+    if ($function->shape->foreign || $function->shape->kind->takesCaptures()) {
         return false;
     }
 
@@ -979,7 +979,7 @@ function inlineIsWorthwhile(IR\FunctionDecl $function): bool
  */
 function isMatchWrapperBody(IR\FunctionDecl $function): bool
 {
-    if ($function->foreign || $function->ioEffect || $function->kind->takesCaptures()) {
+    if ($function->shape->foreign || $function->shape->ioEffect || $function->shape->kind->takesCaptures()) {
         return false;
     }
 
@@ -1602,7 +1602,7 @@ function inlineStmt(
 /** @param IR\FunctionDecl $lambda */
 function isSimpleLambda(IR\FunctionDecl $lambda): bool
 {
-    if ($lambda->kind !== IR\FunctionKind::Lambda || \count($lambda->params) !== 1) {
+    if ($lambda->shape->kind !== IR\FunctionKind::Lambda || \count($lambda->params) !== 1) {
         return false;
     }
 
@@ -1674,11 +1674,11 @@ function estimateStmtExprSize(IR\Stmt $stmt): int
 
 function isPeFusionInlineCandidate(IR\FunctionDecl $function): bool
 {
-    if ($function->foreign || $function->ioEffect) {
+    if ($function->shape->foreign || $function->shape->ioEffect) {
         return false;
     }
 
-    if ($function->kind !== IR\FunctionKind::SpecClone) {
+    if ($function->shape->kind !== IR\FunctionKind::SpecClone) {
         return false;
     }
 

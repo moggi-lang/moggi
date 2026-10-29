@@ -61,11 +61,11 @@ function eliminateIntrinsicWrappers(IR\Module $module): IR\Module
  */
 function intrinsicWrapperSpec(IR\FunctionDecl $function): ?array
 {
-    if (! ($function->instanceMethod)) {
+    if (! ($function->shape->instanceMethod)) {
         return null;
     }
 
-    if ($function->export) {
+    if ($function->shape->export) {
         return null;
     }
 

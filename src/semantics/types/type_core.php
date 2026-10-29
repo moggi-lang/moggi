@@ -268,6 +268,64 @@ function instantiate(TypeCheckState $state, Scheme $scheme): Type
     return instantiateScheme($state, $scheme)['type'];
 }
 
+/**
+ * The scheme a spelling means at this point, resolved by binder identity.
+ *
+ * The scope frame decides *which* binder a name means, once; the environment is keyed by that
+ * identity, so the answer cannot come from a same-spelling neighbour and a shadowed binding is its
+ * own entry. Null means “no local binder of this spelling is in scope”, which is the module/import
+ * case and nothing else — a local binder with no stored scheme is a producer bug and throws rather
+ * than falling back to a name lookup.
+ *
+ * @param array<int|string, Scheme> $env
+ */
+function resolveBinderScheme(TypeCheckState $state, string $name, array $env): ?Scheme
+{
+    $binder = $state->resolveBinder($name);
+    if ($binder === null) {
+        return null;
+    }
+
+    return $env[binderKey($binder)] ?? throw new \LogicException(
+        "the checker resolved `{$name}` to binder {$binder}, which holds nothing in this environment",
+    );
+}
+
+/**
+ * The environment key a local binder's scheme is stored under.
+ *
+ * An environment answers two kinds of question: what a module or imported spelling means, and what a
+ * local binder means. The second is keyed by the identity the checker allocated, never by the
+ * spelling.
+ *
+ * The key is opaque on purpose. A plain integer is silently renumbered by a PHP array spread
+ * (`[...$env, ...$more]`), which moves every binders' entry to a different number and lets a use
+ * resolve to a neighbour's scheme; a key no spelling can be is also a key no name lookup can find.
+ * A key of this shape survives merging, spreading and copying unchanged, so the two kinds of entry
+ * cannot be confused by the container itself.
+ */
+function binderKey(int $binder): string
+{
+    return "\0binder\0" . $binder;
+}
+
+/**
+ * The spellings an environment can answer for by name (module and imported entries).
+ *
+ * Local binders are stored under {@see binderKey()}, so they are not names a diagnostic can suggest;
+ * filtering here is what keeps "did you mean" from proposing a binder.
+ *
+ * @param array<string, Scheme> $env
+ * @return list<string>
+ */
+function visibleEnvNames(array $env): array
+{
+    return \array_values(\array_filter(
+        \array_keys($env),
+        static fn (int|string $key): bool => ! \str_starts_with((string) $key, "\0"),
+    ));
+}
+
 /** @param array<string, Scheme> $env @return array<string, true> */
 
 function envFreeVars(array $env): array
@@ -638,6 +696,25 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
 
                 return;
             }
+            if (isset($state->restrictedVars[$left->name]) && $rightRigid) {
+                // `use :: Num a => a; use = count` with `count` a pattern binding. Neither side can
+                // be the one bound: a rigid variable is never bound, and a restricted one has to stay
+                // free for the module end to settle it. Pinning the binding to the skolem anyway
+                // would let `use` be used at a different `Num` type than the binding was compiled
+                // for (a boxed `Int` where a `Double` was promised — a run-time cast failure), so
+                // the equality is refused here instead.
+                $rename = friendlyTypeVarNames([$left, $right]);
+                throw typeFail(
+                    $state,
+                    'the pattern binding\'s type would have to be the rigid type variable `'
+                        . typeToString($right, $rename)
+                        . '`; give the binding a signature',
+                    $at,
+                    'unify',
+                );
+            }
+            // A restricted variable is kept free so the module end can settle it from its use
+            // sites, so the ordinary variable is the one bound.
             if (isset($state->restrictedVars[$left->name]) && ! isset($state->restrictedVars[$right->name])) {
                 unify($state, $right, $left, $at);
 

@@ -87,6 +87,7 @@ final class PhpBackend implements Backend
         string $kind,
         array $pathInfo,
         string $name,
+        ?string $module = null,
     ): ?string {
         return null;
     }

@@ -83,7 +83,7 @@ try {
             . ' ordinary functions, got: ' . \implode(', ', $names),
     );
 
-    $cold = IR\Dump\dump(IR\lower($program, $program->interface->data, $path));
+    $cold = IR\Dump\dump(IR\lower($program, $program->interface->data(), $path));
     $assert(\str_contains($cold, 'scaled'), 'the cold lowering produced no `scaled`');
 
     $relPath = 'checked-core-cache-test/' . \bin2hex(\random_bytes(6));
@@ -109,8 +109,18 @@ try {
         'the cached record lost the evidence vector',
     );
     $assert(
-        \count($roundCore->function('scaled')?->bodyEvidence ?? []) === \count($core->function('scaled')?->bodyEvidence ?? []),
-        'the cached record lost the body evidence plans',
+        \count($roundCore->function('scaled')?->terms ?? []) === \count($core->function('scaled')?->terms ?? []),
+        'the cached record lost the evidence terms',
+    );
+    // A term's identity is its own id, not an object id: it must survive the cache round-trip and
+    // still be the key the lowering resolves through.
+    $termIds = static fn (CheckedCore $core): array => \array_map(
+        static fn ($term): string => $term::class . '#' . $term->id->value . '@' . $term->origin,
+        $core->function('scaled')?->terms ?? [],
+    );
+    $assert(
+        $termIds($roundCore) === $termIds($core),
+        'the cached record moved a term\'s identity: ' . \json_encode([$termIds($core), $termIds($roundCore)]),
     );
     $assert(
         ($core->function('scaled')?->parameterKinds ?? []) === ['a' => 'Type'],
@@ -123,7 +133,7 @@ try {
             . \json_encode($roundCore->function('scaled')?->parameterKinds),
     );
 
-    $warm = IR\Dump\dump(IR\lower($round, $round->interface->data, $path));
+    $warm = IR\Dump\dump(IR\lower($round, $round->interface->data(), $path));
     $assert(
         $warm === $cold,
         "IR differs between the checked program and the same program read back from the module cache:\n"

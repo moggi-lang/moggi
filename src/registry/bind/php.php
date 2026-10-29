@@ -9,6 +9,7 @@ use ReflectionFunction;
 use ReflectionFunctionAbstract;
 use ReflectionNamedType;
 use ReflectionType;
+use ReflectionUnionType;
 
 use function Moggi\Backend\DotNet\Dependencies\dotNetSidecarDiscriminator;
 use function Moggi\Backend\Php\Dependencies\phpDeclaredSymbols;

@@ -236,7 +236,7 @@ try {
                 . Types\typeToString($countdown->scheme->type),
         );
         $check(
-            $countdown->terms !== [],
+            $countdown->termTypes !== [],
             'the recursive record publishes no term types for its own body',
         );
     }
@@ -255,7 +255,15 @@ try {
             \count($sumDown->evidence) === $sumDown->scheme->runtimeConstraintCount,
             'the recursive record\'s vector does not match the scheme it publishes',
         );
-        $planKinds = \array_map(static fn ($plan): string => $plan->kind->name, $sumDown->bodyEvidence);
+        // The record's term list holds every published family, so this reads the
+        // evidence terms only; the primop family is pinned by
+        // `semantics/checked_intrinsic_terms`.
+        $evidenceTerms = \array_filter(
+            $sumDown->terms,
+            static fn (Modules\CheckedTerm $term): bool => $term instanceof Modules\CheckedEvidenceRef
+                || $term instanceof Modules\CheckedEvidenceMethod,
+        );
+        $planKinds = \array_values(\array_map(static fn ($term): string => $term->plan->kind->name, $evidenceTerms));
         $check(
             $planKinds === ['Parameter', 'Parameter'],
             'every evidence site of the recursive body is planned, got: ' . \implode(', ', $planKinds),
@@ -340,10 +348,10 @@ try {
             'the record names its declaration by origin, got: ' . $twice->origin,
         );
 
-        $check($twice->terms !== [], 'the elaboration published no term types');
+        $check($twice->termTypes !== [], 'the elaboration published no term types');
         $termsWellFormed = true;
         $ownResult = false;
-        foreach ($twice->terms as $term) {
+        foreach ($twice->termTypes as $term) {
             if (\preg_match('/^[^:]+:\d+:\d+:\d+$/', $term['origin']) !== 1) {
                 $termsWellFormed = false;
             }
@@ -425,7 +433,7 @@ try {
     foreach ($core?->functions ?? [] as $name => $record) {
         $termsBefore[$name] = \array_map(
             static fn (array $term): string => $term['origin'] . ' => ' . Types\typeToString($term['type']),
-            $record->terms,
+            $record->termTypes,
         );
     }
     $check($termsBefore !== [] && $termsBefore['twice'] !== [], 'the fixture published no term table to compare');
@@ -452,7 +460,7 @@ try {
     foreach ($termsBefore as $name => $expected) {
         $after = \array_map(
             static fn (array $term): string => $term['origin'] . ' => ' . Types\typeToString($term['type']),
-            $program->core?->function($name)?->terms ?? [],
+            $program->core?->function($name)?->termTypes ?? [],
         );
         $check(
             $after === $expected,
@@ -465,7 +473,7 @@ try {
     }
     Modules\publishElaboration($program);
 
-    $ir = IR\lower($program, $program->interface->data, $path);
+    $ir = IR\lower($program, $program->interface->data(), $path);
     $irTwice = null;
     foreach ($ir->functions as $function) {
         if ($function->name === 'twice') {
@@ -501,7 +509,7 @@ try {
         ]]);
         $substitutedCore = new CheckedCore('Main', ['twice' => $substituted] + $core->functions);
         $program->core = $substitutedCore;
-        $substitutedIr = IR\lower($program, $program->interface->data, $path);
+        $substitutedIr = IR\lower($program, $program->interface->data(), $path);
         $substitutedTwice = null;
         foreach ($substitutedIr->functions as $function) {
             if ($function->name === 'twice') {
@@ -554,23 +562,30 @@ try {
 
     foreach ($sites as $name => $declarationSites) {
         $record = $core?->function($name);
+        // The record's term map holds every family; this check is about the evidence one, so it
+        // counts the terms that carry a plan (a foreign call's term does not).
+        $evidenceTerms = \array_filter(
+            $record?->terms ?? [],
+            static fn (Modules\CheckedTerm $term): bool => $term instanceof Modules\CheckedEvidenceRef
+                || $term instanceof Modules\CheckedEvidenceMethod,
+        );
         $check(
-            $record !== null && \count($record->bodyEvidence) === \count($declarationSites),
+            $record !== null && \count($evidenceTerms) === \count($declarationSites),
             "`{$name}` does not plan every evidence site its body carries: "
-                . \count($record?->bodyEvidence ?? []) . ' plan(s) for ' . \count($declarationSites) . ' site(s)',
+                . \count($evidenceTerms) . ' term(s) for ' . \count($declarationSites) . ' site(s)',
         );
 
-        $bySite = $record?->evidencePlanIndex() ?? [];
         $expected = [];
         foreach ($declarationSites as $site) {
+            $term = $site->checkedTerm === null ? null : $record?->term($site->checkedTerm);
             $check(
-                isset($bySite[\spl_object_id($site)]),
+                $term !== null,
                 "`{$name}` leaves the evidence site at line {$site->line} unplanned",
             );
             $expected[] = CheckedFunction::termOrigin($site);
         }
 
-        $planOrigins = \array_map(static fn ($plan): string => $plan->origin, $record?->bodyEvidence ?? []);
+        $planOrigins = \array_map(static fn ($term): string => $term->plan->origin, $evidenceTerms);
         \sort($planOrigins);
         \sort($expected);
         $check(
@@ -579,15 +594,23 @@ try {
         );
     }
 
-    $bothPlans = $core?->function('both')?->bodyEvidence ?? [];
-    $bothKinds = \array_map(static fn ($plan): string => $plan->kind->name, $bothPlans);
+    $bothPlans = \array_values(\array_filter(
+        $core?->function('both')?->terms ?? [],
+        static fn (Modules\CheckedTerm $term): bool => $term instanceof Modules\CheckedEvidenceRef
+            || $term instanceof Modules\CheckedEvidenceMethod,
+    ));
+    $bothKinds = \array_values(\array_map(static fn ($term): string => $term->plan->kind->name, $bothPlans));
     $check(
         $bothKinds === ['Parameter', 'Parameter'],
         'a declaration taking its dictionaries as parameters plans them as parameters, got: '
             . \implode(', ', $bothKinds),
     );
 
-    $listedPlan = $core?->function('listed')?->bodyEvidence[0] ?? null;
+    $listedPlan = \array_values(\array_filter(
+        $core?->function('listed')?->terms ?? [],
+        static fn (Modules\CheckedTerm $term): bool => $term instanceof Modules\CheckedEvidenceRef
+            || $term instanceof Modules\CheckedEvidenceMethod,
+    ))[0]->plan ?? null;
     $check(
         $listedPlan !== null && $listedPlan->kind === EvidencePlanKind::Reference,
         'a dictionary passed to a constrained function is planned as a reference, got: '
@@ -606,7 +629,9 @@ try {
     $projectedSite = $sites['projected'][0] ?? null;
     $projectedPlan = $projectedSite === null
         ? null
-        : ($core?->function('projected')?->evidencePlanIndex()[\spl_object_id($projectedSite)] ?? null);
+        : ($projectedSite->checkedTerm === null
+            ? null
+            : ($core?->function('projected')?->term($projectedSite->checkedTerm)?->plan ?? null));
     $check(
         $projectedPlan !== null && $projectedPlan->kind === EvidencePlanKind::Projection,
         'an instance-selected method is planned as a projection, got: '
@@ -673,7 +698,7 @@ try {
             $site->context = [];
         }
     }
-    $scrubbedIr = IR\lower($program, $program->interface->data, $path);
+    $scrubbedIr = IR\lower($program, $program->interface->data(), $path);
     $check(
         IR\Dump\dump($scrubbedIr) === $pristine,
         'lowering still reads the elaborated node\'s evidence fields: scrubbing them changed the IR',
@@ -683,11 +708,11 @@ try {
     if ($publishedBoth !== null) {
         $program->core = new CheckedCore(
             'Main',
-            ['both' => $publishedBoth->withElaboration($publishedBoth->terms, [])] + $program->core->functions,
+            ['both' => $publishedBoth->withElaboration($publishedBoth->termTypes, [])] + $program->core->functions,
         );
         $unplanned = '';
         try {
-            IR\lower($program, $program->interface->data, $path);
+            IR\lower($program, $program->interface->data(), $path);
         } catch (\RuntimeException $error) {
             $unplanned = $error->getMessage();
         }
@@ -706,7 +731,7 @@ try {
     $program->core = new CheckedCore('Main', $withoutTwice);
     $refused = '';
     try {
-        IR\lower($program, $program->interface->data, $path);
+        IR\lower($program, $program->interface->data(), $path);
     } catch (\RuntimeException $error) {
         $refused = $error->getMessage();
     }
@@ -718,7 +743,7 @@ try {
     $program->core = null;
     $refused = '';
     try {
-        IR\lower($program, $program->interface->data, $path);
+        IR\lower($program, $program->interface->data(), $path);
     } catch (\RuntimeException $error) {
         $refused = $error->getMessage();
     }

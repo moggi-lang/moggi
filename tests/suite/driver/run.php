@@ -280,7 +280,6 @@ function warmSharedCache(array $backends): void
             suiteEcho(renderLibWarmupStart($backend, $multiBackend));
         }
         try {
-            \Moggi\Backend\setCompileBackend($backend);
             \Moggi\Compiler\compileFile($source, 'php');
         } catch (\Throwable) {
         }
@@ -345,7 +344,6 @@ function runSelection(array $cases, array $backends, array $pathFilters): int
     $multi = \count($backends) > 1;
 
     foreach ($backends as $backend) {
-        \Moggi\Backend\setCompileBackend($backend);
         $selected = selectCases($cases, $pathFilters, $testArgs['groups'], $backend);
         if ($selected === []) {
             continue;

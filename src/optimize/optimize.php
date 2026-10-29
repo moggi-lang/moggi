@@ -200,7 +200,7 @@ function optimize(Module $module): Module
             $functions,
             static fn (array $fns): array => \array_map(
                 static fn (FunctionDecl $function): FunctionDecl => $function->withBody(
-                    $function->ioStraightLine ? $function->body : dceBlock($function->body, $effects),
+                    $function->shape->ioStraightLine ? $function->body : dceBlock($function->body, $effects),
                 ),
                 $fns,
             ),
@@ -228,7 +228,7 @@ function optimize(Module $module): Module
 
 function optimizeFunctionEarly(FunctionDecl $function, Model $effects): FunctionDecl
 {
-    if ($function->ioStraightLine) {
+    if ($function->shape->ioStraightLine) {
         return $function;
     }
 
@@ -239,7 +239,7 @@ function optimizeFunctionEarly(FunctionDecl $function, Model $effects): Function
 
     $body = cseBlock($body, $effects);
     $body = dceBlock($body, $effects);
-    $body = eliminateTailRecursion($function->name, $function->params, $body, $function->kind);
+    $body = eliminateTailRecursion($function->name, $function->params, $body, $function->shape->kind);
     $body = new Block(foldMatchReturn($body->items));
 
     return $function->withBody($body);
@@ -247,7 +247,7 @@ function optimizeFunctionEarly(FunctionDecl $function, Model $effects): Function
 
 function optimizeFunctionAfterInline(FunctionDecl $function, Model $effects): FunctionDecl
 {
-    if ($function->ioStraightLine) {
+    if ($function->shape->ioStraightLine) {
         return $function->withBody(new Block(foldKnownMatchesInItems($function->body->items)));
     }
 
@@ -269,7 +269,7 @@ function optimizeFunctionAfterInline(FunctionDecl $function, Model $effects): Fu
  */
 function optimizeFunctionFinal(FunctionDecl $function, array $workers, Model $effects): FunctionDecl
 {
-    if ($function->ioStraightLine) {
+    if ($function->shape->ioStraightLine) {
         $body = propagateCopiesBlock($function->body);
         $items = foldSingleUseCallResults(foldTailReturn($body->items), $workers);
 

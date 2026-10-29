@@ -1,0 +1,11 @@
+import System.IO
+
+-- A `let`-bound action run once by the very next bind — the shape lowering's fold lookahead used to
+-- fuse. The lookahead was deleted when the store path was measured to answer byte-identical IR, so
+-- this case pins the shape and the output that path produces.
+main :: IO ()
+main = do
+  let greet = putStrLn "one"
+  y <- greet
+  putStrLn (case y of
+    () -> "two")

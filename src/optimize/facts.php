@@ -30,6 +30,16 @@ final class Facts
     private static ?self $current = null;
 
     /**
+     * Incremented every time the published function/evidence index is replaced.
+     *
+     * A reader that captured this number before a rewrite can refuse to read the
+     * facts afterwards, so a fact set built for the old body cannot answer for the
+     * new one. The map is a fact of the *program*, and the program changes under a
+     * run; this is the revision that makes that visible instead of conventional.
+     */
+    private int $functionsRevision = 0;
+
+    /**
      * @param array<string, array{module: string, methods: array<string, string>}> $evidence
      * @param array<string, array<string, mixed>> $fnsByModule
      * @param array<string, array<string, string>> $externalFnsByModule
@@ -97,12 +107,20 @@ final class Facts
     {
         $this->evidence = $evidence;
         $this->fnsByModule = $fnsByModule;
+        ++$this->functionsRevision;
     }
 
     /** @param array<string, array<string, mixed>> $fnsByModule */
     public function publishFnsByModule(array $fnsByModule): void
     {
         $this->fnsByModule = $fnsByModule;
+        ++$this->functionsRevision;
+    }
+
+    /** The revision of the published function/evidence index this owner answers for. */
+    public function functionsRevision(): int
+    {
+        return $this->functionsRevision;
     }
 
     /**
@@ -233,15 +251,40 @@ final class Facts
         }
     }
 
-    /** @return array<string, mixed> */
-    public function fnsIn(string $module): array
+    /**
+     * One module's function facts, as of the revision the reader captured.
+     *
+     * A null revision keeps the old, unguarded read; a captured one is checked
+     * against the live revision, so a map that was replaced between the capture and
+     * this call (a rewritten body republished its module) is refused rather than
+     * answered.
+     *
+     * @return array<string, mixed>
+     */
+    public function fnsIn(string $module, ?int $revision = null): array
     {
+        $this->requireRevision($revision);
+
         return $this->fnsByModule[$module] ?? [];
     }
 
     /** @return array<string, string> */
-    public function externalFnsIn(string $module): array
+    public function externalFnsIn(string $module, ?int $revision = null): array
     {
+        $this->requireRevision($revision);
+
         return $this->externalFnsByModule[$module] ?? [];
+    }
+
+    private function requireRevision(?int $revision): void
+    {
+        if ($revision === null || $revision === $this->functionsRevision) {
+            return;
+        }
+
+        throw new \LogicException(
+            "the optimizer facts were rebuilt (revision {$this->functionsRevision}) after this reader "
+            . "captured revision {$revision}; a fact set from before a rewrite cannot be read after it",
+        );
     }
 }

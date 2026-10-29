@@ -1,0 +1,23 @@
+-- Standalone instances another module has to resolve: the project instance world is built from
+-- parsed declarations, so a `deriving instance` outside the data declaration must contribute its
+-- record there just as an inline `deriving` clause does. When it did not, a consumer of `Lib`
+-- reported `unresolved type class constraint: Eq (Pair Int Bool)` even though `Lib` itself used
+-- the same instance happily.
+module Lib where
+
+import Data.Eq
+import Text.Show
+
+data Pair a b = Pair a b
+
+deriving instance (Eq a, Eq b) => Eq (Pair a b)
+deriving instance (Show a, Show b) => Show (Pair a b)
+
+newtype Age = Age Int
+deriving newtype instance Eq Age
+deriving newtype instance Show Age
+
+newtype Sum2 = Sum2 Int deriving (Eq, Show)
+newtype Total = Total Int
+deriving via (Sum2) instance Eq Total
+deriving via (Sum2) instance Show Total

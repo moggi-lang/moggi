@@ -40,6 +40,7 @@ function updateProjectClassesForModule(
     array &$projectClasses,
 ): void {
     $state = Types\newState($unit['source'], $unit['path']);
+    $state->module = $moduleName;
     $state->classes = $projectClasses;
 
     foreach ($unit['program']->imports as $import) {
@@ -197,7 +198,12 @@ function classModuleScopes(
 
             $scoped = Ast\copyNode($body);
             desugarDoForScope($scoped);
-            foreach (IR\freeVarsExpr($scoped, []) as $name) {
+            // A copied default body carries no checked terms — it is scoped, not lowered — so
+            // this caller answers the evidence question from the node it is walking.
+            $evidenceParameter = static fn (Ast\EvidenceMethod $method): ?string
+                => $method->evidence === '' ? null : $method->evidence;
+
+            foreach (IR\freeVarsExpr($scoped, [], $evidenceParameter) as $name) {
                 $referenced[$module][$name] = true;
             }
 
@@ -646,6 +652,34 @@ function projectClassDeclarations(array $units): array
 }
 
 /**
+ * Every data/newtype declaration the units parsed, keyed by type constructor name.
+ *
+ * A standalone `deriving instance` may name a type another module declares, so the answer it
+ * needs is the project's, not the declaring unit's. The first declaration of a name wins: two
+ * modules cannot both declare it, and preparation has already refused that.
+ *
+ * @param array<string, array<string, mixed>> $units
+ * @return array<string, Ast\DataDecl>
+ */
+function projectDataDeclarations(array $units): array
+{
+    $declarations = [];
+    foreach (canonicalModuleOrder($units) as $moduleName) {
+        $program = $units[$moduleName]['program'] ?? null;
+        if (! $program instanceof Ast\Program) {
+            continue;
+        }
+        foreach ($program->items as $item) {
+            if ($item instanceof Ast\DataDecl) {
+                $declarations[$item->name] ??= $item;
+            }
+        }
+    }
+
+    return $declarations;
+}
+
+/**
  * The instance records the project's units declare, in canonical module order.
  *
  * {@see projectInstancesFromProgram()} is the only place a record is shaped, so
@@ -665,6 +699,7 @@ function projectClassDeclarations(array $units): array
 function collectProjectInstances(array $units, ?array $onlyModules = null): array
 {
     $facts = ClassDeriveFacts::fromClassDeclarations(projectClassDeclarations($units));
+    $dataDecls = projectDataDeclarations($units);
 
     $instances = [];
     foreach (canonicalModuleOrder($units, $onlyModules) as $moduleName) {
@@ -675,7 +710,7 @@ function collectProjectInstances(array $units, ?array $onlyModules = null): arra
             );
         }
 
-        foreach (projectInstancesFromProgram($unit['program'], $facts, $moduleName) as $record) {
+        foreach (projectInstancesFromProgram($unit['program'], $facts, $moduleName, $dataDecls) as $record) {
             $instances[] = $record;
         }
     }

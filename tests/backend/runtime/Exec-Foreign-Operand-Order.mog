@@ -1,0 +1,25 @@
+import System.IO
+import Text.Show
+
+-- ---- A computation in operand position, and its order ----
+-- A foreign call is not a value computed once at the binding: it is a
+-- computation, and operands are evaluated left to right before the enclosing
+-- call. So `trace "a"` runs before `trace "b"`, and the value the pair answers
+-- is the second call's length. This is the rule that makes the two operand
+-- forms (`Intrinsic`, `ForeignCall`) safe to leave in operand position instead
+-- of promoting every one to a statement (R7), so it is pinned here rather than
+-- left to an emitter's habit: both modes, and every emitter, have to preserve
+-- it.
+--
+-- `printf` is the host function with an observable effect this fixture can use;
+-- it writes its argument with no newline, which is why the value follows `ab`
+-- on one line.
+
+foreign php function trace "printf" :: String -> Int
+foreign php function larger "max" :: Int -> Int -> Int
+
+main :: IO ()
+main = do
+  putStrLn "start"
+  putStrLn (show (larger (trace "a") (trace "b")))
+  putStrLn "end"

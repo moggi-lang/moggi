@@ -355,7 +355,7 @@ function indexCapturedFunctions(array $functions): array
 {
     $index = [];
     foreach ($functions as $function) {
-        if ($function->kind->takesCaptures()) {
+        if ($function->shape->kind->takesCaptures()) {
             $index[$function->name] = $function;
         }
     }

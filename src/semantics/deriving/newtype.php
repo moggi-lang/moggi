@@ -81,11 +81,9 @@ function deriveViaNewtype(
     $functorial = $facts->takesOneTypeArgument($ref->name);
 
     if ($functorial) {
-        $underlying = functorialUnderlying($state, $decl, $ref);
         $head = functorialHeadAst($decl);
     } else {
         assertNominalGndEligible($state, $ref);
-        $underlying = $rep['field'];
         $head = dataDeclHeadAst($decl);
     }
 
@@ -110,11 +108,31 @@ function deriveViaNewtype(
     return new DerivedInstance(
         $ref->name,
         $head,
-        [new Ast\TypeApp(new Ast\TypeCon($ref->name), [$underlying])],
+        [newtypeDelegationConstraint($state, $decl, $ref, $facts)],
         $methods,
         $ref,
         strategy: 'Newtype',
     );
+}
+
+/**
+ * The context a newtype-derived instance delegates to: `C underlying`, the representation (or,
+ * for a class at `* -> *`, that representation without its last argument).
+ *
+ * The checked path and the project-instance stub that lets another module see the same instance
+ * both ask this one question here, so the two cannot describe one instance differently.
+ */
+function newtypeDelegationConstraint(
+    TypeCheckState $state,
+    Ast\DataDecl $decl,
+    Ast\DerivingClassRef $ref,
+    ClassDeriveFacts $facts,
+): Ast\TypeNode {
+    $underlying = $facts->takesOneTypeArgument($ref->name)
+        ? functorialUnderlying($state, $decl, $ref)
+        : newtypeRepresentation($decl)['field'];
+
+    return new Ast\TypeApp(new Ast\TypeCon($ref->name), [$underlying]);
 }
 
 /**

@@ -302,7 +302,7 @@ function specializeDictCallsFunctions(array $functions, array $evidenceByName): 
 
     return \array_map(
         static function (IR\FunctionDecl $function) use ($evidenceByName, $localFns): IR\FunctionDecl {
-            if ($function->ioStraightLine) {
+            if ($function->shape->ioStraightLine) {
                 return $function;
             }
 

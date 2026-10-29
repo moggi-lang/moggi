@@ -382,7 +382,7 @@ foreach ($prepared->checked as $moduleName => $program) {
     $assert($core !== null, "the checked module `{$moduleName}` published no checked core");
 
     $path = $unit['path'] ?? $moduleName . '.mog';
-    $pristine = IR\Dump\dump(IR\lower($program, $program->interface->data, $path));
+    $pristine = IR\Dump\dump(IR\lower($program, $program->interface->data(), $path));
 
     $declarations = [];
     foreach ($program->items as $item) {
@@ -436,7 +436,7 @@ foreach ($prepared->checked as $moduleName => $program) {
         $scrubbedSites += \count($scrub($declaration->body));
     }
 
-    $scrubbed = IR\Dump\dump(IR\lower($program, $program->interface->data, $path));
+    $scrubbed = IR\Dump\dump(IR\lower($program, $program->interface->data(), $path));
     $assert(
         $scrubbed === $pristine,
         "lowering `{$moduleName}` still reads the elaborated tree for a declaration its record covers:"
@@ -458,8 +458,8 @@ $mutate = static fn (Modules\CheckedFunction $record, array $overrides): Modules
         $overrides['scheme'] ?? $record->scheme,
         $overrides['evidence'] ?? $record->evidence,
         $record->residuals,
+        $record->termTypes,
         $record->terms,
-        $record->bodyEvidence,
         $overrides['parameterKinds'] ?? $record->parameterKinds,
     );
 
