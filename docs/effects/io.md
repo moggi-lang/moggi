@@ -205,23 +205,17 @@ root ([Standard library](../stdlib.md)).
   function returning `IO`.
 * **No lifting between `ST` and `IO` except `stToIO`.** An `IO` action cannot be
   run inside `ST`.
-* **In a `do` block, keep an `if` statement on one line.** A multi-line `if`
-  works as a function body, but as a bare statement it cuts the branch at its
-  first application and fails:
-
-  ```text
-  parse error: expected keyword `else`, found string "pos"
-  ```
-
-  Write the whole `if … then … else …` on one line, or bind it with `let` and
-  run the binding:
+* **A multi-line `if` works as a `do` statement.** The branches may be laid out
+  deeper than the block's column, whether the `if` is a function body or a
+  statement followed by more statements:
 
   ```moggi
-  main :: IO ()
-  main = do
-    let n = 1
-    let action = if n > 0 then putStrLn (show n) else pure ()
-    action
+  describe :: Int -> IO ()
+  describe n = do
+    if n > 0
+      then putStrLn "pos"
+      else putStrLn "neg"
+    putStrLn "done"
   ```
 
 * **Handles are sequential streams.** There is no seeking, no text encoding
