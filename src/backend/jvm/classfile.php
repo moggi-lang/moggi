@@ -230,6 +230,16 @@ final class CodeBuilder
         ];
     }
 
+    /**
+     * The finished LineNumberTable: the lines this method's debug info can report.
+     *
+     * @return list<array{pc: int, line: int}>
+     */
+    public function lineTable(): array
+    {
+        return $this->lineNumbers;
+    }
+
     /** Record a LineNumberTable entry at the current PC (Moggi source line). */
     public function noteLine(int $line): void
     {

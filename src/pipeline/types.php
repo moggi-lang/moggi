@@ -288,7 +288,7 @@ final class PipelineRequest
 /**
  * Stage artifacts produced by Pipeline::run. Null means the stage was not reached.
  *
- * @param string|array<string, string>|null $emit
+ * @param array<string, string>|null $emit
  */
 final class PipelineArtifacts
 {
@@ -297,7 +297,7 @@ final class PipelineArtifacts
         public ?Program $typedAst = null,
         public ?IrModule $ir = null,
         public ?IrModule $irOpt = null,
-        public string|array|null $emit = null,
+        public ?array $emit = null,
         public ?EntryPoint $entry = null,
         public CompilePurpose $purpose = CompilePurpose::Executable,
     ) {

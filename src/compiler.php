@@ -466,7 +466,7 @@ function compileFileCapturingErrorsBoth(string $path, bool $optimize = true, ?st
         ), PipelineStage::Emit);
 
         return [
-            'emit' => ['output' => $artifacts->emit ?? '', 'exitCode' => 0],
+            'emit' => ['output' => $artifacts->emit ?? [], 'exitCode' => 0],
             'opt-ir' => ['output' => dumpIr($artifacts->irOpt ?? throw new \RuntimeException('missing optimized IR')), 'exitCode' => 0],
         ];
     } catch (LexError|ParseError|TypeError $e) {

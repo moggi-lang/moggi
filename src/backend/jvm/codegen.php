@@ -17,12 +17,6 @@ require_once __DIR__ . '/emit_match.php';
 require_once __DIR__ . '/emit_pattern.php';
 require_once __DIR__ . '/emit_data.php';
 require_once __DIR__ . '/emit_io.php';
-require_once __DIR__ . '/emit_env.php';
-require_once __DIR__ . '/emit_io.php';
-require_once __DIR__ . '/emit_stmt.php';
-require_once __DIR__ . '/emit_match.php';
-require_once __DIR__ . '/emit_intrinsic.php';
-require_once __DIR__ . '/emit_expr.php';
 require_once __DIR__ . '/classfile.php';
 require_once __DIR__ . '/naming.php';
 require_once __DIR__ . '/foreign.php';
@@ -244,6 +238,15 @@ function emitFunction(
             $env->c->noteFrame($env->frameLocals($arity));
             $env->c->aconst_null();
             emitFunctionReturn($env);
+
+            if ($env->sourceMap !== null) {
+                foreach ($env->c->lineTable() as $entry) {
+                    $loc = $env->locByLine[$entry['line']] ?? null;
+                    if ($loc !== null) {
+                        $env->sourceMap->addFrame($env->owner, $name, $loc);
+                    }
+                }
+            }
         }
     );
 }

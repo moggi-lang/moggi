@@ -138,33 +138,63 @@ only the toolchain-specific files differ.
 | `<backend>/codegen.php` | `emitModule`: module → target code, function/evidence/main/data |
 | `<backend>/emit_env.php` | the one env object an emission threads, and its module-wide counters/registries |
 | `<backend>/emit_stmt.php` | statements and blocks: `emitBlock`, `emitStmt`, tail loops, termination |
-| `<backend>/emit_expr.php` | operands and values: `emitOperand`, calls, lambdas, partials, boxes, literals |
-| `<backend>/emit_match.php` | matches and patterns: `emitMatchStmt`, `emitMatchReturn`, `emitMatchIo`, `emitPatternTest` |
+| `<backend>/emit_expr.php` | operands and values: `emitOperand`, boxes, field reads, enum/dict method operands |
+| `<backend>/emit_call.php` | calls: `emitCallValue`, `emitStaticCall`, the call-argument shaping they share |
+| `<backend>/emit_fn_value.php` | function values: `emitTopLevelFnValue`, `emitPartialValue`, lambda/wrapper construction |
+| `<backend>/emit_literal.php` | literal and constant loading (`formatDoubleLiteral`, the backend's integer push) |
+| `<backend>/emit_pattern.php` | `emitPatternTest` and the pattern tests/bindings behind it |
+| `<backend>/emit_data.php` | `emitDataDecl`: data declarations, constructors and their accessors |
+| `<backend>/emit_match.php` | matches: `emitMatchStmt`, `emitMatchReturn`, `emitMatchIo` |
 | `<backend>/emit_intrinsic.php` | `emitIntrinsic`: the exception/fix intrinsics, the dispatch into the families below, and (php) the module's intrinsic helper functions |
 | `<backend>/emit_primop.php` | numeric primop families: `emitIntrinsicPrimop` (arithmetic, bit operations, width conversion) and `emitIntrinsicCompare` (equality, ordering, boolean), with the operand and comparison helpers they expand to |
 | `<backend>/emit_value.php` | `emitIntrinsicValue` (list, maybe, string, bytes, platform intrinsics), boxing, literal values and source locations |
 | `<backend>/emit_io.php` | IO statements: runs, binds, throw/catch/finally, thunks; `emitIntrinsicState` (ST refs and arrays) |
-| `<backend>/foreign.php` | host path/descriptor rules |
+| `<backend>/foreign.php` | host path/descriptor rules, foreign call emission (`emitForeign`, `emitForeignIoWrap`) |
+| `<backend>/verify.php` | `verifyForeignImportAgainstHost`: the declaration checked against the host |
 | `<backend>/dependencies.php` | library-owned dependency discovery |
 | `<backend>/runtime_abi.php` | generated runtime (JVM/.NET) |
 | `<backend>/frames.php` | host frames → `.mog` source locations |
 | `<backend>/package.php` | build tree → deployable artifact |
+| `src/backend/stack/source_lines.php` | the stack backends' one rule for which locations reach the line and frame tables |
+| `src/backend/stack/scalar_intrinsics.php` | the stack backends' scalar intrinsic vocabulary: every name, and the job it does |
 | `src/backend/ir_meta.php` | shared IR facts (constructor layout, backing, throwing call site) |
 | `src/backend/inspect.php` | rendering emitted artifacts for `:emit` |
 
 The `emit_*.php` set is the same in all three backends and the functions in it carry
-the same names; a backend differs where its host language does. An intrinsic is emitted
-by name: `emitIntrinsic` asks each family reader in turn (`emitIntrinsicPrimop`,
+the same names; a backend differs where its host language does. That is enforced, not
+assumed: `tests/backend/emit_surface.php` fails when a backend's file set differs from the
+shared set plus its documented host files (`$shared` / `$hostOnly` there), or when a target
+stops declaring one of the shared role names. Adding a host-only module or a new shared
+role is therefore a deliberate edit to that case and to this table, never a silent drift.
+
+An intrinsic is emitted by name: `emitIntrinsic` asks each family reader in turn (`emitIntrinsicPrimop`,
 `emitIntrinsicCompare`, `emitIntrinsicState`, `emitIntrinsicValue`) and the first that
 knows the name answers for it, so a new intrinsic lands in the family file that owns it
-and the dispatcher never grows a case list. The one difference is the answer: the stack
+and the dispatcher never grows a case list. In the two stack backends the scalar families are
+driven from one table: `src/backend/stack/scalar_intrinsics.php` names every scalar intrinsic
+and the job it does, so `emitIntrinsicPrimop` and `emitIntrinsicCompare` switch on the *job*
+(about forty arms) instead of on the name (about a hundred and fifty cases), and a name can
+no longer exist on one target while missing on the other. A job a backend does not implement
+is a `RuntimeException` at emit time, never a fallthrough; where the two hosts answer one job
+differently (`word64Equality` is `moggi/rt/Word64.eq` on the JVM and object equality on the
+CLR) the job names the question and each backend answers it with the operation it has. The one difference is the answer: the stack
 backends push and return `true`, php returns the expression text (or `null`) and takes
 the argument expressions its caller already emitted, because a php operand *is* a string.
 The same holds in `emit_foreign.php`: `emitForeign` emits one foreign call and
 `emitForeignIoWrap` applies its `ioWrap`, in all three backends; php's `emitForeignCall`,
 `emitInstanceCall` and `emitForeignIoStatement` read the host's dispatch kinds and
 assemble statement text, where the stack backends' `emitForeign` resolves descriptors
-and packs JVM/.NET argument slots. Each emitter threads
+and packs JVM/.NET argument slots. Debug info has one policy too. Which locations are noted is decided once, in
+`src/backend/stack/source_lines.php`: a statement that declares `$srcLoc`, and an intrinsic operand
+(which carries the expression it replaced). Both stack emitters call those two functions at the two
+points every emitter has — the statement prefix and the intrinsic operand — so a statement class or
+intrinsic added later reaches both targets without touching either. Each then derives its frame
+table from the debug info it actually emitted (the classfile `LineNumberTable`, the IL sequence
+points), so a frame row exists exactly where the host can report a position, and a line noted twice
+keeps the location that opened it. php is not a user of this rule: its module is one expression tree
+with a runtime source map, so it records throw sites only.
+
+Each emitter threads
 exactly one `EmitEnv` (`emit_env.php`): the module facts `emitModule` sets once, and the
 per-function values `emitFunction` sets on a clone. A clone — not an array copy — is how
 a deeper emit derives a scope, so counters that must outlive one (`$__scrut_N` here, the

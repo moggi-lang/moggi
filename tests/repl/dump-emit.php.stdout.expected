@@ -1,6 +1,6 @@
 namespace Interactive;
 
-const __MOGGI_MAP = [[], ['Interactive\\foo' => ['Interactive.foo', 'Interactive.mog', 3, 7]]];
+const __MOGGI_MAP = [[], ['Interactive\\foo' => 0], [], [], [[0, 0, 3, 7]], ['Interactive.foo'], ['Interactive.mog']];
 
 function foo() {
     return 1;

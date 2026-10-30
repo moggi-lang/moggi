@@ -33,16 +33,16 @@ function boxInt(EmitEnv $env): void
 }
 
 /** Sign-extend-truncate an i64 on the stack to the width named by an intN_* op. */
-function emitSignExtend(EmitEnv $env, string $opName): void
+function emitSignExtend(EmitEnv $env, int $bits): void
 {
-    if (\str_starts_with($opName, 'int8')) {
+    if ($bits === 8) {
         $env->c->l2i();
         $env->c->i2b();
         $env->c->i2l();
 
         return;
     }
-    if (\str_starts_with($opName, 'int16')) {
+    if ($bits === 16) {
         $env->c->l2i();
         $env->c->i2s();
         $env->c->i2l();

@@ -275,12 +275,8 @@ function compilePreparedProject(PreparedProject $prepared, CompilationContext $c
             'foreignInterfaces' => $foreignInterfaces,
         ]);
 
-        if (\is_array($emitted)) {
-            foreach ($emitted as $path => $bytes) {
-                $emitOutputs[$path] = $bytes;
-            }
-        } else {
-            $emitOutputs[$outputRelative] = $emitted;
+        foreach ($emitted as $path => $bytes) {
+            $emitOutputs[$path] = $bytes;
         }
     }
 
@@ -374,7 +370,7 @@ function compileModuleFile(
 }
 
 /**
- * @return array{emit: string|array<string, string>, opt-ir: string}
+ * @return array{emit: array<string, string>, opt-ir: string}
  */
 function compileModuleFileOutputs(
     string $path,
@@ -427,7 +423,7 @@ function compileModuleFileOutputs(
     ]);
 
     return [
-        'emit' => \is_array($emit) ? $context->backend->foldProgramEmit($emit) : $emit,
+        'emit' => $context->backend->foldProgramEmit($emit),
         'opt-ir' => dumpIr($phpIr),
     ];
 }

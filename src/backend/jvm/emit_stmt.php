@@ -3,9 +3,12 @@
 namespace Moggi\Backend\Jvm\Codegen;
 
 
+require_once __DIR__ . '/../stack/source_lines.php';
+
 use Moggi\IR;
 use function Moggi\Backend\Meta\tempReadsForFunction;
 use function Moggi\Backend\Meta\returnedCall;
+use function Moggi\Backend\Stack\SourceLines\statementLoc;
 
 function emitBlock(EmitEnv $env, IR\Block $block): void
 {
@@ -15,7 +18,7 @@ function emitBlock(EmitEnv $env, IR\Block $block): void
     for ($i = 0; $i < \count($items); ++$i) {
         $call = returnedCall($items[$i], $items[$i + 1] ?? null, $tempReads);
         if ($call !== null) {
-            noteSrcLoc($env, $call->srcLoc);
+            noteSrcLoc($env, statementLoc($call));
             emitCallValue($env, $call);
             emitFunctionReturn($env);
             ++$i;
@@ -28,8 +31,14 @@ function emitBlock(EmitEnv $env, IR\Block $block): void
 }
 
 /**
- * Record a source location for both the LineNumberTable and the frame table
- * (the latter supplies the display path and column native debug info lacks).
+ * Note a source location in the LineNumberTable, and keep it for the frame table.
+ *
+ * Frames are added from the finished line table ({@see emitFunction}), because a frame row only
+ * means something when the host's own debug info can report that line. A line is noted more than
+ * once (a function's entry line, then its first statement; a statement's head, then an expression
+ * under it) and the first note on a line is the one its frame names — so a line that the line
+ * table dropped (a later location claimed its PC) has no row, and a line it kept keeps the
+ * location that opened it. The .NET sink reaches the same table from its sequence points.
  */
 function noteSrcLoc(EmitEnv $env, ?IR\SrcLoc $loc): void
 {
@@ -37,16 +46,12 @@ function noteSrcLoc(EmitEnv $env, ?IR\SrcLoc $loc): void
         return;
     }
     $env->c->noteLine($loc->line);
-    if ($env->sourceMap !== null) {
-        $env->sourceMap->addFrame($env->owner, $env->currentMethod, $loc);
-    }
+    $env->locByLine[$loc->line] ??= $loc;
 }
 
 function emitStmt(EmitEnv $env, IR\Stmt $stmt): void
 {
-    if (isset($stmt->srcLoc) && $stmt->srcLoc instanceof IR\SrcLoc) {
-        noteSrcLoc($env, $stmt->srcLoc);
-    }
+    noteSrcLoc($env, statementLoc($stmt));
     switch ($stmt::class) {
         case IR\Ret::class:
             /** @var IR\Ret $stmt */

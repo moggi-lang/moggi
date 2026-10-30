@@ -70,18 +70,16 @@ try {
 
     $emitted = $outputs['emit'];
     $entryRelative = (string) ($outputs['entryRelative'] ?? '');
-    $entryText = \is_array($emitted)
-        ? (string) ($emitted[$entryRelative] ?? '')
-        : (string) $emitted;
+    $entryText = (string) ($emitted[$entryRelative] ?? '');
     if ($entryText === '') {
-        \fwrite(\STDERR, "no entry artifact at `{$entryRelative}`: " . \json_encode(\array_keys(\is_array($emitted) ? $emitted : [])) . "\n");
+        \fwrite(\STDERR, "no entry artifact at `{$entryRelative}`: " . \json_encode(\array_keys($emitted)) . "\n");
         exit(1);
     }
     if (\str_contains($entryText, '__ev_Show_Int(')) {
         \fwrite(\STDERR, "the entry still builds the unread `Show Int` dictionary\n");
         exit(1);
     }
-    foreach (\array_keys(\is_array($emitted) ? $emitted : []) as $path) {
+    foreach (\array_keys($emitted) as $path) {
         if (\str_ends_with((string) $path, 'Text/Show.php')) {
             \fwrite(\STDERR, "the unread dictionary kept `Text/Show.php` in the emitted set\n");
             exit(1);

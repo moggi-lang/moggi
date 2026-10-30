@@ -3,11 +3,13 @@
 namespace Moggi\Backend\DotNet\Codegen;
 
 
+require_once __DIR__ . '/../stack/source_lines.php';
+
 use Moggi\IR;
 use function Moggi\Backend\DotNet\Il\ilString;
 use function Moggi\Backend\Meta\tempReadsForFunction;
-use function Moggi\Backend\Meta\operandCallSrcLoc;
 use function Moggi\Backend\Meta\returnedCall;
+use function Moggi\Backend\Stack\SourceLines\statementLoc;
 
 function emitBlock(EmitEnv $env, IR\Block $block): void
 {
@@ -17,7 +19,7 @@ function emitBlock(EmitEnv $env, IR\Block $block): void
     for ($i = 0; $i < \count($items); ++$i) {
         $call = returnedCall($items[$i], $items[$i + 1] ?? null, $tempReads);
         if ($call !== null) {
-            $env->m->emitLine($call->srcLoc);
+            $env->m->emitLine(statementLoc($call));
             emitCallValue($env, $call);
             emitFunctionReturn($env);
             ++$i;
@@ -32,17 +34,7 @@ function emitBlock(EmitEnv $env, IR\Block $block): void
 /** A call whose value is on the stack, without storing it in its destination temp. */
 function emitStmt(EmitEnv $env, IR\Stmt $stmt): void
 {
-    $frameLoc = match ($stmt::class) {
-        IR\Ret::class => operandCallSrcLoc($stmt->value),
-        IR\Call::class,
-        IR\IoCall::class,
-        IR\IoRun::class,
-        IR\IoAssignAction::class,
-        IR\CallValue::class,
-        IR\DictCall::class => $stmt->srcLoc ?? null,
-        default => null,
-    };
-    $env->m->emitLine($frameLoc);
+    $env->m->emitLine(statementLoc($stmt));
     switch ($stmt::class) {
         case IR\Ret::class:
             /** @var IR\Ret $stmt */

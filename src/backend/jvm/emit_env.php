@@ -29,6 +29,14 @@ final class EmitEnv
     public string $currentMethod = '';
 
     /**
+     * The first source location noted for each line of this function, so the frame table can be
+     * filled once the body is emitted ({@see noteSrcLoc}).
+     *
+     * @var array<int, IR\SrcLoc>
+     */
+    public array $locByLine = [];
+
+    /**
      * Local slots of the enclosing function's declared parameters, in
      * `FunctionDecl::$params` order. `IR\TailRecall` writes these slots and
      * jumps back to {@see $tailLoopHead}.

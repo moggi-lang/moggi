@@ -8,8 +8,6 @@ use function Moggi\Backend\DotNet\Il\ilString;
 use function Moggi\Backend\DotNet\Naming\symbolName;
 use function Moggi\Backend\Meta\isBoolBackedData;
 
-// --- Data declarations --------------------------------------------------------
-
 function emitDataDecl(ClassIlBuilder $b, IR\DataDecl $decl): void
 {
     if (isBoolBackedData($decl)) {
