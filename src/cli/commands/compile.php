@@ -165,9 +165,6 @@ function compileIntoRoot(
                 return $empty(1);
             }
 
-            $relative = \substr($sourcePath, \strlen($rootPrefix));
-            $ext = Backend\backendById($backend)->extension();
-
             try {
                 $output = compileFile($sourcePath, 'php', $optimize, null, $backend, $context);
             } catch (LexError|ParseError|TypeError|\RuntimeException $e) {
@@ -180,10 +177,7 @@ function compileIntoRoot(
                 return $empty(1);
             }
 
-            $writes = \is_array($output)
-                ? $output
-                : [(\preg_replace('/\.mog$/', $ext, $relative) ?? $relative) => $output];
-            foreach ($writes as $writeRel => $bytes) {
+            foreach ($output as $writeRel => $bytes) {
                 $writeRel = \str_replace('\\', '/', (string) $writeRel);
                 $writePath = $outputRoot . DIRECTORY_SEPARATOR . \str_replace('/', DIRECTORY_SEPARATOR, $writeRel);
                 $writeParent = \dirname($writePath);

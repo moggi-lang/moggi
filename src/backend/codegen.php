@@ -17,9 +17,9 @@ require_once __DIR__ . '/dotnet/DotNetBackend.php';
  * `CompilationContext` names. There is no `codegen()` that resolves a target from a global.
  *
  * @param array<string, mixed> $options
- * @return string|array<string, string>
+ * @return array<string, string>
  */
-function codegenWith(Backend $backend, Module $ir, string $sourcePath, array $options = []): string|array
+function codegenWith(Backend $backend, Module $ir, string $sourcePath, array $options = []): array
 {
     return $backend->emit($ir, $sourcePath, $options);
 }

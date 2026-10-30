@@ -49,7 +49,8 @@ final class PhpBackend implements Backend
         return \is_file($path) ? [$path] : [];
     }
 
-    public function emit(Module $ir, string $sourcePath, array $options = []): string|array
+    /** @return array<string, string> */
+    public function emit(Module $ir, string $sourcePath, array $options = []): array
     {
         return emitModule($ir, $sourcePath, $options);
     }
@@ -66,7 +67,7 @@ final class PhpBackend implements Backend
         return $emit;
     }
 
-    public function describeEmit(string|array $emit, array $focusNames = []): string
+    public function describeEmit(array $emit, array $focusNames = []): string
     {
         return describePhpEmit($emit, $focusNames);
     }

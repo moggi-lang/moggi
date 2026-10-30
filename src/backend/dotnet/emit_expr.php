@@ -3,8 +3,11 @@
 namespace Moggi\Backend\DotNet\Codegen;
 
 
+require_once __DIR__ . '/../stack/source_lines.php';
+
 use Moggi\IR;
 use function Moggi\Backend\DotNet\Il\ilString;
+use function Moggi\Backend\Stack\SourceLines\operandLoc;
 use function Moggi\Modules\parseResolvedSymbol;
 use function Moggi\Semantics\Kernel\boolCtorValue;
 
@@ -47,6 +50,7 @@ function emitOperand(EmitEnv $env, IR\Operand $op): void
         return;
     }
     if ($op instanceof IR\Intrinsic) {
+        $env->m->emitLine(operandLoc($op));
         emitIntrinsic($env, $op);
 
         return;

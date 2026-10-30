@@ -26,15 +26,11 @@ require_once __DIR__ . '/../executables.php';
  *
  * `.moggi.map` sidecars (and any other companion) are never display artifacts.
  *
- * @param string|array<string, string> $emit
+ * @param array<string, string> $emit
  * @return array<string, string>
  */
-function selectArtifacts(string|array $emit, string $extension): array
+function selectArtifacts(array $emit, string $extension): array
 {
-    if (! \is_array($emit)) {
-        return [];
-    }
-
     $out = [];
     foreach ($emit as $rel => $bytes) {
         if (! \is_string($rel) || ! \is_string($bytes)) {
@@ -55,14 +51,10 @@ function selectArtifacts(string|array $emit, string $extension): array
  * Last-resort listing when no artifact matches the backend's display shape:
  * names and sizes, never the source map.
  *
- * @param string|array<string, string> $emit
+ * @param array<string, string> $emit
  */
-function describeArtifactList(string|array $emit): string
+function describeArtifactList(array $emit): string
 {
-    if (\is_string($emit)) {
-        return $emit === '' ? '' : $emit . (\str_ends_with($emit, "\n") ? '' : "\n");
-    }
-
     $lines = [];
     foreach ($emit as $rel => $bytes) {
         if (! \is_string($rel) || ! \is_string($bytes) || \str_ends_with($rel, '.moggi.map')) {
@@ -78,15 +70,11 @@ function describeArtifactList(string|array $emit): string
  * PHP emits source text; the primary artifact is the module file itself
  * (host-owned companion `.php` files follow it in the map).
  *
- * @param string|array<string, string> $emit
+ * @param array<string, string> $emit
  * @param list<string> $focusNames
  */
-function describePhpEmit(string|array $emit, array $focusNames = []): string
+function describePhpEmit(array $emit, array $focusNames = []): string
 {
-    if (\is_string($emit)) {
-        return displayPhpEmit($emit, $focusNames);
-    }
-
     $artifacts = selectArtifacts($emit, '.php');
     if ($artifacts === []) {
         return describeArtifactList($emit);
@@ -99,10 +87,10 @@ function describePhpEmit(string|array $emit, array $focusNames = []): string
  * JVM emits `.class` bytes; disassemble them with `javap -c -p`, like the PHP
  * backend shows source.
  *
- * @param string|array<string, string> $emit
+ * @param array<string, string> $emit
  * @param list<string> $focusNames
  */
-function describeJvmEmit(string|array $emit, array $focusNames = []): string
+function describeJvmEmit(array $emit, array $focusNames = []): string
 {
     $classFiles = selectArtifacts($emit, '.class');
     if ($classFiles === []) {
@@ -115,10 +103,10 @@ function describeJvmEmit(string|array $emit, array $focusNames = []): string
 /**
  * .NET emits ILASM text (`.il`), the analogue of the JVM javap dump.
  *
- * @param string|array<string, string> $emit
+ * @param array<string, string> $emit
  * @param list<string> $focusNames
  */
-function describeDotNetEmit(string|array $emit, array $focusNames = []): string
+function describeDotNetEmit(array $emit, array $focusNames = []): string
 {
     $ilFiles = selectArtifacts($emit, '.il');
     if ($ilFiles === []) {

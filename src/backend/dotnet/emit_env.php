@@ -68,6 +68,18 @@ final class MethodIl
     /** @var list<array{0: int, 1: IR\SrcLoc}> sequence point offset => location */
     private array $sequencePoints = [];
 
+    /**
+     * The first location noted on each line: the frame text a line resolves to.
+     *
+     * A line is noted more than once (a statement's head, then an expression under it) and only
+     * the last note before an instruction becomes that instruction's sequence point, so the rows
+     * alone would name whichever expression happened to sit closest to the call. The JVM frame
+     * table is keyed by line and keeps the first row, so this is the same answer.
+     *
+     * @var array<int, IR\SrcLoc>
+     */
+    private array $firstLocOnLine = [];
+
     public function freshLocal(string $type = 'object'): string
     {
         $id = 'V' . $this->localCounter++;
@@ -109,6 +121,7 @@ final class MethodIl
             return;
         }
         $this->pendingLoc = $loc;
+        $this->firstLocOnLine[$loc->line] ??= $loc;
         $line = $loc->line;
         $col = \max(1, $loc->col > 0 ? $loc->col : 1);
         $file = normalizeDisplayPath($loc->file ?? '');
@@ -151,6 +164,14 @@ final class MethodIl
     }
 
     /**
+     * The finished method body, and its frame rows when a sink is given.
+     *
+     * Rows are keyed by IL offset because that is what a host stack trace reports, but their text
+     * is the *first* location recorded on the row's line: several offsets share a line (a
+     * statement's head and the argument expressions under it), and a frame naming the last of them
+     * would point at an argument instead of at the call that faulted. The JVM table is keyed by
+     * line and keeps the first row, so this is the same answer there by a different shape.
+     *
      * @param list<string> $paramTypes
      */
     public function render(
@@ -164,7 +185,7 @@ final class MethodIl
         if ($frameSink !== null && $frameOwner !== '') {
             $member = runtimeMemberName($name);
             foreach ($this->sequencePoints as [$offset, $loc]) {
-                $frameSink->addIlFrame($frameOwner, $member, $offset, $loc);
+                $frameSink->addIlFrame($frameOwner, $member, $offset, $this->firstLocOnLine[$loc->line] ?? $loc);
             }
         }
         $params = \implode(', ', $paramTypes);

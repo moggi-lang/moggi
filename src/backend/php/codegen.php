@@ -18,12 +18,6 @@ require_once __DIR__ . '/emit_pattern.php';
 require_once __DIR__ . '/emit_data.php';
 require_once __DIR__ . '/emit_io.php';
 require_once __DIR__ . '/naming.php';
-require_once __DIR__ . '/emit_env.php';
-require_once __DIR__ . '/emit_expr.php';
-require_once __DIR__ . '/emit_match.php';
-require_once __DIR__ . '/emit_stmt.php';
-require_once __DIR__ . '/emit_intrinsic.php';
-require_once __DIR__ . '/emit_io.php';
 require_once __DIR__ . '/foreign.php';
 require_once __DIR__ . '/dependencies.php';
 const MAP_PLACEHOLDER = '//@@moggi-source-map@@';
@@ -57,9 +51,9 @@ use function Moggi\Backend\Php\Codegen\emitBlock;
 /**
  * @param IR\Module $module
  * @param array{namespace?: ?string, outputRelative?: string, artifactModuleName?: string, runtimeRequire?: string, plan: EmitPlan, irUsage?: array<string, mixed>, globalFnArity?: array<string, int>} $options
- * @return string|array<string, string>
+ * @return array<string, string>
  */
-function emitModule(IR\Module $module, string $sourcePath, array $options = []): string|array
+function emitModule(IR\Module $module, string $sourcePath, array $options = []): array
 {
     $namespace = $options['namespace'] ?? null;
     $analysis = analyzeFunctionsForCodegen($module->functions);

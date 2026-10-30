@@ -42,13 +42,16 @@ interface Backend
     public function runtimeFiles(): array;
 
     /**
-     * Emit one compiled module. Return value is backend-specific
-     * (source string, or map of relative-path => bytes/text).
+     * Emit one compiled module as a map of relative path => bytes/text.
+     *
+     * One shape for every target: a module can fan out into more than one artifact (a
+     * php module's host companions, one classfile or IL type per declared type), so the
+     * map is the honest answer and callers never branch on which backend answered.
      *
      * @param array<string, mixed> $options
-     * @return string|array<string, string> string body, or map of relative-path => bytes
+     * @return array<string, string>
      */
-    public function emit(Module $ir, string $sourcePath, array $options = []): string|array;
+    public function emit(Module $ir, string $sourcePath, array $options = []): array;
 
     /**
      * Extra state this backend's `emit()` reads that the module closure does not
@@ -83,10 +86,10 @@ interface Backend
      * `:dump emit`). Each backend owns the shape of its own artifacts, so
      * callers never have to sniff file extensions.
      *
-     * @param string|array<string, string> $emit
+     * @param array<string, string> $emit
      * @param list<string> $focusNames Moggi names to keep (empty = whole module)
      */
-    public function describeEmit(string|array $emit, array $focusNames = []): string;
+    public function describeEmit(array $emit, array $focusNames = []): string;
 
     /**
      * Finalize a build directory into a runnable artifact.

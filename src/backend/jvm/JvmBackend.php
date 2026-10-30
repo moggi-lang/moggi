@@ -57,7 +57,8 @@ final class JvmBackend implements Backend
         return '';
     }
 
-    public function emit(Module $ir, string $sourcePath, array $options = []): string|array
+    /** @return array<string, string> */
+    public function emit(Module $ir, string $sourcePath, array $options = []): array
     {
         $emitted = emitModule($ir, $sourcePath, $options);
         $out = [];
@@ -86,7 +87,7 @@ final class JvmBackend implements Backend
         return $emit;
     }
 
-    public function describeEmit(string|array $emit, array $focusNames = []): string
+    public function describeEmit(array $emit, array $focusNames = []): string
     {
         return describeJvmEmit($emit, $focusNames);
     }

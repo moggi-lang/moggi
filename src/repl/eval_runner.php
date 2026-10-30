@@ -69,19 +69,14 @@ function runEntryPhp(State $state, string $entryName): string
     $state->lastFragmentFocus = [$entryName];
 
     $phpPath = $liveDir . '/Interactive.php';
-    $emit = $artifacts->emit;
     $phpSource = null;
-    if (\is_string($emit)) {
-        $phpSource = $emit;
-    } elseif (\is_array($emit)) {
-        foreach ($emit as $rel => $bytes) {
-            if (\is_string($rel) && \is_string($bytes) && \str_ends_with($rel, '.php')) {
-                $phpSource = $bytes;
-            }
+    foreach ($artifacts->emit ?? [] as $rel => $bytes) {
+        if (\str_ends_with($rel, '.php')) {
+            $phpSource = $bytes;
         }
     }
     if (! \is_string($phpSource)) {
-        throw new \RuntimeException('expected PHP emit string');
+        throw new \RuntimeException('expected a PHP artifact from the interactive emit');
     }
     \file_put_contents($phpPath, $phpSource);
 

@@ -77,10 +77,6 @@ function emitPhpArtifact(string $path): string
         'outputRelative' => $outputRelative,
         'plan' => EmitPlan::forTarget('php', $outputRelative),
     ]);
-    if (\is_string($actual)) {
-        return $actual;
-    }
-
     foreach ($actual as $relative => $bytes) {
         if (\is_string($relative) && \is_string($bytes) && \str_ends_with($relative, '.php') && ! \str_ends_with($relative, '.moggi.map')) {
             return $bytes;
