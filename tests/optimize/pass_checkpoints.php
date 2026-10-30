@@ -3,10 +3,11 @@
 // Per-pass checkpoints and the specialization boundary check that rejects
 // unbound temps.
 //
-// Pinned: the checkpoint is inert while the switch is off and the harness turns
-// it on for its own run; a stage that leaves an undefined temp fails with its own
-// label; the capture-binding exception is narrow; and no restoration hook remains
-// to hide such a failure.
+// The checkpoint is inert while the switch is off and the harness turns it on
+// for its own run; a stage that leaves an undefined temp fails with its own label;
+// the capture-binding exception is narrow; and no restoration hook remains to hide
+// such a failure. There is no environment variable: the switch is process state the
+// harness sets, so a compile cannot change what it validates from outside.
 
 $root = __DIR__;
 while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
@@ -60,20 +61,10 @@ $off = $throws(static fn () => PassCheckpoints\runOnFunctions(
     false,
 ));
 $check($off === null, 'an invalid stage was rejected with the checkpoint flag off');
-
-// The approved switch (approval #5 / D18) is an environment variable, so a user
-// can localise a miscompile without the harness. An explicit setting still wins.
-\putenv('MOGGI_IR_PASS_CHECKPOINTS=1');
-PassCheckpoints\setEnabled(null);
-$check(PassCheckpoints\enabled(), 'MOGGI_IR_PASS_CHECKPOINTS=1 did not turn the checkpoints on');
-\putenv('MOGGI_IR_PASS_CHECKPOINTS=0');
-PassCheckpoints\setEnabled(null);
-$check(! PassCheckpoints\enabled(), 'MOGGI_IR_PASS_CHECKPOINTS=0 did not leave the checkpoints off');
-\putenv('MOGGI_IR_PASS_CHECKPOINTS');
-PassCheckpoints\setEnabled(null);
-$check(! PassCheckpoints\enabled(), 'unset MOGGI_IR_PASS_CHECKPOINTS did not leave the checkpoints off');
+$check(! PassCheckpoints\enabled(), 'the checkpoints are on by default');
 
 PassCheckpoints\setEnabled(true);
+$check(PassCheckpoints\enabled(), 'the harness switch did not turn the checkpoints on');
 PassCheckpoints\enterOptimize();
 try {
     $error = $throws(static fn () => PassCheckpoints\runOnFunctions(

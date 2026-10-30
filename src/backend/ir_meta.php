@@ -25,8 +25,6 @@ use function Moggi\Semantics\Kernel\boolTypeName;
  * emitters stay in `Moggi\Backend\{Php,Jvm,DotNet}\Codegen`.
  */
 
-// --- A call whose value the next statement returns -----------------------------
-
 /**
  * How many times each temp is read in a function body, nested scopes included.
  *

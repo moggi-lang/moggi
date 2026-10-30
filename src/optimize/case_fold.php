@@ -6,6 +6,7 @@ use Moggi\IR;
 use Moggi\Optimize\Facts\Facts;
 
 use function Moggi\IR\Projection\index as projectionIndex;
+use function Moggi\IR\Projection\tupleArity;
 use function Moggi\IR\Visit\mapGuards;
 use function Moggi\IR\Visit\mapOperandChildren;
 use function Moggi\IR\Visit\stmtDirectOperands;
@@ -1242,19 +1243,13 @@ function flattenResolvedListCons(
 
 function isTupleCtorTree(CtorTree $tree): bool
 {
-    if (constructorNamesMatch($tree->name, '()')) {
-        return true;
-    }
-    $leaf = constructorLeafName($tree->name);
-
-    return \preg_match('/^__tuple\d+$/', $leaf) === 1;
+    return constructorNamesMatch($tree->name, '()') || isTupleCtorCallee($tree->name);
 }
 
+/** Tuple construction is the callee's published projection spelling, read by its one reader. */
 function isTupleCtorCallee(string $callee): bool
 {
-    $leaf = constructorLeafName($callee);
-
-    return \preg_match('/^__tuple\d+$/', $leaf) === 1;
+    return tupleArity($callee) !== null;
 }
 
 /**

@@ -491,8 +491,6 @@ function publishElaboration(Ast\Program $program): Ast\Program
         assertObligationsSettled($declaration, $core->module);
 
         $termTypes = termTypesFor($declaration);
-        // The declaration, not just its body: a parameter pattern is a binding site too, and its
-        // identity has to be published for lowering to register the slot by identity.
         $terms = checkedTermsIn($declaration);
 
         $core = $core->withFunction($record->withElaboration($termTypes, $terms));

@@ -2,32 +2,33 @@
 
 namespace Moggi\Backend\Php\Codegen;
 
-use function Moggi\Backend\Meta\returnedCall;
+
 use function Moggi\Backend\Php\Naming\mangleVar;
-
 use function Moggi\Backend\Php\Naming\phpSingleQuoted;
-use function Moggi\Backend\Php\Naming\phpTemp;
-
 use Moggi\IR;
+use function Moggi\Backend\Meta\returnedCall;
+use function Moggi\Backend\Php\Naming\phpTemp;
+use function Moggi\IR\Visit\walkOperand;
+use function Moggi\Backend\Php\Codegen\emitOperand;
+use function Moggi\Backend\Php\Codegen\emitBlock;
+use function Moggi\Backend\Php\Codegen\emitFunctionReturn;
 
-use function Moggi\IR\Visit\mapOperandChildren;
-
-function emitMatchStmt(IR\Stmt $stmt, int $indent, array $ctx): string
+function emitMatchStmt(IR\Stmt $stmt, int $indent, EmitEnv $env): string
 {
-    $depth = (int) ($GLOBALS['__moggi_php_match_nest'] ?? 0);
-    $GLOBALS['__moggi_php_match_nest'] = $depth + 1;
+    $depth = $env->matchDepth;
+    $env->matchDepth = $depth + 1;
 
     try {
-        $body = canUsePhpMatch($stmt, $ctx)
-            ? emitPhpMatch($stmt, $indent, $ctx)
-            : emitIfMatch($stmt, $indent, $ctx);
+        $body = canUsePhpMatch($stmt, $env)
+            ? emitPhpMatch($stmt, $indent, $env)
+            : emitMatchIo($stmt, $indent, $env);
         if ($depth > 0) {
             return emitWithSavedFieldBinders($body, $indent, $depth);
         }
 
         return $body;
     } finally {
-        $GLOBALS['__moggi_php_match_nest'] = $depth;
+        $env->matchDepth = $depth;
     }
 }
 
@@ -82,7 +83,7 @@ function emitWithSavedFieldBinders(string $body, int $indent, int $depth): strin
  * a value-position region names its result in its own slot, which its arms write, so they are never
  * the single `Ret` this rendering needs.
  */
-function canUsePhpMatch(IR\Stmt $stmt, array $ctx = []): bool
+function canUsePhpMatch(IR\Stmt $stmt, EmitEnv $env): bool
 {
     $mode = null;
     $lastIndex = \count($stmt->arms) - 1;
@@ -98,7 +99,7 @@ function canUsePhpMatch(IR\Stmt $stmt, array $ctx = []): bool
             }
             $mode = 'literal';
         } elseif ($pattern instanceof IR\PatCon) {
-            if (isset($ctx['newtypeConstructors'][patternConstructorName($pattern, $ctx)])) {
+            if (isset($env->newtypeConstructors[patternConstructorName($pattern, $env)])) {
                 return false;
             }
             if ($mode !== null && $mode !== 'constructor') {
@@ -155,7 +156,7 @@ function patternIsShallowForPhpMatch(IR\Pattern $pattern): bool
     return false;
 }
 
-function isBoolConstructorMatch(IR\Stmt $stmt, array $ctx): bool
+function isBoolConstructorMatch(IR\Stmt $stmt, EmitEnv $env): bool
 {
     $boolArms = 0;
 
@@ -168,8 +169,8 @@ function isBoolConstructorMatch(IR\Stmt $stmt, array $ctx): bool
             return false;
         }
 
-        $name = patternConstructorName($arm->pattern, $ctx);
-        if (! \array_key_exists($name, $ctx['boolConstructors'] ?? [])) {
+        $name = patternConstructorName($arm->pattern, $env);
+        if (! \array_key_exists($name, $env->boolConstructors)) {
             return false;
         }
 
@@ -193,12 +194,12 @@ function phpMatchMode(IR\Stmt $stmt): string
     return 'literal';
 }
 
-function emitPhpMatch(IR\Stmt $stmt, int $indent, array $ctx): string
+function emitPhpMatch(IR\Stmt $stmt, int $indent, EmitEnv $env): string
 {
     $pad = \str_repeat('    ', $indent);
-    $scrutinee = emitOperand($stmt->scrutinee, $ctx);
+    $scrutinee = emitOperand($stmt->scrutinee, $env);
     $mode = phpMatchMode($stmt);
-    $boolMatch = isBoolConstructorMatch($stmt, $ctx);
+    $boolMatch = isBoolConstructorMatch($stmt, $env);
     $matchScrutinee = match (true) {
         $mode === 'literal' => $scrutinee,
         $boolMatch => $scrutinee,
@@ -209,14 +210,11 @@ function emitPhpMatch(IR\Stmt $stmt, int $indent, array $ctx): string
 
     foreach ($stmt->arms as $arm) {
         $pattern = $arm->pattern;
-        $armCtx = [
-            ...$ctx,
-            'patternLocals' => buildPatternLocals($pattern, $scrutinee)
-                + ($ctx['patternLocals'] ?? []),
-            'matchScrutineeOperand' => $scrutinee,
-        ];
-        $expr = emitMatchArmExpression($arm, $armCtx, $indent);
-        $matchKey = emitPhpMatchKey($pattern, $ctx, $boolMatch);
+        $armEnv = clone $env;
+        $armEnv->patternLocals = buildPatternLocals($pattern, $scrutinee) + $env->patternLocals;
+        $armEnv->matchScrutineeOperand = $scrutinee;
+        $expr = emitMatchArmExpression($arm, $armEnv, $indent);
+        $matchKey = emitPhpMatchKey($pattern, $env, $boolMatch);
         $out .= $pad . "    {$matchKey} => {$expr},\n";
         if ($matchKey === 'default') {
             $exhaustive = true;
@@ -232,13 +230,7 @@ function emitPhpMatch(IR\Stmt $stmt, int $indent, array $ctx): string
     return $out . ";\n";
 }
 
-/** @param int|string $value */
-function emitPatLitPhp(int|string $value): string
-{
-    return \is_string($value) ? \json_encode($value, JSON_UNESCAPED_UNICODE) : (string) $value;
-}
-
-function emitPhpMatchKey(IR\Pattern $pattern, array $ctx, bool $boolMatch): string
+function emitPhpMatchKey(IR\Pattern $pattern, EmitEnv $env, bool $boolMatch): string
 {
     if (isCatchAllPattern($pattern)) {
         return 'default';
@@ -252,32 +244,14 @@ function emitPhpMatchKey(IR\Pattern $pattern, array $ctx, bool $boolMatch): stri
         return (string) $pattern->value;
     }
 
-    $tag = patternConstructorName($pattern, $ctx);
+    $tag = patternConstructorName($pattern, $env);
 
     return $boolMatch
-        ? (($ctx['boolConstructors'][$tag] ?? false) ? 'true' : 'false')
+        ? (($env->boolConstructors[$tag] ?? false) ? 'true' : 'false')
         : phpSingleQuoted($tag);
 }
 
-/** @return array<string, string> */
-function buildPatternLocals(IR\Pattern $pattern, string $scrutinee): array
-{
-    $locals = [];
-
-    if ($pattern instanceof IR\PatCon) {
-        foreach ($pattern->args as $i => $arg) {
-            if ($arg instanceof IR\PatVar) {
-                $locals[$arg->name] = "{$scrutinee}[" . ($i + 1) . ']';
-            }
-        }
-
-        return $locals;
-    }
-
-    return $locals;
-}
-
-function emitMatchArmExpression(IR\MatchArm $arm, array $ctx, int $indent): string
+function emitMatchArmExpression(IR\MatchArm $arm, EmitEnv $env, int $indent): string
 {
     $items = $arm->body->items;
     if ($items === []) {
@@ -290,27 +264,27 @@ function emitMatchArmExpression(IR\MatchArm $arm, array $ctx, int $indent): stri
     }
 
     if (\count($items) === 1) {
-        return emitFunctionReturn($last->value, $ctx);
+        return emitFunctionReturn($last->value, $env);
     }
 
-    $fused = returnedCall($items[\count($items) - 2], $last, $ctx['tempReads']);
+    $fused = returnedCall($items[\count($items) - 2], $last, $env->tempReads);
 
     $innerPad = \str_repeat('    ', $indent + 2);
     $inner = '';
     foreach (\array_slice($items, 0, $fused !== null ? -2 : -1) as $item) {
-        $inner .= emitStmt($item, $indent + 2, $ctx);
+        $inner .= emitStmt($item, $indent + 2, $env);
     }
     $inner .= $innerPad . 'return '
-        . ($fused !== null ? emitReturnedCall($fused, $ctx) : emitFunctionReturn($last->value, $ctx)) . ";\n";
+        . ($fused !== null ? emitReturnedCall($fused, $env) : emitFunctionReturn($last->value, $env)) . ";\n";
 
-    $uses = matchArmClosureUses($arm->body, $ctx);
+    $uses = matchArmClosureUses($arm->body, $env);
     $useClause = $uses === [] ? '' : ' use (' . \implode(', ', $uses) . ')';
 
     return '(function ()' . $useClause . " {\n{$inner}" . \str_repeat('    ', $indent + 1) . '})()';
 }
 
-/** @param array<string, mixed> $ctx Codegen context map @return list<string> */
-function matchArmClosureUses(IR\Block $block, array $ctx): array
+/** @param array<string, mixed> $env Codegen context map @return list<string> */
+function matchArmClosureUses(IR\Block $block, EmitEnv $env): array
 {
     $definedTemps = [];
     $definedLocals = [];
@@ -324,15 +298,15 @@ function matchArmClosureUses(IR\Block $block, array $ctx): array
         }
     }
 
-    $patternLocals = $ctx['patternLocals'] ?? [];
+    $patternLocals = $env->patternLocals;
     $captured = [];
-    if ($patternLocals !== [] && isset($ctx['matchScrutineeOperand'])) {
-        $scrut = $ctx['matchScrutineeOperand'];
+    if ($patternLocals !== [] && isset($env->matchScrutineeOperand)) {
+        $scrut = $env->matchScrutineeOperand;
         if (\is_string($scrut) && \str_starts_with($scrut, '$')) {
             $captured[\substr($scrut, 1)] = $scrut;
         }
     }
-    $params = $ctx['functionParams'] ?? [];
+    $params = $env->functionParams;
     if ($params !== []) {
         $paramSet = \array_fill_keys($params, true);
         foreach ($block->items as $item) {
@@ -426,40 +400,6 @@ function matchStmtReferencedLocals(IR\MatchStmt $stmt): array
     return $locals;
 }
 
-/** @return array<string, true> */
-function patternBoundNames(IR\Pattern $pattern): array
-{
-    $bound = [];
-    if ($pattern instanceof IR\PatVar) {
-        $bound[$pattern->name] = true;
-
-        return $bound;
-    }
-    if ($pattern instanceof IR\PatCon) {
-        foreach ($pattern->args as $arg) {
-            foreach (patternBoundNames($arg) as $name => $_) {
-                $bound[$name] = true;
-            }
-        }
-
-        return $bound;
-    }
-    if ($pattern instanceof IR\PatTuple) {
-        foreach ($pattern->elements as $el) {
-            foreach (patternBoundNames($el) as $name => $_) {
-                $bound[$name] = true;
-            }
-        }
-
-        return $bound;
-    }
-    if ($pattern instanceof IR\PatCons) {
-        return patternBoundNames($pattern->head) + patternBoundNames($pattern->tail);
-    }
-
-    return $bound;
-}
-
 /** @return list<int> */
 function stmtReferencedTemps(IR\Stmt $stmt): array
 {
@@ -520,10 +460,10 @@ function operandReferencedTemps(IR\Operand $operand): array
     return $temps;
 }
 
-function emitIfMatch(IR\Stmt $stmt, int $indent, array $ctx): string
+function emitMatchIo(IR\Stmt $stmt, int $indent, EmitEnv $env): string
 {
     $pad = \str_repeat('    ', $indent);
-    $scrutinee = emitOperand($stmt->scrutinee, $ctx);
+    $scrutinee = emitOperand($stmt->scrutinee, $env);
     $arms = $stmt->arms;
     $out = '';
     $exhaustive = ($stmt->exhaustive)
@@ -532,7 +472,7 @@ function emitIfMatch(IR\Stmt $stmt, int $indent, array $ctx): string
 
     foreach ($arms as $arm) {
         if ($arm->guards !== []) {
-            return emitGuardedIfMatch($stmt, $indent, $ctx, $scrutinee, $exhaustive);
+            return emitGuardedIfMatch($stmt, $indent, $env, $scrutinee, $exhaustive);
         }
     }
 
@@ -551,12 +491,12 @@ function emitIfMatch(IR\Stmt $stmt, int $indent, array $ctx): string
         if ($prefix === 'else') {
             $out .= $pad . "else {\n";
         } else {
-            $cond = emitMatchArmCondition($arm, $scrutinee, $ctx);
+            $cond = emitMatchArmCondition($arm, $scrutinee, $env);
             $out .= $pad . "{$prefix} ({$cond}) {\n";
         }
 
-        $out .= emitPatternBindings($arm->pattern, $scrutinee, $indent + 1, $ctx);
-        $out .= emitBlock($arm->body, $indent + 1, $ctx);
+        $out .= emitPatternBindings($arm->pattern, $scrutinee, $indent + 1, $env);
+        $out .= emitBlock($arm->body, $indent + 1, $env);
         $out .= $pad . "}\n";
     }
 
@@ -578,28 +518,28 @@ function emitIfMatch(IR\Stmt $stmt, int $indent, array $ctx): string
  * failed pattern -- so the arms are a sequence, each one leaving through the
  * join when it takes its body and falling through to the next when it does not.
  */
-function emitGuardedIfMatch(IR\Stmt $stmt, int $indent, array $ctx, string $scrutinee, bool $exhaustive): string
+function emitGuardedIfMatch(IR\Stmt $stmt, int $indent, EmitEnv $env, string $scrutinee, bool $exhaustive): string
 {
     $pad = \str_repeat('    ', $indent);
     $out = $pad . "do {\n";
 
     foreach ($stmt->arms as $arm) {
-        $out .= $pad . '    if (' . emitPatternTest($arm->pattern, $scrutinee, $ctx) . ") {\n";
-        $out .= emitPatternBindings($arm->pattern, $scrutinee, $indent + 2, $ctx);
+        $out .= $pad . '    if (' . emitPatternTest($arm->pattern, $scrutinee, $env) . ") {\n";
+        $out .= emitPatternBindings($arm->pattern, $scrutinee, $indent + 2, $env);
 
         if ($arm->guards === []) {
-            $out .= emitBlock($arm->body, $indent + 2, $ctx);
+            $out .= emitBlock($arm->body, $indent + 2, $env);
             $out .= $pad . "        break;\n";
         } else {
             $conditions = [];
             foreach ($arm->guards as $guard) {
                 foreach ($guard->prep->items as $prepItem) {
-                    $out .= emitStmt($prepItem, $indent + 2, $ctx);
+                    $out .= emitStmt($prepItem, $indent + 2, $env);
                 }
-                $conditions[] = emitOperand($guard->cond, $ctx);
+                $conditions[] = emitOperand($guard->cond, $env);
             }
             $out .= $pad . '        if (' . joinPatternTests($conditions) . ") {\n";
-            $out .= emitBlock($arm->body, $indent + 3, $ctx);
+            $out .= emitBlock($arm->body, $indent + 3, $env);
             $out .= $pad . "            break;\n";
             $out .= $pad . "        }\n";
         }
@@ -614,369 +554,3 @@ function emitGuardedIfMatch(IR\Stmt $stmt, int $indent, array $ctx, string $scru
     return $out . $pad . "} while (false);\n";
 }
 
-/** @param array<string, string> $map */
-function collectPatternBinderNames(IR\Pattern $pattern, array &$map, int $id, int &$n): void
-{
-    if ($pattern instanceof IR\PatVar) {
-        if (! \str_starts_with($pattern->name, '__f')) {
-            return;
-        }
-        if (! isset($map[$pattern->name])) {
-            $map[$pattern->name] = $pattern->name . '__m' . $id . '_' . $n;
-            ++$n;
-        }
-
-        return;
-    }
-    if ($pattern instanceof IR\PatCon) {
-        foreach ($pattern->args as $arg) {
-            collectPatternBinderNames($arg, $map, $id, $n);
-        }
-
-        return;
-    }
-    if ($pattern instanceof IR\PatTuple) {
-        foreach ($pattern->elements as $el) {
-            collectPatternBinderNames($el, $map, $id, $n);
-        }
-
-        return;
-    }
-    if ($pattern instanceof IR\PatCons) {
-        collectPatternBinderNames($pattern->head, $map, $id, $n);
-        collectPatternBinderNames($pattern->tail, $map, $id, $n);
-    }
-}
-
-/** @param array<string, string> $map */
-function renamePatternBinders(IR\Pattern $pattern, array $map): IR\Pattern
-{
-    if ($pattern instanceof IR\PatVar) {
-        return new IR\PatVar($map[$pattern->name] ?? $pattern->name);
-    }
-    if ($pattern instanceof IR\PatCon) {
-        return new IR\PatCon(
-            $pattern->name,
-            \array_map(static fn (IR\Pattern $a): IR\Pattern => renamePatternBinders($a, $map), $pattern->args),
-        );
-    }
-    if ($pattern instanceof IR\PatTuple) {
-        return new IR\PatTuple(\array_map(
-            static fn (IR\Pattern $e): IR\Pattern => renamePatternBinders($e, $map),
-            $pattern->elements,
-        ));
-    }
-    if ($pattern instanceof IR\PatCons) {
-        return new IR\PatCons(
-            renamePatternBinders($pattern->head, $map),
-            renamePatternBinders($pattern->tail, $map),
-        );
-    }
-
-    return $pattern;
-}
-
-/**
- * Rename Locals in statements. Nested match arm bodies are rewritten for
- * outer binder renames, but nested patterns keep their own binder names
- * (shadowing removes those keys from the rename map).
- *
- * @param list<IR\Stmt> $items
- * @param array<string, string> $map
- * @return list<IR\Stmt>
- */
-function renameLocalsInItemsShallow(array $items, array $map): array
-{
-    $out = [];
-    foreach ($items as $item) {
-        if ($item instanceof IR\MatchStmt) {
-            $arms = [];
-            foreach ($item->arms as $arm) {
-                $arms[] = renameNestedMatchArmPreservingBinders($arm, $map);
-            }
-            $out[] = new IR\MatchStmt(
-                renameLocalsInOperand($item->scrutinee, $map),
-                $arms,
-                $item->dest,
-                $item->exhaustive,
-            );
-
-            continue;
-        }
-        if ($item instanceof IR\MatchReturn) {
-            $arms = [];
-            foreach ($item->arms as $arm) {
-                $arms[] = renameNestedMatchArmPreservingBinders($arm, $map);
-            }
-            $out[] = new IR\MatchReturn(
-                renameLocalsInOperand($item->scrutinee, $map),
-                $arms,
-                $item->exhaustive,
-            );
-
-            continue;
-        }
-        $out[] = renameLocalsInStmtDeep($item, $map);
-    }
-
-    return $out;
-}
-
-/**
- * @param array<string, string> $map
- */
-function renameNestedMatchArmPreservingBinders(IR\MatchArm $arm, array $map): IR\MatchArm
-{
-    $bound = [];
-    $n = 0;
-    $tmp = [];
-    collectPatternBinderNames($arm->pattern, $tmp, 0, $n);
-    foreach ($tmp as $old => $_fresh) {
-        $bound[$old] = true;
-    }
-    $innerMap = [];
-    foreach ($map as $old => $fresh) {
-        if (! isset($bound[$old])) {
-            $innerMap[$old] = $fresh;
-        }
-    }
-    $guards = IR\Visit\mapGuards(
-        $arm->guards,
-        static fn (IR\Operand $g): IR\Operand => renameLocalsInOperand($g, $innerMap),
-        static fn (IR\Stmt $s): IR\Stmt => renameLocalsInItemsShallow([$s], $innerMap)[0],
-    );
-
-    return new IR\MatchArm(
-        $arm->pattern,
-        new IR\Block(renameLocalsInItemsShallow($arm->body->items, $innerMap)),
-        $guards,
-    );
-}
-
-/** @param array<string, string> $map */
-function renameLocalsInStmtDeep(IR\Stmt $stmt, array $map): IR\Stmt
-{
-    return match ($stmt::class) {
-        IR\Ret::class => new IR\Ret(renameLocalsInOperand($stmt->value, $map)),
-        IR\Assign::class => new IR\Assign($stmt->dest, renameLocalsInOperand($stmt->value, $map)),
-        IR\Let::class => new IR\Let($stmt->name, renameLocalsInOperand($stmt->value, $map)),
-        IR\Call::class => new IR\Call(
-            $stmt->callee,
-            \array_map(static fn (IR\Operand $a): IR\Operand => renameLocalsInOperand($a, $map), $stmt->args),
-            $stmt->dest,
-            $stmt->srcLoc,
-        ),
-        IR\CallValue::class => new IR\CallValue(
-            renameLocalsInOperand($stmt->callee, $map),
-            \array_map(static fn (IR\Operand $a): IR\Operand => renameLocalsInOperand($a, $map), $stmt->args),
-            $stmt->dest,
-            $stmt->srcLoc,
-        ),
-        default => $stmt,
-    };
-}
-
-/** @param array<string, string> $map */
-function renameLocalsInOperand(IR\Operand $operand, array $map): IR\Operand
-{
-    if ($operand instanceof IR\Local) {
-        return new IR\Local($map[$operand->name] ?? $operand->name);
-    }
-
-    return mapOperandChildren(
-        $operand,
-        static fn (IR\Operand $child): IR\Operand => renameLocalsInOperand($child, $map),
-    );
-}
-
-function emitMatchArmCondition(IR\MatchArm $arm, string $scrutinee, array $ctx): string
-{
-    $tests = [emitPatternTest($arm->pattern, $scrutinee, $ctx)];
-    foreach ($arm->guards as $guard) {
-        $tests[] = emitOperand($guard->cond, $ctx);
-    }
-
-    return joinPatternTests($tests);
-}
-
-/**
- * Conjoin pattern/guard tests, dropping the no-op `true` that a wildcard or
- * variable argument contributes: `arm Left _` is `… === 'Left' && true`
- * otherwise, which is a real (if pointless) operation on every arm.
- */
-function joinPatternTests(array $tests): string
-{
-    $tests = \array_values(\array_filter($tests, static fn (string $test): bool => $test !== 'true'));
-    if ($tests === []) {
-        return 'true';
-    }
-
-    return \count($tests) === 1 ? $tests[0] : '(' . \implode(' && ', $tests) . ')';
-}
-
-function isCatchAllPattern(IR\Pattern $pattern): bool
-{
-    return match ($pattern::class) {
-        IR\PatWild::class, IR\PatVar::class => true,
-        IR\PatTuple::class => \array_reduce(
-            $pattern->elements,
-            static fn (bool $carry, IR\Pattern $element): bool => $carry && isCatchAllPattern($element),
-            true,
-        ),
-        default => false,
-    };
-}
-
-function patternConstructorName(IR\Pattern $pattern, array $ctx): string
-{
-    $name = $pattern->name;
-
-    return $ctx['constructorRenames'][$name] ?? $name;
-}
-
-function emitPatternTest(IR\Pattern $pattern, string $scrutinee, array $ctx): string
-{
-    if ($pattern instanceof IR\PatCon && $pattern->args === []) {
-        $name = patternConstructorName($pattern, $ctx);
-        if (\array_key_exists($name, $ctx['boolConstructors'] ?? [])) {
-            $value = $ctx['boolConstructors'][$name] ? 'true' : 'false';
-
-            return "{$scrutinee} === {$value}";
-        }
-    }
-
-    return match ($pattern::class) {
-        IR\PatWild::class => 'true',
-        IR\PatVar::class => 'true',
-        IR\PatLit::class => "{$scrutinee} === " . emitPatLitPhp($pattern->value),
-        IR\PatChar::class => "{$scrutinee} === " . $pattern->value,
-        IR\PatCon::class => emitConPatternTest($pattern, $scrutinee, $ctx),
-        IR\PatTuple::class => emitTuplePatternTest($pattern, $scrutinee, $ctx),
-        IR\PatNil::class => "{$scrutinee} === []",
-        IR\PatCons::class => joinPatternTests([
-            $scrutinee . ' !== []',
-            emitPatternTest($pattern->head, $scrutinee . '[0]', $ctx),
-            emitPatternTest($pattern->tail, '\array_slice(' . $scrutinee . ', 1)', $ctx),
-        ]),
-        default => throw new \RuntimeException('unsupported pattern `' . $pattern::class . '` in codegen'),
-    };
-}
-
-function emitConPatternTest(IR\Pattern $pattern, string $scrutinee, array $ctx): string
-{
-    $name = patternConstructorName($pattern, $ctx);
-    if (isset($ctx['newtypeConstructors'][$name])) {
-        $tests = [];
-        foreach ($pattern->args as $arg) {
-            $tests[] = emitPatternTest($arg, $scrutinee, $ctx);
-        }
-
-        return joinPatternTests($tests);
-    }
-
-    $tests = ["(({$scrutinee})[0] ?? null) === " . phpSingleQuoted($name)];
-    foreach ($pattern->args as $i => $arg) {
-        $tests[] = emitPatternTest($arg, "{$scrutinee}[" . ($i + 1) . ']', $ctx);
-    }
-
-    return joinPatternTests($tests);
-}
-
-function emitTuplePatternTest(IR\Pattern $pattern, string $scrutinee, array $ctx): string
-{
-    $tests = [];
-    foreach ($pattern->elements as $i => $element) {
-        $tests[] = emitPatternTest($element, "{$scrutinee}[{$i}]", $ctx);
-    }
-
-    return joinPatternTests($tests);
-}
-
-function emitPatternBindings(IR\Pattern $pattern, string $scrutinee, int $indent, array $ctx = []): string
-{
-    return match ($pattern::class) {
-        IR\PatWild::class, IR\PatLit::class, IR\PatChar::class, IR\PatVar::class => '',
-        IR\PatCon::class => emitConPatternBindings($pattern, $scrutinee, $indent, $ctx),
-        IR\PatTuple::class => emitTuplePatternBindings($pattern, $scrutinee, $indent, $ctx),
-        IR\PatNil::class => '',
-        IR\PatCons::class => emitListConsPatternBindings($pattern, $scrutinee, $indent, $ctx),
-        default => throw new \RuntimeException('unsupported pattern `' . $pattern::class . '` in codegen'),
-    };
-}
-
-function emitConPatternBindings(IR\Pattern $pattern, string $scrutinee, int $indent, array $ctx = []): string
-{
-    $name = patternConstructorName($pattern, $ctx);
-    if (isset($ctx['newtypeConstructors'][$name])) {
-        return $pattern->args === []
-            ? ''
-            : emitPatternBinding($pattern->args[0], $scrutinee, $indent, $ctx);
-    }
-
-    if ($pattern->args === []) {
-        return '';
-    }
-
-    $pad = \str_repeat('    ', $indent);
-    $snap = nextPhpScrutineeSnapshot();
-    $out = $pad . "{$snap} = {$scrutinee};\n";
-    foreach ($pattern->args as $i => $arg) {
-        $field = "{$snap}[" . ($i + 1) . ']';
-        $out .= emitPatternBinding($arg, $field, $indent, $ctx);
-    }
-
-    return $out;
-}
-
-function emitTuplePatternBindings(IR\Pattern $pattern, string $scrutinee, int $indent, array $ctx = []): string
-{
-    if ($pattern->elements === []) {
-        return '';
-    }
-
-    $pad = \str_repeat('    ', $indent);
-    $snap = nextPhpScrutineeSnapshot();
-    $out = $pad . "{$snap} = {$scrutinee};\n";
-    foreach ($pattern->elements as $i => $element) {
-        $field = "{$snap}[{$i}]";
-        $out .= emitPatternBinding($element, $field, $indent, $ctx);
-    }
-
-    return $out;
-}
-
-function emitListConsPatternBindings(IR\Pattern $pattern, string $scrutinee, int $indent, array $ctx = []): string
-{
-    $pad = \str_repeat('    ', $indent);
-    $snap = nextPhpScrutineeSnapshot();
-    $out = $pad . "{$snap} = {$scrutinee};\n";
-    $head = "{$snap}[0]";
-    $tail = "\array_slice({$snap}, 1)";
-
-    return $out
-        . emitPatternBinding($pattern->head, $head, $indent, $ctx)
-        . emitPatternBinding($pattern->tail, $tail, $indent, $ctx);
-}
-
-function nextPhpScrutineeSnapshot(): string
-{
-    $n = (int) ($GLOBALS['__moggi_php_scrut_snap'] ?? 0);
-    $GLOBALS['__moggi_php_scrut_snap'] = $n + 1;
-
-    return '$__scrut_' . $n;
-}
-
-function emitPatternBinding(IR\Pattern $pattern, string $source, int $indent, array $ctx = []): string
-{
-    $pad = \str_repeat('    ', $indent);
-
-    return match ($pattern::class) {
-        IR\PatWild::class, IR\PatLit::class, IR\PatChar::class => '',
-        IR\PatVar::class => $pad . '$' . mangleVar($pattern->name) . " = {$source};\n",
-        IR\PatCon::class => emitConPatternBindings($pattern, $source, $indent, $ctx),
-        IR\PatTuple::class => emitTuplePatternBindings($pattern, $source, $indent, $ctx),
-        IR\PatNil::class => '',
-        IR\PatCons::class => emitListConsPatternBindings($pattern, $source, $indent, $ctx),
-        default => throw new \RuntimeException('unsupported pattern `' . $pattern::class . '` in codegen'),
-    };
-}

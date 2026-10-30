@@ -198,8 +198,6 @@ function classModuleScopes(
 
             $scoped = Ast\copyNode($body);
             desugarDoForScope($scoped);
-            // A copied default body carries no checked terms — it is scoped, not lowered — so
-            // this caller answers the evidence question from the node it is walking.
             $evidenceParameter = static fn (Ast\EvidenceMethod $method): ?string
                 => $method->evidence === '' ? null : $method->evidence;
 

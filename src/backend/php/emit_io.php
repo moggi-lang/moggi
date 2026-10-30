@@ -1,18 +1,17 @@
 <?php declare(strict_types=1);
 
-namespace Moggi\Backend\Php\Io;
+namespace Moggi\Backend\Php\Codegen;
 
-use function Moggi\Backend\Meta\lambdaCaptureNamesInBlock;
 
-use function Moggi\Backend\Php\Codegen\emitBlock;
-use function Moggi\Backend\Php\Codegen\emitOperand;
-use function Moggi\Backend\Php\Codegen\emitFunctionReturn;
-use function Moggi\Backend\Php\Intrinsics\emitSrcLocExpr;
 use function Moggi\Backend\Php\Naming\mangleVar;
-use function Moggi\Backend\Php\Naming\phpTemp;
-
 use Moggi\IR;
-
+use function Moggi\Backend\Php\Naming\phpTemp;
+use function Moggi\IR\Visit\collectLocalsInOperand;
+use function Moggi\IR\Visit\walkOperand;
+use function Moggi\Backend\Php\Codegen\emitOperand;
+use function Moggi\Backend\Meta\lambdaCaptureNamesInBlock;
+use function Moggi\Backend\Php\Codegen\emitBlock;
+use function Moggi\Backend\Php\Codegen\emitFunctionReturn;
 use function Moggi\IR\Visit\collectLocalsInBlock;
 
 /**
@@ -29,7 +28,7 @@ function emitIoRunResultExpr(string $resultExpr): string
     return '(' . $resultExpr . '[1])()';
 }
 
-function emitIoAssignAction(IR\Stmt $stmt, int $indent, array $ctx): string
+function emitIoAssignAction(IR\Stmt $stmt, int $indent, EmitEnv $env): string
 {
     $pad = \str_repeat('    ', $indent);
     $dest = phpTemp($stmt->dest);
@@ -71,7 +70,7 @@ function emitIoAssignAction(IR\Stmt $stmt, int $indent, array $ctx): string
         }
     }
 
-    $lambdaMeta = $ctx['lambdaMeta'] ?? [];
+    $lambdaMeta = $env->lambdaMeta;
     foreach (lambdaCaptureNamesInBlock($body, $lambdaMeta) as $capture) {
         if (! isset($assignedLocals[$capture])) {
             $captured[$capture] = '$' . mangleVar($capture);
@@ -107,8 +106,8 @@ function emitIoAssignAction(IR\Stmt $stmt, int $indent, array $ctx): string
             \array_values($captured),
         )) . ')';
 
-    $inner = emitBlock($body, $indent + 1, $ctx);
-    $value = emitFunctionReturn($result, $ctx);
+    $inner = emitBlock($body, $indent + 1, $env);
+    $value = emitFunctionReturn($result, $env);
     $return = 'return ' . $value . ';';
 
     return $pad . $dest . " = ['__io', static function(){$useList}: mixed {\n"
@@ -117,10 +116,10 @@ function emitIoAssignAction(IR\Stmt $stmt, int $indent, array $ctx): string
         . $pad . "}];\n";
 }
 
-function emitIoRun(IR\Stmt $stmt, int $indent, array $ctx): string
+function emitIoRun(IR\Stmt $stmt, int $indent, EmitEnv $env): string
 {
     $pad = \str_repeat('    ', $indent);
-    $action = emitOperand($stmt->action, $ctx);
+    $action = emitOperand($stmt->action, $env);
     $run = emitIoRunResultExpr($action);
     $dest = $stmt->dest;
 
@@ -131,11 +130,11 @@ function emitIoRun(IR\Stmt $stmt, int $indent, array $ctx): string
     return $pad . phpTemp($dest) . ' = ' . $run . ";\n";
 }
 
-function emitIoThrow(IR\Stmt $stmt, int $indent, array $ctx): string
+function emitIoThrow(IR\Stmt $stmt, int $indent, EmitEnv $env): string
 {
     $pad = \str_repeat('    ', $indent);
-    $ex = emitOperand($stmt->exception, $ctx);
-    $loc = emitSrcLocExpr($stmt->srcLoc, $ctx);
+    $ex = emitOperand($stmt->exception, $env);
+    $loc = emitSrcLocValue($stmt->srcLoc, $env);
     $out = $pad . '\\Moggi\\throwSomeException(' . $ex . ', ' . $loc . ");\n";
     if ($stmt->dest !== null) {
         $out .= $pad . phpTemp($stmt->dest) . " = null;\n";
@@ -144,12 +143,12 @@ function emitIoThrow(IR\Stmt $stmt, int $indent, array $ctx): string
     return $out;
 }
 
-function emitIoCatch(IR\Stmt $stmt, int $indent, array $ctx): string
+function emitIoCatch(IR\Stmt $stmt, int $indent, EmitEnv $env): string
 {
     $pad = \str_repeat('    ', $indent);
     $innerPad = $pad . '    ';
-    $action = emitOperand($stmt->action, $ctx);
-    $handler = emitOperand($stmt->handler, $ctx);
+    $action = emitOperand($stmt->action, $env);
+    $handler = emitOperand($stmt->handler, $env);
     $dest = $stmt->dest;
     $run = emitIoRunResultExpr($action);
 
@@ -181,12 +180,12 @@ function emitIoCatch(IR\Stmt $stmt, int $indent, array $ctx): string
     return $out;
 }
 
-function emitIoFinally(IR\Stmt $stmt, int $indent, array $ctx): string
+function emitIoFinally(IR\Stmt $stmt, int $indent, EmitEnv $env): string
 {
     $pad = \str_repeat('    ', $indent);
     $innerPad = $pad . '    ';
-    $action = emitOperand($stmt->action, $ctx);
-    $cleanup = emitOperand($stmt->cleanup, $ctx);
+    $action = emitOperand($stmt->action, $env);
+    $cleanup = emitOperand($stmt->cleanup, $env);
     $dest = $stmt->dest;
     $run = emitIoRunResultExpr($action);
     $cleanupRun = emitIoRunResultExpr($cleanup);
@@ -211,4 +210,46 @@ function emitIoFinally(IR\Stmt $stmt, int $indent, array $ctx): string
     }
 
     return $out;
+}
+
+/** @param list<string> $argExprs */
+function emitIntrinsicState(EmitEnv $env, IR\Intrinsic $op, array $argExprs): ?string
+{
+    return match ($op->name) {
+        'ioPure#', 'ioBind#' => throw new \InvalidArgumentException(
+            "intrinsic `{$name}` must be erased by strict IO normalization",
+        ),
+        'stPure#' => '\\Moggi\\stPure(' . $argExprs[0] . ')',
+        'stBind#' => '\\Moggi\\stBind(' . $argExprs[0] . ', ' . $argExprs[1] . ')',
+        'runST#' => '\\Moggi\\stRun(' . $argExprs[0] . ')',
+        'stToIO#' => '\\Moggi\\stToIO(' . $argExprs[0] . ')',
+        'newSTRef#' => '\\Moggi\\stNewRef(' . $argExprs[0] . ')',
+        'readSTRef#' => '\\Moggi\\stReadRef(' . $argExprs[0] . ')',
+        'writeSTRef#' => '\\Moggi\\stWriteRef(' . $argExprs[0] . ', ' . $argExprs[1] . ')',
+        'arrayNew#' => '\\Moggi\\arrayNew(' . $argExprs[0] . ', ' . $argExprs[1] . ')',
+        'arraySize#' => '\\Moggi\\arraySize(' . $argExprs[0] . ')',
+        'arrayBounds#' => '\\Moggi\\arrayBounds(' . $argExprs[0] . ')',
+        'arrayRead#' => '\\Moggi\\arrayRead(' . $argExprs[0] . ', ' . $argExprs[1] . ')',
+        'newSTArray#' => '\\Moggi\\stNewArray(' . $argExprs[0] . ', ' . $argExprs[1] . ')',
+        'readSTArray#' => '\\Moggi\\stReadArray(' . $argExprs[0] . ', ' . $argExprs[1] . ')',
+        'writeSTArray#' => '\\Moggi\\stWriteArray(' . $argExprs[0] . ', ' . $argExprs[1] . ', ' . $argExprs[2] . ')',
+        'sizeSTArray#' => '\\Moggi\\stSizeArray(' . $argExprs[0] . ')',
+        'boundsSTArray#' => '\\Moggi\\stBoundsArray(' . $argExprs[0] . ')',
+        'sameSTArray#' => "({$argExprs[0]} === {$argExprs[1]})",
+        'freezeSTArray#' => '\\Moggi\\stFreezeArray(' . $argExprs[0] . ', true)',
+        'thawArray#' => '\\Moggi\\stThawArray(' . $argExprs[0] . ', true)',
+        'unsafeFreezeSTArray#' => '\\Moggi\\stFreezeArray(' . $argExprs[0] . ', false)',
+        'unsafeThawArray#' => '\\Moggi\\stThawArray(' . $argExprs[0] . ', false)',
+        'newIOArray#' => '\\Moggi\\ioNewArray(' . $argExprs[0] . ', ' . $argExprs[1] . ')',
+        'readIOArray#' => '\\Moggi\\ioReadArray(' . $argExprs[0] . ', ' . $argExprs[1] . ')',
+        'writeIOArray#' => '\\Moggi\\ioWriteArray(' . $argExprs[0] . ', ' . $argExprs[1] . ', ' . $argExprs[2] . ')',
+        'sizeIOArray#' => '\\Moggi\\ioSizeArray(' . $argExprs[0] . ')',
+        'boundsIOArray#' => '\\Moggi\\ioBoundsArray(' . $argExprs[0] . ')',
+        'sameIOArray#' => "({$argExprs[0]} === {$argExprs[1]})",
+        'freezeIOArray#' => '\\Moggi\\ioFreezeArray(' . $argExprs[0] . ', true)',
+        'thawIOArray#' => '\\Moggi\\ioThawArray(' . $argExprs[0] . ', true)',
+        'unsafeFreezeIOArray#' => '\\Moggi\\ioFreezeArray(' . $argExprs[0] . ', false)',
+        'unsafeThawIOArray#' => '\\Moggi\\ioThawArray(' . $argExprs[0] . ', false)',
+        default => null,
+    };
 }

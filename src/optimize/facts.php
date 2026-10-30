@@ -3,6 +3,7 @@
 namespace Moggi\Optimize\Facts;
 
 use Moggi\IR;
+use Moggi\IR\Callables\CallableTable;
 use Moggi\Optimize\CaseFold\CtorTree;
 
 use function Moggi\IR\Projection\leafName;
@@ -13,7 +14,7 @@ use function Moggi\IR\Projection\leafName;
  * Facts that used to ride in session globals and per-file static state with twenty-two setters and
  * getters between them: the evidence map, each module's functions, each module's imported functions,
  * the nullary constructor-carrying functions case-fold unfolds, the fusion index, the inline pass's
- * capture and rebinding tables. They are all derived from the same module set, so one object holds
+ * callable table and rebinding tables. They are all derived from the same module set, so one object holds
  * them, one install publishes them, and a reader asks for the fact it needs.
  *
  * The object is ambient because the passes that read it sit at the bottom of rewrite recursion that
@@ -50,7 +51,9 @@ final class Facts
         public array $fnsByModule = [],
         public readonly array $externalFnsByModule = [],
         public array $nullaryCtorCafs = [],
-        public array $captureMeta = [],
+        public ?CallableTable $callableTable = null,
+        /** @var ?array<string, list<string>> the locals a reference to each lifted callable keeps alive */
+        public ?array $liftedCaptureNeeds = null,
         public array $fusionIndex = [],
         public array $inlineProtectedNames = [],
         public array $inlineTargetBoundNames = [],
@@ -124,16 +127,21 @@ final class Facts
     }
 
     /**
-     * The capture table of the module being inlined, and the fusion index built from the module set.
+     * The callable table of the module being inlined, and the fusion index built from the module set.
      *
      * Both are per-run facts about the program, so they live here rather than in a session global; publishing
-     * an empty array is how a pass drops one when it is done with it.
-     *
-     * @param array<string, array{captures: list<string>, params: list<string>}> $meta
+     * nothing is how a pass drops one when it is done with it. The table is the publication every capture
+     * question is answered from, so no pass keeps a second capture map of its own.
      */
-    public function publishCaptureMeta(array $meta): void
+    public function publishCallableTable(?CallableTable $table): void
     {
-        $this->captureMeta = $meta;
+        $this->callableTable = $table;
+    }
+
+    /** @param array<string, list<string>> $needs */
+    public function publishLiftedCaptureNeeds(array $needs): void
+    {
+        $this->liftedCaptureNeeds = $needs;
     }
 
     /** @param array<string, IR\FunctionDecl> $index */

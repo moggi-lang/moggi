@@ -6,8 +6,6 @@ use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Syntax\Ast;
 
-// Record fields: which constructor a field name belongs to, and a field's type at a given object type.
-
 function recordFieldNames(TypeCheckState $state, string $dataName): array
 {
     $names = [];

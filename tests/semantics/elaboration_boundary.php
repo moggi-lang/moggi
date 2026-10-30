@@ -110,16 +110,21 @@ $inserters = static function (array $functions) use ($insertion): array {
 };
 
 $typeRoot = $root . '/src/semantics/types';
-$inferFile = $typeRoot . '/infer.php';
-$inferFunctions = $functions($inferFile);
+$inferFunctions = $functions($typeRoot . '/infer.php');
+$evidenceFunctions = $functions($typeRoot . '/evidence.php');
 $literalFunctions = $functions($typeRoot . '/literals.php');
 
 $expectation = $expectedInfer;
 \sort($expectation);
 
 $assert(
-    $inserters($inferFunctions) === $expectation,
-    'infer.php may insert evidence only from [' . \implode(', ', $expectedInfer) . ']; found ['
+    $inserters($evidenceFunctions) === $expectation,
+    'evidence.php may insert evidence only from [' . \implode(', ', $expectedInfer) . ']; found ['
+        . \implode(', ', $inserters($evidenceFunctions)) . ']',
+);
+$assert(
+    $inserters($inferFunctions) === [],
+    'infer.php must not attach evidence at all — elaboration is evidence.php\'s; found ['
         . \implode(', ', $inserters($inferFunctions)) . ']',
 );
 $assert(
@@ -145,33 +150,21 @@ foreach ([...$insertion, 'clearPendingConstraints', 'resolveConstraintEvidence',
     );
 }
 
-// No inference-phase function may insert evidence: `elaborateApplyEvidence`
-// (reached through `inferApplyAndElaborate`) is the only way in.
-foreach ($inferFunctions as $name => $text) {
-    if (! \str_starts_with($name, 'infer')) {
-        continue;
-    }
-
-    foreach ($insertion as $primitive) {
-        $assert(
-            ! \str_contains($text, $primitive . '('),
-            "inference function {$name} must not insert evidence; elaborateApplyEvidence is the only one that does",
-        );
-    }
-}
-
+// Inferring an apply and discharging what it owes are one entry (`inferApplyAndElaborate`, which
+// moved to evidence.php with the elaboration it performs), so no third function may reach
+// `inferApply` and leave a call's obligation parked behind the caller's back.
 $applyCallers = [];
-foreach ($inferFunctions as $name => $text) {
-    if ($name !== 'inferApply' && \preg_match('/\binferApply\(/', $text)) {
+foreach ($inferFunctions + $evidenceFunctions as $name => $text) {
+    if ($name !== 'inferApply' && $name !== 'inferApplyAndElaborate' && \preg_match('/\binferApply\(/', $text)) {
         $applyCallers[] = $name;
     }
 }
 $assert(
-    $applyCallers === ['inferApplyAndElaborate'],
+    $applyCallers === [],
     'inferApplyAndElaborate must be the only entry to inferApply; found [' . \implode(', ', $applyCallers) . ']',
 );
 $assert(
-    \str_contains($inferFunctions['inferApplyAndElaborate'], 'elaborateApplyEvidence('),
+    \str_contains($evidenceFunctions['inferApplyAndElaborate'] ?? '', 'elaborateApplyEvidence('),
     'inferApplyAndElaborate must elaborate through elaborateApplyEvidence',
 );
 $assert(

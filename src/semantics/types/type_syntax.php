@@ -17,8 +17,6 @@ use Moggi\Syntax\Ast;
 use function Moggi\Semantics\IntrinsicRegistry\primitiveTypeOwnerModule;
 use function Moggi\Semantics\TypeExpr\canonicalNatDigits;
 
-// Type syntax: a written type node becomes a `Type`, against the declarations in scope (synonyms, promoted constructors, kind-checked application).
-
 function astTypeSignature(TypeCheckState $state, Ast\TypeNode $typeAst, array $expanding = [], ?Ast\AstNode $at = null): Type
 {
     [$constraintAsts, $bodyTypeAst] = splitTypeAst($typeAst);

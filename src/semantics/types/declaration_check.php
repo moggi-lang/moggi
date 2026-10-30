@@ -9,12 +9,9 @@ use Moggi\Semantics\TypeExpr\Scheme;
 use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\TVar;
-use Moggi\Semantics\TypeExpr\TVarApp;
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Syntax\Ast;
 use function Moggi\Semantics\TypeExpr\scheme;
-
-// Checking a declaration: its body, what the monomorphism restriction holds back until the module end, and the scheme it publishes.
 
 /**
  * Make the class methods of the given obligations the ones a body in scope can
@@ -231,8 +228,6 @@ function checkFunction(TypeCheckState $state, Ast\FunctionDecl $fn): Ast\Functio
     }
 
     assertParamListLinear($state, $fn->params);
-    // The declaration's parameters open a frame of their own, so a use in the body reaches the binder
-    // the frame names by identity rather than resolving the spelling against whatever is left.
     $state->pushBinderScope();
     foreach ($fn->params as $i => $param) {
         [$_, $env] = bindPattern($state, $param, $paramTypes[$i], $env, generalize: false);

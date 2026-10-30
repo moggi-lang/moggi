@@ -8,7 +8,7 @@ require $root . '/src/compiler.php';
 
 use Moggi\Backend\DotNet\Codegen\EmitEnv;
 use Moggi\Backend\DotNet\Codegen\MethodIl;
-use function Moggi\Backend\DotNet\Codegen\emitDotNetConstLiteral;
+use function Moggi\Backend\DotNet\Codegen\emitConstLiteral;
 
 $assert = static function (bool $condition, string $message): void {
     if (! $condition) {
@@ -20,7 +20,7 @@ $assert = static function (bool $condition, string $message): void {
 $emit = static function (array $lit, string $desc): array {
     $m = new MethodIl();
     $env = new EmitEnv($m, 'TestOwner', [], []);
-    $ok = emitDotNetConstLiteral($env, $lit, $desc);
+    $ok = emitConstLiteral($env, $lit, $desc);
 
     return [$ok, $m->render('Test', [])];
 };

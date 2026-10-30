@@ -278,8 +278,6 @@ function lowerFunction(
     foreach ($fn->params as $i => $pattern) {
         $term = plannedPattern($pattern, $ctx);
         if ($term->shape === PatternShape::Var) {
-            // A parameter that is already its own slot gets no `Let`; its binder still has to be
-            // resolvable by identity, which is what a use of it asks for.
             if ($term->binder !== null) {
                 $ctx->binders[$term->binder] = new Local($slotNames[$i]);
             }
@@ -309,8 +307,6 @@ function lowerFunction(
             );
             [$bodyItems, $result, $bodyHasBox] = lowerActionBody($fn->body, $ctx, false);
 
-            // A worker runs the action where it stands, so it is not exported, not foreign and -
-            // unlike the entry it sits beside - answers with its result rather than an action.
             $worker = new FunctionDecl(
                 $workerName,
                 $slotNames,
@@ -561,9 +557,6 @@ function newCtx(
         $ctx->constructorRenames = $from->constructorRenames;
         $ctx->evidenceNames = $from->evidenceNames;
         $ctx->terms = $from->terms;
-        // Binder identities are unique for the whole declaration, so inheriting the map keeps every
-        // enclosing binder reachable (a lambda body is where they are captured) without a name ever
-        // standing in for an identity.
         $ctx->binders = $from->binders;
     }
 

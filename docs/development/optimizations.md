@@ -30,9 +30,9 @@ IR cannot name counts as possibly throwing.
 ## Stage order
 
 `optimize()` in `src/optimize/optimize.php` runs these stages, each under a
-checkpoint label; the test harness validates the module after each one, and so
-does a compile with `MOGGI_IR_PASS_CHECKPOINTS=1` — the escape hatch for
-localizing a miscompile. A normal compile does not pay that cost.
+checkpoint label; the test harness validates the module after each one, which is
+how a pass that leaves an invalid module fails with that pass's label. A user
+compile does not pay that cost and has no switch to turn it on.
 
 1. `early-folds` — forward walk, CSE, DCE, tail-recursion elimination,
    match-return folding; an IO-returning function stops after the walk and a

@@ -697,12 +697,6 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
                 return;
             }
             if (isset($state->restrictedVars[$left->name]) && $rightRigid) {
-                // `use :: Num a => a; use = count` with `count` a pattern binding. Neither side can
-                // be the one bound: a rigid variable is never bound, and a restricted one has to stay
-                // free for the module end to settle it. Pinning the binding to the skolem anyway
-                // would let `use` be used at a different `Num` type than the binding was compiled
-                // for (a boxed `Int` where a `Double` was promised — a run-time cast failure), so
-                // the equality is refused here instead.
                 $rename = friendlyTypeVarNames([$left, $right]);
                 throw typeFail(
                     $state,
@@ -713,8 +707,6 @@ function unify(TypeCheckState $state, Type $left, Type $right, ?Ast\AstNode $at 
                     'unify',
                 );
             }
-            // A restricted variable is kept free so the module end can settle it from its use
-            // sites, so the ordinary variable is the one bound.
             if (isset($state->restrictedVars[$left->name]) && ! isset($state->restrictedVars[$right->name])) {
                 unify($state, $right, $left, $at);
 

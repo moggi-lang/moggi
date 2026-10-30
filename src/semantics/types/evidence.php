@@ -13,9 +13,6 @@ use Moggi\Semantics\TypeExpr\TVar;
 use Moggi\Semantics\TypeExpr\TVarApp;
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Syntax\Ast;
-use function Moggi\Semantics\TypeExpr\scheme;
-
-// Evidence: which dictionary a use needs, which instance head it dispatches on, and how the elaboration records the choice.
 
 /**
  * The class obligation behind an ambient-projected method reference, if it

@@ -8,6 +8,7 @@ use function Moggi\Backend\DotNet\Naming\bclAssemblyFor;
 use function Moggi\Backend\DotNet\Verify\dotNetConstNeedsGetterCall;
 use function Moggi\Backend\DotNet\Verify\sameClrTypeIgnoringScope;
 use function Moggi\Backend\DotNet\Verify\splitClrSignature;
+use function Moggi\Backend\backendById;
 use function Moggi\Foreign\splitForeignPathMember;
 use function Moggi\Semantics\IoBoundary\isIoTypeConName;
 use function Moggi\Semantics\Kernel\boolTypeName;
@@ -16,95 +17,47 @@ use function Moggi\Semantics\Kernel\boundaryHandleTypeName;
 use function Moggi\Semantics\Kernel\boundaryMaybeTypeName;
 use function Moggi\Semantics\Types\primitiveTypeIdOf;
 
+use Moggi\Foreign\ForeignTypeTable;
 use Moggi\Syntax\Ast;
 
 /**
- * Foreign host types, keyed by the declaring module and then by Moggi type name.
+ * The dotnet host types checked modules declare — one table, owned by the target.
  *
- * A `foreign dotnet type Stream "…"` is one module's statement about one of its own names.
- * Two modules may each declare `Stream` against different host types — this corpus has
- * `System.IO.MemoryStream` and `System.IO.Stream` — so a bare-name map cannot answer for
- * both: whichever module was checked last would overwrite the other and every reader after
- * it would get a fact the compilation never stated. The module is part of the key.
+ * A `foreign dotnet type Path "…"` is one module's statement about one of its own names, and the
+ * module is half the key ({@see ForeignTypeTable}): two modules declare `Path` against different
+ * host types, and a bare-name map would let whichever was checked last answer for both.
  */
 function registerDotNetForeignType(string $module, string $moggiName, string $hostType): void
 {
-    $GLOBALS['moggi_dotnet_foreign_types'][$module][$moggiName] = $hostType;
+    dotNetForeignTypes()->register($module, $moggiName, $hostType);
 }
 
-/**
- * Every module that declares `$name`, with the host type it declares.
- *
- * @return array<string, string> module => host type
- */
+/** Every module that declares `$name`, with the host type it declares. */
 function dotNetForeignTypeDeclarations(string $name): array
 {
-    $found = [];
-    foreach ($GLOBALS['moggi_dotnet_foreign_types'] ?? [] as $module => $declarations) {
-        if (\is_array($declarations) && isset($declarations[$name])) {
-            $found[(string) $module] = (string) $declarations[$name];
-        }
-    }
-
-    return $found;
+    return dotNetForeignTypes()->declarationsOf($name);
 }
 
 /**
  * The host type `$name` stands for, read from the module that declared it.
  *
- * With a module, that module's declaration and nothing else; re-checking the same module —
- * what the REPL and LSP do on every keystroke — replaces its entry instead of colliding with
- * it. Without one, the answer must be the same in every declaring module, and a real
- * cross-module disagreement is refused rather than resolved by whichever module ran last.
+ * With a module, that module's declaration and nothing else; without one, every declaring module
+ * must agree, and a real disagreement is refused rather than answered by whichever ran last.
  */
 function lookupDotNetForeignType(string $name, ?string $module = null): ?string
 {
-    if ($module !== null) {
-        return $GLOBALS['moggi_dotnet_foreign_types'][$module][$name] ?? null;
-    }
-
-    $byModule = dotNetForeignTypeDeclarations($name);
-    if ($byModule === []) {
-        return null;
-    }
-
-    $hosts = \array_values(\array_unique($byModule));
-    if (\count($hosts) > 1) {
-        $said = [];
-        foreach ($byModule as $declaringModule => $host) {
-            $said[] = "`{$declaringModule}` says {$host}";
-        }
-
-        throw new \RuntimeException(
-            "foreign dotnet type `{$name}` is declared with different host types ("
-            . \implode('; ', $said)
-            . '); a read with no module to answer from cannot pick one',
-        );
-    }
-
-    return $hosts[0];
+    return dotNetForeignTypes()->lookup($name, $module, 'dotnet');
 }
 
-/**
- * Every host type any module declares.
- *
- * For set membership, where the declaring module is not part of the question.
- *
- * @return list<string>
- */
+/** Every host type any module declares, for set membership. */
 function dotNetDeclaredForeignHostTypes(): array
 {
-    $hosts = [];
-    foreach ($GLOBALS['moggi_dotnet_foreign_types'] ?? [] as $declarations) {
-        if (! \is_array($declarations)) {
-            continue;
-        }
-        foreach ($declarations as $host) {
-            $hosts[] = (string) $host;
-        }
-    }
+    return dotNetForeignTypes()->hostTypes();
+}
 
-    return $hosts;
+function dotNetForeignTypes(): ForeignTypeTable
+{
+    return backendById('dotnet')->foreignTypes();
 }
 
 /**

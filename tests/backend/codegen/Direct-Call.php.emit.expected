@@ -2,7 +2,7 @@
 
 namespace StructureDirectCall;
 
-const __MOGGI_MAP = [[27 => ['StructureDirectCall.sumTo', 'tests/backend/codegen/Direct-Call.mog', 9, 11]], ['StructureDirectCall\\countDown' => ['StructureDirectCall.countDown', 'tests/backend/codegen/Direct-Call.mog', 4, 19], 'StructureDirectCall\\sumTo' => ['StructureDirectCall.sumTo', 'tests/backend/codegen/Direct-Call.mog', 9, 11]]];
+const __MOGGI_MAP = [[27 => 1], ['StructureDirectCall\\countDown' => 0, 'StructureDirectCall\\sumTo' => 1], [], [], [[0, 0, 4, 19], [1, 0, 9, 11]], ['StructureDirectCall.countDown', 'StructureDirectCall.sumTo'], ['tests/backend/codegen/Direct-Call.mog']];
 
 function moggi_u64_add(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao + $bo; $c = ($lo >> 32) & 0xffffffff; $hi = ($ah + $bh + $c) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }
 function moggi_u64_sub(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao - $bo; $bw = $lo < 0 ? 1 : 0; $hi = ($ah - $bh - $bw) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }

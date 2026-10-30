@@ -85,6 +85,21 @@ type-level enforcement behind it.
   `src/backend/ir_meta.php` owns backend-neutral IR facts; `IR\Projection` owns
   which callees are field/tuple projections; `Optimize\Effects\Model` owns what
   an operand may do.
+* **A callee is a spelling; the table says which entry it names.**
+  `IR\Callables\table()` publishes one `CallableSig` and one capture vector per
+  entry, and every consumer that needs an entry's arity, hidden slots or capture
+  layout asks it through `sig()` — which is also the only place that knows a
+  `Module::name` spelling for this module means the bare entry. The optimizer's
+  partial legalization (`Optimize\Partial`) therefore threads the table, not a
+  name-keyed map, and reads a call's layout with `publishedLayout()`. The run
+  republishes that table in its facts whenever the function list changes, and the
+  inline pass and the partial-return specialisation answer their capture questions
+  through `publishedCaptures()`, so an entry that cannot be resolved is reported
+  instead of assumed capture-free; a second arity map or a second capture table is
+  a defect, not an optimisation. One fact is deliberately separate: DCE and copy
+  propagation publish `Optimize\GlobalPass`'s liveness set, which follows every
+  reference kind (`FnRef`, `Partial`, call callee) because those are the locals a
+  bound capture prefix reads, where the ABI vector follows value references only.
 * **No backend facts before codegen.** The typed AST and IR never carry PHP
   function names, import lines or output paths.
 * **IO is strict sequencing, not a state token.** `do` desugars through `>>=`;
@@ -120,7 +135,15 @@ only the toolchain-specific files differ.
 |---|---|
 | `<backend>/<X>Backend.php` | target id, artifact extension/path, mangling, foreign validation |
 | `<backend>/naming.php` | module → type/package names, symbol mangling |
-| `<backend>/codegen.php` | IR → target code |
+| `<backend>/codegen.php` | `emitModule`: module → target code, function/evidence/main/data |
+| `<backend>/emit_env.php` | the one env object an emission threads, and its module-wide counters/registries |
+| `<backend>/emit_stmt.php` | statements and blocks: `emitBlock`, `emitStmt`, tail loops, termination |
+| `<backend>/emit_expr.php` | operands and values: `emitOperand`, calls, lambdas, partials, boxes, literals |
+| `<backend>/emit_match.php` | matches and patterns: `emitMatchStmt`, `emitMatchReturn`, `emitMatchIo`, `emitPatternTest` |
+| `<backend>/emit_intrinsic.php` | `emitIntrinsic`: the exception/fix intrinsics, the dispatch into the families below, and (php) the module's intrinsic helper functions |
+| `<backend>/emit_primop.php` | numeric primop families: `emitIntrinsicPrimop` (arithmetic, bit operations, width conversion) and `emitIntrinsicCompare` (equality, ordering, boolean), with the operand and comparison helpers they expand to |
+| `<backend>/emit_value.php` | `emitIntrinsicValue` (list, maybe, string, bytes, platform intrinsics), boxing, literal values and source locations |
+| `<backend>/emit_io.php` | IO statements: runs, binds, throw/catch/finally, thunks; `emitIntrinsicState` (ST refs and arrays) |
 | `<backend>/foreign.php` | host path/descriptor rules |
 | `<backend>/dependencies.php` | library-owned dependency discovery |
 | `<backend>/runtime_abi.php` | generated runtime (JVM/.NET) |
@@ -129,11 +152,28 @@ only the toolchain-specific files differ.
 | `src/backend/ir_meta.php` | shared IR facts (constructor layout, backing, throwing call site) |
 | `src/backend/inspect.php` | rendering emitted artifacts for `:emit` |
 
-PHP is expression-valued, so its emitters split into `emit_expr.php`,
-`emit_match.php`, `intrinsics.php`, `io.php` and `native.php`; JVM and .NET keep
-the equivalent code in their `codegen.php` plus `classfile.php` and
-`il.php`/`il_size.php`. The PHP runtime is hand-written (`php/runtime.php`,
-shipped as `_runtime.php`); JVM and .NET generate theirs per build.
+The `emit_*.php` set is the same in all three backends and the functions in it carry
+the same names; a backend differs where its host language does. An intrinsic is emitted
+by name: `emitIntrinsic` asks each family reader in turn (`emitIntrinsicPrimop`,
+`emitIntrinsicCompare`, `emitIntrinsicState`, `emitIntrinsicValue`) and the first that
+knows the name answers for it, so a new intrinsic lands in the family file that owns it
+and the dispatcher never grows a case list. The one difference is the answer: the stack
+backends push and return `true`, php returns the expression text (or `null`) and takes
+the argument expressions its caller already emitted, because a php operand *is* a string.
+The same holds in `emit_foreign.php`: `emitForeign` emits one foreign call and
+`emitForeignIoWrap` applies its `ioWrap`, in all three backends; php's `emitForeignCall`,
+`emitInstanceCall` and `emitForeignIoStatement` read the host's dispatch kinds and
+assemble statement text, where the stack backends' `emitForeign` resolves descriptors
+and packs JVM/.NET argument slots. Each emitter threads
+exactly one `EmitEnv` (`emit_env.php`): the module facts `emitModule` sets once, and the
+per-function values `emitFunction` sets on a clone. A clone — not an array copy — is how
+a deeper emit derives a scope, so counters that must outlive one (`$__scrut_N` here, the
+wrapper and thunk registries on JVM/.NET) sit in an object the clone shares. The hosts
+differ where the targets do: `classfile.php` (a JVM class writer) against
+`il.php`/`il_size.php` (CIL text and sizes), with PHP expression-valued so its
+`emitIntrinsic` answers a string where the other two push to the stack. The PHP runtime is
+hand-written (`php/runtime.php`, shipped as `_runtime.php`); JVM and .NET generate theirs
+per build.
 
 ## Changing the compiler
 

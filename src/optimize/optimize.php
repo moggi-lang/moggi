@@ -9,7 +9,7 @@ use Moggi\IR\Stmt;
 use Moggi\Optimize\PassCheckpoints;
 
 use function Moggi\IR\entryFromFunctions;
-use function Moggi\IR\Callables\captureMeta;
+use function Moggi\IR\Callables\table;
 use function Moggi\IR\Callables\workerDeclarations;
 use function Moggi\Optimize\CaseFold\foldKnownConstructorsBlock;
 use function Moggi\Optimize\CaseFold\foldKnownMatchesInItems;
@@ -24,7 +24,7 @@ use function Moggi\Optimize\FoldIntrinsic\foldIntrinsicsItems;
 use function Moggi\Optimize\GlobalPass\cseBlock;
 use function Moggi\Optimize\GlobalPass\dceBlock;
 use function Moggi\Optimize\GlobalPass\propagateCopiesBlock;
-use function Moggi\Optimize\GlobalPass\setPropagateCopiesLambdaBodies;
+use function Moggi\Optimize\GlobalPass\publishLiftedCaptureNeeds;
 use function Moggi\Optimize\Interproc\inlineFunctions;
 use function Moggi\Optimize\Intrinsic\eliminateIntrinsicWrappers;
 use function Moggi\Optimize\IoSpecialize\foldIoActionBoxes;
@@ -37,9 +37,22 @@ use function Moggi\Optimize\Local\optimizeBlock;
 use function Moggi\Optimize\Partial\legalizeCallables;
 use function Moggi\Optimize\Partial\foldPartialApply;
 use function Moggi\Optimize\Partial\normalizeKnownApplies;
+use function Moggi\Optimize\Partial\publishedCaptures;
 use function Moggi\Optimize\Partial\specializePartialReturnFunction;
-use function Moggi\Optimize\Support\indexCapturedFunctions;
 use function Moggi\Optimize\Tco\eliminateTailRecursion;
+
+/**
+ * Publishes the facts the passes below read for this function list: the callable table and the locals a
+ * reference to each lifted callable keeps alive. Both are rebuilt whenever the list changes underneath
+ * them, so no pass keeps its own copy.
+ *
+ * @param list<FunctionDecl> $functions
+ */
+function publishModuleFacts(array $functions, string $moduleName): void
+{
+    Facts::current()->publishCallableTable(table($functions, $moduleName));
+    publishLiftedCaptureNeeds($functions);
+}
 
 /** Runs the stage sequence, each stage checked under its own checkpoint label. */
 function optimize(Module $module): Module
@@ -65,7 +78,7 @@ function optimize(Module $module): Module
             $module,
             $functions,
             static function (array $fns) use ($moduleName, $analysis): array {
-                setPropagateCopiesLambdaBodies($fns);
+                publishModuleFacts($fns, $moduleName);
                 $effects = $analysis->modelFor($fns, $moduleName);
                 $optimized = \array_map(
                     static fn (FunctionDecl $function): FunctionDecl => optimizeFunctionEarly($function, $effects),
@@ -103,7 +116,7 @@ function optimize(Module $module): Module
             $module,
             $functions,
             static function (array $fns) use ($moduleName, $analysis): array {
-                setPropagateCopiesLambdaBodies($fns);
+                publishModuleFacts($fns, $moduleName);
                 $effects = $analysis->modelFor($fns, $moduleName);
                 $optimized = \array_map(
                     static fn (FunctionDecl $function): FunctionDecl => optimizeFunctionAfterInline($function, $effects),
@@ -139,13 +152,13 @@ function optimize(Module $module): Module
             'specialize-partial-return',
             $module,
             $functions,
-            static function (array $fns): array {
-                $captureMeta = captureMeta(indexCapturedFunctions($fns));
+            static function (array $fns) use ($moduleName): array {
+                $table = table($fns, $moduleName);
 
                 return \array_map(
                     static fn (FunctionDecl $function): FunctionDecl => specializePartialReturnFunction(
                         $function,
-                        $captureMeta[$function->name]['captures'] ?? [],
+                        publishedCaptures($table, $function->name),
                     ),
                     $fns,
                 );
@@ -173,7 +186,7 @@ function optimize(Module $module): Module
         $module = new Module($functions, $module->data, $module->instanceEvidence, $module->entry, $module->moduleName, $module->sourceFile);
         $functions = $module->functions;
 
-        setPropagateCopiesLambdaBodies($functions);
+        publishModuleFacts($functions, $moduleName);
         $workers = workerDeclarations($module);
         $effects = $analysis->modelFor($functions, $moduleName);
         $functions = PassCheckpoints\runOnFunctions(

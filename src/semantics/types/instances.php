@@ -1821,7 +1821,6 @@ function checkInstanceMethod(
     }
     $bodyExpected = $expected;
 
-    // The method's parameters open their own frame, as a declaration's do; it closes with the method.
     $state->pushBinderScope();
     foreach ($fn->params as $i => $param) {
         [, $env] = bindPattern($state, $param, $paramTypes[$i], $env, generalize: false);

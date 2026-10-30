@@ -7,10 +7,7 @@ use Moggi\Semantics\TypeExpr\TArrow;
 use Moggi\Semantics\TypeExpr\TCon;
 use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Syntax\Ast;
-use function Moggi\Patterns\Walk\patternVariableNames;
 use function Moggi\Semantics\TypeExpr\scheme;
-
-// Local binding groups: `let`/`where` recursion, the dictionary lambdas a constrained local becomes, and the ambient dictionaries its body reads.
 
 /**
  * Typecheck a let/where binding list with recursive groups (SCCs).
@@ -431,9 +428,6 @@ function inferRecursiveBindings(TypeCheckState $state, array $bindings, array $e
     /** @var array<int, int> $memberOf binding index => its binder identity */
     $memberOf = [];
 
-    // Every member of the group is a binding site, and a recursive group refers to its members before
-    // any of their bodies exists. The identities are therefore allocated and made the spelling's
-    // meaning here, in the frame the group opened; nothing below answers a member by its spelling.
     $declared = [];
     foreach ($bindings as $bi => $binding) {
         $declared[$bi] = declarePatternBinders($state, $binding->pattern, $local);
@@ -542,8 +536,6 @@ function inferRecursiveBindings(TypeCheckState $state, array $bindings, array $e
             }
         }
 
-        // The group's members are named by their binders: a `let` inside a member's body may bind the
-        // same spelling, and that binding takes no dictionaries.
         $byBinder = [];
         foreach ($members as $binder) {
             $byBinder[$binder] = $groupConstraints;
@@ -598,8 +590,6 @@ function inferRecursiveBindings(TypeCheckState $state, array $bindings, array $e
                 $schemeDicts !== [] ? \count($schemeDicts) : null,
                 $schemeDicts,
             );
-            // The member's scheme answers under its own identity, which is also what a use site copies
-            // onto its node, so bind the identity to the scheme rather than the spelling.
             $memberScheme->binderId = $binder;
             $local[binderKey($binder)] = $memberScheme;
             continue;

@@ -24,8 +24,6 @@ function analyze(Ast\Program $program): Ast\Program
             continue;
         }
 
-        // Every body's form is published, whatever the declaration returns: an IO body can sit in a
-        // declaration the callback convention never asks about.
         if (isIoStatementExpression($item->body)) {
             annotateIoBodies($item->body);
         }
@@ -53,11 +51,6 @@ function analyze(Ast\Program $program): Ast\Program
  */
 function annotateIoBodies(Ast\AstNode $expr, array $deferred = []): void
 {
-    // A `case` alternative may carry guards (`k | k > 0 -> …`), which reach the body as one
-    // `GuardsExpr` whose clauses are that alternative's arms. The arm bodies are the IO bodies —
-    // the case term flattens the clauses and lowering asks each of them for its form — so publish
-    // on each clause body. The guard chain itself is neither a statement nor a body and no reader
-    // asks it for a form, which is why it is not given one.
     if ($expr instanceof Ast\GuardsExpr) {
         foreach ($expr->clauses as $clause) {
             annotateIoBodies($clause->body, $deferred);
@@ -73,7 +66,6 @@ function annotateIoBodies(Ast\AstNode $expr, array $deferred = []): void
         );
     }
 
-    // The body's own form, exactly as a statement's: the two positions ask one question.
     $expr->ioForm = ioStatementForm($expr, $deferred);
 
     if ($expr instanceof Ast\IoSequence) {
@@ -90,8 +82,6 @@ function annotateIoBodies(Ast\AstNode $expr, array $deferred = []): void
         return;
     }
 
-    // A bare body (`main = putStrLn "hi"`): an action, and nothing more to publish than the form
-    // already written above.
     if ($expr instanceof Ast\IoAction && $expr->expr instanceof Ast\IoSequence) {
         annotateIoBodies($expr->expr, $deferred);
     }
@@ -104,8 +94,6 @@ function annotateIoBodies(Ast\AstNode $expr, array $deferred = []): void
 function annotateIoSequence(array $stmts, array $deferred): void
 {
     foreach ($stmts as $stmt) {
-        // What the statement does with its expression, published where the whole list is in view:
-        // lowering dispatches on this instead of asking the statement's class.
         $stmt->ioKind = match (true) {
             $stmt instanceof Ast\IoLet => IoStatementKind::Let,
             $stmt instanceof Ast\IoLetAction => IoStatementKind::LetAction,

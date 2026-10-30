@@ -2,7 +2,7 @@
 
 namespace Constrained\Consumer;
 
-const __MOGGI_MAP = [[15 => ['Constrained.Consumer.useDemo', 'tests/semantics/constrained-import/Consumer.mog', 8, 11]], ['Constrained\\Consumer\\useDemo' => ['Constrained.Consumer.useDemo', 'tests/semantics/constrained-import/Consumer.mog', 8, 11]]];
+const __MOGGI_MAP = [[15 => 0], ['Constrained\\Consumer\\useDemo' => 0], [], [], [[0, 0, 8, 11]], ['Constrained.Consumer.useDemo'], ['tests/semantics/constrained-import/Consumer.mog']];
 
 require_once __DIR__ . '/Provider.php';
 require_once __DIR__ . '/../../../libraries/base/src/Data/List.php';

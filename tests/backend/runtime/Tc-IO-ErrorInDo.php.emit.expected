@@ -2,7 +2,7 @@
 
 namespace Tc\IO\ErrorInDo;
 
-const __MOGGI_MAP = [[13 => ['Tc.IO.ErrorInDo.abort', 'tests/backend/runtime/Tc-IO-ErrorInDo.mog', 6, 9], 21 => ['Tc.IO.ErrorInDo.abort', 'tests/backend/runtime/Tc-IO-ErrorInDo.mog', 7, 3], 22 => ['Tc.IO.ErrorInDo.abort', 'tests/backend/runtime/Tc-IO-ErrorInDo.mog', 8, 3], 23 => ['Tc.IO.ErrorInDo.abort', 'tests/backend/runtime/Tc-IO-ErrorInDo.mog', 8, 3], 28 => ['Tc.IO.ErrorInDo.main', 'tests/backend/runtime/Tc-IO-ErrorInDo.mog', 11, 8], 36 => ['Tc.IO.ErrorInDo.main', 'tests/backend/runtime/Tc-IO-ErrorInDo.mog', 11, 8]], ['Tc\\IO\\ErrorInDo\\abort' => ['Tc.IO.ErrorInDo.abort', 'tests/backend/runtime/Tc-IO-ErrorInDo.mog', 6, 9], 'Tc\\IO\\ErrorInDo\\__w_abort' => ['Tc.IO.ErrorInDo.abort', 'tests/backend/runtime/Tc-IO-ErrorInDo.mog', 6, 9], 'Tc\\IO\\ErrorInDo\\main' => ['Tc.IO.ErrorInDo.main', 'tests/backend/runtime/Tc-IO-ErrorInDo.mog', 11, 8], 'Tc\\IO\\ErrorInDo\\__w_main' => ['Tc.IO.ErrorInDo.main', 'tests/backend/runtime/Tc-IO-ErrorInDo.mog', 11, 8]], ['Tc\\IO\\ErrorInDo\\abort', 'Tc\\IO\\ErrorInDo\\main'], ['Tc\\IO\\ErrorInDo\\__w_abort', 'Tc\\IO\\ErrorInDo\\__w_main']];
+const __MOGGI_MAP = [[13 => 0, 21 => 2, 22 => 3, 23 => 3, 28 => 1, 36 => 1], ['Tc\\IO\\ErrorInDo\\abort' => 0, 'Tc\\IO\\ErrorInDo\\__w_abort' => 0, 'Tc\\IO\\ErrorInDo\\main' => 1, 'Tc\\IO\\ErrorInDo\\__w_main' => 1], ['Tc\\IO\\ErrorInDo\\abort', 'Tc\\IO\\ErrorInDo\\main'], ['Tc\\IO\\ErrorInDo\\__w_abort', 'Tc\\IO\\ErrorInDo\\__w_main'], [[0, 0, 6, 9], [1, 0, 11, 8], [0, 0, 7, 3], [0, 0, 8, 3]], ['Tc.IO.ErrorInDo.abort', 'Tc.IO.ErrorInDo.main'], ['tests/backend/runtime/Tc-IO-ErrorInDo.mog']];
 
 require_once __DIR__ . '/../../../libraries/base/src/Moggi/Err.php';
 require_once __DIR__ . '/../../../libraries/base/src/System/IO.php';

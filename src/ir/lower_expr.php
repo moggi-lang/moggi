@@ -229,6 +229,11 @@ function lowerVariable(Ast\Variable $expr, LowerCtx $ctx): Operand
         return lowerIntrinsicValue($intrinsic->intrinsic, [], $expr, $ctx);
     }
 
+    $deferred = ioDeferredActionValue($expr, $ctx);
+    if ($deferred !== null) {
+        return $deferred;
+    }
+
     return variableOperand($expr, $ctx);
 }
 
@@ -562,9 +567,6 @@ function lowerShortCircuitAndOr(Ast\Infix $expr, string $intrinsic, LowerCtx $ct
     $rightCtx = newArmCtx($ctx, $expr->right);
     $arms = [];
 
-    // The match this operator means is the lowering's decision, so its arms are IR. They used to
-    // be a `case` over two `Ast\Alt` nodes built here — a `case` the checked core never planned,
-    // which is exactly the shape the term boundary now refuses.
     foreach ([boolTrueCtor(), boolFalseCtor()] as $ctor) {
         $takesRight = $isAnd === ($ctor === boolTrueCtor());
         $value = $takesRight
@@ -732,9 +734,6 @@ function lowerIntrinsicValue(string $name, array $astArgs, Ast\AstNode $node, Lo
         $paramNames[] = 'primopArg' . $i . '_' . $ctx->state->nextLambda;
     }
 
-    // The supplied arguments are checked terms of the enclosing declaration, so
-    // capture analysis runs over the trees that exist; the body below is IR, not a
-    // node this pass invents for the checker to have missed.
     $evidenceParameter = static fn (Ast\EvidenceMethod $method): ?string
         => checkedEvidenceMethod($method, $ctx)->plan->parameter;
     $captures = [];
@@ -986,9 +985,6 @@ function applyCalleeName(Ast\AstNode $expr, LowerCtx $ctx): ?string
 function crossModuleOrigin(Ast\Variable|Ast\OperatorRef $expr, LowerCtx $ctx): ?string
 {
     $origin = $expr->resolvedOrigin;
-    // "this use is bound locally" is the term's answer, not the node's: a bound use names a binder
-    // ({@see CheckedVariable}), and the node's own copy of that identity is not read anywhere in
-    // lowering any more.
     $term = siteTerm($expr, $ctx);
     $bound = $term instanceof CheckedVariable && $term->binder !== null;
     if (! $expr->declarationScoped || $origin === null || $bound || $ctx->moduleName === '') {
@@ -1297,8 +1293,6 @@ function lowerRecursiveBindings(array $bindings, LowerCtx $ctx): void
     $planned = [];
 
     foreach ($bindings as $binding) {
-        // A member that binds a single variable can be the group's own function entry; a structural
-        // pattern cannot, and both questions are the pattern term's shape rather than the node's.
         $site = plannedPattern($binding->pattern, $ctx);
         if ($site->shape !== PatternShape::Var) {
             continue;
@@ -1309,18 +1303,12 @@ function lowerRecursiveBindings(array $bindings, LowerCtx $ctx): void
         $fnName = '__letrec' . $ctx->state->nextLambda++;
         if ($rhs instanceof Ast\Lambda) {
             $planned[$name] = ['kind' => 'lambda', 'fnName' => $fnName, 'rhs' => $rhs];
-            // The group member's arity is its lambda term's, not its parameter list's:
-            // the same term names the slots below, and a call to this entry is shaped
-            // by this number.
             $ctx->functionArity[$fnName] = plannedLambda($rhs, $ctx)->arity();
         } else {
             $planned[$name] = ['kind' => 'nullary', 'fnName' => $fnName, 'rhs' => $rhs];
             $ctx->functionArity[$fnName] = 0;
         }
         $ctx->env[$name] = new FnRef($fnName);
-        // A member's own name is a binder too: a use inside the group resolves by identity to the
-        // entry the group pre-bound, not by finding the spelling in the environment. The identity is
-        // the binding site's term, the same one the `let`'s own slot is allocated from.
         $identity = $site->binder;
         if ($identity !== null) {
             $ctx->binders[$identity] = new FnRef($fnName);
@@ -1395,8 +1383,6 @@ function lowerCase(Ast\CaseExpr $expr, LowerCtx $ctx): Operand
                 $guards = [];
             } else {
                 $bindings = $armCtx->items;
-                // Whether the arm binds by a variable is the pattern's own shape — the IR pattern
-                // this arm just bound — not a question about the source node behind it.
                 $isVarPattern = $pattern instanceof PatVar;
                 $armCtx->items = [];
                 $guards = [lowerArmGuard($clause['guard'], $armCtx, $isVarPattern ? $bindings : [])];

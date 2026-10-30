@@ -10,18 +10,15 @@ use Moggi\IR\Validate;
  * `bindLambdaCaptures`, so a `__spec_` clone is excepted inside that window only;
  * nested runs report `d2/<stage>`.
  *
- * The checkpoints are off unless the harness turns them on (see
- * {@see setEnabled()}) or `MOGGI_IR_PASS_CHECKPOINTS=1` is set in the
- * environment: validating the whole module after every pass is the suite's cost
- * to pay, not every compile's. The variable is the approved escape hatch for a
- * user localising a miscompile; an explicit `setEnabled()` wins over it.
+ * They are off for a user compile: validating the whole module after every pass
+ * is the suite's cost to pay, not every compile's, so only the harness turns them
+ * on ({@see setEnabled()}). There is no environment switch.
  */
 final class State
 {
     public static int $depth = 0;
 
-    /** null until answered: the environment decides, unless the harness said. */
-    public static ?bool $enabled = null;
+    public static bool $enabled = false;
 
     /** @var list<array<string, array{label: string, function: string, temps: list<int>}>> */
     public static array $frames = [];
@@ -32,18 +29,16 @@ final class State
 
 /**
  * Turn the per-pass checkpoints on or off for this process (the test harness
- * does), or pass null to let the environment decide again.
+ * does).
  */
-function setEnabled(?bool $enabled = null): void
+function setEnabled(bool $enabled): void
 {
     State::$enabled = $enabled;
 }
 
 function enabled(): bool
 {
-    $flag = \getenv('MOGGI_IR_PASS_CHECKPOINTS');
-
-    return State::$enabled ??= \in_array($flag, ['1', 'true', 'yes'], true);
+    return State::$enabled;
 }
 
 function enterOptimize(): void

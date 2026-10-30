@@ -2,7 +2,7 @@
 
 namespace Tc\IO\Linear;
 
-const __MOGGI_MAP = [[10 => ['Tc.IO.Linear.emit', 'tests/backend/codegen/Tc-IO-Linear.mog', 6, 12], 18 => ['Tc.IO.Linear.emit', 'tests/backend/codegen/Tc-IO-Linear.mog', 6, 12], 23 => ['Tc.IO.Linear.main', 'tests/backend/codegen/Tc-IO-Linear.mog', 9, 8], 31 => ['Tc.IO.Linear.main', 'tests/backend/codegen/Tc-IO-Linear.mog', 10, 3], 32 => ['Tc.IO.Linear.main', 'tests/backend/codegen/Tc-IO-Linear.mog', 11, 3]], ['Tc\\IO\\Linear\\emit' => ['Tc.IO.Linear.emit', 'tests/backend/codegen/Tc-IO-Linear.mog', 6, 12], 'Tc\\IO\\Linear\\__w_emit' => ['Tc.IO.Linear.emit', 'tests/backend/codegen/Tc-IO-Linear.mog', 6, 12], 'Tc\\IO\\Linear\\main' => ['Tc.IO.Linear.main', 'tests/backend/codegen/Tc-IO-Linear.mog', 9, 8], 'Tc\\IO\\Linear\\__w_main' => ['Tc.IO.Linear.main', 'tests/backend/codegen/Tc-IO-Linear.mog', 9, 8]], ['Tc\\IO\\Linear\\emit', 'Tc\\IO\\Linear\\main'], ['Tc\\IO\\Linear\\__w_emit', 'Tc\\IO\\Linear\\__w_main']];
+const __MOGGI_MAP = [[10 => 0, 18 => 0, 23 => 1, 31 => 2, 32 => 3], ['Tc\\IO\\Linear\\emit' => 0, 'Tc\\IO\\Linear\\__w_emit' => 0, 'Tc\\IO\\Linear\\main' => 1, 'Tc\\IO\\Linear\\__w_main' => 1], ['Tc\\IO\\Linear\\emit', 'Tc\\IO\\Linear\\main'], ['Tc\\IO\\Linear\\__w_emit', 'Tc\\IO\\Linear\\__w_main'], [[0, 0, 6, 12], [1, 0, 9, 8], [1, 0, 10, 3], [1, 0, 11, 3]], ['Tc.IO.Linear.emit', 'Tc.IO.Linear.main'], ['tests/backend/codegen/Tc-IO-Linear.mog']];
 
 require_once __DIR__ . '/../../../libraries/base/src/System/IO.php';
 

@@ -5,7 +5,6 @@ namespace Moggi\Optimize\Interproc;
 use Moggi\IR;
 use Moggi\Optimize\Facts\Facts;
 
-use function Moggi\IR\Callables\captureMeta;
 use function Moggi\IR\Callables\calleeIsRun;
 use function Moggi\IR\Visit\collectLambdaRefsInBlock;
 use function Moggi\IR\Visit\collectLocalsInBlock;
@@ -21,7 +20,7 @@ use function Moggi\Modules\parseResolvedSymbol;
 use function Moggi\Modules\resolvedSymbol;
 use function Moggi\Optimize\CaseFold\isPlausibleConstructorName;
 use function Moggi\Optimize\CaseFold\joinMatchStmtConsumer;
-use function Moggi\Optimize\Support\indexCapturedFunctions;
+use function Moggi\Optimize\Partial\publishedCaptures;
 use function Moggi\Optimize\Support\mapStmtNestedBlocks;
 use function Moggi\Optimize\Support\tempUsedInItems;
 use function Moggi\Semantics\IntrinsicRegistry\isListConsForm;
@@ -114,12 +113,7 @@ function lookupIndexedFunction(array $index, string $callee): ?IR\FunctionDecl
 /** @param list<IR\FunctionDecl> $functions */
 function inlineFunctions(array $functions, string $moduleName = ''): array
 {
-    Facts::current()->publishCaptureMeta(captureMeta(indexCapturedFunctions($functions)));
-    try {
-        return inlineFunctionsRounds($functions, $moduleName);
-    } finally {
-        Facts::current()->publishCaptureMeta([]);
-    }
+    return inlineFunctionsRounds($functions, $moduleName);
 }
 
 /** @param list<IR\FunctionDecl> $functions @return list<IR\FunctionDecl> */
@@ -441,8 +435,6 @@ function tryInlineCall(IR\FunctionDecl $target, IR\Call $call, string $selfName,
         }
     }
 
-    // Decided once, before any variant splices a body: every inlined form substitutes these args into
-    // parameter positions, so work-carrying arguments are bound here rather than three times over.
     $materialized = materializeInlineArgs($call->args, $nextTemp);
     $nextTemp = $materialized['nextTemp'];
     $prefix = $materialized['prefix'];
@@ -641,6 +633,26 @@ function assignMatchArmToDest(array $items, int $dest): array
     return alignInlineCallDest($items, $dest);
 }
 
+/**
+ * The capture vector the run published for a callable, read through the table's own lookup.
+ *
+ * Every question the inline pass asks about captures — is this argument a captured closure, may this
+ * body be copied into another scope — is answered here, so no callee spelling and no re-scan of a
+ * body can stand in for the fact. A read with no table published, or for an entry the module does not
+ * publish, is reported rather than guessed.
+ *
+ * @return list<string>
+ */
+function inlineCaptures(string $entry): array
+{
+    $table = Facts::current()->callableTable;
+    if ($table === null) {
+        throw new \RuntimeException('inline: capture layout read before the pass published the table');
+    }
+
+    return publishedCaptures($table, $entry);
+}
+
 /** @param array<string, IR\FunctionDecl> $index */
 function isCapturedLambdaArg(IR\Operand $arg, array $index): bool
 {
@@ -648,18 +660,11 @@ function isCapturedLambdaArg(IR\Operand $arg, array $index): bool
         return false;
     }
 
-    $lambda = $index[$arg->name] ?? null;
-    if ($lambda === null || ! $lambda->shape->kind->takesCaptures()) {
-        return false;
-    }
+    $lambda = lookupIndexedFunction($index, $arg->name);
 
-    foreach (collectLocalsInBlock($lambda->body) as $local) {
-        if (! \in_array($local, $lambda->params, true)) {
-            return true;
-        }
-    }
-
-    return false;
+    return $lambda !== null
+        && $lambda->shape->kind->takesCaptures()
+        && inlineCaptures($lambda->name) !== [];
 }
 
 /**
@@ -676,44 +681,27 @@ function isCapturedLambdaArg(IR\Operand $arg, array $index): bool
  */
 function bodyReferencesCapturedLambdas(IR\FunctionDecl $function, array $index): bool
 {
-    $leafCaptured = static function (string $name) use ($index): bool {
-        $lambda = $index[$name]
-            ?? $index[specializationLookupNameSafe($name)]
-            ?? lookupIndexedFunction($index, $name);
+    $isCaptured = static function (string $name) use ($index): bool {
+        $lambda = lookupIndexedFunction($index, $name);
 
         return $lambda !== null && $lambda->shape->kind->takesCaptures();
     };
-    $names = collectLambdaRefsInBlock($function->body, $leafCaptured);
+    $names = collectLambdaRefsInBlock($function->body, $isCaptured);
     walkBlock(
         $function->body,
-        static function (IR\Stmt $stmt) use (&$names, $leafCaptured): void {
-            if ($stmt instanceof IR\Call && $leafCaptured($stmt->callee)) {
+        static function (IR\Stmt $stmt) use (&$names, $isCaptured): void {
+            if ($stmt instanceof IR\Call && $isCaptured($stmt->callee)) {
                 $names[] = $stmt->callee;
             }
         },
         static function (IR\Operand $operand): void {
         },
     );
-    $meta = Facts::current()->captureMeta;
-    foreach (\array_unique($names) as $lambdaName) {
-        $leaf = specializationLookupNameSafe($lambdaName);
-        $info = $meta[$leaf] ?? null;
-        if ($info !== null) {
-            if ($info['captures'] !== []) {
-                return true;
-            }
-            continue;
-        }
-        $lambda = $index[$lambdaName]
-            ?? $index[$leaf]
-            ?? lookupIndexedFunction($index, $lambdaName);
-        if ($lambda === null) {
-            continue;
-        }
-        foreach (collectLocalsInBlock($lambda->body) as $local) {
-            if (! \in_array($local, $lambda->params, true)) {
-                return true;
-            }
+
+    foreach (\array_unique($names) as $name) {
+        $lambda = lookupIndexedFunction($index, $name);
+        if ($lambda !== null && inlineCaptures($lambda->name) !== []) {
+            return true;
         }
     }
 

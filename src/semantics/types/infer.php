@@ -204,8 +204,6 @@ function inferVariable(TypeCheckState $state, Ast\AstNode &$expr, array $env): T
         throw typeFail($state, ambiguousImportMessage($expr->name, $state->ambiguousImports[$expr->name]), $expr);
     }
 
-    // A local binder is found by the identity the scope frame gives the spelling; only when no
-    // local binder of that spelling is in scope does the name denote a module or imported entry.
     $localScheme = resolveBinderScheme($state, $expr->name, $env);
     $scheme = $localScheme
         ?? $env[$expr->name]
@@ -745,8 +743,6 @@ function inferLambda(TypeCheckState $state, Ast\Lambda $expr, array $env): Type
     }
     assertParamListLinear($state, $paramPatterns);
 
-    // The slots are this lambda's own frame: a use inside the body reaches the binder the frame
-    // names, and an enclosing binding of the same spelling is a different entry, not an overwrite.
     $state->pushBinderScope();
 
     try {
@@ -776,8 +772,6 @@ function inferLambda(TypeCheckState $state, Ast\Lambda $expr, array $env): Type
 function inferLet(TypeCheckState $state, Ast\Let $expr, array $env): Type
 {
     assertBindingGroupLinear($state, $expr->bindings);
-    // One frame for the group and the body it scopes: a group member's own RHS is inside it (a
-    // recursive group refers to itself by identity), and the frame closes with the `let`.
     $state->pushBinderScope();
 
     try {
@@ -813,9 +807,6 @@ function inferCase(TypeCheckState $state, Ast\CaseExpr $expr, array $env): Type
     foreach ($expr->alts as $alt) {
         $altEnv = $env;
         assertPatternLinear($state, $alt->pattern);
-        // An arm's binders belong to the arm: two arms may reuse one spelling, and the same spelling
-        // may shadow an outer binder. The frame is saved, not kept on the stack, because the arms'
-        // bodies are inferred in a second pass.
         $state->pushBinderScope();
         [$patType, $altEnv] = bindPattern($state, $alt->pattern, freshType($state), $altEnv, generalize: false);
         unify($state, $patType, $scrutineeType, $expr);

@@ -28,8 +28,6 @@ use function Moggi\Semantics\Kernel\literalRole;
 use function Moggi\Semantics\TypeExpr\scheme;
 use function Moggi\Semantics\TypeExpr\schemeFreeTypeVars;
 
-// Patterns: binding a pattern into the environment, the linearity each binding site must satisfy, and the overloaded-literal pattern test.
-
 /**
  * Whether the literal's type compares with a host primitive, i.e. the pattern
  * test the lowering emits (`$x === 0`) is already the literal's own.
@@ -113,8 +111,6 @@ function overloadedLiteralPatternNode(TypeCheckState $state, Ast\AstNode $patter
         $binder->name = $name;
         $binder->inferredInternalType = $type;
         $binder->inferredType = internalTypeToAst($type, $state->subst);
-        // A synthesized binder is still a binder: stored under its identity, reachable by the frame
-        // the pattern is being bound in.
         $state->registerBinder($name, $binder->binderId);
         $env[binderKey($binder->binderId)] = scheme($type, []);
         $literal = new Ast\IntegerLit($pattern->value, $pattern->line, $pattern->col, $pattern->endCol);
@@ -255,9 +251,6 @@ function declarePatternBinders(TypeCheckState $state, Ast\AstNode $pattern, arra
                 $pattern->binderId ??= ++$state->nextBinderId;
                 $state->registerBinder($pattern->name, $pattern->binderId);
                 $entry = scheme(freshType($state), []);
-                // A member's RHS refers to the group before any scheme is settled, so the entry
-                // published for it carries its identity too: the use is recorded as naming this
-                // binder, and lowering then finds the group's entry rather than a spelling.
                 $entry->binderId = $pattern->binderId;
                 $env[binderKey($pattern->binderId)] = $entry;
                 $declared[$pattern->name] = $pattern->binderId;
@@ -294,10 +287,7 @@ function bindPattern(TypeCheckState $state, Ast\AstNode $pattern, Type $expected
     return match ($pattern::class) {
         Ast\PatWild::class => [$expected, $env],
         Ast\PatVar::class => (static function () use ($state, $pattern, $expected, $env, $generalize, $constraints): array {
-            // One identity per binding site: a site a group already declared keeps the one it has.
             $pattern->binderId ??= ++$state->nextBinderId;
-            // The site's identity is what the environment is keyed by from here on: the spelling is
-            // only how source reaches the frame, and the frame records which binder it means.
             $state->registerBinder($pattern->name, $pattern->binderId);
             [$type, $env] = bindVar($state, $pattern->binderId, $pattern->name, $expected, $env, $generalize, $constraints);
             if (isset($env[binderKey($pattern->binderId)])) {

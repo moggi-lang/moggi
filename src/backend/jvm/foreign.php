@@ -2,6 +2,7 @@
 
 namespace Moggi\Backend\Jvm\Foreign;
 
+use function Moggi\Backend\backendById;
 use function Moggi\Foreign\splitForeignPathMember;
 
 /**
@@ -25,96 +26,47 @@ use function Moggi\Semantics\Kernel\boundaryHandleTypeName;
 use function Moggi\Semantics\Kernel\boundaryMaybeTypeName;
 use function Moggi\Semantics\Types\primitiveTypeIdOf;
 
+use Moggi\Foreign\ForeignTypeTable;
 use Moggi\Syntax\Ast;
 
 /**
- * Foreign host types, keyed by the declaring module and then by Moggi type name.
+ * The jvm host types checked modules declare — one table, owned by the target.
  *
- * A `foreign jvm type Path "…"` is one module's statement about one of its own names. Two
- * modules may each declare `Path` against different host types — this corpus has
- * `java.lang.String` and `java.nio.file.Path` — so a bare-name map cannot answer for both:
- * whichever module was checked last would overwrite the other and every reader after it
- * would get a fact the compilation never stated. The module is part of the key.
+ * A `foreign jvm type Path "…"` is one module's statement about one of its own names, and the
+ * module is half the key ({@see ForeignTypeTable}): two modules declare `Path` against different
+ * host types, and a bare-name map would let whichever was checked last answer for both.
  */
 function registerJvmForeignType(string $module, string $moggiName, string $hostType): void
 {
-    $GLOBALS['moggi_jvm_foreign_types'][$module][$moggiName] = $hostType;
+    jvmForeignTypes()->register($module, $moggiName, $hostType);
 }
 
-/**
- * Every module that declares `$name`, with the host type it declares.
- *
- * @return array<string, string> module => host type
- */
+/** Every module that declares `$name`, with the host type it declares. */
 function jvmForeignTypeDeclarations(string $name): array
 {
-    $found = [];
-    foreach ($GLOBALS['moggi_jvm_foreign_types'] ?? [] as $module => $declarations) {
-        if (\is_array($declarations) && isset($declarations[$name])) {
-            $found[(string) $module] = (string) $declarations[$name];
-        }
-    }
-
-    return $found;
+    return jvmForeignTypes()->declarationsOf($name);
 }
 
 /**
  * The host type `$name` stands for, read from the module that declared it.
  *
- * With a module, that module's declaration and nothing else; re-checking the same module —
- * what the REPL and LSP do on every keystroke — replaces its entry instead of colliding with
- * it. Without one, the answer must be the same in every declaring module, and a real
- * cross-module disagreement is refused rather than resolved by whichever module ran last.
+ * With a module, that module's declaration and nothing else; without one, every declaring module
+ * must agree, and a real disagreement is refused rather than answered by whichever ran last.
  */
 function lookupJvmForeignType(string $name, ?string $module = null): ?string
 {
-    if ($module !== null) {
-        return $GLOBALS['moggi_jvm_foreign_types'][$module][$name] ?? null;
-    }
-
-    $byModule = jvmForeignTypeDeclarations($name);
-    if ($byModule === []) {
-        return null;
-    }
-
-    $hosts = \array_values(\array_unique($byModule));
-    if (\count($hosts) > 1) {
-        $said = [];
-        foreach ($byModule as $declaringModule => $host) {
-            $said[] = "`{$declaringModule}` says {$host}";
-        }
-
-        throw new \RuntimeException(
-            "foreign jvm type `{$name}` is declared with different host types ("
-            . \implode('; ', $said)
-            . '); a read with no module to answer from cannot pick one',
-        );
-    }
-
-    return $hosts[0];
+    return jvmForeignTypes()->lookup($name, $module, 'jvm');
 }
 
-/**
- * Every host type any module declares.
- *
- * For set membership — `jvmIsInterface` asks whether an internal name is declared as an
- * interface anywhere — where the declaring module is not part of the question.
- *
- * @return list<string>
- */
+/** Every host type any module declares, for set membership. */
 function jvmDeclaredForeignHostTypes(): array
 {
-    $hosts = [];
-    foreach ($GLOBALS['moggi_jvm_foreign_types'] ?? [] as $declarations) {
-        if (! \is_array($declarations)) {
-            continue;
-        }
-        foreach ($declarations as $host) {
-            $hosts[] = (string) $host;
-        }
-    }
+    return jvmForeignTypes()->hostTypes();
+}
 
-    return $hosts;
+function jvmForeignTypes(): ForeignTypeTable
+{
+    return backendById('jvm')->foreignTypes();
 }
 
 /**

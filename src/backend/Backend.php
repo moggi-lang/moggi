@@ -2,6 +2,7 @@
 
 namespace Moggi\Backend;
 
+use Moggi\Foreign\ForeignTypeTable;
 use Moggi\IR\Module;
 use Moggi\Syntax\Ast\TypeNode;
 
@@ -112,6 +113,15 @@ interface Backend
         string $name,
         ?string $module = null,
     ): ?string;
+
+    /**
+     * The host types the modules checked for this target declare.
+     *
+     * A `foreign jvm type Path "…"` is written while *checking* and read while *emitting*, and the
+     * emitter sees IR rather than the checker's state, so the facts belong to the target object those
+     * two steps share rather than to the process they happen to run in.
+     */
+    public function foreignTypes(): ForeignTypeTable;
 
     /**
      * Backend-specific foreign-import rules (path shape, receiver constraints).

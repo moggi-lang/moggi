@@ -5,7 +5,7 @@ namespace Moggi\Optimize\Partial;
 use Moggi\IR;
 use Moggi\Syntax\Ast;
 
-use function Moggi\IR\Callables\captureMeta;
+use Moggi\IR\Callables\CallableTable;
 use function Moggi\IR\Callables\table;
 use function Moggi\IR\Visit\mapOperandChildren;
 use function Moggi\IR\Visit\stmtDirectOperands;
@@ -14,7 +14,6 @@ use function Moggi\Optimize\GlobalPass\rewriteStmtOperands;
 use function Moggi\Optimize\Interproc\indexFunctions;
 use function Moggi\Optimize\Interproc\isSimpleLambda;
 use function Moggi\Optimize\Interproc\maxTempInItems;
-use function Moggi\Optimize\Support\indexCapturedFunctions;
 use function Moggi\Optimize\Support\mapStmtNestedBlocks;
 use function Moggi\Optimize\Support\scheduleCall;
 use function Moggi\Optimize\Support\tempUseCountsInItems;
@@ -39,29 +38,23 @@ use function Moggi\Optimize\Support\tempUseCountsInItems;
  */
 function legalizeCallables(array $functions): array
 {
-    $meta = captureMeta(indexCapturedFunctions($functions));
-    $arity = publishedArities($functions);
+    $table = table($functions);
 
-    // One round per level a capture can propagate through the call graph, plus slack: a round that
-    // grows nothing returns, so the bound only turns a bug into a diagnostic.
     for ($round = 0, $limit = 2 * \count($functions) + 4; $round < $limit; ++$round) {
         $rewritten = \array_map(
             static fn (IR\FunctionDecl $function): IR\FunctionDecl => $function->withBody(
-                new IR\Block(bindLambdaCapturesItems($function->body->items, $meta, $arity)),
+                new IR\Block(bindLambdaCapturesItems($function->body->items, $table)),
             ),
             $functions,
         );
 
-        $nextMeta = captureMeta(indexCapturedFunctions($rewritten));
-        $nextArity = publishedArities($rewritten);
-        // Order-insensitive: the two maps must agree on every entry, not on the order they were
-        // built in.
-        if ($nextMeta == $meta && $nextArity == $arity) {
+        $next = table($rewritten);
+
+        if ($next->meta() == $table->meta() && $next->byEntry == $table->byEntry) {
             return $rewritten;
         }
 
-        $meta = $nextMeta;
-        $arity = $nextArity;
+        $table = $next;
     }
 
     throw new \RuntimeException(
@@ -71,20 +64,47 @@ function legalizeCallables(array $functions): array
 }
 
 /**
- * The runtime arity every entry publishes, read from the same table the emitters and the layout
- * check consult.
+ * What the table publishes about the entry a callee names, or null when this module publishes no
+ * such entry.
  *
- * @param list<IR\FunctionDecl> $functions
- * @return array<string, int>
+ * A callee is a spelling, and the table is what decides which entry one names: `sig()` is the
+ * publication's own lookup, which matches a qualified `Module::name` for this module as well as the
+ * bare name, and answers null rather than a neighbour for anything else. The capture vector is
+ * taken beside the signature because the signature's `captures` is the hidden slots with their
+ * evidence taken out, while a call passes them in the one order the binder produced
+ * (`CallableTable::meta()`), and prepending a different order would bind the wrong locals.
+ *
+ * @return array{sig: \Moggi\IR\Callables\CallableSig, captures: list<string>}|null
  */
-function publishedArities(array $functions): array
+function publishedLayout(CallableTable $table, string $callee): ?array
 {
-    $arity = [];
-    foreach (table($functions)->byEntry as $name => $sig) {
-        $arity[$name] = $sig->runtimeArity();
+    $sig = $table->sig($callee);
+    if ($sig === null) {
+        return null;
     }
 
-    return $arity;
+    return [
+        'sig' => $sig,
+        'captures' => $table->meta()[$sig->entryId]['captures'] ?? [],
+    ];
+}
+
+/**
+ * The capture vector the run published for the entry a spelling names.
+ *
+ * The published table is the only answer, so a pass never re-derives a layout from a name or a body;
+ * an entry the module does not publish is reported rather than assumed capture-free.
+ *
+ * @return list<string>
+ */
+function publishedCaptures(CallableTable $table, string $entry): array
+{
+    $layout = publishedLayout($table, $entry);
+    if ($layout === null) {
+        throw new \RuntimeException('no published capture layout for `' . $entry . '`');
+    }
+
+    return $layout['captures'];
 }
 
 /**
@@ -92,12 +112,12 @@ function publishedArities(array $functions): array
  * holds the supplied prefix and waits for the rest. Making that an `IR\Partial` here keeps the
  * judgement in one place — the table's own arity — instead of in each emitter.
  *
- * @param array<string, array{captures: list<string>, params: list<string>}> $meta
- * @param array<string, int> $arity
+ * @param list<IR\Operand> $args
+ * @param array{sig: \Moggi\IR\Callables\CallableSig, captures: list<string>}|null $layout
  */
-function underapplied(IR\Call $call, array $args, array $arity): ?IR\Partial
+function underapplied(IR\Call $call, array $args, ?array $layout): ?IR\Partial
 {
-    $full = $arity[$call->callee] ?? null;
+    $full = $layout === null ? null : $layout['sig']->runtimeArity();
     if ($full === null || \count($args) >= $full) {
         return null;
     }
@@ -107,33 +127,27 @@ function underapplied(IR\Call $call, array $args, array $arity): ?IR\Partial
 
 /**
  * @param list<IR\Stmt> $items
- * @param array<string, array{captures: list<string>, params: list<string>}> $meta
- * @param array<string, int> $arity
  * @return list<IR\Stmt>
  */
-function bindLambdaCapturesItems(array $items, array $meta, array $arity = []): array
+function bindLambdaCapturesItems(array $items, CallableTable $table): array
 {
     return \array_map(
-        static fn (IR\Stmt $item): IR\Stmt => bindLambdaCapturesStmt($item, $meta, $arity),
+        static fn (IR\Stmt $item): IR\Stmt => bindLambdaCapturesStmt($item, $table),
         $items,
     );
 }
 
-/**
- * @param array<string, array{captures: list<string>, params: list<string>}> $meta
- * @param array<string, int> $arity
- */
-function bindLambdaCapturesStmt(IR\Stmt $stmt, array $meta, array $arity = []): IR\Stmt
+function bindLambdaCapturesStmt(IR\Stmt $stmt, CallableTable $table): IR\Stmt
 {
     if ($stmt instanceof IR\Call) {
-        return legalizeCall($stmt, $meta, $arity);
+        return legalizeCall($stmt, $table);
     }
 
-    $rewrite = static fn (IR\Operand $operand): IR\Operand => bindLambdaCapturesOperand($operand, $meta, $arity);
+    $rewrite = static fn (IR\Operand $operand): IR\Operand => bindLambdaCapturesOperand($operand, $table);
 
     $rewritten = $stmt instanceof IR\CallValue
         ? new IR\CallValue(
-            legalizeCallee($rewrite($stmt->callee), \count($stmt->args), $arity),
+            legalizeCallee($rewrite($stmt->callee), \count($stmt->args), $table),
             \array_map($rewrite, $stmt->args),
             $stmt->dest,
             $stmt->srcLoc,
@@ -142,25 +156,24 @@ function bindLambdaCapturesStmt(IR\Stmt $stmt, array $meta, array $arity = []): 
 
     return mapStmtNestedBlocks(
         $rewritten,
-        static fn (IR\Block $block): IR\Block => new IR\Block(bindLambdaCapturesItems($block->items, $meta, $arity)),
+        static fn (IR\Block $block): IR\Block => new IR\Block(bindLambdaCapturesItems($block->items, $table)),
     );
 }
 
 /**
  * A call by name: its arguments, its captures, then either the call or — when the vector is a
  * proper prefix of what the entry publishes — the partial that holds it.
- *
- * @param array<string, array{captures: list<string>, params: list<string>}> $meta
- * @param array<string, int> $arity
  */
-function legalizeCall(IR\Call $call, array $meta, array $arity): IR\Stmt
+function legalizeCall(IR\Call $call, CallableTable $table): IR\Stmt
 {
-    $args = captureArgsForCall($call->callee, \array_map(
-        static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $meta, $arity),
+    $args = \array_map(
+        static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $table),
         $call->args,
-    ), $meta);
+    );
+    $layout = publishedLayout($table, $call->callee);
+    $args = captureArgsForCall($layout, $args);
 
-    $partial = underapplied($call, $args, $arity);
+    $partial = underapplied($call, $args, $layout);
     if ($partial !== null) {
         return new IR\Assign($call->dest, $partial);
     }
@@ -171,13 +184,12 @@ function legalizeCall(IR\Call $call, array $meta, array $arity): IR\Stmt
 /**
  * The callee of an application: a reference to a local entry applied to fewer slots than it
  * publishes is the partial that holds them, so the emitter never has to decide.
- *
- * @param array<string, int> $arity
  */
-function legalizeCallee(IR\Operand $callee, int $supplied, array $arity): IR\Operand
+function legalizeCallee(IR\Operand $callee, int $supplied, CallableTable $table): IR\Operand
 {
     if ($callee instanceof IR\FnRef) {
-        $full = $arity[$callee->name] ?? null;
+        $layout = publishedLayout($table, $callee->name);
+        $full = $layout === null ? null : $layout['sig']->runtimeArity();
         if ($full !== null && $supplied < $full) {
             return new IR\Partial($callee->name, $full, []);
         }
@@ -202,18 +214,22 @@ function legalizeCallee(IR\Operand $callee, int $supplied, array $arity): IR\Ope
  * local binding's own dictionaries), where skipping it would bind the
  * trailing arguments to the wrong parameters.
  *
+ * @param array{sig: \Moggi\IR\Callables\CallableSig, captures: list<string>}|null $layout
  * @param list<IR\Operand> $args
- * @param array<string, array{captures: list<string>, params: list<string>}> $meta
  * @return list<IR\Operand>
  */
-function captureArgsForCall(string $name, array $args, array $meta): array
+function captureArgsForCall(?array $layout, array $args): array
 {
-    $info = $meta[$name] ?? null;
-    $captures = $info['captures'] ?? [];
-    if ($captures === [] || \count($args) !== \count($info['params'])) {
+    if ($layout === null) {
         return $args;
     }
-    if (\count($info['params']) > \count($captures) && callArgsLeadWithCaptures($args, $captures)) {
+
+    $params = $layout['sig']->params;
+    $captures = $layout['captures'];
+    if ($captures === [] || \count($args) !== \count($params)) {
+        return $args;
+    }
+    if (\count($params) > \count($captures) && callArgsLeadWithCaptures($args, $captures)) {
         return $args;
     }
 
@@ -249,22 +265,24 @@ function callArgsLeadWithCaptures(array $args, array $captures): bool
 /**
  * A partial of a lifted function counts its captures in `arity` as well, so one
  * built from the declared parameters alone is widened to the full arity.
- *
- * @param array<string, array{captures: list<string>, params: list<string>}> $meta
- * @param array<string, int> $arity
  */
-function bindCapturedPartial(IR\Partial $partial, array $meta, array $arity = []): IR\Partial
+function bindCapturedPartial(IR\Partial $partial, CallableTable $table): IR\Partial
 {
     $args = \array_map(
-        static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $meta, $arity),
+        static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $table),
         $partial->args,
     );
-    $info = $meta[$partial->fn] ?? null;
-    $captures = $info['captures'] ?? [];
-    if ($captures === [] || $partial->arity !== \count($info['params'])) {
+    $layout = publishedLayout($table, $partial->fn);
+    if ($layout === null) {
         return new IR\Partial($partial->fn, $partial->arity, $args);
     }
-    if (\count($info['params']) > \count($captures) && callArgsLeadWithCaptures($args, $captures)) {
+
+    $params = $layout['sig']->params;
+    $captures = $layout['captures'];
+    if ($captures === [] || $partial->arity !== \count($params)) {
+        return new IR\Partial($partial->fn, $partial->arity, $args);
+    }
+    if (\count($params) > \count($captures) && callArgsLeadWithCaptures($args, $captures)) {
         return new IR\Partial($partial->fn, $partial->arity, $args);
     }
 
@@ -277,37 +295,33 @@ function bindCapturedPartial(IR\Partial $partial, array $meta, array $arity = []
     return new IR\Partial($partial->fn, $arity, $args);
 }
 
-/**
- * @param array<string, array{captures: list<string>, params: list<string>}> $meta
- * @param array<string, int> $arity
- */
-function bindLambdaCapturesOperand(IR\Operand $operand, array $meta, array $arity = []): IR\Operand
+function bindLambdaCapturesOperand(IR\Operand $operand, CallableTable $table): IR\Operand
 {
     if ($operand instanceof IR\FnRef) {
-        $info = $meta[$operand->name] ?? null;
-        if ($info !== null && ($info['captures'] ?? []) !== []) {
+        $layout = publishedLayout($table, $operand->name);
+        if ($layout !== null && $layout['captures'] !== []) {
             $captureArgs = \array_map(
                 static fn (string $name): IR\Operand => new IR\Local($name),
-                $info['captures'],
+                $layout['captures'],
             );
-            $full = \count($info['captures']) + \count($info['params']);
+            $full = \count($layout['captures']) + \count($layout['sig']->params);
 
             return new IR\Partial($operand->name, $full, $captureArgs);
         }
     }
 
     return match ($operand::class) {
-        IR\Partial::class => bindCapturedPartial($operand, $meta, $arity),
+        IR\Partial::class => bindCapturedPartial($operand, $table),
         IR\Intrinsic::class => new IR\Intrinsic(
             $operand->name,
-            \array_map(static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $meta, $arity), $operand->args),
+            \array_map(static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $table), $operand->args),
             $operand->srcLoc,
         ),
         IR\ListLit::class => new IR\ListLit(
-            \array_map(static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $meta, $arity), $operand->elements),
+            \array_map(static fn (IR\Operand $arg): IR\Operand => bindLambdaCapturesOperand($arg, $table), $operand->elements),
         ),
         IR\DictMethod::class => new IR\DictMethod(
-            bindLambdaCapturesOperand($operand->evidence, $meta, $arity),
+            bindLambdaCapturesOperand($operand->evidence, $table),
             $operand->method,
             $operand->localEvidence,
         ),
@@ -666,35 +680,14 @@ function returnedIdentityArg(IR\FunctionDecl $provider, array $providerArgs): ?I
  */
 function normalizeKnownApplies(array $functions, string $moduleName = ''): array
 {
-    $arity = knownFunctionArity($functions, $moduleName);
+    $table = table($functions, $moduleName);
 
     return \array_map(
         static fn (IR\FunctionDecl $function): IR\FunctionDecl => $function->withBody(
-            new IR\Block(normalizeApplyItems($function->body->items, $arity, declaredParamArities($function))),
+            new IR\Block(normalizeApplyItems($function->body->items, $table, declaredParamArities($function))),
         ),
         $functions,
     );
-}
-
-/**
- * @param list<IR\FunctionDecl> $functions
- * @return array<string, int>
- */
-function knownFunctionArity(array $functions, string $moduleName): array
-{
-    $arity = [];
-    foreach ($functions as $function) {
-        if ($function->shape->kind->takesCaptures()) {
-            continue;
-        }
-        $count = \count($function->params);
-        $arity[$function->name] = $count;
-        if ($moduleName !== '') {
-            $arity[$moduleName . '::' . $function->name] ??= $count;
-        }
-    }
-
-    return $arity;
 }
 
 /**
@@ -752,15 +745,14 @@ function functionTypeArity(Ast\TypeNode $type): int
  * the scope it was evaluated in.
  *
  * @param list<IR\Stmt> $items
- * @param array<string, int> $arity
  * @param array<string, int> $paramArities
  * @return list<IR\Stmt>
  */
-function normalizeApplyItems(array $items, array $arity, array $paramArities): array
+function normalizeApplyItems(array $items, CallableTable $table, array $paramArities): array
 {
     return fuseKnownApplyChains(
         \array_map(
-            static fn (IR\Stmt $item): IR\Stmt => normalizeApplyStmt($item, $arity, $paramArities),
+            static fn (IR\Stmt $item): IR\Stmt => normalizeApplyStmt($item, $table, $paramArities),
             $items,
         ),
         $paramArities,
@@ -824,13 +816,15 @@ function fuseKnownApplyChains(array $items, array $paramArities): array
  * The statement shapes: a known callee applied to fewer slots than it declares is a `Partial`, and
  * at full arity the application *is* a call statement in the scope that reads it.
  *
- * @param array<string, int> $arity
  * @param array<string, int> $paramArities
  */
-function normalizeApplyStmt(IR\Stmt $stmt, array $arity, array $paramArities): IR\Stmt
+function normalizeApplyStmt(IR\Stmt $stmt, CallableTable $table, array $paramArities): IR\Stmt
 {
     if ($stmt instanceof IR\CallValue && $stmt->callee instanceof IR\FnRef) {
-        $declared = $arity[$stmt->callee->name] ?? null;
+        $layout = publishedLayout($table, $stmt->callee->name);
+        $declared = $layout !== null && ! $layout['sig']->kind->takesCaptures()
+            ? $layout['sig']->runtimeArity()
+            : null;
         if ($declared !== null && \count($stmt->args) <= $declared) {
             if (\count($stmt->args) === $declared) {
                 return new IR\Call($stmt->callee->name, $stmt->args, $stmt->dest, $stmt->srcLoc);
@@ -844,7 +838,7 @@ function normalizeApplyStmt(IR\Stmt $stmt, array $arity, array $paramArities): I
     }
 
     $mapBlock = static fn (IR\Block $block): IR\Block => new IR\Block(
-        normalizeApplyItems($block->items, $arity, $paramArities),
+        normalizeApplyItems($block->items, $table, $paramArities),
     );
 
     if ($stmt instanceof IR\MatchStmt || $stmt instanceof IR\MatchReturn) {
@@ -907,8 +901,6 @@ function specializePartialReturnFunction(IR\FunctionDecl $function, array $captu
     [$value] = scheduleCall($partial->fn, $callArgs, $body, maxTempInItems($items) + 1);
     $body[] = new IR\Ret($value);
 
-    // The clone keeps everything about its source except the parameter list and the body it now
-    // heads, so the shape travels as the record it is instead of nine copied flags.
     return $function->with([
         'params' => $newParams,
         'body' => new IR\Block($body),
