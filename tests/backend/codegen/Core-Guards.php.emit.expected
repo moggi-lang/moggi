@@ -2,7 +2,7 @@
 
 namespace Core\Guards;
 
-const __MOGGI_MAP = [[19 => ['Core.Guards.positive', 'tests/backend/codegen/Core-Guards.mog', 9, 14], 20 => ['Core.Guards.positive', 'tests/backend/codegen/Core-Guards.mog', 9, 14], 33 => ['Core.Guards.firstSign', 'tests/backend/codegen/Core-Guards.mog', 15, 29], 34 => ['Core.Guards.firstSign', 'tests/backend/codegen/Core-Guards.mog', 15, 29], 65 => ['Core.Guards.classify', 'tests/backend/codegen/Core-Guards.mog', 23, 31], 66 => ['Core.Guards.classify', 'tests/backend/codegen/Core-Guards.mog', 23, 31]], ['Core\\Guards\\positive' => ['Core.Guards.positive', 'tests/backend/codegen/Core-Guards.mog', 9, 14], 'Core\\Guards\\twice' => ['Core.Guards.twice', 'tests/backend/codegen/Core-Guards.mog', 12, 11], 'Core\\Guards\\firstSign' => ['Core.Guards.firstSign', 'tests/backend/codegen/Core-Guards.mog', 14, 1], 'Core\\Guards\\classify' => ['Core.Guards.classify', 'tests/backend/codegen/Core-Guards.mog', 22, 3]]];
+const __MOGGI_MAP = [[19 => 0, 20 => 0, 33 => 4, 34 => 4, 65 => 5, 66 => 5], ['Core\\Guards\\positive' => 0, 'Core\\Guards\\twice' => 1, 'Core\\Guards\\firstSign' => 2, 'Core\\Guards\\classify' => 3], [], [], [[0, 0, 9, 14], [1, 0, 12, 11], [2, 0, 14, 1], [3, 0, 22, 3], [2, 0, 15, 29], [3, 0, 23, 31]], ['Core.Guards.positive', 'Core.Guards.twice', 'Core.Guards.firstSign', 'Core.Guards.classify'], ['tests/backend/codegen/Core-Guards.mog']];
 
 require_once __DIR__ . '/../../../libraries/base/src/Data/Bool.php';
 require_once __DIR__ . '/../../../libraries/base/src/Data/Ord.php';

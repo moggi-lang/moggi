@@ -3,6 +3,7 @@
 namespace Moggi\Backend\Jvm;
 
 use Moggi\Backend\Backend;
+use Moggi\Foreign\ForeignTypeTable;
 
 use function Moggi\Backend\Inspect\describeJvmEmit;
 use function Moggi\Backend\Jvm\Codegen\emitModule;
@@ -179,5 +180,16 @@ final class JvmBackend implements Backend
         string $name,
     ): ?string {
         return verifyForeignImportAgainstHost($kind, $pathInfo, $type, $nativeSig, $name);
+    }
+
+    /**
+     * The host types this target's checked modules declare. One table per backend object, which is
+     * the object the checker's `backendById()` and the emitter both reach.
+     */
+    private ?ForeignTypeTable $foreignTypes = null;
+
+    public function foreignTypes(): ForeignTypeTable
+    {
+        return $this->foreignTypes ??= new ForeignTypeTable();
     }
 }

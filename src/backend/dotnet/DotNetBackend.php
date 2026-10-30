@@ -3,6 +3,7 @@
 namespace Moggi\Backend\DotNet;
 
 use Moggi\Backend\Backend;
+use Moggi\Foreign\ForeignTypeTable;
 
 use function Moggi\Backend\DotNet\Codegen\emitModule;
 use function Moggi\Backend\DotNet\Dependencies\dotNetSignatureEntry;
@@ -275,5 +276,16 @@ final class DotNetBackend implements Backend
         string $name,
     ): ?string {
         return verifyDotNetForeignImport($kind, $pathInfo, $type, $nativeSig, $name);
+    }
+
+    /**
+     * The host types this target's checked modules declare. One table per backend object, which is
+     * the object the checker's `backendById()` and the emitter both reach.
+     */
+    private ?ForeignTypeTable $foreignTypes = null;
+
+    public function foreignTypes(): ForeignTypeTable
+    {
+        return $this->foreignTypes ??= new ForeignTypeTable();
     }
 }

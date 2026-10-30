@@ -276,18 +276,9 @@ function lowerIoSequence(array $stmts, LowerCtx $ctx): bool
                 return true;
             })(),
             \Moggi\IR\IoStatementKind::LetAction => (function () use ($stmt, $ctx): bool {
-                // A `let`-bound action is deferred, not run: the store keeps the expression under
-                // the binder identity this statement binds, and the `<-` that uses it lowers it
-                // there. Nothing here looks at the next statement — the former fold fused this
-                // with a following bind, and the store path answers the same IR (see the boundary
-                // note at the top of this file).
-                // The identity the store is keyed by is the pattern term's, not the pattern's
-                // spelling: a `let`-bound action whose name is reused elsewhere stays its own entry.
                 $planned = plannedPattern($stmt->pattern, $ctx);
                 $binder = $planned->shape === \Moggi\Modules\PatternShape::Var ? $planned->binder : null;
                 if ($binder !== null) {
-                    // The expression itself, which already carries the form the checker published
-                    // for it: the use site re-lowers it by the same answer, without a second copy.
                     $ctx->ioActionStore[$binder] = $stmt->expr;
                 }
 
@@ -305,9 +296,6 @@ function lowerIoSequence(array $stmts, LowerCtx $ctx): bool
             \Moggi\IR\IoStatementKind::Expr => (function () use ($stmt, $last, $ctx): bool {
                 $form = ioStatementFormOf(statementFormNode($stmt));
 
-                // A `case` or a nested `do` answers from inside its arms (`ret`), so lowered in
-                // statement position it would end the body where it stands and strand every
-                // statement after it. Run it as the action it is, then carry on.
                 if (! $last && ($form === IoStatementForm::Case || $form === IoStatementForm::Sequence)) {
                     $boxed = lowerIoActionToBox($stmt->expr, $ctx);
                     $ctx->items[] = new IoRun($boxed, null, ioStmtSrcLoc($stmt->expr, $ctx));
@@ -408,6 +396,30 @@ function ioDeferredActionFor(Ast\Variable $use, LowerCtx $ctx): ?Ast\AstNode
     return $ctx->ioActionStore[$term->binder] ?? null;
 }
 
+/**
+ * The action value a use of a deferred action names, or null when the name is not one.
+ *
+ * A `let`-bound action is kept as the expression its binding wrote, because the lowering it needs
+ * depends on the consumer. The spine serves the statement consumer (run it); this serves the
+ * expression one — `lowerExpr()` asks it before the binder slot, so `idIO act` passes the action
+ * `act` denotes instead of failing to find a slot a deferred binding never allocated. A call's
+ * value *is* the action, so it is lowered as that value; a body is boxed, which is what an action
+ * value of a `do`-block or `case` is everywhere else.
+ */
+function ioDeferredActionValue(Ast\Variable $use, LowerCtx $ctx): ?Operand
+{
+    $expr = ioDeferredActionFor($use, $ctx);
+    if ($expr === null) {
+        return null;
+    }
+
+    $inner = actionValueNode($expr);
+
+    return ioStatementFormOf($expr) === IoStatementForm::Action
+        ? lowerExpr($inner, $ctx)
+        : lowerIoActionToBox($inner, $ctx);
+}
+
 function ioActionExprReturnsUnit(Ast\AstNode $expr): bool
 {
     $expr = actionValueNode($expr);
@@ -484,10 +496,6 @@ function lowerIoReturnOrAction(
         return $dest === null ? new Unit() : new Temp($dest);
     }
 
-    // A nested `do` in action position — `x <- (do …)` — is an action like a `case` in the same
-    // position: boxed where it stands, or run in place inside a box. This arm used to be missing,
-    // and the deleted recovery was the only thing that lowered the shape: it caught the value
-    // lowering's refusal and boxed the sequence. Classified here, it needs no retry.
     if ($form === IoStatementForm::Sequence) {
         if (! $expr instanceof Ast\IoSequence) {
             throw new \RuntimeException('a statement published as a sequence is a `' . $expr::class . '`');
@@ -496,9 +504,6 @@ function lowerIoReturnOrAction(
             return lowerIoSequence($expr->stmts, $ctx) ? new Unit() : null;
         }
 
-        // The destination is allocated before the box's body, which is the order the deleted
-        // recovery reached it in (it allocated the run's destination, then boxed); the shape's IR
-        // is byte-identical to that path, temp numbering included.
         $dest = $asStatement ? null : freshTemp($ctx);
         $boxed = lowerIoActionToBox($expr, $ctx);
         $ctx->items[] = new IoRun($boxed, $dest, ioStmtSrcLoc($expr, $ctx));
@@ -529,8 +534,11 @@ function lowerActionValue(Ast\AstNode $expr, LowerCtx $ctx, bool $asStatement, b
     $dest = ($asStatement || ioActionExprReturnsUnit($expr)) ? null : freshTemp($ctx);
 
     if ($inner instanceof Ast\Variable) {
-        // The operand, not the spelling: a locally bound action variable is its binder's slot, and
-        // two binders that share a name stay two different variables here.
+        $deferred = ioDeferredActionFor($inner, $ctx);
+        if ($deferred !== null) {
+            return lowerIoReturnOrAction($deferred, $ctx, $asStatement, $isTail) ?? new Unit();
+        }
+
         $envRef = variableOperand($inner, $ctx);
         if ($envRef instanceof FnRef) {
             lowerIoNullaryCall($envRef->name, $ctx, $dest, ioStmtSrcLoc($expr, $ctx, $inner), $isTail);
@@ -545,10 +553,6 @@ function lowerActionValue(Ast\AstNode $expr, LowerCtx $ctx, bool $asStatement, b
 
     $call = ioActionCall($inner, $ctx);
     if ($call === null) {
-        // No action call to emit: the expression's value *is* the action (an evidence method
-        // answering `IO`, a lifted closure, a dictionary application), so lower it as the value it
-        // is and run what it answers. This is the `Action` form's other half, classified before
-        // anything is emitted, not a failed attempt at the first one.
         $value = lowerExpr($inner, $ctx);
         $ctx->items[] = new IoRun($value, $dest, ioStmtSrcLoc($expr, $ctx));
         $ctx->hasIoRun = true;
@@ -832,7 +836,6 @@ function lowerIoCase(Ast\IoCase $expr, LowerCtx $ctx): bool
             $guards = [];
             if ($clause['guard'] !== null) {
                 $bindings = $armCtx->items;
-                // The arm's shape is the IR pattern just bound, not the node behind it.
                 $isVarPattern = $pattern instanceof PatVar;
                 $armCtx->items = [];
                 $guards = [lowerArmGuard($clause['guard'], $armCtx, $isVarPattern ? $bindings : [])];

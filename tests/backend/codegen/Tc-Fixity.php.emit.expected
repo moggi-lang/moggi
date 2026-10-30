@@ -2,7 +2,7 @@
 
 namespace Tc\Fixity;
 
-const __MOGGI_MAP = [[], ['Tc\\Fixity\\eqAdd' => ['Tc.Fixity.eqAdd', 'tests/backend/codegen/Tc-Fixity.mog', 9, 9], 'Tc\\Fixity\\addEq' => ['Tc.Fixity.addEq', 'tests/backend/codegen/Tc-Fixity.mog', 12, 9], 'Tc\\Fixity\\cons' => ['Tc.Fixity.cons', 'tests/backend/codegen/Tc-Fixity.mog', 15, 8], 'Tc\\Fixity\\append' => ['Tc.Fixity.append', 'tests/backend/codegen/Tc-Fixity.mog', 18, 10]]];
+const __MOGGI_MAP = [[], ['Tc\\Fixity\\eqAdd' => 0, 'Tc\\Fixity\\addEq' => 1, 'Tc\\Fixity\\cons' => 2, 'Tc\\Fixity\\append' => 3], [], [], [[0, 0, 9, 9], [1, 0, 12, 9], [2, 0, 15, 8], [3, 0, 18, 10]], ['Tc.Fixity.eqAdd', 'Tc.Fixity.addEq', 'Tc.Fixity.cons', 'Tc.Fixity.append'], ['tests/backend/codegen/Tc-Fixity.mog']];
 
 function eqAdd() {
     return (1 === 5);

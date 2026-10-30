@@ -2,7 +2,7 @@
 
 namespace User;
 
-const __MOGGI_MAP = [[12 => ['User.getId', 'lib/User.mog', 12, 11], 16 => ['User.makeUser', 'lib/User.mog', 15, 15]], ['User\\getId' => ['User.getId', 'lib/User.mog', 12, 11], 'User\\makeUser' => ['User.makeUser', 'lib/User.mog', 15, 15]]];
+const __MOGGI_MAP = [[12 => 0, 16 => 1], ['User\\getId' => 0, 'User\\makeUser' => 1], [], [], [[0, 0, 12, 11], [1, 0, 15, 15]], ['User.getId', 'User.makeUser'], ['lib/User.mog']];
 
 function User($id) {
     return ['User', $id];

@@ -5,7 +5,7 @@
  * `kinds.php` picks the producer by the golden's kind.
  */
 
-use function Moggi\Backend\Php\Codegen\emit;
+use function Moggi\Backend\Php\Codegen\emitModule;
 
 use function Moggi\Compiler\compileFile;
 use function Moggi\IR\Dump\dump as dumpIr;
@@ -67,13 +67,13 @@ function optimizedIrDump(string $path): string
     return dumpIr(optimize($module));
 }
 
-/** The PHP module `emit` produces for an IR fixture, with the source map dropped. */
+/** The PHP module `emitModule` produces for an IR fixture, with the source map dropped. */
 function emitPhpArtifact(string $path): string
 {
     $module = loadIrFixture($path);
     $sourcePath = testRelativePath($path);
     $outputRelative = \preg_replace('/\.ir\.php$/', '.php', $sourcePath) ?? $sourcePath;
-    $actual = emit($module, $sourcePath, [
+    $actual = emitModule($module, $sourcePath, [
         'outputRelative' => $outputRelative,
         'plan' => EmitPlan::forTarget('php', $outputRelative),
     ]);

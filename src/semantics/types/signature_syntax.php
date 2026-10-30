@@ -10,8 +10,6 @@ use Moggi\Semantics\TypeExpr\Type;
 use Moggi\Syntax\Ast;
 use function Moggi\Semantics\IntrinsicRegistry\isMagicHashName;
 
-// Spelling a discovered type as the signature AST a declaration without one gains, and the variables such a signature quantifies over.
-
 /**
  * The signature AST a body type and the obligations it takes on spell.
  *

@@ -4,6 +4,7 @@ namespace Moggi\Optimize\GlobalPass;
 
 use Moggi\IR;
 use Moggi\Optimize\Effects\Model;
+use Moggi\Optimize\Facts\Facts;
 
 use function Moggi\IR\Projection\index as projectionIndex;
 use function Moggi\IR\Visit\boundLocalsInBlock;
@@ -177,18 +178,12 @@ function usedInItems(array $items): array
  */
 function markLambdaCaptureLocalsUsed(array $items, array &$used): void
 {
-    global $propagateCopiesLambdaBodies;
-
-    /** @var array<string, array<string, true>> $memo */
-    $memo = [];
+    $needs = liftedCaptureNeeds();
+    $isLifted = static fn (string $name): bool => isset($needs[$name]);
 
     foreach ($items as $item) {
-        foreach (lambdaNamesReferencedInStmt($item) as $lambdaName) {
-            if (! isset($propagateCopiesLambdaBodies[$lambdaName])) {
-                continue;
-            }
-
-            foreach (lambdaCapturedLocals($lambdaName, $memo) as $localName => $_) {
+        foreach (lambdaNamesReferencedInStmt($item, $isLifted) as $lambdaName) {
+            foreach ($needs[$lambdaName] as $localName) {
                 $used['locals'][$localName] = true;
             }
         }
@@ -196,60 +191,17 @@ function markLambdaCaptureLocalsUsed(array $items, array &$used): void
 }
 
 /**
- * Collect locals captured transitively through referenced lifted lambdas.
- * Excludes lambda-bound names; memoization breaks recursive reference cycles.
- *
- * @param array<string, array<string, true>> $memo
- * @return array<string, true>
- */
-function lambdaCapturedLocals(string $lambdaName, array &$memo): array
-{
-    global $propagateCopiesLambdaBodies, $propagateCopiesLambdaParams;
-
-    $body = $propagateCopiesLambdaBodies[$lambdaName] ?? null;
-    if ($body === null) {
-        return [];
-    }
-
-    if (isset($memo[$lambdaName])) {
-        return $memo[$lambdaName];
-    }
-
-    $memo[$lambdaName] = [];
-
-    $params = \array_fill_keys($propagateCopiesLambdaParams[$lambdaName] ?? [], true);
-    $captures = \array_fill_keys(freeLocalsInBlock($body, $params), true);
-    $owned = boundLocalsInBlock($body) + $params;
-
-    foreach (lambdaNamesReferencedInBlock($body) as $referenced) {
-        if ($referenced === $lambdaName) {
-            continue;
-        }
-
-        foreach (lambdaCapturedLocals($referenced, $memo) as $localName => $_) {
-            if (! isset($owned[$localName])) {
-                $captures[$localName] = true;
-            }
-        }
-    }
-
-    $memo[$lambdaName] = $captures;
-
-    return $captures;
-}
-
-/**
  * Lifted lambdas a whole block refers to, at any nesting depth.
  *
  * @return list<string>
  */
-function lambdaNamesReferencedInBlock(IR\Block $block): array
+function lambdaNamesReferencedInBlock(IR\Block $block, callable $isLifted): array
 {
     $names = [];
     IR\Visit\walkBlock(
         $block,
-        static function (IR\Stmt $stmt) use (&$names): void {
-            foreach (lambdaNamesReferencedInStmt($stmt) as $name) {
+        static function (IR\Stmt $stmt) use (&$names, $isLifted): void {
+            foreach (lambdaNamesReferencedInStmt($stmt, $isLifted) as $name) {
                 $names[] = $name;
             }
         },
@@ -756,24 +708,71 @@ function mapCopyOperand(IR\Operand $operand, array $temps, array $locals): IR\Op
     );
 }
 
-/** @var array<string, IR\Block> */
-$propagateCopiesLambdaBodies = [];
-
-/** @var array<string, list<string>> */
-$propagateCopiesLambdaParams = [];
-
-/** @param list<IR\FunctionDecl> $functions */
-function setPropagateCopiesLambdaBodies(array $functions): void
+/**
+ * The locals a reference to each lifted callable must keep alive, computed once from the function list
+ * being optimized and published on the run's facts.
+ *
+ * This is not the capture vector `IR\Callables` publishes. That vector is what the binder prepends at a
+ * value reference, so its closure follows `FnRef` operands; DCE and copy propagation ask which enclosing
+ * locals a call, a partial or a value reference reads once that prefix is bound, so this closure follows
+ * every reference kind — a call and a `Partial` carry the callee as a name, not as an operand.
+ *
+ * @param list<IR\FunctionDecl> $functions
+ */
+function publishLiftedCaptureNeeds(array $functions): void
 {
-    global $propagateCopiesLambdaBodies, $propagateCopiesLambdaParams;
-    $propagateCopiesLambdaBodies = [];
-    $propagateCopiesLambdaParams = [];
+    $bodies = [];
+    $params = [];
     foreach ($functions as $function) {
-        if ($function->shape->kind->takesCaptures()) {
-            $propagateCopiesLambdaBodies[$function->name] = $function->body;
-            $propagateCopiesLambdaParams[$function->name] = $function->params;
+        if (! $function->shape->kind->takesCaptures()) {
+            continue;
+        }
+        $bodies[$function->name] = $function->body;
+        $params[$function->name] = $function->params;
+    }
+
+    $isLifted = static fn (string $name): bool => isset($bodies[$name]);
+    $needs = [];
+    $owned = [];
+    foreach ($bodies as $name => $body) {
+        $needs[$name] = freeLocalsInBlock($body, \array_fill_keys($params[$name], true));
+        $owned[$name] = boundLocalsInBlock($body) + \array_fill_keys($params[$name], true);
+    }
+
+    $changed = true;
+    while ($changed) {
+        $changed = false;
+        foreach ($bodies as $name => $body) {
+            foreach (lambdaNamesReferencedInBlock($body, $isLifted) as $referenced) {
+                foreach ($needs[$referenced] as $local) {
+                    if (isset($owned[$name][$local]) || \in_array($local, $needs[$name], true)) {
+                        continue;
+                    }
+
+                    $needs[$name][] = $local;
+                    $changed = true;
+                }
+            }
         }
     }
+
+    foreach ($needs as &$locals) {
+        \sort($locals);
+    }
+    unset($locals);
+
+    Facts::current()->publishLiftedCaptureNeeds($needs);
+}
+
+/**
+ * The published liveness set of the lifted callables, keyed by the name their declarations carry.
+ *
+ * @return array<string, list<string>>
+ */
+function liftedCaptureNeeds(): array
+{
+    return Facts::current()->liftedCaptureNeeds
+        ?? throw new \RuntimeException('global-pass: capture needs read before they were published');
 }
 
 /**
@@ -782,29 +781,21 @@ function setPropagateCopiesLambdaBodies(array $functions): void
  * propagated (rather than kept materialized) iff no lambda referenced *after*
  * i captures `x`, i.e. `captureIndex[x] <= i`.
  *
- * Built in one pass with per-lambda free-local sets memoized, replacing the old
- * per-let `\array_slice` + repeated full lambda-body walks (which were quadratic
- * to cubic in blocks with many lets and closures).
+ * One pass over the block against the published liveness sets, so a block with many
+ * lets and closures costs no more than its statements.
  *
  * @param list<IR\Stmt> $items
  * @return array<string, int>
  */
 function lambdaCaptureIndex(array $items): array
 {
-    global $propagateCopiesLambdaBodies;
+    $needs = liftedCaptureNeeds();
+    $isLifted = static fn (string $name): bool => isset($needs[$name]);
 
-    /** @var array<string, array<string, true>> $memo */
-    $memo = [];
-    $lambdaLocals = [];
     $lastIndex = [];
     foreach ($items as $index => $item) {
-        foreach (lambdaNamesReferencedInStmt($item) as $lambdaName) {
-            if (! isset($propagateCopiesLambdaBodies[$lambdaName])) {
-                continue;
-            }
-
-            $locals = $lambdaLocals[$lambdaName] ??= lambdaCapturedLocals($lambdaName, $memo);
-            foreach ($locals as $localName => $_) {
+        foreach (lambdaNamesReferencedInStmt($item, $isLifted) as $lambdaName) {
+            foreach ($needs[$lambdaName] as $localName) {
                 $lastIndex[$localName] = $index;
             }
         }
@@ -828,13 +819,9 @@ function lambdaCaptureIndex(array $items): array
  *
  * @return array<int, string>
  */
-function lambdaNamesReferencedInStmt(IR\Stmt $stmt): array
+function lambdaNamesReferencedInStmt(IR\Stmt $stmt, callable $captured): array
 {
     $names = [];
-
-    global $propagateCopiesLambdaBodies;
-
-    $captured = static fn (string $name): bool => isset($propagateCopiesLambdaBodies[$name]);
 
     $visitStmt = static function (IR\Stmt $s) use (&$names, $captured): void {
         if ($s instanceof IR\Call && $captured($s->callee)) {

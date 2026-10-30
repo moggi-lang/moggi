@@ -80,7 +80,6 @@ function treeShakeModules(array $modulesByName): array
     }
 
     if ($reachable === []) {
-        // An entry whose declaration did not mark itself is not a license to drop the program.
         return ['modules' => $modulesByName, 'removed' => 0, 'kept' => $total, 'total' => $total];
     }
 

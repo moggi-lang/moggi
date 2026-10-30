@@ -3,9 +3,10 @@
 namespace Moggi\Backend\Php;
 
 use Moggi\Backend\Backend;
+use Moggi\Foreign\ForeignTypeTable;
 
 use function Moggi\Backend\Inspect\describePhpEmit;
-use function Moggi\Backend\Php\Codegen\emit as emitPhp;
+use function Moggi\Backend\Php\Codegen\emitModule;
 
 use function Moggi\Backend\Php\Dependencies\composerIsBundled;
 use function Moggi\Backend\Php\Naming\basePhpFunctionName;
@@ -13,6 +14,9 @@ use function Moggi\Backend\Php\Verify\verifyForeignImportAgainstHost;
 
 use Moggi\IR\Module;
 use Moggi\Syntax\Ast\TypeNode;
+
+require_once __DIR__ . '/codegen.php';
+require_once __DIR__ . '/verify.php';
 
 final class PhpBackend implements Backend
 {
@@ -47,7 +51,7 @@ final class PhpBackend implements Backend
 
     public function emit(Module $ir, string $sourcePath, array $options = []): string|array
     {
-        return emitPhp($ir, $sourcePath, $options);
+        return emitModule($ir, $sourcePath, $options);
     }
 
     /**
@@ -117,5 +121,16 @@ final class PhpBackend implements Backend
         string $name,
     ): ?string {
         return verifyForeignImportAgainstHost($kind, $pathInfo, $type, $name);
+    }
+
+    /**
+     * The host types this target's checked modules declare. One table per backend object, which is
+     * the object the checker's `backendById()` and the emitter both reach.
+     */
+    private ?ForeignTypeTable $foreignTypes = null;
+
+    public function foreignTypes(): ForeignTypeTable
+    {
+        return $this->foreignTypes ??= new ForeignTypeTable();
     }
 }

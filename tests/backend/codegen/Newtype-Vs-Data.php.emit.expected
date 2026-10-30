@@ -2,7 +2,7 @@
 
 namespace Main;
 
-const __MOGGI_MAP = [[28 => ['Main.wrapBox', 'tests/backend/codegen/Newtype-Vs-Data.mog', 15, 13]], ['Main\\unwrapAge' => ['Main.unwrapAge', 'tests/backend/codegen/Newtype-Vs-Data.mog', 6, 21], 'Main\\unwrapBox' => ['Main.unwrapBox', 'tests/backend/codegen/Newtype-Vs-Data.mog', 9, 21], 'Main\\wrapAge' => ['Main.wrapAge', 'tests/backend/codegen/Newtype-Vs-Data.mog', 12, 13], 'Main\\wrapBox' => ['Main.wrapBox', 'tests/backend/codegen/Newtype-Vs-Data.mog', 15, 13]]];
+const __MOGGI_MAP = [[28 => 3], ['Main\\unwrapAge' => 0, 'Main\\unwrapBox' => 1, 'Main\\wrapAge' => 2, 'Main\\wrapBox' => 3], [], [], [[0, 0, 6, 21], [1, 0, 9, 21], [2, 0, 12, 13], [3, 0, 15, 13]], ['Main.unwrapAge', 'Main.unwrapBox', 'Main.wrapAge', 'Main.wrapBox'], ['tests/backend/codegen/Newtype-Vs-Data.mog']];
 
 function Age($v0) {
     return $v0;

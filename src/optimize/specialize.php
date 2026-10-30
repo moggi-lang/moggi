@@ -840,9 +840,6 @@ function specializeItems(
     int &$specializations,
     int &$cacheHits,
 ): array {
-    // Captured once per body: a rewrite that republishes the module's functions while this body is
-    // being specialized changes the revision, and the reads below refuse instead of answering with
-    // facts from the pre-rewrite program.
     $factsRevision = Facts::current()->functionsRevision();
     $out = [];
     $changed = false;
@@ -1633,8 +1630,6 @@ function cloneSpecializedFunction(
         }
     }
 
-    // A clone is reachable only through its call sites, so it resets the reachability traits; it
-    // keeps the target's action shape and records where it came from.
     return new IR\FunctionDecl(
         $specName,
         $params,

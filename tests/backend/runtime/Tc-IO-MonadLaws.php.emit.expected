@@ -2,7 +2,7 @@
 
 namespace Tc\IO\MonadLaws;
 
-const __MOGGI_MAP = [[10 => ['Tc.IO.MonadLaws.main', 'tests/backend/runtime/Tc-IO-MonadLaws.mog', 6, 8], 18 => ['Tc.IO.MonadLaws.main', 'tests/backend/runtime/Tc-IO-MonadLaws.mog', 7, 16], 19 => ['Tc.IO.MonadLaws.main', 'tests/backend/runtime/Tc-IO-MonadLaws.mog', 8, 3]], ['Tc\\IO\\MonadLaws\\main' => ['Tc.IO.MonadLaws.main', 'tests/backend/runtime/Tc-IO-MonadLaws.mog', 6, 8], 'Tc\\IO\\MonadLaws\\__w_main' => ['Tc.IO.MonadLaws.main', 'tests/backend/runtime/Tc-IO-MonadLaws.mog', 6, 8]], ['Tc\\IO\\MonadLaws\\main'], ['Tc\\IO\\MonadLaws\\__w_main']];
+const __MOGGI_MAP = [[10 => 0, 18 => 1, 19 => 2], ['Tc\\IO\\MonadLaws\\main' => 0, 'Tc\\IO\\MonadLaws\\__w_main' => 0], ['Tc\\IO\\MonadLaws\\main'], ['Tc\\IO\\MonadLaws\\__w_main'], [[0, 0, 6, 8], [0, 0, 7, 16], [0, 0, 8, 3]], ['Tc.IO.MonadLaws.main'], ['tests/backend/runtime/Tc-IO-MonadLaws.mog']];
 
 require_once __DIR__ . '/../../../libraries/base/src/System/IO.php';
 

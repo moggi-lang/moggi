@@ -11,9 +11,6 @@ use function Moggi\Semantics\IntrinsicRegistry\isShortCircuitPrimop;
 use function Moggi\Semantics\IntrinsicRegistry\resolveIntrinsicName;
 use function Moggi\Semantics\IntrinsicRegistry\schemeArity;
 use function Moggi\Semantics\IntrinsicRegistry\typeSchemes;
-use function Moggi\Semantics\TypeExpr\scheme;
-
-// Primop rewriting: saturated `#` applications become `IntrinsicCall`s, and a class method an instance declares as a primop lowers to that primop.
 
 /**
  * Rewrite saturated applications of imported `#` primops into IntrinsicCall

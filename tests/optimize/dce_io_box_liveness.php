@@ -32,6 +32,9 @@ use function Moggi\Optimize\GlobalPass\usedInItems;
 use function Moggi\Optimize\GlobalPass\usedInOperand;
 use function Moggi\Optimize\Specialize\unboundTempsInFunction;
 
+Facts::install(new Facts());
+Facts::current()->publishLiftedCaptureNeeds([]);
+
 $failures = [];
 $check = static function (bool $condition, string $message) use (&$failures): void {
     if (! $condition) {
@@ -97,7 +100,6 @@ $function = new IR\FunctionDecl('main', [], null, new IR\Block([
     new IR\Ret($unit()),
 ]));
 $totalFib = new IR\FunctionDecl('fib', ['n'], null, new IR\Block([new IR\Ret(new IR\ConstInt(0))]));
-Facts::install(new Facts());
 $optimized = $function->withBody(dceBlock($function->body, Model::forFunctions([$totalFib, $function])));
 $destinations = [];
 walkBlock($optimized->body, static function (IR\Stmt $stmt) use (&$destinations): void {

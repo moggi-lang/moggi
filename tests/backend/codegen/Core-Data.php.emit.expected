@@ -2,7 +2,7 @@
 
 namespace Main;
 
-const __MOGGI_MAP = [[24 => ['Main.makeUser', 'tests/backend/codegen/Core-Data.mog', 8, 12], 28 => ['Main.getAge', 'tests/backend/codegen/Core-Data.mog', 10, 15]], ['Main\\fromMaybe' => ['Main.fromMaybe', 'tests/backend/codegen/Core-Data.mog', 2, 18], 'Main\\makeUser' => ['Main.makeUser', 'tests/backend/codegen/Core-Data.mog', 8, 12], 'Main\\getAge' => ['Main.getAge', 'tests/backend/codegen/Core-Data.mog', 10, 15], 'Main\\showUser' => ['Main.showUser', 'tests/backend/codegen/Core-Data.mog', 12, 39], 'Main\\ageOf' => ['Main.ageOf', 'tests/backend/codegen/Core-Data.mog', 14, 26]]];
+const __MOGGI_MAP = [[24 => 1, 28 => 2], ['Main\\fromMaybe' => 0, 'Main\\makeUser' => 1, 'Main\\getAge' => 2, 'Main\\showUser' => 3, 'Main\\ageOf' => 4], [], [], [[0, 0, 2, 18], [1, 0, 8, 12], [2, 0, 10, 15], [3, 0, 12, 39], [4, 0, 14, 26]], ['Main.fromMaybe', 'Main.makeUser', 'Main.getAge', 'Main.showUser', 'Main.ageOf'], ['tests/backend/codegen/Core-Data.mog']];
 
 function moggi_u64_add(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao + $bo; $c = ($lo >> 32) & 0xffffffff; $hi = ($ah + $bh + $c) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }
 function moggi_u64_sub(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao - $bo; $bw = $lo < 0 ? 1 : 0; $hi = ($ah - $bh - $bw) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }

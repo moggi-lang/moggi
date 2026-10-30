@@ -330,47 +330,68 @@ final class SourceMapBuilder
     }
 
     /**
-     * The module's map as a namespace constant: `[rows, functions]`, where a
-     * row is `generatedLine => [symbol, displayPath, line, col]` (keyed and
-     * pre-resolved, so the runtime resolves a frame with one array access) and
-     * `functions` is `generated function name => [symbol, path, line, col]` for
-     * frames whose generated line carries no mapping of its own.
+     * The module's map as a namespace constant: `[rows, functions, entries, workers, sites, symbols, paths]`.
      *
-     * Null when the module has neither, so a module that can never appear in a
-     * report carries nothing.
+     * A generated line maps to a *site index*, not to a site: one expression's statements share a
+     * source position, so `[symbol, path, line, col]` written per line repeats the same two strings
+     * for every one of them. Sites are deduplicated by value, and their symbol and path are interned
+     * to an index each, so a row costs one integer and the strings appear once per module.
+     *
+     * `functions` is `generated function name => site` for frames whose generated line carries no
+     * mapping of its own, and `entries`/`workers` name the generated frames a report drops.
+     *
+     * Null when the module has nothing to say, so a module that can never appear in a report carries
+     * nothing.
      */
     public function toRuntimeConst(string $name = '__MOGGI_MAP'): ?string
     {
+        $intern = ['sites' => [], 'at' => [], 'symbols' => [], 'symbolAt' => [], 'paths' => [], 'pathAt' => []];
+
+        $site = static function (array $location) use (&$intern): int {
+            [$symbol, $path, $line, $col] = $location;
+            $key = $symbol . "\x1f" . $path . "\x1f" . $line . "\x1f" . $col;
+            if (isset($intern['at'][$key])) {
+                return $intern['at'][$key];
+            }
+            $intern['symbols'][$intern['symbolAt'][$symbol] ??= \count($intern['symbols'])] = $symbol;
+            $intern['paths'][$intern['pathAt'][$path] ??= \count($intern['paths'])] = $path;
+            $intern['sites'][] = [$intern['symbolAt'][$symbol], $intern['pathAt'][$path], $line, $col];
+
+            return $intern['at'][$key] = \count($intern['sites']) - 1;
+        };
+
         $functions = [];
         foreach ($this->runtimeFunctions() as $generated => $fn) {
-            $functions[$generated] = [$fn['symbol'], $fn['path'], $fn['line'], $fn['col']];
+            $functions[$generated] = $site([$fn['symbol'], $fn['path'], $fn['line'], $fn['col']]);
         }
 
         $rows = [];
         foreach ($this->mappings as $generatedLine => $siteId) {
-            $site = $this->siteById($siteId);
-            if ($site === null) {
+            $mapped = $this->siteById($siteId);
+            if ($mapped === null) {
                 continue;
             }
-            $rows[$generatedLine] = [
-                (string) ($site['symbolId'] ?? ''),
-                $this->displayPathFor((string) ($site['sourceId'] ?? '')),
-                (int) ($site['line'] ?? 0),
-                (int) ($site['col'] ?? 0),
-            ];
+            $rows[$generatedLine] = $site([
+                (string) ($mapped['symbolId'] ?? ''),
+                $this->displayPathFor((string) ($mapped['sourceId'] ?? '')),
+                (int) ($mapped['line'] ?? 0),
+                (int) ($mapped['col'] ?? 0),
+            ]);
         }
 
         if ($rows === [] && $functions === [] && $this->entryFrames === [] && $this->workerFrames === []) {
             return null;
         }
 
-        $payload = [$rows, $functions];
-        if ($this->entryFrames !== [] || $this->workerFrames !== []) {
-            $payload[] = \array_keys($this->entryFrames);
-            $payload[] = \array_keys($this->workerFrames);
-        }
-
-        return 'const ' . $name . ' = ' . self::phpLiteral($payload) . ';';
+        return 'const ' . $name . ' = ' . self::phpLiteral([
+            $rows,
+            $functions,
+            \array_keys($this->entryFrames),
+            \array_keys($this->workerFrames),
+            $intern['sites'],
+            $intern['symbols'],
+            $intern['paths'],
+        ]) . ';';
     }
 
     /** One-line PHP literal for map data (ints, strings, and arrays of both). */

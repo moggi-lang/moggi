@@ -731,8 +731,6 @@ function buildImportContext(
             $origin = (! $scheme->classMethod && isset($selected['origins'][$name]))
                 ? $selected['origins'][$name]
                 : null;
-            // Whether this spelling was already imported, captured before the qualified answer below
-            // adds to the record: the ambiguity rules are stated over the earlier import.
             $existing = $symbols[$name] ?? null;
 
             $reExported = ! $scheme->classMethod && $origin !== null && $origin['module'] !== $targetName;
@@ -774,7 +772,7 @@ function buildImportContext(
             }
 
             if ($existing !== null) {
-                if ($import->implicit) {
+                if ($import->implicit && $existing->scheme !== null) {
                     continue;
                 }
 

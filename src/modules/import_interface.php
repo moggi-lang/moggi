@@ -507,8 +507,6 @@ final class ImportInterface
     public function withClassScopeRefs(array $refs, array $localNames): self
     {
         $symbols = $this->symbols;
-        // By reference: each loop below extends a record an earlier one may have written, and a
-        // by-value capture would quietly read the table as it was before those writes.
         $at = static function (string $name) use (&$symbols): ImportSymbol {
             return $symbols[$name] ?? new ImportSymbol();
         };

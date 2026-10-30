@@ -47,8 +47,6 @@ function applyImportContext(TypeCheckState $state, Ast\Program $program, ImportC
 {
     $interface = $importContext->interface;
 
-    // One table, read once per payload the checker keeps separately: the records are the source and
-    // these are the state maps inference resolves through.
     foreach ($interface->env() as $name => $scheme) {
         $state->env[$name] = $scheme;
     }

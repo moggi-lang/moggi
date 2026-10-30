@@ -8,4 +8,3 @@ function moggi_i64_add(int $a, int $b): int { $r = $a + $b; return \is_int($r) ?
 function add($x, $y) {
     return (\is_int($__m64 = $x + $y) ? $__m64 : moggi_u64_add($x, $y));
 }
-

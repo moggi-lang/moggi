@@ -54,8 +54,8 @@ if (\version_compare(\PHP_VERSION, MINIMUM_PHP, '<')) {
             default => $n,
         };
     })($current);
-    if ($bytes > 0 && $bytes < 1024 * 1024 * 1024) {
-        \ini_set('memory_limit', '1024M');
+    if ($bytes > 0 && $bytes < 1536 * 1024 * 1024) {
+        \ini_set('memory_limit', '1536M');
     }
 })();
 
@@ -90,6 +90,7 @@ require __DIR__ . '/semantics/io_boundary.php';
 require_once __DIR__ . '/semantics/st_boundary.php';
 require __DIR__ . '/semantics/strict_io_normalize.php';
 require __DIR__ . '/semantics/io_escape.php';
+require __DIR__ . '/foreign/registry.php';
 require __DIR__ . '/foreign/path.php';
 require __DIR__ . '/semantics/foreign.php';
 require __DIR__ . '/semantics/effects.php';
@@ -120,10 +121,6 @@ require __DIR__ . '/optimize/tree_shake.php';
 require __DIR__ . '/optimize/pass_checkpoints.php';
 require __DIR__ . '/optimize/optimize.php';
 require __DIR__ . '/backend/ir_meta.php';
-require __DIR__ . '/backend/php/intrinsics.php';
-require __DIR__ . '/backend/php/foreign.php';
-require __DIR__ . '/backend/php/io.php';
-require __DIR__ . '/backend/php/codegen.php';
 require __DIR__ . '/backend/Backend.php';
 require __DIR__ . '/backend/php/verify.php';
 require __DIR__ . '/backend/jvm/verify.php';
@@ -210,6 +207,7 @@ require __DIR__ . '/lsp/workspace/fileOperations.php';
 require __DIR__ . '/lsp/workspace/configuration.php';
 require __DIR__ . '/lsp/workspace/watchedFiles.php';
 require __DIR__ . '/lsp/capabilities.php';
+require __DIR__ . '/lsp/request_scope.php';
 require __DIR__ . '/lsp/progress.php';
 require __DIR__ . '/lsp/staleness.php';
 require __DIR__ . '/lsp/sync.php';

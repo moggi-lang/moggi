@@ -52,9 +52,11 @@ $indirectPartial = $function('indirectPartial', $block([
     new IR\Ret(new IR\Temp(92)),
 ]));
 
-// The model asks the run's facts owner which entries a reference runs, so a case that builds a model
-// directly installs one, exactly as a pass driving an optimize run finds it.
+// The model asks the run's facts owner which entries a reference runs, and DCE asks it which locals a
+// reference to a lifted callable keeps alive, so a case that builds a model directly installs one and
+// publishes what a pass driving an optimize run publishes, minus the lifted callables this module has.
 Facts::install(new Facts());
+Facts::current()->publishLiftedCaptureNeeds([]);
 
 $module = [$total, $faulting, $indirectBody, $indirectApply, $indirectPartial];
 $effects = Model::forFunctions($module);

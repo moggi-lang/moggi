@@ -2,7 +2,7 @@
 
 namespace StructureCallDirect;
 
-const __MOGGI_MAP = [[21 => ['StructureCallDirect.pairUp', 'tests/backend/codegen/Call-Direct.mog', 10, 12]], ['StructureCallDirect\\addOne' => ['StructureCallDirect.addOne', 'tests/backend/codegen/Call-Direct.mog', 4, 12], 'StructureCallDirect\\twice' => ['StructureCallDirect.twice', 'tests/backend/codegen/Call-Direct.mog', 7, 11], 'StructureCallDirect\\pairUp' => ['StructureCallDirect.pairUp', 'tests/backend/codegen/Call-Direct.mog', 10, 12]]];
+const __MOGGI_MAP = [[21 => 2], ['StructureCallDirect\\addOne' => 0, 'StructureCallDirect\\twice' => 1, 'StructureCallDirect\\pairUp' => 2], [], [], [[0, 0, 4, 12], [1, 0, 7, 11], [2, 0, 10, 12]], ['StructureCallDirect.addOne', 'StructureCallDirect.twice', 'StructureCallDirect.pairUp'], ['tests/backend/codegen/Call-Direct.mog']];
 
 function moggi_u64_add(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao + $bo; $c = ($lo >> 32) & 0xffffffff; $hi = ($ah + $bh + $c) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }
 function moggi_u64_sub(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao - $bo; $bw = $lo < 0 ? 1 : 0; $hi = ($ah - $bh - $bw) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }

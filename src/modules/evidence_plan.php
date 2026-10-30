@@ -158,12 +158,6 @@ function checkedTermsIn(Ast\AstNode $root): array
     /** @var list<array{id: TermId, node: Ast\Lambda}> $lambdas */
     $lambdas = [];
 
-    // A pattern's term names its sub-patterns by their own ids, so a parent can only be built
-    // after its children exist: this walk is post-order, and it marks every node it publishes so
-    // the pre-order visit below skips the ones it already covered. One node, one term — a pattern
-    // nested in a `case` arm, a binding, a lambda slot or a declaration parameter is published
-    // once, wherever the enclosing family happens to sit.
-    $publishPattern = null;
     $publishPattern = static function (Ast\AstNode $pattern) use (&$terms, &$seen, &$next, &$publishPattern): int {
         $key = \spl_object_id($pattern);
         if (isset($seen[$key])) {
@@ -202,20 +196,13 @@ function checkedTermsIn(Ast\AstNode $root): array
             $id,
             CheckedFunction::termOrigin($pattern),
             patternShape($pattern),
-            // The identity the checker allocated for this site, read here and nowhere else: a
-            // scrubbed, re-parsed or cache-restored tree has no `binderId`, while the term survives
-            // all three.
             $pattern instanceof Ast\PatVar ? $pattern->binderId : null,
-            // A variable's occurrence name, or a constructor's/record's source name — what lowering
-            // needs to build the IR node and to apply its rename map.
             $pattern instanceof Ast\PatVar || $pattern instanceof Ast\PatCon || $pattern instanceof Ast\PatRecord
                 ? $pattern->name
                 : null,
             $pattern instanceof Ast\PatLit || $pattern instanceof Ast\PatChar ? $pattern->value : null,
             $children,
             $fields,
-            // The names this subtree binds, so free-variable analysis asks the term instead of
-            // walking the pattern's nodes a second time.
             \array_keys(patternBoundNames($pattern)),
         );
 
@@ -247,9 +234,6 @@ function checkedTermsIn(Ast\AstNode $root): array
 
             $id = new TermId(++$next);
             $node->checkedTerm = $id->value;
-            // The checker resolved the use when it inferred it; publishing that answer is the whole
-            // producer for this family. A use with no binder names something outside the local scope
-            // and is planned as such.
             $terms[$id->value] = new CheckedVariable($id, CheckedFunction::termOrigin($node), $node->binderId);
 
             return;
@@ -264,9 +248,6 @@ function checkedTermsIn(Ast\AstNode $root): array
 
             $id = new TermId(++$next);
             $node->checkedTerm = $id->value;
-            // The value as written, plus the digits of an integer the host `int` cannot hold: the
-            // second is what a big-integer type is built from, and reading it off the node later is
-            // exactly the read this family removes.
             $terms[$id->value] = new CheckedLiteral(
                 $id,
                 CheckedFunction::termOrigin($node),
@@ -287,7 +268,6 @@ function checkedTermsIn(Ast\AstNode $root): array
 
             $id = new TermId(++$next);
             $node->checkedTerm = $id->value;
-            // The clauses in source order; each guard and body stays a child, lowered in place.
             $terms[$id->value] = new CheckedGuards($id, CheckedFunction::termOrigin($node), $node->clauses);
 
             return;
@@ -307,9 +287,6 @@ function checkedTermsIn(Ast\AstNode $root): array
 
             $id = new TermId(++$next);
             $node->checkedTerm = $id->value;
-            // One family, two node shapes: a construction is an update with no receiver. The
-            // constructor of an update is the checker's answer from the receiver's type, so it is
-            // required here rather than defaulted.
             $constructor = $node instanceof Ast\RecordCon
                 ? $node->name
                 : ($node->constructor ?? throw new \LogicException(
@@ -333,9 +310,6 @@ function checkedTermsIn(Ast\AstNode $root): array
                 return;
             }
 
-            // One identity per binding site, published where the checker allocated it, and the
-            // shape beside it. A pattern that binds nothing (a wildcard, a literal) is still a
-            // term: the arm it belongs to has to be matched against something.
             $publishPattern($node);
 
             return;
@@ -371,9 +345,6 @@ function checkedTermsIn(Ast\AstNode $root): array
             return;
         }
 
-        // `IoCase` is the same family in a `do` block: a scrutinee, its arms in source order and
-        // whether the check proved them total, so one term covers both node shapes and neither
-        // lowerer reads the node's own list.
         if ($node instanceof Ast\CaseExpr || $node instanceof Ast\IoCase) {
             $key = \spl_object_id($node);
             if (isset($seen[$key])) {
@@ -381,10 +352,6 @@ function checkedTermsIn(Ast\AstNode $root): array
             }
             $seen[$key] = true;
 
-            // The arms are the structure: their order and their guard flattening are stated once
-            // here, so lowering reads a list of arms instead of asking each alternative whether its
-            // body happens to be a `GuardsExpr`. The patterns, guards and bodies stay children,
-            // lowered in place.
             $arms = [];
             foreach ($node->alts as $alt) {
                 $clauses = [];
@@ -417,8 +384,6 @@ function checkedTermsIn(Ast\AstNode $root): array
             }
             $seen[$key] = true;
 
-            // Binding order is the check's answer, not lowering's: the same decomposition inference
-            // grouped these members by is published here, computed once on the final tree.
             $components = [];
             foreach (bindingGroupSccs($node->bindings) as $component) {
                 $group = [];
@@ -503,14 +468,9 @@ function checkedTermsIn(Ast\AstNode $root): array
             : new CheckedEvidenceRef($id, $origin, $node->class, $plan);
     });
 
-    // A lambda's slots and captures, once every term its body names exists: the
-    // capture question is answered with the dictionary parameter each evidence
-    // site dispatches through, and those sites are terms of this same product.
     foreach ($lambdas as $lambda) {
         $node = $lambda['node'];
         $parameterNames = patternParams($node->params);
-        // The slots' identities, published with them: a lowering frame is opened from the term, so
-        // a re-parse (or a scrub of the node's parameter list) cannot cost a use its binder.
         $parameterBinders = [];
         foreach ($node->params as $param) {
             $pattern = $param instanceof Ast\LambdaParam ? $param->pattern : $param;
@@ -523,8 +483,6 @@ function checkedTermsIn(Ast\AstNode $root): array
                 => ($terms[$method->checkedTerm ?? 0] ?? null) instanceof CheckedEvidenceMethod
                     ? $terms[$method->checkedTerm]->plan->parameter
                     : null,
-            // The terms published so far: a `case` or a group inside this body is walked through its
-            // own structure, so the capture set is the same answer lowering will read.
             $terms,
         );
 

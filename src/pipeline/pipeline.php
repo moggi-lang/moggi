@@ -84,7 +84,7 @@ function run(PipelineRequest $request, PipelineStage $stopAt = PipelineStage::Em
     $artifacts->ir = $ir;
     $artifacts->entry = $ir->entry;
 
-    if (irCheckpointsEnabled()) {
+    if (enabled()) {
         validateModule($ir, 'post-lower');
     }
 
@@ -138,15 +138,6 @@ function run(PipelineRequest $request, PipelineStage $stopAt = PipelineStage::Em
     $artifacts->emit = codegenWith($request->context->backend, $irOpt, $request->filename, $emitOptions);
 
     return $artifacts;
-}
-
-/**
- * Whether the post-lower checkpoint runs for this process. The suite turns the
- * checkpoints on; a user compile gets the post-optimizer checkpoint only.
- */
-function irCheckpointsEnabled(): bool
-{
-    return enabled();
 }
 
 /** @return array{outputRelative: string, moduleName?: string, namespace?: string, plan: EmitPlan} */

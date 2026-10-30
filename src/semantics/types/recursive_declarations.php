@@ -211,7 +211,6 @@ function inferRecursiveMemberBody(TypeCheckState $state, RecursiveMember $member
 
     $env = $state->env;
     assertParamListLinear($state, $fn->params);
-    // The member's parameters open their own frame, exactly as a standalone declaration's do.
     $state->pushBinderScope();
     foreach ($fn->params as $i => $param) {
         [$_, $env] = bindPattern($state, $param, $paramTypes[$i], $env, generalize: false);

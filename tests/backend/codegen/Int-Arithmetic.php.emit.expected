@@ -2,7 +2,7 @@
 
 namespace StructureIntArithmetic;
 
-const __MOGGI_MAP = [[], ['StructureIntArithmetic\\mix' => ['StructureIntArithmetic.mix', 'tests/backend/codegen/Int-Arithmetic.mog', 4, 11]]];
+const __MOGGI_MAP = [[], ['StructureIntArithmetic\\mix' => 0], [], [], [[0, 0, 4, 11]], ['StructureIntArithmetic.mix'], ['tests/backend/codegen/Int-Arithmetic.mog']];
 
 function moggi_u64_add(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao + $bo; $c = ($lo >> 32) & 0xffffffff; $hi = ($ah + $bh + $c) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }
 function moggi_u64_sub(int $a, int $b): int { $ao = $a & 0xffffffff; $ah = ($a >> 32) & 0xffffffff; $bo = $b & 0xffffffff; $bh = ($b >> 32) & 0xffffffff; $lo = $ao - $bo; $bw = $lo < 0 ? 1 : 0; $hi = ($ah - $bh - $bw) & 0xffffffff; return ($hi << 32) | ($lo & 0xffffffff); }

@@ -173,7 +173,7 @@ function runProjectCase(TestCase $case, string $backend, string $projectRoot): a
 
     compareProjectSnapshots($case, $backend);
 
-    return runProgramVerdict($case);
+    return runProgramVerdict($case, $backend);
 }
 
 /**

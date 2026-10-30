@@ -2,7 +2,7 @@
 
 namespace Tc\Infix\Constructor\Fixity;
 
-const __MOGGI_MAP = [[], ['Tc\\Infix\\Constructor\\Fixity\\nested' => ['Tc.Infix.Constructor.Fixity.nested', 'tests/backend/codegen/Tc-Infix-Constructor-Fixity.mog', 14, 1], 'Tc\\Infix\\Constructor\\Fixity\\ok' => ['Tc.Infix.Constructor.Fixity.ok', 'tests/backend/codegen/Tc-Infix-Constructor-Fixity.mog', 18, 6]]];
+const __MOGGI_MAP = [[], ['Tc\\Infix\\Constructor\\Fixity\\nested' => 0, 'Tc\\Infix\\Constructor\\Fixity\\ok' => 1], [], [], [[0, 0, 14, 1], [1, 0, 18, 6]], ['Tc.Infix.Constructor.Fixity.nested', 'Tc.Infix.Constructor.Fixity.ok'], ['tests/backend/codegen/Tc-Infix-Constructor-Fixity.mog']];
 
 require_once __DIR__ . '/../../../libraries/base/src/Data/Bool.php';
 
