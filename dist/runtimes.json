@@ -172,7 +172,9 @@
       "build": {
         "tool": "spc",
         "php": "8.5",
-        "sapi": "micro"
+        "sapi": "micro",
+        "extensions": ["bcmath", "intl", "mbstring", "phar"],
+        "note": "The native compiler runs itself from the archive appended to its binary, so the micro runtime needs the phar wrapper on top of the extensions compiled programs require."
       }
     },
 

@@ -137,7 +137,7 @@ function emitIntrinsicValue(EmitEnv $env, IR\Intrinsic $op): bool
             emitOperand($env, $args[1]);
             $env->c->checkcast($env->cp->class_('java/lang/String'));
             $env->c->invokevirtual($env->cp->methodRef('java/lang/String', 'compareTo', '(Ljava/lang/String;)I'), 1, true);
-            emitCompareIntToOrdering($env);
+            emitCompareToOrdering($env);
 
             return true;
         case 'stringNe#':
