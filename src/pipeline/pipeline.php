@@ -167,7 +167,7 @@ function defaultEmitOptions(Program $ast, string $filename, CompilationContext $
         );
     }
 
-    $emitOptions['plan'] = EmitPlan::forTarget($context->backendId, $emitOptions['outputRelative']);
+    $emitOptions['plan'] = $context->backend->emitPlan($emitOptions['outputRelative']);
 
     return $emitOptions;
 }

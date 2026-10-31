@@ -165,10 +165,21 @@ $assert(
 );
 
 // 2c. The disposition: one producer, one reader, four kinds, and the walk's only dispatch.
-\preg_match('/enum IoStatementKind: string\n\{(.*?)\n\}/s', (string) \file_get_contents($root . '/src/ir/types.php'), $kindBlock);
+// A Windows checkout is CRLF (`core.autocrlf`), so the block delimiters must tolerate `\r\n`:
+// anchoring on `string\n{` alone answers "no cases" instead of "the kinds changed".
+\preg_match('/enum IoStatementKind: string\r?\n\{(.*?)\r?\n\}/s', (string) \file_get_contents($root . '/src/ir/types.php'), $kindBlock);
 \preg_match_all('/^    case ([A-Za-z]+) = /m', $kindBlock[1] ?? '', $kindCases);
 $kinds = $kindCases[1];
 $expectedKinds = ['Let', 'LetAction', 'Bind', 'Expr'];
+// A Windows checkout is CRLF, so the pinned block delimiter is exercised against the same file
+// with CRLF line endings. This is the branch CI cannot otherwise reach on a LF host.
+$crlfTypes = \str_replace("\n", "\r\n", (string) \file_get_contents($root . '/src/ir/types.php'));
+\preg_match('/enum IoStatementKind: string\r?\n\{(.*?)\r?\n\}/s', $crlfTypes, $crlfBlock);
+\preg_match_all('/^    case ([A-Za-z]+) = /m', $crlfBlock[1] ?? '', $crlfCases);
+$assert(
+    ($crlfCases[1] ?? []) === $expectedKinds,
+    'the CRLF disposition block did not parse: [' . \implode(', ', $crlfCases[1] ?? []) . ']',
+);
 $assert(
     $kinds === $expectedKinds,
     'the statement disposition changed: declared [' . \implode(', ', $kinds) . '], pinned ['

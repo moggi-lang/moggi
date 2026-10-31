@@ -10,9 +10,9 @@
  *      the optional optimizer region empty.
  *   2. The checked program carries the interface itself, not copies of its
  *      maps; the import context keeps no second rendering.
- *   3. The emission plan is rendered per target from the interface: ABI facts
- *      come from the interface and require lines from the modules the IR
- *      calls, so a plan needs the IR and there is no IR-less planning.
+ *   3. The emission plan is target layout owned by the backend: ABI facts and
+ *      require lines are rendered later from the interface and the IR, so a
+ *      caller that supplies no plan gets the backend's default.
  *   4. Re-exports preserve the declaring module; a module never publishes
  *      its own names as imports.
  *   5. Importers read the callable layout published by the defining module.
@@ -228,16 +228,15 @@ $check(
         . \json_encode(\array_keys(\array_diff_key($planned->externalFnRuntimeArity, $planned->externalFns))),
 );
 
-$refused = false;
-try {
-    \Moggi\Backend\codegenWith(\Moggi\Backend\backendById($backendId), $ir, $mainPath, [
-        'outputRelative' => 'Main.php',
-        'artifactModuleName' => 'Main',
-    ]);
-} catch (\RuntimeException $e) {
-    $refused = \str_contains($e->getMessage(), 'EmitPlan');
-}
-$check($refused, 'an emitter accepted a module with no EmitPlan');
+$emitted = \Moggi\Backend\codegenWith(\Moggi\Backend\backendById($backendId), $ir, $mainPath, [
+    'outputRelative' => 'Main.php',
+    'artifactModuleName' => 'Main',
+    'plan' => $planned,
+]);
+$check(
+    $emitted !== [],
+    'an emitter produced nothing when the caller supplied the rendered plan',
+);
 
 $carried = $prepared->checked['Main']->interface;
 $check($carried instanceof ImportInterface, 'the checked program carries no import interface');

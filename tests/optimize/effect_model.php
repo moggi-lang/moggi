@@ -53,13 +53,13 @@ $indirectPartial = $function('indirectPartial', $block([
 ]));
 
 // The model asks the run's facts owner which entries a reference runs, and DCE asks it which locals a
-// reference to a lifted callable keeps alive, so a case that builds a model directly installs one and
-// publishes what a pass driving an optimize run publishes, minus the lifted callables this module has.
-Facts::install(new Facts());
-Facts::current()->publishLiftedCaptureNeeds([]);
+// reference to a lifted callable keeps alive, so a case that builds a model directly hands it the
+// owner a pass driving an optimize run would, minus the lifted callables this module has.
+$facts = new Facts();
+$facts->publishLiftedCaptureNeeds([]);
 
 $module = [$total, $faulting, $indirectBody, $indirectApply, $indirectPartial];
-$effects = Model::forFunctions($module);
+$effects = Model::forFunctions($module, '', $facts);
 
 $check($effects->ofCall('total')->discardIsObservable() === false, 'a total call should be discardable');
 $check($effects->ofCall('faulting')->discardIsObservable(), 'a call reaching a faulting primop should not be discardable');
@@ -206,8 +206,8 @@ $quirk = new IR\FunctionDecl('quirk', [], null, $block([
     new IR\Ret(new IR\Intrinsic('intDiv#', [new IR\ConstInt(1), new IR\ConstInt(0)])),
 ]));
 $pureCaf = new IR\FunctionDecl('pureCaf', [], null, $block([new IR\Ret(new IR\ConstInt(7))]));
-Facts::current()->publishFunctions([...$module, $quirk, $pureCaf]);
-$withCafs = Model::forFunctions([...$module, $quirk, $pureCaf]);
+$facts->publishFunctions([...$module, $quirk, $pureCaf]);
+$withCafs = Model::forFunctions([...$module, $quirk, $pureCaf], '', $facts);
 
 $check(
     $withCafs->evaluationOf(new IR\FnRef('quirk'))->discardIsObservable(),
@@ -245,14 +245,14 @@ $check($cafArgCse->items[1] instanceof IR\Call, 'CSE shared two calls whose argu
 // one model; a rewritten body has to be a different one — and an `ioEffect` mark is the change a pass makes
 // in place rather than by replacing the declaration, so the owner must see that too.
 $analysis = new Analysis();
-$first = $analysis->modelFor($module);
+$first = $analysis->modelFor($module, '', $facts);
 $check(
-    $first === $analysis->modelFor($module),
+    $first === $analysis->modelFor($module, '', $facts),
     'the analysis owner rebuilt a model for an unchanged program',
 );
 
 $quiet = $faulting->withBody($block([new IR\Ret(new IR\ConstInt(0))]));
-$rewritten = $analysis->modelFor([$total, $quiet, $indirectBody, $indirectApply, $indirectPartial]);
+$rewritten = $analysis->modelFor([$total, $quiet, $indirectBody, $indirectApply, $indirectPartial], '', $facts);
 $check($rewritten !== $first, 'the analysis owner kept its model across a rewritten body');
 $check(
     $rewritten->ofCall('faulting')->discardIsObservable() === false,
@@ -262,7 +262,7 @@ $check(
 // A shape is a readonly record, so marking a declaration is a replacement, not a field write.
 $marked = new IR\FunctionDecl('faulting', ['n'], null, $quiet->body);
 $marked->shape = $marked->shape->with(['ioEffect' => true]);
-$withIo = $analysis->modelFor([$total, $marked, $indirectBody, $indirectApply, $indirectPartial]);
+$withIo = $analysis->modelFor([$total, $marked, $indirectBody, $indirectApply, $indirectPartial], '', $facts);
 $check($withIo !== $rewritten, 'the analysis owner kept its model across an adopted io mark');
 $check($withIo->ofCall('faulting')->executes, 'the analysis owner missed an io mark while reusing its scan');
 

@@ -84,12 +84,12 @@ function indexFunctions(array $functions, string $moduleName = ''): array
  *
  * @param array<string, IR\FunctionDecl> $index
  */
-function lookupIndexedFunction(array $index, string $callee): ?IR\FunctionDecl
+function lookupIndexedFunction(array $index, string $callee, Facts $facts): ?IR\FunctionDecl
 {
     if (isset($index[$callee])) {
         return $index[$callee];
     }
-    $pe = Facts::current()->fusionIndex;
+    $pe = $facts->fusionIndex;
     if (isset($pe[$callee])) {
         return $pe[$callee];
     }
@@ -97,7 +97,7 @@ function lookupIndexedFunction(array $index, string $callee): ?IR\FunctionDecl
     $leaf = specializationLookupNameSafe($callee);
     if ($leaf !== $callee && (
         (isset($index[$leaf]) && $index[$leaf]->shape->kind === IR\FunctionKind::SpecClone)
-        || Facts::current()->isEvidence($leaf)
+        || $facts->isEvidence($leaf)
     )) {
         if (isset($index[$leaf])) {
             return $index[$leaf];
@@ -111,13 +111,13 @@ function lookupIndexedFunction(array $index, string $callee): ?IR\FunctionDecl
 }
 
 /** @param list<IR\FunctionDecl> $functions */
-function inlineFunctions(array $functions, string $moduleName = ''): array
+function inlineFunctions(array $functions, Facts $facts, string $moduleName = ''): array
 {
-    return inlineFunctionsRounds($functions, $moduleName);
+    return inlineFunctionsRounds($functions, $facts, $moduleName);
 }
 
 /** @param list<IR\FunctionDecl> $functions @return list<IR\FunctionDecl> */
-function inlineFunctionsRounds(array $functions, string $moduleName = ''): array
+function inlineFunctionsRounds(array $functions, Facts $facts, string $moduleName = ''): array
 {
     for ($round = 0; $round < 4; ++$round) {
         $index = indexFunctions($functions, $moduleName);
@@ -130,7 +130,7 @@ function inlineFunctionsRounds(array $functions, string $moduleName = ''): array
         foreach ($index as $name => $callee) {
             $boundNames[$name] = functionBoundNames($callee);
         }
-        Facts::current()->publishInlineTargetBound($boundNames);
+        $facts->publishInlineTargetBound($boundNames);
 
         foreach ($functions as $function) {
             if ($function->shape->ioStraightLine) {
@@ -141,7 +141,7 @@ function inlineFunctionsRounds(array $functions, string $moduleName = ''): array
 
             $peBlocked = [];
             $nextTemp = null;
-            Facts::current()->publishInlineProtected(\array_fill_keys(
+            $facts->publishInlineProtected(\array_fill_keys(
                 [...$function->params, ...collectLocalsInBlock($function->body)],
                 true,
             ));
@@ -149,13 +149,14 @@ function inlineFunctionsRounds(array $functions, string $moduleName = ''): array
                 $function->body,
                 $function->name,
                 $index,
+                $facts,
                 $inlineable,
                 0,
                 $peBlocked,
                 $nextTemp,
                 $rewrittenNames,
             );
-            Facts::current()->publishInlineProtected([]);
+            $facts->publishInlineProtected([]);
             $joined = new IR\Block(joinMatchStmtConsumer($inlinedBody->items));
             if ($joined !== $function->body) {
                 $changed = true;
@@ -164,7 +165,7 @@ function inlineFunctionsRounds(array $functions, string $moduleName = ''): array
             $next[] = $function->withBody($joined);
         }
 
-        Facts::current()->publishInlineTargetBound([]);
+        $facts->publishInlineTargetBound([]);
 
         if ($rewrittenNames !== []) {
             $changed = true;
@@ -291,6 +292,7 @@ function inlineBlock(
     IR\Block $block,
     string $selfName,
     array $index,
+    Facts $facts,
     array $inlineable = [],
     int $depth = 0,
     array &$peBlocked = [],
@@ -303,7 +305,7 @@ function inlineBlock(
         $nextTemp = \max($nextTemp, $localMax);
     }
 
-    return new IR\Block(inlineItems($block->items, $selfName, $index, $nextTemp, $inlineable, $depth, $peBlocked));
+    return new IR\Block(inlineItems($block->items, $selfName, $index, $facts, $nextTemp, $inlineable, $depth, $peBlocked));
 }
 
 /**
@@ -317,6 +319,7 @@ function inlineItems(
     array $items,
     string $selfName,
     array $index,
+    Facts $facts,
     int &$nextTemp,
     array $inlineable = [],
     int $depth = 0,
@@ -326,9 +329,9 @@ function inlineItems(
 
     foreach (denseStmtItems($items) as $item) {
         if ($item instanceof IR\Call) {
-            $target = lookupIndexedFunction($index, $item->callee);
+            $target = lookupIndexedFunction($index, $item->callee, $facts);
             if ($target !== null) {
-                $inlined = tryInlineCall($target, $item, $selfName, $index, $nextTemp, $inlineable);
+                $inlined = tryInlineCall($target, $item, $selfName, $index, $nextTemp, $inlineable, $facts);
                 if ($inlined !== null) {
                     foreach (denseStmtItems($inlined) as $inlinedItem) {
                         $out[] = $inlinedItem;
@@ -339,7 +342,7 @@ function inlineItems(
             }
         }
 
-        $out[] = inlineStmt($item, $selfName, $index, $inlineable, $depth, $peBlocked, $nextTemp);
+        $out[] = inlineStmt($item, $selfName, $index, $facts, $inlineable, $depth, $peBlocked, $nextTemp);
     }
 
     return denseStmtItems($out);
@@ -386,14 +389,14 @@ function functionBoundNames(IR\FunctionDecl $function): array
  * the other made the lambda render a field of whatever the inlined arms bound,
  * so the guard keeps an inline from capturing the caller's variables.
  */
-function inliningWouldRebindCallerName(IR\FunctionDecl $target): bool
+function inliningWouldRebindCallerName(IR\FunctionDecl $target, Facts $facts): bool
 {
-    $protected = Facts::current()->inlineProtectedNames;
+    $protected = $facts->inlineProtectedNames;
     if ($protected === []) {
         return false;
     }
 
-    $bound = Facts::current()->inlineTargetBoundNames[$target->name] ?? functionBoundNames($target);
+    $bound = $facts->inlineTargetBoundNames[$target->name] ?? functionBoundNames($target);
     foreach ($bound as $name) {
         if (isset($protected[$name])) {
             return true;
@@ -408,17 +411,17 @@ function inliningWouldRebindCallerName(IR\FunctionDecl $target): bool
  * @param array<string, true> $inlineable
  * @return list<IR\Stmt>|null
  */
-function tryInlineCall(IR\FunctionDecl $target, IR\Call $call, string $selfName, array $index, int &$nextTemp, array $inlineable): ?array
+function tryInlineCall(IR\FunctionDecl $target, IR\Call $call, string $selfName, array $index, int &$nextTemp, array $inlineable, Facts $facts): ?array
 {
     if ($target->name === $selfName || ! isset($inlineable[$target->name])) {
         return null;
     }
 
-    if (inliningWouldRebindCallerName($target)) {
+    if (inliningWouldRebindCallerName($target, $facts)) {
         return null;
     }
 
-    if (bodyReferencesCapturedLambdas($target, $index)) {
+    if (bodyReferencesCapturedLambdas($target, $index, $facts)) {
         return null;
     }
 
@@ -430,12 +433,12 @@ function tryInlineCall(IR\FunctionDecl $target, IR\Call $call, string $selfName,
         if ($arg instanceof IR\Partial) {
             return null;
         }
-        if (isCapturedLambdaArg($arg, $index)) {
+        if (isCapturedLambdaArg($arg, $index, $facts)) {
             return null;
         }
     }
 
-    $materialized = materializeInlineArgs($call->args, $nextTemp);
+    $materialized = materializeInlineArgs($call->args, $nextTemp, $facts);
     $nextTemp = $materialized['nextTemp'];
     $prefix = $materialized['prefix'];
     $call = new IR\Call($call->callee, $materialized['args'], $call->dest, $call->srcLoc);
@@ -507,12 +510,12 @@ function tryInlineCall(IR\FunctionDecl $target, IR\Call $call, string $selfName,
  * @param list<IR\Operand> $args
  * @return array{prefix: list<IR\Stmt>, args: list<IR\Operand>, nextTemp: int}
  */
-function materializeInlineArgs(array $args, int $nextTemp): array
+function materializeInlineArgs(array $args, int $nextTemp, Facts $facts): array
 {
     $prefix = [];
     $out = [];
     foreach ($args as $arg) {
-        if (operandIsNonDuplicable($arg)) {
+        if (operandIsNonDuplicable($arg, $facts)) {
             $dest = $nextTemp++;
             $prefix[] = new IR\Assign($dest, $arg);
             $out[] = new IR\Temp($dest);
@@ -643,9 +646,9 @@ function assignMatchArmToDest(array $items, int $dest): array
  *
  * @return list<string>
  */
-function inlineCaptures(string $entry): array
+function inlineCaptures(string $entry, Facts $facts): array
 {
-    $table = Facts::current()->callableTable;
+    $table = $facts->callableTable;
     if ($table === null) {
         throw new \RuntimeException('inline: capture layout read before the pass published the table');
     }
@@ -654,17 +657,17 @@ function inlineCaptures(string $entry): array
 }
 
 /** @param array<string, IR\FunctionDecl> $index */
-function isCapturedLambdaArg(IR\Operand $arg, array $index): bool
+function isCapturedLambdaArg(IR\Operand $arg, array $index, Facts $facts): bool
 {
     if (! $arg instanceof IR\FnRef) {
         return false;
     }
 
-    $lambda = lookupIndexedFunction($index, $arg->name);
+    $lambda = lookupIndexedFunction($index, $arg->name, $facts);
 
     return $lambda !== null
         && $lambda->shape->kind->takesCaptures()
-        && inlineCaptures($lambda->name) !== [];
+        && inlineCaptures($lambda->name, $facts) !== [];
 }
 
 /**
@@ -679,10 +682,10 @@ function isCapturedLambdaArg(IR\Operand $arg, array $index): bool
  * emitters report as an unknown local. A body that only mentions a captured
  * function with no free locals is safe: there is nothing to prepend.
  */
-function bodyReferencesCapturedLambdas(IR\FunctionDecl $function, array $index): bool
+function bodyReferencesCapturedLambdas(IR\FunctionDecl $function, array $index, Facts $facts): bool
 {
-    $isCaptured = static function (string $name) use ($index): bool {
-        $lambda = lookupIndexedFunction($index, $name);
+    $isCaptured = static function (string $name) use ($index, $facts): bool {
+        $lambda = lookupIndexedFunction($index, $name, $facts);
 
         return $lambda !== null && $lambda->shape->kind->takesCaptures();
     };
@@ -699,8 +702,8 @@ function bodyReferencesCapturedLambdas(IR\FunctionDecl $function, array $index):
     );
 
     foreach (\array_unique($names) as $name) {
-        $lambda = lookupIndexedFunction($index, $name);
-        if ($lambda !== null && inlineCaptures($lambda->name) !== []) {
+        $lambda = lookupIndexedFunction($index, $name, $facts);
+        if ($lambda !== null && inlineCaptures($lambda->name, $facts) !== []) {
             return true;
         }
     }
@@ -745,10 +748,10 @@ function inlineExprAsItems(IR\Operand $expr, int $dest): array
  * call, which executes on every copy. Everything else is a value the emitter re-materializes from the
  * same inputs, so duplicating it re-computes a value rather than performing work.
  */
-function operandIsNonDuplicable(IR\Operand $op): bool
+function operandIsNonDuplicable(IR\Operand $op, Facts $facts): bool
 {
     return $op instanceof IR\ForeignCall
-        || ($op instanceof IR\FnRef && Facts::current()->runsOnReference($op->name));
+        || ($op instanceof IR\FnRef && $facts->runsOnReference($op->name));
 }
 
 /** True when `$op` mentions any Temp (not safe to hoist into a specialized clone). */
@@ -1564,6 +1567,7 @@ function inlineStmt(
     IR\Stmt $stmt,
     string $selfName,
     array $index,
+    Facts $facts,
     array $inlineable = [],
     int $depth = 0,
     array &$peBlocked = [],
@@ -1571,11 +1575,12 @@ function inlineStmt(
 ): IR\Stmt {
     return mapStmtNestedBlocks(
         $stmt,
-        static function (IR\Block $block) use ($selfName, $index, $inlineable, $depth, &$peBlocked, &$nextTemp): IR\Block {
+        static function (IR\Block $block) use ($selfName, $index, $facts, $inlineable, $depth, &$peBlocked, &$nextTemp): IR\Block {
             return inlineBlock(
                 $block,
                 $selfName,
                 $index,
+                $facts,
                 $inlineable,
                 $depth + 1,
                 $peBlocked,

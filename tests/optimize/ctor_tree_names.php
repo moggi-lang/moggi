@@ -17,6 +17,7 @@ require $root . '/src/compiler.php';
 
 use Moggi\IR;
 use Moggi\Optimize\CaseFold\CtorTree;
+use Moggi\Optimize\Facts\Facts;
 
 use function Moggi\Optimize\Specialize\cafRetToCtorTree;
 use function Moggi\Optimize\Specialize\qualifyCtorRefName;
@@ -30,9 +31,10 @@ $assert = static function (bool $condition, string $message): void {
 $errorModule = 'System.IO.Error';
 $qualified = 'Moggi.IO.Exception::NoSuchThing';
 $retNullary = [new IR\Ret(new IR\FnRef('NoSuchThing'))];
+$facts = new Facts();
 
 // A nullary constructor returned by value: the reading module's interface names it.
-$tree = cafRetToCtorTree($retNullary, $errorModule, ['NoSuchThing' => $qualified]);
+$tree = cafRetToCtorTree($retNullary, $facts, $errorModule, ['NoSuchThing' => $qualified]);
 $assert(
     $tree instanceof CtorTree && $tree->name === $qualified,
     'a nullary constructor must take the name the reading module knows, got '
@@ -40,7 +42,7 @@ $assert(
 );
 
 // With no interface entry, the reading module's own qualification is what it can emit.
-$tree = cafRetToCtorTree($retNullary, $errorModule, []);
+$tree = cafRetToCtorTree($retNullary, $facts, $errorModule, []);
 $assert(
     $tree instanceof CtorTree && $tree->name === $errorModule . '::NoSuchThing',
     'a nullary constructor must be qualified by the reading module when its interface is silent',
@@ -52,7 +54,7 @@ $nested = [
     new IR\Call('MkPair', [new IR\FnRef('Nothing'), new IR\FnRef('NoSuchThing')], 0),
     new IR\Ret(new IR\Temp(0)),
 ];
-$tree = cafRetToCtorTree($nested, $errorModule, [
+$tree = cafRetToCtorTree($nested, $facts, $errorModule, [
     'Nothing' => 'Data.Maybe::Nothing',
     'NoSuchThing' => $qualified,
 ]);

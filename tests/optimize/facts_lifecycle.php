@@ -3,12 +3,12 @@
 /**
  * Who owns the facts an optimize run reads, and for how long.
  *
- * The passes ask one shared owner what the program is; a run installs it. Nothing creates one
- * implicitly, and the run that installed it restores what it found on the way out — so a pass can
- * never answer from a program that has finished compiling.
+ * The passes ask one shared owner what the program is, and that owner is handed to the run. Nothing
+ * creates one implicitly, and a run never edits the owner it was given in place: it derives a child,
+ * publishes there, and absorbs upward on the way out — so a pass can never answer from a program
+ * that has finished compiling.
  *
- * A run nested inside an installed owner gets its *own* child owner, seeded with the program-wide
- * facts and restored afterwards. The published function index and callable table describe the one
+ * A run nested inside an owner gets its *own* child owner, seeded with the program-wide facts. The published function index and callable table describe the one
  * body being rewritten, so a nested run must not publish them onto its host (whole-program
  * specialization optimizes module after module inside one owner); the evidence tables and CAF
  * trees it discovers are program-wide, so those are handed up.
@@ -36,16 +36,6 @@ $check = static function (bool $condition, string $message) use (&$failures): vo
     }
 };
 
-$check(Facts::installed() === null, 'an owner was installed before any run asked for one');
-
-$refused = false;
-try {
-    Facts::current();
-} catch (\LogicException) {
-    $refused = true;
-}
-$check($refused, 'a pass that asks for facts without an owner invented one instead of failing');
-
 /** @param list<IR\InstanceEvidence> $evidence */
 $module = static fn (array $evidence = []): IR\Module => new IR\Module(
     [new IR\FunctionDecl(
@@ -63,14 +53,11 @@ $module = static fn (array $evidence = []): IR\Module => new IR\Module(
 
 $optimized = optimize($module());
 $check($optimized instanceof IR\Module, 'a top-level run did not optimize');
-$check(Facts::installed() === null, 'the run that installed the owner did not clear it');
 
 $owner = new Facts();
-Facts::install($owner);
-optimize($module());
-$check(Facts::installed() === $owner, 'a run inside an installed owner replaced or cleared it');
+optimize($module(), $owner);
 
-optimize($module([new IR\InstanceEvidence('__ev_Foo_Int', ['show' => 'showInt'])]));
+optimize($module([new IR\InstanceEvidence('__ev_Foo_Int', ['show' => 'showInt'])]), $owner);
 $check($owner->isEvidence('__ev_Foo_Int'), 'the run did not publish the module\'s own evidence table onto the owner it found');
 $check($owner->isEvidence('Main::__ev_Foo_Int'), 'the owner did not answer the qualified spelling of the table it published');
 $check(
@@ -83,13 +70,11 @@ $check(
     'a nested run left the function index of the body it optimized on the owner it found',
 );
 $check(! $owner->isEvidence('__ev_Unrelated_9'), 'a name that only looks like evidence was answered as a table');
-specializeAcrossModules([]);
-$check(Facts::installed() === $owner, 'the whole-program run replaced the owner it found instead of restoring it');
+specializeAcrossModules([], [], $owner);
 
 // The function facts carry the revision they were published for. A reader that captured the
 // revision before a rewrite cannot read the map afterwards: the map describes the old program.
 $facts = new Facts();
-Facts::install($facts);
 $before = new IR\FunctionDecl(
     'bump',
     ['n'],
@@ -130,8 +115,6 @@ try {
     $staleExternal = $e->getMessage();
 }
 $check($staleExternal !== null, 'the external-function map answered a pre-rewrite revision');
-Facts::clear();
-$check(Facts::installed() === null, 'clearing an installed owner did not release it');
 
 if ($failures !== []) {
     foreach ($failures as $failure) {

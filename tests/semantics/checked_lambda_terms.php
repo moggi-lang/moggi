@@ -126,9 +126,9 @@ try {
     // this product published — the same question `lowerNamedLambda()` asks.
     $evidenceParameterFor = static function (Modules\CheckedFunction $record): callable {
         return static fn (Ast\EvidenceMethod $method): ?string
-            => ($method->checkedTerm === null ? null : $record->term($method->checkedTerm))
+            => $record->termFor($method)
                 instanceof CheckedEvidenceMethod
-                ? $record->term($method->checkedTerm)->plan->parameter
+                ? $record->termFor($method)->plan->parameter
                 : null;
     };
 
@@ -156,7 +156,7 @@ try {
         ): void {
             if ($node instanceof Ast\Lambda) {
                 ++$lambdas;
-                $term = $node->checkedTerm === null ? null : $record?->term($node->checkedTerm);
+                $term = $record?->termFor($node);
                 if (! $term instanceof CheckedLambda) {
                     throw new \RuntimeException(
                         'the lambda at line ' . $node->line . ' of `' . $item->name
@@ -203,7 +203,7 @@ try {
                 return;
             }
 
-            $term = $node->checkedTerm === null ? null : $record?->term($node->checkedTerm);
+            $term = $record?->termFor($node);
             // A primop site is the intrinsic family's, not this one's.
             if ($term instanceof CheckedIntrinsicCall) {
                 return;
@@ -335,16 +335,18 @@ try {
     // 3. A site the record does not cover is refused, for each shape.
     $refusals = [];
     foreach ($program->items as $item) {
-        if (! $item instanceof Ast\FunctionDecl || $core->function($item->name) === null) {
+        if (! $item instanceof Ast\FunctionDecl) {
             continue;
         }
-        Modules\walkElaboration($item->body, static function (Ast\AstNode $node) use (&$refusals, $program, $path): void {
+        $record = $core->function($item->name);
+        $assert($record !== null, "`Main::{$item->name}` is lowered and has no record");
+        Modules\walkElaboration($item->body, static function (Ast\AstNode $node) use (&$refusals, $program, $path, $record): void {
             $family = $node instanceof Ast\Lambda ? 'lambda' : ($node instanceof Ast\Apply ? 'apply' : null);
-            if ($family === null || $node->checkedTerm === null) {
+            if ($family === null || $record->terms->termFor($node) === null) {
                 return;
             }
-            $saved = $node->checkedTerm;
-            $node->checkedTerm = null;
+            $saved = $record->terms->termFor($node);
+            $record->terms->forget($node);
 
             try {
                 // A site lowering never reaches on its own (the head of a spine is
@@ -357,7 +359,7 @@ try {
                 }
                 $refusals[$family] = ($refusals[$family] ?? 0) + 1;
             } finally {
-                $node->checkedTerm = $saved;
+                $record->terms->restore($node, $saved);
             }
         });
     }

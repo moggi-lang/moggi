@@ -16,6 +16,7 @@ while (! \is_file($root . '/src/compiler.php') && \dirname($root) !== $root) {
 require $root . '/src/compiler.php';
 
 use Moggi\IR;
+use Moggi\Optimize\Facts\Facts;
 
 use function Moggi\Optimize\Specialize\isConcreteSpecializeCall;
 
@@ -64,7 +65,7 @@ $rows = [
 ];
 
 foreach ($rows as [$name, $records, $call, $expected]) {
-    $concrete = isConcreteSpecializeCall($call, $records);
+    $concrete = isConcreteSpecializeCall($call, $records, new Facts());
     $assert(
         $concrete === $expected,
         $name . ': expected ' . ($expected ? 'concrete' : 'not concrete') . ', got '

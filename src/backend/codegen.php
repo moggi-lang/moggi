@@ -21,5 +21,9 @@ require_once __DIR__ . '/dotnet/DotNetBackend.php';
  */
 function codegenWith(Backend $backend, Module $ir, string $sourcePath, array $options = []): array
 {
+    if (! ($options['plan'] ?? null) instanceof \Moggi\Modules\EmitPlan) {
+        $options['plan'] = $backend->emitPlan((string) ($options['outputRelative'] ?? ''), $options);
+    }
+
     return $backend->emit($ir, $sourcePath, $options);
 }

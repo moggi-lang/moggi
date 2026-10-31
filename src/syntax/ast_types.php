@@ -122,19 +122,6 @@ abstract class AstNode implements AstWalkable
 
     public ?TypeNode $inferredType = null;
 
-    /**
-     * The id of the checked term this node elaborates to, in its declaration's
-     * elaboration.
-     *
-     * Written once, by {@see \Moggi\Modules\publishElaboration()} on the final
-     * elaboration, and read once, by lowering, to find the term at this position
-     * ({@see \Moggi\Modules\CheckedTerm}). Lowering reads the term and never the
-     * node's copy of the same facts, so the node is a link and not a second
-     * authority. Null on a tree that was parsed and not checked, and on a node
-     * whose shape no published family covers.
-     */
-    public ?int $checkedTerm = null;
-
     /** Doc comment attached by the parser (`-- |`, `{-|`, `-- ^`). */
     public ?string $doc = null;
 
@@ -1299,14 +1286,6 @@ final class EvidenceMethod extends AstNode
         parent::__construct($line, $col, $endCol);
     }
 
-    /**
-     * The id of the checked term this node elaborates to.
-     *
-     * Written once, by {@see \Moggi\Modules\publishElaboration()} on the final
-     * elaboration; lowering follows it to the term and reads the term, never this
-     * node's evidence fields. Null on a tree that was parsed and not checked.
-     */
-    public ?int $checkedTerm = null;
 }
 
 final class ForeignCall extends AstNode

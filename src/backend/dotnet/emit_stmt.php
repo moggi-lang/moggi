@@ -4,31 +4,33 @@ namespace Moggi\Backend\DotNet\Codegen;
 
 
 require_once __DIR__ . '/../stack/source_lines.php';
+require_once __DIR__ . '/../managed/block.php';
 
 use Moggi\IR;
 use function Moggi\Backend\DotNet\Il\ilString;
-use function Moggi\Backend\Meta\tempReadsForFunction;
-use function Moggi\Backend\Meta\returnedCall;
+use function Moggi\Backend\Managed\emitBlock as emitManagedBlock;
+use function Moggi\Backend\Managed\stmtTerminates as managedStmtTerminates;
+use function Moggi\Backend\Managed\blockTerminates as managedBlockTerminates;
 use function Moggi\Backend\Stack\SourceLines\statementLoc;
 
 function emitBlock(EmitEnv $env, IR\Block $block): void
 {
-    $items = \array_values($block->items);
-    $tempReads = tempReadsForFunction($env->tempReads, $block);
-
-    for ($i = 0; $i < \count($items); ++$i) {
-        $call = returnedCall($items[$i], $items[$i + 1] ?? null, $tempReads);
-        if ($call !== null) {
-            $env->m->emitLine(statementLoc($call));
+    emitManagedBlock(
+        $env,
+        $block,
+        static function (?IR\SrcLoc $loc) use ($env): void {
+            $env->m->emitLine($loc);
+        },
+        static function (IR\Stmt $call) use ($env): void {
             emitCallValue($env, $call);
+        },
+        static function (IR\Stmt $stmt) use ($env): void {
+            emitStmt($env, $stmt);
+        },
+        static function () use ($env): void {
             emitFunctionReturn($env);
-            ++$i;
-
-            continue;
-        }
-
-        emitStmt($env, $items[$i]);
-    }
+        },
+    );
 }
 
 /** A call whose value is on the stack, without storing it in its destination temp. */
@@ -189,34 +191,12 @@ function emitStmt(EmitEnv $env, IR\Stmt $stmt): void
  */
 function stmtTerminates(IR\Stmt $stmt): bool
 {
-    if ($stmt instanceof IR\Ret
-        || $stmt instanceof IR\MatchReturn
-        || $stmt instanceof IR\TailRecall
-        || $stmt instanceof IR\IoThrow) {
-        return true;
-    }
-    if ($stmt instanceof IR\MatchStmt || $stmt instanceof IR\IoMatch) {
-        $arms = $stmt->arms;
-        if ($arms === []) {
-            return false;
-        }
-        foreach ($arms as $arm) {
-            if (! blockTerminates($arm->body)) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    return false;
+    return managedStmtTerminates($stmt);
 }
 
 function blockTerminates(IR\Block $block): bool
 {
-    $items = $block->items;
-
-    return $items !== [] && stmtTerminates($items[\array_key_last($items)]);
+    return managedBlockTerminates($block);
 }
 
 /**

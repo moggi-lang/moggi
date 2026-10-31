@@ -12,7 +12,21 @@ use Moggi\Syntax\Ast\TypeNode;
  */
 interface Backend
 {
-    /** Stable id: "php", "jvm", "dotnet", … */
+    /** Stable id: "php", "jvm", "dotnet". */
+    public function id(): string;
+
+    /**
+     * The emit plan for one output path, built by the target it describes.
+     *
+     * A plan is target layout, not module meaning: `EmitPlan::forTarget()` needs no IR, so a
+     * caller can ask before lowering. Keeping the construction here is what stops shared
+     * pipeline code from assembling a plan *for* a target, and stops a target from being handed
+     * one another target built.
+     *
+     * @param array<string, mixed> $options
+     */
+    public function emitPlan(string $outputRelative, array $options = []): \Moggi\Modules\EmitPlan;
+
     /**
      * Primary on-disk unit for a compiled module (before packaging).
      * e.g. ".php", ".class", ".il".

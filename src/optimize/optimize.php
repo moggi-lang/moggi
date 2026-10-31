@@ -48,19 +48,18 @@ use function Moggi\Optimize\Tco\eliminateTailRecursion;
  *
  * @param list<FunctionDecl> $functions
  */
-function publishModuleFacts(array $functions, string $moduleName): void
+function publishModuleFacts(array $functions, string $moduleName, Facts $facts): void
 {
-    Facts::current()->publishCallableTable(table($functions, $moduleName));
-    publishLiftedCaptureNeeds($functions);
+    $facts->publishCallableTable(table($functions, $moduleName));
+    publishLiftedCaptureNeeds($functions, $facts);
 }
 
 /** Runs the stage sequence, each stage checked under its own checkpoint label. */
-function optimize(Module $module): Module
+function optimize(Module $module, ?Facts $owner = null): Module
 {
     PassCheckpoints\enterOptimize();
-    $previous = Facts::installed();
+    $previous = $owner;
     $facts = $previous?->child() ?? new Facts();
-    Facts::install($facts);
     $result = null;
 
     try {
@@ -68,19 +67,19 @@ function optimize(Module $module): Module
         $functions = $module->functions;
         $instanceEvidence = $module->instanceEvidence;
         $evidenceByName = indexEvidenceByName($instanceEvidence);
-        Facts::current()->publishModuleEvidence($moduleName, $instanceEvidence);
-        Facts::current()->publishFunctions($functions);
+        $facts->publishModuleEvidence($moduleName, $instanceEvidence);
+        $facts->publishFunctions($functions);
         $analysis = new Analysis();
 
         $functions = PassCheckpoints\runOnFunctions(
             'early-folds',
             $module,
             $functions,
-            static function (array $fns) use ($moduleName, $analysis): array {
-                publishModuleFacts($fns, $moduleName);
-                $effects = $analysis->modelFor($fns, $moduleName);
+            static function (array $fns) use ($moduleName, $analysis, $facts): array {
+                publishModuleFacts($fns, $moduleName, $facts);
+                $effects = $analysis->modelFor($fns, $moduleName, $facts);
                 $optimized = \array_map(
-                    static fn (FunctionDecl $function): FunctionDecl => optimizeFunctionEarly($function, $effects),
+                    static fn (FunctionDecl $function): FunctionDecl => optimizeFunctionEarly($function, $effects, $facts),
                     $fns,
                 );
 
@@ -100,7 +99,7 @@ function optimize(Module $module): Module
             'inline-functions',
             $module,
             $functions,
-            static fn (array $fns): array => inlineFunctions($fns, $moduleName),
+            static fn (array $fns): array => inlineFunctions($fns, $facts, $moduleName),
             true,
         );
         $functions = PassCheckpoints\runOnFunctions(
@@ -114,11 +113,11 @@ function optimize(Module $module): Module
             'after-inline-folds',
             $module,
             $functions,
-            static function (array $fns) use ($moduleName, $analysis): array {
-                publishModuleFacts($fns, $moduleName);
-                $effects = $analysis->modelFor($fns, $moduleName);
+            static function (array $fns) use ($moduleName, $analysis, $facts): array {
+                publishModuleFacts($fns, $moduleName, $facts);
+                $effects = $analysis->modelFor($fns, $moduleName, $facts);
                 $optimized = \array_map(
-                    static fn (FunctionDecl $function): FunctionDecl => optimizeFunctionAfterInline($function, $effects),
+                    static fn (FunctionDecl $function): FunctionDecl => optimizeFunctionAfterInline($function, $effects, $facts),
                     $fns,
                 );
 
@@ -186,15 +185,15 @@ function optimize(Module $module): Module
         $module = new Module($functions, $module->data, $module->instanceEvidence, $module->entry, $module->moduleName, $module->sourceFile);
         $functions = $module->functions;
 
-        publishModuleFacts($functions, $moduleName);
+        publishModuleFacts($functions, $moduleName, $facts);
         $workers = workerDeclarations($module);
-        $effects = $analysis->modelFor($functions, $moduleName);
+        $effects = $analysis->modelFor($functions, $moduleName, $facts);
         $functions = PassCheckpoints\runOnFunctions(
             'final-folds',
             $module,
             $functions,
             static fn (array $fns): array => \array_map(
-                static fn (FunctionDecl $function): FunctionDecl => optimizeFunctionFinal($function, $workers, $effects),
+                static fn (FunctionDecl $function): FunctionDecl => optimizeFunctionFinal($function, $workers, $effects, $facts),
                 $fns,
             ),
             false,
@@ -206,7 +205,7 @@ function optimize(Module $module): Module
             static fn (array $fns): array => annotateIoEffects($fns, $moduleName),
             false,
         );
-        $effects = $analysis->modelFor($functions, $moduleName);
+        $effects = $analysis->modelFor($functions, $moduleName, $facts);
         $functions = PassCheckpoints\runOnFunctions(
             'final-dce',
             $module,
@@ -232,19 +231,18 @@ function optimize(Module $module): Module
     } finally {
         PassCheckpoints\leaveOptimize();
         $previous?->absorb($facts);
-        Facts::restore($previous);
     }
 
     return $result;
 }
 
-function optimizeFunctionEarly(FunctionDecl $function, Model $effects): FunctionDecl
+function optimizeFunctionEarly(FunctionDecl $function, Model $effects, Facts $facts): FunctionDecl
 {
     if ($function->shape->ioStraightLine) {
         return $function;
     }
 
-    $body = optimizeBlock($function->body);
+    $body = optimizeBlock($function->body, $facts);
     if (functionReturnsIo($function->type)) {
         return $function->withBody($body);
     }
@@ -257,17 +255,17 @@ function optimizeFunctionEarly(FunctionDecl $function, Model $effects): Function
     return $function->withBody($body);
 }
 
-function optimizeFunctionAfterInline(FunctionDecl $function, Model $effects): FunctionDecl
+function optimizeFunctionAfterInline(FunctionDecl $function, Model $effects, Facts $facts): FunctionDecl
 {
     if ($function->shape->ioStraightLine) {
-        return $function->withBody(new Block(foldKnownMatchesInItems($function->body->items)));
+        return $function->withBody(new Block(foldKnownMatchesInItems($function->body->items, $facts)));
     }
 
-    $body = foldKnownConstructorsBlock($function->body);
-    $body = optimizeBlock($body);
-    $body = foldKnownConstructorsBlock($body);
+    $body = foldKnownConstructorsBlock($function->body, $facts);
+    $body = optimizeBlock($body, $facts);
+    $body = foldKnownConstructorsBlock($body, $facts);
     $body = cseBlock($body, $effects);
-    $body = propagateCopiesBlock($body);
+    $body = propagateCopiesBlock($body, $facts);
     $body = new Block(foldIntrinsicsItems($body->items));
     $body = dceBlock($body, $effects);
     $body = new Block(foldTailReturn($body->items));
@@ -279,16 +277,16 @@ function optimizeFunctionAfterInline(FunctionDecl $function, Model $effects): Fu
 /**
  * @param array<string, FunctionDecl> $workers the module's workers, so a run stays a statement
  */
-function optimizeFunctionFinal(FunctionDecl $function, array $workers, Model $effects): FunctionDecl
+function optimizeFunctionFinal(FunctionDecl $function, array $workers, Model $effects, Facts $facts): FunctionDecl
 {
     if ($function->shape->ioStraightLine) {
-        $body = propagateCopiesBlock($function->body);
+        $body = propagateCopiesBlock($function->body, $facts);
         $items = foldSingleUseCallResults(foldTailReturn($body->items), $workers);
 
         return $function->withBody(new Block($items));
     }
 
-    $body = propagateCopiesBlock($function->body);
+    $body = propagateCopiesBlock($function->body, $facts);
     $body = new Block(foldIntrinsicsItems($body->items));
     $body = dceBlock($body, $effects);
     $body = new Block(foldTailReturn($body->items));

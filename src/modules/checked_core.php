@@ -38,10 +38,10 @@ final class CheckedFunction
      *   Term-to-type entries in elaboration order, keyed by source origin
      *   (see {@see termOrigin()}). Tooling: a type is looked up by where a term
      *   is written, not by which term it is.
-     * @param array<int, CheckedTerm> $terms
-     *   The elaboration's terms, keyed by their own {@see TermId}'s value. Lowering
-     *   reads the term at the position it is lowering and refuses when there is
-     *   none; it never re-derives payload from the AST node.
+     * @param CheckedTerms $terms
+     *   The elaboration's terms, by their own {@see TermId} and by the source site each one
+     *   elaborates. Lowering reads the term at the position it is lowering and refuses when
+     *   there is none; it never re-derives payload from the AST node.
      * @param array<string, string> $parameterKinds
      *   Each type parameter's kind in this declaration's signature scope.
      *   Kinds are declaration-local, so identical names may have different
@@ -54,7 +54,7 @@ final class CheckedFunction
         public readonly array $evidence,
         public readonly array $residuals,
         public readonly array $termTypes = [],
-        public readonly array $terms = [],
+        public readonly CheckedTerms $terms = new CheckedTerms(),
         public readonly array $parameterKinds = [],
     ) {
     }
@@ -68,9 +68,8 @@ final class CheckedFunction
      * built at different moments and joined here.
      *
      * @param list<array{origin: string, type: Type}> $termTypes
-     * @param array<int, CheckedTerm> $terms
      */
-    public function withElaboration(array $termTypes, array $terms): self
+    public function withElaboration(array $termTypes, CheckedTerms $terms): self
     {
         return new self(
             $this->name,
@@ -107,14 +106,20 @@ final class CheckedFunction
     /**
      * One term of this elaboration, by its own identity.
      *
-     * This is how lowering resolves a position it is lowering: the node carries
-     * the id the producer wrote, and the record answers with the term that id
-     * names. No object id and no origin-string key stands between them, so a
-     * copied or reparsed node fails loudly instead of answering by position.
+     * This is how lowering resolves a position it is lowering: the record's site
+     * map answers for the node, and the term id names the payload. An origin
+     * string is never a key, so a copied or reparsed node fails loudly instead of
+     * answering by position.
      */
     public function term(int $id): ?CheckedTerm
     {
-        return $this->terms[$id] ?? null;
+        return $this->terms->get($id);
+    }
+
+    /** The term this declaration published for a source site, or null when it covered none. */
+    public function termFor(Ast\AstNode $site): ?CheckedTerm
+    {
+        return $this->terms->termFor($site);
     }
 
     /**
@@ -171,6 +176,23 @@ final class CheckedCore
             [$function->name => $function] + $this->functions,
         );
     }
+}
+
+/**
+ * The declaration record that owns a source site's term, or null when no record does.
+ *
+ * Tooling and tests that walk a whole program have the site but not the declaration it came from;
+ * asking each record's published map is the only answer that does not reintroduce a node field.
+ */
+function owningRecord(CheckedCore $core, Ast\AstNode $site): ?CheckedFunction
+{
+    foreach ($core->functions as $record) {
+        if ($record->termFor($site) !== null) {
+            return $record;
+        }
+    }
+
+    return null;
 }
 
 /**

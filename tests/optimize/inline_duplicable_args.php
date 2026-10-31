@@ -95,15 +95,15 @@ $pe = new IR\FunctionDecl(
 $closure = new IR\FunctionDecl('takesOne', ['x'], null, new IR\Block([new IR\Ret(new IR\Local('x'))]));
 
 $inlineWith = static function (IR\FunctionDecl $callee, IR\Operand $arg) use ($seed, $closure): ?array {
-    Facts::install(new Facts());
-    Facts::current()->publishFunctions([$seed, $closure, $callee]);
+    $facts = new Facts();
+    $facts->publishFunctions([$seed, $closure, $callee]);
     $index = [];
     foreach ([$seed, $closure, $callee] as $decl) {
         $index[$decl->name] = $decl;
     }
     $nextTemp = 10;
 
-    return tryInlineCall($callee, new IR\Call($callee->name, [$arg], 9), 'caller', $index, $nextTemp, [$callee->name => true]);
+    return tryInlineCall($callee, new IR\Call($callee->name, [$arg], 9), 'caller', $index, $nextTemp, [$callee->name => true], $facts);
 };
 
 $seedCall = $inlineWith($dup, new IR\FnRef('mk'));
@@ -172,6 +172,6 @@ if ($failures !== []) {
 
 // Each case installs the owner it needs; a run that leaves one installed models a state the
 // production path never leaves behind.
-Facts::clear();
+
 
 echo "inline_duplicable_args: ok\n";

@@ -100,6 +100,20 @@ type-level enforcement behind it.
   propagation publish `Optimize\GlobalPass`'s liveness set, which follows every
   reference kind (`FnRef`, `Partial`, call callee) because those are the locals a
   bound capture prefix reads, where the ABI vector follows value references only.
+* **The checked core is a decision overlay, not a structural tree.** Terms in
+  `src/modules/checked_term.php` own the facts inference decides at a site — its
+  binder identities, its evidence, the arity an application still wants, a
+  `case`'s arms — and lowering reads them where a construct has one. The
+  structural children a term names are still AST nodes, so the source tree
+  remains the structure: lowering dispatches on AST shape for any construct
+  without a term, and free-variable/capture analysis walks the tree. Migrating a
+  construct means publishing its decisions as terms, not moving its structure;
+  claiming a closed core before structure moves would be false.
+* **One capture order: the binder's.** `IR\Callables\table()` publishes each
+  entry's `captures` in the order the binder produced them (body order), and a
+  call prepends exactly that vector (`Optimize\Partial::publishedLayout`). It is
+  not re-sorted into an `E`-first order: for a lifted callable `E` and `C` are a
+  split of that one vector, so reordering it would bind the wrong locals.
 * **No backend facts before codegen.** The typed AST and IR never carry PHP
   function names, import lines or output paths.
 * **IO is strict sequencing, not a state token.** `do` desugars through `>>=`;

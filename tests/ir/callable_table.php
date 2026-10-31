@@ -9,7 +9,8 @@
  * What it holds down:
  *   1. Lowering records evidence slots at declaration sites, deriving `E`
  *      from solved constraints and captured lambda scope, never `__ev_` names.
- *   2. The runtime vector is `E ++ C ++ V`, with its length defining runtime arity.
+ *   2. The runtime arity is `|E| + |C| + |V|`, and the published capture vector keeps the
+ *      binder's order rather than being re-sorted into an `E`-first one.
  *   3. Post-legalize checks reject direct calls with mismatched vectors and
  *      partials that are not underapplications, with or without optimization.
  */
@@ -27,6 +28,7 @@ use Moggi\IR\Callables;
 use Moggi\IR\Validate\InvalidIr;
 
 use function Moggi\IR\Validate\validateCallableLayouts;
+use function Moggi\IR\Visit\freeLocalsInBlock;
 use function Moggi\Pipeline\run as pipelineRun;
 use function Moggi\Syntax\Lexer\lex;
 use function Moggi\Syntax\Parser\parse;
@@ -49,7 +51,9 @@ $check = static function (bool $condition, string $message) use (&$failures): vo
 /**
  * Compile one source the way the pipeline does and return its table.
  *
- * @return array{IR\Module, Callables\CallableTable}
+ * @return array{IR\Module, Callables\CallableTable, IR\Module, \Moggi\Syntax\Ast\Program} the
+ *   optimized module, its table, the pre-legalize module, and the typed program carrying the
+ *   checker's terms
  */
 $compile = static function (string $source, string $filename, bool $optimize = false) use ($scratch): array {
     $dir = $scratch . '/' . \preg_replace('/\.mog$/', '', $filename);
@@ -77,7 +81,12 @@ $compile = static function (string $source, string $filename, bool $optimize = f
         importContext: $moduleContext['importContext'],
     ), \Moggi\Pipeline\PipelineStage::IrOpt);
 
-    return [$artifacts->irOpt, Callables\table($artifacts->irOpt->functions, 'Main')];
+    return [
+        $artifacts->irOpt,
+        Callables\table($artifacts->irOpt->functions, 'Main'),
+        $artifacts->ir ?? $artifacts->irOpt,
+        $moduleContext['typedProgram'],
+    ];
 };
 
 /** @param list<string> $evidence @return string */
@@ -87,7 +96,7 @@ $shape = static function (Callables\CallableSig $sig, array $evidence): string {
         . ' V=' . \count($sig->params) . '|' . \implode(',', $sig->params);
 };
 
-[$module, $table] = $compile(<<<'MOGGI'
+[$module, $table, $irBefore, $typed] = $compile(<<<'MOGGI'
 module Main where
 
 import System.IO
@@ -118,9 +127,15 @@ if ($choose !== null) {
 }
 
 $lambda = null;
+$irBeforeLambda = null;
 foreach ($module->functions as $function) {
     if ($function->shape->kind === IR\FunctionKind::Lambda) {
         $lambda = $function;
+    }
+}
+foreach ($irBefore->functions as $function) {
+    if ($function->shape->kind === IR\FunctionKind::Lambda) {
+        $irBeforeLambda = $function;
     }
 }
 $check($lambda !== null, 'the example has no lifted lambda');
@@ -132,11 +147,116 @@ if ($lambdaSig !== null) {
         'the closure entry is not E=[Tag a] C=[x] V=[y]: ' . $shape($lambdaSig, $lambdaSig->evidenceNames()),
     );
     $check($lambdaSig->runtimeArity() === 3, 'the closure entry arity is not |E|+|C|+|V| = 3');
+    $published = $table->meta()[$lambdaSig->entryId]['captures'] ?? null;
     $check(
-        $lambdaSig->slotNames() === ['__ev_Tag', 'x', 'y'],
-        'the runtime slot order is not E ++ C ++ V: ' . \implode(',', $lambdaSig->slotNames()),
+        $published === ['__ev_Tag', 'x'] && $lambdaSig->captures === ['x'],
+        'the published vector is not the binder\'s order with evidence split out: meta='
+            . \json_encode($published) . ' sig=' . \json_encode($lambdaSig->captures),
+    );
+    $checkedCaptures = null;
+    if ($typed->core !== null) {
+        foreach ($typed->items as $typedItem) {
+            if (! $typedItem instanceof \Moggi\Syntax\Ast\FunctionDecl || $typedItem->name !== 'choose') {
+                continue;
+            }
+            $chooseRecord = $typed->core->function('choose');
+            if ($chooseRecord === null) {
+                continue;
+            }
+            \Moggi\Modules\walkElaboration(
+                $typedItem->body,
+                static function (\Moggi\Syntax\Ast\AstNode $node) use (&$checkedCaptures, $chooseRecord): void {
+                    if (! $node instanceof \Moggi\Syntax\Ast\Lambda) {
+                        return;
+                    }
+                    $term = $chooseRecord->termFor($node);
+                    if ($term instanceof \Moggi\Modules\CheckedLambda) {
+                        $checkedCaptures = $term->captures;
+                    }
+                },
+            );
+        }
+    }
+    $check(
+        $checkedCaptures === $published,
+        'the checker capture vector and the published table disagree: checker='
+            . \json_encode($checkedCaptures) . ' table=' . \json_encode($published),
+    );
+    $check(
+        $irBeforeLambda?->captures === $published,
+        'lowering did not store the binder vector the table publishes: decl='
+            . \json_encode($irBeforeLambda?->captures) . ' meta=' . \json_encode($published),
+    );
+    $check(
+        $lambda->captures === null || $lambda->captures === $published,
+        'a rewritten lifted declaration carries a vector that does not match its published layout: decl='
+            . \json_encode($lambda->captures) . ' meta=' . \json_encode($published),
+    );
+    $check(
+        \array_intersect($lambdaSig->captures, $lambdaSig->evidenceNames()) === [],
+        'the capture/signature split repeats an evidence slot',
     );
     $check($lambdaSig->kind === IR\FunctionKind::Lambda, 'the closure entry lost its kind');
+}
+
+// A body that reads a captured local *before* the dictionary it needs puts the binder's vector in
+// an order that is not evidence-first. The published vector has to keep that order: the
+// evidence/capture split is a read of it, not a licence to re-sort the slots a call passes.
+[$ordered] = $compile(<<<'MOGGI'
+module Main where
+
+import Text.Show
+
+class Tag a where
+  tag :: a -> String
+
+instance Tag Int where
+  tag x = "tag-int"
+
+choose x = \y -> x <> tag y
+
+main :: String
+main = choose "a" 1
+MOGGI, 'CallableTable-BinderOrder.mog');
+
+$orderedLambda = null;
+foreach ($ordered->functions as $function) {
+    if ($function->shape->kind === IR\FunctionKind::Lambda) {
+        $orderedLambda = $function;
+    }
+}
+$check($orderedLambda !== null, 'the binder-order example has no lifted lambda');
+if ($orderedLambda !== null) {
+    $orderedTable = Callables\table($ordered->functions, 'Main');
+    $orderedSig = $orderedTable->sig($orderedLambda->name);
+    $check($orderedSig !== null, 'the binder-order lambda has no published signature');
+    if ($orderedSig !== null) {
+        $bodyOrder = \array_values(freeLocalsInBlock(
+            $orderedLambda->body,
+            \array_fill_keys($orderedLambda->params, true),
+        ));
+        $publishedOrder = $orderedTable->meta()[$orderedSig->entryId]['captures'] ?? [];
+        $check(
+            $orderedSig->evidence !== [] && $orderedSig->captures !== [],
+            'the binder-order example did not bind both evidence and a capture: '
+                . $shape($orderedSig, $orderedSig->evidenceNames()),
+        );
+        $check(
+            $publishedOrder === $bodyOrder,
+            'the published vector is not the body\'s binder order: published='
+                . \json_encode($publishedOrder) . ' body=' . \json_encode($bodyOrder),
+        );
+        // The vector is the one legalization prepends, so it has to be the vector the binder
+        // produced — not a fresh concatenation. (In today's IR a dictionary is emitted as the
+        // callee, so evidence happens to come first here; the contract is body order, not that
+        // fact, which is why legalization reads this vector rather than rebuilding one.)
+        $check(
+            $publishedOrder === [...$orderedSig->captures, ...$orderedSig->evidenceNames()]
+                || $publishedOrder === [...$orderedSig->evidenceNames(), ...$orderedSig->captures],
+            'the published vector is neither embedding of the evidence/capture split: '
+                . \json_encode($publishedOrder),
+        );
+    }
 }
 
 [, $plain] = $compile(<<<'MOGGI'

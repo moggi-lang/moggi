@@ -474,6 +474,13 @@ final class Model
      * @param array<string, true> $executes
      * @param array<string, true> $recursive
      */
+    /**
+     * The facts owner this model answers from. A model built by a pass receives the run's owner;
+     * one built without a run (a test, a direct query) asks the installed owner if there is one and
+     * otherwise answers from an owner that has published nothing.
+     */
+    public Facts $facts;
+
     private function __construct(
         private array $index,
         private array $executes,
@@ -482,9 +489,9 @@ final class Model
     }
 
     /** @param list<IR\FunctionDecl> $functions */
-    public static function forFunctions(array $functions, string $moduleName = ''): self
+    public static function forFunctions(array $functions, string $moduleName = '', ?Facts $facts = null): self
     {
-        return self::fromScan($functions, scanFunctions($functions), $moduleName);
+        return self::fromScan($functions, scanFunctions($functions), $moduleName, $facts);
     }
 
     /**
@@ -496,7 +503,7 @@ final class Model
      * @param list<IR\FunctionDecl> $functions
      * @param array<string, array{names: array<string, true>, mentions: array<string, true>, unresolved: bool, throws: bool, loops: bool, dictMethods: array<string, true>}> $bodies
      */
-    public static function fromScan(array $functions, array $bodies, string $moduleName = ''): self
+    public static function fromScan(array $functions, array $bodies, string $moduleName = '', ?Facts $facts = null): self
     {
         $index = indexFunctions($functions, $moduleName);
         $model = new self(
@@ -505,6 +512,7 @@ final class Model
             \array_fill_keys(functionNamesInRecursiveSccs($index, $bodies), true),
         );
         $model->bodies = $bodies;
+        $model->facts = $facts ?? new Facts();
 
         return $model;
     }
@@ -560,7 +568,7 @@ final class Model
         return match ($operand::class) {
             IR\ConstInt::class, IR\ConstDouble::class, IR\ConstStr::class, IR\ConstChar::class,
             IR\Unit::class, IR\Temp::class, IR\Local::class => Effect::none(),
-            IR\FnRef::class => Facts::current()->runsOnReference($operand->name)
+            IR\FnRef::class => $this->facts->runsOnReference($operand->name)
                 ? $this->ofCall($operand->name)
                 : Effect::none(),
             IR\ListLit::class => Effect::constructor()->union($this->evaluationsOf($operand->elements)),
@@ -655,18 +663,19 @@ final class Analysis
     private ?array $revision = null;
 
     /** @param list<IR\FunctionDecl> $functions */
-    public function modelFor(array $functions, string $moduleName = ''): Model
+    public function modelFor(array $functions, string $moduleName = '', ?Facts $facts = null): Model
     {
         $bodies = scanFunctions($functions);
         $marks = [];
         foreach ($functions as $function) {
             $marks[$function->name] = [$function->shape->kind, $function->shape->foreign, $function->shape->ioEffect];
         }
-        $revision = [$moduleName, $marks, $bodies];
+        $owner = $facts;
+        $revision = [$moduleName, $marks, $bodies, $owner];
 
         if ($this->model === null || $revision !== $this->revision) {
             $this->revision = $revision;
-            $this->model = Model::fromScan($functions, $bodies, $moduleName);
+            $this->model = Model::fromScan($functions, $bodies, $moduleName, $owner);
         }
 
         return $this->model;
