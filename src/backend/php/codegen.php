@@ -325,7 +325,7 @@ function emitFunction(IR\FunctionDecl $function, EmitEnv $env): string
     $fnEnv->tailRecParams = $function->params;
     $fnEnv->frameFunction = $generated;
     $fnEnv->tempReads = tempReadCounts($function->body);
-    $body = emitBlock($function->body, 1, $fnEnv);
+    $body = emitBlock($fnEnv, $function->body, 1);
 
     return "function {$name}({$paramsCode}) {\n"
         . $body

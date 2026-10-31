@@ -125,8 +125,11 @@ if ($javap !== null) {
      * extension included: `Con.class` opens the console rather than a file, and the runtime really
      * has `moggi/rt/Con`. Such a class is written as `Con_.class` for `javap`, which reads bytes and
      * not the spelling, and is handed to the verifier inside a jar, whose entry names are not paths.
+     * `MOGGI_TEST_OS_FAMILY=Windows` runs the same branch on a POSIX host, including a launch of
+     * `RT` whose referenced `Con` is only in the jar; that is the CI-only path made testable.
      */
-    $reservedDevice = static fn (string $internal): bool => \PHP_OS_FAMILY === 'Windows'
+    $osFamily = \getenv('MOGGI_TEST_OS_FAMILY') ?: \PHP_OS_FAMILY;
+    $reservedDevice = static fn (string $internal): bool => $osFamily === 'Windows'
         && \in_array(
             \strtoupper(\explode('.', \basename($internal))[0]),
             ['CON', 'PRN', 'AUX', 'NUL', 'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7',

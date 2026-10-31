@@ -221,7 +221,6 @@ function canonicalizeJavapCodeBlocks(string $text): string
             continue;
         }
 
-        // A blank line, the closing brace, or the next member signature ends the block.
         $endsBlock = \trim($line) === ''
             || \preg_match('/^\s*}/', $line) === 1
             || \preg_match('/^  \S/', $line) === 1;

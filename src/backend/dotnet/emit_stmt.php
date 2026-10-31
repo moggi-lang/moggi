@@ -5,13 +5,13 @@ namespace Moggi\Backend\DotNet\Codegen;
 
 require_once __DIR__ . '/../stack/source_lines.php';
 require_once __DIR__ . '/../managed/block.php';
+require_once __DIR__ . '/../managed/stmt.php';
 
 use Moggi\IR;
-use function Moggi\Backend\DotNet\Il\ilString;
 use function Moggi\Backend\Managed\emitBlock as emitManagedBlock;
+use function Moggi\Backend\Managed\emitManagedStmt;
 use function Moggi\Backend\Managed\stmtTerminates as managedStmtTerminates;
 use function Moggi\Backend\Managed\blockTerminates as managedBlockTerminates;
-use function Moggi\Backend\Stack\SourceLines\statementLoc;
 
 function emitBlock(EmitEnv $env, IR\Block $block): void
 {
@@ -36,153 +36,7 @@ function emitBlock(EmitEnv $env, IR\Block $block): void
 /** A call whose value is on the stack, without storing it in its destination temp. */
 function emitStmt(EmitEnv $env, IR\Stmt $stmt): void
 {
-    $env->m->emitLine(statementLoc($stmt));
-    switch ($stmt::class) {
-        case IR\Ret::class:
-            /** @var IR\Ret $stmt */
-            emitOperand($env, $stmt->value);
-            emitFunctionReturn($env);
-
-            return;
-
-        case IR\Assign::class:
-            /** @var IR\Assign $stmt */
-            emitOperand($env, $stmt->value);
-            $env->m->store($env->localSlot('t' . $stmt->dest));
-
-            return;
-
-        case IR\Let::class:
-            /** @var IR\Let $stmt */
-            emitOperand($env, $stmt->value);
-            $env->m->store($env->localSlot($stmt->name));
-
-            return;
-
-        case IR\Call::class:
-            /** @var IR\Call $stmt */
-            emitStaticCall($env, $stmt->callee, $stmt->args);
-            $env->m->store($env->localSlot('t' . $stmt->dest));
-
-            return;
-
-        case IR\CallValue::class:
-            /** @var IR\CallValue $stmt */
-            emitOperand($env, $stmt->callee);
-            emitRuntimeApply($env, $stmt->args);
-            $env->m->store($env->localSlot('t' . $stmt->dest));
-
-            return;
-
-        case IR\IoRun::class:
-            /** @var IR\IoRun $stmt */
-            emitOperand($env, $stmt->action);
-            $env->m->emit('call object Moggi.Rt.RT::IoRun(object)');
-            if ($stmt->dest !== null) {
-                $env->m->store($env->localSlot('t' . $stmt->dest));
-            } else {
-                $env->m->emit('pop');
-            }
-
-            return;
-
-        case IR\IoCall::class:
-            /** @var IR\IoCall $stmt */
-            emitIoCall($env, $stmt);
-
-            return;
-
-        case IR\IoAssignAction::class:
-            /** @var IR\IoAssignAction $stmt */
-            emitIoAssignAction($env, $stmt);
-
-            return;
-
-        case IR\IoMatch::class:
-            /** @var IR\IoMatch $stmt */
-            emitMatchIo($env, $stmt);
-
-            return;
-
-        case IR\IoThrow::class:
-            /** @var IR\IoThrow $stmt */
-            emitOperand($env, $stmt->exception);
-            emitSrcLocValue($env, $stmt->srcLoc);
-            $env->m->emit('call object Moggi.Rt.RT::ThrowSomeException(object, object[])');
-            if ($stmt->dest !== null) {
-                $env->m->store($env->localSlot('t' . $stmt->dest));
-            } else {
-                $env->m->emit('pop');
-            }
-
-            return;
-
-        case IR\IoCatch::class:
-            /** @var IR\IoCatch $stmt */
-            emitOperand($env, $stmt->action);
-            $env->m->emit('castclass Moggi.Rt.IO');
-            emitOperand($env, $stmt->handler);
-            $env->m->emit('call object Moggi.Rt.RT::IoCatch(class Moggi.Rt.IO, object)');
-            if ($stmt->dest !== null) {
-                $env->m->store($env->localSlot('t' . $stmt->dest));
-            } else {
-                $env->m->emit('pop');
-            }
-
-            return;
-
-        case IR\IoFinally::class:
-            /** @var IR\IoFinally $stmt */
-            emitOperand($env, $stmt->action);
-            $env->m->emit('castclass Moggi.Rt.IO');
-            emitOperand($env, $stmt->cleanup);
-            $env->m->emit('castclass Moggi.Rt.IO');
-            $env->m->emit('call object Moggi.Rt.RT::IoFinally(class Moggi.Rt.IO, class Moggi.Rt.IO)');
-            if ($stmt->dest !== null) {
-                $env->m->store($env->localSlot('t' . $stmt->dest));
-            } else {
-                $env->m->emit('pop');
-            }
-
-            return;
-
-        case IR\MatchReturn::class:
-            /** @var IR\MatchReturn $stmt */
-            emitMatchReturn($env, $stmt);
-
-            return;
-
-        case IR\MatchStmt::class:
-            /** @var IR\MatchStmt $stmt */
-            emitMatchStmt($env, $stmt);
-
-            return;
-
-        case IR\Loop::class:
-            /** @var IR\Loop $stmt */
-            emitTailLoop($env, $stmt);
-
-            return;
-
-        case IR\TailRecall::class:
-            /** @var IR\TailRecall $stmt */
-            emitTailRecall($env, $stmt);
-
-            return;
-
-        case IR\DictCall::class:
-            /** @var IR\DictCall $stmt */
-            emitOperand($env, $stmt->evidence);
-            $env->m->emit('ldstr ' . ilString($stmt->method));
-            pushObjectArray($env, $stmt->args);
-            $env->m->emit('call object Moggi.Rt.RT::DictCall(object, string, object[])');
-            $env->m->store($env->localSlot('t' . $stmt->dest));
-
-            return;
-
-        default:
-            throw new \RuntimeException('DotNet emit: unsupported stmt ' . $stmt::class);
-    }
+    emitManagedStmt($env, $stmt);
 }
 
 /**
@@ -254,4 +108,3 @@ function emitFunctionReturn(EmitEnv $env): void
 {
     $env->m->emit('ret');
 }
-

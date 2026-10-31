@@ -41,6 +41,8 @@ use function Moggi\Syntax\isIdentifier;
 
 function lowerExpr(Ast\AstNode $expr, LowerCtx $ctx): Operand
 {
+    $expr = materializeSite($expr, $ctx);
+
     return match ($expr::class) {
         Ast\IntegerLit::class,
         Ast\DoubleLit::class,
@@ -347,7 +349,56 @@ function foreignCallOperand(CheckedForeignCall $term, array $args): ForeignCall
  */
 function siteTerm(Ast\AstNode $site, LowerCtx $ctx): ?CheckedTerm
 {
+    $generated = $ctx->generatedTerms;
+    if ($generated !== null) {
+        $term = $generated[$site] ?? null;
+        if ($term !== null) {
+            return $term;
+        }
+    }
+
     return $ctx->terms->termFor($site);
+}
+
+/**
+ * The lowering view of a checked site.
+ *
+ * The checked core owns the body's structure; the source node is only the site whose published
+ * structure is asked for. Materializing a view means a lowering pass never reads structural
+ * children from the tree the checker was handed, and every generated child is mapped back to the
+ * declaration term that owns it.
+ */
+function materializeSite(Ast\AstNode $site, LowerCtx $ctx): Ast\AstNode
+{
+    $generated = new \WeakMap();
+    $view = $ctx->terms->materialize($site, $generated);
+    if ($view === null) {
+        return $site;
+    }
+
+    $ctx->generatedTerms ??= new \WeakMap();
+    foreach ($generated as $object => $term) {
+        $ctx->generatedTerms[$object] = $term;
+    }
+
+    return $view;
+}
+
+/** Materialize one child named by a typed term's structure id. */
+function materializeTermId(int $id, LowerCtx $ctx): Ast\AstNode
+{
+    $generated = new \WeakMap();
+    $view = $ctx->terms->materializeId($id, $generated);
+    if (! $view instanceof Ast\AstNode) {
+        throw new \RuntimeException("checked structure #{$id} does not name an expression");
+    }
+
+    $ctx->generatedTerms ??= new \WeakMap();
+    foreach ($generated as $object => $term) {
+        $ctx->generatedTerms[$object] = $term;
+    }
+
+    return $view;
 }
 
 function plannedEvidence(
@@ -606,10 +657,11 @@ function applySpine(Ast\Apply $expr, LowerCtx $ctx): array
         $argument = $term->argument ?? throw new \RuntimeException(
             "the application at {$term->origin} publishes no argument",
         );
-        $args = [$argument, ...$args];
+        $args = [materializeTermId($argument, $ctx), ...$args];
         $callee = $term->callee ?? throw new \RuntimeException(
             "the application at {$term->origin} publishes no callee",
         );
+        $callee = materializeTermId($callee, $ctx);
     }
 
     return ['callee' => $callee, 'args' => $args];
@@ -1076,10 +1128,10 @@ function lowerCheckedLambda(Ast\Lambda $expr, LowerCtx $ctx): FnRef
     return lowerLoweredLambda(
         $term->parameterNames,
         $term->captures,
-        lambdaBody($expr, $term),
+        lambdaBody($term),
         $expr->body,
         $ctx,
-        $expr->inferredType,
+        $term->type,
     );
 }
 
@@ -1095,16 +1147,20 @@ function lowerCheckedLambda(Ast\Lambda $expr, LowerCtx $ctx): FnRef
  *
  * @return callable(LowerCtx): Operand
  */
-function lambdaBody(Ast\Lambda $lambda, CheckedLambda $term): callable
+function lambdaBody(CheckedLambda $term): callable
 {
-    return static function (LowerCtx $fnCtx) use ($lambda, $term): Operand {
+    return static function (LowerCtx $fnCtx) use ($term): Operand {
         foreach ($term->parameterBinders as $index => $binder) {
             if ($binder !== null && isset($term->parameterNames[$index])) {
                 $fnCtx->binders[$binder] = new Local($term->parameterNames[$index]);
             }
         }
 
-        return lowerExpr($term->body ?? $lambda->body, $fnCtx);
+        $body = $term->body ?? throw new \LogicException(
+            "the checked lambda at {$term->origin} names no body",
+        );
+
+        return lowerExpr(materializeTermId($body, $fnCtx), $fnCtx);
     };
 }
 
@@ -1136,12 +1192,6 @@ function lowerNamedLambda(
     FunctionKind $kind,
     ?Ast\AstNode $type = null,
 ): FnRef {
-    // A name the enclosing scope resolves to a `FnRef` is an entry reference, not a local slot:
-    // a recursive group member, a nested lambda that mentions one, or any other lifted entry.
-    // Free-variable analysis can name it, but passing it as a capture would emit `Local('showl')`
-    // for a name nothing binds. Keep it in the body environment (the body still names it), but
-    // never publish it as a capture slot. What stays a slot is a genuine local value, whose scope
-    // entry is a `Local`.
     $captureSlots = \array_values(\array_filter(
         $captures,
         static fn (string $free): bool => ! (($ctx->env[$free] ?? null) instanceof FnRef),
@@ -1260,8 +1310,9 @@ function lowerLoweredLambda(
 function lowerLetGroup(Ast\AstNode $node, LowerCtx $ctx): Operand
 {
     $term = plannedLetGroup($node, $ctx);
-    $body = $term->body
-        ?? throw new \LogicException(
+    $body = $term->body !== null
+        ? materializeTermId($term->body, $ctx)
+        : throw new \LogicException(
             'the checked term for the `' . $node::class . "` at line {$node->line} names no scoped expression",
         );
 
@@ -1286,7 +1337,11 @@ function lowerBindingGroups(CheckedLetGroup $term, LowerCtx $ctx): void
 
             continue;
         }
-        foreach ($component->bindings as $binding) {
+        foreach ($component->bindings as $bindingId) {
+            $binding = materializeTermId($bindingId, $ctx);
+            if (! $binding instanceof Ast\Binding) {
+                throw new \RuntimeException("checked structure #{$bindingId} does not name a binding");
+            }
             [$rhs] = peelBindingAnnotation($binding->value);
             bindPattern(
                 lowerPattern($binding->pattern, $ctx),
@@ -1303,10 +1358,19 @@ function lowerBindingGroups(CheckedLetGroup $term, LowerCtx $ctx): void
  *
  * @param list<Ast\Binding> $bindings
  */
-function lowerRecursiveBindings(array $bindings, LowerCtx $ctx): void
+function lowerRecursiveBindings(array $bindingIds, LowerCtx $ctx): void
 {
     /** @var array<string, array{kind: 'lambda'|'nullary', fnName: string, rhs: Ast\AstNode}> $planned */
     $planned = [];
+
+    $bindings = [];
+    foreach ($bindingIds as $bindingId) {
+        $binding = materializeTermId($bindingId, $ctx);
+        if (! $binding instanceof Ast\Binding) {
+            throw new \RuntimeException("checked structure #{$bindingId} does not name a binding");
+        }
+        $bindings[] = $binding;
+    }
 
     foreach ($bindings as $binding) {
         $site = plannedPattern($binding->pattern, $ctx);
@@ -1341,9 +1405,10 @@ function lowerRecursiveBindings(array $bindings, LowerCtx $ctx): void
                 $term->parameterNames,
                 $term->captures,
                 $lambda->body,
-                lambdaBody($lambda, $term),
+                lambdaBody($term),
                 $ctx,
                 FunctionKind::Letrec,
+                $term->type,
             );
         } else {
             lowerNamedNullary($plan['fnName'], $plan['rhs'], $ctx, FunctionKind::Letrec);
@@ -1380,7 +1445,7 @@ function lowerRecursiveBindings(array $bindings, LowerCtx $ctx): void
 function lowerCase(Ast\CaseExpr $expr, LowerCtx $ctx): Operand
 {
     $term = plannedCase($expr, $ctx);
-    $scrutineeOp = lowerExpr($expr->scrutinee, $ctx);
+    $scrutineeOp = lowerExpr(materializeTermId($term->scrutinee, $ctx), $ctx);
     $dest = freshTemp($ctx);
     $arms = [];
     $guardsAlwaysHold = true;
@@ -1388,12 +1453,16 @@ function lowerCase(Ast\CaseExpr $expr, LowerCtx $ctx): Operand
     foreach ($term->arms as $arm) {
         $lastGuard = $arm->lastGuard();
         if ($lastGuard !== null) {
-            $guardsAlwaysHold = $guardsAlwaysHold && guardIsConstantTrue($lastGuard, $ctx->trueBindings);
+            $guardsAlwaysHold = $guardsAlwaysHold && guardIsConstantTrue(materializeTermId($lastGuard, $ctx), $ctx->trueBindings);
         }
 
         foreach ($arm->clauses as $clause) {
-            $armCtx = newArmCtx($ctx, $clause['body']);
-            $pattern = lowerPattern($arm->pattern, $ctx);
+            $clauseBody = materializeTermId($clause['body'], $ctx);
+            $guardSite = $clause['guard'] === null
+                ? null
+                : materializeTermId($clause['guard'], $ctx);
+            $armCtx = newArmCtx($ctx, $clauseBody);
+            $pattern = lowerPattern(materializeTermId($arm->pattern, $ctx), $ctx);
             bindPattern($pattern, $scrutineeOp, $armCtx);
             if ($clause['guard'] === null) {
                 $guards = [];
@@ -1401,10 +1470,10 @@ function lowerCase(Ast\CaseExpr $expr, LowerCtx $ctx): Operand
                 $bindings = $armCtx->items;
                 $isVarPattern = $pattern instanceof PatVar;
                 $armCtx->items = [];
-                $guards = [lowerArmGuard($clause['guard'], $armCtx, $isVarPattern ? $bindings : [])];
+                $guards = [lowerArmGuard($guardSite, $armCtx, $isVarPattern ? $bindings : [])];
                 $armCtx->items = $isVarPattern ? [] : $bindings;
             }
-            $value = lowerExpr($clause['body'], $armCtx);
+            $value = lowerExpr($clauseBody, $armCtx);
             $arms[] = new MatchArm(
                 eraseNewtypesInPattern($pattern, $armCtx->newtypes),
                 new Block([...$armCtx->items, new Assign($dest, $value)]),
@@ -1433,9 +1502,11 @@ function lowerGuards(Ast\GuardsExpr $expr, LowerCtx $ctx): Operand
     $arms = [];
 
     foreach ($term->clauses as $clause) {
-        $guard = lowerExpr($clause->guard, $ctx);
-        $armCtx = newArmCtx($ctx, $clause->body);
-        $value = lowerExpr($clause->body, $armCtx);
+        $guardSite = materializeTermId($clause['guard'], $ctx);
+        $clauseBody = materializeTermId($clause['body'], $ctx);
+        $guard = lowerExpr($guardSite, $ctx);
+        $armCtx = newArmCtx($ctx, $clauseBody);
+        $value = lowerExpr($clauseBody, $armCtx);
         $arms[] = new MatchArm(
             new PatWild(),
             new Block([...$armCtx->items, new Assign($dest, $value)]),
@@ -1447,7 +1518,9 @@ function lowerGuards(Ast\GuardsExpr $expr, LowerCtx $ctx): Operand
         new ConstInt(0),
         $arms,
         $dest,
-        guardIsConstantTrue($term->lastGuard(), $ctx->trueBindings),
+        $term->lastGuard() === null
+            ? false
+            : guardIsConstantTrue(materializeTermId($term->lastGuard(), $ctx), $ctx->trueBindings),
     );
 
     return new Temp($dest);
@@ -1510,7 +1583,7 @@ function lowerRecord(Ast\RecordCon|Ast\RecordUpdate $expr, LowerCtx $ctx): Opera
 
     $byName = [];
     foreach ($term->fields as $field) {
-        $byName[$field->name] = $field->value;
+        $byName[$field->name] = materializeTermId($field->value, $ctx);
     }
 
     if (! $term->isUpdate()) {
@@ -1522,7 +1595,7 @@ function lowerRecord(Ast\RecordCon|Ast\RecordUpdate $expr, LowerCtx $ctx): Opera
         return lowerCall($term->constructor, $args, $ctx);
     }
 
-    $receiver = stabilizeOperand(lowerExpr($term->receiver, $ctx), $ctx);
+    $receiver = stabilizeOperand(lowerExpr(materializeTermId($term->receiver, $ctx), $ctx), $ctx);
     $args = [];
     foreach ($order as $position => $name) {
         if (isset($byName[$name])) {

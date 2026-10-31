@@ -173,7 +173,8 @@ $kinds = $kindCases[1];
 $expectedKinds = ['Let', 'LetAction', 'Bind', 'Expr'];
 // A Windows checkout is CRLF, so the pinned block delimiter is exercised against the same file
 // with CRLF line endings. This is the branch CI cannot otherwise reach on a LF host.
-$crlfTypes = \str_replace("\n", "\r\n", (string) \file_get_contents($root . '/src/ir/types.php'));
+$crlfTypes = \str_replace("\r\n", "\n", (string) \file_get_contents($root . '/src/ir/types.php'));
+$crlfTypes = \str_replace("\n", "\r\n", $crlfTypes);
 \preg_match('/enum IoStatementKind: string\r?\n\{(.*?)\r?\n\}/s', $crlfTypes, $crlfBlock);
 \preg_match_all('/^    case ([A-Za-z]+) = /m', $crlfBlock[1] ?? '', $crlfCases);
 $assert(

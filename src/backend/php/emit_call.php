@@ -20,20 +20,20 @@ use function Moggi\Backend\Php\Codegen\emitOperand;
 
 function emitDictMethodOperand(IR\Operand $operand, EmitEnv $env): string
 {
-    $evidence = emitOperand($operand->evidence, $env);
+    $evidence = emitOperand($env, $operand->evidence);
     $method = \json_encode($operand->method, JSON_UNESCAPED_UNICODE);
 
     return '(' . $evidence . '[' . $method . '])';
 }
 
 /** @param list<IR\Operand> $args */
-function emitStaticCall(string $callee, array $args, EmitEnv $env): string
+function emitStaticCall(EmitEnv $env, string $callee, array $args, ?string $ownerModule = null): string
 {
-    $argsCode = \implode(', ', \array_map(static fn (IR\Operand $arg): string => emitOperand($arg, $env), $args));
+    $argsCode = \implode(', ', \array_map(static fn (IR\Operand $arg): string => emitOperand($env, $arg), $args));
 
     $projection = projectionParse($callee);
     if ($projection !== null) {
-        $base = emitOperand($args[0], $env);
+        $base = emitOperand($env, $args[0]);
 
         return $projection['tuple']
             ? $base . '[' . $projection['index'] . ']'
@@ -83,7 +83,7 @@ function emitCallStmt(string $callee, array $args, int $dest, int $indent, EmitE
 {
     $pad = \str_repeat('    ', $indent);
 
-    return $pad . phpTemp($dest) . ' = ' . emitStaticCall($callee, $args, $env) . ";\n";
+    return $pad . phpTemp($dest) . ' = ' . emitStaticCall($env, $callee, $args) . ";\n";
 }
 
 /**
@@ -94,8 +94,8 @@ function emitCallStmt(string $callee, array $args, int $dest, int $indent, EmitE
 function emitReturnedCall(IR\Call|IR\CallValue $call, EmitEnv $env): string
 {
     return $call instanceof IR\Call
-        ? emitStaticCall($call->callee, $call->args, $env)
-        : emitCallValue($call->callee, $call->args, $env);
+        ? emitStaticCall($env, $call->callee, $call->args)
+        : emitCallValue($env, $call);
 }
 
 /** @param array{externalFns?: array<string, string>, moduleAsNames?: array<string, string>} $env */
@@ -172,22 +172,29 @@ function constructorTag(string $name): ?string
 }
 
 /** @param list<IR\Operand> $args */
-function emitCallValue(IR\Operand $callee, array $args, EmitEnv $env): string
+function emitCallValue(EmitEnv $env, IR\Call|IR\CallValue $call): string
 {
+    if ($call instanceof IR\Call) {
+        return emitStaticCall($env, $call->callee, $call->args);
+    }
+
+    $callee = $call->callee;
+    $args = $call->args;
+
     if ($callee instanceof IR\Partial) {
         $all = [...$callee->args, ...$args];
         if (\count($all) === $callee->arity) {
-            return emitStaticCall($callee->fn, $all, $env);
+            return emitStaticCall($env, $callee->fn, $all);
         }
 
-        return emitPartialValue(new IR\Partial($callee->fn, $callee->arity, $all), $env);
+        return emitPartialValue($env, $callee->fn, $callee->arity, $all);
     }
 
     if ($callee instanceof IR\FnRef && isset($env->lambdaIndex[$callee->name])) {
         $lambdaFn = $env->lambdaIndex[$callee->name];
         if ($lambdaFn !== null && canInlineLambdaAsArrow($lambdaFn) && \count($args) === \count($lambdaFn->params)) {
             $arrow = emitLambdaArrow($lambdaFn, $env);
-            $callArgs = \array_map(static fn (IR\Operand $arg): string => emitOperand($arg, $env), $args);
+            $callArgs = \array_map(static fn (IR\Operand $arg): string => emitOperand($env, $arg), $args);
 
             return '(' . $arrow . ')(' . \implode(', ', $callArgs) . ')';
         }
@@ -198,17 +205,17 @@ function emitCallValue(IR\Operand $callee, array $args, EmitEnv $env): string
         $arity = $env->functionArity[$callee->name] ?? null;
         if ($arity !== null) {
             if (\count($args) === $arity) {
-                return emitStaticCall($callee->name, $args, $env);
+                return emitStaticCall($env, $callee->name, $args);
             }
 
             if (\count($args) < $arity) {
-                return emitPartialValue(new IR\Partial($callee->name, $arity, $args), $env);
+                return emitPartialValue($env, $callee->name, $arity, $args);
             }
         }
     }
 
-    $calleeCode = emitOperand($callee, $env);
-    $argsCode = \implode(', ', \array_map(static fn (IR\Operand $arg): string => emitOperand($arg, $env), $args));
+    $calleeCode = emitOperand($env, $callee);
+    $argsCode = \implode(', ', \array_map(static fn (IR\Operand $arg): string => emitOperand($env, $arg), $args));
 
     return '__apply(' . $calleeCode . ($argsCode === '' ? '' : ', ' . $argsCode) . ')';
 }

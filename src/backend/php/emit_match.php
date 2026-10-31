@@ -13,7 +13,17 @@ use function Moggi\Backend\Php\Codegen\emitOperand;
 use function Moggi\Backend\Php\Codegen\emitBlock;
 use function Moggi\Backend\Php\Codegen\emitFunctionReturn;
 
-function emitMatchStmt(IR\Stmt $stmt, int $indent, EmitEnv $env): string
+function emitMatchStmt(EmitEnv $env, IR\MatchStmt $stmt, int $indent): string
+{
+    return emitMatchLike($env, $stmt, $indent);
+}
+
+function emitMatchReturn(EmitEnv $env, IR\MatchReturn $stmt, int $indent): string
+{
+    return emitMatchLike($env, $stmt, $indent);
+}
+
+function emitMatchLike(EmitEnv $env, IR\MatchStmt|IR\MatchReturn $stmt, int $indent): string
 {
     $depth = $env->matchDepth;
     $env->matchDepth = $depth + 1;
@@ -21,7 +31,7 @@ function emitMatchStmt(IR\Stmt $stmt, int $indent, EmitEnv $env): string
     try {
         $body = canUsePhpMatch($stmt, $env)
             ? emitPhpMatch($stmt, $indent, $env)
-            : emitMatchIo($stmt, $indent, $env);
+            : emitMatchFallback($env, $stmt, $indent);
         if ($depth > 0) {
             return emitWithSavedFieldBinders($body, $indent, $depth);
         }
@@ -197,7 +207,7 @@ function phpMatchMode(IR\Stmt $stmt): string
 function emitPhpMatch(IR\Stmt $stmt, int $indent, EmitEnv $env): string
 {
     $pad = \str_repeat('    ', $indent);
-    $scrutinee = emitOperand($stmt->scrutinee, $env);
+    $scrutinee = emitOperand($env, $stmt->scrutinee);
     $mode = phpMatchMode($stmt);
     $boolMatch = isBoolConstructorMatch($stmt, $env);
     $matchScrutinee = match (true) {
@@ -272,7 +282,7 @@ function emitMatchArmExpression(IR\MatchArm $arm, EmitEnv $env, int $indent): st
     $innerPad = \str_repeat('    ', $indent + 2);
     $inner = '';
     foreach (\array_slice($items, 0, $fused !== null ? -2 : -1) as $item) {
-        $inner .= emitStmt($item, $indent + 2, $env);
+        $inner .= emitStmt($env, $item, $indent + 2);
     }
     $inner .= $innerPad . 'return '
         . ($fused !== null ? emitReturnedCall($fused, $env) : emitFunctionReturn($last->value, $env)) . ";\n";
@@ -460,10 +470,15 @@ function operandReferencedTemps(IR\Operand $operand): array
     return $temps;
 }
 
-function emitMatchIo(IR\Stmt $stmt, int $indent, EmitEnv $env): string
+function emitMatchIo(EmitEnv $env, IR\IoMatch $stmt, int $indent): string
+{
+    return emitMatchFallback($env, $stmt, $indent);
+}
+
+function emitMatchFallback(EmitEnv $env, IR\MatchStmt|IR\MatchReturn|IR\IoMatch $stmt, int $indent): string
 {
     $pad = \str_repeat('    ', $indent);
-    $scrutinee = emitOperand($stmt->scrutinee, $env);
+    $scrutinee = emitOperand($env, $stmt->scrutinee);
     $arms = $stmt->arms;
     $out = '';
     $exhaustive = ($stmt->exhaustive)
@@ -496,7 +511,7 @@ function emitMatchIo(IR\Stmt $stmt, int $indent, EmitEnv $env): string
         }
 
         $out .= emitPatternBindings($arm->pattern, $scrutinee, $indent + 1, $env);
-        $out .= emitBlock($arm->body, $indent + 1, $env);
+        $out .= emitBlock($env, $arm->body, $indent + 1);
         $out .= $pad . "}\n";
     }
 
@@ -524,22 +539,22 @@ function emitGuardedIfMatch(IR\Stmt $stmt, int $indent, EmitEnv $env, string $sc
     $out = $pad . "do {\n";
 
     foreach ($stmt->arms as $arm) {
-        $out .= $pad . '    if (' . emitPatternTest($arm->pattern, $scrutinee, $env) . ") {\n";
+        $out .= $pad . '    if (' . emitPatternTest($env, $arm->pattern, $scrutinee) . ") {\n";
         $out .= emitPatternBindings($arm->pattern, $scrutinee, $indent + 2, $env);
 
         if ($arm->guards === []) {
-            $out .= emitBlock($arm->body, $indent + 2, $env);
+            $out .= emitBlock($env, $arm->body, $indent + 2);
             $out .= $pad . "        break;\n";
         } else {
             $conditions = [];
             foreach ($arm->guards as $guard) {
                 foreach ($guard->prep->items as $prepItem) {
-                    $out .= emitStmt($prepItem, $indent + 2, $env);
+                    $out .= emitStmt($env, $prepItem, $indent + 2);
                 }
-                $conditions[] = emitOperand($guard->cond, $env);
+                $conditions[] = emitOperand($env, $guard->cond);
             }
             $out .= $pad . '        if (' . joinPatternTests($conditions) . ") {\n";
-            $out .= emitBlock($arm->body, $indent + 3, $env);
+            $out .= emitBlock($env, $arm->body, $indent + 3);
             $out .= $pad . "            break;\n";
             $out .= $pad . "        }\n";
         }

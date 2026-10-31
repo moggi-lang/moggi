@@ -172,7 +172,10 @@ try {
                 }
 
                 $expectedFields = \array_map(
-                    static fn (Ast\RecordField $field): array => [$field->name, $field->expr],
+                    static fn (Ast\RecordField $field): array => [
+                        $field->name,
+                        $record->terms->structureFor($field->expr)?->id->value,
+                    ],
                     $node->fields,
                 );
                 $actualFields = \array_map(
@@ -196,7 +199,7 @@ try {
                     return;
                 }
 
-                if ($term->receiver !== $node->object) {
+                if ($term->receiver !== $record->terms->structureFor($node->object)?->id->value) {
                     throw new \RuntimeException(
                         'the update at line ' . $node->line . ' publishes another receiver',
                     );
@@ -256,7 +259,14 @@ try {
                         . '` is not published as a checked term',
                     );
                 }
-                if ($term->clauses !== $node->clauses) {
+                $expectedClauses = [];
+                foreach ($node->clauses as $clause) {
+                    $expectedClauses[] = [
+                        'guard' => $record->terms->structureFor($clause->guard)?->id->value,
+                        'body' => $record->terms->structureFor($clause->body)?->id->value,
+                    ];
+                }
+                if ($term->clauses !== $expectedClauses) {
                     throw new \RuntimeException(
                         'the guard chain at line ' . $node->line . ' publishes other clauses',
                     );

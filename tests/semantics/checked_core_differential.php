@@ -123,7 +123,7 @@ $context = CompilationContext::for(
     roots: [$libraryRoot],
     sources: $files,
 );
-$prepared = Modules\prepareProject($files, $libraryRoot, $context);
+$prepared = Modules\prepareProject($files, $libraryRoot, $context, releaseChecked: true);
 
 /**
  * The project's kind facts: the kind each datatype, type synonym, associated
@@ -369,7 +369,7 @@ $validateRecord = static function (
 /** @var array<string, ?array{0: string, 1: string, 2: Modules\CheckedFunction, 3: Ast\FunctionDecl}> $samples */
 $samples = ['plain' => null, 'evidence' => null, 'kinded' => null];
 
-foreach ($prepared->checked as $moduleName => $program) {
+foreach (\array_keys($prepared->units) as $moduleName) {
     $unit = $prepared->units[$moduleName] ?? [];
     $moduleFiles += \count(Modules\unitSourceFiles($unit));
     if (($unit['synthetic'] ?? false) === true) {
@@ -377,6 +377,8 @@ foreach ($prepared->checked as $moduleName => $program) {
         // generated, so there is nothing here for the record to own or to be missing.
         continue;
     }
+
+    $program = $prepared->program($moduleName, $context);
 
     $core = $program->core;
     $assert($core !== null, "the checked module `{$moduleName}` published no checked core");

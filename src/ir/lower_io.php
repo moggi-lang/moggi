@@ -816,32 +816,36 @@ function callYieldsAction(IoCall $call, LowerCtx $ctx, ?Ast\AstNode $expr = null
 function lowerIoCase(Ast\IoCase $expr, LowerCtx $ctx): bool
 {
     $term = plannedCase($expr, $ctx);
-    $scrutinee = lowerExpr($expr->scrutinee, $ctx);
+    $scrutinee = lowerExpr(materializeTermId($term->scrutinee, $ctx), $ctx);
     $arms = [];
     $guardsAlwaysHold = true;
 
     foreach ($term->arms as $arm) {
         $lastGuard = $arm->lastGuard();
         if ($lastGuard !== null) {
-            $guardsAlwaysHold = $guardsAlwaysHold && guardIsConstantTrue($lastGuard, $ctx->trueBindings);
+            $guardsAlwaysHold = $guardsAlwaysHold && guardIsConstantTrue(materializeTermId($lastGuard, $ctx), $ctx->trueBindings);
         }
 
         foreach ($arm->clauses as $clause) {
-            $armCtx = newArmCtx($ctx, $clause['body']);
+            $clauseBody = materializeTermId($clause['body'], $ctx);
+            $guardSite = $clause['guard'] === null
+                ? null
+                : materializeTermId($clause['guard'], $ctx);
+            $armCtx = newArmCtx($ctx, $clauseBody);
             $armCtx->externalFnNames = $ctx->externalFnNames;
             $armCtx->functionArity = $ctx->functionArity;
             $armCtx->ioActionStore = $ctx->ioActionStore;
-            $pattern = lowerPattern($arm->pattern, $ctx);
+            $pattern = lowerPattern(materializeTermId($arm->pattern, $ctx), $ctx);
             bindPattern($pattern, $scrutinee, $armCtx);
             $guards = [];
             if ($clause['guard'] !== null) {
                 $bindings = $armCtx->items;
                 $isVarPattern = $pattern instanceof PatVar;
                 $armCtx->items = [];
-                $guards = [lowerArmGuard($clause['guard'], $armCtx, $isVarPattern ? $bindings : [])];
+                $guards = [lowerArmGuard($guardSite, $armCtx, $isVarPattern ? $bindings : [])];
                 $armCtx->items = $isVarPattern ? [] : $bindings;
             }
-            if (! lowerIoFunctionBody($clause['body'], $armCtx)) {
+            if (! lowerIoFunctionBody($clauseBody, $armCtx)) {
                 return false;
             }
             $arms[] = new MatchArm(

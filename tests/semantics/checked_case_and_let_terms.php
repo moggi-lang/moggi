@@ -212,12 +212,22 @@ try {
                 }
                 foreach (\array_values($node->alts) as $index => $alt) {
                     $arm = $term->arms[$index];
-                    if ($arm->pattern !== $alt->pattern) {
+                    $patternId = $record->terms->structureFor($alt->pattern)?->id->value;
+                    if ($patternId === null || $arm->pattern !== $patternId) {
                         throw new \RuntimeException(
                             'arm ' . $index . ' of the `case` at line ' . $node->line . ' names another pattern',
                         );
                     }
-                    if ($arm->clauses !== $flatten($alt)) {
+                    $clauses = [];
+                    foreach ($flatten($alt) as $clause) {
+                        $clauses[] = [
+                            'guard' => $clause['guard'] === null
+                                ? null
+                                : $record->terms->structureFor($clause['guard'])?->id->value,
+                            'body' => $record->terms->structureFor($clause['body'])?->id->value,
+                        ];
+                    }
+                    if ($arm->clauses !== $clauses) {
                         throw new \RuntimeException(
                             'arm ' . $index . ' of the `case` at line ' . $node->line
                             . ' flattened its clauses differently from the source',
@@ -230,6 +240,11 @@ try {
                 if ($term->exhaustive !== $node->exhaustive) {
                     throw new \RuntimeException(
                         'the `case` at line ' . $node->line . ' publishes a totality the check did not decide',
+                    );
+                }
+                if ($term->scrutinee !== $record->terms->structureFor($node->scrutinee)?->id->value) {
+                    throw new \RuntimeException(
+                        'the `case` at line ' . $node->line . ' publishes another scrutinee',
                     );
                 }
 
@@ -266,16 +281,14 @@ try {
             $expectedOrder = [];
             foreach (bindingGroupSccs($node->bindings) as $component) {
                 foreach ($component['indices'] as $index) {
-                    $expectedOrder[] = $node->bindings[$index];
+                    $expectedOrder[] = $record->terms->structureFor($node->bindings[$index])?->id->value;
                 }
             }
             foreach ($term->components as $component) {
                 if ($component->recursive) {
                     ++$recursiveComponents;
                 }
-                foreach ($component->bindings as $binding) {
-                    $ordered[] = $binding;
-                }
+                $ordered = [...$ordered, ...$component->bindings];
             }
             if ($ordered !== $members) {
                 throw new \RuntimeException('the group at line ' . $node->line . ' lost a member in its components');
@@ -285,10 +298,10 @@ try {
                     'the group at line ' . $node->line . ' publishes a binding order the check did not compute',
                 );
             }
-            if ($node instanceof Ast\Let && $term->body !== $node->body) {
+            if ($node instanceof Ast\Let && $term->body !== $record->terms->structureFor($node->body)?->id->value) {
                 throw new \RuntimeException('the `let` at line ' . $node->line . ' publishes another body');
             }
-            if ($node instanceof Ast\Where && $term->body !== $node->expr) {
+            if ($node instanceof Ast\Where && $term->body !== $record->terms->structureFor($node->expr)?->id->value) {
                 throw new \RuntimeException('the `where` at line ' . $node->line . ' publishes another body');
             }
             if ($node instanceof Ast\IoLet && $term->body !== null) {
@@ -319,6 +332,7 @@ try {
     foreach ($caseNodes as $node) {
         $node->alts = [];
         $node->exhaustive = false;
+        $node->scrutinee = new Ast\IntegerLit(0);
     }
     foreach ($groupNodes as $node) {
         $node->bindings = [];

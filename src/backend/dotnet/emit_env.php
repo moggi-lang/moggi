@@ -3,6 +3,7 @@
 namespace Moggi\Backend\DotNet\Codegen;
 
 require_once __DIR__ . '/../managed/operand.php';
+require_once __DIR__ . '/../managed/stmt.php';
 
 use Moggi\Debug\SourceMapBuilder;
 use Moggi\IR;
@@ -211,7 +212,7 @@ final class MethodIl
     }
 }
 
-final class EmitEnv implements \Moggi\Backend\Managed\OperandTarget
+final class EmitEnv implements \Moggi\Backend\Managed\StmtTarget
 {
     /** @var array<string, string> source name => IL local id, or `arg:N` */
     public array $locals = [];
@@ -281,8 +282,6 @@ final class EmitEnv implements \Moggi\Backend\Managed\OperandTarget
         return $this->m->freshLabelId();
     }
 
-    // --- OperandTarget: how this target pushes a value, loads a slot and calls a method -------
-
     public function pushInt(int $value): void
     {
         pushBoxedInt($this, $value);
@@ -326,6 +325,122 @@ final class EmitEnv implements \Moggi\Backend\Managed\OperandTarget
     public function noteLoc(?IR\SrcLoc $loc): void
     {
         $this->m->emitLine($loc);
+    }
+
+    public function storeTemp(int $dest): void
+    {
+        $this->m->store($this->localSlot('t' . $dest));
+    }
+
+    public function storeLocal(string $name): void
+    {
+        $this->m->store($this->localSlot($name));
+    }
+
+    public function storeTempOrPop(?int $dest): void
+    {
+        if ($dest !== null) {
+            $this->storeTemp($dest);
+
+            return;
+        }
+        $this->m->emit('pop');
+    }
+
+    public function emitReturn(): void
+    {
+        emitFunctionReturn($this);
+    }
+
+    public function emitCall(IR\Call $stmt): void
+    {
+        emitStaticCall($this, $stmt->callee, $stmt->args);
+        $this->storeTemp($stmt->dest);
+    }
+
+    public function emitCallValue(IR\CallValue $stmt): void
+    {
+        emitOperand($this, $stmt->callee, $this);
+        emitRuntimeApply($this, $stmt->args);
+        $this->storeTemp($stmt->dest);
+    }
+
+    public function emitIoRun(IR\IoRun $stmt): void
+    {
+        emitOperand($this, $stmt->action, $this);
+        $this->m->emit('call object Moggi.Rt.RT::IoRun(object)');
+    }
+
+    public function emitIoCall(IR\IoCall $stmt): void
+    {
+        emitIoCall($this, $stmt);
+    }
+
+    public function emitIoAssignAction(IR\IoAssignAction $stmt): void
+    {
+        emitIoAssignAction($this, $stmt);
+    }
+
+    public function emitIoMatch(IR\IoMatch $stmt): void
+    {
+        emitMatchIo($this, $stmt);
+    }
+
+    public function emitIoThrow(IR\IoThrow $stmt): void
+    {
+        emitOperand($this, $stmt->exception, $this);
+        emitSrcLocValue($this, $stmt->srcLoc);
+        $this->m->emit('call object Moggi.Rt.RT::ThrowSomeException(object, object[])');
+    }
+
+    public function emitIoCatch(IR\IoCatch $stmt): void
+    {
+        emitOperand($this, $stmt->action, $this);
+        $this->m->emit('castclass Moggi.Rt.IO');
+        emitOperand($this, $stmt->handler, $this);
+        $this->m->emit('call object Moggi.Rt.RT::IoCatch(class Moggi.Rt.IO, object)');
+    }
+
+    public function emitIoFinally(IR\IoFinally $stmt): void
+    {
+        emitOperand($this, $stmt->action, $this);
+        $this->m->emit('castclass Moggi.Rt.IO');
+        emitOperand($this, $stmt->cleanup, $this);
+        $this->m->emit('castclass Moggi.Rt.IO');
+        $this->m->emit('call object Moggi.Rt.RT::IoFinally(class Moggi.Rt.IO, class Moggi.Rt.IO)');
+    }
+
+    public function emitMatchReturn(IR\MatchReturn $stmt): void
+    {
+        emitMatchReturn($this, $stmt);
+    }
+
+    public function emitMatchStmt(IR\MatchStmt $stmt): void
+    {
+        emitMatchStmt($this, $stmt);
+    }
+
+    public function emitTailLoop(IR\Loop $stmt): void
+    {
+        emitTailLoop($this, $stmt);
+    }
+
+    public function emitTailRecall(IR\TailRecall $stmt): void
+    {
+        emitTailRecall($this, $stmt);
+    }
+
+    public function emitDictCall(IR\DictCall $stmt): void
+    {
+        emitOperand($this, $stmt->evidence, $this);
+        $this->m->emit('ldstr ' . \Moggi\Backend\DotNet\Il\ilString($stmt->method));
+        pushObjectArray($this, $stmt->args);
+        $this->m->emit('call object Moggi.Rt.RT::DictCall(object, string, object[])');
+    }
+
+    public function unsupportedStmt(string $class): \RuntimeException
+    {
+        return new \RuntimeException('DotNet emit: unsupported stmt ' . $class);
     }
 
     public function intrinsic(IR\Intrinsic $op): void
