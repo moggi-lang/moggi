@@ -188,7 +188,7 @@ if ($lambdaSig !== null) {
             . \json_encode($irBeforeLambda?->captures) . ' meta=' . \json_encode($published),
     );
     $check(
-        $lambda->captures === null || $lambda->captures === $published,
+        $lambda->captures === $published,
         'a rewritten lifted declaration carries a vector that does not match its published layout: decl='
             . \json_encode($lambda->captures) . ' meta=' . \json_encode($published),
     );
@@ -518,13 +518,41 @@ foreach ([false, true] as $optimize) {
     }
 }
 
+$missingCaptures = new IR\FunctionDecl(
+    'missingCaptures',
+    [],
+    null,
+    new IR\Block([new IR\Ret(new IR\Local('c'))]),
+    new IR\FunctionShape(kind: IR\FunctionKind::Lambda),
+);
+try {
+    validateCallableLayouts(new IR\Module([$missingCaptures], [], [], null, 'Main'), 'test');
+    $check(false, 'a capture-taking declaration without a capture vector was accepted');
+} catch (\LogicException $e) {
+    $check(
+        \str_contains($e->getMessage(), 'publishes no capture vector'),
+        'the missing-vector failure is not the table contract: ' . $e->getMessage(),
+    );
+}
+
 $captured = new IR\FunctionDecl(
     'λ0',
     [],
     null,
     new IR\Block([new IR\Ret(new IR\Local('c'))]),
     new IR\FunctionShape(kind: IR\FunctionKind::Lambda),
+    captures: ['c'],
 );
+$directRewrite = $captured->with([
+    'params' => ['p'],
+    'body' => new IR\Block([new IR\Ret(new IR\Local('d'))]),
+]);
+$check(
+    $directRewrite->captures === ['d'],
+    'a direct with() body/parameter rewrite did not recompute the capture vector: '
+        . \json_encode($directRewrite->captures),
+);
+
 $bareReference = new IR\FunctionDecl(
     'bareCaller',
     [],

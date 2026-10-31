@@ -3,6 +3,7 @@
 namespace Moggi\Backend\Jvm\Codegen;
 
 require_once __DIR__ . '/../managed/operand.php';
+require_once __DIR__ . '/../managed/stmt.php';
 
 use Moggi\Backend\Jvm\Classfile\CodeBuilder;
 use Moggi\Backend\Jvm\Classfile\ConstantPool;
@@ -10,7 +11,7 @@ use Moggi\Debug\SourceMapBuilder;
 use Moggi\IR;
 use function Moggi\Backend\Meta\tempReadsForFunction;
 
-final class EmitEnv implements \Moggi\Backend\Managed\OperandTarget
+final class EmitEnv implements \Moggi\Backend\Managed\StmtTarget
 {
     /** @var array<string, int> */
     public array $locals = [];
@@ -132,9 +133,6 @@ final class EmitEnv implements \Moggi\Backend\Managed\OperandTarget
 
         return $locals;
     }
-
-    // --- OperandTarget: how this target pushes a value, loads a slot and calls a method -------
-
     public function pushInt(int $value): void
     {
         pushBoxedInt($this, $value);
@@ -188,6 +186,142 @@ final class EmitEnv implements \Moggi\Backend\Managed\OperandTarget
     public function noteLoc(?IR\SrcLoc $loc): void
     {
         noteSrcLoc($this, $loc);
+    }
+
+    public function storeTemp(int $dest): void
+    {
+        $this->c->astore($this->localSlot('t' . $dest));
+    }
+
+    public function storeLocal(string $name): void
+    {
+        $this->c->astore($this->localSlot($name));
+    }
+
+    public function storeTempOrPop(?int $dest): void
+    {
+        if ($dest !== null) {
+            $this->storeTemp($dest);
+
+            return;
+        }
+        $this->c->pop_();
+    }
+
+    public function emitReturn(): void
+    {
+        emitFunctionReturn($this);
+    }
+
+    public function emitCall(IR\Call $stmt): void
+    {
+        emitStaticCall($this, $stmt->callee, $stmt->args);
+        $this->storeTemp($stmt->dest);
+    }
+
+    public function emitCallValue(IR\CallValue $stmt): void
+    {
+        emitOperand($this, $stmt->callee, $this);
+        emitRuntimeApply($this, $stmt->args);
+        $this->storeTemp($stmt->dest);
+    }
+
+    public function emitIoRun(IR\IoRun $stmt): void
+    {
+        emitOperand($this, $stmt->action, $this);
+        $this->c->invokestatic(
+            $this->cp->methodRef('moggi/rt/RT', 'ioRun', '(Ljava/lang/Object;)Ljava/lang/Object;'),
+            1,
+            true,
+        );
+    }
+
+    public function emitIoCall(IR\IoCall $stmt): void
+    {
+        emitIoCall($this, $stmt);
+    }
+
+    public function emitIoAssignAction(IR\IoAssignAction $stmt): void
+    {
+        emitIoAssignAction($this, $stmt);
+    }
+
+    public function emitIoMatch(IR\IoMatch $stmt): void
+    {
+        emitMatchIo($this, $stmt);
+    }
+
+    public function emitIoThrow(IR\IoThrow $stmt): void
+    {
+        emitOperand($this, $stmt->exception, $this);
+        emitSrcLocValue($this, $stmt->srcLoc);
+        $this->c->invokestatic(
+            $this->cp->methodRef('moggi/rt/RT', 'throwSomeException', '(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;'),
+            2,
+            true,
+        );
+    }
+
+    public function emitIoCatch(IR\IoCatch $stmt): void
+    {
+        emitOperand($this, $stmt->action, $this);
+        $this->c->checkcast($this->cp->class_('moggi/rt/IO'));
+        emitOperand($this, $stmt->handler, $this);
+        $this->c->invokestatic(
+            $this->cp->methodRef('moggi/rt/RT', 'ioCatch', '(Lmoggi/rt/IO;Ljava/lang/Object;)Ljava/lang/Object;'),
+            2,
+            true,
+        );
+    }
+
+    public function emitIoFinally(IR\IoFinally $stmt): void
+    {
+        emitOperand($this, $stmt->action, $this);
+        $this->c->checkcast($this->cp->class_('moggi/rt/IO'));
+        emitOperand($this, $stmt->cleanup, $this);
+        $this->c->checkcast($this->cp->class_('moggi/rt/IO'));
+        $this->c->invokestatic(
+            $this->cp->methodRef('moggi/rt/RT', 'ioFinally', '(Lmoggi/rt/IO;Lmoggi/rt/IO;)Ljava/lang/Object;'),
+            2,
+            true,
+        );
+    }
+
+    public function emitMatchReturn(IR\MatchReturn $stmt): void
+    {
+        emitMatchReturn($this, $stmt);
+    }
+
+    public function emitMatchStmt(IR\MatchStmt $stmt): void
+    {
+        emitMatchStmt($this, $stmt);
+    }
+
+    public function emitTailLoop(IR\Loop $stmt): void
+    {
+        emitTailLoop($this, $stmt);
+    }
+
+    public function emitTailRecall(IR\TailRecall $stmt): void
+    {
+        emitTailRecall($this, $stmt);
+    }
+
+    public function emitDictCall(IR\DictCall $stmt): void
+    {
+        emitOperand($this, $stmt->evidence, $this);
+        $this->c->ldc($this->cp->string_($stmt->method));
+        pushObjectArray($this, $stmt->args);
+        $this->c->invokestatic(
+            $this->cp->methodRef('moggi/rt/RT', 'dictCall', '(Ljava/lang/Object;Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Object;'),
+            3,
+            true,
+        );
+    }
+
+    public function unsupportedStmt(string $class): \RuntimeException
+    {
+        return new \RuntimeException('JVM emit: unsupported stmt ' . $class);
     }
 
     public function intrinsic(IR\Intrinsic $op): void

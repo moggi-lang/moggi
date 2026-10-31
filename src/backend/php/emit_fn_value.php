@@ -65,7 +65,7 @@ function emitLambdaReference(string $name, EmitEnv $env): string
 }
 
 /** @param array{phpNames: array<string, string>, functionArity?: array<string, int>, externalFns?: array<string, string>, boolConstructors?: array<string, bool>} $env */
-function emitTopLevelFnValue(string $name, EmitEnv $env): string
+function emitTopLevelFnValue(EmitEnv $env, string $name, int $arity, ?string $ownerModule = null): string
 {
     if (\array_key_exists($name, $env->boolConstructors)) {
         return $env->boolConstructors[$name] ? 'true' : 'false';
@@ -83,7 +83,7 @@ function emitTopLevelFnValue(string $name, EmitEnv $env): string
         $member = \str_contains($name, '::')
             ? \substr($name, \strrpos($name, '::') + 2)
             : \substr($name, \strrpos($name, '\\') + 1);
-        $arity = $env->functionArity[$name] ?? $env->functionArity[$member] ?? null;
+        $arity = $env->functionArity[$name] ?? $env->functionArity[$member] ?? $arity;
         $callee = formatQualifiedCallee($name, $env);
 
         return $arity === 0 ? $callee . '()' : $callee . '(...)';
@@ -93,7 +93,7 @@ function emitTopLevelFnValue(string $name, EmitEnv $env): string
     $phpName = $external !== null
         ? basePhpFunctionName($name)
         : phpFunctionName($name, $env->phpNames);
-    $arity = $env->functionArity[$name] ?? null;
+    $arity = $env->functionArity[$name] ?? $arity;
 
     if ($arity === 0) {
         return $phpName . '()';
@@ -102,12 +102,13 @@ function emitTopLevelFnValue(string $name, EmitEnv $env): string
     return $phpName . '(...)';
 }
 
-function emitPartialValue(IR\Partial $partial, EmitEnv $env): string
+/** @param list<IR\Operand> $args */
+function emitPartialValue(EmitEnv $env, string $fn, int $arity, array $args): string
 {
-    $fn = emitPartialCallableName($partial->fn, $env);
-    $args = \array_map(static fn (IR\Operand $arg): string => emitOperand($arg, $env), $partial->args);
+    $callable = emitPartialCallableName($fn, $env);
+    $args = \array_map(static fn (IR\Operand $arg): string => emitOperand($env, $arg), $args);
 
-    return "['__partial', {$partial->arity}, {$fn}" . ($args === [] ? '' : ', ' . \implode(', ', $args)) . ']';
+    return "['__partial', {$arity}, {$callable}" . ($args === [] ? '' : ', ' . \implode(', ', $args)) . ']';
 }
 
 function emitPartialCallableName(string $name, EmitEnv $env): string

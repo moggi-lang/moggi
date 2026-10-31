@@ -17,7 +17,7 @@ use function Moggi\Backend\Php\Codegen\isLeafOperand;
 function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): string
 {
     $argExprs = \array_map(
-        static fn (IR\Operand $arg): string => emitOperand($arg, $env),
+        static fn (IR\Operand $arg): string => emitOperand($env, $arg),
         $op->args,
     );
 
@@ -36,7 +36,7 @@ function emitIntrinsic(EmitEnv $env, IR\Intrinsic $op): string
     }
 
     $name = $op->name;
-    $locExpr = ($name === 'error#' || $name === 'exceptionThrow#') ? emitSrcLocValue($op->srcLoc, $inner) : 'null';
+    $locExpr = ($name === 'error#' || $name === 'exceptionThrow#') ? emitSrcLocValue($inner, $op->srcLoc) : 'null';
 
     return match ($name) {
         'error#' => '\\Moggi\\throwErrorCall(' . $argExprs[0] . ', ' . $locExpr . ')',

@@ -7,7 +7,6 @@ use Moggi\Syntax\Ast\TypeArrow;
 
 use function Moggi\IR\Visit\boundLocalsInBlock;
 use function Moggi\IR\Visit\collectLambdaRefsInBlock;
-use function Moggi\IR\Visit\freeLocalsInBlock;
 use function Moggi\Modules\resolvedSymbol;
 use function Moggi\Semantics\IoBoundary\functionReturnsIo;
 use function Moggi\Semantics\IoBoundary\stripConstraints;
@@ -291,9 +290,8 @@ function captureMeta(array $byName): array
     return captureClosure(
         $byName,
         static fn (IR\FunctionDecl $function): array => $function->captures
-            ?? freeLocalsInBlock(
-                $function->body,
-                \array_fill_keys($function->params, true),
+            ?? throw new \LogicException(
+                "the capture-taking declaration `{$function->name}` publishes no capture vector",
             ),
     );
 }

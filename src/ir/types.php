@@ -331,10 +331,9 @@ final class FunctionDecl implements IrNode
          * Entry references are not slots: a free name the enclosing scope resolves to a lifted
          * `FnRef` is kept in the lambda's environment but omitted here, and the body reaches the
          * entry directly. This is the one value the callable table publishes as `E + C`; it
-         * includes evidence slots, which the table then splits against `$evidenceScope`. Null
-         * means the vector was not published for this declaration (a hand-built fixture, or a
-         * body a pass has just rewritten), and the table derives it from the body. A rewrite sets
-         * it to null rather than preserving a vector that may no longer match the body.
+         * includes evidence slots, which the table then splits against `$evidenceScope`. A
+         * capture-taking declaration must publish this vector; `with()` recomputes it on the
+         * declaration that owns the body, so the table never derives a second layout.
          */
         public ?array $captures = null,
     ) {
@@ -342,12 +341,7 @@ final class FunctionDecl implements IrNode
 
     public function withBody(Block $body): self
     {
-        $copy = $this->with(['body' => $body]);
-        if ($copy->shape->kind->takesCaptures()) {
-            $copy->captures = null;
-        }
-
-        return $copy;
+        return $this->with(['body' => $body]);
     }
 
     /**
@@ -357,7 +351,9 @@ final class FunctionDecl implements IrNode
      * from the object instead of re-listing all fifteen in every `with*`. A
      * property that does not exist is a caller error, not a silently dropped
      * field. A shape trait is addressed by its own name (`with(['ioEffect' => …])`),
-     * so a rewrite of one trait does not have to build a whole new shape.
+     * so a rewrite of one trait does not have to build a whole new shape. A body,
+     * parameter-list or kind rewrite invalidates the capture vector, so this is
+     * the one place that recomputes it; every `with*` path inherits that rule.
      *
      * @param array<string, mixed> $fields
      */
@@ -383,6 +379,19 @@ final class FunctionDecl implements IrNode
         }
         if ($shape !== []) {
             $copy->shape = $copy->shape->with($shape);
+        }
+
+        $capturesDirty = \array_key_exists('body', $fields)
+            || \array_key_exists('params', $fields)
+            || \array_key_exists('shape', $fields)
+            || \array_key_exists('kind', $fields);
+        if ($capturesDirty) {
+            $copy->captures = $copy->shape->kind->takesCaptures()
+                ? \Moggi\IR\Visit\freeLocalsInBlock(
+                    $copy->body,
+                    \array_fill_keys($copy->params, true),
+                )
+                : null;
         }
 
         return $copy;
@@ -1076,6 +1085,17 @@ final class LowerCtx
          * checked core (the suite's hand-built IR), which then has no evidence positions at all.
          */
         public \Moggi\Modules\CheckedTerms $terms = new \Moggi\Modules\CheckedTerms(),
+        /**
+         * Terms resolved for nodes the checked core materialized from its structural tree.
+         *
+         * Lowering sees a generated view of the elaborated body — rebuilt from
+         * `CheckedTerms::$structures`, never from the source node — and every generated node that
+         * has a published decision term is registered here. `siteTerm()` reads this map first, so
+         * a scrubbed source tree cannot change a lowering answer.
+         *
+         * @var ?\WeakMap<Ast\AstNode, \Moggi\Modules\CheckedTerm>
+         */
+        public ?\WeakMap $generatedTerms = null,
     ) {
     }
 }

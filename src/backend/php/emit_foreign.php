@@ -8,9 +8,13 @@ use function Moggi\Backend\Php\Naming\phpTemp;
 use function Moggi\Foreign\phpClassFqn;
 use function Moggi\Backend\Php\Foreign\foreignPathInfo;
 
-/** One foreign call as a php expression. @param list<string> $argExprs */
-function emitForeign(IR\ForeignCall $foreign, array $argExprs): string
+/** One foreign call as a php expression. */
+function emitForeign(EmitEnv $env, IR\ForeignCall $foreign): string
 {
+    $argExprs = \array_map(
+        static fn (IR\Operand $arg): string => emitOperand($env, $arg),
+        $foreign->args,
+    );
     $call = emitForeignCall($foreign, $argExprs);
 
     return ($foreign->phpValueBox ?? false) === true ? emitPhpValueBox($call) : $call;

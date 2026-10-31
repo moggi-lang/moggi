@@ -28,7 +28,7 @@ function emitIoRunResultExpr(string $resultExpr): string
     return '(' . $resultExpr . '[1])()';
 }
 
-function emitIoAssignAction(IR\Stmt $stmt, int $indent, EmitEnv $env): string
+function emitIoAssignAction(EmitEnv $env, IR\IoAssignAction $stmt, int $indent): string
 {
     $pad = \str_repeat('    ', $indent);
     $dest = phpTemp($stmt->dest);
@@ -106,7 +106,7 @@ function emitIoAssignAction(IR\Stmt $stmt, int $indent, EmitEnv $env): string
             \array_values($captured),
         )) . ')';
 
-    $inner = emitBlock($body, $indent + 1, $env);
+    $inner = emitBlock($env, $body, $indent + 1);
     $value = emitFunctionReturn($result, $env);
     $return = 'return ' . $value . ';';
 
@@ -116,10 +116,10 @@ function emitIoAssignAction(IR\Stmt $stmt, int $indent, EmitEnv $env): string
         . $pad . "}];\n";
 }
 
-function emitIoRun(IR\Stmt $stmt, int $indent, EmitEnv $env): string
+function emitIoRun(EmitEnv $env, IR\IoRun $stmt, int $indent): string
 {
     $pad = \str_repeat('    ', $indent);
-    $action = emitOperand($stmt->action, $env);
+    $action = emitOperand($env, $stmt->action);
     $run = emitIoRunResultExpr($action);
     $dest = $stmt->dest;
 
@@ -130,11 +130,11 @@ function emitIoRun(IR\Stmt $stmt, int $indent, EmitEnv $env): string
     return $pad . phpTemp($dest) . ' = ' . $run . ";\n";
 }
 
-function emitIoThrow(IR\Stmt $stmt, int $indent, EmitEnv $env): string
+function emitIoThrow(EmitEnv $env, IR\IoThrow $stmt, int $indent): string
 {
     $pad = \str_repeat('    ', $indent);
-    $ex = emitOperand($stmt->exception, $env);
-    $loc = emitSrcLocValue($stmt->srcLoc, $env);
+    $ex = emitOperand($env, $stmt->exception);
+    $loc = emitSrcLocValue($env, $stmt->srcLoc);
     $out = $pad . '\\Moggi\\throwSomeException(' . $ex . ', ' . $loc . ");\n";
     if ($stmt->dest !== null) {
         $out .= $pad . phpTemp($stmt->dest) . " = null;\n";
@@ -143,12 +143,12 @@ function emitIoThrow(IR\Stmt $stmt, int $indent, EmitEnv $env): string
     return $out;
 }
 
-function emitIoCatch(IR\Stmt $stmt, int $indent, EmitEnv $env): string
+function emitIoCatch(EmitEnv $env, IR\IoCatch $stmt, int $indent): string
 {
     $pad = \str_repeat('    ', $indent);
     $innerPad = $pad . '    ';
-    $action = emitOperand($stmt->action, $env);
-    $handler = emitOperand($stmt->handler, $env);
+    $action = emitOperand($env, $stmt->action);
+    $handler = emitOperand($env, $stmt->handler);
     $dest = $stmt->dest;
     $run = emitIoRunResultExpr($action);
 
@@ -180,12 +180,12 @@ function emitIoCatch(IR\Stmt $stmt, int $indent, EmitEnv $env): string
     return $out;
 }
 
-function emitIoFinally(IR\Stmt $stmt, int $indent, EmitEnv $env): string
+function emitIoFinally(EmitEnv $env, IR\IoFinally $stmt, int $indent): string
 {
     $pad = \str_repeat('    ', $indent);
     $innerPad = $pad . '    ';
-    $action = emitOperand($stmt->action, $env);
-    $cleanup = emitOperand($stmt->cleanup, $env);
+    $action = emitOperand($env, $stmt->action);
+    $cleanup = emitOperand($env, $stmt->cleanup);
     $dest = $stmt->dest;
     $run = emitIoRunResultExpr($action);
     $cleanupRun = emitIoRunResultExpr($cleanup);

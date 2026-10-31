@@ -17,6 +17,10 @@
  *     states which column it belongs to;
  *   - every role name in `$roles` is declared by every target, so a reader who learned where
  *     `emitIntrinsicValue` lives in one backend finds it in the other two;
+ *   - every role with a shared IR payload starts its argument list the same way, `EmitEnv $env`
+ *     first and the same payload types next, so a call site moves between backends unchanged.
+ *     A backend may append host-only parameters after that prefix (`int $indent` in php, the
+ *     failure label in a stack pattern test), but it may not insert one before the payload;
  *   - each of the three targets the registry answers for implements `Backend`.
  *
  * The asymmetry that is allowed is *stated*, not inferred: php's host is the compiler's own process,
@@ -88,6 +92,7 @@ $roles = [
     'emitIoCall',
     'emitMain',
     'emitMatchIo',
+    'emitMatchReturn',
     'emitMatchStmt',
     'emitOperand',
     'emitPartialValue',
@@ -101,6 +106,43 @@ $roles = [
     'entryReturnsAction',
     'formatDoubleLiteral',
 ];
+
+// The shared parameter prefix for each role that walks IR. Types are matched, not parameter
+// names: callers bind by position. Trailing host-only parameters are allowed; a differing prefix
+// is the accidental drift this contract exists to catch.
+$signatureRoles = [
+    'emitBlock' => ['IR\\Block'],
+    'emitCallValue' => ['IR\\Call|IR\\CallValue'],
+    'emitForeign' => ['IR\\ForeignCall'],
+    'emitIntrinsic' => ['IR\\Intrinsic'],
+    'emitIntrinsicCompare' => ['IR\\Intrinsic'],
+    'emitIntrinsicPrimop' => ['IR\\Intrinsic'],
+    'emitIntrinsicState' => ['IR\\Intrinsic'],
+    'emitIntrinsicValue' => ['IR\\Intrinsic'],
+    'emitIoAssignAction' => ['IR\\IoAssignAction'],
+    'emitIoCall' => ['IR\\IoCall'],
+    'emitMatchIo' => ['IR\\IoMatch'],
+    'emitMatchReturn' => ['IR\\MatchReturn'],
+    'emitMatchStmt' => ['IR\\MatchStmt'],
+    'emitOperand' => ['IR\\Operand'],
+    'emitPartialValue' => ['string', 'int', 'array'],
+    'emitPatternTest' => ['IR\\Pattern'],
+    'emitSrcLocValue' => ['?IR\\SrcLoc'],
+    'emitStaticCall' => ['string', 'array'],
+    'emitStmt' => ['IR\\Stmt'],
+    'emitTailRecall' => ['IR\\TailRecall'],
+    'emitTopLevelFnValue' => ['string', 'int'],
+];
+
+$normalizeType = static function (string $type): string {
+    $type = \trim($type);
+
+    return match ($type) {
+        'SrcLoc' => 'IR\\SrcLoc',
+        '?SrcLoc' => '?IR\\SrcLoc',
+        default => $type,
+    };
+};
 
 $backendIds = implementedBackendIds();
 if ($backendIds !== \array_keys($hostOnly)) {
@@ -130,6 +172,7 @@ foreach ($hostOnly as $backendId => $extra) {
     }
 
     $sources = '';
+    $declarations = [];
     foreach ($declared as $file) {
         $text = \file_get_contents($dir . '/' . $file);
         if ($text === false) {
@@ -139,11 +182,40 @@ foreach ($hostOnly as $backendId => $extra) {
         }
         $sources .= $text . "\n";
     }
-    \preg_match_all('/^function\s+([A-Za-z0-9_]+)\s*\(/m', $sources, $matches);
-    $declares = \array_flip($matches[1]);
+    \preg_match_all('/^function\s+([A-Za-z0-9_]+)\s*\(([^)]*)\)/m', $sources, $matches, PREG_SET_ORDER);
+    $declares = [];
+    foreach ($matches as $match) {
+        $declares[$match[1]] = true;
+        $params = [];
+        foreach (\explode(',', $match[2]) as $param) {
+            $param = \trim($param);
+            if ($param === '') {
+                continue;
+            }
+            $dollar = \strpos($param, '$');
+            $params[] = $dollar === false ? 'mixed' : \trim(\substr($param, 0, $dollar));
+        }
+        $declarations[$match[1]] = $params;
+    }
     foreach ($roles as $role) {
         if (! isset($declares[$role])) {
             $fail("{$backendId}: no `function {$role}(`; the role names are shared by every backend");
+        }
+    }
+
+    foreach ($signatureRoles as $role => $expected) {
+        $params = $declarations[$role] ?? null;
+        if ($params === null) {
+            continue;
+        }
+        if (($params[0] ?? null) !== 'EmitEnv') {
+            $fail("{$backendId}: {$role} must take `EmitEnv \$env` first, got `" . \implode(', ', $params) . '`');
+
+            continue;
+        }
+        $actual = \array_map($normalizeType, \array_slice($params, 1, \count($expected)));
+        if ($actual !== $expected) {
+            $fail("{$backendId}: {$role} signature `(" . \implode(', ', $params) . ')` does not start with the shared prefix `(EmitEnv, ' . \implode(', ', $expected) . ')`');
         }
     }
 }
@@ -164,4 +236,4 @@ if ($failures !== []) {
 }
 
 echo 'backend emit surface: ' . \count($backendIds) . ' targets, ' . \count($shared) . " shared files, "
-    . \count($roles) . " shared roles\n";
+    . \count($roles) . ' shared roles, ' . \count($signatureRoles) . " checked signatures\n";

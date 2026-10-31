@@ -244,9 +244,9 @@ function renameLocalsInOperand(IR\Operand $operand, array $map): IR\Operand
 
 function emitMatchArmCondition(IR\MatchArm $arm, string $scrutinee, EmitEnv $env): string
 {
-    $tests = [emitPatternTest($arm->pattern, $scrutinee, $env)];
+    $tests = [emitPatternTest($env, $arm->pattern, $scrutinee)];
     foreach ($arm->guards as $guard) {
-        $tests[] = emitOperand($guard->cond, $env);
+        $tests[] = emitOperand($env, $guard->cond);
     }
 
     return joinPatternTests($tests);
@@ -287,7 +287,7 @@ function patternConstructorName(IR\Pattern $pattern, EmitEnv $env): string
     return $env->constructorRenames[$name] ?? $name;
 }
 
-function emitPatternTest(IR\Pattern $pattern, string $scrutinee, EmitEnv $env): string
+function emitPatternTest(EmitEnv $env, IR\Pattern $pattern, string $scrutinee): string
 {
     if ($pattern instanceof IR\PatCon && $pattern->args === []) {
         $name = patternConstructorName($pattern, $env);
@@ -308,8 +308,8 @@ function emitPatternTest(IR\Pattern $pattern, string $scrutinee, EmitEnv $env): 
         IR\PatNil::class => "{$scrutinee} === []",
         IR\PatCons::class => joinPatternTests([
             $scrutinee . ' !== []',
-            emitPatternTest($pattern->head, $scrutinee . '[0]', $env),
-            emitPatternTest($pattern->tail, '\array_slice(' . $scrutinee . ', 1)', $env),
+            emitPatternTest($env, $pattern->head, $scrutinee . '[0]'),
+            emitPatternTest($env, $pattern->tail, '\array_slice(' . $scrutinee . ', 1)'),
         ]),
         default => throw new \RuntimeException('unsupported pattern `' . $pattern::class . '` in codegen'),
     };
@@ -321,7 +321,7 @@ function emitConPatternTest(IR\Pattern $pattern, string $scrutinee, EmitEnv $env
     if (isset($env->newtypeConstructors[$name])) {
         $tests = [];
         foreach ($pattern->args as $arg) {
-            $tests[] = emitPatternTest($arg, $scrutinee, $env);
+            $tests[] = emitPatternTest($env, $arg, $scrutinee);
         }
 
         return joinPatternTests($tests);
@@ -329,7 +329,7 @@ function emitConPatternTest(IR\Pattern $pattern, string $scrutinee, EmitEnv $env
 
     $tests = ["(({$scrutinee})[0] ?? null) === " . phpSingleQuoted($name)];
     foreach ($pattern->args as $i => $arg) {
-        $tests[] = emitPatternTest($arg, "{$scrutinee}[" . ($i + 1) . ']', $env);
+        $tests[] = emitPatternTest($env, $arg, "{$scrutinee}[" . ($i + 1) . ']');
     }
 
     return joinPatternTests($tests);
@@ -339,7 +339,7 @@ function emitTuplePatternTest(IR\Pattern $pattern, string $scrutinee, EmitEnv $e
 {
     $tests = [];
     foreach ($pattern->elements as $i => $element) {
-        $tests[] = emitPatternTest($element, "{$scrutinee}[{$i}]", $env);
+        $tests[] = emitPatternTest($env, $element, "{$scrutinee}[{$i}]");
     }
 
     return joinPatternTests($tests);

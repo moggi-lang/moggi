@@ -16,12 +16,12 @@ use Moggi\IR\SrcLoc;
 use function Moggi\Backend\Php\Codegen\emitBlock;
 use function Moggi\Backend\Php\Codegen\emitFunctionReturn;
 
-function emitTailRecall(IR\Stmt $stmt, int $indent, EmitEnv $env): string
+function emitTailRecall(EmitEnv $env, IR\TailRecall $stmt, int $indent): string
 {
     $pad = \str_repeat('    ', $indent);
     $params = $env->tailRecParams;
     $args = $stmt->args;
-    $argExprs = \array_map(static fn (IR\Operand $arg): string => emitOperand($arg, $env), $args);
+    $argExprs = \array_map(static fn (IR\Operand $arg): string => emitOperand($env, $arg), $args);
     $order = tailRecallAssignOrder($params, $args);
     $out = '';
 
@@ -103,7 +103,7 @@ function tailRecallAssignOrder(array $params, array $args): ?array
     return \count($order) === $n ? $order : null;
 }
 
-function emitBlock(IR\Block $block, int $indent, EmitEnv $env): string
+function emitBlock(EmitEnv $env, IR\Block $block, int $indent): string
 {
     $items = \array_values($block->items);
     $tempReads = $env->tempReads
@@ -120,7 +120,7 @@ function emitBlock(IR\Block $block, int $indent, EmitEnv $env): string
             continue;
         }
 
-        $out .= emitStmt($items[$i], $indent, $env);
+        $out .= emitStmt($env, $items[$i], $indent);
     }
 
     return $out;
@@ -159,7 +159,7 @@ function tailRecallSrcLoc(IR\Stmt $stmt): ?IR\SrcLoc
     return null;
 }
 
-function emitStmt(IR\Stmt $stmt, int $indent, EmitEnv $env): string
+function emitStmt(EmitEnv $env, IR\Stmt $stmt, int $indent): string
 {
     $pad = \str_repeat('    ', $indent);
 
@@ -167,31 +167,32 @@ function emitStmt(IR\Stmt $stmt, int $indent, EmitEnv $env): string
         IR\Ret::class => frameMark($env, operandCallSrcLoc($stmt->value))
             . $pad . 'return ' . emitFunctionReturn($stmt->value, $env) . ";\n",
         IR\Call::class => frameMark($env, $stmt->srcLoc) . emitCallStmt($stmt->callee, $stmt->args, $stmt->dest, $indent, $env),
-        IR\IoCall::class => frameMark($env, $stmt->srcLoc) . emitIoCall($stmt, $indent, $env),
-        IR\IoRun::class => frameMark($env, $stmt->srcLoc) . emitIoRun($stmt, $indent, $env),
-        IR\IoAssignAction::class => frameMark($env, $stmt->srcLoc) . emitIoAssignAction($stmt, $indent, $env),
-        IR\IoThrow::class => emitIoThrow($stmt, $indent, $env),
-        IR\IoCatch::class => emitIoCatch($stmt, $indent, $env),
-        IR\IoFinally::class => emitIoFinally($stmt, $indent, $env),
-        IR\CallValue::class => frameMark($env, $stmt->srcLoc) . $pad . phpTemp($stmt->dest) . ' = ' . emitCallValue($stmt->callee, $stmt->args, $env) . ";\n",
-        IR\DictCall::class => frameMark($env, $stmt->srcLoc) . $pad . phpTemp($stmt->dest) . ' = (' . emitOperand($stmt->evidence, $env)
+        IR\IoCall::class => frameMark($env, $stmt->srcLoc) . emitIoCall($env, $stmt, $indent),
+        IR\IoRun::class => frameMark($env, $stmt->srcLoc) . emitIoRun($env, $stmt, $indent),
+        IR\IoAssignAction::class => frameMark($env, $stmt->srcLoc) . emitIoAssignAction($env, $stmt, $indent),
+        IR\IoThrow::class => emitIoThrow($env, $stmt, $indent),
+        IR\IoCatch::class => emitIoCatch($env, $stmt, $indent),
+        IR\IoFinally::class => emitIoFinally($env, $stmt, $indent),
+        IR\CallValue::class => frameMark($env, $stmt->srcLoc) . $pad . phpTemp($stmt->dest) . ' = ' . emitCallValue($env, $stmt) . ";\n",
+        IR\DictCall::class => frameMark($env, $stmt->srcLoc) . $pad . phpTemp($stmt->dest) . ' = (' . emitOperand($env, $stmt->evidence)
             . '[' . \json_encode($stmt->method, JSON_UNESCAPED_UNICODE) . '])('
-            . \implode(', ', \array_map(static fn (IR\Operand $arg): string => emitOperand($arg, $env), $stmt->args))
+            . \implode(', ', \array_map(static fn (IR\Operand $arg): string => emitOperand($env, $arg), $stmt->args))
             . ");\n",
         IR\Assign::class => frameMark($env, operandCallSrcLoc($stmt->value))
-            . $pad . phpTemp($stmt->dest) . ' = ' . emitOperand($stmt->value, $env) . ";\n",
+            . $pad . phpTemp($stmt->dest) . ' = ' . emitOperand($env, $stmt->value) . ";\n",
         IR\Let::class => frameMark($env, operandCallSrcLoc($stmt->value))
-            . $pad . '$' . mangleVar($stmt->name) . ' = ' . emitOperand($stmt->value, $env) . ";\n",
-        IR\MatchStmt::class, IR\MatchReturn::class => emitMatchStmt($stmt, $indent, $env),
-        IR\IoMatch::class => emitMatchIo($stmt, $indent, $env),
-        IR\Loop::class => $pad . "while (true) {\n" . emitBlock($stmt->body, $indent + 1, $env) . $pad . "}\n",
+            . $pad . '$' . mangleVar($stmt->name) . ' = ' . emitOperand($env, $stmt->value) . ";\n",
+        IR\MatchStmt::class => emitMatchStmt($env, $stmt, $indent),
+        IR\MatchReturn::class => emitMatchReturn($env, $stmt, $indent),
+        IR\IoMatch::class => emitMatchIo($env, $stmt, $indent),
+        IR\Loop::class => $pad . "while (true) {\n" . emitBlock($env, $stmt->body, $indent + 1) . $pad . "}\n",
         IR\TailRecall::class => frameMark($env, tailRecallSrcLoc($stmt))
-            . emitTailRecall($stmt, $indent, $env),
+            . emitTailRecall($env, $stmt, $indent),
         default => throw new \RuntimeException('unsupported ir stmt `' . $stmt::class . '` in codegen'),
     };
 }
 
-function emitIoCall(IR\Stmt $stmt, int $indent, EmitEnv $env): string
+function emitIoCall(EmitEnv $env, IR\IoCall $stmt, int $indent): string
 {
     $pad = \str_repeat('    ', $indent);
     $dest = $stmt->dest;
@@ -209,25 +210,25 @@ function emitIoCall(IR\Stmt $stmt, int $indent, EmitEnv $env): string
 
         return emitForeignIoStatement(
             $foreign,
-            \array_map(static fn (IR\Operand $arg): string => emitOperand($arg, $env), $stmt->args),
+            \array_map(static fn (IR\Operand $arg): string => emitOperand($env, $arg), $stmt->args),
             $dest,
             $pad,
             $foreign->ioWrap,
         );
     }
 
-    return $pad . $assign . emitStaticCall($stmt->callee, $stmt->args, $env) . ";\n";
+    return $pad . $assign . emitStaticCall($env, $stmt->callee, $stmt->args) . ";\n";
 }
 
 function emitFunctionReturn(IR\Operand $value, EmitEnv $env): string
 {
     return match ($value::class) {
-        IR\Partial::class => emitPartialValue($value, $env),
-        IR\Intrinsic::class => emitOperand($value, $env),
+        IR\Partial::class => emitPartialValue($env, $value->fn, $value->arity, $value->args),
+        IR\Intrinsic::class => emitOperand($env, $value),
         IR\FnRef::class => isset($env->lambdaIndex[$value->name])
             ? emitLambdaReference($value->name, $env)
-            : emitTopLevelFnValue($value->name, $env),
-        default => emitOperand($value, $env),
+            : emitTopLevelFnValue($env, $value->name, $env->functionArity[$value->name] ?? 0),
+        default => emitOperand($env, $value),
     };
 }
 

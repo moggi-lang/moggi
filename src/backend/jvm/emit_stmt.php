@@ -5,12 +5,13 @@ namespace Moggi\Backend\Jvm\Codegen;
 
 require_once __DIR__ . '/../stack/source_lines.php';
 require_once __DIR__ . '/../managed/block.php';
+require_once __DIR__ . '/../managed/stmt.php';
 
 use Moggi\IR;
 use function Moggi\Backend\Managed\emitBlock as emitManagedBlock;
+use function Moggi\Backend\Managed\emitManagedStmt;
 use function Moggi\Backend\Managed\stmtTerminates as managedStmtTerminates;
 use function Moggi\Backend\Managed\blockTerminates as managedBlockTerminates;
-use function Moggi\Backend\Stack\SourceLines\statementLoc;
 
 function emitBlock(EmitEnv $env, IR\Block $block): void
 {
@@ -53,169 +54,7 @@ function noteSrcLoc(EmitEnv $env, ?IR\SrcLoc $loc): void
 
 function emitStmt(EmitEnv $env, IR\Stmt $stmt): void
 {
-    noteSrcLoc($env, statementLoc($stmt));
-    switch ($stmt::class) {
-        case IR\Ret::class:
-            /** @var IR\Ret $stmt */
-            emitOperand($env, $stmt->value);
-            emitFunctionReturn($env);
-
-            return;
-
-        case IR\Assign::class:
-            /** @var IR\Assign $stmt */
-            emitOperand($env, $stmt->value);
-            $env->c->astore($env->localSlot('t' . $stmt->dest));
-
-            return;
-
-        case IR\Let::class:
-            /** @var IR\Let $stmt */
-            emitOperand($env, $stmt->value);
-            $env->c->astore($env->localSlot($stmt->name));
-
-            return;
-
-        case IR\Call::class:
-            /** @var IR\Call $stmt */
-            emitStaticCall($env, $stmt->callee, $stmt->args);
-            $env->c->astore($env->localSlot('t' . $stmt->dest));
-
-            return;
-
-        case IR\CallValue::class:
-            /** @var IR\CallValue $stmt */
-            emitOperand($env, $stmt->callee);
-            emitRuntimeApply($env, $stmt->args);
-            $env->c->astore($env->localSlot('t' . $stmt->dest));
-
-            return;
-
-        case IR\IoRun::class:
-            /** @var IR\IoRun $stmt */
-            emitOperand($env, $stmt->action);
-            $env->c->invokestatic($env->cp->methodRef('moggi/rt/RT', 'ioRun', '(Ljava/lang/Object;)Ljava/lang/Object;'), 1, true);
-            if ($stmt->dest !== null) {
-                $env->c->astore($env->localSlot('t' . $stmt->dest));
-            } else {
-                $env->c->pop_();
-            }
-
-            return;
-
-        case IR\IoCall::class:
-            /** @var IR\IoCall $stmt */
-            emitIoCall($env, $stmt);
-
-            return;
-
-        case IR\IoAssignAction::class:
-            /** @var IR\IoAssignAction $stmt */
-            emitIoAssignAction($env, $stmt);
-
-            return;
-
-        case IR\IoMatch::class:
-            /** @var IR\IoMatch $stmt */
-            emitMatchIo($env, $stmt);
-
-            return;
-
-        case IR\IoThrow::class:
-            /** @var IR\IoThrow $stmt */
-            emitOperand($env, $stmt->exception);
-            emitSrcLocValue($env, $stmt->srcLoc);
-            $env->c->invokestatic(
-                $env->cp->methodRef('moggi/rt/RT', 'throwSomeException', '(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;'),
-                2,
-                true,
-            );
-            if ($stmt->dest !== null) {
-                $env->c->astore($env->localSlot('t' . $stmt->dest));
-            } else {
-                $env->c->pop_();
-            }
-
-            return;
-
-        case IR\IoCatch::class:
-            /** @var IR\IoCatch $stmt */
-            emitOperand($env, $stmt->action);
-            $env->c->checkcast($env->cp->class_('moggi/rt/IO'));
-            emitOperand($env, $stmt->handler);
-            $env->c->invokestatic(
-                $env->cp->methodRef('moggi/rt/RT', 'ioCatch', '(Lmoggi/rt/IO;Ljava/lang/Object;)Ljava/lang/Object;'),
-                2,
-                true,
-            );
-            if ($stmt->dest !== null) {
-                $env->c->astore($env->localSlot('t' . $stmt->dest));
-            } else {
-                $env->c->pop_();
-            }
-
-            return;
-
-        case IR\IoFinally::class:
-            /** @var IR\IoFinally $stmt */
-            emitOperand($env, $stmt->action);
-            $env->c->checkcast($env->cp->class_('moggi/rt/IO'));
-            emitOperand($env, $stmt->cleanup);
-            $env->c->checkcast($env->cp->class_('moggi/rt/IO'));
-            $env->c->invokestatic(
-                $env->cp->methodRef('moggi/rt/RT', 'ioFinally', '(Lmoggi/rt/IO;Lmoggi/rt/IO;)Ljava/lang/Object;'),
-                2,
-                true,
-            );
-            if ($stmt->dest !== null) {
-                $env->c->astore($env->localSlot('t' . $stmt->dest));
-            } else {
-                $env->c->pop_();
-            }
-
-            return;
-
-        case IR\MatchReturn::class:
-            /** @var IR\MatchReturn $stmt */
-            emitMatchReturn($env, $stmt);
-
-            return;
-
-        case IR\MatchStmt::class:
-            /** @var IR\MatchStmt $stmt */
-            emitMatchStmt($env, $stmt);
-
-            return;
-
-        case IR\Loop::class:
-            /** @var IR\Loop $stmt */
-            emitTailLoop($env, $stmt);
-
-            return;
-
-        case IR\TailRecall::class:
-            /** @var IR\TailRecall $stmt */
-            emitTailRecall($env, $stmt);
-
-            return;
-
-        case IR\DictCall::class:
-            /** @var IR\DictCall $stmt */
-            emitOperand($env, $stmt->evidence);
-            $env->c->ldc($env->cp->string_($stmt->method));
-            pushObjectArray($env, $stmt->args);
-            $env->c->invokestatic(
-                $env->cp->methodRef('moggi/rt/RT', 'dictCall', '(Ljava/lang/Object;Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Object;'),
-                3,
-                true,
-            );
-            $env->c->astore($env->localSlot('t' . $stmt->dest));
-
-            return;
-
-        default:
-            throw new \RuntimeException('JVM emit: unsupported stmt ' . $stmt::class);
-    }
+    emitManagedStmt($env, $stmt);
 }
 
 /**
@@ -293,4 +132,3 @@ function emitFunctionReturn(EmitEnv $env): void
 {
     $env->c->areturn();
 }
-

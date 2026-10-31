@@ -18,6 +18,7 @@ require_once __DIR__ . '/types.php';
 require_once __DIR__ . '/lower_pattern.php';
 require_once __DIR__ . '/lower_expr.php';
 require_once __DIR__ . '/lower_io.php';
+require_once __DIR__ . '/free_vars_structure.php';
 
 function lower(Ast\Program $program, array $importedData = [], string $sourceFile = ''): Module
 {
@@ -260,6 +261,12 @@ function lowerFunction(
     $ctx->evidenceNames = $core->evidenceBinders();
     $ctx->terms = $core->terms;
 
+    $params = [];
+    foreach ($fn->params as $pattern) {
+        $params[] = materializeSite($pattern, $ctx);
+    }
+    $body = materializeSite($fn->body, $ctx);
+
     foreach (\array_keys($externalFns) as $name) {
         if (\in_array($name, $slotNames, true)) {
             continue;
@@ -276,7 +283,7 @@ function lowerFunction(
         $ctx->env[$name] = new FnRef($name);
     }
 
-    foreach ($fn->params as $i => $pattern) {
+    foreach ($params as $i => $pattern) {
         $term = plannedPattern($pattern, $ctx);
         if ($term->shape === PatternShape::Var) {
             if ($term->binder !== null) {
@@ -289,8 +296,8 @@ function lowerFunction(
         bindPattern(lowerPatternTerm($term, $ctx), new Local($slotNames[$i]), $ctx);
     }
 
-    if ($fn->body->line > 0) {
-        $ctx->stmtSrcLoc = srcLocFromAst($fn->body, $moduleName, $fn->name, $sourceFile);
+    if ($body->line > 0) {
+        $ctx->stmtSrcLoc = srcLocFromAst($body, $moduleName, $fn->name, $sourceFile);
     }
 
     $straightLineIo = false;
@@ -306,7 +313,7 @@ function lowerFunction(
             $workerName = $workers[$fn->name] ?? throw new \RuntimeException(
                 "`{$moduleName}::{$fn->name}` returns an action but has no worker allocated",
             );
-            [$bodyItems, $result, $bodyHasBox] = lowerActionBody($fn->body, $ctx, false);
+            [$bodyItems, $result, $bodyHasBox] = lowerActionBody($body, $ctx, false);
 
             $worker = new FunctionDecl(
                 $workerName,
@@ -318,7 +325,7 @@ function lowerFunction(
                     origin: $fn->name,
                     ioStraightLine: ! $bodyHasBox,
                 ),
-                srcLocFromAst($fn->body, $moduleName, $fn->name, $sourceFile),
+                srcLocFromAst($body, $moduleName, $fn->name, $sourceFile),
                 $ctx->evidenceNames,
             );
 
@@ -332,16 +339,16 @@ function lowerFunction(
                     $slotNames,
                 ), $callDest)]),
                 new Temp($callDest),
-                srcLocFromAst($fn->body, $moduleName, $fn->name, $sourceFile),
+                srcLocFromAst($body, $moduleName, $fn->name, $sourceFile),
             );
             $ctx->items[] = new Ret(new Temp($boxDest));
-        } elseif (! lowerIoFunctionBody($fn->body, $ctx)) {
+        } elseif (! lowerIoFunctionBody($body, $ctx)) {
             throw new \RuntimeException("failed to lower IO body for `{$fn->name}`");
         }
 
         $straightLineIo = ! $ctx->hasIoRun && ! $ctx->hasIoAssignAction;
     } else {
-        $tail = lowerExpr($fn->body, $ctx);
+        $tail = lowerExpr($body, $ctx);
         $ctx->items[] = new Ret($tail);
     }
 
@@ -358,11 +365,13 @@ function lowerFunction(
             actionConvention: $actionConvention,
             ioStraightLine: $straightLineIo,
         ),
-        $fn->body->line > 0
-            ? srcLocFromAst($fn->body, $moduleName, $fn->name, $sourceFile)
+        $body->line > 0
+            ? srcLocFromAst($body, $moduleName, $fn->name, $sourceFile)
             : srcLocFromAst($fn, $moduleName, $fn->name, $sourceFile),
         $ctx->evidenceNames,
     );
+
+    $core->terms->releaseStructures();
 
     return $worker === null ? [$entry] : [$entry, $worker];
 }
@@ -558,6 +567,7 @@ function newCtx(
         $ctx->constructorRenames = $from->constructorRenames;
         $ctx->evidenceNames = $from->evidenceNames;
         $ctx->terms = $from->terms;
+        $ctx->generatedTerms = $from->generatedTerms;
         $ctx->binders = $from->binders;
     }
 
@@ -610,6 +620,17 @@ function freshLocalName(LowerCtx $ctx, string $occ): string
  */
 function freeVarsExpr(Ast\AstNode $expr, array $bound, callable $evidenceParameter, CheckedTerms $terms = new CheckedTerms()): array
 {
+    $structure = $terms->structureFor($expr);
+    if ($structure !== null) {
+        return freeVarsStructure($structure->id->value, $bound, $evidenceParameter, $terms);
+    }
+
+    return freeVarsAst($expr, $bound, $evidenceParameter, $terms);
+}
+
+/** The source-AST fallback for a tree that carries no checked structures. */
+function freeVarsAst(Ast\AstNode $expr, array $bound, callable $evidenceParameter, CheckedTerms $terms = new CheckedTerms()): array
+{
     $walk = static fn (Ast\AstNode $node, array $names): array
         => freeVarsExpr($node, $names, $evidenceParameter, $terms);
 
@@ -643,13 +664,29 @@ function freeVarsExpr(Ast\AstNode $expr, array $bound, callable $evidenceParamet
         ],
         Ast\FieldAccess::class => $walk($expr->object, $bound),
         Ast\IntrinsicCall::class => freeVarsInExprs($expr->args, $bound, $evidenceParameter, $terms),
-        Ast\EvidenceRef::class => freeVarsInExprs($expr->context, $bound, $evidenceParameter, $terms),
+        Ast\EvidenceRef::class => (static function () use ($expr, $bound, $evidenceParameter, $terms): array {
+            $term = $terms->termFor($expr);
+            if ($term instanceof \Moggi\Modules\CheckedEvidenceRef) {
+                return evidencePlanFreeVars($term->plan, $bound);
+            }
+
+            return \is_array($expr->context ?? null)
+                ? freeVarsInExprs($expr->context, $bound, $evidenceParameter, $terms)
+                : [];
+        })(),
         Ast\EvidenceMethod::class => (static function () use ($expr, $bound, $evidenceParameter, $terms): array {
+            $term = $terms->termFor($expr);
+            if ($term instanceof \Moggi\Modules\CheckedEvidenceMethod) {
+                return evidencePlanFreeVars($term->plan, $bound);
+            }
+
             $parameter = $evidenceParameter($expr);
 
             return [
                 ...($parameter === null || isset($bound[$parameter]) ? [] : [$parameter]),
-                ...freeVarsInExprs($expr->contextEvidence, $bound, $evidenceParameter, $terms),
+                ...(\is_array($expr->contextEvidence ?? null)
+                    ? freeVarsInExprs($expr->contextEvidence, $bound, $evidenceParameter, $terms)
+                    : []),
             ];
         })(),
         default => freeVarsInChildren($expr, $bound, $evidenceParameter, $terms),
@@ -721,6 +758,19 @@ function freeVarsInExprs(array $exprs, array $bound, callable $evidenceParameter
  * @param array<int, \Moggi\Modules\CheckedTerm> $terms
  * @return array<int, string>
  */
+/** Materialize one structural child for a free-variable walk. */
+function materializeTermStructure(int $id, CheckedTerms $terms): Ast\AstNode
+{
+    $generated = new \WeakMap();
+    $value = $terms->materializeId($id, $generated);
+
+    if (! $value instanceof Ast\AstNode) {
+        throw new \RuntimeException("checked structure #{$id} does not name an expression");
+    }
+
+    return $value;
+}
+
 function freeVarsInGroupNode(Ast\AstNode $expr, array $bound, callable $evidenceParameter, CheckedTerms $terms): array
 {
     $term = $terms->termFor($expr);
@@ -731,18 +781,27 @@ function freeVarsInGroupNode(Ast\AstNode $expr, array $bound, callable $evidence
     }
 
     $members = $term->members();
+    $bindings = [];
+    foreach ($members as $memberId) {
+        $binding = materializeTermStructure($memberId, $terms);
+        if (! $binding instanceof Ast\Binding) {
+            throw new \RuntimeException("checked structure #{$memberId} does not name a binding");
+        }
+        $bindings[] = $binding;
+    }
+
     $groupBound = $bound;
-    foreach ($members as $binding) {
+    foreach ($bindings as $binding) {
         $groupBound = [...$groupBound, ...patternBoundSet($binding->pattern, $terms)];
     }
 
     $free = [];
-    foreach ($members as $binding) {
+    foreach ($bindings as $binding) {
         $free = [...$free, ...freeVarsExpr($binding->value, $groupBound, $evidenceParameter, $terms)];
     }
 
     if ($term->body !== null) {
-        $free = [...$free, ...freeVarsExpr($term->body, $groupBound, $evidenceParameter, $terms)];
+        $free = [...$free, ...freeVarsExpr(materializeTermStructure($term->body, $terms), $groupBound, $evidenceParameter, $terms)];
     }
 
     return \array_values(\array_unique($free));
@@ -769,14 +828,14 @@ function freeVarsInCaseNode(Ast\CaseExpr $expr, array $bound, callable $evidence
         ];
     }
 
-    $free = freeVarsExpr($expr->scrutinee, $bound, $evidenceParameter, $terms);
+    $free = freeVarsExpr(materializeTermStructure($term->scrutinee, $terms), $bound, $evidenceParameter, $terms);
     foreach ($term->arms as $arm) {
-        $armBound = [...$bound, ...patternBoundSet($arm->pattern, $terms)];
+        $armBound = [...$bound, ...patternBoundSet(materializeTermStructure($arm->pattern, $terms), $terms)];
         foreach ($arm->clauses as $clause) {
             if ($clause['guard'] !== null) {
-                $free = [...$free, ...freeVarsExpr($clause['guard'], $armBound, $evidenceParameter, $terms)];
+                $free = [...$free, ...freeVarsExpr(materializeTermStructure($clause['guard'], $terms), $armBound, $evidenceParameter, $terms)];
             }
-            $free = [...$free, ...freeVarsExpr($clause['body'], $armBound, $evidenceParameter, $terms)];
+            $free = [...$free, ...freeVarsExpr(materializeTermStructure($clause['body'], $terms), $armBound, $evidenceParameter, $terms)];
         }
     }
 
@@ -864,7 +923,7 @@ function recordFieldValues(Ast\AstNode $expr, CheckedTerms $terms): array
     if ($term instanceof \Moggi\Modules\CheckedRecord) {
         $fields = [];
         foreach ($term->fields as $field) {
-            $fields[] = [$field->name, $field->value];
+            $fields[] = [$field->name, materializeTermStructure($field->value, $terms)];
         }
 
         return $fields;
@@ -888,7 +947,7 @@ function recordReceiver(Ast\AstNode $expr, CheckedTerms $terms): Ast\AstNode
 {
     $term = $terms->termFor($expr);
     if ($term instanceof \Moggi\Modules\CheckedRecord && $term->receiver !== null) {
-        return $term->receiver;
+        return materializeTermStructure($term->receiver, $terms);
     }
 
     return $expr->object ?? throw new \RuntimeException(
@@ -905,8 +964,19 @@ function recordReceiver(Ast\AstNode $expr, CheckedTerms $terms): Ast\AstNode
 function guardsClauses(Ast\GuardsExpr $expr, CheckedTerms $terms): array
 {
     $term = $terms->termFor($expr);
+    if ($term instanceof \Moggi\Modules\CheckedGuards) {
+        $clauses = [];
+        foreach ($term->clauses as $clause) {
+            $clauses[] = new Ast\Guarded(
+                materializeTermStructure($clause['guard'], $terms),
+                materializeTermStructure($clause['body'], $terms),
+            );
+        }
 
-    return $term instanceof \Moggi\Modules\CheckedGuards ? $term->clauses : $expr->clauses;
+        return $clauses;
+    }
+
+    return $expr->clauses;
 }
 
 /**

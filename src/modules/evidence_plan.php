@@ -152,7 +152,16 @@ function evidencePlanFor(Ast\AstNode $site): ?EvidencePlan
  */
 function checkedTermsIn(Ast\AstNode $root): CheckedTerms
 {
-    $terms = new CheckedTerms();
+    $terms = new CheckedTerms($root);
+    $structures = checkedStructuresIn($root);
+    foreach ($structures['sources'] as $id => $source) {
+        $terms->addStructure($source, $structures['structures'][$id]);
+    }
+
+    $sid = static fn (Ast\AstNode $node): int
+        => $terms->structureFor($node)?->id->value
+            ?? throw new \LogicException('the checked structure walk did not publish ' . $node::class);
+
     $seen = [];
     $next = 0;
     /** @var list<array{id: TermId, node: Ast\Lambda}> $lambdas */
@@ -208,7 +217,7 @@ function checkedTermsIn(Ast\AstNode $root): CheckedTerms
         return $id->value;
     };
 
-    $visit = static function (Ast\AstNode $node) use ($terms, &$seen, &$next, &$lambdas, &$publishPattern): void {
+    $visit = static function (Ast\AstNode $node) use ($terms, &$seen, &$next, &$lambdas, &$publishPattern, $sid): void {
         $intrinsic = intrinsicNameFor($node);
         if ($intrinsic !== null) {
             $key = \spl_object_id($node);
@@ -224,8 +233,8 @@ function checkedTermsIn(Ast\AstNode $root): CheckedTerms
                     $id,
                     CheckedFunction::termOrigin($node),
                     remainingArity($node->inferredInternalType),
-                    $node->function,
-                    $node->argument,
+                    $sid($node->function),
+                    $sid($node->argument),
                     $intrinsic,
                 )
                 : new CheckedIntrinsicCall($id, CheckedFunction::termOrigin($node), $intrinsic));
@@ -273,7 +282,11 @@ function checkedTermsIn(Ast\AstNode $root): CheckedTerms
             $seen[$key] = true;
 
             $id = new TermId(++$next);
-            $terms->add($node, new CheckedGuards($id, CheckedFunction::termOrigin($node), $node->clauses));
+            $clauses = [];
+            foreach ($node->clauses as $clause) {
+                $clauses[] = ['guard' => $sid($clause->guard), 'body' => $sid($clause->body)];
+            }
+            $terms->add($node, new CheckedGuards($id, CheckedFunction::termOrigin($node), $clauses));
 
             return;
         }
@@ -287,7 +300,7 @@ function checkedTermsIn(Ast\AstNode $root): CheckedTerms
 
             $fields = [];
             foreach ($node->fields as $field) {
-                $fields[] = new CheckedRecordField($field->name, $field->expr);
+                $fields[] = new CheckedRecordField($field->name, $sid($field->expr));
             }
 
             $id = new TermId(++$next);
@@ -302,7 +315,7 @@ function checkedTermsIn(Ast\AstNode $root): CheckedTerms
                 CheckedFunction::termOrigin($node),
                 $constructor,
                 $fields,
-                $node instanceof Ast\RecordUpdate ? $node->object : null,
+                $node instanceof Ast\RecordUpdate ? $sid($node->object) : null,
                 $node instanceof Ast\RecordUpdate ? $node->fieldOnNewtype : false,
             ));
 
@@ -343,8 +356,8 @@ function checkedTermsIn(Ast\AstNode $root): CheckedTerms
                 $id,
                 CheckedFunction::termOrigin($node),
                 remainingArity($node->inferredInternalType),
-                $node->function,
-                $node->argument,
+                $sid($node->function),
+                $sid($node->argument),
             ));
 
             return;
@@ -362,18 +375,19 @@ function checkedTermsIn(Ast\AstNode $root): CheckedTerms
                 $clauses = [];
                 if ($alt->body instanceof Ast\GuardsExpr) {
                     foreach ($alt->body->clauses as $clause) {
-                        $clauses[] = ['guard' => $clause->guard, 'body' => $clause->body];
+                        $clauses[] = ['guard' => $sid($clause->guard), 'body' => $sid($clause->body)];
                     }
                 } else {
-                    $clauses[] = ['guard' => null, 'body' => $alt->body];
+                    $clauses[] = ['guard' => null, 'body' => $sid($alt->body)];
                 }
-                $arms[] = new CheckedCaseArm($alt->pattern, $clauses);
+                $arms[] = new CheckedCaseArm($sid($alt->pattern), $clauses);
             }
 
             $id = new TermId(++$next);
             $terms->add($node, new CheckedCase(
                 $id,
                 CheckedFunction::termOrigin($node),
+                $sid($node->scrutinee),
                 $arms,
                 $node->exhaustive,
             ));
@@ -392,7 +406,7 @@ function checkedTermsIn(Ast\AstNode $root): CheckedTerms
             foreach (bindingGroupSccs($node->bindings) as $component) {
                 $group = [];
                 foreach ($component['indices'] as $index) {
-                    $group[] = $node->bindings[$index];
+                    $group[] = $sid($node->bindings[$index]);
                 }
                 $components[] = new CheckedBindingGroup($group, $component['recursive']);
             }
@@ -408,7 +422,7 @@ function checkedTermsIn(Ast\AstNode $root): CheckedTerms
                 $id,
                 CheckedFunction::termOrigin($node),
                 $components,
-                $body,
+                $body === null ? null : $sid($body),
             ));
 
             return;
@@ -470,6 +484,7 @@ function checkedTermsIn(Ast\AstNode $root): CheckedTerms
     };
 
     walkElaboration($root, $visit);
+    $terms->bindStructureTerms();
 
     foreach ($lambdas as $lambda) {
         $node = $lambda['node'];
@@ -495,9 +510,13 @@ function checkedTermsIn(Ast\AstNode $root): CheckedTerms
             $parameterNames,
             $parameterBinders,
             \array_values(\array_unique($captures)),
-            $node->body,
+            $sid($node->body),
+            $node->inferredType instanceof Ast\AstNode ? $node->inferredType : null,
         ));
     }
+
+    $terms->bindStructureTerms();
+    $terms->releaseStructures();
 
     return $terms;
 }

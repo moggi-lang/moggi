@@ -77,7 +77,7 @@ function maybeCompareExpr(string $left, string $right): string
 function emitIntrinsicPrimop(EmitEnv $env, IR\Intrinsic $op, array $argExprs): ?string
 {
     $argLeaves = $env->intrinsicArgLeaves;
-    $locExpr = $op->name === 'integerToNatural#' ? emitSrcLocValue($op->srcLoc, $env) : 'null';
+    $locExpr = $op->name === 'integerToNatural#' ? emitSrcLocValue($env, $op->srcLoc) : 'null';
 
     return match ($op->name) {
         'charToInt#' => $argExprs[0],

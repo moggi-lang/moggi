@@ -106,10 +106,6 @@ function managedModuleFacts(
             $functionArity[$name] = $arity;
         }
     }
-    // An evidence entry's arity is the dictionaries it closes over, and the table publishes it as
-    // evidence + captures + values; the declaration wins because that is the number the call
-    // passes. This order is the JVM's, which the .NET emitter did not share — unifying it here
-    // removes a divergence rather than introducing one.
     foreach ($module->instanceEvidence as $ev) {
         $functionArity[$ev->evidenceName] = \count($ev->contextParams);
     }

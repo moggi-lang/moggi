@@ -35,7 +35,7 @@ function emitConstructorValue(string $tag, ?int $arity): string
     return 'fn(' . \implode(', ', $params) . ") => [{$name}, " . \implode(', ', $params) . ']';
 }
 
-function emitSrcLocValue(?SrcLoc $loc, EmitEnv $env): string
+function emitSrcLocValue(EmitEnv $env, ?SrcLoc $loc): string
 {
     if ($loc === null) {
         return 'null';

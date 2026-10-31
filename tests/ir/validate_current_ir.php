@@ -60,7 +60,16 @@ $fn = static fn (
     array $params,
     IR\Block $body,
     IR\FunctionKind $kind = IR\FunctionKind::Source,
-): IR\FunctionDecl => new IR\FunctionDecl($name, $params, null, $body, new IR\FunctionShape(kind: $kind));
+): IR\FunctionDecl => new IR\FunctionDecl(
+    $name,
+    $params,
+    null,
+    $body,
+    new IR\FunctionShape(kind: $kind),
+    captures: $kind->takesCaptures()
+        ? \Moggi\IR\Visit\freeLocalsInBlock($body, \array_fill_keys($params, true))
+        : null,
+);
 $module = static fn (array $functions): IR\Module => new IR\Module($functions, []);
 
 // ---- legal current IR ----------------------------------------------------

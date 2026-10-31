@@ -4,6 +4,8 @@ namespace Moggi\Modules;
 
 use Moggi\Syntax\Ast;
 
+require_once __DIR__ . '/checked_structure.php';
+
 /**
  * The checked core's own terms.
  *
@@ -20,16 +22,16 @@ use Moggi\Syntax\Ast;
  * time — the cut-over is whole per construct, and the lowerer's arm for it reads a
  * term or refuses, so a migrated construct is never readable two ways.
  *
- * It is not, however, a second structural tree. The children a term names are
- * still the AST nodes they are (`CheckedLambda::$body` is a source body,
- * `CheckedApplication` names a source callee and its argument nodes), so the AST
- * remains the structural substrate and these terms are the decisions recorded
- * over it. A construct's migration therefore means "its decisions are published
- * as terms", not "its structure moved": lowering still dispatches on the AST
- * shape of a construct that publishes no term, and free-variable/capture analysis
- * still walks the tree. Treating this family as the closed core its name suggests
- * would be wrong until structure migrates too; the two-representation cost is a
- * known, accepted property of the hybrid, not an oversight.
+ * Structure is published too. Every elaborated site has a {@see CheckedStructure} whose payload
+ * holds the scalar fields and whose children are other structure ids; no structure points at the
+ * source node it was published from. A typed term names its children by those ids
+ * (`CheckedLambda::$body`, `CheckedApplication::$callee`/`$argument`, a case arm's pattern and
+ * clauses, a group's bindings), and lowering materializes a source-located view from the
+ * structure tree before it runs. The AST is therefore a *view* of the checked core, not its
+ * storage protocol: a scrubbed, reparsed or discarded source tree cannot change a decision or a
+ * structural child. Lowering still dispatches on the materialized view's classes because the IR
+ * lowerer is written against source-shaped nodes; that view is rebuilt from terms, not read from
+ * the tree the checker was handed.
  *
  * Families published today: evidence ({@see CheckedEvidenceRef},
  * {@see CheckedEvidenceMethod}), foreign calls ({@see CheckedForeignCall}),
@@ -37,7 +39,7 @@ use Moggi\Syntax\Ast;
  * names it closes over ({@see CheckedLambda}), the arity an application still
  * wants ({@see CheckedApplication}) — a variable's referent
  * ({@see CheckedVariable}), a binding site's identity ({@see CheckedPattern}),
- * a `case`'s arms ({@see CheckedCase}) and a `let`/`where` group's members and
+ * a `case`'s scrutinee and arms ({@see CheckedCase}) and a `let`/`where` group's members and
  * their order ({@see CheckedLetGroup}). All are keyed the same way, in one id
  * space per declaration ({@see checkedTermsIn()}), and each has exactly one place
  * that says where a site is written: {@see evidencePlanFor()}, `checkedTermsIn()`'s
@@ -47,10 +49,8 @@ use Moggi\Syntax\Ast;
  * A family that owns *structure* — `case`, `let`, `where` — publishes the
  * arrangement lowering used to read off the node's own children: the arms in
  * source order with their guards flattened, and the members in binding order with
- * the recursive components already decided. The child nodes they name stay
- * children (a pattern, a guard, a body is lowered in place, the way a foreign
- * call's arguments are); what the term removes is the node's list and the
- * question of how it decomposes.
+ * the recursive components already decided. Their patterns, guards and bodies are
+ * structure ids too, so the family is a term tree from the root down.
  */
 abstract class CheckedTerm
 {
@@ -101,11 +101,50 @@ final class CheckedTerms implements \ArrayAccess, \Countable, \IteratorAggregate
     /** @var array<int, CheckedTerm> */
     private array $byId = [];
 
+    /** @var ?string serialized decision terms, decoded for the declaration currently lowering */
+    private ?string $termsBlob = null;
+
     /** @var array<int, int> spl_object_id(site) => term id */
     private array $siteIds = [];
 
     /** @var array<int, Ast\AstNode> the retained node for each site id, to defeat id reuse */
     private array $siteNodes = [];
+
+    /** @var array<int, CheckedStructure> the declaration's structural tree, by its own id */
+    private array $structures = [];
+
+    /** @var ?string the structural tree, serialized so a warm read does not keep every module decoded */
+    private ?string $structuresBlob = null;
+
+    /** @var array<int, int> spl_object_id(site) => structural term id */
+    private array $structureSites = [];
+
+    /** @var array<int, Ast\AstWalkable> the retained value for each structural site */
+    private array $structureNodes = [];
+
+    /** @var array<int, Ast\AstWalkable> structural id => the value it was published from */
+    private array $structureSource = [];
+
+    /** @var \WeakMap<Ast\AstNode, CheckedTerm> generated nodes => the term they materialize */
+    private \WeakMap $materializedTerms;
+
+    /** @var array<int, ?int> structural id => the decision term id it publishes */
+    private array $structureTermIds = [];
+
+    /** @var bool whether the process-local site maps have been rebuilt for the live AST */
+    private bool $siteMapsReady = false;
+
+    /** @var ?Ast\AstWalkable the root this record was published from, retained so cache wakeup can rebuild node links */
+    private ?Ast\AstWalkable $root;
+
+    public function __construct(?Ast\AstWalkable $root = null)
+    {
+        $this->root = $root;
+        $this->termsBlob = null;
+        $this->structuresBlob = null;
+        $this->siteMapsReady = false;
+        $this->materializedTerms = new \WeakMap();
+    }
 
     public function add(Ast\AstNode $site, CheckedTerm $term): void
     {
@@ -113,11 +152,188 @@ final class CheckedTerms implements \ArrayAccess, \Countable, \IteratorAggregate
         $objectId = \spl_object_id($site);
         $this->siteIds[$objectId] = $term->id->value;
         $this->siteNodes[$objectId] = $site;
+        $this->siteMapsReady = true;
+    }
+
+    /** Add one structural node, published from the elaborated value it belongs to. */
+    public function addStructure(Ast\AstWalkable $site, CheckedStructure $structure): void
+    {
+        $this->structures[$structure->id->value] = $structure;
+        $this->structureSource[$structure->id->value] = $site;
+        if ($site instanceof Ast\AstNode) {
+            $objectId = \spl_object_id($site);
+            $this->structureSites[$objectId] = $structure->id->value;
+            $this->structureNodes[$objectId] = $site;
+        }
+        $this->siteMapsReady = true;
+    }
+
+    /** The structural term published for a source site, or null when it has none. */
+    public function structureFor(Ast\AstNode $site): ?CheckedStructure
+    {
+        $this->ensureSiteMaps();
+        $this->ensureStructures();
+        $objectId = \spl_object_id($site);
+        if (($this->structureNodes[$objectId] ?? null) !== $site) {
+            return null;
+        }
+
+        $id = $this->structureSites[$objectId] ?? null;
+
+        return $id === null ? null : ($this->structures[$id] ?? null);
+    }
+
+    /** The structural term with one id. */
+    public function structure(int $id): ?CheckedStructure
+    {
+        $this->ensureStructures();
+
+        return $this->structures[$id] ?? null;
+    }
+
+    /** The decision term published for one structural id, or null. */
+    public function termForStructure(int $id): ?CheckedTerm
+    {
+        $this->ensureTerms();
+        $termId = $this->structureTermIds[$id] ?? null;
+
+        return $termId === null ? null : ($this->byId[$termId] ?? null);
+    }
+
+    /**
+     * Bind each structural node to the decision term published for its source site.
+     *
+     * The binding is captured once, after publication, rather than looked up from the source
+     * node when lowering materializes the view: a scrub test is allowed to remove the source
+     * link, and the checked core must still answer with the term the structure owns.
+     */
+    public function bindStructureTerms(): void
+    {
+        $this->ensureSiteMaps();
+        $this->structureTermIds = [];
+        foreach ($this->structureSource as $id => $source) {
+            if ($source instanceof Ast\AstNode) {
+                $this->structureTermIds[$id] = $this->idFor($source);
+            }
+        }
+    }
+
+    /**
+     * Materialize the lowering view of a site from its structural term.
+     *
+     * Every generated node is recorded in `$generatedTerms` with the declaration term that was
+     * published for the source site it materializes. Lowering therefore resolves the same term
+     * from a view whose structure no longer points at the source tree; a source tree that has
+     * been scrubbed after publication cannot change the answer.
+     *
+     * @param \WeakMap<Ast\AstNode, CheckedTerm> $generatedTerms
+     */
+    public function materialize(Ast\AstNode $site, \WeakMap $generatedTerms): ?Ast\AstNode
+    {
+        $structure = $this->structureFor($site);
+        if ($structure === null) {
+            return null;
+        }
+
+        $value = $this->materializeStructure($structure, $generatedTerms);
+
+        return $value instanceof Ast\AstNode ? $value : null;
+    }
+
+    /**
+     * Materialize one structural id directly.
+     *
+     * The typed terms name their children by these ids, so lowering a lambda body, an
+     * application's callee/argument, a case arm or a record field follows the structure tree
+     * rather than a source-node pointer.
+     *
+     * @param \WeakMap<Ast\AstNode, CheckedTerm> $generatedTerms
+     */
+    public function materializeId(int $id, \WeakMap $generatedTerms): mixed
+    {
+        $this->ensureSiteMaps();
+        $this->ensureStructures();
+        $structure = $this->structures[$id] ?? null;
+
+        return $structure === null
+            ? throw new \LogicException("a checked term references structure #{$id}, which its record does not own")
+            : $this->materializeStructure($structure, $generatedTerms);
+    }
+
+    /** @param \WeakMap<Ast\AstNode, CheckedTerm> $generatedTerms */
+    private function materializeStructure(CheckedStructure $structure, \WeakMap $generatedTerms): mixed
+    {
+        $id = $structure->id->value;
+        $this->ensureTerms();
+        $reflection = new \ReflectionClass($structure->kind);
+        $source = $this->structureSource[$id] ?? null;
+        $object = $reflection->newInstanceWithoutConstructor();
+
+        foreach ($structure->payload as $name => $value) {
+            $object->{$name} = $this->materializeValue($value, $generatedTerms);
+        }
+
+        if ($source instanceof Ast\AstNode && \property_exists($source, 'type')) {
+            foreach (\get_object_vars($source) as $name => $value) {
+                if ($value instanceof Ast\TypeNode && ! \array_key_exists($name, $structure->payload)) {
+                    $object->{$name} = $value;
+                }
+            }
+        }
+
+        if ($object instanceof Ast\AstNode) {
+            foreach (['inferredType', 'inferredInternalType'] as $name) {
+                if (! \array_key_exists($name, $structure->payload)) {
+                    $object->{$name} = null;
+                }
+            }
+        }
+
+        if ($object instanceof Ast\AstNode) {
+            $termId = $this->structureTermIds[$id] ?? null;
+            $term = $termId === null ? null : ($this->byId[$termId] ?? null);
+            if ($term !== null) {
+                $generatedTerms[$object] = $term;
+                $this->materializedTerms[$object] = $term;
+            }
+        }
+
+        return $object;
+    }
+
+    /** @param \WeakMap<Ast\AstNode, CheckedTerm> $generatedTerms */
+    private function materializeValue(mixed $value, \WeakMap $generatedTerms): mixed
+    {
+        if (\is_array($value)) {
+            if (\array_key_exists('__checked_ref', $value) && \count($value) === 1) {
+                $child = $this->structures[$value['__checked_ref']] ?? null;
+
+                return $child === null
+                    ? throw new \LogicException('a checked structure references an id it does not own')
+                    : $this->materializeStructure($child, $generatedTerms);
+            }
+
+            $decoded = [];
+            foreach ($value as $key => $entry) {
+                $decoded[$key] = $this->materializeValue($entry, $generatedTerms);
+            }
+
+            return $decoded;
+        }
+
+        return $value;
     }
 
     /** The term published for a site, or null when the record does not cover it. */
     public function termFor(Ast\AstNode $site): ?CheckedTerm
     {
+        $materialized = $this->materializedTerms[$site] ?? null;
+        if ($materialized !== null) {
+            return $materialized;
+        }
+
+        $this->ensureSiteMaps();
+        $this->ensureTerms();
         $id = $this->idFor($site);
 
         return $id === null ? null : ($this->byId[$id] ?? null);
@@ -126,6 +342,7 @@ final class CheckedTerms implements \ArrayAccess, \Countable, \IteratorAggregate
     /** The id published for a site, or null when the record does not cover it. */
     public function idFor(Ast\AstNode $site): ?int
     {
+        $this->ensureSiteMaps();
         $objectId = \spl_object_id($site);
         if (($this->siteNodes[$objectId] ?? null) !== $site) {
             return null;
@@ -137,41 +354,145 @@ final class CheckedTerms implements \ArrayAccess, \Countable, \IteratorAggregate
     /** Forget a site's link without deleting the term it named. Used by scrub tests. */
     public function forget(Ast\AstNode $site): void
     {
+        $this->ensureSiteMaps();
         $objectId = \spl_object_id($site);
+        $structureId = $this->structureSites[$objectId] ?? null;
+        if ($structureId !== null) {
+            unset($this->structureTermIds[$structureId]);
+        }
+        $this->materializedTerms = new \WeakMap();
         unset($this->siteIds[$objectId], $this->siteNodes[$objectId]);
     }
 
-    /**
-     * Re-key the site links after the module cache decodes this record.
-     *
-     * `spl_object_id()` is process-local: serialization restores the node objects but not their
-     * ids, so the keys written at publication name objects that no longer exist by that id. The
-     * nodes themselves are retained in `siteNodes`, so the old id → term pair is enough to
-     * rebuild the maps around the restored nodes. Without this, a warm module read answers
-     * `null` for every site and lowering refuses a record that is in fact complete.
-     */
-    public function __wakeup(): void
+    /** Serialize the structure tree once; a warm read keeps it compressed until this declaration lowers. */
+    public function __serialize(): array
     {
-        $siteIds = [];
-        $siteNodes = [];
-        foreach ($this->siteNodes as $oldId => $node) {
-            $termId = $this->siteIds[$oldId] ?? null;
-            if ($termId === null) {
-                continue;
-            }
-
-            $newId = \spl_object_id($node);
-            $siteIds[$newId] = $termId;
-            $siteNodes[$newId] = $node;
+        $termsBlob = $this->termsBlob;
+        if ($termsBlob === null && $this->byId !== []) {
+            $termsBlob = \serialize($this->byId);
+        }
+        $blob = $this->structuresBlob;
+        if ($blob === null && $this->structures !== []) {
+            $blob = \gzcompress(\serialize($this->structures));
         }
 
-        $this->siteIds = $siteIds;
-        $this->siteNodes = $siteNodes;
+        return [
+            'byId' => [],
+            'termsBlob' => $termsBlob,
+            'structureTermIds' => $this->structureTermIds,
+            'root' => $this->root,
+            'structuresBlob' => $blob,
+        ];
+    }
+
+    public function __unserialize(array $data): void
+    {
+        $this->byId = $data['byId'] ?? [];
+        $termsBlob = $data['termsBlob'] ?? null;
+        $this->termsBlob = \is_string($termsBlob) ? $termsBlob : null;
+        $this->structureTermIds = $data['structureTermIds'] ?? [];
+        $root = $data['root'] ?? null;
+        $this->root = $root instanceof Ast\AstWalkable ? $root : null;
+        $blob = $data['structuresBlob'] ?? null;
+        if (! \is_string($blob) && isset($data['structures']) && \is_array($data['structures'])) {
+            $blob = \gzcompress(\serialize($data['structures']));
+        }
+        $this->structuresBlob = \is_string($blob) ? $blob : null;
+        $this->structures = [];
+        $this->structureSites = [];
+        $this->structureNodes = [];
+        $this->structureSource = [];
+        $this->siteIds = [];
+        $this->siteNodes = [];
+        $this->siteMapsReady = false;
+        $this->materializedTerms = new \WeakMap();
+    }
+
+    /** Legacy property-format payloads still land here; shape validation drops them after decode. */
+    public function __wakeup(): void
+    {
+        $this->__unserialize(\get_object_vars($this));
+    }
+
+    private function ensureSiteMaps(): void
+    {
+        if ($this->siteMapsReady) {
+            return;
+        }
+
+        $this->siteMapsReady = true;
+        $this->siteIds = [];
+        $this->siteNodes = [];
+        $this->structureSites = [];
+        $this->structureNodes = [];
+        $this->structureSource = [];
+        if (! isset($this->root) || $this->root === null) {
+            return;
+        }
+
+        $index = checkedStructuresIn($this->root, false);
+        $this->structureSites = $index['sites'];
+        $this->structureSource = $index['sources'];
+        foreach ($index['sources'] as $id => $source) {
+            if (! $source instanceof Ast\AstNode) {
+                continue;
+            }
+            $objectId = \spl_object_id($source);
+            $this->structureNodes[$objectId] = $source;
+            $termId = $this->structureTermIds[$id] ?? null;
+            if ($termId !== null) {
+                $this->siteIds[$objectId] = $termId;
+                $this->siteNodes[$objectId] = $source;
+            }
+        }
+    }
+
+    /** Decode the structural tree only for the declaration currently lowering. */
+    private function ensureStructures(): void
+    {
+        if ($this->structures !== [] || $this->structuresBlob === null) {
+            return;
+        }
+
+        $raw = @\gzuncompress($this->structuresBlob);
+        if (! \is_string($raw)) {
+            $raw = $this->structuresBlob;
+        }
+        $decoded = @\unserialize($raw);
+        if (\is_array($decoded)) {
+            $this->structures = $decoded;
+        }
+    }
+
+    /** Release the decoded tree; the blob remains for a later scrub/lower pass. */
+    public function releaseStructures(): void
+    {
+        if ($this->byId !== [] && $this->termsBlob === null) {
+            $this->termsBlob = \serialize($this->byId);
+        }
+        $this->byId = [];
+        if ($this->structures !== [] && $this->structuresBlob === null) {
+            $this->structuresBlob = \gzcompress(\serialize($this->structures));
+        }
+        $this->structures = [];
+    }
+
+    private function ensureTerms(): void
+    {
+        if ($this->byId !== [] || $this->termsBlob === null) {
+            return;
+        }
+
+        $decoded = @\unserialize($this->termsBlob);
+        if (\is_array($decoded)) {
+            $this->byId = $decoded;
+        }
     }
 
     /** Restore a link previously removed by {@see forget()}; a null term stays forgotten. */
     public function restore(Ast\AstNode $site, ?CheckedTerm $term): void
     {
+        $this->ensureSiteMaps();
         if ($term === null) {
             $this->forget($site);
 
@@ -179,36 +500,49 @@ final class CheckedTerms implements \ArrayAccess, \Countable, \IteratorAggregate
         }
 
         $this->add($site, $term);
+        $this->bindStructureTerms();
     }
 
     public function get(int $id): ?CheckedTerm
     {
+        $this->ensureTerms();
+
         return $this->byId[$id] ?? null;
     }
 
     /** @return array<int, CheckedTerm> */
     public function all(): array
     {
+        $this->ensureTerms();
+
         return $this->byId;
     }
 
     public function count(): int
     {
+        $this->ensureTerms();
+
         return \count($this->byId);
     }
 
     public function getIterator(): \Traversable
     {
+        $this->ensureTerms();
+
         return new \ArrayIterator($this->byId);
     }
 
     public function offsetExists(mixed $offset): bool
     {
+        $this->ensureTerms();
+
         return \is_int($offset) && isset($this->byId[$offset]);
     }
 
     public function offsetGet(mixed $offset): ?CheckedTerm
     {
+        $this->ensureTerms();
+
         return \is_int($offset) ? ($this->byId[$offset] ?? null) : null;
     }
 
@@ -219,6 +553,7 @@ final class CheckedTerms implements \ArrayAccess, \Countable, \IteratorAggregate
 
     public function offsetUnset(mixed $offset): void
     {
+        $this->ensureTerms();
         if (\is_int($offset)) {
             unset($this->byId[$offset]);
         }
@@ -336,7 +671,9 @@ final class CheckedLambda extends CheckedTerm
         public readonly array $parameterBinders,
         public readonly array $captures,
         /** The body this lambda scopes, a child lowered in place. */
-        public readonly ?Ast\AstNode $body = null,
+        public readonly ?int $body = null,
+        /** The checker's inferred type for the lambda, kept here because the structural view drops overlays. */
+        public readonly ?Ast\AstNode $type = null,
     ) {
         parent::__construct($id, $origin);
     }
@@ -371,8 +708,8 @@ final class CheckedApplication extends CheckedTerm
         TermId $id,
         string $origin,
         public readonly int $remainingArity,
-        public readonly ?Ast\AstNode $callee = null,
-        public readonly ?Ast\AstNode $argument = null,
+        public readonly ?int $callee = null,
+        public readonly ?int $argument = null,
         /** The primop this application names, when the site is also a primop site. */
         public readonly ?string $intrinsic = null,
     ) {
@@ -534,18 +871,19 @@ function patternShape(Ast\AstNode $node): PatternShape
 final class CheckedCaseArm
 {
     /**
-     * @param Ast\AstNode $pattern the arm's pattern, lowered as a child
+     * @param int $pattern the arm's pattern structure id
      * @param list<array{guard: ?Ast\AstNode, body: Ast\AstNode}> $clauses in source order;
      *   a null guard is the unconditional case
      */
     public function __construct(
-        public readonly Ast\AstNode $pattern,
+        public readonly int $pattern,
+        /** @var list<array{guard: ?int, body: int}> */
         public readonly array $clauses,
     ) {
     }
 
     /** The guard of the last clause, which is what decides whether the arm always matches. */
-    public function lastGuard(): ?Ast\AstNode
+    public function lastGuard(): ?int
     {
         return $this->clauses === [] ? null : $this->clauses[\count($this->clauses) - 1]['guard'];
     }
@@ -554,10 +892,9 @@ final class CheckedCaseArm
 /**
  * A `case`: its arms in source order and whether the checker proved them total.
  *
- * The scrutinee stays a child of the node, because it is one expression lowered in
- * place; the *arms* are the term's, because their order, their guard flattening and
- * the match's totality are what lowering used to re-derive from `CaseExpr::$alts`
- * and `CaseExpr::$exhaustive`.
+ * The scrutinee and the arms are both the term's. Their order, their guard
+ * flattening and the match's totality are what lowering used to re-derive from
+ * `CaseExpr::$scrutinee`, `CaseExpr::$alts` and `CaseExpr::$exhaustive`.
  */
 final class CheckedCase extends CheckedTerm
 {
@@ -565,6 +902,7 @@ final class CheckedCase extends CheckedTerm
     public function __construct(
         TermId $id,
         string $origin,
+        public readonly int $scrutinee,
         public readonly array $arms,
         public readonly bool $exhaustive,
     ) {
@@ -578,7 +916,7 @@ final class CheckedCase extends CheckedTerm
  */
 final class CheckedBindingGroup
 {
-    /** @param list<Ast\Binding> $bindings */
+    /** @param list<int> $bindings binding structure ids, in source order */
     public function __construct(
         public readonly array $bindings,
         public readonly bool $recursive,
@@ -609,12 +947,12 @@ final class CheckedLetGroup extends CheckedTerm
         TermId $id,
         string $origin,
         public readonly array $components,
-        public readonly ?Ast\AstNode $body,
+        public readonly ?int $body,
     ) {
         parent::__construct($id, $origin);
     }
 
-    /** @return list<Ast\Binding> every member, in binding order */
+    /** @return list<int> every member's structure id, in binding order */
     public function members(): array
     {
         $members = [];
@@ -709,7 +1047,7 @@ final class CheckedRecordField
 {
     public function __construct(
         public readonly string $name,
-        public readonly Ast\AstNode $value,
+        public readonly int $value,
     ) {
     }
 }
@@ -742,7 +1080,7 @@ final class CheckedRecord extends CheckedTerm
         string $origin,
         public readonly string $constructor,
         public readonly array $fields,
-        public readonly ?Ast\AstNode $receiver = null,
+        public readonly ?int $receiver = null,
         public readonly bool $fieldOnNewtype = false,
     ) {
         parent::__construct($id, $origin);
@@ -766,7 +1104,7 @@ final class CheckedRecord extends CheckedTerm
  */
 final class CheckedGuards extends CheckedTerm
 {
-    /** @param list<Ast\Guarded> $clauses in source order */
+    /** @param list<array{guard: int, body: int}> $clauses in source order */
     public function __construct(
         TermId $id,
         string $origin,
@@ -776,9 +1114,9 @@ final class CheckedGuards extends CheckedTerm
     }
 
     /** The guard of the last clause, which decides whether the chain always succeeds. */
-    public function lastGuard(): ?Ast\AstNode
+    public function lastGuard(): ?int
     {
-        return $this->clauses === [] ? null : $this->clauses[\count($this->clauses) - 1]->guard;
+        return $this->clauses === [] ? null : $this->clauses[\count($this->clauses) - 1]['guard'];
     }
 }
 

@@ -9,7 +9,7 @@ use function Moggi\Backend\Php\Naming\phpTemp;
 use function Moggi\Backend\Php\Codegen\emitOperand;
 use function Moggi\Backend\Php\Codegen\isLeafOperand;
 
-function emitOperand(IR\Operand $operand, EmitEnv $env): string
+function emitOperand(EmitEnv $env, IR\Operand $operand): string
 {
     if ($operand instanceof IR\FnRef && isset($env->lambdaIndex[$operand->name])) {
         return emitLambdaReference($operand->name, $env);
@@ -24,17 +24,14 @@ function emitOperand(IR\Operand $operand, EmitEnv $env): string
             ?? ('$' . mangleVar($operand->name)),
         IR\Temp::class => phpTemp($operand->id),
         IR\Unit::class => 'null',
-        IR\FnRef::class => emitTopLevelFnValue($operand->name, $env),
+        IR\FnRef::class => emitTopLevelFnValue($env, $operand->name, $env->functionArity[$operand->name] ?? 0),
         IR\ListLit::class => '[' . \implode(', ', \array_map(
-            static fn (IR\Operand $element): string => emitOperand($element, $env),
+            static fn (IR\Operand $element): string => emitOperand($env, $element),
             $operand->elements,
         )) . ']',
-        IR\Partial::class => emitPartialValue($operand, $env),
+        IR\Partial::class => emitPartialValue($env, $operand->fn, $operand->arity, $operand->args),
         IR\Intrinsic::class => emitIntrinsic($env, $operand),
-        IR\ForeignCall::class => emitForeign(
-            $operand,
-            \array_map(static fn (IR\Operand $arg): string => emitOperand($arg, $env), $operand->args),
-        ),
+        IR\ForeignCall::class => emitForeign($env, $operand),
         IR\DictMethod::class => emitDictMethodOperand($operand, $env),
         default => throw new \RuntimeException('unsupported operand `' . $operand::class . '` in codegen'),
     };
